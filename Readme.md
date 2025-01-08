@@ -1,3 +1,7 @@
+Attention: This project is currently under very active development. The code and files are expected to be ready by May 25, 2025. At this stage, the project is not yet functional, but exciting updates are on the way. Stay tuned!
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 # tœrn_x408: THE SUCCESSOR TO NI404  
 **DIY Open-Source Hardware Sampler-Sequencer**  
