@@ -76,5 +76,5 @@ All source code, schematics, and 3D files are available under the MIT License. W
 ## THANK YOU  
 Special thanks to Paul Stoffregen and the PJRC team for the incredible Teensy platform, as well as the open-source community for contributing essential libraries. A heartfelt shoutout to Nic Newdigate for the teensy-polyphony library, the soul of this project.  
 
-Jan from Soundpauli  
+Jan from SP_ (formaly known as soundpauli)
 Hamburg, January 2025  
