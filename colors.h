@@ -52,39 +52,10 @@ const CRGB col_base[] = {
   };
 
 
-
-
-
-const uint32_t colors[] = {
-  0xFF0000, // 1 rot (red)
-  0xfa6902, // 7 orange (orange)
-  0xFFFF00, // 3 gelb (yellow)
-  0x83ff4a, // 6 hellgrün (light green)
-  0x00AA00, // 4 grün (green)
-  0x06d1c7, // 8 türkis (turquoise)
-  0x0000AA, // 2 blau (blue)
-  0x800080, // 5 lila (purple)
-  0xD3D3D3, // 13 hellgrau (light gray)
-  0x222222, // 14 dunkelgrau (dark gray)
-  0x000000, // 0 schwarz (black)
-  0x000000, // 9 schwarz (black)
-  0x000000, // 10 schwarz (black)
-  0x000000, // 11 schwarz (black)
-  0x000000  // 12 schwarz (black)
-};
-
 uint32_t CRGBToUint32(CRGB color) {
     return ((uint32_t)color.r << 16) | ((uint32_t)color.g << 8) | (uint32_t)color.b;
 }
 
-void writeColors() {
-    for (size_t i = 0; i < 16; i++) {
-        uint8_t r = (colors[i] >> 16) & 0xFF; // Extract red
-        uint8_t g = (colors[i] >> 8) & 0xFF;  // Extract green
-        uint8_t b = colors[i] & 0xFF;         // Extract blue
-     //   col[i] = CRGB(r, g, b);              // Assign to `cols` array
-    }
-}
 
 
 CRGB uint32ToCRGBWithControls(uint32_t rgb, uint8_t saturation, uint8_t brightness) {
@@ -105,7 +76,24 @@ CRGB uint32ToCRGBWithControls(uint32_t rgb, uint8_t saturation, uint8_t brightne
     // Convert back to CRGB
     CRGB adjustedColor;
     hsv2rgb_rainbow(hsv, adjustedColor);
-
     return adjustedColor;
-
 }
+
+CRGB rainbowColor(float hue) {
+    uint8_t r = (sin(hue + 0.0f) * 127.5f + 127.5f); // Red channel
+    uint8_t g = (sin(hue + 2.0f * M_PI / 3.0f) * 127.5f + 127.5f); // Green channel
+    uint8_t b = (sin(hue + 4.0f * M_PI / 3.0f) * 127.5f + 127.5f); // Blue channel
+    return CRGB(r, g, b);
+}
+
+
+
+const char* welcome[5][9] = {
+    {"PLAY", "NICE", "FEEL", "GOOD", "LET", "VIBES", "SING", "PURE", "LOVE"},
+    {"HEAR", "TONE", "MAKE", "JOY", "LET", "BASS", "DROP", "REAL", "LOUD"},
+    {"KEEP", "CALM", "STAY", "KIND", "LET", "SOUL", "FIND", "ITS", "SONG"},
+    {"LOVE", "LIFE", "SING", "LOUD", "MAKE", "BEATS", "THAT", "FEEL", "PURE"},
+    {"DROP", "BASS", "HEAR", "VIBES", "MAKE", "TONE", "FLOW", "WITH", "LOVE"}
+};
+
+
