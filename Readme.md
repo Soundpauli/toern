@@ -2,6 +2,7 @@ Attention: This project is currently under very active development. The code and
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 update: fixed nullptr exceptions, please use added ResamplingReader.h for lib "teensy-variable-playback"
 
 
