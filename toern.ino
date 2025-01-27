@@ -1,11 +1,12 @@
-#include "Arduino.h"
+
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 1
 #define SERIAL8_RX_BUFFER_SIZE 256  // Increase to 256 bytes
 #define SERIAL8_TX_BUFFER_SIZE 256  // Increase if needed for transmission
+#define TargetFPS 64
 
 //#define AUDIO_SAMPLE_RATE_EXACT 44117.64706
-#define TargetFPS 64
+#include <stdint.h>
 #include "3x5.h"
 #include <Wire.h>
 #include <i2cEncoderLibV2.h>
@@ -94,7 +95,7 @@ volatile bool resetTimerActive = false;
 //  variables for program logic
 volatile float pulse = 1;
 volatile int dir = 1;
-
+unsigned int MIDI_CH = 1;
 unsigned int playNoteInterval = 150000;
 volatile unsigned int RefreshTime = 1000 / TargetFPS;
 float marqueePos = maxX;
@@ -116,6 +117,7 @@ volatile unsigned int pagebeat, beat = 1;
 unsigned int samplePackID, fileID = 1;
 EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
+IntervalTimer midiTimer;
 unsigned int lastPage = 1;
 
 EXTMEM unsigned int tmp[maxlen][maxY + 1][2] = {};
@@ -964,7 +966,7 @@ void setup(void) {
   playTimer.priority(230);
   playTimer.begin(playNote, playNoteInterval);
   playTimer.priority(230);
-
+  midiTimer.begin(checkMidi, playNoteInterval/16);
 
   // turn on the output
   sgtl5000_1.enable();
@@ -979,7 +981,7 @@ void setup(void) {
   switchMode(&draw);
 
 
-  MIDI.begin(1);
+  MIDI.begin(MIDI_CH);
   //Serial8.begin(57600);
 }
 
@@ -1100,6 +1102,8 @@ void checkMenuTouch() {
 
 
 void checkMidi() {
+
+  if (MIDI.read()) { 
   int pitch, velocity, channel, d1, d2;
   uint8_t miditype;
 
@@ -1108,13 +1112,12 @@ void checkMidi() {
   switch (miditype) {
     case midi::NoteOn:
       pitch = MIDI.getData1();
-      velocity = MIDI.getData2();
+      velocity = 127; //MIDI.getData2();
       //channel = MIDI.getChannel();
-
-      if (velocity > 0) {
+      handleNoteOn(channel, pitch, velocity);
+      //if (velocity > 0) {
         //Serial.println(String("Note On:  ch=") + channel + ", note=" + pitch + ", velocity=" + velocity);
-        handleNoteOn(channel, pitch, velocity);
-      }
+      //}
       break;
 
     case midi::NoteOff:
@@ -1130,6 +1133,7 @@ void checkMidi() {
       //Serial.println(String("Message, type=") + miditype + ", data = " + d1 + " " + d2);
       break;
   }
+}
 }
 
 
@@ -1222,9 +1226,9 @@ void loop() {
     }
 
 
-     if (MIDI.read()) {  // Is there a MIDI message incoming ?
-    checkMidi();
-      } 
+      // Is there a MIDI message incoming ?
+    //checkMidi();
+     
 
     if (!freshPaint && currentMode == &velocity) drawVelocity();
   }
@@ -1238,8 +1242,8 @@ void loop() {
 
   FastLEDshow();  // draw!
   yield();
-  //delay(20);  // 50????
-  //yield();    // 50????
+  delay(50);  // 50????
+  yield();    // 50????
 
 }
 
@@ -1968,6 +1972,7 @@ void updateBPM() {
   SMP.bpm = currentMode->pos[3];
   playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
   playTimer.update(playNoteInterval);
+  midiTimer.update(playNoteInterval/16);
   drawBPMScreen();
 }
 
@@ -2929,6 +2934,7 @@ void loadPattern(bool autoload) {
     bpm_vol->pos[3] = SMP.bpm;
     playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
     playTimer.update(playNoteInterval);
+    midiTimer.update(playNoteInterval/16);
     bpm_vol->pos[2] = SMP.vol;
 
 
@@ -3038,14 +3044,15 @@ void handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
   if (livenote < 1) livenote += 12;
 
   if (livenote >= 1 && livenote <= 16) {
-    light(SMP.x, livenote, CRGB(0, 0, 255));
-    FastLEDshow();
-    _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity * 8, true, true);
     if (isPlaying) {
       if (!SMP.mute[SMP.y - 1]) {
-        note[beat-1][livenote][0] = mychannel;
-        note[beat-1][livenote][1] = velocity;
+        note[beat][livenote][0] = mychannel;
+        note[beat][livenote][1] = velocity;
       }
+    }else{
+      light(SMP.x, livenote, CRGB(0, 0, 255));
+      FastLEDshow();
+      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity * 8, true, true);
     }
   }
 }
@@ -3107,6 +3114,7 @@ void myClock() {
       float bpm = 60000.0 / (averageInterval * 24);
       SMP.bpm = round(bpm);
       playTimer.update(((60 * 1000 / SMP.bpm) / 4) * 1000);
+      midiTimer.update((((60 * 1000 / SMP.bpm) / 4) * 1000)/16);
       clockCount = 0;
       totalInterval = 0;
     }
