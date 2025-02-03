@@ -395,6 +395,12 @@ public:
                             constexpr int requiredSize = 4;
 
                             
+
+                            if (!_interpolationPoints || !_interpolationPoints[channel]) {
+                                //std::cerr << "Pointer validation failed\n";
+                                return;
+                                }
+
                             // Shift the interpolation points
                             _interpolationPoints[channel][0].y = _interpolationPoints[channel][1].y;
                             _interpolationPoints[channel][1].y = _interpolationPoints[channel][2].y;
@@ -464,6 +470,9 @@ public:
                 //std::cerr << "Pointer validation failed\n";
                 return;
                 }
+
+                if (!result) return;
+                
 
 
                 _interpolationPoints[channel][0].y = _interpolationPoints[channel][1].y;
