@@ -1,4 +1,4 @@
-#include <stdint.h>
+
 const CRGB col_Folder[] = {
     CRGB(139, 0, 0),     // Dark Red
     CRGB(255, 69, 0),    // Burnt Orange

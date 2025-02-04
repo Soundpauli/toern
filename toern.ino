@@ -48,7 +48,8 @@
 #define defaultVelocity 63
 #define FOLDER_MAX 9
 
-#define maxPages 8
+#define maxPages 16
+
 #define maxFiles 9  // 9 samples, 2 Synths
 #define maxFilters 15
 #define maxfilterResolution 32
@@ -119,6 +120,7 @@ EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
 IntervalTimer midiTimer;
 unsigned int lastPage = 1;
+int editpage=1;
 
 EXTMEM unsigned int tmp[maxlen][maxY + 1][2] = {};
 EXTMEM unsigned int original[maxlen][maxY + 1][2] = {};
@@ -126,7 +128,7 @@ EXTMEM unsigned int note[maxlen][maxY + 1][2] = {};
 
 unsigned int sample_len[maxFiles];
 bool sampleLengthSet = false;
-bool isPlaying = false;  // global
+bool isNowPlaying = false;  // global
 int PrevSampleRate = 1;
 volatile EXTMEM int SampleRate[16] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 volatile EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles + 1)];
@@ -169,12 +171,12 @@ struct Mode {
   uint32_t knobcolor[4];
 };
 
-Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxY }, { 1, 1, maxfilterResolution, 1 }, { 0x110011, 0xFFFFFF, 0x00FF00, 0x110011 } };
-Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxX, maxfilterResolution, maxY }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
+Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen-1 }, { 1, 1, maxfilterResolution, 1 }, { 0x110011, 0xFFFFFF, 0x00FF00, 0x110011 } };
+Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution,  maxlen-1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode volume_bpm = { "VOLUME_BPM", { 1, 6, VOL_MIN, BPM_MIN }, { 1, 25, VOL_MAX, BPM_MAX }, { 1, 6, 9, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 1, 1, 1, 1 }, { 100, 100, 100, 100}, { 100, 1, 100, 1}, { 0x000000, 0x000000, 0x000000, 0x000000 } };
-Mode noteShift = { "NOTE_SHIFT", { 7, 0, 0, 7 }, { 9, 0, 0, 9 }, { 8, 0, 0, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
+Mode noteShift = { "NOTE_SHIFT", { 7, 7, 7, 7 }, { 9, 9, 9, 9 }, { 8, 8, 8, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
 Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 999, FOLDER_MAX, 999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
@@ -463,13 +465,28 @@ void switchMode(Mode *newMode) {
   unpaintMode = false;
   SMP.singleMode = false;
   paintMode = false;
-
   Mode *oldMode = currentMode;
+  /// OLD ACTIONS
+  if (currentMode == &set_Wav){
+      Encoder[0].begin(
+      i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
+      | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_ENABLE
+      | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+  }
+  /// NEW ACTIONS
   Serial.println(newMode->name);
   oldButtonString = buttonString;
   if (newMode != currentMode) {
     currentMode = newMode;
     // Set last saved values for encoders
+  
+  if (currentMode== &set_Wav){
+    Encoder[0].begin(
+      i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
+      | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
+      | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+  }
+
     for (int i = 0; i < NUM_ENCODERS; i++) {
       Encoder[i].writeRGBCode(currentMode->knobcolor[i]);
       Encoder[i].writeMax((int32_t) currentMode->maxValues[i]);  //maxval
@@ -497,7 +514,7 @@ void switchMode(Mode *newMode) {
 void drawPlayButton(unsigned int timer) {
 
   if (currentMode == &draw || currentMode == &singleMode) {
-    if (isPlaying) {
+    if (isNowPlaying) {
       if (timer == 1 || timer == 5 || timer == 9 || timer == 13) {
         Encoder[2].writeRGBCode(0xFF0000);
       } else {
@@ -522,7 +539,7 @@ void checkMode(String buttonString, bool reset) {
   if ((currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && buttonString == "0010") {
 
 
-    if (!isPlaying) {
+    if (!isNowPlaying) {
       Serial.println("PLAY");
       play(true);
     } else {
@@ -533,7 +550,7 @@ void checkMode(String buttonString, bool reset) {
       }
     }
 
-    //if (isPlaying) pause();
+    //if (isNowPlaying) pause();
   }
 
   if ((currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && buttonString == "0200") {
@@ -598,7 +615,7 @@ void checkMode(String buttonString, bool reset) {
 
   // Switch to volume mode in draw or single mode
   if ((currentMode == &draw || currentMode == &singleMode) && buttonString == "0220") {
-    if (isPlaying) {
+    if (isNowPlaying) {
       play(false);
     } else {
     }
@@ -607,7 +624,7 @@ void checkMode(String buttonString, bool reset) {
 
   // Switch to volume mode in draw or single mode
   if ((currentMode == &draw || currentMode == &singleMode) && buttonString == "0020") {
-    if (isPlaying) {
+    if (isNowPlaying) {
       play(false);
     } else {
     }
@@ -914,7 +931,7 @@ void setup(void) {
 
     Encoder[i].writeAntibouncingPeriod(10);  //10?
     Encoder[i].writeCounter((int32_t)1);
-    Encoder[i].writeMax((int32_t)16);  //maxval
+    Encoder[i].writeMax((int32_t)16*4);  //maxval
     Encoder[i].writeMin((int32_t)1);   //minval
     Encoder[i].writeStep((int32_t)1);  //steps
 
@@ -1086,30 +1103,36 @@ void checkEncoders() {
     } 
 
     Encoder[0].writeRGBCode(CRGBToUint32(col[SMP.currentChannel]));
-   Encoder[3].writeRGBCode(CRGBToUint32(col[SMP.currentChannel]));
+    Encoder[3].writeRGBCode(CRGBToUint32(col[SMP.currentChannel]));
     //WHY???
     //SMP.edit = 1;
 
     if (paintMode) {
-      note[(SMP.edit - 1) * maxX + SMP.x][SMP.y][0] = SMP.currentChannel;
+      note[SMP.x][SMP.y][0] = SMP.currentChannel;
     }
     if (paintMode && currentMode == &singleMode) {
-      note[(SMP.edit - 1) * maxX + SMP.x][SMP.y][0] = SMP.currentChannel;
+      note[SMP.x][SMP.y][0] = SMP.currentChannel;
     }
 
     if (unpaintMode) {
       if (SMP.singleMode) {
-        if (note[(SMP.edit - 1) * maxX + SMP.x][SMP.y][0] == SMP.currentChannel)
-          note[(SMP.edit - 1) * maxX + SMP.x][SMP.y][0] = 0;
+        if (note[SMP.x][SMP.y][0] == SMP.currentChannel)
+          note[SMP.x][SMP.y][0] = 0;
       } else {
-        note[(SMP.edit - 1) * maxX + SMP.x][SMP.y][0] = 0;
+        note[SMP.x][SMP.y][0] = 0;
       }
     }
 
-    unsigned int editpage = currentMode->pos[1];
-    if (editpage != SMP.edit && editpage <= lastPage) {
+  
+    if (currentMode->pos[1] != editpage) {
+      //SMP.edit = editpage;
+      editpage = currentMode->pos[1];
+      Serial.println("p:" + String(editpage));
+      int xval = mapXtoPageOffset(SMP.x) + ((editpage-1)*16);
+      Encoder[3].writeCounter((int32_t) xval);
+      SMP.x = xval;
       SMP.edit = editpage;
-      //Serial.println("p:" + String(SMP.edit));
+      
     }
   }
 }
@@ -1207,16 +1230,15 @@ void checkMidi() {
 }
 
 
+int getPage(int x) {
+    return (x - 1) / maxX + 1;  // Calculate page number
+}
+
 void loop() {
-
-
-
-
+  
   drawPlayButton(pagebeat);
   checkSingleTouch();
   checkMenuTouch();
-
-
 
 
   if (note[SMP.x][SMP.y][0] == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true) {
@@ -1245,7 +1267,7 @@ void loop() {
   checkButtons();
 
   //fix?
-  SMP.edit = 1;
+  SMP.edit = getPage(SMP.x);
 
 
   // Continuously check encoders
@@ -1277,7 +1299,7 @@ void loop() {
     drawBase();
     drawTriggers();
 
-    if (isPlaying) {
+    if (isNowPlaying) {
       drawTimer(pagebeat);
     }
   }
@@ -1289,7 +1311,7 @@ void loop() {
     drawTriggers();
     if (currentMode != &velocity)
       drawCursor();
-    if (isPlaying) {
+    if (isNowPlaying) {
       drawTimer(pagebeat);
       if (!freshPaint && currentMode == &velocity) drawVelocity();
       FastLEDshow();
@@ -1347,6 +1369,8 @@ void getLastFiles() {
 }
 
 void shiftNotes() {
+
+
   unsigned int patternLength = lastPage * maxX;
   if (currentMode->pos[3] != SMP.shiftX) {
     // Determine shift direction (+1 or -1)
@@ -1447,6 +1471,12 @@ void shiftNotes() {
     }
     shifted = false;
   }
+
+
+
+  /* shift only this page:*/
+
+
 }
 
 
@@ -1497,11 +1527,11 @@ void play(bool fromStart) {
     Encoder[2].writeRGBCode(0xFFFF00);
   }
   playStartTime = millis();  // Record the current time
-  isPlaying = true;
+  isNowPlaying = true;
 }
 
 void pause() {
-  isPlaying = false;
+  isNowPlaying = false;
   updateLastPage();
   deleteActiveCopy();
   autoSave();
@@ -1534,7 +1564,7 @@ void togglePlay(bool &value) {
 void playNote() {
 
   playTimer.end();  // Stop the timer
-  if (isPlaying) {
+  if (isNowPlaying) {
 
 
     for (unsigned int b = 1; b < maxY + 1; b++) {
@@ -1577,14 +1607,14 @@ void playNote() {
       beat = 1;
       pagebeat = 1;
       SMP.page = 1;
-      isPlaying = true;
+      isNowPlaying = true;
       Serial.println("4 Bars Reached");
 
       waitForFourBars = false;  // Reset for the next start message
     }
 
     if (beat > SMP.page * maxX) {
-
+      updateLastPage();
       SMP.page = SMP.page + 1;
 
       if (SMP.page > maxPages)
@@ -1631,7 +1661,7 @@ void paint() {
   //SMP.edit = 1;
   Serial.println("!!!PAINT!");
   unsigned int sample = 1;
-  unsigned int x = (SMP.edit - 1) * maxX + SMP.x;
+  unsigned int x = SMP.x;//(SMP.edit - 1) * maxX + SMP.x;
   unsigned int y = SMP.y;
 
   if (!SMP.singleMode) {
@@ -1665,7 +1695,7 @@ void paint() {
     FastLEDshow();
   }
 
-  if (!isPlaying) {
+  if (!isNowPlaying) {
     if (note[x][y][0] < 9) {
       _samplers[note[x][y][0]].noteEvent(12 * SampleRate[note[x][y][0]] + y - (note[x][y][0] + 1), defaultVelocity, true, false);
       //yield();
@@ -1713,12 +1743,13 @@ void light(unsigned int x, unsigned int y, CRGB color) {
 
 
 
-void displaySample(unsigned int len) {
-  unsigned int length = mapf(len, 0, 1329920, 1, maxX);
-  unsigned int skip = mapf(SMP.seek * 200, 44, len, 1, maxX);
+void displaySample(unsigned int start, unsigned int size, unsigned int end) {
+  unsigned int length = mapf(size, 0, 1329920, 1, maxX);
+  unsigned int starting = mapf(start * 200, 0, size, 1, maxX);
+unsigned int ending  = mapf(end * 200, 0, size, 1, maxX);
 
   for (unsigned int s = 1; s <= maxX; s++) {
-    light(s, 5, CRGB(1, 1, 1));
+    light(s, 5, CRGB(10, 10, 10));
   }
 
   for (unsigned int s = 1; s <= length; s++) {
@@ -1729,9 +1760,14 @@ void displaySample(unsigned int len) {
     light(s, 4, CRGB(4, 0, 0));
   }
 
-  for (unsigned int s = 1; s <= skip; s++) {
+  for (unsigned int s = 1; s <= starting; s++) {
     light(s, 4, CRGB(0, 4, 0));
   }
+
+for (unsigned int s = maxX; s >= ending; s--) {
+    light(s, 4, CRGB(0, 4, 40));
+}
+
   FastLED.setBrightness(ledBrightness);
   FastLED.show();
 }
@@ -1811,9 +1847,9 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     }
 
     previewSample.close();
-    displaySample(SMP.smplen);
+    displaySample(SMP.seek, fileSize / (PrevSampleRate * 2), SMP.seekEnd);
 
-    _samplers[0].addSample(36, (int16_t *)sampled[0], (int)(plen / 2), 1);  //-44?
+    _samplers[0].addSample(36, (int16_t *)sampled[0], (int) plen, 1);  //-44?
 
     Serial.println("NOTE");
     _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
@@ -1979,7 +2015,8 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
 
 void clearPage() {
   //SMP.edit = 1;
-  unsigned int start = (SMP.edit - 1) * maxX + 1;
+  
+  unsigned int start = ((SMP.edit - 1) * maxX) +1;
   unsigned int end = start + maxX;
   unsigned int channel = SMP.currentChannel;
   bool singleMode = SMP.singleMode;
@@ -1987,7 +2024,7 @@ void clearPage() {
   for (unsigned int c = start; c < end; c++) {
     clearNoteChannel(c, 1, maxY + 1, channel, singleMode);
   }
-  updateLastPage();
+  //updateLastPage();
 }
 
 void drawBPMScreen() {
@@ -2013,8 +2050,8 @@ void updateVolume() {
   SMP.vol = currentMode->pos[2];
   float vol = float(SMP.vol / 10.0);
   Serial.println("Vol: " + String(vol));
-  //if (vol <= 1.0) sgtl5000_1.volume(vol);
-  // setvol = true;
+  if (vol <= 1.0) sgtl5000_1.volume(vol);
+   //setvol = true;
 }
 
 void updateBrightness() {
@@ -2023,7 +2060,7 @@ void updateBrightness() {
 }
 
 void updateBPM() {
-  // setvol = false;
+ //setvol = false;
   Serial.println("BPM: " + String(currentMode->pos[3]));
   SMP.bpm = currentMode->pos[3];
   playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
@@ -2364,18 +2401,20 @@ void showWave() {
   char OUTPUTf[50];
   sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
   showNumber(snr, col_Folder[fnr], 11);
-  displaySample(SMP.smplen);
+//  displaySample(SMP.smplen);
+// todo: show filelend
 
 
   //:::::::: STARTPOSITION SAMPLE  ::::: //
   if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
     SMP.seek = currentMode->pos[0];
+  
     Serial.println(SMP.seek);
 
     //STOP ALREADY PLAYING
     _samplers[0].removeAllSamples();
     envelope0.noteOff();
-    if (sampleFile) sampleFile.seek(44);
+   // if (sampleFile) sampleFile.seek(44);
 
     if (SD.exists(OUTPUTf)) {
       previewSample(fnr, getFileNumber(snr), false, false);
@@ -2433,9 +2472,7 @@ void showWave() {
     currentMode->pos[0] = 0;
     SMP.seek = 0;
     Encoder[0].writeCounter((int32_t)0);
-    //_samplers[0].removeAllSamples();
-    //envelope0.noteOff();
-    //if (sampleFile)sampleFile.seek(44);
+    envelope0.noteOff();
 
     if (!sampleIsLoaded) {
       //lastPreviewedSample[fnr] = snr;
@@ -2686,34 +2723,36 @@ void drawBase() {
       light(x, 1, CRGB(0, 1, 1));  // türkis
     }
   }
+  
   drawPages();
   drawStatus();
+  
 }
 
 void drawStatus() {
   CRGB ledColor = CRGB(0, 0, 0);
   if (SMP.activeCopy)
     ledColor = CRGB(20, 20, 0);
-  for (unsigned int s = 9; s <= maxX; s++) {
-    light(s, maxY, ledColor);
+  for (unsigned int s = 1; s <= maxX; s++) {
+    light(s, 1, ledColor);
   }
 
   if (currentMode == &noteShift) {
     // draw a moving marquee to indicate the note shift mode
-    for (unsigned int x = 9; x <= maxX; x++) {
-      light(x, maxY, CRGB(0, 0, 0));
+    for (unsigned int x = 1; x <= maxX; x++) {
+      light(x, 1, CRGB(0, 0, 0));
     }
-    light(round(marqueePos), maxY, CRGB(20, 20, 20));
+    light(round(marqueePos), 1, CRGB(120, 120, 120));
     if (movingForward) {
-      marqueePos = marqueePos + 0.1;
+      marqueePos = marqueePos + 1;
       if (marqueePos > maxX) {
         marqueePos = maxX;
         movingForward = false;
       }
     } else {
-      marqueePos = marqueePos - 0.1;
-      if (marqueePos < 9) {
-        marqueePos = 9;
+      marqueePos = marqueePos - 1;
+      if (marqueePos < 1) {
+        marqueePos = 1;
         movingForward = true;
       }
     }
@@ -2754,9 +2793,9 @@ void drawPages() {
 
     // If the page is the current one, set the LED to white
     if (SMP.page == p && SMP.edit == p) {
-      ledColor = isPlaying ? CRGB(20, 255, 20) : CRGB(50, 50, 50);
+      ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(50, 50, 50);
     } else if (SMP.page == p) {
-      ledColor = isPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
+      ledColor = isNowPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
     } else {
       if (SMP.edit == p) {
         ledColor = SMP.page == p ? CRGB(50, 50, 50) : CRGB(20, 20, 20);
@@ -2770,7 +2809,7 @@ void drawPages() {
   }
 
   // After the loop, update the maxValues for Page-select-knob
-  currentMode->maxValues[1] = lastPage + 1;
+  //currentMode->maxValues[1] = lastPage + 1;
 
   // Additional logic can be added here if needed
 }
@@ -2780,7 +2819,7 @@ void drawPages() {
   *************************************************/
 void drawTriggers() {
   // why?
-  SMP.edit = 1;
+  //SMP.edit = 1;
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
     for (unsigned int iy = 1; iy < maxY + 1; iy++) {
       int thisNote = note[((SMP.edit - 1) * maxX) + ix][iy][0];
@@ -2826,6 +2865,11 @@ void drawTimer(unsigned int timer) {
   }
 }
 
+
+int mapXtoPageOffset(int x){
+    return  x - (SMP.edit - 1) * maxX;
+}
+
 /************************************************
       USER CURSOR
   *************************************************/
@@ -2840,7 +2884,7 @@ void drawCursor() {
   if (pulse < 1) {
     dir = 1;
   }
-  light(SMP.x, SMP.y, CRGB(255 - (int)pulse, 255 - (int)pulse, 255 - (int)pulse));
+  light(mapXtoPageOffset(SMP.x), SMP.y, CRGB(255 - (int)pulse, 255 - (int)pulse, 255 - (int)pulse));
 }
 
 
@@ -3144,7 +3188,7 @@ void autoLoad() {
 
 void handleStop() {
   // This function is called when a MIDI STOP message is received
-  isPlaying = false;
+  isNowPlaying = false;
   pulseCount = 0;
   AudioMemoryUsageMaxReset();
   deleteActiveCopy();
@@ -3177,13 +3221,13 @@ void handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
   if (livenote < 1) livenote += 12;
 
   if (livenote >= 1 && livenote <= 16) {
-    if (isPlaying) {
+    if (isNowPlaying) {
       if (!SMP.mute[SMP.currentChannel]) {
         note[beat][livenote][0] = mychannel;
         note[beat][livenote][1] = velocity;
       }
     } else {
-      light(SMP.x, livenote, CRGB(0, 0, 255));
+      light(mapXtoPageOffset(SMP.x), livenote, CRGB(0, 0, 255));
       FastLEDshow();
       _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity * 8, true, true);
     }
@@ -3191,7 +3235,7 @@ void handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
 }
 
 void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
-  /*if (isPlaying) {
+  /*if (isNowPlaying) {
     if (pitch > 0 && pitch < 17) {
       if (note[beat][pitch][0] == SMP.currentChannel) {
         note[beat][pitch][0] = 0;
