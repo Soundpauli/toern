@@ -86,14 +86,3 @@ CRGB rainbowColor(float hue) {
     return CRGB(r, g, b);
 }
 
-
-
-const char* welcome[5][9] = {
-    {"PLAY", "NICE", "FEEL", "GOOD", "LET", "VIBES", "SING", "PURE", "LOVE"},
-    {"HEAR", "TONE", "MAKE", "JOY", "LET", "BASS", "DROP", "REAL", "LOUD"},
-    {"KEEP", "CALM", "STAY", "KIND", "LET", "SOUL", "FIND", "ITS", "SONG"},
-    {"LOVE", "LIFE", "SING", "LOUD", "MAKE", "BEATS", "THAT", "FEEL", "PURE"},
-    {"DROP", "BASS", "HEAR", "VIBES", "MAKE", "TONE", "FLOW", "WITH", "LOVE"}
-};
-
-
