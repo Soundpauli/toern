@@ -6,7 +6,7 @@ Attention: This project is currently under very active development. The code and
 update: fixed nullptr exceptions, please use added ResamplingReader.h for lib "teensy-variable-playback"
 
 
-# tœrn: THE SUCCESSOR TO NI404  
+# TŒRN: THE SUCCESSOR TO NI404  
 **DIY Open-Source Hardware Sampler-Sequencer**  
 An Etch-A-Sketch™-inspired device for beginners, makers, and music enthusiasts.
 
@@ -14,7 +14,7 @@ An Etch-A-Sketch™-inspired device for beginners, makers, and music enthusiasts
 ---
 
 ## INTRODUCING TŒRN  
-The tœrn builds on the legacy of the NI404 with **enhanced features**, a streamlined design, and superior functionality. From upgraded RGB-I2C rotary encoders to a custom PCB with everything pre-assembled, tœrn_x408 is designed to be the ultimate **DIY sampler-sequencer**—accessible, powerful, and inspiring.  
+The TŒRN builds on the legacy of the NI404 with **enhanced features**, a streamlined design, and superior functionality. From upgraded RGB-I2C rotary encoders to a custom PCB with everything pre-assembled, tœrn_x408 is designed to be the ultimate **DIY sampler-sequencer**—accessible, powerful, and inspiring.  
 
 No more additional cables or extensions: every component is directly mounted on the PCB, ensuring ease of assembly and a clean build. With **new connectivity options**, expanded audio capabilities, and an updated design, this device is ready to meet the needs of modern music creators.  
 
