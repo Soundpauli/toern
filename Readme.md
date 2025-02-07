@@ -6,7 +6,7 @@ Attention: This project is currently under very active development. The code and
 update: fixed nullptr exceptions, please use added ResamplingReader.h for lib "teensy-variable-playback"
 
 
-# tœrn_x408: THE SUCCESSOR TO NI404  
+# tœrn: THE SUCCESSOR TO NI404  
 **DIY Open-Source Hardware Sampler-Sequencer**  
 An Etch-A-Sketch™-inspired device for beginners, makers, and music enthusiasts.
 
