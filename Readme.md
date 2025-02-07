@@ -20,7 +20,7 @@ No more additional cables or extensions: every component is directly mounted on 
 
 ---
 
-## WHAT'S NEW IN TŒRN_X408  
+## WHAT'S NEW IN TŒRN 
 
 - **Upgraded Encoders**: High-quality RGB-I2C rotary encoders for smoother and more precise control.  
 - **Custom PCB**: Fully assembled, simplifying the building process—just order and put it together.  
@@ -39,7 +39,7 @@ No more additional cables or extensions: every component is directly mounted on 
 ---
 
 ## OPEN-SOURCE AND COMMUNITY-DRIVEN  
-As always, tœrn_x408 remains **fully open-source**, with all schematics, code, and design files available for download. The project encourages collaboration and creativity, inviting users to tweak, modify, and share their own innovations.  
+As always, TŒRN remains **fully open-source**, with all schematics, code, and design files available for download. The project encourages collaboration and creativity, inviting users to tweak, modify, and share their own innovations.  
 
 ---
 
@@ -73,7 +73,7 @@ As always, tœrn_x408 remains **fully open-source**, with all schematics, code, 
 All source code, schematics, and 3D files are available under the MIT License. Whether you're a maker, developer, or musician, the tœrn_x408 invites you to explore, modify, and share your ideas.  
 
 
-**Order a tœrn_x408**: Don’t want to build your own? Contact us at **JPKuntoff@gmail.com** to purchase a pre-assembled unit or collaborate on your custom build.  
+**Order a TŒRN**: Don’t want to build your own? Contact us at **JPKuntoff@gmail.com** to purchase a pre-assembled unit or collaborate on your custom build.  
 
 ---
 
