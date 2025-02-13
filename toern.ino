@@ -19,13 +19,13 @@
 #include "files.h"
 #include <MIDI.h>
 #include <FastLED.h>  // leds
-#include <Audio.h>
-#include "audioinit.h"
 
+#include <Audio.h>
 #include <EEPROM.h>
 #include "colors.h"
-#include <TeensyPolyphony.h>
 #include <FastTouch.h>
+#include <TeensyPolyphony.h>
+#include "audioinit.h"
 
 
 #define maxX 16
@@ -107,7 +107,7 @@ volatile bool resetTimerActive = false;
 
 // runtime
 //  variables for program logic
-volatile float pulse = 1;
+float pulse = 1;
 volatile int dir = 1;
 unsigned int MIDI_CH = 1;
 unsigned int playNoteInterval = 150000;
@@ -291,10 +291,10 @@ int clickCount[NUM_ENCODERS] = { 0 };               // Number of clicks
 
 
 i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
-  i2cEncoderLibV2(0b0100000),  // third encoder address
-  i2cEncoderLibV2(0b1110000),  // 2nd encoder address +
-  i2cEncoderLibV2(0b1000100),  // First encoder address
-  i2cEncoderLibV2(0b1000101),  // First encoder address
+  i2cEncoderLibV2(0x01),  // third encoder address
+  i2cEncoderLibV2(0x41),  // 2nd encoder address +
+  i2cEncoderLibV2(0x20),  // First encoder address
+  i2cEncoderLibV2(0x61),  // First encoder address
 };
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
@@ -1223,6 +1223,7 @@ void setEncoderColor(int i) {
 
 void checkEncoders() {
   buttonString = "";
+  posString = "";
   for (int i = 0; i < NUM_ENCODERS; i++) {
     currentEncoderIndex = i;
     Encoder[i].updateStatus();
@@ -1238,6 +1239,7 @@ void checkEncoders() {
   if (currentMode == &draw || currentMode == &singleMode) {
     if (posString != oldPosString) {
       oldPosString = posString;
+      Serial.println(posString);
       SMP.x = currentMode->pos[3];
       SMP.y = currentMode->pos[0];
     }

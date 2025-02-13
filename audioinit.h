@@ -1,4 +1,22 @@
 
+AudioPlayArrayResmp sound0;
+AudioPlayArrayResmp sound1;
+AudioPlayArrayResmp sound2;
+AudioPlayArrayResmp sound3;
+AudioPlayArrayResmp sound4;
+AudioPlayArrayResmp sound5;
+AudioPlayArrayResmp sound6;
+AudioPlayArrayResmp sound7;
+AudioPlayArrayResmp sound8;
+AudioPlayArrayResmp sound9;
+AudioPlayArrayResmp sound10;
+AudioPlayArrayResmp sound11;
+AudioPlayArrayResmp sound12;
+
+// --- ADDITIONAL sound declarations below here ... ---//
+// --- AudioPlayArrayResmp doesnt exist in GUItool ---//
+
+
 // GUItool: begin automatically generated code
 AudioSynthWaveform       sound13;        //xy=102.5555648803711,1034.8889617919922
 AudioSynthWaveform       sound14;        //xy=108.11111068725586,1108.6666951179504
@@ -122,21 +140,6 @@ AudioControlSGTL5000     sgtl5000_1;     //xy=1867.2224884033203,864.66684532165
 
 // --- ADDITIONAL sound declarations below here ... ---//
 // --- AudioPlayArrayResmp doesnt exist in GUItool ---//
-
-AudioPlayArrayResmp sound0;
-AudioPlayArrayResmp sound1;
-AudioPlayArrayResmp sound2;
-AudioPlayArrayResmp sound3;
-AudioPlayArrayResmp sound4;
-AudioPlayArrayResmp sound5;
-AudioPlayArrayResmp sound6;
-AudioPlayArrayResmp sound7;
-AudioPlayArrayResmp sound8;
-AudioPlayArrayResmp sound9;
-AudioPlayArrayResmp sound10;
-AudioPlayArrayResmp sound11;
-AudioPlayArrayResmp sound12;
-
 
 AudioConnection snd0(sound0, envelope0);
 AudioConnection snd1(sound1, envelope1);
