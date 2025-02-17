@@ -4,7 +4,7 @@
 #define SERIAL8_RX_BUFFER_SIZE 256  // Increase to 256 bytes
 #define SERIAL8_TX_BUFFER_SIZE 256  // Increase if needed for transmission
 #define TargetFPS 30
-
+#define SEARCHSIZE 100
 //#define AUDIO_SAMPLE_RATE_EXACT 44117.64706
 #include <stdint.h>
 #include "font_3x5.h"
@@ -74,6 +74,12 @@ unsigned int menuPosition = 1;
 String oldPosString, posString = "1:2:";
 String buttonString, oldButtonString = "0000";
 unsigned long playStartTime = 0;  // To track when play(true) was last called
+
+bool previewIsPlaying = false;
+
+const int maxPeaks = 512; // Adjust based on your needs
+      float peakValues[maxPeaks];
+      int peakIndex = 0;
 
 volatile uint8_t ledBrightness = 63;
 const unsigned int maxlen = (maxX * maxPages) + 1;
@@ -165,6 +171,7 @@ const float pianoFrequencies[16] = {
   587.33   // D5
 };
 
+elapsedMillis msecs;
 
 
 CRGB leds[NUM_LEDS];
@@ -192,7 +199,7 @@ Mode filterMode = { "FILTERMODE", { 1, 1, 1, 1 }, { 4, 100, 100, 100 }, { 1, 1, 
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 7, 7 }, { 9, 9, 9, 9 }, { 8, 8, 8, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
-Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 999, FOLDER_MAX, 999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
+Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 1, 1 }, { 1, 1, 12, 12 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode menu = { "MENU", { 1, 1, 1, 1 }, { 1, 1, 1, 5 }, { 1, 1, 1, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
@@ -254,25 +261,42 @@ volatile Device SMP = {
   { 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16 }  //channelVol
 };
 
-enum FilterType { WAVEFORM,
+
+enum VoiceSelect { 
+                  };  // Define filter types
+
+enum ParameterType { 
+                  TYPE, //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM 
+                  WAVEFORM,
                   DELAY,
                   ATTACK,
                   HOLD,
                   DECAY,
                   SUSTAIN,
                   RELEASE,
+                  DETUNE,
+                  NOISE,
+                  MAX_PARAM };  // Define filter types
+
+enum FilterType { LOWPASS,
+                  HIGHPASS,
+                  FREQUENCY, //AudioFilterStateVariable ->freqency
+                  FLANGER,
+                  ECHO,
+                  DISTORTION,
+                  RINGMOD,
                   MAX_TYPE };  // Define filter types
 
 // Define 2D array where each row represents a button's cycling values
-const FilterType buttonValues[][4] = {
+const ParameterType buttonValues[][4] = {
   {},                                      // Button 1 (no cycling values)
-  {DELAY, ATTACK, MAX_TYPE, MAX_TYPE},     // Button 2 (no cycling values)
-  {HOLD, DECAY, MAX_TYPE, MAX_TYPE},       // Button 3 (no cycling values)
-  {SUSTAIN, RELEASE, MAX_TYPE, MAX_TYPE }  // Button 4 cycles through {RELEASE, WAVEFORM}
+  {DELAY, ATTACK, MAX_PARAM, MAX_PARAM},     // Button 2 (no cycling values)
+  {HOLD, DECAY, MAX_PARAM, MAX_PARAM},       // Button 3 (no cycling values)
+  {SUSTAIN, RELEASE, MAX_PARAM, MAX_PARAM }  // Button 4 cycles through {RELEASE, WAVEFORM}
 };
 
 // ADSR array that stores the currently selected value for each button
-FilterType adsr[4] = { WAVEFORM, DELAY, HOLD, RELEASE };  // Button 4 starts at RELEASE
+ParameterType adsr[4] = { WAVEFORM, DELAY, HOLD, RELEASE };  // Button 4 starts at RELEASE
 
 // Arrays to track multiple encoders
 int buttons[NUM_ENCODERS] = { 0 };  // Tracks the current state of each encoder
@@ -311,6 +335,7 @@ void resetAllFilters() {
     filters[i]->resonance(0);
   }
 }
+
 
 void allOff() {
   for (AudioEffectEnvelope *envelope : envelopes) {
@@ -530,6 +555,17 @@ void switchMode(Mode *newMode) {
 }
 
 
+void interpolatePeaks() {
+    int lastValidIndex = peakIndex - 1;
+    
+    if (lastValidIndex >= 1) {
+        float step = (float)(peakValues[lastValidIndex] - peakValues[0]) / lastValidIndex;
+
+        for (int i = 1; i < lastValidIndex; i++) {
+            peakValues[i] = peakValues[0] + (step * i);
+        }
+    }
+}
 
 void continueRecording() {
   if (queue1.available() >= 2) {
@@ -1446,6 +1482,27 @@ void loop() {
     return;
   }
 
+
+
+
+  if (previewIsPlaying){
+    if (msecs > 5) {
+        if (playRaw0.isPlaying() && peakIndex < maxPeaks) {
+          if (peak1.available()) {
+            msecs = 0;
+            // Store the peak value
+            peakValues[peakIndex] = peak1.read();
+            Serial.println(peakValues[peakIndex]);
+            peakIndex++;
+          } 
+        }   
+      }
+
+      if (!playRaw0.isPlaying()) {
+        previewIsPlaying = false; // Playback finished
+    }
+  }
+
   drawPlayButton(pagebeat);
   //checkSingleTouch();
   //checkMenuTouch();
@@ -1954,32 +2011,34 @@ void light(unsigned int x, unsigned int y, CRGB color) {
 
 
 void displaySample(unsigned int start, unsigned int size, unsigned int end) {
-  unsigned int length = mapf(size, 0, 1329920, 1, maxX);
-  unsigned int starting = mapf(start * 200, 0, size, 1, maxX);
-  unsigned int ending = mapf(end * 200, 0, size, 1, maxX);
+  return;
+  unsigned int length = mapf(size, 0, 302000, 1, maxX);
+  unsigned int starting = mapf(start * SEARCHSIZE, 0, size, 1, maxX);
+  unsigned int ending = mapf(end * SEARCHSIZE, 0, size, 1, maxX);
 
-  for (unsigned int s = 1; s <= maxX; s++) {
-    light(s, 5, CRGB(10, 10, 10));
-  }
+  //for (unsigned int s = 1; s <= maxX; s++) {
+    //light(s, 5, CRGB(10, 20, 10));
+  //}
 
   for (unsigned int s = 1; s <= length; s++) {
-    light(s, 5, CRGB(20, 20, 20));
-  }
-
-  for (unsigned int s = 1; s <= maxX; s++) {
-    light(s, 4, CRGB(4, 0, 0));
+    light(s, 9, CRGB(10, 10, 0));
   }
 
   for (unsigned int s = 1; s <= starting; s++) {
-    light(s, 4, CRGB(0, 4, 0));
+    light(s, 7, CRGB(0, 10, 0));
+  }
+  
+  for (unsigned int s = starting; s <= ending; s++) {
+    light(s, 6, CRGB(10, 10, 10));
   }
 
-  for (unsigned int s = maxX; s >= ending; s--) {
-    light(s, 4, CRGB(0, 4, 40));
+
+  for (unsigned int s = ending; s <= maxX; s++) {
+    light(s, 7, CRGB(10,0,0));
   }
 
-  FastLED.setBrightness(ledBrightness);
-  FastLED.show();
+  //FastLED.setBrightness(ledBrightness);
+  //FastLED.show();
 }
 
 
@@ -1988,6 +2047,8 @@ void displaySample(unsigned int start, unsigned int size, unsigned int end) {
 
 void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
   // envelopes[0]->release(0);
+
+    
   _samplers[0].removeAllSamples();
   envelope0.noteOff();
   char OUTPUTf[50];
@@ -1996,7 +2057,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
   Serial.print("PLAYING:::");
   Serial.println(OUTPUTf);
   File previewSample = SD.open(OUTPUTf);
-  SMP.smplen = 0;
+  //SMP.smplen = 0;
 
   if (previewSample) {
     int fileSize = previewSample.size();
@@ -2020,8 +2081,8 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
         PrevSampleRate = 4;
     }
 
-    int startOffset = 1 + (200 * SMP.seek);  // Start offset in milliseconds
-    int endOffset = (200 * SMP.seekEnd);     // End offset in milliseconds
+    int startOffset = 1 + (SEARCHSIZE * SMP.seek);  // Start offset in milliseconds
+    int endOffset =       (SEARCHSIZE * SMP.seekEnd);     // End offset in milliseconds
 
     if (setMaxSampleLength == true) {
       endOffset = fileSize;
@@ -2045,19 +2106,18 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     }
 
     sampleIsLoaded = true;
-    SMP.smplen = plen;
-
-    // only set the first time to get seekEnd
-    if (setMaxSampleLength == true) {
-      sampleLengthSet = true;
-      SMP.seekEnd = (SMP.smplen / (PrevSampleRate * 2) / 200);
-      currentMode->pos[2] = SMP.seekEnd;
-      //SET ENCODER SEARCH_END to last byte
-      Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-    }
+    SMP.smplen = fileSize / (PrevSampleRate * 2);
+ 
+ 
+ if (setMaxSampleLength) {
+            SMP.seekEnd = SMP.smplen / SEARCHSIZE;
+            currentMode->pos[2] = SMP.seekEnd;
+            Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+            sampleLengthSet = true;
+        }
 
     previewSample.close();
-    displaySample(SMP.seek, fileSize / (PrevSampleRate * 2), SMP.seekEnd);
+    displaySample(SMP.seek, SMP.smplen, SMP.seekEnd);
 
     _samplers[0].addSample(36, (int16_t *)sampled[0], (int)plen, 1);  //-44?
 
@@ -2143,10 +2203,10 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
     //SMP.seek = 0;
 
-    unsigned int startOffset = 1 + (200 * SMP.seek);                   // Start offset in milliseconds
+    unsigned int startOffset = 1 + (SEARCHSIZE * SMP.seek);                   // Start offset in milliseconds
     unsigned int startOffsetBytes = startOffset * PrevSampleRate * 2;  // Convert to bytes (assuming 16-bit samples)
 
-    unsigned int endOffset = 200 * SMP.seekEnd;  // End offset in milliseconds
+    unsigned int endOffset = SEARCHSIZE * SMP.seekEnd;  // End offset in milliseconds
     if (SMP.seekEnd == 0) {
       // If seekEnd is not set, default to the full length of the sample
       endOffset = fileSize;
@@ -2640,7 +2700,58 @@ int getFileNumber(int value) {
   if (wavfile <= 0) wavfile = 0;
   return wavfile + folder * 100;
 }
+void processPeaks() {
+    float interpolatedValues[16]; // Ensure at least 16 values
 
+    // Map seek start and end positions to x range (1-16)
+    unsigned int startX = mapf(SMP.seek * SEARCHSIZE, 0, SMP.smplen, 1, 16);
+    unsigned int endX = mapf(SMP.seekEnd * SEARCHSIZE, 0, SMP.smplen, 1, 16);
+
+    if (peakIndex > 0) {
+        // Distribute peak values over 16 positions
+        for (int i = 0; i < 16; i++) {
+            float indexMapped = mapf(i, 0, 15, 0, peakIndex - 1);
+            int lowerIndex = floor(indexMapped);
+            int upperIndex = min(lowerIndex + 1, peakIndex - 1);
+
+            if (peakIndex > 1) {
+                float fraction = indexMapped - lowerIndex;
+                interpolatedValues[i] = peakValues[lowerIndex] * (1 - fraction) + peakValues[upperIndex] * fraction;
+            } else {
+                interpolatedValues[i] = peakValues[0]; // Duplicate if only one value exists
+            }
+        }
+    } else {
+        // No peaks, default to zero
+        for (int i = 0; i < 16; i++) {
+            interpolatedValues[i] = 0;
+        }
+    }
+
+    // Light up LEDs
+    for (int i = 0; i < 16; i++) {
+        int x = i + 1; // Ensure x values go from 1 to 16
+        int yPeak = mapf(interpolatedValues[i] * 100, 0, 100, 4, 11);
+        yPeak = constrain(yPeak, 4, 10);
+
+        for (int y = 4; y <= yPeak; y++) {
+            // **Color gradient based on Y (vertical) instead of X**
+            
+            CRGB color;
+            if (x < startX) {
+                color = CRGB(0, 0, 5); // Green for pre-start region
+            } else if (x > endX) {
+                color = CRGB(10, 0, 15); // Dark red for post-end region
+            } else {
+                              
+                color = CRGB(((y - 4) * 35) / 4, (255 - ((y - 4) * 35)) / 4, 0); // Red to green gradient at 25% brightness
+            }
+
+            // Light up from y = 4 to y = yPeak
+            light(x, y, color);
+        }
+    }
+}
 
 void showWave() {
   File sampleFile;
@@ -2675,11 +2786,24 @@ void showWave() {
       showIcons("helper_load", CRGB(0, 20, 0));
       }
 
-  showNumber(snr, col_Folder[fnr], 11);
-  //displaySample(SMP.seek,SMP.smplen,SMP.seekEnd);
+  displaySample(SMP.seek, SMP.smplen +1 ,SMP.seekEnd);
+  
+  processPeaks();
+
+// Update the LED display
+showNumber(snr, col_Folder[fnr], 12);
+
+ if (sampleLengthSet) {
+        SMP.seekEnd = SMP.smplen / SEARCHSIZE;
+        currentMode->pos[2] = SMP.seekEnd;
+        Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+        sampleLengthSet = false; // Reset the flag after setting seekEnd
+    }
 
   //:::::::: STARTPOSITION SAMPLE  ::::: //
   if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
+    playRaw0.stop();
+    Serial.println("SEEK-hit");
     SMP.seek = currentMode->pos[0];
     Serial.println(SMP.seek);
     //STOP ALREADY PLAYING
@@ -2691,6 +2815,7 @@ void showWave() {
 
   //::::::: FOLDER ::::: //
   if (currentMode->pos[1] != SMP.folder) {
+    playRaw0.stop();
     firstcheck = true;
     nofile=false;
     SMP.folder = currentMode->pos[1];
@@ -2704,44 +2829,113 @@ void showWave() {
 
   //::::::: ENDPOSITION SAMPLE  ::::: //
   if (sampleIsLoaded && (currentMode->pos[2]) != SMP.seekEnd) {
-    SMP.seekEnd = currentMode->pos[2];
-    Serial.println("seekEnd:");
-    Serial.println(SMP.seekEnd);
+    previewIsPlaying = false;
+    playRaw0.stop();
+    Serial.println("SEEKEND-hit");
+   
+     SMP.seekEnd = currentMode->pos[2];
+        Serial.println("seekEnd updated to: " + String(SMP.seekEnd));
+
+  
     //STOP ALREADY PLAYING
     _samplers[0].removeAllSamples();
     envelope0.noteOff();
-    if (!sampleLengthSet) previewSample(fnr, getFileNumber(snr), false, false);
+    //if (!sampleLengthSet) 
+    previewSample(fnr, getFileNumber(snr), false, false);
     sampleLengthSet = false;
+    
   }
 
   // GET SAMPLEFILE
   if (currentMode->pos[3] != snr) {
+    previewIsPlaying = false;
+    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
+    File selectedFile = SD.open(OUTPUTf);
+  int PrevSampleRate;
+    selectedFile.seek(24);
+    for (uint8_t i = 24; i < 25; i++) {
+      int g = selectedFile.read();
+      if (g == 72)
+        PrevSampleRate = 4;
+      if (g == 68)
+        PrevSampleRate = 3;
+      if (g == 34)
+        PrevSampleRate = 2;
+      if (g == 17)
+        PrevSampleRate = 1;
+      if (g == 0)
+        PrevSampleRate = 4;
+    }
+
+    memset(sampled[0], 0, sizeof(sampled[0]));
     sampleIsLoaded = false;
     firstcheck = true;
     nofile=false;
     SMP.wav[SMP.currentChannel][1] = currentMode->pos[3];
+    
     int snr = SMP.wav[SMP.currentChannel][1];
     int fnr = getFolderNumber(snr);
-    showNumber(snr, col_Folder[fnr], 11);
-    Serial.println("File: " + String(fnr) + " / " + String(getFileNumber(snr)));
+    FastLEDclear();
+    showNumber(snr, col_Folder[fnr], 12);
+    
+    Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
     char OUTPUTf[50];
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
     //check if exists?
 
-
     // reset SEEK and stop sample playing
-    SMP.smplen = 0;
+    
     currentMode->pos[0] = 0;
     SMP.seek = 0;
-    Encoder[0].writeCounter((int32_t)0);
-    envelope0.noteOff();
+    Encoder[0].writeCounter((int32_t) 0);
 
-    if (!sampleIsLoaded) {
+    
+    sampleLengthSet = true;
+      Serial.print("F---->");
+      Serial.print(selectedFile.size());
+      Serial.print(" / ");
+      Serial.print(PrevSampleRate);
+      Serial.println();
+      
+//SMP.seekEnd = (selectedFile.size() / (PrevSampleRate * 2) / SEARCHSIZE);
+        SMP.smplen = (selectedFile.size() / (PrevSampleRate * 2) - 44 / SEARCHSIZE);
+        SMP.seekEnd = SMP.smplen;
+        currentMode->pos[2] = SMP.seekEnd;
+        //SET ENCODER SEARCH_END to last byte
+        Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+
+     //envelope0.noteOff();
+     playRaw0.stop();
+    if (!previewIsPlaying && !sampleIsLoaded) {
       //lastPreviewedSample[fnr] = snr;
-      previewSample(fnr, getFileNumber(snr), true, true);
+      playRaw0.play(OUTPUTf);
+      previewIsPlaying=true;
+      peakIndex = 0;
+         memset(peakValues, 0, sizeof(peakValues));
+
+
+      
+      // Read peaks until the file ends or the array is full
+      
+      
+
+
+
+
+
+
+      //previewSample(fnr, getFileNumber(snr), true, true);
       sampleIsLoaded = true;
     }
   }
+
+    if (SMP.seekEnd > SMP.smplen / SEARCHSIZE) {
+        SMP.seekEnd = SMP.smplen / SEARCHSIZE;
+        currentMode->pos[2] = SMP.seekEnd;
+        Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+    }
+
+
 }
 
 

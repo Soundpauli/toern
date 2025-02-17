@@ -20,7 +20,7 @@ AudioPlayArrayResmp sound12;
 // GUItool: begin automatically generated code
 AudioSynthWaveform       sound13;        //xy=102.5555648803711,1034.8889617919922
 AudioSynthWaveform       sound14;        //xy=108.11111068725586,1108.6666951179504
-AudioPlaySdRaw           playRaw0;       //xy=274.5558891296387,139.66687393188477
+AudioPlaySdRaw        playRaw0;       //xy=274.5558891296387,139.66687393188477
 AudioEffectEnvelope      envelope2;      //xy=275.5557060241699,251.6666965484619
 AudioEffectEnvelope      envelope3;      //xy=275.5557556152344,319.66668248176575
 AudioEffectEnvelope      envelope1;      //xy=276.5557670593262,194.4444661140442
@@ -140,7 +140,8 @@ AudioControlSGTL5000     sgtl5000_1;     //xy=1867.2224884033203,864.66684532165
 
 // --- ADDITIONAL sound declarations below here ... ---//
 // --- AudioPlayArrayResmp doesnt exist in GUItool ---//
-
+AudioAnalyzePeak         peak1; 
+AudioConnection          patchCord2121(playRaw0, 0, peak1, 0);
 AudioConnection snd0(sound0, envelope0);
 AudioConnection snd1(sound1, envelope1);
 AudioConnection snd2(sound2, envelope2);
