@@ -58,6 +58,16 @@ uint32_t CRGBToUint32(CRGB color) {
 
 
 
+// ----- Phase 1: Compute Logo Pixel Color -----
+// Use FastLED's CHSV for an x/y/time-based rainbow.
+CRGB getLogoPixelColor(uint8_t gridX, uint8_t gridY, float timeFactor) {
+  // Hue depends on (x + y) plus a time offset
+  int rawHue = ((gridX + gridY) * 20 + (int)(timeFactor * 360)) % 360;
+  uint8_t hue = (uint8_t)(rawHue * 255 / 360);
+  return CHSV(hue, 255, 255);
+}
+
+
 CRGB uint32ToCRGBWithControls(uint32_t rgb, uint8_t saturation, uint8_t brightness) {
     uint8_t r = (rgb >> 16) & 0xFF; // Extract red
     uint8_t g = (rgb >> 8) & 0xFF;  // Extract green

@@ -1,4 +1,3 @@
-
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 1
 #define SERIAL8_RX_BUFFER_SIZE 256  // Increase to 256 bytes
@@ -41,35 +40,56 @@
 #define BPM_MIN 40
 #define BPM_MAX 300
 #define GAIN 0.25
-
 #define NUM_ENCODERS 4
-
 #define defaultVelocity 63
 #define FOLDER_MAX 9
-
 #define maxPages 16
-
 #define maxFiles 9  // 9 samples, 2 Synths
 #define maxFilters 15
 #define maxfilterResolution 32
-
 #define numPulsesForAverage 24  // Number of pulses to average over
 #define pulsesPerBar (24 * 4)   // 24 pulses per quarter note, 4 quarter notes per bar
-//char* menuText[14] = {"","FlLE","PACK","WAVE", "REC","SET","MlDl","LlNE","MlC","CH","+c","+v","DEL?","SHlFt","EFX"};
 
 struct MySettings : public midi ::DefaultSettings {
   static const long BaudRate = 31250;
   static const unsigned SysExMaxSize = 256;
 };
-
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MySettings);
+unsigned long beatStartTime = 0;  // Timestamp when the current beat started
+
+
+
+// ----- Intro Animation Timing (in ms) -----
+// Phase 1: 5 seconds (rainbow logo)
+// Phase 2: 2 seconds (explosion)
+const unsigned long phase1Duration = 3000;
+const unsigned long phase2Duration = 1500;
+const unsigned long totalAnimationTime = phase1Duration + phase2Duration;
+// We'll treat the center of the grid as (7.5, 7.5) for the explosion.
+const float logoCenterX = 6;
+const float logoCenterY = 7;
+// ----- Particle Structure for Explosion Phase -----
+struct Particle {
+  float initX;
+  float initY;
+  float dirX;
+  float dirY;
+  CRGB color;
+};
+bool particlesGenerated = false;
+Particle particles[256];  // up to 256 possible "on" pixels
+int particleCount = 0;
+
+bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
 char *menuText[5] = { "DAT", "KIT", "WAV", "REC", "SET" };
 int lastFile[9] = { 0 };
 bool freshPaint, tmpMute = false;
 bool firstcheck = false;
 bool nofile = false;
-char* currentFilter = "ADSR";
+char *currentFilter = "ADSR";
+unsigned int fxType = 0;
+unsigned int selectedFX = 0;
 unsigned int menuPosition = 1;
 String oldPosString, posString = "1:2:";
 String buttonString, oldButtonString = "0000";
@@ -77,9 +97,9 @@ unsigned long playStartTime = 0;  // To track when play(true) was last called
 
 bool previewIsPlaying = false;
 
-const int maxPeaks = 512; // Adjust based on your needs
-      float peakValues[maxPeaks];
-      int peakIndex = 0;
+const int maxPeaks = 512;  // Adjust based on your needs
+float peakValues[maxPeaks];
+int peakIndex = 0;
 
 volatile uint8_t ledBrightness = 63;
 const unsigned int maxlen = (maxX * maxPages) + 1;
@@ -133,7 +153,7 @@ volatile unsigned int pulseCount = 0;
 bool sampleIsLoaded = false;
 bool unpaintMode, paintMode = false;
 
-volatile unsigned int pagebeat, beat = 1;
+volatile unsigned int beat = 1;
 unsigned int samplePackID, fileID = 1;
 EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
@@ -195,7 +215,7 @@ Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, max
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode volume_bpm = { "VOLUME_BPM", { 1, 6, VOL_MIN, BPM_MIN }, { 1, 25, VOL_MAX, BPM_MAX }, { 1, 6, 9, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
-Mode filterMode = { "FILTERMODE", { 1, 1, 1, 1 }, { 4, 100, 100, 100 }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
+Mode filterMode = { "FILTERMODE", { 0, 1, 0, 0 }, { 7, 1, 8, 32 }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 7, 7 }, { 9, 9, 9, 9 }, { 8, 8, 8, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
@@ -230,73 +250,79 @@ struct Device {
   unsigned int smplen;  // overall selected samplelength
   unsigned int shiftX;  // note Shift
   unsigned int shiftY;  // note Shift
-  float filter_setting[maxY][maxFilters];
+  float param_settings[maxY][maxFilters];
+  unsigned int selectedParameter;
+
+  float filter_settings[maxY][maxFilters];
+  unsigned int selectedFilter;
+
   unsigned int mute[maxY];
   unsigned int channelVol[16];
 };
 
 //EXTMEM?
 volatile Device SMP = {
-  false,                                                              //singleMode
-  1,                                                                  //currentChannel
-  10,                                                                 //volume
-  100,                                                                //bpm
-  10,                                                                 //velocity
-  1,                                                                  //page
-  1,                                                                  //edit
-  1,                                                                  //file
-  1,                                                                  //pack
-  { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },                 //sampleID
-  0,                                                                  //folder
-  false,                                                              //activeCopy
-  1,                                                                  //x
-  2,                                                                  //y
-  0,                                                                  //seek
-  0,                                                                  //seekEnd
-  0,                                                                  //sampleLen
-  0,                                                                  //shiftX
-  0,                                                                  //shiftY
-  {},                                                                 //filter_setting
+  false,                                               //singleMode
+  1,                                                   //currentChannel
+  10,                                                  //volume
+  100,                                                 //bpm
+  10,                                                  //velocity
+  1,                                                   //page
+  1,                                                   //edit
+  1,                                                   //file
+  1,                                                   //pack
+  { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },  //sampleID
+  0,                                                   //folder
+  false,                                               //activeCopy
+  1,                                                   //x
+  2,                                                   //y
+  0,                                                   //seek
+  0,                                                   //seekEnd
+  0,                                                   //sampleLen
+  0,                                                   //shiftX
+  0,                                                   //shiftY
+  {},                                                  //param_settings
+  0,
+  {},  //filter_settings
+  0,
   {},                                                                 //mute
   { 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16 }  //channelVol
 };
 
 
-enum VoiceSelect { 
-                  };  // Define filter types
+enum VoiceSelect {
+};  // Define filter types
 
-enum ParameterType { 
-                  TYPE, //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM 
-                  WAVEFORM,
-                  DELAY,
-                  ATTACK,
-                  HOLD,
-                  DECAY,
-                  SUSTAIN,
-                  RELEASE,
-                  DETUNE,
-                  NOISE,
-                  MAX_PARAM };  // Define filter types
+enum ParameterType {
+  TYPE,  //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM
+  WAVEFORM,
+  DELAY,
+  ATTACK,
+  HOLD,
+  DECAY,
+  SUSTAIN,
+  RELEASE
+};  // Define filter types
+
+char *activeParameterType[10] = { "TYPE", "WAV", "DLAY", "ATTC", "HOLD", "DCAY", "SUST", "RLSE" };
+
 
 enum FilterType { LOWPASS,
                   HIGHPASS,
-                  FREQUENCY, //AudioFilterStateVariable ->freqency
+                  FREQUENCY,  //AudioFilterStateVariable ->freqency
                   FLANGER,
                   ECHO,
                   DISTORTION,
                   RINGMOD,
-                  MAX_TYPE };  // Define filter types
+                  DETUNE,
+                  NOISE
+};  // Define filter types
 
-// Define 2D array where each row represents a button's cycling values
-const ParameterType buttonValues[][4] = {
-  {},                                      // Button 1 (no cycling values)
-  {DELAY, ATTACK, MAX_PARAM, MAX_PARAM},     // Button 2 (no cycling values)
-  {HOLD, DECAY, MAX_PARAM, MAX_PARAM},       // Button 3 (no cycling values)
-  {SUSTAIN, RELEASE, MAX_PARAM, MAX_PARAM }  // Button 4 cycles through {RELEASE, WAVEFORM}
-};
+char *activeFilterType[10] = { "LOW", "HIGH", "FREQ", "FLNG", "ECHO", "DIST", "RING", "DTNE", "NOIS" };
+
 
 // ADSR array that stores the currently selected value for each button
-ParameterType adsr[4] = { WAVEFORM, DELAY, HOLD, RELEASE };  // Button 4 starts at RELEASE
+
 
 // Arrays to track multiple encoders
 int buttons[NUM_ENCODERS] = { 0 };  // Tracks the current state of each encoder
@@ -322,6 +348,8 @@ i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
 };
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
+
+
 
 EXTMEM arraysampler _samplers[13];
 AudioPlayArrayResmp *voices[] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8, &sound9, &sound10, &sound11, &sound12 };
@@ -375,6 +403,37 @@ void drawNoSD() {
   }
 }
 
+
+
+void setDahdsrDefaults(bool allChannels) {
+  if (allChannels) {
+    for (int ch = 0; ch < 16; ch++) {
+      // First clear all 15 settings to zero
+      for (int param = 0; param < 15; param++) {
+        SMP.param_settings[ch][param] = 0;
+      }
+      // Now assign default envelope values for a DAHDSR shape:
+      SMP.param_settings[ch][DELAY] = 11;    // No delay
+      SMP.param_settings[ch][ATTACK] = 24;   // Quick attack duration
+      SMP.param_settings[ch][HOLD] = 21;     // MIN hold time
+      SMP.param_settings[ch][DECAY] = 27;    // MID decay period
+      SMP.param_settings[ch][SUSTAIN] = 16;  // MID sustain level
+      SMP.param_settings[ch][RELEASE] = 23;  // MID release
+    }
+  } else {
+    int ch = SMP.currentChannel;
+    for (int param = 0; param < 15; param++) {
+      SMP.param_settings[ch][param] = 0;
+    }
+    // Now assign default envelope values for a DAHDSR shape:
+    SMP.param_settings[ch][DELAY] = 11;    // No delay
+    SMP.param_settings[ch][ATTACK] = 24;   // Quick attack duration
+    SMP.param_settings[ch][HOLD] = 21;     // MIN hold time
+    SMP.param_settings[ch][DECAY] = 27;    // MID decay period
+    SMP.param_settings[ch][SUSTAIN] = 16;  // MID sustain level
+    SMP.param_settings[ch][RELEASE] = 23;  // MID release
+  }
+}
 
 
 
@@ -510,7 +569,9 @@ void switchMode(Mode *newMode) {
   paintMode = false;
   Mode *oldMode = currentMode;
   /// OLD ACTIONS
-  if (currentMode == &set_Wav) {
+  if (currentMode == &set_Wav || currentMode == &filterMode) {
+    //RESET left encoder
+    SMP.selectedParameter = 0;
     Encoder[0].begin(
       i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
       | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_ENABLE
@@ -524,6 +585,7 @@ void switchMode(Mode *newMode) {
     // Set last saved values for encoders
 
     if (currentMode == &set_Wav) {
+      //REVERSE left encoder
       Encoder[0].begin(
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
@@ -543,28 +605,31 @@ void switchMode(Mode *newMode) {
       }
 
       if (currentMode == &filterMode) {
-        adsr[0] = WAVEFORM;
-        adsr[1] = DELAY;
-        adsr[2] = HOLD;
-        adsr[3] = SUSTAIN;
-        Encoder[i].writeCounter((int32_t)SMP.filter_setting[SMP.currentChannel][i]);
+        //REVERSE left encoder
+        Encoder[0].begin(
+          i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
+          | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
+          | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+
+        //selectedFX = TYPE;
+        //Encoder[3].writeCounter((int32_t)SMP.param_settings[SMP.currentChannel][0]);
       }
     }
   }
-  drawPlayButton(0);
+  drawPlayButton();
 }
 
 
 void interpolatePeaks() {
-    int lastValidIndex = peakIndex - 1;
-    
-    if (lastValidIndex >= 1) {
-        float step = (float)(peakValues[lastValidIndex] - peakValues[0]) / lastValidIndex;
+  int lastValidIndex = peakIndex - 1;
 
-        for (int i = 1; i < lastValidIndex; i++) {
-            peakValues[i] = peakValues[0] + (step * i);
-        }
+  if (lastValidIndex >= 1) {
+    float step = (float)(peakValues[lastValidIndex] - peakValues[0]) / lastValidIndex;
+
+    for (int i = 1; i < lastValidIndex; i++) {
+      peakValues[i] = peakValues[0] + (step * i);
     }
+  }
 }
 
 void continueRecording() {
@@ -596,11 +661,11 @@ void continueRecording() {
   }
 }
 
-void record(int fnr,int snr) {
+void record(int fnr, int snr) {
 
 
   if (!isRecording) {
-    
+
     char OUTPUTf[50];
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
 
@@ -624,12 +689,12 @@ void record(int fnr,int snr) {
   }
 }
 
-void stopRecord(int fnr, int snr ) {
+void stopRecord(int fnr, int snr) {
   if (isRecording) {
 
     char OUTPUTf[50];
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-    
+
     Serial.println("Stop Recording");
     queue1.end();
     if (frec) {
@@ -646,8 +711,8 @@ void stopRecord(int fnr, int snr ) {
   }
 }
 
-void drawPlayButton(unsigned int timer) {
-
+void drawPlayButton() {
+  unsigned int timer = (beat - 2) % maxX + 1;
   if (currentMode == &draw || currentMode == &singleMode) {
     if (isNowPlaying) {
       if (timer == 1 || timer == 5 || timer == 9 || timer == 13) {
@@ -676,7 +741,9 @@ void checkMode(String buttonString, bool reset) {
 
     if (!isNowPlaying) {
       Serial.println("PLAY");
+      playNote();
       play(true);
+
     } else {
 
       unsigned long currentTime = millis();
@@ -750,19 +817,13 @@ void checkMode(String buttonString, bool reset) {
 
   // Switch to volume mode in draw or single mode
   if ((currentMode == &draw || currentMode == &singleMode) && buttonString == "0220") {
-    if (isNowPlaying) {
-      play(false);
-    } else {
-    }
+
     switchMode(&volume_bpm);
   }
 
-  // Switch to volume mode in draw or single mode
+  // Switch to filter mode in draw or single mode
   if ((currentMode == &draw || currentMode == &singleMode) && buttonString == "0020") {
-    if (isNowPlaying) {
-      play(false);
-    } else {
-    }
+
     switchMode(&filterMode);
   }
 
@@ -818,17 +879,23 @@ void checkMode(String buttonString, bool reset) {
   }
 
   // switch Filters
-  if (currentMode == &filterMode && buttonString == "0001") {
-    cycleFilterTypes(3);
+  if (currentMode == &filterMode && buttonString == "0002") {
+    setDahdsrDefaults(false);
+    currentFilter = activeParameterType[SMP.selectedParameter];
+    currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][SMP.selectedParameter];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
   }
 
   if (currentMode == &filterMode && buttonString == "0010") {
-    cycleFilterTypes(2);
+    //cycleFilterTypes(2);
   }
 
   if (currentMode == &filterMode && buttonString == "0100") {
-    cycleFilterTypes(1);
+    //cycleFilterTypes(1);
   }
+
+
+
 
   // Switch to draw mode from volume mode
   if (currentMode == &filterMode && buttonString == "1000") {
@@ -899,13 +966,13 @@ void checkMode(String buttonString, bool reset) {
     switchMode(&singleMode);
     SMP.singleMode = true;
   } else if ((currentMode == &set_Wav) && buttonString == "0200") {
-    
-      Serial.println("RECORDING TO ============> ");
+
+    Serial.println("RECORDING TO ============> ");
     Serial.println(SMP.wav[SMP.currentChannel][1]);
 
-    record(getFolderNumber(SMP.wav[SMP.currentChannel][1]),SMP.wav[SMP.currentChannel][1]);
-  } else if ((currentMode == &set_Wav) && buttonString == "0900") { 
-    stopRecord(getFolderNumber(SMP.wav[SMP.currentChannel][1]),SMP.wav[SMP.currentChannel][1]);
+    record(getFolderNumber(SMP.wav[SMP.currentChannel][1]), SMP.wav[SMP.currentChannel][1]);
+  } else if ((currentMode == &set_Wav) && buttonString == "0900") {
+    stopRecord(getFolderNumber(SMP.wav[SMP.currentChannel][1]), SMP.wav[SMP.currentChannel][1]);
   }
 
   // Set SamplePack + Load + Save + Exit
@@ -978,45 +1045,46 @@ void checkMode(String buttonString, bool reset) {
 
 
 
-void cycleFilterTypes(int button) {
+void _cycleFilterTypes(int button) {
   int numValues = 0;
   // If the button has no cycling values, do nothing
-  if (buttonValues[button][0] == MAX_TYPE || buttonValues[button][0] == 0) return;
+  //if (buttonValues[button][0] == MAX_TYPE || buttonValues[button][0] == 0) return;
   // Count valid entries in buttonValues[button] (ignoring MAX_TYPE)
-  while (numValues < 4 && buttonValues[button][numValues] != MAX_TYPE) {
-    numValues++;
-  }
+  //while (numValues < 4 && buttonValues[button][numValues] != MAX_TYPE) {
+  //  numValues++;
+  //}
   // Find current position of adsr[button] in buttonValues[button]
   for (int i = 0; i < numValues; i++) {
-    if (adsr[button] == buttonValues[button][i]) {
+    //if (adsr[button] == buttonValues[button][i])
+    {
       // Move to the next value, wrapping around
-      adsr[button] = buttonValues[button][(i + 1) % numValues];
+      //adsr[button] = buttonValues[button][(i + 1) % numValues];
       Serial.print("Button ");
       Serial.print(button + 1);
       Serial.print(" toggled to: ");
-      Serial.println(adsr[button]);
-      
-/*
+
+
+      /*
       //TOOGLE BETWEEN RELEASE AND WF
-      if (adsr[0] == WAVEFORM) {
+      if (selectedFX == WAVEFORM) {
         Serial.println("---> WAVE");
-        Serial.println(SMP.filter_setting[SMP.currentChannel][WAVEFORM]);
+        Serial.println(SMP.param_settings[SMP.currentChannel][WAVEFORM]);
         Encoder[0].writeMax((int32_t)5);
-        Encoder[0].writeCounter((int32_t)SMP.filter_setting[SMP.currentChannel][WAVEFORM]);
+        Encoder[0].writeCounter((int32_t)SMP.param_settings[SMP.currentChannel][WAVEFORM]);
       }
 
       if (adsr[3] == SUSTAIN) {
         Serial.println("---> SUSTAIN");
-        Serial.println(SMP.filter_setting[SMP.currentChannel][SUSTAIN]);
+        Serial.println(SMP.param_settings[SMP.currentChannel][SUSTAIN]);
         Encoder[3].writeMax((int32_t)100);  // current maxvalues
-        Encoder[3].writeCounter((int32_t)SMP.filter_setting[SMP.currentChannel][SUSTAIN]);
+        Encoder[3].writeCounter((int32_t)SMP.param_settings[SMP.currentChannel][SUSTAIN]);
       }
 
         if (adsr[3] == RELEASE) {
         Serial.println("---> RELEASE");
-        Serial.println(SMP.filter_setting[SMP.currentChannel][RELEASE]);
+        Serial.println(SMP.param_settings[SMP.currentChannel][RELEASE]);
         Encoder[3].writeMax((int32_t)100);  // current maxvalues
-        Encoder[3].writeCounter((int32_t)SMP.filter_setting[SMP.currentChannel][RELEASE]);
+        Encoder[3].writeCounter((int32_t)SMP.param_settings[SMP.currentChannel][RELEASE]);
       }
 
       */
@@ -1025,22 +1093,111 @@ void cycleFilterTypes(int button) {
   }
 }
 
-void intro() {
-  randomSeed(analogRead(0));
-  int rand = random(0, 6);
-  for (int i = 0; i < 9; i++) {
-    FastLED.clear();
-    drawText(welcome[rand][i], 1, 11 - i, col_Folder[i]);
-    FastLED.show();
-    delay(300);
+
+
+// ----- Generate Explosion Particles -----
+// Called once when Phase 2 starts. Each "1" pixel in the logo becomes a particle.
+void generateParticles() {
+  particleCount = 0;
+  for (int row = 0; row < 16; row++) {
+    for (int col = 0; col < 16; col++) {
+      if (logo[row][col] == 1) {
+        // Particle's initial position (center of that cell)
+        float initX = col + 0.5;
+        float initY = row + 0.5;
+        // Explosion direction from the center
+        float dx = initX - logoCenterX;
+        float dy = initY - logoCenterY;
+        float length = sqrt(dx * dx + dy * dy);
+        float dirX = (length == 0) ? 0 : (dx / length);
+        float dirY = (length == 0) ? 0 : (dy / length);
+        // Freeze the pixel’s color from timeFactor=1
+        CRGB color = getLogoPixelColor(col, row, 1.0);
+        particles[particleCount] = { initX, initY, dirX, dirY, color };
+        particleCount++;
+      }
+    }
   }
-  FastLED.clear();
+  particlesGenerated = true;
+}
+
+
+// ----- Determine Color of Each LED Based on Time -----
+CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
+  // Convert (x,y) to float center coords
+  float cellCenterX = x + 0.5;
+  float cellCenterY = y + 0.5;
+
+  if (elapsed < phase1Duration) {
+    // PHASE 1: Rainbow Logo
+    if (logo[y][x] == 1) {
+      float timeFactor = (float)elapsed / phase1Duration;  // 0..1
+      return getLogoPixelColor(x, y, timeFactor);
+    } else {
+      return CRGB::Black;
+    }
+  } else if (elapsed < totalAnimationTime) {
+    // PHASE 2: Explosion
+    if (!particlesGenerated) {
+      generateParticles();
+    }
+    float progress = (float)(elapsed - phase1Duration) / phase2Duration;  // 0..1
+    const float maxDisp = 20.0;                                           // how far particles fly outward
+
+    // Check each particle to see if it's near this LED cell
+    for (int i = 0; i < particleCount; i++) {
+      float px = particles[i].initX + particles[i].dirX * progress * maxDisp;
+      float py = particles[i].initY + particles[i].dirY * progress * maxDisp;
+      float dist = sqrt((cellCenterX - px) * (cellCenterX - px) + (cellCenterY - py) * (cellCenterY - py));
+      if (dist < 0.4) {
+        return particles[i].color;
+      }
+    }
+    return CRGB::Black;
+  } else {
+    // After animation, stay black
+    return CRGB::Black;
+  }
+}
+
+// ----- Run the Animation Once (Called in setup) -----
+void runAnimation() {
+  unsigned long startTime = millis();
+  while (true) {
+    unsigned long elapsed = millis() - startTime;
+    if (elapsed > totalAnimationTime) {
+      elapsed = totalAnimationTime;
+    }
+
+    // Update each LED in the 16×16 grid (0-based coords)
+    for (uint8_t y = 0; y < maxY; y++) {
+      for (uint8_t x = 0; x < maxX; x++) {
+        CRGB color = getPixelColor(x, y, elapsed);
+        // The light() function uses 1-based coords:
+        light(x + 1, y + 1, color);
+      }
+    }
+    FastLED.show();
+    delay(10);
+
+    // Stop after totalAnimationTime
+    if (elapsed >= totalAnimationTime) {
+      break;
+    }
+  }
+
+  // Clear the display at end
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB::Black;
+  }
+  FastLED.show();
 }
 
 
 
+
 void setup(void) {
-  //NVIC_SET_PRIORITY(IRQ_LPUART8, 0);
+  NVIC_SET_PRIORITY(IRQ_LPUART8, 1);
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
 
@@ -1050,6 +1207,7 @@ void setup(void) {
     Serial.print(CrashReport);
     delay(1000);
   }
+
 
   EEPROM.get(0, samplePackID);
   Serial.print("SamplePackID:");
@@ -1109,9 +1267,17 @@ void setup(void) {
     delay(50);
     Encoder[i].updateStatus();
   }
+
+  runAnimation();
+
+
   switchMode(&draw);
   Serial.print("Initializing SD card...");
   drawNoSD();
+
+
+
+
 
   getLastFiles();
   loadSamplePack(samplePackID, true);
@@ -1225,7 +1391,7 @@ void setup(void) {
   // set BPM:100
   SMP.bpm = 100;
   playTimer.begin(playNote, playNoteInterval);
-  playTimer.priority(230);
+  playTimer.priority(170);
 
   midiTimer.begin(checkMidi, playNoteInterval / 24);
   AudioMemory(80);
@@ -1250,6 +1416,9 @@ void setup(void) {
 
   MIDI.begin(MIDI_CH);
   //Serial8.begin(57600);
+
+
+  setDahdsrDefaults(true);
 }
 
 void setEncoderColor(int i) {
@@ -1346,15 +1515,14 @@ void checkTouchInputs() {
   if (touchState[0] && touchState[1] && !lastTouchState[2]) {
     lastTouchState[2] = true;
     // Optional: Define a special mode when both are touched
-     if (currentMode == &singleMode ) {
+    if (currentMode == &singleMode) {
       Serial.println("---------<>---------");
       SMP.singleMode = false;
       switchMode(&set_Wav);
-      
-    } else{
+
+    } else {
       Serial.println("!!!!!!!!!");
       switchMode(&loadSaveTrack);
-      
     }
     // Define specialMode if needed
   } else {
@@ -1362,9 +1530,9 @@ void checkTouchInputs() {
 
     // Check for a rising edge on SWITCH_1 (LOW to HIGH transition)
     if (touchState[0] && !lastTouchState[0]) {
-        lastTouchState[2] = false;
+      lastTouchState[2] = false;
       if (currentMode == &draw) {
-        
+
         SMP.currentChannel = SMP.currentChannel;
         switchMode(&singleMode);
         SMP.singleMode = true;
@@ -1376,7 +1544,7 @@ void checkTouchInputs() {
 
     // Check for a rising edge on SWITCH_2
     if (touchState[1] && !lastTouchState[1]) {
-        lastTouchState[2] = false;
+      lastTouchState[2] = false;
       if (currentMode == &draw || currentMode == &singleMode) {
         switchMode(&menu);
       } else {
@@ -1386,10 +1554,9 @@ void checkTouchInputs() {
   }
 
   // Update last touch states
-  
+
   lastTouchState[0] = touchState[0];
   lastTouchState[1] = touchState[1];
-
 }
 
 
@@ -1453,7 +1620,9 @@ void checkMidi() {
         break;
 
       case midi::NoteOff:
-        // pitch = MIDI.getData1();
+        pitch = MIDI.getData1();
+        velocity = 127;
+        handleNoteOff(channel, pitch, velocity);
         // velocity = MIDI.getData2();
         // channel = MIDI.getChannel();
         // Serial.println(String("Note Off: ch=") + channel + ", note=" + pitch + ", velocity=" + velocity);
@@ -1483,30 +1652,30 @@ void loop() {
   }
 
 
-
-
-  if (previewIsPlaying){
+  if (previewIsPlaying) {
     if (msecs > 5) {
-        if (playRaw0.isPlaying() && peakIndex < maxPeaks) {
-          if (peak1.available()) {
-            msecs = 0;
-            // Store the peak value
-            peakValues[peakIndex] = peak1.read();
-            Serial.println(peakValues[peakIndex]);
-            peakIndex++;
-          } 
-        }   
+      if (playRaw0.isPlaying() && peakIndex < maxPeaks) {
+        if (peak1.available()) {
+          msecs = 0;
+          // Store the peak value
+          peakValues[peakIndex] = peak1.read();
+          Serial.println(peakValues[peakIndex]);
+          peakIndex++;
+        }
       }
+    }
 
-      if (!playRaw0.isPlaying()) {
-        previewIsPlaying = false; // Playback finished
+    if (!playRaw0.isPlaying()) {
+      previewIsPlaying = false;  // Playback finished
     }
   }
 
-  drawPlayButton(pagebeat);
+  // dont forget
+  drawPlayButton();
+
   //checkSingleTouch();
   //checkMenuTouch();
-  
+
   checkTouchInputs();
 
 
@@ -1567,30 +1736,21 @@ void loop() {
     shiftNotes();
     drawBase();
     drawTriggers();
-
-    if (isNowPlaying) {
-      drawTimer(pagebeat);
-    }
   }
 
   if (currentMode == &draw || currentMode == &singleMode || currentMode == &velocity) {
-
     drawBase();
-
     drawTriggers();
     if (currentMode != &velocity)
       drawCursor();
     if (isNowPlaying) {
-      drawTimer(pagebeat);
+      drawTimer();
       if (!freshPaint && currentMode == &velocity) drawVelocity();
       FastLEDshow();
     }
 
-
     // Is there a MIDI message incoming ?
     //checkMidi();
-
-
     if (!freshPaint && currentMode == &velocity) drawVelocity();
   }
 
@@ -1603,7 +1763,7 @@ void loop() {
 
   FastLEDshow();  // draw!
   yield();
-  delay(50);  // 50????
+  delay(50);
   yield();
 }
 
@@ -1789,12 +1949,12 @@ void play(bool fromStart) {
     updateLastPage();
     deleteActiveCopy();
     beat = 1;
-    pagebeat = 1;
     SMP.page = 1;
     Encoder[2].writeRGBCode(0xFFFF00);
   }
-  playStartTime = millis();  // Record the current time
   isNowPlaying = true;
+  playNote();
+  playStartTime = millis();  // Record the current time
 }
 
 void pause() {
@@ -1806,38 +1966,25 @@ void pause() {
   allOff();
   Encoder[2].writeRGBCode(0x005500);
   beat = 1;
-  pagebeat = 1;
   SMP.page = 1;
 }
 
-void togglePlay(bool &value) {
-  updateLastPage();
-  deleteActiveCopy();
-  value = !value;  // Toggle the boolean value
-  Serial.println(value ? "Playing" : "Paused");
 
-  if (value == false) {
-    autoSave();
-    envelope0.noteOff();
-    allOff();
-  }
-
-  beat = 1;
-  pagebeat = 1;
-  SMP.page = 1;
-}
 
 
 void playNote() {
 
-  playTimer.end();  // Stop the timer
+
   if (isNowPlaying) {
 
+    playTimer.end();  // Stop the timer
+    //drawTimer();
 
     for (unsigned int b = 1; b < maxY + 1; b++) {
       if (beat < maxlen && b < maxY + 1 && note[beat][b][0] > 0 && !SMP.mute[note[beat][b][0]]) {
         if (note[beat][b][0] < 9) {
           _samplers[note[beat][b][0]].noteEvent(12 * SampleRate[note[beat][b][0]] + b - (note[beat][b][0] + 1), note[beat][b][1], true, false);
+
           // usbMIDI.sendNoteOn(b, note[beat][b][1], 1);
         }
 
@@ -1863,27 +2010,27 @@ void playNote() {
       }
     }
 
-    beat++;
-    // pagebeat is always 1-16, calcs from beat. if beat 1-16, pagebeat is 1, if beat 17-32, pagebeat is 2, etc.
-    pagebeat = (beat - 1) % maxX + 1;
-
-    yield();
 
     // midi functions
     if (waitForFourBars && pulseCount >= totalPulsesToWait) {
       beat = 1;
-      pagebeat = 1;
       SMP.page = 1;
       isNowPlaying = true;
       Serial.println("4 Bars Reached");
-
       waitForFourBars = false;  // Reset for the next start message
     }
+    yield();
+
+
+    beatStartTime = millis();
+    beat++;
+
+
+
 
     if (beat > SMP.page * maxX) {
       updateLastPage();
       SMP.page = SMP.page + 1;
-
       if (SMP.page > maxPages)
         SMP.page = 1;
       if (SMP.page > lastPage)
@@ -1891,16 +2038,11 @@ void playNote() {
     }
 
     if (beat > maxX * lastPage) {
-
       beat = 1;
       SMP.page = 1;
-      pagebeat = 1;
     }
+    playTimer.begin(playNote, playNoteInterval);
   }
-  //Draw Things
-
-
-  playTimer.begin(playNote, playNoteInterval);
   yield();
 }
 
@@ -1965,7 +2107,7 @@ void paint() {
   if (!isNowPlaying) {
     if (note[x][y][0] < 9) {
       _samplers[note[x][y][0]].noteEvent(12 * SampleRate[note[x][y][0]] + y - (note[x][y][0] + 1), defaultVelocity, true, false);
-      //yield();
+      yield();
     }
 
     if (note[x][y][0] == 14) {
@@ -2017,7 +2159,7 @@ void displaySample(unsigned int start, unsigned int size, unsigned int end) {
   unsigned int ending = mapf(end * SEARCHSIZE, 0, size, 1, maxX);
 
   //for (unsigned int s = 1; s <= maxX; s++) {
-    //light(s, 5, CRGB(10, 20, 10));
+  //light(s, 5, CRGB(10, 20, 10));
   //}
 
   for (unsigned int s = 1; s <= length; s++) {
@@ -2027,14 +2169,14 @@ void displaySample(unsigned int start, unsigned int size, unsigned int end) {
   for (unsigned int s = 1; s <= starting; s++) {
     light(s, 7, CRGB(0, 10, 0));
   }
-  
+
   for (unsigned int s = starting; s <= ending; s++) {
     light(s, 6, CRGB(10, 10, 10));
   }
 
 
   for (unsigned int s = ending; s <= maxX; s++) {
-    light(s, 7, CRGB(10,0,0));
+    light(s, 7, CRGB(10, 0, 0));
   }
 
   //FastLED.setBrightness(ledBrightness);
@@ -2048,7 +2190,7 @@ void displaySample(unsigned int start, unsigned int size, unsigned int end) {
 void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
   // envelopes[0]->release(0);
 
-    
+
   _samplers[0].removeAllSamples();
   envelope0.noteOff();
   char OUTPUTf[50];
@@ -2082,7 +2224,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     }
 
     int startOffset = 1 + (SEARCHSIZE * SMP.seek);  // Start offset in milliseconds
-    int endOffset =       (SEARCHSIZE * SMP.seekEnd);     // End offset in milliseconds
+    int endOffset = (SEARCHSIZE * SMP.seekEnd);     // End offset in milliseconds
 
     if (setMaxSampleLength == true) {
       endOffset = fileSize;
@@ -2107,14 +2249,14 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
 
     sampleIsLoaded = true;
     SMP.smplen = fileSize / (PrevSampleRate * 2);
- 
- 
- if (setMaxSampleLength) {
-            SMP.seekEnd = SMP.smplen / SEARCHSIZE;
-            currentMode->pos[2] = SMP.seekEnd;
-            Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-            sampleLengthSet = true;
-        }
+
+
+    if (setMaxSampleLength) {
+      SMP.seekEnd = SMP.smplen / SEARCHSIZE;
+      currentMode->pos[2] = SMP.seekEnd;
+      Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+      sampleLengthSet = true;
+    }
 
     previewSample.close();
     displaySample(SMP.seek, SMP.smplen, SMP.seekEnd);
@@ -2203,7 +2345,7 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
     //SMP.seek = 0;
 
-    unsigned int startOffset = 1 + (SEARCHSIZE * SMP.seek);                   // Start offset in milliseconds
+    unsigned int startOffset = 1 + (SEARCHSIZE * SMP.seek);            // Start offset in milliseconds
     unsigned int startOffsetBytes = startOffset * PrevSampleRate * 2;  // Convert to bytes (assuming 16-bit samples)
 
     unsigned int endOffset = SEARCHSIZE * SMP.seekEnd;  // End offset in milliseconds
@@ -2342,7 +2484,7 @@ void updateBPM() {
 void setVolume() {
   drawBPMScreen();
 
-  if (currentMode->pos[1] * 10 != ledBrightness) {
+  if (currentMode->pos[1] != ledBrightness / 10) {
     updateBrightness();
   }
 
@@ -2357,122 +2499,287 @@ void setVolume() {
 }
 
 
+void drawFilters(char *txt, int activeFilter) {
+  FastLED.clear();
+  // Amplitude definitions:
+  int baseAmplitude = 1;        // baseline (minimum amplitude)
+  CRGB activeFilterColor;
+  switch (activeFilter) {
+    case 0:
+      activeFilterColor = CRGB(100, 0, 0);
+      break;
+    case 1:
+      activeFilterColor = CRGB(0, 100, 0);
+      break;
+    case 2:
+      activeFilterColor = CRGB(0, 0, 100);
+      break;
+    case 3:
+      activeFilterColor = CRGB(100, 100, 0);
+      break;
+    case 4:
+      activeFilterColor = CRGB(100, 0, 100);
+      break;
+    case 5:
+      activeFilterColor = CRGB(0, 100, 100);
+      break;
+    case 6:
+      activeFilterColor = CRGB(100, 100, 100);
+      break;
+    case 7:
+      activeFilterColor = CRGB(100, 50, 100);
+      break;
+    case 8:
+      activeFilterColor = CRGB(50, 10, 10);
+      break;
+    default:
+      activeFilterColor = CRGB(0, 0, 0);  // default color (adjust as needed)
+      break;
+  }
+
+  showText(txt, 1, 12, activeFilterColor);
+  int FilterValue = mapf(SMP.filter_settings[SMP.currentChannel][SMP.selectedFilter],0,32,0,10);
+  showNumber(FilterValue, CRGB(100,100,100),5);
+}
 
 void setFilters() {
-  // Encoder 1: Adjust attack
 
-if (adsr[1] == DELAY) {
-  // Encoder2 : Adjust delay
+  if (fxType==0) drawADSR(currentFilter, SMP.selectedParameter);
 
-     
-  if (currentMode->pos[1] != SMP.filter_setting[SMP.currentChannel][DELAY]) {
-    currentFilter = "DLAY";
-    SMP.filter_setting[SMP.currentChannel][DELAY] = currentMode->pos[1];
-    float delayVal = mapf(SMP.filter_setting[SMP.currentChannel][DELAY], 1, 100, 0, 10);
-    envelope13.delay(delayVal);
-    Serial.println("delay: " + String(delayVal));
-  }
-}
-  if (adsr[1] == ATTACK) {
+  if (fxType==1) drawFilters(currentFilter,SMP.selectedFilter);
 
- 
-
-  if (currentMode->pos[1] != SMP.filter_setting[SMP.currentChannel][ATTACK]) {
-    currentFilter = "ATAC";
-    SMP.filter_setting[SMP.currentChannel][ATTACK] = currentMode->pos[1];
-    float attackVal = mapf(SMP.filter_setting[SMP.currentChannel][ATTACK], 1, 100, 0, 11880);
-    envelope13.attack(attackVal);
-    Serial.println("attack: " + String(attackVal));
-  }
+  // Encoder 3: Adjust Filters
+  if (currentMode->pos[2] != SMP.selectedFilter) {
+    FastLED.clear();
+    SMP.selectedFilter = currentMode->pos[2];
+    currentFilter = activeFilterType[SMP.selectedFilter];
+    fxType = 1;
+    selectedFX = currentMode->pos[2];
+    Serial.print("FILTER: ");
+    Serial.println(currentFilter);
+    Serial.println(fxType);
+    currentMode->pos[3] = SMP.filter_settings[SMP.currentChannel][SMP.selectedFilter];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+    drawFilters(currentFilter,SMP.selectedFilter);
   }
 
+  // Encoder 1: Adjust Params
+  if (currentMode->pos[0] != SMP.selectedParameter) {
+    FastLED.clear();
+    SMP.selectedParameter = currentMode->pos[0];
+    fxType = 0;
 
-if (adsr[2] == HOLD) {
-  // Encoder2 : Adjust delay
-
-  
-     
-
-  if (currentMode->pos[2] != SMP.filter_setting[SMP.currentChannel][HOLD]) {
-    currentFilter="HOLD";
-    SMP.filter_setting[SMP.currentChannel][HOLD] = currentMode->pos[2];
-    float holdVal = mapf(SMP.filter_setting[SMP.currentChannel][HOLD], 1, 100, 0, 11880);
-    envelope13.hold(holdVal);
-    Serial.println("hold: " + String(holdVal));
-  }
-}
-
-if (adsr[2] == DECAY) {
-  // Encoder2 : Adjust delay
-
-     
-
-  if (currentMode->pos[2] != SMP.filter_setting[SMP.currentChannel][DECAY]) {
-    currentFilter = "DCAY";
-    SMP.filter_setting[SMP.currentChannel][DECAY] = currentMode->pos[2];
-    float decayVal = mapf(SMP.filter_setting[SMP.currentChannel][DECAY], 1, 100, 0, 11880);
-    envelope13.decay(decayVal);
-    Serial.println("decay: " + String(decayVal));
-  }
-}
-
-if (adsr[3] == SUSTAIN) {
-
-  
-    
-     
-
-  // Encoder 3: Adjust sustain
-  if (currentMode->pos[3] != SMP.filter_setting[SMP.currentChannel][SUSTAIN]) {
-     currentFilter = "SUST";
-    SMP.filter_setting[SMP.currentChannel][SUSTAIN] = currentMode->pos[3];
-    float sustainVal = mapf(SMP.filter_setting[SMP.currentChannel][SUSTAIN], 1, 100, 0, 1.0);  // Sustain range: 0.1s to 2.0s
-    envelope13.sustain(sustainVal);
-    Serial.println("sustain: " + String(sustainVal) + "");
-  }
-}
-
-  if (adsr[3] == RELEASE) {
-   
-
-
-     
-    // Encoder 4: Adjust release
-    if (currentMode->pos[3] != SMP.filter_setting[SMP.currentChannel][RELEASE]) {
-      currentFilter = "RLSE";
-      SMP.filter_setting[SMP.currentChannel][RELEASE] = currentMode->pos[3];
-      float releaseVal = mapf(SMP.filter_setting[SMP.currentChannel][RELEASE], 1, 100, 0, 1000.0);  // Release range: 0ms to 1.0s
-      envelope13.sustain(releaseVal);
-      Serial.println("release: " + String(releaseVal) + "");
-    }
+    selectedFX = currentMode->pos[0];
+    currentFilter = activeParameterType[SMP.selectedParameter];
+    Serial.print("PARAMS: ");
+    Serial.println(currentFilter);
+    currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][SMP.selectedParameter];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+    drawADSR(currentFilter, SMP.selectedParameter);
   }
 
-
-  
-    // Encoder 4: Adjust waveform
-    if (currentMode->pos[0] != SMP.filter_setting[SMP.currentChannel][WAVEFORM]) {
-      SMP.filter_setting[SMP.currentChannel][WAVEFORM] = currentMode->pos[0];
-      unsigned int wavformVal = mapf(SMP.filter_setting[SMP.currentChannel][WAVEFORM], 0, 4, 1, 4);  // 0-4
-      
-      Serial.println("WaveForm: " + String(wavformVal));
-
-      switch (wavformVal) {
-        case 1:
-          sound13.begin(WAVEFORM_SINE);
-          break;
-        case 2:
-          sound13.begin(WAVEFORM_SAWTOOTH);
-          break;
-        case 3:
-          sound13.begin(WAVEFORM_SQUARE);
-          break;
-        case 4:
-          sound13.begin(WAVEFORM_TRIANGLE);
-          break;
+  if (fxType == 1) {
+    if (selectedFX == LOWPASS) {
+      // Adjust delay
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][LOWPASS]) {
+        SMP.filter_settings[SMP.currentChannel][LOWPASS] = currentMode->pos[3];
+        float lowPassVal = mapf(SMP.filter_settings[SMP.currentChannel][LOWPASS], 0, 32, 0, 10);
+        envelope13.delay(lowPassVal);
+        Serial.println("lowpass: " + String(lowPassVal));
       }
     }
-  
-  drawADSR(currentFilter);
+
+    if (selectedFX == HIGHPASS) {
+      //Adjust highpass
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][HIGHPASS]) {
+        SMP.filter_settings[SMP.currentChannel][HIGHPASS] = currentMode->pos[3];
+        float highPassVal = mapf(SMP.filter_settings[SMP.currentChannel][HIGHPASS], 0, 32, 0, 10);
+        envelope13.delay(highPassVal);
+        Serial.println("highpass: " + String(highPassVal));
+      }
+    }
+
+    if (selectedFX == FREQUENCY) {
+      //Adjust frequency
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][FREQUENCY]) {
+        SMP.filter_settings[SMP.currentChannel][FREQUENCY] = currentMode->pos[3];
+        float freqVal = mapf(SMP.filter_settings[SMP.currentChannel][FREQUENCY], 0, 32, 0, 10);
+        envelope13.delay(freqVal);
+        Serial.println("frequency: " + String(freqVal));
+      }
+    }
+
+
+
+    if (selectedFX == FLANGER) {
+      //Adjust flanger
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][FLANGER]) {
+        SMP.filter_settings[SMP.currentChannel][FLANGER] = currentMode->pos[3];
+        float flangeVal = mapf(SMP.filter_settings[SMP.currentChannel][FLANGER], 0, 32, 0, 10);
+        envelope13.delay(flangeVal);
+        Serial.println("flangerVal: " + String(flangeVal));
+      }
+    }
+
+
+    if (selectedFX == ECHO) {
+      //Adjust echo
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][ECHO]) {
+        SMP.filter_settings[SMP.currentChannel][ECHO] = currentMode->pos[3];
+        float echoVal = mapf(SMP.filter_settings[SMP.currentChannel][ECHO], 0, 32, 0, 10);
+        envelope13.delay(echoVal);
+        Serial.println("echoVal: " + String(echoVal));
+      }
+    }
+
+
+    if (selectedFX == DISTORTION) {
+      //Adjust distortion
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][DISTORTION]) {
+        SMP.filter_settings[SMP.currentChannel][DISTORTION] = currentMode->pos[3];
+        float distortVal = mapf(SMP.filter_settings[SMP.currentChannel][DISTORTION], 0, 32, 0, 10);
+        envelope13.delay(distortVal);
+        Serial.println("distortVal: " + String(distortVal));
+      }
+    }
+
+    if (selectedFX == RINGMOD) {
+      //Adjust ringmod
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][RINGMOD]) {
+        SMP.filter_settings[SMP.currentChannel][RINGMOD] = currentMode->pos[3];
+        float ringModVal = mapf(SMP.filter_settings[SMP.currentChannel][RINGMOD], 0, 32, 0, 10);
+        envelope13.delay(ringModVal);
+        Serial.println("ringModVal: " + String(ringModVal));
+      }
+    }
+
+
+    if (selectedFX == DETUNE) {
+      //Adjust detune
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][DETUNE]) {
+        SMP.filter_settings[SMP.currentChannel][DETUNE] = currentMode->pos[3];
+        float detuneVal = mapf(SMP.filter_settings[SMP.currentChannel][DETUNE], 0, 32, 0, 10);
+        envelope13.delay(detuneVal);
+        Serial.println("detuneVal: " + String(detuneVal));
+      }
+    }
+
+
+
+    if (selectedFX == NOISE) {
+      //Adjust noise
+      if (currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][NOISE]) {
+        SMP.filter_settings[SMP.currentChannel][NOISE] = currentMode->pos[3];
+        float noiseVal = mapf(SMP.filter_settings[SMP.currentChannel][NOISE], 0, 32, 0, 10);
+        envelope13.delay(noiseVal);
+        Serial.println("noiseVal: " + String(noiseVal));
+      }
+    }
+  }
+
+  if (fxType == 0) {
+    if (selectedFX == DELAY) {
+      // Adjust delay
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][DELAY]) {
+        SMP.param_settings[SMP.currentChannel][DELAY] = currentMode->pos[3];
+        float delayVal = mapf(SMP.param_settings[SMP.currentChannel][DELAY], 0, 32, 0, 10);
+        envelope13.delay(delayVal);
+        Serial.println("delay: " + String(delayVal));
+      }
+    }
+
+    if (selectedFX == ATTACK) {
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][ATTACK]) {
+        SMP.param_settings[SMP.currentChannel][ATTACK] = currentMode->pos[3];
+        float attackVal = mapf(SMP.param_settings[SMP.currentChannel][ATTACK], 0, 32, 0, 11880);
+        envelope13.attack(attackVal);
+        Serial.println("attack: " + String(attackVal));
+      }
+    }
+
+
+    if (selectedFX == HOLD) {
+      //  Adjust hold
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][HOLD]) {
+        SMP.param_settings[SMP.currentChannel][HOLD] = currentMode->pos[3];
+        float holdVal = mapf(SMP.param_settings[SMP.currentChannel][HOLD], 0, 32, 0, 11880);
+        envelope13.hold(holdVal);
+        Serial.println("hold: " + String(holdVal));
+      }
+    }
+
+    if (selectedFX == DECAY) {
+      //  Adjust decay
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][DECAY]) {
+        SMP.param_settings[SMP.currentChannel][DECAY] = currentMode->pos[3];
+        float decayVal = mapf(SMP.param_settings[SMP.currentChannel][DECAY], 0, 32, 0, 11880);
+        envelope13.decay(decayVal);
+        Serial.println("decay: " + String(decayVal));
+      }
+    }
+
+    if (selectedFX == SUSTAIN) {
+      //  Adjust sustain
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][SUSTAIN]) {
+        SMP.param_settings[SMP.currentChannel][SUSTAIN] = currentMode->pos[3];
+        float sustainVal = mapf(SMP.param_settings[SMP.currentChannel][SUSTAIN], 0, 32, 0, 1.0);  // Sustain range: 0.1s to 2.0s
+        envelope13.sustain(sustainVal);
+        Serial.println("sustain: " + String(sustainVal) + "");
+      }
+    }
+
+    if (selectedFX == RELEASE) {
+      //  Adjust release
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][RELEASE]) {
+        SMP.param_settings[SMP.currentChannel][RELEASE] = currentMode->pos[3];
+        float releaseVal = mapf(SMP.param_settings[SMP.currentChannel][RELEASE], 0, 32, 0, 1000.0);  // Release range: 0ms to 1.0s
+        envelope13.sustain(releaseVal);
+        Serial.println("release: " + String(releaseVal) + "");
+      }
+    }
+
+
+
+
+
+    if (selectedFX == TYPE) {
+      // Adjust type
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][TYPE]) {
+        SMP.param_settings[SMP.currentChannel][TYPE] = currentMode->pos[3];
+        float typeVAL = mapf(SMP.param_settings[SMP.currentChannel][TYPE], 1, 100, 0, 4.0);  // Release range: 0ms to 1.0s
+        envelope13.sustain(typeVAL);
+        Serial.println("type: " + String(typeVAL) + "");
+      }
+    }
+
+
+
+
+
+    if (selectedFX == WAVEFORM) {
+      // adjust waveform
+      if (currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][WAVEFORM]) {
+        SMP.param_settings[SMP.currentChannel][WAVEFORM] = currentMode->pos[3];
+        unsigned int wavformVal = mapf(SMP.param_settings[SMP.currentChannel][WAVEFORM], 0, 4, 1, 4);  // 0-4
+        Serial.println("WaveForm: " + String(wavformVal));
+
+        switch (wavformVal) {
+          case 1:
+            sound13.begin(WAVEFORM_SINE);
+            break;
+          case 2:
+            sound13.begin(WAVEFORM_SAWTOOTH);
+            break;
+          case 3:
+            sound13.begin(WAVEFORM_SQUARE);
+            break;
+          case 4:
+            sound13.begin(WAVEFORM_TRIANGLE);
+            break;
+        }
+      }
+    }
+  }
 }
 
 
@@ -2622,12 +2929,13 @@ void loadSamplePack(unsigned int pack, bool intro) {
   SMP.smplen = 0;
   SMP.seekEnd = 0;
   EEPROM.put(0, pack);
-  if (intro) renderRainbowWave(2500);
-  for (unsigned int z = 1; z < maxFiles; z++) {
 
+  for (unsigned int z = 1; z < maxFiles; z++) {
     if (!intro) {
       FastLEDclear();
       showIcons("icon_sample", CRGB(20, 20, 20));
+    } else {
+      showText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
     }
 
     drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], CRGB(50, 50, 50), intro);
@@ -2635,8 +2943,6 @@ void loadSamplePack(unsigned int pack, bool intro) {
   }
   char OUTPUTf[50];
   sprintf(OUTPUTf, "%d/%d.wav", pack, 1);
-
-
   switchMode(&draw);
 }
 
@@ -2701,56 +3007,56 @@ int getFileNumber(int value) {
   return wavfile + folder * 100;
 }
 void processPeaks() {
-    float interpolatedValues[16]; // Ensure at least 16 values
+  float interpolatedValues[16];  // Ensure at least 16 values
 
-    // Map seek start and end positions to x range (1-16)
-    unsigned int startX = mapf(SMP.seek * SEARCHSIZE, 0, SMP.smplen, 1, 16);
-    unsigned int endX = mapf(SMP.seekEnd * SEARCHSIZE, 0, SMP.smplen, 1, 16);
+  // Map seek start and end positions to x range (1-16)
+  unsigned int startX = mapf(SMP.seek * SEARCHSIZE, 0, SMP.smplen, 1, 16);
+  unsigned int endX = mapf(SMP.seekEnd * SEARCHSIZE, 0, SMP.smplen, 1, 16);
 
-    if (peakIndex > 0) {
-        // Distribute peak values over 16 positions
-        for (int i = 0; i < 16; i++) {
-            float indexMapped = mapf(i, 0, 15, 0, peakIndex - 1);
-            int lowerIndex = floor(indexMapped);
-            int upperIndex = min(lowerIndex + 1, peakIndex - 1);
-
-            if (peakIndex > 1) {
-                float fraction = indexMapped - lowerIndex;
-                interpolatedValues[i] = peakValues[lowerIndex] * (1 - fraction) + peakValues[upperIndex] * fraction;
-            } else {
-                interpolatedValues[i] = peakValues[0]; // Duplicate if only one value exists
-            }
-        }
-    } else {
-        // No peaks, default to zero
-        for (int i = 0; i < 16; i++) {
-            interpolatedValues[i] = 0;
-        }
-    }
-
-    // Light up LEDs
+  if (peakIndex > 0) {
+    // Distribute peak values over 16 positions
     for (int i = 0; i < 16; i++) {
-        int x = i + 1; // Ensure x values go from 1 to 16
-        int yPeak = mapf(interpolatedValues[i] * 100, 0, 100, 4, 11);
-        yPeak = constrain(yPeak, 4, 10);
+      float indexMapped = mapf(i, 0, 15, 0, peakIndex - 1);
+      int lowerIndex = floor(indexMapped);
+      int upperIndex = min(lowerIndex + 1, peakIndex - 1);
 
-        for (int y = 4; y <= yPeak; y++) {
-            // **Color gradient based on Y (vertical) instead of X**
-            
-            CRGB color;
-            if (x < startX) {
-                color = CRGB(0, 0, 5); // Green for pre-start region
-            } else if (x > endX) {
-                color = CRGB(10, 0, 15); // Dark red for post-end region
-            } else {
-                              
-                color = CRGB(((y - 4) * 35) / 4, (255 - ((y - 4) * 35)) / 4, 0); // Red to green gradient at 25% brightness
-            }
-
-            // Light up from y = 4 to y = yPeak
-            light(x, y, color);
-        }
+      if (peakIndex > 1) {
+        float fraction = indexMapped - lowerIndex;
+        interpolatedValues[i] = peakValues[lowerIndex] * (1 - fraction) + peakValues[upperIndex] * fraction;
+      } else {
+        interpolatedValues[i] = peakValues[0];  // Duplicate if only one value exists
+      }
     }
+  } else {
+    // No peaks, default to zero
+    for (int i = 0; i < 16; i++) {
+      interpolatedValues[i] = 0;
+    }
+  }
+
+  // Light up LEDs
+  for (int i = 0; i < 16; i++) {
+    int x = i + 1;  // Ensure x values go from 1 to 16
+    int yPeak = mapf(interpolatedValues[i] * 100, 0, 100, 4, 11);
+    yPeak = constrain(yPeak, 4, 10);
+
+    for (int y = 4; y <= yPeak; y++) {
+      // **Color gradient based on Y (vertical) instead of X**
+
+      CRGB color;
+      if (x < startX) {
+        color = CRGB(0, 0, 5);  // Green for pre-start region
+      } else if (x > endX) {
+        color = CRGB(10, 0, 15);  // Dark red for post-end region
+      } else {
+
+        color = CRGB(((y - 4) * 35) / 4, (255 - ((y - 4) * 35)) / 4, 0);  // Red to green gradient at 25% brightness
+      }
+
+      // Light up from y = 4 to y = yPeak
+      light(x, y, color);
+    }
+  }
 }
 
 void showWave() {
@@ -2762,43 +3068,45 @@ void showWave() {
 
   char OUTPUTf[50];
   sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-  
+
   if (firstcheck) {
     Serial.print("checking: ");
     firstcheck = false;
-      if (!SD.exists(OUTPUTf)){
-         Serial.print(OUTPUTf);
-        Serial.println(" >NOPE");
-      nofile = true;
-     } else{
+    if (!SD.exists(OUTPUTf)) {
       Serial.print(OUTPUTf);
-       nofile = false; Serial.println(" >exists!");}
+      Serial.println(" >NOPE");
+      nofile = true;
+    } else {
+      Serial.print(OUTPUTf);
+      nofile = false;
+      Serial.println(" >exists!");
+    }
   }
-  
-  
+
+
   FastLEDclear();
   showIcons("helper_select", col[SMP.currentChannel]);
   showIcons("helper_folder", CRGB(10, 10, 0));
   showIcons("helper_seek", CRGB(10, 0, 0));
-  if (nofile) { 
-      showIcons("helper_load", CRGB(20, 0, 0));
-      }else{
-      showIcons("helper_load", CRGB(0, 20, 0));
-      }
+  if (nofile) {
+    showIcons("helper_load", CRGB(20, 0, 0));
+  } else {
+    showIcons("helper_load", CRGB(0, 20, 0));
+  }
 
-  displaySample(SMP.seek, SMP.smplen +1 ,SMP.seekEnd);
-  
+  displaySample(SMP.seek, SMP.smplen + 1, SMP.seekEnd);
+
   processPeaks();
 
-// Update the LED display
-showNumber(snr, col_Folder[fnr], 12);
+  // Update the LED display
+  showNumber(snr, col_Folder[fnr], 12);
 
- if (sampleLengthSet) {
-        SMP.seekEnd = SMP.smplen / SEARCHSIZE;
-        currentMode->pos[2] = SMP.seekEnd;
-        Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-        sampleLengthSet = false; // Reset the flag after setting seekEnd
-    }
+  if (sampleLengthSet) {
+    SMP.seekEnd = SMP.smplen / SEARCHSIZE;
+    currentMode->pos[2] = SMP.seekEnd;
+    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+    sampleLengthSet = false;  // Reset the flag after setting seekEnd
+  }
 
   //:::::::: STARTPOSITION SAMPLE  ::::: //
   if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
@@ -2817,7 +3125,7 @@ showNumber(snr, col_Folder[fnr], 12);
   if (currentMode->pos[1] != SMP.folder) {
     playRaw0.stop();
     firstcheck = true;
-    nofile=false;
+    nofile = false;
     SMP.folder = currentMode->pos[1];
     Serial.println("Folder: " + String(SMP.folder - 1));
     SMP.wav[SMP.currentChannel][1] = ((SMP.folder - 1) * 100) + 1;
@@ -2832,18 +3140,17 @@ showNumber(snr, col_Folder[fnr], 12);
     previewIsPlaying = false;
     playRaw0.stop();
     Serial.println("SEEKEND-hit");
-   
-     SMP.seekEnd = currentMode->pos[2];
-        Serial.println("seekEnd updated to: " + String(SMP.seekEnd));
 
-  
+    SMP.seekEnd = currentMode->pos[2];
+    Serial.println("seekEnd updated to: " + String(SMP.seekEnd));
+
+
     //STOP ALREADY PLAYING
     _samplers[0].removeAllSamples();
     envelope0.noteOff();
-    //if (!sampleLengthSet) 
+    //if (!sampleLengthSet)
     previewSample(fnr, getFileNumber(snr), false, false);
     sampleLengthSet = false;
-    
   }
 
   // GET SAMPLEFILE
@@ -2851,7 +3158,7 @@ showNumber(snr, col_Folder[fnr], 12);
     previewIsPlaying = false;
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
     File selectedFile = SD.open(OUTPUTf);
-  int PrevSampleRate;
+    int PrevSampleRate;
     selectedFile.seek(24);
     for (uint8_t i = 24; i < 25; i++) {
       int g = selectedFile.read();
@@ -2870,54 +3177,54 @@ showNumber(snr, col_Folder[fnr], 12);
     memset(sampled[0], 0, sizeof(sampled[0]));
     sampleIsLoaded = false;
     firstcheck = true;
-    nofile=false;
+    nofile = false;
     SMP.wav[SMP.currentChannel][1] = currentMode->pos[3];
-    
+
     int snr = SMP.wav[SMP.currentChannel][1];
     int fnr = getFolderNumber(snr);
     FastLEDclear();
     showNumber(snr, col_Folder[fnr], 12);
-    
+
     Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
     char OUTPUTf[50];
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
     //check if exists?
 
     // reset SEEK and stop sample playing
-    
+
     currentMode->pos[0] = 0;
     SMP.seek = 0;
-    Encoder[0].writeCounter((int32_t) 0);
+    Encoder[0].writeCounter((int32_t)0);
 
-    
+
     sampleLengthSet = true;
-      Serial.print("F---->");
-      Serial.print(selectedFile.size());
-      Serial.print(" / ");
-      Serial.print(PrevSampleRate);
-      Serial.println();
-      
-//SMP.seekEnd = (selectedFile.size() / (PrevSampleRate * 2) / SEARCHSIZE);
-        SMP.smplen = (selectedFile.size() / (PrevSampleRate * 2) - 44 / SEARCHSIZE);
-        SMP.seekEnd = SMP.smplen;
-        currentMode->pos[2] = SMP.seekEnd;
-        //SET ENCODER SEARCH_END to last byte
-        Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+    Serial.print("F---->");
+    Serial.print(selectedFile.size());
+    Serial.print(" / ");
+    Serial.print(PrevSampleRate);
+    Serial.println();
 
-     //envelope0.noteOff();
-     playRaw0.stop();
+    //SMP.seekEnd = (selectedFile.size() / (PrevSampleRate * 2) / SEARCHSIZE);
+    SMP.smplen = (selectedFile.size() / (PrevSampleRate * 2) - 44 / SEARCHSIZE);
+    SMP.seekEnd = SMP.smplen;
+    currentMode->pos[2] = SMP.seekEnd;
+    //SET ENCODER SEARCH_END to last byte
+    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+
+    //envelope0.noteOff();
+    playRaw0.stop();
     if (!previewIsPlaying && !sampleIsLoaded) {
       //lastPreviewedSample[fnr] = snr;
       playRaw0.play(OUTPUTf);
-      previewIsPlaying=true;
+      previewIsPlaying = true;
       peakIndex = 0;
-         memset(peakValues, 0, sizeof(peakValues));
+      memset(peakValues, 0, sizeof(peakValues));
 
 
-      
+
       // Read peaks until the file ends or the array is full
-      
-      
+
+
 
 
 
@@ -2929,18 +3236,16 @@ showNumber(snr, col_Folder[fnr], 12);
     }
   }
 
-    if (SMP.seekEnd > SMP.smplen / SEARCHSIZE) {
-        SMP.seekEnd = SMP.smplen / SEARCHSIZE;
-        currentMode->pos[2] = SMP.seekEnd;
-        Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-    }
-
-
+  if (SMP.seekEnd > SMP.smplen / SEARCHSIZE) {
+    SMP.seekEnd = SMP.smplen / SEARCHSIZE;
+    currentMode->pos[2] = SMP.seekEnd;
+    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+  }
 }
 
 
 
-void renderRainbowWave(int durationMs) {
+void _renderRainbowWave(int durationMs) {
   int elapsedMs = 0;
   const int frameTime = 40;       // Update every 50ms
   const float speed = 0.1f;       // Speed of the wave
@@ -3078,108 +3383,123 @@ void drawVelocity() {
   showText("c", 10, 2, CRGB(50, 50, 50));
 }
 
-void drawADSR(String activeFilter) {
-  
+void drawADSR(char *txt, int activeParameter) {
   FastLED.clear();
 
-  showText(currentFilter, 1, 12, CRGB(50, 50, 50));
-  
 
-  CRGB volColor = CRGB(SMP.vol * SMP.vol, 20 - SMP.vol, 0);
-  showIcons("helper_exit", CRGB(0, 0, 20));
-  unsigned int waveform = mapf(SMP.filter_setting[SMP.currentChannel][WAVEFORM], 1, 4, 1, maxY - 6); // 4
+  //showIcons("helper_exit", CRGB(0, 0, 20));
 
-  unsigned int delay = mapf(SMP.filter_setting[SMP.currentChannel][DELAY], 0, 100, 1, maxY - 6); //10
-  unsigned int attack = mapf(SMP.filter_setting[SMP.currentChannel][ATTACK], 0, 100, 1, maxY - 6); //11880
+  // Amplitude definitions:
+  int baseAmplitude = 1;        // baseline (minimum amplitude)
+  int attackHeight = maxY - 6;  // fixed attack (and hold) height
+  // Sustain's height is variable, controlled by the SUSTAIN parameter:
+  int sustainHeight = mapf(SMP.param_settings[SMP.currentChannel][SUSTAIN], 0, 32, baseAmplitude, attackHeight);
+  // Map widths (x durations) for each stage:
+  int delayWidth = mapf(SMP.param_settings[SMP.currentChannel][DELAY], 0, 32, 0, 3);      // Delay: min 0, max 3
+  int attackWidth = mapf(SMP.param_settings[SMP.currentChannel][ATTACK], 0, 32, 0, 4);    // Attack: duration only (0 to 4)
+  int holdWidth = mapf(SMP.param_settings[SMP.currentChannel][HOLD], 0, 32, 0, 3);        // Hold: width (0 to 3)
+  int decayWidth = mapf(SMP.param_settings[SMP.currentChannel][DECAY], 0, 32, 0, 4);      // Decay: now 0 to 4
+  const int sustainFixedWidth = 2;                                                        // Sustain: fixed width of 2
+  int releaseWidth = mapf(SMP.param_settings[SMP.currentChannel][RELEASE], 0, 32, 0, 4);  // Release: 0 to 4
 
-  unsigned int hold = mapf(SMP.filter_setting[SMP.currentChannel][HOLD], 0, 100, 1, maxY - 6);  //11880
-  unsigned int decay = mapf(SMP.filter_setting[SMP.currentChannel][DECAY], 0, 100, 1, maxY - 6); //11880
-
-  unsigned int sustain = mapf(SMP.filter_setting[SMP.currentChannel][SUSTAIN], 0, 100, 1, maxY - 6); //1
-  unsigned int release = mapf(SMP.filter_setting[SMP.currentChannel][RELEASE], 0, 100, 1, maxY - 6);//1000
-
-  
-
-  //GLOBAL
-
-  int max = 0;
-  for (unsigned int x = 1; x <= 2; x++) {
-      for (unsigned int y = 1; y <= waveform; y++) {
-        light(x, y, CRGB(0, y * y, 20 - y));
-        max = y;
-      }
-      light(x, max, CRGB(50, 50, 50));
-    }
+  // Compute x-positions for each stage:
+  int xDelayStart = 1;
+  int xDelayEnd = xDelayStart + delayWidth;
+  int xAttackStart = xDelayEnd;
+  int xAttackEnd = xAttackStart + attackWidth;
+  int xHoldEnd = xAttackEnd + holdWidth;
+  int xDecayEnd = xHoldEnd + decayWidth;
+  int xSustainEnd = xDecayEnd + sustainFixedWidth;
+  int xReleaseEnd = xSustainEnd + releaseWidth;
 
 
-  for (unsigned int x = 4; x <= 5; x++) {
-    for (unsigned int y = 1; y <= delay; y++) {
-     light(x, y, CRGB(y * y, 20 - y, 0));  
-      max = y;
-    }
-    light(x, max, CRGB(50, 50, 50));
+
+  CRGB activeParameterColor;
+
+  switch (activeParameter) {
+    case 2:
+      activeParameterColor = CRGB(100, 0, 0);
+      break;
+    case 3:
+      activeParameterColor = CRGB(0, 100, 0);
+      break;
+    case 4:
+      activeParameterColor = CRGB(0, 0, 100);
+      break;
+    case 5:
+      activeParameterColor = CRGB(100, 100, 0);
+      break;
+    case 6:
+      activeParameterColor = CRGB(100, 0, 100);
+      break;
+    case 7:
+      activeParameterColor = CRGB(0, 100, 100);
+      break;
+    default:
+      activeParameterColor = CRGB(0, 0, 0);  // default color (adjust as needed)
+      break;
   }
 
+  // --- Draw colored envelopes first ---
+  // Delay stage: flat line at baseAmplitude.
+  colorBelowCurve(xDelayStart, xDelayEnd, baseAmplitude, baseAmplitude,
+                  activeParameter == 2 ? CRGB(100, 0, 0) : CRGB(4, 0, 0));
+  // Attack stage: rising line from baseAmplitude to fixed attackHeight.
+  colorBelowCurve(xAttackStart, xAttackEnd, baseAmplitude, attackHeight,
+                  activeParameter == 3 ? CRGB(0, 100, 0) : CRGB(0, 4, 0));
+  // Hold stage: flat line at attackHeight.
+  colorBelowCurve(xAttackEnd, xHoldEnd, attackHeight, attackHeight,
+                  activeParameter == 4 ? CRGB(0, 0, 100) : CRGB(0, 0, 4));
+  // Decay stage: falling line from attackHeight down to sustainHeight.
+  colorBelowCurve(xHoldEnd, xDecayEnd, attackHeight, sustainHeight,
+                  activeParameter == 5 ? CRGB(100, 100, 0) : CRGB(4, 4, 0));
+  // Sustain stage: flat line at sustainHeight.
+  colorBelowCurve(xDecayEnd, xSustainEnd, sustainHeight, sustainHeight,
+                  activeParameter == 6 ? CRGB(100, 0, 100) : CRGB(4, 0, 4));
+  // Release stage: falling line from sustainHeight down to baseAmplitude.
+  colorBelowCurve(xSustainEnd, xReleaseEnd, sustainHeight, baseAmplitude,
+                  activeParameter == 7 ? CRGB(0, 100, 100) : CRGB(0, 4, 4));
 
-  for (unsigned int x = 6 ; x <= 7; x++) {
-    for (unsigned int y = 1; y <= attack; y++) {
-    light(x, y, CRGB(0, y * y, 20 - y));  
-      max = y;
+  // --- Now overlay the white envelope outline ---
+  drawLine(xDelayStart, baseAmplitude, xDelayEnd, baseAmplitude, CRGB::Red);
+  drawLine(xAttackStart, baseAmplitude, xAttackEnd, attackHeight, CRGB(30, 255, 104));
+  drawLine(xAttackEnd, attackHeight, xHoldEnd, attackHeight, CRGB::White);
+  drawLine(xHoldEnd, attackHeight, xDecayEnd, sustainHeight, CRGB::White);
+  drawLine(xDecayEnd, sustainHeight, xSustainEnd, sustainHeight, CRGB::White);
+  drawLine(xSustainEnd, sustainHeight, xReleaseEnd, baseAmplitude, CRGB::White);
+
+  showText(txt, 1, 12, activeParameterColor);
+}
+
+void drawLine(int x1, int y1, int x2, int y2, CRGB color) {
+  int dx = abs(x2 - x1);
+  int dy = abs(y2 - y1);
+  int sx = (x1 < x2) ? 1 : -1;
+  int sy = (y1 < y2) ? 1 : -1;
+  int err = dx - dy;
+
+  while (true) {
+    light(x1, y1, color);
+    if (x1 == x2 && y1 == y2) break;
+    int e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x1 += sx;
     }
-    light(x, max, CRGB(50, 50, 50));
+    if (e2 < dx) {
+      err += dx;
+      y1 += sy;
+    }
   }
+}
 
-
-
-  for (unsigned int x = 8; x <= 9; x++) {
-    for (unsigned int y = 1; y <= hold; y++) {
-    light(x, y, CRGB(20 - y, 0, y * y));  
-      max = y;
+void colorBelowCurve(int xStart, int xEnd, int yStart, int yEnd, CRGB color) {
+  for (int x = xStart; x <= xEnd; x++) {
+    int yCurve = mapf(x, xStart, xEnd, yStart, yEnd);  // Compute envelope's y-value at this x
+    for (int y = 1; y <= yCurve; y++) {
+      light(x, y, color);  // Fill from y=1 up to the envelope
     }
-    light(x, max, CRGB(50, 50, 50));
   }
-
-
-  for (unsigned int x = 10; x <= 11; x++) {
-    for (unsigned int y = 1; y <= decay; y++) {
-      light(x, y, CRGB( 0,  20 - y, y * y));
-      max = y;
-    }
-    light(x, max, CRGB(50, 50, 50));
-  }
-
-
-
-
-  for (unsigned int x = 12; x <= 13; x++) {
-    for (unsigned int y = 1; y <= sustain; y++) {
-      light(x, y, CRGB(20 - y, y * y, 0));
-      max = y;
-    }
-    light(x, max, CRGB(50, 50, 50));
-  }
- 
- 
-    for (unsigned int x = 14; x <= 15; x++) {
-      for (unsigned int y = 1; y <= release; y++) {
-        light(x, y, CRGB(y * y, 0, 20 - y));
-        max = y;
-      }
-      light(x, max, CRGB(50, 50, 50));
-    }
-  
-  
-  //showText("W", 1, 12, CRGB(50, 50, 50));
-  
-  /*if (adsr[1] == DELAY) showText("D", 5, 12, CRGB(50, 50, 50));
-  if (adsr[1] == ATTACK) showText("A", 5, 12, CRGB(50, 50, 50));
-
-  if (adsr[2] == HOLD) showText("H", 10, 12, CRGB(50, 50, 50));
-  if (adsr[2] == DECAY) showText("D", 10, 12, CRGB(50, 50, 50));
-
-  if (adsr[3] == SUSTAIN) showText("S", 14, 12, CRGB(50, 50, 50));
-  if (adsr[3] == RELEASE) showText("R", 14, 12, CRGB(50, 50, 50));
-  */
 }
 
 
@@ -3190,7 +3510,7 @@ void drawBase() {
   if (!SMP.singleMode) {
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
-      //unsigned int filtering = 2;  // mapf(SMP.filter_setting[SMP.currentChannel][y - 1], 0, maxfilterResolution, 50, 5);
+      //unsigned int filtering = 2;  // mapf(SMP.param_settings[SMP.currentChannel][y - 1], 0, maxfilterResolution, 50, 5);
       for (unsigned int x = 1; x < maxX + 1; x++) {
         if (SMP.mute[y - 1]) {
           light(x, y, CRGB(0, 0, 0));
@@ -3201,7 +3521,7 @@ void drawBase() {
       colors++;
     }
 
-    drawStatus(); 
+    drawStatus();
 
     for (unsigned int x = 1; x <= 13; x += 4) {
       light(x, 1, CRGB(10, 10, 10));  //4-4 helper
@@ -3344,8 +3664,10 @@ void drawTriggers() {
       TIMER
   *************************************************/
 
-void drawTimer(unsigned int timer) {
+void drawTimer() {
+  unsigned int timer = (beat - 2) % maxX + 1;
   if (SMP.page == SMP.edit) {
+    if (timer < 1) timer = 1;
     for (unsigned int y = 1; y < maxY; y++) {
       light(timer, y, CRGB(10, 0, 0));
 
@@ -3607,7 +3929,7 @@ void loadPattern(bool autoload) {
     bpm_vol->pos[3] = SMP.bpm;
     playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
     playTimer.update(playNoteInterval);
-    midiTimer.update(playNoteInterval / 24);
+    midiTimer.update(playNoteInterval / 48);
     bpm_vol->pos[2] = SMP.vol;
 
 
@@ -3615,7 +3937,7 @@ void loadPattern(bool autoload) {
     //if (vol <= 1.0) sgtl5000_1.volume(vol);
     // set all Filters
     //for (unsigned int i = 0; i < maxFilters; i++) {
-    //filters[i]->frequency(100 * SMP.filter_setting[SMP.currentChannel][i]);
+    //filters[i]->frequency(100 * SMP.param_settings[SMP.currentChannel][i]);
     //}
     SMP.singleMode = false;
 
@@ -3648,7 +3970,7 @@ void loadPattern(bool autoload) {
     SMP.shiftY = 0;
 
     for (unsigned int i = 0; i < maxFilters; i++) {
-      //Serial.print(SMP.filter_setting[SMP.currentChannel][i]);
+      //Serial.print(SMP.param_settings[SMP.currentChannel][i]);
       Serial.print(", ");
     }
 
@@ -3691,7 +4013,6 @@ void handleStop() {
   allOff();
   autoSave();
   beat = 1;
-  pagebeat = 1;
   SMP.page = 1;
   waitForFourBars = false;
   yield();
@@ -3700,53 +4021,62 @@ void handleStop() {
 
 //receive Midi notes and velocity, map to note array. if not playing, play the note
 void handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
-  unsigned int mychannel;
-  // return if out of range
-  if (!SMP.singleMode) {
-    mychannel = SMP.currentChannel;
-    if (mychannel < 1 || mychannel > maxFiles) return;
-  } else {
-    mychannel = SMP.currentChannel;
-  }
-  //  envelopes[SMP.currentChannel]->release(11880 / 2);
+  int currentbeat = beat;
+  unsigned int mychannel = SMP.currentChannel;
+  if (mychannel < 1 || mychannel > maxFiles) return;
+
   unsigned int livenote = (mychannel + 1) + pitch - 60;  // set Base to C3
 
-  // fake missing octaves (only 16 notes visible, so step up/down an octave!)
+  // Adjust for missing octaves
   if (livenote > 16) livenote -= 12;
   if (livenote < 1) livenote += 12;
 
   if (livenote >= 1 && livenote <= 16) {
     if (isNowPlaying) {
-      if (!SMP.mute[SMP.currentChannel]) {
-        note[beat][livenote][0] = mychannel;
-        note[beat][livenote][1] = velocity;
+      if (SMP.singleMode) {
+        unsigned long currentTime = millis();
+        unsigned long elapsedTime = currentTime - beatStartTime;
+        unsigned int effectiveBeat = currentbeat;
+
+        // If the note arrives late, assign it to the next beat
+        if (elapsedTime > playNoteInterval / 2) {
+          effectiveBeat = (beat % (maxX * lastPage)) + 1;
+        }
+
+        // Assign the note to the effective beat
+        note[effectiveBeat][livenote][0] = mychannel;
+        note[effectiveBeat][livenote][1] = velocity;
+
+        // Mark the note as active
+        activeNotes[pitch] = true;
+
+        // Play the note immediately
+        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
+      } else {
+        // Play the note without assigning it to the grid
+        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
       }
-    }   else {
+    } else {
+      // If not playing, light up the LED and play the note
       light(mapXtoPageOffset(SMP.x), livenote, CRGB(0, 0, 255));
       FastLEDshow();
-      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity * 8, true, true);
+      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
     }
   }
 }
 
 void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
-  /*if (isNowPlaying) {
-    if (pitch > 0 && pitch < 17) {
-      if (note[beat][pitch][0] == SMP.currentChannel) {
-        note[beat][pitch][0] = 0;
-        light(pitch, SMP.currentChannel + 1, CRGB(0, 0, 0));
-        FastLEDshow();
+  if (isNowPlaying) {
+    if (!SMP.singleMode) {
+      int mychannel = SMP.currentChannel;
+
+      // Only stop the note if it is currently active
+      if (activeNotes[pitch]) {
+        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, false, false);
+        activeNotes[pitch] = false;  // Mark the note as inactive
       }
     }
-  } else {
-    if (pitch > 0 && pitch < 17) {
-      if (note[beat][pitch][0] == SMP.curr  entChannel) {
-        note[beat][pitch][0] = 0;
-        light(pitch, SMP.currentChannel + 1, CRGB(0, 0, 0));
-        FastLEDshow();
-      }
-    }
-  }*/
+  }
 }
 
 void handleStart() {
