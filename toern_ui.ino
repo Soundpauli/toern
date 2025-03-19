@@ -158,16 +158,33 @@ void drawChar(char c, int x, int y, CRGB color) {
 
 
 
+void drawNumber(float count, CRGB color, int topY) {
+  char buffer[16];
 
-void drawNumber(unsigned int count, CRGB color, int topY) {
-  char buffer[12];
-  unsigned int width = 0;
-  if (count > 9) width = 4;
-  if ((count > 99)) width = 8;
-  sprintf(buffer, "%u", count);
-  drawText(buffer, 14 - width, topY, color);
+  // Check if the number is "effectively" an integer
+  if (fabs(count - (int)count) < 0.01) {
+    // It's a whole number, print as int
+    sprintf(buffer, "%d", (int)count);
+  } else {
+    // It's a float with decimals, print with 2 decimals
+    dtostrf(count, 0, 2, buffer);  // Example: 1.25 -> "1.25"
+  }
+
+  // Dynamically calculate pixel width for alignment
+  int textPixelWidth = 0;
+  for (int i = 0; buffer[i] != '\0'; i++) {
+    if (buffer[i] >= 32 && buffer[i] <= 126) {
+      textPixelWidth += alphabet[buffer[i] - 32][0] + 1;  // Char width + 1 space
+    }
+  }
+
+  int startX = 17 - textPixelWidth;  // Adjust 14 based on your screen width
+  if (startX < 0) startX = 0;
+
+  drawText(buffer, startX, topY, color);
   FastLEDshow();
 }
+
 
 
 void drawVelocity() {
@@ -197,125 +214,7 @@ void drawVelocity() {
 
 
 
-void colorBelowCurve(int xStart, int xEnd, int yStart, int yEnd, CRGB color) {
-  for (int x = xStart; x <= xEnd; x++) {
-    int yCurve = mapf(x, xStart, xEnd, yStart, yEnd);  // Compute envelope's y-value at this x
-    for (int y = 1; y <= yCurve; y++) {
-      light(x, y, color);  // Fill from y=1 up to the envelope
-    }
-  }
-}
 
-
-void drawADSR(char *txt, int activeParameter) {
-  FastLED.clear();
-
-
-  //showIcons("helper_exit", CRGB(0, 0, 20));
-
-  // Amplitude definitions:
-  int baseAmplitude = 1;        // baseline (minimum amplitude)
-  int attackHeight = maxY - 6;  // fixed attack (and hold) height
-  // Sustain's height is variable, controlled by the SUSTAIN parameter:
-  int sustainHeight = mapf(SMP.param_settings[SMP.currentChannel][SUSTAIN], 0, 32, baseAmplitude, attackHeight);
-  // Map widths (x durations) for each stage:
-  int delayWidth = mapf(SMP.param_settings[SMP.currentChannel][DELAY], 0, 32, 0, 3);      // Delay: min 0, max 3
-  int attackWidth = mapf(SMP.param_settings[SMP.currentChannel][ATTACK], 0, 32, 0, 4);    // Attack: duration only (0 to 4)
-  int holdWidth = mapf(SMP.param_settings[SMP.currentChannel][HOLD], 0, 32, 0, 3);        // Hold: width (0 to 3)
-  int decayWidth = mapf(SMP.param_settings[SMP.currentChannel][DECAY], 0, 32, 0, 4);      // Decay: now 0 to 4
-  const int sustainFixedWidth = 2;                                                        // Sustain: fixed width of 2
-  int releaseWidth = mapf(SMP.param_settings[SMP.currentChannel][RELEASE], 0, 32, 0, 4);  // Release: 0 to 4
-
-  // Compute x-positions for each stage:
-  int xDelayStart = 1;
-  int xDelayEnd = xDelayStart + delayWidth;
-  int xAttackStart = xDelayEnd;
-  int xAttackEnd = xAttackStart + attackWidth;
-  int xHoldEnd = xAttackEnd + holdWidth;
-  int xDecayEnd = xHoldEnd + decayWidth;
-  int xSustainEnd = xDecayEnd + sustainFixedWidth;
-  int xReleaseEnd = xSustainEnd + releaseWidth;
-
-
-
-  CRGB activeParameterColor;
-
-  switch (activeParameter) {
-    case 2:
-      activeParameterColor = CRGB(100, 0, 0);
-      break;
-    case 3:
-      activeParameterColor = CRGB(0, 100, 0);
-      break;
-    case 4:
-      activeParameterColor = CRGB(0, 0, 100);
-      break;
-    case 5:
-      activeParameterColor = CRGB(100, 100, 0);
-      break;
-    case 6:
-      activeParameterColor = CRGB(100, 0, 100);
-      break;
-    case 7:
-      activeParameterColor = CRGB(0, 100, 100);
-      break;
-    default:
-      activeParameterColor = CRGB(0, 0, 0);  // default color (adjust as needed)
-      break;
-  }
-
-  // --- Draw colored envelopes first ---
-  // Delay stage: flat line at baseAmplitude.
-  colorBelowCurve(xDelayStart, xDelayEnd, baseAmplitude, baseAmplitude,
-                  activeParameter == 2 ? CRGB(100, 0, 0) : CRGB(4, 0, 0));
-  // Attack stage: rising line from baseAmplitude to fixed attackHeight.
-  colorBelowCurve(xAttackStart, xAttackEnd, baseAmplitude, attackHeight,
-                  activeParameter == 3 ? CRGB(0, 100, 0) : CRGB(0, 4, 0));
-  // Hold stage: flat line at attackHeight.
-  colorBelowCurve(xAttackEnd, xHoldEnd, attackHeight, attackHeight,
-                  activeParameter == 4 ? CRGB(0, 0, 100) : CRGB(0, 0, 4));
-  // Decay stage: falling line from attackHeight down to sustainHeight.
-  colorBelowCurve(xHoldEnd, xDecayEnd, attackHeight, sustainHeight,
-                  activeParameter == 5 ? CRGB(100, 100, 0) : CRGB(4, 4, 0));
-  // Sustain stage: flat line at sustainHeight.
-  colorBelowCurve(xDecayEnd, xSustainEnd, sustainHeight, sustainHeight,
-                  activeParameter == 6 ? CRGB(100, 0, 100) : CRGB(4, 0, 4));
-  // Release stage: falling line from sustainHeight down to baseAmplitude.
-  colorBelowCurve(xSustainEnd, xReleaseEnd, sustainHeight, baseAmplitude,
-                  activeParameter == 7 ? CRGB(0, 100, 100) : CRGB(0, 4, 4));
-
-  // --- Now overlay the white envelope outline ---
-  drawLine(xDelayStart, baseAmplitude, xDelayEnd, baseAmplitude, CRGB::Red);
-  drawLine(xAttackStart, baseAmplitude, xAttackEnd, attackHeight, CRGB(30, 255, 104));
-  drawLine(xAttackEnd, attackHeight, xHoldEnd, attackHeight, CRGB::White);
-  drawLine(xHoldEnd, attackHeight, xDecayEnd, sustainHeight, CRGB::White);
-  drawLine(xDecayEnd, sustainHeight, xSustainEnd, sustainHeight, CRGB::White);
-  drawLine(xSustainEnd, sustainHeight, xReleaseEnd, baseAmplitude, CRGB::White);
-
-  drawText(txt, 1, 12, activeParameterColor);
-}
-
-void drawLine(int x1, int y1, int x2, int y2, CRGB color) {
-  int dx = abs(x2 - x1);
-  int dy = abs(y2 - y1);
-  int sx = (x1 < x2) ? 1 : -1;
-  int sy = (y1 < y2) ? 1 : -1;
-  int err = dx - dy;
-
-  while (true) {
-    light(x1, y1, color);
-    if (x1 == x2 && y1 == y2) break;
-    int e2 = 2 * err;
-    if (e2 > -dy) {
-      err -= dy;
-      x1 += sx;
-    }
-    if (e2 < dx) {
-      err += dx;
-      y1 += sy;
-    }
-  }
-}
 
 
 void drawPages() {

@@ -45,7 +45,7 @@
 #define maxPages 16
 #define maxFiles 9  // 9 samples, 2 Synths
 #define maxFilters 15
-#define maxfilterResolution 32
+#define maxfilterResolution 64
 #define numPulsesForAverage 24  // Number of pulses to average over
 #define pulsesPerBar (24 * 4)   // 24 pulses per quarter note, 4 quarter notes per bar
 
@@ -55,6 +55,15 @@ struct MySettings : public midi ::DefaultSettings {
 };
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MySettings);
 unsigned long beatStartTime = 0;  // Timestamp when the current beat started
+
+
+
+
+// Number of samples in each delay line
+// Allocate the delay lines for left and right channels
+#define FLANGE_DELAY_LENGTH (12*AUDIO_BLOCK_SAMPLES)
+short delayline[FLANGE_DELAY_LENGTH];
+
 
 
 
@@ -75,10 +84,11 @@ struct Particle {
   float dirY;
   CRGB color;
 };
+bool filterfreshsetted = true;
 bool particlesGenerated = false;
 Particle particles[256];  // up to 256 possible "on" pixels
 int particleCount = 0;
-
+ static bool bypassSet = false;
 bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
 char *menuText[5] = { "DAT", "KIT", "WAV", "REC", "SET" };
@@ -164,7 +174,7 @@ EXTMEM unsigned int tmp[maxlen][maxY + 1][2] = {};
 EXTMEM unsigned int original[maxlen][maxY + 1][2] = {};
 EXTMEM unsigned int note[maxlen][maxY + 1][2] = {};
 
-unsigned int sample_len[maxFiles];
+EXTMEM unsigned int sample_len[maxFiles];
 bool sampleLengthSet = false;
 bool isNowPlaying = false;  // global
 int PrevSampleRate = 1;
@@ -229,7 +239,7 @@ Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, max
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode volume_bpm = { "VOLUME_BPM", { 1, 6, VOL_MIN, BPM_MIN }, { 1, 25, VOL_MAX, BPM_MAX }, { 1, 6, 9, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
-Mode filterMode = { "FILTERMODE", { 0, 1, 0, 0 }, { 7, 1, 8, 32 }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
+Mode filterMode = { "FILTERMODE", { 0, 1, 0, 0 }, { 7, 1, 9, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 7, 7 }, { 9, 9, 9, 9 }, { 8, 8, 8, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
@@ -315,23 +325,25 @@ enum ParameterType { TYPE,  //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAV
                      DECAY,
                      SUSTAIN,
                      RELEASE
-};  // Define filter types
+};  //Define filter types
 
-char *activeParameterType[10] = { "TYPE", "WAV", "DLAY", "ATTC", "HOLD", "DCAY", "SUST", "RLSE" };
+char *activeParameterType[8] = { "TYPE", "WAV", "DLAY", "ATTC", "HOLD", "DCAY", "SUST", "RLSE" };
 
 
 enum FilterType { LOWPASS,
                   HIGHPASS,
                   FREQUENCY,  //AudioFilterStateVariable ->freqency
-                  FLANGER,
                   ECHO,
-                  DISTORTION,
-                  RINGMOD,
+                  REVERB,
+                  CHORUS,
+                  BITCRUSHER,
+                  FLANGER,
                   DETUNE,
-                  NOISE
-};  // Define filter types
+                  OCTAVE
+};  //Define filter types
 
-char *activeFilterType[10] = { "LOW", "HIGH", "FREQ", "FLNG", "ECHO", "DIST", "RING", "DTNE", "NOIS" };
+FilterType defaultFilter[maxFiles] = {1};
+char *activeFilterType[10] = { "LOW", "HIGH", "FREQ", "ECHO", "RVRB", "CHOR", "BITC", "FLNG", "DTNE", "OCTV" };
 
 // Arrays to track multiple encoders
 int buttons[NUM_ENCODERS] = { 0 };  // Tracks the current state of each encoder
@@ -361,7 +373,7 @@ int currentEncoderIndex = 0;
 EXTMEM arraysampler _samplers[13];
 AudioPlayArrayResmp *voices[] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8, &sound9, &sound10, &sound11, &sound12 };
 AudioEffectEnvelope *envelopes[] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, &envelope9, &envelope10, &envelope11, &envelope12, &envelope13, &envelope14 };
-AudioFilterStateVariable *filters[] = { &filter0, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, &filter9, &filter10, &filter11, &filter12, &filter13, &filter14 };
+AudioFilterStateVariable *filters[] = {&filter0, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, &filter9, &filter10, &filter11, &filter12, &filter13, &filter14 };
 AudioAmplifier *amps[] = { &amp0, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, &amp9, &amp10, &amp11, &amp12, &amp13, &amp14 };
 
 
@@ -782,11 +794,33 @@ void checkMode(String buttonString, bool reset) {
     }
   }
 
-  // switch Filters
-  if (currentMode == &filterMode && buttonString == "0002") {
+  // set DefaultFilterParam
+  if (currentMode == &filterMode && buttonString == "0010") {
+    if (fxType == 1){
+      defaultFilter[SMP.currentChannel] = SMP.selectedFilter;
+    }else{
+      defaultFilter[SMP.currentChannel] = SMP.selectedParameter;
+      
+    }
+    Serial.println("!!!-------------------");
+    Serial.println(defaultFilter[SMP.currentChannel]);
+    Serial.println("!!!-------------------");
+  }
+  
+   // reset Parameters
+  if (currentMode == &filterMode && buttonString == "2000") {
     setDahdsrDefaults(false);
     currentFilter = activeParameterType[SMP.selectedParameter];
     currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][SMP.selectedParameter];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+  }
+
+
+  // reset Filters
+  if (currentMode == &filterMode && buttonString == "0002") {
+    setFilterDefaults();
+    currentFilter = activeFilterType[SMP.selectedFilter];
+    currentMode->pos[3] = SMP.filter_settings[SMP.currentChannel][SMP.selectedFilter];
     Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
   }
 
@@ -860,7 +894,7 @@ void checkMode(String buttonString, bool reset) {
     //Encoder[3].writeCounter((int32_t)((SMP.wav[SMP.currentChannel][0] * 4) - 1));
 
   } else if ((currentMode == &set_Wav) && buttonString == "1000") {
-    //set SMP.wav[currentChannel][0] and [1] to current file
+    //set SMP.wav[currentChannel][0] and [1] to current file
     SMP.wav[SMP.currentChannel][0] = SMP.wav[SMP.currentChannel][1];
     currentMode->pos[3] = SMP.wav[SMP.currentChannel][0];
     loadWav();
@@ -1012,7 +1046,7 @@ void setup(void) {
     Encoder[i].updateStatus();
   }
 
-  runAnimation();
+  //runAnimation();
 
 
   switchMode(&draw);
@@ -1090,34 +1124,25 @@ void setup(void) {
 
   // configure what the synth will sound like
   //FIRST SYNTH
-  sound13.begin(WAVEFORM_SAWTOOTH);
-  sound13.amplitude(0.3);
-  sound13.frequency(261.62);
-  sound13.phase(0);
-
-  envelope13.attack(0);
-  envelope13.decay(200);
-  envelope13.sustain(1);
-  envelope13.release(500);
+  waveform1.begin(WAVEFORM_SAWTOOTH);
+  waveform1.amplitude(0.3);
+  waveform1.frequency(261.62);
+  waveform1.phase(0);
 
 
   //SECOND SYNTH
-  sound14.begin(WAVEFORM_SQUARE);
-  sound14.amplitude(0.5);
-  sound14.frequency(261.62);  //C
-  sound14.phase(0);
+  waveform2.begin(WAVEFORM_SQUARE);
+  waveform2.amplitude(0.5);
+  waveform2.frequency(261.62);  //C
+  waveform2.phase(0);
 
-  envelope14.attack(0);
-  envelope14.decay(200);
-  envelope14.sustain(1);
-  envelope14.release(500);  // Release time set to 200 ms
 
   // set filters and envelopes for all sounds
   for (unsigned int i = 1; i < maxFilters; i++) {
-    envelopes[i]->attack(0);
+    
     filters[i]->octaveControl(6.0);
     filters[i]->resonance(0.7);
-    filters[i]->frequency(100 * 32);
+    filters[i]->frequency(8000);
   }
 
   for (unsigned int i = 0; i < maxFiles; i++) {
@@ -1135,7 +1160,7 @@ void setup(void) {
   playTimer.priority(170);
 
   midiTimer.begin(checkMidi, playNoteInterval / 24);
-  AudioMemory(80);
+  AudioMemory(120);
   // turn on the output
   sgtl5000_1.enable();
   sgtl5000_1.volume(0.9);
@@ -1144,7 +1169,7 @@ void setup(void) {
 
   sgtl5000_1.inputSelect(myInput);
   sgtl5000_1.micGain(35);  //0-63
-  sgtl5000_1.adcHighPassFilterDisable();
+ // sgtl5000_1.adcHighPassFilterDisable();
 
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(1);
@@ -1156,6 +1181,7 @@ void setup(void) {
   MIDI.begin(MIDI_CH);
   //Serial8.begin(57600);
   setDahdsrDefaults(true);
+  setFilterDefaults();
 }
 
 void setEncoderColor(int i) {
@@ -1170,7 +1196,7 @@ void checkEncoders() {
     currentEncoderIndex = i;
     Encoder[i].updateStatus();
     currentMode->pos[i] = Encoder[i].readCounterInt();
-    posString += String(currentMode->pos[i]) + ":";
+    if (i != 2) posString += String(currentMode->pos[i]) + ":"; // check Encoder 0,1 & 3
     handle_button_state(&Encoder[i], i);
     buttonString += String(buttons[i]);
   }
@@ -1181,16 +1207,24 @@ void checkEncoders() {
       Serial.println(posString);
       SMP.x = currentMode->pos[3];
       SMP.y = currentMode->pos[0];
-    }
+    
     if (currentMode == &draw) {
       // offset y by one (notes (channel 1/red) start at row #1)
       SMP.currentChannel = SMP.y - 1;
+      //write the current filterSetting to the Encoder
+      FilterType dfx = defaultFilter[SMP.currentChannel];
+      Encoder[2].writeCounter((int32_t)SMP.filter_settings[SMP.currentChannel][dfx]);
+      filterfreshsetted=true;
     }
+
 
     Encoder[0].writeRGBCode(CRGBToUint32(col[SMP.currentChannel]));
     Encoder[3].writeRGBCode(CRGBToUint32(col[SMP.currentChannel]));
-    //WHY???
-    //SMP.edit = 1;
+    }
+   
+    
+    
+    //SMP.edit = 1; // überflüssig
 
     if (paintMode) {
       note[SMP.x][SMP.y][0] = SMP.currentChannel;
@@ -1218,6 +1252,22 @@ void checkEncoders() {
       SMP.x = xval;
       SMP.edit = editpage;
     }
+
+  
+   //FILTERCHECK
+  
+    FilterType fx = defaultFilter[SMP.currentChannel];
+  
+    if (fxType==1 && !filterfreshsetted && currentMode->pos[2] != SMP.filter_settings[SMP.currentChannel][fx]) {
+    Serial.print(fx + " >>> " + String(currentMode->pos[2]));
+    Serial.println();
+    //SMP.filter_settings[SMP.currentChannel][fx] = currentMode->pos[2];
+    float mappedValue = processFilterAdjustment(fx,2);
+    updateFilterValue(fx, mappedValue);
+    }
+
+ 
+
   }
 }
 
@@ -1449,8 +1499,10 @@ void loop() {
   }
 
   // end synthsound after X ms
-  if (noteOnTriggered && millis() - startTime >= 200) {
-    envelope14.noteOff();
+  int noteLen =  getNoteDuration(13);
+  //Serial.println(noteLen);
+  if (noteOnTriggered && millis() - startTime >= noteLen) {
+    //envelope14.noteOff();
     envelope13.noteOff();
     noteOnTriggered = false;
   }
@@ -1459,9 +1511,15 @@ void loop() {
   yield();
   delay(50);
   yield();
+  filterfreshsetted=false;
 }
 
-
+float getNoteDuration(int channel) {
+    return mapf(SMP.param_settings[channel][DELAY], 0, 32, 0, 500) +
+           mapf(SMP.param_settings[channel][ATTACK], 0, 32, 0, 2000) +
+           mapf(SMP.param_settings[channel][HOLD], 0, 32, 0, 2000) +
+           mapf(SMP.param_settings[channel][DECAY], 0, 32, 0, 1500);
+}
 
 
 void shiftNotes() {
@@ -1652,20 +1710,29 @@ void playNote() {
         }
 
         if (note[beat][b][0] == 14) {
-          float frequency = pianoFrequencies[b] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert
-          sound14.frequency(frequency);
-          float WaveFormVelocity = mapf(note[beat][b][1], 1, 127, 0.0, 1.0);
-          sound14.amplitude(WaveFormVelocity);
-          envelope14.noteOn();
+         envelope14.noteOn();
           startTime = millis();    // Record the start time
           noteOnTriggered = true;  // Set the flag so we don't trigger noteOn again
         }
 
         if (note[beat][b][0] == 13) {
-          float frequency = pianoFrequencies[b - 1] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert
-          sound13.frequency(frequency);
-          float WaveFormVelocity = mapf(note[beat][b][1], 1, 127, 0.0, 1.0);
-          sound13.amplitude(WaveFormVelocity);
+          
+          float frequency = pianoFrequencies[b] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
+          float WaveFormVelocity = mapf(note[beat][13][1], 1, 127, 0.0, 1.0);
+          waveform1.frequency(frequency);
+
+          float detune_amount = mapf(SMP.filter_settings[13][DETUNE], 0, maxfilterResolution, -1.0/12.0, 1.0/12.0);
+          float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
+          // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
+          // For example, an OCTAVE value of 1 multiplies frequency by 2, -1 divides by 2.
+          int octave_shift = mapf(SMP.filter_settings[13][OCTAVE], 0, maxfilterResolution, -3, +3);
+          float octave_ratio = pow(2.0, octave_shift);
+
+          // Apply both adjustments to the base frequency
+          waveform2.frequency(frequency * octave_ratio * detune_ratio);
+
+          waveform1.amplitude(WaveFormVelocity);
+          waveform2.amplitude(WaveFormVelocity);
           envelope13.noteOn();
           startTime = millis();    // Record the start time
           noteOnTriggered = true;  // Set the flag so we don't trigger noteOn again
@@ -1775,9 +1842,9 @@ void paint() {
 
     if (note[x][y][0] == 14) {
       float frequency = pianoFrequencies[y] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert
-      sound14.frequency(frequency);
+      waveform2.frequency(frequency);
       float WaveFormVelocity = mapf(defaultVelocity, 1, 127, 0.0, 1.0);
-      sound14.amplitude(WaveFormVelocity);
+      waveform2.amplitude(WaveFormVelocity);
       envelope14.noteOn();
       startTime = millis();    // Record the start time
       noteOnTriggered = true;  // Set the flag so we don't trigger noteOn again
@@ -1785,9 +1852,9 @@ void paint() {
 
     if (note[x][y][0] == 13) {
       float frequency = pianoFrequencies[y - 1] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert
-      sound13.frequency(frequency);
+      waveform1.frequency(frequency);
       float WaveFormVelocity = mapf(defaultVelocity, 1, 127, 0.0, 1.0);
-      sound13.amplitude(WaveFormVelocity);
+      waveform1.amplitude(WaveFormVelocity);
       envelope13.noteOn();
       startTime = millis();    // Record the start time
       noteOnTriggered = true;  // Set the flag so we don't trigger noteOn again
