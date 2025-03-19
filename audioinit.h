@@ -23,8 +23,8 @@ AudioPlayArrayResmp sound12;
 
 // GUItool: begin automatically generated code
 AudioSynthNoisePink      pink1;          //xy=66,957
-AudioSynthWaveform       waveform1;      //xy=67,1015
-AudioSynthWaveform       waveform2;      //xy=68,1053
+AudioSynthWaveform       waveform13_1;      //xy=67,1015
+AudioSynthWaveform       waveform13_2;      //xy=68,1053
 AudioSynthWaveform       waveform11_1;      //xy=75.5,766
 AudioSynthWaveform       waveform11_2;      //xy=75.5,812
 AudioSynthWaveform       waveform12_1;      //xy=76,861
@@ -81,7 +81,7 @@ AudioAmplifier           amp13;          //xy=843,1029
 AudioEffectBitcrusher    bitcrusher11;    //xy=998,865
 AudioEffectBitcrusher    bitcrusher12;    //xy=1010,947
 AudioEffectBitcrusher    bitcrusher13;   //xy=1011,1030
-AudioEffectBitcrusher    bitcrusher1;    //xy=1021,1106
+AudioEffectBitcrusher    bitcrusher14;    //xy=1021,1106
 AudioFilterStateVariable filter13;       //xy=1172,1036
 AudioFilterStateVariable filter14;       //xy=1179,1113
 AudioFilterStateVariable filter12;       //xy=1180,955
@@ -124,8 +124,8 @@ AudioConnection          patchCord1(pink1, 0, mixer_waveform13, 2);
 AudioConnection          patchCord2(pink1, 0, mixer_waveform14, 3);
 AudioConnection          patchCord3(pink1, 0, mixer_waveform12, 2);
 AudioConnection          patchCord4(pink1, 0, mixer_waveform11, 2);
-AudioConnection          patchCord5(waveform1, 0, mixer_waveform13, 0);
-AudioConnection          patchCord6(waveform2, 0, mixer_waveform13, 1);
+AudioConnection          patchCord5(waveform13_1, 0, mixer_waveform13, 0);
+AudioConnection          patchCord6(waveform13_2, 0, mixer_waveform13, 1);
 AudioConnection          patchCord7(waveform11_1, 0, mixer_waveform11, 0);
 AudioConnection          patchCord8(waveform11_2, 0, mixer_waveform11, 1);
 AudioConnection          patchCord9(waveform12_1, 0, mixer_waveform12, 0);
@@ -172,7 +172,7 @@ AudioConnection          patchCord49(amp6, 0, filter6, 0);
 AudioConnection          patchCord50(amp2, 0, filter2, 0);
 AudioConnection          patchCord51(amp3, 0, filter3, 0);
 AudioConnection          patchCord52(amp7, 0, filter7, 0);
-AudioConnection          patchCord53(amp14, bitcrusher1);
+AudioConnection          patchCord53(amp14, bitcrusher14);
 AudioConnection          patchCord54(amp9, 0, filter9, 0);
 AudioConnection          patchCord55(amp11, bitcrusher11);
 AudioConnection          patchCord56(amp8, 0, filter8, 0);
@@ -182,7 +182,7 @@ AudioConnection          patchCord59(amp13, bitcrusher13);
 AudioConnection          patchCord60(bitcrusher11, 0, filter11, 0);
 AudioConnection          patchCord61(bitcrusher12, 0, filter12, 0);
 AudioConnection          patchCord62(bitcrusher13, 0, filter13, 0);
-AudioConnection          patchCord63(bitcrusher1, 0, filter14, 0);
+AudioConnection          patchCord63(bitcrusher14, 0, filter14, 0);
 AudioConnection          patchCord64(filter13, 0, filtermixer13, 0);
 AudioConnection          patchCord65(filter13, 1, filtermixer13, 1);
 AudioConnection          patchCord66(filter13, 2, filtermixer13, 2);
