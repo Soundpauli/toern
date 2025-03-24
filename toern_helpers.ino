@@ -26,6 +26,7 @@ void EEPROMsetLastFile() {
     //set last File on Encoder
     drawLoadingBar(1, 999, lastFile[f], col_base[f], CRGB(15, 15, 55), false);
   }
+  
   //set lastFile Array into Eeprom
   EEPROM.put(100, lastFile);
 }

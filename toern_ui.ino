@@ -45,6 +45,8 @@ void drawNoSD() {
 
   if (noSDfound && SD.begin(INT_SD)) {
     FastLEDclear();
+
+
     EEPROMsetLastFile();
     noSDfound = false;
   }
@@ -68,9 +70,22 @@ void drawBase() {
     }
 
     drawStatus();
+      
+  for (unsigned int x = 1; x <= 16; x++) {
+    int brightness;
+    if (x <= 8) {
+      brightness = ::map(x, 2, 8, 0, 80);  // Ramp up from black to white
+    } else {
+      brightness = ::map(x, 9, 15, 80, 0); // Ramp down from white to black
+    }
+    brightness = constrain(brightness, 0, 255); // Safety limit
+    light(x, 11, CRGB(brightness, brightness, brightness));
+  }
 
+
+  //4-4 helper takt
     for (unsigned int x = 1; x <= 13; x += 4) {
-      light(x, 1, CRGB(10, 10, 10));  //4-4 helper
+      light(x, 1, CRGB(10, 10, 10));  
     }
 
   } else {
@@ -309,16 +324,18 @@ int mapXtoPageOffset(int x) {
   *************************************************/
 void drawCursor() {
   if (dir == 1)
-    pulse = pulse + 1;
+    pulse += 8;
   if (dir == -1)
-    pulse = pulse - 1;
-  if (pulse > 220) {
+    pulse -= 8;
+  if (pulse > 230) {
     dir = -1;
   }
   if (pulse < 1) {
     dir = 1;
   }
-  light(mapXtoPageOffset(SMP.x), SMP.y, CRGB(255 - (int)pulse, 255 - (int)pulse, 255 - (int)pulse));
+
+  uint8_t hue = pulse; // Directly use pulse as hue for smooth cycling
+  light(mapXtoPageOffset(SMP.x), SMP.y, CHSV(hue, 255, 255)); // Full saturation and brightness
 }
 
 
@@ -482,6 +499,7 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
   int ypos = 4;
   int height = 2;
   int barwidth = mapf(currentval, minval, maxval, 1, maxX);
+  FastLEDclear();
   for (int x = 1; x <= maxX; x++) {
     light(x, ypos - 1, fontColor);
   }
@@ -499,6 +517,7 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
     }
   }
   if (!intro) {
+    
     drawNumber(currentval, fontColor, 11);
   } else {
     FastLED.show();
