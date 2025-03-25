@@ -17,7 +17,6 @@ void drawFilters(char *txt, int activeFilter) {
   int baseAmplitude = 1;  // baseline (minimum amplitude)
   drawText(txt, 1, 12, filter_col[activeFilter]);
   float FilterValue = mapf(SMP.filter_settings[SMP.currentChannel][SMP.selectedFilter], 0, maxfilterResolution, 0, 10);
-
   drawNumber(FilterValue, CRGB(100, 100, 100), 5);
 }
 
@@ -176,7 +175,7 @@ void setFilters() {
 
   // Process parameter adjustments
   if (fxType == 0 && currentMode->pos[3] != SMP.param_settings[SMP.currentChannel][selectedFX]) {
-    float mappedValue = processParameterAdjustment(selectedFX);
+    float mappedValue = processParameterAdjustment(selectedFX, SMP.currentChannel);
     updateParameterValue(selectedFX, SMP.currentChannel, mappedValue);
   }
 }
@@ -185,13 +184,13 @@ void setFilters() {
 
 // Helper function to process filter adjustments
 float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
-  SMP.drum_settings[SMP.currentChannel][drumType] = currentMode->pos[encoder];
+  SMP.drum_settings[index][drumType] = currentMode->pos[encoder];
   Serial.print(":::::");
-  Serial.println(SMP.drum_settings[SMP.currentChannel][drumType]);
+  Serial.println(SMP.drum_settings[index][drumType]);
   float mappedValue;  
-  if (drumType == DRUMDECAY) mappedValue = mapf(SMP.drum_settings[SMP.currentChannel][drumType], 0, maxfilterResolution, 0, 1023);
-  if (drumType == DRUMPITCH) mappedValue = mapf(SMP.drum_settings[SMP.currentChannel][drumType], 0, maxfilterResolution, 0, 1023);
-  if (drumType == DRUMTYPE) mappedValue = mapf(SMP.drum_settings[SMP.currentChannel][drumType], 0, maxfilterResolution, 1, 3);
+  if (drumType == DRUMDECAY) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
+  if (drumType == DRUMPITCH) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
+  if (drumType == DRUMTYPE) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 1, 3);
   Serial.print(drumType);
   Serial.print(" #####---->");
   Serial.println(mappedValue);
@@ -200,62 +199,63 @@ float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
 
 // Helper function to process filter adjustments
 float processFilterAdjustment(FilterType filterType, int index, int encoder) {
-  SMP.filter_settings[SMP.currentChannel][filterType] = currentMode->pos[encoder];
+
+  SMP.filter_settings[index][filterType] = currentMode->pos[encoder];
   float mappedValue;
-  if (filterType == HIGH) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 5, 10000);
-  if (filterType == FREQUENCY) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 5, 10000);
-  if (filterType == FREQUENCY) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 5, 10000);
-  if (filterType == ECHO) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 0, 2000);
-  if (filterType == REVERB) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 0, 1);
-  if (filterType == CHORUS) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 0, 1);
-  if (filterType == BITCRUSHER) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 0, 16);
-  if (filterType == FLANGER) mappedValue = mapf(SMP.filter_settings[SMP.currentChannel][filterType], 0, maxfilterResolution, 0, 1);
+  if (filterType == LOWPASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 5, 10000);
+  if (filterType == HIGHPASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 5, 10000);
+  if (filterType == FREQUENCY) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 5, 10000);
+  if (filterType == REVERB) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 1);
+  if (filterType == BITCRUSHER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 1, 16);
+  if (filterType == FLANGER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 1);
   //if (filterType == DETUNE) // find in main file.
   
   return mappedValue;
 }
 
 // Helper function to process parameter adjustments
-float processParameterAdjustment(int paramType) {
-  SMP.param_settings[SMP.currentChannel][paramType] = currentMode->pos[3];
+float processParameterAdjustment(int paramType,int index) {
+  SMP.param_settings[index][paramType] = currentMode->pos[3];
   float mappedValue;
   switch (paramType) {
     case TYPE:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 1, maxfilterResolution, 1, 3);
+      mappedValue = mapf(SMP.param_settings[index][paramType], 1, maxfilterResolution, 1, 3);
       break;
     case WAVEFORM:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 1, 4);
-      handleWaveformChange(SMP.currentChannel, (unsigned int)mappedValue);
+      mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 1, 4);
+      handleWaveformChange(index, (unsigned int)mappedValue);
       break;
     case DELAY:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 250);  // max 0.25sec delay!
+
+    
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[DELAY]);  //250
       break;
     case ATTACK:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 2000);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[ATTACK]); //2000
       break;
     case HOLD:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 1000);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[HOLD]); //1000
       break;
     case DECAY:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 1000);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[DECAY]); //1000
       break;
     case SUSTAIN:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 1.0);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]); //1.0
       break;
     case RELEASE:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 1000);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[RELEASE]); //1000
       break;
 
     case LENGTH:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 1000);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[LENGTH]); //1000
       break;
 
     case SECONDMIX:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 1);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[SECONDMIX]); //1
       break;
 
       case PITCHMOD:
-      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, 1);
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[PITCHMOD]); //1
       break;
 
     default:
@@ -270,7 +270,7 @@ float processParameterAdjustment(int paramType) {
 void updateDrumValue(DrumTypes drumType, int index, float value) {
   // Common function to update all filter types
   Serial.print(drumType);
-  Serial.print(" :==>: ");
+  Serial.print(" d==>: ");
   Serial.println(value);
 
   switch (drumType) {
@@ -310,11 +310,26 @@ void updateFilterValue(FilterType filterType, int index, float value) {
 
   switch (filterType) {
     case FREQUENCY:
-      filters[SMP.currentChannel]->frequency(value);
+      filters[index]->frequency(value);
+      filtermixers[index]->gain(0, 0.0);
+      filtermixers[index]->gain(1, 1.0);
+      filtermixers[index]->gain(2, 0.0);
       break;
 
-    case ECHO:
-      break;
+    case HIGHPASS:
+      filters[index]->frequency(value);
+      filtermixers[index]->gain(0, 0.0);
+      filtermixers[index]->gain(1, 0.0);
+      filtermixers[index]->gain(2, 1.0);
+    break;
+
+    case LOWPASS:
+      filters[index]->frequency(value);
+      filtermixers[index]->gain(0, 1.0);
+      filtermixers[index]->gain(1, 0.0);
+      filtermixers[index]->gain(2, 0.0);
+    break;
+
 
     case REVERB:
       if (freeverbs[index] != nullptr && freeverbs[index] != 0) {
@@ -333,9 +348,6 @@ void updateFilterValue(FilterType filterType, int index, float value) {
     }
     }
       }
-      break;
-
-    case CHORUS:
       break;
 
 
@@ -368,23 +380,38 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       }
       break;
 
-    case BITCRUSHER:
-      // Map the control value (0 to 10) to a bit depth:
-      // At 0 → 1 (maximum crushing), at 10 → 16 (passthrough)
-      int xbitDepth = constrain(value, 1, 16);
-      float xbitDepthVol = mapf(value,1,16,0,1);
-      // Map the control value (0 to 10) to a sample rate:
-      // At 0, we choose a low sample rate (e.g., 1000Hz) for maximum effect,
-      // and at 10 we want 44100Hz (passthrough).
-      int xsampleRate = round(mapf(value, 0, 16, 1000, 44100));
-      // Apply the parameters to the bitcrusher.
-      bitcrushers[index]->bits(xbitDepth);
-      bitcrushers[index]->sampleRate(xsampleRate);
-      
-      float channelvolume = mapf(SMP.channelVol[SMP.currentChannel], 1, maxY, 0, 1);
-      amps[index]->gain(constrain(xbitDepthVol,0.3,channelvolume));
-      break;
-  }
+    case BITCRUSHER: 
+    Serial.print("####>>");
+    Serial.println(value);
+
+    // Map value (1 = clean, 16 = max crush) to bit depth
+    int xbitDepth = constrain(value, 1, 16);
+    // Optional volume influence based on bit depth (not needed anymore)
+    // float xbitDepthVol = mapf(value, 1, 16, 1, 0); // Remove this
+
+    // Sample rate mapping (cleaner has full rate, crushed has low rate)
+    int xsampleRate = round(mapf(value, 1, 16, 44100, 1000));
+
+    // Apply settings
+    bitcrushers[index]->bits(16 - xbitDepth);  // invert bit depth if needed
+    bitcrushers[index]->sampleRate(xsampleRate);
+
+    // Calculate channel volume separately (assuming SMP.channelVol is 1..16)
+    float channelvolume = mapf(SMP.channelVol[SMP.currentChannel], 1, 16, 0, 1);
+
+    // Auto-gain: 1 (clean) -> channelVol | 16 (max crush) -> 0.2
+    //float crushCompGain = mapf(value, 1, 16, channelvolume, 0.2);
+    float crushCompGain = mapf(value, 1, 15, max(channelvolume, 1), 0.00001);
+
+    // Apply gain
+    amps[index]->gain(crushCompGain);
+
+    // Debugging
+    Serial.print("BitDepth: "); Serial.print(16 - xbitDepth);
+    Serial.print(" | SampleRate: "); Serial.print(xsampleRate);
+    Serial.print(" | CompGain: "); Serial.println(crushCompGain);
+    break;
+}
 
   // Call the new update function to ensure changes are applied
   updateFiltersAndParameters();
@@ -583,8 +610,10 @@ void setDahdsrDefaults(bool allChannels) {
 
 
 void resetAllFilters() {
-  for (unsigned int i = 0; i < maxFilters; i++) {
+  for (unsigned int i = 0; i < 15; i++) {
     filters[i]->frequency(0);
     filters[i]->resonance(0);
   }
 }
+
+

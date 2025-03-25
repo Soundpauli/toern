@@ -15,6 +15,39 @@ void light(unsigned int x, unsigned int y, CRGB color) {
 }
 
 
+void drawFilterCheck(int mappedValue, FilterType fx) {
+  // Map the value (0-maxfilterResolution) to 0-16 LEDs lit
+  int activeLength = ::map(mappedValue, 0, maxfilterResolution, 0, 16);
+  
+  // Draw gradient line at y = 16
+  for (int x = 1; x <= 16; x++) {
+    if (x <= activeLength) {
+      // Gradient from white -> filter color
+      float blend = float(x - 1) / max(1, activeLength - 1);  // Prevent div by zero
+      CRGB color = CRGB(
+        255 * (1.0 - blend) + filter_col[fx].r * blend,
+        255 * (1.0 - blend) + filter_col[fx].g * blend,
+        255 * (1.0 - blend) + filter_col[fx].b * blend
+      );
+      light(x, 16, color);
+    } else {
+      // Empty part stays black
+      light(x, 16, CRGB(0, 0, 0));
+    }
+    
+  }
+ int width = 12;
+ if (mappedValue > 9) width=8;
+  // Draw black box background for the number
+  for (int x = width; x <= 16; x++) {      // 6 pixels wide for the number area
+    for (int y = 7; y <= 13; y++) {   // Box height (adjust as needed)
+      light(x, y, CRGB(0, 0, 0));
+    }
+  }
+
+  // Draw the number in light gray / white-ish
+  drawNumber(mappedValue, filter_col[fx], 8);
+}
 
 
 void drawPlayButton() {
@@ -107,10 +140,13 @@ void drawBase() {
 
 void drawStatus() {
   CRGB ledColor = CRGB(0, 0, 0);
-  if (SMP.activeCopy)
-    ledColor = CRGB(20, 20, 0);
+  if (SMP.activeCopy) 
+  ledColor = CRGB(20, 20, 0);
   for (unsigned int s = 1; s <= maxX; s++) {
     light(s, 1, ledColor);
+  }
+  for (unsigned int s = 1; s <= maxX; s++) {
+    light(s, 16, ledColor);
   }
 
   if (currentMode == &noteShift) {

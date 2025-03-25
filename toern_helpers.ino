@@ -65,6 +65,21 @@ void clearPage() {
   //updateLastPage();
 }
 
+void clearPageX(int thatpage) {
+  //SMP.edit = 1;
+
+  unsigned int start = ((thatpage - 1) * maxX) + 1;
+  unsigned int end = start + maxX;
+  unsigned int channel = SMP.currentChannel;
+  bool singleMode = SMP.singleMode;
+
+  for (unsigned int c = start; c < end; c++) {
+    clearNoteChannel(c, 1, maxY + 1, channel, singleMode);
+  }
+  updateLastPage();
+}
+
+
 
 void changeMenu(int newMenuPosition) {
   menuPosition = newMenuPosition;

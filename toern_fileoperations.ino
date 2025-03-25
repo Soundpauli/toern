@@ -263,11 +263,7 @@ void loadPattern(bool autoload) {
 
 
     float vol = float(SMP.vol / 10.0);
-    //if (vol <= 1.0) sgtl5000_1.volume(vol);
-    // set all Filters
-    //for (unsigned int i = 0; i < maxFilters; i++) {
-    //filters[i]->frequency(100 * SMP.param_settings[SMP.currentChannel][i]);
-    //}
+
     SMP.singleMode = false;
 
     // Display the loaded SMP data
@@ -297,13 +293,27 @@ void loadPattern(bool autoload) {
     SMP.smplen = 0;
     SMP.shiftX = 0;
     SMP.shiftY = 0;
-
-    for (unsigned int i = 0; i < maxFilters; i++) {
-      //Serial.print(SMP.param_settings[SMP.currentChannel][i]);
+    Serial.print("pram_settings: ");
+    for (unsigned int i = 0; i < 8; i++) {
+      Serial.print(SMP.param_settings[1][i]);
+      Serial.print(", ");
+    }
+    Serial.println();
+    Serial.print("filter_settings: ");
+    for (unsigned int i = 0; i < 8; i++) {
+      Serial.print(SMP.filter_settings[1][i]);
+      Serial.print(", ");
+    }
+    Serial.println();
+      Serial.print("drum_settings: ");
+    for (unsigned int i = 0; i < 4; i++) {
+      Serial.print(SMP.drum_settings[1][i]);
       Serial.print(", ");
     }
 
-    Serial.println("mute: ");
+    Serial.println();
+    
+    Serial.print("mute: ");
     for (unsigned int i = 0; i < maxY; i++) {
       Serial.print(SMP.mute[i]);
       Serial.print(", ");
@@ -324,6 +334,7 @@ void loadPattern(bool autoload) {
     delay(500);
     switchMode(&draw);
   }
+  //applySMPSettings();
 }
 
 
