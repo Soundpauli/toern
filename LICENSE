@@ -1,6 +1,6 @@
-MIT License
+MIT License (for all software/code in this repository)
 
-Copyright (c) 2025 Soundpauli
+Copyright (c) 2025 Jan-Peter Kuntoff
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,26 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)  
+(for all hardware files: schematics, PCB layouts, Gerbers, BOMs, etc. of the tœrn project)
+
+You are free to:
+- Share — copy and redistribute the material in any medium or format
+- Adapt — remix, transform, and build upon the material
+
+Under the following terms:
+- Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+- NonCommercial — You may not use the material for commercial purposes.
+
+No additional restrictions — You may not apply legal terms or technological measures that legally restrict others from doing anything the license permits.
+
+Full license text: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+For commercial use of the hardware files in the **tœrn** project, please contact the original author:
+
+Jan-Peter Kuntoff  
+jpkuntoff@gmail.com  
+Hamburg, Germany
