@@ -6,6 +6,18 @@ Attention: This project is currently under very active development. The code and
 update: fixed nullptr exceptions, please use added ResamplingReader.h for lib "teensy-variable-playback"
 
 
+## License
+
+- **Software/code**: MIT License — Free for personal and commercial use (see [LICENSE](./LICENSE)).
+- **Hardware design files** (schematics, PCB layouts, Gerbers, etc.):  
+  Licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).  
+  Free to use and modify for personal, non-commercial purposes only.  
+  Commercial use is **not permitted** without prior written consent.
+
+For commercial licensing of the hardware, please contact:  
+Jan-Peter Kuntoff — jpkuntoff@gmail.com (Hamburg, Germany)
+
+
 # TŒRN: THE SUCCESSOR TO NI404  
 **DIY Open-Source Hardware Sampler-Sequencer**  
 An Etch-A-Sketch™-inspired device for beginners, makers, and music enthusiasts.
