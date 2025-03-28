@@ -3,13 +3,15 @@
 #define SERIAL8_RX_BUFFER_SIZE 256  // Increase to 256 bytes
 #define SERIAL8_TX_BUFFER_SIZE 256  // Increase if needed for transmission
 #define TargetFPS 30
-#define SEARCHSIZE 100
-//#define AUDIO_SAMPLE_RATE_EXACT 44117.64706
+
+#define AUDIO_BLOCK_SAMPLES  128
+//#define AUDIO_SAMPLE_RATE_EXACT 44100
 #include <stdint.h>
 #include <Wire.h>
 #include "Arduino.h"
 #include <math.h>
 #include <Mapf.h>
+
 #include <WS2812Serial.h>  // leds
 #define USE_WS2812SERIAL   // leds
 #include <FastLED.h>       // leds
@@ -98,6 +100,8 @@ int particleCount = 0;
 static bool bypassSet = false;
 bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
+float rateFactor = 44117.0 / 44100.0;
+
 char *menuText[6] = { "DAT", "KIT", "WAV", "REC", "BPM", "SET" };
 int lastFile[9] = { 0 };
 bool freshPaint, tmpMute = false;
@@ -149,7 +153,7 @@ File frec;
 
 // which input on the audio shield will be used?
 //const int myInput = AUDIO_INPUT_LINEIN;
-const int myInput = AUDIO_INPUT_MIC;
+unsigned int recInput = AUDIO_INPUT_MIC;
 
 /*timers*/
 volatile unsigned int lastButtonPressTime = 0;
@@ -332,7 +336,7 @@ volatile Device SMP = {
   1,                                                   //edit
   1,                                                   //file
   1,                                                   //pack
-  { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },  //sampleID
+  {{1, 1}, {1, 1}, {1, 1}, {1, 1}, {1, 1}, {1, 1}, {1, 1}, {1, 1}},  //wav preset
   0,                                                   //folder
   false,                                               //activeCopy
   1,                                                   //x
@@ -708,7 +712,34 @@ void switchMode(Mode *newMode) {
 }
 
 
+void writeWavHeader(File &file, uint32_t sampleRate, uint16_t bitsPerSample, uint16_t numChannels) {
+  uint32_t byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  uint16_t blockAlign = numChannels * bitsPerSample / 8;
+
+  // WAV header (44 bytes)
+  uint8_t header[44] = {
+    'R', 'I', 'F', 'F',
+    0, 0, 0, 0, // <- file size - 8 (filled in later)
+    'W', 'A', 'V', 'E',
+    'f', 'm', 't', ' ',
+    16, 0, 0, 0,             // PCM chunk size
+    1, 0,                   // Audio format (1 = PCM)
+    (uint8_t)(numChannels & 0xff), (uint8_t)(numChannels >> 8),
+    (uint8_t)(sampleRate & 0xff), (uint8_t)((sampleRate >> 8) & 0xff),
+    (uint8_t)((sampleRate >> 16) & 0xff), (uint8_t)((sampleRate >> 24) & 0xff),
+    (uint8_t)(byteRate & 0xff), (uint8_t)((byteRate >> 8) & 0xff),
+    (uint8_t)((byteRate >> 16) & 0xff), (uint8_t)((byteRate >> 24) & 0xff),
+    blockAlign, 0,
+    bitsPerSample, 0,
+    'd', 'a', 't', 'a',
+    0, 0, 0, 0 // <- data chunk size (filled in later)
+  };
+
+  file.write(header, 44);
+}
+
 void continueRecording() {
+  //Serial.println("rec?");
   if (queue1.available() >= 2) {
     uint8_t buffer[512];
     // Fetch 2 blocks from the audio library and copy
@@ -749,6 +780,7 @@ void record(int fnr, int snr) {
     Serial.println(OUTPUTf);
 
     isRecording = true;
+    //AudioNoInterrupts();
     Serial.println("Start recording");
     showIcons("icon_rec", CRGB(20, 0, 0));
     FastLED.show();
@@ -760,6 +792,7 @@ void record(int fnr, int snr) {
     frec = SD.open(OUTPUTf, FILE_WRITE);
 
     if (frec) {
+      writeWavHeader(frec, (uint32_t)AUDIO_SAMPLE_RATE_EXACT, 16, 1);  // 44.1kHz, 16-bit, mono
       queue1.begin();
     }
   }
@@ -767,7 +800,7 @@ void record(int fnr, int snr) {
 
 void stopRecord(int fnr, int snr) {
   if (isRecording) {
-
+    //AudioInterrupts();
     char OUTPUTf[50];
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
 
@@ -775,10 +808,23 @@ void stopRecord(int fnr, int snr) {
     queue1.end();
     if (frec) {
       while (queue1.available() > 0) {
-        frec.write((uint8_t *)queue1.readBuffer(), 256);
+        frec.write((uint8_t*)queue1.readBuffer(), 256);
         queue1.freeBuffer();
       }
       frec.close();
+
+      // Update file sizes in header
+      File f = SD.open(OUTPUTf, FILE_WRITE);
+      if (f) {
+        uint32_t fileSize = f.size();
+        uint32_t dataSize = fileSize - 44;
+        f.seek(4);
+        uint32_t riffSize = fileSize - 8;
+        f.write((uint8_t *)&riffSize, 4);
+        f.seek(40);
+        f.write((uint8_t *)&dataSize, 4);
+        f.close();
+      }
     }
     isRecording = false;
 
@@ -791,9 +837,11 @@ void stopRecord(int fnr, int snr) {
 
 void drawRecMode(){
   
-  if (recMode==1) { drawText("mic", 7, 10, CRGB(200, 200, 200));}
-  if (recMode==-1) {drawText("line", 6, 10, CRGB(0, 0, 200));}
-
+  if (recMode==1) { drawText("mic", 7, 10, CRGB(200, 200, 200)); recInput = AUDIO_INPUT_MIC;}
+  if (recMode==-1) {drawText("line", 6, 10, CRGB(0, 0, 200));recInput = AUDIO_INPUT_LINEIN;}
+  sgtl5000_1.inputSelect(recInput);
+  
+                          
   FastLEDshow();
 }
 
@@ -952,7 +1000,7 @@ void checkMode(String buttonString, bool reset) {
 
   // Switch to filter mode in draw or single mode
   if ((currentMode == &draw || currentMode == &singleMode) && buttonString == "0020") {
-
+    fxType=0;
     switchMode(&filterMode);
   }
 
@@ -1418,11 +1466,16 @@ void setup(void) {
 
   midiTimer.begin(checkMidi, playNoteInterval / 24);
   AudioInterrupts();
-  AudioMemory(24);
+  AudioMemory(50);
   // turn on the output
   sgtl5000_1.enable();
 
+  sgtl5000_1.volume(0.0);
+
+  sgtl5000_1.volume(0.1);
+  sgtl5000_1.volume(0.4);
   sgtl5000_1.volume(0.9);
+
   
 
   //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
@@ -1434,9 +1487,11 @@ void setup(void) {
 
   //REC
 
-  sgtl5000_1.inputSelect(myInput);
-  sgtl5000_1.micGain(35);  //0-63
-                           // sgtl5000_1.adcHighPassFilterDisable();
+  sgtl5000_1.inputSelect(recInput);
+  sgtl5000_1.micGain(33);  //0-63
+  sgtl5000_1.adcHighPassFilterEnable();
+  //sgtl5000_1.adcHighPassFilterDisable();
+
 
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(1);
@@ -2004,13 +2059,9 @@ void playNote() {
            
 
 
-          if (SMP.param_settings[ch][TYPE] != 1){ 
+          if (SMP.param_settings[ch][TYPE] == 1){ 
             
-          _samplers[ch].noteEvent(12 * SampleRate[note[beat][b][0]] + b - (note[beat][b][0] + 1), note[beat][b][1], true, false);
-          // usbMIDI.sendNoteOn(b, note[beat][b][1], 1);
-          }else{
-          
-            float tone = pianoFrequencies[b];
+          float tone = pianoFrequencies[b];
             float dec = mapf(SMP.drum_settings[ch][DRUMDECAY],0,64,0,1023);
             float pit = mapf(SMP.drum_settings[ch][DRUMPITCH],0,64,0,1023);
             float typ = mapf(SMP.drum_settings[ch][DRUMTYPE],0,64, 1,3);
@@ -2018,7 +2069,11 @@ void playNote() {
             if (ch == 1) KD_drum(tone,dec,pit,typ);
             if (ch == 2) SN_drum(tone,dec,pit,typ);
             if (ch == 3) HH_drum(tone,dec,pit,typ);
-  
+
+          }
+          else{
+          _samplers[ch].noteEvent(12 * SampleRate[note[beat][b][0]] + b - (note[beat][b][0] + 1), note[beat][b][1], true, false);
+          // usbMIDI.sendNoteOn(b, note[beat][b][1], 1);
           }
         }
 
@@ -2092,7 +2147,7 @@ void unpaint() {
   unsigned int y = SMP.y;
   unsigned int x = (SMP.edit - 1) * maxX + SMP.x;
 
- if ((y > 1 && y <= 9) || (y >= 11 && y<=15)) {
+ if ((y > 1 && y<=15)) {
   if (!SMP.singleMode) {
     Serial.println("deleting voice:" + String(x));
     note[x][y][0] = 0;
@@ -2181,169 +2236,7 @@ void paint() {
 
 
 
-void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
 
-  _samplers[0].removeAllSamples();
-  envelope0.noteOff();
-  char OUTPUTf[50];
-  int plen = 0;
-  sprintf(OUTPUTf, "samples/%d/_%d.wav", folder, sampleID);
-  Serial.print("PLAYING:::");
-  Serial.println(OUTPUTf);
-  File previewSample = SD.open(OUTPUTf);
-
-  if (previewSample) {
-    int fileSize = previewSample.size();
-
-    if (firstPreview) {
-      fileSize = min(previewSample.size(), 302000);  //max 10SEC preview // max preview len =  X Sec. //toDO: make it better to preview long files
-    }
-
-    previewSample.seek(24);
-    for (uint8_t i = 24; i < 25; i++) {
-      int g = previewSample.read();
-      if (g == 72)
-        PrevSampleRate = 4;
-      if (g == 68)
-        PrevSampleRate = 3;
-      if (g == 34)
-        PrevSampleRate = 2;
-      if (g == 17)
-        PrevSampleRate = 1;
-      if (g == 0)
-        PrevSampleRate = 4;
-    }
-
-    int startOffset = 1 + (SEARCHSIZE * SMP.seek);  // Start offset in milliseconds
-    int endOffset = (SEARCHSIZE * SMP.seekEnd);     // End offset in milliseconds
-
-    if (setMaxSampleLength == true) {
-      endOffset = fileSize;
-    }
-
-    int startOffsetBytes = startOffset * PrevSampleRate * 2;  // Convert to bytes (assuming 16-bit samples)
-    int endOffsetBytes = endOffset * PrevSampleRate * 2;      // Convert to bytes (assuming 16-bit samples)
-
-    // Adjust endOffsetBytes to avoid reading past the file end
-    endOffsetBytes = min(endOffsetBytes, fileSize);  //- 44?
-
-    previewSample.seek(44 + startOffsetBytes);
-    memset(sampled[0], 0, sizeof(sampled[0]));
-    plen = 0;
-
-    while (previewSample.available() && (plen < (endOffsetBytes - startOffsetBytes))) {
-      int b = previewSample.read();
-      sampled[0][plen] = b;
-      plen++;
-      if (plen >= sizeof(sampled[0])) break;  // Prevent buffer overflow
-    }
-
-    sampleIsLoaded = true;
-    SMP.smplen = fileSize / (PrevSampleRate * 2);
-
-
-    if (setMaxSampleLength) {
-      SMP.seekEnd = SMP.smplen / SEARCHSIZE;
-      currentMode->pos[2] = SMP.seekEnd;
-      Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-      sampleLengthSet = true;
-    }
-
-    previewSample.close();
-    displaySample(SMP.seek, SMP.smplen, SMP.seekEnd);
-
-    _samplers[0].addSample(36, (int16_t *)sampled[0], (int)plen, 1);  //-44?
-
-    Serial.println("NOTE");
-    _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
-  }
-}
-
-
-
-
-void loadSample(unsigned int packID, unsigned int sampleID) {
-  Serial.print("loading Sample:");
-  Serial.print(sampleID);
-  Serial.print("from pack nr.");
-  Serial.println(packID);
-
-  drawNoSD();
-
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "%d/%d.wav", packID, sampleID);
-
-  if (packID == 0) {
-    // SingleTrack from Samples-Folder
-    sprintf(OUTPUTf, "samples/%d/_%d.wav", getFolderNumber(sampleID), sampleID);
-    sampleID = SMP.currentChannel;
-  }
-
-  if (!SD.exists(OUTPUTf)) {
-    Serial.print("File does not exist: ");
-    Serial.println(OUTPUTf);
-    // mute the channel
-    SMP.mute[sampleID] = true;
-    return;
-  } else {
-    //unmute the channel
-    SMP.mute[sampleID] = false;
-  }
-
-  usedFiles[sampleID - 1] = OUTPUTf;
-
-  File loadSample = SD.open(OUTPUTf);
-  if (loadSample) {
-    int fileSize = loadSample.size();
-    loadSample.seek(24);
-    for (uint8_t i = 24; i < 25; i++) {
-      int g = loadSample.read();
-      if (g == 0)
-        SampleRate[sampleID] = 4;
-      if (g == 17)
-        SampleRate[sampleID] = 1;
-      if (g == 34)
-        SampleRate[sampleID] = 2;
-      if (g == 68)
-        SampleRate[sampleID] = 3;
-      if (g == 72)
-        SampleRate[sampleID] = 4;
-    }
-
-    //SMP.seek = 0;
-
-    unsigned int startOffset = 1 + (SEARCHSIZE * SMP.seek);            // Start offset in milliseconds
-    unsigned int startOffsetBytes = startOffset * PrevSampleRate * 2;  // Convert to bytes (assuming 16-bit samples)
-
-    unsigned int endOffset = SEARCHSIZE * SMP.seekEnd;  // End offset in milliseconds
-    if (SMP.seekEnd == 0) {
-      // If seekEnd is not set, default to the full length of the sample
-      endOffset = fileSize;
-    }
-    unsigned int endOffsetBytes = endOffset * PrevSampleRate * 2;  // Convert to bytes (assuming 16-bit samples)
-    // Adjust endOffsetBytes to avoid reading past the file end
-    endOffsetBytes = min(endOffsetBytes, fileSize);  //-44?
-
-    loadSample.seek(44 + startOffsetBytes);
-    unsigned int i = 0;
-    //memset(sampled[sampleID], 0, sizeof(sample_len[sampleID]));
-    //o1
-    memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));  // FIXED memset
-
-
-    while (loadSample.available() && (i < (endOffsetBytes - startOffsetBytes))) {
-      int b = loadSample.read();
-      sampled[sampleID][i] = b;
-      i++;
-      if (i >= sizeof(sampled[sampleID])) break;  // Prevent buffer overflow
-    }
-    loadSample.close();
-
-    i = i / 2;
-    _samplers[sampleID].removeAllSamples();
-    _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], (int)i, 1);  //-44?
-  }
-}
 
 
 void toggleCopyPaste() {
@@ -2574,11 +2467,7 @@ void showSamplePack() {
 void loadSamplePack(unsigned int pack, bool intro) {
   Serial.println("Loading SamplePack #" + String(pack));
   drawNoSD();
-
-  SMP.smplen = 0;
-  SMP.seekEnd = 0;
   EEPROM.put(0, pack);
-
   for (unsigned int z = 1; z < maxFiles; z++) {
     if (!intro) {
       FastLEDclear();
@@ -2598,181 +2487,6 @@ void loadSamplePack(unsigned int pack, bool intro) {
 
 
 
-
-
-
-void showWave() {
-  File sampleFile;
-  //drawNoSD();
-  int snr = SMP.wav[SMP.currentChannel][1];
-  if (snr < 1) snr = 1;
-  int fnr = getFolderNumber(snr);
-
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-
-  if (firstcheck) {
-    Serial.print("checking: ");
-    firstcheck = false;
-    if (!SD.exists(OUTPUTf)) {
-      Serial.print(OUTPUTf);
-      Serial.println(" >NOPE");
-      nofile = true;
-    } else {
-      Serial.print(OUTPUTf);
-      nofile = false;
-      
-      Serial.println(" >exists!");
-    }
-  }
-
-
-  FastLEDclear();
-  showIcons("helper_select", col[SMP.currentChannel]);
-  showIcons("helper_folder", CRGB(10, 10, 0));
-  showIcons("helper_seek", CRGB(10, 0, 0));
-  if (nofile) {
-    showIcons("helper_load", CRGB(20, 0, 0));
-  } else {
-    showIcons("helper_load", CRGB(0, 20, 0));
-  }
-
-  displaySample(SMP.seek, SMP.smplen + 1, SMP.seekEnd);
-
-  processPeaks();
-
-  // Update the LED display
-  drawNumber(snr, col_Folder[fnr], 12);
-
-  if (sampleLengthSet) {
-    SMP.seekEnd = SMP.smplen / SEARCHSIZE;
-    currentMode->pos[2] = SMP.seekEnd;
-    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-    sampleLengthSet = false;  // Reset the flag after setting seekEnd
-  }
-
-  //:::::::: STARTPOSITION SAMPLE  ::::: //
-  if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
-    playRaw0.stop();
-    Serial.println("SEEK-hit");
-    SMP.seek = currentMode->pos[0];
-    Serial.println(SMP.seek);
-    //STOP ALREADY PLAYING
-    _samplers[0].removeAllSamples();
-    envelope0.noteOff();
-    previewSample(fnr, getFileNumber(snr), false, false);
-  }
-
-
-  //::::::: FOLDER ::::: //
-  if (currentMode->pos[1] != SMP.folder) {
-    playRaw0.stop();
-    firstcheck = true;
-    nofile = false;
-    SMP.folder = currentMode->pos[1];
-    Serial.println("Folder: " + String(SMP.folder - 1));
-    SMP.wav[SMP.currentChannel][1] = ((SMP.folder - 1) * 100) + 1;
-    Serial.print("WAV:");
-    Serial.println(SMP.wav[SMP.currentChannel][1]);
-    Encoder[3].writeCounter((int32_t)SMP.wav[SMP.currentChannel][1]);
-  }
-
-
-  //::::::: ENDPOSITION SAMPLE  ::::: //
-  if (sampleIsLoaded && (currentMode->pos[2]) != SMP.seekEnd) {
-    previewIsPlaying = false;
-    playRaw0.stop();
-    Serial.println("SEEKEND-hit");
-
-    SMP.seekEnd = currentMode->pos[2];
-    Serial.println("seekEnd updated to: " + String(SMP.seekEnd));
-
-
-    //STOP ALREADY PLAYING
-    _samplers[0].removeAllSamples();
-    envelope0.noteOff();
-    //if (!sampleLengthSet)
-    previewSample(fnr, getFileNumber(snr), false, false);
-    sampleLengthSet = false;
-  }
-
-  // GET SAMPLEFILE
-  if (currentMode->pos[3] != snr) {
-    previewIsPlaying = false;
-    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-    File selectedFile = SD.open(OUTPUTf);
-    int PrevSampleRate;
-    selectedFile.seek(24);
-    for (uint8_t i = 24; i < 25; i++) {
-      int g = selectedFile.read();
-      if (g == 72)
-        PrevSampleRate = 4;
-      if (g == 68)
-        PrevSampleRate = 3;
-      if (g == 34)
-        PrevSampleRate = 2;
-      if (g == 17)
-        PrevSampleRate = 1;
-      if (g == 0)
-        PrevSampleRate = 4;
-    }
-
-    memset(sampled[0], 0, sizeof(sampled[0]));
-    sampleIsLoaded = false;
-    firstcheck = true;
-    nofile = false;
-    SMP.wav[SMP.currentChannel][1] = currentMode->pos[3];
-
-    int snr = SMP.wav[SMP.currentChannel][1];
-    int fnr = getFolderNumber(snr);
-    FastLEDclear();
-    drawNumber(snr, col_Folder[fnr], 12);
-
-    Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
-    char OUTPUTf[50];
-    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-    //check if exists?
-
-    // reset SEEK and stop sample playing
-
-    currentMode->pos[0] = 0;
-    SMP.seek = 0;
-    Encoder[0].writeCounter((int32_t)0);
-
-
-    sampleLengthSet = true;
-    Serial.print("F---->");
-    Serial.print(selectedFile.size());
-    Serial.print(" / ");
-    Serial.print(PrevSampleRate);
-    Serial.println();
-
-    //SMP.seekEnd = (selectedFile.size() / (PrevSampleRate * 2) / SEARCHSIZE);
-    SMP.smplen = (selectedFile.size() / (PrevSampleRate * 2) - 44 / SEARCHSIZE);
-    SMP.seekEnd = SMP.smplen;
-    currentMode->pos[2] = SMP.seekEnd;
-    //SET ENCODER SEARCH_END to last byte
-    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-
-    //envelope0.noteOff();
-    playRaw0.stop();
-    if (!previewIsPlaying && !sampleIsLoaded) {
-      //lastPreviewedSample[fnr] = snr;
-      playRaw0.play(OUTPUTf);
-      previewIsPlaying = true;
-      peakIndex = 0;
-      memset(peakValues, 0, sizeof(peakValues));
-
-      sampleIsLoaded = true;
-    }
-  }
-
-  if (SMP.seekEnd > SMP.smplen / SEARCHSIZE) {
-    SMP.seekEnd = SMP.smplen / SEARCHSIZE;
-    currentMode->pos[2] = SMP.seekEnd;
-    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
-  }
-}
 
 
 

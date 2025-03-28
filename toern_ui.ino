@@ -104,7 +104,7 @@ void drawBase() {
 
     drawStatus();
       
-  for (unsigned int x = 1; x <= 16; x++) {
+  for ( int x = 1; x <= 16; x++) {
     int brightness;
     if (x <= 8) {
       brightness = ::map(x, 2, 8, 0, 80);  // Ramp up from black to white
@@ -451,8 +451,8 @@ void processPeaks() {
   float interpolatedValues[16];  // Ensure at least 16 values
 
   // Map seek start and end positions to x range (1-16)
-  unsigned int startX = mapf(SMP.seek * SEARCHSIZE, 0, SMP.smplen, 1, 16);
-  unsigned int endX = mapf(SMP.seekEnd * SEARCHSIZE, 0, SMP.smplen, 1, 16);
+  unsigned int startX = mapf(SMP.seek, 0, 100, 1, 16);
+unsigned int endX = mapf(SMP.seekEnd, 0, 100, 1, 16);
 
   if (peakIndex > 0) {
     // Distribute peak values over 16 positions
@@ -502,35 +502,6 @@ void processPeaks() {
 
 
 
-void displaySample(unsigned int start, unsigned int size, unsigned int end) {
-  return;
-  unsigned int length = mapf(size, 0, 302000, 1, maxX);
-  unsigned int starting = mapf(start * SEARCHSIZE, 0, size, 1, maxX);
-  unsigned int ending = mapf(end * SEARCHSIZE, 0, size, 1, maxX);
-
-  //for (unsigned int s = 1; s <= maxX; s++) {
-  //light(s, 5, CRGB(10, 20, 10));
-  //}
-
-  for (unsigned int s = 1; s <= length; s++) {
-    light(s, 9, CRGB(10, 10, 0));
-  }
-
-  for (unsigned int s = 1; s <= starting; s++) {
-    light(s, 7, CRGB(0, 10, 0));
-  }
-
-  for (unsigned int s = starting; s <= ending; s++) {
-    light(s, 6, CRGB(10, 10, 10));
-  }
-
-
-  for (unsigned int s = ending; s <= maxX; s++) {
-    light(s, 7, CRGB(10, 0, 0));
-  }
-}
-
-
 void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fontColor, bool intro) {
   int ypos = 4;
   int height = 2;
@@ -577,3 +548,38 @@ void drawBPMScreen() {
   showIcons("helper_bpm", CRGB(0, 50, 120));
   drawNumber(SMP.bpm, CRGB(0, 50, 120), 6);
 }
+
+
+
+
+/*void deleted_displaySample(unsigned int start, unsigned int size, unsigned int end) {
+  return;
+  unsigned int length = mapf(size, 0, 302000, 1, maxX);
+  unsigned int starting = mapf(start * SEARCHSIZE, 0, size, 1, maxX);
+  unsigned int ending = mapf(end * SEARCHSIZE, 0, size, 1, maxX);
+
+  //for (unsigned int s = 1; s <= maxX; s++) {
+  //light(s, 5, CRGB(10, 20, 10));
+  //}
+
+  for (unsigned int s = 1; s <= length; s++) {
+    light(s, 9, CRGB(10, 10, 0));
+  }
+
+  for (unsigned int s = 1; s <= starting; s++) {
+    light(s, 7, CRGB(0, 10, 0));
+  }
+
+  for (unsigned int s = starting; s <= ending; s++) {
+    light(s, 6, CRGB(10, 10, 10));
+  }
+
+
+  for (unsigned int s = ending; s <= maxX; s++) {
+    light(s, 7, CRGB(10, 0, 0));
+  }
+}*/
+
+
+
+

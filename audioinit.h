@@ -348,8 +348,11 @@ AudioControlSGTL5000     sgtl5000_1;     //xy=2987,1420
 
 // --- ADDITIONAL sound declarations below here ... ---//
 // --- AudioPlayArrayResmp doesnt exist in GUItool ---//
+
+
 AudioAnalyzePeak         peak1; 
 AudioConnection          patchCord2121(playRaw0, 0, peak1, 0);
+AudioConnection          patchCord2122(is23, 0, queue1, 0);
 
 AudioConnection snd0(sound0, envelope0);
 

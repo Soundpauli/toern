@@ -5,7 +5,7 @@ void drawDrums(char *txt, int activeDrum) {
   int baseAmplitude = 1;  // baseline (minimum amplitude)
   drawText(txt, 1, 12, filter_col[activeDrum]);
   float DrumValue = SMP.drum_settings[SMP.currentChannel][SMP.selectedDrum]; //mapf(SMP.drum_settings[SMP.currentChannel][SMP.selectedDrum], 0, maxfilterResolution, 0, 10);
-  drawNumber(DrumValue, CRGB(100, 0, 100), 5);
+  drawNumber(DrumValue, CRGB(100, 0, 100), 4);
 }
 
 
@@ -17,7 +17,19 @@ void drawFilters(char *txt, int activeFilter) {
   int baseAmplitude = 1;  // baseline (minimum amplitude)
   drawText(txt, 1, 12, filter_col[activeFilter]);
   float FilterValue = mapf(SMP.filter_settings[SMP.currentChannel][SMP.selectedFilter], 0, maxfilterResolution, 0, 10);
-  drawNumber(FilterValue, CRGB(100, 100, 100), 5);
+
+  if (activeFilter == defaultFilter[SMP.currentChannel]) {
+    
+    for(int x=1;x<9;x++){
+    light(x,10,CRGB(250,200,0));
+    }
+
+
+  }
+
+  drawNumber(FilterValue, CRGB(100, 100, 100), 4);
+  
+  
 }
 
 void drawADSR(char *txt, int activeParameter) {
@@ -68,6 +80,135 @@ void drawADSR(char *txt, int activeParameter) {
   drawLine(xDecayEnd, sustainHeight, xSustainEnd, sustainHeight, CRGB::White);
   drawLine(xSustainEnd, sustainHeight, xReleaseEnd, baseAmplitude, CRGB::White);
   drawText(txt, 1, 12, filter_col[activeParameter]);
+
+int paramValue = SMP.param_settings[SMP.currentChannel][SMP.selectedParameter];
+ int width = 12;
+ if (paramValue > 9) width=8;
+  // Draw black box background for the number
+  for (int x = width; x <= 16; x++) {      // 6 pixels wide for the number area
+    for (int y = 5; y <= 11; y++) {   // Box height (adjust as needed)
+      light(x, y, CRGB(0, 0, 0));
+    }
+  }
+
+  drawNumber(paramValue, CRGB(100, 100, 100), 6);
+}
+
+
+void drawType(char *txt, int activeParameter) {
+  FastLED.clear();
+  const int maxIndex = 1;
+  if (SMP.param_settings[SMP.currentChannel][TYPE] > maxIndex) {
+    SMP.param_settings[SMP.currentChannel][TYPE] = maxIndex;
+    currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][TYPE];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+  }
+  int typeValue = mapf(SMP.param_settings[SMP.currentChannel][TYPE], 0, maxIndex, 1, maxIndex+1);
+  drawText(txt, 1, 12, filter_col[activeParameter]);
+
+  if (typeValue==1) drawText("SMP", 1, 6, filter_col[typeValue]);
+  if (typeValue==2) drawText("DRUM", 1, 6, filter_col[typeValue]);
+
+  drawNumber(typeValue, CRGB(100, 100, 100), 1);
+}
+
+
+void drawWaveforms(const char *txt, int activeParameter) {
+  FastLED.clear();
+
+  const int maxWaveformIndex = 3;
+  int waveformSetting = SMP.param_settings[SMP.currentChannel][WAVEFORM];
+
+  // Clamp waveform setting within valid bounds and update if needed
+  if (waveformSetting > maxWaveformIndex) {
+    waveformSetting = maxWaveformIndex;
+    currentMode->pos[3] = waveformSetting;
+    Encoder[3].writeCounter((int32_t)waveformSetting);
+  }
+
+  // Calculate displayed waveform value once, clearly mapping internal state to UI value
+  int wavValue = mapf(waveformSetting, 0, maxWaveformIndex, 1, 4);
+
+  // Draw waveform based on wavValue using light(x, y, color)
+  switch(wavValue) {
+    case 1: // WAVEFORM_SINE
+      {
+        const char* pattern[6] = {
+          "001100000000",
+          "010010000001",
+          "100001000010",
+          "100001000010",
+          "000000100100",
+          "000000011000"
+        };
+        for (int y = 0; y < 6; y++) {
+          for (int x = 0; x < 12; x++) {
+            if (pattern[y][x] == '1') {
+              light(x + 1, y + 2, CRGB::Red);
+            }
+          }
+        }
+      }
+      break;
+    case 2: // WAVEFORM_SAWTOOTH
+      {
+        const char* pattern[5] = {
+          "0100010001",
+          "1100110011",
+          "0101010101",
+          "0110011001",
+          "0100010001"
+        };
+        for (int y = 0; y < 5; y++) {
+          for (int x = 0; x < 10; x++) {
+            if (pattern[y][x] == '1') {
+              light(x + 1, y + 3, CRGB::Red);
+            }
+          }
+        }
+      }
+      break;
+    case 3: // WAVEFORM_SQUARE
+      {
+        const char* pattern[5] = {
+          "01111000111",
+          "010010001000",
+          "01001000100",
+          "01001000100",
+          "11001111100"
+        };
+        for (int y = 0; y < 5; y++) {
+          for (int x = 0; x < 11; x++) {
+            if (pattern[y][x] == '1') {
+              light(x + 1, y + 3, CRGB::Red);
+            }
+          }
+        }
+      }
+      break;
+    case 4: // WAVEFORM_TRIANGLE
+      {
+        const char* pattern[5] = {
+          "00001000000",
+          "00010100000",
+          "00100010001",
+          "01000001010",
+          "10000000100"
+        };
+        for (int y = 0; y < 5; y++) {
+          for (int x = 0; x < 11; x++) {
+            if (pattern[y][x] == '1') {
+              light(x + 1, y + 4, CRGB::Red);
+            }
+          }
+        }
+      }
+      break;
+  }
+
+  // Render UI elements
+  drawText(txt, 1, 12, filter_col[activeParameter]);
+  drawNumber(wavValue, CRGB(100, 100, 100), 4);
 }
 
 void drawLine(int x1, int y1, int x2, int y2, CRGB color) {
@@ -105,7 +246,9 @@ void colorBelowCurve(int xStart, int xEnd, int yStart, int yEnd, CRGB color) {
 void setFilters() {
   // Display current view based on effect type
   if (fxType == 0) {
-    drawADSR(currentFilter, SMP.selectedParameter);
+    if (SMP.selectedParameter==0) drawType(currentFilter, SMP.selectedParameter);
+    if (SMP.selectedParameter==1) drawWaveforms(currentFilter, SMP.selectedParameter);
+   if (SMP.selectedParameter>1) drawADSR(currentFilter, SMP.selectedParameter);
   } 
   else if (fxType == 1) {
     drawFilters(currentFilter, SMP.selectedFilter);
@@ -158,7 +301,10 @@ void setFilters() {
     Serial.println(currentFilter);
     currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][SMP.selectedParameter];
     Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
-    drawADSR(currentFilter, SMP.selectedParameter);
+
+     if (SMP.selectedParameter==0) drawType(currentFilter, SMP.selectedParameter);
+    if (SMP.selectedParameter==1) drawWaveforms(currentFilter, SMP.selectedParameter);
+    if (SMP.selectedParameter>1) drawADSR(currentFilter, SMP.selectedParameter);
   }
 
   // Process drum adjustments
@@ -190,7 +336,16 @@ float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
   float mappedValue;  
   if (drumType == DRUMDECAY) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
   if (drumType == DRUMPITCH) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
-  if (drumType == DRUMTYPE) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 1, 3);
+  if (drumType == DRUMTYPE) {
+    
+     const int maxIndex = 3;
+  if (SMP.drum_settings[SMP.currentChannel][drumType] > maxIndex) {
+    SMP.drum_settings[SMP.currentChannel][drumType] = maxIndex;
+    currentMode->pos[3] = SMP.drum_settings[SMP.currentChannel][drumType];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+  }
+  int mappedValue = mapf(SMP.drum_settings[SMP.currentChannel][drumType], 0, maxIndex, 1, maxIndex+1);  // = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 1, 3);
+  }
   Serial.print(drumType);
   Serial.print(" #####---->");
   Serial.println(mappedValue);
@@ -219,15 +374,30 @@ float processParameterAdjustment(int paramType,int index) {
   float mappedValue;
   switch (paramType) {
     case TYPE:
-      mappedValue = mapf(SMP.param_settings[index][paramType], 1, maxfilterResolution, 1, 3);
-      break;
+  {
+      int maxIndex = 1;
+      if (SMP.param_settings[SMP.currentChannel][TYPE] > maxIndex) {
+      SMP.param_settings[SMP.currentChannel][TYPE] = maxIndex;
+      currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][TYPE];
+      Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+      }
+      mappedValue = mapf(SMP.param_settings[SMP.currentChannel][TYPE], 0, maxIndex, 1, maxIndex+1); //mappedValue = mapf(SMP.param_settings[index][paramType], 1, maxfilterResolution, 1, 3);
+    break;
+    }
+
     case WAVEFORM:
-      mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 1, 4);
+    {
+     int maxIndex = 3;
+     if (SMP.param_settings[SMP.currentChannel][WAVEFORM] > maxIndex) {
+     SMP.param_settings[SMP.currentChannel][WAVEFORM] = maxIndex;
+     currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][WAVEFORM];
+     Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+     }
+    mappedValue = mapf(SMP.param_settings[SMP.currentChannel][WAVEFORM], 0, maxIndex, 1, maxIndex+1); // mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 1, 4);
       handleWaveformChange(index, (unsigned int)mappedValue);
       break;
+      }
     case DELAY:
-
-    
       mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[DELAY]);  //250
       break;
     case ATTACK:
@@ -397,11 +567,11 @@ void updateFilterValue(FilterType filterType, int index, float value) {
     bitcrushers[index]->sampleRate(xsampleRate);
 
     // Calculate channel volume separately (assuming SMP.channelVol is 1..16)
-    float channelvolume = mapf(SMP.channelVol[SMP.currentChannel], 1, 16, 0, 1);
+    float channelvolume = mapf(SMP.channelVol[SMP.currentChannel], 1, 16, 1, 0.2);
 
     // Auto-gain: 1 (clean) -> channelVol | 16 (max crush) -> 0.2
     //float crushCompGain = mapf(value, 1, 16, channelvolume, 0.2);
-    float crushCompGain = mapf(value, 1, 15, max(channelvolume, 1), 0.00001);
+    float crushCompGain = mapf(value, 1, 15, max(channelvolume, 1), 0.01);
 
     // Apply gain
     amps[index]->gain(crushCompGain);
@@ -492,7 +662,7 @@ void updateParameterValue(int paramType, int index, float value) {
 void handleWaveformChange(int index, unsigned int waveformType) {
   Serial.println(index);
   
-   if (synths[index] != nullptr && synths[index] != 0) {
+   if (synths[index][0] != nullptr && synths[index][0] != 0) {
   switch (waveformType) {
     case 1:
       synths[index][0]->begin(WAVEFORM_SINE);
