@@ -167,7 +167,7 @@ volatile bool resetTimerActive = false;
 float pulse = 1;
 volatile int dir = 1;
 unsigned int MIDI_CH = 1;
-unsigned int playNoteInterval = 150000;
+float playNoteInterval = 150000.0;
 volatile unsigned int RefreshTime = 1000 / TargetFPS;
 float marqueePos = maxX;
 bool shifted = false;
@@ -297,7 +297,7 @@ struct Device {
   unsigned int singleMode;  // single Sample Mod
   unsigned int currentChannel;
   unsigned int vol;           // volume
-  unsigned int bpm;           // bpm
+  float bpm;           // bpm
   unsigned int velocity;      // velocity
   unsigned int page;          // current page
   unsigned int edit;          // edit mode or plaing mode?
@@ -333,7 +333,7 @@ volatile Device SMP = {
   false,                                               //singleMode
   1,                                                   //currentChannel
   10,                                                  //volume
-  100,                                                 //bpm
+  100.0,                                                 //bpm
   10,                                                  //velocity
   1,                                                   //page
   1,                                                   //edit
@@ -1469,12 +1469,12 @@ void setup(void) {
 
 
   // set BPM:100
-  SMP.bpm = 100;
+  SMP.bpm = 100.0;
   playTimer.begin(playNote, playNoteInterval);
-  playTimer.priority(170);
+  playTimer.priority(110);
   
 
-  midiTimer.begin(checkMidi, playNoteInterval / 256);
+  midiTimer.begin(checkMidi, 1000);
   midiTimer.priority(10);
 
   AudioInterrupts();
@@ -2321,7 +2321,7 @@ void updateBPM() {
     SMP.bpm = currentMode->pos[3];
     playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
    playTimer.update(playNoteInterval);
-   midiTimer.update(playNoteInterval / 256);
+   midiTimer.update(playNoteInterval / 1000);
     }
   drawBPMScreen();
 }
