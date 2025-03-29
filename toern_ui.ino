@@ -545,8 +545,12 @@ void drawBPMScreen() {
 
   showIcons("helper_bright", CRGB(20, 20, 20));
   showIcons("helper_vol", volColor);
-  showIcons("helper_bpm", CRGB(0, 50, 120));
-  drawNumber(SMP.bpm, CRGB(0, 50, 120), 6);
+  if (MIDI_CLOCK_SEND){ 
+      showIcons("helper_bpm", CRGB(0, 50, 120));
+      drawNumber(SMP.bpm, CRGB(0, 50, 120), 6);}
+      else{
+        drawNumber(SMP.bpm, CRGB(20, 0 , 0), 6);
+      }
 }
 
 

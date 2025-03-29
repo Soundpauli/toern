@@ -103,17 +103,18 @@ void showWave() {
 
   // --- UPDATE START POSITION (Encoder 0) ---
   if (sampleIsLoaded && (currentMode->pos[0] != SMP.seek)) {
+     envelope0.noteOff();
     playRaw0.stop();
     Serial.println("SEEK-hit");
     SMP.seek = currentMode->pos[0];  // should be between 0 and 100
     Serial.println(SMP.seek);
     _samplers[0].removeAllSamples();
-    envelope0.noteOff();
     previewSample(fnr, getFileNumber(snr), false, false);
   }
 
   // --- FOLDER SELECTION (Encoder 1) ---
   if (currentMode->pos[1] != SMP.folder) {
+    envelope0.noteOff();
     playRaw0.stop();
     firstcheck = true;
     nofile = false;
@@ -128,6 +129,8 @@ void showWave() {
   // --- UPDATE END POSITION (Encoder 2) ---
   if (sampleIsLoaded && (currentMode->pos[2] != SMP.seekEnd)) {
     previewIsPlaying = false;
+    envelope0.noteOff();
+
     playRaw0.stop();
     Serial.println("SEEKEND-hit");
     SMP.seekEnd = currentMode->pos[2];  // value 0-100
@@ -145,6 +148,7 @@ if (currentMode->pos[3] < 1 || currentMode->pos[3] > 999) {
 }
 
 if (currentMode->pos[3] != snr) {
+  envelope0.noteOff();
     previewIsPlaying = false;
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
     File selectedFile = SD.open(OUTPUTf);
@@ -182,7 +186,7 @@ if (currentMode->pos[3] != snr) {
 
     // Calculate full sample length for display/conversion later
     SMP.smplen = selectedFile.size() / (PrevSampleRate * 2);
-
+    envelope0.noteOff();
     playRaw0.stop();
     if (!previewIsPlaying && !sampleIsLoaded) {
       playRaw0.play(OUTPUTf);

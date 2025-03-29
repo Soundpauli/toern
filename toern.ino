@@ -50,12 +50,12 @@
 #define defaultVelocity 63
 #define FOLDER_MAX 9
 #define maxPages 16
-#define maxFiles 9
+#define maxFiles 8
 
 #define maxFilters 15
 
 #define maxfilterResolution 64
-#define numPulsesForAverage 24  // Number of pulses to average over
+#define numPulsesForAverage 8  // Number of pulses to average over
 #define pulsesPerBar (24 * 4)   // 24 pulses per quarter note, 4 quarter notes per bar
 
 struct MySettings : public midi ::DefaultSettings {
@@ -65,6 +65,7 @@ struct MySettings : public midi ::DefaultSettings {
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MySettings);
 unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 
+#define CLOCK_BUFFER_SIZE 24
 
 
 
@@ -72,6 +73,8 @@ unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 // Allocate the delay lines for left and right channels
 #define FLANGE_DELAY_LENGTH (12 * AUDIO_BLOCK_SAMPLES)
 short delayline[FLANGE_DELAY_LENGTH];
+
+bool MIDI_CLOCK_SEND = false;
 
 
 
@@ -912,6 +915,12 @@ void checkMode(String buttonString, bool reset) {
     SMP.singleMode = true;
   }
 
+if (currentMode == &menu && buttonString == "1000")
+  {
+    switchMode(&draw);
+    SMP.singleMode = false;
+  }
+
   if (currentMode == &menu && buttonString == "0001")
   {
     switch(menuPosition){
@@ -1463,8 +1472,11 @@ void setup(void) {
   SMP.bpm = 100;
   playTimer.begin(playNote, playNoteInterval);
   playTimer.priority(170);
+  
 
-  midiTimer.begin(checkMidi, playNoteInterval / 24);
+  midiTimer.begin(checkMidi, playNoteInterval / 256);
+  midiTimer.priority(10);
+
   AudioInterrupts();
   AudioMemory(50);
   // turn on the output
@@ -2304,11 +2316,13 @@ void updateBrightness() {
 
 void updateBPM() {
   //setvol = false;
-  Serial.println("BPM: " + String(currentMode->pos[3]));
-  SMP.bpm = currentMode->pos[3];
-  playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
-  playTimer.update(playNoteInterval);
-  midiTimer.update(playNoteInterval / 24);
+  if(MIDI_CLOCK_SEND){
+    Serial.println("BPM: " + String(currentMode->pos[3]));
+    SMP.bpm = currentMode->pos[3];
+    playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
+   playTimer.update(playNoteInterval);
+   midiTimer.update(playNoteInterval / 256);
+    }
   drawBPMScreen();
 }
 
@@ -2354,7 +2368,7 @@ void drawBrightness() {
 
 void showMenu() {
   FastLEDclear();
-  //showIcons("icon_loadsave", CRGB(10, 5, 0));
+  showIcons("helper_exit", CRGB(10, 5, 0));
   //drawNumber(menuPosition, CRGB(20, 20, 40), 0);
 
 
