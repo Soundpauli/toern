@@ -66,7 +66,7 @@ MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MySettings);
 unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 
 #define CLOCK_BUFFER_SIZE 24
-
+elapsedMicros recFlushTimer;
 
 
 // Number of samples in each delay line
@@ -74,8 +74,23 @@ unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 #define FLANGE_DELAY_LENGTH (12 * AUDIO_BLOCK_SAMPLES)
 short delayline[FLANGE_DELAY_LENGTH];
 
-bool MIDI_CLOCK_SEND = false;
+bool MIDI_CLOCK_SEND = true;
 
+bool notePending = false;
+uint8_t pendingPitch = 0;
+uint8_t pendingVelocity = 0;
+unsigned long pendingTime = 0;
+
+
+struct PendingNote {
+  uint8_t pitch;
+  uint8_t velocity;
+  uint8_t channel;
+  unsigned int livenote;
+  bool active = false;
+};
+
+PendingNote pendingNote;
 
 
 
@@ -282,7 +297,7 @@ Mode filterMode = { "FILTERMODE", { 0, 0, 1, 0 }, { 7, 3, 8, maxfilterResolution
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
-Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 2 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
+Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode menu = { "MENU", { 1, 1, 1, 1 }, { 1, 1, 1, 6 }, { 1, 1, 1, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
@@ -741,6 +756,21 @@ void writeWavHeader(File &file, uint32_t sampleRate, uint16_t bitsPerSample, uin
   file.write(header, 44);
 }
 
+void flushAudioQueueToSD() {
+  if (!isRecording || !frec) return;
+
+  // Only flush every ~10–15 ms to prevent overload
+  if (recFlushTimer > 10) {
+    while (queue1.available() >= 2) {
+      uint8_t buffer[512];
+      memcpy(buffer, queue1.readBuffer(), 256); queue1.freeBuffer();
+      memcpy(buffer + 256, queue1.readBuffer(), 256); queue1.freeBuffer();
+      frec.write(buffer, 512);
+    }
+    recFlushTimer = 0;
+  }
+}
+
 void continueRecording() {
   //Serial.println("rec?");
   if (queue1.available() >= 2) {
@@ -772,29 +802,23 @@ void continueRecording() {
 }
 
 void record(int fnr, int snr) {
-
-
   if (!isRecording) {
-
+    
     char OUTPUTf[50];
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-
     Serial.print("RECORDING IN >>>> ");
     Serial.println(OUTPUTf);
-
     isRecording = true;
     //AudioNoInterrupts();
     Serial.println("Start recording");
     showIcons("icon_rec", CRGB(20, 0, 0));
     FastLED.show();
-
     if (SD.exists(OUTPUTf)) {
       SD.remove(OUTPUTf);
     }
-
     frec = SD.open(OUTPUTf, FILE_WRITE);
-
     if (frec) {
+      recFlushTimer = 0;
       writeWavHeader(frec, (uint32_t)AUDIO_SAMPLE_RATE_EXACT, 16, 1);  // 44.1kHz, 16-bit, mono
       queue1.begin();
     }
@@ -861,6 +885,7 @@ void checkMode(String buttonString, bool reset) {
       Serial.println("PLAY");
       playNote();
       play(true);
+      
 
     } else {
 
@@ -1212,7 +1237,7 @@ if (currentMode == &menu && buttonString == "1000")
 
 
 void setup(void) {
-  NVIC_SET_PRIORITY(IRQ_LPUART8, 1);
+  //NVIC_SET_PRIORITY(IRQ_LPUART8, 128);
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
 
@@ -1471,24 +1496,17 @@ void setup(void) {
   // set BPM:100
   SMP.bpm = 100.0;
   playTimer.begin(playNote, playNoteInterval);
-  playTimer.priority(110);
-  
-
-  midiTimer.begin(checkMidi, 1000);
-  midiTimer.priority(10);
-
+  //playTimer.priority(110);
+  midiTimer.begin(checkMidi, playNoteInterval / 24); 
+  //midiTimer.priority(10);
   AudioInterrupts();
-  AudioMemory(50);
+  AudioMemory(120);
   // turn on the output
-  sgtl5000_1.enable();
-
   sgtl5000_1.volume(0.0);
-
+  sgtl5000_1.enable();
   sgtl5000_1.volume(0.1);
   sgtl5000_1.volume(0.4);
   sgtl5000_1.volume(0.9);
-
-  
 
   //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
   //sgtl5000_1.audioPostProcessorEnable();
@@ -1500,7 +1518,7 @@ void setup(void) {
   //REC
 
   sgtl5000_1.inputSelect(recInput);
-  sgtl5000_1.micGain(33);  //0-63
+  sgtl5000_1.micGain(28);  //0-63
   sgtl5000_1.adcHighPassFilterEnable();
   //sgtl5000_1.adcHighPassFilterDisable();
 
@@ -1510,10 +1528,11 @@ void setup(void) {
 
   autoLoad();
   switchMode(&draw);
+  
+  Serial8.begin(31250); 
   MIDI.begin(MIDI_CH);
-  //Serial8.begin(57600); 
-  
-  
+    MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
+  //MIDI.setHandleClock(myClock);       // optional if you're using callbacks
 
   //set Defaults
   setDahdsrDefaults(true);
@@ -1743,11 +1762,11 @@ void checkMenuTouch() {
 
 void loop() {
 
-  if (isRecording) {
-    continueRecording();
-    checkEncoders();
+ if (isRecording) {
+    flushAudioQueueToSD();  // SD write is now throttled and safe
+    checkEncoders();        // Optional: allow user interaction
     checkButtons();
-    return;
+    return;                 // Skip the rest for performance
   }
 
 
@@ -1769,19 +1788,10 @@ void loop() {
     }
   }
 
-  // dont forget
   drawPlayButton();
-
-  //checkSingleTouch();
-  //checkMenuTouch();
-
   checkTouchInputs();
 
-
   if (note[SMP.x][SMP.y][0] == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true) {
-    Serial.println("------------------");
-    Serial.println(note[SMP.x][SMP.y][0]);
-    Serial.println("------------------");
     paintMode = false;
     freshPaint = true;
     unpaintMode = false;
@@ -1790,29 +1800,22 @@ void loop() {
     return;
   }
 
-
   if ((currentMode == &draw || currentMode == &singleMode) && pressed[0] == true) {
-    Serial.println("UNPAINT");
     paintMode = false;
     unpaintMode = false;
     pressed[0] = false;
     unpaint();
   }
 
-
   checkEncoders();
   checkButtons();
 
   //fix?
   SMP.edit = getPage(SMP.x);
-
-
-  // Continuously check encoders
-
-
+  
   // Set stateMashine
   if (currentMode->name == "DRAW") {
-    //checkEncoders();
+    //
   } else if (currentMode->name == "FILTERMODE") {
     setFilters();
   } else if (currentMode->name == "VOLUME_BPM") {
@@ -1835,7 +1838,6 @@ void loop() {
     shiftNotes();
     drawBase();
     drawTriggers();
-
     if (isNowPlaying) {
       filtercheck();
       drawTimer();
@@ -1853,9 +1855,6 @@ void loop() {
       if (!freshPaint && currentMode == &velocity) drawVelocity();
       FastLEDshow();
     }
-
-    // Is there a MIDI message incoming ?
-    //checkMidi();
     if (!freshPaint && currentMode == &velocity) drawVelocity();
   }
 
@@ -1867,11 +1866,8 @@ void loop() {
     if (noteOnTriggered[ch] && millis() - startTime[ch] >= noteLen) {
       envelopes[ch]->noteOff();
       noteOnTriggered[ch] = false;
-    }
+    } 
   }
-
-
-   
 
   FastLEDshow();  // draw!
   yield();
@@ -2038,6 +2034,7 @@ void play(bool fromStart) {
     beat = 1;
     SMP.page = 1;
     Encoder[2].writeRGBCode(0xFFFF00);
+    MIDI.sendRealTime(midi::Start);
   }
   isNowPlaying = true;
   playNote();
@@ -2045,6 +2042,7 @@ void play(bool fromStart) {
 }
 
 void pause() {
+  MIDI.sendRealTime(midi::Stop);
   isNowPlaying = false;
   updateLastPage();
   deleteActiveCopy();
@@ -2058,14 +2056,18 @@ void pause() {
 
 
 void playNote() {
+  onBeatTick();
   if (isNowPlaying) {
 
     playTimer.end();  // Stop the timer
     //drawTimer();
 
     for (unsigned int b = 1; b < maxY + 1; b++) {
-      if (beat < maxlen && b < maxY + 1 && note[beat][b][0] > 0 && !SMP.mute[note[beat][b][0]]) {
-        int ch = note[beat][b][0];
+      int ch = note[beat][b][0];
+      int vel = note[beat][b][1];
+      if (beat < maxlen && b < maxY + 1 && ch > 0 && !SMP.mute[ch]) {
+        
+        MidiSendNoteOn(b, ch, vel);
 
         if (ch < 9) {
            
@@ -2084,12 +2086,12 @@ void playNote() {
 
           }
           else{
-          _samplers[ch].noteEvent(12 * SampleRate[note[beat][b][0]] + b - (note[beat][b][0] + 1), note[beat][b][1], true, false);
-          // usbMIDI.sendNoteOn(b, note[beat][b][1], 1);
+          _samplers[ch].noteEvent(12 * SampleRate[ch] + b - (ch + 1), vel , true, false);
+          
           }
         }
 
-        if (note[beat][b][0] >= 11) {
+        if (ch >= 11) {
 
           float frequency = pianoFrequencies[b] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
           float WaveFormVelocity = mapf(note[beat][ch][1], 1, 127, 0.0, 1.0);
@@ -2321,7 +2323,7 @@ void updateBPM() {
     SMP.bpm = currentMode->pos[3];
     playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
    playTimer.update(playNoteInterval);
-   midiTimer.update(playNoteInterval / 1000);
+   midiTimer.update(playNoteInterval / 24);
     }
   drawBPMScreen();
 }

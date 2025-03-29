@@ -21,10 +21,12 @@ void checkMidi() {
         handleNoteOff(channel, pitch, velocity);
         break;
 
-      case midi::Clock:
-        // Process incoming MIDI Clock pulse with improved averaging.
-        myClock();
-        break;
+    case midi::Clock:
+      {
+        unsigned long now = micros();  // Capture time ASAP
+        myClock(now);  // Pass it into the clock handler
+      }
+      break;
 
       case midi::Start:
         handleStart();
@@ -50,57 +52,87 @@ void checkMidi() {
   }
   
   // If this device is sending MIDI Clock, calculate and send it based on SMP.bpm.
-  if (MIDI_CLOCK_SEND) {
-    static unsigned long lastClockSent = 0;
-    unsigned long now = millis();
-    // Calculate the interval per clock pulse (24 per quarter note)
-    unsigned long clockInterval = (60000UL / SMP.bpm) / 24;
-    if (now - lastClockSent >= clockInterval) {
-      MIDI.sendRealTime(midi::Clock);
-      lastClockSent = now;
-    }
+if (MIDI_CLOCK_SEND) {
+  static unsigned long lastClockSent = micros();
+  unsigned long now = micros();
+
+  // Use a float for smoothing even though SMP.bpm is an int.
+  static float smoothedBPM = (float)SMP.bpm;  
+  const float alpha = 0.1f;  // Smoothing factor (0.0 to 1.0); lower is smoother.
+  smoothedBPM = alpha * ((float)SMP.bpm) + (1.0f - alpha) * smoothedBPM;
+
+  // Calculate clock pulse interval in microseconds using the smoothed BPM.
+  // MIDI clocks: 24 ticks per quarter note.
+  float clockInterval = 60000000.0f / (smoothedBPM * 24.0f);
+  unsigned long clockInterval_us = (unsigned long)clockInterval;
+
+  // Increment the lastClockSent time by the fixed interval to reduce jitter.
+  while (now - lastClockSent >= clockInterval_us) {
+    MIDI.sendRealTime(midi::Clock);
+    lastClockSent += clockInterval_us;
   }
 }
 
-void myClock() {
-  // Use a sliding window of intervals for a smoother BPM calculation.
+  
+}
+
+
+void myClock(unsigned long now) {
   static unsigned long lastClockTime = 0;
   static unsigned long intervals[CLOCK_BUFFER_SIZE] = {0};
   static int index = 0;
   static int count = 0;
-  
-  unsigned long now = micros();
+
   if (lastClockTime != 0) {
     unsigned long delta = now - lastClockTime;
-    
-    // If the gap is too long, assume an interruption and reset the buffer.
-    if (delta > 100000) {  
+
+    if (delta > 100000) {
       count = 0;
       index = 0;
     } else {
       intervals[index] = delta;
       index = (index + 1) % CLOCK_BUFFER_SIZE;
       if (count < CLOCK_BUFFER_SIZE) count++;
-      
-      // Compute the average interval over the buffered pulses.
+
       unsigned long sum = 0;
-      for (int i = 0; i < count; i++) {
-        sum += intervals[i];
-      }
-      float avgInterval = sum / (float) count;
-      // 24 clock pulses per quarter note, 60,000,000 microseconds per minute.
+      for (int i = 0; i < count; i++) sum += intervals[i];
+
+      float avgInterval = sum / (float)count;
       float bpm = 60000000.0 / (avgInterval * 24.0);
-      
-      // If we are receiving (not sending) clock, update BPM and the note interval.
+
       if (!MIDI_CLOCK_SEND) {
         SMP.bpm = round(bpm);
-        // Calculate note interval for a 16th note (quarter note/4), converted to microseconds.
         playNoteInterval = ((60000UL / SMP.bpm) / 4) * 1000UL;
       }
     }
   }
   lastClockTime = now;
 }
+
+void MidiSendNoteOn(int pitch, int channel, int velocity) {
+  // Clamp channel and velocity to valid MIDI ranges.
+  if (channel < 1) channel = 1;
+  if (channel > 16) channel = 16;
+  if (velocity < 0) velocity = 0;
+  if (velocity > 127) velocity = 127;
+  
+  // Optionally, if y is not already a MIDI note number, map it here.
+  // For example, if y is from 0 to 15 and you want to map it to notes 60-75:
+  // y = map(y, 0, 15, 60, 75);
+
+
+  // Optionally, if you want a specific scale (e.g. only C major notes) use an array:
+  // const int scaleNotes[16] = {48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74};
+  // int note = scaleNotes[y - 1];
+
+  const int baseNote = 48;
+  // Map y to a MIDI note: y=1 gives baseNote, y=2 gives baseNote+1, etc.
+  int note = baseNote + (pitch - 1);
+  
+  // Send the Note On event using the MIDI library.
+  MIDI.sendNoteOn(note, velocity, channel);
+}
+
 
 void handleStop() {
   // Called when a MIDI STOP message is received.
@@ -109,42 +141,107 @@ void handleStop() {
     pause();
   }
 }
-
 void handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
-  int currentbeat = beat;
   unsigned int mychannel = SMP.currentChannel;
   if (mychannel < 1 || mychannel > maxFiles) return;
 
-  // Map the received note to a note grid. Base note is set to C3 (MIDI 60).
   unsigned int livenote = (mychannel + 1) + pitch - 60;
-
-  // Adjust for missing octaves.
   if (livenote > 16) livenote -= 12;
   if (livenote < 1) livenote += 12;
 
   if (livenote >= 1 && livenote <= 16) {
     if (isNowPlaying) {
       if (SMP.singleMode) {
-        unsigned long currentTime = millis();
-        unsigned long elapsedTime = currentTime - beatStartTime;
-        unsigned int effectiveBeat = currentbeat;
+        // Store for grid write on next beat
+        pendingNote = {
+          .pitch = pitch,
+          .velocity = velocity,
+          .channel = mychannel,
+          .livenote = livenote,
+          .active = true
+        };
+      }
 
-        // If the note arrives late, assign it to the next beat.
-        if (elapsedTime > playNoteInterval / 2) {
-          effectiveBeat = (beat % (maxX * lastPage)) + 1;
+      // Always play the note immediately
+      activeNotes[pitch] = true;
+      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
+    } else {
+      // Not playing: play note and show light
+      light(mapXtoPageOffset(SMP.x), livenote, CRGB(0, 0, 255));
+      FastLEDshow();
+      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
+    }
+  }
+}
+
+
+void onBeatTick() {
+  beatStartTime = millis();
+
+  if (pendingNote.active) {
+    int targetBeat = (beat == 1) ? (maxX * lastPage) : (beat - 1);
+
+    if (pendingNote.livenote >= 1 && pendingNote.livenote <= 16) {
+      note[targetBeat][pendingNote.livenote][0] = pendingNote.channel;
+      note[targetBeat][pendingNote.livenote][1] = pendingNote.velocity;
+    }
+
+    pendingNote.active = false;
+  }
+
+  // Now play the notes for beat
+}
+
+
+void _handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
+  int currentbeat = beat;
+  unsigned int mychannel = SMP.currentChannel;
+  if (mychannel < 1 || mychannel > maxFiles) return;
+
+  unsigned int livenote = (mychannel + 1) + pitch - 60;
+
+  if (livenote > 16) livenote -= 12;
+  if (livenote < 1) livenote += 12;
+
+  if (livenote >= 1 && livenote <= 16) {
+    if (isNowPlaying) {
+      if (SMP.singleMode) {
+        // If there is a pending note, commit it now
+        if (notePending) {
+          unsigned int effectiveBeat = currentbeat;
+          unsigned long elapsedTime = millis() - beatStartTime;
+
+          if (elapsedTime > playNoteInterval / 2) {
+            effectiveBeat = (beat % (maxX * lastPage)) + 1;
+          }
+
+          unsigned int pendingLiveNote = (mychannel + 1) + pendingPitch - 60;
+          if (pendingLiveNote > 16) pendingLiveNote -= 12;
+          if (pendingLiveNote < 1) pendingLiveNote += 12;
+
+          if (pendingLiveNote >= 1 && pendingLiveNote <= 16) {
+            note[effectiveBeat][pendingLiveNote][0] = mychannel;
+            note[effectiveBeat][pendingLiveNote][1] = pendingVelocity;
+          }
+
+          notePending = false; // Clear the buffer
         }
-        // Map the note to the grid.
-        note[effectiveBeat][livenote][0] = mychannel;
-        note[effectiveBeat][livenote][1] = velocity;
+
+        // Store current note as pending for next trigger
+        pendingPitch = pitch;
+        pendingVelocity = velocity;
+        pendingTime = millis();
+        notePending = true;
+
+        // Play the current note now, but don’t write to grid
         activeNotes[pitch] = true;
-        // Play the note immediately.
         _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
       } else {
-        // In multi-mode, play the note without grid assignment.
+        // In multi-mode, play note immediately
         _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
       }
     } else {
-      // If not playing, light up the corresponding LED and play the note.
+      // Not playing: play and light LED
       light(mapXtoPageOffset(SMP.x), livenote, CRGB(0, 0, 255));
       FastLEDshow();
       _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
