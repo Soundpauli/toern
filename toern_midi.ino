@@ -12,13 +12,13 @@ void checkMidi() {
         pitch = MIDI.getData1();
         // Use the actual velocity from the message (if zero, treat as note off)
         velocity = MIDI.getData2() ? MIDI.getData2() : 127;
-        handleNoteOn(channel, pitch, velocity);
+        handleNoteOn(SMP.currentChannel, pitch, velocity);
         break;
 
       case midi::NoteOff:
         pitch = MIDI.getData1();
         velocity = MIDI.getData2();
-        handleNoteOff(channel, pitch, velocity);
+        handleNoteOff(SMP.currentChannel, pitch - 60, velocity);
         break;
 
     case midi::Clock:
@@ -141,9 +141,32 @@ void handleStop() {
     pause();
   }
 }
-void handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
+
+
+void handleNoteOn(int channel, uint8_t pitch, uint8_t velocity) {
+  // For persistent channels (11-14), use the actual MIDI channel
+  
+  Serial.print("[midinote] ch:");
+  Serial.print(channel);
+
+  if (channel >= 11 && channel <= 14) {
+    pressedKeyCount[channel]++;  // Increment count for this channel
+    // Only trigger noteOn if this is the first key pressed on that channel
+    Serial.print(">>>> ++ ");
+    Serial.println(pressedKeyCount[channel]);
+
+    if (pressedKeyCount[channel] == 1) {
+      // Adjust pitch as needed (here, subtract 60 as in your code)
+      playSynth(channel, pitch - 60, velocity, true);
+      persistentNoteOn[channel] = true;
+    }
+    // Optionally: update visuals here
+    return;
+  }else{
+  
+  // For other channels, use your existing logic:
   unsigned int mychannel = SMP.currentChannel;
-  if (mychannel < 1 || mychannel > maxFiles) return;
+  if (mychannel < 1 || mychannel > 16) return;
 
   unsigned int livenote = (mychannel + 1) + pitch - 60;
   if (livenote > 16) livenote -= 12;
@@ -161,18 +184,27 @@ void handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
           .active = true
         };
       }
-
       // Always play the note immediately
       activeNotes[pitch] = true;
-      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
+      if (mychannel < 9) {
+        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
+      } if (mychannel>11) {
+        playSynth(mychannel, pitch - 60, velocity, true);
+      }
     } else {
-      // Not playing: play note and show light
+      // Live mode: play note and show light
       light(mapXtoPageOffset(SMP.x), livenote, CRGB(0, 0, 255));
       FastLEDshow();
-      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
+      if (mychannel < 9) {
+        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
+      } else if (mychannel >11) {
+        playSynth(mychannel, pitch - 60, velocity, true);
+      }
     }
   }
 }
+}
+
 
 
 void onBeatTick() {
@@ -193,72 +225,32 @@ void onBeatTick() {
 }
 
 
-void _handleNoteOn(uint8_t channel, uint8_t pitch, uint8_t velocity) {
-  int currentbeat = beat;
-  unsigned int mychannel = SMP.currentChannel;
-  if (mychannel < 1 || mychannel > maxFiles) return;
 
-  unsigned int livenote = (mychannel + 1) + pitch - 60;
-
-  if (livenote > 16) livenote -= 12;
-  if (livenote < 1) livenote += 12;
-
-  if (livenote >= 1 && livenote <= 16) {
-    if (isNowPlaying) {
-      if (SMP.singleMode) {
-        // If there is a pending note, commit it now
-        if (notePending) {
-          unsigned int effectiveBeat = currentbeat;
-          unsigned long elapsedTime = millis() - beatStartTime;
-
-          if (elapsedTime > playNoteInterval / 2) {
-            effectiveBeat = (beat % (maxX * lastPage)) + 1;
-          }
-
-          unsigned int pendingLiveNote = (mychannel + 1) + pendingPitch - 60;
-          if (pendingLiveNote > 16) pendingLiveNote -= 12;
-          if (pendingLiveNote < 1) pendingLiveNote += 12;
-
-          if (pendingLiveNote >= 1 && pendingLiveNote <= 16) {
-            note[effectiveBeat][pendingLiveNote][0] = mychannel;
-            note[effectiveBeat][pendingLiveNote][1] = pendingVelocity;
-          }
-
-          notePending = false; // Clear the buffer
-        }
-
-        // Store current note as pending for next trigger
-        pendingPitch = pitch;
-        pendingVelocity = velocity;
-        pendingTime = millis();
-        notePending = true;
-
-        // Play the current note now, but don’t write to grid
-        activeNotes[pitch] = true;
-        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
-      } else {
-        // In multi-mode, play note immediately
-        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
-      }
-    } else {
-      // Not playing: play and light LED
-      light(mapXtoPageOffset(SMP.x), livenote, CRGB(0, 0, 255));
-      FastLEDshow();
-      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
-    }
-  }
-}
 
 void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
-  if (isNowPlaying) {
-    int mychannel = SMP.currentChannel;
-    // Only stop the note if it is currently active.
-    if (activeNotes[pitch]) {
-      _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, false, false);
-      activeNotes[pitch] = false;  // Mark the note as inactive.
+  Serial.print("OFF : ");
+  Serial.print(channel);
+  Serial.print(".");
+  Serial.println( pressedKeyCount[channel] );
+
+  // For persistent channels (11-14) use the counter.
+  if (channel >= 11 && channel <= 14) {
+    if (pressedKeyCount[channel] > 0)
+      pressedKeyCount[channel]--; // Decrement counter
+
+    // Only release if no keys remain pressed
+    if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
+      envelopes[channel]->noteOff();
+      persistentNoteOn[channel] = false;
+      noteOnTriggered[channel] = false;
     }
+    return;
   }
+  
+  // Existing logic for non-persistent channels goes here...
 }
+
+
 
 void handleStart() {
   // Called when a MIDI Start message is received.

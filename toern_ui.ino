@@ -104,7 +104,7 @@ void drawBase() {
 
     drawStatus();
       
-  for ( int x = 1; x <= 16; x++) {
+  /*for ( int x = 1; x <= 16; x++) {
     int brightness;
     if (x <= 8) {
       brightness = ::map(x, 2, 8, 0, 80);  // Ramp up from black to white
@@ -113,7 +113,7 @@ void drawBase() {
     }
     brightness = constrain(brightness, 0, 255); // Safety limit
     light(x, 11, CRGB(brightness, brightness, brightness));
-  }
+  }*/
 
 
   //4-4 helper takt
@@ -310,12 +310,19 @@ void drawTriggers() {
 
         if (!SMP.mute[thisNote]) {
           //light(ix, iy, getCol(note[((SMP.edit - 1) * maxX) + ix][iy][0]));
-          light(ix, iy, col[thisNote]);
+          if (SMP.singleMode) {
+            light(ix, iy, CRGB(200,200,200)); //col[thisNote]);
+          }else{
+              light(ix, iy, col[thisNote]);
+          }
+          
+          
+          if (thisNote != SMP.currentChannel && currentMode == &singleMode) light(ix, iy, col_base[thisNote]);
 
           // if there is any note of the same value in the same column, make it less bright
           for (unsigned int iy2 = 1; iy2 < maxY + 1; iy2++) {
             if (iy2 != iy && note[((SMP.edit - 1) * maxX) + ix][iy2][0] == note[((SMP.edit - 1) * maxX) + ix][iy][0]) {
-              light(ix, iy2, col[thisNote]);
+              light(ix, iy2, col_base[thisNote]);
             }
           }
         } else {
@@ -334,16 +341,23 @@ void drawTriggers() {
 
 void drawTimer() {
   unsigned int timer = (beat - 2) % maxX + 1;
+  
   if (SMP.page == SMP.edit) {
     if (timer < 1) timer = 1;
     for (unsigned int y = 1; y < maxY; y++) {
+      int ch = note[((SMP.page - 1) * maxX) + timer][y][0];
       light(timer, y, CRGB(10, 0, 0));
 
-      if (note[((SMP.page - 1) * maxX) + timer][y][0] > 0) {
-        if (SMP.mute[note[((SMP.page - 1) * maxX) + timer][y][0]] == 0) {
-          light(timer, y, CRGB(200, 200, 200));
+      if (ch> 0) {
+        if (SMP.mute[ch] == 0) {
+          
+          if( !SMP.singleMode ) {light(timer, y, CRGB(200, 200, 200));
+          }else{
+            if (SMP.currentChannel == ch){light(timer, y, CRGB(200, 200, 200));}
+          }
+          
         } else {
-          light(timer, y, CRGB(00, 00, 00));
+          if( !SMP.singleMode ) light(timer, y, CRGB(00, 00, 00));
         }
       }
     }

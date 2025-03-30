@@ -50,7 +50,7 @@
 #define defaultVelocity 63
 #define FOLDER_MAX 9
 #define maxPages 16
-#define maxFiles 8
+#define maxFiles 9
 
 #define maxFilters 15
 
@@ -120,7 +120,7 @@ bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
 float rateFactor = 44117.0 / 44100.0;
 
-char *menuText[6] = { "DAT", "KIT", "WAV", "REC", "BPM", "SET" };
+char *menuText[6] = { "DAT", "KIT", "WAV", "REC", "BPM", "MIDI" };
 int lastFile[9] = { 0 };
 bool freshPaint, tmpMute = false;
 bool firstcheck = false;
@@ -160,8 +160,9 @@ const unsigned int totalPulsesToWait = pulsesPerBar * 2;
 
 const unsigned long CHECK_INTERVAL = 50;  // Interval to check buttons in ms
 unsigned long lastCheckTime = 0;          // Get the current time
-int recMode = 1;
 
+int recMode = 1;
+int clockMode = 1;
 
 unsigned long recordStartTime = 0;
 const unsigned long recordDuration = 5000;  // 5 seconds
@@ -194,6 +195,11 @@ volatile unsigned int clockCount = 0;
 bool hasNotes[maxPages + 1];
 unsigned int startTime[maxY] = { 0 };    // Variable to store the start time
 bool noteOnTriggered[maxY] = { false };  // Flag to indicate if noteOn has been triggered
+
+bool persistentNoteOn[16] = { false };
+
+int pressedKeyCount[17] = {0};
+
 volatile bool waitForFourBars = false;
 volatile unsigned int pulseCount = 0;
 bool sampleIsLoaded = false;
@@ -233,6 +239,36 @@ int hihatLed = 70;
 float kickVol = 1;
 float snareVol = 1;
 float hihatVol = 1;
+
+const float fullFrequencies[27] = {
+   130.81, // C3
+  138.59, // C#3/Db3
+  146.83, // D3
+  155.56, // D#3/Eb3
+  164.81, // E3
+  174.61, // F3
+  185.00, // F#3/Gb3
+  196.00, // G3
+  207.65, // G#3/Ab3
+  220.00, // A3
+  233.08, // A#3/Bb3
+  246.94, // B3
+  261.63, // C4
+  277.18, // C#4/Db4
+  293.66, // D4
+  311.13, // D#4/Eb4
+  329.63, // E4
+  349.23, // F4
+  369.99, // F#4/Gb4
+  392.00, // G4
+  415.30, // G#4/Ab4
+  440.00, // A4
+  466.16, // A#4/Bb4
+  493.88, // B4
+  523.25, // C5
+  554.37, // C#5/Db5
+  587.33  // D5
+};
 
 
 const float pianoFrequencies[16] = {
@@ -861,6 +897,15 @@ void stopRecord(int fnr, int snr) {
 }
 
 
+void drawClockMode(){
+  
+  if (clockMode==1) { drawText("int", 7, 12, CRGB(200, 200, 200)); MIDI_CLOCK_SEND = true;}
+  if (clockMode==-1) {drawText("EXT", 6, 12, CRGB(0, 0, 200));recInput = MIDI_CLOCK_SEND = false;}
+                          
+  FastLEDshow();
+}
+
+
 
 void drawRecMode(){
   
@@ -973,6 +1018,10 @@ if (currentMode == &menu && buttonString == "1000")
       case 5:
         switchMode(&volume_bpm);
       break;
+
+      case 6:
+       clockMode = clockMode*(-1);
+      drawClockMode();
 }
   }else if ((currentMode == &loadSaveTrack) && buttonString == "0001") {
     paintMode = false;
@@ -1041,7 +1090,11 @@ if (currentMode == &menu && buttonString == "1000")
 
   // Toggle copy/paste in draw mode
   if (currentMode == &draw && buttonString == "1100") {
-    toggleCopyPaste();
+    //toggleCopyPaste();
+    
+
+
+
   }
 
 
@@ -1525,12 +1578,21 @@ void setup(void) {
 
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(1);
-
   autoLoad();
+  
+for (int step = 0; step <= 31; step++) {
+    for (int y = 2; y <= 15; y++) {
+   
+
+    //  if (copynote[step][y-2] != 0)  note[step+1][y][0] = copynote[step][y-2];
+      
+    }
+}
+
   switchMode(&draw);
   
   Serial8.begin(31250); 
-  MIDI.begin(MIDI_CH);
+  MIDI.begin(MIDI_CHANNEL_OMNI);
     MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
   //MIDI.setHandleClock(myClock);       // optional if you're using callbacks
 
@@ -1691,9 +1753,10 @@ void checkTouchInputs() {
       lastTouchState[2] = false;
       if (currentMode == &draw) {
 
-        SMP.currentChannel = SMP.currentChannel;
-        switchMode(&singleMode);
-        SMP.singleMode = true;
+        //SMP.currentChannel = SMP.currentChannel;
+        animateSingle();
+        
+        
       } else {
         switchMode(&draw);
         SMP.singleMode = false;
@@ -1717,7 +1780,27 @@ void checkTouchInputs() {
   lastTouchState[1] = touchState[1];
 }
 
+void animateSingle() {
+  int yStart = SMP.currentChannel; // 0 to 15
+  int yCenter = yStart + 1;        // Because y grid is 1-based
+  CRGB col = col_base[SMP.currentChannel];
 
+  // Animate outward from center
+  for (int offset = 0; offset <= 15; offset++) {
+    int yUp = yCenter - offset;
+    int yDown = yCenter + offset;
+
+    for (int x = 1; x <= 16; x++) {
+      if (yUp >= 1 && yUp <= 15) light(x, yUp, col);
+      if (yDown >= 1 && yDown <= 15 && offset != 0) light(x, yDown, col);
+    }
+    drawTriggers();
+FastLED.show();
+    delay(15); // adjust for animation speed
+  }
+  switchMode(&singleMode); 
+  SMP.singleMode = true; 
+}
 void checkSingleTouch() {
   int touchValue = fastTouchRead(SWITCH_1);
 
@@ -1859,15 +1942,14 @@ void loop() {
   }
 
 
-  // end synthsound after X ms
-  for (int ch = 11; ch <= 14; ch++) {
-    int noteLen = getNoteDuration(ch);
-    //Serial.println(noteLen);
-    if (noteOnTriggered[ch] && millis() - startTime[ch] >= noteLen) {
-      envelopes[ch]->noteOff();
-      noteOnTriggered[ch] = false;
-    } 
+for (int ch = 11; ch <= 14; ch++) {
+  int noteLen = getNoteDuration(ch);
+  // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
+  if (noteOnTriggered[ch] && !persistentNoteOn[ch] && (millis() - startTime[ch] >= noteLen)) {
+    envelopes[ch]->noteOff();
+    noteOnTriggered[ch] = false;
   }
+}
 
   FastLEDshow();  // draw!
   yield();
@@ -2052,8 +2134,38 @@ void pause() {
   Encoder[2].writeRGBCode(0x005500);
   beat = 1;
   SMP.page = 1;
+  
 }
 
+
+void playSynth(int ch, int b, int vel, bool persistant){
+          float frequency = fullFrequencies[b];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
+          float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
+          synths[ch][0]->frequency(frequency);
+          float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
+          float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
+          // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
+          // For example, an OCTAVE value of 1 multiplies frequency by 2, -1 divides by 2.
+          int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
+          float octave_ratio = pow(2.0, octave_shift);
+          // Apply both adjustments to the base frequency
+          synths[ch][1]->frequency(frequency * octave_ratio * detune_ratio);
+          synths[ch][0]->amplitude(WaveFormVelocity);
+          synths[ch][1]->amplitude(WaveFormVelocity);
+          envelopes[ch]->noteOn();
+
+          if (persistant){
+            persistentNoteOn[ch] = true;
+            } else {
+              persistentNoteOn[ch] = false;
+            }
+          
+          drums[ch]->frequency(frequency * octave_ratio * detune_ratio);
+          drums[ch]->noteOn();
+          
+          startTime[ch] = millis();    // Record the start time
+          noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
+}
 
 void playNote() {
   onBeatTick();
@@ -2092,27 +2204,7 @@ void playNote() {
         }
 
         if (ch >= 11) {
-
-          float frequency = pianoFrequencies[b] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
-          float WaveFormVelocity = mapf(note[beat][ch][1], 1, 127, 0.0, 1.0);
-          synths[ch][0]->frequency(frequency);
-          float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
-          float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
-          // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
-          // For example, an OCTAVE value of 1 multiplies frequency by 2, -1 divides by 2.
-          int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
-          float octave_ratio = pow(2.0, octave_shift);
-          // Apply both adjustments to the base frequency
-          synths[ch][1]->frequency(frequency * octave_ratio * detune_ratio);
-          synths[ch][0]->amplitude(WaveFormVelocity);
-          synths[ch][1]->amplitude(WaveFormVelocity);
-          envelopes[ch]->noteOn();
-          
-          drums[ch]->frequency(frequency * octave_ratio * detune_ratio);
-          drums[ch]->noteOn();
-          
-          startTime[ch] = millis();    // Record the start time
-          noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
+            playSynth(ch,b,vel,false);
         }
       }
     }
@@ -2227,7 +2319,7 @@ void paint() {
     if (note[x][y][0] >= 11) {
 
       int ch = note[x][y][0];
-      float frequency = pianoFrequencies[y] / 2;  // y-Wert ist 1-basiert, Array ist 0-basiert
+      float frequency = pianoFrequencies[y];  // y-Wert ist 1-basiert, Array ist 0-basiert
       synths[ch][0]->frequency(frequency);
       float WaveFormVelocity = mapf(defaultVelocity, 1, 127, 0.0, 1.0);
       synths[ch][0]->amplitude(WaveFormVelocity);
@@ -2405,6 +2497,7 @@ void showMenu() {
     case 6:
       showIcons("icon_settings", CRGB(50, 50, 50));
       drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(0, 200, 200));
+      drawClockMode();
       break;
 
     default:
