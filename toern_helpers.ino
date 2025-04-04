@@ -10,7 +10,6 @@ void EEPROMgetLastFiles() {
 }
 
 
-
 void EEPROMsetLastFile() {
   //set maxFiles in folder and show loading...
   for (int f = 0; f <= FOLDER_MAX; f++) {
@@ -105,6 +104,23 @@ CRGB getCol(unsigned int g) {
   return col[g] * 10;
 }
 
+
+
+void setNote(uint16_t step,  uint8_t pitch, uint8_t channel, uint8_t velocity) {
+  if (step < maxlen && channel < NUM_CHANNELS) {
+    note[step][pitch].channel = channel;
+    note[step][pitch].velocity = velocity;
+  }
+}
+
+// Function to get a note from a given step and channel
+Note getNote(uint16_t step, uint8_t channel) {
+  if (step < maxlen && channel < NUM_CHANNELS) {
+    return note[step][channel];
+  }
+  // Return a default Note if indices are out-of-range.
+  return {0, 0};
+}
 
 
 /***************/

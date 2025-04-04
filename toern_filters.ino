@@ -106,8 +106,8 @@ void drawType(char *txt, int activeParameter) {
   int typeValue = mapf(SMP.param_settings[SMP.currentChannel][TYPE], 0, maxIndex, 1, maxIndex+1);
   drawText(txt, 1, 12, filter_col[activeParameter]);
 
-  if (typeValue==1) drawText("SMP", 1, 6, filter_col[typeValue]);
-  if (typeValue==2) drawText("DRUM", 1, 6, filter_col[typeValue]);
+  if (typeValue==1) drawText("DRUM", 1, 6, filter_col[typeValue]);
+  if (typeValue==2) drawText("SMP", 1, 6, filter_col[typeValue]);
 
   drawNumber(typeValue, CRGB(100, 100, 100), 1);
 }
@@ -204,6 +204,7 @@ void drawWaveforms(const char *txt, int activeParameter) {
         }
       }
       break;
+      default:return;
   }
 
   // Render UI elements
@@ -452,16 +453,21 @@ void updateDrumValue(DrumTypes drumType, int index, float value) {
 
     case DRUMTYPE:
     break;
+    
+    default:return;
   }
   float tone = mapf(SMP.drum_settings[SMP.currentChannel][DRUMTONE],0,64,0,1023);
   float dec = mapf(SMP.drum_settings[SMP.currentChannel][DRUMDECAY],0,64,0,1023);
   float pit = mapf(SMP.drum_settings[SMP.currentChannel][DRUMPITCH],0,64,0,1023);
   float typ = mapf(SMP.drum_settings[SMP.currentChannel][DRUMTYPE],0,64, 1,3);
+  
+  
+
 
        
-            if (SMP.currentChannel == 1) KD_drum(tone,dec,pit,typ);
-            if (SMP.currentChannel == 2) SN_drum(tone,dec,pit,typ);
-            if (SMP.currentChannel == 3) HH_drum(tone,dec,pit,typ);
+            //if (SMP.currentChannel == 1) KD_drum(tone,dec,pit,typ);
+            //if (SMP.currentChannel == 2) SN_drum(tone,dec,pit,typ);
+            //if (SMP.currentChannel == 3) HH_drum(tone,dec,pit,typ);
 
    // Call the new update function to ensure changes are applied
   updateFiltersAndParameters();
@@ -503,20 +509,21 @@ void updateFilterValue(FilterType filterType, int index, float value) {
 
     case REVERB:
       if (freeverbs[index] != nullptr && freeverbs[index] != 0) {
-       if (freeverbmixers[index]!= 0 && value < 0.1) {
-      // Effectively bypass the reverb
-      freeverbmixers[index]->gain(0, 0);        // Mute wet
-      freeverbmixers[index]->gain(3, 1);     // Enable dry
-    } else {
-      // Apply reverb settings
-      freeverbs[index]->roomsize(value);
-      freeverbs[index]->damping(0.5);
-      if (freeverbmixers[index]!= 0){
-      // Enable wet, disable dry
-      freeverbmixers[index]->gain(0, 1);        // Enable wet
-      freeverbmixers[index]->gain(3, 1);     // dont Mute dry
-    }
-    }
+
+        if (freeverbmixers[index]!= 0 && value < 0.1) {
+        // Effectively bypass the reverb
+        freeverbmixers[index]->gain(0, 0);        // Mute wet
+        freeverbmixers[index]->gain(3, 1);     // Enable dry
+      } else {
+        // Apply reverb settings
+        freeverbs[index]->roomsize(value);
+        freeverbs[index]->damping(0.5);
+          if (freeverbmixers[index]!= 0){
+          // Enable wet, disable dry
+          freeverbmixers[index]->gain(0, 1);        // Enable wet
+          freeverbmixers[index]->gain(3, 1);     // dont Mute dry
+        }
+        }
       }
       break;
 
@@ -551,9 +558,6 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       break;
 
     case BITCRUSHER: 
-    Serial.print("####>>");
-    Serial.println(value);
-
     // Map value (1 = clean, 16 = max crush) to bit depth
     int xbitDepth = constrain(value, 1, 16);
     // Optional volume influence based on bit depth (not needed anymore)
@@ -571,7 +575,7 @@ void updateFilterValue(FilterType filterType, int index, float value) {
 
     // Auto-gain: 1 (clean) -> channelVol | 16 (max crush) -> 0.2
     //float crushCompGain = mapf(value, 1, 16, channelvolume, 0.2);
-    float crushCompGain = mapf(value, 1, 15, max(channelvolume, 1), 0.01);
+    float crushCompGain = mapf(value, 1, 16, max(channelvolume, 1), 0.2);
 
     // Apply gain
     amps[index]->gain(crushCompGain);
@@ -581,6 +585,9 @@ void updateFilterValue(FilterType filterType, int index, float value) {
     Serial.print(" | SampleRate: "); Serial.print(xsampleRate);
     Serial.print(" | CompGain: "); Serial.println(crushCompGain);
     break;
+    
+ 
+      
 }
 
   // Call the new update function to ensure changes are applied
@@ -611,20 +618,9 @@ void updateParameterValue(int paramType, int index, float value) {
       envelopes[index]->release(value);
       break;
 
-    case LENGTH:
-      drums[index]->length(value);
-     break;
-
-     case SECONDMIX:
-      drums[index]->secondMix(value);
-     break;
-
-     case PITCHMOD:
-      drums[index]->pitchMod(value);
-     break;
 
 
-    case TYPE:
+    case TYPE: {
 
     int synthType = value;
       Serial.println(synthType);
@@ -633,24 +629,28 @@ void updateParameterValue(int paramType, int index, float value) {
       
       switch (synthType) {
       case 1:
-          waveformmixers[index]->gain(0, 1);  // Enable drum channel
-          waveformmixers[index]->gain(1, 0);  // Disable synth
-          waveformmixers[index]->gain(2, 0);  // Disable strings
+      Serial.print("enable drum at Input0 at channel ");
+      Serial.println(index);
+      waveformmixers[index]->gain(0, 0);  // Disable SAMPLE
+          waveformmixers[index]->gain(1, 1);  // Enable drum channel
+          
           break;
 
         case 2:
-          waveformmixers[index]->gain(0, 0);
-          waveformmixers[index]->gain(1, 1);  // Enable synth channel
-          waveformmixers[index]->gain(2, 0);
+        Serial.print("enable synth at Input1 for channel ");
+        Serial.println(index);
+        waveformmixers[index]->gain(0, 1);  // Enable SAMPLE channel       
+          waveformmixers[index]->gain(1, 0); // disable drum channel
+          
         break;
 
-        case 3:
-          waveformmixers[index]->gain(0, 0);
-          waveformmixers[index]->gain(1, 0);
-          waveformmixers[index]->gain(2, 1);  // Enable strings channel
-          break;
+        
+        
+        default:return;
       }
       break;
+    }
+    break;
     }
   }
 
@@ -676,6 +676,7 @@ void handleWaveformChange(int index, unsigned int waveformType) {
     case 4:
       synths[index][0]->begin(WAVEFORM_TRIANGLE);
       break;
+    default: return;    
   }
   // Call the new update function to ensure changes are applied
    }
@@ -778,6 +779,53 @@ void setDahdsrDefaults(bool allChannels) {
   }
 }
 
+
+
+void setDrumDefaults(bool allChannels) {
+
+  
+  //BD parameters
+  BDsine.begin(0.7, 100, WAVEFORM_SINE);
+  BDsaw.begin(0.4, 100, WAVEFORM_TRIANGLE);
+  BDenv.sustain(0);
+  BDpitchEnv.sustain(0);
+
+  //SN parameters
+  SNenv.sustain(0);
+  SNfilt.frequency(1000);
+  SNnoise.amplitude(0.5);
+  SNtone.begin(0.8, 700, WAVEFORM_SINE);
+  SNtone2.begin(0.8, 700, WAVEFORM_SINE);
+  SNtoneEnv.sustain(0);
+  SNfilt.resonance(2);
+  SNchaosMix.gain(1, 0);
+  SNtone.frequencyModulation(0);
+
+  //HH parameters
+  HHenv.sustain(0);
+  HHfilt.frequency(6000);
+  HHnoise.amplitude(0.6);
+  HHtone.begin(0.8, 700, WAVEFORM_SQUARE);
+  HHtone2.begin(0.8, 700, WAVEFORM_SQUARE);
+  HHtoneEnv.sustain(0);
+  HHfilt.resonance(2);
+  HHchaosMix.gain(1, 0);
+  HHtone.frequencyModulation(6);
+  HHtone2.frequencyModulation(6);
+
+
+  if (allChannels) {
+    for (int ch = 1; ch < 4; ch++) {
+      // First clear all 3 Drums
+    
+      SMP.drum_settings[ch][DRUMTONE] = 0;     //0
+      SMP.drum_settings[ch][DRUMDECAY] = 32;   //half
+      SMP.drum_settings[ch][DRUMPITCH] = 32;    //half
+      SMP.drum_settings[ch][DRUMTYPE] = 1;     // MID decay period
+      SMP.param_settings[ch][TYPE] = 2;  // SMP
+    }
+  }
+}
 
 void resetAllFilters() {
   for (unsigned int i = 0; i < 15; i++) {

@@ -119,8 +119,6 @@ void MidiSendNoteOn(int pitch, int channel, int velocity) {
   // Optionally, if y is not already a MIDI note number, map it here.
   // For example, if y is from 0 to 15 and you want to map it to notes 60-75:
   // y = map(y, 0, 15, 60, 75);
-
-
   // Optionally, if you want a specific scale (e.g. only C major notes) use an array:
   // const int scaleNotes[16] = {48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74};
   // int note = scaleNotes[y - 1];
@@ -212,10 +210,9 @@ void onBeatTick() {
 
   if (pendingNote.active) {
     int targetBeat = (beat == 1) ? (maxX * lastPage) : (beat - 1);
-
     if (pendingNote.livenote >= 1 && pendingNote.livenote <= 16) {
-      note[targetBeat][pendingNote.livenote][0] = pendingNote.channel;
-      note[targetBeat][pendingNote.livenote][1] = pendingNote.velocity;
+      note[targetBeat][pendingNote.livenote].channel = pendingNote.channel;
+      note[targetBeat][pendingNote.livenote].velocity = pendingNote.velocity;
     }
 
     pendingNote.active = false;

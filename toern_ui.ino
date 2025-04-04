@@ -51,7 +51,7 @@ void drawFilterCheck(int mappedValue, FilterType fx) {
 
 
 void drawPlayButton() {
-  unsigned int timer = (beat - 2) % maxX + 1;
+  unsigned int timer = (beat - 1) % maxX + 1;
   if (currentMode == &draw || currentMode == &singleMode) {
     if (isNowPlaying) {
       if (timer == 1 || timer == 5 || timer == 9 || timer == 13) {
@@ -305,12 +305,13 @@ void drawTriggers() {
   //SMP.edit = 1;
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
     for (unsigned int iy = 1; iy < maxY + 1; iy++) {
-      int thisNote = note[((SMP.edit - 1) * maxX) + ix][iy][0];
+      int thisNote = note[((SMP.edit - 1) * maxX) + ix][iy].channel;
       if (thisNote > 0) {
 
         if (!SMP.mute[thisNote]) {
-          //light(ix, iy, getCol(note[((SMP.edit - 1) * maxX) + ix][iy][0]));
-          if (SMP.singleMode) {
+          //light(ix, iy, getCol(note[((SMP.edit - 1) * maxX) + ix][iy].channel));
+          if (SMP.singleMode && thisNote == SMP.currentChannel) {
+            
             light(ix, iy, CRGB(200,200,200)); //col[thisNote]);
           }else{
               light(ix, iy, col[thisNote]);
@@ -320,13 +321,17 @@ void drawTriggers() {
           if (thisNote != SMP.currentChannel && currentMode == &singleMode) light(ix, iy, col_base[thisNote]);
 
           // if there is any note of the same value in the same column, make it less bright
+          /*
           for (unsigned int iy2 = 1; iy2 < maxY + 1; iy2++) {
-            if (iy2 != iy && note[((SMP.edit - 1) * maxX) + ix][iy2][0] == note[((SMP.edit - 1) * maxX) + ix][iy][0]) {
+            if (iy2 != iy && note[((SMP.edit - 1) * maxX) + ix][iy2].channel == note[((SMP.edit - 1) * maxX) + ix][iy].channel) {
               light(ix, iy2, col_base[thisNote]);
             }
           }
+          */
+
+
         } else {
-          //light(ix, iy, getCol(note[((SMP.edit - 1) * maxX) + ix][iy][0]) / 24);
+          //light(ix, iy, getCol(note[((SMP.edit - 1) * maxX) + ix][iy].channel) / 24);
           light(ix, iy, col_base[thisNote]);
         }
       }
@@ -340,12 +345,13 @@ void drawTriggers() {
   *************************************************/
 
 void drawTimer() {
-  unsigned int timer = (beat - 2) % maxX + 1;
   
+  unsigned int timer = (beat - 1) % maxX + 1;
+
   if (SMP.page == SMP.edit) {
     if (timer < 1) timer = 1;
     for (unsigned int y = 1; y < maxY; y++) {
-      int ch = note[((SMP.page - 1) * maxX) + timer][y][0];
+      int ch = note[((SMP.page - 1) * maxX) + timer][y].channel;
       light(timer, y, CRGB(10, 0, 0));
 
       if (ch> 0) {
@@ -567,6 +573,11 @@ void drawBPMScreen() {
       }
 }
 
+void drawKnobColorDefault(){
+  for (int i = 0; i < NUM_ENCODERS; i++) {
+      Encoder[i].writeRGBCode(currentMode->knobcolor[i]);
+  }
+}
 
 
 

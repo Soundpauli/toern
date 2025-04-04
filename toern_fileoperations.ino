@@ -55,13 +55,13 @@ void savePatternAsMIDI(bool autosave) {
     unsigned int trackLength = 0;
     for (unsigned int sdx = 1; sdx < maxlen; sdx++) {
       for (unsigned int sdy = 1; sdy < maxY + 1; sdy++) {
-        uint8_t channel = note[sdx][sdy][0] % 16;  // Determine MIDI channel (1-16)
+        uint8_t channel = note[sdx][sdy].channel % 16;  // Determine MIDI channel (1-16)
         if (channel == 0) {
           continue;  // Skip invalid channel 0
         }
         uint8_t baseNote = 60;                      // C4 (Middle C)
         uint8_t noteNumber = baseNote + (sdy - 1);  // Adjust note based on sdy
-        uint8_t velocity = note[sdx][sdy][1];
+        uint8_t velocity = note[sdx][sdy].velocity;
 
         if (velocity > 0) {
           // Note On event
@@ -135,9 +135,9 @@ void savePattern(bool autosave) {
     // Save notes
     for (unsigned int sdx = 1; sdx < maxlen; sdx++) {
       for (unsigned int sdy = 1; sdy < maxY + 1; sdy++) {
-        maxdata = maxdata + note[sdx][sdy][0];
-        saveFile.write(note[sdx][sdy][0]);
-        saveFile.write(note[sdx][sdy][1]);
+        maxdata = maxdata + note[sdx][sdy].channel;
+        saveFile.write(note[sdx][sdy].channel);
+        saveFile.write(note[sdx][sdy].velocity);
       }
     }
     // Use a unique marker to indicate the end of notes and start of SMP data
@@ -236,8 +236,8 @@ void loadPattern(bool autoload) {
         }
 
         int v = loadFile.read();
-        note[sdrx][sdry][0] = b;
-        note[sdrx][sdry][1] = v;
+        note[sdrx][sdry].channel = b;
+        note[sdrx][sdry].velocity = v;
         sdry++;
         if (sdry > maxY) {
           sdry = 1;
@@ -277,7 +277,7 @@ void loadPattern(bool autoload) {
     Serial.println("edit: " + String(SMP.edit));
     Serial.println("file: " + String(SMP.file));
     Serial.println("pack: " + String(SMP.pack));
-    Serial.println("wav: " + String(SMP.wav[SMP.currentChannel][1]));
+    Serial.println("wav: " + String(SMP.wav[SMP.currentChannel].fileID));
     Serial.println("folder: " + String(SMP.folder));
     Serial.println("activeCopy: " + String(SMP.activeCopy));
     Serial.println("x: " + String(SMP.x));
@@ -322,8 +322,8 @@ void loadPattern(bool autoload) {
   } else {
     for (unsigned int nx = 1; nx < maxlen; nx++) {
       for (unsigned int ny = 1; ny < maxY + 1; ny++) {
-        note[nx][ny][0] = 0;
-        note[nx][ny][1] = defaultVelocity;
+        note[nx][ny].channel = 0;
+        note[nx][ny].velocity = defaultVelocity;
       }
     }
   }

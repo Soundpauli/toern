@@ -67,7 +67,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
 }
 
 void showWave() {
-  int snr = SMP.wav[SMP.currentChannel][1];
+  int snr = SMP.wav[SMP.currentChannel].fileID;
   if (snr < 1) snr = 1;
   int fnr = getFolderNumber(snr);
   char OUTPUTf[50];
@@ -120,10 +120,10 @@ void showWave() {
     nofile = false;
     SMP.folder = currentMode->pos[1];
     Serial.println("Folder: " + String(SMP.folder - 1));
-    SMP.wav[SMP.currentChannel][1] = ((SMP.folder - 1) * 100) + 1;
+    SMP.wav[SMP.currentChannel].fileID = ((SMP.folder - 1) * 100) + 1;
     Serial.print("WAV:");
-    Serial.println(SMP.wav[SMP.currentChannel][1]);
-    Encoder[3].writeCounter((int32_t)SMP.wav[SMP.currentChannel][1]);
+    Serial.println(SMP.wav[SMP.currentChannel].fileID);
+    Encoder[3].writeCounter((int32_t)SMP.wav[SMP.currentChannel].fileID);
   }
 
   // --- UPDATE END POSITION (Encoder 2) ---
@@ -167,9 +167,9 @@ if (currentMode->pos[3] != snr) {
     sampleIsLoaded = false;
     firstcheck = true;
     nofile = false;
-    SMP.wav[SMP.currentChannel][1] = currentMode->pos[3];
+    SMP.wav[SMP.currentChannel].fileID = currentMode->pos[3];
 
-    snr = SMP.wav[SMP.currentChannel][1];
+    snr = SMP.wav[SMP.currentChannel].fileID;
     fnr = getFolderNumber(snr);
     FastLEDclear();
     drawNumber(snr, col_Folder[fnr], 12);
@@ -230,7 +230,7 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
     SMP.mute[sampleID] = false;
   }
 
-  usedFiles[sampleID - 1] = OUTPUTf;
+usedFiles[sampleID - 1] = String(OUTPUTf);
 
   File loadSample = SD.open(OUTPUTf);
   if (loadSample) {
@@ -262,7 +262,8 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
     loadSample.seek(44 + startOffsetBytes);
     unsigned int i = 0;
-    memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
+    //memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
+    memset((void*)sampled[0], 0, sizeof(sampled[0]));
 
     while (loadSample.available() && (i < (endOffsetBytes - startOffsetBytes))) {
       int b = loadSample.read();
