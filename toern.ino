@@ -1606,7 +1606,7 @@ void setup(void) {
   midiTimer.begin(checkMidi, playNoteInterval / 24);
   //midiTimer.priority(10);
   AudioInterrupts();
-  AudioMemory(120);
+  AudioMemory(48);
   // turn on the output
   sgtl5000_1.volume(0.0);
   sgtl5000_1.enable();
@@ -1649,7 +1649,7 @@ void setup(void) {
   
   setDrumDefaults(true);
   testDrums();
-
+  bass_synth(0,0,0); 
  
   //chiptune_synth(0,0,0); 
  for (int i = 0; i < 3; i++) {
@@ -2241,14 +2241,10 @@ void playNote() {
             if (ch == 3) HH_drum(tone+notepitch, dec, pit, typ);
 
             if (ch == 4) {
-              bass_synth(0,0,0); 
+             
               playSound(12 * octave[0] + transpose + b,0); 
             }  
 
-            if (ch == 5) {
-                  brass_synth(0,0,0); 
-              playSound(12 * octave[0] + transpose + b,1); 
-            }  
 
 
           } else {

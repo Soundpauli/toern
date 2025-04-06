@@ -368,136 +368,73 @@ AudioControlSGTL5000     sgtl5000_1;     //xy=3755.3332443237305,1413.3333358764
 
 
 
- EXTMEM AudioSynthWaveform       Swaveform1[6];
- EXTMEM AudioSynthWaveform       Swaveform2[6];
- EXTMEM AudioSynthWaveform       Swaveform3[6];
- EXTMEM AudioSynthWaveformDc     Sdc1[6];
- EXTMEM  AudioEffectEnvelope     SenvelopeFilter1[6];
- EXTMEM AudioMixer4              Smixer2[6];
- EXTMEM AudioMixer4              Smixer1[6];
- EXTMEM AudioFilterLadder        Sladder2[6];
- EXTMEM AudioFilterLadder        Sladder1[6];
- EXTMEM AudioEffectEnvelope      Senvelope1[6];
- EXTMEM AudioEffectEnvelope      Senvelope2[6];
+ EXTMEM AudioSynthWaveform       Swaveform1[3];
+ EXTMEM AudioSynthWaveform       Swaveform2[3];
+ EXTMEM AudioSynthWaveform       Swaveform3[3];
+ EXTMEM AudioSynthWaveformDc     Sdc1[3];
+ EXTMEM  AudioEffectEnvelope     SenvelopeFilter1[3];
+ EXTMEM AudioMixer4              Smixer2[3];
+ EXTMEM AudioMixer4              Smixer1[3];
+ EXTMEM AudioFilterLadder        Sladder2[3];
+ EXTMEM AudioFilterLadder        Sladder1[3];
+ EXTMEM AudioEffectEnvelope      Senvelope1[3];
+ EXTMEM AudioEffectEnvelope      Senvelope2[3];
  EXTMEM AudioMixer4              SmixerL4;
  EXTMEM AudioMixer4              SmixerR4;
  EXTMEM AudioMixer4              CHMixer4;
 
- EXTMEM AudioMixer4              SmixerL5;
- EXTMEM AudioMixer4              SmixerR5;
- EXTMEM AudioMixer4              CHMixer5;
 
+AudioConnection          SpatchCord1(Swaveform1[0], 0, Smixer1[0], 0);
+AudioConnection          SpatchCord2(Swaveform1[0], 0, Smixer2[0], 0);
+AudioConnection          SpatchCord3(Swaveform2[0], 0, Smixer1[0], 1);
+AudioConnection          SpatchCord4(Swaveform2[0], 0, Smixer2[0], 1);
+AudioConnection          SpatchCord5(Swaveform3[0], 0, Smixer1[0], 2);
+AudioConnection          SpatchCord6(Swaveform3[0], 0, Smixer2[0], 2);
+AudioConnection          SpatchCord7(Sdc1[0], SenvelopeFilter1[0]);
+AudioConnection          SpatchCord8(SenvelopeFilter1[0], 0, Sladder1[0], 1);
+AudioConnection          SpatchCord9(SenvelopeFilter1[0], 0, Sladder2[0], 1);
+AudioConnection          SpatchCord10(Smixer2[0], 0, Sladder2[0], 0);
+AudioConnection          SpatchCord11(Smixer1[0], 0, Sladder1[0], 0);
+AudioConnection          SpatchCord12(Sladder2[0], Senvelope2[0]);
+AudioConnection          SpatchCord13(Sladder1[0], Senvelope1[0]);
+AudioConnection          SpatchCord14(Senvelope1[0], 0, SmixerL4, 0);
+AudioConnection          SpatchCord15(Senvelope2[0], 0, SmixerR4, 0);
 
+AudioConnection          SpatchCord16(Swaveform1[1], 0, Smixer1[1], 0);
+AudioConnection          SpatchCord17(Swaveform1[1], 0, Smixer2[1], 0);
+AudioConnection          SpatchCord18(Swaveform2[1], 0, Smixer1[1], 1);
+AudioConnection          SpatchCord19(Swaveform2[1], 0, Smixer2[1], 1);
+AudioConnection          SpatchCord20(Swaveform3[1], 0, Smixer1[1], 2);
+AudioConnection          SpatchCord21(Swaveform3[1], 0, Smixer2[1], 2);
+AudioConnection          SpatchCord22(Sdc1[1], SenvelopeFilter1[1]);
+AudioConnection          SpatchCord23(SenvelopeFilter1[1], 0, Sladder1[1], 1);
+AudioConnection          SpatchCord24(SenvelopeFilter1[1], 0, Sladder2[1], 1);
+AudioConnection          SpatchCord25(Smixer2[1], 0, Sladder2[1], 0);
+AudioConnection          SpatchCord26(Smixer1[1], 0, Sladder1[1], 0);
+AudioConnection          SpatchCord27(Sladder2[1], Senvelope2[1]);
+AudioConnection          SpatchCord28(Sladder1[1], Senvelope1[1]);
+AudioConnection          SpatchCord29(Senvelope1[1], 0, SmixerL4, 1);
+AudioConnection          SpatchCord30(Senvelope2[1], 0, SmixerR4, 1);
 
-EXTMEM AudioConnection          SpatchCord1(Swaveform1[0], 0, Smixer1[0], 0);
-EXTMEM AudioConnection          SpatchCord2(Swaveform1[0], 0, Smixer2[0], 0);
-EXTMEM AudioConnection          SpatchCord3(Swaveform2[0], 0, Smixer1[0], 1);
-EXTMEM AudioConnection          SpatchCord4(Swaveform2[0], 0, Smixer2[0], 1);
-EXTMEM AudioConnection          SpatchCord5(Swaveform3[0], 0, Smixer1[0], 2);
-EXTMEM AudioConnection          SpatchCord6(Swaveform3[0], 0, Smixer2[0], 2);
-EXTMEM AudioConnection          SpatchCord7(Sdc1[0], SenvelopeFilter1[0]);
-EXTMEM AudioConnection          SpatchCord8(SenvelopeFilter1[0], 0, Sladder1[0], 1);
-EXTMEM AudioConnection          SpatchCord9(SenvelopeFilter1[0], 0, Sladder2[0], 1);
-EXTMEM AudioConnection          SpatchCord10(Smixer2[0], 0, Sladder2[0], 0);
-EXTMEM AudioConnection          SpatchCord11(Smixer1[0], 0, Sladder1[0], 0);
-EXTMEM AudioConnection          SpatchCord12(Sladder2[0], Senvelope2[0]);
-EXTMEM AudioConnection          SpatchCord13(Sladder1[0], Senvelope1[0]);
-EXTMEM AudioConnection          SpatchCord14(Senvelope1[0], 0, SmixerL4, 0);
-EXTMEM AudioConnection          SpatchCord15(Senvelope2[0], 0, SmixerR4, 0);
-
-EXTMEM AudioConnection          SpatchCord16(Swaveform1[1], 0, Smixer1[1], 0);
-EXTMEM AudioConnection          SpatchCord17(Swaveform1[1], 0, Smixer2[1], 0);
-EXTMEM AudioConnection          SpatchCord18(Swaveform2[1], 0, Smixer1[1], 1);
-EXTMEM AudioConnection          SpatchCord19(Swaveform2[1], 0, Smixer2[1], 1);
-EXTMEM AudioConnection          SpatchCord20(Swaveform3[1], 0, Smixer1[1], 2);
-EXTMEM AudioConnection          SpatchCord21(Swaveform3[1], 0, Smixer2[1], 2);
-EXTMEM AudioConnection          SpatchCord22(Sdc1[1], SenvelopeFilter1[1]);
-EXTMEM AudioConnection          SpatchCord23(SenvelopeFilter1[1], 0, Sladder1[1], 1);
-EXTMEM AudioConnection          SpatchCord24(SenvelopeFilter1[1], 0, Sladder2[1], 1);
-EXTMEM AudioConnection          SpatchCord25(Smixer2[1], 0, Sladder2[1], 0);
-EXTMEM AudioConnection          SpatchCord26(Smixer1[1], 0, Sladder1[1], 0);
-EXTMEM AudioConnection          SpatchCord27(Sladder2[1], Senvelope2[1]);
-EXTMEM AudioConnection          SpatchCord28(Sladder1[1], Senvelope1[1]);
-EXTMEM AudioConnection          SpatchCord29(Senvelope1[1], 0, SmixerL4, 1);
-EXTMEM AudioConnection          SpatchCord30(Senvelope2[1], 0, SmixerR4, 1);
-
-EXTMEM AudioConnection          SpatchCord31(Swaveform1[2], 0, Smixer1[2], 0);
-EXTMEM AudioConnection          SpatchCord32(Swaveform1[2], 0, Smixer2[2], 0);
-EXTMEM AudioConnection          SpatchCord33(Swaveform2[2], 0, Smixer1[2], 1);
-EXTMEM AudioConnection          SpatchCord34(Swaveform2[2], 0, Smixer2[2], 1);
-EXTMEM AudioConnection          SpatchCord35(Swaveform3[2], 0, Smixer1[2], 2);
-EXTMEM AudioConnection          SpatchCord36(Swaveform3[2], 0, Smixer2[2], 2);
-EXTMEM AudioConnection          SpatchCord37(Sdc1[2], SenvelopeFilter1[2]);
-EXTMEM AudioConnection          SpatchCord38(SenvelopeFilter1[2], 0, Sladder1[2], 1);
-EXTMEM AudioConnection          SpatchCord39(SenvelopeFilter1[2], 0, Sladder2[2], 1);
-EXTMEM AudioConnection          SpatchCord40(Smixer2[2], 0, Sladder2[2], 0);
-EXTMEM AudioConnection          SpatchCord41(Smixer1[2], 0, Sladder1[2], 0);
-EXTMEM AudioConnection          SpatchCord42(Sladder2[2], Senvelope2[2]);
-EXTMEM AudioConnection          SpatchCord43(Sladder1[2], Senvelope1[2]);
-EXTMEM AudioConnection          SpatchCord44(Senvelope1[2], 0, SmixerL4, 2);
-EXTMEM AudioConnection          SpatchCord45(Senvelope2[2], 0, SmixerR4, 2);
-
-
-/****** V2 *****/
-
-EXTMEM AudioConnection          SpatchCord51(Swaveform1[3], 0, Smixer1[3], 0);
-EXTMEM AudioConnection          SpatchCord52(Swaveform1[3], 0, Smixer2[3], 0);
-EXTMEM AudioConnection          SpatchCord53(Swaveform2[3], 0, Smixer1[3], 1);
-EXTMEM AudioConnection          SpatchCord54(Swaveform2[3], 0, Smixer2[3], 1);
-EXTMEM AudioConnection          SpatchCord55(Swaveform3[3], 0, Smixer1[3], 2);
-EXTMEM AudioConnection          SpatchCord56(Swaveform3[3], 0, Smixer2[3], 2);
-EXTMEM AudioConnection          SpatchCord57(Sdc1[3], SenvelopeFilter1[3]);
-EXTMEM AudioConnection          SpatchCord58(SenvelopeFilter1[3], 0, Sladder1[3], 1);
-EXTMEM AudioConnection          SpatchCord59(SenvelopeFilter1[3], 0, Sladder2[3], 1);
-EXTMEM AudioConnection          SpatchCord60(Smixer2[3], 0, Sladder2[3], 0);
-EXTMEM AudioConnection          SpatchCord61(Smixer1[3], 0, Sladder1[3], 0);
-EXTMEM AudioConnection          SpatchCord62(Sladder2[3], Senvelope2[3]);
-EXTMEM AudioConnection          SpatchCord63(Sladder1[3], Senvelope1[3]);
-EXTMEM AudioConnection          SpatchCord64(Senvelope1[3], 0, SmixerL5, 0);
-EXTMEM AudioConnection          SpatchCord65(Senvelope2[3], 0, SmixerR5, 0);
-
-EXTMEM AudioConnection          SpatchCord66(Swaveform1[4], 0, Smixer1[4], 0);
-EXTMEM AudioConnection          SpatchCord67(Swaveform1[4], 0, Smixer2[4], 0);
-EXTMEM AudioConnection          SpatchCord68(Swaveform2[4], 0, Smixer1[4], 1);
-EXTMEM AudioConnection          SpatchCord69(Swaveform2[4], 0, Smixer2[4], 1);
-EXTMEM AudioConnection          SpatchCord70(Swaveform3[4], 0, Smixer1[4], 2);
-EXTMEM AudioConnection          SpatchCord71(Swaveform3[4], 0, Smixer2[4], 2);
-EXTMEM AudioConnection          SpatchCord72(Sdc1[4], SenvelopeFilter1[4]);
-EXTMEM AudioConnection          SpatchCord73(SenvelopeFilter1[4], 0, Sladder1[4], 1);
-EXTMEM AudioConnection          SpatchCord74(SenvelopeFilter1[4], 0, Sladder2[4], 1);
-EXTMEM AudioConnection          SpatchCord75(Smixer2[4], 0, Sladder2[4], 0);
-EXTMEM AudioConnection          SpatchCord76(Smixer1[4], 0, Sladder1[4], 0);
-EXTMEM AudioConnection          SpatchCord77(Sladder2[4], Senvelope2[4]);
-EXTMEM AudioConnection          SpatchCord78(Sladder1[4], Senvelope1[4]);
-EXTMEM AudioConnection          SpatchCord79(Senvelope1[4], 0, SmixerL5, 1);
-EXTMEM AudioConnection          SpatchCord80(Senvelope2[4], 0, SmixerR5, 1);
-
-EXTMEM AudioConnection          SpatchCord81(Swaveform1[5], 0, Smixer1[5], 0);
-EXTMEM AudioConnection          SpatchCord82(Swaveform1[5], 0, Smixer2[5], 0);
-EXTMEM AudioConnection          SpatchCord83(Swaveform2[5], 0, Smixer1[5], 1);
-EXTMEM AudioConnection          SpatchCord84(Swaveform2[5], 0, Smixer2[5], 1);
-EXTMEM AudioConnection          SpatchCord85(Swaveform3[5], 0, Smixer1[5], 2);
-EXTMEM AudioConnection          SpatchCord86(Swaveform3[5], 0, Smixer2[5], 2);
-EXTMEM AudioConnection          SpatchCord87(Sdc1[5], SenvelopeFilter1[5]);
-EXTMEM AudioConnection          SpatchCord88(SenvelopeFilter1[5], 0, Sladder1[5], 1);
-EXTMEM AudioConnection          SpatchCord89(SenvelopeFilter1[5], 0, Sladder2[5], 1);
-EXTMEM AudioConnection          SpatchCord90(Smixer2[5], 0, Sladder2[5], 0);
-EXTMEM AudioConnection          SpatchCord91(Smixer1[5], 0, Sladder1[5], 0);
-EXTMEM AudioConnection          SpatchCord92(Sladder2[5], Senvelope2[5]);
-EXTMEM AudioConnection          SpatchCord93(Sladder1[5], Senvelope1[5]);
-EXTMEM AudioConnection          SpatchCord94(Senvelope1[5], 0, SmixerL5, 2);
-EXTMEM AudioConnection          SpatchCord95(Senvelope2[5], 0, SmixerR5, 2);
-
-
-
+AudioConnection          SpatchCord31(Swaveform1[2], 0, Smixer1[2], 0);
+AudioConnection          SpatchCord32(Swaveform1[2], 0, Smixer2[2], 0);
+AudioConnection          SpatchCord33(Swaveform2[2], 0, Smixer1[2], 1);
+AudioConnection          SpatchCord34(Swaveform2[2], 0, Smixer2[2], 1);
+AudioConnection          SpatchCord35(Swaveform3[2], 0, Smixer1[2], 2);
+AudioConnection          SpatchCord36(Swaveform3[2], 0, Smixer2[2], 2);
+AudioConnection          SpatchCord37(Sdc1[2], SenvelopeFilter1[2]);
+AudioConnection          SpatchCord38(SenvelopeFilter1[2], 0, Sladder1[2], 1);
+AudioConnection          SpatchCord39(SenvelopeFilter1[2], 0, Sladder2[2], 1);
+AudioConnection          SpatchCord40(Smixer2[2], 0, Sladder2[2], 0);
+AudioConnection          SpatchCord41(Smixer1[2], 0, Sladder1[2], 0);
+AudioConnection          SpatchCord42(Sladder2[2], Senvelope2[2]);
+AudioConnection          SpatchCord43(Sladder1[2], Senvelope1[2]);
+AudioConnection          SpatchCord44(Senvelope1[2], 0, SmixerL4, 2);
+AudioConnection          SpatchCord45(Senvelope2[2], 0, SmixerR4, 2);
 
 AudioConnection          SpatchCord21214(SmixerL4, 0, CHMixer4, 0);
 AudioConnection          SpatchCord21224(SmixerR4, 0, CHMixer4, 1);
 AudioConnection          SpatchCord21234(CHMixer4, 0, envelope4, 0);
-
-AudioConnection          SpatchCord21215(SmixerL5, 0, CHMixer5, 0);
-AudioConnection          SpatchCord21225(SmixerR5, 0, CHMixer5, 1);
-AudioConnection          SpatchCord21235(CHMixer5, 0, envelope5, 0);
 
 
 // --- ADDITIONAL sound declarations below here ... ---//
@@ -512,10 +449,9 @@ AudioConnection          patchCord2122(is23, 0, queue1, 0);
  AudioConnection snd1(sound1, 0, BDMixer,0);
  AudioConnection snd3(sound2, 0, SNMixer,0);
  AudioConnection snd2(sound3, 0, HHMixer,0);
-
  AudioConnection snd4(sound4, 0, CHMixer4, 2);
- AudioConnection snd5(sound5, 0, CHMixer5, 2);
  
+ AudioConnection snd5(sound5, envelope5);
  AudioConnection snd6(sound6, envelope6);
  AudioConnection snd7(sound7, envelope7);
  AudioConnection snd8(sound8, envelope8);
