@@ -329,7 +329,8 @@ void loadPattern(bool autoload) {
   }
 
   updateLastPage();
-
+  loadSMPSettings();
+  
   if (!autoload) {
     delay(500);
     switchMode(&draw);

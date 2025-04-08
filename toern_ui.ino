@@ -276,7 +276,7 @@ void drawPages() {
 
     // If the page is the current one, set the LED to white
     if (SMP.page == p && SMP.edit == p) {
-      ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(50, 50, 50);
+      ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(200, 250, 200);
     } else if (SMP.page == p) {
       ledColor = isNowPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
     } else {

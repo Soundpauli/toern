@@ -12,6 +12,23 @@
 #include <math.h>
 #include <Mapf.h>
 
+
+#define FLANGE_DELAY_LENGTH 2048
+
+// Assume 'flangers' is an array of AudioEffectFlange pointers
+// AudioEffectFlange* flangers[MAX_EFFECTS]; // Example declaration
+// Assume 'delayline' is a shared or dedicated delay line buffer
+// int16_t delayline[FLANGE_DELAY_LENGTH]; // Example declaration
+// Assume 'index' is the valid index for the current flanger instance
+// Assume 'value' is the input control value (0.0 to 1.0)
+
+// Define the number of flanger instances you might use if this code handles multiple
+#define MAX_FLANGERS 5// Adjust if you have more/less
+
+// Per-instance state variables to avoid glitches and redundant calls
+static float flanger_lastValue[MAX_FLANGERS] = { -1.0f }; // Initialize all to -1.0f
+static bool flanger_bypassSet[MAX_FLANGERS] = { false };  // Initialize all to false
+
 #include <WS2812Serial.h>  // leds
 #define USE_WS2812SERIAL   // leds
 #include <FastLED.h>       // leds
@@ -92,6 +109,9 @@ struct PendingNote {
 
 PendingNote pendingNote;
 
+float fadeGain = 0.0f;
+bool fadingIn = false;
+elapsedMillis fadeTimer;
 
 
 // ----- Intro Animation Timing (in ms) -----
@@ -321,7 +341,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 1, maxfilterResolution, 1 }, { 0x110011, 0xFFFFFF, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
-Mode volume_bpm = { "VOLUME_BPM", { 1, 6, VOL_MIN, BPM_MIN }, { 1, 25, VOL_MAX, BPM_MAX }, { 1, 6, 10, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
+Mode volume_bpm = { "VOLUME_BPM", { 1, 6, VOL_MIN, BPM_MIN }, { 1, 25, VOL_MAX, BPM_MAX }, { 1, 6, 7, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 1, 0 }, { 7, 3, 8, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
@@ -542,7 +562,7 @@ float gainValue = 2.0;
 #define NUM_PARAMS (sizeof(SMP.param_settings[0]) / sizeof(SMP.param_settings[0][0]))
 #define NUM_FILTERS (sizeof(SMP.filter_settings[0]) / sizeof(SMP.filter_settings[0][0]))
 #define NUM_DRUMS (sizeof(SMP.drum_settings[0]) / sizeof(SMP.drum_settings[0][0]))
-
+#define MAX_CHANNELS maxY  // maxY is the number of channels (e.g. 16)
 
 enum ParameterType { TYPE,  //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM
                      WAVEFORM,
@@ -623,25 +643,39 @@ int currentEncoderIndex = 0;
 
 
 EXTMEM arraysampler _samplers[9];
-AudioPlayArrayResmp *voices[] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8 };
-AudioSynthKarplusStrong *strings[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &string11, &string12, &string13, &string14 };
+AudioPlayArrayResmp *voices[9] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8 };
 
-AudioEffectEnvelope *envelopes[] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, &envelope12, &envelope13, &envelope14 };
-AudioAmplifier *amps[] = { &amp0, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, &amp12, &amp13, &amp14 };
-AudioFilterStateVariable *filters[] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, &filter12, &filter13, &filter14 };
-AudioMixer4 *filtermixers[] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, &filtermixer12, &filtermixer13, &filtermixer14 };
-AudioEffectBitcrusher *bitcrushers[] = { 0, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, 0, 0, &bitcrusher11, &bitcrusher12, &bitcrusher13, &bitcrusher14 };
-AudioEffectFreeverb *freeverbs[] = { 0, &freeverb1, &freeverb2, 0, 0, 0, 0, &freeverb7, &freeverb8, 0, 0, &freeverb11, &freeverb12, &freeverb13, &freeverb14 };
-AudioMixer4 *freeverbmixers[] = { 0, &freeverbmixer1, &freeverbmixer2, 0, 0, 0, 0, &freeverbmixer7, &freeverbmixer8, 0, 0, 0, 0, 0, 0 };
-AudioEffectFlange *flangers[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &flange11, &flange12, &flange13, &flange14 };
-AudioMixer4 *waveformmixers[] = { 0, &BDMixer, &SNMixer, &HHMixer, 0, 0, 0, 0, 0, 0, 0, &waveformmixer11, &waveformmixer12, &waveformmixer13, &waveformmixer14 };
-
-
-AudioSynthWaveform *synths[15][2] = { 0 };
-//AudioSynthSimpleDrum *drums[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &drum11, &drum12, &drum13, &drum14 };
+AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, &envelope12, &envelope13, &envelope14 };
+AudioAmplifier *amps[15] = { &amp0, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, &amp12, &amp13, &amp14 };
+AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, &filter12, &filter13, &filter14 };
+AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, &filtermixer12, &filtermixer13, &filtermixer14 };
+AudioEffectBitcrusher *bitcrushers[15] = { 0, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, 0, 0, &bitcrusher11, &bitcrusher12, &bitcrusher13, &bitcrusher14 };
+AudioEffectFreeverb *freeverbs[15] = { 0, &freeverb1, &freeverb2, 0, 0, 0, 0, &freeverb7, &freeverb8, 0, 0, &freeverb11, &freeverb12, &freeverb13, &freeverb14 };
+AudioMixer4 *freeverbmixers[15] = { 0, &freeverbmixer1, &freeverbmixer2, 0, 0, 0, 0, &freeverbmixer7, &freeverbmixer8, 0, 0, 0, 0, 0, 0 };
+AudioEffectFlange *flangers[15] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &flange11, &flange12, &flange13, &flange14 };
+AudioMixer4 *waveformmixers[15] = { 0, &BDMixer, &SNMixer, &HHMixer, 0, 0, 0, 0, 0, 0, 0, &mixer_waveform11, &mixer_waveform12, &mixer_waveform13, &mixer_waveform14 };
 
 
+AudioSynthWaveform *synths[15][2];
 
+/*
+AudioSynthWaveformDc *Sdc1[3] = {&dc11_1, &dc11_2, &dc11_3};
+AudioEffectEnvelope *Senvelope1[3] = {&envelope1_1, &envelope1_2, &envelope1_3};
+AudioEffectEnvelope *Senvelope2[3] = {&envelope2_1, &envelope2_2, &envelope2_3};
+AudioEffectEnvelope *SenvelopeFilter1[3] = {&envelopeFilter1_1, &envelopeFilter1_2, &envelopeFilter1_3};
+
+AudioSynthWaveform *Swaveform1[3] = {&waveform1_1, &waveform2_1, &waveform3_1};
+AudioSynthWaveform *Swaveform2[3] = {&waveform2_2, &waveform2_2, &waveform3_2};
+AudioSynthWaveform *Swaveform3[3] = {&waveform3_1, &waveform3_2, &waveform3_3};
+
+AudioFilterLadder *Sladder1[3] = {&ladder1_1, &ladder2_1};
+AudioFilterLadder *Sladder2[3] = {&ladder1_2, &ladder2_2};
+AudioFilterLadder *Sladder3[3] = {&ladder1_3, &ladder2_3};
+
+AudioMixer4 *Smixer1[2] = { &mixer1_1, &mixer2_1};
+AudioMixer4 *Smixer2[2] = { &mixer1_2, &mixer2_2};
+AudioMixer4 *Smixer3[2] = { &mixer1_3, &mixer2_3};
+*/
 
 void allOff() {
   for (AudioEffectEnvelope *envelope : envelopes) {
@@ -850,6 +884,49 @@ void switchMode(Mode *newMode) {
   drawPlayButton();
 }
 
+// Load (apply) parameter settings for a single channel.
+void loadParametersForChannel(int ch) {
+  for (int p = 0; p < NUM_PARAMS; p++) {
+    // Set the encoder value to the saved parameter value.
+    //currentMode->pos[3] = SMP.param_settings[ch][p];
+    // Process the parameter mapping.
+    float mappedValue = processParameterAdjustment(p, ch);
+    // Update the audio envelope or effect according to the mapped value.
+    updateParameterValue(p, ch, mappedValue);
+  }
+}
+
+// Load (apply) filter settings for a single channel.
+void loadFiltersForChannel(int ch) {
+  for (int f = 0; f < NUM_FILTERS; f++) {
+    //currentMode->pos[3] = SMP.filter_settings[ch][f];
+    float mappedValue = processFilterAdjustment((FilterType)f, ch, 3);
+    updateFilterValue((FilterType)f, ch, mappedValue);
+  }
+}
+
+// Load (apply) drum settings for a single channel.
+void loadDrumsForChannel(int ch) {
+  for (int d = 0; d < NUM_DRUMS; d++) {
+    //currentMode->pos[3] = SMP.drum_settings[ch][d];
+    float mappedValue = processDrumAdjustment((DrumTypes)d, ch, 3);
+    updateDrumValue((DrumTypes)d, ch, mappedValue);
+  }
+}
+
+// Wrapper: load all saved SMP settings (parameters, filters, drums)
+// for every channel.
+void loadSMPSettings() {
+  for (int ch = 1; ch < 15; ch++) {
+    loadParametersForChannel(ch);
+    //loadFiltersForChannel(ch);
+    loadDrumsForChannel(ch);
+  }
+  // Optionally update other settings such as channel volumes
+  // or call updateFiltersAndParameters() if needed.
+  //updateFiltersAndParameters();
+}
+
 
 void writeWavHeader(File &file, uint32_t sampleRate, uint8_t bitsPerSample, uint16_t numChannels) {
   uint32_t byteRate = sampleRate * numChannels * bitsPerSample / 8;
@@ -893,6 +970,8 @@ void flushAudioQueueToSD() {
     recFlushTimer = 0;
   }
 }
+
+
 
 void continueRecording() {
   //Serial.println("rec?");
@@ -980,6 +1059,7 @@ void stopRecord(int fnr, int snr) {
 
     Serial.println("Start Playing");
     playRaw0.play(OUTPUTf);
+    
   }
 }
 
@@ -1175,10 +1255,18 @@ void checkMode(String buttonString, bool reset) {
   }
 
 
+  // single mode: RANDOMIZE
+  if ((SMP.y>15) && (currentMode == &singleMode) && buttonString == "0002")  {
+    Serial.println(SMP.y);
+    drawRandoms();
+    return;
+    }
+  
+
 
   // Handle velocity switch in single mode
   if (!freshPaint && note[SMP.x][SMP.y].channel != 0 && (currentMode == &singleMode) && buttonString == "0002") {
-    unsigned int velo = round(mapf(note[SMP.x][SMP.y].velocity, 1, 127, 1, maxY));
+      unsigned int velo = round(mapf(note[SMP.x][SMP.y].velocity, 1, 127, 1, maxY));
 
     Serial.println(velo);
     SMP.velocity = velo;
@@ -1475,7 +1563,7 @@ void setup(void) {
 
 
   mixer0.gain(0, GAIN2);
-  mixer0.gain(1, GAIN2);
+  mixer0.gain(1, 0.2);
 
   mixer1.gain(0, GAIN4);
   mixer1.gain(1, GAIN4);
@@ -1487,22 +1575,22 @@ void setup(void) {
   mixer2.gain(2, GAIN4);
   mixer2.gain(3, GAIN4);
 
-  synthmixer1.gain(0, GAIN3);
-  synthmixer1.gain(1, GAIN3);
-  synthmixer1.gain(3, GAIN3);
+  synthmixer11.gain(0, GAIN3);
+  synthmixer11.gain(1, GAIN3);
+  synthmixer11.gain(3, GAIN3);
 
-  synthmixer2.gain(0, GAIN3);
-  synthmixer2.gain(1, GAIN3);
-  synthmixer2.gain(3, GAIN3);
+  synthmixer12.gain(0, GAIN3);
+  synthmixer12.gain(1, GAIN3);
+  synthmixer12.gain(3, GAIN3);
 
 
-  synthmixer3.gain(0, GAIN3);
-  synthmixer3.gain(1, GAIN3);
-  synthmixer3.gain(3, GAIN3);
+  synthmixer13.gain(0, GAIN3);
+  synthmixer13.gain(1, GAIN3);
+  synthmixer13.gain(3, GAIN3);
 
-  synthmixer4.gain(0, GAIN3);
-  synthmixer4.gain(1, GAIN3);
-  synthmixer4.gain(3, GAIN3);
+  synthmixer14.gain(0, GAIN3);
+  synthmixer14.gain(1, GAIN3);
+  synthmixer14.gain(3, GAIN3);
 
 
   mixersynth_end.gain(0, GAIN4);
@@ -1516,7 +1604,6 @@ void setup(void) {
   mixer_end.gain(2, GAIN3);
 
 
-
   mixerPlay.gain(0, GAIN3);
   mixerPlay.gain(1, GAIN3);
   mixerPlay.gain(2, GAIN3);
@@ -1525,11 +1612,9 @@ void setup(void) {
 
   // Initialize the array with nullptrs
 
+
   synths[11][0] = &waveform11_1;
   synths[11][1] = &waveform11_2;
-
-  synths[12][0] = &waveform12_1;
-  synths[12][1] = &waveform12_2;
 
   synths[13][0] = &waveform13_1;
   synths[13][1] = &waveform13_2;
@@ -1539,11 +1624,9 @@ void setup(void) {
 
   short waveformType[15][2] = { 0 };  // zero-initialize unused elements
   // Define your actual waveforms at relevant indices
-  waveformType[11][0] = WAVEFORM_SAWTOOTH;
-  waveformType[11][1] = WAVEFORM_SQUARE;
-
-  waveformType[12][0] = WAVEFORM_SINE;
-  waveformType[12][1] = WAVEFORM_TRIANGLE;
+  
+  waveformType[11][0] = WAVEFORM_PULSE;
+  waveformType[11][1] = WAVEFORM_SAWTOOTH;
 
   waveformType[13][0] = WAVEFORM_PULSE;
   waveformType[13][1] = WAVEFORM_SAWTOOTH;
@@ -1552,12 +1635,10 @@ void setup(void) {
   waveformType[14][1] = WAVEFORM_SAWTOOTH;
 
   float amplitude[15][2] = { 0 };
-  // Set amplitude values similarly
-  amplitude[11][0] = 0.3;
-  amplitude[11][1] = 0.5;
 
-  amplitude[12][0] = 0.4;
-  amplitude[12][1] = 0.4;
+  amplitude[11][0] = 0.3;
+  amplitude[11][1] = 0.3;
+  // Set amplitude values similarly
 
   amplitude[13][0] = 0.3;
   amplitude[13][1] = 0.3;
@@ -1567,10 +1648,8 @@ void setup(void) {
 
 
 
-
-
   // Initialize your waveforms in a loop safely:
-  for (int pairIndex = 11; pairIndex <= 13; pairIndex++) {
+  for (int pairIndex = 11; pairIndex <= 14; pairIndex++) {
     for (int synthIndex = 0; synthIndex < 2; synthIndex++) {
       if (synths[pairIndex][synthIndex] != nullptr) {
         synths[pairIndex][synthIndex]->begin(waveformType[pairIndex][synthIndex]);
@@ -1582,7 +1661,7 @@ void setup(void) {
 
 
   // set filters and envelopes for all sounds
-  for (unsigned int i = 1; i < 9; i++) {
+  for (unsigned int i = 1; i <9; i++) {
     filters[i]->octaveControl(6.0);
     filters[i]->resonance(0.7);
     filters[i]->frequency(8000);
@@ -1593,9 +1672,6 @@ void setup(void) {
     Serial.println(i);
     voices[i]->enableInterpolation(true);
   }
-
-
-
 
 
 
@@ -1612,7 +1688,7 @@ void setup(void) {
   sgtl5000_1.enable();
   sgtl5000_1.volume(0.1);
   sgtl5000_1.volume(0.4);
-  sgtl5000_1.volume(1.0);
+  sgtl5000_1.volume(0.7);
 
   //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
   //sgtl5000_1.audioPostProcessorEnable();
@@ -1649,11 +1725,11 @@ void setup(void) {
   
   setDrumDefaults(true);
   testDrums();
-  bass_synth(0,0,0); 
+  bass_synth(0); 
  
   //chiptune_synth(0,0,0); 
  for (int i = 0; i < 3; i++) {
-        Sdc1[i].amplitude(1.0);
+       Sdc1[i].amplitude(1.0);
     }
 }
 
@@ -1795,16 +1871,11 @@ void checkTouchInputs() {
     // Define specialMode if needed
   } else {
     // Handle individual touch events
-
     // Check for a rising edge on SWITCH_1 (LOW to HIGH transition)
     if (touchState[0] && !lastTouchState[0]) {
       lastTouchState[2] = false;
       if (currentMode == &draw) {
-
-        //SMP.currentChannel = SMP.currentChannel;
         animateSingle();
-
-
       } else {
         switchMode(&draw);
         SMP.singleMode = false;
@@ -1902,19 +1973,25 @@ void loop() {
 
 
   if (previewIsPlaying) {
+
+    if (fadingIn && fadeTimer > 80) {
+      mixer0.gain(1, 0.25);  // Instantly go volume
+    fadingIn = false;
+  }
+
     if (msecs > 5) {
       if (playRaw0.isPlaying() && peakIndex < maxPeaks) {
         if (peak1.available()) {
           msecs = 0;
           // Store the peak value
           peakValues[peakIndex] = peak1.read();
-          Serial.println(peakValues[peakIndex]);
           peakIndex++;
         }
       }
     }
 
     if (!playRaw0.isPlaying()) {
+      playRaw0.stop();
       previewIsPlaying = false;  // Playback finished
     }
   }
@@ -1990,7 +2067,7 @@ void loop() {
   }
 
 
-  for (int ch = 11; ch <= 14; ch++) {
+  for (int ch = 13; ch <= 14; ch++) {
     int noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
     if (noteOnTriggered[ch] && !persistentNoteOn[ch] && (millis() - startTime[ch] >= noteLen)) {
@@ -2179,7 +2256,7 @@ void pause() {
   updateLastPage();
   deleteActiveCopy();
   autoSave();
-  envelope0.noteOff();
+  //envelope0.noteOff();
   //allOff();
   Encoder[2].writeRGBCode(0x005500);
   beat = 1;
@@ -2191,6 +2268,7 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   float frequency = fullFrequencies[b];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
   synths[ch][0]->frequency(frequency);
+  
   float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
   float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
   // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
@@ -2225,6 +2303,9 @@ void playNote() {
 
         MidiSendNoteOn(b, ch, vel);
 
+
+        
+              
         if (ch < 9) {
 
           if (SMP.param_settings[ch][TYPE] == 0) {
@@ -2240,21 +2321,20 @@ void playNote() {
             if (ch == 2) SN_drum(tone+notepitch, dec, pit, typ);
             if (ch == 3) HH_drum(tone+notepitch, dec, pit, typ);
 
-            if (ch == 4) {
-             
-              playSound(12 * octave[0] + transpose + b,0); 
-            }  
-
-
-
-          } else {
+          } else { 
             _samplers[ch].noteEvent(12 * SampleRate[ch] + b - (ch + 1), vel, true, false);
           }
-        }
+        } else if (ch == 11) { 
+          
+           playSound(12 * octave[0] + transpose + b,0);
 
-        if (ch >= 11) {
-          playSynth(ch, b, vel, false);
-        }
+          
+          } else if (ch >=13){
+            playSynth(ch, b, vel, false);
+            
+          }
+
+        
       }
     }
 
@@ -2302,7 +2382,7 @@ void unpaint() {
   unsigned int y = SMP.y;
   unsigned int x = (SMP.edit - 1) * maxX + SMP.x;
 
-  if ((y > 1 && y <= 15)) {
+  if ((y > 1 && y < 16)) {
     if (!SMP.singleMode) {
       Serial.println("deleting voice:" + String(x));
       note[x][y].channel = 0;
@@ -2328,7 +2408,7 @@ void paint() {
   unsigned int y = SMP.y;
 
   if (!SMP.singleMode) {
-    if ((y > 1 && y <= 9) || (y >= 11 && y <= 15)) {
+    if ((y > 1 && y <= 9) || (y == 12) || (y>13 && y <= 15)) {
       if (note[x][y].channel == 0) {
         note[x][y].channel = (y - 1);
       }
@@ -2336,7 +2416,9 @@ void paint() {
     } else if (y == 16) toggleCopyPaste();  //copypaste if top above
 
   } else {
-    note[x][y].channel = SMP.currentChannel;
+    if ((y > 1 && y <= 15)) {
+      note[x][y].channel = SMP.currentChannel;
+    }
   }
 
   if (note[x][y].channel > maxY - 2) {
@@ -2353,7 +2435,7 @@ void paint() {
       yield();
     }
 
-    if (note[x][y].channel >= 11) {
+    if (note[x][y].channel >= 13) {
 
       int ch = note[x][y].channel;
       float frequency = pianoFrequencies[y];  // y-Wert ist 1-basiert, Array ist 0-basiert
