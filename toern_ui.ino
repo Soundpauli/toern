@@ -62,8 +62,11 @@ void drawPlayButton() {
     }
   }
 }
-
 void drawNoSD() {
+  playSdWav1.stop();
+  if (drawNoSD_hasRun) return;  // Prevent running again
+  
+
   bool noSDfound = false;
 
   while (!SD.begin(INT_SD)) {
@@ -78,13 +81,11 @@ void drawNoSD() {
 
   if (noSDfound && SD.begin(INT_SD)) {
     FastLEDclear();
-
-
     EEPROMsetLastFile();
-    noSDfound = false;
   }
-}
 
+  drawNoSD_hasRun = true;  // Mark it as run
+}
 
 
 void drawBase() {

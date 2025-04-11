@@ -1,3 +1,5 @@
+
+
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 1
 #define SERIAL8_RX_BUFFER_SIZE 256  // Increase to 256 bytes
@@ -11,7 +13,6 @@
 #include "Arduino.h"
 #include <math.h>
 #include <Mapf.h>
-
 
 #define FLANGE_DELAY_LENGTH 2048
 
@@ -92,6 +93,7 @@ elapsedMicros recFlushTimer;
 short delayline[FLANGE_DELAY_LENGTH];
 
 bool MIDI_CLOCK_SEND = true;
+bool drawNoSD_hasRun = false;
 
 bool notePending = false;
 uint8_t pendingPitch = 0;
@@ -109,9 +111,23 @@ struct PendingNote {
 
 PendingNote pendingNote;
 
-float fadeGain = 0.0f;
-bool fadingIn = false;
-elapsedMillis fadeTimer;
+unsigned const int paramConfig[15][3] = {
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}},
+{{2},{3},{4}}
+};
 
 
 // ----- Intro Animation Timing (in ms) -----
@@ -140,6 +156,8 @@ bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
 float rateFactor = 44117.0 / 44100.0;
 
+const char* SynthVoices[11] = {nullptr, "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS"};
+const char* channelType[5] = {nullptr, "DRUM", "SMP", "SYNTH", "X"};
 
 const char *menuText[6] = { "DAT", "KIT", "WAV", "REC", "BPM", "MIDI" };
 
@@ -149,6 +167,7 @@ bool firstcheck = false;
 bool nofile = false;
 char *currentFilter = "TYPE";
 char *currentDrum = "TONE";
+char *currentSynth = "BASS";
 unsigned int fxType = 0;
 unsigned int drum_type = 0;
 
@@ -389,6 +408,8 @@ struct Device {
   float drum_settings[maxY][4];
   unsigned int selectedFilter;
   unsigned int selectedDrum;
+  float synth_settings[maxY][4];
+  unsigned int selectedSynth;
   unsigned int mute[maxY];
   unsigned int channelVol[maxY];
 };
@@ -423,6 +444,8 @@ float octave[2];
   {},                                                                                  //drum_settings
   0,                                                                                   //selectedFilter
   0,                                                                                   //selectedDrum
+  {},                                                                                  //synth_settings
+  0,                                                                                   //selectedSynth
   {},                                                                                  //mute
   { 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16 }                   //channelVol
 };
@@ -600,6 +623,13 @@ enum DrumTypes { DRUMTONE,
 };  //Define drum types
 
 
+enum SynthTypes { INSTRUMENT,
+                  BASS,
+                  WOW,
+                  PAD
+};  //Define Synth types
+
+
 enum MidiSetTypes {
   MIDI_IN_BOOL,
   MIDI_OUT_BOOL,
@@ -614,6 +644,8 @@ FilterType defaultFilter[maxFiles] = { LOWPASS };
 char *activeParameterType[8] = { "TYPE", "WAV", "DLAY", "ATTC", "HOLD", "DCAY", "SUST", "RLSE" };
 char *activeFilterType[9] = { "", "LOW", "HIGH", "FREQ", "RVRB", "BITC", "FLNG", "DTNE", "OCTV" };
 char *activeDrumType[4] = { "TONE", "DCAY", "FREQ", "TYPE" };
+
+char *activeSynthVoice[4] = { "SND", "PAR1", "PAR2", "PAR3"};
 char *activeMidiSetType[6] = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
 
 
@@ -757,6 +789,8 @@ void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
 
 
 
+
+
 void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
   // Only process the button if it's the last pressed encoder
   unsigned long currentTime = millis();
@@ -828,6 +862,8 @@ void testDrums() {
 
 
 void switchMode(Mode *newMode) {
+
+  drawNoSD_hasRun = false; 
 
   unpaintMode = false;
   SMP.singleMode = false;
@@ -1058,7 +1094,7 @@ void stopRecord(int fnr, int snr) {
     isRecording = false;
 
     Serial.println("Start Playing");
-    playRaw0.play(OUTPUTf);
+    playSdWav1.play(OUTPUTf);
     
   }
 }
@@ -1562,8 +1598,6 @@ void setup(void) {
   _samplers[8].addVoice(sound8, mixer2, 3, envelope8);
 
 
-  mixer0.gain(0, GAIN2);
-  mixer0.gain(1, 0.2);
 
   mixer1.gain(0, GAIN4);
   mixer1.gain(1, GAIN4);
@@ -1606,7 +1640,8 @@ void setup(void) {
 
   mixerPlay.gain(0, GAIN3);
   mixerPlay.gain(1, GAIN3);
-  mixerPlay.gain(2, GAIN3);
+  mixerPlay.gain(2, GAIN2);
+  
 
 
 
@@ -1731,6 +1766,8 @@ void setup(void) {
  for (int i = 0; i < 3; i++) {
        Sdc1[i].amplitude(1.0);
     }
+
+    playSdWav1.play("samples/0/_3.wav");
 }
 
 void setEncoderColor(int i) {
@@ -1974,13 +2011,8 @@ void loop() {
 
   if (previewIsPlaying) {
 
-    if (fadingIn && fadeTimer > 80) {
-      mixer0.gain(1, 0.25);  // Instantly go volume
-    fadingIn = false;
-  }
-
     if (msecs > 5) {
-      if (playRaw0.isPlaying() && peakIndex < maxPeaks) {
+      if (playSdWav1.isPlaying() && peakIndex < maxPeaks) {
         if (peak1.available()) {
           msecs = 0;
           // Store the peak value
@@ -1990,8 +2022,8 @@ void loop() {
       }
     }
 
-    if (!playRaw0.isPlaying()) {
-      playRaw0.stop();
+    if (!playSdWav1.isPlaying()) {
+      playSdWav1.stop();
       previewIsPlaying = false;  // Playback finished
     }
   }
@@ -2256,7 +2288,7 @@ void pause() {
   updateLastPage();
   deleteActiveCopy();
   autoSave();
-  //envelope0.noteOff();
+  envelope0.noteOff();
   //allOff();
   Encoder[2].writeRGBCode(0x005500);
   beat = 1;
@@ -2629,7 +2661,7 @@ void showMenu() {
 
 
 void showLoadSave() {
-
+  
   drawNoSD();
   FastLEDclear();
 
@@ -2731,7 +2763,7 @@ void updateLastPage() {
 }
 
 void loadWav() {
-  playRaw0.stop();
+  playSdWav1.stop();
   Serial.println("Loading Wave :" + String(SMP.wav[SMP.currentChannel].fileID));
   loadSample(0, SMP.wav[SMP.currentChannel].fileID);
   switchMode(&singleMode);

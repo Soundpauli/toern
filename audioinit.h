@@ -150,12 +150,15 @@
   AudioMixer4              mixer_end;      //xy=3372.9048080444336,1340.5714645385742
   AudioAmplifier           amp0;           //xy=3480.6350021362305,1086.4167108535767
   AudioEffectEnvelope      envelope0;      //xy=3485.0832443237305,1000.3333339691162
-  AudioPlaySdRaw           playRaw0;       //xy=3485.3334884643555,1042.7500212192535
+
+  AudioPlaySdWav           playSdWav1;     //xy=199,194
+
   AudioMixer4              mixerPlay;      //xy=3587.8886184692383,1342.2221393585205
   AudioMixer4              mixer0;         //xy=3712.1389083862305,1040.0000228881836
   AudioInputI2S            is23;           //xy=3743.3332443237305,1366.3333358764648
   AudioRecordQueue         queue1;         //xy=3750.8332901000977,1458.3333129882812
   AudioOutputI2S           i2s1;           //xy=3754.8889083862305,1254.4445419311523
+
 
   AudioConnection          patchCord1(SNchaosMix, 0, SNtone, 0);
   AudioConnection          patchCord2(SNchaosMix, 0, SNtone2, 0);
@@ -349,12 +352,15 @@ AudioConnection          patchCord17b(waveform11_1, 0, mixer_waveform11, 0);
   AudioConnection          patchCord191(mixer2, 0, mixer_end, 1);
   AudioConnection          patchCord192(mixer_end, 0, mixerPlay, 0);
   AudioConnection          patchCord193(mixer_end, 0, mixerPlay, 1);
-  AudioConnection          patchCord194(amp0, 0, mixer0, 2);
+  AudioConnection          patchCord194(mixer0, 0, mixerPlay, 2);
+
   AudioConnection          patchCord195(envelope0, 0, mixer0, 0);
-  AudioConnection          patchCord196(playRaw0, 0, mixer0, 1);
-  AudioConnection          patchCord197(mixerPlay, 0, i2s1, 0);
-  AudioConnection          patchCord198(mixerPlay, 0, i2s1, 1);
-  AudioConnection          patchCord199(mixer0, 0, mixerPlay, 2);
+  AudioConnection          patchCord196(playSdWav1, 0, mixer0, 1);
+  //AudioConnection          patchCord1967(envelope0, 0, mixer0, 2);
+
+  AudioConnection          patchCord198(mixerPlay, 0, i2s1, 0);
+  AudioConnection          patchCord199(mixerPlay, 0, i2s1, 1);
+  
   AudioControlSGTL5000     sgtl5000_1;     //xy=3755.3332443237305,1413.3333358764648
   // GUItool: end automatically generated code
 
@@ -433,7 +439,7 @@ AudioConnection          patchCord17b(waveform11_1, 0, mixer_waveform11, 0);
 // --- EXTMEM AudioPlayArrayResmp doesnt exist in GUItool ---//
 
 
-AudioConnection          patchCord2121(playRaw0, 0, peak1, 0);
+AudioConnection          patchCord2121(playSdWav1, 0, peak1, 0);
 AudioConnection          patchCord2122(is23, 0, queue1, 0);
 
  AudioConnection snd0(sound0, envelope0);

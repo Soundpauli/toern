@@ -8,7 +8,13 @@ void drawDrums(char *txt, int activeDrum) {
   drawNumber(DrumValue, CRGB(100, 0, 100), 4);
 }
 
-
+void drawSynths(char *txt, int activeSynth) {
+  FastLED.clear();
+  // Amplitude definitions:
+  drawText(txt, 1, 12, filter_col[activeSynth]);
+  float SynthValue = SMP.synth_settings[SMP.currentChannel][SMP.selectedSynth];  //mapf(SMP.drum_settings[SMP.currentChannel][SMP.selectedDrum], 0, maxfilterResolution, 0, 10);
+  drawNumber(SynthValue, CRGB(100, 0, 100), 4);
+}
 
 
 void drawFilters(char *txt, int activeFilter) {
@@ -20,7 +26,6 @@ void drawFilters(char *txt, int activeFilter) {
   float FilterValue = mapf(SMP.filter_settings[SMP.currentChannel][SMP.selectedFilter], 0, maxfilterResolution, 0, 10);
 
   if (activeFilter == defaultFilter[SMP.currentChannel]) {
-
     for (int x = 1; x < 9; x++) {
       light(x, 10, CRGB(250, 200, 0));
     }
@@ -87,15 +92,32 @@ void drawADSR(char *txt, int activeParameter) {
       light(x, y, CRGB(0, 0, 0));
     }
   }
-
   drawNumber(paramValue, CRGB(100, 100, 100), 6);
+}
+
+
+void drawInstrument(char *txt, int activeSynth) {
+  FastLED.clear();
+  
+  const int maxIndex =  10;
+  if (SMP.synth_settings[SMP.currentChannel][INSTRUMENT] > maxIndex) {
+    SMP.synth_settings[SMP.currentChannel][INSTRUMENT] = maxIndex;
+    currentMode->pos[3] = SMP.synth_settings[SMP.currentChannel][INSTRUMENT];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+  }
+  int instrumentValue = mapf(SMP.synth_settings[SMP.currentChannel][INSTRUMENT], 0, maxIndex, 1, maxIndex + 1);
+  drawText(txt, 1, 12, filter_col[activeSynth]);
+  
+  drawText(SynthVoices[instrumentValue], 1, 6, filter_col[instrumentValue]);
+  drawNumber(instrumentValue, CRGB(100, 100, 100), 1);
+  if (SMP.currentChannel == 11) switchSynthVoice(instrumentValue, 0);
 }
 
 
 void drawType(char *txt, int activeParameter) {
   FastLED.clear();
-  
-  const int maxIndex = 11;
+
+  const int maxIndex = 3;
   if (SMP.param_settings[SMP.currentChannel][TYPE] > maxIndex) {
     SMP.param_settings[SMP.currentChannel][TYPE] = maxIndex;
     currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][TYPE];
@@ -103,24 +125,39 @@ void drawType(char *txt, int activeParameter) {
   }
   int typeValue = mapf(SMP.param_settings[SMP.currentChannel][TYPE], 0, maxIndex, 1, maxIndex + 1);
   drawText(txt, 1, 12, filter_col[activeParameter]);
-int ch=0; // ch0
-  if (typeValue == 1) {drawText("DRUM", 1, 6, filter_col[typeValue]); }
-  if (typeValue == 2) {drawText("SMP", 1, 6, filter_col[typeValue]); }
-  if (typeValue == 3) {drawText("KEY", 1, 6, filter_col[typeValue]); keys_synth(ch);}
-  if (typeValue == 4) {drawText("BASS", 1, 6, filter_col[typeValue]);bass_synth(ch);}
-  if (typeValue == 5) {drawText("CPT", 1, 6, filter_col[typeValue]); chiptune_synth(ch);}
-  if (typeValue == 6) {drawText("PAD", 1, 6, filter_col[typeValue]); pad_synth(ch);}
-  if (typeValue == 7) {drawText("WOW", 1, 6, filter_col[typeValue]); wow_synth(ch);}
-  if (typeValue == 8) {drawText("ORG", 1, 6, filter_col[typeValue]); organ_synth(ch);}
-  if (typeValue == 9) {drawText("FLT", 1, 6, filter_col[typeValue]); flute_synth(ch);}
-  if (typeValue == 10) {drawText("LEAD", 1, 6, filter_col[typeValue]); lead_synth(ch);}
-  if (typeValue == 11) {drawText("ARP", 1, 6, filter_col[typeValue]); arp_synth(ch);}
-  if (typeValue == 12) {drawText("BRSS", 1, 6, filter_col[typeValue]); brass_synth(ch);}
-
-
+  
+  drawText(channelType[typeValue], 1, 6, filter_col[typeValue]);
   drawNumber(typeValue, CRGB(100, 100, 100), 1);
 }
 
+
+void switchSynthVoice(int typeValue, int ch) {
+    switch(typeValue) {
+        case 1: bass_synth(ch);
+            break;
+        case 2: keys_synth(ch);
+            break;
+        case 3: chiptune_synth(ch);
+            break;
+        case 4: pad_synth(ch);
+            break;
+        case 5: wow_synth(ch);
+            break;
+        case 6: organ_synth(ch);
+            break;
+        case 7: flute_synth(ch);
+            break;
+        case 8: lead_synth(ch);
+            break;
+        case 9: arp_synth(ch);
+            break;
+        case 10: brass_synth(ch);
+            break;
+        default:
+            // Optionally, handle any values of typeValue that are not supported.
+            break;
+    }
+}
 
 void drawWaveforms(const char *txt, int activeParameter) {
   FastLED.clear();
@@ -261,16 +298,18 @@ void setFilters() {
     if (SMP.selectedParameter > 1) drawADSR(currentFilter, SMP.selectedParameter);
   } else if (fxType == 1) {
     drawFilters(currentFilter, SMP.selectedFilter);
-  } else if (fxType == 2) {
-    drawDrums(currentDrum, SMP.selectedDrum);
+  } else if (fxType == 2) { drawDrums(currentDrum, SMP.selectedDrum);
+  } else if (fxType ==4){
+    if (SMP.selectedSynth == 0) drawInstrument(currentSynth, SMP.selectedSynth);
+    if (SMP.selectedSynth > 0) drawSynths(currentSynth, SMP.selectedSynth);
   }
 
 
+if (SMP.currentChannel<=3){
   // Handle Encoder 1: Filter Selection
   if (currentMode->pos[1] != SMP.selectedDrum) {
     FastLED.clear();
     SMP.selectedDrum = currentMode->pos[1];
-
     currentDrum = activeDrumType[SMP.selectedDrum];
     fxType = 2;
     selectedFX = currentMode->pos[1];
@@ -281,6 +320,24 @@ void setFilters() {
     Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
     drawDrums(currentDrum, SMP.selectedDrum);
   }
+}
+
+if (SMP.currentChannel==11){
+  // Handle Encoder 1: Filter Selection
+  if (currentMode->pos[1] != SMP.selectedSynth) {
+    FastLED.clear();
+    SMP.selectedSynth = currentMode->pos[1];
+    currentSynth = activeSynthVoice[SMP.selectedSynth];
+    fxType = 4;
+    selectedFX = currentMode->pos[1];
+    Serial.print("Synth: ");
+    Serial.println(currentSynth);
+    Serial.println(fxType);
+    currentMode->pos[3] = SMP.synth_settings[SMP.currentChannel][SMP.selectedSynth];
+    Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+    drawSynths(currentSynth, SMP.selectedSynth);
+  }
+}
 
   // Handle Encoder 2: Filter Selection
   if (currentMode->pos[2] != SMP.selectedFilter) {
@@ -321,6 +378,12 @@ void setFilters() {
     updateDrumValue(selectedFX, SMP.currentChannel, mappedValue);
   }
 
+  // Process Synth adjustments
+  if (fxType == 4 && currentMode->pos[3] != SMP.synth_settings[SMP.currentChannel][selectedFX]) {
+    float mappedValue = processSynthAdjustment(selectedFX, SMP.currentChannel, 3);
+    updateSynthValue(selectedFX, SMP.currentChannel, mappedValue);
+  }
+
   // Process filter adjustments
   if (fxType == 1 && currentMode->pos[3] != SMP.filter_settings[SMP.currentChannel][selectedFX]) {
     float mappedValue = processFilterAdjustment(selectedFX, SMP.currentChannel, 3);
@@ -333,6 +396,29 @@ void setFilters() {
     updateParameterValue(selectedFX, SMP.currentChannel, mappedValue);
   }
 }
+
+
+// Helper function to process filter adjustments
+float processSynthAdjustment(SynthTypes synthType, int index, int encoder) {
+  SMP.synth_settings[index][synthType] = currentMode->pos[encoder];
+  Serial.print(":::::");
+  Serial.println(SMP.drum_settings[index][synthType]);
+  int mappedValue;
+  
+    const int maxIndex = 10;
+    if (SMP.synth_settings[SMP.currentChannel][synthType] > maxIndex) {
+      SMP.synth_settings[SMP.currentChannel][synthType] = maxIndex;
+      currentMode->pos[3] = SMP.synth_settings[SMP.currentChannel][synthType];
+      Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+    }
+    mappedValue = mapf(SMP.synth_settings[SMP.currentChannel][synthType], 0, maxIndex, 1, maxIndex + 1); 
+  
+  Serial.print(synthType);
+  Serial.print(" #####---->");
+  Serial.println(mappedValue);
+  return mappedValue;
+}
+
 
 
 
@@ -383,13 +469,13 @@ float processParameterAdjustment(int paramType, int index) {
   switch (paramType) {
     case TYPE:
       {
-        int maxIndex = 11;
+        int maxIndex =  3;
         if (SMP.param_settings[SMP.currentChannel][TYPE] > maxIndex) {
           SMP.param_settings[SMP.currentChannel][TYPE] = maxIndex;
           currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][TYPE];
           Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
         }
-        mappedValue = mapf(SMP.param_settings[SMP.currentChannel][TYPE], 0, maxIndex, 1, maxIndex + 1);  //mappedValue = mapf(SMP.param_settings[index][paramType], 1, maxfilterResolution, 1, 3);
+        mappedValue = mapf(SMP.param_settings[SMP.currentChannel][TYPE], 0, maxIndex, 1, maxIndex + 1);  
         break;
       }
 
@@ -401,7 +487,7 @@ float processParameterAdjustment(int paramType, int index) {
           currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][WAVEFORM];
           Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
         }
-        mappedValue = mapf(SMP.param_settings[SMP.currentChannel][WAVEFORM], 0, maxIndex, 1, maxIndex + 1);  // mappedValue = mapf(SMP.param_settings[index][paramf, 0, maxfilterResolution, 1, 4);
+        mappedValue = mapf(SMP.param_settings[SMP.currentChannel][WAVEFORM], 0, maxIndex, 1, maxIndex + 1);  
         handleWaveformChange(index, (unsigned int)mappedValue);
         break;
       }
@@ -469,16 +555,32 @@ void updateDrumValue(DrumTypes drumType, int index, float value) {
   float typ = mapf(SMP.drum_settings[SMP.currentChannel][DRUMTYPE], 0, 64, 1, 3);
 
 
-
-
-
-  //if (SMP.currentChannel == 1) KD_drum(tone,dec,pit,typ);
-  //if (SMP.currentChannel == 2) SN_drum(tone,dec,pit,typ);
-  //if (SMP.currentChannel == 3) HH_drum(tone,dec,pit,typ);
-
-  // Call the new update function to ensure changes are applied
-  updateFiltersAndParameters();
 }
+
+
+
+
+// Update filter values
+void updateSynthValue(SynthTypes synthType, int index, float value) {
+  // Common function to update all filter types
+  Serial.print(synthType);
+  Serial.print(" S==>: ");
+  Serial.println(value);
+  switch (synthType) {
+    case INSTRUMENT:
+      break;
+
+    case BASS:
+      break;
+
+    case WOW:
+      break;
+
+    default: return;
+  }  
+}
+
+
 
 
 
@@ -533,22 +635,7 @@ void updateFilterValue(FilterType filterType, int index, float value) {
         }
       }
       break;
-      /*
 
-      // Alternative mapping for manual control
-float offset = mapf(value, 0.0, 1.0, 30, 300);
-float depth = mapf(value, 0.0, 1.0, 60, 150);
-float rate = mapf(value, 0.0, 1.0, 0.08, 0.6);
-
-// Add some automatic modulation
-float dynamicOffset = offset * (1.0 + 0.1 * sin(millis() * 0.0005 * rate));
-float dynamicRate = rate * (1.0 + 0.05 * sin(millis() * 0.0003));
-
-flangers[index]->voices(
-  (int)dynamicOffset,
-  (int)depth,
-  dynamicRate
-);*/
   case FLANGER:
   if (flangers[index] != nullptr) {
     if (value <= 0.01) {  // Bypass mode
@@ -618,8 +705,7 @@ flangers[index]->voices(
       break;
   }
 
-  // Call the new update function to ensure changes are applied
-  updateFiltersAndParameters();
+  
 }
 
 // Update parameter values
@@ -628,29 +714,26 @@ void updateParameterValue(int paramType, int index, float value) {
   Serial.println(index);
   switch (paramType) {
     case DELAY:
-      envelopes[index]->delay(value);
+        envelopes[index]->delay(value);
       break;
     case ATTACK:
-      envelopes[index]->attack(value);
+        envelopes[index]->attack(value);
       break;
     case HOLD:
-      envelopes[index]->hold(value);
+        envelopes[index]->hold(value);
       break;
     case DECAY:
-      envelopes[index]->decay(value);
+        envelopes[index]->decay(value);
       break;
     case SUSTAIN:
-      envelopes[index]->sustain(value);
+        envelopes[index]->sustain(value);
       break;
     case RELEASE:
-      envelopes[index]->release(value);
+       envelopes[index]->release(value);
       break;
-
-
 
     case TYPE:
       {
-
         int synthType = value;
         Serial.println(synthType);
 
@@ -670,10 +753,7 @@ void updateParameterValue(int paramType, int index, float value) {
               Serial.println(index);
               waveformmixers[index]->gain(0, 1);  // Enable SAMPLE channel
               waveformmixers[index]->gain(1, 0);  // disable drum channel
-
-              break;
-
-
+            break;
 
             default: return;
           }
@@ -683,8 +763,7 @@ void updateParameterValue(int paramType, int index, float value) {
       }
   }
 
-  // Call the new update function to ensure changes are applied
-  updateFiltersAndParameters();
+  
 }
 
 // Handle waveform changes
@@ -707,15 +786,9 @@ void handleWaveformChange(int index, unsigned int waveformType) {
         break;
       default: return;
     }
-    // Call the new update function to ensure changes are applied
-  }
-  updateFiltersAndParameters();
-}
 
-// New function to ensure updates are applied
-void updateFiltersAndParameters() {
-  // Add code here to ensure changes are properly applied
-  // This might include refreshing displays, updating audio processing chain, etc.
+  }
+  
 }
 
 void setFilterDefaults(int channel) {
@@ -775,7 +848,7 @@ void setFilterDefaults(int channel) {
     flangers[channel]->begin(delayline, FLANGE_DELAY_LENGTH, s_idx, s_depth, s_freq);
   }
 
-  updateFiltersAndParameters();
+  
 }
 
 void setDahdsrDefaults(bool allChannels) {

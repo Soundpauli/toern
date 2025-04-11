@@ -1,5 +1,6 @@
 
 void savePatternAsMIDI(bool autosave) {
+  
   yield();
   Serial.println("Saving MIDI file");
   drawNoSD();
@@ -115,6 +116,7 @@ void savePatternAsMIDI(bool autosave) {
 
 
 void savePattern(bool autosave) {
+  
   //yield();
   Serial.println("Saving in slot #" + String(SMP.file));
   drawNoSD();
@@ -163,7 +165,10 @@ void savePattern(bool autosave) {
 
 
 void saveSamplePack(unsigned int pack) {
+  yield();
   Serial.println("Saving SamplePack in #" + String(pack));
+  drawNoSD();
+  
   FastLEDclear();
   char OUTPUTdir[50];
   sprintf(OUTPUTdir, "%d/", pack);
@@ -209,6 +214,7 @@ void saveSamplePack(unsigned int pack) {
 
 
 void loadPattern(bool autoload) {
+  
   yield();
   Serial.println("Loading slot #" + String(SMP.file));
   drawNoSD();
@@ -329,7 +335,7 @@ void loadPattern(bool autoload) {
   }
 
   updateLastPage();
-  loadSMPSettings();
+  //loadSMPSettings();
   
   if (!autoload) {
     delay(500);

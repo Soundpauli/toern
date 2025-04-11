@@ -1,6 +1,6 @@
 void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
   _samplers[0].removeAllSamples();
-  //envelope0.noteOff();
+  envelope0.noteOff();
   char OUTPUTf[50];
   sprintf(OUTPUTf, "samples/%d/_%d.wav", folder, sampleID);
   Serial.print("PLAYING:::");
@@ -30,19 +30,19 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     // Use SMP.seek and SMP.seekEnd as percentages (0-100)
     // (Each percent corresponds to 1/100th of the full sample length.)
     int startOffset = (SMP.smplen * SMP.seek) / 100;
-    int endOffset   = (SMP.smplen * SMP.seekEnd) / 100;
+    int endOffset = (SMP.smplen * SMP.seekEnd) / 100;
 
     if (setMaxSampleLength == true) {
       // If you want to force full sample preview:
       endOffset = SMP.smplen;
-      SMP.seekEnd = 100; // 100%
+      SMP.seekEnd = 100;  // 100%
       currentMode->pos[2] = SMP.seekEnd;
       Encoder[2].writeCounter((int32_t)SMP.seekEnd);
     }
 
     // Convert these “time units” into byte offsets (44-byte header)
     int startOffsetBytes = startOffset * PrevSampleRate * 2;
-    int endOffsetBytes   = endOffset   * PrevSampleRate * 2;
+    int endOffsetBytes = endOffset * PrevSampleRate * 2;
     endOffsetBytes = min(endOffsetBytes, fileSize);
 
     previewSample.seek(44 + startOffsetBytes);
@@ -72,7 +72,7 @@ void showWave() {
   int fnr = getFolderNumber(snr);
   char OUTPUTf[50];
   sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-
+/*
   if (firstcheck) {
     Serial.print("checking: ");
     firstcheck = false;
@@ -86,6 +86,9 @@ void showWave() {
       Serial.println(" >exists!");
     }
   }
+  */
+  firstcheck = false;
+  nofile=false;
 
   FastLEDclear();
   showIcons("helper_select", col[SMP.currentChannel]);
@@ -103,8 +106,8 @@ void showWave() {
 
   // --- UPDATE START POSITION (Encoder 0) ---
   if (sampleIsLoaded && (currentMode->pos[0] != SMP.seek)) {
-    //envelope0.noteOff();
-    playRaw0.stop();
+    envelope0.noteOff();
+    playSdWav1.stop();
     Serial.println("SEEK-hit");
     SMP.seek = currentMode->pos[0];  // should be between 0 and 100
     Serial.println(SMP.seek);
@@ -114,8 +117,8 @@ void showWave() {
 
   // --- FOLDER SELECTION (Encoder 1) ---
   if (currentMode->pos[1] != SMP.folder) {
-    //envelope0.noteOff();
-    playRaw0.stop();
+    envelope0.noteOff();
+    playSdWav1.stop();
     firstcheck = true;
     nofile = false;
     SMP.folder = currentMode->pos[1];
@@ -129,53 +132,33 @@ void showWave() {
   // --- UPDATE END POSITION (Encoder 2) ---
   if (sampleIsLoaded && (currentMode->pos[2] != SMP.seekEnd)) {
     previewIsPlaying = false;
-    //envelope0.noteOff();
 
-    playRaw0.stop();
+    playSdWav1.stop();
     Serial.println("SEEKEND-hit");
     SMP.seekEnd = currentMode->pos[2];  // value 0-100
     Serial.println("seekEnd updated to: " + String(SMP.seekEnd));
     _samplers[0].removeAllSamples();
-    //envelope0.noteOff();
+    envelope0.noteOff();
+
     previewSample(fnr, getFileNumber(snr), false, false);
   }
 
-// --- NEW SAMPLE SELECTION (Encoder 3) ---
-// Ensure encoder3's value is within 1-999. If not, reset it.
-if (currentMode->pos[3] < 1 || currentMode->pos[3] > 999) {
-    currentMode->pos[3] = snr;      // snr is already clamped to at least 1
-    Encoder[3].writeCounter((int32_t)snr);   // Update the encoder display/counter
-}
+  // --- NEW SAMPLE SELECTION (Encoder 3) ---
+  // Ensure encoder3's value is within 1-999. If not, reset it.
+  if (currentMode->pos[3] < 1 || currentMode->pos[3] > 999) {
+    currentMode->pos[3] = snr;              // snr is already clamped to at least 1
+    Encoder[3].writeCounter((int32_t)snr);  // Update the encoder display/counter
+  }
 
-if (currentMode->pos[3] != snr) {
-  //envelope0.noteOff();
+  if (currentMode->pos[3] != snr) {
+    envelope0.noteOff();
     previewIsPlaying = false;
- playRaw0.stop();
-     fadingIn = true;
-  fadeTimer = 0;
-  mixer0.gain(1, 0.0f);  // Silent at start
+    playSdWav1.stop();
 
-    /*
-    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-    File selectedFile = SD.open(OUTPUTf);
-    int PrevSampleRate;
-    selectedFile.seek(24);
-    for (uint8_t i = 24; i < 25; i++) {
-      int g = selectedFile.read();
-      if (g == 72) PrevSampleRate = 4;
-      else if (g == 68) PrevSampleRate = 3;
-      else if (g == 34) PrevSampleRate = 2;
-      else if (g == 17) PrevSampleRate = 1;
-      else if (g == 0) PrevSampleRate = 4;
-    }
-
-*/
-    
     // o1:
     //memset(sampled[0], 0, sizeof(sampled[0]));
+    //memset(sampled[0], 0, sizeof(sample_len[0]));
 
-    
-    memset(sampled[0], 0, sizeof(sample_len[0]));
     sampleIsLoaded = false;
     firstcheck = true;
     nofile = false;
@@ -185,8 +168,9 @@ if (currentMode->pos[3] != snr) {
     fnr = getFolderNumber(snr);
     FastLEDclear();
     drawNumber(snr, col_Folder[fnr], 12);
-    //Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
+    Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
+    
 
     // --- Reset seek positions when choosing a new sample ---
     currentMode->pos[0] = 0;
@@ -199,17 +183,19 @@ if (currentMode->pos[3] != snr) {
     // Calculate full sample length for display/conversion later
     //SMP.smplen = selectedFile.size() / (PrevSampleRate * 2);
     //envelope0.noteOff();
-   
+
     if (!previewIsPlaying && !sampleIsLoaded) {
-      playRaw0.play(OUTPUTf);
-     
-      
       previewIsPlaying = true;
+      if (playSdWav1.isPlaying()) {
+        playSdWav1.stop(); playSdWav1.play(OUTPUTf);} else{
+        playSdWav1.play(OUTPUTf);
+      }
+
       peakIndex = 0;
       memset(peakValues, 0, sizeof(peakValues));
       sampleIsLoaded = true;
     }
-}
+  }
 
   // Just to be safe, ensure SMP.seekEnd never exceeds 100
   if (SMP.seekEnd > 100) {
@@ -244,7 +230,7 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
     SMP.mute[sampleID] = false;
   }
 
-usedFiles[sampleID - 1] = String(OUTPUTf);
+  usedFiles[sampleID - 1] = String(OUTPUTf);
 
   File loadSample = SD.open(OUTPUTf);
   if (loadSample) {
@@ -261,7 +247,7 @@ usedFiles[sampleID - 1] = String(OUTPUTf);
 
     // Calculate sample length in milliseconds
     SMP.smplen = fileSize / (SampleRate[sampleID] * 2);
-    
+
     // Convert percentage positions to actual offsets
     unsigned int startOffset = (SMP.seek * SMP.smplen) / 100;
     unsigned int startOffsetBytes = startOffset * SampleRate[sampleID] * 2;
@@ -277,7 +263,7 @@ usedFiles[sampleID - 1] = String(OUTPUTf);
     loadSample.seek(44 + startOffsetBytes);
     unsigned int i = 0;
     //memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
-    memset((void*)sampled[0], 0, sizeof(sampled[0]));
+    memset((void *)sampled[0], 0, sizeof(sampled[0]));
 
     while (loadSample.available() && (i < (endOffsetBytes - startOffsetBytes))) {
       int b = loadSample.read();
@@ -292,7 +278,3 @@ usedFiles[sampleID - 1] = String(OUTPUTf);
     _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], (int)i, rateFactor);
   }
 }
-
-
-
-
