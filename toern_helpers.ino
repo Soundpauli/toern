@@ -50,6 +50,7 @@ int getPage(int x) {
 }
 
 void drawRandoms(){
+  
   // Determine current page boundaries.
   unsigned int start = ((SMP.edit - 1) * maxX) + 1;
   unsigned int end = start + maxX;
@@ -531,9 +532,14 @@ CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
       return CRGB::Black;
     }
   } else if (elapsed < totalAnimationTime) {
+    
     // PHASE 2: Explosion
     if (!particlesGenerated) {
+      //done once
+      playSdWav1.play("intro/008.wav");
       generateParticles();
+      initEncoders();
+      
     }
     float progress = (float)(elapsed - phase1Duration) / phase2Duration;  // 0..1
     const float maxDisp = 20.0;                                           // how far particles fly outward

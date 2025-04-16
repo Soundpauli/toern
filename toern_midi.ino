@@ -141,32 +141,21 @@ void handleStop() {
 }
 
 
-void handleNoteOn(int channel, uint8_t pitch, uint8_t velocity) {
+
+
+void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   // For persistent channels (11-14), use the actual MIDI channel
-  
+  if (ch < 1 || ch > 16) return;
+
   Serial.print("[midinote] ch:");
-  Serial.print(channel);
+  Serial.print(ch);
 
-  if (channel >= 11 && channel <= 14) {
-    pressedKeyCount[channel]++;  // Increment count for this channel
-    // Only trigger noteOn if this is the first key pressed on that channel
-    Serial.print(">>>> ++ ");
-    Serial.println(pressedKeyCount[channel]);
+  pressedKeyCount[ch]++;  // Increment count for this channel
+  if (pressedKeyCount[ch] == 1) {
+    persistentNoteOn[ch] = true;
+  }
 
-    if (pressedKeyCount[channel] == 1) {
-      // Adjust pitch as needed (here, subtract 60 as in your code)
-      playSynth(channel, pitch - 60, velocity, true);
-      persistentNoteOn[channel] = true;
-    }
-    // Optionally: update visuals here
-    return;
-  }else{
-  
-  // For other channels, use your existing logic:
-  unsigned int mychannel = SMP.currentChannel;
-  if (mychannel < 1 || mychannel > 16) return;
-
-  unsigned int livenote = (mychannel + 1) + pitch - 60;
+  unsigned int livenote = (ch + 1) + pitch - 60;
   if (livenote > 16) livenote -= 12;
   if (livenote < 1) livenote += 12;
 
@@ -177,30 +166,27 @@ void handleNoteOn(int channel, uint8_t pitch, uint8_t velocity) {
         pendingNote = {
           .pitch = pitch,
           .velocity = velocity,
-          .channel = mychannel,
+          .channel = ch,
           .livenote = livenote,
           .active = true
         };
       }
       // Always play the note immediately
       activeNotes[pitch] = true;
-      if (mychannel < 9) {
-        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
-      } if (mychannel>11) {
-        playSynth(mychannel, pitch - 60, velocity, true);
-      }
-    } else {
+      } 
+
       // Live mode: play note and show light
-      light(mapXtoPageOffset(SMP.x), livenote, CRGB(0, 0, 255));
-      FastLEDshow();
-      if (mychannel < 9) {
-        _samplers[mychannel].noteEvent(((SampleRate[mychannel] * 12) + pitch - 60), velocity, true, true);
-      } else if (mychannel >11) {
-        playSynth(mychannel, pitch - 60, velocity, true);
+      light(mapXtoPageOffset(SMP.x), livenote, CRGB(255, 255, 255));
+      FastLED.show();
+      
+      if (ch < 9) {
+        _samplers[ch].noteEvent(((SampleRate[ch] * 12) + pitch - 60), velocity, true, true);
+      } else if (ch > 12) {
+        playSynth(ch, (pitch - 60) + 14, velocity, true);
       }
     }
-  }
-}
+  
+
 }
 
 

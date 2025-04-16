@@ -189,3 +189,106 @@ void HH_drum(float A7, float A8, float A9, int type) {
 }
 
 
+
+// Helper function to process filter adjustments
+float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
+  SMP.drum_settings[index][drumType] = currentMode->pos[encoder];
+  Serial.print(":::::");
+  Serial.println(SMP.drum_settings[index][drumType]);
+  float mappedValue;
+  if (drumType == DRUMDECAY) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
+  if (drumType == DRUMPITCH) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
+  if (drumType == DRUMTYPE) {
+
+    const int maxIndex = 3;
+    if (SMP.drum_settings[SMP.currentChannel][drumType] > maxIndex) {
+      SMP.drum_settings[SMP.currentChannel][drumType] = maxIndex;
+      currentMode->pos[3] = SMP.drum_settings[SMP.currentChannel][drumType];
+      Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+    }
+    int mappedValue = mapf(SMP.drum_settings[SMP.currentChannel][drumType], 0, maxIndex, 1, maxIndex + 1);  // = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 1, 3);
+  }
+  Serial.print(drumType);
+  Serial.print(" #####---->");
+  Serial.println(mappedValue);
+  return mappedValue;
+}
+
+
+
+
+// Update filter values
+void updateDrumValue(DrumTypes drumType, int index, float value) {
+  // Common function to update all filter types
+  Serial.print(drumType);
+  Serial.print(" d==>: ");
+  Serial.println(value);
+
+  switch (drumType) {
+    case DRUMDECAY:
+      break;
+
+    case DRUMPITCH:
+      break;
+
+    case DRUMTYPE:
+      break;
+
+    default: return;
+  }
+  float tone = mapf(SMP.drum_settings[SMP.currentChannel][DRUMTONE], 0, 64, 0, 1023);
+  float dec = mapf(SMP.drum_settings[SMP.currentChannel][DRUMDECAY], 0, 64, 0, 1023);
+  float pit = mapf(SMP.drum_settings[SMP.currentChannel][DRUMPITCH], 0, 64, 0, 1023);
+  float typ = mapf(SMP.drum_settings[SMP.currentChannel][DRUMTYPE], 0, 64, 1, 3);
+
+
+}
+
+
+
+
+void setDrumDefaults(bool allChannels) {
+
+
+  //BD parameters
+  BDsine.begin(0.7, 100, WAVEFORM_SINE);
+  BDsaw.begin(0.4, 100, WAVEFORM_TRIANGLE);
+  BDenv.sustain(0);
+  BDpitchEnv.sustain(0);
+
+  //SN parameters
+  SNenv.sustain(0);
+  SNfilt.frequency(1000);
+  SNnoise.amplitude(0.5);
+  SNtone.begin(0.8, 700, WAVEFORM_SINE);
+  SNtone2.begin(0.8, 700, WAVEFORM_SINE);
+  SNtoneEnv.sustain(0);
+  SNfilt.resonance(2);
+  SNchaosMix.gain(1, 0);
+  SNtone.frequencyModulation(0);
+
+  //HH parameters
+  HHenv.sustain(0);
+  HHfilt.frequency(6000);
+  HHnoise.amplitude(0.6);
+  HHtone.begin(0.8, 700, WAVEFORM_SQUARE);
+  HHtone2.begin(0.8, 700, WAVEFORM_SQUARE);
+  HHtoneEnv.sustain(0);
+  HHfilt.resonance(2);
+  HHchaosMix.gain(1, 0);
+  HHtone.frequencyModulation(6);
+  HHtone2.frequencyModulation(6);
+
+
+  if (allChannels) {
+    for (int ch = 1; ch < 4; ch++) {
+      // First clear all 3 Drums
+
+      SMP.drum_settings[ch][DRUMTONE] = 0;    //0
+      SMP.drum_settings[ch][DRUMDECAY] = 32;  //half
+      SMP.drum_settings[ch][DRUMPITCH] = 32;  //half
+      SMP.drum_settings[ch][DRUMTYPE] = 1;    // MID decay period
+      SMP.param_settings[ch][TYPE] = 1;       // SMP
+    }
+  }
+}

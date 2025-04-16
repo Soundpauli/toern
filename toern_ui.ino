@@ -15,6 +15,21 @@ void light(unsigned int x, unsigned int y, CRGB color) {
 }
 
 
+
+// Draws the above shape, with its top-left at (startX, startY).
+void drawLowResCircle(int startX, int startY, CRGB color) {
+  // The pattern has 7 rows and 9 columns.
+  for (int row = 0; row < 7; row++) {
+    for (int col = 0; col < 9; col++) {
+      if (LOWRES_CIRCLE[row][col] == 'X') {
+        // Light only the positions marked 'X'.
+        light(startX + col, startY + row, color);
+      }
+    }
+  }
+}
+
+
 void drawFilterCheck(int mappedValue, FilterType fx) {
   // Map the value (0-maxfilterResolution) to 0-16 LEDs lit
   int activeLength = ::map(mappedValue, 0, maxfilterResolution, 0, 16);
@@ -62,6 +77,8 @@ void drawPlayButton() {
     }
   }
 }
+
+
 void drawNoSD() {
   playSdWav1.stop();
   if (drawNoSD_hasRun) return;  // Prevent running again
@@ -181,6 +198,7 @@ void drawText(const char *text, int startX, int startY, CRGB color) {
     xOffset += alphabet[text[i] - 32][0] + 1;  // Advance by char width + 1 space
   }
 }
+
 
 
 void drawChar(char c, int x, int y, CRGB color) {
@@ -399,71 +417,100 @@ void drawCursor() {
 
 
 
-void showIcons(String ico, CRGB colors) {
-  const uint8_t(*iconArray)[2] = nullptr;  // Change to const int
+void showIcons(IconType ico, CRGB colors) {
+    // Pointer to icon array and its size
+    const uint8_t (*iconArray)[2] = nullptr;
+    unsigned int size = 0;
 
-  unsigned int size = 0;
-
-  if (ico == "icon_samplepack") {
-    iconArray = icon_samplepack;
-    size = sizeof(icon_samplepack) / sizeof(icon_samplepack[0]);
-  } else if (ico == "icon_sample") {
-    iconArray = icon_sample;
-    size = sizeof(icon_sample) / sizeof(icon_sample[0]);
-  } else if (ico == "icon_loadsave") {
-    iconArray = icon_loadsave;
-    size = sizeof(icon_loadsave) / sizeof(icon_loadsave[0]);
-  } else if (ico == "icon_loadsave2") {
-    iconArray = icon_loadsave2;
-    size = sizeof(icon_loadsave2) / sizeof(icon_loadsave2[0]);
-  } else if (ico == "helper_load") {
-    iconArray = helper_load;
-    size = sizeof(helper_load) / sizeof(helper_load[0]);
-  } else if (ico == "helper_seek") {
-    iconArray = helper_seek;
-    size = sizeof(helper_seek) / sizeof(helper_seek[0]);
-  } else if (ico == "helper_folder") {
-    iconArray = helper_folder;
-    size = sizeof(helper_folder) / sizeof(helper_folder[0]);
-  } else if (ico == "helper_save") {
-    iconArray = helper_save;
-    size = sizeof(helper_save) / sizeof(helper_save[0]);
-  } else if (ico == "helper_exit") {
-    iconArray = helper_exit;
-    size = sizeof(helper_exit) / sizeof(helper_select[0]);
-  } else if (ico == "helper_exit") {
-    iconArray = helper_select;
-    size = sizeof(helper_select) / sizeof(helper_select[0]);
-  } else if (ico == "helper_vol") {
-    iconArray = helper_vol;
-    size = sizeof(helper_vol) / sizeof(helper_vol[0]);
-  } else if (ico == "helper_bright") {
-    iconArray = helper_bright;
-    size = sizeof(helper_bright) / sizeof(helper_bright[0]);
-  } else if (ico == "helper_bpm") {
-    iconArray = helper_bpm;
-    size = sizeof(helper_bpm) / sizeof(helper_bpm[0]);
-  } else if (ico == "icon_bpm") {
-    iconArray = icon_bpm;
-    size = sizeof(icon_bpm) / sizeof(icon_bpm[0]);
-  } else if (ico == "icon_settings") {
-    iconArray = icon_settings;
-    size = sizeof(icon_settings) / sizeof(icon_settings[0]);
-  }
-
-  else if (ico == "icon_rec") {
-    iconArray = icon_rec;
-    size = sizeof(icon_rec) / sizeof(icon_rec[0]);
-  } else if (ico == "icon_rec2") {
-    iconArray = icon_rec2;
-    size = sizeof(icon_rec2) / sizeof(icon_rec2[0]);
-  }
-
-  if (iconArray != nullptr) {
-    for (unsigned int gx = 0; gx < size; gx++) {
-      light(iconArray[gx][0], maxY - iconArray[gx][1], colors);
+    // Select the icon based on the enum value
+    switch (ico) {
+        case ICON_DELETE:
+            iconArray = icon_delete;
+            size = sizeof(icon_delete) / sizeof(icon_delete[0]);
+            break;
+        case ICON_SAMPLEPACK:
+            iconArray = icon_samplepack;
+            size = sizeof(icon_samplepack) / sizeof(icon_samplepack[0]);
+            break;
+        case ICON_SAMPLE:
+            iconArray = icon_sample;
+            size = sizeof(icon_sample) / sizeof(icon_sample[0]);
+            break;
+        case ICON_LOADSAVE:
+            iconArray = icon_loadsave;
+            size = sizeof(icon_loadsave) / sizeof(icon_loadsave[0]);
+            break;
+        case ICON_LOADSAVE2:
+            iconArray = icon_loadsave2;
+            size = sizeof(icon_loadsave2) / sizeof(icon_loadsave2[0]);
+            break;
+        case HELPER_LOAD:
+            iconArray = helper_load;
+            size = sizeof(helper_load) / sizeof(helper_load[0]);
+            break;
+        case HELPER_SEEK:
+            iconArray = helper_seek;
+            size = sizeof(helper_seek) / sizeof(helper_seek[0]);
+            break;
+        case HELPER_SEEKSTART:
+            iconArray = helper_seekstart;
+            size = sizeof(helper_seekstart) / sizeof(helper_seekstart[0]);
+            break;
+        case HELPER_FOLDER:
+            iconArray = helper_folder;
+            size = sizeof(helper_folder) / sizeof(helper_folder[0]);
+            break;
+        case HELPER_SAVE:
+            iconArray = helper_save;
+            size = sizeof(helper_save) / sizeof(helper_save[0]);
+            break;
+        case HELPER_EXIT:
+            iconArray = helper_exit;
+            size = sizeof(helper_exit) / sizeof(helper_exit[0]);
+            break;
+        case HELPER_SELECT:
+            iconArray = helper_select;
+            size = sizeof(helper_select) / sizeof(helper_select[0]);
+            break;
+        case HELPER_VOL:
+            iconArray = helper_vol;
+            size = sizeof(helper_vol) / sizeof(helper_vol[0]);
+            break;
+        case HELPER_BRIGHT:
+            iconArray = helper_bright;
+            size = sizeof(helper_bright) / sizeof(helper_bright[0]);
+            break;
+        case HELPER_BPM:
+            iconArray = helper_bpm;
+            size = sizeof(helper_bpm) / sizeof(helper_bpm[0]);
+            break;
+        case ICON_BPM:
+            iconArray = icon_bpm;
+            size = sizeof(icon_bpm) / sizeof(icon_bpm[0]);
+            break;
+        case ICON_SETTINGS:
+            iconArray = icon_settings;
+            size = sizeof(icon_settings) / sizeof(icon_settings[0]);
+            break;
+        case ICON_REC:
+            iconArray = icon_rec;
+            size = sizeof(icon_rec) / sizeof(icon_rec[0]);
+            break;
+        case ICON_REC2:
+            iconArray = icon_rec2;
+            size = sizeof(icon_rec2) / sizeof(icon_rec2[0]);
+            break;
+        default:
+            // Optionally handle unrecognized values
+            break;
     }
-  }
+
+    // If a valid icon array is selected, call the light function for each element.
+    if (iconArray != nullptr) {
+        for (unsigned int gx = 0; gx < size; gx++) {
+            light(iconArray[gx][0], maxY - iconArray[gx][1], colors);
+        }
+    }
 }
 
 
@@ -562,12 +609,10 @@ void drawBPMScreen() {
   CRGB volColor = CRGB(SMP.vol * SMP.vol, 20 - SMP.vol, 0);
   Encoder[2].writeRGBCode(CRGBToUint32(volColor));
 
-  showIcons("helper_exit", CRGB(0, 0, 20));
-
-  showIcons("helper_bright", CRGB(20, 20, 20));
-  showIcons("helper_vol", volColor);
+  showIcons(HELPER_BRIGHT, CRGB(20, 20, 20));
+  showIcons(HELPER_VOL, volColor);
   if (MIDI_CLOCK_SEND){ 
-      showIcons("helper_bpm", CRGB(0, 50, 120));
+      showIcons(HELPER_BPM, CRGB(0, 50, 120));
       drawNumber(SMP.bpm, CRGB(0, 50, 120), 6);}
       else{
         drawNumber(SMP.bpm, CRGB(20, 0 , 0), 6);

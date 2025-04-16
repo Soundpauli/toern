@@ -165,6 +165,7 @@ void savePattern(bool autosave) {
 
 
 void saveSamplePack(unsigned int pack) {
+
   yield();
   Serial.println("Saving SamplePack in #" + String(pack));
   drawNoSD();
@@ -178,7 +179,7 @@ void saveSamplePack(unsigned int pack) {
     for (unsigned int f = 1; f < (maxY / 2) + 1; f++) {
       light(i + 1, f, CRGB(4, 0, 0));
     }
-    showIcons("icon_samplepack", CRGB(20, 20, 20));
+    showIcons(ICON_SAMPLEPACK, CRGB(20, 20, 20));
     FastLED.setBrightness(ledBrightness);
     FastLED.show();
 
@@ -214,10 +215,10 @@ void saveSamplePack(unsigned int pack) {
 
 
 void loadPattern(bool autoload) {
-  
   yield();
   Serial.println("Loading slot #" + String(SMP.file));
   drawNoSD();
+  
   FastLEDclear();
   char OUTPUTf[50];
   if (autoload) {
@@ -347,6 +348,7 @@ void loadPattern(bool autoload) {
 
 
 void autoLoad() {
+  
   loadPattern(true);
 }
 

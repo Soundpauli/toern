@@ -1,3 +1,25 @@
+enum IconType {
+    ICON_DELETE,
+    ICON_SAMPLEPACK,
+    ICON_SAMPLE,
+    ICON_LOADSAVE,
+    ICON_LOADSAVE2,
+    HELPER_LOAD,
+    HELPER_SEEK,
+    HELPER_SEEKSTART,
+    HELPER_FOLDER,
+    HELPER_SAVE,
+    HELPER_EXIT,
+    HELPER_SELECT,
+    HELPER_VOL,
+    HELPER_BRIGHT,
+    HELPER_BPM,
+    ICON_BPM,
+    ICON_SETTINGS,
+    ICON_REC,
+    ICON_REC2
+};
+
 const uint8_t logo[16][16] = {
   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -50,7 +72,33 @@ const uint8_t icon_move[18][2] = { { 3, 1 }, { 2, 2 }, { 3, 2 }, { 4, 2 }, { 1, 
 
 const uint8_t icon_line[18][2] = { { 3, 1 }, { 3, 2 }, { 3, 3 }, { 2, 4 }, { 3, 4 }, { 4, 4 }, { 2, 5 }, { 4, 5 }, { 2, 6 }, { 4, 6 }, { 2, 7 }, { 4, 7 }, { 2, 8 }, { 3, 8 }, { 4, 8 }, { 2, 9 }, { 3, 9 }, { 4, 9 } };
 
-const uint8_t icon_delete[9][2] = { { 1, 2 }, { 5, 2 }, { 2, 3 }, { 4, 3 }, { 3, 4 }, { 2, 5 }, { 4, 5 }, { 1, 6 }, { 5, 6 } };
+
+static const char LOWRES_CIRCLE[7][10] = {
+  "000XXX000",
+  "00XXXXX00",
+  "0XXXXXXX0",
+  "0XXXXXXX0",
+  "0XXXXXXX0",
+  "00XXXXX00",
+  "000XXX000"
+};
+
+const uint8_t icon_delete[49][2] = {
+  // Row 1 (y=1): 13 pixels wide
+  { 1, 1}, { 2, 1}, { 3, 1}, { 4, 1}, { 5, 1}, { 6, 1}, { 7, 1}, { 8, 1}, { 9, 1}, {10, 1}, {11, 1}, {12, 1}, {13, 1},
+  // Row 2 (y=2): 11 pixels wide
+  { 2, 2}, { 3, 2}, { 4, 2}, { 5, 2}, { 6, 2}, { 7, 2}, { 8, 2}, { 9, 2}, {10, 2}, {11, 2}, {12, 2},
+  // Row 3 (y=3): 9 pixels wide
+  { 3, 3}, { 4, 3}, { 5, 3}, { 6, 3}, { 7, 3}, { 8, 3}, { 9, 3}, {10, 3}, {11, 3},
+  // Row 4 (y=4): 7 pixels wide
+  { 4, 4}, { 5, 4}, { 6, 4}, { 7, 4}, { 8, 4}, { 9, 4}, {10, 4},
+  // Row 5 (y=5): 5 pixels wide
+  { 5, 5}, { 6, 5}, { 7, 5}, { 8, 5}, { 9, 5},
+  // Row 6 (y=6): 3 pixels wide
+  { 6, 6}, { 7, 6}, { 8, 6},
+  // Row 7 (y=7): 1 pixel
+  { 7, 7}
+};
 
 const uint8_t icon_samplepack[18][2] = { { 2, 1 }, { 2, 2 }, { 3, 2 }, { 2, 3 }, { 2, 4 }, { 4, 4 }, { 1, 5 }, { 2, 5 }, { 4, 5 }, { 5, 5 }, { 1, 6 }, { 2, 6 }, { 4, 6 }, { 4, 7 }, { 3, 8 }, { 4, 8 }, { 3, 9 }, { 4, 9 } };
 const uint8_t icon_sample[19][2] = { { 3, 1 }, { 3, 2 }, { 3, 3 }, { 4, 3 }, { 3, 5 }, { 4, 2 }, { 5, 3 }, { 3, 4 }, { 3, 5 }, { 3, 6 }, { 1, 7 }, { 2, 7 }, { 3, 7 }, { 1, 8 }, { 2, 8 }, { 3, 8 }, { 1, 9 }, { 2, 9 }, { 3, 9 } };
@@ -71,6 +119,7 @@ const uint8_t icon_bpm[16][2] = {
 const uint8_t helper_load[3][2] = { { 1, 15 }, { 2, 15 }, { 3, 15 } };
 const uint8_t helper_folder[5][2] = { { 6, 13 }, { 6, 14 }, { 6, 15 }, { 7, 14 }, { 7, 15 } };
 const uint8_t helper_seek[2][2] = { { 10, 15 }, { 10, 14 } };
+const uint8_t helper_seekstart[2][2] = { { 2, 15 }, { 2, 14 } };
 
 const uint8_t helper_bright[5][2] =  { { 5, 14 }, { 6, 13 }, { 6 ,15 }, { 6, 14 }, { 7, 14 } };
 const uint8_t helper_vol[5][2] = { { 9, 13 }, { 11, 13 }, { 10, 15 }, { 9, 14 }, { 11, 14 } };

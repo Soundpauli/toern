@@ -1,5 +1,5 @@
 
- AudioPlayArrayResmp sound0;
+AudioPlayArrayResmp sound0;
 
  AudioPlayArrayResmp sound1;
  AudioPlayArrayResmp sound2;

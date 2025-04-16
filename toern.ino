@@ -8,10 +8,9 @@
 
 #define AUDIO_BLOCK_SAMPLES 128
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
+
 #include <stdint.h>
 #include <Wire.h>
-#include "Arduino.h"
-#include <math.h>
 #include <Mapf.h>
 
 #define FLANGE_DELAY_LENGTH 2048
@@ -24,11 +23,11 @@
 // Assume 'value' is the input control value (0.0 to 1.0)
 
 // Define the number of flanger instances you might use if this code handles multiple
-#define MAX_FLANGERS 5// Adjust if you have more/less
+#define MAX_FLANGERS 5  // Adjust if you have more/less
 
 // Per-instance state variables to avoid glitches and redundant calls
-static float flanger_lastValue[MAX_FLANGERS] = { -1.0f }; // Initialize all to -1.0f
-static bool flanger_bypassSet[MAX_FLANGERS] = { false };  // Initialize all to false
+static float flanger_lastValue[MAX_FLANGERS] = { -1.0f };  // Initialize all to -1.0f
+static bool flanger_bypassSet[MAX_FLANGERS] = { false };   // Initialize all to false
 
 #include <WS2812Serial.h>  // leds
 #define USE_WS2812SERIAL   // leds
@@ -111,23 +110,6 @@ struct PendingNote {
 
 PendingNote pendingNote;
 
-unsigned const int paramConfig[15][3] = {
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}},
-{{2},{3},{4}}
-};
 
 
 // ----- Intro Animation Timing (in ms) -----
@@ -156,10 +138,11 @@ bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
 float rateFactor = 44117.0 / 44100.0;
 
-const char* SynthVoices[11] = {nullptr, "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS"};
-const char* channelType[5] = {nullptr, "DRUM", "SMP", "SYNTH", "X"};
-
+const char *SynthVoices[11] = { nullptr, "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
+const char *channelType[5] = { nullptr, "DRUM", "SMP", "SYNTH", "X" };
 const char *menuText[6] = { "DAT", "KIT", "WAV", "REC", "BPM", "MIDI" };
+
+unsigned int infoIndex = 0;
 
 int lastFile[9] = { 0 };
 bool freshPaint, tmpMute = false;
@@ -176,6 +159,7 @@ unsigned int selectedFX = 0;
 unsigned long filterchecktime = 0;
 unsigned long filterDrawEndTime = 0;
 bool filterDrawActive = false;
+
 
 unsigned int menuPosition = 1;
 String oldPosString, posString = "1:2:";
@@ -216,23 +200,23 @@ File frec;
 unsigned int recInput = AUDIO_INPUT_MIC;
 
 /*timers*/
- unsigned int lastButtonPressTime = 0;
- bool resetTimerActive = false;
+unsigned int lastButtonPressTime = 0;
+bool resetTimerActive = false;
 
 // runtime
 //  variables for program logic
 float pulse = 1;
- int dir = 1;
+int dir = 1;
 unsigned int MIDI_CH = 1;
 float playNoteInterval = 150000.0;
- unsigned int RefreshTime = 1000 / TargetFPS;
+unsigned int RefreshTime = 1000 / TargetFPS;
 float marqueePos = maxX;
 bool shifted = false;
 bool movingForward = true;  // Variable to track the direction of movement
-unsigned  int lastUpdate = 0;
- unsigned int lastClockTime = 0;
- unsigned int totalInterval = 0;
- unsigned int clockCount = 0;
+unsigned int lastUpdate = 0;
+unsigned int lastClockTime = 0;
+unsigned int totalInterval = 0;
+unsigned int clockCount = 0;
 
 bool hasNotes[maxPages + 1];
 unsigned int startTime[maxY] = { 0 };    // Variable to store the start time
@@ -240,12 +224,12 @@ bool noteOnTriggered[maxY] = { false };  // Flag to indicate if noteOn has been 
 bool persistentNoteOn[maxY] = { false };
 int pressedKeyCount[maxY] = { 0 };
 
- bool waitForFourBars = false;
- unsigned int pulseCount = 0;
+bool waitForFourBars = false;
+unsigned int pulseCount = 0;
 bool sampleIsLoaded = false;
 bool unpaintMode, paintMode = false;
 
- unsigned int beat = 1;
+unsigned int beat = 1;
 unsigned int samplePackID, fileID = 1;
 EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
@@ -261,9 +245,9 @@ struct Note {
 } __attribute__((packed));
 
 
-EXTMEM Note note[maxlen+1][maxY+1] = {};
-EXTMEM Note tmp[maxlen+1][maxY+1]  = {};
-EXTMEM Note original[maxlen+1][maxY+1] = {};
+EXTMEM Note note[maxlen + 1][maxY + 1] = {};
+EXTMEM Note tmp[maxlen + 1][maxY + 1] = {};
+EXTMEM Note original[maxlen + 1][maxY + 1] = {};
 
 EXTMEM unsigned int sample_len[maxFiles];
 bool sampleLengthSet = false;
@@ -271,8 +255,8 @@ bool sampleLengthSet = false;
 bool isNowPlaying = false;  // global
 
 int PrevSampleRate = 1;
- EXTMEM int SampleRate[maxFiles] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
- EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles + 1)];
+EXTMEM int SampleRate[maxFiles] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles + 1)];
 
 
 
@@ -289,7 +273,7 @@ const float fullFrequencies[27] = {
   220.00,  // A3
   233.08,  // A#3/Bb3
   246.94,  // B3
-  261.63,  // C4
+  261.63,  // C4. // MITTE
   277.18,  // C#4/Db4
   293.66,  // D4
   311.13,  // D#4/Eb4
@@ -335,8 +319,7 @@ String usedFiles[maxFiles] = { "samples/_1.wav",
                                "samples/_6.wav",
                                "samples/_7.wav",
                                "samples/_8.wav",
-                               "samples/_9.wav" 
-                               };
+                               "samples/_9.wav" };
 
 elapsedMillis msecs;
 
@@ -362,21 +345,21 @@ Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, max
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode volume_bpm = { "VOLUME_BPM", { 1, 6, VOL_MIN, BPM_MIN }, { 1, 25, VOL_MAX, BPM_MAX }, { 1, 6, 7, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
-Mode filterMode = { "FILTERMODE", { 0, 0, 1, 0 }, { 7, 3, 8, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
+Mode filterMode = { "FILTERMODE", { 0, 0, 1, 0 }, { 7, 6, 8, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
 Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-Mode menu = { "MENU", { 1, 1, 1, 1 }, { 1, 1, 1, 6 }, { 1, 1, 1, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
+Mode menu = { "MENU", { 1, 1, 1, 1 }, { 1, 1, 1, 6 }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 // Declare currentMode as a global variable
 Mode *currentMode;
 
 
 
 struct Sample {
-  unsigned int oldID  : 10;  // values 0-1023, enough for 0-999
+  unsigned int oldID : 10;   // values 0-1023, enough for 0-999
   unsigned int fileID : 10;  // values 0-1023, enough for 0-999
 } __attribute__((packed));
 
@@ -385,19 +368,19 @@ struct Sample {
 struct Device {
   unsigned int singleMode;  // single Sample Mod
   unsigned int currentChannel;
-  unsigned int vol;           // volume
-  float bpm;                  // bpm
-  unsigned int velocity;      // velocity
-  unsigned int page;          // current page
-  unsigned int edit;          // edit mode or plaing mode?
-  unsigned int file;          // current selected save/load id
-  unsigned int pack;          // current selected samplepack id
-  Sample wav[maxFiles];      // current selected sample
-  unsigned int folder;        // current selected folder id
-  bool activeCopy;            // is copy/paste active?
-  unsigned int x;             // cursor X
-  unsigned int y;             // cursor Y
-  unsigned int seek;          // skipped into sample
+  unsigned int vol;       // volume
+  float bpm;              // bpm
+  unsigned int velocity;  // velocity
+  unsigned int page;      // current page
+  unsigned int edit;      // edit mode or plaing mode?
+  unsigned int file;      // current selected save/load id
+  unsigned int pack;      // current selected samplepack id
+  Sample wav[maxFiles];   // current selected sample
+  unsigned int folder;    // current selected folder id
+  bool activeCopy;        // is copy/paste active?
+  unsigned int x;         // cursor X
+  unsigned int y;         // cursor Y
+  unsigned int seek;      // skipped into sample
   unsigned int seekEnd;
   unsigned int smplen;  // overall selected samplelength
   unsigned int shiftX;  // note Shift
@@ -408,7 +391,7 @@ struct Device {
   float drum_settings[maxY][4];
   unsigned int selectedFilter;
   unsigned int selectedDrum;
-  float synth_settings[maxY][4];
+  float synth_settings[maxY][8];
   unsigned int selectedSynth;
   unsigned int mute[maxY];
   unsigned int channelVol[maxY];
@@ -418,7 +401,7 @@ float octave[2];
 
 
 //EXTMEM?
- Device SMP = {
+Device SMP = {
   false,                                                                               //singleMode
   1,                                                                                   //currentChannel
   10,                                                                                  //volume
@@ -559,22 +542,22 @@ float octave[2];
 #define NOTE_AS8 (7458.62)
 #define NOTE_B8 (7902.13)
 
-float notesArray[108] = {NOTE_C0, NOTE_CS0, NOTE_D0, NOTE_DS0, NOTE_E0, NOTE_F0, NOTE_FS0, NOTE_G0, NOTE_GS0, NOTE_A0, NOTE_AS0, NOTE_B0,
-    NOTE_C1, NOTE_CS1, NOTE_D1, NOTE_DS1, NOTE_E1, NOTE_F1, NOTE_FS1, NOTE_G1, NOTE_GS1, NOTE_A1, NOTE_AS1, NOTE_B1,
-    NOTE_C2, NOTE_CS2, NOTE_D2, NOTE_DS2, NOTE_E2, NOTE_F2, NOTE_FS2, NOTE_G2, NOTE_GS2, NOTE_A2, NOTE_AS2, NOTE_B2,
-    NOTE_C3, NOTE_CS3, NOTE_D3, NOTE_DS3, NOTE_E3, NOTE_F3, NOTE_FS3, NOTE_G3, NOTE_GS3, NOTE_A3, NOTE_AS3, NOTE_B3,
-    NOTE_C4, NOTE_CS4, NOTE_D4, NOTE_DS4, NOTE_E4, NOTE_F4, NOTE_FS4, NOTE_G4, NOTE_GS4, NOTE_A4, NOTE_AS4, NOTE_B4,
-    NOTE_C5, NOTE_CS5, NOTE_D5, NOTE_DS5, NOTE_E5, NOTE_F5, NOTE_FS5, NOTE_G5, NOTE_GS5, NOTE_A5, NOTE_AS5, NOTE_B5,
-    NOTE_C6, NOTE_CS6, NOTE_D6, NOTE_DS6, NOTE_E6, NOTE_F6, NOTE_FS6, NOTE_G6, NOTE_GS6, NOTE_A6, NOTE_AS6, NOTE_B6,
-    NOTE_C7, NOTE_CS7, NOTE_D7, NOTE_DS7, NOTE_E7, NOTE_F7, NOTE_FS7, NOTE_G7, NOTE_GS7, NOTE_A7, NOTE_AS7, NOTE_B7,
-    NOTE_C8, NOTE_CS8, NOTE_D8, NOTE_DS8, NOTE_E8, NOTE_F8, NOTE_FS8, NOTE_G8, NOTE_GS8, NOTE_A8, NOTE_AS8, NOTE_B8};
+float notesArray[108] = { NOTE_C0, NOTE_CS0, NOTE_D0, NOTE_DS0, NOTE_E0, NOTE_F0, NOTE_FS0, NOTE_G0, NOTE_GS0, NOTE_A0, NOTE_AS0, NOTE_B0,
+                          NOTE_C1, NOTE_CS1, NOTE_D1, NOTE_DS1, NOTE_E1, NOTE_F1, NOTE_FS1, NOTE_G1, NOTE_GS1, NOTE_A1, NOTE_AS1, NOTE_B1,
+                          NOTE_C2, NOTE_CS2, NOTE_D2, NOTE_DS2, NOTE_E2, NOTE_F2, NOTE_FS2, NOTE_G2, NOTE_GS2, NOTE_A2, NOTE_AS2, NOTE_B2,
+                          NOTE_C3, NOTE_CS3, NOTE_D3, NOTE_DS3, NOTE_E3, NOTE_F3, NOTE_FS3, NOTE_G3, NOTE_GS3, NOTE_A3, NOTE_AS3, NOTE_B3,
+                          NOTE_C4, NOTE_CS4, NOTE_D4, NOTE_DS4, NOTE_E4, NOTE_F4, NOTE_FS4, NOTE_G4, NOTE_GS4, NOTE_A4, NOTE_AS4, NOTE_B4,
+                          NOTE_C5, NOTE_CS5, NOTE_D5, NOTE_DS5, NOTE_E5, NOTE_F5, NOTE_FS5, NOTE_G5, NOTE_GS5, NOTE_A5, NOTE_AS5, NOTE_B5,
+                          NOTE_C6, NOTE_CS6, NOTE_D6, NOTE_DS6, NOTE_E6, NOTE_F6, NOTE_FS6, NOTE_G6, NOTE_GS6, NOTE_A6, NOTE_AS6, NOTE_B6,
+                          NOTE_C7, NOTE_CS7, NOTE_D7, NOTE_DS7, NOTE_E7, NOTE_F7, NOTE_FS7, NOTE_G7, NOTE_GS7, NOTE_A7, NOTE_AS7, NOTE_B7,
+                          NOTE_C8, NOTE_CS8, NOTE_D8, NOTE_DS8, NOTE_E8, NOTE_F8, NOTE_FS8, NOTE_G8, NOTE_GS8, NOTE_A8, NOTE_AS8, NOTE_B8 };
 
 
 float myFreq = 80;
 
 float freqValue = 1000;
-float resValue =  0.1;
-float octValue =  2.0;
+float resValue = 0.1;
+float octValue = 2.0;
 
 int transpose = 0;
 int scale = 0;
@@ -624,9 +607,12 @@ enum DrumTypes { DRUMTONE,
 
 
 enum SynthTypes { INSTRUMENT,
-                  BASS,
-                  WOW,
-                  PAD
+                  PARAM1,
+                  PARAM2,
+                  PARAM3,
+                  PARAM4,
+                  PARAM5,
+                  PARAM6,
 };  //Define Synth types
 
 
@@ -645,7 +631,7 @@ char *activeParameterType[8] = { "TYPE", "WAV", "DLAY", "ATTC", "HOLD", "DCAY", 
 char *activeFilterType[9] = { "", "LOW", "HIGH", "FREQ", "RVRB", "BITC", "FLNG", "DTNE", "OCTV" };
 char *activeDrumType[4] = { "TONE", "DCAY", "FREQ", "TYPE" };
 
-char *activeSynthVoice[4] = { "SND", "PAR1", "PAR2", "PAR3"};
+char *activeSynthVoice[8] = { "SND", "PAR1", "PAR2", "PAR3", "PAR4", "PAR5", "PAR6", "PAR7" };
 char *activeMidiSetType[6] = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
 
 
@@ -849,21 +835,13 @@ void testDrums() {
   float hihatDecay = 512;  // Maps to ~10–50 ms decay (very short)
   float hihatPitch = 512;  // Maps to filter frequency (2000–7000 Hz)
   int hihatType = 3;       // Choose type 3 for hi-hat sound
-
-  // Trigger each drum sound (in a real sequencer these would be timed)
-  KD_drum(kickTone, kickDecay, kickPitch, kickType);
-  delay(500);
-  SN_drum(snareTone, snareDecay, snarePitch, snareType);
-  delay(500);
-  HH_drum(hihatTone, hihatDecay, hihatPitch, hihatType);
-  delay(500);
 }
 
 
 
 void switchMode(Mode *newMode) {
 
-  drawNoSD_hasRun = false; 
+  drawNoSD_hasRun = false;
 
   unpaintMode = false;
   SMP.singleMode = false;
@@ -1049,7 +1027,7 @@ void record(int fnr, int snr) {
     isRecording = true;
     //AudioNoInterrupts();
     Serial.println("Start recording");
-    showIcons("icon_rec", CRGB(20, 0, 0));
+    showIcons(ICON_REC, CRGB(20, 0, 0));
     FastLED.show();
     if (SD.exists(OUTPUTf)) {
       SD.remove(OUTPUTf);
@@ -1057,7 +1035,7 @@ void record(int fnr, int snr) {
     frec = SD.open(OUTPUTf, FILE_WRITE);
     if (frec) {
       recFlushTimer = 0;
-      writeWavHeader(frec, (uint32_t) AUDIO_SAMPLE_RATE_EXACT, 16, 1);  // 44.1kHz, 16-bit, mono
+      writeWavHeader(frec, (uint32_t)AUDIO_SAMPLE_RATE_EXACT, 16, 1);  // 44.1kHz, 16-bit, mono
       queue1.begin();
     }
   }
@@ -1095,7 +1073,6 @@ void stopRecord(int fnr, int snr) {
 
     Serial.println("Start Playing");
     playSdWav1.play(OUTPUTf);
-    
   }
 }
 
@@ -1292,17 +1269,17 @@ void checkMode(String buttonString, bool reset) {
 
 
   // single mode: RANDOMIZE
-  if ((SMP.y>15) && (currentMode == &singleMode) && buttonString == "0002")  {
+  if ((SMP.y > 15) && (currentMode == &singleMode) && buttonString == "0002") {
     Serial.println(SMP.y);
     drawRandoms();
     return;
-    }
-  
+  }
+
 
 
   // Handle velocity switch in single mode
   if (!freshPaint && note[SMP.x][SMP.y].channel != 0 && (currentMode == &singleMode) && buttonString == "0002") {
-      unsigned int velo = round(mapf(note[SMP.x][SMP.y].velocity, 1, 127, 1, maxY));
+    unsigned int velo = round(mapf(note[SMP.x][SMP.y].velocity, 1, 127, 1, maxY));
 
     Serial.println(velo);
     SMP.velocity = velo;
@@ -1482,101 +1459,37 @@ void checkMode(String buttonString, bool reset) {
 
 
 
+void initSoundChip() {
+  AudioInterrupts();
+  AudioMemory(48);
+  // turn on the output
+  sgtl5000_1.volume(0.0);
+  sgtl5000_1.enable();
+  sgtl5000_1.volume(0.1);
+  sgtl5000_1.volume(0.4);
+  sgtl5000_1.volume(0.9);
+
+  //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
+  //sgtl5000_1.audioPostProcessorEnable();
+
+  //sgtl5000_1.audioPreProcessorEnable();
+  //sgtl5000_1.audioPostProcessorEnable();
+  //   sgtl5000_1.autoVolumeEnable();
+
+  //REC
+
+  sgtl5000_1.inputSelect(recInput);
+  sgtl5000_1.micGain(28);  //0-63
+  sgtl5000_1.adcHighPassFilterEnable();
+  //sgtl5000_1.adcHighPassFilterDisable();
 
 
-
-void setup(void) {
-  //NVIC_SET_PRIORITY(IRQ_LPUART8, 128);
-  //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
-  Serial.begin(115200);
-
-  Wire.begin();
-  if (CrashReport) {
-    
-    Serial.println("\n" __FILE__ " " __DATE__ " " __TIME__);
-    Serial.print(CrashReport);
-
-    delay(1000);
-    Serial.println("clearing EEPROM and autosaved.txt...");
-
-    for (unsigned int i = 0; i < EEPROM.length(); i++) EEPROM.write(i, 0);
-
-    char OUTPUTf[50];
-    sprintf(OUTPUTf, "autosaved.txt");
-    if (SD.exists(OUTPUTf)) {
-      SD.remove(OUTPUTf);
-    }
-    delay(2000);
-    Serial.println("clearing completed.");
-  }
+  sgtl5000_1.unmuteLineout();
+  sgtl5000_1.lineOutLevel(1);
+}
 
 
-  EEPROM.get(0, samplePackID);
-  Serial.print("SamplePackID:");
-  Serial.println(samplePackID);
-
-  if (samplePackID == NAN || samplePackID == 0) {
-    Serial.print("NO SAMPLEPACK SET! Defaulting to 1");
-    samplePackID = 1;
-  }
-
-  pinMode(INT_PIN, INPUT_PULLUP);  // Interrups for encoder
-  pinMode(0, INPUT_PULLDOWN);
-  pinMode(3, INPUT_PULLDOWN);
-  pinMode(16, INPUT_PULLDOWN);
-  FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
-  FastLED.setBrightness(ledBrightness);
-
-
-
-
-  Serial.println("I2C Encoder init...");
-  for (int i = 0; i < NUM_ENCODERS; i++) {
-    // Set the global encoder index for callbacks
-    currentEncoderIndex = i;
-    Encoder[i].reset();
-    uint16_t direction;
-    if (i > 0) {
-      direction = i2cEncoderLibV2::DIRE_RIGHT;
-    } else {
-      direction = i2cEncoderLibV2::DIRE_LEFT;
-    }
-    Encoder[i].begin(
-      i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
-      | direction | i2cEncoderLibV2::IPUP_ENABLE
-      | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
-
-    Encoder[0].writeDoublePushPeriod(0);
-    Encoder[1].writeDoublePushPeriod(0);
-    Encoder[2].writeDoublePushPeriod(0);
-    Encoder[3].writeDoublePushPeriod(0);
-
-    Encoder[i].writeAntibouncingPeriod(10);  //10?
-    Encoder[i].writeCounter((int32_t)1);
-    Encoder[i].writeMax((int32_t)16 * 4);  //maxval
-    Encoder[i].writeMin((int32_t)1);       //minval
-    Encoder[i].writeStep((int32_t)1);      //steps
-
-    // Assign static callback wrappers
-    Encoder[i].onButtonPush = staticButtonPushed;
-    Encoder[i].onButtonRelease = staticButtonReleased;
-    Encoder[i].onButtonDoublePush = staticDoublePush;
-
-    Encoder[i].onMinMax = staticThresholds;
-    Encoder[i].autoconfigInterrupt();
-    Encoder[i].writeRGBCode(0xFFFFFF);
-    Encoder[i].writeFadeRGB(0);
-    delay(50);
-    Encoder[i].updateStatus();
-  }
-
-  //runAnimation();
-
-  Serial.print("Initializing SD card...");
-  drawNoSD();
-
-  EEPROMgetLastFiles();
-  loadSamplePack(samplePackID, true);
+void initSamples() {
 
   for (unsigned int vx = 1; vx < SONG_LEN + 1; vx++) {
     for (unsigned int vy = 1; vy < maxY + 1; vy++) {
@@ -1590,14 +1503,10 @@ void setup(void) {
   _samplers[2].addVoice(sound2, mixer1, 1, envelope2);
   _samplers[3].addVoice(sound3, mixer1, 2, envelope3);
   _samplers[4].addVoice(sound4, mixer1, 3, envelope4);
-
   _samplers[5].addVoice(sound5, mixer2, 0, envelope5);
   _samplers[6].addVoice(sound6, mixer2, 1, envelope6);
-
   _samplers[7].addVoice(sound7, mixer2, 2, envelope7);
   _samplers[8].addVoice(sound8, mixer2, 3, envelope8);
-
-
 
   mixer1.gain(0, GAIN4);
   mixer1.gain(1, GAIN4);
@@ -1640,14 +1549,9 @@ void setup(void) {
 
   mixerPlay.gain(0, GAIN3);
   mixerPlay.gain(1, GAIN3);
-  mixerPlay.gain(2, GAIN2);
-  
-
-
+  mixerPlay.gain(2, GAIN3);
 
   // Initialize the array with nullptrs
-
-
   synths[11][0] = &waveform11_1;
   synths[11][1] = &waveform11_2;
 
@@ -1659,7 +1563,7 @@ void setup(void) {
 
   short waveformType[15][2] = { 0 };  // zero-initialize unused elements
   // Define your actual waveforms at relevant indices
-  
+
   waveformType[11][0] = WAVEFORM_PULSE;
   waveformType[11][1] = WAVEFORM_SAWTOOTH;
 
@@ -1694,9 +1598,13 @@ void setup(void) {
     }
   }
 
+  //chiptune_synth(0,0,0);
+  for (int i = 0; i < 3; i++) {
+    Sdc1[i].amplitude(1.0);
+  }
 
   // set filters and envelopes for all sounds
-  for (unsigned int i = 1; i <9; i++) {
+  for (unsigned int i = 1; i < 9; i++) {
     filters[i]->octaveControl(6.0);
     filters[i]->resonance(0.7);
     filters[i]->frequency(8000);
@@ -1708,66 +1616,131 @@ void setup(void) {
     voices[i]->enableInterpolation(true);
   }
 
-
-
-  // set BPM:100
-  SMP.bpm = 100.0;
-  playTimer.begin(playNote, playNoteInterval);
-  //playTimer.priority(110);
-  midiTimer.begin(checkMidi, playNoteInterval / 24);
-  //midiTimer.priority(10);
-  AudioInterrupts();
-  AudioMemory(48);
-  // turn on the output
-  sgtl5000_1.volume(0.0);
-  sgtl5000_1.enable();
-  sgtl5000_1.volume(0.1);
-  sgtl5000_1.volume(0.4);
-  sgtl5000_1.volume(0.7);
-
-  //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
-  //sgtl5000_1.audioPostProcessorEnable();
-
-  //sgtl5000_1.audioPreProcessorEnable();
-  //sgtl5000_1.audioPostProcessorEnable();
-  //   sgtl5000_1.autoVolumeEnable();
-
-  //REC
-
-  sgtl5000_1.inputSelect(recInput);
-  sgtl5000_1.micGain(28);  //0-63
-  sgtl5000_1.adcHighPassFilterEnable();
-  //sgtl5000_1.adcHighPassFilterDisable();
-
-
-  sgtl5000_1.unmuteLineout();
-  sgtl5000_1.lineOutLevel(1);
-  autoLoad();
-
-  switchMode(&draw);
-
-  Serial8.begin(31250);
-  MIDI.begin(MIDI_CHANNEL_OMNI);
-  MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
-  //MIDI.setHandleClock(myClock);       // optional if you're using callbacks
-
   //set Defaults
   setDahdsrDefaults(true);
   for (int ch = 1; ch <= 14; ch++) {
     setFilterDefaults(ch);
   }
 
-  
+
   setDrumDefaults(true);
   testDrums();
-  bass_synth(0); 
- 
-  //chiptune_synth(0,0,0); 
- for (int i = 0; i < 3; i++) {
-       Sdc1[i].amplitude(1.0);
-    }
+  bass_synth(0, 0, 0, 0, 0, 0, 0);
+}
 
-    playSdWav1.play("samples/0/_3.wav");
+
+void checkCrashReport() {
+  Serial.println("\n" __FILE__ " " __DATE__ " " __TIME__);
+  Serial.print(CrashReport);
+  delay(1000);
+  Serial.println("clearing EEPROM and autosaved.txt...");
+  for (unsigned int i = 0; i < EEPROM.length(); i++) EEPROM.write(i, 0);
+  char OUTPUTf[50];
+  sprintf(OUTPUTf, "autosaved.txt");
+  if (SD.exists(OUTPUTf)) {
+    SD.remove(OUTPUTf);
+  }
+  delay(2000);
+  Serial.println("clearing completed.");
+}
+void initEncoders() {
+  Serial.println("I2C Encoder init...");
+  for (int i = 0; i < NUM_ENCODERS; i++) {
+    // Set the global encoder index for callbacks
+    currentEncoderIndex = i;
+    Encoder[i].reset();
+    uint16_t direction;
+    if (i > 0) {
+      direction = i2cEncoderLibV2::DIRE_RIGHT;
+    } else {
+      direction = i2cEncoderLibV2::DIRE_LEFT;
+    }
+    Encoder[i].begin(
+      i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
+      | direction | i2cEncoderLibV2::IPUP_ENABLE
+      | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+
+    Encoder[0].writeDoublePushPeriod(0);
+    Encoder[1].writeDoublePushPeriod(0);
+    Encoder[2].writeDoublePushPeriod(0);
+    Encoder[3].writeDoublePushPeriod(0);
+
+    Encoder[i].writeAntibouncingPeriod(10);  //10?
+    Encoder[i].writeCounter((int32_t)1);
+    Encoder[i].writeMax((int32_t)16 * 4);  //maxval
+    Encoder[i].writeMin((int32_t)1);       //minval
+    Encoder[i].writeStep((int32_t)1);      //steps
+
+    // Assign static callback wrappers
+    Encoder[i].onButtonPush = staticButtonPushed;
+    Encoder[i].onButtonRelease = staticButtonReleased;
+    Encoder[i].onButtonDoublePush = staticDoublePush;
+
+    Encoder[i].onMinMax = staticThresholds;
+    Encoder[i].autoconfigInterrupt();
+    Encoder[i].writeRGBCode(0xFFFFFF);
+    Encoder[i].writeFadeRGB(0);
+    delay(50);
+    Encoder[i].updateStatus();
+  }
+}
+
+void setup(void) {
+  //NVIC_SET_PRIORITY(IRQ_LPUART8, 128);
+  //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
+  Serial.begin(115200);
+
+  Wire.begin();
+  if (CrashReport) { checkCrashReport(); }
+
+  EEPROM.get(0, samplePackID);
+  Serial.print("SamplePackID:");
+  Serial.println(samplePackID);
+
+  if (samplePackID == NAN || samplePackID == 0) {
+    Serial.print("NO SAMPLEPACK SET! Defaulting to 1");
+    samplePackID = 1;
+  }
+
+  pinMode(INT_PIN, INPUT_PULLUP);  // Interrups for encoder
+  pinMode(0, INPUT_PULLDOWN);
+  pinMode(3, INPUT_PULLDOWN);
+  pinMode(16, INPUT_PULLDOWN);
+  FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
+  FastLED.setBrightness(ledBrightness);
+
+
+  initSoundChip();
+  initSamples();
+  
+  drawNoSD(); 
+  
+  playSdWav1.play("intro/002.wav");
+  runAnimation();
+  
+  playSdWav1.stop();
+
+  EEPROMgetLastFiles();
+  
+  loadSamplePack(samplePackID, true);
+  // set BPM:100
+  SMP.bpm = 100.0;
+  playTimer.begin(playNote, playNoteInterval);
+  //playTimer.priority(110);
+  midiTimer.begin(checkMidi, playNoteInterval / 24);
+  //midiTimer.priority(10);
+
+
+
+  autoLoad();
+  
+  switchMode(&draw);
+  Serial8.begin(31250);
+  MIDI.begin(MIDI_CHANNEL_OMNI);
+  //MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
+  //MIDI.setHandleClock(myClock);       // optional if you're using callbacks
+  
+
 }
 
 void setEncoderColor(int i) {
@@ -1851,6 +1824,7 @@ void checkEncoders() {
       }
     }
   }
+
 }
 
 
@@ -1999,6 +1973,7 @@ void checkMenuTouch() {
 
 
 
+
 void loop() {
 
   if (isRecording) {
@@ -2092,10 +2067,12 @@ void loop() {
 
     if (isNowPlaying) {
       drawTimer();
-      if (!freshPaint && currentMode == &velocity) {drawVelocity();}
+      if (!freshPaint && currentMode == &velocity) { drawVelocity(); }
       FastLEDshow();
     }
-    if (!freshPaint && currentMode == &velocity) {drawVelocity();}
+    if (!freshPaint && currentMode == &velocity) { drawVelocity(); }
+
+    
   }
 
 
@@ -2109,6 +2086,8 @@ void loop() {
   }
 
   autoOffActiveNotes();
+
+
 
   FastLEDshow();  // draw!
   filterfreshsetted = false;
@@ -2232,6 +2211,7 @@ void shiftNotes() {
 
 
 void tmpMuteAll(bool pressed) {
+  
   if (pressed > 0) {
     int channel = SMP.currentChannel;
     //mute all channels except current
@@ -2253,6 +2233,7 @@ void tmpMuteAll(bool pressed) {
 
 
 void toggleMute() {
+  
   if (SMP.mute[SMP.currentChannel]) {
     SMP.mute[SMP.currentChannel] = false;
     //envelopes[SMP.currentChannel]->release(11880 / 2);
@@ -2268,6 +2249,8 @@ void deleteActiveCopy() {
 }
 
 
+
+
 void play(bool fromStart) {
   if (fromStart) {
     updateLastPage();
@@ -2276,8 +2259,13 @@ void play(bool fromStart) {
     SMP.page = 1;
     Encoder[2].writeRGBCode(0xFFFF00);
     MIDI.sendRealTime(midi::Start);
+    
   }
   isNowPlaying = true;
+  
+  
+
+  FastLED.show();
   //playNote();
   playStartTime = millis();  // Record the current time
 }
@@ -2297,10 +2285,13 @@ void pause() {
 
 
 void playSynth(int ch, int b, int vel, bool persistant) {
-  float frequency = fullFrequencies[b];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
+  float frequency = fullFrequencies[b - ch  + 13];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
+
+  //float frequency = pianoFrequencies[b+12]; //C4
+
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
-  synths[ch][0]->frequency(frequency);
-  
+
+
   float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
   float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
   // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
@@ -2308,6 +2299,7 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
   float octave_ratio = pow(2.0, octave_shift);
   // Apply both adjustments to the base frequency
+  synths[ch][0]->frequency(frequency);
   synths[ch][1]->frequency(frequency * octave_ratio * detune_ratio);
   synths[ch][0]->amplitude(WaveFormVelocity);
   synths[ch][1]->amplitude(WaveFormVelocity);
@@ -2336,37 +2328,34 @@ void playNote() {
         MidiSendNoteOn(b, ch, vel);
 
 
-        
-              
+
+
         if (ch < 9) {
 
           if (SMP.param_settings[ch][TYPE] == 0) {
-            
+
             float tone = pianoFrequencies[b];
             float dec = mapf(SMP.drum_settings[ch][DRUMDECAY], 0, 64, 0, 1023);
             float pit = mapf(SMP.drum_settings[ch][DRUMPITCH], 0, 64, 0, 1023);
-            float typ = SMP.drum_settings[ch][DRUMTYPE]; //mapf(, 0, 64, 1, 3);
+            float typ = SMP.drum_settings[ch][DRUMTYPE];  //mapf(, 0, 64, 1, 3);
 
             float notepitch = mapf(SMP.drum_settings[ch][DRUMTONE], 0, 64, 0, 1023);
 
-            if (ch == 1) KD_drum(tone+notepitch, dec, pit, typ);
-            if (ch == 2) SN_drum(tone+notepitch, dec, pit, typ);
-            if (ch == 3) HH_drum(tone+notepitch, dec, pit, typ);
+            if (ch == 1) KD_drum(tone + notepitch, dec, pit, typ);
+            if (ch == 2) SN_drum(tone + notepitch, dec, pit, typ);
+            if (ch == 3) HH_drum(tone + notepitch, dec, pit, typ);
 
-          } else { 
+          } else {
             _samplers[ch].noteEvent(12 * SampleRate[ch] + b - (ch + 1), vel, true, false);
           }
-        } else if (ch == 11) { 
-          
-           playSound(12 * octave[0] + transpose + b,0);
+        } else if (ch == 11) {
 
-          
-          } else if (ch >=13){
-            playSynth(ch, b, vel, false);
-            
-          }
+          playSound(12 * octave[0] + transpose + b, 0);
 
-        
+
+        } else if (ch >= 13) {
+          playSynth(ch, b, vel, false);
+        }
       }
     }
 
@@ -2435,12 +2424,12 @@ void unpaint() {
 void paint() {
   //SMP.edit = 1;
   Serial.println("!!!PAINT!");
-  
+
   unsigned int x = SMP.x;  //(SMP.edit - 1) * maxX + SMP.x;
   unsigned int y = SMP.y;
 
   if (!SMP.singleMode) {
-    if ((y > 1 && y <= 9) || (y == 12) || (y>13 && y <= 15)) {
+    if ((y > 1 && y <= 9) || (y == 12) || (y > 13 && y <= 15)) {
       if (note[x][y].channel == 0) {
         note[x][y].channel = (y - 1);
       }
@@ -2470,10 +2459,26 @@ void paint() {
     if (note[x][y].channel >= 13) {
 
       int ch = note[x][y].channel;
-      float frequency = pianoFrequencies[y];  // y-Wert ist 1-basiert, Array ist 0-basiert
+      float frequency = fullFrequencies[y - (note[x][y].channel + 1)+ 14];  // y-Wert ist 1-basiert, Array ist 0-basiert
       synths[ch][0]->frequency(frequency);
       float WaveFormVelocity = mapf(defaultVelocity, 1, 127, 0.0, 1.0);
+      
+    
+      
+
+      float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
+      float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
+      // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
+      // For example, an OCTAVE value of 1 multiplies frequency by 2, -1 divides by 2.
+      int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
+      float octave_ratio = pow(2.0, octave_shift);
+      // Apply both adjustments to the base frequency
+      synths[ch][0]->frequency(frequency);
+      synths[ch][1]->frequency(frequency * octave_ratio * detune_ratio);
+
       synths[ch][0]->amplitude(WaveFormVelocity);
+      synths[ch][1]->amplitude(WaveFormVelocity);
+      
       envelopes[ch]->noteOn();
 
       startTime[ch] = millis();    // Record the start time
@@ -2490,30 +2495,30 @@ void paint() {
 
 
 void toggleCopyPaste() {
+
   //SMP.edit = 1;
   if (!SMP.activeCopy) {
-
+    
     // copy the pattern into the memory
     Serial.print("copy now");
     unsigned int src = 0;
     for (unsigned int c = ((SMP.edit - 1) * maxX) + 1; c < ((SMP.edit - 1) * maxX) + (maxX + 1); c++) {  // maxy?
       src++;
       for (unsigned int y = 1; y < maxY + 1; y++) {
-        
-          tmp[src][y] = note[c][y];
-        
+
+        tmp[src][y] = note[c][y];
       }
     }
   } else {
+    
     // paste the memory into the song
     Serial.print("paste here!");
     unsigned int src = 0;
     for (unsigned int c = ((SMP.edit - 1) * maxX) + 1; c < ((SMP.edit - 1) * maxX) + (maxX + 1); c++) {
       src++;
       for (unsigned int y = 1; y < maxY + 1; y++) {
-        
-          note[c][y] = tmp[src][y];
-        
+
+        note[c][y] = tmp[src][y];
       }
     }
   }
@@ -2523,6 +2528,7 @@ void toggleCopyPaste() {
 
 
 void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, unsigned int channel, bool singleMode) {
+  
   for (unsigned int y = yStart; y < yEnd; y++) {
     if (singleMode) {
       if (note[c][y].channel == channel)
@@ -2565,6 +2571,7 @@ void updateBPM() {
 }
 
 void setVolume() {
+  showExit(0);
   drawBPMScreen();
 
   if (currentMode->pos[1] != ledBrightness / 10) {
@@ -2603,44 +2610,55 @@ void drawBrightness() {
 
 
 
+void showExit(int index) {
+  showIcons(HELPER_EXIT, CRGB(0, 0, 100));
+  Encoder[index].writeRGBCode(0x0000FF);
+  }
 
 void showMenu() {
   FastLEDclear();
-  showIcons("helper_exit", CRGB(10, 5, 0));
+  showExit(0);  
+  
   //drawNumber(menuPosition, CRGB(20, 20, 40), 0);
 
 
   switch (menuPosition) {
     case 1:
-      showIcons("icon_loadsave", CRGB(0, 20, 0));
-      showIcons("icon_loadsave2", CRGB(20, 20, 20));
+      showIcons(ICON_LOADSAVE, CRGB(0, 20, 0));
+      showIcons(ICON_LOADSAVE2, CRGB(20, 20, 20));
       drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(0, 200, 0));
+      Encoder[3].writeRGBCode(0x00FF00);
       break;
     case 2:
-      showIcons("icon_samplepack", CRGB(0, 0, 20));
+      showIcons(ICON_SAMPLEPACK, CRGB(0, 0, 20));
       drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(0, 0, 200));
+      Encoder[3].writeRGBCode(0x0000FF);
       break;
 
     case 3:
-      showIcons("icon_sample", CRGB(20, 0, 20));
+      showIcons(ICON_SAMPLE, CRGB(20, 0, 20));
       drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 200, 0));
+      Encoder[3].writeRGBCode(0xFFFF00);
       break;
 
     case 4:
-      showIcons("icon_rec", CRGB(20, 0, 0));
-      showIcons("icon_rec2", CRGB(20, 20, 20));
+      showIcons(ICON_REC, CRGB(20, 0, 0));
+      showIcons(ICON_REC2, CRGB(20, 20, 20));
       drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 0, 0));
+      Encoder[3].writeRGBCode(0xFF0000);
       drawRecMode();
       break;
 
     case 5:
-      showIcons("icon_bpm", CRGB(0, 50, 0));
+      showIcons(ICON_BPM, CRGB(0, 50, 0));
       drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 0, 200));
+      Encoder[3].writeRGBCode(0xFF00FF);
       break;
 
     case 6:
-      showIcons("icon_settings", CRGB(50, 50, 50));
+      showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
       drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(0, 200, 200));
+      Encoder[3].writeRGBCode(0x00FFFF);
       drawClockMode();
       break;
 
@@ -2656,28 +2674,29 @@ void showMenu() {
   if (currentMode->pos[3] != menuPosition) {
     changeMenu(currentMode->pos[3]);
   }
+  
 }
 
 
 
 void showLoadSave() {
-  
+
   drawNoSD();
   FastLEDclear();
 
-  showIcons("icon_loadsave", CRGB(10, 5, 0));
-  showIcons("icon_loadsave2", CRGB(200, 200, 200));
-  showIcons("helper_select", CRGB(0, 0, 5));
+  showIcons(ICON_LOADSAVE, CRGB(10, 5, 0));
+  showIcons(ICON_LOADSAVE2, CRGB(200, 200, 200));
+  showIcons(HELPER_SELECT, CRGB(0, 0, 5));
 
   char OUTPUTf[50];
   sprintf(OUTPUTf, "%d.txt", SMP.file);
   if (SD.exists(OUTPUTf)) {
-    showIcons("helper_save", CRGB(1, 0, 0));
-    showIcons("helper_load", CRGB(0, 20, 0));
+    showIcons(HELPER_SAVE, CRGB(1, 0, 0));
+    showIcons(HELPER_LOAD, CRGB(0, 20, 0));
     drawNumber(SMP.file, CRGB(0, 0, 20), 11);
   } else {
-    showIcons("helper_save", CRGB(20, 0, 0));
-    showIcons("helper_load", CRGB(0, 1, 0));
+    showIcons(HELPER_SAVE, CRGB(20, 0, 0));
+    showIcons(HELPER_LOAD, CRGB(0, 1, 0));
     drawNumber(SMP.file, CRGB(20, 20, 40), 11);
   }
   FastLED.setBrightness(ledBrightness);
@@ -2694,19 +2713,19 @@ void showSamplePack() {
   drawNoSD();
   FastLEDclear();
 
-  showIcons("icon_samplepack", CRGB(10, 10, 0));
-  showIcons("helper_select", CRGB(0, 0, 5));
+  showIcons(ICON_SAMPLEPACK, CRGB(10, 10, 0));
+  showIcons(HELPER_SELECT, CRGB(0, 0, 10));
   drawNumber(SMP.pack, CRGB(20, 0, 0), 11);
 
   char OUTPUTf[50];
   sprintf(OUTPUTf, "%d/%d.wav", SMP.pack, 1);
   if (SD.exists(OUTPUTf)) {
-    showIcons("helper_load", CRGB(0, 20, 0));
-    showIcons("helper_save", CRGB(3, 0, 0));
+    showIcons(HELPER_LOAD, CRGB(0, 20, 0));
+    showIcons(HELPER_SAVE, CRGB(3, 0, 0));
     drawNumber(SMP.pack, CRGB(0, 20, 0), 11);
   } else {
-    showIcons("helper_load", CRGB(0, 3, 0));
-    showIcons("helper_save", CRGB(20, 0, 0));
+    showIcons(HELPER_LOAD, CRGB(0, 3, 0));
+    showIcons(HELPER_SAVE, CRGB(20, 0, 0));
     drawNumber(SMP.pack, CRGB(20, 0, 0), 11);
   }
   FastLED.setBrightness(ledBrightness);
@@ -2724,7 +2743,7 @@ void loadSamplePack(unsigned int pack, bool intro) {
   for (unsigned int z = 1; z < maxFiles; z++) {
     if (!intro) {
       FastLEDclear();
-      showIcons("icon_sample", CRGB(20, 20, 20));
+      showIcons(ICON_SAMPLE, CRGB(20, 20, 20));
     } else {
       drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
     }
@@ -2769,5 +2788,3 @@ void loadWav() {
   switchMode(&singleMode);
   SMP.singleMode = true;
 }
-
-

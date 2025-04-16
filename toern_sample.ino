@@ -91,14 +91,27 @@ void showWave() {
   nofile=false;
 
   FastLEDclear();
-  showIcons("helper_select", col[SMP.currentChannel]);
-  showIcons("helper_folder", CRGB(10, 10, 0));
-  showIcons("helper_seek", CRGB(10, 0, 0));
-  if (nofile)
-    showIcons("helper_load", CRGB(20, 0, 0));
-  else
-    showIcons("helper_load", CRGB(0, 20, 0));
+  //exit
+  Encoder[3].writeRGBCode(0x0000FF);
+  showIcons(HELPER_SELECT, CRGB(0, 0, 50));
 
+  //showIcons("helper_ex", CRGB(10, 10, 0));
+  
+  showIcons(HELPER_FOLDER, CRGB(50, 50, 50));
+  Encoder[1].writeRGBCode(0xFFFFFF);
+  
+  showIcons(HELPER_SEEK, CRGB(10, 0, 10));
+  Encoder[2].writeRGBCode(0xFF00FF);
+
+  if (nofile){
+    showIcons(HELPER_SEEKSTART, CRGB(0, 0, 10));
+    showIcons(HELPER_EXIT, CRGB(0, 0, 0));
+    Encoder[0].writeRGBCode(0x000000);
+  } else{
+    showIcons(HELPER_SEEKSTART, CRGB(0, 0, 10));
+    showIcons(HELPER_EXIT, col[SMP.currentChannel]);
+    Encoder[0].writeRGBCode(0x00FF00);
+    }
   // Display using current seek positions (as percentages)
   //displaySample(SMP.seek, SMP.smplen, SMP.seekEnd);
   processPeaks();

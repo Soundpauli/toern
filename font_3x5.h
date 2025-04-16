@@ -1,4 +1,4 @@
-uint8_t alphabet[95][4] = {
+ const uint8_t alphabet[95][4] FLASHMEM = {
   { 3, 0x00, 0x00, 0x00 },  // " "
   { 1, 0x17, 0x00, 0x00 },  // "!"
   { 3, 0x03, 0x00, 0x03 },  // """
