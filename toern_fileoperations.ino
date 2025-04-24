@@ -1,4 +1,95 @@
 
+/*
+void flushAudioQueueToSD() {
+  if (!isRecording || !frec) return;
+  // Only flush every ~10–15 ms to prevent overload
+  //if (recFlushTimer > 100) {
+  while (queue1.available() >= 2) {
+    uint8_t buffer[512];
+    memcpy(buffer, queue1.readBuffer(), 256);
+    queue1.freeBuffer();
+    memcpy(buffer + 256, queue1.readBuffer(), 256);
+    queue1.freeBuffer();
+    frec.write(buffer, 512);
+  }
+  recFlushTimer = 0;
+  //}
+}
+
+
+
+
+void startRecordSD(int fnr, int snr) {
+  if (!isRecording) {
+    playSdWav1.stop();
+    Encoder[0].writeRGBCode(0x000000);
+    Encoder[1].writeRGBCode(0xFF0000);
+    Encoder[2].writeRGBCode(0x000000);
+    Encoder[3].writeRGBCode(0x000000);
+
+    char OUTPUTf[50];
+    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
+    showIcons(ICON_REC, CRGB(20, 0, 0));
+
+    FastLED.show();
+    if (SD.exists(OUTPUTf)) {
+      SD.remove(OUTPUTf);
+    }
+    frec = SD.open(OUTPUTf, FILE_WRITE);
+    if (frec) {
+      recFlushTimer = 0;
+      delay(100);
+      writeWavHeader(frec, (uint32_t)AUDIO_SAMPLE_RATE_EXACT, 16, 1);  // 44.1kHz, 16-bit, mono
+      isRecording = true;
+      queue1.begin();
+    }
+  }
+  return;
+}
+
+void stopRecordSD(int fnr, int snr) {
+  if (isRecording) {
+    isRecording = false;
+    queue1.end();
+
+    //AudioInterrupts();
+    char OUTPUTf[50];
+    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
+
+    //Encoder[2].writeRGBCode(0x000000);
+    if (frec) {
+      while (queue1.available() > 0) {
+        frec.write((uint8_t *)queue1.readBuffer(), 256);
+        queue1.freeBuffer();
+      }
+      frec.close();
+      delay(100);
+      // Update file sizes in header
+      File f = SD.open(OUTPUTf, FILE_WRITE);
+      if (f) {
+        uint32_t fileSize = f.size();
+        uint32_t dataSize = fileSize - 44;
+        f.seek(4);
+        uint32_t riffSize = fileSize - 8;
+        f.write((uint8_t *)&riffSize, 4);
+        f.seek(40);
+        f.write((uint8_t *)&dataSize, 4);
+        f.close();
+      }
+    }
+    delay(100);
+    playSdWav1.play(OUTPUTf);
+
+    previewIsPlaying = false;
+    sampleIsLoaded = false;
+    processPeaks();
+    showWave();
+  }
+}
+
+*/
+
+
 void savePatternAsMIDI(bool autosave) {
   
   yield();

@@ -1,5 +1,3 @@
-
-
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 1
 #define SERIAL8_RX_BUFFER_SIZE 256  // Increase to 256 bytes
@@ -7,11 +5,12 @@
 #define TargetFPS 30
 
 #define AUDIO_BLOCK_SAMPLES 128
-//#define AUDIO_SAMPLE_RATE_EXACT 44100
+#define AUDIO_SAMPLE_RATE_EXACT 44100
 
 #include <stdint.h>
 #include <Wire.h>
 #include <Mapf.h>
+#include <vector>
 
 #define FLANGE_DELAY_LENGTH 2048
 
@@ -83,7 +82,8 @@ MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MySettings);
 unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 
 #define CLOCK_BUFFER_SIZE 24
-elapsedMicros recFlushTimer;
+//elapsedMillis recFlushTimer;
+elapsedMillis recTime;
 
 
 // Number of samples in each delay line
@@ -99,17 +99,15 @@ uint8_t pendingPitch = 0;
 uint8_t pendingVelocity = 0;
 unsigned long pendingTime = 0;
 
-
 struct PendingNote {
   uint8_t pitch;
   uint8_t velocity;
   uint8_t channel;
-  unsigned int livenote;
-  bool active = false;
+  uint8_t livenote;
 };
 
-PendingNote pendingNote;
-
+// a small FIFO for upcoming grid-writes
+static std::vector<PendingNote> pendingNotes;
 
 
 // ----- Intro Animation Timing (in ms) -----
@@ -172,6 +170,13 @@ const int maxPeaks = 512;  // Adjust based on your needs
 float peakValues[maxPeaks];
 int peakIndex = 0;
 
+
+const int maxRecPeaks = 512;  // Adjust based on your needs
+float peakRecValues[maxRecPeaks];
+int peakRecIndex = 0;
+
+
+
 uint8_t ledBrightness = 63;
 const unsigned int maxlen = (maxX * maxPages) + 1;
 const long ram = 12582912;  //12MB ram for sounds // 16MB total
@@ -189,10 +194,17 @@ unsigned long lastCheckTime = 0;          // Get the current time
 int recMode = 1;
 int clockMode = 1;
 
-unsigned long recordStartTime = 0;
-const unsigned long recordDuration = 5000;  // 5 seconds
+
 bool isRecording = false;
 File frec;
+
+#define MAXREC_SECONDS 10
+#define BUFFER_SAMPLES (44100 * MAXREC_SECONDS)
+#define BUFFER_BYTES (BUFFER_SAMPLES * sizeof(int16_t))
+
+
+EXTMEM int16_t recBuffer[BUFFER_SAMPLES];
+volatile size_t recWriteIndex = 0;
 
 
 // which input on the audio shield will be used?
@@ -260,7 +272,7 @@ EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles + 1)];
 
 
 
-const float fullFrequencies[27] = {
+const float fullFrequencies[27] PROGMEM = {
   130.81,  // C3
   138.59,  // C#3/Db3
   146.83,  // D3
@@ -291,7 +303,7 @@ const float fullFrequencies[27] = {
 };
 
 
-const float pianoFrequencies[16] = {
+const float pianoFrequencies[16] PROGMEM = {
   130.81,  // C3
   146.83,  // D3
   164.81,  // E3
@@ -322,6 +334,7 @@ String usedFiles[maxFiles] = { "samples/_1.wav",
                                "samples/_9.wav" };
 
 elapsedMillis msecs;
+elapsedMillis mRecsecs;
 
 
 CRGB leds[NUM_LEDS];
@@ -631,7 +644,7 @@ char *activeParameterType[8] = { "TYPE", "WAV", "DLAY", "ATTC", "HOLD", "DCAY", 
 char *activeFilterType[9] = { "", "LOW", "HIGH", "FREQ", "RVRB", "BITC", "FLNG", "DTNE", "OCTV" };
 char *activeDrumType[4] = { "TONE", "DCAY", "FREQ", "TYPE" };
 
-char *activeSynthVoice[8] = { "SND", "PAR1", "PAR2", "PAR3", "PAR4", "PAR5", "PAR6", "PAR7" };
+char *activeSynthVoice[8] = { "SND", "CUT", "RES", "FLT", "CENT", "SEMI", "WAVE", "PAR7" };
 char *activeMidiSetType[6] = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
 
 
@@ -667,36 +680,37 @@ AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &enve
 AudioAmplifier *amps[15] = { &amp0, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, &amp12, &amp13, &amp14 };
 AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, &filter12, &filter13, &filter14 };
 AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, &filtermixer12, &filtermixer13, &filtermixer14 };
-AudioEffectBitcrusher *bitcrushers[15] = { 0, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, 0, 0, &bitcrusher11, &bitcrusher12, &bitcrusher13, &bitcrusher14 };
-AudioEffectFreeverb *freeverbs[15] = { 0, &freeverb1, &freeverb2, 0, 0, 0, 0, &freeverb7, &freeverb8, 0, 0, &freeverb11, &freeverb12, &freeverb13, &freeverb14 };
-AudioMixer4 *freeverbmixers[15] = { 0, &freeverbmixer1, &freeverbmixer2, 0, 0, 0, 0, &freeverbmixer7, &freeverbmixer8, 0, 0, 0, 0, 0, 0 };
-AudioEffectFlange *flangers[15] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &flange11, &flange12, &flange13, &flange14 };
-AudioMixer4 *waveformmixers[15] = { 0, &BDMixer, &SNMixer, &HHMixer, 0, 0, 0, 0, 0, 0, 0, &mixer_waveform11, &mixer_waveform12, &mixer_waveform13, &mixer_waveform14 };
+AudioEffectBitcrusher *bitcrushers[15] = { nullptr, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, nullptr, nullptr, &bitcrusher11, &bitcrusher12, &bitcrusher13, &bitcrusher14 };
+AudioEffectFreeverb *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, nullptr, nullptr, &freeverb7, &freeverb8, 0, 0, &freeverb11, &freeverb12, &freeverb13, &freeverb14 };
+AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, nullptr, nullptr, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+AudioEffectFlange *flangers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &flange11, &flange12, &flange13, &flange14 };
+AudioMixer4 *waveformmixers[15] = { nullptr, &BDMixer, &SNMixer, &HHMixer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, &mixer_waveform12, &mixer_waveform13, &mixer_waveform14 };
 
 
 AudioSynthWaveform *synths[15][2];
 
 /*
-AudioSynthWaveformDc *Sdc1[3] = {&dc11_1, &dc11_2, &dc11_3};
-AudioEffectEnvelope *Senvelope1[3] = {&envelope1_1, &envelope1_2, &envelope1_3};
-AudioEffectEnvelope *Senvelope2[3] = {&envelope2_1, &envelope2_2, &envelope2_3};
-AudioEffectEnvelope *SenvelopeFilter1[3] = {&envelopeFilter1_1, &envelopeFilter1_2, &envelopeFilter1_3};
+  AudioSynthWaveformDc *Sdc1[3] = {&dc11_1, &dc11_2, &dc11_3};
+  AudioEffectEnvelope *Senvelope1[3] = {&envelope1_1, &envelope1_2, &envelope1_3};
+  AudioEffectEnvelope *Senvelope2[3] = {&envelope2_1, &envelope2_2, &envelope2_3};
+  AudioEffectEnvelope *SenvelopeFilter1[3] = {&envelopeFilter1_1, &envelopeFilter1_2, &envelopeFilter1_3};
 
-AudioSynthWaveform *Swaveform1[3] = {&waveform1_1, &waveform2_1, &waveform3_1};
-AudioSynthWaveform *Swaveform2[3] = {&waveform2_2, &waveform2_2, &waveform3_2};
-AudioSynthWaveform *Swaveform3[3] = {&waveform3_1, &waveform3_2, &waveform3_3};
+  AudioSynthWaveform *Swaveform1[3] = {&waveform1_1, &waveform2_1, &waveform3_1};
+  AudioSynthWaveform *Swaveform2[3] = {&waveform2_2, &waveform2_2, &waveform3_2};
+  AudioSynthWaveform *Swaveform3[3] = {&waveform3_1, &waveform3_2, &waveform3_3};
 
-AudioFilterLadder *Sladder1[3] = {&ladder1_1, &ladder2_1};
-AudioFilterLadder *Sladder2[3] = {&ladder1_2, &ladder2_2};
-AudioFilterLadder *Sladder3[3] = {&ladder1_3, &ladder2_3};
+  AudioFilterLadder *Sladder1[3] = {&ladder1_1, &ladder2_1};
+  AudioFilterLadder *Sladder2[3] = {&ladder1_2, &ladder2_2};
+  AudioFilterLadder *Sladder3[3] = {&ladder1_3, &ladder2_3};
 
-AudioMixer4 *Smixer1[2] = { &mixer1_1, &mixer2_1};
-AudioMixer4 *Smixer2[2] = { &mixer1_2, &mixer2_2};
-AudioMixer4 *Smixer3[2] = { &mixer1_3, &mixer2_3};
-*/
+  AudioMixer4 *Smixer1[2] = { &mixer1_1, &mixer2_1};
+  AudioMixer4 *Smixer2[2] = { &mixer1_2, &mixer2_2};
+  AudioMixer4 *Smixer3[2] = { &mixer1_3, &mixer2_3};
+  */
 
 void allOff() {
   for (AudioEffectEnvelope *envelope : envelopes) {
+    if (!envelope) continue;
     envelope->noteOff();
   }
 }
@@ -968,114 +982,63 @@ void writeWavHeader(File &file, uint32_t sampleRate, uint8_t bitsPerSample, uint
   file.write(header, 44);
 }
 
-void flushAudioQueueToSD() {
-  if (!isRecording || !frec) return;
 
-  // Only flush every ~10–15 ms to prevent overload
-  if (recFlushTimer > 10) {
-    while (queue1.available() >= 2) {
-      uint8_t buffer[512];
-      memcpy(buffer, queue1.readBuffer(), 256);
-      queue1.freeBuffer();
-      memcpy(buffer + 256, queue1.readBuffer(), 256);
-      queue1.freeBuffer();
-      frec.write(buffer, 512);
-    }
-    recFlushTimer = 0;
-  }
+void startRecordingRAM() {
+  if (isRecording) return;
+
+  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  Encoder[0].writeRGBCode(0x000000);
+  Encoder[1].writeRGBCode(0xFF0000);
+  Encoder[2].writeRGBCode(0x000000);
+  Encoder[3].writeRGBCode(0x000000);
+  recTime = 0;
+  recWriteIndex = 0;
+  queue1.begin();  // start filling 128‑sample blocks
+  showIcons(ICON_REC, CRGB(20, 0, 0));
+  FastLED.show();
+  isRecording = true;
 }
 
-
-
-void continueRecording() {
-  //Serial.println("rec?");
-  if (queue1.available() >= 2) {
-    uint8_t buffer[512];
-    // Fetch 2 blocks from the audio library and copy
-    // into a 512 byte buffer.  The Arduino SD library
-    // is most efficient when full 512 byte sector size
-    // writes are used.
-    memcpy(buffer, queue1.readBuffer(), 256);
+void flushAudioQueueToRAM() {
+  if (!isRecording) return;
+  // each AudioRecordQueue block is 128 samples
+  while (queue1.available() && recWriteIndex + 128 <= BUFFER_SAMPLES) {
+    auto block = (int16_t *)queue1.readBuffer();
+    memcpy(recBuffer + recWriteIndex, block, 128 * sizeof(int16_t));
+    recWriteIndex += 128;
     queue1.freeBuffer();
-    memcpy(buffer + 256, queue1.readBuffer(), 256);
-    queue1.freeBuffer();
-    // write all 512 bytes to the SD card
-    //elapsedMicros usec = 0;
-    frec.write(buffer, 512);
-    // Uncomment these lines to see how long SD writes
-    // are taking.  A pair of audio blocks arrives every
-    // 5802 microseconds, so hopefully most of the writes
-    // take well under 5802 us.  Some will take more, as
-    // the SD library also must write to the FAT tables
-    // and the SD card controller manages media erase and
-    // wear leveling.  The queue1 object can buffer
-    // approximately 301700 us of audio, to allow time
-    // for occasional high SD card latency, as long as
-    // the average write time is under 5802 us.
-    //Serial.print("SD write, us=");
-    //Serial.println(usec);
   }
-}
-
-void record(int fnr, int snr) {
-  if (!isRecording) {
-
-    char OUTPUTf[50];
-    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-    Serial.print("RECORDING IN >>>> ");
-    Serial.println(OUTPUTf);
-    isRecording = true;
-    //AudioNoInterrupts();
-    Serial.println("Start recording");
-    showIcons(ICON_REC, CRGB(20, 0, 0));
-    FastLED.show();
-    if (SD.exists(OUTPUTf)) {
-      SD.remove(OUTPUTf);
-    }
-    frec = SD.open(OUTPUTf, FILE_WRITE);
-    if (frec) {
-      recFlushTimer = 0;
-      writeWavHeader(frec, (uint32_t)AUDIO_SAMPLE_RATE_EXACT, 16, 1);  // 44.1kHz, 16-bit, mono
-      queue1.begin();
-    }
-  }
-}
-
-void stopRecord(int fnr, int snr) {
-  if (isRecording) {
-    //AudioInterrupts();
-    char OUTPUTf[50];
-    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-
-    Serial.println("Stop Recording");
+  // if we ever hit the end of the buffer, stop automatically:
+  if (recWriteIndex >= BUFFER_SAMPLES) {
+    Serial.println("⚠️ Buffer full");
     queue1.end();
-    if (frec) {
-      while (queue1.available() > 0) {
-        frec.write((uint8_t *)queue1.readBuffer(), 256);
-        queue1.freeBuffer();
-      }
-      frec.close();
-
-      // Update file sizes in header
-      File f = SD.open(OUTPUTf, FILE_WRITE);
-      if (f) {
-        uint32_t fileSize = f.size();
-        uint32_t dataSize = fileSize - 44;
-        f.seek(4);
-        uint32_t riffSize = fileSize - 8;
-        f.write((uint8_t *)&riffSize, 4);
-        f.seek(40);
-        f.write((uint8_t *)&dataSize, 4);
-        f.close();
-      }
-    }
     isRecording = false;
-
-    Serial.println("Start Playing");
-    playSdWav1.play(OUTPUTf);
   }
 }
 
+void stopRecordingRAM(int fnr, int snr) {
+  if (!isRecording) return;
+  flushAudioQueueToRAM();
+  queue1.end();
+  isRecording = false;
+
+  // open WAV on SD
+  char path[64];
+  sprintf(path, "samples/%d/_%d.wav", fnr, snr);
+  if (SD.exists(path)) SD.remove(path);
+  File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!f) { return; }
+  // write 44‑byte WAV header for 16‑bit/mono/22 050 Hz
+  writeWavHeader(f, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
+  // write all your samples in one chunk
+  f.write((uint8_t *)recBuffer, recWriteIndex * sizeof(int16_t));
+
+  f.close();
+  Serial.print("💾 Saved ");
+  Serial.println(path);
+  // playback if you like
+  playSdWav1.play(path);
+}
 
 void drawClockMode() {
 
@@ -1112,8 +1075,15 @@ void drawRecMode() {
 
 void checkMode(String buttonString, bool reset) {
 
-  Serial.print("-----> | ");
-  Serial.println(buttonString);
+
+  if (isRecording && buttonString == "0900") {
+    //stopRecord(getFolderNumber(SMP.wav[SMP.currentChannel].fileID), SMP.wav[SMP.currentChannel].fileID);
+    stopRecordingRAM(getFolderNumber(SMP.wav[SMP.currentChannel].fileID), SMP.wav[SMP.currentChannel].fileID);
+    return;
+  }
+  if (isRecording) return;
+
+
   // Toggle play/pause in draw or single mode
   if ((currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && buttonString == "0010") {
 
@@ -1228,11 +1198,8 @@ void checkMode(String buttonString, bool reset) {
     switchMode(&singleMode);
     SMP.singleMode = true;
   } else if ((currentMode == &set_Wav) && buttonString == "0200") {
-    Serial.println("RECORDING TO ============> ");
-    Serial.println(SMP.wav[SMP.currentChannel].fileID);
-    record(getFolderNumber(SMP.wav[SMP.currentChannel].fileID), SMP.wav[SMP.currentChannel].fileID);
-  } else if ((currentMode == &set_Wav) && buttonString == "0900") {
-    stopRecord(getFolderNumber(SMP.wav[SMP.currentChannel].fileID), SMP.wav[SMP.currentChannel].fileID);
+    //startRecord(getFolderNumber(SMP.wav[SMP.currentChannel].fileID), SMP.wav[SMP.currentChannel].fileID);
+    startRecordingRAM();
   }
 
 
@@ -1461,17 +1428,14 @@ void checkMode(String buttonString, bool reset) {
 
 void initSoundChip() {
   AudioInterrupts();
-  AudioMemory(48);
+  //AudioMemory(48);
+  AudioMemory(96);
   // turn on the output
-  sgtl5000_1.volume(0.0);
   sgtl5000_1.enable();
-  sgtl5000_1.volume(0.1);
-  sgtl5000_1.volume(0.4);
   sgtl5000_1.volume(0.9);
-
+  
   //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
   //sgtl5000_1.audioPostProcessorEnable();
-
   //sgtl5000_1.audioPreProcessorEnable();
   //sgtl5000_1.audioPostProcessorEnable();
   //   sgtl5000_1.autoVolumeEnable();
@@ -1480,10 +1444,8 @@ void initSoundChip() {
 
   sgtl5000_1.inputSelect(recInput);
   sgtl5000_1.micGain(28);  //0-63
-  sgtl5000_1.adcHighPassFilterEnable();
-  //sgtl5000_1.adcHighPassFilterDisable();
-
-
+  //sgtl5000_1.adcHighPassFilterEnable();
+  //sgtl5000_1.adcHighPassFilterDisable(); //for mic?
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(1);
 }
@@ -1503,10 +1465,57 @@ void initSamples() {
   _samplers[2].addVoice(sound2, mixer1, 1, envelope2);
   _samplers[3].addVoice(sound3, mixer1, 2, envelope3);
   _samplers[4].addVoice(sound4, mixer1, 3, envelope4);
+  
   _samplers[5].addVoice(sound5, mixer2, 0, envelope5);
   _samplers[6].addVoice(sound6, mixer2, 1, envelope6);
   _samplers[7].addVoice(sound7, mixer2, 2, envelope7);
   _samplers[8].addVoice(sound8, mixer2, 3, envelope8);
+
+  mixer1.gain(0, GAIN4);
+  mixer1.gain(1, GAIN4);
+  mixer1.gain(2, GAIN4);
+  mixer1.gain(3, GAIN4);
+
+
+freeverbmixer8.gain(0,0.2);
+freeverbmixer8.gain(1,0.2);
+freeverbmixer8.gain(2,0.2);
+freeverbmixer8.gain(3,0.2);
+
+filtermixer8.gain(0,0.2);
+filtermixer8.gain(1,0.2);
+filtermixer8.gain(2,0.2);
+filtermixer8.gain(3,0.2);
+
+
+  synthmixer11.gain(0, GAIN3);
+  synthmixer11.gain(1, GAIN3);
+  synthmixer11.gain(3, GAIN3);
+
+  synthmixer12.gain(0, GAIN3);
+  synthmixer12.gain(1, GAIN3);
+  synthmixer12.gain(3, GAIN3);
+
+
+  synthmixer13.gain(0, 0.1);
+  synthmixer13.gain(1, 0.1);
+  synthmixer13.gain(3, 0.1);
+
+  synthmixer14.gain(0, 0.1);
+  synthmixer14.gain(1, 0.1);
+  synthmixer14.gain(3, 0.1);
+
+
+  mixersynth_end.gain(0, GAIN4);
+  mixersynth_end.gain(1, GAIN4);
+  mixersynth_end.gain(2, GAIN4);
+  mixersynth_end.gain(3, GAIN4);
+
+
+  mixer0.gain(0, 0.1);  //PREV
+  mixer0.gain(1, 0.1);  //PREV
+  mixer0.gain(2, 0.1);  //PREV
+  mixer0.gain(3, 0.1);  //PREV
 
   mixer1.gain(0, GAIN4);
   mixer1.gain(1, GAIN4);
@@ -1518,38 +1527,16 @@ void initSamples() {
   mixer2.gain(2, GAIN4);
   mixer2.gain(3, GAIN4);
 
-  synthmixer11.gain(0, GAIN3);
-  synthmixer11.gain(1, GAIN3);
-  synthmixer11.gain(3, GAIN3);
 
-  synthmixer12.gain(0, GAIN3);
-  synthmixer12.gain(1, GAIN3);
-  synthmixer12.gain(3, GAIN3);
+  mixer_end.gain(0, 0.2);
+  mixer_end.gain(1, 0.2);
+  mixer_end.gain(2, 0.2);
 
 
-  synthmixer13.gain(0, GAIN3);
-  synthmixer13.gain(1, GAIN3);
-  synthmixer13.gain(3, GAIN3);
-
-  synthmixer14.gain(0, GAIN3);
-  synthmixer14.gain(1, GAIN3);
-  synthmixer14.gain(3, GAIN3);
-
-
-  mixersynth_end.gain(0, GAIN4);
-  mixersynth_end.gain(1, GAIN4);
-  mixersynth_end.gain(2, GAIN4);
-  mixersynth_end.gain(3, GAIN4);
-
-
-  mixer_end.gain(0, GAIN3);
-  mixer_end.gain(1, GAIN3);
-  mixer_end.gain(2, GAIN3);
-
-
-  mixerPlay.gain(0, GAIN3);
-  mixerPlay.gain(1, GAIN3);
-  mixerPlay.gain(2, GAIN3);
+  mixerPlay.gain(0, 0.2);
+  mixerPlay.gain(1, 0.2);
+  mixerPlay.gain(2, 0.2);
+  mixerPlay.gain(3, 0.2);
 
   // Initialize the array with nullptrs
   synths[11][0] = &waveform11_1;
@@ -1686,6 +1673,9 @@ void initEncoders() {
 }
 
 void setup(void) {
+
+
+
   //NVIC_SET_PRIORITY(IRQ_LPUART8, 128);
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
@@ -1712,16 +1702,16 @@ void setup(void) {
 
   initSoundChip();
   initSamples();
-  
-  drawNoSD(); 
-  
+
+  drawNoSD();
+  delay(50);
+
   playSdWav1.play("intro/002.wav");
   runAnimation();
-  
   playSdWav1.stop();
 
   EEPROMgetLastFiles();
-  
+
   loadSamplePack(samplePackID, true);
   // set BPM:100
   SMP.bpm = 100.0;
@@ -1730,17 +1720,13 @@ void setup(void) {
   midiTimer.begin(checkMidi, playNoteInterval / 24);
   //midiTimer.priority(10);
 
-
-
   autoLoad();
-  
+
   switchMode(&draw);
   Serial8.begin(31250);
   MIDI.begin(MIDI_CHANNEL_OMNI);
   //MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
   //MIDI.setHandleClock(myClock);       // optional if you're using callbacks
-  
-
 }
 
 void setEncoderColor(int i) {
@@ -1763,7 +1749,6 @@ void checkEncoders() {
   if (currentMode == &draw || currentMode == &singleMode) {
     if (posString != oldPosString) {
       oldPosString = posString;
-      Serial.println(posString);
       SMP.x = currentMode->pos[3];
       SMP.y = currentMode->pos[0];
 
@@ -1824,7 +1809,6 @@ void checkEncoders() {
       }
     }
   }
-
 }
 
 
@@ -1931,6 +1915,8 @@ void animateSingle() {
   switchMode(&singleMode);
   SMP.singleMode = true;
 }
+
+
 void checkSingleTouch() {
   int touchValue = fastTouchRead(SWITCH_1);
 
@@ -1977,9 +1963,38 @@ void checkMenuTouch() {
 void loop() {
 
   if (isRecording) {
-    flushAudioQueueToSD();  // SD write is now throttled and safe
-    checkEncoders();        // Optional: allow user interaction
-    checkButtons();
+    //flushAudioQueueToSD();  // SD write is now throttled and safe
+    flushAudioQueueToRAM();
+    checkEncoders();  // Optional: allow user interaction
+    checkMode(buttonString, true);
+    
+
+    for (int x = 1; x < maxX; x++) {
+      for (int y = 5; y < 10; y++) {
+        light(x, y, CRGB(0, 0, 0));
+      }
+    }
+    float seconds = recTime / 1000.0f;
+    char buf[8];
+
+    snprintf(buf, sizeof(buf), "%.2f", seconds);
+    drawText(buf, 3, 5, CRGB(200, 50, 0));
+    
+
+
+  if (mRecsecs > 5) {
+      if (peakRecIndex < maxRecPeaks) {
+        if (peakRec.available()) {
+          mRecsecs = 0;
+          // Store the peak value
+          peakRecValues[peakIndex] = peakRec.read();
+          peakRecIndex++;
+        }
+      }
+    }
+    processRecPeaks();
+    FastLED.show();
+
     return;  // Skip the rest for performance
   }
 
@@ -2046,9 +2061,8 @@ void loop() {
   } else if (currentMode->name == "SET_SAMPLEPACK") {
     showSamplePack();
   } else if (currentMode->name == "SET_WAV") {
+    if (isRecording) return;
     showWave();
-
-
   } else if (currentMode->name == "NOTE_SHIFT") {
     shiftNotes();
     drawBase();
@@ -2071,8 +2085,6 @@ void loop() {
       FastLEDshow();
     }
     if (!freshPaint && currentMode == &velocity) { drawVelocity(); }
-
-    
   }
 
 
@@ -2080,6 +2092,7 @@ void loop() {
     int noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
     if (noteOnTriggered[ch] && !persistentNoteOn[ch] && (millis() - startTime[ch] >= noteLen)) {
+      if (!envelopes[ch]) continue;
       envelopes[ch]->noteOff();
       noteOnTriggered[ch] = false;
     }
@@ -2091,8 +2104,8 @@ void loop() {
 
   FastLEDshow();  // draw!
   filterfreshsetted = false;
-  yield();
-  delay(25);
+  //yield();
+  //delay(15); //25
   yield();
 }
 
@@ -2211,7 +2224,7 @@ void shiftNotes() {
 
 
 void tmpMuteAll(bool pressed) {
-  
+
   if (pressed > 0) {
     int channel = SMP.currentChannel;
     //mute all channels except current
@@ -2233,7 +2246,7 @@ void tmpMuteAll(bool pressed) {
 
 
 void toggleMute() {
-  
+
   if (SMP.mute[SMP.currentChannel]) {
     SMP.mute[SMP.currentChannel] = false;
     //envelopes[SMP.currentChannel]->release(11880 / 2);
@@ -2259,11 +2272,10 @@ void play(bool fromStart) {
     SMP.page = 1;
     Encoder[2].writeRGBCode(0xFFFF00);
     MIDI.sendRealTime(midi::Start);
-    
   }
   isNowPlaying = true;
-  
-  
+
+
 
   FastLED.show();
   //playNote();
@@ -2285,7 +2297,7 @@ void pause() {
 
 
 void playSynth(int ch, int b, int vel, bool persistant) {
-  float frequency = fullFrequencies[b - ch  + 13];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
+  float frequency = fullFrequencies[b - ch + 13];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
 
   //float frequency = pianoFrequencies[b+12]; //C4
 
@@ -2303,6 +2315,7 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   synths[ch][1]->frequency(frequency * octave_ratio * detune_ratio);
   synths[ch][0]->amplitude(WaveFormVelocity);
   synths[ch][1]->amplitude(WaveFormVelocity);
+  if (!envelopes[ch]) return;
   envelopes[ch]->noteOn();
 
   if (persistant) {
@@ -2318,7 +2331,7 @@ void playSynth(int ch, int b, int vel, bool persistant) {
 void playNote() {
   onBeatTick();
   if (isNowPlaying) {
-    playTimer.end();  // Stop the timer
+    //playTimer.end();  // Stop the timer
 
     for (unsigned int b = 1; b < maxY + 1; b++) {
       int ch = note[beat][b].channel;
@@ -2346,11 +2359,13 @@ void playNote() {
             if (ch == 3) HH_drum(tone + notepitch, dec, pit, typ);
 
           } else {
+
             _samplers[ch].noteEvent(12 * SampleRate[ch] + b - (ch + 1), vel, true, false);
           }
         } else if (ch == 11) {
 
           playSound(12 * octave[0] + transpose + b, 0);
+          
 
 
         } else if (ch >= 13) {
@@ -2390,7 +2405,7 @@ void playNote() {
       beat = 1;
       SMP.page = 1;
     }
-    playTimer.begin(playNote, playNoteInterval);
+    //playTimer.begin(playNote, playNoteInterval);
   }
   yield();
 }
@@ -2437,7 +2452,7 @@ void paint() {
     } else if (y == 16) toggleCopyPaste();  //copypaste if top above
 
   } else {
-    if ((y > 1 && y <= 15)) {
+    if ((y > 0 && y <= 15)) {
       note[x][y].channel = SMP.currentChannel;
     }
   }
@@ -2454,17 +2469,17 @@ void paint() {
     if (note[x][y].channel <= 9) {
       _samplers[note[x][y].channel].noteEvent(12 * SampleRate[note[x][y].channel] + y - (note[x][y].channel + 1), defaultVelocity, true, false);
       yield();
-    }
+    } else if (note[x][y].channel == 11){playSound(12 * octave[0] + transpose + y, 0);}
 
-    if (note[x][y].channel >= 13) {
+    else if (note[x][y].channel >= 13 && note[x][y].channel<15) {
 
       int ch = note[x][y].channel;
-      float frequency = fullFrequencies[y - (note[x][y].channel + 1)+ 14];  // y-Wert ist 1-basiert, Array ist 0-basiert
+      float frequency = fullFrequencies[y - (note[x][y].channel + 1) + 14];  // y-Wert ist 1-basiert, Array ist 0-basiert
       synths[ch][0]->frequency(frequency);
       float WaveFormVelocity = mapf(defaultVelocity, 1, 127, 0.0, 1.0);
-      
-    
-      
+
+
+
 
       float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
       float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
@@ -2478,7 +2493,7 @@ void paint() {
 
       synths[ch][0]->amplitude(WaveFormVelocity);
       synths[ch][1]->amplitude(WaveFormVelocity);
-      
+      if (!envelopes[ch]) return;
       envelopes[ch]->noteOn();
 
       startTime[ch] = millis();    // Record the start time
@@ -2498,7 +2513,7 @@ void toggleCopyPaste() {
 
   //SMP.edit = 1;
   if (!SMP.activeCopy) {
-    
+
     // copy the pattern into the memory
     Serial.print("copy now");
     unsigned int src = 0;
@@ -2510,7 +2525,7 @@ void toggleCopyPaste() {
       }
     }
   } else {
-    
+
     // paste the memory into the song
     Serial.print("paste here!");
     unsigned int src = 0;
@@ -2528,7 +2543,7 @@ void toggleCopyPaste() {
 
 
 void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, unsigned int channel, bool singleMode) {
-  
+
   for (unsigned int y = yStart; y < yEnd; y++) {
     if (singleMode) {
       if (note[c][y].channel == channel)
@@ -2554,7 +2569,7 @@ void updateVolume() {
 }
 
 void updateBrightness() {
-  ledBrightness = (currentMode->pos[1] * 10) + 4;
+  ledBrightness = (currentMode->pos[1] * 10) + 4 - 50;
   Serial.println("Brightness: " + String(ledBrightness));
 }
 
@@ -2613,12 +2628,12 @@ void drawBrightness() {
 void showExit(int index) {
   showIcons(HELPER_EXIT, CRGB(0, 0, 100));
   Encoder[index].writeRGBCode(0x0000FF);
-  }
+}
 
 void showMenu() {
   FastLEDclear();
-  showExit(0);  
-  
+  showExit(0);
+
   //drawNumber(menuPosition, CRGB(20, 20, 40), 0);
 
 
@@ -2674,7 +2689,6 @@ void showMenu() {
   if (currentMode->pos[3] != menuPosition) {
     changeMenu(currentMode->pos[3]);
   }
-  
 }
 
 

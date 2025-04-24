@@ -21,12 +21,12 @@ void checkMidi() {
         handleNoteOff(SMP.currentChannel, pitch - 60, velocity);
         break;
 
-    case midi::Clock:
-      {
-        unsigned long now = micros();  // Capture time ASAP
-        myClock(now);  // Pass it into the clock handler
-      }
-      break;
+      case midi::Clock:
+        {
+          unsigned long now = micros();  // Capture time ASAP
+          myClock(now);                  // Pass it into the clock handler
+        }
+        break;
 
       case midi::Start:
         handleStart();
@@ -50,36 +50,34 @@ void checkMidi() {
         break;
     }
   }
-  
+
   // If this device is sending MIDI Clock, calculate and send it based on SMP.bpm.
-if (MIDI_CLOCK_SEND) {
-  static unsigned long lastClockSent = micros();
-  unsigned long now = micros();
+  if (MIDI_CLOCK_SEND) {
+    static unsigned long lastClockSent = micros();
+    unsigned long now = micros();
 
-  // Use a float for smoothing even though SMP.bpm is an int.
-  static float smoothedBPM = (float)SMP.bpm;  
-  const float alpha = 0.1f;  // Smoothing factor (0.0 to 1.0); lower is smoother.
-  smoothedBPM = alpha * ((float)SMP.bpm) + (1.0f - alpha) * smoothedBPM;
+    // Use a float for smoothing even though SMP.bpm is an int.
+    static float smoothedBPM = (float)SMP.bpm;
+    const float alpha = 0.1f;  // Smoothing factor (0.0 to 1.0); lower is smoother.
+    smoothedBPM = alpha * ((float)SMP.bpm) + (1.0f - alpha) * smoothedBPM;
 
-  // Calculate clock pulse interval in microseconds using the smoothed BPM.
-  // MIDI clocks: 24 ticks per quarter note.
-  float clockInterval = 60000000.0f / (smoothedBPM * 24.0f);
-  unsigned long clockInterval_us = (unsigned long)clockInterval;
+    // Calculate clock pulse interval in microseconds using the smoothed BPM.
+    // MIDI clocks: 24 ticks per quarter note.
+    float clockInterval = 60000000.0f / (smoothedBPM * 24.0f);
+    unsigned long clockInterval_us = (unsigned long)clockInterval;
 
-  // Increment the lastClockSent time by the fixed interval to reduce jitter.
-  while (now - lastClockSent >= clockInterval_us) {
-    MIDI.sendRealTime(midi::Clock);
-    lastClockSent += clockInterval_us;
+    // Increment the lastClockSent time by the fixed interval to reduce jitter.
+    while (now - lastClockSent >= clockInterval_us) {
+      MIDI.sendRealTime(midi::Clock);
+      lastClockSent += clockInterval_us;
+    }
   }
-}
-
-  
 }
 
 
 void myClock(unsigned long now) {
   static unsigned long lastClockTime = 0;
-  static unsigned long intervals[CLOCK_BUFFER_SIZE] = {0};
+  static unsigned long intervals[CLOCK_BUFFER_SIZE] = { 0 };
   static int index = 0;
   static int count = 0;
 
@@ -115,7 +113,7 @@ void MidiSendNoteOn(int pitch, int channel, int velocity) {
   if (channel > 16) channel = 16;
   if (velocity < 0) velocity = 0;
   if (velocity > 127) velocity = 127;
-  
+
   // Optionally, if y is not already a MIDI note number, map it here.
   // For example, if y is from 0 to 15 and you want to map it to notes 60-75:
   // y = map(y, 0, 15, 60, 75);
@@ -126,7 +124,7 @@ void MidiSendNoteOn(int pitch, int channel, int velocity) {
   const int baseNote = 48;
   // Map y to a MIDI note: y=1 gives baseNote, y=2 gives baseNote+1, etc.
   int note = baseNote + (pitch - 1);
-  
+
   // Send the Note On event using the MIDI library.
   MIDI.sendNoteOn(note, velocity, channel);
 }
@@ -146,10 +144,6 @@ void handleStop() {
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   // For persistent channels (11-14), use the actual MIDI channel
   if (ch < 1 || ch > 16) return;
-
-  Serial.print("[midinote] ch:");
-  Serial.print(ch);
-
   pressedKeyCount[ch]++;  // Increment count for this channel
   if (pressedKeyCount[ch] == 1) {
     persistentNoteOn[ch] = true;
@@ -160,33 +154,33 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   if (livenote < 1) livenote += 12;
 
   if (livenote >= 1 && livenote <= 16) {
+
     if (isNowPlaying) {
       if (SMP.singleMode) {
         // Store for grid write on next beat
-        pendingNote = {
-          .pitch = pitch,
-          .velocity = velocity,
-          .channel = ch,
-          .livenote = livenote,
-          .active = true
-        };
+        pendingNotes.push_back({ .pitch = pitch,
+                                 .velocity = velocity,
+                                 .channel = (uint8_t)ch,
+                                 .livenote = (uint8_t)livenote });
+                                
       }
       // Always play the note immediately
       activeNotes[pitch] = true;
-      } 
-
-      // Live mode: play note and show light
-      light(mapXtoPageOffset(SMP.x), livenote, CRGB(255, 255, 255));
-      FastLED.show();
       
-      if (ch < 9) {
-        _samplers[ch].noteEvent(((SampleRate[ch] * 12) + pitch - 60), velocity, true, true);
-      } else if (ch > 12) {
-        playSynth(ch, (pitch - 60) + 14, velocity, true);
-      }
     }
-  
 
+    // Live mode: play note and show light
+    light(mapXtoPageOffset(SMP.x), livenote, CRGB(255, 255, 255));
+    FastLED.show();
+  
+    if (ch < 9) {
+      _samplers[ch].noteEvent(((SampleRate[ch] * 12) + pitch - 60), velocity, true, false);
+    } else if (ch > 12 && ch < 15) {
+      playSynth(ch, livenote, velocity, true);
+    } else if (ch == 11) {
+      playSound(12 * octave[0] + transpose + pitch - 60 + 12, 0);
+    }
+  }
 }
 
 
@@ -194,16 +188,16 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
 void onBeatTick() {
   beatStartTime = millis();
 
-  if (pendingNote.active) {
+  for (auto &pn : pendingNotes) {
     int targetBeat = (beat == 1) ? (maxX * lastPage) : (beat - 1);
-    if (pendingNote.livenote >= 1 && pendingNote.livenote <= 16) {
-      note[targetBeat][pendingNote.livenote].channel = pendingNote.channel;
-      note[targetBeat][pendingNote.livenote].velocity = pendingNote.velocity;
+    //int targetBeat = beat;
+
+    if (pn.livenote >= 1 && pn.livenote <= maxY) {
+      note[targetBeat][pn.livenote].channel = pn.channel;
+      note[targetBeat][pn.livenote].velocity = pn.velocity;
     }
-
-    pendingNote.active = false;
   }
-
+  pendingNotes.clear();
   // Now play the notes for beat
 }
 
@@ -211,25 +205,22 @@ void onBeatTick() {
 
 
 void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
-  Serial.print("OFF : ");
-  Serial.print(channel);
-  Serial.print(".");
-  Serial.println( pressedKeyCount[channel] );
 
   // For persistent channels (11-14) use the counter.
   if (channel >= 11 && channel <= 14) {
     if (pressedKeyCount[channel] > 0)
-      pressedKeyCount[channel]--; // Decrement counter
+      pressedKeyCount[channel]--;  // Decrement counter
 
     // Only release if no keys remain pressed
     if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
+      if (!envelopes[channel]) return;
       envelopes[channel]->noteOff();
       persistentNoteOn[channel] = false;
       noteOnTriggered[channel] = false;
     }
     return;
   }
-  
+
   // Existing logic for non-persistent channels goes here...
 }
 
@@ -238,7 +229,7 @@ void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
 void handleStart() {
   // Called when a MIDI Start message is received.
   waitForFourBars = true;
-  pulseCount = 0;  // Reset pulse count on start.
+  pulseCount = 0;            // Reset pulse count on start.
   beatStartTime = millis();  // Sync to current time.
   Serial.println("MIDI Start Received");
   play(true);

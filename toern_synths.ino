@@ -623,6 +623,8 @@ void playSound(int note, int ch) {
 
 // This function checks each voice and auto-offs active notes after AUTO_OFF_TIME.
 void autoOffActiveNotes() {
+  //Serial.println(persistentNoteOn[11]);
+if (pressedKeyCount[11]>=1) return;
   unsigned long currentTime = millis();
   for (int ch = 0; ch < 2; ch++) {
     for (int i = 0; i < POLY_VOICES; i++) {

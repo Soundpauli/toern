@@ -570,6 +570,55 @@ unsigned int endX = mapf(SMP.seekEnd, 0, 100, 1, 16);
 
 
 
+void processRecPeaks() {
+  float interpolatedRecValues[16];  // Ensure at least 16 values
+
+
+
+  if (peakIndex > 0) {
+    // Distribute peak values over 16 positions
+    for (int i = 0; i < 16; i++) {
+      float indexMapped = mapf(i, 0, 15, 0, peakIndex - 1);
+      int lowerIndex = floor(indexMapped);
+      int upperIndex = min(lowerIndex + 1, peakIndex - 1);
+
+      if (peakIndex > 1) {
+        float fraction = indexMapped - lowerIndex;
+        interpolatedRecValues[i] = peakRecValues[lowerIndex] * (1 - fraction) + peakRecValues[upperIndex] * fraction;
+      } else {
+        interpolatedRecValues[i] = peakRecValues[0];  // Duplicate if only one value exists
+      }
+    }
+  } else {
+    // No peaks, default to zero
+    for (int i = 0; i < 16; i++) {
+      interpolatedRecValues[i] = 0;
+    }
+  }
+
+  // Light up LEDs
+  for (int i = 0; i < 16; i++) {
+    int x = i + 1;  // Ensure x values go from 1 to 16
+    int yPeak = mapf(interpolatedRecValues[i] * 100, 0, 100, 4, 11);
+    yPeak = constrain(yPeak, 4, 10);
+
+    for (int y = 4; y <= yPeak; y++) {
+      // **Color gradient based on Y (vertical) instead of X**
+
+      CRGB color;
+     
+
+        color = CRGB(((y - 4)*0) / 4, (255 - ((y - 4) * 135)) / 4, 0);  // Red to green gradient at 25% brightness
+    
+
+      // Light up from y = 4 to y = yPeak
+      light(x, y, color);
+    }
+  }
+}
+
+
+
 void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fontColor, bool intro) {
   int ypos = 4;
   int height = 2;

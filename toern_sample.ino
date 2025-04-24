@@ -67,12 +67,13 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
 }
 
 void showWave() {
+
   int snr = SMP.wav[SMP.currentChannel].fileID;
   if (snr < 1) snr = 1;
   int fnr = getFolderNumber(snr);
   char OUTPUTf[50];
   sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-/*
+  /*
   if (firstcheck) {
     Serial.print("checking: ");
     firstcheck = false;
@@ -88,7 +89,7 @@ void showWave() {
   }
   */
   firstcheck = false;
-  nofile=false;
+  nofile = false;
 
   FastLEDclear();
   //exit
@@ -96,22 +97,22 @@ void showWave() {
   showIcons(HELPER_SELECT, CRGB(0, 0, 50));
 
   //showIcons("helper_ex", CRGB(10, 10, 0));
-  
+
   showIcons(HELPER_FOLDER, CRGB(50, 50, 50));
   Encoder[1].writeRGBCode(0xFFFFFF);
-  
+
   showIcons(HELPER_SEEK, CRGB(10, 0, 10));
   Encoder[2].writeRGBCode(0xFF00FF);
 
-  if (nofile){
+  if (nofile) {
     showIcons(HELPER_SEEKSTART, CRGB(0, 0, 10));
     showIcons(HELPER_EXIT, CRGB(0, 0, 0));
     Encoder[0].writeRGBCode(0x000000);
-  } else{
+  } else {
     showIcons(HELPER_SEEKSTART, CRGB(0, 0, 10));
     showIcons(HELPER_EXIT, col[SMP.currentChannel]);
     Encoder[0].writeRGBCode(0x00FF00);
-    }
+  }
   // Display using current seek positions (as percentages)
   //displaySample(SMP.seek, SMP.smplen, SMP.seekEnd);
   processPeaks();
@@ -168,10 +169,6 @@ void showWave() {
     previewIsPlaying = false;
     playSdWav1.stop();
 
-    // o1:
-    //memset(sampled[0], 0, sizeof(sampled[0]));
-    //memset(sampled[0], 0, sizeof(sample_len[0]));
-
     sampleIsLoaded = false;
     firstcheck = true;
     nofile = false;
@@ -183,7 +180,6 @@ void showWave() {
     drawNumber(snr, col_Folder[fnr], 12);
     Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-    
 
     // --- Reset seek positions when choosing a new sample ---
     currentMode->pos[0] = 0;
@@ -193,14 +189,12 @@ void showWave() {
     SMP.seekEnd = 100;
     Encoder[2].writeCounter((int32_t)100);
 
-    // Calculate full sample length for display/conversion later
-    //SMP.smplen = selectedFile.size() / (PrevSampleRate * 2);
-    //envelope0.noteOff();
-
     if (!previewIsPlaying && !sampleIsLoaded) {
       previewIsPlaying = true;
       if (playSdWav1.isPlaying()) {
-        playSdWav1.stop(); playSdWav1.play(OUTPUTf);} else{
+        playSdWav1.stop();
+        playSdWav1.play(OUTPUTf);
+      } else {
         playSdWav1.play(OUTPUTf);
       }
 
@@ -288,6 +282,6 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
     i = i / 2;
     _samplers[sampleID].removeAllSamples();
-    _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], (int)i, rateFactor);
+    _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], (int)i/1 , rateFactor);
   }
 }

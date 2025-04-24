@@ -10,29 +10,29 @@ void updateFilterValue(FilterType filterType, int index, float value) {
 
 
   switch (filterType) {
-    case FREQUENCY:
+    case FREQUENCY:{
       filters[index]->frequency(value);
       filtermixers[index]->gain(0, 0.0);
       filtermixers[index]->gain(1, 1.0);
       filtermixers[index]->gain(2, 0.0);
-      break;
+      break;}
 
-    case HIGHPASS:
+    case HIGHPASS:{
       filters[index]->frequency(value);
       filtermixers[index]->gain(0, 0.0);
       filtermixers[index]->gain(1, 0.0);
       filtermixers[index]->gain(2, 1.0);
-      break;
+      break;}
 
-    case LOWPASS:
+    case LOWPASS:{
       filters[index]->frequency(value);
       filtermixers[index]->gain(0, 1.0);
       filtermixers[index]->gain(1, 0.0);
       filtermixers[index]->gain(2, 0.0);
-      break;
+      break;}
 
 
-    case REVERB:
+    case REVERB:{
       if (freeverbs[index] != nullptr && freeverbs[index] != 0) {
 
         if (freeverbmixers[index] != 0 && value < 0.1) {
@@ -41,8 +41,9 @@ void updateFilterValue(FilterType filterType, int index, float value) {
           freeverbmixers[index]->gain(3, 1);  // Enable dry
         } else {
           // Apply reverb settings
+          
           freeverbs[index]->roomsize(value);
-          freeverbs[index]->damping(0.5);
+          //freeverbs[index]->damping(0);
           if (freeverbmixers[index] != 0) {
             // Enable wet, disable dry
             freeverbmixers[index]->gain(0, 1);  // Enable wet
@@ -50,9 +51,9 @@ void updateFilterValue(FilterType filterType, int index, float value) {
           }
         }
       }
-      break;
+      break;}
 
-  case FLANGER:
+  case FLANGER:{
   if (flangers[index] != nullptr) {
     if (value <= 0.01) {  // Bypass mode
       if (!bypassSet) {
@@ -87,8 +88,9 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       }
     }
   }
-  break;
-    case BITCRUSHER:
+  break;}
+
+    case BITCRUSHER:{
       // Map value (1 = clean, 16 = max crush) to bit depth
       int xbitDepth = constrain(value, 1, 16);
       // Optional volume influence based on bit depth (not needed anymore)
@@ -120,6 +122,7 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       Serial.println(crushCompGain);
       break;
   }
+  }
 
   
 }
@@ -137,6 +140,8 @@ float processFilterAdjustment(FilterType filterType, int index, int encoder) {
   if (filterType == BITCRUSHER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 1, 16);
   if (filterType == FLANGER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 1);
   //if (filterType == DETUNE) // find in main file.
+  //if (filterType == OCTAVE) // find in main file.
+  
 
   return mappedValue;
 }
