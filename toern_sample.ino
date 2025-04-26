@@ -1,4 +1,89 @@
 void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
+  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  envelope0.noteOff();
+  char OUTPUTf[50];
+  sprintf(OUTPUTf, "samples/%d/_%d.wav", folder, sampleID);
+
+  // --- Check if already cached ---
+  if (!previewCache.valid || previewCache.folder != folder || previewCache.sampleID != sampleID) {
+    File previewFile = SD.open(OUTPUTf);
+    if (!previewFile) {
+      Serial.println("File not found!");
+      return;
+    }
+
+    int fileSize = previewFile.size();
+    if (firstPreview) {
+      fileSize = min(fileSize, 302000);  // max 10 seconds
+    }
+
+    // Read sample rate from header at offset 24
+    previewFile.seek(24);
+    int g = previewFile.read();
+    if (g == 72) PrevSampleRate = 4;
+    else if (g == 68) PrevSampleRate = 3;
+    else if (g == 34) PrevSampleRate = 2;
+    else if (g == 17) PrevSampleRate = 1;
+    else PrevSampleRate = 4;
+
+    SMP.smplen = fileSize / (PrevSampleRate * 2);
+
+    // Load full sample into RAM buffer
+    previewFile.seek(44);
+    memset(sampled[0], 0, sizeof(sampled[0]));
+    int plen = 0;
+    while (previewFile.available() && plen < sizeof(sampled[0])) {
+      sampled[0][plen++] = previewFile.read();
+    }
+    previewFile.close();
+
+    // Update cache
+    previewCache.folder = folder;
+    previewCache.sampleID = sampleID;
+    previewCache.lengthBytes = plen;
+    previewCache.rate = PrevSampleRate;
+    previewCache.valid = true;
+    previewCache.plen = plen;
+  } else {
+    PrevSampleRate = previewCache.rate;
+    SMP.smplen = previewCache.lengthBytes / (PrevSampleRate * 2);
+  }
+
+  // --- Calculate offsets from seek percentages ---
+  int startOffset = (SMP.smplen * SMP.seek) / 100;
+  int endOffset = (SMP.smplen * SMP.seekEnd) / 100;
+
+  if (setMaxSampleLength) {
+    endOffset = SMP.smplen;
+    SMP.seekEnd = 100;
+    currentMode->pos[2] = SMP.seekEnd;
+    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+  }
+
+  int startOffsetBytes = startOffset * PrevSampleRate * 2;
+  int endOffsetBytes = endOffset * PrevSampleRate * 2;
+
+  // Clamp offsets to buffer size
+  if (startOffsetBytes >= previewCache.lengthBytes) startOffsetBytes = 0;
+  if (endOffsetBytes > previewCache.lengthBytes) endOffsetBytes = previewCache.lengthBytes;
+
+  // Ensure alignment for 16-bit playback
+  startOffsetBytes &= ~1;
+  endOffsetBytes &= ~1;
+
+  int plen = endOffsetBytes - startOffsetBytes;
+  uint8_t* startPtr = &sampled[0][startOffsetBytes];
+
+  // --- Playback from offset directly ---
+  _samplers[0].removeAllSamples();
+  _samplers[0].addSample(36, (int16_t*)startPtr, plen, rateFactor);
+  sampleIsLoaded = true;
+
+  Serial.println("NOTE");
+  _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
+}
+
+void previewSample2(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
   _samplers[0].removeAllSamples();
   envelope0.noteOff();
   char OUTPUTf[50];

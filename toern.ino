@@ -85,6 +85,17 @@ unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 //elapsedMillis recFlushTimer;
 elapsedMillis recTime;
 
+struct CachedSample {
+  uint8_t folder;
+  uint16_t sampleID;
+  uint32_t lengthBytes;
+  uint8_t rate;
+  bool valid;
+  int plen;
+};
+
+CachedSample previewCache;
+
 
 // Number of samples in each delay line
 // Allocate the delay lines for left and right channels
@@ -1445,7 +1456,7 @@ void initSoundChip() {
   sgtl5000_1.inputSelect(recInput);
   sgtl5000_1.micGain(28);  //0-63
   //sgtl5000_1.adcHighPassFilterEnable();
-  //sgtl5000_1.adcHighPassFilterDisable(); //for mic?
+  sgtl5000_1.adcHighPassFilterDisable(); //for mic?
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(1);
 }
