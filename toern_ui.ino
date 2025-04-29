@@ -624,6 +624,7 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
   int height = 2;
   int barwidth = mapf(currentval, minval, maxval, 1, maxX);
   FastLEDclear();
+  
   for (int x = 1; x <= maxX; x++) {
     light(x, ypos - 1, fontColor);
   }
@@ -644,10 +645,14 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
     
     drawNumber(currentval, fontColor, 11);
   } else {
+    if (barwidth<4) drawText("LOAD", 2, 11, CRGB(20,20,20));
+    if (barwidth>=4 && barwidth<=8) drawText("KIT", 2, 11, CRGB(20,20,20));
+    char buf[6];
+    snprintf(buf, sizeof(buf), "# %d", SMP.pack );
+    if (barwidth>8) drawText(buf, 2, 11, CRGB(20,20,20));
     FastLED.show();
   }
 }
-
 
 
 void drawBPMScreen() {

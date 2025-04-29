@@ -1,7 +1,7 @@
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 1
-#define SERIAL8_RX_BUFFER_SIZE 256  // Increase to 256 bytes
-#define SERIAL8_TX_BUFFER_SIZE 256  // Increase if needed for transmission
+#define SERIAL8_RX_BUFFER_SIZE 16  // Increase to 256 bytes
+#define SERIAL8_TX_BUFFER_SIZE 16  // Increase if needed for transmission
 #define TargetFPS 30
 
 #define AUDIO_BLOCK_SAMPLES 128
@@ -58,9 +58,11 @@ static bool flanger_bypassSet[MAX_FLANGERS] = { false };   // Initialize all to 
 #define BPM_MAX 300
 
 #define GAIN1 1
-#define GAIN2 0.5
-#define GAIN3 0.33
-#define GAIN4 0.25
+#define GAIN2 0.3 //0.5
+#define GAIN3 0.3 //0.33
+#define GAIN4 0.3 //0.25
+#define GAIN02 0.3 //0.2;
+#define GAIN01 0.3 //0.1;
 
 #define NUM_ENCODERS 4
 #define defaultVelocity 63
@@ -75,8 +77,8 @@ static bool flanger_bypassSet[MAX_FLANGERS] = { false };   // Initialize all to 
 #define pulsesPerBar (24 * 4)  // 24 pulses per quarter note, 4 quarter notes per bar
 
 struct MySettings : public midi ::DefaultSettings {
-  static const long BaudRate = 31250;
-  static const unsigned SysExMaxSize = 256;
+  static const long BaudRate = 115200;
+  static const unsigned SysExMaxSize = 16;
 };
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MySettings);
 unsigned long beatStartTime = 0;  // Timestamp when the current beat started
@@ -1200,11 +1202,10 @@ void checkMode(String buttonString, bool reset) {
     switchMode(&draw);
   } else if ((currentMode == &set_Wav) && buttonString == "1000") {
     //set SMP.wav[currentChannel][0] and [1] to current file
-
-    SMP.wav[SMP.currentChannel].oldID = SMP.wav[SMP.currentChannel].fileID;
-    currentMode->pos[3] = SMP.wav[SMP.currentChannel].oldID;
+    
     loadWav();
     autoSave();
+
   } else if ((currentMode == &set_Wav) && buttonString == "0001") {
     switchMode(&singleMode);
     SMP.singleMode = true;
@@ -1443,7 +1444,7 @@ void initSoundChip() {
   AudioMemory(96);
   // turn on the output
   sgtl5000_1.enable();
-  sgtl5000_1.volume(0.9);
+  sgtl5000_1.volume(1.0);
   
   //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
   //sgtl5000_1.audioPostProcessorEnable();
@@ -1488,15 +1489,15 @@ void initSamples() {
   mixer1.gain(3, GAIN4);
 
 
-freeverbmixer8.gain(0,0.2);
-freeverbmixer8.gain(1,0.2);
-freeverbmixer8.gain(2,0.2);
-freeverbmixer8.gain(3,0.2);
+freeverbmixer8.gain(0, GAIN02);
+freeverbmixer8.gain(1, GAIN02);
+freeverbmixer8.gain(2, GAIN02);
+freeverbmixer8.gain(3, GAIN02);
 
-filtermixer8.gain(0,0.2);
-filtermixer8.gain(1,0.2);
-filtermixer8.gain(2,0.2);
-filtermixer8.gain(3,0.2);
+filtermixer8.gain(0, GAIN02);
+filtermixer8.gain(1, GAIN02);
+filtermixer8.gain(2, GAIN02);
+filtermixer8.gain(3, GAIN02);
 
 
   synthmixer11.gain(0, GAIN3);
@@ -1508,13 +1509,13 @@ filtermixer8.gain(3,0.2);
   synthmixer12.gain(3, GAIN3);
 
 
-  synthmixer13.gain(0, 0.1);
-  synthmixer13.gain(1, 0.1);
-  synthmixer13.gain(3, 0.1);
+  synthmixer13.gain(0, GAIN01);
+  synthmixer13.gain(1, GAIN01);
+  synthmixer13.gain(3, GAIN01);
 
-  synthmixer14.gain(0, 0.1);
-  synthmixer14.gain(1, 0.1);
-  synthmixer14.gain(3, 0.1);
+  synthmixer14.gain(0, GAIN01);
+  synthmixer14.gain(1, GAIN01);
+  synthmixer14.gain(3, GAIN01);
 
 
   mixersynth_end.gain(0, GAIN4);
@@ -1523,10 +1524,10 @@ filtermixer8.gain(3,0.2);
   mixersynth_end.gain(3, GAIN4);
 
 
-  mixer0.gain(0, 0.1);  //PREV
-  mixer0.gain(1, 0.1);  //PREV
-  mixer0.gain(2, 0.1);  //PREV
-  mixer0.gain(3, 0.1);  //PREV
+  mixer0.gain(0, GAIN01);  //PREV
+  mixer0.gain(1, GAIN01);  //PREV
+  mixer0.gain(2, GAIN01);  //PREV
+  mixer0.gain(3, GAIN01);  //PREV
 
   mixer1.gain(0, GAIN4);
   mixer1.gain(1, GAIN4);
@@ -1539,15 +1540,15 @@ filtermixer8.gain(3,0.2);
   mixer2.gain(3, GAIN4);
 
 
-  mixer_end.gain(0, 0.2);
-  mixer_end.gain(1, 0.2);
-  mixer_end.gain(2, 0.2);
+  mixer_end.gain(0, GAIN02);
+  mixer_end.gain(1, GAIN02);
+  mixer_end.gain(2, GAIN02);
 
 
-  mixerPlay.gain(0, 0.2);
-  mixerPlay.gain(1, 0.2);
-  mixerPlay.gain(2, 0.2);
-  mixerPlay.gain(3, 0.2);
+  mixerPlay.gain(0, GAIN02);
+  mixerPlay.gain(1, GAIN02);
+  mixerPlay.gain(2, GAIN02);
+  mixerPlay.gain(3, GAIN02);
 
   // Initialize the array with nullptrs
   synths[11][0] = &waveform11_1;
@@ -1736,7 +1737,7 @@ void setup(void) {
   switchMode(&draw);
   Serial8.begin(31250);
   MIDI.begin(MIDI_CHANNEL_OMNI);
-  //MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
+  MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
   //MIDI.setHandleClock(myClock);       // optional if you're using callbacks
 }
 
@@ -2767,12 +2768,10 @@ void loadSamplePack(unsigned int pack, bool intro) {
   EEPROM.put(0, pack);
   for (unsigned int z = 1; z < maxFiles; z++) {
     if (!intro) {
-      FastLEDclear();
       showIcons(ICON_SAMPLE, CRGB(20, 20, 20));
     } else {
       drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
     }
-
     drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], CRGB(50, 50, 50), intro);
     loadSample(pack, z);
   }
@@ -2808,6 +2807,7 @@ void updateLastPage() {
 
 void loadWav() {
   playSdWav1.stop();
+  
   Serial.println("Loading Wave :" + String(SMP.wav[SMP.currentChannel].fileID));
   loadSample(0, SMP.wav[SMP.currentChannel].fileID);
   switchMode(&singleMode);

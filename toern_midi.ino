@@ -12,7 +12,7 @@ void checkMidi() {
         pitch = MIDI.getData1();
         // Use the actual velocity from the message (if zero, treat as note off)
         velocity = MIDI.getData2() ? MIDI.getData2() : 127;
-        handleNoteOn(SMP.currentChannel, pitch, velocity);
+        //handleNoteOn(SMP.currentChannel, pitch, velocity);
         break;
 
       case midi::NoteOff:
@@ -142,9 +142,12 @@ void handleStop() {
 
 
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
+   Serial.println(pitch);
   // For persistent channels (11-14), use the actual MIDI channel
+  ch = SMP.currentChannel;
   if (ch < 1 || ch > 16) return;
   pressedKeyCount[ch]++;  // Increment count for this channel
+ 
   if (pressedKeyCount[ch] == 1) {
     persistentNoteOn[ch] = true;
   }
@@ -152,7 +155,6 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   unsigned int livenote = (ch + 1) + pitch - 60;
   if (livenote > 16) livenote -= 12;
   if (livenote < 1) livenote += 12;
-
   if (livenote >= 1 && livenote <= 16) {
 
     if (isNowPlaying) {
@@ -161,23 +163,22 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
         pendingNotes.push_back({ .pitch = pitch,
                                  .velocity = velocity,
                                  .channel = (uint8_t)ch,
-                                 .livenote = (uint8_t)livenote });
-                                
+                                 .livenote = (uint8_t)livenote });                          
       }
       // Always play the note immediately
       activeNotes[pitch] = true;
-      
     }
 
     // Live mode: play note and show light
-    light(mapXtoPageOffset(SMP.x), livenote, CRGB(255, 255, 255));
-    FastLED.show();
+    //light(mapXtoPageOffset(SMP.x), livenote, CRGB(255, 255, 255));
+    //FastLED.show();
   
     if (ch < 9) {
       _samplers[ch].noteEvent(((SampleRate[ch] * 12) + pitch - 60), velocity, true, false);
     } else if (ch > 12 && ch < 15) {
       playSynth(ch, livenote, velocity, true);
     } else if (ch == 11) {
+
       playSound(12 * octave[0] + transpose + pitch - 60 + 12, 0);
     }
   }
