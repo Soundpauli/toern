@@ -444,6 +444,12 @@ void showIcons(IconType ico, CRGB colors) {
             iconArray = icon_loadsave2;
             size = sizeof(icon_loadsave2) / sizeof(icon_loadsave2[0]);
             break;
+
+        case ICON_NEW:
+            iconArray = icon_new;
+            size = sizeof(icon_new) / sizeof(icon_new[0]);
+            break;
+
         case HELPER_LOAD:
             iconArray = helper_load;
             size = sizeof(helper_load) / sizeof(helper_load[0]);
@@ -648,7 +654,7 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
     if (barwidth<4) drawText("LOAD", 2, 11, CRGB(20,20,20));
     if (barwidth>=4 && barwidth<=8) drawText("KIT", 2, 11, CRGB(20,20,20));
     char buf[6];
-    snprintf(buf, sizeof(buf), "# %d", SMP.pack );
+    snprintf(buf, sizeof(buf), "no.%d", SMP.pack );
     if (barwidth>8) drawText(buf, 2, 11, CRGB(20,20,20));
     FastLED.show();
   }

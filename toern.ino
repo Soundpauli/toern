@@ -159,6 +159,7 @@ int lastFile[9] = { 0 };
 bool freshPaint, tmpMute = false;
 bool firstcheck = false;
 bool nofile = false;
+char *currentParam = "DLAY";
 char *currentFilter = "TYPE";
 char *currentDrum = "TONE";
 char *currentSynth = "BASS";
@@ -197,7 +198,7 @@ const unsigned int SONG_LEN = maxX * maxPages;
 
 bool touchState[] = { false };      // Current touch state (HIGH/LOW)
 bool lastTouchState[] = { false };  // Previous touch state
-const int touchThreshold = 40;
+const int touchThreshold = 60;
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
 
@@ -596,17 +597,14 @@ float gainValue = 2.0;
 #define NUM_DRUMS (sizeof(SMP.drum_settings[0]) / sizeof(SMP.drum_settings[0][0]))
 #define MAX_CHANNELS maxY  // maxY is the number of channels (e.g. 16)
 
-enum ParameterType { TYPE,  //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM
-                     WAVEFORM,
-                     DELAY,
+enum ParameterType { DELAY,
                      ATTACK,
                      HOLD,
                      DECAY,
                      SUSTAIN,
                      RELEASE,
-                     LENGTH,
-                     SECONDMIX,
-                     PITCHMOD
+                     WAVEFORM,
+                     TYPE //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM
 };  //Define filter types
 
 int maxParamVal[12] = { 0, 0, 250, 2000, 1000, 1000, 1, 1000, 1000, 1, 1 };
@@ -622,6 +620,7 @@ enum FilterType { NUL,
                   DETUNE,
                   OCTAVE
 };  //Define filter types
+
 
 
 
@@ -653,12 +652,12 @@ enum MidiSetTypes {
 
 FilterType defaultFilter[maxFiles] = { LOWPASS };
 
-char *activeParameterType[8] = { "TYPE", "WAV", "DLAY", "ATTC", "HOLD", "DCAY", "SUST", "RLSE" };
-char *activeFilterType[9] = { "", "LOW", "HIGH", "FREQ", "RVRB", "BITC", "FLNG", "DTNE", "OCTV" };
-char *activeDrumType[4] = { "TONE", "DCAY", "FREQ", "TYPE" };
+char *activeParameterType[8] = { "DLAY", "ATTC", "HOLD", "DCAY", "SUST", "RLSE", "WAV", "TYPE" };
+char *activeFilterType[9] = {"", "LOW", "HIGH", "FREQ", "RVRB", "BITC", "FLNG", "DTNE", "OCTV"};
 
-char *activeSynthVoice[8] = { "SND", "CUT", "RES", "FLT", "CENT", "SEMI", "WAVE", "PAR7" };
-char *activeMidiSetType[6] = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
+char *activeDrumType[4]   =    { "TONE", "DCAY", "FREQ", "TYPE" };
+char *activeSynthVoice[8] =    { "SND", "CUT", "RES", "FLT", "CENT", "SEMI", "WAVE", "PAR7" };
+char *activeMidiSetType[6] =   { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
 
 
 // Arrays to track multiple encoders
@@ -1301,11 +1300,14 @@ void checkMode(String buttonString, bool reset) {
 
   // set DefaultFilterParam
   if (currentMode == &filterMode && buttonString == "0010") {
-    if (fxType == 1) {
-      defaultFilter[SMP.currentChannel] = SMP.selectedFilter;
-
-    } else {
-      defaultFilter[SMP.currentChannel] = SMP.selectedParameter;
+    if (fxType == 0) {
+        defaultFilter[SMP.currentChannel] = SMP.selectedParameter;     
+    } else if (fxType == 1){
+    defaultFilter[SMP.currentChannel] = SMP.selectedFilter;
+    } else if (fxType == 2){
+      defaultFilter[SMP.currentChannel] = SMP.selectedDrum;
+    } else if (fxType == 4){
+      defaultFilter[SMP.currentChannel] = SMP.selectedSynth;
     }
   }
 
@@ -1718,8 +1720,9 @@ void setup(void) {
   drawNoSD();
   delay(50);
 
-  playSdWav1.play("intro/002.wav");
+  playSdWav1.play("intro/016.wav");
   runAnimation();
+
   playSdWav1.stop();
 
   EEPROMgetLastFiles();
@@ -2713,6 +2716,7 @@ void showLoadSave() {
   showIcons(ICON_LOADSAVE, CRGB(10, 5, 0));
   showIcons(ICON_LOADSAVE2, CRGB(200, 200, 200));
   showIcons(HELPER_SELECT, CRGB(0, 0, 5));
+  showIcons(ICON_NEW, CRGB(20, 20, 20   ));
 
   char OUTPUTf[50];
   sprintf(OUTPUTf, "%d.txt", SMP.file);

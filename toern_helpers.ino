@@ -536,7 +536,7 @@ CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
     // PHASE 2: Explosion
     if (!particlesGenerated) {
       //done once
-      playSdWav1.play("intro/008.wav");
+      //playSdWav1.play("intro/008.wav");
       generateParticles();
       initEncoders();
       

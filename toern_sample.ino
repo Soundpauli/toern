@@ -240,7 +240,7 @@ if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
   envelope0.noteOff();
   playSdWav1.stop();
 
-  // 🔥 force a fresh slice of the same file:
+  // force a fresh slice of the same file:
   previewCache.valid = false;
 
   Serial.println("SEEK-hit");
@@ -268,7 +268,7 @@ if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
 if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
   playSdWav1.stop();
 
-  // 🔥 force reload so your new end‐point takes effect
+  // force reload so your new end‐point takes effect
   previewCache.valid = false;
 
   Serial.println("SEEKEND-hit");

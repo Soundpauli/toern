@@ -17,7 +17,8 @@ enum IconType {
     ICON_BPM,
     ICON_SETTINGS,
     ICON_REC,
-    ICON_REC2
+    ICON_REC2,
+    ICON_NEW
 };
 
 const uint8_t logo[16][16] = {
@@ -73,6 +74,8 @@ const uint8_t icon_move[18][2] = { { 3, 1 }, { 2, 2 }, { 3, 2 }, { 4, 2 }, { 1, 
 const uint8_t icon_line[18][2] = { { 3, 1 }, { 3, 2 }, { 3, 3 }, { 2, 4 }, { 3, 4 }, { 4, 4 }, { 2, 5 }, { 4, 5 }, { 2, 6 }, { 4, 6 }, { 2, 7 }, { 4, 7 }, { 2, 8 }, { 3, 8 }, { 4, 8 }, { 2, 9 }, { 3, 9 }, { 4, 9 } };
 
 
+
+
 static const char LOWRES_CIRCLE[7][10] = {
   "000XXX000",
   "00XXXXX00",
@@ -120,6 +123,7 @@ const uint8_t helper_load[3][2] = { { 1, 15 }, { 2, 15 }, { 3, 15 } };
 const uint8_t helper_folder[5][2] = { { 6, 13 }, { 6, 14 }, { 6, 15 }, { 7, 14 }, { 7, 15 } };
 const uint8_t helper_seek[2][2] = { { 10, 15 }, { 10, 14 } };
 const uint8_t helper_seekstart[2][2] = { { 2, 15 }, { 2, 14 } };
+const uint8_t icon_new[5][2] = { { 9, 14 }, { 10, 14 }, { 11, 14 }, { 10, 13 }, { 10, 15 }}; //+ sign
 
 const uint8_t helper_bright[5][2] =  { { 5, 14 }, { 6, 13 }, { 6 ,15 }, { 6, 14 }, { 7, 14 } };
 const uint8_t helper_vol[5][2] = { { 9, 13 }, { 11, 13 }, { 10, 15 }, { 9, 14 }, { 11, 14 } };

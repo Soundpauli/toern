@@ -47,7 +47,7 @@ float processParameterAdjustment(int paramType, int index) {
       mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);  //1000
       break;
 
-    case LENGTH:
+   /* case LENGTH:
       mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[LENGTH]);  //1000
       break;
 
@@ -58,7 +58,7 @@ float processParameterAdjustment(int paramType, int index) {
     case PITCHMOD:
       mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[PITCHMOD]);  //1
       break;
-
+*/
     default:
       mappedValue = 0;
   }
