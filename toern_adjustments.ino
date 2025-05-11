@@ -123,17 +123,17 @@
 
       // Draw colored ADSR envelope:
       colorBelowCurve(xDelayStart, xDelayEnd, baseAmplitude, baseAmplitude,
-                      activeParameter == 2 ? CRGB(100, 0, 0) : CRGB(4, 0, 0));
+                      activeParameter == 0 ? CRGB(100, 0, 0) : CRGB(4, 0, 0));
       colorBelowCurve(xAttackStart, xAttackEnd, baseAmplitude, attackHeight,
-                      activeParameter == 3 ? CRGB(0, 100, 0) : CRGB(0, 4, 0));
+                      activeParameter == 1 ? CRGB(0, 100, 0) : CRGB(0, 4, 0));
       colorBelowCurve(xAttackEnd, xHoldEnd, attackHeight, attackHeight,
-                      activeParameter == 4 ? CRGB(0, 0, 100) : CRGB(0, 0, 4));
+                      activeParameter == 2 ? CRGB(0, 0, 100) : CRGB(0, 0, 4));
       colorBelowCurve(xHoldEnd, xDecayEnd, attackHeight, sustainHeight,
-                      activeParameter == 5 ? CRGB(100, 100, 0) : CRGB(4, 4, 0));
+                      activeParameter == 3 ? CRGB(100, 100, 0) : CRGB(4, 4, 0));
       colorBelowCurve(xDecayEnd, xSustainEnd, sustainHeight, sustainHeight,
-                      activeParameter == 6 ? CRGB(100, 0, 100) : CRGB(4, 0, 4));
+                      activeParameter == 4 ? CRGB(100, 0, 100) : CRGB(4, 0, 4));
       colorBelowCurve(xSustainEnd, xReleaseEnd, sustainHeight, baseAmplitude,
-                      activeParameter == 7 ? CRGB(0, 100, 100) : CRGB(0, 4, 4));
+                      activeParameter == 5 ? CRGB(0, 100, 100) : CRGB(0, 4, 4));
 
       // Overlay white envelope outline:
       drawLine(xDelayStart, baseAmplitude, xDelayEnd, baseAmplitude, CRGB::Red);
@@ -316,7 +316,7 @@
           if (SMP.selectedParameter == 7 && SMP.currentChannel<=3)
             drawType(currentParam, SMP.selectedParameter);
           else if (SMP.selectedParameter == 6 && (SMP.currentChannel<=3 || SMP.currentChannel>=13)){
-       
+  
             drawWaveforms(currentParam, SMP.selectedParameter);
           } else
             drawADSR(currentParam, SMP.selectedParameter);
@@ -469,8 +469,6 @@
       
 
       if (SMP.currentChannel>3 && SMP.currentChannel<13 ){
-      } else if(SMP.currentChannel>=13) {
-        Encoder[0].writeMin((int32_t) 1);  //minval
       } else {
         Encoder[0].writeMin((int32_t) 0);  //minval
       }

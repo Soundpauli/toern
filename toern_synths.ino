@@ -621,6 +621,31 @@ void playSound(int note, int ch) {
   SenvelopeFilter1[notePlaying[ch]].noteOn();
 }
 
+void autoOffActiveNotes2() {
+  if (pressedKeyCount[11] >= 1) return;
+
+  unsigned long currentTime = millis();
+  for (int ch = 0; ch < 2; ch++) {
+    for (int i = 0; i < POLY_VOICES; i++) {
+      if (noteArray[ch][i] != 0) {  // There is an active note on this voice.
+        // Calculate total note duration including delay
+        int delay_ms = mapf(SMP.param_settings[ch][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
+        int attack_ms = mapf(SMP.param_settings[ch][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]);
+        int hold_ms = mapf(SMP.param_settings[ch][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
+        int decay_ms = mapf(SMP.param_settings[ch][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
+        int release_ms = mapf(SMP.param_settings[ch][RELEASE], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
+
+        int noteDuration = delay_ms + attack_ms + hold_ms + decay_ms + release_ms;
+
+        if (currentTime - voiceStartTime[ch][i] >= noteDuration) {
+          stopSound(noteArray[ch][i], ch);  // Properly ends envelope
+        }
+      }
+    }
+  }
+}
+
+
 // This function checks each voice and auto-offs active notes after AUTO_OFF_TIME.
 void autoOffActiveNotes() {
   //Serial.println(persistentNoteOn[11]);

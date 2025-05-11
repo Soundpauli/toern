@@ -58,11 +58,11 @@ static bool flanger_bypassSet[MAX_FLANGERS] = { false };   // Initialize all to 
 #define BPM_MAX 300
 
 #define GAIN1 1
-#define GAIN2 0.3 //0.5
-#define GAIN3 0.3 //0.33
-#define GAIN4 0.3 //0.25
-#define GAIN02 0.3 //0.2;
-#define GAIN01 0.3 //0.1;
+#define GAIN2 0.4 //0.5
+#define GAIN3 0.4 //0.33
+#define GAIN4 0.4 //0.25
+#define GAIN02 0.4 //0.2;
+#define GAIN01 0.4 //0.1;
 
 #define NUM_ENCODERS 4
 #define defaultVelocity 63
@@ -86,6 +86,15 @@ unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 #define CLOCK_BUFFER_SIZE 24
 //elapsedMillis recFlushTimer;
 elapsedMillis recTime;
+
+struct PendingNoteEvent {
+  uint8_t channel;
+  uint8_t pitch;
+  uint8_t velocity;
+  unsigned long triggerTime;  // when to trigger
+};
+
+std::vector<PendingNoteEvent> pendingSampleNotes;
 
 struct CachedSample {
   uint8_t folder;
@@ -193,7 +202,7 @@ int peakRecIndex = 0;
 
 uint8_t ledBrightness = 63;
 const unsigned int maxlen = (maxX * maxPages) + 1;
-const long ram = 12582912;  //12MB ram for sounds // 16MB total
+const long ram = 9525600; // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
 const unsigned int SONG_LEN = maxX * maxPages;
 
 bool touchState[] = { false };      // Current touch state (HIGH/LOW)
@@ -607,7 +616,7 @@ enum ParameterType { DELAY,
                      TYPE //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM
 };  //Define filter types
 
-int maxParamVal[12] = { 0, 0, 250, 2000, 1000, 1000, 1, 1000, 1000, 1, 1 };
+int maxParamVal[12] = {1000, 2000, 1000, 1000, 1, 1000, 1000, 1, 1, 0,0};
 
 
 enum FilterType { NUL,
@@ -1461,7 +1470,7 @@ void initSoundChip() {
   //sgtl5000_1.adcHighPassFilterEnable();
   sgtl5000_1.adcHighPassFilterDisable(); //for mic?
   sgtl5000_1.unmuteLineout();
-  sgtl5000_1.lineOutLevel(1);
+  sgtl5000_1.lineOutLevel(14);
 }
 
 
@@ -1973,7 +1982,18 @@ void checkMenuTouch() {
 
 
 
-
+void checkPendingSampleNotes() {
+  unsigned long now = millis();
+  for (int i = 0; i < pendingSampleNotes.size(); /* no ++ */) {
+    if (now >= pendingSampleNotes[i].triggerTime) {
+      auto &ev = pendingSampleNotes[i];
+      _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, false);
+      pendingSampleNotes.erase(pendingSampleNotes.begin() + i);  // erase and continue
+    } else {
+      ++i;
+    }
+  }
+}
 
 void loop() {
 
@@ -2032,6 +2052,7 @@ void loop() {
       previewIsPlaying = false;  // Playback finished
     }
   }
+    checkPendingSampleNotes();
 
   drawPlayButton();
   checkTouchInputs();
@@ -2106,12 +2127,15 @@ void loop() {
   for (int ch = 13; ch <= 14; ch++) {
     int noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
+    Serial.println(noteLen);
     if (noteOnTriggered[ch] && !persistentNoteOn[ch] && (millis() - startTime[ch] >= noteLen)) {
       if (!envelopes[ch]) continue;
       envelopes[ch]->noteOff();
       noteOnTriggered[ch] = false;
     }
   }
+
+  
 
   autoOffActiveNotes();
 
@@ -2125,7 +2149,11 @@ void loop() {
 }
 
 float getNoteDuration(int channel) {
-  int timetilloff = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]) + mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]) + mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]) + mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]) + mapf(SMP.param_settings[channel][RELEASE], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
+  int timetilloff = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]) +
+                    mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]) +
+                    mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]) +
+                    mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]) +
+                    mapf(SMP.param_settings[channel][RELEASE], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
   return timetilloff;
 }
 
@@ -2339,7 +2367,8 @@ void playSynth(int ch, int b, int vel, bool persistant) {
     persistentNoteOn[ch] = false;
   }
 
-  startTime[ch] = millis();    // Record the start time
+  //unsigned long delay_ms = mapf(SMP.param_settings[ch][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
+  startTime[ch] = millis(); // + delay_ms;    // Record the start time
   noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
 }
 
@@ -2375,7 +2404,19 @@ void playNote() {
 
           } else {
 
-            _samplers[ch].noteEvent(12 * SampleRate[ch] + b - (ch + 1), vel, true, false);
+            //_samplers[ch].noteEvent(12 * SampleRate[ch] + b - (ch + 1), vel, true, false);
+
+             float delay_ms = mapf(SMP.param_settings[ch][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
+
+          PendingNoteEvent ev = {
+            .channel = (uint8_t)ch,
+            .pitch = (uint8_t)(12 * SampleRate[ch] + b - (ch + 1)),
+            .velocity = (uint8_t)vel,
+            .triggerTime = millis() + delay_ms
+          };
+
+          pendingSampleNotes.push_back(ev);
+
           }
         } else if (ch == 11) {
 

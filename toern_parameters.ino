@@ -33,6 +33,7 @@ float processParameterAdjustment(int paramType, int index) {
       break;
     case ATTACK:
       mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[ATTACK]);  //2000
+      Serial.println(mappedValue);
       break;
     case HOLD:
       mappedValue = mapf(SMP.param_settings[SMP.currentChannel][paramType], 0, maxfilterResolution, 0, maxParamVal[HOLD]);  //1000
@@ -71,7 +72,7 @@ void updateParameterValue(int paramType, int index, float value) {
   Serial.println(index);
   switch (paramType) {
     case DELAY:
-        envelopes[index]->delay(value);
+        if (index > 9) envelopes[index]->delay(value);
       break;
     case ATTACK:
         envelopes[index]->attack(value);
