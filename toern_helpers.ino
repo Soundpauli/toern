@@ -10,6 +10,203 @@ void EEPROMgetLastFiles() {
 }
 
 
+// Load (apply) parameter settings for a single channel.
+void loadParametersForChannel(int ch) {
+  for (int p = 0; p < NUM_PARAMS; p++) {
+    // Set the encoder value to the saved parameter value.
+    //currentMode->pos[3] = SMP.param_settings[ch][p];
+    // Process the parameter mapping.
+    float mappedValue = processParameterAdjustment(p, ch);
+    // Update the audio envelope or effect according to the mapped value.
+    updateParameterValue(p, ch, mappedValue);
+  }
+}
+
+// Load (apply) filter settings for a single channel.
+void loadFiltersForChannel(int ch) {
+  for (int f = 0; f < NUM_FILTERS; f++) {
+    //currentMode->pos[3] = SMP.filter_settings[ch][f];
+    float mappedValue = processFilterAdjustment((FilterType)f, ch, 3);
+    updateFilterValue((FilterType)f, ch, mappedValue);
+  }
+}
+
+// Load (apply) drum settings for a single channel.
+void loadDrumsForChannel(int ch) {
+  for (int d = 0; d < NUM_DRUMS; d++) {
+    //currentMode->pos[3] = SMP.drum_settings[ch][d];
+    float mappedValue = processDrumAdjustment((DrumTypes)d, ch, 3);
+    updateDrumValue((DrumTypes)d, ch, mappedValue);
+  }
+}
+
+// Wrapper: load all saved SMP settings (parameters, filters, drums)
+// for every channel.
+void loadSMPSettings() {
+  for (int ch = 1; ch < 15; ch++) {
+    loadParametersForChannel(ch);
+    //loadFiltersForChannel(ch);
+    loadDrumsForChannel(ch);
+  }
+  // Optionally update other settings such as channel volumes
+  // or call updateFiltersAndParameters() if needed.
+  //updateFiltersAndParameters();
+}
+
+
+void writeWavHeader(File &file, uint32_t sampleRate, uint8_t bitsPerSample, uint16_t numChannels) {
+  uint32_t byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  uint8_t blockAlign = numChannels * bitsPerSample / 8;
+
+  // WAV header (44 bytes)
+  uint8_t header[44] = {
+    'R', 'I', 'F', 'F',
+    0, 0, 0, 0,  // <- file size - 8 (filled in later)
+    'W', 'A', 'V', 'E',
+    'f', 'm', 't', ' ',
+    16, 0, 0, 0,  // PCM chunk size
+    1, 0,         // Audio format (1 = PCM)
+    (uint8_t)(numChannels & 0xff), (uint8_t)(numChannels >> 8),
+    (uint8_t)(sampleRate & 0xff), (uint8_t)((sampleRate >> 8) & 0xff),
+    (uint8_t)((sampleRate >> 16) & 0xff), (uint8_t)((sampleRate >> 24) & 0xff),
+    (uint8_t)(byteRate & 0xff), (uint8_t)((byteRate >> 8) & 0xff),
+    (uint8_t)((byteRate >> 16) & 0xff), (uint8_t)((byteRate >> 24) & 0xff),
+    blockAlign, 0,
+    bitsPerSample, 0,
+    'd', 'a', 't', 'a',
+    0, 0, 0, 0  // <- data chunk size (filled in later)
+  };
+
+  file.write(header, 44);
+}
+
+
+void startRecordingRAM() {
+  if (isRecording) return;
+
+  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  Encoder[0].writeRGBCode(0x000000);
+  Encoder[1].writeRGBCode(0xFF0000);
+  Encoder[2].writeRGBCode(0x000000);
+  Encoder[3].writeRGBCode(0x000000);
+  recTime = 0;
+  recWriteIndex = 0;
+  queue1.begin();  // start filling 128‑sample blocks
+  showIcons(ICON_REC, CRGB(20, 0, 0));
+  FastLED.show();
+  isRecording = true;
+}
+
+void flushAudioQueueToRAM() {
+if (fastRecordActive) {
+    auto  ch = SMP.currentChannel;
+    auto& idx = fastRecWriteIndex[ch];
+    uint8_t* buf = sampled[ch];  // raw byte buffer
+
+    while (queue1.available() &&
+          idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES)
+    {
+      auto block = (int16_t*)queue1.readBuffer();
+      // copy AUDIO_BLOCK_SAMPLES samples = AUDIO_BLOCK_SAMPLES*2 bytes
+      memcpy(buf + idx*sizeof(int16_t),
+             block,
+             AUDIO_BLOCK_SAMPLES*sizeof(int16_t));
+      idx += AUDIO_BLOCK_SAMPLES;
+      queue1.freeBuffer();
+    }
+    if (idx >= BUFFER_SAMPLES) {
+      // auto-stop on full buffer
+      stopFastRecord();
+    }
+    return;  // skip your SD-record path
+  }
+  
+
+  if (!isRecording) return;
+  // each AudioRecordQueue block is 128 samples
+  while (queue1.available() && recWriteIndex + 128 <= BUFFER_SAMPLES) {
+    auto block = (int16_t *)queue1.readBuffer();
+    memcpy(recBuffer + recWriteIndex, block, 128 * sizeof(int16_t));
+    recWriteIndex += 128;
+    queue1.freeBuffer();
+  }
+  // if we ever hit the end of the buffer, stop automatically:
+  if (recWriteIndex >= BUFFER_SAMPLES) {
+    Serial.println("⚠️ Buffer full");
+    queue1.end();
+    isRecording = false;
+  }
+}
+
+void stopRecordingRAM(int fnr, int snr) {
+  if (!isRecording) return;
+  flushAudioQueueToRAM();
+  queue1.end();
+  isRecording = false;
+
+  // open WAV on SD
+  char path[64];
+  sprintf(path, "samples/%d/_%d.wav", fnr, snr);
+  if (SD.exists(path)) SD.remove(path);
+  File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!f) { return; }
+  // write 44‑byte WAV header for 16‑bit/mono/22 050 Hz
+  writeWavHeader(f, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
+  // write all your samples in one chunk
+  f.write((uint8_t *)recBuffer, recWriteIndex * sizeof(int16_t));
+
+  f.close();
+  Serial.print("💾 Saved ");
+  Serial.println(path);
+  // playback if you like
+  playSdWav1.play(path);
+}
+
+void drawClockMode() {
+
+  if (clockMode == 1) {
+    drawText("int", 7, 12, CRGB(200, 200, 200));
+    MIDI_CLOCK_SEND = true;
+  }
+  if (clockMode == -1) {
+    drawText("EXT", 6, 12, CRGB(0, 0, 200));
+    recInput = MIDI_CLOCK_SEND = false;
+  }
+
+  FastLEDshow();
+}
+
+
+void startFastRecord() {
+  if (fastRecordActive) return;
+  fastRecordActive = true;
+  fastRecWriteIndex[SMP.currentChannel] = 0;
+  queue1.begin();
+  // feedback:
+  //Encoder[0].writeRGBCode(0xFF0000);
+  Serial.printf("FAST RECORD ▶ ch%u\n", SMP.currentChannel);
+}
+
+void stopFastRecord() {
+  fastRecordActive = false;
+  queue1.end();
+  auto  ch  = SMP.currentChannel;
+  auto& idx = fastRecWriteIndex[ch];
+  // load into that channel’s sampler voice:
+  _samplers[ch].removeAllSamples();
+  _samplers[ch].addSample(
+    36,                            // MIDI note #
+    (int16_t*)sampled[ch],         // reinterpret bytes → int16_t
+    idx,                           // sample-count
+    rateFactor
+  );
+  // give back your knob color + preview
+ // Encoder[0].writeRGBCode(CRGBToUint32(col[ch]));
+ // _samplers[ch].noteEvent(36, defaultVelocity, true, false);
+  Serial.printf("◀ FASTREC ch%u, %u samples\n", ch, (unsigned)idx);
+ 
+}
+
 void EEPROMsetLastFile() {
   //set maxFiles in folder and show loading...
   for (int f = 0; f <= FOLDER_MAX; f++) {

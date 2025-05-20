@@ -252,10 +252,47 @@ void savePattern(bool autosave) {
 }
 
 
-
-
-
 void saveSamplePack(unsigned int pack) {
+  // Create (or ensure) the target directory on the SD card
+  char dirPath[32];
+  sprintf(dirPath, "%u", pack);
+  SD.mkdir(dirPath);
+
+  // Iterate through each sample buffer
+  for (unsigned int i = 0; i < maxFiles; i++) {
+    // Determine the length (in bytes) of the i-th sample
+    uint32_t lenBytes = sample_len[i];      // number of int16_t samples recorded
+    if (lenBytes == 0) continue;            // skip empty buffers
+
+    // Build the output filename: "<pack>/<index>.wav"
+    char outPath[64];
+    sprintf(outPath, "%s/%u.wav", dirPath, i + 1);
+
+    // Remove any existing file at this path
+    if (SD.exists(outPath)) {
+      SD.remove(outPath);
+      delay(50);
+    }
+
+    // Open a new file for writing
+    File outFile = SD.open(outPath, FILE_WRITE);
+    if (!outFile) continue;
+
+    // Write the standard 44-byte WAV header
+    // Assuming 16-bit PCM, mono, AUDIO_SAMPLE_RATE_EXACT
+    writeWavHeader(outFile, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
+
+    // Write the raw sample data from the in-memory buffer
+    // The buffer holds int16_t samples, so multiply count by sizeof(int16_t)
+    outFile.write(reinterpret_cast<const uint8_t*>(sampled[i]), lenBytes * sizeof(int16_t));
+
+    // Close the file
+    outFile.close();
+  }
+}
+
+
+void saveSamplePack2(unsigned int pack) {
 
   yield();
   Serial.println("Saving SamplePack in #" + String(pack));

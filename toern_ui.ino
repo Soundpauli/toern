@@ -415,6 +415,40 @@ void drawCursor() {
 
 
 
+void drawRecMode() {
+
+  if (recMode == 1) {
+    drawText("mic", 7, 10, CRGB(200, 200, 200));
+    recInput = AUDIO_INPUT_MIC;
+  }
+  if (recMode == -1) {
+    drawText("line", 6, 10, CRGB(0, 0, 200));
+    recInput = AUDIO_INPUT_LINEIN;
+  }
+  sgtl5000_1.inputSelect(recInput);
+
+
+  FastLEDshow();
+}
+
+
+void drawVolume(unsigned int vol) {
+  unsigned int maxXVolume = int(vol * 1.3) + 2;
+  for (unsigned int x = 0; x <= maxXVolume; x++) {
+    light(x + 1, 12, CRGB(vol * vol, 20 - vol, 0));
+    light(x + 1, 13, CRGB(vol * vol, 20 - vol, 0));
+  }
+}
+
+void drawBrightness() {
+  unsigned int maxBrightness = ((ledBrightness - 65) * (15 - 1)) / (255 - 65) + 3;
+  for (unsigned int x = 0; x < maxBrightness; x++) {
+    CRGB brightness = CRGB(16 * x, 16 * x, 16 * x);
+    light(x, 15, brightness);
+    light(x, 16, brightness);
+  }
+}
+
 
 
 void showIcons(IconType ico, CRGB colors) {

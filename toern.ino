@@ -51,7 +51,8 @@ static bool flanger_bypassSet[MAX_FLANGERS] = { false };   // Initialize all to 
 #define DATA_PIN 17  // PIN FOR LEDS
 #define INT_PIN 27   // PIN FOR ENOCDER INTERRUPS
 #define SWITCH_1 16  // Pin for TPP223 1
-#define SWITCH_2 41  // Pin for TPP223 1
+#define SWITCH_2 41  // Pin for TPP223 2
+#define SWITCH_3 15  // Pin for TPP223 3
 #define VOL_MIN 1
 #define VOL_MAX 10
 #define BPM_MIN 40
@@ -166,6 +167,8 @@ unsigned int infoIndex = 0;
 
 int lastFile[9] = { 0 };
 bool freshPaint, tmpMute = false;
+
+
 bool firstcheck = false;
 bool nofile = false;
 char *currentParam = "DLAY";
@@ -205,8 +208,8 @@ const unsigned int maxlen = (maxX * maxPages) + 1;
 const long ram = 9525600; // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
 const unsigned int SONG_LEN = maxX * maxPages;
 
-bool touchState[] = { false };      // Current touch state (HIGH/LOW)
-bool lastTouchState[] = { false };  // Previous touch state
+bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
+bool lastTouchState[4] = { false };  // Previous touch state
 const int touchThreshold = 60;
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
@@ -222,9 +225,8 @@ bool isRecording = false;
 File frec;
 
 #define MAXREC_SECONDS 10
-#define BUFFER_SAMPLES (44100 * MAXREC_SECONDS)
+#define BUFFER_SAMPLES (22100 * MAXREC_SECONDS)
 #define BUFFER_BYTES (BUFFER_SAMPLES * sizeof(int16_t))
-
 
 EXTMEM int16_t recBuffer[BUFFER_SAMPLES];
 volatile size_t recWriteIndex = 0;
@@ -435,6 +437,11 @@ struct Device {
 
 float octave[2];
 
+// in the same file, before tmpMuteAll:
+
+
+
+
 
 //EXTMEM?
 Device SMP = {
@@ -605,6 +612,16 @@ float gainValue = 2.0;
 #define NUM_FILTERS (sizeof(SMP.filter_settings[0]) / sizeof(SMP.filter_settings[0][0]))
 #define NUM_DRUMS (sizeof(SMP.drum_settings[0]) / sizeof(SMP.drum_settings[0][0]))
 #define MAX_CHANNELS maxY  // maxY is the number of channels (e.g. 16)
+
+static bool prevMuteState[maxFiles+1];  
+static bool tmpMuteActive = false;  
+
+//EXTMEM int16_t fastRecBuffer[MAX_CHANNELS][BUFFER_SAMPLES];
+static size_t fastRecWriteIndex[MAX_CHANNELS];
+bool fastRecordActive = false;
+//static uint8_t fastRecordChannel = 0;
+
+
 
 enum ParameterType { DELAY,
                      ATTACK,
@@ -811,7 +828,6 @@ void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
 
 
 
-
 void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
   // Only process the button if it's the last pressed encoder
   unsigned long currentTime = millis();
@@ -933,169 +949,43 @@ void switchMode(Mode *newMode) {
   drawPlayButton();
 }
 
-// Load (apply) parameter settings for a single channel.
-void loadParametersForChannel(int ch) {
-  for (int p = 0; p < NUM_PARAMS; p++) {
-    // Set the encoder value to the saved parameter value.
-    //currentMode->pos[3] = SMP.param_settings[ch][p];
-    // Process the parameter mapping.
-    float mappedValue = processParameterAdjustment(p, ch);
-    // Update the audio envelope or effect according to the mapped value.
-    updateParameterValue(p, ch, mappedValue);
-  }
-}
 
-// Load (apply) filter settings for a single channel.
-void loadFiltersForChannel(int ch) {
-  for (int f = 0; f < NUM_FILTERS; f++) {
-    //currentMode->pos[3] = SMP.filter_settings[ch][f];
-    float mappedValue = processFilterAdjustment((FilterType)f, ch, 3);
-    updateFilterValue((FilterType)f, ch, mappedValue);
-  }
-}
-
-// Load (apply) drum settings for a single channel.
-void loadDrumsForChannel(int ch) {
-  for (int d = 0; d < NUM_DRUMS; d++) {
-    //currentMode->pos[3] = SMP.drum_settings[ch][d];
-    float mappedValue = processDrumAdjustment((DrumTypes)d, ch, 3);
-    updateDrumValue((DrumTypes)d, ch, mappedValue);
-  }
-}
-
-// Wrapper: load all saved SMP settings (parameters, filters, drums)
-// for every channel.
-void loadSMPSettings() {
-  for (int ch = 1; ch < 15; ch++) {
-    loadParametersForChannel(ch);
-    //loadFiltersForChannel(ch);
-    loadDrumsForChannel(ch);
-  }
-  // Optionally update other settings such as channel volumes
-  // or call updateFiltersAndParameters() if needed.
-  //updateFiltersAndParameters();
-}
-
-
-void writeWavHeader(File &file, uint32_t sampleRate, uint8_t bitsPerSample, uint16_t numChannels) {
-  uint32_t byteRate = sampleRate * numChannels * bitsPerSample / 8;
-  uint8_t blockAlign = numChannels * bitsPerSample / 8;
-
-  // WAV header (44 bytes)
-  uint8_t header[44] = {
-    'R', 'I', 'F', 'F',
-    0, 0, 0, 0,  // <- file size - 8 (filled in later)
-    'W', 'A', 'V', 'E',
-    'f', 'm', 't', ' ',
-    16, 0, 0, 0,  // PCM chunk size
-    1, 0,         // Audio format (1 = PCM)
-    (uint8_t)(numChannels & 0xff), (uint8_t)(numChannels >> 8),
-    (uint8_t)(sampleRate & 0xff), (uint8_t)((sampleRate >> 8) & 0xff),
-    (uint8_t)((sampleRate >> 16) & 0xff), (uint8_t)((sampleRate >> 24) & 0xff),
-    (uint8_t)(byteRate & 0xff), (uint8_t)((byteRate >> 8) & 0xff),
-    (uint8_t)((byteRate >> 16) & 0xff), (uint8_t)((byteRate >> 24) & 0xff),
-    blockAlign, 0,
-    bitsPerSample, 0,
-    'd', 'a', 't', 'a',
-    0, 0, 0, 0  // <- data chunk size (filled in later)
-  };
-
-  file.write(header, 44);
-}
-
-
-void startRecordingRAM() {
-  if (isRecording) return;
-
-  if (playSdWav1.isPlaying()) playSdWav1.stop();
-  Encoder[0].writeRGBCode(0x000000);
-  Encoder[1].writeRGBCode(0xFF0000);
-  Encoder[2].writeRGBCode(0x000000);
-  Encoder[3].writeRGBCode(0x000000);
-  recTime = 0;
-  recWriteIndex = 0;
-  queue1.begin();  // start filling 128‑sample blocks
-  showIcons(ICON_REC, CRGB(20, 0, 0));
-  FastLED.show();
-  isRecording = true;
-}
-
-void flushAudioQueueToRAM() {
-  if (!isRecording) return;
-  // each AudioRecordQueue block is 128 samples
-  while (queue1.available() && recWriteIndex + 128 <= BUFFER_SAMPLES) {
-    auto block = (int16_t *)queue1.readBuffer();
-    memcpy(recBuffer + recWriteIndex, block, 128 * sizeof(int16_t));
-    recWriteIndex += 128;
-    queue1.freeBuffer();
-  }
-  // if we ever hit the end of the buffer, stop automatically:
-  if (recWriteIndex >= BUFFER_SAMPLES) {
-    Serial.println("⚠️ Buffer full");
-    queue1.end();
-    isRecording = false;
-  }
-}
-
-void stopRecordingRAM(int fnr, int snr) {
-  if (!isRecording) return;
-  flushAudioQueueToRAM();
-  queue1.end();
-  isRecording = false;
-
-  // open WAV on SD
-  char path[64];
-  sprintf(path, "samples/%d/_%d.wav", fnr, snr);
-  if (SD.exists(path)) SD.remove(path);
-  File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
-  if (!f) { return; }
-  // write 44‑byte WAV header for 16‑bit/mono/22 050 Hz
-  writeWavHeader(f, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
-  // write all your samples in one chunk
-  f.write((uint8_t *)recBuffer, recWriteIndex * sizeof(int16_t));
-
-  f.close();
-  Serial.print("💾 Saved ");
-  Serial.println(path);
-  // playback if you like
-  playSdWav1.play(path);
-}
-
-void drawClockMode() {
-
-  if (clockMode == 1) {
-    drawText("int", 7, 12, CRGB(200, 200, 200));
-    MIDI_CLOCK_SEND = true;
-  }
-  if (clockMode == -1) {
-    drawText("EXT", 6, 12, CRGB(0, 0, 200));
-    recInput = MIDI_CLOCK_SEND = false;
-  }
-
-  FastLEDshow();
-}
-
-
-
-void drawRecMode() {
-
-  if (recMode == 1) {
-    drawText("mic", 7, 10, CRGB(200, 200, 200));
-    recInput = AUDIO_INPUT_MIC;
-  }
-  if (recMode == -1) {
-    drawText("line", 6, 10, CRGB(0, 0, 200));
-    recInput = AUDIO_INPUT_LINEIN;
-  }
-  sgtl5000_1.inputSelect(recInput);
-
-
-  FastLEDshow();
-}
 
 
 void checkMode(String buttonString, bool reset) {
 
+ for (int i = 0; i < NUM_ENCODERS; i++) {
+    if (buttons[i] == 9 || buttons[i] == 1) {
+      buttons[i]     = 0;
+      buttonState[i] = IDLE;
+      isPressed[i]   = false;
+    }
+  }
+  
+  
+//fastrec   
+  if (!fastRecordActive && buttonString == "2100") {
+    startFastRecord();
+    return;  // skip other mode logic while fast recording
+  }
+  // detect stop: encoder0 released ("9000") while fastRecordActive
+  if (fastRecordActive && buttonString == "9000") {
+    stopFastRecord();
+    return;
+  }
+
+  int touchValue3 = fastTouchRead(SWITCH_3);
+  touchState[2] = (touchValue3 > touchThreshold);
+
+if (!fastRecordActive && touchState[2]){
+  startFastRecord();
+  return;  // skip other mode logic while fast recording
+  }
+
+if (fastRecordActive && !touchState[2]) {
+    stopFastRecord();
+    return;
+  }
 
   if (isRecording && buttonString == "0900") {
     //stopRecord(getFolderNumber(SMP.wav[SMP.currentChannel].fileID), SMP.wav[SMP.currentChannel].fileID);
@@ -1793,7 +1683,7 @@ void checkEncoders() {
 
 
     //SMP.edit = 1; // überflüssig
-    if ((SMP.y > 1 && SMP.y <= 9) || (SMP.y >= 11 && SMP.y <= 14)) {
+    if ((SMP.y > 1  && SMP.y <= 14)) {
       if (paintMode) {
         note[SMP.x][SMP.y].channel = SMP.currentChannel;
       }
@@ -1854,6 +1744,23 @@ void filtercheck() {
 
 void checkButtons() {
   unsigned long currentTime = millis();
+  if (currentTime - lastCheckTime < CHECK_INTERVAL) return;
+  lastCheckTime = currentTime;
+
+  checkMode(buttonString, false);
+
+  // Now clear out only the ones that were RELEASED
+  for (int i = 0; i < NUM_ENCODERS; i++) {
+    if (buttonState[i] == RELEASED) {
+      buttons[i]      = 0;
+      buttonState[i]  = IDLE;
+      isPressed[i]    = false;
+    }
+  }
+}
+
+void checkButtons2() {
+  unsigned long currentTime = millis();
   // Check at defined intervals
   if (currentTime - lastCheckTime >= CHECK_INTERVAL) {
 
@@ -1862,7 +1769,8 @@ void checkButtons() {
       // Only trigger if buttonString has meaningful input
       //Serial.println(buttonString);
       oldButtonString = buttonString;
-      checkMode(buttonString, true);
+      
+      checkMode(buttonString, false);
     }
   }
 }
@@ -1870,10 +1778,12 @@ void checkButtons() {
 void checkTouchInputs() {
   int touchValue1 = fastTouchRead(SWITCH_1);
   int touchValue2 = fastTouchRead(SWITCH_2);
+  int touchValue3 = fastTouchRead(SWITCH_3);
 
   // Determine if the touches are above the threshold
   touchState[0] = (touchValue1 > touchThreshold);
   touchState[1] = (touchValue2 > touchThreshold);
+  touchState[2] = (touchValue3 > touchThreshold);
 
   // Handle simultaneous touch
   if (touchState[0] && touchState[1] && !lastTouchState[2]) {
@@ -1916,6 +1826,7 @@ void checkTouchInputs() {
 
   lastTouchState[0] = touchState[0];
   lastTouchState[1] = touchState[1];
+  lastTouchState[2] = touchState[2];
 }
 
 void animateSingle() {
@@ -1933,7 +1844,7 @@ void animateSingle() {
       if (yDown >= 1 && yDown <= 15 && offset != 0) light(x, yDown, col);
     }
     drawTriggers();
-    FastLED.show();
+    //FastLED.show();
     //delay(5);  // adjust for animation speed
   }
   switchMode(&singleMode);
@@ -1996,12 +1907,24 @@ void checkPendingSampleNotes() {
 }
 
 void loop() {
+ if (fastRecordActive) {
+    flushAudioQueueToRAM();    // grab incoming audio into RAM
+    // you can still service your encoders / UI if you want:
+    //checkEncoders();
+    checkMode(buttonString, false);
+    //checkButtons();
+    drawTimer();
+    checkPendingSampleNotes();
+    
+    return;                    // skip the rest while we’re fast-recording
+  }
 
   if (isRecording) {
     //flushAudioQueueToSD();  // SD write is now throttled and safe
     flushAudioQueueToRAM();
     checkEncoders();  // Optional: allow user interaction
     checkMode(buttonString, true);
+    
     
 
     for (int x = 1; x < maxX; x++) {
@@ -2056,6 +1979,7 @@ void loop() {
 
   drawPlayButton();
   checkTouchInputs();
+  
 
   if (note[SMP.x][SMP.y].channel == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true) {
     paintMode = false;
@@ -2127,7 +2051,7 @@ void loop() {
   for (int ch = 13; ch <= 14; ch++) {
     int noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
-    Serial.println(noteLen);
+    
     if (noteOnTriggered[ch] && !persistentNoteOn[ch] && (millis() - startTime[ch] >= noteLen)) {
       if (!envelopes[ch]) continue;
       envelopes[ch]->noteOff();
@@ -2135,7 +2059,7 @@ void loop() {
     }
   }
 
-  
+
 
   autoOffActiveNotes();
 
@@ -2264,25 +2188,27 @@ void shiftNotes() {
 
   /* shift only this page:*/
 }
-
-
 void tmpMuteAll(bool pressed) {
-
-  if (pressed > 0) {
-    int channel = SMP.currentChannel;
-    //mute all channels except current
-    for (unsigned int i = 1; i < maxFiles + 1; i++) {
-      if (i != channel) {
-        SMP.mute[i] = true;
-      } else {
-        SMP.mute[i] = false;
+  if (pressed) {
+    // only on the *transition* into pressed do we save & mute
+    if (!tmpMuteActive) {
+      // save current mutes
+      for (unsigned i = 1; i <= maxFiles; i++) {
+        prevMuteState[i] = SMP.mute[i];
       }
+      // mute all except the current channel
+      for (unsigned i = 1; i <= maxFiles; i++) {
+        SMP.mute[i] = (i == SMP.currentChannel) ? false : true;
+      }
+      tmpMuteActive = true;
     }
   } else {
-    //unmute all channels
-    tmpMute = false;
-    for (unsigned int i = 1; i < maxFiles + 1; i++) {
-      SMP.mute[i] = false;
+    // only on the *transition* into released do we restore
+    if (tmpMuteActive) {
+      for (unsigned i = 1; i <= maxFiles; i++) {
+        SMP.mute[i] = prevMuteState[i];
+      }
+      tmpMuteActive = false;
     }
   }
 }
@@ -2476,7 +2402,7 @@ void unpaint() {
 
   if ((y > 1 && y < 16)) {
     if (!SMP.singleMode) {
-      Serial.println("deleting voice:" + String(x));
+      
       note[x][y].channel = 0;
       note[x][y].velocity = defaultVelocity;
     } else {
@@ -2659,24 +2585,6 @@ void setVolume() {
   }
 }
 
-
-
-void drawVolume(unsigned int vol) {
-  unsigned int maxXVolume = int(vol * 1.3) + 2;
-  for (unsigned int x = 0; x <= maxXVolume; x++) {
-    light(x + 1, 12, CRGB(vol * vol, 20 - vol, 0));
-    light(x + 1, 13, CRGB(vol * vol, 20 - vol, 0));
-  }
-}
-
-void drawBrightness() {
-  unsigned int maxBrightness = ((ledBrightness - 65) * (15 - 1)) / (255 - 65) + 3;
-  for (unsigned int x = 0; x < maxBrightness; x++) {
-    CRGB brightness = CRGB(16 * x, 16 * x, 16 * x);
-    light(x, 15, brightness);
-    light(x, 16, brightness);
-  }
-}
 
 
 
