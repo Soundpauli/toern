@@ -88,6 +88,8 @@ unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 //elapsedMillis recFlushTimer;
 elapsedMillis recTime;
 
+
+
 struct PendingNoteEvent {
   uint8_t channel;
   uint8_t pitch;
@@ -251,9 +253,9 @@ float marqueePos = maxX;
 bool shifted = false;
 bool movingForward = true;  // Variable to track the direction of movement
 unsigned int lastUpdate = 0;
-unsigned int lastClockTime = 0;
+
 unsigned int totalInterval = 0;
-unsigned int clockCount = 0;
+
 
 bool hasNotes[maxPages + 1];
 unsigned int startTime[maxY] = { 0 };    // Variable to store the start time
@@ -1082,6 +1084,11 @@ if (fastRecordActive && !touchState[2]) {
 
       case 6:
         clockMode = clockMode * (-1);
+        if (clockMode==1){ 
+          playTimer.begin(playNote, playNoteInterval);
+          }else{
+          playTimer.end();
+        }
         drawClockMode();
     }
   } else if ((currentMode == &loadSaveTrack) && buttonString == "0001") {
@@ -1629,11 +1636,10 @@ void setup(void) {
   loadSamplePack(samplePackID, true);
   // set BPM:100
   SMP.bpm = 100.0;
-  playTimer.begin(playNote, playNoteInterval);
-  //playTimer.priority(110);
+  playTimer.begin(playNote, playNoteInterval);  
   midiTimer.begin(checkMidi, playNoteInterval / 24);
   //midiTimer.priority(10);
-
+  //playTimer.priority(110);
   autoLoad();
 
   switchMode(&draw);
@@ -2247,7 +2253,6 @@ void play(bool fromStart) {
 
 
   FastLED.show();
-  //playNote();
   playStartTime = millis();  // Record the current time
 }
 
@@ -2300,23 +2305,16 @@ void playSynth(int ch, int b, int vel, bool persistant) {
 
 void playNote() {
   onBeatTick();
+  
+  
   if (isNowPlaying) {
-    //playTimer.end();  // Stop the timer
-
     for (unsigned int b = 1; b < maxY + 1; b++) {
       int ch = note[beat][b].channel;
       int vel = note[beat][b].velocity;
       if (beat < maxlen && b < maxY + 1 && ch > 0 && !SMP.mute[ch]) {
-
         MidiSendNoteOn(b, ch, vel);
-
-
-
-
         if (ch < 9) {
-
           if (SMP.param_settings[ch][TYPE] == 0) {
-
             float tone = pianoFrequencies[b];
             float dec = mapf(SMP.drum_settings[ch][DRUMDECAY], 0, 64, 0, 1023);
             float pit = mapf(SMP.drum_settings[ch][DRUMPITCH], 0, 64, 0, 1023);
@@ -2367,31 +2365,47 @@ void playNote() {
     }
     yield();
 
-
     beatStartTime = millis();
-    beat++;
+    
+     beat++;
+    
+    checkPages();
 
-
-
-
-    if (beat > SMP.page * maxX) {
-      updateLastPage();
-      SMP.page = SMP.page + 1;
-      if (SMP.page > maxPages)
-        SMP.page = 1;
-      if (SMP.page > lastPage)
-        SMP.page = 1;
-    }
-
-    if (beat > maxX * lastPage) {
-      beat = 1;
-      SMP.page = 1;
-    }
-    //playTimer.begin(playNote, playNoteInterval);
   }
+  
+  
   yield();
 }
 
+void checkPages() {
+  updateLastPage();               // recompute the highest page that actually has notes
+  // compute what page beat should be on
+  uint16_t newPage = (beat - 1) / maxX + 1;
+
+  // if we stepped past the last non-empty page, restart at the top
+  if (newPage > lastPage) {
+    beat    = 1;
+    newPage = 1;
+  }
+
+  SMP.page = newPage;
+}
+
+void checkPages2(){
+    if (beat > SMP.page * maxX) {
+    updateLastPage();
+    SMP.page = SMP.page + 1;
+    if (SMP.page > maxPages) SMP.page = 1;
+    if (SMP.page > lastPage) SMP.page = 1;
+  }
+  
+  if (beat > maxX * lastPage) {
+    beat = 1;
+    // handle page rollover if you need
+    updateLastPage();
+    SMP.page = (SMP.page % maxPages) + 1;
+  }
+}
 
 void unpaint() {
 

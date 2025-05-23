@@ -1,4 +1,14 @@
 
+// move these to file-scope so everybody can reset them
+static unsigned long lastClockTime = 0;
+static unsigned long intervalsBuf[CLOCK_BUFFER_SIZE] = { 0 };
+
+static int bufIndex = 0;
+static int bufCount = 0;
+static float smoothedBPM = 0.0f;
+static uint8_t midiClockTicks = 0;
+static unsigned long lastClockSent = 0;
+
 void checkMidi() {
   if (MIDI.read()) {
     uint8_t pitch, velocity, channel;
@@ -24,7 +34,7 @@ void checkMidi() {
       case midi::Clock:
         {
           unsigned long now = micros();  // Capture time ASAP
-          myClock(now);                  // Pass it into the clock handler
+          if (!MIDI_CLOCK_SEND) myClock(now);                  // Pass it into the clock handler
         }
         break;
 
@@ -53,11 +63,11 @@ void checkMidi() {
 
   // If this device is sending MIDI Clock, calculate and send it based on SMP.bpm.
   if (MIDI_CLOCK_SEND) {
-    static unsigned long lastClockSent = micros();
+
     unsigned long now = micros();
 
     // Use a float for smoothing even though SMP.bpm is an int.
-    static float smoothedBPM = (float)SMP.bpm;
+
     const float alpha = 0.1f;  // Smoothing factor (0.0 to 1.0); lower is smoother.
     smoothedBPM = alpha * ((float)SMP.bpm) + (1.0f - alpha) * smoothedBPM;
 
@@ -70,42 +80,54 @@ void checkMidi() {
     while (now - lastClockSent >= clockInterval_us) {
       MIDI.sendRealTime(midi::Clock);
       lastClockSent += clockInterval_us;
+      //lastClockSent = now;
     }
   }
 }
 
 
-void myClock(unsigned long now) {
-  static unsigned long lastClockTime = 0;
-  static unsigned long intervals[CLOCK_BUFFER_SIZE] = { 0 };
-  static int index = 0;
-  static int count = 0;
+void resetMidiClockState() {
+  lastClockTime = 0;
+  smoothedBPM = SMP.bpm;     // start your smoothing at the current BPM
+  lastClockSent = micros();  // so when we jump into myClock() we don’t burst
+}
+// number of MIDI clocks per “step” (sixteenth note)
+constexpr uint8_t clocksPerStep = 24 / 4;
 
+void myClock(unsigned long now) {
+  // ————— 1) BPM averaging (unchanged) —————
   if (lastClockTime != 0) {
     unsigned long delta = now - lastClockTime;
-
-    if (delta > 100000) {
-      count = 0;
-      index = 0;
-    } else {
-      intervals[index] = delta;
-      index = (index + 1) % CLOCK_BUFFER_SIZE;
-      if (count < CLOCK_BUFFER_SIZE) count++;
+    if (delta < 100000) {
+      intervalsBuf[bufIndex] = delta;
+      bufIndex = (bufIndex + 1) % CLOCK_BUFFER_SIZE;
+      if (bufCount < CLOCK_BUFFER_SIZE) bufCount++;
 
       unsigned long sum = 0;
-      for (int i = 0; i < count; i++) sum += intervals[i];
-
-      float avgInterval = sum / (float)count;
-      float bpm = 60000000.0 / (avgInterval * 24.0);
-
-      if (!MIDI_CLOCK_SEND) {
-        SMP.bpm = round(bpm);
-        playNoteInterval = ((60000UL / SMP.bpm) / 4) * 1000UL;
-      }
+      for (int i = 0; i < bufCount; i++) sum += intervalsBuf[i];
+      float avgInterval = sum / float(bufCount);
+      float rawBPM = 60000000.0f / (avgInterval * 24.0f);
+      const float α = 0.1f;
+      if (smoothedBPM == 0.0f) smoothedBPM = rawBPM;
+      smoothedBPM = α * rawBPM + (1 - α) * smoothedBPM;
+      SMP.bpm = round(smoothedBPM);
     }
   }
   lastClockTime = now;
+
+    // ————— 2) Step scheduling —————
+    if (!MIDI_CLOCK_SEND && isNowPlaying) {
+    midiClockTicks++;
+    if (midiClockTicks >= clocksPerStep) {
+      midiClockTicks = 0;
+      // Play *this* step, then advance to the next:
+      //onBeatTick();
+      playNote();
+    }
+  }
 }
+
+
 
 void MidiSendNoteOn(int pitch, int channel, int velocity) {
   // Clamp channel and velocity to valid MIDI ranges.
@@ -131,9 +153,11 @@ void MidiSendNoteOn(int pitch, int channel, int velocity) {
 
 
 void handleStop() {
+  if (!isNowPlaying) return;
+
   // Called when a MIDI STOP message is received.
   unsigned long currentTime = millis();
-  if (currentTime - playStartTime > 200) {  // Only pause if play started more than 200ms ago
+  if (currentTime - playStartTime > 50) {  // Only pause if play started more than 200ms ago
     pause();
   }
 }
@@ -142,12 +166,12 @@ void handleStop() {
 
 
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
-   Serial.println(pitch);
+  Serial.println(pitch);
   // For persistent channels (11-14), use the actual MIDI channel
   ch = SMP.currentChannel;
   if (ch < 1 || ch > 16) return;
   pressedKeyCount[ch]++;  // Increment count for this channel
- 
+
   if (pressedKeyCount[ch] == 1) {
     persistentNoteOn[ch] = true;
   }
@@ -163,7 +187,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
         pendingNotes.push_back({ .pitch = pitch,
                                  .velocity = velocity,
                                  .channel = (uint8_t)ch,
-                                 .livenote = (uint8_t)livenote });                          
+                                 .livenote = (uint8_t)livenote });
       }
       // Always play the note immediately
       activeNotes[pitch] = true;
@@ -172,7 +196,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
     // Live mode: play note and show light
     //light(mapXtoPageOffset(SMP.x), livenote, CRGB(255, 255, 255));
     //FastLED.show();
-  
+
     if (ch < 9) {
       _samplers[ch].noteEvent(((SampleRate[ch] * 12) + pitch - 60), velocity, true, false);
     } else if (ch > 12 && ch < 15) {
@@ -184,9 +208,21 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   }
 }
 
-
-
 void onBeatTick() {
+  // Reset your UI timer immediately for the new beat
+  beatStartTime = millis();
+
+  // Flush any pending grid-writes into the _new_ beat slot?
+  for (auto &pn : pendingNotes) {
+    int targetBeat = (beat == 1) ? (maxX * lastPage) : (beat - 1);
+    note[targetBeat][pn.livenote].channel = pn.channel;
+    note[targetBeat][pn.livenote].velocity = pn.velocity;
+  }
+  pendingNotes.clear();
+}
+
+/*
+void onBeatTick2() {
   beatStartTime = millis();
 
   for (auto &pn : pendingNotes) {
@@ -201,7 +237,7 @@ void onBeatTick() {
   pendingNotes.clear();
   // Now play the notes for beat
 }
-
+*/
 
 
 
@@ -228,12 +264,15 @@ void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
 
 
 void handleStart() {
-  // Called when a MIDI Start message is received.
+  if (isNowPlaying) return;
+  resetMidiClockState();
+  midiClockTicks = 0;
   waitForFourBars = true;
   pulseCount = 0;            // Reset pulse count on start.
   beatStartTime = millis();  // Sync to current time.
   Serial.println("MIDI Start Received");
   play(true);
+  playNote();
 }
 
 void handleTimeCodeQuarterFrame(uint8_t data) {

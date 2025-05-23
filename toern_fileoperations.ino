@@ -90,7 +90,7 @@ void stopRecordSD(int fnr, int snr) {
 */
 
 
-void savePatternAsMIDI(bool autosave) {
+/*void savePatternAsMIDI(bool autosave) {
   
   yield();
   Serial.println("Saving MIDI file");
@@ -204,7 +204,7 @@ void savePatternAsMIDI(bool autosave) {
   }
   yield();
 }
-
+*/
 
 void savePattern(bool autosave) {
   
@@ -481,6 +481,6 @@ void autoLoad() {
 }
 
 void autoSave() {
-  savePatternAsMIDI(true);
+  //savePatternAsMIDI(true);
   savePattern(true);
 }

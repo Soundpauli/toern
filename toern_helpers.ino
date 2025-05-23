@@ -168,6 +168,7 @@ void drawClockMode() {
     drawText("int", 7, 12, CRGB(200, 200, 200));
     MIDI_CLOCK_SEND = true;
   }
+
   if (clockMode == -1) {
     drawText("EXT", 6, 12, CRGB(0, 0, 200));
     recInput = MIDI_CLOCK_SEND = false;
