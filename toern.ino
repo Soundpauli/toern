@@ -117,6 +117,9 @@ CachedSample previewCache;
 short delayline[FLANGE_DELAY_LENGTH];
 
 bool MIDI_CLOCK_SEND = true;
+bool MIDI_TRANSPORT_RECEIVE= true;
+bool MIDI_VOICE_SELECT = false;
+
 bool drawNoSD_hasRun = false;
 
 bool notePending = false;
@@ -163,7 +166,7 @@ float rateFactor = 44117.0 / 44100.0;
 
 const char *SynthVoices[11] = { nullptr, "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
 const char *channelType[5] = { nullptr, "DRUM", "SMP", "SYNTH", "X" };
-const char *menuText[6] = { "DAT", "KIT", "WAV", "REC", "BPM", "MIDI" };
+const char *menuText[8] = { "DAT", "KIT", "WAV", "REC", "BPM", "CLK", "CHS","TRP" };
 
 unsigned int infoIndex = 0;
 
@@ -220,8 +223,9 @@ const unsigned long CHECK_INTERVAL = 50;  // Interval to check buttons in ms
 unsigned long lastCheckTime = 0;          // Get the current time
 
 int recMode = 1;
+int transportMode = 1;
 int clockMode = 1;
-
+int voiceSelect = 1;
 
 bool isRecording = false;
 File frec;
@@ -392,7 +396,7 @@ Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1
 Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-Mode menu = { "MENU", { 1, 1, 1, 1 }, { 1, 1, 1, 6 }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
+Mode menu = { "MENU", { 1, 1, 1, 1 }, { 1, 1, 1, 8 }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 // Declare currentMode as a global variable
 Mode *currentMode;
 
@@ -1084,12 +1088,26 @@ if (fastRecordActive && !touchState[2]) {
 
       case 6:
         clockMode = clockMode * (-1);
+        Serial.println(clockMode);
+        drawClockMode();
         if (clockMode==1){ 
           playTimer.begin(playNote, playNoteInterval);
           }else{
           playTimer.end();
         }
-        drawClockMode();
+       
+        break;
+
+        case 7:
+        voiceSelect = voiceSelect * (-1);
+        Serial.println(voiceSelect);
+        drawMidiVoiceSelect();
+        break;
+
+            case 8:
+        transportMode = transportMode * (-1);
+       drawMidiTransport();
+        break;
     }
   } else if ((currentMode == &loadSaveTrack) && buttonString == "0001") {
     paintMode = false;
@@ -1637,7 +1655,7 @@ void setup(void) {
   // set BPM:100
   SMP.bpm = 100.0;
   playTimer.begin(playNote, playNoteInterval);  
-  midiTimer.begin(checkMidi, playNoteInterval / 24);
+  midiTimer.begin(checkMidi, playNoteInterval);
   //midiTimer.priority(10);
   //playTimer.priority(110);
   autoLoad();
@@ -2246,7 +2264,7 @@ void play(bool fromStart) {
     beat = 1;
     SMP.page = 1;
     Encoder[2].writeRGBCode(0xFFFF00);
-    MIDI.sendRealTime(midi::Start);
+   if (MIDI_CLOCK_SEND) MIDI.sendRealTime(midi::Start);
   }
   isNowPlaying = true;
 
@@ -2257,7 +2275,7 @@ void play(bool fromStart) {
 }
 
 void pause() {
-  MIDI.sendRealTime(midi::Stop);
+  if (MIDI_CLOCK_SEND) MIDI.sendRealTime(midi::Stop);
   isNowPlaying = false;
   updateLastPage();
   deleteActiveCopy();
@@ -2576,7 +2594,7 @@ void updateBPM() {
     SMP.bpm = currentMode->pos[3];
     playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
     playTimer.update(playNoteInterval);
-    midiTimer.update(playNoteInterval / 24);
+    midiTimer.update(playNoteInterval);
   }
   drawBPMScreen();
 }
@@ -2650,9 +2668,23 @@ void showMenu() {
 
     case 6:
       showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(0, 200, 200));
+      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 200, 200));
       Encoder[3].writeRGBCode(0x00FFFF);
       drawClockMode();
+      break;
+
+  case 7:
+      showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
+      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 200, 200));
+      Encoder[3].writeRGBCode(0xFFFFFF);
+      drawMidiVoiceSelect();
+      break;
+
+  case 8:
+      showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
+      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 200, 200));
+      Encoder[3].writeRGBCode(0xFFFFFF);
+      drawMidiTransport();
       break;
 
     default:

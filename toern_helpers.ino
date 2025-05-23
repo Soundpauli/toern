@@ -165,13 +165,41 @@ void stopRecordingRAM(int fnr, int snr) {
 void drawClockMode() {
 
   if (clockMode == 1) {
-    drawText("int", 7, 12, CRGB(200, 200, 200));
+    drawText("int", 3, 1, CRGB(0, 200, 0));
     MIDI_CLOCK_SEND = true;
+  }else{
+    drawText("EXT", 3, 1, CRGB(200, 200, 0));
+    MIDI_CLOCK_SEND = false;
   }
 
-  if (clockMode == -1) {
-    drawText("EXT", 6, 12, CRGB(0, 0, 200));
-    recInput = MIDI_CLOCK_SEND = false;
+  FastLEDshow();
+}
+
+
+void drawMidiVoiceSelect() {
+
+  if (voiceSelect == 1) {
+    drawText("MIDI", 3, 1, CRGB(200, 0, 200));
+    MIDI_VOICE_SELECT = true;
+  }else{
+    drawText("MAN", 3, 1, CRGB(0, 0, 200));
+     MIDI_VOICE_SELECT = false;
+  }
+
+  FastLEDshow();
+}
+
+
+void drawMidiTransport() {
+
+  if (transportMode == 1) {
+    drawText("on", 5, 1, CRGB(0, 200, 0));
+    MIDI_TRANSPORT_RECEIVE = true;
+  }
+
+  if (transportMode == -1) {
+    drawText("off", 5, 1, CRGB(200, 0, 0));
+    MIDI_TRANSPORT_RECEIVE = false;
   }
 
   FastLEDshow();

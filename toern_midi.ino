@@ -22,6 +22,7 @@ void checkMidi() {
         pitch = MIDI.getData1();
         // Use the actual velocity from the message (if zero, treat as note off)
         velocity = MIDI.getData2() ? MIDI.getData2() : 127;
+        
         //handleNoteOn(SMP.currentChannel, pitch, velocity);
         break;
 
@@ -77,7 +78,7 @@ void checkMidi() {
     unsigned long clockInterval_us = (unsigned long)clockInterval;
 
     // Increment the lastClockSent time by the fixed interval to reduce jitter.
-    while (now - lastClockSent >= clockInterval_us) {
+    while (f - lastClockSent >= clockInterval_us) {
       MIDI.sendRealTime(midi::Clock);
       lastClockSent += clockInterval_us;
       //lastClockSent = now;
@@ -153,11 +154,11 @@ void MidiSendNoteOn(int pitch, int channel, int velocity) {
 
 
 void handleStop() {
-  if (!isNowPlaying) return;
+  if (!isNowPlaying || !MIDI_TRANSPORT_RECEIVE) return;
 
   // Called when a MIDI STOP message is received.
   unsigned long currentTime = millis();
-  if (currentTime - playStartTime > 50) {  // Only pause if play started more than 200ms ago
+  if (currentTime - playStartTime > 500) {  // Only pause if play started more than 200ms ago
     pause();
   }
 }
@@ -168,7 +169,8 @@ void handleStop() {
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   Serial.println(pitch);
   // For persistent channels (11-14), use the actual MIDI channel
-  ch = SMP.currentChannel;
+  if (!MIDI_VOICE_SELECT) ch = SMP.currentChannel;
+
   if (ch < 1 || ch > 16) return;
   pressedKeyCount[ch]++;  // Increment count for this channel
 
@@ -221,23 +223,6 @@ void onBeatTick() {
   pendingNotes.clear();
 }
 
-/*
-void onBeatTick2() {
-  beatStartTime = millis();
-
-  for (auto &pn : pendingNotes) {
-    int targetBeat = (beat == 1) ? (maxX * lastPage) : (beat - 1);
-    //int targetBeat = beat;
-
-    if (pn.livenote >= 1 && pn.livenote <= maxY) {
-      note[targetBeat][pn.livenote].channel = pn.channel;
-      note[targetBeat][pn.livenote].velocity = pn.velocity;
-    }
-  }
-  pendingNotes.clear();
-  // Now play the notes for beat
-}
-*/
 
 
 
@@ -262,15 +247,16 @@ void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
 }
 
 
-
 void handleStart() {
-  if (isNowPlaying) return;
-  resetMidiClockState();
+  if (isNowPlaying || !MIDI_TRANSPORT_RECEIVE) return;
+  Serial.println("MIDI Start Received");
+  //if (!MIDI_CLOCK_SEND) playTimer.end(); // just to be sure
+  
+  //resetMidiClockState();
   midiClockTicks = 0;
   waitForFourBars = true;
   pulseCount = 0;            // Reset pulse count on start.
   beatStartTime = millis();  // Sync to current time.
-  Serial.println("MIDI Start Received");
   play(true);
   playNote();
 }
