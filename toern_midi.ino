@@ -1,7 +1,7 @@
 
 // move these to file-scope so everybody can reset them
 static unsigned long lastClockTime = 0;
-static unsigned long intervalsBuf[CLOCK_BUFFER_SIZE] = { 0 };
+static unsigned long intervalsBuf[CLOCK_BUFFER_SIZE]  = { 0 };
 
 static int bufIndex = 0;
 static int bufCount = 0;
@@ -78,7 +78,7 @@ void checkMidi() {
     unsigned long clockInterval_us = (unsigned long)clockInterval;
 
     // Increment the lastClockSent time by the fixed interval to reduce jitter.
-    while (f - lastClockSent >= clockInterval_us) {
+    while (now - lastClockSent >= clockInterval_us) {
       MIDI.sendRealTime(midi::Clock);
       lastClockSent += clockInterval_us;
       //lastClockSent = now;
@@ -117,15 +117,29 @@ void myClock(unsigned long now) {
   lastClockTime = now;
 
     // ————— 2) Step scheduling —————
-    if (!MIDI_CLOCK_SEND && isNowPlaying) {
+    if (!MIDI_CLOCK_SEND) {
+      pulseCount = (pulseCount + 1) % (24 * 2);
+
     midiClockTicks++;
     if (midiClockTicks >= clocksPerStep) {
       midiClockTicks = 0;
-      // Play *this* step, then advance to the next:
-      //onBeatTick();
+      
+           // **first** check for an armed start
+      if (pendingStartOnBar && pulseCount == 0) {
+        // bar-1 just hit!
+        pendingStartOnBar = false;
+        isNowPlaying = true;
+        beat = 1;
+        SMP.page = 1;
+        playStartTime = millis();
+      }
+
+ if (isNowPlaying) {
       playNote();
+ }
     }
   }
+  
 }
 
 
@@ -245,18 +259,52 @@ void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
 
   // Existing logic for non-persistent channels goes here...
 }
-
-
 void handleStart() {
+  // only act if we’re supposed to follow external transport
+  if (!MIDI_TRANSPORT_RECEIVE) return;
+
+  Serial.println("MIDI Start Received");
+
+  // 1) reset everything for beat 1
+  beat           = 1;
+  SMP.page       = 1;
+  deleteActiveCopy();
+  isNowPlaying   = true;
+  beatStartTime = millis();
+
+  // 2) if we're the master, also send a MIDI-Start
+  if (MIDI_CLOCK_SEND) {
+    MIDI.sendRealTime(midi::Start);
+  }
+
+  // 3) immediately fire the very first step
+  playNote();
+}
+
+void handleStart2() {
   if (isNowPlaying || !MIDI_TRANSPORT_RECEIVE) return;
   Serial.println("MIDI Start Received");
   //if (!MIDI_CLOCK_SEND) playTimer.end(); // just to be sure
-  
-  //resetMidiClockState();
+   // ---------- SLAVE MODE: start immediately ----------
+  if (!MIDI_CLOCK_SEND) {
+    // reset to bar‐1
+    beat     = 1;
+    SMP.page = 1;
+    // turn playback on
+    isNowPlaying  = true;
+    beatStartTime = millis();
+    // fire the very first step now
+    playNote();
+    return;
+  }
+
+  // ---------- MASTER MODE: your existing behavior ----------
+  if (isNowPlaying) return;       // avoid double-starts
   midiClockTicks = 0;
-  waitForFourBars = true;
-  pulseCount = 0;            // Reset pulse count on start.
-  beatStartTime = millis();  // Sync to current time.
+  pulseCount     = 0;             // clear any previous clock counting
+  // if you still had a four-bar arm, clear it:
+  waitForFourBars = false;
+  // now invoke your normal play() which will send MIDI Start
   play(true);
   playNote();
 }

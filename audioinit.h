@@ -109,58 +109,59 @@ AudioPlayArrayResmp sound0;
   AudioEffectBitcrusher    bitcrusher1;    //xy=2144.2776222229004,627.4166750907898
   AudioEffectBitcrusher    bitcrusher2;    //xy=2144.2776222229004,737.416675567627
   AudioEffectBitcrusher    bitcrusher3;    //xy=2147.2776222229004,829.9166774749756
-  AudioMixer4              synthmixer14;   //xy=2158.8095703125,1913.1903076171875
-  AudioMixer4              synthmixer11;    //xy=2164.618827819824,1437.9999752044678
-  AudioMixer4              synthmixer13;    //xy=2163.666660308838,1734.2382926940918
-  AudioMixer4              synthmixer12;    //xy=2170.476177215576,1589.9999752044678
-  AudioAmplifier           amp8;           //xy=2312.8845596313477,1212.8334312438965
-  AudioAmplifier           amp7;           //xy=2313.5511837005615,1135.0278873443604
-  AudioAmplifier           amp6;           //xy=2316.5234756469727,1054.5001773834229
-  AudioAmplifier           amp4;           //xy=2317.6345596313477,905.722282409668
-  AudioAmplifier           amp3;           //xy=2318.162269592285,829.0278835296631
-  AudioAmplifier           amp5;           //xy=2317.967933654785,976.1668014526367
-  AudioAmplifier           amp2;           //xy=2322.0233764648438,739.2858781814575
-  AudioAmplifier           amp1;           //xy=2323.3291397094727,626.6111946105957
-  AudioMixer4              mixersynth_end; //xy=2409.190528869629,1621.1427688598633
-  AudioFilterStateVariable filter1;        //xy=2476.9997940063477,632.8333015441895
-  AudioFilterStateVariable filter8;        //xy=2475.7497940063477,1218.5833435058594
-  AudioFilterStateVariable filter7;        //xy=2478.1663818359375,1140.333339691162
-  AudioFilterStateVariable filter6;        //xy=2478.4997177124023,1061.7499198913574
-  AudioFilterStateVariable filter4;        //xy=2480.2497940063477,912.3333053588867
-  AudioFilterStateVariable filter2;        //xy=2481.606887817383,744.9404106140137
-  AudioFilterStateVariable filter3;        //xy=2481.7497959136963,835.0833034515381
-  AudioFilterStateVariable filter5;        //xy=2481.6663818359375,986.8332901000977
-  AudioMixer4              filtermixer7;   //xy=2645.749801635742,1145.3333072662354
-  AudioMixer4              filtermixer1;   //xy=2648.749797821045,639.5833015441895
-  AudioMixer4              filtermixer8;   //xy=2647.166343688965,1222.7500076293945
-  AudioMixer4              filtermixer4;   //xy=2652.749797821045,918.5833044052124
-  AudioMixer4              filtermixer6;   //xy=2652.4163856506348,1069.6666679382324
-  AudioMixer4              filtermixer5;   //xy=2653.666305541992,994.4998779296875
-  AudioMixer4              filtermixer2;   //xy=2655.678291320801,750.9404258728027
-  AudioMixer4              filtermixer3;   //xy=2655.749797821045,841.0833053588867
-  AudioEffectFreeverb      freeverb1;      //xy=2794.749801635742,599.3333005905151
-  AudioEffectFreeverb      freeverb7;      //xy=2803.749801635742,1109.0833072662354
-  AudioEffectFreeverb      freeverb2;      //xy=2805.5712356567383,738.5832767486572
-  AudioEffectFreeverb      freeverb8;      //xy=2809.499801635742,1194.333309173584
-  AudioMixer4              freeverbmixer1; //xy=3008.8331909179688,624.8332977294922
-  AudioMixer4              freeverbmixer7; //xy=3014.083106994629,1127.5832977294922
-  AudioMixer4              freeverbmixer8; //xy=3014.749855041504,1219.6667137145996
-  AudioMixer4              freeverbmixer2; //xy=3022.166358947754,768.4166164398193
-  AudioMixer4              mixer1;         //xy=3244.777618408203,874.0832862854004
-  AudioMixer4              mixer2;         //xy=3244.9998741149902,1059.2498397827148
-  AudioMixer4              mixer_end;      //xy=3372.9048080444336,1340.5714645385742
-  AudioAmplifier           amp0;           //xy=3480.6350021362305,1086.4167108535767
-  AudioEffectEnvelope      envelope0;      //xy=3485.0832443237305,1000.3333339691162
+  /* newDMAMEM*/
+  DMAMEM AudioMixer4              synthmixer14;   //xy=2158.8095703125,1913.1903076171875
+  DMAMEM AudioMixer4              synthmixer11;    //xy=2164.618827819824,1437.9999752044678
+  DMAMEM AudioMixer4              synthmixer13;    //xy=2163.666660308838,1734.2382926940918
+  DMAMEM AudioMixer4              synthmixer12;    //xy=2170.476177215576,1589.9999752044678
+  DMAMEM AudioAmplifier           amp8;           //xy=2312.8845596313477,1212.8334312438965
+  DMAMEM AudioAmplifier           amp7;           //xy=2313.5511837005615,1135.0278873443604
+  DMAMEM AudioAmplifier           amp6;           //xy=2316.5234756469727,1054.5001773834229
+  DMAMEM AudioAmplifier           amp4;           //xy=2317.6345596313477,905.722282409668
+  DMAMEM AudioAmplifier           amp3;           //xy=2318.162269592285,829.0278835296631
+  DMAMEM AudioAmplifier           amp5;           //xy=2317.967933654785,976.1668014526367
+  DMAMEM AudioAmplifier           amp2;           //xy=2322.0233764648438,739.2858781814575
+  DMAMEM AudioAmplifier           amp1;           //xy=2323.3291397094727,626.6111946105957
+  DMAMEM AudioMixer4              mixersynth_end; //xy=2409.190528869629,1621.1427688598633
+  DMAMEM AudioFilterStateVariable filter1;        //xy=2476.9997940063477,632.8333015441895
+  DMAMEM AudioFilterStateVariable filter8;        //xy=2475.7497940063477,1218.5833435058594
+  DMAMEM AudioFilterStateVariable filter7;        //xy=2478.1663818359375,1140.333339691162
+  DMAMEM AudioFilterStateVariable filter6;        //xy=2478.4997177124023,1061.7499198913574
+  DMAMEM AudioFilterStateVariable filter4;        //xy=2480.2497940063477,912.3333053588867
+  DMAMEM AudioFilterStateVariable filter2;        //xy=2481.606887817383,744.9404106140137
+  DMAMEM AudioFilterStateVariable filter3;        //xy=2481.7497959136963,835.0833034515381
+  DMAMEM AudioFilterStateVariable filter5;        //xy=2481.6663818359375,986.8332901000977
+  DMAMEM AudioMixer4              filtermixer7;   //xy=2645.749801635742,1145.3333072662354
+  DMAMEM AudioMixer4              filtermixer1;   //xy=2648.749797821045,639.5833015441895
+  DMAMEM AudioMixer4              filtermixer8;   //xy=2647.166343688965,1222.7500076293945
+  DMAMEM AudioMixer4              filtermixer4;   //xy=2652.749797821045,918.5833044052124
+  DMAMEM AudioMixer4              filtermixer6;   //xy=2652.4163856506348,1069.6666679382324
+  DMAMEM AudioMixer4              filtermixer5;   //xy=2653.666305541992,994.4998779296875
+  DMAMEM AudioMixer4              filtermixer2;   //xy=2655.678291320801,750.9404258728027
+  DMAMEM AudioMixer4              filtermixer3;   //xy=2655.749797821045,841.0833053588867
+  DMAMEM AudioEffectFreeverb      freeverb1;      //xy=2794.749801635742,599.3333005905151
+  DMAMEM AudioEffectFreeverb      freeverb7;      //xy=2803.749801635742,1109.0833072662354
+  DMAMEM AudioEffectFreeverb      freeverb2;      //xy=2805.5712356567383,738.5832767486572
+  DMAMEM AudioEffectFreeverb      freeverb8;      //xy=2809.499801635742,1194.333309173584
+  DMAMEM AudioMixer4              freeverbmixer1; //xy=3008.8331909179688,624.8332977294922
+  DMAMEM AudioMixer4              freeverbmixer7; //xy=3014.083106994629,1127.5832977294922
+  DMAMEM AudioMixer4              freeverbmixer8; //xy=3014.749855041504,1219.6667137145996
+  DMAMEM AudioMixer4              freeverbmixer2; //xy=3022.166358947754,768.4166164398193
+  DMAMEM AudioMixer4              mixer1;         //xy=3244.777618408203,874.0832862854004
+  DMAMEM AudioMixer4              mixer2;         //xy=3244.9998741149902,1059.2498397827148
+  DMAMEM AudioMixer4              mixer_end;      //xy=3372.9048080444336,1340.5714645385742
+  DMAMEM AudioAmplifier           amp0;           //xy=3480.6350021362305,1086.4167108535767
+  DMAMEM AudioEffectEnvelope      envelope0;      //xy=3485.0832443237305,1000.3333339691162
 
   AudioPlaySdWav           playSdWav1;     //xy=199,194
 
-  AudioMixer4              mixerPlay;      //xy=3587.8886184692383,1342.2221393585205
-  AudioMixer4              mixer0;         //xy=3712.1389083862305,1040.0000228881836
-  AudioInputI2S            audioInput;           //xy=3743.3332443237305,1366.3333358764648
-  AudioRecordQueue         queue1;         //xy=3750.8332901000977,1458.3333129882812
+  DMAMEM AudioMixer4              mixerPlay;      //xy=3587.8886184692383,1342.2221393585205
+  DMAMEM AudioMixer4              mixer0;         //xy=3712.1389083862305,1040.0000228881836
+  DMAMEM AudioInputI2S            audioInput;           //xy=3743.3332443237305,1366.3333358764648
+  DMAMEM AudioRecordQueue         queue1;         //xy=3750.8332901000977,1458.3333129882812
   AudioOutputI2S           i2s1;           //xy=3754.8889083862305,1254.4445419311523
 
-
+/*. ----  */
   DMAMEM AudioConnection          patchCord1(SNchaosMix, 0, SNtone, 0);
   DMAMEM AudioConnection          patchCord2(SNchaosMix, 0, SNtone2, 0);
   DMAMEM AudioConnection          patchCord3(HHchaosMix, 0, HHtone, 0);

@@ -28,7 +28,20 @@ void drawLowResCircle(int startX, int startY, CRGB color) {
     }
   }
 }
+ void drawPatternChange(int val){
+  int width = 12;
+ if (val > 9) width=8;
+    
+//BLACK BOX
+  for (int x = width; x <= 16; x++) {      // 6 pixels wide for the number area
+    for (int y = 7; y <= 13; y++) {   // Box height (adjust as needed)
+      light(x, y, CRGB(0, 0, 0));
+    }
+  }
+  // Draw the number in light gray / white-ish
+  drawNumber(val, CRGB(220, 220, 220), 8);
 
+ }
 
 void drawFilterCheck(int mappedValue, FilterType fx) {
   // Map the value (0-maxfilterResolution) to 0-16 LEDs lit
@@ -414,22 +427,6 @@ void drawCursor() {
 }
 
 
-
-void drawRecMode() {
-
-  if (recMode == 1) {
-    drawText("mic", 7, 10, CRGB(200, 200, 200));
-    recInput = AUDIO_INPUT_MIC;
-  }
-  if (recMode == -1) {
-    drawText("line", 6, 10, CRGB(0, 0, 200));
-    recInput = AUDIO_INPUT_LINEIN;
-  }
-  sgtl5000_1.inputSelect(recInput);
-
-
-  FastLEDshow();
-}
 
 
 void drawVolume(unsigned int vol) {

@@ -184,8 +184,9 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
 
 void showWave() {
-
   int snr = SMP.wav[SMP.currentChannel].fileID;
+
+
   if (snr < 1) snr = 1;
   int fnr = getFolderNumber(snr);
   char OUTPUTf[50];
@@ -276,26 +277,35 @@ if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
   _samplers[0].removeAllSamples();
   envelope0.noteOff();
   previewSample(fnr, getFileNumber(snr), false, false);
+
 }
+
+
+
+
 
   // --- NEW SAMPLE SELECTION (Encoder 3) ---
   // Ensure encoder3's value is within 1-999. If not, reset it.
   if (currentMode->pos[3] < 1 || currentMode->pos[3] > 999) {
-    currentMode->pos[3] = snr;              // snr is already clamped to at least 1
-    Encoder[3].writeCounter((int32_t)snr);  // Update the encoder display/counter
+    //currentMode->pos[3] = snr;              // snr is already clamped to at least 1
+    //Encoder[3].writeCounter((int32_t)snr);  // Update the encoder display/counter
   }
+  
 
   if (currentMode->pos[3] != snr) {
     envelope0.noteOff();
     previewIsPlaying = false;
     playSdWav1.stop();
-
+    //currentMode->pos[3] = snr;
     sampleIsLoaded = false;
     firstcheck = true;
     nofile = false;
-    SMP.wav[SMP.currentChannel].fileID = currentMode->pos[3];
 
-    snr = SMP.wav[SMP.currentChannel].fileID;
+    snr = currentMode->pos[3];
+    SMP.wav[SMP.currentChannel].fileID = snr;
+    
+    Serial.println(snr);
+
     fnr = getFolderNumber(snr);
     FastLEDclear();
     drawNumber(snr, col_Folder[fnr], 12);

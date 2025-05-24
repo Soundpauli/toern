@@ -45,7 +45,7 @@ const CRGB col[] = {
   CRGB(140, 0, 120),    // Lila
   CRGB(220, 100, 100),  // rosa
   CRGB(0, 0, 0),
-  CRGB(0, 200, 0),  //s4
+  CRGB(0, 0, 0),  //s4
   CRGB(220, 0, 0),      //s3
   CRGB(0, 0, 0),
   CRGB(0, 255, 70),  // s2
@@ -65,7 +65,7 @@ const CRGB col_base[] = {
   CRGB(15, 1, 4),    // Lila
   CRGB(22, 12, 16),  // Rosa
   CRGB(0, 0, 0),
-  CRGB(0, 20, 0), //s4
+  CRGB(0, 0, 0), //s4
   CRGB(20, 0, 0),//s3
   CRGB(0, 0, 0),
   CRGB(0, 10, 4),  //s2
