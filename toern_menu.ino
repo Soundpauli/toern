@@ -94,7 +94,7 @@ void showMenu() {
     case 6:
       //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
       drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 200, 200));
-      Encoder[3].writeRGBCode(0x00FFFF);
+      Encoder[3].writeRGBCode(0xFFFFFF);
       drawClockMode();
       break;
 
@@ -122,7 +122,7 @@ void showMenu() {
       case 10:
       //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
       drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 0, 20));
-      Encoder[3].writeRGBCode(0xFF0000);
+      Encoder[3].writeRGBCode(0xFF00AA);
       drawFastRecMode();
       break;
 
@@ -241,10 +241,10 @@ void drawRecMode() {
 void drawClockMode() {
 
   if (clockMode == 1) {
-    drawText("INT", 4, 1, CRGB(0, 200, 0));
+    drawText("INT", 5, 1, CRGB(0, 200, 0));
     MIDI_CLOCK_SEND = true;
   }else{
-    drawText("EXT", 4, 1, CRGB(200, 200, 0));
+    drawText("EXT", 5, 1, CRGB(200, 200, 0));
     MIDI_CLOCK_SEND = false;
   }
 

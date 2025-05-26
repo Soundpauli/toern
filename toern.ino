@@ -8,6 +8,9 @@
 #define AUDIO_SAMPLE_RATE_EXACT 44100
 #define FLANGE_DELAY_LENGTH 2048
 
+static const int FAST_DROP_BLOCKS = 40;   // ≈200ms @ 44100Hz with 128-sample blocks
+static int fastDropRemaining = 0;
+
 // Assume 'flangers' is an array of AudioEffectFlange pointers
 // AudioEffectFlange* flangers[MAX_EFFECTS]; // Example declaration
 // Assume 'delayline' is a shared or dedicated delay line buffer
@@ -46,7 +49,7 @@ static bool flanger_bypassSet[MAX_FLANGERS] = { false };   // Initialize all to 
 #define INT_PIN 27   // PIN FOR ENOCDER INTERRUPS
 #define SWITCH_1 16  // Pin for TPP223 1
 #define SWITCH_2 41  // Pin for TPP223 2
-#define SWITCH_3 15  // Pin for TPP223 3
+#define SWITCH_3 3  // Pin for TPP223 3 //3==lowerright, lowerleft== 15!
 #define VOL_MIN 1
 #define VOL_MAX 10
 #define BPM_MIN 40
@@ -86,6 +89,10 @@ unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 //elapsedMillis recFlushTimer;
 elapsedMillis recTime;
 
+
+bool lastPinsConnected = false;
+unsigned long lastChangeTime = 0;
+const unsigned long debounceDelay = 500;  // 100ms debounce
 
 #define EEPROM_MAGIC_ADDR   42
 #define EEPROM_DATA_START   43   // 43..48 will be your six mode‐bytes
@@ -173,7 +180,7 @@ float rateFactor = 44117.0 / 44100.0;
 
 const char *SynthVoices[11]  = { nullptr, "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
 const char *channelType[5]  = { nullptr, "DRUM", "SMP", "SYNTH", "X" };
-const char *menuText[10]  = { "DAT", "KIT", "WAV", "REC", "BPM", "CLCK", "CHAN", "TRAN", "PMOD", "FREC" };
+const char *menuText[10]  = { "DAT", "KIT", "WAV", "REC", "BPM", "CLCK", "CHAN", "TRAN", "PMOD", "OTR" };
 
 unsigned int infoIndex = 0;
 
@@ -244,7 +251,7 @@ int voiceSelect = 1;
 bool isRecording = false;
 File frec;
 
-#define MAXREC_SECONDS 10
+#define MAXREC_SECONDS 20
 #define BUFFER_SAMPLES (22100 * MAXREC_SECONDS)
 #define BUFFER_BYTES (BUFFER_SAMPLES * sizeof(int16_t))
 
@@ -977,7 +984,64 @@ void switchMode(Mode *newMode) {
 }
 
 
+void checkFastRec(){
+      if ((currentMode == &draw || currentMode == &singleMode) && SMP_FAST_REC == 2 || SMP_FAST_REC == 3) {
+      bool pinsConnected = (digitalRead(2) == LOW);
 
+      if (pinsConnected != lastPinsConnected && millis() - lastChangeTime > debounceDelay) {
+        lastChangeTime = millis();  // Update timestamp
+        lastPinsConnected = pinsConnected;
+
+        if (SMP_FAST_REC == 2) {
+          if (pinsConnected && !fastRecordActive) {
+            Serial.println(">> startFastRecord from pin 2+4");
+            startFastRecord();
+            paintMode = false;
+            freshPaint = true;
+            unpaintMode = false;
+            pressed[3] = false;
+            note[beat][SMP.currentChannel+1].channel = SMP.currentChannel;
+            note[beat][SMP.currentChannel+1].velocity = defaultVelocity;
+            return;
+          } else if (!pinsConnected && fastRecordActive) {
+            Serial.println(">> stopFastRecord from pin 2+4");
+            stopFastRecord();
+          }
+        }
+
+        if (SMP_FAST_REC == 3) {
+          if (!pinsConnected && !fastRecordActive) {
+            Serial.println(">> startFastRecord from pin 2+4");
+            startFastRecord();
+            paintMode = false;
+            freshPaint = true;
+            unpaintMode = false;
+            pressed[3] = false;
+            note[beat][SMP.currentChannel+1].channel = SMP.currentChannel;
+            note[beat][SMP.currentChannel+1].velocity = defaultVelocity;
+            return;
+          } else if (pinsConnected && fastRecordActive) {
+            Serial.println(">> stopFastRecord from pin 2+4");
+            stopFastRecord();
+          }
+        }
+      }
+    }
+
+
+  int touchValue3 = fastTouchRead(SWITCH_3);
+  touchState[2] = (touchValue3 > touchThreshold);
+
+  if (SMP_FAST_REC==1 && !fastRecordActive && touchState[2]) {
+    startFastRecord();
+    return;  // skip other mode logic while fast recording
+  }
+
+  if (SMP_FAST_REC==1 && fastRecordActive && !touchState[2]) {
+    stopFastRecord();
+  }
+
+}
 
 void checkMode(String buttonString, bool reset) {
 
@@ -990,31 +1054,8 @@ void checkMode(String buttonString, bool reset) {
   }
 
 
-  //fastrec
-  /*
-  if (SMP_FAST_REC>0 && !fastRecordActive && buttonString == "2100") {
-    startFastRecord();
-    return;  // skip other mode logic while fast recording
-  }
-  // detect stop: encoder0 released ("9000") while fastRecordActive
-  if (SMP_FAST_REC>0 && fastRecordActive && buttonString == "9000") {
-    stopFastRecord();
-    return;
-  }
-  */
+  checkFastRec();
 
-  int touchValue3 = fastTouchRead(SWITCH_3);
-  touchState[2] = (touchValue3 > touchThreshold);
-
-  if (SMP_FAST_REC==1 && !fastRecordActive && touchState[2]) {
-    startFastRecord();
-    return;  // skip other mode logic while fast recording
-  }
-
-  if (SMP_FAST_REC==1 && fastRecordActive && !touchState[2]) {
-    stopFastRecord();
-    return;
-  }
 
   if (isRecording && buttonString == "0900") {
     //stopRecord(getFolderNumber(SMP.wav[SMP.currentChannel].fileID), SMP.wav[SMP.currentChannel].fileID);
@@ -1361,7 +1402,7 @@ void initSoundChip() {
   sgtl5000_1.inputSelect(recInput);
   sgtl5000_1.micGain(28);  //0-63
   //sgtl5000_1.adcHighPassFilterEnable();
-  sgtl5000_1.adcHighPassFilterDisable();  //for mic?
+  //sgtl5000_1.adcHighPassFilterDisable();  //for mic?
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(14);
 }
@@ -1612,6 +1653,11 @@ void setup(void) {
   pinMode(0, INPUT_PULLDOWN);
   pinMode(3, INPUT_PULLDOWN);
   pinMode(16, INPUT_PULLDOWN);
+
+  pinMode(2, INPUT_PULLUP);   // Pin 2 as input with pull-up
+pinMode(4, OUTPUT);         // Pin 4 set as output
+digitalWrite(4, LOW);       // Drive Pin 4 LOW
+
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
   FastLED.setBrightness(ledBrightness);
 
@@ -1930,8 +1976,7 @@ void loop() {
     checkMode(buttonString, false);
     drawTimer();
     checkPendingSampleNotes();
-
-    return;  // skip the rest while we’re fast-recording
+    //return;  // skip the rest while we’re fast-recording
   }
 
   if (isRecording) {
@@ -2042,8 +2087,6 @@ void loop() {
     shiftNotes();
     drawBase();
     drawTriggers();
-
-
     if (isNowPlaying) {
       //filtercheck();
       drawTimer();
@@ -2054,20 +2097,16 @@ void loop() {
     drawBase();
     drawTriggers();
 
-
+    
     /*if (patternChangeActive){
-    if (millis() <= patternChangeTime) {
-  
-          
+    if (millis() <= patternChangeTime) {          
           Serial.println(editpage);
-
     }else{patternChangeActive=false;}
-
     }
     */
-
     //drawPatternChange(SMP.edit);
     
+
     if (currentMode != &velocity)
       drawCursor();
 
@@ -2083,7 +2122,6 @@ void loop() {
   for (int ch = 13; ch <= 14; ch++) {
     int noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
-
     if (noteOnTriggered[ch] && !persistentNoteOn[ch] && (millis() - startTime[ch] >= noteLen)) {
       if (!envelopes[ch]) continue;
       envelopes[ch]->noteOff();
@@ -2091,12 +2129,7 @@ void loop() {
     }
   }
 
-
-
   autoOffActiveNotes();
-
-
-
   FastLEDshow();  // draw!
   filterfreshsetted = false;
   //yield();
@@ -2332,7 +2365,6 @@ void playSynth(int ch, int b, int vel, bool persistant) {
 void playNote() {
   onBeatTick();
 
-
   if (isNowPlaying) {
     for (unsigned int b = 1; b < maxY + 1; b++) {
       int ch = note[beat][b].channel;
@@ -2383,17 +2415,15 @@ void playNote() {
     // midi functions
     if (waitForFourBars && pulseCount >= totalPulsesToWait) {
       beat = 1;
+      if (fastRecordActive) stopFastRecord();
       SMP.page = 1;
       isNowPlaying = true;
       Serial.println("4 Bars Reached");
       waitForFourBars = false;  // Reset for the next start message
     }
     yield();
-
     beatStartTime = millis();
-
     beat++;
-
     checkPages();
   }
 
@@ -2409,6 +2439,7 @@ void checkPages() {
   // if we stepped past the last non-empty page, restart at the top
   if (newPage > lastPage) {
     beat = 1;
+    if (fastRecordActive) stopFastRecord();
     newPage = 1;
   }
 

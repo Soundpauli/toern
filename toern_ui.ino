@@ -378,7 +378,7 @@ void drawTriggers() {
 
 void drawTimer() {
   
-  unsigned int timer = (beat - 1) % maxX + 1;
+  unsigned int timer = ((beat - 1) % maxX + 1);
 
   if (SMP.page == SMP.edit) {
     if (timer < 1) timer = 1;
@@ -745,7 +745,6 @@ void drawKnobColorDefault(){
     light(s, 7, CRGB(10, 0, 0));
   }
 }*/
-
 
 
 

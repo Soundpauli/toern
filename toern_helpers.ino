@@ -97,7 +97,7 @@ void startRecordingRAM() {
   isRecording = true;
 }
 
-void flushAudioQueueToRAM() {
+void flushAudioQueueToRAM2() {
 if (fastRecordActive) {
     auto  ch = SMP.currentChannel;
     auto& idx = fastRecWriteIndex[ch];
@@ -163,7 +163,7 @@ void stopRecordingRAM(int fnr, int snr) {
 }
 
 
-void startFastRecord() {
+void startFastRecord2() {
   if (fastRecordActive) return;
   fastRecordActive = true;
   fastRecWriteIndex[SMP.currentChannel] = 0;
@@ -171,6 +171,65 @@ void startFastRecord() {
   // feedback:
   //Encoder[0].writeRGBCode(0xFF0000);
   Serial.printf("FAST RECORD ▶ ch%u\n", SMP.currentChannel);
+}
+
+// --------------------
+void startFastRecord() {
+  if (fastRecordActive) return;
+
+  // 1) Stop & clear any queued audio so old data never sneaks in
+  queue1.end();
+  while (queue1.available()) {
+    queue1.readBuffer();
+    queue1.freeBuffer();
+  }
+
+  // 2) Reset our write index and drop counter
+  int ch = SMP.currentChannel;
+  fastRecWriteIndex[ch] = 0;
+  fastDropRemaining = FAST_DROP_BLOCKS;
+
+  // 3) Restart recording queue
+  queue1.begin();
+  fastRecordActive = true;
+
+  Serial.printf("FAST RECORD ▶ ch%u (dropping %d blocks)\n", ch, FAST_DROP_BLOCKS);
+}
+
+// --------------------
+void flushAudioQueueToRAM() {
+  if (fastRecordActive) {
+    int ch = SMP.currentChannel;
+    auto &idx = fastRecWriteIndex[ch];
+
+    // Treat your byte buffer as an int16_t array for cleaner pointer math:
+    int16_t *dest = reinterpret_cast<int16_t *>(sampled[ch]);
+
+    // Pull every pending block
+    while (queue1.available()) {
+      int16_t *block = (int16_t *)queue1.readBuffer();
+
+      if (fastDropRemaining > 0) {
+        // still skipping the first 200ms
+        fastDropRemaining--;
+      } else if (idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES) {
+        // copy 128 samples (256 bytes) into our buffer
+        memcpy(dest + idx, block, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
+        idx += AUDIO_BLOCK_SAMPLES;
+      }
+
+      queue1.freeBuffer();
+
+      // auto-stop if full
+      if (idx >= BUFFER_SAMPLES) {
+        stopFastRecord();
+        break;
+      }
+    }
+    return;  // skip your SD path
+  }
+
+  // … your existing “normal” recording code here …
 }
 
 void stopFastRecord() {
