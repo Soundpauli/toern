@@ -349,9 +349,9 @@
         fxType = 2;
         selectedFX = currentMode->pos[1];
 
-        Serial.print("DRUM: ");
-        Serial.println(currentDrum);
-        Serial.println(fxType);
+        //Serial.print("DRUM: ");
+        //Serial.println(currentDrum);
+        //Serial.println(fxType);
 
         currentMode->pos[3] = SMP.drum_settings[SMP.currentChannel][SMP.selectedDrum];
         Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
@@ -368,9 +368,9 @@
         fxType = 4;
         selectedFX = currentMode->pos[1];
 
-        Serial.print("Synth: ");
-        Serial.println(currentSynth);
-        Serial.println(fxType);
+        //Serial.print("Synth: ");
+        //Serial.println(currentSynth);
+        //Serial.println(fxType);
 
         currentMode->pos[3] = SMP.synth_settings[SMP.currentChannel][SMP.selectedSynth];
         Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
@@ -399,9 +399,9 @@
         fxType = 1;
         selectedFX = currentMode->pos[2];
 
-        Serial.print("FILTER: ");
-        Serial.println(currentFilter);
-        Serial.println(fxType);
+        //Serial.print("FILTER: ");
+        //Serial.println(currentFilter);
+        //Serial.println(fxType);
 
         currentMode->pos[3] = SMP.filter_settings[SMP.currentChannel][SMP.selectedFilter];
         Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
@@ -418,8 +418,8 @@
         selectedFX = currentMode->pos[0];
         currentParam = activeParameterType[SMP.selectedParameter];
 
-        Serial.print("PARAMS: ");
-        Serial.println(currentParam);
+        //Serial.print("PARAMS: ");
+        //Serial.println(currentParam);
 
         currentMode->pos[3] = SMP.param_settings[SMP.currentChannel][SMP.selectedParameter];
         Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
@@ -480,7 +480,6 @@
       handleSynthEncoder();
       handleFilterEncoder();
       handleParameterEncoder();
-
       // Process parameter, drum, synth, or filter adjustments
       processAdjustments();
       

@@ -36,15 +36,15 @@ void HHnoteOn() {
 
 void KD_drum(float A1, float A2, float A3, int type) {
 
-  Serial.print("BD ");
-  Serial.print(A1);
-  Serial.print(" ");
-  Serial.print(A2);
-  Serial.print(" ");
-  Serial.print(A3);
-  Serial.print(" ");
-  Serial.print(type);
-  Serial.println(" ");
+  //Serial.print("BD ");
+  //Serial.print(A1);
+  //Serial.print(" ");
+  //Serial.print(A2);
+  //Serial.print(" ");
+  //Serial.print(A3);
+  //Serial.print(" ");
+  //Serial.print(type);
+  //Serial.println(" ");
 
 
 
@@ -193,8 +193,8 @@ void HH_drum(float A7, float A8, float A9, int type) {
 // Helper function to process filter adjustments
 float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
   SMP.drum_settings[index][drumType] = currentMode->pos[encoder];
-  Serial.print(":::::");
-  Serial.println(SMP.drum_settings[index][drumType]);
+  //Serial.print(":::::");
+  //Serial.println(SMP.drum_settings[index][drumType]);
   float mappedValue;
   if (drumType == DRUMDECAY) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
   if (drumType == DRUMPITCH) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
@@ -208,9 +208,9 @@ float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
     }
     int mappedValue = mapf(SMP.drum_settings[SMP.currentChannel][drumType], 0, maxIndex, 1, maxIndex + 1);  // = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 1, 3);
   }
-  Serial.print(drumType);
-  Serial.print(" #####---->");
-  Serial.println(mappedValue);
+  //Serial.print(drumType);
+  //Serial.print(" #####---->");
+  //Serial.println(mappedValue);
   return mappedValue;
 }
 
@@ -220,9 +220,9 @@ float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
 // Update filter values
 void updateDrumValue(DrumTypes drumType, int index, float value) {
   // Common function to update all filter types
-  Serial.print(drumType);
-  Serial.print(" d==>: ");
-  Serial.println(value);
+  //Serial.print(drumType);
+  //Serial.print(" d==>: ");
+  //Serial.println(value);
 
   switch (drumType) {
     case DRUMDECAY:

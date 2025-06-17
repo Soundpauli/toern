@@ -9,7 +9,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
   if (!previewCache.valid || previewCache.folder != folder || previewCache.sampleID != sampleID) {
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
-      Serial.println("File not found!");
+      //Serial.println("File not found!");
       return;
     }
 
@@ -78,7 +78,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
 
   // If the end lies before (or equal to) the start, nothing to play
   if (endOffsetBytes <= startOffsetBytes) {
-    Serial.println("Invalid sample range; skipping playback.");
+    //Serial.println("Invalid sample range; skipping playback.");
     return;
   }
 
@@ -99,17 +99,17 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
   );
   sampleIsLoaded = true;
 
-  Serial.println("NOTE");
+  //Serial.println("NOTE");
   _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
 }
 
 
 
 void loadSample(unsigned int packID, unsigned int sampleID) {
-  Serial.print("loading Sample:");
-  Serial.print(sampleID);
-  Serial.print("from pack nr.");
-  Serial.println(packID);
+  //Serial.print("loading Sample:");
+  //Serial.print(sampleID);
+  //Serial.print("from pack nr.");
+  //Serial.println(packID);
     
 
   drawNoSD();
@@ -123,15 +123,15 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
   }
 
   if (!SD.exists(OUTPUTf)) {
-    Serial.print("File does not exist: ");
-    Serial.println(OUTPUTf);
+    //Serial.print("File does not exist: ");
+    //Serial.println(OUTPUTf);
     SMP.mute[sampleID] = true;
     return;
   } else {
     SMP.mute[sampleID] = false;
   }
 
-  usedFiles[sampleID - 1] = String(OUTPUTf);
+  //usedFiles[sampleID - 1] = String(OUTPUTf);
 
   File loadSample = SD.open(OUTPUTf);
   if (loadSample) {
@@ -176,8 +176,11 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
     i = i / 2;
     _samplers[sampleID].removeAllSamples();
+    loadedSampleRate[sampleID] = SampleRate[sampleID];  // e.g. 44100, or whatever
+    loadedSampleLen[sampleID] = i; 
     _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], (int)i/1 , rateFactor);
   }
+  yield();
 }
 
 
@@ -193,16 +196,16 @@ void showWave() {
   sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
   /*
   if (firstcheck) {
-    Serial.print("checking: ");
+    //Serial.print("checking: ");
     firstcheck = false;
     if (!SD.exists(OUTPUTf)) {
-      Serial.print(OUTPUTf);
-      Serial.println(" >NOPE");
+      //Serial.print(OUTPUTf);
+      //Serial.println(" >NOPE");
       nofile = true;
     } else {
-      Serial.print(OUTPUTf);
+      //Serial.print(OUTPUTf);
       nofile = false;
-      Serial.println(" >exists!");
+      //Serial.println(" >exists!");
     }
   }
   */
@@ -244,7 +247,7 @@ if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
   // force a fresh slice of the same file:
   previewCache.valid = false;
 
-  Serial.println("SEEK-hit");
+  //Serial.println("SEEK-hit");
   SMP.seek = currentMode->pos[0];
   _samplers[0].removeAllSamples();
   previewSample(fnr, getFileNumber(snr), false, false);
@@ -257,10 +260,10 @@ if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
     firstcheck = true;
     nofile = false;
     SMP.folder = currentMode->pos[1];
-    Serial.println("Folder: " + String(SMP.folder - 1));
+    //Serial.println("Folder: " + String(SMP.folder - 1));
     SMP.wav[SMP.currentChannel].fileID = ((SMP.folder - 1) * 100) + 1;
-    Serial.print("WAV:");
-    Serial.println(SMP.wav[SMP.currentChannel].fileID);
+    //Serial.print("WAV:");
+    //Serial.println(SMP.wav[SMP.currentChannel].fileID);
     Encoder[3].writeCounter((int32_t)SMP.wav[SMP.currentChannel].fileID);
   }
 
@@ -272,7 +275,7 @@ if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
   // force reload so your new end‐point takes effect
   previewCache.valid = false;
 
-  Serial.println("SEEKEND-hit");
+  //Serial.println("SEEKEND-hit");
   SMP.seekEnd = currentMode->pos[2];
   _samplers[0].removeAllSamples();
   envelope0.noteOff();
@@ -304,12 +307,12 @@ if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
     snr = currentMode->pos[3];
     SMP.wav[SMP.currentChannel].fileID = snr;
     
-    Serial.println(snr);
+    //Serial.println(snr);
 
     fnr = getFolderNumber(snr);
     FastLEDclear();
     drawNumber(snr, col_Folder[fnr], 12);
-    Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
+    //Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
 
     // --- Reset seek positions when choosing a new sample ---

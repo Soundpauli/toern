@@ -54,6 +54,7 @@ void loadSMPSettings() {
 }
 
 
+
 void writeWavHeader(File &file, uint32_t sampleRate, uint8_t bitsPerSample, uint16_t numChannels) {
   uint32_t byteRate = sampleRate * numChannels * bitsPerSample / 8;
   uint8_t blockAlign = numChannels * bitsPerSample / 8;
@@ -98,30 +99,6 @@ void startRecordingRAM() {
 }
 
 void flushAudioQueueToRAM2() {
-if (fastRecordActive) {
-    auto  ch = SMP.currentChannel;
-    auto& idx = fastRecWriteIndex[ch];
-    uint8_t* buf = sampled[ch];  // raw byte buffer
-
-    while (queue1.available() &&
-          idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES)
-    {
-      auto block = (int16_t*)queue1.readBuffer();
-      // copy AUDIO_BLOCK_SAMPLES samples = AUDIO_BLOCK_SAMPLES*2 bytes
-      memcpy(buf + idx*sizeof(int16_t),
-             block,
-             AUDIO_BLOCK_SAMPLES*sizeof(int16_t));
-      idx += AUDIO_BLOCK_SAMPLES;
-      queue1.freeBuffer();
-    }
-    if (idx >= BUFFER_SAMPLES) {
-      // auto-stop on full buffer
-      stopFastRecord();
-    }
-    return;  // skip your SD-record path
-  }
-  
-
   if (!isRecording) return;
   // each AudioRecordQueue block is 128 samples
   while (queue1.available() && recWriteIndex + 128 <= BUFFER_SAMPLES) {
@@ -132,7 +109,7 @@ if (fastRecordActive) {
   }
   // if we ever hit the end of the buffer, stop automatically:
   if (recWriteIndex >= BUFFER_SAMPLES) {
-    Serial.println("⚠️ Buffer full");
+    //Serial.println("⚠️ Buffer full");
     queue1.end();
     isRecording = false;
   }
@@ -156,27 +133,27 @@ void stopRecordingRAM(int fnr, int snr) {
   f.write((uint8_t *)recBuffer, recWriteIndex * sizeof(int16_t));
 
   f.close();
-  Serial.print("💾 Saved ");
-  Serial.println(path);
+  //Serial.print("💾 Saved ");
+  //Serial.println(path);
   // playback if you like
   playSdWav1.play(path);
 }
 
 
-void startFastRecord2() {
-  if (fastRecordActive) return;
-  fastRecordActive = true;
-  fastRecWriteIndex[SMP.currentChannel] = 0;
-  queue1.begin();
-  // feedback:
-  //Encoder[0].writeRGBCode(0xFF0000);
-  Serial.printf("FAST RECORD ▶ ch%u\n", SMP.currentChannel);
-}
 
 // --------------------
 void startFastRecord() {
   if (fastRecordActive) return;
 
+  if (SMP_REC_CHANNEL_CLEAR) clearAllNotesOfChannel();
+
+   paintMode = false;
+            freshPaint = true;
+            unpaintMode = false;
+            pressed[3] = false;
+            note[beat][SMP.currentChannel+1].channel = SMP.currentChannel;
+            note[beat][SMP.currentChannel+1].velocity = defaultVelocity;
+            
   // 1) Stop & clear any queued audio so old data never sneaks in
   queue1.end();
   while (queue1.available()) {
@@ -193,7 +170,7 @@ void startFastRecord() {
   queue1.begin();
   fastRecordActive = true;
 
-  Serial.printf("FAST RECORD ▶ ch%u (dropping %d blocks)\n", ch, FAST_DROP_BLOCKS);
+  //Serial.printf("FAST RECORD ▶ ch%u (dropping %d blocks)\n", ch, FAST_DROP_BLOCKS);
 }
 
 // --------------------
@@ -228,8 +205,6 @@ void flushAudioQueueToRAM() {
     }
     return;  // skip your SD path
   }
-
-  // … your existing “normal” recording code here …
 }
 
 void stopFastRecord() {
@@ -237,6 +212,7 @@ void stopFastRecord() {
   queue1.end();
   auto  ch  = SMP.currentChannel;
   auto& idx = fastRecWriteIndex[ch];
+  loadedSampleLen[ch] = idx;
   // load into that channel’s sampler voice:
   _samplers[ch].removeAllSamples();
   _samplers[ch].addSample(
@@ -248,7 +224,7 @@ void stopFastRecord() {
   // give back your knob color + preview
  // Encoder[0].writeRGBCode(CRGBToUint32(col[ch]));
  // _samplers[ch].noteEvent(36, defaultVelocity, true, false);
-  Serial.printf("◀ FASTREC ch%u, %u samples\n", ch, (unsigned)idx);
+  //Serial.printf("◀ FASTREC ch%u, %u samples\n", ch, (unsigned)idx);
  
 }
 
@@ -273,6 +249,23 @@ void EEPROMsetLastFile() {
 }
 
 
+
+void clearAllNotesOfChannel() {
+  uint8_t channel = SMP.currentChannel;
+
+  for (uint16_t step = 0; step < maxlen; step++) {
+    for (uint8_t pitch = 1; pitch <= 16; pitch++) {
+      if (note[step][pitch].channel == channel) {
+        note[step][pitch].channel = 0;
+        note[step][pitch].velocity = defaultVelocity;
+      }
+    }
+  }
+
+  updateLastPage();  // Optional: If your UI tracks last updated page
+  FastLEDshow();     // Optional: Refresh LED grid if used
+}
+
 void FastLEDclear() {
   FastLED.clear();
 }
@@ -288,7 +281,7 @@ void FastLEDshow() {
 
 
 int getPage(int x) {
-  updateLastPage();
+  //updateLastPage();
   return (x - 1) / maxX + 1;  // Calculate page number
 }
 
@@ -820,30 +813,30 @@ void _cycleFilterTypes(int button) {
     {
       // Move to the next value, wrapping around
       //adsr[button] = buttonValues[button][(i + 1) % numValues];
-      Serial.print("Button ");
-      Serial.print(button + 1);
-      Serial.print(" toggled to: ");
+      //Serial.print("Button ");
+      //Serial.print(button + 1);
+      //Serial.print(" toggled to: ");
 
 
       /*
       //TOOGLE BETWEEN RELEASE AND WF
       if (selectedFX == WAVEFORM) {
-        Serial.println("---> WAVE");
-        Serial.println(SMP.param_settings[SMP.currentChannel][WAVEFORM]);
+        //Serial.println("---> WAVE");
+        //Serial.println(SMP.param_settings[SMP.currentChannel][WAVEFORM]);
         Encoder[0].writeMax((int32_t)5);
         Encoder[0].writeCounter((int32_t)SMP.param_settings[SMP.currentChannel][WAVEFORM]);
       }
 
       if (adsr[3] == SUSTAIN) {
-        Serial.println("---> SUSTAIN");
-        Serial.println(SMP.param_settings[SMP.currentChannel][SUSTAIN]);
+        //Serial.println("---> SUSTAIN");
+        //Serial.println(SMP.param_settings[SMP.currentChannel][SUSTAIN]);
         Encoder[3].writeMax((int32_t)100);  // current maxvalues
         Encoder[3].writeCounter((int32_t)SMP.param_settings[SMP.currentChannel][SUSTAIN]);
       }
 
         if (adsr[3] == RELEASE) {
-        Serial.println("---> RELEASE");
-        Serial.println(SMP.param_settings[SMP.currentChannel][RELEASE]);
+        //Serial.println("---> RELEASE");
+        //Serial.println(SMP.param_settings[SMP.currentChannel][RELEASE]);
         Encoder[3].writeMax((int32_t)100);  // current maxvalues
         Encoder[3].writeCounter((int32_t)SMP.param_settings[SMP.currentChannel][RELEASE]);
       }

@@ -4,9 +4,9 @@
 // Update filter values
 void updateFilterValue(FilterType filterType, int index, float value) {
   // Common function to update all filter types
-  Serial.print(filterType);
-  Serial.print(" :==>: ");
-  Serial.println(value);
+  //Serial.print(filterType);
+  //Serial.print(" :==>: ");
+  //Serial.println(value);
 
 
   switch (filterType) {
@@ -54,6 +54,7 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       break;}
 
   case FLANGER:{
+  /*
   if (flangers[index] != nullptr) {
     if (value <= 0.01) {  // Bypass mode
       if (!bypassSet) {
@@ -88,6 +89,7 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       }
     }
   }
+  */
   break;}
 
     case BITCRUSHER:{
@@ -114,12 +116,12 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       amps[index]->gain(crushCompGain);
 
       // Debugging
-      Serial.print("BitDepth: ");
-      Serial.print(16 - xbitDepth);
-      Serial.print(" | SampleRate: ");
-      Serial.print(xsampleRate);
-      Serial.print(" | CompGain: ");
-      Serial.println(crushCompGain);
+      //Serial.print("BitDepth: ");
+      //Serial.print(16 - xbitDepth);
+      //Serial.print(" | SampleRate: ");
+      //Serial.print(xsampleRate);
+      //Serial.print(" | CompGain: ");
+      //Serial.println(crushCompGain);
       break;
   }
   }
@@ -203,6 +205,7 @@ void setFilterDefaults(int channel) {
   bitcrushers[channel]->bits(16);
   bitcrushers[channel]->sampleRate(44100);
 
+/*
   int s_idx = mapf(0, 0.0, 1.0, -4, 4);
   int s_depth = mapf(0, 0.0, 1.0, 0, 100);
   float s_freq = mapf(0, 0.0, 1.0, 0.05, 0.25);
@@ -211,4 +214,5 @@ void setFilterDefaults(int channel) {
     flangers[channel]->voices(s_idx, s_depth, s_freq);
     flangers[channel]->begin(delayline, FLANGE_DELAY_LENGTH, s_idx, s_depth, s_freq);
   }
+  */
 }

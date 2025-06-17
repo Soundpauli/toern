@@ -84,15 +84,14 @@ AudioPlayArrayResmp sound0;
   AudioMixer4              filtermixer13;  //xy=1780.5715103149414,1733.0477809906006
   AudioMixer4              filtermixer14;  //xy=1790.3333549499512,1907.4286851882935
   AudioMixer4              filtermixer11;  //xy=1794.8809204101562,1420.4284896850586
-  AudioMixer4              filtermixer12;  //xy=1796.3691596984863,1591.095220565796
-  AudioEffectFlange        flange13;       //xy=1942.1905975341797,1703.8096947669983
+  AudioMixer4              filtermixer12;  //xy=1796.3691596984863,1591.09522056579AudioEffectFlange        flange13;       //xy=1942.1905975341797,1703.8096947669983
   AudioEffectFreeverb      freeverb13;     //xy=1942.4763107299805,1770.0953216552734
-  AudioEffectFlange        flange12;       //xy=1953.5238914489746,1554.1428842544556
-  AudioEffectFlange        flange14;       //xy=1954.047519683838,1877.142855644226
+  //AudioEffectFlange        flange12;       //xy=1953.5238914489746,1554.1428842544556
+  //AudioEffectFlange        flange14;       //xy=1954.047519683838,1877.142855644226
   AudioEffectFreeverb      freeverb12;     //xy=1956.3810539245605,1624.4286155700684
   AudioEffectFreeverb      freeverb11;     //xy=1959.3810005187988,1461.4285488128662
   AudioEffectFreeverb      freeverb14;     //xy=1958.3334312438965,1959.0001192092896
-  AudioEffectFlange        flange11;       //xy=1962.6667137145996,1392.5714235305786
+  //AudioEffectFlange        flange11;       //xy=1962.6667137145996,1392.5714235305786
   AudioEffectEnvelope      envelope6;      //xy=1967.2497863769531,1053.083306312561
   AudioEffectEnvelope      envelope8;      //xy=1966.9164428710938,1213.916633605957
   AudioEffectEnvelope      envelope7;      //xy=1968.9997863769531,1136.5833082199097
@@ -110,263 +109,270 @@ AudioPlayArrayResmp sound0;
   AudioEffectBitcrusher    bitcrusher2;    //xy=2144.2776222229004,737.416675567627
   AudioEffectBitcrusher    bitcrusher3;    //xy=2147.2776222229004,829.9166774749756
   /* newDMAMEM*/
-  DMAMEM AudioMixer4              synthmixer14;   //xy=2158.8095703125,1913.1903076171875
-  DMAMEM AudioMixer4              synthmixer11;    //xy=2164.618827819824,1437.9999752044678
-  DMAMEM AudioMixer4              synthmixer13;    //xy=2163.666660308838,1734.2382926940918
-  DMAMEM AudioMixer4              synthmixer12;    //xy=2170.476177215576,1589.9999752044678
-  DMAMEM AudioAmplifier           amp8;           //xy=2312.8845596313477,1212.8334312438965
-  DMAMEM AudioAmplifier           amp7;           //xy=2313.5511837005615,1135.0278873443604
-  DMAMEM AudioAmplifier           amp6;           //xy=2316.5234756469727,1054.5001773834229
-  DMAMEM AudioAmplifier           amp4;           //xy=2317.6345596313477,905.722282409668
-  DMAMEM AudioAmplifier           amp3;           //xy=2318.162269592285,829.0278835296631
-  DMAMEM AudioAmplifier           amp5;           //xy=2317.967933654785,976.1668014526367
-  DMAMEM AudioAmplifier           amp2;           //xy=2322.0233764648438,739.2858781814575
-  DMAMEM AudioAmplifier           amp1;           //xy=2323.3291397094727,626.6111946105957
-  DMAMEM AudioMixer4              mixersynth_end; //xy=2409.190528869629,1621.1427688598633
-  DMAMEM AudioFilterStateVariable filter1;        //xy=2476.9997940063477,632.8333015441895
-  DMAMEM AudioFilterStateVariable filter8;        //xy=2475.7497940063477,1218.5833435058594
-  DMAMEM AudioFilterStateVariable filter7;        //xy=2478.1663818359375,1140.333339691162
-  DMAMEM AudioFilterStateVariable filter6;        //xy=2478.4997177124023,1061.7499198913574
-  DMAMEM AudioFilterStateVariable filter4;        //xy=2480.2497940063477,912.3333053588867
-  DMAMEM AudioFilterStateVariable filter2;        //xy=2481.606887817383,744.9404106140137
-  DMAMEM AudioFilterStateVariable filter3;        //xy=2481.7497959136963,835.0833034515381
-  DMAMEM AudioFilterStateVariable filter5;        //xy=2481.6663818359375,986.8332901000977
-  DMAMEM AudioMixer4              filtermixer7;   //xy=2645.749801635742,1145.3333072662354
-  DMAMEM AudioMixer4              filtermixer1;   //xy=2648.749797821045,639.5833015441895
-  DMAMEM AudioMixer4              filtermixer8;   //xy=2647.166343688965,1222.7500076293945
-  DMAMEM AudioMixer4              filtermixer4;   //xy=2652.749797821045,918.5833044052124
-  DMAMEM AudioMixer4              filtermixer6;   //xy=2652.4163856506348,1069.6666679382324
-  DMAMEM AudioMixer4              filtermixer5;   //xy=2653.666305541992,994.4998779296875
-  DMAMEM AudioMixer4              filtermixer2;   //xy=2655.678291320801,750.9404258728027
-  DMAMEM AudioMixer4              filtermixer3;   //xy=2655.749797821045,841.0833053588867
-  DMAMEM AudioEffectFreeverb      freeverb1;      //xy=2794.749801635742,599.3333005905151
-  DMAMEM AudioEffectFreeverb      freeverb7;      //xy=2803.749801635742,1109.0833072662354
-  DMAMEM AudioEffectFreeverb      freeverb2;      //xy=2805.5712356567383,738.5832767486572
-  DMAMEM AudioEffectFreeverb      freeverb8;      //xy=2809.499801635742,1194.333309173584
-  DMAMEM AudioMixer4              freeverbmixer1; //xy=3008.8331909179688,624.8332977294922
-  DMAMEM AudioMixer4              freeverbmixer7; //xy=3014.083106994629,1127.5832977294922
-  DMAMEM AudioMixer4              freeverbmixer8; //xy=3014.749855041504,1219.6667137145996
-  DMAMEM AudioMixer4              freeverbmixer2; //xy=3022.166358947754,768.4166164398193
-  DMAMEM AudioMixer4              mixer1;         //xy=3244.777618408203,874.0832862854004
-  DMAMEM AudioMixer4              mixer2;         //xy=3244.9998741149902,1059.2498397827148
-  DMAMEM AudioMixer4              mixer_end;      //xy=3372.9048080444336,1340.5714645385742
-  DMAMEM AudioAmplifier           amp0;           //xy=3480.6350021362305,1086.4167108535767
-  DMAMEM AudioEffectEnvelope      envelope0;      //xy=3485.0832443237305,1000.3333339691162
+  AudioMixer4              synthmixer14;   //xy=2158.8095703125,1913.1903076171875
+  AudioMixer4              synthmixer11;    //xy=2164.618827819824,1437.9999752044678
+  AudioMixer4              synthmixer13;    //xy=2163.666660308838,1734.2382926940918
+  AudioMixer4              synthmixer12;    //xy=2170.476177215576,1589.9999752044678
+  AudioAmplifier           amp8;           //xy=2312.8845596313477,1212.8334312438965
+  AudioAmplifier           amp7;           //xy=2313.5511837005615,1135.0278873443604
+  AudioAmplifier           amp6;           //xy=2316.5234756469727,1054.5001773834229
+  AudioAmplifier           amp4;           //xy=2317.6345596313477,905.722282409668
+  AudioAmplifier           amp3;           //xy=2318.162269592285,829.0278835296631
+  AudioAmplifier           amp5;           //xy=2317.967933654785,976.1668014526367
+  AudioAmplifier           amp2;           //xy=2322.0233764648438,739.2858781814575
+  AudioAmplifier           amp1;           //xy=2323.3291397094727,626.6111946105957
+  AudioMixer4              mixersynth_end; //xy=2409.190528869629,1621.1427688598633
+  AudioFilterStateVariable filter1;        //xy=2476.9997940063477,632.8333015441895
+  AudioFilterStateVariable filter8;        //xy=2475.7497940063477,1218.5833435058594
+  AudioFilterStateVariable filter7;        //xy=2478.1663818359375,1140.333339691162
+  AudioFilterStateVariable filter6;        //xy=2478.4997177124023,1061.7499198913574
+  AudioFilterStateVariable filter4;        //xy=2480.2497940063477,912.3333053588867
+  AudioFilterStateVariable filter2;        //xy=2481.606887817383,744.9404106140137
+  AudioFilterStateVariable filter3;        //xy=2481.7497959136963,835.0833034515381
+  AudioFilterStateVariable filter5;        //xy=2481.6663818359375,986.8332901000977
+  AudioMixer4              filtermixer7;   //xy=2645.749801635742,1145.3333072662354
+  AudioMixer4              filtermixer1;   //xy=2648.749797821045,639.5833015441895
+  AudioMixer4              filtermixer8;   //xy=2647.166343688965,1222.7500076293945
+  AudioMixer4              filtermixer4;   //xy=2652.749797821045,918.5833044052124
+  AudioMixer4              filtermixer6;   //xy=2652.4163856506348,1069.6666679382324
+  AudioMixer4              filtermixer5;   //xy=2653.666305541992,994.4998779296875
+  AudioMixer4              filtermixer2;   //xy=2655.678291320801,750.9404258728027
+  AudioMixer4              filtermixer3;   //xy=2655.749797821045,841.0833053588867
+  AudioEffectFreeverb      freeverb1;      //xy=2794.749801635742,599.3333005905151
+  AudioEffectFreeverb      freeverb7;      //xy=2803.749801635742,1109.0833072662354
+  AudioEffectFreeverb      freeverb2;      //xy=2805.5712356567383,738.5832767486572
+  AudioEffectFreeverb      freeverb8;      //xy=2809.499801635742,1194.333309173584
+  AudioMixer4              freeverbmixer1; //xy=3008.8331909179688,624.8332977294922
+  AudioMixer4              freeverbmixer7; //xy=3014.083106994629,1127.5832977294922
+  AudioMixer4              freeverbmixer8; //xy=3014.749855041504,1219.6667137145996
+  AudioMixer4              freeverbmixer2; //xy=3022.166358947754,768.4166164398193
+  AudioMixer4              mixer1;         //xy=3244.777618408203,874.0832862854004
+  AudioMixer4              mixer2;         //xy=3244.9998741149902,1059.2498397827148
+  AudioMixer4              mixer_end;      //xy=3372.9048080444336,1340.5714645385742
+  AudioAmplifier           amp0;           //xy=3480.6350021362305,1086.4167108535767
+  AudioEffectEnvelope      envelope0;      //xy=3485.0832443237305,1000.3333339691162
 
   AudioPlaySdWav           playSdWav1;     //xy=199,194
 
-  DMAMEM AudioMixer4              mixerPlay;      //xy=3587.8886184692383,1342.2221393585205
-  DMAMEM AudioMixer4              mixer0;         //xy=3712.1389083862305,1040.0000228881836
-  DMAMEM AudioInputI2S            audioInput;           //xy=3743.3332443237305,1366.3333358764648
-  DMAMEM AudioRecordQueue         queue1;         //xy=3750.8332901000977,1458.3333129882812
+  AudioMixer4              mixerPlay;      //xy=3587.8886184692383,1342.2221393585205
+  AudioMixer4              mixer0;         //xy=3712.1389083862305,1040.0000228881836
+  AudioMixer4              mixer_stereoL;         //xy=3712.1389083862305,1040.0000228881836
+  AudioMixer4              mixer_stereoR;         //xy=3712.1389083862305,1040.0000228881836
+  AudioInputI2S            audioInput;           //xy=3743.3332443237305,1366.3333358764648
+  AudioRecordQueue         queue1;         //xy=3750.8332901000977,1458.3333129882812
   AudioOutputI2S           i2s1;           //xy=3754.8889083862305,1254.4445419311523
 
 /*. ----  */
-  DMAMEM AudioConnection          patchCord1(SNchaosMix, 0, SNtone, 0);
-  DMAMEM AudioConnection          patchCord2(SNchaosMix, 0, SNtone2, 0);
-  DMAMEM AudioConnection          patchCord3(HHchaosMix, 0, HHtone, 0);
-  DMAMEM AudioConnection          patchCord4(HHchaosMix, 0, HHtone2, 0);
-  DMAMEM AudioConnection          patchCord5(BDpitchAmt, BDpitchEnv);
-  DMAMEM AudioConnection          patchCord6(SNtone, 0, SNtoneMix, 0);
-  DMAMEM AudioConnection          patchCord7(SNtone2, 0, SNchaosMix, 0);
-  DMAMEM AudioConnection          patchCord8(SNtone2, 0, SNtoneMix, 1);
+  AudioConnection          patchCord1(SNchaosMix, 0, SNtone, 0);
+  AudioConnection          patchCord2(SNchaosMix, 0, SNtone2, 0);
+  AudioConnection          patchCord3(HHchaosMix, 0, HHtone, 0);
+  AudioConnection          patchCord4(HHchaosMix, 0, HHtone2, 0);
+  AudioConnection          patchCord5(BDpitchAmt, BDpitchEnv);
+  AudioConnection          patchCord6(SNtone, 0, SNtoneMix, 0);
+  AudioConnection          patchCord7(SNtone2, 0, SNchaosMix, 0);
+  AudioConnection          patchCord8(SNtone2, 0, SNtoneMix, 1);
   
   
-  DMAMEM AudioConnection          patchCord13(HHtone2, 0, HHchaosMix, 0);
-  DMAMEM AudioConnection          patchCord14(HHtone2, 0, HHtoneMix, 1);
-  DMAMEM AudioConnection          patchCord15(HHtone, 0, HHtoneMix, 0);
-  DMAMEM AudioConnection          patchCord16(BDpitchEnv, 0, BDchaosMix, 0);
-  DMAMEM AudioConnection          patchCord17(waveform13_1, 0, mixer_waveform13, 0);
-  DMAMEM AudioConnection          patchCord18(waveform13_2, 0, mixer_waveform13, 1);
+  AudioConnection          patchCord13(HHtone2, 0, HHchaosMix, 0);
+  AudioConnection          patchCord14(HHtone2, 0, HHtoneMix, 1);
+  AudioConnection          patchCord15(HHtone, 0, HHtoneMix, 0);
+  AudioConnection          patchCord16(BDpitchEnv, 0, BDchaosMix, 0);
+  AudioConnection          patchCord17(waveform13_1, 0, mixer_waveform13, 0);
+  AudioConnection          patchCord18(waveform13_2, 0, mixer_waveform13, 1);
 
 
-DMAMEM AudioConnection          patchCord17b(waveform11_1, 0, mixer_waveform11, 0);
-  DMAMEM AudioConnection          patchCord18b(waveform11_2, 0, mixer_waveform11, 1);
+AudioConnection          patchCord17b(waveform11_1, 0, mixer_waveform11, 0);
+  AudioConnection          patchCord18b(waveform11_2, 0, mixer_waveform11, 1);
 
 
-  DMAMEM AudioConnection          patchCord23(waveform14_1, 0, mixer_waveform14, 0);
-  DMAMEM AudioConnection          patchCord24(waveform14_2, 0, mixer_waveform14, 1);
-  DMAMEM AudioConnection          patchCord25(SNtoneMix, SNtoneEnv);
-  DMAMEM AudioConnection          patchCord26(HHtoneMix, HHtoneEnv);
-  DMAMEM AudioConnection          patchCord27(BDchaosMix, 0, BDsine, 0);
-  DMAMEM AudioConnection          patchCord28(BDchaosMix, 0, BDsaw, 0);
-  DMAMEM AudioConnection          patchCord29(BDchaosMix, 0, BDsaw, 1);
+  AudioConnection          patchCord23(waveform14_1, 0, mixer_waveform14, 0);
+  AudioConnection          patchCord24(waveform14_2, 0, mixer_waveform14, 1);
+  AudioConnection          patchCord25(SNtoneMix, SNtoneEnv);
+  AudioConnection          patchCord26(HHtoneMix, HHtoneEnv);
+  AudioConnection          patchCord27(BDchaosMix, 0, BDsine, 0);
+  AudioConnection          patchCord28(BDchaosMix, 0, BDsaw, 0);
+  AudioConnection          patchCord29(BDchaosMix, 0, BDsaw, 1);
   
-  DMAMEM AudioConnection          patchCord33(SNtoneEnv, 0, SNMix, 1);
-
-
-  
-  DMAMEM AudioConnection          patchCord38(SNnoise, 0, SNMix, 0);
-
-  DMAMEM AudioConnection          patchCord44(HHtoneEnv, 0, HHMix, 1);
-  DMAMEM AudioConnection          patchCord45(HHnoise, 0, HHMix, 0);
-  DMAMEM AudioConnection          patchCord46(BDsine, 0, BDMix, 0);
-  DMAMEM AudioConnection          patchCord47(BDsaw, 0, BDMix, 1);
-  DMAMEM AudioConnection          patchCord48(BDsaw, 0, BDchaosMix, 1);
-  DMAMEM AudioConnection          patchCord49(SNMix, SNenv);
-  
-  DMAMEM AudioConnection          patchCord53(mixer_waveform11, bitcrusher11);
-  DMAMEM AudioConnection          patchCord58(envelope11, 0, mixer_waveform11,2);
-  DMAMEM AudioConnection          patchCord50(mixer_waveform12, envelope12);
-  DMAMEM AudioConnection          patchCord51(mixer_waveform13, envelope13);
-  DMAMEM AudioConnection          patchCord52(mixer_waveform14, envelope14);
-  
-  DMAMEM AudioConnection          patchCord54(HHMix, HHenv);
-  DMAMEM AudioConnection          patchCord55(BDMix, BDenv);
-  DMAMEM AudioConnection          patchCord56(SNenv, 0, SNfilt, 0);
-  DMAMEM AudioConnection          patchCord57(HHenv, 0, HHfilt, 0);
-  
-  DMAMEM AudioConnection          patchCord59(envelope13, bitcrusher13);
-  DMAMEM AudioConnection          patchCord60(BDenv, 0, BDfilter, 0);
-  DMAMEM AudioConnection          patchCord61(envelope12, bitcrusher12);
-  DMAMEM AudioConnection          patchCord62(envelope14, bitcrusher14);
-  DMAMEM AudioConnection          patchCord63(SNfilt, 1, SnFilter, 0);
-  DMAMEM AudioConnection          patchCord64(HhFilter, 0, HhFilterMix, 0);
-  DMAMEM AudioConnection          patchCord65(HhFilter, 2, HhFilterMix, 1);
-  DMAMEM AudioConnection          patchCord66(BDfilter, 0, BdFilterMix, 0);
-  DMAMEM AudioConnection          patchCord67(BDfilter, 2, BdFilterMix, 1);
-  DMAMEM AudioConnection          patchCord68(HHfilt, 1, HhFilter, 0);
-  DMAMEM AudioConnection          patchCord69(bitcrusher11, amp11);
-
-  DMAMEM AudioConnection          patchCord70(bitcrusher13, amp13);
-  DMAMEM AudioConnection          patchCord71(bitcrusher12, amp12);
-  DMAMEM AudioConnection          patchCord72(SnFilter, 0, SnFilterMix, 0);
-  DMAMEM AudioConnection          patchCord73(SnFilter, 2, SnFilterMix, 1);
-  DMAMEM AudioConnection          patchCord74(bitcrusher14, amp14);
-  DMAMEM AudioConnection          patchCord75(HhFilterMix, 0, HHMixer, 1);
-  DMAMEM AudioConnection          patchCord76(amp13, 0, filter13, 0);
-  DMAMEM AudioConnection          patchCord77(amp11, 0, filter11, 0);
-  
-
-  DMAMEM AudioConnection          patchCord78(BdFilterMix, 0, BDMixer, 1);
-  DMAMEM AudioConnection          patchCord79(amp12, 0, filter12, 0);
-  DMAMEM AudioConnection          patchCord80(SnFilterMix, 0, SNMixer, 1);
-  DMAMEM AudioConnection          patchCord81(amp14, 0, filter14, 0);
-  DMAMEM AudioConnection          patchCord82(filter13, 0, filtermixer13, 0);
-  DMAMEM AudioConnection          patchCord83(filter13, 1, filtermixer13, 1);
-  DMAMEM AudioConnection          patchCord84(filter13, 2, filtermixer13, 2);
-  DMAMEM AudioConnection          patchCord85(filter12, 0, filtermixer12, 0);
-  DMAMEM AudioConnection          patchCord86(filter12, 1, filtermixer12, 1);
-  DMAMEM AudioConnection          patchCord87(filter12, 2, filtermixer12, 2);
-  DMAMEM AudioConnection          patchCord88(filter11, 0, filtermixer11, 0);
-  DMAMEM AudioConnection          patchCord89(filter11, 1, filtermixer11, 1);
-  DMAMEM AudioConnection          patchCord90(filter11, 2, filtermixer11, 2);
-  DMAMEM AudioConnection          patchCord91(filter14, 0, filtermixer14, 0);
-  DMAMEM AudioConnection          patchCord92(filter14, 1, filtermixer14, 1);
-  DMAMEM AudioConnection          patchCord93(filter14, 2, filtermixer14, 2);
-  DMAMEM AudioConnection          patchCord94(BDMixer, envelope1);
-  DMAMEM AudioConnection          patchCord95(SNMixer, envelope2);
-  DMAMEM AudioConnection          patchCord96(HHMixer, envelope3);
-  DMAMEM AudioConnection          patchCord97(filtermixer13, flange13);
-  DMAMEM AudioConnection          patchCord98(filtermixer13, freeverb13);
-  DMAMEM AudioConnection          patchCord99(filtermixer13, 0, synthmixer13, 3);
-  DMAMEM AudioConnection          patchCord100(filtermixer14, flange14);
-  DMAMEM AudioConnection          patchCord101(filtermixer14, freeverb14);
-  DMAMEM AudioConnection          patchCord102(filtermixer14, 0, synthmixer14, 3);
-  DMAMEM AudioConnection          patchCord103(filtermixer11, flange11);
-  DMAMEM AudioConnection          patchCord104(filtermixer11, freeverb11);
-  DMAMEM AudioConnection          patchCord105(filtermixer11, 0, synthmixer11, 3);
-  DMAMEM AudioConnection          patchCord106(filtermixer12, flange12);
-  //DMAMEM AudioConnection          patchCord107(filtermixer12, freeverb12);
-  DMAMEM AudioConnection          patchCord108(filtermixer12, 0, synthmixer12, 3);
-  DMAMEM AudioConnection          patchCord109(flange13, 0, synthmixer13, 0);
-  DMAMEM AudioConnection          patchCord110(freeverb13, 0, synthmixer13, 1);
-  DMAMEM AudioConnection          patchCord111(flange12, 0, synthmixer12, 0);
-  DMAMEM AudioConnection          patchCord112(flange14, 0, synthmixer14, 0);
-  DMAMEM AudioConnection          patchCord113(freeverb12, 0, synthmixer12, 1);
-  DMAMEM AudioConnection          patchCord114(freeverb11, 0, synthmixer11, 1);
-  DMAMEM AudioConnection          patchCord115(freeverb14, 0, synthmixer14, 1);
-  DMAMEM AudioConnection          patchCord116(flange11, 0, synthmixer11, 0);
-  DMAMEM AudioConnection          patchCord117(envelope6, bitcrusher6);
-  
-  DMAMEM AudioConnection          patchCord118(envelope8, bitcrusher8);
-  DMAMEM AudioConnection          patchCord119(envelope7, bitcrusher7);
-  DMAMEM AudioConnection          patchCord120(envelope3, bitcrusher3);
-  DMAMEM AudioConnection          patchCord121(envelope1, bitcrusher1);
-  DMAMEM AudioConnection          patchCord122(envelope4, bitcrusher4);
-  DMAMEM AudioConnection          patchCord123(envelope5, bitcrusher5);
-  DMAMEM AudioConnection          patchCord124(envelope2, bitcrusher2);
-
-  DMAMEM AudioConnection          patchCord125(bitcrusher6, amp6);
-  DMAMEM AudioConnection          patchCord126(bitcrusher7, amp7);
-  DMAMEM AudioConnection          patchCord127(bitcrusher8, amp8);
-  DMAMEM AudioConnection          patchCord128(bitcrusher4, amp4);
-  DMAMEM AudioConnection          patchCord129(bitcrusher5, amp5);
-  DMAMEM AudioConnection          patchCord130(bitcrusher1, amp1);
-  DMAMEM AudioConnection          patchCord131(bitcrusher2, amp2);
-  DMAMEM AudioConnection          patchCord132(bitcrusher3, amp3);
-  DMAMEM AudioConnection          patchCord133(synthmixer14, 0, mixersynth_end, 3);
-  DMAMEM AudioConnection          patchCord134(synthmixer11, 0, mixersynth_end, 0);
-  DMAMEM AudioConnection          patchCord135(synthmixer13, 0, mixersynth_end, 2);
-  DMAMEM AudioConnection          patchCord136(synthmixer12, 0, mixersynth_end, 1);
-  DMAMEM AudioConnection          patchCord137(amp8, 0, filter8, 0);
-  DMAMEM AudioConnection          patchCord138(amp7, 0, filter7, 0);
-  DMAMEM AudioConnection          patchCord139(amp6, 0, filter6, 0);
-  DMAMEM AudioConnection          patchCord140(amp4, 0, filter4, 0);
-  DMAMEM AudioConnection          patchCord141(amp3, 0, filter3, 0);
-  DMAMEM AudioConnection          patchCord142(amp5, 0, filter5, 0);
-  DMAMEM AudioConnection          patchCord143(amp2, 0, filter2, 0);
-  DMAMEM AudioConnection          patchCord144(amp1, 0, filter1, 0);
-  DMAMEM AudioConnection          patchCord145(mixersynth_end, 0, mixer_end, 2);
-  DMAMEM AudioConnection          patchCord146(filter1, 0, filtermixer1, 0);
-  DMAMEM AudioConnection          patchCord147(filter1, 1, filtermixer1, 1);
-  DMAMEM AudioConnection          patchCord148(filter1, 2, filtermixer1, 2);
-  DMAMEM AudioConnection          patchCord149(filter8, 0, filtermixer8, 0);
-  DMAMEM AudioConnection          patchCord150(filter8, 1, filtermixer8, 1);
-  DMAMEM AudioConnection          patchCord151(filter8, 2, filtermixer8, 2);
-  DMAMEM AudioConnection          patchCord152(filter7, 0, filtermixer7, 0);
-  DMAMEM AudioConnection          patchCord153(filter7, 1, filtermixer7, 1);
-  DMAMEM AudioConnection          patchCord154(filter7, 2, filtermixer7, 2);
-  DMAMEM AudioConnection          patchCord155(filter6, 0, filtermixer6, 0);
-  DMAMEM AudioConnection          patchCord156(filter6, 1, filtermixer6, 1);
-  DMAMEM AudioConnection          patchCord157(filter6, 2, filtermixer6, 2);
-  DMAMEM AudioConnection          patchCord158(filter4, 0, filtermixer4, 0);
-  DMAMEM AudioConnection          patchCord159(filter4, 1, filtermixer4, 1);
-  DMAMEM AudioConnection          patchCord160(filter4, 2, filtermixer4, 2);
-  DMAMEM AudioConnection          patchCord161(filter2, 0, filtermixer2, 0);
-  DMAMEM AudioConnection          patchCord162(filter2, 1, filtermixer2, 1);
-  DMAMEM AudioConnection          patchCord163(filter2, 2, filtermixer2, 2);
-  DMAMEM AudioConnection          patchCord164(filter3, 0, filtermixer3, 0);
-  DMAMEM AudioConnection          patchCord165(filter3, 1, filtermixer3, 1);
-  DMAMEM AudioConnection          patchCord166(filter3, 2, filtermixer3, 2);
-  DMAMEM AudioConnection          patchCord167(filter5, 0, filtermixer5, 0);
-  DMAMEM AudioConnection          patchCord168(filter5, 1, filtermixer5, 1);
-  DMAMEM AudioConnection          patchCord169(filter5, 2, filtermixer5, 2);
-  DMAMEM AudioConnection          patchCord170(filtermixer7, freeverb7);
-  DMAMEM AudioConnection          patchCord171(filtermixer7, 0, freeverbmixer7, 3);
-  DMAMEM AudioConnection          patchCord172(filtermixer1, freeverb1);
-  DMAMEM AudioConnection          patchCord173(filtermixer1, 0, freeverbmixer1, 3);
-  DMAMEM AudioConnection          patchCord174(filtermixer8, freeverb8);
-  DMAMEM AudioConnection          patchCord175(filtermixer8, 0, freeverbmixer8, 3);
-  DMAMEM AudioConnection          patchCord176(filtermixer4, 0, mixer1, 3);
-  DMAMEM AudioConnection          patchCord177(filtermixer6, 0, mixer2, 1);
-  DMAMEM AudioConnection          patchCord178(filtermixer5, 0, mixer2, 0);
-  DMAMEM AudioConnection          patchCord179(filtermixer2, freeverb2);
-  DMAMEM AudioConnection          patchCord180(filtermixer2, 0, freeverbmixer2, 3);
-  DMAMEM AudioConnection          patchCord181(filtermixer3, 0, mixer1, 2);
-  DMAMEM AudioConnection          patchCord182(freeverb1, 0, freeverbmixer1, 0);
-  DMAMEM AudioConnection          patchCord183(freeverb7, 0, freeverbmixer7, 0);
-  DMAMEM AudioConnection          patchCord184(freeverb2, 0, freeverbmixer2, 0);
-  DMAMEM AudioConnection          patchCord185(freeverb8, 0, freeverbmixer8, 0);
-  DMAMEM AudioConnection          patchCord186(freeverbmixer1, 0, mixer1, 0);
-  DMAMEM AudioConnection          patchCord187(freeverbmixer7, 0, mixer2, 2);
-  DMAMEM AudioConnection          patchCord188(freeverbmixer8, 0, mixer2, 3);
-  DMAMEM AudioConnection          patchCord189(freeverbmixer2, 0, mixer1, 1);
-  DMAMEM AudioConnection          patchCord190(mixer1, 0, mixer_end, 0);
-  DMAMEM AudioConnection          patchCord191(mixer2, 0, mixer_end, 1);
-  DMAMEM AudioConnection          patchCord192(mixer_end, 0, mixerPlay, 0);
-  DMAMEM AudioConnection          patchCord193(mixer_end, 0, mixerPlay, 1);
-  DMAMEM AudioConnection          patchCord194(mixer0, 0, mixerPlay, 2);
-
-  DMAMEM AudioConnection          patchCord195(envelope0, 0, mixer0, 0);
-  DMAMEM AudioConnection          patchCord196(playSdWav1, 0, mixer0, 1);
-  //DMAMEM AudioConnection          patchCord1967(envelope0, 0, mixer0, 2);
-
-  DMAMEM AudioConnection          patchCord198(mixerPlay, 0, i2s1, 0);
-  DMAMEM AudioConnection          patchCord199(mixerPlay, 0, i2s1, 1);
+  AudioConnection          patchCord33(SNtoneEnv, 0, SNMix, 1);
 
 
   
+  AudioConnection          patchCord38(SNnoise, 0, SNMix, 0);
+
+  AudioConnection          patchCord44(HHtoneEnv, 0, HHMix, 1);
+  AudioConnection          patchCord45(HHnoise, 0, HHMix, 0);
+  AudioConnection          patchCord46(BDsine, 0, BDMix, 0);
+  AudioConnection          patchCord47(BDsaw, 0, BDMix, 1);
+  AudioConnection          patchCord48(BDsaw, 0, BDchaosMix, 1);
+  AudioConnection          patchCord49(SNMix, SNenv);
+  
+  AudioConnection          patchCord53(mixer_waveform11, bitcrusher11);
+  AudioConnection          patchCord58(envelope11, 0, mixer_waveform11,2);
+  AudioConnection          patchCord50(mixer_waveform12, envelope12);
+  AudioConnection          patchCord51(mixer_waveform13, envelope13);
+  AudioConnection          patchCord52(mixer_waveform14, envelope14);
+  
+  AudioConnection          patchCord54(HHMix, HHenv);
+  AudioConnection          patchCord55(BDMix, BDenv);
+  AudioConnection          patchCord56(SNenv, 0, SNfilt, 0);
+  AudioConnection          patchCord57(HHenv, 0, HHfilt, 0);
+  
+  AudioConnection          patchCord59(envelope13, bitcrusher13);
+  AudioConnection          patchCord60(BDenv, 0, BDfilter, 0);
+  AudioConnection          patchCord61(envelope12, bitcrusher12);
+  AudioConnection          patchCord62(envelope14, bitcrusher14);
+  AudioConnection          patchCord63(SNfilt, 1, SnFilter, 0);
+  AudioConnection          patchCord64(HhFilter, 0, HhFilterMix, 0);
+  AudioConnection          patchCord65(HhFilter, 2, HhFilterMix, 1);
+  AudioConnection          patchCord66(BDfilter, 0, BdFilterMix, 0);
+  AudioConnection          patchCord67(BDfilter, 2, BdFilterMix, 1);
+  AudioConnection          patchCord68(HHfilt, 1, HhFilter, 0);
+  AudioConnection          patchCord69(bitcrusher11, amp11);
+
+  AudioConnection          patchCord70(bitcrusher13, amp13);
+  AudioConnection          patchCord71(bitcrusher12, amp12);
+  AudioConnection          patchCord72(SnFilter, 0, SnFilterMix, 0);
+  AudioConnection          patchCord73(SnFilter, 2, SnFilterMix, 1);
+  AudioConnection          patchCord74(bitcrusher14, amp14);
+  AudioConnection          patchCord75(HhFilterMix, 0, HHMixer, 1);
+  AudioConnection          patchCord76(amp13, 0, filter13, 0);
+  AudioConnection          patchCord77(amp11, 0, filter11, 0);
+  
+
+  AudioConnection          patchCord78(BdFilterMix, 0, BDMixer, 1);
+  AudioConnection          patchCord79(amp12, 0, filter12, 0);
+  AudioConnection          patchCord80(SnFilterMix, 0, SNMixer, 1);
+  AudioConnection          patchCord81(amp14, 0, filter14, 0);
+  AudioConnection          patchCord82(filter13, 0, filtermixer13, 0);
+  AudioConnection          patchCord83(filter13, 1, filtermixer13, 1);
+  AudioConnection          patchCord84(filter13, 2, filtermixer13, 2);
+  AudioConnection          patchCord85(filter12, 0, filtermixer12, 0);
+  AudioConnection          patchCord86(filter12, 1, filtermixer12, 1);
+  AudioConnection          patchCord87(filter12, 2, filtermixer12, 2);
+  AudioConnection          patchCord88(filter11, 0, filtermixer11, 0);
+  AudioConnection          patchCord89(filter11, 1, filtermixer11, 1);
+  AudioConnection          patchCord90(filter11, 2, filtermixer11, 2);
+  AudioConnection          patchCord91(filter14, 0, filtermixer14, 0);
+  AudioConnection          patchCord92(filter14, 1, filtermixer14, 1);
+  AudioConnection          patchCord93(filter14, 2, filtermixer14, 2);
+  AudioConnection          patchCord94(BDMixer, envelope1);
+  AudioConnection          patchCord95(SNMixer, envelope2);
+  AudioConnection          patchCord96(HHMixer, envelope3);
+  //AudioConnection          patchCord97(filtermixer13, flange13);
+  AudioConnection          patchCord98(filtermixer13, freeverb13);
+  AudioConnection          patchCord99(filtermixer13, 0, synthmixer13, 3);
+  //AudioConnection          patchCord100(filtermixer14, flange14);
+  AudioConnection          patchCord101(filtermixer14, freeverb14);
+  AudioConnection          patchCord102(filtermixer14, 0, synthmixer14, 3);
+  //AudioConnection          patchCord103(filtermixer11, flange11);
+  AudioConnection          patchCord104(filtermixer11, freeverb11);
+  AudioConnection          patchCord105(filtermixer11, 0, synthmixer11, 3);
+  //AudioConnection          patchCord106(filtermixer12, flange12);
+  //AudioConnection          patchCord107(filtermixer12, freeverb12);
+  AudioConnection          patchCord108(filtermixer12, 0, synthmixer12, 3);
+  AudioConnection          patchCord109(filtermixer13, 0, synthmixer13, 0);
+  AudioConnection          patchCord110(freeverb13, 0, synthmixer13, 1);
+  AudioConnection          patchCord111(filtermixer12, 0, synthmixer12, 0);
+  AudioConnection          patchCord112(filtermixer14, 0, synthmixer14, 0);
+  AudioConnection          patchCord113(freeverb12, 0, synthmixer12, 1);
+  AudioConnection          patchCord114(freeverb11, 0, synthmixer11, 1);
+  AudioConnection          patchCord115(freeverb14, 0, synthmixer14, 1);
+  AudioConnection          patchCord116(filtermixer11, 0, synthmixer11, 0);
+  AudioConnection          patchCord117(envelope6, bitcrusher6);
+  
+  AudioConnection          patchCord118(envelope8, bitcrusher8);
+  AudioConnection          patchCord119(envelope7, bitcrusher7);
+  AudioConnection          patchCord120(envelope3, bitcrusher3);
+  AudioConnection          patchCord121(envelope1, bitcrusher1);
+  AudioConnection          patchCord122(envelope4, bitcrusher4);
+  AudioConnection          patchCord123(envelope5, bitcrusher5);
+  AudioConnection          patchCord124(envelope2, bitcrusher2);
+
+  AudioConnection          patchCord125(bitcrusher6, amp6);
+  AudioConnection          patchCord126(bitcrusher7, amp7);
+  AudioConnection          patchCord127(bitcrusher8, amp8);
+  AudioConnection          patchCord128(bitcrusher4, amp4);
+  AudioConnection          patchCord129(bitcrusher5, amp5);
+  AudioConnection          patchCord130(bitcrusher1, amp1);
+  AudioConnection          patchCord131(bitcrusher2, amp2);
+  AudioConnection          patchCord132(bitcrusher3, amp3);
+  AudioConnection          patchCord133(synthmixer14, 0, mixersynth_end, 3);
+  AudioConnection          patchCord134(synthmixer11, 0, mixersynth_end, 0);
+  AudioConnection          patchCord135(synthmixer13, 0, mixersynth_end, 2);
+  AudioConnection          patchCord136(synthmixer12, 0, mixersynth_end, 1);
+  AudioConnection          patchCord137(amp8, 0, filter8, 0);
+  AudioConnection          patchCord138(amp7, 0, filter7, 0);
+  AudioConnection          patchCord139(amp6, 0, filter6, 0);
+  AudioConnection          patchCord140(amp4, 0, filter4, 0);
+  AudioConnection          patchCord141(amp3, 0, filter3, 0);
+  AudioConnection          patchCord142(amp5, 0, filter5, 0);
+  AudioConnection          patchCord143(amp2, 0, filter2, 0);
+  AudioConnection          patchCord144(amp1, 0, filter1, 0);
+  AudioConnection          patchCord145(mixersynth_end, 0, mixer_end, 2);
+  AudioConnection          patchCord146(filter1, 0, filtermixer1, 0);
+  AudioConnection          patchCord147(filter1, 1, filtermixer1, 1);
+  AudioConnection          patchCord148(filter1, 2, filtermixer1, 2);
+  AudioConnection          patchCord149(filter8, 0, filtermixer8, 0);
+  AudioConnection          patchCord150(filter8, 1, filtermixer8, 1);
+  AudioConnection          patchCord151(filter8, 2, filtermixer8, 2);
+  AudioConnection          patchCord152(filter7, 0, filtermixer7, 0);
+  AudioConnection          patchCord153(filter7, 1, filtermixer7, 1);
+  AudioConnection          patchCord154(filter7, 2, filtermixer7, 2);
+  AudioConnection          patchCord155(filter6, 0, filtermixer6, 0);
+  AudioConnection          patchCord156(filter6, 1, filtermixer6, 1);
+  AudioConnection          patchCord157(filter6, 2, filtermixer6, 2);
+  AudioConnection          patchCord158(filter4, 0, filtermixer4, 0);
+  AudioConnection          patchCord159(filter4, 1, filtermixer4, 1);
+  AudioConnection          patchCord160(filter4, 2, filtermixer4, 2);
+  AudioConnection          patchCord161(filter2, 0, filtermixer2, 0);
+  AudioConnection          patchCord162(filter2, 1, filtermixer2, 1);
+  AudioConnection          patchCord163(filter2, 2, filtermixer2, 2);
+  AudioConnection          patchCord164(filter3, 0, filtermixer3, 0);
+  AudioConnection          patchCord165(filter3, 1, filtermixer3, 1);
+  AudioConnection          patchCord166(filter3, 2, filtermixer3, 2);
+  AudioConnection          patchCord167(filter5, 0, filtermixer5, 0);
+  AudioConnection          patchCord168(filter5, 1, filtermixer5, 1);
+  AudioConnection          patchCord169(filter5, 2, filtermixer5, 2);
+  AudioConnection          patchCord170(filtermixer7, freeverb7);
+  AudioConnection          patchCord171(filtermixer7, 0, freeverbmixer7, 3);
+  AudioConnection          patchCord172(filtermixer1, freeverb1);
+  AudioConnection          patchCord173(filtermixer1, 0, freeverbmixer1, 3);
+  AudioConnection          patchCord174(filtermixer8, freeverb8);
+  AudioConnection          patchCord175(filtermixer8, 0, freeverbmixer8, 3);
+  AudioConnection          patchCord176(filtermixer4, 0, mixer1, 3);
+  AudioConnection          patchCord177(filtermixer6, 0, mixer2, 1);
+  AudioConnection          patchCord178(filtermixer5, 0, mixer2, 0);
+  AudioConnection          patchCord179(filtermixer2, freeverb2);
+  AudioConnection          patchCord180(filtermixer2, 0, freeverbmixer2, 3);
+  AudioConnection          patchCord181(filtermixer3, 0, mixer1, 2);
+  AudioConnection          patchCord182(freeverb1, 0, freeverbmixer1, 0);
+  AudioConnection          patchCord183(freeverb7, 0, freeverbmixer7, 0);
+  AudioConnection          patchCord184(freeverb2, 0, freeverbmixer2, 0);
+  AudioConnection          patchCord185(freeverb8, 0, freeverbmixer8, 0);
+  AudioConnection          patchCord186(freeverbmixer1, 0, mixer1, 0);
+  AudioConnection          patchCord187(freeverbmixer7, 0, mixer2, 2);
+  AudioConnection          patchCord188(freeverbmixer8, 0, mixer2, 3);
+  AudioConnection          patchCord189(freeverbmixer2, 0, mixer1, 1);
+  AudioConnection          patchCord190(mixer1, 0, mixer_end, 0);
+  AudioConnection          patchCord191(mixer2, 0, mixer_end, 1);
+  AudioConnection          patchCord192(mixer_end, 0, mixerPlay, 0);
+  AudioConnection          patchCord193(mixer_end, 0, mixerPlay, 1);
+  //AudioConnection          patchCord194(mixer0, mixerPlay, 2);
+
+  AudioConnection          patchCord195(envelope0, 0, mixer0, 0);
+  AudioConnection          patchCord196(playSdWav1, 0, mixer0, 1);
+
+
+    AudioConnection          patchCord198l1(mixerPlay, 0, mixer_stereoL, 0);
+    AudioConnection        patchCord198l2(mixer0, 0, mixer_stereoL, 1);
+
+    AudioConnection          patchCord198r1(mixerPlay, 0, mixer_stereoR, 0);
+    AudioConnection        patchCord198r2(mixer0, 0, mixer_stereoR, 1);
+
+  AudioConnection          patchCord198s(mixer_stereoR, 0, i2s1, 1);
+  AudioConnection          patchCord199s(mixer_stereoL, 0, i2s1, 0);
+
+
   
   AudioControlSGTL5000     sgtl5000_1;     //xy=3755.3332443237305,1413.3333358764648
   // GUItool: end automatically generated code
@@ -389,75 +395,75 @@ DMAMEM AudioConnection          patchCord17b(waveform11_1, 0, mixer_waveform11, 
   EXTMEM AudioMixer4              CHMixer11;
 
 
-  DMAMEM AudioConnection          SpatchCord1(Swaveform1[0], 0, Smixer1[0], 0);
-  DMAMEM AudioConnection          SpatchCord2(Swaveform1[0], 0, Smixer2[0], 0);
-  DMAMEM AudioConnection          SpatchCord3(Swaveform2[0], 0, Smixer1[0], 1);
-  DMAMEM AudioConnection          SpatchCord4(Swaveform2[0], 0, Smixer2[0], 1);
-  DMAMEM AudioConnection          SpatchCord5(Swaveform3[0], 0, Smixer1[0], 2);
-  DMAMEM AudioConnection          SpatchCord6(Swaveform3[0], 0, Smixer2[0], 2);
-  DMAMEM AudioConnection          SpatchCord7(Sdc1[0], SenvelopeFilter1[0]);
-  DMAMEM AudioConnection          SpatchCord8(SenvelopeFilter1[0], 0, Sladder1[0], 1);
-  DMAMEM AudioConnection          SpatchCord9(SenvelopeFilter1[0], 0, Sladder2[0], 1);
-  DMAMEM AudioConnection          SpatchCord10(Smixer2[0], 0, Sladder2[0], 0);
-  DMAMEM AudioConnection          SpatchCord11(Smixer1[0], 0, Sladder1[0], 0);
-  DMAMEM AudioConnection          SpatchCord12(Sladder2[0], Senvelope2[0]);
-  DMAMEM AudioConnection          SpatchCord13(Sladder1[0], Senvelope1[0]);
-  DMAMEM AudioConnection          SpatchCord14(Senvelope1[0], 0, SmixerL4, 0);
-  DMAMEM AudioConnection          SpatchCord15(Senvelope2[0], 0, SmixerR4, 0);
+  AudioConnection          SpatchCord1(Swaveform1[0], 0, Smixer1[0], 0);
+  AudioConnection          SpatchCord2(Swaveform1[0], 0, Smixer2[0], 0);
+  AudioConnection          SpatchCord3(Swaveform2[0], 0, Smixer1[0], 1);
+  AudioConnection          SpatchCord4(Swaveform2[0], 0, Smixer2[0], 1);
+  AudioConnection          SpatchCord5(Swaveform3[0], 0, Smixer1[0], 2);
+  AudioConnection          SpatchCord6(Swaveform3[0], 0, Smixer2[0], 2);
+  AudioConnection          SpatchCord7(Sdc1[0], SenvelopeFilter1[0]);
+  AudioConnection          SpatchCord8(SenvelopeFilter1[0], 0, Sladder1[0], 1);
+  AudioConnection          SpatchCord9(SenvelopeFilter1[0], 0, Sladder2[0], 1);
+  AudioConnection          SpatchCord10(Smixer2[0], 0, Sladder2[0], 0);
+  AudioConnection          SpatchCord11(Smixer1[0], 0, Sladder1[0], 0);
+  AudioConnection          SpatchCord12(Sladder2[0], Senvelope2[0]);
+  AudioConnection          SpatchCord13(Sladder1[0], Senvelope1[0]);
+  AudioConnection          SpatchCord14(Senvelope1[0], 0, SmixerL4, 0);
+  AudioConnection          SpatchCord15(Senvelope2[0], 0, SmixerR4, 0);
 
-  DMAMEM AudioConnection          SpatchCord16(Swaveform1[1], 0, Smixer1[1], 0);
-  DMAMEM AudioConnection          SpatchCord17(Swaveform1[1], 0, Smixer2[1], 0);
-  DMAMEM AudioConnection          SpatchCord18(Swaveform2[1], 0, Smixer1[1], 1);
-  DMAMEM AudioConnection          SpatchCord19(Swaveform2[1], 0, Smixer2[1], 1);
-  DMAMEM AudioConnection          SpatchCord20(Swaveform3[1], 0, Smixer1[1], 2);
-  DMAMEM AudioConnection          SpatchCord21(Swaveform3[1], 0, Smixer2[1], 2);
-  DMAMEM AudioConnection          SpatchCord22(Sdc1[1], SenvelopeFilter1[1]);
-  DMAMEM AudioConnection          SpatchCord23(SenvelopeFilter1[1], 0, Sladder1[1], 1);
-  DMAMEM AudioConnection          SpatchCord24(SenvelopeFilter1[1], 0, Sladder2[1], 1);
-  DMAMEM AudioConnection          SpatchCord25(Smixer2[1], 0, Sladder2[1], 0);
-  DMAMEM AudioConnection          SpatchCord26(Smixer1[1], 0, Sladder1[1], 0);
-  DMAMEM AudioConnection          SpatchCord27(Sladder2[1], Senvelope2[1]);
-  DMAMEM AudioConnection          SpatchCord28(Sladder1[1], Senvelope1[1]);
-  DMAMEM AudioConnection          SpatchCord29(Senvelope1[1], 0, SmixerL4, 1);
-  DMAMEM AudioConnection          SpatchCord30(Senvelope2[1], 0, SmixerR4, 1);
+  AudioConnection          SpatchCord16(Swaveform1[1], 0, Smixer1[1], 0);
+  AudioConnection          SpatchCord17(Swaveform1[1], 0, Smixer2[1], 0);
+  AudioConnection          SpatchCord18(Swaveform2[1], 0, Smixer1[1], 1);
+  AudioConnection          SpatchCord19(Swaveform2[1], 0, Smixer2[1], 1);
+  AudioConnection          SpatchCord20(Swaveform3[1], 0, Smixer1[1], 2);
+  AudioConnection          SpatchCord21(Swaveform3[1], 0, Smixer2[1], 2);
+  AudioConnection          SpatchCord22(Sdc1[1], SenvelopeFilter1[1]);
+  AudioConnection          SpatchCord23(SenvelopeFilter1[1], 0, Sladder1[1], 1);
+  AudioConnection          SpatchCord24(SenvelopeFilter1[1], 0, Sladder2[1], 1);
+  AudioConnection          SpatchCord25(Smixer2[1], 0, Sladder2[1], 0);
+  AudioConnection          SpatchCord26(Smixer1[1], 0, Sladder1[1], 0);
+  AudioConnection          SpatchCord27(Sladder2[1], Senvelope2[1]);
+  AudioConnection          SpatchCord28(Sladder1[1], Senvelope1[1]);
+  AudioConnection          SpatchCord29(Senvelope1[1], 0, SmixerL4, 1);
+  AudioConnection          SpatchCord30(Senvelope2[1], 0, SmixerR4, 1);
 
-  DMAMEM AudioConnection          SpatchCord31(Swaveform1[2], 0, Smixer1[2], 0);
-  DMAMEM AudioConnection          SpatchCord32(Swaveform1[2], 0, Smixer2[2], 0);
-  DMAMEM AudioConnection          SpatchCord33(Swaveform2[2], 0, Smixer1[2], 1);
-  DMAMEM AudioConnection          SpatchCord34(Swaveform2[2], 0, Smixer2[2], 1);
-  DMAMEM AudioConnection          SpatchCord35(Swaveform3[2], 0, Smixer1[2], 2);
-  DMAMEM AudioConnection          SpatchCord36(Swaveform3[2], 0, Smixer2[2], 2);
-  DMAMEM AudioConnection          SpatchCord37(Sdc1[2], SenvelopeFilter1[2]);
-  DMAMEM AudioConnection          SpatchCord38(SenvelopeFilter1[2], 0, Sladder1[2], 1);
-  DMAMEM AudioConnection          SpatchCord39(SenvelopeFilter1[2], 0, Sladder2[2], 1);
-  DMAMEM AudioConnection          SpatchCord40(Smixer2[2], 0, Sladder2[2], 0);
-  DMAMEM AudioConnection          SpatchCord41(Smixer1[2], 0, Sladder1[2], 0);
-  DMAMEM AudioConnection          SpatchCord42(Sladder2[2], Senvelope2[2]);
-  DMAMEM AudioConnection          SpatchCord43(Sladder1[2], Senvelope1[2]);
-  DMAMEM AudioConnection          SpatchCord44(Senvelope1[2], 0, SmixerL4, 2);
-  DMAMEM AudioConnection          SpatchCord45(Senvelope2[2], 0, SmixerR4, 2);
+  AudioConnection          SpatchCord31(Swaveform1[2], 0, Smixer1[2], 0);
+  AudioConnection          SpatchCord32(Swaveform1[2], 0, Smixer2[2], 0);
+  AudioConnection          SpatchCord33(Swaveform2[2], 0, Smixer1[2], 1);
+  AudioConnection          SpatchCord34(Swaveform2[2], 0, Smixer2[2], 1);
+  AudioConnection          SpatchCord35(Swaveform3[2], 0, Smixer1[2], 2);
+  AudioConnection          SpatchCord36(Swaveform3[2], 0, Smixer2[2], 2);
+  AudioConnection          SpatchCord37(Sdc1[2], SenvelopeFilter1[2]);
+  AudioConnection          SpatchCord38(SenvelopeFilter1[2], 0, Sladder1[2], 1);
+  AudioConnection          SpatchCord39(SenvelopeFilter1[2], 0, Sladder2[2], 1);
+  AudioConnection          SpatchCord40(Smixer2[2], 0, Sladder2[2], 0);
+  AudioConnection          SpatchCord41(Smixer1[2], 0, Sladder1[2], 0);
+  AudioConnection          SpatchCord42(Sladder2[2], Senvelope2[2]);
+  AudioConnection          SpatchCord43(Sladder1[2], Senvelope1[2]);
+  AudioConnection          SpatchCord44(Senvelope1[2], 0, SmixerL4, 2);
+  AudioConnection          SpatchCord45(Senvelope2[2], 0, SmixerR4, 2);
 
-  DMAMEM AudioConnection          SpatchCord21214(SmixerL4, 0, CHMixer11, 0);
-  DMAMEM AudioConnection          SpatchCord21224(SmixerR4, 0, CHMixer11, 1);
-  DMAMEM AudioConnection          SpatchCord21234(CHMixer11, 0, mixer_waveform11, 3); //<<--- ???
+  AudioConnection          SpatchCord21214(SmixerL4, 0, CHMixer11, 0);
+  AudioConnection          SpatchCord21224(SmixerR4, 0, CHMixer11, 1);
+  AudioConnection          SpatchCord21234(CHMixer11, 0, mixer_waveform11, 3); //<<--- ???
 
 
 // --- ADDITIONAL sound declarations below here ... ---//
 // --- EXTMEM AudiowlayArrayResmp doesnt exist in GUItool ---//
 
 
-DMAMEM AudioConnection          patchCord2121(playSdWav1, 0, peak1, 0);
-DMAMEM AudioConnection          patchCord2122(audioInput, 0, queue1, 0);
-DMAMEM AudioConnection          patchCord200(audioInput, 0, peakRec, 0);
+AudioConnection          patchCord2121(playSdWav1, 0, peak1, 0);
+AudioConnection          patchCord2122(audioInput, 0, queue1, 0);
+AudioConnection          patchCord200(audioInput, 0, peakRec, 0);
 
 
- DMAMEM AudioConnection snd0(sound0, envelope0);
- DMAMEM AudioConnection snd1(sound1, 0, BDMixer,0);
- DMAMEM AudioConnection snd3(sound2, 0, SNMixer,0);
- DMAMEM AudioConnection snd2(sound3, 0, HHMixer,0);
- DMAMEM AudioConnection snd4(sound4, envelope4);
- DMAMEM AudioConnection snd5(sound5, envelope5);
- DMAMEM AudioConnection snd6(sound6, envelope6);
- DMAMEM AudioConnection snd7(sound7, envelope7);
- DMAMEM AudioConnection snd8(sound8, envelope8);
+ AudioConnection snd0(sound0, envelope0);
+ AudioConnection snd1(sound1, 0, BDMixer,0);
+ AudioConnection snd3(sound2, 0, SNMixer,0);
+ AudioConnection snd2(sound3, 0, HHMixer,0);
+ AudioConnection snd4(sound4, envelope4);
+ AudioConnection snd5(sound5, envelope5);
+ AudioConnection snd6(sound6, envelope6);
+ AudioConnection snd7(sound7, envelope7);
+ AudioConnection snd8(sound8, envelope8);
 

@@ -93,7 +93,7 @@ void stopRecordSD(int fnr, int snr) {
 /*void savePatternAsMIDI(bool autosave) {
   
   yield();
-  Serial.println("Saving MIDI file");
+  //Serial.println("Saving MIDI file");
   drawNoSD();
   FastLEDclear();
 
@@ -193,9 +193,9 @@ void stopRecordSD(int fnr, int snr) {
     saveFile.seek(endPos);
 
     saveFile.close();
-    Serial.println("MIDI file saved successfully!");
+    //Serial.println("MIDI file saved successfully!");
   } else {
-    Serial.println("Failed to open file for writing");
+    //Serial.println("Failed to open file for writing");
   }
 
   if (!autosave) {
@@ -208,8 +208,6 @@ void stopRecordSD(int fnr, int snr) {
 
 void savePattern(bool autosave) {
   
-  //yield();
-  Serial.println("Saving in slot #" + String(SMP.file));
   drawNoSD();
   FastLEDclear();
   unsigned int maxdata = 0;
@@ -252,99 +250,72 @@ void savePattern(bool autosave) {
 }
 
 
-void saveSamplePack(unsigned int pack) {
-  // Create (or ensure) the target directory on the SD card
-  char dirPath[32];
-  sprintf(dirPath, "%u", pack);
-  SD.mkdir(dirPath);
+void saveSamplePack(int pack) {
+    
+    
+    char filename[64];
+    
 
-  // Iterate through each sample buffer
-  for (unsigned int i = 0; i < maxFiles; i++) {
-    // Determine the length (in bytes) of the i-th sample
-    uint32_t lenBytes = sample_len[i];      // number of int16_t samples recorded
-    if (lenBytes == 0) continue;            // skip empty buffers
 
-    // Build the output filename: "<pack>/<index>.wav"
-    char outPath[64];
-    sprintf(outPath, "%s/%u.wav", dirPath, i + 1);
-
-    // Remove any existing file at this path
-    if (SD.exists(outPath)) {
-      SD.remove(outPath);
-      delay(50);
+         char dirPath[64];
+    // Ensure the directory exists
+    snprintf(dirPath, sizeof(dirPath), "%d", pack);
+         if (!SD.exists(dirPath)) {
+        SD.mkdir(dirPath);
     }
 
-    // Open a new file for writing
-    File outFile = SD.open(outPath, FILE_WRITE);
-    if (!outFile) continue;
+    // Iterate over each sample channel (1..FOLDER_MAX)
+    for (uint8_t ch = 1; ch <= 8; ch++) {
 
-    // Write the standard 44-byte WAV header
-    // Assuming 16-bit PCM, mono, AUDIO_SAMPLE_RATE_EXACT
-    writeWavHeader(outFile, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
-
-    // Write the raw sample data from the in-memory buffer
-    // The buffer holds int16_t samples, so multiply count by sizeof(int16_t)
-    outFile.write(reinterpret_cast<const uint8_t*>(sampled[i]), lenBytes * sizeof(int16_t));
-
-    // Close the file
-    outFile.close();
-  }
-}
-
-
-void saveSamplePack2(unsigned int pack) {
-
-  yield();
-  Serial.println("Saving SamplePack in #" + String(pack));
-  drawNoSD();
-  
-  FastLEDclear();
-  char OUTPUTdir[50];
-  sprintf(OUTPUTdir, "%d/", pack);
-  SD.mkdir(OUTPUTdir);
-  delay(500);
-  for (unsigned int i = 0; i < sizeof(usedFiles) / sizeof(usedFiles[0]); i++) {
-    for (unsigned int f = 1; f < (maxY / 2) + 1; f++) {
-      light(i + 1, f, CRGB(4, 0, 0));
+       for (unsigned int f = 1; f < (maxY / 2) + 1; f++) {
+      light(ch + 1, f, CRGB(4, 0, 0));
     }
     showIcons(ICON_SAMPLEPACK, CRGB(20, 20, 20));
     FastLED.setBrightness(ledBrightness);
     FastLED.show();
 
-    if (SD.exists(usedFiles[i].c_str())) {
-      File saveFilePack = SD.open(usedFiles[i].c_str());
-      char OUTPUTf[50];
-      sprintf(OUTPUTf, "%d/%d.wav", pack, i + 1);
+        // Construct the output path: samples/<pack>/<ch>.wav
+        snprintf(filename, sizeof(filename), "%d/%d.wav", pack, ch);
+    
 
-      if (SD.exists(OUTPUTf)) {
-        SD.remove(OUTPUTf);
-        delay(100);
-      }
-
-      File myDestFile = SD.open(OUTPUTf, FILE_WRITE);
-
-      size_t n;
-      uint8_t buf[512];
-      while ((n = saveFilePack.read(buf, sizeof(buf))) > 0) {
-        myDestFile.write(buf, n);
-      }
-      myDestFile.close();
-      saveFilePack.close();
-    }
-
-    for (unsigned int f = 1; f < (maxY + 1) + 1; f++) {
-      light(i + 1, f, CRGB(0, 20, 0));
+      //  //Serial.println(filename);
+        // Remove any existing file at this path
+        if (SD.exists(filename)) {
+            SD.remove(filename);
+        }
+        
+        // Open a new file for writing
+        File outFile = SD.open(filename, FILE_WRITE);
+        if (!outFile) {
+            //Serial.print("Failed to create ");
+            //Serial.println(filename);
+            continue;
+        }
+        
+        // Write standard 44-byte WAV header (mono, 16-bit, AUDIO_SAMPLE_RATE_EXACT)
+        writeWavHeader(outFile, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
+        
+        // Determine how many samples were recorded for this channel
+        uint32_t sampleCount = loadedSampleLen[ch];  // number of int16_t samples
+        
+        // Write the raw PCM data from the sampled buffer
+        outFile.write(reinterpret_cast<uint8_t*>(sampled[ch]), sampleCount * sizeof(int16_t));
+        
+        outFile.close();
+        //Serial.print("Saved sample ");
+        //Serial.println(filename);
+         for (unsigned int f = 1; f < (maxY + 1) + 1; f++) {
+      light(ch + 1, f, CRGB(0, 20, 0));
     }
     FastLEDshow();
-  }
-  switchMode(&draw);
+    }
+   yield();
 }
 
 
-
 void loadPattern(bool autoload) {
-  yield();
-  Serial.println("Loading slot #" + String(SMP.file));
+  
+  //Serial.println("Loading slot #" + String(SMP.file));
   drawNoSD();
   
   FastLEDclear();
@@ -388,12 +359,12 @@ void loadPattern(bool autoload) {
       }
     }
     loadFile.close();
-    // yield();
+    yield();
     Mode *bpm_vol = &volume_bpm;
     bpm_vol->pos[3] = SMP.bpm;
     playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
     playTimer.update(playNoteInterval);
-    midiTimer.update(playNoteInterval / 48);
+    //midiTimer.update(playNoteInterval / 48);
     bpm_vol->pos[2] = SMP.vol;
 
 
@@ -402,25 +373,25 @@ void loadPattern(bool autoload) {
     SMP.singleMode = false;
 
     // Display the loaded SMP data
-    Serial.println("Loaded SMP Data:");
-    Serial.println("singleMode: " + String(SMP.singleMode));
-    Serial.println("currentChannel: " + String(SMP.currentChannel));
-    Serial.println("vol: " + String(SMP.vol));
-    Serial.println("bpm: " + String(SMP.bpm));
-    Serial.println("velocity: " + String(SMP.velocity));
-    Serial.println("page: " + String(SMP.page));
-    Serial.println("edit: " + String(SMP.edit));
-    Serial.println("file: " + String(SMP.file));
-    Serial.println("pack: " + String(SMP.pack));
-    Serial.println("wav: " + String(SMP.wav[SMP.currentChannel].fileID));
-    Serial.println("folder: " + String(SMP.folder));
-    Serial.println("activeCopy: " + String(SMP.activeCopy));
-    Serial.println("x: " + String(SMP.x));
-    Serial.println("y: " + String(SMP.y));
-    Serial.println("seek: " + String(SMP.seek));
-    Serial.println("seekEnd: " + String(SMP.seekEnd));
-    Serial.println("smplen: " + String(SMP.smplen));
-    Serial.println("shiftX: " + String(SMP.shiftX));
+    //Serial.println("Loaded SMP Data:");
+    //Serial.println("singleMode: " + String(SMP.singleMode));
+    //Serial.println("currentChannel: " + String(SMP.currentChannel));
+    //Serial.println("vol: " + String(SMP.vol));
+    //Serial.println("bpm: " + String(SMP.bpm));
+    //Serial.println("velocity: " + String(SMP.velocity));
+    //Serial.println("page: " + String(SMP.page));
+    //Serial.println("edit: " + String(SMP.edit));
+    //Serial.println("file: " + String(SMP.file));
+    //Serial.println("pack: " + String(SMP.pack));
+    //Serial.println("wav: " + String(SMP.wav[SMP.currentChannel].fileID));
+    //Serial.println("folder: " + String(SMP.folder));
+    //Serial.println("activeCopy: " + String(SMP.activeCopy));
+    //Serial.println("x: " + String(SMP.x));
+    //Serial.println("y: " + String(SMP.y));
+    //Serial.println("seek: " + String(SMP.seek));
+    //Serial.println("seekEnd: " + String(SMP.seekEnd));
+    //Serial.println("smplen: " + String(SMP.smplen));
+    //Serial.println("shiftX: " + String(SMP.shiftX));
 
 
     SMP.seek = 0;
@@ -428,32 +399,32 @@ void loadPattern(bool autoload) {
     SMP.smplen = 0;
     SMP.shiftX = 0;
     SMP.shiftY = 0;
-    Serial.print("pram_settings: ");
+    //Serial.print("pram_settings: ");
     for (unsigned int i = 0; i < 8; i++) {
-      Serial.print(SMP.param_settings[1][i]);
-      Serial.print(", ");
+      //Serial.print(SMP.param_settings[1][i]);
+      //Serial.print(", ");
     }
-    Serial.println();
-    Serial.print("filter_settings: ");
+    //Serial.println();
+    //Serial.print("filter_settings: ");
     for (unsigned int i = 0; i < 8; i++) {
-      Serial.print(SMP.filter_settings[1][i]);
-      Serial.print(", ");
+      //Serial.print(SMP.filter_settings[1][i]);
+      //Serial.print(", ");
     }
-    Serial.println();
-      Serial.print("drum_settings: ");
+    //Serial.println();
+      //Serial.print("drum_settings: ");
     for (unsigned int i = 0; i < 4; i++) {
-      Serial.print(SMP.drum_settings[1][i]);
-      Serial.print(", ");
+      //Serial.print(SMP.drum_settings[1][i]);
+      //Serial.print(", ");
     }
 
-    Serial.println();
+    //Serial.println();
     
-    Serial.print("mute: ");
+    //Serial.print("mute: ");
     for (unsigned int i = 0; i < maxY; i++) {
-      Serial.print(SMP.mute[i]);
-      Serial.print(", ");
+      //Serial.print(SMP.mute[i]);
+      //Serial.print(", ");
     }
-    Serial.println();
+    //Serial.println();
   } else {
     for (unsigned int nx = 1; nx < maxlen; nx++) {
       for (unsigned int ny = 1; ny < maxY + 1; ny++) {
@@ -471,6 +442,7 @@ void loadPattern(bool autoload) {
     switchMode(&draw);
   }
   //applySMPSettings();
+  yield();
 }
 
 
@@ -478,6 +450,7 @@ void loadPattern(bool autoload) {
 void autoLoad() {
   
   loadPattern(true);
+  
 }
 
 void autoSave() {

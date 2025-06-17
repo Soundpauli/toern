@@ -93,22 +93,22 @@ void updateParameterValue(int paramType, int index, float value) {
     case TYPE:
       {
         int synthType = value;
-        Serial.println(synthType);
+        //Serial.println(synthType);
 
         if (waveformmixers[index] != nullptr && waveformmixers[index] != 0) {
 
           switch (synthType) {
             case 1:
-              Serial.print("enable drum at Input0 at channel ");
-              Serial.println(index);
+              //Serial.print("enable drum at Input0 at channel ");
+              //Serial.println(index);
               waveformmixers[index]->gain(0, 0);  // Disable SAMPLE
               waveformmixers[index]->gain(1, 1);  // Enable drum channel
 
               break;
 
             case 2:
-              Serial.print("enable synth at Input1 for channel ");
-              Serial.println(index);
+              //Serial.print("enable synth at Input1 for channel ");
+              //Serial.println(index);
               waveformmixers[index]->gain(0, 1);  // Enable SAMPLE channel
               waveformmixers[index]->gain(1, 0);  // disable drum channel
             break;
@@ -128,7 +128,7 @@ void updateParameterValue(int paramType, int index, float value) {
 
 // Handle waveform changes
 void handleWaveformChange(int index, unsigned int waveformType) {
-  Serial.println(index);
+  //Serial.println(index);
 
   if (synths[index][0] != nullptr && synths[index][0] != 0) {
     switch (waveformType) {

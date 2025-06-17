@@ -7,8 +7,11 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 2,  1);   // transportMode default
     EEPROM.write(EEPROM_DATA_START + 3,  1);   // patternMode default
     EEPROM.write(EEPROM_DATA_START + 4,  1);   // voiceSelect default
-    EEPROM.write(EEPROM_DATA_START + 5,  0);   // fastRecMode default
-    Serial.println(F("EEPROM initialized with defaults."));
+    EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
+    EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
+    EEPROM.write(EEPROM_DATA_START + 7,  0);   // previewVol default
+
+    //Serial.println(F("EEPROM initialized with defaults."));
   }
 
   // now pull them in
@@ -18,14 +21,20 @@ void loadMenuFromEEPROM() {
   patternMode   = (int8_t) EEPROM.read(EEPROM_DATA_START + 3);
   voiceSelect   = (int8_t) EEPROM.read(EEPROM_DATA_START + 4);
   fastRecMode   = (int8_t) EEPROM.read(EEPROM_DATA_START + 5);
+  recChannelClear   = (int8_t) EEPROM.read(EEPROM_DATA_START + 6);
+  previewVol   = (int8_t) EEPROM.read(EEPROM_DATA_START + 7);
+ if (recChannelClear>1 || recChannelClear< -1) recChannelClear=1;
 
-  Serial.println(F("Loaded Menu values from EEPROM:"));
-  Serial.print(F("  recMode="));       Serial.println(recMode);
-  Serial.print(F("  clockMode="));     Serial.println(clockMode);
-  Serial.print(F("  transportMode=")); Serial.println(transportMode);
-  Serial.print(F("  patternMode="));   Serial.println(patternMode);
-  Serial.print(F("  voiceSelect="));   Serial.println(voiceSelect);
-  Serial.print(F("  fastRecMode="));   Serial.println(fastRecMode);
+  //Serial.println(F("Loaded Menu values from EEPROM:"));
+  //Serial.print(F("  recMode="));       //Serial.println(recMode);
+  //Serial.print(F("  clockMode="));     //Serial.println(clockMode);
+  //Serial.print(F("  transportMode=")); //Serial.println(transportMode);
+  //Serial.print(F("  patternMode="));   //Serial.println(patternMode);
+  //Serial.print(F("  voiceSelect="));   //Serial.println(voiceSelect);
+  //Serial.print(F("  fastRecMode="));   //Serial.println(fastRecMode);
+  //Serial.print(F("  recChannelClear="));   //Serial.println(recChannelClear);
+  //Serial.print(F("  previewVol="));   //Serial.println(previewVol);
+
 
   // re‐derive your dependent flags:
   recInput               = (recMode ==  1) ? AUDIO_INPUT_MIC  : AUDIO_INPUT_LINEIN;
@@ -34,7 +43,8 @@ void loadMenuFromEEPROM() {
   SMP_PATTERN_MODE       = (patternMode   == 1);
   MIDI_VOICE_SELECT      = (voiceSelect   == 1);
   SMP_FAST_REC           = fastRecMode;
-
+  SMP_REC_CHANNEL_CLEAR  = (recChannelClear == 1);
+/*
   // update the display so it reflects the loaded state immediately:
   drawRecMode();
   drawClockMode();
@@ -42,6 +52,11 @@ void loadMenuFromEEPROM() {
   drawPatternMode();
   drawMidiVoiceSelect();
   drawFastRecMode();
+  drawRecChannelClear();
+  drawPreviewVol();
+  */
+
+   
 }
 
 // call this after you change *any* one of the six modes in switchMenu():
@@ -126,6 +141,20 @@ void showMenu() {
       drawFastRecMode();
       break;
 
+      case 11:
+      //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
+      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 0, 20));
+      Encoder[3].writeRGBCode(0x0000FF);
+      drawRecChannelClear();
+      break;
+
+       case 12:
+      //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
+      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 0, 20));
+      Encoder[3].writeRGBCode(0xAAFFAA);
+      drawPreviewVol();
+      break;
+
 
     default:
       break;
@@ -176,7 +205,7 @@ void switchMenu(int menuPosition){
         clockMode = clockMode * (-1);
         saveSingleModeToEEPROM(1, clockMode);
 
-        Serial.println(clockMode);
+        //Serial.println(clockMode);
         drawClockMode();
         if (clockMode == 1) {
           playTimer.begin(playNote, playNoteInterval);
@@ -190,7 +219,7 @@ void switchMenu(int menuPosition){
         voiceSelect = voiceSelect * (-1);
         saveSingleModeToEEPROM(4, voiceSelect);
 
-        Serial.println(voiceSelect);
+        //Serial.println(voiceSelect);
         drawMidiVoiceSelect();
         break;
 
@@ -203,7 +232,6 @@ void switchMenu(int menuPosition){
       case 9:
         patternMode = patternMode * (-1);
         saveSingleModeToEEPROM(3, patternMode);
-
         drawPatternMode();
         break;
 
@@ -215,12 +243,31 @@ void switchMenu(int menuPosition){
         drawFastRecMode();
         break;
 
+         case 11:
+        recChannelClear = recChannelClear * (-1);
+        saveSingleModeToEEPROM(6, recChannelClear);
+        drawRecChannelClear();
+        break;
+
+        case 12:
+        previewVol = previewVol + 1;                   
+        if (previewVol>3) previewVol=0;
+        saveSingleModeToEEPROM(7, previewVol);
+        drawPreviewVol();
+        break;
     }
-    
     //saveMenutoEEPROM();
 }
 
-
+void drawRecChannelClear(){
+  if (recChannelClear == 1) {
+    drawText("ON", 5, 5, CRGB(0, 200, 0));
+    SMP_REC_CHANNEL_CLEAR = true;
+  } else {
+    drawText("OFF", 5, 5, CRGB(200, 0, 0));
+    SMP_REC_CHANNEL_CLEAR = false;
+  }
+}
 
 void drawRecMode() {
 
@@ -265,6 +312,65 @@ void drawMidiVoiceSelect() {
   FastLEDshow();
 }
 
+
+
+void drawPreviewVol() {
+
+if (previewVol == 3) {
+    drawText("SPLT", 2, 6, CRGB(0, 0, 50));
+    previewVol = 3;
+    mixer_stereoL.gain(0, 1);
+    mixer_stereoL.gain(1, 0);
+
+    mixer_stereoR.gain(0, 0);
+    mixer_stereoR.gain(1, 1);
+    
+    mixer0.gain(1, 0.4);  //PREV
+  }
+
+
+  if (previewVol == 2) {
+    drawText("HIGH", 2, 6, CRGB(50, 50, 0));
+    previewVol = 2;
+    mixer_stereoL.gain(0, 1);
+    mixer_stereoL.gain(1, 1);
+
+    mixer_stereoR.gain(0, 1);
+    mixer_stereoR.gain(1, 1);
+
+       mixer0.gain(1, 0.6);  //PREV
+
+  }
+
+
+  if (previewVol == 1) {
+    drawText("MID", 2, 6, CRGB(50, 50, 0));
+    previewVol = 1;
+
+    mixer_stereoL.gain(0, 1);
+    mixer_stereoL.gain(1, 1);
+
+    mixer_stereoR.gain(0, 1);
+    mixer_stereoR.gain(1, 1);
+
+    mixer0.gain(1, 0.4);  //PREV
+  }
+
+  if (previewVol == 0) {
+    drawText("LOW", 2, 6, CRGB(200, 0, 0));
+    previewVol = 0;
+    
+    mixer_stereoL.gain(0, 1);
+    mixer_stereoL.gain(1, 1);
+
+    mixer_stereoR.gain(0, 1);
+    mixer_stereoR.gain(1, 1);
+
+    mixer0.gain(1, 0.1);  //PREV
+  }
+  FastLEDshow();
+  
+}
 
 void drawFastRecMode() {
 

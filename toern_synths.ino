@@ -648,7 +648,7 @@ void autoOffActiveNotes2() {
 
 // This function checks each voice and auto-offs active notes after AUTO_OFF_TIME.
 void autoOffActiveNotes() {
-  //Serial.println(persistentNoteOn[11]);
+  ////Serial.println(persistentNoteOn[11]);
 if (pressedKeyCount[11]>=1) return;
   unsigned long currentTime = millis();
   for (int ch = 0; ch < 2; ch++) {
@@ -681,8 +681,8 @@ void stopSound(int note, int ch) {
 // Helper function to process filter adjustments
 float processSynthAdjustment(SynthTypes synthType, int index, int encoder) {
   SMP.synth_settings[index][synthType] = currentMode->pos[encoder];
-  Serial.print(":::::");
-  Serial.println(SMP.synth_settings[index][synthType]);
+  //Serial.print(":::::");
+  //Serial.println(SMP.synth_settings[index][synthType]);
   
   int mappedValue;
   
@@ -694,18 +694,18 @@ float processSynthAdjustment(SynthTypes synthType, int index, int encoder) {
     }
     mappedValue = mapf(SMP.synth_settings[SMP.currentChannel][synthType], 0, maxIndex, 1, maxIndex + 1); 
   
-  Serial.print(synthType);
-  Serial.print(" #####---->");
-  Serial.println(mappedValue);
+  //Serial.print(synthType);
+  //Serial.print(" #####---->");
+  //Serial.println(mappedValue);
   return mappedValue;
 }
 
 // Update filter values
 void updateSynthValue(SynthTypes synthType, int index, float value) {
   // Common function to update all filter types
-  Serial.print(synthType);
-  Serial.print(" S==>: ");
-  Serial.println(value);
+  //Serial.print(synthType);
+  //Serial.print(" S==>: ");
+  //Serial.println(value);
   switch (synthType) {
     case INSTRUMENT:
       break;
