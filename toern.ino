@@ -1146,6 +1146,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     switchMode(&draw);
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+
     loadWav();
     autoSave();
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
@@ -2823,7 +2824,7 @@ void loadWav() {
   // And the sample SMP.wav[SMP.currentChannel].fileID is loaded into sampler SMP.currentChannel.
   // This needs clarification based on loadSample's actual implementation.
   // For now, I'll keep it as is, but it's a potential point of confusion/bugs.
-  loadSample(SMP.folder, SMP.wav[SMP.currentChannel].fileID);  // Assuming SMP.folder is the intended first arg, and second is file ID.
+  loadSample(0, SMP.wav[SMP.currentChannel].fileID);  // Assuming SMP.folder is the intended first arg, and second is file ID.
                                                                // And loadSample internally knows to use SMP.currentChannel as target.
   switchMode(&singleMode);
   SMP.singleMode = true;
