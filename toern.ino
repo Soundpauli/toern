@@ -2284,6 +2284,10 @@ void deleteActiveCopy() {
 
 
 void play(bool fromStart) {
+  if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
+    checkCrashReport();
+  }
+
   if (fromStart) {
     updateLastPage();
     deleteActiveCopy();
@@ -2360,6 +2364,24 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   //unsigned long delay_ms = mapf(SMP.param_settings[ch][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
   startTime[ch] = millis();    // + delay_ms;    // Record the start time
   noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
+}
+
+
+// Adjust beat offset when manually switching pages in pattern mode:
+// Place this logic in your encoder handler where SMP.edit (page) changes:
+void handlePageSwitch(int newEdit) {
+  unsigned int oldEdit = SMP.edit;
+  if (newEdit != oldEdit) {
+    if (SMP_PATTERN_MODE) {
+      unsigned int oldStart = (oldEdit - 1) * maxX + 1;
+      unsigned int newStart = (newEdit - 1) * maxX + 1;
+      unsigned int offset   = beat - oldStart;
+      // Preserve relative position within page:
+      beat = newStart + offset;
+      SMP.page = newEdit;
+    }
+    SMP.edit = newEdit;
+  }
 }
 
 void playNote() {
@@ -2442,10 +2464,36 @@ void playNote() {
       //Serial.println("4 Bars Reached");
       waitForFourBars = false;  // Reset for the next start message
     }
+
     yield();
     beatStartTime = millis();
+     if (SMP_PATTERN_MODE) {
+    // Compute the bounds of the current page:
+    unsigned int pageStart = (SMP.edit - 1) * maxX + 1;
+    unsigned int pageEnd   = pageStart + maxX - 1;
+
+    // Preserve relative beat when switching pages:
+    static unsigned int lastEdit = SMP.edit;
+    if (SMP.edit != lastEdit) {
+      unsigned int oldStart = (lastEdit - 1) * maxX + 1;
+      unsigned int offset   = beat - oldStart;
+      beat = pageStart + offset;
+      lastEdit = SMP.edit;
+    }
+
+    // Advance and wrap within this page:
+    beat++;
+    if (beat < pageStart || beat > pageEnd) {
+      beat = pageStart;
+    }
+
+    // Keep the displayed page locked:
+    SMP.page = SMP.edit;
+  } else {
+    // Fallback to default behavior:
     beat++;
     checkPages();
+  }
 
 
   }
@@ -2465,6 +2513,11 @@ void playNote() {
 }
 
 void checkPages() {
+    if (SMP_PATTERN_MODE) {
+    // Always display the editable page when looping in pattern mode.
+    SMP.page = SMP.edit;
+    return;
+  }
   updateLastPage();  // recompute the highest page that actually has notes
   // compute what page beat should be on
   uint16_t newPage = (beat - 1) / maxX + 1;

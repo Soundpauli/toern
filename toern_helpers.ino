@@ -13,7 +13,7 @@ void EEPROMgetLastFiles() {
 // Load (apply) parameter settings for a single channel.
 void loadParametersForChannel(int ch) {
   for (int p = 0; p < NUM_PARAMS; p++) {
-    // Set the encoder value to the saved parameter value.
+    // Set the encoder value to the saved parameter value.S
     //currentMode->pos[3] = SMP.param_settings[ch][p];
     // Process the parameter mapping.
     float mappedValue = processParameterAdjustment(p, ch);
