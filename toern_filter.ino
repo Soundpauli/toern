@@ -173,7 +173,7 @@ void setFilterDefaults(int channel) {
     case 8: mixer = &filtermixer8; break;
 
     case 11: mixer = &filtermixer11; break;
-    case 12: mixer = &filtermixer12; break;
+    
     case 13: mixer = &filtermixer13; break;
     case 14: mixer = &filtermixer14; break;
     default: return;  // Invalid channel

@@ -376,16 +376,14 @@ const float pianoFrequencies[16] PROGMEM = {
   587.33   // D5
 };
 
-
-String usedFiles[maxFiles] = { "samples/_1.wav",
-                               "samples/_2.wav",
-                               "samples/_3.wav",
-                               "samples/_4.wav",
-                               "samples/_5.wav",
-                               "samples/_6.wav",
-                               "samples/_7.wav",
-                               "samples/_8.wav",
-                               "samples/_9.wav" };
+const char* pianoNoteNames[27] = {
+  "C3",  "C#3", "D3",  "D#3", "E3",
+  "F3",  "F#3", "G3",  "G#3", "A3",
+  "A#3", "B3",  "C4",  "C#4", "D4",
+  "D#4", "E4",  "F4",  "F#4", "G4",
+  "G#4", "A4",  "A#4", "B4",  "C5",
+  "C#5", "D5"
+};
 
 elapsedMillis msecs;
 elapsedMillis mRecsecs;
@@ -742,37 +740,37 @@ int currentEncoderIndex = 0;
 EXTMEM arraysampler _samplers[9];
 AudioPlayArrayResmp *voices[9] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8 };
 
-AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, &envelope12, &envelope13, &envelope14 };
-AudioAmplifier *amps[15] = { &amp0, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, &amp12, &amp13, &amp14 };
-AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, &filter12, &filter13, &filter14 };
-AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, &filtermixer12, &filtermixer13, &filtermixer14 };
-AudioEffectBitcrusher *bitcrushers[15] = { nullptr, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, nullptr, nullptr, &bitcrusher11, &bitcrusher12, &bitcrusher13, &bitcrusher14 };
-AudioEffectFreeverb *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, nullptr, nullptr, &freeverb7, &freeverb8, 0, 0, &freeverb11, &freeverb12, &freeverb13, &freeverb14 };
+AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, nullptr, &envelope13, &envelope14 };
+AudioAmplifier *amps[15] = { nullptr, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, nullptr, &amp13, &amp14 };
+AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, nullptr, &filter13, &filter14 };
+AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, nullptr, &filtermixer13, &filtermixer14 };
+AudioEffectBitcrusher *bitcrushers[15] = { nullptr, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, nullptr, nullptr, &bitcrusher11, nullptr, &bitcrusher13, &bitcrusher14 };
+AudioEffectFreeverb *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, nullptr, nullptr, &freeverb7, &freeverb8, 0, 0, &freeverb11, nullptr, &freeverb13, &freeverb14 };
 AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, nullptr, nullptr, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 //AudioEffectFlange *flangers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &flange11, &flange12, &flange13, &flange14 };
-AudioMixer4 *waveformmixers[15] = { nullptr, &BDMixer, &SNMixer, &HHMixer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, &mixer_waveform12, &mixer_waveform13, &mixer_waveform14 };
+AudioMixer4 *waveformmixers[15] = { nullptr, &BDMixer, &SNMixer, &HHMixer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
 
 
 AudioSynthWaveform *synths[15][2];
 
-/*
-  AudioSynthWaveformDc *Sdc1[3] = {&dc11_1, &dc11_2, &dc11_3};
-  AudioEffectEnvelope *Senvelope1[3] = {&envelope1_1, &envelope1_2, &envelope1_3};
-  AudioEffectEnvelope *Senvelope2[3] = {&envelope2_1, &envelope2_2, &envelope2_3};
-  AudioEffectEnvelope *SenvelopeFilter1[3] = {&envelopeFilter1_1, &envelopeFilter1_2, &envelopeFilter1_3};
 
-  AudioSynthWaveform *Swaveform1[3] = {&waveform1_1, &waveform2_1, &waveform3_1};
-  AudioSynthWaveform *Swaveform2[3] = {&waveform2_2, &waveform2_2, &waveform3_2};
-  AudioSynthWaveform *Swaveform3[3] = {&waveform3_1, &waveform3_2, &waveform3_3};
+//for FULL patch:
 
-  AudioFilterLadder *Sladder1[3] = {&ladder1_1, &ladder2_1};
-  AudioFilterLadder *Sladder2[3] = {&ladder1_2, &ladder2_2};
-  AudioFilterLadder *Sladder3[3] = {&ladder1_3, &ladder2_3};
+AudioSynthWaveformDc *Sdc1[3] = { &Sdc1_0, &Sdc1_1, &Sdc1_2 };
+AudioEffectEnvelope *Senvelope1[3] = { &Senvelope1_0, &Senvelope1_1, &Senvelope1_2 };
+AudioEffectEnvelope *Senvelope2[3] = { &Senvelope2_0, &Senvelope2_1, &Senvelope2_2 };
+AudioEffectEnvelope *SenvelopeFilter1[3] = { &SenvelopeFilter1_0, &SenvelopeFilter1_1, &SenvelopeFilter1_2 };
 
-  AudioMixer4 *Smixer1[2] = { &mixer1_1, &mixer2_1};
-  AudioMixer4 *Smixer2[2] = { &mixer1_2, &mixer2_2};
-  AudioMixer4 *Smixer3[2] = { &mixer1_3, &mixer2_3};
-  */
+AudioSynthWaveform *Swaveform1[3] = { &Swaveform1_0, &Swaveform1_1, &Swaveform1_2 };
+AudioSynthWaveform *Swaveform2[3] = { &Swaveform2_0, &Swaveform2_1, &Swaveform2_2 };
+AudioSynthWaveform *Swaveform3[3] = { &Swaveform3_0, &Swaveform3_1, &Swaveform3_2 };
+
+AudioFilterLadder *Sladder1[3] = { &Sladder1_0, &Sladder1_1, &Sladder1_2 };
+AudioFilterLadder *Sladder2[3] = { &Sladder2_0, &Sladder2_1, &Sladder2_2 };
+
+AudioMixer4 *Smixer1[3] = { &Smixer1_0, &Smixer1_1, &Smixer1_2 };
+AudioMixer4 *Smixer2[3] = { &Smixer2_0, &Smixer2_1, &Smixer2_2 };
+/**/
 
 void allOff() {
   for (AudioEffectEnvelope *envelope : envelopes) {
@@ -1000,6 +998,7 @@ void switchMode(Mode *newMode) {
 
 
 void checkFastRec() {
+if (SMP.currentChannel>8) return; 
 
   if ((currentMode == &draw || currentMode == &singleMode) && SMP_FAST_REC == 2 || SMP_FAST_REC == 3) {
     bool pinsConnected = (digitalRead(2) == LOW);
@@ -1406,9 +1405,6 @@ void initSamples() {
   synthmixer11.gain(1, GAIN3);
   synthmixer11.gain(3, GAIN3);
 
-  synthmixer12.gain(0, GAIN3);
-  synthmixer12.gain(1, GAIN3);
-  synthmixer12.gain(3, GAIN3);
 
 
   synthmixer13.gain(0, GAIN01);
@@ -1421,15 +1417,14 @@ void initSamples() {
 
 
   mixersynth_end.gain(0, GAIN4);
-  mixersynth_end.gain(1, GAIN4);
+  
   mixersynth_end.gain(2, GAIN4);
   mixersynth_end.gain(3, GAIN4);
 
 
   mixer0.gain(0, GAIN01);  //PREV
   mixer0.gain(1, GAIN01);  //PREV
-  mixer0.gain(2, GAIN01);  //PREV
-  mixer0.gain(3, GAIN01);  //PREV
+  
 
   mixer1.gain(0, GAIN4);
   mixer1.gain(1, GAIN4);
@@ -1449,8 +1444,7 @@ void initSamples() {
 
   mixerPlay.gain(0, GAIN02);
   mixerPlay.gain(1, GAIN02);
-  mixerPlay.gain(2, GAIN02);
-  mixerPlay.gain(3, GAIN02);
+  
 
   // Initialize the array with nullptrs
   synths[11][0] = &waveform11_1;
@@ -1501,7 +1495,7 @@ void initSamples() {
 
   //chiptune_synth(0,0,0);
   for (int i = 0; i < 3; i++) {
-    Sdc1[i].amplitude(1.0);
+    Sdc1[i]->amplitude(1.0);
   }
 
   // set filters and envelopes for all sounds
@@ -1640,7 +1634,7 @@ void setup() {
   }
   drawNoSD();
   delay(50);
-
+  mixer0.gain(1, 0.05);  //PREV Sound
   playSdWav1.play("intro/016.wav");
 
   runAnimation();
@@ -1714,6 +1708,10 @@ void checkEncoders() {
           Encoder[2].writeCounter((int32_t)SMP.filter_settings[SMP.currentChannel][dfx]);
         }
         filterfreshsetted = true;
+      }
+
+      if (currentMode == &singleMode){
+        drawText(pianoNoteNames[12 - SMP.y + 1  + SMP.currentChannel], 3, 5, CRGB(200, 50, 0));
       }
 
 
@@ -1980,9 +1978,6 @@ void checkPendingSampleNotes() {
 void loop() {
    checkMidi();
 
-
-   
-
   if (currentMode == &draw || currentMode == &singleMode) {
     drawBase();
     drawTriggers();
@@ -2100,7 +2095,7 @@ void loop() {
 
 
 
-for (int ch = 13; ch <= 14; ch++) {
+  for (int ch = 13; ch <= 14; ch++) {
     int noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
 
@@ -2124,8 +2119,6 @@ for (int ch = 13; ch <= 14; ch++) {
   yield();
 }
 
-
-// ... (rest of the functions from the original file)
 float getNoteDuration(int channel) {
   int timetilloff = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]) + mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]) + mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]) + mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]) + mapf(SMP.param_settings[channel][RELEASE], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
   return timetilloff;

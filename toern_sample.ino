@@ -131,7 +131,7 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
     SMP.mute[sampleID] = false;
   }
 
-  //usedFiles[sampleID - 1] = String(OUTPUTf);
+  
 
   File loadSample = SD.open(OUTPUTf);
   if (loadSample) {

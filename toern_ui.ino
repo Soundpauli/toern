@@ -117,57 +117,55 @@ void drawNoSD() {
   drawNoSD_hasRun = true;  // Mark it as run
 }
 
-
 void drawBase() {
   if (!SMP.singleMode) {
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
-      //unsigned int filtering = 2;  // mapf(SMP.param_settings[SMP.currentChannel][y - 1], 0, maxfilterResolution, 50, 5);
       for (unsigned int x = 1; x < maxX + 1; x++) {
         if (SMP.mute[y - 1]) {
-          light(x, y, CRGB(0, 0, 0));
+          light(x, y, CRGB(0, 0, 0));  // gemutete Zeilen schwarz
         } else {
-          light(x, y, col_base[colors]);
+          light(x, y, col_base[colors]);  // normale Farbcodierung pro Spur
         }
       }
       colors++;
     }
 
     drawStatus();
-      
-  /*for ( int x = 1; x <= 16; x++) {
-    int brightness;
-    if (x <= 8) {
-      brightness = ::map(x, 2, 8, 0, 80);  // Ramp up from black to white
-    } else {
-      brightness = ::map(x, 9, 15, 80, 0); // Ramp down from white to black
-    }
-    brightness = constrain(brightness, 0, 255); // Safety limit
-    light(x, 11, CRGB(brightness, brightness, brightness));
-  }*/
 
-
-  //4-4 helper takt
+    // 4/4-Takt-Hilfsmarkierung in Zeile 1
     for (unsigned int x = 1; x <= 13; x += 4) {
-      light(x, 1, CRGB(10, 10, 10));  
+      light(x, 1, CRGB(10, 10, 10));  // hellgraue Taktpunkte
     }
 
   } else {
+    // ---- SINGLE MODE ----
     unsigned int currentChannel = SMP.currentChannel;
     bool isMuted = SMP.mute[currentChannel];
 
     for (unsigned int y = 1; y < maxY; y++) {
       for (unsigned int x = 1; x < maxX + 1; x++) {
-        light(x, y, col_base[currentChannel]);
+        CRGB color = col_base[currentChannel];
+
+        // Grundton (z. B. C3) pro Kanal etwas heller darstellen
+        if (y == currentChannel + 1 ) {
+         color = blend(color, CRGB::White, 5); 
+        }        
+
+        light(x, y, color);
       }
     }
+
+    // 4/4-Takt-Hilfslinien in Zeile 1 (z. B. Start jeder Viertel)
     for (unsigned int x = 1; x <= 13; x += 4) {
-      light(x, 1, CRGB(0, 1, 1));  // türkis
+      light(x, 1, CRGB(0, 1, 1));  // türkisfarbene Taktmarkierung
     }
   }
 
   drawPages();
 }
+
+
 
 void drawStatus() {
   CRGB ledColor = CRGB(0, 0, 0);
@@ -423,7 +421,15 @@ void drawCursor() {
   }
 
   uint8_t hue = pulse; // Directly use pulse as hue for smooth cycling
-  light(mapXtoPageOffset(SMP.x), SMP.y, CHSV(hue, 255, 255)); // Full saturation and brightness
+  if (note[SMP.x][SMP.y].channel) {
+    
+    CRGB color = col[note[SMP.x][SMP.y].channel];  // aus deiner col[] Farbpalette
+    light(mapXtoPageOffset(SMP.x), SMP.y, color.nscale8_video(pulse));  // pulse = animierte Helligkeit
+
+
+  }else{
+    light(mapXtoPageOffset(SMP.x), SMP.y, CHSV(hue, 255, 255)); // Full saturation and brightness
+  }
 }
 
 
@@ -699,7 +705,7 @@ void drawBPMScreen() {
   drawBrightness();
   CRGB volColor = CRGB(SMP.vol * SMP.vol, 20 - SMP.vol, 0);
   Encoder[2].writeRGBCode(CRGBToUint32(volColor));
-
+  showIcons(HELPER_EXIT, CRGB(0, 0, 100));
   showIcons(HELPER_BRIGHT, CRGB(20, 20, 20));
   showIcons(HELPER_VOL, volColor);
   if (MIDI_CLOCK_SEND){ 
