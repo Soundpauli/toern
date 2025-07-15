@@ -53,44 +53,7 @@ void updateFilterValue(FilterType filterType, int index, float value) {
       }
       break;}
 
-  case FLANGER:{
-  /*
-  if (flangers[index] != nullptr) {
-    if (value <= 0.01) {  // Bypass mode
-      if (!bypassSet) {
-        flangers[index]->voices(FLANGE_DELAY_PASSTHRU, 0, 0);
-        bypassSet = true;
-      }
-    } else {
-      // Active mode - full frequency flanger
-      bypassSet = false;
-      
-      static float lastValue = -1.0;
-      if (fabs(value - lastValue) > 0.001) {
-        // Custom mapping curve (gentle at first, then aggressive)
-        float normalized = value < 0.3 ? value * 0.7 : 0.21 + (value - 0.3) * 1.7;
-        
-        // Primary flanger voice (bass emphasis)
-        int offset = (int)mapf(normalized, 0.0, 1.0, 30, 300);  // Samples (1.5ms-15ms @44.1kHz)
-        int depth = (int)mapf(normalized, 0.0, 1.0, 60, 150);   // 60-150% depth
-        float delayRate = mapf(normalized, 0.0, 1.0, 0.08, 0.6); // Hz
-        
-        // Secondary modulation for richer sweeps
-        float harmonicRate = delayRate * 1.3; // Slightly detuned
-        
-        // Update flanger with modulated parameters
-        flangers[index]->voices(
-          offset + (int)(10 * sin(millis() * 0.001 * harmonicRate)), // Dynamic offset
-          depth,
-          delayRate + (0.02 * sin(millis() * 0.0007)) // Slight rate modulation
-        );
-        
-        lastValue = value;
-      }
-    }
-  }
-  */
-  break;}
+  
 
     case BITCRUSHER:{
       // Map value (1 = clean, 16 = max crush) to bit depth
@@ -140,7 +103,7 @@ float processFilterAdjustment(FilterType filterType, int index, int encoder) {
   if (filterType == FREQUENCY) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 5, 10000);
   if (filterType == REVERB) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 1);
   if (filterType == BITCRUSHER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 1, 16);
-  if (filterType == FLANGER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 1);
+  
   //if (filterType == DETUNE) // find in main file.
   //if (filterType == OCTAVE) // find in main file.
   
@@ -205,14 +168,4 @@ void setFilterDefaults(int channel) {
   bitcrushers[channel]->bits(16);
   bitcrushers[channel]->sampleRate(44100);
 
-/*
-  int s_idx = mapf(0, 0.0, 1.0, -4, 4);
-  int s_depth = mapf(0, 0.0, 1.0, 0, 100);
-  float s_freq = mapf(0, 0.0, 1.0, 0.05, 0.25);
-
-  if (flangers[channel] != 0 && flangers[channel] != nullptr) {
-    flangers[channel]->voices(s_idx, s_depth, s_freq);
-    flangers[channel]->begin(delayline, FLANGE_DELAY_LENGTH, s_idx, s_depth, s_freq);
-  }
-  */
 }

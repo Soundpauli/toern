@@ -65,12 +65,11 @@ volatile bool stepIsDue = false;
 #define NUM_CHANNELS 16
 #define maxFilters 15
 
-#define maxfilterResolution 64
+#define maxfilterResolution 32
 #define numPulsesForAverage 8  // Number of pulses to average over
 #define pulsesPerBar (24 * 4)  // 24 pulses per quarter note, 4 quarter notes per bar
 
 #define EEPROM_MENU_ADDR 42
-
 
 struct MySettings : public midi ::DefaultSettings {
   static const long BaudRate = 1000000;
@@ -92,6 +91,58 @@ const unsigned long debounceDelay = 500;  // 100ms debounce
 #define EEPROM_MAGIC_ADDR 42
 #define EEPROM_DATA_START 43        // 43..48 will be your six mode‐bytes
 const uint8_t EEPROM_MAGIC = 0x5A;  // anything nonzero
+
+
+
+
+enum ValueDisplayMode {
+  DISPLAY_NUMERIC,
+  DISPLAY_ENUM
+};
+
+const char* instTypeNames[] = { "WV", "SY", "DR" };
+#define INST_ENUM_COUNT (sizeof(instTypeNames) / sizeof(instTypeNames[0]))
+
+
+struct SliderMeta {
+  uint8_t maxValue;          // physical encoder range, e.g. 16
+  uint8_t displayMode;       // enum or numeric
+  const char** enumNames;    // for DISPLAY_ENUM
+  uint8_t displayRange;      // NEW: number of distinct display values (e.g. 5, 3)
+};
+
+
+static const SliderMeta sliderMeta[4][4] = {
+  // Page 0
+  {
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32}
+  },
+  // Page 1
+  {
+    {28, DISPLAY_NUMERIC, nullptr, 28},
+    {20, DISPLAY_NUMERIC, nullptr, 20},
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32}
+  },
+  // Page 2
+  {
+    {16, DISPLAY_NUMERIC, nullptr, 5},                  // Shown as 0–4
+    {16, DISPLAY_ENUM, instTypeNames, INST_ENUM_COUNT}, // Mapped from 0–16
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32}
+  },
+  // Page 3
+  {
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32},
+    {32, DISPLAY_NUMERIC, nullptr, 32}
+  }
+};
+
 
 struct PendingNoteEvent {
   uint8_t channel;
@@ -410,7 +461,7 @@ Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, max
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode volume_bpm = { "VOLUME_BPM", { 1, 6, VOL_MIN, BPM_MIN }, { 1, 25, VOL_MAX, BPM_MAX }, { 1, 6, 7, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
-Mode filterMode = { "FILTERMODE", { 0, 0, 1, 0 }, { 7, 6, 8, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
+Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x000000, 0x000000, 0x000000, 0x000000 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0x000000, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
@@ -651,6 +702,11 @@ bool fastRecordActive = false;
 //static uint8_t fastRecordChannel = 0;
 
 
+// State variables
+uint8_t filterPage = 0; // 0-3 pages
+uint8_t lastEncoder = 0; // last used encoder index (0-3)
+
+
 
 enum ParameterType { DELAY,
                      ATTACK,
@@ -660,9 +716,10 @@ enum ParameterType { DELAY,
                      RELEASE,
                      WAVEFORM,
                      TYPE  //AudioSynthNoiseWhite, AudioSynthSimpleDrums OR WAVEFORM
-};                         //Define filter types
+};                         
 
 int maxParamVal[12] = { 1000, 2000, 1000, 1000, 1, 1000, 1000, 1, 1, 0, 0 };
+
 
 
 enum FilterType { NUL,
@@ -671,10 +728,10 @@ enum FilterType { NUL,
                   FREQUENCY,
                   REVERB,
                   BITCRUSHER,
-                  FLANGER,
                   DETUNE,
                   OCTAVE
 };  //Define filter types
+
 
 
 
@@ -708,12 +765,10 @@ enum MidiSetTypes {
 FilterType defaultFilter[maxFiles] = { LOWPASS };
 
 char *activeParameterType[8] = { "DLAY", "ATTC", "HOLD", "DCAY", "SUST", "RLSE", "WAV", "TYPE" };
-char *activeFilterType[9] = { "", "LOW", "HIGH", "FREQ", "RVRB", "BITC", "FLNG", "DTNE", "OCTV" };
-
+char *activeFilterType[8] = { "", "LOW", "HIGH", "FREQ", "RVRB", "BITC", "DTNE", "OCTV" };
 char *activeDrumType[4] = { "TONE", "DCAY", "FREQ", "TYPE" };
 char *activeSynthVoice[8] = { "SND", "CUT", "RES", "FLT", "CENT", "SEMI", "WAVE", "PAR7" };
 char *activeMidiSetType[6] = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
-
 
 // Arrays to track multiple encoders
 int buttons[NUM_ENCODERS] = { 0 };  // Tracks the current state of each encoder
@@ -735,6 +790,35 @@ i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
 
+// Slider column positions (2 LEDs each)
+static const uint8_t sliderCols[4][2] = {{2,3},{6,7},{10,11},{14,15}};
+
+// Define which data array each slider uses
+enum SettingArray { ARR_FILTER, ARR_SYNTH, ARR_DRUM, ARR_PARAM, ARR_NONE };
+
+
+
+// For each page and slot: {arrayType, settingIndex}
+static const struct { SettingArray arr; int8_t idx; } sliderDef[4][4] = {
+  // page 0: filters
+  {{ARR_FILTER, LOWPASS}, {ARR_FILTER, FREQUENCY}, {ARR_FILTER, REVERB},   {ARR_FILTER, BITCRUSHER}},
+  // page 1: synth & filter octave
+  {{ ARR_SYNTH ,   PARAM1},     {ARR_SYNTH,   PARAM2}, {ARR_SYNTH, PARAM3}, {ARR_FILTER, OCTAVE}},
+  // page 2: waveform & voice
+  {{ARR_SYNTH,   WAVEFORM}, {ARR_SYNTH,   INSTRUMENT},      {ARR_FILTER, DETUNE},        {ARR_SYNTH,   TYPE}},
+  // page 3: DAHDSR params
+  {{ARR_PARAM,   ATTACK},  {ARR_PARAM,   DECAY},     {ARR_PARAM, SUSTAIN},        {ARR_PARAM,  RELEASE}}
+};  
+
+
+
+
+struct FilterTarget {
+  SettingArray arr;
+  uint8_t idx;
+};
+
+FilterTarget defaultFastFilter[NUM_CHANNELS]; // one per channel
 
 
 EXTMEM arraysampler _samplers[9];
@@ -747,7 +831,6 @@ AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filter
 AudioEffectBitcrusher *bitcrushers[15] = { nullptr, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, nullptr, nullptr, &bitcrusher11, nullptr, &bitcrusher13, &bitcrusher14 };
 AudioEffectFreeverb *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, nullptr, nullptr, &freeverb7, &freeverb8, 0, 0, &freeverb11, nullptr, &freeverb13, &freeverb14 };
 AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, nullptr, nullptr, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-//AudioEffectFlange *flangers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &flange11, &flange12, &flange13, &flange14 };
 AudioMixer4 *waveformmixers[15] = { nullptr, &BDMixer, &SNMixer, &HHMixer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
 
 
@@ -929,7 +1012,7 @@ void testDrums() {
 
 void switchMode(Mode *newMode) {
   updateLastPage();
-
+  
   drawNoSD_hasRun = false;
 
   unpaintMode = false;
@@ -952,6 +1035,8 @@ void switchMode(Mode *newMode) {
   memcpy(oldButtons, buttons, sizeof(buttons));  // ADDED
 
   if (newMode != currentMode) {
+
+    
     currentMode = newMode;
     // Set last saved values for encoders
 
@@ -980,9 +1065,11 @@ void switchMode(Mode *newMode) {
       Encoder[3].writeMax((int32_t)999);  //maxval
       Encoder[3].writeMin((int32_t)1);    //minval
     }
-
+    
     if (currentMode == &filterMode) {
       //REVERSE left encoder
+
+      initSliders(filterPage);
       Encoder[0].begin(
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
@@ -998,7 +1085,7 @@ void switchMode(Mode *newMode) {
 
 
 void checkFastRec() {
-if (SMP.currentChannel>8) return; 
+if (SMP.currentChannel>8) return;
 
   if ((currentMode == &draw || currentMode == &singleMode) && SMP_FAST_REC == 2 || SMP_FAST_REC == 3) {
     bool pinsConnected = (digitalRead(2) == LOW);
@@ -1214,7 +1301,16 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
+
+  if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0010"
+setDefaultFilterFromSlider(filterPage,3);
+  }
+
+
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010"
+setDefaultFilterFromSlider(filterPage,2);
+
+/*
     if (fxType == 0) {
       defaultFilter[SMP.currentChannel] = (FilterType)SMP.selectedParameter;  // Cast needed if SMP.selectedParameter is int
     } else if (fxType == 1) {
@@ -1224,8 +1320,10 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     } else if (fxType == 4) {
       defaultFilter[SMP.currentChannel] = (FilterType)SMP.selectedSynth;  // Cast needed
     }
+    */
   }
 
+/*
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
     setDahdsrDefaults(false);
     currentFilter = activeParameterType[SMP.selectedParameter];
@@ -1240,15 +1338,16 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
   }
 
-  if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010" (duplicate, see above)
-    //cycleFilterTypes(2);
-  }
+  */
+
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
-    //cycleFilterTypes(1);
+    setDefaultFilterFromSlider(filterPage,1);
   }
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+  setDefaultFilterFromSlider(filterPage,0);
+  /*
     if (!SMP.singleMode) {
       switchMode(&draw);
     } else {
@@ -1259,7 +1358,8 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     
     if (defaultFilter[SMP.currentChannel] < sizeof(activeFilterType) / sizeof(activeFilterType[0]) && SMP.filter_settings[SMP.currentChannel][defaultFilter[SMP.currentChannel]] >= Encoder[2].readMin() && SMP.filter_settings[SMP.currentChannel][defaultFilter[SMP.currentChannel]] <= Encoder[2].readMax()) {
       Encoder[2].writeCounter((int32_t)SMP.filter_settings[SMP.currentChannel][defaultFilter[SMP.currentChannel]]);
-    }
+    }*/
+
   }
 
   if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
@@ -1626,7 +1726,7 @@ void setup() {
   FastLED.setBrightness(ledBrightness);
 
   initSoundChip();
-  initSamples();
+  
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
 
   if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
@@ -1636,14 +1736,15 @@ void setup() {
   delay(50);
   mixer0.gain(1, 0.05);  //PREV Sound
   playSdWav1.play("intro/016.wav");
-
+  
+  
   runAnimation();
   playSdWav1.stop();
   EEPROMgetLastFiles();
   loadMenuFromEEPROM();
   loadSamplePack(samplePackID, true);
   SMP.bpm = 100.0;
-
+  initSamples();
   //playTimer.priority(118);
   playTimer.begin(playNote, playNoteInterval);
   //midiTimer.begin(checkMidi, playNoteInterval);
@@ -1881,7 +1982,7 @@ void checkTouchInputs() {
     }
 
     // SWITCH_2
-    if (touchState[1] && !lastTouchState[1]) {
+    if (currentMode != &filterMode && touchState[1] && !lastTouchState[1]) {
       if (currentMode == &draw || currentMode == &singleMode) {
         switchMode(&menu);
       } else {  // If in any other mode (e.g. menu, set_wav, etc.) and Switch 2 is touched, go to draw mode.
@@ -1941,7 +2042,7 @@ void checkSingleTouch() {
   lastTouchState[0] = touchState[0];
 }
 
-void checkMenuTouch() {
+void _checkMenuTouch() {
   int touchValue = fastTouchRead(SWITCH_2);
 
   // Determine if the touch is above the threshold
@@ -2045,7 +2146,7 @@ void loop() {
 
 
   checkEncoders();
-  if (currentMode != &velocity) drawCursor();
+  if (currentMode != &velocity && currentMode != &filterMode) drawCursor();
   checkButtons();
   checkTouchInputs();
   checkPendingSampleNotes();
@@ -2068,7 +2169,10 @@ void loop() {
 
   // Set stateMashine
   if (currentMode->name == "FILTERMODE") {
-    setFilters();
+    //setFilters();
+
+    setNewFilters();
+
   } else if (currentMode->name == "VOLUME_BPM") {
     setVolume();
   } else if (currentMode->name == "VELOCITY") {
