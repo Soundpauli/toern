@@ -404,6 +404,7 @@ AudioConnection        patchCord224(mixerPlay, 0, mixer_stereoR, 0);
 AudioConnection        patchCord225(mixerPlay, 0, mixer_stereoL, 0);
 AudioConnection        patchCord226(mixer_stereoR, 0, i2s1, 0);
 AudioConnection        patchCord227(mixer_stereoL, 0, i2s1, 1);
+AudioConnection        patchCord228(audioInput, 0, mixer_end, 3);
 
 // Control Nodes (all control nodes (no inputs or outputs))
 AudioControlSGTL5000     sgtl5000_1;     //xy=3827,1361
@@ -1105,12 +1106,12 @@ float processSynthAdjustment(SynthTypes synthType, int index, int encoder) {
   int mappedValue;
   
     const int maxIndex = 64;
-    if (SMP.synth_settings[SMP.currentChannel][synthType] > maxIndex) {
-      SMP.synth_settings[SMP.currentChannel][synthType] = maxIndex;
-      currentMode->pos[3] = SMP.synth_settings[SMP.currentChannel][synthType];
+    if (SMP.synth_settings[GLOB.currentChannel][synthType] > maxIndex) {
+      SMP.synth_settings[GLOB.currentChannel][synthType] = maxIndex;
+      currentMode->pos[3] = SMP.synth_settings[GLOB.currentChannel][synthType];
       Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
     }
-    mappedValue = mapf(SMP.synth_settings[SMP.currentChannel][synthType], 0, maxIndex, 1, maxIndex + 1); 
+    mappedValue = mapf(SMP.synth_settings[GLOB.currentChannel][synthType], 0, maxIndex, 1, maxIndex + 1); 
   
   //Serial.print(synthType);
   //Serial.print(" #####---->");

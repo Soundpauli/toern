@@ -7,59 +7,17 @@ unsigned long lastInteraction = millis();  // global timestamp
 bool showingAny = false;
 bool showSingleFilter[4] = { false, false, false, false };
 
-// 1) Define your per‐page, per‐slot filter names:
-static const char* filterNames[4][4] = {
-  { "PASS", "FREQ", "REVB", "BITC" },  // page 0
-  { "CUTF", "RESZ", "FREQ", "OCTV" },  // page 1
-  { "WAVE", "INST", "TUNE", "LEN" },   // page 2
-  { "ATTC", "DCAY", "SUST", "RLSE" }   // page 3
-};
 
-
-
-static const CRGB filterColors[4][4] = {
-  // ─── Page 0: RED to ORANGE (Hue 0–30)
-  {
-    CHSV(0, 255, 255),   // Red
-    CHSV(10, 255, 255),  // Red-Orange
-    CHSV(20, 255, 255),  // Orange
-    CHSV(30, 255, 255)   // Orange-Yellow
-  },
-
-  // ─── Page 1: BLUE to CYAN (Hue 160–200)
-  {
-    CHSV(160, 255, 255),  // Blue
-    CHSV(170, 255, 255),  // Blue-Cyan
-    CHSV(185, 255, 255),  // Cyan
-    CHSV(200, 255, 255)   // Aqua
-  },
-
-  // ─── Page 2: GREEN to LIME (Hue 90–130)
-  {
-    CHSV(90, 255, 255),   // Lime
-    CHSV(100, 255, 255),  // Yellow-Green
-    CHSV(115, 255, 255),  // Green
-    CHSV(130, 255, 255)   // Blue-Green
-  },
-
-  {
-    CHSV(220, 255, 255),  // Indigo Violet
-    CHSV(235, 255, 255),  // Purple
-    CHSV(250, 255, 255),  // Orchid
-    CHSV(255, 255, 150)   // Fuchsia
-  }
-};
-
-uint8_t scaleToDisplay(const SliderMeta& meta, uint8_t val) {
+uint8_t scaleToDisplay(const SliderDefEntry& meta, uint8_t val) {
   return (meta.displayRange < meta.maxValue) ? constrain(mapf(val, 0, meta.maxValue, 0, meta.displayRange - 1), 0, meta.displayRange - 1) : val;
 }
 
-uint8_t scaleFromDisplay(const SliderMeta& meta, uint8_t val) {
+uint8_t scaleFromDisplay(const SliderDefEntry& meta, uint8_t val) {
   return (meta.displayRange < meta.maxValue) ? constrain(mapf(val, 0, meta.displayRange - 1, 0, meta.maxValue), 0, meta.maxValue) : val;
 }
 
 
-#define MAX_FILTER_RESOLUTION 32
+#define MAX_FILTER_RESOLUTION 32.0
 #define FILTER_BYPASS MAX_FILTER_RESOLUTION
 #define FILTER_WET 0
 #define FILTER_MID (MAX_FILTER_RESOLUTION / 2)
@@ -67,7 +25,7 @@ uint8_t scaleFromDisplay(const SliderMeta& meta, uint8_t val) {
 
 // Read raw 0..MAX_FILTER_RESOLUTION setting directly
 uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
-  if (idx < 0) return 0;
+  //if (idx < 0) return 0;
   uint8_t raw = 0;
   switch (arr) {
     case ARR_FILTER: raw = constrain(SMP.filter_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
@@ -104,24 +62,8 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
 }
 
 
-// Blended LOW+HIGH readback for page 0 slider 0
-uint8_t readLowHighBlend(uint8_t chan) {
-  int lp = SMP.filter_settings[chan][LOWPASS];
-  int hp = SMP.filter_settings[chan][HIGHPASS];
-  int val = 0;
 
-  if (hp == FILTER_BYPASS) {
-    val = mapf(lp, FILTER_WET, FILTER_BYPASS, 0, FILTER_MID);
-  } else if (lp == FILTER_BYPASS) {
-    val = mapf(hp, FILTER_BYPASS, FILTER_WET, FILTER_MID, MAX_FILTER_RESOLUTION);
-  } else {
-    //Serial.printf("[Debug] readLowHighBlend: ambiguous state LP=%d HP=%d\n", lp, hp);
-    val = FILTER_MID;
-  }
-
-  return constrain(val, 0, MAX_FILTER_RESOLUTION);
-}
-void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderMeta& meta) {
+void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEntry& meta) {
   const uint8_t x = (encoderIndex < 2) ? 10 : 2;
   const uint8_t y = 5;
   const uint8_t w = 6, h = 7;
@@ -143,38 +85,27 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderMeta& 
   }
 
   // ─── Color according to value ───
-  CRGB baseColor = filterColors[filterPage][encoderIndex];
+  uint8_t chan = GLOB.currentChannel;
+  CRGB baseColor = filterColors[filterPage[chan]][encoderIndex];
   CRGB dimmed = baseColor;
   dimmed.nscale8(64);
   uint8_t blendVal = mapf(val, 0, meta.maxValue, 0, 255);
-  CRGB textColor = blend(CRGB::Black, dimmed, blendVal);
+  CRGB textColor = blend(CRGB::Green, CRGB::Red, blendVal);
 
   drawText(buf, x, y, textColor);
 }
 
 
-void drawFireBackground(uint16_t timeBase = millis()) {
-  for (uint8_t x = 0; x < 16; ++x) {
-    for (uint8_t y = 0; y < 16; ++y) {
-      // Use a unique offset for each coordinate
-      uint8_t noise = inoise8(x * 12, y * 24, timeBase / 4);  // smooth flow
 
-      // Map noise to fire hue (0–30) and scale brightness low
-      uint8_t brightness = scale8(noise, 24);   // dim! (0–255 scaled to 0–24)
-      uint8_t fireHue = mapf(y, 0, 15, 0, 25);  // hue gradient from red to yellow
-
-      // Optional: fade bottom brighter
-      if (y > 12) brightness = scale8(brightness, 150);  // boost base
-
-      CRGB fireColor = CHSV(fireHue, 255, brightness);
-      light(x + 1, y + 1, fireColor);  // your coords are 1-based
-    }
-  }
-}
-void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRGB baseColor, bool lowHighSlider = false, uint8_t sliderIndex = 0) {
+void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRGB baseColor, bool lowHighSlider = false, uint8_t sliderIndex = 0, uint8_t page = 0, bool switchtype = false) {
   const uint8_t displayResolution = 10;
-  uint8_t displayVal = mapf(val, 0, maxVal, 1, displayResolution);
-  displayVal = constrain(displayVal, 1, displayResolution);
+  uint8_t displayVal;
+  if (switchtype) {
+    displayVal = (val == 0 ? 1 : displayResolution);
+  } else {
+    displayVal = mapf(val, 0, maxVal, 1, displayResolution);
+    displayVal = constrain(displayVal, 1, displayResolution);
+  }
 
   // ─── Animated Pulse Modulation ───
   // Offset each slider with a phase shift
@@ -188,12 +119,29 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
   uint8_t blendVal = mapf(val, 0, maxVal, 0, 255);
   CRGB color = blend(CRGB::Black, dimmed, blendVal);
 
+  // Determine if this slider is the defaultFastFilter for the current channel
+  bool isDefaultFast = false;
+  uint8_t chan = GLOB.currentChannel;
+  if (chan < NUM_CHANNELS) {
+    if (sliderDef[chan][page][sliderIndex].arr == defaultFastFilter[chan].arr &&
+        sliderDef[chan][page][sliderIndex].idx == defaultFastFilter[chan].idx) {
+      isDefaultFast = true;
+    }
+  }
+
   for (uint8_t y = 1; y <= displayResolution; ++y) {
     CRGB c;
     if (y == displayVal) {
-      c = CRGB::White;
+      if (isDefaultFast) {
+        c = CRGB(255, 255, 0); // Yellow
+      } else {
+        c = CRGB::White;
+      }
+    } else if (switchtype) {
+      // For switchtype, val is 0 or 1, displayVal is 1 or displayResolution
+      c = (y < displayVal) ? CRGB::Green : CRGB::Red;
     } else if (lowHighSlider) {
-      c = (y < displayVal) ? CRGB::Red : CRGB::Yellow;
+      c = (y < displayVal) ? CRGB::Green : CRGB::Red;
     } else {
       c = (y < displayVal) ? color : CRGB::Black;
     }
@@ -204,16 +152,15 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
 }
 
 
-void initSliders(uint8_t page) {
-  showFilterNames();
+void initSliders(uint8_t page, uint8_t chan) {
+  showFilterNames(chan);
 
   Serial.print("[Debug] Switched to slider page: ");
   Serial.println(page);
-  uint8_t chan = SMP.currentChannel;
-
   for (uint8_t i = 0; i < 4; ++i) {
-    auto& d = sliderDef[page][i];
-    const auto& meta = sliderMeta[page][i];
+    auto& d = sliderDef[chan][page][i];
+    if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip value change
+    const auto& meta = sliderDef[chan][page][i];
     uint8_t val = 0;
 
     if (d.arr != ARR_NONE) {
@@ -221,35 +168,36 @@ void initSliders(uint8_t page) {
         Serial.printf("[Warning] init skip invalid ARR_PARAM idx %d\n", d.idx);
         continue;
       }
-      if (page == 0 && i == 0) {
-        val = readLowHighBlend(chan);
-      } else {
-        val = readSetting(d.arr, d.idx, chan);
-      }
+
+      val = readSetting(d.arr, d.idx, chan);
+      
+      
     }
 
     val = constrain(val, 0, meta.maxValue);
     Serial.printf("[Debug] Encoder %u page %u channel %u -> value %u\n", i, page, chan, val);
     currentMode->pos[i] = val;
     Encoder[i].writeMax((int32_t)(meta.maxValue));
-    //Encoder[i].writeMax((int32_t)meta.maxValue); // Prevent encoder going out of bounds
     Encoder[i].writeCounter((int32_t)val);
   }
 
-  showFilterPages();
+  showFilterPages(chan);
 }
 
 
 void slider(uint8_t page) {
   unsigned long now = millis();
   bool activeInteraction = (now - lastInteraction < 600);
-
+  uint8_t chan = GLOB.currentChannel;
   for (uint8_t i = 0; i < 4; ++i) {
-    const auto& meta = sliderMeta[page][i];
+    const auto& def = sliderDef[chan][page][i];
+    if (def.arr == ARR_NONE && def.idx == -1) continue; // Skip rendering
+    const auto& meta = sliderDef[chan][page][i];
     uint8_t val = constrain(currentMode->pos[i], 0, meta.maxValue);
-    bool isLowHigh = (page == 0 && i == 0);
-
-    // ❌ Skip drawing if interaction is active and this isn't the last touched encoder
+    // lowHighSlider is true if (old logic) OR if maxValue == 2
+    bool isLowHigh = (def.arr == ARR_FILTER && def.idx == PASS); // or even others
+    bool switchtype = (def.arr == ARR_FILTER && def.idx == EFX) || (def.arr == ARR_FILTER && def.idx == ACTIVE); // or even others
+    // Skip drawing if interaction is active and this isn't the last touched encoder
     if (activeInteraction && i != lastChangedEncoder) {
       // Clear the slider area so it disappears
       for (uint8_t y = 1; y <= 10; ++y) {
@@ -259,8 +207,8 @@ void slider(uint8_t page) {
       continue;
     }
 
-    // ✅ Draw slider
-    //drawVerticalSlider( sliderCols[i][0], sliderCols[i][1], val, meta.maxValue, filterColors[page][i], isLowHigh);
+    //  Draw slider
+
     drawVerticalSlider(
       sliderCols[i][0],
       sliderCols[i][1],
@@ -268,13 +216,15 @@ void slider(uint8_t page) {
       meta.maxValue,
       filterColors[page][i],
       isLowHigh,
-      i  // <- for animation phase offset
+      i, // sliderIndex
+      page, // pass page
+      switchtype // switchtype (default for now)
     );
     showSingleFilter[i] = false;
     if (i == lastChangedEncoder && activeInteraction) {
       drawSliderName(sliderCols[i][0],
                      sliderCols[i][1],
-                     filterNames[page][i],
+                     def.name,
                      filterColors[page][i]);
       showSingleFilter[i] = true;
     }
@@ -290,12 +240,12 @@ void slider(uint8_t page) {
   }
 
   if (allFalse) {
-    showFilterNames();
+    showFilterNames(GLOB.currentChannel);
   }
 }
 
 void printSliderDefTarget(uint8_t page, uint8_t encoder) {
-  const auto& def = sliderDef[page][encoder];
+  const auto& def = sliderDef[GLOB.currentChannel][page][encoder];
   const char* arrName = "UNKNOWN";
   const char* idxName = "??";
 
@@ -309,7 +259,7 @@ void printSliderDefTarget(uint8_t page, uint8_t encoder) {
 
   // Use existing `filterNames` array for the label
   if (encoder < 4 && page < 4) {
-    idxName = filterNames[page][encoder];
+    idxName = def.name;
   }
 
   Serial.printf("{%s, %s}\n", arrName, idxName);
@@ -317,8 +267,8 @@ void printSliderDefTarget(uint8_t page, uint8_t encoder) {
 
 
 void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
-  auto& def = sliderDef[page][encoder];
-  uint8_t chan = SMP.currentChannel;
+  auto& def = sliderDef[GLOB.currentChannel][page][encoder];
+  uint8_t chan = GLOB.currentChannel;
 
   switch (def.arr) {
     case ARR_FILTER:
@@ -343,6 +293,12 @@ void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
       }
       break;
 
+    case ARR_DRUM:
+      defaultFastFilter[chan].arr = def.arr;
+      defaultFastFilter[chan].idx = def.idx;
+      //Serial.printf("[Default] DRUM set: ch=%u idx=%u\n", chan, def.idx);
+      break;
+
     default:
       Serial.printf("[Skip] Not assignable default: arr=%d\n", def.arr);
       break;
@@ -350,175 +306,108 @@ void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
 
   Serial.print("[Default] Set defaultFastFilter: ");
   printSliderDefTarget(page, encoder);
+  
+  // Update encoder colors to reflect the new default fast filter
+  updateFilterEncoderColors();
 }
 
 void processAdjustments_new(uint8_t page) {
   Serial.print("[Debug] processAdjustments_new page: ");
   Serial.println(page);
 
-  uint8_t chan = SMP.currentChannel;
+  uint8_t chan = GLOB.currentChannel;
 
   for (uint8_t i = 0; i < 4; ++i) {
-    auto& d = sliderDef[page][i];
-    if (d.arr == ARR_NONE) continue;
+    auto& d = sliderDef[chan][page][i];
+    if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip if ARR_NONE
     if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) {
       Serial.printf("[Warning] Skipping ARR_PARAM idx %d - out of bounds\n", d.idx);
       continue;
     }
 
-    const auto& meta = sliderMeta[page][i];
+    const auto& meta = sliderDef[chan][page][i];
     uint8_t rawVal = constrain(currentMode->pos[i], 0, meta.maxValue);
     uint8_t val = scaleToDisplay(meta, rawVal);
-
-    uint8_t prev = (page == 0 && i == 0)
-                     ? readLowHighBlend(chan)
-                     : readSetting(d.arr, d.idx, chan);
-
+    uint8_t prev = readSetting(d.arr, d.idx, chan);
+  
     if (val == prev) continue;
 
-    Serial.printf("[Debug] Applying adj page %u slot %u arr %d idx %d raw %u -> display %u\n",
-                  page, i, d.arr, d.idx, rawVal, val);
+    // Print debug output
+    const char* arrType = (d.arr == ARR_FILTER) ? "ARR_FILTER" : (d.arr == ARR_SYNTH) ? "ARR_SYNTH" : (d.arr == ARR_PARAM) ? "ARR_PARAM" : (d.arr == ARR_DRUM) ? "ARR_DRUM" : "ARR_NONE";
+    Serial.printf("[Debug] %s:%s raw %u -> display %u\n", arrType, d.name, rawVal, val);
 
     float mappedVal = 0;
 
     switch (d.arr) {
       case ARR_FILTER:
-        if (page == 0 && i == 0) {
-          int lp = 0, hp = 0;
-          if (val <= FILTER_MID) {
-            lp = mapf(val, 0, FILTER_MID, FILTER_WET, FILTER_BYPASS);
-            hp = FILTER_BYPASS;
-          } else {
-            lp = FILTER_BYPASS;
-            hp = mapf(val, FILTER_MID, MAX_FILTER_RESOLUTION, FILTER_BYPASS, FILTER_WET);
-          }
-          SMP.filter_settings[chan][LOWPASS] = constrain(lp, 0, MAX_FILTER_RESOLUTION);
-          SMP.filter_settings[chan][HIGHPASS] = constrain(hp, 0, MAX_FILTER_RESOLUTION);
-          Serial.printf("[Debug] LP=%d HP=%d\n", lp, hp);
-        } else {
-          SMP.filter_settings[chan][d.idx] = val;
-          mappedVal = processFilterAdjustment(d.idx, chan, i);
-          updateFilterValue(d.idx, chan, mappedVal);
-        }
+          SMP.filter_settings[chan][d.idx] = currentMode->pos[i];
+          setFilters(d.idx, chan, false);
         break;
 
       case ARR_SYNTH:
-        SMP.synth_settings[chan][d.idx] = val;
-        mappedVal = processSynthAdjustment(d.idx, chan, i);
-        updateSynthValue(d.idx, chan, mappedVal);
+        SMP.synth_settings[chan][d.idx] = currentMode->pos[i];
+        
         break;
 
       case ARR_DRUM:
-        SMP.drum_settings[chan][d.idx] = val;
-        mappedVal = processDrumAdjustment(d.idx, chan, i);
-        updateDrumValue(d.idx, chan, mappedVal);
+        SMP.drum_settings[chan][d.idx] =  currentMode->pos[i];
+        setDrums(d.idx, chan);
         break;
 
       case ARR_PARAM:
-        if (SMP.param_settings[chan][d.idx] == val) continue;
-        SMP.param_settings[chan][d.idx] = val;
+        SMP.param_settings[chan][d.idx] = currentMode->pos[i];
+        setParams(d.idx, chan);
+
         // Optional: process/update param visuals here
         break;
 
       default:
         break;
     }
+    
   }
+  
+
+  if (GLOB.currentChannel == 11) updateSynthVoice(11);
+
 }
 
-// Apply adjustments back to SMP arrays based on sliders and current page (only on change)
-void processAdjustments_new2(uint8_t page) {
-  Serial.print("[Debug] processAdjustments_new page: ");
-  Serial.println(page);
-  uint8_t chan = SMP.currentChannel;
-  for (uint8_t i = 0; i < 4; ++i) {
-    auto& d = sliderDef[page][i];
-    if (d.arr == ARR_NONE) continue;
 
-    if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) {
-      Serial.printf("[Warning] Skipping ARR_PARAM idx %d - out of bounds\n", d.idx);
-      continue;
-    }
 
-    //    uint8_t val = constrain(currentMode->pos[i], 0, MAX_FILTER_RESOLUTION);
 
-    const auto& meta = sliderMeta[page][i];
-    uint8_t val = constrain(currentMode->pos[i], 0, meta.maxValue);
-
-    uint8_t prev = (page == 0 && i == 0) ? readLowHighBlend(chan) : readSetting(d.arr, d.idx, chan);
-    if (val == prev) continue;
-
-    Serial.printf("[Debug] Applying adj page %u slot %u arr %d idx %d raw %u\n", page, i, d.arr, d.idx, val);
-    float mappedVal = 0;
-
-    switch (d.arr) {
-      case ARR_FILTER:
-        if (page == 0 && i == 0) {
-          int lp = 0, hp = 0;
-          if (val <= FILTER_MID) {
-            lp = mapf(val, 0, FILTER_MID, FILTER_WET, FILTER_BYPASS);
-            hp = FILTER_BYPASS;
-          } else {
-            lp = FILTER_BYPASS;
-            hp = mapf(val, FILTER_MID, MAX_FILTER_RESOLUTION, FILTER_BYPASS, FILTER_WET);
-          }
-          SMP.filter_settings[chan][LOWPASS] = constrain(lp, 0, MAX_FILTER_RESOLUTION);
-          SMP.filter_settings[chan][HIGHPASS] = constrain(hp, 0, MAX_FILTER_RESOLUTION);
-          Serial.printf("[Debug] LP=%d HP=%d\n", lp, hp);
-        } else {
-          SMP.filter_settings[chan][d.idx] = val;
-          mappedVal = processFilterAdjustment(d.idx, chan, i);
-          updateFilterValue(d.idx, chan, mappedVal);
-        }
-        break;
-      case ARR_SYNTH:
-        SMP.synth_settings[chan][d.idx] = val;
-        mappedVal = processSynthAdjustment(d.idx, chan, i);
-        updateSynthValue(d.idx, chan, mappedVal);
-        break;
-      case ARR_DRUM:
-        SMP.drum_settings[chan][d.idx] = val;
-        mappedVal = processDrumAdjustment(d.idx, chan, i);
-        updateDrumValue(d.idx, chan, mappedVal);
-        break;
-      case ARR_PARAM:
-        if (SMP.param_settings[chan][d.idx] == val) continue;
-        SMP.param_settings[chan][d.idx] = val;
-        //mappedVal = processParameterAdjustment(d.idx, chan);
-        //updateParameterValue(d.idx, chan, mappedVal);
-        break;
-      default:
-        break;
-    }
-  }
-}
 
 // Handle touch-triggered page switching and conditional update propagation
 void setNewFilters() {
   int touchValue = fastTouchRead(SWITCH_2);
   static bool lastTouch = false;
   bool currTouch = (touchValue > touchThreshold);
+  uint8_t chan = GLOB.currentChannel;
   if (currTouch && !lastTouch) {
-    filterPage = (filterPage + 1) % 4;
-    initSliders(filterPage);
+    // Use filterPageCount[chan] for wrapping
+    filterPage[chan] = (filterPage[chan] + 1) % filterPageCount[chan];
+    filterDrawActive = false;
+    filterDrawEndTime=0;
+    initSliders(filterPage[chan], chan);
+    
+    // Update encoder colors for the new filter page and default fast filter
+    updateFilterEncoderColors();
   }
   lastTouch = currTouch;
 
   bool anyChanged = false;
-  uint8_t chan = SMP.currentChannel;
   for (uint8_t i = 0; i < 4; ++i) {
-    auto& d = sliderDef[filterPage][i];
-    if (d.arr == ARR_NONE) continue;
+    auto& d = sliderDef[chan][filterPage[chan]][i];
+    if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip if ARR_NONE
     if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) continue;
     uint8_t val = constrain(currentMode->pos[i], 0, MAX_FILTER_RESOLUTION);
-    uint8_t prev = (filterPage == 0 && i == 0) ? readLowHighBlend(chan) : readSetting(d.arr, d.idx, chan);
+    uint8_t prev = readSetting(d.arr, d.idx, chan);
     if (val != prev) {
       showSingleFilter[i] = true;
 
       drawSliderName(sliderCols[i][0],
                      sliderCols[i][1],
-                     filterNames[filterPage][i],
-                     filterColors[filterPage][i]);
+                     d.name,
+                     filterColors[filterPage[chan]][i]);
 
 
       anyChanged = true;
@@ -529,18 +418,18 @@ void setNewFilters() {
   }
 
   if (anyChanged) {
-    processAdjustments_new(filterPage);
-    showFilterPages();
+    processAdjustments_new(filterPage[chan]);
+    showFilterPages(chan);
   }
 
-  showFilterPages();
+  showFilterPages(chan);
 }
 
-void showFilterPages() {
+void showFilterPages(uint8_t chan) {
   FastLED.clear();
-  //drawFireBackground();  // 🔥 Background first
+  
 
-  slider(filterPage);
+  slider(filterPage[chan]);
 
 
   unsigned long now = millis();
@@ -548,10 +437,10 @@ void showFilterPages() {
 
   // ─── overlay corner values ───────────────────
   //for (uint8_t i = 0; i < 4; ++i) {
-  if (now - lastInteraction < 600) {
+  if (now - lastInteraction < 600 && lastChangedEncoder >= 0 && lastChangedEncoder < 4) {
     uint8_t val = constrain(currentMode->pos[lastChangedEncoder],
-                            0, sliderMeta[filterPage][lastChangedEncoder].maxValue);
-    drawCornerValueCustom(lastChangedEncoder, val, sliderMeta[filterPage][lastChangedEncoder]);
+                            0, sliderDef[chan][filterPage[chan]][lastChangedEncoder].maxValue);
+    drawCornerValueCustom(lastChangedEncoder, val, sliderDef[chan][filterPage[chan]][lastChangedEncoder]);
   }
 
   FastLED.show();
@@ -589,13 +478,46 @@ void drawSliderValue(uint8_t x0, uint8_t x1, uint8_t val) {
 }
 
 
-void showFilterNames() {
-  for (uint8_t i = 0; i < 4; ++i) {
-    // pick the first char of the name as your abbreviation
-    char abbrev[2] = { filterNames[filterPage][i][0], '\0' };
-    drawText(abbrev,
-             sliderCols[i][0],
-             12,
-             filterColors[filterPage][i]);
+void showFilterNames(uint8_t chan) {
+    uint8_t page = filterPage[chan];
+    for (uint8_t i = 0; i < 4; ++i) {
+        const SliderDefEntry& def = sliderDef[chan][page][i];
+        if (def.arr == ARR_NONE && def.idx == -1) continue;
+        char abbrev[2] = { def.name[0], '\0' };
+        CRGB color = filterColors[page][i];
+        drawText(abbrev, sliderCols[i][0], 12, color);
+    }
+}
+
+extern SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
+extern uint8_t filterPage[NUM_CHANNELS];
+
+void updateFilterEncoderColors() {
+  if (currentMode == &filterMode) {
+    uint8_t chan = GLOB.currentChannel;
+    uint8_t page = filterPage[chan];
+    
+    for (int i = 0; i < NUM_ENCODERS; i++) {
+      CRGB color;
+      
+      // Check if this encoder controls the default fast filter
+      bool isDefaultFast = false;
+      if (chan < NUM_CHANNELS) {
+        if (sliderDef[chan][page][i].arr == defaultFastFilter[chan].arr &&
+            sliderDef[chan][page][i].idx == defaultFastFilter[chan].idx) {
+          isDefaultFast = true;
+        }
+      }
+      
+      if (isDefaultFast) {
+        color = CRGB(255, 255, 0); // Bright yellow for default fast filter
+      } else {
+        color = filterColors[page][i]; // Normal filter page color
+      }
+      
+      Encoder[i].writeRGBCode(CRGBToUint32(color));
+    }
   }
 }
+
+// Handle touch-triggered page switching and conditional update propagation

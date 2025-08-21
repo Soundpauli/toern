@@ -23,13 +23,13 @@ void checkMidi() {
         // Use the actual velocity from the message (if zero, treat as note off)
         velocity = MIDI.getData2() ? MIDI.getData2() : 127;
         
-        //handleNoteOn(SMP.currentChannel, pitch, velocity);
+        //handleNoteOn(GLOB.currentChannel, pitch, velocity);
         break;
 
       case midi::NoteOff:
         pitch = MIDI.getData1();
         velocity = MIDI.getData2();
-        handleNoteOff(SMP.currentChannel, pitch - 60, velocity);
+        handleNoteOff(GLOB.currentChannel, pitch - 60, velocity);
         break;
 
       case midi::Clock:
@@ -211,8 +211,13 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       // Serial.println("myClock: Slave Start - pendingStartOnBar & pulseCount == 0");
       pendingStartOnBar = false;
       isNowPlaying = true;
-      beat = 1;
-      SMP.page = 1;
+      if (SMP_PATTERN_MODE) {
+        beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+        GLOB.page = GLOB.edit;  // Keep the current page
+      } else {
+        beat = 1;
+        GLOB.page = 1;
+      }
       playStartTime = millis();
     }
 
@@ -269,8 +274,13 @@ void myClock2(unsigned long now) {
         // bar-1 just hit!
         pendingStartOnBar = false;
         isNowPlaying = true;
-        beat = 1;
-        SMP.page = 1;
+        if (SMP_PATTERN_MODE) {
+          beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+          GLOB.page = GLOB.edit;  // Keep the current page
+        } else {
+          beat = 1;
+          GLOB.page = 1;
+        }
         playStartTime = millis();
       }
 
@@ -325,7 +335,7 @@ void handleStop() {
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   //Serial.println(pitch);
   // For persistent channels (11-14), use the actual MIDI channel
-  if (!MIDI_VOICE_SELECT) ch = SMP.currentChannel;
+  if (!MIDI_VOICE_SELECT) ch = GLOB.currentChannel;
 
   if (ch < 1 || ch > 16) return;
   pressedKeyCount[ch]++;  // Increment count for this channel
@@ -340,7 +350,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   if (livenote >= 1 && livenote <= 16) {
 
     if (isNowPlaying) {
-      if (SMP.singleMode) {
+      if (GLOB.singleMode) {
         // Store for grid write on next beat
         pendingNotes.push_back({ .pitch = pitch,
                                  .velocity = velocity,
@@ -362,7 +372,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
     }
     else{ 
     // Live mode: play note and show light
-    //light(mapXtoPageOffset(SMP.x), livenote, CRGB(255, 255, 255));
+    //light(mapXtoPageOffset(GLOB.x), livenote, CRGB(255, 255, 255));
     //FastLED.show();
 
     if (ch < 9) {
@@ -424,8 +434,13 @@ void handleStart() {
   //Serial.println("MIDI Start Received");
 
   // 1) reset everything for beat 1
-  beat           = 1;
-  SMP.page       = 1;
+  if (SMP_PATTERN_MODE) {
+    beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+    GLOB.page = GLOB.edit;  // Keep the current page
+  } else {
+    beat = 1;
+    GLOB.page = 1;
+  }
   deleteActiveCopy();
   isNowPlaying   = true;
   beatStartTime = millis();
@@ -446,8 +461,13 @@ void handleStart2() {
    // ---------- SLAVE MODE: start immediately ----------
   if (!MIDI_CLOCK_SEND) {
     // reset to bar‐1
-    beat     = 1;
-    SMP.page = 1;
+    if (SMP_PATTERN_MODE) {
+      beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+      GLOB.page = GLOB.edit;  // Keep the current page
+    } else {
+      beat = 1;
+      GLOB.page = 1;
+    }
     // turn playback on
     isNowPlaying  = true;
     beatStartTime = millis();

@@ -164,6 +164,7 @@ AudioEffectEnvelope             envelope0;      //xy=3524,426
 AudioPlaySdWav                  playSdWav1;     //xy=3524,474
 AudioMixer4                     mixer_end;      //xy=3518,1059
 AudioInputI2S                   audioInput;     //xy=3556,1189
+AudioAmplifier                  audioInputAmp;  //xy=3650,1189
 AudioMixer4                     mixer0;         //xy=3722,478
 AudioAnalyzePeak                peak1;          //xy=3727,541
 AudioMixer4                     mixerPlay;      //xy=3714,1048
@@ -300,15 +301,12 @@ AudioConnection        patchCord123(sound6, 0, envelope6, 0);
 AudioConnection        patchCord124(sound7, 0, envelope7, 0);
 AudioConnection        patchCord125(filtermixer11, 0, freeverb11, 0);
 AudioConnection        patchCord126(filtermixer11, 0, synthmixer11, 3);
-AudioConnection        patchCord127(filtermixer11, 0, synthmixer11, 0);
 AudioConnection        patchCord128(filtermixer13, 0, freeverb13, 0);
 AudioConnection        patchCord129(filtermixer13, 0, synthmixer13, 3);
-AudioConnection        patchCord130(filtermixer13, 0, synthmixer13, 0);
 AudioConnection        patchCord131(filtermixer14, 0, freeverb14, 0);
 AudioConnection        patchCord132(filtermixer14, 0, synthmixer14, 3);
-AudioConnection        patchCord133(filtermixer14, 0, synthmixer14, 0);
 AudioConnection        patchCord134(SmixerL4, 0, CHMixer11, 0);
-AudioConnection        patchCord135(freeverb13, 0, synthmixer13, 1);
+AudioConnection        patchCord135(freeverb13, 0, synthmixer13, 0);
 AudioConnection        patchCord136(SmixerR4, 0, CHMixer11, 1);
 AudioConnection        patchCord137(envelope1, 0, bitcrusher1, 0);
 AudioConnection        patchCord138(envelope2, 0, bitcrusher2, 0);
@@ -318,8 +316,8 @@ AudioConnection        patchCord141(envelope5, 0, bitcrusher5, 0);
 AudioConnection        patchCord142(envelope6, 0, bitcrusher6, 0);
 AudioConnection        patchCord143(envelope7, 0, bitcrusher7, 0);
 AudioConnection        patchCord144(envelope8, 0, bitcrusher8, 0);
-AudioConnection        patchCord145(freeverb11, 0, synthmixer11, 1);
-AudioConnection        patchCord146(freeverb14, 0, synthmixer14, 1);
+AudioConnection        patchCord145(freeverb11, 0, synthmixer11, 0);
+AudioConnection        patchCord146(freeverb14, 0, synthmixer14, 0);
 AudioConnection        patchCord147(CHMixer11, 0, mixer_waveform11, 3);
 AudioConnection        patchCord148(bitcrusher4, 0, amp4, 0);
 AudioConnection        patchCord149(bitcrusher5, 0, amp5, 0);
@@ -341,6 +339,11 @@ AudioConnection        patchCord164(amp5, 0, filter5, 0);
 AudioConnection        patchCord165(amp6, 0, filter6, 0);
 AudioConnection        patchCord166(amp7, 0, filter7, 0);
 AudioConnection        patchCord167(amp8, 0, filter8, 0);
+//test granular
+//AudioEffectGranular      granular1;      //xy=504,155
+//AudioConnection        patchCord167a(amp8, 0, granular1, 0);
+//AudioConnection        patchCord167b(granular1, 0, filter8, 0);
+
 AudioConnection        patchCord168(filter1, 0, filtermixer1, 0);
 AudioConnection        patchCord169(filter1, 1, filtermixer1, 1);
 AudioConnection        patchCord170(filter1, 2, filtermixer1, 2);
@@ -393,14 +396,19 @@ AudioConnection        patchCord216(playSdWav1, 0, mixer0, 1);
 AudioConnection        patchCord217(playSdWav1, 0, peak1, 0);
 AudioConnection        patchCord218(mixer_end, 0, mixerPlay, 0);
 AudioConnection        patchCord219(mixer_end, 0, mixerPlay, 1);
-AudioConnection        patchCord220(audioInput, 0, queue1, 0);
-AudioConnection        patchCord221(audioInput, 0, peakRec, 0);
-AudioConnection        patchCord222(mixer0, 0, mixer_stereoR, 1);
-AudioConnection        patchCord223(mixer0, 0, mixer_stereoL, 1);
-AudioConnection        patchCord224(mixerPlay, 0, mixer_stereoR, 0);
-AudioConnection        patchCord225(mixerPlay, 0, mixer_stereoL, 0);
-AudioConnection        patchCord226(mixer_stereoR, 0, i2s1, 0);
-AudioConnection        patchCord227(mixer_stereoL, 0, i2s1, 1);
+AudioConnection        patchCord220(audioInput, 0, audioInputAmp, 0);
+AudioConnection        patchCord221(audioInputAmp, 0, queue1, 0);
+AudioConnection        patchCord222(audioInputAmp, 0, peakRec, 0);
+AudioConnection        patchCord223(mixer0, 0, mixer_stereoR, 1);
+AudioConnection        patchCord224(mixer0, 0, mixer_stereoL, 1);
+AudioConnection        patchCord225(mixerPlay, 0, mixer_stereoR, 0);
+AudioConnection        patchCord226(mixerPlay, 0, mixer_stereoL, 0);
+AudioConnection        patchCord227(mixer_stereoR, 0, i2s1, 0);
+AudioConnection        patchCord228(mixer_stereoL, 0, i2s1, 1);
+AudioConnection        patchCord229(audioInputAmp, 0, mixer_end, 3);
+
+
+
 
 // Control Nodes (all control nodes (no inputs or outputs))
 AudioControlSGTL5000     sgtl5000_1;     //xy=3827,1361

@@ -1,3 +1,35 @@
+// Menu page system - completely independent from maxPages
+#define MENU_PAGES_COUNT 16
+
+// Page definitions - each page contains one main setting + additional features
+struct MenuPage {
+  const char* name;
+  int mainSetting;  // The main setting for this page (menuPosition from old system)
+  bool hasAdditionalFeatures;  // Whether this page has extra controls (like mic gain)
+  const char* additionalFeatureName;  // Name of additional feature if any
+};
+
+MenuPage menuPages[MENU_PAGES_COUNT] = {
+  {"DAT", 1, false, nullptr},           // Load/Save
+  {"KIT", 2, false, nullptr},           // Sample Pack
+  {"WAV", 3, false, nullptr},           // Wave Selection
+  {"REC", 4, true, "GAIN"},             // Recording Mode + Mic Gain
+  {"BPM", 5, false, nullptr},           // BPM/Volume
+  {"CLK", 6, false, nullptr},           // Clock Mode
+  {"CHN", 7, false, nullptr},           // MIDI Voice Select
+  {"TRN", 8, false, nullptr},           // MIDI Transport
+  {"PMD", 9, false, nullptr},           // Pattern Mode
+  {"FLW", 10, false, nullptr},          // Flow Mode
+  {"OTR", 11, false, nullptr},          // Fast Rec Mode
+  {"CLR", 12, false, nullptr},          // Rec Channel Clear
+  {"PVL", 13, false, nullptr},          // Preview Volume
+  {"MON", 14, true, "LEVEL"},           // Monitor Level + Level Control
+  {"RST", 15, false, nullptr},          // Reset
+  {"CFG", 16, false, nullptr}           // Settings
+};
+
+int currentMenuPage = 0;
+
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
     // first run! write magic + defaults
@@ -10,6 +42,9 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
     EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
     EEPROM.write(EEPROM_DATA_START + 7,  0);   // previewVol default
+    EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
+    EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
+    EEPROM.write(EEPROM_DATA_START + 10, 0);   // monitorLevel default (0 = OFF)
 
     //Serial.println(F("EEPROM initialized with defaults."));
   }
@@ -23,40 +58,60 @@ void loadMenuFromEEPROM() {
   fastRecMode   = (int8_t) EEPROM.read(EEPROM_DATA_START + 5);
   recChannelClear   = (int8_t) EEPROM.read(EEPROM_DATA_START + 6);
   previewVol   = (int8_t) EEPROM.read(EEPROM_DATA_START + 7);
- if (recChannelClear>1 || recChannelClear< -1) recChannelClear=1;
+  flowMode     = (int8_t) EEPROM.read(EEPROM_DATA_START + 8);
+  micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
+  monitorLevel = (int8_t) EEPROM.read(EEPROM_DATA_START + 10);
+  
+  // Safety: Ensure monitoring is OFF on startup to prevent feedback
+  mixer_end.gain(3, 0.0);
+  
+  if (recChannelClear < 0 || recChannelClear > 2) recChannelClear = 1;  // Default to ON if invalid
+  
+  // Ensure flowMode is valid (-1 or 1)
+  if (flowMode != -1 && flowMode != 1) {
+    flowMode = -1;  // Default to OFF if invalid value
+  }
 
   //Serial.println(F("Loaded Menu values from EEPROM:"));
   //Serial.print(F("  recMode="));       //Serial.println(recMode);
   //Serial.print(F("  clockMode="));     //Serial.println(clockMode);
   //Serial.print(F("  transportMode=")); //Serial.println(transportMode);
   //Serial.print(F("  patternMode="));   //Serial.println(patternMode);
+  //Serial.print(F("  flowMode="));      //Serial.println(flowMode);
   //Serial.print(F("  voiceSelect="));   //Serial.println(voiceSelect);
   //Serial.print(F("  fastRecMode="));   //Serial.println(fastRecMode);
-  //Serial.print(F("  recChannelClear="));   //Serial.println(recChannelClear);
-  //Serial.print(F("  previewVol="));   //Serial.println(previewVol);
+  //Serial.print(F("  recChannelClear=")); //Serial.println(recChannelClear);
+  //Serial.print(F("  previewVol="));    //Serial.println(previewVol);
 
-
-  // re‐derive your dependent flags:
-  recInput               = (recMode ==  1) ? AUDIO_INPUT_MIC  : AUDIO_INPUT_LINEIN;
-  MIDI_CLOCK_SEND        = (clockMode   == 1);
-  MIDI_TRANSPORT_RECEIVE = (transportMode == 1);
+  // Set global flags
   SMP_PATTERN_MODE       = (patternMode   == 1);
+  SMP_FLOW_MODE          = (flowMode      == 1);
   MIDI_VOICE_SELECT      = (voiceSelect   == 1);
+  MIDI_TRANSPORT_RECEIVE = (transportMode == 1);
   SMP_FAST_REC           = fastRecMode;
-  SMP_REC_CHANNEL_CLEAR  = (recChannelClear == 1);
-/*
-  // update the display so it reflects the loaded state immediately:
+  SMP_REC_CHANNEL_CLEAR  = (recChannelClear == 1);  // Only true for ON mode
+  
+  // Set audio input based on recMode
+  recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
+  
+  // Set MIDI clock send based on clockMode
+  MIDI_CLOCK_SEND = (clockMode == 1);
+  
+  // Apply mic gain if in mic mode
+  if (recMode == 1) {
+    sgtl5000_1.micGain(micGain);
+  }
+
   drawRecMode();
   drawClockMode();
   drawMidiTransport();
   drawPatternMode();
+  drawFlowMode();
   drawMidiVoiceSelect();
   drawFastRecMode();
   drawRecChannelClear();
   drawPreviewVol();
-  */
-
-   
+  drawMonitorLevel();
 }
 
 // call this after you change *any* one of the six modes in switchMenu():
@@ -64,112 +119,276 @@ void saveSingleModeToEEPROM(int index, int8_t value) {
   EEPROM.write(EEPROM_DATA_START + index, (uint8_t)value);
 }
 
-
 void showMenu() {
   FastLEDclear();
   showExit(0);
 
-  //drawNumber(menuPosition, CRGB(20, 20, 40), 0);
 
 
-  switch (menuPosition) {
-    case 1:
-      showIcons(ICON_LOADSAVE, CRGB(0, 20, 0));
-      showIcons(ICON_LOADSAVE2, CRGB(20, 20, 20));
-      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(0, 200, 0));
-      Encoder[3].writeRGBCode(0x00FF00);
-      break;
-    case 2:
-      showIcons(ICON_SAMPLEPACK, CRGB(0, 0, 20));
-      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(0, 0, 200));
-      Encoder[3].writeRGBCode(0x0000FF);
-      break;
-
-    case 3:
-      showIcons(ICON_SAMPLE, CRGB(20, 0, 20));
-      if (SMP.currentChannel > 0 && SMP.currentChannel < 9) drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 200, 0));
-      if (SMP.currentChannel < 1 || SMP.currentChannel > 8) drawText("(-)", 6, menuPosition, CRGB(200, 200, 0));
-      Encoder[3].writeRGBCode(0xFFFF00);
-      break;
-
-    case 4:
-      showIcons(ICON_REC, CRGB(20, 0, 0));
-      showIcons(ICON_REC2, CRGB(20, 20, 20));
-      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 0, 0));
-      Encoder[3].writeRGBCode(0xFF0000);
-      drawRecMode();
-      break;
-
-    case 5:
-      showIcons(ICON_BPM, CRGB(0, 50, 0));
-      drawText(menuText[menuPosition - 1], 6, menuPosition, CRGB(200, 0, 200));
-      Encoder[3].writeRGBCode(0xFF00FF);
-      break;
-
-    case 6:
-      //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 200, 200));
-      Encoder[3].writeRGBCode(0xFFFFFF);
-      drawClockMode();
-      break;
-
-    case 7:
-     // showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 200, 200));
-      Encoder[3].writeRGBCode(0xFFFFFF);
-      drawMidiVoiceSelect();
-      break;
-
-    case 8:
-     // showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 200, 200));
-      Encoder[3].writeRGBCode(0xFFFFFF);
-      drawMidiTransport();
-      break;
-
-      case 9:
-      //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(0, 200, 200));
-      Encoder[3].writeRGBCode(0x00FFFF);
-      drawPatternMode();
-      break;
-
-      case 10:
-      //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 0, 20));
-      Encoder[3].writeRGBCode(0xFF00AA);
-      drawFastRecMode();
-      break;
-
-      case 11:
-      //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 0, 20));
-      Encoder[3].writeRGBCode(0x0000FF);
-      drawRecChannelClear();
-      break;
-
-       case 12:
-      //showIcons(ICON_SETTINGS, CRGB(50, 50, 50));
-      drawText(menuText[menuPosition - 1], 2, menuPosition, CRGB(200, 0, 20));
-      Encoder[3].writeRGBCode(0xAAFFAA);
-      drawPreviewVol();
-      break;
-
-
-    default:
-      break;
+  // Get current page info
+  int pageIndex = currentMenuPage;
+  MenuPage* currentPageInfo = &menuPages[pageIndex];
+  
+  // Draw page title at top
+  //drawText(currentPageInfo->name, 6, 1, UI_WHITE);
+  
+  // Draw page indicator as a line at y=16
+  // Show current page as red, others as blue
+  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  for (int i = 0; i < MENU_PAGES_COUNT; i++) {
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_BLUE;
+    light(i + 1, 16, indicatorColor);
   }
 
+  // Handle the main setting for this page
+  int mainSetting = currentPageInfo->mainSetting;
+  
+  // Set encoder color based on page type
+  CRGB encoderColor = UI_WHITE;
+  switch (mainSetting) {
+    case 1: encoderColor = UI_GREEN; break;      // DAT
+    case 2: encoderColor = UI_BLUE; break;       // KIT
+    case 3: encoderColor = UI_YELLOW; break;     // WAV
+    case 4: encoderColor = UI_RED; break;        // REC
+    case 5: encoderColor = UI_MAGENTA; break;    // BPM
+    case 6: encoderColor = UI_WHITE; break;      // CLK
+    case 7: encoderColor = UI_WHITE; break;      // CHN
+    case 8: encoderColor = UI_WHITE; break;      // TRN
+    case 9: encoderColor = UI_CYAN; break;       // PMD
+    case 10: encoderColor = UI_CYAN; break;      // FLW
+    case 11: encoderColor = UI_ORANGE; break;    // OTR
+    case 12: encoderColor = UI_ORANGE; break;    // CLR
+    case 13: encoderColor = UI_ORANGE; break;    // PVL
+    case 14: encoderColor = CRGB(200, 0, 20); break; // MON
+    case 15: encoderColor = CRGB(255, 100, 0); break; // RST
+    case 16: encoderColor = CRGB(100, 100, 100); break; // CFG
+  }
+  
+  Encoder[3].writeRGBCode(encoderColor.r << 16 | encoderColor.g << 8 | encoderColor.b);
 
+  // Draw the main setting status
+  drawMainSettingStatus(mainSetting);
+  
+  // Draw additional features if this page has them
+  if (currentPageInfo->hasAdditionalFeatures) {
+    drawAdditionalFeatures(mainSetting);
+  }
 
   FastLED.setBrightness(ledBrightness);
   FastLEDshow();
 
-  if (currentMode->pos[3] != menuPosition) {
-    changeMenu(currentMode->pos[3]);
+  // Handle page navigation with encoder 3
+  static int lastPagePosition = -1;
+  static bool menuFirstEnter = true;
+  
+  if (menuFirstEnter) {
+    Encoder[3].writeCounter((int32_t)currentMenuPage);
+    Encoder[3].writeMax((int32_t)(MENU_PAGES_COUNT - 1));
+    Encoder[3].writeMin((int32_t)0);
+    menuFirstEnter = false;
+  }
+  
+  if (currentMode->pos[3] != lastPagePosition) {
+    currentMenuPage = currentMode->pos[3];
+    if (currentMenuPage >= MENU_PAGES_COUNT) currentMenuPage = MENU_PAGES_COUNT - 1;
+    if (currentMenuPage < 0) currentMenuPage = 0;
+    lastPagePosition = currentMenuPage;
+  }
+  
+  // Set the menu position to the current page's main setting
+  if (currentMode->pos[3] != mainSetting) {
+    changeMenu(mainSetting);
+  }
+  
+  // Handle encoder 2 changes for pages with additional features
+  handleAdditionalFeatureControls(mainSetting);
+}
+
+void drawMainSettingStatus(int setting) {
+  switch (setting) {
+    case 1: // DAT - Load/Save
+      showIcons(ICON_LOADSAVE, UI_DIM_GREEN);
+      showIcons(ICON_LOADSAVE2, UI_DIM_WHITE);
+      drawText("FILE", 2, 2, UI_GREEN);
+      break;
+      
+    case 2: // KIT - Sample Pack
+      showIcons(ICON_SAMPLEPACK, UI_DIM_BLUE);
+      drawText("PACK", 2, 2, UI_BLUE);
+      break;
+      
+    case 3: // WAV - Wave Selection
+      showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
+      if (GLOB.currentChannel > 0 && GLOB.currentChannel < 9) {
+        drawText("WAVE", 2, 2, UI_YELLOW);
+      } else {
+        drawText("(-)", 2, 2, UI_YELLOW);
+      }
+      break;
+      
+    case 4: // REC - Recording Mode
+      showIcons(ICON_REC, UI_DIM_RED);
+      showIcons(ICON_REC2, UI_DIM_WHITE);
+      drawRecMode();
+      break;
+      
+    case 5: // BPM - BPM/Volume
+      showIcons(ICON_BPM, UI_DIM_GREEN);
+      drawText("BPM", 2, 2, UI_MAGENTA);
+      break;
+      
+    case 6: // CLK - Clock Mode
+      drawText("CLCK", 2, 10, UI_WHITE);
+      drawClockMode();
+      break;
+      
+    case 7: // CHN - MIDI Voice Select
+      drawText("MIDI", 2, 10, UI_WHITE);
+      drawMidiVoiceSelect();
+      break;
+      
+    case 8: // TRN - MIDI Transport
+      drawText("TRSP", 2, 10, UI_WHITE);
+      drawMidiTransport();
+      break;
+      
+    case 9: // PMD - Pattern Mode
+      drawText("PMODE", 2, 10, UI_CYAN);
+      drawPatternMode();
+      break;
+      
+    case 10: // FLW - Flow Mode
+      drawText("FLOW", 2, 10, UI_CYAN);
+      drawFlowMode();
+      break;
+      
+    case 11: // OTR - Fast Rec Mode
+      drawText("REC", 2, 10, UI_ORANGE);
+      drawFastRecMode();
+      break;
+      
+    case 12: // CLR - Rec Channel Clear
+      drawText("CLR", 2, 10, UI_ORANGE);
+      drawRecChannelClear();
+      break;
+      
+    case 13: // PVL - Preview Volume
+      drawText("PVOL", 2, 10, UI_ORANGE);
+      drawPreviewVol();
+      break;
+      
+    case 14: // MON - Monitor Level
+      drawText("LIVE", 2, 10, CRGB(200, 0, 20));
+      drawMonitorLevel();
+      break;
+      
+    case 15: // RST - Reset
+      drawText("RSET", 2, 10, CRGB(255, 100, 0));
+      break;
+      
+    case 16: // CFG - Settings
+      drawText("SET", 2, 10, CRGB(100, 100, 100));
+      break;
   }
 }
 
+void drawAdditionalFeatures(int setting) {
+  switch (setting) {
+    case 4: { // REC page - Mic Gain
+      //drawText("GAIN:", 2, 12, UI_DIM_WHITE);
+      char gainText[8];
+      sprintf(gainText, "%d", micGain);
+      //drawText(gainText, 8, 12, UI_WHITE);
+      
+      // Mic gain meter is now drawn vertically in drawRecMode() on x=16
+      // No horizontal meter needed here since page indicator uses y=16
+      break;
+    }
+      
+    case 14: { // MON page - Monitor Level
+      //drawText("LEVEL:", 2, 12, UI_DIM_WHITE);
+      char levelText[8];
+      sprintf(levelText, "%d", monitorLevel);
+      //drawText(levelText, 9, 12, UI_WHITE);
+      
+      // Draw level meter on y=15 (moved from y=16 to avoid conflict with page indicator)
+      int levelLength = mapf(monitorLevel, 0, 4, 0, 16);
+      for (int x = 1; x <= 16; x++) {
+        if (x <= levelLength) {
+          // Gradient from red -> green
+          float blend = float(x - 1) / max(1, levelLength - 1);
+          CRGB grad = CRGB(
+            255 * (1.0 - blend) + 0 * blend,
+            0 * (1.0 - blend) + 255 * blend,
+            0 * (1.0 - blend) + 0 * blend
+          );
+          light(x, 15, grad);
+        } else {
+          light(x, 15, CRGB(0, 0, 0));
+        }
+      }
+      break;
+    }
+  }
+}
+
+void handleAdditionalFeatureControls(int setting) {
+  static bool recMenuFirstEnter = true;
+  static bool monMenuFirstEnter = true;
+  static bool menuFirstEnter = true;
+  
+  switch (setting) {
+    case 4: // REC page - Mic Gain control
+      static int lastMicGain = -1;
+      
+      // Set encoder counter only on first entry
+      if (recMenuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)micGain);
+        Encoder[2].writeMax((int32_t)64);
+        Encoder[2].writeMin((int32_t)0);
+        recMenuFirstEnter = false;
+      }
+      
+      if (currentMode->pos[2] != lastMicGain) {
+        micGain = currentMode->pos[2];
+        saveSingleModeToEEPROM(9, micGain);
+        sgtl5000_1.micGain(micGain);
+        drawMainSettingStatus(setting);
+        drawAdditionalFeatures(setting);
+        lastMicGain = micGain;
+      }
+      break;
+      
+    case 14: // MON page - Monitor Level control
+      static int lastMonitorLevel = -1;
+      
+      // Set encoder counter only on first entry
+      if (monMenuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)monitorLevel);
+        Encoder[2].writeMax((int32_t)4);
+        Encoder[2].writeMin((int32_t)0);
+        monMenuFirstEnter = false;
+      }
+      
+      if (currentMode->pos[2] != lastMonitorLevel) {
+        monitorLevel = currentMode->pos[2];
+        if (monitorLevel > 4) monitorLevel = 4;
+        if (monitorLevel < 0) monitorLevel = 0;
+        saveSingleModeToEEPROM(10, monitorLevel);
+        drawMainSettingStatus(setting);
+        drawAdditionalFeatures(setting);
+        lastMonitorLevel = monitorLevel;
+      }
+      break;
+      
+         default:
+       // Reset first enter flags when not on pages with additional features
+       recMenuFirstEnter = true;
+       monMenuFirstEnter = true;
+       menuFirstEnter = true;
+       break;
+  }
+}
 
 void switchMenu(int menuPosition){
    switch (menuPosition) {
@@ -182,19 +401,25 @@ void switchMenu(int menuPosition){
         break;
 
       case 3:
-        if (SMP.currentChannel < 1 || SMP.currentChannel > 8) return;
+        if (GLOB.currentChannel < 1 || GLOB.currentChannel > 8) return;
         switchMode(&set_Wav);
-        currentMode->pos[3] = SMP.wav[SMP.currentChannel].oldID;
-        SMP.wav[SMP.currentChannel].fileID = SMP.wav[SMP.currentChannel].oldID;
+        currentMode->pos[3] = SMP.wav[GLOB.currentChannel].oldID;
+        SMP.wav[GLOB.currentChannel].fileID = SMP.wav[GLOB.currentChannel].oldID;
         //set encoder to currently Loaded Sample!!
-        //Encoder[3].writeCounter((int32_t)((SMP.wav[SMP.currentChannel][0] * 4) - 1));
+        //Encoder[3].writeCounter((int32_t)((SMP.wav[GLOB.currentChannel][0] * 4) - 1));
         break;
 
       case 4:
         recMode = recMode * (-1);
         saveSingleModeToEEPROM(0, recMode);
-        drawRecMode();
-
+        
+        // Apply mic gain if switching to mic mode
+        if (recMode == 1) {
+          sgtl5000_1.micGain(micGain);
+        }
+        
+        drawMainSettingStatus(menuPosition);
+        drawAdditionalFeatures(menuPosition);
         break;
 
       case 5:
@@ -206,13 +431,12 @@ void switchMenu(int menuPosition){
         saveSingleModeToEEPROM(1, clockMode);
 
         //Serial.println(clockMode);
-        drawClockMode();
+        drawMainSettingStatus(menuPosition);
         if (clockMode == 1) {
           playTimer.begin(playNote, playNoteInterval);
         } else {
           playTimer.end();
         }
-
         break;
 
       case 7:
@@ -220,63 +444,161 @@ void switchMenu(int menuPosition){
         saveSingleModeToEEPROM(4, voiceSelect);
 
         //Serial.println(voiceSelect);
-        drawMidiVoiceSelect();
+        drawMainSettingStatus(menuPosition);
         break;
 
       case 8:
         transportMode = transportMode * (-1);
         saveSingleModeToEEPROM(2, transportMode);
-        drawMidiTransport();
+        drawMainSettingStatus(menuPosition);
         break;
     
       case 9:
         patternMode = patternMode * (-1);
         saveSingleModeToEEPROM(3, patternMode);
-        drawPatternMode();
+        drawMainSettingStatus(menuPosition);
+        
+        // Handle mute system when PMOD is toggled
+        if (SMP_PATTERN_MODE) {
+          // Switching TO PMOD mode - load global mutes to current page
+          loadGlobalMutesToPage();
+        } else {
+          // Switching FROM PMOD mode - save current page mutes to global
+          savePageMutesToGlobal();
+        }
+        
+        // Update encoder 1 limit when pattern mode is toggled
+        if (currentMode == &draw || currentMode == &singleMode) {
+          if (SMP_PATTERN_MODE) {
+            // Pattern mode is ON - limit to lastPage
+            updateLastPage();
+            Encoder[1].writeMax((int32_t)lastPage);
+          } else {
+            // Pattern mode is OFF - allow up to maxPages
+            Encoder[1].writeMax((int32_t)maxPages);
+          }
+        }
         break;
 
       case 10:
+        flowMode = flowMode * (-1);
+        saveSingleModeToEEPROM(8, flowMode);
+        drawMainSettingStatus(menuPosition);
+        
+        // Reset lastFlowPage when FLOW mode is toggled
+        lastFlowPage = 0;
+        break;
+
+      case 11:
         fastRecMode = fastRecMode + 1;
                             
         if (fastRecMode>3) fastRecMode=0;
         saveSingleModeToEEPROM(5, fastRecMode);
-        drawFastRecMode();
+        drawMainSettingStatus(menuPosition);
         break;
 
-         case 11:
-        recChannelClear = recChannelClear * (-1);
+         case 12:
+        recChannelClear = recChannelClear + 1;
+        if (recChannelClear > 2) recChannelClear = 0;  // Cycle: 0->1->2->0
         saveSingleModeToEEPROM(6, recChannelClear);
-        drawRecChannelClear();
+        drawMainSettingStatus(menuPosition);
         break;
 
-        case 12:
+        case 13:
         previewVol = previewVol + 1;                   
         if (previewVol>3) previewVol=0;
         saveSingleModeToEEPROM(7, previewVol);
-        drawPreviewVol();
+        drawMainSettingStatus(menuPosition);
+        break;
+
+        case 14:
+        monitorLevel = monitorLevel + 1;                   
+        if (monitorLevel>4) monitorLevel=0;
+        saveSingleModeToEEPROM(10, monitorLevel);
+        drawMainSettingStatus(menuPosition);
+        drawAdditionalFeatures(menuPosition);
+        break;
+
+        case 15:
+        // Reset all filters, envelopes, drums and synths to default
+        resetAllToDefaults();
+        break;
+
+        case 16:
+        // Settings menu - could be used for additional settings
+        // For now, just a placeholder
         break;
     }
     //saveMenutoEEPROM();
 }
 
+// New functions for menu page navigation
+void nextMenuPage() {
+  currentMenuPage = (currentMenuPage + 1) % MENU_PAGES_COUNT;
+}
+
+void previousMenuPage() {
+  currentMenuPage = (currentMenuPage - 1 + MENU_PAGES_COUNT) % MENU_PAGES_COUNT;
+}
+
+void goToMenuPage(int page) {
+  if (page >= 0 && page < MENU_PAGES_COUNT) {
+    currentMenuPage = page;
+  }
+}
+
+// Function to reset menu state when leaving menu mode
+void resetMenuState() {
+  // This function can be called when exiting menu mode to reset any state
+  // For now, we'll let the static variables handle the reset automatically
+}
+
+// Helper function to get main setting for current menu page
+int getCurrentMenuMainSetting() {
+  return menuPages[currentMenuPage].mainSetting;
+}
+
 void drawRecChannelClear(){
   if (recChannelClear == 1) {
-    drawText("ON", 5, 5, CRGB(0, 200, 0));
-    SMP_REC_CHANNEL_CLEAR = true;
-  } else {
-    drawText("OFF", 5, 5, CRGB(200, 0, 0));
-    SMP_REC_CHANNEL_CLEAR = false;
+    drawText("ON", 2, 2, UI_GREEN);
+    SMP_REC_CHANNEL_CLEAR = true;  // Clear mode
+  } else if (recChannelClear == 0) {
+    drawText("OFF",2, 2, UI_RED);
+    SMP_REC_CHANNEL_CLEAR = false; // Add triggers mode
+  } else if (recChannelClear == 2) {
+    drawText("FIX", 2, 2, UI_YELLOW);
+    SMP_REC_CHANNEL_CLEAR = false; // FIX mode - no manipulation
   }
 }
 
 void drawRecMode() {
 
   if (recMode == 1) {
-    drawText("mic", 7, 10, CRGB(200, 200, 200));
+    drawText("MIC", 2, 2, UI_WHITE);
+    
+    // Draw mic gain meter vertically on x=16 - white to red gradient
+    int activeLength = mapf(micGain, 0, 64, 0, 16);
+    for (int y = 1; y <= 16; y++) {
+      if (y <= activeLength) {
+        // Gradient from white -> red
+        float blend = float(y - 1) / max(1, activeLength - 1);  // Prevent div by zero
+        CRGB grad = CRGB(
+          255 * (1.0 - blend) + 255 * blend,  // Red component
+          255 * (1.0 - blend) + 0 * blend,    // Green component  
+          255 * (1.0 - blend) + 0 * blend     // Blue component
+        );
+        light(16, y, grad);
+      } else {
+        // Empty part stays black
+        light(16, y, CRGB(0, 0, 0));
+      }
+    }
+    
     recInput = AUDIO_INPUT_MIC;
   }
   if (recMode == -1) {
-    drawText("line", 6, 10, CRGB(0, 0, 200));
+    drawText("LINE", 2, 2, UI_BLUE);
+    // No gain level display for LINE input
     recInput = AUDIO_INPUT_LINEIN;
   }
   sgtl5000_1.inputSelect(recInput);
@@ -288,10 +610,10 @@ void drawRecMode() {
 void drawClockMode() {
 
   if (clockMode == 1) {
-    drawText("INT", 5, 1, CRGB(0, 200, 0));
+    drawText("INT", 2, 2, UI_GREEN);
     MIDI_CLOCK_SEND = true;
   }else{
-    drawText("EXT", 5, 1, CRGB(200, 200, 0));
+    drawText("EXT", 2, 2, UI_YELLOW);
     MIDI_CLOCK_SEND = false;
   }
 
@@ -302,10 +624,10 @@ void drawClockMode() {
 void drawMidiVoiceSelect() {
 
   if (voiceSelect == 1) {
-    drawText("MID", 5, 1, CRGB(200, 0, 200));
+    drawText("MIDI", 2, 2, UI_MAGENTA);
     MIDI_VOICE_SELECT = true;
   }else{
-    drawText("MAN", 5, 1, CRGB(0, 0, 200));
+    drawText("YPOS", 2, 2, UI_BLUE);
      MIDI_VOICE_SELECT = false;
   }
 
@@ -316,55 +638,54 @@ void drawMidiVoiceSelect() {
 
 void drawPreviewVol() {
 
-if (previewVol == 3) {
-    drawText("SPLT", 2, 6, CRGB(0, 0, 50));
-    previewVol = 3;
+  if (previewVol == 3) {
+    drawText("SPLT", 2, 2, UI_BLUE);
+    
+    
     mixer_stereoL.gain(0, 1);
     mixer_stereoL.gain(1, 0);
 
     mixer_stereoR.gain(0, 0);
     mixer_stereoR.gain(1, 1);
-    
+
     mixer0.gain(1, 0.4);  //PREV
   }
-
 
   if (previewVol == 2) {
-    drawText("HIGH", 2, 6, CRGB(50, 50, 0));
-    previewVol = 2;
+    drawText("HIGH", 2, 2, UI_GREEN);
+    
+    
     mixer_stereoL.gain(0, 1);
     mixer_stereoL.gain(1, 1);
 
     mixer_stereoR.gain(0, 1);
     mixer_stereoR.gain(1, 1);
 
-       mixer0.gain(1, 0.6);  //PREV
-
+    mixer0.gain(1, 0.6);  //PREV
   }
 
-
   if (previewVol == 1) {
-    drawText("MID", 2, 6, CRGB(50, 50, 0));
-    previewVol = 1;
-
+    drawText("MID", 2, 2, UI_ORANGE);
+    
+    
     mixer_stereoL.gain(0, 1);
     mixer_stereoL.gain(1, 1);
 
     mixer_stereoR.gain(0, 1);
     mixer_stereoR.gain(1, 1);
 
-    mixer0.gain(1, 0.4);  //PREV
+    mixer0.gain(1, 0.3);  //PREV
   }
 
   if (previewVol == 0) {
-    drawText("LOW", 2, 6, CRGB(200, 0, 0));
-    previewVol = 0;
+    drawText("LOW", 2, 2, UI_RED);
+  
     
     mixer_stereoL.gain(0, 1);
     mixer_stereoL.gain(1, 1);
 
     mixer_stereoR.gain(0, 1);
-    mixer_stereoR.gain(1, 1);
+    mixer_stereoL.gain(1, 1);
 
     mixer0.gain(1, 0.1);  //PREV
   }
@@ -372,29 +693,44 @@ if (previewVol == 3) {
   
 }
 
+void drawMonitorLevel() {
+  if (monitorLevel == 0) {
+    drawText("OFF", 2, 2, UI_RED);
+  } else if (monitorLevel == 1) {
+    drawText("LOW", 2, 2, UI_ORANGE);
+  } else if (monitorLevel == 2) {
+    drawText("MED", 2, 2, UI_YELLOW);
+  } else if (monitorLevel == 3) {
+    drawText("HIGH", 2, 2, UI_BRIGHT_GREEN);
+  } else if (monitorLevel == 4) {
+    drawText("FULL", 2, 2, UI_BLUE);
+  }
+  FastLEDshow();
+}
+
 void drawFastRecMode() {
 
 if (fastRecMode == 3) {
-    drawText("+CON", 2, 4, CRGB(0, 0, 50));
+    drawText("+CON", 2, 2, UI_DIM_BLUE);
     SMP_FAST_REC = 3;
   }
 
 
   if (fastRecMode == 2) {
-    drawText("-CON", 2, 4, CRGB(50, 50, 0));
+    drawText("-CON", 2, 2, UI_DIM_YELLOW);
     SMP_FAST_REC = 2;
    
   }
 
 
   if (fastRecMode == 1) {
-    drawText("SENS", 2, 4, CRGB(50, 50, 0));
+    drawText("SENS", 2, 2, UI_GREEN);
     SMP_FAST_REC = 1;
    
   }
 
   if (fastRecMode == 0) {
-    drawText("OFF", 2, 4, CRGB(200, 0, 0));
+    drawText("OFF", 2, 2, UI_RED);
     SMP_FAST_REC = 0;
   }
   FastLEDshow();
@@ -404,13 +740,30 @@ if (fastRecMode == 3) {
 void drawPatternMode() {
 
   if (patternMode == 1) {
-    drawText("ON", 5, 3, CRGB(0, 200, 0));
+    drawText("ON", 2, 2, UI_GREEN);
     SMP_PATTERN_MODE = true;
   }
 
   if (patternMode == -1) {
-    drawText("OFF", 5, 3, CRGB(200, 0, 0));
+    drawText("OFF", 2, 2, UI_RED);
     SMP_PATTERN_MODE = false;
+  }
+
+  FastLEDshow();
+}
+
+void drawFlowMode() {
+  if (flowMode == 1) {
+    drawText("ON", 2, 2, UI_GREEN);  // Use same coordinates as drawRecChannelClear
+    SMP_FLOW_MODE = true;
+  } else if (flowMode == -1) {
+    drawText("OFF", 2, 2, UI_RED);  // Use same coordinates as drawRecChannelClear
+    SMP_FLOW_MODE = false;
+  } else {
+    // Fallback for any unexpected values
+    drawText("OFF", 2, 2, UI_RED);  // Use same coordinates as drawRecChannelClear
+    SMP_FLOW_MODE = false;
+    flowMode = -1;  // Reset to valid value
   }
 
   FastLEDshow();
@@ -420,12 +773,12 @@ void drawPatternMode() {
 void drawMidiTransport() {
 
   if (transportMode == 1) {
-    drawText("ON", 5, 2, CRGB(0, 200, 0));
+    drawText("ON", 2, 2, UI_GREEN);
     MIDI_TRANSPORT_RECEIVE = true;
   }
 
   if (transportMode == -1) {
-    drawText("OFF", 5, 2, CRGB(200, 0, 0));
+    drawText("OFF", 2, 2, UI_RED);
     MIDI_TRANSPORT_RECEIVE = false;
   }
 

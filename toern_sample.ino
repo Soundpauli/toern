@@ -27,7 +27,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     else if (g == 17) PrevSampleRate = 1;
     else PrevSampleRate = 4;
 
-    SMP.smplen = fileSize / (PrevSampleRate * 2);
+    GLOB.smplen = fileSize / (PrevSampleRate * 2);
 
     // Load full sample into RAM buffer
     previewFile.seek(44);
@@ -47,18 +47,18 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     previewCache.plen = plen;
   } else {
     PrevSampleRate = previewCache.rate;
-    SMP.smplen = previewCache.lengthBytes / (PrevSampleRate * 2);
+    GLOB.smplen = previewCache.lengthBytes / (PrevSampleRate * 2);
   }
 
   // --- Calculate offsets from seek percentages ---
-  int startOffset = (SMP.smplen * SMP.seek) / 100;
-  int endOffset = (SMP.smplen * SMP.seekEnd) / 100;
+  int startOffset = (GLOB.smplen * GLOB.seek) / 100;
+  int endOffset = (GLOB.smplen * GLOB.seekEnd) / 100;
 
   if (setMaxSampleLength) {
-    endOffset = SMP.smplen;
-    SMP.seekEnd = 100;
-    currentMode->pos[2] = SMP.seekEnd;
-    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+    endOffset = GLOB.smplen;
+    GLOB.seekEnd = 100;
+    currentMode->pos[2] = GLOB.seekEnd;
+    Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
   }
 
   int startOffsetBytes = startOffset * PrevSampleRate * 2;
@@ -119,16 +119,16 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
   if (packID == 0) {
     sprintf(OUTPUTf, "samples/%d/_%d.wav", getFolderNumber(sampleID), sampleID);
-    sampleID = SMP.currentChannel;
+    sampleID = GLOB.currentChannel;
   }
 
   if (!SD.exists(OUTPUTf)) {
     //Serial.print("File does not exist: ");
     //Serial.println(OUTPUTf);
-    SMP.mute[sampleID] = true;
+    setMuteState(sampleID, true);
     return;
   } else {
-    SMP.mute[sampleID] = false;
+    setMuteState(sampleID, false);
   }
 
   
@@ -147,16 +147,16 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
     }
 
     // Calculate sample length in milliseconds
-    SMP.smplen = fileSize / (SampleRate[sampleID] * 2);
+    GLOB.smplen = fileSize / (SampleRate[sampleID] * 2);
 
     // Convert percentage positions to actual offsets
-    unsigned int startOffset = (SMP.seek * SMP.smplen) / 100;
+    unsigned int startOffset = (GLOB.seek * GLOB.smplen) / 100;
     unsigned int startOffsetBytes = startOffset * SampleRate[sampleID] * 2;
 
-    unsigned int endOffset = (SMP.seekEnd * SMP.smplen) / 100;
-    if (SMP.seekEnd == 0) {
-      endOffset = SMP.smplen;  // Full length if seekEnd is 0
-      SMP.seekEnd = 100;       // Set to 100%
+    unsigned int endOffset = (GLOB.seekEnd * GLOB.smplen) / 100;
+    if (GLOB.seekEnd == 0) {
+      endOffset = GLOB.smplen;  // Full length if seekEnd is 0
+      GLOB.seekEnd = 100;       // Set to 100%
     }
     unsigned int endOffsetBytes = endOffset * SampleRate[sampleID] * 2;
     endOffsetBytes = min(endOffsetBytes, fileSize);
@@ -187,7 +187,7 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
 
 void showWave() {
-  int snr = SMP.wav[SMP.currentChannel].fileID;
+  int snr = SMP.wav[GLOB.currentChannel].fileID;
 
 
   if (snr < 1) snr = 1;
@@ -215,32 +215,32 @@ void showWave() {
   FastLEDclear();
   //exit
   Encoder[3].writeRGBCode(0x0000FF);
-  showIcons(HELPER_SELECT, CRGB(0, 0, 50));
+  showIcons(HELPER_SELECT, UI_DIM_BLUE);
 
   //showIcons("helper_ex", CRGB(10, 10, 0));
 
-  showIcons(HELPER_FOLDER, CRGB(50, 50, 50));
+  showIcons(HELPER_FOLDER, UI_DIM_WHITE);
   Encoder[1].writeRGBCode(0xFFFFFF);
 
-  showIcons(HELPER_SEEK, CRGB(10, 0, 10));
+  showIcons(HELPER_SEEK, UI_DIM_MAGENTA);
   Encoder[2].writeRGBCode(0xFF00FF);
 
   if (nofile) {
-    showIcons(HELPER_SEEKSTART, CRGB(0, 0, 10));
-    showIcons(HELPER_EXIT, CRGB(0, 0, 0));
+    showIcons(HELPER_SEEKSTART, UI_DIM_BLUE);
+    showIcons(HELPER_EXIT, UI_BG_DARK);
     Encoder[0].writeRGBCode(0x000000);
   } else {
-    showIcons(HELPER_SEEKSTART, CRGB(0, 0, 10));
-    showIcons(HELPER_EXIT, col[SMP.currentChannel]);
+    showIcons(HELPER_SEEKSTART, UI_DIM_BLUE);
+    showIcons(HELPER_EXIT, col[GLOB.currentChannel]);
     Encoder[0].writeRGBCode(0x00FF00);
   }
   // Display using current seek positions (as percentages)
-  //displaySample(SMP.seek, SMP.smplen, SMP.seekEnd);
+  //displaySample(GLOB.seek, SMP.smplen, GLOB.seekEnd);
   processPeaks();
   drawNumber(snr, col_Folder[fnr], 12);
 
  // --- UPDATE START POSITION (Encoder 0) ---
-if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
+if (sampleIsLoaded && currentMode->pos[0] != GLOB.seek) {
   envelope0.noteOff();
   playSdWav1.stop();
 
@@ -248,35 +248,35 @@ if (sampleIsLoaded && currentMode->pos[0] != SMP.seek) {
   previewCache.valid = false;
 
   //Serial.println("SEEK-hit");
-  SMP.seek = currentMode->pos[0];
+  GLOB.seek = currentMode->pos[0];
   _samplers[0].removeAllSamples();
   previewSample(fnr, getFileNumber(snr), false, false);
 }
 
   // --- FOLDER SELECTION (Encoder 1) ---
-  if (currentMode->pos[1] != SMP.folder) {
+  if (currentMode->pos[1] != GLOB.folder) {
     envelope0.noteOff();
     playSdWav1.stop();
     firstcheck = true;
     nofile = false;
-    SMP.folder = currentMode->pos[1];
-    //Serial.println("Folder: " + String(SMP.folder - 1));
-    SMP.wav[SMP.currentChannel].fileID = ((SMP.folder - 1) * 100) + 1;
+    GLOB.folder = currentMode->pos[1];
+    //Serial.println("Folder: " + String(GLOB.folder - 1));
+    SMP.wav[GLOB.currentChannel].fileID = ((GLOB.folder - 1) * 100) + 1;
     //Serial.print("WAV:");
-    //Serial.println(SMP.wav[SMP.currentChannel].fileID);
-    Encoder[3].writeCounter((int32_t)SMP.wav[SMP.currentChannel].fileID);
+    //Serial.println(SMP.wav[GLOB.currentChannel].fileID);
+    Encoder[3].writeCounter((int32_t)SMP.wav[GLOB.currentChannel].fileID);
   }
 
 
 // --- UPDATE END POSITION (Encoder 2) ---
-if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
+if (sampleIsLoaded && currentMode->pos[2] != GLOB.seekEnd) {
   playSdWav1.stop();
 
   // force reload so your new end‐point takes effect
   previewCache.valid = false;
 
   //Serial.println("SEEKEND-hit");
-  SMP.seekEnd = currentMode->pos[2];
+  GLOB.seekEnd = currentMode->pos[2];
   _samplers[0].removeAllSamples();
   envelope0.noteOff();
   previewSample(fnr, getFileNumber(snr), false, false);
@@ -305,7 +305,7 @@ if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
     nofile = false;
 
     snr = currentMode->pos[3];
-    SMP.wav[SMP.currentChannel].fileID = snr;
+    SMP.wav[GLOB.currentChannel].fileID = snr;
     
     //Serial.println(snr);
 
@@ -317,10 +317,10 @@ if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
 
     // --- Reset seek positions when choosing a new sample ---
     currentMode->pos[0] = 0;
-    SMP.seek = 0;
+    GLOB.seek = 0;
     Encoder[0].writeCounter((int32_t)0);
     currentMode->pos[2] = 100;
-    SMP.seekEnd = 100;
+    GLOB.seekEnd = 100;
     Encoder[2].writeCounter((int32_t)100);
 
     if (!previewIsPlaying && !sampleIsLoaded) {
@@ -338,10 +338,10 @@ if (sampleIsLoaded && currentMode->pos[2] != SMP.seekEnd) {
     }
   }
 
-  // Just to be safe, ensure SMP.seekEnd never exceeds 100
-  if (SMP.seekEnd > 100) {
-    SMP.seekEnd = 100;
-    currentMode->pos[2] = SMP.seekEnd;
-    Encoder[2].writeCounter((int32_t)SMP.seekEnd);
+  // Just to be safe, ensure GLOB.seekEnd never exceeds 100
+  if (GLOB.seekEnd > 100) {
+    GLOB.seekEnd = 100;
+    currentMode->pos[2] = GLOB.seekEnd;
+    Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
   }
 }

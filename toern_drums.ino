@@ -190,61 +190,43 @@ void HH_drum(float A7, float A8, float A9, int type) {
 
 
 
-// Helper function to process filter adjustments
-float processDrumAdjustment(DrumTypes drumType, int index, int encoder) {
-  SMP.drum_settings[index][drumType] = currentMode->pos[encoder];
-  //Serial.print(":::::");
-  //Serial.println(SMP.drum_settings[index][drumType]);
-  float mappedValue;
-  if (drumType == DRUMDECAY) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
-  if (drumType == DRUMPITCH) mappedValue = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 0, 1023);
-  if (drumType == DRUMTYPE) {
-
-    const int maxIndex = 3;
-    if (SMP.drum_settings[SMP.currentChannel][drumType] > maxIndex) {
-      SMP.drum_settings[SMP.currentChannel][drumType] = maxIndex;
-      currentMode->pos[3] = SMP.drum_settings[SMP.currentChannel][drumType];
-      Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
-    }
-    int mappedValue = mapf(SMP.drum_settings[SMP.currentChannel][drumType], 0, maxIndex, 1, maxIndex + 1);  // = mapf(SMP.drum_settings[index][drumType], 0, maxfilterResolution, 1, 3);
-  }
-  //Serial.print(drumType);
-  //Serial.print(" #####---->");
-  //Serial.println(mappedValue);
-  return mappedValue;
-}
-
-
-
-
-// Update filter values
-void updateDrumValue(DrumTypes drumType, int index, float value) {
-  // Common function to update all filter types
-  //Serial.print(drumType);
-  //Serial.print(" d==>: ");
-  //Serial.println(value);
-
+// Unified drum setter: setDrums combines processDrumAdjustment and updateDrumValue
+void setDrums(DrumTypes drumType, int index) {
+  float mappedValue = 0;
+  int maxIndex = 3;
+  // Map and constrain value
   switch (drumType) {
+    case DRUMTONE:
+      mappedValue = mapf(SMP.drum_settings[index][DRUMTONE], 0, maxfilterResolution, 0, 1023);
+      break;
     case DRUMDECAY:
+      mappedValue = mapf(SMP.drum_settings[index][DRUMDECAY], 0, maxfilterResolution, 0, 1023);
       break;
-
     case DRUMPITCH:
+      mappedValue = mapf(SMP.drum_settings[index][DRUMPITCH], 0, maxfilterResolution, 0, 1023);
       break;
-
     case DRUMTYPE:
+      mappedValue = mapf(SMP.drum_settings[index][DRUMTYPE], 0, maxIndex, 1, maxIndex + 1);
       break;
-
-    default: return;
+    default:
+      return;
   }
-  float tone = mapf(SMP.drum_settings[SMP.currentChannel][DRUMTONE], 0, 64, 0, 1023);
-  float dec = mapf(SMP.drum_settings[SMP.currentChannel][DRUMDECAY], 0, 64, 0, 1023);
-  float pit = mapf(SMP.drum_settings[SMP.currentChannel][DRUMPITCH], 0, 64, 0, 1023);
-  float typ = mapf(SMP.drum_settings[SMP.currentChannel][DRUMTYPE], 0, 64, 1, 3);
 
+  // Apply to drum engine if all values are present
+  float tone = mapf(SMP.drum_settings[index][DRUMTONE], 0, maxfilterResolution, 0, 1023);
+  float dec = mapf(SMP.drum_settings[index][DRUMDECAY], 0, maxfilterResolution, 0, 1023);
+  float pit = mapf(SMP.drum_settings[index][DRUMPITCH], 0, maxfilterResolution, 0, 1023);
+  int typ = (int)mapf(SMP.drum_settings[index][DRUMTYPE], 0, maxfilterResolution, 1, 3);
 
+  // Channel 0 = Kick, 1 = Snare, 2 = HiHat
+  if (index == 0) {
+    KD_drum(tone, dec, pit, typ);
+  } else if (index == 1) {
+    SN_drum(tone, dec, pit, typ);
+  } else if (index == 2) {
+    HH_drum(tone, dec, pit, typ);
+  }
 }
-
-
 
 
 void setDrumDefaults(bool allChannels) {
@@ -288,7 +270,7 @@ void setDrumDefaults(bool allChannels) {
       SMP.drum_settings[ch][DRUMDECAY] = 32;  //half
       SMP.drum_settings[ch][DRUMPITCH] = 32;  //half
       SMP.drum_settings[ch][DRUMTYPE] = 1;    // MID decay period
-      SMP.param_settings[ch][TYPE] = 1;       // SMP
+      //SMP.param_settings[ch][TYPE] = 1;       // SMP
     }
   }
 }

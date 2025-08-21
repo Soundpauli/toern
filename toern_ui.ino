@@ -43,7 +43,7 @@ void drawLowResCircle(int startX, int startY, CRGB color) {
 
  }
 
-void drawFilterCheck(int mappedValue, FilterType fx) {
+void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
   // Map the value (0-maxfilterResolution) to 0-16 LEDs lit
   int activeLength = ::map(mappedValue, 0, maxfilterResolution, 0, 16);
   
@@ -52,12 +52,12 @@ void drawFilterCheck(int mappedValue, FilterType fx) {
     if (x <= activeLength) {
       // Gradient from white -> filter color
       float blend = float(x - 1) / max(1, activeLength - 1);  // Prevent div by zero
-      CRGB color = CRGB(
-        255 * (1.0 - blend) + filter_col[fx].r * blend,
-        255 * (1.0 - blend) + filter_col[fx].g * blend,
-        255 * (1.0 - blend) + filter_col[fx].b * blend
+      CRGB grad = CRGB(
+        255 * (1.0 - blend) + color.r * blend,
+        255 * (1.0 - blend) + color.g * blend,
+        255 * (1.0 - blend) + color.b * blend
       );
-      light(x, 16, color);
+      light(x, 16, grad);
     } else {
       // Empty part stays black
       light(x, 16, CRGB(0, 0, 0));
@@ -74,7 +74,7 @@ void drawFilterCheck(int mappedValue, FilterType fx) {
   }
 
   // Draw the number in light gray / white-ish
-  drawNumber(mappedValue, filter_col[fx], 8);
+  drawNumber(mappedValue, color, 8);
 }
 
 
@@ -118,11 +118,11 @@ void drawNoSD() {
 }
 
 void drawBase() {
-  if (!SMP.singleMode) {
+  if (!GLOB.singleMode) {
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
       for (unsigned int x = 1; x < maxX + 1; x++) {
-        if (SMP.mute[y - 1]) {
+        if (getMuteState(y - 1)) {
           light(x, y, CRGB(0, 0, 0));  // gemutete Zeilen schwarz
         } else {
           light(x, y, col_base[colors]);  // normale Farbcodierung pro Spur
@@ -140,8 +140,8 @@ void drawBase() {
 
   } else {
     // ---- SINGLE MODE ----
-    unsigned int currentChannel = SMP.currentChannel;
-    bool isMuted = SMP.mute[currentChannel];
+    unsigned int currentChannel = GLOB.currentChannel;
+    bool isMuted = getMuteState(currentChannel);
 
     for (unsigned int y = 1; y < maxY; y++) {
       for (unsigned int x = 1; x < maxX + 1; x++) {
@@ -156,6 +156,8 @@ void drawBase() {
       }
     }
 
+    drawStatus();
+
     // 4/4-Takt-Hilfslinien in Zeile 1 (z. B. Start jeder Viertel)
     for (unsigned int x = 1; x <= 13; x += 4) {
       light(x, 1, CRGB(0, 1, 1));  // türkisfarbene Taktmarkierung
@@ -169,13 +171,38 @@ void drawBase() {
 
 void drawStatus() {
   CRGB ledColor = CRGB(0, 0, 0);
-  if (SMP.activeCopy) 
+  if (GLOB.activeCopy) 
   ledColor = CRGB(20, 20, 0);
   for (unsigned int s = 1; s <= maxX; s++) {
     light(s, 1, ledColor);
   }
   for (unsigned int s = 1; s <= maxX; s++) {
     light(s, 16, ledColor);
+  }
+
+  // Add indicators for copy and noteshift functions when cursor is at y=16 in single mode
+  if (GLOB.singleMode && GLOB.y == 16) {
+    // Red indicator (x=2-3)
+    light(2, 1, CRGB(255, 0, 0));  // Red indicator
+    light(3, 1, CRGB(255, 0, 0));
+    
+    // Copy indicator (x=14-15)
+    if (GLOB.activeCopy) {
+      light(14, 1, CRGB(255, 255, 0));  // Yellow for copy active
+      light(15, 1, CRGB(255, 255, 0));
+    } else {
+      light(14, 1, CRGB(50, 50, 0));    // Dim yellow for copy available
+      light(15, 1, CRGB(50, 50, 0));
+    }
+    
+    // Note shift indicator (x=6-7)
+    if (currentMode == &noteShift) {
+      light(6, 1, CRGB(255, 255, 255));  // White for noteshift active
+      light(7, 1, CRGB(255, 255, 255));
+    } else {
+      light(6, 1, CRGB(100, 100, 100));  // Gray for noteshift available
+      light(7, 1, CRGB(100, 100, 100));
+    }
   }
 
   if (currentMode == &noteShift) {
@@ -289,8 +316,8 @@ void drawVelocity() {
       light(x, y, CRGB(0, 20 - y, y * y));
     }
   }
-  drawText("v", 2, 2, CRGB(50, 50, 50));
-  drawText("c", 10, 2, CRGB(50, 50, 50));
+  drawText("v", 2, 2, UI_DIM_WHITE);
+  drawText("c", 10, 2, UI_DIM_WHITE);
 }
 
 
@@ -299,19 +326,22 @@ void drawVelocity() {
 
 
 void drawPages() {
-  //SMP.edit = 1;
+  //GLOB.edit = 1;
   CRGB ledColor;
 
   for (unsigned int p = 1; p <= maxPages; p++) {  // Assuming maxPages is 8
 
     // If the page is the current one, set the LED to white
-    if (SMP.page == p && SMP.edit == p) {
-      ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(200, 250, 200);
-    } else if (SMP.page == p) {
-      ledColor = isNowPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
+    if (GLOB.page == p && GLOB.edit == p) {
+      //ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(200, 250, 200);
+      ledColor = CRGB(255, 255, 50);
+    } else if (GLOB.page == p) {
+      //ledColor = isNowPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
+      ledColor = CRGB(0, 255, 0);
     } else {
-      if (SMP.edit == p) {
-        ledColor = SMP.page == p ? CRGB(50, 50, 50) : CRGB(20, 20, 20);
+      if (GLOB.edit == p) {
+        //ledColor = GLOB.page == p ? CRGB(50, 50, 50) : CRGB(20, 20, 20);
+        ledColor = CRGB(255, 255, 0);
       } else {
         ledColor = hasNotes[p] ? CRGB(0, 0, 35) : CRGB(1, 0, 0);
       }
@@ -332,28 +362,28 @@ void drawPages() {
   *************************************************/
 void drawTriggers() {
   // why?
-  //SMP.edit = 1;
+  //GLOB.edit = 1;
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
     for (unsigned int iy = 1; iy < maxY + 1; iy++) {
-      int thisNote = note[((SMP.edit - 1) * maxX) + ix][iy].channel;
+      int thisNote = note[((GLOB.edit - 1) * maxX) + ix][iy].channel;
       if (thisNote > 0) {
 
-        if (!SMP.mute[thisNote]) {
-          //light(ix, iy, getCol(note[((SMP.edit - 1) * maxX) + ix][iy].channel));
-          if (SMP.singleMode && thisNote == SMP.currentChannel) {
+        if (!getMuteState(thisNote)) {
+          //light(ix, iy, getCol(note[((GLOB.edit - 1) * maxX) + ix][iy].channel));
+          if (GLOB.singleMode && thisNote == GLOB.currentChannel) {
             
-            light(ix, iy, CRGB(200,200,200)); //col[thisNote]);
+            light(ix, iy, UI_BRIGHT_WHITE); //col[thisNote]);
           }else{
               light(ix, iy, col[thisNote]);
           }
           
           
-          if (thisNote != SMP.currentChannel && currentMode == &singleMode) light(ix, iy, col_base[thisNote]);
+          if (thisNote != GLOB.currentChannel && currentMode == &singleMode) light(ix, iy, col_base[thisNote]);
 
           // if there is any note of the same value in the same column, make it less bright
           /*
           for (unsigned int iy2 = 1; iy2 < maxY + 1; iy2++) {
-            if (iy2 != iy && note[((SMP.edit - 1) * maxX) + ix][iy2].channel == note[((SMP.edit - 1) * maxX) + ix][iy].channel) {
+            if (iy2 != iy && note[((GLOB.edit - 1) * maxX) + ix][iy2].channel == note[((GLOB.edit - 1) * maxX) + ix][iy].channel) {
               light(ix, iy2, col_base[thisNote]);
             }
           }
@@ -361,7 +391,7 @@ void drawTriggers() {
 
 
         } else {
-          //light(ix, iy, getCol(note[((SMP.edit - 1) * maxX) + ix][iy].channel) / 24);
+          //light(ix, iy, getCol(note[((GLOB.edit - 1) * maxX) + ix][iy].channel) / 24);
           light(ix, iy, col_base[thisNote]);
         }
       }
@@ -378,22 +408,22 @@ void drawTimer() {
   
   unsigned int timer = ((beat - 1) % maxX + 1);
 
-  if (SMP.page == SMP.edit) {
+  if (GLOB.page == GLOB.edit) {
     if (timer < 1) timer = 1;
     for (unsigned int y = 1; y < maxY; y++) {
-      int ch = note[((SMP.page - 1) * maxX) + timer][y].channel;
+      int ch = note[((GLOB.page - 1) * maxX) + timer][y].channel;
       light(timer, y, CRGB(10, 0, 0));
 
       if (ch> 0) {
-        if (SMP.mute[ch] == 0) {
+        if (getMuteState(ch) == false) {
           
-          if( !SMP.singleMode ) {light(timer, y, CRGB(200, 200, 200));
-          }else{
-            if (SMP.currentChannel == ch){light(timer, y, CRGB(200, 200, 200));}
-          }
+                if( !GLOB.singleMode ) {light(timer, y, UI_BRIGHT_WHITE);
+      }else{
+        if (GLOB.currentChannel == ch){light(timer, y, UI_BRIGHT_WHITE);}
+      }
           
         } else {
-          if( !SMP.singleMode ) light(timer, y, CRGB(00, 00, 00));
+          if( !GLOB.singleMode ) light(timer, y, CRGB(00, 00, 00));
         }
       }
     }
@@ -402,7 +432,7 @@ void drawTimer() {
 
 
 int mapXtoPageOffset(int x) {
-  return x - (SMP.edit - 1) * maxX;
+  return x - (GLOB.edit - 1) * maxX;
 }
 
 /************************************************
@@ -421,14 +451,14 @@ void drawCursor() {
   }
 
   uint8_t hue = pulse; // Directly use pulse as hue for smooth cycling
-  if (note[SMP.x][SMP.y].channel) {
+  if (note[GLOB.x][GLOB.y].channel) {
     
-    CRGB color = col[note[SMP.x][SMP.y].channel];  // aus deiner col[] Farbpalette
-    light(mapXtoPageOffset(SMP.x), SMP.y, color.nscale8_video(pulse));  // pulse = animierte Helligkeit
+    CRGB color = col[note[GLOB.x][GLOB.y].channel];  // aus deiner col[] Farbpalette
+    light(mapXtoPageOffset(GLOB.x), GLOB.y, color.nscale8_video(pulse));  // pulse = animierte Helligkeit
 
 
   }else{
-    light(mapXtoPageOffset(SMP.x), SMP.y, CHSV(hue, 255, 255)); // Full saturation and brightness
+    light(mapXtoPageOffset(GLOB.x), GLOB.y, CHSV(hue, 255, 255)); // Full saturation and brightness
   }
 }
 
@@ -562,8 +592,8 @@ void processPeaks() {
   float interpolatedValues[16];  // Ensure at least 16 values
 
   // Map seek start and end positions to x range (1-16)
-  unsigned int startX = mapf(SMP.seek, 0, 100, 1, 16);
-unsigned int endX = mapf(SMP.seekEnd, 0, 100, 1, 16);
+  unsigned int startX = mapf(GLOB.seek, 0, 100, 1, 16);
+unsigned int endX = mapf(GLOB.seekEnd, 0, 100, 1, 16);
 
   if (peakIndex > 0) {
     // Distribute peak values over 16 positions
@@ -590,9 +620,9 @@ unsigned int endX = mapf(SMP.seekEnd, 0, 100, 1, 16);
   for (int i = 0; i < 16; i++) {
     int x = i + 1;  // Ensure x values go from 1 to 16
     int yPeak = mapf(interpolatedValues[i] * 100, 0, 100, 4, 11);
-    yPeak = constrain(yPeak, 4, 10);
+    yPeak = constrain(yPeak, 5, 10);
 
-    for (int y = 4; y <= yPeak; y++) {
+    for (int y = 5; y <= yPeak; y++) {
       // **Color gradient based on Y (vertical) instead of X**
 
       CRGB color;
@@ -688,11 +718,11 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
     
     drawNumber(currentval, fontColor, 11);
   } else {
-    if (barwidth<4) drawText("LOAD", 2, 11, CRGB(20,20,20));
-    if (barwidth>=4 && barwidth<=8) drawText("KIT", 2, 11, CRGB(20,20,20));
+    if (barwidth<4) drawText("LOAD", 2, 11, UI_BG_DARK);
+    if (barwidth>=4 && barwidth<=8) drawText("KIT", 2, 11, UI_BG_DARK);
     char buf[6];
     snprintf(buf, sizeof(buf), "no.%d", SMP.pack );
-    if (barwidth>8) drawText(buf, 2, 11, CRGB(20,20,20));
+    if (barwidth>8) drawText(buf, 2, 11, UI_BG_DARK);
     FastLED.show();
   }
 }
@@ -701,18 +731,18 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
 void drawBPMScreen() {
 
   FastLEDclear();
-  drawVolume(SMP.vol);
+  drawVolume(GLOB.vol);
   drawBrightness();
-  CRGB volColor = CRGB(SMP.vol * SMP.vol, 20 - SMP.vol, 0);
+  CRGB volColor = CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0);
   Encoder[2].writeRGBCode(CRGBToUint32(volColor));
-  showIcons(HELPER_EXIT, CRGB(0, 0, 100));
-  showIcons(HELPER_BRIGHT, CRGB(20, 20, 20));
+  showIcons(HELPER_EXIT, UI_DIM_BLUE);
+  showIcons(HELPER_BRIGHT, UI_BG_DIM);
   showIcons(HELPER_VOL, volColor);
   if (MIDI_CLOCK_SEND){ 
-      showIcons(HELPER_BPM, CRGB(0, 50, 120));
-      drawNumber(SMP.bpm, CRGB(0, 50, 120), 6);}
+      showIcons(HELPER_BPM, UI_CYAN);
+      drawNumber(SMP.bpm, UI_CYAN, 6);}
       else{
-        drawNumber(SMP.bpm, CRGB(20, 0 , 0), 6);
+        drawNumber(SMP.bpm, UI_DIM_RED, 6);
       }
 }
 
