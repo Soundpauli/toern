@@ -18,7 +18,8 @@ enum IconType {
     ICON_SETTINGS,
     ICON_REC,
     ICON_REC2,
-    ICON_NEW
+    ICON_NEW,
+    HELPER_MINUS
 };
 
 const uint8_t logo[16][16] = {
@@ -132,6 +133,7 @@ const uint8_t helper_bpm[7][2] = { { 13, 13 }, { 13, 14 }, { 13, 15 }, { 14, 14 
 const uint8_t helper_save[3][2] = { { 5, 15 }, { 6, 15 }, { 7, 15 } };
 const uint8_t helper_select[3][2] = { { 13, 15 }, { 14, 15 }, { 15, 15 } };
 const uint8_t helper_exit[3][2] = { { 1, 15 }, { 2, 15 }, { 3, 15 } };
+const uint8_t helper_minus[3][2] = { { 9, 14 }, { 10, 14 }, { 11, 14 } }; //- sign
 
 
 

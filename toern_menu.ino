@@ -34,6 +34,7 @@ void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
     // first run! write magic + defaults
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
+    EEPROM.put(0, (unsigned int)1);            // samplePackID default (1)
     EEPROM.write(EEPROM_DATA_START + 0,  1);   // recMode default
     EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default
     EEPROM.write(EEPROM_DATA_START + 2,  1);   // transportMode default

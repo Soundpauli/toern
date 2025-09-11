@@ -557,6 +557,10 @@ void showIcons(IconType ico, CRGB colors) {
             iconArray = helper_bpm;
             size = sizeof(helper_bpm) / sizeof(helper_bpm[0]);
             break;
+        case HELPER_MINUS:
+            iconArray = helper_minus;
+            size = sizeof(helper_minus) / sizeof(helper_minus[0]);
+            break;
         case ICON_BPM:
             iconArray = icon_bpm;
             size = sizeof(icon_bpm) / sizeof(icon_bpm[0]);

@@ -228,12 +228,17 @@ void loadPattern(bool autoload) {
     extern bool preventPaintUnpaint;
     preventPaintUnpaint = false;
 } else {
+    // File not found - clear all notes and reset all defaults
     for (unsigned int nx = 1; nx < maxlen; nx++) {
       for (unsigned int ny = 1; ny < maxY + 1; ny++) {
         note[nx][ny].channel = 0;
         note[nx][ny].velocity = defaultVelocity;
       }
     }
+    
+    // Auto reset all defaults when loading empty pattern (like pressing reset)
+    extern void resetAllToDefaults();
+    resetAllToDefaults();
   }
 
   updateLastPage();

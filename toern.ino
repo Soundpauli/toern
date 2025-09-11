@@ -998,7 +998,15 @@ void switchMode(Mode *newMode) {
     
     if (currentMode == &loadSaveTrack) {
       // Initialize encoder[2] to current SMP_LOAD_SETTINGS value
-      currentMode->pos[2] = SMP_LOAD_SETTINGS ? 1 : 0;
+      // Only allow settings loading if file exists
+      char OUTPUTf[50];
+      sprintf(OUTPUTf, "%u.txt", SMP.file);
+      if (SD.exists(OUTPUTf)) {
+        currentMode->pos[2] = SMP_LOAD_SETTINGS ? 1 : 0;
+      } else {
+        // For empty files, force settings loading off
+        currentMode->pos[2] = 0;
+      }
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
     }
   }
@@ -1327,8 +1335,8 @@ setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],2);
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-    // In single mode, trigger clear page function
-    if (GLOB.singleMode) {
+    // In single mode, trigger clear page function ONLY when y=16
+    if (GLOB.singleMode && GLOB.y == 16) {
       clearPage();
       preventPaintUnpaint = true;  // Prevent paint/unpaint after deleteall
       return;  // Prevent other button actions from being processed
@@ -1337,8 +1345,8 @@ setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],2);
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
-    // In single mode, trigger random function
-    if (GLOB.singleMode) {
+    // In single mode, trigger random function ONLY when y=16
+    if (GLOB.singleMode && GLOB.y == 16) {
       drawRandoms();
       preventPaintUnpaint = true;  // Prevent paint/unpaint after random
       return;  // Prevent other button actions from being processed
@@ -1655,10 +1663,14 @@ void setup() {
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
   EEPROM.get(0, samplePackID);
-  if (isnan(samplePackID) || samplePackID == 0) {  // Check for NaN properly
-    Serial.print("NO SAMPLEPACK SET! Defaulting to 1");
+  if (isnan(samplePackID) || samplePackID == 0 || samplePackID < 1) {  // Check for NaN, zero, or invalid values
+    Serial.print("NO SAMPLEPACK SET OR INVALID VALUE! Defaulting to 1");
     samplePackID = 1;
+    EEPROM.put(0, samplePackID);  // Save the default to EEPROM
   }
+  
+  // Synchronize SMP.pack with the loaded samplePackID
+  SMP.pack = samplePackID;
 
   pinMode(INT_PIN, INPUT_PULLUP);  // Interrups for encoder
   pinMode(0, INPUT_PULLDOWN);
@@ -3129,7 +3141,8 @@ void showLoadSave() {
     drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
   } else {
     showIcons(HELPER_SAVE, UI_BRIGHT_RED);
-    showIcons(HELPER_LOAD, UI_DIM_GREEN);
+    showIcons(HELPER_LOAD, UI_DIM_GREEN);  // Keep load indicator even for empty files
+    showIcons(HELPER_MINUS, UI_DIM_GREEN);  // Show minus sign for empty pattern
     drawNumber(SMP.file, UI_DIM_BLUE, 11);
   }
   FastLED.setBrightness(ledBrightness);  // Already done in updateBrightness, but ok if called again
@@ -3142,10 +3155,18 @@ void showLoadSave() {
   }
   
   // Update SMP_LOAD_SETTINGS based on encoder[2] position
-  if (currentMode->pos[2] == 1) {
-    SMP_LOAD_SETTINGS = true;
+  // Only allow settings loading if file exists
+  if (SD.exists(OUTPUTf)) {
+    if (currentMode->pos[2] == 1) {
+      SMP_LOAD_SETTINGS = true;
+    } else {
+      SMP_LOAD_SETTINGS = false;
+    }
   } else {
+    // For empty files, force settings loading off and disable encoder
     SMP_LOAD_SETTINGS = false;
+    currentMode->pos[2] = 0;
+    Encoder[2].writeCounter((int32_t)0);
   }
 }
 
@@ -3156,6 +3177,15 @@ void showSamplePack() {
   showIcons(ICON_SAMPLEPACK, UI_DIM_YELLOW);
   showIcons(HELPER_SELECT, UI_DIM_BLUE);
   // drawNumber(SMP.pack, CRGB(20, 0, 0), 11); // This one seems redundant given the logic below
+
+  // Validate samplepack value - ensure it's within valid range (1-99)
+  if (SMP.pack < 1 || SMP.pack > 99) {
+    Serial.print("INVALID SAMPLEPACK VALUE! Defaulting to 1");
+    SMP.pack = 1;
+    currentMode->pos[3] = 1;
+    Encoder[3].writeCounter((int32_t)1);
+    EEPROM.put(0, SMP.pack);  // Save the corrected value to EEPROM
+  }
 
   char OUTPUTf[50];
   sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);  // Use %u
@@ -3179,6 +3209,13 @@ void showSamplePack() {
 void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack_id to avoid conflict
   //Serial.println("Loading SamplePack #" + String(pack_id));
   drawNoSD();
+  
+  // Validate pack_id - ensure it's within valid range (1-99)
+  if (pack_id < 1 || pack_id > 99) {
+    Serial.print("INVALID SAMPLEPACK ID! Defaulting to 1");
+    pack_id = 1;
+  }
+  
   EEPROM.put(0, pack_id);                        // Save current pack_id to EEPROM
   for (unsigned int z = 1; z < maxFiles; z++) {  // maxFiles is 9. So loads samples 1 through 8.
                                                  // Sample arrays are often 0-indexed. _samplers[0] to _samplers[8] exist.
@@ -3208,18 +3245,11 @@ void updateLastPage() {
     unsigned int baseIndex = (p - 1) * maxX;
     for (unsigned int ix = 1; ix <= maxX; ix++) {
       for (unsigned int iy = 1; iy <= maxY; iy++) {
-        // In single mode, only consider notes from the current channel
-        if (GLOB.singleMode) {
-          if (note[baseIndex + ix][iy].channel == GLOB.currentChannel) {
-            pageHasNotesThisPage = true;
-            break;
-          }
-        } else {
-          // In draw mode, consider notes from any channel
-          if (note[baseIndex + ix][iy].channel > 0) {
-            pageHasNotesThisPage = true;
-            break;
-          }
+        // Always consider notes from any channel for playback range
+        // The current channel filtering should only affect visual display, not playback
+        if (note[baseIndex + ix][iy].channel > 0) {
+          pageHasNotesThisPage = true;
+          break;
         }
       }
       if (pageHasNotesThisPage) {
