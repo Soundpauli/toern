@@ -436,7 +436,7 @@ Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1
 Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 15 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
+Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 // Declare currentMode as a global variable
 Mode *currentMode;
 Mode *oldMode;
@@ -473,6 +473,7 @@ struct GlobalVars {
   unsigned int edit;      // edit mode or plaing mode?
   unsigned int folder;    // current selected folder id
   bool activeCopy;        // is copy/paste active?
+  unsigned int copyChannel; // channel that was copied (for cross-channel paste)
   unsigned int x;         // cursor X
   unsigned int y;         // cursor Y
   unsigned int seek;      // skipped into sample
@@ -580,7 +581,7 @@ int maxParamVal[12] = { 1000.0, 2000.0, 1000.0, 1000.0, 1.0, 1000.0};
 
 
 
-enum FilterType { EFX,
+enum FilterType { NULL_,
                   PASS,
                   FREQUENCY,
                   REVERB,
@@ -594,7 +595,8 @@ enum FilterType { EFX,
                   SPEED,
                   PITCH,
                   ACTIVE,
-};  //Define filter types
+                  EFX
+  };  //Define filter types
 
 
 enum DrumTypes { DRUMTONE,
@@ -1206,6 +1208,29 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     return;
   }
 
+  // Channel switching in single mode with button combination 0-1-0-0 when not at y=16
+  if (currentMode == &singleMode && GLOB.y != 16 && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100" when not at y=16
+    // Cycle through channels 1-8 (avoiding special channels 0, 9, 10, 12, 15)
+    GLOB.currentChannel++;
+    if (GLOB.currentChannel > 8) {
+      GLOB.currentChannel = 1;
+    }
+    // Skip special channels
+    if (GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15) {
+      GLOB.currentChannel = 1;
+    }
+    
+    // Update encoder colors to reflect new channel
+    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    
+    // Update channel volume encoder
+    Encoder[2].writeCounter((int32_t)SMP.channelVol[GLOB.currentChannel]);
+    currentMode->pos[2] = SMP.channelVol[GLOB.currentChannel];
+    
+    return;  // Prevent other button actions from being processed
+  }
+
   if (currentMode == &draw && match_buttons(currentButtonStates, 1, 1, 0, 0)) {  // "1100"
     //toggleCopyPaste();
   }
@@ -1447,13 +1472,13 @@ void initSamples() {
   synthmixer11.gain(1, GAIN_3);
   synthmixer11.gain(3, GAIN_3);
 
-  synthmixer13.gain(0, GAIN_3);
-  synthmixer13.gain(1, GAIN_3);
-  synthmixer13.gain(3, GAIN_3);
+  synthmixer13.gain(0, 0.15);  // Reduced to half of current (0.3 * 0.5 = 0.15)
+  synthmixer13.gain(1, 0.15);
+  synthmixer13.gain(3, 0.15);
 
-  synthmixer14.gain(0, GAIN_3);
-  synthmixer14.gain(1, GAIN_3);
-  synthmixer14.gain(3, GAIN_3);
+  synthmixer14.gain(0, 0.15);  // Reduced to half of current (0.3 * 0.5 = 0.15)
+  synthmixer14.gain(1, 0.15);
+  synthmixer14.gain(3, 0.15);
 
 
   mixer0.gain(0, GAIN_1);  //PREV
@@ -1515,11 +1540,11 @@ void initSamples() {
   amplitude[11][1] = 0.3f;
   // Set amplitude values similarly
 
-  amplitude[13][0] = 0.3f;
-  amplitude[13][1] = 0.3f;
+  amplitude[13][0] = 0.1125f;  // Reduced to half of current (0.225 * 0.5 = 0.1125)
+  amplitude[13][1] = 0.1125f;
 
-  amplitude[14][0] = 0.3f;
-  amplitude[14][1] = 0.3f;
+  amplitude[14][0] = 0.1125f;  // Reduced to half of current (0.225 * 0.5 = 0.1125)
+  amplitude[14][1] = 0.1125f;
 
 
 
@@ -1749,6 +1774,7 @@ void initGlobalVars() {
   GLOB.currentChannel = 1;
   GLOB.vol = 10;
   GLOB.velocity = 10;
+  GLOB.copyChannel = 0;
   GLOB.page = 1;
   GLOB.edit = 1;
   GLOB.folder = 0;
@@ -2501,11 +2527,11 @@ void tmpMuteAll(bool pressed) {
     // only on the *transition* into pressed do we save & mute
     if (!tmpMuteActive) {
       // save current mutes
-      for (unsigned i = 1; i <= maxFiles; i++) {  // maxFiles or maxY for channels? Assuming mute array is indexed 1..maxFiles
+      for (unsigned i = 1; i <= maxY; i++) {  // Use maxY to include all channels (1-16)
         prevMuteState[i] = getMuteState(i);
       }
       // mute all except the current channel
-      for (unsigned i = 1; i <= maxFiles; i++) {
+      for (unsigned i = 1; i <= maxY; i++) {
         setMuteState(i, (i == GLOB.currentChannel) ? false : true);
       }
       tmpMuteActive = true;
@@ -2513,7 +2539,7 @@ void tmpMuteAll(bool pressed) {
   } else {
     // only on the *transition* into released do we restore
     if (tmpMuteActive) {
-      for (unsigned i = 1; i <= maxFiles; i++) {
+      for (unsigned i = 1; i <= maxY; i++) {
         setMuteState(i, prevMuteState[i]);
       }
       tmpMuteActive = false;
@@ -2684,18 +2710,28 @@ void playNote() {
 
           //MidiSendNoteOn(b, ch, vel); // This needs ch to be 1-16 for MIDI, and b as pitch.
           if (ch < 9) {                                                    // Sample channels (0-8 are _samplers[0] to _samplers[8])
-            if (false==true) {
-            //if (SMP.param_settings[ch][TYPE] == 0) {                       // Drum type for sample channels 0,1,2
+            if (SMP.filter_settings[ch][EFX] == 1) {                       // Drum type for sample channels 0,1,2
               float baseTone = pianoFrequencies[constrain(b - 1, 0, 15)];  // b is 1-16, map to 0-15 for pianoFreq
               float decay = mapf(SMP.drum_settings[ch][DRUMDECAY], 0, 64, 0, 1023);
               float pitchMod = mapf(SMP.drum_settings[ch][DRUMPITCH], 0, 64, 0, 1023);
               float type = SMP.drum_settings[ch][DRUMTYPE];
               float notePitchOffset = mapf(SMP.drum_settings[ch][DRUMTONE], 0, 64, 0, 1023);  // Additional pitch
 
-              if (ch == 0) KD_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // KD on channel 0 (_sampler 1)
-              if (ch == 1) SN_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // SN on channel 1 (_sampler 2)
-              if (ch == 2) HH_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // HH on channel 2 (_sampler 3)
-                                                                                        // Channels 3-8 using this mode are undefined behavior
+              
+              Serial.print(ch);  
+              Serial.print("-Drum params: baseTone+notePitchOffset=");
+                
+                Serial.print(baseTone + notePitchOffset);
+                Serial.print(", decay=");
+                Serial.print(decay);
+                Serial.print(", pitchMod=");
+                Serial.println(pitchMod);
+                
+              
+              if (ch == 1) KD_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // KD on channel 1 (_sampler 1)
+              if (ch == 2) SN_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // SN on channel 2 (_sampler 2)
+              if (ch == 3) HH_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // HH on channel 3 (_sampler 3)
+                                                                                        // Channels 4-8 using this mode are undefined behavior
             } else {                                                                    // Sample playback for channels 0-8
               // `b` is grid row (1-16), map to pitch. `SampleRate` seems to be a pitch offset.
               // The original `b - (ch + 1)` seems like an attempt to map grid row to a MIDI-like note relative to channel.
@@ -2930,13 +2966,23 @@ void paint() {
     int pitch_from_row = current_y;  // 1-16
 
     if (painted_channel > 0 && painted_channel < 9) {  // Sampler channels
-      // Map pitch_from_row (1-16) to a MIDI note or sampler-specific pitch.
-      // Original: 12 * SampleRate[ch] + y - (ch + 1)
-      //int pitch = (12 * SampleRate[painted_channel]) + (pitch_from_row - 1);  // Example mapping
-      
-      int pitch = 12 * SampleRate[painted_channel] + pitch_from_row - (painted_channel + 1);
+      // Check if channel is set to DRUM mode (EFX = 1)
+      if (SMP.filter_settings[painted_channel][EFX] == 1 && painted_channel >= 1 && painted_channel <= 3) {
+        // Play drum instead of sample
+        float baseTone = pianoFrequencies[constrain(pitch_from_row - 1, 0, 15)];  // pitch_from_row is 1-16, map to 0-15 for pianoFreq
+        float decay = mapf(SMP.drum_settings[painted_channel][DRUMDECAY], 0, 64, 0, 1023);
+        float pitchMod = mapf(SMP.drum_settings[painted_channel][DRUMPITCH], 0, 64, 0, 1023);
+        float type = SMP.drum_settings[painted_channel][DRUMTYPE];
+        float notePitchOffset = mapf(SMP.drum_settings[painted_channel][DRUMTONE], 0, 64, 0, 1023);  // Additional pitch
 
-      _samplers[painted_channel].noteEvent(pitch, painted_velocity, true, true);
+        if (painted_channel == 1) KD_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // KD on channel 1
+        if (painted_channel == 2) SN_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // SN on channel 2
+        if (painted_channel == 3) HH_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // HH on channel 3
+      } else {
+        // Play sample as normal
+        int pitch = 12 * SampleRate[painted_channel] + pitch_from_row - (painted_channel + 1);
+        _samplers[painted_channel].noteEvent(pitch, painted_velocity, true, true);
+      }
     } else if (painted_channel == 11) {  // Specific synth
       playSound((12 * (int)octave[0]) + transpose + (pitch_from_row - 1), 0);
     } else if (painted_channel >= 13 && painted_channel < 15) {            // General synths
@@ -2985,6 +3031,8 @@ void toggleCopyPaste() {
         }
       }
     }
+    // Store the source channel for cross-channel pasting
+    GLOB.copyChannel = GLOB.currentChannel;
   } else {
 
     // paste the memory into the song
@@ -2999,9 +3047,10 @@ void toggleCopyPaste() {
             note[c][y].channel = 0;
             note[c][y].velocity = defaultVelocity;
           }
-          // Then paste notes for the current channel (overwriting)
-          if (tmp[src][y].channel == GLOB.currentChannel) {
-            note[c][y] = tmp[src][y];
+          // Then paste notes from the copied channel to the current channel
+          if (tmp[src][y].channel == GLOB.copyChannel) {
+            note[c][y].channel = GLOB.currentChannel;
+            note[c][y].velocity = tmp[src][y].velocity;
           }
           // Don't modify other channels when pasting in single mode
         } else {

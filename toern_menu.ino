@@ -1,5 +1,5 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 16
+#define MENU_PAGES_COUNT 17
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -25,10 +25,18 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"PVL", 13, false, nullptr},          // Preview Volume
   {"MON", 14, true, "LEVEL"},           // Monitor Level + Level Control
   {"RST", 15, false, nullptr},          // Reset
-  {"CFG", 16, false, nullptr}           // Settings
+  {"AI", 16, true, "PAGES"},            // AI Song Generation + Page Count
+  {"NEW", 17, true, "LENGTH"}           // Genre Generation + Length Control
 };
 
 int currentMenuPage = 0;
+int aiTargetPage = 6; // Default target page for AI song generation
+int aiBaseStartPage = 1; // Start of base page range for AI analysis
+int aiBaseEndPage = 1;   // End of base page range for AI analysis
+
+// Genre generation variables
+int genreType = 0; // 0=BLANK, 1=TECH, 2=HIPH, 3=DNB, 4=HOUS, 5=AMBT
+int genreLength = 8; // Default length for genre generation
 
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
@@ -162,7 +170,8 @@ void showMenu() {
     case 13: encoderColor = UI_ORANGE; break;    // PVL
     case 14: encoderColor = CRGB(200, 0, 20); break; // MON
     case 15: encoderColor = CRGB(255, 100, 0); break; // RST
-    case 16: encoderColor = CRGB(100, 100, 100); break; // CFG
+    case 16: encoderColor = CRGB(255, 0, 255); break; // AI
+    case 17: encoderColor = CRGB(0, 255, 255); break; // NEW
   }
   
   Encoder[3].writeRGBCode(encoderColor.r << 16 | encoderColor.g << 8 | encoderColor.b);
@@ -287,8 +296,12 @@ void drawMainSettingStatus(int setting) {
       drawText("RSET", 2, 10, CRGB(255, 100, 0));
       break;
       
-    case 16: // CFG - Settings
-      drawText("SET", 2, 10, CRGB(100, 100, 100));
+    case 16: // AI - Song Generation
+      drawText("AI", 2, 10, CRGB(255, 0, 255));
+      break;
+      
+    case 17: // NEW - Genre Generation
+      drawText("NEW", 2, 10, CRGB(0, 255, 255));
       break;
   }
 }
@@ -330,13 +343,78 @@ void drawAdditionalFeatures(int setting) {
       }
       break;
     }
+    
+    case 16: { // AI page - Base Page Range + Additional Pages Count (all on one line)
+      // Draw everything on y=8: Orange base range + Green additional pages count
+      for (int x = 1; x <= 16; x++) {
+        if (x >= aiBaseStartPage && x <= aiBaseEndPage) {
+          light(x, 8, CRGB(255, 165, 0)); // Orange for base pages
+        } else if (x > aiBaseEndPage && x <= aiBaseEndPage + aiTargetPage) {
+          light(x, 8, CRGB(0, 255, 0)); // Green for additional pages to generate
+        } else {
+          light(x, 8, CRGB(0, 0, 0));
+        }
+      }
+      
+      // Draw "PAGE" text in pink at the bottom
+      drawText("PAGE", 2, 2, CRGB(255, 0, 255)); // Pink color
+      break;
+    }
+    
+    case 17: { // NEW page - Genre Selection + Length Control
+      // Draw genre selection on y=8
+      drawGenreSelection();
+      
+      // Draw length meter on y=15 in pink
+      int lengthLength = mapf(genreLength, 1, 16, 1, 16);
+      for (int x = 1; x <= 16; x++) {
+        if (x <= lengthLength) {
+          light(x, 8, CRGB(255, 0, 255)); // Pink for length
+        } else {
+          light(x, 8, CRGB(0, 0, 0));
+        }
+      }
+      
+      // Draw "LENGTH" text in pink at the bottom
+      //drawText("LENGTH", 2, 2, CRGB(255, 0, 255)); // Pink color
+      break;
+    }
   }
+}
+
+void drawGenreSelection() {
+  // Draw genre options on y=8
+  const char* genres[] = {"BLANK", "TECH", "HIPH", "DNB", "HOUS", "AMBT"};
+  CRGB genreColors[] = {
+    CRGB(100, 100, 100), // BLANK - gray
+    CRGB(255, 100, 0),   // TECH - orange
+    CRGB(255, 0, 255),   // HIPH - magenta
+    CRGB(0, 255, 0),     // DNB - green
+    CRGB(0, 100, 255),   // HOUS - blue
+    CRGB(255, 255, 0)    // AMBT - yellow
+  };
+  
+  // Draw current genre text
+  drawText(genres[genreType], 2, 2, genreColors[genreType]);
 }
 
 void handleAdditionalFeatureControls(int setting) {
   static bool recMenuFirstEnter = true;
   static bool monMenuFirstEnter = true;
+  static bool aiMenuFirstEnter = true;
+  static bool newMenuFirstEnter = true;
   static bool menuFirstEnter = true;
+  static int lastSetting = -1;
+  
+  // Reset first enter flags when switching to a different setting
+  if (setting != lastSetting) {
+    recMenuFirstEnter = true;
+    monMenuFirstEnter = true;
+    aiMenuFirstEnter = true;
+    newMenuFirstEnter = true;
+    menuFirstEnter = true;
+    lastSetting = setting;
+  }
   
   switch (setting) {
     case 4: // REC page - Mic Gain control
@@ -382,10 +460,114 @@ void handleAdditionalFeatureControls(int setting) {
       }
       break;
       
+    case 16: { // AI page - Target Count (enc0), Base Start (enc1), Base End (enc2)
+      static int lastAiTargetPage = -1;
+      static int lastAiBaseStartPage = -1;
+      static int lastAiBaseEndPage = -1;
+      
+      // Set encoder counters only on first entry
+      if (aiMenuFirstEnter) {
+        Encoder[0].writeCounter((int32_t)aiTargetPage);
+        Encoder[0].writeMax((int32_t)16);
+        Encoder[0].writeMin((int32_t)1);
+        
+        Encoder[1].writeCounter((int32_t)aiBaseStartPage);
+        Encoder[1].writeMax((int32_t)16);
+        Encoder[1].writeMin((int32_t)1);
+        
+        Encoder[2].writeCounter((int32_t)aiBaseEndPage);
+        Encoder[2].writeMax((int32_t)16);
+        Encoder[2].writeMin((int32_t)1);
+        
+        aiMenuFirstEnter = false;
+      }
+      
+      // Handle target page count (encoder 0)
+      if (currentMode->pos[0] != lastAiTargetPage) {
+        aiTargetPage = currentMode->pos[0];
+        if (aiTargetPage > 16) aiTargetPage = 16;
+        if (aiTargetPage < 1) aiTargetPage = 1;
+        drawAdditionalFeatures(setting);
+        lastAiTargetPage = aiTargetPage;
+      }
+      
+      // Handle base start page (encoder 1)
+      if (currentMode->pos[1] != lastAiBaseStartPage) {
+        aiBaseStartPage = currentMode->pos[1];
+        if (aiBaseStartPage > 16) aiBaseStartPage = 16;
+        if (aiBaseStartPage < 1) aiBaseStartPage = 1;
+        
+        // Ensure base start <= base end
+        if (aiBaseStartPage > aiBaseEndPage) {
+          aiBaseEndPage = aiBaseStartPage;
+          Encoder[2].writeCounter((int32_t)aiBaseEndPage);
+        }
+        
+        drawAdditionalFeatures(setting);
+        lastAiBaseStartPage = aiBaseStartPage;
+      }
+      
+      // Handle base end page (encoder 2)
+      if (currentMode->pos[2] != lastAiBaseEndPage) {
+        aiBaseEndPage = currentMode->pos[2];
+        if (aiBaseEndPage > 16) aiBaseEndPage = 16;
+        if (aiBaseEndPage < 1) aiBaseEndPage = 1;
+        
+        // Ensure base end >= base start
+        if (aiBaseEndPage < aiBaseStartPage) {
+          aiBaseStartPage = aiBaseEndPage;
+          Encoder[1].writeCounter((int32_t)aiBaseStartPage);
+        }
+        
+        drawAdditionalFeatures(setting);
+        lastAiBaseEndPage = aiBaseEndPage;
+      }
+      break;
+    }
+    
+    case 17: { // NEW page - Genre Type (enc0), Length (enc1)
+      static int lastGenreType = -1;
+      static int lastGenreLength = -1;
+      
+      // Set encoder counters only on first entry
+      if (newMenuFirstEnter) {
+        Encoder[0].writeCounter((int32_t)genreType);
+        Encoder[0].writeMax((int32_t)5);
+        Encoder[0].writeMin((int32_t)0);
+        
+        Encoder[1].writeCounter((int32_t)genreLength);
+        Encoder[1].writeMax((int32_t)16);
+        Encoder[1].writeMin((int32_t)1);
+        
+        newMenuFirstEnter = false;
+      }
+      
+      // Handle genre type (encoder 0)
+      if (currentMode->pos[0] != lastGenreType) {
+        genreType = currentMode->pos[0];
+        if (genreType > 5) genreType = 5;
+        if (genreType < 0) genreType = 0;
+        drawAdditionalFeatures(setting);
+        lastGenreType = genreType;
+      }
+      
+      // Handle genre length (encoder 1)
+      if (currentMode->pos[1] != lastGenreLength) {
+        genreLength = currentMode->pos[1];
+        if (genreLength > 16) genreLength = 16;
+        if (genreLength < 1) genreLength = 1;
+        drawAdditionalFeatures(setting);
+        lastGenreLength = genreLength;
+      }
+      break;
+    }
+      
          default:
        // Reset first enter flags when not on pages with additional features
        recMenuFirstEnter = true;
        monMenuFirstEnter = true;
+       aiMenuFirstEnter = true;
+       newMenuFirstEnter = true;
        menuFirstEnter = true;
        break;
   }
@@ -526,8 +708,13 @@ void switchMenu(int menuPosition){
         break;
 
         case 16:
-        // Settings menu - could be used for additional settings
-        // For now, just a placeholder
+        // AI Song Generation - generate song from current page to target page
+        generateSong();
+        break;
+        
+        case 17:
+        // Genre Generation - generate new track from page 1 to selected length
+        generateGenreTrack();
         break;
     }
     //saveMenutoEEPROM();

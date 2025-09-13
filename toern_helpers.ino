@@ -1,4 +1,58 @@
 
+// Forward declarations for musical random generation functions
+struct HarmonicAnalysis {
+  bool hasRoot = false;
+  bool hasThird = false;
+  bool hasFifth = false;
+  bool hasSeventh = false;
+  int rootNote = 0;
+  bool isMajor = false;
+  bool isMinor = false;
+};
+
+struct BasePagePattern {
+  bool hasNotes[16];           // Which steps have notes for this channel
+  int noteRows[16];           // Which rows (pitches) are used on each step
+  int velocities[16];         // Velocity values for each step
+  int stepCount;              // How many steps have notes
+  float density;              // Note density (steps with notes / total steps)
+  int mostCommonRow;          // Most frequently used note row
+  int rhythmPattern[16];      // Rhythm pattern (1 = note, 0 = rest)
+  bool isRhythmic;            // True if this channel has rhythmic patterns
+  bool isMelodic;             // True if this channel has melodic patterns
+};
+
+void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
+void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
+void generateBassOrMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
+void generateBassLine(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
+void generateMainMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
+void generateBasicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
+void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset);
+void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset);
+int createHarmonicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony);
+int createMelodicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony);
+int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony);
+void generateSong();
+void generateGenreTrack();
+void setGenreBPM();
+void applyBPMDirectly(int bpm);
+void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int page);
+void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int page);
+void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page);
+void generateHousePattern(unsigned int start, unsigned int end, unsigned int page);
+void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int page);
+
+// External variables from menu
+extern int genreType;
+extern int genreLength;
+
+// External variables from main system
+extern Device SMP;
+extern Mode volume_bpm;
+extern IntervalTimer playTimer;
+extern float playNoteInterval;
+
 void EEPROMgetLastFiles() {
   //get lastFile Array from Eeprom
   EEPROM.get(100, lastFile);
@@ -19,6 +73,12 @@ void loadSMPSettings() {
   // Don't load settings if SMP_LOAD_SETTINGS is false
   if (!SMP_LOAD_SETTINGS) {
     return;
+  }
+  
+  // CRITICAL FIX: Ensure channels 4-8 are always in sample mode (EFX=0)
+  // This prevents saved patterns from incorrectly setting these channels to drum mode
+  for (int ch = 4; ch <= 8; ch++) {
+    SMP.filter_settings[ch][EFX] = 0;
   }
   
   // Define the valid channels: 1,2,3,4,5,6,7,8,11,13,14
@@ -45,7 +105,7 @@ void loadSMPSettings() {
     if (ch >= 1 && ch <= 3) {
         for (int d = 0; d < NUM_DRUMS; d++) {
            setDrums((DrumTypes)d, ch);
-    }
+        }
     }
     
     // Load Synths - apply synth settings (only for channel 11)
@@ -53,6 +113,38 @@ void loadSMPSettings() {
     updateSynthVoice(11);
   }
   }
+  
+  // CRITICAL: Initialize drum engines for channels set to DRUM mode (EFX=1)
+  // This replicates what happens during manual switching and ensures drums work after loading
+  for (int ch = 1; ch <= 3; ch++) {
+    if (SMP.filter_settings[ch][EFX] == 1) {
+      // Use default parameters
+      float tone = 0;      // DRUMTONE = 0
+      float decay = 512;   // DRUMDECAY = 32 mapped to 0-1023
+      float pitchMod = 512; // DRUMPITCH = 32 mapped to 0-1023  
+      int type = 1;        // DRUMTYPE = 1
+      
+      // Initialize the appropriate drum engine
+      if (ch == 1) {
+        KD_drum(tone, decay, pitchMod, type);
+      } else if (ch == 2) {
+        SN_drum(tone, decay, pitchMod, type);
+      } else if (ch == 3) {
+        HH_drum(tone, decay, pitchMod, type);
+      }
+      
+      // Trigger the shared envelope to initialize it
+      // This replicates what happens when samples play and makes drums work
+      if (ch == 1) {
+        envelope1.noteOn();
+      } else if (ch == 2) {
+        envelope2.noteOn();
+      } else if (ch == 3) {
+        envelope3.noteOn();
+      }
+    }
+  }
+  
   
   // Optionally update other settings such as channel volumes
   // or call updateFiltersAndParameters() if needed.
@@ -325,6 +417,8 @@ int getPage(int x) {
   return (x - 1) / maxX + 1;  // Calculate page number
 }
 
+// Harmonic analysis structure for musical random generation (moved to top of file)
+
 void drawRandoms(){
   
   // Determine current page boundaries.
@@ -342,103 +436,1373 @@ void drawRandoms(){
     }
   }
   
-  // --- Process each column individually ---
+  // --- Step 2: Analyze existing harmonic content ---
+  HarmonicAnalysis harmony;
+  
+  // Analyze existing notes to determine key/scale
   for(unsigned int c = start; c < end; c++){
-    // Determine the column's tonality based on existing notes (from any channel).
-    bool foundMajor = false, foundMinor = false;
     for(unsigned int r = 1; r <= 16; r++){
       if(note[c][r].channel != 0){
-        if(r == 1 || r == 3 || r == 5)
-          foundMajor = true;
-        if(r == 6 || r == 13)
-          foundMinor = true;
+        // Map row to scale degrees (1-based)
+        if(r == 1 || r == 8 || r == 15) { harmony.hasRoot = true; harmony.rootNote = r; }
+        if(r == 3 || r == 10) { harmony.hasThird = true; harmony.isMajor = true; }
+        if(r == 6 || r == 13) { harmony.hasThird = true; harmony.isMinor = true; }
+        if(r == 5 || r == 12) { harmony.hasFifth = true; }
+        if(r == 2 || r == 9) { harmony.hasSeventh = true; }
       }
     }
-    // Decide the allowed set:
-    bool useMajor;
-    if(foundMajor && !foundMinor) {
-      useMajor = true;
-    } else if(foundMinor && !foundMajor) {
-      useMajor = false;
+  }
+  
+  // --- Step 3: Channel-specific generation ---
+  if(channel >= 1 && channel <= 4) {
+    // Rhythm channels (1-4): Generate rhythmic patterns
+    generateRhythmicPattern(start, end, channel, harmony);
+  } else if(channel >= 5 && channel <= 8) {
+    // Voice channels (5-8): Generate melodic patterns
+    generateMelodicPattern(start, end, channel, harmony);
+  } else if(channel == 11) {
+    // Channel 11: Generate bass or main melody
+    generateBassOrMelody(start, end, channel, harmony);
     } else {
-      // If ambiguous or empty, choose randomly.
-      useMajor = (random(0,2) == 0);
+    // Other channels: Use original logic as fallback
+    generateBasicPattern(start, end, channel, harmony);
+  }
+}
+
+// Generate rhythmic patterns for channels 1-4
+void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+  // Define 4/4 time signature patterns with more sophisticated rhythms
+  const int strongBeats[] = {1, 5, 9, 13};  // Beat 1, 2, 3, 4
+  const int weakBeats[] = {3, 7, 11, 15};   // Off-beats
+  
+  // Different rhythm patterns for different channels
+  int patternType = (channel - 1) % 4;
+  
+  for(unsigned int c = start; c < end; c++) {
+    int x_rel = c - start + 1;
+    int beatPosition = ((x_rel - 1) % 16) + 1;
+    
+    bool shouldPlay = false;
+    int velocity = defaultVelocity;
+    
+    switch(patternType) {
+      case 0: // Channel 1: Kick-like pattern (Bass drum)
+        shouldPlay = (beatPosition == 1 || beatPosition == 9); // Beat 1 and 3
+        // Add some ghost notes for groove
+        if(random(0, 100) < 20 && (beatPosition == 5 || beatPosition == 13)) {
+          shouldPlay = true;
+          velocity = 60; // Ghost note
+        } else {
+          velocity = 120; // Strong kick
+        }
+        break;
+      case 1: // Channel 2: Snare-like pattern  
+        shouldPlay = (beatPosition == 5 || beatPosition == 13); // Beat 2 and 4
+        // Add some ghost snares
+        if(random(0, 100) < 30 && (beatPosition == 3 || beatPosition == 7 || beatPosition == 11 || beatPosition == 15)) {
+          shouldPlay = true;
+          velocity = 70; // Ghost snare
+        } else {
+          velocity = 100; // Strong snare
+        }
+        break;
+      case 2: // Channel 3: Hi-hat pattern
+        shouldPlay = (beatPosition % 2 == 0); // Every other beat
+        // Add some open hi-hats
+        if(random(0, 100) < 15 && (beatPosition == 5 || beatPosition == 13)) {
+          velocity = 90; // Open hi-hat
+        } else {
+          velocity = 80; // Closed hi-hat
+        }
+        break;
+      case 3: // Channel 4: Percussion pattern
+        // More musical percussion with accent patterns
+        if(beatPosition == 1 || beatPosition == 9) {
+          shouldPlay = true;
+          velocity = 110; // Accent
+        } else if(random(0, 100) < 40) {
+          shouldPlay = true;
+          velocity = 85; // Regular hit
+        }
+        break;
     }
     
-    // Define allowed chord tones (1-based indices into pianoFrequencies).
-    const int allowedMajor[] = {1, 3, 5, 8, 10, 12, 15};
-    const int allowedMinor[] = {6, 8, 10, 13, 15};
-    
-    const int numMajor = sizeof(allowedMajor) / sizeof(allowedMajor[0]);
-    const int numMinor = sizeof(allowedMinor) / sizeof(allowedMinor[0]);
-    
-    const int* allowedArray = useMajor ? allowedMajor : allowedMinor;
-    int numAllowed = useMajor ? numMajor : numMinor;
-    
-    // Determine the relative x position within the page.
+    if(shouldPlay) {
+      // Choose a rhythmically appropriate note with harmonic awareness
+      int noteRow = 1; // Default to root
+      if(harmony.hasRoot) {
+        noteRow = harmony.rootNote;
+        // Add some harmonic variation
+        if(random(0, 100) < 20) {
+          if(harmony.hasFifth) noteRow = 5;
+          else if(harmony.hasThird) noteRow = (harmony.isMajor) ? 3 : 6;
+        }
+      } else if(harmony.hasFifth) {
+        noteRow = 5;
+      } else {
+        noteRow = random(1, 9); // Random if no harmony detected
+      }
+      
+      // Only place note if slot is empty (channel == 0)
+      if(note[c][noteRow].channel == 0) {
+        note[c][noteRow].channel = channel;
+        note[c][noteRow].velocity = velocity;
+      }
+    }
+  }
+}
+
+// Generate melodic patterns for channels 5-8
+void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+  // Define scale notes based on harmonic analysis
+  int scaleNotes[8];
+  int scaleSize = 0;
+  
+  if(harmony.isMajor) {
+    int majorScale[] = {1, 3, 5, 6, 8, 10, 12, 13};
+    for(int i = 0; i < 8; i++) {
+      scaleNotes[i] = majorScale[i];
+    }
+    scaleSize = 8;
+  } else if(harmony.isMinor) {
+    int minorScale[] = {6, 8, 10, 11, 13, 15, 1, 3};
+    for(int i = 0; i < 8; i++) {
+      scaleNotes[i] = minorScale[i];
+    }
+    scaleSize = 8;
+  } else {
+    // Default pentatonic scale
+    int pentatonic[] = {1, 3, 5, 8, 10};
+    for(int i = 0; i < 5; i++) {
+      scaleNotes[i] = pentatonic[i];
+    }
+    scaleSize = 5;
+  }
+  
+  // Different melodic styles for different voice channels
+  int voiceType = (channel - 5) % 4;
+  int phraseLength = 4; // 4-beat phrases
+  int currentNote = 0;
+  int lastDirection = 0; // Track melodic direction for smoother lines
+  
+  for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
+    int beatPosition = ((x_rel - 1) % 16) + 1;
     
-    // Set the probability to add a note:
-    // Strong beats (columns 1, 4, 8, 12) always get a note.
-    // Otherwise, use an 80% chance.
-    int prob = (x_rel == 1 || x_rel == 4 || x_rel == 8 || x_rel == 12) ? 100 : 80;
-    
-    // Decide whether to add a note in this column.
-    if(random(0, 100) < prob){
-      // --- Step 2: Choose a chord tone index.
-      int baseIndex = -1;
-      for(int i = 0; i < numAllowed; i++){
-        int tone = allowedArray[i];
-        if(note[c][tone].channel != 0){
-          baseIndex = i;
+    // Create melodic phrases with musical intervals
+    if(beatPosition % phraseLength == 1) {
+      // Start of phrase - choose a strong note
+      currentNote = random(0, scaleSize);
+      lastDirection = 0;
+    } else {
+      // Continue phrase with musical motion
+      int direction = random(0, 5); // More options for musical variety
+      
+      switch(voiceType) {
+        case 0: // Voice 1: Smooth step-wise motion
+          if(direction == 1 && currentNote < scaleSize - 1) currentNote++;
+          else if(direction == 2 && currentNote > 0) currentNote--;
+          else if(direction == 3 && currentNote < scaleSize - 2) currentNote += 2;
+          else if(direction == 4 && currentNote > 1) currentNote -= 2;
+          break;
+        case 1: // Voice 2: More leaps and jumps
+          if(direction == 1 && currentNote < scaleSize - 1) currentNote++;
+          else if(direction == 2 && currentNote > 0) currentNote--;
+          else if(direction == 3 && currentNote < scaleSize - 3) currentNote += 3;
+          else if(direction == 4 && currentNote > 2) currentNote -= 3;
+          break;
+        case 2: // Voice 3: Arpeggio-like patterns
+          if(direction == 1) currentNote = (currentNote + 2) % scaleSize;
+          else if(direction == 2) currentNote = (currentNote + 3) % scaleSize;
+          else if(direction == 3) currentNote = (currentNote + 4) % scaleSize;
+          else if(direction == 4) currentNote = (currentNote - 1 + scaleSize) % scaleSize;
+          break;
+        case 3: // Voice 4: Sustained notes with occasional movement
+          if(direction == 1 && currentNote < scaleSize - 1) currentNote++;
+          else if(direction == 2 && currentNote > 0) currentNote--;
+          // Otherwise stay on same note (sustained)
           break;
         }
       }
-      if(baseIndex < 0) {
-        baseIndex = random(0, numAllowed);
+    
+    // Add rhythmic variation based on voice type
+    bool shouldPlay = false;
+    int velocity = defaultVelocity;
+    
+    switch(voiceType) {
+      case 0: // Voice 1: Regular rhythm
+        if(beatPosition % 2 == 1) shouldPlay = true;
+        else if(random(0, 100) < 30) shouldPlay = true;
+        velocity += random(-15, 16);
+        break;
+      case 1: // Voice 2: Syncopated rhythm
+        if(random(0, 100) < 60) shouldPlay = true;
+        velocity += random(-10, 21);
+        break;
+      case 2: // Voice 3: Arpeggio rhythm
+        if(beatPosition % 4 == 1) shouldPlay = true;
+        else if(random(0, 100) < 25) shouldPlay = true;
+        velocity += random(-5, 26);
+        break;
+      case 3: // Voice 4: Sustained notes
+        if(beatPosition == 1 || beatPosition == 9) shouldPlay = true;
+        else if(random(0, 100) < 20) shouldPlay = true;
+        velocity += random(-5, 11); // Less velocity variation
+        break;
+    }
+    
+    if(shouldPlay && scaleSize > 0) {
+      int noteRow = scaleNotes[currentNote];
+      
+      // Only place note if slot is empty (channel == 0)
+      if(note[c][noteRow].channel == 0) {
+        note[c][noteRow].channel = channel;
+        note[c][noteRow].velocity = velocity;
+      }
+    }
+  }
+}
+
+// Generate bass or main melody for channel 11
+void generateBassOrMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+  // Channel 11 should primarily be bass lines (80% bass, 20% melody)
+  bool generateBass = (random(0, 100) < 80);
+  
+  if(generateBass) {
+    // Generate bass line
+    generateBassLine(start, end, channel, harmony);
+  } else {
+    // Generate main melody (with reduced chords)
+    generateMainMelody(start, end, channel, harmony);
+  }
+}
+
+// Generate bass line
+void generateBassLine(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+  // Classic bass notes: root, third, fifth, octave (low register)
+  int bassNotes[] = {1, 2, 3, 4, 5, 6, 7, 8}; // Low register (C3 to C4)
+  int bassSize = 8;
+  
+  int currentBassNote = 0;
+  int phraseLength = 4; // Shorter phrases for bass
+  
+  for(unsigned int c = start; c < end; c++) {
+    int x_rel = c - start + 1;
+    int beatPosition = ((x_rel - 1) % 16) + 1;
+    
+    // Create bass phrases
+    if(beatPosition % phraseLength == 1) {
+      currentBassNote = random(0, bassSize);
+    } else {
+      // Bass motion - mostly stepwise with occasional leaps
+      int direction = random(0, 6);
+      if(direction == 1 && currentBassNote < bassSize - 1) currentBassNote++;
+      else if(direction == 2 && currentBassNote > 0) currentBassNote--;
+      else if(direction == 3 && currentBassNote < bassSize - 3) currentBassNote += 2; // Leap up
+      else if(direction == 4 && currentBassNote > 2) currentBassNote -= 2; // Leap down
+    }
+    
+    // Bass plays on strong beats with some off-beat variation
+    bool shouldPlay = false;
+    if(beatPosition == 1 || beatPosition == 5 || beatPosition == 9 || beatPosition == 13) {
+      shouldPlay = true; // Strong beats
+    } else if(random(0, 100) < 25) {
+      shouldPlay = true; // Some off-beats
+    }
+    
+    if(shouldPlay) {
+      int noteRow = bassNotes[currentBassNote];
+      
+      // Only place note if slot is empty (channel == 0)
+      if(note[c][noteRow].channel == 0) {
+        note[c][noteRow].channel = channel;
+        note[c][noteRow].velocity = defaultVelocity + random(10, 31); // Stronger bass with variation
+      }
+    }
+  }
+}
+
+// Generate main melody
+void generateMainMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+  // Melody uses higher register and more complex patterns
+  int melodyNotes[] = {10, 12, 13, 15, 1, 3, 5, 6};
+  int melodySize = 8;
+  
+  int currentNote = 0;
+  int phraseLength = 8; // Longer phrases for melody
+  
+  for(unsigned int c = start; c < end; c++) {
+    int x_rel = c - start + 1;
+    int beatPosition = ((x_rel - 1) % 16) + 1;
+    
+    // Create melodic phrases
+    if(beatPosition % phraseLength == 1) {
+      currentNote = random(0, melodySize);
+    } else {
+      // Melodic motion with larger intervals
+      int direction = random(0, 5); // More variation
+      if(direction == 1 && currentNote < melodySize - 1) currentNote++;
+      else if(direction == 2 && currentNote > 0) currentNote--;
+      else if(direction == 3 && currentNote < melodySize - 2) currentNote += 2;
+      else if(direction == 4 && currentNote > 1) currentNote -= 2;
+    }
+    
+    // Melody plays more frequently
+    bool shouldPlay = false;
+    if(random(0, 100) < 70) shouldPlay = true;
+    
+    if(shouldPlay && melodySize > 0) {
+      // Decide how many notes to play (mostly single notes, occasional chords)
+      int noteCount;
+      int chordChance = random(0, 100);
+      if(chordChance < 80) {
+        noteCount = 1; // 80% single notes
+      } else if(chordChance < 95) {
+        noteCount = 2; // 15% two-note chords
+      } else {
+        noteCount = 3; // 5% three-note chords
       }
       
-      // --- Step 3: Add the main note.
-      int mainRow = allowedArray[baseIndex];
-      if(note[c][mainRow].channel == 0){
-        note[c][mainRow].channel = channel;
-        note[c][mainRow].velocity = defaultVelocity;
-      }
+      int rootNote = melodyNotes[currentNote];
       
-      // --- Step 4: Optionally add extra chord tones (only in empty slots)
-      // With 20% chance, add one adjacent note.
-      if(random(0, 100) < 20){
-        int extraIndex = baseIndex;
-        if(baseIndex > 0 && random(0,2) == 0)
-          extraIndex = baseIndex - 1;
-        else if(baseIndex < numAllowed - 1)
-          extraIndex = baseIndex + 1;
-        int extraRow = allowedArray[extraIndex];
-        if(extraRow != mainRow && note[c][extraRow].channel == 0){
-          note[c][extraRow].channel = channel;
-          note[c][extraRow].velocity = defaultVelocity;
+      if(noteCount == 1) {
+        // Single note - only place if slot is empty
+        if(note[c][rootNote].channel == 0) {
+          note[c][rootNote].channel = channel;
+          note[c][rootNote].velocity = defaultVelocity + random(-10, 31);
         }
-      }
-      // With a 10% chance, add both adjacent tones.
-      if(random(0, 100) < 10){
-        if(baseIndex > 0){
-          int extraRow = allowedArray[baseIndex - 1];
-          if(extraRow != mainRow && note[c][extraRow].channel == 0){
-            note[c][extraRow].channel = channel;
-            note[c][extraRow].velocity = defaultVelocity;
-          }
+      } else if(noteCount == 2) {
+        // Two-note chord - convert rootNote (1-16) to piano index (0-15), add intervals, convert back
+        int rootPianoIndex = rootNote - 1; // Convert 1-16 to 0-15
+        int intervalChoice = random(0, 4); // 0-3 for different intervals
+        int secondPianoIndex;
+        
+        switch(intervalChoice) {
+          case 0: secondPianoIndex = rootPianoIndex + 3; break;  // Minor third (C-Eb)
+          case 1: secondPianoIndex = rootPianoIndex + 5; break;  // Perfect fourth (C-F)
+          case 2: secondPianoIndex = rootPianoIndex + 7; break;  // Perfect fifth (C-G)
+          case 3: secondPianoIndex = rootPianoIndex + 12; break; // Perfect octave (C-C)
         }
-        if(baseIndex < numAllowed - 1){
-          int extraRow = allowedArray[baseIndex + 1];
-          if(extraRow != mainRow && note[c][extraRow].channel == 0){
-            note[c][extraRow].channel = channel;
-            note[c][extraRow].velocity = defaultVelocity;
-          }
+        
+        // Ensure piano index stays within valid range (0-15)
+        if(secondPianoIndex > 15) secondPianoIndex -= 12;  // Octave down
+        if(secondPianoIndex < 0) secondPianoIndex += 12;   // Octave up
+        
+        int secondNote = secondPianoIndex + 1; // Convert back to 1-16
+        
+        // Place both notes - only if slots are empty
+        if(note[c][rootNote].channel == 0) {
+          note[c][rootNote].channel = channel;
+          note[c][rootNote].velocity = defaultVelocity + random(-5, 21); // Root note slightly louder
+        }
+        
+        if(note[c][secondNote].channel == 0) {
+          note[c][secondNote].channel = channel;
+          note[c][secondNote].velocity = defaultVelocity + random(-10, 16); // Second note
+        }
+      } else { // noteCount == 3
+        // Three-note chord - 50% major, 50% minor (with occasional sus4)
+        int chordType;
+        if(random(0, 100) < 90) {
+          // 90% chance for major or minor (45% each)
+          chordType = random(0, 2); // 0 = major, 1 = minor
+        } else {
+          // 10% chance for sus4
+          chordType = 2;
+        }
+        
+        // Convert rootNote (1-16) to piano index (0-15)
+        int rootPianoIndex = rootNote - 1;
+        int secondPianoIndex, thirdPianoIndex;
+        
+        switch(chordType) {
+          case 0: // Major triad (C-E-G)
+            secondPianoIndex = rootPianoIndex + 4;  // Major third (C to E)
+            thirdPianoIndex = rootPianoIndex + 7;   // Perfect fifth (C to G)
+            break;
+          case 1: // Minor triad (C-Eb-G)
+            secondPianoIndex = rootPianoIndex + 3;  // Minor third (C to Eb)
+            thirdPianoIndex = rootPianoIndex + 7;    // Perfect fifth (C to G)
+            break;
+          case 2: // Sus4 chord (C-F-G)
+            secondPianoIndex = rootPianoIndex + 5;  // Perfect fourth (C to F)
+            thirdPianoIndex = rootPianoIndex + 7;    // Perfect fifth (C to G)
+            break;
+        }
+        
+        // Ensure piano indices stay within valid range (0-15)
+        if(secondPianoIndex > 15) secondPianoIndex -= 12;  // Octave down
+        if(thirdPianoIndex > 15) thirdPianoIndex -= 12;    // Octave down
+        if(secondPianoIndex < 0) secondPianoIndex += 12;   // Octave up
+        if(thirdPianoIndex < 0) thirdPianoIndex += 12;      // Octave up
+        
+        int secondNote = secondPianoIndex + 1; // Convert back to 1-16
+        int thirdNote = thirdPianoIndex + 1;   // Convert back to 1-16
+        
+        // Place all three notes - only if slots are empty
+        if(note[c][rootNote].channel == 0) {
+          note[c][rootNote].channel = channel;
+          note[c][rootNote].velocity = defaultVelocity + random(-5, 21); // Root note slightly louder
+        }
+        
+        if(note[c][secondNote].channel == 0) {
+          note[c][secondNote].channel = channel;
+          note[c][secondNote].velocity = defaultVelocity + random(-10, 16); // Second note
+        }
+        
+        if(note[c][thirdNote].channel == 0) {
+          note[c][thirdNote].channel = channel;
+          note[c][thirdNote].velocity = defaultVelocity + random(-10, 16); // Third note
         }
       }
     }
-    // If probability check fails, the column remains unchanged.
-  } // End for each column
+  }
+}
+
+// Context-aware rhythmic pattern generation that preserves base page rhythm
+void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
+  // Preserve the original rhythm structure with subtle variations
+  for(unsigned int c = start; c < end; c++) {
+    int x_rel = c - start + 1;
+    int beatPosition = ((x_rel - 1) % 16) + 1;
+    
+    // Use the base pattern rhythm as foundation
+    bool shouldPlay = basePattern->rhythmPattern[beatPosition - 1] == 1;
+    
+    // Add subtle variations based on page progression
+    if (shouldPlay) {
+      // Occasionally skip a note for variation (8% chance - subtle)
+      if (random(0, 100) < 8) {
+        shouldPlay = false;
+      }
+    } else {
+      // Occasionally add a note for variation (4% chance - subtle)
+      if (random(0, 100) < 4) {
+        shouldPlay = true;
+      }
+    }
+    
+    if (shouldPlay) {
+      // Use the base pattern's note row with harmonic progression
+      int baseNoteRow = basePattern->noteRows[beatPosition - 1];
+      int noteRow = baseNoteRow;
+      
+        // Apply harmonic progression based on page offset - create real musical progressions
+        if (pageOffset > 0) {
+          // For rhythm channels (1-4), use conservative pitch variations
+          if (channel >= 1 && channel <= 4) {
+            noteRow = createRhythmicProgression(baseNoteRow, pageOffset, harmony);
+          } else {
+            // For melodic channels, use full harmonic progressions
+            noteRow = createHarmonicProgression(baseNoteRow, pageOffset, harmony);
+          }
+        }
+      
+      // Use base pattern velocity with slight variation
+      int baseVelocity = basePattern->velocities[beatPosition - 1];
+      int velocity = baseVelocity + random(-10, 11);
+      if (velocity < 40) velocity = 40;
+      if (velocity > 127) velocity = 127;
+      
+      // Only place note if slot is empty (channel == 0)
+      if(note[c][noteRow].channel == 0) {
+        note[c][noteRow].channel = channel;
+        note[c][noteRow].velocity = velocity;
+      }
+    }
+  }
+}
+
+// Context-aware melodic pattern generation that preserves base page melody
+void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
+  // Preserve the original melodic structure with harmonic progressions
+  for(unsigned int c = start; c < end; c++) {
+    int x_rel = c - start + 1;
+    int beatPosition = ((x_rel - 1) % 16) + 1;
+    
+    // Use the base pattern rhythm as foundation
+    bool shouldPlay = basePattern->rhythmPattern[beatPosition - 1] == 1;
+    
+    // Add subtle variations based on page progression
+    if (shouldPlay) {
+      // Occasionally skip a note for variation (6% chance - subtle)
+      if (random(0, 100) < 6) {
+        shouldPlay = false;
+      }
+    } else {
+      // Occasionally add a note for variation (3% chance - subtle)
+      if (random(0, 100) < 3) {
+        shouldPlay = true;
+      }
+    }
+    
+    if (shouldPlay) {
+      // Use the base pattern's note row with harmonic progression
+      int baseNoteRow = basePattern->noteRows[beatPosition - 1];
+      int noteRow = baseNoteRow;
+      
+      // Apply harmonic progression based on page offset - create real musical progressions
+      if (pageOffset > 0) {
+        // For rhythm channels (1-4), use conservative pitch variations
+        if (channel >= 1 && channel <= 4) {
+          noteRow = createRhythmicProgression(baseNoteRow, pageOffset, harmony);
+        } else {
+          // For melodic channels, use full melodic progressions
+          noteRow = createMelodicProgression(baseNoteRow, pageOffset, harmony);
+        }
+      }
+      
+      // Use base pattern velocity with slight variation
+      int baseVelocity = basePattern->velocities[beatPosition - 1];
+      int velocity = baseVelocity + random(-8, 9);
+      if (velocity < 40) velocity = 40;
+      if (velocity > 127) velocity = 127;
+      
+      // Only place note if slot is empty (channel == 0)
+      if(note[c][noteRow].channel == 0) {
+        note[c][noteRow].channel = channel;
+        note[c][noteRow].velocity = velocity;
+      }
+    }
+  }
+}
+
+// Create dynamic harmonic progressions with more variation
+int createHarmonicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
+  // Analyze the base note's harmonic function within the detected scale
+  int scaleNotes[16];
+  int scaleSize = 0;
+  
+  // Build scale based on harmony analysis
+  if (harmony.isMajor) {
+    // Major scale: C D E F G A B C (1 3 5 6 8 10 12 13)
+    int majorScale[] = {1, 3, 5, 6, 8, 10, 12, 13};
+    for (int i = 0; i < 8; i++) {
+      scaleNotes[i] = majorScale[i];
+    }
+    scaleSize = 8;
+  } else if (harmony.isMinor) {
+    // Minor scale: A B C D E F G A (6 8 10 11 13 15 1 3)
+    int minorScale[] = {6, 8, 10, 11, 13, 15, 1, 3};
+    for (int i = 0; i < 8; i++) {
+      scaleNotes[i] = minorScale[i];
+    }
+    scaleSize = 8;
+  } else {
+    // Pentatonic scale as fallback: C D E G A (1 3 5 8 10)
+    int pentatonic[] = {1, 3, 5, 8, 10};
+    for (int i = 0; i < 5; i++) {
+      scaleNotes[i] = pentatonic[i];
+    }
+    scaleSize = 5;
+  }
+  
+  // Find the base note's position in the scale
+  int scaleDegree = -1;
+  for (int i = 0; i < scaleSize; i++) {
+    if (baseNote == scaleNotes[i]) {
+      scaleDegree = i;
+      break;
+    }
+  }
+  
+  // If base note not in scale, find closest
+  if (scaleDegree == -1) {
+    int minDistance = 16;
+    for (int i = 0; i < scaleSize; i++) {
+      int distance = abs(baseNote - scaleNotes[i]);
+      if (distance < minDistance) {
+        minDistance = distance;
+        scaleDegree = i;
+      }
+    }
+  }
+  
+  // Create subtle harmonic progressions that preserve character
+  // Use gentle, character-preserving progressions
+  int progressionPatterns[][8] = {
+    {0, 5, 3, 4, 0, 5, 3, 4},  // I-vi-IV-V (classic, gentle)
+    {0, 4, 5, 3, 0, 4, 5, 3},  // I-V-vi-IV (gentle pop progression)
+    {5, 3, 0, 4, 5, 3, 0, 4},  // vi-IV-I-V (minor start, gentle)
+    {0, 2, 3, 4, 0, 2, 3, 4},  // I-iii-IV-V (major with gentle third)
+    {0, 4, 2, 3, 0, 4, 2, 3},  // I-V-iii-IV (gentle major progression)
+    {0, 1, 3, 4, 0, 1, 3, 4},  // I-ii-IV-V (gentle with minor second)
+    {0, 3, 4, 5, 0, 3, 4, 5},  // I-IV-V-vi (gentle major progression)
+    {0, 4, 1, 3, 0, 4, 1, 3}   // I-V-ii-IV (gentle with minor second)
+  };
+  
+  int patternIndex = pageOffset % 8;
+  int progressionStep = (pageOffset / 8) % 8;
+  int targetDegree = progressionPatterns[patternIndex][progressionStep];
+  
+  // Add subtle randomness for gentle variation
+  if (random(0, 100) < 10) { // 10% chance for subtle variation
+    targetDegree += random(-1, 2); // Very gentle offset
+  }
+  
+  // Apply the progression
+  int newScaleDegree = (scaleDegree + targetDegree) % scaleSize;
+  if (newScaleDegree < 0) newScaleDegree += scaleSize;
+  
+  int resultNote = scaleNotes[newScaleDegree];
+  
+  // Add gentle octave variations (much less frequent)
+  if (random(0, 100) < 8) { // 8% chance for octave change
+    if (random(0, 2) == 0) {
+      resultNote += 7; // Up an octave
+      if (resultNote > 16) resultNote -= 7; // Keep in range
+    } else {
+      resultNote -= 7; // Down an octave
+      if (resultNote < 1) resultNote += 7; // Keep in range
+    }
+  }
+  
+  return resultNote;
+}
+
+// Create dynamic melodic progressions with more variation and excitement
+int createMelodicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
+  // Analyze the base note's harmonic function
+  int scaleNotes[16];
+  int scaleSize = 0;
+  
+  // Build scale based on harmony analysis
+  if (harmony.isMajor) {
+    int majorScale[] = {1, 3, 5, 6, 8, 10, 12, 13};
+    for (int i = 0; i < 8; i++) {
+      scaleNotes[i] = majorScale[i];
+    }
+    scaleSize = 8;
+  } else if (harmony.isMinor) {
+    int minorScale[] = {6, 8, 10, 11, 13, 15, 1, 3};
+    for (int i = 0; i < 8; i++) {
+      scaleNotes[i] = minorScale[i];
+    }
+    scaleSize = 8;
+  } else {
+    int pentatonic[] = {1, 3, 5, 8, 10};
+    for (int i = 0; i < 5; i++) {
+      scaleNotes[i] = pentatonic[i];
+    }
+    scaleSize = 5;
+  }
+  
+  // Find the base note's position in the scale
+  int scaleDegree = -1;
+  for (int i = 0; i < scaleSize; i++) {
+    if (baseNote == scaleNotes[i]) {
+      scaleDegree = i;
+      break;
+    }
+  }
+  
+  // If base note not in scale, find closest
+  if (scaleDegree == -1) {
+    int minDistance = 16;
+    for (int i = 0; i < scaleSize; i++) {
+      int distance = abs(baseNote - scaleNotes[i]);
+      if (distance < minDistance) {
+        minDistance = distance;
+        scaleDegree = i;
+      }
+    }
+  }
+  
+  // Create gentle melodic progressions that preserve character
+  // Use subtle, character-preserving melodic patterns
+  int melodicPatterns[][8] = {
+    {0, 1, 2, 1, 0, -1, -2, -1},  // Gentle stepwise motion
+    {0, 2, 4, 2, 0, -2, -4, -2},  // Gentle thirds
+    {0, 4, 2, 6, 4, 0, -2, 2},    // Gentle arpeggio-like
+    {0, 1, 3, 2, 4, 3, 5, 4},    // Gentle chromatic with scale notes
+    {0, 2, 1, 3, 2, 4, 3, 5},    // Gentle alternating motion
+    {0, 3, 1, 4, 2, 5, 3, 6},    // Gentle mixed intervals
+    {0, -1, 1, -2, 2, -3, 3, -4}, // Gentle oscillating
+    {0, 1, 0, 2, 1, 3, 2, 4}     // Gentle gradual ascent
+  };
+  
+  int patternIndex = pageOffset % 8;
+  int progressionStep = (pageOffset / 8) % 8;
+  int melodicOffset = melodicPatterns[patternIndex][progressionStep];
+  
+  // Add subtle randomness for gentle variation
+  if (random(0, 100) < 12) { // 12% chance for subtle variation
+    melodicOffset += random(-1, 2); // Very gentle offset
+  }
+  
+  // Apply the melodic progression
+  int newScaleDegree = (scaleDegree + melodicOffset) % scaleSize;
+  if (newScaleDegree < 0) newScaleDegree += scaleSize;
+  
+  int resultNote = scaleNotes[newScaleDegree];
+  
+  // Add gentle octave variations (much less frequent)
+  if (random(0, 100) < 6) { // 6% chance for octave change
+    if (random(0, 2) == 0) {
+      resultNote += 7; // Up an octave
+      if (resultNote > 16) resultNote -= 7; // Keep in range
+    } else {
+      resultNote -= 7; // Down an octave
+      if (resultNote < 1) resultNote += 7; // Keep in range
+    }
+  }
+  
+  // Add very subtle chromatic passing tones
+  if (random(0, 100) < 5) { // 5% chance for chromatic variation
+    if (random(0, 2) == 0) {
+      resultNote += 1; // Up a semitone
+      if (resultNote > 16) resultNote -= 1;
+    } else {
+      resultNote -= 1; // Down a semitone
+      if (resultNote < 1) resultNote += 1;
+    }
+  }
+  
+  return resultNote;
+}
+
+// Create very conservative rhythmic progressions that stay close to original pitch
+int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
+  // For rhythm channels, we want to stay very close to the original pitch
+  // Only make minimal changes to maintain the rhythmic character
+  
+  // Very conservative pitch variations - mostly stay on the same note
+  int rhythmicVariations[][4] = {
+    {0, 0, 0, 0},    // Stay exactly the same
+    {0, 1, 0, -1},   // Very gentle up/down motion
+    {0, 0, 1, 0},    // Occasional step up
+    {0, 0, -1, 0},   // Occasional step down
+    {0, 2, 0, -2},   // Very gentle third motion
+    {0, 0, 2, 0},    // Occasional third up
+    {0, 0, -2, 0},   // Occasional third down
+    {0, 1, -1, 0}    // Gentle up then down
+  };
+  
+  int patternIndex = pageOffset % 8;
+  int progressionStep = (pageOffset / 8) % 4;
+  int pitchOffset = rhythmicVariations[patternIndex][progressionStep];
+  
+  // Add very minimal randomness (much less than melodic channels)
+  if (random(0, 100) < 5) { // Only 5% chance for variation
+    pitchOffset += random(-1, 2); // Very gentle offset
+  }
+  
+  // Apply the minimal progression
+  int resultNote = baseNote + pitchOffset;
+  
+  // Keep within bounds
+  if (resultNote < 1) resultNote = 1;
+  if (resultNote > 16) resultNote = 16;
+  
+  // Very rarely add octave variation (much less than melodic channels)
+  if (random(0, 100) < 2) { // Only 2% chance for octave change
+    if (random(0, 2) == 0) {
+      resultNote += 7; // Up an octave
+      if (resultNote > 16) resultNote -= 7; // Keep in range
+    } else {
+      resultNote -= 7; // Down an octave
+      if (resultNote < 1) resultNote += 7; // Keep in range
+    }
+  }
+  
+  return resultNote;
+}
+
+// Generate genre-based track from page 1 to selected length
+void generateGenreTrack() {
+  // Clear ALL pages first (complete reset)
+  for (unsigned int page = 1; page <= maxPages; page++) {
+    unsigned int start = (page - 1) * 16 + 1;
+    unsigned int end = page * 16;
+    for (unsigned int c = start; c <= end; c++) {
+      for (int row = 1; row <= 16; row++) {
+        note[c][row].channel = 0;
+        note[c][row].velocity = 0;
+      }
+    }
+  }
+  
+  // Generate genre-specific patterns ONLY from page 1 to genreLength (exact count)
+  for (unsigned int page = 1; page <= genreLength; page++) {
+    unsigned int start = (page - 1) * 16 + 1;
+    unsigned int end = page * 16;
+    
+    switch (genreType) {
+      case 0: // BLANK - Already cleared above
+        break;
+        
+      case 1: // TECH - Techno patterns
+        generateTechnoPattern(start, end, page);
+        break;
+        
+      case 2: // HIPH - Hip-hop patterns
+        generateHipHopPattern(start, end, page);
+        break;
+        
+      case 3: // DNB - Drum & Bass patterns
+        generateDnBPattern(start, end, page);
+        break;
+        
+      case 4: // HOUS - House patterns
+        generateHousePattern(start, end, page);
+        break;
+        
+      case 5: // AMBT - Ambient patterns
+        generateAmbientPattern(start, end, page);
+        break;
+    }
+  }
+  
+  // Set genre-appropriate BPM
+  setGenreBPM();
+  
+  // Auto close menu after generation
+  switchMode(&draw);
+}
+
+// Set genre-appropriate BPM
+void setGenreBPM() {
+  int targetBPM = 100; // Default BPM
+  
+  switch (genreType) {
+    case 0: // BLANK
+      targetBPM = 100; // Default
+      break;
+    case 1: // TECH - Techno
+      targetBPM = 128 + random(-4, 5); // 124-132 BPM
+      break;
+    case 2: // HIPH - Hip-hop
+      targetBPM = 85 + random(-3, 4); // 82-88 BPM
+      break;
+    case 3: // DNB - Drum & Bass
+      targetBPM = 174 + random(-4, 5); // 170-178 BPM
+      break;
+    case 4: // HOUS - House
+      targetBPM = 124 + random(-4, 5); // 120-128 BPM
+      break;
+    case 5: // AMBT - Ambient
+      targetBPM = 70 + random(-5, 6); // 65-75 BPM
+      break;
+  }
+  
+  // Set the BPM directly in SMP.bpm and update the volume_bpm mode
+  SMP.bpm = targetBPM;
+  
+  // Update the volume_bpm mode position
+  volume_bpm.pos[3] = targetBPM;
+  
+  // If currently in volume_bpm mode, update the encoder
+  if (currentMode == &volume_bpm) {
+    Encoder[3].writeCounter((int32_t)targetBPM);
+  }
+  
+  // Apply the BPM immediately by updating the playback timer
+  applyBPMDirectly(targetBPM);
+}
+
+// Apply BPM directly without relying on MIDI clock condition
+void applyBPMDirectly(int bpm) {
+  if (bpm > 0) { // Avoid division by zero
+    playNoteInterval = ((60.0 * 1000.0 / bpm) / 4.0) * 1000.0;  // Use floats for precision
+    playTimer.update(playNoteInterval);
+  }
+}
+
+// Techno pattern generation - Enhanced and dynamic
+void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int page) {
+  for (unsigned int c = start; c < end; c++) {
+    int beat = ((c - start) % 16) + 1;
+    int pageOffset = page - 1;
+    
+    // Dynamic kick patterns - varies by page
+    bool kickPlay = false;
+    if (pageOffset % 4 == 0) {
+      // Standard four-on-floor
+      kickPlay = (beat == 1 || beat == 5 || beat == 9 || beat == 13);
+    } else if (pageOffset % 4 == 1) {
+      // Techno variation: 1, 3, 5, 7, 9, 11, 13, 15
+      kickPlay = (beat % 2 == 1);
+    } else if (pageOffset % 4 == 2) {
+      // Break pattern: 1, 4, 7, 9, 12, 15
+      kickPlay = (beat == 1 || beat == 4 || beat == 7 || beat == 9 || beat == 12 || beat == 15);
+    } else {
+      // Complex: 1, 2, 5, 6, 9, 10, 13, 14
+      kickPlay = (beat == 1 || beat == 2 || beat == 5 || beat == 6 || beat == 9 || beat == 10 || beat == 13 || beat == 14);
+    }
+    
+    if (kickPlay) {
+      note[c][3].channel = 1; // Kick
+      note[c][3].velocity = 100 + random(-15, 16);
+    }
+    
+    // Dynamic snare patterns
+    bool snarePlay = false;
+    if (pageOffset % 3 == 0) {
+      // Standard backbeat
+      snarePlay = (beat == 5 || beat == 13);
+    } else if (pageOffset % 3 == 1) {
+      // Ghost snares
+      snarePlay = (beat == 3 || beat == 5 || beat == 11 || beat == 13);
+      if (beat == 3 || beat == 11) {
+        note[c][5].velocity = 60 + random(-10, 11); // Ghost
+      } else {
+        note[c][5].velocity = 80 + random(-10, 11); // Main
+      }
+    } else {
+      // Roll pattern
+      snarePlay = (beat == 4 || beat == 5 || beat == 6 || beat == 12 || beat == 13 || beat == 14);
+      if (beat == 4 || beat == 6 || beat == 12 || beat == 14) {
+        note[c][5].velocity = 50 + random(-10, 11); // Roll
+      } else {
+        note[c][5].velocity = 75 + random(-10, 11); // Main
+      }
+    }
+    
+    if (snarePlay) {
+      note[c][5].channel = 2; // Snare
+    }
+    
+    // Complex hi-hat patterns
+    if (beat % 2 == 0) {
+      note[c][7].channel = 3; // Closed hi-hat
+      note[c][7].velocity = 60 + random(-10, 11);
+    }
+    
+    // Open hi-hats
+    if (beat == 5 || beat == 13) {
+      note[c][8].channel = 4; // Open hi-hat
+      note[c][8].velocity = 70 + random(-10, 11);
+    }
+    
+    // Additional percussion
+    if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
+      note[c][6].channel = 5; // Additional percussion
+      note[c][6].velocity = 45 + random(-10, 11);
+    }
+    
+    // Dynamic bass lines
+    bool bassPlay = false;
+    if (pageOffset % 2 == 0) {
+      // Standard techno bass
+      bassPlay = (beat == 1 || beat == 9);
+    } else {
+      // Complex bass pattern
+      bassPlay = (beat == 1 || beat == 3 || beat == 5 || beat == 7 || beat == 9 || beat == 11 || beat == 13 || beat == 15);
+    }
+    
+    if (bassPlay) {
+      note[c][2].channel = 6; // Bass
+      note[c][2].velocity = 90 + random(-15, 16);
+    }
+    
+    // Melodic elements
+    if (random(0, 100) < 25) { // 25% chance
+      note[c][9].channel = 7; // Melodic element
+      note[c][9].velocity = 65 + random(-10, 11);
+    }
+    
+    // Additional stabs
+    if (random(0, 100) < 15) { // 15% chance
+      note[c][10].channel = 8; // Stab
+      note[c][10].velocity = 75 + random(-10, 11);
+    }
+  }
+}
+
+// Hip-hop pattern generation - Enhanced and dynamic
+void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int page) {
+  for (unsigned int c = start; c < end; c++) {
+    int beat = ((c - start) % 16) + 1;
+    int pageOffset = page - 1;
+    
+    // Dynamic kick patterns - varies by page
+    bool kickPlay = false;
+    if (pageOffset % 4 == 0) {
+      // Classic hip-hop: 1, 7, 11
+      kickPlay = (beat == 1 || beat == 7 || beat == 11);
+    } else if (pageOffset % 4 == 1) {
+      // Trap variation: 1, 3, 7, 11, 15
+      kickPlay = (beat == 1 || beat == 3 || beat == 7 || beat == 11 || beat == 15);
+    } else if (pageOffset % 4 == 2) {
+      // Complex: 1, 4, 7, 10, 13
+      kickPlay = (beat == 1 || beat == 4 || beat == 7 || beat == 10 || beat == 13);
+    } else {
+      // Break pattern: 1, 2, 7, 8, 11, 12
+      kickPlay = (beat == 1 || beat == 2 || beat == 7 || beat == 8 || beat == 11 || beat == 12);
+    }
+    
+    if (kickPlay) {
+      note[c][3].channel = 1; // Kick
+      note[c][3].velocity = 110 + random(-15, 16);
+    }
+    
+    // Dynamic snare patterns
+    bool snarePlay = false;
+    if (pageOffset % 3 == 0) {
+      // Standard backbeat
+      snarePlay = (beat == 5 || beat == 13);
+    } else if (pageOffset % 3 == 1) {
+      // Ghost snares
+      snarePlay = (beat == 3 || beat == 5 || beat == 11 || beat == 13);
+      if (beat == 3 || beat == 11) {
+        note[c][5].velocity = 70 + random(-10, 11); // Ghost
+      } else {
+        note[c][5].velocity = 100 + random(-10, 11); // Main
+      }
+    } else {
+      // Roll pattern
+      snarePlay = (beat == 4 || beat == 5 || beat == 6 || beat == 12 || beat == 13 || beat == 14);
+      if (beat == 4 || beat == 6 || beat == 12 || beat == 14) {
+        note[c][5].velocity = 60 + random(-10, 11); // Roll
+      } else {
+        note[c][5].velocity = 95 + random(-10, 11); // Main
+      }
+    }
+    
+    if (snarePlay) {
+      note[c][5].channel = 2; // Snare
+    }
+    
+    // Complex hi-hat patterns
+    if (beat % 2 == 0) {
+      note[c][7].channel = 3; // Closed hi-hat
+      note[c][7].velocity = 70 + random(-10, 11);
+    }
+    
+    // Open hi-hats
+    if (beat == 5 || beat == 13) {
+      note[c][8].channel = 4; // Open hi-hat
+      note[c][8].velocity = 80 + random(-10, 11);
+    }
+    
+    // Additional percussion
+    if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
+      note[c][6].channel = 5; // Additional percussion
+      note[c][6].velocity = 50 + random(-10, 11);
+    }
+    
+    // Dynamic bass lines
+    bool bassPlay = false;
+    if (pageOffset % 2 == 0) {
+      // Standard hip-hop bass
+      bassPlay = (beat == 1 || beat == 5 || beat == 9 || beat == 13);
+    } else {
+      // Complex bass pattern
+      bassPlay = (beat == 1 || beat == 3 || beat == 5 || beat == 7 || beat == 9 || beat == 11 || beat == 13 || beat == 15);
+    }
+    
+    if (bassPlay) {
+      note[c][2].channel = 6; // Bass
+      note[c][2].velocity = 85 + random(-15, 16);
+    }
+    
+    // Melodic elements
+    if (random(0, 100) < 20) { // 20% chance
+      note[c][9].channel = 7; // Melodic element
+      note[c][9].velocity = 70 + random(-10, 11);
+    }
+    
+    // Additional stabs
+    if (random(0, 100) < 12) { // 12% chance
+      note[c][10].channel = 8; // Stab
+      note[c][10].velocity = 80 + random(-10, 11);
+    }
+  }
+}
+
+// Drum & Bass pattern generation - More dynamic and complex
+void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page) {
+  for (unsigned int c = start; c < end; c++) {
+    int beat = ((c - start) % 16) + 1;
+    int pageOffset = page - 1; // For variation across pages
+    
+    // Dynamic kick pattern - varies by page
+    bool kickPlay = false;
+    if (pageOffset % 4 == 0) {
+      // Standard DnB: 1, 9
+      kickPlay = (beat == 1 || beat == 9);
+    } else if (pageOffset % 4 == 1) {
+      // Variation: 1, 5, 9, 13 (four-on-floor)
+      kickPlay = (beat == 1 || beat == 5 || beat == 9 || beat == 13);
+    } else if (pageOffset % 4 == 2) {
+      // Break pattern: 1, 7, 11
+      kickPlay = (beat == 1 || beat == 7 || beat == 11);
+    } else {
+      // Complex: 1, 3, 9, 11
+      kickPlay = (beat == 1 || beat == 3 || beat == 9 || beat == 11);
+    }
+    
+    if (kickPlay) {
+      note[c][3].channel = 1; // Kick
+      note[c][3].velocity = 120 + random(-15, 16);
+    }
+    
+    // Dynamic snare pattern
+    bool snarePlay = false;
+    if (pageOffset % 3 == 0) {
+      // Standard backbeat: 5, 13
+      snarePlay = (beat == 5 || beat == 13);
+    } else if (pageOffset % 3 == 1) {
+      // Ghost snares: 3, 5, 11, 13
+      snarePlay = (beat == 3 || beat == 5 || beat == 11 || beat == 13);
+      if (beat == 3 || beat == 11) {
+        note[c][5].velocity = 70 + random(-10, 11); // Ghost snare
+      } else {
+        note[c][5].velocity = 110 + random(-10, 11); // Main snare
+      }
+    } else {
+      // Roll pattern: 4, 5, 6, 12, 13, 14
+      snarePlay = (beat == 4 || beat == 5 || beat == 6 || beat == 12 || beat == 13 || beat == 14);
+      if (beat == 4 || beat == 6 || beat == 12 || beat == 14) {
+        note[c][5].velocity = 60 + random(-10, 11); // Roll notes
+      } else {
+        note[c][5].velocity = 100 + random(-10, 11); // Main snares
+      }
+    }
+    
+    if (snarePlay) {
+      note[c][5].channel = 2; // Snare
+    }
+    
+    // Complex hi-hat patterns - multiple layers
+    if (beat % 2 == 0) {
+      note[c][7].channel = 3; // Closed hi-hat
+      note[c][7].velocity = 70 + random(-10, 11);
+    }
+    
+    // Open hi-hats on snare beats
+    if (beat == 5 || beat == 13) {
+      note[c][8].channel = 4; // Open hi-hat
+      note[c][8].velocity = 80 + random(-10, 11);
+    }
+    
+    // Additional percussion layer
+    if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
+      note[c][6].channel = 5; // Additional percussion
+      note[c][6].velocity = 50 + random(-10, 11);
+    }
+    
+    // Dynamic bass line - varies by page
+    bool bassPlay = false;
+    if (pageOffset % 2 == 0) {
+      // Standard DnB: every odd beat
+      bassPlay = (beat % 2 == 1);
+    } else {
+      // Complex: syncopated pattern
+      bassPlay = (beat == 1 || beat == 3 || beat == 6 || beat == 9 || beat == 11 || beat == 14);
+    }
+    
+    if (bassPlay) {
+      note[c][2].channel = 6; // Bass
+      note[c][2].velocity = 95 + random(-15, 16);
+    }
+    
+    // Additional melodic elements
+    if (random(0, 100) < 15) { // 15% chance
+      note[c][9].channel = 7; // Melodic element
+      note[c][9].velocity = 60 + random(-10, 11);
+    }
+  }
+}
+
+// House pattern generation - More dynamic and groovy
+void generateHousePattern(unsigned int start, unsigned int end, unsigned int page) {
+  for (unsigned int c = start; c < end; c++) {
+    int beat = ((c - start) % 16) + 1;
+    int pageOffset = page - 1; // For variation across pages
+    
+    // Dynamic kick pattern - varies by page
+    bool kickPlay = false;
+    if (pageOffset % 3 == 0) {
+      // Standard house: four-on-the-floor
+      kickPlay = (beat == 1 || beat == 5 || beat == 9 || beat == 13);
+    } else if (pageOffset % 3 == 1) {
+      // Groove variation: 1, 3, 5, 7, 9, 11, 13, 15
+      kickPlay = (beat % 2 == 1);
+    } else {
+      // Break pattern: 1, 5, 7, 9, 13, 15
+      kickPlay = (beat == 1 || beat == 5 || beat == 7 || beat == 9 || beat == 13 || beat == 15);
+    }
+    
+    if (kickPlay) {
+      note[c][3].channel = 1; // Kick
+      note[c][3].velocity = 95 + random(-15, 16);
+    }
+    
+    // Dynamic snare pattern
+    bool snarePlay = false;
+    if (pageOffset % 4 == 0) {
+      // Standard backbeat: 5, 13
+      snarePlay = (beat == 5 || beat == 13);
+    } else if (pageOffset % 4 == 1) {
+      // Ghost snares: 3, 5, 11, 13
+      snarePlay = (beat == 3 || beat == 5 || beat == 11 || beat == 13);
+      if (beat == 3 || beat == 11) {
+        note[c][5].velocity = 60 + random(-10, 11); // Ghost snare
+      } else {
+        note[c][5].velocity = 85 + random(-10, 11); // Main snare
+      }
+    } else if (pageOffset % 4 == 2) {
+      // Roll pattern: 4, 5, 6, 12, 13, 14
+      snarePlay = (beat == 4 || beat == 5 || beat == 6 || beat == 12 || beat == 13 || beat == 14);
+      if (beat == 4 || beat == 6 || beat == 12 || beat == 14) {
+        note[c][5].velocity = 50 + random(-10, 11); // Roll notes
+      } else {
+        note[c][5].velocity = 80 + random(-10, 11); // Main snares
+      }
+    } else {
+      // Complex: 2, 5, 8, 13
+      snarePlay = (beat == 2 || beat == 5 || beat == 8 || beat == 13);
+    }
+    
+    if (snarePlay) {
+      note[c][5].channel = 2; // Snare
+    }
+    
+    // Dynamic hi-hat patterns
+    if (beat % 2 == 0) {
+      note[c][7].channel = 3; // Closed hi-hat
+      note[c][7].velocity = 65 + random(-10, 11);
+    }
+    
+    // Open hi-hats - varies by page
+    bool openHatPlay = false;
+    if (pageOffset % 2 == 0) {
+      // Standard: on snare beats
+      openHatPlay = (beat == 5 || beat == 13);
+    } else {
+      // Variation: 3, 5, 11, 13
+      openHatPlay = (beat == 3 || beat == 5 || beat == 11 || beat == 13);
+    }
+    
+    if (openHatPlay) {
+      note[c][8].channel = 4; // Open hi-hat
+      note[c][8].velocity = 75 + random(-10, 11);
+    }
+    
+    // Additional percussion layer
+    if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
+      note[c][6].channel = 5; // Additional percussion
+      note[c][6].velocity = 45 + random(-10, 11);
+    }
+    
+    // Dynamic bass line - varies by page
+    bool bassPlay = false;
+    if (pageOffset % 3 == 0) {
+      // Standard house: 1, 9
+      bassPlay = (beat == 1 || beat == 9);
+    } else if (pageOffset % 3 == 1) {
+      // Groove: 1, 3, 5, 7, 9, 11, 13, 15
+      bassPlay = (beat % 2 == 1);
+    } else {
+      // Complex: 1, 4, 7, 9, 12, 15
+      bassPlay = (beat == 1 || beat == 4 || beat == 7 || beat == 9 || beat == 12 || beat == 15);
+    }
+    
+    if (bassPlay) {
+      note[c][2].channel = 6; // Bass
+      note[c][2].velocity = 90 + random(-15, 16);
+    }
+    
+    // Melodic elements - house style
+    if (random(0, 100) < 20) { // 20% chance
+      note[c][9].channel = 7; // Melodic element
+      note[c][9].velocity = 70 + random(-10, 11);
+    }
+    
+    // Additional stabs
+    if (random(0, 100) < 10) { // 10% chance
+      note[c][10].channel = 8; // Stab
+      note[c][10].velocity = 80 + random(-10, 11);
+    }
+  }
+}
+
+// Ambient pattern generation - Enhanced and atmospheric
+void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int page) {
+  for (unsigned int c = start; c < end; c++) {
+    int beat = ((c - start) % 16) + 1;
+    int pageOffset = page - 1;
+    
+    // Dynamic atmospheric patterns - varies by page
+    if (pageOffset % 3 == 0) {
+      // Sparse, ethereal
+      if (random(0, 100) < 15) { // 15% chance
+        int channel = random(5, 9); // Use melodic channels
+        int row = random(8, 13); // Higher register
+        note[c][row].channel = channel;
+        note[c][row].velocity = 30 + random(0, 25); // Very soft
+      }
+    } else if (pageOffset % 3 == 1) {
+      // More active, but still ambient
+      if (random(0, 100) < 25) { // 25% chance
+        int channel = random(5, 9); // Use melodic channels
+        int row = random(7, 12); // Mid to high register
+        note[c][row].channel = channel;
+        note[c][row].velocity = 40 + random(0, 30); // Soft
+      }
+    } else {
+      // Dense but soft
+      if (random(0, 100) < 35) { // 35% chance
+        int channel = random(5, 9); // Use melodic channels
+        int row = random(6, 11); // Mid register
+        note[c][row].channel = channel;
+        note[c][row].velocity = 35 + random(0, 35); // Soft to medium
+      }
+    }
+    
+    // Soft percussion - varies by page
+    if (pageOffset % 2 == 0) {
+      // Very sparse percussion
+      if (random(0, 100) < 8) { // 8% chance
+        note[c][6].channel = 3; // Soft hi-hat
+        note[c][6].velocity = 25 + random(0, 15);
+      }
+    } else {
+      // More active percussion
+      if (random(0, 100) < 15) { // 15% chance
+        note[c][6].channel = 3; // Soft hi-hat
+        note[c][6].velocity = 30 + random(0, 20);
+      }
+    }
+    
+    // Occasional soft bass
+    if (random(0, 100) < 12) { // 12% chance
+      note[c][4].channel = 6; // Soft bass
+      note[c][4].velocity = 35 + random(0, 25);
+    }
+    
+    // Atmospheric pads
+    if (random(0, 100) < 18) { // 18% chance
+      note[c][10].channel = 7; // Pad
+      note[c][10].velocity = 30 + random(0, 20);
+    }
+    
+    // Occasional soft snare
+    if (random(0, 100) < 5) { // 5% chance
+      note[c][5].channel = 2; // Soft snare
+      note[c][5].velocity = 25 + random(0, 15);
+    }
+  }
+}
+
+// Fallback basic pattern for other channels
+void generateBasicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+  // Use simplified version of original logic
+  for(unsigned int c = start; c < end; c++) {
+    int x_rel = c - start + 1;
+    
+    // Strong beats get notes
+    if(x_rel == 1 || x_rel == 5 || x_rel == 9 || x_rel == 13) {
+      int noteRow = random(1, 9); // Random note in lower register
+      
+      // Only place note if slot is empty (channel == 0)
+      if(note[c][noteRow].channel == 0) {
+        note[c][noteRow].channel = channel;
+        note[c][noteRow].velocity = defaultVelocity;
+      }
+    }
+  }
 }
 
 
@@ -637,4 +2001,315 @@ void runAnimation() {
     leds[i] = CRGB::Black;
   }
   FastLED.show();
+}
+
+// Enhanced base page pattern analysis structure (moved to top of file)
+
+// AI Song Generation - extends current pattern across multiple pages with context awareness
+void generateSong() {
+  extern int aiTargetPage; // Access the target page from menu
+  extern int aiBaseStartPage; // Access the base start page from menu
+  extern int aiBaseEndPage;   // Access the base end page from menu
+  
+  int currentPage = GLOB.page;
+  int targetPage = aiTargetPage;
+  
+  // Validate target page - ensure it's higher than current page
+  if (targetPage <= currentPage) {
+    targetPage = currentPage + 1;
+  }
+  
+  // Don't exceed maxPages
+  if (targetPage > maxPages) {
+    targetPage = maxPages;
+  }
+  
+  // Validate base page range
+  if (aiBaseStartPage > aiBaseEndPage) {
+    Serial.println("ERROR: Base start page > base end page");
+    return;
+  }
+  
+  // Check if base pages have content and analyze patterns
+  bool basePagesEmpty = true;
+  bool channelsUsed[16] = {false};
+  BasePagePattern channelPatterns[16]; // Detailed pattern analysis for each channel
+  
+  // Initialize pattern analysis
+  for (int ch = 0; ch < 16; ch++) {
+    channelPatterns[ch].stepCount = 0;
+    channelPatterns[ch].density = 0.0;
+    channelPatterns[ch].mostCommonRow = 1;
+    channelPatterns[ch].isRhythmic = false;
+    channelPatterns[ch].isMelodic = false;
+    for (int step = 0; step < 16; step++) {
+      channelPatterns[ch].hasNotes[step] = false;
+      channelPatterns[ch].noteRows[step] = 0;
+      channelPatterns[ch].velocities[step] = defaultVelocity;
+      channelPatterns[ch].rhythmPattern[step] = 0;
+    }
+  }
+  
+  // Analyze all base pages content with detailed pattern extraction
+  for (int basePage = aiBaseStartPage; basePage <= aiBaseEndPage; basePage++) {
+    unsigned int pageStartStep = (basePage - 1) * maxX + 1;
+    unsigned int pageEndStep = basePage * maxX;
+    
+    for (unsigned int c = pageStartStep; c <= pageEndStep; c++) {
+      for (unsigned int r = 1; r <= maxY; r++) {
+        if (note[c][r].channel != 0) {
+          basePagesEmpty = false;
+          int ch = note[c][r].channel;
+          channelsUsed[ch] = true;
+          
+          // Calculate relative step position within the 16-step pattern
+          int relativeStep = ((c - pageStartStep) % 16);
+          
+          // Record pattern information
+          channelPatterns[ch].hasNotes[relativeStep] = true;
+          channelPatterns[ch].noteRows[relativeStep] = r;
+          channelPatterns[ch].velocities[relativeStep] = note[c][r].velocity;
+          channelPatterns[ch].rhythmPattern[relativeStep] = 1;
+          channelPatterns[ch].stepCount++;
+        }
+      }
+    }
+  }
+  
+  // Analyze patterns for each used channel
+  for (int ch = 1; ch <= 15; ch++) {
+    if (channelsUsed[ch]) {
+      BasePagePattern* pattern = &channelPatterns[ch];
+      
+      // Calculate density
+      pattern->density = (float)pattern->stepCount / 16.0;
+      
+      // Find most common note row
+      int rowCounts[17] = {0}; // 1-16 for note rows
+      for (int step = 0; step < 16; step++) {
+        if (pattern->hasNotes[step]) {
+          rowCounts[pattern->noteRows[step]]++;
+        }
+      }
+      int maxCount = 0;
+      for (int row = 1; row <= 16; row++) {
+        if (rowCounts[row] > maxCount) {
+          maxCount = rowCounts[row];
+          pattern->mostCommonRow = row;
+        }
+      }
+      
+      // Determine if rhythmic or melodic based on pattern characteristics
+      if (ch >= 1 && ch <= 4) {
+        pattern->isRhythmic = true;
+        pattern->isMelodic = false;
+      } else if (ch >= 5 && ch <= 8) {
+        pattern->isRhythmic = false;
+        pattern->isMelodic = true;
+      } else if (ch == 11) {
+        // Channel 11 can be both - determine based on density and note variation
+        bool hasNoteVariation = false;
+        for (int i = 1; i < 16; i++) {
+          if (pattern->hasNotes[i] && pattern->noteRows[i] != pattern->mostCommonRow) {
+            hasNoteVariation = true;
+            break;
+          }
+        }
+        pattern->isMelodic = hasNoteVariation || pattern->density > 0.3;
+        pattern->isRhythmic = !pattern->isMelodic;
+      } else {
+        // Other channels - analyze based on density and variation
+        pattern->isMelodic = pattern->density > 0.2;
+        pattern->isRhythmic = !pattern->isMelodic;
+      }
+      
+      Serial.print("Channel ");
+      Serial.print(ch);
+      Serial.print(": Density=");
+      Serial.print(pattern->density);
+      Serial.print(", CommonRow=");
+      Serial.print(pattern->mostCommonRow);
+      Serial.print(", Type=");
+      Serial.println(pattern->isMelodic ? "MELODIC" : "RHYTHMIC");
+    }
+  }
+  
+  // Debug: Show what musical elements are present in base pages
+  Serial.print("Base pages ");
+  Serial.print(aiBaseStartPage);
+  Serial.print("-");
+  Serial.print(aiBaseEndPage);
+  Serial.print(" analysis: ");
+  int rhythmChannels = 0, melodyChannels = 0, otherChannels = 0;
+  for (int ch = 1; ch <= 15; ch++) {
+    if (channelsUsed[ch]) {
+      if (channelPatterns[ch].isRhythmic) rhythmChannels++;
+      else if (channelPatterns[ch].isMelodic) melodyChannels++;
+      else otherChannels++;
+    }
+  }
+  Serial.print("Rhythm=");
+  Serial.print(rhythmChannels);
+  Serial.print(", Melody=");
+  Serial.print(melodyChannels);
+  Serial.print(", Other=");
+  Serial.println(otherChannels);
+  
+  // Generate pages starting from after the base page range
+  int startPage = aiBaseEndPage + 1;
+  int endPage = startPage + aiTargetPage - 1;
+  
+  // Safety check: ensure we don't exceed maxPages
+  if (endPage > maxPages) {
+    endPage = maxPages;
+    Serial.print("WARNING: Limited generation to page ");
+    Serial.println(endPage);
+  }
+  
+  // Debug: Show what pages will be generated
+  Serial.print("AI Generation: Base pages ");
+  Serial.print(aiBaseStartPage);
+  Serial.print("-");
+  Serial.print(aiBaseEndPage);
+  Serial.print(", Additional pages to generate: ");
+  Serial.print(aiTargetPage);
+  Serial.print(", Start page ");
+  Serial.print(startPage);
+  Serial.print(", End page ");
+  Serial.println(startPage + aiTargetPage - 1);
+  Serial.print("Base pages empty: ");
+  Serial.println(basePagesEmpty ? "YES" : "NO");
+  
+  for (int page = startPage; page <= endPage; page++) {
+    Serial.print("Generating page ");
+    Serial.println(page);
+    
+    // Save current page context
+    int originalPage = GLOB.page;
+    
+    // Set the page context for generation
+    GLOB.page = page;
+    
+    // Always clear the page since we're generating new content
+    // Calculate the step range for this specific page
+    unsigned int pageStartStep = (page - 1) * maxX + 1;
+    unsigned int pageEndStep = page * maxX;
+    
+    Serial.print("Clearing page ");
+    Serial.print(page);
+    Serial.print(" (steps ");
+    Serial.print(pageStartStep);
+    Serial.print("-");
+    Serial.println(pageEndStep);
+    
+    for (unsigned int c = pageStartStep; c <= pageEndStep; c++) {
+      for (unsigned int r = 1; r <= maxY; r++) {
+        note[c][r].channel = 0;
+        note[c][r].velocity = defaultVelocity;
+      }
+    }
+    
+    // Generate pattern for this page
+    HarmonicAnalysis harmony;
+    
+    // Analyze existing harmony from base page for intelligent progression
+    harmony.hasRoot = false;
+    harmony.hasThird = false;
+    harmony.hasFifth = false;
+    harmony.hasSeventh = false;
+    harmony.rootNote = 1;
+    harmony.isMajor = false;
+    harmony.isMinor = false;
+    
+    // Analyze base pages harmony if they exist
+    if (!basePagesEmpty) {
+      // Find the most common root note across all base pages
+      int noteCounts[16] = {0};
+      for (int basePage = aiBaseStartPage; basePage <= aiBaseEndPage; basePage++) {
+        unsigned int pageStartStep = (basePage - 1) * maxX + 1;
+        unsigned int pageEndStep = basePage * maxX;
+        
+        for (unsigned int c = pageStartStep; c <= pageEndStep; c++) {
+          for (unsigned int r = 1; r <= maxY; r++) {
+            if (note[c][r].channel != 0) {
+              noteCounts[r]++;
+            }
+          }
+        }
+      }
+      
+      // Find the most prominent note as root
+      int maxCount = 0;
+      for (int i = 1; i <= 16; i++) {
+        if (noteCounts[i] > maxCount) {
+          maxCount = noteCounts[i];
+          harmony.rootNote = i;
+        }
+      }
+    }
+    
+    // Create harmonic progression based on page number relative to base pages
+    if (page > aiBaseEndPage) {
+      int pageOffset = page - aiBaseEndPage;
+      
+      // Common chord progressions: I, ii, iii, IV, V, vi, vii°
+      int progression[] = {1, 2, 3, 4, 5, 6, 7, 1}; // I-ii-iii-IV-V-vi-vii°-I
+      int progressionIndex = (pageOffset - 1) % 8;
+      int chordDegree = progression[progressionIndex];
+      
+      // Convert chord degree to root note (simplified)
+      harmony.rootNote = ((harmony.rootNote + chordDegree - 1) % 8) + 1;
+      
+      // Determine major/minor based on chord degree
+      if (chordDegree == 1 || chordDegree == 4 || chordDegree == 5) {
+        harmony.isMajor = true;
+        harmony.isMinor = false;
+      } else if (chordDegree == 2 || chordDegree == 3 || chordDegree == 6) {
+        harmony.isMajor = false;
+        harmony.isMinor = true;
+      } else {
+        // Diminished or other - use alternating pattern
+        harmony.isMajor = (page % 2 == 0);
+        harmony.isMinor = !harmony.isMajor;
+      }
+      
+      Serial.print("Page ");
+      Serial.print(page);
+      Serial.print(" harmony: Root=");
+      Serial.print(harmony.rootNote);
+      Serial.print(", ");
+      Serial.println(harmony.isMajor ? "Major" : "Minor");
+    }
+    
+    // Generate patterns for used channels - only for this specific page
+    // Use analyzed base page patterns with intelligent variations
+    for (int ch = 1; ch <= 15; ch++) {
+      if (channelsUsed[ch]) {
+        BasePagePattern* basePattern = &channelPatterns[ch];
+        
+        // Add dynamic variation based on page position relative to base pages
+        int pageOffset = page - aiBaseEndPage;
+        float intensityMultiplier = 0.8 + (pageOffset * 0.1); // Gradually increase intensity
+        if (intensityMultiplier > 1.2) intensityMultiplier = 1.2;
+        
+        // Generate based on analyzed pattern type
+        if (basePattern->isRhythmic) {
+          generateContextAwareRhythmicPattern(pageStartStep, pageEndStep, ch, harmony, basePattern, pageOffset);
+        } else if (basePattern->isMelodic) {
+          generateContextAwareMelodicPattern(pageStartStep, pageEndStep, ch, harmony, basePattern, pageOffset);
+        } else {
+          // Fallback for other channels
+          generateBasicPattern(pageStartStep, pageEndStep, ch, harmony);
+        }
+      }
+    }
+    
+    // Restore original page context
+    GLOB.page = originalPage;
+  }
+  
+  // Auto-close menu and return to main interface
+  extern void switchMode(Mode *newMode);
+  extern Mode draw;
+  switchMode(&draw);
 }

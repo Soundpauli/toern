@@ -205,6 +205,23 @@ void drawStatus() {
     }
   }
 
+  // Add current channel indicator in single mode (x=4-5)
+  if (GLOB.singleMode) {
+    CRGB channelColor = col_base[GLOB.currentChannel];
+    light(4, 1, channelColor);  // Show current channel color
+    light(5, 1, channelColor);
+    
+    // Show copy source channel if copy is active (x=8-9)
+    if (GLOB.activeCopy) {
+      CRGB copySourceColor = col_base[GLOB.copyChannel];
+      light(8, 1, copySourceColor);  // Show copied channel color
+      light(9, 1, copySourceColor);
+    } else {
+      light(8, 1, CRGB(0, 0, 0));  // Dark when no copy
+      light(9, 1, CRGB(0, 0, 0));
+    }
+  }
+
   if (currentMode == &noteShift) {
     // draw a moving marquee to indicate the note shift mode
     for (unsigned int x = 1; x <= maxX; x++) {

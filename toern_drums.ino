@@ -219,11 +219,11 @@ void setDrums(DrumTypes drumType, int index) {
   int typ = (int)mapf(SMP.drum_settings[index][DRUMTYPE], 0, maxfilterResolution, 1, 3);
 
   // Channel 0 = Kick, 1 = Snare, 2 = HiHat
-  if (index == 0) {
+  if (index == 1) {
     KD_drum(tone, dec, pit, typ);
-  } else if (index == 1) {
-    SN_drum(tone, dec, pit, typ);
   } else if (index == 2) {
+    SN_drum(tone, dec, pit, typ);
+  } else if (index == 3) {
     HH_drum(tone, dec, pit, typ);
   }
 }

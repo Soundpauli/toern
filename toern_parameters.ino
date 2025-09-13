@@ -170,15 +170,16 @@ void setFiltersDefaultValues(int ch) {
   SMP.filter_settings[ch][BITCRUSHER] = 0;
   SMP.filter_settings[ch][DETUNE] = 16;
   SMP.filter_settings[ch][OCTAVE] = 16;
+  // EFX setting: 0 = SAMPLE mode (default for all channels), 1 = DRUM mode (only for channels 1-3)
+  SMP.filter_settings[ch][EFX] = 0;
 
-
-  //SND?
   setFilters(PASS, ch, true);
   setFilters(FREQUENCY, ch, true);
   setFilters(REVERB, ch, true);
   setFilters(BITCRUSHER, ch, true);
   setFilters(DETUNE, ch, true);
   setFilters(OCTAVE, ch, true);
+  // EFX parameter doesn't need setFilters call - it's just a control parameter
   initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
   updateSynthVoice(11);
 }

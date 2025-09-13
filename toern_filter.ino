@@ -228,6 +228,31 @@ break;
         amps[index]->gain(crushCompGain);
         break;
       }
+    case EFX:
+      {
+        // EFX is a control parameter that determines drum vs sample mode
+        // No audio processing needed - just ensure the parameter is loaded
+        // The actual drum/sample switching happens in playNote() function
+        
+        // If switching to DRUM mode, initialize the drum engine
+        if (SMP.filter_settings[index][EFX] == 1 && index >= 1 && index <= 3) {
+          // Get current drum settings
+          float tone = mapf(SMP.drum_settings[index][DRUMTONE], 0, 64, 0, 1023);
+          float decay = mapf(SMP.drum_settings[index][DRUMDECAY], 0, 64, 0, 1023);
+          float pitchMod = mapf(SMP.drum_settings[index][DRUMPITCH], 0, 64, 0, 1023);
+          int type = (int)mapf(SMP.drum_settings[index][DRUMTYPE], 0, 64, 1, 3);
+          
+          // Initialize the appropriate drum engine
+          if (index == 1) {
+            KD_drum(tone, decay, pitchMod, type);
+          } else if (index == 2) {
+            SN_drum(tone, decay, pitchMod, type);
+          } else if (index == 3) {
+            HH_drum(tone, decay, pitchMod, type);
+          }
+        }
+        break;
+      }
     default:
       break;
   }
@@ -263,6 +288,8 @@ void setFilterDefaults(int channel) {
 
   SMP.filter_settings[channel][OCTAVE] = 16;  // middle = 0
   SMP.filter_settings[channel][DETUNE] = 16;  // middle = 0
+  // EFX setting: 0 = SAMPLE mode (default for all channels), 1 = DRUM mode (only for channels 1-3)
+  SMP.filter_settings[channel][EFX] = 0;
   filters[channel]->resonance(0.0);           // default resonance off
   filters[channel]->frequency(10000);
 

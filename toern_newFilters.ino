@@ -90,7 +90,7 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   CRGB dimmed = baseColor;
   dimmed.nscale8(64);
   uint8_t blendVal = mapf(val, 0, meta.maxValue, 0, 255);
-  CRGB textColor = blend(CRGB::Green, CRGB::Red, blendVal);
+  CRGB textColor = blend(CRGB::Red, CRGB::Green, blendVal);
 
   drawText(buf, x, y, textColor);
 }
@@ -382,6 +382,7 @@ void setNewFilters() {
   static bool lastTouch = false;
   bool currTouch = (touchValue > touchThreshold);
   uint8_t chan = GLOB.currentChannel;
+  
   if (currTouch && !lastTouch) {
     // Use filterPageCount[chan] for wrapping
     filterPage[chan] = (filterPage[chan] + 1) % filterPageCount[chan];

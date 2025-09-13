@@ -595,13 +595,15 @@ void updateVals(int ch) {
     Sladder2[i]->resonance(resonance[ch][i]);
 
     // Update mixer gains (example: using pan[ch] and volume[ch] to calculate gain)
-    Smixer1[i]->gain(0, max(0, (-pan[ch][0] + 100.0) * 0.005) * (volume[ch][0] / 100.0) * 0.33);
-    Smixer1[i]->gain(1, max(0, (-pan[ch][1] + 100.0) * 0.005) * (volume[ch][1] / 100.0) * 0.33);
-    Smixer1[i]->gain(2, max(0, (-pan[ch][2] + 100.0) * 0.005) * (volume[ch][2] / 100.0) * 0.33);
+    // Use heavily reduced multiplier (0.12375 = 0.33 * 0.375) for channels 13 and 14 to reduce volume significantly
+    float gainMultiplier = (ch == 13 || ch == 14) ? 0.12375f : 0.33f;
+    Smixer1[i]->gain(0, max(0, (-pan[ch][0] + 100.0) * 0.005) * (volume[ch][0] / 100.0) * gainMultiplier);
+    Smixer1[i]->gain(1, max(0, (-pan[ch][1] + 100.0) * 0.005) * (volume[ch][1] / 100.0) * gainMultiplier);
+    Smixer1[i]->gain(2, max(0, (-pan[ch][2] + 100.0) * 0.005) * (volume[ch][2] / 100.0) * gainMultiplier);
 
-    Smixer2[i]->gain(0, max(0, (pan[ch][0] + 100.0) * 0.005) * (volume[ch][0] / 100.0) * 0.33);
-    Smixer2[i]->gain(1, max(0, (pan[ch][1] + 100.0) * 0.005) * (volume[ch][1] / 100.0) * 0.33);
-    Smixer2[i]->gain(2, max(0, (pan[ch][2] + 100.0) * 0.005) * (volume[ch][2] / 100.0) * 0.33);
+    Smixer2[i]->gain(0, max(0, (pan[ch][0] + 100.0) * 0.005) * (volume[ch][0] / 100.0) * gainMultiplier);
+    Smixer2[i]->gain(1, max(0, (pan[ch][1] + 100.0) * 0.005) * (volume[ch][1] / 100.0) * gainMultiplier);
+    Smixer2[i]->gain(2, max(0, (pan[ch][2] + 100.0) * 0.005) * (volume[ch][2] / 100.0) * gainMultiplier);
   }
 }
 
