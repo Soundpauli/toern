@@ -64,7 +64,14 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
 
 
 void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEntry& meta) {
-  const uint8_t x = (encoderIndex < 2) ? 10 : 2;
+  // Special case: Channel 11 WAVE slider (encoder 0) should be at x=6
+  uint8_t chan = GLOB.currentChannel;
+  uint8_t x;
+  if (chan == 11 && encoderIndex == 0 && meta.arr == ARR_FILTER && meta.idx == FILTER_WAVEFORM) {
+    x = 6;
+  } else {
+    x = (encoderIndex < 2) ? 10 : 2;
+  }
   const uint8_t y = 5;
   const uint8_t w = 6, h = 7;
 
@@ -85,7 +92,6 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   }
 
   // ─── Color according to value ───
-  uint8_t chan = GLOB.currentChannel;
   CRGB baseColor = filterColors[filterPage[chan]][encoderIndex];
   CRGB dimmed = baseColor;
   dimmed.nscale8(64);
@@ -129,6 +135,26 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
     }
   }
 
+  // Check if this is a PASS filter with value == 15
+  bool isPassFilterAt15 = false;
+  if (chan < NUM_CHANNELS) {
+    if (sliderDef[chan][page][sliderIndex].arr == ARR_FILTER && 
+        sliderDef[chan][page][sliderIndex].idx == PASS && 
+        val == 15) {
+      isPassFilterAt15 = true;
+    }
+  }
+
+  // Check if this is DETUNE or OCTAVE at middle value (16 for maxVal=32)
+  bool isDetuneOctaveAtMiddle = false;
+  if (chan < NUM_CHANNELS) {
+    if (sliderDef[chan][page][sliderIndex].arr == ARR_FILTER && 
+        (sliderDef[chan][page][sliderIndex].idx == DETUNE || sliderDef[chan][page][sliderIndex].idx == OCTAVE) && 
+        val == 16) { // Middle value for maxVal=32
+      isDetuneOctaveAtMiddle = true;
+    }
+  }
+
   for (uint8_t y = 1; y <= displayResolution; ++y) {
     CRGB c;
     if (y == displayVal) {
@@ -141,9 +167,19 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
       // For switchtype, val is 0 or 1, displayVal is 1 or displayResolution
       c = (y < displayVal) ? CRGB::Green : CRGB::Red;
     } else if (lowHighSlider) {
-      c = (y < displayVal) ? CRGB::Green : CRGB::Red;
+      // Special case: PASS filter at value 15 shows bright green
+      if (isPassFilterAt15) {
+        c = CRGB(0, 255, 0); // Bright Green
+      } else {
+        c = (y < displayVal) ? CRGB(148, 0, 211) : CRGB::Red; // Violet : Red
+      }
     } else {
-      c = (y < displayVal) ? color : CRGB::Black;
+      // Special case: DETUNE and OCTAVE at middle value show green at top
+      if (isDetuneOctaveAtMiddle && y == 1) {
+        c = CRGB::Green; // Green at top when at middle value
+      } else {
+        c = (y < displayVal) ? color : CRGB::Black;
+      }
     }
 
     light(x0, y, c);

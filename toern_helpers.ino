@@ -52,6 +52,8 @@ extern Device SMP;
 extern Mode volume_bpm;
 extern IntervalTimer playTimer;
 extern float playNoteInterval;
+extern float detune[13]; // Global detune array for channels 1-12
+extern float channelOctave[9]; // Global octave array for channels 1-8
 
 void EEPROMgetLastFiles() {
   //get lastFile Array from Eeprom
@@ -1228,7 +1230,7 @@ void generateGenreTrack() {
     unsigned int end = page * 16;
     
     switch (genreType) {
-      case 0: // BLANK - Already cleared above
+      case 0: // BLNK - Already cleared above
         break;
         
       case 1: // TECH - Techno patterns
@@ -1265,7 +1267,7 @@ void setGenreBPM() {
   int targetBPM = 100; // Default BPM
   
   switch (genreType) {
-    case 0: // BLANK
+    case 0: // BLNK
       targetBPM = 100; // Default
       break;
     case 1: // TECH - Techno

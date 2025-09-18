@@ -1,4 +1,8 @@
 
+// External variables
+extern float detune[13]; // Global detune array for channels 1-12
+extern float channelOctave[9]; // Global octave array for channels 1-8
+
 // move these to file-scope so everybody can reset them
 static unsigned long lastClockTime = 0;
 static unsigned long intervalsBuf[CLOCK_BUFFER_SIZE]  = { 0 };
@@ -359,7 +363,16 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
       }else{
 
         if (ch < 9) {
-     _samplers[ch].noteEvent(((SampleRate[ch] * 12) + pitch - 60), velocity, true, false);
+          int samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
+          // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+          if (ch >= 1 && ch <= 12) {
+            samplePitch += (int)detune[ch]; // Add detune semitones
+          }
+          // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+          if (ch >= 1 && ch <= 8) {
+            samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
+          }
+          _samplers[ch].noteEvent(samplePitch, velocity, true, false);
     } else if (ch > 12 && ch < 15) {
       playSynth(ch, livenote, velocity, true);
     } else if (ch == 11) {
@@ -376,7 +389,16 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
     //FastLED.show();
 
     if (ch < 9) {
-     _samplers[ch].noteEvent(((SampleRate[ch] * 12) + pitch - 60), velocity, true, false);
+      int samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
+      // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+      if (ch >= 1 && ch <= 12) {
+        samplePitch += (int)detune[ch]; // Add detune semitones
+      }
+      // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+      if (ch >= 1 && ch <= 8) {
+        samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
+      }
+      _samplers[ch].noteEvent(samplePitch, velocity, true, false);
     } else if (ch > 12 && ch < 15) {
       playSynth(ch, livenote, velocity, true);
     } else if (ch == 11) {

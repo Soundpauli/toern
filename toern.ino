@@ -108,6 +108,7 @@ void setMuteState(int channel, bool muted);
 void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
 void initPageMutes();
+void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false);
 static int lastDefaultFastFilterValue[NUM_CHANNELS] = {0};
 
 enum ValueDisplayMode {
@@ -120,6 +121,7 @@ const char* instTypeNames[] = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FL
 
 // Add at file scope, after instTypeNames[]
 const char* sndTypeNames[] = { "SAMP", "DRUM" };
+const char* waveformNames[] = { "SIN", "SQR", "SAW", "TRI" };
 
 struct SliderMeta {
   uint8_t maxValue;          // physical encoder range, e.g. 16
@@ -437,6 +439,7 @@ Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
+Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
 // Declare currentMode as a global variable
 Mode *currentMode;
 Mode *oldMode;
@@ -485,6 +488,12 @@ struct GlobalVars {
 };
 
 float octave[2];
+
+// Global detune array for channels 1-12 (excluding synth channels 13-14)
+float detune[13]; // Index 0 unused, indices 1-12 for channels 1-12
+
+// Global octave array for channels 1-8 (excluding synth channels 13-14)
+float channelOctave[9]; // Index 0 unused, indices 1-8 for channels 1-8
                              
 //#define GRANULAR_MEMORY_SIZE 95280  // enough for 800 ms at 44.1 kHz
 //DMAMEM int16_t granularMemory[GRANULAR_MEMORY_SIZE];
@@ -595,7 +604,8 @@ enum FilterType { NULL_,
                   SPEED,
                   PITCH,
                   ACTIVE,
-                  EFX
+                  EFX,
+                  FILTER_WAVEFORM
   };  //Define filter types
 
 
@@ -683,10 +693,10 @@ void initSliderDefTemplates() {
           {ARR_SYNTH, CUTOFF, "CUT", 32, DISPLAY_NUMERIC, nullptr, 32}, 
           {ARR_SYNTH, RESONANCE, "RES", 32, DISPLAY_NUMERIC, nullptr, 32}, 
           {ARR_SYNTH, FILTER, "FLT", 32, DISPLAY_NUMERIC, nullptr, 32}, 
-          {ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32}
+          {ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0}
         },
         {
-          {ARR_SYNTH, WAVEFORM, "WAVE", 16, DISPLAY_NUMERIC, nullptr, 5}, 
+          {ARR_FILTER, FILTER_WAVEFORM, "WAVE", 16, DISPLAY_ENUM, waveformNames, 4}, 
           {ARR_SYNTH, INSTRUMENT, "INST", 9, DISPLAY_ENUM, instTypeNames, 10}, 
           {ARR_SYNTH, CENT, "CENT", 32, DISPLAY_NUMERIC, nullptr, 32}, 
           {ARR_SYNTH, SEMI, "SEMI", 32, DISPLAY_NUMERIC, nullptr, 32}
@@ -1145,6 +1155,19 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     extern int getCurrentMenuMainSetting();
     int mainSetting = getCurrentMenuMainSetting();
     switchMenu(mainSetting);
+  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
+    // Exit NEW mode and switch back to DAT view (unchanged)
+    extern void resetNewModeState();
+    resetNewModeState();
+    switchMode(&loadSaveTrack);
+    return;
+  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+    // Generate genre track and exit NEW mode
+    extern void generateGenreTrack();
+    extern void resetNewModeState();
+    resetNewModeState();
+    generateGenreTrack();
+    return;
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     paintMode = false;
     unpaintMode = false;
@@ -1879,9 +1902,11 @@ void checkEncoders() {
     if ((GLOB.y > 1 && GLOB.y <= 14)) {  // GLOB.y is 1-based from encoder
       if (paintMode && !preventPaintUnpaint) {
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
+        note[GLOB.x][GLOB.y].velocity = defaultVelocity;
       }
       if (paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;
+        note[GLOB.x][GLOB.y].velocity = defaultVelocity;
       }
 
 
@@ -2068,6 +2093,11 @@ void checkTouchInputs() {
     if (currentMode != &filterMode && touchState[1] && !lastTouchState[1]) {
       if (currentMode == &draw || currentMode == &singleMode) {
         switchMode(&menu);
+      } else if (currentMode == &newFileMode) {
+        // Exit NEW mode without generating
+        extern void resetNewModeState();
+        resetNewModeState();
+        switchMode(&draw);
       } else {  // If in any other mode (e.g. menu, set_wav, etc.) and Switch 2 is touched, go to draw mode.
         switchMode(&draw);
       }
@@ -2294,6 +2324,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       //filtercheck
       drawTimer();
     }
+  } else if (currentMode->name == "NEW_FILE") {
+    showNewFileMode();
   }
 
 
@@ -2716,21 +2748,33 @@ void playNote() {
               float pitchMod = mapf(SMP.drum_settings[ch][DRUMPITCH], 0, 64, 0, 1023);
               float type = SMP.drum_settings[ch][DRUMTYPE];
               float notePitchOffset = mapf(SMP.drum_settings[ch][DRUMTONE], 0, 64, 0, 1023);  // Additional pitch
+              
+              // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+              float detuneOffset = 0.0;
+              if (ch >= 1 && ch <= 12) {
+                detuneOffset = detune[ch] * 100.0; // Convert semitones to cents for drum pitch
+              }
+              
+              // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+              float octaveOffset = 0.0;
+              if (ch >= 1 && ch <= 8) {
+                octaveOffset = channelOctave[ch] * 1200.0; // Convert octaves to cents for drum pitch (12 semitones * 100 cents)
+              }
 
               
               Serial.print(ch);  
               Serial.print("-Drum params: baseTone+notePitchOffset=");
                 
-                Serial.print(baseTone + notePitchOffset);
+                Serial.print(baseTone + notePitchOffset + detuneOffset + octaveOffset);
                 Serial.print(", decay=");
                 Serial.print(decay);
                 Serial.print(", pitchMod=");
                 Serial.println(pitchMod);
                 
               
-              if (ch == 1) KD_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // KD on channel 1 (_sampler 1)
-              if (ch == 2) SN_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // SN on channel 2 (_sampler 2)
-              if (ch == 3) HH_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // HH on channel 3 (_sampler 3)
+              if (ch == 1) KD_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // KD on channel 1 (_sampler 1)
+              if (ch == 2) SN_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // SN on channel 2 (_sampler 2)
+              if (ch == 3) HH_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // HH on channel 3 (_sampler 3)
                                                                                         // Channels 4-8 using this mode are undefined behavior
             } else {                                                                    // Sample playback for channels 0-8
               // `b` is grid row (1-16), map to pitch. `SampleRate` seems to be a pitch offset.
@@ -2739,6 +2783,16 @@ void playNote() {
               //int pitch = (12 * SampleRate[ch]) + b - 1;  // b-1 to make it 0-15. SampleRate acts as octave. // Original: 12 * SampleRate[ch] + b - (ch + 1) //
 
               int pitch = (12 * SampleRate[ch]) +  b - (ch + 1);
+              
+              // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+              if (ch >= 1 && ch <= 12) {
+                pitch += (int)detune[ch]; // Add detune semitones
+              }
+              
+              // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+              if (ch >= 1 && ch <= 8) {
+                pitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
+              }
                 
               
               _samplers[ch].noteEvent(pitch, vel, true, true);
@@ -2974,13 +3028,36 @@ void paint() {
         float pitchMod = mapf(SMP.drum_settings[painted_channel][DRUMPITCH], 0, 64, 0, 1023);
         float type = SMP.drum_settings[painted_channel][DRUMTYPE];
         float notePitchOffset = mapf(SMP.drum_settings[painted_channel][DRUMTONE], 0, 64, 0, 1023);  // Additional pitch
+        
+        // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+        float detuneOffset = 0.0;
+        if (painted_channel >= 1 && painted_channel <= 12) {
+          detuneOffset = detune[painted_channel] * 100.0; // Convert semitones to cents for drum pitch
+        }
+        
+        // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+        float octaveOffset = 0.0;
+        if (painted_channel >= 1 && painted_channel <= 8) {
+          octaveOffset = channelOctave[painted_channel] * 1200.0; // Convert octaves to cents for drum pitch (12 semitones * 100 cents)
+        }
 
-        if (painted_channel == 1) KD_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // KD on channel 1
-        if (painted_channel == 2) SN_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // SN on channel 2
-        if (painted_channel == 3) HH_drum(baseTone + notePitchOffset, decay, pitchMod, type);  // HH on channel 3
+        if (painted_channel == 1) KD_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // KD on channel 1
+        if (painted_channel == 2) SN_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // SN on channel 2
+        if (painted_channel == 3) HH_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // HH on channel 3
       } else {
         // Play sample as normal
         int pitch = 12 * SampleRate[painted_channel] + pitch_from_row - (painted_channel + 1);
+        
+        // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+        if (painted_channel >= 1 && painted_channel <= 12) {
+          pitch += (int)detune[painted_channel]; // Add detune semitones
+        }
+        
+        // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+        if (painted_channel >= 1 && painted_channel <= 8) {
+          pitch += (int)(channelOctave[painted_channel] * 12); // Add octave semitones (12 semitones per octave)
+        }
+        
         _samplers[painted_channel].noteEvent(pitch, painted_velocity, true, true);
       }
     } else if (painted_channel == 11) {  // Specific synth
@@ -3171,35 +3248,37 @@ void showLoadSave() {
   drawNoSD();
   FastLEDclear();
 
+  // Show big icons
   showIcons(ICON_LOADSAVE, UI_DIM_GREEN);
   showIcons(ICON_LOADSAVE2, UI_WHITE);
-  showIcons(HELPER_SELECT, UI_DIM_BLUE);
   
-  // Show ICON_NEW in white if settings are enabled, red if disabled
-  if (!SMP_LOAD_SETTINGS) {
-    showIcons(ICON_NEW, UI_BLACK);
-  } else {
-    showIcons(ICON_NEW, UI_DIM_RED);
+  // New indicator system: file: M[G] | M[R] | C[W] (conditional) | L[X]
+  drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
+  drawIndicator('M', 'R', 2);  // Encoder 2: Medium Red  
+  // Encoder 3: Cross White only if SMP_LOAD_SETTINGS is true
+  if (SMP_LOAD_SETTINGS) {
+    drawIndicator('C', 'W', 3);  // Encoder 3: Cross White
   }
-
+  drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
+  
+  // Apply different colors for load/save operations based on file existence
   char OUTPUTf[50];
-  sprintf(OUTPUTf, "%u.txt", SMP.file);  // Use %u for unsigned int
+  sprintf(OUTPUTf, "%u.txt", SMP.file);
   if (SD.exists(OUTPUTf)) {
-    showIcons(HELPER_SAVE, UI_DIM_RED);
-    showIcons(HELPER_LOAD, UI_BRIGHT_GREEN);
-    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
+    // File exists - bright green for load, dark red for save
+    drawIndicator('M', 'G', 1);   // Bright green for load
+    drawIndicator('M', 'D', 2);   // Dark red for save
+    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11); // Bright green number for existing file
   } else {
-    showIcons(HELPER_SAVE, UI_BRIGHT_RED);
-    showIcons(HELPER_LOAD, UI_DIM_GREEN);  // Keep load indicator even for empty files
-    showIcons(HELPER_MINUS, UI_DIM_GREEN);  // Show minus sign for empty pattern
-    drawNumber(SMP.file, UI_DIM_BLUE, 11);
+    // File doesn't exist - dark green for load, bright red for save
+    drawIndicator('M', 'E', 1);   // Dark green for load
+    drawIndicator('M', 'R', 2);   // Bright red for save
+    drawNumber(SMP.file, UI_BLUE, 11); // Blue number for non-existing file
   }
-  FastLED.setBrightness(ledBrightness);  // Already done in updateBrightness, but ok if called again
+  FastLED.setBrightness(ledBrightness);
   FastLED.show();
 
   if (currentMode->pos[3] != SMP.file) {
-    ////Serial.print("File: " + String(currentMode->pos[3]));
-    ////Serial.println();
     SMP.file = currentMode->pos[3];
   }
   
@@ -3223,9 +3302,29 @@ void showSamplePack() {
   drawNoSD();
   FastLEDclear();
 
+  // Show big icons
   showIcons(ICON_SAMPLEPACK, UI_DIM_YELLOW);
-  showIcons(HELPER_SELECT, UI_DIM_BLUE);
-  // drawNumber(SMP.pack, CRGB(20, 0, 0), 11); // This one seems redundant given the logic below
+  
+  // New indicator system: pack: M[G] | M[R] | | L[X]
+  drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
+  drawIndicator('M', 'R', 2);  // Encoder 2: Medium Red
+  // Encoder 3: empty (no indicator)
+  drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
+  
+  // Apply different colors for load/save operations based on file existence
+  char OUTPUTf[50];
+  sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);
+  if (SD.exists(OUTPUTf)) {
+    // File exists - bright green for load, dark red for save
+    drawIndicator('M', 'G', 1);   // Bright green for load
+    drawIndicator('M', 'D', 2);   // Dark red for save
+    drawNumber(SMP.pack, UI_BRIGHT_GREEN, 11); // Bright green number for existing file
+  } else {
+    // File doesn't exist - dark green for load, bright red for save
+    drawIndicator('M', 'E', 1);   // Dark green for load
+    drawIndicator('M', 'R', 2);   // Bright red for save
+    drawNumber(SMP.pack, UI_BLUE, 11); // Blue number for non-existing file
+  }
 
   // Validate samplepack value - ensure it's within valid range (1-99)
   if (SMP.pack < 1 || SMP.pack > 99) {
@@ -3236,17 +3335,6 @@ void showSamplePack() {
     EEPROM.put(0, SMP.pack);  // Save the corrected value to EEPROM
   }
 
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);  // Use %u
-  if (SD.exists(OUTPUTf)) {
-    showIcons(HELPER_LOAD, UI_BRIGHT_GREEN);
-    showIcons(HELPER_SAVE, UI_DIM_RED);
-    drawNumber(SMP.pack, UI_BRIGHT_GREEN, 11);
-  } else {
-    showIcons(HELPER_LOAD, UI_DIM_GREEN);
-    showIcons(HELPER_SAVE, UI_BRIGHT_RED);
-    drawNumber(SMP.pack, UI_BRIGHT_RED, 11);
-  }
   FastLED.setBrightness(ledBrightness);
   FastLED.show();
   if (currentMode->pos[3] != SMP.pack) {
@@ -3467,7 +3555,7 @@ void setSliderDefForChannel(int channel) {
                 {ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32},
-                {ARR_SYNTH, WAVEFORM, "WAVE", 16, DISPLAY_NUMERIC, nullptr, 5}
+                {ARR_FILTER, FILTER_WAVEFORM, "WAVE", 16, DISPLAY_ENUM, waveformNames, 4}
             },
             {
                 {ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32},

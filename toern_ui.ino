@@ -14,6 +14,113 @@ void light(unsigned int x, unsigned int y, CRGB color) {
   yield();
 }
 
+// New indicator system colors
+CRGB getIndicatorColor(char colorCode) {
+  switch (colorCode) {
+    case 'G': return CRGB(0, 255, 0);      // Green
+    case 'R': return CRGB(255, 0, 0);      // Red
+    case 'X': return CRGB(0, 0, 255);      // Blue
+    case 'W': return CRGB(255, 255, 255); // White
+    case 'O': return CRGB(255, 165, 0);    // Orange
+    case 'H': return CRGB(0, 191, 255);    // Bright Blue
+    case 'V': return CRGB(148, 0, 211);    // Violet
+    case 'P': return CRGB(255, 192, 203);  // Pink
+    case 'Y': return CRGB(255, 255, 0);   // Yellow
+    case 'C': return CRGB(0, 0, 0);        // Black (placeholder for CH)
+    case 'U': return CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0); // Volume color
+    case 'D': return CRGB(100, 0, 0);     // Dark Red
+    case 'E': return CRGB(0, 100, 0);     // Dark Green
+    default: return CRGB(0, 0, 0);        // Default to black
+  }
+}
+
+// Get current channel color for CH indicator
+CRGB getCurrentChannelColor() {
+  if (GLOB.currentChannel >= 0 && GLOB.currentChannel < 16) {
+    return col_base[GLOB.currentChannel];
+  }
+  return CRGB(0, 0, 0);
+}
+
+// Apply highlighting to a color (brighter or darker)
+CRGB applyHighlight(CRGB color, bool highlight) {
+  if (highlight) {
+    // Make brighter by increasing brightness
+    return CRGB(
+      min(255, color.r * 1.5),
+      min(255, color.g * 1.5),
+      min(255, color.b * 1.5)
+    );
+  } else {
+    // Make darker by reducing brightness
+    return CRGB(
+      color.r * 0.5,
+      color.g * 0.5,
+      color.b * 0.5
+    );
+  }
+}
+
+// Draw indicator with new format: SIZE[COLOR]
+void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false) {
+  CRGB color = getIndicatorColor(colorCode);
+  
+  // Handle special case for CH (current channel color)
+  if (colorCode == 'C') {
+    color = getCurrentChannelColor();
+  }
+  
+  // Apply highlighting if requested
+  if (highlight) {
+    color = applyHighlight(color, true);
+  }
+  
+  // Determine x positions based on encoder number
+  int x1, x2, x3;
+  switch (encoderNum) {
+    case 1:
+      x1 = 1; x2 = 2; x3 = 3; // L: 1,2,3 / M: 2,3 / S: 3
+      break;
+    case 2:
+      x1 = 5; x2 = 6; x3 = 7; // L: 5,6,7 / M: 6,7 / S: 6
+      break;
+    case 3:
+      x1 = 9; x2 = 10; x3 = 11; // L: 9,10,11 / M: 10,11 / S: 10
+      break;
+    case 4:
+      x1 = 13; x2 = 14; x3 = 15; // L: 13,14,15 / M: 14,15 / S: 14
+      break;
+    default:
+      return; // Invalid encoder number
+  }
+  
+  // Draw based on size
+  switch (size) {
+    case 'S': // Small: 1px wide, 1px high
+      light(x3, 1, color);
+      break;
+    case 'M': // Medium: 2px wide, 1px high
+      light(x2, 1, color);
+      light(x3, 1, color);
+      break;
+    case 'L': // Large: 3px wide, 1px high
+      light(x1, 1, color);
+      light(x2, 1, color);
+      light(x3, 1, color);
+      break;
+    case 'C': // Cross: 3px wide, 3px high
+      // Draw horizontal line
+      light(x1, 1, color);
+      light(x2, 1, color);
+      light(x3, 1, color);
+      // Draw vertical line
+      light(x2, 1, color);
+      light(x2, 2, color);
+      light(x2, 3, color);
+      break;
+  }
+}
+
 
 
 // Draws the above shape, with its top-left at (startX, startY).
@@ -130,13 +237,11 @@ void drawBase() {
       }
       colors++;
     }
+   
 
-    drawStatus();
+  
 
-    // 4/4-Takt-Hilfsmarkierung in Zeile 1
-    for (unsigned int x = 1; x <= 13; x += 4) {
-      light(x, 1, CRGB(10, 10, 10));  // hellgraue Taktpunkte
-    }
+
 
   } else {
     // ---- SINGLE MODE ----
@@ -156,13 +261,19 @@ void drawBase() {
       }
     }
 
-    drawStatus();
+    
+   
 
-    // 4/4-Takt-Hilfslinien in Zeile 1 (z. B. Start jeder Viertel)
-    for (unsigned int x = 1; x <= 13; x += 4) {
-      light(x, 1, CRGB(0, 1, 1));  // türkisfarbene Taktmarkierung
-    }
+    
+
   }
+
+   // 4/4-Takt-Hilfslinien in Zeile 1 (z. B. Start jeder Viertel)
+   for (unsigned int x = 1; x <= 13; x += 4) {
+    light(x, 1, CRGB(10, 10, 10));  // türkisfarbene Taktmarkierung
+  }
+
+  drawStatus();
 
   drawPages();
 }
@@ -170,56 +281,70 @@ void drawBase() {
 
 
 void drawStatus() {
+  // Clear status bar - no yellow fill for active copy
   CRGB ledColor = CRGB(0, 0, 0);
-  if (GLOB.activeCopy) 
-  ledColor = CRGB(20, 20, 0);
   for (unsigned int s = 1; s <= maxX; s++) {
     light(s, 1, ledColor);
   }
   for (unsigned int s = 1; s <= maxX; s++) {
     light(s, 16, ledColor);
   }
+  
+  // If copy is active, show specific indicators
+  if (GLOB.activeCopy) {
+    // Clear y=16 completely
+    for (unsigned int s = 1; s <= maxX; s++) {
+      light(s, 16, CRGB(0, 0, 0));
+    }
+    
+    // Show active copy indicators: w[X] / - / - / G[Y]
+    drawIndicator('L', 'X', 1);  // Encoder 1: Small Blue (w[X])
+    // Encoder 2: empty (no indicator)
+    // Encoder 3: empty (no indicator)
+    drawIndicator('L', 'Y', 4);  // Encoder 4: Small Yellow (G[Y])
+    
+    return; // Exit early to prevent any other indicators
+  }
 
   // Add indicators for copy and noteshift functions when cursor is at y=16 in single mode
-  if (GLOB.singleMode && GLOB.y == 16) {
-    // Red indicator (x=2-3)
-    light(2, 1, CRGB(255, 0, 0));  // Red indicator
-    light(3, 1, CRGB(255, 0, 0));
+  // Only show indicators when copy is NOT active
+  if (GLOB.singleMode && GLOB.y == 16 && !GLOB.activeCopy) {
+    // New indicator system: copypaste: M[X] | | | M[G]
+    drawIndicator('M', 'X', 1);  // Encoder 1: Medium Blue
+    // Encoder 2: empty (no indicator)
+    // Encoder 3: empty (no indicator)
+    drawIndicator('M', 'G', 4);  // Encoder 4: Medium Green
     
-    // Copy indicator (x=14-15)
-    if (GLOB.activeCopy) {
-      light(14, 1, CRGB(255, 255, 0));  // Yellow for copy active
-      light(15, 1, CRGB(255, 255, 0));
-    } else {
-      light(14, 1, CRGB(50, 50, 0));    // Dim yellow for copy available
-      light(15, 1, CRGB(50, 50, 0));
-    }
-    
-    // Note shift indicator (x=6-7)
+    // Note shift indicator: L[W] | L[G] | | L[W]
     if (currentMode == &noteShift) {
-      light(6, 1, CRGB(255, 255, 255));  // White for noteshift active
-      light(7, 1, CRGB(255, 255, 255));
-    } else {
-      light(6, 1, CRGB(100, 100, 100));  // Gray for noteshift available
-      light(7, 1, CRGB(100, 100, 100));
-    }
+      
+    } 
   }
 
   // Add current channel indicator in single mode (x=4-5)
   if (GLOB.singleMode) {
     CRGB channelColor = col_base[GLOB.currentChannel];
-    light(4, 1, channelColor);  // Show current channel color
-    light(5, 1, channelColor);
     
-    // Show copy source channel if copy is active (x=8-9)
-    if (GLOB.activeCopy) {
-      CRGB copySourceColor = col_base[GLOB.copyChannel];
-      light(8, 1, copySourceColor);  // Show copied channel color
-      light(9, 1, copySourceColor);
-    } else {
-      light(8, 1, CRGB(0, 0, 0));  // Dark when no copy
-      light(9, 1, CRGB(0, 0, 0));
-    }
+    
+ 
+  }
+  
+  // Add draw mode indicators when y=16
+  if (GLOB.y == 16) {
+    // New indicator system: draw(+y=16): M[R] | | | M[Y]
+    drawIndicator('M', 'R', 1);  // Encoder 1: Medium Red
+    // Encoder 2: empty (no indicator)
+    // Encoder 3: empty (no indicator)
+    drawIndicator('M', 'Y', 4);  // Encoder 4: Medium Yellow
+  }
+  
+  // Add single mode indicators when y=16
+  if (GLOB.singleMode && GLOB.y == 16) {
+    // New indicator system: singlemode(y=16): M[R] | M[W] | | M[Y]
+    drawIndicator('M', 'R', 1);  // Encoder 1: Medium Red
+    drawIndicator('M', 'W', 2);  // Encoder 2: Medium White
+    // Encoder 3: empty (no indicator)
+    drawIndicator('M', 'Y', 4);  // Encoder 4: Medium Yellow
   }
 
   if (currentMode == &noteShift) {
@@ -228,6 +353,11 @@ void drawStatus() {
       light(x, 1, CRGB(0, 0, 0));
     }
     light(round(marqueePos), 1, CRGB(120, 120, 120));
+      drawIndicator('L', 'G', 1, true);   // Highlighted white for noteshift active
+      //drawIndicator('L', 'G', 2, true);  // Highlighted green for noteshift active
+      // Encoder 3: empty (no indicator)
+      drawIndicator('L', 'X', 4, true);   // Highlighted white for noteshift active
+
     if (movingForward) {
       marqueePos = marqueePos + 1;
       if (marqueePos > maxX) {
@@ -650,7 +780,7 @@ unsigned int endX = mapf(GLOB.seekEnd, 0, 100, 1, 16);
       if (x < startX) {
         color = CRGB(0, 0, 5);  // Green for pre-start region
       } else if (x > endX) {
-        color = CRGB(10, 0, 15);  // Dark red for post-end region
+        color = CRGB(15, 15, 00);  // yellow for post-end region
       } else {
 
         color = CRGB(((y - 4) * 35) / 4, (255 - ((y - 4) * 35)) / 4, 0);  // Red to green gradient at 25% brightness
@@ -756,11 +886,14 @@ void drawBPMScreen() {
   drawBrightness();
   CRGB volColor = CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0);
   Encoder[2].writeRGBCode(CRGBToUint32(volColor));
-  showIcons(HELPER_EXIT, UI_DIM_BLUE);
-  showIcons(HELPER_BRIGHT, UI_BG_DIM);
-  showIcons(HELPER_VOL, volColor);
+  
+  // New indicator system: BPM: L[H] | L[W] | L[U] | -
+  drawIndicator('L', 'H', 1);  // Encoder 1: Large Bright Blue
+  drawIndicator('L', 'W', 2);  // Encoder 2: Large White
+  drawIndicator('L', 'U', 3);  // Encoder 3: Large Volume Color
+  // Encoder 4: empty (no indicator)
+  
   if (MIDI_CLOCK_SEND){ 
-      showIcons(HELPER_BPM, UI_CYAN);
       drawNumber(SMP.bpm, UI_CYAN, 6);}
       else{
         drawNumber(SMP.bpm, UI_DIM_RED, 6);

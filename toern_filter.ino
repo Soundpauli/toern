@@ -1,5 +1,12 @@
 
 
+// External variables
+extern float detune[13]; // Global detune array for channels 1-12
+extern float channelOctave[9]; // Global octave array for channels 1-8
+extern int waveformsArray[2][5]; // Waveform array for instrument channels
+
+// External functions
+void handleWaveformChange(int index, unsigned int waveformType);
 
 // --- Smooth Gain Transition State ---
 #define NUM_FILTERS 15
@@ -195,10 +202,57 @@ break;
 
         case OCTAVE:
       {
-        filters[index]->octaveControl(mappedValue);
+        // For channels 1-8, store octave value in global array
+        if (index >= 1 && index <= 8) {
+          // Map octave value from 0-maxfilterResolution to -3 to +3 octaves
+          // Center value (maxfilterResolution/2) = 0 octave shift
+          float octaveShift = mapf(SMP.filter_settings[index][OCTAVE], 0, maxfilterResolution, -3.0, 3.0);
+          channelOctave[index] = octaveShift;
+        } else {
+          // For synth channels (13-14), use the original filter octave control
+          filters[index]->octaveControl(mappedValue);
+        }
         break;
       }
 
+      case DETUNE:
+      {
+        // Only apply detune to channels 1-12 (excluding synth channels 13-14)
+        if (index >= 1 && index <= 12) {
+          // Map detune value from 0-maxfilterResolution to -12 to +12 semitones
+          // Center value (maxfilterResolution/2) = 0 detune
+          float detuneSemitones = mapf(SMP.filter_settings[index][DETUNE], 0, maxfilterResolution, -12.0, 12.0);
+          detune[index] = detuneSemitones;
+        }
+        break;
+      }
+
+      case FILTER_WAVEFORM:
+      {
+        // Handle waveform changes for synth channels 11, 13-14
+        if (index == 11) {
+          // Channel 11 uses waveformsArray system (ch=0 in instrument system)
+          // Map WAVE value from 0-16 to 0-3 (SIN/SQR/SAW/TRI)
+          // Value 0-3 = SIN, 4-7 = SQR, 8-11 = SAW, 12-15 = TRI, 16 = SIN
+          uint8_t waveformIndex = mapf(SMP.filter_settings[index][FILTER_WAVEFORM], 0, 16, 0, 3);
+          waveformIndex = constrain(waveformIndex, 0, 3);
+          
+          // Update waveformsArray for channel 11 (maps to ch=0 in instrument system)
+          waveformsArray[0][0] = (waveformIndex == 0) ? WAVEFORM_SINE : 
+                                 (waveformIndex == 1) ? WAVEFORM_SQUARE :
+                                 (waveformIndex == 2) ? WAVEFORM_SAWTOOTH :
+                                 WAVEFORM_TRIANGLE;
+        } else if (index >= 13 && index <= 14) {
+          // Channels 13-14 use synth objects
+          // Map WAVE value from 0-16 to 1-4 (SIN/SQR/SAW/TRI)
+          // Value 0-3 = SIN, 4-7 = SQR, 8-11 = SAW, 12-15 = TRI, 16 = SIN
+          uint8_t waveformType = mapf(SMP.filter_settings[index][FILTER_WAVEFORM], 0, 16, 1, 4);
+          waveformType = constrain(waveformType, 1, 4);
+          
+          handleWaveformChange(index, waveformType);
+        }
+        break;
+      }
 
     case REVERB:
       {
@@ -288,6 +342,17 @@ void setFilterDefaults(int channel) {
 
   SMP.filter_settings[channel][OCTAVE] = 16;  // middle = 0
   SMP.filter_settings[channel][DETUNE] = 16;  // middle = 0
+  SMP.filter_settings[channel][FILTER_WAVEFORM] = 8;  // SAW (value 2)
+  
+  // Initialize detune array for channels 1-12
+  if (channel >= 1 && channel <= 12) {
+    detune[channel] = 0.0; // No detune by default
+  }
+  
+  // Initialize octave array for channels 1-8
+  if (channel >= 1 && channel <= 8) {
+    channelOctave[channel] = 0.0; // No octave shift by default
+  }
   // EFX setting: 0 = SAMPLE mode (default for all channels), 1 = DRUM mode (only for channels 1-3)
   SMP.filter_settings[channel][EFX] = 0;
   filters[channel]->resonance(0.0);           // default resonance off

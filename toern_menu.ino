@@ -1,5 +1,5 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 17
+#define MENU_PAGES_COUNT 16
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -24,9 +24,8 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"CLR", 12, false, nullptr},          // Rec Channel Clear
   {"PVL", 13, false, nullptr},          // Preview Volume
   {"MON", 14, true, "LEVEL"},           // Monitor Level + Level Control
-  {"RST", 15, false, nullptr},          // Reset
-  {"AI", 16, true, "PAGES"},            // AI Song Generation + Page Count
-  {"NEW", 17, true, "LENGTH"}           // Genre Generation + Length Control
+  {"AI", 15, true, "PAGES"},            // AI Song Generation + Page Count
+  {"RST", 16, false, nullptr}           // Reset
 };
 
 int currentMenuPage = 0;
@@ -35,8 +34,11 @@ int aiBaseStartPage = 1; // Start of base page range for AI analysis
 int aiBaseEndPage = 1;   // End of base page range for AI analysis
 
 // Genre generation variables
-int genreType = 0; // 0=BLANK, 1=TECH, 2=HIPH, 3=DNB, 4=HOUS, 5=AMBT
+int genreType = 0; // 0=BLNK, 1=TECH, 2=HIPH, 3=DNB, 4=HOUS, 5=AMBT
 int genreLength = 8; // Default length for genre generation
+
+// NEW mode state management
+bool newScreenFirstEnter = true;
 
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
@@ -130,9 +132,13 @@ void saveSingleModeToEEPROM(int index, int8_t value) {
 
 void showMenu() {
   FastLEDclear();
-  showExit(0);
+  //showExit(0);
 
-
+  // New indicator system: menu: | | | L[X]
+  // Encoder 1: empty (no indicator)
+  // Encoder 2: empty (no indicator)
+  // Encoder 3: empty (no indicator)
+  drawIndicator('L', 'G', 4);  // Encoder 4: Large Blue
 
   // Get current page info
   int pageIndex = currentMenuPage;
@@ -169,9 +175,8 @@ void showMenu() {
     case 12: encoderColor = UI_ORANGE; break;    // CLR
     case 13: encoderColor = UI_ORANGE; break;    // PVL
     case 14: encoderColor = CRGB(200, 0, 20); break; // MON
-    case 15: encoderColor = CRGB(255, 100, 0); break; // RST
-    case 16: encoderColor = CRGB(255, 0, 255); break; // AI
-    case 17: encoderColor = CRGB(0, 255, 255); break; // NEW
+    case 15: encoderColor = CRGB(255, 0, 255); break; // AI
+    case 16: encoderColor = CRGB(255, 100, 0); break; // RST
   }
   
   Encoder[3].writeRGBCode(encoderColor.r << 16 | encoderColor.g << 8 | encoderColor.b);
@@ -219,32 +224,34 @@ void drawMainSettingStatus(int setting) {
     case 1: // DAT - Load/Save
       showIcons(ICON_LOADSAVE, UI_DIM_GREEN);
       showIcons(ICON_LOADSAVE2, UI_DIM_WHITE);
-      drawText("FILE", 2, 2, UI_GREEN);
+      drawText("FILE", 2, 3, UI_GREEN);
       break;
       
     case 2: // KIT - Sample Pack
-      showIcons(ICON_SAMPLEPACK, UI_DIM_BLUE);
-      drawText("PACK", 2, 2, UI_BLUE);
+      showIcons(ICON_SAMPLEPACK, UI_DIM_YELLOW);
+      drawText("PACK", 2, 3, UI_BLUE);
       break;
       
     case 3: // WAV - Wave Selection
       showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
       if (GLOB.currentChannel > 0 && GLOB.currentChannel < 9) {
-        drawText("WAVE", 2, 2, UI_YELLOW);
+        drawText("WAVE", 2, 3, UI_YELLOW);
       } else {
-        drawText("(-)", 2, 2, UI_YELLOW);
+        drawText("(-)", 2, 3, UI_YELLOW);
       }
       break;
       
-    case 4: // REC - Recording Mode
+    case 4: // REC - Recording Mode (menu/mic)
       showIcons(ICON_REC, UI_DIM_RED);
       showIcons(ICON_REC2, UI_DIM_WHITE);
+      // New indicator system: menu/mic: S[G] | | M[W] | L[X]
+      drawIndicator('L', 'R', 3);  // Encoder 3: Medium White (only for mic page)
       drawRecMode();
       break;
       
     case 5: // BPM - BPM/Volume
       showIcons(ICON_BPM, UI_DIM_GREEN);
-      drawText("BPM", 2, 2, UI_MAGENTA);
+      drawText("BPM", 2, 3, UI_MAGENTA);
       break;
       
     case 6: // CLK - Clock Mode
@@ -292,16 +299,17 @@ void drawMainSettingStatus(int setting) {
       drawMonitorLevel();
       break;
       
-    case 15: // RST - Reset
-      drawText("RSET", 2, 10, CRGB(255, 100, 0));
-      break;
-      
-    case 16: // AI - Song Generation
+    case 15: // AI - Song Generation
       drawText("AI", 2, 10, CRGB(255, 0, 255));
+      // New indicator system: menu/AI: L[G] | L[Y] | L[W] | S[X]
+      drawIndicator('L', 'G', 1);  // Encoder 1: Large Green
+      drawIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow
+      drawIndicator('L', 'W', 3);  // Encoder 3: Large White
+      drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
       break;
       
-    case 17: // NEW - Genre Generation
-      drawText("NEW", 2, 10, CRGB(0, 255, 255));
+    case 16: // RST - Reset
+      drawText("RSET", 2, 10, CRGB(255, 100, 0));
       break;
   }
 }
@@ -344,7 +352,7 @@ void drawAdditionalFeatures(int setting) {
       break;
     }
     
-    case 16: { // AI page - Base Page Range + Additional Pages Count (all on one line)
+    case 15: { // AI page - Base Page Range + Additional Pages Count (all on one line)
       // Draw everything on y=8: Orange base range + Green additional pages count
       for (int x = 1; x <= 16; x++) {
         if (x >= aiBaseStartPage && x <= aiBaseEndPage) {
@@ -357,36 +365,18 @@ void drawAdditionalFeatures(int setting) {
       }
       
       // Draw "PAGE" text in pink at the bottom
-      drawText("PAGE", 2, 2, CRGB(255, 0, 255)); // Pink color
+      drawText("PAGE", 2, 3, CRGB(255, 0, 255)); // Pink color
       break;
     }
     
-    case 17: { // NEW page - Genre Selection + Length Control
-      // Draw genre selection on y=8
-      drawGenreSelection();
-      
-      // Draw length meter on y=15 in pink
-      int lengthLength = mapf(genreLength, 1, 16, 1, 16);
-      for (int x = 1; x <= 16; x++) {
-        if (x <= lengthLength) {
-          light(x, 8, CRGB(255, 0, 255)); // Pink for length
-        } else {
-          light(x, 8, CRGB(0, 0, 0));
-        }
-      }
-      
-      // Draw "LENGTH" text in pink at the bottom
-      //drawText("LENGTH", 2, 2, CRGB(255, 0, 255)); // Pink color
-      break;
-    }
   }
 }
 
 void drawGenreSelection() {
   // Draw genre options on y=8
-  const char* genres[] = {"BLANK", "TECH", "HIPH", "DNB", "HOUS", "AMBT"};
+  const char* genres[] = {"BLNK", "TECH", "HIPH", "DNB", "HOUS", "AMBT"};
   CRGB genreColors[] = {
-    CRGB(100, 100, 100), // BLANK - gray
+    CRGB(100, 100, 100), // BLNK - gray
     CRGB(255, 100, 0),   // TECH - orange
     CRGB(255, 0, 255),   // HIPH - magenta
     CRGB(0, 255, 0),     // DNB - green
@@ -395,14 +385,13 @@ void drawGenreSelection() {
   };
   
   // Draw current genre text
-  drawText(genres[genreType], 2, 2, genreColors[genreType]);
+  drawText(genres[genreType], 2, 3, genreColors[genreType]);
 }
 
 void handleAdditionalFeatureControls(int setting) {
   static bool recMenuFirstEnter = true;
   static bool monMenuFirstEnter = true;
   static bool aiMenuFirstEnter = true;
-  static bool newMenuFirstEnter = true;
   static bool menuFirstEnter = true;
   static int lastSetting = -1;
   
@@ -411,7 +400,6 @@ void handleAdditionalFeatureControls(int setting) {
     recMenuFirstEnter = true;
     monMenuFirstEnter = true;
     aiMenuFirstEnter = true;
-    newMenuFirstEnter = true;
     menuFirstEnter = true;
     lastSetting = setting;
   }
@@ -460,7 +448,7 @@ void handleAdditionalFeatureControls(int setting) {
       }
       break;
       
-    case 16: { // AI page - Target Count (enc0), Base Start (enc1), Base End (enc2)
+    case 15: { // AI page - Target Count (enc0), Base Start (enc1), Base End (enc2)
       static int lastAiTargetPage = -1;
       static int lastAiBaseStartPage = -1;
       static int lastAiBaseEndPage = -1;
@@ -525,49 +513,12 @@ void handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 17: { // NEW page - Genre Type (enc0), Length (enc1)
-      static int lastGenreType = -1;
-      static int lastGenreLength = -1;
-      
-      // Set encoder counters only on first entry
-      if (newMenuFirstEnter) {
-        Encoder[0].writeCounter((int32_t)genreType);
-        Encoder[0].writeMax((int32_t)5);
-        Encoder[0].writeMin((int32_t)0);
-        
-        Encoder[1].writeCounter((int32_t)genreLength);
-        Encoder[1].writeMax((int32_t)16);
-        Encoder[1].writeMin((int32_t)1);
-        
-        newMenuFirstEnter = false;
-      }
-      
-      // Handle genre type (encoder 0)
-      if (currentMode->pos[0] != lastGenreType) {
-        genreType = currentMode->pos[0];
-        if (genreType > 5) genreType = 5;
-        if (genreType < 0) genreType = 0;
-        drawAdditionalFeatures(setting);
-        lastGenreType = genreType;
-      }
-      
-      // Handle genre length (encoder 1)
-      if (currentMode->pos[1] != lastGenreLength) {
-        genreLength = currentMode->pos[1];
-        if (genreLength > 16) genreLength = 16;
-        if (genreLength < 1) genreLength = 1;
-        drawAdditionalFeatures(setting);
-        lastGenreLength = genreLength;
-      }
-      break;
-    }
       
          default:
        // Reset first enter flags when not on pages with additional features
        recMenuFirstEnter = true;
        monMenuFirstEnter = true;
        aiMenuFirstEnter = true;
-       newMenuFirstEnter = true;
        menuFirstEnter = true;
        break;
   }
@@ -703,18 +654,13 @@ void switchMenu(int menuPosition){
         break;
 
         case 15:
-        // Reset all filters, envelopes, drums and synths to default
-        resetAllToDefaults();
-        break;
-
-        case 16:
         // AI Song Generation - generate song from current page to target page
         generateSong();
         break;
-        
-        case 17:
-        // Genre Generation - generate new track from page 1 to selected length
-        generateGenreTrack();
+
+        case 16:
+        // Reset all filters, envelopes, drums and synths to default
+        resetAllToDefaults();
         break;
     }
     //saveMenutoEEPROM();
@@ -741,6 +687,164 @@ void resetMenuState() {
   // For now, we'll let the static variables handle the reset automatically
 }
 
+// Reset NEW mode state when exiting
+void resetNewModeState() {
+  newScreenFirstEnter = true;
+}
+
+// Show NEW screen when creating a new file via DAT
+void showNewFileScreen() {
+  // Switch to new file mode
+  switchMode(&newFileMode);
+}
+
+// Show NEW file mode screen
+void showNewFileMode() {
+  FastLEDclear();
+  
+  // Draw page title
+  drawText("NEW", 6, 12, CRGB(0, 255, 255));
+  
+  // Draw genre selection
+  drawGenreSelection();
+  
+  // Draw length meter on y=8 in pink (only for non-BLNK genres)
+  if (genreType != 0) { // Not BLNK
+    int lengthLength = mapf(genreLength, 1, 16, 1, 16);
+    for (int x = 1; x <= 16; x++) {
+      if (x <= lengthLength) {
+        light(x, 10, CRGB(255, 0, 255)); // Pink for length
+      } else {
+        light(x, 10, CRGB(0, 0, 0));
+      }
+    }
+  } else {
+    // Clear the length meter area for BLNK
+    for (int x = 1; x <= 16; x++) {
+      light(x, 10, CRGB(0, 0, 0));
+    }
+  }
+  
+  // New indicator system: new: M[G] | | M[V] | S[X]
+  drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
+  // Encoder 2: empty (no indicator)
+  
+  // Only show L[V] if not BLNK (genreType != 0)
+  if (genreType != 0) {
+    drawIndicator('L', 'V', 3);  // Encoder 3: Large Violet (only for non-BLNK)
+  }
+  // Encoder 3: empty if BLNK
+  
+  drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue (was missing!)
+
+
+  
+  
+  FastLED.setBrightness(ledBrightness);
+  FastLEDshow();
+  
+  // Initialize encoders for genre and length control
+  static int lastGenreType = -1;
+  static int lastGenreLength = -1;
+  
+  // Always initialize encoders when entering NEW mode
+  if (newScreenFirstEnter) {
+    // Genre selection by last encoder (encoder 3)
+    Encoder[3].writeCounter((int32_t)genreType);
+    Encoder[3].writeMax((int32_t)5);
+    Encoder[3].writeMin((int32_t)0);
+    
+    if (genreType != 0) { // Only enable length control for non-BLNK genres
+      // Length selection by 3rd encoder (encoder 2)
+      Encoder[2].writeCounter((int32_t)genreLength);
+      Encoder[2].writeMax((int32_t)16);
+      Encoder[2].writeMin((int32_t)1);
+    } else {
+      // Disable encoder 2 for BLNK
+      Encoder[2].writeCounter((int32_t)0);
+      Encoder[2].writeMax((int32_t)0);
+      Encoder[2].writeMin((int32_t)0);
+    }
+    
+    // Update currentMode positions to match encoders
+    currentMode->pos[3] = genreType;
+    currentMode->pos[2] = genreType != 0 ? genreLength : 0;
+    
+    lastGenreType = genreType;
+    lastGenreLength = genreLength;
+    newScreenFirstEnter = false;
+  }
+  
+  // Handle genre type (encoder 3 - last encoder)
+  int currentGenreType = currentMode->pos[3];
+  if (currentGenreType != lastGenreType) {
+    genreType = currentGenreType;
+    if (genreType > 5) genreType = 5;
+    if (genreType < 0) genreType = 0;
+    
+    // Update encoder to match clamped value
+    if (genreType != currentGenreType) {
+      Encoder[3].writeCounter((int32_t)genreType);
+      currentMode->pos[3] = genreType;
+    }
+    
+    drawGenreSelection();
+    
+    // Update pink helper based on genre type
+    if (genreType != 0) { // Not BLNK - show pink helper dot
+      light(10, 1, CRGB(255, 0, 255)); // Pink helper dot
+    } else { // BLNK - clear pink helper
+      light(10, 1, CRGB(0, 0, 0)); // Clear pink helper
+    }
+    FastLEDshow(); // Update display to show pink helper change
+    
+    // Update encoder 2 based on genre type
+    if (genreType != 0) { // Enable length control for non-BLNK genres
+      Encoder[2].writeCounter((int32_t)genreLength);
+      Encoder[2].writeMax((int32_t)16);
+      Encoder[2].writeMin((int32_t)1);
+      currentMode->pos[2] = genreLength;
+    } else {
+      // Disable encoder 2 for BLNK
+      Encoder[2].writeCounter((int32_t)0);
+      Encoder[2].writeMax((int32_t)0);
+      Encoder[2].writeMin((int32_t)0);
+      currentMode->pos[2] = 0;
+    }
+    
+    lastGenreType = genreType;
+  }
+  
+  // Handle genre length (encoder 2 - 3rd encoder) - only for non-BLNK genres
+  if (genreType != 0) {
+    int currentGenreLength = currentMode->pos[2];
+    if (currentGenreLength != lastGenreLength) {
+      genreLength = currentGenreLength;
+      if (genreLength > 16) genreLength = 16;
+      if (genreLength < 1) genreLength = 1;
+      
+      // Update encoder to match clamped value
+      if (genreLength != currentGenreLength) {
+        Encoder[2].writeCounter((int32_t)genreLength);
+        currentMode->pos[2] = genreLength;
+      }
+      
+      // Redraw length meter
+      int lengthLength = mapf(genreLength, 1, 16, 1, 16);
+      for (int x = 1; x <= 16; x++) {
+        if (x <= lengthLength) {
+          light(x, 10, CRGB(255, 0, 255)); // Pink for length
+        } else {
+          light(x, 10, CRGB(0, 0, 0));
+        }
+      }
+      FastLEDshow();
+      
+      lastGenreLength = genreLength;
+    }
+  }
+}
+
 // Helper function to get main setting for current menu page
 int getCurrentMenuMainSetting() {
   return menuPages[currentMenuPage].mainSetting;
@@ -748,13 +852,13 @@ int getCurrentMenuMainSetting() {
 
 void drawRecChannelClear(){
   if (recChannelClear == 1) {
-    drawText("ON", 2, 2, UI_GREEN);
+    drawText("ON", 2, 3, UI_GREEN);
     SMP_REC_CHANNEL_CLEAR = true;  // Clear mode
   } else if (recChannelClear == 0) {
     drawText("OFF",2, 2, UI_RED);
     SMP_REC_CHANNEL_CLEAR = false; // Add triggers mode
   } else if (recChannelClear == 2) {
-    drawText("FIX", 2, 2, UI_YELLOW);
+    drawText("FIX", 2, 3, UI_YELLOW);
     SMP_REC_CHANNEL_CLEAR = false; // FIX mode - no manipulation
   }
 }
@@ -762,7 +866,7 @@ void drawRecChannelClear(){
 void drawRecMode() {
 
   if (recMode == 1) {
-    drawText("MIC", 2, 2, UI_WHITE);
+    drawText("MIC", 2, 3, UI_WHITE);
     
     // Draw mic gain meter vertically on x=16 - white to red gradient
     int activeLength = mapf(micGain, 0, 64, 0, 16);
@@ -785,7 +889,7 @@ void drawRecMode() {
     recInput = AUDIO_INPUT_MIC;
   }
   if (recMode == -1) {
-    drawText("LINE", 2, 2, UI_BLUE);
+    drawText("LINE", 2, 3, UI_BLUE);
     // No gain level display for LINE input
     recInput = AUDIO_INPUT_LINEIN;
   }
@@ -798,10 +902,10 @@ void drawRecMode() {
 void drawClockMode() {
 
   if (clockMode == 1) {
-    drawText("INT", 2, 2, UI_GREEN);
+    drawText("INT", 2, 3, UI_GREEN);
     MIDI_CLOCK_SEND = true;
   }else{
-    drawText("EXT", 2, 2, UI_YELLOW);
+    drawText("EXT", 2, 3, UI_YELLOW);
     MIDI_CLOCK_SEND = false;
   }
 
@@ -812,10 +916,10 @@ void drawClockMode() {
 void drawMidiVoiceSelect() {
 
   if (voiceSelect == 1) {
-    drawText("MIDI", 2, 2, UI_MAGENTA);
+    drawText("MIDI", 2, 3, UI_MAGENTA);
     MIDI_VOICE_SELECT = true;
   }else{
-    drawText("YPOS", 2, 2, UI_BLUE);
+    drawText("YPOS", 2, 3, UI_BLUE);
      MIDI_VOICE_SELECT = false;
   }
 
@@ -827,7 +931,7 @@ void drawMidiVoiceSelect() {
 void drawPreviewVol() {
 
   if (previewVol == 3) {
-    drawText("SPLT", 2, 2, UI_BLUE);
+    drawText("SPLT", 2, 3, UI_BLUE);
     
     
     mixer_stereoL.gain(0, 1);
@@ -840,7 +944,7 @@ void drawPreviewVol() {
   }
 
   if (previewVol == 2) {
-    drawText("HIGH", 2, 2, UI_GREEN);
+    drawText("HIGH", 2, 3, UI_GREEN);
     
     
     mixer_stereoL.gain(0, 1);
@@ -853,7 +957,7 @@ void drawPreviewVol() {
   }
 
   if (previewVol == 1) {
-    drawText("MID", 2, 2, UI_ORANGE);
+    drawText("MID", 2, 3, UI_ORANGE);
     
     
     mixer_stereoL.gain(0, 1);
@@ -866,7 +970,7 @@ void drawPreviewVol() {
   }
 
   if (previewVol == 0) {
-    drawText("LOW", 2, 2, UI_RED);
+    drawText("LOW", 2, 3, UI_RED);
   
     
     mixer_stereoL.gain(0, 1);
@@ -883,15 +987,15 @@ void drawPreviewVol() {
 
 void drawMonitorLevel() {
   if (monitorLevel == 0) {
-    drawText("OFF", 2, 2, UI_RED);
+    drawText("OFF", 2, 3, UI_RED);
   } else if (monitorLevel == 1) {
-    drawText("LOW", 2, 2, UI_ORANGE);
+    drawText("LOW", 2, 3, UI_ORANGE);
   } else if (monitorLevel == 2) {
-    drawText("MED", 2, 2, UI_YELLOW);
+    drawText("MED", 2, 3, UI_YELLOW);
   } else if (monitorLevel == 3) {
-    drawText("HIGH", 2, 2, UI_BRIGHT_GREEN);
+    drawText("HIGH", 2, 3, UI_BRIGHT_GREEN);
   } else if (monitorLevel == 4) {
-    drawText("FULL", 2, 2, UI_BLUE);
+    drawText("FULL", 2, 3, UI_BLUE);
   }
   FastLEDshow();
 }
@@ -899,26 +1003,26 @@ void drawMonitorLevel() {
 void drawFastRecMode() {
 
 if (fastRecMode == 3) {
-    drawText("+CON", 2, 2, UI_DIM_BLUE);
+    drawText("+CON", 2, 3, UI_DIM_BLUE);
     SMP_FAST_REC = 3;
   }
 
 
   if (fastRecMode == 2) {
-    drawText("-CON", 2, 2, UI_DIM_YELLOW);
+    drawText("-CON", 2, 3, UI_DIM_YELLOW);
     SMP_FAST_REC = 2;
    
   }
 
 
   if (fastRecMode == 1) {
-    drawText("SENS", 2, 2, UI_GREEN);
+    drawText("SENS", 2, 3, UI_GREEN);
     SMP_FAST_REC = 1;
    
   }
 
   if (fastRecMode == 0) {
-    drawText("OFF", 2, 2, UI_RED);
+    drawText("OFF", 2, 3, UI_RED);
     SMP_FAST_REC = 0;
   }
   FastLEDshow();
@@ -928,12 +1032,12 @@ if (fastRecMode == 3) {
 void drawPatternMode() {
 
   if (patternMode == 1) {
-    drawText("ON", 2, 2, UI_GREEN);
+    drawText("ON", 2, 3, UI_GREEN);
     SMP_PATTERN_MODE = true;
   }
 
   if (patternMode == -1) {
-    drawText("OFF", 2, 2, UI_RED);
+    drawText("OFF", 2, 3, UI_RED);
     SMP_PATTERN_MODE = false;
   }
 
@@ -942,14 +1046,14 @@ void drawPatternMode() {
 
 void drawFlowMode() {
   if (flowMode == 1) {
-    drawText("ON", 2, 2, UI_GREEN);  // Use same coordinates as drawRecChannelClear
+    drawText("ON", 2, 3, UI_GREEN);  // Use same coordinates as drawRecChannelClear
     SMP_FLOW_MODE = true;
   } else if (flowMode == -1) {
-    drawText("OFF", 2, 2, UI_RED);  // Use same coordinates as drawRecChannelClear
+    drawText("OFF", 2, 3, UI_RED);  // Use same coordinates as drawRecChannelClear
     SMP_FLOW_MODE = false;
   } else {
     // Fallback for any unexpected values
-    drawText("OFF", 2, 2, UI_RED);  // Use same coordinates as drawRecChannelClear
+    drawText("OFF", 2, 3, UI_RED);  // Use same coordinates as drawRecChannelClear
     SMP_FLOW_MODE = false;
     flowMode = -1;  // Reset to valid value
   }
@@ -961,12 +1065,12 @@ void drawFlowMode() {
 void drawMidiTransport() {
 
   if (transportMode == 1) {
-    drawText("ON", 2, 2, UI_GREEN);
+    drawText("ON", 2, 3, UI_GREEN);
     MIDI_TRANSPORT_RECEIVE = true;
   }
 
   if (transportMode == -1) {
-    drawText("OFF", 2, 2, UI_RED);
+    drawText("OFF", 2, 3, UI_RED);
     MIDI_TRANSPORT_RECEIVE = false;
   }
 

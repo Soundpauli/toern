@@ -189,49 +189,33 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 void showWave() {
   int snr = SMP.wav[GLOB.currentChannel].fileID;
 
-
   if (snr < 1) snr = 1;
   int fnr = getFolderNumber(snr);
   char OUTPUTf[50];
   sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-  /*
-  if (firstcheck) {
-    //Serial.print("checking: ");
-    firstcheck = false;
-    if (!SD.exists(OUTPUTf)) {
-      //Serial.print(OUTPUTf);
-      //Serial.println(" >NOPE");
-      nofile = true;
-    } else {
-      //Serial.print(OUTPUTf);
-      nofile = false;
-      //Serial.println(" >exists!");
-    }
-  }
-  */
+  
   firstcheck = false;
   nofile = false;
 
   FastLEDclear();
-  //exit
-  Encoder[3].writeRGBCode(0x0000FF);
-  showIcons(HELPER_SELECT, UI_DIM_BLUE);
-
-  //showIcons("helper_ex", CRGB(10, 10, 0));
-
-  showIcons(HELPER_FOLDER, UI_DIM_WHITE);
+  
+  // Show big icon
+  showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
+  
+  // New indicator system: wave: M[CH] | M[W] | S[P] | L[X]
+  drawIndicator('M', 'C', 1);  // Encoder 1: Medium Current Channel Color
+  drawIndicator('L', 'W', 2);  // Encoder 2: Large White
+  drawIndicator('L', 'Y', 3);  // Encoder 3: Large Yellow
+  drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
+  
+  // Set encoder colors
+  Encoder[3].writeRGBCode(0xFFFF00); // Yellow for seek sample end
   Encoder[1].writeRGBCode(0xFFFFFF);
-
-  showIcons(HELPER_SEEK, UI_DIM_MAGENTA);
   Encoder[2].writeRGBCode(0xFF00FF);
-
+  
   if (nofile) {
-    showIcons(HELPER_SEEKSTART, UI_DIM_BLUE);
-    showIcons(HELPER_EXIT, UI_BG_DARK);
     Encoder[0].writeRGBCode(0x000000);
   } else {
-    showIcons(HELPER_SEEKSTART, UI_DIM_BLUE);
-    showIcons(HELPER_EXIT, col[GLOB.currentChannel]);
     Encoder[0].writeRGBCode(0x00FF00);
   }
   // Display using current seek positions (as percentages)
