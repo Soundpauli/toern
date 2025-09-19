@@ -298,10 +298,19 @@ void drawStatus() {
     }
     
     // Show active copy indicators: w[X] / - / - / G[Y]
-    drawIndicator('L', 'X', 1);  // Encoder 1: Small Blue (w[X])
+    drawIndicator('L', 'X', 1);  // Encoder 1: Large Blue
     // Encoder 2: empty (no indicator)
     // Encoder 3: empty (no indicator)
-    drawIndicator('L', 'Y', 4);  // Encoder 4: Small Yellow (G[Y])
+    drawIndicator('L', 'Y', 4);  // Encoder 4: Large Yellow
+    
+    // Set encoder colors to match active copy indicators
+    CRGB blueColor = getIndicatorColor('X'); // Blue
+    CRGB yellowColor = getIndicatorColor('Y'); // Yellow
+    
+    Encoder[0].writeRGBCode(0xFF0000);
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[3].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
     
     return; // Exit early to prevent any other indicators
   }
@@ -314,6 +323,15 @@ void drawStatus() {
     // Encoder 2: empty (no indicator)
     // Encoder 3: empty (no indicator)
     drawIndicator('M', 'G', 4);  // Encoder 4: Medium Green
+    
+    // Set encoder colors to match copypaste indicators
+    CRGB blueColor = getIndicatorColor('X'); // Blue
+    CRGB greenColor = getIndicatorColor('G'); // Green
+    
+    Encoder[0].writeRGBCode(0xFF0000);
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[3].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
     
     // Note shift indicator: L[W] | L[G] | | L[W]
     if (currentMode == &noteShift) {
@@ -330,12 +348,21 @@ void drawStatus() {
   }
   
   // Add draw mode indicators when y=16
-  if (GLOB.y == 16) {
+  if (currentMode == &draw && GLOB.y == 16) {
     // New indicator system: draw(+y=16): M[R] | | | M[Y]
     drawIndicator('M', 'R', 1);  // Encoder 1: Medium Red
     // Encoder 2: empty (no indicator)
     // Encoder 3: empty (no indicator)
     drawIndicator('M', 'Y', 4);  // Encoder 4: Medium Yellow
+    
+    // Set encoder colors to match draw mode indicators
+    CRGB redColor = getIndicatorColor('R'); // Red
+    CRGB yellowColor = getIndicatorColor('Y'); // Yellow
+    
+    Encoder[0].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[3].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
   }
   
   // Add single mode indicators when y=16
@@ -345,6 +372,16 @@ void drawStatus() {
     drawIndicator('M', 'W', 2);  // Encoder 2: Medium White
     // Encoder 3: empty (no indicator)
     drawIndicator('M', 'Y', 4);  // Encoder 4: Medium Yellow
+    
+    // Set encoder colors to match single mode indicators
+    CRGB redColor = getIndicatorColor('R'); // Red
+    CRGB whiteColor = getIndicatorColor('W'); // White
+    CRGB yellowColor = getIndicatorColor('Y'); // Yellow
+    
+    Encoder[0].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
+    Encoder[1].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[3].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
   }
 
   if (currentMode == &noteShift) {
@@ -353,10 +390,19 @@ void drawStatus() {
       light(x, 1, CRGB(0, 0, 0));
     }
     light(round(marqueePos), 1, CRGB(120, 120, 120));
-      drawIndicator('L', 'G', 1, true);   // Highlighted white for noteshift active
+      drawIndicator('L', 'G', 1, true);   // Highlighted green for noteshift active
       //drawIndicator('L', 'G', 2, true);  // Highlighted green for noteshift active
       // Encoder 3: empty (no indicator)
-      drawIndicator('L', 'X', 4, true);   // Highlighted white for noteshift active
+      drawIndicator('L', 'X', 4, true);   // Highlighted blue for noteshift active
+      
+      // Set encoder colors to match noteshift indicators (highlighted)
+      CRGB greenColor = applyHighlight(getIndicatorColor('G'), true); // Highlighted Green
+      CRGB blueColor = applyHighlight(getIndicatorColor('X'), true); // Highlighted Blue
+      
+      Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+      Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+      Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
 
     if (movingForward) {
       marqueePos = marqueePos + 1;

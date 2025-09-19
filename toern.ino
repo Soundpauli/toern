@@ -36,6 +36,18 @@ volatile bool stepIsDue = false;
 #include "font_3x5.h"
 #include "icons.h"
 
+// Function declarations
+void loadMIDIPattern(const char* filename);
+
+// MIDI Event structure for parsing
+struct MIDIEvent {
+  uint32_t deltaTime;
+  uint8_t eventType;
+  uint8_t channel;
+  uint8_t data1;
+  uint8_t data2;
+};
+
 #define maxX 16
 #define maxY 16
 #define INT_SD 10
@@ -427,8 +439,8 @@ struct Mode {
   uint32_t knobcolor[4];
 };
 
-Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 1, maxfilterResolution, 1 }, { 0x110011, 0xFFFFFF, 0x00FF00, 0x110011 } };
-Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
+Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 1, maxfilterResolution, 1 }, { 0x110011, 0x000000 , 0x00FF00, 0x110011 } };
+Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
 Mode volume_bpm = { "VOLUME_BPM", { 1, 11, VOL_MIN, BPM_MIN }, { 1, 30, VOL_MAX, BPM_MAX }, { 1, 11, 7, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
@@ -1243,10 +1255,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
       GLOB.currentChannel = 1;
     }
     
-    // Update encoder colors to reflect new channel
-    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    
+  
     // Update channel volume encoder
     Encoder[2].writeCounter((int32_t)SMP.channelVol[GLOB.currentChannel]);
     currentMode->pos[2] = SMP.channelVol[GLOB.currentChannel];
@@ -1696,7 +1705,7 @@ void initEncoders() {
 
     Encoder[i].onMinMax = staticThresholds;
     Encoder[i].autoconfigInterrupt();
-    Encoder[i].writeRGBCode(0xFFFFFF);
+    // Don't set encoder colors during init - they'll be set after the explosion animation
     Encoder[i].writeFadeRGB(0);
     delay(50);
     Encoder[i].updateStatus();
@@ -1749,6 +1758,9 @@ void setup() {
 
   runAnimation();
   playSdWav1.stop();
+  
+
+  
   EEPROMgetLastFiles();
   loadMenuFromEEPROM();
   loadSamplePack(samplePackID, true);
@@ -1864,8 +1876,11 @@ void checkEncoders() {
        // drawText(pianoNoteNames[12 - GLOB.y + 1  + GLOB.currentChannel], 3, 5, CRGB(200, 50, 0));
       //}
 
-      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      // Only update encoder colors if not  y=16
+      if (!(GLOB.y == 16)) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      }
       GLOB.edit = getPage(GLOB.x);
     }
 
@@ -3261,14 +3276,44 @@ void showLoadSave() {
   }
   drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
   
+  // Set encoder colors to match load/save indicators
+  CRGB greenColor = getIndicatorColor('G'); // Green
+  CRGB redColor = getIndicatorColor('R'); // Red
+  CRGB blueColor = getIndicatorColor('X'); // Blue
+  
+  Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+  Encoder[1].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
+  Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+  
+  // Set encoder 2 color conditionally based on SMP_LOAD_SETTINGS
+  if (SMP_LOAD_SETTINGS) {
+    CRGB whiteColor = getIndicatorColor('W'); // White
+    Encoder[2].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+  } else {
+    Encoder[2].writeRGBCode(0x000000); // Black when settings loading is off
+  }
+  
   // Apply different colors for load/save operations based on file existence
   char OUTPUTf[50];
+  char MIDIf[50];
   sprintf(OUTPUTf, "%u.txt", SMP.file);
-  if (SD.exists(OUTPUTf)) {
-    // File exists - bright green for load, dark red for save
-    drawIndicator('M', 'G', 1);   // Bright green for load
-    drawIndicator('M', 'D', 2);   // Dark red for save
-    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11); // Bright green number for existing file
+  sprintf(MIDIf, "%u.mid", SMP.file);
+  
+  bool txtExists = SD.exists(OUTPUTf);
+  bool midExists = SD.exists(MIDIf);
+  
+  if (txtExists || midExists) {
+    if (midExists) {
+      // MIDI file exists - yellow for load, dark red for save
+      drawIndicator('M', 'Y', 1);   // Yellow for MIDI load
+      drawIndicator('M', 'D', 2);   // Dark red for save
+      drawNumber(SMP.file, CRGB(255, 255, 0), 11); // Yellow number for MIDI file
+    } else {
+      // TXT file exists - bright green for load, dark red for save
+      drawIndicator('M', 'G', 1);   // Bright green for load
+      drawIndicator('M', 'D', 2);   // Dark red for save
+      drawNumber(SMP.file, UI_BRIGHT_GREEN, 11); // Bright green number for existing file
+    }
   } else {
     // File doesn't exist - dark green for load, bright red for save
     drawIndicator('M', 'E', 1);   // Dark green for load
@@ -3283,8 +3328,8 @@ void showLoadSave() {
   }
   
   // Update SMP_LOAD_SETTINGS based on encoder[2] position
-  // Only allow settings loading if file exists
-  if (SD.exists(OUTPUTf)) {
+  // Only allow settings loading if file exists (TXT or MIDI)
+  if (txtExists || midExists) {
     if (currentMode->pos[2] == 1) {
       SMP_LOAD_SETTINGS = true;
     } else {

@@ -158,28 +158,33 @@ void showMenu() {
   // Handle the main setting for this page
   int mainSetting = currentPageInfo->mainSetting;
   
-  // Set encoder color based on page type
-  CRGB encoderColor = UI_WHITE;
-  switch (mainSetting) {
-    case 1: encoderColor = UI_GREEN; break;      // DAT
-    case 2: encoderColor = UI_BLUE; break;       // KIT
-    case 3: encoderColor = UI_YELLOW; break;     // WAV
-    case 4: encoderColor = UI_RED; break;        // REC
-    case 5: encoderColor = UI_MAGENTA; break;    // BPM
-    case 6: encoderColor = UI_WHITE; break;      // CLK
-    case 7: encoderColor = UI_WHITE; break;      // CHN
-    case 8: encoderColor = UI_WHITE; break;      // TRN
-    case 9: encoderColor = UI_CYAN; break;       // PMD
-    case 10: encoderColor = UI_CYAN; break;      // FLW
-    case 11: encoderColor = UI_ORANGE; break;    // OTR
-    case 12: encoderColor = UI_ORANGE; break;    // CLR
-    case 13: encoderColor = UI_ORANGE; break;    // PVL
-    case 14: encoderColor = CRGB(200, 0, 20); break; // MON
-    case 15: encoderColor = CRGB(255, 0, 255); break; // AI
-    case 16: encoderColor = CRGB(255, 100, 0); break; // RST
+  // Set encoder colors to match indicators based on main setting
+  if (mainSetting == 4 && recMode == 1) {
+    // REC page in MIC mode: L[R] indicator for encoder 3
+    CRGB indicatorColor = getIndicatorColor('R'); // Red
+    Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+    Encoder[3].writeRGBCode(0x000000); // Black (no indicator)
+  } else if (mainSetting == 15) {
+    // AI page: multiple indicators - L[G], L[Y], L[W], L[X]
+    CRGB greenColor = getIndicatorColor('G'); // Green for encoder 1
+    CRGB yellowColor = getIndicatorColor('Y'); // Yellow for encoder 2  
+    CRGB whiteColor = getIndicatorColor('W'); // White for encoder 3
+    CRGB blueColor = getIndicatorColor('X'); // Blue for encoder 4
+    
+    Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+    Encoder[1].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
+    Encoder[2].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+    Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+  } else {
+    // Default: L[G] indicator for encoder 4 (green)
+    CRGB indicatorColor = getIndicatorColor('G'); // Green
+    Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
   }
-  
-  Encoder[3].writeRGBCode(encoderColor.r << 16 | encoderColor.g << 8 | encoderColor.b);
 
   // Draw the main setting status
   drawMainSettingStatus(mainSetting);
@@ -245,7 +250,10 @@ void drawMainSettingStatus(int setting) {
       showIcons(ICON_REC, UI_DIM_RED);
       showIcons(ICON_REC2, UI_DIM_WHITE);
       // New indicator system: menu/mic: S[G] | | M[W] | L[X]
-      drawIndicator('L', 'R', 3);  // Encoder 3: Medium White (only for mic page)
+      // Only show L[R] if value is MIC (recMode == 1)
+      if (recMode == 1) {
+        drawIndicator('L', 'R', 3);  // Encoder 3: Large Red (only for mic page)
+      }
       drawRecMode();
       break;
       
@@ -737,8 +745,26 @@ void showNewFileMode() {
   
   drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue (was missing!)
 
-
+  // Set encoder colors to match indicators
+  // Encoder 1: Medium Green (M[G])
+  CRGB greenColor = getIndicatorColor('G'); // Green
+  Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
   
+  // Encoder 2: Black (no indicator)
+  Encoder[1].writeRGBCode(0x000000); // Black
+  
+  // Encoder 3: Large Violet (L[V]) only if genreType != 0 (not BLNK)
+  if (genreType != 0) {
+    CRGB violetColor = getIndicatorColor('V'); // Violet
+    Encoder[2].writeRGBCode(violetColor.r << 16 | violetColor.g << 8 | violetColor.b);
+  } else {
+    Encoder[2].writeRGBCode(0x000000); // Black when BLNK
+  }
+  
+  // Encoder 4: Large Blue (L[X])
+  CRGB blueColor = getIndicatorColor('X'); // Blue
+  Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+
   
   FastLED.setBrightness(ledBrightness);
   FastLEDshow();

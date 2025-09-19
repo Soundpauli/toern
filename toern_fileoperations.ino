@@ -124,12 +124,22 @@ void loadPattern(bool autoload) {
   
   FastLEDclear();
   char OUTPUTf[50];
+  char MIDIf[50];
   if (autoload) {
     sprintf(OUTPUTf, "autosaved.txt");
+    sprintf(MIDIf, "autosaved.mid");
   } else {
     sprintf(OUTPUTf, "%d.txt", SMP.file);
+    sprintf(MIDIf, "%d.mid", SMP.file);
   }
-  if (SD.exists(OUTPUTf)) {
+  
+  // Check for MIDI file first, then TXT file
+  if (SD.exists(MIDIf)) {
+    // Load MIDI file
+    extern void loadMIDIPattern(const char* filename);
+    loadMIDIPattern(MIDIf);
+    return;
+  } else if (SD.exists(OUTPUTf)) {
     // showNumber(SMP.file, CRGB(0, 0, 50), 0);
     File loadFile = SD.open(OUTPUTf);
     if (loadFile) {

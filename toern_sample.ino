@@ -203,21 +203,28 @@ void showWave() {
   showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
   
   // New indicator system: wave: M[CH] | M[W] | S[P] | L[X]
-  drawIndicator('M', 'C', 1);  // Encoder 1: Medium Current Channel Color
+  drawIndicator('L', 'C', 1);  // Encoder 1: Medium Current Channel Color
   drawIndicator('L', 'W', 2);  // Encoder 2: Large White
   drawIndicator('L', 'Y', 3);  // Encoder 3: Large Yellow
   drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
   
-  // Set encoder colors
-  Encoder[3].writeRGBCode(0xFFFF00); // Yellow for seek sample end
-  Encoder[1].writeRGBCode(0xFFFFFF);
-  Encoder[2].writeRGBCode(0xFF00FF);
+  // Set encoder colors to match indicators
+  // Encoder 0: Keep existing logic for file status (no corresponding indicator)
   
-  if (nofile) {
-    Encoder[0].writeRGBCode(0x000000);
-  } else {
-    Encoder[0].writeRGBCode(0x00FF00);
-  }
+  
+  
+  // Encoder 1: Large Current Channel Color (L[C]) - matches indicator 1
+  CRGB channelColor = getCurrentChannelColor();
+  Encoder[0].writeRGBCode(channelColor.r << 16 | channelColor.g << 8 | channelColor.b);
+  
+  // Encoder 2: Large White (L[W]) - matches indicator 2
+  Encoder[1].writeRGBCode(0xFFFFFF); // White
+  
+  // Encoder 3: Large Yellow (L[Y]) - matches indicator 3
+  Encoder[2].writeRGBCode(0xFFFF00); // Yellow
+  
+  // Encoder 4: Large Blue (L[X]) - matches indicator 4
+  Encoder[3].writeRGBCode(0x0000FF); // Blue
   // Display using current seek positions (as percentages)
   //displaySample(GLOB.seek, SMP.smplen, GLOB.seekEnd);
   processPeaks();
