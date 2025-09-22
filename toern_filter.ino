@@ -49,8 +49,6 @@ void updateMixerGains(int i) {
 
 // Set a target gain for smooth transition
 void setMixerGainSmooth(int index, int channel, float target, int steps = 8) {
-  Serial.print("*******");
-  Serial.println(index);
   if (filtermixers[index] == nullptr) return;
   float cur = filterMixerTransitions[index].currentGain[channel];
   filterMixerTransitions[index].targetGain[channel] = target;
@@ -61,9 +59,6 @@ void setMixerGainSmooth(int index, int channel, float target, int steps = 8) {
 // Initialize transition state for a filter
 void initFilterTransition(int index) {
   if (filtermixers[index] == nullptr) return;
-
-  Serial.print("######");
-  Serial.println(index);
 
   // Initialize with default values (channel 0 = 1.0, others = 0.0)
   filterMixerTransitions[index].currentGain[0] = 1.0;
@@ -88,9 +83,6 @@ void forceAllMixerGainsToTarget() {
         int idx = ALL_CHANNELS[i];
         if (filtermixers[idx] == nullptr) return;
   
-        Serial.print("--------");
-  Serial.println(idx);
-
         for (int ch = 0; ch < NUM_MIXER_CHANNELS; ++ch) {
             filterMixerTransitions[idx].currentGain[ch] = filterMixerTransitions[idx].targetGain[ch];
             filterMixerTransitions[idx].active[ch] = false;
@@ -102,13 +94,6 @@ void forceAllMixerGainsToTarget() {
 // Refactored: setFilters combines processFilterAdjustment and updateFilterValue
 void setFilters(FilterType filterType, int index, bool initial) {
   // Map encoder value to filter setting
-Serial.print(filterType);
-Serial.print(":");
-Serial.print(index);
-Serial.print(">");
-Serial.print(initial);
-
-
   float mappedValue = 0.0;
   if (filterType == PASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.0, 9000.0);
 
@@ -130,10 +115,6 @@ Serial.print(initial);
 
 
   // Now update the filter value (was updateFilterValue)
-  Serial.println("-------------------------");
-  Serial.println(filterType);
-  Serial.println(mappedValue);
-  Serial.println("-------------------------");
   switch (filterType) {
 
 
@@ -163,21 +144,13 @@ break;
     break;
     case PASS:
       {
-        Serial.println("SETTING LOWPASS+HIGHPASS");
-
         filters[index]->frequency(mappedValue);
         if (SMP.filter_settings[index][filterType] >= maxfilterResolution / 2) {  //16
           // Smooth transition to frequency configuration
-          Serial.print("HIGHPASS:");
-          Serial.println(mappedValue);
           setMixerGainSmooth(index, 0, 0.0, 32);  // low pass off
           setMixerGainSmooth(index, 1, 0.0, 32);  // bandpass off
           setMixerGainSmooth(index, 2, 1.0, 32);  // Highpass ON
         } else {
-
-          Serial.print("LOWPASS:");
-          Serial.println(mappedValue);
-
           setMixerGainSmooth(index, 0, 1.0, 32);  // LOWPASS ON
           setMixerGainSmooth(index, 1, 0.0, 32);  // bandpass off
           setMixerGainSmooth(index, 2, 0.0, 32);  // Highpass off

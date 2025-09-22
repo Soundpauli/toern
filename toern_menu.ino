@@ -1,6 +1,9 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 16
 
+// External variables
+extern Mode *currentMode;
+
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
   const char* name;

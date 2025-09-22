@@ -1,151 +1,67 @@
 // MIDI File Loader for Toern
-// Loads MIDI files and converts them to the internal pattern format
+// Handles loading MIDI files and mapping them to the pattern system
 
-// Channel mapping as specified:
-// Channel 1 → Bass Drum (Kick) 
-// Channel 2 → Snare 
-// Channel 3 → Hi-Hat 
-// Channel 4 → Clap 
-// Channel 5 → Instrument / Sample 1 
-// Channel 6 → Instrument / Sample 2 
-// Channel 7 → Instrument / Sample 3 
-// Channel 8 → Instrument / Sample 4
-// Channel 9 → do not use
-// Channel 10 → do not use
-// Channel 11 → Bass 
-// Channel 12 → do not use 
-// Channel 13 → Lead 1 
-// Channel 14 → Lead 2
+#include <SD.h>
 
-// MIDI note to channel mapping
-const int MIDI_CHANNEL_MAP[15] = {
-  0,  // Channel 0 - unused
-  1,  // Channel 1 - Bass Drum
-  2,  // Channel 2 - Snare
-  3,  // Channel 3 - Hi-Hat
-  4,  // Channel 4 - Clap
-  5,  // Channel 5 - Sample 1
-  6,  // Channel 6 - Sample 2
-  7,  // Channel 7 - Sample 3
-  8,  // Channel 8 - Sample 4
-  0,  // Channel 9 - unused
-  0,  // Channel 10 - unused
-  11, // Channel 11 - Bass
-  0,  // Channel 12 - unused
-  13, // Channel 13 - Lead 1
-  14  // Channel 14 - Lead 2
+// External variables from main code
+extern const unsigned int maxlen;
+#define maxY 16
+#define defaultVelocity 63
+
+// MIDI file structure definitions
+struct MIDIHeader {
+  char chunkType[4];    // "MThd"
+  uint32_t length;      // Always 6
+  uint16_t format;      // 0, 1, or 2
+  uint16_t tracks;      // Number of tracks
+  uint16_t division;    // Ticks per quarter note
 };
 
-// MIDI note to frequency mapping for each channel
-// Each channel has different frequency ranges
-const int CHANNEL_FREQ_RANGES[15][2] = {
-  {0, 0},     // Channel 0 - unused
-  {36, 36},   // Channel 1 - Bass Drum (C1)
-  {38, 38},   // Channel 2 - Snare (D1)
-  {42, 42},   // Channel 3 - Hi-Hat (F#1)
-  {39, 39},   // Channel 4 - Clap (D#1)
-  {60, 84},   // Channel 5 - Sample 1 (C4 to C6)
-  {60, 84},   // Channel 6 - Sample 2 (C4 to C6)
-  {60, 84},   // Channel 7 - Sample 3 (C4 to C6)
-  {60, 84},   // Channel 8 - Sample 4 (C4 to C6)
-  {0, 0},     // Channel 9 - unused
-  {0, 0},     // Channel 10 - unused
-  {40, 64},   // Channel 11 - Bass (E2 to E4)
-  {0, 0},     // Channel 12 - unused
-  {72, 96},   // Channel 13 - Lead 1 (C5 to C7)
-  {72, 96}    // Channel 14 - Lead 2 (C5 to C7)
+struct MIDITrack {
+  char chunkType[4];    // "MTrk"
+  uint32_t length;      // Track data length
 };
 
-// Convert MIDI note to internal note index based on channel
-int midiNoteToInternalNote(int midiNote, int channel) {
-  if (channel < 1 || channel > 14) return 0;
-  
-  int mappedChannel = MIDI_CHANNEL_MAP[channel];
-  if (mappedChannel == 0) return 0; // Unused channel
-  
-  int minNote = CHANNEL_FREQ_RANGES[mappedChannel][0];
-  int maxNote = CHANNEL_FREQ_RANGES[mappedChannel][1];
-  
-  // Clamp MIDI note to channel range
-  if (midiNote < minNote) midiNote = minNote;
-  if (midiNote > maxNote) midiNote = maxNote;
-  
-  // Convert to internal note index (1-based, max 16 for grid)
-  int noteIndex = midiNote - minNote + 1;
-  if (noteIndex > 16) noteIndex = 16;
-  if (noteIndex < 1) noteIndex = 1;
-  
-  return noteIndex;
+struct MIDIEvent {
+  uint32_t deltaTime;   // Delta time in ticks
+  uint8_t eventType;    // MIDI event type
+  uint8_t channel;      // MIDI channel (0-15)
+  uint8_t track;        // MIDI track number (0-based)
+  uint8_t data1;        // First data byte
+  uint8_t data2;        // Second data byte (if applicable)
+};
+
+// Global variables for MIDI parsing
+EXTMEM MIDIEvent midiEvents[4096];  // Buffer for MIDI events
+uint16_t eventCount = 0;
+uint16_t currentTrack = 0;
+uint32_t ticksPerQuarter = 480;  // Default MIDI resolution
+uint32_t currentTime = 0;
+uint8_t runningStatus = 0;  // For handling running status
+MIDIHeader midiHeader;  // Global header for access across functions
+
+// Track mapping: MIDI track -> Device channel
+uint8_t trackToChannel[8] = {1, 2, 3, 4, 5, 6, 7, 8};  // Track 0->Ch1, Track 1->Ch2, etc.
+
+// Function to read 32-bit big-endian integer
+uint32_t readBigEndian32(File& file) {
+  uint32_t value = 0;
+  value |= (uint32_t)file.read() << 24;
+  value |= (uint32_t)file.read() << 16;
+  value |= (uint32_t)file.read() << 8;
+  value |= (uint32_t)file.read();
+  return value;
 }
 
-// Convert MIDI velocity to internal velocity (1-127 -> 1-15)
-int midiVelocityToInternal(int midiVelocity) {
-  if (midiVelocity < 1) return 1;
-  if (midiVelocity > 127) return 15;
-  return mapf(midiVelocity, 1, 127, 1, 15);
+// Function to read 16-bit big-endian integer
+uint16_t readBigEndian16(File& file) {
+  uint16_t value = 0;
+  value |= (uint16_t)file.read() << 8;
+  value |= (uint16_t)file.read();
+  return value;
 }
 
-// Convert MIDI channel volume to internal volume (0-127 -> 0-100)
-int midiVolumeToInternal(int midiVolume) {
-  if (midiVolume < 0) return 0;
-  if (midiVolume > 127) return 100;
-  return mapf(midiVolume, 0, 127, 0, 100);
-}
-
-// Simple MIDI file parser
-
-// Parse MIDI file header
-bool parseMIDIHeader(File& file) {
-  char header[4];
-  if (file.readBytes(header, 4) != 4) return false;
-  
-  // Check for "MThd" signature
-  if (header[0] != 'M' || header[1] != 'T' || header[2] != 'h' || header[3] != 'd') {
-    return false;
-  }
-  
-  // Read header length (should be 6)
-  uint32_t headerLength = 0;
-  for (int i = 0; i < 4; i++) {
-    headerLength = (headerLength << 8) | file.read();
-  }
-  
-  if (headerLength != 6) return false;
-  
-  // Read format (should be 1 for multitrack)
-  uint16_t format = (file.read() << 8) | file.read();
-  if (format != 1) return false;
-  
-  // Read number of tracks (should be 14)
-  uint16_t numTracks = (file.read() << 8) | file.read();
-  if (numTracks < 1 || numTracks > 16) return false;
-  
-  // Read division (ticks per quarter note)
-  uint16_t division = (file.read() << 8) | file.read();
-  
-  return true;
-}
-
-// Parse MIDI track header
-bool parseTrackHeader(File& file) {
-  char header[4];
-  if (file.readBytes(header, 4) != 4) return false;
-  
-  // Check for "MTrk" signature
-  if (header[0] != 'M' || header[1] != 'T' || header[2] != 'r' || header[3] != 'k') {
-    return false;
-  }
-  
-  // Read track length
-  uint32_t trackLength = 0;
-  for (int i = 0; i < 4; i++) {
-    trackLength = (trackLength << 8) | file.read();
-  }
-  
-  return true;
-}
-
-// Read variable length quantity
+// Function to read variable-length quantity
 uint32_t readVariableLength(File& file) {
   uint32_t value = 0;
   uint8_t byte;
@@ -158,170 +74,391 @@ uint32_t readVariableLength(File& file) {
   return value;
 }
 
-// Parse MIDI event
-bool parseMIDIEvent(File& file, MIDIEvent& event) {
-  // Read delta time
-  event.deltaTime = readVariableLength(file);
+// Function to parse MIDI file header
+bool parseMIDIHeader(File& file) {
+  Serial.println("Parsing MIDI header...");
   
-  // Read event byte
-  uint8_t eventByte = file.read();
+  // Read chunk type
+  file.readBytes(midiHeader.chunkType, 4);
+  midiHeader.chunkType[4] = '\0';  // Null terminate for printing
+  Serial.println("Chunk type: " + String(midiHeader.chunkType));
   
-  if (eventByte == 0xFF) {
-    // Meta event
-    uint8_t metaType = file.read();
-    uint32_t metaLength = readVariableLength(file);
-    
-    // Skip meta event data
-    for (uint32_t i = 0; i < metaLength; i++) {
-      file.read();
-    }
-    
-    return false; // Not a note event
+  if (strncmp(midiHeader.chunkType, "MThd", 4) != 0) {
+    Serial.println("ERROR: Not a valid MIDI file header");
+    return false;  // Not a valid MIDI file
   }
   
-  if (eventByte == 0xF0 || eventByte == 0xF7) {
-    // System exclusive event
-    uint32_t sysexLength = readVariableLength(file);
-    for (uint32_t i = 0; i < sysexLength; i++) {
-      file.read();
-    }
-    return false; // Not a note event
-  }
-  
-  // Channel event
-  event.eventType = eventByte & 0xF0;
-  event.channel = eventByte & 0x0F;
-  
-  if (event.eventType == 0x90 || event.eventType == 0x80) {
-    // Note On or Note Off
-    event.data1 = file.read(); // Note number
-    event.data2 = file.read(); // Velocity
-    
-    return true; // This is a note event
-  } else if (event.eventType == 0xB0) {
-    // Control Change
-    event.data1 = file.read(); // Controller number
-    event.data2 = file.read(); // Controller value
-    
-    return false; // Not a note event
-  } else if (event.eventType == 0xC0) {
-    // Program Change
-    event.data1 = file.read(); // Program number
-    
-    return false; // Not a note event
-  }
-  
-  return false; // Unknown event
-}
-
-// Load MIDI file and convert to internal pattern format
-bool loadMIDIFile(const char* filename) {
-  File file = SD.open(filename);
-  if (!file) {
+  // Read length (should be 6)
+  midiHeader.length = readBigEndian32(file);
+  Serial.println("Header length: " + String(midiHeader.length));
+  if (midiHeader.length != 6) {
+    Serial.println("ERROR: Invalid header length");
     return false;
   }
   
-  // Clear existing notes
-  for (unsigned int x = 1; x < maxlen; x++) {
-    for (unsigned int y = 1; y < maxY + 1; y++) {
-      note[x][y].channel = 0;
-      note[x][y].velocity = 0;
-    }
-  }
+  // Read format, tracks, and division
+  midiHeader.format = readBigEndian16(file);
+  midiHeader.tracks = readBigEndian16(file);
+  midiHeader.division = readBigEndian16(file);
   
-  // Parse MIDI header
-  if (!parseMIDIHeader(file)) {
-    file.close();
-    return false;
-  }
+  Serial.println("Format: " + String(midiHeader.format));
+  Serial.println("Tracks: " + String(midiHeader.tracks));
+  Serial.println("Division: " + String(midiHeader.division));
   
-  // Track timing variables
-  uint32_t currentTime = 0;
-  uint32_t ticksPerBeat = 480; // Default from example
-  uint32_t ticksPerStep = ticksPerBeat / 4; // 16th notes
+  // Store global values
+  ticksPerQuarter = midiHeader.division;
   
-  // Process each track
-  for (int trackNum = 0; trackNum < 14; trackNum++) {
-    if (!parseTrackHeader(file)) {
-      break;
-    }
-    
-    uint32_t trackStartTime = currentTime;
-    
-    // Process events in this track
-    while (file.available()) {
-      MIDIEvent event;
-      if (!parseMIDIEvent(file, event)) {
-        continue;
-      }
-      
-      // Update current time
-      currentTime += event.deltaTime;
-      
-      // Process note events - only Note On with velocity > 0
-      if (event.eventType == 0x90 && event.data2 > 0) { // Note On with velocity
-        int channel = event.channel + 1; // Convert to 1-based
-        int mappedChannel = MIDI_CHANNEL_MAP[channel];
-        
-        if (mappedChannel == 0) continue; // Skip unused channels
-        
-        // Convert MIDI note to internal note
-        int internalNote = midiNoteToInternalNote(event.data1, channel);
-        if (internalNote == 0) continue;
-        
-        // Convert velocity
-        int internalVelocity = midiVelocityToInternal(event.data2);
-        
-        // Calculate step position (1-based)
-        // Each bar = 4 beats, each beat = 4 steps (16th notes)
-        // So each bar = 16 steps, 16 pages = 256 steps total
-        uint32_t stepTime = currentTime - trackStartTime;
-        int step = (stepTime / ticksPerStep) + 1;
-        
-        // Limit to maxlen (16 pages * 16 steps = 256 steps)
-        // maxlen = 257, so valid range is 1-256
-        if (step > maxlen - 1) step = maxlen - 1; // maxlen - 1 = 256
-        if (step < 1) step = 1;
-        
-        // Set note in pattern: note[tick(1-256)][ypos(1-16)] = channel(1-14)
-        note[step][internalNote].channel = mappedChannel;
-        note[step][internalNote].velocity = internalVelocity;
-        
-        // Debug output (can be removed later)
-        //Serial.print("MIDI: Ch="); Serial.print(channel); 
-        //Serial.print(" -> MappedCh="); Serial.print(mappedChannel);
-        //Serial.print(" Note="); Serial.print(event.data1);
-        //Serial.print(" -> InternalNote="); Serial.print(internalNote);
-        //Serial.print(" Step="); Serial.print(step);
-        //Serial.print(" Vel="); Serial.println(internalVelocity);
-      }
-    }
-  }
-  
-  file.close();
+  Serial.println("MIDI header parsed successfully");
   return true;
 }
 
-// Main function to load MIDI file
-void loadMIDIPattern(const char* filename) {
-  if (loadMIDIFile(filename)) {
-    // Reset basic runtime flags when loading a MIDI pattern
-    GLOB.singleMode = false;
-    
-    // Set default BPM (can be overridden by user)
-    Mode *bpm_vol = &volume_bpm;
-    bpm_vol->pos[3] = 120; // Default BPM
-    playNoteInterval = ((60 * 1000 / 120) / 4) * 1000;
-    playTimer.update(playNoteInterval);
-    bpm_vol->pos[2] = GLOB.vol;
-    
-    // Update last page
-    updateLastPage();
-    
-    // Don't load SMP settings for MIDI files as requested
-    // loadSMPSettings(); // Commented out as per requirements
-    
-    delay(500);
-    switchMode(&draw);
+// Function to parse a MIDI track
+bool parseMIDITrack(File& file) {
+  MIDITrack track;
+  
+  Serial.println("Parsing MIDI track " + String(currentTrack + 1) + "...");
+  
+  // Read chunk type
+  if (file.available() < 4) {
+    Serial.println("ERROR: Not enough data for track header");
+    return false;
   }
+  
+  // Read the first 4 bytes and show them as hex
+  uint8_t headerBytes[4];
+  file.readBytes(headerBytes, 4);
+  track.chunkType[0] = headerBytes[0];
+  track.chunkType[1] = headerBytes[1];
+  track.chunkType[2] = headerBytes[2];
+  track.chunkType[3] = headerBytes[3];
+  track.chunkType[4] = '\0';  // Null terminate for printing
+  
+  Serial.print("Track header bytes: ");
+  for (int i = 0; i < 4; i++) {
+    Serial.print(String(headerBytes[i], HEX) + " ");
+  }
+  Serial.println();
+  Serial.println("Track chunk type: '" + String(track.chunkType) + "'");
+  
+  if (strncmp(track.chunkType, "MTrk", 4) != 0) {
+    Serial.println("ERROR: Not a valid MIDI track (expected 'MTrk', got '" + String(track.chunkType) + "')");
+    return false;  // Not a valid track
+  }
+  
+  // Read track length
+  track.length = readBigEndian32(file);
+  Serial.println("Track length: " + String(track.length) + " bytes");
+  
+  // Parse track events
+  uint32_t bytesRead = 0;
+  uint32_t deltaTime = 0;
+  uint16_t eventsInTrack = 0;
+  runningStatus = 0;  // Reset running status for each track
+  
+  while (bytesRead < track.length && eventCount < 4095) {
+    Serial.println("--- Event " + String(eventsInTrack + 1) + " ---");
+    Serial.println("Bytes read so far: " + String(bytesRead) + "/" + String(track.length));
+    
+    // Read delta time
+    deltaTime = readVariableLength(file);
+    Serial.println("Delta time: " + String(deltaTime) + " ticks");
+    
+    // Read status byte (or use running status)
+    uint8_t statusByte;
+    if (!file.available()) {
+      Serial.println("ERROR: No status byte available");
+      break;
+    }
+    
+    uint8_t firstByte = file.read();
+    bytesRead++;
+    
+    Serial.println("Read byte: " + String(firstByte, HEX) + " (dec: " + String(firstByte) + ")");
+    
+    // Check if this is a status byte or data byte
+    if (firstByte >= 0x80) {
+      // This is a status byte
+      statusByte = firstByte;
+      runningStatus = statusByte;
+      Serial.println("Status byte: " + String(statusByte, HEX));
+    } else {
+      // This is a data byte, use running status
+      statusByte = runningStatus;
+      Serial.println("Running status: " + String(statusByte, HEX) + " Data byte: " + String(firstByte, HEX));
+      // We need to process this as the first data byte
+      goto processEvent;
+    }
+    
+    if (statusByte == 0xFF) {
+      // Meta event - handle some important ones
+      uint8_t metaType = file.read();
+      bytesRead++;
+      uint32_t metaLength = readVariableLength(file);
+      
+      Serial.println("Meta event: Type=" + String(metaType, HEX) + " Length=" + String(metaLength));
+      
+      // Skip most meta events but log them
+      file.seek(file.position() + metaLength);
+      bytesRead += metaLength;
+      continue;
+    }
+    
+    if (statusByte == 0xF0 || statusByte == 0xF7) {
+      // System exclusive - skip for now
+      uint32_t sysexLength = readVariableLength(file);
+      file.seek(file.position() + sysexLength);
+      bytesRead += sysexLength;
+      continue;
+    }
+    
+    processEvent:
+    // Parse MIDI event
+    MIDIEvent event;
+    event.deltaTime = deltaTime;
+    event.eventType = statusByte & 0xF0;
+    event.channel = statusByte & 0x0F;
+    event.track = currentTrack;  // Assign current track number
+    
+    if (event.eventType == 0x90 || event.eventType == 0x80) {  // Note On/Off
+      if (firstByte < 0x80) {
+        // Running status case - firstByte is already the note number
+        event.data1 = firstByte;
+        event.data2 = file.read();  // Velocity
+        bytesRead += 1;
+      } else {
+        // Normal case - read both data bytes
+        event.data1 = file.read();  // Note number
+        event.data2 = file.read();  // Velocity
+        bytesRead += 2;
+      }
+      
+      Serial.println("Note event: Track=" + String(event.track) + " Ch=" + String(event.channel) + " Note=" + String(event.data1) + " Vel=" + String(event.data2) + " Type=" + String(event.eventType, HEX));
+      
+      // Only process Note On events (velocity > 0)
+      if (event.eventType == 0x90 && event.data2 > 0) {
+        midiEvents[eventCount] = event;
+        eventCount++;
+        eventsInTrack++;
+        Serial.println("  -> Added Note On event #" + String(eventCount));
+      }
+    } else if (event.eventType == 0xB0) {  // Controller Change
+      if (firstByte < 0x80) {
+        // Running status case - firstByte is already the controller number
+        event.data1 = firstByte;
+        event.data2 = file.read();  // Controller value
+        bytesRead += 1;
+      } else {
+        // Normal case - read both data bytes
+        event.data1 = file.read();  // Controller number
+        event.data2 = file.read();  // Controller value
+        bytesRead += 2;
+      }
+      
+      Serial.println("Controller event: Ch=" + String(event.channel) + " CC=" + String(event.data1) + " Val=" + String(event.data2));
+      
+      // Store controller events for volume/mute
+      midiEvents[eventCount] = event;
+      eventCount++;
+      eventsInTrack++;
+    } else {
+      // Skip other events
+      Serial.println("Skipping event type: " + String(event.eventType, HEX));
+      if (event.eventType == 0xC0 || event.eventType == 0xD0) {
+        if (firstByte < 0x80) {
+          event.data1 = firstByte;
+          bytesRead += 0;  // Already counted firstByte
+        } else {
+          event.data1 = file.read();
+          bytesRead++;
+        }
+      } else if (event.eventType == 0xE0) {
+        if (firstByte < 0x80) {
+          event.data1 = firstByte;
+          event.data2 = file.read();
+          bytesRead += 1;
+        } else {
+          event.data1 = file.read();
+          event.data2 = file.read();
+          bytesRead += 2;
+        }
+      }
+    }
+  }
+  
+  Serial.println("Track " + String(currentTrack + 1) + " completed: " + String(eventsInTrack) + " events processed");
+  return true;
+}
+
+// Function to convert MIDI note to grid position
+uint8_t midiNoteToGrid(uint8_t midiNote, uint8_t channel) {
+  // Map MIDI note (0-127) to grid position (1-16)
+  // Each channel has its own frequency range
+  // Use the same logic as the existing handleNoteOn function
+  
+  unsigned int livenote = (channel + 1) + midiNote - 60;
+  if (livenote > 16) livenote -= 12;
+  if (livenote < 1) livenote += 12;
+  
+  return constrain(livenote, 1, 16);
+}
+
+// Function to convert MIDI time to step position
+uint16_t midiTimeToStep(uint32_t midiTime) {
+  // Convert MIDI time to step position (1-256)
+  // 1 bar = 4 steps, 4 bars = 16 steps
+  // Use ticks per quarter note to calculate step position
+  
+  uint32_t stepsPerQuarter = 1;  // 1 step per quarter note (4 steps per bar)
+  uint32_t stepTime = ticksPerQuarter / stepsPerQuarter;
+  if (stepTime == 0) stepTime = 1;  // Prevent division by zero
+  uint16_t step = (midiTime / stepTime) + 1;
+  
+  return constrain(step, 1, maxlen);
+}
+
+// Function to map MIDI channel to device channel
+uint8_t mapMIDIChannel(uint8_t midiChannel) {
+  // Map MIDI channels (0-15) to device channels (1-8)
+  // If more than 8 tracks, map them to channels 1-8
+  return (midiChannel % 8) + 1;
+}
+
+// Main function to load MIDI file
+bool loadMIDIFile(const char* filename) {
+  Serial.println("=== MIDI Loader Debug ===");
+  Serial.println("Loading MIDI file: " + String(filename));
+  
+  // Clear existing notes but keep current settings
+  extern Note note[maxlen + 1][maxY + 1];
+  extern Device SMP;
+  
+  // Clear all notes
+  Serial.println("Clearing existing notes...");
+  for (uint16_t x = 1; x <= maxlen; x++) {
+    for (uint16_t y = 1; y <= maxY; y++) {
+      note[x][y].channel = 0;
+      note[x][y].velocity = defaultVelocity;
+    }
+  }
+  
+  // Reset MIDI parsing variables
+  eventCount = 0;
+  currentTrack = 0;
+  currentTime = 0;
+  
+  // Open MIDI file
+  File midiFile = SD.open(filename);
+  if (!midiFile) {
+    Serial.println("ERROR: Could not open MIDI file");
+    return false;
+  }
+  
+  Serial.println("MIDI file opened successfully, size: " + String(midiFile.size()) + " bytes");
+  
+  // Parse MIDI header
+  if (!parseMIDIHeader(midiFile)) {
+    midiFile.close();
+    return false;
+  }
+  
+  // Parse tracks
+  Serial.println("Parsing tracks...");
+  Serial.println("Header indicates " + String(midiHeader.tracks) + " tracks");
+  for (uint16_t track = 0; track < midiHeader.tracks && track < 8; track++) {  // Use actual track count, limit to 8
+    Serial.println("File position before track " + String(track + 1) + ": " + String(midiFile.position()));
+    Serial.println("Available bytes: " + String(midiFile.available()));
+    
+    if (midiFile.available()) {
+      if (!parseMIDITrack(midiFile)) {
+        Serial.println("Failed to parse track " + String(track + 1));
+        break;
+      }
+      currentTrack++;
+    } else {
+      Serial.println("No more tracks available");
+      break;
+    }
+  }
+  
+  midiFile.close();
+  
+  Serial.println("Total events parsed: " + String(eventCount));
+  Serial.println("Track mapping: Track 0->Ch1, Track 1->Ch2, Track 2->Ch3, etc.");
+  
+  // Process MIDI events and convert to note array
+  Serial.println("Processing MIDI events to note array...");
+  uint32_t currentTime = 0;
+  
+  for (uint16_t i = 0; i < eventCount; i++) {
+    MIDIEvent event = midiEvents[i];
+    currentTime += event.deltaTime;
+    
+    if (event.eventType == 0x90) {  // Note On
+      uint8_t deviceChannel = trackToChannel[event.track];  // Map track to device channel
+      uint8_t gridY = midiNoteToGrid(event.data1, deviceChannel);
+      uint16_t stepX = midiTimeToStep(currentTime);
+      
+      Serial.println("Processing Note On: Track=" + String(event.track) + " -> Dev Ch=" + String(deviceChannel) + 
+                     " Note=" + String(event.data1) + " -> Grid Y=" + String(gridY) + 
+                     " Time=" + String(currentTime) + " -> Step X=" + String(stepX) + 
+                     " Vel=" + String(event.data2));
+      
+      // Set note in the pattern
+      if (stepX <= maxlen && gridY <= maxY) {
+        note[stepX][gridY].channel = deviceChannel;
+        note[stepX][gridY].velocity = event.data2;
+        Serial.println("  -> Set note[" + String(stepX) + "][" + String(gridY) + "] = Ch" + String(deviceChannel) + " Vel" + String(event.data2));
+      } else {
+        Serial.println("  -> Note out of bounds: stepX=" + String(stepX) + " gridY=" + String(gridY));
+      }
+    } else if (event.eventType == 0xB0) {  // Controller Change
+      if (event.data1 == 7) {  // Volume controller
+        uint8_t deviceChannel = trackToChannel[event.track];
+        if (deviceChannel <= 8) {
+          SMP.channelVol[deviceChannel] = event.data2;
+          Serial.println("Set channel " + String(deviceChannel) + " volume to " + String(event.data2));
+        }
+      } else if (event.data1 == 123) {  // All Notes Off
+        uint8_t deviceChannel = trackToChannel[event.track];
+        if (deviceChannel <= 8) {
+          SMP.mute[deviceChannel] = 1;  // Mute channel
+          Serial.println("Muted channel " + String(deviceChannel));
+        }
+      }
+    }
+  }
+  
+  Serial.println("=== MIDI Loading Complete ===");
+  Serial.println("Total events processed: " + String(eventCount));
+  Serial.println("Notes should now be visible in the pattern");
+  
+  return true;
+}
+
+// Function to check if MIDI file exists and load it
+bool loadPatternOrMIDI(bool autoload) {
+  extern Device SMP;
+  
+  char txtFile[50];
+  char midiFile[50];
+  
+  if (autoload) {
+    sprintf(txtFile, "autosaved.txt");
+    sprintf(midiFile, "autosaved.mid");
+  } else {
+    sprintf(txtFile, "%d.txt", SMP.file);
+    sprintf(midiFile, "%d.mid", SMP.file);
+  }
+  
+  // Check for MIDI file first
+  if (SD.exists(midiFile)) {
+    return loadMIDIFile(midiFile);
+  } else if (SD.exists(txtFile)) {
+    // Fall back to regular pattern loading
+    extern void loadPattern(bool autoload);
+    loadPattern(autoload);
+    return true;
+  }
+  
+  return false;
 }

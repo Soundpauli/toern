@@ -133,13 +133,20 @@ void loadPattern(bool autoload) {
     sprintf(MIDIf, "%d.mid", SMP.file);
   }
   
-  // Check for MIDI file first, then TXT file
+  // Check for MIDI file first
+  bool midiLoaded = false;
   if (SD.exists(MIDIf)) {
+    Serial.println("MIDI file found: " + String(MIDIf));
     // Load MIDI file
-    extern void loadMIDIPattern(const char* filename);
-    loadMIDIPattern(MIDIf);
-    return;
-  } else if (SD.exists(OUTPUTf)) {
+    extern bool loadMIDIFile(const char* filename);
+    midiLoaded = loadMIDIFile(MIDIf);
+    Serial.println("MIDI loading result: " + String(midiLoaded ? "SUCCESS" : "FAILED"));
+  } else {
+    Serial.println("No MIDI file found: " + String(MIDIf));
+  }
+  
+  // If MIDI loading failed or no MIDI file exists, try .txt file
+  if (!midiLoaded && SD.exists(OUTPUTf)) {
     // showNumber(SMP.file, CRGB(0, 0, 50), 0);
     File loadFile = SD.open(OUTPUTf);
     if (loadFile) {
@@ -174,70 +181,73 @@ void loadPattern(bool autoload) {
     }
     loadFile.close();
     yield();
-    
-    // Reset basic runtime flags when loading a pattern
-    GLOB.singleMode = false;
-    
-    Mode *bpm_vol = &volume_bpm;
-    bpm_vol->pos[3] = SMP.bpm;
-    playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
-    playTimer.update(playNoteInterval);
-    //midiTimer.update(playNoteInterval / 48);
-    bpm_vol->pos[2] = GLOB.vol;
+  }
+  
+  // Reset basic runtime flags when loading a pattern
+  GLOB.singleMode = false;
+  
+  Mode *bpm_vol = &volume_bpm;
+  bpm_vol->pos[3] = SMP.bpm;
+  playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
+  playTimer.update(playNoteInterval);
+  //midiTimer.update(playNoteInterval / 48);
+  bpm_vol->pos[2] = GLOB.vol;
 
-    float vol = float(GLOB.vol / 10.0);
+  float vol = float(GLOB.vol / 10.0);
 
-    // Display the loaded SMP data
-    //Serial.println("Loaded SMP Data:");
-    //Serial.println("singleMode: " + String(GLOB.singleMode));
-    //Serial.println("currentChannel: " + String(GLOB.currentChannel));
-    //Serial.println("vol: " + String(GLOB.vol));
-    //Serial.println("bpm: " + String(SMP.bpm));
-    //Serial.println("velocity: " + String(GLOB.velocity));
-    //Serial.println("page: " + String(GLOB.page));
-    //Serial.println("edit: " + String(GLOB.edit));
-    //Serial.println("file: " + String(SMP.file));
-    //Serial.println("pack: " + String(SMP.pack));
-    //Serial.println("wav: " + String(SMP.wav[GLOB.currentChannel].fileID));
-    //Serial.println("folder: " + String(GLOB.folder));
-    //Serial.println("activeCopy: " + String(GLOB.activeCopy));
-    //Serial.println("x: " + String(GLOB.x));
-    //Serial.println("y: " + String(GLOB.y));
-    //Serial.println("seek: " + String(GLOB.seek));
-    //Serial.println("seekEnd: " + String(GLOB.seekEnd));
-    //Serial.println("smplen: " + String(GLOB.smplen));
-    //Serial.println("shiftX: " + String(GLOB.shiftX));
-    //Serial.print("pram_settings: ");
-    for (unsigned int i = 0; i < 8; i++) {
-      //Serial.print(SMP.param_settings[1][i]);
-      //Serial.print(", ");
-    }
-    //Serial.println();
-    //Serial.print("filter_settings: ");
-    for (unsigned int i = 0; i < 8; i++) {
-      //Serial.print(SMP.filter_settings[1][i]);
-      //Serial.print(", ");
-    }
-    //Serial.println();
-      //Serial.print("drum_settings: ");
-    for (unsigned int i = 0; i < 4; i++) {
-      //Serial.print(SMP.drum_settings[1][i]);
-      //Serial.print(", ");
-    }
+  // Display the loaded SMP data
+  //Serial.println("Loaded SMP Data:");
+  //Serial.println("singleMode: " + String(GLOB.singleMode));
+  //Serial.println("currentChannel: " + String(GLOB.currentChannel));
+  //Serial.println("vol: " + String(GLOB.vol));
+  //Serial.println("bpm: " + String(SMP.bpm));
+  //Serial.println("velocity: " + String(GLOB.velocity));
+  //Serial.println("page: " + String(GLOB.page));
+  //Serial.println("edit: " + String(GLOB.edit));
+  //Serial.println("file: " + String(SMP.file));
+  //Serial.println("pack: " + String(SMP.pack));
+  //Serial.println("wav: " + String(SMP.wav[GLOB.currentChannel].fileID));
+  //Serial.println("folder: " + String(GLOB.folder));
+  //Serial.println("activeCopy: " + String(GLOB.activeCopy));
+  //Serial.println("x: " + String(GLOB.x));
+  //Serial.println("y: " + String(GLOB.y));
+  //Serial.println("seek: " + String(GLOB.seek));
+  //Serial.println("seekEnd: " + String(GLOB.seekEnd));
+  //Serial.println("smplen: " + String(GLOB.smplen));
+  //Serial.println("shiftX: " + String(GLOB.shiftX));
+  //Serial.print("pram_settings: ");
+  for (unsigned int i = 0; i < 8; i++) {
+    //Serial.print(SMP.param_settings[1][i]);
+    //Serial.print(", ");
+  }
+  //Serial.println();
+  //Serial.print("filter_settings: ");
+  for (unsigned int i = 0; i < 8; i++) {
+    //Serial.print(SMP.filter_settings[1][i]);
+    //Serial.print(", ");
+  }
+  //Serial.println();
+  //Serial.print("drum_settings: ");
+  for (unsigned int i = 0; i < 4; i++) {
+    //Serial.print(SMP.drum_settings[1][i]);
+    //Serial.print(", ");
+  }
 
-    //Serial.println();
-    
-    //Serial.print("mute: ");
-    for (unsigned int i = 0; i < maxY; i++) {
-      //Serial.print(SMP.mute[i]);
-      //Serial.print(", ");
-    }
-        //Serial.println();
-    
-    // Reset paint/unpaint prevention flag after loadPattern operation
-    extern bool preventPaintUnpaint;
-    preventPaintUnpaint = false;
-} else {
+  //Serial.println();
+  
+  //Serial.print("mute: ");
+  for (unsigned int i = 0; i < maxY; i++) {
+    //Serial.print(SMP.mute[i]);
+    //Serial.print(", ");
+  }
+  //Serial.println();
+  
+  // Reset paint/unpaint prevention flag after loadPattern operation
+  extern bool preventPaintUnpaint;
+  preventPaintUnpaint = false;
+  
+  // If no file was loaded (neither MIDI nor .txt), show NEW screen
+  if (!midiLoaded && !SD.exists(OUTPUTf)) {
     // File not found - show NEW screen for genre generation when creating new file
     extern void showNewFileScreen();
     showNewFileScreen();
@@ -245,7 +255,11 @@ void loadPattern(bool autoload) {
   }
 
   updateLastPage();
-  loadSMPSettings();
+  
+  // Only load SMP settings if we loaded a .txt file (not MIDI)
+  if (SD.exists(OUTPUTf)) {
+    loadSMPSettings();
+  }
   
   if (!autoload) {
     delay(500);
