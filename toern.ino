@@ -1410,6 +1410,7 @@ setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],2);
   // Assuming '3' is a valid state that buttons[i] can take.
   // If not, this block is dead code.
   if (currentMode == &singleMode && match_buttons(currentButtonStates, 3, 0, 0, 0)) {  // "3000"
+    GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
     switchMode(&draw);
   } else if (currentMode == &draw && match_buttons(currentButtonStates, 3, 0, 0, 0) && ((GLOB.currentChannel >= 1 && GLOB.currentChannel <= maxFiles) || GLOB.currentChannel > 12)) {  // "3000"
     GLOB.currentChannel = GLOB.currentChannel;
@@ -2084,8 +2085,14 @@ void checkTouchInputs() {
           animateSingle();
         }
       } else {  // If in any other mode, and Switch 1 is touched, go to draw mode.
+        if (currentMode == &singleMode) {
+          GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
+        }
         switchMode(&draw);
         GLOB.singleMode = false;
+        // Update encoder colors to reflect the new currentChannel when switching to draw mode
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     }
 
@@ -2098,8 +2105,14 @@ void checkTouchInputs() {
         extern void resetNewModeState();
         resetNewModeState();
         switchMode(&draw);
+        // Update encoder colors to reflect the current channel when exiting newFileMode
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else {  // If in any other mode (e.g. menu, set_wav, etc.) and Switch 2 is touched, go to draw mode.
         switchMode(&draw);
+        // Update encoder colors to reflect the current channel when exiting other modes
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     }
   }
@@ -2147,8 +2160,14 @@ void checkSingleTouch() {
       switchMode(&singleMode);
       GLOB.singleMode = true;
     } else {
+      if (currentMode == &singleMode) {
+        GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
+      }
       switchMode(&draw);
       GLOB.singleMode = false;
+      // Update encoder colors to reflect the new currentChannel when switching to draw mode
+      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     }
   }
   // Update the last touch state
@@ -2167,6 +2186,9 @@ void _checkMenuTouch() {
       switchMode(&menu);
     } else {
       switchMode(&draw);
+      // Update encoder colors to reflect the current channel when exiting menu
+      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     }
   }
   // Update the last touch state
@@ -2195,6 +2217,7 @@ void loop() {
   if (currentMode == &draw || currentMode == &singleMode) {
     drawBase();
     drawTriggers();
+    drawPages();  // Render page helper after drawTriggers
     if (isNowPlaying) drawTimer();
   }
 
@@ -2320,6 +2343,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     shiftNotes();
     drawBase();
     drawTriggers();
+    drawPages();  // Render page helper after drawTriggers
     if (isNowPlaying) {
       //filtercheck
       drawTimer();
@@ -3261,22 +3285,14 @@ void showLoadSave() {
   }
   drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
   
-  // Check for both .txt and .mid files
+  // Check for .txt file
   char OUTPUTf[50];
-  char MIDIf[50];
   sprintf(OUTPUTf, "%u.txt", SMP.file);
-  sprintf(MIDIf, "%u.mid", SMP.file);
   
   bool txtExists = SD.exists(OUTPUTf);
-  bool midExists = SD.exists(MIDIf);
   
-  if (midExists) {
-    // MIDI file exists - show yellow for MIDI file
-    drawIndicator('M', 'G', 1);   // Bright green for load
-    drawIndicator('M', 'D', 2);   // Dark red for save
-    drawNumber(SMP.file, UI_YELLOW, 11); // Yellow number for MIDI file
-  } else if (txtExists) {
-    // Only .txt file exists - bright green for load, dark red for save
+  if (txtExists) {
+    // .txt file exists - bright green for load, dark red for save
     drawIndicator('M', 'G', 1);   // Bright green for load
     drawIndicator('M', 'D', 2);   // Dark red for save
     drawNumber(SMP.file, UI_BRIGHT_GREEN, 11); // Bright green number for existing file
@@ -3294,8 +3310,8 @@ void showLoadSave() {
   }
   
   // Update SMP_LOAD_SETTINGS based on encoder[2] position
-  // Only allow settings loading if file exists (either .txt or .mid)
-  if (txtExists || midExists) {
+  // Only allow settings loading if .txt file exists
+  if (txtExists) {
     if (currentMode->pos[2] == 1) {
       SMP_LOAD_SETTINGS = true;
     } else {

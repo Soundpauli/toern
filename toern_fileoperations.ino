@@ -124,29 +124,14 @@ void loadPattern(bool autoload) {
   
   FastLEDclear();
   char OUTPUTf[50];
-  char MIDIf[50];
   if (autoload) {
     sprintf(OUTPUTf, "autosaved.txt");
-    sprintf(MIDIf, "autosaved.mid");
   } else {
     sprintf(OUTPUTf, "%d.txt", SMP.file);
-    sprintf(MIDIf, "%d.mid", SMP.file);
   }
   
-  // Check for MIDI file first
-  bool midiLoaded = false;
-  if (SD.exists(MIDIf)) {
-    Serial.println("MIDI file found: " + String(MIDIf));
-    // Load MIDI file
-    extern bool loadMIDIFile(const char* filename);
-    midiLoaded = loadMIDIFile(MIDIf);
-    Serial.println("MIDI loading result: " + String(midiLoaded ? "SUCCESS" : "FAILED"));
-  } else {
-    Serial.println("No MIDI file found: " + String(MIDIf));
-  }
-  
-  // If MIDI loading failed or no MIDI file exists, try .txt file
-  if (!midiLoaded && SD.exists(OUTPUTf)) {
+  // Load .txt file
+  if (SD.exists(OUTPUTf)) {
     // showNumber(SMP.file, CRGB(0, 0, 50), 0);
     File loadFile = SD.open(OUTPUTf);
     if (loadFile) {
@@ -246,8 +231,8 @@ void loadPattern(bool autoload) {
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
   
-  // If no file was loaded (neither MIDI nor .txt), show NEW screen
-  if (!midiLoaded && !SD.exists(OUTPUTf)) {
+  // If no file was loaded, show NEW screen
+  if (!SD.exists(OUTPUTf)) {
     // File not found - show NEW screen for genre generation when creating new file
     extern void showNewFileScreen();
     showNewFileScreen();
@@ -256,10 +241,8 @@ void loadPattern(bool autoload) {
 
   updateLastPage();
   
-  // Only load SMP settings if we loaded a .txt file (not MIDI)
-  if (SD.exists(OUTPUTf)) {
-    loadSMPSettings();
-  }
+  // Load SMP settings
+  loadSMPSettings();
   
   if (!autoload) {
     delay(500);
@@ -281,7 +264,6 @@ void autoLoad() {
 }
 
 void autoSave() {
-  //savePatternAsMIDI(true);
   savePattern(true);
   
   // Reset paint/unpaint prevention flag after autoSave operation

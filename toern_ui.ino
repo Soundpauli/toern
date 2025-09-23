@@ -286,8 +286,11 @@ void drawStatus() {
   for (unsigned int s = 1; s <= maxX; s++) {
     light(s, 1, ledColor);
   }
-  for (unsigned int s = 1; s <= maxX; s++) {
-    light(s, 16, ledColor);
+  // Don't clear row 16 in draw/single mode as it contains the page helper
+  if (currentMode == &draw || currentMode == &singleMode) {
+    for (unsigned int s = 1; s <= maxX; s++) {
+      light(s, 16, ledColor);
+    }
   }
   
   // If copy is active, show specific indicators
@@ -574,13 +577,16 @@ void drawTriggers() {
           if (thisNote != GLOB.currentChannel && currentMode == &singleMode) light(ix, iy, col_base[thisNote]);
 
           // if there is any note of the same value in the same column, make it less bright
-          /*
+          
+         /* if (thisNote != 11) {
           for (unsigned int iy2 = 1; iy2 < maxY + 1; iy2++) {
             if (iy2 != iy && note[((GLOB.edit - 1) * maxX) + ix][iy2].channel == note[((GLOB.edit - 1) * maxX) + ix][iy].channel) {
-              light(ix, iy2, col_base[thisNote]);
+              CRGB color = blend(col_base[thisNote], CRGB::Black, 0.2); 
+              light(ix, iy2, color);
             }
           }
-          */
+        }*/
+          
 
 
         } else {
