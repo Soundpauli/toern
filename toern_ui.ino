@@ -378,6 +378,9 @@ void drawStatus() {
     Encoder[1].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
     Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
     Encoder[3].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
+  } else if (GLOB.singleMode && GLOB.y != 16) {
+    // Reset encoder[1] to black when not at y=16 in single mode
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
   }
 
   if (currentMode == &noteShift) {

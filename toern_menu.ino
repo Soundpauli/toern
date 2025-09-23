@@ -321,6 +321,7 @@ void drawMainSettingStatus(int setting) {
       
     case 16: // RST - Reset
       drawText("RSET", 2, 10, CRGB(255, 100, 0));
+      drawText(VERSION, 2, 3, CRGB(0, 0, 10));
       break;
   }
 }
@@ -376,7 +377,7 @@ void drawAdditionalFeatures(int setting) {
       }
       
       // Draw "PAGE" text in pink at the bottom
-      drawText("PAGE", 2, 3, CRGB(255, 0, 255)); // Pink color
+      drawText("PAGE", 2, 3, CRGB(50, 50, 50)); // Pink color
       break;
     }
     
@@ -884,7 +885,7 @@ void drawRecChannelClear(){
     drawText("ON", 2, 3, UI_GREEN);
     SMP_REC_CHANNEL_CLEAR = true;  // Clear mode
   } else if (recChannelClear == 0) {
-    drawText("OFF",2, 2, UI_RED);
+    drawText("OFF",2, 3, UI_RED);
     SMP_REC_CHANNEL_CLEAR = false; // Add triggers mode
   } else if (recChannelClear == 2) {
     drawText("FIX", 2, 3, UI_YELLOW);
