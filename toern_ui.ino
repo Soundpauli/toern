@@ -281,20 +281,13 @@ void drawBase() {
 
 
 void drawStatus() {
-  // Clear status bar - no yellow fill for active copy
-  CRGB ledColor = CRGB(0, 0, 0);
-  for (unsigned int s = 1; s <= maxX; s++) {
-    light(s, 1, ledColor);
-  }
-  // Don't clear row 16 in draw/single mode as it contains the page helper
-  if (currentMode == &draw || currentMode == &singleMode) {
-    for (unsigned int s = 1; s <= maxX; s++) {
-      light(s, 16, ledColor);
-    }
-  }
+ 
+
   
   // If copy is active, show specific indicators
   if (GLOB.activeCopy) {
+
+  
     // Clear y=16 completely
     for (unsigned int s = 1; s <= maxX; s++) {
       light(s, 16, CRGB(0, 0, 0));

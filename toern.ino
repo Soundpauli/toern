@@ -1697,7 +1697,7 @@ void initEncoders() {
 
     Encoder[i].onMinMax = staticThresholds;
     Encoder[i].autoconfigInterrupt();
-    Encoder[i].writeRGBCode(0xFFFFFF);
+    //Encoder[i].writeRGBCode(0xFFFFFF);
     Encoder[i].writeFadeRGB(0);
     delay(50);
     Encoder[i].updateStatus();
