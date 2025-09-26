@@ -377,7 +377,7 @@ void drawAdditionalFeatures(int setting) {
       }
       
       // Draw "PAGE" text in pink at the bottom
-      drawText("PAGE", 2, 3, CRGB(50, 50, 50)); // Pink color
+      drawText("PAGE", 2, 3, CRGB(0, 0, 10)); // Pink color
       break;
     }
     
@@ -946,10 +946,10 @@ void drawClockMode() {
 void drawMidiVoiceSelect() {
 
   if (voiceSelect == 1) {
-    drawText("MIDI", 2, 3, UI_MAGENTA);
+    drawText("MIDI", 2, 3, UI_BLUE);
     MIDI_VOICE_SELECT = true;
   }else{
-    drawText("YPOS", 2, 3, UI_BLUE);
+    drawText("YPOS", 2, 3, UI_GREEN);
      MIDI_VOICE_SELECT = false;
   }
 
@@ -974,7 +974,7 @@ void drawPreviewVol() {
   }
 
   if (previewVol == 2) {
-    drawText("HIGH", 2, 3, UI_GREEN);
+    drawText("HIGH", 2, 3, UI_RED);
     
     
     mixer_stereoL.gain(0, 1);
@@ -1000,7 +1000,7 @@ void drawPreviewVol() {
   }
 
   if (previewVol == 0) {
-    drawText("LOW", 2, 3, UI_RED);
+    drawText("LOW", 2, 3, UI_GREEN);
   
     
     mixer_stereoL.gain(0, 1);
@@ -1019,11 +1019,11 @@ void drawMonitorLevel() {
   if (monitorLevel == 0) {
     drawText("OFF", 2, 3, UI_RED);
   } else if (monitorLevel == 1) {
-    drawText("LOW", 2, 3, UI_ORANGE);
+    drawText("LOW", 2, 3, UI_GREEN);
   } else if (monitorLevel == 2) {
     drawText("MED", 2, 3, UI_YELLOW);
   } else if (monitorLevel == 3) {
-    drawText("HIGH", 2, 3, UI_BRIGHT_GREEN);
+    drawText("HIGH", 2, 3, UI_ORANGE);
   } else if (monitorLevel == 4) {
     drawText("FULL", 2, 3, UI_BLUE);
   }

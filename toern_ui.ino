@@ -26,6 +26,7 @@ CRGB getIndicatorColor(char colorCode) {
     case 'V': return CRGB(148, 0, 211);    // Violet
     case 'P': return CRGB(255, 192, 203);  // Pink
     case 'Y': return CRGB(255, 255, 0);   // Yellow
+    case 'M': return CRGB(255, 0, 255);   // Magenta
     case 'C': return CRGB(0, 0, 0);        // Black (placeholder for CH)
     case 'U': return CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0); // Volume color
     case 'D': return CRGB(100, 0, 0);     // Dark Red

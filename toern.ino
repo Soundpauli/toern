@@ -441,6 +441,7 @@ Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1,
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
+Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
 // Declare currentMode as a global variable
 Mode *currentMode;
 Mode *oldMode;
@@ -486,6 +487,7 @@ struct GlobalVars {
   unsigned int shiftX;  // note Shift
   unsigned int shiftY;  // note Shift
   unsigned int shiftY1; // note Shift for encoder 1 (current channel and page only)
+  unsigned int subpattern; // current subpattern (0-15)
 };
 
 float octave[2];
@@ -536,7 +538,8 @@ GlobalVars GLOB = {
   0,                                                                                   //smplen
   0,                                                                                   //shiftX
   0,                                                                                   //shiftY
-  0                                                                                    //shiftY1
+  0,                                                                                   //shiftY1
+  0                                                                                    //subpattern
 };
 
 
@@ -1107,10 +1110,16 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  if ((currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0)) {  // "0200"
+  if (GLOB.y != 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0)) {  // "0200"
     tmpMute = true;
     tmpMuteAll(true);
     Encoder[1].writeRGBCode(0x111111);
+  }
+
+  if (GLOB.y == 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0)) {  // "0200"
+   //switch subpattern
+    switchMode(&subpatternMode);
+    GLOB.singleMode = (currentMode == &singleMode);
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 9, 0, 0)) {  // "0900"
@@ -1214,6 +1223,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     GLOB.singleMode = true;
     preventPaintUnpaint = false;  // Reset flag when exiting noteShift mode
   }
+
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     freshPaint = false;
@@ -1818,6 +1828,7 @@ void initGlobalVars() {
   GLOB.shiftX = 0;
   GLOB.shiftY = 0;
   GLOB.shiftY1 = 0;
+  GLOB.subpattern = 0;
 }
 
 void setEncoderColor(int i) {
@@ -1849,6 +1860,22 @@ void checkEncoders() {
 
     handle_button_state(&Encoder[i], i);  // This updates buttons[i] based on new physical state
     // buttonString += String(buttons[i]); // REMOVED
+  }
+
+  // Handle subpattern mode encoder[1] changes and auto-exit on release
+  if (currentMode->name == "SUBPATTERN") {
+    GLOB.subpattern = currentMode->pos[1];  // Direct mapping: encoder 0-7 = subpattern 0-7
+    if (GLOB.subpattern > 7) GLOB.subpattern = 7;
+    if (GLOB.subpattern < 0) GLOB.subpattern = 0;
+    
+    // Auto-exit subpattern mode when encoder[1] button is released
+    if (buttons[1] == 9) {  // Button release event
+      if (GLOB.singleMode) {
+        switchMode(&singleMode);
+      } else {
+        switchMode(&draw);
+      }
+    }
   }
 
   if (currentMode == &draw || currentMode == &singleMode) {
@@ -2357,6 +2384,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
   } else if (currentMode->name == "NEW_FILE") {
     showNewFileMode();
+  } else if (currentMode->name == "SUBPATTERN") {
+    switchSubPattern();
   }
 
 
@@ -3218,6 +3247,31 @@ void updateBrightness() {
   ledBrightness = constrain((currentMode->pos[1] * 10) - 46, 10, 255);  // Simplified and constrained
   //Serial.println("Brightness: " + String(ledBrightness));
   FastLED.setBrightness(ledBrightness);
+}
+
+void switchSubPattern() {
+  FastLEDclear();
+  
+  // Display "SUBPATTERN" title
+  drawText("SUB", 2, 10, CRGB(255, 0, 255));
+  
+  // Display current subpattern number
+  char subpatternText[8];
+  sprintf(subpatternText, "SP %d", GLOB.subpattern);
+  drawText(subpatternText, 2, 3, CRGB(0, 255, 255));
+  
+  // Show encoder indicators - only encoder 1 for subpattern control
+  drawIndicator('L', 'M', 1);  // Encoder 1: Large Magenta for subpattern control
+  
+  // Set encoder colors - only encoder 1 active
+  CRGB magentaColor = getIndicatorColor('M');
+  
+  Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[1].writeRGBCode(magentaColor.r << 16 | magentaColor.g << 8 | magentaColor.b);
+  Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[3].writeRGBCode(0x000000); // Black (no indicator)
+  
+  FastLEDshow();
 }
 
 void updateBPM() {
