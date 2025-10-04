@@ -78,13 +78,13 @@ const CRGB filter_col[] = {
 
 const CRGB col[] = {
   CRGB(0, 0, 0),
-  CRGB(139, 0, 0),      // Dark Red
+  CRGB(255, 0, 0),      // Dark Red
   CRGB(255, 69, 0),     // Burnt Orange
   CRGB(255, 255, 0),    // Gold
-  CRGB(0, 139, 0),      // Green
-  CRGB(0, 140, 130),    // Türkis
+  CRGB(0, 200, 0),      // Green
+  CRGB(0, 255, 255),    // Türkis
   CRGB(0, 0, 255),      // Blau
-  CRGB(140, 0, 120),    // Lila
+  CRGB(255, 0, 255),    // Lila
   CRGB(220, 100, 100),  // rosa
   CRGB(0, 0, 0),
   CRGB(0, 0, 0),  //s4
@@ -98,7 +98,7 @@ const CRGB col[] = {
 // Normal: 70% brightness
 const CRGB col_base[] = {
   CRGB(0, 0, 0),
-  CRGB(9, 0, 0),     // Dark Red
+  CRGB(5, 0, 0),     // Dark Red
   CRGB(18, 4, 0),    // Orange
   CRGB(10, 10, 0),   // Gold
   CRGB(0, 4, 0),     // Green

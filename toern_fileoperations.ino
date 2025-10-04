@@ -29,6 +29,14 @@ void savePattern(bool autosave) {
     saveFile.write(0xFF);  // Marker byte to indicate end of notes
     saveFile.write(0xFE);  // Marker byte to indicate start of SMP
 
+    // Save current mute states to SMP before writing
+    for (int ch = 0; ch < maxY; ch++) {
+      SMP.globalMutes[ch] = globalMutes[ch];
+      for (int page = 0; page < maxPages; page++) {
+        SMP.pageMutes[page][ch] = pageMutes[page][ch];
+      }
+    }
+    
     // Save SMP struct (file/pattern specific data)
     saveFile.write((uint8_t *)&SMP, sizeof(SMP));
   }
@@ -162,6 +170,18 @@ void loadPattern(bool autoload) {
       // Load SMP struct after marker (file/pattern specific data)
       if (loadFile.available()) {
         loadFile.read((uint8_t *)&SMP, sizeof(SMP));
+        
+        // Load mute states from SMP
+        for (int ch = 0; ch < maxY; ch++) {
+          globalMutes[ch] = SMP.globalMutes[ch];
+          for (int page = 0; page < maxPages; page++) {
+            pageMutes[page][ch] = SMP.pageMutes[page][ch];
+          }
+        }
+        
+        // Unmute all channels first, then apply loaded mutes based on PMOD state
+        unmuteAllChannels();
+        applyMutesAfterPMODSwitch();
       }
     }
     loadFile.close();

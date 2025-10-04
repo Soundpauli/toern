@@ -100,7 +100,7 @@ AudioMixer4                     filtermixer11;  //xy=1750,1309
 AudioMixer4                     filtermixer13;  //xy=1736,1622
 AudioMixer4                     filtermixer14;  //xy=1746,1796
 EXTMEM AudioMixer4                     SmixerL4; //xy=1785,2195
-AudioEffectFreeverb             freeverb13;     //xy=1898,1659
+
 EXTMEM AudioMixer4                     SmixerR4; //xy=1815,2530
 AudioEffectEnvelope             envelope1;      //xy=1927,516
 AudioEffectEnvelope             envelope2;      //xy=1928,626
@@ -111,7 +111,7 @@ AudioEffectEnvelope             envelope6;      //xy=1923,942
 AudioEffectEnvelope             envelope7;      //xy=1924,1025
 AudioEffectEnvelope             envelope8;      //xy=1922,1102
 AudioEffectFreeverb             freeverb11;     //xy=1922,1384
-AudioEffectFreeverb             freeverb14;     //xy=1914,1848
+
 EXTMEM AudioMixer4                     CHMixer11; //xy=1945,2340
 AudioEffectBitcrusher           bitcrusher4;    //xy=2098,793
 AudioEffectBitcrusher           bitcrusher5;    //xy=2098,864
@@ -151,11 +151,15 @@ AudioMixer4                     filtermixer7;   //xy=2601,1034
 AudioMixer4                     filtermixer8;   //xy=2603,1111
 AudioEffectFreeverb             freeverb1;      //xy=2750,488
 AudioEffectFreeverb             freeverb2;      //xy=2761,627
+AudioEffectFreeverb             freeverb5;      //xy=2759,998
+AudioEffectFreeverb             freeverb6;      //xy=2765,108
 AudioEffectFreeverb             freeverb7;      //xy=2759,998
 AudioEffectFreeverb             freeverb8;      //xy=2765,1083
 AudioMixer4                     mixersynth_end; //xy=2889,1562
 AudioMixer4                     freeverbmixer1; //xy=2964,513
 AudioMixer4                     freeverbmixer2; //xy=2978,657
+AudioMixer4                     freeverbmixer5; //xy=2970,912
+AudioMixer4                     freeverbmixer6; //xy=2970,1004
 AudioMixer4                     freeverbmixer7; //xy=2970,1016
 AudioMixer4                     freeverbmixer8; //xy=2970,1108
 AudioMixer4                     mixer1;         //xy=3200,763
@@ -301,12 +305,12 @@ AudioConnection        patchCord123(sound6, 0, envelope6, 0);
 AudioConnection        patchCord124(sound7, 0, envelope7, 0);
 AudioConnection        patchCord125(filtermixer11, 0, freeverb11, 0);
 AudioConnection        patchCord126(filtermixer11, 0, synthmixer11, 3);
-AudioConnection        patchCord128(filtermixer13, 0, freeverb13, 0);
+//AudioConnection        patchCord128(filtermixer13, 0, freeverb13, 0);
 AudioConnection        patchCord129(filtermixer13, 0, synthmixer13, 3);
-AudioConnection        patchCord131(filtermixer14, 0, freeverb14, 0);
+//AudioConnection        patchCord131(filtermixer14, 0, freeverb14, 0);
 AudioConnection        patchCord132(filtermixer14, 0, synthmixer14, 3);
 AudioConnection        patchCord134(SmixerL4, 0, CHMixer11, 0);
-AudioConnection        patchCord135(freeverb13, 0, synthmixer13, 0);
+//AudioConnection        patchCord135(freeverb13, 0, synthmixer13, 0);
 AudioConnection        patchCord136(SmixerR4, 0, CHMixer11, 1);
 AudioConnection        patchCord137(envelope1, 0, bitcrusher1, 0);
 AudioConnection        patchCord138(envelope2, 0, bitcrusher2, 0);
@@ -317,7 +321,7 @@ AudioConnection        patchCord142(envelope6, 0, bitcrusher6, 0);
 AudioConnection        patchCord143(envelope7, 0, bitcrusher7, 0);
 AudioConnection        patchCord144(envelope8, 0, bitcrusher8, 0);
 AudioConnection        patchCord145(freeverb11, 0, synthmixer11, 0);
-AudioConnection        patchCord146(freeverb14, 0, synthmixer14, 0);
+//AudioConnection        patchCord146(freeverb14, 0, synthmixer14, 0);
 AudioConnection        patchCord147(CHMixer11, 0, mixer_waveform11, 3);
 AudioConnection        patchCord148(bitcrusher4, 0, amp4, 0);
 AudioConnection        patchCord149(bitcrusher5, 0, amp5, 0);
@@ -374,19 +378,25 @@ AudioConnection        patchCord194(filtermixer2, 0, freeverb2, 0);
 AudioConnection        patchCord195(filtermixer2, 0, freeverbmixer2, 3);
 AudioConnection        patchCord196(filtermixer3, 0, mixer1, 2);
 AudioConnection        patchCord197(filtermixer4, 0, mixer1, 3);
-AudioConnection        patchCord198(filtermixer5, 0, mixer2, 0);
-AudioConnection        patchCord199(filtermixer6, 0, mixer2, 1);
+AudioConnection        patchCord198(filtermixer5, 0, freeverb5, 0);
+AudioConnection        patchCord198b(filtermixer5, 0, freeverbmixer5, 3);
+AudioConnection        patchCord199(filtermixer6, 0, freeverb6, 0);
+AudioConnection        patchCord199b(filtermixer6, 0, freeverbmixer6, 3);
 AudioConnection        patchCord200(filtermixer7, 0, freeverb7, 0);
 AudioConnection        patchCord201(filtermixer7, 0, freeverbmixer7, 3);
 AudioConnection        patchCord202(filtermixer8, 0, freeverb8, 0);
 AudioConnection        patchCord203(filtermixer8, 0, freeverbmixer8, 3);
 AudioConnection        patchCord204(freeverb1, 0, freeverbmixer1, 0);
 AudioConnection        patchCord205(freeverb2, 0, freeverbmixer2, 0);
+AudioConnection        patchCord205b(freeverb5, 0, freeverbmixer5, 0);
+AudioConnection        patchCord205c(freeverb6, 0, freeverbmixer6, 0);
 AudioConnection        patchCord206(freeverb7, 0, freeverbmixer7, 0);
 AudioConnection        patchCord207(freeverb8, 0, freeverbmixer8, 0);
 AudioConnection        patchCord208(mixersynth_end, 0, mixer_end, 2);
 AudioConnection        patchCord209(freeverbmixer1, 0, mixer1, 0);
 AudioConnection        patchCord210(freeverbmixer2, 0, mixer1, 1);
+AudioConnection        patchCord210b(freeverbmixer5, 0, mixer2, 0);
+AudioConnection        patchCord210c(freeverbmixer6, 0, mixer2, 1);
 AudioConnection        patchCord211(freeverbmixer7, 0, mixer2, 2);
 AudioConnection        patchCord212(freeverbmixer8, 0, mixer2, 3);
 AudioConnection        patchCord213(mixer1, 0, mixer_end, 0);

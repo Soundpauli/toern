@@ -347,6 +347,59 @@ void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
   updateFilterEncoderColors();
 }
 
+void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
+  auto& def = sliderDef[GLOB.currentChannel][page][encoder];
+  uint8_t chan = GLOB.currentChannel;
+
+  // Check if this encoder is already the active fast filter
+  bool isCurrentlyActive = (defaultFastFilter[chan].arr == def.arr && 
+                           defaultFastFilter[chan].idx == def.idx);
+
+  if (isCurrentlyActive) {
+    // Deselect the fast filter by setting it to ARR_NONE
+    defaultFastFilter[chan].arr = ARR_NONE;
+    defaultFastFilter[chan].idx = -1;
+    Serial.print("[Default] Cleared defaultFastFilter");
+  } else {
+    // Set as new default fast filter
+    switch (def.arr) {
+      case ARR_FILTER:
+        defaultFastFilter[chan].arr = def.arr;
+        defaultFastFilter[chan].idx = def.idx;
+        break;
+
+      case ARR_SYNTH:
+        defaultFastFilter[chan].arr = def.arr;
+        defaultFastFilter[chan].idx = def.idx;
+        break;
+
+      case ARR_PARAM:
+        if (def.idx < PARAM_COUNT) {
+          defaultFastFilter[chan].arr = def.arr;
+          defaultFastFilter[chan].idx = def.idx;
+        } else {
+          Serial.printf("[Warning] PARAM idx out of range: %u\n", def.idx);
+          return; // Don't update colors if we can't set it
+        }
+        break;
+
+      case ARR_DRUM:
+        defaultFastFilter[chan].arr = def.arr;
+        defaultFastFilter[chan].idx = def.idx;
+        break;
+
+      default:
+        Serial.printf("[Skip] Not assignable default: arr=%d\n", def.arr);
+        return; // Don't update colors if we can't set it
+    }
+    Serial.print("[Default] Set defaultFastFilter: ");
+    printSliderDefTarget(page, encoder);
+  }
+  
+  // Update encoder colors to reflect the new default fast filter state
+  updateFilterEncoderColors();
+}
+
 void processAdjustments_new(uint8_t page) {
   Serial.print("[Debug] processAdjustments_new page: ");
   Serial.println(page);

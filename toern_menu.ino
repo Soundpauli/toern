@@ -27,7 +27,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"CLR", 12, false, nullptr},          // Rec Channel Clear
   {"PVL", 13, false, nullptr},          // Preview Volume
   {"MON", 14, true, "LEVEL"},           // Monitor Level + Level Control
-  {"AI", 15, true, "PAGES"},            // AI Song Generation + Page Count
+  {"AUTO", 15, true, "PAGES"},            // AI Song Generation + Page Count
   {"RST", 16, false, nullptr}           // Reset
 };
 
@@ -311,7 +311,7 @@ void drawMainSettingStatus(int setting) {
       break;
       
     case 15: // AI - Song Generation
-      drawText("AI", 2, 10, CRGB(255, 0, 255));
+      drawText("AUTO", 2, 10, CRGB(255, 0, 255));
       // New indicator system: menu/AI: L[G] | L[Y] | L[W] | S[X]
       drawIndicator('L', 'G', 1);  // Encoder 1: Large Green
       drawIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow
@@ -606,11 +606,13 @@ void switchMenu(int menuPosition){
         
         // Handle mute system when PMOD is toggled
         if (SMP_PATTERN_MODE) {
-          // Switching TO PMOD mode - load global mutes to current page
-          loadGlobalMutesToPage();
+          // Switching TO PMOD mode - unmute all, then apply saved page mutes
+          unmuteAllChannels();
+          applyMutesAfterPMODSwitch();
         } else {
-          // Switching FROM PMOD mode - save current page mutes to global
-          savePageMutesToGlobal();
+          // Switching FROM PMOD mode - unmute all, then apply global mutes
+          unmuteAllChannels();
+          applyMutesAfterPMODSwitch();
         }
         
         // Update encoder 1 limit when pattern mode is toggled

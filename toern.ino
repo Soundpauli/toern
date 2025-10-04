@@ -8,7 +8,7 @@
 //#define AUDIO_BLOCK_SAMPLES 128
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
 
-
+//STILL FREE PINS: 24, 25, 31, 22, 5, 15, 2, 4, 14, 9, 32, 33
 static const int FAST_DROP_BLOCKS = 40;  // ≈200ms @ 44100Hz with 128-sample blocks
 static int fastDropRemaining = 0;
 volatile bool stepIsDue = false;
@@ -298,6 +298,7 @@ int peakRecIndex = 0;
 
 
 uint8_t ledBrightness = 83;
+bool drawBaseColorMode = true;  // true = channel colors, false = black
 const unsigned int maxlen = (maxX * maxPages) + 1;
 const long ram = 9525600;  // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
 const unsigned int SONG_LEN = maxX * maxPages;
@@ -466,6 +467,9 @@ struct Device {
   float synth_settings[maxY][8];
   unsigned int mute[maxY];
   unsigned int channelVol[maxY];
+  // Mute system for PMOD
+  bool globalMutes[maxY];           // Global mute states (when PMOD is off)
+  bool pageMutes[maxPages][maxY];   // Page-specific mute states (when PMOD is on)
 };
 
 // Global variables struct
@@ -560,7 +564,7 @@ float gainValue = 2.0;
 
 uint32_t loadedSampleRate[MAX_CHANNELS];
 uint32_t loadedSampleLen[MAX_CHANNELS];
-static bool prevMuteState[maxFiles + 1];
+static bool prevMuteState[maxY + 1];
 static bool tmpMuteActive = false;
 
 // Per-page mute system for PMOD (pattern mode)
@@ -741,8 +745,8 @@ AudioAmplifier *amps[15] = { nullptr, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, 
 AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, nullptr, &filter13, &filter14 };
 AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, nullptr, &filtermixer13, &filtermixer14 };
 AudioEffectBitcrusher *bitcrushers[15] = { nullptr, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, nullptr, nullptr, &bitcrusher11, nullptr, &bitcrusher13, &bitcrusher14 };
-AudioEffectFreeverb *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, nullptr, nullptr, &freeverb7, &freeverb8, 0, 0, &freeverb11, nullptr, nullptr, nullptr };
-AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, nullptr, nullptr, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+AudioEffectFreeverb *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, &freeverb5, &freeverb6, &freeverb7, &freeverb8, 0, 0, &freeverb11, nullptr, nullptr, nullptr };
+AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, &freeverbmixer5, &freeverbmixer6, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 AudioMixer4 *waveformmixers[15] = { nullptr, &BDMixer, &SNMixer, &HHMixer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
 
 
@@ -1311,7 +1315,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
 
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0010"
-setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],3);
+    toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel],3);
   }
   
 
@@ -1339,20 +1343,21 @@ setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],3);
   
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010"
-setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],2);
-
+    toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel],2);
   }
 
 
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
-    setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],1);
+    toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel],1);
   }
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-  setDefaultFilterFromSlider(filterPage[GLOB.currentChannel],0);
+    toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel],0);
+  }
 
-
+  if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
+    drawBaseColorMode = !drawBaseColorMode;  // Toggle drawBASE color mode
   }
 
   if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
@@ -3292,7 +3297,7 @@ void updateBPM() {
 }
 
 void setVolume() {
-  showExit(0);
+  //showExit(0);
   drawBPMScreen();  // Assumed to exist
 
   // Track previous encoder position to only update brightness when it changes
@@ -3324,8 +3329,8 @@ void setVolume() {
 
 
 void showExit(int index) {
-  showIcons(HELPER_EXIT, UI_DIM_BLUE);
-  Encoder[index].writeRGBCode(0x0000FF);
+  //showIcons(HELPER_EXIT, UI_DIM_BLUE);
+  //Encoder[index].writeRGBCode(0x0000FF);
 }
 
 void showLoadSave() {
@@ -3669,14 +3674,32 @@ void setSliderDefForChannel(int channel) {
 
 // Initialize page mutes
 void initPageMutes() {
-  for (int page = 0; page < maxPages; page++) {
-    for (int ch = 0; ch < maxY; ch++) {
-      pageMutes[page][ch] = false;  // All channels unmuted by default
+  // Initialize from SMP data if available, otherwise use defaults
+  for (int ch = 0; ch < maxY; ch++) {
+    globalMutes[ch] = SMP.globalMutes[ch];
+    for (int page = 0; page < maxPages; page++) {
+      pageMutes[page][ch] = SMP.pageMutes[page][ch];
     }
   }
-  // Copy current global mutes to globalMutes array
+  
+  // Fallback: if SMP data is not available (old files), use SMP.mute for global mutes
+  bool hasValidMuteData = false;
   for (int ch = 0; ch < maxY; ch++) {
-    globalMutes[ch] = SMP.mute[ch];
+    if (SMP.globalMutes[ch] != false || SMP.pageMutes[0][ch] != false) {
+      hasValidMuteData = true;
+      break;
+    }
+  }
+  
+  if (!hasValidMuteData) {
+    // This is likely an old file, use SMP.mute as global mutes
+    for (int ch = 0; ch < maxY; ch++) {
+      globalMutes[ch] = SMP.mute[ch];
+      // Initialize all pages with the global mute state
+      for (int page = 0; page < maxPages; page++) {
+        pageMutes[page][ch] = SMP.mute[ch];
+      }
+    }
   }
 }
 
@@ -3703,17 +3726,20 @@ void setMuteState(int channel, bool muted) {
   }
 }
 
-// Save current page mutes to global mutes when switching from PMOD to non-PMOD
-void savePageMutesToGlobal() {
+// Note: Global and page mutes are now completely separate stores
+// No copying between them when switching PMOD modes
+
+// Unmute all channels in audio system
+void unmuteAllChannels() {
   for (int ch = 0; ch < maxY; ch++) {
-    globalMutes[ch] = pageMutes[GLOB.edit - 1][ch];
-    SMP.mute[ch] = globalMutes[ch];  // Keep SMP.mute in sync
+    SMP.mute[ch] = false;  // Unmute in audio system
   }
 }
 
-// Load global mutes to current page when switching from non-PMOD to PMOD
-void loadGlobalMutesToPage() {
+// Apply saved mutes after PMOD switch
+void applyMutesAfterPMODSwitch() {
   for (int ch = 0; ch < maxY; ch++) {
-    pageMutes[GLOB.edit - 1][ch] = globalMutes[ch];
+    bool muteState = getMuteState(ch);
+    SMP.mute[ch] = muteState;  // Apply to audio system
   }
 }

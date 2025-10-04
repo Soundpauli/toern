@@ -233,7 +233,11 @@ void drawBase() {
         if (getMuteState(y - 1)) {
           light(x, y, CRGB(0, 0, 0));  // gemutete Zeilen schwarz
         } else {
-          light(x, y, col_base[colors]);  // normale Farbcodierung pro Spur
+          if (drawBaseColorMode) {
+            light(x, y, col_base[colors]);  // normale Farbcodierung pro Spur
+          } else {
+            light(x, y, CRGB(0, 0, 0));  // schwarz wenn drawBaseColorMode = false
+          }
         }
       }
       colors++;
@@ -932,14 +936,19 @@ void drawBPMScreen() {
 
   FastLEDclear();
   drawVolume(GLOB.vol);
-  drawBrightness();
+  if (drawBaseColorMode) {
+    drawBrightness();
+  }
   CRGB volColor = CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0);
   Encoder[2].writeRGBCode(CRGBToUint32(volColor));
   
   // New indicator system: BPM: L[H] | L[W] | L[U] | -
-  drawIndicator('L', 'H', 1);  // Encoder 1: Large Bright Blue
+  
   drawIndicator('L', 'W', 2);  // Encoder 2: Large White
   drawIndicator('L', 'U', 3);  // Encoder 3: Large Volume Color
+  if (drawBaseColorMode) {
+    drawIndicator('L', 'H', 4);  // Encoder 1: Large Bright Blue
+  }
   // Encoder 4: empty (no indicator)
   
   if (MIDI_CLOCK_SEND){ 
