@@ -141,6 +141,39 @@ void saveSingleModeToEEPROM(int index, int8_t value) {
   EEPROM.write(EEPROM_DATA_START + index, (uint8_t)value);
 }
 
+// Save samplepack 0 state to EEPROM (which voices are using sp0)
+void saveSp0StateToEEPROM() {
+  Serial.println("=== Saving SP0 State to EEPROM ===");
+  // Use addresses 200-208 for sp0 state (8 voices = 8 bytes)
+  for (int i = 1; i < maxFiles; i++) {
+    uint8_t value = SMP.sp0Active[i] ? 1 : 0;
+    EEPROM.write(200 + i, value);
+    Serial.print("Voice ");
+    Serial.print(i);
+    Serial.print(": sp0Active = ");
+    Serial.print(SMP.sp0Active[i] ? "TRUE" : "FALSE");
+    Serial.print(", saving ");
+    Serial.println(value);
+  }
+  Serial.println("=== SP0 State Saved ===");
+}
+
+// Load samplepack 0 state from EEPROM
+void loadSp0StateFromEEPROM() {
+  Serial.println("=== Loading SP0 State from EEPROM ===");
+  for (int i = 1; i < maxFiles; i++) {
+    uint8_t stored = EEPROM.read(200 + i);
+    SMP.sp0Active[i] = (stored == 1);
+    Serial.print("Voice ");
+    Serial.print(i);
+    Serial.print(": EEPROM value = ");
+    Serial.print(stored);
+    Serial.print(", sp0Active = ");
+    Serial.println(SMP.sp0Active[i] ? "TRUE" : "FALSE");
+  }
+  Serial.println("=== SP0 State Loaded ===");
+}
+
 void showMenu() {
   FastLEDclear();
   //showExit(0);

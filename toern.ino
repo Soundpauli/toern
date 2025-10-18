@@ -473,6 +473,8 @@ struct Device {
   // Mute system for PMOD
   bool globalMutes[maxY];           // Global mute states (when PMOD is off)
   bool pageMutes[maxPages][maxY];   // Page-specific mute states (when PMOD is on)
+  // Samplepack 0 tracking - which voices have individually loaded samples
+  bool sp0Active[maxFiles];         // Track which voices are using samplepack 0
 };
 
 // Global variables struct
@@ -1777,6 +1779,7 @@ void setup() {
   playSdWav1.stop();
   EEPROMgetLastFiles();
   loadMenuFromEEPROM();
+  loadSp0StateFromEEPROM();  // Load samplepack 0 state before loading samplepack
   loadSamplePack(samplePackID, true);
   SMP.bpm = 100.0;
   
@@ -3507,18 +3510,61 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
   }
   
   EEPROM.put(0, pack_id);                        // Save current pack_id to EEPROM
+  
+  Serial.println("=== Loading Samplepack ===");
+  Serial.print("Pack ID: ");
+  Serial.println(pack_id);
+  
+  // First, load samples from samplepack 0 for voices that have custom samples
+  Serial.println("--- Checking SP0 Active Voices ---");
+  for (unsigned int z = 1; z < maxFiles; z++) {
+    Serial.print("Voice ");
+    Serial.print(z);
+    Serial.print(": sp0Active = ");
+    Serial.println(SMP.sp0Active[z] ? "TRUE" : "FALSE");
+    
+    if (SMP.sp0Active[z]) {
+      Serial.print(">>> Loading voice ");
+      Serial.print(z);
+      Serial.println(" from SAMPLEPACK 0 <<<");
+      
+      if (!intro) {
+        showIcons(ICON_SAMPLE, UI_BG_DIM);
+      } else {
+        drawText("SP0", 2, 11, col[(maxFiles + 1) - z]);
+      }
+      drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
+      loadSample(0, z);  // Load from samplepack 0
+    }
+  }
+  
+  Serial.println("--- Loading Regular Samplepack ---");
+  
+  // Then, load samples from the requested samplepack, but skip voices with sp0Active
   for (unsigned int z = 1; z < maxFiles; z++) {  // maxFiles is 9. So loads samples 1 through 8.
                                                  // Sample arrays are often 0-indexed. _samplers[0] to _samplers[8] exist.
                                                  // This loop should probably be z=0 to maxFiles-1 or z=1 to maxFiles (inclusive for maxFiles).
                                                  // Assuming it means load into sampler slots 1 to 8.
-    if (!intro) {
-      showIcons(ICON_SAMPLE, UI_BG_DIM);
+    if (!SMP.sp0Active[z]) {  // Only load if NOT using samplepack 0
+      Serial.print(">>> Loading voice ");
+      Serial.print(z);
+      Serial.print(" from Pack ");
+      Serial.println(pack_id);
+      
+      if (!intro) {
+        showIcons(ICON_SAMPLE, UI_BG_DIM);
+      } else {
+        drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
+      }
+      drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
+      loadSample(pack_id, z);  // loadSample needs to know which sampler slot 'z' corresponds to.
     } else {
-      drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
+      Serial.print("--- Skipping voice ");
+      Serial.print(z);
+      Serial.println(" (using SP0)");
     }
-    drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
-    loadSample(pack_id, z);  // loadSample needs to know which sampler slot 'z' corresponds to.
   }
+  Serial.println("=== Samplepack Loading Complete ===");
   // char OUTPUTf[50]; // This seems unused here
   // sprintf(OUTPUTf, "%u/%u.wav", pack_id, 1);
   switchMode(&draw);  // Switch back to draw mode after loading
@@ -3575,6 +3621,11 @@ void loadWav() {
   // For now, I'll keep it as is, but it's a potential point of confusion/bugs.
   loadSample(0, SMP.wav[GLOB.currentChannel].fileID);  // Assuming GLOB.folder is the intended first arg, and second is file ID.
                                                                // And loadSample internally knows to use GLOB.currentChannel as target.
+  
+  // Auto-save to samplepack 0 after loading individual sample
+  copySampleToSamplepack0(GLOB.currentChannel);
+  saveSp0StateToEEPROM();
+  
   switchMode(&singleMode);
   GLOB.singleMode = true;
   

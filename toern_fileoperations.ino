@@ -64,63 +64,121 @@ void savePattern(bool autosave) {
 
 void saveSamplePack(int pack) {
     
+    Serial.println("=== Saving Samplepack ===");
+    Serial.print("Pack ID: ");
+    Serial.println(pack);
     
     char filename[64];
-    
+    char sourcePath[64];
 
-
-         char dirPath[64];
+    char dirPath[64];
     // Ensure the directory exists
     snprintf(dirPath, sizeof(dirPath), "%d", pack);
-         if (!SD.exists(dirPath)) {
+    if (!SD.exists(dirPath)) {
         SD.mkdir(dirPath);
     }
 
-    // Iterate over each sample channel (1..FOLDER_MAX)
+    // Iterate over each sample channel (1..8)
     for (uint8_t ch = 1; ch <= 8; ch++) {
 
        for (unsigned int f = 1; f < (maxY / 2) + 1; f++) {
-      light(ch + 1, f, CRGB(4, 0, 0));
-    }
-    showIcons(ICON_SAMPLEPACK, UI_BG_DIM);
-    FastLED.setBrightness(ledBrightness);
-    FastLED.show();
+            light(ch + 1, f, CRGB(4, 0, 0));
+        }
+        showIcons(ICON_SAMPLEPACK, UI_BG_DIM);
+        FastLED.setBrightness(ledBrightness);
+        FastLED.show();
 
-        // Construct the output path: samples/<pack>/<ch>.wav
+        // Check if this voice has a custom sample in samplepack 0
+        snprintf(sourcePath, sizeof(sourcePath), "0/%d.wav", ch);
         snprintf(filename, sizeof(filename), "%d/%d.wav", pack, ch);
+        
+        if (SD.exists(sourcePath)) {
+            // Copy from samplepack 0
+            Serial.print(">>> Copying voice ");
+            Serial.print(ch);
+            Serial.println(" from SP0");
+            
+            // Remove existing file if it exists
+            if (SD.exists(filename)) {
+                SD.remove(filename);
+            }
+            
+            // Open source file for reading
+            File sourceFile = SD.open(sourcePath, FILE_READ);
+            if (!sourceFile) {
+                Serial.print("Failed to open source: ");
+                Serial.println(sourcePath);
+                continue;
+            }
+            
+            // Open destination file for writing
+            File destFile = SD.open(filename, FILE_WRITE);
+            if (!destFile) {
+                Serial.print("Failed to create: ");
+                Serial.println(filename);
+                sourceFile.close();
+                continue;
+            }
+            
+            // Copy file contents
+            uint8_t buffer[512];
+            size_t bytesRead;
+            while ((bytesRead = sourceFile.read(buffer, sizeof(buffer))) > 0) {
+                destFile.write(buffer, bytesRead);
+            }
+            
+            sourceFile.close();
+            destFile.close();
+            
+            Serial.print("Copied: ");
+            Serial.println(filename);
+        } else {
+            // Save from RAM (current loaded sample)
+            Serial.print(">>> Saving voice ");
+            Serial.print(ch);
+            Serial.println(" from RAM");
+            
+            // Remove any existing file at this path
+            if (SD.exists(filename)) {
+                SD.remove(filename);
+            }
+            
+            // Open a new file for writing
+            File outFile = SD.open(filename, FILE_WRITE);
+            if (!outFile) {
+                Serial.print("Failed to create ");
+                Serial.println(filename);
+                continue;
+            }
+            
+            // Write standard 44-byte WAV header (mono, 16-bit, AUDIO_SAMPLE_RATE_EXACT)
+            writeWavHeader(outFile, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
+            
+            // Determine how many samples were recorded for this channel
+            uint32_t sampleCount = loadedSampleLen[ch];  // number of int16_t samples
+            
+            // Write the raw PCM data from the sampled buffer
+            outFile.write(reinterpret_cast<uint8_t*>(sampled[ch]), sampleCount * sizeof(int16_t));
+            
+            outFile.close();
+            Serial.print("Saved sample ");
+            Serial.println(filename);
+        }
+        
+        for (unsigned int f = 1; f < (maxY + 1) + 1; f++) {
+            light(ch + 1, f, CRGB(0, 20, 0));
+        }
+        FastLEDshow();
+    }
     
-
-      //  //Serial.println(filename);
-        // Remove any existing file at this path
-        if (SD.exists(filename)) {
-            SD.remove(filename);
-        }
-        
-        // Open a new file for writing
-        File outFile = SD.open(filename, FILE_WRITE);
-        if (!outFile) {
-            //Serial.print("Failed to create ");
-            //Serial.println(filename);
-            continue;
-        }
-        
-        // Write standard 44-byte WAV header (mono, 16-bit, AUDIO_SAMPLE_RATE_EXACT)
-        writeWavHeader(outFile, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
-        
-        // Determine how many samples were recorded for this channel
-        uint32_t sampleCount = loadedSampleLen[ch];  // number of int16_t samples
-        
-        // Write the raw PCM data from the sampled buffer
-        outFile.write(reinterpret_cast<uint8_t*>(sampled[ch]), sampleCount * sizeof(int16_t));
-        
-        outFile.close();
-        //Serial.print("Saved sample ");
-        //Serial.println(filename);
-         for (unsigned int f = 1; f < (maxY + 1) + 1; f++) {
-      light(ch + 1, f, CRGB(0, 20, 0));
+    // Clear sp0Active flags when saving a samplepack (all samples now part of this pack)
+    Serial.println("Clearing SP0 flags (all samples now in pack)");
+    for (uint8_t ch = 1; ch < maxFiles; ch++) {
+        SMP.sp0Active[ch] = false;
     }
-    FastLEDshow();
-    }
+    saveSp0StateToEEPROM();
+    
+    Serial.println("=== Samplepack Save Complete ===");
     
     // Reset paint/unpaint prevention flag after saveSamplePack operation
     extern bool preventPaintUnpaint;

@@ -106,20 +106,35 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
 
 
 void loadSample(unsigned int packID, unsigned int sampleID) {
-  //Serial.print("loading Sample:");
-  //Serial.print(sampleID);
-  //Serial.print("from pack nr.");
-  //Serial.println(packID);
+  Serial.print("loadSample: packID=");
+  Serial.print(packID);
+  Serial.print(", sampleID=");
+  Serial.println(sampleID);
     
 
   drawNoSD();
 
   char OUTPUTf[50];
-  sprintf(OUTPUTf, "%d/%d.wav", packID, sampleID);
-
-  if (packID == 0) {
+  
+  // Check if we're loading from samplepack 0 (check if file exists first)
+  sprintf(OUTPUTf, "0/%d.wav", sampleID);
+  bool loadingFromSp0 = (packID == 0 && SD.exists(OUTPUTf));
+  
+  if (loadingFromSp0) {
+    // Loading from samplepack 0 - path is already correct
+    Serial.print("Loading from SP0: ");
+    Serial.println(OUTPUTf);
+  } else if (packID == 0) {
+    // Old behavior: loading individual sample from samples folder
     sprintf(OUTPUTf, "samples/%d/_%d.wav", getFolderNumber(sampleID), sampleID);
     sampleID = GLOB.currentChannel;
+    Serial.print("Loading from samples folder: ");
+    Serial.println(OUTPUTf);
+  } else {
+    // Loading from regular samplepack
+    sprintf(OUTPUTf, "%d/%d.wav", packID, sampleID);
+    Serial.print("Loading from pack: ");
+    Serial.println(OUTPUTf);
   }
 
   if (!SD.exists(OUTPUTf)) {
@@ -335,4 +350,74 @@ if (sampleIsLoaded && currentMode->pos[2] != GLOB.seekEnd) {
     currentMode->pos[2] = GLOB.seekEnd;
     Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
   }
+}
+
+// Copy currently loaded sample to samplepack 0
+void copySampleToSamplepack0(unsigned int channel) {
+  // Ensure samplepack 0 directory exists
+  if (!SD.exists("0")) {
+    SD.mkdir("0");
+  }
+  
+  char outputPath[50];
+  sprintf(outputPath, "0/%d.wav", channel);
+  
+  // Remove existing file if it exists
+  if (SD.exists(outputPath)) {
+    SD.remove(outputPath);
+  }
+  
+  // Open new file for writing
+  File outFile = SD.open(outputPath, FILE_WRITE);
+  if (!outFile) {
+    Serial.print("Failed to create samplepack 0 file: ");
+    Serial.println(outputPath);
+    return;
+  }
+  
+  // Get sample data size
+  uint32_t sampleCount = loadedSampleLen[channel];  // number of int16_t samples
+  uint32_t dataSize = sampleCount * sizeof(int16_t);  // size in bytes
+  
+  // Write complete WAV header with correct sizes
+  uint32_t sampleRate = (uint32_t)AUDIO_SAMPLE_RATE_EXACT;  // Convert to integer
+  uint32_t byteRate = sampleRate * 1 * 16 / 8;  // mono, 16-bit
+  uint8_t blockAlign = 1 * 16 / 8;  // mono, 16-bit
+  
+  // WAV header (44 bytes) with correct file size
+  uint8_t header[44] = {
+    'R', 'I', 'F', 'F',
+    (uint8_t)((dataSize + 36) & 0xff), (uint8_t)(((dataSize + 36) >> 8) & 0xff),
+    (uint8_t)(((dataSize + 36) >> 16) & 0xff), (uint8_t)(((dataSize + 36) >> 24) & 0xff),  // file size - 8
+    'W', 'A', 'V', 'E',
+    'f', 'm', 't', ' ',
+    16, 0, 0, 0,  // PCM chunk size
+    1, 0,         // Audio format (1 = PCM)
+    1, 0,         // num channels (mono)
+    (uint8_t)(sampleRate & 0xff), (uint8_t)((sampleRate >> 8) & 0xff),
+    (uint8_t)((sampleRate >> 16) & 0xff), (uint8_t)((sampleRate >> 24) & 0xff),
+    (uint8_t)(byteRate & 0xff), (uint8_t)((byteRate >> 8) & 0xff),
+    (uint8_t)((byteRate >> 16) & 0xff), (uint8_t)((byteRate >> 24) & 0xff),
+    blockAlign, 0,
+    16, 0,  // bits per sample
+    'd', 'a', 't', 'a',
+    (uint8_t)(dataSize & 0xff), (uint8_t)((dataSize >> 8) & 0xff),
+    (uint8_t)((dataSize >> 16) & 0xff), (uint8_t)((dataSize >> 24) & 0xff)  // data chunk size
+  };
+  
+  outFile.write(header, 44);
+  
+  // Write the sample data from RAM
+  outFile.write(reinterpret_cast<uint8_t*>(sampled[channel]), dataSize);
+  
+  outFile.close();
+  
+  // Mark this channel as using samplepack 0
+  SMP.sp0Active[channel] = true;
+  
+  Serial.print("Saved sample to samplepack 0: ");
+  Serial.print(outputPath);
+  Serial.print(" (");
+  Serial.print(dataSize);
+  Serial.println(" bytes)");
 }

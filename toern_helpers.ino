@@ -346,8 +346,20 @@ void stopFastRecord() {
   
   auto  ch  = GLOB.currentChannel;
   auto& idx = fastRecWriteIndex[ch];
+  
+  Serial.print(">>> stopFastRecord: channel=");
+  Serial.print(ch);
+  Serial.print(", recorded samples=");
+  Serial.println(idx);
+  
   loadedSampleLen[ch] = idx;
-  // load into that channel’s sampler voice:
+  
+  Serial.print("loadedSampleLen[");
+  Serial.print(ch);
+  Serial.print("] = ");
+  Serial.println(loadedSampleLen[ch]);
+  
+  // load into that channel's sampler voice:
   _samplers[ch].removeAllSamples();
   _samplers[ch].addSample(
     36,                            // MIDI note #
@@ -355,6 +367,13 @@ void stopFastRecord() {
     idx,                           // sample-count
     rateFactor
   );
+  
+  // Auto-save recorded sample to samplepack 0
+  Serial.print("Fast record stopped, saving to SP0 for channel ");
+  Serial.println(ch);
+  copySampleToSamplepack0(ch);
+  saveSp0StateToEEPROM();
+  
   // give back your knob color + preview
  // Encoder[0].writeRGBCode(CRGBToUint32(col[ch]));
  // _samplers[ch].noteEvent(36, defaultVelocity, true, false);
