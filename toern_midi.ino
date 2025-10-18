@@ -338,8 +338,20 @@ void handleStop() {
 
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   //Serial.println(pitch);
-  // For persistent channels (11-14), use the actual MIDI channel
-  if (!MIDI_VOICE_SELECT) ch = GLOB.currentChannel;
+  // Determine channel based on MIDI mode
+  extern int voiceSelect;
+  
+  if (voiceSelect == 2) {
+    // KEYS mode: Map MIDI note to channel (C4=60 -> ch1, C#4=61 -> ch2, etc.)
+    // Wrapping: C4-B4 (60-71) = ch1-12, C5-B5 (72-83) = ch1-12, etc.
+    ch = ((pitch - 60) % 12) + 1;
+    if (ch < 1) ch += 12;  // Handle notes below C4
+    if (ch > 8) ch = 8;    // Limit to 8 sample channels
+  } else if (!MIDI_VOICE_SELECT) {
+    // YPOS mode: use current channel
+    ch = GLOB.currentChannel;
+  }
+  // else: MIDI mode uses the ch parameter as-is
 
   if (ch < 1 || ch > 16) return;
   pressedKeyCount[ch]++;  // Increment count for this channel
@@ -363,7 +375,14 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
       }else{
 
         if (ch < 9) {
-          int samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
+          int samplePitch;
+          if (voiceSelect == 2) {
+            // KEYS mode: Play at base pitch (no MIDI pitch transposition)
+            samplePitch = SampleRate[ch] * 12;
+          } else {
+            // YPOS/MIDI mode: Transpose by MIDI pitch
+            samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
+          }
           // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
           if (ch >= 1 && ch <= 12) {
             samplePitch += (int)detune[ch]; // Add detune semitones
@@ -389,7 +408,14 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
     //FastLED.show();
 
     if (ch < 9) {
-      int samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
+      int samplePitch;
+      if (voiceSelect == 2) {
+        // KEYS mode: Play at base pitch (no MIDI pitch transposition)
+        samplePitch = SampleRate[ch] * 12;
+      } else {
+        // YPOS/MIDI mode: Transpose by MIDI pitch
+        samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
+      }
       // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
       if (ch >= 1 && ch <= 12) {
         samplePitch += (int)detune[ch]; // Add detune semitones

@@ -215,7 +215,7 @@ void showWave() {
   FastLEDclear();
   
   // Show big icon
-  showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
+  //showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
   
   // New indicator system: wave: M[CH] | M[W] | S[P] | L[X]
   drawIndicator('L', 'C', 1);  // Encoder 1: Medium Current Channel Color
@@ -247,15 +247,8 @@ void showWave() {
 
  // --- UPDATE START POSITION (Encoder 0) ---
 if (sampleIsLoaded && currentMode->pos[0] != GLOB.seek) {
-  envelope0.noteOff();
-  playSdWav1.stop();
-
-  // force a fresh slice of the same file:
-  previewCache.valid = false;
-
-  //Serial.println("SEEK-hit");
   GLOB.seek = currentMode->pos[0];
-  _samplers[0].removeAllSamples();
+  // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
   previewSample(fnr, getFileNumber(snr), false, false);
 }
 
@@ -276,17 +269,9 @@ if (sampleIsLoaded && currentMode->pos[0] != GLOB.seek) {
 
 // --- UPDATE END POSITION (Encoder 2) ---
 if (sampleIsLoaded && currentMode->pos[2] != GLOB.seekEnd) {
-  playSdWav1.stop();
-
-  // force reload so your new end‐point takes effect
-  previewCache.valid = false;
-
-  //Serial.println("SEEKEND-hit");
   GLOB.seekEnd = currentMode->pos[2];
-  _samplers[0].removeAllSamples();
-  envelope0.noteOff();
+  // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
   previewSample(fnr, getFileNumber(snr), false, false);
-
 }
 
 

@@ -93,6 +93,11 @@ void loadMenuFromEEPROM() {
   if (simpleNotesView < 1 || simpleNotesView > 2) {
     simpleNotesView = 1;  // Default to EASY if invalid value
   }
+  
+  // Ensure voiceSelect is valid (-1, 1, or 2)
+  if (voiceSelect != -1 && voiceSelect != 1 && voiceSelect != 2) {
+    voiceSelect = 1;  // Default to MIDI if invalid value
+  }
 
   //Serial.println(F("Loaded Menu values from EEPROM:"));
   //Serial.print(F("  recMode="));       //Serial.println(recMode);
@@ -108,7 +113,7 @@ void loadMenuFromEEPROM() {
   // Set global flags
   SMP_PATTERN_MODE       = (patternMode   == 1);
   SMP_FLOW_MODE          = (flowMode      == 1);
-  MIDI_VOICE_SELECT      = (voiceSelect   == 1);
+  MIDI_VOICE_SELECT      = (voiceSelect   == 1 || voiceSelect == 2);  // MIDI or KEYS mode
   MIDI_TRANSPORT_RECEIVE = (transportMode == 1);
   SMP_FAST_REC           = fastRecMode;
   SMP_REC_CHANNEL_CLEAR  = (recChannelClear == 1);  // Only true for ON mode
@@ -632,7 +637,14 @@ void switchMenu(int menuPosition){
         break;
 
       case 7:
-        voiceSelect = voiceSelect * (-1);
+        // Cycle through: -1 (YPOS) -> 1 (MIDI) -> 2 (KEYS) -> -1 (YPOS) ...
+        if (voiceSelect == -1) {
+          voiceSelect = 1;  // YPOS -> MIDI
+        } else if (voiceSelect == 1) {
+          voiceSelect = 2;  // MIDI -> KEYS
+        } else {
+          voiceSelect = -1; // KEYS -> YPOS
+        }
         saveSingleModeToEEPROM(4, voiceSelect);
 
         //Serial.println(voiceSelect);
@@ -1021,9 +1033,12 @@ void drawMidiVoiceSelect() {
   if (voiceSelect == 1) {
     drawText("MIDI", 2, 3, UI_BLUE);
     MIDI_VOICE_SELECT = true;
-  }else{
+  } else if (voiceSelect == 2) {
+    drawText("KEYS", 2, 3, UI_MAGENTA);
+    MIDI_VOICE_SELECT = true;  // KEYS mode also uses MIDI channel info
+  } else {
     drawText("YPOS", 2, 3, UI_GREEN);
-     MIDI_VOICE_SELECT = false;
+    MIDI_VOICE_SELECT = false;
   }
 
   FastLEDshow();
