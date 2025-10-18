@@ -1174,13 +1174,26 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     // Get the main setting for the current page
     extern int getCurrentMenuMainSetting();
     int mainSetting = getCurrentMenuMainSetting();
-    switchMenu(mainSetting);
+    
+    // Special case: If on AI menu (setting 15), trigger AI generation
+    if (mainSetting == 15) {
+      switchMenu(mainSetting);  // Trigger AI generation
+    } else {
+      // For all other menu pages, exit to draw mode
+      switchMode(&draw);
+      GLOB.singleMode = false;
+    }
   }
 
   if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
-    // Exit to draw mode
-    switchMode(&draw);
-    GLOB.singleMode = false;
+    // Get the main setting for the current page
+    extern int getCurrentMenuMainSetting();
+    int mainSetting = getCurrentMenuMainSetting();
+    
+    // Encoder[3] triggers action for all menu items EXCEPT AI (which uses encoder[0])
+    if (mainSetting != 15) {
+      switchMenu(mainSetting);
+    }
   } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     // Exit NEW mode and switch back to DAT view (unchanged)
     extern void resetNewModeState();
