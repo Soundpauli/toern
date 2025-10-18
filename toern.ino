@@ -441,7 +441,7 @@ Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
 
 Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
-Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 1 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
@@ -1171,15 +1171,16 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   if (currentMode == &menu && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-    switchMode(&draw);
-    GLOB.singleMode = false;
-  }
-
-  if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     // Get the main setting for the current page
     extern int getCurrentMenuMainSetting();
     int mainSetting = getCurrentMenuMainSetting();
     switchMenu(mainSetting);
+  }
+
+  if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
+    // Exit to draw mode
+    switchMode(&draw);
+    GLOB.singleMode = false;
   } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     // Exit NEW mode and switch back to DAT view (unchanged)
     extern void resetNewModeState();
@@ -2115,6 +2116,15 @@ void checkTouchInputs() {
   static bool touchConflict = false;
   static bool touch1Held = false;
   static bool touch2Held = false;
+  static int firstTouchPressed = 0; // 0=none, 1=left first, 2=right first
+  
+  // Track which touch was pressed first
+  if (newTouchState[0] && !lastTouchState[0] && !touch2Held) {
+    firstTouchPressed = 1; // Left pressed first
+  }
+  if (newTouchState[1] && !lastTouchState[1] && !touch1Held) {
+    firstTouchPressed = 2; // Right pressed first
+  }
   
   // Check for touch conflicts (one held, another pressed)
   if (newTouchState[0] && !lastTouchState[0] && touch2Held) {
@@ -2129,6 +2139,7 @@ void checkTouchInputs() {
     touchConflict = false;
     touch1Held = false;
     touch2Held = false;
+    firstTouchPressed = 0;
   }
   
   // Update held states
@@ -2141,18 +2152,36 @@ void checkTouchInputs() {
 
   if (newBoth) {
     // only on the first frame where both are pressed:
-    // Both touch works in single mode, draw mode, or menu mode
-    if (currentMode == &singleMode) {
-      //Serial.println("---------<>---------");
-      GLOB.singleMode = false;
-      switchMode(&set_Wav);
-    } else if (currentMode == &draw || currentMode == &menu) {
-      // Only switch to filter mode if current channel is valid for filters
-      if (GLOB.currentChannel != 0 && GLOB.currentChannel != 9 && GLOB.currentChannel != 10 && GLOB.currentChannel != 12 && GLOB.currentChannel != 15) {
-        // Reset filter page to 1 when entering filter mode via both touch inputs
-        filterPage[GLOB.currentChannel] = 1;
-        initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
-        switchMode(&filterMode);
+    // Action depends on which touch was pressed first
+    // Right pressed first (2) -> go to filter mode (if valid channel)
+    // Left pressed first (1) OR simultaneous (0) -> go to set_Wav mode
+    
+    if (currentMode == &singleMode || currentMode == &draw || currentMode == &menu) {
+      // Validate current channel before any mode switch
+      if (GLOB.currentChannel < 0 || GLOB.currentChannel > 15) {
+        GLOB.currentChannel = 1; // Safe default
+      }
+      
+      if (firstTouchPressed == 2) {
+        // Right pressed first -> go to filter mode
+        // Only switch to filter mode if current channel is valid for filters
+        if (GLOB.currentChannel != 0 && GLOB.currentChannel != 9 && GLOB.currentChannel != 10 && GLOB.currentChannel != 12 && GLOB.currentChannel != 15) {
+          // Reset filter page to 1 when entering filter mode via both touch inputs
+          filterPage[GLOB.currentChannel] = 1;
+          initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
+          switchMode(&filterMode);
+        }
+        // If channel doesn't support filters, do nothing (don't crash)
+      } else {
+        // Left pressed first (1) OR simultaneous (0) -> go to set_Wav
+        // Only go to set_Wav if channel supports samples (1-8)
+        if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
+          if (currentMode == &singleMode) {
+            GLOB.singleMode = false;
+          }
+          switchMode(&set_Wav);
+        }
+        // If channel doesn't support samples, do nothing (don't crash)
       }
     }
     // skip any individual‐touch handling this frame
@@ -2404,6 +2433,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     unpaintMode = false;
     pressed[0] = false;
     unpaint();
+  }
+
+  // Handle encoder 2 press in SET_WAV mode - reverse preview sample
+  if (currentMode == &set_Wav && pressed[2] == true && !isRecording) {
+    pressed[2] = false;
+    Serial.println("Encoder 2 pressed in SET_WAV mode - reversing preview");
+    reversePreviewSample();
   }
 
   // Set stateMashine
@@ -3482,12 +3518,12 @@ void showSamplePack() {
     drawNumber(SMP.pack, UI_BLUE, 11); // Blue number for non-existing file
   }
 
-  // Validate samplepack value - ensure it's within valid range (1-99)
-  if (SMP.pack < 1 || SMP.pack > 99) {
-    Serial.print("INVALID SAMPLEPACK VALUE! Defaulting to 1");
-    SMP.pack = 1;
-    currentMode->pos[3] = 1;
-    Encoder[3].writeCounter((int32_t)1);
+  // Validate samplepack value - ensure it's within valid range (0-99)
+  if (SMP.pack < 0 || SMP.pack > 99) {
+    Serial.print("INVALID SAMPLEPACK VALUE! Defaulting to 0");
+    SMP.pack = 0;
+    currentMode->pos[3] = 0;
+    Encoder[3].writeCounter((int32_t)0);
     EEPROM.put(0, SMP.pack);  // Save the corrected value to EEPROM
   }
 
@@ -3503,10 +3539,10 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
   //Serial.println("Loading SamplePack #" + String(pack_id));
   drawNoSD();
   
-  // Validate pack_id - ensure it's within valid range (1-99)
-  if (pack_id < 1 || pack_id > 99) {
-    Serial.print("INVALID SAMPLEPACK ID! Defaulting to 1");
-    pack_id = 1;
+  // Validate pack_id - ensure it's within valid range (0-99)
+  if (pack_id < 0 || pack_id > 99) {
+    Serial.print("INVALID SAMPLEPACK ID! Defaulting to 0");
+    pack_id = 0;
   }
   
   EEPROM.put(0, pack_id);                        // Save current pack_id to EEPROM
@@ -3609,25 +3645,26 @@ void loadWav() {
   playSdWav1.stop();
 
   //Serial.println("Loading Wave :" + String(SMP.wav[GLOB.currentChannel].fileID));
-  // loadSample takes (folder_or_pack_id, file_id_or_sampler_slot).
-  // Here, it seems SMP.wav[GLOB.currentChannel].fileID is the actual sample ID to load.
-  // And it should load into the sampler associated with GLOB.currentChannel.
-  // The second argument to loadSample in loadSamplePack was 'z' (sampler slot).
-  // A consistent loadSample(pack_or_folder, file_to_load_id, target_sampler_slot) would be clearer.
-  // Assuming loadSample(0, SMP.wav[GLOB.currentChannel].fileID) means:
-  // 0 might be a special folder/pack ID, or it implies using GLOB.folder.
-  // And the sample SMP.wav[GLOB.currentChannel].fileID is loaded into sampler GLOB.currentChannel.
-  // This needs clarification based on loadSample's actual implementation.
-  // For now, I'll keep it as is, but it's a potential point of confusion/bugs.
-  loadSample(0, SMP.wav[GLOB.currentChannel].fileID);  // Assuming GLOB.folder is the intended first arg, and second is file ID.
-                                                               // And loadSample internally knows to use GLOB.currentChannel as target.
+  
+  // Load the preview sample (which may be reversed/edited) to the target channel
+  // This copies from sampled[0] (preview) to sampled[targetChannel]
+  extern void loadPreviewToChannel(unsigned int targetChannel);
+  loadPreviewToChannel(GLOB.currentChannel);
   
   // Auto-save to samplepack 0 after loading individual sample
   copySampleToSamplepack0(GLOB.currentChannel);
   saveSp0StateToEEPROM();
   
+  // Store the current edit page before switching modes
+  int savedEditPage = GLOB.edit;
+  
   switchMode(&singleMode);
   GLOB.singleMode = true;
+  
+  // Restore the edit page and set encoder[1] to match
+  GLOB.edit = savedEditPage;
+  currentMode->pos[1] = savedEditPage;
+  Encoder[1].writeCounter((int32_t)savedEditPage);
   
   // Reset paint/unpaint prevention flag after loadWav operation
   preventPaintUnpaint = false;

@@ -306,6 +306,9 @@ if (sampleIsLoaded && currentMode->pos[2] != GLOB.seekEnd) {
     //Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
 
+    // --- Invalidate preview cache when selecting new sample ---
+    previewCache.valid = false;
+
     // --- Reset seek positions when choosing a new sample ---
     currentMode->pos[0] = 0;
     GLOB.seek = 0;
@@ -405,4 +408,173 @@ void copySampleToSamplepack0(unsigned int channel) {
   Serial.print(" (");
   Serial.print(dataSize);
   Serial.println(" bytes)");
+}
+
+// Reverse the preview sample (channel 0) in RAM - used in showWave
+void reversePreviewSample() {
+  extern CachedSample previewCache;
+  
+  if (!previewCache.valid || previewCache.lengthBytes == 0) {
+    Serial.println("No preview sample loaded to reverse");
+    return;
+  }
+  
+  Serial.print("Reversing preview sample, length: ");
+  Serial.print(previewCache.lengthBytes);
+  Serial.println(" bytes");
+  
+  // Reverse the byte array in sampled[0]
+  uint8_t* buffer = sampled[0];
+  int numSamples = previewCache.lengthBytes / 2;  // Number of 16-bit samples
+  
+  // Reverse as int16_t samples (not individual bytes)
+  int16_t* sampleBuffer = (int16_t*)buffer;
+  for (int i = 0; i < numSamples / 2; i++) {
+    int16_t temp = sampleBuffer[i];
+    sampleBuffer[i] = sampleBuffer[numSamples - 1 - i];
+    sampleBuffer[numSamples - 1 - i] = temp;
+  }
+  
+  Serial.println("Preview sample reversed!");
+  
+  // Flip the peak visualization values array
+  extern int peakIndex;
+  extern float peakValues[];
+  
+  for (int i = 0; i < peakIndex / 2; i++) {
+    float temp = peakValues[i];
+    peakValues[i] = peakValues[peakIndex - 1 - i];
+    peakValues[peakIndex - 1 - i] = temp;
+  }
+  
+  Serial.println("Peak values flipped!");
+  
+  // Swap seek and seekEnd positions (they're now reversed)
+  int tempSeek = GLOB.seek;
+  GLOB.seek = 100 - GLOB.seekEnd;
+  GLOB.seekEnd = 100 - tempSeek;
+  
+  // Update encoder positions to match
+  extern Mode* currentMode;
+  currentMode->pos[0] = GLOB.seek;
+  currentMode->pos[2] = GLOB.seekEnd;
+  
+  extern i2cEncoderLibV2 Encoder[];
+  Encoder[0].writeCounter((int32_t)GLOB.seek);
+  Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
+  
+  Serial.print("Seek positions swapped: seek=");
+  Serial.print(GLOB.seek);
+  Serial.print(", seekEnd=");
+  Serial.println(GLOB.seekEnd);
+  
+  // Trigger re-preview with current seek settings
+  extern int getFolderNumber(int fileID);
+  extern int getFileNumber(int fileID);
+  
+  int snr = SMP.wav[GLOB.currentChannel].fileID;
+  int fnr = getFolderNumber(snr);
+  
+  previewSample(fnr, getFileNumber(snr), false, false);
+}
+
+// Copy the preview sample (channel 0) to the target channel
+void loadPreviewToChannel(unsigned int targetChannel) {
+  if (targetChannel < 1 || targetChannel >= maxFiles) {
+    Serial.println("Invalid target channel for preview load");
+    return;
+  }
+  
+  extern CachedSample previewCache;
+  extern int getFolderNumber(int fileID);
+  extern int getFileNumber(int fileID);
+  
+  bool needToLoadPreview = (!previewCache.valid || previewCache.lengthBytes == 0);
+  
+  // If preview cache is not valid, ensure the sample is loaded first
+  if (needToLoadPreview) {
+    Serial.println("Preview cache invalid - loading sample first");
+    int snr = SMP.wav[GLOB.currentChannel].fileID;
+    int fnr = getFolderNumber(snr);
+    
+    // Load the sample into cache without triggering preview playback
+    // We'll manually load it into sampled[0] and set up the cache
+    char OUTPUTf[50];
+    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
+    
+    File previewFile = SD.open(OUTPUTf);
+    if (!previewFile) {
+      Serial.println("Failed to open sample file");
+      return;
+    }
+    
+    int fileSize = previewFile.size();
+    
+    // Read sample rate from header
+    previewFile.seek(24);
+    int g = previewFile.read();
+    int rate;
+    if (g == 72) rate = 4;
+    else if (g == 68) rate = 3;
+    else if (g == 34) rate = 2;
+    else if (g == 17) rate = 1;
+    else rate = 4;
+    
+    // Load full sample into RAM buffer
+    previewFile.seek(44);
+    memset(sampled[0], 0, sizeof(sampled[0]));
+    int plen = 0;
+    while (previewFile.available() && plen < sizeof(sampled[0])) {
+      sampled[0][plen++] = previewFile.read();
+    }
+    previewFile.close();
+    
+    // Update cache
+    previewCache.folder = fnr;
+    previewCache.sampleID = getFileNumber(snr);
+    previewCache.lengthBytes = plen;
+    previewCache.rate = rate;
+    previewCache.valid = true;
+    previewCache.plen = plen;
+    
+    Serial.println("Sample loaded to cache without preview");
+  }
+  
+  Serial.print("Loading preview sample to channel ");
+  Serial.println(targetChannel);
+  
+  // Calculate the trimmed portion based on seek/seekEnd
+  int numSamples = previewCache.lengthBytes / 2;  // Total samples in preview
+  int startSample = (numSamples * GLOB.seek) / 100;
+  int endSample = (numSamples * GLOB.seekEnd) / 100;
+  
+  if (endSample <= startSample) {
+    endSample = numSamples;
+  }
+  
+  int trimmedSamples = endSample - startSample;
+  
+  Serial.print("Copying samples ");
+  Serial.print(startSample);
+  Serial.print(" to ");
+  Serial.print(endSample);
+  Serial.print(" (");
+  Serial.print(trimmedSamples);
+  Serial.println(" samples)");
+  
+  // Copy the trimmed portion from preview (channel 0) to target channel
+  int16_t* previewBuffer = (int16_t*)sampled[0];
+  int16_t* targetBuffer = (int16_t*)sampled[targetChannel];
+  
+  for (int i = 0; i < trimmedSamples && i < (sizeof(sampled[targetChannel]) / 2); i++) {
+    targetBuffer[i] = previewBuffer[startSample + i];
+  }
+  
+  // Update the sampler for the target channel
+  _samplers[targetChannel].removeAllSamples();
+  loadedSampleRate[targetChannel] = previewCache.rate;
+  loadedSampleLen[targetChannel] = trimmedSamples;
+  _samplers[targetChannel].addSample(36, targetBuffer, trimmedSamples, rateFactor);
+  
+  Serial.println("Preview loaded to channel!");
 }

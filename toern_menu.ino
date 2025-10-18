@@ -358,11 +358,11 @@ void drawMainSettingStatus(int setting) {
       
     case 15: // AI - Song Generation
       drawText("AUTO", 2, 10, CRGB(255, 0, 255));
-      // New indicator system: menu/AI: L[G] | L[Y] | L[W] | S[X]
-      drawIndicator('L', 'G', 1);  // Encoder 1: Large Green
-      drawIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow
-      drawIndicator('L', 'W', 3);  // Encoder 3: Large White
-      drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
+      // New indicator system: menu/AI: L[M] | L[Y] | L[W] | L[X]
+      drawIndicator('L', 'M', 1);  // Encoder 1: Large Magenta (trigger)
+      drawIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow (base start)
+      drawIndicator('L', 'W', 3);  // Encoder 3: Large White (base end)
+      drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue (exit)
       break;
       
     case 16: // RST - Reset
@@ -511,16 +511,14 @@ void handleAdditionalFeatureControls(int setting) {
       }
       break;
       
-    case 15: { // AI page - Target Count (enc0), Base Start (enc1), Base End (enc2)
+    case 15: { // AI page - Base Start (enc1), Base End (enc2), Target Count (enc0)
       static int lastAiTargetPage = -1;
       static int lastAiBaseStartPage = -1;
       static int lastAiBaseEndPage = -1;
       
       // Set encoder counters only on first entry
       if (aiMenuFirstEnter) {
-        Encoder[0].writeCounter((int32_t)aiTargetPage);
-        Encoder[0].writeMax((int32_t)16);
-        Encoder[0].writeMin((int32_t)1);
+        // Encoder 0 is now the trigger button, not used for values
         
         Encoder[1].writeCounter((int32_t)aiBaseStartPage);
         Encoder[1].writeMax((int32_t)16);
@@ -529,6 +527,10 @@ void handleAdditionalFeatureControls(int setting) {
         Encoder[2].writeCounter((int32_t)aiBaseEndPage);
         Encoder[2].writeMax((int32_t)16);
         Encoder[2].writeMin((int32_t)1);
+        
+        Encoder[0].writeCounter((int32_t)aiTargetPage);
+        Encoder[0].writeMax((int32_t)16);
+        Encoder[0].writeMin((int32_t)1);
         
         aiMenuFirstEnter = false;
       }

@@ -22,6 +22,9 @@ struct BasePagePattern {
   bool isMelodic;             // True if this channel has melodic patterns
 };
 
+// Global buffer for AI generation in external RAM (prevents stack overflow)
+EXTMEM BasePagePattern g_channelPatterns[16];
+
 void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
 void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
 void generateBassOrMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
@@ -2081,7 +2084,8 @@ void generateSong() {
   // Check if base pages have content and analyze patterns
   bool basePagesEmpty = true;
   bool channelsUsed[16] = {false};
-  BasePagePattern channelPatterns[16]; // Detailed pattern analysis for each channel
+  // STACK OVERFLOW FIX: Use global EXTMEM buffer to prevent stack overflow
+  BasePagePattern* channelPatterns = g_channelPatterns; // Use global EXTMEM buffer
   
   // Initialize pattern analysis
   for (int ch = 0; ch < 16; ch++) {
