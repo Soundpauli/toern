@@ -482,7 +482,7 @@ void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int 
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % 16) + 1;
+    int beatPosition = ((x_rel - 1) % maxX) + 1;
     
     bool shouldPlay = false;
     int velocity = defaultVelocity;
@@ -589,7 +589,7 @@ void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int c
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % 16) + 1;
+    int beatPosition = ((x_rel - 1) % maxX) + 1;
     
     // Create melodic phrases with musical intervals
     if(beatPosition % phraseLength == 1) {
@@ -690,7 +690,7 @@ void generateBassLine(unsigned int start, unsigned int end, unsigned int channel
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % 16) + 1;
+    int beatPosition = ((x_rel - 1) % maxX) + 1;
     
     // Create bass phrases
     if(beatPosition % phraseLength == 1) {
@@ -735,7 +735,7 @@ void generateMainMelody(unsigned int start, unsigned int end, unsigned int chann
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % 16) + 1;
+    int beatPosition = ((x_rel - 1) % maxX) + 1;
     
     // Create melodic phrases
     if(beatPosition % phraseLength == 1) {
@@ -866,7 +866,7 @@ void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, u
   // Preserve the original rhythm structure with subtle variations
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % 16) + 1;
+    int beatPosition = ((x_rel - 1) % maxX) + 1;
     
     // Use the base pattern rhythm as foundation
     bool shouldPlay = basePattern->rhythmPattern[beatPosition - 1] == 1;
@@ -920,7 +920,7 @@ void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, un
   // Preserve the original melodic structure with harmonic progressions
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % 16) + 1;
+    int beatPosition = ((x_rel - 1) % maxX) + 1;
     
     // Use the base pattern rhythm as foundation
     bool shouldPlay = basePattern->rhythmPattern[beatPosition - 1] == 1;
@@ -1313,7 +1313,7 @@ void applyBPMDirectly(int bpm) {
 // Techno pattern generation - Enhanced and dynamic
 void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int page) {
   for (unsigned int c = start; c < end; c++) {
-    int beat = ((c - start) % 16) + 1;
+    int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1;
     
     // Dynamic kick patterns - varies by page
@@ -1414,7 +1414,7 @@ void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int pa
 // Hip-hop pattern generation - Enhanced and dynamic
 void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int page) {
   for (unsigned int c = start; c < end; c++) {
-    int beat = ((c - start) % 16) + 1;
+    int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1;
     
     // Dynamic kick patterns - varies by page
@@ -1515,7 +1515,7 @@ void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int pa
 // Drum & Bass pattern generation - More dynamic and complex
 void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page) {
   for (unsigned int c = start; c < end; c++) {
-    int beat = ((c - start) % 16) + 1;
+    int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1; // For variation across pages
     
     // Dynamic kick pattern - varies by page
@@ -1610,7 +1610,7 @@ void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page)
 // House pattern generation - More dynamic and groovy
 void generateHousePattern(unsigned int start, unsigned int end, unsigned int page) {
   for (unsigned int c = start; c < end; c++) {
-    int beat = ((c - start) % 16) + 1;
+    int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1; // For variation across pages
     
     // Dynamic kick pattern - varies by page
@@ -1723,7 +1723,7 @@ void generateHousePattern(unsigned int start, unsigned int end, unsigned int pag
 // Ambient pattern generation - Enhanced and atmospheric
 void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int page) {
   for (unsigned int c = start; c < end; c++) {
-    int beat = ((c - start) % 16) + 1;
+    int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1;
     
     // Dynamic atmospheric patterns - varies by page
@@ -1974,23 +1974,50 @@ CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
 
 // ----- Run the Animation Once (Called in setup) -----
 void runAnimation() {
+  // Clear ALL LEDs first to ensure clean start (all matrices stay black)
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB::Black;
+  }
+  FastLED.show();
+  
   unsigned long startTime = millis();
+  unsigned long lastFrameTime = millis();
+  const unsigned long frameDelay = 33;  // ~30 FPS for smoother animation
+  
   while (true) {
-    unsigned long elapsed = millis() - startTime;
+    unsigned long currentTime = millis();
+    unsigned long elapsed = currentTime - startTime;
+    
+    // Frame rate limiting - only update display at consistent intervals
+    if (currentTime - lastFrameTime < frameDelay) {
+      yield();  // Give CPU time to other tasks
+      continue;  // Skip this iteration if not enough time has passed
+    }
+    lastFrameTime = currentTime;
+    
     if (elapsed > totalAnimationTime) {
       elapsed = totalAnimationTime;
     }
 
-    // Update each LED in the 16×16 grid (0-based coords)
+    // Update ONLY the first matrix (16×16 grid)
+    // Second matrix stays black (already cleared above)
     for (uint8_t y = 0; y < maxY; y++) {
-      for (uint8_t x = 0; x < maxX; x++) {
+      for (uint8_t x = 0; x < MATRIX_WIDTH; x++) {
         CRGB color = getPixelColor(x, y, elapsed);
-        // The light() function uses 1-based coords:
-        light(x + 1, y + 1, color);
+        // Direct write to LED array for maximum speed
+        uint16_t ledIndex;
+        if ((y + 1) % 2 == 0) {
+          // Even rows: right to left
+          ledIndex = (MATRIX_WIDTH - (x + 1)) + (MATRIX_WIDTH * y);
+        } else {
+          // Odd rows: left to right
+          ledIndex = x + (MATRIX_WIDTH * y);
+        }
+        leds[ledIndex] = color;
       }
     }
+    
     FastLED.show();
-    delay(10);
 
     // Stop after totalAnimationTime
     if (elapsed >= totalAnimationTime) {
@@ -1998,7 +2025,7 @@ void runAnimation() {
     }
   }
 
-  // Clear the display at end
+  // Clear the display at end - all matrices
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }

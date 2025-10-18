@@ -1,16 +1,41 @@
 
 
-void light(unsigned int x, unsigned int y, CRGB color) {
-  unsigned int index = 0;
-  if (y >= 1 && y <= maxY && x >= 1 && x <= maxX) {
-    if (y > maxY) y = 1;
-    if (y % 2 == 0) {
-      index = (maxX - x) + (maxX * (y - 1));
-    } else {
-      index = (x - 1) + (maxX * (y - 1));
-    }
-    if (index < NUM_LEDS) { leds[index] = color; }
+// Fast function to light a specific LED on a specific matrix
+// matrixId: 0 = first matrix (left), 1 = second matrix, etc.
+// x, y: coordinates within that matrix (1-16, 1-16)
+void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB color) {
+  if (matrixId >= LED_MODULES) return;  // Invalid matrix ID
+  if (x < 1 || x > MATRIX_WIDTH || y < 1 || y > maxY) return;  // Out of bounds
+  
+  unsigned int matrixOffset = matrixId * 256;  // Each matrix has 256 LEDs
+  unsigned int index;
+  
+  // Calculate index within the matrix using serpentine pattern
+  if (y % 2 == 0) {
+    // Even rows: right to left
+    index = (MATRIX_WIDTH - x) + (MATRIX_WIDTH * (y - 1));
+  } else {
+    // Odd rows: left to right
+    index = (x - 1) + (MATRIX_WIDTH * (y - 1));
   }
+  
+  // Add matrix offset and set LED
+  index += matrixOffset;
+  if (index < NUM_LEDS) { 
+    leds[index] = color; 
+  }
+}
+
+// General function to light an LED at global coordinates
+void light(unsigned int x, unsigned int y, CRGB color) {
+  if (y < 1 || y > maxY || x < 1 || x > maxX) return;
+  
+  // Determine which matrix (0-based) and local x coordinate within that matrix
+  unsigned int matrixNum = (x - 1) / MATRIX_WIDTH;  // Which matrix (0, 1, 2, etc.)
+  unsigned int localX = ((x - 1) % MATRIX_WIDTH) + 1;  // Position within that matrix (1-16)
+  
+  // Use the fast single-matrix function
+  light_single(matrixNum, localX, y, color);
   yield();
 }
 
@@ -141,7 +166,7 @@ void drawLowResCircle(int startX, int startY, CRGB color) {
  if (val > 9) width=8;
     
 //BLACK BOX
-  for (int x = width; x <= 16; x++) {      // 6 pixels wide for the number area
+  for (int x = width; x <= maxX; x++) {      // Cover to end of display
     for (int y = 7; y <= 13; y++) {   // Box height (adjust as needed)
       light(x, y, CRGB(0, 0, 0));
     }
@@ -152,11 +177,11 @@ void drawLowResCircle(int startX, int startY, CRGB color) {
  }
 
 void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
-  // Map the value (0-maxfilterResolution) to 0-16 LEDs lit
-  int activeLength = ::map(mappedValue, 0, maxfilterResolution, 0, 16);
+  // Map the value (0-maxfilterResolution) to 0-maxX LEDs lit
+  int activeLength = ::map(mappedValue, 0, maxfilterResolution, 0, maxX);
   
-  // Draw gradient line at y = 16
-  for (int x = 1; x <= 16; x++) {
+  // Draw gradient line at y = maxY
+  for (int x = 1; x <= maxX; x++) {
     if (x <= activeLength) {
       // Gradient from white -> filter color
       float blend = float(x - 1) / max(1, activeLength - 1);  // Prevent div by zero
@@ -165,17 +190,17 @@ void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
         255 * (1.0 - blend) + color.g * blend,
         255 * (1.0 - blend) + color.b * blend
       );
-      light(x, 16, grad);
+      light(x, maxY, grad);
     } else {
       // Empty part stays black
-      light(x, 16, CRGB(0, 0, 0));
+      light(x, maxY, CRGB(0, 0, 0));
     }
     
   }
  int width = 12;
  if (mappedValue > 9) width=8;
   // Draw black box background for the number
-  for (int x = width; x <= 16; x++) {      // 6 pixels wide for the number area
+  for (int x = width; x <= maxX; x++) {      // Cover to end of display
     for (int y = 7; y <= 13; y++) {   // Box height (adjust as needed)
       light(x, y, CRGB(0, 0, 0));
     }
@@ -190,7 +215,8 @@ void drawPlayButton() {
   unsigned int timer = (beat - 1) % maxX + 1;
   if (currentMode == &draw || currentMode == &singleMode) {
     if (isNowPlaying) {
-      if (timer == 1 || timer == 5 || timer == 9 || timer == 13) {
+      // Flash red on every 4th beat (works for any display width)
+      if (timer % 4 == 1) {
         Encoder[2].writeRGBCode(0xFF0000);
       } else {
         Encoder[2].writeRGBCode(0x550000);
@@ -274,7 +300,8 @@ void drawBase() {
   }
 
    // 4/4-Takt-Hilfslinien in Zeile 1 (z. B. Start jeder Viertel)
-   for (unsigned int x = 1; x <= 13; x += 4) {
+   // Mark every 4th position across the full width
+   for (unsigned int x = 1; x <= maxX - 3; x += 4) {
     light(x, 1, CRGB(10, 10, 10));  // türkisfarbene Taktmarkierung
   }
 
@@ -483,7 +510,7 @@ void drawNumber(float count, CRGB color, int topY) {
     }
   }
 
-  int startX = 17 - textPixelWidth;  // Adjust 14 based on your screen width
+  int startX = (maxX + 1) - textPixelWidth;  // Align text to right side of display
   if (startX < 0) startX = 0;
 
   drawText(buffer, startX, topY, color);
@@ -526,25 +553,31 @@ void drawPages() {
   //GLOB.edit = 1;
   CRGB ledColor;
 
-  for (unsigned int p = 1; p <= maxPages; p++) {  // Assuming maxPages is 8
+  // First, clear the entire top row across all matrices
+  for (unsigned int x = 1; x <= maxX; x++) {
+    light(x, maxY, CRGB(0, 0, 0));  // Clear to black
+  }
+
+  // Then draw page indicators at positions 1-16 (or up to maxPages)
+  for (unsigned int p = 1; p <= maxPages && p <= maxX; p++) {
 
     // If the page is the current one, set the LED to white
     if (GLOB.page == p && GLOB.edit == p) {
       //ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(200, 250, 200);
-      ledColor = CRGB(255, 255, 50);
+      ledColor = CRGB(255, 255, 50);  // Playing and editing
     } else if (GLOB.page == p) {
       //ledColor = isNowPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
-      ledColor = CRGB(0, 255, 0);
+      ledColor = CRGB(0, 255, 0);  // Playing
     } else {
       if (GLOB.edit == p) {
         //ledColor = GLOB.page == p ? CRGB(50, 50, 50) : CRGB(20, 20, 20);
-        ledColor = CRGB(255, 255, 0);
+        ledColor = CRGB(255, 255, 0);  // Editing
       } else {
-        ledColor = hasNotes[p] ? CRGB(0, 0, 35) : CRGB(1, 0, 0);
+        ledColor = hasNotes[p] ? CRGB(0, 0, 35) : CRGB(1, 0, 0);  // Has notes / empty
       }
     }
 
-    // Set the LED color
+    // Set the LED color at position p on top row
     light(p, maxY, ledColor);
   }
 
@@ -593,6 +626,32 @@ void drawTriggers() {
         } else {
           //light(ix, iy, getCol(note[((GLOB.edit - 1) * maxX) + ix][iy].channel) / 24);
           light(ix, iy, col_base[thisNote]);
+        }
+      }
+    }
+  }
+  
+  // Simple Notes View: Draw notes at their voice Y position instead of their actual Y position
+  if (simpleNotesView == 1 && !GLOB.singleMode) {
+    for (unsigned int ix = 1; ix < maxX + 1; ix++) {
+      for (unsigned int iy = 1; iy < maxY + 1; iy++) {
+        int thisNote = note[((GLOB.edit - 1) * maxX) + ix][iy].channel;
+        if (thisNote > 0) {
+          // Calculate the voice Y position (channel + 1)
+          int voiceY = thisNote + 1;
+          
+          // Only draw if the voice Y position is within bounds
+          if (voiceY >= 1 && voiceY <= maxY) {
+            // Clear the original position first
+            light(ix, iy, CRGB(0, 0, 0));
+            
+            // Draw at the voice Y position - use muted color if muted, normal color if not
+            if (getMuteState(thisNote)) {
+              light(ix, voiceY, col_base[thisNote]);  // Muted color
+            } else {
+              light(ix, voiceY, col[thisNote]);       // Normal color
+            }
+          }
         }
       }
     }
@@ -793,16 +852,16 @@ void showIcons(IconType ico, CRGB colors) {
 
 
 void processPeaks() {
-  float interpolatedValues[16];  // Ensure at least 16 values
+  float interpolatedValues[maxX];  // Support full width of display
 
-  // Map seek start and end positions to x range (1-16)
-  unsigned int startX = mapf(GLOB.seek, 0, 100, 1, 16);
-unsigned int endX = mapf(GLOB.seekEnd, 0, 100, 1, 16);
+  // Map seek start and end positions to x range (1-maxX)
+  unsigned int startX = mapf(GLOB.seek, 0, 100, 1, maxX);
+  unsigned int endX = mapf(GLOB.seekEnd, 0, 100, 1, maxX);
 
   if (peakIndex > 0) {
-    // Distribute peak values over 16 positions
-    for (int i = 0; i < 16; i++) {
-      float indexMapped = mapf(i, 0, 15, 0, peakIndex - 1);
+    // Distribute peak values over maxX positions
+    for (int i = 0; i < maxX; i++) {
+      float indexMapped = mapf(i, 0, maxX - 1, 0, peakIndex - 1);
       int lowerIndex = floor(indexMapped);
       int upperIndex = min(lowerIndex + 1, peakIndex - 1);
 
@@ -815,14 +874,14 @@ unsigned int endX = mapf(GLOB.seekEnd, 0, 100, 1, 16);
     }
   } else {
     // No peaks, default to zero
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < maxX; i++) {
       interpolatedValues[i] = 0;
     }
   }
 
   // Light up LEDs
-  for (int i = 0; i < 16; i++) {
-    int x = i + 1;  // Ensure x values go from 1 to 16
+  for (int i = 0; i < maxX; i++) {
+    int x = i + 1;  // Ensure x values go from 1 to maxX
     int yPeak = mapf(interpolatedValues[i] * 100, 0, 100, 4, 11);
     yPeak = constrain(yPeak, 5, 10);
 
@@ -848,14 +907,14 @@ unsigned int endX = mapf(GLOB.seekEnd, 0, 100, 1, 16);
 
 
 void processRecPeaks() {
-  float interpolatedRecValues[16];  // Ensure at least 16 values
+  float interpolatedRecValues[maxX];  // Support full width of display
 
 
 
   if (peakIndex > 0) {
-    // Distribute peak values over 16 positions
-    for (int i = 0; i < 16; i++) {
-      float indexMapped = mapf(i, 0, 15, 0, peakIndex - 1);
+    // Distribute peak values over maxX positions
+    for (int i = 0; i < maxX; i++) {
+      float indexMapped = mapf(i, 0, maxX - 1, 0, peakIndex - 1);
       int lowerIndex = floor(indexMapped);
       int upperIndex = min(lowerIndex + 1, peakIndex - 1);
 
@@ -868,14 +927,14 @@ void processRecPeaks() {
     }
   } else {
     // No peaks, default to zero
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < maxX; i++) {
       interpolatedRecValues[i] = 0;
     }
   }
 
   // Light up LEDs
-  for (int i = 0; i < 16; i++) {
-    int x = i + 1;  // Ensure x values go from 1 to 16
+  for (int i = 0; i < maxX; i++) {
+    int x = i + 1;  // Ensure x values go from 1 to maxX
     int yPeak = mapf(interpolatedRecValues[i] * 100, 0, 100, 4, 11);
     yPeak = constrain(yPeak, 4, 10);
 

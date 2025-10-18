@@ -145,7 +145,7 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
     }
   }
 
-  // Check if this is DETUNE or OCTAVE at middle value (16 for maxVal=32)
+  // Check if this is DETUNE or OCTAVE at middle value (maxVal/2 for centered parameters)
   bool isDetuneOctaveAtMiddle = false;
   if (chan < NUM_CHANNELS) {
     if (sliderDef[chan][page][sliderIndex].arr == ARR_FILTER && 

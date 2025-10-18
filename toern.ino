@@ -37,10 +37,12 @@ volatile bool stepIsDue = false;
 #include "font_3x5.h"
 #include "icons.h"
 
-#define maxX 16
+#define LED_MODULES 1  // Number of 16x16 matrices chained together (1, 2, 3, etc.)
+#define MATRIX_WIDTH 16  // Width of each individual matrix
+#define maxX (MATRIX_WIDTH * LED_MODULES)  // Total display width
 #define maxY 16
 #define INT_SD 10
-#define NUM_LEDS 256
+#define NUM_LEDS (256 * LED_MODULES)  // 256 LEDs per matrix
 #define DATA_PIN 17  // PIN FOR LEDS
 #define INT_PIN 27   // PIN FOR ENOCDER INTERRUPS
 
@@ -323,6 +325,7 @@ int patternMode = -1;
 int flowMode = -1;  // FLOW setting: -1 = OFF, 1 = ON
 int clockMode = 1;
 int voiceSelect = 1;
+int simpleNotesView = 1;  // Simple notes view: 1=EASY, 2=FULL
 unsigned int micGain = 10;  // Microphone gain: 0-64, default 10
 unsigned int monitorLevel = 0;  // Monitoring level: 0-4, default 0 (OFF) to prevent startup feedback
 
@@ -1708,7 +1711,7 @@ void initEncoders() {
 
     Encoder[i].writeAntibouncingPeriod(10);  //10?
     Encoder[i].writeCounter((int32_t)1);
-    Encoder[i].writeMax((int32_t)16 * 4);  //maxval
+    Encoder[i].writeMax((int32_t)maxX * 4);  //maxval scaled to display width
     Encoder[i].writeMin((int32_t)1);       //minval
     Encoder[i].writeStep((int32_t)1);      //steps
 
@@ -2095,30 +2098,71 @@ void checkTouchInputs() {
  // int tv3 = fastTouchRead(SWITCH_3);
 
   // 2) threshold into boolean states
-  touchState[0] = (tv1 > touchThreshold);
-  touchState[1] = (tv2 > touchThreshold);
+  bool newTouchState[2];
+  newTouchState[0] = (tv1 > touchThreshold);
+  newTouchState[1] = (tv2 > touchThreshold);
   //touchState[2] = (tv3 > touchThreshold);
 
   // 3) detect "rising edge" of both‐pressed
-  bool bothTouched = touchState[0] && touchState[1];
+  bool bothTouched = newTouchState[0] && newTouchState[1];
   bool newBoth = bothTouched && !lastBothTouched;
   lastBothTouched = bothTouched;
+  
+  // State machine to prevent conflicts when one touch is held and another is pressed
+  static bool touchConflict = false;
+  static bool touch1Held = false;
+  static bool touch2Held = false;
+  
+  // Check for touch conflicts (one held, another pressed)
+  if (newTouchState[0] && !lastTouchState[0] && touch2Held) {
+    touchConflict = true;
+  }
+  if (newTouchState[1] && !lastTouchState[1] && touch1Held) {
+    touchConflict = true;
+  }
+  
+  // Reset conflict when both touches are released
+  if (!newTouchState[0] && !newTouchState[1]) {
+    touchConflict = false;
+    touch1Held = false;
+    touch2Held = false;
+  }
+  
+  // Update held states
+  if (newTouchState[0]) touch1Held = true;
+  if (newTouchState[1]) touch2Held = true;
+  
+  // Update touch states only after processing
+  touchState[0] = newTouchState[0];
+  touchState[1] = newTouchState[1];
 
   if (newBoth) {
     // only on the first frame where both are pressed:
+    // Both touch works in single mode, draw mode, or menu mode
     if (currentMode == &singleMode) {
       //Serial.println("---------<>---------");
       GLOB.singleMode = false;
       switchMode(&set_Wav);
-    } else {
-      switchMode(&loadSaveTrack);
+    } else if (currentMode == &draw || currentMode == &menu) {
+      // Only switch to filter mode if current channel is valid for filters
+      if (GLOB.currentChannel != 0 && GLOB.currentChannel != 9 && GLOB.currentChannel != 10 && GLOB.currentChannel != 12 && GLOB.currentChannel != 15) {
+        // Reset filter page to 1 when entering filter mode via both touch inputs
+        filterPage[GLOB.currentChannel] = 1;
+        initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
+        switchMode(&filterMode);
+      }
     }
     // skip any individual‐touch handling this frame
   } else if (!bothTouched) {
     // 4) only if *not* holding both, handle individual rising edges
+    // Add debouncing to prevent rapid state changes
+    static unsigned long lastTouchTime[2] = {0, 0};
+    unsigned long currentTime = millis();
+    const unsigned long DEBOUNCE_TIME = 50; // 50ms debounce
 
     // SWITCH_1
-    if (touchState[0] && !lastTouchState[0]) {
+    if (touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME) && !touchConflict) {
+      lastTouchTime[0] = currentTime;
       if (currentMode == &draw) {
         if (!(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
           animateSingle();
@@ -2136,7 +2180,8 @@ void checkTouchInputs() {
     }
 
     // SWITCH_2
-    if (currentMode != &filterMode && touchState[1] && !lastTouchState[1]) {
+    if (currentMode != &filterMode && touchState[1] && !lastTouchState[1] && (currentTime - lastTouchTime[1] > DEBOUNCE_TIME) && !touchConflict) {
+      lastTouchTime[1] = currentTime;
       if (currentMode == &draw || currentMode == &singleMode) {
         switchMode(&menu);
       } else if (currentMode == &newFileMode) {
@@ -2246,7 +2291,7 @@ void checkPendingSampleNotes() {
       pendingSampleNotes.erase(pendingSampleNotes.begin() + i);  // erase and continue
     } else {
       ++i;
-    }
+    } 
   }
 }
 
@@ -3013,8 +3058,23 @@ void unpaint() {
                                                // Assuming general unpaint for rows 1-15, and 16 is special.
     if (current_y < 16) {                      // Rows 1-15 for notes
       if (!GLOB.singleMode) {
-        note[current_x][current_y].channel = 0;
-        note[current_x][current_y].velocity = defaultVelocity;
+        if (simpleNotesView == 1) {
+          // In simple notes view, find the voice that should be at this Y position (voice = Y-1)
+          int voiceToUnpaint = current_y - 1;  // Y position 3 = voice 2, Y position 4 = voice 3, etc.
+          if (voiceToUnpaint >= 0 && voiceToUnpaint < maxY) {
+            // Unpaint all notes of this voice at this X position
+            for (unsigned int y = 1; y <= maxY; y++) {
+              if (note[current_x][y].channel == voiceToUnpaint) {
+                note[current_x][y].channel = 0;
+                note[current_x][y].velocity = defaultVelocity;
+              }
+            }
+          }
+        } else {
+          // Normal unpaint behavior
+          note[current_x][current_y].channel = 0;
+          note[current_x][current_y].velocity = defaultVelocity;
+        }
       } else {
         if (note[current_x][current_y].channel == GLOB.currentChannel) {
           note[current_x][current_y].channel = 0;

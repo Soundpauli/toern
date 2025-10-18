@@ -3,7 +3,12 @@
 void savePattern(bool autosave) {
   
   drawNoSD();
-  FastLEDclear();
+  
+  // Only clear display for manual saves, not autosaves
+  if (!autosave) {
+    FastLEDclear();
+  }
+  
   unsigned int maxdata = 0;
   char OUTPUTf[50];
   // Save to autosave.txt if autosave is true

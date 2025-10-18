@@ -1,5 +1,5 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 16
+#define MENU_PAGES_COUNT 17
 
 // External variables
 extern Mode *currentMode;
@@ -28,7 +28,8 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"PVL", 13, false, nullptr},          // Preview Volume
   {"MON", 14, true, "LEVEL"},           // Monitor Level + Level Control
   {"AUTO", 15, true, "PAGES"},            // AI Song Generation + Page Count
-  {"RST", 16, false, nullptr}           // Reset
+  {"RST", 16, false, nullptr},          // Reset
+  {"VIEW", 17, false, nullptr}          // Simple Notes View
 };
 
 int currentMenuPage = 0;
@@ -59,6 +60,7 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
     EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
     EEPROM.write(EEPROM_DATA_START + 10, 0);   // monitorLevel default (0 = OFF)
+    EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
 
     //Serial.println(F("EEPROM initialized with defaults."));
   }
@@ -75,6 +77,7 @@ void loadMenuFromEEPROM() {
   flowMode     = (int8_t) EEPROM.read(EEPROM_DATA_START + 8);
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
   monitorLevel = (int8_t) EEPROM.read(EEPROM_DATA_START + 10);
+  simpleNotesView = (int) EEPROM.read(EEPROM_DATA_START + 11);
   
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
@@ -84,6 +87,11 @@ void loadMenuFromEEPROM() {
   // Ensure flowMode is valid (-1 or 1)
   if (flowMode != -1 && flowMode != 1) {
     flowMode = -1;  // Default to OFF if invalid value
+  }
+  
+  // Ensure simpleNotesView is valid (1-2)
+  if (simpleNotesView < 1 || simpleNotesView > 2) {
+    simpleNotesView = 1;  // Default to EASY if invalid value
   }
 
   //Serial.println(F("Loaded Menu values from EEPROM:"));
@@ -150,12 +158,12 @@ void showMenu() {
   // Draw page title at top
   //drawText(currentPageInfo->name, 6, 1, UI_WHITE);
   
-  // Draw page indicator as a line at y=16
+  // Draw page indicator as a line at y=maxY
   // Show current page as red, others as blue
   // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
   for (int i = 0; i < MENU_PAGES_COUNT; i++) {
     CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_BLUE;
-    light(i + 1, 16, indicatorColor);
+    light(i + 1, maxY, indicatorColor);
   }
 
   // Handle the main setting for this page
@@ -322,6 +330,11 @@ void drawMainSettingStatus(int setting) {
     case 16: // RST - Reset
       drawText("RSET", 2, 10, CRGB(255, 100, 0));
       drawText(VERSION, 2, 3, CRGB(0, 0, 10));
+      break;
+      
+    case 17: // VIEW - Simple Notes View
+      drawText("VIEW", 2, 10, CRGB(0, 255, 100));
+      drawSimpleNotesView();
       break;
   }
 }
@@ -676,6 +689,13 @@ void switchMenu(int menuPosition){
         // Reset all filters, envelopes, drums and synths to default
         resetAllToDefaults();
         break;
+        
+        case 17:
+        // Cycle through VIEW modes: 1=EASY, 2=FULL
+        simpleNotesView = (simpleNotesView == 1) ? 2 : 1;
+        saveSingleModeToEEPROM(11, simpleNotesView);
+        drawMainSettingStatus(menuPosition);
+        break;
     }
     //saveMenutoEEPROM();
 }
@@ -707,6 +727,24 @@ void resetNewModeState() {
 }
 
 // Show NEW screen when creating a new file via DAT
+
+// Simple Notes View functions
+void drawSimpleNotesView() {
+  // Show current state: 1=EASY, 2=FULL
+  switch (simpleNotesView) {
+    case 1:
+      drawText("EASY", 2, 3, CRGB(0, 255, 0));
+      break;
+    case 2:
+      drawText("FULL", 2, 3, CRGB(0, 0, 255));
+      break;
+    default:
+      // Default to EASY if invalid value
+      simpleNotesView = 1;
+      drawText("EASY", 2, 3, CRGB(0, 255, 0));
+      break;
+  }
+}
 void showNewFileScreen() {
   // Switch to new file mode
   switchMode(&newFileMode);
