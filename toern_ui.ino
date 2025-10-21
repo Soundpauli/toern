@@ -312,6 +312,23 @@ void drawBase() {
 
 
 
+void drawRecordingBorder() {
+  // Draw red border around entire screen
+  CRGB redColor = CRGB(255, 0, 0);
+  
+  // Top and bottom borders
+  for (unsigned int x = 1; x <= maxX; x++) {
+    light(x, 1, redColor);
+    light(x, maxY, redColor);
+  }
+  
+  // Left and right borders
+  for (unsigned int y = 2; y < maxY; y++) {
+    light(1, y, redColor);
+    light(maxX, y, redColor);
+  }
+}
+
 void drawStatus() {
  
 
@@ -434,15 +451,23 @@ void drawStatus() {
       Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
       Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
       Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
-
+  }
+  
+  // Update marquee animation for noteShift mode OR song mode
+  extern bool songModeActive;
+  extern Mode songMode;
+  if (currentMode == &noteShift || songModeActive || currentMode == &songMode) {
+    // Make marquee slower in song mode
+    float speed = (currentMode == &noteShift) ? 1.0 : 0.2;  // Song mode 5x slower
+    
     if (movingForward) {
-      marqueePos = marqueePos + 1;
+      marqueePos = marqueePos + speed;
       if (marqueePos > maxX) {
         marqueePos = maxX;
         movingForward = false;
       }
     } else {
-      marqueePos = marqueePos - 1;
+      marqueePos = marqueePos - speed;
       if (marqueePos < 1) {
         marqueePos = 1;
         movingForward = true;
@@ -552,6 +577,7 @@ void drawVelocity() {
 void drawPages() {
   //GLOB.edit = 1;
   CRGB ledColor;
+  extern int loopLength;
 
   // First, clear the entire top row across all matrices
   for (unsigned int x = 1; x <= maxX; x++) {
@@ -561,19 +587,28 @@ void drawPages() {
   // Then draw page indicators at positions 1-16 (or up to maxPages)
   for (unsigned int p = 1; p <= maxPages && p <= maxX; p++) {
 
-    // If the page is the current one, set the LED to white
-    if (GLOB.page == p && GLOB.edit == p) {
-      //ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(200, 250, 200);
-      ledColor = CRGB(255, 255, 50);  // Playing and editing
-    } else if (GLOB.page == p) {
-      //ledColor = isNowPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
-      ledColor = CRGB(0, 255, 0);  // Playing
+    // Check if page is outside loop range when loop mode is active
+    bool outsideLoop = (loopLength > 0 && p > loopLength);
+    
+    if (outsideLoop) {
+      // Pages outside loop range are dark red
+      ledColor = CRGB(10, 0, 0);
     } else {
-      if (GLOB.edit == p) {
-        //ledColor = GLOB.page == p ? CRGB(50, 50, 50) : CRGB(20, 20, 20);
-        ledColor = CRGB(255, 255, 0);  // Editing
+      // Normal page coloring logic
+      // If the page is the current one, set the LED to white
+      if (GLOB.page == p && GLOB.edit == p) {
+        //ledColor = isNowPlaying ? CRGB(20, 255, 20) : CRGB(200, 250, 200);
+        ledColor = CRGB(255, 255, 50);  // Playing and editing
+      } else if (GLOB.page == p) {
+        //ledColor = isNowPlaying ? CRGB(0, 15, 0) : CRGB(0, 0, 35);
+        ledColor = CRGB(0, 255, 0);  // Playing
       } else {
-        ledColor = hasNotes[p] ? CRGB(0, 0, 35) : CRGB(1, 0, 0);  // Has notes / empty
+        if (GLOB.edit == p) {
+          //ledColor = GLOB.page == p ? CRGB(50, 50, 50) : CRGB(20, 20, 20);
+          ledColor = CRGB(255, 255, 0);  // Editing
+        } else {
+          ledColor = hasNotes[p] ? CRGB(0, 0, 35) : CRGB(1, 0, 0);  // Has notes / empty
+        }
       }
     }
 
@@ -584,7 +619,13 @@ void drawPages() {
   // After the loop, update the maxValues for Page-select-knob
   //currentMode->maxValues[1] = lastPage + 1;
 
-  // Additional logic can be added here if needed
+  // Show green bezier when song mode is active (similar to noteshift marquee) on y=1
+  extern bool songModeActive;
+  extern float marqueePos;
+  extern bool movingForward;
+  if (songModeActive) {
+    light(round(marqueePos), 1, CRGB(0, 80, 0));  // Darker green moving marquee on y=1
+  }
 }
 
 /************************************************
@@ -1052,6 +1093,101 @@ void drawKnobColorDefault(){
     light(s, 7, CRGB(10, 0, 0));
   }
 }*/
+
+/************************************************
+      SONG MODE
+  *************************************************/
+void showSongMode() {
+  extern uint8_t songArrangement[64];
+  extern Mode songMode;
+  extern bool songModeActive;
+  
+  // Get current position and selected pattern from encoders
+  int songPosition = songMode.pos[3];  // Encoder 3: position 1-64
+  int selectedPattern = songMode.pos[1];  // Encoder 1: pattern 1-16
+  
+  // Clear screen
+  for (int x = 1; x <= maxX; x++) {
+    for (int y = 1; y <= maxY; y++) {
+      light(x, y, CRGB(0, 0, 0));
+    }
+  }
+  
+  // Show marquee on bottom row (y=1) if song mode is active
+  extern float marqueePos;
+  if (songModeActive) {
+    light(round(marqueePos), 1, CRGB(0, 80, 0));  // Darker green moving marquee on bottom row
+  }
+  
+  // Show indicators for song mode
+  drawIndicator('L', 'P', 2);  // Encoder 2: Large Purple/Magenta (pattern select)
+  drawIndicator('L', 'Y', 4);  // Encoder 4: Large Yellow (position select)
+  
+  // Show current position number
+  char posText[8];
+  snprintf(posText, sizeof(posText), "%02d", songPosition);
+  drawText(posText, 1, 11, CRGB(0, 255, 255));
+  
+  // Show selected pattern number in rainbow color
+  char patText[8];
+  snprintf(patText, sizeof(patText), "%02d", selectedPattern);
+  int hue1 = (selectedPattern * 16) % 255;
+  drawText(patText, 10, 11, CHSV(hue1, 255, 255));
+  
+  // Show stored pattern at this position (if any)
+  int storedPattern = songArrangement[songPosition - 1];
+  if (storedPattern > 0) {
+    char storedText[8];
+    snprintf(storedText, sizeof(storedText), ">%02d", storedPattern);
+    int hue2 = (storedPattern * 16) % 255;
+    drawText(storedText, 1, 5, CHSV(hue2, 255, 255));
+  }
+  
+  // Draw song arrangement overview in bottom rows
+  // Show 16 positions at a time (4 rows x 16 positions)
+  int startPos = ((songPosition - 1) / 16) * 16;  // Start of current 16-position block
+  
+  for (int i = 0; i < 16 && (startPos + i) < 64; i++) {
+    int pos = startPos + i;
+    int pattern = songArrangement[pos];
+    
+    int x = (i % 16) + 1;
+    int y = 3 - (i / 16);  // Row 3 down to 1 (changed from 4 to make room for playback indicator)
+    
+    CRGB color;
+    if (pos == (songPosition - 1)) {
+      // Current position: bright yellow
+      color = CRGB(200, 200, 0);
+    } else if (pattern > 0) {
+      // Has pattern assigned: dim color based on pattern number
+      int hue = (pattern * 16) % 255;
+      color = CHSV(hue, 255, 80);
+    } else {
+      // Empty: very dark
+      color = CRGB(5, 5, 5);
+    }
+    
+    light(x, y, color);
+  }
+  
+  // Draw song mode active indicator on y=1 (darker green bezier/marquee)
+  extern float marqueePos;
+  extern bool movingForward;
+  if (songModeActive) {
+    light(round(marqueePos), 1, CRGB(0, 80, 0));  // Darker green moving marquee to show song mode is active
+  }
+  
+  // Draw playback position indicator on y=2 (white dot) if song mode is active during playback
+  extern int currentSongPosition;
+  extern bool isNowPlaying;
+  if (songModeActive && isNowPlaying && currentSongPosition >= 0) {
+    // Check if current playback position is in the visible range
+    if (currentSongPosition >= startPos && currentSongPosition < startPos + 16) {
+      int indicatorX = (currentSongPosition - startPos) + 1;
+      light(indicatorX, 2, CRGB(255, 255, 255));  // White dot
+    }
+  }
+}
 
 
 

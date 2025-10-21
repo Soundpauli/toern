@@ -110,14 +110,21 @@ const uint8_t icon_sample[17][2] = { { 3, 1 }, { 3, 2 }, { 3, 3 }, { 4, 3 }, { 3
 const uint8_t icon_loadsave[12][2] = { { 3, 1 }, { 3, 2 }, { 3, 3 }, { 1, 4 }, { 2, 4}, { 3, 4 }, { 4, 4 }, { 5, 4 }, { 2, 5 }, { 3, 5 }, { 4, 5 }, { 3, 6 } };
 const uint8_t icon_loadsave2[7][2] = { { 1, 6 }, { 5, 6 }, { 1, 7 }, { 2, 7 }, { 3, 7 }, { 4, 7 }, { 5, 7 } };
 
-const uint8_t icon_bpm[16][2] = {
-  {3,1},              // Pendulum tips
-  {3,2},              // Pendulum stick
-  {2,3},{3,3},{4,3},  // Body top
-  {2,4},{4,4},        // Body open (space at center)
-  {2,5},{3,5},{4,5},  // Body bottom
-  {2,6},{3,6},{4,6}, // Base top
-  {2,7},{3,7},{4,7}  // Base bottom
+const uint8_t icon_bpm[33][2] = {
+  // Circular outline (clock face)
+  {3,1},{4,1},{5,1},        // Top
+  {2,2},{6,2},              // Upper sides
+  {1,3},{7,3},              // Middle sides
+  {1,4},{7,4},              // Middle sides
+  {1,5},{7,5},              // Middle sides
+  {2,6},{6,6},              // Lower sides
+  {3,7},{4,7},{5,7},        // Bottom
+  // Center point
+  {4,4},
+  // Hour hand (pointing up to 12)
+  {4,3},{4,2},
+  // Minute hand (pointing right to 3)
+  {5,4},{6,4},{7,4}
 };
 
 const uint8_t helper_load[3][2] = { { 1, 15 }, { 2, 15 }, { 3, 15 } };

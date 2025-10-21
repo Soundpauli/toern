@@ -42,6 +42,12 @@ void savePattern(bool autosave) {
       }
     }
     
+    // Save song arrangement to SMP before writing
+    extern uint8_t songArrangement[64];
+    for (int i = 0; i < 64; i++) {
+      SMP.songArrangement[i] = songArrangement[i];
+    }
+    
     // Save SMP struct (file/pattern specific data)
     saveFile.write((uint8_t *)&SMP, sizeof(SMP));
   }
@@ -241,6 +247,13 @@ void loadPattern(bool autoload) {
             pageMutes[page][ch] = SMP.pageMutes[page][ch];
           }
         }
+        
+        // Load song arrangement from SMP
+        extern uint8_t songArrangement[64];
+        for (int i = 0; i < 64; i++) {
+          songArrangement[i] = SMP.songArrangement[i];
+        }
+        Serial.println("Song arrangement loaded from pattern");
         
         // Unmute all channels first, then apply loaded mutes based on PMOD state
         unmuteAllChannels();

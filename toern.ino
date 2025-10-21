@@ -1,4 +1,4 @@
-#define VERSION "v1.1"
+#define VERSION "v1.2"
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 255  // Increase to 256 bytes
@@ -326,6 +326,7 @@ int flowMode = -1;  // FLOW setting: -1 = OFF, 1 = ON
 int clockMode = 1;
 int voiceSelect = 1;
 int simpleNotesView = 1;  // Simple notes view: 1=EASY, 2=FULL
+int loopLength = 0;  // Loop length: 0=OFF, 1-8=force pattern length
 unsigned int micGain = 10;  // Microphone gain: 0-64, default 10
 unsigned int monitorLevel = 0;  // Monitoring level: 0-4, default 0 (OFF) to prevent startup feedback
 
@@ -446,9 +447,15 @@ Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1
 Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
+Mode songMode = { "SONGMODE", { 1, 1, 1, 1 }, { 1, 16, 1, 64 }, { 1, 1, 1, 1 }, { 0x000000, 0xFF00FF, 0x000000, 0xFFFF00 } };
 // Declare currentMode as a global variable
 Mode *currentMode;
 Mode *oldMode;
+
+// Song arrangement data: 64 positions, each holds a pattern number (1-16, or 0 for empty)
+uint8_t songArrangement[64] = {0};
+bool songModeActive = false;  // When true, playback follows song arrangement
+int currentSongPosition = 0;  // Current position in song arrangement (0-63)
 
 
 struct Sample {
@@ -475,6 +482,8 @@ struct Device {
   bool pageMutes[maxPages][maxY];   // Page-specific mute states (when PMOD is on)
   // Samplepack 0 tracking - which voices have individually loaded samples
   bool sp0Active[maxFiles];         // Track which voices are using samplepack 0
+  // Song arrangement - which pattern plays at each position
+  uint8_t songArrangement[64];      // Song arrangement: 64 positions, each holds pattern 1-16 (or 0 for empty)
 };
 
 // Global variables struct
@@ -1171,6 +1180,35 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   if (currentMode == &menu && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+    extern bool inLookSubmenu;
+    extern bool inRecsSubmenu;
+    extern bool inMidiSubmenu;
+    extern int currentMenuPage;
+    
+    // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
+    if (inLookSubmenu) {
+      inLookSubmenu = false;
+      currentMenuPage = 4;
+      Encoder[3].writeCounter((int32_t)4);
+      return;
+    }
+    
+    // If in RECS submenu, exit back to main menu at RECS page (index 5)
+    if (inRecsSubmenu) {
+      inRecsSubmenu = false;
+      currentMenuPage = 5;
+      Encoder[3].writeCounter((int32_t)5);
+      return;
+    }
+    
+    // If in MIDI submenu, exit back to main menu at MIDI page (index 6)
+    if (inMidiSubmenu) {
+      inMidiSubmenu = false;
+      currentMenuPage = 6;
+      Encoder[3].writeCounter((int32_t)6);
+      return;
+    }
+    
     // Get the main setting for the current page
     extern int getCurrentMenuMainSetting();
     int mainSetting = getCurrentMenuMainSetting();
@@ -1235,7 +1273,43 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     return;  // Prevent other button actions from being processed
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     switchMode(&singleMode);
-    GLOB.singleMode = true;
+  } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
+    extern uint8_t songArrangement[64];
+    int songPosition = songMode.pos[3];  // 1-64
+    songArrangement[songPosition - 1] = 0;  // Clear assignment
+    Serial.print("Song position ");
+    Serial.print(songPosition);
+    Serial.println(" cleared");
+    return;
+  } else if (currentMode == &songMode && (match_buttons(currentButtonStates, 0, 1, 0, 0) || match_buttons(currentButtonStates, 0, 0, 0, 1))) {  // "0100" or "0001" - Encoder 1 or 3 pressed
+    // Save selected pattern to current song position
+    extern uint8_t songArrangement[64];
+    int songPosition = songMode.pos[3];  // 1-64
+    int selectedPattern = songMode.pos[1];  // 1-16
+    songArrangement[songPosition - 1] = selectedPattern;
+    Serial.print("Song position ");
+    Serial.print(songPosition);
+    Serial.print(" set to pattern ");
+    Serial.println(selectedPattern);
+    return;
+  } else if (currentMode == &songMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010" - Encoder 2 pressed - Toggle play/pause + songModeActive
+    extern bool songModeActive;
+    if (isNowPlaying) {
+      // Currently playing - pause and deactivate song mode
+      pause();
+      songModeActive = false;
+      patternMode = -1;  // Set PMOD to OFF
+      saveSingleModeToEEPROM(3, patternMode);
+      Serial.println("Song playback paused, song mode deactivated");
+    } else {
+      // Not playing - activate song mode and start playback
+      songModeActive = true;
+      patternMode = 2;  // Set PMOD to SONG
+      saveSingleModeToEEPROM(3, patternMode);
+      Serial.println("Song playback started");
+      play(true);
+    }
+    return;
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 2, 0, 0)) {  // "0200"
     startRecordingRAM();
     return;  // Prevent other button actions from being processed
@@ -1926,7 +2000,12 @@ void checkEncoders() {
 
       Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      GLOB.edit = getPage(GLOB.x);
+      
+      // Only update edit page from X position if NOT in song mode
+      extern bool songModeActive;
+      if (!songModeActive) {
+        GLOB.edit = getPage(GLOB.x);
+      }
     }
 
     // --- update value from encoder2 in draw mode for all SettingArray types ---
@@ -1994,7 +2073,9 @@ void checkEncoders() {
     }
 
 
-    if (currentMode->pos[1] != editpage) {
+    // Only allow encoder[1] page changes if NOT in song mode (song controls pages automatically)
+    extern bool songModeActive;
+    if (currentMode->pos[1] != editpage && !songModeActive) {
       updateLastPage();
       editpage = currentMode->pos[1];
       //Serial.println("p:" + String(editpage));
@@ -2212,6 +2293,34 @@ void checkTouchInputs() {
         if (!(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
           animateSingle();
         }
+      } else if (currentMode == &menu) {
+        extern bool inLookSubmenu;
+        extern bool inRecsSubmenu;
+        extern bool inMidiSubmenu;
+        extern int currentMenuPage;
+        // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
+        if (inLookSubmenu) {
+          inLookSubmenu = false;
+          currentMenuPage = 4;
+          Encoder[3].writeCounter((int32_t)4);
+        } else if (inRecsSubmenu) {
+          // If in RECS submenu, exit back to main menu at RECS page (index 5)
+          inRecsSubmenu = false;
+          currentMenuPage = 5;
+          Encoder[3].writeCounter((int32_t)5);
+        } else if (inMidiSubmenu) {
+          // If in MIDI submenu, exit back to main menu at MIDI page (index 6)
+          inMidiSubmenu = false;
+          currentMenuPage = 6;
+          Encoder[3].writeCounter((int32_t)6);
+        } else {
+          // Otherwise exit to draw mode
+          switchMode(&draw);
+          GLOB.singleMode = false;
+          // Update encoder colors to reflect the new currentChannel when switching to draw mode
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        }
       } else {  // If in any other mode, and Switch 1 is touched, go to draw mode.
         if (currentMode == &singleMode) {
           GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
@@ -2237,7 +2346,34 @@ void checkTouchInputs() {
         // Update encoder colors to reflect the current channel when exiting newFileMode
         Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {  // If in any other mode (e.g. menu, set_wav, etc.) and Switch 2 is touched, go to draw mode.
+      } else if (currentMode == &menu) {
+        extern bool inLookSubmenu;
+        extern bool inRecsSubmenu;
+        extern bool inMidiSubmenu;
+        extern int currentMenuPage;
+        // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
+        if (inLookSubmenu) {
+          inLookSubmenu = false;
+          currentMenuPage = 4;
+          Encoder[3].writeCounter((int32_t)4);
+        } else if (inRecsSubmenu) {
+          // If in RECS submenu, exit back to main menu at RECS page (index 5)
+          inRecsSubmenu = false;
+          currentMenuPage = 5;
+          Encoder[3].writeCounter((int32_t)5);
+        } else if (inMidiSubmenu) {
+          // If in MIDI submenu, exit back to main menu at MIDI page (index 6)
+          inMidiSubmenu = false;
+          currentMenuPage = 6;
+          Encoder[3].writeCounter((int32_t)6);
+        } else {
+          // Otherwise exit to draw mode
+          switchMode(&draw);
+          // Update encoder colors to reflect the current channel when exiting menu
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        }
+      } else {  // If in any other mode (e.g. set_wav, etc.) and Switch 2 is touched, go to draw mode.
         switchMode(&draw);
         // Update encoder colors to reflect the current channel when exiting other modes
         Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
@@ -2288,6 +2424,22 @@ void checkSingleTouch() {
       // GLOB.currentChannel = GLOB.currentChannel; // This line is redundant
       switchMode(&singleMode);
       GLOB.singleMode = true;
+    } else if (currentMode == &menu) {
+      extern bool inLookSubmenu;
+      // If in LOOK submenu, exit back to main menu
+      if (inLookSubmenu) {
+        inLookSubmenu = false;
+      } else {
+        // Otherwise exit to draw mode
+        if (currentMode == &singleMode) {
+          GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
+        }
+        switchMode(&draw);
+        GLOB.singleMode = false;
+        // Update encoder colors to reflect the new currentChannel when switching to draw mode
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      }
     } else {
       if (currentMode == &singleMode) {
         GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
@@ -2313,6 +2465,18 @@ void _checkMenuTouch() {
     // Toggle the mode only on a rising edge
     if (currentMode == &draw || currentMode == &singleMode) {
       switchMode(&menu);
+    } else if (currentMode == &menu) {
+      extern bool inLookSubmenu;
+      // If in LOOK submenu, exit back to main menu
+      if (inLookSubmenu) {
+        inLookSubmenu = false;
+      } else {
+        // Otherwise exit to draw mode
+        switchMode(&draw);
+        // Update encoder colors to reflect the current channel when exiting menu
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      }
     } else {
       switchMode(&draw);
       // Update encoder colors to reflect the current channel when exiting menu
@@ -2348,6 +2512,12 @@ void loop() {
     drawTriggers();
     drawPages();  // Render page helper after drawTriggers
     if (isNowPlaying) drawTimer();
+    
+    // Draw red border when recording
+    extern void drawRecordingBorder();
+    if (fastRecordActive) {
+      drawRecordingBorder();
+    }
   }
 
 
@@ -2468,7 +2638,21 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   } else if (currentMode->name == "LOADSAVE_TRACK") {
     showLoadSave();
   } else if (currentMode->name == "MENU") {
-    showMenu();
+    extern bool inLookSubmenu;
+    extern bool inRecsSubmenu;
+    extern bool inMidiSubmenu;
+    extern void showLookMenu();
+    extern void showRecsMenu();
+    extern void showMidiMenu();
+    if (inLookSubmenu) {
+      showLookMenu();
+    } else if (inRecsSubmenu) {
+      showRecsMenu();
+    } else if (inMidiSubmenu) {
+      showMidiMenu();
+    } else {
+      showMenu();
+    }
   } else if (currentMode->name == "SET_SAMPLEPACK") {
     showSamplePack();
   } else if (currentMode->name == "SET_WAV") {
@@ -2488,6 +2672,9 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     showNewFileMode();
   } else if (currentMode->name == "SUBPATTERN") {
     switchSubPattern();
+  } else if (currentMode->name == "SONGMODE") {
+    extern void showSongMode();
+    showSongMode();
   }
 
 
@@ -2770,8 +2957,41 @@ void play(bool fromStart) {
     lastFlowPage = 0;  // Reset FLOW page tracking when playback starts
     deleteActiveCopy();
     
-    // In pattern mode, start from the current page's first beat
-    if (SMP_PATTERN_MODE) {
+    // In song mode, start from the first defined pattern
+    extern bool songModeActive;
+    extern uint8_t songArrangement[64];
+    extern int currentSongPosition;
+    
+    if (songModeActive) {
+      // Find first non-empty position in song arrangement
+      currentSongPosition = -1;
+      for (int i = 0; i < 64; i++) {
+        if (songArrangement[i] > 0) {
+          currentSongPosition = i;
+          break;
+        }
+      }
+      
+      if (currentSongPosition >= 0 && songArrangement[currentSongPosition] > 0) {
+        int pattern = songArrangement[currentSongPosition];
+        GLOB.edit = pattern;
+        GLOB.page = pattern;
+        beat = (pattern - 1) * maxX + 1;  // Start from first beat of first pattern
+        Serial.print("Song: Starting at position ");
+        Serial.print(currentSongPosition + 1);
+        Serial.print(" -> pattern ");
+        Serial.println(pattern);
+      } else {
+        // No patterns defined, fall back to pattern mode behavior
+        songModeActive = false;
+        patternMode = 1;  // Set to normal pattern mode instead
+        SMP_PATTERN_MODE = true;
+        beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+        GLOB.page = GLOB.edit;
+        Serial.println("Song: No patterns defined, falling back to pattern mode");
+      }
+    } else if (SMP_PATTERN_MODE) {
+      // In pattern mode, start from the current page's first beat
       beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
       GLOB.page = GLOB.edit;  // Keep the current page
     } else {
@@ -2997,27 +3217,48 @@ void playNote() {
     yield();
     beatStartTime = millis();
      if (SMP_PATTERN_MODE) {
+    extern bool songModeActive;
+    
     // Compute the bounds of the current page:
     unsigned int pageStart = (GLOB.edit - 1) * maxX + 1;
     unsigned int pageEnd   = pageStart + maxX - 1;
 
-    // Preserve relative beat when switching pages:
+    // Preserve relative beat when switching pages (but NOT in song mode - let song handle beat position)
     static unsigned int lastEdit = GLOB.edit;
-    if (GLOB.edit != lastEdit) {
+    if (GLOB.edit != lastEdit && !songModeActive) {
       unsigned int oldStart = (lastEdit - 1) * maxX + 1;
       unsigned int offset   = beat - oldStart;
       beat = pageStart + offset;
       lastEdit = GLOB.edit;
     }
+    
+    // Update lastEdit tracker in song mode too
+    if (songModeActive) {
+      lastEdit = GLOB.edit;
+    }
 
     // Advance and wrap within this page:
     beat++;
-    if (beat < pageStart || beat > pageEnd) {
-      beat = pageStart;
+    
+    if (songModeActive) {
+      // In song mode, check if we need to advance to next pattern
+      if (beat > pageEnd) {
+        // Pattern finished - advance to next pattern in song
+        Serial.print("Pattern finished at beat ");
+        Serial.println(beat);
+        checkPages();
+      } else {
+        // Still within pattern - just keep displaying current pattern
+        GLOB.page = GLOB.edit;
+      }
+    } else {
+      // Normal pattern mode - wrap within page
+      if (beat < pageStart || beat > pageEnd) {
+        beat = pageStart;
+      }
+      // Keep the displayed page locked:
+      GLOB.page = GLOB.edit;
     }
-
-    // Keep the displayed page locked:
-    GLOB.page = GLOB.edit;
   } else {
     // Fallback to default behavior:
     beat++;
@@ -3042,7 +3283,65 @@ void playNote() {
 }
 
 void checkPages() {
-    if (SMP_PATTERN_MODE) {
+  extern bool songModeActive;
+  extern uint8_t songArrangement[64];
+  extern int currentSongPosition;
+  
+  // Check song mode FIRST, before SMP_PATTERN_MODE
+  if (songModeActive) {
+    // Song mode: play through the song arrangement
+    Serial.println("Song checkPages called - advancing to next pattern");
+    
+    // Safety check: if currentSongPosition is invalid, try to find first valid position
+    if (currentSongPosition < 0) {
+      currentSongPosition = 0;
+      for (int i = 0; i < 64; i++) {
+        if (songArrangement[i] > 0) {
+          currentSongPosition = i;
+          break;
+        }
+      }
+    }
+    
+    // Move to next position in song
+    int startPos = currentSongPosition;
+    int attempts = 0;
+    do {
+      currentSongPosition++;
+      if (currentSongPosition >= 64) {
+        currentSongPosition = 0;  // Loop back to start
+      }
+      attempts++;
+      // Stop if we've checked all 64 positions
+      if (attempts >= 64 || currentSongPosition == startPos) {
+        break;
+      }
+    } while (songArrangement[currentSongPosition] == 0);  // Skip empty slots
+    
+    // Get the pattern at this position
+    int pattern = songArrangement[currentSongPosition];
+    if (pattern > 0 && pattern <= 16) {
+      GLOB.edit = pattern;
+      GLOB.page = pattern;
+      beat = (pattern - 1) * maxX + 1;  // Start at beginning of this pattern
+      Serial.print("Song: Moving to position ");
+      Serial.print(currentSongPosition + 1);
+      Serial.print(" -> pattern ");
+      Serial.println(pattern);
+    } else {
+      // No valid pattern found in entire song - disable song mode and fall back to pattern mode
+      Serial.println("ERROR: No valid patterns in song arrangement - disabling song mode");
+      songModeActive = false;
+      patternMode = 1;  // Fall back to pattern mode
+      SMP_PATTERN_MODE = true;
+      beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+      GLOB.page = GLOB.edit;
+    }
+    
+    return;
+  }
+  
+  if (SMP_PATTERN_MODE) {
     // Always display the editable page when looping in pattern mode.
     GLOB.page = GLOB.edit;
     return;
@@ -3624,6 +3923,29 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
 
 
 void updateLastPage() {
+  // If LOOP is set (1-8), force lastPage to that value
+  extern int loopLength;
+  if (loopLength > 0) {
+    lastPage = loopLength;
+    // Still update hasNotes array for potential other uses
+    for (unsigned int p = 1; p <= maxPages; p++) {
+      bool pageHasNotesThisPage = false;
+      unsigned int baseIndex = (p - 1) * maxX;
+      for (unsigned int ix = 1; ix <= maxX; ix++) {
+        for (unsigned int iy = 1; iy <= maxY; iy++) {
+          if (note[baseIndex + ix][iy].channel > 0) {
+            pageHasNotesThisPage = true;
+            break;
+          }
+        }
+        if (pageHasNotesThisPage) break;
+      }
+      hasNotes[p] = pageHasNotesThisPage;
+    }
+    return;
+  }
+  
+  // Original logic when LOOP is OFF
   lastPage = 0;  // Start by assuming no notes
   for (unsigned int p = 1; p <= maxPages; p++) {
     bool pageHasNotesThisPage = false;  // Renamed to avoid conflict

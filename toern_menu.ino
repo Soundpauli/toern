@@ -1,5 +1,8 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 17
+#define MENU_PAGES_COUNT 10
+#define LOOK_PAGES_COUNT 4
+#define RECS_PAGES_COUNT 5
+#define MIDI_PAGES_COUNT 3
 
 // External variables
 extern Mode *currentMode;
@@ -16,23 +19,46 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"DAT", 1, false, nullptr},           // Load/Save
   {"KIT", 2, false, nullptr},           // Sample Pack
   {"WAV", 3, false, nullptr},           // Wave Selection
-  {"REC", 4, true, "GAIN"},             // Recording Mode + Mic Gain
   {"BPM", 5, false, nullptr},           // BPM/Volume
-  {"CLK", 6, false, nullptr},           // Clock Mode
-  {"CHN", 7, false, nullptr},           // MIDI Voice Select
-  {"TRN", 8, false, nullptr},           // MIDI Transport
-  {"PMD", 9, false, nullptr},           // Pattern Mode
+  {"PLAY", 19, false, nullptr},         // PLAY submenu (FLW, VIEW, PMD, LOOP)
+  {"RECS", 20, false, nullptr},         // RECS submenu (REC, OTR, CLR, PVL, MON)
+  {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP, CLCK)
+  {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
+  {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
+  {"RST", 16, false, nullptr}           // Reset
+};
+
+// LOOK submenu pages
+MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"FLW", 10, false, nullptr},          // Flow Mode
-  {"OTR", 11, false, nullptr},          // Fast Rec Mode
+  {"VIEW", 17, false, nullptr},         // Simple Notes View
+  {"PMD", 9, false, nullptr},           // Pattern Mode
+  {"LOOP", 18, false, nullptr}          // Loop Length
+};
+
+// RECS submenu pages
+MenuPage recsPages[RECS_PAGES_COUNT] = {
+  {"MIC", 4, true, "GAIN"},             // Recording Mode + Mic Gain
+  {"TRIG", 11, false, nullptr},          // Fast Rec Mode (On-The-fly Recording)
   {"CLR", 12, false, nullptr},          // Rec Channel Clear
-  {"PVL", 13, false, nullptr},          // Preview Volume
-  {"MON", 14, true, "LEVEL"},           // Monitor Level + Level Control
-  {"AUTO", 15, true, "PAGES"},            // AI Song Generation + Page Count
-  {"RST", 16, false, nullptr},          // Reset
-  {"VIEW", 17, false, nullptr}          // Simple Notes View
+  {"PVOL", 13, false, nullptr},         // Preview Volume
+  {"LIVE", 14, true, "LEVEL"}           // Monitor Level + Level Control
+};
+
+// MIDI submenu pages
+MenuPage midiPages[MIDI_PAGES_COUNT] = {
+  {"CH", 7, false, nullptr},            // MIDI Voice Select (Channel)
+  {"TRANSP", 8, false, nullptr},          // MIDI Transport
+  {"CLCK", 6, false, nullptr}           // Clock Mode
 };
 
 int currentMenuPage = 0;
+int currentLookPage = 0;
+int currentRecsPage = 0;
+int currentMidiPage = 0;
+bool inLookSubmenu = false;
+bool inRecsSubmenu = false;
+bool inMidiSubmenu = false;
 int aiTargetPage = 6; // Default target page for AI song generation
 int aiBaseStartPage = 1; // Start of base page range for AI analysis
 int aiBaseEndPage = 1;   // End of base page range for AI analysis
@@ -61,6 +87,7 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
     EEPROM.write(EEPROM_DATA_START + 10, 0);   // monitorLevel default (0 = OFF)
     EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
+    EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
 
     //Serial.println(F("EEPROM initialized with defaults."));
   }
@@ -78,6 +105,7 @@ void loadMenuFromEEPROM() {
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
   monitorLevel = (int8_t) EEPROM.read(EEPROM_DATA_START + 10);
   simpleNotesView = (int) EEPROM.read(EEPROM_DATA_START + 11);
+  loopLength = (int) EEPROM.read(EEPROM_DATA_START + 12);
   
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
@@ -94,9 +122,19 @@ void loadMenuFromEEPROM() {
     simpleNotesView = 1;  // Default to EASY if invalid value
   }
   
+  // Ensure loopLength is valid (0-8)
+  if (loopLength < 0 || loopLength > 8) {
+    loopLength = 0;  // Default to OFF if invalid value
+  }
+  
   // Ensure voiceSelect is valid (-1, 1, or 2)
   if (voiceSelect != -1 && voiceSelect != 1 && voiceSelect != 2) {
     voiceSelect = 1;  // Default to MIDI if invalid value
+  }
+  
+  // Ensure patternMode is valid (-1, 1, or 2)
+  if (patternMode != -1 && patternMode != 1 && patternMode != 2) {
+    patternMode = -1;  // Default to OFF if invalid value
   }
 
   //Serial.println(F("Loaded Menu values from EEPROM:"));
@@ -111,12 +149,16 @@ void loadMenuFromEEPROM() {
   //Serial.print(F("  previewVol="));    //Serial.println(previewVol);
 
   // Set global flags
-  SMP_PATTERN_MODE       = (patternMode   == 1);
+  SMP_PATTERN_MODE       = (patternMode   == 1 || patternMode == 2);  // ON or SONG mode
   SMP_FLOW_MODE          = (flowMode      == 1);
   MIDI_VOICE_SELECT      = (voiceSelect   == 1 || voiceSelect == 2);  // MIDI or KEYS mode
   MIDI_TRANSPORT_RECEIVE = (transportMode == 1);
   SMP_FAST_REC           = fastRecMode;
   SMP_REC_CHANNEL_CLEAR  = (recChannelClear == 1);  // Only true for ON mode
+  
+  // Set song mode active flag
+  extern bool songModeActive;
+  songModeActive = (patternMode == 2);
   
   // Set audio input based on recMode
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
@@ -252,16 +294,233 @@ void showMenu() {
   
   if (menuFirstEnter) {
     Encoder[3].writeCounter((int32_t)currentMenuPage);
-    Encoder[3].writeMax((int32_t)(MENU_PAGES_COUNT - 1));
-    Encoder[3].writeMin((int32_t)0);
     menuFirstEnter = false;
   }
+  
+  // Always set encoder limits to ensure they match current MENU_PAGES_COUNT
+  Encoder[3].writeMax((int32_t)(MENU_PAGES_COUNT - 1));
+  Encoder[3].writeMin((int32_t)0);
   
   if (currentMode->pos[3] != lastPagePosition) {
     currentMenuPage = currentMode->pos[3];
     if (currentMenuPage >= MENU_PAGES_COUNT) currentMenuPage = MENU_PAGES_COUNT - 1;
     if (currentMenuPage < 0) currentMenuPage = 0;
     lastPagePosition = currentMenuPage;
+  }
+  
+  // Set the menu position to the current page's main setting
+  if (currentMode->pos[3] != mainSetting) {
+    changeMenu(mainSetting);
+  }
+  
+  // Handle encoder 2 changes for pages with additional features
+  handleAdditionalFeatureControls(mainSetting);
+}
+
+void showLookMenu() {
+  FastLEDclear();
+
+  // New indicator system: lookMenu: | | | L[G]
+  drawIndicator('L', 'G', 4);  // Encoder 4: Large Green (different from main menu)
+
+  // Get current page info
+  int pageIndex = currentLookPage;
+  MenuPage* currentPageInfo = &lookPages[pageIndex];
+  
+  // Draw page indicator as a line at y=maxY
+  // Show current page as red, others as GREEN (different from main menu)
+  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  for (int i = 0; i < LOOK_PAGES_COUNT; i++) {
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_GREEN;
+    light(i + 1, maxY, indicatorColor);
+  }
+
+  // Handle the main setting for this page
+  int mainSetting = currentPageInfo->mainSetting;
+  
+  // Default: L[G] indicator for encoder 4 (green)
+  CRGB indicatorColor = getIndicatorColor('G'); // Green
+  Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+
+  // Draw the main setting status
+  drawMainSettingStatus(mainSetting);
+  
+  // Draw additional features if this page has them
+  if (currentPageInfo->hasAdditionalFeatures) {
+    drawAdditionalFeatures(mainSetting);
+  }
+
+  FastLED.setBrightness(ledBrightness);
+  FastLEDshow();
+
+  // Handle page navigation with encoder 3
+  static int lastLookPagePosition = -1;
+  static bool lookMenuFirstEnter = true;
+  
+  if (lookMenuFirstEnter) {
+    Encoder[3].writeCounter((int32_t)currentLookPage);
+    lookMenuFirstEnter = false;
+  }
+  
+  // Always set encoder limits to ensure they match current LOOK_PAGES_COUNT
+  Encoder[3].writeMax((int32_t)(LOOK_PAGES_COUNT - 1));
+  Encoder[3].writeMin((int32_t)0);
+  
+  if (currentMode->pos[3] != lastLookPagePosition) {
+    currentLookPage = currentMode->pos[3];
+    if (currentLookPage >= LOOK_PAGES_COUNT) currentLookPage = LOOK_PAGES_COUNT - 1;
+    if (currentLookPage < 0) currentLookPage = 0;
+    lastLookPagePosition = currentLookPage;
+  }
+  
+  // Set the menu position to the current page's main setting
+  if (currentMode->pos[3] != mainSetting) {
+    changeMenu(mainSetting);
+  }
+  
+  // Handle encoder 2 changes for pages with additional features
+  handleAdditionalFeatureControls(mainSetting);
+}
+
+void showRecsMenu() {
+  FastLEDclear();
+
+  // New indicator system: recsMenu: | | | L[O] (orange)
+  drawIndicator('L', 'O', 4);  // Encoder 4: Large Orange
+
+  // Get current page info
+  int pageIndex = currentRecsPage;
+  MenuPage* currentPageInfo = &recsPages[pageIndex];
+  
+  // Draw page indicator as a line at y=maxY
+  // Show current page as red, others as ORANGE
+  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  for (int i = 0; i < RECS_PAGES_COUNT; i++) {
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : CRGB(255, 165, 0); // Orange
+    light(i + 1, maxY, indicatorColor);
+  }
+
+  // Handle the main setting for this page
+  int mainSetting = currentPageInfo->mainSetting;
+  
+  // Set encoder colors based on main setting
+  if (mainSetting == 4 && recMode == 1) {
+    // REC page in MIC mode: L[R] indicator for encoder 3
+    CRGB redColor = getIndicatorColor('R'); // Red
+    CRGB orangeColor = getIndicatorColor('O'); // Orange
+    Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[2].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
+    Encoder[3].writeRGBCode(orangeColor.r << 16 | orangeColor.g << 8 | orangeColor.b);
+  } else {
+    // Default: L[O] indicator for encoder 4 (orange)
+    CRGB indicatorColor = getIndicatorColor('O'); // Orange
+    Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+    Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+  }
+
+  // Draw the main setting status
+  drawMainSettingStatus(mainSetting);
+  
+  // Draw additional features if this page has them
+  if (currentPageInfo->hasAdditionalFeatures) {
+    drawAdditionalFeatures(mainSetting);
+  }
+
+  FastLED.setBrightness(ledBrightness);
+  FastLEDshow();
+
+  // Handle page navigation with encoder 3
+  static int lastRecsPagePosition = -1;
+  static bool recsMenuFirstEnter = true;
+  
+  if (recsMenuFirstEnter) {
+    Encoder[3].writeCounter((int32_t)currentRecsPage);
+    recsMenuFirstEnter = false;
+  }
+  
+  // Always set encoder limits to ensure they match current RECS_PAGES_COUNT
+  Encoder[3].writeMax((int32_t)(RECS_PAGES_COUNT - 1));
+  Encoder[3].writeMin((int32_t)0);
+  
+  if (currentMode->pos[3] != lastRecsPagePosition) {
+    currentRecsPage = currentMode->pos[3];
+    if (currentRecsPage >= RECS_PAGES_COUNT) currentRecsPage = RECS_PAGES_COUNT - 1;
+    if (currentRecsPage < 0) currentRecsPage = 0;
+    lastRecsPagePosition = currentRecsPage;
+  }
+  
+  // Set the menu position to the current page's main setting
+  if (currentMode->pos[3] != mainSetting) {
+    changeMenu(mainSetting);
+  }
+  
+  // Handle encoder 2 changes for pages with additional features
+  handleAdditionalFeatureControls(mainSetting);
+}
+
+void showMidiMenu() {
+  FastLEDclear();
+
+  // New indicator system: midiMenu: | | | L[W] (white)
+  drawIndicator('L', 'W', 4);  // Encoder 4: Large White
+
+  // Get current page info
+  int pageIndex = currentMidiPage;
+  MenuPage* currentPageInfo = &midiPages[pageIndex];
+  
+  // Draw page indicator as a line at y=maxY
+  // Show current page as red, others as WHITE
+  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  for (int i = 0; i < MIDI_PAGES_COUNT; i++) {
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_WHITE;
+    light(i + 1, maxY, indicatorColor);
+  }
+
+  // Handle the main setting for this page
+  int mainSetting = currentPageInfo->mainSetting;
+  
+  // Default: L[W] indicator for encoder 4 (white)
+  CRGB indicatorColor = getIndicatorColor('W'); // White
+  Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+
+  // Draw the main setting status
+  drawMainSettingStatus(mainSetting);
+  
+  // Draw additional features if this page has them
+  if (currentPageInfo->hasAdditionalFeatures) {
+    drawAdditionalFeatures(mainSetting);
+  }
+
+  FastLED.setBrightness(ledBrightness);
+  FastLEDshow();
+
+  // Handle page navigation with encoder 3
+  static int lastMidiPagePosition = -1;
+  static bool midiMenuFirstEnter = true;
+  
+  if (midiMenuFirstEnter) {
+    Encoder[3].writeCounter((int32_t)currentMidiPage);
+    midiMenuFirstEnter = false;
+  }
+  
+  // Always set encoder limits to ensure they match current MIDI_PAGES_COUNT
+  Encoder[3].writeMax((int32_t)(MIDI_PAGES_COUNT - 1));
+  Encoder[3].writeMin((int32_t)0);
+  
+  if (currentMode->pos[3] != lastMidiPagePosition) {
+    currentMidiPage = currentMode->pos[3];
+    if (currentMidiPage >= MIDI_PAGES_COUNT) currentMidiPage = MIDI_PAGES_COUNT - 1;
+    if (currentMidiPage < 0) currentMidiPage = 0;
+    lastMidiPagePosition = currentMidiPage;
   }
   
   // Set the menu position to the current page's main setting
@@ -317,12 +576,12 @@ void drawMainSettingStatus(int setting) {
       break;
       
     case 7: // CHN - MIDI Voice Select
-      drawText("MIDI", 2, 10, UI_WHITE);
+      drawText("CH", 2, 10, UI_WHITE);
       drawMidiVoiceSelect();
       break;
       
     case 8: // TRN - MIDI Transport
-      drawText("TRSP", 2, 10, UI_WHITE);
+      drawText("TRANSP", 2, 10, UI_WHITE);
       drawMidiTransport();
       break;
       
@@ -337,7 +596,7 @@ void drawMainSettingStatus(int setting) {
       break;
       
     case 11: // OTR - Fast Rec Mode
-      drawText("REC", 2, 10, UI_ORANGE);
+      drawText("TRIG", 2, 10, UI_ORANGE);
       drawFastRecMode();
       break;
       
@@ -357,7 +616,7 @@ void drawMainSettingStatus(int setting) {
       break;
       
     case 15: // AI - Song Generation
-      drawText("AUTO", 2, 10, CRGB(255, 0, 255));
+      drawText("AUTO", 2, 10, CRGB(0, 100, 255));  // Blue
       // New indicator system: menu/AI: L[M] | L[Y] | L[W] | L[X]
       drawIndicator('L', 'M', 1);  // Encoder 1: Large Magenta (trigger)
       drawIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow (base start)
@@ -366,13 +625,38 @@ void drawMainSettingStatus(int setting) {
       break;
       
     case 16: // RST - Reset
-      drawText("RSET", 2, 10, CRGB(255, 100, 0));
-      drawText(VERSION, 2, 3, CRGB(0, 0, 10));
+      drawText("RSET", 2, 10, CRGB(255, 0, 0));  // Red
+      drawText(VERSION, 2, 3, CRGB(100, 0, 0));  // Dark Red
+      break;
+      
+    case 19: // PLAY - Submenu
+      drawText("PLAY", 2, 10, CRGB(0, 255, 0));
+      drawText("MENU", 2, 3, CRGB(0, 100, 0));
+      break;
+      
+    case 20: // RECS - Submenu
+      drawText("REC", 2, 10, CRGB(255, 165, 0)); // Orange
+      drawText("MENU", 2, 3, CRGB(150, 80, 0));    // Dark Orange
+      break;
+      
+    case 21: // MIDI - Submenu
+      drawText("MIDI", 2, 10, CRGB(255, 255, 255)); // White
+      drawText("MENU", 2, 3, CRGB(100, 100, 100));  // Gray
+      break;
+      
+    case 22: // SONG - Song Mode
+      drawText("SONG", 2, 10, CRGB(255, 255, 0)); // Yellow
+      drawText("MODE", 2, 3, CRGB(100, 100, 0));  // Dark Yellow
       break;
       
     case 17: // VIEW - Simple Notes View
       drawText("VIEW", 2, 10, CRGB(0, 255, 100));
       drawSimpleNotesView();
+      break;
+      
+    case 18: // LOOP - Loop Length
+      drawText("LOOP", 2, 10, CRGB(100, 200, 255));
+      drawLoopLength();
       break;
   }
 }
@@ -390,40 +674,16 @@ void drawAdditionalFeatures(int setting) {
       break;
     }
       
-    case 14: { // MON page - Monitor Level
-      //drawText("LEVEL:", 2, 12, UI_DIM_WHITE);
-      char levelText[8];
-      sprintf(levelText, "%d", monitorLevel);
-      //drawText(levelText, 9, 12, UI_WHITE);
-      
-      // Draw level meter on y=15 (moved from y=16 to avoid conflict with page indicator)
-      int levelLength = mapf(monitorLevel, 0, 4, 0, 16);
-      for (int x = 1; x <= 16; x++) {
-        if (x <= levelLength) {
-          // Gradient from red -> green
-          float blend = float(x - 1) / max(1, levelLength - 1);
-          CRGB grad = CRGB(
-            255 * (1.0 - blend) + 0 * blend,
-            0 * (1.0 - blend) + 255 * blend,
-            0 * (1.0 - blend) + 0 * blend
-          );
-          light(x, 15, grad);
-        } else {
-          light(x, 15, CRGB(0, 0, 0));
-        }
-      }
-      break;
-    }
     
     case 15: { // AI page - Base Page Range + Additional Pages Count (all on one line)
       // Draw everything on y=8: Orange base range + Green additional pages count
       for (int x = 1; x <= 16; x++) {
         if (x >= aiBaseStartPage && x <= aiBaseEndPage) {
-          light(x, 8, CRGB(255, 165, 0)); // Orange for base pages
+          light(x, 14, CRGB(255, 165, 0)); // Orange for base pages
         } else if (x > aiBaseEndPage && x <= aiBaseEndPage + aiTargetPage) {
-          light(x, 8, CRGB(0, 255, 0)); // Green for additional pages to generate
+          light(x, 14, CRGB(0, 255, 0)); // Green for additional pages to generate
         } else {
-          light(x, 8, CRGB(0, 0, 0));
+          light(x, 14, CRGB(0, 0, 0));
         }
       }
       
@@ -660,9 +920,22 @@ void switchMenu(int menuPosition){
         break;
     
       case 9:
-        patternMode = patternMode * (-1);
+        // Cycle through: -1 (OFF) -> 1 (ON) -> 2 (SONG) -> -1 (OFF) ...
+        if (patternMode == -1) {
+          patternMode = 1;  // OFF -> ON
+        } else if (patternMode == 1) {
+          patternMode = 2;  // ON -> SONG
+        } else {
+          patternMode = -1; // SONG -> OFF
+        }
         saveSingleModeToEEPROM(3, patternMode);
         drawMainSettingStatus(menuPosition);
+        
+        // Update songModeActive flag
+        extern bool songModeActive;
+        songModeActive = (patternMode == 2);
+        Serial.print("PMOD changed - songModeActive: ");
+        Serial.println(songModeActive ? "TRUE" : "FALSE");
         
         // Handle mute system when PMOD is toggled
         if (SMP_PATTERN_MODE) {
@@ -737,11 +1010,46 @@ void switchMenu(int menuPosition){
         resetAllToDefaults();
         break;
         
+        case 19:
+        // Enter LOOK submenu at first page
+        inLookSubmenu = true;
+        currentLookPage = 0;
+        Encoder[3].writeCounter((int32_t)0);
+        break;
+        
+        case 20:
+        // Enter RECS submenu at first page
+        inRecsSubmenu = true;
+        currentRecsPage = 0;
+        Encoder[3].writeCounter((int32_t)0);
+        break;
+        
+        case 21:
+        // Enter MIDI submenu at first page
+        inMidiSubmenu = true;
+        currentMidiPage = 0;
+        Encoder[3].writeCounter((int32_t)0);
+        break;
+        
         case 17:
         // Cycle through VIEW modes: 1=EASY, 2=FULL
         simpleNotesView = (simpleNotesView == 1) ? 2 : 1;
         saveSingleModeToEEPROM(11, simpleNotesView);
         drawMainSettingStatus(menuPosition);
+        break;
+        
+        case 18:
+        // Cycle through LOOP length: 0=OFF, 1-8
+        loopLength = loopLength + 1;
+        if (loopLength > 8) loopLength = 0;
+        saveSingleModeToEEPROM(12, loopLength);
+        drawMainSettingStatus(menuPosition);
+        break;
+        
+        case 22:
+        // Enter SONG mode
+        extern Mode songMode;
+        switchMode(&songMode);
         break;
     }
     //saveMenutoEEPROM();
@@ -792,6 +1100,16 @@ void drawSimpleNotesView() {
       break;
   }
 }
+
+void drawLoopLength() {
+  // Show current state: 0=OFF, 1-8=forced length
+  if (loopLength == 0) {
+    drawText("OFF", 2, 3, CRGB(100, 100, 100));
+  } else {
+    drawNumber(loopLength, CRGB(0, 200, 255), 3);
+  }
+}
+
 void showNewFileScreen() {
   // Switch to new file mode
   switchMode(&newFileMode);
@@ -964,6 +1282,15 @@ void showNewFileMode() {
 
 // Helper function to get main setting for current menu page
 int getCurrentMenuMainSetting() {
+  if (inLookSubmenu) {
+    return lookPages[currentLookPage].mainSetting;
+  }
+  if (inRecsSubmenu) {
+    return recsPages[currentRecsPage].mainSetting;
+  }
+  if (inMidiSubmenu) {
+    return midiPages[currentMidiPage].mainSetting;
+  }
   return menuPages[currentMenuPage].mainSetting;
 }
 
@@ -1151,12 +1478,13 @@ if (fastRecMode == 3) {
 
 void drawPatternMode() {
 
-  if (patternMode == 1) {
+  if (patternMode == 2) {
+    drawText("SONG", 2, 3, CRGB(255, 255, 0)); // Yellow for SONG mode
+    SMP_PATTERN_MODE = true;
+  } else if (patternMode == 1) {
     drawText("ON", 2, 3, UI_GREEN);
     SMP_PATTERN_MODE = true;
-  }
-
-  if (patternMode == -1) {
+  } else {
     drawText("OFF", 2, 3, UI_RED);
     SMP_PATTERN_MODE = false;
   }
