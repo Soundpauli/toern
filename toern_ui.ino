@@ -1120,19 +1120,19 @@ void showSongMode() {
   }
   
   // Show indicators for song mode
-  drawIndicator('L', 'P', 2);  // Encoder 2: Large Purple/Magenta (pattern select)
+  drawIndicator('L', 'M', 2);  // Encoder 1: Large Magenta (pattern select)
   drawIndicator('L', 'Y', 4);  // Encoder 4: Large Yellow (position select)
   
-  // Show current position number
-  char posText[8];
-  snprintf(posText, sizeof(posText), "%02d", songPosition);
-  drawText(posText, 1, 11, CRGB(0, 255, 255));
-  
-  // Show selected pattern number in rainbow color
+  // Show selected pattern number in rainbow color (left side)
   char patText[8];
   snprintf(patText, sizeof(patText), "%02d", selectedPattern);
   int hue1 = (selectedPattern * 16) % 255;
-  drawText(patText, 10, 11, CHSV(hue1, 255, 255));
+  drawText(patText, 1, 11, CHSV(hue1, 255, 255));
+  
+  // Show current position number (right side)
+  char posText[8];
+  snprintf(posText, sizeof(posText), "%02d", songPosition);
+  drawText(posText, 10, 11, CRGB(0, 255, 255));
   
   // Show stored pattern at this position (if any)
   int storedPattern = songArrangement[songPosition - 1];

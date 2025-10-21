@@ -328,10 +328,10 @@ void showLookMenu() {
   MenuPage* currentPageInfo = &lookPages[pageIndex];
   
   // Draw page indicator as a line at y=maxY
-  // Show current page as red, others as GREEN (different from main menu)
+  // Show current page as red, others as green (matching PLAY menu color)
   // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
   for (int i = 0; i < LOOK_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_GREEN;
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : CRGB(0, 255, 0); // Green like PLAY
     light(i + 1, maxY, indicatorColor);
   }
 
@@ -396,10 +396,10 @@ void showRecsMenu() {
   MenuPage* currentPageInfo = &recsPages[pageIndex];
   
   // Draw page indicator as a line at y=maxY
-  // Show current page as red, others as ORANGE
+  // Show current page as red, others as magenta (matching RECS menu color)
   // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
   for (int i = 0; i < RECS_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : CRGB(255, 165, 0); // Orange
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_MAGENTA; // Magenta like RECS
     light(i + 1, maxY, indicatorColor);
   }
 
@@ -475,10 +475,10 @@ void showMidiMenu() {
   MenuPage* currentPageInfo = &midiPages[pageIndex];
   
   // Draw page indicator as a line at y=maxY
-  // Show current page as red, others as WHITE
+  // Show current page as red, others as white (matching MIDI menu color)
   // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
   for (int i = 0; i < MIDI_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_WHITE;
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_WHITE; // White like MIDI
     light(i + 1, maxY, indicatorColor);
   }
 
@@ -596,22 +596,22 @@ void drawMainSettingStatus(int setting) {
       break;
       
     case 11: // OTR - Fast Rec Mode
-      drawText("TRIG", 2, 10, UI_ORANGE);
+      drawText("TRIG", 2, 10, UI_MAGENTA);
       drawFastRecMode();
       break;
       
     case 12: // CLR - Rec Channel Clear
-      drawText("CLR", 2, 10, UI_ORANGE);
+      drawText("CLR", 2, 10, UI_MAGENTA);
       drawRecChannelClear();
       break;
       
     case 13: // PVL - Preview Volume
-      drawText("PVOL", 2, 10, UI_ORANGE);
+      drawText("PVOL", 2, 10, UI_MAGENTA);
       drawPreviewVol();
       break;
       
     case 14: // MON - Monitor Level
-      drawText("LIVE", 2, 10, CRGB(200, 0, 20));
+      drawText("LIVE", 2, 10, UI_MAGENTA);
       drawMonitorLevel();
       break;
       
@@ -631,22 +631,22 @@ void drawMainSettingStatus(int setting) {
       
     case 19: // PLAY - Submenu
       drawText("PLAY", 2, 10, CRGB(0, 255, 0));
-      drawText("MENU", 2, 3, CRGB(0, 100, 0));
+      drawText("MENU", 2, 3, CRGB(0, 10, 0));
       break;
       
     case 20: // RECS - Submenu
-      drawText("REC", 2, 10, CRGB(255, 165, 0)); // Orange
-      drawText("MENU", 2, 3, CRGB(150, 80, 0));    // Dark Orange
+      drawText("REC", 2, 10, UI_MAGENTA); // Orange
+      drawText("MENU", 2, 3, CRGB(15, 0, 8));    // Dark Orange
       break;
       
     case 21: // MIDI - Submenu
       drawText("MIDI", 2, 10, CRGB(255, 255, 255)); // White
-      drawText("MENU", 2, 3, CRGB(100, 100, 100));  // Gray
+      drawText("MENU", 2, 3, CRGB(10, 10, 10));  // Gray
       break;
       
     case 22: // SONG - Song Mode
       drawText("SONG", 2, 10, CRGB(255, 255, 0)); // Yellow
-      drawText("MODE", 2, 3, CRGB(100, 100, 0));  // Dark Yellow
+      drawText("MODE", 2, 3, CRGB(10, 10, 0));  // Dark Yellow
       break;
       
     case 17: // VIEW - Simple Notes View
@@ -679,11 +679,11 @@ void drawAdditionalFeatures(int setting) {
       // Draw everything on y=8: Orange base range + Green additional pages count
       for (int x = 1; x <= 16; x++) {
         if (x >= aiBaseStartPage && x <= aiBaseEndPage) {
-          light(x, 14, CRGB(255, 165, 0)); // Orange for base pages
+          light(x, 8, CRGB(255, 165, 0)); // Orange for base pages
         } else if (x > aiBaseEndPage && x <= aiBaseEndPage + aiTargetPage) {
-          light(x, 14, CRGB(0, 255, 0)); // Green for additional pages to generate
+          light(x, 8, CRGB(0, 255, 0)); // Green for additional pages to generate
         } else {
-          light(x, 14, CRGB(0, 0, 0));
+          light(x, 8, CRGB(0, 0, 0));
         }
       }
       

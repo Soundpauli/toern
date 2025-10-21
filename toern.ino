@@ -2963,6 +2963,10 @@ void play(bool fromStart) {
     extern int currentSongPosition;
     
     if (songModeActive) {
+      // Song mode requires PMOD to be active
+      patternMode = 2;  // Ensure PMOD is set to SONG
+      SMP_PATTERN_MODE = true;
+      
       // Find first non-empty position in song arrangement
       currentSongPosition = -1;
       for (int i = 0; i < 64; i++) {
