@@ -702,8 +702,18 @@ void drawTriggers() {
         if (!getMuteState(thisNote)) {
           //light(ix, iy, getCol(note[((GLOB.edit - 1) * maxX) + ix][iy].channel));
           if (GLOB.singleMode && thisNote == GLOB.currentChannel) {
+            // Get probability for this note
+            uint8_t prob = note[((GLOB.edit - 1) * maxX) + ix][iy].probability;
+            CRGB noteColor = UI_BRIGHT_WHITE;
             
-            light(ix, iy, UI_BRIGHT_WHITE); //col[thisNote]);
+            // Dim based on probability (only in single mode for current channel)
+            if (prob < 100) {
+              // Scale brightness: 0% = very dim, 100% = full bright
+              uint8_t brightness = mapf(prob, 0, 100, 30, 255);  // 30-255 range
+              noteColor.nscale8(brightness);
+            }
+            
+            light(ix, iy, noteColor);
           }else{
               light(ix, iy, col[thisNote]);
           }
