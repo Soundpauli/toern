@@ -1046,14 +1046,32 @@ void switchMenu(int menuPosition){
         // Toggle LED modules: 1 or 2
         extern int ledModules;
         extern unsigned int maxX;
+        extern Mode draw;
+        extern Mode singleMode;
         ledModules = (ledModules == 1) ? 2 : 1;
         maxX = MATRIX_WIDTH * ledModules;  // Update maxX runtime variable
+        
+        // Update encoder[1] max for draw/single mode based on new maxX
+        if (currentMode == &draw || currentMode == &singleMode) {
+          int numModules = maxX / MATRIX_WIDTH;  // 1 or 2
+          int adjustedMaxPages = maxPages / numModules;  // 16 or 8
+          Encoder[1].writeMax((int32_t)adjustedMaxPages);
+          
+          // Clamp current page to new max if needed
+          if (currentMode->pos[1] > adjustedMaxPages) {
+            currentMode->pos[1] = adjustedMaxPages;
+            Encoder[1].writeCounter((int32_t)adjustedMaxPages);
+          }
+        }
+        
         saveSingleModeToEEPROM(13, ledModules);
         drawMainSettingStatus(menuPosition);
         Serial.print("LED Modules set to: ");
         Serial.print(ledModules);
         Serial.print(", maxX now: ");
-        Serial.println(maxX);
+        Serial.print(maxX);
+        Serial.print(", max pages now: ");
+        Serial.println(maxPages / (maxX / MATRIX_WIDTH));
         break;
         
         case 22:

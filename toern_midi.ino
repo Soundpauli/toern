@@ -334,7 +334,10 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
       playSynth(ch, livenote, velocity, true);
     } else if (ch == 11) {
 
-      playSound(12 * octave[0] + transpose + pitch - 60 + 12, 0);
+      // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 12
+      // Grid formula: 12 * octave[0] + transpose + (row - 1)
+      // So: MIDI pitch - 49 = row - 1
+      playSound(12 * octave[0] + transpose + pitch - 49, 0);
     }
       }
       // Always play the note immediately
@@ -367,7 +370,10 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
       playSynth(ch, livenote, velocity, true);
     } else if (ch == 11) {
 
-      playSound(12 * octave[0] + transpose + pitch - 60 + 12, 0);
+      // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 12
+      // Grid formula: 12 * octave[0] + transpose + (row - 1)
+      // So: MIDI pitch - 49 = row - 1
+      playSound(12 * octave[0] + transpose + pitch - 49, 0);
     }
     }
   }

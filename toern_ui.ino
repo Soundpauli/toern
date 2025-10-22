@@ -706,11 +706,20 @@ void drawTriggers() {
             uint8_t prob = note[((GLOB.edit - 1) * maxX) + ix][iy].probability;
             CRGB noteColor = UI_BRIGHT_WHITE;
             
-            // Dim based on probability (only in single mode for current channel)
+            // Add blinking red/white effect for notes with probability < 100%
             if (prob < 100) {
-              // Scale brightness: 0% = very dim, 100% = full bright
-              uint8_t brightness = mapf(prob, 0, 100, 30, 255);  // 30-255 range
-              noteColor.nscale8(brightness);
+              // Slow blink effect using sine wave
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              
+              if (blinkPhase == 0) {
+                // Red phase - intensity based on probability (lower prob = more red)
+                uint8_t redIntensity = mapf(prob, 0, 100, 255, 80);  // More red for lower probability
+                noteColor = CRGB(redIntensity, 0, 0);
+              } else {
+                // White phase - dimmed based on probability
+                uint8_t brightness = mapf(prob, 0, 100, 30, 255);  // 30-255 range
+                noteColor.nscale8(brightness);
+              }
             }
             
             light(ix, iy, noteColor);

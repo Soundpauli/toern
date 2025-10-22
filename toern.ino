@@ -1004,11 +1004,18 @@ void switchMode(Mode *newMode) {
     for (int i = 0; i < NUM_ENCODERS; i++) {
       Encoder[i].writeRGBCode(currentMode->knobcolor[i]);
       
-      // Special handling for encoder 1 (page control) when pattern mode is ON
-      if (i == 1 && SMP_PATTERN_MODE && (currentMode == &draw || currentMode == &singleMode)) {
-        // When pattern mode is ON, limit encoder 1 to lastPage instead of maxPages
-        updateLastPage();  // Ensure lastPage is up to date
-        Encoder[i].writeMax((int32_t)lastPage);
+      // Special handling for encoder 1 (page control)
+      if (i == 1 && (currentMode == &draw || currentMode == &singleMode)) {
+        if (SMP_PATTERN_MODE) {
+          // When pattern mode is ON, limit encoder 1 to lastPage instead of maxPages
+          updateLastPage();  // Ensure lastPage is up to date
+          Encoder[i].writeMax((int32_t)lastPage);
+        } else {
+          // Adjust max pages based on LED modules (showing multiple pages at once)
+          int numModules = maxX / MATRIX_WIDTH;  // 1 or 2
+          int adjustedMaxPages = maxPages / numModules;  // 16 or 8
+          Encoder[i].writeMax((int32_t)adjustedMaxPages);
+        }
       } else {
         Encoder[i].writeMax((int32_t)currentMode->maxValues[i]);  //maxval
       }
@@ -2147,7 +2154,7 @@ void checkEncoders() {
       updateLastPage();
       editpage = currentMode->pos[1];
       //Serial.println("p:" + String(editpage));
-      int xval = mapXtoPageOffset(GLOB.x) + ((editpage - 1) * 16);
+      int xval = mapXtoPageOffset(GLOB.x) + ((editpage - 1) * maxX);  // Use maxX instead of hardcoded 16
       Encoder[3].writeCounter((int32_t)xval);
       GLOB.x = xval;
       
@@ -3269,9 +3276,8 @@ void playNote() {
             }
           } else if (ch == 11) {  // Assuming ch 11 is a specific synth
             // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
-            // playSound likely expects a MIDI note number.
-            //playSound((12 * (int)octave[0]) + transpose + (b - 1), vel);  // b-1 for 0-indexed pitch offset from row
-            playSound(12 * (int)octave[0] + transpose + b, 0);
+            // playSound expects MIDI note number (0-indexed pitch offset from row)
+            playSound(12 * (int)octave[0] + transpose + (b - 1), 0);  // b-1 to match paint preview
             
           } else if (ch >= 13 && ch < 15) {                               // Synth channels 13, 14
             playSynth(ch, b, vel, false);                                 // b is 1-indexed for grid row
@@ -4007,12 +4013,16 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
 
 
 void updateLastPage() {
+  // Calculate max selectable pages based on LED modules
+  int numModules = maxX / MATRIX_WIDTH;  // 1 or 2
+  int effectiveMaxPages = maxPages / numModules;  // 16 or 8
+  
   // If LOOP is set (1-8), force lastPage to that value
   extern int loopLength;
   if (loopLength > 0) {
     lastPage = loopLength;
     // Still update hasNotes array for potential other uses
-    for (unsigned int p = 1; p <= maxPages; p++) {
+    for (unsigned int p = 1; p <= effectiveMaxPages; p++) {
       bool pageHasNotesThisPage = false;
       unsigned int baseIndex = (p - 1) * maxX;
       for (unsigned int ix = 1; ix <= maxX; ix++) {
@@ -4031,7 +4041,7 @@ void updateLastPage() {
   
   // Original logic when LOOP is OFF
   lastPage = 0;  // Start by assuming no notes
-  for (unsigned int p = 1; p <= maxPages; p++) {
+  for (unsigned int p = 1; p <= effectiveMaxPages; p++) {
     bool pageHasNotesThisPage = false;  // Renamed to avoid conflict
     unsigned int baseIndex = (p - 1) * maxX;
     for (unsigned int ix = 1; ix <= maxX; ix++) {
