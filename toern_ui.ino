@@ -547,27 +547,87 @@ void drawNumber(float count, CRGB color, int topY) {
 void drawVelocity() {
   //FastLEDclear();
 
-  unsigned int vy = currentMode->pos[0];
+  unsigned int vy = currentMode->pos[0];  // Velocity on encoder[0]
+  unsigned int probStep = currentMode->pos[1];  // Probability on encoder[1]
 
   //GLOBAL
   unsigned int cv = currentMode->pos[2];
   FastLEDclear();
 
-
+  // Draw velocity bar on the left (x=1-5)
   for (unsigned int x = 1; x < 6; x++) {
     for (unsigned int y = 1; y < vy + 1; y++) {
       light(x, y, CRGB(y * y, 20 - y, 0));
     }
   }
+  drawText("v", 2, 2, UI_DIM_WHITE);
+  
+  // Draw probability bars at x=7-10
+  // Layout: y=1 empty, [2-3: 0%] [4: black] [5-6: 25%] [7: black] [8-9: 50%] [10: black] [11-12: 75%] [13: black] [14-15: 100%]
+  // White border at y=1 and y=16, plus sides (x=7 and x=10)
+  
+  // Draw white border
+  light(7, 1, CRGB(30, 30, 30));   // Bottom left corner
+  light(8, 1, CRGB(30, 30, 30));   // Bottom
+  light(9, 1, CRGB(30, 30, 30));   // Bottom
+  light(10, 1, CRGB(30, 30, 30));  // Bottom right corner
+  light(7, 16, CRGB(30, 30, 30));  // Top left corner
+  light(8, 16, CRGB(30, 30, 30));  // Top
+  light(9, 16, CRGB(30, 30, 30));  // Top
+  light(10, 16, CRGB(30, 30, 30)); // Top right corner
+  
+  for (unsigned int y = 2; y <= 15; y++) {
+    light(7, y, CRGB(30, 30, 30));  // Left border
+    light(10, y, CRGB(30, 30, 30)); // Right border
+  }
+  
+  // Draw only the active probability bar (not cumulative)
+  for (unsigned int x = 8; x < 10; x++) {
+    // Step 1: 0% - red (y=2-3)
+    if (probStep == 1) {
+      light(x, 2, CRGB(100, 0, 0));
+      light(x, 3, CRGB(100, 0, 0));
+    }
+    // Black spacer at y=4
+    
+    // Step 2: 25% - orange (y=5-6)
+    if (probStep == 2) {
+      light(x, 5, CRGB(150, 50, 0));
+      light(x, 6, CRGB(150, 50, 0));
+    }
+    // Black spacer at y=7
+    
+    // Step 3: 50% - yellow (y=8-9) - only 2 rows
+    if (probStep == 3) {
+      light(x, 8, CRGB(150, 150, 0));
+      light(x, 9, CRGB(150, 150, 0));
+    }
+    // Black spacer at y=10
+    
+    // Step 4: 75% - turquoise (y=11-12)
+    if (probStep == 4) {
+      light(x, 11, CRGB(0, 150, 150));
+      light(x, 12, CRGB(0, 150, 150));
+    }
+    // Black spacer at y=13
+    
+    // Step 5: 100% - green (y=14-15)
+    if (probStep == 5) {
+      light(x, 14, CRGB(0, 200, 0));
+      light(x, 15, CRGB(0, 200, 0));
+    }
+  }
 
-  for (unsigned int x = 9; x < 13 + 1; x++) {
+  // Draw channel volume on the right at x=12-16
+  for (unsigned int x = 12; x <= 16; x++) {
     for (unsigned int y = 1; y < cv + 1; y++) {
       light(x, y, CRGB(0, 20 - y, y * y));
     }
   }
-  drawText("v", 2, 2, UI_DIM_WHITE);
-  drawText("c", 10, 2, UI_DIM_WHITE);
+  drawText("c", 13, 2, UI_DIM_WHITE);
 }
+
+
 
 
 

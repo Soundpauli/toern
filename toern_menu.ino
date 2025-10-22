@@ -1,6 +1,6 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 4
+#define LOOK_PAGES_COUNT 5
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 3
 
@@ -33,7 +33,8 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"FLW", 10, false, nullptr},          // Flow Mode
   {"VIEW", 17, false, nullptr},         // Simple Notes View
   {"PMD", 9, false, nullptr},           // Pattern Mode
-  {"LOOP", 18, false, nullptr}          // Loop Length
+  {"LOOP", 18, false, nullptr},         // Loop Length
+  {"LEDS", 23, false, nullptr}          // LED Modules Count (1 or 2)
 };
 
 // RECS submenu pages
@@ -106,6 +107,7 @@ void loadMenuFromEEPROM() {
   monitorLevel = (int8_t) EEPROM.read(EEPROM_DATA_START + 10);
   simpleNotesView = (int) EEPROM.read(EEPROM_DATA_START + 11);
   loopLength = (int) EEPROM.read(EEPROM_DATA_START + 12);
+  ledModules = (int) EEPROM.read(EEPROM_DATA_START + 13);
   
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
@@ -135,6 +137,11 @@ void loadMenuFromEEPROM() {
   // Ensure patternMode is valid (-1, 1, or 2)
   if (patternMode != -1 && patternMode != 1 && patternMode != 2) {
     patternMode = -1;  // Default to OFF if invalid value
+  }
+  
+  // Ensure ledModules is valid (1 or 2)
+  if (ledModules < 1 || ledModules > 2) {
+    ledModules = 1;  // Default to 1 if invalid value
   }
 
   //Serial.println(F("Loaded Menu values from EEPROM:"));
@@ -658,6 +665,11 @@ void drawMainSettingStatus(int setting) {
       drawText("LOOP", 2, 10, CRGB(100, 200, 255));
       drawLoopLength();
       break;
+      
+    case 23: // LEDS - LED Modules Count
+      drawText("LEDS", 2, 10, CRGB(0, 255, 0));
+      drawLedModules();
+      break;
   }
 }
 
@@ -1046,6 +1058,16 @@ void switchMenu(int menuPosition){
         drawMainSettingStatus(menuPosition);
         break;
         
+        case 23:
+        // Toggle LED modules: 1 or 2
+        extern int ledModules;
+        ledModules = (ledModules == 1) ? 2 : 1;
+        saveSingleModeToEEPROM(13, ledModules);
+        drawMainSettingStatus(menuPosition);
+        Serial.print("LED Modules set to: ");
+        Serial.println(ledModules);
+        break;
+        
         case 22:
         // Enter SONG mode
         extern Mode songMode;
@@ -1108,6 +1130,12 @@ void drawLoopLength() {
   } else {
     drawNumber(loopLength, CRGB(0, 200, 255), 3);
   }
+}
+
+void drawLedModules() {
+  // Show current LED modules count: 1 or 2
+  extern int ledModules;
+  drawNumber(ledModules, CRGB(0, 255, 0), 3);
 }
 
 void showNewFileScreen() {

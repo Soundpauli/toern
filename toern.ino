@@ -37,9 +37,9 @@ volatile bool stepIsDue = false;
 #include "font_3x5.h"
 #include "icons.h"
 
-#define LED_MODULES 1  // Number of 16x16 matrices chained together (1, 2, 3, etc.)
+#define LED_MODULES 2  // Number of 16x16 matrices chained together (1, 2, 3, etc.)
 #define MATRIX_WIDTH 16  // Width of each individual matrix
-#define maxX (MATRIX_WIDTH * LED_MODULES)  // Total display width
+#define maxX (MATRIX_WIDTH * 1)  // Total display width
 #define maxY 16
 #define INT_SD 10
 #define NUM_LEDS (256 * LED_MODULES)  // 256 LEDs per matrix
@@ -327,6 +327,7 @@ int clockMode = 1;
 int voiceSelect = 1;
 int simpleNotesView = 1;  // Simple notes view: 1=EASY, 2=FULL
 int loopLength = 0;  // Loop length: 0=OFF, 1-8=force pattern length
+int ledModules = 1;  // Number of LED modules: 1 or 2
 unsigned int micGain = 10;  // Microphone gain: 0-64, default 10
 unsigned int monitorLevel = 0;  // Monitoring level: 0-4, default 0 (OFF) to prevent startup feedback
 
@@ -387,8 +388,9 @@ int editpage = 1;
 
 
 struct Note {
-  uint8_t channel;   // 0 = no note; otherwise, MIDI note value (0-127)
-  uint8_t velocity;  // MIDI velocity (0-127)
+  uint8_t channel;      // 0 = no note; otherwise, MIDI note value (0-127)
+  uint8_t velocity;     // MIDI velocity (0-127)
+  uint8_t probability;  // Probability 0-100 (in 25% steps: 0, 25, 50, 75, 100)
 } __attribute__((packed));
 
 
@@ -439,7 +441,7 @@ Mode volume_bpm = { "VOLUME_BPM", { 1, 11, VOL_MIN, BPM_MIN }, { 1, 30, VOL_MAX,
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
-Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 1, maxY, maxY }, { maxY, 1, 10, 10 }, { 0xFF4400, 0x000000, 0x0044FF, 0x888888 } };
+Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 5, maxY, maxY }, { maxY, 5, 10, 10 }, { 0xFF4400, 0x00FF88, 0x0044FF, 0x888888 } };
 
 Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
@@ -795,6 +797,7 @@ void allOff() {
 
 
 void setVelocity() {
+  // Update velocity (encoder[0])
   if (currentMode->pos[0] != GLOB.velocity) {
     GLOB.velocity = currentMode->pos[0];
 
@@ -810,6 +813,28 @@ void setVelocity() {
       }
     }
   }
+  
+  // Update probability (encoder[1])
+  static int lastProbStep = -1;
+  int currentProbStep = currentMode->pos[1];
+  
+  if (currentProbStep != lastProbStep) {
+    lastProbStep = currentProbStep;
+    
+    // Map encoder steps 1-5 to probability values 0%, 25%, 50%, 75%, 100%
+    uint8_t probValue;
+    switch (currentProbStep) {
+      case 1: probValue = 0; break;
+      case 2: probValue = 25; break;
+      case 3: probValue = 50; break;
+      case 4: probValue = 75; break;
+      case 5: probValue = 100; break;
+      default: probValue = 100; break;
+    }
+    
+    note[GLOB.x][GLOB.y].probability = probValue;
+  }
+  
   //CHANNEL VOLUME
   if (currentMode->pos[2] != GLOB.velocity) {
     SMP.channelVol[GLOB.currentChannel] = currentMode->pos[2];
@@ -820,6 +845,7 @@ void setVelocity() {
 
   drawVelocity();
 }
+
 
 
 
@@ -1376,19 +1402,43 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
     unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
     GLOB.velocity = velo;
+    
+    // Map probability 0-100 to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
+    unsigned int prob = note[GLOB.x][GLOB.y].probability;
+    unsigned int probStep;
+    if (prob == 0) probStep = 1;
+    else if (prob == 25) probStep = 2;
+    else if (prob == 50) probStep = 3;
+    else if (prob == 75) probStep = 4;
+    else probStep = 5;  // 100%
+    
     switchMode(&velocity);
     GLOB.singleMode = true;
     Encoder[0].writeCounter((int32_t)velo);
+    Encoder[1].writeCounter((int32_t)probStep);
+    currentMode->pos[1] = probStep;
   }
 
   if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &draw) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
     unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
     unsigned int chvol = SMP.channelVol[GLOB.currentChannel];
     GLOB.velocity = velo;
+    
+    // Map probability 0-100 to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
+    unsigned int prob = note[GLOB.x][GLOB.y].probability;
+    unsigned int probStep;
+    if (prob == 0) probStep = 1;
+    else if (prob == 25) probStep = 2;
+    else if (prob == 50) probStep = 3;
+    else if (prob == 75) probStep = 4;
+    else probStep = 5;  // 100%
+    
     GLOB.singleMode = false;
     switchMode(&velocity);
     Encoder[0].writeCounter((int32_t)velo);
+    Encoder[1].writeCounter((int32_t)probStep);
     Encoder[3].writeCounter((int32_t)chvol);
+    currentMode->pos[1] = probStep;
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 2)) {  // "2002"
@@ -1884,6 +1934,19 @@ void setup() {
 
   autoLoad();
   
+  // Initialize probability field for all existing notes (default 100%)
+  for (unsigned int x = 0; x <= maxlen; x++) {
+    for (unsigned int y = 0; y <= maxY; y++) {
+      if (note[x][y].probability == 0 && note[x][y].channel != 0) {
+        // If probability is 0 but note exists, set to 100% (for backward compatibility)
+        note[x][y].probability = 100;
+      } else if (note[x][y].channel != 0 && note[x][y].probability == 0) {
+        note[x][y].probability = 100;
+      }
+    }
+  }
+  Serial.println("Note probabilities initialized to 100%");
+  
   updateSynthVoice(11);
   switchMode(&draw);
 
@@ -2042,10 +2105,12 @@ void checkEncoders() {
       if (paintMode && !preventPaintUnpaint) {
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
         note[GLOB.x][GLOB.y].velocity = defaultVelocity;
+        note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability
       }
       if (paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;
         note[GLOB.x][GLOB.y].velocity = defaultVelocity;
+        note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability
       }
 
 
@@ -3124,7 +3189,17 @@ void playNote() {
       if (beat > 0 && beat <= maxlen) {            // Ensure beat is within valid range for note array
         int ch = note[beat][b].channel;            // ch is 0-indexed for internal use (e.g. SMP arrays)
         int vel = note[beat][b].velocity;
+        uint8_t prob = note[beat][b].probability;   // Get probability (0-100)
+        
         if (ch > 0 && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
+          
+          // Check probability - if random(0-99) >= probability, skip this note
+          if (prob < 100) {
+            int randValue = random(100);  // Generate random value 0-99
+            if (randValue >= prob) {
+              continue;  // Skip this note based on probability
+            }
+          }
 
           //MidiSendNoteOn(b, ch, vel); // This needs ch to be 1-16 for MIDI, and b as pitch.
           if (ch < 9) {                                                    // Sample channels (0-8 are _samplers[0] to _samplers[8])
@@ -3470,6 +3545,7 @@ void paint() {
       if (note[current_x][current_y].channel == 0) {              // Only paint if empty
         note[current_x][current_y].channel = GLOB.currentChannel;  // GLOB.currentChannel should be correct 0-indexed channel
         note[current_x][current_y].velocity = defaultVelocity;
+        note[current_x][current_y].probability = 100;  // Default 100% probability
       }
     } else if (current_y == 16) {  // Top row (GLOB.y == 16)
       toggleCopyPaste();
@@ -3478,6 +3554,7 @@ void paint() {
     if ((current_y > 0 && current_y <= 15)) {  // Grid rows 1-15
       note[current_x][current_y].channel = GLOB.currentChannel;
       note[current_x][current_y].velocity = defaultVelocity;
+      note[current_x][current_y].probability = 100;  // Default 100% probability
     } else if (current_y == 16) {  // Top row (GLOB.y == 16) - enable copypaste in single mode
       toggleCopyPaste();
     }
