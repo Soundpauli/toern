@@ -423,13 +423,9 @@ void clearAllNotesOfChannel() {
 }
 
 void FastLEDclear() {
-  // Only clear the active LED modules (based on maxX runtime variable)
-  extern unsigned int maxX;
-  unsigned int numActiveModules = maxX / MATRIX_WIDTH;  // 1 or 2 modules
-  unsigned int numActiveLEDs = numActiveModules * 256;  // 256 LEDs per module
-  
-  // Clear only the active LEDs
-  for (unsigned int i = 0; i < numActiveLEDs; i++) {
+  // Clear ALL LEDs in the buffer to prevent flickering from uninitialized LEDs
+  // Even if only 1 module is active, we must clear the entire buffer
+  for (unsigned int i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
 }

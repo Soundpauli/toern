@@ -40,7 +40,7 @@ void setParams(ParameterType paramType, int index) {
 
 
       void drawWaveforms(const char *txt, int activeParameter) {
-        FastLED.clear();
+        FastLEDclear();
 
         const int maxWaveformIndex = 3;
         int waveformSetting = SMP.param_settings[GLOB.currentChannel][WAVEFORM];

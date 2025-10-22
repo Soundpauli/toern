@@ -516,7 +516,7 @@ void setNewFilters() {
 }
 
 void showFilterPages(uint8_t chan) {
-  FastLED.clear();
+  FastLEDclear();
   
 
   slider(filterPage[chan]);
@@ -533,7 +533,7 @@ void showFilterPages(uint8_t chan) {
     drawCornerValueCustom(lastChangedEncoder, val, sliderDef[chan][filterPage[chan]][lastChangedEncoder]);
   }
 
-  FastLED.show();
+  FastLEDshow();
 }
 
 
