@@ -234,68 +234,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
 
 
 
-void resetMidiClockState2() {
-  lastClockTime = 0;
-  smoothedBPM = SMP.bpm;     // start your smoothing at the current BPM
-  lastClockSent = micros();  // so when we jump into myClock() we don’t burst
-}
-// number of MIDI clocks per “step” (sixteenth note)
-
-
-
-void myClock2(unsigned long now) {
-  // ————— 1) BPM averaging (unchanged) —————
-  if (lastClockTime != 0) {
-    unsigned long delta = now - lastClockTime;
-    if (delta < 100000) {
-      intervalsBuf[bufIndex] = delta;
-      bufIndex = (bufIndex + 1) % CLOCK_BUFFER_SIZE;
-      if (bufCount < CLOCK_BUFFER_SIZE) bufCount++;
-
-      unsigned long sum = 0;
-      for (int i = 0; i < bufCount; i++) sum += intervalsBuf[i];
-      float avgInterval = sum / float(bufCount);
-      float rawBPM = 60000000.0f / (avgInterval * 24.0f);
-      const float α = 0.1f;
-      if (smoothedBPM == 0.0f) smoothedBPM = rawBPM;
-      smoothedBPM = α * rawBPM + (1 - α) * smoothedBPM;
-      SMP.bpm = round(smoothedBPM);
-      
-    }
-  }
-  lastClockTime = now;
-
-    // ————— 2) Step scheduling —————
-    if (!MIDI_CLOCK_SEND) {
-      pulseCount = (pulseCount + 1) % (24 * 2);
-
-    midiClockTicks++;
-    if (midiClockTicks >= clocksPerStep) {
-      midiClockTicks = 0;
-      
-           // **first** check for an armed start
-      if (pendingStartOnBar && pulseCount == 0) {
-        // bar-1 just hit!
-        pendingStartOnBar = false;
-        isNowPlaying = true;
-        if (SMP_PATTERN_MODE) {
-          beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-          GLOB.page = GLOB.edit;  // Keep the current page
-        } else {
-          beat = 1;
-          GLOB.page = 1;
-        }
-        playStartTime = millis();
-      }
-
- if (isNowPlaying) {
-      //playNote();
-      stepIsDue = true;  // <--- INSTEAD, JUST SET THE FLAG. This is instant.
-      }
-    }
-  }
-  
-}
 
 
 
@@ -502,38 +440,6 @@ void handleStart() {
   playNote();
 }
 
-void handleStart2() {
-  if (isNowPlaying || !MIDI_TRANSPORT_RECEIVE) return;
-  //Serial.println("MIDI Start Received");
-  //if (!MIDI_CLOCK_SEND) playTimer.end(); // just to be sure
-   // ---------- SLAVE MODE: start immediately ----------
-  if (!MIDI_CLOCK_SEND) {
-    // reset to bar‐1
-    if (SMP_PATTERN_MODE) {
-      beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-      GLOB.page = GLOB.edit;  // Keep the current page
-    } else {
-      beat = 1;
-      GLOB.page = 1;
-    }
-    // turn playback on
-    isNowPlaying  = true;
-    beatStartTime = millis();
-    // fire the very first step now
-    playNote();
-    return;
-  }
-
-  // ---------- MASTER MODE: your existing behavior ----------
-  if (isNowPlaying) return;       // avoid double-starts
-  midiClockTicks = 0;
-  pulseCount     = 0;             // clear any previous clock counting
-  // if you still had a four-bar arm, clear it:
-  waitForFourBars = false;
-  // now invoke your normal play() which will send MIDI Start
-  play(true);
-  playNote();
-}
 
 void handleTimeCodeQuarterFrame(uint8_t data) {
   // Called on receiving a MIDI Time Code Quarter Frame message.

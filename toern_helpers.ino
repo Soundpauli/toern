@@ -423,7 +423,15 @@ void clearAllNotesOfChannel() {
 }
 
 void FastLEDclear() {
-  FastLED.clear();
+  // Only clear the active LED modules (based on maxX runtime variable)
+  extern unsigned int maxX;
+  unsigned int numActiveModules = maxX / MATRIX_WIDTH;  // 1 or 2 modules
+  unsigned int numActiveLEDs = numActiveModules * 256;  // 256 LEDs per module
+  
+  // Clear only the active LEDs
+  for (unsigned int i = 0; i < numActiveLEDs; i++) {
+    leds[i] = CRGB::Black;
+  }
 }
 
 void FastLEDshow() {
@@ -1868,10 +1876,6 @@ void clearPageX(int thatpage) {
 
 
 
-void changeMenu(int newMenuPosition) {
-  // This function is now used to set the main setting for the current page
-  // The actual page navigation is handled in showMenu()
-}
 
 
 int getFolderNumber(int value) {

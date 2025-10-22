@@ -37,11 +37,13 @@ volatile bool stepIsDue = false;
 #include "font_3x5.h"
 #include "icons.h"
 
-#define LED_MODULES 2  // Number of 16x16 matrices chained together (1, 2, 3, etc.)
+#define LED_MODULES 2  // Max number of 16x16 matrices that can be chained (hardware limit)
 #define MATRIX_WIDTH 16  // Width of each individual matrix
-#define maxX (MATRIX_WIDTH * 1)  // Total display width
 #define maxY 16
 #define INT_SD 10
+
+// maxX is now a runtime variable, calculated from ledModules menu setting
+extern unsigned int maxX;
 #define NUM_LEDS (256 * LED_MODULES)  // 256 LEDs per matrix
 #define DATA_PIN 17  // PIN FOR LEDS
 #define INT_PIN 27   // PIN FOR ENOCDER INTERRUPS
@@ -301,9 +303,9 @@ int peakRecIndex = 0;
 
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
-const unsigned int maxlen = (maxX * maxPages) + 1;
+const unsigned int maxlen = (MATRIX_WIDTH * LED_MODULES * maxPages) + 1;  // Use max hardware capacity for array size
 const long ram = 9525600;  // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
-const unsigned int SONG_LEN = maxX * maxPages;
+const unsigned int SONG_LEN = MATRIX_WIDTH * LED_MODULES * maxPages;  // Use max hardware capacity
 
 static bool lastBothTouched = false;
 bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
@@ -328,6 +330,7 @@ int voiceSelect = 1;
 int simpleNotesView = 1;  // Simple notes view: 1=EASY, 2=FULL
 int loopLength = 0;  // Loop length: 0=OFF, 1-8=force pattern length
 int ledModules = 1;  // Number of LED modules: 1 or 2
+unsigned int maxX = MATRIX_WIDTH * 1;  // Runtime variable: total display width (16 or 32)
 unsigned int micGain = 10;  // Microphone gain: 0-64, default 10
 unsigned int monitorLevel = 0;  // Monitoring level: 0-4, default 0 (OFF) to prevent startup feedback
 

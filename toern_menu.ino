@@ -112,6 +112,10 @@ void loadMenuFromEEPROM() {
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
   
+  // Update maxX based on loaded ledModules value
+  extern unsigned int maxX;
+  maxX = MATRIX_WIDTH * ledModules;
+  
   if (recChannelClear < 0 || recChannelClear > 2) recChannelClear = 1;  // Default to ON if invalid
   
   // Ensure flowMode is valid (-1 or 1)
@@ -315,11 +319,6 @@ void showMenu() {
     lastPagePosition = currentMenuPage;
   }
   
-  // Set the menu position to the current page's main setting
-  if (currentMode->pos[3] != mainSetting) {
-    changeMenu(mainSetting);
-  }
-  
   // Handle encoder 2 changes for pages with additional features
   handleAdditionalFeatureControls(mainSetting);
 }
@@ -381,11 +380,6 @@ void showLookMenu() {
     if (currentLookPage >= LOOK_PAGES_COUNT) currentLookPage = LOOK_PAGES_COUNT - 1;
     if (currentLookPage < 0) currentLookPage = 0;
     lastLookPagePosition = currentLookPage;
-  }
-  
-  // Set the menu position to the current page's main setting
-  if (currentMode->pos[3] != mainSetting) {
-    changeMenu(mainSetting);
   }
   
   // Handle encoder 2 changes for pages with additional features
@@ -462,11 +456,6 @@ void showRecsMenu() {
     lastRecsPagePosition = currentRecsPage;
   }
   
-  // Set the menu position to the current page's main setting
-  if (currentMode->pos[3] != mainSetting) {
-    changeMenu(mainSetting);
-  }
-  
   // Handle encoder 2 changes for pages with additional features
   handleAdditionalFeatureControls(mainSetting);
 }
@@ -528,11 +517,6 @@ void showMidiMenu() {
     if (currentMidiPage >= MIDI_PAGES_COUNT) currentMidiPage = MIDI_PAGES_COUNT - 1;
     if (currentMidiPage < 0) currentMidiPage = 0;
     lastMidiPagePosition = currentMidiPage;
-  }
-  
-  // Set the menu position to the current page's main setting
-  if (currentMode->pos[3] != mainSetting) {
-    changeMenu(mainSetting);
   }
   
   // Handle encoder 2 changes for pages with additional features
@@ -1061,11 +1045,15 @@ void switchMenu(int menuPosition){
         case 23:
         // Toggle LED modules: 1 or 2
         extern int ledModules;
+        extern unsigned int maxX;
         ledModules = (ledModules == 1) ? 2 : 1;
+        maxX = MATRIX_WIDTH * ledModules;  // Update maxX runtime variable
         saveSingleModeToEEPROM(13, ledModules);
         drawMainSettingStatus(menuPosition);
         Serial.print("LED Modules set to: ");
-        Serial.println(ledModules);
+        Serial.print(ledModules);
+        Serial.print(", maxX now: ");
+        Serial.println(maxX);
         break;
         
         case 22:
@@ -1395,7 +1383,7 @@ void drawMidiVoiceSelect() {
     MIDI_VOICE_SELECT = true;  // KEYS mode also uses MIDI channel info
   } else {
     drawText("YPOS", 2, 3, UI_GREEN);
-    MIDI_VOICE_SELECT = false;
+     MIDI_VOICE_SELECT = false;
   }
 
   FastLEDshow();
