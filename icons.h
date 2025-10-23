@@ -19,6 +19,7 @@ enum IconType {
     ICON_REC,
     ICON_REC2,
     ICON_NEW,
+    ICON_HOURGLASS,
     HELPER_MINUS
 };
 
@@ -132,6 +133,19 @@ const uint8_t helper_folder[5][2] = { { 6, 13 }, { 6, 14 }, { 6, 15 }, { 7, 14 }
 const uint8_t helper_seek[2][2] = { { 10, 15 }, { 10, 14 } };
 const uint8_t helper_seekstart[2][2] = { { 2, 15 }, { 2, 14 } };
 const uint8_t icon_new[5][2] = { { 9, 14 }, { 10, 14 }, { 11, 14 }, { 10, 13 }, { 10, 15 }}; //+ sign
+
+// Hourglass icon (centered)
+const uint8_t icon_hourglass[23][2] = {
+  { 6, 4 }, { 7, 4 }, { 8, 4 }, { 9, 4 }, { 10, 4 },  // Top line
+  { 6, 5 }, { 10, 5 },  // Top sides
+  { 7, 6 }, { 9, 6 },   // Upper neck
+  { 8, 7 },             // Center (narrowest point)
+  { 7, 8 }, { 9, 8 },   // Lower neck
+  { 6, 9 }, { 10, 9 },  // Bottom sides
+  { 7, 9 }, { 8, 9 }, { 9, 9 },  // Sand at bottom
+  { 6, 10 }, { 7, 10 }, { 8, 10 }, { 9, 10 }, { 10, 10 } // Bottom line
+  
+};
 
 const uint8_t helper_bright[5][2] =  { { 5, 14 }, { 6, 13 }, { 6 ,15 }, { 6, 14 }, { 7, 14 } };
 const uint8_t helper_vol[5][2] = { { 9, 13 }, { 11, 13 }, { 10, 15 }, { 9, 14 }, { 11, 14 } };

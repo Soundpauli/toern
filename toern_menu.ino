@@ -1,5 +1,5 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 10
+#define MENU_PAGES_COUNT 11
 #define LOOK_PAGES_COUNT 5
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 3
@@ -25,7 +25,8 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP, CLCK)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"RST", 16, false, nullptr}           // Reset
+  {"RST", 16, false, nullptr},          // Reset Effects
+  {"SOFT", 24, false, nullptr}          // Software Update Mode
 };
 
 // LOOK submenu pages
@@ -74,6 +75,7 @@ bool newScreenFirstEnter = true;
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
     // first run! write magic + defaults
+    Serial.println("First run detected - initializing EEPROM with defaults");
     EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
     EEPROM.put(0, (unsigned int)1);            // samplePackID default (1)
     EEPROM.write(EEPROM_DATA_START + 0,  1);   // recMode default
@@ -89,8 +91,9 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 10, 0);   // monitorLevel default (0 = OFF)
     EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
     EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
+    EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
 
-    //Serial.println(F("EEPROM initialized with defaults."));
+    Serial.println("EEPROM initialized with defaults.");
   }
 
   // now pull them in
@@ -145,17 +148,20 @@ void loadMenuFromEEPROM() {
   
   // Ensure ledModules is valid (1 or 2)
   if (ledModules < 1 || ledModules > 2) {
+    Serial.print("Invalid ledModules value: ");
+    Serial.print(ledModules);
+    Serial.println(" - defaulting to 1");
     ledModules = 1;  // Default to 1 if invalid value
+    EEPROM.write(EEPROM_DATA_START + 13, 1);  // Save corrected value
   }
 
-  //Serial.println(F("Loaded Menu values from EEPROM:"));
-  //Serial.print(F("  recMode="));       //Serial.println(recMode);
-  //Serial.print(F("  clockMode="));     //Serial.println(clockMode);
-  //Serial.print(F("  transportMode=")); //Serial.println(transportMode);
-  //Serial.print(F("  patternMode="));   //Serial.println(patternMode);
-  //Serial.print(F("  flowMode="));      //Serial.println(flowMode);
-  //Serial.print(F("  voiceSelect="));   //Serial.println(voiceSelect);
-  //Serial.print(F("  fastRecMode="));   //Serial.println(fastRecMode);
+  Serial.println("Loaded Menu values from EEPROM:");
+  Serial.print("  ledModules="); Serial.print(ledModules); Serial.print(" (maxX="); Serial.print(maxX); Serial.println(")");
+  Serial.print("  samplePackID="); Serial.println(samplePackID);
+  Serial.print("  recMode="); Serial.println(recMode);
+  Serial.print("  clockMode="); Serial.println(clockMode);
+  Serial.print("  patternMode="); Serial.println(patternMode);
+  Serial.print("  loopLength="); Serial.println(loopLength);
   //Serial.print(F("  recChannelClear=")); //Serial.println(recChannelClear);
   //Serial.print(F("  previewVol="));    //Serial.println(previewVol);
 
@@ -617,7 +623,12 @@ void drawMainSettingStatus(int setting) {
       
     case 16: // RST - Reset
       drawText("RSET", 2, 10, CRGB(255, 0, 0));  // Red
-      drawText(VERSION, 2, 3, CRGB(100, 0, 0));  // Dark Red
+      drawText("EFX", 2, 3, CRGB(100, 0, 0));  // Dark Red
+      break;
+      
+    case 24: // SOFT - Software Update Mode
+      drawText("SOFT", 2, 10, CRGB(100, 100, 255));  // Light Blue
+      drawText(VERSION, 2, 3, CRGB(50, 50, 100));  // Dim Blue
       break;
       
     case 19: // PLAY - Submenu
@@ -846,6 +857,8 @@ void handleAdditionalFeatureControls(int setting) {
 }
 
 void switchMenu(int menuPosition){
+   Serial.print("DEBUG: switchMenu called with menuPosition=");
+   Serial.println(menuPosition);
    switch (menuPosition) {
       case 1:
         switchMode(&loadSaveTrack);
@@ -1006,6 +1019,23 @@ void switchMenu(int menuPosition){
         resetAllToDefaults();
         break;
         
+        case 24: {
+        // Software Update Mode - show hourglass and wait for firmware upload
+        Serial.println("Entering software update mode...");
+        FastLEDclear();
+        showIcons(ICON_HOURGLASS, CRGB(255, 255, 255));  // White hourglass
+        FastLED.setBrightness(ledBrightness);
+        FastLED.show();
+        
+        // Infinite loop waiting for firmware upload
+        Serial.println("Ready for firmware upload. Device will stay in this mode until reset.");
+        while(true) {
+          delay(1000);
+          yield();  // Allow USB/serial to work
+        }
+        break;
+        }
+        
         case 19:
         // Enter LOOK submenu at first page
         inLookSubmenu = true;
@@ -1042,8 +1072,17 @@ void switchMenu(int menuPosition){
         drawMainSettingStatus(menuPosition);
         break;
         
-        case 23:
+        case 22: {
+        // Enter SONG mode
+        Serial.println("DEBUG: Case 22 (SONG) triggered - entering song mode");
+        extern Mode songMode;
+        switchMode(&songMode);
+        break;
+        }
+        
+        case 23: {
         // Toggle LED modules: 1 or 2
+        Serial.println("DEBUG: Case 23 (LEDS) triggered - toggling LED modules");
         extern int ledModules;
         extern unsigned int maxX;
         extern Mode draw;
@@ -1073,12 +1112,7 @@ void switchMenu(int menuPosition){
         Serial.print(", max pages now: ");
         Serial.println(maxPages / (maxX / MATRIX_WIDTH));
         break;
-        
-        case 22:
-        // Enter SONG mode
-        extern Mode songMode;
-        switchMode(&songMode);
-        break;
+        }
     }
     //saveMenutoEEPROM();
 }

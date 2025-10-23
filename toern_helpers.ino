@@ -197,7 +197,7 @@ void startRecordingRAM() {
   recWriteIndex = 0;
   queue1.begin();  // start filling 128‑sample blocks
   showIcons(ICON_REC, UI_DIM_RED);
-  FastLED.show();
+  FastLEDshow();
   isRecording = true;
 }
 

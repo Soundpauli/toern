@@ -28,6 +28,7 @@ void savePattern(bool autosave) {
         maxdata = maxdata + note[sdx][sdy].channel;
         saveFile.write(note[sdx][sdy].channel);
         saveFile.write(note[sdx][sdy].velocity);
+        saveFile.write(note[sdx][sdy].probability);
       }
     }
     // Use a unique marker to indicate the end of notes and start of SMP data
@@ -92,7 +93,7 @@ void saveSamplePack(int pack) {
         }
         showIcons(ICON_SAMPLEPACK, UI_BG_DIM);
         FastLED.setBrightness(ledBrightness);
-        FastLED.show();
+        FastLEDshow();
 
         // Check if this voice has a custom sample in samplepack 0
         snprintf(sourcePath, sizeof(sourcePath), "0/%d.wav", ch);
@@ -225,8 +226,10 @@ void loadPattern(bool autoload) {
         }
 
         int v = loadFile.read();
+        int p = loadFile.available() ? loadFile.read() : 100;  // Read probability, default to 100 if not present
         note[sdrx][sdry].channel = b;
         note[sdrx][sdry].velocity = v;
+        note[sdrx][sdry].probability = p;
         sdry++;
         if (sdry > maxY) {
           sdry = 1;

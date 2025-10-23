@@ -895,6 +895,11 @@ void showIcons(IconType ico, CRGB colors) {
             iconArray = icon_new;
             size = sizeof(icon_new) / sizeof(icon_new[0]);
             break;
+            
+        case ICON_HOURGLASS:
+            iconArray = icon_hourglass;
+            size = sizeof(icon_hourglass) / sizeof(icon_hourglass[0]);
+            break;
 
         case HELPER_LOAD:
             iconArray = helper_load;
@@ -1106,7 +1111,7 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
     char buf[6];
     snprintf(buf, sizeof(buf), "no.%d", SMP.pack );
     if (barwidth>8) drawText(buf, 2, 11, UI_BG_DARK);
-    FastLED.show();
+    FastLEDshow();
   }
 }
 
@@ -1223,15 +1228,16 @@ void showSongMode() {
   }
   
   // Draw song arrangement overview in bottom rows
-  // Show 16 positions at a time (4 rows x 16 positions)
-  int startPos = ((songPosition - 1) / 16) * 16;  // Start of current 16-position block
+  // Show maxX positions at a time across the full display width
+  extern unsigned int maxX;
+  int startPos = ((songPosition - 1) / maxX) * maxX;  // Start of current block
   
-  for (int i = 0; i < 16 && (startPos + i) < 64; i++) {
+  for (int i = 0; i < maxX && (startPos + i) < 64; i++) {
     int pos = startPos + i;
     int pattern = songArrangement[pos];
     
-    int x = (i % 16) + 1;
-    int y = 3 - (i / 16);  // Row 3 down to 1 (changed from 4 to make room for playback indicator)
+    int x = (i % maxX) + 1;
+    int y = 3 - (i / maxX);  // Row 3 down to 1 (changed from 4 to make room for playback indicator)
     
     CRGB color;
     if (pos == (songPosition - 1)) {
@@ -1261,7 +1267,7 @@ void showSongMode() {
   extern bool isNowPlaying;
   if (songModeActive && isNowPlaying && currentSongPosition >= 0) {
     // Check if current playback position is in the visible range
-    if (currentSongPosition >= startPos && currentSongPosition < startPos + 16) {
+    if (currentSongPosition >= startPos && currentSongPosition < startPos + maxX) {
       int indicatorX = (currentSongPosition - startPos) + 1;
       light(indicatorX, 2, CRGB(255, 255, 255));  // White dot
     }
