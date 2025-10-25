@@ -121,12 +121,12 @@ enum ValueDisplayMode {
   DISPLAY_ENUM
 };
 
-const char* instTypeNames[] = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
+const char* const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
 #define INST_ENUM_COUNT (sizeof(instTypeNames) / sizeof(instTypeNames[0]))
 
 // Add at file scope, after instTypeNames[]
-const char* sndTypeNames[] = { "SAMP", "DRUM" };
-const char* waveformNames[] = { "SIN", "SQR", "SAW", "TRI" };
+const char* const sndTypeNames[] PROGMEM = { "SAMP", "DRUM" };
+const char* const waveformNames[] PROGMEM = { "SIN", "SQR", "SAW", "TRI" };
 
 struct SliderMeta {
   uint8_t maxValue;          // physical encoder range, e.g. 16
@@ -666,7 +666,7 @@ enum MidiSetTypes {
 
 FilterType defaultFilter[maxFiles] = { PASS };
 
-char *activeMidiSetType[6] = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
+const char* const activeMidiSetType[6] PROGMEM = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
 
 // Arrays to track multiple encoders
 int buttons[NUM_ENCODERS] = { 0 };  // Tracks the current state of each encoder
@@ -1886,23 +1886,15 @@ void setup() {
   //NVIC_SET_PRIORITY(IRQ_LPUART8, 128);
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
-  delay(100);  // Give serial time to initialize
-  
   EEPROM.get(0, samplePackID);
-  Serial.print("EEPROM samplePackID: ");
-  Serial.println(samplePackID);
-  
-  // Check for invalid values (NaN, out of range 0-99)
-  if (isnan(samplePackID) || samplePackID < 0 || samplePackID > 99) {
-    Serial.println("INVALID SAMPLEPACK VALUE! Defaulting to 1");
+  if (isnan(samplePackID) || samplePackID == 0 || samplePackID < 1) {  // Check for NaN, zero, or invalid values
+    Serial.print("NO SAMPLEPACK SET OR INVALID VALUE! Defaulting to 1");
     samplePackID = 1;
     EEPROM.put(0, samplePackID);  // Save the default to EEPROM
   }
   
   // Synchronize SMP.pack with the loaded samplePackID
   SMP.pack = samplePackID;
-  Serial.print("Using samplePackID: ");
-  Serial.println(samplePackID);
 
   pinMode(INT_PIN, INPUT_PULLUP);  // Interrups for encoder
   pinMode(0, INPUT_PULLDOWN);
@@ -1935,13 +1927,8 @@ void setup() {
   playSdWav1.stop();
   EEPROMgetLastFiles();
   loadMenuFromEEPROM();
-  loadSp0StateFromEEPROM();  // Load samplepack 0 state
-  
-  // Load samplepack on startup (with safety checks)
-  // loadSamplePack will abort gracefully if pack folder doesn't exist
-  Serial.println("Loading samplepack from EEPROM...");
+  loadSp0StateFromEEPROM();  // Load samplepack 0 state before loading samplepack
   loadSamplePack(samplePackID, true);
-  
   SMP.bpm = 100.0;
   
   // Initialize GLOB with default runtime values
@@ -3951,19 +3938,16 @@ void showSamplePack() {
 }
 
 void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack_id to avoid conflict
+  //Serial.println("Loading SamplePack #" + String(pack_id));
   drawNoSD();
   
   // Validate pack_id - ensure it's within valid range (0-99)
   if (pack_id < 0 || pack_id > 99) {
-    Serial.print("INVALID SAMPLEPACK ID (");
-    Serial.print(pack_id);
-    Serial.println(")! Defaulting to 1");
-    pack_id = 1;
+    Serial.print("INVALID SAMPLEPACK ID! Defaulting to 0");
+    pack_id = 0;
   }
   
   EEPROM.put(0, pack_id);                        // Save current pack_id to EEPROM
-  samplePackID = pack_id;  // Keep samplePackID in sync
-  SMP.pack = pack_id;  // Keep SMP.pack in sync
   
   Serial.println("=== Loading Samplepack ===");
   Serial.print("Pack ID: ");
@@ -3971,18 +3955,13 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
   
   // First, load samples from samplepack 0 for voices that have custom samples
   Serial.println("--- Checking SP0 Active Voices ---");
-  bool sp0FolderExists = SD.exists("0");
-  if (!sp0FolderExists) {
-    Serial.println("WARNING: Samplepack 0 folder does not exist - skipping SP0 loading");
-  }
-  
   for (unsigned int z = 1; z < maxFiles; z++) {
     Serial.print("Voice ");
     Serial.print(z);
     Serial.print(": sp0Active = ");
     Serial.println(SMP.sp0Active[z] ? "TRUE" : "FALSE");
     
-    if (SMP.sp0Active[z] && sp0FolderExists) {
+    if (SMP.sp0Active[z]) {
       Serial.print(">>> Loading voice ");
       Serial.print(z);
       Serial.println(" from SAMPLEPACK 0 <<<");
@@ -3994,28 +3973,10 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
       }
       drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
       loadSample(0, z);  // Load from samplepack 0
-    } else if (SMP.sp0Active[z] && !sp0FolderExists) {
-      Serial.print(">>> Skipping voice ");
-      Serial.print(z);
-      Serial.println(" - SP0 folder missing");
     }
   }
   
   Serial.println("--- Loading Regular Samplepack ---");
-  
-  // Check if the samplepack folder exists
-  char packPath[20];
-  sprintf(packPath, "%d", pack_id);
-  bool packFolderExists = SD.exists(packPath);
-  if (!packFolderExists) {
-    Serial.print("ERROR: Samplepack folder '");
-    Serial.print(packPath);
-    Serial.println("' does not exist!");
-    Serial.println("=== Samplepack Loading ABORTED - No samples loaded ===");
-    switchMode(&draw);
-    preventPaintUnpaint = false;
-    return;  // Exit without loading
-  }
   
   // Then, load samples from the requested samplepack, but skip voices with sp0Active
   for (unsigned int z = 1; z < maxFiles; z++) {  // maxFiles is 9. So loads samples 1 through 8.

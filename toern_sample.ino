@@ -9,7 +9,6 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
   if (!previewCache.valid || previewCache.folder != folder || previewCache.sampleID != sampleID) {
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
-      //Serial.println("File not found!");
       return;
     }
 
@@ -78,7 +77,6 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
 
   // If the end lies before (or equal to) the start, nothing to play
   if (endOffsetBytes <= startOffsetBytes) {
-    //Serial.println("Invalid sample range; skipping playback.");
     return;
   }
 
@@ -99,19 +97,12 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
   );
   sampleIsLoaded = true;
 
-  //Serial.println("NOTE");
   _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
 }
 
 
 
 void loadSample(unsigned int packID, unsigned int sampleID) {
-  Serial.print("loadSample: packID=");
-  Serial.print(packID);
-  Serial.print(", sampleID=");
-  Serial.println(sampleID);
-    
-
   drawNoSD();
 
   char OUTPUTf[50];
@@ -122,24 +113,16 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
   
   if (loadingFromSp0) {
     // Loading from samplepack 0 - path is already correct
-    Serial.print("Loading from SP0: ");
-    Serial.println(OUTPUTf);
   } else if (packID == 0) {
     // Old behavior: loading individual sample from samples folder
     sprintf(OUTPUTf, "samples/%d/_%d.wav", getFolderNumber(sampleID), sampleID);
     sampleID = GLOB.currentChannel;
-    Serial.print("Loading from samples folder: ");
-    Serial.println(OUTPUTf);
   } else {
     // Loading from regular samplepack
     sprintf(OUTPUTf, "%d/%d.wav", packID, sampleID);
-    Serial.print("Loading from pack: ");
-    Serial.println(OUTPUTf);
   }
 
   if (!SD.exists(OUTPUTf)) {
-    //Serial.print("File does not exist: ");
-    //Serial.println(OUTPUTf);
     setMuteState(sampleID, true);
     return;
   } else {
@@ -259,10 +242,7 @@ if (sampleIsLoaded && currentMode->pos[0] != GLOB.seek) {
     firstcheck = true;
     nofile = false;
     GLOB.folder = currentMode->pos[1];
-    //Serial.println("Folder: " + String(GLOB.folder - 1));
     SMP.wav[GLOB.currentChannel].fileID = ((GLOB.folder - 1) * 100) + 1;
-    //Serial.print("WAV:");
-    //Serial.println(SMP.wav[GLOB.currentChannel].fileID);
     Encoder[3].writeCounter((int32_t)SMP.wav[GLOB.currentChannel].fileID);
   }
 
@@ -297,13 +277,10 @@ if (sampleIsLoaded && currentMode->pos[2] != GLOB.seekEnd) {
 
     snr = currentMode->pos[3];
     SMP.wav[GLOB.currentChannel].fileID = snr;
-    
-    //Serial.println(snr);
 
     fnr = getFolderNumber(snr);
     FastLEDclear();
     drawNumber(snr, col_Folder[fnr], 12);
-    //Serial.println("File>> " + String(fnr) + " / " + String(getFileNumber(snr)));
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
 
     // --- Invalidate preview cache when selecting new sample ---
@@ -358,8 +335,6 @@ void copySampleToSamplepack0(unsigned int channel) {
   // Open new file for writing
   File outFile = SD.open(outputPath, FILE_WRITE);
   if (!outFile) {
-    Serial.print("Failed to create samplepack 0 file: ");
-    Serial.println(outputPath);
     return;
   }
   
@@ -402,12 +377,6 @@ void copySampleToSamplepack0(unsigned int channel) {
   
   // Mark this channel as using samplepack 0
   SMP.sp0Active[channel] = true;
-  
-  Serial.print("Saved sample to samplepack 0: ");
-  Serial.print(outputPath);
-  Serial.print(" (");
-  Serial.print(dataSize);
-  Serial.println(" bytes)");
 }
 
 // Reverse the preview sample (channel 0) in RAM - used in showWave
@@ -415,13 +384,8 @@ void reversePreviewSample() {
   extern CachedSample previewCache;
   
   if (!previewCache.valid || previewCache.lengthBytes == 0) {
-    Serial.println("No preview sample loaded to reverse");
     return;
   }
-  
-  Serial.print("Reversing preview sample, length: ");
-  Serial.print(previewCache.lengthBytes);
-  Serial.println(" bytes");
   
   // Reverse the byte array in sampled[0]
   uint8_t* buffer = sampled[0];
@@ -435,8 +399,6 @@ void reversePreviewSample() {
     sampleBuffer[numSamples - 1 - i] = temp;
   }
   
-  Serial.println("Preview sample reversed!");
-  
   // Flip the peak visualization values array
   extern int peakIndex;
   extern float peakValues[];
@@ -446,8 +408,6 @@ void reversePreviewSample() {
     peakValues[i] = peakValues[peakIndex - 1 - i];
     peakValues[peakIndex - 1 - i] = temp;
   }
-  
-  Serial.println("Peak values flipped!");
   
   // Swap seek and seekEnd positions (they're now reversed)
   int tempSeek = GLOB.seek;
@@ -463,11 +423,6 @@ void reversePreviewSample() {
   Encoder[0].writeCounter((int32_t)GLOB.seek);
   Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
   
-  Serial.print("Seek positions swapped: seek=");
-  Serial.print(GLOB.seek);
-  Serial.print(", seekEnd=");
-  Serial.println(GLOB.seekEnd);
-  
   // Trigger re-preview with current seek settings
   extern int getFolderNumber(int fileID);
   extern int getFileNumber(int fileID);
@@ -481,7 +436,6 @@ void reversePreviewSample() {
 // Copy the preview sample (channel 0) to the target channel
 void loadPreviewToChannel(unsigned int targetChannel) {
   if (targetChannel < 1 || targetChannel >= maxFiles) {
-    Serial.println("Invalid target channel for preview load");
     return;
   }
   
@@ -493,7 +447,6 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   
   // If preview cache is not valid, ensure the sample is loaded first
   if (needToLoadPreview) {
-    Serial.println("Preview cache invalid - loading sample first");
     int snr = SMP.wav[GLOB.currentChannel].fileID;
     int fnr = getFolderNumber(snr);
     
@@ -504,7 +457,6 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
-      Serial.println("Failed to open sample file");
       return;
     }
     
@@ -536,12 +488,7 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     previewCache.rate = rate;
     previewCache.valid = true;
     previewCache.plen = plen;
-    
-    Serial.println("Sample loaded to cache without preview");
   }
-  
-  Serial.print("Loading preview sample to channel ");
-  Serial.println(targetChannel);
   
   // Calculate the trimmed portion based on seek/seekEnd
   int numSamples = previewCache.lengthBytes / 2;  // Total samples in preview
@@ -553,14 +500,6 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   }
   
   int trimmedSamples = endSample - startSample;
-  
-  Serial.print("Copying samples ");
-  Serial.print(startSample);
-  Serial.print(" to ");
-  Serial.print(endSample);
-  Serial.print(" (");
-  Serial.print(trimmedSamples);
-  Serial.println(" samples)");
   
   // Copy the trimmed portion from preview (channel 0) to target channel
   int16_t* previewBuffer = (int16_t*)sampled[0];
@@ -575,6 +514,4 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   loadedSampleRate[targetChannel] = previewCache.rate;
   loadedSampleLen[targetChannel] = trimmedSamples;
   _samplers[targetChannel].addSample(36, targetBuffer, trimmedSamples, rateFactor);
-  
-  Serial.println("Preview loaded to channel!");
 }

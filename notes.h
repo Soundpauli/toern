@@ -108,7 +108,7 @@
 #define NOTE_AS8 (7458.62)
 #define NOTE_B8 (7902.13)
 
-float notesArray[108] = { NOTE_C0, NOTE_CS0, NOTE_D0, NOTE_DS0, NOTE_E0, NOTE_F0, NOTE_FS0, NOTE_G0, NOTE_GS0, NOTE_A0, NOTE_AS0, NOTE_B0,
+const float notesArray[108] PROGMEM = { NOTE_C0, NOTE_CS0, NOTE_D0, NOTE_DS0, NOTE_E0, NOTE_F0, NOTE_FS0, NOTE_G0, NOTE_GS0, NOTE_A0, NOTE_AS0, NOTE_B0,
                           NOTE_C1, NOTE_CS1, NOTE_D1, NOTE_DS1, NOTE_E1, NOTE_F1, NOTE_FS1, NOTE_G1, NOTE_GS1, NOTE_A1, NOTE_AS1, NOTE_B1,
                           NOTE_C2, NOTE_CS2, NOTE_D2, NOTE_DS2, NOTE_E2, NOTE_F2, NOTE_FS2, NOTE_G2, NOTE_GS2, NOTE_A2, NOTE_AS2, NOTE_B2,
                           NOTE_C3, NOTE_CS3, NOTE_D3, NOTE_DS3, NOTE_E3, NOTE_F3, NOTE_FS3, NOTE_G3, NOTE_GS3, NOTE_A3, NOTE_AS3, NOTE_B3,
@@ -170,7 +170,7 @@ const float pianoFrequencies[16] PROGMEM = {
   587.33   // D5
 };
 
-const char* pianoNoteNames[27] = {
+const char* const pianoNoteNames[27] PROGMEM = {
   "C3",  "C#3", "D3",  "D#3", "E3",
   "F3",  "F#3", "G3",  "G#3", "A3",
   "A#3", "B3",  "C4",  "C#4", "D4",

@@ -1871,7 +1871,266 @@ void clearPageX(int thatpage) {
 }
 
 
+// Reset all audio effects/filters to clean defaults
+void resetAllAudioEffects() {
+  Serial.println("Resetting audio hardware...");
+  
+  extern const int ALL_CHANNELS[];
+  extern const int NUM_ALL_CHANNELS;
+  
+  // Step 1: Reset all filter mixer gains and audio objects to clean state
+  for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
+    int idx = ALL_CHANNELS[i];
+    setFilterDefaults(idx);  // Resets mixers, filters, reverbs, bitcrushers to default
+  }
+  
+  // Step 2: Reset drum engine defaults
+  setDrumDefaults(true);
+  
+  // Step 3: Force all mixer gains to target (ensures smooth transitions are off)
+  forceAllMixerGainsToTarget();
+  
+  // Step 4: Apply reset data from SMP to audio hardware
+  Serial.println("Applying reset data to audio hardware...");
+  const int channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
+  const int numChannels = sizeof(channels) / sizeof(channels[0]);
+  
+  for (int i = 0; i < numChannels; i++) {
+    int ch = channels[i];
+    
+    // Apply filters to hardware (setFilters reads from SMP.filter_settings and applies)
+    setFilters(PASS, ch, true);
+    setFilters(FREQUENCY, ch, true);
+    setFilters(REVERB, ch, true);
+    setFilters(BITCRUSHER, ch, true);
+    setFilters(DETUNE, ch, true);
+    setFilters(OCTAVE, ch, true);
+    
+    // Apply parameters to hardware (setParams reads from SMP.param_settings and applies)
+    setParams(ATTACK, ch);
+    setParams(DECAY, ch);
+    setParams(SUSTAIN, ch);
+    setParams(RELEASE, ch);
+    
+    // Apply drums to hardware (only for channels 1-3)
+    if (ch >= 1 && ch <= 3) {
+      setDrums(DRUMTONE, ch);
+      setDrums(DRUMDECAY, ch);
+      setDrums(DRUMPITCH, ch);
+      setDrums(DRUMTYPE, ch);
+    }
+    
+    // Update synth voice (only for channel 11)
+    if (ch == 11) {
+      updateSynthVoice(11);
+    }
+  }
+  
+  Serial.println("Audio hardware reset complete.");
+}
 
+
+// Complete reset for NEW start - clears everything and loads fresh defaults
+void startNew() {
+  // Declare all external variables at the beginning
+  extern unsigned int samplePackID;
+  extern float playNoteInterval;
+  extern IntervalTimer playTimer;
+  extern bool globalMutes[maxY];
+  extern bool pageMutes[maxPages][maxY];
+  extern uint8_t songArrangement[64];
+  extern bool songModeActive;
+  extern bool preventPaintUnpaint;
+  extern int patternMode;
+  extern uint8_t filterPage[NUM_CHANNELS];
+  extern const int ALL_CHANNELS[];
+  extern const int NUM_ALL_CHANNELS;
+  extern Mode draw;
+  extern Mode volume_bpm;
+  extern Mode *currentMode;
+  extern i2cEncoderLibV2 Encoder[NUM_ENCODERS];
+  extern const CRGB col[];
+  extern bool isNowPlaying;
+  
+  Serial.println("=== START NEW - Complete Reset ===");
+  
+  // 0. STOP PLAYBACK FIRST (if playing)
+  if (isNowPlaying) {
+    Serial.println("Stopping playback...");
+    isNowPlaying = false;
+  }
+  
+  // Visual feedback - clear display and show message
+  FastLEDclear();
+  drawText("NEW", 6, 8, CRGB(0, 255, 255));
+  FastLEDshow();
+  
+  // 1. CLEAR ALL NOTES (all pages, all channels, all velocities, all probabilities)
+  Serial.println("Clearing all notes...");
+  for (unsigned int x = 0; x <= maxlen; x++) {
+    for (unsigned int y = 0; y <= maxY; y++) {
+      note[x][y].channel = 0;
+      note[x][y].velocity = defaultVelocity;  // Reset to default velocity
+      note[x][y].probability = 100;  // Reset to 100% probability
+    }
+  }
+  
+  // 2. RESET GLOBAL VARIABLES FIRST (before using GLOB.currentChannel)
+  Serial.println("Resetting global variables...");
+  SMP.bpm = 100.0;
+  GLOB.vol = 10;
+  GLOB.velocity = 10;
+  GLOB.currentChannel = 1;  // Set this FIRST before using it
+  GLOB.page = 1;
+  GLOB.edit = 1;
+  GLOB.singleMode = false;
+  GLOB.x = 1;
+  GLOB.y = 1;
+  
+  // 3. RESET ALL FILTER/PARAMETER DATA (just data, no audio hardware yet)
+  Serial.println("Resetting filter/parameter data...");
+  const int channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
+  const int numChannels = sizeof(channels) / sizeof(channels[0]);
+  
+  for (int i = 0; i < numChannels; i++) {
+    int ch = channels[i];
+    
+    // Reset channel volume
+    SMP.channelVol[ch] = 10;
+    
+    // Reset filter data (no hardware calls)
+    SMP.filter_settings[ch][PASS] = 15;
+    SMP.filter_settings[ch][FREQUENCY] = 0;
+    SMP.filter_settings[ch][REVERB] = 0;
+    SMP.filter_settings[ch][BITCRUSHER] = 0;
+    SMP.filter_settings[ch][DETUNE] = 16;
+    SMP.filter_settings[ch][OCTAVE] = 16;
+    SMP.filter_settings[ch][EFX] = 0;  // Sample mode
+    
+    // Reset parameter data (no hardware calls)
+    SMP.param_settings[ch][ATTACK] = 32;
+    SMP.param_settings[ch][DECAY] = 32;
+    SMP.param_settings[ch][SUSTAIN] = 10;
+    SMP.param_settings[ch][RELEASE] = 5;
+    
+    // Reset drum data (only for channels 1-3)
+    if (ch >= 1 && ch <= 3) {
+      SMP.drum_settings[ch][DRUMTONE] = 0;
+      SMP.drum_settings[ch][DRUMDECAY] = 16;
+      SMP.drum_settings[ch][DRUMPITCH] = 16;
+      SMP.drum_settings[ch][DRUMTYPE] = 1;
+    }
+    
+    // Reset synth data (only for channels 11, 13-14)
+    if (ch == 11 || ch == 13 || ch == 14) {
+      SMP.synth_settings[ch][CUTOFF] = 0;
+      SMP.synth_settings[ch][RESONANCE] = 0;
+      SMP.synth_settings[ch][FILTER] = 0;
+      SMP.synth_settings[ch][CENT] = 16;
+      SMP.synth_settings[ch][SEMI] = 0;
+      SMP.synth_settings[ch][INSTRUMENT] = 0;
+      SMP.synth_settings[ch][FORM] = 0;
+    }
+  }
+  
+  // 4. CLEAR ALL MUTE STATES
+  Serial.println("Clearing all mute states...");
+  for (int ch = 0; ch < maxY; ch++) {
+    globalMutes[ch] = false;
+    SMP.globalMutes[ch] = false;
+    for (int page = 0; page < maxPages; page++) {
+      pageMutes[page][ch] = false;
+      SMP.pageMutes[page][ch] = false;
+    }
+    SMP.mute[ch] = 0;
+  }
+  unmuteAllChannels();
+  
+  // 5. CLEAR ALL SONG ARRANGEMENT
+  Serial.println("Clearing song arrangement...");
+  for (int i = 0; i < 64; i++) {
+    songArrangement[i] = 0;
+    SMP.songArrangement[i] = 0;
+  }
+  
+  // 6. CLEAR ALL SAMPLEPACK 0 (sp0) STATES - Remove all custom samples
+  Serial.println("Clearing all sp0Active states...");
+  for (int i = 1; i < maxFiles; i++) {
+    SMP.sp0Active[i] = false;
+  }
+  saveSp0StateToEEPROM();
+  
+  // 7. LOAD SAMPLEPACK 1 (fresh default samples)
+  Serial.println("Loading Samplepack 1...");
+  SMP.pack = 1;
+  samplePackID = 1;
+  EEPROM.put(0, (unsigned int)1);  // Save to EEPROM
+  loadSamplePack(1, false);
+  
+  // 8. UPDATE BPM AND TIMER
+  Mode *bpm_vol = &volume_bpm;
+  bpm_vol->pos[3] = SMP.bpm;
+  playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
+  playTimer.update(playNoteInterval);
+  bpm_vol->pos[2] = GLOB.vol;
+  
+  // 9. RESET WAVE FILE IDS to defaults
+  Serial.println("Resetting wave file IDs...");
+  for (int i = 1; i < maxFiles; i++) {
+    SMP.wav[i].fileID = i;
+    SMP.wav[i].oldID = i;
+  }
+  
+  // 10. UPDATE LAST PAGE (should be 1 since no notes)
+  updateLastPage();
+  
+  // 11. RESET PATTERN MODE FLAGS (before switching mode)
+  songModeActive = false;
+  SMP_PATTERN_MODE = false;
+  patternMode = -1;  // OFF
+  
+  // Reset paint/unpaint prevention flag
+  preventPaintUnpaint = false;
+  
+  // 12. SWITCH TO DRAW MODE
+  Serial.println("Switching to draw mode...");
+  delay(300);  // Brief delay to show "NEW" message
+  switchMode(&draw);
+  
+  // 13. SYNC ENCODERS WITH CURRENT POSITION
+  // Force encoder positions to match reset state
+  Encoder[0].writeCounter((int32_t)GLOB.y);       // Y position (channel)
+  Encoder[1].writeCounter((int32_t)GLOB.edit);    // Page
+  Encoder[2].writeCounter((int32_t)maxfilterResolution);  // Filter/velocity
+  Encoder[3].writeCounter((int32_t)GLOB.x);       // X position
+  
+  // Update currentMode positions to match
+  currentMode->pos[0] = GLOB.y;
+  currentMode->pos[1] = GLOB.edit;
+  currentMode->pos[2] = maxfilterResolution;
+  currentMode->pos[3] = GLOB.x;
+  
+  // Set encoder colors to match channel 1
+  Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+  Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+  
+  // 14. RESET ALL AUDIO EFFECTS/FILTERS TO CLEAN DEFAULTS
+  resetAllAudioEffects();
+  
+  // 15. FORCE DISPLAY REFRESH
+  // Clear any stale display data and force a complete redraw
+  FastLEDclear();
+  FastLEDshow();
+  
+  // 16. AUTOSAVE EMPTY STATE
+  // Save the clean/empty state to autosaved.txt
+  Serial.println("Autosaving empty state...");
+  extern void savePattern(bool autosave);
+  savePattern(true);
+  
+  Serial.println("=== START NEW Complete ===");
+  Serial.println("Ready for fresh pattern creation!");
+}
 
 
 int getFolderNumber(int value) {
@@ -2000,7 +2259,7 @@ void runAnimation() {
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
-  FastLED.show();
+  FastLEDshow();
   
   unsigned long startTime = millis();
   unsigned long lastFrameTime = millis();
@@ -2039,7 +2298,7 @@ void runAnimation() {
       }
     }
     
-    FastLED.show();
+    FastLEDshow();
 
     // Stop after totalAnimationTime
     if (elapsed >= totalAnimationTime) {
@@ -2051,7 +2310,7 @@ void runAnimation() {
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
-  FastLED.show();
+  FastLEDshow();
 }
 
 // Enhanced base page pattern analysis structure (moved to top of file)

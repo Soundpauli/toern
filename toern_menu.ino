@@ -26,7 +26,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"RST", 16, false, nullptr},          // Reset Effects
-  {"SOFT", 24, false, nullptr}          // Software Update Mode
+  {"NEW", 24, false, nullptr}           // Start New - Complete factory reset
 };
 
 // LOOK submenu pages
@@ -626,9 +626,9 @@ void drawMainSettingStatus(int setting) {
       drawText("EFX", 2, 3, CRGB(100, 0, 0));  // Dark Red
       break;
       
-    case 24: // SOFT - Software Update Mode
-      drawText("SOFT", 2, 10, CRGB(100, 100, 255));  // Light Blue
-      drawText(VERSION, 2, 3, CRGB(50, 50, 100));  // Dim Blue
+    case 24: // NEW - Start New (Complete Reset)
+      drawText("NEW", 2, 10, CRGB(0, 255, 255));  // Cyan
+      drawText("RSET", 2, 3, CRGB(0, 100, 100));  // Dim Cyan
       break;
       
     case 19: // PLAY - Submenu
@@ -1020,19 +1020,10 @@ void switchMenu(int menuPosition){
         break;
         
         case 24: {
-        // Software Update Mode - show hourglass and wait for firmware upload
-        Serial.println("Entering software update mode...");
-        FastLEDclear();
-        showIcons(ICON_HOURGLASS, CRGB(255, 255, 255));  // White hourglass
-        FastLED.setBrightness(ledBrightness);
-        FastLED.show();
-        
-        // Infinite loop waiting for firmware upload
-        Serial.println("Ready for firmware upload. Device will stay in this mode until reset.");
-        while(true) {
-          delay(1000);
-          yield();  // Allow USB/serial to work
-        }
+        // START NEW - Complete reset to factory defaults with fresh start
+        Serial.println("Starting NEW - Complete reset...");
+        extern void startNew();
+        startNew();
         break;
         }
         

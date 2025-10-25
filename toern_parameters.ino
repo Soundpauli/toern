@@ -39,106 +39,6 @@ void setParams(ParameterType paramType, int index) {
 }
 
 
-      void drawWaveforms(const char *txt, int activeParameter) {
-        FastLEDclear();
-
-        const int maxWaveformIndex = 3;
-        int waveformSetting = SMP.param_settings[GLOB.currentChannel][WAVEFORM];
-
-        // Clamp waveform setting within valid bounds and update if needed
-        if (waveformSetting > maxWaveformIndex) {
-          waveformSetting = maxWaveformIndex;
-          currentMode->pos[3] = waveformSetting;
-          Encoder[3].writeCounter((int32_t)waveformSetting);
-        }
-
-        // Calculate displayed waveform value once, clearly mapping internal state to UI value
-        int wavValue = mapf(waveformSetting, 0, maxWaveformIndex, 1, 4);
-
-        // Draw waveform based on wavValue using light(x, y, color)
-        switch (wavValue) {
-          case 1:  // WAVEFORM_SINE
-            {
-              const char *pattern[6] = {
-                "001100000000",
-                "010010000001",
-                "100001000010",
-                "100001000010",
-                "000000100100",
-                "000000011000"
-              };
-              for (int y = 0; y < 6; y++) {
-                for (int x = 0; x < 12; x++) {
-                  if (pattern[y][x] == '1') {
-                    light(x + 1, y + 2, CRGB::Red);
-                  }
-                }
-              }
-            }
-            break;
-          case 2:  // WAVEFORM_SAWTOOTH
-            {
-              const char *pattern[5] = {
-                "0100010001",
-                "1100110011",
-                "0101010101",
-                "0110011001",
-                "0100010001"
-              };
-              for (int y = 0; y < 5; y++) {
-                for (int x = 0; x < 10; x++) {
-                  if (pattern[y][x] == '1') {
-                    light(x + 1, y + 3, CRGB::Red);
-                  }
-                }
-              }
-            }
-            break;
-          case 3:  // WAVEFORM_SQUARE
-            {
-              const char *pattern[5] = {
-                "01111000111",
-                "010010001000",
-                "01001000100",
-                "01001000100",
-                "11001111100"
-              };
-              for (int y = 0; y < 5; y++) {
-                for (int x = 0; x < 11; x++) {
-                  if (pattern[y][x] == '1') {
-                    light(x + 1, y + 3, CRGB::Red);
-                  }
-                }
-              }
-            }
-            break;
-          case 4:  // WAVEFORM_TRIANGLE
-            {
-              const char *pattern[5] = {
-                "00001000000",
-                "00010100000",
-                "00100010001",
-                "01000001010",
-                "10000000100"
-              };
-              for (int y = 0; y < 5; y++) {
-                for (int x = 0; x < 11; x++) {
-                  if (pattern[y][x] == '1') {
-                    light(x + 1, y + 4, CRGB::Red);
-                  }
-                }
-              }
-            }
-            break;
-          default: return;
-        }
-
-        // Render UI elements
-        drawText(txt, 1, 12, filter_col[activeParameter]);
-        drawNumber(wavValue, CRGB(100, 100, 100), 4);
-      }
-
-
 // Handle waveform changes
 void handleWaveformChange(int index, unsigned int waveformType) {
   //Serial.println(index);
@@ -268,26 +168,12 @@ void resetAllToDefaults() {
     }
   }
   
-  // Reset drum engine defaults
-  setDrumDefaults(true);
+  // Reset all audio effects/filters to clean defaults
+  extern void resetAllAudioEffects();
+  resetAllAudioEffects();
   
-  // Reset all filter mixer gains to default
-  extern const int ALL_CHANNELS[];
-  extern const int NUM_ALL_CHANNELS;
-  for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
-    int idx = ALL_CHANNELS[i];
-    setFilterDefaults(idx);
-  }
-  
-  // Force all mixer gains to target
-  extern void forceAllMixerGainsToTarget();
-  forceAllMixerGainsToTarget();
-  
-  // Update synth voice for channel 11
-  updateSynthVoice(11);
-  
-  // Initialize sliders for current channel
-  initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
+  // Add delay before switching mode
+  delay(300);
   
   // Switch to draw mode after reset
   switchMode(&draw);

@@ -53,7 +53,9 @@ void savePattern(bool autosave) {
     saveFile.write((uint8_t *)&SMP, sizeof(SMP));
   }
   saveFile.close();
-  if (maxdata == 0) {
+  // Only delete empty files for manual saves, not autosaves
+  // (We want to preserve empty state in autosaved.txt)
+  if (maxdata == 0 && !autosave) {
     SD.remove(OUTPUTf);
   }
   if (!autosave) {
@@ -70,11 +72,6 @@ void savePattern(bool autosave) {
 
 
 void saveSamplePack(int pack) {
-    
-    Serial.println("=== Saving Samplepack ===");
-    Serial.print("Pack ID: ");
-    Serial.println(pack);
-    
     char filename[64];
     char sourcePath[64];
 
@@ -101,10 +98,6 @@ void saveSamplePack(int pack) {
         
         if (SD.exists(sourcePath)) {
             // Copy from samplepack 0
-            Serial.print(">>> Copying voice ");
-            Serial.print(ch);
-            Serial.println(" from SP0");
-            
             // Remove existing file if it exists
             if (SD.exists(filename)) {
                 SD.remove(filename);
@@ -113,16 +106,12 @@ void saveSamplePack(int pack) {
             // Open source file for reading
             File sourceFile = SD.open(sourcePath, FILE_READ);
             if (!sourceFile) {
-                Serial.print("Failed to open source: ");
-                Serial.println(sourcePath);
                 continue;
             }
             
             // Open destination file for writing
             File destFile = SD.open(filename, FILE_WRITE);
             if (!destFile) {
-                Serial.print("Failed to create: ");
-                Serial.println(filename);
                 sourceFile.close();
                 continue;
             }
@@ -136,15 +125,8 @@ void saveSamplePack(int pack) {
             
             sourceFile.close();
             destFile.close();
-            
-            Serial.print("Copied: ");
-            Serial.println(filename);
         } else {
             // Save from RAM (current loaded sample)
-            Serial.print(">>> Saving voice ");
-            Serial.print(ch);
-            Serial.println(" from RAM");
-            
             // Remove any existing file at this path
             if (SD.exists(filename)) {
                 SD.remove(filename);
@@ -153,8 +135,6 @@ void saveSamplePack(int pack) {
             // Open a new file for writing
             File outFile = SD.open(filename, FILE_WRITE);
             if (!outFile) {
-                Serial.print("Failed to create ");
-                Serial.println(filename);
                 continue;
             }
             
@@ -168,8 +148,6 @@ void saveSamplePack(int pack) {
             outFile.write(reinterpret_cast<uint8_t*>(sampled[ch]), sampleCount * sizeof(int16_t));
             
             outFile.close();
-            Serial.print("Saved sample ");
-            Serial.println(filename);
         }
         
         for (unsigned int f = 1; f < (maxY + 1) + 1; f++) {
@@ -179,13 +157,10 @@ void saveSamplePack(int pack) {
     }
     
     // Clear sp0Active flags when saving a samplepack (all samples now part of this pack)
-    Serial.println("Clearing SP0 flags (all samples now in pack)");
     for (uint8_t ch = 1; ch < maxFiles; ch++) {
         SMP.sp0Active[ch] = false;
     }
     saveSp0StateToEEPROM();
-    
-    Serial.println("=== Samplepack Save Complete ===");
     
     // Reset paint/unpaint prevention flag after saveSamplePack operation
     extern bool preventPaintUnpaint;
@@ -196,8 +171,6 @@ void saveSamplePack(int pack) {
 
 
 void loadPattern(bool autoload) {
-  
-  //Serial.println("Loading slot #" + String(SMP.file));
   drawNoSD();
   
   FastLEDclear();
@@ -256,7 +229,6 @@ void loadPattern(bool autoload) {
         for (int i = 0; i < 64; i++) {
           songArrangement[i] = SMP.songArrangement[i];
         }
-        Serial.println("Song arrangement loaded from pattern");
         
         // Unmute all channels first, then apply loaded mutes based on PMOD state
         unmuteAllChannels();
@@ -279,53 +251,6 @@ void loadPattern(bool autoload) {
 
   float vol = float(GLOB.vol / 10.0);
 
-  // Display the loaded SMP data
-  //Serial.println("Loaded SMP Data:");
-  //Serial.println("singleMode: " + String(GLOB.singleMode));
-  //Serial.println("currentChannel: " + String(GLOB.currentChannel));
-  //Serial.println("vol: " + String(GLOB.vol));
-  //Serial.println("bpm: " + String(SMP.bpm));
-  //Serial.println("velocity: " + String(GLOB.velocity));
-  //Serial.println("page: " + String(GLOB.page));
-  //Serial.println("edit: " + String(GLOB.edit));
-  //Serial.println("file: " + String(SMP.file));
-  //Serial.println("pack: " + String(SMP.pack));
-  //Serial.println("wav: " + String(SMP.wav[GLOB.currentChannel].fileID));
-  //Serial.println("folder: " + String(GLOB.folder));
-  //Serial.println("activeCopy: " + String(GLOB.activeCopy));
-  //Serial.println("x: " + String(GLOB.x));
-  //Serial.println("y: " + String(GLOB.y));
-  //Serial.println("seek: " + String(GLOB.seek));
-  //Serial.println("seekEnd: " + String(GLOB.seekEnd));
-  //Serial.println("smplen: " + String(GLOB.smplen));
-  //Serial.println("shiftX: " + String(GLOB.shiftX));
-  //Serial.print("pram_settings: ");
-  for (unsigned int i = 0; i < 8; i++) {
-    //Serial.print(SMP.param_settings[1][i]);
-    //Serial.print(", ");
-  }
-  //Serial.println();
-  //Serial.print("filter_settings: ");
-  for (unsigned int i = 0; i < 8; i++) {
-    //Serial.print(SMP.filter_settings[1][i]);
-    //Serial.print(", ");
-  }
-  //Serial.println();
-  //Serial.print("drum_settings: ");
-  for (unsigned int i = 0; i < 4; i++) {
-    //Serial.print(SMP.drum_settings[1][i]);
-    //Serial.print(", ");
-  }
-
-  //Serial.println();
-  
-  //Serial.print("mute: ");
-  for (unsigned int i = 0; i < maxY; i++) {
-    //Serial.print(SMP.mute[i]);
-    //Serial.print(", ");
-  }
-  //Serial.println();
-  
   // Reset paint/unpaint prevention flag after loadPattern operation
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;

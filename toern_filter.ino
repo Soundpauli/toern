@@ -117,31 +117,6 @@ void setFilters(FilterType filterType, int index, bool initial) {
   // Now update the filter value (was updateFilterValue)
   switch (filterType) {
 
-
-case ACTIVE:{
-  //float pitch = mapf(SMP.filter_settings[index][PITCH], 0, maxfilterResolution, 0.0, 3000.0);
- //if (mappedValue>0){ granular1.beginFreeze(mappedValue);}
- // else{granular1.stop();}
-}
-break;
-
-  case OFFSET:{
-  //float mappedValue2 = mapf(SMP.filter_settings[index][OFFSET], 0, maxfilterResolution, 0.0, 350.0);
-    //  granular1.beginFreeze(mappedValue);
-    //granular1.beginPitchShift(mappedValue2);
-  }
-  break;
-
-    case PITCH:{
-     // float mappedValue1 = mapf(SMP.filter_settings[index][OFFSET], 0, maxfilterResolution, 0.0, 350.0);
-      //granular1.beginFreeze(mappedValue1);
-    //  granular1.beginPitchShift(mappedValue);
-    }
-    break;
-
-    case SPEED:
-      //granular1.setSpeed(mappedValue);
-    break;
     case PASS:
       {
         filters[index]->frequency(mappedValue);
