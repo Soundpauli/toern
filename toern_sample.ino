@@ -185,6 +185,16 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
 
 
 void showWave() {
+  // Check touch3 to enter recordMode
+  extern int fastTouchRead(int);
+  extern const int touchThreshold;
+  extern Mode recordMode;
+  int touchValue3 = fastTouchRead(SWITCH_3);
+  if (touchValue3 > touchThreshold) {
+    switchMode(&recordMode);
+    return;
+  }
+  
   int snr = SMP.wav[GLOB.currentChannel].fileID;
 
   if (snr < 1) snr = 1;
@@ -223,16 +233,16 @@ void showWave() {
   
   // Encoder 4: Large Blue (L[X]) - matches indicator 4
   Encoder[3].writeRGBCode(0x0000FF); // Blue
-  // Display using current seek positions (as percentages)
-  //displaySample(GLOB.seek, SMP.smplen, GLOB.seekEnd);
-  processPeaks();
-  drawNumber(snr, col_Folder[fnr], 12);
 
  // --- UPDATE START POSITION (Encoder 0) ---
-if (sampleIsLoaded && currentMode->pos[0] != GLOB.seek) {
-  GLOB.seek = currentMode->pos[0];
-  // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
-  previewSample(fnr, getFileNumber(snr), false, false);
+if (sampleIsLoaded) {
+  int newSeek = constrain(currentMode->pos[0], 0, GLOB.seekEnd - 1);  // Ensure seek < seekEnd
+  if (newSeek != GLOB.seek) {
+    GLOB.seek = newSeek;
+    currentMode->pos[0] = newSeek;  // Update encoder to match
+    // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
+    previewSample(fnr, getFileNumber(snr), false, false);
+  }
 }
 
   // --- FOLDER SELECTION (Encoder 1) ---
@@ -248,10 +258,14 @@ if (sampleIsLoaded && currentMode->pos[0] != GLOB.seek) {
 
 
 // --- UPDATE END POSITION (Encoder 2) ---
-if (sampleIsLoaded && currentMode->pos[2] != GLOB.seekEnd) {
-  GLOB.seekEnd = currentMode->pos[2];
-  // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
-  previewSample(fnr, getFileNumber(snr), false, false);
+if (sampleIsLoaded) {
+  int newSeekEnd = constrain(currentMode->pos[2], GLOB.seek + 1, 100);  // Ensure seekEnd > seek
+  if (newSeekEnd != GLOB.seekEnd) {
+    GLOB.seekEnd = newSeekEnd;
+    currentMode->pos[2] = newSeekEnd;  // Update encoder to match
+    // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
+    previewSample(fnr, getFileNumber(snr), false, false);
+  }
 }
 
 
@@ -315,6 +329,10 @@ if (sampleIsLoaded && currentMode->pos[2] != GLOB.seekEnd) {
     currentMode->pos[2] = GLOB.seekEnd;
     Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
   }
+  
+  // Display peaks AFTER all encoder processing (so display matches audio)
+  processPeaks();
+  drawNumber(snr, col_Folder[fnr], 12);
 }
 
 // Copy currently loaded sample to samplepack 0

@@ -195,10 +195,32 @@ void startRecordingRAM() {
   Encoder[3].writeRGBCode(0x000000);
   recTime = 0;
   recWriteIndex = 0;
+  
+  // Reset peak recording index for fresh waveform display
+  extern int peakRecIndex;
+  peakRecIndex = 0;
+  
   queue1.begin();  // start filling 128‑sample blocks
   showIcons(ICON_REC, UI_DIM_RED);
   FastLEDshow();
   isRecording = true;
+  
+  // Enable audio input monitoring only if monitorLevel > 0
+  extern unsigned int monitorLevel;
+  if (monitorLevel > 0) {
+    float monitorGain = 0.0;
+    switch (monitorLevel) {
+      case 1: monitorGain = 0.1; break;    // Low
+      case 2: monitorGain = 0.3; break;    // Medium
+      case 3: monitorGain = 0.5; break;    // High
+      case 4: monitorGain = 0.8; break;    // Full
+      default: monitorGain = 0.0; break;   // Default to OFF
+    }
+    mixer_end.gain(3, monitorGain);
+  } else {
+    // Ensure monitoring is OFF if monitorLevel is 0
+    mixer_end.gain(3, 0.0);
+  }
 }
 
 void flushAudioQueueToRAM2() {
@@ -223,6 +245,9 @@ void stopRecordingRAM(int fnr, int snr) {
   flushAudioQueueToRAM();
   queue1.end();
   isRecording = false;
+  
+  // Disable audio input monitoring
+  mixer_end.gain(3, 0.0);
 
   // open WAV on SD
   char path[64];
@@ -230,7 +255,7 @@ void stopRecordingRAM(int fnr, int snr) {
   if (SD.exists(path)) SD.remove(path);
   File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
   if (!f) { return; }
-  // write 44‑byte WAV header for 16‑bit/mono/22 050 Hz
+  // write 44‑byte WAV header for 16‑bit/mono/22 050 Hz
   writeWavHeader(f, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
   // write all your samples in one chunk
   f.write((uint8_t *)recBuffer, recWriteIndex * sizeof(int16_t));
@@ -238,8 +263,18 @@ void stopRecordingRAM(int fnr, int snr) {
   f.close();
   //Serial.print("💾 Saved ");
   //Serial.println(path);
-  // playback if you like
-  playSdWav1.play(path);
+  
+  // Reload the sample metadata after recording
+  extern bool sampleIsLoaded;
+  extern bool firstcheck;
+  extern CachedSample previewCache;
+  
+  sampleIsLoaded = false;  // Force reload of new recording
+  firstcheck = true;       // Reset check flag
+  previewCache.valid = false;  // Invalidate cache so new recording is loaded
+  
+  // Don't auto-play - user will press encoder[2] to play if desired
+  // playSdWav1.play(path);
 }
 
 

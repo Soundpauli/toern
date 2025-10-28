@@ -26,7 +26,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"RST", 16, false, nullptr},          // Reset Effects
-  {"NEW", 24, false, nullptr}           // Start New - Complete factory reset
+  {"FULL", 24, false, nullptr}           // Start New - Complete factory reset
 };
 
 // LOOK submenu pages
@@ -1179,7 +1179,7 @@ void showNewFileMode() {
   FastLEDclear();
   
   // Draw page title
-  drawText("NEW", 6, 12, CRGB(0, 255, 255));
+  drawText("FULL", 6, 12, CRGB(0, 255, 255));
   
   // Draw genre selection
   drawGenreSelection();

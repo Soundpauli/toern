@@ -969,7 +969,9 @@ void showIcons(IconType ico, CRGB colors) {
     // If a valid icon array is selected, call the light function for each element.
     if (iconArray != nullptr) {
         for (unsigned int gx = 0; gx < size; gx++) {
-            light(iconArray[gx][0], maxY - iconArray[gx][1], colors);
+            // Move hourglass up by 2 pixels
+            int yOffset = (ico == ICON_HOURGLASS) ? 2 : 0;
+            light(iconArray[gx][0], maxY - iconArray[gx][1] + yOffset, colors);
         }
     }
 }
@@ -977,53 +979,127 @@ void showIcons(IconType ico, CRGB colors) {
 
 
 void processPeaks() {
-  float interpolatedValues[maxX];  // Support full width of display
+  static float interpolatedValues[32];  // Cache interpolated values (max possible width)
+  static float lastSeek = -1;
+  static float lastSeekEnd = -1;
+  static int lastPeakIndex = -1;
+  static bool hasCalculated = false;  // Track if we've calculated for current peak data
+  
+  // Recalculate if:
+  // 1. Parameters changed
+  // 2. We have peaks but haven't calculated yet (initial display or new sample)
+  bool needsRecalc = (GLOB.seek != lastSeek) || 
+                     (GLOB.seekEnd != lastSeekEnd) || 
+                     (peakIndex != lastPeakIndex) ||
+                     (peakIndex > 0 && !hasCalculated);
+  
+  if (needsRecalc) {
+    lastSeek = GLOB.seek;
+    lastSeekEnd = GLOB.seekEnd;
+    lastPeakIndex = peakIndex;
+  }
+  
+  // Reset calculation flag when no peaks (new sample loading)
+  if (peakIndex == 0) {
+    hasCalculated = false;
+  }
 
-  // Map seek start and end positions to x range (1-maxX)
-  unsigned int startX = mapf(GLOB.seek, 0, 100, 1, maxX);
-  unsigned int endX = mapf(GLOB.seekEnd, 0, 100, 1, maxX);
-
-  if (peakIndex > 0) {
-    // Distribute peak values over maxX positions
+  if (peakIndex > 0 && needsRecalc) {
+    hasCalculated = true;  // Mark that we've calculated for current peaks
+    // For each display column, map directly to peak array considering seek range
     for (int i = 0; i < maxX; i++) {
-      float indexMapped = mapf(i, 0, maxX - 1, 0, peakIndex - 1);
-      int lowerIndex = floor(indexMapped);
+      // Map i (0 to maxX-1) to normalized position within seek range
+      // This ensures x=1 gets the first peak in the visible range
+      float normalizedPos = (float)i / (float)(maxX - 1);  // 0.0 to 1.0
+      
+      // Map normalized position to seek range
+      float seekPosition = GLOB.seek + normalizedPos * (GLOB.seekEnd - GLOB.seek);
+      seekPosition = constrain(seekPosition, 0.0f, 100.0f);
+      
+      // Map seek position (0-100%) to peak array index (0 to peakIndex-1)
+      float peakPos = (seekPosition / 100.0f) * (peakIndex - 1);
+      peakPos = constrain(peakPos, 0.0f, (float)(peakIndex - 1));
+      
+      int lowerIndex = floor(peakPos);
       int upperIndex = min(lowerIndex + 1, peakIndex - 1);
-
-      if (peakIndex > 1) {
-        float fraction = indexMapped - lowerIndex;
-        interpolatedValues[i] = peakValues[lowerIndex] * (1 - fraction) + peakValues[upperIndex] * fraction;
+      
+      // Interpolate between peaks
+      if (peakIndex > 1 && lowerIndex != upperIndex) {
+        float fraction = peakPos - lowerIndex;
+        interpolatedValues[i] = peakValues[lowerIndex] * (1.0f - fraction) + peakValues[upperIndex] * fraction;
       } else {
-        interpolatedValues[i] = peakValues[0];  // Duplicate if only one value exists
+        interpolatedValues[i] = peakValues[lowerIndex];
       }
     }
-  } else {
+  } else if (needsRecalc) {
     // No peaks, default to zero
     for (int i = 0; i < maxX; i++) {
       interpolatedValues[i] = 0;
     }
   }
 
-  // Light up LEDs
+  // === NORMALIZATION: Calculate once and cache ===
+  static float cachedGainFactor = 1.0f;
+  
+  if (needsRecalc) {
+    // Find max peak value
+    float maxPeak = 0.0f;
+    for (int i = 0; i < maxX; i++) {
+      if (interpolatedValues[i] > maxPeak) {
+        maxPeak = interpolatedValues[i];
+      }
+    }
+    
+    // Calculate gain factor (with minimum threshold to avoid over-amplifying noise)
+    if (maxPeak > 0.05f) {  // Only normalize if there's meaningful signal (> 5%)
+      cachedGainFactor = 1.0f / maxPeak;  // Scale so max peak reaches 1.0
+      cachedGainFactor = constrain(cachedGainFactor, 1.0f, 10.0f);  // Limit gain to 10x max
+    } else {
+      cachedGainFactor = 1.0f;
+    }
+  }
+  
+  float gainFactor = cachedGainFactor;
+
+  // Light up LEDs with normalized values - Start at y=3 for more height
   for (int i = 0; i < maxX; i++) {
     int x = i + 1;  // Ensure x values go from 1 to maxX
-    int yPeak = mapf(interpolatedValues[i] * 100, 0, 100, 4, 11);
-    yPeak = constrain(yPeak, 5, 10);
+    
+    // Apply normalization gain
+    float normalizedValue = interpolatedValues[i] * gainFactor;
+    normalizedValue = constrain(normalizedValue, 0.0f, 1.0f);
+    
+    // Map to y range 3-11 (was 5-11, now 2px taller)
+    int yPeak = mapf(normalizedValue * 100, 0, 100, 3, 11);
+    yPeak = constrain(yPeak, 3, 10);
 
-    for (int y = 5; y <= yPeak; y++) {
-      // **Color gradient based on Y (vertical) instead of X**
-
+    for (int y = 3; y <= yPeak; y++) {
+      // Spectral color gradient (rainbow): Red → Orange → Yellow → Green → Cyan → Blue
+      // Map y from 3-10 to hue 0-170 (red to cyan-blue range)
+      float normalizedY = mapf(y, 3, 10, 0.0f, 1.0f);
+      int hue = mapf(normalizedY, 0.0f, 1.0f, 0, 170);  // HSV hue: 0=red, 60=yellow, 120=green, 170=cyan
+      
+      // Convert HSV to RGB (hue, saturation=255, value=255)
+      // Simplified HSV to RGB conversion
+      int sector = hue / 60;
+      int remainder = hue % 60;
+      int p = 0;
+      int q = (255 * (60 - remainder)) / 60;
+      int t = (255 * remainder) / 60;
+      
       CRGB color;
-      if (x < startX) {
-        color = CRGB(0, 0, 5);  // Green for pre-start region
-      } else if (x > endX) {
-        color = CRGB(15, 15, 00);  // yellow for post-end region
-      } else {
-
-        color = CRGB(((y - 4) * 35) / 4, (255 - ((y - 4) * 35)) / 4, 0);  // Red to green gradient at 25% brightness
+      switch(sector) {
+        case 0: color = CRGB(255, t, p); break;      // Red → Yellow
+        case 1: color = CRGB(q, 255, p); break;      // Yellow → Green
+        case 2: color = CRGB(p, 255, t); break;      // Green → Cyan
+        default: color = CRGB(p, q, 255); break;     // Cyan → Blue
       }
+      
+      // Reduce brightness to 40% for display
+      color.r = (color.r * 40) / 100;
+      color.g = (color.g * 40) / 100;
+      color.b = (color.b * 40) / 100;
 
-      // Light up from y = 4 to y = yPeak
       light(x, y, color);
     }
   }
@@ -1149,34 +1225,6 @@ void drawKnobColorDefault(){
 }
 
 
-
-/*void deleted_displaySample(unsigned int start, unsigned int size, unsigned int end) {
-  return;
-  unsigned int length = mapf(size, 0, 302000, 1, maxX);
-  unsigned int starting = mapf(start * SEARCHSIZE, 0, size, 1, maxX);
-  unsigned int ending = mapf(end * SEARCHSIZE, 0, size, 1, maxX);
-
-  //for (unsigned int s = 1; s <= maxX; s++) {
-  //light(s, 5, CRGB(10, 20, 10));
-  //}
-
-  for (unsigned int s = 1; s <= length; s++) {
-    light(s, 9, CRGB(10, 10, 0));
-  }
-
-  for (unsigned int s = 1; s <= starting; s++) {
-    light(s, 7, CRGB(0, 10, 0));
-  }
-
-  for (unsigned int s = starting; s <= ending; s++) {
-    light(s, 6, CRGB(10, 10, 10));
-  }
-
-
-  for (unsigned int s = ending; s <= maxX; s++) {
-    light(s, 7, CRGB(10, 0, 0));
-  }
-}*/
 
 /************************************************
       SONG MODE
