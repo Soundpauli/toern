@@ -981,6 +981,11 @@ void switchMode(Mode *newMode) {
   GLOB.singleMode = false;
   paintMode = false;
   oldMode = currentMode;
+
+  if (currentMode == &recordMode && newMode != &recordMode) {
+    extern AudioMixer4 mixer_end;
+    mixer_end.gain(3, 0.0f);
+  }
   
   /// OLD ACTIONS
   if (currentMode == &set_Wav || currentMode == &filterMode) {
@@ -2659,6 +2664,8 @@ void showDoRecord() {
   // State machine: NORMAL -> RECORDING -> NORMAL -> PLAYBACK -> NORMAL
   enum RecordState { STATE_NORMAL, STATE_RECORDING, STATE_PLAYBACK };
   static RecordState state = STATE_NORMAL;
+  static bool forcedLineMonitor = false;
+  static float lastLineMonitorGain = 0.0f;
   
   // Persistent state variables
   static bool thresholdActive = false;
@@ -2684,11 +2691,38 @@ void showDoRecord() {
     state = STATE_NORMAL;
     thresholdActive = false;
     playbackActive = false;
+    forcedLineMonitor = false;
+    lastLineMonitorGain = 0.0f;
     extern bool sampleIsLoaded, firstcheck;
     extern CachedSample previewCache;
     sampleIsLoaded = false;
     firstcheck = true;
     previewCache.valid = false;
+  }
+
+  // === FORCE LINE-IN MONITORING WHEN IN RECORD MODE ===
+  extern int recMode;
+  if (recMode != 1) {  // Line input mode active
+    extern unsigned int monitorLevel;
+    extern AudioMixer4 mixer_end;
+
+    float monitorGain = 0.0f;
+    switch (monitorLevel) {
+      case 1: monitorGain = 0.1f; break;
+      case 2: monitorGain = 0.3f; break;
+      case 3: monitorGain = 0.5f; break;
+      case 4: monitorGain = 0.8f; break;
+      default: monitorGain = 0.1f; break;  // Ensure audible monitoring in line mode
+    }
+
+    mixer_end.gain(3, monitorGain);
+    lastLineMonitorGain = monitorGain;
+    forcedLineMonitor = true;
+  } else if (forcedLineMonitor) {
+    extern AudioMixer4 mixer_end;
+    mixer_end.gain(3, 0.0f);
+    forcedLineMonitor = false;
+    lastLineMonitorGain = 0.0f;
   }
   
   // Check global flag to disable threshold
@@ -2868,7 +2902,7 @@ void showDoRecord() {
     drawText(buf, 3, 5, CRGB(0, 255, 0));  // Green playback timer
   } else {
     // STATE_NORMAL: Only draw RDY when NOT recording and NOT playing
-    drawText("RDY", 3, 5, CRGB(255, 100, 0));  // Orange ready text
+    drawText("RDY", 5, 5, CRGB(255, 100, 0));  // Orange ready text
   }
 }
 
