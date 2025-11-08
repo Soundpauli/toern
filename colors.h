@@ -56,26 +56,6 @@ const CRGB col_Folder[] = {
 
 
 
-const CRGB filter_col[] = {
-  CRGB(50, 50, 50),
-  CRGB(139, 0, 0),      // Dark Red
-  CRGB(255, 69, 0),     // Burnt Orange
-  CRGB(255, 255, 0),    // Gold
-  CRGB(0, 139, 0),      // Green
-  CRGB(0, 140, 130),    // Türkis
-  CRGB(0, 0, 255),      // Blau
-  CRGB(140, 0, 120),    // Lila
-  CRGB(220, 100, 100),  // rosa
-  CRGB(50, 50, 50),
-  CRGB(50, 50, 50),
-  CRGB(50, 50, 50),
-  CRGB(50, 50, 50),
-  CRGB(50, 255, 70),  // s1s
-  CRGB(255, 50, 50)  // s2
-};
-
-
-
 const CRGB col[] = {
   CRGB(0, 0, 0),
   CRGB(255, 0, 0),      // Dark Red

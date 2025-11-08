@@ -1,3 +1,30 @@
+extern uint8_t filterPageCount[NUM_CHANNELS];
+extern uint8_t filterPage[NUM_CHANNELS];
+
+static bool channelHasFreeverb(uint8_t chan) {
+  return !(chan == 3 || chan == 4);
+}
+
+static bool channelIsDrumMode(uint8_t chan) {
+  if (chan < 1 || chan > 3) return false;
+  return SMP.filter_settings[chan][EFX] == 1;
+}
+
+static bool updateFilterPageAvailability(uint8_t chan) {
+  if (chan >= 1 && chan <= 3) {
+    uint8_t desiredCount = channelIsDrumMode(chan) ? 4 : 3;
+    if (filterPageCount[chan] != desiredCount) {
+      filterPageCount[chan] = desiredCount;
+      if (desiredCount == 0) {
+        filterPage[chan] = 0;
+      } else if (filterPage[chan] >= desiredCount) {
+        filterPage[chan] = desiredCount - 1;
+      }
+      return true;
+    }
+  }
+  return false;
+}
 unsigned long lastEncoderChange[4] = { 0, 0, 0, 0 };
 
 int8_t lastChangedEncoder = -1;
@@ -189,6 +216,8 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
 
 
 void initSliders(uint8_t page, uint8_t chan) {
+  updateFilterPageAvailability(chan);
+  page = filterPage[chan];
   showFilterNames(chan);
 
   Serial.print("[Debug] Switched to slider page: ");
@@ -245,12 +274,18 @@ void slider(uint8_t page) {
 
     //  Draw slider
 
+    CRGB sliderColor = filterColors[page][i];
+    bool reverbDisabled = (def.arr == ARR_FILTER && def.idx == REVERB && !channelHasFreeverb(chan));
+    if (reverbDisabled) {
+      sliderColor = CRGB(4, 4, 4);
+    }
+
     drawVerticalSlider(
       sliderCols[i][0],
       sliderCols[i][1],
       val,
       meta.maxValue,
-      filterColors[page][i],
+      sliderColor,
       isLowHigh,
       i, // sliderIndex
       page, // pass page
@@ -261,7 +296,7 @@ void slider(uint8_t page) {
       drawSliderName(sliderCols[i][0],
                      sliderCols[i][1],
                      def.name,
-                     filterColors[page][i]);
+                     sliderColor);
       showSingleFilter[i] = true;
     }
   }
@@ -405,6 +440,7 @@ void processAdjustments_new(uint8_t page) {
   Serial.println(page);
 
   uint8_t chan = GLOB.currentChannel;
+  bool pageCountChanged = false;
 
   for (uint8_t i = 0; i < 4; ++i) {
     auto& d = sliderDef[chan][page][i];
@@ -431,6 +467,11 @@ void processAdjustments_new(uint8_t page) {
       case ARR_FILTER:
           SMP.filter_settings[chan][d.idx] = currentMode->pos[i];
           setFilters(d.idx, chan, false);
+          if (d.idx == EFX) {
+            if (updateFilterPageAvailability(chan)) {
+              pageCountChanged = true;
+            }
+          }
         break;
 
       case ARR_SYNTH:
@@ -456,6 +497,11 @@ void processAdjustments_new(uint8_t page) {
     
   }
   
+  if (pageCountChanged) {
+    initSliders(filterPage[chan], chan);
+    updateFilterEncoderColors();
+  }
+
 
   if (GLOB.currentChannel == 11) updateSynthVoice(11);
 
@@ -471,6 +517,7 @@ void setNewFilters() {
   static bool lastTouch = false;
   bool currTouch = (touchValue > touchThreshold);
   uint8_t chan = GLOB.currentChannel;
+  updateFilterPageAvailability(chan);
   
   if (currTouch && !lastTouch) {
     // Use filterPageCount[chan] for wrapping
@@ -575,6 +622,9 @@ void showFilterNames(uint8_t chan) {
         if (def.arr == ARR_NONE && def.idx == -1) continue;
         char abbrev[2] = { def.name[0], '\0' };
         CRGB color = filterColors[page][i];
+        if (def.arr == ARR_FILTER && def.idx == REVERB && !channelHasFreeverb(chan)) {
+          color = CRGB(4, 4, 4);
+        }
         drawText(abbrev, sliderCols[i][0], 12, color);
     }
 }
@@ -599,10 +649,20 @@ void updateFilterEncoderColors() {
         }
       }
       
+      bool reverbDisabled = (sliderDef[chan][page][i].arr == ARR_FILTER &&
+                             sliderDef[chan][page][i].idx == REVERB &&
+                             !channelHasFreeverb(chan));
+
       if (isDefaultFast) {
         color = CRGB(255, 255, 0); // Bright yellow for default fast filter
+        if (reverbDisabled) {
+          color = CRGB(16, 16, 0);
+        }
       } else {
         color = filterColors[page][i]; // Normal filter page color
+        if (reverbDisabled) {
+          color = CRGB(8, 8, 8);
+        }
       }
       
       Encoder[i].writeRGBCode(CRGBToUint32(color));

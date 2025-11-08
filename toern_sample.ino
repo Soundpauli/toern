@@ -52,6 +52,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
   // --- Calculate offsets from seek percentages ---
   int startOffset = (GLOB.smplen * GLOB.seek) / 100;
   int endOffset = (GLOB.smplen * GLOB.seekEnd) / 100;
+  endOffset = min(endOffset, GLOB.smplen);
 
   if (setMaxSampleLength) {
     endOffset = GLOB.smplen;
@@ -152,6 +153,7 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
     unsigned int startOffsetBytes = startOffset * SampleRate[sampleID] * 2;
 
     unsigned int endOffset = (GLOB.seekEnd * GLOB.smplen) / 100;
+    if (endOffset > GLOB.smplen) endOffset = GLOB.smplen;
     if (GLOB.seekEnd == 0) {
       endOffset = GLOB.smplen;  // Full length if seekEnd is 0
       GLOB.seekEnd = 100;       // Set to 100%
@@ -230,6 +232,11 @@ void showWave() {
   
   // Encoder 3: Large Yellow (L[Y]) - matches indicator 3
   Encoder[2].writeRGBCode(0xFFFF00); // Yellow
+  Encoder[2].writeMax((int32_t)100);
+  if (currentMode->pos[2] > 100) {
+    currentMode->pos[2] = 100;
+    Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+  }
   
   // Encoder 4: Large Blue (L[X]) - matches indicator 4
   Encoder[3].writeRGBCode(0x0000FF); // Blue

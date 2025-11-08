@@ -2884,7 +2884,7 @@ void showDoRecord() {
   
   // x=2: Live input level bar
   for (int y = 1; y <= inputHeight && y <= maxY; y++) {
-    CRGB barColor = (thresholdActive && y <= thresholdHeight) ? CRGB(0, 255, 0) : CRGB(255, 0, 0);
+    CRGB barColor = CRGB(255, 0, 0);
     light(2, y, barColor);
   }
   
@@ -3425,9 +3425,6 @@ void playSynth(int ch, int b, int vel, bool persistant) {
 
   float frequency = fullFrequencies[constrain(b - ch + 13, 0, 26)];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
                                                                      // Constrain index for fullFrequencies
-
-  //float frequency = pianoFrequencies[b+12]; //C4
-
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
 

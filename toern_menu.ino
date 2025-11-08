@@ -1,5 +1,5 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 11
+#define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 5
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 3
@@ -25,8 +25,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP, CLCK)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"RST", 16, false, nullptr},          // Reset Effects
-  {"FULL", 24, false, nullptr}           // Start New - Complete factory reset
+  {"RST", 16, true, "MODE"}            // Reset Effects
 };
 
 // LOOK submenu pages
@@ -71,6 +70,9 @@ int genreLength = 8; // Default length for genre generation
 
 // NEW mode state management
 bool newScreenFirstEnter = true;
+
+// Reset menu option: 0 = EFX reset, 1 = FULL reset
+int resetMenuOption = 0;
 
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
@@ -623,12 +625,12 @@ void drawMainSettingStatus(int setting) {
       
     case 16: // RST - Reset
       drawText("RSET", 2, 10, CRGB(255, 0, 0));  // Red
-      drawText("EFX", 2, 3, CRGB(100, 0, 0));  // Dark Red
-      break;
-      
-    case 24: // NEW - Start New (Complete Reset)
-      drawText("NEW", 2, 10, CRGB(0, 255, 255));  // Cyan
-      drawText("RSET", 2, 3, CRGB(0, 100, 100));  // Dim Cyan
+      /*if (resetMenuOption == 0) {
+        drawText("EFX", 2, 3, CRGB(100, 0, 0));  // Dark Red
+      } else {
+        drawText("FULL", 2, 3, CRGB(100, 0, 0));  // Dark Red
+      }*/
+      drawIndicator('L', 'O', 3);  // Encoder 3: Large Orange indicator
       break;
       
     case 19: // PLAY - Submenu
@@ -696,6 +698,16 @@ void drawAdditionalFeatures(int setting) {
       
       // Draw "PAGE" text in pink at the bottom
       drawText("PAGE", 2, 3, CRGB(0, 0, 10)); // Pink color
+      break;
+    }
+
+    case 16: { // RST page - show current reset mode
+      const char* modeText = (resetMenuOption == 0) ? "EFX" : "FULL";
+      for (int x = 1; x <= 16; x++) {
+        light(x, 8, CRGB::Black);
+      }
+      drawText(modeText, 2, 3, UI_ORANGE);
+      FastLEDshow();
       break;
     }
     
@@ -845,6 +857,25 @@ void handleAdditionalFeatureControls(int setting) {
       break;
     }
     
+    case 16: { // RST page - Choose between EFX and FULL reset
+      static int lastResetOption = -1;
+
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)resetMenuOption);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        menuFirstEnter = false;
+      }
+
+      if (currentMode->pos[2] != lastResetOption) {
+        resetMenuOption = constrain(currentMode->pos[2], 0, 1);
+        Encoder[2].writeCounter((int32_t)resetMenuOption);
+        drawMainSettingStatus(setting);
+        lastResetOption = resetMenuOption;
+      }
+      break;
+    }
+
       
          default:
        // Reset first enter flags when not on pages with additional features
@@ -1015,17 +1046,15 @@ void switchMenu(int menuPosition){
         break;
 
         case 16:
-        // Reset all filters, envelopes, drums and synths to default
+        if (resetMenuOption == 0) {
+        // Reset effects/parameters to defaults
         resetAllToDefaults();
-        break;
-        
-        case 24: {
-        // START NEW - Complete reset to factory defaults with fresh start
-        Serial.println("Starting NEW - Complete reset...");
+        } else {
+        // Full reset
         extern void startNew();
         startNew();
-        break;
         }
+        break;
         
         case 19:
         // Enter LOOK submenu at first page

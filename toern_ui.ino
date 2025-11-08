@@ -235,9 +235,7 @@ void drawNoSD() {
 
   while (!SD.begin(INT_SD)) {
     FastLEDclear();
-    for (unsigned int gx = 0; gx < 48; gx++) {
-      light(noSD[gx][0], maxY - noSD[gx][1], CRGB(50, 0, 0));
-    }
+    drawText("SD?", 6, 8, UI_RED);
     FastLEDshow();
     delay(1000);
     noSDfound = true;
@@ -1061,7 +1059,30 @@ void processPeaks() {
   
   float gainFactor = cachedGainFactor;
 
-  // Light up LEDs with normalized values - Start at y=3 for more height
+  // Draw baseline at y=3 across full width
+  for (int x = 1; x <= maxX; x++) {
+    light(x, 3, CRGB(0, 0, 50));  // Dim blue baseline
+  }
+
+  // Highlight seek region on baseline
+  int seekStartX = mapf(GLOB.seek, 0, 100, 1, maxX);
+  int seekEndX = mapf(GLOB.seekEnd, 0, 100, 1, maxX);
+  seekStartX = constrain(seekStartX, 1, maxX);
+  seekEndX = constrain(seekEndX, 1, maxX);
+
+  if (seekEndX <= seekStartX) {
+    seekEndX = min(maxX, seekStartX + 1);
+  }
+
+  for (int x = 1; x <= seekStartX; x++) {
+    light(x, 3, CRGB(0, 80, 0));  // Green for start portion
+  }
+
+  for (int x = seekEndX; x <= maxX; x++) {
+    light(x, 3, CRGB(80, 0, 0));  // Red for end portion
+  }
+
+  // Light up LEDs with normalized values - limit drawing to y=5..10
   for (int i = 0; i < maxX; i++) {
     int x = i + 1;  // Ensure x values go from 1 to maxX
     
@@ -1069,14 +1090,20 @@ void processPeaks() {
     float normalizedValue = interpolatedValues[i] * gainFactor;
     normalizedValue = constrain(normalizedValue, 0.0f, 1.0f);
     
-    // Map to y range 3-11 (was 5-11, now 2px taller)
-    int yPeak = mapf(normalizedValue * 100, 0, 100, 3, 11);
-    yPeak = constrain(yPeak, 3, 10);
+    // Map to y range 5-10
+    int yPeak = mapf(normalizedValue * 100, 0, 100, 5, 10);
+    yPeak = constrain(yPeak, 5, 10);
 
-    for (int y = 3; y <= yPeak; y++) {
+    // Clear rows above the waveform area (except baseline at y=3)
+    for (int y = 2; y < 5; y++) {
+      if (y == 3) continue;
+      light(x, y, CRGB::Black);
+    }
+
+    for (int y = 5; y <= yPeak; y++) {
       // Spectral color gradient (rainbow): Red → Orange → Yellow → Green → Cyan → Blue
-      // Map y from 3-10 to hue 0-170 (red to cyan-blue range)
-      float normalizedY = mapf(y, 3, 10, 0.0f, 1.0f);
+      // Map y from 5-10 to hue 0-170 (red to cyan-blue range)
+      float normalizedY = mapf(y, 5, 10, 0.0f, 1.0f);
       int hue = mapf(normalizedY, 0.0f, 1.0f, 0, 170);  // HSV hue: 0=red, 60=yellow, 120=green, 170=cyan
       
       // Convert HSV to RGB (hue, saturation=255, value=255)
