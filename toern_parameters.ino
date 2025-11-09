@@ -1,20 +1,8 @@
-
-
 // Refactored: setParams combines processParameterAdjustment and updateParameterValue
 void setParams(ParameterType paramType, int index) {
 
   float mappedValue;
   switch (paramType) {
-    /*case WAVEFORM: {
-      mappedValue = mapf(SMP.param_settings[index][WAVEFORM], 0, maxIndex, 1, maxIndex + 1);
-      handleWaveformChange(index, (unsigned int)mappedValue);
-      break;
-    }*/
-    /*case DELAY:
-      mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
-      if (index > 9) envelopes[index]->delay(mappedValue);
-      break;
-    */
     case ATTACK:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
       envelopes[index]->attack(mappedValue);

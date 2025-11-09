@@ -1,4 +1,6 @@
 
+extern int8_t channelDirection[maxFiles];
+
 void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
   if (playSdWav1.isPlaying()) playSdWav1.stop();
   envelope0.noteOff();
@@ -179,6 +181,7 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
     loadedSampleRate[sampleID] = SampleRate[sampleID];  // e.g. 44100, or whatever
     loadedSampleLen[sampleID] = i; 
     _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], (int)i/1 , rateFactor);
+    channelDirection[sampleID] = 1;
   }
   yield();
 }
@@ -539,4 +542,5 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   loadedSampleRate[targetChannel] = previewCache.rate;
   loadedSampleLen[targetChannel] = trimmedSamples;
   _samplers[targetChannel].addSample(36, targetBuffer, trimmedSamples, rateFactor);
+  channelDirection[targetChannel] = 1;
 }

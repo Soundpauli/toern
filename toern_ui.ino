@@ -1,4 +1,5 @@
-
+extern const unsigned int maxlen;
+extern void triggerGridNote(unsigned int globalX, unsigned int y);
 
 // Fast function to light a specific LED on a specific matrix
 // matrixId: 0 = first matrix (left), 1 = second matrix, etc.
@@ -235,7 +236,7 @@ void drawNoSD() {
 
   while (!SD.begin(INT_SD)) {
     FastLEDclear();
-    drawText("SD?", 6, 8, UI_RED);
+    drawText("SD?", 3, 8, UI_RED);
     FastLEDshow();
     delay(1000);
     noSDfound = true;
@@ -308,7 +309,142 @@ void drawBase() {
   drawPages();
 }
 
+static bool pongBallInitialized = false;
+static int pongBallX = 1;
+static int pongBallY = 1;
+static int pongVelocityX = 1;
+static int pongVelocityY = 1;
+static unsigned long pongLastUpdate = 0;
+static const unsigned long pongUpdateInterval = 70;
 
+void resetPongGame() {
+  pongBallInitialized = false;
+}
+
+static void initPongBall() {
+  pongBallX = max(1, (int)((maxX > 0) ? ((maxX + 1) / 2) : 1));
+  pongBallY = max(1, (int)((maxY > 0) ? ((maxY + 1) / 2) : 1));
+
+  // Random angle between 25-65° to avoid perfect 45°
+  int angle = random(25, 66);
+  bool flipX = (random(0, 2) == 0);
+  bool flipY = (random(0, 2) == 0);
+
+  // Simple angle-to-velocity mapping without floats:
+  // angle 30°→vx=2,vy=1  45°→vx=1,vy=1  60°→vx=1,vy=2
+  if (angle < 40) {
+    pongVelocityX = 2;
+    pongVelocityY = 1;
+  } else if (angle > 50) {
+    pongVelocityX = 1;
+    pongVelocityY = 2;
+  } else {
+    pongVelocityX = 1;
+    pongVelocityY = 1;
+  }
+
+  if (flipX) pongVelocityX = -pongVelocityX;
+  if (flipY) pongVelocityY = -pongVelocityY;
+
+  pongLastUpdate = millis();
+  pongBallInitialized = true;
+}
+
+static bool pongNoteAt(int px, int py) {
+  if (px < 1 || px > (int)maxX || py < 1 || py > maxY) {
+    return false;
+  }
+
+  unsigned int pageIndex = (GLOB.edit > 0) ? (GLOB.edit - 1) : 0;
+  unsigned int globalX = (pageIndex * maxX) + px;
+  if (globalX > maxlen) {
+    return false;
+  }
+
+  return note[globalX][py].channel != 0;
+}
+
+static void triggerPongCollision(int px, int py) {
+  if (px < 1 || px > (int)maxX || py < 1 || py > maxY) {
+    return;
+  }
+
+  unsigned int pageIndex = (GLOB.edit > 0) ? (GLOB.edit - 1) : 0;
+  unsigned int globalX = (pageIndex * maxX) + px;
+  if (globalX > maxlen) {
+    return;
+  }
+
+  triggerGridNote(globalX, py);
+}
+
+void updatePongBall() {
+  if (!pongBallInitialized) {
+    initPongBall();
+  }
+
+  unsigned long now = millis();
+  if (now - pongLastUpdate < pongUpdateInterval) {
+    return;
+  }
+  pongLastUpdate = now;
+
+  int vx = pongVelocityX;
+  int vy = pongVelocityY;
+
+  int nextX = pongBallX + vx;
+  int nextY = pongBallY + vy;
+
+  if (nextX < 1 || nextX > (int)maxX) {
+    vx = -vx;
+    nextX = pongBallX + vx;
+  }
+
+  if (nextY < 1 || nextY > maxY) {
+    vy = -vy;
+    nextY = pongBallY + vy;
+  }
+
+  bool axisCollision = false;
+
+  if (vx != 0) {
+    int collisionX = pongBallX + vx;
+    if (collisionX >= 1 && collisionX <= (int)maxX && pongNoteAt(collisionX, pongBallY)) {
+      triggerPongCollision(collisionX, pongBallY);
+      vx = -vx;
+      axisCollision = true;
+    }
+  }
+
+  if (vy != 0) {
+    int collisionY = pongBallY + vy;
+    if (collisionY >= 1 && collisionY <= maxY && pongNoteAt(pongBallX, collisionY)) {
+      triggerPongCollision(pongBallX, collisionY);
+      vy = -vy;
+      axisCollision = true;
+    }
+  }
+
+  if (!axisCollision) {
+    int collisionX = pongBallX + vx;
+    int collisionY = pongBallY + vy;
+    if (collisionX >= 1 && collisionX <= (int)maxX && collisionY >= 1 && collisionY <= maxY && pongNoteAt(collisionX, collisionY)) {
+      triggerPongCollision(collisionX, collisionY);
+      vx = -vx;
+      vy = -vy;
+    }
+  }
+
+  pongBallX = constrain(pongBallX + vx, 1, (int)maxX);
+  pongBallY = constrain(pongBallY + vy, 1, maxY);
+
+  pongVelocityX = vx;
+  pongVelocityY = vy;
+}
+
+void drawPongBall() {
+  light(pongBallX, pongBallY, CRGB(255, 255, 255));
+}
 
 void drawRecordingBorder() {
   // Draw red border around entire screen

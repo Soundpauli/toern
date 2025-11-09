@@ -36,17 +36,6 @@ void HHnoteOn() {
 
 void KD_drum(float A1, float A2, float A3, int type) {
 
-  //Serial.print("BD ");
-  //Serial.print(A1);
-  //Serial.print(" ");
-  //Serial.print(A2);
-  //Serial.print(" ");
-  //Serial.print(A3);
-  //Serial.print(" ");
-  //Serial.print(type);
-  //Serial.println(" ");
-
-
 
   int BDvariation = 1;
 

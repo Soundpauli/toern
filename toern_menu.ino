@@ -1,11 +1,12 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 5
+#define LOOK_PAGES_COUNT 6
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 3
 
 // External variables
 extern Mode *currentMode;
+extern bool pong;
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -34,7 +35,8 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"VIEW", 17, false, nullptr},         // Simple Notes View
   {"PMD", 9, false, nullptr},           // Pattern Mode
   {"LOOP", 18, false, nullptr},         // Loop Length
-  {"LEDS", 23, false, nullptr}          // LED Modules Count (1 or 2)
+  {"LEDS", 23, false, nullptr},         // LED Modules Count (1 or 2)
+  {"PONG", 24, false, nullptr}          // Pong Toggle
 };
 
 // RECS submenu pages
@@ -667,6 +669,15 @@ void drawMainSettingStatus(int setting) {
       drawText("LEDS", 2, 10, CRGB(0, 255, 0));
       drawLedModules();
       break;
+
+    case 24: // PONG toggle
+      drawText("PONG", 2, 10, CRGB(255, 255, 255));
+      if (pong) {
+        drawText(" ON", 2, 3, UI_GREEN);
+      } else {
+        drawText("OFF", 2, 3, UI_RED);
+      }
+      break;
   }
 }
 
@@ -1133,6 +1144,12 @@ void switchMenu(int menuPosition){
         Serial.println(maxPages / (maxX / MATRIX_WIDTH));
         break;
         }
+
+      case 24: {
+        pong = !pong;
+        drawMainSettingStatus(menuPosition);
+        break;
+      }
     }
     //saveMenutoEEPROM();
 }

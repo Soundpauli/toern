@@ -57,6 +57,7 @@ extern IntervalTimer playTimer;
 extern float playNoteInterval;
 extern float detune[13]; // Global detune array for channels 1-12
 extern float channelOctave[9]; // Global octave array for channels 1-8
+extern int8_t channelDirection[maxFiles];
 
 void EEPROMgetLastFiles() {
   //get lastFile Array from Eeprom
@@ -405,6 +406,7 @@ void stopFastRecord() {
     idx,                           // sample-count
     rateFactor
   );
+  channelDirection[ch] = 1;
   
   // Auto-save recorded sample to samplepack 0
   Serial.print("Fast record stopped, saving to SP0 for channel ");
