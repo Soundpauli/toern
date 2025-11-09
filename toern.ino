@@ -309,7 +309,7 @@ int peakRecIndex = 0;
 
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
-bool pong = true;
+bool pong = false;
 const unsigned int maxlen = (MATRIX_WIDTH * LED_MODULES * maxPages) + 1;  // Use max hardware capacity for array size
 const long ram = 9525600;  // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
 const unsigned int SONG_LEN = MATRIX_WIDTH * LED_MODULES * maxPages;  // Use max hardware capacity
@@ -379,7 +379,7 @@ bool hasNotes[maxPages + 1];
 unsigned int startTime[maxY] = { 0 };    // Variable to store the start time
 bool noteOnTriggered[maxY] = { false };  // Flag to indicate if noteOn has been triggered
 bool persistentNoteOn[maxY] = { false };
-uint8_t pressedKeyCount[maxY] = { 0 };  // Count of keys pressed per channel
+int pressedKeyCount[maxY] = { 0 };
 
 bool waitForFourBars = false;
 unsigned int pulseCount = 0;
@@ -393,7 +393,7 @@ EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
 //IntervalTimer midiTimer;
 unsigned int lastPage = 1;
-uint8_t editpage = 1;  // Current edit page (1-maxPages)
+int editpage = 1;
 
 
 
@@ -479,7 +479,7 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir);
 // Song arrangement data: 64 positions, each holds a pattern number (1-16, or 0 for empty)
 uint8_t songArrangement[64] = {0};
 bool songModeActive = false;  // When true, playback follows song arrangement
-uint8_t currentSongPosition = 0;  // Current position in song arrangement (0-63)
+int currentSongPosition = 0;  // Current position in song arrangement (0-63)
 
 
 struct Sample {
@@ -2785,8 +2785,8 @@ void showDoRecord() {
   extern AudioAnalyzePeak peakRec;
   extern AudioPlaySdWav playSdWav1;
   extern bool previewIsPlaying;
-    extern int peakRecIndex;
-    extern const int maxRecPeaks;
+  extern int peakRecIndex;
+  extern const int maxRecPeaks;
   extern float peakRecValues[];
   extern elapsedMillis mRecsecs;
   
@@ -3450,7 +3450,7 @@ void play(bool fromStart) {
     // In song mode, start from the first defined pattern
     extern bool songModeActive;
     extern uint8_t songArrangement[64];
-      extern uint8_t currentSongPosition;
+    extern int currentSongPosition;
     
     if (songModeActive) {
       // Song mode requires PMOD to be active
@@ -3785,7 +3785,7 @@ void playNote() {
 void checkPages() {
   extern bool songModeActive;
   extern uint8_t songArrangement[64];
-      extern uint8_t currentSongPosition;
+  extern int currentSongPosition;
   
   // Check song mode FIRST, before SMP_PATTERN_MODE
   if (songModeActive) {
@@ -3953,6 +3953,9 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   Note& cell = note[globalX][y];
   int channel = cell.channel;
   if (channel == 0) return;
+  
+  // Don't trigger muted voices
+  if (getMuteState(channel)) return;
 
   int velocity = cell.velocity > 0 ? cell.velocity : defaultVelocity;
   int pitch_from_row = y;

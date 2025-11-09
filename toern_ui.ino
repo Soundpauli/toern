@@ -317,13 +317,26 @@ static int pongVelocityY = 1;
 static unsigned long pongLastUpdate = 0;
 static const unsigned long pongUpdateInterval = 70;
 
-void resetPongGame() {
+// Comet tail tracking (using int8_t to save RAM)
+static const int8_t pongTailLength = 4;
+DMAMEM int8_t pongTailX[pongTailLength] __attribute__((aligned(4)));
+DMAMEM int8_t pongTailY[pongTailLength] __attribute__((aligned(4)));
+DMAMEM int8_t pongTailIndex = 0;
+
+FLASHMEM void resetPongGame() {
   pongBallInitialized = false;
+  // Clear tail history
+  for (int i = 0; i < pongTailLength; i++) {
+    pongTailX[i] = -1;
+    pongTailY[i] = -1;
+  }
+  pongTailIndex = 0;
 }
 
-static void initPongBall() {
-  pongBallX = max(1, (int)((maxX > 0) ? ((maxX + 1) / 2) : 1));
-  pongBallY = max(1, (int)((maxY > 0) ? ((maxY + 1) / 2) : 1));
+FLASHMEM static void initPongBall() {
+  // Spawn at random position
+  pongBallX = random(1, maxX + 1);
+  pongBallY = random(1, maxY + 1);
 
   // Random angle between 25-65° to avoid perfect 45°
   int angle = random(25, 66);
@@ -361,7 +374,13 @@ static bool pongNoteAt(int px, int py) {
     return false;
   }
 
-  return note[globalX][py].channel != 0;
+  int channel = note[globalX][py].channel;
+  if (channel == 0) return false;
+  
+  // Don't bounce off muted voices
+  if (getMuteState(channel)) return false;
+  
+  return true;
 }
 
 static void triggerPongCollision(int px, int py) {
@@ -378,7 +397,7 @@ static void triggerPongCollision(int px, int py) {
   triggerGridNote(globalX, py);
 }
 
-void updatePongBall() {
+FLASHMEM void updatePongBall() {
   if (!pongBallInitialized) {
     initPongBall();
   }
@@ -407,24 +426,35 @@ void updatePongBall() {
 
   bool axisCollision = false;
 
+  // Check X-axis collisions (check ALL cells along the path)
   if (vx != 0) {
-    int collisionX = pongBallX + vx;
-    if (collisionX >= 1 && collisionX <= (int)maxX && pongNoteAt(collisionX, pongBallY)) {
-      triggerPongCollision(collisionX, pongBallY);
-      vx = -vx;
-      axisCollision = true;
+    int stepX = (vx > 0) ? 1 : -1;
+    for (int step = 1; step <= abs(vx); step++) {
+      int checkX = pongBallX + (step * stepX);
+      if (checkX >= 1 && checkX <= (int)maxX && pongNoteAt(checkX, pongBallY)) {
+        triggerPongCollision(checkX, pongBallY);
+        vx = -vx;
+        axisCollision = true;
+        break;
+      }
     }
   }
 
-  if (vy != 0) {
-    int collisionY = pongBallY + vy;
-    if (collisionY >= 1 && collisionY <= maxY && pongNoteAt(pongBallX, collisionY)) {
-      triggerPongCollision(pongBallX, collisionY);
-      vy = -vy;
-      axisCollision = true;
+  // Check Y-axis collisions (check ALL cells along the path)
+  if (vy != 0 && !axisCollision) {
+    int stepY = (vy > 0) ? 1 : -1;
+    for (int step = 1; step <= abs(vy); step++) {
+      int checkY = pongBallY + (step * stepY);
+      if (checkY >= 1 && checkY <= maxY && pongNoteAt(pongBallX, checkY)) {
+        triggerPongCollision(pongBallX, checkY);
+        vy = -vy;
+        axisCollision = true;
+        break;
+      }
     }
   }
 
+  // Check diagonal collision only if no axis collision
   if (!axisCollision) {
     int collisionX = pongBallX + vx;
     int collisionY = pongBallY + vy;
@@ -435,6 +465,11 @@ void updatePongBall() {
     }
   }
 
+  // Store old position in tail before moving
+  pongTailX[pongTailIndex] = pongBallX;
+  pongTailY[pongTailIndex] = pongBallY;
+  pongTailIndex = (pongTailIndex + 1) % pongTailLength;
+
   pongBallX = constrain(pongBallX + vx, 1, (int)maxX);
   pongBallY = constrain(pongBallY + vy, 1, maxY);
 
@@ -442,7 +477,27 @@ void updatePongBall() {
   pongVelocityY = vy;
 }
 
-void drawPongBall() {
+FLASHMEM void drawPongBall() {
+  // Draw colorful fading tail (oldest to newest)
+  for (int i = 0; i < pongTailLength; i++) {
+    int tailIdx = (pongTailIndex + i) % pongTailLength;
+    int tx = pongTailX[tailIdx];
+    int ty = pongTailY[tailIdx];
+    
+    // Skip invalid positions
+    if (tx < 1 || ty < 1) continue;
+    
+    // Calculate fade (oldest = dimmest, newest = brightest)
+    int brightness = (i + 1) * 255 / (pongTailLength + 1);
+    
+    // Create rainbow effect: cycle through hue based on position in tail
+    uint8_t hue = (i * 255 / pongTailLength);
+    CRGB color = CHSV(hue, 255, brightness);
+    
+    light(tx, ty, color);
+  }
+  
+  // Draw bright white ball at current position
   light(pongBallX, pongBallY, CRGB(255, 255, 255));
 }
 
