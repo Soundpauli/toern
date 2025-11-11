@@ -223,9 +223,9 @@ void setFilters(FilterType filterType, int index, bool initial) {
         int xsampleRate = round(mapf(mappedValue, 1, 16, 44100, 1000));
         bitcrushers[index]->bits(16 - xbitDepth);
         bitcrushers[index]->sampleRate(xsampleRate);
-        float channelvolume = mapf(SMP.channelVol[index], 1, 16, 1, 0.2);
+        float normalizedVol = mapf(SMP.channelVol[index], 0, 16, 0.0f, 1.0f);
         // Less aggressive gain compensation: only reduce by 40% at max crush instead of 80%
-        float crushCompGain = mapf(mappedValue, 1, 16, max(channelvolume, 1), 0.6);
+        float crushCompGain = mapf(mappedValue, 1, 16, max(normalizedVol, 0.1f), 0.6f);
         amps[index]->gain(crushCompGain);
         break;
       }

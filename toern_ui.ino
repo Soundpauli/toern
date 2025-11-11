@@ -49,6 +49,7 @@ CRGB getIndicatorColor(char colorCode) {
     case 'W': return CRGB(255, 255, 255); // White
     case 'O': return CRGB(255, 165, 0);    // Orange
     case 'H': return CRGB(0, 191, 255);    // Bright Blue
+    case 'B': return CRGB(0, 150, 255);    // Teal for Pong speed
     case 'V': return CRGB(148, 0, 211);    // Violet
     case 'P': return CRGB(255, 192, 203);  // Pink
     case 'Y': return CRGB(255, 255, 0);   // Yellow
@@ -151,7 +152,7 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
 
 
 // Draws the above shape, with its top-left at (startX, startY).
-void drawLowResCircle(int startX, int startY, CRGB color) {
+FLASHMEM void drawLowResCircle(int startX, int startY, CRGB color) {
   // The pattern has 7 rows and 9 columns.
   for (int row = 0; row < 7; row++) {
     for (int col = 0; col < 9; col++) {
@@ -250,7 +251,7 @@ void drawNoSD() {
   drawNoSD_hasRun = true;  // Mark it as run
 }
 
-void drawBase() {
+FLASHMEM void drawBase() {
   if (!GLOB.singleMode) {
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
@@ -315,13 +316,54 @@ static int pongBallY = 1;
 static int pongVelocityX = 1;
 static int pongVelocityY = 1;
 static unsigned long pongLastUpdate = 0;
-static const unsigned long pongUpdateInterval = 70;
+DMAMEM uint16_t pongUpdateInterval __attribute__((aligned(4))) = 70;
 
 // Comet tail tracking (using int8_t to save RAM)
 static const int8_t pongTailLength = 4;
 DMAMEM int8_t pongTailX[pongTailLength] __attribute__((aligned(4)));
 DMAMEM int8_t pongTailY[pongTailLength] __attribute__((aligned(4)));
 DMAMEM int8_t pongTailIndex = 0;
+DMAMEM uint8_t pongCollisionCount = 0;
+
+FLASHMEM static void adjustPongAngle(int &vx, int &vy) {
+  int signX = (vx >= 0) ? 1 : -1;
+  int signY = (vy >= 0) ? 1 : -1;
+  int absVx = abs(vx);
+  int absVy = abs(vy);
+
+  int currentIdx;
+  if (absVx == 1 && absVy == 1) {
+    currentIdx = 0;
+  } else if (absVx == 2 && absVy == 1) {
+    currentIdx = 1;
+  } else {
+    currentIdx = 2;  // absVx == 1 && absVy == 2
+  }
+
+  int newIdx = currentIdx;
+  for (int attempts = 0; attempts < 4 && newIdx == currentIdx; attempts++) {
+    newIdx = random(0, 3);
+  }
+
+  int newAbsVx = 1;
+  int newAbsVy = 1;
+  switch (newIdx) {
+    case 0: newAbsVx = 1; newAbsVy = 1; break;
+    case 1: newAbsVx = 2; newAbsVy = 1; break;
+    case 2: newAbsVx = 1; newAbsVy = 2; break;
+  }
+
+  vx = signX * newAbsVx;
+  vy = signY * newAbsVy;
+}
+
+ FLASHMEM static void registerPongCollision(int &vx, int &vy) {
+  pongCollisionCount++;
+  if (pongCollisionCount >= 10) {
+    pongCollisionCount = 0;
+    adjustPongAngle(vx, vy);
+  }
+}
 
 FLASHMEM void resetPongGame() {
   pongBallInitialized = false;
@@ -331,6 +373,7 @@ FLASHMEM void resetPongGame() {
     pongTailY[i] = -1;
   }
   pongTailIndex = 0;
+  pongCollisionCount = 0;
 }
 
 FLASHMEM static void initPongBall() {
@@ -435,6 +478,7 @@ FLASHMEM void updatePongBall() {
         triggerPongCollision(checkX, pongBallY);
         vx = -vx;
         axisCollision = true;
+        registerPongCollision(vx, vy);
         break;
       }
     }
@@ -449,6 +493,7 @@ FLASHMEM void updatePongBall() {
         triggerPongCollision(pongBallX, checkY);
         vy = -vy;
         axisCollision = true;
+        registerPongCollision(vx, vy);
         break;
       }
     }
@@ -462,6 +507,7 @@ FLASHMEM void updatePongBall() {
       triggerPongCollision(collisionX, collisionY);
       vx = -vx;
       vy = -vy;
+      registerPongCollision(vx, vy);
     }
   }
 
@@ -501,7 +547,7 @@ FLASHMEM void drawPongBall() {
   light(pongBallX, pongBallY, CRGB(255, 255, 255));
 }
 
-void drawRecordingBorder() {
+FLASHMEM void drawRecordingBorder() {
   // Draw red border around entire screen
   CRGB redColor = CRGB(255, 0, 0);
   
@@ -518,7 +564,7 @@ void drawRecordingBorder() {
   }
 }
 
-void drawStatus() {
+FLASHMEM void drawStatus() {
  
 
   
@@ -666,7 +712,7 @@ void drawStatus() {
 }
 
 
-void drawText(const char *text, int startX, int startY, CRGB color) {
+FLASHMEM void drawText(const char *text, int startX, int startY, CRGB color) {
   int xOffset = startX;
 
   for (int i = 0; text[i] != '\0'; i++) {
@@ -677,7 +723,7 @@ void drawText(const char *text, int startX, int startY, CRGB color) {
 
 
 
-void drawChar(char c, int x, int y, CRGB color) {
+FLASHMEM void drawChar(char c, int x, int y, CRGB color) {
   if (c < 32 || c > 126) return;  // Skip unsupported characters
 
   uint8_t index = c - 32;              // Calculate index in alphabet array
@@ -704,7 +750,7 @@ void drawChar(char c, int x, int y, CRGB color) {
 
 
 
-void drawNumber(float count, CRGB color, int topY) {
+FLASHMEM void drawNumber(float count, CRGB color, int topY) {
   char buffer[16];
 
   // Check if the number is "effectively" an integer
@@ -733,7 +779,7 @@ void drawNumber(float count, CRGB color, int topY) {
 
 
 
-void drawVelocity() {
+FLASHMEM void drawVelocity() {
   //FastLEDclear();
 
   unsigned int vy = currentMode->pos[0];  // Velocity on encoder[0]
@@ -816,6 +862,29 @@ void drawVelocity() {
   drawText("c", 13, 2, UI_DIM_WHITE);
 }
 
+FLASHMEM void drawCtrlVolumeOverlay(int volume) {
+  const int overlayWidth = 2;
+  const int startX = 6;
+  const int endX = min((int)maxX, startX + overlayWidth - 1);
+  volume = constrain(volume, 0, 16);
+
+  if (volume == 0) {
+    // Show a dim red dot to indicate muted state
+    for (int x = startX; x <= endX; ++x) {
+      light(x, 1, CRGB(60, 0, 0));
+    }
+    return;
+  }
+
+  for (int x = startX; x <= endX; ++x) {
+    for (int y = 1; y <= volume; ++y) {
+      uint8_t hue = mapf(y, 1, 16, 0, 96);         // Red -> Green
+      uint8_t value = mapf(y, 1, 16, 180, 255);    // Brighter towards the top
+      CRGB color = CHSV(hue, 255, value);
+      light(x, y, color);
+    }
+  }
+}
 
 
 
@@ -823,7 +892,8 @@ void drawVelocity() {
 
 
 
-void drawPages() {
+
+FLASHMEM void drawPages() {
   //GLOB.edit = 1;
   CRGB ledColor;
   extern int loopLength;
@@ -880,7 +950,7 @@ void drawPages() {
 /************************************************
       DRAW SAMPLES
   *************************************************/
-void drawTriggers() {
+FLASHMEM void drawTriggers() {
   // why?
   //GLOB.edit = 1;
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
@@ -1006,7 +1076,7 @@ int mapXtoPageOffset(int x) {
 /************************************************
       USER CURSOR
   *************************************************/
-void drawCursor() {
+FLASHMEM void drawCursor() {
   if (dir == 1)
     pulse += 8;
   if (dir == -1)
@@ -1033,7 +1103,7 @@ void drawCursor() {
 
 
 
-void drawVolume(unsigned int vol) {
+FLASHMEM void drawVolume(unsigned int vol) {
   unsigned int maxXVolume = int(vol * 1.3) + 2;
   for (unsigned int x = 0; x <= maxXVolume; x++) {
     light(x + 1, 12, CRGB(vol * vol, 20 - vol, 0));
@@ -1041,7 +1111,7 @@ void drawVolume(unsigned int vol) {
   }
 }
 
-void drawBrightness() {
+FLASHMEM void drawBrightness() {
   unsigned int maxBrightness = ((ledBrightness - 65) * (15 - 1)) / (255 - 65) + 3;
   for (unsigned int x = 0; x < maxBrightness; x++) {
     CRGB brightness = CRGB(16 * x, 16 * x, 16 * x);
@@ -1052,7 +1122,7 @@ void drawBrightness() {
 
 
 
-void showIcons(IconType ico, CRGB colors) {
+FLASHMEM void showIcons(IconType ico, CRGB colors) {
     // Pointer to icon array and its size
     const uint8_t (*iconArray)[2] = nullptr;
     unsigned int size = 0;

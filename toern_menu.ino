@@ -1,12 +1,15 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 6
+#define LOOK_PAGES_COUNT 7
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 3
 
 // External variables
 extern Mode *currentMode;
+extern int ctrlMode;
+void refreshCtrlEncoderConfig();
 extern bool pong;
+extern uint16_t pongUpdateInterval;
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -35,9 +38,20 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"VIEW", 17, false, nullptr},         // Simple Notes View
   {"PMD", 9, false, nullptr},           // Pattern Mode
   {"LOOP", 18, false, nullptr},         // Loop Length
+  {"CTRL", 25, false, nullptr},         // Encoder control mode
   {"LEDS", 23, false, nullptr},         // LED Modules Count (1 or 2)
   {"PONG", 24, false, nullptr}          // Pong Toggle
 };
+
+static inline uint16_t pongSpeedToInterval(int speed) {
+  speed = constrain(speed, 1, 99);
+  return static_cast<uint16_t>(mapf(speed, 1, 99, 300, 20));
+}
+
+static inline int pongIntervalToSpeed(uint16_t interval) {
+  interval = constrain(interval, 20, 300);
+  return static_cast<int>(mapf(interval, 300, 20, 1, 99));
+}
 
 // RECS submenu pages
 MenuPage recsPages[RECS_PAGES_COUNT] = {
@@ -96,6 +110,7 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
     EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
     EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
+    EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
 
     Serial.println("EEPROM initialized with defaults.");
   }
@@ -115,6 +130,7 @@ void loadMenuFromEEPROM() {
   simpleNotesView = (int) EEPROM.read(EEPROM_DATA_START + 11);
   loopLength = (int) EEPROM.read(EEPROM_DATA_START + 12);
   ledModules = (int) EEPROM.read(EEPROM_DATA_START + 13);
+  ctrlMode = (int8_t) EEPROM.read(EEPROM_DATA_START + 14);
   
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
@@ -152,6 +168,10 @@ void loadMenuFromEEPROM() {
   
   // Ensure ledModules is valid (1 or 2)
   if (ledModules < 1 || ledModules > 2) {
+  if (ctrlMode != 0 && ctrlMode != 1) {
+    ctrlMode = 0;
+  }
+
     Serial.print("Invalid ledModules value: ");
     Serial.print(ledModules);
     Serial.println(" - defaulting to 1");
@@ -242,7 +262,7 @@ void loadSp0StateFromEEPROM() {
   Serial.println("=== SP0 State Loaded ===");
 }
 
-void showMenu() {
+FLASHMEM void showMenu() {
   FastLEDclear();
   //showExit(0);
 
@@ -333,7 +353,7 @@ void showMenu() {
   handleAdditionalFeatureControls(mainSetting);
 }
 
-void showLookMenu() {
+FLASHMEM void showLookMenu() {
   FastLEDclear();
 
   // New indicator system: lookMenu: | | | L[G]
@@ -396,7 +416,7 @@ void showLookMenu() {
   handleAdditionalFeatureControls(mainSetting);
 }
 
-void showRecsMenu() {
+FLASHMEM void showRecsMenu() {
   FastLEDclear();
 
   // New indicator system: recsMenu: | | | L[O] (orange)
@@ -470,7 +490,7 @@ void showRecsMenu() {
   handleAdditionalFeatureControls(mainSetting);
 }
 
-void showMidiMenu() {
+FLASHMEM void showMidiMenu() {
   FastLEDclear();
 
   // New indicator system: midiMenu: | | | L[W] (white)
@@ -533,7 +553,7 @@ void showMidiMenu() {
   handleAdditionalFeatureControls(mainSetting);
 }
 
-void drawMainSettingStatus(int setting) {
+FLASHMEM void drawMainSettingStatus(int setting) {
   switch (setting) {
     case 1: // DAT - Load/Save
       showIcons(ICON_LOADSAVE, UI_DIM_GREEN);
@@ -673,15 +693,38 @@ void drawMainSettingStatus(int setting) {
     case 24: // PONG toggle
       drawText("PONG", 2, 10, CRGB(255, 255, 255));
       if (pong) {
-        drawText(" ON", 2, 3, UI_GREEN);
+        drawText("ON", 10, 3, UI_GREEN);
       } else {
-        drawText("OFF", 2, 3, UI_RED);
+        drawText("OFF", 6, 3, UI_RED);
+      }
+      if (pong) {
+        char speedText[6];
+        int speedValue = pongIntervalToSpeed(pongUpdateInterval);
+        snprintf(speedText, sizeof(speedText), "%02d", speedValue);
+        drawText(speedText, 2, 3, CRGB(0, 150, 255));
+        {
+          CRGB indicatorColor = getIndicatorColor('B');
+          Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+        }
+        drawIndicator('L', 'B', 3);
+      } else {
+        Encoder[2].writeRGBCode(0x000000);
       }
       break;
+
+    case 25: { // CTRL - encoder behaviour
+      drawText("CTRL", 2, 10, CRGB(0, 255, 100));
+      if (ctrlMode == 0) {
+        drawText("PAGE", 2, 3, UI_GREEN);
+      } else {
+        drawText("VOL", 2, 3, UI_ORANGE);
+      }
+      break;
+    }
   }
 }
 
-void drawAdditionalFeatures(int setting) {
+FLASHMEM void drawAdditionalFeatures(int setting) {
   switch (setting) {
     case 4: { // REC page - Mic Gain
       //drawText("GAIN:", 2, 12, UI_DIM_WHITE);
@@ -725,7 +768,7 @@ void drawAdditionalFeatures(int setting) {
   }
 }
 
-void drawGenreSelection() {
+FLASHMEM void drawGenreSelection() {
   // Draw genre options on y=8
   const char* genres[] = {"BLNK", "TECH", "HIPH", "DNB", "HOUS", "AMBT"};
   CRGB genreColors[] = {
@@ -741,11 +784,13 @@ void drawGenreSelection() {
   drawText(genres[genreType], 2, 3, genreColors[genreType]);
 }
 
-void handleAdditionalFeatureControls(int setting) {
+FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static bool recMenuFirstEnter = true;
   static bool monMenuFirstEnter = true;
   static bool aiMenuFirstEnter = true;
   static bool menuFirstEnter = true;
+  static bool pongMenuFirstEnter = true;
+  static int lastPongSpeed = -1;
   static int lastSetting = -1;
   
   // Reset first enter flags when switching to a different setting
@@ -754,6 +799,8 @@ void handleAdditionalFeatureControls(int setting) {
     monMenuFirstEnter = true;
     aiMenuFirstEnter = true;
     menuFirstEnter = true;
+    pongMenuFirstEnter = true;
+    lastPongSpeed = -1;
     lastSetting = setting;
   }
   
@@ -887,13 +934,51 @@ void handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-      
+    case 24: { // PONG page - speed control on encoder 2
+      if (!pong) {
+        pongMenuFirstEnter = true;
+        lastPongSpeed = -1;
+        Encoder[2].writeRGBCode(0x000000);
+        break;
+      }
+
+      const int pongSpeedMin = 1;
+      const int pongSpeedMax = 99;
+
+      if (pongMenuFirstEnter) {
+        int currentSpeed = pongIntervalToSpeed(pongUpdateInterval);
+        Encoder[2].writeCounter(static_cast<int32_t>(currentSpeed));
+        Encoder[2].writeMax(static_cast<int32_t>(pongSpeedMax));
+        Encoder[2].writeMin(static_cast<int32_t>(pongSpeedMin));
+        currentMode->pos[2] = currentSpeed;
+        lastPongSpeed = currentSpeed;
+        pongMenuFirstEnter = false;
+      }
+
+      if (currentMode->pos[2] != lastPongSpeed) {
+        int newSpeed = currentMode->pos[2];
+        newSpeed = constrain(newSpeed, pongSpeedMin, pongSpeedMax);
+        if (newSpeed != lastPongSpeed) {
+          uint16_t newInterval = pongSpeedToInterval(newSpeed);
+          if (newInterval != pongUpdateInterval) {
+            pongUpdateInterval = newInterval;
+          }
+          drawMainSettingStatus(setting);
+        }
+        lastPongSpeed = newSpeed;
+        // Keep encoder within bounds in case constrain clipped it
+        Encoder[2].writeCounter(static_cast<int32_t>(newSpeed));
+      }
+      break;
+    }
+
          default:
        // Reset first enter flags when not on pages with additional features
        recMenuFirstEnter = true;
        monMenuFirstEnter = true;
        aiMenuFirstEnter = true;
        menuFirstEnter = true;
+       pongMenuFirstEnter = true;
        break;
   }
 }
@@ -1150,6 +1235,14 @@ void switchMenu(int menuPosition){
         drawMainSettingStatus(menuPosition);
         break;
       }
+
+      case 25: {
+        ctrlMode = ctrlMode ? 0 : 1;
+        drawMainSettingStatus(menuPosition);
+        refreshCtrlEncoderConfig();
+        saveSingleModeToEEPROM(14, ctrlMode);
+        break;
+      }
     }
     //saveMenutoEEPROM();
 }
@@ -1399,7 +1492,7 @@ int getCurrentMenuMainSetting() {
   return menuPages[currentMenuPage].mainSetting;
 }
 
-void drawRecChannelClear(){
+FLASHMEM void drawRecChannelClear(){
   if (recChannelClear == 1) {
     drawText("ON", 2, 3, UI_GREEN);
     SMP_REC_CHANNEL_CLEAR = true;  // Clear mode
@@ -1412,7 +1505,7 @@ void drawRecChannelClear(){
   }
 }
 
-void drawRecMode() {
+FLASHMEM void drawRecMode() {
 
   if (recMode == 1) {
     drawText("MIC", 2, 3, UI_WHITE);
@@ -1448,7 +1541,7 @@ void drawRecMode() {
   FastLEDshow();
 }
 
-void drawClockMode() {
+FLASHMEM void drawClockMode() {
 
   if (clockMode == 1) {
     drawText("INT", 2, 3, UI_GREEN);
@@ -1462,7 +1555,7 @@ void drawClockMode() {
 }
 
 
-void drawMidiVoiceSelect() {
+FLASHMEM void drawMidiVoiceSelect() {
 
   if (voiceSelect == 1) {
     drawText("MIDI", 2, 3, UI_BLUE);
@@ -1480,7 +1573,7 @@ void drawMidiVoiceSelect() {
 
 
 
-void drawPreviewVol() {
+FLASHMEM void drawPreviewVol() {
 
   if (previewVol == 3) {
     drawText("SPLT", 2, 3, UI_BLUE);
@@ -1537,7 +1630,7 @@ void drawPreviewVol() {
   
 }
 
-void drawMonitorLevel() {
+FLASHMEM void drawMonitorLevel() {
   if (monitorLevel == 0) {
     drawText("OFF", 2, 3, UI_RED);
   } else if (monitorLevel == 1) {
@@ -1552,7 +1645,7 @@ void drawMonitorLevel() {
   FastLEDshow();
 }
 
-void drawFastRecMode() {
+FLASHMEM void drawFastRecMode() {
 
 if (fastRecMode == 3) {
     drawText("+CON", 2, 3, UI_DIM_BLUE);
@@ -1581,7 +1674,7 @@ if (fastRecMode == 3) {
 }
 
 
-void drawPatternMode() {
+FLASHMEM void drawPatternMode() {
 
   if (patternMode == 2) {
     drawText("SONG", 2, 3, CRGB(255, 255, 0)); // Yellow for SONG mode
@@ -1597,7 +1690,7 @@ void drawPatternMode() {
   FastLEDshow();
 }
 
-void drawFlowMode() {
+FLASHMEM void drawFlowMode() {
   if (flowMode == 1) {
     drawText("ON", 2, 3, UI_GREEN);  // Use same coordinates as drawRecChannelClear
     SMP_FLOW_MODE = true;
@@ -1615,7 +1708,7 @@ void drawFlowMode() {
 }
 
 
-void drawMidiTransport() {
+FLASHMEM void drawMidiTransport() {
 
   if (transportMode == 1) {
     drawText("ON", 2, 3, UI_GREEN);

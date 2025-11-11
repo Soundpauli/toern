@@ -118,6 +118,7 @@ void updatePongBall();
 void drawPongBall();
 void resetPongGame();
 void triggerGridNote(unsigned int globalX, unsigned int y);
+void drawCtrlVolumeOverlay(int volume);
 static int lastDefaultFastFilterValue[NUM_CHANNELS] = {0};
 
 enum ValueDisplayMode {
@@ -340,6 +341,13 @@ int ledModules = 1;  // Number of LED modules: 1 or 2
 unsigned int maxX = MATRIX_WIDTH * 1;  // Runtime variable: total display width (16 or 32)
 unsigned int micGain = 0;  // Microphone gain: 0-64, default 10
 unsigned int monitorLevel = 0;  // Monitoring level: 0-4, default 0 (OFF) to prevent startup feedback
+int ctrlMode = 0;  // 0=page, 1=volume control for encoder 1
+static int ctrlLastChannel = -1;
+static int ctrlLastVolume = -1;
+static bool ctrlVolumeOverlayActive = false;
+static unsigned long ctrlVolumeOverlayUntil = 0;
+static int ctrlVolumeOverlayValue = 0;
+static const int DEFAULT_CHANNEL_VOLUME = 10;
 
 bool isRecording = false;
 File frec;
@@ -860,7 +868,7 @@ void setVelocity() {
   //CHANNEL VOLUME
   if (currentMode->pos[2] != GLOB.velocity) {
     SMP.channelVol[GLOB.currentChannel] = currentMode->pos[2];
-    float channelvolume = mapf(SMP.channelVol[GLOB.currentChannel], 1, maxY, 0, 1);
+    float channelvolume = mapf(SMP.channelVol[GLOB.currentChannel], 0, maxY, 0, 1);
     //Serial.println(channelvolume);
     amps[GLOB.currentChannel]->gain(channelvolume);
   }
@@ -988,6 +996,58 @@ void testDrums() {
 
 
 
+static void resetCtrlModeState() {
+  ctrlLastChannel = -1;
+  ctrlLastVolume = -1;
+}
+
+void showCtrlVolumeChange(int volume) {
+  ctrlVolumeOverlayValue = constrain(volume, 0, maxY);
+  ctrlVolumeOverlayActive = true;
+  ctrlVolumeOverlayUntil = millis() + 600;
+}
+
+void refreshCtrlEncoderConfig() {
+  if (!(currentMode == &draw || currentMode == &singleMode)) {
+    resetCtrlModeState();
+    ctrlVolumeOverlayActive = false;
+    return;
+  }
+
+  if (ctrlMode == 0) {
+    resetCtrlModeState();
+    int numModules = maxX / MATRIX_WIDTH;
+    if (numModules < 1) numModules = 1;
+    updateLastPage();
+    int adjustedMax = SMP_PATTERN_MODE ? lastPage : (maxPages / numModules);
+    if (adjustedMax < 1) adjustedMax = 1;
+
+    currentMode->minValues[1] = 1;
+    currentMode->maxValues[1] = adjustedMax;
+
+    int target = constrain(editpage, 1, adjustedMax);
+    currentMode->pos[1] = target;
+    Encoder[1].writeMin((int32_t)1);
+    Encoder[1].writeMax((int32_t)adjustedMax);
+    Encoder[1].writeCounter((int32_t)target);
+    Encoder[1].writeRGBCode(currentMode->knobcolor[1]);
+    ctrlVolumeOverlayActive = false;
+  } else {
+    ctrlLastChannel = -1;
+    ctrlLastVolume = -1;
+    currentMode->minValues[1] = 0;
+    currentMode->maxValues[1] = 16;
+
+    int currentVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+    currentMode->pos[1] = currentVol;
+    Encoder[1].writeMin((int32_t)0);
+    Encoder[1].writeMax((int32_t)16);
+    Encoder[1].writeCounter((int32_t)currentVol);
+    CRGB volColor = CRGB(currentVol * currentVol, max(0, 20 - currentVol), 0);
+    Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
+  }
+}
+
 FLASHMEM void switchMode(Mode *newMode) {
   updateLastPage();
   
@@ -1053,15 +1113,22 @@ FLASHMEM void switchMode(Mode *newMode) {
 
       // Special handling for encoder 1 (page control)
       if (i == 1 && (currentMode == &draw || currentMode == &singleMode)) {
-        if (SMP_PATTERN_MODE) {
-          // When pattern mode is ON, limit encoder 1 to lastPage instead of maxPages
-          updateLastPage();  // Ensure lastPage is up to date
-          maxVal = lastPage;
+        if (ctrlMode == 0) {
+          if (SMP_PATTERN_MODE) {
+            updateLastPage();
+            maxVal = lastPage;
+          } else {
+            int numModules = maxX / MATRIX_WIDTH;
+            if (numModules < 1) numModules = 1;
+            int adjustedMaxPages = maxPages / numModules;
+            maxVal = adjustedMaxPages;
+          }
+          minVal = 1;
+          counterVal = constrain(editpage, (int)minVal, (int)maxVal);
         } else {
-          // Adjust max pages based on LED modules (showing multiple pages at once)
-          int numModules = maxX / MATRIX_WIDTH;  // 1 or 2
-          int adjustedMaxPages = maxPages / numModules;  // 16 or 8
-          maxVal = adjustedMaxPages;
+          minVal = 0;
+          maxVal = 16;
+          counterVal = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
         }
       } else if (currentMode == &subpatternMode && muteModeActive && i == 2) {
         maxVal = 1;
@@ -1086,6 +1153,12 @@ FLASHMEM void switchMode(Mode *newMode) {
     if (currentMode == &singleMode) {
       Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    }
+
+    if (currentMode == &draw || currentMode == &singleMode) {
+      refreshCtrlEncoderConfig();
+    } else {
+      resetCtrlModeState();
     }
     
     if (currentMode == &set_Wav) {
@@ -1646,7 +1719,33 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   //}
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
+    bool wasMuted = getMuteState(GLOB.currentChannel);
     toggleMute();
+    bool isMuted = getMuteState(GLOB.currentChannel);
+
+    if (ctrlMode == 1 && wasMuted && !isMuted) {
+      SMP.channelVol[GLOB.currentChannel] = DEFAULT_CHANNEL_VOLUME;
+      float channelvolume = mapf(DEFAULT_CHANNEL_VOLUME, 0, maxY, 0, 1);
+      amps[GLOB.currentChannel]->gain(channelvolume);
+
+      currentMode->pos[1] = DEFAULT_CHANNEL_VOLUME;
+      Encoder[1].writeCounter((int32_t)DEFAULT_CHANNEL_VOLUME);
+      ctrlLastVolume = DEFAULT_CHANNEL_VOLUME;
+
+      if (GLOB.y != 16) {
+        showCtrlVolumeChange(DEFAULT_CHANNEL_VOLUME);
+        CRGB volColor = CRGB(DEFAULT_CHANNEL_VOLUME * DEFAULT_CHANNEL_VOLUME,
+                             max(0, 20 - DEFAULT_CHANNEL_VOLUME), 0);
+        Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
+        ctrlVolumeOverlayActive = true;
+      } else {
+        Encoder[1].writeRGBCode(currentMode->knobcolor[1]);
+        ctrlVolumeOverlayActive = false;
+      }
+
+      setMuteState(GLOB.currentChannel, false);
+      SMP.mute[GLOB.currentChannel] = false;
+    }
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
@@ -2317,7 +2416,7 @@ void checkEncoders() {
             note[GLOB.x][GLOB.y].velocity = defaultVelocity;
             updateLastPage();
             // Update encoder 1 limit if pattern mode is ON or if in single mode
-            if ((SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
+            if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
               Encoder[1].writeMax((int32_t)lastPage);
             }
           }
@@ -2326,7 +2425,7 @@ void checkEncoders() {
           note[GLOB.x][GLOB.y].velocity = defaultVelocity;
           updateLastPage();
           // Update encoder 1 limit if pattern mode is ON or if in single mode
-          if ((SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
+          if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
             Encoder[1].writeMax((int32_t)lastPage);
           }
         }
@@ -2336,7 +2435,7 @@ void checkEncoders() {
 
     // Only allow encoder[1] page changes if NOT in song mode (song controls pages automatically)
     extern bool songModeActive;
-    if (currentMode->pos[1] != editpage && !songModeActive) {
+    if (ctrlMode == 0 && currentMode->pos[1] != editpage && !songModeActive) {
       updateLastPage();
       editpage = currentMode->pos[1];
       //Serial.println("p:" + String(editpage));
@@ -2363,8 +2462,71 @@ void checkEncoders() {
     }
 
 
+    if (ctrlMode == 1) {
+      if (GLOB.y == 16) {
+        int channelVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+        currentMode->pos[1] = channelVol;
+        Encoder[1].writeCounter((int32_t)channelVol);
+        Encoder[1].writeRGBCode(currentMode->knobcolor[1]);
+        ctrlVolumeOverlayActive = false;
+        ctrlLastChannel = -1;
+        ctrlLastVolume = channelVol;
+      } else {
+        if (ctrlLastChannel != (int)GLOB.currentChannel) {
+          ctrlLastChannel = GLOB.currentChannel;
+          int channelVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+          currentMode->pos[1] = channelVol;
+          Encoder[1].writeCounter((int32_t)channelVol);
+          ctrlLastVolume = channelVol;
+        }
+
+        int requestedVol = constrain((int)currentMode->pos[1], 0, 16);
+        int actualVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+        bool protectedChannel = (GLOB.currentChannel == 0 || GLOB.currentChannel == 9 ||
+                                 GLOB.currentChannel == 10 || GLOB.currentChannel == 12);
+        int prevVolume = ctrlLastVolume;
+
+        if (protectedChannel) {
+          requestedVol = actualVol;
+          if (currentMode->pos[1] != actualVol) {
+            currentMode->pos[1] = actualVol;
+            Encoder[1].writeCounter((int32_t)actualVol);
+          }
+        }
+
+        if (requestedVol != currentMode->pos[1]) {
+          currentMode->pos[1] = requestedVol;
+          Encoder[1].writeCounter((int32_t)requestedVol);
+        }
+
+        CRGB volColor = CRGB(requestedVol * requestedVol, max(0, 20 - requestedVol), 0);
+
+        bool volumeChanged = (requestedVol != prevVolume);
+
+        if (volumeChanged) {
+          ctrlLastVolume = requestedVol;
+          if (!protectedChannel) {
+            SMP.channelVol[GLOB.currentChannel] = requestedVol;
+            float channelvolume = mapf(SMP.channelVol[GLOB.currentChannel], 0, maxY, 0, 1);
+            amps[GLOB.currentChannel]->gain(channelvolume);
+            showCtrlVolumeChange(requestedVol);
+          } else {
+            showCtrlVolumeChange(actualVol);
+          }
+        }
+
+        Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
+
+        if (volumeChanged && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
+          int effectiveVol = protectedChannel ? actualVol : requestedVol;
+          bool shouldMute = (effectiveVol == 0);
+          setMuteState(GLOB.currentChannel, shouldMute);
+          SMP.mute[GLOB.currentChannel] = shouldMute;
+        }
+      }
+    }
     
-  filtercheck();
+    filtercheck();
 
   
 
@@ -3183,6 +3345,15 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   autoOffActiveNotes();
   
   filterfreshsetted = false;
+
+  if (ctrlVolumeOverlayActive && ctrlMode == 1 && (currentMode == &draw || currentMode == &singleMode)) {
+    if (millis() <= ctrlVolumeOverlayUntil) {
+      drawCtrlVolumeOverlay(ctrlVolumeOverlayValue);
+    } else {
+      ctrlVolumeOverlayActive = false;
+    }
+  }
+
   FastLEDshow();
 
    if (stepIsDue) {
@@ -3436,12 +3607,18 @@ void play(bool fromStart) {
     checkCrashReport();
   }
 
+  ctrlVolumeOverlayActive = false;
+
   if (fromStart) {
     updateLastPage();
     
     // Update encoder 1 limit if pattern mode is ON
-    if (SMP_PATTERN_MODE && (currentMode == &draw || currentMode == &singleMode)) {
-      Encoder[1].writeMax((int32_t)lastPage);
+    if (currentMode == &draw || currentMode == &singleMode) {
+      if (ctrlMode == 0 && SMP_PATTERN_MODE) {
+        Encoder[1].writeMax((int32_t)lastPage);
+      } else if (ctrlMode == 1) {
+        refreshCtrlEncoderConfig();
+      }
     }
     
     lastFlowPage = 0;  // Reset FLOW page tracking when playback starts
@@ -3516,14 +3693,19 @@ void pause() {
   if (MIDI_CLOCK_SEND) {MIDI.sendRealTime(midi::Stop);
         resetMidiClockState();}
 
+  ctrlVolumeOverlayActive = false;
   isNowPlaying = false;
   pendingStartOnBar = false;
   lastFlowPage = 0;  // Reset FLOW page tracking when playback stops
   updateLastPage();
   
   // Update encoder 1 limit if pattern mode is ON
-  if (SMP_PATTERN_MODE && (currentMode == &draw || currentMode == &singleMode)) {
-    Encoder[1].writeMax((int32_t)lastPage);
+  if (currentMode == &draw || currentMode == &singleMode) {
+    if (ctrlMode == 0 && SMP_PATTERN_MODE) {
+      Encoder[1].writeMax((int32_t)lastPage);
+    } else if (ctrlMode == 1) {
+      refreshCtrlEncoderConfig();
+    }
   }
   
   deleteActiveCopy();
@@ -3939,8 +4121,12 @@ void unpaint() {
   updateLastPage();
   
   // Update encoder 1 limit if pattern mode is ON or if in single mode
-  if ((SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
-    Encoder[1].writeMax((int32_t)lastPage);
+  if (currentMode == &draw || currentMode == &singleMode) {
+    if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode)) {
+      Encoder[1].writeMax((int32_t)lastPage);
+    } else if (ctrlMode == 1) {
+      refreshCtrlEncoderConfig();
+    }
   }
   
   FastLEDshow();  // Update display immediately
@@ -4112,8 +4298,12 @@ void paint() {
   updateLastPage();
   
   // Update encoder 1 limit if pattern mode is ON or if in single mode
-  if ((SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
-    Encoder[1].writeMax((int32_t)lastPage);
+  if (currentMode == &draw || currentMode == &singleMode) {
+    if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode)) {
+      Encoder[1].writeMax((int32_t)lastPage);
+    } else if (ctrlMode == 1) {
+      refreshCtrlEncoderConfig();
+    }
   }
   
   FastLEDshow();
@@ -4181,8 +4371,12 @@ void toggleCopyPaste() {
   updateLastPage();
   
   // Update encoder 1 limit if pattern mode is ON or if in single mode
-  if ((SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
-    Encoder[1].writeMax((int32_t)lastPage);
+  if (currentMode == &draw || currentMode == &singleMode) {
+    if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode)) {
+      Encoder[1].writeMax((int32_t)lastPage);
+    } else if (ctrlMode == 1) {
+      refreshCtrlEncoderConfig();
+    }
   }
   
   GLOB.activeCopy = !GLOB.activeCopy;  // Toggle the boolean value
