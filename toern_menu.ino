@@ -10,6 +10,7 @@ extern int ctrlMode;
 void refreshCtrlEncoderConfig();
 extern bool pong;
 extern uint16_t pongUpdateInterval;
+extern bool MIDI_TRANSPORT_SEND;
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -65,7 +66,7 @@ MenuPage recsPages[RECS_PAGES_COUNT] = {
 // MIDI submenu pages
 MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"CH", 7, false, nullptr},            // MIDI Voice Select (Channel)
-  {"TRANSP", 8, false, nullptr},          // MIDI Transport
+  {"TRAN", 8, false, nullptr},          // MIDI Transport
   {"CLCK", 6, false, nullptr}           // Clock Mode
 };
 
@@ -151,6 +152,10 @@ void loadMenuFromEEPROM() {
     simpleNotesView = 1;  // Default to EASY if invalid value
   }
   
+  if (transportMode != -1 && transportMode != 1 && transportMode != 2) {
+    transportMode = -1;  // Default to OFF if invalid value
+  }
+
   // Ensure loopLength is valid (0-8)
   if (loopLength < 0 || loopLength > 8) {
     loopLength = 0;  // Default to OFF if invalid value
@@ -194,6 +199,7 @@ void loadMenuFromEEPROM() {
   SMP_FLOW_MODE          = (flowMode      == 1);
   MIDI_VOICE_SELECT      = (voiceSelect   == 1 || voiceSelect == 2);  // MIDI or KEYS mode
   MIDI_TRANSPORT_RECEIVE = (transportMode == 1);
+  MIDI_TRANSPORT_SEND = (transportMode == 2);
   SMP_FAST_REC           = fastRecMode;
   SMP_REC_CHANNEL_CLEAR  = (recChannelClear == 1);  // Only true for ON mode
   
@@ -602,7 +608,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
       
     case 8: // TRN - MIDI Transport
-      drawText("TRANSP", 2, 10, UI_WHITE);
+      drawText("TRAN", 2, 10, UI_WHITE);
       drawMidiTransport();
       break;
       
@@ -1051,7 +1057,13 @@ void switchMenu(int menuPosition){
         break;
 
       case 8:
-        transportMode = transportMode * (-1);
+        if (transportMode == -1) {
+          transportMode = 1; // OFF -> GET
+        } else if (transportMode == 1) {
+          transportMode = 2; // GET -> SEND
+        } else {
+          transportMode = -1; // SEND -> OFF
+        }
         saveSingleModeToEEPROM(2, transportMode);
         drawMainSettingStatus(menuPosition);
         break;
@@ -1710,15 +1722,19 @@ FLASHMEM void drawFlowMode() {
 
 
 FLASHMEM void drawMidiTransport() {
-
-  if (transportMode == 1) {
-    drawText("ON", 2, 3, UI_GREEN);
+  if (transportMode == 2) {
+    drawText("SEND", 2, 3, UI_BLUE);
+    MIDI_TRANSPORT_RECEIVE = false;
+    MIDI_TRANSPORT_SEND = true;
+  } else if (transportMode == 1) {
+    drawText("GET", 2, 3, UI_GREEN);
     MIDI_TRANSPORT_RECEIVE = true;
-  }
-
-  if (transportMode == -1) {
+    MIDI_TRANSPORT_SEND = false;
+  } else {
     drawText("OFF", 2, 3, UI_RED);
     MIDI_TRANSPORT_RECEIVE = false;
+    MIDI_TRANSPORT_SEND = false;
+    transportMode = -1;
   }
 
   FastLEDshow();

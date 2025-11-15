@@ -210,6 +210,7 @@ bool disableThresholdFlag = false;
 bool MIDI_CLOCK_SEND = true;
 
 bool MIDI_TRANSPORT_RECEIVE = true;
+bool MIDI_TRANSPORT_SEND = false;
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;  // FLOW mode: follows timer position when playing
@@ -407,6 +408,7 @@ unsigned int beat = 1;
 unsigned int samplePackID, fileID = 1;
 EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
+IntervalTimer midiClockTimer;
 //IntervalTimer midiTimer;
 unsigned int lastPage = 1;
 int editpage = 1;
@@ -2405,7 +2407,7 @@ void checkEncoders() {
       }
     }
 
-    if ((GLOB.y > 1 && GLOB.y <= 14)) {  // GLOB.y is 1-based from encoder
+    if ((GLOB.y > 1 && GLOB.y <= 15)) {  // Allow paint/unpaint up to row 15; row 16 reserved for UI
       if (paintMode && !preventPaintUnpaint) {
         // Only set probability to 100% if slot was empty (preserve existing probability)
         if (note[GLOB.x][GLOB.y].channel == 0) {
@@ -3712,7 +3714,9 @@ void play(bool fromStart) {
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
       resetMidiClockState();
-      MIDI.sendRealTime(midi::Start);
+      if (MIDI_TRANSPORT_SEND) {
+        MIDI.sendRealTime(midi::Start);
+      }
       isNowPlaying = true;
       playStartTime = millis();
     } else {
@@ -3729,8 +3733,12 @@ void play(bool fromStart) {
 
 
 void pause() {
-  if (MIDI_CLOCK_SEND) {MIDI.sendRealTime(midi::Stop);
-        resetMidiClockState();}
+  if (MIDI_CLOCK_SEND) {
+    if (MIDI_TRANSPORT_SEND) {
+      MIDI.sendRealTime(midi::Stop);
+    }
+    resetMidiClockState();
+  }
 
   ctrlVolumeOverlayActive = false;
   isNowPlaying = false;

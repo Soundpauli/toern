@@ -1,3 +1,4 @@
+#include <math.h>
 
 // External variables
 extern float detune[13]; // Global detune array for channels 1-12
@@ -5,7 +6,9 @@ extern float channelOctave[9]; // Global octave array for channels 1-8
 extern unsigned int maxX;
 extern unsigned int pulseCount;
 extern bool isNowPlaying;
+extern bool MIDI_TRANSPORT_SEND;
 void triggerExternalOneBlink();
+extern IntervalTimer midiClockTimer;
 
 // move these to file-scope so everybody can reset them
 static unsigned long lastClockTime = 0;                  // legacy, no longer used for BPM
@@ -19,6 +22,9 @@ static const float BPM_UPDATE_THRESHOLD = 0.5f;          // minimum delta to for
 static const uint32_t CLOCKS_PER_BPM_WINDOW = 24 * 4 * 4; // 4/4: 24 clocks/beat * 4 beats/bar * 4 bars
 static uint8_t midiClockTicks = 0;
 static uint8_t externalStepWithinPage = 0;  // Tracks external clock-derived step (1..maxX)
+static float midiClockSendBPM = 0.0f;
+static unsigned long midiClockIntervalUs = 0;
+static unsigned long midiNextClockMicros = 0;
 
 static void markExternalOne() {
   midiClockTicks = 0;
@@ -32,6 +38,21 @@ static void markExternalOne() {
   triggerExternalOneBlink();
 }
 static unsigned long lastClockSent = 0;
+
+// ISR-style callback driven by IntervalTimer for master MIDI clock
+void midiClockTick() {
+  if (!MIDI_CLOCK_SEND) return;
+  MIDI.sendRealTime(midi::Clock);
+}
+
+static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
+  if (bpm < 1.0f) bpm = 1.0f;
+  midiClockSendBPM = bpm;
+  midiClockIntervalUs = (unsigned long)(60000000.0f / (bpm * 24.0f));
+  if (midiClockIntervalUs == 0) midiClockIntervalUs = 1;
+  midiNextClockMicros = nowMicros;
+  midiClockTimer.begin(midiClockTick, midiClockIntervalUs);
+}
 
 void checkMidi() {
   while (MIDI.read()) {
@@ -86,27 +107,12 @@ void checkMidi() {
     }
   }
 
-  // If this device is sending MIDI Clock, calculate and send it based on SMP.bpm.
+  // If this device is sending MIDI Clock (master), keep timer in sync with SMP.bpm.
   if (MIDI_CLOCK_SEND) {
-
-
-    unsigned long now = micros();
-
-    // Use a float for smoothing even though SMP.bpm is an int.
-
-    const float alpha = 0.1f;  // Smoothing factor (0.0 to 1.0); lower is smoother.
-    smoothedBPM = alpha * ((float)SMP.bpm) + (1.0f - alpha) * smoothedBPM;
-
-    // Calculate clock pulse interval in microseconds using the smoothed BPM.
-    // MIDI clocks: 24 ticks per quarter note.
-    float clockInterval = 60000000.0f / (smoothedBPM * 24.0f);
-    unsigned long clockInterval_us = (unsigned long)clockInterval;
-
-    // Increment the lastClockSent time by the fixed interval to reduce jitter.
-    while (now - lastClockSent >= clockInterval_us) {
-      MIDI.sendRealTime(midi::Clock);
-      lastClockSent += clockInterval_us;
-      //lastClockSent = now;
+    // If BPM changed since last configure, update the timer interval
+    if (fabsf((float)SMP.bpm - midiClockSendBPM) > 0.01f && SMP.bpm > 0.0f) {
+      unsigned long now = micros();
+      configureMidiClockSend((float)SMP.bpm, now);
     }
   }
 }
@@ -125,8 +131,9 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
   lastClockTime = 0;
   
   if (MIDI_CLOCK_SEND) {
-    smoothedBPM = (float)SMP.bpm; // For master, use current BPM
-    lastClockSent = micros();
+    unsigned long now = micros();
+    configureMidiClockSend((float)SMP.bpm, now);
+    lastClockSent = now;
     // Ensure playTimer is configured if master
     if (SMP.bpm > 0.0f) {
         unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
@@ -135,6 +142,8 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
         playTimer.end();
     }
   } else { // SLAVE MODE - run internal timer, sync with external clock
+    // Stop MIDI clock timer when not master
+    midiClockTimer.end();
     // Reset BPM averaging state for slave
     clocksSinceLastBPM = 0;
     lastBPMMeasureTime = 0;
@@ -487,7 +496,7 @@ void handleStart() {
   beatStartTime = millis();
 
   // 2) if we're the master, also send a MIDI-Start
-  if (MIDI_CLOCK_SEND) {
+  if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
     MIDI.sendRealTime(midi::Start);
   }
 
