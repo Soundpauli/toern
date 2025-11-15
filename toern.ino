@@ -1,8 +1,8 @@
 #define VERSION "v1.2"
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
-#define SERIAL8_RX_BUFFER_SIZE 255  // Increase to 256 bytes
-#define SERIAL8_TX_BUFFER_SIZE 16  // Increase if needed for transmission
+#define SERIAL8_RX_BUFFER_SIZE 512  // Larger MIDI input buffer (default is 64)
+#define SERIAL8_TX_BUFFER_SIZE 64   // Larger transmit buffer for safety
 #define TargetFPS 30
 
 //#define AUDIO_BLOCK_SAMPLES 128
@@ -88,6 +88,13 @@ unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 
 unsigned long ganularStartTime = 0;  // Timestamp when the current beat started
 
+#define EXTERNAL_ONE_ENCODER_INDEX 2  // Encoder(2) -> third hardware knob
+static bool externalOneBlinkActive = false;
+static unsigned long externalOneBlinkUntil = 0;
+
+void triggerExternalOneBlink();
+void updateExternalOneBlink();
+
 #define CLOCK_BUFFER_SIZE 24
 //elapsedMillis recFlushTimer;
 elapsedMillis recTime;
@@ -119,6 +126,7 @@ void drawPongBall();
 void resetPongGame();
 void triggerGridNote(unsigned int globalX, unsigned int y);
 void drawCtrlVolumeOverlay(int volume);
+void drawSampleLoadOverlay();
 static int lastDefaultFastFilterValue[NUM_CHANNELS] = {0};
 
 enum ValueDisplayMode {
@@ -1048,7 +1056,7 @@ void refreshCtrlEncoderConfig() {
   }
 }
 
-FLASHMEM void switchMode(Mode *newMode) {
+void switchMode(Mode *newMode) {
   updateLastPage();
   
   drawNoSD_hasRun = false;
@@ -1222,7 +1230,11 @@ FLASHMEM void switchMode(Mode *newMode) {
 
 
 void checkFastRec() {
-if (GLOB.currentChannel>8) return;
+  bool channelAllowed = (GLOB.currentChannel <= 8);
+
+  if (!channelAllowed && !fastRecordActive) return;
+
+  bool allowStart = channelAllowed && (GLOB.y > 1);
 
   if ((currentMode == &draw || currentMode == &singleMode) && SMP_FAST_REC == 2 || SMP_FAST_REC == 3) {
     bool pinsConnected = (digitalRead(2) == LOW);
@@ -1233,6 +1245,7 @@ if (GLOB.currentChannel>8) return;
 
       if (SMP_FAST_REC == 2) {
         if (pinsConnected && !fastRecordActive) {
+          if (!allowStart) return;
           //Serial.println(">> startFastRecord from pin 2+4");
           startFastRecord();
           return;
@@ -1244,6 +1257,7 @@ if (GLOB.currentChannel>8) return;
 
       if (SMP_FAST_REC == 3) {
         if (!pinsConnected && !fastRecordActive) {
+          if (!allowStart) return;
           //Serial.println(">> startFastRecord from pin 2+4");
           startFastRecord();
           return;
@@ -1260,6 +1274,7 @@ if (currentMode == &draw || currentMode == &singleMode){
   touchState[2] = (touchValue3 > touchThreshold);
 
   if (SMP_FAST_REC == 1 && !fastRecordActive && touchState[2]) {
+    if (!allowStart) return;
     startFastRecord();
     return;  // skip other mode logic while fast recording
   }
@@ -3175,6 +3190,7 @@ void showDoRecord() {
 }
 
 void loop() {
+   updateExternalOneBlink();
    checkMidi();
 
   bool pongActive = pong && currentMode == &draw;
@@ -3362,6 +3378,29 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   }
 
   yield();
+}
+
+void triggerExternalOneBlink() {
+  if (MIDI_CLOCK_SEND) return;        // External clock only
+  if (isNowPlaying) return;           // Only blink while waiting to start
+
+  Encoder[EXTERNAL_ONE_ENCODER_INDEX].writeRGBCode(0xFFFFFF);  // White blink
+  externalOneBlinkActive = true;
+
+  unsigned long beatDurationMs = 120;  // default short blink
+  if (SMP.bpm > 0.0f) {
+    beatDurationMs = (unsigned long)(60000.0f / (SMP.bpm * 4.0f)); // quarter-beat blink
+    if (beatDurationMs < 50) beatDurationMs = 50;
+  }
+  externalOneBlinkUntil = millis() + beatDurationMs;
+}
+
+void updateExternalOneBlink() {
+  if (!externalOneBlinkActive) return;
+  if ((long)(millis() - externalOneBlinkUntil) >= 0) {
+    externalOneBlinkActive = false;
+    Encoder[EXTERNAL_ONE_ENCODER_INDEX].writeRGBCode(0x000000);  // Turn back off
+  }
 }
 
 float getNoteDuration(int channel) {
@@ -3921,6 +3960,16 @@ void playNote() {
 
     // Advance and wrap within this page:
     beat++;
+
+    // Debug: log whenever the current page-local beat wraps to 1
+    {
+      static uint8_t lastLoggedBeatWithinPage = 0;
+      uint8_t beatWithinPage = ((beat - 1) % maxX) + 1;
+      if (beatWithinPage == 1 && beatWithinPage != lastLoggedBeatWithinPage) {
+        //Serial.println("DEBUG: beatWithinPage == 1");
+      }
+      lastLoggedBeatWithinPage = beatWithinPage;
+    }
     
     if (songModeActive) {
       // In song mode, check if we need to advance to next pattern
@@ -4809,6 +4858,9 @@ void updateLastPage() {
 }
 
 void loadWav() {
+  drawSampleLoadOverlay();
+  FastLEDshow();
+
   playSdWav1.stop();
 
   //Serial.println("Loading Wave :" + String(SMP.wav[GLOB.currentChannel].fileID));

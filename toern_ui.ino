@@ -1,5 +1,6 @@
 extern const unsigned int maxlen;
 extern void triggerGridNote(unsigned int globalX, unsigned int y);
+extern const CRGB col[];
 
 // Fast function to light a specific LED on a specific matrix
 // matrixId: 0 = first matrix (left), 1 = second matrix, etc.
@@ -101,6 +102,11 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
   // Apply highlighting if requested
   if (highlight) {
     color = applyHighlight(color, true);
+  }
+
+  if (encoderNum >= 1 && encoderNum <= NUM_ENCODERS) {
+    uint32_t rgbCode = (uint32_t(color.r) << 16) | (uint32_t(color.g) << 8) | color.b;
+    Encoder[encoderNum - 1].writeRGBCode(rgbCode);
   }
   
   // Determine x positions based on encoder number
@@ -251,7 +257,7 @@ void drawNoSD() {
   drawNoSD_hasRun = true;  // Mark it as run
 }
 
-FLASHMEM void drawBase() {
+void drawBase() {
   if (!GLOB.singleMode) {
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
@@ -564,7 +570,7 @@ FLASHMEM void drawRecordingBorder() {
   }
 }
 
-FLASHMEM void drawStatus() {
+void drawStatus() {
  
 
   
@@ -886,6 +892,34 @@ FLASHMEM void drawCtrlVolumeOverlay(int volume) {
   }
 }
 
+FLASHMEM void drawSampleLoadOverlay() {
+  FastLEDclear();
+
+  const CRGB frameColor = CRGB(20, 20, 40);
+  const CRGB textColor = CRGB(180, 220, 255);
+
+  // Frame around top area
+  for (int x = 1; x <= (int)maxX; ++x) {
+    light(x, 3, frameColor);
+    //light(x, 4, frameColor);
+  }
+
+  light(1, 4, frameColor);
+  light(maxX, 4, frameColor);
+
+
+  // Load bar on y = 2
+  int safeChannel = constrain(GLOB.currentChannel, 1, NUM_CHANNELS - 1);
+  CRGB barColor = col[safeChannel];
+  for (int x = 2; x <= (int)maxX - 1; ++x) {
+    light(x, 4, barColor);
+    light(x, 5, barColor);
+  }
+
+  // Text on y = 10
+  drawText("LOAD", 1, 10, textColor);
+  FastLED.show();
+}
 
 
 
@@ -893,7 +927,8 @@ FLASHMEM void drawCtrlVolumeOverlay(int volume) {
 
 
 
-FLASHMEM void drawPages() {
+
+void drawPages() {
   //GLOB.edit = 1;
   CRGB ledColor;
   extern int loopLength;
@@ -950,7 +985,7 @@ FLASHMEM void drawPages() {
 /************************************************
       DRAW SAMPLES
   *************************************************/
-FLASHMEM void drawTriggers() {
+void drawTriggers() {
   // why?
   //GLOB.edit = 1;
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
@@ -1076,7 +1111,7 @@ int mapXtoPageOffset(int x) {
 /************************************************
       USER CURSOR
   *************************************************/
-FLASHMEM void drawCursor() {
+void drawCursor() {
   if (dir == 1)
     pulse += 8;
   if (dir == -1)

@@ -2,19 +2,39 @@
 // External variables
 extern float detune[13]; // Global detune array for channels 1-12
 extern float channelOctave[9]; // Global octave array for channels 1-8
+extern unsigned int maxX;
+extern unsigned int pulseCount;
+extern bool isNowPlaying;
+void triggerExternalOneBlink();
 
 // move these to file-scope so everybody can reset them
-static unsigned long lastClockTime = 0;
-static unsigned long intervalsBuf[CLOCK_BUFFER_SIZE]  = { 0 };
-
-static int bufIndex = 0;
-static int bufCount = 0;
-static float smoothedBPM = 0.0f;
+static unsigned long lastClockTime = 0;                  // legacy, no longer used for BPM
+static unsigned long lastBPMMeasureTime = 0;             // time of last BPM measurement window
+static uint32_t clocksSinceLastBPM = 0;                  // number of MIDI clocks since last BPM measurement
+static float smoothedBPM = 0.0f;                         // internal smoothed BPM estimate
+static float displayedBPM = 0.0f;                        // BPM value committed to SMP.bpm / UI
+static unsigned long lastBPMUpdateMillis = 0;            // last time we updated displayed BPM
+static const unsigned long BPM_UPDATE_INTERVAL_MS = 200; // minimum time between BPM UI updates
+static const float BPM_UPDATE_THRESHOLD = 0.5f;          // minimum delta to force BPM UI update
+static const uint32_t CLOCKS_PER_BPM_WINDOW = 24 * 4 * 4; // 4/4: 24 clocks/beat * 4 beats/bar * 4 bars
 static uint8_t midiClockTicks = 0;
+static uint8_t externalStepWithinPage = 0;  // Tracks external clock-derived step (1..maxX)
+
+static void markExternalOne() {
+  midiClockTicks = 0;
+  pulseCount = 0;
+  if (maxX == 0) {
+    externalStepWithinPage = 0;
+    return;
+  }
+  externalStepWithinPage = 1;
+  //Serial.println("ONE");
+  triggerExternalOneBlink();
+}
 static unsigned long lastClockSent = 0;
 
 void checkMidi() {
-  if (MIDI.read()) {
+  while (MIDI.read()) {
     uint8_t pitch, velocity, channel;
     uint8_t miditype;
 
@@ -114,15 +134,21 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     } else {
         playTimer.end();
     }
-  } else { // SLAVE MODE
-    playTimer.end(); // SLAVE mode, internal timer off
-    // Reset BPM averaging state for slave to re-learn quickly
-    bufCount = 0;
-    bufIndex = 0;
-    smoothedBPM = 0.0f; // This will make it use the first valid rawBPM
-    // Or, you could set smoothedBPM to a typical starting BPM like 120.0f
-    // smoothedBPM = 120.0f; 
-    // SMP.bpm will be updated by myClock
+  } else { // SLAVE MODE - run internal timer, sync with external clock
+    // Reset BPM averaging state for slave
+    clocksSinceLastBPM = 0;
+    lastBPMMeasureTime = 0;
+    
+    // Start internal timer with current BPM (will be adjusted by external clock)
+    if (SMP.bpm > 0.0f) {
+        unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+        playTimer.begin(playNote, currentPlayNoteInterval);
+        Serial.print("SLAVE: Started internal timer at ");
+        Serial.print(SMP.bpm);
+        Serial.println(" BPM");
+    } else {
+        playTimer.end();
+    }
   }
 }
 
@@ -131,104 +157,125 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     return;
   }
 
-  // --- BPM Averaging ---
-  if (lastClockTime != 0) {
-    unsigned long delta = now_captured - lastClockTime;
-    bool accept_delta = false;
+  // --- BPM Detection and Sync (slave mode) ---
+  // Count clocks but DON'T trigger steps - internal timer does that
+  clocksSinceLastBPM++;
 
-    // 1. Basic Sanity Checks for Delta
-    // Min plausible delta (around 400 BPM, e.g. 60M / (400*24) = 6250 us).
-    // Max plausible delta (around 30 BPM, e.g. 60M / (30*24) = 83333 us).
-    // Your current "delta < 100000" is a loose upper bound.
-    // We need a tighter lower bound to prevent BPM shooting up.
-    
-    // Let's define a MIN_DELTA based on slightly faster than your max BPM
-    // For 300 BPM, delta is ~8333 us. Let's say min acceptable is ~7000 us (~350 BPM).
-    // And MAX_DELTA based on slightly slower than your min BPM
-    // For 40 BPM, delta is ~62500 us. Let's say max acceptable is ~75000 us (~32 BPM).
-    const unsigned long ABSOLUTE_MIN_DELTA = 7000; 
-    const unsigned long ABSOLUTE_MAX_DELTA = 75000; // was 100000, tightened it
+  if (lastBPMMeasureTime == 0) {
+    // First tick after reset: just remember the time
+    lastBPMMeasureTime = now_captured;
+  } else if (clocksSinceLastBPM >= CLOCKS_PER_BPM_WINDOW) {
+    // Measure BPM over 4 bars and adjust internal timer
+    unsigned long deltaTotal = now_captured - lastBPMMeasureTime;
 
-    if (delta >= ABSOLUTE_MIN_DELTA && delta <= ABSOLUTE_MAX_DELTA) {
-        // If smoothedBPM is somewhat stable, we can be more restrictive
-        if (smoothedBPM > (float)BPM_MIN * 0.8f && bufCount > CLOCK_BUFFER_SIZE / 2) {
-            float expectedInterval = 60000000.0f / (smoothedBPM * 24.0f);
-            // Allow delta to be LARGER than expected, but not much SMALLER
-            // If BPM jumps UP, delta was too SMALL.
-            if (delta >= expectedInterval * 0.80f &&  // Not more than 20% smaller
-                delta <= expectedInterval * 1.50f) { // Not more than 50% larger
-                accept_delta = true;
-            }
-        } else {
-            // Initial phase, or smoothedBPM is not yet reliable, accept any delta within absolute bounds
-            accept_delta = true;
-        }
-    }
-    
-    /* // Optional: Log rejected deltas
-    if (!accept_delta && delta > 0 && isNowPlaying) { // Log only if playing
-        Serial.print(millis());
-        Serial.print(" Delta REJ: "); Serial.print(delta);
-        Serial.print(" sBPM: "); Serial.println(smoothedBPM, 1);
-    }
-    */
+    // Expected delta per MIDI clock at BPM_MIN/BPM_MAX
+    const unsigned long ABSOLUTE_MIN_DELTA = 7000;   // ~350 BPM upper bound
+    const unsigned long ABSOLUTE_MAX_DELTA = 75000;  // ~32 BPM lower bound
 
-    if (accept_delta) {
-      intervalsBuf[bufIndex] = delta;
-      bufIndex = (bufIndex + 1) % CLOCK_BUFFER_SIZE;
-      if (bufCount < CLOCK_BUFFER_SIZE) bufCount++;
+    float intervalPerClock = (float)deltaTotal / (float)clocksSinceLastBPM;
 
-      unsigned long sum = 0;
-      for (int i = 0; i < bufCount; i++) sum += intervalsBuf[i];
+    if (intervalPerClock >= ABSOLUTE_MIN_DELTA * 0.8f &&
+        intervalPerClock <= ABSOLUTE_MAX_DELTA * 1.2f) {
+
+      float rawBPM = 60000000.0f / (intervalPerClock * 24.0f);
+
+      // Serial debug: show raw BPM calculation
+      /*
+      Serial.print("RAW BPM: ");
+      Serial.print(rawBPM, 2);
+      Serial.print(" | Clocks: ");
+      Serial.print(clocksSinceLastBPM);
+      Serial.print(" | Delta(us): ");
+      Serial.print(deltaTotal);
+      Serial.print(" | Interval/Clock(us): ");
+      Serial.println(intervalPerClock, 2);
+*/
+      // Clamp to valid range
+      if (rawBPM < BPM_MIN) rawBPM = BPM_MIN;
+      if (rawBPM > BPM_MAX) rawBPM = BPM_MAX;
+
+      // Round and update BPM
+      int newBPM = round(rawBPM);
       
-      if (bufCount > 0) { // Ensure bufCount is not zero
-        float avgInterval = (float)sum / bufCount;
-        if (avgInterval >= ABSOLUTE_MIN_DELTA * 0.8f ) { // also check avgInterval is plausible
-            float rawBPM = 60000000.0f / (avgInterval * 24.0f);
-            const float alpha_smooth = 0.1f; // Smoothing factor (can try 0.05 for more smoothing)
-
-            if (smoothedBPM == 0.0f || bufCount < CLOCK_BUFFER_SIZE / 3) { // Faster initial lock
-                smoothedBPM = rawBPM;
-            } else {
-                smoothedBPM = alpha_smooth * rawBPM + (1.0f - alpha_smooth) * smoothedBPM;
-            }
-
-            // Clamp to defined min/max
-            if (smoothedBPM < BPM_MIN) smoothedBPM = BPM_MIN;
-            if (smoothedBPM > BPM_MAX) smoothedBPM = BPM_MAX;
-
-            SMP.bpm = round(smoothedBPM);
-        }
+      // Only adjust if difference is 1 BPM or more (in either direction)
+      if (abs(SMP.bpm - newBPM) >= 1) {
+        SMP.bpm = newBPM;
+        // Restart internal timer with new BPM
+        unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+        playTimer.begin(playNote, currentPlayNoteInterval);
+        /*Serial.print("  -> SYNCED internal timer to ");
+        Serial.print(SMP.bpm);
+        Serial.print(" BPM (was ");
+        Serial.print(SMP.bpm - (newBPM - SMP.bpm));
+        Serial.println(")");*/
+      } else if (SMP.bpm != newBPM) {
+        /*Serial.print("  -> Detected ");
+        Serial.print(newBPM);
+        Serial.print(" BPM but staying at ");
+        Serial.print(SMP.bpm);
+        Serial.println(" (< 3 BPM difference)");*/
       }
+    } else {
+      /*Serial.print("REJECTED: intervalPerClock = ");
+      Serial.print(intervalPerClock, 2);
+      Serial.print(" (out of range ");
+      Serial.print(ABSOLUTE_MIN_DELTA * 0.8f);
+      Serial.print(" - ");
+      Serial.print(ABSOLUTE_MAX_DELTA * 1.2f);
+      Serial.println(")");*/
     }
-  }
-  lastClockTime = now_captured;
 
-  // --- Step Scheduling (for slave mode) ---
+    // Reset window
+    lastBPMMeasureTime = now_captured;
+    clocksSinceLastBPM = 0;
+  }
+
+  // --- Handle Start command sync ---
+  // Keep pulseCount for transport sync, but don't trigger steps
   pulseCount = (pulseCount + 1) % (24 * 2); // 48 pulses = 2 quarter notes or half a 4/4 bar
 
-  midiClockTicks++;
-  if (midiClockTicks >= clocksPerStep) { // clocksPerStep = 6
-    midiClockTicks = 0;
-    
-    if (pendingStartOnBar && pulseCount == 0) { // pulseCount == 0 is on a half-bar
-      // Serial.println("myClock: Slave Start - pendingStartOnBar & pulseCount == 0");
-      pendingStartOnBar = false;
-      isNowPlaying = true;
-      if (SMP_PATTERN_MODE) {
-        beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-        GLOB.page = GLOB.edit;  // Keep the current page
-      } else {
-        beat = 1;
-        GLOB.page = 1;
-      }
-      playStartTime = millis();
+  if (pendingStartOnBar && pulseCount == 0) { // pulseCount == 0 is on a half-bar
+    Serial.println("myClock: Slave Start - synced on bar");
+    pendingStartOnBar = false;
+    isNowPlaying = true;
+    if (SMP_PATTERN_MODE) {
+      beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+      GLOB.page = GLOB.edit;  // Keep the current page
+    } else {
+      beat = 1;
+      GLOB.page = 1;
     }
+    playStartTime = millis();
 
-    if (isNowPlaying) {
-      stepIsDue = true;
+    // Immediately trigger the first step so playback starts on beat 1
+    if (SMP.bpm > 0) {
+      unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+      playTimer.end();
+      playNote();  // Fire the downbeat right away
+      playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
+    } else {
+      playNote();
     }
   }
+  // Track external steps from MIDI clock (1..maxX) for debugging
+  midiClockTicks++;
+  if (midiClockTicks >= clocksPerStep) {
+    midiClockTicks = 0;
+    if (maxX == 0) {
+      externalStepWithinPage = 0;
+    } else {
+      externalStepWithinPage++;
+      if (externalStepWithinPage > maxX) {
+        externalStepWithinPage = 1;
+      }
+      if (externalStepWithinPage == 1) {
+        //  Serial.println("ONE");
+        triggerExternalOneBlink();
+      }
+    }
+  }
+  
+  // NOTE: stepIsDue is now triggered by playTimer (internal), not by external clock
 }
 
 
@@ -422,6 +469,8 @@ void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
 void handleStart() {
   // only act if we’re supposed to follow external transport
   if (!MIDI_TRANSPORT_RECEIVE) return;
+
+  markExternalOne(); // define "ONE" on incoming Play signal
 
   //Serial.println("MIDI Start Received");
 

@@ -653,6 +653,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText("FULL", 2, 3, CRGB(100, 0, 0));  // Dark Red
       }*/
       drawIndicator('L', 'O', 3);  // Encoder 3: Large Orange indicator
+      
       break;
       
     case 19: // PLAY - Submenu
