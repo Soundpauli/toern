@@ -91,6 +91,7 @@ void loadSMPSettings() {
   const int validChannels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
   const int numValidChannels = sizeof(validChannels) / sizeof(validChannels[0]);
   
+
   for (int i = 0; i < numValidChannels; i++) {
     int ch = validChannels[i];
     
@@ -107,6 +108,8 @@ void loadSMPSettings() {
     setParams(p, ch);
   }
     
+
+  
     // Load Drums - apply drum settings (only for channels 1-3)
     if (ch >= 1 && ch <= 3) {
         for (int d = 0; d < NUM_DRUMS; d++) {
@@ -118,6 +121,7 @@ void loadSMPSettings() {
    if (ch == 11) {
     updateSynthVoice(11);
   }
+  return;
   }
   
   // CRITICAL: Initialize drum engines for channels set to DRUM mode (EFX=1)
@@ -2046,7 +2050,7 @@ void startNew() {
     
     // Reset parameter data (no hardware calls)
     SMP.param_settings[ch][ATTACK] = 32;
-    SMP.param_settings[ch][DECAY] = 32;
+    SMP.param_settings[ch][DECAY] = 0;
     SMP.param_settings[ch][SUSTAIN] = 10;
     SMP.param_settings[ch][RELEASE] = 5;
     

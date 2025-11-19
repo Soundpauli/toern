@@ -1,8 +1,8 @@
 #define VERSION "v1.2"
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
-#define SERIAL8_RX_BUFFER_SIZE 512  // Larger MIDI input buffer (default is 64)
-#define SERIAL8_TX_BUFFER_SIZE 64   // Larger transmit buffer for safety
+#define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
+#define SERIAL8_TX_BUFFER_SIZE 128   // Larger transmit buffer for safety
 #define TargetFPS 30
 
 //#define AUDIO_BLOCK_SAMPLES 128
@@ -404,7 +404,11 @@ bool sampleIsLoaded = false;
 bool unpaintMode, paintMode = false;
 
 
+// Global sequencer position (1..maxlen)
 unsigned int beat = 1;
+// Beat index that was last used for audio playback / sequencing.
+// UI components should use this to stay visually in sync with what was just played.
+unsigned int beatForUI = 1;
 unsigned int samplePackID, fileID = 1;
 EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
@@ -1078,7 +1082,7 @@ void switchMode(Mode *newMode) {
     //RESET left encoder
     Encoder[0].begin(
       i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
-      | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_ENABLE
+      | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_DISABLE
       | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
   }
   /// NEW ACTIONS
@@ -2096,7 +2100,9 @@ void setup() {
   //Wire.begin();
   //Wire.setClock(10000); // Set to 400 kHz (standard speed)
   NVIC_SET_PRIORITY(IRQ_SOFTWARE, 208);
-  //NVIC_SET_PRIORITY(IRQ_LPUART8, 128);
+  // Set MIDI (Serial8/LPUART8) interrupt priority - lower number = higher priority
+  // Priority 112 = higher priority than software (208) for faster MIDI handling
+  NVIC_SET_PRIORITY(IRQ_LPUART8, 112);  // MIDI serial interrupt priority
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
   EEPROM.get(0, samplePackID);
@@ -2129,7 +2135,7 @@ void setup() {
     checkCrashReport();
   }
   drawNoSD();
-  delay(50);
+  delay(500);
   initSoundChip();
   
   mixer0.gain(1, 0.05);  //PREV Sound
@@ -3713,12 +3719,19 @@ void play(bool fromStart) {
     
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
+      // Master mode: start internal clock and play immediately on the current beat
       resetMidiClockState();
       if (MIDI_TRANSPORT_SEND) {
         MIDI.sendRealTime(midi::Start);
       }
       isNowPlaying = true;
       playStartTime = millis();
+
+      // Fire the very first step right away so beat 1 is heard as soon as Play is pressed.
+      // Subsequent steps will be driven by playTimer at regular intervals.
+      if (SMP.bpm > 0.0f) {
+        playNote();
+      }
     } else {
       // slave-mode: arm for the next bar-1 instead of starting now
       pendingStartOnBar = true;
@@ -3761,6 +3774,7 @@ void pause() {
   //allOff();
   Encoder[2].writeRGBCode(0x005500);
   beat = 1;      // Reset beat on pause
+  beatForUI = beat;  // Keep UI timer in sync with reset position
   GLOB.page = 1;  // Reset page on pause
 }
 
@@ -3819,6 +3833,9 @@ void handlePageSwitch(int newEdit) {
 
 void playNote() {
 
+  // Remember which beat is actually being played for UI highlighting
+  beatForUI = beat;
+
   if (currentMode == &draw || currentMode == &singleMode || currentMode == &velocity) {
 
 
@@ -3852,7 +3869,10 @@ void playNote() {
             }
           }
 
-          //MidiSendNoteOn(b, ch, vel); // This needs ch to be 1-16 for MIDI, and b as pitch.
+          // Trigger MIDI and audio as close together as possible.
+          // NOTE: 'ch' is stored 0-based in 'note', but MIDI channels are 1-16.
+          // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
+          MidiSendNoteOn(b, ch + 1, vel);
           if (ch < 9) {                                                    // Sample channels (0-8 are _samplers[0] to _samplers[8])
             if (SMP.filter_settings[ch][EFX] == 1) {                       // Drum type for sample channels 0,1,2
               float baseTone = pianoFrequencies[constrain(b - 1, 0, 15)];  // b is 1-16, map to 0-15 for pianoFreq

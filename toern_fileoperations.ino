@@ -266,13 +266,15 @@ void loadPattern(bool autoload) {
   updateLastPage();
   
   // Load SMP settings
+  
+  delay(500);
   loadSMPSettings();
   
   if (!autoload) {
     delay(500);
     switchMode(&draw);
   }
-  //applySMPSettings();
+  
   yield();
 }
 

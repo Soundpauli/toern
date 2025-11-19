@@ -7,6 +7,10 @@ extern unsigned int maxX;
 extern unsigned int pulseCount;
 extern bool isNowPlaying;
 extern bool MIDI_TRANSPORT_SEND;
+extern bool SMP_PATTERN_MODE;
+extern unsigned int beat;
+struct GlobalVars;
+extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
 extern IntervalTimer midiClockTimer;
 
@@ -14,12 +18,16 @@ extern IntervalTimer midiClockTimer;
 static unsigned long lastClockTime = 0;                  // legacy, no longer used for BPM
 static unsigned long lastBPMMeasureTime = 0;             // time of last BPM measurement window
 static uint32_t clocksSinceLastBPM = 0;                  // number of MIDI clocks since last BPM measurement
-static float smoothedBPM = 0.0f;                         // internal smoothed BPM estimate
+static float smoothedBPM = 0.0f;                         // internal smoothed BPM estimate (Kalman filter state)
+static float bpmEstimate = 0.0f;                         // Kalman filter: current BPM estimate
+static float bpmEstimateError = 1.0f;                    // Kalman filter: estimate error covariance
+static const float BPM_PROCESS_NOISE = 0.8f;             // Kalman filter: process noise (how much BPM can change) - LOWER = harder filtering
+static const float BPM_MEASUREMENT_NOISE = 0.8f;         // Kalman filter: measurement noise (BPM measurement uncertainty) - HIGHER = harder filtering
 static float displayedBPM = 0.0f;                        // BPM value committed to SMP.bpm / UI
 static unsigned long lastBPMUpdateMillis = 0;            // last time we updated displayed BPM
 static const unsigned long BPM_UPDATE_INTERVAL_MS = 200; // minimum time between BPM UI updates
 static const float BPM_UPDATE_THRESHOLD = 0.5f;          // minimum delta to force BPM UI update
-static const uint32_t CLOCKS_PER_BPM_WINDOW = 24 * 4 * 4; // 4/4: 24 clocks/beat * 4 beats/bar * 4 bars
+static const uint32_t CLOCKS_PER_BPM_WINDOW = 24 * 4 * 4; // 4/4: 24 clocks/beat * 4 beats/bar * 4 bars = 384 clocks (calculate BPM every 4 bars)
 static uint8_t midiClockTicks = 0;
 static uint8_t externalStepWithinPage = 0;  // Tracks external clock-derived step (1..maxX)
 static float midiClockSendBPM = 0.0f;
@@ -55,19 +63,37 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
 }
 
 void checkMidi() {
+  // No serial output for individual MIDI messages - only show calculated BPM
+  // Only Clock messages (0xF8) are used for BPM calculation
+  // Active Sensing (0xFE), Note messages, and others are IGNORED for BPM
+  
+  // CRITICAL: Process Clock messages with ABSOLUTE PRIORITY and minimal overhead
+  // When Note messages are in the buffer, they can delay Clock processing, causing timing jitter
+  // Solution: Check message type FIRST, process Clock immediately with timestamp capture
+  // before ANY other processing (including MIDI.getChannel() or MIDI.getData() calls)
+  
   while (MIDI.read()) {
+    // Get message type FIRST - this is fast and doesn't process the message
+    uint8_t miditype = MIDI.getType();
+    
+    // Handle Clock messages FIRST with zero overhead - capture timestamp IMMEDIATELY
+    // This must happen before ANY other MIDI library calls to avoid timing delays
+    if (miditype == midi::Clock) {
+      unsigned long now = micros();  // Capture timestamp IMMEDIATELY
+      if (!MIDI_CLOCK_SEND) {
+        myClock(now);  // Process Clock - ONLY increments counter, no other overhead
+      }
+      continue;  // Skip all other processing for Clock messages
+    }
+    
+    // Process all other message types (non-time-critical) - these can have overhead
     uint8_t pitch, velocity, channel;
-    uint8_t miditype;
-
-    miditype = MIDI.getType();
-    channel = MIDI.getChannel();  // Fixed: assign channel from the incoming message
+    channel = MIDI.getChannel();
 
     switch (miditype) {
       case midi::NoteOn:
         pitch = MIDI.getData1();
-        // Use the actual velocity from the message (if zero, treat as note off)
         velocity = MIDI.getData2() ? MIDI.getData2() : 127;
-        
         //handleNoteOn(GLOB.currentChannel, pitch, velocity);
         break;
 
@@ -75,13 +101,6 @@ void checkMidi() {
         pitch = MIDI.getData1();
         velocity = MIDI.getData2();
         handleNoteOff(GLOB.currentChannel, pitch - 60, velocity);
-        break;
-
-      case midi::Clock:
-        {
-          unsigned long now = micros();  // Capture time ASAP
-          if (!MIDI_CLOCK_SEND) myClock(now);                  // Pass it into the clock handler
-        }
         break;
 
       case midi::Start:
@@ -93,7 +112,6 @@ void checkMidi() {
         break;
 
       case midi::SongPosition:
-        // Combine two data bytes into a 14-^ number
         handleSongPosition(MIDI.getData1() | (MIDI.getData2() << 7));
         break;
 
@@ -102,7 +120,10 @@ void checkMidi() {
         break;
 
       default:
-        // Other MIDI messages can be ignored or processed as needed.
+        // Filter out messages that should NOT affect BPM calculation:
+        // - Active Sensing (0xFE) - ignore completely
+        // - Tune Request, System Exclusive, etc. - ignore
+        // Only Clock messages (0xF8) are used for BPM calculation
         break;
     }
   }
@@ -147,6 +168,9 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     // Reset BPM averaging state for slave
     clocksSinceLastBPM = 0;
     lastBPMMeasureTime = 0;
+    // Reset Kalman filter state when switching to slave mode
+    bpmEstimate = 0.0f;
+    bpmEstimateError = 1.0f;
     
     // Start internal timer with current BPM (will be adjusted by external clock)
     if (SMP.bpm > 0.0f) {
@@ -162,19 +186,28 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
 }
 
 void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
-  if (MIDI_CLOCK_SEND) { // Safeguard: Should only run in slave mode
+  // SAFETY: This function should ONLY be called for MIDI Clock messages (0xF8)
+  // Do NOT call this for Note messages, Active Sensing (0xFE), or any other message type!
+  // DO NOT calculate BPM here - just count clocks for later calculation
+  
+  if (MIDI_CLOCK_SEND) { // Safeguard: Should only run in slave mode (EXT mode)
     return;
   }
 
-  // --- BPM Detection and Sync (slave mode) ---
-  // Count clocks but DON'T trigger steps - internal timer does that
+  // --- Count Clock messages only (NO BPM calculation during clock reception) ---
+  // Count ONLY MIDI Clock messages (0xF8) - will use this count later for BPM calculation
+  // Ignore all other messages (Notes, Active Sensing, etc.)
   clocksSinceLastBPM++;
 
   if (lastBPMMeasureTime == 0) {
     // First tick after reset: just remember the time
     lastBPMMeasureTime = now_captured;
-  } else if (clocksSinceLastBPM >= CLOCKS_PER_BPM_WINDOW) {
-    // Measure BPM over 4 bars and adjust internal timer
+    return; // Don't calculate yet - need more clocks
+  }
+
+  // Only calculate BPM when we've accumulated a full window of clocks (384 clocks = 4 bars)
+  if (clocksSinceLastBPM >= CLOCKS_PER_BPM_WINDOW) {
+    // Measure BPM over 4 bars and update SMP.bpm directly in EXT mode
     unsigned long deltaTotal = now_captured - lastBPMMeasureTime;
 
     // Expected delta per MIDI clock at BPM_MIN/BPM_MAX
@@ -186,86 +219,88 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     if (intervalPerClock >= ABSOLUTE_MIN_DELTA * 0.8f &&
         intervalPerClock <= ABSOLUTE_MAX_DELTA * 1.2f) {
 
+      // Calculate raw BPM from clock data
       float rawBPM = 60000000.0f / (intervalPerClock * 24.0f);
 
-      // Serial debug: show raw BPM calculation
-      /*
-      Serial.print("RAW BPM: ");
-      Serial.print(rawBPM, 2);
-      Serial.print(" | Clocks: ");
-      Serial.print(clocksSinceLastBPM);
-      Serial.print(" | Delta(us): ");
-      Serial.print(deltaTotal);
-      Serial.print(" | Interval/Clock(us): ");
-      Serial.println(intervalPerClock, 2);
-*/
-      // Clamp to valid range
-      if (rawBPM < BPM_MIN) rawBPM = BPM_MIN;
-      if (rawBPM > BPM_MAX) rawBPM = BPM_MAX;
+      // Clamp to valid range before filtering
+      float clampedRawBPM = rawBPM;
+      if (rawBPM < BPM_MIN) clampedRawBPM = BPM_MIN;
+      if (rawBPM > BPM_MAX) clampedRawBPM = BPM_MAX;
 
-      // Round and update BPM
-      int newBPM = round(rawBPM);
+      // Kalman filter for BPM smoothing
+      float filteredBPM;
+      float kalmanGain;
       
-      // Only adjust if difference is 1 BPM or more (in either direction)
-      if (abs(SMP.bpm - newBPM) >= 1) {
-        SMP.bpm = newBPM;
-        // Restart internal timer with new BPM
-        unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
-        playTimer.begin(playNote, currentPlayNoteInterval);
-        /*Serial.print("  -> SYNCED internal timer to ");
-        Serial.print(SMP.bpm);
-        Serial.print(" BPM (was ");
-        Serial.print(SMP.bpm - (newBPM - SMP.bpm));
-        Serial.println(")");*/
-      } else if (SMP.bpm != newBPM) {
-        /*Serial.print("  -> Detected ");
-        Serial.print(newBPM);
-        Serial.print(" BPM but staying at ");
-        Serial.print(SMP.bpm);
-        Serial.println(" (< 3 BPM difference)");*/
+      // Initialize filter if this is the first measurement
+      if (bpmEstimate == 0.0f) {
+        filteredBPM = clampedRawBPM;
+        bpmEstimateError = BPM_MEASUREMENT_NOISE;
+        kalmanGain = 1.0f;  // Full trust in first measurement
+      } else {
+        // Prediction step: predict next state (BPM stays mostly the same)
+        float predictedBPM = bpmEstimate;  // Assuming BPM doesn't change much between measurements
+        float predictedError = bpmEstimateError + BPM_PROCESS_NOISE;
+        
+        // Update step: combine prediction with measurement
+        kalmanGain = predictedError / (predictedError + BPM_MEASUREMENT_NOISE);
+        filteredBPM = predictedBPM + kalmanGain * (clampedRawBPM - predictedBPM);
+        bpmEstimateError = (1.0f - kalmanGain) * predictedError;
       }
+      
+      // Update filter state
+      bpmEstimate = filteredBPM;
+      smoothedBPM = filteredBPM;
+
+      // Serial debug: show raw BPM calculation and filtered value
+      Serial.print("BPM CALC (EXT mode): Raw=");
+      Serial.print(rawBPM, 2);
+      Serial.print(" | Filtered=");
+      Serial.print(filteredBPM, 2);
+      Serial.print(" | Gain=");
+      Serial.print(kalmanGain, 3);
+      Serial.print(" | Clocks=");
+      Serial.print(clocksSinceLastBPM);
+      Serial.print(" | Delta(us)=");
+      Serial.print(deltaTotal);
+      Serial.print(" | Interval/Clock(us)=");
+      Serial.print(intervalPerClock, 2);
+
+      // Round filtered BPM to nearest integer
+      int newBPM = round(filteredBPM);
+      
+      // Clamp final BPM to valid range
+      if (newBPM < BPM_MIN) newBPM = BPM_MIN;
+      if (newBPM > BPM_MAX) newBPM = BPM_MAX;
+      
+      // UPDATE SMP.bpm from filtered value (but DON'T sync sequencer timer)
+      // Just update the BPM value - sequencer continues using its own internal timer
+      // This allows the BPM display to match external clock while sequencer runs independently
+      SMP.bpm = (float)newBPM;
+      
+      Serial.print(" | Updated SMP.bpm=");
+      Serial.print(SMP.bpm);
+      Serial.println(" -> BPM value synced to external clock (sequencer timer unchanged)");
     } else {
-      /*Serial.print("REJECTED: intervalPerClock = ");
+      Serial.print("BPM CALC: REJECTED - intervalPerClock=");
       Serial.print(intervalPerClock, 2);
       Serial.print(" (out of range ");
       Serial.print(ABSOLUTE_MIN_DELTA * 0.8f);
       Serial.print(" - ");
       Serial.print(ABSOLUTE_MAX_DELTA * 1.2f);
-      Serial.println(")");*/
+      Serial.print(") | Clocks=");
+      Serial.print(clocksSinceLastBPM);
+      Serial.print(" | Delta(us)=");
+      Serial.println(deltaTotal);
     }
 
-    // Reset window
+    // Reset window for next measurement
     lastBPMMeasureTime = now_captured;
     clocksSinceLastBPM = 0;
   }
 
   // --- Handle Start command sync ---
   // Keep pulseCount for transport sync, but don't trigger steps
-  pulseCount = (pulseCount + 1) % (24 * 2); // 48 pulses = 2 quarter notes or half a 4/4 bar
-
-  if (pendingStartOnBar && pulseCount == 0) { // pulseCount == 0 is on a half-bar
-    Serial.println("myClock: Slave Start - synced on bar");
-    pendingStartOnBar = false;
-    isNowPlaying = true;
-    if (SMP_PATTERN_MODE) {
-      beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-      GLOB.page = GLOB.edit;  // Keep the current page
-    } else {
-      beat = 1;
-      GLOB.page = 1;
-    }
-    playStartTime = millis();
-
-    // Immediately trigger the first step so playback starts on beat 1
-    if (SMP.bpm > 0) {
-      unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
-      playTimer.end();
-      playNote();  // Fire the downbeat right away
-      playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
-    } else {
-      playNote();
-    }
-  }
+  pulseCount = (pulseCount + 1) % (24 * 4); // 96 pulses = one full 4/4 bar
   // Track external steps from MIDI clock (1..maxX) for debugging
   midiClockTicks++;
   if (midiClockTicks >= clocksPerStep) {
@@ -280,6 +315,30 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       if (externalStepWithinPage == 1) {
         //  Serial.println("ONE");
         triggerExternalOneBlink();
+
+        if (pendingStartOnBar) {
+          Serial.println("myClock: Slave Start - synced on beat 1");
+          pendingStartOnBar = false;
+          isNowPlaying = true;
+          if (SMP_PATTERN_MODE) {
+            beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+            GLOB.page = GLOB.edit;  // Keep the current page
+          } else {
+            beat = 1;
+            GLOB.page = 1;
+          }
+          playStartTime = millis();
+
+          // Immediately trigger the first step so playback starts on beat 1
+          if (SMP.bpm > 0) {
+            unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+            playTimer.end();
+            playNote();  // Fire the downbeat right away
+            playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
+          } else {
+            playNote();
+          }
+        }
       }
     }
   }
@@ -492,16 +551,26 @@ void handleStart() {
     GLOB.page = 1;
   }
   deleteActiveCopy();
-  isNowPlaying   = true;
-  beatStartTime = millis();
 
-  // 2) if we're the master, also send a MIDI-Start
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
+    // If we're master and also listening to incoming start, re-broadcast start
     MIDI.sendRealTime(midi::Start);
   }
 
-  // 3) immediately fire the very first step
-  playNote();
+  // Start immediately on the transport command
+  pendingStartOnBar = false;
+  isNowPlaying = true;
+  beatStartTime = millis();
+
+  // Fire the very first step right away so playback starts on beat 1
+  if (SMP.bpm > 0) {
+    unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+    playTimer.end();
+    playNote();  // Fire the downbeat right away
+    playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
+  } else {
+    playNote();
+  }
 }
 
 

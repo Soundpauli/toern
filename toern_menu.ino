@@ -1598,7 +1598,7 @@ FLASHMEM void drawPreviewVol() {
     mixer_stereoR.gain(0, 0);
     mixer_stereoR.gain(1, 1);
 
-    mixer0.gain(1, 0.4);  //PREV
+    mixer0.gain(1, 0.3);  //PREV
   }
 
   if (previewVol == 2) {
@@ -1611,7 +1611,7 @@ FLASHMEM void drawPreviewVol() {
     mixer_stereoR.gain(0, 1);
     mixer_stereoR.gain(1, 1);
 
-    mixer0.gain(1, 0.6);  //PREV
+    mixer0.gain(1, 0.3);  //PREV
   }
 
   if (previewVol == 1) {
@@ -1624,7 +1624,7 @@ FLASHMEM void drawPreviewVol() {
     mixer_stereoR.gain(0, 1);
     mixer_stereoR.gain(1, 1);
 
-    mixer0.gain(1, 0.3);  //PREV
+    mixer0.gain(1, 0.1);  //PREV
   }
 
   if (previewVol == 0) {
@@ -1637,7 +1637,7 @@ FLASHMEM void drawPreviewVol() {
     mixer_stereoR.gain(0, 1);
     mixer_stereoL.gain(1, 1);
 
-    mixer0.gain(1, 0.1);  //PREV
+    mixer0.gain(1, 0.04);  //PREV
   }
   FastLEDshow();
   

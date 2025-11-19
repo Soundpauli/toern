@@ -1,6 +1,7 @@
 extern const unsigned int maxlen;
 extern void triggerGridNote(unsigned int globalX, unsigned int y);
 extern const CRGB col[];
+extern unsigned int beatForUI;
 
 // Fast function to light a specific LED on a specific matrix
 // matrixId: 0 = first matrix (left), 1 = second matrix, etc.
@@ -220,7 +221,7 @@ void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
 
 
 void drawPlayButton() {
-  unsigned int timer = (beat - 1) % maxX + 1;
+  unsigned int timer = (beatForUI - 1) % maxX + 1;
   if (currentMode == &draw || currentMode == &singleMode) {
     if (isNowPlaying) {
       // Flash red on every 4th beat (works for any display width)
@@ -1078,8 +1079,8 @@ void drawTriggers() {
   *************************************************/
 
 void drawTimer() {
-  
-  unsigned int timer = ((beat - 1) % maxX + 1);
+ 
+  unsigned int timer = ((beatForUI - 1) % maxX + 1);
 
   if (GLOB.page == GLOB.edit) {
     if (timer < 1) timer = 1;
