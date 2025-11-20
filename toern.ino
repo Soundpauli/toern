@@ -54,6 +54,8 @@ extern unsigned int maxX;
 
 #define VOL_MIN 1
 #define VOL_MAX 10
+#define LINEOUT_MIN 13   // SGTL5000 line-out valid range (datasheet: 13..31)
+#define LINEOUT_MAX 31
 #define BPM_MIN 40
 #define BPM_MAX 300
 
@@ -94,6 +96,7 @@ static unsigned long externalOneBlinkUntil = 0;
 
 void triggerExternalOneBlink();
 void updateExternalOneBlink();
+void updatePreviewVolume();
 
 #define CLOCK_BUFFER_SIZE 24
 //elapsedMillis recFlushTimer;
@@ -220,6 +223,7 @@ bool monMenuFirstEnter = true;  // Flag for MON menu first entry
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
 bool SMP_LOAD_SETTINGS = true;  // Whether to load SMP settings when loading tracks
+uint8_t lineOutLevelSetting = 30;
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
 
@@ -337,8 +341,8 @@ unsigned long lastCheckTime = 0;          // Get the current time
 
 int recMode = 1;
 unsigned int fastRecMode = 0;
-unsigned int previewVol = 2;
-int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation)
+unsigned int previewVol = 2;  // Default 2 (0-5 range)
+int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1)
 int transportMode = 1;
 int patternMode = -1;
 int flowMode = -1;  // FLOW setting: -1 = OFF, 1 = ON
@@ -361,7 +365,7 @@ static const int DEFAULT_CHANNEL_VOLUME = 10;
 bool isRecording = false;
 File frec;
 
-#define MAXREC_SECONDS 20
+#define MAXREC_SECONDS 12
 #define BUFFER_SAMPLES (22100 * MAXREC_SECONDS)
 #define BUFFER_BYTES (BUFFER_SAMPLES * sizeof(int16_t))
 
@@ -469,7 +473,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 1, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode volume_bpm = { "VOLUME_BPM", { 1, 11, VOL_MIN, BPM_MIN }, { 1, 30, VOL_MAX, BPM_MAX }, { 1, 11, 7, 100 }, { 0x000000, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
+Mode volume_bpm = { "VOLUME_BPM", { LINEOUT_MIN, 11, 0, BPM_MIN }, { LINEOUT_MAX, 30, 16, BPM_MAX }, { 30, 11, 8, 100 }, { 0x00FFFF, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -636,6 +640,15 @@ static bool globalMutes[maxY];          // stores global mute state when PMOD is
 static size_t fastRecWriteIndex[MAX_CHANNELS];
 bool fastRecordActive = false;
 //static uint8_t fastRecordChannel = 0;
+bool countInActive = false;  // Count-in active for ON1 mode
+int countInBeat = 0;  // Current count-in beat (0-4, where 0=waiting, 1-4=count, 5=start recording)
+bool countInComplete = false;  // Flag to track when count-in (1,2,3,4) is complete
+bool countInPending = false;  // Flag to track when waiting for next beat 1 to start count-in
+unsigned long touch3PressStartTime = 0;  // When touch3 was first pressed
+bool touch3PressProcessed = false;  // Whether the >300ms press has been processed
+unsigned int recordingStartBeat = 0;  // Beat where recording started (to stop before reaching it again)
+unsigned int recordingBeatCount = 0;  // Absolute beat counter for recording (doesn't wrap)
+bool pendingStopFastRecord = false;  // Flag to defer stopFastRecord() from interrupt to main loop
 
 
 // State variables
@@ -1277,16 +1290,64 @@ void checkFastRec() {
 
 if (currentMode == &draw || currentMode == &singleMode){
   int touchValue3 = fastTouchRead(SWITCH_3);
-  touchState[2] = (touchValue3 > touchThreshold);
+  bool currentTouchState = (touchValue3 > touchThreshold);
+  touchState[2] = currentTouchState;
 
-  if (SMP_FAST_REC == 1 && !fastRecordActive && touchState[2]) {
-    if (!allowStart) return;
-    startFastRecord();
-    return;  // skip other mode logic while fast recording
-  }
-
-  if (SMP_FAST_REC == 1 && fastRecordActive && !touchState[2]) {
-    stopFastRecord();
+  if (SMP_FAST_REC == 1) {
+    // ON1 mode: requires >300ms press, count-in, then auto-start/stop at beat boundaries
+    if (recChannelClear == 3) {
+      if (!fastRecordActive && !countInActive) {
+        if (currentTouchState && !touch3PressProcessed) {
+          // Touch3 just pressed - start timer
+          if (touch3PressStartTime == 0) {
+            touch3PressStartTime = millis();
+          }
+          // Check if pressed for >300ms
+          if (millis() - touch3PressStartTime >= 300) {
+            // >300ms press detected - trigger count-in
+            if (!allowStart) {
+              touch3PressStartTime = 0;  // Reset if not allowed
+              return;
+            }
+            touch3PressProcessed = true;  // Mark as processed to avoid retriggering
+            
+            // If playing, mark that we want to start count-in
+            // We'll wait for the next beat 1 (full bar) before showing count-in
+            if (isNowPlaying) {
+              countInPending = true;  // Wait for next beat 1 to start count-in
+              countInActive = false;
+              countInBeat = 0;  // Reset count-in
+              countInComplete = false;  // Reset completion flag
+              touch3PressStartTime = 0;  // Reset timer
+              return;
+            }
+            touch3PressStartTime = 0;  // Reset timer
+          }
+        } else if (!currentTouchState && !touch3PressProcessed) {
+          // Touch3 released before >300ms - reset timer
+          touch3PressStartTime = 0;
+        }
+      }
+      
+      // Reset processed flag when touch3 is released
+      if (!currentTouchState && touch3PressProcessed) {
+        touch3PressProcessed = false;
+        touch3PressStartTime = 0;
+      }
+    } else {
+      // Non-ON1 modes: start/stop directly on touch/release (old behavior)
+      if (currentTouchState && !fastRecordActive) {
+        // Touch3 pressed - start recording immediately
+        if (allowStart) {
+          recordingStartBeat = beat;  // Track where recording starts
+          recordingBeatCount = 0;  // Reset absolute beat counter
+          startFastRecord();
+        }
+      } else if (!currentTouchState && fastRecordActive) {
+        // Touch3 released - stop recording immediately
+        stopFastRecord();
+      }
+    }
   }
 }
 }
@@ -1859,7 +1920,7 @@ void initSoundChip() {
   //sgtl5000_1.adcHighPassFilterEnable();
   //sgtl5000_1.adcHighPassFilterDisable();  //for mic?
   sgtl5000_1.unmuteLineout();
-  sgtl5000_1.lineOutLevel(30);
+  sgtl5000_1.lineOutLevel(lineOutLevelSetting);
 }
 
 
@@ -2169,9 +2230,20 @@ void setup() {
   playSdWav1.stop();
   EEPROMgetLastFiles();
   loadMenuFromEEPROM();
+  
+  // Load lineOutLevelSetting from EEPROM (stored at EEPROM_DATA_START + 15)
+  lineOutLevelSetting = (uint8_t)EEPROM.read(EEPROM_DATA_START + 15);
+  if (lineOutLevelSetting < LINEOUT_MIN || lineOutLevelSetting > LINEOUT_MAX) {
+    lineOutLevelSetting = 30;  // Default to 30 if invalid
+    EEPROM.write(EEPROM_DATA_START + 15, lineOutLevelSetting);  // Save default if invalid
+  }
+  // Apply loaded lineout level setting
+  sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+  
   loadSp0StateFromEEPROM();  // Load samplepack 0 state before loading samplepack
   loadSamplePack(samplePackID, true);
   SMP.bpm = 100.0;
+  updatePreviewVolume();
   
   // Initialize GLOB with default runtime values
   initGlobalVars();
@@ -3215,6 +3287,12 @@ void loop() {
     drawPages();  // Render page helper after drawTriggers
     if (isNowPlaying) drawTimer();
     
+    // Draw count-in for ON1 mode
+    extern void drawCountIn();
+    if (countInActive) {
+      drawCountIn();
+    }
+    
     // Draw red border when recording
     extern void drawRecordingBorder();
     if (fastRecordActive) {
@@ -3236,6 +3314,12 @@ if (SMP.filter_settings[8][ACTIVE]>0){
                 }
 }else{granular1.stop();}
 */
+
+  // Handle deferred stop recording (from timer interrupt)
+  if (pendingStopFastRecord) {
+    pendingStopFastRecord = false;
+    stopFastRecord();
+  }
 
   if (fastRecordActive) {
     flushAudioQueueToRAM();     // grab incoming audio into RAM
@@ -3835,6 +3919,94 @@ void playNote() {
 
   // Remember which beat is actually being played for UI highlighting
   beatForUI = beat;
+
+  // Handle count-in pending: wait for next beat 1 (full bar) before starting count-in
+  if (countInPending && isNowPlaying) {
+    unsigned int currentBeatInBar = ((beat - 1) % maxX) + 1;
+    
+    // When we reach beat 1, start the count-in (wait complete - full bar has passed)
+    if (currentBeatInBar == 1) {
+      countInPending = false;  // No longer pending
+      countInActive = true;    // Start showing count-in
+      countInBeat = 0;         // Reset count-in
+      countInComplete = false; // Reset completion flag
+    }
+  }
+
+  // Handle count-in for ON1 mode
+  if (countInActive && isNowPlaying) {
+    unsigned int currentBeatInBar = ((beat - 1) % maxX) + 1;
+    
+    // Count-in should span a full bar (maxX beats), showing 1,2,3,4 spread evenly
+    // Show 1 at beat 1, 2 at beat (1 + maxX/4), 3 at beat (1 + 2*maxX/4), 4 at beat (1 + 3*maxX/4)
+    // For maxX=16: beats 1,5,9,13 show 1,2,3,4, then start recording at beat 1 of next bar
+    unsigned int beatInterval = maxX / 4;  // 4 for maxX=16
+    unsigned int countInNumber = ((currentBeatInBar - 1) / beatInterval) + 1;
+    
+    // Update countInBeat to track which count-in number we're showing (1-4)
+    if (countInNumber <= 4) {
+      countInBeat = countInNumber;
+      
+      // Mark count-in as complete when we show "4"
+      if (countInNumber == 4) {
+        countInComplete = true;
+      }
+    } else {
+      // Beyond beat 13 (for maxX=16), count-in is complete
+      countInBeat = 0;
+    }
+    
+    // When we're at beat 1 again after showing "4", start recording
+    if (currentBeatInBar == 1 && countInComplete) {
+      // Count-in complete (shown 1,2,3,4) - start recording at beat 1
+      countInActive = false;
+      countInBeat = 0;
+      countInComplete = false;
+      // Clear all triggers from selected channel
+      clearAllNotesOfChannel();
+      // Track starting beat for auto-stop before reaching it again
+      recordingStartBeat = beat;
+      recordingBeatCount = 0;  // Reset absolute beat counter
+      // Start fast recording (note at x=1 will be set after recording completes)
+      startFastRecord();
+    }
+  }
+
+  // Auto-stop recording at loop end (ONLY for ON1 mode)
+  // Recording should record from beat 1 until the loop end is reached
+  // Stop AFTER loop end is recorded, BEFORE beat 1 (ONE) plays again
+  if (fastRecordActive && recChannelClear == 3 && recordingStartBeat > 0 && isNowPlaying) {
+    unsigned int currentBeatInBar = ((beat - 1) % maxX) + 1;
+    
+    // Increment absolute beat counter (doesn't wrap, unlike beat in pattern mode)
+    recordingBeatCount++;
+    
+    // Calculate loop length in beats
+    // If loopLength > 0, use it (in pages), otherwise use lastPage (actual pattern length)
+    extern int loopLength;
+    unsigned int loopEndBeat;
+    if (loopLength > 0) {
+      loopEndBeat = loopLength * maxX;  // Loop length in beats
+    } else {
+      extern unsigned int lastPage;
+      loopEndBeat = lastPage * maxX;  // Pattern length in beats
+    }
+    
+    // Stop AFTER recording the full loop (including the complete last beat)
+    // We check at the start of playNote(), so:
+    // - Recording starts at beat 1, recordingBeatCount = 0
+    // - Each call increments recordingBeatCount (absolute, doesn't wrap)
+    // - When recordingBeatCount = loopEndBeat, we've recorded beats 1 through (loopEndBeat - 1)
+    // - When recordingBeatCount = loopEndBeat + 1, we've recorded beats 1 through loopEndBeat
+    //   At this point we're about to play beat (loopEndBeat + 1), which is beat 1 again
+    //   Stop here to capture the complete loop including the full audio of the last beat
+    // Defer actual stop to main loop to avoid blocking timer interrupt
+    if (currentBeatInBar == 1 && recordingBeatCount >= loopEndBeat + 1) {
+      pendingStopFastRecord = true;  // Defer to main loop
+      recordingStartBeat = 0;  // Reset tracking
+      recordingBeatCount = 0;  // Reset counter
+    }
+  }
 
   if (currentMode == &draw || currentMode == &singleMode || currentMode == &velocity) {
 
@@ -4490,6 +4662,26 @@ void updateVolume() {
   if (vol >= 0.0 && vol <= 1.0) sgtl5000_1.volume(vol);  // Ensure vol is in valid range
 }
 
+void updatePreviewVolume() {
+  unsigned int level = constrain(previewVol, 0u, 5u);
+  float gain = (float)level * 0.0625f;  // Map 0→0.0, 5→0.3125
+  mixer0.gain(1, 0.1f);  // Keep mixer at clean level
+  ampPreview.gain(gain);
+}
+
+void updateLineOutLevel() {
+  unsigned int newLevel = constrain(currentMode->pos[0], LINEOUT_MIN, LINEOUT_MAX);
+  if (newLevel != currentMode->pos[0]) {
+    currentMode->pos[0] = newLevel;
+    Encoder[0].writeCounter((int32_t)newLevel);
+  }
+  if (lineOutLevelSetting != newLevel) {
+    lineOutLevelSetting = newLevel;
+    EEPROM.write(EEPROM_DATA_START + 15, lineOutLevelSetting);  // Save to EEPROM
+  }
+  sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+}
+
 void updateBrightness() {
   // Original: ledBrightness = (currentMode->pos[1] * 10) + 4 - 50;
   // This seems to map encoder pos[1] (range 6-25 for volume_bpm mode) to brightness
@@ -4618,11 +4810,19 @@ void setVolume() {
 
   // Track previous encoder position to only update brightness when it changes
   static unsigned int lastPos1 = 0;
+  static unsigned int lastLineOutPos = 0;
+  static unsigned int lastVolPos = 0;
   static bool firstCall = true;
   
   if (firstCall) {
     // On first call, just initialize lastPos1
     lastPos1 = currentMode->pos[1];
+    currentMode->pos[0] = lineOutLevelSetting;
+    lastLineOutPos = lineOutLevelSetting;
+    Encoder[0].writeCounter((int32_t)lineOutLevelSetting);
+    currentMode->pos[2] = GLOB.vol;
+    lastVolPos = GLOB.vol;
+    Encoder[2].writeCounter((int32_t)GLOB.vol);
     firstCall = false;
   }
   
@@ -4631,8 +4831,14 @@ void setVolume() {
     lastPos1 = currentMode->pos[1];
   }
 
-  if (currentMode->pos[2] != GLOB.vol) {
+  if (currentMode->pos[0] != lastLineOutPos) {
+    updateLineOutLevel();
+    lastLineOutPos = currentMode->pos[0];
+  }
+
+  if (currentMode->pos[2] != lastVolPos) {
     updateVolume();
+    lastVolPos = currentMode->pos[2];
   }
 
   if (currentMode->pos[3] != (unsigned int)SMP.bpm) {  // Cast SMP.bpm for comparison

@@ -11,6 +11,7 @@ void refreshCtrlEncoderConfig();
 extern bool pong;
 extern uint16_t pongUpdateInterval;
 extern bool MIDI_TRANSPORT_SEND;
+void updatePreviewVolume();
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -59,7 +60,7 @@ MenuPage recsPages[RECS_PAGES_COUNT] = {
   {"MIC", 4, true, "GAIN"},             // Recording Mode + Mic Gain
   {"TRIG", 11, false, nullptr},          // Fast Rec Mode (On-The-fly Recording)
   {"CLR", 12, false, nullptr},          // Rec Channel Clear
-  {"PVOL", 13, false, nullptr},         // Preview Volume
+{"PVOL", 13, true, "LEVEL"},          // Preview Volume
   {"LIVE", 14, true, "LEVEL"}           // Monitor Level + Level Control
 };
 
@@ -104,7 +105,7 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 4,  1);   // voiceSelect default
     EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
     EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
-    EEPROM.write(EEPROM_DATA_START + 7,  0);   // previewVol default
+    EEPROM.write(EEPROM_DATA_START + 7,  2);   // previewVol default (0-5 range, middle = 2)
     EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
     EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
     EEPROM.write(EEPROM_DATA_START + 10, 0);   // monitorLevel default (0 = OFF)
@@ -112,6 +113,7 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
     EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
     EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
+    EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
 
     Serial.println("EEPROM initialized with defaults.");
   }
@@ -133,6 +135,8 @@ void loadMenuFromEEPROM() {
   ledModules = (int) EEPROM.read(EEPROM_DATA_START + 13);
   ctrlMode = (int8_t) EEPROM.read(EEPROM_DATA_START + 14);
   
+  if (previewVol < 0 || previewVol > 5) previewVol = 2;
+
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
   
@@ -140,7 +144,7 @@ void loadMenuFromEEPROM() {
   extern unsigned int maxX;
   maxX = MATRIX_WIDTH * ledModules;
   
-  if (recChannelClear < 0 || recChannelClear > 2) recChannelClear = 1;  // Default to ON if invalid
+  if (recChannelClear < 0 || recChannelClear > 3) recChannelClear = 1;  // Default to ON if invalid
   
   // Ensure flowMode is valid (-1 or 1)
   if (flowMode != -1 && flowMode != 1) {
@@ -634,6 +638,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       
     case 13: // PVL - Preview Volume
       drawText("PVOL", 2, 10, UI_MAGENTA);
+      drawIndicator('L', 'N', 3);  // Encoder 3: Large Cyan
       drawPreviewVol();
       break;
       
@@ -797,6 +802,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static bool aiMenuFirstEnter = true;
   static bool menuFirstEnter = true;
   static bool pongMenuFirstEnter = true;
+  static bool previewMenuFirstEnter = true;
   static int lastPongSpeed = -1;
   static int lastSetting = -1;
   
@@ -807,6 +813,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
     aiMenuFirstEnter = true;
     menuFirstEnter = true;
     pongMenuFirstEnter = true;
+    previewMenuFirstEnter = true;
     lastPongSpeed = -1;
     lastSetting = setting;
   }
@@ -833,6 +840,28 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       }
       break;
       
+    case 13: { // PVOL page - Preview Volume control
+      static int lastPreview = -1;
+
+      if (previewMenuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)previewVol);
+        Encoder[2].writeMax((int32_t)5);
+        Encoder[2].writeMin((int32_t)0);
+        previewMenuFirstEnter = false;
+        lastPreview = previewVol;
+      }
+
+      if (currentMode->pos[2] != lastPreview) {
+        previewVol = constrain(currentMode->pos[2], 0, 5);
+        saveSingleModeToEEPROM(7, previewVol);
+        updatePreviewVolume();
+        drawMainSettingStatus(setting);
+        drawAdditionalFeatures(setting);
+        lastPreview = previewVol;
+      }
+      break;
+    }
+
     case 14: // MON page - Monitor Level control
       static int lastMonitorLevel = -1;
       
@@ -1129,15 +1158,13 @@ void switchMenu(int menuPosition){
 
          case 12:
         recChannelClear = recChannelClear + 1;
-        if (recChannelClear > 2) recChannelClear = 0;  // Cycle: 0->1->2->0
+        if (recChannelClear > 3) recChannelClear = 0;  // Cycle: 0->1->2->3->0 (OFF->ON->FIX->ON1->OFF)
         saveSingleModeToEEPROM(6, recChannelClear);
         drawMainSettingStatus(menuPosition);
         break;
 
         case 13:
-        previewVol = previewVol + 1;                   
-        if (previewVol>3) previewVol=0;
-        saveSingleModeToEEPROM(7, previewVol);
+        // Preview volume is now adjusted via encoder 2 on PVOL page; button press has no action.
         drawMainSettingStatus(menuPosition);
         break;
 
@@ -1515,6 +1542,9 @@ FLASHMEM void drawRecChannelClear(){
   } else if (recChannelClear == 2) {
     drawText("FIX", 2, 3, UI_YELLOW);
     SMP_REC_CHANNEL_CLEAR = false; // FIX mode - no manipulation
+  } else if (recChannelClear == 3) {
+    drawText("ON1", 2, 3, UI_CYAN);
+    SMP_REC_CHANNEL_CLEAR = true;  // ON1 mode - count-in then record on beat 1
   }
 }
 
@@ -1587,60 +1617,16 @@ FLASHMEM void drawMidiVoiceSelect() {
 
 
 FLASHMEM void drawPreviewVol() {
-
-  if (previewVol == 3) {
-    drawText("SPLT", 2, 3, UI_BLUE);
-    
-    
-    mixer_stereoL.gain(0, 1);
-    mixer_stereoL.gain(1, 0);
-
-    mixer_stereoR.gain(0, 0);
-    mixer_stereoR.gain(1, 1);
-
-    mixer0.gain(1, 0.3);  //PREV
+  int barLength = mapf(previewVol, 0, 5, 1, maxX);
+  for (int x = 1; x <= (int)maxX; x++) {
+    CRGB color = (x <= barLength) ? CRGB(0, 160, 80) : CRGB(0, 0, 0);
+    light(x, 6, color);
+    light(x, 7, color);
   }
-
-  if (previewVol == 2) {
-    drawText("HIGH", 2, 3, UI_RED);
-    
-    
-    mixer_stereoL.gain(0, 1);
-    mixer_stereoL.gain(1, 1);
-
-    mixer_stereoR.gain(0, 1);
-    mixer_stereoR.gain(1, 1);
-
-    mixer0.gain(1, 0.3);  //PREV
-  }
-
-  if (previewVol == 1) {
-    drawText("MID", 2, 3, UI_ORANGE);
-    
-    
-    mixer_stereoL.gain(0, 1);
-    mixer_stereoL.gain(1, 1);
-
-    mixer_stereoR.gain(0, 1);
-    mixer_stereoR.gain(1, 1);
-
-    mixer0.gain(1, 0.1);  //PREV
-  }
-
-  if (previewVol == 0) {
-    drawText("LOW", 2, 3, UI_GREEN);
-  
-    
-    mixer_stereoL.gain(0, 1);
-    mixer_stereoL.gain(1, 1);
-
-    mixer_stereoR.gain(0, 1);
-    mixer_stereoL.gain(1, 1);
-
-    mixer0.gain(1, 0.04);  //PREV
-  }
+  char label[8];
+  //snprintf(label, sizeof(label), "PV %d", previewVol);  // Display 0-5
+  //drawText(label, 2, 3, UI_CYAN);
   FastLEDshow();
-  
 }
 
 FLASHMEM void drawMonitorLevel() {

@@ -58,6 +58,7 @@ extern float playNoteInterval;
 extern float detune[13]; // Global detune array for channels 1-12
 extern float channelOctave[9]; // Global octave array for channels 1-8
 extern int8_t channelDirection[maxFiles];
+extern unsigned int recordingStartBeat;  // Beat where recording started
 
 void EEPROMgetLastFiles() {
   //get lastFile Array from Eeprom
@@ -321,7 +322,13 @@ void startFastRecord() {
   // 2) Reset our write index and drop counter
   int ch = GLOB.currentChannel;
   fastRecWriteIndex[ch] = 0;
-  fastDropRemaining = FAST_DROP_BLOCKS;
+  // For ON1 mode, don't drop initial audio - we want a perfect loop from beat 1
+  // For other modes, drop first 200ms to avoid noise/click at start
+  if (recChannelClear == 3) {
+    fastDropRemaining = 0;  // ON1 mode: no drop, capture from beat 1
+  } else {
+    fastDropRemaining = FAST_DROP_BLOCKS;  // Other modes: drop first 200ms
+  }
 
   // 3) Restart recording queue
   queue1.begin();
@@ -381,14 +388,52 @@ void flushAudioQueueToRAM() {
 }
 
 void stopFastRecord() {
+  // CRITICAL: Disable audio input first to stop new data from entering queue
+  mixer_end.gain(3, 0.0);
+  
+  // Flush all remaining audio data while fastRecordActive is still true
+  // Flush more aggressively to ensure we capture all data for the final beat
+  int flushCount = 0;
+  while (fastRecordActive && queue1.available() && flushCount < 10) {
+    flushAudioQueueToRAM();
+    flushCount++;
+  }
+  
+  // Now safe to stop recording
   fastRecordActive = false;
   queue1.end();
   
-  // Disable audio input monitoring
-  mixer_end.gain(3, 0.0);
+  // Final flush of any remaining data (now that fastRecordActive is false, we need to flush manually)
+  // This is critical to capture the last beat's audio data
+  int ch = GLOB.currentChannel;
+  auto &idx = fastRecWriteIndex[ch];
+  int16_t *dest = reinterpret_cast<int16_t *>(sampled[ch]);
   
-  auto  ch  = GLOB.currentChannel;
-  auto& idx = fastRecWriteIndex[ch];
+  // Aggressive flush of remaining queue data to ensure we get all audio
+  while (queue1.available() && idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES) {
+    int16_t *block = (int16_t *)queue1.readBuffer();
+    memcpy(dest + idx, block, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
+    idx += AUDIO_BLOCK_SAMPLES;
+    queue1.freeBuffer();
+  }
+  
+  // One more pass to catch any stragglers
+  while (queue1.available() && idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES) {
+    int16_t *block = (int16_t *)queue1.readBuffer();
+    memcpy(dest + idx, block, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
+    idx += AUDIO_BLOCK_SAMPLES;
+    queue1.freeBuffer();
+  }
+  
+  // Save recording start beat before resetting (needed for ON1 mode note placement)
+  unsigned int savedStartBeat = recordingStartBeat;
+  
+  // Reset recording start beat tracking
+  recordingStartBeat = 0;
+  
+  // Reset absolute beat counter
+  extern unsigned int recordingBeatCount;
+  recordingBeatCount = 0;
   
   Serial.print(">>> stopFastRecord: channel=");
   Serial.print(ch);
@@ -397,12 +442,19 @@ void stopFastRecord() {
   
   loadedSampleLen[ch] = idx;
   
-  Serial.print("loadedSampleLen[");
-  Serial.print(ch);
-  Serial.print("] = ");
-  Serial.println(loadedSampleLen[ch]);
+  // Defer sampler loading and heavy operations to avoid blocking audio
+  // These will happen after the critical stop sequence
   
-  // load into that channel's sampler voice:
+  // Auto-save recorded sample to samplepack 0
+  Serial.print("Fast record stopped, saving to SP0 for channel ");
+  Serial.println(ch);
+  
+  // Do heavy save operations (SD write, EEPROM) - these might cause brief hang
+  // but we've already stopped recording, so audio playback should continue
+  copySampleToSamplepack0(ch);
+  saveSp0StateToEEPROM();
+  
+  // Now load into sampler (do this after saves to minimize interruption)
   _samplers[ch].removeAllSamples();
   _samplers[ch].addSample(
     36,                            // MIDI note #
@@ -412,17 +464,21 @@ void stopFastRecord() {
   );
   channelDirection[ch] = 1;
   
-  // Auto-save recorded sample to samplepack 0
-  Serial.print("Fast record stopped, saving to SP0 for channel ");
-  Serial.println(ch);
-  copySampleToSamplepack0(ch);
-  saveSp0StateToEEPROM();
+  // For ON1 mode: Set note at x=1 after recording and copy are complete
+  if (recChannelClear == 3 && savedStartBeat > 0) {
+    // Find the next x=1 position (beat 1 in the next bar)
+    // Since recording stopped at maxX, the next x=1 is at the start of the next bar
+    unsigned int nextBeat1 = ((savedStartBeat - 1) / maxX + 1) * maxX + 1;
+    // Set note at x=1
+    note[nextBeat1][ch+1].channel = ch;
+    note[nextBeat1][ch+1].velocity = defaultVelocity;
+  }
   
   // give back your knob color + preview
  // Encoder[0].writeRGBCode(CRGBToUint32(col[ch]));
  // _samplers[ch].noteEvent(36, defaultVelocity, true, false);
   //Serial.printf("◀ FASTREC ch%u, %u samples\n", ch, (unsigned)idx);
- 
+
 }
 
 void EEPROMsetLastFile() {

@@ -2,6 +2,10 @@ extern const unsigned int maxlen;
 extern void triggerGridNote(unsigned int globalX, unsigned int y);
 extern const CRGB col[];
 extern unsigned int beatForUI;
+extern uint8_t lineOutLevelSetting;
+
+#define LINEOUT_LEVEL_MIN 13
+#define LINEOUT_LEVEL_MAX 31
 
 // Fast function to light a specific LED on a specific matrix
 // matrixId: 0 = first matrix (left), 1 = second matrix, etc.
@@ -53,13 +57,14 @@ CRGB getIndicatorColor(char colorCode) {
     case 'H': return CRGB(0, 191, 255);    // Bright Blue
     case 'B': return CRGB(0, 150, 255);    // Teal for Pong speed
     case 'V': return CRGB(148, 0, 211);    // Violet
-    case 'P': return CRGB(255, 192, 203);  // Pink
+    case 'P': return CRGB(50, 0, 50);  // Pink
     case 'Y': return CRGB(255, 255, 0);   // Yellow
     case 'M': return CRGB(255, 0, 255);   // Magenta
     case 'C': return CRGB(0, 0, 0);        // Black (placeholder for CH)
     case 'U': return CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0); // Volume color
     case 'D': return CRGB(100, 0, 0);     // Dark Red
     case 'E': return CRGB(0, 100, 0);     // Dark Green
+    case 'N': return CRGB(0, 120, 120);   // Cyan
     default: return CRGB(0, 0, 0);        // Default to black
   }
 }
@@ -1104,6 +1109,19 @@ void drawTimer() {
   }
 }
 
+FLASHMEM void drawCountIn() {
+  extern bool countInActive;
+  extern int countInBeat;
+  
+  if (countInActive && countInBeat > 0 && countInBeat <= 4) {
+    // Display count-in number (1,2,3,4) on the bar at y=1
+    char countText[4];
+    snprintf(countText, sizeof(countText), "%d", countInBeat);
+    // Display centered on the bar - position based on maxX
+    int textX = (maxX / 2) - 1;  // Center the count text
+    drawText(countText, textX, 1, CRGB(0, 255, 255));  // Cyan color for count-in
+  }
+}
 
 int mapXtoPageOffset(int x) {
   return x - (GLOB.edit - 1) * maxX;
@@ -1144,6 +1162,19 @@ FLASHMEM void drawVolume(unsigned int vol) {
   for (unsigned int x = 0; x <= maxXVolume; x++) {
     light(x + 1, 12, CRGB(vol * vol, 20 - vol, 0));
     light(x + 1, 13, CRGB(vol * vol, 20 - vol, 0));
+  }
+}
+
+FLASHMEM void drawLineOutVolume(uint8_t level) {
+  level = constrain(level, LINEOUT_LEVEL_MIN, LINEOUT_LEVEL_MAX);
+  // Flip the mapping: higher level (31) = quieter = less bar, lower level (13) = louder = more bar
+  unsigned int filled = ::map(level, LINEOUT_LEVEL_MIN, LINEOUT_LEVEL_MAX, (int)maxX, 0);
+  // Ensure minimum bar width of 1
+  if (filled == 0) filled = 1;
+  for (unsigned int x = 1; x <= maxX; x++) {
+    CRGB color = (x <= filled) ? CRGB(50, 0, 50) : CRGB(0, 0, 0);  // Pink color
+    light(x, 3, color);
+    light(x, 4, color);
   }
 }
 
@@ -1520,18 +1551,22 @@ void drawBPMScreen() {
 
   FastLEDclear();
   drawVolume(GLOB.vol);
+  drawLineOutVolume(lineOutLevelSetting);
   if (drawBaseColorMode) {
     drawBrightness();
   }
   CRGB volColor = CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0);
   Encoder[2].writeRGBCode(CRGBToUint32(volColor));
+  CRGB pinkColor = CRGB(50, 0, 50);  // Pink color
+  Encoder[0].writeRGBCode(CRGBToUint32(pinkColor));
   
-  // New indicator system: BPM: L[H] | L[W] | L[U] | -
+  // New indicator system: BPM: L[P] | L[W] | L[U] | -
   
+  drawIndicator('L', 'P', 1);  // Encoder 1: Large Pink for line out
   drawIndicator('L', 'W', 2);  // Encoder 2: Large White
   drawIndicator('L', 'U', 3);  // Encoder 3: Large Volume Color
   if (drawBaseColorMode) {
-    drawIndicator('L', 'H', 4);  // Encoder 1: Large Bright Blue
+    drawIndicator('L', 'H', 4);  // Encoder 4: Large Bright Blue
   }
   // Encoder 4: empty (no indicator)
   
