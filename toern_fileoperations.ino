@@ -290,7 +290,18 @@ void autoLoad() {
 }
 
 void autoSave() {
+  // Prevent autosave if last save was less than 10 seconds ago
+  static unsigned long lastAutoSaveTime = 0;
+  const unsigned long AUTO_SAVE_COOLDOWN_MS = 10000;  // 10 seconds
+  
+  unsigned long currentTime = millis();
+  if (lastAutoSaveTime > 0 && (currentTime - lastAutoSaveTime) < AUTO_SAVE_COOLDOWN_MS) {
+    // Too soon since last autosave - skip this one
+    return;
+  }
+  
   savePattern(true);
+  lastAutoSaveTime = currentTime;  // Update timestamp after successful save
   
   // Reset paint/unpaint prevention flag after autoSave operation
   extern bool preventPaintUnpaint;
