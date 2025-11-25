@@ -44,6 +44,7 @@ volatile bool stepIsDue = false;
 
 // maxX is now a runtime variable, calculated from ledModules menu setting
 extern unsigned int maxX;
+extern void handleMidiClock();
 #define NUM_LEDS (256 * LED_MODULES)  // 256 LEDs per matrix
 #define DATA_PIN 17  // PIN FOR LEDS
 #define INT_PIN 27   // PIN FOR ENOCDER INTERRUPS
@@ -81,7 +82,7 @@ extern unsigned int maxX;
 #define EEPROM_MENU_ADDR 42
 
 struct MidiSettings : public midi ::DefaultSettings {
-  static const long BaudRate = 1000000;
+  static const long BaudRate = 31250;
   static const unsigned SysExMaxSize = 16;
 };
 
@@ -219,7 +220,6 @@ bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;  // FLOW mode: follows timer position when playing
 unsigned int lastFlowPage = 0;  // Track the last page set by FLOW mode
 bool recMenuFirstEnter = true;  // Track first entry into REC menu
-bool monMenuFirstEnter = true;  // Flag for MON menu first entry
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
 bool SMP_LOAD_SETTINGS = true;  // Whether to load SMP settings when loading tracks
@@ -354,6 +354,7 @@ int ledModules = 1;  // Number of LED modules: 1 or 2
 unsigned int maxX = MATRIX_WIDTH * 1;  // Runtime variable: total display width (16 or 32)
 unsigned int micGain = 0;  // Microphone gain: 0-64, default 10
 unsigned int monitorLevel = 0;  // Monitoring level: 0-4, default 0 (OFF) to prevent startup feedback
+unsigned int lineInLevel = 8;  // Line input level: 0-15, default 8
 int ctrlMode = 0;  // 0=page, 1=volume control for encoder 1
 static int ctrlLastChannel = -1;
 static int ctrlLastVolume = -1;
@@ -365,7 +366,7 @@ static const int DEFAULT_CHANNEL_VOLUME = 10;
 bool isRecording = false;
 File frec;
 
-#define MAXREC_SECONDS 12
+#define MAXREC_SECONDS 20
 #define BUFFER_SAMPLES (22100 * MAXREC_SECONDS)
 #define BUFFER_BYTES (BUFFER_SAMPLES * sizeof(int16_t))
 
@@ -471,9 +472,9 @@ struct Mode {
   uint32_t knobcolor[4];
 };
 
-Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 1, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
+Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, maxY, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode volume_bpm = { "VOLUME_BPM", { LINEOUT_MIN, 11, 0, BPM_MIN }, { LINEOUT_MAX, 30, 16, BPM_MAX }, { 30, 11, 8, 100 }, { 0x00FFFF, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  //OK
+Mode volume_bpm = { "VOLUME_BPM", { 11, 11, 0, BPM_MIN }, { 30, 30, 1, BPM_MAX }, { 11, 11, 0, 100 }, { 0x00FFFF, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -1222,6 +1223,11 @@ void switchMode(Mode *newMode) {
       brightnessPos = constrain(brightnessPos, 6, 25);  // Valid range for volume_bpm mode
       currentMode->pos[1] = brightnessPos;
       Encoder[1].writeCounter((int32_t)brightnessPos);
+      
+      // Set encoder 2 position to match current clockMode (1=INT -> 1, -1=EXT -> 0)
+      extern int clockMode;
+      currentMode->pos[2] = (clockMode == 1) ? 1 : 0;
+      Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
     }
     
     if (currentMode == &loadSaveTrack) {
@@ -1345,7 +1351,7 @@ if (currentMode == &draw || currentMode == &singleMode){
         }
       } else if (!currentTouchState && fastRecordActive) {
         // Touch3 released - stop recording immediately
-        stopFastRecord();
+    stopFastRecord();
       }
     }
   }
@@ -1443,6 +1449,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool inLookSubmenu;
     extern bool inRecsSubmenu;
     extern bool inMidiSubmenu;
+    extern bool inVolSubmenu;
     extern int currentMenuPage;
     
     // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
@@ -1469,6 +1476,14 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
       return;
     }
     
+    // If in VOL submenu, exit back to main menu at VOL page (index 4)
+    if (inVolSubmenu) {
+      inVolSubmenu = false;
+      currentMenuPage = 4;
+      Encoder[3].writeCounter((int32_t)4);
+      return;
+    }
+    
     // Get the main setting for the current page
     extern int getCurrentMenuMainSetting();
     int mainSetting = getCurrentMenuMainSetting();
@@ -1489,6 +1504,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     int mainSetting = getCurrentMenuMainSetting();
     
     // Encoder[3] triggers action for all menu items EXCEPT AI (which uses encoder[0])
+    // Note: Encoder button does NOT exit submenus - only touch buttons do
     if (mainSetting != 15) {
       switchMenu(mainSetting);
     }
@@ -1900,7 +1916,14 @@ void initSoundChip() {
   AudioMemory(256);
   // turn on the output
   sgtl5000_1.enable();
-  sgtl5000_1.volume(1.0);
+  
+  // Load audio settings from globals (they should be loaded from EEPROM before this is called)
+  // GLOB, micGain, lineInLevel, and lineOutLevelSetting are already in scope as globals
+  
+  // Apply initial volume (will be fully applied later via applyAudioSettingsFromGlobals)
+  float vol = GLOB.vol / 10.0f;
+  vol = constrain(vol, 0.0f, 1.0f);
+  sgtl5000_1.volume(vol);
 
   // Initialize audio input amplifier - turned off at startup
   audioInputAmp.gain(0.0);
@@ -1921,6 +1944,7 @@ void initSoundChip() {
   //sgtl5000_1.adcHighPassFilterDisable();  //for mic?
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+  sgtl5000_1.lineInLevel(lineInLevel);  // Apply line input level
 }
 
 
@@ -1958,8 +1982,7 @@ void initSamples() {
   synthmixer14.gain(3, 0.15);
 
 
-  mixer0.gain(0, GAIN_1);  //PREV
-  mixer0.gain(1, GAIN_1);  //PREV
+  // mixer0.gain(0, ...) and mixer0.gain(1, ...) will be set by updatePreviewVolume() based on PREV volume
 
 
   mixersynth_end.gain(0, GAIN_4);
@@ -2189,6 +2212,40 @@ void setup() {
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
   FastLED.setBrightness(ledBrightness);
 
+  // Early EEPROM load for audio settings (before initSoundChip)
+  // Load GLOB.vol, micGain, previewVol, lineInLevel, lineOutLevelSetting directly from EEPROM
+  // GLOB, micGain, previewVol, lineInLevel, and lineOutLevelSetting are already in scope as globals
+  
+  // Load GLOB.vol from EEPROM (stored at EEPROM_DATA_START + 17, separate from transportMode)
+  GLOB.vol = (int8_t)EEPROM.read(EEPROM_DATA_START + 17);
+  if (GLOB.vol < 0 || GLOB.vol > 10) {
+    GLOB.vol = 10;  // Default to 10 if invalid
+  }
+  
+  // Load micGain from EEPROM
+  micGain = (unsigned int)EEPROM.read(EEPROM_DATA_START + 9);
+  if (micGain > 63) {
+    micGain = 10;  // Default to 10 if invalid
+  }
+  
+  // Load previewVol from EEPROM
+  previewVol = (unsigned int)EEPROM.read(EEPROM_DATA_START + 7);
+  if (previewVol > 5) {
+    previewVol = 2;  // Default to 2 if invalid
+  }
+  
+  // Load lineInLevel from EEPROM
+  lineInLevel = (unsigned int)EEPROM.read(EEPROM_DATA_START + 16);
+  if (lineInLevel > 15) {
+    lineInLevel = 8;  // Default to 8 if invalid
+  }
+  
+  // Load lineOutLevelSetting from EEPROM
+  lineOutLevelSetting = (uint8_t)EEPROM.read(EEPROM_DATA_START + 15);
+  if (lineOutLevelSetting < LINEOUT_MIN || lineOutLevelSetting > LINEOUT_MAX) {
+    lineOutLevelSetting = 30;  // Default to 30 if invalid
+  }
+  
   initSoundChip();
   
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
@@ -2197,7 +2254,6 @@ void setup() {
   }
   drawNoSD();
   delay(500);
-  initSoundChip();
   
   mixer0.gain(1, 0.05);  //PREV Sound
   
@@ -2231,22 +2287,18 @@ void setup() {
   EEPROMgetLastFiles();
   loadMenuFromEEPROM();
   
-  // Load lineOutLevelSetting from EEPROM (stored at EEPROM_DATA_START + 15)
-  lineOutLevelSetting = (uint8_t)EEPROM.read(EEPROM_DATA_START + 15);
-  if (lineOutLevelSetting < LINEOUT_MIN || lineOutLevelSetting > LINEOUT_MAX) {
-    lineOutLevelSetting = 30;  // Default to 30 if invalid
-    EEPROM.write(EEPROM_DATA_START + 15, lineOutLevelSetting);  // Save default if invalid
-  }
-  // Apply loaded lineout level setting
-  sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+  // Apply all audio settings from globals (after loadMenuFromEEPROM which may have updated values)
+  extern void applyAudioSettingsFromGlobals();
+  applyAudioSettingsFromGlobals();
   
   loadSp0StateFromEEPROM();  // Load samplepack 0 state before loading samplepack
   loadSamplePack(samplePackID, true);
   SMP.bpm = 100.0;
-  updatePreviewVolume();
   
-  // Initialize GLOB with default runtime values
+  // Initialize GLOB with default runtime values (but preserve vol from EEPROM)
+  int savedVol = GLOB.vol;
   initGlobalVars();
+  GLOB.vol = savedVol;  // Restore vol from EEPROM
   
   initSamples();
   initPageMutes();  // Initialize per-page mute system
@@ -2284,7 +2336,7 @@ void setup() {
   Serial8.begin(31250);
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.setHandleNoteOn(handleNoteOn);  // optional MIDI library hook
-  //MIDI.setHandleClock(myClock);       // optional if you're using callbacks
+  MIDI.setHandleClock(handleMidiClock);  // dedicated callback for MIDI clock to reduce jitter
   resetMidiClockState();
   
 
@@ -2298,6 +2350,10 @@ void setup() {
   
   // Turn on audio input amplifier after setup is complete
   audioInputAmp.gain(1.0);
+  
+  // Final application of audio settings to ensure all are applied after all globals are loaded/initialized
+  extern void applyAudioSettingsFromGlobals();
+  applyAudioSettingsFromGlobals();
   
 // END SETUP
 }
@@ -2314,7 +2370,7 @@ void initGlobalVars() {
   GLOB.folder = 0;
   GLOB.activeCopy = false;
   GLOB.x = 1;
-  GLOB.y = 2;
+  GLOB.y = 16;
   GLOB.seek = 0;
   GLOB.seekEnd = 0;
   GLOB.smplen = 0;
@@ -2815,6 +2871,7 @@ void checkTouchInputs() {
         extern bool inLookSubmenu;
         extern bool inRecsSubmenu;
         extern bool inMidiSubmenu;
+        extern bool inVolSubmenu;
         extern int currentMenuPage;
         // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
         if (inLookSubmenu) {
@@ -2831,6 +2888,11 @@ void checkTouchInputs() {
           inMidiSubmenu = false;
           currentMenuPage = 6;
           Encoder[3].writeCounter((int32_t)6);
+        } else if (inVolSubmenu) {
+          // If in VOL submenu, exit back to main menu at VOL page (index 4)
+          inVolSubmenu = false;
+          currentMenuPage = 4;
+          Encoder[3].writeCounter((int32_t)4);
         } else {
           // Otherwise exit to draw mode
           switchMode(&draw);
@@ -2868,6 +2930,7 @@ void checkTouchInputs() {
         extern bool inLookSubmenu;
         extern bool inRecsSubmenu;
         extern bool inMidiSubmenu;
+        extern bool inVolSubmenu;
         extern int currentMenuPage;
         // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
         if (inLookSubmenu) {
@@ -2884,6 +2947,11 @@ void checkTouchInputs() {
           inMidiSubmenu = false;
           currentMenuPage = 6;
           Encoder[3].writeCounter((int32_t)6);
+        } else if (inVolSubmenu) {
+          // If in VOL submenu, exit back to main menu at VOL page (index 4)
+          inVolSubmenu = false;
+          currentMenuPage = 4;
+          Encoder[3].writeCounter((int32_t)4);
         } else {
           // Otherwise exit to draw mode
           switchMode(&draw);
@@ -3062,26 +3130,48 @@ void showDoRecord() {
     previewCache.valid = false;
   }
 
-  // === FORCE LINE-IN MONITORING WHEN IN RECORD MODE ===
-  extern int recMode;
-  if (recMode != 1) {  // Line input mode active
-    extern unsigned int monitorLevel;
-    extern AudioMixer4 mixer_end;
-
+  // === DIRECT INPUT PASS-THROUGH WHEN PREVIEW IS PLAYING AND CURSOR AT Y==1 ===
+  extern AudioMixer4 mixer_end;
+  extern AudioAmplifier audioInputAmp;
+  static bool directPassThroughActive = false;
+  
+  if (previewIsPlaying && GLOB.y == 1) {
+    // Enable direct pass-through: input → output with no additional amplification
+    // Only use the set mic/line input gain from codec (already applied via sgtl5000_1)
+    audioInputAmp.gain(1.0f);  // Unity gain, no additional amplification
+    mixer_end.gain(3, 1.0f);   // Full pass-through of input (other sources continue playing)
+    directPassThroughActive = true;
+  } else if (directPassThroughActive) {
+    // Restore normal routing when conditions no longer met
+    audioInputAmp.gain(1.0f);  // Keep at unity gain
+    mixer_end.gain(3, 0.0f);   // Disable input pass-through
+    directPassThroughActive = false;
+    forcedLineMonitor = false;  // Reset line monitor flag
+    lastLineMonitorGain = 0.0f;
+  }
+  
+  // === INPUT MONITORING WHEN IN RECORD MODE ===
+  // Only apply if direct pass-through is not active
+  // Uses VOL menu input level settings (LVL for line, MIC for mic)
+  if (!directPassThroughActive) {
+    extern int recMode;
+    extern unsigned int lineInLevel;  // From VOL menu (0-15)
+    extern unsigned int micGain;      // From VOL menu (0-63)
+    
     float monitorGain = 0.0f;
-    switch (monitorLevel) {
-      case 1: monitorGain = 0.1f; break;
-      case 2: monitorGain = 0.3f; break;
-      case 3: monitorGain = 0.5f; break;
-      case 4: monitorGain = 0.8f; break;
-      default: monitorGain = 0.1f; break;  // Ensure audible monitoring in line mode
+    if (recMode == 1) {
+      // Mic input: map micGain (0-63) to mixer gain (0.0-0.8)
+      monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, 0.8f);
+    } else {
+      // Line input: map lineInLevel (0-15) to mixer gain (0.0-0.8)
+      monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, 0.8f);
     }
-
+    
     mixer_end.gain(3, monitorGain);
     lastLineMonitorGain = monitorGain;
     forcedLineMonitor = true;
   } else if (forcedLineMonitor) {
-    extern AudioMixer4 mixer_end;
+    // Disable monitoring when direct pass-through becomes active
     mixer_end.gain(3, 0.0f);
     forcedLineMonitor = false;
     lastLineMonitorGain = 0.0f;
@@ -3271,7 +3361,7 @@ void showDoRecord() {
 
 void loop() {
    updateExternalOneBlink();
-   checkMidi();
+   checkMidi();  // Process MIDI early in loop for lower latency
 
   bool pongActive = pong && currentMode == &draw;
 
@@ -3399,15 +3489,19 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     extern bool inLookSubmenu;
     extern bool inRecsSubmenu;
     extern bool inMidiSubmenu;
+    extern bool inVolSubmenu;
     extern void showLookMenu();
     extern void showRecsMenu();
     extern void showMidiMenu();
+    extern void showVolMenu();
     if (inLookSubmenu) {
       showLookMenu();
     } else if (inRecsSubmenu) {
       showRecsMenu();
     } else if (inMidiSubmenu) {
       showMidiMenu();
+    } else if (inVolSubmenu) {
+      showVolMenu();
     } else {
       showMenu();
     }
@@ -3734,6 +3828,16 @@ void deleteActiveCopy() {
 
 
 void play(bool fromStart) {
+  // Send MIDI Start FIRST (before any other operations) to advance it by ~5ms
+  if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
+    MIDI.sendRealTime(midi::Start);  // Send as early as possible for better sync
+    
+    // Send first clock pulse immediately after Start to establish timing reference
+    // This is correct MIDI behavior and reduces audible delay, especially at low BPM
+    // Timer will continue from there, so this is not "extra" clock, just the first one
+    Serial8.write(0xF8);  // Send first clock pulse immediately (same as timer does)
+  }
+  
   if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
     checkCrashReport();
   }
@@ -3804,10 +3908,8 @@ void play(bool fromStart) {
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
       // Master mode: start internal clock and play immediately on the current beat
+      // Note: MIDI Start was already sent at the beginning of play() function for ~5ms advance
       resetMidiClockState();
-      if (MIDI_TRANSPORT_SEND) {
-        MIDI.sendRealTime(midi::Start);
-      }
       isNowPlaying = true;
       playStartTime = millis();
 
@@ -3830,12 +3932,14 @@ void play(bool fromStart) {
 
 
 void pause() {
-  if (MIDI_CLOCK_SEND) {
-    if (MIDI_TRANSPORT_SEND) {
-      MIDI.sendRealTime(midi::Stop);
-    }
-    resetMidiClockState();
+  // Send MIDI Stop FIRST (before any other operations) to advance it by ~5ms
+  if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
+    MIDI.sendRealTime(midi::Stop);  // Send as early as possible for better sync
   }
+  
+  // MIDI clock timer continues running in background - never stopped for precise timing
+  // Don't reset clock state - timer keeps running in background
+  // Only reset playback state
 
   ctrlVolumeOverlayActive = false;
   isNowPlaying = false;
@@ -3853,7 +3957,7 @@ void pause() {
   }
   
   deleteActiveCopy();
-  autoSave();
+  autoSave();  // Now safe to do blocking SD card operations - timer is stopped
   envelope0.noteOff();
   //allOff();
   Encoder[2].writeRGBCode(0x005500);
@@ -4021,6 +4125,9 @@ void playNote() {
   }
 
   onBeatTick();
+  
+  // Process MIDI again before playing sequencer notes to reduce external MIDI latency
+  checkMidi();
 
   if (isNowPlaying) {
     drawPlayButton();
@@ -4282,8 +4389,17 @@ void checkPages() {
     // FLOW mode: follow the timer position when playing
     uint16_t timerPage = (beat - 1) / maxX + 1;
     
-    // Handle page looping like normal mode
+    // Only update lastPage when crossing page boundaries or at beat 1 (when looping)
+    // Skip update if fastrecord is active to save CPU cycles
+    extern bool fastRecordActive;
+    static uint16_t lastTimerPage = 0;
+    if ((timerPage != lastTimerPage || beat == 1) && !fastRecordActive) {
     updateLastPage();  // recompute the highest page that actually has notes
+      lastTimerPage = timerPage;
+    } else if (timerPage != lastTimerPage) {
+      lastTimerPage = timerPage;  // Update tracking even if we skip updateLastPage
+    }
+    
     if (timerPage > lastPage && lastPage > 0) {
       // If we stepped past the last non-empty page, restart at the top
       beat = 1;
@@ -4306,18 +4422,31 @@ void checkPages() {
     return;
   }
   
-  updateLastPage();  // recompute the highest page that actually has notes
-  // compute what page beat should be on
+  // Normal mode: only update lastPage when crossing page boundaries or looping
+  // Skip update if fastrecord is active to save CPU cycles
+  extern bool fastRecordActive;
   uint16_t newPage = (beat - 1) / maxX + 1;
+  static uint16_t lastCheckedPage = 0;
+  
+  // Only call updateLastPage() when page changes or when we're at beat 1 (looping)
+  // But never during fastrecord to avoid CPU overhead
+  if ((newPage != lastCheckedPage || beat == 1) && !fastRecordActive) {
+    updateLastPage();  // recompute the highest page that actually has notes
+    lastCheckedPage = newPage;
+  } else if (newPage != lastCheckedPage) {
+    lastCheckedPage = newPage;  // Update tracking even if we skip updateLastPage
+  }
 
   // if we stepped past the last non-empty page, restart at the top
   if (newPage > lastPage && lastPage > 0) {  // Ensure lastPage is valid before comparison
     beat = 1;
     //if (fastRecordActive) stopFastRecord(); // This might stop recording prematurely if looping
     newPage = 1;
+    lastCheckedPage = 0;  // Reset to force update on next check
   } else if (lastPage == 0) {  // Should not happen if updateLastPage ensures it's at least 1
     beat = 1;
     newPage = 1;
+    lastCheckedPage = 0;
   }
   GLOB.page = newPage;
 }
@@ -4664,9 +4793,16 @@ void updateVolume() {
 
 void updatePreviewVolume() {
   unsigned int level = constrain(previewVol, 0u, 5u);
-  float gain = (float)level * 0.0625f;  // Map 0→0.0, 5→0.3125
-  mixer0.gain(1, 0.1f);  // Keep mixer at clean level
-  ampPreview.gain(gain);
+  // Map previewVol (0-5) to gain (0.0-0.5): vol = previewVol * 0.1f
+  float gain = (float)level * 0.1f;  // Map 0→0.0, 5→0.5
+  
+  // Apply PREV volume to both preview paths:
+  // - sound0 (voice0) → envelope0 → mixer0 channel 0
+  // - playSdWav1 → ampPreview → mixer0 channel 1
+  // Both paths should have the same total gain for consistent volume
+  mixer0.gain(0, gain);  // sound0 preview volume
+  mixer0.gain(1, gain);  // ampPreview path - apply same gain as voice0
+  ampPreview.gain(1.0f);  // Set ampPreview to unity gain (volume controlled by mixer0)
 }
 
 void updateLineOutLevel() {
@@ -4797,8 +4933,9 @@ void updateBPM() {
       playTimer.update(playNoteInterval);
       //midiTimer.update(playNoteInterval);  // If midiTimer exists and shares interval
       
-      
-      // this causes delays....resetMidiClockState();
+      // Update MIDI clock output immediately with exact rounded BPM value
+      extern void updateMidiClockOutput();
+      updateMidiClockOutput();
     }
   }
   drawBPMScreen();  // Assumed to exist for visual feedback
@@ -4808,37 +4945,63 @@ void setVolume() {
   //showExit(0);
   drawBPMScreen();  // Assumed to exist
 
-  // Track previous encoder position to only update brightness when it changes
+  // Track previous encoder positions to only update when they change
   static unsigned int lastPos1 = 0;
-  static unsigned int lastLineOutPos = 0;
-  static unsigned int lastVolPos = 0;
-  static bool firstCall = true;
+  static int lastPos2 = -1;
+  static Mode *lastMode = nullptr;
   
-  if (firstCall) {
-    // On first call, just initialize lastPos1
-    lastPos1 = currentMode->pos[1];
-    currentMode->pos[0] = lineOutLevelSetting;
-    lastLineOutPos = lineOutLevelSetting;
-    Encoder[0].writeCounter((int32_t)lineOutLevelSetting);
-    currentMode->pos[2] = GLOB.vol;
-    lastVolPos = GLOB.vol;
-    Encoder[2].writeCounter((int32_t)GLOB.vol);
-    firstCall = false;
+  extern int clockMode;
+  
+  // Reset tracking when switching to volume_bpm mode
+  if (lastMode != currentMode) {
+    lastPos1 = 0;
+    lastPos2 = -1;
+    lastMode = currentMode;
   }
   
+  // Initialize encoder[2] if not set or if clockMode changed externally
+  if (lastPos2 == -1) {
+    // Initialize encoder[2] based on current clockMode (1=INT, -1=EXT -> 0=EXT, 1=INT)
+    currentMode->pos[2] = (clockMode == 1) ? 1 : 0;
+    Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+    lastPos2 = currentMode->pos[2];
+    lastPos1 = currentMode->pos[1];
+  }
+  
+  // Handle encoder 1 (brightness)
   if (currentMode->pos[1] != lastPos1) {
     updateBrightness();
     lastPos1 = currentMode->pos[1];
   }
-
-  if (currentMode->pos[0] != lastLineOutPos) {
-    updateLineOutLevel();
-    lastLineOutPos = currentMode->pos[0];
-  }
-
-  if (currentMode->pos[2] != lastVolPos) {
-    updateVolume();
-    lastVolPos = currentMode->pos[2];
+  
+  // Handle encoder 2 (MIDI INT/EXT)
+  if (currentMode->pos[2] != lastPos2) {
+    // Constrain to 0 or 1 (toggle between EXT and INT)
+    int newPos2 = constrain(currentMode->pos[2], 0, 1);
+    if (newPos2 != currentMode->pos[2]) {
+      currentMode->pos[2] = newPos2;
+      Encoder[2].writeCounter((int32_t)newPos2);
+    }
+    
+    // Update clockMode: 0 = EXT (-1), 1 = INT (1)
+    clockMode = (newPos2 == 1) ? 1 : -1;
+    
+    // Save to EEPROM
+    extern void saveSingleModeToEEPROM(int index, int8_t value);
+    saveSingleModeToEEPROM(1, clockMode);
+    
+    // Update MIDI_CLOCK_SEND flag
+    extern bool MIDI_CLOCK_SEND;
+    MIDI_CLOCK_SEND = (clockMode == 1);
+    
+    // Update MIDI clock state
+    extern void resetMidiClockState();
+    resetMidiClockState();
+    
+    // Redraw to show arrow
+    drawBPMScreen();
+    
+    lastPos2 = newPos2;
   }
 
   if (currentMode->pos[3] != (unsigned int)SMP.bpm) {  // Cast SMP.bpm for comparison

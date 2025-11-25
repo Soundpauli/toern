@@ -1,8 +1,9 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 10
+#define MENU_PAGES_COUNT 11
 #define LOOK_PAGES_COUNT 7
-#define RECS_PAGES_COUNT 5
-#define MIDI_PAGES_COUNT 3
+#define RECS_PAGES_COUNT 3
+#define MIDI_PAGES_COUNT 2
+#define VOL_PAGES_COUNT 5
 
 // External variables
 extern Mode *currentMode;
@@ -26,9 +27,10 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"KIT", 2, false, nullptr},           // Sample Pack
   {"WAV", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
+  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LINE, PREV, MIC, LVL)
   {"PLAY", 19, false, nullptr},         // PLAY submenu (FLW, VIEW, PMD, LOOP)
-  {"RECS", 20, false, nullptr},         // RECS submenu (REC, OTR, CLR, PVL, MON)
-  {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP, CLCK)
+  {"RECS", 20, false, nullptr},         // RECS submenu (MIC, TRIG, CLR)
+  {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"RST", 16, true, "MODE"}            // Reset Effects
@@ -59,25 +61,33 @@ static inline int pongIntervalToSpeed(uint16_t interval) {
 MenuPage recsPages[RECS_PAGES_COUNT] = {
   {"MIC", 4, true, "GAIN"},             // Recording Mode + Mic Gain
   {"TRIG", 11, false, nullptr},          // Fast Rec Mode (On-The-fly Recording)
-  {"CLR", 12, false, nullptr},          // Rec Channel Clear
-{"PVOL", 13, true, "LEVEL"},          // Preview Volume
-  {"LIVE", 14, true, "LEVEL"}           // Monitor Level + Level Control
+  {"CLR", 12, false, nullptr}           // Rec Channel Clear
 };
 
 // MIDI submenu pages
 MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"CH", 7, false, nullptr},            // MIDI Voice Select (Channel)
-  {"TRAN", 8, false, nullptr},          // MIDI Transport
-  {"CLCK", 6, false, nullptr}           // Clock Mode
+  {"TRAN", 8, false, nullptr}          // MIDI Transport
+};
+
+// VOL submenu pages
+MenuPage volPages[VOL_PAGES_COUNT] = {
+  {"MAIN", 27, false, nullptr},         // Headphone output volume
+  {"LINE", 28, false, nullptr},         // Line output volume
+  {"PREV", 29, false, nullptr},         // Preview volume
+  {"MIC", 30, false, nullptr},          // Microphone gain
+  {"LVL", 31, false, nullptr}           // Line input level
 };
 
 int currentMenuPage = 0;
 int currentLookPage = 0;
 int currentRecsPage = 0;
 int currentMidiPage = 0;
+int currentVolPage = 0;
 bool inLookSubmenu = false;
 bool inRecsSubmenu = false;
 bool inMidiSubmenu = false;
+bool inVolSubmenu = false;
 int aiTargetPage = 6; // Default target page for AI song generation
 int aiBaseStartPage = 1; // Start of base page range for AI analysis
 int aiBaseEndPage = 1;   // End of base page range for AI analysis
@@ -114,6 +124,8 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
     EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
     EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
+    EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
+    EEPROM.write(EEPROM_DATA_START + 17, 10);  // GLOB.vol default (10, maps to 1.0 volume)
 
     Serial.println("EEPROM initialized with defaults.");
   }
@@ -135,8 +147,16 @@ void loadMenuFromEEPROM() {
   ledModules = (int) EEPROM.read(EEPROM_DATA_START + 13);
   ctrlMode = (int8_t) EEPROM.read(EEPROM_DATA_START + 14);
   
+  // Load lineInLevel from EEPROM (stored at EEPROM_DATA_START + 16)
+  extern unsigned int lineInLevel;
+  lineInLevel = (unsigned int)EEPROM.read(EEPROM_DATA_START + 16);
+  if (lineInLevel > 15) {
+    lineInLevel = 8;  // Default to 8 if invalid
+    EEPROM.write(EEPROM_DATA_START + 16, lineInLevel);
+  }
+  
   if (previewVol < 0 || previewVol > 5) previewVol = 2;
-
+  
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
   
@@ -230,8 +250,33 @@ void loadMenuFromEEPROM() {
   drawMidiVoiceSelect();
   drawFastRecMode();
   drawRecChannelClear();
-  drawPreviewVol();
-  drawMonitorLevel();
+}
+
+// Apply all audio-related global variables to hardware
+void applyAudioSettingsFromGlobals() {
+  // GLOB, lineOutLevelSetting, previewVol, micGain, and lineInLevel are already in scope as globals
+  extern struct GlobalVars GLOB;
+  extern uint8_t lineOutLevelSetting;
+  extern unsigned int previewVol;
+  extern unsigned int micGain;
+  extern unsigned int lineInLevel;
+  
+  // Apply main volume (headphone output)
+  float vol = GLOB.vol / 10.0f;
+  vol = constrain(vol, 0.0f, 1.0f);
+  sgtl5000_1.volume(vol);
+  
+  // Apply line output level
+  sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+  
+  // Apply microphone gain
+  sgtl5000_1.micGain(micGain);
+  
+  // Apply line input level
+  sgtl5000_1.lineInLevel(lineInLevel);
+  
+  // Apply preview volume
+  updatePreviewVolume();
 }
 
 // call this after you change *any* one of the six modes in switchMenu():
@@ -563,6 +608,70 @@ FLASHMEM void showMidiMenu() {
   handleAdditionalFeatureControls(mainSetting);
 }
 
+FLASHMEM void showVolMenu() {
+  FastLEDclear();
+
+  // New indicator system: volMenu: | | | L[Y] (yellow)
+  drawIndicator('L', 'Y', 3);  // Encoder 3: Large Yellow (page navigation)
+
+  // Get current page info
+  int pageIndex = currentVolPage;
+  MenuPage* currentPageInfo = &volPages[pageIndex];
+  
+  // Draw page indicator as a line at y=maxY
+  // Show current page as red, others as yellow (matching VOL menu color)
+  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  for (int i = 0; i < VOL_PAGES_COUNT; i++) {
+    CRGB indicatorColor = (i == pageIndex) ? UI_RED : CRGB(255, 255, 0); // Yellow like VOL
+    light(i + 1, maxY, indicatorColor);
+  }
+
+  // Handle the main setting for this page
+  int mainSetting = currentPageInfo->mainSetting;
+  
+  // Set encoder colors based on page (will be set in drawMainSettingStatus for each page)
+  // Default: L[Y] indicator for encoder 3 (yellow)
+  CRGB indicatorColor = getIndicatorColor('Y'); // Yellow
+  Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+  Encoder[2].writeRGBCode(0x000000); // Black (no indicator) - will be set per page
+  Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+
+  // Draw the main setting status
+  drawMainSettingStatus(mainSetting);
+  
+  // Draw additional features if this page has them
+  if (currentPageInfo->hasAdditionalFeatures) {
+    drawAdditionalFeatures(mainSetting);
+  }
+
+  FastLED.setBrightness(ledBrightness);
+  FastLEDshow();
+
+  // Handle page navigation with encoder 3
+  static int lastVolPagePosition = -1;
+  static bool volMenuFirstEnter = true;
+  
+  if (volMenuFirstEnter) {
+    Encoder[3].writeCounter((int32_t)currentVolPage);
+    volMenuFirstEnter = false;
+  }
+  
+  // Always set encoder limits to ensure they match current VOL_PAGES_COUNT
+  Encoder[3].writeMax((int32_t)(VOL_PAGES_COUNT - 1));
+  Encoder[3].writeMin((int32_t)0);
+  
+  if (currentMode->pos[3] != lastVolPagePosition) {
+    currentVolPage = currentMode->pos[3];
+    if (currentVolPage >= VOL_PAGES_COUNT) currentVolPage = VOL_PAGES_COUNT - 1;
+    if (currentVolPage < 0) currentVolPage = 0;
+    lastVolPagePosition = currentVolPage;
+  }
+  
+  // Handle encoder 2 changes for all VOL pages (value adjustment)
+  handleAdditionalFeatureControls(mainSetting);
+}
+
 FLASHMEM void drawMainSettingStatus(int setting) {
   switch (setting) {
     case 1: // DAT - Load/Save
@@ -601,11 +710,6 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawText("BPM", 2, 3, UI_MAGENTA);
       break;
       
-    case 6: // CLK - Clock Mode
-      drawText("CLCK", 2, 10, UI_WHITE);
-      drawClockMode();
-      break;
-      
     case 7: // CHN - MIDI Voice Select
       drawText("CH", 2, 10, UI_WHITE);
       drawMidiVoiceSelect();
@@ -634,17 +738,6 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 12: // CLR - Rec Channel Clear
       drawText("CLR", 2, 10, UI_MAGENTA);
       drawRecChannelClear();
-      break;
-      
-    case 13: // PVL - Preview Volume
-      drawText("PVOL", 2, 10, UI_MAGENTA);
-      drawIndicator('L', 'N', 3);  // Encoder 3: Large Cyan
-      drawPreviewVol();
-      break;
-      
-    case 14: // MON - Monitor Level
-      drawText("LIVE", 2, 10, UI_MAGENTA);
-      drawMonitorLevel();
       break;
       
     case 15: // AI - Song Generation
@@ -733,6 +826,86 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
     }
+    
+    case 26: // VOL - Submenu
+      showIcons(ICON_VOL, CRGB(255, 0, 0)); // Red volume icon
+      drawText("VOL", 2, 3, CRGB(255, 255, 0)); // Yellow text
+      break;
+      
+    case 27: { // MAIN - Headphone output volume
+      drawText("MAIN", 2, 10, CRGB(255, 255, 0)); // Yellow
+      extern Mode *currentMode;
+      extern struct GlobalVars GLOB;
+      
+      // Calculate volume from GLOB.vol (0-10) to float (0.0-1.0)
+      float vol = GLOB.vol / 10.0f;
+      char volText[8];
+      snprintf(volText, sizeof(volText), "%.2f", vol);
+      drawText(volText, 2, 3, CRGB(255, 100, 0)); // Orange-red gradient
+      
+      // Dynamic gradient color based on volume level
+      int r = (int)(vol * 255.0f);
+      int g = (int)((1.0f - vol) * 100.0f);
+      int b = 0;
+      CRGB volColor = CRGB(r, g, b);
+      Encoder[2].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
+      break;
+    }
+    
+    case 28: { // LINE - Line output volume
+      drawText("LINE", 2, 10, CRGB(255, 255, 0)); // Yellow
+      extern uint8_t lineOutLevelSetting;
+      char levelText[8];
+      snprintf(levelText, sizeof(levelText), "%d", lineOutLevelSetting);
+      drawText(levelText, 2, 3, CRGB(255, 192, 203)); // Pink
+      
+      // Pink color for encoder
+      CRGB pinkColor = CRGB(255, 192, 203);
+      Encoder[2].writeRGBCode(pinkColor.r << 16 | pinkColor.g << 8 | pinkColor.b);
+      break;
+    }
+    
+    case 29: { // PREV - Preview volume
+      drawText("PREV", 2, 10, CRGB(255, 255, 0)); // Yellow
+      extern unsigned int previewVol;
+      
+      // Calculate volume from previewVol (0-5) to float (0.0-0.5)
+      float vol = previewVol * 0.1f;
+      char volText[8];
+      snprintf(volText, sizeof(volText), "%.2f", vol);
+      drawText(volText, 2, 3, CRGB(0, 160, 80)); // Green
+      
+      // Green color for encoder
+      CRGB greenColor = CRGB(0, 160, 80);
+      Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      break;
+    }
+    
+    case 30: { // MIC - Microphone gain
+      drawText("MIC", 2, 10, CRGB(255, 255, 0)); // Yellow
+      extern unsigned int micGain;
+      char gainText[8];
+      snprintf(gainText, sizeof(gainText), "%d", micGain);
+      drawText(gainText, 2, 3, CRGB(255, 0, 0)); // Red
+      
+      // Red color for encoder
+      CRGB redColor = CRGB(255, 0, 0);
+      Encoder[2].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
+      break;
+    }
+    
+    case 31: { // LVL - Line input level
+      drawText("LVL", 2, 10, CRGB(255, 255, 0)); // Yellow
+      extern unsigned int lineInLevel;
+      char levelText[8];
+      snprintf(levelText, sizeof(levelText), "%d", lineInLevel);
+      drawText(levelText, 2, 3, CRGB(0, 0, 255)); // Blue
+      
+      // Blue color for encoder
+      CRGB blueColor = CRGB(0, 0, 255);
+      Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+      break;
+    }
   }
 }
 
@@ -798,22 +971,28 @@ FLASHMEM void drawGenreSelection() {
 
 FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static bool recMenuFirstEnter = true;
-  static bool monMenuFirstEnter = true;
   static bool aiMenuFirstEnter = true;
   static bool menuFirstEnter = true;
   static bool pongMenuFirstEnter = true;
-  static bool previewMenuFirstEnter = true;
+  static bool mainMenuFirstEnter = true;
+  static bool lineMenuFirstEnter = true;
+  static bool prevMenuFirstEnter = true;
+  static bool micMenuFirstEnter = true;
+  static bool lvlMenuFirstEnter = true;
   static int lastPongSpeed = -1;
   static int lastSetting = -1;
   
   // Reset first enter flags when switching to a different setting
   if (setting != lastSetting) {
     recMenuFirstEnter = true;
-    monMenuFirstEnter = true;
     aiMenuFirstEnter = true;
     menuFirstEnter = true;
     pongMenuFirstEnter = true;
-    previewMenuFirstEnter = true;
+    mainMenuFirstEnter = true;
+    lineMenuFirstEnter = true;
+    prevMenuFirstEnter = true;
+    micMenuFirstEnter = true;
+    lvlMenuFirstEnter = true;
     lastPongSpeed = -1;
     lastSetting = setting;
   }
@@ -837,50 +1016,6 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         drawMainSettingStatus(setting);
         drawAdditionalFeatures(setting);
         lastMicGain = micGain;
-      }
-      break;
-      
-    case 13: { // PVOL page - Preview Volume control
-      static int lastPreview = -1;
-
-      if (previewMenuFirstEnter) {
-        Encoder[2].writeCounter((int32_t)previewVol);
-        Encoder[2].writeMax((int32_t)5);
-        Encoder[2].writeMin((int32_t)0);
-        previewMenuFirstEnter = false;
-        lastPreview = previewVol;
-      }
-
-      if (currentMode->pos[2] != lastPreview) {
-        previewVol = constrain(currentMode->pos[2], 0, 5);
-        saveSingleModeToEEPROM(7, previewVol);
-        updatePreviewVolume();
-        drawMainSettingStatus(setting);
-        drawAdditionalFeatures(setting);
-        lastPreview = previewVol;
-      }
-      break;
-    }
-
-    case 14: // MON page - Monitor Level control
-      static int lastMonitorLevel = -1;
-      
-      // Set encoder counter only on first entry
-      if (monMenuFirstEnter) {
-        Encoder[2].writeCounter((int32_t)monitorLevel);
-        Encoder[2].writeMax((int32_t)4);
-        Encoder[2].writeMin((int32_t)0);
-        monMenuFirstEnter = false;
-      }
-      
-      if (currentMode->pos[2] != lastMonitorLevel) {
-        monitorLevel = currentMode->pos[2];
-        if (monitorLevel > 4) monitorLevel = 4;
-        if (monitorLevel < 0) monitorLevel = 0;
-        saveSingleModeToEEPROM(10, monitorLevel);
-        drawMainSettingStatus(setting);
-        drawAdditionalFeatures(setting);
-        lastMonitorLevel = monitorLevel;
       }
       break;
       
@@ -1007,11 +1142,196 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       }
       break;
     }
+    
+    case 27: { // MAIN - Headphone output volume
+      static int lastHpVol = -1;
+      
+      extern Mode *currentMode;
+      extern struct GlobalVars GLOB;
+      
+      if (mainMenuFirstEnter) {
+        // Load GLOB.vol from EEPROM (0-10), convert to encoder range (0-31) for 32 steps
+        // Each encoder step = 1/32 = 0.03125, mapping 0.00 to 1.00
+        float currentVol = GLOB.vol / 10.0f;
+        int encoderVal = (int)round(currentVol * 31.0f);
+        encoderVal = constrain(encoderVal, 0, 31);
+        
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)31);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastHpVol = encoderVal;
+        mainMenuFirstEnter = false;
+        
+        // Apply to hardware
+        sgtl5000_1.volume(currentVol);
+      }
+      
+      if (currentMode->pos[2] != lastHpVol) {
+        int encoderPos = constrain(currentMode->pos[2], 0, 31);
+        // Map encoder position (0-31) to volume (0.00-1.00) in 32 equal steps
+        // Position 0 = 0.00, Position 31 = 1.00
+        // Each step = 1/31 ≈ 0.03226
+        float vol = encoderPos / 31.0f;
+        // Convert back to GLOB.vol range (0-10) for storage
+        GLOB.vol = (int)round(vol * 10.0f);
+        GLOB.vol = constrain(GLOB.vol, 0, 10);
+        
+        // Apply to hardware
+        sgtl5000_1.volume(vol);
+        
+        // Save to EEPROM (slot 17 - separate from transportMode which uses slot 2)
+        saveSingleModeToEEPROM(17, (int8_t)GLOB.vol);
+        
+        drawMainSettingStatus(setting);
+        lastHpVol = encoderPos;
+      }
+      break;
+    }
+    
+    case 28: { // LINE - Line output volume
+      static int lastLoVol = -1;
+      
+      extern uint8_t lineOutLevelSetting;
+      
+      if (lineMenuFirstEnter) {
+        int encoderVal = constrain((int)lineOutLevelSetting, LINEOUT_MIN, LINEOUT_MAX);
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)LINEOUT_MAX);
+        Encoder[2].writeMin((int32_t)LINEOUT_MIN);
+        currentMode->pos[2] = encoderVal;
+        lastLoVol = encoderVal;
+        lineMenuFirstEnter = false;
+        
+        // Apply to hardware
+        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+      }
+      
+      if (currentMode->pos[2] != lastLoVol) {
+        int encoderPos = constrain(currentMode->pos[2], LINEOUT_MIN, LINEOUT_MAX);
+        lineOutLevelSetting = (uint8_t)encoderPos;
+        
+        // Apply to hardware
+        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+        
+        // Save to EEPROM
+        saveSingleModeToEEPROM(15, (int8_t)lineOutLevelSetting);
+        
+        drawMainSettingStatus(setting);
+        lastLoVol = encoderPos;
+      }
+      break;
+    }
+    
+    case 29: { // PREV - Preview volume
+      static int lastPvVol = -1;
+      
+      extern unsigned int previewVol;
+      
+      if (prevMenuFirstEnter) {
+        // Load previewVol from EEPROM (0-5), convert to encoder range (0-50)
+        int encoderVal = previewVol * 10;
+        encoderVal = constrain(encoderVal, 0, 50);
+        
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)50);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastPvVol = encoderVal;
+        prevMenuFirstEnter = false;
+        
+        // Apply to hardware
+        updatePreviewVolume();
+      }
+      
+      if (currentMode->pos[2] != lastPvVol) {
+        int encoderPos = constrain(currentMode->pos[2], 0, 50);
+        previewVol = encoderPos / 10;
+        previewVol = constrain(previewVol, 0, 5);
+        
+        // Apply to hardware
+        updatePreviewVolume();
+        
+        // Save to EEPROM
+        saveSingleModeToEEPROM(7, previewVol);
+        
+        drawMainSettingStatus(setting);
+        lastPvVol = encoderPos;
+      }
+      break;
+    }
+    
+    case 30: { // MIC - Microphone gain
+      static int lastMicGain = -1;
+      
+      extern unsigned int micGain;
+      
+      if (micMenuFirstEnter) {
+        int encoderVal = constrain((int)micGain, 0, 63);
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)63);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastMicGain = encoderVal;
+        micMenuFirstEnter = false;
+        
+        // Apply to hardware
+        sgtl5000_1.micGain(micGain);
+      }
+      
+      if (currentMode->pos[2] != lastMicGain) {
+        int encoderPos = constrain(currentMode->pos[2], 0, 63);
+        micGain = (unsigned int)encoderPos;
+        
+        // Apply to hardware
+        sgtl5000_1.micGain(micGain);
+        
+        // Save to EEPROM
+        saveSingleModeToEEPROM(9, micGain);
+        
+        drawMainSettingStatus(setting);
+        lastMicGain = encoderPos;
+      }
+      break;
+    }
+    
+    case 31: { // LVL - Line input level
+      static int lastLineInLevel = -1;
+      
+      extern unsigned int lineInLevel;
+      
+      if (lvlMenuFirstEnter) {
+        int encoderVal = constrain((int)lineInLevel, 0, 15);
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)15);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastLineInLevel = encoderVal;
+        lvlMenuFirstEnter = false;
+        
+        // Apply to hardware
+        sgtl5000_1.lineInLevel(lineInLevel);
+      }
+      
+      if (currentMode->pos[2] != lastLineInLevel) {
+        int encoderPos = constrain(currentMode->pos[2], 0, 15);
+        lineInLevel = (unsigned int)encoderPos;
+        
+        // Apply to hardware
+        sgtl5000_1.lineInLevel(lineInLevel);
+        
+        // Save to EEPROM
+        saveSingleModeToEEPROM(16, lineInLevel);
+        
+        drawMainSettingStatus(setting);
+        lastLineInLevel = encoderPos;
+      }
+      break;
+    }
 
          default:
        // Reset first enter flags when not on pages with additional features
        recMenuFirstEnter = true;
-       monMenuFirstEnter = true;
        aiMenuFirstEnter = true;
        menuFirstEnter = true;
        pongMenuFirstEnter = true;
@@ -1057,18 +1377,6 @@ void switchMenu(int menuPosition){
         switchMode(&volume_bpm);
         break;
 
-      case 6:
-        clockMode = clockMode * (-1);
-        saveSingleModeToEEPROM(1, clockMode);
-
-        //Serial.println(clockMode);
-        drawMainSettingStatus(menuPosition);
-        if (clockMode == 1) {
-          playTimer.begin(playNote, playNoteInterval);
-        } else {
-          playTimer.end();
-        }
-        break;
 
       case 7:
         // Cycle through: -1 (YPOS) -> 1 (MIDI) -> 2 (KEYS) -> -1 (YPOS) ...
@@ -1163,19 +1471,6 @@ void switchMenu(int menuPosition){
         drawMainSettingStatus(menuPosition);
         break;
 
-        case 13:
-        // Preview volume is now adjusted via encoder 2 on PVOL page; button press has no action.
-        drawMainSettingStatus(menuPosition);
-        break;
-
-        case 14:
-        monitorLevel = monitorLevel + 1;                   
-        if (monitorLevel>4) monitorLevel=0;
-        saveSingleModeToEEPROM(10, monitorLevel);
-        drawMainSettingStatus(menuPosition);
-        drawAdditionalFeatures(menuPosition);
-        break;
-
         case 15:
         // AI Song Generation - generate song from current page to target page
         generateSong();
@@ -1210,6 +1505,13 @@ void switchMenu(int menuPosition){
         // Enter MIDI submenu at first page
         inMidiSubmenu = true;
         currentMidiPage = 0;
+        Encoder[3].writeCounter((int32_t)0);
+        break;
+        
+        case 26:
+        // Enter VOL submenu at first page
+        inVolSubmenu = true;
+        currentVolPage = 0;
         Encoder[3].writeCounter((int32_t)0);
         break;
         
@@ -1528,6 +1830,9 @@ int getCurrentMenuMainSetting() {
   }
   if (inMidiSubmenu) {
     return midiPages[currentMidiPage].mainSetting;
+  }
+  if (inVolSubmenu) {
+    return volPages[currentVolPage].mainSetting;
   }
   return menuPages[currentMenuPage].mainSetting;
 }

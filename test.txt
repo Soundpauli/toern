@@ -1,0 +1,78 @@
+if EXT == true, do bpm sync until stable once(!) in the Background even if NOT on the BPM menu page after startup (+ show debug message in serial when done..)
+
+----
+
+Implement Clock Processing in the MIDI Library's Input Handler
+The most effective way is to process the clock byte immediately within the lowest-level MIDI input function, before it gets buffered or parsed by the main application logic.
+
+Custom MIDI Read/Handle Function: Since you are using MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MidiSettings);, you have control over how Serial8 is read. You need to read the raw Serial8 data and check for 0xF8 before calling the standard MIDI library read() or handle...() functions.
+
+Minimal Handler: When 0xF8 (MIDI Clock) is received:
+
+Immediately record the micros() or cycle_count timestamp.
+
+Store this timestamp in a ring buffer (you have CLOCK_BUFFER_SIZE 24).
+
+Do not perform any complex BPM calculation here. The calculation itself takes time and must be done outside this critical section.
+
+The standard MIDI library's MIDI.read() should only be used to process Notes, CCs, and other messages.
+
+Refine the Clock Calculation (Averaging & Filtering)Your existing code snippet suggests you are aware of the importance of averaging:#define numPulsesForAverage 8Increase the Averaging Window: Using only 8 pulses might be too sensitive. A MIDI quarter note (beat) is 24 pulses. Averaging over 24 pulses (one full beat) or 96 pulses (one full bar) will significantly smooth out jitter caused by intervening messages.Calculation: For stable BPM, calculate the average time difference $(\Delta T)$ over the last $N$ clock pulses, where $N$ is preferably $\ge 24$.BPM is then: $BPM = \frac{60 \times 10^6}{\Delta T \times 24}$ (if $\Delta T$ is in microseconds).Discard Outliers (Filtering): Implement a simple median filter or low-pass filter on the calculated $\Delta T$ values. If a single $\Delta T$ value is drastically outside the average of the last $M$ values (e.g., more than $\pm 5\%$ deviation), discard it and do not use it for the running average calculation. This is the most direct way to ignore the timing artifacts of long-running non-clock messages.
+
+FASTRUN or __attribute__((always_inline)): Ensure your core clock handling function (handleMidiClock or a similar raw serial handler) is in __attribute__((optimize("-O3"))) or FASTRUN RAM to execute from the fastest memory.
+
+Minimal Global Variables: Only use volatile variables (like elapsedMillis recTime; or your clock buffer) in your interrupt/fast-read handler. Avoid any function calls that use the heap (malloc, free, String objects, std::vector modifications, etc.) during clock processing.
+
+Example Implementation Idea (Conceptual)
+In your code, you have extern void handleMidiClock();. This function needs to be an extremely fast, high-priority routine.
+
+C++
+
+// Global ring buffer for clock pulse timestamps
+#define CLOCK_BUFFER_SIZE 96 // Use 96 for 1 bar of averaging
+volatile unsigned long clockTimestamps[CLOCK_BUFFER_SIZE];
+volatile int clockBufferIndex = 0;
+volatile bool clockReceived = false;
+
+// Function to read raw MIDI from Serial8 with immediate clock check
+void fastMidiRead() {
+    // Read raw data from Serial8's buffer using its low-level mechanism
+    while (Serial8.available()) {
+        uint8_t byte = Serial8.read();
+
+        if (byte == 0xF8) {
+            // --- CRITICAL SECTION: Process Clock Pulse ---
+            // Get the current time with maximum precision
+            unsigned long now = micros(); // or a cycle counter for better resolution
+            
+            clockTimestamps[clockBufferIndex] = now;
+            clockBufferIndex = (clockBufferIndex + 1) % CLOCK_BUFFER_SIZE;
+            clockReceived = true; // Signal the main loop that new data is available
+            
+            // Do NOT put heavy calculations or MIDI.read() here.
+        } else {
+            // Feed all other bytes to the standard MIDI library for parsing
+            // This assumes the library's read function can process one byte at a time
+            // without blocking.
+            MIDI.handleIncoming(byte); 
+        }
+    }
+}
+
+// In loop() or a scheduled task:
+void calculateBPM() {
+    if (!clockReceived) return; // Only run if new data arrived
+
+    // Reset flag to prevent re-calculation on same data
+    clockReceived = false; 
+    
+    // Average the time differences (micros) over CLOCK_BUFFER_SIZE pulses
+    if (clockBufferIndex >= CLOCK_BUFFER_SIZE) {
+        // ... complex, non-time-critical averaging, outlier rejection, 
+        // and BPM calculation is performed here ...
+
+        // Update the global BPM
+        // SMP.bpm = ... 
+    }
+}
+This conceptual approach ensures that the time-critical timestamp capture for 0xF8 is done as close to the hardware as possible, completely isolating it from the variable execution time of the standard MIDI message parser (which handles Notes, CCs, etc.).

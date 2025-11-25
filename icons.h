@@ -20,6 +20,7 @@ enum IconType {
     ICON_REC2,
     ICON_NEW,
     ICON_HOURGLASS,
+    ICON_VOL,
     HELPER_MINUS
 };
 
@@ -97,6 +98,18 @@ const uint8_t icon_bpm[33][2] PROGMEM = {
   {4,3},{4,2},
   // Minute hand (pointing right to 3)
   {5,4},{6,4},{7,4}
+};
+
+const uint8_t icon_vol[19][2] PROGMEM = {
+  // Volume bar icon: 000000# / 0000### / 000#### / #######
+  // Row 1 (y=3): 6 empty, 1 filled
+  {8,3},
+  // Row 2 (y=4): 4 empty, 3 filled
+  {6,4},{7,4},{8,4},
+  // Row 3 (y=5): 3 empty, 4 filled
+  {4,5},{5,5},{6,5},{7,5},{8,5},
+  // Row 4 (y=6): 0 empty, 7 filled
+  {2,6},{3,6},{4,6},{5,6},{6,6},{7,6},{8,6}
 };
 
 const uint8_t helper_load[3][2] PROGMEM = { { 1, 15 }, { 2, 15 }, { 3, 15 } };

@@ -1275,6 +1275,10 @@ FLASHMEM void showIcons(IconType ico, CRGB colors) {
             iconArray = icon_bpm;
             size = sizeof(icon_bpm) / sizeof(icon_bpm[0]);
             break;
+        case ICON_VOL:
+            iconArray = icon_vol;
+            size = sizeof(icon_vol) / sizeof(icon_vol[0]);
+            break;
         case ICON_SETTINGS:
             iconArray = icon_settings;
             size = sizeof(icon_settings) / sizeof(icon_settings[0]);
@@ -1547,34 +1551,116 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
 }
 
 
+// Draw small arrow for MIDI INT/EXT indicator
+// direction: true = right arrow (INT/send), false = left arrow (EXT/receive)
+// x, y: position to draw the arrow (tip position)
+// blink: if true, dim the arrow (for clock-synced blinking in EXT mode)
+FLASHMEM void drawMidiArrow(bool direction, int x, int y, bool blink = false) {
+  CRGB color = direction ? CRGB(0, 255, 0) : CRGB(255, 0, 0); // Green for INT, Red for EXT
+  
+  // Dim the color if blinking (reduce brightness to 30% for visible blink effect)
+  if (blink) {
+    color.r = (color.r * 30) / 100;
+    color.g = (color.g * 30) / 100;
+    color.b = (color.b * 30) / 100;
+  }
+  
+  // Ensure coordinates are within bounds
+  if (x < 1 || x > (int)maxX || y < 1 || y > maxY) return;
+  
+  if (direction) {
+    // Right arrow (>): 3 pixels forming a right-pointing arrow
+    // Tip at (x+1, y), with tail points at (x, y-1) and (x, y+1)
+    if (x + 1 <= (int)maxX) light(x + 1, y, color);      // Tip (rightmost point)
+    if (y - 1 >= 1) light(x, y - 1, color);               // Top tail
+    if (y + 1 <= maxY) light(x, y + 1, color);            // Bottom tail
+  } else {
+    // Left arrow (<): 3 pixels forming a left-pointing arrow
+    // Tip at (x-1, y), with tail points at (x, y-1) and (x, y+1)
+    if (x - 1 >= 1) light(x - 1, y, color);               // Tip (leftmost point)
+    if (y - 1 >= 1) light(x, y - 1, color);               // Top tail
+    if (y + 1 <= maxY) light(x, y + 1, color);            // Bottom tail
+  }
+}
+
+// Draw BPM number starting at x=3 with reserved 3-digit space (right-aligned with leading spaces)
+FLASHMEM void drawBPMWithReservedSpace(float bpm, CRGB color, int topY) {
+  char buffer[16];
+  
+  // Format as integer with leading spaces to always use 3 characters
+  // "123" for 3 digits, " 21" for 2 digits, "  2" for 1 digit
+  int bpmInt = (int)round(bpm);
+  sprintf(buffer, "%3d", bpmInt);  // %3d = right-aligned with leading spaces
+  
+  // Start at x=3 (left-aligned position, but number is right-aligned within 3-digit space)
+  drawText(buffer, 2, topY, color);
+}
+
 void drawBPMScreen() {
 
   FastLEDclear();
-  drawVolume(GLOB.vol);
-  drawLineOutVolume(lineOutLevelSetting);
+  // Volume bars and indicators removed - volume controls now in VOL menu
   if (drawBaseColorMode) {
     drawBrightness();
   }
-  CRGB volColor = CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0);
-  Encoder[2].writeRGBCode(CRGBToUint32(volColor));
-  CRGB pinkColor = CRGB(50, 0, 50);  // Pink color
-  Encoder[0].writeRGBCode(CRGBToUint32(pinkColor));
   
-  // New indicator system: BPM: L[P] | L[W] | L[U] | -
+  // New indicator system: BPM: - | L[W] | - | L[H]
+  // Only show indicators for brightness (encoder 1) and BPM (encoder 3)
+  // Encoder 0 and 2 (volume controls) removed
   
-  drawIndicator('L', 'P', 1);  // Encoder 1: Large Pink for line out
-  drawIndicator('L', 'W', 2);  // Encoder 2: Large White
-  drawIndicator('L', 'U', 3);  // Encoder 3: Large Volume Color
   if (drawBaseColorMode) {
-    drawIndicator('L', 'H', 4);  // Encoder 4: Large Bright Blue
+    drawIndicator('L', 'H', 4);  // Encoder 4: Large Bright Blue for brightness
   }
-  // Encoder 4: empty (no indicator)
   
-  if (MIDI_CLOCK_SEND){ 
-      drawNumber(SMP.bpm, UI_CYAN, 6);}
-      else{
-        drawNumber(SMP.bpm, UI_DIM_RED, 6);
-      }
+  // Draw MIDI INT/EXT arrow indicator using encoder[2] position
+  extern Mode *currentMode;
+  extern Mode volume_bpm;
+  extern int clockMode;
+  bool isInt = false;
+  if (currentMode == &volume_bpm) {
+    // Get clockMode from encoder[2] position (0=EXT, 1=INT)
+    isInt = (currentMode->pos[2] == 1);
+  } else {
+    // Fallback: use clockMode directly if not in volume_bpm mode
+    isInt = (clockMode == 1);
+  }
+  
+  // Draw BPM number starting at x=3 (left-aligned with reserved space)
+  // In EXT mode: BLUE if stable, RED if not yet stable
+  // In INT mode: CYAN
+  extern bool getBPMStable();
+  if (MIDI_CLOCK_SEND) {
+    // INT mode: always cyan
+    drawBPMWithReservedSpace(SMP.bpm, UI_CYAN, 6);
+  } else {
+    // EXT mode: blue if stable, red if not yet stable
+    bool isStable = getBPMStable();
+    CRGB extColor = isStable ? CRGB(0, 0, 255) : CRGB(255, 0, 0); // Blue if stable, Red if not
+    drawBPMWithReservedSpace(SMP.bpm, extColor, 6);
+  }
+  
+  // Draw arrow at right edge (x=maxX-1, y=8)
+  // In EXT mode: blink the arrow in sync with MIDI clock (every 24th note)
+  bool shouldBlink = false;
+  if (!isInt && !MIDI_CLOCK_SEND) {
+    // EXT mode: get clock tick count for blinking
+    extern uint16_t getMidiClockTicks();
+    uint16_t clockTicks = getMidiClockTicks();
+    // Blink every 12 clocks (~half a beat at 24 PPQN): dim for first 6 ticks, bright for next 6
+    shouldBlink = ((clockTicks % 12) < 6);
+  }
+  drawMidiArrow(isInt, maxX - 1, 8, shouldBlink);
+  
+  // Add indicator to encoder[2]: L size, color matching arrow, encoder 3
+  if (currentMode == &volume_bpm) {
+    // Green for INT, Red for EXT
+    char arrowColor = isInt ? 'G' : 'R';
+    drawIndicator('L', arrowColor, 3);  // Encoder 3: Large indicator matching arrow color
+    
+    // Set encoder color to match
+    CRGB indicatorColor = getIndicatorColor(arrowColor);
+    Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+  }
 }
 
 void drawKnobColorDefault(){

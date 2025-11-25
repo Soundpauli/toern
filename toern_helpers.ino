@@ -211,22 +211,21 @@ void startRecordingRAM() {
   FastLEDshow();
   isRecording = true;
   
-  // Enable audio input monitoring only if monitorLevel > 0
-  extern unsigned int monitorLevel;
-  if (monitorLevel > 0) {
+  // Enable audio input monitoring using VOL menu input level settings
+  extern int recMode;
+  extern unsigned int lineInLevel;  // From VOL menu (0-15)
+  extern unsigned int micGain;      // From VOL menu (0-63)
+  extern AudioMixer4 mixer_end;
+  
     float monitorGain = 0.0;
-    switch (monitorLevel) {
-      case 1: monitorGain = 0.1; break;    // Low
-      case 2: monitorGain = 0.3; break;    // Medium
-      case 3: monitorGain = 0.5; break;    // High
-      case 4: monitorGain = 0.8; break;    // Full
-      default: monitorGain = 0.0; break;   // Default to OFF
+  if (recMode == 1) {
+    // Mic input: map micGain (0-63) to mixer gain (0.0-0.8)
+    monitorGain = mapf(micGain, 0, 63, 0.0, 0.8);
+  } else {
+    // Line input: map lineInLevel (0-15) to mixer gain (0.0-0.8)
+    monitorGain = mapf(lineInLevel, 0, 15, 0.0, 0.8);
     }
     mixer_end.gain(3, monitorGain);
-  } else {
-    // Ensure monitoring is OFF if monitorLevel is 0
-    mixer_end.gain(3, 0.0);
-  }
 }
 
 void flushAudioQueueToRAM2() {
@@ -334,21 +333,21 @@ void startFastRecord() {
   queue1.begin();
   fastRecordActive = true;
   
-  // Enable audio input monitoring only if monitorLevel > 0
-  if (monitorLevel > 0) {
+  // Enable audio input monitoring using VOL menu input level settings
+  extern int recMode;
+  extern unsigned int lineInLevel;  // From VOL menu (0-15)
+  extern unsigned int micGain;      // From VOL menu (0-63)
+  extern AudioMixer4 mixer_end;
+  
     float monitorGain = 0.0;
-    switch (monitorLevel) {
-      case 1: monitorGain = 0.1; break;    // Low
-      case 2: monitorGain = 0.3; break;    // Medium
-      case 3: monitorGain = 0.5; break;    // High
-      case 4: monitorGain = 0.8; break;    // Full
-      default: monitorGain = 0.0; break;   // Default to OFF
-    }
-    mixer_end.gain(3, monitorGain);
+  if (recMode == 1) {
+    // Mic input: map micGain (0-63) to mixer gain (0.0-0.8)
+    monitorGain = mapf(micGain, 0, 63, 0.0, 0.8);
   } else {
-    // Ensure monitoring is OFF if monitorLevel is 0
-    mixer_end.gain(3, 0.0);
+    // Line input: map lineInLevel (0-15) to mixer gain (0.0-0.8)
+    monitorGain = mapf(lineInLevel, 0, 15, 0.0, 0.8);
   }
+  mixer_end.gain(3, monitorGain);
 
   //Serial.printf("FAST RECORD ▶ ch%u (dropping %d blocks)\n", ch, FAST_DROP_BLOCKS);
 }

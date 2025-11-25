@@ -140,17 +140,9 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
     displayVal = constrain(displayVal, 1, displayResolution);
   }
 
-  // ─── Animated Pulse Modulation ───
-  // Offset each slider with a phase shift
-  uint8_t pulsePhase = millis() / 8 + sliderIndex * 64;
-  uint8_t pulse = sin8(pulsePhase);                      // 0–255 sine wave
-  uint8_t brightnessMod = mapf(pulse, 0, 255, 32, 128);  // You can tune min/max for subtlety
-
-  // ─── Dim and blend base color by value ───
-  CRGB dimmed = baseColor;
-  dimmed.nscale8(brightnessMod);  // animated brightness dim
+  // ─── Dim and blend base color by value (no fading) ───
   uint8_t blendVal = mapf(val, 0, maxVal, 0, 255);
-  CRGB color = blend(CRGB::Black, dimmed, blendVal);
+  CRGB color = blend(CRGB::Black, baseColor, blendVal);
 
   // Determine if this slider is the defaultFastFilter for the current channel
   bool isDefaultFast = false;
