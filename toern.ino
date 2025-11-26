@@ -2584,6 +2584,9 @@ void checkEncoders() {
         if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
           int val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
           Encoder[2].writeCounter((int32_t)val);
+          // Reset the last encoder value tracking when channel changes
+          static int lastEncVal[NUM_CHANNELS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+          lastEncVal[GLOB.currentChannel] = val;  // Sync tracking with encoder
         }
         filterfreshsetted = true;
       }
@@ -2607,26 +2610,35 @@ void checkEncoders() {
       FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
       int page, slot;
       if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
+        // Only check when encoder value actually changes to avoid excessive I2C reads/writes
+        static int lastEncVal[NUM_CHANNELS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
         int encVal = currentMode->pos[2];
-        if (getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx) != encVal) {
-          setDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx, encVal);
+        
+        // Only process if encoder value changed for this channel
+        if (encVal != lastEncVal[GLOB.currentChannel]) {
+          lastEncVal[GLOB.currentChannel] = encVal;
           
-          // Apply the filter changes like in filtermode page
-          switch (dft.arr) {
-            case ARR_FILTER:
-              setFilters(dft.idx, GLOB.currentChannel, false);
-              break;
-            case ARR_SYNTH:
-              // Handle synth updates if needed
-              break;
-            case ARR_DRUM:
-              setDrums(dft.idx, GLOB.currentChannel);
-              break;
-            case ARR_PARAM:
-              setParams(dft.idx, GLOB.currentChannel);
-              break;
-            default:
-              break;
+          // Only update if the stored value is different
+          if (getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx) != encVal) {
+            setDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx, encVal);
+            
+            // Apply the filter changes like in filtermode page
+            switch (dft.arr) {
+              case ARR_FILTER:
+                setFilters(dft.idx, GLOB.currentChannel, false);
+                break;
+              case ARR_SYNTH:
+                // Handle synth updates if needed
+                break;
+              case ARR_DRUM:
+                setDrums(dft.idx, GLOB.currentChannel);
+                break;
+              case ARR_PARAM:
+                setParams(dft.idx, GLOB.currentChannel);
+                break;
+              default:
+                break;
+            }
           }
         }
       }
@@ -2774,7 +2786,7 @@ void checkEncoders() {
 
   
 
-  if (filterDrawActive && isNowPlaying) {
+  if (filterDrawActive) {
       //Serial.println("active");
       if (millis() <= filterDrawEndTime) {
         
@@ -2785,7 +2797,7 @@ void checkEncoders() {
           drawFilterCheck(val, dft.idx, filterColors[page][slot]);
         }
       } else {
-        // Stop drawing after 2 seconds
+        // Stop drawing after timeout
         filterDrawActive = false;
       }
     }
@@ -2812,7 +2824,8 @@ void filtercheck() {
         if (currVal != lastDefaultFastFilterValue[GLOB.currentChannel]) {
             lastDefaultFastFilterValue[GLOB.currentChannel] = currVal;
             filterDrawActive = true;
-            filterDrawEndTime = millis() + 1000; // 1s after last change
+            // Show longer when not playing (2s) vs when playing (1s)
+            filterDrawEndTime = millis() + (isNowPlaying ? 1000 : 500);
             drawFilterCheck(currVal, dft.idx, filterColors[page][slot]);
         }
     }
