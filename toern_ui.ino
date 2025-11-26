@@ -792,44 +792,42 @@ FLASHMEM void drawNumber(float count, CRGB color, int topY) {
 
 
 FLASHMEM void drawVelocity() {
-  //FastLEDclear();
-
-  unsigned int vy = currentMode->pos[0];  // Velocity on encoder[0]
+  unsigned int vy = currentMode->pos[0];    // Velocity on encoder[0]
   unsigned int probStep = currentMode->pos[1];  // Probability on encoder[1]
-
-  //GLOBAL
-  unsigned int cv = currentMode->pos[2];
+  unsigned int cv = currentMode->pos[2];    // Channel volume on encoder[2]
+  unsigned int condStep = currentMode->pos[3];  // Condition on encoder[3]
+  
   FastLEDclear();
 
-  // Draw velocity bar on the left (x=1-5)
-  for (unsigned int x = 1; x < 6; x++) {
+  // Draw velocity bar at x=2-3
+  for (unsigned int x = 2; x <= 3; x++) {
     for (unsigned int y = 1; y < vy + 1; y++) {
       light(x, y, CRGB(y * y, 20 - y, 0));
     }
   }
-  drawText("v", 2, 2, UI_DIM_WHITE);
   
-  // Draw probability bars at x=7-10
+  // Draw probability bars at x=5-8
   // Layout: y=1 empty, [2-3: 0%] [4: black] [5-6: 25%] [7: black] [8-9: 50%] [10: black] [11-12: 75%] [13: black] [14-15: 100%]
-  // White border at y=1 and y=16, plus sides (x=7 and x=10)
+  // White border at y=1 and y=16, plus sides (x=5 and x=8)
   
-  // Draw white border
-  light(7, 1, CRGB(30, 30, 30));   // Bottom left corner
-  light(8, 1, CRGB(30, 30, 30));   // Bottom
-  light(9, 1, CRGB(30, 30, 30));   // Bottom
-  light(10, 1, CRGB(30, 30, 30));  // Bottom right corner
-  light(7, 16, CRGB(30, 30, 30));  // Top left corner
-  light(8, 16, CRGB(30, 30, 30));  // Top
-  light(9, 16, CRGB(30, 30, 30));  // Top
-  light(10, 16, CRGB(30, 30, 30)); // Top right corner
+  // Draw dark white border for probability
+  CRGB darkWhite = CRGB(30, 30, 30);
+  light(5, 1, darkWhite);   // Bottom left corner
+  light(6, 1, darkWhite);   // Bottom
+  light(7, 1, darkWhite);   // Bottom
+  light(8, 1, darkWhite);  // Bottom right corner
+  light(5, 16, darkWhite);  // Top left corner
+  light(6, 16, darkWhite);  // Top
+  light(7, 16, darkWhite);  // Top
+  light(8, 16, darkWhite); // Top right corner
   
   for (unsigned int y = 2; y <= 15; y++) {
-    light(7, y, CRGB(30, 30, 30));  // Left border
-    light(10, y, CRGB(30, 30, 30)); // Right border
+    light(5, y, darkWhite);  // Left border
+    light(8, y, darkWhite); // Right border
   }
   
   // Draw only the active probability bar (not cumulative)
-  for (unsigned int x = 8; x < 10; x++) {
+  for (unsigned int x = 6; x < 8; x++) {
     // Step 1: 0% - red (y=2-3)
     if (probStep == 1) {
       light(x, 2, CRGB(100, 0, 0));
@@ -865,13 +863,52 @@ FLASHMEM void drawVelocity() {
     }
   }
 
-  // Draw channel volume on the right at x=12-16
-  for (unsigned int x = 12; x <= 16; x++) {
+  // Draw channel volume at x=10-11
+  for (unsigned int x = 10; x <= 11; x++) {
     for (unsigned int y = 1; y < cv + 1; y++) {
       light(x, y, CRGB(0, 20 - y, y * y));
     }
   }
-  drawText("c", 13, 2, UI_DIM_WHITE);
+  
+  // Draw condition display at x=13-16 using drawText
+  // Show condition as "1/1", "1/2", or "1/4" based on condStep
+  
+  // Map condStep to denominator and color
+  // Strings are already in flash, just use simple if/else to save RAM
+  const char* denominatorText;
+  CRGB textColor;
+  if (condStep == 1) {
+    denominatorText = "1";
+    textColor = CRGB(0, 200, 0);  // Green for 1/1
+  } else if (condStep == 2) {
+    denominatorText = "2";
+    textColor = CRGB(0, 0, 255);  // Blue for 1/2
+  } else if (condStep == 3) {
+    denominatorText = "4";
+    textColor = CRGB(200, 0, 255);  // Violet for 1/4
+  } else if (condStep == 4) {
+    denominatorText = "8";
+    textColor = CRGB(255, 100, 0);  // Orange for 1/8
+  } else {  // condStep == 5
+    denominatorText = "X";
+    textColor = CRGB(0, 200, 200);  // Turquoise for 1/16
+  }
+  
+  // Draw numerator "1" at top: x=13, y=10
+  drawText("1", 13, 11, textColor);
+  
+  // Draw diagonal slash "/" from bottom right to top left: x=12-16, y=8-11
+  // Reuse darkWhite from probability border above
+  // Diagonal line from (16, 8) to (12, 11) - bottom right to top left
+  light(16, 10, darkWhite);
+  light(15, 9, darkWhite);
+  light(14, 8, darkWhite);
+  light(13, 7, darkWhite);
+  
+  
+  // Draw denominator at bottom: x=14, y=3 (adjust x for two-digit "16")
+
+  drawText(denominatorText, 14, 2, textColor);
 }
 
 FLASHMEM void drawCtrlVolumeOverlay(int volume) {
@@ -991,7 +1028,7 @@ void drawPages() {
 /************************************************
       DRAW SAMPLES
   *************************************************/
-void drawTriggers() {
+FLASHMEM void drawTriggers() {
   // why?
   //GLOB.edit = 1;
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
@@ -1002,13 +1039,47 @@ void drawTriggers() {
         if (!getMuteState(thisNote)) {
           //light(ix, iy, getCol(note[((GLOB.edit - 1) * maxX) + ix][iy].channel));
           if (GLOB.singleMode && thisNote == GLOB.currentChannel) {
-            // Get probability for this note
+            // Get probability and condition for this note
             uint8_t prob = note[((GLOB.edit - 1) * maxX) + ix][iy].probability;
+            uint8_t cond = note[((GLOB.edit - 1) * maxX) + ix][iy].condition;
+            if (cond == 0) cond = 1;  // Default to 1 if not set
             CRGB noteColor = UI_BRIGHT_WHITE;
             
-            // Add blinking red/white effect for notes with probability < 100%
-            if (prob < 100) {
-              // Slow blink effect using sine wave
+            // Add blinking effect for notes with condition 2, 4, 8, or 16
+            if (cond == 2) {
+              // Blue blinking for condition 2 (every 2nd loop)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(0, 0, 255);  // Blue phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (cond == 4) {
+              // Violet blinking for condition 4 (every 4th loop)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(200, 0, 255);  // Violet phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (cond == 8) {
+              // Orange blinking for condition 8 (every 8th loop)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(255, 100, 0);  // Orange phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (cond == 16) {
+              // Turquoise blinking for condition 16 (every 16th loop)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(0, 200, 200);  // Turquoise phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (prob < 100) {
+              // Add blinking red/white effect for notes with probability < 100%
               uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
               
               if (blinkPhase == 0) {

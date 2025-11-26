@@ -29,6 +29,7 @@ void savePattern(bool autosave) {
         saveFile.write(note[sdx][sdy].channel);
         saveFile.write(note[sdx][sdy].velocity);
         saveFile.write(note[sdx][sdy].probability);
+        saveFile.write(note[sdx][sdy].condition);  // Save condition (default 1 if not set)
       }
     }
     // Use a unique marker to indicate the end of notes and start of SMP data
@@ -200,9 +201,11 @@ void loadPattern(bool autoload) {
 
         int v = loadFile.read();
         int p = loadFile.available() ? loadFile.read() : 100;  // Read probability, default to 100 if not present
+        int c = loadFile.available() ? loadFile.read() : 1;    // Read condition, default to 1 if not present
         note[sdrx][sdry].channel = b;
         note[sdrx][sdry].velocity = v;
         note[sdrx][sdry].probability = p;
+        note[sdrx][sdry].condition = c;
         sdry++;
         if (sdry > maxY) {
           sdry = 1;

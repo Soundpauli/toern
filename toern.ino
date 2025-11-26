@@ -414,6 +414,8 @@ unsigned int beat = 1;
 // Beat index that was last used for audio playback / sequencing.
 // UI components should use this to stay visually in sync with what was just played.
 unsigned int beatForUI = 1;
+// Loop counter for condition feature (increments when beat resets to 1)
+uint16_t loopCount = 0;
 unsigned int samplePackID, fileID = 1;
 EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
@@ -428,6 +430,7 @@ struct Note {
   uint8_t channel;      // 0 = no note; otherwise, MIDI note value (0-127)
   uint8_t velocity;     // MIDI velocity (0-127)
   uint8_t probability;  // Probability 0-100 (in 25% steps: 0, 25, 50, 75, 100)
+  uint8_t condition;   // Condition: 1=every loop, 2=every 2nd, 4=every 4th, 8=every 8th, 16=every 16th (default 1)
 } __attribute__((packed));
 
 
@@ -854,7 +857,7 @@ void allOff() {
 
 
 
-void setVelocity() {
+FLASHMEM void setVelocity() {
   // Update velocity (encoder[0])
   if (currentMode->pos[0] != GLOB.velocity) {
     GLOB.velocity = currentMode->pos[0];
@@ -889,8 +892,38 @@ void setVelocity() {
       case 5: probValue = 100; break;
       default: probValue = 100; break;
     }
-    
     note[GLOB.x][GLOB.y].probability = probValue;
+  }
+  
+  // Update condition (encoder[3])
+  static int lastCondStep = -1;
+  int currentCondStep = currentMode->pos[3];
+  
+  if (currentCondStep != lastCondStep) {
+    lastCondStep = currentCondStep;
+    
+    // Map encoder steps 1-5 to condition values 1, 2, 4, 8, 16 (1, 1/2, 1/4, 1/8, 1/16)
+    // Use PROGMEM lookup table to save RAM
+    static const uint8_t condValues[5] PROGMEM = {1, 2, 4, 8, 16};
+    uint8_t condValue;
+    if (currentCondStep >= 1 && currentCondStep <= 5) {
+      condValue = pgm_read_byte(&condValues[currentCondStep - 1]);
+    } else {
+      condValue = 1;  // Default
+    }
+    note[GLOB.x][GLOB.y].condition = condValue;
+    
+    // Debug message to serial
+    Serial.print("Condition changed: step=");
+    Serial.print(currentCondStep);
+    Serial.print(", value=");
+    Serial.print(condValue);
+    if (condValue == 1) Serial.println(" (every loop)");
+    else if (condValue == 2) Serial.println(" (every 2nd loop)");
+    else if (condValue == 4) Serial.println(" (every 4th loop)");
+    else if (condValue == 8) Serial.println(" (every 8th loop)");
+    else if (condValue == 16) Serial.println(" (every 16th loop)");
+    else Serial.println();
   }
   
   //CHANNEL VOLUME
@@ -1163,11 +1196,25 @@ void switchMode(Mode *newMode) {
         minVal = -1;
         counterVal = 0;
         currentMode->pos[2] = 0;
+      } else if (currentMode == &velocity && i == 3) {
+        // Encoder[3] in velocity mode: condition range 1-5 (1, 1/2, 1/4, 1/8, 1/16)
+        maxVal = 5;
+        minVal = 1;
+        // Initialize with current note's condition value
+        if (note[GLOB.x][GLOB.y].channel != 0) {
+          uint8_t cond = note[GLOB.x][GLOB.y].condition;
+          if (cond == 0) cond = 1;  // Default to 1 if not set
+          counterVal = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+          currentMode->pos[3] = counterVal;
+        } else {
+          counterVal = 1;  // Default condition
+          currentMode->pos[3] = 1;
+        }
       } else {
       }
 
-      Encoder[i].writeMax(maxVal);
-      Encoder[i].writeMin(minVal);
+      Encoder[i].writeMax((int32_t)maxVal);
+      Encoder[i].writeMin((int32_t)minVal);
 
       if ((currentMode == &singleMode && oldMode == &draw) || (currentMode == &draw && oldMode == &singleMode)) {
         //do not move Cursor for those modes
@@ -1681,7 +1728,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
     GLOB.velocity = velo;
     
-    // Map probability 0-100 to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
+    // Map probability to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
     unsigned int prob = note[GLOB.x][GLOB.y].probability;
     unsigned int probStep;
     if (prob == 0) probStep = 1;
@@ -1690,11 +1737,18 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     else if (prob == 75) probStep = 4;
     else probStep = 5;  // 100%
     
+    // Map condition to encoder range 1-5 (1, 1/2, 1/4, 1/8, 1/16)
+    uint8_t cond = note[GLOB.x][GLOB.y].condition;
+    if (cond == 0) cond = 1;  // Default to 1 if not set
+    unsigned int condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+    
     switchMode(&velocity);
     GLOB.singleMode = true;
     Encoder[0].writeCounter((int32_t)velo);
     Encoder[1].writeCounter((int32_t)probStep);
+    Encoder[3].writeCounter((int32_t)condStep);
     currentMode->pos[1] = probStep;
+    currentMode->pos[3] = condStep;
   }
 
   if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &draw) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
@@ -1702,7 +1756,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     unsigned int chvol = SMP.channelVol[GLOB.currentChannel];
     GLOB.velocity = velo;
     
-    // Map probability 0-100 to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
+    // Map probability to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
     unsigned int prob = note[GLOB.x][GLOB.y].probability;
     unsigned int probStep;
     if (prob == 0) probStep = 1;
@@ -1711,12 +1765,19 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     else if (prob == 75) probStep = 4;
     else probStep = 5;  // 100%
     
+    // Map condition to encoder range 1-5 (1, 1/2, 1/4, 1/8, 1/16)
+    uint8_t cond = note[GLOB.x][GLOB.y].condition;
+    if (cond == 0) cond = 1;  // Default to 1 if not set
+    unsigned int condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+    
     GLOB.singleMode = false;
     switchMode(&velocity);
     Encoder[0].writeCounter((int32_t)velo);
     Encoder[1].writeCounter((int32_t)probStep);
-    Encoder[3].writeCounter((int32_t)chvol);
+    Encoder[2].writeCounter((int32_t)chvol);
+    Encoder[3].writeCounter((int32_t)condStep);
     currentMode->pos[1] = probStep;
+    currentMode->pos[3] = condStep;
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 2)) {  // "2002"
@@ -1725,6 +1786,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     return;  // Prevent other button actions from being processed
   }
 
+  
   if (currentMode == &velocity && match_buttons(currentButtonStates, 0, 0, 0, 9)) {  // "0009"
     if (!GLOB.singleMode) {
       switchMode(&draw);
@@ -2310,7 +2372,7 @@ void setup() {
 
   autoLoad();
   
-  // Initialize probability field for all existing notes (default 100%)
+  // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
   for (unsigned int x = 0; x <= maxlen; x++) {
     for (unsigned int y = 0; y <= maxY; y++) {
       if (note[x][y].probability == 0 && note[x][y].channel != 0) {
@@ -2319,9 +2381,13 @@ void setup() {
       } else if (note[x][y].channel != 0 && note[x][y].probability == 0) {
         note[x][y].probability = 100;
       }
+      // Initialize condition to 1 if not set (for backward compatibility)
+      if (note[x][y].channel != 0 && note[x][y].condition == 0) {
+        note[x][y].condition = 1;
+      }
     }
   }
-  Serial.println("Note probabilities initialized to 100%");
+  Serial.println("Note probabilities initialized to 100%, conditions initialized to 1");
   
   // Check for reset flag file and trigger startNew() if it exists
   if (SD.exists("reset.dat")) {
@@ -2546,6 +2612,7 @@ void checkEncoders() {
         // Only set probability to 100% if slot was empty (preserve existing probability)
         if (note[GLOB.x][GLOB.y].channel == 0) {
           note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
+          note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
         }
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
         note[GLOB.x][GLOB.y].velocity = defaultVelocity;
@@ -2554,6 +2621,7 @@ void checkEncoders() {
         // Only set probability to 100% if slot was empty (preserve existing probability)
         if (note[GLOB.x][GLOB.y].channel == 0) {
           note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
+          note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
         }
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;
         note[GLOB.x][GLOB.y].velocity = defaultVelocity;
@@ -3905,6 +3973,11 @@ void play(bool fromStart) {
       GLOB.page = 1;
     }
     
+    // Reset loop count to 1 when starting playback (first loop)
+    loopCount = 1;
+    Serial.print("Play started: loopCount reset to ");
+    Serial.println(loopCount);
+    
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
       // Master mode: start internal clock and play immediately on the current beat
@@ -3964,6 +4037,10 @@ void pause() {
   beat = 1;      // Reset beat on pause
   beatForUI = beat;  // Keep UI timer in sync with reset position
   GLOB.page = 1;  // Reset page on pause
+  loopCount = 0;  // Reset loop count to 0 on pause (will be set to 1 on next play)
+  
+  // Reset static tracking variables on pause to ensure clean state on next play
+  // Note: static variables will be reset when play() is called and we check for page 1, beat 1
 }
 
 
@@ -4137,8 +4214,28 @@ void playNote() {
         int ch = note[beat][b].channel;            // ch is 0-indexed for internal use (e.g. SMP arrays)
         int vel = note[beat][b].velocity;
         uint8_t prob = note[beat][b].probability;   // Get probability (0-100)
+        uint8_t cond = note[beat][b].condition;     // Get condition (1, 2, 4 for 1, 1/2, 1/4)
+        if (cond == 0) cond = 1;  // Default to 1 if not set
         
         if (ch > 0 && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
+          
+          // Check condition - skip if not the right loop iteration
+          if (cond > 1) {
+            // Condition is 2, 4, 8, or 16 (every 2nd, 4th, 8th, or 16th loop)
+            // Play only when (loopCount % cond) == 0
+            Serial.print("Condition check: loopCount=");
+            Serial.print(loopCount);
+            Serial.print(", cond=");
+            Serial.print(cond);
+            Serial.print(", (loopCount % cond)=");
+            Serial.print(loopCount % cond);
+            if ((loopCount % cond) != 0) {
+              Serial.println(" -> SKIP");
+              continue;  // Skip this note based on condition
+            } else {
+              Serial.println(" -> PLAY");
+            }
+          }
           
           // Check probability - if random(0-99) >= probability, skip this note
           if (prob < 100) {
@@ -4266,17 +4363,13 @@ void playNote() {
     }
 
     // Advance and wrap within this page:
+    // Track previous state BEFORE incrementing
+    static unsigned int lastPageAfterWrap = 0;
+    static unsigned int lastBeatAfterWrap = 0;
+    unsigned int previousPage = GLOB.page;
+    unsigned int previousBeat = beat;
+    
     beat++;
-
-    // Debug: log whenever the current page-local beat wraps to 1
-    {
-      static uint8_t lastLoggedBeatWithinPage = 0;
-      uint8_t beatWithinPage = ((beat - 1) % maxX) + 1;
-      if (beatWithinPage == 1 && beatWithinPage != lastLoggedBeatWithinPage) {
-        //Serial.println("DEBUG: beatWithinPage == 1");
-      }
-      lastLoggedBeatWithinPage = beatWithinPage;
-    }
     
     if (songModeActive) {
       // In song mode, check if we need to advance to next pattern
@@ -4294,13 +4387,47 @@ void playNote() {
       if (beat < pageStart || beat > pageEnd) {
         beat = pageStart;
       }
-      // Keep the displayed page locked:
-      GLOB.page = GLOB.edit;
+    }
+    
+    // Update page after wrapping
+    GLOB.page = GLOB.edit;
+    
+    // Simple loopCount logic: increment when we transition TO page 1, beat 1 while playing
+    static bool wasAtStart = false;  // Track if we were at page 1, beat 1 in previous call
+    
+    if (!isNowPlaying) {
+      wasAtStart = false;  // Reset when not playing
+    } else {
+      bool atStart = (GLOB.page == 1 && beat == 1);
+      // Increment if we just arrived at start (weren't here before, but are now)
+      if (atStart && !wasAtStart) {
+        loopCount++;
+        if (loopCount > 1000) loopCount = 1;  // Prevent overflow
+        Serial.print("Loop count incremented: loopCount=");
+        Serial.println(loopCount);
+      }
+      wasAtStart = atStart;
     }
   } else {
     // Fallback to default behavior:
     beat++;
     checkPages();
+    // Simple loopCount logic for non-pattern mode: increment when we transition TO page 1, beat 1
+    static bool wasAtStartNP = false;  // Track if we were at page 1, beat 1 in previous call
+    
+    if (!isNowPlaying) {
+      wasAtStartNP = false;  // Reset when not playing
+    } else {
+      bool atStartNP = (GLOB.page == 1 && beat == 1);
+      // Increment if we just arrived at start (weren't here before, but are now)
+      if (atStartNP && !wasAtStartNP) {
+        loopCount++;
+        if (loopCount > 1000) loopCount = 1;  // Prevent overflow
+        Serial.print("Loop count incremented: loopCount=");
+        Serial.println(loopCount);
+      }
+      wasAtStartNP = atStartNP;
+    }
   }
 
 
@@ -4362,6 +4489,7 @@ void checkPages() {
       GLOB.edit = pattern;
       GLOB.page = pattern;
       beat = (pattern - 1) * maxX + 1;  // Start at beginning of this pattern
+      // No loopCount changes here; handled centrally in playNote()
       Serial.print("Song: Moving to position ");
       Serial.print(currentSongPosition + 1);
       Serial.print(" -> pattern ");
@@ -4404,10 +4532,12 @@ void checkPages() {
       // If we stepped past the last non-empty page, restart at the top
       beat = 1;
       timerPage = 1;
+      // loopCount handled centrally in playNote()
     } else if (lastPage == 0) {
       // Should not happen if updateLastPage ensures it's at least 1
       beat = 1;
       timerPage = 1;
+      // loopCount handled centrally in playNote()
     }
     
     // Update the page
@@ -4592,6 +4722,7 @@ void paint() {
         note[current_x][current_y].channel = GLOB.currentChannel;  // GLOB.currentChannel should be correct 0-indexed channel
         note[current_x][current_y].velocity = defaultVelocity;
         note[current_x][current_y].probability = 100;  // Default 100% probability
+        note[current_x][current_y].condition = 1;      // Default condition: 1 (every loop)
       }
     } else if (current_y == 16) {  // Top row (GLOB.y == 16)
       toggleCopyPaste();
@@ -4602,6 +4733,7 @@ void paint() {
         note[current_x][current_y].channel = GLOB.currentChannel;
         note[current_x][current_y].velocity = defaultVelocity;
         note[current_x][current_y].probability = 100;  // Default 100% probability
+        note[current_x][current_y].condition = 1;      // Default condition: 1 (every loop)
       }
     } else if (current_y == 16) {  // Top row (GLOB.y == 16) - enable copypaste in single mode
       toggleCopyPaste();
