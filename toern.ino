@@ -430,7 +430,7 @@ struct Note {
   uint8_t channel;      // 0 = no note; otherwise, MIDI note value (0-127)
   uint8_t velocity;     // MIDI velocity (0-127)
   uint8_t probability;  // Probability 0-100 (in 25% steps: 0, 25, 50, 75, 100)
-  uint8_t condition;   // Condition: 1=every loop, 2=every 2nd, 4=every 4th, 8=every 8th, 16=every 16th (default 1)
+  uint8_t condition;   // Condition: 1=1/1, 2=1/2, 4=1/4, 8=1/8, 16=1/16, 17=2/1, 18=4/1, 19=8/1, 20=16/1 (default 1)
 } __attribute__((packed));
 
 
@@ -902,11 +902,13 @@ FLASHMEM void setVelocity() {
   if (currentCondStep != lastCondStep) {
     lastCondStep = currentCondStep;
     
-    // Map encoder steps 1-5 to condition values 1, 2, 4, 8, 16 (1, 1/2, 1/4, 1/8, 1/16)
+    // Map encoder steps 1-9 to condition values
+    // Positions 1-5: 1/X conditions -> values 1, 2, 4, 8, 16
+    // Positions 6-9: X/1 conditions -> values 17, 18, 19, 20
     // Use PROGMEM lookup table to save RAM
-    static const uint8_t condValues[5] PROGMEM = {1, 2, 4, 8, 16};
+    static const uint8_t condValues[9] PROGMEM = {1, 2, 4, 8, 16, 17, 18, 19, 20};
     uint8_t condValue;
-    if (currentCondStep >= 1 && currentCondStep <= 5) {
+    if (currentCondStep >= 1 && currentCondStep <= 9) {
       condValue = pgm_read_byte(&condValues[currentCondStep - 1]);
     } else {
       condValue = 1;  // Default
@@ -1197,14 +1199,23 @@ void switchMode(Mode *newMode) {
         counterVal = 0;
         currentMode->pos[2] = 0;
       } else if (currentMode == &velocity && i == 3) {
-        // Encoder[3] in velocity mode: condition range 1-5 (1, 1/2, 1/4, 1/8, 1/16)
-        maxVal = 5;
+        // Encoder[3] in velocity mode: condition range 1-9
+        // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1
+        maxVal = 9;
         minVal = 1;
         // Initialize with current note's condition value
         if (note[GLOB.x][GLOB.y].channel != 0) {
           uint8_t cond = note[GLOB.x][GLOB.y].condition;
           if (cond == 0) cond = 1;  // Default to 1 if not set
-          counterVal = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+          // Map condition value to encoder position
+          // Values 1-16: 1/X conditions -> positions 1-5
+          // Values 17-20: X/1 conditions -> positions 6-9
+          if (cond <= 16) {
+            counterVal = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+          } else {
+            // X/1 conditions: 17=2/1, 18=4/1, 19=8/1, 20=16/1
+            counterVal = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+          }
           currentMode->pos[3] = counterVal;
         } else {
           counterVal = 1;  // Default condition
@@ -1737,10 +1748,17 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     else if (prob == 75) probStep = 4;
     else probStep = 5;  // 100%
     
-    // Map condition to encoder range 1-5 (1, 1/2, 1/4, 1/8, 1/16)
+    // Map condition to encoder range 1-9
+    // Values 1-16: 1/X conditions -> positions 1-5
+    // Values 17-20: X/1 conditions -> positions 6-9
     uint8_t cond = note[GLOB.x][GLOB.y].condition;
     if (cond == 0) cond = 1;  // Default to 1 if not set
-    unsigned int condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+    unsigned int condStep;
+    if (cond <= 16) {
+      condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+    } else {
+      condStep = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+    }
     
     switchMode(&velocity);
     GLOB.singleMode = true;
@@ -1765,10 +1783,17 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     else if (prob == 75) probStep = 4;
     else probStep = 5;  // 100%
     
-    // Map condition to encoder range 1-5 (1, 1/2, 1/4, 1/8, 1/16)
+    // Map condition to encoder range 1-9
+    // Values 1-16: 1/X conditions -> positions 1-5
+    // Values 17-20: X/1 conditions -> positions 6-9
     uint8_t cond = note[GLOB.x][GLOB.y].condition;
     if (cond == 0) cond = 1;  // Default to 1 if not set
-    unsigned int condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+    unsigned int condStep;
+    if (cond <= 16) {
+      condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+    } else {
+      condStep = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+    }
     
     GLOB.singleMode = false;
     switchMode(&velocity);
@@ -4221,15 +4246,37 @@ void playNote() {
           
           // Check condition - skip if not the right loop iteration
           if (cond > 1) {
-            // Condition is 2, 4, 8, or 16 (every 2nd, 4th, 8th, or 16th loop)
-            // Play only when (loopCount % cond) == 0
+            bool shouldPlay = false;
+            if (cond <= 16) {
+              // 1/X conditions: play when (loopCount % cond) == 0
+              // 1/2: every 2nd loop (2, 4, 6, 8...)
+              // 1/4: every 4th loop (4, 8, 12, 16...)
+              shouldPlay = (loopCount % cond) == 0;
+            } else {
+              // X/1 conditions: play on every Xth loop, starting with the first
+              // 2/1: every 2nd loop starting with first (1, 3, 5, 7...)
+              // 4/1: every 4th loop starting with first (1, 5, 9, 13...)
+              // Values: 17=2/1, 18=4/1, 19=8/1, 20=16/1
+              // Map: 17->2, 18->4, 19->8, 20->16
+              uint8_t x = (cond == 17) ? 2 : (cond == 18) ? 4 : (cond == 19) ? 8 : 16;
+              shouldPlay = (loopCount % x) == 1;
+            }
+            
             Serial.print("Condition check: loopCount=");
             Serial.print(loopCount);
             Serial.print(", cond=");
             Serial.print(cond);
-            Serial.print(", (loopCount % cond)=");
-            Serial.print(loopCount % cond);
-            if ((loopCount % cond) != 0) {
+            if (cond <= 16) {
+              Serial.print(", (loopCount % cond)=");
+              Serial.print(loopCount % cond);
+            } else {
+              uint8_t x = (cond == 17) ? 2 : (cond == 18) ? 4 : (cond == 19) ? 8 : 16;
+              Serial.print(", (loopCount % ");
+              Serial.print(x);
+              Serial.print(" == 1)=");
+              Serial.print((loopCount % x) == 1);
+            }
+            if (!shouldPlay) {
               Serial.println(" -> SKIP");
               continue;  // Skip this note based on condition
             } else {

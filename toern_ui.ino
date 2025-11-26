@@ -873,29 +873,51 @@ FLASHMEM void drawVelocity() {
   // Draw condition display at x=13-16 using drawText
   // Show condition as "1/1", "1/2", or "1/4" based on condStep
   
-  // Map condStep to denominator and color
-  // Strings are already in flash, just use simple if/else to save RAM
+  // Map condStep to numerator, denominator and color
+  // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1
+  const char* numeratorText;
   const char* denominatorText;
   CRGB textColor;
   if (condStep == 1) {
+    numeratorText = "1";
     denominatorText = "1";
     textColor = CRGB(0, 200, 0);  // Green for 1/1
   } else if (condStep == 2) {
+    numeratorText = "1";
     denominatorText = "2";
     textColor = CRGB(0, 0, 255);  // Blue for 1/2
   } else if (condStep == 3) {
+    numeratorText = "1";
     denominatorText = "4";
     textColor = CRGB(200, 0, 255);  // Violet for 1/4
   } else if (condStep == 4) {
+    numeratorText = "1";
     denominatorText = "8";
     textColor = CRGB(255, 100, 0);  // Orange for 1/8
-  } else {  // condStep == 5
+  } else if (condStep == 5) {
+    numeratorText = "1";
     denominatorText = "X";
     textColor = CRGB(0, 200, 200);  // Turquoise for 1/16
+  } else if (condStep == 6) {
+    numeratorText = "2";
+    denominatorText = "1";
+    textColor = CRGB(0, 150, 255);  // Light blue for 2/1
+  } else if (condStep == 7) {
+    numeratorText = "4";
+    denominatorText = "1";
+    textColor = CRGB(150, 0, 255);  // Light violet for 4/1
+  } else if (condStep == 8) {
+    numeratorText = "8";
+    denominatorText = "1";
+    textColor = CRGB(255, 150, 0);  // Light orange for 8/1
+  } else {  // condStep == 9
+    numeratorText = "X";
+    denominatorText = "1";
+    textColor = CRGB(0, 255, 200);  // Light turquoise for 16/1
   }
   
-  // Draw numerator "1" at top: x=13, y=10
-  drawText("1", 13, 11, textColor);
+  // Draw numerator at top: x=13, y=11
+  drawText(numeratorText, 13, 11, textColor);
   
   // Draw diagonal slash "/" from bottom right to top left: x=12-16, y=8-11
   // Reuse darkWhite from probability border above
@@ -905,9 +927,7 @@ FLASHMEM void drawVelocity() {
   light(14, 8, darkWhite);
   light(13, 7, darkWhite);
   
-  
-  // Draw denominator at bottom: x=14, y=3 (adjust x for two-digit "16")
-
+  // Draw denominator at bottom: x=14, y=2
   drawText(denominatorText, 14, 2, textColor);
 }
 
@@ -1045,9 +1065,11 @@ FLASHMEM void drawTriggers() {
             if (cond == 0) cond = 1;  // Default to 1 if not set
             CRGB noteColor = UI_BRIGHT_WHITE;
             
-            // Add blinking effect for notes with condition 2, 4, 8, or 16
+            // Add blinking effect for notes with condition
+            // 1/X conditions: 2, 4, 8, 16
+            // X/1 conditions: 17, 18, 19, 20
             if (cond == 2) {
-              // Blue blinking for condition 2 (every 2nd loop)
+              // Blue blinking for condition 2 (1/2 - every 2nd loop)
               uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
               if (blinkPhase == 0) {
                 noteColor = CRGB(0, 0, 255);  // Blue phase
@@ -1055,7 +1077,7 @@ FLASHMEM void drawTriggers() {
                 noteColor = UI_BRIGHT_WHITE;  // White phase
               }
             } else if (cond == 4) {
-              // Violet blinking for condition 4 (every 4th loop)
+              // Violet blinking for condition 4 (1/4 - every 4th loop)
               uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
               if (blinkPhase == 0) {
                 noteColor = CRGB(200, 0, 255);  // Violet phase
@@ -1063,7 +1085,7 @@ FLASHMEM void drawTriggers() {
                 noteColor = UI_BRIGHT_WHITE;  // White phase
               }
             } else if (cond == 8) {
-              // Orange blinking for condition 8 (every 8th loop)
+              // Orange blinking for condition 8 (1/8 - every 8th loop)
               uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
               if (blinkPhase == 0) {
                 noteColor = CRGB(255, 100, 0);  // Orange phase
@@ -1071,10 +1093,42 @@ FLASHMEM void drawTriggers() {
                 noteColor = UI_BRIGHT_WHITE;  // White phase
               }
             } else if (cond == 16) {
-              // Turquoise blinking for condition 16 (every 16th loop)
+              // Turquoise blinking for condition 16 (1/16 - every 16th loop)
               uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
               if (blinkPhase == 0) {
                 noteColor = CRGB(0, 200, 200);  // Turquoise phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (cond == 17) {
+              // Light blue blinking for condition 17 (2/1 - first 2 loops)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(0, 150, 255);  // Light blue phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (cond == 18) {
+              // Light violet blinking for condition 18 (4/1 - first 4 loops)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(150, 0, 255);  // Light violet phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (cond == 19) {
+              // Light orange blinking for condition 19 (8/1 - first 8 loops)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(255, 150, 0);  // Light orange phase
+              } else {
+                noteColor = UI_BRIGHT_WHITE;  // White phase
+              }
+            } else if (cond == 20) {
+              // Light turquoise blinking for condition 20 (16/1 - first 16 loops)
+              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
+              if (blinkPhase == 0) {
+                noteColor = CRGB(0, 255, 200);  // Light turquoise phase
               } else {
                 noteColor = UI_BRIGHT_WHITE;  // White phase
               }
