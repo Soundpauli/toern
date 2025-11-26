@@ -961,8 +961,18 @@ void staticThresholds(i2cEncoderLibV2 *obj) {
 
 
 
+// Debounce tracking for button presses/releases
+static unsigned long lastButtonChange[NUM_ENCODERS] = {0, 0, 0, 0};
+const unsigned long btnDebounce = 20;  // Debounce time in milliseconds
+
 void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
+  
+  // Debounce: Only accept button press if enough time has passed since last change
+  if (currentTime - lastButtonChange[encoderIndex] < btnDebounce) {
+    return;  // Ignore spurious button press (debounce)
+  }
+  lastButtonChange[encoderIndex] = currentTime;
 
   buttonPressStartTime[encoderIndex] = currentTime;
   isPressed[encoderIndex] = true;
@@ -971,6 +981,13 @@ void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
 
 
 void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
+  // Debounce: Only accept button release if enough time has passed since last change
+  unsigned long currentTime = millis();
+  if (currentTime - lastButtonChange[encoderIndex] < btnDebounce) {
+    return;  // Ignore spurious button release (debounce)
+  }
+  lastButtonChange[encoderIndex] = currentTime;
+  
   buttonState[encoderIndex] = RELEASED;
 }
 
@@ -978,7 +995,6 @@ void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
 
 
 
-const unsigned long btnDebounce = 30;
 static unsigned long lastBtnChange = 0;
 void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
@@ -1019,10 +1035,19 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
     }
 
   } else {  // Button is not pressed (isPressed[encoderIndex] is false)
+    // Additional safety: If we think button is pressed but encoder says it's not,
+    // verify this state persists before clearing (helps filter I2C glitches)
+    static unsigned long lastNotPressedTime[NUM_ENCODERS] = {0, 0, 0, 0};
     if (buttonState[encoderIndex] != IDLE) {
-      // If it's not pressed, but state wasn't RELEASED to transition to IDLE, force IDLE.
-      // This can happen if a release was missed or if initial state is off.
-      buttonState[encoderIndex] = IDLE;
+      // If it's not pressed, but state wasn't RELEASED to transition to IDLE, 
+      // wait a bit to ensure it's not a transient I2C glitch
+      if (currentTime - lastNotPressedTime[encoderIndex] > btnDebounce) {
+        // State has been "not pressed" for debounce period, safe to reset
+        buttonState[encoderIndex] = IDLE;
+      }
+      lastNotPressedTime[encoderIndex] = currentTime;
+    } else {
+      lastNotPressedTime[encoderIndex] = 0;  // Reset when in IDLE
     }
     // If button is up and state is IDLE (or just became IDLE)
     // and it wasn't a 1 or 9 event from a RELEASED state this cycle:
