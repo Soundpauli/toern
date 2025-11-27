@@ -95,6 +95,12 @@ unsigned long ganularStartTime = 0;  // Timestamp when the current beat started
 static bool externalOneBlinkActive = false;
 static unsigned long externalOneBlinkUntil = 0;
 
+// Input monitoring toggle state: 0=off, 1=on (y==1 only), 2=all (always on)
+// 0 = OFF (dark white helper LEDs)
+// 1 = ON (dark green helper LEDs, only when y==1)
+// 2 = ALL (dark yellow helper LEDs, always on regardless of y position)
+int inputMonitoringState = 0;
+
 void triggerExternalOneBlink();
 void updateExternalOneBlink();
 void updatePreviewVolume();
@@ -130,6 +136,7 @@ void drawPongBall();
 void resetPongGame();
 void triggerGridNote(unsigned int globalX, unsigned int y);
 void drawCtrlVolumeOverlay(int volume);
+void drawInputGainOverlay(int gain, int maxGain);
 void drawSampleLoadOverlay();
 static int lastDefaultFastFilterValue[NUM_CHANNELS] = {0};
 
@@ -353,7 +360,6 @@ int loopLength = 0;  // Loop length: 0=OFF, 1-8=force pattern length
 int ledModules = 1;  // Number of LED modules: 1 or 2
 unsigned int maxX = MATRIX_WIDTH * 1;  // Runtime variable: total display width (16 or 32)
 unsigned int micGain = 0;  // Microphone gain: 0-64, default 10
-unsigned int monitorLevel = 0;  // Monitoring level: 0-4, default 0 (OFF) to prevent startup feedback
 unsigned int lineInLevel = 8;  // Line input level: 0-15, default 8
 int ctrlMode = 0;  // 0=page, 1=volume control for encoder 1
 static int ctrlLastChannel = -1;
@@ -361,6 +367,10 @@ static int ctrlLastVolume = -1;
 static bool ctrlVolumeOverlayActive = false;
 static unsigned long ctrlVolumeOverlayUntil = 0;
 static int ctrlVolumeOverlayValue = 0;
+static bool inputGainOverlayActive = false;
+static unsigned long inputGainOverlayUntil = 0;
+static int inputGainOverlayValue = 0;
+static int inputGainOverlayMax = 63;
 static const int DEFAULT_CHANNEL_VOLUME = 10;
 
 bool isRecording = false;
@@ -1043,7 +1053,7 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
       // wait a bit to ensure it's not a transient I2C glitch
       if (currentTime - lastNotPressedTime[encoderIndex] > btnDebounce) {
         // State has been "not pressed" for debounce period, safe to reset
-        buttonState[encoderIndex] = IDLE;
+      buttonState[encoderIndex] = IDLE;
       }
       lastNotPressedTime[encoderIndex] = currentTime;
     } else {
@@ -1089,16 +1099,24 @@ static void resetCtrlModeState() {
   ctrlLastVolume = -1;
 }
 
-void showCtrlVolumeChange(int volume) {
+FLASHMEM void showCtrlVolumeChange(int volume) {
   ctrlVolumeOverlayValue = constrain(volume, 0, maxY);
   ctrlVolumeOverlayActive = true;
   ctrlVolumeOverlayUntil = millis() + 600;
+}
+
+FLASHMEM void showInputGainOverlay(int gain, int maxGain) {
+  inputGainOverlayValue = constrain(gain, 0, maxGain);
+  inputGainOverlayMax = maxGain;
+  inputGainOverlayActive = true;
+  inputGainOverlayUntil = millis() + 600;
 }
 
 void refreshCtrlEncoderConfig() {
   if (!(currentMode == &draw || currentMode == &singleMode)) {
     resetCtrlModeState();
     ctrlVolumeOverlayActive = false;
+    inputGainOverlayActive = false;
     return;
   }
 
@@ -1847,7 +1865,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     return;  // Prevent other button actions from being processed
   }
 
-  
+
   if (currentMode == &velocity && match_buttons(currentButtonStates, 0, 0, 0, 9)) {  // "0009"
     if (!GLOB.singleMode) {
       switchMode(&draw);
@@ -1940,6 +1958,12 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   //}
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
+    // At y==1 in draw mode with CTRL==VOL: cycle input monitoring (off -> on -> all -> off)
+    if (currentMode == &draw && GLOB.y == 1 && ctrlMode == 1) {
+      inputMonitoringState = (inputMonitoringState + 1) % 3;  // Cycle: 0->1->2->0
+      return;  // Skip mute toggle at y==1
+    }
+    
     bool wasMuted = getMuteState(GLOB.currentChannel);
     toggleMute();
     bool isMuted = getMuteState(GLOB.currentChannel);
@@ -1947,7 +1971,10 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     if (ctrlMode == 1 && wasMuted && !isMuted) {
       SMP.channelVol[GLOB.currentChannel] = DEFAULT_CHANNEL_VOLUME;
       float channelvolume = mapf(DEFAULT_CHANNEL_VOLUME, 0, maxY, 0, 1);
-      amps[GLOB.currentChannel]->gain(channelvolume);
+      // Check if amps[channel] exists before accessing (channel 0, 9, 10, 12 are nullptr)
+      if (amps[GLOB.currentChannel] != nullptr) {
+        amps[GLOB.currentChannel]->gain(channelvolume);
+      }
 
       currentMode->pos[1] = DEFAULT_CHANNEL_VOLUME;
       Encoder[1].writeCounter((int32_t)DEFAULT_CHANNEL_VOLUME);
@@ -1972,8 +1999,8 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
     // Only activate paintMode if we're actually in draw/singleMode (safety check)
     if (currentMode == &draw || currentMode == &singleMode) {
-      paintMode = true;
-      preventPaintUnpaint = false;  // Reset flag when paintMode is activated
+    paintMode = true;
+    preventPaintUnpaint = false;  // Reset flag when paintMode is activated
     }
   }
 
@@ -2448,8 +2475,8 @@ void setup() {
       // Initialize condition to 1 if not set (for backward compatibility)
       if (note[x][y].channel != 0 && note[x][y].condition == 0) {
         note[x][y].condition = 1;
-      }
     }
+  }
   }
   Serial.println("Note probabilities initialized to 100%, conditions initialized to 1");
   
@@ -2520,6 +2547,11 @@ void setEncoderColor(int i) {
 
 
 void checkEncoders() {
+  // Track mode changes globally for this function to detect re-entry into Draw/Single modes
+  static Mode* lastSeenMode = nullptr;
+  bool modeChangedGlobal = (currentMode != lastSeenMode);
+  lastSeenMode = currentMode;
+
   // buttonString = ""; // REMOVED
   posString = "";
 
@@ -2658,25 +2690,25 @@ void checkEncoders() {
           lastEncVal[GLOB.currentChannel] = encVal;
           
           // Only update if the stored value is different
-          if (getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx) != encVal) {
-            setDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx, encVal);
-            
-            // Apply the filter changes like in filtermode page
-            switch (dft.arr) {
-              case ARR_FILTER:
-                setFilters(dft.idx, GLOB.currentChannel, false);
-                break;
-              case ARR_SYNTH:
-                // Handle synth updates if needed
-                break;
-              case ARR_DRUM:
-                setDrums(dft.idx, GLOB.currentChannel);
-                break;
-              case ARR_PARAM:
-                setParams(dft.idx, GLOB.currentChannel);
-                break;
-              default:
-                break;
+        if (getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx) != encVal) {
+          setDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx, encVal);
+          
+          // Apply the filter changes like in filtermode page
+          switch (dft.arr) {
+            case ARR_FILTER:
+              setFilters(dft.idx, GLOB.currentChannel, false);
+              break;
+            case ARR_SYNTH:
+              // Handle synth updates if needed
+              break;
+            case ARR_DRUM:
+              setDrums(dft.idx, GLOB.currentChannel);
+              break;
+            case ARR_PARAM:
+              setParams(dft.idx, GLOB.currentChannel);
+              break;
+            default:
+              break;
             }
           }
         }
@@ -2760,7 +2792,115 @@ void checkEncoders() {
 
 
     if (ctrlMode == 1) {
-      if (GLOB.y == 16) {
+      static int lastY = -1;
+      
+      bool yChanged = (GLOB.y != lastY);
+      
+      lastY = GLOB.y;
+
+      // Special handling for draw mode at y==1: control input gain instead of channel volume
+      if (currentMode == &draw && GLOB.y == 1) {
+        // Only enable encoder(1) when monitoring is ON or ALL
+        if (inputMonitoringState == 0) {
+          // Monitoring is OFF: disable encoder(1) - don't process changes
+          // Reset encoder to prevent drift
+          static int lastDisabledPos = -1;
+          extern int recMode;
+          int currentGain = (recMode == 1) ? (int)micGain : (int)lineInLevel;
+          if (lastDisabledPos != currentGain || currentMode->pos[1] != currentGain) {
+            currentMode->pos[1] = currentGain;
+            Encoder[1].writeCounter((int32_t)currentGain);
+            lastDisabledPos = currentGain;
+          }
+          // Set encoder to black/disabled color
+          Encoder[1].writeRGBCode(0x000000);
+          // Skip all encoder(1) processing when monitoring is off - continue to next encoder
+        } else {
+          // Monitoring is ON: process encoder(1) normally
+          ctrlLastChannel = -1; // Force volume control re-init when leaving y=1
+        extern int recMode;
+        static int lastInputGain = -1;
+        static bool inputGainFirstEnter = true;
+        
+        // Reset first enter flag when y changes or mode changes
+        if (yChanged || modeChangedGlobal) {
+          inputGainFirstEnter = true;
+          inputGainOverlayActive = false;  // Reset overlay when y changes
+        }
+        
+        // Enforce limits (in case they were reset by other functions like play/pause)
+        int targetMax = (recMode == 1) ? 63 : 15;
+        if (currentMode->maxValues[1] != targetMax) {
+            Encoder[1].writeMax((int32_t)targetMax);
+            Encoder[1].writeMin((int32_t)0);
+            currentMode->maxValues[1] = targetMax;
+            currentMode->minValues[1] = 0;
+            
+            // Limits were reset, meaning the encoder value was likely reset too.
+            // Force re-initialization to restore correct gain value.
+            inputGainFirstEnter = true;
+        }
+
+        if (inputGainFirstEnter) {
+          // Initialize encoder based on current input type
+          if (recMode == 1) {
+            // Mic input: use micGain (0-63)
+            Encoder[1].writeCounter((int32_t)micGain);
+            // Limits handled by enforcement above
+            currentMode->pos[1] = micGain;
+          } else {
+            // Line input: use lineInLevel (0-15)
+            Encoder[1].writeCounter((int32_t)lineInLevel);
+            // Limits handled by enforcement above
+            currentMode->pos[1] = lineInLevel;
+          }
+          lastInputGain = currentMode->pos[1];
+          inputGainFirstEnter = false;
+          
+          // Set encoder color (red for mic, blue for line) on entry
+          CRGB gainColor = (recMode == 1) ? CRGB(55, 0, 0) : CRGB(0, 0, 55);
+          Encoder[1].writeRGBCode(gainColor.r << 16 | gainColor.g << 8 | gainColor.b);
+          
+          // Always show overlay when entering y==1
+          showInputGainOverlay(currentMode->pos[1], targetMax);
+        }
+        
+        // Handle encoder changes
+        if (currentMode->pos[1] != lastInputGain) {
+          int newGain = constrain((int)currentMode->pos[1], 0, targetMax);
+          
+          if (recMode == 1) {
+            // Mic input
+            micGain = (unsigned int)newGain;
+            sgtl5000_1.micGain(micGain);
+            // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end = 1.0×GAIN_4×GAIN_2 = 0.16)
+            extern AudioMixer4 mixer_end;
+            float maxPlaybackGain = GAIN_4 * GAIN_2;  // 0.4 × 0.4 = 0.16
+            float monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
+            mixer_end.gain(3, monitorGain);
+          } else {
+            // Line input
+            lineInLevel = (unsigned int)newGain;
+            sgtl5000_1.lineInLevel(lineInLevel);
+            // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end = 1.0×GAIN_4×GAIN_2 = 0.16)
+            extern AudioMixer4 mixer_end;
+            float maxPlaybackGain = GAIN_4 * GAIN_2;  // 0.4 × 0.4 = 0.16
+            float monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
+            mixer_end.gain(3, monitorGain);
+          }
+          
+          lastInputGain = newGain;
+          Encoder[1].writeCounter((int32_t)newGain);
+          
+          // Set encoder color (red for mic, blue for line)
+          CRGB gainColor = (recMode == 1) ? CRGB(55, 0, 0) : CRGB(0, 0, 55);
+          Encoder[1].writeRGBCode(gainColor.r << 16 | gainColor.g << 8 | gainColor.b);
+          
+          // Show overlay
+          showInputGainOverlay(newGain, targetMax);
+        }
+        }  // End of monitoring ON else block
+      } else if (GLOB.y == 16) {
         int channelVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
         currentMode->pos[1] = channelVol;
         Encoder[1].writeCounter((int32_t)channelVol);
@@ -3306,12 +3446,13 @@ void showDoRecord() {
     extern unsigned int micGain;      // From VOL menu (0-63)
     
     float monitorGain = 0.0f;
+    float maxPlaybackGain = GAIN_4 * GAIN_2;  // Match loudest playback: amps×mixer1/2×mixer_end = 1.0×0.4×0.4 = 0.16
     if (recMode == 1) {
-      // Mic input: map micGain (0-63) to mixer gain (0.0-0.8)
-      monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, 0.8f);
+      // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
+      monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
     } else {
-      // Line input: map lineInLevel (0-15) to mixer gain (0.0-0.8)
-      monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, 0.8f);
+      // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
+      monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
     }
     
     mixer_end.gain(3, monitorGain);
@@ -3593,6 +3734,47 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   checkTouchInputs();
   checkPendingSampleNotes();
   
+  // === INPUT MONITORING WHEN IN DRAW MODE ===
+  // Enable if monitoring toggle is ON (y==1 only) or ALL (always on), and not in record mode
+  static bool drawModeInputMonitorActive = false;
+  bool shouldMonitor = false;
+  if (currentMode == &draw && currentMode->name != "RECORD_MODE") {
+    if (inputMonitoringState == 1 && GLOB.y == 1) {
+      // ON mode: only when y==1
+      shouldMonitor = true;
+    } else if (inputMonitoringState == 2) {
+      // ALL mode: always on regardless of y position
+      shouldMonitor = true;
+    }
+  }
+  
+  if (shouldMonitor) {
+    extern AudioMixer4 mixer_end;
+    extern AudioAmplifier audioInputAmp;
+    extern int recMode;
+    
+    // Enable input monitoring with current gain settings
+    audioInputAmp.gain(1.0f);  // Unity gain, no additional amplification
+    
+    float monitorGain = 0.0f;
+    float maxPlaybackGain = GAIN_4 * GAIN_2;  // Match loudest playback: amps×mixer1/2×mixer_end = 1.0×0.4×0.4 = 0.16
+    if (recMode == 1) {
+      // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
+      monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
+    } else {
+      // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
+      monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
+    }
+    
+    mixer_end.gain(3, monitorGain);
+    drawModeInputMonitorActive = true;
+  } else if (drawModeInputMonitorActive && currentMode->name != "RECORD_MODE") {
+    // Disable monitoring when conditions are no longer met
+    extern AudioMixer4 mixer_end;
+    mixer_end.gain(3, 0.0f);
+    drawModeInputMonitorActive = false;
+  }
+  
   // Update smooth filter mixer gains
   updateMixerGains(GLOB.currentChannel);
 
@@ -3703,6 +3885,15 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
   }
 
+  // Draw input gain overlay when in draw mode at y==1
+  if (inputGainOverlayActive && currentMode == &draw && GLOB.y == 1 && ctrlMode == 1) {
+    if (millis() <= inputGainOverlayUntil) {
+      drawInputGainOverlay(inputGainOverlayValue, inputGainOverlayMax);
+    } else {
+      inputGainOverlayActive = false;
+    }
+  }
+
   FastLEDshow();
 
    if (stepIsDue) {
@@ -3713,7 +3904,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   yield();
 }
 
-void triggerExternalOneBlink() {
+FLASHMEM void triggerExternalOneBlink() {
   if (MIDI_CLOCK_SEND) return;        // External clock only
   if (isNowPlaying) return;           // Only blink while waiting to start
 
@@ -3728,7 +3919,7 @@ void triggerExternalOneBlink() {
   externalOneBlinkUntil = millis() + beatDurationMs;
 }
 
-void updateExternalOneBlink() {
+FLASHMEM void updateExternalOneBlink() {
   if (!externalOneBlinkActive) return;
   if ((long)(millis() - externalOneBlinkUntil) >= 0) {
     externalOneBlinkActive = false;
@@ -3962,7 +4153,7 @@ void tmpMuteAll(bool pressed) {
 }
 
 
-void toggleMute() {
+FLASHMEM void toggleMute() {
   bool currentMuteState = getMuteState(GLOB.currentChannel);
   setMuteState(GLOB.currentChannel, !currentMuteState);
 }
@@ -4087,7 +4278,7 @@ void pause() {
   // Send MIDI Stop FIRST (before any other operations) to advance it by ~5ms
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
     MIDI.sendRealTime(midi::Stop);  // Send as early as possible for better sync
-  }
+    }
   
   // MIDI clock timer continues running in background - never stopped for precise timing
   // Don't reset clock state - timer keeps running in background
@@ -4491,7 +4682,7 @@ void playNote() {
     }
     
     // Update page after wrapping
-    GLOB.page = GLOB.edit;
+      GLOB.page = GLOB.edit;
     
     // Simple loopCount logic: increment when we transition TO page 1, beat 1 while playing
     static bool wasAtStart = false;  // Track if we were at page 1, beat 1 in previous call
@@ -5024,7 +5215,7 @@ void updateVolume() {
   if (vol >= 0.0 && vol <= 1.0) sgtl5000_1.volume(vol);  // Ensure vol is in valid range
 }
 
-void updatePreviewVolume() {
+FLASHMEM void updatePreviewVolume() {
   unsigned int level = constrain(previewVol, 0u, 5u);
   // Map previewVol (0-5) to gain (0.0-0.5): vol = previewVol * 0.1f
   float gain = (float)level * 0.1f;  // Map 0→0.0, 5→0.5
@@ -5033,12 +5224,12 @@ void updatePreviewVolume() {
   // - sound0 (voice0) → envelope0 → mixer0 channel 0
   // - playSdWav1 → ampPreview → mixer0 channel 1
   // Both paths should have the same total gain for consistent volume
-  mixer0.gain(0, gain);  // sound0 preview volume
+  mixer0.gain(0, gain * 0.8f);  // sound0 preview volume (20% reduction)
   mixer0.gain(1, gain);  // ampPreview path - apply same gain as voice0
   ampPreview.gain(1.0f);  // Set ampPreview to unity gain (volume controlled by mixer0)
 }
 
-void updateLineOutLevel() {
+FLASHMEM void updateLineOutLevel() {
   unsigned int newLevel = constrain(currentMode->pos[0], LINEOUT_MIN, LINEOUT_MAX);
   if (newLevel != currentMode->pos[0]) {
     currentMode->pos[0] = newLevel;
@@ -5701,7 +5892,7 @@ void initPageMutes() {
 }
 
 // Get mute state for a channel, considering PMOD setting
-bool getMuteState(int channel) {
+FLASHMEM bool getMuteState(int channel) {
   if (SMP_PATTERN_MODE) {
     // Use page-specific mutes when PMOD is enabled
     return pageMutes[GLOB.edit - 1][channel];  // GLOB.edit is 1-indexed, array is 0-indexed
@@ -5712,7 +5903,7 @@ bool getMuteState(int channel) {
 }
 
 // Set mute state for a channel, considering PMOD setting
-void setMuteState(int channel, bool muted) {
+FLASHMEM void setMuteState(int channel, bool muted) {
   if (SMP_PATTERN_MODE) {
     // Set page-specific mute when PMOD is enabled
     pageMutes[GLOB.edit - 1][channel] = muted;
@@ -5727,14 +5918,14 @@ void setMuteState(int channel, bool muted) {
 // No copying between them when switching PMOD modes
 
 // Unmute all channels in audio system
-void unmuteAllChannels() {
+FLASHMEM void unmuteAllChannels() {
   for (int ch = 0; ch < maxY; ch++) {
     SMP.mute[ch] = false;  // Unmute in audio system
   }
 }
 
 // Apply saved mutes after PMOD switch
-void applyMutesAfterPMODSwitch() {
+FLASHMEM void applyMutesAfterPMODSwitch() {
   for (int ch = 0; ch < maxY; ch++) {
     bool muteState = getMuteState(ch);
     SMP.mute[ch] = muteState;  // Apply to audio system

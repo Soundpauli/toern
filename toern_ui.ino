@@ -313,8 +313,18 @@ void drawBase() {
 
    // 4/4-Takt-Hilfslinien in Zeile 1 (z. B. Start jeder Viertel)
    // Mark every 4th position across the full width
+   // Show monitoring state: dark white (off), dark green (on), dark yellow (all)
+   extern int inputMonitoringState;
+   CRGB helperColor;
+   if (inputMonitoringState == 0) {
+     helperColor = CRGB(10, 10, 10);  // Dark white when off
+   } else if (inputMonitoringState == 1) {
+     helperColor = CRGB(0, 30, 0);    // Dark green when on (y==1 only)
+   } else {
+     helperColor = CRGB(30, 30, 0);   // Dark yellow when all (always on)
+   }
    for (unsigned int x = 1; x <= maxX - 3; x += 4) {
-    light(x, 1, CRGB(10, 10, 10));  // türkisfarbene Taktmarkierung
+    light(x, 1, helperColor);
   }
 
   drawStatus();
@@ -948,6 +958,36 @@ FLASHMEM void drawCtrlVolumeOverlay(int volume) {
   for (int x = startX; x <= endX; ++x) {
     for (int y = 1; y <= volume; ++y) {
       uint8_t hue = mapf(y, 1, 16, 0, 96);         // Red -> Green
+      uint8_t value = mapf(y, 1, 16, 180, 255);    // Brighter towards the top
+      CRGB color = CHSV(hue, 255, value);
+      light(x, y, color);
+    }
+  }
+}
+
+FLASHMEM void drawInputGainOverlay(int gain, int maxGain) {
+  const int overlayWidth = 2;
+  const int startX = 6;
+  const int endX = min((int)maxX, startX + overlayWidth - 1);
+  gain = constrain(gain, 0, maxGain);
+  maxGain = max(maxGain, 1);  // Prevent division by zero
+
+  if (gain == 0) {
+    // Show a dim blue dot to indicate zero gain
+    for (int x = startX; x <= endX; ++x) {
+      light(x, 1, CRGB(0, 0, 60));
+    }
+    return;
+  }
+
+  // Map gain to display height (1-16)
+  int displayHeight = mapf(gain, 0, maxGain, 0, 16);
+  displayHeight = constrain(displayHeight, 1, 16);
+
+  for (int x = startX; x <= endX; ++x) {
+    for (int y = 1; y <= displayHeight; ++y) {
+      // Blue to violet gradient: hue from 160 (blue) to 240 (violet)
+      uint8_t hue = mapf(y, 1, 16, 160, 240);
       uint8_t value = mapf(y, 1, 16, 180, 255);    // Brighter towards the top
       CRGB color = CHSV(hue, 255, value);
       light(x, y, color);

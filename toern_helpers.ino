@@ -320,6 +320,23 @@ void startFastRecord() {
 
   // 2) Reset our write index and drop counter
   int ch = GLOB.currentChannel;
+  
+  // Immediately stop any playing sound on the recording channel
+  extern AudioEffectEnvelope *envelopes[];
+  if (ch >= 0 && ch < 15 && envelopes[ch] != nullptr) {
+    envelopes[ch]->noteOff();
+  }
+  
+  // Also stop all notes on the sampler for channels 0-8 (sample channels)
+  // Stop notes in the typical MIDI range (36-96 covers most sample pitches)
+  if (ch >= 0 && ch <= 8) {
+    extern arraysampler _samplers[];
+    // Stop notes in a reasonable range (MIDI note 36-96, covering most sample pitches)
+    for (int note = 36; note <= 96; note++) {
+      _samplers[ch].noteEvent(note, 0, false, false);
+    }
+  }
+  
   fastRecWriteIndex[ch] = 0;
   // For ON1 mode, don't drop initial audio - we want a perfect loop from beat 1
   // For other modes, drop first 200ms to avoid noise/click at start
@@ -339,13 +356,14 @@ void startFastRecord() {
   extern unsigned int micGain;      // From VOL menu (0-63)
   extern AudioMixer4 mixer_end;
   
-    float monitorGain = 0.0;
+  float monitorGain = 0.0;
+  float maxPlaybackGain = 0.4f * 0.4f;  // GAIN_4 * GAIN_2 = 0.16 (match loudest playback)
   if (recMode == 1) {
-    // Mic input: map micGain (0-63) to mixer gain (0.0-0.8)
-    monitorGain = mapf(micGain, 0, 63, 0.0, 0.8);
+    // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
+    monitorGain = mapf(micGain, 0, 63, 0.0, maxPlaybackGain);
   } else {
-    // Line input: map lineInLevel (0-15) to mixer gain (0.0-0.8)
-    monitorGain = mapf(lineInLevel, 0, 15, 0.0, 0.8);
+    // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
+    monitorGain = mapf(lineInLevel, 0, 15, 0.0, maxPlaybackGain);
   }
   mixer_end.gain(3, monitorGain);
 

@@ -118,7 +118,6 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 7,  2);   // previewVol default (0-5 range, middle = 2)
     EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
     EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
-    EEPROM.write(EEPROM_DATA_START + 10, 0);   // monitorLevel default (0 = OFF)
     EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
     EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
     EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
@@ -141,7 +140,6 @@ void loadMenuFromEEPROM() {
   previewVol   = (int8_t) EEPROM.read(EEPROM_DATA_START + 7);
   flowMode     = (int8_t) EEPROM.read(EEPROM_DATA_START + 8);
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
-  monitorLevel = (int8_t) EEPROM.read(EEPROM_DATA_START + 10);
   simpleNotesView = (int) EEPROM.read(EEPROM_DATA_START + 11);
   loopLength = (int) EEPROM.read(EEPROM_DATA_START + 12);
   ledModules = (int) EEPROM.read(EEPROM_DATA_START + 13);
@@ -347,11 +345,10 @@ FLASHMEM void showMenu() {
   
   // Set encoder colors to match indicators based on main setting
   if (mainSetting == 4 && recMode == 1) {
-    // REC page in MIC mode: L[R] indicator for encoder 3
-    CRGB indicatorColor = getIndicatorColor('R'); // Red
+    // REC page in MIC mode: no encoder indicators (encoder(2) removed)
     Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
     Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator - removed)
     Encoder[3].writeRGBCode(0x000000); // Black (no indicator)
   } else if (mainSetting == 15) {
     // AI page: multiple indicators - L[G], L[Y], L[W], L[X]
@@ -494,12 +491,11 @@ FLASHMEM void showRecsMenu() {
   
   // Set encoder colors based on main setting
   if (mainSetting == 4 && recMode == 1) {
-    // REC page in MIC mode: L[R] indicator for encoder 3
-    CRGB redColor = getIndicatorColor('R'); // Red
+    // REC page in MIC mode: no encoder indicators (encoder(2) removed)
     CRGB orangeColor = getIndicatorColor('O'); // Orange
     Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
     Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
+    Encoder[2].writeRGBCode(0x000000); // Black (no indicator - removed)
     Encoder[3].writeRGBCode(orangeColor.r << 16 | orangeColor.g << 8 | orangeColor.b);
   } else {
     // Default: L[O] indicator for encoder 4 (orange)
@@ -697,11 +693,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 4: // REC - Recording Mode (menu/mic)
       showIcons(ICON_REC, UI_DIM_RED);
       showIcons(ICON_REC2, UI_DIM_WHITE);
-      // New indicator system: menu/mic: S[G] | | M[W] | L[X]
-      // Only show L[R] if value is MIC (recMode == 1)
-      if (recMode == 1) {
-        drawIndicator('L', 'R', 3);  // Encoder 3: Large Red (only for mic page)
-      }
+      // No red indicator for encoder(2) - removed
       drawRecMode();
       break;
       
@@ -998,25 +990,8 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
   }
   
   switch (setting) {
-    case 4: // REC page - Mic Gain control
-      static int lastMicGain = -1;
-      
-      // Set encoder counter only on first entry
-      if (recMenuFirstEnter) {
-        Encoder[2].writeCounter((int32_t)micGain);
-        Encoder[2].writeMax((int32_t)64);
-        Encoder[2].writeMin((int32_t)0);
-        recMenuFirstEnter = false;
-      }
-      
-      if (currentMode->pos[2] != lastMicGain) {
-        micGain = currentMode->pos[2];
-        saveSingleModeToEEPROM(9, micGain);
-        sgtl5000_1.micGain(micGain);
-        drawMainSettingStatus(setting);
-        drawAdditionalFeatures(setting);
-        lastMicGain = micGain;
-      }
+    case 4: // REC page - Mic Gain control removed (encoder(2) disabled)
+      // Encoder(2) functionality removed - no mic gain control in REC menu
       break;
       
     case 15: { // AI page - Base Start (enc1), Base End (enc2), Target Count (enc0)
@@ -1857,25 +1832,7 @@ FLASHMEM void drawRecMode() {
 
   if (recMode == 1) {
     drawText("MIC", 2, 3, UI_WHITE);
-    
-    // Draw mic gain meter vertically on x=16 - white to red gradient
-    int activeLength = mapf(micGain, 0, 64, 0, 16);
-    for (int y = 1; y <= 16; y++) {
-      if (y <= activeLength) {
-        // Gradient from white -> red
-        float blend = float(y - 1) / max(1, activeLength - 1);  // Prevent div by zero
-        CRGB grad = CRGB(
-          255 * (1.0 - blend) + 255 * blend,  // Red component
-          255 * (1.0 - blend) + 0 * blend,    // Green component  
-          255 * (1.0 - blend) + 0 * blend     // Blue component
-        );
-        light(16, y, grad);
-      } else {
-        // Empty part stays black
-        light(16, y, CRGB(0, 0, 0));
-      }
-    }
-    
+    // Mic gain level display removed (no display on x=16)
     recInput = AUDIO_INPUT_MIC;
   }
   if (recMode == -1) {
@@ -1931,21 +1888,6 @@ FLASHMEM void drawPreviewVol() {
   char label[8];
   //snprintf(label, sizeof(label), "PV %d", previewVol);  // Display 0-5
   //drawText(label, 2, 3, UI_CYAN);
-  FastLEDshow();
-}
-
-FLASHMEM void drawMonitorLevel() {
-  if (monitorLevel == 0) {
-    drawText("OFF", 2, 3, UI_RED);
-  } else if (monitorLevel == 1) {
-    drawText("LOW", 2, 3, UI_GREEN);
-  } else if (monitorLevel == 2) {
-    drawText("MED", 2, 3, UI_YELLOW);
-  } else if (monitorLevel == 3) {
-    drawText("HIGH", 2, 3, UI_ORANGE);
-  } else if (monitorLevel == 4) {
-    drawText("FULL", 2, 3, UI_BLUE);
-  }
   FastLEDshow();
 }
 
