@@ -319,9 +319,9 @@ void drawBase() {
    if (inputMonitoringState == 0) {
      helperColor = CRGB(10, 10, 10);  // Dark white when off
    } else if (inputMonitoringState == 1) {
-     helperColor = CRGB(0, 30, 0);    // Dark green when on (y==1 only)
+     helperColor = CRGB(30, 30, 0);    // Dark yellow when on (y==1 only)
    } else {
-     helperColor = CRGB(30, 30, 0);   // Dark yellow when all (always on)
+     helperColor = CRGB(0, 30, 0);   // Dark green when all (always on)
    }
    for (unsigned int x = 1; x <= maxX - 3; x += 4) {
     light(x, 1, helperColor);
