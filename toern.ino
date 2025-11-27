@@ -477,7 +477,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, maxY, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode volume_bpm = { "VOLUME_BPM", { 11, 11, 0, BPM_MIN }, { 30, 30, 1, BPM_MAX }, { 11, 11, 0, 100 }, { 0x00FFFF, 0xFFFFFF, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT
+Mode volume_bpm = { "VOLUME_BPM", { 11, 11, 0, BPM_MIN }, { 30, 30, 1, BPM_MAX }, { 11, 11, 0, 100 }, { 0x000000, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoders 0-1 black
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -963,7 +963,7 @@ void staticThresholds(i2cEncoderLibV2 *obj) {
 
 // Debounce tracking for button presses/releases
 static unsigned long lastButtonChange[NUM_ENCODERS] = {0, 0, 0, 0};
-const unsigned long btnDebounce = 20;  // Debounce time in milliseconds
+const unsigned long btnDebounce = 30;  // Debounce time in milliseconds
 
 void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
@@ -1145,6 +1145,13 @@ void switchMode(Mode *newMode) {
   GLOB.singleMode = false;
   paintMode = false;
   oldMode = currentMode;
+  
+  // Additional safety: Reset paintMode when leaving draw/singleMode
+  if ((oldMode == &draw || oldMode == &singleMode) && (newMode != &draw && newMode != &singleMode)) {
+    paintMode = false;
+    unpaintMode = false;
+    preventPaintUnpaint = false;
+  }
 
   if (currentMode == &recordMode && newMode != &recordMode) {
     extern AudioMixer4 mixer_end;
@@ -1300,6 +1307,10 @@ void switchMode(Mode *newMode) {
     }
     
     if (currentMode == &volume_bpm) {
+      // Set encoder 0 and 1 to black (no color)
+      Encoder[0].writeRGBCode(0x000000);
+      Encoder[1].writeRGBCode(0x000000);
+      
       // Set encoder 1 position to match current brightness
       // ledBrightness = (pos[1] * 10) - 46, so pos[1] = (ledBrightness + 46) / 10
       unsigned int brightnessPos = (ledBrightness + 46) / 10;
@@ -1959,8 +1970,11 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
-    paintMode = true;
-    preventPaintUnpaint = false;  // Reset flag when paintMode is activated
+    // Only activate paintMode if we're actually in draw/singleMode (safety check)
+    if (currentMode == &draw || currentMode == &singleMode) {
+      paintMode = true;
+      preventPaintUnpaint = false;  // Reset flag when paintMode is activated
+    }
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
@@ -2679,6 +2693,7 @@ void checkEncoders() {
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
         note[GLOB.x][GLOB.y].velocity = defaultVelocity;
       }
+      // Safety check: Only allow paintMode when actually in singleMode
       if (paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
         // Only set probability to 100% if slot was empty (preserve existing probability)
         if (note[GLOB.x][GLOB.y].channel == 0) {
@@ -2690,7 +2705,8 @@ void checkEncoders() {
       }
 
 
-      if (unpaintMode && !preventPaintUnpaint) {
+      // Safety check: Only allow unpaintMode when actually in draw/singleMode
+      if (unpaintMode && (currentMode == &draw || currentMode == &singleMode) && !preventPaintUnpaint) {
         if (GLOB.singleMode) {
           if (note[GLOB.x][GLOB.y].channel == GLOB.currentChannel) {
             note[GLOB.x][GLOB.y].channel = 0;

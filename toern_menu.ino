@@ -828,12 +828,12 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 26: // VOL - Submenu
-      showIcons(ICON_VOL, CRGB(255, 0, 0)); // Red volume icon
-      drawText("VOL", 2, 3, CRGB(255, 255, 0)); // Yellow text
+      showIcons(ICON_VOL, CRGB(55, 0, 0)); // Red volume icon
+      drawText("VOL", 2, 3, CRGB(55, 55, 0)); // Yellow text
       break;
       
     case 27: { // MAIN - Headphone output volume
-      drawText("MAIN", 2, 10, CRGB(255, 255, 0)); // Yellow
+      drawText("MAIN", 2, 10, CRGB(55, 55, 0)); // Yellow
       extern Mode *currentMode;
       extern struct GlobalVars GLOB;
       
@@ -841,7 +841,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       float vol = GLOB.vol / 10.0f;
       char volText[8];
       snprintf(volText, sizeof(volText), "%.2f", vol);
-      drawText(volText, 2, 3, CRGB(255, 100, 0)); // Orange-red gradient
+      drawText(volText, 2, 3, CRGB(55, 10, 0)); // Orange-red gradient
       
       // Dynamic gradient color based on volume level
       int r = (int)(vol * 255.0f);
@@ -853,7 +853,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 28: { // LINE - Line output volume
-      drawText("LINE", 2, 10, CRGB(255, 255, 0)); // Yellow
+      drawText("LINE", 2, 10, CRGB(55, 55, 0)); // Yellow
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
       snprintf(levelText, sizeof(levelText), "%d", lineOutLevelSetting);
@@ -866,7 +866,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 29: { // PREV - Preview volume
-      drawText("PREV", 2, 10, CRGB(255, 255, 0)); // Yellow
+      drawText("PREV", 2, 10, CRGB(55, 55, 0)); // Yellow
       extern unsigned int previewVol;
       
       // Calculate volume from previewVol (0-5) to float (0.0-0.5)
@@ -882,27 +882,27 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 30: { // MIC - Microphone gain
-      drawText("MIC", 2, 10, CRGB(255, 255, 0)); // Yellow
+      drawText("MIC", 2, 10, CRGB(55, 55, 0)); // Yellow
       extern unsigned int micGain;
       char gainText[8];
       snprintf(gainText, sizeof(gainText), "%d", micGain);
-      drawText(gainText, 2, 3, CRGB(255, 0, 0)); // Red
+      drawText(gainText, 2, 3, CRGB(55, 0, 0)); // Red
       
       // Red color for encoder
-      CRGB redColor = CRGB(255, 0, 0);
+      CRGB redColor = CRGB(55, 0, 0);
       Encoder[2].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
       break;
     }
     
     case 31: { // LVL - Line input level
-      drawText("LVL", 2, 10, CRGB(255, 255, 0)); // Yellow
+      drawText("LVL", 2, 10, CRGB(55, 55, 0)); // Yellow
       extern unsigned int lineInLevel;
       char levelText[8];
       snprintf(levelText, sizeof(levelText), "%d", lineInLevel);
-      drawText(levelText, 2, 3, CRGB(0, 0, 255)); // Blue
+      drawText(levelText, 2, 3, CRGB(0, 0, 55)); // Blue
       
       // Blue color for encoder
-      CRGB blueColor = CRGB(0, 0, 255);
+      CRGB blueColor = CRGB(0, 0, 55);
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
       break;
     }
