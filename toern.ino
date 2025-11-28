@@ -1,4 +1,4 @@
-#define VERSION "v1.2"
+#define VERSION "v1.3"
 //extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
@@ -9,7 +9,7 @@
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
 
 //STILL FREE PINS: 24, 25, 31, 22, 5, 15, 2, 4, 14, 9, 32, 33
-static const int FAST_DROP_BLOCKS = 40;  // ≈200ms @ 44100Hz with 128-sample blocks
+static const int FAST_DROP_BLOCKS = 5;  // ≈25ms @ 44100Hz with 128-sample blocks (reduced from 200ms to minimize trimming)
 static int fastDropRemaining = 0;
 volatile bool stepIsDue = false;
 
@@ -109,7 +109,8 @@ void updatePreviewVolume();
 //elapsedMillis recFlushTimer;
 elapsedMillis recTime;
 
-
+bool showChannelNr = true;
+int cursorType = 0;  // 0=NORM, 1=BIG (CHNR uses showChannelNr=true, cursorType=0)
 bool lastPinsConnected = false;
 unsigned long lastChangeTime = 0;
 const unsigned long debounceDelay = 500;  // 100ms debounce
@@ -137,8 +138,9 @@ void resetPongGame();
 void triggerGridNote(unsigned int globalX, unsigned int y);
 void drawCtrlVolumeOverlay(int volume);
 void drawInputGainOverlay(int gain, int maxGain);
+void drawChannelNrOverlay(int channelNum, int channelIdx);
 void drawSampleLoadOverlay();
-static int lastDefaultFastFilterValue[NUM_CHANNELS] = {0};
+static int16_t lastDefaultFastFilterValue[NUM_CHANNELS] = {0};  // Changed from int to int16_t (32 bytes saved)
 
 enum ValueDisplayMode {
   DISPLAY_NUMERIC,
@@ -283,7 +285,7 @@ float rateFactor = 44117.0 / 44100.0;
 
 unsigned int infoIndex = 0;
 
-int lastFile[9] = { 0 };
+int8_t lastFile[9] = { 0 };  // Changed from int to int8_t (27 bytes saved)
 bool freshPaint, tmpMute = false;
 bool preventPaintUnpaint = false;  // Flag to prevent paint/unpaint after certain operations
 
@@ -309,9 +311,10 @@ bool patternChangeActive = false;
 
 
 
-String oldPosString, posString = "1:2:";
+// Replaced String with hash for memory efficiency (~100-200 bytes saved)
+uint32_t oldPosHash = 0;
 // String buttonString, oldButtonString = "0000"; // REMOVED
-int oldButtons[NUM_ENCODERS] = { 0, 0, 0, 0 };  // ADDED: To store previous button states
+uint8_t oldButtons[NUM_ENCODERS] = { 0, 0, 0, 0 };  // Changed from int to uint8_t (4 bytes saved per element)
 
 unsigned long playStartTime = 0;  // To track when play(true) was last called
 
@@ -371,6 +374,10 @@ static bool inputGainOverlayActive = false;
 static unsigned long inputGainOverlayUntil = 0;
 static int inputGainOverlayValue = 0;
 static int inputGainOverlayMax = 63;
+
+static bool channelNrOverlayActive = false;
+static unsigned long channelNrOverlayUntil = 0;
+static int channelNrOverlayChannel = 0;
 static const int DEFAULT_CHANNEL_VOLUME = 10;
 
 bool isRecording = false;
@@ -738,7 +745,7 @@ FilterType defaultFilter[maxFiles] = { PASS };
 const char* const activeMidiSetType[6] PROGMEM = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
 
 // Arrays to track multiple encoders
-int buttons[NUM_ENCODERS] = { 0 };  // Tracks the current state of each encoder
+uint8_t buttons[NUM_ENCODERS] = { 0 };  // Changed from int to uint8_t (12 bytes saved)
 unsigned long buttonPressStartTime[NUM_ENCODERS] = { 0 };
 unsigned long pressDuration[NUM_ENCODERS] = { 0 };
 unsigned long longPressDuration[NUM_ENCODERS] = { 200, 200, 200, 200 };  // 300ms for long press
@@ -925,17 +932,7 @@ FLASHMEM void setVelocity() {
     }
     note[GLOB.x][GLOB.y].condition = condValue;
     
-    // Debug message to serial
-    Serial.print("Condition changed: step=");
-    Serial.print(currentCondStep);
-    Serial.print(", value=");
-    Serial.print(condValue);
-    if (condValue == 1) Serial.println(" (every loop)");
-    else if (condValue == 2) Serial.println(" (every 2nd loop)");
-    else if (condValue == 4) Serial.println(" (every 4th loop)");
-    else if (condValue == 8) Serial.println(" (every 8th loop)");
-    else if (condValue == 16) Serial.println(" (every 16th loop)");
-    else Serial.println();
+    // Condition changed (debug removed)
   }
   
   //CHANNEL VOLUME
@@ -953,8 +950,9 @@ FLASHMEM void setVelocity() {
 
 
 void staticButtonPushed(i2cEncoderLibV2 *obj) {
-  encoder_button_pushed(obj, currentEncoderIndex);
   pressed[currentEncoderIndex] = true;
+  encoder_button_pushed(obj, currentEncoderIndex);
+  
 }
 
 
@@ -971,8 +969,8 @@ void staticThresholds(i2cEncoderLibV2 *obj) {
 
 
 
-// Debounce tracking for button presses/releases
-static unsigned long lastButtonChange[NUM_ENCODERS] = {0, 0, 0, 0};
+// Debounce tracking for button presses/releases (in fast RAM for interrupt handlers)
+unsigned long lastButtonChange[NUM_ENCODERS] = {0, 0, 0, 0};
 const unsigned long btnDebounce = 30;  // Debounce time in milliseconds
 
 void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
@@ -1068,8 +1066,27 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
 }
 
 // Helper function for checkMode
-bool match_buttons(const int states[], int b0, int b1, int b2, int b3) {
+bool match_buttons(const uint8_t states[], int b0, int b1, int b2, int b3) {
   return states[0] == b0 && states[1] == b1 && states[2] == b2 && states[3] == b3;
+}
+
+// Helper function to check if previous button state was 0000
+bool was_buttons_0000(const uint8_t prevStates[]) {
+  return prevStates[0] == 0 && prevStates[1] == 0 && prevStates[2] == 0 && prevStates[3] == 0;
+}
+
+// Helper function to check if previous button state was NOT 0000
+bool was_not_buttons_0000(const uint8_t prevStates[]) {
+  return !was_buttons_0000(prevStates);
+}
+
+// Hash function for String (simple djb2-like hash)
+uint32_t hashString(const String& str) {
+  uint32_t hash = 5381;
+  for (size_t i = 0; i < str.length(); i++) {
+    hash = ((hash << 5) + hash) + str.charAt(i);  // hash * 33 + char
+  }
+  return hash;
 }
 
 
@@ -1181,7 +1198,7 @@ void switchMode(Mode *newMode) {
     //RESET left encoder
     Encoder[0].begin(
       i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
-      | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_DISABLE
+      | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_ENABLE
       | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
   }
   /// NEW ACTIONS
@@ -1470,7 +1487,7 @@ if (currentMode == &draw || currentMode == &singleMode){
 }
 }
 
-void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
+void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   //checkFastRec();
 
   
@@ -1503,7 +1520,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  if (GLOB.y != 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0)) {  // "0200"
+  if (GLOB.y != 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
     if (!muteModeActive) {
       muteModeActive = true;
       muteModeReturn = currentMode;
@@ -1512,13 +1529,13 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  if (GLOB.y == 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0)) {  // "0200"
+  if (GLOB.y == 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
    //switch subpattern
     switchMode(&subpatternMode);
     GLOB.singleMode = (currentMode == &singleMode);
   }
 
-  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 9, 0, 0)) {  // "0900"
+  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 9, 0, 0) && was_not_buttons_0000(oldButtons)) {  // "0900" - must be !=0000 before
     if (tmpMute) tmpMuteAll(false);
     drawKnobColorDefault();
   }
@@ -1540,6 +1557,8 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
       for (unsigned int ny = 1; ny <= maxY; ny++) {         // Start from 1
         original[nx][ny].channel = 0;
         original[nx][ny].velocity = defaultVelocity;
+        original[nx][ny].probability = 100;  // Default probability
+        original[nx][ny].condition = 1;      // Default condition
       }
     }
 
@@ -1747,7 +1766,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     switchMode(&volume_bpm);
   }
 
-  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 2, 0)) {  // "0020"
+  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 2, 0) && was_buttons_0000(oldButtons)) {  // "0020" - must be 0000 before
     if (GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15) return;
 
     // Only update currentChannel from y-position if in draw mode (not single mode)
@@ -1789,7 +1808,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
 
-  if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
+  if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
     unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
     GLOB.velocity = velo;
     
@@ -1823,7 +1842,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     currentMode->pos[3] = condStep;
   }
 
-  if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &draw) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
+  if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &draw) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
     unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
     unsigned int chvol = SMP.channelVol[GLOB.currentChannel];
     GLOB.velocity = velo;
@@ -1882,7 +1901,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
   
 
 
-  if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0010"
+  if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
     setEnvelopeDefaultValues((unsigned int)GLOB.currentChannel);
     setFiltersDefaultValues((unsigned int)GLOB.currentChannel);
     setDrumDefaultValues((unsigned int)GLOB.currentChannel);
@@ -1926,7 +1945,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     switchMode(&draw);
   }
 
-  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 9, 0, 9)) {  // "0909"
+  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 9, 0, 9) && was_not_buttons_0000(oldButtons)) {  // "0909" - must be !=0000 before
     paintMode = false;
     unpaintMode = false;
     preventPaintUnpaint = false;  // Reset flag when paint/unpaint modes are cleared
@@ -1996,7 +2015,7 @@ void checkMode(const int currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2)) {  // "0002"
+  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
     // Only activate paintMode if we're actually in draw/singleMode (safety check)
     if (currentMode == &draw || currentMode == &singleMode) {
     paintMode = true;
@@ -2478,7 +2497,7 @@ void setup() {
     }
   }
   }
-  Serial.println("Note probabilities initialized to 100%, conditions initialized to 1");
+  // Note probabilities and conditions initialized (debug removed)
   
   // Check for reset flag file and trigger startNew() if it exists
   if (SD.exists("reset.dat")) {
@@ -2552,8 +2571,8 @@ void checkEncoders() {
   bool modeChangedGlobal = (currentMode != lastSeenMode);
   lastSeenMode = currentMode;
 
-  // buttonString = ""; // REMOVED
-  posString = "";
+  // Calculate hash of encoder positions (replaces String for memory efficiency)
+  uint32_t posHash = 0;
 
   for (int i = 0; i < NUM_ENCODERS; i++) {
     currentEncoderIndex = i;  // Ensure this is set before calling encoder methods or callbacks that might use it implicitly
@@ -2579,7 +2598,10 @@ void checkEncoders() {
       currentMode->pos[i] = rawValue;
     }
 
-    if (i != 2) posString += String(currentMode->pos[i]) + ":";  // check Encoder 0,1 & 3
+    // Build hash from encoder positions (skip encoder 2)
+    if (i != 2) {
+      posHash = (posHash << 10) | (currentMode->pos[i] & 0x3FF);  // 10 bits per encoder (0-1023 range)
+    }
 
     // Ensure buttons[i] is reset before handle_button_state if it's not sticky
     // or handle_button_state should ensure it's 0 if no event.
@@ -2643,20 +2665,40 @@ void checkEncoders() {
   }
 
   if (currentMode == &draw || currentMode == &singleMode) {
-    if (posString != oldPosString) {
-      oldPosString = posString;
+    if (posHash != oldPosHash) {
+      oldPosHash = posHash;
+      static int lastY = -1;
+      
       GLOB.x = currentMode->pos[3];
       GLOB.y = currentMode->pos[0];
+      
+      // Check y change after updating GLOB.y
+      bool yChanged = (GLOB.y != lastY);
+      lastY = GLOB.y;
+      
       //filterDrawActive = false;
       if (currentMode == &draw) {
         GLOB.currentChannel = GLOB.y - 1;
+        
+        // Show channel number overlay when y changes (if enabled and channel is valid)
+        if (yChanged && showChannelNr) {
+          // Valid channels: 1-8 only (y=2-9 maps to channels 1-8)
+          // GLOB.currentChannel = GLOB.y - 1 (0-indexed: y=2->1, y=3->2, ..., y=9->8)
+          // Display number = GLOB.currentChannel (y=2->channel 1->display "1", y=3->channel 2->display "2", etc.)
+          int channelNum = GLOB.currentChannel; // Display number equals currentChannel (1-indexed display)
+          if (channelNum >= 1 && channelNum <= 8) {
+            channelNrOverlayChannel = channelNum;
+            channelNrOverlayActive = true;
+            channelNrOverlayUntil = millis() + 800; // Show for 800ms
+          }
+        }
         FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
         int page, slot;
         if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
           int val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
           Encoder[2].writeCounter((int32_t)val);
           // Reset the last encoder value tracking when channel changes
-          static int lastEncVal[NUM_CHANNELS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+          static int16_t lastEncVal[NUM_CHANNELS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};  // Changed from int to int16_t
           lastEncVal[GLOB.currentChannel] = val;  // Sync tracking with encoder
         }
         filterfreshsetted = true;
@@ -2682,7 +2724,7 @@ void checkEncoders() {
       int page, slot;
       if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
         // Only check when encoder value actually changes to avoid excessive I2C reads/writes
-        static int lastEncVal[NUM_CHANNELS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+        static int16_t lastEncVal[NUM_CHANNELS] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};  // Changed from int to int16_t
         int encVal = currentMode->pos[2];
         
         // Only process if encoder value changed for this channel
@@ -3018,6 +3060,14 @@ void checkButtons() {
   checkFastRec();
 
   if (changed) {
+    // Filter out invalid "9" values: a "9" (long release) is only valid if previous state was 1 or 2 (not 0)
+    // This prevents ghost "9" events when transitioning from 0
+    for (int i = 0; i < NUM_ENCODERS; i++) {
+      if (buttons[i] == 9 && oldButtons[i] == 0) {
+        buttons[i] = 0;  // Invalidate: "9" can only come from state 1 or 2
+      }
+    }
+
     Serial.print("Button event for checkMode (from checkButtons): ");
     for (int i = 0; i < NUM_ENCODERS; ++i) Serial.print(buttons[i]);
     Serial.println();
@@ -3025,7 +3075,7 @@ void checkButtons() {
     // Create a temporary copy for checkMode to use, so checkMode cannot inadvertently
     // alter the state `checkButtons` intends to process for consumption logic later,
     // AND so that checkMode is working with a snapshot.
-    int snapshotButtons[NUM_ENCODERS];
+    uint8_t snapshotButtons[NUM_ENCODERS];
     memcpy(snapshotButtons, buttons, sizeof(buttons));
 
     checkMode(snapshotButtons, false);  // Pass the snapshot
@@ -3054,7 +3104,110 @@ void checkTouchInputs() {
   // 1) read raw touch values
   int tv1 = fastTouchRead(SWITCH_1);
   int tv2 = fastTouchRead(SWITCH_2);
- // int tv3 = fastTouchRead(SWITCH_3);
+  int tv3 = fastTouchRead(SWITCH_3);
+  
+  // Tap tempo for BPM menu using touch3
+  if (currentMode == &volume_bpm) {
+    static bool lastTouch3State = false;
+    static unsigned long tapTimes[4] = {0, 0, 0, 0}; // Store last 4 tap times
+    static uint8_t tapIndex = 0;
+    static unsigned long lastTapTime = 0;
+    const unsigned long TAP_TIMEOUT = 2000; // Reset if no tap for 2 seconds
+    
+    // Kalman filter state for BPM smoothing
+    static float kalmanBPM = 0.0f;  // Estimated BPM
+    static float kalmanP = 1.0f;    // Estimation error covariance
+    const float kalmanQ = 0.01f;    // Process noise covariance (small = trust model more)
+    const float kalmanR = 2.0f;     // Measurement noise covariance (larger = trust measurements less)
+    
+    bool currentTouch3State = (tv3 > touchThreshold);
+    
+    // Detect rising edge (tap)
+    if (currentTouch3State && !lastTouch3State) {
+      unsigned long currentTime = millis();
+      
+      // Reset if too much time passed since last tap
+      if (lastTapTime > 0 && (currentTime - lastTapTime) > TAP_TIMEOUT) {
+        tapIndex = 0;
+        for (uint8_t i = 0; i < 4; i++) tapTimes[i] = 0;
+        // Reset Kalman filter
+        kalmanBPM = 0.0f;
+        kalmanP = 1.0f;
+      }
+      
+      // Store tap time
+      tapTimes[tapIndex % 4] = currentTime;
+      tapIndex++;
+      lastTapTime = currentTime;
+      
+      // Calculate BPM from tap intervals (need at least 2 taps)
+      if (tapIndex >= 2) {
+        // Use last 2-4 taps to calculate average interval
+        uint8_t numTaps = min(tapIndex, (uint8_t)4);
+        unsigned long totalInterval = 0;
+        uint8_t intervalCount = 0;
+        
+        // Calculate intervals between consecutive taps
+        for (uint8_t i = 1; i < numTaps; i++) {
+          uint8_t idx1 = (tapIndex - i - 1) % 4;
+          uint8_t idx2 = (tapIndex - i) % 4;
+          if (tapTimes[idx1] > 0 && tapTimes[idx2] > 0) {
+            unsigned long interval = tapTimes[idx2] - tapTimes[idx1];
+            if (interval > 0 && interval < 3000) { // Valid interval: 0-3000ms (20-300 BPM)
+              totalInterval += interval;
+              intervalCount++;
+            }
+          }
+        }
+        
+        // Calculate BPM from average interval
+        if (intervalCount > 0) {
+          float avgInterval = (float)totalInterval / (float)intervalCount; // milliseconds per beat
+          float measuredBPM = 60000.0f / avgInterval; // BPM = 60000ms / interval_ms
+          
+          // Clamp to valid range
+          measuredBPM = constrain(measuredBPM, (float)BPM_MIN, (float)BPM_MAX);
+          
+          // Apply Kalman filter
+          if (kalmanBPM == 0.0f) {
+            // First measurement: initialize filter
+            kalmanBPM = measuredBPM;
+            kalmanP = kalmanR;
+          } else {
+            // Prediction step
+            float P_pred = kalmanP + kalmanQ;
+            
+            // Update step
+            float K = P_pred / (P_pred + kalmanR);  // Kalman gain
+            kalmanBPM = kalmanBPM + K * (measuredBPM - kalmanBPM);
+            kalmanP = (1.0f - K) * P_pred;
+          }
+          
+          // Use filtered BPM
+          float calculatedBPM = kalmanBPM;
+          calculatedBPM = constrain(calculatedBPM, (float)BPM_MIN, (float)BPM_MAX);
+          
+          // Update BPM
+          SMP.bpm = calculatedBPM;
+          currentMode->pos[3] = (unsigned int)calculatedBPM;
+          Encoder[3].writeCounter((int32_t)calculatedBPM);
+          
+          // Apply BPM immediately
+          extern void applyBPMDirectly(int bpm);
+          applyBPMDirectly((int)calculatedBPM);
+          
+          // Update display
+          extern void drawBPMScreen();
+          drawBPMScreen();
+          
+          // Note: BPM is applied via applyBPMDirectly which updates playTimer
+          // BPM value is stored in SMP.bpm and will persist in currentMode->pos[3]
+        }
+      }
+    }
+    
+    lastTouch3State = currentTouch3State;
+  }
 
   // 2) threshold into boolean states
   bool newTouchState[2];
@@ -3390,7 +3543,7 @@ void showDoRecord() {
   static unsigned long recordingStartTime = 0;
   static bool playbackActive = false;
   static unsigned long playbackStartTime = 0;
-  static String lastModeName = "";
+  static uint32_t lastModeNameHash = 0;  // Replaced String with hash for memory efficiency
   
   // Externs
   extern bool disableThresholdFlag;
@@ -3403,8 +3556,9 @@ void showDoRecord() {
   extern elapsedMillis mRecsecs;
   
   // === MODE ENTRY INITIALIZATION ===
-  if (lastModeName != currentMode->name) {
-    lastModeName = currentMode->name;
+  uint32_t currentModeNameHash = hashString(currentMode->name);
+  if (currentModeNameHash != lastModeNameHash) {
+    lastModeNameHash = currentModeNameHash;
     state = STATE_NORMAL;
     thresholdActive = false;
     playbackActive = false;
@@ -3894,6 +4048,17 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
   }
 
+  // Draw channel number overlay when in draw mode
+  if (channelNrOverlayActive && currentMode == &draw && showChannelNr) {
+    if (millis() <= channelNrOverlayUntil && GLOB.y <= 9) {
+      // Pass both channel number (1-indexed for display) and channel index (0-indexed for color)
+      // Only render if y <= 9 (channels 1-8)
+      drawChannelNrOverlay(channelNrOverlayChannel, GLOB.currentChannel);
+    } else {
+      channelNrOverlayActive = false;
+    }
+  }
+
   FastLEDshow();
 
    if (stepIsDue) {
@@ -3952,6 +4117,8 @@ FLASHMEM void shiftNotes() {
       for (unsigned int ny = 1; ny <= maxY; ny++) {         // Start from 1
         tmp[nx][ny].channel = 0;
         tmp[nx][ny].velocity = defaultVelocity;
+        tmp[nx][ny].probability = 100;  // Default probability
+        tmp[nx][ny].condition = 1;      // Default condition
       }
     }
 
@@ -3969,6 +4136,8 @@ FLASHMEM void shiftNotes() {
           }
           tmp[newposX][ny].channel = GLOB.currentChannel;
           tmp[newposX][ny].velocity = note[nx][ny].velocity;
+          tmp[newposX][ny].probability = note[nx][ny].probability;
+          tmp[newposX][ny].condition = note[nx][ny].condition;
         }
       }
     }
@@ -3992,6 +4161,8 @@ FLASHMEM void shiftNotes() {
       for (unsigned int ny = 1; ny <= maxY; ny++) {         // Start from 1
         tmp[nx][ny].channel = 0;
         tmp[nx][ny].velocity = defaultVelocity;
+        tmp[nx][ny].probability = 100;  // Default probability
+        tmp[nx][ny].condition = 1;      // Default condition
       }
     }
 
@@ -4056,14 +4227,20 @@ FLASHMEM void shiftNotes() {
             } else if (newposY > maxY) {
               newposY = 1;
             }
-            // Store the velocity before clearing
+            // Store the note data before clearing
             int originalVelocity = pageTmp[nx][ny].velocity;
+            uint8_t originalProbability = pageTmp[nx][ny].probability;
+            uint8_t originalCondition = pageTmp[nx][ny].condition;
             // Clear the old position
             pageTmp[nx][ny].channel = 0;
             pageTmp[nx][ny].velocity = defaultVelocity;
+            pageTmp[nx][ny].probability = 100;  // Default probability
+            pageTmp[nx][ny].condition = 1;      // Default condition
             // Set the new position
             pageTmp[nx][newposY].channel = GLOB.currentChannel;
             pageTmp[nx][newposY].velocity = originalVelocity;
+            pageTmp[nx][newposY].probability = originalProbability;
+            pageTmp[nx][newposY].condition = originalCondition;
           }
         }
       }
@@ -4079,14 +4256,20 @@ FLASHMEM void shiftNotes() {
             } else if (newposY > maxY) {
               newposY = 1;
             }
-            // Store the velocity before clearing
+            // Store the note data before clearing
             int originalVelocity = pageTmp[nx][ny].velocity;
+            uint8_t originalProbability = pageTmp[nx][ny].probability;
+            uint8_t originalCondition = pageTmp[nx][ny].condition;
             // Clear the old position
             pageTmp[nx][ny].channel = 0;
             pageTmp[nx][ny].velocity = defaultVelocity;
+            pageTmp[nx][ny].probability = 100;  // Default probability
+            pageTmp[nx][ny].condition = 1;      // Default condition
             // Set the new position
             pageTmp[nx][newposY].channel = GLOB.currentChannel;
             pageTmp[nx][newposY].velocity = originalVelocity;
+            pageTmp[nx][newposY].probability = originalProbability;
+            pageTmp[nx][newposY].condition = originalCondition;
           }
         }
       }
@@ -4112,6 +4295,8 @@ FLASHMEM void shiftNotes() {
         } else {  // Clear spot for current channel notes or if it was empty in original
           note[nx][ny].channel = 0;
           note[nx][ny].velocity = defaultVelocity;
+          note[nx][ny].probability = 100;  // Default probability
+          note[nx][ny].condition = 1;      // Default condition
         }
         // Then overlay the shifted notes for the current channel
         if (tmp[nx][ny].channel == GLOB.currentChannel) {
@@ -4507,25 +4692,8 @@ void playNote() {
               shouldPlay = (loopCount % x) == 1;
             }
             
-            Serial.print("Condition check: loopCount=");
-            Serial.print(loopCount);
-            Serial.print(", cond=");
-            Serial.print(cond);
-            if (cond <= 16) {
-              Serial.print(", (loopCount % cond)=");
-              Serial.print(loopCount % cond);
-            } else {
-              uint8_t x = (cond == 17) ? 2 : (cond == 18) ? 4 : (cond == 19) ? 8 : 16;
-              Serial.print(", (loopCount % ");
-              Serial.print(x);
-              Serial.print(" == 1)=");
-              Serial.print((loopCount % x) == 1);
-            }
             if (!shouldPlay) {
-              Serial.println(" -> SKIP");
               continue;  // Skip this note based on condition
-            } else {
-              Serial.println(" -> PLAY");
             }
           }
           
@@ -4694,7 +4862,7 @@ void playNote() {
       // Increment if we just arrived at start (weren't here before, but are now)
       if (atStart && !wasAtStart) {
         loopCount++;
-        if (loopCount > 1000) loopCount = 1;  // Prevent overflow
+        if (loopCount > 256) loopCount = 1;  // Prevent overflow
         Serial.print("Loop count incremented: loopCount=");
         Serial.println(loopCount);
       }
@@ -4714,7 +4882,7 @@ void playNote() {
       // Increment if we just arrived at start (weren't here before, but are now)
       if (atStartNP && !wasAtStartNP) {
         loopCount++;
-        if (loopCount > 1000) loopCount = 1;  // Prevent overflow
+        if (loopCount > 256) loopCount = 1;  // Prevent overflow
         Serial.print("Loop count incremented: loopCount=");
         Serial.println(loopCount);
       }
@@ -5134,6 +5302,8 @@ void toggleCopyPaste() {
             // Clear other channels in the temp buffer
             tmp[src][y].channel = 0;
             tmp[src][y].velocity = defaultVelocity;
+            tmp[src][y].probability = 100;  // Default probability
+            tmp[src][y].condition = 1;      // Default condition
           }
         } else {
           // In draw mode, copy all notes
@@ -5156,11 +5326,15 @@ void toggleCopyPaste() {
           if (note[c][y].channel == GLOB.currentChannel) {
             note[c][y].channel = 0;
             note[c][y].velocity = defaultVelocity;
+            note[c][y].probability = 100;  // Default probability
+            note[c][y].condition = 1;      // Default condition
           }
           // Then paste notes from the copied channel to the current channel
           if (tmp[src][y].channel == GLOB.copyChannel) {
             note[c][y].channel = GLOB.currentChannel;
             note[c][y].velocity = tmp[src][y].velocity;
+            note[c][y].probability = tmp[src][y].probability;
+            note[c][y].condition = tmp[src][y].condition;
           }
           // Don't modify other channels when pasting in single mode
         } else {
@@ -5196,10 +5370,14 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
         if (note[c][y].channel == channel_to_clear) {
           note[c][y].channel = 0;
           note[c][y].velocity = defaultVelocity;
+          note[c][y].probability = 100;  // Default probability
+          note[c][y].condition = 1;      // Default condition
         }
       } else {  // Clear all notes in the range on column c regardless of their channel
         note[c][y].channel = 0;
         note[c][y].velocity = defaultVelocity;
+        note[c][y].probability = 100;  // Default probability
+        note[c][y].condition = 1;      // Default condition
       }
     }
   }
@@ -5347,7 +5525,7 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir) {
   refreshSamplerChannel(channel);
 }
 
-void updateBPM() {
+FLASHMEM void updateBPM() {
   if (MIDI_CLOCK_SEND) {
     
     //Serial.println("BPM: " + String(currentMode->pos[3]));
@@ -5365,7 +5543,7 @@ void updateBPM() {
   drawBPMScreen();  // Assumed to exist for visual feedback
 }
 
-void setVolume() {
+FLASHMEM void setVolume() {
   //showExit(0);
   drawBPMScreen();  // Assumed to exist
 
@@ -5861,7 +6039,7 @@ void setSliderDefForChannel(int channel) {
 }
 
 // Initialize page mutes
-void initPageMutes() {
+FLASHMEM void initPageMutes() {
   // Initialize from SMP data if available, otherwise use defaults
   for (int ch = 0; ch < maxY; ch++) {
     globalMutes[ch] = SMP.globalMutes[ch];

@@ -1,6 +1,6 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 11
-#define LOOK_PAGES_COUNT 7
+#define LOOK_PAGES_COUNT 8
 #define RECS_PAGES_COUNT 3
 #define MIDI_PAGES_COUNT 2
 #define VOL_PAGES_COUNT 5
@@ -44,7 +44,8 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"LOOP", 18, false, nullptr},         // Loop Length
   {"CTRL", 25, false, nullptr},         // Encoder control mode
   {"LEDS", 23, false, nullptr},         // LED Modules Count (1 or 2)
-  {"PONG", 24, false, nullptr}          // Pong Toggle
+  {"PONG", 24, false, nullptr},          // Pong Toggle
+  {"CRSR", 32, false, nullptr}          // Cursor Type (NORM/CHNR/BIG)
 };
 
 static inline uint16_t pongSpeedToInterval(int speed) {
@@ -125,6 +126,8 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
     EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
     EEPROM.write(EEPROM_DATA_START + 17, 10);  // GLOB.vol default (10, maps to 1.0 volume)
+    EEPROM.write(EEPROM_DATA_START + 18, 0);   // cursorType default (0 = NORM)
+    EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
 
     Serial.println("EEPROM initialized with defaults.");
   }
@@ -152,6 +155,18 @@ void loadMenuFromEEPROM() {
     lineInLevel = 8;  // Default to 8 if invalid
     EEPROM.write(EEPROM_DATA_START + 16, lineInLevel);
   }
+  
+  // Load cursorType from EEPROM (stored at EEPROM_DATA_START + 18)
+  extern int cursorType;
+  cursorType = (int8_t)EEPROM.read(EEPROM_DATA_START + 18);
+  if (cursorType < 0 || cursorType > 1) {
+    cursorType = 0;  // Default to 0 (NORM) if invalid
+    EEPROM.write(EEPROM_DATA_START + 18, cursorType);
+  }
+  
+  // Load showChannelNr from EEPROM (stored at EEPROM_DATA_START + 19)
+  extern bool showChannelNr;
+  showChannelNr = (EEPROM.read(EEPROM_DATA_START + 19) != 0);
   
   if (previewVol < 0 || previewVol > 5) previewVol = 2;
   
@@ -898,6 +913,35 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
       break;
     }
+    
+    case 32: { // CRSR - Cursor Type
+      drawText("CRSR", 2, 10, CRGB(0, 255, 0)); // Green (matching PLAY menu)
+      extern bool showChannelNr;
+      extern int cursorType;
+      
+      // Determine current mode: 0=NORM, 1=CHNR, 2=BIG
+      int cursorMode = 0;
+      if (showChannelNr && cursorType == 0) {
+        cursorMode = 1; // CHNR
+      } else if (!showChannelNr && cursorType == 1) {
+        cursorMode = 2; // BIG
+      } else {
+        cursorMode = 0; // NORM
+      }
+      
+      if (cursorMode == 0) {
+        drawText("NORM", 2, 3, CRGB(150, 100, 0)); // Dark green
+      } else if (cursorMode == 1) {
+        drawText("CHNR", 2, 3, CRGB(150, 200, 0)); // Medium green
+      } else {
+        drawText("BIG", 2, 3, CRGB(150, 255, 0)); // Bright green
+      }
+      
+      // Green color for encoder
+      CRGB greenColor = CRGB(0, 255, 0);
+      Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      break;
+    }
   }
 }
 
@@ -1467,6 +1511,48 @@ void switchMenu(int menuPosition){
         inLookSubmenu = true;
         currentLookPage = 0;
         Encoder[3].writeCounter((int32_t)0);
+        break;
+        
+        case 32:
+        // Cycle through cursor modes: NORM (0) -> CHNR (1) -> BIG (2) -> NORM (0)
+        {
+          extern bool showChannelNr;
+          extern int cursorType;
+          
+          // Determine current cursor mode
+          int cursorMode = 0;
+          if (showChannelNr && cursorType == 0) {
+            cursorMode = 1; // CHNR
+          } else if (!showChannelNr && cursorType == 1) {
+            cursorMode = 2; // BIG
+          } else {
+            cursorMode = 0; // NORM
+          }
+          
+          // Cycle to next mode
+          cursorMode = (cursorMode + 1) % 3;
+          
+          // Apply new mode
+          if (cursorMode == 0) {
+            // NORM: showChannelNr=false, cursorType=0
+            showChannelNr = false;
+            cursorType = 0;
+          } else if (cursorMode == 1) {
+            // CHNR: showChannelNr=true, cursorType=0
+            showChannelNr = true;
+            cursorType = 0;
+          } else {
+            // BIG: showChannelNr=false, cursorType=1
+            showChannelNr = false;
+            cursorType = 1;
+          }
+          
+          // Save to EEPROM
+          saveSingleModeToEEPROM(18, cursorType);
+          EEPROM.write(EEPROM_DATA_START + 19, showChannelNr ? 1 : 0);
+          
+          drawMainSettingStatus(menuPosition);
+        }
         break;
         
         case 20:

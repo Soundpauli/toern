@@ -339,11 +339,11 @@ void startFastRecord() {
   
   fastRecWriteIndex[ch] = 0;
   // For ON1 mode, don't drop initial audio - we want a perfect loop from beat 1
-  // For other modes, drop first 200ms to avoid noise/click at start
+  // For other modes, drop first ~25ms to avoid noise/click at start (reduced from 200ms)
   if (recChannelClear == 3) {
     fastDropRemaining = 0;  // ON1 mode: no drop, capture from beat 1
   } else {
-    fastDropRemaining = FAST_DROP_BLOCKS;  // Other modes: drop first 200ms
+    fastDropRemaining = FAST_DROP_BLOCKS;  // Other modes: drop first ~25ms
   }
 
   // 3) Restart recording queue
@@ -408,38 +408,70 @@ void stopFastRecord() {
   // CRITICAL: Disable audio input first to stop new data from entering queue
   mixer_end.gain(3, 0.0);
   
-  // Flush all remaining audio data while fastRecordActive is still true
-  // Flush more aggressively to ensure we capture all data for the final beat
-  int flushCount = 0;
-  while (fastRecordActive && queue1.available() && flushCount < 10) {
-    flushAudioQueueToRAM();
-    flushCount++;
-  }
-  
-  // Now safe to stop recording
-  fastRecordActive = false;
-  queue1.end();
-  
-  // Final flush of any remaining data (now that fastRecordActive is false, we need to flush manually)
-  // This is critical to capture the last beat's audio data
   int ch = GLOB.currentChannel;
   auto &idx = fastRecWriteIndex[ch];
   int16_t *dest = reinterpret_cast<int16_t *>(sampled[ch]);
   
-  // Aggressive flush of remaining queue data to ensure we get all audio
-  while (queue1.available() && idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES) {
-    int16_t *block = (int16_t *)queue1.readBuffer();
-    memcpy(dest + idx, block, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
-    idx += AUDIO_BLOCK_SAMPLES;
-    queue1.freeBuffer();
+  // Flush all remaining audio data while fastRecordActive is still true
+  // Use multiple passes to ensure we capture all data for the final beat
+  int flushCount = 0;
+  int lastQueueSize = -1;
+  int stableCount = 0;
+  
+  // Continue flushing until queue is empty or no progress is made
+  while (fastRecordActive && queue1.available()) {
+    int currentQueueSize = queue1.available();
+    flushAudioQueueToRAM();
+    flushCount++;
+    
+    // Check if queue size changed (progress made)
+    if (currentQueueSize == lastQueueSize) {
+      stableCount++;
+      // If queue size hasn't changed for 3 passes, likely done
+      if (stableCount >= 3) break;
+    } else {
+      stableCount = 0;
+      lastQueueSize = currentQueueSize;
+    }
+    
+    // Safety limit to prevent infinite loops
+    if (flushCount >= 100) break;
   }
   
-  // One more pass to catch any stragglers
+  // Now safe to stop recording
+  fastRecordActive = false;
+  
+  // Flush one more time before ending the queue
+  flushAudioQueueToRAM();
+  
+  queue1.end();
+  
+  // Final aggressive flush of any remaining data in the queue
+  // Continue until queue is completely empty or buffer is full
+  flushCount = 0;
+  lastQueueSize = -1;
+  stableCount = 0;
+  
   while (queue1.available() && idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES) {
+    int currentQueueSize = queue1.available();
     int16_t *block = (int16_t *)queue1.readBuffer();
     memcpy(dest + idx, block, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
     idx += AUDIO_BLOCK_SAMPLES;
     queue1.freeBuffer();
+    flushCount++;
+    
+    // Check if queue size changed (progress made)
+    if (currentQueueSize == lastQueueSize) {
+      stableCount++;
+      // If queue size hasn't changed for 3 passes, likely done
+      if (stableCount >= 3) break;
+    } else {
+      stableCount = 0;
+      lastQueueSize = currentQueueSize;
+    }
+    
+    // Safety limit to prevent infinite loops
+    if (flushCount >= 100) break;
   }
   
   // Save recording start beat before resetting (needed for ON1 mode note placement)

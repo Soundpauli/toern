@@ -995,6 +995,43 @@ FLASHMEM void drawInputGainOverlay(int gain, int maxGain) {
   }
 }
 
+FLASHMEM void drawChannelNrOverlay(int channelNum, int channelIdx) {
+  // channelNum: 1-indexed channel number to display (1-8)
+  // channelIdx: 0-indexed channel index for color lookup (0-7 for channels 1-8)
+  if (channelIdx < 0 || channelIdx >= NUM_CHANNELS) return;
+  
+  CRGB channelColor = col[channelIdx];
+  const int overlayY = 13; // Fixed Y position for overlay
+  const int numberX = 2;   // X position for the number
+  const int borderY = 10;  // Border-bottom position (moved 1px down from 12)
+  const int overlayEndX = 5; // Overlay ends at x=6
+  
+  // Draw black background column from x=1, y=16 to x=6, y=11
+  for (int x = 1; x <= overlayEndX && x <= (int)maxX; x++) {
+    for (int y = 11; y <= 16 && y <= (int)maxY; y++) {
+      light(x, y, CRGB(0, 0, 0)); // Black background
+    }
+  }
+  
+  // Draw colored border-bottom (at y=10, across x=1 to x=6)
+  for (int x = 1; x <= overlayEndX && x <= (int)maxX; x++) {
+    if (x >= 1 && x <= (int)maxX && borderY >= 1 && borderY <= (int)maxY) {
+      light(x, borderY, channelColor); // Bottom border in channel color
+    }
+  }
+  
+  
+  // Draw channel number at x=2, moved 3 positions higher
+  char numStr[4];
+  sprintf(numStr, "%d", channelNum);
+  
+  // Characters are 5 pixels tall, originally at y=9 (overlayY - 2)
+  // Move 3 positions higher: y=9 - 3 = y=6
+  int textY = overlayY - 1; // Position text 3 positions higher
+  
+  drawText(numStr, numberX, textY, channelColor);
+}
+
 FLASHMEM void drawSampleLoadOverlay() {
   FastLEDclear();
 
@@ -1284,7 +1321,36 @@ FLASHMEM void drawCountIn() {
     snprintf(countText, sizeof(countText), "%d", countInBeat);
     // Display centered on the bar - position based on maxX
     int textX = (maxX / 2) - 1;  // Center the count text
-    drawText(countText, textX, 1, CRGB(0, 255, 255));  // Cyan color for count-in
+    
+    // Draw black background behind the number
+    // Estimate text width (single digit = ~2-3 pixels wide)
+    int bgWidth = 3;  // Background width to cover the number
+    int bgStartX = max(1, textX - 1);
+    int bgEndX = min((int)maxX, textX + bgWidth);
+    
+    // Draw black background rectangle
+    for (int x = bgStartX; x <= bgEndX; x++) {
+      for (int y = 1; y <= 7; y++) {  // Cover y=1 to y=3 for text height
+        if (x >= 1 && x <= (int)maxX && y >= 1 && y <= (int)maxY) {
+          light(x, y, CRGB(0, 0, 0));  // Black background
+        }
+      }
+    }
+    
+    // Draw the count-in number on top with different colors
+    CRGB countColor;
+    if (countInBeat == 1) {
+      countColor = CRGB(255, 255, 255);  // White for 1
+    } else if (countInBeat == 2) {
+      countColor = CRGB(0, 255, 0);      // Green for 2
+    } else if (countInBeat == 3) {
+      countColor = CRGB(255, 255, 0);    // Yellow for 3
+    } else if (countInBeat == 4) {
+      countColor = CRGB(255, 0, 0);      // Red for 4
+    } else {
+      countColor = CRGB(0, 255, 255);    // Cyan fallback
+    }
+    drawText(countText, textX, 2, countColor);
   }
 }
 
@@ -1307,15 +1373,69 @@ void drawCursor() {
     dir = 1;
   }
 
+  int cursorX = mapXtoPageOffset(GLOB.x);
+  int cursorY = GLOB.y;
+  
+  // Draw white circle outline for BIG cursor mode (cursorType == 1)
+  extern int cursorType;
+  if (cursorType == 1) {
+    CRGB whiteColor = CRGB(50, 50, 50); // Darker white
+    
+    // Animate circle: grow from radius 1 to 16, synced with BPM
+    static unsigned long lastCircleUpdate = 0;
+    static int animatedRadius = 1;
+    
+    // Get BPM and calculate update interval
+    extern struct Device SMP;
+    float bpm = SMP.bpm;
+    if (bpm < 40) bpm = 120.0f; // Default to 120 BPM if invalid
+    
+    // Calculate interval: one full cycle (1->16) per 2 beats (half speed)
+    // Time per 2 beats = 60000ms / BPM * 2
+    // Interval per step = (60000ms / BPM * 2) / 16 steps
+    unsigned long circleUpdateInterval = (unsigned long)((60000.0f / bpm * 2.0f) / 16.0f);
+    if (circleUpdateInterval < 10) circleUpdateInterval = 10; // Minimum 10ms for stability
+    
+    unsigned long currentTime = millis();
+    if (currentTime - lastCircleUpdate >= circleUpdateInterval) {
+      animatedRadius++;
+      if (animatedRadius > 16) {
+        animatedRadius = 1; // Loop back to radius 1
+      }
+      lastCircleUpdate = currentTime;
+    }
+    
+    // Draw circle outline around cursor position with animated radius
+    for (int dx = -animatedRadius; dx <= animatedRadius; dx++) {
+      for (int dy = -animatedRadius; dy <= animatedRadius; dy++) {
+        int distanceSquared = dx * dx + dy * dy;
+        int radiusSquared = animatedRadius * animatedRadius;
+        
+        // Draw outline: only pixels where distance is approximately equal to radius
+        // Exclude interior: distanceSquared must be >= radiusSquared
+        // Include perimeter: distanceSquared <= radiusSquared + 2
+        if (distanceSquared >= radiusSquared && distanceSquared <= radiusSquared + 2) {
+          int x = cursorX + dx;
+          int y = cursorY + dy;
+          
+          // Only draw if within bounds
+          if (x >= 1 && x <= (int)maxX && y >= 1 && y <= (int)maxY) {
+            light(x, y, whiteColor);
+          }
+        }
+      }
+    }
+  }
+
   uint8_t hue = pulse; // Directly use pulse as hue for smooth cycling
   if (note[GLOB.x][GLOB.y].channel) {
     
     CRGB color = col[note[GLOB.x][GLOB.y].channel];  // aus deiner col[] Farbpalette
-    light(mapXtoPageOffset(GLOB.x), GLOB.y, color.nscale8_video(pulse));  // pulse = animierte Helligkeit
+    light(cursorX, cursorY, color.nscale8_video(pulse));  // pulse = animierte Helligkeit
 
 
   }else{
-    light(mapXtoPageOffset(GLOB.x), GLOB.y, CHSV(hue, 255, 255)); // Full saturation and brightness
+    light(cursorX, cursorY, CHSV(hue, 255, 255)); // Full saturation and brightness
   }
 }
 
