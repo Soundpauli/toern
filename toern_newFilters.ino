@@ -29,6 +29,7 @@ unsigned long lastEncoderChange[4] = { 0, 0, 0, 0 };
 
 int8_t lastChangedEncoder = -1;
 unsigned long lastInteraction = millis();  // global timestamp
+const unsigned long FILTER_INTERACTION_TIMEOUT = 1000; // ms before reverting to initial view
 
 
 bool showingAny = false;
@@ -244,7 +245,7 @@ void initSliders(uint8_t page, uint8_t chan) {
 
 void slider(uint8_t page) {
   unsigned long now = millis();
-  bool activeInteraction = (now - lastInteraction < 600);
+  bool activeInteraction = (now - lastInteraction < FILTER_INTERACTION_TIMEOUT);
   uint8_t chan = GLOB.currentChannel;
   for (uint8_t i = 0; i < 4; ++i) {
     const auto& def = sliderDef[chan][page][i];
@@ -511,6 +512,23 @@ void setNewFilters() {
   uint8_t chan = GLOB.currentChannel;
   updateFilterPageAvailability(chan);
   
+  static uint8_t lastFilterPage[NUM_CHANNELS] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
+  static uint8_t lastEncoderPos[4] = {255, 255, 255, 255};
+  static uint8_t lastChannel = 255;
+  static unsigned long lastRedrawTime = 0;
+  const unsigned long REDRAW_THROTTLE_MS = 50; // Throttle redraws to max once per 50ms
+  
+  // Reset encoder tracking when channel changes
+  bool channelChanged = (chan != lastChannel);
+  if (channelChanged) {
+    lastChannel = chan;
+    // Reset encoder position tracking to force redraw on channel change
+    for (uint8_t i = 0; i < 4; ++i) {
+      lastEncoderPos[i] = 255;
+    }
+  }
+  
+  bool pageChanged = (filterPage[chan] != lastFilterPage[chan]);
   if (currTouch && !lastTouch) {
     // Use filterPageCount[chan] for wrapping
     filterPage[chan] = (filterPage[chan] + 1) % filterPageCount[chan];
@@ -520,16 +538,26 @@ void setNewFilters() {
     
     // Update encoder colors for the new filter page and default fast filter
     updateFilterEncoderColors();
+    pageChanged = true;
+    lastFilterPage[chan] = filterPage[chan];
   }
   lastTouch = currTouch;
 
   bool anyChanged = false;
+  bool encoderPosChanged = false;
   for (uint8_t i = 0; i < 4; ++i) {
     auto& d = sliderDef[chan][filterPage[chan]][i];
     if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip if ARR_NONE
     if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) continue;
     uint8_t val = constrain(currentMode->pos[i], 0, MAX_FILTER_RESOLUTION);
     uint8_t prev = readSetting(d.arr, d.idx, chan);
+    
+    // Check if encoder position changed (for redraw detection)
+    if (currentMode->pos[i] != lastEncoderPos[i]) {
+      encoderPosChanged = true;
+      lastEncoderPos[i] = currentMode->pos[i];
+    }
+    
     if (val != prev) {
       showSingleFilter[i] = true;
 
@@ -549,9 +577,18 @@ void setNewFilters() {
   if (anyChanged) {
     processAdjustments_new(filterPage[chan]);
     showFilterPages(chan);
+    lastRedrawTime = millis();
+  } else if (pageChanged || encoderPosChanged || channelChanged) {
+    // Only redraw if page changed, encoder positions changed, or channel changed, and throttle to prevent excessive redraws
+    unsigned long now = millis();
+    if (now - lastRedrawTime >= REDRAW_THROTTLE_MS) {
+      showFilterPages(chan);
+      lastRedrawTime = now;
+      if (pageChanged) {
+        lastFilterPage[chan] = filterPage[chan];
+      }
+    }
   }
-
-  showFilterPages(chan);
 }
 
 void showFilterPages(uint8_t chan) {
@@ -566,7 +603,7 @@ void showFilterPages(uint8_t chan) {
 
   // ─── overlay corner values ───────────────────
   //for (uint8_t i = 0; i < 4; ++i) {
-  if (now - lastInteraction < 600 && lastChangedEncoder >= 0 && lastChangedEncoder < 4) {
+  if (now - lastInteraction < FILTER_INTERACTION_TIMEOUT && lastChangedEncoder >= 0 && lastChangedEncoder < 4) {
     uint8_t val = constrain(currentMode->pos[lastChangedEncoder],
                             0, sliderDef[chan][filterPage[chan]][lastChangedEncoder].maxValue);
     drawCornerValueCustom(lastChangedEncoder, val, sliderDef[chan][filterPage[chan]][lastChangedEncoder]);
@@ -608,6 +645,15 @@ void drawSliderValue(uint8_t x0, uint8_t x1, uint8_t val) {
 
 
 void showFilterNames(uint8_t chan) {
+    // Clear the entire headline area (y=12) before drawing to prevent brightness accumulation
+    for (uint8_t x = 1; x <= 16; ++x) {
+        light(x, 12, CRGB::Black);
+        light(x, 13, CRGB::Black);
+        light(x, 14, CRGB::Black);
+        light(x, 15, CRGB::Black);
+        light(x, 16, CRGB::Black);
+    }
+    
     uint8_t page = filterPage[chan];
     for (uint8_t i = 0; i < 4; ++i) {
         const SliderDefEntry& def = sliderDef[chan][page][i];

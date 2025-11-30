@@ -1,7 +1,7 @@
 
 extern int8_t channelDirection[maxFiles];
 
-void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview) {
+FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength) {
   if (playSdWav1.isPlaying()) playSdWav1.stop();
   envelope0.noteOff();
   char OUTPUTf[50];
@@ -15,9 +15,6 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     }
 
     int fileSize = previewFile.size();
-    if (firstPreview) {
-      fileSize = min(fileSize, 302000);  // max 10 seconds
-    }
 
     // Read sample rate from header at offset 24
     previewFile.seek(24);
@@ -34,8 +31,17 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
     previewFile.seek(44);
     memset(sampled[0], 0, sizeof(sampled[0]));
     int plen = 0;
+    // Read in chunks with periodic yield() to prevent blocking CPU during large file operations
+    // For a 930KB sample, this prevents 1-2 second freeze
+    uint8_t chunk[512];  // Read 512 bytes at a time
     while (previewFile.available() && plen < sizeof(sampled[0])) {
-      sampled[0][plen++] = previewFile.read();
+      size_t toRead = min(sizeof(chunk), (size_t)(sizeof(sampled[0]) - plen));
+      size_t bytesRead = previewFile.read(chunk, toRead);
+      if (bytesRead == 0) break;
+      memcpy(&sampled[0][plen], chunk, bytesRead);
+      plen += bytesRead;
+      // Yield every chunk to maintain responsiveness (critical for long samples)
+      yield();
     }
     previewFile.close();
 
@@ -105,7 +111,7 @@ void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSample
 
 
 
-void loadSample(unsigned int packID, unsigned int sampleID) {
+FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   drawNoSD();
 
   char OUTPUTf[50];
@@ -168,11 +174,19 @@ void loadSample(unsigned int packID, unsigned int sampleID) {
     //memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
     memset((void *)sampled[0], 0, sizeof(sampled[0]));
 
-    while (loadSample.available() && (i < (endOffsetBytes - startOffsetBytes))) {
-      int b = loadSample.read();
-      sampled[sampleID][i] = b;
-      i++;
+    // Read in chunks with periodic yield() to prevent blocking CPU during large file operations
+    // This prevents device freeze when loading long samples
+    uint8_t chunk[512];  // Read 512 bytes at a time
+    size_t bytesToRead = min((size_t)(endOffsetBytes - startOffsetBytes), sizeof(sampled[sampleID]));
+    while (loadSample.available() && i < bytesToRead) {
+      size_t toRead = min(sizeof(chunk), bytesToRead - i);
+      size_t bytesRead = loadSample.read(chunk, toRead);
+      if (bytesRead == 0) break;
+      memcpy(&sampled[sampleID][i], chunk, bytesRead);
+      i += bytesRead;
       if (i >= sizeof(sampled[sampleID])) break;
+      // Yield every chunk to maintain responsiveness (critical for long samples)
+      yield();
     }
     loadSample.close();
 
@@ -199,6 +213,8 @@ void showWave() {
     switchMode(&recordMode);
     return;
   }
+  
+  yield(); // Allow other tasks to run, especially important during file operations
   
   int snr = SMP.wav[GLOB.currentChannel].fileID;
 
@@ -251,12 +267,14 @@ if (sampleIsLoaded) {
     GLOB.seek = newSeek;
     currentMode->pos[0] = newSeek;  // Update encoder to match
     // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
-    previewSample(fnr, getFileNumber(snr), false, false);
+    yield(); // Yield before file operations
+    previewSample(fnr, getFileNumber(snr), false);
   }
 }
 
   // --- FOLDER SELECTION (Encoder 1) ---
   if (currentMode->pos[1] != GLOB.folder) {
+    yield(); // Yield before audio/file operations
     envelope0.noteOff();
     playSdWav1.stop();
     firstcheck = true;
@@ -274,7 +292,8 @@ if (sampleIsLoaded) {
     GLOB.seekEnd = newSeekEnd;
     currentMode->pos[2] = newSeekEnd;  // Update encoder to match
     // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
-    previewSample(fnr, getFileNumber(snr), false, false);
+    yield(); // Yield before file operations
+    previewSample(fnr, getFileNumber(snr), false);
   }
 }
 
@@ -283,14 +302,35 @@ if (sampleIsLoaded) {
 
 
   // --- NEW SAMPLE SELECTION (Encoder 3) ---
-  // Ensure encoder3's value is within 1-999. If not, reset it.
-  if (currentMode->pos[3] < 1 || currentMode->pos[3] > 999) {
-    //currentMode->pos[3] = snr;              // snr is already clamped to at least 1
-    //Encoder[3].writeCounter((int32_t)snr);  // Update the encoder display/counter
-  }
-  
+  const unsigned long samplePreviewDebounceMs = 120;
+  static int lastEncoder3Value = -1;
+  static int pendingSampleSelection = -1;
+  static unsigned long lastSampleSelectionChange = 0;
 
-  if (currentMode->pos[3] != snr) {
+  int encoderSampleValue = constrain(currentMode->pos[3], 1, 999);
+  if (encoderSampleValue != currentMode->pos[3]) {
+    currentMode->pos[3] = encoderSampleValue;
+    Encoder[3].writeCounter((int32_t)encoderSampleValue);
+  }
+
+  if (encoderSampleValue != lastEncoder3Value) {
+    lastEncoder3Value = encoderSampleValue;
+    pendingSampleSelection = encoderSampleValue;
+    lastSampleSelectionChange = millis();
+  }
+
+  bool shouldApplySampleChange = false;
+  int nextSampleId = snr;
+  if (pendingSampleSelection > 0 &&
+      (millis() - lastSampleSelectionChange) >= samplePreviewDebounceMs &&
+      pendingSampleSelection != snr) {
+    shouldApplySampleChange = true;
+    nextSampleId = pendingSampleSelection;
+  }
+
+  if (shouldApplySampleChange) {
+    pendingSampleSelection = -1;
+    yield(); // Yield before file operations
     envelope0.noteOff();
     previewIsPlaying = false;
     playSdWav1.stop();
@@ -299,13 +339,15 @@ if (sampleIsLoaded) {
     firstcheck = true;
     nofile = false;
 
-    snr = currentMode->pos[3];
+    snr = nextSampleId;
     SMP.wav[GLOB.currentChannel].fileID = snr;
 
     fnr = getFolderNumber(snr);
     FastLEDclear();
     drawNumber(snr, col_Folder[fnr], 12);
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
+    
+    yield(); // Yield before opening file
 
     // --- Invalidate preview cache when selecting new sample ---
     previewCache.valid = false;
@@ -320,6 +362,7 @@ if (sampleIsLoaded) {
 
     if (!previewIsPlaying && !sampleIsLoaded) {
       previewIsPlaying = true;
+      yield(); // Yield before file playback operations
       if (playSdWav1.isPlaying()) {
         playSdWav1.stop();
         playSdWav1.play(OUTPUTf);
@@ -343,10 +386,12 @@ if (sampleIsLoaded) {
   // Display peaks AFTER all encoder processing (so display matches audio)
   processPeaks();
   drawNumber(snr, col_Folder[fnr], 12);
+  
+  yield(); // Yield at end of function to maintain responsiveness
 }
 
 // Copy currently loaded sample to samplepack 0
-void copySampleToSamplepack0(unsigned int channel) {
+FLASHMEM void copySampleToSamplepack0(unsigned int channel) {
   // Ensure samplepack 0 directory exists
   if (!SD.exists("0")) {
     SD.mkdir("0");
@@ -399,7 +444,17 @@ void copySampleToSamplepack0(unsigned int channel) {
   outFile.write(header, 44);
   
   // Write the sample data from RAM
-  outFile.write(reinterpret_cast<uint8_t*>(sampled[channel]), dataSize);
+  // Write the raw PCM data from the sampled buffer in chunks to prevent blocking
+  // Large samples (930KB) can block CPU for 500-1000ms without chunking
+  uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[channel]);
+  const size_t CHUNK_SIZE = 8192;  // 8KB chunks
+  
+  for (uint32_t offset = 0; offset < dataSize; offset += CHUNK_SIZE) {
+    size_t chunkSize = min((size_t)CHUNK_SIZE, (size_t)(dataSize - offset));
+    outFile.write(dataPtr + offset, chunkSize);
+    // Yield periodically during large file writes to maintain responsiveness
+    if ((offset % (CHUNK_SIZE * 4)) == 0) yield();  // Yield every 32KB
+  }
   
   outFile.close();
   
@@ -458,7 +513,7 @@ void reversePreviewSample() {
   int snr = SMP.wav[GLOB.currentChannel].fileID;
   int fnr = getFolderNumber(snr);
   
-  previewSample(fnr, getFileNumber(snr), false, false);
+  previewSample(fnr, getFileNumber(snr), false);
 }
 
 // Copy the preview sample (channel 0) to the target channel
@@ -504,8 +559,17 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     previewFile.seek(44);
     memset(sampled[0], 0, sizeof(sampled[0]));
     int plen = 0;
+    // Read in chunks with periodic yield() to prevent blocking CPU during large file operations
+    // For a 930KB sample, this prevents 1-2 second freeze
+    uint8_t chunk[512];  // Read 512 bytes at a time
     while (previewFile.available() && plen < sizeof(sampled[0])) {
-      sampled[0][plen++] = previewFile.read();
+      size_t toRead = min(sizeof(chunk), (size_t)(sizeof(sampled[0]) - plen));
+      size_t bytesRead = previewFile.read(chunk, toRead);
+      if (bytesRead == 0) break;
+      memcpy(&sampled[0][plen], chunk, bytesRead);
+      plen += bytesRead;
+      // Yield every chunk to maintain responsiveness (critical for long samples)
+      yield();
     }
     previewFile.close();
     

@@ -15,7 +15,7 @@ volatile bool stepIsDue = false;
 
 
 //#include <Wire.h>x-
-#include "Arduino.h"
+
 #include <cstring>  // For memcmp
 #include "src/effect_freeverb_dmabuf.h"
 #define USE_WS2812SERIAL   // leds
@@ -334,8 +334,8 @@ int peakRecIndex = 0;
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
 bool pong = false;
-const unsigned int maxlen = (MATRIX_WIDTH * LED_MODULES * maxPages) + 1;  // Use max hardware capacity for array size
 const long ram = 9525600;  // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
+const unsigned int maxlen = (MATRIX_WIDTH * LED_MODULES * maxPages) + 1;  // Use max hardware capacity for array size
 const unsigned int SONG_LEN = MATRIX_WIDTH * LED_MODULES * maxPages;  // Use max hardware capacity
 
 static bool lastBothTouched = false;
@@ -383,7 +383,7 @@ static const int DEFAULT_CHANNEL_VOLUME = 10;
 bool isRecording = false;
 File frec;
 
-#define MAXREC_SECONDS 20
+#define MAXREC_SECONDS 12
 #define BUFFER_SAMPLES (22100 * MAXREC_SECONDS)
 #define BUFFER_BYTES (BUFFER_SAMPLES * sizeof(int16_t))
 
@@ -1692,24 +1692,31 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     if (playSdWav1.isPlaying()) {
       playSdWav1.stop();
     }
-    // Load the sample properly for showWave
+    // Use direct SD playback like first preview in showWave (sample is already on SD)
     extern bool sampleIsLoaded, firstcheck;
     extern CachedSample previewCache;
-    extern void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength, bool firstPreview);
     
     int fileID = SMP.wav[GLOB.currentChannel].fileID;
     int fnr = getFolderNumber(fileID);
     int fileNum = getFileNumber(fileID);
     
-    // Invalidate cache and reload sample
+    // Invalidate cache and reset flags
     previewCache.valid = false;
     sampleIsLoaded = false;
     firstcheck = true;
     
     switchMode(&set_Wav);  // Switch to showWave mode
     
-    // Load the sample into the sampler
-    previewSample(fnr, fileNum, false, true);  // Load with full length, mark as first preview
+    // Use direct SD playback (same as first preview in showWave)
+    char OUTPUTf[50];
+    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, fileNum);
+    
+    previewIsPlaying = true;
+    playSdWav1.play(OUTPUTf);
+    
+    peakIndex = 0;
+    memset(peakValues, 0, sizeof(peakValues));
+    sampleIsLoaded = true;
   } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
     extern uint8_t songArrangement[64];
     int songPosition = songMode.pos[3];  // 1-64
@@ -2085,7 +2092,10 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
 void initSoundChip() {
   // AudioInterrupts();
-  AudioMemory(256);
+  // Reduced from 256 to 128 blocks to prevent memory fragmentation
+  // 256 blocks = 64KB, which can cause slow SD card access and unresponsiveness
+  // 128 blocks = 32KB, still plenty for complex audio routing
+  AudioMemory(128);
   // turn on the output
   sgtl5000_1.enable();
   
@@ -3519,6 +3529,27 @@ void _checkMenuTouch() {
 void checkPendingSampleNotes() {
   // return; // This function seems disabled, keeping it as is.
   unsigned long now = millis();
+  
+  // Safety: Limit vector size to prevent memory exhaustion
+  const size_t MAX_PENDING_NOTES = 256;
+  if (pendingSampleNotes.size() > MAX_PENDING_NOTES) {
+    // Remove oldest events if too many pending
+    pendingSampleNotes.erase(pendingSampleNotes.begin(), 
+                            pendingSampleNotes.begin() + (pendingSampleNotes.size() - MAX_PENDING_NOTES / 2));
+  }
+  
+  // Clean up stale events (older than 10 seconds) to prevent unbounded growth
+  const unsigned long STALE_THRESHOLD = 10000; // 10 seconds
+  for (size_t i = 0; i < pendingSampleNotes.size(); /* no ++ */) {
+    if (pendingSampleNotes[i].triggerTime < now - STALE_THRESHOLD) {
+      // Stale event - remove it
+      pendingSampleNotes.erase(pendingSampleNotes.begin() + i);
+    } else {
+      ++i;
+    }
+  }
+  
+  // Process pending events
   for (size_t i = 0; i < pendingSampleNotes.size(); /* no ++ */) {  // Use size_t for vector index
     if (now >= pendingSampleNotes[i].triggerTime) {
       auto &ev = pendingSampleNotes[i];
@@ -3804,6 +3835,8 @@ void showDoRecord() {
 void loop() {
    updateExternalOneBlink();
    checkMidi();  // Process MIDI early in loop for lower latency
+   
+   yield(); // Yield early to maintain responsiveness during file operations
 
   bool pongActive = pong && currentMode == &draw;
 
@@ -3816,7 +3849,6 @@ void loop() {
   if (currentMode == &draw || currentMode == &singleMode) {
     drawBase();
     drawTriggers();
-    drawPages();  // Render page helper after drawTriggers
     if (isNowPlaying) drawTimer();
     
     // Draw count-in for ON1 mode
@@ -3887,6 +3919,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   checkButtons();
   checkTouchInputs();
   checkPendingSampleNotes();
+  
+  yield(); // Yield periodically to prevent unresponsiveness, especially during file operations
   
   // === INPUT MONITORING WHEN IN DRAW MODE ===
   // Enable if monitoring toggle is ON (y==1 only) or ALL (always on), and not in record mode
@@ -4000,7 +4034,6 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     shiftNotes();
     drawBase();
     drawTriggers();
-    drawPages();  // Render page helper after drawTriggers
     if (isNowPlaying) {
       //filtercheck
       drawTimer();

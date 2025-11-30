@@ -1,6 +1,6 @@
 
 
-void savePattern(bool autosave) {
+FLASHMEM void savePattern(bool autosave) {
   
   drawNoSD();
   
@@ -72,7 +72,7 @@ void savePattern(bool autosave) {
 }
 
 
-void saveSamplePack(int pack) {
+FLASHMEM void saveSamplePack(int pack) {
     char filename[64];
     char sourcePath[64];
 
@@ -145,8 +145,18 @@ void saveSamplePack(int pack) {
             // Determine how many samples were recorded for this channel
             uint32_t sampleCount = loadedSampleLen[ch];  // number of int16_t samples
             
-            // Write the raw PCM data from the sampled buffer
-            outFile.write(reinterpret_cast<uint8_t*>(sampled[ch]), sampleCount * sizeof(int16_t));
+            // Write the raw PCM data from the sampled buffer in chunks to prevent blocking
+            // Large samples (930KB) can block CPU for 500-1000ms without chunking
+            uint32_t totalBytes = sampleCount * sizeof(int16_t);
+            uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[ch]);
+            const size_t CHUNK_SIZE = 8192;  // 8KB chunks
+            
+            for (uint32_t offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
+              size_t chunkSize = min((size_t)CHUNK_SIZE, (size_t)(totalBytes - offset));
+              outFile.write(dataPtr + offset, chunkSize);
+              // Yield periodically during large file writes to maintain responsiveness
+              if ((offset % (CHUNK_SIZE * 4)) == 0) yield();  // Yield every 32KB
+            }
             
             outFile.close();
         }
@@ -171,7 +181,7 @@ void saveSamplePack(int pack) {
 }
 
 
-void loadPattern(bool autoload) {
+FLASHMEM void loadPattern(bool autoload) {
   drawNoSD();
   
   FastLEDclear();
@@ -283,7 +293,7 @@ void loadPattern(bool autoload) {
 
 
 
-void autoLoad() {
+FLASHMEM void autoLoad() {
   
   loadPattern(true);
   
@@ -292,7 +302,7 @@ void autoLoad() {
   preventPaintUnpaint = false;
 }
 
-void autoSave() {
+FLASHMEM void autoSave() {
   // Prevent autosave if last save was less than 10 seconds ago
   static unsigned long lastAutoSaveTime = 0;
   const unsigned long AUTO_SAVE_COOLDOWN_MS = 10000;  // 10 seconds
