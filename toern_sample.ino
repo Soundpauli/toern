@@ -302,10 +302,11 @@ if (sampleIsLoaded) {
 
 
   // --- NEW SAMPLE SELECTION (Encoder 3) ---
-  const unsigned long samplePreviewDebounceMs = 120;
+  // Display updates immediately, but preview is debounced (500ms)
+  const unsigned long samplePreviewDebounceMs = 150;
   static int lastEncoder3Value = -1;
-  static int pendingSampleSelection = -1;
   static unsigned long lastSampleSelectionChange = 0;
+  static int lastPreviewedSample = -1;  // Track which sample is currently being previewed
 
   int encoderSampleValue = constrain(currentMode->pos[3], 1, 999);
   if (encoderSampleValue != currentMode->pos[3]) {
@@ -313,38 +314,40 @@ if (sampleIsLoaded) {
     Encoder[3].writeCounter((int32_t)encoderSampleValue);
   }
 
+  // Update display immediately when encoder value changes (no debounce for display)
   if (encoderSampleValue != lastEncoder3Value) {
     lastEncoder3Value = encoderSampleValue;
-    pendingSampleSelection = encoderSampleValue;
     lastSampleSelectionChange = millis();
+    
+    // Update display immediately (number shown updates instantly)
+    snr = encoderSampleValue;
+    SMP.wav[GLOB.currentChannel].fileID = snr;
+    fnr = getFolderNumber(snr);
+    drawNumber(snr, col_Folder[fnr], 12);
   }
 
-  bool shouldApplySampleChange = false;
-  int nextSampleId = snr;
-  if (pendingSampleSelection > 0 &&
-      (millis() - lastSampleSelectionChange) >= samplePreviewDebounceMs &&
-      pendingSampleSelection != snr) {
-    shouldApplySampleChange = true;
-    nextSampleId = pendingSampleSelection;
-  }
-
-  if (shouldApplySampleChange) {
-    pendingSampleSelection = -1;
+  // Only trigger preview after 500ms of staying on the same number
+  // Check if the displayed sample is different from the one currently being previewed
+  unsigned long now = millis();
+  if (encoderSampleValue == lastEncoder3Value && 
+      (now - lastSampleSelectionChange) >= samplePreviewDebounceMs &&
+      encoderSampleValue != lastPreviewedSample) {
+    
+    // Preview debounce expired - trigger preview
+    lastPreviewedSample = encoderSampleValue;  // Track that we're previewing this sample
+    
     yield(); // Yield before file operations
     envelope0.noteOff();
     previewIsPlaying = false;
     playSdWav1.stop();
-    //currentMode->pos[3] = snr;
     sampleIsLoaded = false;
     firstcheck = true;
     nofile = false;
 
-    snr = nextSampleId;
+    snr = encoderSampleValue;
     SMP.wav[GLOB.currentChannel].fileID = snr;
 
     fnr = getFolderNumber(snr);
-    FastLEDclear();
-    drawNumber(snr, col_Folder[fnr], 12);
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
     
     yield(); // Yield before opening file

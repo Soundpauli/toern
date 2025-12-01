@@ -1004,10 +1004,50 @@ void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
 
 
 static unsigned long lastBtnChange = 0;
+const unsigned long BUTTON_STUCK_TIMEOUT_MS = 10000; // 10 seconds - if button appears stuck, force reset
 void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
   // `isPressed[encoderIndex]` is true if button is physically down, false if up.
   // `buttonState[encoderIndex]` is our FSM state: IDLE, LONG_PRESSED, RELEASED.
+
+  // Recovery mechanism: If button appears stuck pressed for too long, force reset
+  // This handles cases where I2C communication fails or callbacks are missed
+  // Also reset if button state is 2 (long press) for more than 10 seconds
+  if (isPressed[encoderIndex] && buttonState[encoderIndex] != IDLE) {
+    unsigned long pressDuration;
+    // Handle millis() wraparound (happens every ~50 days)
+    if (currentTime < buttonPressStartTime[encoderIndex]) {
+      // Wraparound occurred
+      pressDuration = (0xFFFFFFFF - buttonPressStartTime[encoderIndex]) + currentTime;
+    } else {
+      pressDuration = currentTime - buttonPressStartTime[encoderIndex];
+    }
+    
+    if (pressDuration > BUTTON_STUCK_TIMEOUT_MS) {
+      // Button has been "pressed" for too long (10+ seconds) - likely stuck state, force reset
+      isPressed[encoderIndex] = false;
+      buttonState[encoderIndex] = IDLE;
+      buttons[encoderIndex] = 0;
+      buttonPressStartTime[encoderIndex] = 0;  // Reset for next valid press
+    }
+  } else if (buttons[encoderIndex] == 2 && buttonState[encoderIndex] == LONG_PRESSED) {
+    // Also check if button state 2 (long press) has been active for too long
+    unsigned long pressDuration;
+    // Handle millis() wraparound
+    if (currentTime < buttonPressStartTime[encoderIndex]) {
+      pressDuration = (0xFFFFFFFF - buttonPressStartTime[encoderIndex]) + currentTime;
+    } else {
+      pressDuration = currentTime - buttonPressStartTime[encoderIndex];
+    }
+    
+    if (pressDuration > BUTTON_STUCK_TIMEOUT_MS) {
+      // Button state 2 (long press) has been stuck for 10+ seconds - force reset
+      isPressed[encoderIndex] = false;
+      buttonState[encoderIndex] = IDLE;
+      buttons[encoderIndex] = 0;
+      buttonPressStartTime[encoderIndex] = 0;  // Reset for next valid press
+    }
+  }
 
   if (buttonState[encoderIndex] == RELEASED) {
     // This state was set by encoder_button_released callback.
@@ -1046,12 +1086,15 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
     // Additional safety: If we think button is pressed but encoder says it's not,
     // verify this state persists before clearing (helps filter I2C glitches)
     static unsigned long lastNotPressedTime[NUM_ENCODERS] = {0, 0, 0, 0};
-    if (buttonState[encoderIndex] != IDLE) {
+    if (buttonState[encoderIndex] != IDLE || isPressed[encoderIndex]) {
       // If it's not pressed, but state wasn't RELEASED to transition to IDLE, 
       // wait a bit to ensure it's not a transient I2C glitch
       if (currentTime - lastNotPressedTime[encoderIndex] > btnDebounce) {
         // State has been "not pressed" for debounce period, safe to reset
-      buttonState[encoderIndex] = IDLE;
+        // This handles cases where isPressed got stuck due to missed callback
+        buttonState[encoderIndex] = IDLE;
+        isPressed[encoderIndex] = false;  // Force reset if stuck
+        buttons[encoderIndex] = 0;
       }
       lastNotPressedTime[encoderIndex] = currentTime;
     } else {
@@ -2767,6 +2810,31 @@ void checkEncoders() {
       }
     }
 
+    // Recovery mechanism: Auto-reset stuck paintMode/unpaintMode after timeout
+    static unsigned long paintModeSetTime = 0;
+    static unsigned long unpaintModeSetTime = 0;
+    static bool lastPaintMode = false;
+    static bool lastUnpaintMode = false;
+    unsigned long now = millis();
+    
+    if (paintMode != lastPaintMode) {
+      paintModeSetTime = now;
+      lastPaintMode = paintMode;
+    } else if (paintMode && (now - paintModeSetTime > 30000)) {
+      // paintMode has been active for 30+ seconds - likely stuck, force reset
+      paintMode = false;
+      paintModeSetTime = 0;
+    }
+    
+    if (unpaintMode != lastUnpaintMode) {
+      unpaintModeSetTime = now;
+      lastUnpaintMode = unpaintMode;
+    } else if (unpaintMode && (now - unpaintModeSetTime > 30000)) {
+      // unpaintMode has been active for 30+ seconds - likely stuck, force reset
+      unpaintMode = false;
+      unpaintModeSetTime = 0;
+    }
+
     if ((GLOB.y > 1 && GLOB.y <= 15)) {  // Allow paint/unpaint up to row 15; row 16 reserved for UI
       if (paintMode && !preventPaintUnpaint) {
         // Only set probability to 100% if slot was empty (preserve existing probability)
@@ -3965,6 +4033,41 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   
   // Update smooth filter mixer gains
   updateMixerGains(GLOB.currentChannel);
+
+  // Recovery mechanism: Detect and reset stuck pressed[] states
+  // If pressed[] is true but no button event is active, it might be stuck
+  static unsigned long pressedStateTime[NUM_ENCODERS] = {0, 0, 0, 0};
+  static bool lastPressedState[NUM_ENCODERS] = {false, false, false, false};
+  unsigned long now = millis();
+  for (int i = 0; i < NUM_ENCODERS; i++) {
+    if (pressed[i] != lastPressedState[i]) {
+      // State changed - reset timer
+      pressedStateTime[i] = now;
+      lastPressedState[i] = pressed[i];
+    } else if (pressed[i] && (now - pressedStateTime[i] > 2000)) {
+      // pressed[i] has been true for 2+ seconds without change - likely stuck
+      // Check if button is actually pressed by reading encoder status
+      uint8_t encoderStatus = Encoder[i].readStatus();
+      bool actualButtonPressed = (encoderStatus != 0xFF && (encoderStatus & 0x08) != 0);
+      if (!actualButtonPressed) {
+        // Hardware says button is NOT pressed but pressed[i] is true - force reset
+        pressed[i] = false;
+        pressedStateTime[i] = 0;
+      }
+    }
+  }
+
+  // Recovery mechanism: Auto-reset preventPaintUnpaint if stuck for too long
+  static unsigned long preventPaintUnpaintSetTime = 0;
+  static bool lastPreventState = false;
+  if (preventPaintUnpaint != lastPreventState) {
+    preventPaintUnpaintSetTime = now;
+    lastPreventState = preventPaintUnpaint;
+  } else if (preventPaintUnpaint && (now - preventPaintUnpaintSetTime > 5000)) {
+    // preventPaintUnpaint has been true for 5+ seconds - likely stuck, force reset
+    preventPaintUnpaint = false;
+    preventPaintUnpaintSetTime = 0;
+  }
 
   if (note[GLOB.x][GLOB.y].channel == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
     paintMode = false;

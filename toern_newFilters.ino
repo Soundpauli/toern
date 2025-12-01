@@ -246,6 +246,12 @@ void initSliders(uint8_t page, uint8_t chan) {
 void slider(uint8_t page) {
   unsigned long now = millis();
   bool activeInteraction = (now - lastInteraction < FILTER_INTERACTION_TIMEOUT);
+  if (!activeInteraction && lastChangedEncoder != -1) {
+    lastChangedEncoder = -1;
+    for (uint8_t i = 0; i < 4; ++i) {
+      showSingleFilter[i] = false;
+    }
+  }
   uint8_t chan = GLOB.currentChannel;
   for (uint8_t i = 0; i < 4; ++i) {
     const auto& def = sliderDef[chan][page][i];
@@ -574,19 +580,31 @@ void setNewFilters() {
     }
   }
 
+  // Check if interaction timeout has expired - need to force redraw to reset view
+  unsigned long now = millis();
+  bool timeoutExpired = (lastInteraction > 0 && (now - lastInteraction) >= FILTER_INTERACTION_TIMEOUT);
+  bool needsTimeoutCheck = (lastInteraction > 0 && !timeoutExpired); // Still waiting for timeout
+  
   if (anyChanged) {
     processAdjustments_new(filterPage[chan]);
     showFilterPages(chan);
     lastRedrawTime = millis();
-  } else if (pageChanged || encoderPosChanged || channelChanged) {
-    // Only redraw if page changed, encoder positions changed, or channel changed, and throttle to prevent excessive redraws
-    unsigned long now = millis();
-    if (now - lastRedrawTime >= REDRAW_THROTTLE_MS) {
+  } else if (pageChanged || encoderPosChanged || channelChanged || timeoutExpired) {
+    // Redraw if page changed, encoder positions changed, channel changed, OR timeout expired
+    // Throttle to prevent excessive redraws, but allow timeout checks through
+    if (timeoutExpired || (now - lastRedrawTime >= REDRAW_THROTTLE_MS)) {
       showFilterPages(chan);
       lastRedrawTime = now;
       if (pageChanged) {
         lastFilterPage[chan] = filterPage[chan];
       }
+    }
+  } else if (needsTimeoutCheck) {
+    // Periodically check for timeout even when nothing is changing
+    // This ensures the view resets after 1 second of inactivity
+    if (now - lastRedrawTime >= REDRAW_THROTTLE_MS) {
+      showFilterPages(chan);
+      lastRedrawTime = now;
     }
   }
 }
