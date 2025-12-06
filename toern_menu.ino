@@ -116,7 +116,7 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 4,  1);   // voiceSelect default
     EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
     EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
-    EEPROM.write(EEPROM_DATA_START + 7,  2);   // previewVol default (0-5 range, middle = 2)
+    EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol default (0-50 range, middle = 20)
     EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
     EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
     EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
@@ -168,7 +168,7 @@ void loadMenuFromEEPROM() {
   extern bool showChannelNr;
   showChannelNr = (EEPROM.read(EEPROM_DATA_START + 19) != 0);
   
-  if (previewVol < 0 || previewVol > 5) previewVol = 2;
+  if (previewVol < 0 || previewVol > 50) previewVol = 20;
   
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
@@ -863,7 +863,9 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawText("LINE", 2, 10, CRGB(55, 55, 0)); // Yellow
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
-      snprintf(levelText, sizeof(levelText), "%d", lineOutLevelSetting);
+      // Display mapped range 1..19 (LINEOUT_MIN..LINEOUT_MAX) for user friendliness
+      int displayVal = (lineOutLevelSetting - LINEOUT_MIN) + 1;  // 13->1, 31->19
+      snprintf(levelText, sizeof(levelText), "%d", displayVal);
       drawText(levelText, 2, 3, CRGB(255, 192, 203)); // Pink
       
       // Pink color for encoder
@@ -875,9 +877,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 29: { // PREV - Preview volume
       drawText("PREV", 2, 10, CRGB(55, 55, 0)); // Yellow
       extern unsigned int previewVol;
-      
-      // Calculate volume from previewVol (0-5) to float (0.0-0.5)
-      float vol = previewVol * 0.1f;
+      // Show two decimals (0.00–0.50) for finer feedback
+      float vol = previewVol * 0.01f;
       char volText[8];
       snprintf(volText, sizeof(volText), "%.2f", vol);
       drawText(volText, 2, 3, CRGB(0, 160, 80)); // Green
@@ -1214,24 +1215,24 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       extern uint8_t lineOutLevelSetting;
       
       if (lineMenuFirstEnter) {
-        int encoderVal = constrain((int)lineOutLevelSetting, LINEOUT_MIN, LINEOUT_MAX);
-        Encoder[2].writeCounter((int32_t)encoderVal);
-        Encoder[2].writeMax((int32_t)LINEOUT_MAX);
-        Encoder[2].writeMin((int32_t)LINEOUT_MIN);
-        currentMode->pos[2] = encoderVal;
-        lastLoVol = encoderVal;
+        int displayVal = constrain((int)(lineOutLevelSetting - LINEOUT_MIN + 1), 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
+        Encoder[2].writeCounter((int32_t)displayVal);
+        Encoder[2].writeMax((int32_t)(LINEOUT_MAX - LINEOUT_MIN + 1)); // 19
+        Encoder[2].writeMin((int32_t)1);
+        currentMode->pos[2] = displayVal;
+        lastLoVol = displayVal;
         lineMenuFirstEnter = false;
         
         // Apply to hardware
-        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+        sgtl5000_1.lineOutLevel(32-lineOutLevelSetting);
       }
       
       if (currentMode->pos[2] != lastLoVol) {
-        int encoderPos = constrain(currentMode->pos[2], LINEOUT_MIN, LINEOUT_MAX);
-        lineOutLevelSetting = (uint8_t)encoderPos;
+        int encoderPos = constrain(currentMode->pos[2], 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
+        lineOutLevelSetting = (uint8_t)(LINEOUT_MIN + encoderPos - 1);
         
         // Apply to hardware
-        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+        sgtl5000_1.lineOutLevel(32-lineOutLevelSetting);
         
         // Save to EEPROM
         saveSingleModeToEEPROM(15, (int8_t)lineOutLevelSetting);
@@ -1248,9 +1249,8 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       extern unsigned int previewVol;
       
       if (prevMenuFirstEnter) {
-        // Load previewVol from EEPROM (0-5), convert to encoder range (0-50)
-        int encoderVal = previewVol * 10;
-        encoderVal = constrain(encoderVal, 0, 50);
+        // Load previewVol from EEPROM (0-50), direct mapping to encoder range (0-50)
+        int encoderVal = constrain((int)previewVol, 0, 50);
         
         Encoder[2].writeCounter((int32_t)encoderVal);
         Encoder[2].writeMax((int32_t)50);
@@ -1265,8 +1265,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       
       if (currentMode->pos[2] != lastPvVol) {
         int encoderPos = constrain(currentMode->pos[2], 0, 50);
-        previewVol = encoderPos / 10;
-        previewVol = constrain(previewVol, 0, 5);
+        previewVol = encoderPos;  // Store 0-50 (0.00-0.50)
         
         // Apply to hardware
         updatePreviewVolume();
@@ -1611,14 +1610,18 @@ void switchMenu(int menuPosition){
         
         // Update encoder[1] max for draw/single mode based on new maxX
         if (currentMode == &draw || currentMode == &singleMode) {
-          int numModules = maxX / MATRIX_WIDTH;  // 1 or 2
-          int adjustedMaxPages = maxPages / numModules;  // 16 or 8
-          Encoder[1].writeMax((int32_t)adjustedMaxPages);
+          int dynamicPages = (MAX_STEPS / maxX);
+          Encoder[1].writeMax((int32_t)dynamicPages);
+          Encoder[3].writeMax((int32_t)MAX_STEPS);
           
           // Clamp current page to new max if needed
-          if (currentMode->pos[1] > adjustedMaxPages) {
-            currentMode->pos[1] = adjustedMaxPages;
-            Encoder[1].writeCounter((int32_t)adjustedMaxPages);
+          if (currentMode->pos[1] > dynamicPages) {
+            currentMode->pos[1] = dynamicPages;
+            Encoder[1].writeCounter((int32_t)dynamicPages);
+          }
+          if (currentMode->pos[3] > MAX_STEPS) {
+            currentMode->pos[3] = MAX_STEPS;
+            Encoder[3].writeCounter((int32_t)MAX_STEPS);
           }
         }
         
@@ -1629,7 +1632,7 @@ void switchMenu(int menuPosition){
         Serial.print(", maxX now: ");
         Serial.print(maxX);
         Serial.print(", max pages now: ");
-        Serial.println(maxPages / (maxX / MATRIX_WIDTH));
+        Serial.println(MAX_STEPS / maxX);
         break;
         }
 
@@ -1965,7 +1968,7 @@ FLASHMEM void drawMidiVoiceSelect() {
 
 
 FLASHMEM void drawPreviewVol() {
-  int barLength = mapf(previewVol, 0, 5, 1, maxX);
+  int barLength = mapf(previewVol, 0, 50, 1, maxX);
   for (int x = 1; x <= (int)maxX; x++) {
     CRGB color = (x <= barLength) ? CRGB(0, 160, 80) : CRGB(0, 0, 0);
     light(x, 6, color);

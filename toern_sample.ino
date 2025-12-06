@@ -1,11 +1,43 @@
 
 extern int8_t channelDirection[maxFiles];
 
+// Track last sample selection in showWave() across calls
+static int lastEncoder3Value_forShowWave = -1;
+
 FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength) {
   if (playSdWav1.isPlaying()) playSdWav1.stop();
   envelope0.noteOff();
   char OUTPUTf[50];
   sprintf(OUTPUTf, "samples/%d/_%d.wav", folder, sampleID);
+
+  // If no trimming is requested (seek at 0, seekEnd at 100), avoid loading into RAM
+  // and stream directly from SD to keep memory usage low.
+  bool usingFullRange = (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
+  if (usingFullRange) {
+    if (!SD.exists(OUTPUTf)) {
+      return;
+    }
+
+    // Normalize seekEnd if it was left at 0 (treat as 100%)
+    if (GLOB.seekEnd == 0) {
+      GLOB.seekEnd = 100;
+      currentMode->pos[2] = GLOB.seekEnd;
+      Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
+    }
+
+    // Clear cached preview metadata so trimmed previews will reload when needed
+    previewCache.valid = false;
+    previewCache.lengthBytes = 0;
+    previewCache.plen = 0;
+
+    previewIsPlaying = true;
+    peakIndex = 0;
+    memset(peakValues, 0, sizeof(peakValues));
+
+    playSdWav1.play(OUTPUTf);  // Stream from SD (no RAM copy)
+    sampleIsLoaded = true;
+    return;
+  }
 
   // --- Check if already cached ---
   if (!previewCache.valid || previewCache.folder != folder || previewCache.sampleID != sampleID) {
@@ -27,21 +59,45 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
 
     GLOB.smplen = fileSize / (PrevSampleRate * 2);
 
-    // Load full sample into RAM buffer
-    previewFile.seek(44);
-    memset(sampled[0], 0, sizeof(sampled[0]));
+    // Decide whether to load full file or only the trimmed window to keep UI responsive
+    // Trimmed window applies when not forcing max length and the file is larger than buffer.
+    bool loadPartial = (!setMaxSampleLength) && (fileSize > (int)sizeof(sampled[0]));
+
+    // Load full sample into RAM buffer (no blanket memset to keep this fast on large files)
     int plen = 0;
+    int readStartBytes = 44;
+    int bytesToReadAll = fileSize - 44;
+    if (loadPartial) {
+      // Compute requested window in bytes based on seek/seekEnd (after smplen computed)
+      int startOffset = (GLOB.smplen * GLOB.seek) / 100;
+      int endOffset = (GLOB.smplen * GLOB.seekEnd) / 100;
+      endOffset = min(endOffset, GLOB.smplen);
+      int startOffsetBytes = startOffset * PrevSampleRate * 2;
+      int endOffsetBytes = endOffset * PrevSampleRate * 2;
+      startOffsetBytes &= ~1;
+      endOffsetBytes &= ~1;
+      if (endOffsetBytes <= startOffsetBytes) {
+        startOffsetBytes = 0;
+        endOffsetBytes = min(fileSize - 44, (int)sizeof(sampled[0]));
+      }
+      readStartBytes = 44 + startOffsetBytes;
+      bytesToReadAll = min(endOffsetBytes - startOffsetBytes, (int)sizeof(sampled[0]));
+    }
+
+    previewFile.seek(readStartBytes);
     // Read in chunks with periodic yield() to prevent blocking CPU during large file operations
-    // For a 930KB sample, this prevents 1-2 second freeze
-    uint8_t chunk[512];  // Read 512 bytes at a time
-    while (previewFile.available() && plen < sizeof(sampled[0])) {
-      size_t toRead = min(sizeof(chunk), (size_t)(sizeof(sampled[0]) - plen));
+    // Larger chunk to reduce SD overhead on big files
+    uint8_t chunk[2048];  // Read 2KB at a time
+    int chunkCount = 0;
+    while (previewFile.available() && plen < bytesToReadAll) {
+      size_t toRead = min(sizeof(chunk), (size_t)(bytesToReadAll - plen));
       size_t bytesRead = previewFile.read(chunk, toRead);
       if (bytesRead == 0) break;
       memcpy(&sampled[0][plen], chunk, bytesRead);
       plen += bytesRead;
-      // Yield every chunk to maintain responsiveness (critical for long samples)
+      // Yield every chunk; extra yield every few chunks to stay responsive
       yield();
+      if ((++chunkCount & 0x3) == 0) yield();
     }
     previewFile.close();
 
@@ -171,13 +227,14 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
 
     loadSample.seek(44 + startOffsetBytes);
     unsigned int i = 0;
-    //memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
-    memset((void *)sampled[0], 0, sizeof(sampled[0]));
+    // Clear target buffer so new load starts from a clean state
+    memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
 
     // Read in chunks with periodic yield() to prevent blocking CPU during large file operations
-    // This prevents device freeze when loading long samples
-    uint8_t chunk[512];  // Read 512 bytes at a time
+    // Larger chunk to reduce SD overhead on big files
+    uint8_t chunk[2048];  // Read 2KB at a time
     size_t bytesToRead = min((size_t)(endOffsetBytes - startOffsetBytes), sizeof(sampled[sampleID]));
+    int chunkCount = 0;
     while (loadSample.available() && i < bytesToRead) {
       size_t toRead = min(sizeof(chunk), bytesToRead - i);
       size_t bytesRead = loadSample.read(chunk, toRead);
@@ -187,6 +244,7 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
       if (i >= sizeof(sampled[sampleID])) break;
       // Yield every chunk to maintain responsiveness (critical for long samples)
       yield();
+      if ((++chunkCount & 0x3) == 0) yield();
     }
     loadSample.close();
 
@@ -204,7 +262,36 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
 
 
 void showWave() {
-  // Check touch3 to enter recordMode
+  // ---- Helpers -------------------------------------------------------------
+  auto resetSeekRange = []() {
+    currentMode->pos[0] = 0;
+    GLOB.seek = 0;
+    Encoder[0].writeCounter((int32_t)0);
+    currentMode->pos[2] = 100;
+    GLOB.seekEnd = 100;
+    Encoder[2].writeCounter((int32_t)100);
+  };
+
+  auto startSdPreview = [&](const char* path) {
+    previewIsPlaying = true;
+    peakIndex = 0;
+    memset(peakValues, 0, sizeof(peakValues));
+    yield(); // Yield before file playback operations
+    if (playSdWav1.isPlaying()) {
+      playSdWav1.stop();
+    }
+    playSdWav1.play(path);
+    sampleIsLoaded = true;
+  };
+
+  auto refreshPeaksDisplay = [&]() {
+    // Update peaks whenever data exists
+    if (peakIndex > 0) {
+      processPeaks();
+    }
+  };
+
+  // ---- Early exits / setup -------------------------------------------------
   extern int fastTouchRead(int);
   extern const int touchThreshold;
   extern Mode recordMode;
@@ -217,7 +304,6 @@ void showWave() {
   yield(); // Allow other tasks to run, especially important during file operations
   
   int snr = SMP.wav[GLOB.currentChannel].fileID;
-
   if (snr < 1) snr = 1;
   int fnr = getFolderNumber(snr);
   char OUTPUTf[50];
@@ -228,9 +314,6 @@ void showWave() {
 
   FastLEDclear();
   
-  // Show big icon
-  //showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
-  
   // New indicator system: wave: M[CH] | M[W] | S[P] | L[X]
   drawIndicator('L', 'C', 1);  // Encoder 1: Medium Current Channel Color
   drawIndicator('L', 'W', 2);  // Encoder 2: Large White
@@ -238,41 +321,29 @@ void showWave() {
   drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
   
   // Set encoder colors to match indicators
-  // Encoder 0: Keep existing logic for file status (no corresponding indicator)
-  
-  
-  
-  // Encoder 1: Large Current Channel Color (L[C]) - matches indicator 1
   CRGB channelColor = getCurrentChannelColor();
   Encoder[0].writeRGBCode(channelColor.r << 16 | channelColor.g << 8 | channelColor.b);
-  
-  // Encoder 2: Large White (L[W]) - matches indicator 2
   Encoder[1].writeRGBCode(0xFFFFFF); // White
-  
-  // Encoder 3: Large Yellow (L[Y]) - matches indicator 3
   Encoder[2].writeRGBCode(0xFFFF00); // Yellow
   Encoder[2].writeMax((int32_t)100);
   if (currentMode->pos[2] > 100) {
     currentMode->pos[2] = 100;
     Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
   }
-  
-  // Encoder 4: Large Blue (L[X]) - matches indicator 4
   Encoder[3].writeRGBCode(0x0000FF); // Blue
 
- // --- UPDATE START POSITION (Encoder 0) ---
-if (sampleIsLoaded) {
-  int newSeek = constrain(currentMode->pos[0], 0, GLOB.seekEnd - 1);  // Ensure seek < seekEnd
-  if (newSeek != GLOB.seek) {
-    GLOB.seek = newSeek;
-    currentMode->pos[0] = newSeek;  // Update encoder to match
-    // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
-    yield(); // Yield before file operations
-    previewSample(fnr, getFileNumber(snr), false);
+  // ---- Encoder 0: Seek start ----------------------------------------------
+  if (sampleIsLoaded) {
+    int newSeek = constrain(currentMode->pos[0], 0, GLOB.seekEnd - 1);  // Ensure seek < seekEnd
+    if (newSeek != GLOB.seek) {
+      GLOB.seek = newSeek;
+      currentMode->pos[0] = newSeek;  // Update encoder to match
+      yield(); // Yield before file operations
+      previewSample(fnr, getFileNumber(snr), false);  // Uses cached buffer when available
+    }
   }
-}
 
-  // --- FOLDER SELECTION (Encoder 1) ---
+  // ---- Encoder 1: Folder --------------------------------------------------
   if (currentMode->pos[1] != GLOB.folder) {
     yield(); // Yield before audio/file operations
     envelope0.noteOff();
@@ -282,60 +353,37 @@ if (sampleIsLoaded) {
     GLOB.folder = currentMode->pos[1];
     SMP.wav[GLOB.currentChannel].fileID = ((GLOB.folder - 1) * 100) + 1;
     Encoder[3].writeCounter((int32_t)SMP.wav[GLOB.currentChannel].fileID);
+    lastEncoder3Value_forShowWave = -1;  // Force re-preview after folder change
   }
 
-
-// --- UPDATE END POSITION (Encoder 2) ---
-if (sampleIsLoaded) {
-  int newSeekEnd = constrain(currentMode->pos[2], GLOB.seek + 1, 100);  // Ensure seekEnd > seek
-  if (newSeekEnd != GLOB.seekEnd) {
-    GLOB.seekEnd = newSeekEnd;
-    currentMode->pos[2] = newSeekEnd;  // Update encoder to match
-    // Use existing previewSample function - it will use cached data (fast!) and play the trimmed section
-    yield(); // Yield before file operations
-    previewSample(fnr, getFileNumber(snr), false);
+  // ---- Encoder 2: Seek end ------------------------------------------------
+  if (sampleIsLoaded) {
+    int newSeekEnd = constrain(currentMode->pos[2], GLOB.seek + 1, 100);  // Ensure seekEnd > seek
+    if (newSeekEnd != GLOB.seekEnd) {
+      GLOB.seekEnd = newSeekEnd;
+      currentMode->pos[2] = newSeekEnd;  // Update encoder to match
+      yield(); // Yield before file operations
+      previewSample(fnr, getFileNumber(snr), false);  // Uses cached buffer when available
+    }
   }
-}
 
-
-
-
-
-  // --- NEW SAMPLE SELECTION (Encoder 3) ---
-  // Display updates immediately, but preview is debounced (500ms)
-  const unsigned long samplePreviewDebounceMs = 150;
-  static int lastEncoder3Value = -1;
-  static unsigned long lastSampleSelectionChange = 0;
-  static int lastPreviewedSample = -1;  // Track which sample is currently being previewed
-
+  // ---- Encoder 3: Sample selection ---------------------------------------
   int encoderSampleValue = constrain(currentMode->pos[3], 1, 999);
   if (encoderSampleValue != currentMode->pos[3]) {
     currentMode->pos[3] = encoderSampleValue;
     Encoder[3].writeCounter((int32_t)encoderSampleValue);
   }
 
-  // Update display immediately when encoder value changes (no debounce for display)
-  if (encoderSampleValue != lastEncoder3Value) {
-    lastEncoder3Value = encoderSampleValue;
-    lastSampleSelectionChange = millis();
-    
-    // Update display immediately (number shown updates instantly)
+  bool sampleChanged = (encoderSampleValue != lastEncoder3Value_forShowWave) ||
+                       (encoderSampleValue != SMP.wav[GLOB.currentChannel].fileID);
+
+  if (sampleChanged) {
+    lastEncoder3Value_forShowWave = encoderSampleValue;
     snr = encoderSampleValue;
     SMP.wav[GLOB.currentChannel].fileID = snr;
     fnr = getFolderNumber(snr);
-    drawNumber(snr, col_Folder[fnr], 12);
-  }
 
-  // Only trigger preview after 500ms of staying on the same number
-  // Check if the displayed sample is different from the one currently being previewed
-  unsigned long now = millis();
-  if (encoderSampleValue == lastEncoder3Value && 
-      (now - lastSampleSelectionChange) >= samplePreviewDebounceMs &&
-      encoderSampleValue != lastPreviewedSample) {
-    
-    // Preview debounce expired - trigger preview
-    lastPreviewedSample = encoderSampleValue;  // Track that we're previewing this sample
-    
+    // Reset preview / state
     yield(); // Yield before file operations
     envelope0.noteOff();
     previewIsPlaying = false;
@@ -344,50 +392,39 @@ if (sampleIsLoaded) {
     firstcheck = true;
     nofile = false;
 
-    snr = encoderSampleValue;
-    SMP.wav[GLOB.currentChannel].fileID = snr;
-
-    fnr = getFolderNumber(snr);
     sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, getFileNumber(snr));
-    
     yield(); // Yield before opening file
 
-    // --- Invalidate preview cache when selecting new sample ---
-    previewCache.valid = false;
-
-    // --- Reset seek positions when choosing a new sample ---
-    currentMode->pos[0] = 0;
-    GLOB.seek = 0;
-    Encoder[0].writeCounter((int32_t)0);
-    currentMode->pos[2] = 100;
-    GLOB.seekEnd = 100;
-    Encoder[2].writeCounter((int32_t)100);
-
-    if (!previewIsPlaying && !sampleIsLoaded) {
-      previewIsPlaying = true;
-      yield(); // Yield before file playback operations
-      if (playSdWav1.isPlaying()) {
-        playSdWav1.stop();
-        playSdWav1.play(OUTPUTf);
-      } else {
-        playSdWav1.play(OUTPUTf);
+    // Log file info for debugging large-sample browsing
+    static unsigned long lastInfoLogMs = 0;
+    unsigned long nowInfo = millis();
+    if (nowInfo - lastInfoLogMs > 150) {
+      lastInfoLogMs = nowInfo;
+      File infoFile = SD.open(OUTPUTf);
+      if (infoFile) {
+        int fileSize = infoFile.size();
+        float ramUsePct = (float)fileSize / (float)sizeof(sampled[0]) * 100.0f;
+        Serial.printf("SETWAV preview %s size=%.1fKB buf=%.1f%%\n", OUTPUTf, fileSize / 1024.0f, ramUsePct);
+        infoFile.close();
       }
-
-      peakIndex = 0;
-      memset(peakValues, 0, sizeof(peakValues));
-      sampleIsLoaded = true;
     }
+
+    // Invalidate preview cache and reset seek positions for new sample
+    previewCache.valid = false;
+    resetSeekRange();
+
+    startSdPreview(OUTPUTf);
   }
 
-  // Just to be safe, ensure GLOB.seekEnd never exceeds 100
+  // Safety clamp
   if (GLOB.seekEnd > 100) {
     GLOB.seekEnd = 100;
     currentMode->pos[2] = GLOB.seekEnd;
     Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
   }
   
-  // Display peaks AFTER all encoder processing (so display matches audio)
-  processPeaks();
+  // Display peaks AFTER encoder processing (so display matches audio)
+  refreshPeaksDisplay();
   drawNumber(snr, col_Folder[fnr], 12);
   
   yield(); // Yield at end of function to maintain responsiveness
@@ -558,13 +595,13 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     else if (g == 17) rate = 1;
     else rate = 4;
     
-    // Load full sample into RAM buffer
+    // Load full sample into RAM buffer (no blanket memset)
     previewFile.seek(44);
-    memset(sampled[0], 0, sizeof(sampled[0]));
     int plen = 0;
     // Read in chunks with periodic yield() to prevent blocking CPU during large file operations
-    // For a 930KB sample, this prevents 1-2 second freeze
-    uint8_t chunk[512];  // Read 512 bytes at a time
+    // Larger chunk to reduce SD overhead on big files
+    uint8_t chunk[2048];  // Read 2KB at a time
+    int chunkCount = 0;
     while (previewFile.available() && plen < sizeof(sampled[0])) {
       size_t toRead = min(sizeof(chunk), (size_t)(sizeof(sampled[0]) - plen));
       size_t bytesRead = previewFile.read(chunk, toRead);
@@ -573,6 +610,7 @@ void loadPreviewToChannel(unsigned int targetChannel) {
       plen += bytesRead;
       // Yield every chunk to maintain responsiveness (critical for long samples)
       yield();
+      if ((++chunkCount & 0x3) == 0) yield();
     }
     previewFile.close();
     

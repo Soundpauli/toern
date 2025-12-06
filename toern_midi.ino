@@ -1,5 +1,3 @@
-#include <math.h>
-
 // External variables
 extern float detune[13]; // Global detune array for channels 1-12
 extern float channelOctave[9]; // Global octave array for channels 1-8

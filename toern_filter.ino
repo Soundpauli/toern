@@ -203,16 +203,35 @@ void setFilters(FilterType filterType, int index, bool initial) {
     case REVERB:
       {
         if (freeverbs[index] != nullptr && freeverbs[index] != 0) {
-          if (freeverbmixers[index] != 0 && mappedValue < 0.1) {
-            freeverbmixers[index]->gain(0, 0);  // Mute wet
-            freeverbmixers[index]->gain(3, 1);  // Enable dry
+          // Map reverb value (0.0-0.79) to smooth wet/dry blend
+          // Every value should have an effect - smooth transition from dry to wet
+          float wetGain = mapf(mappedValue, 0.0f, 0.79f, 0.0f, 1.0f);
+          wetGain = constrain(wetGain, 0.0f, 1.0f);
+          
+          // Keep dry at constant level (slightly reduce when wet is high to prevent over-amplification)
+          float dryGain = mapf(mappedValue, 0.0f, 0.79f, 1.0f, 0.7f);
+          dryGain = constrain(dryGain, 0.7f, 1.0f);
+          
+          if (freeverbmixers[index] != 0) {
+            freeverbmixers[index]->gain(0, wetGain);  // Smooth wet blend
+            freeverbmixers[index]->gain(3, dryGain);  // Slight dry reduction at high wet
+          }
+          
+          // Set reverb parameters (only when wet is active)
+          if (wetGain > 0.01f) {
+            // Map damping from bright (0.01) to darker (0.5) as reverb increases
+            // Low reverb = bright, clear tail; High reverb = darker, more muffled tail
+            float dampingValue = mapf(mappedValue, 0.0f, 0.79f, 0.01f, 0.5f);
+            dampingValue = constrain(dampingValue, 0.01f, 0.5f);
+            freeverbs[index]->damping(dampingValue);
+            
+            // Map roomsize smoothly across the range
+            float roomSize = mapf(mappedValue, 0.0f, 0.79f, 0.0f, 0.79f);
+            freeverbs[index]->roomsize(roomSize);
           } else {
+            // When off, set to minimum
+            freeverbs[index]->roomsize(0.0);
             freeverbs[index]->damping(0.01);
-            freeverbs[index]->roomsize(mappedValue);
-            if (freeverbmixers[index] != 0) {
-              freeverbmixers[index]->gain(0, 1);  // Enable wet
-              freeverbmixers[index]->gain(3, 1);  // dont Mute dry
-            }
           }
         }
         break;

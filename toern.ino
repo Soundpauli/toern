@@ -1,5 +1,5 @@
-#define VERSION "v1.3"
-//extern "C" char *sbrk(int incr);
+#define VERSION "v1.4"
+extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
 #define SERIAL8_TX_BUFFER_SIZE 128   // Larger transmit buffer for safety
@@ -61,9 +61,9 @@ extern void handleMidiClock();
 #define BPM_MAX 300
 
 #define GAIN_1 0.4  //0.1;
-#define GAIN_2 0.4   //0.33
+#define GAIN_2 0.8   //0.33 (increased to 0.8 for 64% total gain)
 #define GAIN_3 0.4   //0.25
-#define GAIN_4 0.4  //0.2;
+#define GAIN_4 0.8  //0.2; (increased to 0.8 for 64% total gain)
 
 
 #define NUM_ENCODERS 4
@@ -334,9 +334,10 @@ int peakRecIndex = 0;
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
 bool pong = false;
-const long ram = 9525600;  // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
-const unsigned int maxlen = (MATRIX_WIDTH * LED_MODULES * maxPages) + 1;  // Use max hardware capacity for array size
-const unsigned int SONG_LEN = MATRIX_WIDTH * LED_MODULES * maxPages;  // Use max hardware capacity
+const long ram = 12582912;  // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
+const unsigned int MAX_STEPS = MATRIX_WIDTH * maxPages;  // Fixed total steps (16 pages * 16 cols = 256)
+const unsigned int maxlen = MAX_STEPS + 1;               // Note array width (1-based)
+const unsigned int SONG_LEN = MAX_STEPS;                 // Song length equals total steps
 
 static bool lastBothTouched = false;
 bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
@@ -351,7 +352,7 @@ unsigned long lastCheckTime = 0;          // Get the current time
 
 int recMode = 1;
 unsigned int fastRecMode = 0;
-unsigned int previewVol = 2;  // Default 2 (0-5 range)
+unsigned int previewVol = 20;  // Default 20 (0-50 range, 0.00-0.50)
 int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1)
 int transportMode = 1;
 int patternMode = -1;
@@ -462,7 +463,7 @@ bool isNowPlaying = false;  // global
 
 int PrevSampleRate = 1;
 EXTMEM int SampleRate[maxFiles] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles + 1)];
+EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles)];
 static const uint32_t MAX_SAMPLES = sizeof(sampled[0]) / sizeof(sampled[0][0]);
 
 
@@ -470,6 +471,7 @@ static const uint32_t MAX_SAMPLES = sizeof(sampled[0]) / sizeof(sampled[0][0]);
 
 elapsedMillis msecs;
 elapsedMillis mRecsecs;
+elapsedMillis diagStatsTimer;
 
 
 DMAMEM CRGB leds[NUM_LEDS];
@@ -1182,10 +1184,8 @@ void refreshCtrlEncoderConfig() {
 
   if (ctrlMode == 0) {
     resetCtrlModeState();
-    int numModules = maxX / MATRIX_WIDTH;
-    if (numModules < 1) numModules = 1;
     updateLastPage();
-    int adjustedMax = SMP_PATTERN_MODE ? lastPage : (maxPages / numModules);
+    int adjustedMax = SMP_PATTERN_MODE ? lastPage : (MAX_STEPS / maxX);
     if (adjustedMax < 1) adjustedMax = 1;
 
     currentMode->minValues[1] = 1;
@@ -1276,6 +1276,13 @@ void switchMode(Mode *newMode) {
     }
     // Set last saved values for encoders
 
+    // When entering draw/single, restore X (encoder 3) from grid position, not prior mode state
+    if (currentMode == &draw || currentMode == &singleMode) {
+      int maxStepsRuntime = (int)MAX_STEPS;
+      GLOB.x = constrain(GLOB.x, 1, maxStepsRuntime);
+      currentMode->pos[3] = GLOB.x;
+    }
+
 
 
     for (int i = 0; i < NUM_ENCODERS; i++) {
@@ -1291,10 +1298,7 @@ void switchMode(Mode *newMode) {
             updateLastPage();
             maxVal = lastPage;
           } else {
-            int numModules = maxX / MATRIX_WIDTH;
-            if (numModules < 1) numModules = 1;
-            int adjustedMaxPages = maxPages / numModules;
-            maxVal = adjustedMaxPages;
+            maxVal = MAX_STEPS / maxX;
           }
           minVal = 1;
           counterVal = constrain(editpage, (int)minVal, (int)maxVal);
@@ -2138,7 +2142,7 @@ void initSoundChip() {
   // Reduced from 256 to 128 blocks to prevent memory fragmentation
   // 256 blocks = 64KB, which can cause slow SD card access and unresponsiveness
   // 128 blocks = 32KB, still plenty for complex audio routing
-  AudioMemory(128);
+  AudioMemory(64);
   // turn on the output
   sgtl5000_1.enable();
   
@@ -2194,17 +2198,18 @@ void initSamples() {
 
 
 
-  synthmixer11.gain(0, GAIN_3);
-  synthmixer11.gain(1, GAIN_3);
-  synthmixer11.gain(3, GAIN_3);
+  // Reduced synth gains to prevent clipping (was 0.4 for 11, 0.15 for 13/14)
+  synthmixer11.gain(0, 0.12);  // Reduced from GAIN_3 (0.4) to prevent clipping
+  synthmixer11.gain(1, 0.12);
+  synthmixer11.gain(3, 0.12);
 
-  synthmixer13.gain(0, 0.15);  // Reduced to half of current (0.3 * 0.5 = 0.15)
-  synthmixer13.gain(1, 0.15);
-  synthmixer13.gain(3, 0.15);
+  synthmixer13.gain(0, 0.10);  // Further reduced from 0.15 to prevent clipping
+  synthmixer13.gain(1, 0.10);
+  synthmixer13.gain(3, 0.10);
 
-  synthmixer14.gain(0, 0.15);  // Reduced to half of current (0.3 * 0.5 = 0.15)
-  synthmixer14.gain(1, 0.15);
-  synthmixer14.gain(3, 0.15);
+  synthmixer14.gain(0, 0.10);  // Further reduced from 0.15 to prevent clipping
+  synthmixer14.gain(1, 0.10);
+  synthmixer14.gain(3, 0.10);
 
 
   // mixer0.gain(0, ...) and mixer0.gain(1, ...) will be set by updatePreviewVolume() based on PREV volume
@@ -2455,8 +2460,8 @@ void setup() {
   
   // Load previewVol from EEPROM
   previewVol = (unsigned int)EEPROM.read(EEPROM_DATA_START + 7);
-  if (previewVol > 5) {
-    previewVol = 2;  // Default to 2 if invalid
+  if (previewVol > 50) {
+    previewVol = 20;  // Default to mid if invalid
   }
   
   // Load lineInLevel from EEPROM
@@ -2721,7 +2726,9 @@ void checkEncoders() {
     if (posHash != oldPosHash) {
       oldPosHash = posHash;
       static int lastY = -1;
-      
+      int maxStepsRuntime = (int)MAX_STEPS;  // total grid length, independent of modules
+      currentMode->pos[3] = constrain(currentMode->pos[3], 1, maxStepsRuntime);
+      Encoder[3].writeMax((int32_t)maxStepsRuntime);
       GLOB.x = currentMode->pos[3];
       GLOB.y = currentMode->pos[0];
       
@@ -3964,10 +3971,11 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
 
   if (previewIsPlaying) {
-    if (msecs > 5) {
+    static elapsedMillis peakCaptureTimer;
+    if (peakCaptureTimer > 15) { // capture peaks at ~66 fps max
+      peakCaptureTimer = 0;
       if (playSdWav1.isPlaying() && peakIndex < maxPeaks) {
         if (peak1.available()) {
-          msecs = 0;
           // Store the peak value
           peakValues[peakIndex] = peak1.read();
           peakIndex++;
@@ -3987,6 +3995,27 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   checkButtons();
   checkTouchInputs();
   checkPendingSampleNotes();
+  
+  // Periodic system stats to Serial (every ~5s)
+  if (diagStatsTimer > 5000) {
+    diagStatsTimer = 0;
+    float cpu = AudioProcessorUsage();
+    float cpuMax = AudioProcessorUsageMax();
+    int audioMem = AudioMemoryUsage();
+    int audioMemMax = AudioMemoryUsageMax();
+    char* heapEnd = (char*)sbrk(0);
+    char* stackPtr = (char*)__builtin_frame_address(0);
+    unsigned long freeRam = 0;
+    if ((uintptr_t)stackPtr > (uintptr_t)heapEnd) {
+      freeRam = (unsigned long)((uintptr_t)stackPtr - (uintptr_t)heapEnd);
+    }
+    unsigned long previewBuf = (unsigned long)sizeof(sampled[0]);
+    float currentGain = GAIN_4 * GAIN_2;  // Current total gain for samples
+    float maxPossibleGain = 1.0f;  // Maximum theoretical gain (1.0 × 1.0)
+    float gainPercent = (currentGain / maxPossibleGain) * 100.0f;
+    Serial.printf("SYS cpu=%.1f%% max=%.1f%% audioMem=%d/%d freeRAM=%luKB previewBuf=%luKB gain=%.2f (%.1f%%)\n",
+                  cpu, cpuMax, audioMem, audioMemMax, freeRam / 1024, previewBuf / 1024, currentGain, gainPercent);
+  }
   
   yield(); // Yield periodically to prevent unresponsiveness, especially during file operations
   
@@ -5530,9 +5559,9 @@ void updateVolume() {
 }
 
 FLASHMEM void updatePreviewVolume() {
-  unsigned int level = constrain(previewVol, 0u, 5u);
-  // Map previewVol (0-5) to gain (0.0-0.5): vol = previewVol * 0.1f
-  float gain = (float)level * 0.1f;  // Map 0→0.0, 5→0.5
+  unsigned int level = constrain(previewVol, 0u, 50u);
+  // Map previewVol (0-50) to gain (0.0-0.5): vol = previewVol * 0.01f
+  float gain = (float)level * 0.01f;  // Map 0→0.0, 50→0.5
   
   // Apply PREV volume to both preview paths:
   // - sound0 (voice0) → envelope0 → mixer0 channel 0
@@ -5937,12 +5966,12 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
 void updateLastPage() {
   // Calculate max selectable pages based on LED modules
   int numModules = maxX / MATRIX_WIDTH;  // 1 or 2
-  int effectiveMaxPages = maxPages / numModules;  // 16 or 8
+  int effectiveMaxPages = MAX_STEPS / maxX;  // Keep total steps fixed; fewer pages when wider
   
   // If LOOP is set (1-8), force lastPage to that value
   extern int loopLength;
   if (loopLength > 0) {
-    lastPage = loopLength;
+    lastPage = min(loopLength, effectiveMaxPages);
     // Still update hasNotes array for potential other uses
     for (unsigned int p = 1; p <= effectiveMaxPages; p++) {
       bool pageHasNotesThisPage = false;
