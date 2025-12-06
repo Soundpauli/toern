@@ -151,7 +151,7 @@ const char* const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WO
 #define INST_ENUM_COUNT (sizeof(instTypeNames) / sizeof(instTypeNames[0]))
 
 // Add at file scope, after instTypeNames[]
-const char* const sndTypeNames[] PROGMEM = { "SAMP", "DRUM" };
+const char* const sndTypeNames[] PROGMEM = { "SAMP" };
 const char* const waveformNames[] PROGMEM = { "SIN", "SQR", "SAW", "TRI" };
 
 struct SliderMeta {
@@ -285,7 +285,7 @@ float rateFactor = 44117.0 / 44100.0;
 
 unsigned int infoIndex = 0;
 
-int8_t lastFile[9] = { 0 };  // Changed from int to int8_t (27 bytes saved)
+uint16_t lastFile[FOLDER_MAX + 1] = { 0 };  // 16-bit to safely store file ids (no overflow)
 bool freshPaint, tmpMute = false;
 bool preventPaintUnpaint = false;  // Flag to prevent paint/unpaint after certain operations
 
@@ -294,10 +294,8 @@ bool firstcheck = false;
 bool nofile = false;
 char *currentParam = "DLAY";
 char *currentFilter = "TYPE";
-char *currentDrum = "TONE";
 char *currentSynth = "BASS";
 unsigned int fxType = 0;
-unsigned int drum_type = 0;
 
 unsigned int selectedFX = 0;
 
@@ -546,7 +544,6 @@ struct Device {
   Sample wav[maxFiles];   // current selected sample
   float param_settings[maxY][maxFilters];
   float filter_settings[maxY][maxFilters];
-  float drum_settings[maxY][4];
   float synth_settings[maxY][8];
   unsigned int mute[maxY];
   unsigned int channelVol[maxY];
@@ -607,7 +604,6 @@ EXTMEM Device SMP = {
   { { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 } },  //wav preset
   {},                                                                                  //param_settings
   {},                                                                                  //filter_settings
-  {},                                                                                  //drum_settings
   {},                                                                                  //synth_settings
   {},                                                                                  //mute
   { 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16 }                   //channelVol
@@ -646,7 +642,6 @@ float gainValue = 2.0;
 
 #define NUM_PARAMS (sizeof(SMP.param_settings[0]) / sizeof(SMP.param_settings[0][0]))
 #define NUM_FILTERS (sizeof(SMP.filter_settings[0]) / sizeof(SMP.filter_settings[0][0]))
-#define NUM_DRUMS (sizeof(SMP.drum_settings[0]) / sizeof(SMP.drum_settings[0][0]))
 #define MAX_CHANNELS maxY  // maxY is the number of channels (e.g. 16)
 
 uint32_t loadedSampleRate[MAX_CHANNELS];
@@ -690,6 +685,9 @@ enum ParameterType { DELAY,
                      TYPE
 };                         
 
+// Number of parameter slots (ATTACK..RELEASE indexes 0-5)
+constexpr int PARAM_COUNT = 6;
+
 
 int maxParamVal[12] = { 1000.0, 2000.0, 1000.0, 1000.0, 1.0, 1000.0};
 
@@ -712,14 +710,6 @@ enum FilterType { NULL_,
                   EFX,
                   FILTER_WAVEFORM
   };  //Define filter types
-
-
-enum DrumTypes { DRUMTONE,
-                 DRUMDECAY,
-                 DRUMPITCH,
-                 DRUMTYPE
-};  //Define drum types
-
 
 
 
@@ -770,7 +760,7 @@ int currentEncoderIndex = 0;
 static const uint8_t sliderCols[4][2] = {{2,3},{6,7},{10,11},{14,15}};
 
 // Define which data array each slider uses
-enum SettingArray { ARR_FILTER, ARR_SYNTH, ARR_DRUM, ARR_PARAM, ARR_NONE };
+enum SettingArray { ARR_FILTER, ARR_SYNTH, ARR_PARAM, ARR_NONE };
 
 // Define named struct for sliderDef
 struct SliderDefEntry {
@@ -844,7 +834,41 @@ AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filter
 AudioEffectBitcrusher *bitcrushers[15] = { nullptr, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, nullptr, nullptr, &bitcrusher11, nullptr, &bitcrusher13, &bitcrusher14 };
 AudioEffectFreeverbDMAMEM *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, &freeverb5, &freeverb6, &freeverb7, &freeverb8, 0, 0, &freeverb11, nullptr, nullptr, nullptr };
 AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, &freeverbmixer5, &freeverbmixer6, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-AudioMixer4 *waveformmixers[15] = { nullptr, &BDMixer, &SNMixer, &HHMixer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
+AudioMixer4 *waveformmixers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
+
+// Stop synth channels (13/14) immediately
+static inline void stopSynthChannel(int ch) {
+  if (ch < 13 || ch > 14) return;
+  if (envelopes[ch]) envelopes[ch]->noteOff();
+  noteOnTriggered[ch] = false;
+  persistentNoteOn[ch] = false;
+}
+
+// Map external 14-bit input (e.g. pitchbend) to current channel fast filter
+static inline void applyExternalFastFilter(uint16_t value14) {
+  FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
+  if (dft.arr == ARR_NONE) return;
+  int mapped = constrain((int)mapf(value14, 0.0f, 16383.0f, 0.0f, maxfilterResolution), 0, (int)maxfilterResolution);
+
+  // Guard PARAM index
+  if (dft.arr == ARR_PARAM && dft.idx >= PARAM_COUNT) return;
+
+  setDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx, mapped);
+
+  switch (dft.arr) {
+    case ARR_FILTER:
+      setFilters(dft.idx, GLOB.currentChannel, false);
+      break;
+    case ARR_SYNTH:
+      if (GLOB.currentChannel == 11) updateSynthVoice(11);
+      break;
+    case ARR_PARAM:
+      setParams(dft.idx, GLOB.currentChannel);
+      break;
+    default:
+      break;
+  }
+}
 
 AudioSynthWaveform *synths[15][2];
 
@@ -1135,24 +1159,6 @@ uint32_t hashString(const String& str) {
 }
 
 
-
-void testDrums() {
-
-  float kickTone = 512;   // Maps to ~40–120 Hz for the kick
-  float kickDecay = 512;  // Maps to ~50–300 ms decay
-  float kickPitch = 0;    // Adds up to ~34 Hz extra on saw wave
-  int kickType = 1;       // Choose type 1 (try 1, 2, or 3)
-
-  float snareTone = 300;   // Controls blend: higher = more tone
-  float snareDecay = 400;  // Maps to ~30–150 ms decay
-  float snarePitch = 512;  // Sets filter cutoff and tone frequency
-  int snareType = 2;       // Choose type 2 for snare character
-
-  float hihatTone = 512;   // Blend between noise and tone for hi-hat
-  float hihatDecay = 512;  // Maps to ~10–50 ms decay (very short)
-  float hihatPitch = 512;  // Maps to filter frequency (2000–7000 Hz)
-  int hihatType = 3;       // Choose type 3 for hi-hat sound
-}
 
 
 
@@ -1973,7 +1979,6 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
     setEnvelopeDefaultValues((unsigned int)GLOB.currentChannel);
     setFiltersDefaultValues((unsigned int)GLOB.currentChannel);
-    setDrumDefaultValues((unsigned int)GLOB.currentChannel);
     setSynthDefaultValues((unsigned int)GLOB.currentChannel);
   }
   
@@ -2333,34 +2338,15 @@ for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
     setFilterDefaults(i);
 }
   
-  setDrumDefaults(true);
-  testDrums();
-    
-
   /*
- for (int ch = 1; ch <= 8; ch++) {
-    setEnvelopeDefaultValues((unsigned int)ch);
-    setFiltersDefaultValues((unsigned int)ch);
-    setDrumDefaultValues((unsigned int)ch);
-    setSynthDefaultValues((unsigned int)ch);
- }
-  for (int ch = 11; ch <= 11; ch++) {
-    setEnvelopeDefaultValues((unsigned int)ch);
-    setFiltersDefaultValues((unsigned int)ch);
-    setDrumDefaultValues((unsigned int)ch);
-    setSynthDefaultValues((unsigned int)ch);
- }
-
-  for (int ch = 13; ch <= 14; ch++) {
-    setEnvelopeDefaultValues((unsigned int)ch);
-    setFiltersDefaultValues((unsigned int)ch);
-    setDrumDefaultValues((unsigned int)ch);
-    setSynthDefaultValues((unsigned int)ch);
- }
+ // Example: reset all channels
+ // for (int ch = 1; ch <= 8; ch++) {
+ //   setEnvelopeDefaultValues((unsigned int)ch);
+ //   setFiltersDefaultValues((unsigned int)ch);
+ //   setSynthDefaultValues((unsigned int)ch);
+ // }
  */
- 
 
-  
 }
 
 
@@ -2820,9 +2806,6 @@ void checkEncoders() {
               if (GLOB.currentChannel == 11) {
                 updateSynthVoice(11);
               }
-              break;
-            case ARR_DRUM:
-              setDrums(dft.idx, GLOB.currentChannel);
               break;
             case ARR_PARAM:
               setParams(dft.idx, GLOB.currentChannel);
@@ -3624,7 +3607,7 @@ void checkPendingSampleNotes() {
   unsigned long now = millis();
   
   // Safety: Limit vector size to prevent memory exhaustion
-  const size_t MAX_PENDING_NOTES = 256;
+  const size_t MAX_PENDING_NOTES = 64;
   if (pendingSampleNotes.size() > MAX_PENDING_NOTES) {
     // Remove oldest events if too many pending
     pendingSampleNotes.erase(pendingSampleNotes.begin(), 
@@ -4276,7 +4259,21 @@ FLASHMEM void updateExternalOneBlink() {
 }
 
 float getNoteDuration(int channel) {
-   float timetilloff = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]) + mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]) + mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]) + mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]) + mapf(SMP.param_settings[channel][RELEASE], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
+  // Calculate ADSR-derived length in milliseconds
+  float delayMs  = mapf(SMP.param_settings[channel][DELAY],  0, maxfilterResolution, 0, maxParamVal[DELAY]);
+  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]);
+  float holdMs   = mapf(SMP.param_settings[channel][HOLD],   0, maxfilterResolution, 0, maxParamVal[HOLD]);
+  float decayMs  = mapf(SMP.param_settings[channel][DECAY],  0, maxfilterResolution, 0, maxParamVal[DECAY]);
+  float releaseMs= mapf(SMP.param_settings[channel][RELEASE],0, maxfilterResolution, 0, maxParamVal[RELEASE]);
+
+  float timetilloff = delayMs + attackMs + holdMs + decayMs + releaseMs;
+
+  // Ensure attack is actually reached before note-off by enforcing at least (attack + small cushion)
+  float minLen = attackMs + 5.0f; // 5ms cushion beyond attack
+  if (timetilloff < minLen) timetilloff = minLen;
+
+  // Absolute floor to avoid zero-length
+  if (timetilloff < 5.0f) timetilloff = 5.0f;
   return timetilloff;
 }
 
@@ -4549,6 +4546,9 @@ void play(bool fromStart) {
   }
 
   ctrlVolumeOverlayActive = false;
+  // Ensure synth voices are idle before starting
+  stopSynthChannel(13);
+  stopSynthChannel(14);
 
   if (fromStart) {
     updateLastPage();
@@ -4670,6 +4670,9 @@ void pause() {
   deleteActiveCopy();
   autoSave();  // Now safe to do blocking SD card operations - timer is stopped
   envelope0.noteOff();
+  // Ensure synth voices 13/14 are silenced on pause
+  stopSynthChannel(13);
+  stopSynthChannel(14);
   //allOff();
   Encoder[2].writeRGBCode(0x005500);
   beat = 1;      // Reset beat on pause
@@ -4691,6 +4694,13 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
 
+  // Ensure any prior note is released so the new trigger starts clean
+  stopSynthChannel(ch);
+
+  // Global cent shift for both oscillators (0..32 -> -24..+24 semitones)
+  float centSemis = mapf(SMP.synth_settings[ch][CENT], 0, maxfilterResolution, -24.0f, 24.0f);
+  float cent_ratio = pow(2.0, centSemis / 12.0);
+
   float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
   float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
   // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
@@ -4698,8 +4708,8 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
   float octave_ratio = pow(2.0, octave_shift);
   // Apply both adjustments to the base frequency
-  synths[ch][0]->frequency(frequency);
-  synths[ch][1]->frequency(frequency * octave_ratio * detune_ratio);
+  synths[ch][0]->frequency(frequency * cent_ratio);
+  synths[ch][1]->frequency(frequency * cent_ratio * octave_ratio * detune_ratio);
   synths[ch][0]->amplitude(WaveFormVelocity);
   synths[ch][1]->amplitude(WaveFormVelocity);
   if (!envelopes[ch]) return;
@@ -4893,67 +4903,19 @@ void playNote() {
           // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
           MidiSendNoteOn(b, ch, vel);
           if (ch < 9) {                                                    // Sample channels (0-8 are _samplers[0] to _samplers[8])
-            if (SMP.filter_settings[ch][EFX] == 1) {                       // Drum type for sample channels 0,1,2
-              float baseTone = pianoFrequencies[constrain(b - 1, 0, 15)];  // b is 1-16, map to 0-15 for pianoFreq
-              float decay = mapf(SMP.drum_settings[ch][DRUMDECAY], 0, 64, 0, 1023);
-              float pitchMod = mapf(SMP.drum_settings[ch][DRUMPITCH], 0, 64, 0, 1023);
-              float type = SMP.drum_settings[ch][DRUMTYPE];
-              float notePitchOffset = mapf(SMP.drum_settings[ch][DRUMTONE], 0, 64, 0, 1023);  // Additional pitch
-              
-              // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-              float detuneOffset = 0.0;
-              if (ch >= 1 && ch <= 12) {
-                detuneOffset = detune[ch] * 100.0; // Convert semitones to cents for drum pitch
-              }
-              
-              // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-              float octaveOffset = 0.0;
-              if (ch >= 1 && ch <= 8) {
-                octaveOffset = channelOctave[ch] * 1200.0; // Convert octaves to cents for drum pitch (12 semitones * 100 cents)
-              }
-
-              
-              Serial.print(ch);  
-              Serial.print("-Drum params: baseTone+notePitchOffset=");
-                
-                Serial.print(baseTone + notePitchOffset + detuneOffset + octaveOffset);
-                Serial.print(", decay=");
-                Serial.print(decay);
-                Serial.print(", pitchMod=");
-                Serial.println(pitchMod);
-                
-              
-              if (ch == 1) KD_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // KD on channel 1 (_sampler 1)
-              if (ch == 2) SN_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // SN on channel 2 (_sampler 2)
-              if (ch == 3) HH_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // HH on channel 3 (_sampler 3)
-                                                                                        // Channels 4-8 using this mode are undefined behavior
-            } else {                                                                    // Sample playback for channels 0-8
-              // `b` is grid row (1-16), map to pitch. `SampleRate` seems to be a pitch offset.
-              // The original `b - (ch + 1)` seems like an attempt to map grid row to a MIDI-like note relative to channel.
-              // Need to ensure pitch is valid for sampler.
-              //int pitch = (12 * SampleRate[ch]) + b - 1;  // b-1 to make it 0-15. SampleRate acts as octave. // Original: 12 * SampleRate[ch] + b - (ch + 1) //
-
-              int pitch = (12 * SampleRate[ch]) +  b - (ch + 1);
-              
-              // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-              if (ch >= 1 && ch <= 12) {
-                pitch += (int)detune[ch]; // Add detune semitones
-              }
-              
-              // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-              if (ch >= 1 && ch <= 8) {
-                pitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
-              }
-                
-              
-              _samplers[ch].noteEvent(pitch, vel, true, true);
-              
-
-           
-
-              // float delay_ms = mapf(SMP.param_settings[ch][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
-              // PendingNoteEvent logic was here, removed for brevity as it was commented out in original.
+            int pitch = (12 * SampleRate[ch]) +  b - (ch + 1);
+            
+            // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+            if (ch >= 1 && ch <= 12) {
+              pitch += (int)detune[ch]; // Add detune semitones
             }
+            
+            // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+            if (ch >= 1 && ch <= 8) {
+              pitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
+            }
+            
+            _samplers[ch].noteEvent(pitch, vel, true, true);
           } else if (ch == 11) {  // Assuming ch 11 is a specific synth
             // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
             // playSound expects MIDI note number (0-indexed pitch offset from row)
@@ -5298,43 +5260,17 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   int pitch_from_row = y;
 
   if (channel > 0 && channel < 9) {
-    if (SMP.filter_settings[channel][EFX] == 1 && channel >= 1 && channel <= 3) {
-      float baseTone = pianoFrequencies[constrain(pitch_from_row - 1, 0, 15)];
-      float decay = mapf(SMP.drum_settings[channel][DRUMDECAY], 0, 64, 0, 1023);
-      float pitchMod = mapf(SMP.drum_settings[channel][DRUMPITCH], 0, 64, 0, 1023);
-      float type = SMP.drum_settings[channel][DRUMTYPE];
-      float notePitchOffset = mapf(SMP.drum_settings[channel][DRUMTONE], 0, 64, 0, 1023);
+    int pitch = (12 * SampleRate[channel]) + pitch_from_row - (channel + 1);
 
-      float detuneOffset = 0.0;
-      if (channel >= 1 && channel <= 12) {
-        detuneOffset = detune[channel] * 100.0;
-      }
-
-      float octaveOffset = 0.0;
-      if (channel >= 1 && channel <= 8) {
-        octaveOffset = channelOctave[channel] * 1200.0;
-      }
-
-      if (channel == 1) {
-        KD_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);
-      } else if (channel == 2) {
-        SN_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);
-      } else if (channel == 3) {
-        HH_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);
-      }
-    } else {
-      int pitch = (12 * SampleRate[channel]) + pitch_from_row - (channel + 1);
-
-      if (channel >= 1 && channel <= 12) {
-        pitch += static_cast<int>(detune[channel]);
-      }
-
-      if (channel >= 1 && channel <= 8) {
-        pitch += static_cast<int>(channelOctave[channel] * 12);
-      }
-
-      _samplers[channel].noteEvent(pitch, velocity, true, true);
+    if (channel >= 1 && channel <= 12) {
+      pitch += static_cast<int>(detune[channel]);
     }
+
+    if (channel >= 1 && channel <= 8) {
+      pitch += static_cast<int>(channelOctave[channel] * 12);
+    }
+
+    _samplers[channel].noteEvent(pitch, velocity, true, true);
   } else if (channel == 11) {
     playSound((12 * static_cast<int>(octave[0])) + transpose + (pitch_from_row - 1), 0);
   } else if (channel >= 13 && channel < 15) {
@@ -5400,31 +5336,6 @@ void paint() {
     int pitch_from_row = current_y;  // 1-16
 
     if (painted_channel > 0 && painted_channel < 9) {  // Sampler channels
-      // Check if channel is set to DRUM mode (EFX = 1)
-      if (SMP.filter_settings[painted_channel][EFX] == 1 && painted_channel >= 1 && painted_channel <= 3) {
-        // Play drum instead of sample
-        float baseTone = pianoFrequencies[constrain(pitch_from_row - 1, 0, 15)];  // pitch_from_row is 1-16, map to 0-15 for pianoFreq
-        float decay = mapf(SMP.drum_settings[painted_channel][DRUMDECAY], 0, 64, 0, 1023);
-        float pitchMod = mapf(SMP.drum_settings[painted_channel][DRUMPITCH], 0, 64, 0, 1023);
-        float type = SMP.drum_settings[painted_channel][DRUMTYPE];
-        float notePitchOffset = mapf(SMP.drum_settings[painted_channel][DRUMTONE], 0, 64, 0, 1023);  // Additional pitch
-        
-        // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-        float detuneOffset = 0.0;
-        if (painted_channel >= 1 && painted_channel <= 12) {
-          detuneOffset = detune[painted_channel] * 100.0; // Convert semitones to cents for drum pitch
-        }
-        
-        // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-        float octaveOffset = 0.0;
-        if (painted_channel >= 1 && painted_channel <= 8) {
-          octaveOffset = channelOctave[painted_channel] * 1200.0; // Convert octaves to cents for drum pitch (12 semitones * 100 cents)
-        }
-
-        if (painted_channel == 1) KD_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // KD on channel 1
-        if (painted_channel == 2) SN_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // SN on channel 2
-        if (painted_channel == 3) HH_drum(baseTone + notePitchOffset + detuneOffset + octaveOffset, decay, pitchMod, type);  // HH on channel 3
-      } else {
         // Play sample as normal
         int pitch = 12 * SampleRate[painted_channel] + pitch_from_row - (painted_channel + 1);
         
@@ -5439,7 +5350,6 @@ void paint() {
         }
         
         _samplers[painted_channel].noteEvent(pitch, painted_velocity, true, true);
-      }
     } else if (painted_channel == 11) {  // Specific synth
       playSound((12 * (int)octave[0]) + transpose + (pitch_from_row - 1), 0);
     } else if (painted_channel >= 13 && painted_channel < 15) {            // General synths
@@ -5563,6 +5473,9 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
         note[c][y].condition = 1;      // Default condition
       }
     }
+  }
+  if (channel_to_clear == 13 || channel_to_clear == 14) {
+    stopSynthChannel(channel_to_clear);
   }
 }
 
@@ -6090,23 +6003,21 @@ int getDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx) {
     switch (arr) {
         case ARR_FILTER: return SMP.filter_settings[channel][idx];
         case ARR_SYNTH:  return SMP.synth_settings[channel][idx];
-        case ARR_DRUM:   return SMP.drum_settings[channel][idx];
         case ARR_PARAM:  return SMP.param_settings[channel][idx];
-     
+        default: return 0;
     }
 }
 void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int value) {
     switch (arr) {
         case ARR_FILTER: SMP.filter_settings[channel][idx] = value; break;
         case ARR_SYNTH:  SMP.synth_settings[channel][idx] = value; break;
-        case ARR_DRUM:   SMP.drum_settings[channel][idx] = value; break;
         case ARR_PARAM:  SMP.param_settings[channel][idx] = value; break;
         default: break;
     }
 }
 
 // Add an array to define how many filter pages to render for each channel
-uint8_t filterPageCount[NUM_CHANNELS] = {0,4,4,4,3,3,3,3,3,0,0,4,0,3,3,0}; // default 4, channel 1 (index 1) has 3 pages
+uint8_t filterPageCount[NUM_CHANNELS] = {0,3,3,3,3,3,3,3,3,0,0,4,0,3,3,0}; // default 3 for sample channels, 4 for channel 11
 // ... existing code ...
 // (If you want to be explicit for all channels, you can do: {4,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4})
 // ... existing code ...
@@ -6114,7 +6025,7 @@ uint8_t filterPageCount[NUM_CHANNELS] = {0,4,4,4,3,3,3,3,3,0,0,4,0,3,3,0}; // de
 void setSliderDefForChannel(int channel) {
     // Channel 1-3 (index 1-3):
     if (channel >= 1 && channel <= 3) {
-        static const SliderDefEntry ch1_3Template[4][4] = {
+        static const SliderDefEntry ch1_3Template[3][4] = {
             {
                 {ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32},
@@ -6125,21 +6036,21 @@ void setSliderDefForChannel(int channel) {
                 {ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32},
-                {ARR_FILTER, EFX, "SND", 1, DISPLAY_ENUM, sndTypeNames, 2},
+                {ARR_FILTER, EFX, "SND", 1, DISPLAY_ENUM, sndTypeNames, 1},
             },
             {
                 {ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_PARAM, SUSTAIN, "SUST", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32}
-            },
-            {
-                {ARR_DRUM, DRUMTONE, "NOTE", 32, DISPLAY_NUMERIC, nullptr, 32},
-                {ARR_DRUM, DRUMDECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32},
-                {ARR_DRUM, DRUMPITCH, "PTCH", 32, DISPLAY_NUMERIC, nullptr, 32},
-                {ARR_DRUM, DRUMTYPE, "TYPE", 6, DISPLAY_NUMERIC, nullptr, 3}
             }
         };
+        // Clear all pages first to avoid stale data in unused slots
+        for (int p = 0; p < 4; ++p) {
+          for (int s = 0; s < 4; ++s) {
+            sliderDef[channel][p][s] = {ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0};
+          }
+        }
         memcpy(sliderDef[channel], ch1_3Template, sizeof(ch1_3Template));
         return;
     }
@@ -6190,7 +6101,8 @@ void setSliderDefForChannel(int channel) {
             {
                 {ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32},
-                {ARR_FILTER, REVERB, "RVRB", 32, DISPLAY_NUMERIC, nullptr, 32},
+                // Use CENT (synth) instead of REVERB to shift oscillators up/down
+                {ARR_SYNTH, CENT, "CENT", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32}
             },
             {
@@ -6272,6 +6184,10 @@ FLASHMEM void setMuteState(int channel, bool muted) {
     // Set global mute when PMOD is disabled
     globalMutes[channel] = muted;
     SMP.mute[channel] = muted;  // Keep SMP.mute in sync for backward compatibility
+  }
+  // Immediately stop synth voices when muted
+  if (muted && (channel == 13 || channel == 14)) {
+    stopSynthChannel(channel);
   }
 }
 

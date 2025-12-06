@@ -183,6 +183,13 @@ void checkMidi() {
         handleStop();
         break;
 
+      case midi::PitchBend: {
+        // Map pitch bend (14-bit) to current channel fast filter
+        uint16_t bend14 = (uint16_t)((MIDI.getData1() & 0x7F) | (MIDI.getData2() << 7));
+        applyExternalFastFilter(bend14);
+        break;
+      }
+
       case midi::SongPosition:
         handleSongPosition(MIDI.getData1() | (MIDI.getData2() << 7));
         break;

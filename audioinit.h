@@ -1,13 +1,5 @@
 
 // Audio Processing Nodes
-EXTMEM AudioMixer4                     SNchaosMix;     //xy=164,617
-AudioSynthWaveformDc            BDpitchAmt;     //xy=227,398
-EXTMEM AudioMixer4                     HHchaosMix;     //xy=215,806
-AudioEffectEnvelope             BDpitchEnv;     //xy=392,397
-AudioSynthWaveformModulated     SNtone;         //xy=322,599
-AudioSynthWaveformModulated     SNtone2;        //xy=322,649
-AudioSynthWaveformModulated     HHtone;         //xy=376,788
-AudioSynthWaveformModulated     HHtone2;        //xy=372,837
 AudioSynthWaveform              waveform11_1;   //xy=405,1269
 AudioSynthWaveform              waveform11_2;   //xy=405,1310
 AudioEffectEnvelope             envelope11;     //xy=412,1351
@@ -22,46 +14,26 @@ EXTMEM AudioSynthWaveform              Swaveform3_2; //xy=490,2460
 AudioSynthWaveformDc            Sdc1_0; //xy=460,2550
 AudioSynthWaveformDc            Sdc1_1; //xy=465,2605
 AudioSynthWaveformDc            Sdc1_2; //xy=460,2665
-EXTMEM AudioMixer4                     BDchaosMix;     //xy=580,415
-EXTMEM AudioMixer4                     SNtoneMix;      //xy=500,623
-EXTMEM AudioMixer4                     HHtoneMix;      //xy=539,824
 EXTMEM AudioSynthWaveform              Swaveform1_0; //xy=520,1970
 EXTMEM AudioSynthWaveform              Swaveform1_1; //xy=525,2030
 EXTMEM AudioSynthWaveform              Swaveform1_2; //xy=525,2085
 EXTMEM AudioSynthWaveform              Swaveform2_0; //xy=505,2150
 EXTMEM AudioSynthWaveform              Swaveform2_1; //xy=515,2215
-AudioSynthNoiseWhite            SNnoise;        //xy=666,607
-AudioEffectEnvelope             SNtoneEnv;      //xy=657,651
 EXTMEM AudioMixer4                     mixer_waveform11; //xy=636,1304
 EXTMEM AudioMixer4                     mixer_waveform13; //xy=641,1611
 EXTMEM AudioMixer4                     mixer_waveform14; //xy=658,1781
 AudioEffectEnvelope             SenvelopeFilter1_0; //xy=675,2560
 AudioEffectEnvelope             SenvelopeFilter1_1; //xy=680,2620
 AudioEffectEnvelope             SenvelopeFilter1_2; //xy=685,2670
-AudioSynthWaveformModulated     BDsine;         //xy=747,399
-AudioSynthWaveformModulated     BDsaw;          //xy=749,452
-AudioSynthNoiseWhite            HHnoise;        //xy=714,803
-AudioEffectEnvelope             HHtoneEnv;      //xy=710,841
-EXTMEM AudioMixer4                     SNMix;          //xy=838,621
-EXTMEM AudioMixer4                     HHMix;          //xy=881,829
-EXTMEM AudioMixer4                     BDMix;          //xy=922,427
-AudioEffectEnvelope             SNenv;          //xy=976,621
 AudioPlayArrayResmp             sound8;         //xy=990,745
-AudioEffectEnvelope             BDenv;          //xy=1084,439
-AudioEffectEnvelope             HHenv;          //xy=1064,816
 AudioEffectEnvelope             envelope13;     //xy=1073,1610
 AudioEffectEnvelope             envelope14;     //xy=1082,1784
-AudioFilterStateVariable        SNfilt;         //xy=1113,564
 EXTMEM AudioMixer4                     Smixer1_0; //xy=1130,2055
 EXTMEM AudioMixer4                     Smixer1_1; //xy=1130,2140
 EXTMEM AudioMixer4                     Smixer1_2; //xy=1130,2215
 EXTMEM AudioMixer4                     Smixer2_0; //xy=1135,2370
 EXTMEM AudioMixer4                     Smixer2_1; //xy=1135,2455
 EXTMEM AudioMixer4                     Smixer2_2; //xy=1140,2565
-AudioFilterStateVariable        BDfilter;       //xy=1234,453
-AudioFilterStateVariable        SnFilter;       //xy=1273,611
-AudioFilterStateVariable        HHfilt;         //xy=1243,731
-AudioFilterStateVariable        HhFilter;       //xy=1221,838
 AudioEffectBitcrusher           bitcrusher11;   //xy=1249,1294
 AudioEffectBitcrusher           bitcrusher13;   //xy=1251,1612
 AudioEffectBitcrusher           bitcrusher14;   //xy=1271,1782
@@ -71,9 +43,6 @@ EXTMEM AudioFilterLadder               Sladder1_2; //xy=1370,2245
 EXTMEM AudioFilterLadder               Sladder2_0; //xy=1360,2430
 EXTMEM AudioFilterLadder               Sladder2_1; //xy=1365,2510
 EXTMEM AudioFilterLadder               Sladder2_2; //xy=1365,2580
-EXTMEM AudioMixer4                     BdFilterMix;    //xy=1429,456
-EXTMEM AudioMixer4                     SnFilterMix;    //xy=1438,621
-EXTMEM AudioMixer4                     HhFilterMix;    //xy=1408,835
 AudioAmplifier                  amp11;          //xy=1421,1295
 AudioAmplifier                  amp13;          //xy=1409,1612
 AudioAmplifier                  amp14;          //xy=1439,1783
@@ -89,9 +58,6 @@ EXTMEM AudioEffectEnvelope             Senvelope1_2; //xy=1560,2240
 EXTMEM AudioEffectEnvelope             Senvelope2_0; //xy=1545,2460
 EXTMEM AudioEffectEnvelope             Senvelope2_1; //xy=1545,2525
 EXTMEM AudioEffectEnvelope             Senvelope2_2; //xy=1555,2585
-EXTMEM AudioMixer4                     BDMixer;        //xy=1680,473
-EXTMEM AudioMixer4                     SNMixer;        //xy=1693,614
-EXTMEM AudioMixer4                     HHMixer;        //xy=1700,717
 AudioPlayArrayResmp             sound4;         //xy=1715,795
 AudioPlayArrayResmp             sound5;         //xy=1720,865
 AudioPlayArrayResmp             sound6;         //xy=1720,935
@@ -179,18 +145,6 @@ EXTMEM AudioMixer4                     mixer_stereoL;  //xy=3931,848
 AudioOutputI2S                  i2s1;           //xy=4154,795
 
 // Audio Connections (all connections (aka wires or links))
-EXTMEM AudioConnection        patchCord1(SNchaosMix, 0, SNtone, 0);
-EXTMEM AudioConnection        patchCord2(SNchaosMix, 0, SNtone2, 0);
-EXTMEM AudioConnection        patchCord3(BDpitchAmt, 0, BDpitchEnv, 0);
-EXTMEM AudioConnection        patchCord4(HHchaosMix, 0, HHtone, 0);
-EXTMEM AudioConnection        patchCord5(HHchaosMix, 0, HHtone2, 0);
-EXTMEM AudioConnection        patchCord6(BDpitchEnv, 0, BDchaosMix, 0);
-EXTMEM AudioConnection        patchCord7(SNtone, 0, SNtoneMix, 0);
-EXTMEM AudioConnection        patchCord8(SNtone2, 0, SNchaosMix, 0);
-EXTMEM AudioConnection        patchCord9(SNtone2, 0, SNtoneMix, 1);
-EXTMEM AudioConnection        patchCord10(HHtone, 0, HHtoneMix, 0);
-EXTMEM AudioConnection        patchCord11(HHtone2, 0, HHchaosMix, 0);
-EXTMEM AudioConnection        patchCord12(HHtone2, 0, HHtoneMix, 1);
 EXTMEM AudioConnection        patchCord13(waveform11_1, 0, mixer_waveform11, 0);
 EXTMEM AudioConnection        patchCord14(waveform11_2, 0, mixer_waveform11, 1);
 EXTMEM AudioConnection        patchCord15(envelope11, 0, mixer_waveform11, 2);
@@ -209,11 +163,6 @@ EXTMEM AudioConnection        patchCord27(Swaveform3_2, 0, Smixer2_2, 2);
 EXTMEM AudioConnection        patchCord28(Sdc1_0, 0, SenvelopeFilter1_0, 0);
 EXTMEM AudioConnection        patchCord29(Sdc1_1, 0, SenvelopeFilter1_1, 0);
 EXTMEM AudioConnection        patchCord30(Sdc1_2, 0, SenvelopeFilter1_2, 0);
-EXTMEM AudioConnection        patchCord31(BDchaosMix, 0, BDsine, 0);
-EXTMEM AudioConnection        patchCord32(BDchaosMix, 0, BDsaw, 0);
-EXTMEM AudioConnection        patchCord33(BDchaosMix, 0, BDsaw, 1);
-EXTMEM AudioConnection        patchCord34(SNtoneMix, 0, SNtoneEnv, 0);
-EXTMEM AudioConnection        patchCord35(HHtoneMix, 0, HHtoneEnv, 0);
 EXTMEM AudioConnection        patchCord36(Swaveform1_0, 0, Smixer1_0, 0);
 EXTMEM AudioConnection        patchCord37(Swaveform1_0, 0, Smixer2_0, 0);
 EXTMEM AudioConnection        patchCord38(Swaveform1_1, 0, Smixer1_1, 0);
@@ -224,45 +173,24 @@ EXTMEM AudioConnection        patchCord42(Swaveform2_0, 0, Smixer1_0, 1);
 EXTMEM AudioConnection        patchCord43(Swaveform2_0, 0, Smixer2_0, 1);
 EXTMEM AudioConnection        patchCord44(Swaveform2_1, 0, Smixer1_1, 1);
 EXTMEM AudioConnection        patchCord45(Swaveform2_1, 0, Smixer2_1, 1);
-EXTMEM AudioConnection        patchCord46(SNnoise, 0, SNMix, 0);
-EXTMEM AudioConnection        patchCord47(SNtoneEnv, 0, SNMix, 1);
-EXTMEM AudioConnection        patchCord48(mixer_waveform11, 0, bitcrusher11, 0);
-EXTMEM AudioConnection        patchCord49(mixer_waveform13, 0, envelope13, 0);
-EXTMEM AudioConnection        patchCord50(mixer_waveform14, 0, envelope14, 0);
-EXTMEM AudioConnection        patchCord51(SenvelopeFilter1_0, 0, Sladder1_0, 1);
-EXTMEM AudioConnection        patchCord52(SenvelopeFilter1_0, 0, Sladder2_0, 1);
-EXTMEM AudioConnection        patchCord53(SenvelopeFilter1_1, 0, Sladder1_1, 1);
-EXTMEM AudioConnection        patchCord54(SenvelopeFilter1_1, 0, Sladder2_1, 1);
-EXTMEM AudioConnection        patchCord55(SenvelopeFilter1_2, 0, Sladder1_2, 1);
-EXTMEM AudioConnection        patchCord56(SenvelopeFilter1_2, 0, Sladder2_2, 1);
-EXTMEM AudioConnection        patchCord57(BDsine, 0, BDMix, 0);
-EXTMEM AudioConnection        patchCord58(BDsaw, 0, BDchaosMix, 1);
-EXTMEM AudioConnection        patchCord59(BDsaw, 0, BDMix, 1);
-EXTMEM AudioConnection        patchCord60(HHnoise, 0, HHMix, 0);
-EXTMEM AudioConnection        patchCord61(HHtoneEnv, 0, HHMix, 1);
-EXTMEM AudioConnection        patchCord62(SNMix, 0, SNenv, 0);
-EXTMEM AudioConnection        patchCord63(HHMix, 0, HHenv, 0);
-EXTMEM AudioConnection        patchCord64(BDMix, 0, BDenv, 0);
-EXTMEM AudioConnection        patchCord65(SNenv, 0, SNfilt, 0);
-EXTMEM AudioConnection        patchCord66(sound8, 0, envelope8, 0);
-EXTMEM AudioConnection        patchCord67(BDenv, 0, BDfilter, 0);
-EXTMEM AudioConnection        patchCord68(HHenv, 0, HHfilt, 0);
-EXTMEM AudioConnection        patchCord69(envelope13, 0, bitcrusher13, 0);
-EXTMEM AudioConnection        patchCord70(envelope14, 0, bitcrusher14, 0);
-EXTMEM AudioConnection        patchCord71(SNfilt, 1, SnFilter, 0);
-EXTMEM AudioConnection        patchCord72(Smixer1_0, 0, Sladder1_0, 0);
-EXTMEM AudioConnection        patchCord73(Smixer1_1, 0, Sladder1_1, 0);
-EXTMEM AudioConnection        patchCord74(Smixer1_2, 0, Sladder1_2, 0);
-EXTMEM AudioConnection        patchCord75(Smixer2_0, 0, Sladder2_0, 0);
-EXTMEM AudioConnection        patchCord76(Smixer2_1, 0, Sladder2_1, 0);
-EXTMEM AudioConnection        patchCord77(Smixer2_2, 0, Sladder2_2, 0);
-EXTMEM AudioConnection        patchCord78(BDfilter, 0, BdFilterMix, 0);
-EXTMEM AudioConnection        patchCord79(BDfilter, 2, BdFilterMix, 1);
-EXTMEM AudioConnection        patchCord80(SnFilter, 0, SnFilterMix, 0);
-EXTMEM AudioConnection        patchCord81(SnFilter, 2, SnFilterMix, 1);
-EXTMEM AudioConnection        patchCord82(HHfilt, 1, HhFilter, 0);
-EXTMEM AudioConnection        patchCord83(HhFilter, 0, HhFilterMix, 0);
-EXTMEM AudioConnection        patchCord84(HhFilter, 2, HhFilterMix, 1);
+EXTMEM AudioConnection        patchCord46(mixer_waveform11, 0, bitcrusher11, 0);
+EXTMEM AudioConnection        patchCord47(mixer_waveform13, 0, envelope13, 0);
+EXTMEM AudioConnection        patchCord48(mixer_waveform14, 0, envelope14, 0);
+EXTMEM AudioConnection        patchCord49(SenvelopeFilter1_0, 0, Sladder1_0, 1);
+EXTMEM AudioConnection        patchCord50(SenvelopeFilter1_0, 0, Sladder2_0, 1);
+EXTMEM AudioConnection        patchCord51(SenvelopeFilter1_1, 0, Sladder1_1, 1);
+EXTMEM AudioConnection        patchCord52(SenvelopeFilter1_1, 0, Sladder2_1, 1);
+EXTMEM AudioConnection        patchCord53(SenvelopeFilter1_2, 0, Sladder1_2, 1);
+EXTMEM AudioConnection        patchCord54(SenvelopeFilter1_2, 0, Sladder2_2, 1);
+EXTMEM AudioConnection        patchCord55(Smixer1_0, 0, Sladder1_0, 0);
+EXTMEM AudioConnection        patchCord56(Smixer1_1, 0, Sladder1_1, 0);
+EXTMEM AudioConnection        patchCord57(Smixer1_2, 0, Sladder1_2, 0);
+EXTMEM AudioConnection        patchCord58(Smixer2_0, 0, Sladder2_0, 0);
+EXTMEM AudioConnection        patchCord59(Smixer2_1, 0, Sladder2_1, 0);
+EXTMEM AudioConnection        patchCord60(Smixer2_2, 0, Sladder2_2, 0);
+EXTMEM AudioConnection        patchCord61(sound8, 0, envelope8, 0);
+EXTMEM AudioConnection        patchCord62(envelope13, 0, bitcrusher13, 0);
+EXTMEM AudioConnection        patchCord63(envelope14, 0, bitcrusher14, 0);
 EXTMEM AudioConnection        patchCord85(bitcrusher11, 0, amp11, 0);
 EXTMEM AudioConnection        patchCord86(bitcrusher13, 0, amp13, 0);
 EXTMEM AudioConnection        patchCord87(bitcrusher14, 0, amp14, 0);
@@ -272,15 +200,12 @@ EXTMEM AudioConnection        patchCord90(Sladder1_2, 0, Senvelope1_2, 0);
 EXTMEM AudioConnection        patchCord91(Sladder2_0, 0, Senvelope2_0, 0);
 EXTMEM AudioConnection        patchCord92(Sladder2_1, 0, Senvelope2_1, 0);
 EXTMEM AudioConnection        patchCord93(Sladder2_2, 0, Senvelope2_2, 0);
-EXTMEM AudioConnection        patchCord94(BdFilterMix, 0, BDMixer, 1);
-EXTMEM AudioConnection        patchCord95(SnFilterMix, 0, SNMixer, 1);
-EXTMEM AudioConnection        patchCord96(HhFilterMix, 0, HHMixer, 1);
 EXTMEM AudioConnection        patchCord97(amp11, 0, filter11, 0);
 EXTMEM AudioConnection        patchCord98(amp13, 0, filter13, 0);
 EXTMEM AudioConnection        patchCord99(amp14, 0, filter14, 0);
-EXTMEM AudioConnection        patchCord100(sound1, 0, BDMixer, 0);
-EXTMEM AudioConnection        patchCord101(sound2, 0, SNMixer, 0);
-EXTMEM AudioConnection        patchCord102(sound3, 0, HHMixer, 0);
+EXTMEM AudioConnection        patchCord100(sound1, 0, envelope1, 0);
+EXTMEM AudioConnection        patchCord101(sound2, 0, envelope2, 0);
+EXTMEM AudioConnection        patchCord102(sound3, 0, envelope3, 0);
 EXTMEM AudioConnection        patchCord103(filter11, 0, filtermixer11, 0);
 EXTMEM AudioConnection        patchCord104(filter11, 1, filtermixer11, 1);
 EXTMEM AudioConnection        patchCord105(filter11, 2, filtermixer11, 2);
@@ -296,9 +221,6 @@ EXTMEM AudioConnection        patchCord114(Senvelope1_2, 0, SmixerL4, 2);
 EXTMEM AudioConnection        patchCord115(Senvelope2_0, 0, SmixerR4, 0);
 EXTMEM AudioConnection        patchCord116(Senvelope2_1, 0, SmixerR4, 1);
 EXTMEM AudioConnection        patchCord117(Senvelope2_2, 0, SmixerR4, 2);
-EXTMEM AudioConnection        patchCord118(BDMixer, 0, envelope1, 0);
-EXTMEM AudioConnection        patchCord119(SNMixer, 0, envelope2, 0);
-EXTMEM AudioConnection        patchCord120(HHMixer, 0, envelope3, 0);
 EXTMEM AudioConnection        patchCord121(sound4, 0, envelope4, 0);
 EXTMEM AudioConnection        patchCord122(sound5, 0, envelope5, 0);
 EXTMEM AudioConnection        patchCord123(sound6, 0, envelope6, 0);

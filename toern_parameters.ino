@@ -58,7 +58,7 @@ void setFiltersDefaultValues(int ch) {
   SMP.filter_settings[ch][BITCRUSHER] = 0;
   SMP.filter_settings[ch][DETUNE] = 16;
   SMP.filter_settings[ch][OCTAVE] = 16;
-  // EFX setting: 0 = SAMPLE mode (default for all channels), 1 = DRUM mode (only for channels 1-3)
+  // EFX setting: 0 = SAMPLE mode (default for all channels)
   SMP.filter_settings[ch][EFX] = 0;
 
   setFilters(PASS, ch, true);
@@ -84,22 +84,6 @@ void setEnvelopeDefaultValues(int ch) {
   setParams(DECAY, ch);
   setParams(SUSTAIN, ch);
   setParams(RELEASE, ch);
-  initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
-  updateSynthVoice(11);
-}
-
-
-// Set default drum values for a single channel
-//DRUM
-void setDrumDefaultValues(int ch) {
-  SMP.drum_settings[ch][DRUMTONE] = 0;
-  SMP.drum_settings[ch][DRUMDECAY] = 16;
-  SMP.drum_settings[ch][DRUMPITCH] = 16;
-  SMP.drum_settings[ch][DRUMTYPE] = 1;
-  setDrums(DRUMTONE, ch);
-  setDrums(DRUMDECAY, ch);
-  setDrums(DRUMPITCH, ch);
-  setDrums(DRUMTYPE, ch);
   initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
   updateSynthVoice(11);
 }
@@ -144,11 +128,6 @@ void resetAllToDefaults() {
     
     // Reset envelopes
     setEnvelopeDefaultValues(ch);
-    
-    // Reset drums (only for channels 1-3)
-    if (ch >= 1 && ch <= 3) {
-      setDrumDefaultValues(ch);
-    }
     
     // Reset synths (only for channels 11, 13-14)
     if (ch == 11 || ch == 13 || ch == 14) {

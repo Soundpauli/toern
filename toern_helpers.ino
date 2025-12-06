@@ -61,20 +61,32 @@ extern int8_t channelDirection[maxFiles];
 extern unsigned int recordingStartBeat;  // Beat where recording started
 
 void EEPROMgetLastFiles() {
-  //get lastFile Array from Eeprom
+  // Get lastFile Array from EEPROM and validate
   EEPROM.get(100, lastFile);
-  set_Wav.maxValues[3] = lastFile[FOLDER_MAX - 1];
-  //if lastFile from eeprom is empty, set it
-  if (lastFile[0] == 0) {
+
+  const uint16_t maxFileId = (FOLDER_MAX * 100) + 99;  // e.g. folder 10, file 99 = 1099
+  bool needsRescan = false;
+  for (int f = 0; f <= FOLDER_MAX; f++) {
+    if (lastFile[f] == 0 || lastFile[f] > maxFileId) {
+      needsRescan = true;
+      break;
+    }
+  }
+
+  // If EEPROM was empty or held truncated (old int8_t) data, rebuild it
+  if (needsRescan) {
     EEPROMsetLastFile();
   }
+
+  // Update encoder limits based on the latest scan result
+  set_Wav.maxValues[3] = lastFile[FOLDER_MAX - 1];
 }
 
 
 
 
 
-// Wrapper: load all saved SMP settings (parameters, filters, drums, synths)
+// Wrapper: load all saved SMP settings (parameters, filters, synths)
 // for every channel.
 void loadSMPSettings() {
   // Don't load settings if SMP_LOAD_SETTINGS is false
@@ -83,7 +95,6 @@ void loadSMPSettings() {
   }
   
   // CRITICAL FIX: Ensure channels 4-8 are always in sample mode (EFX=0)
-  // This prevents saved patterns from incorrectly setting these channels to drum mode
   for (int ch = 4; ch <= 8; ch++) {
     SMP.filter_settings[ch][EFX] = 0;
   }
@@ -111,13 +122,6 @@ void loadSMPSettings() {
     
 
   
-    // Load Drums - apply drum settings (only for channels 1-3)
-    if (ch >= 1 && ch <= 3) {
-        for (int d = 0; d < NUM_DRUMS; d++) {
-           setDrums((DrumTypes)d, ch);
-        }
-    }
-    
     // Load Synths - apply synth settings (only for channel 11)
    if (ch == 11) {
     updateSynthVoice(11);
@@ -125,36 +129,7 @@ void loadSMPSettings() {
   return;
   }
   
-  // CRITICAL: Initialize drum engines for channels set to DRUM mode (EFX=1)
-  // This replicates what happens during manual switching and ensures drums work after loading
-  for (int ch = 1; ch <= 3; ch++) {
-    if (SMP.filter_settings[ch][EFX] == 1) {
-      // Use default parameters
-      float tone = 0;      // DRUMTONE = 0
-      float decay = 512;   // DRUMDECAY = 32 mapped to 0-1023
-      float pitchMod = 512; // DRUMPITCH = 32 mapped to 0-1023  
-      int type = 1;        // DRUMTYPE = 1
-      
-      // Initialize the appropriate drum engine
-      if (ch == 1) {
-        KD_drum(tone, decay, pitchMod, type);
-      } else if (ch == 2) {
-        SN_drum(tone, decay, pitchMod, type);
-      } else if (ch == 3) {
-        HH_drum(tone, decay, pitchMod, type);
-      }
-      
-      // Trigger the shared envelope to initialize it
-      // This replicates what happens when samples play and makes drums work
-      if (ch == 1) {
-        envelope1.noteOn();
-      } else if (ch == 2) {
-        envelope2.noteOn();
-      } else if (ch == 3) {
-        envelope3.noteOn();
-      }
-    }
-  }
+  // Legacy drum path removed; no initialization needed.
   
   
   // Optionally update other settings such as channel volumes
@@ -660,7 +635,7 @@ void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int 
     int velocity = defaultVelocity;
     
     switch(patternType) {
-      case 0: // Channel 1: Kick-like pattern (Bass drum)
+      case 0: // Channel 1: Kick-like pattern
         shouldPlay = (beatPosition == 1 || beatPosition == 9); // Beat 1 and 3
         // Add some ghost notes for groove
         if(random(0, 100) < 20 && (beatPosition == 5 || beatPosition == 13)) {
@@ -1413,7 +1388,7 @@ void generateGenreTrack() {
         generateHipHopPattern(start, end, page);
         break;
         
-      case 3: // DNB - Drum & Bass patterns
+      case 3: // DNB patterns
         generateDnBPattern(start, end, page);
         break;
         
@@ -1448,7 +1423,7 @@ void setGenreBPM() {
     case 2: // HIPH - Hip-hop
       targetBPM = 85 + random(-3, 4); // 82-88 BPM
       break;
-    case 3: // DNB - Drum & Bass
+    case 3: // DNB pattern
       targetBPM = 174 + random(-4, 5); // 170-178 BPM
       break;
     case 4: // HOUS - House
@@ -1684,7 +1659,7 @@ void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int pa
   }
 }
 
-// Drum & Bass pattern generation - More dynamic and complex
+// DNB pattern generation - More dynamic and complex
 void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page) {
   for (unsigned int c = start; c < end; c++) {
     int beat = ((c - start) % maxX) + 1;
@@ -2030,13 +2005,10 @@ void resetAllAudioEffects() {
     setFilterDefaults(idx);  // Resets mixers, filters, reverbs, bitcrushers to default
   }
   
-  // Step 2: Reset drum engine defaults
-  setDrumDefaults(true);
-  
-  // Step 3: Force all mixer gains to target (ensures smooth transitions are off)
+  // Step 2: Force all mixer gains to target (ensures smooth transitions are off)
   forceAllMixerGainsToTarget();
   
-  // Step 4: Apply reset data from SMP to audio hardware
+  // Step 3: Apply reset data from SMP to audio hardware
   Serial.println("Applying reset data to audio hardware...");
   const int channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
   const int numChannels = sizeof(channels) / sizeof(channels[0]);
@@ -2057,14 +2029,6 @@ void resetAllAudioEffects() {
     setParams(DECAY, ch);
     setParams(SUSTAIN, ch);
     setParams(RELEASE, ch);
-    
-    // Apply drums to hardware (only for channels 1-3)
-    if (ch >= 1 && ch <= 3) {
-      setDrums(DRUMTONE, ch);
-      setDrums(DRUMDECAY, ch);
-      setDrums(DRUMPITCH, ch);
-      setDrums(DRUMTYPE, ch);
-    }
     
     // Update synth voice (only for channel 11)
     if (ch == 11) {
@@ -2158,14 +2122,6 @@ void startNew() {
     SMP.param_settings[ch][DECAY] = 0;
     SMP.param_settings[ch][SUSTAIN] = 10;
     SMP.param_settings[ch][RELEASE] = 5;
-    
-    // Reset drum data (only for channels 1-3)
-    if (ch >= 1 && ch <= 3) {
-      SMP.drum_settings[ch][DRUMTONE] = 0;
-      SMP.drum_settings[ch][DRUMDECAY] = 16;
-      SMP.drum_settings[ch][DRUMPITCH] = 16;
-      SMP.drum_settings[ch][DRUMTYPE] = 1;
-    }
     
     // Reset synth data (only for channels 11, 13-14)
     if (ch == 11 || ch == 13 || ch == 14) {

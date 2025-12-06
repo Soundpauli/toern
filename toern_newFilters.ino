@@ -5,26 +5,8 @@ static bool channelHasFreeverb(uint8_t chan) {
   return !(chan == 3 || chan == 4);
 }
 
-static bool channelIsDrumMode(uint8_t chan) {
-  if (chan < 1 || chan > 3) return false;
-  return SMP.filter_settings[chan][EFX] == 1;
-}
-
-static bool updateFilterPageAvailability(uint8_t chan) {
-  if (chan >= 1 && chan <= 3) {
-    uint8_t desiredCount = channelIsDrumMode(chan) ? 4 : 3;
-    if (filterPageCount[chan] != desiredCount) {
-      filterPageCount[chan] = desiredCount;
-      if (desiredCount == 0) {
-        filterPage[chan] = 0;
-      } else if (filterPage[chan] >= desiredCount) {
-        filterPage[chan] = desiredCount - 1;
-      }
-      return true;
-    }
-  }
-  return false;
-}
+// With drum sliders removed, filter pages remain static.
+static bool updateFilterPageAvailability(uint8_t /*chan*/) { return false; }
 unsigned long lastEncoderChange[4] = { 0, 0, 0, 0 };
 
 int8_t lastChangedEncoder = -1;
@@ -58,7 +40,6 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
   switch (arr) {
     case ARR_FILTER: raw = constrain(SMP.filter_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_SYNTH: raw = constrain(SMP.synth_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
-    case ARR_DRUM: raw = constrain(SMP.drum_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_PARAM: raw = constrain(SMP.param_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     default: return 0;
   }
@@ -209,7 +190,6 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
 
 
 void initSliders(uint8_t page, uint8_t chan) {
-  updateFilterPageAvailability(chan);
   page = filterPage[chan];
   showFilterNames(chan);
 
@@ -363,12 +343,6 @@ void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
       }
       break;
 
-    case ARR_DRUM:
-      defaultFastFilter[chan].arr = def.arr;
-      defaultFastFilter[chan].idx = def.idx;
-      //Serial.printf("[Default] DRUM set: ch=%u idx=%u\n", chan, def.idx);
-      break;
-
     default:
       Serial.printf("[Skip] Not assignable default: arr=%d\n", def.arr);
       break;
@@ -417,11 +391,6 @@ void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
         }
         break;
 
-      case ARR_DRUM:
-        defaultFastFilter[chan].arr = def.arr;
-        defaultFastFilter[chan].idx = def.idx;
-        break;
-
       default:
         Serial.printf("[Skip] Not assignable default: arr=%d\n", def.arr);
         return; // Don't update colors if we can't set it
@@ -457,7 +426,7 @@ void processAdjustments_new(uint8_t page) {
     if (val == prev) continue;
 
     // Print debug output
-    const char* arrType = (d.arr == ARR_FILTER) ? "ARR_FILTER" : (d.arr == ARR_SYNTH) ? "ARR_SYNTH" : (d.arr == ARR_PARAM) ? "ARR_PARAM" : (d.arr == ARR_DRUM) ? "ARR_DRUM" : "ARR_NONE";
+    const char* arrType = (d.arr == ARR_FILTER) ? "ARR_FILTER" : (d.arr == ARR_SYNTH) ? "ARR_SYNTH" : (d.arr == ARR_PARAM) ? "ARR_PARAM" : "ARR_NONE";
     Serial.printf("[Debug] %s:%s raw %u -> display %u\n", arrType, d.name, rawVal, val);
 
     float mappedVal = 0;
@@ -466,21 +435,11 @@ void processAdjustments_new(uint8_t page) {
       case ARR_FILTER:
           SMP.filter_settings[chan][d.idx] = currentMode->pos[i];
           setFilters(d.idx, chan, false);
-          if (d.idx == EFX) {
-            if (updateFilterPageAvailability(chan)) {
-              pageCountChanged = true;
-            }
-          }
         break;
 
       case ARR_SYNTH:
         SMP.synth_settings[chan][d.idx] = currentMode->pos[i];
         
-        break;
-
-      case ARR_DRUM:
-        SMP.drum_settings[chan][d.idx] =  currentMode->pos[i];
-        setDrums(d.idx, chan);
         break;
 
       case ARR_PARAM:
@@ -516,7 +475,6 @@ void setNewFilters() {
   static bool lastTouch = false;
   bool currTouch = (touchValue > touchThreshold);
   uint8_t chan = GLOB.currentChannel;
-  updateFilterPageAvailability(chan);
   
   static uint8_t lastFilterPage[NUM_CHANNELS] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
   static uint8_t lastEncoderPos[4] = {255, 255, 255, 255};
