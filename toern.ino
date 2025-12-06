@@ -544,7 +544,7 @@ struct Device {
   Sample wav[maxFiles];   // current selected sample
   float param_settings[maxY][maxFilters];
   float filter_settings[maxY][maxFilters];
-  float synth_settings[maxY][8];
+  float synth_settings[maxY][11];
   unsigned int mute[maxY];
   unsigned int channelVol[maxY];
   // Mute system for PMOD
@@ -719,7 +719,11 @@ enum SynthTypes { INSTRUMENT,
                   FILTER,
                   CENT,
                   SEMI,
-                  FORM
+                  FORM,
+                  LFO_RATE,
+                  LFO_DEPTH,
+                  LFO_PHASE, // repurposed as ARP_SPAN control for ch13/14
+                  ARP_STEP
 };  //Define Synth types
 
 
@@ -844,6 +848,8 @@ static inline void stopSynthChannel(int ch) {
   persistentNoteOn[ch] = false;
 }
 
+// Arp step per channel (used for synth channels)
+static uint32_t arpStepCounter[15] = {0};
 // Map external 14-bit input (e.g. pitchbend) to current channel fast filter
 static inline void applyExternalFastFilter(uint16_t value14) {
   FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
@@ -4701,15 +4707,58 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   float centSemis = mapf(SMP.synth_settings[ch][CENT], 0, maxfilterResolution, -24.0f, 24.0f);
   float cent_ratio = pow(2.0, centSemis / 12.0);
 
+  // Simple LFO: rate (0..32 -> 0..2 Hz), depth (0..32 -> 0..100% modulation), phase fixed at 0 (PHSE repurposed for ARP span)
+  float lfoRateHz   = mapf(SMP.synth_settings[ch][LFO_RATE],  0, maxfilterResolution, 0.0f, 2.0f);
+  float lfoDepthPct = mapf(SMP.synth_settings[ch][LFO_DEPTH], 0, maxfilterResolution, 0.0f, 1.0f); // 0..1
+  float lfoPhase    = 0.0f;
+  float lfo_ratio = 1.0f; // neutral by default (bypass when depth==0 or rate==0)
+  if (lfoRateHz > 0.0f && lfoDepthPct > 0.0f) {
+    float t = (float)millis() * lfoRateHz * 0.0062831853f; // 2*pi/1000
+    float lfo = sinf(lfoPhase + t);
+    // Convert depth to linear multiplier around 1.0 (e.g., 0.5 depth -> +/-50%)
+    lfo_ratio = 1.0f + (lfo * lfoDepthPct);
+    if (lfo_ratio < 0.1f) lfo_ratio = 0.1f; // avoid negative/zero freq
+  }
+
+  // Global cent shift for both oscillators (0..32 -> -24..+24 semitones)
   float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
   float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
   // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
   // For example, an OCTAVE value of 1 multiplies frequency by 2, -1 divides by 2.
   int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
   float octave_ratio = pow(2.0, octave_shift);
-  // Apply both adjustments to the base frequency
-  synths[ch][0]->frequency(frequency * cent_ratio);
-  synths[ch][1]->frequency(frequency * cent_ratio * octave_ratio * detune_ratio);
+  // Apply adjustments to the base frequency (cent only; LFO goes to filter instead)
+  // Arp: map ARP_STEP (0..32) to up to 12 semitones, ping-pong pattern with span set by LFO_PHASE (repurposed)
+  float arpOffsetSemis = 0.0f;
+  if (SMP.synth_settings[ch][ARP_STEP] > 0) {
+    float arpSemis = mapf(SMP.synth_settings[ch][ARP_STEP], 0, maxfilterResolution, 0.0f, 12.0f);
+    int spanSteps = (int)round(mapf(SMP.synth_settings[ch][LFO_PHASE], 0, maxfilterResolution, 2.0f, 16.0f)); // 2..16 steps
+    if (spanSteps < 2) spanSteps = 2;
+    int upPeak = spanSteps - 1;
+    int period = (upPeak > 0) ? (upPeak * 2) : 1;
+    uint32_t step = arpStepCounter[ch]++;
+    int phasePos = (period > 0) ? (step % period) : 0;
+    int reflected = (phasePos > upPeak) ? (period - phasePos) : phasePos;
+    arpOffsetSemis = (float)reflected * arpSemis;
+  }
+  float arp_ratio = pow(2.0f, arpOffsetSemis / 12.0f);
+
+  float base = frequency * cent_ratio * arp_ratio;
+  synths[ch][0]->frequency(base);
+  synths[ch][1]->frequency(base * octave_ratio * detune_ratio);
+
+  // Apply LFO to filter frequency instead of pitch (channels 13/14 only)
+  if (ch == 13 || ch == 14) {
+    if (filters[ch]) {
+      float baseFreqHz = mapf(SMP.filter_settings[ch][FREQUENCY], 0, maxfilterResolution, 0.0f, 10000.0f);
+      float modFreq = baseFreqHz;
+      if (lfo_ratio != 1.0f) {
+        modFreq = baseFreqHz * lfo_ratio;
+        modFreq = constrain(modFreq, 10.0f, 12000.0f);
+      }
+      filters[ch]->frequency(modFreq);
+    }
+  }
   synths[ch][0]->amplitude(WaveFormVelocity);
   synths[ch][1]->amplitude(WaveFormVelocity);
   if (!envelopes[ch]) return;
@@ -6017,7 +6066,7 @@ void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int va
 }
 
 // Add an array to define how many filter pages to render for each channel
-uint8_t filterPageCount[NUM_CHANNELS] = {0,3,3,3,3,3,3,3,3,0,0,4,0,3,3,0}; // default 3 for sample channels, 4 for channel 11
+uint8_t filterPageCount[NUM_CHANNELS] = {0,3,3,3,3,3,3,3,3,0,0,4,0,4,4,0}; // ch13/14 have 4 pages (LFO/ARP page)
 // ... existing code ...
 // (If you want to be explicit for all channels, you can do: {4,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4})
 // ... existing code ...
@@ -6097,7 +6146,7 @@ void setSliderDefForChannel(int channel) {
     
     // Channel 13 and 14: custom 3 pages
     if (channel == 13 || channel == 14) {
-        static const SliderDefEntry ch13_14Template[3][4] = {
+        static const SliderDefEntry ch13_14Template[4][4] = {
             {
                 {ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32},
@@ -6116,19 +6165,21 @@ void setSliderDefForChannel(int channel) {
                 {ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_PARAM, SUSTAIN, "SUST", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32}
+            },
+            {
+                {ARR_SYNTH, LFO_RATE,  "LFO R", 32, DISPLAY_NUMERIC, nullptr, 32},
+                {ARR_SYNTH, LFO_DEPTH, "LFO D", 32, DISPLAY_NUMERIC, nullptr, 32},
+                {ARR_SYNTH, LFO_PHASE, "SPAN", 32, DISPLAY_NUMERIC, nullptr, 32},
+                {ARR_SYNTH, ARP_STEP,  "ARP",  32, DISPLAY_NUMERIC, nullptr, 32}
             }
         };
         // Clear all 4 pages first
         memset(sliderDef[channel], 0, sizeof(sliderDef[channel]));
-        // Copy 3 pages
+        // Copy 4 pages
         memcpy(sliderDef[channel][0], ch13_14Template[0], sizeof(ch13_14Template[0]));
         memcpy(sliderDef[channel][1], ch13_14Template[1], sizeof(ch13_14Template[1]));
         memcpy(sliderDef[channel][2], ch13_14Template[2], sizeof(ch13_14Template[2]));
-        // Set 4th page to ARR_NONE
-        for (int s = 0; s < 4; ++s) {
-            sliderDef[channel][3][s].arr = ARR_NONE;
-            sliderDef[channel][3][s].idx = 0;
-        }
+        memcpy(sliderDef[channel][3], ch13_14Template[3], sizeof(ch13_14Template[3]));
         return;
     }
 }

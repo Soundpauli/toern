@@ -99,6 +99,10 @@ void setSynthDefaultValues(int ch) {
   SMP.synth_settings[ch][SEMI] = 0;
   SMP.synth_settings[ch][INSTRUMENT] = 0;
   SMP.synth_settings[ch][FORM] = 0;
+  SMP.synth_settings[ch][LFO_RATE] = 0;
+  SMP.synth_settings[ch][LFO_DEPTH] = 0;
+  SMP.synth_settings[ch][LFO_PHASE] = 0;
+  SMP.synth_settings[ch][ARP_STEP] = 0;
 
    initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
    // updateSynthVoice(11) is called at the end of resetAllToDefaults() instead
