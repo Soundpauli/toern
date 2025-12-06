@@ -1312,6 +1312,14 @@ void switchMode(Mode *newMode) {
         minVal = -1;
         counterVal = 0;
         currentMode->pos[2] = 0;
+      } else if (i == 2 && (currentMode == &draw || currentMode == &singleMode) && oldMode == &filterMode) {
+        // When exiting filtermode to draw/singleMode, preserve the fastfilter value in encoder 2
+        FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
+        int page, slot;
+        if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
+          counterVal = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
+          currentMode->pos[2] = counterVal;  // Update mode's pos[2] to match fastfilter value
+        }
       } else if (currentMode == &velocity && i == 3) {
         // Encoder[3] in velocity mode: condition range 1-9
         // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1
@@ -1370,6 +1378,13 @@ void switchMode(Mode *newMode) {
 
       Encoder[3].writeMax((int32_t)999);  //maxval
       Encoder[3].writeMin((int32_t)1);    //minval
+      
+      // Initialize encoder 3 with the current channel's saved fileID
+      int fileID = SMP.wav[GLOB.currentChannel].fileID;
+      if (fileID < 1) fileID = 1;  // Ensure valid range
+      fileID = constrain(fileID, 1, 999);
+      currentMode->pos[3] = fileID;
+      Encoder[3].writeCounter((int32_t)fileID);
     }
     
     if (currentMode == &filterMode) {
@@ -4874,9 +4889,9 @@ void playNote() {
           }
 
           // Trigger MIDI and audio as close together as possible.
-          // NOTE: 'ch' is stored 0-based in 'note', but MIDI channels are 1-16.
+          // NOTE: 'ch' is stored 1-based in 'note' (1=voice1, 2=voice2, etc.), and MIDI channels are 1-16.
           // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
-          MidiSendNoteOn(b, ch + 1, vel);
+          MidiSendNoteOn(b, ch, vel);
           if (ch < 9) {                                                    // Sample channels (0-8 are _samplers[0] to _samplers[8])
             if (SMP.filter_settings[ch][EFX] == 1) {                       // Drum type for sample channels 0,1,2
               float baseTone = pianoFrequencies[constrain(b - 1, 0, 15)];  // b is 1-16, map to 0-15 for pianoFreq

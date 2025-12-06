@@ -303,6 +303,20 @@ void showWave() {
   
   yield(); // Allow other tasks to run, especially important during file operations
   
+  // Track last channel to detect channel changes
+  static int lastChannelInShowWave = -1;
+  
+  // Only initialize encoder 3 when channel changes (not every frame)
+  if (lastChannelInShowWave != GLOB.currentChannel) {
+    lastChannelInShowWave = GLOB.currentChannel;
+    int snr = SMP.wav[GLOB.currentChannel].fileID;
+    if (snr < 1) snr = 1;
+    snr = constrain(snr, 1, 999);
+    currentMode->pos[3] = snr;
+    Encoder[3].writeCounter((int32_t)snr);
+    lastEncoder3Value_forShowWave = -1;  // Force re-preview
+  }
+  
   int snr = SMP.wav[GLOB.currentChannel].fileID;
   if (snr < 1) snr = 1;
   int fnr = getFolderNumber(snr);
@@ -648,4 +662,8 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   loadedSampleLen[targetChannel] = trimmedSamples;
   _samplers[targetChannel].addSample(36, targetBuffer, trimmedSamples, rateFactor);
   channelDirection[targetChannel] = 1;
+  
+  // Update the target channel's fileID to match the current channel's fileID
+  // This ensures the saved pattern remembers which sample is loaded
+  SMP.wav[targetChannel].fileID = SMP.wav[GLOB.currentChannel].fileID;
 }
