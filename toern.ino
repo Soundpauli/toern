@@ -2801,7 +2801,10 @@ void checkEncoders() {
               setFilters(dft.idx, GLOB.currentChannel, false);
               break;
             case ARR_SYNTH:
-              // Handle synth updates if needed
+              // Apply synth settings changes for channel 11
+              if (GLOB.currentChannel == 11) {
+                updateSynthVoice(11);
+              }
               break;
             case ARR_DRUM:
               setDrums(dft.idx, GLOB.currentChannel);

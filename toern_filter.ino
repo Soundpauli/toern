@@ -188,6 +188,10 @@ void setFilters(FilterType filterType, int index, bool initial) {
                                  (waveformIndex == 1) ? WAVEFORM_SQUARE :
                                  (waveformIndex == 2) ? WAVEFORM_SAWTOOTH :
                                  WAVEFORM_TRIANGLE;
+          
+          // Update synth voice to apply waveform change
+          extern void updateSynthVoice(int channel);
+          updateSynthVoice(11);
         } else if (index >= 13 && index <= 14) {
           // Channels 13-14 use synth objects
           // Map WAVE value from 0-16 to 1-4 (SIN/SQR/SAW/TRI)
