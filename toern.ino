@@ -1,9 +1,16 @@
-#define VERSION "v1.4"
+#define VERSION "v1.5"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
 #define SERIAL8_TX_BUFFER_SIZE 128   // Larger transmit buffer for safety
 #define TargetFPS 30
+
+// Playback diagnostics / debug (keep OFF for reliability)
+#define DEBUG_PLAYBACK_SERIAL 0  // set to 1 to enable extra playback Serial prints
+
+// Forward declarations to keep Arduino's auto-prototype generator happy
+// (it may emit function prototypes that reference these types before they are defined).
+struct Mode;
 
 //#define AUDIO_BLOCK_SAMPLES 128
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
@@ -12,6 +19,19 @@ extern "C" char *sbrk(int incr);
 static const int FAST_DROP_BLOCKS = 5;  // ≈25ms @ 44100Hz with 128-sample blocks (reduced from 200ms to minimize trimming)
 static int fastDropRemaining = 0;
 volatile bool stepIsDue = false;
+volatile uint32_t missedSteps = 0;  // counts when loop() hasn't consumed the previous tick yet
+
+// Tiny timer ISR (definition is placed later in the file, after includes, to avoid Arduino
+// auto-prototype issues with other callback signatures).
+//void playTimerTick();
+
+// === ISR -> main loop deferrals (keep timer interrupt fast and deterministic) ===
+// NOTE: These are written from the timer ISR (playNote) and consumed in loop().
+volatile bool isrPlayButtonTick = false;         // request drawPlayButton() from main loop (one per beat)
+volatile bool isrDbgPatternFinished = false;     // song-mode: pattern finished
+volatile uint16_t isrDbgPatternFinishedBeat = 0;
+volatile bool isrDbgLoopCountChanged = false;    // loopCount incremented
+volatile uint16_t isrDbgLoopCountValue = 0;
 
 
 //#include <Wire.h>x-
@@ -36,6 +56,86 @@ volatile bool stepIsDue = false;
 #include "audioinit.h"
 #include "font_3x5.h"
 #include "icons.h"
+
+// === Core types (must be defined early for Arduino auto-prototype generation) ===
+enum ValueDisplayMode : uint8_t {
+  DISPLAY_NUMERIC = 0,
+  DISPLAY_ENUM = 1,
+};
+
+enum ParameterType : uint8_t {
+  DELAY,
+  ATTACK,
+  HOLD,
+  DECAY,
+  SUSTAIN,
+  RELEASE,
+  WAVEFORM,
+  TYPE,
+};
+
+enum FilterType : uint8_t {
+  NULL_,
+  PASS,
+  FREQUENCY,
+  REVERB,
+  BITCRUSHER,
+  DETUNE,
+  OCTAVE,
+  RES,
+  RATE,
+  AMOUNT,
+  OFFSET,
+  SPEED,
+  PITCH,
+  ACTIVE,
+  EFX,
+  FILTER_WAVEFORM,
+};  // Define filter types
+
+enum SynthTypes : uint8_t {
+  INSTRUMENT,
+  CUTOFF,
+  RESONANCE,
+  FILTER,
+  CENT,
+  SEMI,
+  FORM,
+  LFO_RATE,
+  LFO_DEPTH,
+  LFO_PHASE, // repurposed as ARP_SPAN control for ch13/14
+  ARP_STEP,
+};  // Define synth types
+
+enum MidiSetTypes : uint8_t {
+  MIDI_IN_BOOL,
+  MIDI_OUT_BOOL,
+  SINGLE_OUT_CHANNEL,
+  GLOBAL_IN_CHANNEL,
+  SEND_CTRL_BOOL,
+  RECEIVE_CTRL_BOOL,
+};  // Define MIDI setting types
+
+// Define which data array each slider uses
+enum SettingArray : uint8_t { ARR_FILTER, ARR_SYNTH, ARR_PARAM, ARR_NONE };
+
+// Define named struct for sliderDef
+struct SliderDefEntry {
+  SettingArray arr;
+  int8_t idx;
+  const char* name;
+  uint8_t maxValue;
+  uint8_t displayMode;
+  const char** enumNames;
+  uint8_t displayRange;
+};
+
+struct Note {
+  uint8_t channel;      // 0 = no note; otherwise, channel / voice id
+  uint8_t velocity;     // velocity (0-127)
+  uint8_t probability;  // 0-100
+  uint8_t condition;    // condition encoding (see codebase)
+} __attribute__((packed));
 
 #define LED_MODULES 2  // Max number of 16x16 matrices that can be chained (hardware limit)
 #define MATRIX_WIDTH 16  // Width of each individual matrix
@@ -80,6 +180,11 @@ extern void handleMidiClock();
 #define pulsesPerBar (24 * 4)  // 24 pulses per quarter note, 4 quarter notes per bar
 
 #define EEPROM_MENU_ADDR 42
+
+// Manifest (folders/files) helpers from toern_helpers.ino
+extern bool scanAndWriteManifest();
+extern bool manifestLoaded;
+extern uint16_t manifestFolderCount;
 
 struct MidiSettings : public midi ::DefaultSettings {
   static const long BaudRate = 31250;
@@ -141,11 +246,6 @@ void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
 void drawSampleLoadOverlay();
 static int16_t lastDefaultFastFilterValue[NUM_CHANNELS] = {0};  // Changed from int to int16_t (32 bytes saved)
-
-enum ValueDisplayMode {
-  DISPLAY_NUMERIC,
-  DISPLAY_ENUM
-};
 
 const char* const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
 #define INST_ENUM_COUNT (sizeof(instTypeNames) / sizeof(instTypeNames[0]))
@@ -252,8 +352,39 @@ struct PendingNote {
   uint8_t livenote;
 };
 
-// a small FIFO for upcoming grid-writes
-static std::vector<PendingNote> pendingNotes;
+// A small FIFO for upcoming grid-writes.
+// IMPORTANT: `playNote()` runs in an IntervalTimer ISR, so this queue must be ISR-safe.
+// Use a fixed-size single-producer (loop/MIDI) single-consumer (ISR/onBeatTick) ring buffer.
+static constexpr uint8_t MAX_PENDING_NOTES = 32;
+static PendingNote pendingNotesBuf[MAX_PENDING_NOTES];
+static volatile uint8_t pendingNotesHead = 0;   // next write index
+static volatile uint8_t pendingNotesTail = 0;   // next read index
+static volatile uint8_t pendingNotesCount = 0;  // number of queued items
+
+// Enqueue from main loop context (may be called from MIDI handlers in loop()).
+// Returns true on success, false if the queue is full (event dropped).
+bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote) {
+  bool ok = false;
+  noInterrupts();
+  if (pendingNotesCount < MAX_PENDING_NOTES) {
+    pendingNotesBuf[pendingNotesHead] = { pitch, velocity, channel, livenote };
+    pendingNotesHead = (uint8_t)((pendingNotesHead + 1) % MAX_PENDING_NOTES);
+    pendingNotesCount++;
+    ok = true;
+  }
+  interrupts();
+  return ok;
+}
+
+// Dequeue from ISR context (`onBeatTick()` runs inside `playNote()` ISR).
+// Returns true if an item was dequeued.
+bool dequeuePendingNote(PendingNote &out) {
+  if (pendingNotesCount == 0) return false;
+  out = pendingNotesBuf[pendingNotesTail];
+  pendingNotesTail = (uint8_t)((pendingNotesTail + 1) % MAX_PENDING_NOTES);
+  pendingNotesCount--;
+  return true;
+}
 
 
 // ----- Intro Animation Timing (in ms) -----
@@ -285,7 +416,7 @@ float rateFactor = 44117.0 / 44100.0;
 
 unsigned int infoIndex = 0;
 
-uint16_t lastFile[FOLDER_MAX + 1] = { 0 };  // 16-bit to safely store file ids (no overflow)
+// Legacy "lastFile" (EEPROM numeric folder*100+idx) system removed; sample browsing is manifest-driven.
 bool freshPaint, tmpMute = false;
 bool preventPaintUnpaint = false;  // Flag to prevent paint/unpaint after certain operations
 
@@ -351,6 +482,10 @@ unsigned long lastCheckTime = 0;          // Get the current time
 int recMode = 1;
 unsigned int fastRecMode = 0;
 unsigned int previewVol = 20;  // Default 20 (0-50 range, 0.00-0.50)
+// Preview trigger mode: 0 = automatic preview on selection/seek, 1 = only on encoder(0) press in SET_WAV
+extern const int PREVIEW_MODE_ON = 0;
+extern const int PREVIEW_MODE_PRESS = 1;
+int previewTriggerMode = PREVIEW_MODE_ON;
 int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1)
 int transportMode = 1;
 int patternMode = -1;
@@ -367,6 +502,8 @@ int ctrlMode = 0;  // 0=page, 1=volume control for encoder 1
 static int ctrlLastChannel = -1;
 static int ctrlLastVolume = -1;
 static bool ctrlVolumeOverlayActive = false;
+// Remember per-channel volume before muting, so unmute can restore it (CTRL=VOL workflow)
+static uint8_t lastChannelVolBeforeMute[maxY] = {0};
 static unsigned long ctrlVolumeOverlayUntil = 0;
 static int ctrlVolumeOverlayValue = 0;
 static bool inputGainOverlayActive = false;
@@ -409,6 +546,7 @@ float marqueePos = maxX;
 bool shifted = false;
 bool movingForward = true;  // Variable to track the direction of movement
 unsigned int lastUpdate = 0;
+unsigned int lastDrawUpdate = 0;  // UI redraw limiter (separate from LED show limiter)
 
 unsigned int totalInterval = 0;
 
@@ -423,6 +561,16 @@ bool waitForFourBars = false;
 unsigned int pulseCount = 0;
 bool sampleIsLoaded = false;
 bool unpaintMode, paintMode = false;
+
+// Rows that should never accept painted notes in draw/single modes.
+// (User-reported: y=9,10,12 were incorrectly paintable when paintMode=true.)
+static inline bool isPaintableDrawRow(unsigned int y) {
+  // Draw-mode: row 16 reserved for UI/copy, row 1 is special UI row.
+  if (y <= 1 || y > 15) return false;
+  // Reserved rows in DRAW mode only (must not accept painted notes)
+  if (y == 10 || y == 11 || y == 13) return false;
+  return true;
+}
 
 
 // Global sequencer position (1..maxlen)
@@ -440,14 +588,6 @@ IntervalTimer midiClockTimer;
 unsigned int lastPage = 1;
 int editpage = 1;
 
-
-
-struct Note {
-  uint8_t channel;      // 0 = no note; otherwise, MIDI note value (0-127)
-  uint8_t velocity;     // MIDI velocity (0-127)
-  uint8_t probability;  // Probability 0-100 (in 25% steps: 0, 25, 50, 75, 100)
-  uint8_t condition;   // Condition: 1=1/1, 2=1/2, 4=1/4, 8=1/8, 16=1/16, 17=2/1, 18=4/1, 19=8/1, 20=16/1 (default 1)
-} __attribute__((packed));
 
 
 EXTMEM Note note[maxlen + 1][maxY + 1] = {};
@@ -500,7 +640,7 @@ Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilt
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 5, maxY, maxY }, { maxY, 5, 10, 10 }, { 0xFF4400, 0x00FF88, 0x0044FF, 0x888888 } };
 
-Mode set_Wav = { "SET_WAV", { 1, 1, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0xFFFFFF, 0x00FF00, 0x000000 } };
+Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
@@ -530,8 +670,11 @@ int currentSongPosition = 0;  // Current position in song arrangement (0-63)
 
 
 struct Sample {
-  unsigned int oldID : 10;   // values 0-1023, enough for 0-999
-  unsigned int fileID : 10;  // values 0-1023, enough for 0-999
+  // Manifest mode:
+  // - oldID  = folder index (0..manifestFolderCount-1)
+  // - fileID = file index within folder (1..manifestFileCount[folder]+1) (+1 is NEW slot)
+  unsigned int oldID : 10;   // 0..1023
+  unsigned int fileID : 10;  // 0..1023
 } __attribute__((packed));
 
 
@@ -601,7 +744,8 @@ EXTMEM Device SMP = {
   100.0,                                                                               //bpm
   1,                                                                                   //file
   1,                                                                                   //pack
-  { { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 } },  //wav preset
+  // wav preset: folder 0, file index = channel (1..8)
+  { { 0, 1 }, { 0, 1 }, { 0, 2 }, { 0, 3 }, { 0, 4 }, { 0, 5 }, { 0, 6 }, { 0, 7 }, { 0, 8 } },
   {},                                                                                  //param_settings
   {},                                                                                  //filter_settings
   {},                                                                                  //synth_settings
@@ -675,16 +819,6 @@ uint8_t lastEncoder = 0; // last used encoder index (0-3)
 
 
 
-enum ParameterType { DELAY,
-                     ATTACK,
-                     HOLD,
-                     DECAY,
-                     SUSTAIN,
-                     RELEASE,
-                     WAVEFORM,
-                     TYPE
-};                         
-
 // Number of parameter slots (ATTACK..RELEASE indexes 0-5)
 constexpr int PARAM_COUNT = 6;
 
@@ -692,49 +826,6 @@ constexpr int PARAM_COUNT = 6;
 int maxParamVal[12] = { 1000.0, 2000.0, 1000.0, 1000.0, 1.0, 1000.0};
 
 
-
-enum FilterType { NULL_,
-                  PASS,
-                  FREQUENCY,
-                  REVERB,
-                  BITCRUSHER,
-                  DETUNE,
-                  OCTAVE,
-                  RES,
-                  RATE,
-                  AMOUNT,
-                  OFFSET,
-                  SPEED,
-                  PITCH,
-                  ACTIVE,
-                  EFX,
-                  FILTER_WAVEFORM
-  };  //Define filter types
-
-
-
-enum SynthTypes { INSTRUMENT,
-                  CUTOFF,
-                  RESONANCE,
-                  FILTER,
-                  CENT,
-                  SEMI,
-                  FORM,
-                  LFO_RATE,
-                  LFO_DEPTH,
-                  LFO_PHASE, // repurposed as ARP_SPAN control for ch13/14
-                  ARP_STEP
-};  //Define Synth types
-
-
-enum MidiSetTypes {
-  MIDI_IN_BOOL,
-  MIDI_OUT_BOOL,
-  SINGLE_OUT_CHANNEL,
-  GLOBAL_IN_CHANNEL,
-  SEND_CTRL_BOOL,
-  RECEIVE_CTRL_BOOL
-};  //Define midi types
 
 FilterType defaultFilter[maxFiles] = { PASS };
 
@@ -762,20 +853,6 @@ int currentEncoderIndex = 0;
 
 // Slider column positions (2 LEDs each)
 static const uint8_t sliderCols[4][2] = {{2,3},{6,7},{10,11},{14,15}};
-
-// Define which data array each slider uses
-enum SettingArray { ARR_FILTER, ARR_SYNTH, ARR_PARAM, ARR_NONE };
-
-// Define named struct for sliderDef
-struct SliderDefEntry {
-  SettingArray arr;
-  int8_t idx;
-  const char* name;
-  uint8_t maxValue;
-  uint8_t displayMode;
-  const char** enumNames;
-  uint8_t displayRange;
-};
 
 // For each page and slot: {arrayType, settingIndex, name}
 DMAMEM static SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
@@ -1388,15 +1465,40 @@ void switchMode(Mode *newMode) {
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
 
-      Encoder[3].writeMax((int32_t)999);  //maxval
-      Encoder[3].writeMin((int32_t)1);    //minval
-      
-      // Initialize encoder 3 with the current channel's saved fileID
-      int fileID = SMP.wav[GLOB.currentChannel].fileID;
-      if (fileID < 1) fileID = 1;  // Ensure valid range
-      fileID = constrain(fileID, 1, 999);
-      currentMode->pos[3] = fileID;
-      Encoder[3].writeCounter((int32_t)fileID);
+      // Set encoder 1 limits based on manifest (if loaded) or FOLDER_MAX
+      extern bool manifestLoaded;
+      extern uint16_t manifestFolderCount;
+      int maxFolders = manifestLoaded ? manifestFolderCount : FOLDER_MAX;
+      if (maxFolders < 1) maxFolders = 1;
+      Encoder[1].writeMin((int32_t)0);
+      Encoder[1].writeMax((int32_t)(maxFolders - 1));
+      // Clamp current position to valid range
+      if ((int)currentMode->pos[1] >= maxFolders) {
+        currentMode->pos[1] = maxFolders - 1;
+        Encoder[1].writeCounter((int32_t)currentMode->pos[1]);
+      }
+
+      // Encoder 3 (sample select) is per-folder, manifest-driven:
+      // 1 .. (fileCount+1) (includes NEW slot).
+      extern uint16_t manifestFileCount[];
+      int folderIdx = constrain((int)SMP.wav[GLOB.currentChannel].oldID, 0, maxFolders - 1);
+      GLOB.folder = (unsigned int)folderIdx;
+      currentMode->pos[1] = folderIdx;
+      Encoder[1].writeCounter((int32_t)folderIdx);
+      int fileCount = (manifestLoaded && folderIdx < (int)manifestFolderCount) ? (int)manifestFileCount[folderIdx] : 0;
+      int maxFilesInFolder = fileCount + 1; // include NEW slot
+      if (maxFilesInFolder < 1) maxFilesInFolder = 1;
+
+      int encMin = 1;
+      int encMax = maxFilesInFolder;
+      Encoder[3].writeMin((int32_t)encMin);
+      Encoder[3].writeMax((int32_t)encMax);
+
+      // Initialize encoder 3 with the current channel's saved file index
+      int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
+      if (fileIdx < encMin || fileIdx > encMax) fileIdx = encMin;
+      currentMode->pos[3] = fileIdx;
+      Encoder[3].writeCounter((int32_t)fileIdx);
     }
     
     if (currentMode == &filterMode) {
@@ -1567,7 +1669,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   
   // In recordMode, allow encoder[2] press to stop recording (no auto-playback)
   if (isRecording && currentMode == &recordMode && pressed[2]) {
-    stopRecordingRAM(getFolderNumber(SMP.wav[GLOB.currentChannel].fileID), SMP.wav[GLOB.currentChannel].fileID);
+    stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
     
     // Turn off threshold trigger when stopping
     extern bool disableThresholdFlag;
@@ -1743,20 +1845,27 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     saveSamplePack(SMP.pack);
     return;  // Prevent other button actions from being processed
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-    loadSamplePack(SMP.pack, false);
+    // User-initiated samplepack load: overwrite any SP0 custom samples
+    loadSamplePack(SMP.pack, false, false);
     return;  // Prevent other button actions from being processed
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     switchMode(&draw);
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-
+    // Encoder 0 press in SET_WAV: manual preview when PREV mode is set to PRSS
+    if (previewTriggerMode == PREVIEW_MODE_PRESS) {
+      int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
+      int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
+      if (fileIdx < 1) fileIdx = 1;
+      previewSample(folderIdx, fileIdx, false);
+    }
+    return;  // Prevent other button actions from being processed
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     loadWav();
     autoSave();
     return;  // Prevent other button actions from being processed
-  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
-    switchMode(&singleMode);
   } else if ((currentMode == &recordMode) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - Exit recordMode
     if (isRecording) {
-      stopRecordingRAM(getFolderNumber(SMP.wav[GLOB.currentChannel].fileID), SMP.wav[GLOB.currentChannel].fileID);
+      stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
       // Turn off threshold trigger when stopping
       extern bool disableThresholdFlag;
       disableThresholdFlag = true;
@@ -1770,9 +1879,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool sampleIsLoaded, firstcheck;
     extern CachedSample previewCache;
     
-    int fileID = SMP.wav[GLOB.currentChannel].fileID;
-    int fnr = getFolderNumber(fileID);
-    int fileNum = getFileNumber(fileID);
+    int fnr = (int)SMP.wav[GLOB.currentChannel].oldID;
+    int fileNum = (int)SMP.wav[GLOB.currentChannel].fileID;
     
     // Invalidate cache and reset flags
     previewCache.valid = false;
@@ -1783,13 +1891,15 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     
     // Use direct SD playback (same as first preview in showWave)
     char OUTPUTf[50];
-    sprintf(OUTPUTf, "samples/%d/_%d.wav", fnr, fileNum);
+    buildSamplePath(fnr, fileNum, OUTPUTf, sizeof(OUTPUTf));
     
-    previewIsPlaying = true;
-    playSdWav1.play(OUTPUTf);
-    
-    peakIndex = 0;
-    memset(peakValues, 0, sizeof(peakValues));
+    if (previewTriggerMode == PREVIEW_MODE_ON) {
+      previewIsPlaying = true;
+      playSdWav1.play(OUTPUTf);
+      
+      peakIndex = 0;
+      memset(peakValues, 0, sizeof(peakValues));
+    }
     sampleIsLoaded = true;
   } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
     extern uint8_t songArrangement[64];
@@ -2063,35 +2173,47 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       return;  // Skip mute toggle at y==1
     }
     
-    bool wasMuted = getMuteState(GLOB.currentChannel);
-    toggleMute();
-    bool isMuted = getMuteState(GLOB.currentChannel);
+    int ch = GLOB.currentChannel;
+    bool wasMuted = getMuteState(ch);
 
+    // If we're about to mute via button, remember the current channel volume (for later restore)
+    if (!wasMuted) {
+      int v = constrain((int)SMP.channelVol[ch], 0, 16);
+      if (v > 0 && ch >= 0 && ch < maxY) {
+        lastChannelVolBeforeMute[ch] = (uint8_t)v;
+      }
+    }
+
+    toggleMute();
+    bool isMuted = getMuteState(ch);
+
+    // CTRL=VOL: on unmute, restore the last channel volume and update encoder(1)
     if (ctrlMode == 1 && wasMuted && !isMuted) {
-      SMP.channelVol[GLOB.currentChannel] = DEFAULT_CHANNEL_VOLUME;
-      float channelvolume = mapf(DEFAULT_CHANNEL_VOLUME, 0, maxY, 0, 1);
-      // Check if amps[channel] exists before accessing (channel 0, 9, 10, 12 are nullptr)
-      if (amps[GLOB.currentChannel] != nullptr) {
-        amps[GLOB.currentChannel]->gain(channelvolume);
+      int restoreVol = (ch >= 0 && ch < maxY) ? (int)lastChannelVolBeforeMute[ch] : 0;
+      restoreVol = constrain(restoreVol, 0, 16);
+      if (restoreVol == 0) restoreVol = DEFAULT_CHANNEL_VOLUME;
+
+      // Apply restored volume
+      SMP.channelVol[ch] = (unsigned int)restoreVol;
+      float channelvolume = mapf((float)restoreVol, 0, maxY, 0, 1);
+      if (amps[ch] != nullptr) {
+        amps[ch]->gain(channelvolume);
       }
 
-      currentMode->pos[1] = DEFAULT_CHANNEL_VOLUME;
-      Encoder[1].writeCounter((int32_t)DEFAULT_CHANNEL_VOLUME);
-      ctrlLastVolume = DEFAULT_CHANNEL_VOLUME;
+      // Keep encoder(1) in sync with the restored volume
+      currentMode->pos[1] = restoreVol;
+      Encoder[1].writeCounter((int32_t)restoreVol);
+      ctrlLastVolume = restoreVol;
 
       if (GLOB.y != 16) {
-        showCtrlVolumeChange(DEFAULT_CHANNEL_VOLUME);
-        CRGB volColor = CRGB(DEFAULT_CHANNEL_VOLUME * DEFAULT_CHANNEL_VOLUME,
-                             max(0, 20 - DEFAULT_CHANNEL_VOLUME), 0);
+        showCtrlVolumeChange(restoreVol);
+        CRGB volColor = CRGB(restoreVol * restoreVol, max(0, 20 - restoreVol), 0);
         Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
         ctrlVolumeOverlayActive = true;
       } else {
         Encoder[1].writeRGBCode(currentMode->knobcolor[1]);
         ctrlVolumeOverlayActive = false;
       }
-
-      setMuteState(GLOB.currentChannel, false);
-      SMP.mute[GLOB.currentChannel] = false;
     }
   }
 
@@ -2426,6 +2548,8 @@ void setup() {
   NVIC_SET_PRIORITY(IRQ_LPUART8, 112);  // MIDI serial interrupt priority
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
+  // Avoid allocations / fragmentation when scheduling sample triggers
+  pendingSampleNotes.reserve(64);
   EEPROM.get(0, samplePackID);
   if (isnan(samplePackID) || samplePackID == 0 || samplePackID < 1) {  // Check for NaN, zero, or invalid values
     Serial.print("NO SAMPLEPACK SET OR INVALID VALUE! Defaulting to 1");
@@ -2469,6 +2593,12 @@ void setup() {
   previewVol = (unsigned int)EEPROM.read(EEPROM_DATA_START + 7);
   if (previewVol > 50) {
     previewVol = 20;  // Default to mid if invalid
+  }
+
+  // Load previewTriggerMode (0=ON, 1=PRSS) from EEPROM slot 20
+  previewTriggerMode = (int)EEPROM.read(EEPROM_DATA_START + 20);
+  if (previewTriggerMode != PREVIEW_MODE_ON && previewTriggerMode != PREVIEW_MODE_PRESS) {
+    previewTriggerMode = PREVIEW_MODE_ON;
   }
   
   // Load lineInLevel from EEPROM
@@ -2521,7 +2651,12 @@ void setup() {
 
   runAnimation();
   playSdWav1.stop();
-  EEPROMgetLastFiles();
+  // Manifest-driven sample browser (no legacy lastFile EEPROM tracking).
+  // Always rescan folders/files on boot and refresh map.txt
+  scanAndWriteManifest();
+  if (manifestLoaded && manifestFolderCount > 0) {
+    set_Wav.maxValues[1] = manifestFolderCount - 1;  // 0-based folders
+  }
   loadMenuFromEEPROM();
   
   // Apply all audio settings from globals (after loadMenuFromEEPROM which may have updated values)
@@ -2529,7 +2664,8 @@ void setup() {
   applyAudioSettingsFromGlobals();
   
   loadSp0StateFromEEPROM();  // Load samplepack 0 state before loading samplepack
-  loadSamplePack(samplePackID, true);
+  // Startup load: preserve SP0 custom voices
+  loadSamplePack(samplePackID, true, true);
   SMP.bpm = 100.0;
   
   // Initialize GLOB with default runtime values (but preserve vol from EEPROM)
@@ -2541,6 +2677,7 @@ void setup() {
   initPageMutes();  // Initialize per-page mute system
   
   //playTimer.priority(118);
+  // Run sequencer from IntervalTimer (ISR-safe playNote) so playback continues during SD/UI work
   playTimer.begin(playNote, playNoteInterval);
   //midiTimer.begin(checkMidi, playNoteInterval);
   //midiTimer.priority(10);
@@ -2619,6 +2756,11 @@ void initGlobalVars() {
   GLOB.shiftY = 0;
   GLOB.shiftY1 = 0;
   GLOB.subpattern = 0;
+
+  // Default synth octave: make ch11 (playSound/voice 11) one octave deeper by default.
+  // playSound() uses octave[0] as an octave offset (in semitones via 12*octave[0]).
+  octave[0] = -1.0f;
+  octave[1] = 0.0f;
 
   for (int i = 0; i < maxFiles; ++i) {
     channelDirection[i] = 1;
@@ -2778,9 +2920,10 @@ void checkEncoders() {
       Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       
-      // Only update edit page from X position if NOT in song mode
+      // Only update edit page from X position if NOT in song mode and NOT in active FLOW-follow playback.
+      // In FLOW mode while playing, the display page is owned by the timer-follow logic.
       extern bool songModeActive;
-      if (!songModeActive) {
+      if (!songModeActive && !(SMP_FLOW_MODE && isNowPlaying)) {
         GLOB.edit = getPage(GLOB.x);
       }
     }
@@ -2849,18 +2992,22 @@ void checkEncoders() {
       unpaintModeSetTime = 0;
     }
 
-    if ((GLOB.y > 1 && GLOB.y <= 15)) {  // Allow paint/unpaint up to row 15; row 16 reserved for UI
+    if ((GLOB.y >= 1 && GLOB.y <= 15)) {  // Paint/unpaint rows 1-15; draw-mode row 1 is filtered below
       if (paintMode && !preventPaintUnpaint) {
-        // Only set probability to 100% if slot was empty (preserve existing probability)
-        if (note[GLOB.x][GLOB.y].channel == 0) {
-          note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
-          note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+        // Continuous paint in draw mode only
+        if (currentMode == &draw && isPaintableDrawRow(GLOB.y)) {
+          // Only set probability to 100% if slot was empty (preserve existing probability)
+          if (note[GLOB.x][GLOB.y].channel == 0) {
+            note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
+            note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+          }
+          note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
+          note[GLOB.x][GLOB.y].velocity = defaultVelocity;
         }
-        note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
-        note[GLOB.x][GLOB.y].velocity = defaultVelocity;
       }
       // Safety check: Only allow paintMode when actually in singleMode
       if (paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
+        // Single mode: allow painting on all y rows 1-15 (no reserved rows)
         // Only set probability to 100% if slot was empty (preserve existing probability)
         if (note[GLOB.x][GLOB.y].channel == 0) {
           note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
@@ -3077,6 +3224,10 @@ void checkEncoders() {
         if (volumeChanged) {
           ctrlLastVolume = requestedVol;
           if (!protectedChannel) {
+            // Track last non-zero volume so unmute can restore it later
+            if (requestedVol > 0 && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
+              lastChannelVolBeforeMute[GLOB.currentChannel] = (uint8_t)requestedVol;
+            }
             SMP.channelVol[GLOB.currentChannel] = requestedVol;
             float channelvolume = mapf(SMP.channelVol[GLOB.currentChannel], 0, maxY, 0, 1);
             amps[GLOB.currentChannel]->gain(channelvolume);
@@ -3614,32 +3765,33 @@ void checkPendingSampleNotes() {
   
   // Safety: Limit vector size to prevent memory exhaustion
   const size_t MAX_PENDING_NOTES = 64;
-  if (pendingSampleNotes.size() > MAX_PENDING_NOTES) {
-    // Remove oldest events if too many pending
-    pendingSampleNotes.erase(pendingSampleNotes.begin(), 
-                            pendingSampleNotes.begin() + (pendingSampleNotes.size() - MAX_PENDING_NOTES / 2));
+
+  // Keep the queue bounded (order does not matter here). Drop newest on overflow.
+  while (pendingSampleNotes.size() > MAX_PENDING_NOTES) {
+    pendingSampleNotes.pop_back();
   }
-  
-  // Clean up stale events (older than 10 seconds) to prevent unbounded growth
+
+  // Clean up stale and process due events using swap+pop (O(1) removals, no shifting).
   const unsigned long STALE_THRESHOLD = 10000; // 10 seconds
   for (size_t i = 0; i < pendingSampleNotes.size(); /* no ++ */) {
-    if (pendingSampleNotes[i].triggerTime < now - STALE_THRESHOLD) {
-      // Stale event - remove it
-      pendingSampleNotes.erase(pendingSampleNotes.begin() + i);
-    } else {
-      ++i;
+    PendingNoteEvent &ev = pendingSampleNotes[i];
+    bool isStale = (ev.triggerTime < (now - STALE_THRESHOLD));
+    bool isDue = (now >= ev.triggerTime);
+
+    if (isStale) {
+      pendingSampleNotes[i] = pendingSampleNotes.back();
+      pendingSampleNotes.pop_back();
+      continue; // re-check this index
     }
-  }
-  
-  // Process pending events
-  for (size_t i = 0; i < pendingSampleNotes.size(); /* no ++ */) {  // Use size_t for vector index
-    if (now >= pendingSampleNotes[i].triggerTime) {
-      auto &ev = pendingSampleNotes[i];
+
+    if (isDue) {
       _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, true);
-      pendingSampleNotes.erase(pendingSampleNotes.begin() + i);  // erase and continue
-    } else {
-      ++i;
-    } 
+      pendingSampleNotes[i] = pendingSampleNotes.back();
+      pendingSampleNotes.pop_back();
+      continue; // re-check this index
+    }
+
+    ++i;
   }
 }
 
@@ -3788,10 +3940,10 @@ void showDoRecord() {
       
       // Encoder[2]: Start playback using playSdWav1
       if (pressed[2] && !lastPressed2) {
-        int fnr = getFolderNumber(SMP.wav[GLOB.currentChannel].fileID);
-        int fileNum = getFileNumber(SMP.wav[GLOB.currentChannel].fileID);
+        int fnr = (int)SMP.wav[GLOB.currentChannel].oldID;
+        int fileNum = (int)SMP.wav[GLOB.currentChannel].fileID;
         char path[50];
-        sprintf(path, "samples/%d/_%d.wav", fnr, fileNum);
+        buildSamplePath(fnr, fileNum, path, sizeof(path));
         
         if (playSdWav1.isPlaying()) playSdWav1.stop();
         playSdWav1.play(path);
@@ -3815,7 +3967,7 @@ void showDoRecord() {
       // Auto-stop on audio trigger (with 1 second debounce)
       if (millis() - recordingStartTime > 1000) {
         if (thresholdActive && triggerThreshold > 0 && currentInputLevel < (triggerThreshold * 0.5f)) {
-          stopRecordingRAM(getFolderNumber(SMP.wav[GLOB.currentChannel].fileID), SMP.wav[GLOB.currentChannel].fileID);
+          stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
           // Disable threshold to prevent accidental re-trigger from loud stop click
           thresholdActive = false;
         }
@@ -3917,8 +4069,77 @@ void showDoRecord() {
 void loop() {
    updateExternalOneBlink();
    checkMidi();  // Process MIDI early in loop for lower latency
+   // Debounced SD backup of EEPROM settings (settings.txt)
+   extern void serviceSettingsBackup();
+   serviceSettingsBackup();
    
    yield(); // Yield early to maintain responsiveness during file operations
+
+  // === Deferred work from timer interrupt (playNote) ===
+  // Keep all Serial/LED/I2C/encoder work out of ISRs.
+  if (isrPlayButtonTick) {
+    // Single-byte flag; on ARM this is atomic. Avoid masking interrupts to keep MIDI clock tight.
+    isrPlayButtonTick = false;
+    drawPlayButton();
+  }
+
+  if (isrDbgPatternFinished) {
+    uint16_t beatCopy;
+    // Avoid masking interrupts; occasional duplicate debug print is acceptable.
+    beatCopy = isrDbgPatternFinishedBeat;
+    isrDbgPatternFinished = false;
+    #if DEBUG_PLAYBACK_SERIAL
+      Serial.print("Pattern finished at beat ");
+      Serial.println(beatCopy);
+    #endif
+  }
+
+  if (isrDbgLoopCountChanged) {
+    uint16_t lcCopy;
+    // Avoid masking interrupts; occasional duplicate debug print is acceptable.
+    lcCopy = isrDbgLoopCountValue;
+    isrDbgLoopCountChanged = false;
+    #if DEBUG_PLAYBACK_SERIAL
+      Serial.print("Loop count incremented: loopCount=");
+      Serial.println(lcCopy);
+    #endif
+  }
+
+  // FLOW mode: SAME playback behavior as normal play.
+  // ONLY difference: the visible page follows the beat being played (beatForUI).
+  // Do page-follow work in the main loop to avoid mid-frame flicker.
+  // Do NOT touch encoder 1 when CTRL-VOL is active (ctrlMode==1).
+  if (SMP_FLOW_MODE && isNowPlaying && (currentMode == &draw || currentMode == &singleMode)) {
+    static uint16_t lastAppliedFlowPage = 0;
+    // 32-bit read on ARM is atomic; avoid masking interrupts to keep MIDI clock tight.
+    uint16_t bf = beatForUI;
+    uint16_t timerPage = (bf > 0) ? (uint16_t)((bf - 1) / maxX + 1) : 1;
+    if (timerPage != lastAppliedFlowPage) {
+      // Keep the user-visible page (GLOB.edit) in sync with the beat being played.
+      // IMPORTANT: don't override GLOB.page here; it's owned by playback/checkPages() and is used by loopCount logic.
+      GLOB.edit = timerPage;
+      editpage = timerPage;
+
+      // Keep the cursor on the currently shown page as well.
+      // Cursor X is stored as a global step (GLOB.x). Preserve the column offset within the page.
+      int localX = mapXtoPageOffset((int)GLOB.x);
+      localX = constrain(localX, 1, (int)maxX);
+      unsigned int newGlobalX = ((timerPage - 1) * maxX) + (unsigned int)localX;
+      if (newGlobalX < 1) newGlobalX = 1;
+      if (newGlobalX > (maxlen - 1)) newGlobalX = (maxlen - 1);
+      GLOB.x = newGlobalX;
+      currentMode->pos[3] = (int)newGlobalX;
+      Encoder[3].writeCounter((int32_t)newGlobalX);
+
+      // Only sync encoder 1 when it's actually the page selector
+      if (ctrlMode == 0) {
+        currentMode->pos[1] = timerPage;
+        Encoder[1].writeCounter((int32_t)timerPage);
+      }
+      lastFlowPage = timerPage;
+      lastAppliedFlowPage = timerPage;
+    }
+  }
 
   bool pongActive = pong && currentMode == &draw;
 
@@ -3928,24 +4149,38 @@ void loop() {
     resetPongGame();
   }
 
+  // UI render throttling (TargetFPS/RefreshTime). Input handling stays full speed below.
+  // NOTE: FastLEDshow() has its own limiter; keep redraw and show timestamps separate.
   if (currentMode == &draw || currentMode == &singleMode) {
-    drawBase();
-    drawTriggers();
-    if (isNowPlaying) drawTimer();
-    
-    // Draw count-in for ON1 mode
-    extern void drawCountIn();
-    if (countInActive) {
-      drawCountIn();
+    unsigned long now = millis();
+    // When sending master MIDI clock, keep UI updates lighter while PAUSED to reduce any chance
+    // of interrupt masking inside display drivers affecting clock tightness.
+    unsigned long effectiveRefresh = (unsigned long)RefreshTime;
+    if (MIDI_CLOCK_SEND && !isNowPlaying) {
+      if (effectiveRefresh < 100UL) effectiveRefresh = 100UL; // cap at 10 FPS while paused + clocking
     }
-    
-    // Draw red border when recording
-    extern void drawRecordingBorder();
-    if (fastRecordActive) {
-      drawRecordingBorder();
-    }
-    if (pongActive) {
-      drawPongBall();
+    if ((unsigned long)(now - lastDrawUpdate) >= effectiveRefresh) {
+      lastDrawUpdate = now;
+      drawBase();
+      drawTriggers();
+      if (isNowPlaying) drawTimer();
+      
+      // Draw count-in for ON1 mode
+      extern void drawCountIn();
+      if (countInActive) {
+        drawCountIn();
+      }
+      
+      // Draw red border when recording
+      extern void drawRecordingBorder();
+      if (fastRecordActive) {
+        drawRecordingBorder();
+      }
+      if (pongActive) {
+        drawPongBall();
+      }
+      // Present the frame (throttled inside FastLEDshow()).
+      FastLEDshow();
     }
   }
 
@@ -3981,11 +4216,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     static elapsedMillis peakCaptureTimer;
     if (peakCaptureTimer > 15) { // capture peaks at ~66 fps max
       peakCaptureTimer = 0;
-      if (playSdWav1.isPlaying() && peakIndex < maxPeaks) {
-        if (peak1.available()) {
-          // Store the peak value
-          peakValues[peakIndex] = peak1.read();
-          peakIndex++;
+      // Only capture peaks from the audible preview when PREV==ON
+      if (previewTriggerMode == PREVIEW_MODE_ON) {
+        if (playSdWav1.isPlaying() && peakIndex < maxPeaks) {
+          if (peak1.available()) {
+            peakValues[peakIndex] = peak1.read();
+            peakIndex++;
+          }
         }
       }
     }
@@ -4233,11 +4470,6 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
   FastLEDshow();
 
-   if (stepIsDue) {
-    stepIsDue = false; // Immediately reset the flag
-    playNote();      // Now, do the heavy lifting here in the non-time-critical main loop
-  }
-
   yield();
 }
 
@@ -4389,8 +4621,10 @@ FLASHMEM void shiftNotes() {
     unsigned int pageStartX = ((GLOB.edit - 1) * maxX) + 1;
     unsigned int pageEndX = GLOB.edit * maxX;
 
-    // Create a temporary array for this page only to avoid overwriting other pages
-    Note pageTmp[maxX + 1][maxY + 1] = {};
+    // Create a temporary array for this page only to avoid overwriting other pages.
+    // IMPORTANT: avoid a VLA on the stack (maxX is runtime 16/32) which can cause stack overflow/hangs.
+    static Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1];
+    memset(pageTmp, 0, sizeof(pageTmp));
 
     // Step 1: Copy current page notes to pageTmp
     for (unsigned int nx = pageStartX; nx <= pageEndX; nx++) {
@@ -4537,14 +4771,12 @@ void deleteActiveCopy() {
 
 
 void play(bool fromStart) {
-  // Send MIDI Start FIRST (before any other operations) to advance it by ~5ms
+  // Send MIDI Start when acting as master.
+  // IMPORTANT: Do NOT inject an extra 0xF8 here; the dedicated midiClockTimer ISR handles clock output.
+  // Injecting an early clock pulse and/or re-phasing the clock timer on play can make external BPM
+  // displays "dip/jiggle" momentarily.
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
-    MIDI.sendRealTime(midi::Start);  // Send as early as possible for better sync
-    
-    // Send first clock pulse immediately after Start to establish timing reference
-    // This is correct MIDI behavior and reduces audible delay, especially at low BPM
-    // Timer will continue from there, so this is not "extra" clock, just the first one
-    Serial8.write(0xF8);  // Send first clock pulse immediately (same as timer does)
+    MIDI.sendRealTime(midi::Start);
   }
   
   if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
@@ -4750,7 +4982,11 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   // Apply LFO to filter frequency instead of pitch (channels 13/14 only)
   if (ch == 13 || ch == 14) {
     if (filters[ch]) {
-      float baseFreqHz = mapf(SMP.filter_settings[ch][FREQUENCY], 0, maxfilterResolution, 0.0f, 10000.0f);
+      // Backward-compatible default:
+      // If FREQUENCY is 0 (old defaults), treat it as "open" so synth isn't silently low-passed.
+      float freqSetting = SMP.filter_settings[ch][FREQUENCY];
+      if (freqSetting <= 0.0f) freqSetting = (float)maxfilterResolution;
+      float baseFreqHz = mapf(freqSetting, 0, maxfilterResolution, 0.0f, 10000.0f);
       float modFreq = baseFreqHz;
       if (lfo_ratio != 1.0f) {
         modFreq = baseFreqHz * lfo_ratio;
@@ -4899,12 +5135,10 @@ void playNote() {
   }
 
   onBeatTick();
-  
-  // Process MIDI again before playing sequencer notes to reduce external MIDI latency
-  checkMidi();
 
   if (isNowPlaying) {
-    drawPlayButton();
+    // Defer LED updates (slow) to main loop
+    isrPlayButtonTick = true;
 
     for (unsigned int b = 1; b < maxY + 1; b++) {  // b is 1-indexed (row on grid)
       if (beat > 0 && beat <= maxlen) {            // Ensure beat is within valid range for note array
@@ -4975,7 +5209,6 @@ void playNote() {
           }
         }
       }
-      yield();
     }
 
     // midi functions
@@ -4993,7 +5226,6 @@ void playNote() {
       waitForFourBars = false;  // Reset for the next start message
     }
 
-    yield();
     beatStartTime = millis();
      if (SMP_PATTERN_MODE) {
     extern bool songModeActive;
@@ -5029,8 +5261,8 @@ void playNote() {
       // In song mode, check if we need to advance to next pattern
       if (beat > pageEnd) {
         // Pattern finished - advance to next pattern in song
-        Serial.print("Pattern finished at beat ");
-        Serial.println(beat);
+        isrDbgPatternFinishedBeat = beat;
+        isrDbgPatternFinished = true;
         checkPages();
       } else {
         // Still within pattern - just keep displaying current pattern
@@ -5057,8 +5289,8 @@ void playNote() {
       if (atStart && !wasAtStart) {
         loopCount++;
         if (loopCount > 256) loopCount = 1;  // Prevent overflow
-        Serial.print("Loop count incremented: loopCount=");
-        Serial.println(loopCount);
+        isrDbgLoopCountValue = (uint16_t)loopCount;
+        isrDbgLoopCountChanged = true;
       }
       wasAtStart = atStart;
     }
@@ -5077,8 +5309,8 @@ void playNote() {
       if (atStartNP && !wasAtStartNP) {
         loopCount++;
         if (loopCount > 256) loopCount = 1;  // Prevent overflow
-        Serial.print("Loop count incremented: loopCount=");
-        Serial.println(loopCount);
+        isrDbgLoopCountValue = (uint16_t)loopCount;
+        isrDbgLoopCountChanged = true;
       }
       wasAtStartNP = atStartNP;
     }
@@ -5098,7 +5330,6 @@ void playNote() {
     }
 
 
-  yield();
 }
 
 void checkPages() {
@@ -5109,8 +5340,7 @@ void checkPages() {
   // Check song mode FIRST, before SMP_PATTERN_MODE
   if (songModeActive) {
     // Song mode: play through the song arrangement
-    Serial.println("Song checkPages called - advancing to next pattern");
-    
+
     // Safety check: if currentSongPosition is invalid, try to find first valid position
     if (currentSongPosition < 0) {
       currentSongPosition = 0;
@@ -5144,13 +5374,8 @@ void checkPages() {
       GLOB.page = pattern;
       beat = (pattern - 1) * maxX + 1;  // Start at beginning of this pattern
       // No loopCount changes here; handled centrally in playNote()
-      Serial.print("Song: Moving to position ");
-      Serial.print(currentSongPosition + 1);
-      Serial.print(" -> pattern ");
-      Serial.println(pattern);
     } else {
       // No valid pattern found in entire song - disable song mode and fall back to pattern mode
-      Serial.println("ERROR: No valid patterns in song arrangement - disabling song mode");
       songModeActive = false;
       patternMode = 1;  // Fall back to pattern mode
       SMP_PATTERN_MODE = true;
@@ -5167,70 +5392,16 @@ void checkPages() {
     return;
   }
   
-  if (SMP_FLOW_MODE && isNowPlaying) {
-    // FLOW mode: follow the timer position when playing
-    uint16_t timerPage = (beat - 1) / maxX + 1;
-    
-    // Only update lastPage when crossing page boundaries or at beat 1 (when looping)
-    // Skip update if fastrecord is active to save CPU cycles
-    extern bool fastRecordActive;
-    static uint16_t lastTimerPage = 0;
-    if ((timerPage != lastTimerPage || beat == 1) && !fastRecordActive) {
-    updateLastPage();  // recompute the highest page that actually has notes
-      lastTimerPage = timerPage;
-    } else if (timerPage != lastTimerPage) {
-      lastTimerPage = timerPage;  // Update tracking even if we skip updateLastPage
-    }
-    
-    if (timerPage > lastPage && lastPage > 0) {
-      // If we stepped past the last non-empty page, restart at the top
-      beat = 1;
-      timerPage = 1;
-      // loopCount handled centrally in playNote()
-    } else if (lastPage == 0) {
-      // Should not happen if updateLastPage ensures it's at least 1
-      beat = 1;
-      timerPage = 1;
-      // loopCount handled centrally in playNote()
-    }
-    
-    // Update the page
-    GLOB.page = timerPage;
-    
-    // Only update encoder if the page actually changed
-    if (timerPage != lastFlowPage && (currentMode == &draw || currentMode == &singleMode)) {
-      currentMode->pos[1] = timerPage;  // Update encoder 1 position
-      Encoder[1].writeCounter((int32_t)timerPage);  // Update the physical encoder
-      lastFlowPage = timerPage;  // Remember this page
-    }
-    return;
-  }
-  
-  // Normal mode: only update lastPage when crossing page boundaries or looping
-  // Skip update if fastrecord is active to save CPU cycles
-  extern bool fastRecordActive;
   uint16_t newPage = (beat - 1) / maxX + 1;
-  static uint16_t lastCheckedPage = 0;
-  
-  // Only call updateLastPage() when page changes or when we're at beat 1 (looping)
-  // But never during fastrecord to avoid CPU overhead
-  if ((newPage != lastCheckedPage || beat == 1) && !fastRecordActive) {
-    updateLastPage();  // recompute the highest page that actually has notes
-    lastCheckedPage = newPage;
-  } else if (newPage != lastCheckedPage) {
-    lastCheckedPage = newPage;  // Update tracking even if we skip updateLastPage
-  }
 
   // if we stepped past the last non-empty page, restart at the top
   if (newPage > lastPage && lastPage > 0) {  // Ensure lastPage is valid before comparison
     beat = 1;
     //if (fastRecordActive) stopFastRecord(); // This might stop recording prematurely if looping
     newPage = 1;
-    lastCheckedPage = 0;  // Reset to force update on next check
   } else if (lastPage == 0) {  // Should not happen if updateLastPage ensures it's at least 1
     beat = 1;
     newPage = 1;
-    lastCheckedPage = 0;
   }
   GLOB.page = newPage;
 }
@@ -5291,7 +5462,7 @@ void unpaint() {
     }
   }
   
-  FastLEDshow();  // Update display immediately
+  // Display update is handled by the main loop frame presenter (FastLEDshow()).
 }
 
 
@@ -5345,7 +5516,7 @@ void paint() {
     // This implies specific rows map to specific channel types/groups.
     // For simplicity, let's assume if current_y maps to a valid channel (1-15), we paint it.
     // GLOB.currentChannel is already set based on GLOB.y in checkEncoders for draw mode.
-    if (current_y > 0 && current_y <= 15) {                       // Grid rows 1-15
+    if (isPaintableDrawRow(current_y)) {                          // Draw mode: paintable grid rows only
       if (!channelBlocked && note[current_x][current_y].channel == 0) {              // Only paint if empty
         note[current_x][current_y].channel = GLOB.currentChannel;  // GLOB.currentChannel should be correct 0-indexed channel
         note[current_x][current_y].velocity = defaultVelocity;
@@ -5356,7 +5527,8 @@ void paint() {
       toggleCopyPaste();
     }
   } else {                                     // Single mode (painting for the globally selected GLOB.currentChannel)
-    if ((current_y > 0 && current_y <= 15)) {  // Grid rows 1-15
+    // Single mode: allow painting on all y rows 1-15 (no reserved rows)
+    if ((current_y > 0 && current_y <= 15)) {
       if (!channelBlocked) {
         note[current_x][current_y].channel = GLOB.currentChannel;
         note[current_x][current_y].velocity = defaultVelocity;
@@ -5418,7 +5590,7 @@ void paint() {
     }
   }
   
-  FastLEDshow();
+  // Display update is handled by the main loop frame presenter (FastLEDshow()).
 }
 
 
@@ -5858,6 +6030,7 @@ void showSamplePack() {
     currentMode->pos[3] = 0;
     Encoder[3].writeCounter((int32_t)0);
     EEPROM.put(0, SMP.pack);  // Save the corrected value to EEPROM
+    markSettingsBackupDirty();
   }
 
   FastLED.setBrightness(ledBrightness);
@@ -5868,7 +6041,7 @@ void showSamplePack() {
   }
 }
 
-void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack_id to avoid conflict
+void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) {  // Renamed pack to pack_id to avoid conflict
   //Serial.println("Loading SamplePack #" + String(pack_id));
   drawNoSD();
   
@@ -5879,58 +6052,73 @@ void loadSamplePack(unsigned int pack_id, bool intro) {  // Renamed pack to pack
   }
   
   EEPROM.put(0, pack_id);                        // Save current pack_id to EEPROM
+  markSettingsBackupDirty();
   
   Serial.println("=== Loading Samplepack ===");
   Serial.print("Pack ID: ");
   Serial.println(pack_id);
-  
-  // First, load samples from samplepack 0 for voices that have custom samples
-  Serial.println("--- Checking SP0 Active Voices ---");
-  for (unsigned int z = 1; z < maxFiles; z++) {
-    Serial.print("Voice ");
-    Serial.print(z);
-    Serial.print(": sp0Active = ");
-    Serial.println(SMP.sp0Active[z] ? "TRUE" : "FALSE");
-    
-    if (SMP.sp0Active[z]) {
-      Serial.print(">>> Loading voice ");
-      Serial.print(z);
-      Serial.println(" from SAMPLEPACK 0 <<<");
-      
-      if (!intro) {
-        showIcons(ICON_SAMPLE, UI_BG_DIM);
-      } else {
-        drawText("SP0", 2, 11, col[(maxFiles + 1) - z]);
-      }
-      drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
-      loadSample(0, z);  // Load from samplepack 0
+
+  if (!preserveSp0Custom) {
+    // Manual/intentional load: reset SP0 overrides so the chosen pack overwrites everything.
+    for (unsigned int z = 1; z < maxFiles; z++) {
+      SMP.sp0Active[z] = false;
     }
-  }
-  
-  Serial.println("--- Loading Regular Samplepack ---");
-  
-  // Then, load samples from the requested samplepack, but skip voices with sp0Active
-  for (unsigned int z = 1; z < maxFiles; z++) {  // maxFiles is 9. So loads samples 1 through 8.
-                                                 // Sample arrays are often 0-indexed. _samplers[0] to _samplers[8] exist.
-                                                 // This loop should probably be z=0 to maxFiles-1 or z=1 to maxFiles (inclusive for maxFiles).
-                                                 // Assuming it means load into sampler slots 1 to 8.
-    if (!SMP.sp0Active[z]) {  // Only load if NOT using samplepack 0
-      Serial.print(">>> Loading voice ");
-      Serial.print(z);
-      Serial.print(" from Pack ");
-      Serial.println(pack_id);
-      
+    saveSp0StateToEEPROM();
+
+    Serial.println("--- Loading Regular Samplepack (overwrite) ---");
+    for (unsigned int z = 1; z < maxFiles; z++) {
       if (!intro) {
         showIcons(ICON_SAMPLE, UI_BG_DIM);
       } else {
         drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
       }
       drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
-      loadSample(pack_id, z);  // loadSample needs to know which sampler slot 'z' corresponds to.
-    } else {
-      Serial.print("--- Skipping voice ");
+      loadSample(pack_id, z);
+    }
+  } else {
+    // Startup load: preserve SP0 custom voices, then load the pack for the rest.
+    Serial.println("--- Checking SP0 Active Voices ---");
+    for (unsigned int z = 1; z < maxFiles; z++) {
+      Serial.print("Voice ");
       Serial.print(z);
-      Serial.println(" (using SP0)");
+      Serial.print(": sp0Active = ");
+      Serial.println(SMP.sp0Active[z] ? "TRUE" : "FALSE");
+      
+      if (SMP.sp0Active[z]) {
+        Serial.print(">>> Loading voice ");
+        Serial.print(z);
+        Serial.println(" from SAMPLEPACK 0 <<<");
+        
+        if (!intro) {
+          showIcons(ICON_SAMPLE, UI_BG_DIM);
+        } else {
+          drawText("SP0", 2, 11, col[(maxFiles + 1) - z]);
+        }
+        drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
+        loadSample(0, z);  // Load from samplepack 0
+      }
+    }
+    
+    Serial.println("--- Loading Regular Samplepack ---");
+    for (unsigned int z = 1; z < maxFiles; z++) {
+      if (!SMP.sp0Active[z]) {  // Only load if NOT using samplepack 0
+        Serial.print(">>> Loading voice ");
+        Serial.print(z);
+        Serial.print(" from Pack ");
+        Serial.println(pack_id);
+        
+        if (!intro) {
+          showIcons(ICON_SAMPLE, UI_BG_DIM);
+        } else {
+          drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
+        }
+        drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
+        loadSample(pack_id, z);
+      } else {
+        Serial.print("--- Skipping voice ");
+        Serial.print(z);
+        Serial.println(" (using SP0)");
+      }
     }
   }
   Serial.println("=== Samplepack Loading Complete ===");
@@ -6021,8 +6209,9 @@ void loadWav() {
   // Store the current edit page before switching modes
   int savedEditPage = GLOB.edit;
   
-  switchMode(&singleMode);
-  GLOB.singleMode = true;
+  // After loading a sample into a voice, return to DRAW (not SINGLE).
+  switchMode(&draw);
+  GLOB.singleMode = false;
   
   // Restore the edit page and set encoder[1] to match
   GLOB.edit = savedEditPage;
@@ -6257,5 +6446,17 @@ FLASHMEM void applyMutesAfterPMODSwitch() {
   for (int ch = 0; ch < maxY; ch++) {
     bool muteState = getMuteState(ch);
     SMP.mute[ch] = muteState;  // Apply to audio system
+  }
+}
+
+
+
+// === Timer tick ISR ===
+// Keep this extremely small: it only schedules work for the main loop.
+void playTimerTick() {
+  if (!stepIsDue) {
+    stepIsDue = true;
+  } else {
+    missedSteps++;
   }
 }

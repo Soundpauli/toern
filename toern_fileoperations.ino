@@ -85,10 +85,8 @@ FLASHMEM void saveSamplePack(int pack) {
 
     // Iterate over each sample channel (1..8)
     for (uint8_t ch = 1; ch <= 8; ch++) {
-
-       for (unsigned int f = 1; f < (maxY / 2) + 1; f++) {
-            light(ch + 1, f, CRGB(4, 0, 0));
-        }
+        // Use the same progress bar UI as samplepack load
+        drawLoadingBar(1, maxFiles, ch, col_base[(maxFiles + 1) - ch], UI_DIM_WHITE, false);
         showIcons(ICON_SAMPLEPACK, UI_BG_DIM);
         FastLED.setBrightness(ledBrightness);
         FastLEDshow();
@@ -160,11 +158,7 @@ FLASHMEM void saveSamplePack(int pack) {
             
             outFile.close();
         }
-        
-        for (unsigned int f = 1; f < (maxY + 1) + 1; f++) {
-            light(ch + 1, f, CRGB(0, 20, 0));
-        }
-        FastLEDshow();
+        yield();
     }
     
     // Clear sp0Active flags when saving a samplepack (all samples now part of this pack)

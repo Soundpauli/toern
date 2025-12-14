@@ -12,6 +12,11 @@ extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
 extern IntervalTimer midiClockTimer;
 
+// Reduce Serial spam in clock/BPM code paths (can stall Serial and hurt responsiveness).
+#ifndef DEBUG_MIDI_CLOCK_SERIAL
+#define DEBUG_MIDI_CLOCK_SERIAL 0
+#endif
+
 // move these to file-scope so everybody can reset them
 static unsigned long lastClockTime = 0;                  // legacy, no longer used for BPM
 static unsigned long lastBPMMeasureTime = 0;             // time of last BPM measurement window
@@ -88,9 +93,9 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
   if (roundedBPM < 1) roundedBPM = 1;
   if (roundedBPM > BPM_MAX) roundedBPM = BPM_MAX;
   
-  // Calculate interval with high precision using floating point, then round to nearest microsecond
+  // Calculate interval with high precision using floating point, then round to nearest microsecond.
   // Formula: 60,000,000 microseconds per minute / (BPM * 24 clocks per quarter note)
-  // Use floating point for precision, then round to avoid truncation errors
+  // Using a fixed period timer avoids per-tick timer reprogramming jitter.
   double intervalUsDouble = 60000000.0 / ((double)roundedBPM * 24.0);
   midiClockIntervalUs = (unsigned long)round(intervalUsDouble);
   if (midiClockIntervalUs == 0) midiClockIntervalUs = 1;
@@ -106,13 +111,15 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
   // Verify actual BPM from calculated interval (for debugging)
   double actualBPM = 60000000.0 / ((double)midiClockIntervalUs * 24.0);
   
-  Serial.print("MIDI Clock configured: ");
-  Serial.print(roundedBPM);
-  Serial.print(" BPM, interval: ");
-  Serial.print(midiClockIntervalUs);
-  Serial.print(" us, actual: ");
-  Serial.print(actualBPM, 3);
-  Serial.println(" BPM (dedicated timer, direct Serial8 write)");
+  #if DEBUG_MIDI_CLOCK_SERIAL
+    Serial.print("MIDI Clock configured: ");
+    Serial.print(roundedBPM);
+    Serial.print(" BPM, interval: ");
+    Serial.print(midiClockIntervalUs);
+    Serial.print(" us, actual: ");
+    Serial.print(actualBPM, 3);
+    Serial.println(" BPM (dedicated timer, direct Serial8 write)");
+  #endif
 }
 
 // Public function to update MIDI clock with exact BPM value (for use from updateBPM)
@@ -240,7 +247,13 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     // Use exact rounded BPM value for precise clock output
     int roundedBPM = (int)round(SMP.bpm);
     if (roundedBPM < 1) roundedBPM = 1;
-    configureMidiClockSend((float)roundedBPM, now);
+    // IMPORTANT: Don't restart/re-phase the MIDI clock timer unless BPM actually changed.
+    // Restarting the IntervalTimer on transport events can cause short-window BPM displays
+    // on external gear to "dip/jiggle" even when paused.
+    int lastRoundedBPM = (int)round(midiClockSendBPM);
+    if (midiClockIntervalUs == 0 || roundedBPM != lastRoundedBPM) {
+      configureMidiClockSend((float)roundedBPM, now);
+    }
     lastClockSent = now;
     // Ensure playTimer is configured if master
     if (SMP.bpm > 0.0f) {
@@ -271,9 +284,11 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     if (SMP.bpm > 0.0f) {
       unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
       playTimer.begin(playNote, currentPlayNoteInterval);
-      Serial.print("SLAVE: Started internal timer at ");
-      Serial.print(SMP.bpm);
-      Serial.println(" BPM");
+      #if DEBUG_MIDI_CLOCK_SERIAL
+        Serial.print("SLAVE: Started internal timer at ");
+        Serial.print(SMP.bpm);
+        Serial.println(" BPM");
+      #endif
     } else {
       playTimer.end();
     }
@@ -303,7 +318,9 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     lastStableBPM = 0;
     stableBPMCount = 0;
     isBPMStable = false;
-    Serial.println("BPM: No clock received for >2s - resetting Kalman filter state");
+    #if DEBUG_MIDI_CLOCK_SERIAL
+      Serial.println("BPM: No clock received for >2s - resetting Kalman filter state");
+    #endif
   }
   
   // Update last clock received time
@@ -340,7 +357,9 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
         triggerExternalOneBlink();
 
         if (pendingStartOnBar) {
-          Serial.println("myClock: Slave Start - synced on beat 1");
+          #if DEBUG_MIDI_CLOCK_SERIAL
+            Serial.println("myClock: Slave Start - synced on beat 1");
+          #endif
           pendingStartOnBar = false;
           isNowPlaying = true;
           if (SMP_PATTERN_MODE) {
@@ -427,18 +446,20 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       smoothedBPM = filteredBPM;
 
       // Serial debug: show raw BPM calculation and filtered value
-      Serial.print("BPM CALC (EXT mode): Raw=");
-      Serial.print(rawBPM, 2);
-      Serial.print(" | Filtered=");
-      Serial.print(filteredBPM, 2);
-      Serial.print(" | Gain=");
-      Serial.print(kalmanGain, 3);
-      Serial.print(" | Clocks=");
-      Serial.print(clocksSinceLastBPM);
-      Serial.print(" | Delta(us)=");
-      Serial.print(deltaTotal);
-      Serial.print(" | Interval/Clock(us)=");
-      Serial.print(intervalPerClock, 2);
+      #if DEBUG_MIDI_CLOCK_SERIAL
+        Serial.print("BPM CALC (EXT mode): Raw=");
+        Serial.print(rawBPM, 2);
+        Serial.print(" | Filtered=");
+        Serial.print(filteredBPM, 2);
+        Serial.print(" | Gain=");
+        Serial.print(kalmanGain, 3);
+        Serial.print(" | Clocks=");
+        Serial.print(clocksSinceLastBPM);
+        Serial.print(" | Delta(us)=");
+        Serial.print(deltaTotal);
+        Serial.print(" | Interval/Clock(us)=");
+        Serial.print(intervalPerClock, 2);
+      #endif
 
       // Round filtered BPM to nearest integer
       int newBPM = round(filteredBPM);
@@ -468,16 +489,20 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           if (newBPM > 0) {
             unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / (float)newBPM) / 4.0f);
             playTimer.begin(playNote, currentPlayNoteInterval);
-            Serial.print("BPM: Synced playTimer to stable BPM ");
-            Serial.println(newBPM);
+            #if DEBUG_MIDI_CLOCK_SERIAL
+              Serial.print("BPM: Synced playTimer to stable BPM ");
+              Serial.println(newBPM);
+            #endif
           }
           
           // If initial sync not done, mark it complete
           if (!initialBpmSyncDone) {
             initialBpmSyncDone = true;
-            Serial.print("BPM INITIAL SYNC COMPLETE: Stable at ");
-            Serial.print(newBPM);
-            Serial.println(" BPM (background sync done, will only recalculate on BPM page now)");
+            #if DEBUG_MIDI_CLOCK_SERIAL
+              Serial.print("BPM INITIAL SYNC COMPLETE: Stable at ");
+              Serial.print(newBPM);
+              Serial.println(" BPM (background sync done, will only recalculate on BPM page now)");
+            #endif
           }
         }
       } else {
@@ -492,20 +517,24 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       // This allows the BPM display to match external clock while sequencer runs independently
       SMP.bpm = (float)newBPM;
       
-      Serial.print(" | Updated SMP.bpm=");
-        Serial.print(SMP.bpm);
-      Serial.println(" -> BPM value synced to external clock (sequencer timer unchanged)");
+      #if DEBUG_MIDI_CLOCK_SERIAL
+        Serial.print(" | Updated SMP.bpm=");
+          Serial.print(SMP.bpm);
+        Serial.println(" -> BPM value synced to external clock (sequencer timer unchanged)");
+      #endif
     } else {
-      Serial.print("BPM CALC: REJECTED - intervalPerClock=");
-      Serial.print(intervalPerClock, 2);
-      Serial.print(" (out of range ");
-      Serial.print(ABSOLUTE_MIN_DELTA * 0.8f);
-      Serial.print(" - ");
-      Serial.print(ABSOLUTE_MAX_DELTA * 1.2f);
-      Serial.print(") | Clocks=");
-      Serial.print(clocksSinceLastBPM);
-      Serial.print(" | Delta(us)=");
-      Serial.println(deltaTotal);
+      #if DEBUG_MIDI_CLOCK_SERIAL
+        Serial.print("BPM CALC: REJECTED - intervalPerClock=");
+        Serial.print(intervalPerClock, 2);
+        Serial.print(" (out of range ");
+        Serial.print(ABSOLUTE_MIN_DELTA * 0.8f);
+        Serial.print(" - ");
+        Serial.print(ABSOLUTE_MAX_DELTA * 1.2f);
+        Serial.print(") | Clocks=");
+        Serial.print(clocksSinceLastBPM);
+        Serial.print(" | Delta(us)=");
+        Serial.println(deltaTotal);
+      #endif
     }
 
     // Reset window for next measurement
@@ -590,11 +619,9 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
 
     if (isNowPlaying) {
       if (GLOB.singleMode) {
-        // Store for grid write on next beat
-        pendingNotes.push_back({ .pitch = pitch,
-                                 .velocity = velocity,
-                                 .channel = (uint8_t)ch,
-                                 .livenote = (uint8_t)livenote });
+        // Store for grid write on next beat (ISR-safe ring buffer).
+        extern bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote);
+        enqueuePendingNote(pitch, velocity, (uint8_t)ch, (uint8_t)livenote);
       }else{
 
         if (ch < 9) {
@@ -666,12 +693,13 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
 
 void onBeatTick() {
   
-  for (auto &pn : pendingNotes) {
+  PendingNote pn;
+  extern bool dequeuePendingNote(PendingNote &out);
+  while (dequeuePendingNote(pn)) {
     int targetBeat = beat; //(beat == 1) ? (maxX * lastPage) : (beat);
     note[targetBeat][pn.livenote].channel = pn.channel;
     note[targetBeat][pn.livenote].velocity = pn.velocity;
   }
-  pendingNotes.clear();
   
 
   return;

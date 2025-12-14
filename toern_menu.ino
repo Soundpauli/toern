@@ -1,6 +1,6 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 11
-#define LOOK_PAGES_COUNT 8
+#define LOOK_PAGES_COUNT 9
 #define RECS_PAGES_COUNT 3
 #define MIDI_PAGES_COUNT 2
 #define VOL_PAGES_COUNT 5
@@ -13,6 +13,9 @@ extern bool pong;
 extern uint16_t pongUpdateInterval;
 extern bool MIDI_TRANSPORT_SEND;
 void updatePreviewVolume();
+extern int previewTriggerMode;
+extern const int PREVIEW_MODE_ON;
+extern const int PREVIEW_MODE_PRESS;
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -28,7 +31,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"WAV", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
   {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LINE, PREV, MIC, LVL)
-  {"PLAY", 19, false, nullptr},         // PLAY submenu (FLW, VIEW, PMD, LOOP)
+  {"PLAY", 19, false, nullptr},         // PLAY submenu (FLW, PREV, VIEW, PMD, LOOP)
   {"RECS", 20, false, nullptr},         // RECS submenu (MIC, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
@@ -39,12 +42,13 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
 // LOOK submenu pages
 MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"FLW", 10, false, nullptr},          // Flow Mode
+  {"PREV", 33, false, nullptr},         // Preview trigger mode (ON/PRSS)
   {"VIEW", 17, false, nullptr},         // Simple Notes View
   {"PMD", 9, false, nullptr},           // Pattern Mode
   {"LOOP", 18, false, nullptr},         // Loop Length
   {"CTRL", 25, false, nullptr},         // Encoder control mode
   {"LEDS", 23, false, nullptr},         // LED Modules Count (1 or 2)
-  {"PONG", 24, false, nullptr},          // Pong Toggle
+  {"PONG", 24, false, nullptr},         // Pong Toggle
   {"CRSR", 32, false, nullptr}          // Cursor Type (NORM/CHNR/BIG)
 };
 
@@ -103,33 +107,220 @@ bool newScreenFirstEnter = true;
 // Reset menu option: 0 = EFX reset, 1 = FULL reset
 int resetMenuOption = 0;
 
+// --- Settings backup (EEPROM <-> SD) ---
+// We back up the menu/settings EEPROM block to a small text file on the SD card.
+// This lets you restore settings if EEPROM is empty/corrupt after a brownout.
+static const char *SETTINGS_BACKUP_PATH = "settings.txt";
+static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
+static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 21; // EEPROM_DATA_START + [0..20]
+static bool settingsBackupDirty = false;
+static uint32_t settingsBackupDirtyMs = 0;
+static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
+
+static inline uint32_t crc32_update(uint32_t crc, uint8_t data) {
+  crc ^= data;
+  for (int i = 0; i < 8; i++) {
+    crc = (crc & 1) ? (crc >> 1) ^ 0xEDB88320UL : (crc >> 1);
+  }
+  return crc;
+}
+
+static uint32_t crc32_compute(const uint8_t *data, size_t len) {
+  uint32_t crc = 0xFFFFFFFFUL;
+  for (size_t i = 0; i < len; i++) crc = crc32_update(crc, data[i]);
+  return ~crc;
+}
+
+static bool readLine(File &f, char *buf, size_t bufSize) {
+  if (!f) return false;
+  size_t idx = 0;
+  while (f.available()) {
+    int c = f.read();
+    if (c < 0) break;
+    if (c == '\r') continue;
+    if (c == '\n') break;
+    if (idx + 1 < bufSize) buf[idx++] = (char)c;
+  }
+  buf[idx] = 0;
+  // If we read nothing and hit EOF, signal failure
+  if (idx == 0 && !f.available()) return false;
+  return true;
+}
+
+static int hexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+  return -1;
+}
+
+static bool decodeHexBytes(const char *hex, uint8_t *out, size_t outLen) {
+  for (size_t i = 0; i < outLen; i++) {
+    int hi = hexNibble(hex[i * 2]);
+    int lo = hexNibble(hex[i * 2 + 1]);
+    if (hi < 0 || lo < 0) return false;
+    out[i] = (uint8_t)((hi << 4) | lo);
+  }
+  return true;
+}
+
+static void encodeHexBytes(const uint8_t *in, size_t inLen, char *out, size_t outSize) {
+  // NOTE: Arduino defines HEX as a macro (base 16 for Print::print), so don't use HEX as an identifier.
+  static const char *HEX_CHARS = "0123456789ABCDEF";
+  size_t needed = inLen * 2 + 1;
+  if (outSize < needed) {
+    if (outSize > 0) out[0] = 0;
+    return;
+  }
+  for (size_t i = 0; i < inLen; i++) {
+    out[i * 2]     = HEX_CHARS[(in[i] >> 4) & 0xF];
+    out[i * 2 + 1] = HEX_CHARS[in[i] & 0xF];
+  }
+  out[inLen * 2] = 0;
+}
+
+void markSettingsBackupDirty() {
+  settingsBackupDirty = true;
+  settingsBackupDirtyMs = millis();
+}
+
+static bool writeSettingsBackupToSD() {
+  // payload = samplePackID (4 bytes) + menu/settings bytes (EEPROM_DATA_START..+20)
+  unsigned int spid = 1;
+  EEPROM.get(0, spid);
+
+  uint8_t block[SETTINGS_EEPROM_BLOCK_LEN];
+  for (uint16_t i = 0; i < SETTINGS_EEPROM_BLOCK_LEN; i++) {
+    block[i] = (uint8_t)EEPROM.read(EEPROM_DATA_START + i);
+  }
+
+  uint8_t payload[sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN];
+  memcpy(payload, &spid, sizeof(unsigned int));
+  memcpy(payload + sizeof(unsigned int), block, SETTINGS_EEPROM_BLOCK_LEN);
+  uint32_t crc = crc32_compute(payload, sizeof(payload));
+
+  // Write atomically: settings.tmp -> rename to settings.txt
+  if (SD.exists(SETTINGS_BACKUP_TMP_PATH)) SD.remove(SETTINGS_BACKUP_TMP_PATH);
+  File f = SD.open(SETTINGS_BACKUP_TMP_PATH, O_WRITE | O_CREAT | O_TRUNC);
+  if (!f) return false;
+
+  f.println(SETTINGS_BACKUP_HEADER);
+  f.print("LEN=");
+  f.println((unsigned int)sizeof(payload));
+  f.print("CRC=");
+  f.println(crc, HEX);
+  f.print("DATA=");
+  char hex[(sizeof(payload) * 2) + 1];
+  encodeHexBytes(payload, sizeof(payload), hex, sizeof(hex));
+  f.println(hex);
+  f.close();
+
+  if (SD.exists(SETTINGS_BACKUP_PATH)) SD.remove(SETTINGS_BACKUP_PATH);
+  if (!SD.rename(SETTINGS_BACKUP_TMP_PATH, SETTINGS_BACKUP_PATH)) {
+    // Fallback: if rename fails, keep tmp as evidence
+    return false;
+  }
+  return true;
+}
+
+static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *outBlock, size_t outBlockLen) {
+  if (!SD.exists(SETTINGS_BACKUP_PATH)) return false;
+  File f = SD.open(SETTINGS_BACKUP_PATH, FILE_READ);
+  if (!f) return false;
+
+  char line[1024];
+  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  if (strcmp(line, SETTINGS_BACKUP_HEADER) != 0) { f.close(); return false; }
+
+  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  if (strncmp(line, "LEN=", 4) != 0) { f.close(); return false; }
+  unsigned int len = (unsigned int)atoi(line + 4);
+
+  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  if (strncmp(line, "CRC=", 4) != 0) { f.close(); return false; }
+  uint32_t expectedCrc = (uint32_t)strtoul(line + 4, nullptr, 16);
+
+  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  if (strncmp(line, "DATA=", 5) != 0) { f.close(); return false; }
+  const char *hex = line + 5;
+
+  const size_t expectedLen = sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN;
+  if (len != expectedLen) { f.close(); return false; }
+  if (strlen(hex) < expectedLen * 2) { f.close(); return false; }
+
+  uint8_t payload[expectedLen];
+  if (!decodeHexBytes(hex, payload, expectedLen)) { f.close(); return false; }
+  uint32_t crc = crc32_compute(payload, expectedLen);
+  if (crc != expectedCrc) { f.close(); return false; }
+
+  // Unpack
+  memcpy(&outSamplePackID, payload, sizeof(unsigned int));
+  if (outBlockLen < SETTINGS_EEPROM_BLOCK_LEN) { f.close(); return false; }
+  memcpy(outBlock, payload + sizeof(unsigned int), SETTINGS_EEPROM_BLOCK_LEN);
+  f.close();
+  return true;
+}
+
+void serviceSettingsBackup() {
+  if (!settingsBackupDirty) return;
+  if ((uint32_t)(millis() - settingsBackupDirtyMs) < SETTINGS_BACKUP_DEBOUNCE_MS) return;
+  // Best effort: if SD write fails, keep dirty flag and try later.
+  if (writeSettingsBackupToSD()) {
+    settingsBackupDirty = false;
+  }
+}
+
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
-    // first run! write magic + defaults
-    Serial.println("First run detected - initializing EEPROM with defaults");
-    EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
-    EEPROM.put(0, (unsigned int)1);            // samplePackID default (1)
-    EEPROM.write(EEPROM_DATA_START + 0,  1);   // recMode default
-    EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default
-    EEPROM.write(EEPROM_DATA_START + 2,  1);   // transportMode default
-    EEPROM.write(EEPROM_DATA_START + 3,  1);   // patternMode default
-    EEPROM.write(EEPROM_DATA_START + 4,  1);   // voiceSelect default
-    EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
-    EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
-    EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol default (0-50 range, middle = 20)
-    EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
-    EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
-    EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
-    EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
-    EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
-    EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
-    EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
-    EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
-    EEPROM.write(EEPROM_DATA_START + 17, 10);  // GLOB.vol default (10, maps to 1.0 volume)
-    EEPROM.write(EEPROM_DATA_START + 18, 0);   // cursorType default (0 = NORM)
-    EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
+    // EEPROM "empty" - try SD backup first, otherwise initialize defaults
+    unsigned int restoredPack = 1;
+    uint8_t restoredBlock[SETTINGS_EEPROM_BLOCK_LEN];
+    bool restored = readSettingsBackupFromSD(restoredPack, restoredBlock, sizeof(restoredBlock));
 
-    Serial.println("EEPROM initialized with defaults.");
+    if (restored) {
+      Serial.println("EEPROM empty - restoring settings from settings.txt");
+      EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
+      EEPROM.put(0, restoredPack);
+      for (uint16_t i = 0; i < SETTINGS_EEPROM_BLOCK_LEN; i++) {
+        EEPROM.write(EEPROM_DATA_START + i, restoredBlock[i]);
+      }
+
+      // Keep runtime in sync for the rest of boot (loadSamplePack uses samplePackID)
+      extern unsigned int samplePackID;
+      samplePackID = restoredPack;
+      SMP.pack = restoredPack;
+    } else {
+      // first run! write magic + defaults
+      Serial.println("First run detected - initializing EEPROM with defaults");
+      EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
+      EEPROM.put(0, (unsigned int)1);            // samplePackID default (1)
+      EEPROM.write(EEPROM_DATA_START + 0,  1);   // recMode default
+      EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default
+      EEPROM.write(EEPROM_DATA_START + 2,  1);   // transportMode default
+      EEPROM.write(EEPROM_DATA_START + 3,  1);   // patternMode default
+      EEPROM.write(EEPROM_DATA_START + 4,  1);   // voiceSelect default
+      EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
+      EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
+      EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol default (0-50 range, middle = 20)
+      EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
+      EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
+      EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
+      EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
+      EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
+      EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
+      EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
+      EEPROM.write(EEPROM_DATA_START + 17, 10);  // GLOB.vol default (10, maps to 1.0 volume)
+      EEPROM.write(EEPROM_DATA_START + 18, 0);   // cursorType default (0 = NORM)
+      EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
+      EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
+
+      Serial.println("EEPROM initialized with defaults.");
+
+      // Create/refresh SD backup for defaults (debounced)
+      markSettingsBackupDirty();
+    }
   }
 
   // now pull them in
@@ -255,14 +446,27 @@ void loadMenuFromEEPROM() {
     sgtl5000_1.micGain(micGain);
   }
 
-  drawRecMode();
-  drawClockMode();
-  drawMidiTransport();
-  drawPatternMode();
-  drawFlowMode();
-  drawMidiVoiceSelect();
-  drawFastRecMode();
-  drawRecChannelClear();
+  // Note: These draw functions are for menu display, not startup initialization.
+  // They should only be called when actually displaying the menu, not during setup().
+  // The initialization logic (loading values from EEPROM) is complete above.
+  // Drawing during startup causes brief text flashes (e.g., "MIC" before "KIT:").
+  // drawRecMode();
+  // drawClockMode();
+  // drawMidiTransport();
+  // drawPatternMode();
+  // drawFlowMode();
+  // drawMidiVoiceSelect();
+  // drawFastRecMode();
+  // drawRecChannelClear();
+  
+  // However, we still need to apply the audio input selection from recMode
+  extern unsigned int recInput;
+  if (recMode == 1) {
+    recInput = AUDIO_INPUT_MIC;
+  } else if (recMode == -1) {
+    recInput = AUDIO_INPUT_LINEIN;
+  }
+  sgtl5000_1.inputSelect(recInput);
 }
 
 // Apply all audio-related global variables to hardware
@@ -295,6 +499,7 @@ void applyAudioSettingsFromGlobals() {
 // call this after you change *any* one of the six modes in switchMenu():
 void saveSingleModeToEEPROM(int index, int8_t value) {
   EEPROM.write(EEPROM_DATA_START + index, (uint8_t)value);
+  markSettingsBackupDirty();
 }
 
 // Save samplepack 0 state to EEPROM (which voices are using sp0)
@@ -943,6 +1148,19 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
       break;
     }
+
+    case 33: { // PREV - Preview trigger mode
+      drawText("PREV", 2, 10, CRGB(0, 255, 0)); // Green like PLAY menu
+      if (previewTriggerMode == PREVIEW_MODE_PRESS) {
+        drawText("PRSS", 2, 3, CRGB(0, 150, 255)); // Blue for press-only
+      } else {
+        drawText("ON", 2, 3, UI_GREEN);
+      }
+      // Encoder color: green by default
+      CRGB greenColor = getIndicatorColor('G');
+      Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      break;
+    }
   }
 }
 
@@ -1372,8 +1590,11 @@ void switchMenu(int menuPosition){
       case 3:
         if (GLOB.currentChannel < 1 || GLOB.currentChannel > 8) return;
         switchMode(&set_Wav);
-        currentMode->pos[3] = SMP.wav[GLOB.currentChannel].oldID;
-        SMP.wav[GLOB.currentChannel].fileID = SMP.wav[GLOB.currentChannel].oldID;
+        // Manifest selection: folder in oldID, file in fileID
+        currentMode->pos[1] = (int)SMP.wav[GLOB.currentChannel].oldID;
+        currentMode->pos[3] = (int)SMP.wav[GLOB.currentChannel].fileID;
+        Encoder[1].writeCounter((int32_t)currentMode->pos[1]);
+        Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
         //set encoder to currently Loaded Sample!!
         //Encoder[3].writeCounter((int32_t)((SMP.wav[GLOB.currentChannel][0] * 4) - 1));
         break;
@@ -1549,6 +1770,7 @@ void switchMenu(int menuPosition){
           // Save to EEPROM
           saveSingleModeToEEPROM(18, cursorType);
           EEPROM.write(EEPROM_DATA_START + 19, showChannelNr ? 1 : 0);
+          markSettingsBackupDirty();
           
           drawMainSettingStatus(menuPosition);
         }
@@ -1647,6 +1869,14 @@ void switchMenu(int menuPosition){
         drawMainSettingStatus(menuPosition);
         refreshCtrlEncoderConfig();
         saveSingleModeToEEPROM(14, ctrlMode);
+        break;
+      }
+
+      case 33: {
+        // Toggle preview trigger mode: ON -> PRSS -> ON
+        previewTriggerMode = (previewTriggerMode == PREVIEW_MODE_ON) ? PREVIEW_MODE_PRESS : PREVIEW_MODE_ON;
+        saveSingleModeToEEPROM(20, (int8_t)previewTriggerMode);
+        drawMainSettingStatus(menuPosition);
         break;
       }
     }

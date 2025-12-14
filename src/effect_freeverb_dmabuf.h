@@ -29,21 +29,6 @@
 #include <Arduino.h>     // github.com/PaulStoffregen/cores/blob/master/teensy4/Arduino.h
 #include <AudioStream.h> // github.com/PaulStoffregen/cores/blob/master/teensy4/AudioStream.h
 
-
-// declare the global DMAMEM buffers defined in the .cpp file
-extern int16_t comb1buf[1116];
-extern int16_t comb2buf[1188];
-extern int16_t comb3buf[1277];
-extern int16_t comb4buf[1356];
-extern int16_t comb5buf[1422];
-extern int16_t comb6buf[1491];
-extern int16_t comb7buf[1557];
-extern int16_t comb8buf[1617];
-extern int16_t allpass1buf[556];
-extern int16_t allpass2buf[441];
-extern int16_t allpass3buf[341];
-extern int16_t allpass4buf[225];
-
 class AudioEffectFreeverbDMAMEM : public AudioStream
 {
 public:

@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TŒRN | Sonic Architecture</title>
+    <meta name="description" content="TŒRN is an open-source DIY sequencer & sampler.">
+    
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&family=JetBrains+Mono:wght@300;400&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
+    
+    <!-- GSAP & Lenis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://unpkg.com/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
+
+    <style>
+        /* --- 1. DESIGN SYSTEM --- */
+        :root {
+            --bg-dark: #050505;
+            --bg-card: #0a0a0a;
+            --text-main: #e0e0e0;
+            --text-muted: #888;
+            --accent: #ff3b30;
+            --grid-line: rgba(255, 255, 255, 0.08);
+            
+            --font-logo: 'Bebas Neue', sans-serif;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-body: 'Inter', sans-serif;
+            --font-tech: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        html { scroll-behavior: auto; overflow-x: hidden; width: 100%; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-display);
+            overflow-x: hidden;
+            cursor: none;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Noise Overlay */
+        .noise-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48ZmlsdGVyIGlkPSJub2lzZSI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOTUiIG51bU9jdGF2ZXM9IjUiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbm9pc2UpIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC4wOCIvPjwvc3ZnPg==');
+            pointer-events: none; z-index: 0; opacity: 1;
+        }
+
+        /* Custom Cursor */
+        .cursor-dot { width: 6px; height: 6px; background: white; position: fixed; transform: translate(-50%, -50%); border-radius: 50%; z-index: 10000; pointer-events: none; }
+        @keyframes rainbow-flicker {
+            0% { background: radial-gradient(circle, #ffffff 0%, #ff0000 40%, rgba(255,0,0,0.3) 100%); }
+            14% { background: radial-gradient(circle, #ffffff 0%, #ff7f00 40%, rgba(255,127,0,0.3) 100%); }
+            28% { background: radial-gradient(circle, #ffffff 0%, #ffff00 40%, rgba(255,255,0,0.3) 100%); }
+            42% { background: radial-gradient(circle, #ffffff 0%, #00ff00 40%, rgba(0,255,0,0.3) 100%); }
+            57% { background: radial-gradient(circle, #ffffff 0%, #0000ff 40%, rgba(0,0,255,0.3) 100%); }
+            71% { background: radial-gradient(circle, #ffffff 0%, #4b0082 40%, rgba(75,0,130,0.3) 100%); }
+            85% { background: radial-gradient(circle, #ffffff 0%, #9400d3 40%, rgba(148,0,211,0.3) 100%); }
+            100% { background: radial-gradient(circle, #ffffff 0%, #ff0000 40%, rgba(255,0,0,0.3) 100%); }
+        }
+        .cursor-outline { 
+            width: 32px; 
+            height: 32px; 
+            background: radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.4) 100%);
+            position: fixed; 
+            transform: translate(-50%, -50%); 
+            border-radius: 50%; 
+            z-index: 9998; 
+            pointer-events: none; 
+            opacity: 1;
+            animation: rainbow-flicker 0.6s linear infinite;
+            transition: width 0.2s, height 0.2s, background 0.2s;
+        }
+        .cursor-outline.hover {
+            animation: none;
+        }
+
+        /* Typography Defaults */
+        h1, h2, h3 { font-family: var(--font-logo); font-weight: 400; letter-spacing: -0.02em; line-height: 1; margin: 0; }
+        p { font-family: var(--font-body); line-height: 1.6; color: #ccc; font-weight: 300; font-size: 1.05rem; }
+        .mono { font-family: var(--font-tech); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+        
+        /* Container Logic */
+        .container { max-width: 1400px; margin: 0 auto; padding: 0 2rem; }
+
+        /* --- NAVIGATION --- */
+        nav {
+            position: fixed; top: 0; left: 0; width: 100%; padding: 2rem 2rem 2rem 5vw;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 100; mix-blend-mode: difference;
+        }
+        .nav-logo { 
+            font-family: var(--font-logo); font-size: 2rem; letter-spacing: 1px; color: white; opacity: 0.9;
+            text-decoration: none; transition: opacity 0.3s, color 0.3s, visibility 0.3s;
+        }
+        .nav-logo.active {
+            opacity: 0;
+            visibility: hidden;
+        }
+        .nav-links { display: flex; gap: 3rem; }
+        .nav-links a {
+            text-decoration: none; color: white;
+            font-family: var(--font-tech); font-size: 0.8rem; position: relative;
+            opacity: 0.5; transition: opacity 0.3s;
+            padding: 10px;
+            display: block;
+        }
+        .nav-links a:hover { opacity: 1; }
+        .nav-links a.active { opacity: 1; color: var(--accent); }
+        .nav-links a.active::after {
+            content: ''; position: absolute; bottom: -5px; left: 0; width: 100%; height: 1px; background: var(--accent);
+        }
+
+        /* --- HERO SECTION --- */
+        .hero {
+            height: 100vh; width: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+            position: relative; overflow: hidden;
+        }
+        .hero-bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('https://toern.live/hero-bg.webp');
+            background-size: cover; background-position: center;
+            opacity: 0.8; z-index: -2; transform: scale(1.05);
+        }
+        .hero-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(5,5,5,0.0) 50%, rgba(5,5,5,1) 95%);
+            z-index: -1;
+        }
+        .hero-content { 
+            z-index: 2; text-align: left; 
+            max-width: 1400px; width: 100%; margin-left: auto; margin-right: auto; padding: 0 2rem;
+            transform: translateX(-5%);
+        }
+        .hero-title {
+            font-family: var(--font-logo); font-size: 19.2vw; color: white; line-height: 0.8; opacity: 0.95; mix-blend-mode: overlay; margin-left: -5px;
+        }
+        .hero-sub {
+            font-family: var(--font-tech); font-size: 1rem; color: white; font-weight: 700;
+            margin-top: 1rem; display: flex; gap: 2rem;
+            text-shadow: none;
+        }
+        .hero-sub .mono {
+            color: white;
+            font-weight: 700;
+        }
+
+        /* --- MARQUEE --- */
+        .marquee-container { position: relative; z-index: 10; margin-top: -3rem; margin-bottom: 5rem; }
+        .marquee {
+            background: var(--accent); color: #000; padding: 1rem 0;
+            transform: rotate(-2deg) scale(1.05); border-top: 2px solid black; border-bottom: 2px solid black; overflow: hidden; 
+        }
+        .track { display: flex; gap: 2rem; white-space: nowrap; animation: scroll 20s linear infinite; }
+        .track div { font-family: var(--font-logo); font-size: 2.5rem; display: flex; align-items: center; gap: 1rem; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+
+        /* --- ABOUT (Split Section) --- */
+        .split-section { padding: 8rem 0; display: flex; align-items: center; gap: 5rem; }
+        .split-text { flex: 1; }
+        .split-text h2 { font-size: 4.8rem; margin-bottom: 2rem; line-height: 1.1; }
+        .split-text p { margin-bottom: 1.5rem; opacity: 0.8; font-size: 1.1rem; }
+        .split-image { flex: 1; height: 600px; position: relative; overflow: hidden; border-radius: 2px; }
+        .split-image img { width: 100%; height: 100%; object-fit: cover; transition: transform 1.5s ease; }
+        .split-image:hover img { transform: scale(1.05); }
+
+        /* --- BENTO GRID --- */
+        .bento-section { padding: 5rem 0; }
+        .bento-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+        .bento-card {
+            background: var(--bg-card); padding: 2.5rem; border: 1px solid var(--grid-line);
+            display: flex; flex-direction: column;
+            min-height: 340px; transition: border-color 0.3s; position: relative;
+        }
+        .bento-card:hover { border-color: #555; }
+        .card-lg { grid-column: span 2; }
+        .card-full { grid-column: 1 / -1; }
+        .bento-card .mono {
+            margin-bottom: 1.5rem;
+        }
+        .bento-card > div {
+            display: flex; flex-direction: column; flex-grow: 1;
+        }
+        .bento-card h3 { font-size: 2.4rem; margin-bottom: 0.5rem; color: white; }
+        .bento-card p,
+        .bento-card .tech-list {
+            margin-top: auto;
+        }
+        .tile-opensource { background: var(--accent); color: black; border: none; }
+        .tile-opensource h3, .tile-opensource p, .tile-opensource .mono { color: #000 !important; opacity: 1 !important; }
+        .tech-list { margin-top: 1.25rem; list-style: none; width: 100%; }
+        .tech-list li { 
+            font-family: var(--font-tech); font-size: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 0.6rem 0; display: flex; justify-content: space-between; color: #ccc;
+            background: none;
+        }
+        .tech-list li span:first-child { color: var(--text-muted); }
+        .tech-list li span:last-child { color: #fff; }
+
+        /* --- GALLERY --- */
+        .gallery-wrap { 
+            height: 100vh; display: flex; align-items: center; overflow: hidden; 
+            background: #000; border-top: 1px solid var(--grid-line); margin-top: 5rem;
+        }
+        .gallery-track { display: flex; gap: 2rem; padding-left: 5vw; }
+        .gallery-item { 
+            width: 40vw; /* Desktop Width */
+            height: 65vh; flex-shrink: 0; background: #111; position: relative; 
+        }
+        .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* --- SPECS --- */
+        .specs-section { padding: 8rem 0; }
+        .spec-row {
+            display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 0; border-bottom: 1px solid var(--grid-line); transition: padding-left 0.3s;
+        }
+        .spec-row:hover { padding-left: 1rem; background: rgba(255,255,255,0.02); }
+        .spec-label { width: 30%; font-family: var(--font-tech); color: var(--text-muted); }
+        .spec-val { flex: 1; font-size: 1.5rem; font-weight: 300; }
+        .spec-extra { font-family: var(--font-tech); color: var(--accent); }
+
+        /* --- MEDIA SECTION --- */
+        .media-section { padding: 8rem 0; border-top: 1px solid var(--grid-line); }
+        .media-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3rem; }
+        .media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+        .media-item {
+            aspect-ratio: 9/16; background: #111; border: 1px solid var(--grid-line);
+            display: flex; align-items: center; justify-content: center; position: relative;
+            transition: transform 0.3s;
+        }
+        .media-item:hover { border-color: #444; transform: translateY(-5px); }
+        .ig-link { font-family: var(--font-tech); color: white; text-decoration: none; border-bottom: 1px solid var(--accent); padding-bottom: 5px; }
+
+        /* --- FOOTER --- */
+        .cta-section { 
+            padding: 10rem 0 15rem 0; border-top: 1px solid var(--grid-line);
+            background: linear-gradient(135deg, rgba(255, 59, 48, 0.15) 0%, rgba(255, 59, 48, 0.05) 100%);
+            position: relative; z-index: 10;
+            border-bottom: 1px solid var(--grid-line);
+            margin-top: 5rem;
+            overflow: hidden;
+        }
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        }
+        .cta-section .mono {
+            color: var(--accent);
+            font-size: 0.9rem;
+            letter-spacing: 0.1em;
+            display: block;
+            margin-bottom: 1.5rem;
+        }
+        .cta-section h2 {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            line-height: 1.1;
+        }
+        .cta-section p {
+            font-size: 1.2rem;
+            opacity: 0.7;
+            margin-bottom: 3rem;
+        }
+        .cta-section .email-form {
+            position: relative;
+            margin-top: 3rem;
+            max-width: 500px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            transition: border-color 0.3s;
+        }
+        .cta-section .email-form:focus-within {
+            border-bottom-color: var(--accent);
+        }
+        .cta-section .email-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            padding: 1.2rem 0;
+            color: white;
+            font-size: 1.1rem;
+            font-family: var(--font-body);
+            outline: none;
+        }
+        .cta-section .email-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: 300;
+        }
+        .cta-section button {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--accent);
+            font-family: var(--font-tech);
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 0.5rem 0;
+            transition: opacity 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+        .cta-section button:hover {
+            opacity: 0.7;
+        }
+        .cta-section a {
+            color: rgba(255, 255, 255, 0.6);
+            transition: color 0.3s;
+        }
+        .cta-section a:hover {
+            color: var(--accent);
+        }
+        .cta-section > div {
+            margin: 0 auto;
+            text-align: center;
+        }
+        .cta-section .email-form {
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .email-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid #333; padding: 1rem 0; color: white; font-size: 1.5rem; outline: none; }
+        .email-form { position: relative; margin-top: 3rem; max-width: 400px; }
+
+        /* --- MOBILE OPTIMIZATION --- */
+        @media (max-width: 1024px) {
+            nav { padding-left: 2rem; }
+            .nav-links { display: none; } /* Hide Desktop Menu */
+            .hero-title { font-size: 24vw; }
+            .container { padding: 0 2rem; }
+            .hero { padding: 5rem 2rem 3rem 2rem; height: auto; min-height: 80vh; }
+            .marquee-container { margin-top: 0; margin-bottom: 3rem; }
+            .split-section, .bento-section, .specs-section, .media-section, .cta-section { padding: 5rem 0; margin-bottom: 3rem; }
+            
+            .bento-grid { grid-template-columns: 1fr; }
+            .card-lg { grid-column: span 1; }
+            
+            .split-section { flex-direction: column; gap: 3rem; }
+            .split-image { width: 100%; height: 400px; }
+            
+            .media-grid { grid-template-columns: 1fr; gap: 2rem; }
+            .media-item { aspect-ratio: 16/9; /* Wider on mobile for better stacking */ }
+
+            .spec-row { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+            .spec-label, .spec-extra { width: 100%; text-align: left; }
+        }
+
+        /* --- MEDIUM DESKTOP ADJUSTMENTS (<1280px) --- */
+        @media (max-width: 1280px) and (min-width: 1025px) {
+            .cta-section { 
+                padding: 6rem 0 8rem 0;
+                margin-top: 3rem;
+            }
+            .container { padding: 0 2rem; }
+        }
+
+        @media (max-width: 768px) {
+            /* General Padding Fix */
+            .container { padding: 0 1.5rem !important; }
+            .container { max-width: 100%; }
+            .hero { padding: 5rem 1.5rem 3rem 1.5rem; height: auto; min-height: 80vh; }
+            nav { padding-left: 1.5rem; }
+            .hero-content { padding: 0 1.5rem; }
+            .hero-title { font-size: 28.8vw; margin-left: -2px; }
+            .hero-sub { flex-wrap: wrap; gap: 1rem; }
+
+            /* Gallery Fix: Make images wide and accessible */
+            .gallery-wrap { height: auto; padding: 3rem 0; margin-top: 2rem; margin-bottom: 4rem; }
+            .gallery-track { 
+                padding: 0 1.5rem; gap: 1rem; 
+                display: flex; flex-direction: row; 
+                overflow-x: auto; overflow-y: hidden;
+                scroll-snap-type: x mandatory;
+                -webkit-overflow-scrolling: touch;
+            }
+            .gallery-track::-webkit-scrollbar { display: none; }
+            .gallery-item { 
+                width: 85vw; height: 55vh; 
+                flex-shrink: 0; 
+                scroll-snap-align: start;
+            }
+
+            /* Text Sizes */
+            .split-text h2 { font-size: 3.6rem; }
+            h2 { font-size: 3rem !important; }
+
+            /* Padding Adjustments */
+            .split-section, .bento-section, .specs-section, .media-section, .cta-section {
+                padding: 7rem 0 10rem 0;
+                margin-bottom: 4rem;
+            }
+            .cta-section { 
+                margin-top: 5rem; 
+                padding: 8rem 0 12rem 0;
+            }
+            .marquee-container { margin-top: 1.5rem; margin-bottom: 4rem; }
+            
+            /* Bento card padding on mobile */
+            .bento-card {
+                padding: 1.5rem;
+            }
+            /* Tables / lists on mobile */
+            .tech-list li {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.25rem;
+                word-break: break-word;
+                line-height: 1.6;
+                padding: 0.9rem 0;
+            }
+            .tech-list li span {
+                display: block;
+            }
+            
+            .media-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+        }
+    </style>
+</head>
+<body id="top">
+
+    <div class="noise-overlay"></div>
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+
+    <nav>
+        <a href="#top" class="nav-logo">TŒRN</a>
+        <div class="nav-links">
+            <a href="#about">01 ABOUT</a>
+            <a href="#features">02 FEATURES</a>
+            <a href="#gallery">03 GALLERY</a>
+            <a href="#specs">04 SPECS</a>
+            <a href="#media">05 MEDIA</a>
+            <a href="#preorder">06 PREORDER</a>
+        </div>
+    </nav>
+
+    <main>
+        <!-- Hero -->
+        <header id="hero" class="hero">
+            <div class="hero-bg"></div>
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+                <h1 class="hero-title">TŒRN</h1>
+                <div class="hero-sub">
+                    <span class="mono">[ OPEN SOURCE ]</span>
+                    <span class="mono">[ SEQUENCER ]</span>
+                    <span class="mono">[ SAMPLER ]</span>
+                    <span class="mono">[ DIY KIT ]</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Marquee -->
+        <div class="marquee-container">
+            <div class="marquee">
+                <div class="track">
+                    <div>STANDALONE /// POWERFUL /// FUN /// DIY /// PORTABLE /// ARDUINO BASED /// 16X16 RGB GRID /// TEENSY 4.1 /// STANDALONE /// POWERFUL /// FUN ///</div>
+                    <div>STANDALONE /// POWERFUL /// FUN /// DIY /// PORTABLE /// ARDUINO BASED /// 16X16 RGB GRID /// TEENSY 4.1 /// STANDALONE /// POWERFUL /// FUN ///</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- About (Restored) -->
+        <section id="about" class="container split-section">
+            <div class="split-text">
+                <span class="mono" style="color: var(--accent); display:block; margin-bottom: 1rem;">// THE VISION</span>
+                <h2>More Than A Toy.<br>A Sonic Tool.</h2>
+                <p>
+                    TŒRN is not just a toy. It is an evolution. Designed for the curious, the makers, and the musicians. A device that adapts to your style, from the couch to the stage.
+                </p>
+                <p>
+                    It is built to be intuitive enough for a child to discover electronic music, yet deep enough for a professional to perform live. With a fully custom 4-layer PCB and the power of the Teensy 4.1, TŒRN offers semi-professional audio processing in a handheld form factor.
+                </p>
+            </div>
+            <div class="split-image">
+                <img src="https://toern.live/about/toern-closeup.webp" alt="TŒRN Close Up" loading="lazy">
+            </div>
+        </section>
+
+        <!-- Features Bento Grid -->
+        <section id="features" class="bento-section container">
+            <div class="mono" style="margin-bottom: 2rem;">// SYSTEM CAPABILITIES</div>
+            <div class="bento-grid">
+                
+                <!-- 1. RGB Matrix -->
+                <div class="bento-card card-lg">
+                    <span class="mono">01. VISUAL FEEDBACK</span>
+                    <div>
+                        <h3>16x16 RGB Matrix</h3>
+                        <p>Get ready for a blast of nostalgia mixed with cutting-edge tech. Paint your music with light. The 16x16 RGB LED grid isn't just for sequencing—it's a futuristic canvas for modulation and performance. Each LED can display pattern data, modulation values, effects states, and more, creating a visual representation of your music in real-time.</p>
+                        <p style="margin-top: 1rem; opacity: 0.8;">The display is extendable, allowing you to chain LED modules for a larger 32x16 grid, doubling your visual workspace for even more complex arrangements and performances.</p>
+                        <ul class="tech-list">
+                            <li style="border-bottom: none;"><span>EXTENDABLE</span> <span>16X16 - 32X16 LEDS</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 2. OPEN SOURCE -->
+                <div class="bento-card tile-opensource">
+                    <span class="mono">02. PHILOSOPHY</span>
+                    <div>
+                        <h3>Open Source</h3>
+                        <p>MIT License Firmware.<br>CC BY-NC Hardware.<br><strong>Made by makers, for makers.</strong></p>
+                    </div>
+                </div>
+
+                <!-- 3. Sequencer -->
+                <div class="bento-card card-full">
+                    <span class="mono">03. SEQUENCER</span>
+                    <div>
+                        <h3>Powerful Sequencer</h3>
+                        <p>Create complex arrangements with 16-bar patterns across 16 pages, giving you 256 bars per song. The sequencer features separate storage for pattern data, sample-pack data, and individual samples—this modular approach guarantees full flexibility. Load patterns, samples, and samplepacks in real-time while playing, without interrupting your performance.</p>
+                        <p style="margin-top: 1rem; opacity: 0.8;">Advanced sequencing features include probability triggers (0-100%) and condition-triggers (1/4, 1/2, 1/1, 2/1, etc.) for creating evolving, dynamic patterns. The configurable song mode allows you to chain patterns together, while manual live-pattern switching gives you complete control during performances. Mute individual parts or entire patterns on the fly. Copy and paste patterns from page to page or page to voice for rapid workflow. Context-aware randomization intelligently generates musical content based on major/minor scales and rhythm patterns. The auto-extend algorithm intelligently extends patterns to custom lengths based on trigger placement.</p>
+                        <p style="margin-top: 1rem; opacity: 0.8;">Each channel features adjustable gain via a designated encoder, and fast access to filter actions per channel. Tap BPM directly via touch controls. Full MIDI integration includes send/receive clocks and notes, plus transport control. Multiple user-selectable play/view templates optimize your workflow for different creative scenarios. The regenerative pong-style pattern and note play mode creates ambient, evolving textures perfect for experimental music.</p>
+                        <ul class="tech-list">
+                            <li><span>STORAGE</span> <span>999 PATTERNS / 999 SOUND-PACKS / 999 SAMPLES</span></li>
+                            <li><span>TRIGGERS</span> <span>PROBABILITY (0-100%) & CONDITION-TRIGS</span></li>
+                            <li><span>SONG MODE</span> <span>CONFIGURABLE PATTERN CHAINING</span></li>
+                            <li><span>PATTERN PLAY</span> <span>MANUAL LIVE-PATTERN SWITCHING</span></li>
+                            <li><span>MUTING</span> <span>PART MUTING & PER-PATTERN MUTES</span></li>
+                            <li><span>PATTERN OPS</span> <span>COPY/PASTE PAGE-TO-PAGE OR PAGE-TO-VOICE</span></li>
+                            <li><span>RANDOMIZATION</span> <span>CONTEXT AWARE</span></li>
+                            <li><span>AUTO-EXTEND</span> <span>TRIGGER-AWARE PATTERN LENGTH</span></li>
+                            <li><span>CHANNEL GAIN</span> <span>ADJUSTABLE VIA DESIGNATED ENCODER</span></li>
+                            <li><span>FILTER ACTIONS</span> <span>FAST ACCESS PER CHANNEL</span></li>
+                            <li><span>BPM TAPPING</span> <span>VIA TOUCH</span></li>
+                            <li><span>MIDI</span> <span>SEND/RECEIVE CLOCKS+NOTES, TRANSPORT</span></li>
+                            <li><span>PLAY/VIEW TEMPLATES</span> <span>MULTIPLE USER-SELECTABLE</span></li>
+                            <li style="border-bottom: none;"><span>REGENERATIVE PLAY</span> <span>PONG-STYLE PATTERN & NOTE PLAY</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 4. Connectivity -->
+                <div class="bento-card card-lg">
+                    <span class="mono">04. I/O</span>
+                    <div>
+                        <h3>Pro Connectivity</h3>
+                        <p>Ready for the studio and the stage. No dongles needed. TŒRN features comprehensive connectivity options designed for professional use. USB-C provides both power and data transfer, eliminating the need for separate cables. TRS MIDI In/Out ports (3.5mm, Type A/B compatible) offer seamless integration with other MIDI gear. Professional 6.35mm stereo jacks handle line-in, line-out, and microphone input, while a built-in internal microphone enables direct sampling without external hardware.</p>
+                        <p style="margin-top: 1rem; opacity: 0.8;">For portable operation, an optional 1500mAh LiPo battery can be installed (battery not included). The device supports both internal clock generation (40-300 BPM) and external MIDI clock reception, giving you flexibility in any performance scenario.</p>
+                        <ul class="tech-list">
+                            <li><span>USB-C</span> <span>POWER & DATA</span></li>
+                            <li><span>MIDI I/O</span> <span>3.5MM TRS (TYPE A/B)</span></li>
+                            <li><span>AUDIO I/O</span> <span>6.35MM JACKS (STEREO)</span></li>
+                            <li><span>BATTERY</span> <span>1500MAH LIPO (OPTIONAL)</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 5. Sound Engine -->
+                <div class="bento-card">
+                    <span class="mono">05. SOUND ENGINE</span>
+                    <div>
+                        <h3>Sound Engine</h3>
+                        <p>Deep sound design capabilities with professional-grade WAV sample support via SD Card. Each of the 8 sample voices can load samples up to 12 seconds in length at 44.1kHz quality. Samples can be individually trimmed (start/end points) per voice before loading, giving you precise control over your sound material.</p>
+                        <p style="margin-top: 1rem; opacity: 0.8;">The system also includes 3 dedicated synth voices for subtractive synthesis, each with multiple oscillators and full effect routing capabilities.</p>
+                        <ul class="tech-list">
+                            <li><span>SAMPLE VOICES</span> <span>8 VOICES</span></li>
+                            <li><span>SAMPLE FORMAT</span> <span>44.1KHZ</span></li>
+                            <li><span>SAMPLE LENGTH</span> <span>UP TO 12S PER VOICE</span></li>
+                            <li style="border-bottom: none;"><span>SYNTH VOICES</span> <span>3 VOICES</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 6. Effects Chain -->
+                <div class="bento-card">
+                    <span class="mono">06. EFFECTS CHAIN</span>
+                    <div>
+                        <h3>Effects Chain</h3>
+                        <p>Each voice features per-voice effect assignment, allowing you to sculpt your sound with precision. The ADSR envelope provides dynamic control over attack, decay, sustain, and release. Multi-mode filters (high-pass, low-pass, band-pass) shape frequency content, while bitcrusher adds digital grit and character. Flanger creates movement and depth, and reverb adds spatial dimension to your sounds.</p>
+                        <ul class="tech-list">
+                            <li style="border-bottom: none;"><span>EFFECTS</span> <span>ADSR / FILTER / BITCRUSHER / FLANGER / REVERB</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 7. Three Synth Voices -->
+                <div class="bento-card">
+                    <span class="mono">07. SYNTHESIS</span>
+                    <div>
+                        <h3>Three Synth Voices</h3>
+                        <p>The TŒRN features three powerful synth voices: one three-voice polyphonic synth with 3 oscillators per voice, and two monophonic synths with 2 oscillators each. All synths use subtractive synthesis architecture with full ADSR envelope control, LFO modulation, and arpeggiator capabilities. Each synth voice can be routed through the complete effects chain including filters, bitcrusher, flanger, and reverb.</p>
+                    </div>
+                </div>
+
+                <!-- 8. Live Recording -->
+                <div class="bento-card card-lg">
+                    <span class="mono">08. LIVE RECORDING</span>
+                    <div>
+                        <h3>Live Recording</h3>
+                        <p>Record directly into TŒRN with 8-channel live-looping capabilities. Each voice can record up to 12 seconds of audio, which can then be fully sequenced, modified, and transposed. Two recording modes are available: touch-hold-activated recording for hands-on control, and one-shot recording for quick captures.</p>
+                        <p style="margin-top: 1rem; opacity: 0.8;">Live monitoring is available so you can hear your input signal while recording. Choose from multiple input sources: 6.35mm microphone jack for external mics, built-in internal microphone for quick sampling without extra hardware, or line-in for recording from external audio sources. Both input and output levels are fully adjustable, giving you complete control over your recording signal chain.</p>
+                        <ul class="tech-list">
+                            <li><span>LIVE MONITORING</span> <span>AVAILABLE</span></li>
+                            <li><span>INPUT SOURCES</span> <span>6.35MM MIC / BUILT-IN MIC / LINE-IN</span></li>
+                            <li style="border-bottom: none;"><span>I/O LEVELS</span> <span>ADJUSTABLE</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Gallery -->
+        <section id="gallery" class="gallery-wrap">
+            <div class="gallery-track">
+                <div class="gallery-item"><img src="https://toern.live/gallery/g00001.png" alt="Detail 1"></div>
+                <div class="gallery-item"><img src="https://toern.live/gallery/g00005.png" alt="Detail 2"></div>
+                <div class="gallery-item"><img src="https://toern.live/gallery/g00008.png" alt="Detail 3"></div>
+                <div class="gallery-item"><img src="https://toern.live/gallery/g00010.png" alt="Detail 4"></div>
+                <div class="gallery-item"><img src="https://toern.live/gallery/g00012.png" alt="Detail 5"></div>
+            </div>
+        </section>
+
+        <!-- Specs -->
+        <section id="specs" class="specs-section container">
+            <h2 style="font-size: 3.6rem; margin-bottom: 3rem;">HARDWARE<br><span style="color: #555">SPECIFICATIONS</span></h2>
+            
+            <div class="spec-table">
+                <div class="spec-row">
+                    <span class="spec-label">MICROCONTROLLER</span>
+                    <span class="spec-val">Teensy 4.1</span>
+                    <span class="spec-extra">600MHZ ARM</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">MEMORY</span>
+                    <span class="spec-val">16MB PSRAM</span>
+                    <span class="spec-extra">BUFFER</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">DISPLAY</span>
+                    <span class="spec-val">16x16 RGB Matrix</span>
+                    <span class="spec-extra">EXTENDABLE TO 32X16</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">AUDIO</span>
+                    <span class="spec-val">Line In/Out</span>
+                    <span class="spec-extra">6.35mm STEREO</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">MIDI</span>
+                    <span class="spec-val">TRS MIDI In/Out</span>
+                    <span class="spec-extra">CLOCK & NOTES</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">HOUSING</span>
+                    <span class="spec-val">Acrylic</span>
+                    <span class="spec-extra">LASER CUT SMOKE BLACK</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">ENCODERS</span>
+                    <span class="spec-val">Custom made,  RGB Push</span>
+                    <span class="spec-extra">I2C</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">STORAGE</span>
+                    <span class="spec-val">Micro SD Card</span>
+                    <span class="spec-extra">UP TO 32GB</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">MICROPHONE</span>
+                    <span class="spec-val">Built-in + 6.35mm Jack</span>
+                    <span class="spec-extra">DUAL INPUT</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">HEADPHONES</span>
+                    <span class="spec-val">6.35mm Output</span>
+                    <span class="spec-extra">STEREO</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">USB</span>
+                    <span class="spec-val">USB-C</span>
+                    <span class="spec-extra">POWER & DATA</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">TOUCH CONTROLS</span>
+                    <span class="spec-val">3x Touch Buttons</span>
+                    <span class="spec-extra">CAPACITIVE</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">PCB</span>
+                    <span class="spec-val">4-Layer Custom</span>
+                    <span class="spec-extra">FULLY ASSEMBLED</span>
+                </div>
+                <div class="spec-row">
+                    <span class="spec-label">CONNECTORS</span>
+                    <span class="spec-val">JST Connectors</span>
+                    <span class="spec-extra">NO SOLDERING</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Media / Instagram -->
+        <section id="media" class="container media-section">
+            <div class="media-header">
+                <h2 style="font-size: 3.6rem;">See It In Action</h2>
+                <a href="https://www.instagram.com/toern_ctrl/" target="_blank" class="ig-link">VIEW ON INSTAGRAM -></a>
+            </div>
+            <div class="media-grid">
+                <div class="media-item">
+                    <div style="text-align:center;">
+                        <span class="mono" style="color: var(--accent);">REEL 01</span><br>
+                        <span style="font-family: var(--font-display);">MELODY DEMO</span>
+                    </div>
+                </div>
+                <div class="media-item">
+                    <div style="text-align:center;">
+                        <span class="mono" style="color: var(--accent);">REEL 02</span><br>
+                        <span style="font-family: var(--font-display);">BEAT PATTERNS</span>
+                    </div>
+                </div>
+                <div class="media-item">
+                    <div style="text-align:center;">
+                        <span class="mono" style="color: var(--accent);">REEL 03</span><br>
+                        <span style="font-family: var(--font-display);">LIVE PERFORMANCE</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer id="preorder" class="cta-section container">
+            <div style="max-width: 600px;">
+                <span class="mono">LAUNCHING MAY 2026</span>
+                <h2>Join the waitlist</h2>
+                <p>to be notified when pre-orders open.</p>
+                
+                <form class="email-form">
+                    <input type="email" placeholder="EMAIL ADDRESS" class="email-input">
+                    <button type="submit">SUBMIT</button>
+                </form>
+
+                <div style="margin-top: 4rem; display: flex; gap: 2rem; justify-content: center;">
+                    <a href="https://www.instagram.com/toern_ctrl/" class="mono" style="text-decoration: none;">INSTAGRAM</a>
+                    <a href="https://github.com/soundpauli/toern" class="mono" style="text-decoration: none;">GITHUB</a>
+                    <a href="/impressum" class="mono" style="text-decoration: none;">IMPRESSUM</a>
+                </div>
+            </div>
+        </footer>
+
+    </main>
+
+    <script>
+        // --- 1. LENIS SCROLL ---
+        const lenis = new Lenis({ duration: 1.2, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), direction: 'vertical', smooth: true });
+        function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
+        requestAnimationFrame(raf);
+
+        // --- 2. ACTIVE NAV ---
+        const sections = document.querySelectorAll("section[id], header[id], footer[id]");
+        const navLinks = document.querySelectorAll(".nav-links a");
+        const navLogo = document.querySelector(".nav-logo");
+        const gallerySection = document.querySelector("#gallery");
+        
+        function updateActiveNav() {
+            const scrollPos = window.scrollY || window.pageYOffset;
+            let current = "";
+            
+            // Check other sections first (excluding gallery)
+            sections.forEach((section) => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.offsetHeight;
+                const sectionId = section.getAttribute("id");
+                
+                // Skip gallery - we'll check it separately
+                if (sectionId === "gallery") return;
+                
+                // Check if section is in viewport (with offset for better detection)
+                if (scrollPos >= sectionTop - 300 && scrollPos < sectionTop + sectionHeight - 300) {
+                    current = sectionId;
+                }
+            });
+            
+            // Check if we're in the gallery section (which is pinned) - only if no other section is active
+            if (!current && gallerySection) {
+                const galleryTop = gallerySection.offsetTop;
+                const galleryHeight = gallerySection.offsetHeight;
+                const galleryScrollEnd = galleryTop + galleryHeight + (gallerySection.scrollWidth - window.innerWidth);
+                
+                // Check if scroll position is within gallery range (more precise check)
+                if (scrollPos >= galleryTop + 100 && scrollPos < galleryScrollEnd) {
+                    current = "gallery";
+                }
+            }
+            
+            // Handle top/hero section
+            if (scrollPos < 300) {
+                current = "top";
+            }
+            
+            // Update nav links
+            navLinks.forEach((link) => {
+                link.classList.remove("active");
+                const href = link.getAttribute("href").replace('#', '');
+                if (href === current) {
+                    link.classList.add("active");
+                }
+            });
+            
+            // Update logo active state
+            if (navLogo) {
+                if (current === "top" || current === "hero") {
+                    navLogo.classList.add("active");
+                } else {
+                    navLogo.classList.remove("active");
+                }
+            }
+        }
+        
+        // Update on scroll (works with Lenis)
+        lenis.on('scroll', updateActiveNav);
+        window.addEventListener("scroll", updateActiveNav);
+        updateActiveNav(); // Initial call
+
+        // --- 3. CURSOR ---
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+        const gridSize = 120;
+        const isCoarse = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 1024;
+        
+        if (!isCoarse && cursorDot && cursorOutline) {
+            function snapToGrid(value) {
+                return Math.round(value / gridSize) * gridSize;
+            }
+            
+            window.addEventListener("mousemove", function(e) {
+                cursorDot.style.left = `${e.clientX}px`; 
+                cursorDot.style.top = `${e.clientY}px`;
+                
+                // Snap cursor-outline to grid
+                const gridX = snapToGrid(e.clientX);
+                const gridY = snapToGrid(e.clientY);
+                cursorOutline.animate({ left: `${gridX}px`, top: `${gridY}px` }, { duration: 500, fill: "forwards" });
+            });
+            // Colors from col[1] to col[8] in colors.h
+            const hoverColors = [
+                { rgb: [255, 0, 0], hex: '#ff0000' },      // col[1] - Red
+                { rgb: [255, 69, 0], hex: '#ff4500' },     // col[2] - Burnt Orange
+                { rgb: [255, 255, 0], hex: '#ffff00' },    // col[3] - Gold
+                { rgb: [0, 200, 0], hex: '#00c800' },      // col[4] - Green
+                { rgb: [0, 255, 255], hex: '#00ffff' },    // col[5] - Cyan
+                { rgb: [0, 0, 255], hex: '#0000ff' },      // col[6] - Blue
+                { rgb: [255, 0, 255], hex: '#ff00ff' },     // col[7] - Magenta
+                { rgb: [220, 100, 100], hex: '#dc6464' }   // col[8] - Pink
+            ];
+            
+            document.querySelectorAll('a, button, .bento-card, .spec-row, .media-item').forEach(el => {
+                el.addEventListener('mouseenter', () => { 
+                    cursorOutline.style.width = '64px'; 
+                    cursorOutline.style.height = '64px';
+                    cursorOutline.classList.add('hover');
+                    
+                    // Randomly select a color from col[1] to col[8]
+                    const randomColor = hoverColors[Math.floor(Math.random() * hoverColors.length)];
+                    const rgba = `rgba(${randomColor.rgb[0]}, ${randomColor.rgb[1]}, ${randomColor.rgb[2]}, 0.3)`;
+                    cursorOutline.style.background = `radial-gradient(circle, #ffffff 0%, ${randomColor.hex} 40%, ${rgba} 100%)`;
+                });
+                el.addEventListener('mouseleave', () => { 
+                    cursorOutline.style.width = '32px'; 
+                    cursorOutline.style.height = '32px';
+                    cursorOutline.classList.remove('hover');
+                    cursorOutline.style.background = '';
+                });
+            });
+        } else {
+            if (cursorDot) cursorDot.style.display = 'none';
+            if (cursorOutline) cursorOutline.style.display = 'none';
+        }
+
+        // --- 4. ANIMATIONS ---
+        gsap.registerPlugin(ScrollTrigger);
+
+        // Hero
+        gsap.from('.hero-title', { x: -50, opacity: 0, duration: 1.5, ease: "power4.out" });
+        gsap.from('.hero-sub', { x: -50, opacity: 0, duration: 1, delay: 0.2, ease: "power4.out" });
+
+        // Parallax
+        gsap.to(".hero-bg", { yPercent: 30, ease: "none", scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: true } });
+
+        // About Split
+        gsap.from(".split-text", { scrollTrigger: { trigger: "#about", start: "top 70%" }, y: 50, opacity: 0, duration: 1 });
+        gsap.from(".split-image", { scrollTrigger: { trigger: "#about", start: "top 70%" }, y: 100, opacity: 0, duration: 1.2, delay: 0.2 });
+
+        // Bento
+        gsap.from(".bento-card", { scrollTrigger: { trigger: ".bento-section", start: "top 80%" }, y: 50, opacity: 0, duration: 0.8, stagger: 0.1 });
+
+        // Gallery (desktop only, disable pinning on mobile to avoid overlap)
+        const race = document.querySelector(".gallery-track");
+        if (race) {
+            function getScrollAmount() {
+                let racesWidth = race.scrollWidth;
+                return -(racesWidth - window.innerWidth + 100);
+            }
+            
+            ScrollTrigger.matchMedia({
+                "(min-width: 1025px)": () => {
+                    return gsap.to(race, {
+                        x: getScrollAmount,
+                        ease: "none",
+                        scrollTrigger: {
+                            trigger: ".gallery-wrap",
+                            start: "top top",
+                            end: () => `+=${getScrollAmount() * -1}`,
+                            pin: true,
+                            scrub: 1,
+                            invalidateOnRefresh: true // Important for desktop resize
+                        }
+                    });
+                },
+                "(max-width: 1024px)": () => {
+                    // Reset position on mobile / tablet
+                    gsap.set(race, { x: 0 });
+                }
+            });
+        }
+
+        // Specs & Media
+        gsap.utils.toArray('.spec-row').forEach((row, i) => { gsap.from(row, { scrollTrigger: { trigger: row, start: "top 95%" }, opacity: 0, x: -20, duration: 0.5, delay: i * 0.05 }); });
+        gsap.from(".media-item", { scrollTrigger: { trigger: ".media-section", start: "top 80%" }, y: 50, opacity: 0, duration: 0.8, stagger: 0.1 });
+
+    </script>
+</body>
+</html>

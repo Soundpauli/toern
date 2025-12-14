@@ -60,26 +60,239 @@ extern float channelOctave[9]; // Global octave array for channels 1-8
 extern int8_t channelDirection[maxFiles];
 extern unsigned int recordingStartBeat;  // Beat where recording started
 
-void EEPROMgetLastFiles() {
-  // Get lastFile Array from EEPROM and validate
-  EEPROM.get(100, lastFile);
+// ── Sample name manifest (EXTMEM, small, plain text) ─────────────────────
+// Limits (keep small)
+const int MANIFEST_MAX_FOLDERS = 32;
+const int MANIFEST_MAX_FILES_PER_FOLDER = 255;
+const int MANIFEST_NAME_MAX = 24;  // incl null
 
-  const uint16_t maxFileId = (FOLDER_MAX * 100) + 99;  // e.g. folder 10, file 99 = 1099
-  bool needsRescan = false;
-  for (int f = 0; f <= FOLDER_MAX; f++) {
-    if (lastFile[f] == 0 || lastFile[f] > maxFileId) {
-      needsRescan = true;
-      break;
+EXTMEM char manifestFolderNames[MANIFEST_MAX_FOLDERS][MANIFEST_NAME_MAX];
+EXTMEM char manifestFileNames[MANIFEST_MAX_FOLDERS][MANIFEST_MAX_FILES_PER_FOLDER][MANIFEST_NAME_MAX];
+EXTMEM uint16_t manifestFileCount[MANIFEST_MAX_FOLDERS] = {0};
+uint16_t manifestFolderCount = 0;
+bool manifestLoaded = false;
+
+static int cmpName(const char* a, const char* b) {
+  return strcasecmp(a, b);
+}
+
+static bool hasWavExt(const char* name) {
+  int len = strlen(name);
+  if (len < 5) return false;
+  const char* ext = name + len - 4;
+  return (ext[0] == '.' || ext[0] == '.') && (tolower(ext[1]) == 'w') && (tolower(ext[2]) == 'a') && (tolower(ext[3]) == 'v');
+}
+
+// Generate next numeric filename: rec001.wav ... rec999.wav
+void generateNextNumericName(int folderIdx, char* outName, size_t outSize) {
+  const char* folderName = (manifestLoaded && folderIdx < manifestFolderCount) ? manifestFolderNames[folderIdx] : "0";
+  char path[96];
+  for (int n = 1; n < 1000; ++n) {
+    snprintf(outName, outSize, "rec_%02d.wav", n);
+    snprintf(path, sizeof(path), "samples/%s/%s", folderName, outName);
+    if (!SD.exists(path)) return;
+  }
+  // fallback
+  snprintf(outName, outSize, "rec_99.wav");
+}
+
+static void clearSampleManifest() {
+  manifestFolderCount = 0;
+  for (int f = 0; f < MANIFEST_MAX_FOLDERS; ++f) {
+    manifestFolderNames[f][0] = '\0';
+    manifestFileCount[f] = 0;
+    for (int i = 0; i < MANIFEST_MAX_FILES_PER_FOLDER; ++i) {
+      manifestFileNames[f][i][0] = '\0';
+    }
+  }
+  manifestLoaded = false;
+}
+
+// Plain text manifest: lines "folder:<name>" then "file:<name>" ... blank lines allowed
+// Path for manifest: "samples/map.txt"
+bool loadSampleManifest() {
+  clearSampleManifest();
+  File f = SD.open("samples/map.txt", FILE_READ);
+  if (!f) return false;
+
+  String line;
+  int currentFolder = -1;
+  while (f.available()) {
+    line = f.readStringUntil('\n');
+    line.trim();  // remove CR/LF/space
+    if (line.length() == 0) continue;
+    if (line.startsWith("folder:")) {
+      if (manifestFolderCount >= MANIFEST_MAX_FOLDERS) continue;
+      currentFolder = manifestFolderCount++;
+      String name = line.substring(7);
+      name.trim();
+      name.toCharArray(manifestFolderNames[currentFolder], MANIFEST_NAME_MAX);
+      manifestFileCount[currentFolder] = 0;
+    } else if (line.startsWith("file:") && currentFolder >= 0) {
+      int fi = manifestFileCount[currentFolder];
+      if (fi >= MANIFEST_MAX_FILES_PER_FOLDER) continue;
+      String name = line.substring(5);
+      name.trim();
+      name.toCharArray(manifestFileNames[currentFolder][fi], MANIFEST_NAME_MAX);
+      manifestFileCount[currentFolder]++;
+    }
+  }
+  f.close();
+  manifestLoaded = manifestFolderCount > 0;
+  return manifestLoaded;
+}
+
+// Scan SD for folders/files (natural sorted by simple insertion) and write manifest
+bool scanAndWriteManifest() {
+  clearSampleManifest();
+  File root = SD.open("samples");
+  if (!root || !root.isDirectory()) return false;
+
+  Serial.println("=== Manifest scan: samples/ ===");
+
+  File entry;
+  while ((entry = root.openNextFile())) {
+    if (!entry.isDirectory()) { entry.close(); continue; }
+    const char* rawName = entry.name();
+    if (rawName && rawName[0] == '.') { entry.close(); continue; } // skip hidden
+    if (manifestFolderCount >= MANIFEST_MAX_FOLDERS) { entry.close(); continue; }
+    char fname[MANIFEST_NAME_MAX];
+    // Some SD libs return a path; keep only the last path component.
+    const char* base = rawName ? rawName : "";
+    const char* slash = strrchr(base, '/');
+    if (slash) base = slash + 1;
+    strncpy(fname, base, MANIFEST_NAME_MAX - 1);
+    fname[MANIFEST_NAME_MAX - 1] = 0;
+    int fidx = manifestFolderCount++;
+    strncpy(manifestFolderNames[fidx], fname, MANIFEST_NAME_MAX - 1);
+    manifestFolderNames[fidx][MANIFEST_NAME_MAX - 1] = 0;
+    manifestFileCount[fidx] = 0;
+
+    Serial.print("folder: ");
+    Serial.println(manifestFolderNames[fidx]);
+
+    // scan files
+    File fileEntry;
+    while ((fileEntry = entry.openNextFile())) {
+      if (fileEntry.isDirectory()) { fileEntry.close(); continue; }
+      const char* nm = fileEntry.name();
+      if (nm && nm[0] == '.') { fileEntry.close(); continue; } // skip hidden files
+      // Keep only the base name (strip any path)
+      const char* fbase = nm ? nm : "";
+      const char* fslash = strrchr(fbase, '/');
+      if (fslash) fbase = fslash + 1;
+      if (!hasWavExt(fbase)) { fileEntry.close(); continue; }
+      int fi = manifestFileCount[fidx];
+      if (fi < MANIFEST_MAX_FILES_PER_FOLDER) {
+        strncpy(manifestFileNames[fidx][fi], fbase, MANIFEST_NAME_MAX - 1);
+        manifestFileNames[fidx][fi][MANIFEST_NAME_MAX - 1] = 0;
+        manifestFileCount[fidx]++;
+        Serial.print("  file: ");
+        Serial.println(manifestFileNames[fidx][fi]);
+      }
+      fileEntry.close();
+    }
+    entry.close();
+  }
+  root.close();
+
+  // Sort folders alphabetically (0-9 then a-z via strcasecmp)
+  for (int i = 0; i < (int)manifestFolderCount - 1; ++i) {
+    for (int j = i + 1; j < (int)manifestFolderCount; ++j) {
+      if (cmpName(manifestFolderNames[i], manifestFolderNames[j]) > 0) {
+        char tmpName[MANIFEST_NAME_MAX];
+        memcpy(tmpName, manifestFolderNames[i], MANIFEST_NAME_MAX);
+        memcpy(manifestFolderNames[i], manifestFolderNames[j], MANIFEST_NAME_MAX);
+        memcpy(manifestFolderNames[j], tmpName, MANIFEST_NAME_MAX);
+        // swap counts and file arrays
+        uint16_t tmpCnt = manifestFileCount[i];
+        manifestFileCount[i] = manifestFileCount[j];
+        manifestFileCount[j] = tmpCnt;
+        char tmpFiles[MANIFEST_MAX_FILES_PER_FOLDER][MANIFEST_NAME_MAX];
+        memcpy(tmpFiles, manifestFileNames[i], sizeof(tmpFiles));
+        memcpy(manifestFileNames[i], manifestFileNames[j], sizeof(tmpFiles));
+        memcpy(manifestFileNames[j], tmpFiles, sizeof(tmpFiles));
+      }
     }
   }
 
-  // If EEPROM was empty or held truncated (old int8_t) data, rebuild it
-  if (needsRescan) {
-    EEPROMsetLastFile();
+  // Sort files within each folder alphabetically
+  for (int f = 0; f < (int)manifestFolderCount; ++f) {
+    int fc = manifestFileCount[f];
+    for (int i = 0; i < fc - 1; ++i) {
+      for (int j = i + 1; j < fc; ++j) {
+        if (cmpName(manifestFileNames[f][i], manifestFileNames[f][j]) > 0) {
+          char tmpName[MANIFEST_NAME_MAX];
+          memcpy(tmpName, manifestFileNames[f][i], MANIFEST_NAME_MAX);
+          memcpy(manifestFileNames[f][i], manifestFileNames[f][j], MANIFEST_NAME_MAX);
+          memcpy(manifestFileNames[f][j], tmpName, MANIFEST_NAME_MAX);
+        }
+      }
+    }
   }
 
-  // Update encoder limits based on the latest scan result
-  set_Wav.maxValues[3] = lastFile[FOLDER_MAX - 1];
+  // write manifest file
+  File f = SD.open("samples/map.txt", O_WRITE | O_CREAT | O_TRUNC);
+  if (f) {
+    Serial.println("--- Writing samples/map.txt (sorted) ---");
+    for (int folder = 0; folder < manifestFolderCount; ++folder) {
+      f.print("folder:");
+      f.println(manifestFolderNames[folder]);
+      Serial.print("folder[");
+      Serial.print(folder);
+      Serial.print("]: ");
+      Serial.println(manifestFolderNames[folder]);
+      for (uint16_t i = 0; i < manifestFileCount[folder]; ++i) {
+        f.print("file:");
+        f.println(manifestFileNames[folder][i]);
+        Serial.print("  file: ");
+        Serial.println(manifestFileNames[folder][i]);
+      }
+      f.println();
+    }
+    f.close();
+    Serial.println("--- Manifest write complete ---");
+  }
+  manifestLoaded = manifestFolderCount > 0;
+  return manifestLoaded;
+}
+
+// Build sample path using manifest (required). No numeric fallback.
+// - folderIdx: 0..manifestFolderCount-1
+// - fileIdx: 1..manifestFileCount[folderIdx] (or fileCount+1 for NEW slot)
+void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
+  if (outSize > 0) out[0] = '\0';
+  if (folderIdx < 0) folderIdx = 0;
+
+  if (manifestLoaded && folderIdx < manifestFolderCount) {
+    int fileCount = manifestFileCount[folderIdx];
+    if (fileIdx < 1) fileIdx = 1;
+    if (fileIdx > fileCount + 1) fileIdx = fileCount + 1;  // allow NEW slot
+    const char* folderName = manifestFolderNames[folderIdx];
+    char newName[MANIFEST_NAME_MAX];
+    const char* fileName = nullptr;
+    if (fileIdx >= 1 && fileIdx <= fileCount) {
+      fileName = manifestFileNames[folderIdx][fileIdx - 1];
+    } else {  // NEW slot
+      generateNextNumericName(folderIdx, newName, sizeof(newName));
+      fileName = newName;
+    }
+    snprintf(out, outSize, "samples/%s/%s", (folderName && folderName[0]) ? folderName : "0", fileName);
+    return;
+  }
+
+  // No manifest available: refuse to construct numeric fallback paths
+}
+
+void EEPROMgetLastFiles() {
+  // Legacy lastFile[] system removed. Keep the function name for compatibility, but make it manifest-only.
+  // Prefer loading the manifest quickly; if missing, regenerate it.
+  if (!loadSampleManifest()) {
+    scanAndWriteManifest();
+  }
+  if (manifestLoaded) {
+    set_Wav.maxValues[1] = (manifestFolderCount > 0) ? (manifestFolderCount - 1) : 0;
+  }
 }
 
 
@@ -121,7 +334,7 @@ void loadSMPSettings() {
   }
     
 
-  
+    
     // Load Synths - apply synth settings (only for channel 11)
    if (ch == 11) {
     updateSynthVoice(11);
@@ -231,7 +444,7 @@ void stopRecordingRAM(int fnr, int snr) {
 
   // open WAV on SD
   char path[64];
-  sprintf(path, "samples/%d/_%d.wav", fnr, snr);
+  buildSamplePath(fnr, snr, path, sizeof(path));
   if (SD.exists(path)) SD.remove(path);
   File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
   if (!f) { return; }
@@ -243,6 +456,9 @@ void stopRecordingRAM(int fnr, int snr) {
   f.close();
   //Serial.print("💾 Saved ");
   //Serial.println(path);
+
+  // Refresh manifest so the new recording appears in map.txt and UI
+  scanAndWriteManifest();
   
   // Reload the sample metadata after recording
   extern bool sampleIsLoaded;
@@ -506,23 +722,8 @@ void stopFastRecord() {
 }
 
 void EEPROMsetLastFile() {
-  //set maxFiles in folder and show loading...
-  for (int f = 0; f <= FOLDER_MAX; f++) {
-    //FastLEDclear();
-
-    for (unsigned int i = 1; i < 99; i++) {
-      char OUTPUTf[50];
-      sprintf(OUTPUTf, "samples/%d/_%d.wav", f, i + (f * 100));
-      if (SD.exists(OUTPUTf)) {
-        lastFile[f] = i + (f * 100);
-      }
-    }
-    //set last File on Encoder
-    drawLoadingBar(1, 999, lastFile[f], col_base[f], CRGB(15, 15, 55), false);
-  }
-  
-  //set lastFile Array into Eeprom
-  EEPROM.put(100, lastFile);
+  // Legacy lastFile[] writer removed; keep as alias to manifest generation (no numeric progress UI).
+  scanAndWriteManifest();
 }
 
 
@@ -2061,8 +2262,20 @@ void startNew() {
   extern i2cEncoderLibV2 Encoder[NUM_ENCODERS];
   extern const CRGB col[];
   extern bool isNowPlaying;
+  extern CachedSample previewCache;
   
   Serial.println("=== START NEW - Complete Reset ===");
+
+  // FULL reset: clear sample manifest + delete map.txt so the next scan is clean
+  Serial.println("Clearing sample manifest + deleting samples/map.txt ...");
+  clearSampleManifest();
+  if (SD.exists("samples/map.txt")) {
+    SD.remove("samples/map.txt");
+  }
+  // Clear any preview/cache state as well
+  previewCache.valid = false;
+  previewCache.lengthBytes = 0;
+  previewCache.plen = 0;
   
   // 0. STOP PLAYBACK FIRST (if playing)
   if (isNowPlaying) {
@@ -2171,7 +2384,8 @@ void startNew() {
   SMP.pack = 1;
   samplePackID = 1;
   EEPROM.put(0, (unsigned int)1);  // Save to EEPROM
-  loadSamplePack(1, false);
+  // Reset should overwrite everything (no SP0 preservation)
+  loadSamplePack(1, false, false);
   
   // 8. UPDATE BPM AND TIMER
   Mode *bpm_vol = &volume_bpm;
@@ -2183,8 +2397,8 @@ void startNew() {
   // 9. RESET WAVE FILE IDS to defaults
   Serial.println("Resetting wave file IDs...");
   for (int i = 1; i < maxFiles; i++) {
-    SMP.wav[i].fileID = i;
-    SMP.wav[i].oldID = i;
+    SMP.wav[i].oldID = 0;   // folder 0
+    SMP.wav[i].fileID = i;  // file index = voice index (1..8)
   }
   
   // 10. UPDATE LAST PAGE (should be 1 since no notes)

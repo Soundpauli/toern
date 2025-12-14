@@ -95,14 +95,24 @@ void setSynthDefaultValues(int ch) {
   SMP.synth_settings[ch][CUTOFF] = 0;
   SMP.synth_settings[ch][RESONANCE] = 0;
   SMP.synth_settings[ch][FILTER] = 0;
-  SMP.synth_settings[ch][CENT] = 16;
+  // Default pitch offsets:
+  // - ch13: 2 octaves down
+  // - ch14: 1 octave down
+  // - ch11 pitch is handled via octave[0] (see initGlobalVars / resetAllToDefaults)
+  if (ch == 13) {
+    SMP.synth_settings[ch][CENT] = 0;   // maps to -24 semitones
+  } else if (ch == 14) {
+    SMP.synth_settings[ch][CENT] = 8;   // maps to -12 semitones
+  } else {
+    SMP.synth_settings[ch][CENT] = 16;  // neutral
+  }
   SMP.synth_settings[ch][SEMI] = 0;
   SMP.synth_settings[ch][INSTRUMENT] = 0;
   SMP.synth_settings[ch][FORM] = 0;
   SMP.synth_settings[ch][LFO_RATE] = 0;
   SMP.synth_settings[ch][LFO_DEPTH] = 0;
-  SMP.synth_settings[ch][LFO_PHASE] = 0;
-  SMP.synth_settings[ch][ARP_STEP] = 0;
+  SMP.synth_settings[ch][LFO_PHASE] = 0; // spread index
+  SMP.synth_settings[ch][ARP_STEP] = 0;   // note count index
 
    initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
    // updateSynthVoice(11) is called at the end of resetAllToDefaults() instead
@@ -138,6 +148,11 @@ void resetAllToDefaults() {
       setSynthDefaultValues(ch);
     }
   }
+
+  // Make ch11 one octave deeper by default (used by playSound()).
+  extern float octave[2];
+  octave[0] = -1.0f;
+  octave[1] = 0.0f;
   
   // Reset all audio effects/filters to clean defaults
   extern void resetAllAudioEffects();

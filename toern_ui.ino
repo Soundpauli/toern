@@ -3,6 +3,7 @@ extern void triggerGridNote(unsigned int globalX, unsigned int y);
 extern const CRGB col[];
 extern unsigned int beatForUI;
 extern uint8_t lineOutLevelSetting;
+extern bool SMP_FLOW_MODE;
 
 #define LINEOUT_LEVEL_MIN 13
 #define LINEOUT_LEVEL_MAX 31
@@ -257,7 +258,9 @@ void drawNoSD() {
 
   if (noSDfound && SD.begin(INT_SD)) {
     FastLEDclear();
-    EEPROMsetLastFile();
+    // Manifest-driven sample browser: rebuild manifest after SD is reinserted.
+    extern bool scanAndWriteManifest();
+    scanAndWriteManifest();
   }
 
   drawNoSD_hasRun = true;  // Mark it as run
@@ -267,11 +270,13 @@ void drawBase() {
   if (!GLOB.singleMode) {
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
+      const bool rowMuted = getMuteState(y - 1);
+      const bool useColor = drawBaseColorMode;
       for (unsigned int x = 1; x < maxX + 1; x++) {
-        if (getMuteState(y - 1)) {
+        if (rowMuted) {
           light(x, y, CRGB(0, 0, 0));  // gemutete Zeilen schwarz
         } else {
-          if (drawBaseColorMode) {
+          if (useColor) {
             light(x, y, col_base[colors]);  // normale Farbcodierung pro Spur
           } else {
             light(x, y, CRGB(0, 0, 0));  // schwarz wenn drawBaseColorMode = false
@@ -1058,7 +1063,7 @@ FLASHMEM void drawSampleLoadOverlay() {
 
   // Text on y = 10
   drawText("LOAD", 1, 10, textColor);
-  FastLED.show();
+  FastLEDshow();
 }
 
 
@@ -1128,153 +1133,90 @@ void drawPages() {
 FLASHMEM void drawTriggers() {
   // why?
   //GLOB.edit = 1;
+  const unsigned int baseX = (GLOB.edit - 1) * maxX;
+  const bool isSingle = GLOB.singleMode;
+  const bool isSimpleNotes = (simpleNotesView == 1 && !isSingle);
+
+  // Cache mute states for this frame (channels are small; avoid repeated getMuteState() calls).
+  bool muteCache[maxY + 1];
+  for (unsigned int ch = 0; ch <= maxY; ++ch) {
+    muteCache[ch] = getMuteState(ch);
+  }
+
+  // Cache blink phase once per frame (used for condition/probability effects).
+  const unsigned long now = millis();
+  const uint8_t blinkPhase = (uint8_t)((now / 300) & 0x1);
+
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
+    const unsigned int globalX = baseX + ix;
     for (unsigned int iy = 1; iy < maxY + 1; iy++) {
-      int thisNote = note[((GLOB.edit - 1) * maxX) + ix][iy].channel;
-      if (thisNote > 0) {
+      Note &cell = note[globalX][iy];
+      int thisNote = cell.channel;
+      if (thisNote <= 0) continue;
 
-        if (!getMuteState(thisNote)) {
-          //light(ix, iy, getCol(note[((GLOB.edit - 1) * maxX) + ix][iy].channel));
-          if (GLOB.singleMode && thisNote == GLOB.currentChannel) {
-            // Get probability and condition for this note
-            uint8_t prob = note[((GLOB.edit - 1) * maxX) + ix][iy].probability;
-            uint8_t cond = note[((GLOB.edit - 1) * maxX) + ix][iy].condition;
-            if (cond == 0) cond = 1;  // Default to 1 if not set
-            CRGB noteColor = UI_BRIGHT_WHITE;
-            
-            // Add blinking effect for notes with condition
-            // 1/X conditions: 2, 4, 8, 16
-            // X/1 conditions: 17, 18, 19, 20
-            if (cond == 2) {
-              // Blue blinking for condition 2 (1/2 - every 2nd loop)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(0, 0, 255);  // Blue phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (cond == 4) {
-              // Violet blinking for condition 4 (1/4 - every 4th loop)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(200, 0, 255);  // Violet phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (cond == 8) {
-              // Orange blinking for condition 8 (1/8 - every 8th loop)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(255, 100, 0);  // Orange phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (cond == 16) {
-              // Turquoise blinking for condition 16 (1/16 - every 16th loop)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(0, 200, 200);  // Turquoise phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (cond == 17) {
-              // Light blue blinking for condition 17 (2/1 - first 2 loops)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(0, 150, 255);  // Light blue phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (cond == 18) {
-              // Light violet blinking for condition 18 (4/1 - first 4 loops)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(150, 0, 255);  // Light violet phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (cond == 19) {
-              // Light orange blinking for condition 19 (8/1 - first 8 loops)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(255, 150, 0);  // Light orange phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (cond == 20) {
-              // Light turquoise blinking for condition 20 (16/1 - first 16 loops)
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              if (blinkPhase == 0) {
-                noteColor = CRGB(0, 255, 200);  // Light turquoise phase
-              } else {
-                noteColor = UI_BRIGHT_WHITE;  // White phase
-              }
-            } else if (prob < 100) {
-              // Add blinking red/white effect for notes with probability < 100%
-              uint8_t blinkPhase = (millis() / 300) % 2;  // Blink every 300ms
-              
-              if (blinkPhase == 0) {
-                // Red phase - intensity based on probability (lower prob = more red)
-                uint8_t redIntensity = mapf(prob, 0, 100, 255, 80);  // More red for lower probability
-                noteColor = CRGB(redIntensity, 0, 0);
-              } else {
-                // White phase - dimmed based on probability
-                uint8_t brightness = mapf(prob, 0, 100, 30, 255);  // 30-255 range
-                noteColor.nscale8(brightness);
-              }
-            }
-            
-            light(ix, iy, noteColor);
-          }else{
-              light(ix, iy, col[thisNote]);
+      // Simple Notes View: draw notes at their voice Y position and clear original position.
+      // Do it in one pass to avoid a second full scan of the grid.
+      if (isSimpleNotes) {
+        int voiceY = thisNote + 1;
+        if (voiceY >= 1 && voiceY <= (int)maxY) {
+          light(ix, iy, CRGB(0, 0, 0));
+          if (muteCache[thisNote]) {
+            light(ix, voiceY, col_base[thisNote]);
+          } else {
+            light(ix, voiceY, col[thisNote]);
           }
-          
-          
-          if (thisNote != GLOB.currentChannel && currentMode == &singleMode) light(ix, iy, col_base[thisNote]);
+        }
+        continue;
+      }
 
-          // if there is any note of the same value in the same column, make it less bright
-          
-         /* if (thisNote != 11) {
-          for (unsigned int iy2 = 1; iy2 < maxY + 1; iy2++) {
-            if (iy2 != iy && note[((GLOB.edit - 1) * maxX) + ix][iy2].channel == note[((GLOB.edit - 1) * maxX) + ix][iy].channel) {
-              CRGB color = blend(col_base[thisNote], CRGB::Black, 0.2); 
-              light(ix, iy2, color);
+      const bool muted = muteCache[thisNote];
+      if (!muted) {
+        // Single-mode: highlight current channel with condition/probability effects
+        if (isSingle && thisNote == (int)GLOB.currentChannel) {
+          uint8_t prob = cell.probability;
+          uint8_t cond = cell.condition;
+          if (cond == 0) cond = 1;
+
+          CRGB noteColor = UI_BRIGHT_WHITE;
+
+          // Condition blink colors (use cached blinkPhase)
+          if (cond == 2) {
+            noteColor = (blinkPhase == 0) ? CRGB(0, 0, 255) : UI_BRIGHT_WHITE;
+          } else if (cond == 4) {
+            noteColor = (blinkPhase == 0) ? CRGB(200, 0, 255) : UI_BRIGHT_WHITE;
+          } else if (cond == 8) {
+            noteColor = (blinkPhase == 0) ? CRGB(255, 100, 0) : UI_BRIGHT_WHITE;
+          } else if (cond == 16) {
+            noteColor = (blinkPhase == 0) ? CRGB(0, 200, 200) : UI_BRIGHT_WHITE;
+          } else if (cond == 17) {
+            noteColor = (blinkPhase == 0) ? CRGB(0, 150, 255) : UI_BRIGHT_WHITE;
+          } else if (cond == 18) {
+            noteColor = (blinkPhase == 0) ? CRGB(150, 0, 255) : UI_BRIGHT_WHITE;
+          } else if (cond == 19) {
+            noteColor = (blinkPhase == 0) ? CRGB(255, 150, 0) : UI_BRIGHT_WHITE;
+          } else if (cond == 20) {
+            noteColor = (blinkPhase == 0) ? CRGB(0, 255, 200) : UI_BRIGHT_WHITE;
+          } else if (prob < 100) {
+            // Probability blink (red/white)
+            if (blinkPhase == 0) {
+              uint8_t redIntensity = mapf(prob, 0, 100, 255, 80);
+              noteColor = CRGB(redIntensity, 0, 0);
+            } else {
+              uint8_t brightness = mapf(prob, 0, 100, 30, 255);
+              noteColor.nscale8(brightness);
             }
           }
-        }*/
-          
 
-
+          light(ix, iy, noteColor);
         } else {
-          //light(ix, iy, getCol(note[((GLOB.edit - 1) * maxX) + ix][iy].channel) / 24);
+          light(ix, iy, col[thisNote]);
+        }
+
+        if (thisNote != (int)GLOB.currentChannel && currentMode == &singleMode) {
           light(ix, iy, col_base[thisNote]);
         }
-      }
-    }
-  }
-  
-  // Simple Notes View: Draw notes at their voice Y position instead of their actual Y position
-  if (simpleNotesView == 1 && !GLOB.singleMode) {
-    for (unsigned int ix = 1; ix < maxX + 1; ix++) {
-      for (unsigned int iy = 1; iy < maxY + 1; iy++) {
-        int thisNote = note[((GLOB.edit - 1) * maxX) + ix][iy].channel;
-        if (thisNote > 0) {
-          // Calculate the voice Y position (channel + 1)
-          int voiceY = thisNote + 1;
-          
-          // Only draw if the voice Y position is within bounds
-          if (voiceY >= 1 && voiceY <= maxY) {
-            // Clear the original position first
-            light(ix, iy, CRGB(0, 0, 0));
-            
-            // Draw at the voice Y position - use muted color if muted, normal color if not
-            if (getMuteState(thisNote)) {
-              light(ix, voiceY, col_base[thisNote]);  // Muted color
-            } else {
-              light(ix, voiceY, col[thisNote]);       // Normal color
-            }
-          }
-        }
+      } else {
+        light(ix, iy, col_base[thisNote]);
       }
     }
   }
@@ -1288,27 +1230,48 @@ FLASHMEM void drawTriggers() {
 void drawTimer() {
  
   unsigned int timer = ((beatForUI - 1) % maxX + 1);
+  
+  // Calculate which page beatForUI belongs to
+  unsigned int beatForUIPage = (beatForUI - 1) / maxX + 1;
 
-  if (GLOB.page == GLOB.edit) {
-    if (timer < 1) timer = 1;
-    for (unsigned int y = 1; y < maxY; y++) {
-      int ch = note[((GLOB.page - 1) * maxX) + timer][y].channel;
-      light(timer, y, CRGB(10, 0, 0));
+  // Determine which page to check against for timer display
+  extern bool SMP_FLOW_MODE;
+  bool shouldShowTimer = false;
+  
+  if (SMP_FLOW_MODE) {
+    // FLOW mode: playback is identical to normal play.
+    // ONLY difference: the visible page follows beatForUI (handled by setting GLOB.edit in the main loop).
+    // Therefore, show the timer when beatForUI belongs to the page currently being displayed (GLOB.edit).
+    shouldShowTimer = (beatForUIPage == GLOB.edit);
+  } else {
+    // In normal/pattern mode, GLOB.edit is what the user is viewing/editing
+    // GLOB.page can automatically switch in normal mode, but GLOB.edit only
+    // changes when user manually switches pages via encoder
+    // We want to show timer if beatForUI belongs to the page being edited
+    shouldShowTimer = (beatForUIPage == GLOB.edit);
+  }
 
-      if (ch> 0) {
-        if (getMuteState(ch) == false) {
-          
-                if( !GLOB.singleMode ) {light(timer, y, UI_BRIGHT_WHITE);
-      }else{
-        if (GLOB.currentChannel == ch){light(timer, y, UI_BRIGHT_WHITE);}
-      }
-          
-        } else {
-          if( !GLOB.singleMode ) light(timer, y, CRGB(00, 00, 00));
+  // Show timer if conditions are met
+  if (shouldShowTimer) {
+      if (timer < 1) timer = 1;
+      for (unsigned int y = 1; y < maxY; y++) {
+        int ch = note[((GLOB.edit - 1) * maxX) + timer][y].channel;
+        light(timer, y, CRGB(10, 0, 0));
+
+        if (ch> 0) {
+          if (getMuteState(ch) == false) {
+            
+                    if( !GLOB.singleMode ) {light(timer, y, UI_BRIGHT_WHITE);
+        }else{
+          if (GLOB.currentChannel == ch){light(timer, y, UI_BRIGHT_WHITE);}
+        }
+            
+          } else {
+            if( !GLOB.singleMode ) light(timer, y, CRGB(00, 00, 00));
+          }
         }
       }
     }
-  }
 }
 
 FLASHMEM void drawCountIn() {

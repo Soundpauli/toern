@@ -32,21 +32,6 @@
 #include "effect_freeverb_dmabuf.h"
 
 
-// Allocate all delay-line buffers in RAM2
-DMAMEM int16_t comb1buf[1116];
-DMAMEM int16_t comb2buf[1188];
-DMAMEM int16_t comb3buf[1277];
-DMAMEM int16_t comb4buf[1356];
-DMAMEM int16_t comb5buf[1422];
-DMAMEM int16_t comb6buf[1491];
-DMAMEM int16_t comb7buf[1557];
-DMAMEM int16_t comb8buf[1617];
-
-DMAMEM int16_t allpass1buf[556];
-DMAMEM int16_t allpass2buf[441];
-DMAMEM int16_t allpass3buf[341];
-DMAMEM int16_t allpass4buf[225];
-
 #include "utility/dspinst.h"
 
 AudioEffectFreeverbDMAMEM::AudioEffectFreeverbDMAMEM() : AudioStream(1, inputQueueArray)
@@ -237,7 +222,10 @@ void AudioEffectFreeverbDMAMEM::update()
 		output = sat16(bufout - output, 1);
 		if (++allpass4index >= sizeof(allpass4buf)/sizeof(int16_t)) allpass4index = 0;
 
-		outblock->data[i] = sat16(output * 30, 0);
+		// Gain staging: the internal fixed-point path already applies attenuation.
+		// Keep the final makeup gain modest to avoid hard clipping (which sounds like
+		// gritty, high-frequency distortion).
+		outblock->data[i] = sat16(output * 8, 0);
 	}
 	transmit(outblock);
 	release(outblock);
@@ -469,7 +457,7 @@ void AudioEffectFreeverbStereoDMAMEM::update()
 		outputL = sat16(bufout - outputL, 1);
 		if (++allpass4indexL >= sizeof(allpass4bufL)/sizeof(int16_t)) allpass4indexL = 0;
 
-		outblockL->data[i] = sat16(outputL * 30, 0);
+		outblockL->data[i] = sat16(outputL * 8, 0);
 
 		bufout = allpass1bufR[allpass1indexR];
 		allpass1bufR[allpass1indexR] = outputR + (bufout >> 1);
@@ -491,7 +479,8 @@ void AudioEffectFreeverbStereoDMAMEM::update()
 		outputR = sat16(bufout - outputR, 1);
 		if (++allpass4indexR >= sizeof(allpass4bufR)/sizeof(int16_t)) allpass4indexR = 0;
 
-		outblockR->data[i] = sat16(outputL * 30, 0);
+		// Bugfix: right channel must use outputR (was outputL).
+		outblockR->data[i] = sat16(outputR * 8, 0);
 	}
 	transmit(outblockL, 0);
 	transmit(outblockR, 1);

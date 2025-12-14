@@ -7,7 +7,6 @@ extern int waveformsArray[2][5]; // Waveform array for instrument channels
 void handleWaveformChange(int index, unsigned int waveformType);
 
 // --- Smooth Gain Transition State ---
-#define NUM_FILTERS 15
 #define NUM_MIXER_CHANNELS 3
 
 struct GainTransition {
@@ -223,10 +222,10 @@ void setFilters(FilterType filterType, int index, bool initial) {
           
           // Set reverb parameters (only when wet is active)
           if (wetGain > 0.01f) {
-            // Map damping from bright (0.01) to darker (0.5) as reverb increases
+            // Map damping from bright (0.01) to darker (0.8) as reverb increases
             // Low reverb = bright, clear tail; High reverb = darker, more muffled tail
-            float dampingValue = mapf(mappedValue, 0.0f, 0.79f, 0.01f, 0.5f);
-            dampingValue = constrain(dampingValue, 0.01f, 0.5f);
+            float dampingValue = mapf(mappedValue, 0.0f, 0.79f, 0.01f, 0.8f);
+            dampingValue = constrain(dampingValue, 0.01f, 0.8f);
             freeverbs[index]->damping(dampingValue);
             
             // Map roomsize smoothly across the range
