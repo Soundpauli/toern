@@ -46,6 +46,21 @@ void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page)
 void generateHousePattern(unsigned int start, unsigned int end, unsigned int page);
 void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int page);
 
+// ---- NEW/genre generation helpers (no RAM1 globals; no large locals) ----
+static inline uint8_t clampVel(int v) {
+  if (v < 1) return 1;
+  if (v > 127) return 127;
+  return (uint8_t)v;
+}
+
+static inline void placeGenNote(unsigned int c, int row, uint8_t ch, int vel, uint8_t prob = 100, uint8_t cond = 1) {
+  // Always write probability/condition explicitly so generated notes don't inherit stale values.
+  note[c][row].channel = ch;
+  note[c][row].velocity = clampVel(vel);
+  note[c][row].probability = prob;
+  note[c][row].condition = cond;
+}
+
 // External variables from menu
 extern int genreType;
 extern int genreLength;
@@ -1660,10 +1675,14 @@ void applyBPMDirectly(int bpm) {
 }
 
 // Techno pattern generation - Enhanced and dynamic
-void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int page) {
+FLASHMEM void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int page) {
+  HarmonicAnalysis harmony;
+  harmony.isMinor = true;
+  const int baseNote = 8;
   for (unsigned int c = start; c < end; c++) {
     int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1;
+    int chordRoot = createHarmonicProgression(baseNote, pageOffset, harmony);
     
     // Dynamic kick patterns - varies by page
     bool kickPlay = false;
@@ -1682,8 +1701,8 @@ void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int pa
     }
     
     if (kickPlay) {
-      note[c][3].channel = 1; // Kick
-      note[c][3].velocity = 100 + random(-15, 16);
+      int vel = 118 + ((beat == 1) ? 6 : 0) + random(-3, 4);
+      placeGenNote(c, 3, 1, vel, 100, 1);
     }
     
     // Dynamic snare patterns
@@ -1710,25 +1729,35 @@ void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int pa
     }
     
     if (snarePlay) {
-      note[c][5].channel = 2; // Snare
+      int vel = 112 + random(-4, 5);
+      uint8_t prob = 100;
+      if (pageOffset % 3 == 1 && (beat == 3 || beat == 11)) {
+        vel = 58 + random(-4, 5); // ghost
+        prob = 45;
+      } else if (pageOffset % 3 == 2 && (beat == 4 || beat == 6 || beat == 12 || beat == 14)) {
+        vel = 62 + random(-5, 6); // roll
+        prob = 60;
+      }
+      placeGenNote(c, 5, 2, vel, prob, 1);
     }
     
     // Complex hi-hat patterns
     if (beat % 2 == 0) {
-      note[c][7].channel = 3; // Closed hi-hat
-      note[c][7].velocity = 60 + random(-10, 11);
+      int vel = 72 + ((beat % 4 == 0) ? 6 : 0) + random(-4, 5);
+      placeGenNote(c, 7, 3, vel, 100, 1);
     }
     
     // Open hi-hats
     if (beat == 5 || beat == 13) {
-      note[c][8].channel = 4; // Open hi-hat
-      note[c][8].velocity = 70 + random(-10, 11);
+      int vel = 92 + random(-4, 5);
+      uint8_t prob = (pageOffset % 4 == 2) ? 55 : 85;
+      placeGenNote(c, 8, 4, vel, prob, 1);
     }
     
     // Additional percussion
     if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
-      note[c][6].channel = 5; // Additional percussion
-      note[c][6].velocity = 45 + random(-10, 11);
+      int vel = 62 + random(-5, 6);
+      placeGenNote(c, 6, 5, vel, 40, 1);
     }
     
     // Dynamic bass lines
@@ -1742,29 +1771,41 @@ void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int pa
     }
     
     if (bassPlay) {
-      note[c][2].channel = 6; // Bass
-      note[c][2].velocity = 90 + random(-15, 16);
+      int row = createRhythmicProgression(chordRoot, pageOffset + (beat / 4), harmony);
+      if (row > 9) row -= 7;
+      int vel = 102 + random(-4, 5);
+      placeGenNote(c, row, 6, vel, 100, 1);
     }
     
     // Melodic elements
-    if (random(0, 100) < 25) { // 25% chance
-      note[c][9].channel = 7; // Melodic element
-      note[c][9].velocity = 65 + random(-10, 11);
+    if (random(0, 100) < 18) {
+      int row = createMelodicProgression(chordRoot, pageOffset + (beat / 2), harmony);
+      int vel = 84 + ((beat == 9) ? 8 : 0) + random(-4, 5);
+      placeGenNote(c, row, 7, vel, 70, 1);
     }
     
     // Additional stabs
-    if (random(0, 100) < 15) { // 15% chance
-      note[c][10].channel = 8; // Stab
-      note[c][10].velocity = 75 + random(-10, 11);
+    if (random(0, 100) < 10) {
+      int row = chordRoot;
+      int r = random(0, 3);
+      if (r == 1) row += 2;
+      if (r == 2) row += 4;
+      if (row > 16) row -= 7;
+      int vel = 96 + random(-4, 5);
+      placeGenNote(c, row, 8, vel, 55, 2);
     }
   }
 }
 
 // Hip-hop pattern generation - Enhanced and dynamic
-void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int page) {
+FLASHMEM void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int page) {
+  HarmonicAnalysis harmony;
+  harmony.isMinor = true;
+  const int baseNote = 6;
   for (unsigned int c = start; c < end; c++) {
     int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1;
+    int chordRoot = createHarmonicProgression(baseNote, pageOffset, harmony);
     
     // Dynamic kick patterns - varies by page
     bool kickPlay = false;
@@ -1783,8 +1824,8 @@ void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int pa
     }
     
     if (kickPlay) {
-      note[c][3].channel = 1; // Kick
-      note[c][3].velocity = 110 + random(-15, 16);
+      int vel = 118 + ((beat == 1) ? 6 : 0) + random(-4, 5);
+      placeGenNote(c, 3, 1, vel, 100, 1);
     }
     
     // Dynamic snare patterns
@@ -1811,25 +1852,35 @@ void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int pa
     }
     
     if (snarePlay) {
-      note[c][5].channel = 2; // Snare
+      int vel = 112 + random(-4, 5);
+      uint8_t prob = 100;
+      if (pageOffset % 3 == 1 && (beat == 3 || beat == 11)) {
+        vel = 60 + random(-5, 6); // ghost
+        prob = 45;
+      } else if (pageOffset % 3 == 2 && (beat == 4 || beat == 6 || beat == 12 || beat == 14)) {
+        vel = 64 + random(-5, 6); // roll
+        prob = 60;
+      }
+      placeGenNote(c, 5, 2, vel, prob, 1);
     }
     
     // Complex hi-hat patterns
     if (beat % 2 == 0) {
-      note[c][7].channel = 3; // Closed hi-hat
-      note[c][7].velocity = 70 + random(-10, 11);
+      int vel = 68 + ((beat == 8 || beat == 16) ? 6 : 0) + random(-4, 5);
+      placeGenNote(c, 7, 3, vel, 90, 1);
     }
     
     // Open hi-hats
     if (beat == 5 || beat == 13) {
-      note[c][8].channel = 4; // Open hi-hat
-      note[c][8].velocity = 80 + random(-10, 11);
+      int vel = 92 + random(-4, 5);
+      uint8_t prob = (pageOffset % 4 == 3) ? 55 : 80;
+      placeGenNote(c, 8, 4, vel, prob, 1);
     }
     
     // Additional percussion
     if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
-      note[c][6].channel = 5; // Additional percussion
-      note[c][6].velocity = 50 + random(-10, 11);
+      int vel = 58 + random(-5, 6);
+      placeGenNote(c, 6, 5, vel, 30, 1);
     }
     
     // Dynamic bass lines
@@ -1843,29 +1894,39 @@ void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int pa
     }
     
     if (bassPlay) {
-      note[c][2].channel = 6; // Bass
-      note[c][2].velocity = 85 + random(-15, 16);
+      int row = createRhythmicProgression(chordRoot, pageOffset + (beat / 4), harmony);
+      if (row > 9) row -= 7;
+      int vel = 98 + random(-4, 5);
+      placeGenNote(c, row, 6, vel, 100, 1);
     }
     
     // Melodic elements
-    if (random(0, 100) < 20) { // 20% chance
-      note[c][9].channel = 7; // Melodic element
-      note[c][9].velocity = 70 + random(-10, 11);
+    if (random(0, 100) < 14) {
+      int row = createMelodicProgression(chordRoot, pageOffset + (beat / 4), harmony);
+      int vel = 88 + random(-4, 5);
+      placeGenNote(c, row, 7, vel, 60, 2);
     }
     
     // Additional stabs
-    if (random(0, 100) < 12) { // 12% chance
-      note[c][10].channel = 8; // Stab
-      note[c][10].velocity = 80 + random(-10, 11);
+    if (random(0, 100) < 8) {
+      int row = chordRoot;
+      if (random(0, 2) == 0) row += 3;
+      if (row > 16) row -= 7;
+      int vel = 90 + random(-4, 5);
+      placeGenNote(c, row, 8, vel, 45, 4);
     }
   }
 }
 
 // DNB pattern generation - More dynamic and complex
-void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page) {
+FLASHMEM void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page) {
+  HarmonicAnalysis harmony;
+  harmony.isMinor = true;
+  const int baseNote = 6;
   for (unsigned int c = start; c < end; c++) {
     int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1; // For variation across pages
+    int chordRoot = createHarmonicProgression(baseNote, pageOffset, harmony);
     
     // Dynamic kick pattern - varies by page
     bool kickPlay = false;
@@ -1884,8 +1945,8 @@ void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page)
     }
     
     if (kickPlay) {
-      note[c][3].channel = 1; // Kick
-      note[c][3].velocity = 120 + random(-15, 16);
+      int vel = 120 + ((beat == 1) ? 6 : 0) + random(-3, 4);
+      placeGenNote(c, 3, 1, vel, 100, 1);
     }
     
     // Dynamic snare pattern
@@ -1912,25 +1973,34 @@ void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page)
     }
     
     if (snarePlay) {
-      note[c][5].channel = 2; // Snare
+      int vel = 114 + random(-4, 5);
+      uint8_t prob = 100;
+      if (pageOffset % 3 == 1 && (beat == 3 || beat == 11)) {
+        vel = 62 + random(-4, 5);
+        prob = 45;
+      } else if (pageOffset % 3 == 2 && (beat == 4 || beat == 6 || beat == 12 || beat == 14)) {
+        vel = 66 + random(-5, 6);
+        prob = 60;
+      }
+      placeGenNote(c, 5, 2, vel, prob, 1);
     }
     
     // Complex hi-hat patterns - multiple layers
     if (beat % 2 == 0) {
-      note[c][7].channel = 3; // Closed hi-hat
-      note[c][7].velocity = 70 + random(-10, 11);
+      int vel = 74 + ((beat % 4 == 0) ? 6 : 0) + random(-4, 5);
+      placeGenNote(c, 7, 3, vel, 100, 1);
     }
     
     // Open hi-hats on snare beats
     if (beat == 5 || beat == 13) {
-      note[c][8].channel = 4; // Open hi-hat
-      note[c][8].velocity = 80 + random(-10, 11);
+      int vel = 94 + random(-4, 5);
+      placeGenNote(c, 8, 4, vel, 80, 1);
     }
     
     // Additional percussion layer
     if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
-      note[c][6].channel = 5; // Additional percussion
-      note[c][6].velocity = 50 + random(-10, 11);
+      int vel = 60 + random(-5, 6);
+      placeGenNote(c, 6, 5, vel, 35, 1);
     }
     
     // Dynamic bass line - varies by page
@@ -1944,23 +2014,31 @@ void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page)
     }
     
     if (bassPlay) {
-      note[c][2].channel = 6; // Bass
-      note[c][2].velocity = 95 + random(-15, 16);
+      int row = createRhythmicProgression(chordRoot, pageOffset + (beat / 4), harmony);
+      if (row > 9) row -= 7;
+      if (row < 1) row = 1;
+      int vel = 104 + random(-4, 5);
+      placeGenNote(c, row, 6, vel, 100, 1);
     }
     
     // Additional melodic elements
-    if (random(0, 100) < 15) { // 15% chance
-      note[c][9].channel = 7; // Melodic element
-      note[c][9].velocity = 60 + random(-10, 11);
+    if (random(0, 100) < 12) {
+      int row = createMelodicProgression(chordRoot, pageOffset + (beat / 2), harmony);
+      int vel = 88 + random(-4, 5);
+      placeGenNote(c, row, 7, vel, 55, 2);
     }
   }
 }
 
 // House pattern generation - More dynamic and groovy
-void generateHousePattern(unsigned int start, unsigned int end, unsigned int page) {
+FLASHMEM void generateHousePattern(unsigned int start, unsigned int end, unsigned int page) {
+  HarmonicAnalysis harmony;
+  harmony.isMajor = true;
+  const int baseNote = 8;
   for (unsigned int c = start; c < end; c++) {
     int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1; // For variation across pages
+    int chordRoot = createHarmonicProgression(baseNote, pageOffset, harmony);
     
     // Dynamic kick pattern - varies by page
     bool kickPlay = false;
@@ -1976,8 +2054,8 @@ void generateHousePattern(unsigned int start, unsigned int end, unsigned int pag
     }
     
     if (kickPlay) {
-      note[c][3].channel = 1; // Kick
-      note[c][3].velocity = 95 + random(-15, 16);
+      int vel = 114 + ((beat == 1) ? 6 : 0) + random(-3, 4);
+      placeGenNote(c, 3, 1, vel, 100, 1);
     }
     
     // Dynamic snare pattern
@@ -2007,13 +2085,22 @@ void generateHousePattern(unsigned int start, unsigned int end, unsigned int pag
     }
     
     if (snarePlay) {
-      note[c][5].channel = 2; // Snare
+      int vel = 106 + random(-4, 5);
+      uint8_t prob = 100;
+      if (pageOffset % 4 == 1 && (beat == 3 || beat == 11)) {
+        vel = 56 + random(-4, 5);
+        prob = 45;
+      } else if (pageOffset % 4 == 2 && (beat == 4 || beat == 6 || beat == 12 || beat == 14)) {
+        vel = 62 + random(-5, 6);
+        prob = 60;
+      }
+      placeGenNote(c, 5, 2, vel, prob, 1);
     }
     
     // Dynamic hi-hat patterns
     if (beat % 2 == 0) {
-      note[c][7].channel = 3; // Closed hi-hat
-      note[c][7].velocity = 65 + random(-10, 11);
+      int vel = 70 + ((beat % 4 == 0) ? 6 : 0) + random(-4, 5);
+      placeGenNote(c, 7, 3, vel, 100, 1);
     }
     
     // Open hi-hats - varies by page
@@ -2027,14 +2114,15 @@ void generateHousePattern(unsigned int start, unsigned int end, unsigned int pag
     }
     
     if (openHatPlay) {
-      note[c][8].channel = 4; // Open hi-hat
-      note[c][8].velocity = 75 + random(-10, 11);
+      int vel = 92 + random(-4, 5);
+      uint8_t prob = (pageOffset % 3 == 2) ? 65 : 85;
+      placeGenNote(c, 8, 4, vel, prob, 1);
     }
     
     // Additional percussion layer
     if (beat == 2 || beat == 6 || beat == 10 || beat == 14) {
-      note[c][6].channel = 5; // Additional percussion
-      note[c][6].velocity = 45 + random(-10, 11);
+      int vel = 58 + random(-5, 6);
+      placeGenNote(c, 6, 5, vel, 30, 1);
     }
     
     // Dynamic bass line - varies by page
@@ -2051,54 +2139,71 @@ void generateHousePattern(unsigned int start, unsigned int end, unsigned int pag
     }
     
     if (bassPlay) {
-      note[c][2].channel = 6; // Bass
-      note[c][2].velocity = 90 + random(-15, 16);
+      int row = createRhythmicProgression(chordRoot, pageOffset + (beat / 4), harmony);
+      if (row > 9) row -= 7;
+      if (row < 1) row = 1;
+      int vel = 100 + random(-4, 5);
+      placeGenNote(c, row, 6, vel, 100, 1);
     }
     
     // Melodic elements - house style
-    if (random(0, 100) < 20) { // 20% chance
-      note[c][9].channel = 7; // Melodic element
-      note[c][9].velocity = 70 + random(-10, 11);
+    if (random(0, 100) < 14) {
+      int row = createMelodicProgression(chordRoot, pageOffset + (beat / 2), harmony);
+      int vel = 86 + random(-4, 5);
+      placeGenNote(c, row, 7, vel, 60, 1);
     }
     
     // Additional stabs
-    if (random(0, 100) < 10) { // 10% chance
-      note[c][10].channel = 8; // Stab
-      note[c][10].velocity = 80 + random(-10, 11);
+    if (random(0, 100) < 8) {
+      int row = chordRoot;
+      int r = random(0, 3);
+      if (r == 1) row += 2;
+      if (r == 2) row += 4;
+      if (row > 16) row -= 7;
+      int vel = 92 + random(-4, 5);
+      placeGenNote(c, row, 8, vel, 50, 2);
     }
   }
 }
 
 // Ambient pattern generation - Enhanced and atmospheric
-void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int page) {
+FLASHMEM void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int page) {
+  HarmonicAnalysis harmony;
+  harmony.isMajor = (random(0, 100) < 55);
+  harmony.isMinor = !harmony.isMajor;
+  const int baseNote = harmony.isMajor ? 8 : 6;
   for (unsigned int c = start; c < end; c++) {
     int beat = ((c - start) % maxX) + 1;
     int pageOffset = page - 1;
+    int chordRoot = createHarmonicProgression(baseNote, pageOffset, harmony);
     
     // Dynamic atmospheric patterns - varies by page
     if (pageOffset % 3 == 0) {
       // Sparse, ethereal
       if (random(0, 100) < 15) { // 15% chance
         int channel = random(5, 9); // Use melodic channels
-        int row = random(8, 13); // Higher register
-        note[c][row].channel = channel;
-        note[c][row].velocity = 30 + random(0, 25); // Very soft
+        int row = createMelodicProgression(chordRoot, pageOffset + (beat / 4), harmony);
+        if (row < 7) row += 7; // keep higher register
+        int vel = 42 + random(-3, 4);
+        placeGenNote(c, row, (uint8_t)channel, vel, 65, 2);
       }
     } else if (pageOffset % 3 == 1) {
       // More active, but still ambient
       if (random(0, 100) < 25) { // 25% chance
         int channel = random(5, 9); // Use melodic channels
-        int row = random(7, 12); // Mid to high register
-        note[c][row].channel = channel;
-        note[c][row].velocity = 40 + random(0, 30); // Soft
+        int row = createMelodicProgression(chordRoot, pageOffset + (beat / 2), harmony);
+        if (row < 6) row += 7;
+        int vel = 52 + random(-4, 5);
+        placeGenNote(c, row, (uint8_t)channel, vel, 75, 1);
       }
     } else {
       // Dense but soft
       if (random(0, 100) < 35) { // 35% chance
         int channel = random(5, 9); // Use melodic channels
-        int row = random(6, 11); // Mid register
-        note[c][row].channel = channel;
-        note[c][row].velocity = 35 + random(0, 35); // Soft to medium
+        int row = createMelodicProgression(chordRoot, pageOffset + beat, harmony);
+        if (row < 5) row += 7;
+        int vel = 48 + random(-4, 5);
+        placeGenNote(c, row, (uint8_t)channel, vel, 80, 1);
       }
     }
     
@@ -2106,33 +2211,38 @@ void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int p
     if (pageOffset % 2 == 0) {
       // Very sparse percussion
       if (random(0, 100) < 8) { // 8% chance
-        note[c][6].channel = 3; // Soft hi-hat
-        note[c][6].velocity = 25 + random(0, 15);
+        int vel = 36 + random(-3, 4);
+        placeGenNote(c, 6, 3, vel, 50, 4);
       }
     } else {
       // More active percussion
       if (random(0, 100) < 15) { // 15% chance
-        note[c][6].channel = 3; // Soft hi-hat
-        note[c][6].velocity = 30 + random(0, 20);
+        int vel = 40 + random(-3, 4);
+        placeGenNote(c, 6, 3, vel, 60, 2);
       }
     }
     
     // Occasional soft bass
     if (random(0, 100) < 12) { // 12% chance
-      note[c][4].channel = 6; // Soft bass
-      note[c][4].velocity = 35 + random(0, 25);
+      int row = createRhythmicProgression(chordRoot, pageOffset, harmony);
+      if (row > 9) row -= 7;
+      if (row < 1) row = 1;
+      int vel = 54 + random(-4, 5);
+      placeGenNote(c, row, 6, vel, 55, 4);
     }
     
     // Atmospheric pads
     if (random(0, 100) < 18) { // 18% chance
-      note[c][10].channel = 7; // Pad
-      note[c][10].velocity = 30 + random(0, 20);
+      int row = createMelodicProgression(chordRoot, pageOffset, harmony);
+      if (row < 6) row += 7;
+      int vel = 46 + random(-3, 4);
+      placeGenNote(c, row, 7, vel, 65, 2);
     }
     
     // Occasional soft snare
     if (random(0, 100) < 5) { // 5% chance
-      note[c][5].channel = 2; // Soft snare
-      note[c][5].velocity = 25 + random(0, 15);
+      int vel = 44 + random(-3, 4);
+      placeGenNote(c, 5, 2, vel, 35, 8);
     }
   }
 }
