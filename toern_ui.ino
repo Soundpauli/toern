@@ -65,7 +65,7 @@ CRGB getIndicatorColor(char colorCode) {
     case 'U': return CRGB(GLOB.vol * GLOB.vol, 20 - GLOB.vol, 0); // Volume color
     case 'D': return CRGB(100, 0, 0);     // Dark Red
     case 'E': return CRGB(0, 100, 0);     // Dark Green
-    case 'N': return CRGB(0, 120, 120);   // Cyan
+    case 'N': return CRGB(0, 255, 255);   // Cyan
     default: return CRGB(0, 0, 0);        // Default to black
   }
 }
@@ -1437,121 +1437,128 @@ FLASHMEM void drawBrightness() {
 
 
 
+static inline void drawIcon7x12_P(const uint8_t *data, int ox, int oy, CRGB color, int yOffset = 0) {
+  for (uint8_t y = 0; y < ICON_H; y++) {
+    for (uint8_t x = 0; x < ICON_W; x++) {
+      if (icon7x12_on_P(data, x, y)) {
+        // Icons are authored in a top-down coordinate system (y grows downward).
+        // The LED grid uses y growing upward, so keep the legacy flip.
+        light(ox + x, (int)maxY - (oy + y) + yOffset, color);
+      }
+    }
+  }
+}
+
+FLASHMEM void showIconsAt(IconType ico, CRGB colors, int ox, int oy) {
+  const uint8_t *data = nullptr;
+  int yOffset = 0;
+
+  switch (ico) {
+    case ICON_DELETE:          data = icon_delete; break;
+    case OLD_ICON_SAMPLEPACK:  data = OLD_icon_samplepack; break;
+    case OLD_ICON_SAMPLE:      data = OLD_icon_sample; break;
+    case OLD_ICON_LOADSAVE:    data = OLD_icon_loadsave; break;
+    case OLD_ICON_LOADSAVE2:   data = OLD_icon_loadsave2; break;
+    case ICON_NEW:             data = icon_new; break;
+    case ICON_HOURGLASS:       data = icon_hourglass; yOffset = 2; break;
+
+    case HELPER_LOAD:          data = helper_load; break;
+    case HELPER_SEEK:          data = helper_seek; break;
+    case HELPER_SEEKSTART:     data = helper_seekstart; break;
+    case HELPER_FOLDER:        data = helper_folder; break;
+    case HELPER_SAVE:          data = helper_save; break;
+    case HELPER_EXIT:          data = helper_exit; break;
+    case HELPER_SELECT:        data = helper_select; break;
+    case HELPER_VOL:           data = helper_vol; break;
+    case HELPER_BRIGHT:        data = helper_bright; break;
+    case HELPER_BPM:           data = helper_bpm; break;
+    case HELPER_MINUS:         data = helper_minus; break;
+
+    case OLD_ICON_BPM:         data = OLD_icon_bpm; break;
+    case OLD_ICON_VOL:         data = OLD_icon_vol; break;
+    case ICON_SETTINGS:        data = icon_settings; break;
+    case OLD_ICON_REC:         data = OLD_icon_rec; break;
+    case OLD_ICON_REC2:        data = OLD_icon_rec2; break;
+
+    case ICON_PACK:            data = icon_pack; break;
+    case ICON_CLOCK:           data = icon_clock; break;
+    case ICON_PATTERN:         data = icon_pattern; break;
+    case ICON_FOLDER_BIG:      data = icon_folder_big; break;
+    case ICON_FILE_BIG:        data = icon_file_big; break;
+    case ICON_SYNC:            data = icon_sync; break;
+    case ICON_VOLUME_BIG:      data = icon_volume_big; break;
+    case ICON_SETTINGS_BIG:    data = icon_settings_big; break;
+    case ICON_VIEW:            data = icon_view; break;
+    case ICON_SAMPLE_BIG:      data = icon_sample_big; break;
+    case ICON_ENGINE:          data = icon_engine; break;
+    case ICON_MIDISYNC:        data = icon_midisync; break;
+    case ICON_SONG:            data = icon_song; break;
+    case ICON_RECORD:          data = icon_record; break;
+    default: break;
+  }
+
+  if (data != nullptr) {
+    drawIcon7x12_P(data, ox, oy, colors, yOffset);
+  }
+}
+
 FLASHMEM void showIcons(IconType ico, CRGB colors) {
-    // Pointer to icon array and its size
-    const uint8_t (*iconArray)[2] = nullptr;
-    unsigned int size = 0;
+  const uint8_t *data = nullptr;
+  int ox = 0;
+  int oy = 0;
+  int yOffset = 0;
 
-    // Select the icon based on the enum value
-    switch (ico) {
-        case ICON_DELETE:
-            iconArray = icon_delete;
-            size = sizeof(icon_delete) / sizeof(icon_delete[0]);
-            break;
-        case ICON_SAMPLEPACK:
-            iconArray = icon_samplepack;
-            size = sizeof(icon_samplepack) / sizeof(icon_samplepack[0]);
-            break;
-        case ICON_SAMPLE:
-            iconArray = icon_sample;
-            size = sizeof(icon_sample) / sizeof(icon_sample[0]);
-            break;
-        case ICON_LOADSAVE:
-            iconArray = icon_loadsave;
-            size = sizeof(icon_loadsave) / sizeof(icon_loadsave[0]);
-            break;
-        case ICON_LOADSAVE2:
-            iconArray = icon_loadsave2;
-            size = sizeof(icon_loadsave2) / sizeof(icon_loadsave2[0]);
-            break;
+  // Keep legacy placement by storing each icon's origin (top-left) in the old coordinate system.
+  switch (ico) {
+    case ICON_DELETE:     data = icon_delete;     ox = 1;  oy = 1;  break;
+    case OLD_ICON_SAMPLEPACK: data = OLD_icon_samplepack; ox = 2;  oy = 1;  break;
+    case OLD_ICON_SAMPLE:     data = OLD_icon_sample;     ox = 1;  oy = 1;  break;
+    case OLD_ICON_LOADSAVE:   data = OLD_icon_loadsave;   ox = 1;  oy = 1;  break;
+    case OLD_ICON_LOADSAVE2:  data = OLD_icon_loadsave2;  ox = 1;  oy = 6;  break;
 
-        case ICON_NEW:
-            iconArray = icon_new;
-            size = sizeof(icon_new) / sizeof(icon_new[0]);
-            break;
-            
-        case ICON_HOURGLASS:
-            iconArray = icon_hourglass;
-            size = sizeof(icon_hourglass) / sizeof(icon_hourglass[0]);
-            break;
+    case ICON_NEW:        data = icon_new;        ox = 9;  oy = 13; break;
+    case ICON_HOURGLASS:  data = icon_hourglass;  ox = 6;  oy = 4;  yOffset = 2; break;
 
-        case HELPER_LOAD:
-            iconArray = helper_load;
-            size = sizeof(helper_load) / sizeof(helper_load[0]);
-            break;
-        case HELPER_SEEK:
-            iconArray = helper_seek;
-            size = sizeof(helper_seek) / sizeof(helper_seek[0]);
-            break;
-        case HELPER_SEEKSTART:
-            iconArray = helper_seekstart;
-            size = sizeof(helper_seekstart) / sizeof(helper_seekstart[0]);
-            break;
-        case HELPER_FOLDER:
-            iconArray = helper_folder;
-            size = sizeof(helper_folder) / sizeof(helper_folder[0]);
-            break;
-        case HELPER_SAVE:
-            iconArray = helper_save;
-            size = sizeof(helper_save) / sizeof(helper_save[0]);
-            break;
-        case HELPER_EXIT:
-            iconArray = helper_exit;
-            size = sizeof(helper_exit) / sizeof(helper_exit[0]);
-            break;
-        case HELPER_SELECT:
-            iconArray = helper_select;
-            size = sizeof(helper_select) / sizeof(helper_select[0]);
-            break;
-        case HELPER_VOL:
-            iconArray = helper_vol;
-            size = sizeof(helper_vol) / sizeof(helper_vol[0]);
-            break;
-        case HELPER_BRIGHT:
-            iconArray = helper_bright;
-            size = sizeof(helper_bright) / sizeof(helper_bright[0]);
-            break;
-        case HELPER_BPM:
-            iconArray = helper_bpm;
-            size = sizeof(helper_bpm) / sizeof(helper_bpm[0]);
-            break;
-        case HELPER_MINUS:
-            iconArray = helper_minus;
-            size = sizeof(helper_minus) / sizeof(helper_minus[0]);
-            break;
-        case ICON_BPM:
-            iconArray = icon_bpm;
-            size = sizeof(icon_bpm) / sizeof(icon_bpm[0]);
-            break;
-        case ICON_VOL:
-            iconArray = icon_vol;
-            size = sizeof(icon_vol) / sizeof(icon_vol[0]);
-            break;
-        case ICON_SETTINGS:
-            iconArray = icon_settings;
-            size = sizeof(icon_settings) / sizeof(icon_settings[0]);
-            break;
-        case ICON_REC:
-            iconArray = icon_rec;
-            size = sizeof(icon_rec) / sizeof(icon_rec[0]);
-            break;
-        case ICON_REC2:
-            iconArray = icon_rec2;
-            size = sizeof(icon_rec2) / sizeof(icon_rec2[0]);
-            break;
-        default:
-            // Optionally handle unrecognized values
-            break;
-    }
+    case HELPER_LOAD:      data = helper_load;      ox = 1;  oy = 15; break;
+    case HELPER_SEEK:      data = helper_seek;      ox = 10; oy = 14; break;
+    case HELPER_SEEKSTART: data = helper_seekstart; ox = 2;  oy = 14; break;
+    case HELPER_FOLDER:    data = helper_folder;    ox = 6;  oy = 13; break;
+    case HELPER_SAVE:      data = helper_save;      ox = 5;  oy = 15; break;
+    case HELPER_EXIT:      data = helper_exit;      ox = 1;  oy = 15; break;
+    case HELPER_SELECT:    data = helper_select;    ox = 13; oy = 15; break;
+    case HELPER_VOL:       data = helper_vol;       ox = 9;  oy = 13; break;
+    case HELPER_BRIGHT:    data = helper_bright;    ox = 5;  oy = 13; break;
+    case HELPER_BPM:       data = helper_bpm;       ox = 13; oy = 13; break;
+    case HELPER_MINUS:     data = helper_minus;     ox = 9;  oy = 14; break;
 
-    // If a valid icon array is selected, call the light function for each element.
-    if (iconArray != nullptr) {
-        for (unsigned int gx = 0; gx < size; gx++) {
-            // Move hourglass up by 2 pixels
-            int yOffset = (ico == ICON_HOURGLASS) ? 2 : 0;
-            light(iconArray[gx][0], maxY - iconArray[gx][1] + yOffset, colors);
-        }
-    }
+    case OLD_ICON_BPM:       data = OLD_icon_bpm;       ox = 1; oy = 1; break;
+    case OLD_ICON_VOL:       data = OLD_icon_vol;       ox = 2; oy = 3; break;
+    case ICON_SETTINGS:  data = icon_settings;  ox = 1; oy = 2; break;
+    case OLD_ICON_REC:       data = OLD_icon_rec;       ox = 2; oy = 4; break;
+    case OLD_ICON_REC2:      data = OLD_icon_rec2;      ox = 1; oy = 3; break;
+
+    // New appended icons (default placement: top-left at (1,1))
+    // Menu placement: start at x=2, y=15 down to y=9  => (ox=2, oy=1) in icon coordinates.
+    case ICON_PACK:         data = icon_pack;         ox = 2; oy = 1; break;
+    case ICON_CLOCK:        data = icon_clock;        ox = 2; oy = 1; break;
+    case ICON_PATTERN:      data = icon_pattern;      ox = 2; oy = 1; break;
+    case ICON_FOLDER_BIG:   data = icon_folder_big;   ox = 2; oy = 1; break;
+    case ICON_FILE_BIG:     data = icon_file_big;     ox = 2; oy = 1; break;
+    case ICON_SYNC:         data = icon_sync;         ox = 1; oy = 1; break;
+    case ICON_VOLUME_BIG:   data = icon_volume_big;   ox = 2; oy = 1; break;
+    case ICON_SETTINGS_BIG: data = icon_settings_big; ox = 2; oy = 1; break;
+    case ICON_VIEW:         data = icon_view;         ox = 2; oy = 1; break;
+    case ICON_SAMPLE_BIG:   data = icon_sample_big;   ox = 2; oy = 1; break;
+    case ICON_ENGINE:       data = icon_engine;       ox = 2; oy = 1; break;
+    case ICON_MIDISYNC:     data = icon_midisync;     ox = 2; oy = 1; break;
+    case ICON_SONG:         data = icon_song;         ox = 2; oy = 1; break;
+    case ICON_RECORD:       data = icon_record;       ox = 2; oy = 1; break;
+    default: break;
+  }
+
+  if (data != nullptr) {
+    drawIcon7x12_P(data, ox, oy, colors, yOffset);
+  }
 }
 
 
@@ -1946,7 +1953,7 @@ void showSongMode() {
   
   // Show indicators for song mode
   drawIndicator('L', 'M', 2);  // Encoder 1: Large Magenta (pattern select)
-  drawIndicator('L', 'Y', 4);  // Encoder 4: Large Yellow (position select)
+  drawIndicator('L', 'N', 4);  // Encoder 4: Large Cyan (match SONGMODE cyan)
   
   // Show selected pattern number in rainbow color (left side)
   char patText[8];

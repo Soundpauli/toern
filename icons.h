@@ -1,9 +1,14 @@
+#pragma once
+
+#include <Arduino.h>
+#include <pgmspace.h>
+
 enum IconType {
     ICON_DELETE,
-    ICON_SAMPLEPACK,
-    ICON_SAMPLE,
-    ICON_LOADSAVE,
-    ICON_LOADSAVE2,
+    OLD_ICON_SAMPLEPACK,
+    OLD_ICON_SAMPLE,
+    OLD_ICON_LOADSAVE,
+    OLD_ICON_LOADSAVE2,
     HELPER_LOAD,
     HELPER_SEEK,
     HELPER_SEEKSTART,
@@ -14,42 +19,133 @@ enum IconType {
     HELPER_VOL,
     HELPER_BRIGHT,
     HELPER_BPM,
-    ICON_BPM,
+    OLD_ICON_BPM,
     ICON_SETTINGS,
-    ICON_REC,
-    ICON_REC2,
+    OLD_ICON_REC,
+    OLD_ICON_REC2,
     ICON_NEW,
     ICON_HOURGLASS,
-    ICON_VOL,
-    HELPER_MINUS
+    OLD_ICON_VOL,
+    HELPER_MINUS,
+
+    // --- New 7x12 icons (appended to keep existing enum values stable) ---
+    ICON_PACK,
+    ICON_CLOCK,
+    ICON_PATTERN,
+    ICON_FOLDER_BIG,
+    ICON_FILE_BIG,
+    ICON_SYNC,
+    ICON_VOLUME_BIG,
+    ICON_SETTINGS_BIG,
+    ICON_VIEW,
+    ICON_SAMPLE_BIG,
+    ICON_ENGINE,
+    ICON_MIDISYNC,
+    ICON_SONG,
+    ICON_RECORD
 };
 
-const uint8_t logo[16][16] PROGMEM = {
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0},
-  {0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0},
-  {0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+// ------------------------------------------------------------
+// 1-bit icon storage formats (PROGMEM)
+// ------------------------------------------------------------
+// Standard icons: 7 px high, max 12 px wide -> 7*12 = 84 bits = 11 bytes.
+#define ICON_W 12
+#define ICON_H 7
+#define ICON_BYTES 11
+
+// 7x12 access helper (row-major, LSB-first within each byte)
+inline bool icon7x12_on_P(const uint8_t *data, uint8_t x, uint8_t y) {
+  uint16_t bit = (uint16_t)y * ICON_W + x;
+  uint8_t b = pgm_read_byte(&data[bit >> 3]);
+  return (b >> (bit & 7)) & 1;
+}
+
+// Logo exception: 16x16 stored as 16 row bitmasks (uint16_t rows[16]).
+inline bool logo16_on_P(const uint16_t *rows, uint8_t x, uint8_t y) {
+  uint16_t row = pgm_read_word(&rows[y]);
+  return (row >> (15 - x)) & 1;
+}
+
+// ------------------------------------------------------------
+// LOGO (16x16) - row bitmasks
+// ------------------------------------------------------------
+const uint16_t logo_rows[16] PROGMEM = {
+  0x0000, // y=0
+  0x0000, // y=1
+  0x07F8, // y=2
+  0x1FF8, // y=3
+  0x1980, // y=4
+  0x1980, // y=5
+  0x1980, // y=6
+  0x19F0, // y=7
+  0x19F0, // y=8
+  0x1980, // y=9
+  0x1980, // y=10
+  0x1980, // y=11
+  0x1FF8, // y=12
+  0x07F8, // y=13
+  0x0000, // y=14
+  0x0000, // y=15
 };
 
-const uint8_t icon_rec[9][2] PROGMEM = { { 2, 4 },{ 3, 4 },{ 4, 4 }, { 2, 5 }, { 3, 5 }, { 4, 5 }, { 2, 6 },{ 3, 6 },{ 4, 6 } };
-const uint8_t icon_rec2[6][2] PROGMEM = { { 4, 3 }, { 5, 3 }, { 5, 4 }, { 1, 6 },{ 1, 7},{ 2, 7 }};
-const uint8_t icon_settings[10][2] PROGMEM = { { 4, 2 }, { 3, 3 }, { 4, 3 }, { 5, 3 }, {4, 4 }, { 2, 6 }, { 1, 7 }, { 2, 7 }, { 3, 7 }, { 2, 8 } };
+// ------------------------------------------------------------
+// 7x12 icons (bit-packed, fixed 11 bytes each)
+// NOTE: These are drawn using per-icon origins inside showIcons().
+// ------------------------------------------------------------
 
+// Scaled from legacy 13x7 to fit 12x7.
+const uint8_t icon_delete[ICON_BYTES] PROGMEM = { 0xFF, 0xEF, 0x7F, 0xFC, 0x83, 0x1F, 0xF0, 0x00, 0x06, 0x40, 0x00 };
 
+// Scaled from legacy 5x8 to fit 5x7 (height compressed).
+const uint8_t OLD_icon_samplepack[ICON_BYTES] PROGMEM = { 0x02, 0x60, 0x00, 0x02, 0xB0, 0x01, 0x0B, 0xC0, 0x00, 0x0C, 0x00 };
+const uint8_t OLD_icon_sample[ICON_BYTES] PROGMEM     = { 0x04, 0xC0, 0x00, 0x1C, 0x40, 0x00, 0x07, 0x70, 0x00, 0x03, 0x00 };
 
+const uint8_t OLD_icon_loadsave[ICON_BYTES] PROGMEM  = { 0x04, 0x40, 0x00, 0x04, 0xF0, 0x01, 0x0E, 0x40, 0x00, 0x00, 0x00 };
+const uint8_t OLD_icon_loadsave2[ICON_BYTES] PROGMEM = { 0x11, 0xF0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
+const uint8_t OLD_icon_bpm[ICON_BYTES] PROGMEM  = { 0x1C, 0xA0, 0x02, 0x49, 0x90, 0x07, 0x41, 0x20, 0x02, 0x1C, 0x00 };
+const uint8_t icon_settings[ICON_BYTES] PROGMEM = { 0x08, 0xC0, 0x01, 0x08, 0x00, 0x00, 0x02, 0x70, 0x00, 0x02, 0x00 };
+const uint8_t OLD_icon_rec[ICON_BYTES] PROGMEM  = { 0x07, 0x70, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t OLD_icon_rec2[ICON_BYTES] PROGMEM = { 0x18, 0x00, 0x01, 0x00, 0x10, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t icon_new[ICON_BYTES] PROGMEM      = { 0x02, 0x70, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t icon_hourglass[ICON_BYTES] PROGMEM= { 0x1F, 0x10, 0x01, 0x0A, 0x40, 0x00, 0x0A, 0xF0, 0x01, 0x1F, 0x00 };
+const uint8_t OLD_icon_vol[ICON_BYTES] PROGMEM  = { 0x40, 0x00, 0x07, 0x7C, 0xF0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+const uint8_t helper_load[ICON_BYTES] PROGMEM      = { 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_seek[ICON_BYTES] PROGMEM      = { 0x01, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_seekstart[ICON_BYTES] PROGMEM = { 0x01, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_folder[ICON_BYTES] PROGMEM    = { 0x01, 0x30, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_save[ICON_BYTES] PROGMEM      = { 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_exit[ICON_BYTES] PROGMEM      = { 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_select[ICON_BYTES] PROGMEM    = { 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_vol[ICON_BYTES] PROGMEM       = { 0x05, 0x50, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_bright[ICON_BYTES] PROGMEM    = { 0x02, 0x70, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_bpm[ICON_BYTES] PROGMEM       = { 0x01, 0x70, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+const uint8_t helper_minus[ICON_BYTES] PROGMEM     = { 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+// ------------------------------------------------------------
+// Additional converted icons (from 0/1 row strings) - 7 px high, <=12 px wide.
+// 6-row sources were padded with an extra blank row at the bottom.
+// ------------------------------------------------------------
+// Old pack icon (preferred in menu)
+const uint8_t icon_pack[ICON_BYTES] PROGMEM         = { 0x1C, 0x40, 0x02, 0x47, 0x90, 0x04, 0x71, 0xF0, 0x01, 0x00, 0x00 }; // 7x6 -> 7x7
+const uint8_t icon_clock[ICON_BYTES] PROGMEM        = { 0x1C, 0xA0, 0x02, 0x49, 0x90, 0x07, 0x41, 0x20, 0x02, 0x1C, 0x00 }; // 7x7
+const uint8_t icon_pattern[ICON_BYTES] PROGMEM      = { 0x04, 0xE0, 0x00, 0x24, 0x00, 0x07, 0x22, 0x70, 0x00, 0x02, 0x00 }; // 7x7
+const uint8_t icon_folder_big[ICON_BYTES] PROGMEM   = { 0x00, 0xF0, 0x00, 0x79, 0x10, 0x04, 0x41, 0x10, 0x04, 0x7F, 0x00 }; // 7x7
+const uint8_t icon_file_big[ICON_BYTES] PROGMEM     = { 0x0F, 0x90, 0x01, 0x31, 0x10, 0x02, 0x21, 0x10, 0x02, 0x3F, 0x00 }; // 6x7
+const uint8_t icon_sync[ICON_BYTES] PROGMEM         = { 0x88, 0xC0, 0x18, 0x8E, 0xF3, 0x7D, 0x8E, 0xC3, 0x18, 0x88, 0x00 }; // 11x7
+const uint8_t icon_volume_big[ICON_BYTES] PROGMEM   = { 0x00, 0x00, 0x00, 0x00, 0x03, 0x3C, 0xF0, 0xC3, 0x3F, 0xFF, 0x03 }; // 10x7 (cropped)
+const uint8_t icon_settings_big[ICON_BYTES] PROGMEM = { 0x49, 0x90, 0x0C, 0xCB, 0xB0, 0x04, 0x59, 0x90, 0x05, 0x49, 0x00 }; // 8x7
+const uint8_t icon_view[ICON_BYTES] PROGMEM         = { 0x3F, 0xA0, 0x02, 0x15, 0x00, 0x00, 0x2A, 0x50, 0x01, 0x3F, 0x00 }; // 6x7
+const uint8_t icon_sample_big[ICON_BYTES] PROGMEM   = { 0x24, 0x40, 0x17, 0xF6, 0xF3, 0x7F, 0xF6, 0x43, 0x17, 0x24, 0x00 }; // 11x7
+const uint8_t icon_engine[ICON_BYTES] PROGMEM       = { 0x28, 0xC0, 0x07, 0x36, 0xB0, 0x06, 0x36, 0xF0, 0x01, 0x0A, 0x00 }; // 7x7
+const uint8_t icon_midisync[ICON_BYTES] PROGMEM     = { 0x1C, 0xA0, 0x02, 0x41, 0x50, 0x05, 0x49, 0x20, 0x02, 0x1C, 0x00 }; // 7x7
+const uint8_t icon_song[ICON_BYTES] PROGMEM         = { 0x00, 0x00, 0x00, 0xBB, 0xB5, 0x5B, 0xBB, 0x05, 0x00, 0x00, 0x00 }; // 11x7
+const uint8_t icon_record[ICON_BYTES] PROGMEM       = { 0x63, 0x10, 0x04, 0x5D, 0xD0, 0x05, 0x5D, 0x10, 0x04, 0x63, 0x00 }; // 7x7
+
+// ------------------------------------------------------------
+// Misc patterns (kept as-is)
+// ------------------------------------------------------------
 static const char LOWRES_CIRCLE[7][10] = {
   "000XXX000",
   "00XXXXX00",
@@ -59,86 +155,6 @@ static const char LOWRES_CIRCLE[7][10] = {
   "00XXXXX00",
   "000XXX000"
 };
-
-const uint8_t icon_delete[49][2] PROGMEM = {
-  // Row 1 (y=1): 13 pixels wide
-  { 1, 1}, { 2, 1}, { 3, 1}, { 4, 1}, { 5, 1}, { 6, 1}, { 7, 1}, { 8, 1}, { 9, 1}, {10, 1}, {11, 1}, {12, 1}, {13, 1},
-  // Row 2 (y=2): 11 pixels wide
-  { 2, 2}, { 3, 2}, { 4, 2}, { 5, 2}, { 6, 2}, { 7, 2}, { 8, 2}, { 9, 2}, {10, 2}, {11, 2}, {12, 2},
-  // Row 3 (y=3): 9 pixels wide
-  { 3, 3}, { 4, 3}, { 5, 3}, { 6, 3}, { 7, 3}, { 8, 3}, { 9, 3}, {10, 3}, {11, 3},
-  // Row 4 (y=4): 7 pixels wide
-  { 4, 4}, { 5, 4}, { 6, 4}, { 7, 4}, { 8, 4}, { 9, 4}, {10, 4},
-  // Row 5 (y=5): 5 pixels wide
-  { 5, 5}, { 6, 5}, { 7, 5}, { 8, 5}, { 9, 5},
-  // Row 6 (y=6): 3 pixels wide
-  { 6, 6}, { 7, 6}, { 8, 6},
-  // Row 7 (y=7): 1 pixel
-  { 7, 7}
-};
-
-const uint8_t icon_samplepack[17][2] PROGMEM = { { 2, 1 }, { 2, 2 }, { 3, 2 }, { 2, 3 }, { 2, 4 }, { 4, 4 }, { 1, 5 }, { 2, 5 }, { 4, 5 }, { 5, 5 }, { 1, 6 }, { 2, 6 }, {3, 7 }, { 4, 6 }, { 4, 7 }, { 3, 8 }, { 4, 8 } };
-const uint8_t icon_sample[17][2] PROGMEM = { { 3, 1 }, { 3, 2 }, { 3, 3 }, { 4, 3 }, { 3, 5 }, { 4, 2 }, { 5, 3 }, { 3, 4 }, { 3, 5 }, {1 ,6 }, {2 , 6 }, { 3, 6 }, { 1, 7 }, { 2, 7 }, { 3, 7 }, { 1, 8 }, { 2, 8 } };
-
-const uint8_t icon_loadsave[12][2] PROGMEM = { { 3, 1 }, { 3, 2 }, { 3, 3 }, { 1, 4 }, { 2, 4}, { 3, 4 }, { 4, 4 }, { 5, 4 }, { 2, 5 }, { 3, 5 }, { 4, 5 }, { 3, 6 } };
-const uint8_t icon_loadsave2[7][2] PROGMEM = { { 1, 6 }, { 5, 6 }, { 1, 7 }, { 2, 7 }, { 3, 7 }, { 4, 7 }, { 5, 7 } };
-
-const uint8_t icon_bpm[33][2] PROGMEM = {
-  // Circular outline (clock face)
-  {3,1},{4,1},{5,1},        // Top
-  {2,2},{6,2},              // Upper sides
-  {1,3},{7,3},              // Middle sides
-  {1,4},{7,4},              // Middle sides
-  {1,5},{7,5},              // Middle sides
-  {2,6},{6,6},              // Lower sides
-  {3,7},{4,7},{5,7},        // Bottom
-  // Center point
-  {4,4},
-  // Hour hand (pointing up to 12)
-  {4,3},{4,2},
-  // Minute hand (pointing right to 3)
-  {5,4},{6,4},{7,4}
-};
-
-const uint8_t icon_vol[19][2] PROGMEM = {
-  // Volume bar icon: 000000# / 0000### / 000#### / #######
-  // Row 1 (y=3): 6 empty, 1 filled
-  {8,3},
-  // Row 2 (y=4): 4 empty, 3 filled
-  {6,4},{7,4},{8,4},
-  // Row 3 (y=5): 3 empty, 4 filled
-  {4,5},{5,5},{6,5},{7,5},{8,5},
-  // Row 4 (y=6): 0 empty, 7 filled
-  {2,6},{3,6},{4,6},{5,6},{6,6},{7,6},{8,6}
-};
-
-const uint8_t helper_load[3][2] PROGMEM = { { 1, 15 }, { 2, 15 }, { 3, 15 } };
-const uint8_t helper_folder[5][2] PROGMEM = { { 6, 13 }, { 6, 14 }, { 6, 15 }, { 7, 14 }, { 7, 15 } };
-const uint8_t helper_seek[2][2] PROGMEM = { { 10, 15 }, { 10, 14 } };
-const uint8_t helper_seekstart[2][2] PROGMEM = { { 2, 15 }, { 2, 14 } };
-const uint8_t icon_new[5][2] PROGMEM = { { 9, 14 }, { 10, 14 }, { 11, 14 }, { 10, 13 }, { 10, 15 }}; //+ sign
-
-// Hourglass icon (centered)
-const uint8_t icon_hourglass[23][2] PROGMEM = {
-  { 6, 4 }, { 7, 4 }, { 8, 4 }, { 9, 4 }, { 10, 4 },  // Top line
-  { 6, 5 }, { 10, 5 },  // Top sides
-  { 7, 6 }, { 9, 6 },   // Upper neck
-  { 8, 7 },             // Center (narrowest point)
-  { 7, 8 }, { 9, 8 },   // Lower neck
-  { 6, 9 }, { 10, 9 },  // Bottom sides
-  { 7, 9 }, { 8, 9 }, { 9, 9 },  // Sand at bottom
-  { 6, 10 }, { 7, 10 }, { 8, 10 }, { 9, 10 }, { 10, 10 } // Bottom line
-  
-};
-
-const uint8_t helper_bright[5][2] PROGMEM =  { { 5, 14 }, { 6, 13 }, { 6 ,15 }, { 6, 14 }, { 7, 14 } };
-const uint8_t helper_vol[5][2] PROGMEM = { { 9, 13 }, { 11, 13 }, { 10, 15 }, { 9, 14 }, { 11, 14 } };
-const uint8_t helper_bpm[7][2] PROGMEM = { { 13, 13 }, { 13, 14 }, { 13, 15 }, { 14, 14 }, { 15, 14 }, { 14, 15 }, { 15, 15 } };
-
-const uint8_t helper_save[3][2] PROGMEM = { { 5, 15 }, { 6, 15 }, { 7, 15 } };
-const uint8_t helper_select[3][2] PROGMEM = { { 13, 15 }, { 14, 15 }, { 15, 15 } };
-const uint8_t helper_exit[3][2] PROGMEM = { { 1, 15 }, { 2, 15 }, { 3, 15 } };
-const uint8_t helper_minus[3][2] PROGMEM = { { 9, 14 }, { 10, 14 }, { 11, 14 } }; //- sign
 
 
 

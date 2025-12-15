@@ -395,7 +395,8 @@ void startRecordingRAM() {
   peakRecIndex = 0;
   
   queue1.begin();  // start filling 128‑sample blocks
-  showIcons(ICON_REC, UI_DIM_RED);
+  // REC = record
+  showIcons(ICON_RECORD, UI_DIM_RED);
   FastLEDshow();
   isRecording = true;
   
@@ -2510,7 +2511,7 @@ void generateParticles() {
   particleCount = 0;
   for (int row = 0; row < 16; row++) {
     for (int col = 0; col < 16; col++) {
-      if (logo[row][col] == 1) {
+      if (logo16_on_P(logo_rows, (uint8_t)col, (uint8_t)row)) {
         // Particle's initial position (center of that cell)
         float initX = col + 0.5;
         float initY = row + 0.5;
@@ -2540,7 +2541,7 @@ CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
 
   if (elapsed < phase1Duration) {
     // PHASE 1: Rainbow Logo
-    if (logo[y][x] == 1) {
+    if (logo16_on_P(logo_rows, x, y)) {
       float timeFactor = (float)elapsed / phase1Duration;  // 0..1
       return getLogoPixelColor(x, y, timeFactor);
     } else {

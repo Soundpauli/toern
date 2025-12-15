@@ -1,9 +1,10 @@
 // Menu page system - completely independent from maxPages
-#define MENU_PAGES_COUNT 11
+#define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 9
 #define RECS_PAGES_COUNT 3
 #define MIDI_PAGES_COUNT 2
 #define VOL_PAGES_COUNT 5
+#define ETC_PAGES_COUNT 2
 
 // External variables
 extern Mode *currentMode;
@@ -35,8 +36,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"RECS", 20, false, nullptr},         // RECS submenu (MIC, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
-  {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"RST", 16, true, "MODE"}            // Reset Effects
+  {"ETC", 34, false, nullptr}           // ETC submenu (AUTO, RST)
 };
 
 // LOOK submenu pages
@@ -84,15 +84,23 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"LVL", 31, false, nullptr}           // Line input level
 };
 
+// ETC submenu pages
+MenuPage etcPages[ETC_PAGES_COUNT] = {
+  {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
+  {"RST", 16, true, "MODE"}             // Reset Effects
+};
+
 int currentMenuPage = 0;
 int currentLookPage = 0;
 int currentRecsPage = 0;
 int currentMidiPage = 0;
 int currentVolPage = 0;
+int currentEtcPage = 0;
 bool inLookSubmenu = false;
 bool inRecsSubmenu = false;
 bool inMidiSubmenu = false;
 bool inVolSubmenu = false;
+bool inEtcSubmenu = false;
 int aiTargetPage = 6; // Default target page for AI song generation
 int aiBaseStartPage = 1; // Start of base page range for AI analysis
 int aiBaseEndPage = 1;   // End of base page range for AI analysis
@@ -552,12 +560,13 @@ FLASHMEM void showMenu() {
   // Draw page title at top
   //drawText(currentPageInfo->name, 6, 1, UI_WHITE);
   
-  // Draw page indicator as a line at y=maxY
+  // Draw page indicator as a line at y=maxY (right-aligned)
   // Show current page as red, others as blue
-  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  int startX = (int)maxX - MENU_PAGES_COUNT + 1;
+  if (startX < 1) startX = 1;
   for (int i = 0; i < MENU_PAGES_COUNT; i++) {
     CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_BLUE;
-    light(i + 1, maxY, indicatorColor);
+    light(startX + i, maxY, indicatorColor);
   }
 
   // Handle the main setting for this page
@@ -635,12 +644,15 @@ FLASHMEM void showLookMenu() {
   int pageIndex = currentLookPage;
   MenuPage* currentPageInfo = &lookPages[pageIndex];
   
-  // Draw page indicator as a line at y=maxY
-  // Show current page as red, others as green (matching PLAY menu color)
-  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  // Draw page indicator as a line at y=maxY (right-aligned)
+  // Match the parent menu color (PLAY).
+  const CRGB parent = currentMenuParentTextColor();
+  const CRGB parentDim = dimIconColorFromText(parent);
+  int startX = (int)maxX - LOOK_PAGES_COUNT + 1;
+  if (startX < 1) startX = 1;
   for (int i = 0; i < LOOK_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : CRGB(0, 255, 0); // Green like PLAY
-    light(i + 1, maxY, indicatorColor);
+    CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
+    light(startX + i, maxY, indicatorColor);
   }
 
   // Handle the main setting for this page
@@ -698,12 +710,20 @@ FLASHMEM void showRecsMenu() {
   int pageIndex = currentRecsPage;
   MenuPage* currentPageInfo = &recsPages[pageIndex];
   
-  // Draw page indicator as a line at y=maxY
-  // Show current page as red, others as magenta (matching RECS menu color)
-  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  // Show header only on MIC/LINE toggle page
+  if (currentPageInfo->mainSetting == 4) {
+    drawText("INPT", 2, 10, menuTextColorFromCol(7));
+  }
+  
+  // Draw page indicator as a line at y=maxY (right-aligned)
+  // Match the parent menu color (RECS).
+  const CRGB parent = currentMenuParentTextColor();
+  const CRGB parentDim = dimIconColorFromText(parent);
+  int startX = (int)maxX - RECS_PAGES_COUNT + 1;
+  if (startX < 1) startX = 1;
   for (int i = 0; i < RECS_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_MAGENTA; // Magenta like RECS
-    light(i + 1, maxY, indicatorColor);
+    CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
+    light(startX + i, maxY, indicatorColor);
   }
 
   // Handle the main setting for this page
@@ -771,12 +791,15 @@ FLASHMEM void showMidiMenu() {
   int pageIndex = currentMidiPage;
   MenuPage* currentPageInfo = &midiPages[pageIndex];
   
-  // Draw page indicator as a line at y=maxY
-  // Show current page as red, others as white (matching MIDI menu color)
-  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  // Draw page indicator as a line at y=maxY (right-aligned)
+  // Match the parent menu color (MIDI).
+  const CRGB parent = currentMenuParentTextColor();
+  const CRGB parentDim = dimIconColorFromText(parent);
+  int startX = (int)maxX - MIDI_PAGES_COUNT + 1;
+  if (startX < 1) startX = 1;
   for (int i = 0; i < MIDI_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_WHITE; // White like MIDI
-    light(i + 1, maxY, indicatorColor);
+    CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
+    light(startX + i, maxY, indicatorColor);
   }
 
   // Handle the main setting for this page
@@ -834,12 +857,15 @@ FLASHMEM void showVolMenu() {
   int pageIndex = currentVolPage;
   MenuPage* currentPageInfo = &volPages[pageIndex];
   
-  // Draw page indicator as a line at y=maxY
-  // Show current page as red, others as yellow (matching VOL menu color)
-  // Shifted right by 1: page 0 = LED 1, page 1 = LED 2, etc.
+  // Draw page indicator as a line at y=maxY (right-aligned)
+  // Match the parent menu color (VOL).
+  const CRGB parent = currentMenuParentTextColor();
+  const CRGB parentDim = dimIconColorFromText(parent);
+  int startX = (int)maxX - VOL_PAGES_COUNT + 1;
+  if (startX < 1) startX = 1;
   for (int i = 0; i < VOL_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : CRGB(255, 255, 0); // Yellow like VOL
-    light(i + 1, maxY, indicatorColor);
+    CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
+    light(startX + i, maxY, indicatorColor);
   }
 
   // Handle the main setting for this page
@@ -888,81 +914,199 @@ FLASHMEM void showVolMenu() {
   handleAdditionalFeatureControls(mainSetting);
 }
 
+FLASHMEM void showEtcMenu() {
+  FastLEDclear();
+
+  // Get current page info
+  int pageIndex = currentEtcPage;
+  MenuPage* currentPageInfo = &etcPages[pageIndex];
+
+  // Draw page indicator as a line at y=maxY (right-aligned)
+  // Match the parent menu color (ETC).
+  const CRGB parent = currentMenuParentTextColor();
+  const CRGB parentDim = dimIconColorFromText(parent);
+  int startX = (int)maxX - ETC_PAGES_COUNT + 1;
+  if (startX < 1) startX = 1;
+  for (int i = 0; i < ETC_PAGES_COUNT; i++) {
+    CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
+    light(startX + i, maxY, indicatorColor);
+  }
+
+  int mainSetting = currentPageInfo->mainSetting;
+
+  // Indicators / encoder ring colors
+  // For AUTO (mainSetting 15): encoder(0) is the green "generate" trigger; no blue exit indicator on encoder(3).
+  // Otherwise keep ETC parent-colored encoder(3) ring (page nav).
+  if (mainSetting == 15) {
+    drawIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
+    // Keep encoder(1)/(2) indicators from AI page itself (drawMainSettingStatus/drawAdditionalFeatures)
+    Encoder[0].writeRGBCode(0x00FF00);
+    Encoder[1].writeRGBCode(getIndicatorColor('Y').r << 16 | getIndicatorColor('Y').g << 8 | getIndicatorColor('Y').b);
+    Encoder[2].writeRGBCode(getIndicatorColor('W').r << 16 | getIndicatorColor('W').g << 8 | getIndicatorColor('W').b);
+    Encoder[3].writeRGBCode(0x000000); // no indicator4 / no exit on encoder(3)
+  } else {
+    // New indicator system: etcMenu: | | | L[H] (bright blue)
+    drawIndicator('L', 'H', 4);
+    CRGB indicatorColor = currentMenuParentTextColor();
+    Encoder[0].writeRGBCode(0x000000);
+    Encoder[1].writeRGBCode(0x000000);
+    Encoder[2].writeRGBCode(0x000000);
+    Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+  }
+
+  drawMainSettingStatus(mainSetting);
+  if (currentPageInfo->hasAdditionalFeatures) {
+    drawAdditionalFeatures(mainSetting);
+  }
+
+  FastLED.setBrightness(ledBrightness);
+  FastLEDshow();
+
+  // Handle page navigation with encoder 3
+  static int lastEtcPagePosition = -1;
+  static bool etcMenuFirstEnter = true;
+  if (etcMenuFirstEnter) {
+    Encoder[3].writeCounter((int32_t)currentEtcPage);
+    etcMenuFirstEnter = false;
+  }
+  Encoder[3].writeMax((int32_t)(ETC_PAGES_COUNT - 1));
+  Encoder[3].writeMin((int32_t)0);
+  if (currentMode->pos[3] != lastEtcPagePosition) {
+    currentEtcPage = currentMode->pos[3];
+    if (currentEtcPage >= ETC_PAGES_COUNT) currentEtcPage = ETC_PAGES_COUNT - 1;
+    if (currentEtcPage < 0) currentEtcPage = 0;
+    lastEtcPagePosition = currentEtcPage;
+  }
+
+  handleAdditionalFeatureControls(mainSetting);
+}
+
+static inline CRGB dimIconColorFromText(CRGB textColor) {
+  // Match the existing UI dim level (~20) regardless of the base text color.
+  CRGB c = textColor;
+  uint8_t maxv = max(c.r, max(c.g, c.b));
+  if (maxv == 0) return c;
+  const uint8_t target = 20; // matches UI_DIM_* constants in colors.h
+  uint16_t scale = (uint16_t)target * 255u / maxv;
+  if (scale > 255) scale = 255;
+  c.nscale8_video((uint8_t)scale);
+  return c;
+}
+
+static inline CRGB menuTextColorFromCol(uint8_t colIndex) {
+  // Use palette colors from `col[]` (voice colors), but normalize brightness
+  // to match the rest of the UI text (~120 peak channel).
+  extern const CRGB col[];
+  CRGB c = col[colIndex];
+  uint8_t maxv = max(c.r, max(c.g, c.b));
+  if (maxv == 0) return c;
+  const uint8_t target = 120; // similar to UI_* brightness
+  uint16_t scale = (uint16_t)target * 255u / maxv;
+  if (scale > 255) scale = 255;
+  c.nscale8_video((uint8_t)scale);
+  return c;
+}
+
+static inline CRGB currentMenuParentTextColor() {
+  // Submenus should match their main-menu parent item color:
+  // PLAY=col[6], RECS=col[7], MIDI=col[8], VOL=col[5], ETC=col[14]
+  if (inLookSubmenu) return menuTextColorFromCol(6);
+  if (inRecsSubmenu) return menuTextColorFromCol(7);
+  if (inMidiSubmenu) return menuTextColorFromCol(8);
+  if (inVolSubmenu)  return menuTextColorFromCol(5);
+  if (inEtcSubmenu)  return menuTextColorFromCol(14);
+  return UI_WHITE;
+}
+
 FLASHMEM void drawMainSettingStatus(int setting) {
   switch (setting) {
     case 1: // DAT - Load/Save
-      showIcons(ICON_LOADSAVE, UI_DIM_GREEN);
-      showIcons(ICON_LOADSAVE2, UI_DIM_WHITE);
-      drawText("FILE", 2, 3, UI_GREEN);
+      // FILE = folder
+      {
+        const CRGB tc = menuTextColorFromCol(1);
+        showIcons(ICON_FOLDER_BIG, dimIconColorFromText(tc));
+        drawText("FILE", 2, 3, tc);
+      }
       break;
       
     case 2: // KIT - Sample Pack
-      showIcons(ICON_SAMPLEPACK, UI_DIM_YELLOW);
-      drawText("PACK", 2, 3, UI_BLUE);
+      // Pack = pack
+      {
+        const CRGB tc = menuTextColorFromCol(2);
+        showIcons(OLD_ICON_SAMPLEPACK, dimIconColorFromText(tc));
+        drawText("PACK", 2, 3, tc);
+      }
       break;
       
     case 3: // WAV - Wave Selection
-      showIcons(ICON_SAMPLE, UI_DIM_MAGENTA);
+      // wave = sample
+      {
+        const CRGB tc = menuTextColorFromCol(3);
+        showIcons(ICON_SAMPLE_BIG, dimIconColorFromText(tc));
       if (GLOB.currentChannel > 0 && GLOB.currentChannel < 9) {
-        drawText("WAVE", 2, 3, UI_YELLOW);
+        drawText("WAVE", 2, 3, tc);
       } else {
-        drawText("(-)", 2, 3, UI_YELLOW);
+        drawText("(-)", 2, 3, tc);
+      }
       }
       break;
       
     case 4: // REC - Recording Mode (menu/mic)
-      showIcons(ICON_REC, UI_DIM_RED);
-      showIcons(ICON_REC2, UI_DIM_WHITE);
+      // Icon should show in main menu entry (RECS), not inside the REC submenu page.
       // No red indicator for encoder(2) - removed
       drawRecMode();
       break;
       
     case 5: // BPM - BPM/Volume
-      showIcons(ICON_BPM, UI_DIM_GREEN);
-      drawText("BPM", 2, 3, UI_MAGENTA);
+      // BPM = Clock
+      {
+        const CRGB tc = menuTextColorFromCol(4);
+        showIcons(ICON_CLOCK, dimIconColorFromText(tc));
+        drawText("BPM", 2, 3, tc);
+        drawIndicator('L', 'W', 2);  // Encoder 2: Large White indicator
+      }
       break;
       
     case 7: // CHN - MIDI Voice Select
-      drawText("CH", 2, 10, UI_WHITE);
+      drawText("CH", 2, 10, currentMenuParentTextColor());
       drawMidiVoiceSelect();
       break;
       
     case 8: // TRN - MIDI Transport
-      drawText("TRAN", 2, 10, UI_WHITE);
+      drawText("TRAN", 2, 10, currentMenuParentTextColor());
       drawMidiTransport();
       break;
       
     case 9: // PMD - Pattern Mode
-      drawText("PMODE", 2, 10, UI_CYAN);
+      drawText("PMODE", 2, 10, currentMenuParentTextColor());
       drawPatternMode();
       break;
       
     case 10: // FLW - Flow Mode
-      drawText("FLOW", 2, 10, UI_CYAN);
+      drawText("FLOW", 2, 10, currentMenuParentTextColor());
       drawFlowMode();
       break;
       
     case 11: // OTR - Fast Rec Mode
-      drawText("TRIG", 2, 10, UI_MAGENTA);
+      drawText("TRIG", 2, 10, currentMenuParentTextColor());
       drawFastRecMode();
       break;
       
     case 12: // CLR - Rec Channel Clear
-      drawText("CLR", 2, 10, UI_MAGENTA);
+      drawText("CLR", 2, 10, currentMenuParentTextColor());
       drawRecChannelClear();
       break;
       
     case 15: // AI - Song Generation
-      drawText("AUTO", 2, 10, CRGB(0, 100, 255));  // Blue
-      // New indicator system: menu/AI: L[M] | L[Y] | L[W] | L[X]
-      drawIndicator('L', 'M', 1);  // Encoder 1: Large Magenta (trigger)
+      drawText("AUTO", 2, 10, currentMenuParentTextColor());
+      // AUTO generate: encoder(0) press triggers generation -> green indicator on encoder(0)
+      drawIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
       drawIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow (base start)
       drawIndicator('L', 'W', 3);  // Encoder 3: Large White (base end)
-      drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue (exit)
       break;
       
     case 16: // RST - Reset
-      drawText("RSET", 2, 10, CRGB(255, 0, 0));  // Red
+      drawText("RSET", 2, 10, currentMenuParentTextColor());
       /*if (resetMenuOption == 0) {
         drawText("EFX", 2, 3, CRGB(100, 0, 0));  // Dark Red
       } else {
@@ -973,42 +1117,58 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
       
     case 19: // PLAY - Submenu
-      drawText("PLAY", 2, 10, CRGB(0, 255, 0));
-      drawText("MENU", 2, 3, CRGB(0, 10, 0));
+      // PLAY = settings icon
+      {
+        const CRGB tc = menuTextColorFromCol(6);
+        showIcons(ICON_SETTINGS_BIG, dimIconColorFromText(tc));
+        drawText("PLAY", 2, 3, tc);
+      }
       break;
       
     case 20: // RECS - Submenu
-      drawText("REC", 2, 10, UI_MAGENTA); // Orange
-      drawText("MENU", 2, 3, CRGB(15, 0, 8));    // Dark Orange
+      // REC = record (icon shown on main menu entry)
+      {
+        const CRGB tc = menuTextColorFromCol(7);
+        showIcons(ICON_RECORD, dimIconColorFromText(tc));
+        drawText("REC", 2, 3, tc);
+      }
       break;
       
     case 21: // MIDI - Submenu
-      drawText("MIDI", 2, 10, CRGB(255, 255, 255)); // White
-      drawText("MENU", 2, 3, CRGB(10, 10, 10));  // Gray
+      // MIDI = midi
+      {
+        const CRGB tc = menuTextColorFromCol(8);
+        showIcons(ICON_MIDISYNC, dimIconColorFromText(tc));
+        drawText("MIDI", 2, 3, tc);
+      }
       break;
       
     case 22: // SONG - Song Mode
-      drawText("SONG", 2, 10, CRGB(255, 255, 0)); // Yellow
-      drawText("MODE", 2, 3, CRGB(10, 10, 0));  // Dark Yellow
+      // SONG = song
+      {
+        const CRGB tc = menuTextColorFromCol(13);
+        showIcons(ICON_SONG, dimIconColorFromText(tc));
+        drawText("SONG", 2, 3, tc);
+      }
       break;
       
     case 17: // VIEW - Simple Notes View
-      drawText("VIEW", 2, 10, CRGB(0, 255, 100));
+      drawText("VIEW", 2, 10, currentMenuParentTextColor());
       drawSimpleNotesView();
       break;
       
     case 18: // LOOP - Loop Length
-      drawText("LOOP", 2, 10, CRGB(100, 200, 255));
+      drawText("LOOP", 2, 10, currentMenuParentTextColor());
       drawLoopLength();
       break;
       
     case 23: // LEDS - LED Modules Count
-      drawText("LEDS", 2, 10, CRGB(0, 255, 0));
+      drawText("LEDS", 2, 10, currentMenuParentTextColor());
       drawLedModules();
       break;
 
     case 24: // PONG toggle
-      drawText("PONG", 2, 10, CRGB(255, 255, 255));
+      drawText("PONG", 2, 10, currentMenuParentTextColor());
       if (pong) {
         drawText("ON", 10, 3, UI_GREEN);
       } else {
@@ -1029,8 +1189,16 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
+    case 34: // ETC - Submenu
+      {
+        const CRGB tc = menuTextColorFromCol(14);
+        showIcons(ICON_PATTERN, dimIconColorFromText(tc));
+        drawText("ETC", 2, 3, tc);
+      }
+      break;
+
     case 25: { // CTRL - encoder behaviour
-      drawText("CTRL", 2, 10, CRGB(0, 255, 100));
+      drawText("CTRL", 2, 10, currentMenuParentTextColor());
       if (ctrlMode == 0) {
         drawText("PAGE", 2, 3, UI_GREEN);
       } else {
@@ -1040,12 +1208,16 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 26: // VOL - Submenu
-      showIcons(ICON_VOL, CRGB(55, 0, 0)); // Red volume icon
-      drawText("VOL", 2, 3, CRGB(55, 55, 0)); // Yellow text
+      // VOL = volume
+      {
+        const CRGB tc = menuTextColorFromCol(5);
+        showIcons(ICON_VOLUME_BIG, dimIconColorFromText(tc));
+        drawText("VOL", 2, 3, tc);
+      }
       break;
       
     case 27: { // MAIN - Headphone output volume
-      drawText("MAIN", 2, 10, CRGB(55, 55, 0)); // Yellow
+      drawText("MAIN", 2, 10, currentMenuParentTextColor());
       extern Mode *currentMode;
       extern struct GlobalVars GLOB;
       
@@ -1065,7 +1237,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 28: { // LINE - Line output volume
-      drawText("LINE", 2, 10, CRGB(55, 55, 0)); // Yellow
+      drawText("LINE", 2, 10, currentMenuParentTextColor());
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
       // Display mapped range 1..19 (LINEOUT_MIN..LINEOUT_MAX) for user friendliness
@@ -1080,7 +1252,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 29: { // PREV - Preview volume
-      drawText("PREV", 2, 10, CRGB(55, 55, 0)); // Yellow
+      drawText("PREV", 2, 10, currentMenuParentTextColor());
       extern unsigned int previewVol;
       // Show two decimals (0.00–0.50) for finer feedback
       float vol = previewVol * 0.01f;
@@ -1095,7 +1267,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 30: { // MIC - Microphone gain
-      drawText("MIC", 2, 10, CRGB(55, 55, 0)); // Yellow
+      drawText("MIC", 2, 10, currentMenuParentTextColor());
       extern unsigned int micGain;
       char gainText[8];
       snprintf(gainText, sizeof(gainText), "%d", micGain);
@@ -1108,7 +1280,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 31: { // LVL - Line input level
-      drawText("LVL", 2, 10, CRGB(55, 55, 0)); // Yellow
+      drawText("LVL", 2, 10, currentMenuParentTextColor());
       extern unsigned int lineInLevel;
       char levelText[8];
       snprintf(levelText, sizeof(levelText), "%d", lineInLevel);
@@ -1121,7 +1293,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 32: { // CRSR - Cursor Type
-      drawText("CRSR", 2, 10, CRGB(0, 255, 0)); // Green (matching PLAY menu)
+      drawText("CRSR", 2, 10, currentMenuParentTextColor());
       extern bool showChannelNr;
       extern int cursorType;
       
@@ -1150,7 +1322,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
 
     case 33: { // PREV - Preview trigger mode
-      drawText("PREV", 2, 10, CRGB(0, 255, 0)); // Green like PLAY menu
+      drawText("PREV", 2, 10, currentMenuParentTextColor());
       if (previewTriggerMode == PREVIEW_MODE_PRESS) {
         drawText("PRSS", 2, 3, CRGB(0, 150, 255)); // Blue for press-only
       } else {
@@ -1796,6 +1968,13 @@ void switchMenu(int menuPosition){
         currentVolPage = 0;
         Encoder[3].writeCounter((int32_t)0);
         break;
+
+        case 34:
+        // Enter ETC submenu at first page
+        inEtcSubmenu = true;
+        currentEtcPage = 0;
+        Encoder[3].writeCounter((int32_t)0);
+        break;
         
         case 17:
         // Cycle through VIEW modes: 1=EASY, 2=FULL
@@ -1954,7 +2133,8 @@ void showNewFileMode() {
   FastLEDclear();
   
   // Draw page title
-  drawText("FULL", 6, 12, CRGB(0, 255, 255));
+  CRGB newColor = CRGB(0, 255, 255);
+  drawText("NEW", 6, 12, newColor);
   
   // Draw genre selection
   drawGenreSelection();
@@ -1976,9 +2156,9 @@ void showNewFileMode() {
     }
   }
   
-  // New indicator system: new: M[G] | | M[V] | S[X]
-  drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
-  // Encoder 2: empty (no indicator)
+  // New indicator system: new: | | M[V] | L[N]
+  // Encoder 0: no indicator (no functionality)
+  // Encoder 1: empty (no indicator)
   
   // Only show L[V] if not BLNK (genreType != 0)
   if (genreType != 0) {
@@ -1986,15 +2166,14 @@ void showNewFileMode() {
   }
   // Encoder 3: empty if BLNK
   
-  drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue (was missing!)
+  // Encoder(3) press starts generation -> match indicator to NEW text color (cyan)
+  drawIndicator('L', 'N', 4);
 
   // Set encoder colors to match indicators
-  // Encoder 1: Medium Green (M[G])
-  CRGB greenColor = getIndicatorColor('G'); // Green
-  Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
-  
-  // Encoder 2: Black (no indicator)
-  Encoder[1].writeRGBCode(0x000000); // Black
+  // Encoder 0: Black (no indicator)
+  Encoder[0].writeRGBCode(0x000000);
+  // Encoder 1: Black (no indicator)
+  Encoder[1].writeRGBCode(0x000000);
   
   // Encoder 3: Large Violet (L[V]) only if genreType != 0 (not BLNK)
   if (genreType != 0) {
@@ -2004,9 +2183,9 @@ void showNewFileMode() {
     Encoder[2].writeRGBCode(0x000000); // Black when BLNK
   }
   
-  // Encoder 4: Large Blue (L[X])
-  CRGB blueColor = getIndicatorColor('X'); // Blue
-  Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+  // Encoder 4: Large Cyan (L[N]) to match NEW title
+  CRGB cyanColor = newColor;
+  Encoder[3].writeRGBCode(cyanColor.r << 16 | cyanColor.g << 8 | cyanColor.b);
 
   
   FastLED.setBrightness(ledBrightness);
@@ -2127,6 +2306,9 @@ int getCurrentMenuMainSetting() {
   }
   if (inVolSubmenu) {
     return volPages[currentVolPage].mainSetting;
+  }
+  if (inEtcSubmenu) {
+    return etcPages[currentEtcPage].mainSetting;
   }
   return menuPages[currentMenuPage].mainSetting;
 }

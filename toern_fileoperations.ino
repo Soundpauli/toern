@@ -87,7 +87,8 @@ FLASHMEM void saveSamplePack(int pack) {
     for (uint8_t ch = 1; ch <= 8; ch++) {
         // Use the same progress bar UI as samplepack load
         drawLoadingBar(1, maxFiles, ch, col_base[(maxFiles + 1) - ch], UI_DIM_WHITE, false);
-        showIcons(ICON_SAMPLEPACK, UI_BG_DIM);
+        // Pack = samplepack icon
+        showIcons(OLD_ICON_SAMPLEPACK, UI_BG_DIM);
         FastLED.setBrightness(ledBrightness);
         FastLEDshow();
 

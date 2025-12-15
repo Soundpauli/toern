@@ -163,18 +163,19 @@ static void servicePeakScan(uint32_t maxBytesThisCall) {
 FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength) {
   if (playSdWav1.isPlaying()) playSdWav1.stop();
   envelope0.noteOff();
-  // PREV==PRSS: stop background peak scanning before any SD-heavy preview work
-  // (avoids SD contention and potential crashes when starting preview playback).
-  if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-    stopPeakScan();
-  }
+  // NOTE: In PREV==PRSS we keep the background peak scan state intact even when
+  // the user triggers a preview via encoder-press. The scan is advanced in
+  // showWave() when safe (to avoid SD contention during SD playback).
   char OUTPUTf[64];
   buildSamplePath(folder, sampleID, OUTPUTf, sizeof(OUTPUTf));
 
-  // If no trimming is requested (seek at 0, seekEnd at 100), avoid loading into RAM
-  // and stream directly from SD to keep memory usage low.
+  // If no trimming is requested (seek at 0, seekEnd at 100), we can stream directly from SD
+  // to start playback instantly.
+  //
+  // NOTE: In PREV==PRSS this means the incremental peak scan will PAUSE while SD playback is
+  // active (to avoid SD contention), but it will NOT be reset/restarted.
   bool usingFullRange = (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
-  if (usingFullRange) {
+  if (usingFullRange && (previewTriggerMode == PREVIEW_MODE_ON || previewTriggerMode == PREVIEW_MODE_PRESS)) {
     if (!SD.exists(OUTPUTf)) {
       return;
     }
@@ -183,7 +184,7 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     if (GLOB.seekEnd == 0) {
       GLOB.seekEnd = 100;
       currentMode->pos[2] = GLOB.seekEnd;
-      Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
+      Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
     }
 
     // Clear cached preview metadata so trimmed previews will reload when needed
@@ -285,7 +286,7 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     endOffset = GLOB.smplen;
     GLOB.seekEnd = 100;
     currentMode->pos[2] = GLOB.seekEnd;
-    Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
+    Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
   }
 
   int startOffsetBytes = startOffset * PrevSampleRate * 2;
@@ -444,7 +445,7 @@ void showWave() {
     Encoder[0].writeCounter((int32_t)0);
     currentMode->pos[2] = 100;
     GLOB.seekEnd = 100;
-    Encoder[2].writeCounter((int32_t)100);
+    Encoder[1].writeCounter((int32_t)100);
   };
 
   auto startSdPreview = [&](const char* path) {
@@ -531,7 +532,7 @@ void showWave() {
     if (folderIdx < 0) folderIdx = 0;
     GLOB.folder = (unsigned int)folderIdx;
     currentMode->pos[1] = folderIdx;
-    Encoder[1].writeCounter((int32_t)folderIdx);
+    Encoder[2].writeCounter((int32_t)folderIdx);
 
     int fileCount = (manifestLoaded && folderIdx < (int)manifestFolderCount) ? (int)manifestFileCount[folderIdx] : 0;
     int maxFilesInFolder = fileCount + 1; // include NEW slot
@@ -559,35 +560,36 @@ void showWave() {
   FastLEDclear();
   
   // Clamp folder encoder to existing folders (manifest if loaded)
+  // NOTE: Encoder functions are swapped in SET_WAV:
+  // - Encoder[2] (rotate) = folder selection
+  // - Encoder[1] (rotate) = seekEnd (trim)
   int maxFolders = manifestLoaded ? manifestFolderCount : FOLDER_MAX;
   if (maxFolders < 1) maxFolders = 1;
-  Encoder[1].writeMin((int32_t)0);
-  Encoder[1].writeMax((int32_t)(maxFolders - 1));
+  Encoder[2].writeMin((int32_t)0);
+  Encoder[2].writeMax((int32_t)(maxFolders - 1));
   if ((int)currentMode->pos[1] >= maxFolders) {
     currentMode->pos[1] = maxFolders - 1;
-    Encoder[1].writeCounter((int32_t)currentMode->pos[1]);
+    Encoder[2].writeCounter((int32_t)currentMode->pos[1]);
   }
   
-  // Indicators: ENC1 folder, ENC2 trim, ENC3 load
-  drawIndicator('L', 'W', 2);  // Encoder 1: folder browse
-  drawIndicator('L', 'Y', 3);  // Encoder 2: trim/seek
+  // Indicators: ENC0 preview (press), ENC2 seekEnd, ENC3 folder, ENC4 load
+  // Manual preview via encoder(0) press is supported for both PREV==ON and PREV==PRSS.
+  drawIndicator('L', 'P', 1);
+  Encoder[0].writeRGBCode(0xFF00FF);
+
+  drawIndicator('L', 'Y', 2);  // Encoder 1: trim/seekEnd (swapped)
+  drawIndicator('L', 'W', 3);  // Encoder 2: folder browse (swapped)
   drawIndicator('L', 'G', 4);  // Encoder 3: load sample
-  if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-    // Preview-on-press mode: show encoder 0 in pink
-    drawIndicator('L', 'P', 1);
-    Encoder[0].writeRGBCode(0xFF00FF);
-  } else {
-    // Default: no indicator/color on encoder 0 in set_wav
-    Encoder[0].writeRGBCode(0x000000);
-  }
+  // (Encoder[0] is intentionally kept pink in SET_WAV to advertise preview-press.)
   
   // Set encoder colors to match indicators
-  Encoder[1].writeRGBCode(0xFFFFFF); // White
-  Encoder[2].writeRGBCode(0xFFFF00); // Yellow
-  Encoder[2].writeMax((int32_t)100);
+  Encoder[2].writeRGBCode(0xFFFFFF); // White (folder)
+  Encoder[1].writeRGBCode(0xFFFF00); // Yellow (seekEnd)
+  Encoder[1].writeMin((int32_t)0);
+  Encoder[1].writeMax((int32_t)100);
   if (currentMode->pos[2] > 100) {
     currentMode->pos[2] = 100;
-    Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+    Encoder[1].writeCounter((int32_t)currentMode->pos[2]);
   }
   Encoder[3].writeRGBCode(0x00FF00); // Green
 
@@ -604,15 +606,15 @@ void showWave() {
     }
   }
 
-  // ---- Encoder 1: Folder --------------------------------------------------
+  // ---- Encoder 2: Folder (swapped) ----------------------------------------
   // Read encoder counter directly and clamp to existing folders
-  int32_t encoder1Counter = Encoder[1].readCounterInt();
+  int32_t encoder2Counter = Encoder[2].readCounterInt();
   // Reuse maxFolders from above (already calculated)
-  int clampedFolderPos = constrain((int)encoder1Counter, 0, maxFolders - 1);
+  int clampedFolderPos = constrain((int)encoder2Counter, 0, maxFolders - 1);
   
   // Sync encoder hardware and mode position if clamped
-  if (clampedFolderPos != (int)encoder1Counter) {
-    Encoder[1].writeCounter((int32_t)clampedFolderPos);
+  if (clampedFolderPos != (int)encoder2Counter) {
+    Encoder[2].writeCounter((int32_t)clampedFolderPos);
   }
   if (clampedFolderPos != (int)currentMode->pos[1]) {
     currentMode->pos[1] = clampedFolderPos;
@@ -639,9 +641,13 @@ void showWave() {
     lastEncoder3Value_forShowWave = -1;  // Force re-preview after folder change
   }
 
-  // ---- Encoder 2: Seek end ------------------------------------------------
+  // ---- Encoder 1: Seek end (swapped) --------------------------------------
   {
-    int newSeekEnd = constrain(currentMode->pos[2], GLOB.seek + 1, 100);  // Ensure seekEnd > seek
+    int32_t encoder1Counter = Encoder[1].readCounterInt();
+    int newSeekEnd = constrain((int)encoder1Counter, GLOB.seek + 1, 100);  // Ensure seekEnd > seek
+    if (newSeekEnd != (int)encoder1Counter) {
+      Encoder[1].writeCounter((int32_t)newSeekEnd);
+    }
     if (newSeekEnd != GLOB.seekEnd) {
       GLOB.seekEnd = newSeekEnd;
       currentMode->pos[2] = newSeekEnd;  // Update encoder to match
@@ -713,16 +719,18 @@ void showWave() {
       startPeakScan(OUTPUTf);
     }
   }
-  // Advance peak scan in small slices to keep UI responsive and avoid audio glitches
+  // Advance peak scan in small slices to keep UI responsive.
+  // PREV==PRSS requirement: keep building peaks even while preview is playing.
+  // To reduce SD contention/glitches during SD streaming, use a smaller slice while playing.
   if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-    servicePeakScan(1024); // ~1KB per frame
+    servicePeakScan(previewIsPlaying ? 128 : 1024);
   }
 
   // Safety clamp
   if (GLOB.seekEnd > 100) {
     GLOB.seekEnd = 100;
     currentMode->pos[2] = GLOB.seekEnd;
-    Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
+    Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
   }
   
   // Display peaks AFTER encoder processing (so display matches audio)
@@ -1048,7 +1056,7 @@ void reversePreviewSample() {
   
   extern i2cEncoderLibV2 Encoder[];
   Encoder[0].writeCounter((int32_t)GLOB.seek);
-  Encoder[2].writeCounter((int32_t)GLOB.seekEnd);
+  Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
   
   // Trigger re-preview with current seek settings
   // Re-preview using manifest selection (folderIdx in oldID, fileIdx in fileID)

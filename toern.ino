@@ -1465,17 +1465,20 @@ void switchMode(Mode *newMode) {
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
 
-      // Set encoder 1 limits based on manifest (if loaded) or FOLDER_MAX
+      // Set folder encoder limits based on manifest (if loaded) or FOLDER_MAX.
+      // NOTE: SET_WAV encoder swap:
+      // - Encoder[2] = folder (pos[1])
+      // - Encoder[1] = seekEnd (pos[2])
       extern bool manifestLoaded;
       extern uint16_t manifestFolderCount;
       int maxFolders = manifestLoaded ? manifestFolderCount : FOLDER_MAX;
       if (maxFolders < 1) maxFolders = 1;
-      Encoder[1].writeMin((int32_t)0);
-      Encoder[1].writeMax((int32_t)(maxFolders - 1));
+      Encoder[2].writeMin((int32_t)0);
+      Encoder[2].writeMax((int32_t)(maxFolders - 1));
       // Clamp current position to valid range
       if ((int)currentMode->pos[1] >= maxFolders) {
         currentMode->pos[1] = maxFolders - 1;
-        Encoder[1].writeCounter((int32_t)currentMode->pos[1]);
+        Encoder[2].writeCounter((int32_t)currentMode->pos[1]);
       }
 
       // Encoder 3 (sample select) is per-folder, manifest-driven:
@@ -1484,7 +1487,7 @@ void switchMode(Mode *newMode) {
       int folderIdx = constrain((int)SMP.wav[GLOB.currentChannel].oldID, 0, maxFolders - 1);
       GLOB.folder = (unsigned int)folderIdx;
       currentMode->pos[1] = folderIdx;
-      Encoder[1].writeCounter((int32_t)folderIdx);
+      Encoder[2].writeCounter((int32_t)folderIdx);
       int fileCount = (manifestLoaded && folderIdx < (int)manifestFolderCount) ? (int)manifestFileCount[folderIdx] : 0;
       int maxFilesInFolder = fileCount + 1; // include NEW slot
       if (maxFilesInFolder < 1) maxFilesInFolder = 1;
@@ -1499,6 +1502,15 @@ void switchMode(Mode *newMode) {
       if (fileIdx < encMin || fileIdx > encMax) fileIdx = encMin;
       currentMode->pos[3] = fileIdx;
       Encoder[3].writeCounter((int32_t)fileIdx);
+
+      // SeekEnd encoder (Encoder[1]) range 0..100; keep in sync with current seekEnd.
+      Encoder[1].writeMin((int32_t)0);
+      Encoder[1].writeMax((int32_t)100);
+      int seekEnd = (int)GLOB.seekEnd;
+      if (seekEnd <= 0) seekEnd = 100;  // treat 0 as full length
+      seekEnd = constrain(seekEnd, 0, 100);
+      currentMode->pos[2] = seekEnd;
+      Encoder[1].writeCounter((int32_t)seekEnd);
     }
     
     if (currentMode == &filterMode) {
@@ -1757,29 +1769,30 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool inRecsSubmenu;
     extern bool inMidiSubmenu;
     extern bool inVolSubmenu;
+    extern bool inEtcSubmenu;
     extern int currentMenuPage;
     
-    // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
+    // If in LOOK submenu, exit back to main menu at PLAY page (index 5)
     if (inLookSubmenu) {
       inLookSubmenu = false;
-      currentMenuPage = 4;
-      Encoder[3].writeCounter((int32_t)4);
-      return;
-    }
-    
-    // If in RECS submenu, exit back to main menu at RECS page (index 5)
-    if (inRecsSubmenu) {
-      inRecsSubmenu = false;
       currentMenuPage = 5;
       Encoder[3].writeCounter((int32_t)5);
       return;
     }
     
-    // If in MIDI submenu, exit back to main menu at MIDI page (index 6)
-    if (inMidiSubmenu) {
-      inMidiSubmenu = false;
+    // If in RECS submenu, exit back to main menu at RECS page (index 6)
+    if (inRecsSubmenu) {
+      inRecsSubmenu = false;
       currentMenuPage = 6;
       Encoder[3].writeCounter((int32_t)6);
+      return;
+    }
+    
+    // If in MIDI submenu, exit back to main menu at MIDI page (index 7)
+    if (inMidiSubmenu) {
+      inMidiSubmenu = false;
+      currentMenuPage = 7;
+      Encoder[3].writeCounter((int32_t)7);
       return;
     }
     
@@ -1788,6 +1801,22 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       inVolSubmenu = false;
       currentMenuPage = 4;
       Encoder[3].writeCounter((int32_t)4);
+      return;
+    }
+
+    // If in ETC submenu:
+    // - On AUTO (mainSetting 15): encoder(0) press should start generation (not exit)
+    // - Otherwise: exit back to main menu at ETC page (index 9)
+    if (inEtcSubmenu) {
+      extern int getCurrentMenuMainSetting();
+      int etcSetting = getCurrentMenuMainSetting();
+      if (etcSetting == 15) {
+        switchMenu(15); // AUTO generate
+        return;
+      }
+      inEtcSubmenu = false;
+      currentMenuPage = 9;
+      Encoder[3].writeCounter((int32_t)9);
       return;
     }
     
@@ -1816,17 +1845,17 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       switchMenu(mainSetting);
     }
   } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
-    // Exit NEW mode and switch back to DAT view (unchanged)
-    extern void resetNewModeState();
-    resetNewModeState();
-    switchMode(&loadSaveTrack);
-    return;
-  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-    // Generate genre track and exit NEW mode
+    // NEW mode: start generation on encoder(3) press
     extern void generateGenreTrack();
     extern void resetNewModeState();
     resetNewModeState();
     generateGenreTrack();
+    return;
+  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+    // NEW mode: encoder(0) press exits (no generation)
+    extern void resetNewModeState();
+    resetNewModeState();
+    switchMode(&loadSaveTrack);
     return;
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     paintMode = false;
@@ -1851,13 +1880,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     switchMode(&draw);
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-    // Encoder 0 press in SET_WAV: manual preview when PREV mode is set to PRSS
-    if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-      int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
-      int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
-      if (fileIdx < 1) fileIdx = 1;
-      previewSample(folderIdx, fileIdx, false);
-    }
+    // Encoder 0 press in SET_WAV: manual preview (allowed for PREV==ON and PREV==PRSS)
+    int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
+    int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
+    if (fileIdx < 1) fileIdx = 1;
+    previewSample(folderIdx, fileIdx, false);
     return;  // Prevent other button actions from being processed
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     loadWav();
@@ -2801,11 +2828,24 @@ void checkEncoders() {
         }
       }
       currentMode->pos[2] = muteModeEncoderValue;
+    } else if (currentMode == &set_Wav) {
+      // SET_WAV encoder swap:
+      // - Physical Encoder[2] (rotate) drives folder selection -> pos[1]
+      // - Physical Encoder[1] (rotate) drives seekEnd -> pos[2]
+      if (i == 1) {
+        currentMode->pos[2] = rawValue;
+      } else if (i == 2) {
+        currentMode->pos[1] = rawValue;
+      } else {
+        currentMode->pos[i] = rawValue;
+      }
     } else {
       currentMode->pos[i] = rawValue;
     }
 
     // Build hash from encoder positions (skip encoder 2)
+    // Note: In SET_WAV we remap encoder(1)->pos[2], encoder(2)->pos[1], but this hash is only
+    // used to trigger redraws in draw/single modes below.
     if (i != 2) {
       posHash = (posHash << 10) | (currentMode->pos[i] & 0x3FF);  // 10 bits per encoder (0-1023 range)
     }
@@ -3555,27 +3595,33 @@ void checkTouchInputs() {
         extern bool inRecsSubmenu;
         extern bool inMidiSubmenu;
         extern bool inVolSubmenu;
+        extern bool inEtcSubmenu;
         extern int currentMenuPage;
-        // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
+        // If in LOOK submenu, exit back to main menu at PLAY page (index 5)
         if (inLookSubmenu) {
           inLookSubmenu = false;
-          currentMenuPage = 4;
-          Encoder[3].writeCounter((int32_t)4);
-        } else if (inRecsSubmenu) {
-          // If in RECS submenu, exit back to main menu at RECS page (index 5)
-          inRecsSubmenu = false;
           currentMenuPage = 5;
           Encoder[3].writeCounter((int32_t)5);
-        } else if (inMidiSubmenu) {
-          // If in MIDI submenu, exit back to main menu at MIDI page (index 6)
-          inMidiSubmenu = false;
+        } else if (inRecsSubmenu) {
+          // If in RECS submenu, exit back to main menu at RECS page (index 6)
+          inRecsSubmenu = false;
           currentMenuPage = 6;
           Encoder[3].writeCounter((int32_t)6);
+        } else if (inMidiSubmenu) {
+          // If in MIDI submenu, exit back to main menu at MIDI page (index 7)
+          inMidiSubmenu = false;
+          currentMenuPage = 7;
+          Encoder[3].writeCounter((int32_t)7);
         } else if (inVolSubmenu) {
           // If in VOL submenu, exit back to main menu at VOL page (index 4)
           inVolSubmenu = false;
           currentMenuPage = 4;
           Encoder[3].writeCounter((int32_t)4);
+        } else if (inEtcSubmenu) {
+          // If in ETC submenu, exit back to main menu at ETC page (index 9)
+          inEtcSubmenu = false;
+          currentMenuPage = 9;
+          Encoder[3].writeCounter((int32_t)9);
         } else {
           // Otherwise exit to draw mode
           switchMode(&draw);
@@ -3614,27 +3660,33 @@ void checkTouchInputs() {
         extern bool inRecsSubmenu;
         extern bool inMidiSubmenu;
         extern bool inVolSubmenu;
+        extern bool inEtcSubmenu;
         extern int currentMenuPage;
-        // If in LOOK submenu, exit back to main menu at LOOK page (index 4)
+        // If in LOOK submenu, exit back to main menu at PLAY page (index 5)
         if (inLookSubmenu) {
           inLookSubmenu = false;
-          currentMenuPage = 4;
-          Encoder[3].writeCounter((int32_t)4);
-        } else if (inRecsSubmenu) {
-          // If in RECS submenu, exit back to main menu at RECS page (index 5)
-          inRecsSubmenu = false;
           currentMenuPage = 5;
           Encoder[3].writeCounter((int32_t)5);
-        } else if (inMidiSubmenu) {
-          // If in MIDI submenu, exit back to main menu at MIDI page (index 6)
-          inMidiSubmenu = false;
+        } else if (inRecsSubmenu) {
+          // If in RECS submenu, exit back to main menu at RECS page (index 6)
+          inRecsSubmenu = false;
           currentMenuPage = 6;
           Encoder[3].writeCounter((int32_t)6);
+        } else if (inMidiSubmenu) {
+          // If in MIDI submenu, exit back to main menu at MIDI page (index 7)
+          inMidiSubmenu = false;
+          currentMenuPage = 7;
+          Encoder[3].writeCounter((int32_t)7);
         } else if (inVolSubmenu) {
           // If in VOL submenu, exit back to main menu at VOL page (index 4)
           inVolSubmenu = false;
           currentMenuPage = 4;
           Encoder[3].writeCounter((int32_t)4);
+        } else if (inEtcSubmenu) {
+          // If in ETC submenu, exit back to main menu at ETC page (index 9)
+          inEtcSubmenu = false;
+          currentMenuPage = 9;
+          Encoder[3].writeCounter((int32_t)9);
         } else {
           // Otherwise exit to draw mode
           switchMode(&draw);
@@ -3695,9 +3747,12 @@ void checkSingleTouch() {
       GLOB.singleMode = true;
     } else if (currentMode == &menu) {
       extern bool inLookSubmenu;
+      extern bool inEtcSubmenu;
       // If in LOOK submenu, exit back to main menu
       if (inLookSubmenu) {
         inLookSubmenu = false;
+      } else if (inEtcSubmenu) {
+        inEtcSubmenu = false;
       } else {
         // Otherwise exit to draw mode
         if (currentMode == &singleMode) {
@@ -4359,10 +4414,11 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     unpaint();
   }
 
-  // Handle encoder 2 press in SET_WAV mode - reverse preview sample
-  if (currentMode == &set_Wav && pressed[2] == true && !isRecording) {
-    pressed[2] = false;
-    Serial.println("Encoder 2 pressed in SET_WAV mode - reversing preview");
+  // Handle encoder 1 press in SET_WAV mode - reverse preview sample
+  // (Encoder functions are swapped: Encoder[2]=folder select, Encoder[1]=seekEnd + invert)
+  if (currentMode == &set_Wav && pressed[1] == true && !isRecording) {
+    pressed[1] = false;
+    Serial.println("Encoder 1 pressed in SET_WAV mode - reversing preview");
     reversePreviewSample();
   }
 
@@ -4383,10 +4439,12 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     extern bool inRecsSubmenu;
     extern bool inMidiSubmenu;
     extern bool inVolSubmenu;
+    extern bool inEtcSubmenu;
     extern void showLookMenu();
     extern void showRecsMenu();
     extern void showMidiMenu();
     extern void showVolMenu();
+    extern void showEtcMenu();
     if (inLookSubmenu) {
       showLookMenu();
     } else if (inRecsSubmenu) {
@@ -4395,6 +4453,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       showMidiMenu();
     } else if (inVolSubmenu) {
       showVolMenu();
+    } else if (inEtcSubmenu) {
+      showEtcMenu();
     } else {
       showMenu();
     }
@@ -5942,9 +6002,13 @@ void showLoadSave() {
   drawNoSD();
   FastLEDclear();
 
-  // Show big icons
-  showIcons(ICON_LOADSAVE, UI_DIM_GREEN);
-  showIcons(ICON_LOADSAVE2, UI_WHITE);
+  // FILE icon: green if loading is possible (file exists), dim red otherwise.
+  // Move icon down to y=3..9 (oy=7).
+  char OUTPUTf[50];
+  sprintf(OUTPUTf, "%u.txt", SMP.file);
+  bool txtExists = SD.exists(OUTPUTf);
+  CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
+  showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
   
   // New indicator system: file: M[G] | M[R] | C[W] (conditional) | L[X]
   drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
@@ -5956,10 +6020,7 @@ void showLoadSave() {
   drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
   
   // Check for .txt file
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "%u.txt", SMP.file);
-  
-  bool txtExists = SD.exists(OUTPUTf);
+  // (OUTPUTf/txtExists already computed above for icon color)
   
   if (txtExists) {
     // .txt file exists - bright green for load, dark red for save
@@ -5999,8 +6060,13 @@ void showSamplePack() {
   drawNoSD();
   FastLEDclear();
 
-  // Show big icons
-  showIcons(ICON_SAMPLEPACK, UI_DIM_YELLOW);
+  // Samplepack icon: green if loading is possible (pack exists), dim red otherwise.
+  // Move icon down to y=3..9 (oy=7).
+  char OUTPUTf[50];
+  sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);
+  bool wavExists = SD.exists(OUTPUTf);
+  CRGB packIconColor = wavExists ? UI_GREEN : UI_DIM_RED;
+  showIconsAt(OLD_ICON_SAMPLEPACK, packIconColor, 2, 7);
   
   // New indicator system: pack: M[G] | M[R] | | L[X]
   drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
@@ -6009,9 +6075,8 @@ void showSamplePack() {
   drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
   
   // Apply different colors for load/save operations based on file existence
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);
-  if (SD.exists(OUTPUTf)) {
+  // (OUTPUTf/wavExists already computed above for icon color)
+  if (wavExists) {
     // File exists - bright green for load, dark red for save
     drawIndicator('M', 'G', 1);   // Bright green for load
     drawIndicator('M', 'D', 2);   // Dark red for save
@@ -6068,7 +6133,8 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
     Serial.println("--- Loading Regular Samplepack (overwrite) ---");
     for (unsigned int z = 1; z < maxFiles; z++) {
       if (!intro) {
-        showIcons(ICON_SAMPLE, UI_BG_DIM);
+        // wave = sample
+        showIcons(ICON_SAMPLE_BIG, UI_BG_DIM);
       } else {
         drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
       }
@@ -6090,7 +6156,8 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
         Serial.println(" from SAMPLEPACK 0 <<<");
         
         if (!intro) {
-          showIcons(ICON_SAMPLE, UI_BG_DIM);
+          // wave = sample
+          showIcons(ICON_SAMPLE_BIG, UI_BG_DIM);
         } else {
           drawText("SP0", 2, 11, col[(maxFiles + 1) - z]);
         }
@@ -6108,7 +6175,8 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
         Serial.println(pack_id);
         
         if (!intro) {
-          showIcons(ICON_SAMPLE, UI_BG_DIM);
+          // wave = sample
+          showIcons(ICON_SAMPLE_BIG, UI_BG_DIM);
         } else {
           drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
         }
