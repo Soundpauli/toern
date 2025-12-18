@@ -442,7 +442,6 @@ bool patternChangeActive = false;
 
 // Replaced String with hash for memory efficiency (~100-200 bytes saved)
 uint32_t oldPosHash = 0;
-// String buttonString, oldButtonString = "0000"; // REMOVED
 uint8_t oldButtons[NUM_ENCODERS] = { 0, 0, 0, 0 };  // Changed from int to uint8_t (4 bytes saved per element)
 
 unsigned long playStartTime = 0;  // To track when play(true) was last called
@@ -1048,7 +1047,6 @@ FLASHMEM void setVelocity() {
   if (currentMode->pos[2] != GLOB.velocity) {
     SMP.channelVol[GLOB.currentChannel] = currentMode->pos[2];
     float channelvolume = mapf(SMP.channelVol[GLOB.currentChannel], 0, maxY, 0, 1);
-    //Serial.println(channelvolume);
     amps[GLOB.currentChannel]->gain(channelvolume);
   }
 
@@ -1334,8 +1332,6 @@ void switchMode(Mode *newMode) {
       | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
   }
   /// NEW ACTIONS
-  //Serial.println(newMode->name);
-  // oldButtonString = buttonString; // REMOVED
   // Synchronize oldButtons with current buttons state
   memcpy(oldButtons, buttons, sizeof(buttons));  // ADDED
 
@@ -1448,7 +1444,14 @@ void switchMode(Mode *newMode) {
 
     // Special handling for singleMode - set currentChannel color on encoders[0] and [3]
     if (currentMode == &singleMode) {
-      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      extern int drawMode;
+      if (drawMode == 0) {
+        // L+R mode: color encoder(0) with channel color
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        // R mode: don't color encoder(0)
+        Encoder[0].writeRGBCode(0x000000);
+      }
       Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     }
 
@@ -1592,7 +1595,6 @@ void checkFastRec() {
           startFastRecord();
           return;
         } else if (!pinsConnected && fastRecordActive) {
-          //Serial.println(">> stopFastRecord from pin 2+4");
           stopFastRecord();
         }
       }
@@ -1600,11 +1602,9 @@ void checkFastRec() {
       if (SMP_FAST_REC == 3) {
         if (!pinsConnected && !fastRecordActive) {
           if (!allowStart) return;
-          //Serial.println(">> startFastRecord from pin 2+4");
           startFastRecord();
           return;
         } else if (pinsConnected && fastRecordActive) {
-          //Serial.println(">> stopFastRecord from pin 2+4");
           stopFastRecord();
         }
       }
@@ -1698,7 +1698,6 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   if ((currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010"
 
     if (!isNowPlaying) {
-      //Serial.println("PLAY");
       play(true);
     } else {
       unsigned long currentTime = millis();
@@ -1771,14 +1770,6 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool inVolSubmenu;
     extern bool inEtcSubmenu;
     extern int currentMenuPage;
-    
-    // If in LOOK submenu, exit back to main menu at PLAY page (index 5)
-    if (inLookSubmenu) {
-      inLookSubmenu = false;
-      currentMenuPage = 5;
-      Encoder[3].writeCounter((int32_t)5);
-      return;
-    }
     
     // If in RECS submenu, exit back to main menu at RECS page (index 6)
     if (inRecsSubmenu) {
@@ -2011,7 +2002,14 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
     
     // Update encoder colors to reflect new channel
-    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    extern int drawMode;
+    if (drawMode == 0) {
+      // L+R mode: color encoder(0) with channel color
+      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    } else {
+      // R mode: don't color encoder(0)
+      Encoder[0].writeRGBCode(0x000000);
+    }
     Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     
     // Update channel volume encoder
@@ -2026,75 +2024,81 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
 
-  if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
-    unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
-    GLOB.velocity = velo;
-    
-    // Map probability to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
-    unsigned int prob = note[GLOB.x][GLOB.y].probability;
-    unsigned int probStep;
-    if (prob == 0) probStep = 1;
-    else if (prob == 25) probStep = 2;
-    else if (prob == 50) probStep = 3;
-    else if (prob == 75) probStep = 4;
-    else probStep = 5;  // 100%
-    
-    // Map condition to encoder range 1-9
-    // Values 1-16: 1/X conditions -> positions 1-5
-    // Values 17-20: X/1 conditions -> positions 6-9
-    uint8_t cond = note[GLOB.x][GLOB.y].condition;
-    if (cond == 0) cond = 1;  // Default to 1 if not set
-    unsigned int condStep;
-    if (cond <= 16) {
-      condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
-    } else {
-      condStep = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+  // Velocity mode entry on encoder(3) long press - skip in R mode
+  extern int drawMode;
+  if (drawMode == 0) {
+    // L+R mode: allow velocity mode entry on encoder(3) long press
+    if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
+      unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
+      GLOB.velocity = velo;
+      
+      // Map probability to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
+      unsigned int prob = note[GLOB.x][GLOB.y].probability;
+      unsigned int probStep;
+      if (prob == 0) probStep = 1;
+      else if (prob == 25) probStep = 2;
+      else if (prob == 50) probStep = 3;
+      else if (prob == 75) probStep = 4;
+      else probStep = 5;  // 100%
+      
+      // Map condition to encoder range 1-9
+      // Values 1-16: 1/X conditions -> positions 1-5
+      // Values 17-20: X/1 conditions -> positions 6-9
+      uint8_t cond = note[GLOB.x][GLOB.y].condition;
+      if (cond == 0) cond = 1;  // Default to 1 if not set
+      unsigned int condStep;
+      if (cond <= 16) {
+        condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+      } else {
+        condStep = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+      }
+      
+      switchMode(&velocity);
+      GLOB.singleMode = true;
+      Encoder[0].writeCounter((int32_t)velo);
+      Encoder[1].writeCounter((int32_t)probStep);
+      Encoder[3].writeCounter((int32_t)condStep);
+      currentMode->pos[1] = probStep;
+      currentMode->pos[3] = condStep;
     }
-    
-    switchMode(&velocity);
-    GLOB.singleMode = true;
-    Encoder[0].writeCounter((int32_t)velo);
-    Encoder[1].writeCounter((int32_t)probStep);
-    Encoder[3].writeCounter((int32_t)condStep);
-    currentMode->pos[1] = probStep;
-    currentMode->pos[3] = condStep;
-  }
 
-  if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &draw) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
-    unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
-    unsigned int chvol = SMP.channelVol[GLOB.currentChannel];
-    GLOB.velocity = velo;
-    
-    // Map probability to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
-    unsigned int prob = note[GLOB.x][GLOB.y].probability;
-    unsigned int probStep;
-    if (prob == 0) probStep = 1;
-    else if (prob == 25) probStep = 2;
-    else if (prob == 50) probStep = 3;
-    else if (prob == 75) probStep = 4;
-    else probStep = 5;  // 100%
-    
-    // Map condition to encoder range 1-9
-    // Values 1-16: 1/X conditions -> positions 1-5
-    // Values 17-20: X/1 conditions -> positions 6-9
-    uint8_t cond = note[GLOB.x][GLOB.y].condition;
-    if (cond == 0) cond = 1;  // Default to 1 if not set
-    unsigned int condStep;
-    if (cond <= 16) {
-      condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
-    } else {
-      condStep = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+    if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &draw) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
+      unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
+      unsigned int chvol = SMP.channelVol[GLOB.currentChannel];
+      GLOB.velocity = velo;
+      
+      // Map probability to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
+      unsigned int prob = note[GLOB.x][GLOB.y].probability;
+      unsigned int probStep;
+      if (prob == 0) probStep = 1;
+      else if (prob == 25) probStep = 2;
+      else if (prob == 50) probStep = 3;
+      else if (prob == 75) probStep = 4;
+      else probStep = 5;  // 100%
+      
+      // Map condition to encoder range 1-9
+      // Values 1-16: 1/X conditions -> positions 1-5
+      // Values 17-20: X/1 conditions -> positions 6-9
+      uint8_t cond = note[GLOB.x][GLOB.y].condition;
+      if (cond == 0) cond = 1;  // Default to 1 if not set
+      unsigned int condStep;
+      if (cond <= 16) {
+        condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+      } else {
+        condStep = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+      }
+      
+      GLOB.singleMode = false;
+      switchMode(&velocity);
+      Encoder[0].writeCounter((int32_t)velo);
+      Encoder[1].writeCounter((int32_t)probStep);
+      Encoder[2].writeCounter((int32_t)chvol);
+      Encoder[3].writeCounter((int32_t)condStep);
+      currentMode->pos[1] = probStep;
+      currentMode->pos[3] = condStep;
     }
-    
-    GLOB.singleMode = false;
-    switchMode(&velocity);
-    Encoder[0].writeCounter((int32_t)velo);
-    Encoder[1].writeCounter((int32_t)probStep);
-    Encoder[2].writeCounter((int32_t)chvol);
-    Encoder[3].writeCounter((int32_t)condStep);
-    currentMode->pos[1] = probStep;
-    currentMode->pos[3] = condStep;
   }
+  // R mode: encoder(3) long press is handled below (paintMode/unpaintMode activation)
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 2)) {  // "2002"
     clearPage();
@@ -2189,10 +2193,6 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     //set loaded sample
   }
 
-  //if ((currentMode == &draw) && match_buttons(currentButtonStates, 2, 2, 0, 0)) {  // "2200"
-    //switchMode(&set_SamplePack);
-  //}
-
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     // At y==1 in draw mode with CTRL==VOL: cycle input monitoring (off -> on -> all -> off)
     if (currentMode == &draw && GLOB.y == 1 && ctrlMode == 1) {
@@ -2244,11 +2244,42 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
+  // R mode: encoder(3) short press - one-time paint/unpaint (no flags)
+  extern int drawMode;
+  if (drawMode == 1 && (currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 1) && !preventPaintUnpaint) {  // "0001" - short press release
+    // Toggle based on current note state: if note exists, unpaint it; if empty, paint it
+    if (note[GLOB.x][GLOB.y].channel == 0) {
+      // Note is empty - paint it
+      freshPaint = true;
+      paint();
+    } else {
+      // Note exists - unpaint it
+      unpaint();
+    }
+    preventPaintUnpaint = false;
+  }
+
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
-    // Only activate paintMode if we're actually in draw/singleMode (safety check)
+    // Only activate paintMode/unpaintMode if we're actually in draw/singleMode (safety check)
     if (currentMode == &draw || currentMode == &singleMode) {
-    paintMode = true;
-    preventPaintUnpaint = false;  // Reset flag when paintMode is activated
+      if (drawMode == 0) {
+        // L+R mode: always activate paintMode on long press
+        paintMode = true;
+        unpaintMode = false;
+        preventPaintUnpaint = false;  // Reset flag when paintMode is activated
+      } else {
+        // R mode: activate paintMode or unpaintMode based on note state
+        if (note[GLOB.x][GLOB.y].channel == 0) {
+          // Note is empty - activate paintMode
+          paintMode = true;
+          unpaintMode = false;
+        } else {
+          // Note exists - activate unpaintMode
+          paintMode = false;
+          unpaintMode = true;
+        }
+        preventPaintUnpaint = false;  // Reset flag when mode is activated
+      }
     }
   }
 
@@ -2263,13 +2294,18 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
+    extern int drawMode;
+    // In R mode, encoder(0) never unpaints - skip unpaint functionality
+    if (drawMode == 1) {
+      return;  // Skip unpaint in R mode
+    }
     // In single mode, trigger random function ONLY when y=16
     if (GLOB.singleMode && GLOB.y == 16) {
       drawRandoms();
       preventPaintUnpaint = true;  // Prevent paint/unpaint after random
       return;  // Prevent other button actions from being processed
     } else {
-      // Normal unpaint functionality for draw mode
+      // Normal unpaint functionality for draw mode (L+R mode only)
       unpaint();
       unpaintMode = true;
       deleteActiveCopy();
@@ -2290,8 +2326,6 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if (reset) {
     // Reset states after handling
-    // buttonString = "0000"; // REMOVED
-    // oldButtonString = buttonString; // REMOVED
     // `oldButtons` will be updated by `checkButtons` after this reset is reflected in `buttons`
 
     for (int i = 0; i < NUM_ENCODERS; i++) {
@@ -2344,7 +2378,9 @@ void initSoundChip() {
   //REC
   sgtl5000_1.inputSelect(recInput);
   sgtl5000_1.micGain(micGain);  //0-63
-  //sgtl5000_1.adcHighPassFilterEnable();
+  
+  
+  sgtl5000_1.adcHighPassFilterEnable(); //ENABLED //matze
   //sgtl5000_1.adcHighPassFilterDisable();  //for mic?
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(lineOutLevelSetting);
@@ -2479,8 +2515,6 @@ void initSamples() {
   }
 
   for (unsigned int i = 0; i < 9; i++) {
-    ////Serial.print("Enabling channel/voice:");
-    ////Serial.println(i);
     if (voices[i]) {  // Check if voice exists
       voices[i]->enableInterpolation(true);
     }
@@ -2511,7 +2545,6 @@ void checkCrashReport() {
     Serial.print(CrashReport);
   }
   delay(1000);
-  //Serial.println("clearing EEPROM and autosaved.txt...");
   for (unsigned int i = 0; i < EEPROM.length(); i++) EEPROM.write(i, 0);
   char OUTPUTf[50];
   sprintf(OUTPUTf, "autosaved.txt");
@@ -2519,13 +2552,11 @@ void checkCrashReport() {
     SD.remove(OUTPUTf);
   }
   delay(2000);
-  //Serial.println("clearing completed.");
 }
 
 
 
 void initEncoders() {
-  //Serial.println("I2C Encoder init...");
   for (int i = 0; i < NUM_ENCODERS; i++) {
     // Set the global encoder index for callbacks
     currentEncoderIndex = i;
@@ -2863,7 +2894,6 @@ void checkEncoders() {
     }
 
     handle_button_state(&Encoder[i], i);  // This updates buttons[i] based on new physical state
-    // buttonString += String(buttons[i]); // REMOVED
   }
 
   // Handle subpattern mode encoder[1] changes and auto-exit on release
@@ -2957,7 +2987,14 @@ void checkEncoders() {
        // drawText(pianoNoteNames[12 - GLOB.y + 1  + GLOB.currentChannel], 3, 5, CRGB(200, 50, 0));
       //}
 
-      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      extern int drawMode;
+      if (drawMode == 0) {
+        // L+R mode: color encoder(0) with channel color
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        // R mode: don't color encoder(0)
+        Encoder[0].writeRGBCode(0x000000);
+      }
       Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       
       // Only update edit page from X position if NOT in song mode and NOT in active FLOW-follow playback.
@@ -3088,7 +3125,6 @@ void checkEncoders() {
     if (ctrlMode == 0 && currentMode->pos[1] != editpage && !songModeActive) {
       updateLastPage();
       editpage = currentMode->pos[1];
-      //Serial.println("p:" + String(editpage));
       int xval = mapXtoPageOffset(GLOB.x) + ((editpage - 1) * maxX);  // Use maxX instead of hardcoded 16
       Encoder[3].writeCounter((int32_t)xval);
       GLOB.x = xval;
@@ -3293,7 +3329,6 @@ void checkEncoders() {
   
 
   if (filterDrawActive) {
-      //Serial.println("active");
       if (millis() <= filterDrawEndTime) {
         
         FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
@@ -3350,10 +3385,6 @@ void checkButtons() {
         buttons[i] = 0;  // Invalidate: "9" can only come from state 1 or 2
       }
     }
-
-    Serial.print("Button event for checkMode (from checkButtons): ");
-    for (int i = 0; i < NUM_ENCODERS; ++i) Serial.print(buttons[i]);
-    Serial.println();
 
     // Create a temporary copy for checkMode to use, so checkMode cannot inadvertently
     // alter the state `checkButtons` intends to process for consumption logic later,
@@ -3627,7 +3658,12 @@ void checkTouchInputs() {
           switchMode(&draw);
           GLOB.singleMode = false;
           // Update encoder colors to reflect the new currentChannel when switching to draw mode
-          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          extern int drawMode;
+          if (drawMode == 0) {
+            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          } else {
+            Encoder[0].writeRGBCode(0x000000);
+          }
           Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
         }
       } else {  // If in any other mode, and Switch 1 is touched, go to draw mode.
@@ -3637,7 +3673,12 @@ void checkTouchInputs() {
         switchMode(&draw);
         GLOB.singleMode = false;
         // Update encoder colors to reflect the new currentChannel when switching to draw mode
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     }
@@ -3653,21 +3694,21 @@ void checkTouchInputs() {
         resetNewModeState();
         switchMode(&draw);
         // Update encoder colors to reflect the current channel when exiting newFileMode
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &menu) {
-        extern bool inLookSubmenu;
         extern bool inRecsSubmenu;
         extern bool inMidiSubmenu;
         extern bool inVolSubmenu;
         extern bool inEtcSubmenu;
         extern int currentMenuPage;
-        // If in LOOK submenu, exit back to main menu at PLAY page (index 5)
-        if (inLookSubmenu) {
-          inLookSubmenu = false;
-          currentMenuPage = 5;
-          Encoder[3].writeCounter((int32_t)5);
-        } else if (inRecsSubmenu) {
+        // If in RECS submenu, exit back to main menu at RECS page (index 6)
+        if (inRecsSubmenu) {
           // If in RECS submenu, exit back to main menu at RECS page (index 6)
           inRecsSubmenu = false;
           currentMenuPage = 6;
@@ -3691,13 +3732,23 @@ void checkTouchInputs() {
           // Otherwise exit to draw mode
           switchMode(&draw);
           // Update encoder colors to reflect the current channel when exiting menu
-          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          extern int drawMode;
+          if (drawMode == 0) {
+            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          } else {
+            Encoder[0].writeRGBCode(0x000000);
+          }
           Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
         }
       } else {  // If in any other mode (e.g. set_wav, etc.) and Switch 2 is touched, go to draw mode.
         switchMode(&draw);
         // Update encoder colors to reflect the current channel when exiting other modes
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     }
@@ -3761,7 +3812,12 @@ void checkSingleTouch() {
         switchMode(&draw);
         GLOB.singleMode = false;
         // Update encoder colors to reflect the new currentChannel when switching to draw mode
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     } else {
@@ -3771,7 +3827,12 @@ void checkSingleTouch() {
       switchMode(&draw);
       GLOB.singleMode = false;
       // Update encoder colors to reflect the new currentChannel when switching to draw mode
-      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
       Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     }
   }
@@ -3798,13 +3859,23 @@ void _checkMenuTouch() {
         // Otherwise exit to draw mode
         switchMode(&draw);
         // Update encoder colors to reflect the current channel when exiting menu
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     } else {
       switchMode(&draw);
       // Update encoder colors to reflect the current channel when exiting menu
-      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
       Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     }
   }
@@ -4397,21 +4468,102 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     preventPaintUnpaintSetTime = 0;
   }
 
-  if (note[GLOB.x][GLOB.y].channel == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
-    paintMode = false;
-    freshPaint = true;
-    unpaintMode = false;
-    pressed[3] = false;
-    paint();
-    preventPaintUnpaint = false;  // Reset flag after paint operation
-    // return; // This return might skip drawing updates if not careful
-  }
+  // Handle encoder presses based on DRAW mode
+  extern int drawMode;  // 0 = L+R (default), 1 = R (right-hand only)
+  
+  if (drawMode == 0) {
+    // L+R mode: encoder(3) paints, encoder(0) unpaints (current behavior)
+    if (note[GLOB.x][GLOB.y].channel == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
+      paintMode = false;
+      freshPaint = true;
+      unpaintMode = false;
+      pressed[3] = false;
+      paint();
+      preventPaintUnpaint = false;  // Reset flag after paint operation
+      // return; // This return might skip drawing updates if not careful
+    }
 
-  if ((currentMode == &draw || currentMode == &singleMode) && pressed[0] == true && !preventPaintUnpaint) {
-    paintMode = false;
-    unpaintMode = false;
-    pressed[0] = false;
-    unpaint();
+    // In R mode, encoder(0) never unpaints - skip unpaint functionality
+    extern int drawMode;
+    if (drawMode == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[0] == true && !preventPaintUnpaint) {
+      paintMode = false;
+      unpaintMode = false;
+      pressed[0] = false;
+      unpaint();
+    }
+    } else {
+    // R mode: encoder(3) short press is handled in checkMode() using button events
+    // encoder(0) velocity editor is handled below
+
+    // R mode: encoder(0) shows velocity editor only while held
+    static Mode* rModeSavedMode = nullptr;
+    static bool encoder0PressedOnEmptyNote = false;  // Track if encoder(0) was pressed on empty note
+    extern bool isPressed[NUM_ENCODERS];
+    
+    // Check if encoder(0) button is currently pressed (held down)
+    bool encoder0Held = isPressed[0];
+    
+    // Track when encoder(0) is pressed on an empty note
+    static bool lastEncoder0State = false;
+    if (encoder0Held && !lastEncoder0State) {
+      // Encoder(0) was just pressed - check if note has value
+      if (note[GLOB.x][GLOB.y].channel == 0) {
+        encoder0PressedOnEmptyNote = true;  // Mark that it was pressed on empty note
+      } else {
+        encoder0PressedOnEmptyNote = false;  // Reset if pressed on note with value
+      }
+    }
+    lastEncoder0State = encoder0Held;
+    
+    // Reset flag when encoder(0) is released
+    if (!encoder0Held) {
+      encoder0PressedOnEmptyNote = false;
+    }
+    
+    if ((currentMode == &draw || currentMode == &singleMode) && encoder0Held) {
+      // Button is held - enter velocity mode if not already in it
+      // Only trigger if note has value AND encoder(0) was not pressed on empty note
+      if (currentMode != &velocity && !encoder0PressedOnEmptyNote) {
+        rModeSavedMode = currentMode;
+        if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0) {
+          unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
+          unsigned int chvol = SMP.channelVol[GLOB.currentChannel];
+          GLOB.velocity = velo;
+          
+          // Map probability to encoder range 1-5 (0%, 25%, 50%, 75%, 100%)
+          unsigned int prob = note[GLOB.x][GLOB.y].probability;
+          unsigned int probStep;
+          if (prob == 0) probStep = 1;
+          else if (prob == 25) probStep = 2;
+          else if (prob == 50) probStep = 3;
+          else if (prob == 75) probStep = 4;
+          else probStep = 5;  // 100%
+          
+          // Map condition to encoder range 1-9
+          uint8_t cond = note[GLOB.x][GLOB.y].condition;
+          if (cond == 0) cond = 1;  // Default to 1 if not set
+          unsigned int condStep;
+          if (cond <= 16) {
+            condStep = (cond == 1) ? 1 : (cond == 2) ? 2 : (cond == 4) ? 3 : (cond == 8) ? 4 : 5;
+          } else {
+            condStep = (cond == 17) ? 6 : (cond == 18) ? 7 : (cond == 19) ? 8 : 9;
+          }
+          
+          GLOB.singleMode = (rModeSavedMode == &singleMode);
+          switchMode(&velocity);
+          Encoder[0].writeCounter((int32_t)velo);
+          Encoder[1].writeCounter((int32_t)probStep);
+          Encoder[2].writeCounter((int32_t)chvol);
+          Encoder[3].writeCounter((int32_t)condStep);
+          currentMode->pos[1] = probStep;
+          currentMode->pos[3] = condStep;
+        }
+      }
+    } else if (currentMode == &velocity && rModeSavedMode != nullptr && !encoder0Held) {
+      // Button released - exit velocity mode and return to saved mode
+      switchMode(rModeSavedMode);
+      rModeSavedMode = nullptr;
+    }
   }
 
   // Handle encoder 1 press in SET_WAV mode - reverse preview sample
@@ -5186,9 +5338,11 @@ void playNote() {
 
 
     /*if (patternChangeActive){
-    if (millis() <= patternChangeTime) {          
-          //Serial.println(editpage);
-    }else{patternChangeActive=false;}
+    if (millis() <= patternChangeTime) {
+      // Pattern change active
+    } else {
+      patternChangeActive = false;
+    }
     }
     drawPatternChange(GLOB.edit);
     */
@@ -5282,7 +5436,6 @@ void playNote() {
       }
       if (fastRecordActive) stopFastRecord();
       isNowPlaying = true;  // Should already be true if MIDI clock started it
-      //Serial.println("4 Bars Reached");
       waitForFourBars = false;  // Reset for the next start message
     }
 
@@ -5468,7 +5621,6 @@ void checkPages() {
 
 
 void unpaint() {
-  //GLOB.edit = 1; // This line seems to do nothing or is misintended. editpage is used for current page.
   paintMode = false;
   preventPaintUnpaint = false;  // Reset flag when unpaint function is called
   // GLOB.x is already global X (1 to maxlen-1), GLOB.y is global Y (1 to maxY)
@@ -5560,8 +5712,6 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
 
 
 void paint() {
-  //GLOB.edit = 1; // Same as in unpaint, probably not intended here.
-  //Serial.println("!!!PAINT!");
   preventPaintUnpaint = false;  // Reset flag when paint function is called
 
   unsigned int current_x = GLOB.x;  // Use global cursor X
@@ -5658,12 +5808,9 @@ void paint() {
 
 
 void toggleCopyPaste() {
-
-  //GLOB.edit = 1;
   if (!GLOB.activeCopy) {
 
     // copy the pattern into the memory
-    Serial.print("copy now");
     unsigned int src = 0;
     for (unsigned int c = ((GLOB.edit - 1) * maxX) + 1; c < ((GLOB.edit - 1) * maxX) + (maxX + 1); c++) {  // maxy?
       src++;
@@ -5690,7 +5837,6 @@ void toggleCopyPaste() {
   } else {
 
     // paste the memory into the song
-    Serial.print("paste here!");
     unsigned int src = 0;
     for (unsigned int c = ((GLOB.edit - 1) * maxX) + 1; c < ((GLOB.edit - 1) * maxX) + (maxX + 1); c++) {
       src++;
@@ -5766,7 +5912,6 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
 void updateVolume() {
   GLOB.vol = currentMode->pos[2];
   float vol = float(GLOB.vol / 10.0);
-  //Serial.println("Vol: " + String(vol));
   if (vol >= 0.0 && vol <= 1.0) sgtl5000_1.volume(vol);  // Ensure vol is in valid range
 }
 
@@ -5804,7 +5949,6 @@ void updateBrightness() {
   // If pos[1] is 25 -> 250+4-50 = 204
   // Brightness for FastLED is 0-255.
   ledBrightness = constrain((currentMode->pos[1] * 10) - 46, 10, 255);  // Simplified and constrained
-  //Serial.println("Brightness: " + String(ledBrightness));
   FastLED.setBrightness(ledBrightness);
 }
 
@@ -5842,7 +5986,12 @@ FLASHMEM void switchSubPattern() {
     }
 
     drawIndicator('L', 'W', 3);
-    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    extern int drawMode;
+    if (drawMode == 0) {
+      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    } else {
+      Encoder[0].writeRGBCode(0x000000);
+    }
     CRGB whiteColor = getIndicatorColor('W');
     Encoder[2].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
     Encoder[1].writeRGBCode(0x000000);
@@ -5904,8 +6053,6 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir) {
 
 FLASHMEM void updateBPM() {
   if (MIDI_CLOCK_SEND) {
-    
-    //Serial.println("BPM: " + String(currentMode->pos[3]));
     SMP.bpm = currentMode->pos[3];                                    // BPM from encoder
     if (SMP.bpm > 0) {                                                // Avoid division by zero
       playNoteInterval = ((60.0 * 1000.0 / SMP.bpm) / 4.0) * 1000.0;  // Use floats for precision
@@ -6101,13 +6248,11 @@ void showSamplePack() {
   FastLED.setBrightness(ledBrightness);
   FastLEDshow();
   if (currentMode->pos[3] != SMP.pack) {
-    //Serial.println("File: " + String(currentMode->pos[3]));
     SMP.pack = currentMode->pos[3];
   }
 }
 
 void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) {  // Renamed pack to pack_id to avoid conflict
-  //Serial.println("Loading SamplePack #" + String(pack_id));
   drawNoSD();
   
   // Validate pack_id - ensure it's within valid range (0-99)
@@ -6262,8 +6407,6 @@ void loadWav() {
   FastLEDshow();
 
   playSdWav1.stop();
-
-  //Serial.println("Loading Wave :" + String(SMP.wav[GLOB.currentChannel].fileID));
   
   // Load the preview sample (which may be reversed/edited) to the target channel
   // This copies from sampled[0] (preview) to sampled[targetChannel]

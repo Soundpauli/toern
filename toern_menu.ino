@@ -1,6 +1,6 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 9
+#define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 3
 #define MIDI_PAGES_COUNT 2
 #define VOL_PAGES_COUNT 5
@@ -39,7 +39,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"ETC", 34, false, nullptr}           // ETC submenu (AUTO, RST)
 };
 
-// LOOK submenu pages
+// LOOK/PLAY submenu pages (PLAY menu uses LOOK submenu)
 MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"FLW", 10, false, nullptr},          // Flow Mode
   {"PREV", 33, false, nullptr},         // Preview trigger mode (ON/PRSS)
@@ -49,7 +49,8 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"CTRL", 25, false, nullptr},         // Encoder control mode
   {"LEDS", 23, false, nullptr},         // LED Modules Count (1 or 2)
   {"PONG", 24, false, nullptr},         // Pong Toggle
-  {"CRSR", 32, false, nullptr}          // Cursor Type (NORM/CHNR/BIG)
+  {"CRSR", 32, false, nullptr},         // Cursor Type (NORM/CHNR/BIG)
+  {"DRAW", 38, false, nullptr}          // DRAW mode toggle (L+R / R)
 };
 
 static inline uint16_t pongSpeedToInterval(int speed) {
@@ -90,6 +91,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"RST", 16, true, "MODE"}             // Reset Effects
 };
 
+
 int currentMenuPage = 0;
 int currentLookPage = 0;
 int currentRecsPage = 0;
@@ -115,13 +117,16 @@ bool newScreenFirstEnter = true;
 // Reset menu option: 0 = EFX reset, 1 = FULL reset
 int resetMenuOption = 0;
 
+// DRAW mode: 0 = L+R (default), 1 = R (right-hand only)
+int drawMode = 0;
+
 // --- Settings backup (EEPROM <-> SD) ---
 // We back up the menu/settings EEPROM block to a small text file on the SD card.
 // This lets you restore settings if EEPROM is empty/corrupt after a brownout.
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 21; // EEPROM_DATA_START + [0..20]
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 22; // EEPROM_DATA_START + [0..21]
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
@@ -323,6 +328,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 18, 0);   // cursorType default (0 = NORM)
       EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
+      EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
 
       Serial.println("EEPROM initialized with defaults.");
 
@@ -366,6 +372,13 @@ void loadMenuFromEEPROM() {
   // Load showChannelNr from EEPROM (stored at EEPROM_DATA_START + 19)
   extern bool showChannelNr;
   showChannelNr = (EEPROM.read(EEPROM_DATA_START + 19) != 0);
+  
+  // Load drawMode from EEPROM (stored at EEPROM_DATA_START + 21)
+  drawMode = (int8_t)EEPROM.read(EEPROM_DATA_START + 21);
+  if (drawMode < 0 || drawMode > 1) {
+    drawMode = 0;  // Default to 0 (L+R) if invalid
+    EEPROM.write(EEPROM_DATA_START + 21, drawMode);
+  }
   
   if (previewVol < 0 || previewVol > 50) previewVol = 20;
   
@@ -1196,6 +1209,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText("ETC", 2, 3, tc);
       }
       break;
+      
+    case 38: // DRAW - Toggle between L+R and R modes
+      drawText("DRAW", 2, 10, currentMenuParentTextColor());
+      if (drawMode == 0) {
+        drawText("L+R", 2, 3, UI_GREEN);
+      } else {
+        drawText("R", 2, 3, UI_GREEN);
+      }
+      break;
 
     case 25: { // CTRL - encoder behaviour
       drawText("CTRL", 2, 10, currentMenuParentTextColor());
@@ -1899,10 +1921,17 @@ void switchMenu(int menuPosition){
         break;
         
         case 19:
-        // Enter LOOK submenu at first page
+        // Enter LOOK/PLAY submenu at first page
         inLookSubmenu = true;
         currentLookPage = 0;
         Encoder[3].writeCounter((int32_t)0);
+        break;
+        
+        case 38:
+        // DRAW mode toggle: switch between L+R (0) and R (1)
+        drawMode = (drawMode == 0) ? 1 : 0;
+        saveSingleModeToEEPROM(21, (int8_t)drawMode);
+        drawMainSettingStatus(menuPosition);
         break;
         
         case 32:
