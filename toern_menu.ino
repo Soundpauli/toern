@@ -3,7 +3,7 @@
 #define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 3
 #define MIDI_PAGES_COUNT 2
-#define VOL_PAGES_COUNT 5
+#define VOL_PAGES_COUNT 6
 #define ETC_PAGES_COUNT 2
 
 // External variables
@@ -82,7 +82,8 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"LINE", 28, false, nullptr},         // Line output volume
   {"PREV", 29, false, nullptr},         // Preview volume
   {"MIC", 30, false, nullptr},          // Microphone gain
-  {"LVL", 31, false, nullptr}           // Line input level
+  {"LVL", 31, false, nullptr},          // Line input level
+  {"SPLT", 35, false, nullptr}          // Split outputs: main->L, preview->R
 };
 
 // ETC submenu pages
@@ -126,7 +127,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 22; // EEPROM_DATA_START + [0..21]
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 23; // EEPROM_DATA_START + [0..22]
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
@@ -258,19 +259,24 @@ static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *out
   if (strncmp(line, "DATA=", 5) != 0) { f.close(); return false; }
   const char *hex = line + 5;
 
-  const size_t expectedLen = sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN;
-  if (len != expectedLen) { f.close(); return false; }
-  if (strlen(hex) < expectedLen * 2) { f.close(); return false; }
+  // Backward compatible: allow older backups with smaller EEPROM blocks.
+  const size_t minLen = sizeof(unsigned int) + 1; // at least 1 byte of settings
+  const size_t maxLen = sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN;
+  if (len < minLen || len > maxLen) { f.close(); return false; }
+  if (strlen(hex) < (size_t)len * 2) { f.close(); return false; }
 
-  uint8_t payload[expectedLen];
-  if (!decodeHexBytes(hex, payload, expectedLen)) { f.close(); return false; }
-  uint32_t crc = crc32_compute(payload, expectedLen);
+  uint8_t payload[len];
+  if (!decodeHexBytes(hex, payload, (size_t)len)) { f.close(); return false; }
+  uint32_t crc = crc32_compute(payload, (size_t)len);
   if (crc != expectedCrc) { f.close(); return false; }
 
   // Unpack
   memcpy(&outSamplePackID, payload, sizeof(unsigned int));
   if (outBlockLen < SETTINGS_EEPROM_BLOCK_LEN) { f.close(); return false; }
-  memcpy(outBlock, payload + sizeof(unsigned int), SETTINGS_EEPROM_BLOCK_LEN);
+  memset(outBlock, 0, SETTINGS_EEPROM_BLOCK_LEN);
+  size_t bytesInFile = (size_t)len - sizeof(unsigned int);
+  if (bytesInFile > SETTINGS_EEPROM_BLOCK_LEN) bytesInFile = SETTINGS_EEPROM_BLOCK_LEN;
+  memcpy(outBlock, payload + sizeof(unsigned int), bytesInFile);
   f.close();
   return true;
 }
@@ -329,6 +335,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
+      EEPROM.write(EEPROM_DATA_START + 22, 0);   // previewSplit default (OFF)
 
       Serial.println("EEPROM initialized with defaults.");
 
@@ -378,6 +385,14 @@ void loadMenuFromEEPROM() {
   if (drawMode < 0 || drawMode > 1) {
     drawMode = 0;  // Default to 0 (L+R) if invalid
     EEPROM.write(EEPROM_DATA_START + 21, drawMode);
+  }
+
+  // Load previewSplit from EEPROM (stored at EEPROM_DATA_START + 22)
+  extern int8_t previewSplit;
+  previewSplit = (int8_t)EEPROM.read(EEPROM_DATA_START + 22);
+  if (previewSplit != 0 && previewSplit != 1) {
+    previewSplit = 0;
+    EEPROM.write(EEPROM_DATA_START + 22, previewSplit);
   }
   
   if (previewVol < 0 || previewVol > 50) previewVol = 20;
@@ -440,8 +455,6 @@ void loadMenuFromEEPROM() {
   Serial.print("  clockMode="); Serial.println(clockMode);
   Serial.print("  patternMode="); Serial.println(patternMode);
   Serial.print("  loopLength="); Serial.println(loopLength);
-  //Serial.print(F("  recChannelClear=")); //Serial.println(recChannelClear);
-  //Serial.print(F("  previewVol="));    //Serial.println(previewVol);
 
   // Set global flags
   SMP_PATTERN_MODE       = (patternMode   == 1 || patternMode == 2);  // ON or SONG mode
@@ -1313,6 +1326,19 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
       break;
     }
+
+    case 35: { // SPLT - Split outputs (main->L, preview->R)
+      drawText("SPLT", 2, 10, currentMenuParentTextColor());
+      extern int8_t previewSplit;
+      if (previewSplit) {
+        drawText("ON", 10, 3, UI_GREEN);
+      } else {
+        drawText("OFF", 6, 3, UI_RED);
+      }
+      CRGB greenColor = getIndicatorColor('G');
+      Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      break;
+    }
     
     case 32: { // CRSR - Cursor Type
       drawText("CRSR", 2, 10, currentMenuParentTextColor());
@@ -1428,6 +1454,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static bool prevMenuFirstEnter = true;
   static bool micMenuFirstEnter = true;
   static bool lvlMenuFirstEnter = true;
+  static bool spltMenuFirstEnter = true;
   static int lastPongSpeed = -1;
   static int lastSetting = -1;
   
@@ -1442,6 +1469,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
     prevMenuFirstEnter = true;
     micMenuFirstEnter = true;
     lvlMenuFirstEnter = true;
+    spltMenuFirstEnter = true;
     lastPongSpeed = -1;
     lastSetting = setting;
   }
@@ -1759,6 +1787,36 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       break;
     }
 
+    case 35: { // SPLT - Split outputs (main->L, preview->R)
+      static int lastSplit = -1;
+      extern int8_t previewSplit;
+      extern void applySplitRouting();
+
+      if (spltMenuFirstEnter) {
+        int encoderVal = (previewSplit != 0) ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastSplit = encoderVal;
+        spltMenuFirstEnter = false;
+
+        applySplitRouting();
+      }
+
+      if (currentMode->pos[2] != lastSplit) {
+        int encoderPos = constrain(currentMode->pos[2], 0, 1);
+        previewSplit = (int8_t)encoderPos;
+
+        saveSingleModeToEEPROM(22, previewSplit);
+        applySplitRouting();
+
+        drawMainSettingStatus(setting);
+        lastSplit = encoderPos;
+      }
+      break;
+    }
+
          default:
        // Reset first enter flags when not on pages with additional features
        recMenuFirstEnter = true;
@@ -1770,8 +1828,6 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
 }
 
 void switchMenu(int menuPosition){
-   Serial.print("DEBUG: switchMenu called with menuPosition=");
-   Serial.println(menuPosition);
    switch (menuPosition) {
       case 1:
         switchMode(&loadSaveTrack);
@@ -1822,7 +1878,6 @@ void switchMenu(int menuPosition){
         }
         saveSingleModeToEEPROM(4, voiceSelect);
 
-        //Serial.println(voiceSelect);
         drawMainSettingStatus(menuPosition);
         break;
 
@@ -2022,7 +2077,6 @@ void switchMenu(int menuPosition){
         
         case 22: {
         // Enter SONG mode
-        Serial.println("DEBUG: Case 22 (SONG) triggered - entering song mode");
         extern Mode songMode;
         switchMode(&songMode);
         break;
@@ -2030,7 +2084,6 @@ void switchMenu(int menuPosition){
         
         case 23: {
         // Toggle LED modules: 1 or 2
-        Serial.println("DEBUG: Case 23 (LEDS) triggered - toggling LED modules");
         extern int ledModules;
         extern unsigned int maxX;
         extern Mode draw;

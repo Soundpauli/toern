@@ -916,6 +916,31 @@ AudioEffectFreeverbDMAMEM *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nu
 AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, &freeverbmixer5, &freeverbmixer6, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 AudioMixer4 *waveformmixers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
 
+// VOL>SPLT: 0 = normal (main+preview to both L/R), 1 = split (main->L only, preview->R only)
+int8_t previewSplit = 0;
+
+FLASHMEM void applySplitRouting() {
+  // stereo mixer inputs:
+  // - input 0: mixer_end (main)
+  // - input 1: mixer0 (preview)
+  // inputs 2/3 unused
+  if (previewSplit) {
+    mixer_stereoL.gain(0, 1.0f); // main -> L
+    mixer_stereoL.gain(1, 0.0f); // preview off on L
+    mixer_stereoR.gain(0, 0.0f); // main off on R
+    mixer_stereoR.gain(1, 1.0f); // preview -> R
+  } else {
+    mixer_stereoL.gain(0, 1.0f);
+    mixer_stereoL.gain(1, 1.0f);
+    mixer_stereoR.gain(0, 1.0f);
+    mixer_stereoR.gain(1, 1.0f);
+  }
+  mixer_stereoR.gain(2, 0.0f);
+  mixer_stereoR.gain(3, 0.0f);
+  mixer_stereoL.gain(2, 0.0f);
+  mixer_stereoL.gain(3, 0.0f);
+}
+
 // Stop synth channels (13/14) immediately
 static inline void stopSynthChannel(int ch) {
   if (ch < 13 || ch > 14) return;
@@ -2426,31 +2451,36 @@ void initSamples() {
   // mixer0.gain(0, ...) and mixer0.gain(1, ...) will be set by updatePreviewVolume() based on PREV volume
 
 
+  // Gain staging:
+  // Keep chain close to unity and apply headroom primarily at the first summing busses (mixer1/mixer2).
+  // Global loudness is handled at mixer_stereoR/L (per user).
   mixersynth_end.gain(0, GAIN_4);
   mixersynth_end.gain(2, GAIN_4);
   mixersynth_end.gain(3, GAIN_4);
 
   
 
-  mixer1.gain(0, GAIN_4);
-  mixer1.gain(1, GAIN_4);
-  mixer1.gain(2, GAIN_4);
-  mixer1.gain(3, GAIN_4);
+  const float MIX_BUS_HEADROOM = 0.70f; // single, intentional attenuation stage (per-voice headroom)
+  mixer1.gain(0, MIX_BUS_HEADROOM);
+  mixer1.gain(1, MIX_BUS_HEADROOM);
+  mixer1.gain(2, MIX_BUS_HEADROOM);
+  mixer1.gain(3, MIX_BUS_HEADROOM);
 
-  mixer2.gain(0, GAIN_4);
-  mixer2.gain(1, GAIN_4);
-  mixer2.gain(2, GAIN_4);
-  mixer2.gain(3, GAIN_4);
+  mixer2.gain(0, MIX_BUS_HEADROOM);
+  mixer2.gain(1, MIX_BUS_HEADROOM);
+  mixer2.gain(2, MIX_BUS_HEADROOM);
+  mixer2.gain(3, MIX_BUS_HEADROOM);
 
 
-  mixer_end.gain(0, GAIN_2);
-  mixer_end.gain(1, GAIN_2);
-  mixer_end.gain(2, GAIN_2);
+  // Keep downstream busses at unity to avoid "down then up" scaling.
+  mixer_end.gain(0, 1.0f);
+  mixer_end.gain(1, 1.0f);
+  mixer_end.gain(2, 1.0f);
   mixer_end.gain(3, 0.0);  // No monitoring by default - ensure OFF on startup
 
 
-  mixerPlay.gain(0, GAIN_2);
-  mixerPlay.gain(1, GAIN_2);
+  // Global loudness stage (final summing before i2s)
+  applySplitRouting();
   
 
   // Initialize the array with nullptrs
@@ -3230,18 +3260,18 @@ void checkEncoders() {
             // Mic input
             micGain = (unsigned int)newGain;
             sgtl5000_1.micGain(micGain);
-            // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end = 1.0×GAIN_4×GAIN_2 = 0.16)
+            // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end)
             extern AudioMixer4 mixer_end;
-            float maxPlaybackGain = GAIN_4 * GAIN_2;  // 0.4 × 0.4 = 0.16
+            float maxPlaybackGain = 0.70f * 1.0f;
             float monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
             mixer_end.gain(3, monitorGain);
           } else {
             // Line input
             lineInLevel = (unsigned int)newGain;
             sgtl5000_1.lineInLevel(lineInLevel);
-            // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end = 1.0×GAIN_4×GAIN_2 = 0.16)
+            // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end)
             extern AudioMixer4 mixer_end;
-            float maxPlaybackGain = GAIN_4 * GAIN_2;  // 0.4 × 0.4 = 0.16
+            float maxPlaybackGain = 0.70f * 1.0f;
             float monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
             mixer_end.gain(3, monitorGain);
           }
@@ -3991,7 +4021,7 @@ void showDoRecord() {
     extern unsigned int micGain;      // From VOL menu (0-63)
     
     float monitorGain = 0.0f;
-    float maxPlaybackGain = GAIN_4 * GAIN_2;  // Match loudest playback: amps×mixer1/2×mixer_end = 1.0×0.4×0.4 = 0.16
+    float maxPlaybackGain = 0.70f * 1.0f;  // Match loudest playback: amps×mixer1/2×mixer_end
     if (recMode == 1) {
       // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
       monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
@@ -4342,13 +4372,12 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     static elapsedMillis peakCaptureTimer;
     if (peakCaptureTimer > 15) { // capture peaks at ~66 fps max
       peakCaptureTimer = 0;
-      // Only capture peaks from the audible preview when PREV==ON
-      if (previewTriggerMode == PREVIEW_MODE_ON) {
-        if (playSdWav1.isPlaying() && peakIndex < maxPeaks) {
-          if (peak1.available()) {
-            peakValues[peakIndex] = peak1.read();
-            peakIndex++;
-          }
+      // Capture peaks from the audible preview for both ON and PRESS modes while playing
+      if (playSdWav1.isPlaying() && peakIndex < maxPeaks) {
+        extern AudioAnalyzePeak peak1;
+        if (peak1.available()) {
+          peakValues[peakIndex] = peak1.read();
+          peakIndex++;
         }
       }
     }
@@ -4356,6 +4385,29 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     if (!playSdWav1.isPlaying()) {
       playSdWav1.stop();
       previewIsPlaying = false;  // Playback finished
+      
+      // In PREV=="PRESS" mode: resume silent peak scan from current position
+      if (previewTriggerMode == PREVIEW_MODE_PRESS) {
+        extern bool isEncoder0PressedMode();
+        extern void setEncoder0PressedMode(bool state);
+        
+        // We always try to resume silent scan in PRESS mode if playback ended
+        extern Mode* currentMode;
+        extern Mode set_Wav;
+        if (currentMode == &set_Wav) {
+          extern Device SMP;
+          int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
+          int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
+          if (fileIdx < 1) fileIdx = 1;
+          char OUTPUTf[64];
+          extern void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize);
+          buildSamplePath(folderIdx, fileIdx, OUTPUTf, sizeof(OUTPUTf));
+          // Start peak scan but DO NOT reset peaks (resume from current peakIndex)
+          extern void startPeakScan(const char* path, bool resetPeaks);
+          startPeakScan(OUTPUTf, false);
+        }
+        setEncoder0PressedMode(false);  // Clear flag
+      }
     }
   }
 
@@ -4412,7 +4464,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     audioInputAmp.gain(1.0f);  // Unity gain, no additional amplification
     
     float monitorGain = 0.0f;
-    float maxPlaybackGain = GAIN_4 * GAIN_2;  // Match loudest playback: amps×mixer1/2×mixer_end = 1.0×0.4×0.4 = 0.16
+    float maxPlaybackGain = 0.70f * 1.0f;  // Match loudest playback: amps×mixer1/2×mixer_end
     if (recMode == 1) {
       // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
       monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
@@ -5335,17 +5387,6 @@ void playNote() {
   }
 
   if (currentMode == &draw || currentMode == &singleMode || currentMode == &velocity) {
-
-
-    /*if (patternChangeActive){
-    if (millis() <= patternChangeTime) {
-      // Pattern change active
-    } else {
-      patternChangeActive = false;
-    }
-    }
-    drawPatternChange(GLOB.edit);
-    */
   }
 
   onBeatTick();
@@ -5921,11 +5962,11 @@ FLASHMEM void updatePreviewVolume() {
   float gain = (float)level * 0.01f;  // Map 0→0.0, 50→0.5
   
   // Apply PREV volume to both preview paths:
-  // - sound0 (voice0) → envelope0 → mixer0 channel 0
-  // - playSdWav1 → ampPreview → mixer0 channel 1
-  // Both paths should have the same total gain for consistent volume
-  mixer0.gain(0, gain * 0.8f);  // sound0 preview volume (20% reduction)
-  mixer0.gain(1, gain);  // ampPreview path - apply same gain as voice0
+  // - sound0 (voice0) → envelope0 → mixer0 channel 0 (RAM playback when seek is set)
+  // - playSdWav1 → ampPreview → mixer0 channel 1 (SD file streaming when seek=0)
+  // Compensate for envelope path gain reduction by increasing RAM path gain slightly
+  mixer0.gain(0, gain * 1.25f);  // RAM playback path - increased to match SD path loudness
+  mixer0.gain(1, gain);  // SD file playback path
   ampPreview.gain(1.0f);  // Set ampPreview to unity gain (volume controlled by mixer0)
 }
 
@@ -6522,11 +6563,6 @@ void setSliderDefForChannel(int channel) {
                 {ARR_PARAM, SUSTAIN, "SUST", 32, DISPLAY_NUMERIC, nullptr, 32},
                 {ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32}
         }
-        /* FOR GRANULAR
-        ,{{ARR_FILTER, ACTIVE, "ACTV", 1, DISPLAY_NUMERIC, nullptr, 2},
-            {ARR_FILTER, OFFSET, "OFFS", 32, DISPLAY_NUMERIC, nullptr, 32},
-            {ARR_FILTER, PITCH, "PTCH", 32, DISPLAY_NUMERIC, nullptr, 32},
-            {ARR_FILTER, SPEED, "SPED", 32, DISPLAY_NUMERIC, nullptr, 32}}*/      
         };
 
         // Clear all 4 pages first

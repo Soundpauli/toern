@@ -28,6 +28,16 @@ struct PeakScanState {
 };
 
 static PeakScanState g_peakScan;
+static bool g_encoder0PressedMode = false;  // Track if encoder(0) is pressed in PREV=="PRESS" mode
+
+// Expose encoder(0) pressed mode state for main loop
+bool isEncoder0PressedMode() {
+  return g_encoder0PressedMode;
+}
+
+void setEncoder0PressedMode(bool state) {
+  g_encoder0PressedMode = state;
+}
 
 // Find 1-based file index within a manifest folder by exact filename (case-insensitive).
 static int manifestFindFileIdx(int folderIdx, const char *filename) {
@@ -73,12 +83,16 @@ static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
 
 static void stopPeakScan() {
   if (g_peakScan.active) {
-    g_peakScan.f.close();
+    if (g_peakScan.f) {
+      g_peakScan.f.close();
+    }
     g_peakScan.active = false;
+    yield();  // Yield to ensure file is fully closed before any other SD operations
   }
 }
 
-static void startPeakScan(const char *path) {
+// Public wrapper to start peak scan (needed for resuming after encoder(0) press)
+void startPeakScan(const char *path, bool resetPeaks = true) {
   stopPeakScan();
   strncpy(g_peakScan.path, path, sizeof(g_peakScan.path) - 1);
   g_peakScan.path[sizeof(g_peakScan.path) - 1] = 0;
@@ -97,28 +111,41 @@ static void startPeakScan(const char *path) {
 
   g_peakScan.dataStart = ds;
   g_peakScan.dataSize = dz;
-  g_peakScan.totalSamples = dz / 2; // assume 16-bit PCM
-  g_peakScan.sampleIdx = 0;
-  g_peakScan.outIndex = 0;
+  g_peakScan.totalSamples = dz / 2;
+  
+  if (resetPeaks) {
+    g_peakScan.sampleIdx = 0;
+    g_peakScan.outIndex = 0;
+    peakIndex = 0;
+    memset(peakValues, 0, sizeof(peakValues));
+  } else {
+    g_peakScan.outIndex = (uint16_t)peakIndex;
+    g_peakScan.sampleIdx = (uint32_t)peakIndex * 640;
+    if (g_peakScan.sampleIdx >= g_peakScan.totalSamples) {
+       stopPeakScan();
+       return;
+    }
+  }
+  
   g_peakScan.samplesInWindow = 0;
   g_peakScan.windowPeak = 0;
   g_peakScan.active = true;
 
-  peakIndex = 0;
-  memset(peakValues, 0, sizeof(peakValues));
-  g_peakScan.f.seek(g_peakScan.dataStart);
+  g_peakScan.f.seek(g_peakScan.dataStart + (g_peakScan.sampleIdx * 2));
 }
 
 static void servicePeakScan(uint32_t maxBytesThisCall) {
   if (!g_peakScan.active) return;
+  
+  if (playSdWav1.isPlaying()) {
+    stopPeakScan();
+    return;
+  }
+  
   if (!g_peakScan.f.available()) { stopPeakScan(); return; }
 
-  // Emulate the "shape" of AudioAnalyzePeak capture:
-  // In PREV==ON you effectively sample peaks at ~15ms intervals (see main loop).
-  // 15ms @ 44.1kHz ≈ 662 samples. Use a fixed window of ~640 samples (5 audio blocks of 128).
-  const uint32_t WINDOW_SAMPLES = 640; // close to 15ms stride; produces similar visual detail
-
-  uint8_t buf[512];
+  const uint32_t WINDOW_SAMPLES = 640;
+  uint8_t buf[2048];  
   uint32_t bytesLeft = maxBytesThisCall;
   while (bytesLeft > 0 && g_peakScan.active && g_peakScan.outIndex < (uint16_t)maxPeaks) {
     uint32_t toRead = min((uint32_t)sizeof(buf), bytesLeft);
@@ -147,7 +174,6 @@ static void servicePeakScan(uint32_t maxBytesThisCall) {
       }
 
       if (g_peakScan.sampleIdx >= g_peakScan.totalSamples) {
-        // Flush any partial window so the waveform doesn't "truncate early"
         if (g_peakScan.samplesInWindow > 0 && g_peakScan.outIndex < (uint16_t)maxPeaks) {
           peakValues[g_peakScan.outIndex] = (float)g_peakScan.windowPeak / 32768.0f;
           g_peakScan.outIndex++;
@@ -161,49 +187,49 @@ static void servicePeakScan(uint32_t maxBytesThisCall) {
 }
 
 FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength) {
+  stopPeakScan();
+  
   if (playSdWav1.isPlaying()) playSdWav1.stop();
   envelope0.noteOff();
-  // NOTE: In PREV==PRSS we keep the background peak scan state intact even when
-  // the user triggers a preview via encoder-press. The scan is advanced in
-  // showWave() when safe (to avoid SD contention during SD playback).
+  
   char OUTPUTf[64];
   buildSamplePath(folder, sampleID, OUTPUTf, sizeof(OUTPUTf));
 
-  // If no trimming is requested (seek at 0, seekEnd at 100), we can stream directly from SD
-  // to start playback instantly.
-  //
-  // NOTE: In PREV==PRSS this means the incremental peak scan will PAUSE while SD playback is
-  // active (to avoid SD contention), but it will NOT be reset/restarted.
   bool usingFullRange = (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
   if (usingFullRange && (previewTriggerMode == PREVIEW_MODE_ON || previewTriggerMode == PREVIEW_MODE_PRESS)) {
     if (!SD.exists(OUTPUTf)) {
       return;
     }
 
-    // Normalize seekEnd if it was left at 0 (treat as 100%)
     if (GLOB.seekEnd == 0) {
       GLOB.seekEnd = 100;
       currentMode->pos[2] = GLOB.seekEnd;
       Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
     }
 
-    // Clear cached preview metadata so trimmed previews will reload when needed
     previewCache.valid = false;
     previewCache.lengthBytes = 0;
     previewCache.plen = 0;
 
     previewIsPlaying = true;
-    // Only reset peaks when PREV==ON. In PREV==PRSS peaks are generated by the silent peak builder.
+    
     if (previewTriggerMode == PREVIEW_MODE_ON) {
       peakIndex = 0;
       memset(peakValues, 0, sizeof(peakValues));
     }
+    
+    g_encoder0PressedMode = (previewTriggerMode == PREVIEW_MODE_PRESS);
+    
+    extern void updatePreviewVolume();
+    updatePreviewVolume();
+    
+    yield();
     playSdWav1.play(OUTPUTf);  // Stream from SD (no RAM copy)
+    
     sampleIsLoaded = true;
     return;
   }
 
-  // --- Check if already cached ---
   if (!previewCache.valid || previewCache.folder != folder || previewCache.sampleID != sampleID) {
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
@@ -211,8 +237,13 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     }
 
     int fileSize = previewFile.size();
+    uint32_t dataStart = 44, dataSize = 0;
+    if (!findWavDataChunk(previewFile, dataStart, dataSize)) {
+      dataStart = 44;
+      dataSize = (uint32_t)max(0, fileSize - 44);
+    }
 
-    // Read sample rate from header at offset 24
+    // Read sample rate from header at offset 24 (legacy mapping used throughout this project)
     previewFile.seek(24);
     int g = previewFile.read();
     if (g == 72) PrevSampleRate = 4;
@@ -221,16 +252,15 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     else if (g == 17) PrevSampleRate = 1;
     else PrevSampleRate = 4;
 
-    GLOB.smplen = fileSize / (PrevSampleRate * 2);
+    // IMPORTANT: Use WAV data chunk size (not file size). This avoids playing non-audio chunks at the end.
+    GLOB.smplen = (int)(dataSize / (uint32_t)(PrevSampleRate * 2));
 
-    // Decide whether to load full file or only the trimmed window to keep UI responsive
-    // Trimmed window applies when not forcing max length and the file is larger than buffer.
-    bool loadPartial = (!setMaxSampleLength) && (fileSize > (int)sizeof(sampled[0]));
+    bool loadPartial = (!setMaxSampleLength) && ((int)dataSize > (int)sizeof(sampled[0]));
 
     // Load full sample into RAM buffer (no blanket memset to keep this fast on large files)
     int plen = 0;
-    int readStartBytes = 44;
-    int bytesToReadAll = fileSize - 44;
+    int readStartBytes = (int)dataStart;
+    int bytesToReadAll = (int)dataSize;
     if (loadPartial) {
       // Compute requested window in bytes based on seek/seekEnd (after smplen computed)
       int startOffset = (GLOB.smplen * GLOB.seek) / 100;
@@ -242,9 +272,9 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
       endOffsetBytes &= ~1;
       if (endOffsetBytes <= startOffsetBytes) {
         startOffsetBytes = 0;
-        endOffsetBytes = min(fileSize - 44, (int)sizeof(sampled[0]));
+        endOffsetBytes = min((int)dataSize, (int)sizeof(sampled[0]));
       }
-      readStartBytes = 44 + startOffsetBytes;
+      readStartBytes = (int)dataStart + startOffsetBytes;
       bytesToReadAll = min(endOffsetBytes - startOffsetBytes, (int)sizeof(sampled[0]));
     }
 
@@ -379,23 +409,35 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
       if (g == 72) SampleRate[sampleID] = 4;
     }
 
-    // Calculate sample length in milliseconds
-    GLOB.smplen = fileSize / (SampleRate[sampleID] * 2);
+    // Use WAV data chunk size, not file size (prevents reading/listening beyond audio data).
+    uint32_t dataStart = 44, dataSize = 0;
+    if (!findWavDataChunk(loadSample, dataStart, dataSize)) {
+      dataStart = 44;
+      dataSize = (uint32_t)max(0, fileSize - 44);
+    }
+
+    GLOB.smplen = (int)(dataSize / (uint32_t)(SampleRate[sampleID] * 2));
 
     // Convert percentage positions to actual offsets
     unsigned int startOffset = (GLOB.seek * GLOB.smplen) / 100;
     unsigned int startOffsetBytes = startOffset * SampleRate[sampleID] * 2;
 
-    unsigned int endOffset = (GLOB.seekEnd * GLOB.smplen) / 100;
-    if (endOffset > GLOB.smplen) endOffset = GLOB.smplen;
-    if (GLOB.seekEnd == 0) {
-      endOffset = GLOB.smplen;  // Full length if seekEnd is 0
-      GLOB.seekEnd = 100;       // Set to 100%
-    }
-    unsigned int endOffsetBytes = endOffset * SampleRate[sampleID] * 2;
-    endOffsetBytes = min(endOffsetBytes, fileSize);
+    // Empirical end-click guard:
+    // Users report the end-click disappears when moving seekEnd by 1 step.
+    // So we always trim by 1 seekEnd step for playback (i.e. use seekEnd-1%),
+    // while keeping the UI/setting unchanged.
+    unsigned int seekEndPct = GLOB.seekEnd;
+    if (seekEndPct == 0) seekEndPct = 100;               // 0 means full length in UI
+    if (seekEndPct > 0) seekEndPct = seekEndPct - 1;     // trim one encoder step
+    // Ensure end stays > start
+    if (seekEndPct <= GLOB.seek) seekEndPct = min((unsigned int)100, (unsigned int)(GLOB.seek + 1));
 
-    loadSample.seek(44 + startOffsetBytes);
+    unsigned int endOffset = (seekEndPct * GLOB.smplen) / 100;
+    if (endOffset > GLOB.smplen) endOffset = GLOB.smplen;
+    unsigned int endOffsetBytes = endOffset * SampleRate[sampleID] * 2;
+    endOffsetBytes = min(endOffsetBytes, (unsigned int)dataSize);
+
+    loadSample.seek((uint32_t)dataStart + startOffsetBytes);
     unsigned int i = 0;
     // Clear target buffer so new load starts from a clean state
     memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
@@ -418,11 +460,24 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     }
     loadSample.close();
 
+    // i is bytes read; convert to 16-bit samples
     i = i / 2;
     _samplers[sampleID].removeAllSamples();
     loadedSampleRate[sampleID] = SampleRate[sampleID];  // e.g. 44100, or whatever
-    loadedSampleLen[sampleID] = i; 
-    _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], (int)i/1 , rateFactor);
+
+    // Add a small zero-tail pad to let downstream FX (filter/bitcrusher) settle to zero.
+    // This helps eliminate end-clicks when the player stops at the end of the buffer.
+    const int END_PAD_SAMPLES = 1024; // ~23ms @ 44.1kHz
+    int bufferSamples = (int)(sizeof(sampled[sampleID]) / 2);
+    int samplesRead = (int)i;
+    if (samplesRead < 0) samplesRead = 0;
+    if (samplesRead > bufferSamples) samplesRead = bufferSamples;
+    int pad = END_PAD_SAMPLES;
+    if (pad > (bufferSamples - samplesRead)) pad = (bufferSamples - samplesRead);
+    int playLen = samplesRead + pad;
+
+    loadedSampleLen[sampleID] = playLen;
+    _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], playLen, rateFactor);
     channelDirection[sampleID] = 1;
   }
   yield();
@@ -452,6 +507,11 @@ void showWave() {
     previewIsPlaying = true;
     peakIndex = 0;
     memset(peakValues, 0, sizeof(peakValues));
+    
+    // Ensure PREV volume setting is applied before starting SD playback
+    extern void updatePreviewVolume();
+    updatePreviewVolume();
+    
     yield(); // Yield before file playback operations
     if (playSdWav1.isPlaying()) {
       playSdWav1.stop();
@@ -694,19 +754,6 @@ void showWave() {
     buildSamplePath(folderIdxForSample, fileIdx, OUTPUTf, sizeof(OUTPUTf));
     yield(); // Yield before opening file
 
-    // Log file info for debugging large-sample browsing
-    static unsigned long lastInfoLogMs = 0;
-    unsigned long nowInfo = millis();
-    if (nowInfo - lastInfoLogMs > 150) {
-      lastInfoLogMs = nowInfo;
-      File infoFile = SD.open(OUTPUTf);
-      if (infoFile) {
-        int fileSize = infoFile.size();
-        float ramUsePct = (float)fileSize / (float)sizeof(sampled[0]) * 100.0f;
-        Serial.printf("SETWAV preview %s size=%.1fKB buf=%.1f%%\n", OUTPUTf, fileSize / 1024.0f, ramUsePct);
-        infoFile.close();
-      }
-    }
 
     // Invalidate preview cache and reset seek positions for new sample
     previewCache.valid = false;
@@ -715,15 +762,13 @@ void showWave() {
     if (previewTriggerMode == PREVIEW_MODE_ON) {
       startSdPreview(OUTPUTf);
     } else if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-      // PREV==PRSS: start (or restart) incremental SD peak scan immediately (no debounce)
-      startPeakScan(OUTPUTf);
+      // PREV==PRSS: start (or restart) incremental SD peak scan immediately (no audio playback yet)
+      startPeakScan(OUTPUTf, true); // Reset peaks for a new sample
     }
   }
-  // Advance peak scan in small slices to keep UI responsive.
-  // PREV==PRSS requirement: keep building peaks even while preview is playing.
-  // To reduce SD contention/glitches during SD streaming, use a smaller slice while playing.
-  if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-    servicePeakScan(previewIsPlaying ? 128 : 1024);
+  
+  if (previewTriggerMode == PREVIEW_MODE_PRESS && !playSdWav1.isPlaying()) {
+    servicePeakScan(16384);
   }
 
   // Safety clamp
@@ -1091,8 +1136,13 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     if (!previewFile) {
       return;
     }
-    
+
     int fileSize = previewFile.size();
+    uint32_t dataStart = 44, dataSize = 0;
+    if (!findWavDataChunk(previewFile, dataStart, dataSize)) {
+      dataStart = 44;
+      dataSize = (uint32_t)max(0, fileSize - 44);
+    }
     
     // Read sample rate from header
     previewFile.seek(24);
@@ -1104,14 +1154,15 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     else if (g == 17) rate = 1;
     else rate = 4;
     
-    // Load full sample into RAM buffer (no blanket memset)
-    previewFile.seek(44);
+    // Load data chunk into RAM buffer (no blanket memset)
+    previewFile.seek(dataStart);
     int plen = 0;
     // Read in chunks with periodic yield() to prevent blocking CPU during large file operations
     // Larger chunk to reduce SD overhead on big files
     uint8_t chunk[2048];  // Read 2KB at a time
     int chunkCount = 0;
-    while (previewFile.available() && plen < sizeof(sampled[0])) {
+    int maxToRead = (int)min((uint32_t)sizeof(sampled[0]), dataSize);
+    while (previewFile.available() && plen < maxToRead) {
       size_t toRead = min(sizeof(chunk), (size_t)(sizeof(sampled[0]) - plen));
       size_t bytesRead = previewFile.read(chunk, toRead);
       if (bytesRead == 0) break;
@@ -1135,7 +1186,12 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   // Calculate the trimmed portion based on seek/seekEnd
   int numSamples = previewCache.lengthBytes / 2;  // Total samples in preview
   int startSample = (numSamples * GLOB.seek) / 100;
-  int endSample = (numSamples * GLOB.seekEnd) / 100;
+  // Same end-click guard as loadSample(): trim by 1 seekEnd step for playback.
+  int seekEndPct = (GLOB.seekEnd == 0) ? 100 : (int)GLOB.seekEnd;
+  if (seekEndPct > 0) seekEndPct -= 1;
+  if (seekEndPct <= (int)GLOB.seek) seekEndPct = min(100, (int)GLOB.seek + 1);
+
+  int endSample = (numSamples * seekEndPct) / 100;
   
   if (endSample <= startSample) {
     endSample = numSamples;
@@ -1154,8 +1210,18 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   // Update the sampler for the target channel
   _samplers[targetChannel].removeAllSamples();
   loadedSampleRate[targetChannel] = previewCache.rate;
-  loadedSampleLen[targetChannel] = trimmedSamples;
-  _samplers[targetChannel].addSample(36, targetBuffer, trimmedSamples, rateFactor);
+  // Add small zero-tail pad (see loadSample()) to reduce end-clicks through FX chain.
+  const int END_PAD_SAMPLES = 1024;
+  int bufferSamples = (int)(sizeof(sampled[targetChannel]) / 2);
+  int samplesRead = trimmedSamples;
+  if (samplesRead < 0) samplesRead = 0;
+  if (samplesRead > bufferSamples) samplesRead = bufferSamples;
+  int pad = END_PAD_SAMPLES;
+  if (pad > (bufferSamples - samplesRead)) pad = (bufferSamples - samplesRead);
+  int playLen = samplesRead + pad;
+
+  loadedSampleLen[targetChannel] = playLen;
+  _samplers[targetChannel].addSample(36, targetBuffer, playLen, rateFactor);
   channelDirection[targetChannel] = 1;
   
   // Persist manifest selection for the target channel (folderIdx in oldID, fileIdx in fileID)

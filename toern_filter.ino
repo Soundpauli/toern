@@ -241,13 +241,31 @@ void setFilters(FilterType filterType, int index, bool initial) {
       }
     case BITCRUSHER:
       {
-        int xbitDepth = constrain(mappedValue, 1, 16);
-        int xsampleRate = round(mapf(mappedValue, 1, 16, 44100, 1000));
-        bitcrushers[index]->bits(16 - xbitDepth);
+        // 0 must be a true bypass.
+        int mv = (int)round(mappedValue);
+        mv = constrain(mv, 0, 16);
+
+        float channelvolume = mapf(SMP.channelVol[index], 0, maxY, 0.0f, 1.0f);
+
+        if (mv == 0) {
+          // Transparent: 16-bit @ 44.1kHz, restore normal amp gain (channel volume)
+          bitcrushers[index]->bits(16);
+          bitcrushers[index]->sampleRate(44100);
+          amps[index]->gain(channelvolume);
+          break;
+        }
+
+        // mv: 1..16 (1 = subtle, 16 = heavy)
+        int bitDepth = (int)round(mapf((float)mv, 1.0f, 16.0f, 16.0f, 1.0f));      // 16..1 bits
+        int xsampleRate = (int)round(mapf((float)mv, 1.0f, 16.0f, 44100.0f, 1000.0f)); // 44100..1000 Hz
+        bitDepth = constrain(bitDepth, 1, 16);
+        xsampleRate = constrain(xsampleRate, 1000, 44100);
+
+        bitcrushers[index]->bits(bitDepth);
         bitcrushers[index]->sampleRate(xsampleRate);
-        float normalizedVol = mapf(SMP.channelVol[index], 0, 16, 0.0f, 1.0f);
-        // Less aggressive gain compensation: only reduce by 40% at max crush instead of 80%
-        float crushCompGain = mapf(mappedValue, 1, 16, max(normalizedVol, 0.1f), 0.6f);
+
+        // Optional loudness compensation: reduce amp gain slightly as crush increases
+        float crushCompGain = mapf((float)mv, 1.0f, 16.0f, max(channelvolume, 0.1f), 0.6f);
         amps[index]->gain(crushCompGain);
         break;
       }

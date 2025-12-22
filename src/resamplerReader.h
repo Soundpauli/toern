@@ -9,7 +9,8 @@
 #include "waveheaderparser.h"
 
 // Simple debug print helper (can be enabled/disabled)
-#define RESAMPLING_READER_DEBUG 1 // Set to 1 to enable Serial prints from this file
+// Keep this off in production builds: Serial I/O can cause timing issues/glitches.
+#define RESAMPLING_READER_DEBUG 0 // Set to 1 to enable Serial prints from this file
 #if RESAMPLING_READER_DEBUG
     #define RR_DEBUG_PRINT(...) if(Serial) Serial.printf(__VA_ARGS__)
 #else
@@ -377,8 +378,39 @@ public:
                         case looptype_none:            
                         default:
                         {
+                            // IMPORTANT: avoid end-of-sample clicks.
+                            // Many callers expect the full audio block to be written. If we return early,
+                            // the remaining samples may contain old/garbage data, producing a click at the end.
+                            //
+                            // Strategy:
+                            // - Write zeros for the remainder of the current block (all channels)
+                            // - Stop playback so subsequent calls return 0 available
+                            // - Return nsamples to indicate buffers are fully written
+
+                            // Zero current channel sample
+                            *index[channel] = 0;
+                            index[channel]++;
+
+                            // Zero remaining channels for this frame
+                            for (int ch2 = channel + 1; ch2 < _numChannels; ch2++) {
+                                *index[ch2] = 0;
+                                index[ch2]++;
+                            }
+
+                            // We just completed one frame worth of output (zeros for remaining channels)
+                            count++;
+
+                            // Zero-fill remaining frames
+                            while (count < nsamples) {
+                                for (int ch2 = 0; ch2 < _numChannels; ch2++) {
+                                    *index[ch2] = 0;
+                                    index[ch2]++;
+                                }
+                                count++;
+                            }
+
                             stop(); // Sets _playing = false
-                            return count; // Return actual frames read
+                            return nsamples;
                         }
                     } // End switch _loopType  
                     // After handling loop/pingpong, we might need to break the inner channel loop

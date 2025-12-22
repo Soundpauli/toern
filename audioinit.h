@@ -137,7 +137,7 @@ AudioInputI2S                   audioInput;     //xy=3556,1189
 AudioAmplifier                  audioInputAmp;  //xy=3650,1189
 EXTMEM AudioMixer4                     mixer0;         //xy=3722,478
 AudioAnalyzePeak                peak1;          //xy=3727,541
-EXTMEM AudioMixer4                     mixerPlay;      //xy=3714,1048
+// mixerPlay removed: mixer_end now feeds mixer_stereoR/L directly
 AudioRecordQueue                queue1;         //xy=3778,1164
 AudioAnalyzePeak                peakRec;        //xy=3788,1215
 EXTMEM AudioMixer4                     mixer_stereoR;  //xy=3932,748
@@ -328,15 +328,14 @@ EXTMEM AudioAmplifier         ampPreview;
 EXTMEM AudioConnection        patchCord216(playSdWav1, 0, ampPreview, 0);
 EXTMEM AudioConnection        patchCord216b(ampPreview, 0, mixer0, 1);
 EXTMEM AudioConnection        patchCord217(playSdWav1, 0, peak1, 0);
-EXTMEM AudioConnection        patchCord218(mixer_end, 0, mixerPlay, 0);
-EXTMEM AudioConnection        patchCord219(mixer_end, 0, mixerPlay, 1);
+// patchCord218/219 removed (mixer_end -> mixerPlay)
 EXTMEM AudioConnection        patchCord220(audioInput, 0, audioInputAmp, 0);
 EXTMEM AudioConnection        patchCord221(audioInputAmp, 0, queue1, 0);
 EXTMEM AudioConnection        patchCord222(audioInputAmp, 0, peakRec, 0);
 EXTMEM AudioConnection        patchCord223(mixer0, 0, mixer_stereoR, 1);
 EXTMEM AudioConnection        patchCord224(mixer0, 0, mixer_stereoL, 1);
-EXTMEM AudioConnection        patchCord225(mixerPlay, 0, mixer_stereoR, 0);
-EXTMEM AudioConnection        patchCord226(mixerPlay, 0, mixer_stereoL, 0);
+EXTMEM AudioConnection        patchCord225(mixer_end, 0, mixer_stereoR, 0);
+EXTMEM AudioConnection        patchCord226(mixer_end, 0, mixer_stereoL, 0);
 EXTMEM AudioConnection        patchCord227(mixer_stereoR, 0, i2s1, 0);
 EXTMEM AudioConnection        patchCord228(mixer_stereoL, 0, i2s1, 1);
 EXTMEM AudioConnection        patchCord229(audioInputAmp, 0, mixer_end, 3);
