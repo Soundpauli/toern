@@ -2037,6 +2037,7 @@ void switchMenu(int menuPosition){
           if (success) {
             extern bool loadSampleManifest();
             bool loadSuccess = loadSampleManifest();
+            FastLEDclear();  // Clear before showing result
             if (loadSuccess) {
               drawText("DONE", 2, 3, UI_GREEN);
               Serial.println("=== SD READ: Scan complete ===");
@@ -2045,6 +2046,7 @@ void switchMenu(int menuPosition){
               Serial.println("=== SD READ: Scan OK but load failed ===");
             }
           } else {
+            FastLEDclear();  // Clear before showing result
             drawText("FAIL", 2, 3, UI_RED);
             Serial.println("=== SD READ: Scan failed ===");
           }
@@ -2056,9 +2058,12 @@ void switchMenu(int menuPosition){
           extern void switchMode(Mode*);
           switchMode(&draw);
         } else { // resetMenuOption == 2 (FULL)
-          // FULL reset: Reset effects AND rescan SD
+          // FULL reset: Complete reset (like startNew) AND rescan SD
           Serial.println("=== RSET: Executing FULL reset ===");
-          resetAllToDefaults();
+          
+          // Call startNew() for complete reset (clears notes, resets all settings, etc.)
+          extern void startNew();
+          startNew();
           
           // Then rescan SD
           Serial.println("=== SD READ: Rescanning samples folder ===");
@@ -2073,6 +2078,7 @@ void switchMenu(int menuPosition){
           if (success) {
             extern bool loadSampleManifest();
             bool loadSuccess = loadSampleManifest();
+            FastLEDclear();  // Clear before showing result
             if (loadSuccess) {
               drawText("DONE", 2, 3, UI_GREEN);
               Serial.println("=== SD READ: Scan complete ===");
@@ -2081,16 +2087,14 @@ void switchMenu(int menuPosition){
               Serial.println("=== SD READ: Scan OK but load failed ===");
             }
           } else {
+            FastLEDclear();  // Clear before showing result
             drawText("FAIL", 2, 3, UI_RED);
             Serial.println("=== SD READ: Scan failed ===");
           }
           FastLEDshow();
           delay(1000);
           
-          // Close menu and return to draw mode
-          extern Mode draw;
-          extern void switchMode(Mode*);
-          switchMode(&draw);
+          // startNew() already switches to draw mode, so we don't need to do it again
         }
         break;
         

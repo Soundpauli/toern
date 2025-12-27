@@ -609,24 +609,48 @@ void updateVals(int ch) {
 
 // Modify playSound() so that when a note is played, you store its start time.
 void playSound(int note, int ch) {
+  // Bounds check: ch must be 0 or 1 (INSTRUMENT_CHANNELS = 2)
+  if (ch < 0 || ch >= INSTRUMENT_CHANNELS) {
+    return;  // Invalid channel, skip
+  }
+  
+  // Bounds check: notesArray has 108 elements (indices 0-107)
+  // Check each voice's note index before accessing notesArray
+  const int NOTES_ARRAY_SIZE = 108;
+  
+  // Calculate note indices for each voice
+  int noteIdx0 = note + semitones[ch][0];
+  int noteIdx1 = note + semitones[ch][1];
+  int noteIdx2 = note + semitones[ch][2];
+  
+  // Clamp indices to valid range
+  noteIdx0 = constrain(noteIdx0, 0, NOTES_ARRAY_SIZE - 1);
+  noteIdx1 = constrain(noteIdx1, 0, NOTES_ARRAY_SIZE - 1);
+  noteIdx2 = constrain(noteIdx2, 0, NOTES_ARRAY_SIZE - 1);
+  
   stopSound(note, ch);
   notePlaying[ch] += 1;
   if (notePlaying[ch] >= POLY_VOICES) {
     notePlaying[ch] = 0;
   }
-  noteArray[ch][notePlaying[ch]] = note;
-  voiceStartTime[ch][notePlaying[ch]] = millis();  // Record the start time for this voice
+  
+  // Bounds check: notePlaying[ch] should be 0-2, and noteArray[ch] has 8 elements (0-7)
+  // But notePlaying[ch] is constrained to 0-2, so this should be safe
+  int voiceIdx = constrain(notePlaying[ch], 0, POLY_VOICES - 1);
+  noteArray[ch][voiceIdx] = note;
+  voiceStartTime[ch][voiceIdx] = millis();  // Record the start time for this voice
 
-  // Play note with frequency calculations, etc.
-  Swaveform1[notePlaying[ch]]->frequency(
-    notesArray[note + semitones[ch][0]] * pow(2, cents[ch][0] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  Swaveform2[notePlaying[ch]]->frequency(
-    notesArray[note + semitones[ch][1]] * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  Swaveform3[notePlaying[ch]]->frequency(
-    notesArray[note + semitones[ch][2]] * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  Senvelope1[notePlaying[ch]]->noteOn();
-  Senvelope2[notePlaying[ch]]->noteOn();
-  SenvelopeFilter1[notePlaying[ch]]->noteOn();
+  // Play note with frequency calculations, etc. (using clamped indices)
+  // Ensure voiceIdx is within bounds for Swaveform arrays (0-2)
+  Swaveform1[voiceIdx]->frequency(
+    notesArray[noteIdx0] * pow(2, cents[ch][0] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+  Swaveform2[voiceIdx]->frequency(
+    notesArray[noteIdx1] * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+  Swaveform3[voiceIdx]->frequency(
+    notesArray[noteIdx2] * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+  Senvelope1[voiceIdx]->noteOn();
+  Senvelope2[voiceIdx]->noteOn();
+  SenvelopeFilter1[voiceIdx]->noteOn();
 }
 
 

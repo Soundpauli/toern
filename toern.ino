@@ -5868,7 +5868,10 @@ void paint() {
         
         _samplers[painted_channel].noteEvent(pitch, painted_velocity, true, true);
     } else if (painted_channel == 11) {  // Specific synth
-      playSound((12 * (int)octave[0]) + transpose + (pitch_from_row - 1), 0);
+      // Calculate note value and clamp to reasonable range (0-107 for notesArray)
+      int noteValue = (12 * (int)octave[0]) + transpose + (pitch_from_row - 1);
+      noteValue = constrain(noteValue, 0, 107);  // Clamp to valid notesArray range
+      playSound(noteValue, 0);
     } else if (painted_channel >= 13 && painted_channel < 15) {            // General synths
       playSynth(painted_channel, pitch_from_row, painted_velocity, false); 
                                                                            
