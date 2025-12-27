@@ -3,7 +3,7 @@
 #define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 3
 #define MIDI_PAGES_COUNT 2
-#define VOL_PAGES_COUNT 7
+#define VOL_PAGES_COUNT 6
 #define ETC_PAGES_COUNT 2
 
 // External variables
@@ -31,7 +31,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"KIT", 2, false, nullptr},           // Sample Pack
   {"WAV", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
-  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LINE, PREV, MIC, LVL)
+  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LOUT, PREV, MIC, L-IN)
   {"PLAY", 19, false, nullptr},         // PLAY submenu (FLW, PREV, VIEW, PMD, LOOP)
   {"RECS", 20, false, nullptr},         // RECS submenu (MIC, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
@@ -79,12 +79,11 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
 // VOL submenu pages
 MenuPage volPages[VOL_PAGES_COUNT] = {
   {"MAIN", 27, false, nullptr},         // Headphone output volume
-  {"LINE", 28, false, nullptr},         // Line output volume
+  {"LOUT", 28, false, nullptr},         // Line output volume
   {"PREV", 29, false, nullptr},         // Preview volume
   {"MIC", 30, false, nullptr},          // Microphone gain
-  {"LVL", 31, false, nullptr},          // Line input level
-  {"SPLT", 35, false, nullptr},         // Split outputs: main->L, preview->R
-  {"2-CH", 36, false, nullptr}         // Stereo channel: selected channel->L, others->R
+  {"L-IN", 31, false, nullptr},          // Line input level
+  {"2-CH", 36, false, nullptr}         // Stereo routing: OFF, M+P, or L+R
 };
 
 // ETC submenu pages
@@ -116,7 +115,7 @@ int genreLength = 8; // Default length for genre generation
 // NEW mode state management
 bool newScreenFirstEnter = true;
 
-// Reset menu option: 0 = EFX reset, 1 = FULL reset
+// Reset menu option: 0 = EFX reset, 1 = SD rescan, 2 = FULL reset
 int resetMenuOption = 0;
 
 // DRAW mode: 0 = L+R (default), 1 = R (right-hand only)
@@ -331,12 +330,11 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
       EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
       EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
-      EEPROM.write(EEPROM_DATA_START + 17, 10);  // GLOB.vol default (10, maps to 1.0 volume)
+      EEPROM.write(EEPROM_DATA_START + 17, 100);  // GLOB.vol default (100, maps to 1.0 volume, 0-100 range)
       EEPROM.write(EEPROM_DATA_START + 18, 0);   // cursorType default (0 = NORM)
       EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
-      EEPROM.write(EEPROM_DATA_START + 22, 0);   // previewSplit default (OFF)
       EEPROM.write(EEPROM_DATA_START + 23, 0);   // stereoChannel default (OFF)
 
       Serial.println("EEPROM initialized with defaults.");
@@ -389,21 +387,20 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 21, drawMode);
   }
 
-  // Load previewSplit from EEPROM (stored at EEPROM_DATA_START + 22)
-  extern int8_t previewSplit;
-  previewSplit = (int8_t)EEPROM.read(EEPROM_DATA_START + 22);
-  if (previewSplit != 0 && previewSplit != 1) {
-    previewSplit = 0;
-    EEPROM.write(EEPROM_DATA_START + 22, previewSplit);
-  }
-  
   // Load stereoChannel from EEPROM (stored at EEPROM_DATA_START + 23)
+  // 0=OFF, 1=M+P, 2=L+R
+  // Convert old values for backward compatibility (conversion happens in menu first enter)
   extern int8_t stereoChannel;
   stereoChannel = (int8_t)EEPROM.read(EEPROM_DATA_START + 23);
   if (stereoChannel < 0 || stereoChannel > 8) {
+    // Invalid value, default to OFF
     stereoChannel = 0;
     EEPROM.write(EEPROM_DATA_START + 23, stereoChannel);
   }
+  // Note: Values 1-8 will be converted in menu first enter (old 1->2, old 2-8->2)
+  // Apply routing after loading from EEPROM
+  extern void applyStereoChannelRouting();
+  applyStereoChannelRouting();
   
   if (previewVol < 0 || previewVol > 50) previewVol = 20;
   
@@ -523,7 +520,15 @@ void applyAudioSettingsFromGlobals() {
   extern unsigned int lineInLevel;
   
   // Apply main volume (headphone output)
-  float vol = GLOB.vol / 10.0f;
+  // Handle both legacy (0-10) and new (0-100) ranges
+  float vol;
+  if (GLOB.vol <= 10) {
+    // Legacy value (0-10): convert to 0.0-1.0
+    vol = GLOB.vol / 10.0f;
+  } else {
+    // New value (0-100): convert to 0.0-1.0
+    vol = GLOB.vol / 100.0f;
+  }
   vol = constrain(vol, 0.0f, 1.0f);
   sgtl5000_1.volume(vol);
   
@@ -1266,13 +1271,18 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern Mode *currentMode;
       extern struct GlobalVars GLOB;
       
-      // Calculate volume from GLOB.vol (0-10) to float (0.0-1.0)
-      float vol = GLOB.vol / 10.0f;
+      // Display GLOB.vol directly as 0-100
+      int volDisplay = GLOB.vol;
+      // Handle legacy values (0-10) for backward compatibility
+      if (volDisplay <= 10) {
+        volDisplay = volDisplay * 10;
+      }
       char volText[8];
-      snprintf(volText, sizeof(volText), "%.2f", vol);
+      snprintf(volText, sizeof(volText), "%d", volDisplay);
       drawText(volText, 2, 3, CRGB(55, 10, 0)); // Orange-red gradient
       
-      // Dynamic gradient color based on volume level
+      // Dynamic gradient color based on volume level (use float for color calculation)
+      float vol = GLOB.vol / 10.0f;
       int r = (int)(vol * 255.0f);
       int g = (int)((1.0f - vol) * 100.0f);
       int b = 0;
@@ -1281,8 +1291,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
     }
     
-    case 28: { // LINE - Line output volume
-      drawText("LINE", 2, 10, currentMenuParentTextColor());
+    case 28: { // LOUT - Line output volume
+      drawText("LOUT", 2, 10, currentMenuParentTextColor());
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
       // Display mapped range 1..19 (LINEOUT_MIN..LINEOUT_MAX) for user friendliness
@@ -1299,10 +1309,9 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 29: { // PREV - Preview volume
       drawText("PREV", 2, 10, currentMenuParentTextColor());
       extern unsigned int previewVol;
-      // Show two decimals (0.00–0.50) for finer feedback
-      float vol = previewVol * 0.01f;
+      // Display as 0-50 instead of 0.00-0.50
       char volText[8];
-      snprintf(volText, sizeof(volText), "%.2f", vol);
+      snprintf(volText, sizeof(volText), "%d", previewVol);
       drawText(volText, 2, 3, CRGB(0, 160, 80)); // Green
       
       // Green color for encoder
@@ -1324,8 +1333,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
     }
     
-    case 31: { // LVL - Line input level
-      drawText("LVL", 2, 10, currentMenuParentTextColor());
+    case 31: { // L-IN - Line input level
+      drawText("L-IN", 2, 10, currentMenuParentTextColor());
       extern unsigned int lineInLevel;
       char levelText[8];
       snprintf(levelText, sizeof(levelText), "%d", lineInLevel);
@@ -1337,28 +1346,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
     }
 
-    case 35: { // SPLT - Split outputs (main->L, preview->R)
-      drawText("SPLT", 2, 10, currentMenuParentTextColor());
-      extern int8_t previewSplit;
-      if (previewSplit) {
-        drawText("ON", 10, 3, UI_GREEN);
-      } else {
-        drawText("OFF", 6, 3, UI_RED);
-      }
-      CRGB greenColor = getIndicatorColor('G');
-      Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
-      break;
-    }
-    
-    case 36: { // 2-CH - Stereo channel routing (selected channel->L, others->R)
+    case 36: { // 2-CH - Stereo routing (OFF, M+P, or L+R)
       drawText("2-CH", 2, 10, currentMenuParentTextColor());
       extern int8_t stereoChannel;
       if (stereoChannel == 0) {
         drawText("OFF", 6, 3, UI_RED);
-      } else {
-        char chText[4];
-        snprintf(chText, sizeof(chText), "%d", stereoChannel);
-        drawText(chText, 10, 3, UI_GREEN);
+      } else if (stereoChannel == 1) {
+        drawText("M+P", 6, 3, UI_GREEN);
+      } else { // stereoChannel == 2
+        drawText("L+R", 6, 3, UI_GREEN);
       }
       CRGB blueColor = getIndicatorColor('X');
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
@@ -1440,8 +1436,15 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       break;
     }
 
-    case 16: { // RST page - show current mode (EFX or SD)
-      const char* modeText = (resetMenuOption == 0) ? "EFX" : "SD";
+    case 16: { // RST page - show current mode (EFX, SD, or FULL)
+      const char* modeText;
+      if (resetMenuOption == 0) {
+        modeText = "EFX";
+      } else if (resetMenuOption == 1) {
+        modeText = "SD";
+      } else {
+        modeText = "FULL";
+      }
       for (int x = 1; x <= 16; x++) {
         light(x, 8, CRGB::Black);
       }
@@ -1479,7 +1482,6 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static bool prevMenuFirstEnter = true;
   static bool micMenuFirstEnter = true;
   static bool lvlMenuFirstEnter = true;
-  static bool spltMenuFirstEnter = true;
   static bool stereoChMenuFirstEnter = true;
   static int lastPongSpeed = -1;
   static int lastSetting = -1;
@@ -1495,7 +1497,6 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
     prevMenuFirstEnter = true;
     micMenuFirstEnter = true;
     lvlMenuFirstEnter = true;
-    spltMenuFirstEnter = true;
     lastPongSpeed = -1;
     lastSetting = setting;
   }
@@ -1572,18 +1573,18 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 16: { // RST page - Choose between EFX and SD rescan
+    case 16: { // RST page - Choose between EFX, SD, and FULL reset
       static int lastResetOption = -1;
 
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        Encoder[2].writeMax((int32_t)1);  // 0=EFX, 1=SD
+        Encoder[2].writeMax((int32_t)2);  // 0=EFX, 1=SD, 2=FULL
         Encoder[2].writeMin((int32_t)0);
         menuFirstEnter = false;
       }
 
       if (currentMode->pos[2] != lastResetOption) {
-        resetMenuOption = constrain(currentMode->pos[2], 0, 1);
+        resetMenuOption = constrain(currentMode->pos[2], 0, 2);
         Encoder[2].writeCounter((int32_t)resetMenuOption);
         drawMainSettingStatus(setting);
         lastResetOption = resetMenuOption;
@@ -1636,37 +1637,47 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       extern struct GlobalVars GLOB;
       
       if (mainMenuFirstEnter) {
-        // Load GLOB.vol from EEPROM (0-10), convert to encoder range (0-31) for 32 steps
-        // Each encoder step = 1/32 = 0.03125, mapping 0.00 to 1.00
-        float currentVol = GLOB.vol / 10.0f;
-        int encoderVal = (int)round(currentVol * 31.0f);
-        encoderVal = constrain(encoderVal, 0, 31);
+        // Load GLOB.vol from EEPROM (0-10 legacy or 0-100 new)
+        // Convert legacy 0-10 to 0-100 for backward compatibility
+        int encoderVal;
+        if (GLOB.vol <= 10) {
+          // Legacy value (0-10): convert to 0-100
+          encoderVal = GLOB.vol * 10;
+        } else {
+          // New value (0-100): use directly
+          encoderVal = GLOB.vol;
+        }
+        encoderVal = constrain(encoderVal, 0, 100);
         
         Encoder[2].writeCounter((int32_t)encoderVal);
-        Encoder[2].writeMax((int32_t)31);
+        Encoder[2].writeMax((int32_t)100);
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = encoderVal;
         lastHpVol = encoderVal;
         mainMenuFirstEnter = false;
         
-        // Apply to hardware
-        sgtl5000_1.volume(currentVol);
+        // Apply to hardware: map 0-100 to 0.0-1.0
+        float vol = encoderVal / 100.0f;
+        sgtl5000_1.volume(vol);
+        
+        // Update GLOB.vol to new range (0-100)
+        GLOB.vol = encoderVal;
       }
       
       if (currentMode->pos[2] != lastHpVol) {
-        int encoderPos = constrain(currentMode->pos[2], 0, 31);
-        // Map encoder position (0-31) to volume (0.00-1.00) in 32 equal steps
-        // Position 0 = 0.00, Position 31 = 1.00
-        // Each step = 1/31 ≈ 0.03226
-        float vol = encoderPos / 31.0f;
-        // Convert back to GLOB.vol range (0-10) for storage
-        GLOB.vol = (int)round(vol * 10.0f);
-        GLOB.vol = constrain(GLOB.vol, 0, 10);
+        int encoderPos = constrain(currentMode->pos[2], 0, 100);
+        // Map encoder position (0-100) directly to volume (0.00-1.00)
+        // Position 0 = 0.00, Position 100 = 1.00
+        float vol = encoderPos / 100.0f;
+        
+        // Store in GLOB.vol as 0-100
+        GLOB.vol = encoderPos;
         
         // Apply to hardware
         sgtl5000_1.volume(vol);
         
         // Save to EEPROM (slot 17 - separate from transportMode which uses slot 2)
+        // Store as 0-100 (int8_t can hold -128 to 127, so 0-100 is fine)
         saveSingleModeToEEPROM(17, (int8_t)GLOB.vol);
         
         drawMainSettingStatus(setting);
@@ -1813,45 +1824,30 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 35: { // SPLT - Split outputs (main->L, preview->R)
-      static int lastSplit = -1;
-      extern int8_t previewSplit;
-      extern void applySplitRouting();
-
-      if (spltMenuFirstEnter) {
-        int encoderVal = (previewSplit != 0) ? 1 : 0;
-        Encoder[2].writeCounter((int32_t)encoderVal);
-        Encoder[2].writeMax((int32_t)1);
-        Encoder[2].writeMin((int32_t)0);
-        currentMode->pos[2] = encoderVal;
-        lastSplit = encoderVal;
-        spltMenuFirstEnter = false;
-
-        applySplitRouting();
-      }
-
-      if (currentMode->pos[2] != lastSplit) {
-        int encoderPos = constrain(currentMode->pos[2], 0, 1);
-        previewSplit = (int8_t)encoderPos;
-
-        saveSingleModeToEEPROM(22, previewSplit);
-        applySplitRouting();
-
-        drawMainSettingStatus(setting);
-        lastSplit = encoderPos;
-      }
-      break;
-    }
-    
-    case 36: { // 2-CH - Stereo channel routing (selected channel->L, others->R)
+    case 36: { // 2-CH - Stereo routing (OFF, M+P, or L+R)
       static int lastStereoCh = -1;
       extern int8_t stereoChannel;
       extern void applyStereoChannelRouting();
       
       if (stereoChMenuFirstEnter) {
+        // Convert old values for backward compatibility
+        // Old: 0=OFF, 1=ON (L+R mode) -> New: 0=OFF, 1=M+P, 2=L+R
         int encoderVal = stereoChannel;
+        if (encoderVal > 2) {
+          // Old invalid values (3-8), convert to L+R (2)
+          encoderVal = 2;
+          stereoChannel = 2;
+        } else if (encoderVal == 1) {
+          // Check if this is old format (L+R) or new format (M+P)
+          // We can't distinguish, so assume it's old format and convert to 2
+          // User can manually change to 1 (M+P) if needed
+          encoderVal = 2;
+          stereoChannel = 2;
+        }
+        // Always save to ensure persistence (even if value didn't change)
+        saveSingleModeToEEPROM(23, stereoChannel);
         Encoder[2].writeCounter((int32_t)encoderVal);
-        Encoder[2].writeMax((int32_t)8);
+        Encoder[2].writeMax((int32_t)2);  // 0=OFF, 1=M+P, 2=L+R
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = encoderVal;
         lastStereoCh = encoderVal;
@@ -1861,8 +1857,8 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       }
       
       if (currentMode->pos[2] != lastStereoCh) {
-        int encoderPos = constrain(currentMode->pos[2], 0, 8);
-        stereoChannel = (int8_t)encoderPos;
+        int encoderPos = constrain(currentMode->pos[2], 0, 2);
+        stereoChannel = (int8_t)encoderPos;  // 0=OFF, 1=M+P, 2=L+R
         
         saveSingleModeToEEPROM(23, stereoChannel);
         applyStereoChannelRouting();
@@ -2027,8 +2023,44 @@ void switchMenu(int menuPosition){
           // Reset effects/parameters to defaults
           Serial.println("=== RSET: Executing EFX reset ===");
           resetAllToDefaults();
-        } else {
+        } else if (resetMenuOption == 1) {
           // SD rescan: Rescan samples folder and update map.txt
+          Serial.println("=== SD READ: Rescanning samples folder ===");
+          FastLEDclear();
+          drawText("SCAN", 2, 3, UI_GREEN);
+          FastLEDshow();
+          
+          // Rescan and write manifest
+          extern bool scanAndWriteManifest();
+          bool success = scanAndWriteManifest();
+          
+          if (success) {
+            extern bool loadSampleManifest();
+            bool loadSuccess = loadSampleManifest();
+            if (loadSuccess) {
+              drawText("DONE", 2, 3, UI_GREEN);
+              Serial.println("=== SD READ: Scan complete ===");
+            } else {
+              drawText("FAIL", 2, 3, UI_RED);
+              Serial.println("=== SD READ: Scan OK but load failed ===");
+            }
+          } else {
+            drawText("FAIL", 2, 3, UI_RED);
+            Serial.println("=== SD READ: Scan failed ===");
+          }
+          FastLEDshow();
+          delay(1000);
+          
+          // Close menu and return to draw mode
+          extern Mode draw;
+          extern void switchMode(Mode*);
+          switchMode(&draw);
+        } else { // resetMenuOption == 2 (FULL)
+          // FULL reset: Reset effects AND rescan SD
+          Serial.println("=== RSET: Executing FULL reset ===");
+          resetAllToDefaults();
+          
+          // Then rescan SD
           Serial.println("=== SD READ: Rescanning samples folder ===");
           FastLEDclear();
           drawText("SCAN", 2, 3, UI_GREEN);

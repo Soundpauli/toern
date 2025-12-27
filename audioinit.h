@@ -336,6 +336,9 @@ EXTMEM AudioConnection        patchCord223(mixer0, 0, mixer_stereoR, 1);
 EXTMEM AudioConnection        patchCord224(mixer0, 0, mixer_stereoL, 1);
 EXTMEM AudioConnection        patchCord225(mixer_end, 0, mixer_stereoR, 0);
 EXTMEM AudioConnection        patchCord226(mixer_end, 0, mixer_stereoL, 0);
+// Direct connections for L+R mode: mixer1 (ch1-4) and mixer2 (ch5-8) to stereo mixers
+EXTMEM AudioConnection        patchCord230(mixer1, 0, mixer_stereoL, 2);  // ch1-4 -> L
+EXTMEM AudioConnection        patchCord231(mixer2, 0, mixer_stereoR, 2);  // ch5-8 -> R
 EXTMEM AudioConnection        patchCord227(mixer_stereoR, 0, i2s1, 0);
 EXTMEM AudioConnection        patchCord228(mixer_stereoL, 0, i2s1, 1);
 EXTMEM AudioConnection        patchCord229(audioInputAmp, 0, mixer_end, 3);

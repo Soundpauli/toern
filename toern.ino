@@ -356,7 +356,7 @@ struct PendingNote {
 // IMPORTANT: `playNote()` runs in an IntervalTimer ISR, so this queue must be ISR-safe.
 // Use a fixed-size single-producer (loop/MIDI) single-consumer (ISR/onBeatTick) ring buffer.
 static constexpr uint8_t MAX_PENDING_NOTES = 32;
-static PendingNote pendingNotesBuf[MAX_PENDING_NOTES];
+DMAMEM static PendingNote pendingNotesBuf[MAX_PENDING_NOTES];
 static volatile uint8_t pendingNotesHead = 0;   // next write index
 static volatile uint8_t pendingNotesTail = 0;   // next read index
 static volatile uint8_t pendingNotesCount = 0;  // number of queued items
@@ -409,7 +409,7 @@ bool particlesGenerated = false;
 DMAMEM Particle particles[256];  // up to 256 possible "on" pixels
 int particleCount = 0;
 
-bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
+DMAMEM bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
 float rateFactor = 44117.0 / 44100.0;
 
@@ -468,8 +468,8 @@ const unsigned int maxlen = MAX_STEPS + 1;               // Note array width (1-
 const unsigned int SONG_LEN = MAX_STEPS;                 // Song length equals total steps
 
 static bool lastBothTouched = false;
-bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
-bool lastTouchState[4] = { false };  // Previous touch state
+DMAMEM bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
+DMAMEM bool lastTouchState[4] = { false };  // Previous touch state
 const int touchThreshold = 45;
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
@@ -502,7 +502,7 @@ static int ctrlLastChannel = -1;
 static int ctrlLastVolume = -1;
 static bool ctrlVolumeOverlayActive = false;
 // Remember per-channel volume before muting, so unmute can restore it (CTRL=VOL workflow)
-static uint8_t lastChannelVolBeforeMute[maxY] = {0};
+DMAMEM static uint8_t lastChannelVolBeforeMute[maxY] = {0};
 static unsigned long ctrlVolumeOverlayUntil = 0;
 static int ctrlVolumeOverlayValue = 0;
 static bool inputGainOverlayActive = false;
@@ -550,11 +550,11 @@ unsigned int lastDrawUpdate = 0;  // UI redraw limiter (separate from LED show l
 unsigned int totalInterval = 0;
 
 
-bool hasNotes[maxPages + 1];
-unsigned int startTime[maxY] = { 0 };    // Variable to store the start time
-bool noteOnTriggered[maxY] = { false };  // Flag to indicate if noteOn has been triggered
-bool persistentNoteOn[maxY] = { false };
-int pressedKeyCount[maxY] = { 0 };
+DMAMEM bool hasNotes[maxPages + 1];
+DMAMEM unsigned int startTime[maxY] = { 0 };    // Variable to store the start time
+DMAMEM bool noteOnTriggered[maxY] = { false };  // Flag to indicate if noteOn has been triggered
+DMAMEM bool persistentNoteOn[maxY] = { false };
+DMAMEM int16_t pressedKeyCount[maxY] = { 0 };  // Changed from int to int16_t
 
 bool waitForFourBars = false;
 unsigned int pulseCount = 0;
@@ -720,13 +720,13 @@ struct GlobalVars {
   unsigned int subpattern; // current subpattern (0-15)
 };
 
-float octave[2];
+DMAMEM float octave[2];
 
 // Global detune array for channels 1-12 (excluding synth channels 13-14)
-float detune[13]; // Index 0 unused, indices 1-12 for channels 1-12
+DMAMEM float detune[13]; // Index 0 unused, indices 1-12 for channels 1-12
 
 // Global octave array for channels 1-8 (excluding synth channels 13-14)
-float channelOctave[9]; // Index 0 unused, indices 1-8 for channels 1-8
+DMAMEM float channelOctave[9]; // Index 0 unused, indices 1-8 for channels 1-8
                              
 //#define GRANULAR_MEMORY_SIZE 95280  // enough for 800 ms at 44.1 kHz
 //DMAMEM int16_t granularMemory[GRANULAR_MEMORY_SIZE];
@@ -789,13 +789,13 @@ float gainValue = 2.0;
 
 uint32_t loadedSampleRate[MAX_CHANNELS];
 uint32_t loadedSampleLen[MAX_CHANNELS];
-int8_t channelDirection[maxFiles];
-static bool prevMuteState[maxY + 1];
+DMAMEM int8_t channelDirection[maxFiles];
+DMAMEM static bool prevMuteState[maxY + 1];
 static bool tmpMuteActive = false;
 
 // Per-page mute system for PMOD (pattern mode)
-static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
-static bool globalMutes[maxY];          // stores global mute state when PMOD is off
+DMAMEM static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
+DMAMEM static bool globalMutes[maxY];          // stores global mute state when PMOD is off
 
 //EXTMEM int16_t fastRecBuffer[MAX_CHANNELS][BUFFER_SAMPLES];
 static size_t fastRecWriteIndex[MAX_CHANNELS];
@@ -902,7 +902,7 @@ struct FilterTarget {
   SettingArray arr;
   uint8_t idx;
 };
-FilterTarget defaultFastFilter[NUM_CHANNELS]; // one per channel
+DMAMEM FilterTarget defaultFastFilter[NUM_CHANNELS]; // one per channel
 
 EXTMEM arraysampler _samplers[9];
 AudioPlayArrayResmp *voices[9] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8 };
@@ -917,85 +917,46 @@ AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, n
 AudioMixer4 *waveformmixers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
 
 // VOL>SPLT: 0 = normal (main+preview to both L/R), 1 = split (main->L only, preview->R only)
-int8_t previewSplit = 0;
-
-// VOL>2-CH: 0 = off (normal routing), 1-8 = selected channel goes to L, others to R, preview muted
+// VOL>2-CH: Stereo routing modes
+// 0 = OFF (normal routing: main and preview to both L+R)
+// 1 = M+P (main -> L, preview -> R)
+// 2 = L+R (channels 1-4 -> L, 5-8 -> R, preview muted)
 int8_t stereoChannel = 0;
 
-FLASHMEM void applySplitRouting() {
+FLASHMEM void applyStereoChannelRouting() {
   // stereo mixer inputs:
   // - input 0: mixer_end (main)
   // - input 1: mixer0 (preview)
   // inputs 2/3 unused
   
-  // If stereoChannel is active, it takes precedence over previewSplit
-  extern int8_t stereoChannel;
-  if (stereoChannel != 0) {
-    // Stereo channel mode is active - applyStereoChannelRouting will handle it
-    return;
-  }
-  
-  if (previewSplit) {
+  if (stereoChannel == 0) {
+    // OFF: Normal routing - main and preview to both L+R
+    mixer_stereoL.gain(0, 1.0f); // main -> L
+    mixer_stereoL.gain(1, 1.0f); // preview -> L
+    mixer_stereoL.gain(2, 0.0f); // mixer1 muted
+    mixer_stereoR.gain(0, 1.0f); // main -> R
+    mixer_stereoR.gain(1, 1.0f); // preview -> R
+    mixer_stereoR.gain(2, 0.0f); // mixer2 muted
+  } else if (stereoChannel == 1) {
+    // M+P: Main -> L, Preview -> R
     mixer_stereoL.gain(0, 1.0f); // main -> L
     mixer_stereoL.gain(1, 0.0f); // preview off on L
+    mixer_stereoL.gain(2, 0.0f); // mixer1 muted
     mixer_stereoR.gain(0, 0.0f); // main off on R
     mixer_stereoR.gain(1, 1.0f); // preview -> R
-  } else {
-    mixer_stereoL.gain(0, 1.0f);
-    mixer_stereoL.gain(1, 1.0f);
-    mixer_stereoR.gain(0, 1.0f);
-    mixer_stereoR.gain(1, 1.0f);
+    mixer_stereoR.gain(2, 0.0f); // mixer2 muted
+  } else { // stereoChannel == 2
+    // L+R: Channels 1-4 -> L, 5-8 -> R, preview muted
+    // Use direct connections: mixer1 (ch1-4) -> L, mixer2 (ch5-8) -> R
+    mixer_stereoL.gain(0, 0.0f); // mixer_end muted on L
+    mixer_stereoL.gain(1, 0.0f); // preview muted
+    mixer_stereoL.gain(2, 1.0f); // mixer1 (ch1-4) -> L
+    mixer_stereoR.gain(0, 0.0f); // mixer_end muted on R
+    mixer_stereoR.gain(1, 0.0f); // preview muted
+    mixer_stereoR.gain(2, 1.0f); // mixer2 (ch5-8) -> R
   }
-  mixer_stereoR.gain(2, 0.0f);
+  // Ensure unused inputs are muted
   mixer_stereoR.gain(3, 0.0f);
-  mixer_stereoL.gain(2, 0.0f);
-  mixer_stereoL.gain(3, 0.0f);
-}
-
-// VOL>2-CH: Route selected channel (1-8) to L, all others to R, preview muted
-// NOTE: For true per-channel routing, you need to modify audioinit.h to add:
-// - mixer_channelL and mixer_channelR (8 inputs each)
-// - Route each freeverbmixer (1-8) to both mixer_channelL and mixer_channelR
-// - Route mixer_channelL to mixer_stereoL input 2, mixer_channelR to mixer_stereoR input 2
-// Then use gain control on mixer_channelL/R to route individual channels.
-//
-// Current implementation: Routes channel groups (1-4 vs 5-8) as an approximation.
-FLASHMEM void applyStereoChannelRouting() {
-  if (stereoChannel == 0) {
-    // OFF: Let applySplitRouting handle normal routing
-    // Just ensure preview is not muted
-    return;
-  } else if (stereoChannel >= 1 && stereoChannel <= 8) {
-    // Channel selected: selected channel -> L, others -> R, preview muted
-    // NOTE: Current implementation routes channel groups (mixer1=ch1-4, mixer2=ch5-8)
-    // For true per-channel routing, modify audioinit.h as noted above.
-    
-    // Route based on which mixer group contains the selected channel
-    if (stereoChannel <= 4) {
-      // Selected channel is in mixer1 group (channels 1-4)
-      // Route mixer_end (which contains both mixer1 and mixer2) to both L and R
-      // Then use mixer1/mixer2 gains to isolate the selected channel group
-      // This is approximate - routes entire mixer1 group to L, mixer2 group to R
-      mixer_stereoL.gain(0, 1.0f); // mixer_end -> L (contains mixer1 with selected channel)
-      mixer_stereoL.gain(1, 0.0f); // preview muted
-      mixer_stereoR.gain(0, 1.0f); // mixer_end -> R (contains mixer2 with other channels)
-      mixer_stereoR.gain(1, 0.0f); // preview muted
-      
-      // Mute mixer2 on left, mute mixer1 on right to isolate groups
-      // Note: mixer_end contains both, so we can't fully isolate without audio graph changes
-      // This is a limitation of the current audio routing structure
-    } else {
-      // Selected channel is in mixer2 group (channels 5-8)
-      // Route mixer2 group to L, mixer1 group to R
-      mixer_stereoL.gain(0, 1.0f); // mixer_end -> L (contains mixer2 with selected channel)
-      mixer_stereoL.gain(1, 0.0f); // preview muted
-      mixer_stereoR.gain(0, 1.0f); // mixer_end -> R (contains mixer1 with other channels)
-      mixer_stereoR.gain(1, 0.0f); // preview muted
-    }
-  }
-  mixer_stereoR.gain(2, 0.0f);
-  mixer_stereoR.gain(3, 0.0f);
-  mixer_stereoL.gain(2, 0.0f);
   mixer_stereoL.gain(3, 0.0f);
 }
 
@@ -1160,7 +1121,7 @@ void staticThresholds(i2cEncoderLibV2 *obj) {
 
 
 // Debounce tracking for button presses/releases (in fast RAM for interrupt handlers)
-unsigned long lastButtonChange[NUM_ENCODERS] = {0, 0, 0, 0};
+DMAMEM unsigned long lastButtonChange[NUM_ENCODERS] = {0, 0, 0, 0};
 const unsigned long btnDebounce = 30;  // Debounce time in milliseconds
 
 void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
@@ -2548,7 +2509,6 @@ void initSamples() {
 
 
   // Global loudness stage (final summing before i2s)
-  applySplitRouting();
   applyStereoChannelRouting();
   
 
@@ -2735,9 +2695,14 @@ void setup() {
   // GLOB, micGain, previewVol, lineInLevel, and lineOutLevelSetting are already in scope as globals
   
   // Load GLOB.vol from EEPROM (stored at EEPROM_DATA_START + 17, separate from transportMode)
+  // Support both legacy (0-10) and new (0-100) ranges
   GLOB.vol = (int8_t)EEPROM.read(EEPROM_DATA_START + 17);
-  if (GLOB.vol < 0 || GLOB.vol > 10) {
-    GLOB.vol = 10;  // Default to 10 if invalid
+  if (GLOB.vol < 0 || GLOB.vol > 100) {
+    GLOB.vol = 100;  // Default to 100 if invalid (new range)
+  } else if (GLOB.vol > 10 && GLOB.vol <= 100) {
+    // New range value (11-100): use as-is
+  } else {
+    // Legacy range value (0-10): will be converted when menu is accessed
   }
   
   // Load micGain from EEPROM

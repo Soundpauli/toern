@@ -3,33 +3,33 @@
 #define MAXSLIDER 32.0 // float version of maxfilterResonance
 
 #define AUTO_OFF_TIME 1800  // milliseconds
-unsigned long voiceStartTime[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };
+DMAMEM unsigned long voiceStartTime[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };
 
-int cents[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };
-int semitones[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };
-int pan[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };
-int volume[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };
+DMAMEM int16_t cents[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };  // Changed from int to int16_t
+DMAMEM int16_t semitones[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };  // Changed from int to int16_t
+DMAMEM int16_t pan[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };  // Changed from int to int16_t
+DMAMEM uint8_t volume[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint8_t
 
-int attackAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };
-int decayAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };
-float sustainAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1, 1, 1 };
-int releaseAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };
+DMAMEM uint16_t attackAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
+DMAMEM uint16_t decayAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
+DMAMEM float sustainAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1, 1, 1 };
+DMAMEM uint16_t releaseAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
 
-int attackFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };
-int decayFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };
-float sustainFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1, 1, 1 };
-int releaseFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };
+DMAMEM uint16_t attackFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
+DMAMEM uint16_t decayFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
+DMAMEM float sustainFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1, 1, 1 };
+DMAMEM uint16_t releaseFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
 
-int cutoff[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1000, 1000, 1000 };
-float resonance[INSTRUMENT_CHANNELS][POLY_VOICES] = { 2.0, 2.0, 2.0 };
-float filterAmount[INSTRUMENT_CHANNELS][POLY_VOICES] = { 2.0, 2.0, 2.0 };
+DMAMEM uint16_t cutoff[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1000, 1000, 1000 };  // Changed from int to uint16_t
+DMAMEM float resonance[INSTRUMENT_CHANNELS][POLY_VOICES] = { 2.0, 2.0, 2.0 };
+DMAMEM float filterAmount[INSTRUMENT_CHANNELS][POLY_VOICES] = { 2.0, 2.0, 2.0 };
 
-int waveforms[INSTRUMENT_CHANNELS][POLY_VOICES] = { WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH };
-int waveformsArray[INSTRUMENT_CHANNELS][5] = { WAVEFORM_SAWTOOTH, WAVEFORM_PULSE, WAVEFORM_SQUARE, WAVEFORM_TRIANGLE, WAVEFORM_SINE };
-float pulseWidth[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0.25, 0.25, 0.25 };
+DMAMEM uint8_t waveforms[INSTRUMENT_CHANNELS][POLY_VOICES] = { WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH };  // Changed from int to uint8_t
+DMAMEM uint8_t waveformsArray[INSTRUMENT_CHANNELS][5] = { WAVEFORM_SAWTOOTH, WAVEFORM_PULSE, WAVEFORM_SQUARE, WAVEFORM_TRIANGLE, WAVEFORM_SINE };  // Changed from int to uint8_t
+DMAMEM float pulseWidth[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0.25, 0.25, 0.25 };
 
-int noteArray[INSTRUMENT_CHANNELS][8];
-int notePlaying[2] = { 0 };
+DMAMEM int16_t noteArray[INSTRUMENT_CHANNELS][8];  // Changed from int to int16_t
+DMAMEM int16_t notePlaying[2] = { 0 };  // Changed from int to int16_t
 
 
 

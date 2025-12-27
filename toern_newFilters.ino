@@ -7,15 +7,15 @@ static bool channelHasFreeverb(uint8_t chan) {
 
 // With drum sliders removed, filter pages remain static.
 static bool updateFilterPageAvailability(uint8_t /*chan*/) { return false; }
-unsigned long lastEncoderChange[4] = { 0, 0, 0, 0 };
+DMAMEM unsigned long lastEncoderChange[4] = { 0, 0, 0, 0 };
 
 int8_t lastChangedEncoder = -1;
-unsigned long lastInteraction = millis();  // global timestamp
+DMAMEM unsigned long lastInteraction = millis();  // global timestamp
 const unsigned long FILTER_INTERACTION_TIMEOUT = 1000; // ms before reverting to initial view
 
 
 bool showingAny = false;
-bool showSingleFilter[4] = { false, false, false, false };
+DMAMEM bool showSingleFilter[4] = { false, false, false, false };
 
 
 uint8_t scaleToDisplay(const SliderDefEntry& meta, uint8_t val) {
