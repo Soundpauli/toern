@@ -78,8 +78,8 @@ extern unsigned int recordingStartBeat;  // Beat where recording started
 // ── Sample name manifest (EXTMEM, small, plain text) ─────────────────────
 // Limits (keep small)
 const int MANIFEST_MAX_FOLDERS = 32;
-const int MANIFEST_MAX_FILES_PER_FOLDER = 255;
-const int MANIFEST_NAME_MAX = 24;  // incl null
+const int MANIFEST_MAX_FILES_PER_FOLDER = 999;  // Increased from 255 to handle up to 999 files per folder
+const int MANIFEST_NAME_MAX = 32;  // incl null (increased from 24 to handle longer filenames)
 
 EXTMEM char manifestFolderNames[MANIFEST_MAX_FOLDERS][MANIFEST_NAME_MAX];
 EXTMEM char manifestFileNames[MANIFEST_MAX_FOLDERS][MANIFEST_MAX_FILES_PER_FOLDER][MANIFEST_NAME_MAX];
@@ -159,9 +159,23 @@ bool loadSampleManifest() {
 
 // Scan SD for folders/files (natural sorted by simple insertion) and write manifest
 bool scanAndWriteManifest() {
+  Serial.println("=== scanAndWriteManifest: Starting ===");
+  
+  // Delete existing map.txt first to ensure clean write
+  if (SD.exists("samples/map.txt")) {
+    if (SD.remove("samples/map.txt")) {
+      Serial.println("--- Deleted existing samples/map.txt ---");
+    } else {
+      Serial.println("WARNING: Failed to delete existing samples/map.txt");
+    }
+  }
+  
   clearSampleManifest();
   File root = SD.open("samples");
-  if (!root || !root.isDirectory()) return false;
+  if (!root || !root.isDirectory()) {
+    Serial.println("ERROR: Failed to open samples directory");
+    return false;
+  }
 
   Serial.println("=== Manifest scan: samples/ ===");
 
@@ -188,6 +202,8 @@ bool scanAndWriteManifest() {
 
     // scan files
     File fileEntry;
+    int filesScanned = 0;
+    int filesSkipped = 0;
     while ((fileEntry = entry.openNextFile())) {
       if (fileEntry.isDirectory()) { fileEntry.close(); continue; }
       const char* nm = fileEntry.name();
@@ -196,16 +212,54 @@ bool scanAndWriteManifest() {
       const char* fbase = nm ? nm : "";
       const char* fslash = strrchr(fbase, '/');
       if (fslash) fbase = fslash + 1;
-      if (!hasWavExt(fbase)) { fileEntry.close(); continue; }
+      filesScanned++;
+      if (!hasWavExt(fbase)) { 
+        fileEntry.close(); 
+        filesSkipped++;
+        continue; 
+      }
       int fi = manifestFileCount[fidx];
       if (fi < MANIFEST_MAX_FILES_PER_FOLDER) {
+        int nameLen = strlen(fbase);
+        if (nameLen >= MANIFEST_NAME_MAX) {
+          Serial.print("WARNING: Filename too long, truncating: ");
+          Serial.print(fbase);
+          Serial.print(" (");
+          Serial.print(nameLen);
+          Serial.print(" chars, max ");
+          Serial.print(MANIFEST_NAME_MAX - 1);
+          Serial.println(")");
+        }
         strncpy(manifestFileNames[fidx][fi], fbase, MANIFEST_NAME_MAX - 1);
         manifestFileNames[fidx][fi][MANIFEST_NAME_MAX - 1] = 0;
         manifestFileCount[fidx]++;
         Serial.print("  file: ");
         Serial.println(manifestFileNames[fidx][fi]);
+      } else {
+        Serial.print("WARNING: Too many files in folder ");
+        Serial.print(manifestFolderNames[fidx]);
+        Serial.print(" (max ");
+        Serial.print(MANIFEST_MAX_FILES_PER_FOLDER);
+        Serial.println("), skipping remaining files");
+        fileEntry.close();
+        break; // Stop scanning this folder
       }
       fileEntry.close();
+    }
+    if (filesScanned > 0) {
+      Serial.print("  [");
+      Serial.print(manifestFolderNames[fidx]);
+      Serial.print("] Scanned ");
+      Serial.print(filesScanned);
+      Serial.print(" files, added ");
+      Serial.print(manifestFileCount[fidx]);
+      Serial.print(" WAV files");
+      if (filesSkipped > 0) {
+        Serial.print(", skipped ");
+        Serial.print(filesSkipped);
+        Serial.print(" non-WAV");
+      }
+      Serial.println();
     }
     entry.close();
   }
@@ -223,10 +277,16 @@ bool scanAndWriteManifest() {
         uint16_t tmpCnt = manifestFileCount[i];
         manifestFileCount[i] = manifestFileCount[j];
         manifestFileCount[j] = tmpCnt;
-        char tmpFiles[MANIFEST_MAX_FILES_PER_FOLDER][MANIFEST_NAME_MAX];
-        memcpy(tmpFiles, manifestFileNames[i], sizeof(tmpFiles));
-        memcpy(manifestFileNames[i], manifestFileNames[j], sizeof(tmpFiles));
-        memcpy(manifestFileNames[j], tmpFiles, sizeof(tmpFiles));
+        // Swap file arrays element-by-element to avoid huge stack allocation
+        // Use the larger of the two counts to ensure we swap all files
+        uint16_t maxFileCount = (manifestFileCount[i] > manifestFileCount[j]) ? manifestFileCount[i] : manifestFileCount[j];
+        char tmpFile[MANIFEST_NAME_MAX];
+        uint16_t fileIdx;
+        for (fileIdx = 0; fileIdx < maxFileCount; fileIdx++) {
+          memcpy(tmpFile, manifestFileNames[i][fileIdx], MANIFEST_NAME_MAX);
+          memcpy(manifestFileNames[i][fileIdx], manifestFileNames[j][fileIdx], MANIFEST_NAME_MAX);
+          memcpy(manifestFileNames[j][fileIdx], tmpFile, MANIFEST_NAME_MAX);
+        }
       }
     }
   }
@@ -247,6 +307,13 @@ bool scanAndWriteManifest() {
   }
 
   // write manifest file
+  // Delete existing map.txt first to ensure clean write
+  if (SD.exists("samples/map.txt")) {
+    SD.remove("samples/map.txt");
+    Serial.println("--- Deleted existing samples/map.txt ---");
+  }
+  
+  // Ensure samples directory exists (it should, since we just scanned it)
   File f = SD.open("samples/map.txt", O_WRITE | O_CREAT | O_TRUNC);
   if (f) {
     Serial.println("--- Writing samples/map.txt (sorted) ---");
@@ -267,6 +334,8 @@ bool scanAndWriteManifest() {
     }
     f.close();
     Serial.println("--- Manifest write complete ---");
+  } else {
+    Serial.println("ERROR: Failed to create samples/map.txt");
   }
   manifestLoaded = manifestFolderCount > 0;
   return manifestLoaded;
@@ -300,10 +369,19 @@ void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
 }
 
 void EEPROMgetLastFiles() {
-  // Legacy lastFile[] system removed. Keep the function name for compatibility, but make it manifest-only.
-  // Prefer loading the manifest quickly; if missing, regenerate it.
+  // Always use map.txt - never use legacy mode
+  // If map.txt is missing, scan and write it, then load it
   if (!loadSampleManifest()) {
+    // map.txt is missing, scan and write it
     scanAndWriteManifest();
+    // Now load the newly created map.txt
+    loadSampleManifest();
+  }
+  // Ensure manifest is loaded
+  if (!manifestLoaded) {
+    // Last resort: try scanning again
+    scanAndWriteManifest();
+    loadSampleManifest();
   }
   if (manifestLoaded) {
     set_Wav.maxValues[1] = (manifestFolderCount > 0) ? (manifestFolderCount - 1) : 0;

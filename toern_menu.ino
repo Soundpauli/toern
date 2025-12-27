@@ -3,7 +3,7 @@
 #define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 3
 #define MIDI_PAGES_COUNT 2
-#define VOL_PAGES_COUNT 6
+#define VOL_PAGES_COUNT 7
 #define ETC_PAGES_COUNT 2
 
 // External variables
@@ -83,13 +83,14 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"PREV", 29, false, nullptr},         // Preview volume
   {"MIC", 30, false, nullptr},          // Microphone gain
   {"LVL", 31, false, nullptr},          // Line input level
-  {"SPLT", 35, false, nullptr}          // Split outputs: main->L, preview->R
+  {"SPLT", 35, false, nullptr},         // Split outputs: main->L, preview->R
+  {"2-CH", 36, false, nullptr}         // Stereo channel: selected channel->L, others->R
 };
 
 // ETC submenu pages
 MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"RST", 16, true, "MODE"}             // Reset Effects
+  {"RST", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
 };
 
 
@@ -127,7 +128,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 23; // EEPROM_DATA_START + [0..22]
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 24; // EEPROM_DATA_START + [0..23]
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
@@ -336,6 +337,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
       EEPROM.write(EEPROM_DATA_START + 22, 0);   // previewSplit default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 23, 0);   // stereoChannel default (OFF)
 
       Serial.println("EEPROM initialized with defaults.");
 
@@ -393,6 +395,14 @@ void loadMenuFromEEPROM() {
   if (previewSplit != 0 && previewSplit != 1) {
     previewSplit = 0;
     EEPROM.write(EEPROM_DATA_START + 22, previewSplit);
+  }
+  
+  // Load stereoChannel from EEPROM (stored at EEPROM_DATA_START + 23)
+  extern int8_t stereoChannel;
+  stereoChannel = (int8_t)EEPROM.read(EEPROM_DATA_START + 23);
+  if (stereoChannel < 0 || stereoChannel > 8) {
+    stereoChannel = 0;
+    EEPROM.write(EEPROM_DATA_START + 23, stereoChannel);
   }
   
   if (previewVol < 0 || previewVol > 50) previewVol = 20;
@@ -1340,6 +1350,21 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
     }
     
+    case 36: { // 2-CH - Stereo channel routing (selected channel->L, others->R)
+      drawText("2-CH", 2, 10, currentMenuParentTextColor());
+      extern int8_t stereoChannel;
+      if (stereoChannel == 0) {
+        drawText("OFF", 6, 3, UI_RED);
+      } else {
+        char chText[4];
+        snprintf(chText, sizeof(chText), "%d", stereoChannel);
+        drawText(chText, 10, 3, UI_GREEN);
+      }
+      CRGB blueColor = getIndicatorColor('X');
+      Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+      break;
+    }
+    
     case 32: { // CRSR - Cursor Type
       drawText("CRSR", 2, 10, currentMenuParentTextColor());
       extern bool showChannelNr;
@@ -1415,8 +1440,8 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       break;
     }
 
-    case 16: { // RST page - show current reset mode
-      const char* modeText = (resetMenuOption == 0) ? "EFX" : "FULL";
+    case 16: { // RST page - show current mode (EFX or SD)
+      const char* modeText = (resetMenuOption == 0) ? "EFX" : "SD";
       for (int x = 1; x <= 16; x++) {
         light(x, 8, CRGB::Black);
       }
@@ -1455,6 +1480,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static bool micMenuFirstEnter = true;
   static bool lvlMenuFirstEnter = true;
   static bool spltMenuFirstEnter = true;
+  static bool stereoChMenuFirstEnter = true;
   static int lastPongSpeed = -1;
   static int lastSetting = -1;
   
@@ -1546,12 +1572,12 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 16: { // RST page - Choose between EFX and FULL reset
+    case 16: { // RST page - Choose between EFX and SD rescan
       static int lastResetOption = -1;
 
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMax((int32_t)1);  // 0=EFX, 1=SD
         Encoder[2].writeMin((int32_t)0);
         menuFirstEnter = false;
       }
@@ -1816,6 +1842,36 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       }
       break;
     }
+    
+    case 36: { // 2-CH - Stereo channel routing (selected channel->L, others->R)
+      static int lastStereoCh = -1;
+      extern int8_t stereoChannel;
+      extern void applyStereoChannelRouting();
+      
+      if (stereoChMenuFirstEnter) {
+        int encoderVal = stereoChannel;
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)8);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastStereoCh = encoderVal;
+        stereoChMenuFirstEnter = false;
+        
+        applyStereoChannelRouting();
+      }
+      
+      if (currentMode->pos[2] != lastStereoCh) {
+        int encoderPos = constrain(currentMode->pos[2], 0, 8);
+        stereoChannel = (int8_t)encoderPos;
+        
+        saveSingleModeToEEPROM(23, stereoChannel);
+        applyStereoChannelRouting();
+        
+        drawMainSettingStatus(setting);
+        lastStereoCh = encoderPos;
+      }
+      break;
+    }
 
          default:
        // Reset first enter flags when not on pages with additional features
@@ -1965,13 +2021,44 @@ void switchMenu(int menuPosition){
         break;
 
         case 16:
+        Serial.print("=== RSET menu: resetMenuOption=");
+        Serial.println(resetMenuOption);
         if (resetMenuOption == 0) {
-        // Reset effects/parameters to defaults
-        resetAllToDefaults();
+          // Reset effects/parameters to defaults
+          Serial.println("=== RSET: Executing EFX reset ===");
+          resetAllToDefaults();
         } else {
-        // Full reset
-        extern void startNew();
-        startNew();
+          // SD rescan: Rescan samples folder and update map.txt
+          Serial.println("=== SD READ: Rescanning samples folder ===");
+          FastLEDclear();
+          drawText("SCAN", 2, 3, UI_GREEN);
+          FastLEDshow();
+          
+          // Rescan and write manifest
+          extern bool scanAndWriteManifest();
+          bool success = scanAndWriteManifest();
+          
+          if (success) {
+            extern bool loadSampleManifest();
+            bool loadSuccess = loadSampleManifest();
+            if (loadSuccess) {
+              drawText("DONE", 2, 3, UI_GREEN);
+              Serial.println("=== SD READ: Scan complete ===");
+            } else {
+              drawText("FAIL", 2, 3, UI_RED);
+              Serial.println("=== SD READ: Scan OK but load failed ===");
+            }
+          } else {
+            drawText("FAIL", 2, 3, UI_RED);
+            Serial.println("=== SD READ: Scan failed ===");
+          }
+          FastLEDshow();
+          delay(1000);
+          
+          // Close menu and return to draw mode
+          extern Mode draw;
+          extern void switchMode(Mode*);
+          switchMode(&draw);
         }
         break;
         

@@ -3,7 +3,7 @@ extern int8_t channelDirection[maxFiles];
 extern bool manifestLoaded;
 extern uint16_t manifestFolderCount;
 extern uint16_t manifestFileCount[];
-extern char manifestFolderNames[][24];
+extern char manifestFolderNames[][32];
 bool scanAndWriteManifest();
 extern int previewTriggerMode;
 extern const int PREVIEW_MODE_ON;
@@ -58,25 +58,112 @@ static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
   outSize = 0;
   uint8_t hdr[12];
   f.seek(0);
-  if (f.read(hdr, sizeof(hdr)) != (int)sizeof(hdr)) return false;
-  if (!(hdr[0]=='R' && hdr[1]=='I' && hdr[2]=='F' && hdr[3]=='F' && hdr[8]=='W' && hdr[9]=='A' && hdr[10]=='V' && hdr[11]=='E')) {
+  if (f.read(hdr, sizeof(hdr)) != (int)sizeof(hdr)) {
+    Serial.print("WAV ERROR: Failed to read RIFF header (file too small)\n");
     return false;
   }
+  if (!(hdr[0]=='R' && hdr[1]=='I' && hdr[2]=='F' && hdr[3]=='F' && hdr[8]=='W' && hdr[9]=='A' && hdr[10]=='V' && hdr[11]=='E')) {
+    Serial.print("WAV ERROR: Invalid RIFF/WAVE header\n");
+    return false;
+  }
+  
+  // Check RIFF chunk size
+  uint32_t riffSize = (uint32_t)hdr[4] | ((uint32_t)hdr[5] << 8) | ((uint32_t)hdr[6] << 16) | ((uint32_t)hdr[7] << 24);
+  uint32_t fileSize = f.size();
+  uint32_t expectedRiffSize = fileSize - 8; // RIFF size = file size - 8 bytes (RIFF + size fields)
+  
+  if (riffSize != expectedRiffSize) {
+    Serial.print("WAV WARNING: RIFF size mismatch! File: ");
+    Serial.print(f.name());
+    Serial.print(", RIFF size in header: ");
+    Serial.print(riffSize);
+    Serial.print(", Expected (fileSize-8): ");
+    Serial.print(expectedRiffSize);
+    Serial.print(", File size: ");
+    Serial.print(fileSize);
+    Serial.print("\n");
+  }
+  
   f.seek(12);
-  while (f.available()) {
+  uint32_t maxIterations = 100; // Prevent infinite loops from malformed files
+  uint32_t iterations = 0;
+  while (f.available() && iterations < maxIterations) {
+    iterations++;
     char id[4];
-    if (f.read((uint8_t*)id, 4) != 4) break;
+    if (f.read((uint8_t*)id, 4) != 4) {
+      Serial.print("WAV ERROR: Failed to read chunk ID at pos ");
+      Serial.print(f.position() - 4);
+      Serial.print(" in ");
+      Serial.print(f.name());
+      Serial.print("\n");
+      break;
+    }
     uint8_t szb[4];
-    if (f.read(szb, 4) != 4) break;
+    if (f.read(szb, 4) != 4) {
+      Serial.print("WAV ERROR: Failed to read chunk size at pos ");
+      Serial.print(f.position() - 4);
+      Serial.print(" in ");
+      Serial.print(f.name());
+      Serial.print("\n");
+      break;
+    }
     uint32_t sz = (uint32_t)szb[0] | ((uint32_t)szb[1] << 8) | ((uint32_t)szb[2] << 16) | ((uint32_t)szb[3] << 24);
+    
+    // Safety check: chunk size should be reasonable (not larger than file)
+    uint32_t currentPos = f.position();
+    if (sz > fileSize || (currentPos + sz) > fileSize) {
+      Serial.print("WAV ERROR: Invalid chunk size! File: ");
+      Serial.print(f.name());
+      Serial.print(", Chunk: ");
+      Serial.write(id, 4);
+      Serial.print(", Size: ");
+      Serial.print(sz);
+      Serial.print(", Pos: ");
+      Serial.print(currentPos);
+      Serial.print(", File size: ");
+      Serial.print(fileSize);
+      Serial.print("\n");
+      break;
+    }
+    
     if (id[0]=='d' && id[1]=='a' && id[2]=='t' && id[3]=='a') {
-      outStart = (uint32_t)f.position();
+      outStart = currentPos;
       outSize = sz;
+      Serial.print("WAV OK: Found data chunk in ");
+      Serial.print(f.name());
+      Serial.print(", Start: ");
+      Serial.print(outStart);
+      Serial.print(", Size: ");
+      Serial.print(outSize);
+      Serial.print("\n");
       return (outSize >= 2);
     }
+    
+    // Skip this chunk (skip size includes padding for even alignment)
     uint32_t skip = sz + (sz & 1);
-    uint32_t nextPos = (uint32_t)f.position() + skip;
-    if (!f.seek(nextPos)) break;
+    uint32_t nextPos = currentPos + skip;
+    if (nextPos > fileSize || !f.seek(nextPos)) {
+      Serial.print("WAV ERROR: Failed to skip chunk! File: ");
+      Serial.print(f.name());
+      Serial.print(", Chunk: ");
+      Serial.write(id, 4);
+      Serial.print(", Next pos: ");
+      Serial.print(nextPos);
+      Serial.print(", File size: ");
+      Serial.print(fileSize);
+      Serial.print("\n");
+      break;
+    }
+  }
+  
+  if (iterations >= maxIterations) {
+    Serial.print("WAV ERROR: Too many iterations searching for data chunk in ");
+    Serial.print(f.name());
+    Serial.print("\n");
+  } else {
+    Serial.print("WAV ERROR: Data chunk not found in ");
+    Serial.print(f.name());
+    Serial.print("\n");
   }
   return false;
 }
@@ -165,6 +252,11 @@ static void servicePeakScan(uint32_t maxBytesThisCall) {
       g_peakScan.samplesInWindow++;
 
       if (g_peakScan.samplesInWindow >= WINDOW_SAMPLES) {
+        // Bounds check before writing to prevent buffer overflow
+        if (g_peakScan.outIndex >= (uint16_t)maxPeaks) {
+          stopPeakScan();
+          break;
+        }
         peakValues[g_peakScan.outIndex] = (float)g_peakScan.windowPeak / 32768.0f;
         g_peakScan.outIndex++;
         g_peakScan.samplesInWindow = 0;
@@ -197,6 +289,7 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
 
   bool usingFullRange = (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
   if (usingFullRange && (previewTriggerMode == PREVIEW_MODE_ON || previewTriggerMode == PREVIEW_MODE_PRESS)) {
+    yield(); // Yield before SD.exists() to prevent blocking main sequencer
     if (!SD.exists(OUTPUTf)) {
       return;
     }
@@ -231,6 +324,7 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
   }
 
   if (!previewCache.valid || previewCache.folder != folder || previewCache.sampleID != sampleID) {
+    yield(); // Yield before SD.open() to prevent blocking main sequencer
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
       return;
@@ -243,16 +337,13 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
       dataSize = (uint32_t)max(0, fileSize - 44);
     }
 
-    // Read sample rate from header at offset 24 (legacy mapping used throughout this project)
-    previewFile.seek(24);
-    int g = previewFile.read();
-    if (g == 72) PrevSampleRate = 4;
-    else if (g == 68) PrevSampleRate = 3;
-    else if (g == 34) PrevSampleRate = 2;
-    else if (g == 17) PrevSampleRate = 1;
-    else PrevSampleRate = 4;
+    // All samples are 44.1kHz Mono - no need to check sample rate
+    // For 44.1kHz, the original code used PrevSampleRate = 3 (byte 0x44 at offset 24)
+    // Keep the original calculation: dataSize / (PrevSampleRate * 2) for compatibility
+    PrevSampleRate = 3;  // 44.1kHz Mono (original mapping: byte 68 = 0x44)
 
     // IMPORTANT: Use WAV data chunk size (not file size). This avoids playing non-audio chunks at the end.
+    // Original calculation: dataSize / (PrevSampleRate * 2) = dataSize / 6 for 44.1kHz
     GLOB.smplen = (int)(dataSize / (uint32_t)(PrevSampleRate * 2));
 
     bool loadPartial = (!setMaxSampleLength) && ((int)dataSize > (int)sizeof(sampled[0]));
@@ -266,6 +357,7 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
       int startOffset = (GLOB.smplen * GLOB.seek) / 100;
       int endOffset = (GLOB.smplen * GLOB.seekEnd) / 100;
       endOffset = min(endOffset, GLOB.smplen);
+      // Use original calculation: offset * PrevSampleRate * 2
       int startOffsetBytes = startOffset * PrevSampleRate * 2;
       int endOffsetBytes = endOffset * PrevSampleRate * 2;
       startOffsetBytes &= ~1;
@@ -303,7 +395,8 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     previewCache.valid = true;
     previewCache.plen = plen;
   } else {
-    PrevSampleRate = previewCache.rate;
+    PrevSampleRate = previewCache.rate;  // Keep for compatibility, should be 3 for 44.1kHz
+    // Original calculation: lengthBytes / (PrevSampleRate * 2)
     GLOB.smplen = previewCache.lengthBytes / (PrevSampleRate * 2);
   }
 
@@ -319,6 +412,7 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
   }
 
+  // Use original calculation: offset * PrevSampleRate * 2
   int startOffsetBytes = startOffset * PrevSampleRate * 2;
   int endOffsetBytes = endOffset * PrevSampleRate * 2;
 
@@ -399,15 +493,9 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   File loadSample = SD.open(OUTPUTf);
   if (loadSample) {
     int fileSize = loadSample.size();
-    loadSample.seek(24);
-    for (uint8_t i = 24; i < 25; i++) {
-      int g = loadSample.read();
-      if (g == 0) SampleRate[sampleID] = 4;
-      if (g == 17) SampleRate[sampleID] = 1;
-      if (g == 34) SampleRate[sampleID] = 2;
-      if (g == 68) SampleRate[sampleID] = 3;
-      if (g == 72) SampleRate[sampleID] = 4;
-    }
+    // All samples are 44.1kHz Mono - no need to check sample rate
+    // For 44.1kHz, the original code used SampleRate = 3 (byte 0x44 at offset 24)
+    SampleRate[sampleID] = 3;  // 44.1kHz Mono (original mapping: byte 68 = 0x44)
 
     // Use WAV data chunk size, not file size (prevents reading/listening beyond audio data).
     uint32_t dataStart = 44, dataSize = 0;
@@ -416,9 +504,11 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
       dataSize = (uint32_t)max(0, fileSize - 44);
     }
 
+    // Original calculation: dataSize / (SampleRate * 2) = dataSize / 6 for 44.1kHz
     GLOB.smplen = (int)(dataSize / (uint32_t)(SampleRate[sampleID] * 2));
 
     // Convert percentage positions to actual offsets
+    // Use original calculation: offset * SampleRate * 2
     unsigned int startOffset = (GLOB.seek * GLOB.smplen) / 100;
     unsigned int startOffsetBytes = startOffset * SampleRate[sampleID] * 2;
 
@@ -434,6 +524,7 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
 
     unsigned int endOffset = (seekEndPct * GLOB.smplen) / 100;
     if (endOffset > GLOB.smplen) endOffset = GLOB.smplen;
+    // Use original calculation: offset * SampleRate * 2
     unsigned int endOffsetBytes = endOffset * SampleRate[sampleID] * 2;
     endOffsetBytes = min(endOffsetBytes, (unsigned int)dataSize);
 
@@ -474,6 +565,12 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     if (samplesRead > bufferSamples) samplesRead = bufferSamples;
     int pad = END_PAD_SAMPLES;
     if (pad > (bufferSamples - samplesRead)) pad = (bufferSamples - samplesRead);
+    
+    // Explicitly zero the pad area to ensure no old data remains
+    if (pad > 0 && (samplesRead + pad) <= bufferSamples) {
+      memset(&sampled[sampleID][samplesRead * 2], 0, pad * 2);
+    }
+    
     int playLen = samplesRead + pad;
 
     loadedSampleLen[sampleID] = playLen;
@@ -488,10 +585,18 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
 
 void showWave() {
   // Ensure manifest is available so folder browsing uses real folder names
+  // Always use map.txt - if missing, scan and write it, then load it
   if (!manifestLoaded) {
     if (!loadSampleManifest()) {
+      // map.txt is missing, scan and write it
       scanAndWriteManifest();
+      // Now load the newly created map.txt
+      loadSampleManifest();
     }
+  }
+  // Require manifest to be loaded - never use legacy mode
+  if (!manifestLoaded) {
+    return; // Cannot proceed without manifest
   }
   // ---- Helpers -------------------------------------------------------------
   auto resetSeekRange = []() {
@@ -549,9 +654,8 @@ void showWave() {
     int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
     int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
 
-    // Legacy migration: older saves stored a combined 3-digit-ish ID in fileID (folder*100+local).
-    // That overflows the 10-bit field once folder>=10 and local>=24, and also doesn't work with manifest indexing.
-    // Detect and convert to (folderIdx,fileIdx) in manifest space when possible.
+    // Always use manifest mode - never use legacy mode
+    // If indices are out of range, clamp them to valid values
     if (manifestLoaded) {
       bool folderValid = (folderIdx >= 0 && folderIdx < (int)manifestFolderCount);
       bool fileValid = false;
@@ -560,32 +664,16 @@ void showWave() {
         fileValid = (fileIdx >= 1 && fileIdx <= fc + 1);
       }
       if (!folderValid || !fileValid) {
-        int legacyCombined = fileIdx;
-        if (legacyCombined >= 100) {
-          int legacyFolder = legacyCombined / 100;
-          int legacyLocal = legacyCombined % 100;
-          legacyFolder = constrain(legacyFolder, 0, (int)manifestFolderCount - 1);
-          char legacyName[16];
-          snprintf(legacyName, sizeof(legacyName), "_%d.wav", legacyLocal);
-          int mapped = manifestFindFileIdx(legacyFolder, legacyName);
-          if (mapped < 1) {
-            // Fallback: treat legacyLocal as a 1-based index into the manifest list
-            int fc = (int)manifestFileCount[legacyFolder];
-            mapped = constrain(legacyLocal, 1, max(1, fc));
-          }
-          folderIdx = legacyFolder;
-          fileIdx = mapped;
-          SMP.wav[GLOB.currentChannel].oldID = (unsigned int)folderIdx;
-          SMP.wav[GLOB.currentChannel].fileID = (unsigned int)fileIdx;
-        } else {
-          // If it's just out of range, clamp into a valid spot
-          folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
-          int fc = (int)manifestFileCount[folderIdx];
-          fileIdx = constrain(fileIdx, 1, max(1, fc + 1));
-          SMP.wav[GLOB.currentChannel].oldID = (unsigned int)folderIdx;
-          SMP.wav[GLOB.currentChannel].fileID = (unsigned int)fileIdx;
-        }
+        // Clamp to valid range - no legacy mode fallback
+        folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
+        int fc = (int)manifestFileCount[folderIdx];
+        fileIdx = constrain(fileIdx, 1, max(1, fc + 1));
+        SMP.wav[GLOB.currentChannel].oldID = (unsigned int)folderIdx;
+        SMP.wav[GLOB.currentChannel].fileID = (unsigned int)fileIdx;
       }
+    } else {
+      // Manifest must be loaded - if not, we cannot proceed
+      return;
     }
 
     if (manifestLoaded) folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
@@ -606,8 +694,12 @@ void showWave() {
     lastEncoder3Value_forShowWave = -1;  // Force re-preview
   }
   
-  int folderIdx = manifestLoaded ? (int)GLOB.folder : (int)SMP.wav[GLOB.currentChannel].oldID;
-  if (manifestLoaded) folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
+  // Always use manifest mode - never use legacy mode
+  if (!manifestLoaded) {
+    return; // Cannot proceed without manifest
+  }
+  int folderIdx = (int)GLOB.folder;
+  folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
   if (folderIdx < 0) folderIdx = 0;
   int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
   if (fileIdx < 1) fileIdx = 1;
@@ -619,11 +711,15 @@ void showWave() {
 
   FastLEDclear();
   
-  // Clamp folder encoder to existing folders (manifest if loaded)
+  // Clamp folder encoder to existing folders (always use manifest)
   // NOTE: Encoder functions are swapped in SET_WAV:
   // - Encoder[2] (rotate) = folder selection
   // - Encoder[1] (rotate) = seekEnd (trim)
-  int maxFolders = manifestLoaded ? manifestFolderCount : FOLDER_MAX;
+  // Always use manifest mode - never use legacy mode
+  if (!manifestLoaded) {
+    return; // Cannot proceed without manifest
+  }
+  int maxFolders = manifestFolderCount;
   if (maxFolders < 1) maxFolders = 1;
   Encoder[2].writeMin((int32_t)0);
   Encoder[2].writeMax((int32_t)(maxFolders - 1));
@@ -947,7 +1043,11 @@ void showWave() {
 
     char folderLabel[32];
     char fileLabel[32];
-    int labelFolderIdx = manifestLoaded ? (int)GLOB.folder : folderIdx;
+    // Always use manifest mode - never use legacy mode
+    if (!manifestLoaded) {
+      return; // Cannot proceed without manifest
+    }
+    int labelFolderIdx = (int)GLOB.folder;
     int localIdx = fileIdx;
     if (localIdx < 1) localIdx = 1;
     if (manifestLoaded && labelFolderIdx < (int)manifestFolderCount) {
@@ -1132,6 +1232,7 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     char OUTPUTf[64];
     buildSamplePath(folderIdx, fileIdx, OUTPUTf, sizeof(OUTPUTf));
     
+    yield(); // Yield before SD.open() to prevent blocking main sequencer
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
       return;
@@ -1144,15 +1245,9 @@ void loadPreviewToChannel(unsigned int targetChannel) {
       dataSize = (uint32_t)max(0, fileSize - 44);
     }
     
-    // Read sample rate from header
-    previewFile.seek(24);
-    int g = previewFile.read();
-    int rate;
-    if (g == 72) rate = 4;
-    else if (g == 68) rate = 3;
-    else if (g == 34) rate = 2;
-    else if (g == 17) rate = 1;
-    else rate = 4;
+    // All samples are 44.1kHz Mono - no need to check sample rate
+    // For 44.1kHz, the original code used rate = 3 (byte 0x44 at offset 24)
+    int rate = 3;  // 44.1kHz Mono (original mapping: byte 68 = 0x44)
     
     // Load data chunk into RAM buffer (no blanket memset)
     previewFile.seek(dataStart);
@@ -1199,6 +1294,9 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   
   int trimmedSamples = endSample - startSample;
   
+  // Clear target buffer first to remove any old sample data
+  memset(sampled[targetChannel], 0, sizeof(sampled[targetChannel]));
+  
   // Copy the trimmed portion from preview (channel 0) to target channel
   int16_t* previewBuffer = (int16_t*)sampled[0];
   int16_t* targetBuffer = (int16_t*)sampled[targetChannel];
@@ -1218,6 +1316,12 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   if (samplesRead > bufferSamples) samplesRead = bufferSamples;
   int pad = END_PAD_SAMPLES;
   if (pad > (bufferSamples - samplesRead)) pad = (bufferSamples - samplesRead);
+  
+  // Explicitly zero the pad area to ensure no old data remains
+  if (pad > 0 && (samplesRead + pad) <= bufferSamples) {
+    memset(&sampled[targetChannel][samplesRead * 2], 0, pad * 2);
+  }
+  
   int playLen = samplesRead + pad;
 
   loadedSampleLen[targetChannel] = playLen;

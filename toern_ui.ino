@@ -267,17 +267,47 @@ void drawNoSD() {
 }
 
 void drawBase() {
+  // Cache mute states per frame to avoid repeated getMuteState() calls
+  static bool muteCache[maxY];
+  static bool muteCacheValid = false;
+  static unsigned int lastFrame = 0;
+  
+  // Invalidate cache on frame change or force refresh
+  unsigned int currentFrame = (millis() / 33); // ~30 FPS frame counter
+  if (currentFrame != lastFrame || !muteCacheValid) {
+    for (unsigned int ch = 0; ch < maxY; ch++) {
+      muteCache[ch] = getMuteState(ch);
+    }
+    muteCacheValid = true;
+    lastFrame = currentFrame;
+  }
+  
   if (!GLOB.singleMode) {
+    // Cache colors to avoid recalculating every frame
+    static CRGB cachedColors[maxY];
+    static bool colorsCached = false;
+    static bool lastDrawBaseColorMode = false;
+    
+    // Recalculate colors only if drawBaseColorMode changed or not cached
+    if (!colorsCached || drawBaseColorMode != lastDrawBaseColorMode) {
+      for (unsigned int y = 0; y < maxY; y++) {
+        cachedColors[y] = col_base[y];
+      }
+      colorsCached = true;
+      lastDrawBaseColorMode = drawBaseColorMode;
+    }
+    
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
-      const bool rowMuted = getMuteState(y - 1);
+      const bool rowMuted = muteCache[y - 1];
       const bool useColor = drawBaseColorMode;
+      const CRGB rowColor = cachedColors[colors];
       for (unsigned int x = 1; x < maxX + 1; x++) {
         if (rowMuted) {
           light(x, y, CRGB(0, 0, 0));  // gemutete Zeilen schwarz
         } else {
           if (useColor) {
-            light(x, y, col_base[colors]);  // normale Farbcodierung pro Spur
+            light(x, y, rowColor);  // Use cached color
           } else {
             light(x, y, CRGB(0, 0, 0));  // schwarz wenn drawBaseColorMode = false
           }
@@ -294,11 +324,25 @@ void drawBase() {
   } else {
     // ---- SINGLE MODE ----
     unsigned int currentChannel = GLOB.currentChannel;
-    bool isMuted = getMuteState(currentChannel);
+    bool isMuted = muteCache[currentChannel];  // Use cached mute state
+
+    // Cache single mode color to avoid recalculating every frame
+    static CRGB cachedSingleModeColor = CRGB(0, 0, 0);
+    static unsigned int lastSingleModeChannel = 255;
+    static CRGB cachedHighlightColor = CRGB(0, 0, 0);
+    
+    // Recalculate colors only if channel changed
+    if (currentChannel != lastSingleModeChannel) {
+      cachedSingleModeColor = col_base[currentChannel];
+      cachedHighlightColor = blend(cachedSingleModeColor, CRGB::White, 5);
+      lastSingleModeChannel = currentChannel;
+    }
 
     for (unsigned int y = 1; y < maxY; y++) {
+      // Determine color once per row
+      CRGB color = (y == currentChannel + 1) ? cachedHighlightColor : cachedSingleModeColor;
+      
       for (unsigned int x = 1; x < maxX + 1; x++) {
-        CRGB color = col_base[currentChannel];
 
         // Grundton (z. B. C3) pro Kanal etwas heller darstellen
         if (y == currentChannel + 1 ) {
@@ -1569,6 +1613,9 @@ void processPeaks() {
   static float lastSeekEnd = -1;
   static int lastPeakIndex = -1;
   static bool hasCalculated = false;  // Track if we've calculated for current peak data
+  static CRGB cachedColors[32][6];  // Cache colors for y=5-10 (6 rows) for each x position
+  static bool colorsCached = false;
+  static float lastCachedValues[32];  // Track last interpolated values to detect changes
   
   // Recalculate if:
   // 1. Parameters changed
@@ -1587,6 +1634,7 @@ void processPeaks() {
   // Reset calculation flag when no peaks (new sample loading)
   if (peakIndex == 0) {
     hasCalculated = false;
+    colorsCached = false;
   }
 
   if (peakIndex > 0 && needsRecalc) {
@@ -1616,11 +1664,13 @@ void processPeaks() {
         interpolatedValues[i] = peakValues[lowerIndex];
       }
     }
+    colorsCached = false;  // Invalidate color cache when interpolation changes
   } else if (needsRecalc) {
     // No peaks, default to zero
     for (int i = 0; i < maxX; i++) {
       interpolatedValues[i] = 0;
     }
+    colorsCached = false;  // Invalidate color cache
   }
 
   // === NORMALIZATION: Calculate once and cache ===
@@ -1669,6 +1719,18 @@ void processPeaks() {
     light(x, 3, CRGB(80, 0, 0));  // Red for end portion
   }
 
+  // Check if we need to recalculate colors (only when interpolated values change)
+  bool needColorRecalc = !colorsCached;
+  if (!needColorRecalc) {
+    for (int i = 0; i < maxX; i++) {
+      // Use small epsilon for float comparison
+      if (fabs(interpolatedValues[i] - lastCachedValues[i]) > 0.001f) {
+        needColorRecalc = true;
+        break;
+      }
+    }
+  }
+
   // Light up LEDs with normalized values - limit drawing to y=5..10
   for (int i = 0; i < maxX; i++) {
     int x = i + 1;  // Ensure x values go from 1 to maxX
@@ -1687,35 +1749,51 @@ void processPeaks() {
       light(x, y, CRGB::Black);
     }
 
-    for (int y = 5; y <= yPeak; y++) {
-      // Spectral color gradient (rainbow): Red → Orange → Yellow → Green → Cyan → Blue
-      // Map y from 5-10 to hue 0-170 (red to cyan-blue range)
-      float normalizedY = mapf(y, 5, 10, 0.0f, 1.0f);
-      int hue = mapf(normalizedY, 0.0f, 1.0f, 0, 170);  // HSV hue: 0=red, 60=yellow, 120=green, 170=cyan
-      
-      // Convert HSV to RGB (hue, saturation=255, value=255)
-      // Simplified HSV to RGB conversion
-      int sector = hue / 60;
-      int remainder = hue % 60;
-      int p = 0;
-      int q = (255 * (60 - remainder)) / 60;
-      int t = (255 * remainder) / 60;
-      
-      CRGB color;
-      switch(sector) {
-        case 0: color = CRGB(255, t, p); break;      // Red → Yellow
-        case 1: color = CRGB(q, 255, p); break;      // Yellow → Green
-        case 2: color = CRGB(p, 255, t); break;      // Green → Cyan
-        default: color = CRGB(p, q, 255); break;     // Cyan → Blue
+    // Recalculate colors only when needed
+    if (needColorRecalc) {
+      for (int y = 5; y <= 10; y++) {
+        // Spectral color gradient (rainbow): Red → Orange → Yellow → Green → Cyan → Blue
+        // Map y from 5-10 to hue 0-170 (red to cyan-blue range)
+        float normalizedY = mapf(y, 5, 10, 0.0f, 1.0f);
+        int hue = mapf(normalizedY, 0.0f, 1.0f, 0, 170);  // HSV hue: 0=red, 60=yellow, 120=green, 170=cyan
+        
+        // Convert HSV to RGB (hue, saturation=255, value=255)
+        // Simplified HSV to RGB conversion
+        int sector = hue / 60;
+        int remainder = hue % 60;
+        int p = 0;
+        int q = (255 * (60 - remainder)) / 60;
+        int t = (255 * remainder) / 60;
+        
+        CRGB color;
+        switch(sector) {
+          case 0: color = CRGB(255, t, p); break;      // Red → Yellow
+          case 1: color = CRGB(q, 255, p); break;      // Yellow → Green
+          case 2: color = CRGB(p, 255, t); break;      // Green → Cyan
+          default: color = CRGB(p, q, 255); break;     // Cyan → Blue
+        }
+        
+        // Reduce brightness to 40% for display
+        color.r = (color.r * 40) / 100;
+        color.g = (color.g * 40) / 100;
+        color.b = (color.b * 40) / 100;
+        
+        cachedColors[i][y - 5] = color;  // Cache color for this x,y position
       }
-      
-      // Reduce brightness to 40% for display
-      color.r = (color.r * 40) / 100;
-      color.g = (color.g * 40) / 100;
-      color.b = (color.b * 40) / 100;
-
-      light(x, y, color);
     }
+
+    // Use cached colors for drawing
+    for (int y = 5; y <= yPeak; y++) {
+      light(x, y, cachedColors[i][y - 5]);
+    }
+  }
+  
+  // Update cache state
+  if (needColorRecalc) {
+    for (int i = 0; i < maxX; i++) {
+      lastCachedValues[i] = interpolatedValues[i];
+    }
+    colorsCached = true;
   }
 }
 

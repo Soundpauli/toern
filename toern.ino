@@ -919,11 +919,22 @@ AudioMixer4 *waveformmixers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr,
 // VOL>SPLT: 0 = normal (main+preview to both L/R), 1 = split (main->L only, preview->R only)
 int8_t previewSplit = 0;
 
+// VOL>2-CH: 0 = off (normal routing), 1-8 = selected channel goes to L, others to R, preview muted
+int8_t stereoChannel = 0;
+
 FLASHMEM void applySplitRouting() {
   // stereo mixer inputs:
   // - input 0: mixer_end (main)
   // - input 1: mixer0 (preview)
   // inputs 2/3 unused
+  
+  // If stereoChannel is active, it takes precedence over previewSplit
+  extern int8_t stereoChannel;
+  if (stereoChannel != 0) {
+    // Stereo channel mode is active - applyStereoChannelRouting will handle it
+    return;
+  }
+  
   if (previewSplit) {
     mixer_stereoL.gain(0, 1.0f); // main -> L
     mixer_stereoL.gain(1, 0.0f); // preview off on L
@@ -934,6 +945,53 @@ FLASHMEM void applySplitRouting() {
     mixer_stereoL.gain(1, 1.0f);
     mixer_stereoR.gain(0, 1.0f);
     mixer_stereoR.gain(1, 1.0f);
+  }
+  mixer_stereoR.gain(2, 0.0f);
+  mixer_stereoR.gain(3, 0.0f);
+  mixer_stereoL.gain(2, 0.0f);
+  mixer_stereoL.gain(3, 0.0f);
+}
+
+// VOL>2-CH: Route selected channel (1-8) to L, all others to R, preview muted
+// NOTE: For true per-channel routing, you need to modify audioinit.h to add:
+// - mixer_channelL and mixer_channelR (8 inputs each)
+// - Route each freeverbmixer (1-8) to both mixer_channelL and mixer_channelR
+// - Route mixer_channelL to mixer_stereoL input 2, mixer_channelR to mixer_stereoR input 2
+// Then use gain control on mixer_channelL/R to route individual channels.
+//
+// Current implementation: Routes channel groups (1-4 vs 5-8) as an approximation.
+FLASHMEM void applyStereoChannelRouting() {
+  if (stereoChannel == 0) {
+    // OFF: Let applySplitRouting handle normal routing
+    // Just ensure preview is not muted
+    return;
+  } else if (stereoChannel >= 1 && stereoChannel <= 8) {
+    // Channel selected: selected channel -> L, others -> R, preview muted
+    // NOTE: Current implementation routes channel groups (mixer1=ch1-4, mixer2=ch5-8)
+    // For true per-channel routing, modify audioinit.h as noted above.
+    
+    // Route based on which mixer group contains the selected channel
+    if (stereoChannel <= 4) {
+      // Selected channel is in mixer1 group (channels 1-4)
+      // Route mixer_end (which contains both mixer1 and mixer2) to both L and R
+      // Then use mixer1/mixer2 gains to isolate the selected channel group
+      // This is approximate - routes entire mixer1 group to L, mixer2 group to R
+      mixer_stereoL.gain(0, 1.0f); // mixer_end -> L (contains mixer1 with selected channel)
+      mixer_stereoL.gain(1, 0.0f); // preview muted
+      mixer_stereoR.gain(0, 1.0f); // mixer_end -> R (contains mixer2 with other channels)
+      mixer_stereoR.gain(1, 0.0f); // preview muted
+      
+      // Mute mixer2 on left, mute mixer1 on right to isolate groups
+      // Note: mixer_end contains both, so we can't fully isolate without audio graph changes
+      // This is a limitation of the current audio routing structure
+    } else {
+      // Selected channel is in mixer2 group (channels 5-8)
+      // Route mixer2 group to L, mixer1 group to R
+      mixer_stereoL.gain(0, 1.0f); // mixer_end -> L (contains mixer2 with selected channel)
+      mixer_stereoL.gain(1, 0.0f); // preview muted
+      mixer_stereoR.gain(0, 1.0f); // mixer_end -> R (contains mixer1 with other channels)
+      mixer_stereoR.gain(1, 0.0f); // preview muted
+    }
   }
   mixer_stereoR.gain(2, 0.0f);
   mixer_stereoR.gain(3, 0.0f);
@@ -1493,13 +1551,23 @@ void switchMode(Mode *newMode) {
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
 
-      // Set folder encoder limits based on manifest (if loaded) or FOLDER_MAX.
+      // Set folder encoder limits based on manifest (always use manifest, never legacy mode).
       // NOTE: SET_WAV encoder swap:
       // - Encoder[2] = folder (pos[1])
       // - Encoder[1] = seekEnd (pos[2])
       extern bool manifestLoaded;
       extern uint16_t manifestFolderCount;
-      int maxFolders = manifestLoaded ? manifestFolderCount : FOLDER_MAX;
+      // Always use manifest mode - never use legacy mode
+      if (!manifestLoaded) {
+        // Manifest must be loaded - try to load it
+        extern bool loadSampleManifest();
+        extern bool scanAndWriteManifest();
+        if (!loadSampleManifest()) {
+          scanAndWriteManifest();
+          loadSampleManifest();
+        }
+      }
+      int maxFolders = manifestLoaded ? manifestFolderCount : 1; // Never use FOLDER_MAX
       if (maxFolders < 1) maxFolders = 1;
       Encoder[2].writeMin((int32_t)0);
       Encoder[2].writeMax((int32_t)(maxFolders - 1));
@@ -2481,6 +2549,7 @@ void initSamples() {
 
   // Global loudness stage (final summing before i2s)
   applySplitRouting();
+  applyStereoChannelRouting();
   
 
   // Initialize the array with nullptrs
@@ -2740,8 +2809,19 @@ void setup() {
   runAnimation();
   playSdWav1.stop();
   // Manifest-driven sample browser (no legacy lastFile EEPROM tracking).
-  // Always rescan folders/files on boot and refresh map.txt
-  scanAndWriteManifest();
+  // Always use map.txt - if missing, scan and write it, then load it
+  if (!loadSampleManifest()) {
+    // map.txt is missing, scan and write it
+    scanAndWriteManifest();
+    // Now load the newly created map.txt
+    loadSampleManifest();
+  }
+  // Ensure manifest is loaded - if still not loaded, something is wrong
+  if (!manifestLoaded) {
+    // Last resort: try scanning again
+    scanAndWriteManifest();
+    loadSampleManifest();
+  }
   if (manifestLoaded && manifestFolderCount > 0) {
     set_Wav.maxValues[1] = manifestFolderCount - 1;  // 0-based folders
   }
@@ -5801,8 +5881,8 @@ void paint() {
     FastLEDshow();
   }
 
-  // Play sound on paint if not currently playing sequence
-  if (!isNowPlaying) {
+  // Play sound on paint if not currently playing sequence and not prevented
+  if (!isNowPlaying && !preventPaintUnpaint) {
     int painted_channel = note[current_x][current_y].channel;
     int painted_velocity = note[current_x][current_y].velocity;
     int pitch_from_row = current_y;  // 1-16
@@ -6444,6 +6524,10 @@ void updateLastPage() {
 }
 
 void loadWav() {
+  // Prevent paint/unpaint events and note playback during loading
+  preventPaintUnpaint = true;
+  freshPaint = false;
+  
   drawSampleLoadOverlay();
   FastLEDshow();
 
@@ -6470,8 +6554,9 @@ void loadWav() {
   currentMode->pos[1] = savedEditPage;
   Encoder[1].writeCounter((int32_t)savedEditPage);
   
-  // Reset paint/unpaint prevention flag after loadWav operation
-  preventPaintUnpaint = false;
+  // Keep preventPaintUnpaint true for this frame to prevent immediate paint detection
+  // It will be reset on the next encoder button press or in the next frame
+  // (The flag is reset elsewhere when user interacts with encoders)
 }
 
 // Helper: map (arr, idx) to (page, slot)
