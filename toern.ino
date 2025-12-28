@@ -1,4 +1,4 @@
-#define VERSION "v1.5"
+#define VERSION "v1.6"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
@@ -2599,10 +2599,58 @@ for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
 
 
 void checkCrashReport() {
+  // Print crash info to Serial
   Serial.println("\n" __FILE__ " " __DATE__ " " __TIME__);
   if (CrashReport) {  // Check if CrashReport is non-empty before printing
     Serial.print(CrashReport);
   }
+  
+  // Try to write crash info to SD card ERROR.txt
+  if (SD.begin(INT_SD)) {
+    File errorFile = SD.open("ERROR.txt", O_WRONLY | O_CREAT | O_APPEND);
+    if (errorFile) {
+      static char buf[120];  // Reusable buffer
+      uint32_t uptimeMs = millis();
+      uint32_t uptimeSec = uptimeMs / 1000;
+      uint32_t h = uptimeSec / 3600;
+      uint32_t m = (uptimeSec % 3600) / 60;
+      uint32_t s = uptimeSec % 60;
+      
+      errorFile.println("\n========================================");
+      sprintf(buf, "CRASH REPORT - %s %s %s", __FILE__, __DATE__, __TIME__);
+      errorFile.println(buf);
+      errorFile.println("========================================");
+      
+      if (CrashReport) {
+        errorFile.print(CrashReport);
+        errorFile.println();
+      }
+      
+      errorFile.println("--- System Information ---");
+      sprintf(buf, "Uptime: %luh, %lumin, %lusec (%lu ms)", h, m, s, uptimeMs);
+      errorFile.println(buf);
+      
+      char* heapEnd = (char*)sbrk(0);
+      char* stackPtr = (char*)__builtin_frame_address(0);
+      uint32_t freeRam = ((uintptr_t)stackPtr > (uintptr_t)heapEnd) ? 
+                         (uint32_t)((uintptr_t)stackPtr - (uintptr_t)heapEnd) : 0;
+      sprintf(buf, "Free RAM: %lu bytes", freeRam);
+      errorFile.println(buf);
+      
+      sprintf(buf, "Audio CPU: %.1f%% (max: %.1f%%)", 
+              AudioProcessorUsage(), AudioProcessorUsageMax());
+      errorFile.println(buf);
+      sprintf(buf, "Audio Memory: %d/%d blocks", 
+              AudioMemoryUsage(), AudioMemoryUsageMax());
+      errorFile.println(buf);
+      
+      errorFile.println("========================================");
+      errorFile.println();
+      errorFile.close();
+      Serial.println("Crash report written to ERROR.txt");
+    }
+  }
+  
   delay(1000);
   for (unsigned int i = 0; i < EEPROM.length(); i++) EEPROM.write(i, 0);
   char OUTPUTf[50];

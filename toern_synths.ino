@@ -520,6 +520,10 @@ void chiptune_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 //–––––– updateVals() Function ––––––//
 // This function updates all the audio objects based on the current global parameters.
 void updateVals(int ch) {
+  // Bounds check: ch must be within valid range for instrument channels (0-1)
+  if (ch < 0 || ch >= INSTRUMENT_CHANNELS) {
+    return;  // Invalid channel, skip to prevent array out-of-bounds access
+  }
 
   for (int i = 0; i < POLY_VOICES; i++) {
     // Update amplitude envelopes
@@ -594,9 +598,9 @@ void updateVals(int ch) {
     Sladder2[i]->octaveControl(filterAmount[ch][i]);
     Sladder2[i]->resonance(resonance[ch][i]);
 
-    // Update mixer gains (example: using pan[ch] and volume[ch] to calculate gain)
-    // Use heavily reduced multiplier (0.12375 = 0.33 * 0.375) for channels 13 and 14 to reduce volume significantly
-    float gainMultiplier = (ch == 13 || ch == 14) ? 0.12375f : 0.33f;
+    // Update mixer gains (using pan[ch] and volume[ch] to calculate gain)
+    // Note: ch is already bounds-checked to be 0-1 (INSTRUMENT_CHANNELS)
+    float gainMultiplier = 0.33f;
     Smixer1[i]->gain(0, max(0, (-pan[ch][0] + 100.0) * 0.005) * (volume[ch][0] / 100.0) * gainMultiplier);
     Smixer1[i]->gain(1, max(0, (-pan[ch][1] + 100.0) * 0.005) * (volume[ch][1] / 100.0) * gainMultiplier);
     Smixer1[i]->gain(2, max(0, (-pan[ch][2] + 100.0) * 0.005) * (volume[ch][2] / 100.0) * gainMultiplier);
