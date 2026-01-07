@@ -438,7 +438,7 @@ void loadMenuFromEEPROM() {
   }
   
   // Ensure patternMode is valid (-1, 1, or 2)
-  if (patternMode != -1 && patternMode != 1 && patternMode != 2) {
+  if (patternMode != -1 && patternMode != 1 && patternMode != 2 && patternMode != 3) {
     patternMode = -1;  // Default to OFF if invalid value
   }
   
@@ -464,7 +464,7 @@ void loadMenuFromEEPROM() {
   Serial.print("  loopLength="); Serial.println(loopLength);
 
   // Set global flags
-  SMP_PATTERN_MODE       = (patternMode   == 1 || patternMode == 2);  // ON or SONG mode
+  SMP_PATTERN_MODE       = (patternMode   == 1 || patternMode == 2 || patternMode == 3);  // ON, SONG, or NEXT mode
   SMP_FLOW_MODE          = (flowMode      == 1);
   MIDI_VOICE_SELECT      = (voiceSelect   == 1 || voiceSelect == 2);  // MIDI or KEYS mode
   MIDI_TRANSPORT_RECEIVE = (transportMode == 1);
@@ -655,8 +655,16 @@ FLASHMEM void showMenu() {
   static int lastPagePosition = -1;
   static bool menuFirstEnter = true;
   
+  // Reset tracking when returning from submenu (currentMenuPage doesn't match mode pos)
+  if (currentMenuPage != currentMode->pos[3] && lastPagePosition != currentMenuPage) {
+    lastPagePosition = -1;
+    menuFirstEnter = true;
+    currentMode->pos[3] = currentMenuPage;  // Sync mode position with current page
+  }
+  
   if (menuFirstEnter) {
     Encoder[3].writeCounter((int32_t)currentMenuPage);
+    lastPagePosition = currentMenuPage;
     menuFirstEnter = false;
   }
   
@@ -721,8 +729,15 @@ FLASHMEM void showLookMenu() {
   static int lastLookPagePosition = -1;
   static bool lookMenuFirstEnter = true;
   
+  // Reset tracking when entering submenu (currentLookPage is 0 and mode pos doesn't match)
+  if (currentLookPage == 0 && currentMode->pos[3] != 0 && lastLookPagePosition != 0) {
+    lastLookPagePosition = -1;
+    lookMenuFirstEnter = true;
+  }
+  
   if (lookMenuFirstEnter) {
     Encoder[3].writeCounter((int32_t)currentLookPage);
+    lastLookPagePosition = currentLookPage;
     lookMenuFirstEnter = false;
   }
   
@@ -802,8 +817,15 @@ FLASHMEM void showRecsMenu() {
   static int lastRecsPagePosition = -1;
   static bool recsMenuFirstEnter = true;
   
+  // Reset tracking when entering submenu (currentRecsPage is 0 and mode pos doesn't match)
+  if (currentRecsPage == 0 && currentMode->pos[3] != 0 && lastRecsPagePosition != 0) {
+    lastRecsPagePosition = -1;
+    recsMenuFirstEnter = true;
+  }
+  
   if (recsMenuFirstEnter) {
     Encoder[3].writeCounter((int32_t)currentRecsPage);
+    lastRecsPagePosition = currentRecsPage;
     recsMenuFirstEnter = false;
   }
   
@@ -868,8 +890,15 @@ FLASHMEM void showMidiMenu() {
   static int lastMidiPagePosition = -1;
   static bool midiMenuFirstEnter = true;
   
+  // Reset tracking when entering submenu (currentMidiPage is 0 and mode pos doesn't match)
+  if (currentMidiPage == 0 && currentMode->pos[3] != 0 && lastMidiPagePosition != 0) {
+    lastMidiPagePosition = -1;
+    midiMenuFirstEnter = true;
+  }
+  
   if (midiMenuFirstEnter) {
     Encoder[3].writeCounter((int32_t)currentMidiPage);
+    lastMidiPagePosition = currentMidiPage;
     midiMenuFirstEnter = false;
   }
   
@@ -935,8 +964,15 @@ FLASHMEM void showVolMenu() {
   static int lastVolPagePosition = -1;
   static bool volMenuFirstEnter = true;
   
+  // Reset tracking when entering submenu (currentVolPage is 0 and mode pos doesn't match)
+  if (currentVolPage == 0 && currentMode->pos[3] != 0 && lastVolPagePosition != 0) {
+    lastVolPagePosition = -1;
+    volMenuFirstEnter = true;
+  }
+  
   if (volMenuFirstEnter) {
     Encoder[3].writeCounter((int32_t)currentVolPage);
+    lastVolPagePosition = currentVolPage;
     volMenuFirstEnter = false;
   }
   
@@ -1006,10 +1042,19 @@ FLASHMEM void showEtcMenu() {
   // Handle page navigation with encoder 3
   static int lastEtcPagePosition = -1;
   static bool etcMenuFirstEnter = true;
+  
+  // Reset tracking when entering submenu (currentEtcPage is 0 and mode pos doesn't match)
+  if (currentEtcPage == 0 && currentMode->pos[3] != 0 && lastEtcPagePosition != 0) {
+    lastEtcPagePosition = -1;
+    etcMenuFirstEnter = true;
+  }
+  
   if (etcMenuFirstEnter) {
     Encoder[3].writeCounter((int32_t)currentEtcPage);
+    lastEtcPagePosition = currentEtcPage;
     etcMenuFirstEnter = false;
   }
+  
   Encoder[3].writeMax((int32_t)(ETC_PAGES_COUNT - 1));
   Encoder[3].writeMin((int32_t)0);
   if (currentMode->pos[3] != lastEtcPagePosition) {
@@ -1946,13 +1991,15 @@ void switchMenu(int menuPosition){
         break;
     
       case 9:
-        // Cycle through: -1 (OFF) -> 1 (ON) -> 2 (SONG) -> -1 (OFF) ...
+        // Cycle through: -1 (OFF) -> 1 (ON) -> 2 (SONG) -> 3 (NEXT) -> -1 (OFF) ...
         if (patternMode == -1) {
           patternMode = 1;  // OFF -> ON
         } else if (patternMode == 1) {
           patternMode = 2;  // ON -> SONG
+        } else if (patternMode == 2) {
+          patternMode = 3;  // SONG -> NEXT
         } else {
-          patternMode = -1; // SONG -> OFF
+          patternMode = -1; // NEXT -> OFF
         }
         saveSingleModeToEEPROM(3, patternMode);
         drawMainSettingStatus(menuPosition);
@@ -1962,6 +2009,12 @@ void switchMenu(int menuPosition){
         songModeActive = (patternMode == 2);
         Serial.print("PMOD changed - songModeActive: ");
         Serial.println(songModeActive ? "TRUE" : "FALSE");
+        
+        // Clear pending page when switching away from NEXT mode
+        if (patternMode != 3) {
+          extern unsigned int pendingPage;
+          pendingPage = 0;
+        }
         
         // Handle mute system when PMOD is toggled
         if (SMP_PATTERN_MODE) {
@@ -2102,6 +2155,7 @@ void switchMenu(int menuPosition){
         // Enter LOOK/PLAY submenu at first page
         inLookSubmenu = true;
         currentLookPage = 0;
+        currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
         break;
         
@@ -2159,6 +2213,7 @@ void switchMenu(int menuPosition){
         // Enter RECS submenu at first page
         inRecsSubmenu = true;
         currentRecsPage = 0;
+        currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
         break;
         
@@ -2166,6 +2221,7 @@ void switchMenu(int menuPosition){
         // Enter MIDI submenu at first page
         inMidiSubmenu = true;
         currentMidiPage = 0;
+        currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
         break;
         
@@ -2173,6 +2229,7 @@ void switchMenu(int menuPosition){
         // Enter VOL submenu at first page
         inVolSubmenu = true;
         currentVolPage = 0;
+        currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
         break;
 
@@ -2180,6 +2237,7 @@ void switchMenu(int menuPosition){
         // Enter ETC submenu at first page
         inEtcSubmenu = true;
         currentEtcPage = 0;
+        currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
         break;
         
@@ -2631,6 +2689,16 @@ FLASHMEM void drawPatternMode() {
   if (patternMode == 2) {
     drawText("SONG", 2, 3, CRGB(255, 255, 0)); // Yellow for SONG mode
     SMP_PATTERN_MODE = true;
+  } else if (patternMode == 3) {
+    drawText("NEXT", 2, 3, CRGB(0, 255, 255)); // Cyan for NEXT mode
+    SMP_PATTERN_MODE = true;
+    // Show pending page if set
+    extern unsigned int pendingPage;
+    if (pendingPage > 0) {
+      char pageText[4];
+      snprintf(pageText, sizeof(pageText), "%02d", (int)pendingPage);
+      drawText(pageText, 10, 3, CRGB(0, 200, 200)); // Dimmer cyan for page number
+    }
   } else if (patternMode == 1) {
     drawText("ON", 2, 3, UI_GREEN);
     SMP_PATTERN_MODE = true;

@@ -294,6 +294,7 @@ void drawNoSD() {
 
 void drawBase() {
   // Cache mute states per frame to avoid repeated getMuteState() calls
+  // Use getMuteStateForUI() to show mutes for the edit page (what you're viewing)
   static bool muteCache[maxY];
   static bool muteCacheValid = false;
   static unsigned int lastFrame = 0;
@@ -301,8 +302,9 @@ void drawBase() {
   // Invalidate cache on frame change or force refresh
   unsigned int currentFrame = (millis() / 33); // ~30 FPS frame counter
   if (currentFrame != lastFrame || !muteCacheValid) {
+    extern bool getMuteStateForUI(int channel);
     for (unsigned int ch = 0; ch < maxY; ch++) {
-      muteCache[ch] = getMuteState(ch);
+      muteCache[ch] = getMuteStateForUI(ch);
     }
     muteCacheValid = true;
     lastFrame = currentFrame;
@@ -1208,9 +1210,11 @@ FLASHMEM void drawTriggers() {
   const bool isSimpleNotes = (simpleNotesView == 1 && !isSingle);
 
   // Cache mute states for this frame (channels are small; avoid repeated getMuteState() calls).
+  // Use getMuteStateForUI() to show mutes for the edit page (what you're viewing)
   bool muteCache[maxY + 1];
+  extern bool getMuteStateForUI(int channel);
   for (unsigned int ch = 0; ch <= maxY; ++ch) {
-    muteCache[ch] = getMuteState(ch);
+    muteCache[ch] = getMuteStateForUI(ch);
   }
 
   // Cache blink phase once per frame (used for condition/probability effects).

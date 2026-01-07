@@ -235,6 +235,7 @@ extern int currentMenuPage;
 
 // Function declarations for per-page mute system
 bool getMuteState(int channel);
+bool getMuteStateForUI(int channel);  // Get mute state for UI display (uses edit page)
 void setMuteState(int channel, bool muted);
 void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
@@ -665,6 +666,9 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir);
 // Using SMP.songArrangement instead to save RAM1 (64 bytes saved)
 bool songModeActive = false;  // When true, playback follows song arrangement
 int currentSongPosition = 0;  // Current position in song arrangement (0-63)
+
+// NEXT mode: pending page that will be jumped to when current page completes
+unsigned int pendingPage = 0;  // 0 = no pending page, otherwise page number to jump to
 
 
 struct Sample {
@@ -1825,10 +1829,20 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool inEtcSubmenu;
     extern int currentMenuPage;
 
+    // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
+    if (inLookSubmenu) {
+      inLookSubmenu = false;
+      currentMenuPage = 5;
+      currentMode->pos[3] = 5;  // Sync mode position with current page
+      Encoder[3].writeCounter((int32_t)5);
+      return;
+    }
+
     // If in RECS submenu, exit back to main menu at RECS page (index 6)
     if (inRecsSubmenu) {
       inRecsSubmenu = false;
       currentMenuPage = 6;
+      currentMode->pos[3] = 6;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)6);
       return;
     }
@@ -1837,6 +1851,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     if (inMidiSubmenu) {
       inMidiSubmenu = false;
       currentMenuPage = 7;
+      currentMode->pos[3] = 7;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)7);
       return;
     }
@@ -1845,6 +1860,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     if (inVolSubmenu) {
       inVolSubmenu = false;
       currentMenuPage = 4;
+      currentMode->pos[3] = 4;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)4);
       return;
     }
@@ -1861,6 +1877,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       }
       inEtcSubmenu = false;
       currentMenuPage = 9;
+      currentMode->pos[3] = 9;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)9);
       return;
     }
@@ -3129,8 +3146,26 @@ void checkEncoders() {
       // Only update edit page from X position if NOT in song mode and NOT in active FLOW-follow playback.
       // In FLOW mode while playing, the display page is owned by the timer-follow logic.
       extern bool songModeActive;
+      extern int patternMode;
       if (!songModeActive && !(SMP_FLOW_MODE && isNowPlaying)) {
-        GLOB.edit = getPage(GLOB.x);
+        unsigned int newEditPage = getPage(GLOB.x);
+        // In NEXT mode, update GLOB.edit (displayed page) when encoder(3) changes X position
+        // This allows viewing different pages while playing continues on GLOB.page
+        if (patternMode == 3) {
+          // NEXT mode: update edit page, but don't change playing page
+          if (newEditPage != GLOB.edit) {
+            GLOB.edit = newEditPage;
+            // Update encoder[1] and editpage to reflect the new edit page
+            if (ctrlMode == 0) {
+              currentMode->pos[1] = (int)newEditPage;
+              Encoder[1].writeCounter((int32_t)newEditPage);
+              editpage = newEditPage;  // Keep editpage in sync
+            }
+          }
+        } else {
+          // Other modes: edit and play page are the same
+          GLOB.edit = newEditPage;
+        }
       }
     }
 
@@ -3251,28 +3286,63 @@ void checkEncoders() {
 
     // Only allow encoder[1] page changes if NOT in song mode (song controls pages automatically)
     extern bool songModeActive;
+    extern int patternMode;
     if (ctrlMode == 0 && currentMode->pos[1] != editpage && !songModeActive) {
       updateLastPage();
       editpage = currentMode->pos[1];
-      int xval = mapXtoPageOffset(GLOB.x) + ((editpage - 1) * maxX);  // Use maxX instead of hardcoded 16
-      Encoder[3].writeCounter((int32_t)xval);
-      GLOB.x = xval;
-
-      // Handle mute system when page changes in PMOD mode
-      if (SMP_PATTERN_MODE) {
-        // Save current page mutes before changing page
-        for (int ch = 0; ch < maxY; ch++) {
-          pageMutes[GLOB.edit - 1][ch] = getMuteState(ch);
+      
+      // In NEXT mode, set pending page instead of immediately changing
+      if (patternMode == 3) {
+        // NEXT mode: store as pending page, will jump when current page completes
+        pendingPage = editpage;
+        // Update display to show pending page (what will play next)
+        GLOB.edit = editpage;  // Show the selected page in UI
+        // IMPORTANT: Don't change GLOB.page here - it represents the actual playing page
+        // If not playing, initialize GLOB.page to the selected page
+        extern bool isNowPlaying;
+        if (!isNowPlaying) {
+          GLOB.page = editpage;
+          // Also update beat position when not playing
+          beat = (editpage - 1) * maxX + 1;
         }
-        // Load mutes for the new page
-        GLOB.edit = editpage;
-        for (int ch = 0; ch < maxY; ch++) {
-          // The getMuteState function will now use the new page
+        // Preserve relative X position within the CURRENT edit page (GLOB.edit)
+        // Get the relative position within the current edit page
+        int relativeX = mapXtoPageOffset(GLOB.x);
+        // Verify GLOB.x is actually on the current edit page, if not use default
+        unsigned int currentPageStart = (GLOB.edit - 1) * maxX + 1;
+        unsigned int currentPageEnd = GLOB.edit * maxX;
+        if (GLOB.x < currentPageStart || GLOB.x > currentPageEnd) {
+          relativeX = 1;  // Default to first column if X is not on the current edit page
         }
-        patternChangeTime = millis() + 2000;  // 2 seconds window
-        patternChangeActive = true;
+        // Constrain relativeX to valid range
+        relativeX = constrain(relativeX, 1, (int)maxX);
+        // Calculate new X position on the new edit page
+        int xval = relativeX + ((editpage - 1) * maxX);
+        Encoder[3].writeCounter((int32_t)xval);
+        GLOB.x = xval;
+        // Don't change the actual playback page yet when playing - that happens in playNote()
       } else {
-        GLOB.edit = editpage;
+        // Normal mode: change page immediately
+        int xval = mapXtoPageOffset(GLOB.x) + ((editpage - 1) * maxX);  // Use maxX instead of hardcoded 16
+        Encoder[3].writeCounter((int32_t)xval);
+        GLOB.x = xval;
+
+        // Handle mute system when page changes in PMOD mode
+        if (SMP_PATTERN_MODE) {
+          // Save current page mutes before changing page
+          for (int ch = 0; ch < maxY; ch++) {
+            pageMutes[GLOB.edit - 1][ch] = getMuteState(ch);
+          }
+          // Load mutes for the new page
+          GLOB.edit = editpage;
+          for (int ch = 0; ch < maxY; ch++) {
+            // The getMuteState function will now use the new page
+          }
+          patternChangeTime = millis() + 2000;  // 2 seconds window
+          patternChangeActive = true;
+        } else {
+          GLOB.edit = editpage;
+        }
       }
     }
 
@@ -3765,26 +3835,31 @@ void checkTouchInputs() {
         if (inLookSubmenu) {
           inLookSubmenu = false;
           currentMenuPage = 5;
+          currentMode->pos[3] = 5;  // Sync mode position with current page
           Encoder[3].writeCounter((int32_t)5);
         } else if (inRecsSubmenu) {
           // If in RECS submenu, exit back to main menu at RECS page (index 6)
           inRecsSubmenu = false;
           currentMenuPage = 6;
+          currentMode->pos[3] = 6;  // Sync mode position with current page
           Encoder[3].writeCounter((int32_t)6);
         } else if (inMidiSubmenu) {
           // If in MIDI submenu, exit back to main menu at MIDI page (index 7)
           inMidiSubmenu = false;
           currentMenuPage = 7;
+          currentMode->pos[3] = 7;  // Sync mode position with current page
           Encoder[3].writeCounter((int32_t)7);
         } else if (inVolSubmenu) {
           // If in VOL submenu, exit back to main menu at VOL page (index 4)
           inVolSubmenu = false;
           currentMenuPage = 4;
+          currentMode->pos[3] = 4;  // Sync mode position with current page
           Encoder[3].writeCounter((int32_t)4);
         } else if (inEtcSubmenu) {
           // If in ETC submenu, exit back to main menu at ETC page (index 9)
           inEtcSubmenu = false;
           currentMenuPage = 9;
+          currentMode->pos[3] = 9;  // Sync mode position with current page
           Encoder[3].writeCounter((int32_t)9);
         } else {
           // Otherwise exit to draw mode
@@ -3834,14 +3909,50 @@ void checkTouchInputs() {
           Encoder[0].writeRGBCode(0x000000);
         }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else if (currentMode == &loadSaveTrack) {
+        // Exit DAT mode back to main menu at DAT page (index 0)
+        switchMode(&menu);
+        extern int currentMenuPage;
+        currentMenuPage = 0;
+        Encoder[3].writeCounter((int32_t)0);
+      } else if (currentMode == &set_SamplePack) {
+        // Exit KIT mode back to main menu at KIT page (index 1)
+        switchMode(&menu);
+        extern int currentMenuPage;
+        currentMenuPage = 1;
+        Encoder[3].writeCounter((int32_t)1);
+      } else if (currentMode == &set_Wav) {
+        // Exit WAV mode back to main menu at WAV page (index 2)
+        switchMode(&menu);
+        extern int currentMenuPage;
+        currentMenuPage = 2;
+        Encoder[3].writeCounter((int32_t)2);
+      } else if (currentMode == &volume_bpm) {
+        // Exit BPM mode back to main menu at BPM page (index 3)
+        switchMode(&menu);
+        extern int currentMenuPage;
+        currentMenuPage = 3;
+        Encoder[3].writeCounter((int32_t)3);
+      } else if (currentMode == &songMode) {
+        // Exit SONG mode back to main menu at SONG page (index 8)
+        switchMode(&menu);
+        extern int currentMenuPage;
+        currentMenuPage = 8;
+        Encoder[3].writeCounter((int32_t)8);
       } else if (currentMode == &menu) {
+        extern bool inLookSubmenu;
         extern bool inRecsSubmenu;
         extern bool inMidiSubmenu;
         extern bool inVolSubmenu;
         extern bool inEtcSubmenu;
         extern int currentMenuPage;
-        // If in RECS submenu, exit back to main menu at RECS page (index 6)
-        if (inRecsSubmenu) {
+        // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
+        if (inLookSubmenu) {
+          inLookSubmenu = false;
+          currentMenuPage = 5;
+          currentMode->pos[3] = 5;  // Sync mode position with current page
+          Encoder[3].writeCounter((int32_t)5);
+        } else if (inRecsSubmenu) {
           // If in RECS submenu, exit back to main menu at RECS page (index 6)
           inRecsSubmenu = false;
           currentMenuPage = 6;
@@ -3873,7 +3984,7 @@ void checkTouchInputs() {
           }
           Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
         }
-      } else {  // If in any other mode (e.g. set_wav, etc.) and Switch 2 is touched, go to draw mode.
+      } else {  // If in any other mode and Switch 2 is touched, go to draw mode.
         switchMode(&draw);
         // Update encoder colors to reflect the current channel when exiting other modes
         extern int drawMode;
@@ -3932,11 +4043,18 @@ void checkSingleTouch() {
     } else if (currentMode == &menu) {
       extern bool inLookSubmenu;
       extern bool inEtcSubmenu;
-      // If in LOOK submenu, exit back to main menu
+      extern int currentMenuPage;
+      // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
       if (inLookSubmenu) {
         inLookSubmenu = false;
+        currentMenuPage = 5;
+        currentMode->pos[3] = 5;  // Sync mode position with current page
+        Encoder[3].writeCounter((int32_t)5);
       } else if (inEtcSubmenu) {
         inEtcSubmenu = false;
+        currentMenuPage = 9;
+        currentMode->pos[3] = 9;  // Sync mode position with current page
+        Encoder[3].writeCounter((int32_t)9);
       } else {
         // Otherwise exit to draw mode
         if (currentMode == &singleMode) {
@@ -3983,11 +4101,44 @@ void _checkMenuTouch() {
     // Toggle the mode only on a rising edge
     if (currentMode == &draw || currentMode == &singleMode) {
       switchMode(&menu);
+    } else if (currentMode == &loadSaveTrack) {
+      // Exit DAT mode back to main menu at DAT page (index 0)
+      switchMode(&menu);
+      extern int currentMenuPage;
+      currentMenuPage = 0;
+      Encoder[3].writeCounter((int32_t)0);
+    } else if (currentMode == &set_SamplePack) {
+      // Exit KIT mode back to main menu at KIT page (index 1)
+      switchMode(&menu);
+      extern int currentMenuPage;
+      currentMenuPage = 1;
+      Encoder[3].writeCounter((int32_t)1);
+    } else if (currentMode == &set_Wav) {
+      // Exit WAV mode back to main menu at WAV page (index 2)
+      switchMode(&menu);
+      extern int currentMenuPage;
+      currentMenuPage = 2;
+      Encoder[3].writeCounter((int32_t)2);
+    } else if (currentMode == &volume_bpm) {
+      // Exit BPM mode back to main menu at BPM page (index 3)
+      switchMode(&menu);
+      extern int currentMenuPage;
+      currentMenuPage = 3;
+      Encoder[3].writeCounter((int32_t)3);
+    } else if (currentMode == &songMode) {
+      // Exit SONG mode back to main menu at SONG page (index 8)
+      switchMode(&menu);
+      extern int currentMenuPage;
+      currentMenuPage = 8;
+      Encoder[3].writeCounter((int32_t)8);
     } else if (currentMode == &menu) {
       extern bool inLookSubmenu;
-      // If in LOOK submenu, exit back to main menu
+      extern int currentMenuPage;
+      // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
       if (inLookSubmenu) {
         inLookSubmenu = false;
+        currentMenuPage = 5;
+        Encoder[3].writeCounter((int32_t)5);
       } else {
         // Otherwise exit to draw mode
         switchMode(&draw);
@@ -5218,8 +5369,18 @@ void play(bool fromStart) {
       }
     } else if (SMP_PATTERN_MODE) {
       // In pattern mode, start from the current page's first beat
-      beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-      GLOB.page = GLOB.edit;              // Keep the current page
+      extern int patternMode;
+      if (patternMode == 3) {
+        // NEXT mode: use GLOB.page as the playing page (may differ from GLOB.edit if pending)
+        if (GLOB.page == 0) {
+          GLOB.page = GLOB.edit;  // Initialize if not set
+        }
+        beat = (GLOB.page - 1) * maxX + 1;  // Start from first beat of playing page
+      } else {
+        // Other pattern modes: use GLOB.edit
+        beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+        GLOB.page = GLOB.edit;              // Keep the current page
+      }
     } else {
       beat = 1;
       GLOB.page = 1;
@@ -5582,9 +5743,19 @@ void playNote() {
 
     // midi functions
     if (waitForFourBars && pulseCount >= totalPulsesToWait) {
+      extern int patternMode;
       if (SMP_PATTERN_MODE) {
-        beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-        GLOB.page = GLOB.edit;              // Keep the current page
+        if (patternMode == 3) {
+          // NEXT mode: use GLOB.page as the playing page
+          if (GLOB.page == 0) {
+            GLOB.page = GLOB.edit;  // Initialize if not set
+          }
+          beat = (GLOB.page - 1) * maxX + 1;  // Start from first beat of playing page
+        } else {
+          // Other pattern modes: use GLOB.edit
+          beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+          GLOB.page = GLOB.edit;              // Keep the current page
+        }
       } else {
         beat = 1;
         GLOB.page = 1;
@@ -5597,18 +5768,40 @@ void playNote() {
     beatStartTime = millis();
     if (SMP_PATTERN_MODE) {
       extern bool songModeActive;
+      extern int patternMode;
 
-      // Compute the bounds of the current page:
-      unsigned int pageStart = (GLOB.edit - 1) * maxX + 1;
+      // In NEXT mode, ALWAYS use GLOB.page (actual playing page) for calculations
+      // In other modes, use GLOB.edit (displayed page)
+      unsigned int currentPlayingPage;
+      if (patternMode == 3) {
+        // NEXT mode: use GLOB.page as the actual playing page
+        currentPlayingPage = GLOB.page;
+        if (currentPlayingPage == 0) {
+          // Initialize if not set
+          currentPlayingPage = GLOB.edit;
+          GLOB.page = GLOB.edit;
+        }
+      } else {
+        // Other modes: use GLOB.edit
+        currentPlayingPage = GLOB.edit;
+      }
+      
+      // Compute the bounds of the current playing page:
+      unsigned int pageStart = (currentPlayingPage - 1) * maxX + 1;
       unsigned int pageEnd = pageStart + maxX - 1;
 
-      // Preserve relative beat when switching pages (but NOT in song mode - let song handle beat position)
+      // Preserve relative beat when switching pages (but NOT in song mode or NEXT mode - let those handle beat position)
       static unsigned int lastEdit = GLOB.edit;
-      if (GLOB.edit != lastEdit && !songModeActive) {
+      if (GLOB.edit != lastEdit && !songModeActive && patternMode != 3) {
         unsigned int oldStart = (lastEdit - 1) * maxX + 1;
         unsigned int offset = beat - oldStart;
         beat = pageStart + offset;
         lastEdit = GLOB.edit;
+      }
+      
+      // In NEXT mode, initialize GLOB.page to current playing page if not set
+      if (patternMode == 3 && GLOB.page == 0) {
+        GLOB.page = GLOB.edit;
       }
 
       // Update lastEdit tracker in song mode too
@@ -5636,6 +5829,32 @@ void playNote() {
           // Still within pattern - just keep displaying current pattern
           GLOB.page = GLOB.edit;
         }
+      } else if (patternMode == 3) {
+        // NEXT mode: check if we've reached the end of current playing page, then jump to pending page
+        if (beat > pageEnd && pendingPage > 0) {
+          // Current page completed - jump to pending page
+          unsigned int newPageStart = (pendingPage - 1) * maxX + 1;
+          beat = newPageStart;
+          unsigned int oldPendingPage = pendingPage;
+          pendingPage = 0;  // Clear pending page after jump
+          
+          // Update page variables - now the pending page becomes the playing page
+          GLOB.page = oldPendingPage;  // This is now the actual playing page
+          GLOB.edit = oldPendingPage;  // Display matches playing page
+          editpage = oldPendingPage;
+          lastEdit = oldPendingPage;
+          
+          // Update encoder positions to match
+          currentMode->pos[1] = (int)oldPendingPage;
+          Encoder[1].writeCounter((int32_t)oldPendingPage);
+          int xval = mapXtoPageOffset(GLOB.x) + ((oldPendingPage - 1) * maxX);
+          Encoder[3].writeCounter((int32_t)xval);
+          GLOB.x = xval;
+        } else if (beat < pageStart || beat > pageEnd) {
+          // Wrap within page if no pending page (shouldn't normally happen in NEXT mode)
+          beat = pageStart;
+        }
+        // In NEXT mode, don't update GLOB.page from GLOB.edit - keep them separate
       } else {
         // Normal pattern mode - wrap within page
         if (beat < pageStart || beat > pageEnd) {
@@ -5643,8 +5862,10 @@ void playNote() {
         }
       }
 
-      // Update page after wrapping
-      GLOB.page = GLOB.edit;
+      // Update page after wrapping (but NOT in NEXT mode - GLOB.page is the playing page there)
+      if (patternMode != 3) {
+        GLOB.page = GLOB.edit;
+      }
 
       // Simple loopCount logic: increment when we transition TO page 1, beat 1 while playing
       static bool wasAtStart = false;  // Track if we were at page 1, beat 1 in previous call
@@ -6752,10 +6973,30 @@ FLASHMEM void initPageMutes() {
 }
 
 // Get mute state for a channel, considering PMOD setting
+// For PLAYBACK: uses playing page in NEXT mode, edit page otherwise
 FLASHMEM bool getMuteState(int channel) {
   if (SMP_PATTERN_MODE) {
     // Use page-specific mutes when PMOD is enabled
-    return pageMutes[GLOB.edit - 1][channel];  // GLOB.edit is 1-indexed, array is 0-indexed
+    extern int patternMode;
+    // In NEXT mode, use GLOB.page (playing page) for playback
+    // In ON/SONG mode, use GLOB.edit (which equals playing page)
+    unsigned int mutePage = (patternMode == 3) ? GLOB.page : GLOB.edit;
+    if (mutePage == 0) mutePage = GLOB.edit;  // Fallback
+    return pageMutes[mutePage - 1][channel];  // Page is 1-indexed, array is 0-indexed
+  } else {
+    // Use global mutes when PMOD is disabled
+    return globalMutes[channel];
+  }
+}
+
+// Get mute state for UI display - always uses edit page (what you're viewing)
+FLASHMEM bool getMuteStateForUI(int channel) {
+  if (SMP_PATTERN_MODE) {
+    // Use page-specific mutes when PMOD is enabled
+    // Always use GLOB.edit (edit page) for UI display
+    unsigned int mutePage = GLOB.edit;
+    if (mutePage == 0) mutePage = 1;  // Fallback
+    return pageMutes[mutePage - 1][channel];  // Page is 1-indexed, array is 0-indexed
   } else {
     // Use global mutes when PMOD is disabled
     return globalMutes[channel];
@@ -6766,15 +7007,32 @@ FLASHMEM bool getMuteState(int channel) {
 FLASHMEM void setMuteState(int channel, bool muted) {
   if (SMP_PATTERN_MODE) {
     // Set page-specific mute when PMOD is enabled
-    pageMutes[GLOB.edit - 1][channel] = muted;
+    extern int patternMode;
+    // In NEXT mode, set mute for the edit page (displayed page), not the playing page
+    // In ON/SONG mode, edit and play page are the same, so use GLOB.edit
+    unsigned int mutePage = GLOB.edit;
+    if (mutePage == 0) mutePage = 1;  // Fallback
+    pageMutes[mutePage - 1][channel] = muted;  // Page is 1-indexed, array is 0-indexed
+    
+    // Immediately stop synth voices when muted (only if muting the currently playing page)
+    if (muted && (channel == 13 || channel == 14)) {
+      bool shouldStop = true;
+      if (patternMode == 3) {
+        // In NEXT mode, only stop synth if we're muting the playing page (GLOB.page)
+        shouldStop = (GLOB.page > 0 && mutePage == GLOB.page);
+      }
+      if (shouldStop) {
+        stopSynthChannel(channel);
+      }
+    }
   } else {
     // Set global mute when PMOD is disabled
     globalMutes[channel] = muted;
     SMP.mute[channel] = muted;  // Keep SMP.mute in sync for backward compatibility
-  }
-  // Immediately stop synth voices when muted
-  if (muted && (channel == 13 || channel == 14)) {
-    stopSynthChannel(channel);
+    // Immediately stop synth voices when muted
+    if (muted && (channel == 13 || channel == 14)) {
+      stopSynthChannel(channel);
+    }
   }
 }
 
