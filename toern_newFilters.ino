@@ -1,4 +1,4 @@
-extern uint8_t filterPageCount[NUM_CHANNELS];
+extern const uint8_t filterPageCount[NUM_CHANNELS];
 extern uint8_t filterPage[NUM_CHANNELS];
 
 static bool channelHasFreeverb(uint8_t chan) {

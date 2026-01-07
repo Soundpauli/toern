@@ -44,11 +44,7 @@ FLASHMEM void savePattern(bool autosave) {
       }
     }
     
-    // Save song arrangement to SMP before writing
-    extern uint8_t songArrangement[64];
-    for (int i = 0; i < 64; i++) {
-      SMP.songArrangement[i] = songArrangement[i];
-    }
+    // Save song arrangement to SMP before writing (already in SMP, no copy needed)
     
     // Save SMP struct (file/pattern specific data)
     saveFile.write((uint8_t *)&SMP, sizeof(SMP));
@@ -232,11 +228,7 @@ FLASHMEM void loadPattern(bool autoload) {
           }
         }
         
-        // Load song arrangement from SMP
-        extern uint8_t songArrangement[64];
-        for (int i = 0; i < 64; i++) {
-          songArrangement[i] = SMP.songArrangement[i];
-        }
+        // Load song arrangement from SMP (already in SMP, no copy needed)
         
         // Unmute all channels first, then apply loaded mutes based on PMOD state
         unmuteAllChannels();

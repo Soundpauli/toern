@@ -2438,7 +2438,6 @@ void startNew() {
   extern IntervalTimer playTimer;
   extern bool globalMutes[maxY];
   extern bool pageMutes[maxPages][maxY];
-  extern uint8_t songArrangement[64];
   extern bool songModeActive;
   extern bool preventPaintUnpaint;
   extern int patternMode;
@@ -2557,7 +2556,6 @@ void startNew() {
   // 5. CLEAR ALL SONG ARRANGEMENT
   Serial.println("Clearing song arrangement...");
   for (int i = 0; i < 64; i++) {
-    songArrangement[i] = 0;
     SMP.songArrangement[i] = 0;
   }
   

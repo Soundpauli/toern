@@ -97,6 +97,30 @@ CRGB applyHighlight(CRGB color, bool highlight) {
   }
 }
 
+// Normalize color to maximum brightness while preserving hue/ratios
+CRGB normalizeToMaxBrightness(CRGB color) {
+  // If color is black, return as is
+  if (color.r == 0 && color.g == 0 && color.b == 0) {
+    return color;
+  }
+  
+  // Find the maximum channel value
+  uint8_t maxChannel = max(max(color.r, color.g), color.b);
+  
+  // If already at max brightness (255), return as is
+  if (maxChannel == 255) {
+    return color;
+  }
+  
+  // Scale all channels proportionally to make max channel = 255
+  // This preserves the color ratios while maximizing brightness
+  uint16_t r = ((uint16_t)color.r * 255) / maxChannel;
+  uint16_t g = ((uint16_t)color.g * 255) / maxChannel;
+  uint16_t b = ((uint16_t)color.b * 255) / maxChannel;
+  
+  return CRGB((uint8_t)r, (uint8_t)g, (uint8_t)b);
+}
+
 // Draw indicator with new format: SIZE[COLOR]
 void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false) {
   CRGB color = getIndicatorColor(colorCode);
@@ -112,7 +136,9 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
   }
 
   if (encoderNum >= 1 && encoderNum <= NUM_ENCODERS) {
-    uint32_t rgbCode = (uint32_t(color.r) << 16) | (uint32_t(color.g) << 8) | color.b;
+    // Normalize color to maximum brightness while preserving hue/ratios
+    CRGB maxBrightnessColor = normalizeToMaxBrightness(color);
+    uint32_t rgbCode = (uint32_t(maxBrightnessColor.r) << 16) | (uint32_t(maxBrightnessColor.g) << 8) | maxBrightnessColor.b;
     Encoder[encoderNum - 1].writeRGBCode(rgbCode);
   }
   
@@ -2008,7 +2034,6 @@ void drawKnobColorDefault(){
       SONG MODE
   *************************************************/
 void showSongMode() {
-  extern uint8_t songArrangement[64];
   extern Mode songMode;
   extern bool songModeActive;
   
@@ -2045,7 +2070,8 @@ void showSongMode() {
   drawText(posText, 10, 11, CRGB(0, 255, 255));
   
   // Show stored pattern at this position (if any)
-  int storedPattern = songArrangement[songPosition - 1];
+  extern Device SMP;
+  int storedPattern = SMP.songArrangement[songPosition - 1];
   if (storedPattern > 0) {
     char storedText[8];
     snprintf(storedText, sizeof(storedText), ">%02d", storedPattern);
@@ -2058,9 +2084,10 @@ void showSongMode() {
   extern unsigned int maxX;
   int startPos = ((songPosition - 1) / maxX) * maxX;  // Start of current block
   
+  extern Device SMP;
   for (int i = 0; i < maxX && (startPos + i) < 64; i++) {
     int pos = startPos + i;
-    int pattern = songArrangement[pos];
+    int pattern = SMP.songArrangement[pos];
     
     int x = (i % maxX) + 1;
     int y = 3 - (i / maxX);  // Row 3 down to 1 (changed from 4 to make room for playback indicator)
