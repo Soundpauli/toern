@@ -2059,34 +2059,6 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   // Channel switching in single mode with button combination 0-1-0-0 when not at y=16
-  if (currentMode == &singleMode && GLOB.y != 16 && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100" when not at y=16
-    // Cycle through channels 1-8 (avoiding special channels 0, 9, 10, 12, 15)
-    GLOB.currentChannel++;
-    if (GLOB.currentChannel > 8) {
-      GLOB.currentChannel = 1;
-    }
-    // Skip special channels
-    if (GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15) {
-      GLOB.currentChannel = 1;
-    }
-
-    // Update encoder colors to reflect new channel
-    extern int drawMode;
-    if (drawMode == 0) {
-      // L+R mode: color encoder(0) with channel color
-      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    } else {
-      // R mode: don't color encoder(0)
-      Encoder[0].writeRGBCode(0x000000);
-    }
-    Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-
-    // Update channel volume encoder
-    Encoder[2].writeCounter((int32_t)SMP.channelVol[GLOB.currentChannel]);
-    currentMode->pos[2] = SMP.channelVol[GLOB.currentChannel];
-
-    return;  // Prevent other button actions from being processed
-  }
 
   if (currentMode == &draw && match_buttons(currentButtonStates, 1, 1, 0, 0)) {  // "1100"
     //toggleCopyPaste();
@@ -2280,7 +2252,9 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
 
     int ch = GLOB.currentChannel;
-    bool wasMuted = getMuteState(ch);
+    // Use getMuteStateForUI() to check mute state from the displayed page (GLOB.edit),
+    // not the playing page (GLOB.page). This ensures correct behavior in NEXT mode.
+    bool wasMuted = getMuteStateForUI(ch);
 
     // If we're about to mute via button, remember the current channel volume (for later restore)
     if (!wasMuted) {
@@ -2291,7 +2265,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
 
     toggleMute();
-    bool isMuted = getMuteState(ch);
+    // Use getMuteStateForUI() to check mute state after toggling (from displayed page)
+    bool isMuted = getMuteStateForUI(ch);
 
     // CTRL=VOL: on unmute, restore the last channel volume and update encoder(1)
     if (ctrlMode == 1 && wasMuted && !isMuted) {
@@ -5287,7 +5262,9 @@ void tmpMuteAll(bool pressed) {
 
 
 FLASHMEM void toggleMute() {
-  bool currentMuteState = getMuteState(GLOB.currentChannel);
+  // Use getMuteStateForUI() to get mute state from the displayed page (GLOB.edit),
+  // not the playing page (GLOB.page). This ensures toggling works correctly in NEXT mode.
+  bool currentMuteState = getMuteStateForUI(GLOB.currentChannel);
   setMuteState(GLOB.currentChannel, !currentMuteState);
 }
 

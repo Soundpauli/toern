@@ -309,6 +309,10 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     if (previewTriggerMode == PREVIEW_MODE_ON) {
       peakIndex = 0;
       memset(peakValues, 0, sizeof(peakValues));
+    } else if (previewTriggerMode == PREVIEW_MODE_PRESS) {
+      // Delete peaks before regenerating them when encoder(0) is pressed
+      peakIndex = 0;
+      memset(peakValues, 0, sizeof(peakValues));
     }
     
     g_encoder0PressedMode = (previewTriggerMode == PREVIEW_MODE_PRESS);

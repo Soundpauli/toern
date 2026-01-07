@@ -370,11 +370,20 @@ void drawBase() {
       // Determine color once per row
       CRGB color = (y == currentChannel + 1) ? cachedHighlightColor : cachedSingleModeColor;
       
+      // Dim base color by 50% when muted (reduce brightness only, preserve hue/saturation)
+      if (isMuted) {
+        CHSV hsv = rgb2hsv_approximate(color);
+        hsv.v = (hsv.v * 128) / 255;  // Reduce brightness by 50% (128/255 ≈ 0.5)
+        hsv2rgb_rainbow(hsv, color);
+      }
+      
       for (unsigned int x = 1; x < maxX + 1; x++) {
 
         // Grundton (z. B. C3) pro Kanal etwas heller darstellen
         if (y == currentChannel + 1 ) {
-         color = blend(color, CRGB::White, 5); 
+         color = blend(color, CRGB::White, 5);
+         // Make default (C4) row 1/2 less bright
+         color.nscale8(190);  // Scale to 50% brightness (190/255 ≈ 0.7)
         }        
 
         light(x, y, color);
@@ -1290,7 +1299,12 @@ FLASHMEM void drawTriggers() {
           light(ix, iy, col_base[thisNote]);
         }
       } else {
-        light(ix, iy, col_base[thisNote]);
+        // Muted: use dark white in single mode, otherwise use base color
+        if (isSingle) {
+          light(ix, iy, UI_DIM_WHITE);  // Dark white for muted triggers in single mode
+        } else {
+          light(ix, iy, col_base[thisNote]);
+        }
       }
     }
   }
