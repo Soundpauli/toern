@@ -478,7 +478,10 @@ const unsigned long CHECK_INTERVAL = 50;  // Interval to check buttons in ms
 unsigned long lastCheckTime = 0;          // Get the current time
 
 
-int recMode = 1;
+// Recording input mode:
+//   1  = MIC (SGTL5000 capture/mic path enabled)
+//  -1  = LINEIN (MIC/capture path disabled)
+int recMode = -1;
 unsigned int fastRecMode = 0;
 unsigned int previewVol = 20;  // Default 20 (0-50 range, 0.00-0.50)
 // Preview trigger mode: 0 = automatic preview on selection/seek, 1 = only on encoder(0) press in SET_WAV
@@ -526,9 +529,9 @@ EXTMEM int16_t recBuffer[BUFFER_SAMPLES];
 volatile size_t recWriteIndex = 0;
 
 
-// which input on the audio shield will be used?
-//const int myInput = AUDIO_INPUT_LINEIN;
-unsigned int recInput = AUDIO_INPUT_MIC;
+// Which input on the audio shield will be used?
+// Default to LINEIN so the SGTL5000 MIC/capture path is not powered by default.
+unsigned int recInput = AUDIO_INPUT_LINEIN;
 
 /*timers*/
 unsigned int lastButtonPressTime = 0;
@@ -583,7 +586,24 @@ unsigned int samplePackID, fileID = 1;
 EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
 IntervalTimer midiClockTimer;
+IntervalTimer fillTimer;  // Timer for fill triggers (runs at 4x beat rate)
 //IntervalTimer midiTimer;
+
+// Fill timer state - tracks sub-beat position (0-3 for 4x rate)
+volatile unsigned int fillSubBeat = 0;
+// Monotonic sub-tick for fill timing (increments in playFillNote ISR; independent of pattern looping).
+// 4 sub-ticks = 1 sequencer step ("beat" in this code).
+volatile uint32_t fillSubTick = 0;
+// Fill state machine:
+// - fillRunning: fill currently playing
+// - fillHasTriggered: fill completed once in this playback cycle (lockout until pause/play)
+volatile bool fillRunning = false;
+volatile bool fillHasTriggered = false;
+volatile uint32_t fillStartSubTick = 0;  // sub-tick when fill started
+// Active fill playback parameters (copied from triggering note).
+volatile int fillActiveChannel = 0;
+volatile int fillActiveVelocity = 0;
+volatile unsigned int fillActiveRow = 0;
 unsigned int lastPage = 1;
 int editpage = 1;
 
@@ -1065,13 +1085,14 @@ FLASHMEM void setVelocity() {
   if (currentCondStep != lastCondStep) {
     lastCondStep = currentCondStep;
 
-    // Map encoder steps 1-9 to condition values
+    // Map encoder steps 1-10 to condition values
     // Positions 1-5: 1/X conditions -> values 1, 2, 4, 8, 16
     // Positions 6-9: X/1 conditions -> values 17, 18, 19, 20
+    // Position 10: F/F condition -> value 21 (fill)
     // Use PROGMEM lookup table to save RAM
-    static const uint8_t condValues[9] PROGMEM = { 1, 2, 4, 8, 16, 17, 18, 19, 20 };
+    static const uint8_t condValues[10] PROGMEM = { 1, 2, 4, 8, 16, 17, 18, 19, 20, 21 };
     uint8_t condValue;
-    if (currentCondStep >= 1 && currentCondStep <= 9) {
+    if (currentCondStep >= 1 && currentCondStep <= 10) {
       condValue = pgm_read_byte(&condValues[currentCondStep - 1]);
     } else {
       condValue = 1;  // Default
@@ -1443,9 +1464,9 @@ void switchMode(Mode *newMode) {
           currentMode->pos[2] = counterVal;  // Update mode's pos[2] to match fastfilter value
         }
       } else if (currentMode == &velocity && i == 3) {
-        // Encoder[3] in velocity mode: condition range 1-9
-        // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1
-        maxVal = 9;
+        // Encoder[3] in velocity mode: condition range 1-10
+        // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1, 10=F/F
+        maxVal = 10;
         minVal = 1;
         // Initialize with current note's condition value
         if (note[GLOB.x][GLOB.y].channel != 0) {
@@ -1454,16 +1475,20 @@ void switchMode(Mode *newMode) {
           // Map condition value to encoder position
           // Values 1-16: 1/X conditions -> positions 1-5
           // Values 17-20: X/1 conditions -> positions 6-9
+          // Value 21: F/F condition -> position 10
           if (cond <= 16) {
             counterVal = (cond == 1) ? 1 : (cond == 2) ? 2
                                          : (cond == 4) ? 3
                                          : (cond == 8) ? 4
                                                        : 5;
-          } else {
+          } else if (cond <= 20) {
             // X/1 conditions: 17=2/1, 18=4/1, 19=8/1, 20=16/1
             counterVal = (cond == 17) ? 6 : (cond == 18) ? 7
                                           : (cond == 19) ? 8
                                                          : 9;
+          } else {
+            // F/F condition: 21 -> position 10
+            counterVal = (cond == 21) ? 10 : 1;
           }
           currentMode->pos[3] = counterVal;
         } else {
@@ -2082,9 +2107,10 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       else if (prob == 75) probStep = 4;
       else probStep = 5;  // 100%
 
-      // Map condition to encoder range 1-9
+      // Map condition to encoder range 1-10
       // Values 1-16: 1/X conditions -> positions 1-5
       // Values 17-20: X/1 conditions -> positions 6-9
+      // Value 21: F/F condition -> position 10
       uint8_t cond = note[GLOB.x][GLOB.y].condition;
       if (cond == 0) cond = 1;  // Default to 1 if not set
       unsigned int condStep;
@@ -2093,10 +2119,12 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
                                    : (cond == 4) ? 3
                                    : (cond == 8) ? 4
                                                  : 5;
-      } else {
+      } else if (cond <= 20) {
         condStep = (cond == 17) ? 6 : (cond == 18) ? 7
                                     : (cond == 19) ? 8
                                                    : 9;
+      } else {
+        condStep = (cond == 21) ? 10 : 1;
       }
 
       switchMode(&velocity);
@@ -2122,9 +2150,10 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       else if (prob == 75) probStep = 4;
       else probStep = 5;  // 100%
 
-      // Map condition to encoder range 1-9
+      // Map condition to encoder range 1-10
       // Values 1-16: 1/X conditions -> positions 1-5
       // Values 17-20: X/1 conditions -> positions 6-9
+      // Value 21: F/F condition -> position 10
       uint8_t cond = note[GLOB.x][GLOB.y].condition;
       if (cond == 0) cond = 1;  // Default to 1 if not set
       unsigned int condStep;
@@ -2133,10 +2162,12 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
                                    : (cond == 4) ? 3
                                    : (cond == 8) ? 4
                                                  : 5;
-      } else {
+      } else if (cond <= 20) {
         condStep = (cond == 17) ? 6 : (cond == 18) ? 7
                                     : (cond == 19) ? 8
                                                    : 9;
+      } else {
+        condStep = (cond == 21) ? 10 : 1;
       }
 
       GLOB.singleMode = false;
@@ -2419,26 +2450,27 @@ void initSoundChip() {
 
   // Initialize audio input amplifier - turned off at startup
   audioInputAmp.gain(0.0);
-
-  //FOR GRANULAR
-  //granular1.begin(granularMemory, GRANULAR_MEMORY_SIZE);
-
-  //sgtl5000_1.autoVolumeControl(1, 1, 0, -6, 40, 20);
-  //sgtl5000_1.audioPostProcessorEnable();
-  //sgtl5000_1.audioPreProcessorEnable();
-  //sgtl5000_1.audioPostProcessorEnable();
-  //sgtl5000_1.autoVolumeEnable();
+  sgtl5000_1.audioPostProcessorEnable();
+  sgtl5000_1.audioPreProcessorEnable();
+  sgtl5000_1.autoVolumeEnable();
 
   //REC
+  // Select requested input.
+  // Default at boot is LINEIN (see setup()), but menu can switch to MIC.
   sgtl5000_1.inputSelect(recInput);
-  sgtl5000_1.micGain(micGain);  //0-63
-
+  if (recInput == AUDIO_INPUT_MIC) {
+    sgtl5000_1.micGain(micGain);  // 0-63
+  } else {
+    // Ensure MIC/capture path is off while on LINEIN.
+    sgtl5000_1.micGain(0);
+  }
 
   sgtl5000_1.adcHighPassFilterEnable();  //ENABLED //matze
   //sgtl5000_1.adcHighPassFilterDisable();  //for mic?
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.lineOutLevel(lineOutLevelSetting);
   sgtl5000_1.lineInLevel(lineInLevel);  // Apply line input level
+
 }
 
 
@@ -2781,6 +2813,14 @@ void setup() {
     lineOutLevelSetting = 30;  // Default to 30 if invalid
   }
 
+  // Load REC input mode early (before initSoundChip), so the codec input isn't accidentally MIC.
+  // Default to LINEIN if EEPROM is invalid.
+  recMode = (int8_t)EEPROM.read(EEPROM_DATA_START + 0);
+  if (recMode != 1 && recMode != -1) {
+    recMode = -1;  // safe default: LINEIN
+  }
+  recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
+
   initSoundChip();
 
   initEncoders();     // Moved initEncoders here, ensures Serial is up for its prints
@@ -2858,6 +2898,10 @@ void setup() {
   //playTimer.priority(118);
   // Run sequencer from IntervalTimer (ISR-safe playNote) so playback continues during SD/UI work
   playTimer.begin(playNote, playNoteInterval);
+  // Start fill timer at 4x the beat rate (for 2x and 4x fills)
+  if (playNoteInterval >= 4) {
+    fillTimer.begin(playFillNote, playNoteInterval / 4);
+  }
   //midiTimer.begin(checkMidi, playNoteInterval);
   //midiTimer.priority(10);
 
@@ -4825,7 +4869,10 @@ if (SMP.filter_settings[8][ACTIVE]>0){
           else if (prob == 75) probStep = 4;
           else probStep = 5;  // 100%
 
-          // Map condition to encoder range 1-9
+          // Map condition to encoder range 1-10
+          // Values 1-16: 1/X conditions -> positions 1-5
+          // Values 17-20: X/1 conditions -> positions 6-9
+          // Value 21: F/F condition -> position 10
           uint8_t cond = note[GLOB.x][GLOB.y].condition;
           if (cond == 0) cond = 1;  // Default to 1 if not set
           unsigned int condStep;
@@ -4834,10 +4881,12 @@ if (SMP.filter_settings[8][ACTIVE]>0){
                                        : (cond == 4) ? 3
                                        : (cond == 8) ? 4
                                                      : 5;
-          } else {
+          } else if (cond <= 20) {
             condStep = (cond == 17) ? 6 : (cond == 18) ? 7
                                         : (cond == 19) ? 8
                                                        : 9;
+          } else {
+            condStep = (cond == 21) ? 10 : 1;
           }
 
           GLOB.singleMode = (rModeSavedMode == &singleMode);
@@ -5379,8 +5428,25 @@ void play(bool fromStart) {
       // Fire the very first step right away so beat 1 is heard as soon as Play is pressed.
       // Subsequent steps will be driven by playTimer at regular intervals.
       if (SMP.bpm > 0.0f) {
+        unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+        playTimer.end();
+        playNote();  // Fire the downbeat right away
+        playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
+        // Start fill timer at 4x the beat rate
+        if (currentPlayNoteInterval >= 4) {
+          fillTimer.begin(playFillNote, currentPlayNoteInterval / 4);
+        }
+      } else {
         playNote();
       }
+      // Reset fill trigger flag on play start
+      fillHasTriggered = false;
+      fillRunning = false;
+      fillSubTick = 0;
+      fillStartSubTick = 0;
+      fillActiveChannel = 0;
+      fillActiveVelocity = 0;
+      fillActiveRow = 0;
     } else {
       // slave-mode: arm for the next bar-1 instead of starting now
       pendingStartOnBar = true;
@@ -5408,6 +5474,7 @@ void pause() {
   isNowPlaying = false;
   pendingStartOnBar = false;
   lastFlowPage = 0;  // Reset FLOW page tracking when playback stops
+  fillTimer.end();  // Stop fill timer when playback stops
   updateLastPage();
 
   // Update encoder 1 limit if pattern mode is ON
@@ -5421,6 +5488,7 @@ void pause() {
 
   deleteActiveCopy();
   autoSave();  // Now safe to do blocking SD card operations - timer is stopped
+  fillTimer.end();  // Stop fill timer on pause
   envelope0.noteOff();
   // Ensure synth voices 13/14 are silenced on pause
   stopSynthChannel(13);
@@ -5431,6 +5499,13 @@ void pause() {
   beatForUI = beat;  // Keep UI timer in sync with reset position
   GLOB.page = 1;     // Reset page on pause
   loopCount = 0;     // Reset loop count to 0 on pause (will be set to 1 on next play)
+  fillHasTriggered = false;  // Reset fill trigger flag on pause
+  fillRunning = false;
+  fillSubTick = 0;
+  fillStartSubTick = 0;
+  fillActiveChannel = 0;
+  fillActiveVelocity = 0;
+  fillActiveRow = 0;
 
   // Reset static tracking variables on pause to ensure clean state on next play
   // Note: static variables will be reset when play() is called and we check for page 1, beat 1
@@ -5548,6 +5623,12 @@ void playNote() {
   // Remember which beat is actually being played for UI highlighting
   beatForUI = beat;
 
+  // NOTE: playNote() is called by a hardware timer even when not playing.
+  // Never start fills (or do any fill side effects) unless we are actually playing.
+  if (!isNowPlaying) {
+    return;
+  }
+
   // Handle count-in pending: wait for next beat 1 (full bar) before starting count-in
   if (countInPending && isNowPlaying) {
     unsigned int currentBeatInBar = ((beat - 1) % maxX) + 1;
@@ -5641,11 +5722,10 @@ void playNote() {
 
   onBeatTick();
 
-  if (isNowPlaying) {
-    // Defer LED updates (slow) to main loop
-    isrPlayButtonTick = true;
+  // Defer LED updates (slow) to main loop
+  isrPlayButtonTick = true;
 
-    for (unsigned int b = 1; b < maxY + 1; b++) {  // b is 1-indexed (row on grid)
+  for (unsigned int b = 1; b < maxY + 1; b++) {  // b is 1-indexed (row on grid)
       if (beat > 0 && beat <= maxlen) {            // Ensure beat is within valid range for note array
         int ch = note[beat][b].channel;            // ch is 0-indexed for internal use (e.g. SMP arrays)
         int vel = note[beat][b].velocity;
@@ -5656,7 +5736,8 @@ void playNote() {
         if (ch > 0 && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
 
           // Check condition - skip if not the right loop iteration
-          if (cond > 1) {
+          // Condition 21 (F/F) always plays (handled separately for fill)
+          if (cond > 1 && cond != 21) {
             bool shouldPlay = false;
             if (cond <= 16) {
               // 1/X conditions: play when (loopCount % cond) == 0
@@ -5688,6 +5769,21 @@ void playNote() {
             }
           }
 
+          // Skip normal trigger for fill notes - they're handled by fillTimer ISR
+          if (cond == 21) {
+            // Initialize fill ONCE per playback cycle (locks out until pause/play resets).
+            // Start as soon as we encounter the fill trigger note during playback.
+            if (!fillHasTriggered && !fillRunning) {
+              fillRunning = true;
+              // Start on the next sub-tick to avoid a double-hit on the same sub-tick edge.
+              fillStartSubTick = fillSubTick + 1;
+              fillActiveChannel = ch;
+              fillActiveVelocity = (vel == 0) ? defaultVelocity : vel;
+              fillActiveRow = b;
+            }
+            continue;  // Fill notes are handled by separate fillTimer ISR
+          }
+
           // Trigger MIDI and audio as close together as possible.
           // NOTE: 'ch' is stored 1-based in 'note' (1=voice1, 2=voice2, etc.), and MIDI channels are 1-16.
           // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
@@ -5716,10 +5812,10 @@ void playNote() {
           }
         }
       }
-    }
+  }
 
-    // midi functions
-    if (waitForFourBars && pulseCount >= totalPulsesToWait) {
+  // midi functions
+  if (waitForFourBars && pulseCount >= totalPulsesToWait) {
       extern int patternMode;
       if (SMP_PATTERN_MODE) {
         if (patternMode == 3) {
@@ -5880,7 +5976,6 @@ void playNote() {
         }
         wasAtStartNP = atStartNP;
       }
-    }
   }
   for (int ch = 13; ch <= 14; ch++) {  // Only for synth channels 13, 14
     if (noteOnTriggered[ch] && !persistentNoteOn[ch]) {
@@ -6025,6 +6120,88 @@ void unpaint() {
   // Display update is handled by the main loop frame presenter (FastLEDshow()).
 }
 
+// Fill timer ISR - runs at 4x the beat rate to handle fill triggers
+void playFillNote() {
+  if (!isNowPlaying) return;
+
+  // Hard lockout once the fill completed. Only pause()/play() clears this.
+  if (fillHasTriggered) return;
+
+  // Advance monotonic fill clock (independent of pattern looping).
+  fillSubTick++;
+  fillSubBeat = (unsigned int)(fillSubTick & 0x3U);  // 0..3
+
+  // No active fill -> nothing to do.
+  if (!fillRunning) return;
+  if (fillStartSubTick == 0) return;
+  if (fillActiveChannel <= 0) return;
+  if (getMuteState(fillActiveChannel)) return;
+
+  // Classic fill length: 4 bars (fixed length for techno fill buildup).
+  const uint32_t fillLengthBeats = (uint32_t)(4U * (uint32_t)maxX);
+
+  // Position in fill in "beat steps" (each beat step = 4 sub-ticks).
+  const uint32_t elapsedSub = (fillSubTick >= fillStartSubTick) ? (fillSubTick - fillStartSubTick) : 0U;
+  const uint32_t positionInFill = (elapsedSub / 4U) + 1U;  // starts at 1
+
+  if (positionInFill > fillLengthBeats) {
+    // Fill completed: stop forever until pause()/play() resets.
+    fillRunning = false;
+    fillHasTriggered = true;
+    return;
+  }
+
+  // Divide fill into 6 sections for buildup: 1/8, 1/4, 1/2, 1, 2, 4
+  const uint32_t sectionSize = (fillLengthBeats + 5U) / 6U;
+  uint32_t section = (positionInFill - 1U) / sectionSize;
+  if (section > 5U) section = 5U;
+
+  bool shouldTrigger = false;
+  switch (section) {
+    case 0:  // 1/8: one hit every 8 beats (sub-beat 0)
+      shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 8U == 0U));
+      break;
+    case 1:  // 1/4: one hit every 4 beats (sub-beat 0)
+      shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 4U == 0U));
+      break;
+    case 2:  // 1/2: one hit every 2 beats (sub-beat 0)
+      shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 2U == 0U));
+      break;
+    case 3:  // 1: one hit every beat (sub-beat 0)
+      shouldTrigger = (fillSubBeat == 0);
+      break;
+    case 4:  // 2: two hits per beat (sub-beats 0 and 2)
+      shouldTrigger = (fillSubBeat == 0 || fillSubBeat == 2);
+      break;
+    case 5:  // 4: four hits per beat (all sub-beats)
+      shouldTrigger = true;
+      break;
+  }
+
+  if (!shouldTrigger) return;
+
+  // Trigger the fill note (ignore MIDI as requested).
+  const int ch = fillActiveChannel;
+  const int vel = (fillActiveVelocity == 0) ? defaultVelocity : fillActiveVelocity;
+  const unsigned int row = fillActiveRow;
+
+  if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
+    int pitch = (12 * SampleRate[ch]) + (int)row - (ch + 1);
+
+    if (ch >= 1 && ch <= 12) {
+      pitch += (int)detune[ch];
+    }
+    if (ch >= 1 && ch <= 8) {
+      pitch += (int)(channelOctave[ch] * 12);
+    }
+
+    _samplers[ch].noteEvent(pitch, vel, true, true);
+  } else if (ch == 11) {
+    playSound(12 * (int)octave[0] + transpose + ((int)row - 1), 0);
+  } else if (ch >= 13 && ch < 15) {
+    playSynth(ch, (int)row, vel, false);
+  }
+}
 
 void triggerGridNote(unsigned int globalX, unsigned int y) {
   if (globalX < 1 || globalX > maxlen || y < 1 || y > maxY) return;
@@ -6407,6 +6584,10 @@ FLASHMEM void updateBPM() {
     if (SMP.bpm > 0) {                                                // Avoid division by zero
       playNoteInterval = ((60.0 * 1000.0 / SMP.bpm) / 4.0) * 1000.0;  // Use floats for precision
       playTimer.update(playNoteInterval);
+      // Update fill timer to match new beat rate (4x speed)
+      if (playNoteInterval >= 4) {
+        fillTimer.update(playNoteInterval / 4);
+      }
       //midiTimer.update(playNoteInterval);  // If midiTimer exists and shares interval
 
       // Update MIDI clock output immediately with exact rounded BPM value

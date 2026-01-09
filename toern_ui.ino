@@ -970,7 +970,7 @@ FLASHMEM void drawVelocity() {
   // Show condition as "1/1", "1/2", or "1/4" based on condStep
   
   // Map condStep to numerator, denominator and color
-  // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1
+  // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1, 10=F/F
   const char* numeratorText;
   const char* denominatorText;
   CRGB textColor;
@@ -1006,10 +1006,14 @@ FLASHMEM void drawVelocity() {
     numeratorText = "8";
     denominatorText = "1";
     textColor = CRGB(255, 150, 0);  // Light orange for 8/1
-  } else {  // condStep == 9
+  } else if (condStep == 9) {
     numeratorText = "X";
     denominatorText = "1";
     textColor = CRGB(0, 255, 200);  // Light turquoise for 16/1
+  } else {  // condStep == 10 (F/F)
+    numeratorText = "F";
+    denominatorText = "F";
+    textColor = CRGB(255, 255, 0);  // Yellow for F/F (fill)
   }
   
   // Draw numerator at top: x=13, y=11

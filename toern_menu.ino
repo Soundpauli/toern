@@ -1,9 +1,9 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 10
-#define RECS_PAGES_COUNT 3
+#define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 2
-#define VOL_PAGES_COUNT 6
+#define VOL_PAGES_COUNT 4
 #define ETC_PAGES_COUNT 2
 
 // External variables
@@ -31,9 +31,9 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"KIT", 2, false, nullptr},           // Sample Pack
   {"WAV", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
-  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LOUT, PREV, MIC, L-IN)
+  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LOUT, PREV, 2-CH)
   {"PLAY", 19, false, nullptr},         // PLAY submenu (FLW, PREV, VIEW, PMD, LOOP)
-  {"RECS", 20, false, nullptr},         // RECS submenu (MIC, TRIG, CLR)
+  {"RECS", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"ETC", 34, false, nullptr}           // ETC submenu (AUTO, RST)
@@ -65,8 +65,10 @@ static inline int pongIntervalToSpeed(uint16_t interval) {
 
 // RECS submenu pages
 MenuPage recsPages[RECS_PAGES_COUNT] = {
-  {"MIC", 4, true, "GAIN"},             // Recording Mode + Mic Gain
-  {"TRIG", 11, false, nullptr},          // Fast Rec Mode (On-The-fly Recording)
+  {"INPT", 4, true, "GAIN"},            // Recording Mode (MIC/LINE)
+  {"MIC", 30, false, nullptr},          // Microphone gain
+  {"L-IN", 31, false, nullptr},         // Line input level
+  {"TRIG", 11, false, nullptr},         // Fast Rec Mode (On-The-fly Recording)
   {"CLR", 12, false, nullptr}           // Rec Channel Clear
 };
 
@@ -81,9 +83,7 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"MAIN", 27, false, nullptr},         // Headphone output volume
   {"LOUT", 28, false, nullptr},         // Line output volume
   {"PREV", 29, false, nullptr},         // Preview volume
-  {"MIC", 30, false, nullptr},          // Microphone gain
-  {"L-IN", 31, false, nullptr},          // Line input level
-  {"2-CH", 36, false, nullptr}         // Stereo routing: OFF, M+P, or L+R
+  {"2-CH", 36, false, nullptr}          // Stereo routing: OFF, M+P, or L+R
 };
 
 // ETC submenu pages
@@ -314,7 +314,8 @@ void loadMenuFromEEPROM() {
       Serial.println("First run detected - initializing EEPROM with defaults");
       EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
       EEPROM.put(0, (unsigned int)1);            // samplePackID default (1)
-      EEPROM.write(EEPROM_DATA_START + 0,  1);   // recMode default
+      // Default to LINEIN so the SGTL5000 MIC/capture path is off by default.
+      EEPROM.write(EEPROM_DATA_START + 0, -1);   // recMode default
       EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default
       EEPROM.write(EEPROM_DATA_START + 2,  1);   // transportMode default
       EEPROM.write(EEPROM_DATA_START + 3,  1);   // patternMode default
@@ -482,9 +483,11 @@ void loadMenuFromEEPROM() {
   // Set MIDI clock send based on clockMode
   MIDI_CLOCK_SEND = (clockMode == 1);
   
-  // Apply mic gain if in mic mode
-  if (recMode == 1) {
+  // Apply mic gain only when MIC is selected; otherwise force 0 to keep MIC path off.
+  if (recInput == AUDIO_INPUT_MIC) {
     sgtl5000_1.micGain(micGain);
+  } else {
+    sgtl5000_1.micGain(0);
   }
 
   // Note: These draw functions are for menu display, not startup initialization.
@@ -500,13 +503,8 @@ void loadMenuFromEEPROM() {
   // drawFastRecMode();
   // drawRecChannelClear();
   
-  // However, we still need to apply the audio input selection from recMode
+  // Apply input selection from recMode.
   extern unsigned int recInput;
-  if (recMode == 1) {
-    recInput = AUDIO_INPUT_MIC;
-  } else if (recMode == -1) {
-    recInput = AUDIO_INPUT_LINEIN;
-  }
   sgtl5000_1.inputSelect(recInput);
 }
 
@@ -535,8 +533,13 @@ void applyAudioSettingsFromGlobals() {
   // Apply line output level
   sgtl5000_1.lineOutLevel(lineOutLevelSetting);
   
-  // Apply microphone gain
-  sgtl5000_1.micGain(micGain);
+  // Apply mic gain only when MIC is selected; otherwise force 0 to keep MIC path off.
+  extern unsigned int recInput;
+  if (recInput == AUDIO_INPUT_MIC) {
+    sgtl5000_1.micGain(micGain);
+  } else {
+    sgtl5000_1.micGain(0);
+  }
   
   // Apply line input level
   sgtl5000_1.lineInLevel(lineInLevel);
@@ -1528,6 +1531,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static bool micMenuFirstEnter = true;
   static bool lvlMenuFirstEnter = true;
   static bool stereoChMenuFirstEnter = true;
+  static int lastStereoCh = -1;
   static int lastPongSpeed = -1;
   static int lastSetting = -1;
   
@@ -1542,6 +1546,8 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
     prevMenuFirstEnter = true;
     micMenuFirstEnter = true;
     lvlMenuFirstEnter = true;
+    stereoChMenuFirstEnter = true;
+    lastStereoCh = -1;
     lastPongSpeed = -1;
     lastSetting = setting;
   }
@@ -1815,16 +1821,26 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         lastMicGain = encoderVal;
         micMenuFirstEnter = false;
         
-        // Apply to hardware
-        sgtl5000_1.micGain(micGain);
+        // Apply to hardware only if MIC is selected
+        extern unsigned int recInput;
+        if (recInput == AUDIO_INPUT_MIC) {
+          sgtl5000_1.micGain(micGain);
+        } else {
+          sgtl5000_1.micGain(0);
+        }
       }
       
       if (currentMode->pos[2] != lastMicGain) {
         int encoderPos = constrain(currentMode->pos[2], 0, 63);
         micGain = (unsigned int)encoderPos;
         
-        // Apply to hardware
-        sgtl5000_1.micGain(micGain);
+        // Apply to hardware only if MIC is selected
+        extern unsigned int recInput;
+        if (recInput == AUDIO_INPUT_MIC) {
+          sgtl5000_1.micGain(micGain);
+        } else {
+          sgtl5000_1.micGain(0);
+        }
         
         // Save to EEPROM
         saveSingleModeToEEPROM(9, micGain);
@@ -1870,34 +1886,27 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
     }
 
     case 36: { // 2-CH - Stereo routing (OFF, M+P, or L+R)
-      static int lastStereoCh = -1;
       extern int8_t stereoChannel;
       extern void applyStereoChannelRouting();
       
+      // Always enforce correct encoder range for 2-CH.
+      // This fixes the "can't change value" issue when coming from a page like PREV (0-50),
+      // where encoder(2) would otherwise stay at a high count and effectively clamp to 2.
+      Encoder[2].writeMax((int32_t)2);  // 0=OFF, 1=M+P, 2=L+R
+      Encoder[2].writeMin((int32_t)0);
+
       if (stereoChMenuFirstEnter) {
-        // Convert old values for backward compatibility
-        // Old: 0=OFF, 1=ON (L+R mode) -> New: 0=OFF, 1=M+P, 2=L+R
-        int encoderVal = stereoChannel;
-        if (encoderVal > 2) {
-          // Old invalid values (3-8), convert to L+R (2)
-          encoderVal = 2;
-          stereoChannel = 2;
-        } else if (encoderVal == 1) {
-          // Check if this is old format (L+R) or new format (M+P)
-          // We can't distinguish, so assume it's old format and convert to 2
-          // User can manually change to 1 (M+P) if needed
-          encoderVal = 2;
-          stereoChannel = 2;
-        }
-        // Always save to ensure persistence (even if value didn't change)
+        int encoderVal = constrain((int)stereoChannel, 0, 2);
+        // Backward-compat: clamp any legacy/invalid values (>2) to L+R.
+        if (encoderVal > 2) encoderVal = 2;
+        stereoChannel = (int8_t)encoderVal;
+
         saveSingleModeToEEPROM(23, stereoChannel);
         Encoder[2].writeCounter((int32_t)encoderVal);
-        Encoder[2].writeMax((int32_t)2);  // 0=OFF, 1=M+P, 2=L+R
-        Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = encoderVal;
         lastStereoCh = encoderVal;
         stereoChMenuFirstEnter = false;
-        
+
         applyStereoChannelRouting();
       }
       
@@ -1947,12 +1956,16 @@ void switchMenu(int menuPosition){
         break;
 
       case 4:
+        // Toggle input source: MIC <-> LINEIN
         recMode = recMode * (-1);
         saveSingleModeToEEPROM(0, recMode);
-        
-        // Apply mic gain if switching to mic mode
-        if (recMode == 1) {
+
+        recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
+        sgtl5000_1.inputSelect(recInput);
+        if (recInput == AUDIO_INPUT_MIC) {
           sgtl5000_1.micGain(micGain);
+        } else {
+          sgtl5000_1.micGain(0);
         }
         
         drawMainSettingStatus(menuPosition);
@@ -2593,18 +2606,17 @@ FLASHMEM void drawRecChannelClear(){
 }
 
 FLASHMEM void drawRecMode() {
-
   if (recMode == 1) {
     drawText("MIC", 2, 3, UI_WHITE);
-    // Mic gain level display removed (no display on x=16)
     recInput = AUDIO_INPUT_MIC;
-  }
-  if (recMode == -1) {
+    sgtl5000_1.inputSelect(AUDIO_INPUT_MIC);
+    sgtl5000_1.micGain(micGain);
+  } else {
     drawText("LINE", 2, 3, UI_BLUE);
-    // No gain level display for LINE input
     recInput = AUDIO_INPUT_LINEIN;
+    sgtl5000_1.inputSelect(AUDIO_INPUT_LINEIN);
+    sgtl5000_1.micGain(0);
   }
-  sgtl5000_1.inputSelect(recInput);
 
 
   FastLEDshow();

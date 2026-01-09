@@ -2519,10 +2519,20 @@ void startNew() {
     SMP.filter_settings[ch][EFX] = 0;  // Sample mode
     
     // Reset parameter data (no hardware calls)
-    SMP.param_settings[ch][ATTACK] = 32;
-    SMP.param_settings[ch][DECAY] = 0;
-    SMP.param_settings[ch][SUSTAIN] = 10;
-    SMP.param_settings[ch][RELEASE] = 5;
+    // Channel-specific ADSR defaults:
+    // - ch13/14 (synths): A=32, D=16, S=0, R=0
+    // - all others: keep existing defaults
+    if (ch == 13 || ch == 14) {
+      SMP.param_settings[ch][ATTACK] = 32;
+      SMP.param_settings[ch][DECAY] = 16;
+      SMP.param_settings[ch][SUSTAIN] = 0;
+      SMP.param_settings[ch][RELEASE] = 0;
+    } else {
+      SMP.param_settings[ch][ATTACK] = 32;
+      SMP.param_settings[ch][DECAY] = 0;
+      SMP.param_settings[ch][SUSTAIN] = 10;
+      SMP.param_settings[ch][RELEASE] = 5;
+    }
     
     // Reset synth data (only for channels 11, 13-14)
     if (ch == 11 || ch == 13 || ch == 14) {
