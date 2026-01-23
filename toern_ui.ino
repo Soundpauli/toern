@@ -1336,6 +1336,7 @@ void drawTimer() {
 
   // Determine which page to check against for timer display
   extern bool SMP_FLOW_MODE;
+  extern bool SMP_PATTERN_MODE;
   bool shouldShowTimer = false;
   
   if (SMP_FLOW_MODE) {
@@ -1343,8 +1344,13 @@ void drawTimer() {
     // ONLY difference: the visible page follows beatForUI (handled by setting GLOB.edit in the main loop).
     // Therefore, show the timer when beatForUI belongs to the page currently being displayed (GLOB.edit).
     shouldShowTimer = (beatForUIPage == GLOB.edit);
+  } else if (SMP_PATTERN_MODE) {
+    // Pattern mode: show timer on the edit page at the current timer column position
+    // This allows the timer to be visible when switching pages mid-beat
+    // The timer column (1..maxX) is always valid for any page
+    shouldShowTimer = true;
   } else {
-    // In normal/pattern mode, GLOB.edit is what the user is viewing/editing
+    // Normal mode (not pattern mode): GLOB.edit is what the user is viewing/editing
     // GLOB.page can automatically switch in normal mode, but GLOB.edit only
     // changes when user manually switches pages via encoder
     // We want to show timer if beatForUI belongs to the page being edited
