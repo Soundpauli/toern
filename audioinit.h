@@ -140,6 +140,7 @@ AudioAnalyzePeak                peak1;          //xy=3727,541
 // mixerPlay removed: mixer_end now feeds mixer_stereoR/L directly
 AudioRecordQueue                queue1;         //xy=3778,1164
 AudioAnalyzePeak                peakRec;        //xy=3788,1215
+AudioAnalyzePeak                peakOutput;     //xy=3788,1300  // For LED strip visualization
 EXTMEM AudioMixer4                     mixer_stereoR;  //xy=3932,748
 EXTMEM AudioMixer4                     mixer_stereoL;  //xy=3931,848
 AudioOutputI2S                  i2s1;           //xy=4154,795
@@ -332,6 +333,7 @@ EXTMEM AudioConnection        patchCord217(playSdWav1, 0, peak1, 0);
 EXTMEM AudioConnection        patchCord220(audioInput, 0, audioInputAmp, 0);
 EXTMEM AudioConnection        patchCord221(audioInputAmp, 0, queue1, 0);
 EXTMEM AudioConnection        patchCord222(audioInputAmp, 0, peakRec, 0);
+EXTMEM AudioConnection        patchCord222b(mixer_end, 0, peakOutput, 0);  // LED strip audio level
 EXTMEM AudioConnection        patchCord223(mixer0, 0, mixer_stereoR, 1);
 EXTMEM AudioConnection        patchCord224(mixer0, 0, mixer_stereoL, 1);
 EXTMEM AudioConnection        patchCord225(mixer_end, 0, mixer_stereoR, 0);

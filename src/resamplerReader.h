@@ -502,11 +502,11 @@ public:
 
         if (!_useDualPlaybackHead || abs(_crossfade) < 0.0001) { // Effectively head 1
             if (_bufferPosition1 + channel < current_play_start_boundary || _bufferPosition1 + channel >= current_play_finish_boundary) 
-                { /* RR_DEBUG_PRINT("RNV OOB H1: %ld (ch %u)\n", _bufferPosition1 + channel, channel); */ *value = 0; return true; } 
+                { /* RR_DEBUG_PRINT("RNV OOB H1: %ld (ch %u)\n", _bufferPosition1 + channel, channel); */ *value = 0; return false; } 
             result =  getSourceBufferValue(_bufferPosition1 + channel);
         } else if (abs(_crossfade - 1.0) < 0.0001){ // Effectively head 2
             if (_bufferPosition2 + channel < current_play_start_boundary || _bufferPosition2 + channel >= current_play_finish_boundary) 
-                { /* RR_DEBUG_PRINT("RNV OOB H2: %ld (ch %u)\n", _bufferPosition2 + channel, channel); */ *value = 0; return true; }
+                { /* RR_DEBUG_PRINT("RNV OOB H2: %ld (ch %u)\n", _bufferPosition2 + channel, channel); */ *value = 0; return false; }
             result =  getSourceBufferValue(_bufferPosition2 + channel);
         } else { // Crossfading
             int16_t r1 = 0, r2 = 0;

@@ -211,9 +211,17 @@ void setFilters(FilterType filterType, int index, bool initial) {
           float wetGain = mapf(mappedValue, 0.0f, 0.79f, 0.0f, 1.0f);
           wetGain = constrain(wetGain, 0.0f, 1.0f);
           
-          // Keep dry at constant level (slightly reduce when wet is high to prevent over-amplification)
+          // Dry path (note: wet + dry can otherwise exceed 1.0 and clip on loud signals)
           float dryGain = mapf(mappedValue, 0.0f, 0.79f, 1.0f, 0.7f);
           dryGain = constrain(dryGain, 0.7f, 1.0f);
+
+          // Safety normalization: guarantee wet+dry <= 1.0 (prevents crackle when reverb is high)
+          float sum = wetGain + dryGain;
+          if (sum > 1.0f) {
+            float s = 1.0f / sum;
+            wetGain *= s;
+            dryGain *= s;
+          }
           
           if (freeverbmixers[index] != 0) {
             freeverbmixers[index]->gain(0, wetGain);  // Smooth wet blend
@@ -250,16 +258,19 @@ void setFilters(FilterType filterType, int index, bool initial) {
         if (mv == 0) {
           // Transparent: 16-bit @ 44.1kHz, restore normal amp gain (channel volume)
           bitcrushers[index]->bits(16);
-          bitcrushers[index]->sampleRate(44100);
+          // Use the *exact* audio sample rate for true bypass.
+          // Using 44100 here can still engage sample-hold occasionally (audible as grit on transients).
+          bitcrushers[index]->sampleRate((int)AUDIO_SAMPLE_RATE_EXACT);
           amps[index]->gain(channelvolume);
           break;
         }
 
         // mv: 1..16 (1 = subtle, 16 = heavy)
         int bitDepth = (int)round(mapf((float)mv, 1.0f, 16.0f, 16.0f, 1.0f));      // 16..1 bits
-        int xsampleRate = (int)round(mapf((float)mv, 1.0f, 16.0f, 44100.0f, 1000.0f)); // 44100..1000 Hz
+        int xsampleRate = (int)round(mapf((float)mv, 1.0f, 16.0f,
+                                          (float)AUDIO_SAMPLE_RATE_EXACT, 1000.0f)); // ~44117..1000 Hz
         bitDepth = constrain(bitDepth, 1, 16);
-        xsampleRate = constrain(xsampleRate, 1000, 44100);
+        xsampleRate = constrain(xsampleRate, 1000, (int)AUDIO_SAMPLE_RATE_EXACT);
 
         bitcrushers[index]->bits(bitDepth);
         bitcrushers[index]->sampleRate(xsampleRate);
@@ -334,7 +345,7 @@ void setFilterDefaults(int channel) {
     freeverbmixers[channel]->gain(3, 1);
   }
   bitcrushers[channel]->bits(16);
-  bitcrushers[channel]->sampleRate(44100);
+  bitcrushers[channel]->sampleRate((int)AUDIO_SAMPLE_RATE_EXACT);
 
   // Initialize transition state for this filter
   initFilterTransition(channel);

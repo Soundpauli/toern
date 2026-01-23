@@ -2,9 +2,9 @@
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 5
-#define MIDI_PAGES_COUNT 2
+#define MIDI_PAGES_COUNT 3
 #define VOL_PAGES_COUNT 4
-#define ETC_PAGES_COUNT 2
+#define ETC_PAGES_COUNT 4
 
 // External variables
 extern Mode *currentMode;
@@ -75,7 +75,8 @@ MenuPage recsPages[RECS_PAGES_COUNT] = {
 // MIDI submenu pages
 MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"CH", 7, false, nullptr},            // MIDI Voice Select (Channel)
-  {"TRAN", 8, false, nullptr}          // MIDI Transport
+  {"TRAN", 8, false, nullptr},         // MIDI Transport
+  {"SEND", 13, false, nullptr}         // MIDI Send (CLCK, NOTE, BOTH)
 };
 
 // VOL submenu pages
@@ -88,9 +89,78 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
 
 // ETC submenu pages
 MenuPage etcPages[ETC_PAGES_COUNT] = {
+  {"INFO", 39, false, nullptr},          // Info / version / credits
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"RST", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
+  {"RST", 16, true, "MODE"},            // Reset Effects / SD Rescan (EFX or SD)
+  {"LGHT", 40, false, nullptr}          // LED Strip visualization (ON/OFF)
 };
+
+// --- INFO page animation state ---
+static bool infoPageFirstEnter = true;
+static uint32_t infoPageEnterMs = 0;
+
+// Force a full redraw on next menu frame (used when entering/exiting menu/submenus).
+static bool menuForceFullRedraw = false;
+void menuRequestFullRedraw() {
+  menuForceFullRedraw = true;
+}
+static inline bool takeMenuForceFullRedraw() {
+  if (!menuForceFullRedraw) return false;
+  menuForceFullRedraw = false;
+  return true;
+}
+
+static int textPixelWidth_3x5(const char *text) {
+  if (!text) return 0;
+  int w = 0;
+  for (int i = 0; text[i] != '\0'; i++) {
+    char c = text[i];
+    if (c < 32 || c > 126) continue;
+    w += alphabet[c - 32][0] + 1;  // char width + 1 space
+  }
+  return w;
+}
+
+FLASHMEM static void drawEtcInfoPage() {
+  // Layout matches other menu pages: title at y=10, value at y=3.
+  drawText("INFO", 2, 10, currentMenuParentTextColor());
+
+  const uint32_t now = millis();
+  if (infoPageFirstEnter) {
+    infoPageFirstEnter = false;
+    infoPageEnterMs = now;
+  }
+
+  // Phase 1: show version in yellow for 2 seconds
+  const uint32_t holdMs = 2000;
+  if (now - infoPageEnterMs < holdMs) {
+    drawText(VERSION, 2, 3, CRGB(255, 255, 0));  // yellow version number below
+    return;
+  }
+
+  // Phase 2: scroll version left while scrolling in the thank-you text from the right
+  static const char *kMsg =
+    "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
+
+  const uint32_t scrollStartMs = infoPageEnterMs + holdMs;
+  const uint32_t elapsedMs = (now >= scrollStartMs) ? (now - scrollStartMs) : 0;
+  const uint32_t msPerPixel = 60;  // scroll speed (lower = faster)
+  const int offsetPx = (int)(elapsedMs / msPerPixel);
+
+  const int versionBaseX = 2;
+  const int versionX = versionBaseX - offsetPx;
+  const int msgStartX = (int)maxX + 1;
+  const int msgX = msgStartX - offsetPx;
+
+  drawText(VERSION, versionX, 3, CRGB(255, 255, 0));  // yellow, scrolling out
+  drawText(kMsg, msgX, 3, UI_WHITE);                   // white, scrolling in
+
+  // Loop once the message has fully exited left.
+  const int msgW = textPixelWidth_3x5(kMsg);
+  if (msgX < -msgW - 2) {
+    infoPageEnterMs = now;
+  }
+}
 
 
 int currentMenuPage = 0;
@@ -337,6 +407,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
       EEPROM.write(EEPROM_DATA_START + 23, 0);   // stereoChannel default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 24, 2);   // midiSendMode default (2 = BOTH)
 
       Serial.println("EEPROM initialized with defaults.");
 
@@ -402,6 +473,16 @@ void loadMenuFromEEPROM() {
   // Apply routing after loading from EEPROM
   extern void applyStereoChannelRouting();
   applyStereoChannelRouting();
+  
+  // Load midiSendMode from EEPROM (stored at EEPROM_DATA_START + 24)
+  // 0=CLCK, 1=NOTE, 2=BOTH
+  extern int midiSendMode;
+  midiSendMode = (int8_t)EEPROM.read(EEPROM_DATA_START + 24);
+  if (midiSendMode < 0 || midiSendMode > 2) {
+    // Invalid value, default to BOTH
+    midiSendMode = 2;
+    EEPROM.write(EEPROM_DATA_START + 24, midiSendMode);
+  }
   
   if (previewVol < 0 || previewVol > 50) previewVol = 20;
   
@@ -482,6 +563,22 @@ void loadMenuFromEEPROM() {
   
   // Set MIDI clock send based on clockMode
   MIDI_CLOCK_SEND = (clockMode == 1);
+  
+  // Set MIDI send flags based on midiSendMode (0=CLCK, 1=NOTE, 2=BOTH)
+  // Note: MIDI_CLOCK_SEND is already set above, but we need to respect midiSendMode
+  extern int midiSendMode;
+  extern bool MIDI_NOTE_SEND;
+  if (midiSendMode == 0) {
+    // CLCK only: keep MIDI_CLOCK_SEND as set by clockMode, disable notes
+    MIDI_NOTE_SEND = false;
+  } else if (midiSendMode == 1) {
+    // NOTE only: disable clock, enable notes
+    MIDI_CLOCK_SEND = false;
+    MIDI_NOTE_SEND = true;
+  } else {
+    // BOTH: keep MIDI_CLOCK_SEND as set by clockMode, enable notes
+    MIDI_NOTE_SEND = true;
+  }
   
   // Apply mic gain only when MIC is selected; otherwise force 0 to keep MIC path off.
   if (recInput == AUDIO_INPUT_MIC) {
@@ -588,73 +685,10 @@ void loadSp0StateFromEEPROM() {
 }
 
 FLASHMEM void showMenu() {
-  FastLEDclear();
-  //showExit(0);
+  // Only redraw the menu UI when the page/setting changes (or a value changed).
+  // This avoids unnecessary clears/shows each loop.
 
-  // New indicator system: menu: | | | L[X]
-  // Encoder 1: empty (no indicator)
-  // Encoder 2: empty (no indicator)
-  // Encoder 3: empty (no indicator)
-  drawIndicator('L', 'G', 4);  // Encoder 4: Large Blue
-
-  // Get current page info
-  int pageIndex = currentMenuPage;
-  MenuPage* currentPageInfo = &menuPages[pageIndex];
-  
-  // Draw page title at top
-  //drawText(currentPageInfo->name, 6, 1, UI_WHITE);
-  
-  // Draw page indicator as a line at y=maxY (right-aligned)
-  // Show current page as red, others as blue
-  int startX = (int)maxX - MENU_PAGES_COUNT + 1;
-  if (startX < 1) startX = 1;
-  for (int i = 0; i < MENU_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_BLUE;
-    light(startX + i, maxY, indicatorColor);
-  }
-
-  // Handle the main setting for this page
-  int mainSetting = currentPageInfo->mainSetting;
-  
-  // Set encoder colors to match indicators based on main setting
-  if (mainSetting == 4 && recMode == 1) {
-    // REC page in MIC mode: no encoder indicators (encoder(2) removed)
-    Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(0x000000); // Black (no indicator - removed)
-    Encoder[3].writeRGBCode(0x000000); // Black (no indicator)
-  } else if (mainSetting == 15) {
-    // AI page: multiple indicators - L[G], L[Y], L[W], L[X]
-    CRGB greenColor = getIndicatorColor('G'); // Green for encoder 1
-    CRGB yellowColor = getIndicatorColor('Y'); // Yellow for encoder 2  
-    CRGB whiteColor = getIndicatorColor('W'); // White for encoder 3
-    CRGB blueColor = getIndicatorColor('X'); // Blue for encoder 4
-    
-    Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
-    Encoder[1].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
-    Encoder[2].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
-    Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
-  } else {
-    // Default: L[G] indicator for encoder 4 (green)
-    CRGB indicatorColor = getIndicatorColor('G'); // Green
-    Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
-  }
-
-  // Draw the main setting status
-  drawMainSettingStatus(mainSetting);
-  
-  // Draw additional features if this page has them
-  if (currentPageInfo->hasAdditionalFeatures) {
-    drawAdditionalFeatures(mainSetting);
-  }
-
-  FastLED.setBrightness(ledBrightness);
-  FastLEDshow();
-
-  // Handle page navigation with encoder 3
+  // Handle page navigation with encoder 4
   static int lastPagePosition = -1;
   static bool menuFirstEnter = true;
   
@@ -681,20 +715,83 @@ FLASHMEM void showMenu() {
     if (currentMenuPage < 0) currentMenuPage = 0;
     lastPagePosition = currentMenuPage;
   }
-  
-  // Handle encoder 2 changes for pages with additional features
-  handleAdditionalFeatureControls(mainSetting);
+
+  // Current page/setting
+  const int pageIndex = currentMenuPage;
+  MenuPage* currentPageInfo = &menuPages[pageIndex];
+  const int mainSetting = currentPageInfo->mainSetting;
+
+  static int lastRenderedPageIndex = -1;
+  static int lastRenderedSetting = -1;
+  const bool fullRedraw = takeMenuForceFullRedraw() || (pageIndex != lastRenderedPageIndex) || (mainSetting != lastRenderedSetting);
+
+  if (fullRedraw) {
+    FastLEDclear();
+    // New indicator system: menu: | | | L[G]
+    drawIndicator('L', 'G', 4);  // Encoder 4: menu navigation
+
+    // Page indicator line at y=maxY
+    int startX = (int)maxX - MENU_PAGES_COUNT + 1;
+    if (startX < 1) startX = 1;
+    for (int i = 0; i < MENU_PAGES_COUNT; i++) {
+      CRGB indicatorColor = (i == pageIndex) ? UI_RED : UI_BLUE;
+      light(startX + i, maxY, indicatorColor);
+    }
+
+    // Encoder RGB defaults (only when page changes)
+    if (mainSetting == 15) {
+      // AI page: multiple indicators - L[G], L[Y], L[W], L[X]
+      CRGB greenColor = getIndicatorColor('G');
+      CRGB yellowColor = getIndicatorColor('Y');
+      CRGB whiteColor = getIndicatorColor('W');
+      CRGB blueColor = getIndicatorColor('X');
+      Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      Encoder[1].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
+      Encoder[2].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+      Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+    } else {
+      Encoder[0].writeRGBCode(0x000000);
+      Encoder[1].writeRGBCode(0x000000);
+      Encoder[2].writeRGBCode(0x000000);
+      Encoder[3].writeRGBCode(0x000000);
+    }
+
+    drawMainSettingStatus(mainSetting);
+    if (currentPageInfo->hasAdditionalFeatures) {
+      drawAdditionalFeatures(mainSetting);
+    }
+
+    lastRenderedPageIndex = pageIndex;
+    lastRenderedSetting = mainSetting;
+  }
+
+  // Handle encoder changes for pages with adjustable values.
+  const bool didRedraw = handleAdditionalFeatureControls(mainSetting);
+  if (fullRedraw || didRedraw) {
+    // FastLED.setBrightness(ledBrightness);
+    FastLEDshow();
+  }
 }
 
 FLASHMEM void showLookMenu() {
-  FastLEDclear();
-
-  // New indicator system: lookMenu: | | | L[G]
-  drawIndicator('L', 'G', 4);  // Encoder 4: Large Green (different from main menu)
-
-  // Get current page info
+  static uint32_t lastPosHash = 0;
+  // Redraw only when page/setting changes (or a value changed).
   int pageIndex = currentLookPage;
   MenuPage* currentPageInfo = &lookPages[pageIndex];
+  int mainSetting = currentPageInfo->mainSetting;
+
+  static int lastRenderedLookPage = -1;
+  static int lastRenderedLookSetting = -1;
+  const bool fullRedraw = takeMenuForceFullRedraw() || (pageIndex != lastRenderedLookPage) || (mainSetting != lastRenderedLookSetting);
+
+  if (fullRedraw) {
+    FastLEDclear();
+
+  // Submenu indicator (encoder 4) should always match submenu text color.
+  drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+
+  // Get current page info
+  // (pageIndex/currentPageInfo already computed above)
   
   // Draw page indicator as a line at y=maxY (right-aligned)
   // Match the parent menu color (PLAY).
@@ -708,10 +805,10 @@ FLASHMEM void showLookMenu() {
   }
 
   // Handle the main setting for this page
-  int mainSetting = currentPageInfo->mainSetting;
+  // (mainSetting already computed above)
   
-  // Default: L[G] indicator for encoder 4 (green)
-  CRGB indicatorColor = getIndicatorColor('G'); // Green
+  // Default: encoder 4 ring matches submenu text color
+  CRGB indicatorColor = currentMenuParentTextColor();
   Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
   Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
   Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
@@ -725,8 +822,12 @@ FLASHMEM void showLookMenu() {
     drawAdditionalFeatures(mainSetting);
   }
 
-  FastLED.setBrightness(ledBrightness);
+  // FastLED.setBrightness(ledBrightness);
   FastLEDshow();
+
+  lastRenderedLookPage = pageIndex;
+  lastRenderedLookSetting = mainSetting;
+  }
 
   // Handle page navigation with encoder 3
   static int lastLookPagePosition = -1;
@@ -755,19 +856,40 @@ FLASHMEM void showLookMenu() {
     lastLookPagePosition = currentLookPage;
   }
   
-  // Handle encoder 2 changes for pages with additional features
-  handleAdditionalFeatureControls(mainSetting);
+  // Handle encoder changes for pages with adjustable values.
+  const bool didRedraw = handleAdditionalFeatureControls(mainSetting);
+  if (!fullRedraw && didRedraw) {
+    // FastLED.setBrightness(ledBrightness);
+    FastLEDshow();
+  }
+
+  // Mark render dirty on any encoder movement while in submenu.
+  uint32_t h = hashEncoderPositions(currentMode);
+  if (h != lastPosHash) {
+    menuRequestFullRedraw();
+    lastPosHash = h;
+  }
 }
 
 FLASHMEM void showRecsMenu() {
-  FastLEDclear();
-
-  // New indicator system: recsMenu: | | | L[O] (orange)
-  drawIndicator('L', 'O', 4);  // Encoder 4: Large Orange
-
-  // Get current page info
+  static uint32_t lastPosHash = 0;
+  // Redraw only when page/setting changes (or a value changed).
   int pageIndex = currentRecsPage;
   MenuPage* currentPageInfo = &recsPages[pageIndex];
+  int mainSetting = currentPageInfo->mainSetting;
+
+  static int lastRenderedRecsPage = -1;
+  static int lastRenderedRecsSetting = -1;
+  const bool fullRedraw = takeMenuForceFullRedraw() || (pageIndex != lastRenderedRecsPage) || (mainSetting != lastRenderedRecsSetting);
+
+  if (fullRedraw) {
+    FastLEDclear();
+
+  // Submenu indicator (encoder 4) should always match submenu text color.
+  drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+
+  // Get current page info
+  // (pageIndex/currentPageInfo already computed above)
   
   // Show header only on MIC/LINE toggle page
   if (currentPageInfo->mainSetting == 4) {
@@ -786,19 +908,19 @@ FLASHMEM void showRecsMenu() {
   }
 
   // Handle the main setting for this page
-  int mainSetting = currentPageInfo->mainSetting;
+  // (mainSetting already computed above)
   
   // Set encoder colors based on main setting
   if (mainSetting == 4 && recMode == 1) {
     // REC page in MIC mode: no encoder indicators (encoder(2) removed)
-    CRGB orangeColor = getIndicatorColor('O'); // Orange
+    CRGB orangeColor = currentMenuParentTextColor();
     Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
     Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
     Encoder[2].writeRGBCode(0x000000); // Black (no indicator - removed)
     Encoder[3].writeRGBCode(orangeColor.r << 16 | orangeColor.g << 8 | orangeColor.b);
   } else {
-    // Default: L[O] indicator for encoder 4 (orange)
-    CRGB indicatorColor = getIndicatorColor('O'); // Orange
+    // Default: encoder 4 ring matches submenu text color
+    CRGB indicatorColor = currentMenuParentTextColor();
     Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
     Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
     Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
@@ -813,8 +935,12 @@ FLASHMEM void showRecsMenu() {
     drawAdditionalFeatures(mainSetting);
   }
 
-  FastLED.setBrightness(ledBrightness);
+  // FastLED.setBrightness(ledBrightness);
   FastLEDshow();
+
+  lastRenderedRecsPage = pageIndex;
+  lastRenderedRecsSetting = mainSetting;
+  }
 
   // Handle page navigation with encoder 3
   static int lastRecsPagePosition = -1;
@@ -843,19 +969,40 @@ FLASHMEM void showRecsMenu() {
     lastRecsPagePosition = currentRecsPage;
   }
   
-  // Handle encoder 2 changes for pages with additional features
-  handleAdditionalFeatureControls(mainSetting);
+  // Handle encoder changes for pages with adjustable values.
+  const bool didRedraw = handleAdditionalFeatureControls(mainSetting);
+  if (!fullRedraw && didRedraw) {
+    // FastLED.setBrightness(ledBrightness);
+    FastLEDshow();
+  }
+
+  // Mark render dirty on any encoder movement while in submenu.
+  uint32_t h = hashEncoderPositions(currentMode);
+  if (h != lastPosHash) {
+    menuRequestFullRedraw();
+    lastPosHash = h;
+  }
 }
 
 FLASHMEM void showMidiMenu() {
-  FastLEDclear();
-
-  // New indicator system: midiMenu: | | | L[W] (white)
-  drawIndicator('L', 'W', 4);  // Encoder 4: Large White
-
-  // Get current page info
+  static uint32_t lastPosHash = 0;
+  // Redraw only when page/setting changes (or a value changed).
   int pageIndex = currentMidiPage;
   MenuPage* currentPageInfo = &midiPages[pageIndex];
+  int mainSetting = currentPageInfo->mainSetting;
+
+  static int lastRenderedMidiPage = -1;
+  static int lastRenderedMidiSetting = -1;
+  const bool fullRedraw = takeMenuForceFullRedraw() || (pageIndex != lastRenderedMidiPage) || (mainSetting != lastRenderedMidiSetting);
+
+  if (fullRedraw) {
+    FastLEDclear();
+
+  // Submenu indicator (encoder 4) should always match submenu text color.
+  drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+
+  // Get current page info
+  // (pageIndex/currentPageInfo already computed above)
   
   // Draw page indicator as a line at y=maxY (right-aligned)
   // Match the parent menu color (MIDI).
@@ -869,10 +1016,10 @@ FLASHMEM void showMidiMenu() {
   }
 
   // Handle the main setting for this page
-  int mainSetting = currentPageInfo->mainSetting;
+  // (mainSetting already computed above)
   
-  // Default: L[W] indicator for encoder 4 (white)
-  CRGB indicatorColor = getIndicatorColor('W'); // White
+  // Default: encoder 4 ring matches submenu text color
+  CRGB indicatorColor = currentMenuParentTextColor();
   Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
   Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
   Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
@@ -886,8 +1033,12 @@ FLASHMEM void showMidiMenu() {
     drawAdditionalFeatures(mainSetting);
   }
 
-  FastLED.setBrightness(ledBrightness);
+  // FastLED.setBrightness(ledBrightness);
   FastLEDshow();
+
+  lastRenderedMidiPage = pageIndex;
+  lastRenderedMidiSetting = mainSetting;
+  }
 
   // Handle page navigation with encoder 3
   static int lastMidiPagePosition = -1;
@@ -916,19 +1067,40 @@ FLASHMEM void showMidiMenu() {
     lastMidiPagePosition = currentMidiPage;
   }
   
-  // Handle encoder 2 changes for pages with additional features
-  handleAdditionalFeatureControls(mainSetting);
+  // Handle encoder changes for pages with adjustable values.
+  const bool didRedraw = handleAdditionalFeatureControls(mainSetting);
+  if (!fullRedraw && didRedraw) {
+    // FastLED.setBrightness(ledBrightness);
+    FastLEDshow();
+  }
+
+  // Mark render dirty on any encoder movement while in submenu.
+  uint32_t h = hashEncoderPositions(currentMode);
+  if (h != lastPosHash) {
+    menuRequestFullRedraw();
+    lastPosHash = h;
+  }
 }
 
 FLASHMEM void showVolMenu() {
-  FastLEDclear();
-
-  // New indicator system: volMenu: | | | L[Y] (yellow)
-  drawIndicator('L', 'Y', 3);  // Encoder 3: Large Yellow (page navigation)
-
-  // Get current page info
+  static uint32_t lastPosHash = 0;
+  // Redraw only when page/setting changes (or a value changed).
   int pageIndex = currentVolPage;
   MenuPage* currentPageInfo = &volPages[pageIndex];
+  int mainSetting = currentPageInfo->mainSetting;
+
+  static int lastRenderedVolPage = -1;
+  static int lastRenderedVolSetting = -1;
+  const bool fullRedraw = takeMenuForceFullRedraw() || (pageIndex != lastRenderedVolPage) || (mainSetting != lastRenderedVolSetting);
+
+  if (fullRedraw) {
+    FastLEDclear();
+
+  // VOL submenu: page-nav indicator should always match VOL text color (e.g. "MAIN")
+  drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+
+  // Get current page info
+  // (pageIndex/currentPageInfo already computed above)
   
   // Draw page indicator as a line at y=maxY (right-aligned)
   // Match the parent menu color (VOL).
@@ -942,11 +1114,11 @@ FLASHMEM void showVolMenu() {
   }
 
   // Handle the main setting for this page
-  int mainSetting = currentPageInfo->mainSetting;
+  // (mainSetting already computed above)
   
   // Set encoder colors based on page (will be set in drawMainSettingStatus for each page)
-  // Default: L[Y] indicator for encoder 3 (yellow)
-  CRGB indicatorColor = getIndicatorColor('Y'); // Yellow
+  // Default: only show page-nav ring on encoder 4 (matches parent text color)
+  CRGB indicatorColor = currentMenuParentTextColor();
   Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
   Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
   Encoder[2].writeRGBCode(0x000000); // Black (no indicator) - will be set per page
@@ -960,8 +1132,12 @@ FLASHMEM void showVolMenu() {
     drawAdditionalFeatures(mainSetting);
   }
 
-  FastLED.setBrightness(ledBrightness);
+  // FastLED.setBrightness(ledBrightness);
   FastLEDshow();
+
+  lastRenderedVolPage = pageIndex;
+  lastRenderedVolSetting = mainSetting;
+  }
 
   // Handle page navigation with encoder 3
   static int lastVolPagePosition = -1;
@@ -990,57 +1166,80 @@ FLASHMEM void showVolMenu() {
     lastVolPagePosition = currentVolPage;
   }
   
-  // Handle encoder 2 changes for all VOL pages (value adjustment)
-  handleAdditionalFeatureControls(mainSetting);
+  // Handle encoder changes for pages with adjustable values.
+  const bool didRedraw = handleAdditionalFeatureControls(mainSetting);
+  if (!fullRedraw && didRedraw) {
+    // FastLED.setBrightness(ledBrightness);
+    FastLEDshow();
+  }
+
+  // Mark render dirty on any encoder movement while in submenu.
+  uint32_t h = hashEncoderPositions(currentMode);
+  if (h != lastPosHash) {
+    menuRequestFullRedraw();
+    lastPosHash = h;
+  }
 }
 
 FLASHMEM void showEtcMenu() {
-  FastLEDclear();
-
-  // Get current page info
+  static uint32_t lastPosHash = 0;
+  // Redraw only when page/setting changes, except INFO which animates continuously.
   int pageIndex = currentEtcPage;
   MenuPage* currentPageInfo = &etcPages[pageIndex];
-
-  // Draw page indicator as a line at y=maxY (right-aligned)
-  // Match the parent menu color (ETC).
-  const CRGB parent = currentMenuParentTextColor();
-  const CRGB parentDim = dimIconColorFromText(parent);
-  int startX = (int)maxX - ETC_PAGES_COUNT + 1;
-  if (startX < 1) startX = 1;
-  for (int i = 0; i < ETC_PAGES_COUNT; i++) {
-    CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
-    light(startX + i, maxY, indicatorColor);
-  }
-
   int mainSetting = currentPageInfo->mainSetting;
 
-  // Indicators / encoder ring colors
-  // For AUTO (mainSetting 15): encoder(0) is the green "generate" trigger; no blue exit indicator on encoder(3).
-  // Otherwise keep ETC parent-colored encoder(3) ring (page nav).
-  if (mainSetting == 15) {
-    drawIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
-    // Keep encoder(1)/(2) indicators from AI page itself (drawMainSettingStatus/drawAdditionalFeatures)
-    Encoder[0].writeRGBCode(0x00FF00);
-    Encoder[1].writeRGBCode(getIndicatorColor('Y').r << 16 | getIndicatorColor('Y').g << 8 | getIndicatorColor('Y').b);
-    Encoder[2].writeRGBCode(getIndicatorColor('W').r << 16 | getIndicatorColor('W').g << 8 | getIndicatorColor('W').b);
-    Encoder[3].writeRGBCode(0x000000); // no indicator4 / no exit on encoder(3)
-  } else {
-    // New indicator system: etcMenu: | | | L[H] (bright blue)
-    drawIndicator('L', 'H', 4);
-    CRGB indicatorColor = currentMenuParentTextColor();
-    Encoder[0].writeRGBCode(0x000000);
-    Encoder[1].writeRGBCode(0x000000);
-    Encoder[2].writeRGBCode(0x000000);
-    Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
-  }
+  static int lastRenderedEtcPage = -1;
+  static int lastRenderedEtcSetting = -1;
+  bool fullRedraw = (pageIndex != lastRenderedEtcPage) || (mainSetting != lastRenderedEtcSetting);
+  if (takeMenuForceFullRedraw()) fullRedraw = true;
+  if (mainSetting == 39) fullRedraw = true;  // INFO animates
 
-  drawMainSettingStatus(mainSetting);
-  if (currentPageInfo->hasAdditionalFeatures) {
-    drawAdditionalFeatures(mainSetting);
-  }
+  if (fullRedraw) {
+    FastLEDclear();
 
-  FastLED.setBrightness(ledBrightness);
-  FastLEDshow();
+    // Draw page indicator as a line at y=maxY (right-aligned)
+    // Match the parent menu color (ETC).
+    const CRGB parent = currentMenuParentTextColor();
+    const CRGB parentDim = dimIconColorFromText(parent);
+    int startX = (int)maxX - ETC_PAGES_COUNT + 1;
+    if (startX < 1) startX = 1;
+    for (int i = 0; i < ETC_PAGES_COUNT; i++) {
+      CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
+      light(startX + i, maxY, indicatorColor);
+    }
+
+    // Indicators / encoder ring colors
+    // For AUTO (mainSetting 15): encoder(0) is the green "generate" trigger; no blue exit indicator on encoder(3).
+    // Otherwise keep ETC parent-colored encoder(3) ring (page nav).
+    if (mainSetting == 15) {
+      drawIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
+      // Keep encoder(1)/(2) indicators from AI page itself (drawMainSettingStatus/drawAdditionalFeatures)
+      Encoder[0].writeRGBCode(0x00FF00);
+      Encoder[1].writeRGBCode(getIndicatorColor('Y').r << 16 | getIndicatorColor('Y').g << 8 | getIndicatorColor('Y').b);
+      Encoder[2].writeRGBCode(getIndicatorColor('W').r << 16 | getIndicatorColor('W').g << 8 | getIndicatorColor('W').b);
+      // Page-nav indicator (encoder 4) should always match ETC text color (e.g. "RSET")
+      drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+    } else {
+      // ETC submenu: page-nav indicator should always match ETC text color (e.g. "RSET")
+      drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+      CRGB indicatorColor = currentMenuParentTextColor();
+      Encoder[0].writeRGBCode(0x000000);
+      Encoder[1].writeRGBCode(0x000000);
+      Encoder[2].writeRGBCode(0x000000);
+      Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+    }
+
+    drawMainSettingStatus(mainSetting);
+    if (currentPageInfo->hasAdditionalFeatures) {
+      drawAdditionalFeatures(mainSetting);
+    }
+
+    // FastLED.setBrightness(ledBrightness);
+    FastLEDshow();
+
+    lastRenderedEtcPage = pageIndex;
+    lastRenderedEtcSetting = mainSetting;
+  }
 
   // Handle page navigation with encoder 3
   static int lastEtcPagePosition = -1;
@@ -1067,7 +1266,20 @@ FLASHMEM void showEtcMenu() {
     lastEtcPagePosition = currentEtcPage;
   }
 
-  handleAdditionalFeatureControls(mainSetting);
+  const bool didRedraw = handleAdditionalFeatureControls(mainSetting);
+  if (!fullRedraw && didRedraw) {
+    // FastLED.setBrightness(ledBrightness);
+    FastLEDshow();
+  }
+
+  // Mark render dirty on any encoder movement while in submenu (except INFO which animates).
+  if (mainSetting != 39) {
+    uint32_t h = hashEncoderPositions(currentMode);
+    if (h != lastPosHash) {
+      menuRequestFullRedraw();
+      lastPosHash = h;
+    }
+  }
 }
 
 static inline CRGB dimIconColorFromText(CRGB textColor) {
@@ -1105,6 +1317,38 @@ static inline CRGB currentMenuParentTextColor() {
   if (inVolSubmenu)  return menuTextColorFromCol(5);
   if (inEtcSubmenu)  return menuTextColorFromCol(14);
   return UI_WHITE;
+}
+
+// Draw a "large" top-row indicator and set encoder ring to an arbitrary color.
+// This is used where we want the indicator color to match submenu text colors (palette-derived),
+// not one of the fixed indicator color codes.
+static inline void drawLargeIndicatorCustom(CRGB color, int encoderNum) {
+  int x1, x2, x3;
+  switch (encoderNum) {
+    case 1: x1 = 1;  x2 = 2;  x3 = 3;  break;
+    case 2: x1 = 5;  x2 = 6;  x3 = 7;  break;
+    case 3: x1 = 9;  x2 = 10; x3 = 11; break;
+    case 4: x1 = 13; x2 = 14; x3 = 15; break;
+    default: return;
+  }
+  light(x1, 1, color);
+  light(x2, 1, color);
+  light(x3, 1, color);
+
+  if (encoderNum >= 1 && encoderNum <= NUM_ENCODERS) {
+    uint32_t rgbCode = (uint32_t(color.r) << 16) | (uint32_t(color.g) << 8) | (uint32_t)color.b;
+    Encoder[encoderNum - 1].writeRGBCode(rgbCode);
+  }
+}
+
+static inline uint32_t hashEncoderPositions(const Mode *m) {
+  // Simple FNV-1a over the 4 encoder positions to detect any knob changes.
+  uint32_t h = 2166136261u;
+  for (int i = 0; i < NUM_ENCODERS; i++) {
+    h ^= (uint32_t)m->pos[i];
+    h *= 16777619u;
+  }
+  return h;
 }
 
 FLASHMEM void drawMainSettingStatus(int setting) {
@@ -1152,7 +1396,6 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         const CRGB tc = menuTextColorFromCol(4);
         showIcons(ICON_CLOCK, dimIconColorFromText(tc));
         drawText("BPM", 2, 3, tc);
-        drawIndicator('L', 'W', 2);  // Encoder 2: Large White indicator
       }
       break;
       
@@ -1164,6 +1407,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 8: // TRN - MIDI Transport
       drawText("TRAN", 2, 10, currentMenuParentTextColor());
       drawMidiTransport();
+      break;
+      
+    case 13: // SEND - MIDI Send (CLCK, NOTE, BOTH)
+      drawText("SEND", 2, 10, currentMenuParentTextColor());
+      drawMidiSend();
       break;
       
     case 9: // PMD - Pattern Mode
@@ -1203,6 +1451,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }*/
       drawIndicator('L', 'O', 3);  // Encoder 3: Large Orange indicator
       
+      break;
+
+    case 39: // INFO - Version / credits scroll
+      drawEtcInfoPage();
+      break;
+      
+    case 40: // LGHT - LED Strip visualization
+      drawText("LGHT", 2, 10, currentMenuParentTextColor());
+      drawLedStripMode();
       break;
       
     case 19: // PLAY - Submenu
@@ -1258,6 +1515,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 24: // PONG toggle
       drawText("PONG", 2, 10, currentMenuParentTextColor());
+      // Clear text areas before drawing
+      clearTextArea(2, 3, 8);  // Clear speed text area
+      clearTextArea(6, 3, 8);  // Clear "OFF" area
+      clearTextArea(10, 3, 8); // Clear "ON" area
       if (pong) {
         drawText("ON", 10, 3, UI_GREEN);
       } else {
@@ -1288,6 +1549,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       
     case 38: // DRAW - Toggle between L+R and R modes
       drawText("DRAW", 2, 10, currentMenuParentTextColor());
+      // Clear text area before drawing (3 chars max: "L+R", 1 char: "R")
+      clearTextArea(2, 3, 16);
       if (drawMode == 0) {
         drawText("L+R", 2, 3, UI_GREEN);
       } else {
@@ -1297,6 +1560,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 25: { // CTRL - encoder behaviour
       drawText("CTRL", 2, 10, currentMenuParentTextColor());
+      // Clear text area before drawing (4 chars max: "PAGE", 3 chars: "VOL")
+      clearTextArea(2, 3, 16);
       if (ctrlMode == 0) {
         drawText("PAGE", 2, 3, UI_GREEN);
       } else {
@@ -1396,6 +1661,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 36: { // 2-CH - Stereo routing (OFF, M+P, or L+R)
       drawText("2-CH", 2, 10, currentMenuParentTextColor());
+      // Clear text area before drawing (3 chars max: "OFF", "M+P", "L+R")
+      clearTextArea(6, 3, 8);
       extern int8_t stereoChannel;
       if (stereoChannel == 0) {
         drawText("OFF", 6, 3, UI_RED);
@@ -1411,6 +1678,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     
     case 32: { // CRSR - Cursor Type
       drawText("CRSR", 2, 10, currentMenuParentTextColor());
+      // Clear text area before drawing (4 chars max: "NORM", "CHNR", 3 chars: "BIG")
+      clearTextArea(2, 3, 16);
       extern bool showChannelNr;
       extern int cursorType;
       
@@ -1440,6 +1709,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 33: { // PREV - Preview trigger mode
       drawText("PREV", 2, 10, currentMenuParentTextColor());
+      // Clear text area before drawing (4 chars max: "PRSS", 2 chars: "ON")
+      clearTextArea(2, 3, 16);
       if (previewTriggerMode == PREVIEW_MODE_PRESS) {
         drawText("PRSS", 2, 3, CRGB(0, 150, 255)); // Blue for press-only
       } else {
@@ -1520,7 +1791,7 @@ FLASHMEM void drawGenreSelection() {
   drawText(genres[genreType], 2, 3, genreColors[genreType]);
 }
 
-FLASHMEM void handleAdditionalFeatureControls(int setting) {
+FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   static bool recMenuFirstEnter = true;
   static bool aiMenuFirstEnter = true;
   static bool menuFirstEnter = true;
@@ -1534,6 +1805,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
   static int lastStereoCh = -1;
   static int lastPongSpeed = -1;
   static int lastSetting = -1;
+  bool didRedraw = false;
   
   // Reset first enter flags when switching to a different setting
   if (setting != lastSetting) {
@@ -1548,10 +1820,20 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
     lvlMenuFirstEnter = true;
     stereoChMenuFirstEnter = true;
     lastStereoCh = -1;
+    infoPageFirstEnter = true;
     lastPongSpeed = -1;
     lastSetting = setting;
   }
   
+  auto redrawMain = [&](int s) {
+    drawMainSettingStatus(s);
+    didRedraw = true;
+  };
+  auto redrawAdd = [&](int s) {
+    drawAdditionalFeatures(s);
+    didRedraw = true;
+  };
+
   switch (setting) {
     case 4: // REC page - Mic Gain control removed (encoder(2) disabled)
       // Encoder(2) functionality removed - no mic gain control in REC menu
@@ -1586,7 +1868,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         aiTargetPage = currentMode->pos[0];
         if (aiTargetPage > 16) aiTargetPage = 16;
         if (aiTargetPage < 1) aiTargetPage = 1;
-        drawAdditionalFeatures(setting);
+        redrawAdd(setting);
         lastAiTargetPage = aiTargetPage;
       }
       
@@ -1602,7 +1884,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
           Encoder[2].writeCounter((int32_t)aiBaseEndPage);
         }
         
-        drawAdditionalFeatures(setting);
+        redrawAdd(setting);
         lastAiBaseStartPage = aiBaseStartPage;
       }
       
@@ -1618,7 +1900,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
           Encoder[1].writeCounter((int32_t)aiBaseStartPage);
         }
         
-        drawAdditionalFeatures(setting);
+        redrawAdd(setting);
         lastAiBaseEndPage = aiBaseEndPage;
       }
       break;
@@ -1637,8 +1919,35 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
       if (currentMode->pos[2] != lastResetOption) {
         resetMenuOption = constrain(currentMode->pos[2], 0, 2);
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        drawMainSettingStatus(setting);
+        redrawMain(setting);
         lastResetOption = resetMenuOption;
+      }
+      break;
+    }
+    
+    case 40: { // LGHT page - LED Strip visualization ON/OFF
+      static int lastLedStripState = -1;
+      extern bool SMP_LED_STRIP_ENABLED;
+      
+      if (menuFirstEnter) {
+        int encoderVal = SMP_LED_STRIP_ENABLED ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastLedStripState = encoderVal;
+        menuFirstEnter = false;
+      }
+
+      if (currentMode->pos[2] != lastLedStripState) {
+        SMP_LED_STRIP_ENABLED = (currentMode->pos[2] == 1);
+        Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+        redrawMain(setting);
+        lastLedStripState = currentMode->pos[2];
+        
+        // Update LED strip state immediately
+        extern void setLedStripEnabled(bool enabled);
+        setLedStripEnabled(SMP_LED_STRIP_ENABLED);
       }
       break;
     }
@@ -1672,7 +1981,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
           if (newInterval != pongUpdateInterval) {
             pongUpdateInterval = newInterval;
           }
-          drawMainSettingStatus(setting);
+          redrawMain(setting);
         }
         lastPongSpeed = newSpeed;
         // Keep encoder within bounds in case constrain clipped it
@@ -1731,7 +2040,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         // Store as 0-100 (int8_t can hold -128 to 127, so 0-100 is fine)
         saveSingleModeToEEPROM(17, (int8_t)GLOB.vol);
         
-        drawMainSettingStatus(setting);
+        redrawMain(setting);
         lastHpVol = encoderPos;
       }
       break;
@@ -1765,7 +2074,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         // Save to EEPROM
         saveSingleModeToEEPROM(15, (int8_t)lineOutLevelSetting);
         
-        drawMainSettingStatus(setting);
+        redrawMain(setting);
         lastLoVol = encoderPos;
       }
       break;
@@ -1801,7 +2110,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         // Save to EEPROM
         saveSingleModeToEEPROM(7, previewVol);
         
-        drawMainSettingStatus(setting);
+        redrawMain(setting);
         lastPvVol = encoderPos;
       }
       break;
@@ -1845,7 +2154,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         // Save to EEPROM
         saveSingleModeToEEPROM(9, micGain);
         
-        drawMainSettingStatus(setting);
+        redrawMain(setting);
         lastMicGain = encoderPos;
       }
       break;
@@ -1879,7 +2188,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         // Save to EEPROM
         saveSingleModeToEEPROM(16, lineInLevel);
         
-        drawMainSettingStatus(setting);
+        redrawMain(setting);
         lastLineInLevel = encoderPos;
       }
       break;
@@ -1917,7 +2226,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
         saveSingleModeToEEPROM(23, stereoChannel);
         applyStereoChannelRouting();
         
-        drawMainSettingStatus(setting);
+        redrawMain(setting);
         lastStereoCh = encoderPos;
       }
       break;
@@ -1931,6 +2240,7 @@ FLASHMEM void handleAdditionalFeatureControls(int setting) {
        pongMenuFirstEnter = true;
        break;
   }
+  return didRedraw;
 }
 
 void switchMenu(int menuPosition){
@@ -2001,6 +2311,36 @@ void switchMenu(int menuPosition){
         }
         saveSingleModeToEEPROM(2, transportMode);
         drawMainSettingStatus(menuPosition);
+        break;
+        
+      case 13:
+        // Cycle through: CLCK (0) -> NOTE (1) -> BOTH (2) -> CLCK (0)
+        {
+          extern int midiSendMode;
+          extern bool MIDI_CLOCK_SEND;
+          extern bool MIDI_NOTE_SEND;
+          extern int clockMode;
+          
+          midiSendMode = (midiSendMode + 1) % 3;  // Cycle 0->1->2->0
+          
+          // Update flags based on new mode
+          if (midiSendMode == 0) {
+            // CLCK only: clock enabled (if clockMode allows), notes disabled
+            MIDI_CLOCK_SEND = (clockMode == 1);
+            MIDI_NOTE_SEND = false;
+          } else if (midiSendMode == 1) {
+            // NOTE only: clock disabled, notes enabled
+            MIDI_CLOCK_SEND = false;
+            MIDI_NOTE_SEND = true;
+          } else {
+            // BOTH: clock enabled (if clockMode allows), notes enabled
+            MIDI_CLOCK_SEND = (clockMode == 1);
+            MIDI_NOTE_SEND = true;
+          }
+          
+          saveSingleModeToEEPROM(24, midiSendMode);
+          drawMainSettingStatus(menuPosition);
+        }
         break;
     
       case 9:
@@ -2170,6 +2510,7 @@ void switchMenu(int menuPosition){
         currentLookPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        menuRequestFullRedraw();
         break;
         
         case 38:
@@ -2228,6 +2569,7 @@ void switchMenu(int menuPosition){
         currentRecsPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        menuRequestFullRedraw();
         break;
         
         case 21:
@@ -2236,6 +2578,7 @@ void switchMenu(int menuPosition){
         currentMidiPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        menuRequestFullRedraw();
         break;
         
         case 26:
@@ -2244,6 +2587,7 @@ void switchMenu(int menuPosition){
         currentVolPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        menuRequestFullRedraw();
         break;
 
         case 34:
@@ -2252,6 +2596,7 @@ void switchMenu(int menuPosition){
         currentEtcPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        menuRequestFullRedraw();
         break;
         
         case 17:
@@ -2284,6 +2629,10 @@ void switchMenu(int menuPosition){
         extern Mode singleMode;
         ledModules = (ledModules == 1) ? 2 : 1;
         maxX = MATRIX_WIDTH * ledModules;  // Update maxX runtime variable
+        
+        // Reinitialize LED strip with new module count
+        extern void initLedStrip();
+        initLedStrip();
         
         // Update encoder[1] max for draw/single mode based on new maxX
         if (currentMode == &draw || currentMode == &singleMode) {
@@ -2368,6 +2717,8 @@ void resetNewModeState() {
 
 // Simple Notes View functions
 void drawSimpleNotesView() {
+  // Clear text area before drawing (4 chars max: "EASY", "FULL")
+  clearTextArea(2, 3, 16);
   // Show current state: 1=EASY, 2=FULL
   switch (simpleNotesView) {
     case 1:
@@ -2385,6 +2736,8 @@ void drawSimpleNotesView() {
 }
 
 void drawLoopLength() {
+  // Clear text area before drawing (3 chars max: "OFF", or number)
+  clearTextArea(2, 3, 16);
   // Show current state: 0=OFF, 1-8=forced length
   if (loopLength == 0) {
     drawText("OFF", 2, 3, CRGB(100, 100, 100));
@@ -2464,7 +2817,7 @@ void showNewFileMode() {
   Encoder[3].writeRGBCode(cyanColor.r << 16 | cyanColor.g << 8 | cyanColor.b);
 
   
-  FastLED.setBrightness(ledBrightness);
+  // FastLED.setBrightness(ledBrightness);
   FastLEDshow();
   
   // Initialize encoders for genre and length control
@@ -2589,7 +2942,19 @@ int getCurrentMenuMainSetting() {
   return menuPages[currentMenuPage].mainSetting;
 }
 
+// Helper function to clear text area before drawing new text
+// Clears a rectangle at (startX, startY) with width pixels wide and 5 pixels tall (character height)
+FLASHMEM void clearTextArea(int startX, int startY, int width) {
+  for (int x = startX; x < startX + width && x <= (int)maxX; x++) {
+    for (int y = startY; y < startY + 5 && y <= (int)maxY; y++) {
+      light(x, y, CRGB(0, 0, 0));
+    }
+  }
+}
+
 FLASHMEM void drawRecChannelClear(){
+  // Clear text area before drawing (4 chars max: "ON1" or "OFF")
+  clearTextArea(2, 3, 16);
   if (recChannelClear == 1) {
     drawText("ON", 2, 3, UI_GREEN);
     SMP_REC_CHANNEL_CLEAR = true;  // Clear mode
@@ -2606,6 +2971,8 @@ FLASHMEM void drawRecChannelClear(){
 }
 
 FLASHMEM void drawRecMode() {
+  // Clear text area before drawing (4 chars max: "LINE")
+  clearTextArea(2, 3, 16);
   if (recMode == 1) {
     drawText("MIC", 2, 3, UI_WHITE);
     recInput = AUDIO_INPUT_MIC;
@@ -2623,13 +2990,42 @@ FLASHMEM void drawRecMode() {
 }
 
 FLASHMEM void drawClockMode() {
-
+  // Clear text area before drawing (3 chars max: "INT" or "EXT")
+  clearTextArea(2, 3, 16);
+  extern int midiSendMode;
+  extern bool MIDI_NOTE_SEND;
   if (clockMode == 1) {
     drawText("INT", 2, 3, UI_GREEN);
-    MIDI_CLOCK_SEND = true;
+    // Update MIDI_CLOCK_SEND based on midiSendMode
+    if (midiSendMode == 0) {
+      // CLCK only: clock enabled
+      MIDI_CLOCK_SEND = true;
+      MIDI_NOTE_SEND = false;
+    } else if (midiSendMode == 1) {
+      // NOTE only: clock disabled
+      MIDI_CLOCK_SEND = false;
+      MIDI_NOTE_SEND = true;
+    } else {
+      // BOTH: clock enabled
+      MIDI_CLOCK_SEND = true;
+      MIDI_NOTE_SEND = true;
+    }
   }else{
     drawText("EXT", 2, 3, UI_YELLOW);
-    MIDI_CLOCK_SEND = false;
+    // Update MIDI_CLOCK_SEND based on midiSendMode
+    if (midiSendMode == 0) {
+      // CLCK only: clock disabled (EXT mode)
+      MIDI_CLOCK_SEND = false;
+      MIDI_NOTE_SEND = false;
+    } else if (midiSendMode == 1) {
+      // NOTE only: clock disabled
+      MIDI_CLOCK_SEND = false;
+      MIDI_NOTE_SEND = true;
+    } else {
+      // BOTH: clock disabled (EXT mode)
+      MIDI_CLOCK_SEND = false;
+      MIDI_NOTE_SEND = true;
+    }
   }
 
   FastLEDshow();
@@ -2637,7 +3033,8 @@ FLASHMEM void drawClockMode() {
 
 
 FLASHMEM void drawMidiVoiceSelect() {
-
+  // Clear text area before drawing (4 chars max: "MIDI", "KEYS", "YPOS")
+  clearTextArea(2, 3, 16);
   if (voiceSelect == 1) {
     drawText("MIDI", 2, 3, UI_BLUE);
     MIDI_VOICE_SELECT = true;
@@ -2668,8 +3065,9 @@ FLASHMEM void drawPreviewVol() {
 }
 
 FLASHMEM void drawFastRecMode() {
-
-if (fastRecMode == 3) {
+  // Clear text area before drawing (4 chars max: "+CON", "-CON", "SENS", "OFF")
+  clearTextArea(2, 3, 16);
+  if (fastRecMode == 3) {
     drawText("+CON", 2, 3, UI_DIM_BLUE);
     SMP_FAST_REC = 3;
   }
@@ -2697,7 +3095,10 @@ if (fastRecMode == 3) {
 
 
 FLASHMEM void drawPatternMode() {
-
+  // Clear text area before drawing (4 chars max: "SONG", "NEXT", "OFF")
+  clearTextArea(2, 3, 16);
+  // Also clear area for pending page number if it exists
+  clearTextArea(10, 3, 8);
   if (patternMode == 2) {
     drawText("SONG", 2, 3, CRGB(255, 255, 0)); // Yellow for SONG mode
     SMP_PATTERN_MODE = true;
@@ -2723,6 +3124,8 @@ FLASHMEM void drawPatternMode() {
 }
 
 FLASHMEM void drawFlowMode() {
+  // Clear text area before drawing (3 chars max: "OFF", 2 chars: "ON")
+  clearTextArea(2, 3, 16);
   if (flowMode == 1) {
     drawText("ON", 2, 3, UI_GREEN);  // Use same coordinates as drawRecChannelClear
     SMP_FLOW_MODE = true;
@@ -2739,8 +3142,23 @@ FLASHMEM void drawFlowMode() {
   FastLEDshow();
 }
 
+FLASHMEM void drawLedStripMode() {
+  // Clear text area before drawing (3 chars max: "OFF", 2 chars: "ON")
+  clearTextArea(2, 3, 16);
+  extern bool SMP_LED_STRIP_ENABLED;
+  if (SMP_LED_STRIP_ENABLED) {
+    drawText("ON", 2, 3, UI_GREEN);
+  } else {
+    drawText("OFF", 2, 3, UI_RED);
+  }
+
+  FastLEDshow();
+}
+
 
 FLASHMEM void drawMidiTransport() {
+  // Clear text area before drawing (4 chars max: "SEND", 3 chars: "GET", "OFF")
+  clearTextArea(2, 3, 16);
   if (transportMode == 2) {
     drawText("SEND", 2, 3, UI_BLUE);
     MIDI_TRANSPORT_RECEIVE = false;
@@ -2754,6 +3172,34 @@ FLASHMEM void drawMidiTransport() {
     MIDI_TRANSPORT_RECEIVE = false;
     MIDI_TRANSPORT_SEND = false;
     transportMode = -1;
+  }
+
+  FastLEDshow();
+}
+
+FLASHMEM void drawMidiSend() {
+  // Clear text area before drawing (4 chars max: "CLCK", "NOTE", "BOTH")
+  clearTextArea(2, 3, 16);
+  extern int midiSendMode;
+  extern bool MIDI_CLOCK_SEND;
+  extern bool MIDI_NOTE_SEND;
+  extern int clockMode;
+  
+  if (midiSendMode == 0) {
+    // CLCK only: clock enabled (if clockMode allows), notes disabled
+    drawText("CLCK", 2, 3, UI_YELLOW);
+    MIDI_CLOCK_SEND = (clockMode == 1);  // Respect clockMode setting
+    MIDI_NOTE_SEND = false;
+  } else if (midiSendMode == 1) {
+    // NOTE only: clock disabled, notes enabled
+    drawText("NOTE", 2, 3, UI_GREEN);
+    MIDI_CLOCK_SEND = false;
+    MIDI_NOTE_SEND = true;
+  } else {
+    // BOTH: clock enabled (if clockMode allows), notes enabled
+    drawText("BOTH", 2, 3, UI_BLUE);
+    MIDI_CLOCK_SEND = (clockMode == 1);  // Respect clockMode setting
+    MIDI_NOTE_SEND = true;
   }
 
   FastLEDshow();

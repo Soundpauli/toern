@@ -499,15 +499,16 @@ void startRecordingRAM() {
   extern unsigned int micGain;      // From VOL menu (0-63)
   extern AudioMixer4 mixer_end;
   
-    float monitorGain = 0.0;
+  float monitorGain = 0.0f;
+  const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
   if (recMode == 1) {
-    // Mic input: map micGain (0-63) to mixer gain (0.0-0.8)
-    monitorGain = mapf(micGain, 0, 63, 0.0, 0.8);
+    // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain)
+    monitorGain = mapf(micGain, 0, 63, 0.0f, maxPlaybackGain);
   } else {
-    // Line input: map lineInLevel (0-15) to mixer gain (0.0-0.8)
-    monitorGain = mapf(lineInLevel, 0, 15, 0.0, 0.8);
-    }
-    mixer_end.gain(3, monitorGain);
+    // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain)
+    monitorGain = mapf(lineInLevel, 0, 15, 0.0f, maxPlaybackGain);
+  }
+  mixer_end.gain(3, monitorGain);
 }
 
 void flushAudioQueueToRAM2() {
@@ -642,7 +643,7 @@ void startFastRecord() {
   extern AudioMixer4 mixer_end;
   
   float monitorGain = 0.0;
-  float maxPlaybackGain = 0.4f * 0.4f;  // GAIN_4 * GAIN_2 = 0.16 (match loudest playback)
+  const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
   if (recMode == 1) {
     // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
     monitorGain = mapf(micGain, 0, 63, 0.0, maxPlaybackGain);
@@ -849,8 +850,9 @@ void FastLEDclear() {
 void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
-    FastLED.setBrightness(ledBrightness);
-    FastLED.show();
+    // Don't change global brightness - matrix is dimmed in software (light_single)
+    // Strip stays at full brightness (set in setup() and not modified)
+    FastLED.show();  // Shows both matrix (PIN 17) and strip (PIN 24)
   }
 }
 
@@ -2704,68 +2706,23 @@ Note getNote(uint16_t step, uint8_t channel) {
 // ----- Generate Explosion Particles -----
 // Called once when Phase 2 starts. Each "1" pixel in the logo becomes a particle.
 void generateParticles() {
-  particleCount = 0;
-  for (int row = 0; row < 16; row++) {
-    for (int col = 0; col < 16; col++) {
-      if (logo16_on_P(logo_rows, (uint8_t)col, (uint8_t)row)) {
-        // Particle's initial position (center of that cell)
-        float initX = col + 0.5;
-        float initY = row + 0.5;
-        // Explosion direction from the center
-        float dx = initX - logoCenterX;
-        float dy = initY - logoCenterY;
-        float length = sqrt(dx * dx + dy * dy);
-        float dirX = (length == 0) ? 0 : (dx / length);
-        float dirY = (length == 0) ? 0 : (dy / length);
-        // Freeze the pixel’s color from timeFactor=1
-        CRGB color = getLogoPixelColor(col, row, 1.0);
-        particles[particleCount] = { initX, initY, dirX, dirY, color };
-        particleCount++;
-      }
-    }
-  }
-  particlesGenerated = true;
+  // Function removed - phase 2 animation removed
+  (void)0; // Prevent unused function warning
 }
+
 
 
 
 // ----- Determine Color of Each LED Based on Time -----
 CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
-  // Convert (x,y) to float center coords
-  float cellCenterX = x + 0.5;
-  float cellCenterY = y + 0.5;
-
   if (elapsed < phase1Duration) {
-    // PHASE 1: Rainbow Logo
+    // PHASE 1: Rainbow Logo (only phase, 2 seconds)
     if (logo16_on_P(logo_rows, x, y)) {
       float timeFactor = (float)elapsed / phase1Duration;  // 0..1
       return getLogoPixelColor(x, y, timeFactor);
     } else {
       return CRGB::Black;
     }
-  } else if (elapsed < totalAnimationTime) {
-    
-    // PHASE 2: Explosion
-    if (!particlesGenerated) {
-      //done once
-      //playSdWav1.play("intro/008.wav");
-      generateParticles();
-      initEncoders();
-      
-    }
-    float progress = (float)(elapsed - phase1Duration) / phase2Duration;  // 0..1
-    const float maxDisp = 20.0;                                           // how far particles fly outward
-
-    // Check each particle to see if it's near this LED cell
-    for (int i = 0; i < particleCount; i++) {
-      float px = particles[i].initX + particles[i].dirX * progress * maxDisp;
-      float py = particles[i].initY + particles[i].dirY * progress * maxDisp;
-      float dist = sqrt((cellCenterX - px) * (cellCenterX - px) + (cellCenterY - py) * (cellCenterY - py));
-      if (dist < 0.4) {
-        return particles[i].color;
-      }
-    }
-    return CRGB::Black;
   } else {
     // After animation, stay black
     return CRGB::Black;
@@ -2789,14 +2746,15 @@ void runAnimation() {
   
   unsigned long startTime = millis();
   unsigned long lastFrameTime = millis();
-  const unsigned long frameDelay = 33;  // ~30 FPS for smoother animation
+  // Use RefreshTime from TargetFPS (defined in toern.ino) for consistent frame rate
+  extern unsigned int RefreshTime;
   
   while (true) {
     unsigned long currentTime = millis();
     unsigned long elapsed = currentTime - startTime;
     
     // Frame rate limiting - only update display at consistent intervals
-    if (currentTime - lastFrameTime < frameDelay) {
+    if (currentTime - lastFrameTime < RefreshTime) {
       yield();  // Give CPU time to other tasks
       continue;  // Skip this iteration if not enough time has passed
     }

@@ -1,12 +1,14 @@
 Comment,Designator,Footprint,LCSC,Quantity
-01x05 Connector_PinSocket_2.54mm,"U10,U11,U12,U9",DuppaI2CEncoderV2.1,C50950,4
+01x05 Connector_PinSocket_2.54mm,"U11,U9",DuppaI2CEncoderV2.1,C50950,2
+1000uF,C6,CP_Elec_8x10.5,C82017,1
 100n,"C10,C11,C14,C15,C21",C_0402_1005Metric,C77020,5
+100nF,C26,C_0805_2012Metric,C1525,1
 10k,"R12,R13,R15,R16,R17",R_0402_1005Metric,C98220,5
 10u,"C16,C17,C18,C19,C20,C22,C24,C3,C4,C5",C_0603_1608Metric,C19702,10
 150n,C13,C_0402_1005Metric,C162182,1
 15k,R19,R_0402_1005Metric,C25756,1
 1u,"C1,C12,C2,C23,C25,C7,C8,C9",C_0402_1005Metric,C52923,8
-220R,"R6,R7,R8",R_0603_1608Metric,C22962,3
+220R,"R20,R6,R7,R8",R_0603_1608Metric,C22962,4
 22R,"R1,R2,R3,R4,R5",R_0402_1005Metric,C25092,5
 2k,"R14,R18",R_0603_1608Metric,C22975,2
 2k2,R11,R_0603_1608Metric,C4190,1
@@ -30,3 +32,11 @@ SPX3819M5-L-3-3,"U1,U7",SOT-23-5,C9055,2
 TLP2361V4_E,U4,5pin SO6_TOS,C107626,1
 USB_C_Receptacle_USB2.0,J4,USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,1
 SGTL5000XNBA3,U3,QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm,,1
+PinSocket_1x05_P2.54mm_Vertical,U14-1,PinSocket_1x05_P2.54mm_Vertical,,1
+PinSocket_1x05_P2.54mm_Vertical,U13-2,PinSocket_1x05_P2.54mm_Vertical,,1
+PinSocket_1x05_P2.54mm_Vertical,U14-2,PinSocket_1x05_P2.54mm_Vertical,,1
+PinSocket_1x05_P2.54mm_Vertical,U13-1,PinSocket_1x05_P2.54mm_Vertical,,1
+PinSocket_1x05_P2.54mm_Vertical,U12-2,PinSocket_1x05_P2.54mm_Vertical,,1
+PinSocket_1x05_P2.54mm_Vertical,U12-1,PinSocket_1x05_P2.54mm_Vertical,,1
+PinSocket_1x05_P2.54mm_Vertical,U11-2,PinSocket_1x05_P2.54mm_Vertical,,1
+PinSocket_1x05_P2.54mm_Vertical,U11-1,PinSocket_1x05_P2.54mm_Vertical,,1

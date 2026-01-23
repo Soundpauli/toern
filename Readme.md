@@ -69,8 +69,8 @@ As always, TŒRN remains **fully open-source**, with all schematics, code, and d
 - Sample Browser: Manage up to 999 samples from the SD card in real-time and during playback  
 - 16-bar patterns across 16 pages (256 bars per song).  
 
-- 8 parallel sample voices with added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), flanger (4X), reverb (4x), each voice can freely assign one of the 999 samples
-- With added effects: ADSR-envelope, flanger, bitcrusher, filter (high/low/pass), flanger, reverb
+- 8 parallel sample voices with added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb (4x), each voice can freely assign one of the 999 samples
+- With added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb
 - All samples can be cut to size for each voice indiviually (start/end) befor loading to voice
 - Recording inbuild-mic/line-in/mic-in directly in sample browser for quick access (input via settings page)
 - Possibility to save / merge used samples as samplepack to SD card for easy access
@@ -89,8 +89,8 @@ As always, TŒRN remains **fully open-source**, with all schematics, code, and d
 
 - **Synth and Filter Features**:
 - 3 of the Sample Voices can be switched to each one of three analog drum voices (bassdrum, snare and highhat), each with tonehight / decay / freqency manupilation
-- 1 three-voice synth with 3 OSCs per voice with added effects: ADSR-envelope, flanger, bitcrusher, filter (high/low/pass), flanger, reverb
-- 2 one-voiced synths with each 2 OSCs with added effects: ADSR-envelope, flanger, bitcrusher, filter (high/low/pass), flanger, reverb
+- 1 three-voice synth with 3 OSCs per voice with added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb
+- 2 one-voiced synths with each 2 OSCs with added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb
 - 1 assignable default filter for each channel which can be easily directly accessed during runtime on encoder #3
 
 ---

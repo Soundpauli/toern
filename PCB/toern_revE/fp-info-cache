@@ -1,4 +1,4 @@
-26728047243693458
+26729815826892605
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -44589,6 +44589,13 @@ Surface mounted socket strip SMD 2x40 2.00mm double row
 0
 80
 80
+Connector_PinSocket_2.54mm
+DuppaI2CEncoderV2.1
+Through hole straight socket strips, 1x05, 2.54mm pitch for Duppa I2C Encoder V2.1
+Duppa I2C Encoder, Through hole socket strip THT 1x05 2.54mm
+0
+10
+5
 Connector_PinSocket_2.54mm
 PinSocket_1x01_P2.54mm_Horizontal
 Through hole angled socket strip, 1x01, 2.54mm pitch, 8.51mm socket length, single row (from Kicad 4.0.7), script generated

@@ -8,6 +8,8 @@ extern bool SMP_FLOW_MODE;
 #define LINEOUT_LEVEL_MIN 13
 #define LINEOUT_LEVEL_MAX 31
 
+extern uint8_t ledBrightness;  // Add extern declaration
+
 // Fast function to light a specific LED on a specific matrix
 // matrixId: 0 = first matrix (left), 1 = second matrix, etc.
 // x, y: coordinates within that matrix (1-16, 1-16)
@@ -27,6 +29,12 @@ void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB co
     index = (x - 1) + (MATRIX_WIDTH * (y - 1));
   }
   
+  // Scale color by virtual matrix brightness (software dimming)
+  // This allows the global FastLED brightness to be 255 (for strip) while dimming the matrix
+  if (ledBrightness < 255) {
+    color.nscale8(ledBrightness);
+  }
+  
   // Add matrix offset and set LED
   index += matrixOffset;
   if (index < NUM_LEDS) { 
@@ -44,7 +52,7 @@ void light(unsigned int x, unsigned int y, CRGB color) {
   
   // Use the fast single-matrix function
   light_single(matrixNum, localX, y, color);
-  yield();
+  // yield() removed - moved to strategic points in main loop for better performance
 }
 
 // New indicator system colors
@@ -1320,6 +1328,26 @@ FLASHMEM void drawTriggers() {
   *************************************************/
 
 void drawTimer() {
+  // Cache mute states per frame (same cache mechanism as drawBase/drawTriggers)
+  static bool muteCache[maxY];
+  static bool muteCacheValid = false;
+  static unsigned int lastFrame = 0;
+  static unsigned int lastEditPage = 0;  // Track page changes for instant redraw
+  
+  // Invalidate cache on frame change, page change, or force refresh
+  unsigned int currentFrame = (millis() / 33); // ~30 FPS frame counter
+  extern struct GlobalVars GLOB;
+  bool pageChanged = (GLOB.edit != lastEditPage);
+  
+  if (currentFrame != lastFrame || !muteCacheValid || pageChanged) {
+    extern bool getMuteStateForUI(int channel);
+    for (unsigned int ch = 0; ch < maxY; ch++) {
+      muteCache[ch] = getMuteStateForUI(ch);
+    }
+    muteCacheValid = true;
+    lastFrame = currentFrame;
+    lastEditPage = GLOB.edit;
+  }
  
   unsigned int timer = ((beatForUI - 1) % maxX + 1);
   
@@ -1351,7 +1379,9 @@ void drawTimer() {
         light(timer, y, CRGB(10, 0, 0));
 
         if (ch> 0) {
-          if (getMuteState(ch) == false) {
+          // Use cached mute state instead of calling getMuteState() directly
+          bool isMuted = muteCache[ch - 1];  // muteCache is 0-indexed, channels are 1-indexed
+          if (!isMuted) {
             
                     if( !GLOB.singleMode ) {light(timer, y, UI_BRIGHT_WHITE);
         }else{
@@ -1848,7 +1878,9 @@ void processPeaks() {
 
 
 void processRecPeaks() {
-  float interpolatedRecValues[maxX];  // Support full width of display
+  // Use maximum possible size (32 for 2 modules) to avoid stack allocation
+  // maxX is runtime (16 or 32), so we need compile-time constant
+  static float interpolatedRecValues[32];  // Static to avoid stack allocation (maxX can be 16 or 32)
 
 
 
@@ -1985,13 +2017,13 @@ void drawBPMScreen() {
     drawBrightness();
   }
   
-  // New indicator system: BPM: - | L[W] | - | L[H]
-  // Only show indicators for brightness (encoder 1) and BPM (encoder 3)
-  // Encoder 0 and 2 (volume controls) removed
-  
-  if (drawBaseColorMode) {
-    drawIndicator('L', 'H', 4);  // Encoder 4: Large Bright Blue for brightness
-  }
+  // Indicators for BPM screen (requested):
+  // - Encoder 2: white
+  // - Encoder 3: green
+  // - Encoder 4: turquoise
+  drawIndicator('L', 'W', 2);
+  drawIndicator('L', 'G', 3);
+  drawIndicator('L', 'N', 4);
   
   // Draw MIDI INT/EXT arrow indicator using encoder[2] position
   extern Mode *currentMode;

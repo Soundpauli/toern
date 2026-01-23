@@ -1,9 +1,9 @@
-#define VERSION "v1.51"
+#define VERSION "v1.52"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
 #define SERIAL8_TX_BUFFER_SIZE 128   // Larger transmit buffer for safety
-#define TargetFPS 30
+#define TargetFPS 60
 
 // Playback diagnostics / debug (keep OFF for reliability)
 #define DEBUG_PLAYBACK_SERIAL 0  // set to 1 to enable extra playback Serial prints
@@ -56,6 +56,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include "audioinit.h"
 #include "font_3x5.h"
 #include "icons.h"
+
 
 // === Core types (must be defined early for Arduino auto-prototype generation) ===
 enum ValueDisplayMode : uint8_t {
@@ -167,6 +168,18 @@ extern void handleMidiClock();
 #define GAIN_2 0.8  //0.33 (increased to 0.8 for 64% total gain)
 #define GAIN_3 0.4  //0.25
 #define GAIN_4 0.8  //0.2; (increased to 0.8 for 64% total gain)
+
+// ---- Mix headroom (samples ch1-8) ----
+// These stages are where hard clipping/crackling happens if too hot:
+// - mixer1 sums ch1-4
+// - mixer2 sums ch5-8
+// - mixer_end sums mixer1 + mixer2 (+ synth + monitoring)
+//
+// Old staging used 0.70f per input on mixer1/2, which can exceed full-scale with only 2 loud hits.
+// The values below keep the *mix* within range (so multiple loud samples don't crackle).
+#define MIX_BUS_HEADROOM 0.25f        // per-input gain into mixer1/mixer2 (4 inputs each)
+#define MIX_END_SAMPLES_GAIN 0.50f    // mixer_end input gain for mixer1 + mixer2
+#define MIX_END_SYNTH_GAIN 0.60f      // mixer_end input gain for mixersynth_end
 
 
 #define NUM_ENCODERS 4
@@ -321,6 +334,7 @@ bool disableThresholdFlag = false;
 // Allocate the delay lines for left and right channels
 
 bool MIDI_CLOCK_SEND = true;
+bool MIDI_NOTE_SEND = true;  // Control whether MIDI notes are sent (independent from clock)
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
@@ -332,6 +346,7 @@ bool recMenuFirstEnter = true;  // Track first entry into REC menu
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
 bool SMP_LOAD_SETTINGS = true;  // Whether to load SMP settings when loading tracks
+bool SMP_LED_STRIP_ENABLED = true;  // LED strip visualization enabled/disabled
 uint8_t lineOutLevelSetting = 30;
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
@@ -388,26 +403,10 @@ bool dequeuePendingNote(PendingNote &out) {
 
 
 // ----- Intro Animation Timing (in ms) -----
-// Phase 1: 5 seconds (rainbow logo)
-// Phase 2: 2 seconds (explosion)
-const unsigned long phase1Duration = 3000;
-const unsigned long phase2Duration = 1500;
-const unsigned long totalAnimationTime = phase1Duration + phase2Duration;
-// We'll treat the center of the grid as (7.5, 7.5) for the explosion.
-const float logoCenterX = 6;
-const float logoCenterY = 7;
-// ----- Particle Structure for Explosion Phase -----
-struct Particle {
-  float initX;
-  float initY;
-  float dirX;
-  float dirY;
-  CRGB color;
-};
+// Phase 1: 2 seconds (rainbow logo only, no particles)
+const unsigned long phase1Duration = 2000;
+const unsigned long totalAnimationTime = phase1Duration;
 bool filterfreshsetted = true;
-bool particlesGenerated = false;
-DMAMEM Particle particles[256];  // up to 256 possible "on" pixels
-int particleCount = 0;
 
 DMAMEM bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
 
@@ -490,6 +489,7 @@ extern const int PREVIEW_MODE_PRESS = 1;
 int previewTriggerMode = PREVIEW_MODE_ON;
 int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1)
 int transportMode = 1;
+int midiSendMode = 2;  // 0=CLCK, 1=NOTE, 2=BOTH (default to BOTH)
 int patternMode = -1;
 int flowMode = -1;  // FLOW setting: -1 = OFF, 1 = ON
 int clockMode = 1;
@@ -543,7 +543,8 @@ float pulse = 1;
 int dir = 1;
 unsigned int MIDI_CH = 1;
 float playNoteInterval = 150000.0;
-unsigned int RefreshTime = 1000 / TargetFPS;
+// Calculate refresh time in milliseconds from TargetFPS (single source of truth for display refresh rate)
+unsigned int RefreshTime = 1000UL / TargetFPS;  // 30 FPS = 33ms per frame
 float marqueePos = maxX;
 bool shifted = false;
 bool movingForward = true;  // Variable to track the direction of movement
@@ -838,6 +839,7 @@ bool pendingStopFastRecord = false;      // Flag to defer stopFastRecord() from 
 // State variables
 uint8_t filterPage[NUM_CHANNELS] = { 0 };
 uint8_t lastEncoder = 0;  // last used encoder index (0-3)
+static int16_t lastEncVal[NUM_CHANNELS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };  // Track last encoder value per channel
 
 
 
@@ -1409,6 +1411,17 @@ void switchMode(Mode *newMode) {
       muteModeArrowUntil = 0;
     }
 
+    // Force a full redraw on menu enter/exit so cached menu rendering can't skip a frame.
+    // Also clear the LED buffer when leaving menu so no menu artifacts remain.
+    if (oldMode == &menu && newMode != &menu) {
+      FastLEDclear();
+      FastLEDshow();
+    }
+    if (newMode == &menu && oldMode != &menu) {
+      extern void menuRequestFullRedraw();
+      menuRequestFullRedraw();
+    }
+
     currentMode = newMode;
     if (currentMode == &subpatternMode && muteModeActive) {
       muteModeLastChannel = GLOB.currentChannel;
@@ -1853,6 +1866,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool inVolSubmenu;
     extern bool inEtcSubmenu;
     extern int currentMenuPage;
+    extern void menuRequestFullRedraw();
 
     // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
     if (inLookSubmenu) {
@@ -1860,6 +1874,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       currentMenuPage = 5;
       currentMode->pos[3] = 5;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)5);
+      menuRequestFullRedraw();
       return;
     }
 
@@ -1869,6 +1884,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       currentMenuPage = 6;
       currentMode->pos[3] = 6;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)6);
+      menuRequestFullRedraw();
       return;
     }
 
@@ -1878,6 +1894,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       currentMenuPage = 7;
       currentMode->pos[3] = 7;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)7);
+      menuRequestFullRedraw();
       return;
     }
 
@@ -1887,6 +1904,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       currentMenuPage = 4;
       currentMode->pos[3] = 4;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)4);
+      menuRequestFullRedraw();
       return;
     }
 
@@ -1904,6 +1922,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       currentMenuPage = 9;
       currentMode->pos[3] = 9;  // Sync mode position with current page
       Encoder[3].writeCounter((int32_t)9);
+      menuRequestFullRedraw();
       return;
     }
 
@@ -2433,10 +2452,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
 void initSoundChip() {
   // AudioInterrupts();
-  // Reduced from 256 to 128 blocks to prevent memory fragmentation
-  // 256 blocks = 64KB, which can cause slow SD card access and unresponsiveness
-  // 128 blocks = 32KB, still plenty for complex audio routing
-  AudioMemory(64);
+  // Increased from 64 to 128 blocks to prevent audio block exhaustion (0.218s click issue).
+  // When allocate() fails, audio objects return early → silence/click.
+  // 128 blocks = 32KB, still reasonable for complex audio routing.
+  // 256 blocks = 64KB (was causing SD card slowdown, but may be needed if 128 isn't enough).
+  AudioMemory(128);
   // turn on the output
   sgtl5000_1.enable();
 
@@ -2449,10 +2469,10 @@ void initSoundChip() {
   sgtl5000_1.volume(vol);
 
   // Initialize audio input amplifier - turned off at startup
-  audioInputAmp.gain(0.0);
-  sgtl5000_1.audioPostProcessorEnable();
-  sgtl5000_1.audioPreProcessorEnable();
-  sgtl5000_1.autoVolumeEnable();
+  //audioInputAmp.gain(0.0);
+  //sgtl5000_1.audioPostProcessorEnable();
+  //sgtl5000_1.audioPreProcessorEnable();
+  //sgtl5000_1.autoVolumeEnable();
 
   //REC
   // Select requested input.
@@ -2465,10 +2485,10 @@ void initSoundChip() {
     sgtl5000_1.micGain(0);
   }
 
-  sgtl5000_1.adcHighPassFilterEnable();  //ENABLED //matze
+  //sgtl5000_1.adcHighPassFilterEnable();  //ENABLED //matze
   //sgtl5000_1.adcHighPassFilterDisable();  //for mic?
-  sgtl5000_1.unmuteLineout();
-  sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+  //sgtl5000_1.unmuteLineout();
+  //sgtl5000_1.lineOutLevel(lineOutLevelSetting);
   sgtl5000_1.lineInLevel(lineInLevel);  // Apply line input level
 
 }
@@ -2521,7 +2541,7 @@ void initSamples() {
 
 
 
-  const float MIX_BUS_HEADROOM = 0.70f;  // single, intentional attenuation stage (per-voice headroom)
+  // First summing busses (prevent clipping when multiple loud samples overlap)
   mixer1.gain(0, MIX_BUS_HEADROOM);
   mixer1.gain(1, MIX_BUS_HEADROOM);
   mixer1.gain(2, MIX_BUS_HEADROOM);
@@ -2532,12 +2552,11 @@ void initSamples() {
   mixer2.gain(2, MIX_BUS_HEADROOM);
   mixer2.gain(3, MIX_BUS_HEADROOM);
 
-
-  // Keep downstream busses at unity to avoid "down then up" scaling.
-  mixer_end.gain(0, 1.0f);
-  mixer_end.gain(1, 1.0f);
-  mixer_end.gain(2, 1.0f);
-  mixer_end.gain(3, 0.0);  // No monitoring by default - ensure OFF on startup
+  // Second summing bus (mixer_end): prevent clipping when both busses (1-4 and 5-8) hit together.
+  mixer_end.gain(0, MIX_END_SAMPLES_GAIN);  // mixer1 -> mixer_end
+  mixer_end.gain(1, MIX_END_SAMPLES_GAIN);  // mixer2 -> mixer_end
+  mixer_end.gain(2, MIX_END_SYNTH_GAIN);    // synth bus -> mixer_end
+  mixer_end.gain(3, 0.0f);                  // No monitoring by default - ensure OFF on startup
 
 
   // Global loudness stage (final summing before i2s)
@@ -2739,8 +2758,8 @@ void setup() {
   //Wire.setClock(10000); // Set to 400 kHz (standard speed)
   NVIC_SET_PRIORITY(IRQ_SOFTWARE, 208);
   // Set MIDI (Serial8/LPUART8) interrupt priority - lower number = higher priority
-  // Priority 112 = higher priority than software (208) for faster MIDI handling
-  NVIC_SET_PRIORITY(IRQ_LPUART8, 112);  // MIDI serial interrupt priority
+  // Priority 64 = higher priority for faster MIDI input handling (was 112)
+  NVIC_SET_PRIORITY(IRQ_LPUART8, 64);  // MIDI serial interrupt priority
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
   // Avoid allocations / fragmentation when scheduling sample triggers
@@ -2765,8 +2784,16 @@ void setup() {
   pinMode(4, OUTPUT);        // Pin 4 set as output
   digitalWrite(4, LOW);      // Drive Pin 4 LOW
 
+  // Matrix LEDs on PIN 17
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
-  FastLED.setBrightness(ledBrightness);
+  // Matrix brightness is controlled per-controller in FastLEDshow() and dimmed in software (light_single)
+  
+  // LED strip on PIN 24 (separate data line, independent from matrix)
+  extern CRGB stripLeds[];
+  extern void initLedStrip();
+  FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);  // LED_STRIP_MAX_LENGTH (256)
+  // Strip brightness: Full brightness (255) - values written directly to stripLeds[]
+  // Matrix brightness: Controlled via software dimming in light_single() using ledBrightness
 
   // Early EEPROM load for audio settings (before initSoundChip)
   // Load GLOB.vol, micGain, previewVol, lineInLevel, lineOutLevelSetting directly from EEPROM
@@ -2821,7 +2848,7 @@ void setup() {
   }
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
 
-  initSoundChip();
+
 
   initEncoders();     // Moved initEncoders here, ensures Serial is up for its prints
   if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
@@ -2830,7 +2857,6 @@ void setup() {
   drawNoSD();
   delay(500);
 
-  mixer0.gain(1, 0.05);  //PREV Sound
 
   // Check if touch2 (menu button) is pressed during startup for INIT mode
   int touch2Value = fastTouchRead(SWITCH_2);
@@ -2855,10 +2881,10 @@ void setup() {
     }
   }
 
-  playSdWav1.play("intro/016.wav");
+ 
 
   runAnimation();
-  playSdWav1.stop();
+ 
   // Manifest-driven sample browser (no legacy lastFile EEPROM tracking).
   // Always use map.txt - if missing, scan and write it, then load it
   if (!loadSampleManifest()) {
@@ -2891,6 +2917,8 @@ void setup() {
   int savedVol = GLOB.vol;
   initGlobalVars();
   GLOB.vol = savedVol;  // Restore vol from EEPROM
+  initSoundChip();
+  mixer0.gain(1, 0.05);  //PREV Sound
 
   initSamples();
   initPageMutes();  // Initialize per-page mute system
@@ -2955,6 +2983,9 @@ void setup() {
   // Final application of audio settings to ensure all are applied after all globals are loaded/initialized
   extern void applyAudioSettingsFromGlobals();
   applyAudioSettingsFromGlobals();
+
+  // Initialize LED strip visualization
+  initLedStrip();
 
   // END SETUP
 }
@@ -3142,8 +3173,7 @@ void checkEncoders() {
           int val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
           Encoder[2].writeCounter((int32_t)val);
           // Reset the last encoder value tracking when channel changes
-          static int16_t lastEncVal[NUM_CHANNELS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };  // Changed from int to int16_t
-          lastEncVal[GLOB.currentChannel] = val;                                                                         // Sync tracking with encoder
+          lastEncVal[GLOB.currentChannel] = val;  // Sync tracking with encoder
         }
         filterfreshsetted = true;
       }
@@ -3194,7 +3224,6 @@ void checkEncoders() {
       int page, slot;
       if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
         // Only check when encoder value actually changes to avoid excessive I2C reads/writes
-        static int16_t lastEncVal[NUM_CHANNELS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };  // Changed from int to int16_t
         int encVal = currentMode->pos[2];
 
         // Only process if encoder value changed for this channel
@@ -3359,6 +3388,9 @@ void checkEncoders() {
           }
           patternChangeTime = millis() + 2000;  // 2 seconds window
           patternChangeActive = true;
+          
+          // Note: Beat position adjustment is handled in playNote() to preserve relative position
+          // and prevent double-trigger when changing pages during playback
         } else {
           GLOB.edit = editpage;
         }
@@ -3450,7 +3482,7 @@ void checkEncoders() {
               sgtl5000_1.micGain(micGain);
               // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end)
               extern AudioMixer4 mixer_end;
-              float maxPlaybackGain = 0.70f * 1.0f;
+              const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;
               float monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
               mixer_end.gain(3, monitorGain);
             } else {
@@ -3459,7 +3491,7 @@ void checkEncoders() {
               sgtl5000_1.lineInLevel(lineInLevel);
               // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end)
               extern AudioMixer4 mixer_end;
-              float maxPlaybackGain = 0.70f * 1.0f;
+              const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;
               float monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
               mixer_end.gain(3, monitorGain);
             }
@@ -4296,7 +4328,7 @@ void showDoRecord() {
     extern unsigned int micGain;      // From VOL menu (0-63)
 
     float monitorGain = 0.0f;
-    float maxPlaybackGain = 0.70f * 1.0f;  // Match loudest playback: amps×mixer1/2×mixer_end
+    const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
     if (recMode == 1) {
       // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
       monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
@@ -4593,6 +4625,16 @@ void loop() {
     if (MIDI_CLOCK_SEND && !isNowPlaying) {
       if (effectiveRefresh < 100UL) effectiveRefresh = 100UL;  // cap at 10 FPS while paused + clocking
     }
+    
+    // Track page changes for instant timer redraw
+    static unsigned int lastEditPage = 0;
+    bool pageChanged = (GLOB.edit != lastEditPage);
+    if (pageChanged) {
+      lastEditPage = GLOB.edit;
+      // Force immediate redraw when page changes
+      lastDrawUpdate = 0;  // Reset timer to force redraw
+    }
+    
     if ((unsigned long)(now - lastDrawUpdate) >= effectiveRefresh) {
       lastDrawUpdate = now;
       drawBase();
@@ -4615,9 +4657,12 @@ void loop() {
       }
       // Present the frame (throttled inside FastLEDshow()).
       FastLEDshow();
+      yield();  // Strategic yield after frame rendering (replaces per-pixel yields)
     }
   }
 
+  // Update LED strip visualization
+  updateLedStrip();
 
   //granular on ch=8
   /*
@@ -4691,31 +4736,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
 
   checkEncoders();
-  if (currentMode != &velocity && currentMode != &filterMode) drawCursor();
+  // Never draw the cursor while in MENU (or its submenus).
+  if (currentMode != &velocity && currentMode != &filterMode && currentMode != &menu) drawCursor();
   checkButtons();
   checkTouchInputs();
   checkPendingSampleNotes();
 
-  // Periodic system stats to Serial (every ~5s)
-  if (diagStatsTimer > 5000) {
-    diagStatsTimer = 0;
-    float cpu = AudioProcessorUsage();
-    float cpuMax = AudioProcessorUsageMax();
-    int audioMem = AudioMemoryUsage();
-    int audioMemMax = AudioMemoryUsageMax();
-    char *heapEnd = (char *)sbrk(0);
-    char *stackPtr = (char *)__builtin_frame_address(0);
-    unsigned long freeRam = 0;
-    if ((uintptr_t)stackPtr > (uintptr_t)heapEnd) {
-      freeRam = (unsigned long)((uintptr_t)stackPtr - (uintptr_t)heapEnd);
-    }
-    unsigned long previewBuf = (unsigned long)sizeof(sampled[0]);
-    float currentGain = GAIN_4 * GAIN_2;  // Current total gain for samples
-    float maxPossibleGain = 1.0f;         // Maximum theoretical gain (1.0 × 1.0)
-    float gainPercent = (currentGain / maxPossibleGain) * 100.0f;
-    Serial.printf("SYS cpu=%.1f%% max=%.1f%% audioMem=%d/%d freeRAM=%luKB previewBuf=%luKB gain=%.2f (%.1f%%)\n",
-                  cpu, cpuMax, audioMem, audioMemMax, freeRam / 1024, previewBuf / 1024, currentGain, gainPercent);
-  }
+  // Periodic system stats to Serial removed (requested): keep runtime silent by default.
 
   yield();  // Yield periodically to prevent unresponsiveness, especially during file operations
 
@@ -4742,7 +4769,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     audioInputAmp.gain(1.0f);  // Unity gain, no additional amplification
 
     float monitorGain = 0.0f;
-    float maxPlaybackGain = 0.70f * 1.0f;  // Match loudest playback: amps×mixer1/2×mixer_end
+    const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
     if (recMode == 1) {
       // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
       monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
@@ -5620,14 +5647,45 @@ void handlePageSwitch(int newEdit) {
 
 void playNote() {
 
-  // Remember which beat is actually being played for UI highlighting
-  beatForUI = beat;
-
   // NOTE: playNote() is called by a hardware timer even when not playing.
   // Never start fills (or do any fill side effects) unless we are actually playing.
   if (!isNowPlaying) {
     return;
   }
+
+  // Handle page changes in PMOD mode BEFORE triggering notes to prevent double-trigger
+  // This must happen early, before notes are triggered, to ensure beat is correct
+  // Declare lastEdit at function scope so it's accessible throughout
+  static unsigned int lastEdit = GLOB.edit;
+  
+  if (SMP_PATTERN_MODE && isNowPlaying) {
+    extern bool songModeActive;
+    extern int patternMode;
+    
+    if (!songModeActive && patternMode != 3) {
+      // Preserve relative beat when switching pages (but NOT in song mode or NEXT mode)
+      if (GLOB.edit != lastEdit) {
+        unsigned int currentPlayingPage = GLOB.edit;
+        unsigned int pageStart = (currentPlayingPage - 1) * maxX + 1;
+        unsigned int oldStart = (lastEdit - 1) * maxX + 1;
+        unsigned int offset = beat - oldStart;
+        unsigned int newBeat = pageStart + offset;
+        
+        // If beat is already at or very close to the start of the new page, 
+        // just set it to pageStart to prevent double-trigger of first note
+        if (beat >= pageStart && beat <= pageStart + 1) {
+          beat = pageStart;
+        } else {
+          beat = newBeat;
+        }
+        lastEdit = GLOB.edit;
+        GLOB.page = GLOB.edit;
+      }
+    }
+  }
+
+  // Remember which beat is actually being played for UI highlighting
+  beatForUI = beat;
 
   // Handle count-in pending: wait for next beat 1 (full bar) before starting count-in
   if (countInPending && isNowPlaying) {
@@ -5735,6 +5793,7 @@ void playNote() {
 
         if (ch > 0 && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
 
+
           // Check condition - skip if not the right loop iteration
           // Condition 21 (F/F) always plays (handled separately for fill)
           if (cond > 1 && cond != 21) {
@@ -5787,6 +5846,10 @@ void playNote() {
           // Trigger MIDI and audio as close together as possible.
           // NOTE: 'ch' is stored 1-based in 'note' (1=voice1, 2=voice2, etc.), and MIDI channels are 1-16.
           // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
+          
+          // Trigger LED strip ripple only if note is actually played (passed cond/prob checks)
+          onNoteTriggered(ch);
+
           MidiSendNoteOn(b, ch, vel);
           if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
             int pitch = (12 * SampleRate[ch]) + b - (ch + 1);
@@ -5810,6 +5873,8 @@ void playNote() {
           } else if (ch >= 13 && ch < 15) {  // Synth channels 13, 14
             playSynth(ch, b, vel, false);    // b is 1-indexed for grid row
           }
+          
+          // Note: LED strip ripple is triggered earlier, before mute check, so it shows all triggers
         }
       }
   }
@@ -5863,14 +5928,8 @@ void playNote() {
       unsigned int pageStart = (currentPlayingPage - 1) * maxX + 1;
       unsigned int pageEnd = pageStart + maxX - 1;
 
-      // Preserve relative beat when switching pages (but NOT in song mode or NEXT mode - let those handle beat position)
-      static unsigned int lastEdit = GLOB.edit;
-      if (GLOB.edit != lastEdit && !songModeActive && patternMode != 3) {
-        unsigned int oldStart = (lastEdit - 1) * maxX + 1;
-        unsigned int offset = beat - oldStart;
-        beat = pageStart + offset;
-        lastEdit = GLOB.edit;
-      }
+      // Page change handling moved to start of playNote() to prevent double-trigger
+      // (beat adjustment now happens before notes are triggered)
       
       // In NEXT mode, initialize GLOB.page to current playing page if not set
       if (patternMode == 3 && GLOB.page == 0) {
@@ -6213,6 +6272,9 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   // Don't trigger muted voices
   if (getMuteState(channel)) return;
 
+  // Trigger LED strip ripple only if channel is not muted (audible)
+  onNoteTriggered(channel);
+
   int velocity = cell.velocity > 0 ? cell.velocity : defaultVelocity;
   int pitch_from_row = y;
 
@@ -6233,6 +6295,7 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   } else if (channel >= 13 && channel < 15) {
     playSynth(channel, pitch_from_row, velocity, false);
   }
+  
 }
 
 
@@ -6436,11 +6499,6 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
 
 
 
-void updateVolume() {
-  GLOB.vol = currentMode->pos[2];
-  float vol = float(GLOB.vol / 10.0);
-  if (vol >= 0.0 && vol <= 1.0) sgtl5000_1.volume(vol);  // Ensure vol is in valid range
-}
 
 FLASHMEM void updatePreviewVolume() {
   unsigned int level = constrain(previewVol, 0u, 50u);
@@ -6476,7 +6534,7 @@ void updateBrightness() {
   // If pos[1] is 25 -> 250+4-50 = 204
   // Brightness for FastLED is 0-255.
   ledBrightness = constrain((currentMode->pos[1] * 10) - 46, 10, 255);  // Simplified and constrained
-  FastLED.setBrightness(ledBrightness);
+  // FastLED.setBrightness(ledBrightness); // Disabled: global brightness stays at 255, matrix is dimmed in software
 }
 
 FLASHMEM void switchSubPattern() {
@@ -6647,9 +6705,23 @@ FLASHMEM void setVolume() {
     extern void saveSingleModeToEEPROM(int index, int8_t value);
     saveSingleModeToEEPROM(1, clockMode);
 
-    // Update MIDI_CLOCK_SEND flag
+    // Update MIDI_CLOCK_SEND flag (respect midiSendMode setting)
     extern bool MIDI_CLOCK_SEND;
-    MIDI_CLOCK_SEND = (clockMode == 1);
+    extern bool MIDI_NOTE_SEND;
+    extern int midiSendMode;
+    if (midiSendMode == 0) {
+      // CLCK only: clock enabled if clockMode allows
+      MIDI_CLOCK_SEND = (clockMode == 1);
+      MIDI_NOTE_SEND = false;
+    } else if (midiSendMode == 1) {
+      // NOTE only: clock disabled
+      MIDI_CLOCK_SEND = false;
+      MIDI_NOTE_SEND = true;
+    } else {
+      // BOTH: clock enabled if clockMode allows
+      MIDI_CLOCK_SEND = (clockMode == 1);
+      MIDI_NOTE_SEND = true;
+    }
 
     // Update MIDI clock state
     extern void resetMidiClockState();

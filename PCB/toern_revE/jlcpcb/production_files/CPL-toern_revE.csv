@@ -17,9 +17,11 @@ C22,10u,C_0603_1608Metric,122.0,-75.5,0.0,top
 C23,1u,C_0402_1005Metric,98.415,-39.2325,180.0,top
 C24,10u,C_0603_1608Metric,98.105,-33.0225,180.0,top
 C25,1u,C_0402_1005Metric,95.565,-37.0725,90.0,top
+C26,100nF,C_0805_2012Metric,74.5,-29.04,-90.0,top
 C3,10u,C_0603_1608Metric,95.443778,-50.283225,-90.0,top
 C4,10u,C_0603_1608Metric,95.45,-46.825,-90.0,top
 C5,10u,C_0603_1608Metric,177.03,-29.335,90.0,top
+C6,1000uF,CP_Elec_8x10.5,90.0,-35.0,-90.0,top
 C7,1u,C_0402_1005Metric,107.52,-53.0,0.0,top
 C8,1u,C_0402_1005Metric,102.98,-48.5,0.0,top
 C9,1u,C_0402_1005Metric,108.92,-51.68,0.0,top
@@ -56,6 +58,7 @@ R17,10k,R_0402_1005Metric,177.2,-35.92,0.0,top
 R18,2k,R_0603_1608Metric,183.77,-29.075,90.0,top
 R19,15k,R_0402_1005Metric,124.5,-34.325,-90.0,top
 R2,22R,R_0402_1005Metric,106.14,-39.51,-90.0,top
+R20,220R,R_0603_1608Metric,140.0,-30.5,0.0,top
 R3,22R,R_0402_1005Metric,105.05,-39.51,-90.0,top
 R4,22R,R_0402_1005Metric,103.92,-39.51,-90.0,top
 R5,22R,R_0402_1005Metric,102.87,-39.51,-90.0,top
@@ -67,7 +70,15 @@ SW1,EG2219,EG2219,183.5,-43.0,90.0,top
 U1,SPX3819M5-L-3-3,SOT-23-5,98.75842,-50.53552,0.0,top
 U10,01x05 Connector_PinSocket_2.54mm,DuppaI2CEncoderV2.1,92.5,-58.505025,0.0,top
 U11,01x05 Connector_PinSocket_2.54mm,DuppaI2CEncoderV2.1,55.5,-58.505025,0.0,top
+U11-1,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,45.0,-58.58,0.0,top
+U11-2,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,66.0,-58.58,0.0,top
 U12,01x05 Connector_PinSocket_2.54mm,DuppaI2CEncoderV2.1,166.5,-58.505025,0.0,top
+U12-1,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,82.025,-58.53,0.0,top
+U12-2,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,103.025,-58.53,0.0,top
+U13-1,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,119.025,-58.53,0.0,top
+U13-2,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,140.025,-58.53,0.0,top
+U14-1,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,156.025,-58.53,0.0,top
+U14-2,PinSocket_1x05_P2.54mm_Vertical,PinSocket_1x05_P2.54mm_Vertical,177.025,-58.53,0.0,top
 U2,SPX3819M5-L-1-8,SOT-23-5,98.77,-46.95,0.0,top
 U3,SGTL5000XNBA3,QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm,108.16,-44.95,90.0,top
 U4,TLP2361V4_E,5pin SO6_TOS,153.7183,-48.59,0.0,top

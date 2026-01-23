@@ -39,7 +39,7 @@ static bool isBPMStable = false;                         // True if BPM has been
 static uint8_t midiClockTicks = 0;  // Resets every step (for step tracking)
 static uint16_t midiClockTickCounter = 0;  // Continuous counter for blinking (never resets, wraps at 65535)
 static bool initialBpmSyncDone = false;  // Track if initial background BPM sync is complete
-static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 16;   // Increased limit for faster NoteOn processing (was 4)
+static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 4;   // Process limited messages per loop to maintain responsiveness
 
 // Function to check if external BPM is stable (for UI display)
 bool getBPMStable() {
@@ -552,6 +552,12 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
 
 
 void MidiSendNoteOn(int pitch, int channel, int velocity) {
+  // Check if MIDI note sending is enabled
+  extern bool MIDI_NOTE_SEND;
+  if (!MIDI_NOTE_SEND) {
+    return;  // Don't send notes if disabled
+  }
+  
   // Clamp channel and velocity to valid MIDI ranges.
   if (channel < 1) channel = 1;
   if (channel > 16) channel = 16;
