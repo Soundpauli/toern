@@ -480,7 +480,7 @@ void setNewFilters() {
   static uint8_t lastEncoderPos[4] = {255, 255, 255, 255};
   static uint8_t lastChannel = 255;
   static unsigned long lastRedrawTime = 0;
-  // Filter UI redraw throttle: 50ms = 20 FPS (intentionally slower than main display refresh rate)
+  // Throttle redraws to max once per 50ms (20 FPS, intentionally slower than main display RefreshTime)
   const unsigned long REDRAW_THROTTLE_MS = 50;
   
   // Reset encoder tracking when channel changes

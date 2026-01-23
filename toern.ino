@@ -346,7 +346,6 @@ bool recMenuFirstEnter = true;  // Track first entry into REC menu
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
 bool SMP_LOAD_SETTINGS = true;  // Whether to load SMP settings when loading tracks
-bool SMP_LED_STRIP_ENABLED = true;  // LED strip visualization enabled/disabled
 uint8_t lineOutLevelSetting = 30;
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
@@ -403,9 +402,9 @@ bool dequeuePendingNote(PendingNote &out) {
 
 
 // ----- Intro Animation Timing (in ms) -----
-// Phase 1: 2 seconds (rainbow logo only, no particles)
+// Phase 1: 2 seconds (rainbow logo only)
 const unsigned long phase1Duration = 2000;
-const unsigned long totalAnimationTime = phase1Duration;
+const unsigned long totalAnimationTime = phase1Duration;  // Only phase 1, no phase 2
 bool filterfreshsetted = true;
 
 DMAMEM bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
@@ -543,8 +542,9 @@ float pulse = 1;
 int dir = 1;
 unsigned int MIDI_CH = 1;
 float playNoteInterval = 150000.0;
-// Calculate refresh time in milliseconds from TargetFPS (single source of truth for display refresh rate)
-unsigned int RefreshTime = 1000UL / TargetFPS;  // 30 FPS = 33ms per frame
+// Display refresh timing: RefreshTime = 1000UL / TargetFPS (30 FPS = 33ms per frame)
+// This is the single source of truth for display-related timing across the codebase
+unsigned int RefreshTime = 1000UL / TargetFPS;
 float marqueePos = maxX;
 bool shifted = false;
 bool movingForward = true;  // Variable to track the direction of movement
@@ -2848,16 +2848,7 @@ void setup() {
   }
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
 
-
-
-  initEncoders();     // Moved initEncoders here, ensures Serial is up for its prints
-  if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
-    checkCrashReport();
-  }
-  drawNoSD();
-  delay(500);
-
-
+  
   // Check if touch2 (menu button) is pressed during startup for INIT mode
   int touch2Value = fastTouchRead(SWITCH_2);
   if (touch2Value > touchThreshold) {
@@ -2881,10 +2872,19 @@ void setup() {
     }
   }
 
- 
+  
 
   runAnimation();
- 
+  
+
+    if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
+    checkCrashReport();
+  }
+  drawNoSD();
+  //delay(500);
+
+  
+
   // Manifest-driven sample browser (no legacy lastFile EEPROM tracking).
   // Always use map.txt - if missing, scan and write it, then load it
   if (!loadSampleManifest()) {
@@ -2917,8 +2917,6 @@ void setup() {
   int savedVol = GLOB.vol;
   initGlobalVars();
   GLOB.vol = savedVol;  // Restore vol from EEPROM
-  initSoundChip();
-  mixer0.gain(1, 0.05);  //PREV Sound
 
   initSamples();
   initPageMutes();  // Initialize per-page mute system
@@ -2934,6 +2932,11 @@ void setup() {
   //midiTimer.priority(10);
 
   autoLoad();
+
+  initSoundChip();
+  //mixer0.gain(1, 0.05);  //PREV Sound
+  initEncoders();     // Moved initEncoders here, ensures Serial is up for its prints
+
 
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
   for (unsigned int x = 0; x <= maxlen; x++) {
@@ -3388,9 +3391,6 @@ void checkEncoders() {
           }
           patternChangeTime = millis() + 2000;  // 2 seconds window
           patternChangeActive = true;
-          
-          // Note: Beat position adjustment is handled in playNote() to preserve relative position
-          // and prevent double-trigger when changing pages during playback
         } else {
           GLOB.edit = editpage;
         }
@@ -4625,16 +4625,6 @@ void loop() {
     if (MIDI_CLOCK_SEND && !isNowPlaying) {
       if (effectiveRefresh < 100UL) effectiveRefresh = 100UL;  // cap at 10 FPS while paused + clocking
     }
-    
-    // Track page changes for instant timer redraw
-    static unsigned int lastEditPage = 0;
-    bool pageChanged = (GLOB.edit != lastEditPage);
-    if (pageChanged) {
-      lastEditPage = GLOB.edit;
-      // Force immediate redraw when page changes
-      lastDrawUpdate = 0;  // Reset timer to force redraw
-    }
-    
     if ((unsigned long)(now - lastDrawUpdate) >= effectiveRefresh) {
       lastDrawUpdate = now;
       drawBase();
@@ -4655,14 +4645,19 @@ void loop() {
       if (pongActive) {
         drawPongBall();
       }
+      // Yield once per frame after all drawing operations complete (replaces per-pixel yields)
+      // This gives the system a chance to process other tasks without causing jitter
+      yield();
       // Present the frame (throttled inside FastLEDshow()).
       FastLEDshow();
-      yield();  // Strategic yield after frame rendering (replaces per-pixel yields)
     }
   }
 
-  // Update LED strip visualization
-  updateLedStrip();
+  // Update LED strip visualization (only if enabled - optimization #3)
+  extern bool getLedStripEnabled();
+  if (getLedStripEnabled()) {
+    updateLedStrip();
+  }
 
   //granular on ch=8
   /*
@@ -5647,45 +5642,37 @@ void handlePageSwitch(int newEdit) {
 
 void playNote() {
 
+  // Remember which beat is actually being played for UI highlighting
+  beatForUI = beat;
+
   // NOTE: playNote() is called by a hardware timer even when not playing.
   // Never start fills (or do any fill side effects) unless we are actually playing.
   if (!isNowPlaying) {
     return;
   }
 
-  // Handle page changes in PMOD mode BEFORE triggering notes to prevent double-trigger
-  // This must happen early, before notes are triggered, to ensure beat is correct
-  // Declare lastEdit at function scope so it's accessible throughout
+  // Handle PMOD page change detection and beat adjustment BEFORE triggering notes
+  // This prevents double-trigger of first note when pages change during playback
+  // Track last edit page to detect page changes (static persists across function calls)
   static unsigned int lastEdit = GLOB.edit;
   
-  if (SMP_PATTERN_MODE && isNowPlaying) {
+  if (SMP_PATTERN_MODE) {
     extern bool songModeActive;
     extern int patternMode;
     
-    if (!songModeActive && patternMode != 3) {
-      // Preserve relative beat when switching pages (but NOT in song mode or NEXT mode)
-      if (GLOB.edit != lastEdit) {
-        unsigned int currentPlayingPage = GLOB.edit;
-        unsigned int pageStart = (currentPlayingPage - 1) * maxX + 1;
-        unsigned int oldStart = (lastEdit - 1) * maxX + 1;
-        unsigned int offset = beat - oldStart;
-        unsigned int newBeat = pageStart + offset;
-        
-        // If beat is already at or very close to the start of the new page, 
-        // just set it to pageStart to prevent double-trigger of first note
-        if (beat >= pageStart && beat <= pageStart + 1) {
-          beat = pageStart;
-        } else {
-          beat = newBeat;
-        }
-        lastEdit = GLOB.edit;
-        GLOB.page = GLOB.edit;
+    // Preserve relative beat when switching pages (but NOT in song mode or NEXT mode - let those handle beat position)
+    if (GLOB.edit != lastEdit && !songModeActive && patternMode != 3) {
+      unsigned int oldStart = (lastEdit - 1) * maxX + 1;
+      unsigned int newStart = (GLOB.edit - 1) * maxX + 1;
+      unsigned int offset = beat - oldStart;
+      
+      // Only adjust if beat is not already at the start of the new page (prevents double-trigger)
+      if (beat != newStart) {
+        beat = newStart + offset;
       }
+      lastEdit = GLOB.edit;
     }
   }
-
-  // Remember which beat is actually being played for UI highlighting
-  beatForUI = beat;
 
   // Handle count-in pending: wait for next beat 1 (full bar) before starting count-in
   if (countInPending && isNowPlaying) {
@@ -5928,15 +5915,12 @@ void playNote() {
       unsigned int pageStart = (currentPlayingPage - 1) * maxX + 1;
       unsigned int pageEnd = pageStart + maxX - 1;
 
-      // Page change handling moved to start of playNote() to prevent double-trigger
-      // (beat adjustment now happens before notes are triggered)
-      
       // In NEXT mode, initialize GLOB.page to current playing page if not set
       if (patternMode == 3 && GLOB.page == 0) {
         GLOB.page = GLOB.edit;
       }
 
-      // Update lastEdit tracker in song mode too
+      // Update lastEdit tracker in song mode too (to track page changes for future reference)
       if (songModeActive) {
         lastEdit = GLOB.edit;
       }

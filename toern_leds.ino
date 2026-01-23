@@ -21,7 +21,6 @@ DMAMEM CRGB stripLeds[LED_STRIP_MAX_LENGTH];
 // LED strip state
 static int ledStripLength = LED_STRIP_DEFAULT_LENGTH;
 static bool ledStripEnabled = true;
-extern bool SMP_LED_STRIP_ENABLED;  // Global setting from Device SMP
 
 // Ripple structure
 struct Ripple {
@@ -81,8 +80,8 @@ int getLedStripLength() {
 
 // Enable/disable LED strip visualization
 void setLedStripEnabled(bool enabled) {
-  ledStripEnabled = enabled && SMP_LED_STRIP_ENABLED;
-  if (!ledStripEnabled) {
+  ledStripEnabled = enabled;
+  if (!enabled) {
     // Clear strip when disabled
     for (int i = 0; i < ledStripLength; i++) {
       stripLeds[i] = CRGB::Black;
@@ -90,12 +89,17 @@ void setLedStripEnabled(bool enabled) {
   }
 }
 
+// Get LED strip enabled state
+bool getLedStripEnabled() {
+  return ledStripEnabled;
+}
+
 // Trigger a ripple from a specific channel
 // If a ripple was just created (within RIPPLE_MERGE_WINDOW_MS), add this channel to it instead
 #define RIPPLE_MERGE_WINDOW_MS 50  // Merge channels triggered within 50ms
 
 void triggerLedStripRipple(uint8_t channel) {
-  if (!SMP_LED_STRIP_ENABLED || !ledStripEnabled || !isNowPlaying) return;
+  if (!ledStripEnabled || !isNowPlaying) return;
   if (channel == 0 || channel > 16) return;  // Invalid channel
   
   // Check if there's a recent ripple we can add this channel to (for simultaneous triggers)
@@ -162,33 +166,52 @@ void triggerLedStripRipple(uint8_t channel) {
 }
 
 // Update LED strip visualization (call from main loop)
+// Optimizations #3 and #8: Throttle updates when idle, rate-limit to fixed FPS
 void updateLedStrip() {
-  // Skip entirely if disabled via menu setting
-  if (!SMP_LED_STRIP_ENABLED) {
-    return;
-  }
+  // Optimization #3: Track previous state and only clear on state change
+  static bool lastLedStripEnabled = ledStripEnabled;
+  static bool lastIsNowPlaying = isNowPlaying;
+  static bool stripClearedOnStateChange = false;
   
-  // Track previous state to detect transitions
-  static bool wasPlaying = false;
-  bool isCurrentlyPlaying = ledStripEnabled && isNowPlaying;
-  
-  if (!isCurrentlyPlaying) {
-    // Idle state: only clear strip when transitioning from playing to idle
-    if (wasPlaying) {
-      // Transition: playing -> idle, clear strip once
+  // Check for state changes
+  bool stateChanged = (ledStripEnabled != lastLedStripEnabled) || (isNowPlaying != lastIsNowPlaying);
+  if (stateChanged) {
+    // Clear strip only when state changes (enabled→disabled, playing→paused)
+    if (!ledStripEnabled || !isNowPlaying) {
       for (int i = 0; i < ledStripLength; i++) {
         stripLeds[i] = CRGB::Black;
       }
-      wasPlaying = false;
+      stripClearedOnStateChange = true;
     }
-    // Strip will be shown by FastLEDshow() in main loop
+    lastLedStripEnabled = ledStripEnabled;
+    lastIsNowPlaying = isNowPlaying;
+  }
+  
+  // Optimization #3: Skip entirely when disabled and not playing (no need to update)
+  if (!ledStripEnabled || !isNowPlaying) {
+    // Strip already cleared on state change, just return
     return;
   }
   
-  // Currently playing: update state
-  wasPlaying = true;
+  // Optimization #8: Rate-limit to fixed FPS (30 Hz = 33ms, matching RefreshTime)
+  static unsigned long lastUpdateTime = 0;
+  const unsigned long UPDATE_INTERVAL_MS = 33;  // 30 FPS
+  unsigned long now = millis();
+  if (now - lastUpdateTime < UPDATE_INTERVAL_MS) {
+    return;  // Skip update if not enough time has passed
+  }
+  lastUpdateTime = now;
   
-  // Read audio level
+  // Optimization #8: Early return if no active ripples (saves CPU)
+  bool hasActiveRipples = false;
+  for (int i = 0; i < MAX_RIPPLES; i++) {
+    if (ripples[i].active) {
+      hasActiveRipples = true;
+      break;
+    }
+  }
+  
+  // Read audio level (throttled to ~10ms, different from visual update rate)
   static unsigned long lastAudioRead = 0;
   if (millis() - lastAudioRead > 10) {  // Read every ~10ms
     lastAudioRead = millis();
@@ -202,21 +225,18 @@ void updateLedStrip() {
     }
   }
   
-  // Check if there are any active ripples
-  bool hasActiveRipples = false;
-  for (int i = 0; i < MAX_RIPPLES; i++) {
-    if (ripples[i].active) {
-      hasActiveRipples = true;
-      break;
-    }
-  }
-  
-  // Only clear strip if there are active ripples (they will redraw it anyway)
-  // This avoids unnecessary clearing when no ripples are active
-  if (hasActiveRipples) {
+  // If no active ripples and no significant audio, skip rendering (but still update audio)
+  if (!hasActiveRipples && smoothedAudioLevel < AUDIO_MIN_THRESHOLD) {
+    // Clear strip if there's nothing to show
     for (int i = 0; i < ledStripLength; i++) {
       stripLeds[i] = CRGB::Black;
     }
+    return;
+  }
+  
+  // Clear strip first (only when we're actually rendering)
+  for (int i = 0; i < ledStripLength; i++) {
+    stripLeds[i] = CRGB::Black;
   }
   
   // Update and render ripples

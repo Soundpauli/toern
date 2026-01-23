@@ -91,8 +91,8 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
 MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"INFO", 39, false, nullptr},          // Info / version / credits
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"RST", 16, true, "MODE"},            // Reset Effects / SD Rescan (EFX or SD)
-  {"LGHT", 40, false, nullptr}          // LED Strip visualization (ON/OFF)
+  {"RST", 16, true, "MODE"},             // Reset Effects / SD Rescan (EFX or SD)
+  {"LGHT", 40, false, nullptr}           // LED Strip toggle (OFF/ON)
 };
 
 // --- INFO page animation state ---
@@ -197,7 +197,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 24; // EEPROM_DATA_START + [0..23]
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 26; // EEPROM_DATA_START + [0..25]
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
@@ -408,6 +408,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
       EEPROM.write(EEPROM_DATA_START + 23, 0);   // stereoChannel default (OFF)
       EEPROM.write(EEPROM_DATA_START + 24, 2);   // midiSendMode default (2 = BOTH)
+      EEPROM.write(EEPROM_DATA_START + 25, 1);   // ledStripEnabled default (1 = ON)
 
       Serial.println("EEPROM initialized with defaults.");
 
@@ -483,6 +484,18 @@ void loadMenuFromEEPROM() {
     midiSendMode = 2;
     EEPROM.write(EEPROM_DATA_START + 24, midiSendMode);
   }
+  
+  // Load ledStripEnabled from EEPROM (stored at EEPROM_DATA_START + 25)
+  extern bool getLedStripEnabled();
+  extern void setLedStripEnabled(bool enabled);
+  uint8_t ledStripValue = EEPROM.read(EEPROM_DATA_START + 25);
+  bool ledStripEnabled = (ledStripValue != 0);
+  if (ledStripValue > 1) {
+    // Invalid value, default to ON
+    ledStripEnabled = true;
+    EEPROM.write(EEPROM_DATA_START + 25, 1);
+  }
+  setLedStripEnabled(ledStripEnabled);
   
   if (previewVol < 0 || previewVol > 50) previewVol = 20;
   
@@ -1457,9 +1470,14 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawEtcInfoPage();
       break;
       
-    case 40: // LGHT - LED Strip visualization
-      drawText("LGHT", 2, 10, currentMenuParentTextColor());
-      drawLedStripMode();
+    case 40: // LGHT - LED Strip toggle (OFF/ON)
+      {
+        extern bool getLedStripEnabled();
+        const CRGB tc = currentMenuParentTextColor();
+        drawText("LGHT", 2, 10, tc);
+        bool enabled = getLedStripEnabled();
+        drawText(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+      }
       break;
       
     case 19: // PLAY - Submenu
@@ -1924,34 +1942,11 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       }
       break;
     }
-    
-    case 40: { // LGHT page - LED Strip visualization ON/OFF
-      static int lastLedStripState = -1;
-      extern bool SMP_LED_STRIP_ENABLED;
-      
-      if (menuFirstEnter) {
-        int encoderVal = SMP_LED_STRIP_ENABLED ? 1 : 0;
-        Encoder[2].writeCounter((int32_t)encoderVal);
-        Encoder[2].writeMax((int32_t)1);
-        Encoder[2].writeMin((int32_t)0);
-        currentMode->pos[2] = encoderVal;
-        lastLedStripState = encoderVal;
-        menuFirstEnter = false;
-      }
 
-      if (currentMode->pos[2] != lastLedStripState) {
-        SMP_LED_STRIP_ENABLED = (currentMode->pos[2] == 1);
-        Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
-        redrawMain(setting);
-        lastLedStripState = currentMode->pos[2];
-        
-        // Update LED strip state immediately
-        extern void setLedStripEnabled(bool enabled);
-        setLedStripEnabled(SMP_LED_STRIP_ENABLED);
-      }
+    case 40: // LGHT - LED Strip toggle (handled by button press in switchMenu)
+      // Toggle is handled by encoder(4) press via switchMenu() - no encoder control needed
       break;
-    }
-
+    
     case 24: { // PONG page - speed control on encoder 2
       if (!pong) {
         pongMenuFirstEnter = true;
@@ -2683,6 +2678,18 @@ void switchMenu(int menuPosition){
         drawMainSettingStatus(menuPosition);
         break;
       }
+
+      case 40: {
+        // Toggle LED strip: OFF <-> ON
+        extern bool getLedStripEnabled();
+        extern void setLedStripEnabled(bool enabled);
+        bool currentState = getLedStripEnabled();
+        bool newState = !currentState;
+        setLedStripEnabled(newState);
+        saveSingleModeToEEPROM(25, (int8_t)(newState ? 1 : 0));
+        menuRequestFullRedraw();  // Force ETC submenu to redraw with new state
+        break;
+      }
     }
     //saveMenutoEEPROM();
 }
@@ -3137,19 +3144,6 @@ FLASHMEM void drawFlowMode() {
     drawText("OFF", 2, 3, UI_RED);  // Use same coordinates as drawRecChannelClear
     SMP_FLOW_MODE = false;
     flowMode = -1;  // Reset to valid value
-  }
-
-  FastLEDshow();
-}
-
-FLASHMEM void drawLedStripMode() {
-  // Clear text area before drawing (3 chars max: "OFF", 2 chars: "ON")
-  clearTextArea(2, 3, 16);
-  extern bool SMP_LED_STRIP_ENABLED;
-  if (SMP_LED_STRIP_ENABLED) {
-    drawText("ON", 2, 3, UI_GREEN);
-  } else {
-    drawText("OFF", 2, 3, UI_RED);
   }
 
   FastLEDshow();

@@ -74,6 +74,7 @@ extern float detune[13]; // Global detune array for channels 1-12
 extern float channelOctave[9]; // Global octave array for channels 1-8
 extern int8_t channelDirection[maxFiles];
 extern unsigned int recordingStartBeat;  // Beat where recording started
+extern unsigned int RefreshTime;  // Display refresh timing (30 FPS = 33ms per frame)
 
 // ── Sample name manifest (EXTMEM, small, plain text) ─────────────────────
 // Limits (keep small)
@@ -2703,20 +2704,13 @@ Note getNote(uint16_t step, uint8_t channel) {
 /***************/
 
 
-// ----- Generate Explosion Particles -----
-// Called once when Phase 2 starts. Each "1" pixel in the logo becomes a particle.
-void generateParticles() {
-  // Function removed - phase 2 animation removed
-  (void)0; // Prevent unused function warning
-}
-
 
 
 
 // ----- Determine Color of Each LED Based on Time -----
 CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
   if (elapsed < phase1Duration) {
-    // PHASE 1: Rainbow Logo (only phase, 2 seconds)
+    // PHASE 1: Rainbow Logo (only phase - shown for 2 seconds)
     if (logo16_on_P(logo_rows, x, y)) {
       float timeFactor = (float)elapsed / phase1Duration;  // 0..1
       return getLogoPixelColor(x, y, timeFactor);
@@ -2746,15 +2740,13 @@ void runAnimation() {
   
   unsigned long startTime = millis();
   unsigned long lastFrameTime = millis();
-  // Use RefreshTime from TargetFPS (defined in toern.ino) for consistent frame rate
-  extern unsigned int RefreshTime;
   
   while (true) {
     unsigned long currentTime = millis();
     unsigned long elapsed = currentTime - startTime;
     
-    // Frame rate limiting - only update display at consistent intervals
-    if (currentTime - lastFrameTime < RefreshTime) {
+    // Frame rate limiting - only update display at consistent intervals (uses RefreshTime from toern.ino for 30 FPS)
+    if (currentTime - lastFrameTime < (unsigned long)RefreshTime) {
       yield();  // Give CPU time to other tasks
       continue;  // Skip this iteration if not enough time has passed
     }

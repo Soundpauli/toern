@@ -52,7 +52,7 @@ void light(unsigned int x, unsigned int y, CRGB color) {
   
   // Use the fast single-matrix function
   light_single(matrixNum, localX, y, color);
-  // yield() removed - moved to strategic points in main loop for better performance
+  // Note: yield() removed - now called once per frame in main loop to reduce jitter
 }
 
 // New indicator system colors
@@ -1328,26 +1328,6 @@ FLASHMEM void drawTriggers() {
   *************************************************/
 
 void drawTimer() {
-  // Cache mute states per frame (same cache mechanism as drawBase/drawTriggers)
-  static bool muteCache[maxY];
-  static bool muteCacheValid = false;
-  static unsigned int lastFrame = 0;
-  static unsigned int lastEditPage = 0;  // Track page changes for instant redraw
-  
-  // Invalidate cache on frame change, page change, or force refresh
-  unsigned int currentFrame = (millis() / 33); // ~30 FPS frame counter
-  extern struct GlobalVars GLOB;
-  bool pageChanged = (GLOB.edit != lastEditPage);
-  
-  if (currentFrame != lastFrame || !muteCacheValid || pageChanged) {
-    extern bool getMuteStateForUI(int channel);
-    for (unsigned int ch = 0; ch < maxY; ch++) {
-      muteCache[ch] = getMuteStateForUI(ch);
-    }
-    muteCacheValid = true;
-    lastFrame = currentFrame;
-    lastEditPage = GLOB.edit;
-  }
  
   unsigned int timer = ((beatForUI - 1) % maxX + 1);
   
@@ -1379,9 +1359,7 @@ void drawTimer() {
         light(timer, y, CRGB(10, 0, 0));
 
         if (ch> 0) {
-          // Use cached mute state instead of calling getMuteState() directly
-          bool isMuted = muteCache[ch - 1];  // muteCache is 0-indexed, channels are 1-indexed
-          if (!isMuted) {
+          if (getMuteState(ch) == false) {
             
                     if( !GLOB.singleMode ) {light(timer, y, UI_BRIGHT_WHITE);
         }else{
@@ -1878,11 +1856,10 @@ void processPeaks() {
 
 
 void processRecPeaks() {
-  // Use maximum possible size (32 for 2 modules) to avoid stack allocation
-  // maxX is runtime (16 or 32), so we need compile-time constant
-  static float interpolatedRecValues[32];  // Static to avoid stack allocation (maxX can be 16 or 32)
-
-
+  // Optimization #5: Use static instead of stack allocation to reduce stack pressure
+  // With maxX up to 32 (2 modules × 16), this saves 128 bytes per call from stack allocation
+  // Use fixed maximum size since maxX is a runtime variable
+  static float interpolatedRecValues[32];  // Max possible width (MATRIX_WIDTH * LED_MODULES = 16 * 2 = 32)
 
   if (peakIndex > 0) {
     // Distribute peak values over maxX positions

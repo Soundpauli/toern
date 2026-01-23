@@ -151,7 +151,7 @@ void checkMidi() {
   // before ANY other processing (including MIDI.getChannel() or MIDI.getData() calls)
   
   uint8_t processedMessages = 0;
-  while (processedMessages < MAX_MIDI_MESSAGES_PER_LOOP && MIDI.read()) {
+  while (MIDI.read()) {
     // Get message type FIRST - this is fast and doesn't process the message
     uint8_t miditype = MIDI.getType();
     
@@ -170,6 +170,11 @@ void checkMidi() {
     }
     
     // Process all other message types (non-time-critical) - these can have overhead
+    // Keep draining the input buffer even if we hit the per-loop processing cap,
+    // so clock messages behind heavy traffic still get handled immediately.
+    if (processedMessages >= MAX_MIDI_MESSAGES_PER_LOOP) {
+      continue;
+    }
     uint8_t pitch, velocity, channel;
     channel = MIDI.getChannel();
     processedMessages++;
