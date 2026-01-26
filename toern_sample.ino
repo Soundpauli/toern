@@ -28,7 +28,7 @@ struct PeakScanState {
 };
 
 static PeakScanState g_peakScan;
-static bool g_encoder0PressedMode = false;  // Track if encoder(0) is pressed in PREV=="PRESS" mode
+static bool g_encoder0PressedMode = false;  // Track if encoder(0) is pressed - makes preview behave like seek > 0
 
 // Expose encoder(0) pressed mode state for main loop
 bool isEncoder0PressedMode() {
@@ -124,7 +124,7 @@ static void stopPeakScan() {
   }
 }
 
-// Public wrapper to start peak scan (needed for resuming after encoder(0) press)
+// Public wrapper to start peak scan
 void startPeakScan(const char *path, bool resetPeaks = true) {
   stopPeakScan();
   strncpy(g_peakScan.path, path, sizeof(g_peakScan.path) - 1);
@@ -180,11 +180,21 @@ static void servicePeakScan(uint32_t maxBytesThisCall) {
   const uint32_t WINDOW_SAMPLES = 640;
   uint8_t buf[2048];  
   uint32_t bytesLeft = maxBytesThisCall;
+  uint32_t bytesProcessed = 0;
+  const uint32_t YIELD_INTERVAL = 2048; // Yield every 2KB to keep UI responsive
+  
   while (bytesLeft > 0 && g_peakScan.active && g_peakScan.outIndex < (uint16_t)maxPeaks) {
+    // Yield periodically to prevent blocking
+    if (bytesProcessed >= YIELD_INTERVAL) {
+      yield();
+      bytesProcessed = 0;
+    }
+    
     uint32_t toRead = min((uint32_t)sizeof(buf), bytesLeft);
     int n = g_peakScan.f.read(buf, (int)toRead);
     if (n <= 0) { stopPeakScan(); break; }
     bytesLeft -= (uint32_t)n;
+    bytesProcessed += (uint32_t)n;
 
     int samplesInChunk = n / 2;
     for (int i = 0; i < samplesInChunk; i++) {
@@ -233,7 +243,8 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
   char OUTPUTf[64];
   buildSamplePath(folder, sampleID, OUTPUTf, sizeof(OUTPUTf));
 
-  bool usingFullRange = (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
+  // When encoder(0) is pressed, behave like seek > 0: skip full range path, just play audio
+  bool usingFullRange = !g_encoder0PressedMode && (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
   if (usingFullRange && (previewTriggerMode == PREVIEW_MODE_ON || previewTriggerMode == PREVIEW_MODE_PRESS)) {
     yield(); // Yield before SD.exists() to prevent blocking main sequencer
     if (!SD.exists(OUTPUTf)) {
@@ -252,16 +263,17 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
 
     previewIsPlaying = true;
     
-    if (previewTriggerMode == PREVIEW_MODE_ON) {
-      peakIndex = 0;
-      memset(peakValues, 0, sizeof(peakValues));
-    } else if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-      // Delete peaks before regenerating them when encoder(0) is pressed
-      peakIndex = 0;
-      memset(peakValues, 0, sizeof(peakValues));
-    }
+    // Only clear peaks if this is a NEW sample (not just a preview of the same sample)
+    static unsigned int lastPreviewFolder = 999;
+    static unsigned int lastPreviewSampleID = 999;
+    bool isNewSample = (folder != lastPreviewFolder || sampleID != lastPreviewSampleID);
     
-    g_encoder0PressedMode = (previewTriggerMode == PREVIEW_MODE_PRESS);
+    if (isNewSample) {
+      peakIndex = 0;
+      memset(peakValues, 0, sizeof(peakValues));
+      lastPreviewFolder = folder;
+      lastPreviewSampleID = sampleID;
+    }
     
     extern void updatePreviewVolume();
     updatePreviewVolume();
@@ -705,6 +717,8 @@ void showWave() {
     if (newSeek != GLOB.seek) {
       GLOB.seek = newSeek;
       currentMode->pos[0] = newSeek;  // Update encoder to match
+      // Stop peak building when seek changes (for both PREV modes)
+      stopPeakScan();
       if (sampleIsLoaded && previewTriggerMode == PREVIEW_MODE_ON) {
       yield(); // Yield before file operations
       previewSample(folderIdx, fileIdx, false);  // Uses cached buffer when available
@@ -757,6 +771,8 @@ void showWave() {
     if (newSeekEnd != GLOB.seekEnd) {
       GLOB.seekEnd = newSeekEnd;
       currentMode->pos[2] = newSeekEnd;  // Update encoder to match
+      // Stop peak building when seekEnd changes (for both PREV modes)
+      stopPeakScan();
       if (sampleIsLoaded && previewTriggerMode == PREVIEW_MODE_ON) {
       yield(); // Yield before file operations
       previewSample(folderIdx, fileIdx, false);  // Uses cached buffer when available
@@ -808,13 +824,15 @@ void showWave() {
     if (previewTriggerMode == PREVIEW_MODE_ON) {
       startSdPreview(OUTPUTf);
     } else if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-      // PREV==PRSS: start (or restart) incremental SD peak scan immediately (no audio playback yet)
-      startPeakScan(OUTPUTf, true); // Reset peaks for a new sample
+      // PREV==PRESS: start incremental SD peak scan (no audio playback yet)
+      startPeakScan(OUTPUTf, true);
     }
   }
   
   if (previewTriggerMode == PREVIEW_MODE_PRESS && !playSdWav1.isPlaying()) {
-    servicePeakScan(16384);
+    // Process peaks in smaller chunks with yields to avoid blocking
+    servicePeakScan(4096);
+    yield(); // Yield after peak processing to keep UI responsive
   }
 
   // Safety clamp

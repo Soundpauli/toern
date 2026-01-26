@@ -1998,11 +1998,24 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     return;                                                                                         // Prevent other button actions from being processed
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     switchMode(&draw);
-  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-    // Encoder 0 press in SET_WAV: manual preview (allowed for PREV==ON and PREV==PRSS)
-    int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
-    int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
+  } else if ((currentMode == &set_Wav) && (match_buttons(currentButtonStates, 1, 0, 0, 0) || match_buttons(currentButtonStates, 2, 0, 0, 0))) {  // "1000" or "2000"
+    // Encoder 0 press (normal or long) in SET_WAV: manual preview (allowed for PREV==ON and PREV==PRSS)
+    // Note: Only handle state 1 (normal) and state 2 (long press while held), not state 9 (long press release)
+    // to avoid playing twice (once on state 2, once on state 9)
+    // Use current encoder positions, not stored SMP values (which might be stale)
+    extern bool manifestLoaded;
+    extern uint16_t manifestFolderCount;
+    if (!manifestLoaded) {
+      return; // Cannot proceed without manifest
+    }
+    int folderIdx = (int)currentMode->pos[1];  // Use current folder encoder position
+    folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
+    int fileIdx = (int)currentMode->pos[3];  // Use current file encoder position
     if (fileIdx < 1) fileIdx = 1;
+    // Set flag so previewSample knows this is encoder(0) press
+    // Makes it behave like seek > 0: skip peak building, just play audio
+    extern void setEncoder0PressedMode(bool state);
+    setEncoder0PressedMode(true);
     previewSample(folderIdx, fileIdx, false);
     return;                                                                                  // Prevent other button actions from being processed
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
@@ -4881,27 +4894,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       playSdWav1.stop();
       previewIsPlaying = false;  // Playback finished
 
-      // In PREV=="PRESS" mode: resume silent peak scan from current position
+      // In PREV=="PRESS" mode: do NOT resume peak scan after playback
+      // Peaks are locked when encoder(0) is pressed - they should not be modified
       if (previewTriggerMode == PREVIEW_MODE_PRESS) {
         extern bool isEncoder0PressedMode();
         extern void setEncoder0PressedMode(bool state);
-
-        // We always try to resume silent scan in PRESS mode if playback ended
-        extern Mode *currentMode;
-        extern Mode set_Wav;
-        if (currentMode == &set_Wav) {
-          extern Device SMP;
-          int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
-          int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
-          if (fileIdx < 1) fileIdx = 1;
-          char OUTPUTf[64];
-          extern void buildSamplePath(int folderIdx, int fileIdx, char *out, size_t outSize);
-          buildSamplePath(folderIdx, fileIdx, OUTPUTf, sizeof(OUTPUTf));
-          // Start peak scan but DO NOT reset peaks (resume from current peakIndex)
-          extern void startPeakScan(const char *path, bool resetPeaks);
-          startPeakScan(OUTPUTf, false);
-        }
         setEncoder0PressedMode(false);  // Clear flag
+        // Do NOT resume peak scan - peaks are locked and should not be modified
       }
     }
   }

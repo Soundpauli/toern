@@ -1143,7 +1143,7 @@ FLASHMEM void drawChannelNrOverlay(int channelNum, int channelIdx) {
 }
 
 FLASHMEM void drawSampleLoadOverlay() {
-  FastLEDclear();
+  FastLED.clear();
 
   const CRGB frameColor = CRGB(20, 20, 40);
   const CRGB textColor = CRGB(180, 220, 255);
@@ -1168,7 +1168,7 @@ FLASHMEM void drawSampleLoadOverlay() {
 
   // Text on y = 10
   drawText("LOAD", 1, 10, textColor);
-  FastLEDshow();
+  FastLED.show();
 }
 
 
@@ -2011,17 +2011,11 @@ FLASHMEM void drawBPMWithReservedSpace(float bpm, CRGB color, int topY) {
 }
 
 void drawBPMScreen() {
-
+s
   FastLEDclear();
   // Volume bars and indicators removed - volume controls now in VOL menu
   if (drawBaseColorMode) {
     drawBrightness();
-    
-    // Display brightness value as number
-    extern uint8_t ledBrightness;
-    char brightnessText[4];
-    snprintf(brightnessText, sizeof(brightnessText), "%3d", ledBrightness);
-    drawText(brightnessText, 2, 12, CRGB(200, 0, 0));  // Display at y=12, red color
   }
   
   // Indicators for BPM screen (requested):
