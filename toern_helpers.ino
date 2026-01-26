@@ -160,25 +160,19 @@ bool loadSampleManifest() {
 
 // Scan SD for folders/files (natural sorted by simple insertion) and write manifest
 bool scanAndWriteManifest() {
-  Serial.println("=== scanAndWriteManifest: Starting ===");
   
   // Delete existing map.txt first to ensure clean write
   if (SD.exists("samples/map.txt")) {
     if (SD.remove("samples/map.txt")) {
-      Serial.println("--- Deleted existing samples/map.txt ---");
     } else {
-      Serial.println("WARNING: Failed to delete existing samples/map.txt");
     }
   }
   
   clearSampleManifest();
   File root = SD.open("samples");
   if (!root || !root.isDirectory()) {
-    Serial.println("ERROR: Failed to open samples directory");
     return false;
   }
-
-  Serial.println("=== Manifest scan: samples/ ===");
 
   File entry;
   while ((entry = root.openNextFile())) {
@@ -197,9 +191,6 @@ bool scanAndWriteManifest() {
     strncpy(manifestFolderNames[fidx], fname, MANIFEST_NAME_MAX - 1);
     manifestFolderNames[fidx][MANIFEST_NAME_MAX - 1] = 0;
     manifestFileCount[fidx] = 0;
-
-    Serial.print("folder: ");
-    Serial.println(manifestFolderNames[fidx]);
 
     // scan files
     File fileEntry;
@@ -223,44 +214,17 @@ bool scanAndWriteManifest() {
       if (fi < MANIFEST_MAX_FILES_PER_FOLDER) {
         int nameLen = strlen(fbase);
         if (nameLen >= MANIFEST_NAME_MAX) {
-          Serial.print("WARNING: Filename too long, truncating: ");
-          Serial.print(fbase);
-          Serial.print(" (");
-          Serial.print(nameLen);
-          Serial.print(" chars, max ");
-          Serial.print(MANIFEST_NAME_MAX - 1);
-          Serial.println(")");
         }
         strncpy(manifestFileNames[fidx][fi], fbase, MANIFEST_NAME_MAX - 1);
         manifestFileNames[fidx][fi][MANIFEST_NAME_MAX - 1] = 0;
         manifestFileCount[fidx]++;
-        Serial.print("  file: ");
-        Serial.println(manifestFileNames[fidx][fi]);
       } else {
-        Serial.print("WARNING: Too many files in folder ");
-        Serial.print(manifestFolderNames[fidx]);
-        Serial.print(" (max ");
-        Serial.print(MANIFEST_MAX_FILES_PER_FOLDER);
-        Serial.println("), skipping remaining files");
         fileEntry.close();
         break; // Stop scanning this folder
       }
       fileEntry.close();
     }
     if (filesScanned > 0) {
-      Serial.print("  [");
-      Serial.print(manifestFolderNames[fidx]);
-      Serial.print("] Scanned ");
-      Serial.print(filesScanned);
-      Serial.print(" files, added ");
-      Serial.print(manifestFileCount[fidx]);
-      Serial.print(" WAV files");
-      if (filesSkipped > 0) {
-        Serial.print(", skipped ");
-        Serial.print(filesSkipped);
-        Serial.print(" non-WAV");
-      }
-      Serial.println();
     }
     entry.close();
   }
@@ -311,32 +275,22 @@ bool scanAndWriteManifest() {
   // Delete existing map.txt first to ensure clean write
   if (SD.exists("samples/map.txt")) {
     SD.remove("samples/map.txt");
-    Serial.println("--- Deleted existing samples/map.txt ---");
   }
   
   // Ensure samples directory exists (it should, since we just scanned it)
   File f = SD.open("samples/map.txt", O_WRITE | O_CREAT | O_TRUNC);
   if (f) {
-    Serial.println("--- Writing samples/map.txt (sorted) ---");
     for (int folder = 0; folder < manifestFolderCount; ++folder) {
       f.print("folder:");
       f.println(manifestFolderNames[folder]);
-      Serial.print("folder[");
-      Serial.print(folder);
-      Serial.print("]: ");
-      Serial.println(manifestFolderNames[folder]);
       for (uint16_t i = 0; i < manifestFileCount[folder]; ++i) {
         f.print("file:");
         f.println(manifestFileNames[folder][i]);
-        Serial.print("  file: ");
-        Serial.println(manifestFileNames[folder][i]);
       }
       f.println();
     }
     f.close();
-    Serial.println("--- Manifest write complete ---");
   } else {
-    Serial.println("ERROR: Failed to create samples/map.txt");
   }
   manifestLoaded = manifestFolderCount > 0;
   return manifestLoaded;
@@ -771,19 +725,12 @@ void stopFastRecord() {
   extern unsigned int recordingBeatCount;
   recordingBeatCount = 0;
   
-  Serial.print(">>> stopFastRecord: channel=");
-  Serial.print(ch);
-  Serial.print(", recorded samples=");
-  Serial.println(idx);
-  
   loadedSampleLen[ch] = idx;
   
   // Defer sampler loading and heavy operations to avoid blocking audio
   // These will happen after the critical stop sequence
   
   // Auto-save recorded sample to samplepack 0
-  Serial.print("Fast record stopped, saving to SP0 for channel ");
-  Serial.println(ch);
   
   // Do heavy save operations (SD write, EEPROM) - these might cause brief hang
   // but we've already stopped recording, so audio playback should continue
@@ -2387,7 +2334,6 @@ void clearPageX(int thatpage) {
 
 // Reset all audio effects/filters to clean defaults
 void resetAllAudioEffects() {
-  Serial.println("Resetting audio hardware...");
   
   extern const int ALL_CHANNELS[];
   extern const int NUM_ALL_CHANNELS;
@@ -2402,7 +2348,6 @@ void resetAllAudioEffects() {
   forceAllMixerGainsToTarget();
   
   // Step 3: Apply reset data from SMP to audio hardware
-  Serial.println("Applying reset data to audio hardware...");
   const int channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
   const int numChannels = sizeof(channels) / sizeof(channels[0]);
   
@@ -2429,7 +2374,6 @@ void resetAllAudioEffects() {
     }
   }
   
-  Serial.println("Audio hardware reset complete.");
 }
 
 
@@ -2451,14 +2395,11 @@ void startNew() {
   extern Mode volume_bpm;
   extern Mode *currentMode;
   extern i2cEncoderLibV2 Encoder[NUM_ENCODERS];
-  extern const CRGB col[];
+  extern CRGB col[];
   extern bool isNowPlaying;
   extern CachedSample previewCache;
   
-  Serial.println("=== START NEW - Complete Reset ===");
-
   // FULL reset: clear sample manifest + delete map.txt so the next scan is clean
-  Serial.println("Clearing sample manifest + deleting samples/map.txt ...");
   clearSampleManifest();
   if (SD.exists("samples/map.txt")) {
     SD.remove("samples/map.txt");
@@ -2470,7 +2411,6 @@ void startNew() {
   
   // 0. STOP PLAYBACK FIRST (if playing)
   if (isNowPlaying) {
-    Serial.println("Stopping playback...");
     isNowPlaying = false;
   }
   
@@ -2480,7 +2420,6 @@ void startNew() {
   FastLEDshow();
   
   // 1. CLEAR ALL NOTES (all pages, all channels, all velocities, all probabilities)
-  Serial.println("Clearing all notes...");
   for (unsigned int x = 0; x <= maxlen; x++) {
     for (unsigned int y = 0; y <= maxY; y++) {
       note[x][y].channel = 0;
@@ -2490,7 +2429,6 @@ void startNew() {
   }
   
   // 2. RESET GLOBAL VARIABLES FIRST (before using GLOB.currentChannel)
-  Serial.println("Resetting global variables...");
   SMP.bpm = 100.0;
   GLOB.vol = 10;
   GLOB.velocity = 10;
@@ -2502,7 +2440,6 @@ void startNew() {
   GLOB.y = 1;
   
   // 3. RESET ALL FILTER/PARAMETER DATA (just data, no audio hardware yet)
-  Serial.println("Resetting filter/parameter data...");
   const int channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
   const int numChannels = sizeof(channels) / sizeof(channels[0]);
   
@@ -2554,7 +2491,6 @@ void startNew() {
   }
   
   // 4. CLEAR ALL MUTE STATES
-  Serial.println("Clearing all mute states...");
   for (int ch = 0; ch < maxY; ch++) {
     globalMutes[ch] = false;
     SMP.globalMutes[ch] = false;
@@ -2567,20 +2503,17 @@ void startNew() {
   unmuteAllChannels();
   
   // 5. CLEAR ALL SONG ARRANGEMENT
-  Serial.println("Clearing song arrangement...");
   for (int i = 0; i < 64; i++) {
     SMP.songArrangement[i] = 0;
   }
   
   // 6. CLEAR ALL SAMPLEPACK 0 (sp0) STATES - Remove all custom samples
-  Serial.println("Clearing all sp0Active states...");
   for (int i = 1; i < maxFiles; i++) {
     SMP.sp0Active[i] = false;
   }
   saveSp0StateToEEPROM();
   
   // 7. LOAD SAMPLEPACK 1 (fresh default samples)
-  Serial.println("Loading Samplepack 1...");
   SMP.pack = 1;
   samplePackID = 1;
   EEPROM.put(0, (unsigned int)1);  // Save to EEPROM
@@ -2595,7 +2528,6 @@ void startNew() {
   bpm_vol->pos[2] = GLOB.vol;
   
   // 9. RESET WAVE FILE IDS to defaults
-  Serial.println("Resetting wave file IDs...");
   for (int i = 1; i < maxFiles; i++) {
     SMP.wav[i].oldID = 0;   // folder 0
     SMP.wav[i].fileID = i;  // file index = voice index (1..8)
@@ -2613,7 +2545,6 @@ void startNew() {
   preventPaintUnpaint = false;
   
   // 12. SWITCH TO DRAW MODE
-  Serial.println("Switching to draw mode...");
   delay(300);  // Brief delay to show "NEW" message
   switchMode(&draw);
   
@@ -2653,12 +2584,9 @@ void startNew() {
   
   // 16. AUTOSAVE EMPTY STATE
   // Save the clean/empty state to autosaved.txt
-  Serial.println("Autosaving empty state...");
   extern void savePattern(bool autosave);
   savePattern(true);
   
-  Serial.println("=== START NEW Complete ===");
-  Serial.println("Ready for fresh pattern creation!");
 }
 
 
@@ -2812,7 +2740,6 @@ void generateSong() {
   
   // Validate base page range
   if (aiBaseStartPage > aiBaseEndPage) {
-    Serial.println("ERROR: Base start page > base end page");
     return;
   }
   
@@ -2910,23 +2837,10 @@ void generateSong() {
         pattern->isRhythmic = !pattern->isMelodic;
       }
       
-      Serial.print("Channel ");
-      Serial.print(ch);
-      Serial.print(": Density=");
-      Serial.print(pattern->density);
-      Serial.print(", CommonRow=");
-      Serial.print(pattern->mostCommonRow);
-      Serial.print(", Type=");
-      Serial.println(pattern->isMelodic ? "MELODIC" : "RHYTHMIC");
     }
   }
   
   // Debug: Show what musical elements are present in base pages
-  Serial.print("Base pages ");
-  Serial.print(aiBaseStartPage);
-  Serial.print("-");
-  Serial.print(aiBaseEndPage);
-  Serial.print(" analysis: ");
   int rhythmChannels = 0, melodyChannels = 0, otherChannels = 0;
   for (int ch = 1; ch <= 15; ch++) {
     if (channelsUsed[ch]) {
@@ -2935,12 +2849,6 @@ void generateSong() {
       else otherChannels++;
     }
   }
-  Serial.print("Rhythm=");
-  Serial.print(rhythmChannels);
-  Serial.print(", Melody=");
-  Serial.print(melodyChannels);
-  Serial.print(", Other=");
-  Serial.println(otherChannels);
   
   // Generate pages starting from after the base page range
   int startPage = aiBaseEndPage + 1;
@@ -2949,27 +2857,11 @@ void generateSong() {
   // Safety check: ensure we don't exceed maxPages
   if (endPage > maxPages) {
     endPage = maxPages;
-    Serial.print("WARNING: Limited generation to page ");
-    Serial.println(endPage);
   }
   
   // Debug: Show what pages will be generated
-  Serial.print("AI Generation: Base pages ");
-  Serial.print(aiBaseStartPage);
-  Serial.print("-");
-  Serial.print(aiBaseEndPage);
-  Serial.print(", Additional pages to generate: ");
-  Serial.print(aiTargetPage);
-  Serial.print(", Start page ");
-  Serial.print(startPage);
-  Serial.print(", End page ");
-  Serial.println(startPage + aiTargetPage - 1);
-  Serial.print("Base pages empty: ");
-  Serial.println(basePagesEmpty ? "YES" : "NO");
   
   for (int page = startPage; page <= endPage; page++) {
-    Serial.print("Generating page ");
-    Serial.println(page);
     
     // Save current page context
     int originalPage = GLOB.page;
@@ -2981,13 +2873,6 @@ void generateSong() {
     // Calculate the step range for this specific page
     unsigned int pageStartStep = (page - 1) * maxX + 1;
     unsigned int pageEndStep = page * maxX;
-    
-    Serial.print("Clearing page ");
-    Serial.print(page);
-    Serial.print(" (steps ");
-    Serial.print(pageStartStep);
-    Serial.print("-");
-    Serial.println(pageEndStep);
     
     for (unsigned int c = pageStartStep; c <= pageEndStep; c++) {
       for (unsigned int r = 1; r <= maxY; r++) {
@@ -3060,12 +2945,6 @@ void generateSong() {
         harmony.isMinor = !harmony.isMajor;
       }
       
-      Serial.print("Page ");
-      Serial.print(page);
-      Serial.print(" harmony: Root=");
-      Serial.print(harmony.rootNote);
-      Serial.print(", ");
-      Serial.println(harmony.isMajor ? "Major" : "Minor");
     }
     
     // Generate patterns for used channels - only for this specific page

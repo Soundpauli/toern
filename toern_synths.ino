@@ -142,7 +142,6 @@ void lead_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 
 // keys_synth preset (menuIndex==1) with additional parameters
 void keys_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
-  Serial.println("KEYS");
   octave[ch] = 4.0;
   cents[ch][0] = 2;   cents[ch][1] = -2;   cents[ch][2] = 0;
   semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 12;
@@ -376,7 +375,6 @@ void wow_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 
 // bass_synth preset (with integrated parameters) with additional parameters
 void bass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
-  Serial.println("BASS");
   octave[ch] = 2.0;
   cents[ch][0] = 5;  cents[ch][1] = -5;  cents[ch][2] = 0;
   semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = -12;
@@ -424,7 +422,6 @@ void bass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 
 // brass_synth preset (menuIndex==5) with additional parameters
 void brass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
-  Serial.println("BRASS");
   octave[ch] = 4.0;
   cents[ch][0] = -4;  cents[ch][1] = 4;  cents[ch][2] = 0;
   semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 0;
@@ -471,7 +468,6 @@ void brass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 
 // chiptune_synth preset (menuIndex==8) with additional parameters
 void chiptune_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
-  Serial.println("CHIP");
   octave[ch] = 4.0;
   cents[ch][0] = 0;  cents[ch][1] = 0;  cents[ch][2] = 0;
   semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 12;
@@ -708,8 +704,6 @@ void updateSynthVoice(int channel){
 
 
 void switchSynthVoice(int typeValue, int ch, int p1,int p2, int p3, int p4, int p5, int p6) {
-  Serial.println(typeValue);
-
     switch(typeValue) {
         case 0: bass_synth(ch,p1,p2,p3,p4,p5,p6);
             break;

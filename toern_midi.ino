@@ -112,13 +112,6 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
   double actualBPM = 60000000.0 / ((double)midiClockIntervalUs * 24.0);
   
   #if DEBUG_MIDI_CLOCK_SERIAL
-    Serial.print("MIDI Clock configured: ");
-    Serial.print(roundedBPM);
-    Serial.print(" BPM, interval: ");
-    Serial.print(midiClockIntervalUs);
-    Serial.print(" us, actual: ");
-    Serial.print(actualBPM, 3);
-    Serial.println(" BPM (dedicated timer, direct Serial8 write)");
   #endif
 }
 
@@ -290,9 +283,6 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
       unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
       playTimer.begin(playNote, currentPlayNoteInterval);
       #if DEBUG_MIDI_CLOCK_SERIAL
-        Serial.print("SLAVE: Started internal timer at ");
-        Serial.print(SMP.bpm);
-        Serial.println(" BPM");
       #endif
     } else {
       playTimer.end();
@@ -324,7 +314,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     stableBPMCount = 0;
     isBPMStable = false;
     #if DEBUG_MIDI_CLOCK_SERIAL
-      Serial.println("BPM: No clock received for >2s - resetting Kalman filter state");
     #endif
   }
   
@@ -363,7 +352,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
 
         if (pendingStartOnBar) {
           #if DEBUG_MIDI_CLOCK_SERIAL
-            Serial.println("myClock: Slave Start - synced on beat 1");
           #endif
           pendingStartOnBar = false;
           isNowPlaying = true;
@@ -452,18 +440,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
 
       // Serial debug: show raw BPM calculation and filtered value
       #if DEBUG_MIDI_CLOCK_SERIAL
-        Serial.print("BPM CALC (EXT mode): Raw=");
-        Serial.print(rawBPM, 2);
-        Serial.print(" | Filtered=");
-        Serial.print(filteredBPM, 2);
-        Serial.print(" | Gain=");
-        Serial.print(kalmanGain, 3);
-        Serial.print(" | Clocks=");
-        Serial.print(clocksSinceLastBPM);
-        Serial.print(" | Delta(us)=");
-        Serial.print(deltaTotal);
-        Serial.print(" | Interval/Clock(us)=");
-        Serial.print(intervalPerClock, 2);
       #endif
 
       // Round filtered BPM to nearest integer
@@ -495,8 +471,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
             unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / (float)newBPM) / 4.0f);
             playTimer.begin(playNote, currentPlayNoteInterval);
             #if DEBUG_MIDI_CLOCK_SERIAL
-              Serial.print("BPM: Synced playTimer to stable BPM ");
-              Serial.println(newBPM);
             #endif
           }
           
@@ -504,9 +478,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           if (!initialBpmSyncDone) {
             initialBpmSyncDone = true;
             #if DEBUG_MIDI_CLOCK_SERIAL
-              Serial.print("BPM INITIAL SYNC COMPLETE: Stable at ");
-              Serial.print(newBPM);
-              Serial.println(" BPM (background sync done, will only recalculate on BPM page now)");
             #endif
           }
         }
@@ -523,22 +494,9 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       SMP.bpm = (float)newBPM;
       
       #if DEBUG_MIDI_CLOCK_SERIAL
-        Serial.print(" | Updated SMP.bpm=");
-          Serial.print(SMP.bpm);
-        Serial.println(" -> BPM value synced to external clock (sequencer timer unchanged)");
       #endif
     } else {
       #if DEBUG_MIDI_CLOCK_SERIAL
-        Serial.print("BPM CALC: REJECTED - intervalPerClock=");
-        Serial.print(intervalPerClock, 2);
-        Serial.print(" (out of range ");
-        Serial.print(ABSOLUTE_MIN_DELTA * 0.8f);
-        Serial.print(" - ");
-        Serial.print(ABSOLUTE_MAX_DELTA * 1.2f);
-        Serial.print(") | Clocks=");
-        Serial.print(clocksSinceLastBPM);
-        Serial.print(" | Delta(us)=");
-        Serial.println(deltaTotal);
       #endif
     }
 

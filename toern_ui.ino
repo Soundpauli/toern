@@ -1,6 +1,6 @@
 extern const unsigned int maxlen;
 extern void triggerGridNote(unsigned int globalX, unsigned int y);
-extern const CRGB col[];
+extern CRGB col[];
 extern unsigned int beatForUI;
 extern uint8_t lineOutLevelSetting;
 extern bool SMP_FLOW_MODE;
@@ -323,14 +323,19 @@ void drawBase() {
     static CRGB cachedColors[maxY];
     static bool colorsCached = false;
     static bool lastDrawBaseColorMode = false;
+    extern uint8_t currentColorScheme;
+    static uint8_t lastColorScheme = 255;  // Initialize to invalid value
+    extern volatile bool colorsUpdatedViaSerial;
     
-    // Recalculate colors only if drawBaseColorMode changed or not cached
-    if (!colorsCached || drawBaseColorMode != lastDrawBaseColorMode) {
+    // Recalculate colors if drawBaseColorMode changed, color scheme changed, colors updated via serial, or not cached
+    if (!colorsCached || drawBaseColorMode != lastDrawBaseColorMode || currentColorScheme != lastColorScheme || colorsUpdatedViaSerial) {
       for (unsigned int y = 0; y < maxY; y++) {
         cachedColors[y] = col_base[y];
       }
       colorsCached = true;
       lastDrawBaseColorMode = drawBaseColorMode;
+      lastColorScheme = currentColorScheme;
+      colorsUpdatedViaSerial = false;  // Reset flag after cache is updated
     }
     
     unsigned int colors = 0;
@@ -366,12 +371,19 @@ void drawBase() {
     static CRGB cachedSingleModeColor = CRGB(0, 0, 0);
     static unsigned int lastSingleModeChannel = 255;
     static CRGB cachedHighlightColor = CRGB(0, 0, 0);
+    extern uint8_t currentColorScheme;
+    static uint8_t lastSingleModeColorScheme = 255;  // Initialize to invalid value
+    extern volatile bool colorsUpdatedViaSerial;
     
-    // Recalculate colors only if channel changed
-    if (currentChannel != lastSingleModeChannel) {
+    // Recalculate colors if channel changed, color scheme changed, or colors updated via serial
+    if (currentChannel != lastSingleModeChannel || currentColorScheme != lastSingleModeColorScheme || colorsUpdatedViaSerial) {
       cachedSingleModeColor = col_base[currentChannel];
       cachedHighlightColor = blend(cachedSingleModeColor, CRGB::White, 5);
       lastSingleModeChannel = currentChannel;
+      lastSingleModeColorScheme = currentColorScheme;
+      if (colorsUpdatedViaSerial) {
+        colorsUpdatedViaSerial = false;  // Reset flag after cache is updated
+      }
     }
 
     for (unsigned int y = 1; y < maxY; y++) {
@@ -1533,8 +1545,14 @@ FLASHMEM void drawLineOutVolume(uint8_t level) {
 }
 
 FLASHMEM void drawBrightness() {
-  unsigned int maxBrightness = ((ledBrightness - 65) * (15 - 1)) / (255 - 65) + 3;
-  for (unsigned int x = 0; x < maxBrightness; x++) {
+  // Map brightness 3-255 to 1-16 LEDs (16 positions)
+  // Formula: numLEDs = ((ledBrightness - 3) * 16) / (255 - 3) + 1
+  // This maps: 3 -> 1 LED, 255 -> 16 LEDs
+  unsigned int numLEDs = ((ledBrightness - 3) * 16) / (255 - 3) + 1;
+  numLEDs = constrain(numLEDs, 1, 16);
+  
+  // Display LEDs at x=1 to x=16 (not x=0)
+  for (unsigned int x = 1; x <= numLEDs && x <= 16; x++) {
     CRGB brightness = CRGB(16 * x, 16 * x, 16 * x);
     light(x, 15, brightness);
     light(x, 16, brightness);
@@ -1998,6 +2016,12 @@ void drawBPMScreen() {
   // Volume bars and indicators removed - volume controls now in VOL menu
   if (drawBaseColorMode) {
     drawBrightness();
+    
+    // Display brightness value as number
+    extern uint8_t ledBrightness;
+    char brightnessText[4];
+    snprintf(brightnessText, sizeof(brightnessText), "%3d", ledBrightness);
+    drawText(brightnessText, 2, 12, CRGB(200, 0, 0));  // Display at y=12, red color
   }
   
   // Indicators for BPM screen (requested):

@@ -1,4 +1,4 @@
-#define VERSION "v1.52"
+#define VERSION "v1.55"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
@@ -654,7 +654,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, maxY, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode volume_bpm = { "VOLUME_BPM", { 11, 11, 0, BPM_MIN }, { 30, 30, 1, BPM_MAX }, { 11, 11, 0, 100 }, { 0x000000, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoders 0-1 black
+Mode volume_bpm = { "VOLUME_BPM", { 11, 0, 0, BPM_MIN }, { 30, 252, 1, BPM_MAX }, { 11, 0, 0, 100 }, { 0x000000, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -840,6 +840,10 @@ bool pendingStopFastRecord = false;      // Flag to defer stopFastRecord() from 
 uint8_t filterPage[NUM_CHANNELS] = { 0 };
 uint8_t lastEncoder = 0;  // last used encoder index (0-3)
 static int16_t lastEncVal[NUM_CHANNELS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };  // Track last encoder value per channel
+
+// Color scheme selection (0=default, 1=blue-ish, 2=whitish)
+uint8_t currentColorScheme = 0;
+volatile bool colorsUpdatedViaSerial = false;
 
 
 
@@ -1608,7 +1612,6 @@ void switchMode(Mode *newMode) {
 
     if (currentMode == &filterMode) {
       //REVERSE left encoder
-      Serial.println("LOAD FILTERS");
       initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
       Encoder[0].begin(
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
@@ -1628,11 +1631,14 @@ void switchMode(Mode *newMode) {
       Encoder[1].writeRGBCode(0x000000);
 
       // Set encoder 1 position to match current brightness
-      // ledBrightness = (pos[1] * 10) - 46, so pos[1] = (ledBrightness + 46) / 10
-      unsigned int brightnessPos = (ledBrightness + 46) / 10;
-      brightnessPos = constrain(brightnessPos, 6, 25);  // Valid range for volume_bpm mode
+      // ledBrightness = pos[1] + 3, so pos[1] = ledBrightness - 3
+      // Range: pos[1] from 0 to 252 gives ledBrightness from 3 to 255
+      unsigned int brightnessPos = (ledBrightness >= 3) ? (ledBrightness - 3) : 0;
+      brightnessPos = constrain(brightnessPos, 0, 252);  // Valid range for volume_bpm mode (3-255 brightness)
       currentMode->pos[1] = brightnessPos;
       Encoder[1].writeCounter((int32_t)brightnessPos);
+      Encoder[1].writeMax((int32_t)252);
+      Encoder[1].writeMin((int32_t)0);
 
       // Set encoder 2 position to match current clockMode (1=INT -> 1, -1=EXT -> 0)
       extern int clockMode;
@@ -1681,7 +1687,6 @@ void checkFastRec() {
       if (SMP_FAST_REC == 2) {
         if (pinsConnected && !fastRecordActive) {
           if (!allowStart) return;
-          //Serial.println(">> startFastRecord from pin 2+4");
           startFastRecord();
           return;
         } else if (!pinsConnected && fastRecordActive) {
@@ -1947,6 +1952,14 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
     // Encoder[3] triggers action for all menu items EXCEPT AI (which uses encoder[0])
     // Note: Encoder button does NOT exit submenus - only touch buttons do
+    
+    // Special case: If in ETC submenu and on COLR (41), toggle scheme without exiting
+    extern bool inEtcSubmenu;
+    if (inEtcSubmenu && mainSetting == 41) {
+      switchMenu(41);  // Toggle color scheme, stay in submenu
+      return;  // Explicitly return to prevent any other processing
+    }
+    
     if (mainSetting != 15) {
       switchMenu(mainSetting);
     }
@@ -2037,19 +2050,12 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
       int songPosition = songMode.pos[3];     // 1-64
       SMP.songArrangement[songPosition - 1] = 0;  // Clear assignment
-    Serial.print("Song position ");
-    Serial.print(songPosition);
-    Serial.println(" cleared");
     return;
     } else if (currentMode == &songMode && (match_buttons(currentButtonStates, 0, 1, 0, 0) || match_buttons(currentButtonStates, 0, 0, 0, 1))) {  // "0100" or "0001" - Encoder 1 or 3 pressed
       // Save selected pattern to current song position
       int songPosition = songMode.pos[3];     // 1-64
       int selectedPattern = songMode.pos[1];  // 1-16
       SMP.songArrangement[songPosition - 1] = selectedPattern;
-    Serial.print("Song position ");
-    Serial.print(songPosition);
-    Serial.print(" set to pattern ");
-    Serial.println(selectedPattern);
     return;
   } else if (currentMode == &songMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010" - Encoder 2 pressed - Toggle play/pause + songModeActive
     extern bool songModeActive;
@@ -2059,13 +2065,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       songModeActive = false;
       patternMode = -1;  // Set PMOD to OFF
       saveSingleModeToEEPROM(3, patternMode);
-      Serial.println("Song playback paused, song mode deactivated");
     } else {
       // Not playing - activate song mode and start playback
       songModeActive = true;
       patternMode = 2;  // Set PMOD to SONG
       saveSingleModeToEEPROM(3, patternMode);
-      Serial.println("Song playback started");
       play(true);
     }
     return;
@@ -2650,9 +2654,7 @@ void initSamples() {
 
 void checkCrashReport() {
   // Print crash info to Serial
-  Serial.println("\n" __FILE__ " " __DATE__ " " __TIME__);
   if (CrashReport) {  // Check if CrashReport is non-empty before printing
-    Serial.print(CrashReport);
   }
 
   // Try to write crash info to SD card ERROR.txt
@@ -2696,7 +2698,6 @@ void checkCrashReport() {
       errorFile.println("========================================");
       errorFile.println();
       errorFile.close();
-      Serial.println("Crash report written to ERROR.txt");
     }
   }
 
@@ -2753,6 +2754,50 @@ void initEncoders() {
   }
 }
 
+FLASHMEM void loadColorSchemeAndBrightness() {
+  // Load color scheme from EEPROM
+  uint8_t savedColorScheme = EEPROM.read(EEPROM_DATA_START + 22);
+  if (savedColorScheme > 3) {
+    savedColorScheme = 0;
+    EEPROM.write(EEPROM_DATA_START + 22, 0);
+  }
+  
+  extern void applyColorScheme(uint8_t scheme);
+  extern volatile bool colorsUpdatedViaSerial;
+  currentColorScheme = savedColorScheme;
+  
+  // Load scheme 3 from file if selected
+  if (savedColorScheme == 3) {
+    bool scheme3Loaded = false;
+    if (SD.exists("scheme.txt")) {
+      File schemeFile = SD.open("scheme.txt", FILE_READ);
+      if (schemeFile && schemeFile.size() >= 90) {
+        uint8_t buf[90];
+        if (schemeFile.read(buf, 90) == 90) {
+          for (int i=0; i<15; i++) {
+            col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
+            col_base[i] = CRGB(buf[45 + i*3], buf[46 + i*3], buf[47 + i*3]);
+          }
+          scheme3Loaded = true;
+          colorsUpdatedViaSerial = true;
+        }
+      }
+      if (schemeFile) schemeFile.close();
+    }
+    if (!scheme3Loaded) applyColorScheme(0);
+  } else {
+    applyColorScheme(currentColorScheme);
+  }
+  
+  // Load brightness from EEPROM
+  uint8_t savedBrightness = EEPROM.read(EEPROM_DATA_START + 26);
+  if (savedBrightness < 3 || savedBrightness > 255) {
+    savedBrightness = 64;
+    EEPROM.write(EEPROM_DATA_START + 26, 64);
+  }
+  ledBrightness = savedBrightness;
+}
+
 void setup() {
   //Wire.begin();
   //Wire.setClock(10000); // Set to 400 kHz (standard speed)
@@ -2766,7 +2811,6 @@ void setup() {
   pendingSampleNotes.reserve(64);
   EEPROM.get(0, samplePackID);
   if (isnan(samplePackID) || samplePackID == 0 || samplePackID < 1) {  // Check for NaN, zero, or invalid values
-    Serial.print("NO SAMPLEPACK SET OR INVALID VALUE! Defaulting to 1");
     samplePackID = 1;
     EEPROM.put(0, samplePackID);  // Save the default to EEPROM
   }
@@ -2875,12 +2919,14 @@ void setup() {
   
 
   runAnimation();
-  
 
     if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
     checkCrashReport();
   }
   drawNoSD();
+  
+  // Load color scheme and brightness from EEPROM (after SD is initialized)
+  loadColorSchemeAndBrightness();
   //delay(500);
 
   
@@ -2958,7 +3004,6 @@ void setup() {
   // Check for reset flag file and trigger startNew() if it exists
   if (SD.exists("reset.dat")) {
     SD.remove("reset.dat");  // Delete the flag file
-    Serial.println("Reset flag file detected - triggering startNew()");
     startNew();  // Trigger factory reset
   }
 
@@ -4532,7 +4577,143 @@ void showDoRecord() {
   }
 }
 
+void checkSerialColors() {
+  // Check for color sync or brightness sync from web interface - works from any mode
+  if (Serial.available() >= 4) {
+    if (Serial.peek() == 'C') {
+      // Color sync: "COLR" header
+      if (Serial.available() >= 94) {
+        if (Serial.read() == 'C' && Serial.read() == 'O' && Serial.read() == 'L' && Serial.read() == 'R') {
+             uint8_t buf[90];
+             int bytesRead = Serial.readBytes(buf, 90);
+             
+             if (bytesRead != 90) {
+               return;
+             }
+             
+             // Update col[] array (Note ON colors) - bytes 0-44
+             for (int i=0; i<15; i++) {
+               col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
+             }
+             
+             // Update col_base[] array (Note OFF / Base colors) - bytes 45-89
+             for (int i=0; i<15; i++) {
+               int baseIdx = 45 + i*3;
+               col_base[i] = CRGB(buf[baseIdx], buf[baseIdx+1], buf[baseIdx+2]);
+             }
+             
+             // Set flag to invalidate color cache in drawBase()
+             colorsUpdatedViaSerial = true;
+             
+             // Debug: verify first and last colors of both arrays
+             
+             // Request menu redraw if in menu mode
+             extern void menuRequestFullRedraw();
+             menuRequestFullRedraw();
+             
+             // Colors are now updated and will be used on next display refresh
+        }
+      }
+    } else if (Serial.peek() == 'B') {
+      // Brightness sync: "BRIT" header
+      if (Serial.available() >= 5) {
+        if (Serial.read() == 'B' && Serial.read() == 'R' && Serial.read() == 'I' && Serial.read() == 'T') {
+             uint8_t brightness = Serial.read();
+             brightness = constrain(brightness, 3, 255);  // Clamp to valid range
+             
+             // Update brightness
+             ledBrightness = brightness;
+             
+             // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
+             EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
+             
+             // Update encoder position if in volume_bpm mode
+             extern Mode* currentMode;
+             extern Mode volume_bpm;
+             if (currentMode == &volume_bpm) {
+               // Update encoder[1] position to match new brightness
+               // ledBrightness = pos[1] + 3, so pos[1] = ledBrightness - 3
+               unsigned int brightnessPos = (brightness >= 3) ? (brightness - 3) : 0;
+               brightnessPos = constrain(brightnessPos, 0, 252);
+               currentMode->pos[1] = brightnessPos;
+               Encoder[1].writeCounter((int32_t)brightnessPos);
+             }
+             
+             
+             // Request menu redraw if in menu mode
+             extern void menuRequestFullRedraw();
+             menuRequestFullRedraw();
+        }
+      }
+    } else if (Serial.peek() == 'S') {
+      // Save scheme: "SAVE" header
+      if (Serial.available() >= 94) {
+        if (Serial.read() == 'S' && Serial.read() == 'A' && Serial.read() == 'V' && Serial.read() == 'E') {
+             uint8_t buf[90];
+             int bytesRead = Serial.readBytes(buf, 90);
+             
+             if (bytesRead != 90) {
+               return;
+             }
+             
+             // Save to scheme.txt on SD card
+             if (SD.exists("scheme.txt")) {
+               SD.remove("scheme.txt");
+             }
+             File schemeFile = SD.open("scheme.txt", FILE_WRITE);
+             if (schemeFile) {
+               // Write col[] array (Note ON colors) - 15 colors * 3 bytes = 45 bytes
+               for (int i=0; i<15; i++) {
+                 schemeFile.write(buf[i*3]);     // R
+                 schemeFile.write(buf[i*3+1]);   // G
+                 schemeFile.write(buf[i*3+2]);   // B
+               }
+               
+               // Write col_base[] array (Note OFF / Base colors) - 15 colors * 3 bytes = 45 bytes
+               for (int i=0; i<15; i++) {
+                 int baseIdx = 45 + i*3;
+                 schemeFile.write(buf[baseIdx]);     // R
+                 schemeFile.write(buf[baseIdx+1]);   // G
+                 schemeFile.write(buf[baseIdx+2]);   // B
+               }
+               
+               schemeFile.close();
+               
+               // Save scheme selection (3) to EEPROM
+               // Use EEPROM_DATA_START + 22 (slot 22 is available)
+               EEPROM.write(EEPROM_DATA_START + 22, 3);
+               
+               // Update current color scheme
+               currentColorScheme = 3;
+               
+               // Update runtime arrays with saved colors (scheme 3 is loaded from file, not from static arrays)
+               for (int i=0; i<15; i++) {
+                 col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
+               }
+               for (int i=0; i<15; i++) {
+                 int baseIdx = 45 + i*3;
+                 col_base[i] = CRGB(buf[baseIdx], buf[baseIdx+1], buf[baseIdx+2]);
+               }
+               
+               // Set flag to invalidate color cache
+               colorsUpdatedViaSerial = true;
+               
+               // Request menu redraw if in menu mode
+               extern void menuRequestFullRedraw();
+               menuRequestFullRedraw();
+               
+             } else {
+             }
+        }
+      }
+    } else {
+        Serial.read(); // Consume junk
+    }
+  }
+}
+
 void loop() {
+  checkSerialColors();
   updateExternalOneBlink();
   checkMidi();  // Process MIDI early in loop for lower latency
   // Debounced SD backup of EEPROM settings (settings.txt)
@@ -4555,8 +4736,6 @@ void loop() {
     beatCopy = isrDbgPatternFinishedBeat;
     isrDbgPatternFinished = false;
 #if DEBUG_PLAYBACK_SERIAL
-    Serial.print("Pattern finished at beat ");
-    Serial.println(beatCopy);
 #endif
   }
 
@@ -4566,8 +4745,6 @@ void loop() {
     lcCopy = isrDbgLoopCountValue;
     isrDbgLoopCountChanged = false;
 #if DEBUG_PLAYBACK_SERIAL
-    Serial.print("Loop count incremented: loopCount=");
-    Serial.println(lcCopy);
 #endif
   }
 
@@ -4932,7 +5109,6 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   // (Encoder functions are swapped: Encoder[2]=folder select, Encoder[1]=seekEnd + invert)
   if (currentMode == &set_Wav && pressed[1] == true && !isRecording) {
     pressed[1] = false;
-    Serial.println("Encoder 1 pressed in SET_WAV mode - reversing preview");
     reversePreviewSample();
   }
 
@@ -5402,10 +5578,6 @@ void play(bool fromStart) {
         GLOB.edit = pattern;
         GLOB.page = pattern;
         beat = (pattern - 1) * maxX + 1;  // Start from first beat of first pattern
-        Serial.print("Song: Starting at position ");
-        Serial.print(currentSongPosition + 1);
-        Serial.print(" -> pattern ");
-        Serial.println(pattern);
       } else {
         // No patterns defined, fall back to pattern mode behavior
         songModeActive = false;
@@ -5413,7 +5585,6 @@ void play(bool fromStart) {
         SMP_PATTERN_MODE = true;
         beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
         GLOB.page = GLOB.edit;
-        Serial.println("Song: No patterns defined, falling back to pattern mode");
       }
     } else if (SMP_PATTERN_MODE) {
       // In pattern mode, start from the current page's first beat
@@ -5436,8 +5607,6 @@ void play(bool fromStart) {
 
     // Reset loop count to 1 when starting playback (first loop)
     loopCount = 1;
-    Serial.print("Play started: loopCount reset to ");
-    Serial.println(loopCount);
 
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
@@ -6512,12 +6681,14 @@ FLASHMEM void updateLineOutLevel() {
 }
 
 void updateBrightness() {
-  // Original: ledBrightness = (currentMode->pos[1] * 10) + 4 - 50;
-  // This seems to map encoder pos[1] (range 6-25 for volume_bpm mode) to brightness
-  // If pos[1] is 6 -> 60+4-50 = 14
-  // If pos[1] is 25 -> 250+4-50 = 204
-  // Brightness for FastLED is 0-255.
-  ledBrightness = constrain((currentMode->pos[1] * 10) - 46, 10, 255);  // Simplified and constrained
+  // New formula: ledBrightness = pos[1] + 3
+  // Range: pos[1] from 0 to 252 gives ledBrightness from 3 to 255
+  uint8_t newBrightness = constrain(currentMode->pos[1] + 3, 3, 255);
+  if (newBrightness != ledBrightness) {
+    ledBrightness = newBrightness;
+    // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
+    EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
+  }
   // FastLED.setBrightness(ledBrightness); // Disabled: global brightness stays at 255, matrix is dimmed in software
 }
 
@@ -6824,7 +6995,6 @@ void showSamplePack() {
 
   // Validate samplepack value - ensure it's within valid range (0-99)
   if (SMP.pack < 0 || SMP.pack > 99) {
-    Serial.print("INVALID SAMPLEPACK VALUE! Defaulting to 0");
     SMP.pack = 0;
     currentMode->pos[3] = 0;
     Encoder[3].writeCounter((int32_t)0);
@@ -6844,16 +7014,11 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
 
   // Validate pack_id - ensure it's within valid range (0-99)
   if (pack_id < 0 || pack_id > 99) {
-    Serial.print("INVALID SAMPLEPACK ID! Defaulting to 0");
     pack_id = 0;
   }
 
   EEPROM.put(0, pack_id);  // Save current pack_id to EEPROM
   markSettingsBackupDirty();
-
-  Serial.println("=== Loading Samplepack ===");
-  Serial.print("Pack ID: ");
-  Serial.println(pack_id);
 
   if (!preserveSp0Custom) {
     // Manual/intentional load: reset SP0 overrides so the chosen pack overwrites everything.
@@ -6862,7 +7027,6 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
     }
     saveSp0StateToEEPROM();
 
-    Serial.println("--- Loading Regular Samplepack (overwrite) ---");
     for (unsigned int z = 1; z < maxFiles; z++) {
       if (!intro) {
         // wave = sample
@@ -6875,17 +7039,8 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
     }
   } else {
     // Startup load: preserve SP0 custom voices, then load the pack for the rest.
-    Serial.println("--- Checking SP0 Active Voices ---");
     for (unsigned int z = 1; z < maxFiles; z++) {
-      Serial.print("Voice ");
-      Serial.print(z);
-      Serial.print(": sp0Active = ");
-      Serial.println(SMP.sp0Active[z] ? "TRUE" : "FALSE");
-
       if (SMP.sp0Active[z]) {
-        Serial.print(">>> Loading voice ");
-        Serial.print(z);
-        Serial.println(" from SAMPLEPACK 0 <<<");
 
         if (!intro) {
           // wave = sample
@@ -6898,13 +7053,8 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
       }
     }
 
-    Serial.println("--- Loading Regular Samplepack ---");
     for (unsigned int z = 1; z < maxFiles; z++) {
       if (!SMP.sp0Active[z]) {  // Only load if NOT using samplepack 0
-        Serial.print(">>> Loading voice ");
-        Serial.print(z);
-        Serial.print(" from Pack ");
-        Serial.println(pack_id);
 
         if (!intro) {
           // wave = sample
@@ -6915,13 +7065,9 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
         drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
         loadSample(pack_id, z);
       } else {
-        Serial.print("--- Skipping voice ");
-        Serial.print(z);
-        Serial.println(" (using SP0)");
       }
     }
   }
-  Serial.println("=== Samplepack Loading Complete ===");
   // char OUTPUTf[50]; // This seems unused here
   // sprintf(OUTPUTf, "%u/%u.wav", pack_id, 1);
   switchMode(&draw);  // Switch back to draw mode after loading

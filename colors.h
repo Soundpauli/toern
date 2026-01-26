@@ -56,7 +56,8 @@ const CRGB col_Folder[] = {
 
 
 
-const CRGB col[] = {
+// Color scheme 0: Default (original)
+static const CRGB col_0[] = {
   CRGB(0, 0, 0),
   CRGB(255, 0, 0),      // Dark Red
   CRGB(255, 69, 0),     // Burnt Orange
@@ -74,9 +75,49 @@ const CRGB col[] = {
   CRGB(255, 50, 50)  // s1
 };
 
+// Color scheme 1: Strong hue gradient (voices 1-8), fixed blacks/white (9-12), warm accents (13-14)
+static const CRGB col_1[] = {
+  CRGB(0, 0, 0),
+  CRGB(0, 0, 180),     // Deep Blue
+  CRGB(0, 60, 220),    // Blue
+  CRGB(0, 180, 255),   // Cyan
+  CRGB(0, 200, 120),   // Teal-Green
+  CRGB(0, 220, 0),     // Green
+  CRGB(120, 255, 0),   // Yellow-Green
+  CRGB(255, 220, 0),   // Yellow
+  CRGB(255, 140, 0),   // Orange
+  CRGB(0, 0, 0),       // ch9 black
+  CRGB(0, 0, 0),       // ch10 black
+  CRGB(255, 255, 255), // ch11 white
+  CRGB(0, 0, 0),       // ch12 black
+  CRGB(255, 40, 40),   // Red (ch13)
+  CRGB(255, 0, 180)    // Magenta (ch14)
+};
 
-// Normal: 70% brightness
-const CRGB col_base[] = {
+// Color scheme 2: High contrast Red/Violet theme
+static const CRGB col_2[] = {
+  CRGB(0, 0, 0),
+  CRGB(0, 35, 209),  // ch1
+  CRGB(120, 0, 255),  // ch2
+  CRGB(180, 0, 220),  // ch3
+  CRGB(255, 102, 191),  // ch4
+  CRGB(255, 0, 80),  // ch5
+  CRGB(255, 54, 54),  // ch6
+  CRGB(255, 106, 0),  // ch7
+  CRGB(255, 217, 0),  // ch8
+  CRGB(0, 0, 0),  // ch9
+  CRGB(0, 0, 0),  // ch10
+  CRGB(120, 120, 120),  // ch11 white
+  CRGB(0, 0, 0),  // ch12
+  CRGB(184, 0, 73),  // ch13
+  CRGB(135, 0, 0),  // ch14
+};
+
+// Runtime color arrays (copied from selected scheme)
+CRGB col[15];
+
+// Normal: 70% brightness - Color scheme 0: Default (original)
+static const CRGB col_base_0[] = {
   CRGB(0, 0, 0),
   CRGB(5, 0, 0),     // Dark Red
   CRGB(18, 4, 0),    // Orange
@@ -93,6 +134,80 @@ const CRGB col_base[] = {
   CRGB(0, 10, 4),  //s2
   CRGB(18, 4, 4)   // s1
 };
+
+// Normal: 70% brightness - Color scheme 1: Blue-ish
+static const CRGB col_base_1[] = {
+  CRGB(0, 0, 0),
+  CRGB(0, 0, 4),   // Deep Blue
+  CRGB(0, 2, 6),   // Blue
+  CRGB(0, 6, 7),   // Cyan
+  CRGB(0, 6, 3),   // Teal-Green
+  CRGB(0, 6, 0),   // Green
+  CRGB(3, 6, 0),   // Yellow-Green
+  CRGB(6, 5, 0),   // Yellow
+  CRGB(6, 3, 0),   // Orange
+  CRGB(0, 0, 0),   // ch9 black
+  CRGB(0, 0, 0),   // ch10 black
+  CRGB(6, 6, 6),   // ch11 white (dim)
+  CRGB(0, 0, 0),   // ch12 black
+  CRGB(6, 1, 1),   // Red
+  CRGB(6, 0, 4)    // Magenta
+};
+
+// Normal: 70% brightness - Color scheme 2: High contrast Red/Violet
+static const CRGB col_base_2[] = {
+  CRGB(0, 0, 0),
+  CRGB(2, 0, 6),   // Purple-Blue
+  CRGB(3, 0, 6),   // Violet
+  CRGB(4, 0, 5),   // Magenta-Violet
+  CRGB(6, 0, 4),   // Magenta-Red
+  CRGB(6, 0, 2),   // Pink-Red
+  CRGB(6, 0, 0),   // Red
+  CRGB(6, 1, 0),   // Red-Orange
+  CRGB(6, 2, 0),   // Deep Orange
+  CRGB(0, 0, 0),   // ch9 black
+  CRGB(0, 0, 0),   // ch10 black
+  CRGB(6, 6, 6),   // ch11 white (dim)
+  CRGB(0, 0, 0),   // ch12 black
+  CRGB(7, 6, 5),   // Warm White
+  CRGB(4, 5, 7)    // Cool White
+};
+
+// Runtime base color arrays (copied from selected scheme)
+CRGB col_base[15];
+
+// Global variable to track current color scheme (0=default, 1=blue-ish, 2=whitish)
+extern uint8_t currentColorScheme;
+
+// Flag to invalidate color cache when colors are updated via serial
+extern volatile bool colorsUpdatedViaSerial;
+
+// Function to copy selected color scheme to runtime arrays
+inline void applyColorScheme(uint8_t scheme) {
+  const CRGB* src_col;
+  const CRGB* src_col_base;
+  
+  switch (scheme) {
+    case 1:
+      src_col = col_1;
+      src_col_base = col_base_1;
+      break;
+    case 2:
+      src_col = col_2;
+      src_col_base = col_base_2;
+      break;
+    default:
+      src_col = col_0;
+      src_col_base = col_base_0;
+      break;
+  }
+  
+  // Copy arrays
+  for (int i = 0; i < 15; i++) {
+    col[i] = src_col[i];
+    col_base[i] = src_col_base[i];
+  }
+}
 
 
 uint32_t CRGBToUint32(CRGB color) {

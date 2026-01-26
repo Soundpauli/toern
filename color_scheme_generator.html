@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toern Color Scheme Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding: 15px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            display: flex;
+            gap: 0;
+            align-items: flex-start;
+        }
+        
+        .left-panel {
+            flex: 0 0 50%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border-right: 3px solid #333;
+            padding-right: 20px;
+        }
+        
+        .right-panel {
+            flex: 0 0 50%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #141414;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        .controls-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 150px;
+        }
+        
+        label {
+            font-size: 11px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 500;
+        }
+        
+        button {
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border: 1px solid #3a3a3a;
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        button:hover {
+            background: #353535;
+            border-color: #4a4a4a;
+            transform: translateY(-1px);
+        }
+        
+        button:active {
+            background: #252525;
+            transform: translateY(0);
+        }
+        
+        .slider-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 300px;
+        }
+        
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #666;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #888;
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #666;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+        
+        input[type="range"]::-moz-range-thumb:hover {
+            background: #888;
+        }
+        
+        .slider-value {
+            min-width: 45px;
+            text-align: right;
+            color: #bbb;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        
+        .matrix-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .matrix-wrapper {
+            background: #0a0a0a;
+            padding: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 60px rgba(0, 0, 0, 0.6);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .matrix-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+            background: rgba(0, 0, 0, 0);
+            backdrop-filter: blur(0px);
+            transition: all 0.2s;
+        }
+        
+        .matrix-title {
+            text-align: left;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: #bbb;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            position: relative;
+            z-index: 60;
+        }
+        
+        .matrix {
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            gap: 25px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 8px;
+            background: #000;
+            position: relative;
+        }
+        
+        .preview-matrix {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 25px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 8px;
+            background: #000;
+            position: relative;
+        }
+        
+        .led {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            background: #000;
+            cursor: pointer;
+            transition: transform 0.15s;
+            position: relative;
+        }
+        
+        .preview-led {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            background: #000;
+            position: relative;
+        }
+        
+        .led::before, .preview-led::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30%;
+            height: 30%;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            filter: blur(3px);
+            opacity: var(--after-opacity, 0);
+            transition: opacity 0.1s;
+        }
+        
+        .led:hover {
+            transform: scale(1.3);
+            z-index: 100;
+            border-color: #fff;
+        }
+        
+        .export-section {
+            background: #141414;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        .export-title {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #bbb;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        
+        .code-output {
+            background: #000;
+            color: #0f0;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .color-editor-section {
+            background: #141414;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .color-editor-title {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #bbb;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        
+        .color-editor-group {
+            margin-bottom: 20px;
+        }
+        
+        .color-editor-group-title {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .color-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            padding: 8px;
+            background: #0f0f0f;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .color-item:hover {
+            background: #1a1a1a;
+        }
+        
+        .color-item.selected {
+            background: #2a2a2a;
+            border: 1px solid #4a4a4a;
+        }
+        
+        .color-item-label {
+            min-width: 50px;
+            font-size: 11px;
+            color: #aaa;
+            font-weight: 500;
+        }
+        
+        .color-item-preview {
+            width: 40px;
+            height: 40px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            flex-shrink: 0;
+        }
+        
+        .shared-sliders {
+            background: #141414;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+        
+        .shared-sliders-title {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .shared-sliders-selected {
+            font-size: 11px;
+            color: #bbb;
+            margin-bottom: 12px;
+            min-height: 16px;
+        }
+        
+        .shared-sliders-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .shared-color-picker {
+            width: 60px;
+            height: 60px;
+            border: 2px solid #333;
+            border-radius: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        
+        .shared-color-picker:hover {
+            border-color: #555;
+        }
+        
+        .shared-sliders-rows {
+            flex: 1;
+        }
+        
+        .shared-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .shared-slider-row label {
+            min-width: 30px;
+            font-size: 11px;
+            color: #aaa;
+            font-weight: 500;
+        }
+        
+        .shared-slider-row input[type="range"] {
+            flex: 1;
+            height: 6px;
+        }
+        
+        .shared-slider-row .slider-value {
+            min-width: 45px;
+            text-align: right;
+            font-size: 12px;
+            color: #bbb;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <div class="matrix-container">
+                <div class="matrix-wrapper">
+                    <div class="matrix-title">Note ON (col[])</div>
+                    <div class="matrix-overlay" id="overlayCol"></div>
+                    <div class="matrix" id="matrixCol"></div>
+                </div>
+                
+                <div class="matrix-wrapper">
+                    <div class="matrix-title">Note OFF / Base (col_base[])</div>
+                    <div class="matrix-overlay" id="overlayBase"></div>
+                    <div class="matrix" id="matrixColBase"></div>
+                </div>
+            </div>
+            
+            <div class="color-editor-section">
+                <div class="color-editor-title">Color Editor</div>
+                
+                <div class="shared-sliders">
+                    <div class="shared-sliders-title">RGB Sliders</div>
+                    <div class="shared-sliders-selected" id="selectedColorInfo">Click a color to edit</div>
+                    <div class="shared-sliders-controls">
+                        <input type="color" id="sharedColorPicker" class="shared-color-picker" style="display: none;" oninput="updateFromSharedColorPicker()">
+                        <div class="shared-sliders-rows">
+                            <div class="shared-slider-row">
+                                <label>R:</label>
+                                <input type="range" id="sharedRSlider" min="0" max="255" value="0" oninput="updateFromSharedSliders()">
+                                <span class="slider-value" id="sharedRValue">0</span>
+                            </div>
+                            <div class="shared-slider-row">
+                                <label>G:</label>
+                                <input type="range" id="sharedGSlider" min="0" max="255" value="0" oninput="updateFromSharedSliders()">
+                                <span class="slider-value" id="sharedGValue">0</span>
+                            </div>
+                            <div class="shared-slider-row">
+                                <label>B:</label>
+                                <input type="range" id="sharedBSlider" min="0" max="255" value="0" oninput="updateFromSharedSliders()">
+                                <span class="slider-value" id="sharedBValue">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="controls-row">
+                    <div class="control-group">
+                        <label>Presets</label>
+                        <button onclick="resetToDefault()">Default (Original)</button>
+                        <button onclick="loadScheme1()">Scheme 1 (Blue)</button>
+                        <button onclick="loadScheme2()">Scheme 2 (Red/Viol)</button>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Device Link</label>
+                        <button id="connectButton" onclick="connectSerial()">Connect Device</button>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
+                            <input type="checkbox" id="liveSync" disabled>
+                            <label for="liveSync" style="margin:0; cursor: pointer; color: #bbb;">Live Sync</label>
+                        </div>
+                        <div style="font-size: 10px; color: #666; margin-top: 5px;">Requires updated firmware</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Save to Device</label>
+                        <button id="saveButton" onclick="saveSchemeToDevice()" disabled>Save as Scheme 3</button>
+                        <div style="font-size: 10px; color: #666; margin-top: 5px;">Saves to scheme.txt</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Export</label>
+                        <button onclick="exportCode()">Export Arduino Code</button>
+                    </div>
+                </div>
+                
+                <div class="slider-controls">
+                    <div class="slider-group">
+                        <label>Hardware Brightness</label>
+                        <div class="slider-container">
+                            <input type="range" id="brightnessSlider" min="3" max="255" value="64" oninput="updateSimulation(); sendBrightness()">
+                            <span class="slider-value" id="brightnessValue">64</span>
+                        </div>
+                    </div>
+                    
+                    <div class="slider-group">
+                        <label>Low End Boost (Simulate LED Curve)</label>
+                        <div class="slider-container">
+                            <input type="range" id="lowEndBoostSlider" min="0" max="100" value="84" oninput="updateSimulation()">
+                            <span class="slider-value" id="lowEndBoostValue">84%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="slider-group">
+                        <label>Diffuser Opacity</label>
+                        <div class="slider-container">
+                            <input type="range" id="diffuserOpacitySlider" min="0" max="95" value="0" oninput="updateSimulation()">
+                            <span class="slider-value" id="diffuserOpacityValue">0%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="slider-group">
+                        <label>Diffuser Blur</label>
+                        <div class="slider-container">
+                            <input type="range" id="diffuserBlurSlider" min="0" max="20" value="4" oninput="updateSimulation()">
+                            <span class="slider-value" id="diffuserBlurValue">4px</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="export-section">
+                <div class="export-title">Arduino Code Output:</div>
+                <div class="code-output" id="codeOutput">Click "Export Arduino Code" to generate code...</div>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <div class="matrix-wrapper">
+                <div class="matrix-title">Combined Preview (Simulation)</div>
+                <div class="matrix-overlay" id="overlayPreview"></div>
+                <div class="preview-matrix" id="matrixPreview"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Updated Default Scheme (col_0) from colors.h
+        const defaultCol = [
+            [0, 0, 0],      [255, 0, 0],    [255, 69, 0],   [255, 255, 0],  [0, 200, 0],
+            [0, 255, 255], [0, 0, 255],    [255, 0, 255],  [220, 100, 100], [0, 0, 0],
+            [0, 0, 0],     [120, 120, 120], [0, 0, 0],     [0, 255, 70],   [255, 50, 50]
+        ];
+        
+        // Accurate Base Scheme (col_base_0) from colors.h
+        const defaultColBase = [
+            [0, 0, 0],      [5, 0, 0],      [18, 4, 0],    [10, 10, 0],   [0, 4, 0],
+            [0, 5, 5],     [0, 0, 4],      [15, 1, 4],    [22, 12, 16],  [0, 0, 0],
+            [0, 0, 0],     [6, 6, 6],      [0, 0, 0],     [0, 10, 4],    [18, 4, 4]
+        ];
+        
+        const scheme1Col = [
+            [0, 0, 0],      [0, 0, 180],    [0, 60, 220],   [0, 180, 255],  [0, 200, 120],
+            [0, 220, 0],   [120, 255, 0],  [255, 220, 0],  [255, 140, 0],  [0, 0, 0],
+            [0, 0, 0],     [255, 255, 255], [0, 0, 0],     [255, 40, 40],  [255, 0, 180]
+        ];
+        
+        const scheme1ColBase = [
+            [0, 0, 0],      [0, 0, 4],      [0, 2, 6],      [0, 6, 7],      [0, 6, 3],
+            [0, 6, 0],     [3, 6, 0],      [6, 5, 0],      [6, 3, 0],      [0, 0, 0],
+            [0, 0, 0],     [6, 6, 6],      [0, 0, 0],     [6, 1, 1],      [6, 0, 4]
+        ];
+        
+        const scheme2Col = [
+            [0, 0, 0],      [80, 0, 255],   [120, 0, 255],  [180, 0, 220],  [255, 0, 150],
+            [255, 0, 80],  [255, 0, 0],    [255, 50, 0],   [255, 100, 0],  [0, 0, 0],
+            [0, 0, 0],     [255, 255, 255], [0, 0, 0],     [255, 220, 180], [150, 200, 255]
+        ];
+        
+        const scheme2ColBase = [
+            [0, 0, 0],      [2, 0, 6],      [3, 0, 6],      [4, 0, 5],      [6, 0, 4],
+            [6, 0, 2],     [6, 0, 0],      [6, 1, 0],      [6, 2, 0],      [0, 0, 0],
+            [0, 0, 0],     [6, 6, 6],      [0, 0, 0],     [7, 6, 5],      [4, 5, 7]
+        ];
+        
+        let currentCol = JSON.parse(JSON.stringify(defaultCol));
+        let currentColBase = JSON.parse(JSON.stringify(defaultColBase));
+        let selectedColorIndex = null;
+        let selectedColorIsBase = false;
+        
+        // Simulation state
+        let currentBrightness = 64;  // Hardware brightness (3-255), default to 64 for color configuration
+        let lowEndBoost = 84;
+        let diffuserOpacity = 0;
+        let diffuserBlur = 4;
+        
+        function rgbToHex(r, g, b) {
+            return "#" + [r, g, b].map(x => {
+                const hex = Math.round(x).toString(16);
+                return hex.length === 1 ? "0" + hex : hex;
+            }).join("");
+        }
+        
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+        
+        function rgbToHsv(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, v = max;
+            const d = max - min;
+            s = max === 0 ? 0 : d / max;
+            if (max === min) {
+                h = 0;
+            } else {
+                switch (max) {
+                    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                    case g: h = ((b - r) / d + 2) / 6; break;
+                    case b: h = ((r - g) / d + 4) / 6; break;
+                }
+            }
+            return { h: h * 360, s: s * 100, v: v * 100 };
+        }
+        
+        function hsvToRgb(h, s, v) {
+            h /= 360; s /= 100; v /= 100;
+            const i = Math.floor(h * 6);
+            const f = h * 6 - i;
+            const p = v * (1 - s);
+            const q = v * (1 - f * s);
+            const t = v * (1 - (1 - f) * s);
+            let r, g, b;
+            switch (i % 6) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                case 5: r = v; g = p; b = q; break;
+            }
+            return {
+                r: Math.round(r * 255),
+                g: Math.round(g * 255),
+                b: Math.round(b * 255)
+            };
+        }
+        
+        function applyBrightnessAndGamma(r, g, b, brightness) {
+            const factor = (brightness / 100) * 4; // 4x brightness
+            let br = r * factor;
+            let bg = g * factor;
+            let bb = b * factor;
+            
+            // Saturation Boost (Vividness)
+            if (br > 1 || bg > 1 || bb > 1) {
+                const avg = (br + bg + bb) / 3;
+                br = avg + (br - avg) * 1.3;
+                bg = avg + (bg - avg) * 1.3;
+                bb = avg + (bb - avg) * 1.3;
+                br = Math.max(0, br);
+                bg = Math.max(0, bg);
+                bb = Math.max(0, bb);
+            }
+            
+            // "Low End Boost" simulation:
+            const boostFactor = lowEndBoost / 100;
+            
+            // Simple non-linear curve that lifts shadows
+            if (br > 0) br = Math.pow(br / 255, 1.0 - (boostFactor * 0.6)) * 255; 
+            if (bg > 0) bg = Math.pow(bg / 255, 1.0 - (boostFactor * 0.6)) * 255;
+            if (bb > 0) bb = Math.pow(bb / 255, 1.0 - (boostFactor * 0.6)) * 255;
+            
+            // Additional floor lift for very low non-zero values if boost is high
+            if (boostFactor > 0.2) {
+                const floor = boostFactor * 20; 
+                if (br > 0.5) br = Math.max(br, floor);
+                if (bg > 0.5) bg = Math.max(bg, floor);
+                if (bb > 0.5) bb = Math.max(bb, floor);
+            }
+
+            // --- HARDWARE SIMULATION: RED SHIFT AT LOW LEVELS ---
+            // Simulates that Red LEDs have lower forward voltage/turn-on threshold.
+            // Green and Blue often "die out" faster at very low PWM (e.g. 1-3).
+            // Example: Orange (5, 2, 0) -> Green component (2) dies -> (5, 0, 0) Red.
+            
+            // Apply a "dead zone" penalty to Green and Blue at low levels
+            if (bg < 4) bg = bg * 0.2; // Severely dampen Green if very low
+            if (bb < 4) bb = bb * 0.2; // Severely dampen Blue if very low
+            
+            // Red stays visible even at low levels (standard LED behavior)
+
+            // Return unclamped values to allow for correct hue mapping
+            return [br, bg, bb];
+        }
+        
+        function updateSimulation() {
+            currentBrightness = parseInt(document.getElementById('brightnessSlider').value);
+            lowEndBoost = parseInt(document.getElementById('lowEndBoostSlider').value);
+            diffuserOpacity = parseInt(document.getElementById('diffuserOpacitySlider').value);
+            diffuserBlur = parseInt(document.getElementById('diffuserBlurSlider').value);
+            
+            document.getElementById('brightnessValue').textContent = currentBrightness;
+            document.getElementById('lowEndBoostValue').textContent = lowEndBoost + '%';
+            document.getElementById('diffuserOpacityValue').textContent = diffuserOpacity + '%';
+            document.getElementById('diffuserBlurValue').textContent = diffuserBlur + 'px';
+            
+            const overlayStyle = `rgba(0, 0, 0, ${diffuserOpacity / 100})`;
+            const blurStyle = `blur(${diffuserBlur}px)`;
+            
+            const overlays = document.querySelectorAll('.matrix-overlay');
+            overlays.forEach(el => {
+                el.style.backgroundColor = overlayStyle;
+                el.style.backdropFilter = blurStyle;
+                el.style.webkitBackdropFilter = blurStyle;
+            });
+            
+            renderMatrix();
+            renderPreviewMatrix();
+        }
+        
+        function createLEDStyle(r, g, b) {
+            // Convert hardware brightness (3-255) to percentage (0-100) for simulation
+            const brightnessPercent = (currentBrightness / 255) * 100;
+            const [rawR, rawG, rawB] = applyBrightnessAndGamma(r, g, b, brightnessPercent);
+            const isBlack = (r+g+b) < 1;
+            
+            let style = {};
+            
+            // Normalize high-brightness values to 0-255 range while preserving Hue
+            // Instead of clamping each channel (which distorts color), we scale down if max > 255
+            const maxVal = Math.max(rawR, rawG, rawB);
+            let simR, simG, simB;
+            
+            if (maxVal > 255) {
+                const scale = 255 / maxVal;
+                simR = rawR * scale;
+                simG = rawG * scale;
+                simB = rawB * scale;
+            } else {
+                simR = rawR;
+                simG = rawG;
+                simB = rawB;
+            }
+            
+            style.backgroundColor = isBlack ? '#000' : `rgb(${Math.round(simR)}, ${Math.round(simG)}, ${Math.round(simB)})`;
+            
+            if (!isBlack) {
+                const totalBright = (rawR + rawG + rawB) / 3;
+                
+                // Bloom strength depends on brightness and diffuser
+                // Use raw brightness (can be > 255) for glow size/intensity
+                const spread = 5 + (totalBright / 15) + (diffuserBlur * 2);
+                
+                // For the glow color, we can allow a bit of saturation loss (whitening) for very bright lights
+                // to simulate camera/eye saturation, but let's keep it colorful as requested.
+                // We'll use the normalized color for the glow.
+                
+                // Alpha can go up to 1 for very bright lights
+                const alpha = Math.min(1, (totalBright / 100));
+                
+                style.boxShadow = `0 0 ${spread}px rgba(${Math.round(simR)}, ${Math.round(simG)}, ${Math.round(simB)}, ${alpha})`;
+                
+                // Hotspot center: reduced effect
+                // Only for extremely bright notes
+                const isHighBrightness = totalBright > 200; 
+                style.afterOpacity = isHighBrightness ? '0.8' : '0';
+            } else {
+                style.boxShadow = 'none';
+                style.afterOpacity = '0';
+            }
+            return style;
+        }
+
+        function createLED(index, isBase) {
+            const led = document.createElement('div');
+            led.className = 'led';
+            led.dataset.index = index;
+            led.dataset.isBase = isBase;
+            
+            const colors = isBase ? currentColBase : currentCol;
+            const [r, g, b] = colors[index] || [0, 0, 0];
+            
+            const style = createLEDStyle(r, g, b);
+            
+            led.style.backgroundColor = style.backgroundColor;
+            led.style.boxShadow = style.boxShadow;
+            led.style.setProperty('--after-opacity', style.afterOpacity);
+            
+            led.addEventListener('click', () => {
+                // Select the color
+                selectColor(index, isBase);
+            });
+            
+            led.title = `Index ${index}\nRGB: ${r}, ${g}, ${b}`;
+            
+            return led;
+        }
+        
+        function createPreviewLED(row, step) {
+            const led = document.createElement('div');
+            led.className = 'preview-led';
+            
+            // Map row (0-14) to channel
+            // Pattern: some steps are active (note), others are inactive (base)
+            // Just a simple visual pattern
+            const channel = row; 
+            const isActive = (step + row) % 4 === 0; // Diagonal pattern
+            
+            const colors = isActive ? currentCol : currentColBase;
+            const [r, g, b] = colors[channel] || [0, 0, 0];
+            
+            const style = createLEDStyle(r, g, b);
+            
+            led.style.backgroundColor = style.backgroundColor;
+            led.style.boxShadow = style.boxShadow;
+            led.style.setProperty('--after-opacity', style.afterOpacity);
+            
+            // No borders
+            
+            return led;
+        }
+        
+        function renderMatrix() {
+            const matrixCol = document.getElementById('matrixCol');
+            const matrixColBase = document.getElementById('matrixColBase');
+            
+            matrixCol.innerHTML = '';
+            matrixColBase.innerHTML = '';
+            
+            for (let i = 0; i < 15; i++) {
+                matrixCol.appendChild(createLED(i, false));
+                matrixColBase.appendChild(createLED(i, true));
+            }
+        }
+        
+        function renderPreviewMatrix() {
+            const preview = document.getElementById('matrixPreview');
+            preview.innerHTML = '';
+            
+            // 15 rows (channels), 16 steps - Rotated 180 degrees
+            // Reverse both row and column order
+            for (let row = 14; row >= 0; row--) {
+                for (let step = 15; step >= 0; step--) {
+                    preview.appendChild(createPreviewLED(row, step));
+                }
+            }
+        }
+        
+        function selectColor(index, isBase) {
+            selectedColorIndex = index;
+            selectedColorIsBase = isBase;
+            
+            // Update shared sliders and color picker
+            const colors = isBase ? currentColBase : currentCol;
+            const [r, g, b] = colors[index] || [0, 0, 0];
+            const arrayName = isBase ? 'col_base[]' : 'col[]';
+            
+            console.log(`Selected ${arrayName}[${index}] = [${r}, ${g}, ${b}]`);
+            
+            updateSharedSliders(r, g, b);
+            
+            // Show and update shared color picker
+            const sharedColorPicker = document.getElementById('sharedColorPicker');
+            sharedColorPicker.style.display = 'block';
+            sharedColorPicker.value = rgbToHex(r, g, b);
+            
+            // Update info text
+            const infoText = isBase ? `col_base[${index}]` : `col[${index}]`;
+            document.getElementById('selectedColorInfo').textContent = `Selected: ${infoText} (R:${r} G:${g} B:${b})`;
+        }
+        
+        function updateSharedSliders(r, g, b) {
+            document.getElementById('sharedRSlider').value = r;
+            document.getElementById('sharedGSlider').value = g;
+            document.getElementById('sharedBSlider').value = b;
+            document.getElementById('sharedRValue').textContent = r;
+            document.getElementById('sharedGValue').textContent = g;
+            document.getElementById('sharedBValue').textContent = b;
+        }
+        
+        function updateFromSharedSliders() {
+            if (selectedColorIndex === null) return;
+            
+            const r = parseInt(document.getElementById('sharedRSlider').value);
+            const g = parseInt(document.getElementById('sharedGSlider').value);
+            const b = parseInt(document.getElementById('sharedBSlider').value);
+            
+            document.getElementById('sharedRValue').textContent = r;
+            document.getElementById('sharedGValue').textContent = g;
+            document.getElementById('sharedBValue').textContent = b;
+            
+            // Update the correct array based on selection
+            const colors = selectedColorIsBase ? currentColBase : currentCol;
+            const arrayName = selectedColorIsBase ? 'col_base[]' : 'col[]';
+            colors[selectedColorIndex] = [r, g, b];
+            
+            console.log(`Updated ${arrayName}[${selectedColorIndex}] = [${r}, ${g}, ${b}]`);
+            
+            // Update shared color picker
+            const sharedColorPicker = document.getElementById('sharedColorPicker');
+            sharedColorPicker.value = rgbToHex(r, g, b);
+            
+            // Update info text
+            const infoText = selectedColorIsBase ? `col_base[${selectedColorIndex}]` : `col[${selectedColorIndex}]`;
+            document.getElementById('selectedColorInfo').textContent = `Selected: ${infoText} (R:${r} G:${g} B:${b})`;
+            
+            updateColorItem(selectedColorIndex, selectedColorIsBase);
+        }
+        
+        function updateFromSharedColorPicker() {
+            if (selectedColorIndex === null) return;
+            
+            const sharedColorPicker = document.getElementById('sharedColorPicker');
+            const rgb = hexToRgb(sharedColorPicker.value);
+            
+            const colors = selectedColorIsBase ? currentColBase : currentCol;
+            colors[selectedColorIndex] = [rgb.r, rgb.g, rgb.b];
+            
+            // Update sliders to match color picker
+            updateSharedSliders(rgb.r, rgb.g, rgb.b);
+            
+            // Update info text
+            const infoText = selectedColorIsBase ? `col_base[${selectedColorIndex}]` : `col[${selectedColorIndex}]`;
+            document.getElementById('selectedColorInfo').textContent = `Selected: ${infoText} (R:${rgb.r} G:${rgb.g} B:${rgb.b})`;
+            
+            updateColorItem(selectedColorIndex, selectedColorIsBase);
+        }
+        
+        function updateColorItem(index, isBase) {
+            const colors = isBase ? currentColBase : currentCol;
+            const [r, g, b] = colors[index] || [0, 0, 0];
+            const hex = rgbToHex(r, g, b);
+            
+            // If this is the selected color, update shared sliders, color picker, and info
+            if (selectedColorIndex === index && selectedColorIsBase === isBase) {
+                updateSharedSliders(r, g, b);
+                const sharedColorPicker = document.getElementById('sharedColorPicker');
+                sharedColorPicker.value = hex;
+                const infoText = isBase ? `col_base[${index}]` : `col[${index}]`;
+                document.getElementById('selectedColorInfo').textContent = `Selected: ${infoText} (R:${r} G:${g} B:${b})`;
+            }
+            
+            renderMatrix();
+            renderPreviewMatrix();
+            trySync();
+        }
+        
+        function resetToDefault() {
+            currentCol = JSON.parse(JSON.stringify(defaultCol));
+            currentColBase = JSON.parse(JSON.stringify(defaultColBase));
+            updateSimulation();
+            trySync();
+        }
+        
+        function loadScheme1() {
+            currentCol = JSON.parse(JSON.stringify(scheme1Col));
+            currentColBase = JSON.parse(JSON.stringify(scheme1ColBase));
+            updateSimulation();
+            trySync();
+        }
+        
+        function loadScheme2() {
+            currentCol = JSON.parse(JSON.stringify(scheme2Col));
+            currentColBase = JSON.parse(JSON.stringify(scheme2ColBase));
+            updateSimulation();
+            trySync();
+        }
+        
+        function exportCode() {
+            let code = "// Color scheme 4 - Generated by Color Scheme Generator\n";
+            code += "static const CRGB col_4[] = {\n";
+            
+            for (let i = 0; i < 15; i++) {
+                const [r, g, b] = currentCol[i];
+                const comment = i === 0 ? "  CRGB(0, 0, 0)," : 
+                               i === 9 ? "  CRGB(0, 0, 0),  // ch9" :
+                               i === 10 ? "  CRGB(0, 0, 0),  // ch10" :
+                               i === 11 ? "  CRGB(120, 120, 120),  // ch11 white" :
+                               i === 12 ? "  CRGB(0, 0, 0),  // ch12" :
+                               `  CRGB(${r}, ${g}, ${b}),  // ch${i}`;
+                code += comment + "\n";
+            }
+            
+            code += "};\n\n";
+            code += "// Normal: 70% brightness - Color scheme 4\n";
+            code += "static const CRGB col_base_4[] = {\n";
+            
+            for (let i = 0; i < 15; i++) {
+                const [r, g, b] = currentColBase[i];
+                const comment = i === 0 ? "  CRGB(0, 0, 0)," : 
+                               i === 9 ? "  CRGB(0, 0, 0),  // ch9" :
+                               i === 10 ? "  CRGB(0, 0, 0),  // ch10" :
+                               i === 11 ? "  CRGB(6, 6, 6),  // ch11 white (dim)" :
+                               i === 12 ? "  CRGB(0, 0, 0),  // ch12" :
+                               `  CRGB(${r}, ${g}, ${b}),  // ch${i}`;
+                code += comment + "\n";
+            }
+            
+            code += "};\n";
+            
+            document.getElementById('codeOutput').textContent = code;
+        }
+        
+        // --- Web Serial Logic ---
+        let port;
+        let writer;
+        let isConnected = false;
+        
+        async function connectSerial() {
+            if (!navigator.serial) {
+                alert("Web Serial API not supported in this browser. Try Chrome or Edge.");
+                return;
+            }
+            
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                writer = port.writable.getWriter();
+                isConnected = true;
+                
+                document.getElementById('connectButton').textContent = "Connected";
+                document.getElementById('connectButton').style.background = "#006600";
+                document.getElementById('liveSync').disabled = false;
+                document.getElementById('liveSync').checked = true;
+                document.getElementById('saveButton').disabled = false;
+                
+                // Initial sync
+                sendColors();
+                sendBrightness();
+                
+            } catch (err) {
+                console.error("Serial connection error:", err);
+                alert("Failed to connect: " + err);
+            }
+        }
+        
+        async function sendColors() {
+            if (!isConnected || !writer || !document.getElementById('liveSync').checked) return;
+            
+            // Protocol: "COLR" header + 15*3 bytes (col) + 15*3 bytes (col_base) = 94 bytes total
+            const buffer = new Uint8Array(4 + 45 + 45);
+            let ptr = 0;
+            
+            // Header: "COLR"
+            buffer[ptr++] = 'C'.charCodeAt(0);
+            buffer[ptr++] = 'O'.charCodeAt(0);
+            buffer[ptr++] = 'L'.charCodeAt(0);
+            buffer[ptr++] = 'R'.charCodeAt(0);
+            
+            // col[] - 15 colors * 3 bytes = 45 bytes (offset 4-48)
+            for (let i = 0; i < 15; i++) {
+                const [r, g, b] = currentCol[i];
+                buffer[ptr++] = r;
+                buffer[ptr++] = g;
+                buffer[ptr++] = b;
+            }
+            
+            // col_base[] - 15 colors * 3 bytes = 45 bytes (offset 49-93)
+            for (let i = 0; i < 15; i++) {
+                const [r, g, b] = currentColBase[i];
+                buffer[ptr++] = r;
+                buffer[ptr++] = g;
+                buffer[ptr++] = b;
+            }
+            
+            // Verify buffer size
+            if (ptr !== 94) {
+                console.error("Buffer size mismatch! Expected 94, got", ptr);
+                return;
+            }
+            
+            try {
+                // Write the buffer
+                await writer.write(buffer);
+                
+                // Verify buffer contents for debugging
+                console.log("Synced both arrays (buffer size:", buffer.length, "bytes):");
+                console.log("  col[] first:", currentCol[0], "last:", currentCol[14]);
+                console.log("  col_base[] first:", currentColBase[0], "last:", currentColBase[14]);
+                console.log("  Buffer[4-6] (col[0]):", buffer[4], buffer[5], buffer[6]);
+                console.log("  Buffer[49-51] (col_base[0]):", buffer[49], buffer[50], buffer[51]);
+            } catch (err) {
+                console.error("Write error:", err);
+            }
+        }
+        
+        async function sendBrightness() {
+            if (!isConnected || !writer || !document.getElementById('liveSync').checked) return;
+            
+            const brightness = parseInt(document.getElementById('brightnessSlider').value);
+            
+            // Protocol: "BRIT" header + 1 byte brightness value
+            const buffer = new Uint8Array(5);
+            buffer[0] = 'B'.charCodeAt(0);
+            buffer[1] = 'R'.charCodeAt(0);
+            buffer[2] = 'I'.charCodeAt(0);
+            buffer[3] = 'T'.charCodeAt(0);
+            buffer[4] = brightness;
+            
+            try {
+                await writer.write(buffer);
+                console.log("Sent brightness:", brightness);
+            } catch (err) {
+                console.error("Brightness write error:", err);
+            }
+        }
+        
+        async function saveSchemeToDevice() {
+            if (!isConnected || !writer) {
+                alert("Please connect to device first");
+                return;
+            }
+            
+            // Protocol: "SAVE" header + 15*3 bytes (col) + 15*3 bytes (col_base) = 94 bytes total
+            const buffer = new Uint8Array(4 + 45 + 45);
+            let ptr = 0;
+            
+            // Header: "SAVE"
+            buffer[ptr++] = 'S'.charCodeAt(0);
+            buffer[ptr++] = 'A'.charCodeAt(0);
+            buffer[ptr++] = 'V'.charCodeAt(0);
+            buffer[ptr++] = 'E'.charCodeAt(0);
+            
+            // col[] - 15 colors * 3 bytes = 45 bytes
+            for (let i = 0; i < 15; i++) {
+                const [r, g, b] = currentCol[i];
+                buffer[ptr++] = r;
+                buffer[ptr++] = g;
+                buffer[ptr++] = b;
+            }
+            
+            // col_base[] - 15 colors * 3 bytes = 45 bytes
+            for (let i = 0; i < 15; i++) {
+                const [r, g, b] = currentColBase[i];
+                buffer[ptr++] = r;
+                buffer[ptr++] = g;
+                buffer[ptr++] = b;
+            }
+            
+            // Verify buffer size
+            if (ptr !== 94) {
+                console.error("Buffer size mismatch! Expected 94, got", ptr);
+                alert("Error: Buffer size mismatch");
+                return;
+            }
+            
+            try {
+                await writer.write(buffer);
+                console.log("Sent save command with color scheme");
+                alert("Color scheme saved to device as Scheme 3!");
+            } catch (err) {
+                console.error("Save write error:", err);
+                alert("Error saving to device: " + err);
+            }
+        }
+        
+        function trySync() {
+            if (isConnected && document.getElementById('liveSync').checked) {
+                sendColors();
+            }
+        }
+
+        // Initialize
+        updateSimulation();
+    </script>
+</body>
+</html>

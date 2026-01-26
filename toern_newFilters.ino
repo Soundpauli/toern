@@ -193,8 +193,6 @@ void initSliders(uint8_t page, uint8_t chan) {
   page = filterPage[chan];
   showFilterNames(chan);
 
-  Serial.print("[Debug] Switched to slider page: ");
-  Serial.println(page);
   for (uint8_t i = 0; i < 4; ++i) {
     auto& d = sliderDef[chan][page][i];
     if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip value change
@@ -203,7 +201,6 @@ void initSliders(uint8_t page, uint8_t chan) {
 
     if (d.arr != ARR_NONE) {
       if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) {
-        Serial.printf("[Warning] init skip invalid ARR_PARAM idx %d\n", d.idx);
         continue;
       }
 
@@ -213,7 +210,6 @@ void initSliders(uint8_t page, uint8_t chan) {
     }
 
     val = constrain(val, 0, meta.maxValue);
-    Serial.printf("[Debug] Encoder %u page %u channel %u -> value %u\n", i, page, chan, val);
     currentMode->pos[i] = val;
     Encoder[i].writeMax((int32_t)(meta.maxValue));
     Encoder[i].writeCounter((int32_t)val);
@@ -312,7 +308,6 @@ void printSliderDefTarget(uint8_t page, uint8_t encoder) {
     idxName = def.name;
   }
 
-  Serial.printf("{%s, %s}\n", arrName, idxName);
 }
 
 
@@ -339,16 +334,13 @@ void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
         defaultFastFilter[chan].idx = def.idx;
         //Serial.printf("[Default] PARAM set: ch=%u idx=%u\n", chan, def.idx);
       } else {
-        Serial.printf("[Warning] PARAM idx out of range: %u\n", def.idx);
       }
       break;
 
     default:
-      Serial.printf("[Skip] Not assignable default: arr=%d\n", def.arr);
       break;
   }
 
-  Serial.print("[Default] Set defaultFastFilter: ");
   printSliderDefTarget(page, encoder);
   
   // Update encoder colors to reflect the new default fast filter
@@ -367,7 +359,6 @@ void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
     // Deselect the fast filter by setting it to ARR_NONE
     defaultFastFilter[chan].arr = ARR_NONE;
     defaultFastFilter[chan].idx = -1;
-    Serial.print("[Default] Cleared defaultFastFilter");
   } else {
     // Set as new default fast filter
     switch (def.arr) {
@@ -386,16 +377,13 @@ void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
           defaultFastFilter[chan].arr = def.arr;
           defaultFastFilter[chan].idx = def.idx;
         } else {
-          Serial.printf("[Warning] PARAM idx out of range: %u\n", def.idx);
           return; // Don't update colors if we can't set it
         }
         break;
 
       default:
-        Serial.printf("[Skip] Not assignable default: arr=%d\n", def.arr);
         return; // Don't update colors if we can't set it
     }
-    Serial.print("[Default] Set defaultFastFilter: ");
     printSliderDefTarget(page, encoder);
   }
   
@@ -404,9 +392,6 @@ void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
 }
 
 void processAdjustments_new(uint8_t page) {
-  Serial.print("[Debug] processAdjustments_new page: ");
-  Serial.println(page);
-
   uint8_t chan = GLOB.currentChannel;
   bool pageCountChanged = false;
 
@@ -414,7 +399,6 @@ void processAdjustments_new(uint8_t page) {
     auto& d = sliderDef[chan][page][i];
     if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip if ARR_NONE
     if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) {
-      Serial.printf("[Warning] Skipping ARR_PARAM idx %d - out of bounds\n", d.idx);
       continue;
     }
 
@@ -427,7 +411,6 @@ void processAdjustments_new(uint8_t page) {
 
     // Print debug output
     const char* arrType = (d.arr == ARR_FILTER) ? "ARR_FILTER" : (d.arr == ARR_SYNTH) ? "ARR_SYNTH" : (d.arr == ARR_PARAM) ? "ARR_PARAM" : "ARR_NONE";
-    Serial.printf("[Debug] %s:%s raw %u -> display %u\n", arrType, d.name, rawVal, val);
 
     float mappedVal = 0;
 

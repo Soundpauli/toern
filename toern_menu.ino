@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 3
 #define VOL_PAGES_COUNT 4
-#define ETC_PAGES_COUNT 4
+#define ETC_PAGES_COUNT 5
 
 // External variables
 extern Mode *currentMode;
@@ -17,6 +17,8 @@ void updatePreviewVolume();
 extern int previewTriggerMode;
 extern const int PREVIEW_MODE_ON;
 extern const int PREVIEW_MODE_PRESS;
+extern uint8_t currentColorScheme;
+extern void applyColorScheme(uint8_t scheme);
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -92,7 +94,8 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"INFO", 39, false, nullptr},          // Info / version / credits
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"RST", 16, true, "MODE"},             // Reset Effects / SD Rescan (EFX or SD)
-  {"LGHT", 40, false, nullptr}           // LED Strip toggle (OFF/ON)
+  {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
+  {"COLR", 41, false, nullptr}           // Color scheme selection (1, 2, 3)
 };
 
 // --- INFO page animation state ---
@@ -197,7 +200,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 26; // EEPROM_DATA_START + [0..25]
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 27; // EEPROM_DATA_START + [0..26]
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
@@ -368,7 +371,6 @@ void loadMenuFromEEPROM() {
     bool restored = readSettingsBackupFromSD(restoredPack, restoredBlock, sizeof(restoredBlock));
 
     if (restored) {
-      Serial.println("EEPROM empty - restoring settings from settings.txt");
       EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
       EEPROM.put(0, restoredPack);
       for (uint16_t i = 0; i < SETTINGS_EEPROM_BLOCK_LEN; i++) {
@@ -381,7 +383,6 @@ void loadMenuFromEEPROM() {
       SMP.pack = restoredPack;
     } else {
       // first run! write magic + defaults
-      Serial.println("First run detected - initializing EEPROM with defaults");
       EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
       EEPROM.put(0, (unsigned int)1);            // samplePackID default (1)
       // Default to LINEIN so the SGTL5000 MIC/capture path is off by default.
@@ -406,11 +407,11 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
+      EEPROM.write(EEPROM_DATA_START + 22, 0);   // colorScheme default (0 = default scheme)
       EEPROM.write(EEPROM_DATA_START + 23, 0);   // stereoChannel default (OFF)
       EEPROM.write(EEPROM_DATA_START + 24, 2);   // midiSendMode default (2 = BOTH)
       EEPROM.write(EEPROM_DATA_START + 25, 1);   // ledStripEnabled default (1 = ON)
-
-      Serial.println("EEPROM initialized with defaults.");
+      EEPROM.write(EEPROM_DATA_START + 26, 64);  // ledBrightness default (64, range 3-255)
 
       // Create/refresh SD backup for defaults (debounced)
       markSettingsBackupDirty();
@@ -543,20 +544,10 @@ void loadMenuFromEEPROM() {
     ctrlMode = 0;
   }
 
-    Serial.print("Invalid ledModules value: ");
-    Serial.print(ledModules);
-    Serial.println(" - defaulting to 1");
     ledModules = 1;  // Default to 1 if invalid value
     EEPROM.write(EEPROM_DATA_START + 13, 1);  // Save corrected value
   }
 
-  Serial.println("Loaded Menu values from EEPROM:");
-  Serial.print("  ledModules="); Serial.print(ledModules); Serial.print(" (maxX="); Serial.print(maxX); Serial.println(")");
-  Serial.print("  samplePackID="); Serial.println(samplePackID);
-  Serial.print("  recMode="); Serial.println(recMode);
-  Serial.print("  clockMode="); Serial.println(clockMode);
-  Serial.print("  patternMode="); Serial.println(patternMode);
-  Serial.print("  loopLength="); Serial.println(loopLength);
 
   // Set global flags
   SMP_PATTERN_MODE       = (patternMode   == 1 || patternMode == 2 || patternMode == 3);  // ON, SONG, or NEXT mode
@@ -666,35 +657,19 @@ void saveSingleModeToEEPROM(int index, int8_t value) {
 
 // Save samplepack 0 state to EEPROM (which voices are using sp0)
 void saveSp0StateToEEPROM() {
-  Serial.println("=== Saving SP0 State to EEPROM ===");
   // Use addresses 200-208 for sp0 state (8 voices = 8 bytes)
   for (int i = 1; i < maxFiles; i++) {
     uint8_t value = SMP.sp0Active[i] ? 1 : 0;
     EEPROM.write(200 + i, value);
-    Serial.print("Voice ");
-    Serial.print(i);
-    Serial.print(": sp0Active = ");
-    Serial.print(SMP.sp0Active[i] ? "TRUE" : "FALSE");
-    Serial.print(", saving ");
-    Serial.println(value);
   }
-  Serial.println("=== SP0 State Saved ===");
 }
 
 // Load samplepack 0 state from EEPROM
 void loadSp0StateFromEEPROM() {
-  Serial.println("=== Loading SP0 State from EEPROM ===");
   for (int i = 1; i < maxFiles; i++) {
     uint8_t stored = EEPROM.read(200 + i);
     SMP.sp0Active[i] = (stored == 1);
-    Serial.print("Voice ");
-    Serial.print(i);
-    Serial.print(": EEPROM value = ");
-    Serial.print(stored);
-    Serial.print(", sp0Active = ");
-    Serial.println(SMP.sp0Active[i] ? "TRUE" : "FALSE");
   }
-  Serial.println("=== SP0 State Loaded ===");
 }
 
 FLASHMEM void showMenu() {
@@ -1310,7 +1285,7 @@ static inline CRGB dimIconColorFromText(CRGB textColor) {
 static inline CRGB menuTextColorFromCol(uint8_t colIndex) {
   // Use palette colors from `col[]` (voice colors), but normalize brightness
   // to match the rest of the UI text (~120 peak channel).
-  extern const CRGB col[];
+  extern CRGB col[];
   CRGB c = col[colIndex];
   uint8_t maxv = max(c.r, max(c.g, c.b));
   if (maxv == 0) return c;
@@ -1477,6 +1452,17 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText("LGHT", 2, 10, tc);
         bool enabled = getLedStripEnabled();
         drawText(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+      }
+      break;
+      
+    case 41: // COLR - Color scheme selection (0=default, 1, 2, 3=custom)
+      {
+        const CRGB tc = currentMenuParentTextColor();
+        drawText("COLR", 2, 10, tc);
+        char schemeText[2];
+        // Display: 0 (default), 1, 2, 3 (custom from scheme.txt)
+        snprintf(schemeText, sizeof(schemeText), "%d", currentColorScheme);
+        drawText(schemeText, 2, 3, UI_GREEN);
       }
       break;
       
@@ -1947,6 +1933,14 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       // Toggle is handled by encoder(4) press via switchMenu() - no encoder control needed
       break;
     
+    case 41: // COLR - Color scheme selection (1, 2, 3)
+      {
+        // Note: Encoder(3) is used for ETC page navigation, not color scheme selection
+        // Color scheme is toggled via encoder(3) button press only
+        // Do not modify encoder(3) settings here - let ETC menu handle page navigation
+      }
+      break;
+    
     case 24: { // PONG page - speed control on encoder 2
       if (!pong) {
         pongMenuFirstEnter = true;
@@ -2355,8 +2349,6 @@ void switchMenu(int menuPosition){
         // Update songModeActive flag
         extern bool songModeActive;
         songModeActive = (patternMode == 2);
-        Serial.print("PMOD changed - songModeActive: ");
-        Serial.println(songModeActive ? "TRUE" : "FALSE");
         
         // Clear pending page when switching away from NEXT mode
         if (patternMode != 3) {
@@ -2418,15 +2410,11 @@ void switchMenu(int menuPosition){
         break;
 
         case 16:
-        Serial.print("=== RSET menu: resetMenuOption=");
-        Serial.println(resetMenuOption);
         if (resetMenuOption == 0) {
           // Reset effects/parameters to defaults
-          Serial.println("=== RSET: Executing EFX reset ===");
           resetAllToDefaults();
         } else if (resetMenuOption == 1) {
           // SD rescan: Rescan samples folder and update map.txt
-          Serial.println("=== SD READ: Rescanning samples folder ===");
           FastLEDclear();
           drawText("SCAN", 2, 3, UI_GREEN);
           FastLEDshow();
@@ -2441,15 +2429,12 @@ void switchMenu(int menuPosition){
             FastLEDclear();  // Clear before showing result
             if (loadSuccess) {
               drawText("DONE", 2, 3, UI_GREEN);
-              Serial.println("=== SD READ: Scan complete ===");
             } else {
               drawText("FAIL", 2, 3, UI_RED);
-              Serial.println("=== SD READ: Scan OK but load failed ===");
             }
           } else {
             FastLEDclear();  // Clear before showing result
             drawText("FAIL", 2, 3, UI_RED);
-            Serial.println("=== SD READ: Scan failed ===");
           }
           FastLEDshow();
           delay(1000);
@@ -2460,14 +2445,12 @@ void switchMenu(int menuPosition){
           switchMode(&draw);
         } else { // resetMenuOption == 2 (FULL)
           // FULL reset: Complete reset (like startNew) AND rescan SD
-          Serial.println("=== RSET: Executing FULL reset ===");
           
           // Call startNew() for complete reset (clears notes, resets all settings, etc.)
           extern void startNew();
           startNew();
           
           // Then rescan SD
-          Serial.println("=== SD READ: Rescanning samples folder ===");
           FastLEDclear();
           drawText("SCAN", 2, 3, UI_GREEN);
           FastLEDshow();
@@ -2482,15 +2465,12 @@ void switchMenu(int menuPosition){
             FastLEDclear();  // Clear before showing result
             if (loadSuccess) {
               drawText("DONE", 2, 3, UI_GREEN);
-              Serial.println("=== SD READ: Scan complete ===");
             } else {
               drawText("FAIL", 2, 3, UI_RED);
-              Serial.println("=== SD READ: Scan OK but load failed ===");
             }
           } else {
             FastLEDclear();  // Clear before showing result
             drawText("FAIL", 2, 3, UI_RED);
-            Serial.println("=== SD READ: Scan failed ===");
           }
           FastLEDshow();
           delay(1000);
@@ -2648,12 +2628,6 @@ void switchMenu(int menuPosition){
         
         saveSingleModeToEEPROM(13, ledModules);
         drawMainSettingStatus(menuPosition);
-        Serial.print("LED Modules set to: ");
-        Serial.print(ledModules);
-        Serial.print(", maxX now: ");
-        Serial.print(maxX);
-        Serial.print(", max pages now: ");
-        Serial.println(MAX_STEPS / maxX);
         break;
         }
 
@@ -2688,6 +2662,77 @@ void switchMenu(int menuPosition){
         setLedStripEnabled(newState);
         saveSingleModeToEEPROM(25, (int8_t)(newState ? 1 : 0));
         menuRequestFullRedraw();  // Force ETC submenu to redraw with new state
+        break;
+      }
+      
+      case 41: {
+        // COLR - Color scheme selection: toggle through 0->1->2->3->0
+        // 0 = default, 1 = scheme 1, 2 = scheme 2, 3 = custom from scheme.txt
+        
+        // Preserve ETC page position (COLR is page 4) - don't overwrite with scheme number
+        extern int currentEtcPage;
+        int savedEtcPage = currentEtcPage;  // Save current ETC page (should be 4 for COLR)
+        
+        currentColorScheme = (currentColorScheme + 1) % 4;  // 0,1,2,3 -> wraps to 0
+        
+        // If scheme 3 is selected, load from scheme.txt if it exists
+        if (currentColorScheme == 3) {
+          if (SD.exists("scheme.txt")) {
+            File schemeFile = SD.open("scheme.txt", FILE_READ);
+            if (schemeFile && schemeFile.size() >= 90) {
+              uint8_t buf[90];
+              int bytesRead = schemeFile.read(buf, 90);
+              schemeFile.close();
+              
+              if (bytesRead == 90) {
+                // Load col[] array (Note ON colors) - bytes 0-44
+                for (int i=0; i<15; i++) {
+                  col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
+                }
+                
+                // Load col_base[] array (Note OFF / Base colors) - bytes 45-89
+                for (int i=0; i<15; i++) {
+                  int baseIdx = 45 + i*3;
+                  col_base[i] = CRGB(buf[baseIdx], buf[baseIdx+1], buf[baseIdx+2]);
+                }
+                
+                // Set flag to invalidate color cache
+                extern volatile bool colorsUpdatedViaSerial;
+                colorsUpdatedViaSerial = true;
+                
+              } else {
+                // File incomplete, fall back to scheme 0
+                currentColorScheme = 0;
+                applyColorScheme(0);
+              }
+            } else {
+              // File doesn't exist or too small, fall back to scheme 0
+              currentColorScheme = 0;
+              applyColorScheme(0);
+            }
+          } else {
+            // File doesn't exist, fall back to scheme 0
+            currentColorScheme = 0;
+            applyColorScheme(0);
+          }
+        } else {
+          // Use normal scheme loading for 0, 1, 2
+          applyColorScheme(currentColorScheme);
+          
+          // Set flag to invalidate color cache
+          extern volatile bool colorsUpdatedViaSerial;
+          colorsUpdatedViaSerial = true;
+        }
+        
+        // Save scheme selection to EEPROM
+        EEPROM.write(EEPROM_DATA_START + 22, currentColorScheme);
+        
+        // Restore ETC page position to stay on COLR page (page 4)
+        currentEtcPage = savedEtcPage;
+        currentMode->pos[3] = savedEtcPage;  // Restore encoder position for ETC page navigation
+        Encoder[3].writeCounter((int32_t)savedEtcPage);
+        
+        menuRequestFullRedraw();  // Force redraw to show new scheme number
         break;
       }
     }

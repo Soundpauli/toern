@@ -39,7 +39,7 @@ static float smoothedAudioLevel = 0.0f;
 
 // Forward declarations
 extern bool isNowPlaying;
-extern const CRGB col[];
+extern CRGB col[];
 
 // Audio peak analyzer for output level (will be added to audioinit.h)
 extern AudioAnalyzePeak peakOutput;

@@ -59,11 +59,9 @@ static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
   uint8_t hdr[12];
   f.seek(0);
   if (f.read(hdr, sizeof(hdr)) != (int)sizeof(hdr)) {
-    Serial.print("WAV ERROR: Failed to read RIFF header (file too small)\n");
     return false;
   }
   if (!(hdr[0]=='R' && hdr[1]=='I' && hdr[2]=='F' && hdr[3]=='F' && hdr[8]=='W' && hdr[9]=='A' && hdr[10]=='V' && hdr[11]=='E')) {
-    Serial.print("WAV ERROR: Invalid RIFF/WAVE header\n");
     return false;
   }
   
@@ -73,15 +71,6 @@ static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
   uint32_t expectedRiffSize = fileSize - 8; // RIFF size = file size - 8 bytes (RIFF + size fields)
   
   if (riffSize != expectedRiffSize) {
-    Serial.print("WAV WARNING: RIFF size mismatch! File: ");
-    Serial.print(f.name());
-    Serial.print(", RIFF size in header: ");
-    Serial.print(riffSize);
-    Serial.print(", Expected (fileSize-8): ");
-    Serial.print(expectedRiffSize);
-    Serial.print(", File size: ");
-    Serial.print(fileSize);
-    Serial.print("\n");
   }
   
   f.seek(12);
@@ -91,20 +80,10 @@ static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
     iterations++;
     char id[4];
     if (f.read((uint8_t*)id, 4) != 4) {
-      Serial.print("WAV ERROR: Failed to read chunk ID at pos ");
-      Serial.print(f.position() - 4);
-      Serial.print(" in ");
-      Serial.print(f.name());
-      Serial.print("\n");
       break;
     }
     uint8_t szb[4];
     if (f.read(szb, 4) != 4) {
-      Serial.print("WAV ERROR: Failed to read chunk size at pos ");
-      Serial.print(f.position() - 4);
-      Serial.print(" in ");
-      Serial.print(f.name());
-      Serial.print("\n");
       break;
     }
     uint32_t sz = (uint32_t)szb[0] | ((uint32_t)szb[1] << 8) | ((uint32_t)szb[2] << 16) | ((uint32_t)szb[3] << 24);
@@ -112,30 +91,12 @@ static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
     // Safety check: chunk size should be reasonable (not larger than file)
     uint32_t currentPos = f.position();
     if (sz > fileSize || (currentPos + sz) > fileSize) {
-      Serial.print("WAV ERROR: Invalid chunk size! File: ");
-      Serial.print(f.name());
-      Serial.print(", Chunk: ");
-      Serial.write(id, 4);
-      Serial.print(", Size: ");
-      Serial.print(sz);
-      Serial.print(", Pos: ");
-      Serial.print(currentPos);
-      Serial.print(", File size: ");
-      Serial.print(fileSize);
-      Serial.print("\n");
       break;
     }
     
     if (id[0]=='d' && id[1]=='a' && id[2]=='t' && id[3]=='a') {
       outStart = currentPos;
       outSize = sz;
-      Serial.print("WAV OK: Found data chunk in ");
-      Serial.print(f.name());
-      Serial.print(", Start: ");
-      Serial.print(outStart);
-      Serial.print(", Size: ");
-      Serial.print(outSize);
-      Serial.print("\n");
       return (outSize >= 2);
     }
     
@@ -143,27 +104,12 @@ static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
     uint32_t skip = sz + (sz & 1);
     uint32_t nextPos = currentPos + skip;
     if (nextPos > fileSize || !f.seek(nextPos)) {
-      Serial.print("WAV ERROR: Failed to skip chunk! File: ");
-      Serial.print(f.name());
-      Serial.print(", Chunk: ");
-      Serial.write(id, 4);
-      Serial.print(", Next pos: ");
-      Serial.print(nextPos);
-      Serial.print(", File size: ");
-      Serial.print(fileSize);
-      Serial.print("\n");
       break;
     }
   }
   
   if (iterations >= maxIterations) {
-    Serial.print("WAV ERROR: Too many iterations searching for data chunk in ");
-    Serial.print(f.name());
-    Serial.print("\n");
   } else {
-    Serial.print("WAV ERROR: Data chunk not found in ");
-    Serial.print(f.name());
-    Serial.print("\n");
   }
   return false;
 }
