@@ -2011,7 +2011,7 @@ FLASHMEM void drawBPMWithReservedSpace(float bpm, CRGB color, int topY) {
 }
 
 void drawBPMScreen() {
-s
+
   FastLEDclear();
   // Volume bars and indicators removed - volume controls now in VOL menu
   if (drawBaseColorMode) {
