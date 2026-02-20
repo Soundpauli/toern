@@ -1,11 +1,43 @@
-Attention: This project is currently under very active development. The code and files are expected to be ready by May 25, 2025. 
-At this stage, the project is not yet functional, but exciting updates are on the way. Stay tuned!
+Attention: This project is currently under very active development. 
+Stay tuned for exciting updates!
 
+---
 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-please use added ResamplingReader.h for lib "teensy-variable-playback"
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+## External Libraries & Modifications
 
+This project uses several external libraries, some of which have been modified from their standard versions:
+
+### Modified Libraries
+
+- **ResamplingReader.h** (for `teensy-variable-playback` library)
+  - Custom implementation added to support variable playback rates with interpolation
+  - Enhanced with multi-channel support, loop types (repeat/ping-pong), and crossfading capabilities
+  - Located in `src/resamplerReader.h`
+
+- **Freeverb Effect** (`effect_freeverb_dmabuf`)
+  - Modified version using DMAMEM for improved memory management on Teensy 4.1
+  - Custom implementation optimized for the audio processing pipeline
+  - Located in `src/effect_freeverb_dmabuf.h` and `src/effect_freeverb_dmabuf.cpp`
+
+- **FastLED Library**
+  - Configured with `FASTLED_ALLOW_INTERRUPTS 0` to prevent timing conflicts with audio processing
+  - Custom wrapper functions (`FastLEDshow()`, `FastLEDclear()`) for coordinated display updates
+
+- **MIDI Library**
+  - Custom instance created with modified buffer sizes:
+    - `SERIAL8_RX_BUFFER_SIZE 2048` (increased from default 64 for high-frequency clock messages)
+    - `SERIAL8_TX_BUFFER_SIZE 128` (increased for safety)
+  - Custom MIDI settings struct for TRS MIDI communication
+
+### Standard Libraries Used
+
+- **TeensyPolyphony** by Nic Newdigate — Core polyphonic audio engine
+- **Audio Library** (PJRC) — Standard Teensy audio processing
+- **WS2812Serial** — LED matrix driver
+- **i2cEncoderLibV2** — Rotary encoder control
+- **FastTouch** — Touch button interface
+
+---
 
 ## License
 
@@ -62,49 +94,87 @@ As always, TŒRN remains **fully open-source**, with all schematics, code, and d
 - **Playful Design**: Inspired by the Etch-A-Sketch™ for intuitive and beginner-friendly music creation.  
 - **Vivid 16x16 RGB LED Grid**: Dynamic visual feedback for a seamless creative process.  
 - **Real-Time Control**: Adjust parameters like BPM, volume, effects, and more on the fly—ideal for live performances.  
-- **Customizable Workflow**: Load your own samples (WAV format) via SD card. Supports up to 8 voices and an additional onboard synth voice.  
+- **Customizable Workflow**: Load your own samples (WAV format) via SD card. Supports 8 sample voices plus 3 synth voices.  
 
-- **Powerful Sequencer**:  
-- Autosave/autoload functionality for convenience.  
-- Sample Browser: Manage up to 999 samples from the SD card in real-time and during playback  
-- 16-bar patterns across 16 pages (256 bars per song).  
+### **Sequencer**
+- **16 channels total**: 8 sample voices (channels 1-8), 1 three-voice polyphonic synth (channel 11), 2 monophonic synths (channels 13-14)
+- **Pattern Structure**: 16 steps per page, 16 pages (256 steps total per song)
+- **Storage**: Up to 999 patterns, 999 samples, 100 samplepacks
+- **Autosave/autoload** functionality for convenience
+- **Real-time pattern switching** during playback without stopping
+- **Song Mode**: Chain up to 64 patterns into complete songs
+- **Pattern Operations**: Copy/paste patterns, transpose page/channel (±1 octave), intelligent random note generation (major/minor scales, rhythm patterns), clear page/channel
 
-- 8 parallel sample voices with added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb (4x), each voice can freely assign one of the 999 samples
-- With added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb
-- All samples can be cut to size for each voice indiviually (start/end) befor loading to voice
-- Recording inbuild-mic/line-in/mic-in directly in sample browser for quick access (input via settings page)
-- Possibility to save / merge used samples as samplepack to SD card for easy access
-  
-- Changing /loading up to 100 samplepacks live during runtime/playing without stopping
-- Changing /loading up to 100 patterns or songs live during runtime/playing without stopping
-- Selecting global midi-TRS-in-channel (1-16)
-- Global midi-TRS out (1-14, for voice 1-14)
-- Selecting single midi-TRS out channel (1-16) if output-channel should be fixed / pinned down to a single voice
-- Clock: 40 - 300bpm, you can change between send the local or receive an external MIDI-Clock (via TRS)
+### **Sample Voices** (Channels 1-8)
+- **8 parallel sample voices** with individual sample assignment
+- Each voice can load samples up to 12 seconds at 44.1kHz
+- **Sample Browser**: Manage up to 999 samples from SD card in real-time during playback
+- **Sample Trimming**: Individual start/end points per voice (0-100% seek/seekEnd)
+- **Sample Direction**: Forward/reverse playback control
+- **Samplepack Support**: Up to 100 samplepacks, live loading during playback
+- **Samplepack 0**: Custom per-voice sample assignment
+- **Recording**: Direct recording from built-in mic/line-in/mic-in in sample browser (input selectable via settings)
+- **Save/Merge**: Save used samples as samplepack to SD card
 
-- Copy+paste of current view/page
-- Intelligent random notes generation (based on maj/min) tonescale as well as rythm per page
-- Transposing and/or shifting current channel / current page within (+/- 1 octave)
-- Delete all notes / current channel notes of a page via shortcut
+### **Synth Voices**
+- **Channel 11**: Three-voice polyphonic synth
+  - 3 oscillators per voice (POLY_VOICES = 3)
+  - 10 instrument presets: BASS, KEYS, CHPT (chiptune), PAD, WOW, ORG (organ), FLT (flute), LEAD, ARP (arpeggio), BRSS (brass)
+  - Independent ADSR envelope per voice
+  - Independent filter envelope per voice
+  - Per-voice panning, volume, pitch offset (cents and semitones), waveform selection
+- **Channels 13-14**: Two monophonic synths
+  - 2 oscillators each
+  - Full ADSR envelope control
+  - LFO modulation (rate, depth)
+  - Arpeggiator (step, span)
+  - Waveform selection (SINE, SAW, SQUARE, TRIANGLE)
 
-- **Synth and Filter Features**:
-- 3 of the Sample Voices can be switched to each one of three analog drum voices (bassdrum, snare and highhat), each with tonehight / decay / freqency manupilation
-- 1 three-voice synth with 3 OSCs per voice with added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb
-- 2 one-voiced synths with each 2 OSCs with added effects: ADSR-envelope, bitcrusher, filter (high/low/pass), reverb
-- 1 assignable default filter for each channel which can be easily directly accessed during runtime on encoder #3
+### **Effects** (All Channels)
+- **ADSR Envelope**: Attack, Decay, Sustain, Release (0-32 range)
+- **Bitcrusher**: Bit depth (1-16 bits, 0 = bypass), sample rate reduction (1000Hz to 44117Hz)
+- **Filter**: Low-pass, High-pass, Band-pass filters
+  - Frequency: 0-10000 Hz
+  - Resonance: 0.7-5.0
+  - Smooth filter transitions
+- **Reverb**: Room size (0.0-0.79), damping (0.01-0.8), wet/dry blend
+- **Fast Filter Access**: Assignable default filter per channel, directly accessible on encoder #3 during runtime
+
+### **MIDI**
+- **MIDI Input**: TRS MIDI in, global MIDI channel selection (1-16), MIDI clock receive, note input, transport control
+- **MIDI Output**: TRS MIDI out, global MIDI out (channels 1-14), single MIDI out channel selection (1-16 per voice), MIDI clock send, note output
+
+### **Clock & Timing**
+- **BPM Range**: 40-300 BPM
+- **Clock Modes**: Internal clock, external MIDI clock (via TRS), tap tempo via touch controls
+
+### **Additional Features**
+- **Live Recording**: 8-channel live-looping, up to 12 seconds per voice, touch-hold recording
+- **Note Properties**: Velocity (1-16, maps to MIDI 1-127), probability (0%, 25%, 50%, 75%, 100%), condition triggers (1/1, 1/2, 1/4, 1/8, 1/X, 2/1, 4/1, 8/1, X/1)
+- **Pitch & Tuning**: Global transpose (semitones), per-channel detune (-12 to +12 semitones), per-channel octave shift (-3 to +3 octaves), fine tuning (-50 to +50 cents for synth channel 11)
+- **Mute/Solo**: Mute individual channels or entire patterns, solo mode
+- **Pattern Mode**: OFF, ON, SONG, NEXT modes
+- **Stereo Routing**: Configurable stereo channel routing (main/preview split, L+R channel separation)
+- **LED Strip**: External WS2812 strip connector for ripple visualization synced to audio and triggered notes
 
 ---
 
 ## TECH SPECS 
 
-- **Microcontroller**: Teensy 4.1 + Audio Board.  
-- **Memory**: 16MB PSRAM, slot for 32GB SD Micro SD card
-- **Encoders**: 4x colorfull illuminated I2C rotary-push encoders
-- **Display**: 16x16 RGB LED Matrix (powered by FastLED).  
-- **LED strip**: 5V WS2812 strip connectable externally via onboard connector (ripple visualization, configurable length).  
-- **Audio I/O**: 6.35mm jacks for headphones, line-in/out, mic-in; internal microphone.  
-- **Power**: USB-C or optional LiPo battery with charging port.  
-- **Ports**: USB-C or optional LiPo battery with charging port.  
+- **Microcontroller**: Teensy 4.1 + Audio Board
+- **Memory**: 16MB PSRAM, slot for up to 32GB Micro SD card
+- **Audio Sample Rate**: 44.1kHz, 16-bit WAV (mono)
+- **Encoders**: 4x RGB illuminated I2C rotary-push encoders
+- **Display**: 16x16 RGB LED Matrix (powered by FastLED), supports up to 2 modules (32x16)
+- **LED Strip**: 5V WS2812 strip connectable externally via onboard connector (ripple visualization, configurable length)
+- **Audio I/O**: 
+  - 6.35mm headphone output
+  - 6.35mm line-in and line-out jacks
+  - 6.35mm mic-in jack
+  - Built-in internal microphone
+- **MIDI**: TRS MIDI in/out ports
+- **Power**: USB-C or optional LiPo battery with charging port
+- **Touch Controls**: 3 touch-sensitive switches  
 ---
 
 ## GET INVOLVED  
@@ -120,4 +190,4 @@ All source code and 3D files are available under the MIT License. Whether you're
 Special thanks to Paul Stoffregen and the PJRC team for the incredible Teensy platform, as well as the open-source community for contributing essential libraries. A heartfelt shoutout to Nic Newdigate for the teensy-polyphony library, the soul of this project.  
 
 Jan from SP_ctrl (formaly known as soundpauli)
-Hamburg, April 2025  
+Hamburg, February 2026  
