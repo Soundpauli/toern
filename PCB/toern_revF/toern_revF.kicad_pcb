@@ -4327,6 +4327,7 @@
 		)
 	)
 	(footprint "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "1e02bfad-4f61-4a87-b474-90620a845cbc")
 		(at 33.95 52.86 -90)
@@ -5086,6 +5087,7 @@
 		)
 	)
 	(footprint "Connector_PinSocket_2.54mm:DuppaI2CEncoderV2.1"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "2554c390-d88d-4d8f-b0f8-c3ebb92e6bae")
 		(at 80 46.005)
@@ -6675,6 +6677,7 @@
 		)
 	)
 	(footprint "Connector_Audio:Jack_3.5mm_CUI_SJ1-3533NG_Horizontal_CircularHoles"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "2d31b70a-f701-4cd8-8718-0f0cfbdf874d")
 		(at 188.8 88.9 -90)
@@ -11477,6 +11480,7 @@
 		)
 	)
 	(footprint "Connector_Audio:Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "60ff9883-ba56-4b66-a3bd-323812aa424b")
 		(at 150.12 79 -90)
@@ -13124,6 +13128,7 @@
 		(embedded_fonts no)
 	)
 	(footprint "Connector_PinSocket_2.54mm:DuppaI2CEncoderV2.1"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "6aced03f-bdf4-402b-8809-ef069933b8cf")
 		(at 117 46.04)
@@ -15526,6 +15531,7 @@
 		)
 	)
 	(footprint "Connector_Audio:Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "7c6a29ab-9b2c-47ec-8fdd-d5b701b9753c")
 		(at 48.68102 43.307339 180)
@@ -20874,6 +20880,7 @@
 		)
 	)
 	(footprint "Connector_PinSocket_2.54mm:DuppaI2CEncoderV2.1"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "c1fe245c-3e2e-4d0f-8611-4108cb0e21da")
 		(at 43 46.005)
@@ -22265,6 +22272,7 @@
 		)
 	)
 	(footprint "Connector_Audio:Jack_3.5mm_CUI_SJ1-3533NG_Horizontal_CircularHoles"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "c88d2f28-72ee-4806-bcc5-b997a1b1f72c")
 		(at 188.8 75.9 -90)
@@ -24638,6 +24646,7 @@
 		)
 	)
 	(footprint "myLibKicad:EG2219"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "cf4d8788-e8c9-483b-b13b-212a129a1ddd")
 		(at 184.75 47 90)
@@ -25315,6 +25324,7 @@
 		)
 	)
 	(footprint "Connector_Audio:Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "d1ed164f-d0ce-4739-8748-da793acd5544")
 		(at 172.875 79 -90)
@@ -27479,6 +27489,7 @@
 		)
 	)
 	(footprint "Connector_PinSocket_2.54mm:DuppaI2CEncoderV2.1"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "eee1a272-28ad-4d98-b216-7686b6bcbfa5")
 		(at 154 46.005)
@@ -29822,6 +29833,7 @@
 		)
 	)
 	(footprint "Connector_Audio:Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal"
+		(locked yes)
 		(layer "F.Cu")
 		(uuid "f8926f74-045c-4ee2-813a-9979dfa4c436")
 		(at 48.7 91.23 180)
