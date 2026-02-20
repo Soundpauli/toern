@@ -1,4 +1,4 @@
-#define VERSION "v1.55"
+#define VERSION "v1.9"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
@@ -153,9 +153,19 @@ extern void handleMidiClock();
 #define DATA_PIN 17                   // PIN FOR LEDS
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
 
-#define SWITCH_1 16  // Pin for TPP223 1
-#define SWITCH_2 3   // // Pin for TPP223 3 //3==lowerright, lowerleft== 15!
-#define SWITCH_3 41  //Pin for TPP223 2
+#define SWITCH_1 2   // Pin for TPP223 1 //>> SINGLE
+#define SWITCH_2 3   // // Pin for TPP223 3 //3==lowerright, lowerleft== 15! >> MENU
+#define SWITCH_3 4  //Pin for TPP223 2 >> REC /
+#define SWITCH_4 6
+#define SWITCH_5 39
+
+// Battery sense: divider on pin 40 (A16). User calibrated: 5k/10k -> ratio ~0.63.
+#define BATT_ADC_PIN A16
+#define BATT_RAW_ZERO 4           // raw reading when pin connected to GND (0V)
+#define BATT_RAW_FULL 4095        // raw at 3.3V at pin (12-bit max)
+#define BATT_DIVIDER_RATIO 0.60f  // Adjusted to 0.60 to correct "78% at full" reading
+#define BATT_V_MIN 3.55f          // 0% = 3.55V (LiPo empty / cutoff)
+#define BATT_V_MAX 4.2f           // 100% = 4.2V (LiPo full)
 
 #define VOL_MIN 1
 #define VOL_MAX 10
@@ -177,9 +187,9 @@ extern void handleMidiClock();
 //
 // Old staging used 0.70f per input on mixer1/2, which can exceed full-scale with only 2 loud hits.
 // The values below keep the *mix* within range (so multiple loud samples don't crackle).
-#define MIX_BUS_HEADROOM 0.25f        // per-input gain into mixer1/mixer2 (4 inputs each)
-#define MIX_END_SAMPLES_GAIN 0.50f    // mixer_end input gain for mixer1 + mixer2
-#define MIX_END_SYNTH_GAIN 0.60f      // mixer_end input gain for mixersynth_end
+#define MIX_BUS_HEADROOM 0.25f      // per-input gain into mixer1/mixer2 (4 inputs each)
+#define MIX_END_SAMPLES_GAIN 0.50f  // mixer_end input gain for mixer1 + mixer2
+#define MIX_END_SYNTH_GAIN 0.60f    // mixer_end input gain for mixersynth_end
 
 
 #define NUM_ENCODERS 4
@@ -340,9 +350,10 @@ bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
-bool SMP_FLOW_MODE = false;     // FLOW mode: follows timer position when playing
-unsigned int lastFlowPage = 0;  // Track the last page set by FLOW mode
-bool recMenuFirstEnter = true;  // Track first entry into REC menu
+bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
+static bool spkrEnabled = true;  // SPKR toggle state (ON by default)
+unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
+bool recMenuFirstEnter = true;   // Track first entry into REC menu
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
 bool SMP_LOAD_SETTINGS = true;  // Whether to load SMP settings when loading tracks
@@ -516,6 +527,18 @@ static bool channelNrOverlayActive = false;
 static unsigned long channelNrOverlayUntil = 0;
 static int channelNrOverlayChannel = 0;
 static const int DEFAULT_CHANNEL_VOLUME = 10;
+
+// Get SPKR enabled state
+bool getSpkrEnabled() {
+  return spkrEnabled;
+}
+
+// Set SPKR enabled state and update pin 30
+void setSpkrEnabled(bool enabled) {
+  spkrEnabled = enabled;
+  pinMode(30, OUTPUT);                     // Switch to OUTPUT mode to control the pin
+  digitalWrite(30, enabled ? LOW : HIGH);  // ON = LOW, OFF = HIGH
+}
 
 bool isRecording = false;
 File frec;
@@ -838,7 +861,7 @@ bool pendingStopFastRecord = false;      // Flag to defer stopFastRecord() from 
 
 // State variables
 uint8_t filterPage[NUM_CHANNELS] = { 0 };
-uint8_t lastEncoder = 0;  // last used encoder index (0-3)
+uint8_t lastEncoder = 0;                                                                                       // last used encoder index (0-3)
 static int16_t lastEncVal[NUM_CHANNELS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };  // Track last encoder value per channel
 
 // Color scheme selection (0=default, 1=blue-ish, 2=whitish)
@@ -1952,14 +1975,14 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
     // Encoder[3] triggers action for all menu items EXCEPT AI (which uses encoder[0])
     // Note: Encoder button does NOT exit submenus - only touch buttons do
-    
+
     // Special case: If in ETC submenu and on COLR (41), toggle scheme without exiting
     extern bool inEtcSubmenu;
     if (inEtcSubmenu && mainSetting == 41) {
       switchMenu(41);  // Toggle color scheme, stay in submenu
-      return;  // Explicitly return to prevent any other processing
+      return;          // Explicitly return to prevent any other processing
     }
-    
+
     if (mainSetting != 15) {
       switchMenu(mainSetting);
     }
@@ -2006,7 +2029,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool manifestLoaded;
     extern uint16_t manifestFolderCount;
     if (!manifestLoaded) {
-      return; // Cannot proceed without manifest
+      return;  // Cannot proceed without manifest
     }
     int folderIdx = (int)currentMode->pos[1];  // Use current folder encoder position
     folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
@@ -2060,15 +2083,15 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       memset(peakValues, 0, sizeof(peakValues));
     }
     sampleIsLoaded = true;
-    } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
-      int songPosition = songMode.pos[3];     // 1-64
-      SMP.songArrangement[songPosition - 1] = 0;  // Clear assignment
+  } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
+    int songPosition = songMode.pos[3];                                                     // 1-64
+    SMP.songArrangement[songPosition - 1] = 0;                                              // Clear assignment
     return;
-    } else if (currentMode == &songMode && (match_buttons(currentButtonStates, 0, 1, 0, 0) || match_buttons(currentButtonStates, 0, 0, 0, 1))) {  // "0100" or "0001" - Encoder 1 or 3 pressed
-      // Save selected pattern to current song position
-      int songPosition = songMode.pos[3];     // 1-64
-      int selectedPattern = songMode.pos[1];  // 1-16
-      SMP.songArrangement[songPosition - 1] = selectedPattern;
+  } else if (currentMode == &songMode && (match_buttons(currentButtonStates, 0, 1, 0, 0) || match_buttons(currentButtonStates, 0, 0, 0, 1))) {  // "0100" or "0001" - Encoder 1 or 3 pressed
+    // Save selected pattern to current song position
+    int songPosition = songMode.pos[3];     // 1-64
+    int selectedPattern = songMode.pos[1];  // 1-16
+    SMP.songArrangement[songPosition - 1] = selectedPattern;
     return;
   } else if (currentMode == &songMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010" - Encoder 2 pressed - Toggle play/pause + songModeActive
     extern bool songModeActive;
@@ -2507,7 +2530,6 @@ void initSoundChip() {
   //sgtl5000_1.unmuteLineout();
   //sgtl5000_1.lineOutLevel(lineOutLevelSetting);
   sgtl5000_1.lineInLevel(lineInLevel);  // Apply line input level
-
 }
 
 
@@ -2774,11 +2796,11 @@ FLASHMEM void loadColorSchemeAndBrightness() {
     savedColorScheme = 0;
     EEPROM.write(EEPROM_DATA_START + 22, 0);
   }
-  
+
   extern void applyColorScheme(uint8_t scheme);
   extern volatile bool colorsUpdatedViaSerial;
   currentColorScheme = savedColorScheme;
-  
+
   // Load scheme 3 from file if selected
   if (savedColorScheme == 3) {
     bool scheme3Loaded = false;
@@ -2787,9 +2809,9 @@ FLASHMEM void loadColorSchemeAndBrightness() {
       if (schemeFile && schemeFile.size() >= 90) {
         uint8_t buf[90];
         if (schemeFile.read(buf, 90) == 90) {
-          for (int i=0; i<15; i++) {
-            col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
-            col_base[i] = CRGB(buf[45 + i*3], buf[46 + i*3], buf[47 + i*3]);
+          for (int i = 0; i < 15; i++) {
+            col[i] = CRGB(buf[i * 3], buf[i * 3 + 1], buf[i * 3 + 2]);
+            col_base[i] = CRGB(buf[45 + i * 3], buf[46 + i * 3], buf[47 + i * 3]);
           }
           scheme3Loaded = true;
           colorsUpdatedViaSerial = true;
@@ -2801,7 +2823,7 @@ FLASHMEM void loadColorSchemeAndBrightness() {
   } else {
     applyColorScheme(currentColorScheme);
   }
-  
+
   // Load brightness from EEPROM
   uint8_t savedBrightness = EEPROM.read(EEPROM_DATA_START + 26);
   if (savedBrightness < 3 || savedBrightness > 255) {
@@ -2820,8 +2842,48 @@ void setup() {
   NVIC_SET_PRIORITY(IRQ_LPUART8, 64);  // MIDI serial interrupt priority
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
   Serial.begin(115200);
+  
+  // Configure SWITCH_1 pin immediately for EEPROM clear detection
+  pinMode(SWITCH_1, INPUT_PULLDOWN);
+  
   // Avoid allocations / fragmentation when scheduling sample triggers
   pendingSampleNotes.reserve(64);
+  
+  // Initialize LEDs early for EEPROM clear visual feedback
+  FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
+  
+  // LED strip initialization (needed for FastLED.show() to work)
+  extern CRGB stripLeds[];
+  extern void initLedStrip();
+  FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);
+  
+  // Check for EEPROM clear request (SWITCH_1 held during startup)
+  int switch1Value = fastTouchRead(SWITCH_1);
+  if (switch1Value > touchThreshold) {  // Switch is pressed (same threshold as SWITCH_2 hourglass check)
+    // Clear screen to black background
+    extern void FastLEDclear();
+    FastLEDclear();
+    
+    // Display "CLR" in yellow on row 1 (y=3)
+    extern void drawText(const char *text, int startX, int startY, CRGB color);
+    drawText("CLR", 3, 3, CRGB(255, 255, 0));  // Yellow
+    
+    // Display "RAM" in yellow on row 2 (y=10)
+    drawText("RAM", 3, 10, CRGB(255, 255, 0));  // Yellow
+    
+    // Show the display
+    extern void FastLEDshow();
+    FastLEDshow();
+    
+    // Wait 3 seconds
+    delay(3000);
+    
+    // Clear all EEPROM bytes to 0
+    for (unsigned int i = 0; i < EEPROM.length(); i++) {
+      EEPROM.write(i, 0);
+    }
+  }
+  
   EEPROM.get(0, samplePackID);
   if (isnan(samplePackID) || samplePackID == 0 || samplePackID < 1) {  // Check for NaN, zero, or invalid values
     samplePackID = 1;
@@ -2831,26 +2893,21 @@ void setup() {
   // Synchronize SMP.pack with the loaded samplePackID
   SMP.pack = samplePackID;
 
-  pinMode(INT_PIN, INPUT_PULLUP);  // Interrups for encoder
-  pinMode(0, INPUT_PULLDOWN);
+  pinMode(INT_PIN, INPUT_PULLUP);     // Interrups for encoder
+  pinMode(BATT_ADC_PIN, INPUT);       // Battery sense (no pull) - voltage divider on schematic
+  analogReadResolution(12);           // 0-4095 so BATT raw reflects actual voltage (was 10-bit 1023 max)
   pinMode(SWITCH_1, INPUT_PULLDOWN);  // Use defined name
   pinMode(SWITCH_2, INPUT_PULLDOWN);  // Use defined name
   pinMode(SWITCH_3, INPUT_PULLDOWN);  // Use defined name
 
-  pinMode(2, INPUT_PULLUP);  // Pin 2 as input with pull-up
+  // SPKR pin 30: set as INPUT_PULLDOWN as early as possible
+  pinMode(30, INPUT_PULLDOWN);
+
+  // Note: SWITCH_1 (pin 2) already configured earlier for EEPROM clear detection
   pinMode(4, OUTPUT);        // Pin 4 set as output
   digitalWrite(4, LOW);      // Drive Pin 4 LOW
 
-  // Matrix LEDs on PIN 17
-  FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
-  // Matrix brightness is controlled per-controller in FastLEDshow() and dimmed in software (light_single)
-  
-  // LED strip on PIN 24 (separate data line, independent from matrix)
-  extern CRGB stripLeds[];
-  extern void initLedStrip();
-  FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);  // LED_STRIP_MAX_LENGTH (256)
-  // Strip brightness: Full brightness (255) - values written directly to stripLeds[]
-  // Matrix brightness: Controlled via software dimming in light_single() using ledBrightness
+  // Note: FastLED initialization moved earlier (before EEPROM clear check) for visual feedback
 
   // Early EEPROM load for audio settings (before initSoundChip)
   // Load GLOB.vol, micGain, previewVol, lineInLevel, lineOutLevelSetting directly from EEPROM
@@ -2905,7 +2962,7 @@ void setup() {
   }
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
 
-  
+
   // Check if touch2 (menu button) is pressed during startup for INIT mode
   int touch2Value = fastTouchRead(SWITCH_2);
   if (touch2Value > touchThreshold) {
@@ -2929,20 +2986,20 @@ void setup() {
     }
   }
 
-  
+
 
   runAnimation();
 
-    if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
+  if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
     checkCrashReport();
   }
   drawNoSD();
-  
+
   // Load color scheme and brightness from EEPROM (after SD is initialized)
   loadColorSchemeAndBrightness();
   //delay(500);
 
-  
+
 
   // Manifest-driven sample browser (no legacy lastFile EEPROM tracking).
   // Always use map.txt - if missing, scan and write it, then load it
@@ -2994,7 +3051,7 @@ void setup() {
 
   initSoundChip();
   //mixer0.gain(1, 0.05);  //PREV Sound
-  initEncoders();     // Moved initEncoders here, ensures Serial is up for its prints
+  initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
 
 
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
@@ -3017,7 +3074,7 @@ void setup() {
   // Check for reset flag file and trigger startNew() if it exists
   if (SD.exists("reset.dat")) {
     SD.remove("reset.dat");  // Delete the flag file
-    startNew();  // Trigger factory reset
+    startNew();              // Trigger factory reset
   }
 
   updateSynthVoice(11);
@@ -3047,6 +3104,8 @@ void setup() {
 
   // Initialize LED strip visualization
   initLedStrip();
+
+
 
   // END SETUP
 }
@@ -3086,6 +3145,58 @@ void setEncoderColor(int i) {
   Encoder[i].writeRGBCode(0x00FF00);
 }
 
+// Battery: voltage divider on BATT_ADC_PIN (R15=10k, R19=15k). Returns 0-100% for 3.0V-4.2V LiPo.
+#define BATT_DEBUG_SERIAL 0  // 1 = print raw to Serial every 2s (USB only; off when on battery)
+
+// Raw ADC value (reads every time called - caller handles throttling/display rate)
+int getBatteryRaw() {
+  return analogRead(BATT_ADC_PIN);
+}
+
+int getBatteryPercent() {
+  const int samples = 8;
+  uint32_t sum = 0;
+  for (int i = 0; i < samples; i++) {
+    sum += analogRead(BATT_ADC_PIN);
+    delay(1);
+  }
+  int adc = (int)(sum / samples);
+  int corrected = adc - BATT_RAW_ZERO;
+  if (corrected < 0) corrected = 0;
+  float vMeasured = (float)corrected * (3.3f / (float)(BATT_RAW_FULL - BATT_RAW_ZERO));
+  float vBat = vMeasured / BATT_DIVIDER_RATIO;
+  float pct = (vBat - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN) * 100.0f;
+  int result = (int)(pct + 0.5f);
+  return constrain(result, 0, 100);
+}
+
+// Battery warning state (checked every minute, shown for 5 seconds if < 20% but >= 1%)
+bool getBatteryWarningActive() {
+  static elapsedMillis batteryCheckTimer;
+  static bool batteryWarningActive = false;
+  static elapsedMillis batteryWarningTimer;
+
+  if (batteryCheckTimer >= 60000) {  // Every 60 seconds
+    batteryCheckTimer = 0;
+    int pct = getBatteryPercent();
+    // Show warning only if battery is between 1% and 20% (skip below 1% to avoid false warnings when USB-powered)
+    if (pct >= 1 && pct < 20) {
+      batteryWarningActive = true;
+      batteryWarningTimer = 0;  // Start 5-second timer
+    }
+  }
+
+  // Show warning for 5 seconds
+  if (batteryWarningActive) {
+    if (batteryWarningTimer >= 5000) {
+      batteryWarningActive = false;  // Hide after 5 seconds
+    } else {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 void checkEncoders() {
   // Track mode changes globally for this function to detect re-entry into Draw/Single modes
@@ -3399,7 +3510,7 @@ void checkEncoders() {
     if (ctrlMode == 0 && currentMode->pos[1] != editpage && !songModeActive) {
       updateLastPage();
       editpage = currentMode->pos[1];
-      
+
       // In NEXT mode, set pending page instead of immediately changing
       if (patternMode == 3) {
         // NEXT mode: store as pending page, will jump when current page completes
@@ -3922,13 +4033,13 @@ void checkTouchInputs() {
     // SWITCH_1
     if (touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME) && !touchConflict) {
       lastTouchTime[0] = currentTime;
-      
+
       // If y=1, touch1 starts play immediately (even if already playing)
       if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 1) {
         play(true);
         return;
       }
-      
+
       if (currentMode == &draw) {
         if (!(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
           animateSingle();
@@ -4597,130 +4708,130 @@ void checkSerialColors() {
       // Color sync: "COLR" header
       if (Serial.available() >= 94) {
         if (Serial.read() == 'C' && Serial.read() == 'O' && Serial.read() == 'L' && Serial.read() == 'R') {
-             uint8_t buf[90];
-             int bytesRead = Serial.readBytes(buf, 90);
-             
-             if (bytesRead != 90) {
-               return;
-             }
-             
-             // Update col[] array (Note ON colors) - bytes 0-44
-             for (int i=0; i<15; i++) {
-               col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
-             }
-             
-             // Update col_base[] array (Note OFF / Base colors) - bytes 45-89
-             for (int i=0; i<15; i++) {
-               int baseIdx = 45 + i*3;
-               col_base[i] = CRGB(buf[baseIdx], buf[baseIdx+1], buf[baseIdx+2]);
-             }
-             
-             // Set flag to invalidate color cache in drawBase()
-             colorsUpdatedViaSerial = true;
-             
-             // Debug: verify first and last colors of both arrays
-             
-             // Request menu redraw if in menu mode
-             extern void menuRequestFullRedraw();
-             menuRequestFullRedraw();
-             
-             // Colors are now updated and will be used on next display refresh
+          uint8_t buf[90];
+          int bytesRead = Serial.readBytes(buf, 90);
+
+          if (bytesRead != 90) {
+            return;
+          }
+
+          // Update col[] array (Note ON colors) - bytes 0-44
+          for (int i = 0; i < 15; i++) {
+            col[i] = CRGB(buf[i * 3], buf[i * 3 + 1], buf[i * 3 + 2]);
+          }
+
+          // Update col_base[] array (Note OFF / Base colors) - bytes 45-89
+          for (int i = 0; i < 15; i++) {
+            int baseIdx = 45 + i * 3;
+            col_base[i] = CRGB(buf[baseIdx], buf[baseIdx + 1], buf[baseIdx + 2]);
+          }
+
+          // Set flag to invalidate color cache in drawBase()
+          colorsUpdatedViaSerial = true;
+
+          // Debug: verify first and last colors of both arrays
+
+          // Request menu redraw if in menu mode
+          extern void menuRequestFullRedraw();
+          menuRequestFullRedraw();
+
+          // Colors are now updated and will be used on next display refresh
         }
       }
     } else if (Serial.peek() == 'B') {
       // Brightness sync: "BRIT" header
       if (Serial.available() >= 5) {
         if (Serial.read() == 'B' && Serial.read() == 'R' && Serial.read() == 'I' && Serial.read() == 'T') {
-             uint8_t brightness = Serial.read();
-             brightness = constrain(brightness, 3, 255);  // Clamp to valid range
-             
-             // Update brightness
-             ledBrightness = brightness;
-             
-             // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
-             EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
-             
-             // Update encoder position if in volume_bpm mode
-             extern Mode* currentMode;
-             extern Mode volume_bpm;
-             if (currentMode == &volume_bpm) {
-               // Update encoder[1] position to match new brightness
-               // ledBrightness = pos[1] + 3, so pos[1] = ledBrightness - 3
-               unsigned int brightnessPos = (brightness >= 3) ? (brightness - 3) : 0;
-               brightnessPos = constrain(brightnessPos, 0, 252);
-               currentMode->pos[1] = brightnessPos;
-               Encoder[1].writeCounter((int32_t)brightnessPos);
-             }
-             
-             
-             // Request menu redraw if in menu mode
-             extern void menuRequestFullRedraw();
-             menuRequestFullRedraw();
+          uint8_t brightness = Serial.read();
+          brightness = constrain(brightness, 3, 255);  // Clamp to valid range
+
+          // Update brightness
+          ledBrightness = brightness;
+
+          // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
+          EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
+
+          // Update encoder position if in volume_bpm mode
+          extern Mode *currentMode;
+          extern Mode volume_bpm;
+          if (currentMode == &volume_bpm) {
+            // Update encoder[1] position to match new brightness
+            // ledBrightness = pos[1] + 3, so pos[1] = ledBrightness - 3
+            unsigned int brightnessPos = (brightness >= 3) ? (brightness - 3) : 0;
+            brightnessPos = constrain(brightnessPos, 0, 252);
+            currentMode->pos[1] = brightnessPos;
+            Encoder[1].writeCounter((int32_t)brightnessPos);
+          }
+
+
+          // Request menu redraw if in menu mode
+          extern void menuRequestFullRedraw();
+          menuRequestFullRedraw();
         }
       }
     } else if (Serial.peek() == 'S') {
       // Save scheme: "SAVE" header
       if (Serial.available() >= 94) {
         if (Serial.read() == 'S' && Serial.read() == 'A' && Serial.read() == 'V' && Serial.read() == 'E') {
-             uint8_t buf[90];
-             int bytesRead = Serial.readBytes(buf, 90);
-             
-             if (bytesRead != 90) {
-               return;
-             }
-             
-             // Save to scheme.txt on SD card
-             if (SD.exists("scheme.txt")) {
-               SD.remove("scheme.txt");
-             }
-             File schemeFile = SD.open("scheme.txt", FILE_WRITE);
-             if (schemeFile) {
-               // Write col[] array (Note ON colors) - 15 colors * 3 bytes = 45 bytes
-               for (int i=0; i<15; i++) {
-                 schemeFile.write(buf[i*3]);     // R
-                 schemeFile.write(buf[i*3+1]);   // G
-                 schemeFile.write(buf[i*3+2]);   // B
-               }
-               
-               // Write col_base[] array (Note OFF / Base colors) - 15 colors * 3 bytes = 45 bytes
-               for (int i=0; i<15; i++) {
-                 int baseIdx = 45 + i*3;
-                 schemeFile.write(buf[baseIdx]);     // R
-                 schemeFile.write(buf[baseIdx+1]);   // G
-                 schemeFile.write(buf[baseIdx+2]);   // B
-               }
-               
-               schemeFile.close();
-               
-               // Save scheme selection (3) to EEPROM
-               // Use EEPROM_DATA_START + 22 (slot 22 is available)
-               EEPROM.write(EEPROM_DATA_START + 22, 3);
-               
-               // Update current color scheme
-               currentColorScheme = 3;
-               
-               // Update runtime arrays with saved colors (scheme 3 is loaded from file, not from static arrays)
-               for (int i=0; i<15; i++) {
-                 col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
-               }
-               for (int i=0; i<15; i++) {
-                 int baseIdx = 45 + i*3;
-                 col_base[i] = CRGB(buf[baseIdx], buf[baseIdx+1], buf[baseIdx+2]);
-               }
-               
-               // Set flag to invalidate color cache
-               colorsUpdatedViaSerial = true;
-               
-               // Request menu redraw if in menu mode
-               extern void menuRequestFullRedraw();
-               menuRequestFullRedraw();
-               
-             } else {
-             }
+          uint8_t buf[90];
+          int bytesRead = Serial.readBytes(buf, 90);
+
+          if (bytesRead != 90) {
+            return;
+          }
+
+          // Save to scheme.txt on SD card
+          if (SD.exists("scheme.txt")) {
+            SD.remove("scheme.txt");
+          }
+          File schemeFile = SD.open("scheme.txt", FILE_WRITE);
+          if (schemeFile) {
+            // Write col[] array (Note ON colors) - 15 colors * 3 bytes = 45 bytes
+            for (int i = 0; i < 15; i++) {
+              schemeFile.write(buf[i * 3]);      // R
+              schemeFile.write(buf[i * 3 + 1]);  // G
+              schemeFile.write(buf[i * 3 + 2]);  // B
+            }
+
+            // Write col_base[] array (Note OFF / Base colors) - 15 colors * 3 bytes = 45 bytes
+            for (int i = 0; i < 15; i++) {
+              int baseIdx = 45 + i * 3;
+              schemeFile.write(buf[baseIdx]);      // R
+              schemeFile.write(buf[baseIdx + 1]);  // G
+              schemeFile.write(buf[baseIdx + 2]);  // B
+            }
+
+            schemeFile.close();
+
+            // Save scheme selection (3) to EEPROM
+            // Use EEPROM_DATA_START + 22 (slot 22 is available)
+            EEPROM.write(EEPROM_DATA_START + 22, 3);
+
+            // Update current color scheme
+            currentColorScheme = 3;
+
+            // Update runtime arrays with saved colors (scheme 3 is loaded from file, not from static arrays)
+            for (int i = 0; i < 15; i++) {
+              col[i] = CRGB(buf[i * 3], buf[i * 3 + 1], buf[i * 3 + 2]);
+            }
+            for (int i = 0; i < 15; i++) {
+              int baseIdx = 45 + i * 3;
+              col_base[i] = CRGB(buf[baseIdx], buf[baseIdx + 1], buf[baseIdx + 2]);
+            }
+
+            // Set flag to invalidate color cache
+            colorsUpdatedViaSerial = true;
+
+            // Request menu redraw if in menu mode
+            extern void menuRequestFullRedraw();
+            menuRequestFullRedraw();
+
+          } else {
+          }
         }
       }
     } else {
-        Serial.read(); // Consume junk
+      Serial.read();  // Consume junk
     }
   }
 }
@@ -4734,6 +4845,31 @@ void loop() {
   serviceSettingsBackup();
 
   yield();  // Yield early to maintain responsiveness during file operations
+
+#if BATT_DEBUG_SERIAL
+  {
+    static elapsedMillis battDebugTimer;
+    if (battDebugTimer >= 2000) {
+      battDebugTimer = 0;
+      int raw = analogRead(BATT_ADC_PIN);
+      int corrected = raw - BATT_RAW_ZERO;
+      if (corrected < 0) corrected = 0;
+      float vMeasured = (float)corrected * (3.3f / (float)(BATT_RAW_FULL - BATT_RAW_ZERO));
+      float vBat = vMeasured / BATT_DIVIDER_RATIO;
+      float pct = (vBat - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN) * 100.0f;
+      if (pct < 0.0f) pct = 0.0f;
+      if (pct > 100.0f) pct = 100.0f;
+      Serial.print("BATT raw=");
+      Serial.print(raw);
+      Serial.print(" Vmeas=");
+      Serial.print(vMeasured, 3);
+      Serial.print(" VBAT=");
+      Serial.print(vBat, 3);
+      Serial.print(" %=");
+      Serial.println((int)(pct + 0.5f));
+    }
+  }
+#endif
 
   // === Deferred work from timer interrupt (playNote) ===
   // Keep all Serial/LED/I2C/encoder work out of ISRs.
@@ -4832,6 +4968,14 @@ void loop() {
       if (fastRecordActive) {
         drawRecordingBorder();
       }
+
+      // Battery warning overlay (red border + empty battery icon)
+      extern void drawBatteryWarning();
+      extern bool getBatteryWarningActive();
+      if (getBatteryWarningActive()) {
+        drawBatteryWarning();
+      }
+
       if (pongActive) {
         drawPongBall();
       }
@@ -5620,7 +5764,7 @@ void play(bool fromStart) {
       if (SMP.bpm > 0.0f) {
         unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
         playTimer.end();
-        playNote();  // Fire the downbeat right away
+        playNote();                                          // Fire the downbeat right away
         playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
         // Start fill timer at 4x the beat rate
         if (currentPlayNoteInterval >= 4) {
@@ -5664,7 +5808,7 @@ void pause() {
   isNowPlaying = false;
   pendingStartOnBar = false;
   lastFlowPage = 0;  // Reset FLOW page tracking when playback stops
-  fillTimer.end();  // Stop fill timer when playback stops
+  fillTimer.end();   // Stop fill timer when playback stops
   updateLastPage();
 
   // Update encoder 1 limit if pattern mode is ON
@@ -5677,7 +5821,7 @@ void pause() {
   }
 
   deleteActiveCopy();
-  autoSave();  // Now safe to do blocking SD card operations - timer is stopped
+  autoSave();       // Now safe to do blocking SD card operations - timer is stopped
   fillTimer.end();  // Stop fill timer on pause
   envelope0.noteOff();
   // Ensure synth voices 13/14 are silenced on pause
@@ -5685,11 +5829,11 @@ void pause() {
   stopSynthChannel(14);
   //allOff();
   Encoder[2].writeRGBCode(0x00FF00);  // Full brightness green
-  beat = 1;          // Reset beat on pause
-  beatForUI = beat;  // Keep UI timer in sync with reset position
-  GLOB.page = 1;     // Reset page on pause
-  loopCount = 0;     // Reset loop count to 0 on pause (will be set to 1 on next play)
-  fillHasTriggered = false;  // Reset fill trigger flag on pause
+  beat = 1;                           // Reset beat on pause
+  beatForUI = beat;                   // Keep UI timer in sync with reset position
+  GLOB.page = 1;                      // Reset page on pause
+  loopCount = 0;                      // Reset loop count to 0 on pause (will be set to 1 on next play)
+  fillHasTriggered = false;           // Reset fill trigger flag on pause
   fillRunning = false;
   fillSubTick = 0;
   fillStartSubTick = 0;
@@ -5823,17 +5967,17 @@ void playNote() {
   // This prevents double-trigger of first note when pages change during playback
   // Track last edit page to detect page changes (static persists across function calls)
   static unsigned int lastEdit = GLOB.edit;
-  
+
   if (SMP_PATTERN_MODE) {
     extern bool songModeActive;
     extern int patternMode;
-    
+
     // Preserve relative beat when switching pages (but NOT in song mode or NEXT mode - let those handle beat position)
     if (GLOB.edit != lastEdit && !songModeActive && patternMode != 3) {
       unsigned int oldStart = (lastEdit - 1) * maxX + 1;
       unsigned int newStart = (GLOB.edit - 1) * maxX + 1;
       unsigned int offset = beat - oldStart;
-      
+
       // Only adjust if beat is not already at the start of the new page (prevents double-trigger)
       if (beat != newStart) {
         beat = newStart + offset;
@@ -5939,254 +6083,254 @@ void playNote() {
   isrPlayButtonTick = true;
 
   for (unsigned int b = 1; b < maxY + 1; b++) {  // b is 1-indexed (row on grid)
-      if (beat > 0 && beat <= maxlen) {            // Ensure beat is within valid range for note array
-        int ch = note[beat][b].channel;            // ch is 0-indexed for internal use (e.g. SMP arrays)
-        int vel = note[beat][b].velocity;
-        uint8_t prob = note[beat][b].probability;  // Get probability (0-100)
-        uint8_t cond = note[beat][b].condition;    // Get condition (1, 2, 4 for 1, 1/2, 1/4)
-        if (cond == 0) cond = 1;                   // Default to 1 if not set
+    if (beat > 0 && beat <= maxlen) {            // Ensure beat is within valid range for note array
+      int ch = note[beat][b].channel;            // ch is 0-indexed for internal use (e.g. SMP arrays)
+      int vel = note[beat][b].velocity;
+      uint8_t prob = note[beat][b].probability;  // Get probability (0-100)
+      uint8_t cond = note[beat][b].condition;    // Get condition (1, 2, 4 for 1, 1/2, 1/4)
+      if (cond == 0) cond = 1;                   // Default to 1 if not set
 
-        if (ch > 0 && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
+      if (ch > 0 && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
 
 
-          // Check condition - skip if not the right loop iteration
-          // Condition 21 (F/F) always plays (handled separately for fill)
-          if (cond > 1 && cond != 21) {
-            bool shouldPlay = false;
-            if (cond <= 16) {
-              // 1/X conditions: play when (loopCount % cond) == 0
-              // 1/2: every 2nd loop (2, 4, 6, 8...)
-              // 1/4: every 4th loop (4, 8, 12, 16...)
-              shouldPlay = (loopCount % cond) == 0;
-            } else {
-              // X/1 conditions: play on every Xth loop, starting with the first
-              // 2/1: every 2nd loop starting with first (1, 3, 5, 7...)
-              // 4/1: every 4th loop starting with first (1, 5, 9, 13...)
-              // Values: 17=2/1, 18=4/1, 19=8/1, 20=16/1
-              // Map: 17->2, 18->4, 19->8, 20->16
-              uint8_t x = (cond == 17) ? 2 : (cond == 18) ? 4
-                                           : (cond == 19) ? 8
-                                                          : 16;
-              shouldPlay = (loopCount % x) == 1;
-            }
-
-            if (!shouldPlay) {
-              continue;  // Skip this note based on condition
-            }
+        // Check condition - skip if not the right loop iteration
+        // Condition 21 (F/F) always plays (handled separately for fill)
+        if (cond > 1 && cond != 21) {
+          bool shouldPlay = false;
+          if (cond <= 16) {
+            // 1/X conditions: play when (loopCount % cond) == 0
+            // 1/2: every 2nd loop (2, 4, 6, 8...)
+            // 1/4: every 4th loop (4, 8, 12, 16...)
+            shouldPlay = (loopCount % cond) == 0;
+          } else {
+            // X/1 conditions: play on every Xth loop, starting with the first
+            // 2/1: every 2nd loop starting with first (1, 3, 5, 7...)
+            // 4/1: every 4th loop starting with first (1, 5, 9, 13...)
+            // Values: 17=2/1, 18=4/1, 19=8/1, 20=16/1
+            // Map: 17->2, 18->4, 19->8, 20->16
+            uint8_t x = (cond == 17) ? 2 : (cond == 18) ? 4
+                                         : (cond == 19) ? 8
+                                                        : 16;
+            shouldPlay = (loopCount % x) == 1;
           }
 
-          // Check probability - if random(0-99) >= probability, skip this note
-          if (prob < 100) {
-            int randValue = random(100);  // Generate random value 0-99
-            if (randValue >= prob) {
-              continue;  // Skip this note based on probability
-            }
+          if (!shouldPlay) {
+            continue;  // Skip this note based on condition
           }
-
-          // Skip normal trigger for fill notes - they're handled by fillTimer ISR
-          if (cond == 21) {
-            // Initialize fill ONCE per playback cycle (locks out until pause/play resets).
-            // Start as soon as we encounter the fill trigger note during playback.
-            if (!fillHasTriggered && !fillRunning) {
-              fillRunning = true;
-              // Start on the next sub-tick to avoid a double-hit on the same sub-tick edge.
-              fillStartSubTick = fillSubTick + 1;
-              fillActiveChannel = ch;
-              fillActiveVelocity = (vel == 0) ? defaultVelocity : vel;
-              fillActiveRow = b;
-            }
-            continue;  // Fill notes are handled by separate fillTimer ISR
-          }
-
-          // Trigger MIDI and audio as close together as possible.
-          // NOTE: 'ch' is stored 1-based in 'note' (1=voice1, 2=voice2, etc.), and MIDI channels are 1-16.
-          // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
-          
-          // Trigger LED strip ripple only if note is actually played (passed cond/prob checks)
-          onNoteTriggered(ch);
-
-          MidiSendNoteOn(b, ch, vel);
-          if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
-            int pitch = (12 * SampleRate[ch]) + b - (ch + 1);
-
-            // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-            if (ch >= 1 && ch <= 12) {
-              pitch += (int)detune[ch];  // Add detune semitones
-            }
-
-            // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-            if (ch >= 1 && ch <= 8) {
-              pitch += (int)(channelOctave[ch] * 12);  // Add octave semitones (12 semitones per octave)
-            }
-
-            _samplers[ch].noteEvent(pitch, vel, true, true);
-          } else if (ch == 11) {  // Assuming ch 11 is a specific synth
-            // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
-            // playSound expects MIDI note number (0-indexed pitch offset from row)
-            playSound(12 * (int)octave[0] + transpose + (b - 1), 0);  // b-1 to match paint preview
-
-          } else if (ch >= 13 && ch < 15) {  // Synth channels 13, 14
-            playSynth(ch, b, vel, false);    // b is 1-indexed for grid row
-          }
-          
-          // Note: LED strip ripple is triggered earlier, before mute check, so it shows all triggers
         }
+
+        // Check probability - if random(0-99) >= probability, skip this note
+        if (prob < 100) {
+          int randValue = random(100);  // Generate random value 0-99
+          if (randValue >= prob) {
+            continue;  // Skip this note based on probability
+          }
+        }
+
+        // Skip normal trigger for fill notes - they're handled by fillTimer ISR
+        if (cond == 21) {
+          // Initialize fill ONCE per playback cycle (locks out until pause/play resets).
+          // Start as soon as we encounter the fill trigger note during playback.
+          if (!fillHasTriggered && !fillRunning) {
+            fillRunning = true;
+            // Start on the next sub-tick to avoid a double-hit on the same sub-tick edge.
+            fillStartSubTick = fillSubTick + 1;
+            fillActiveChannel = ch;
+            fillActiveVelocity = (vel == 0) ? defaultVelocity : vel;
+            fillActiveRow = b;
+          }
+          continue;  // Fill notes are handled by separate fillTimer ISR
+        }
+
+        // Trigger MIDI and audio as close together as possible.
+        // NOTE: 'ch' is stored 1-based in 'note' (1=voice1, 2=voice2, etc.), and MIDI channels are 1-16.
+        // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
+
+        // Trigger LED strip ripple only if note is actually played (passed cond/prob checks)
+        onNoteTriggered(ch);
+
+        MidiSendNoteOn(b, ch, vel);
+        if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
+          int pitch = (12 * SampleRate[ch]) + b - (ch + 1);
+
+          // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
+          if (ch >= 1 && ch <= 12) {
+            pitch += (int)detune[ch];  // Add detune semitones
+          }
+
+          // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
+          if (ch >= 1 && ch <= 8) {
+            pitch += (int)(channelOctave[ch] * 12);  // Add octave semitones (12 semitones per octave)
+          }
+
+          _samplers[ch].noteEvent(pitch, vel, true, true);
+        } else if (ch == 11) {  // Assuming ch 11 is a specific synth
+          // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
+          // playSound expects MIDI note number (0-indexed pitch offset from row)
+          playSound(12 * (int)octave[0] + transpose + (b - 1), 0);  // b-1 to match paint preview
+
+        } else if (ch >= 13 && ch < 15) {  // Synth channels 13, 14
+          playSynth(ch, b, vel, false);    // b is 1-indexed for grid row
+        }
+
+        // Note: LED strip ripple is triggered earlier, before mute check, so it shows all triggers
       }
+    }
   }
 
   // midi functions
   if (waitForFourBars && pulseCount >= totalPulsesToWait) {
-      extern int patternMode;
-      if (SMP_PATTERN_MODE) {
-        if (patternMode == 3) {
-          // NEXT mode: use GLOB.page as the playing page
-          if (GLOB.page == 0) {
-            GLOB.page = GLOB.edit;  // Initialize if not set
-          }
-          beat = (GLOB.page - 1) * maxX + 1;  // Start from first beat of playing page
-        } else {
-          // Other pattern modes: use GLOB.edit
-          beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-          GLOB.page = GLOB.edit;              // Keep the current page
-        }
-      } else {
-        beat = 1;
-        GLOB.page = 1;
-      }
-      if (fastRecordActive) stopFastRecord();
-      isNowPlaying = true;      // Should already be true if MIDI clock started it
-      waitForFourBars = false;  // Reset for the next start message
-    }
-
-    beatStartTime = millis();
+    extern int patternMode;
     if (SMP_PATTERN_MODE) {
-      extern bool songModeActive;
-      extern int patternMode;
-
-      // In NEXT mode, ALWAYS use GLOB.page (actual playing page) for calculations
-      // In other modes, use GLOB.edit (displayed page)
-      unsigned int currentPlayingPage;
       if (patternMode == 3) {
-        // NEXT mode: use GLOB.page as the actual playing page
-        currentPlayingPage = GLOB.page;
-        if (currentPlayingPage == 0) {
-          // Initialize if not set
-          currentPlayingPage = GLOB.edit;
-          GLOB.page = GLOB.edit;
+        // NEXT mode: use GLOB.page as the playing page
+        if (GLOB.page == 0) {
+          GLOB.page = GLOB.edit;  // Initialize if not set
         }
+        beat = (GLOB.page - 1) * maxX + 1;  // Start from first beat of playing page
       } else {
-        // Other modes: use GLOB.edit
-        currentPlayingPage = GLOB.edit;
-      }
-      
-      // Compute the bounds of the current playing page:
-      unsigned int pageStart = (currentPlayingPage - 1) * maxX + 1;
-      unsigned int pageEnd = pageStart + maxX - 1;
-
-      // In NEXT mode, initialize GLOB.page to current playing page if not set
-      if (patternMode == 3 && GLOB.page == 0) {
-        GLOB.page = GLOB.edit;
-      }
-
-      // Update lastEdit tracker in song mode too (to track page changes for future reference)
-      if (songModeActive) {
-        lastEdit = GLOB.edit;
-      }
-
-      // Advance and wrap within this page:
-      // Track previous state BEFORE incrementing
-      static unsigned int lastPageAfterWrap = 0;
-      static unsigned int lastBeatAfterWrap = 0;
-      unsigned int previousPage = GLOB.page;
-      unsigned int previousBeat = beat;
-
-      beat++;
-
-      if (songModeActive) {
-        // In song mode, check if we need to advance to next pattern
-        if (beat > pageEnd) {
-          // Pattern finished - advance to next pattern in song
-          isrDbgPatternFinishedBeat = beat;
-          isrDbgPatternFinished = true;
-          checkPages();
-        } else {
-          // Still within pattern - just keep displaying current pattern
-          GLOB.page = GLOB.edit;
-        }
-      } else if (patternMode == 3) {
-        // NEXT mode: check if we've reached the end of current playing page, then jump to pending page
-        if (beat > pageEnd && pendingPage > 0) {
-          // Current page completed - jump to pending page
-          unsigned int newPageStart = (pendingPage - 1) * maxX + 1;
-          beat = newPageStart;
-          unsigned int oldPendingPage = pendingPage;
-          pendingPage = 0;  // Clear pending page after jump
-          
-          // Update page variables - now the pending page becomes the playing page
-          GLOB.page = oldPendingPage;  // This is now the actual playing page
-          GLOB.edit = oldPendingPage;  // Display matches playing page
-          editpage = oldPendingPage;
-          lastEdit = oldPendingPage;
-          
-          // Update encoder positions to match
-          currentMode->pos[1] = (int)oldPendingPage;
-          Encoder[1].writeCounter((int32_t)oldPendingPage);
-          int xval = mapXtoPageOffset(GLOB.x) + ((oldPendingPage - 1) * maxX);
-          Encoder[3].writeCounter((int32_t)xval);
-          GLOB.x = xval;
-        } else if (beat < pageStart || beat > pageEnd) {
-          // Wrap within page if no pending page (shouldn't normally happen in NEXT mode)
-          beat = pageStart;
-        }
-        // In NEXT mode, don't update GLOB.page from GLOB.edit - keep them separate
-      } else {
-        // Normal pattern mode - wrap within page
-        if (beat < pageStart || beat > pageEnd) {
-          beat = pageStart;
-        }
-      }
-
-      // Update page after wrapping (but NOT in NEXT mode - GLOB.page is the playing page there)
-      if (patternMode != 3) {
-        GLOB.page = GLOB.edit;
-      }
-
-      // Simple loopCount logic: increment when we transition TO page 1, beat 1 while playing
-      static bool wasAtStart = false;  // Track if we were at page 1, beat 1 in previous call
-
-      if (!isNowPlaying) {
-        wasAtStart = false;  // Reset when not playing
-      } else {
-        bool atStart = (GLOB.page == 1 && beat == 1);
-        // Increment if we just arrived at start (weren't here before, but are now)
-        if (atStart && !wasAtStart) {
-          loopCount++;
-          if (loopCount > 256) loopCount = 1;  // Prevent overflow
-          isrDbgLoopCountValue = (uint16_t)loopCount;
-          isrDbgLoopCountChanged = true;
-        }
-        wasAtStart = atStart;
+        // Other pattern modes: use GLOB.edit
+        beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
+        GLOB.page = GLOB.edit;              // Keep the current page
       }
     } else {
-      // Fallback to default behavior:
-      beat++;
-      checkPages();
-      // Simple loopCount logic for non-pattern mode: increment when we transition TO page 1, beat 1
-      static bool wasAtStartNP = false;  // Track if we were at page 1, beat 1 in previous call
+      beat = 1;
+      GLOB.page = 1;
+    }
+    if (fastRecordActive) stopFastRecord();
+    isNowPlaying = true;      // Should already be true if MIDI clock started it
+    waitForFourBars = false;  // Reset for the next start message
+  }
 
-      if (!isNowPlaying) {
-        wasAtStartNP = false;  // Reset when not playing
-      } else {
-        bool atStartNP = (GLOB.page == 1 && beat == 1);
-        // Increment if we just arrived at start (weren't here before, but are now)
-        if (atStartNP && !wasAtStartNP) {
-          loopCount++;
-          if (loopCount > 256) loopCount = 1;  // Prevent overflow
-          isrDbgLoopCountValue = (uint16_t)loopCount;
-          isrDbgLoopCountChanged = true;
-        }
-        wasAtStartNP = atStartNP;
+  beatStartTime = millis();
+  if (SMP_PATTERN_MODE) {
+    extern bool songModeActive;
+    extern int patternMode;
+
+    // In NEXT mode, ALWAYS use GLOB.page (actual playing page) for calculations
+    // In other modes, use GLOB.edit (displayed page)
+    unsigned int currentPlayingPage;
+    if (patternMode == 3) {
+      // NEXT mode: use GLOB.page as the actual playing page
+      currentPlayingPage = GLOB.page;
+      if (currentPlayingPage == 0) {
+        // Initialize if not set
+        currentPlayingPage = GLOB.edit;
+        GLOB.page = GLOB.edit;
       }
+    } else {
+      // Other modes: use GLOB.edit
+      currentPlayingPage = GLOB.edit;
+    }
+
+    // Compute the bounds of the current playing page:
+    unsigned int pageStart = (currentPlayingPage - 1) * maxX + 1;
+    unsigned int pageEnd = pageStart + maxX - 1;
+
+    // In NEXT mode, initialize GLOB.page to current playing page if not set
+    if (patternMode == 3 && GLOB.page == 0) {
+      GLOB.page = GLOB.edit;
+    }
+
+    // Update lastEdit tracker in song mode too (to track page changes for future reference)
+    if (songModeActive) {
+      lastEdit = GLOB.edit;
+    }
+
+    // Advance and wrap within this page:
+    // Track previous state BEFORE incrementing
+    static unsigned int lastPageAfterWrap = 0;
+    static unsigned int lastBeatAfterWrap = 0;
+    unsigned int previousPage = GLOB.page;
+    unsigned int previousBeat = beat;
+
+    beat++;
+
+    if (songModeActive) {
+      // In song mode, check if we need to advance to next pattern
+      if (beat > pageEnd) {
+        // Pattern finished - advance to next pattern in song
+        isrDbgPatternFinishedBeat = beat;
+        isrDbgPatternFinished = true;
+        checkPages();
+      } else {
+        // Still within pattern - just keep displaying current pattern
+        GLOB.page = GLOB.edit;
+      }
+    } else if (patternMode == 3) {
+      // NEXT mode: check if we've reached the end of current playing page, then jump to pending page
+      if (beat > pageEnd && pendingPage > 0) {
+        // Current page completed - jump to pending page
+        unsigned int newPageStart = (pendingPage - 1) * maxX + 1;
+        beat = newPageStart;
+        unsigned int oldPendingPage = pendingPage;
+        pendingPage = 0;  // Clear pending page after jump
+
+        // Update page variables - now the pending page becomes the playing page
+        GLOB.page = oldPendingPage;  // This is now the actual playing page
+        GLOB.edit = oldPendingPage;  // Display matches playing page
+        editpage = oldPendingPage;
+        lastEdit = oldPendingPage;
+
+        // Update encoder positions to match
+        currentMode->pos[1] = (int)oldPendingPage;
+        Encoder[1].writeCounter((int32_t)oldPendingPage);
+        int xval = mapXtoPageOffset(GLOB.x) + ((oldPendingPage - 1) * maxX);
+        Encoder[3].writeCounter((int32_t)xval);
+        GLOB.x = xval;
+      } else if (beat < pageStart || beat > pageEnd) {
+        // Wrap within page if no pending page (shouldn't normally happen in NEXT mode)
+        beat = pageStart;
+      }
+      // In NEXT mode, don't update GLOB.page from GLOB.edit - keep them separate
+    } else {
+      // Normal pattern mode - wrap within page
+      if (beat < pageStart || beat > pageEnd) {
+        beat = pageStart;
+      }
+    }
+
+    // Update page after wrapping (but NOT in NEXT mode - GLOB.page is the playing page there)
+    if (patternMode != 3) {
+      GLOB.page = GLOB.edit;
+    }
+
+    // Simple loopCount logic: increment when we transition TO page 1, beat 1 while playing
+    static bool wasAtStart = false;  // Track if we were at page 1, beat 1 in previous call
+
+    if (!isNowPlaying) {
+      wasAtStart = false;  // Reset when not playing
+    } else {
+      bool atStart = (GLOB.page == 1 && beat == 1);
+      // Increment if we just arrived at start (weren't here before, but are now)
+      if (atStart && !wasAtStart) {
+        loopCount++;
+        if (loopCount > 256) loopCount = 1;  // Prevent overflow
+        isrDbgLoopCountValue = (uint16_t)loopCount;
+        isrDbgLoopCountChanged = true;
+      }
+      wasAtStart = atStart;
+    }
+  } else {
+    // Fallback to default behavior:
+    beat++;
+    checkPages();
+    // Simple loopCount logic for non-pattern mode: increment when we transition TO page 1, beat 1
+    static bool wasAtStartNP = false;  // Track if we were at page 1, beat 1 in previous call
+
+    if (!isNowPlaying) {
+      wasAtStartNP = false;  // Reset when not playing
+    } else {
+      bool atStartNP = (GLOB.page == 1 && beat == 1);
+      // Increment if we just arrived at start (weren't here before, but are now)
+      if (atStartNP && !wasAtStartNP) {
+        loopCount++;
+        if (loopCount > 256) loopCount = 1;  // Prevent overflow
+        isrDbgLoopCountValue = (uint16_t)loopCount;
+        isrDbgLoopCountChanged = true;
+      }
+      wasAtStartNP = atStartNP;
+    }
   }
   for (int ch = 13; ch <= 14; ch++) {  // Only for synth channels 13, 14
     if (noteOnTriggered[ch] && !persistentNoteOn[ch]) {
@@ -6447,7 +6591,6 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   } else if (channel >= 13 && channel < 15) {
     playSynth(channel, pitch_from_row, velocity, false);
   }
-  
 }
 
 
@@ -7354,7 +7497,7 @@ FLASHMEM bool getMuteStateForUI(int channel) {
     // Use page-specific mutes when PMOD is enabled
     // Always use GLOB.edit (edit page) for UI display
     unsigned int mutePage = GLOB.edit;
-    if (mutePage == 0) mutePage = 1;  // Fallback
+    if (mutePage == 0) mutePage = 1;          // Fallback
     return pageMutes[mutePage - 1][channel];  // Page is 1-indexed, array is 0-indexed
   } else {
     // Use global mutes when PMOD is disabled
@@ -7370,9 +7513,9 @@ FLASHMEM void setMuteState(int channel, bool muted) {
     // In NEXT mode, set mute for the edit page (displayed page), not the playing page
     // In ON/SONG mode, edit and play page are the same, so use GLOB.edit
     unsigned int mutePage = GLOB.edit;
-    if (mutePage == 0) mutePage = 1;  // Fallback
+    if (mutePage == 0) mutePage = 1;           // Fallback
     pageMutes[mutePage - 1][channel] = muted;  // Page is 1-indexed, array is 0-indexed
-    
+
     // Immediately stop synth voices when muted (only if muting the currently playing page)
     if (muted && (channel == 13 || channel == 14)) {
       bool shouldStop = true;

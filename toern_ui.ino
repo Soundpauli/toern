@@ -9,6 +9,7 @@ extern bool SMP_FLOW_MODE;
 #define LINEOUT_LEVEL_MAX 31
 
 extern uint8_t ledBrightness;  // Add extern declaration
+#define LED_BRIGHTNESS_DEFAULT 64  // Default from EEPROM (range 3-255)
 
 // Fast function to light a specific LED on a specific matrix
 // matrixId: 0 = first matrix (left), 1 = second matrix, etc.
@@ -692,10 +693,51 @@ FLASHMEM void drawRecordingBorder() {
   }
 }
 
-void drawStatus() {
- 
-
+FLASHMEM void drawBatteryWarning() {
+  // Clear screen to fully black background first
+  extern void FastLEDclear();
+  FastLEDclear();
   
+  // Red border around entire screen
+  CRGB redColor = CRGB(255, 0, 0);
+  CRGB orangeColor = CRGB(255, 165, 0);
+  
+  // Top and bottom borders
+  for (unsigned int x = 1; x <= maxX; x++) {
+    light(x, 1, redColor);
+    light(x, maxY, redColor);
+  }
+  
+  // Left and right borders
+  for (unsigned int y = 2; y < maxY; y++) {
+    light(1, y, redColor);
+    light(maxX, y, redColor);
+  }
+  
+  // Centered "LOW" text in ORANGE (row 2, below BAT)
+  drawText("LOW", 3, 10, redColor);
+
+  // Centered "BAT" text in RED (row 1)
+  drawText("BAT", 3, 3, orangeColor);
+  
+  
+}
+
+void drawStatus() {
+  // Cache encoder RGB and only write when changed to avoid heavy I2C redraws (esp. encoder 1 in single mode)
+  static uint32_t lastEncoderRGB[4] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
+  static Mode* lastDrawStatusMode = nullptr;
+  if (lastDrawStatusMode != currentMode) {
+    lastDrawStatusMode = currentMode;
+    for (int i = 0; i < 4; i++) lastEncoderRGB[i] = 0xFFFFFFFF;
+  }
+  auto setEncoderRGBIfChanged = [&lastEncoderRGB](uint8_t i, uint32_t rgb) {
+    if (i < 4 && lastEncoderRGB[i] != rgb) {
+      lastEncoderRGB[i] = rgb;
+      Encoder[i].writeRGBCode(rgb);
+    }
+  };
+
   // If copy is active, show specific indicators
   if (GLOB.activeCopy) {
 
@@ -715,10 +757,10 @@ void drawStatus() {
     CRGB blueColor = getIndicatorColor('X'); // Blue
     CRGB yellowColor = getIndicatorColor('Y'); // Yellow
     
-    Encoder[0].writeRGBCode(0xFF0000);
-    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[3].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
+    setEncoderRGBIfChanged(0, 0xFF0000);
+    setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(3, yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
     
     return; // Exit early to prevent any other indicators
   }
@@ -736,10 +778,10 @@ void drawStatus() {
     CRGB blueColor = getIndicatorColor('X'); // Blue
     CRGB greenColor = getIndicatorColor('G'); // Green
     
-    Encoder[0].writeRGBCode(0xFF0000);
-    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[3].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+    setEncoderRGBIfChanged(0, 0xFF0000);
+    setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(3, greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
     
     // Note shift indicator: L[W] | L[G] | | L[W]
     if (currentMode == &noteShift) {
@@ -767,10 +809,10 @@ void drawStatus() {
     CRGB redColor = getIndicatorColor('R'); // Red
     CRGB yellowColor = getIndicatorColor('Y'); // Yellow
     
-    Encoder[0].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
-    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[3].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
+    setEncoderRGBIfChanged(0, redColor.r << 16 | redColor.g << 8 | redColor.b);
+    setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(3, yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
   }
   
   // Add single mode indicators when y=16
@@ -786,34 +828,44 @@ void drawStatus() {
     CRGB whiteColor = getIndicatorColor('W'); // White
     CRGB yellowColor = getIndicatorColor('Y'); // Yellow
     
-    Encoder[0].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
-    Encoder[1].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
-    Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[3].writeRGBCode(yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
+    setEncoderRGBIfChanged(0, redColor.r << 16 | redColor.g << 8 | redColor.b);
+    setEncoderRGBIfChanged(1, whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+    setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(3, yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
   } else if (GLOB.singleMode && GLOB.y != 16) {
-    // Reset encoder[1] to black when not at y=16 in single mode
-    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
+    // Reset encoder[1] to black when not at y=16 in single mode (only write when changed)
+    setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
   }
 
   if (currentMode == &noteShift) {
-    // draw a moving marquee to indicate the note shift mode
-    for (unsigned int x = 1; x <= maxX; x++) {
-      light(x, 1, CRGB(0, 0, 0));
+    // Minimal redraw: only update previous and current marquee positions (avoids full row redraw every frame)
+    static int lastMarqueeX = -1;
+    static Mode* lastMarqueeMode = nullptr;
+    if (lastMarqueeMode != currentMode) {
+      lastMarqueeMode = currentMode;
+      lastMarqueeX = -1;
     }
-    light(round(marqueePos), 1, CRGB(120, 120, 120));
-      drawIndicator('L', 'G', 1, true);   // Highlighted green for noteshift active
-      //drawIndicator('L', 'G', 2, true);  // Highlighted green for noteshift active
-      // Encoder 3: empty (no indicator)
-      drawIndicator('L', 'X', 4, true);   // Highlighted blue for noteshift active
-      
-      // Set encoder colors to match noteshift indicators (highlighted)
-      CRGB greenColor = applyHighlight(getIndicatorColor('G'), true); // Highlighted Green
-      CRGB blueColor = applyHighlight(getIndicatorColor('X'), true); // Highlighted Blue
-      
-      Encoder[0].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
-      Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-      Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
-      Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+    int currX = (int)round(marqueePos);
+    currX = (currX < 1) ? 1 : (currX > (int)maxX) ? (int)maxX : currX;
+    if (lastMarqueeX < 0) {
+      for (unsigned int x = 1; x <= maxX; x++) light(x, 1, CRGB(0, 0, 0));
+    } else if (lastMarqueeX != currX) {
+      light((unsigned int)lastMarqueeX, 1, CRGB(0, 0, 0));
+    }
+    light((unsigned int)currX, 1, CRGB(120, 120, 120));
+    lastMarqueeX = currX;
+
+    drawIndicator('L', 'G', 1, true);   // Highlighted green for noteshift active
+    drawIndicator('L', 'X', 4, true);   // Highlighted blue for noteshift active
+    
+    // Set encoder colors to match noteshift indicators (highlighted)
+    CRGB greenColor = applyHighlight(getIndicatorColor('G'), true); // Highlighted Green
+    CRGB blueColor = applyHighlight(getIndicatorColor('X'), true); // Highlighted Blue
+    
+    setEncoderRGBIfChanged(0, greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+    setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
+    setEncoderRGBIfChanged(3, blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
   }
   
   // Update marquee animation for noteShift mode OR song mode
@@ -1551,11 +1603,18 @@ FLASHMEM void drawBrightness() {
   unsigned int numLEDs = ((ledBrightness - 3) * 16) / (255 - 3) + 1;
   numLEDs = constrain(numLEDs, 1, 16);
   
-  // Display LEDs at x=1 to x=16 (not x=0)
+  // At default brightness, show yellow; otherwise white/gray
+  bool atDefault = (ledBrightness == LED_BRIGHTNESS_DEFAULT);
+  
   for (unsigned int x = 1; x <= numLEDs && x <= 16; x++) {
-    CRGB brightness = CRGB(16 * x, 16 * x, 16 * x);
-    light(x, 15, brightness);
-    light(x, 16, brightness);
+    CRGB color;
+    if (atDefault) {
+      color = CRGB(255, 255, 0);  // Yellow when at default
+    } else {
+      color = CRGB(16 * x, 16 * x, 16 * x);  // White/gray scale
+    }
+    light(x, 15, color);
+    light(x, 16, color);
   }
 }
 

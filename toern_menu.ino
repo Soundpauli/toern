@@ -3,8 +3,8 @@
 #define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 3
-#define VOL_PAGES_COUNT 4
-#define ETC_PAGES_COUNT 5
+#define VOL_PAGES_COUNT 5
+#define ETC_PAGES_COUNT 6
 
 // External variables
 extern Mode *currentMode;
@@ -86,7 +86,8 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"MAIN", 27, false, nullptr},         // Headphone output volume
   {"LOUT", 28, false, nullptr},         // Line output volume
   {"PREV", 29, false, nullptr},         // Preview volume
-  {"2-CH", 36, false, nullptr}          // Stereo routing: OFF, M+P, or L+R
+  {"2-CH", 36, false, nullptr},         // Stereo routing: OFF, M+P, or L+R
+  {"SPKR", 43, false, nullptr}          // Speaker toggle (ON/OFF)
 };
 
 // ETC submenu pages
@@ -95,7 +96,8 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"RST", 16, true, "MODE"},             // Reset Effects / SD Rescan (EFX or SD)
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
-  {"COLR", 41, false, nullptr}           // Color scheme selection (1, 2, 3)
+  {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
+  {"BATT", 42, false, nullptr}           // Battery remaining % (3.7V LiPo on pin 0)
 };
 
 // --- INFO page animation state ---
@@ -200,7 +202,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 27; // EEPROM_DATA_START + [0..26]
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 28; // EEPROM_DATA_START + [0..27]
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
@@ -412,6 +414,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 24, 2);   // midiSendMode default (2 = BOTH)
       EEPROM.write(EEPROM_DATA_START + 25, 1);   // ledStripEnabled default (1 = ON)
       EEPROM.write(EEPROM_DATA_START + 26, 64);  // ledBrightness default (64, range 3-255)
+      EEPROM.write(EEPROM_DATA_START + 27, 1);   // spkrEnabled default (1 = ON)
 
       // Create/refresh SD backup for defaults (debounced)
       markSettingsBackupDirty();
@@ -497,6 +500,18 @@ void loadMenuFromEEPROM() {
     EEPROM.write(EEPROM_DATA_START + 25, 1);
   }
   setLedStripEnabled(ledStripEnabled);
+  
+  // Load spkrEnabled from EEPROM (stored at EEPROM_DATA_START + 27)
+  extern bool getSpkrEnabled();
+  extern void setSpkrEnabled(bool enabled);
+  uint8_t spkrValue = EEPROM.read(EEPROM_DATA_START + 27);
+  bool spkrEnabled = (spkrValue != 0);
+  if (spkrValue > 1) {
+    // Invalid value, default to ON
+    spkrEnabled = true;
+    EEPROM.write(EEPROM_DATA_START + 27, 1);
+  }
+  setSpkrEnabled(spkrEnabled);
   
   if (previewVol < 0 || previewVol > 50) previewVol = 20;
   
@@ -1181,6 +1196,14 @@ FLASHMEM void showEtcMenu() {
   bool fullRedraw = (pageIndex != lastRenderedEtcPage) || (mainSetting != lastRenderedEtcSetting);
   if (takeMenuForceFullRedraw()) fullRedraw = true;
   if (mainSetting == 39) fullRedraw = true;  // INFO animates
+  // BATT (42): redraw every 200 ms for live updates
+  if (mainSetting == 42) {
+    static elapsedMillis battMenuRedraw;
+    if (battMenuRedraw >= 200) {
+      battMenuRedraw = 0;
+      fullRedraw = true;
+    }
+  }
 
   if (fullRedraw) {
     FastLEDclear();
@@ -1465,6 +1488,24 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText(schemeText, 2, 3, UI_GREEN);
       }
       break;
+
+    case 42: // BATT - Battery remaining % (calibrated 0.63 ratio)
+      {
+        extern int getBatteryPercent();
+        const CRGB tc = currentMenuParentTextColor();
+        drawText("BATT", 2, 10, tc);
+        
+        int pct = getBatteryPercent();
+        pct = constrain(pct, 0, 100);
+        
+        char pctText[6];
+        snprintf(pctText, sizeof(pctText), "%d%%", pct);
+        
+        // Color scale: >30% Green, 15-30% Orange, <15% Red
+        CRGB stateColor = (pct > 30) ? UI_GREEN : (pct > 15) ? CRGB(255, 165, 0) : UI_RED;
+        drawText(pctText, 2, 3, stateColor);
+      }
+      break;
       
     case 19: // PLAY - Submenu
       // PLAY = settings icon
@@ -1677,6 +1718,16 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       CRGB blueColor = getIndicatorColor('X');
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+      break;
+    }
+
+    case 43: { // SPKR - Speaker toggle (ON/OFF)
+      extern bool getSpkrEnabled();
+      const CRGB tc = currentMenuParentTextColor();
+      drawText("SPKR", 2, 10, tc);
+      bool enabled = getSpkrEnabled();
+      // Display inverted: when enabled=true (pin LOW = ON), show "OFF"; when enabled=false (pin HIGH = OFF), show "ON"
+      drawText(enabled ? "OFF" : "ON", 2, 3, enabled ? CRGB(255, 0, 0) : CRGB(0, 255, 0));
       break;
     }
     
@@ -1939,6 +1990,9 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         // Color scheme is toggled via encoder(3) button press only
         // Do not modify encoder(3) settings here - let ETC menu handle page navigation
       }
+      break;
+
+    case 42: // BATT - read-only, no encoder control
       break;
     
     case 24: { // PONG page - speed control on encoder 2
@@ -2664,6 +2718,18 @@ void switchMenu(int menuPosition){
         menuRequestFullRedraw();  // Force ETC submenu to redraw with new state
         break;
       }
+
+      case 43: {
+        // Toggle SPKR: OFF <-> ON
+        extern bool getSpkrEnabled();
+        extern void setSpkrEnabled(bool enabled);
+        bool currentState = getSpkrEnabled();
+        bool newState = !currentState;
+        setSpkrEnabled(newState);
+        saveSingleModeToEEPROM(27, (int8_t)(newState ? 1 : 0));
+        menuRequestFullRedraw();  // Force VOL submenu to redraw with new state
+        break;
+      }
       
       case 41: {
         // COLR - Color scheme selection: toggle through 0->1->2->3->0
@@ -2733,6 +2799,11 @@ void switchMenu(int menuPosition){
         Encoder[3].writeCounter((int32_t)savedEtcPage);
         
         menuRequestFullRedraw();  // Force redraw to show new scheme number
+        break;
+      }
+
+      case 42: {
+        // BATT - read-only, encoder press does nothing
         break;
       }
     }

@@ -101,6 +101,7 @@ As always, TŒRN remains **fully open-source**, with all schematics, code, and d
 - **Memory**: 16MB PSRAM, slot for 32GB SD Micro SD card
 - **Encoders**: 4x colorfull illuminated I2C rotary-push encoders
 - **Display**: 16x16 RGB LED Matrix (powered by FastLED).  
+- **LED strip**: 5V WS2812 strip connectable externally via onboard connector (ripple visualization, configurable length).  
 - **Audio I/O**: 6.35mm jacks for headphones, line-in/out, mic-in; internal microphone.  
 - **Power**: USB-C or optional LiPo battery with charging port.  
 - **Ports**: USB-C or optional LiPo battery with charging port.  

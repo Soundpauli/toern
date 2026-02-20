@@ -1,7 +1,8 @@
 // LED Strip Visualization Module
 // Ripple effects based on triggered notes/channels with audio reactivity
 //
-// Uses PIN 24 as a separate data line for the LED strip (independent from matrix on PIN 17)
+// Uses PIN 24 as a separate data line for the LED strip (independent from matrix on PIN 17).
+// The strip can be connected externally via the onboard connector.
 
 #include <FastLED.h>
 
