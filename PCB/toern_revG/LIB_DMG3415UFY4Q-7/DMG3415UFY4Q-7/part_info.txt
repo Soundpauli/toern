@@ -1,0 +1,9 @@
+Manufacturer=Diodes Incorporated
+PartNumber=DMG3415UFY4Q-7
+PartCategory=MOSFET (P-Channel)
+PackageCategory=Other
+PinCount=3
+Version=2.1
+Released=2019-06-04 22:28:18
+Downloaded=2026-02-21 12:33:28
+3D=Y

@@ -1,0 +1,13 @@
+(unit MM)
+
+(package "EG2219"
+    (type UNDEF)
+    (uver 2)
+    (cuser "SamacSys")
+    (uuser "SamacSys")
+    (utime 2020-08-31-15:43:47)
+    (mountForm default
+        (footprintRef "EG2219")
+        (spec "System")
+    )
+)

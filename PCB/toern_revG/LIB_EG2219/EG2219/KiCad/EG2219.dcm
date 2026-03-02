@@ -1,0 +1,9 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP EG2219
+D SLIDE, 500mA, 15VDC DPDT, On-On Through Hole, Right Angle
+K
+F https://configured-product-images.s3.amazonaws.com/2D/specs/EG2219.pdf
+$ENDCMP
+#
+#End Doc Library

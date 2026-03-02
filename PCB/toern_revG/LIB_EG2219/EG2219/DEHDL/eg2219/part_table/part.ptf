@@ -1,0 +1,11 @@
+FILE_TYPE = MULTI_PHYS_TABLE;
+
+PART 'EG2219'
+CLASS = DISCRETE
+{========================================================================================}
+:"MANUFACTURER_NAME", "MANUFACTURER_PART_NUMBER"= "PART_NUMBER", "JEDEC_TYPE", "PACK_TYPE", "MOUSER_PART_NUMBER", "MOUSER_PRICE/STOCK", "DESCRIPTION", "DATASHEET", "HEIGHT";
+{========================================================================================}
+ "E-Switch", "EG2219" (!) = "", "EG2219", "Other", "612-EG2219", "https://www.mouser.co.uk/ProductDetail/E-Switch/EG2219?qs=xDsBkp9Lkofjsq7Op0ToJg%3D%3D", "SLIDE, 500mA, 15VDC DPDT, On-On Through Hole, Right Angle", "https://configured-product-images.s3.amazonaws.com/2D/specs/EG2219.pdf", "8.5 mm"
+END_PART
+
+END.

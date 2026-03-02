@@ -1,0 +1,16 @@
+.BQ24075TRGTR :1 ;1.5A USB-Friendly Li-Ion Battery Charger and Power-Path Management IC with 4.2 VBAT
+QFN50P300X300X100-17N-D
+*STM IC
+*NGS
+*PLB 1="TS" 2="BAT_1" 3="BAT_2" 4="'CE'" 5="EN2" 6="EN1" 7="'PGOOD'" 8="VSS" 9="'CHG'" 10="OUT_1" 11="OUT_2" 12="ILIM" 13="IN" 14="TMR" 15="SYSOFF" 16="ISET" 17="EP"
+*MXP 17
+*DFN BQ24075TRGTR
+~!Mouser Part Number (595-BQ24075TRGTR)
+~!Link Mouser Price/Stock (https://www.mouser.co.uk/ProductDetail/Texas-Instruments/BQ24075TRGTR?qs=%2Fqzd9s%252BcLd4uxZAT5jNskQ%3D%3D)
+~!Manufacturer_Name (Texas Instruments)
+~!Manufacturer_Part_Number (BQ24075TRGTR)
+~!Link Datasheet (http://componentsearchengine.com/Datasheets/1/BQ24075TRGTR.pdf)
+~!Height (1mm)
+~!3D_Model (BQ24075TRGTR)
+BQ24075TRGTR
+1.1!U 2.1!U 3.1!U 4.1!U 5.1!U 6.1!U 7.1!U 8.1!U 12.1!U 11.1!U 10.1!U 9.1!U 17.1!U 16.1!U 15.1!U 14.1!U 13.1!U 

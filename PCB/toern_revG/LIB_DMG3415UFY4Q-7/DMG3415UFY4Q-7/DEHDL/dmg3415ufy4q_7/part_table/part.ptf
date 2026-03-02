@@ -1,0 +1,11 @@
+FILE_TYPE = MULTI_PHYS_TABLE;
+
+PART 'DMG3415UFY4Q_7'
+CLASS = DISCRETE
+{========================================================================================}
+:"MANUFACTURER_NAME", "MANUFACTURER_PART_NUMBER"= "PART_NUMBER", "JEDEC_TYPE", "PACK_TYPE", "MOUSER_PART_NUMBER", "MOUSER_PRICE/STOCK", "DESCRIPTION", "DATASHEET";
+{========================================================================================}
+ "Diodes Incorporated", "DMG3415UFY4Q-7" (!) = "", "DMG3415UFY47", "Other", "621-DMG3415UFY4Q-7", "https://www.mouser.co.uk/ProductDetail/Diodes-Incorporated/DMG3415UFY4Q-7?qs=CfuTe0PnivoF8aopa2vWtw%3D%3D", "MOSFET P-Ch -16V Enh FET 8Vgss -12A 0.65W", "https://www.diodes.com//assets/Datasheets/DMG3415UFY4Q.pdf"
+END_PART
+
+END.

@@ -1,0 +1,16 @@
+.DMG3415UFY4Q-7 :1 ;MOSFET P-Ch -16V Enh FET 8Vgss -12A 0.65W
+DMG3415UFY47
+*STM Q
+*NGS
+*PLB 1="G" 2="S" 3="D"
+*MXP 4
+*DFN DMG3415UFY4Q-7
+~!Mouser Part Number (621-DMG3415UFY4Q-7)
+~!Link Mouser Price/Stock (https://www.mouser.co.uk/ProductDetail/Diodes-Incorporated/DMG3415UFY4Q-7?qs=CfuTe0PnivoF8aopa2vWtw%3D%3D)
+~!Manufacturer_Name (Diodes Incorporated)
+~!Manufacturer_Part_Number (DMG3415UFY4Q-7)
+~!Link Datasheet (https://www.diodes.com//assets/Datasheets/DMG3415UFY4Q.pdf)
+~!Height (-)
+~!3D_Model (DMG3415UFY4Q-7)
+DMG3415UFY4Q-7
+1.1!U 2.1!U 3.1!U 

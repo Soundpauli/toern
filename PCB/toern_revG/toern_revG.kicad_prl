@@ -48,7 +48,7 @@
       "conflict_shadows",
       "shapes"
     ],
-    "visible_layers": "ffffffff_ffffffff_fffffff7_ffffffff",
+    "visible_layers": "ffffffff_ffffffff_ffffffff_ffffffff",
     "zone_display_mode": 0
   },
   "git": {
@@ -58,7 +58,7 @@
     "ssh_key": ""
   },
   "meta": {
-    "filename": "toern_revF.kicad_prl",
+    "filename": "toern_revG.kicad_prl",
     "version": 5
   },
   "net_inspector_panel": {
@@ -102,7 +102,7 @@
       103,
       103,
       103,
-      10
+      94
     ],
     "custom_group_rules": [],
     "expanded_rows": [],

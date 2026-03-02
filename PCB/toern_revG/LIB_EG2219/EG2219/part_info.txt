@@ -1,0 +1,9 @@
+Manufacturer=E-Switch
+PartNumber=EG2219
+PartCategory=Switch
+PackageCategory=Other
+PinCount=10
+Version=10.2
+Released=2020-08-31 15:43:46
+Downloaded=2026-02-21 12:32:11
+3D=Y

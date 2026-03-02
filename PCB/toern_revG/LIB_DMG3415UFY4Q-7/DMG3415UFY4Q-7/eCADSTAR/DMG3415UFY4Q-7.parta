@@ -1,0 +1,69 @@
+(Japanese_coding: sjis)
+(function "ECS_665648"
+    (uver 1)
+    (cuser "SamacSys")
+    (uuser "SamacSys")
+    (ctime 2019-06-04-22:28:18)
+    (utime 2024-08-04-17:23:07)
+    (interface
+        (port "1" (symbPinId 1) (portType INOUT))
+        (port "2" (symbPinId 3) (portType INOUT))
+        (port "3" (symbPinId 2) (portType INOUT))
+    )
+    (property "symbolName" "DMG3415UFY4Q-7")
+)
+
+
+(pinAssign "ECS_665648"
+    (uver 1)
+    (cuser "SamacSys")
+    (uuser "SamacSys")
+    (ctime 2019-06-04-22:28:18)
+    (utime 2024-08-04-17:23:07)
+    (interface
+        (port "1" (symbPinId 1) (portName "G") (portType INOUT))
+        (port "2" (symbPinId 3) (portName "S") (portType INOUT))
+        (port "3" (symbPinId 2) (portName "D") (portType INOUT))
+    )
+    (internal
+        (funcInst (functionRef "ECS_665648")
+                (port "1" (match "1"))
+                (port "2" (match "2"))
+                (port "3" (match "3"))
+        )
+    )
+    (property "usePowerBox" "No")
+    (property "symbolName" "DMG3415UFY4Q-7")
+)
+
+
+(part "DMG3415UFY4Q-7"
+    (uver 1)
+    (cuser "SamacSys")
+    (uuser "SamacSys")
+    (ctime 2019-06-04-22:28:18)
+    (utime 2024-08-04-17:23:07)
+    (packageRef "DMG3415UFY4Q-7")
+    (pinAssignRef "ECS_665648")
+    (interface
+        (port "1" (symbPinId 1) (portName "G") (portType INOUT))
+        (port "2" (symbPinId 3) (portName "S") (portType INOUT))
+        (port "3" (symbPinId 2) (portName "D") (portType INOUT))
+    )
+    (partClass UNDEF)
+    (useInSchema Y)
+    (useInLayout Y)
+    (inPartsList Y)
+    (partType NORMAL)
+    (placeRestriction FREE)
+    (property "enetNonSeries" "YES")
+    (property "refDesPrefix" "Q")
+    (property "description" "MOSFET P-Ch -16V Enh FET 8Vgss -12A 0.65W")
+    (property "Mouser_Part_Number" "621-DMG3415UFY4Q-7")
+    (property "Mouser_Price/Stock" "https://www.mouser.co.uk/ProductDetail/Diodes-Incorporated/DMG3415UFY4Q-7?qs=CfuTe0PnivoF8aopa2vWtw%3D%3D")
+    (property "Manufacturer_Name" "Diodes Incorporated")
+    (property "Manufacturer_Part_Number" "DMG3415UFY4Q-7")
+    (property "Datasheet_Link" "https://www.diodes.com//assets/Datasheets/DMG3415UFY4Q.pdf")
+)
+
+

@@ -1,0 +1,13 @@
+(unit MM)
+
+(package "DMG3415UFY4Q-7"
+    (type UNDEF)
+    (uver 2)
+    (cuser "SamacSys")
+    (uuser "SamacSys")
+    (utime 2019-06-04-22:28:18)
+    (mountForm default
+        (footprintRef "DMG3415UFY47")
+        (spec "System")
+    )
+)
