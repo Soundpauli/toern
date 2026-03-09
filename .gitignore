@@ -1,5 +1,9 @@
 samples/
-website/
 docs/
 backups/
 .cursor/
+website/
+BOM_KOSTEN.xlsx
+.history/
+_shooting/
+netlify.toml

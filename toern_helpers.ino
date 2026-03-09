@@ -453,12 +453,17 @@ void startRecordingRAM() {
   extern unsigned int lineInLevel;  // From VOL menu (0-15)
   extern unsigned int micGain;      // From VOL menu (0-63)
   extern AudioMixer4 mixer_end;
+  extern bool getSpkrEnabled();
   
   float monitorGain = 0.0f;
   const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
   if (recMode == 1) {
-    // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain)
-    monitorGain = mapf(micGain, 0, 63, 0.0f, maxPlaybackGain);
+    // Mic input: if SPKR is on, disable monitor path to avoid feedback while recording.
+    if (getSpkrEnabled()) {
+      monitorGain = 0.0f;
+    } else {
+      monitorGain = mapf(micGain, 0, 63, 0.0f, maxPlaybackGain);
+    }
   } else {
     // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain)
     monitorGain = mapf(lineInLevel, 0, 15, 0.0f, maxPlaybackGain);
@@ -596,12 +601,17 @@ void startFastRecord() {
   extern unsigned int lineInLevel;  // From VOL menu (0-15)
   extern unsigned int micGain;      // From VOL menu (0-63)
   extern AudioMixer4 mixer_end;
+  extern bool getSpkrEnabled();
   
   float monitorGain = 0.0;
   const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
   if (recMode == 1) {
-    // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
-    monitorGain = mapf(micGain, 0, 63, 0.0, maxPlaybackGain);
+    // Mic input: if SPKR is on, disable monitor path to avoid feedback while recording.
+    if (getSpkrEnabled()) {
+      monitorGain = 0.0f;
+    } else {
+      monitorGain = mapf(micGain, 0, 63, 0.0, maxPlaybackGain);
+    }
   } else {
     // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
     monitorGain = mapf(lineInLevel, 0, 15, 0.0, maxPlaybackGain);
@@ -2686,19 +2696,11 @@ void runAnimation() {
 
     // Update ONLY the first matrix (16×16 grid)
     // Second matrix stays black (already cleared above)
+    extern void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB color);
     for (uint8_t y = 0; y < maxY; y++) {
       for (uint8_t x = 0; x < MATRIX_WIDTH; x++) {
         CRGB color = getPixelColor(x, y, elapsed);
-        // Direct write to LED array for maximum speed
-        uint16_t ledIndex;
-        if ((y + 1) % 2 == 0) {
-          // Even rows: right to left
-          ledIndex = (MATRIX_WIDTH - (x + 1)) + (MATRIX_WIDTH * y);
-        } else {
-          // Odd rows: left to right
-          ledIndex = x + (MATRIX_WIDTH * y);
-        }
-        leds[ledIndex] = color;
+        light_single(0, x + 1, y + 1, color);
       }
     }
     

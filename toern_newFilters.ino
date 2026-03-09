@@ -17,6 +17,32 @@ const unsigned long FILTER_INTERACTION_TIMEOUT = 1000; // ms before reverting to
 bool showingAny = false;
 DMAMEM bool showSingleFilter[4] = { false, false, false, false };
 
+static inline bool isWideFilterView2B() {
+  extern int ledModules;
+  extern bool ledModulesRotated;
+  return (ledModules == 2 && ledModulesRotated && maxX > MATRIX_WIDTH);
+}
+
+static inline void getFilterSliderCols(uint8_t sliderIndex, uint8_t &x0, uint8_t &x1) {
+  if (isWideFilterView2B()) {
+    // 2B fine layout across 32px:
+    // col1 one px right, col4 one px left -> [5,6], [12,13], [20,21], [27,28]
+    static const uint8_t wideCols[4][2] = {
+      { 5, 6 }, { 12, 13 }, { 20, 21 }, { 27, 28 }
+    };
+    uint8_t idx = (sliderIndex < 4) ? sliderIndex : 3;
+    x0 = wideCols[idx][0];
+    x1 = wideCols[idx][1];
+  } else {
+    x0 = sliderCols[sliderIndex][0];
+    x1 = sliderCols[sliderIndex][1];
+  }
+
+  if (x0 < 1) x0 = 1;
+  if (x1 < x0) x1 = x0;
+  if (x1 > maxX) x1 = maxX;
+}
+
 
 uint8_t scaleToDisplay(const SliderDefEntry& meta, uint8_t val) {
   return (meta.displayRange < meta.maxValue) ? constrain(mapf(val, 0, meta.maxValue, 0, meta.displayRange - 1), 0, meta.displayRange - 1) : val;
@@ -58,7 +84,7 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
   if (tx + totalW > 16) tx = 16 - totalW;*/
 
   // CLEAR just that span on row 10
-  for (int x = 1; x <= 16; ++x) {
+  for (int x = 1; x <= (int)maxX; ++x) {
     light(x, 12, CRGB::Black);
     light(x, 13, CRGB::Black);
     light(x, 14, CRGB::Black);
@@ -66,8 +92,19 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
     light(x, 16, CRGB::Black);
   }
 
+  int textPixelWidth = 0;
+  for (int i = 0; name[i] != '\0'; ++i) {
+    if (name[i] >= 32 && name[i] <= 126) {
+      textPixelWidth += alphabet[name[i] - 32][0] + 1;
+    }
+  }
 
-  drawText(name, 2, 12, filtercol);
+  // Center on full width, rounding up when center is fractional.
+  int tx = ((int)maxX - textPixelWidth + 3) / 2;
+  if (tx < 1) tx = 1;
+  if (tx + textPixelWidth - 1 > (int)maxX) tx = (int)maxX - textPixelWidth + 1;
+  if (tx < 1) tx = 1;
+  drawText(name, tx, 12, filtercol);
 }
 
 
@@ -76,7 +113,17 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   // Special case: Channel 11 WAVE slider (encoder 0) should be at x=6
   uint8_t chan = GLOB.currentChannel;
   uint8_t x;
-  if (chan == 11 && encoderIndex == 0 && meta.arr == ARR_FILTER && meta.idx == FILTER_WAVEFORM) {
+
+  bool dualPanel = isWideFilterView2B();
+
+  if (dualPanel) {
+    // In 2/2B modes, keep value near the active slider (not at display edges):
+    // left pair -> +4px from right slider edge, right pair -> -4px from left slider edge.
+    uint8_t sx0, sx1;
+    getFilterSliderCols(encoderIndex, sx0, sx1);
+    int desiredX = (encoderIndex < 2) ? ((int)sx1 + 4) : ((int)sx0 - 10);
+    x = (uint8_t)constrain(desiredX, 1, (int)maxX - 6);
+  } else if (chan == 11 && encoderIndex == 0 && meta.arr == ARR_FILTER && meta.idx == FILTER_WAVEFORM) {
     x = 6;
   } else {
     x = (encoderIndex < 2) ? 10 : 2;
@@ -241,8 +288,10 @@ void slider(uint8_t page) {
     if (activeInteraction && i != lastChangedEncoder) {
       // Clear the slider area so it disappears
       for (uint8_t y = 1; y <= 10; ++y) {
-        light(sliderCols[i][0], y, CRGB::Black);
-        light(sliderCols[i][1], y, CRGB::Black);
+        uint8_t x0, x1;
+        getFilterSliderCols(i, x0, x1);
+        light(x0, y, CRGB::Black);
+        light(x1, y, CRGB::Black);
       }
       continue;
     }
@@ -255,9 +304,12 @@ void slider(uint8_t page) {
       sliderColor = CRGB(4, 4, 4);
     }
 
+    uint8_t x0, x1;
+    getFilterSliderCols(i, x0, x1);
+
     drawVerticalSlider(
-      sliderCols[i][0],
-      sliderCols[i][1],
+      x0,
+      x1,
       val,
       meta.maxValue,
       sliderColor,
@@ -268,8 +320,8 @@ void slider(uint8_t page) {
     );
     showSingleFilter[i] = false;
     if (i == lastChangedEncoder && activeInteraction) {
-      drawSliderName(sliderCols[i][0],
-                     sliderCols[i][1],
+      drawSliderName(x0,
+                     x1,
                      def.name,
                      sliderColor);
       showSingleFilter[i] = true;
@@ -509,8 +561,10 @@ void setNewFilters() {
     if (val != prev) {
       showSingleFilter[i] = true;
 
-      drawSliderName(sliderCols[i][0],
-                     sliderCols[i][1],
+      uint8_t x0, x1;
+      getFilterSliderCols(i, x0, x1);
+      drawSliderName(x0,
+             x1,
                      d.name,
                      filterColors[filterPage[chan]][i]);
 
@@ -586,12 +640,12 @@ void drawSliderValue(uint8_t x0, uint8_t x1, uint8_t val) {
   // center in between x0..x1
   int cx = (x0 + x1) / 2;
   int tx = cx - totalW / 2;
-  // clamp so that text never goes past 0..16
+  // clamp so that text never goes past 1..maxX
   if (tx < 1) tx = 1;
-  if (tx + totalW > 16) tx = 16 - totalW;
+  if (tx + totalW > (int)maxX) tx = (int)maxX - totalW;
 
   // CLEAR just that span on row 6 (or whatever row you chose)
-  for (int x = 1; x <= 16; ++x) {
+  for (int x = 1; x <= (int)maxX; ++x) {
     light(x, 6, CRGB::Black);
     light(x, 7, CRGB::Black);
     light(x, 8, CRGB::Black);
@@ -606,7 +660,7 @@ void drawSliderValue(uint8_t x0, uint8_t x1, uint8_t val) {
 
 void showFilterNames(uint8_t chan) {
     // Clear the entire headline area (y=12) before drawing to prevent brightness accumulation
-    for (uint8_t x = 1; x <= 16; ++x) {
+  for (uint8_t x = 1; x <= maxX; ++x) {
         light(x, 12, CRGB::Black);
         light(x, 13, CRGB::Black);
         light(x, 14, CRGB::Black);
@@ -623,7 +677,9 @@ void showFilterNames(uint8_t chan) {
         if (def.arr == ARR_FILTER && def.idx == REVERB && !channelHasFreeverb(chan)) {
           color = CRGB(4, 4, 4);
         }
-        drawText(abbrev, sliderCols[i][0], 12, color);
+        uint8_t x0, x1;
+        getFilterSliderCols(i, x0, x1);
+        drawText(abbrev, x0, 12, color);
     }
 }
 

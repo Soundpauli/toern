@@ -49,7 +49,7 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"PMD", 9, false, nullptr},           // Pattern Mode
   {"LOOP", 18, false, nullptr},         // Loop Length
   {"CTRL", 25, false, nullptr},         // Encoder control mode
-  {"LEDS", 23, false, nullptr},         // LED Modules Count (1 or 2)
+  {"LEDS", 23, false, nullptr},         // LED mode (1, 1B, 2, 2B)
   {"PONG", 24, false, nullptr},         // Pong Toggle
   {"CRSR", 32, false, nullptr},         // Cursor Type (NORM/CHNR/BIG)
   {"DRAW", 38, false, nullptr}          // DRAW mode toggle (L+R / R)
@@ -400,7 +400,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
       EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
       EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
-      EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledModules default (1)
+      EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledMode default (1 = one panel, normal orientation)
       EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
       EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
       EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
@@ -434,7 +434,14 @@ void loadMenuFromEEPROM() {
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
   simpleNotesView = (int) EEPROM.read(EEPROM_DATA_START + 11);
   loopLength = (int) EEPROM.read(EEPROM_DATA_START + 12);
-  ledModules = (int) EEPROM.read(EEPROM_DATA_START + 13);
+  uint8_t ledMode = EEPROM.read(EEPROM_DATA_START + 13);
+  extern bool ledModulesRotated;
+  if (ledMode < 1 || ledMode > 4) {
+    ledMode = 1;
+    EEPROM.write(EEPROM_DATA_START + 13, 1);
+  }
+  ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
+  ledModulesRotated = (ledMode >= 3);
   ctrlMode = (int8_t) EEPROM.read(EEPROM_DATA_START + 14);
   
   // Load lineInLevel from EEPROM (stored at EEPROM_DATA_START + 16)
@@ -553,13 +560,15 @@ void loadMenuFromEEPROM() {
     patternMode = -1;  // Default to OFF if invalid value
   }
   
-  // Ensure ledModules is valid (1 or 2)
-  if (ledModules < 1 || ledModules > 2) {
+  // Ensure led mode is valid (1,2,3,4 => 1,2,1B,2B)
+  if (ledMode < 1 || ledMode > 4) {
   if (ctrlMode != 0 && ctrlMode != 1) {
     ctrlMode = 0;
   }
 
-    ledModules = 1;  // Default to 1 if invalid value
+    ledMode = 1;     // Default to 1 if invalid value
+    ledModules = 1;
+    ledModulesRotated = false;
     EEPROM.write(EEPROM_DATA_START + 13, 1);  // Save corrected value
   }
 
@@ -1553,7 +1562,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawLoopLength();
       break;
       
-    case 23: // LEDS - LED Modules Count
+    case 23: // LEDS - LED mode (1, 1B, 2, 2B)
       drawText("LEDS", 2, 10, currentMenuParentTextColor());
       drawLedModules();
       break;
@@ -2651,12 +2660,24 @@ void switchMenu(int menuPosition){
         }
         
         case 23: {
-        // Toggle LED modules: 1 or 2
+        // Cycle LED mode: 1 -> 1B -> 2 -> 2B -> 1
         extern int ledModules;
+        extern bool ledModulesRotated;
         extern unsigned int maxX;
         extern Mode draw;
         extern Mode singleMode;
-        ledModules = (ledModules == 1) ? 2 : 1;
+
+        uint8_t ledMode = ledModules + (ledModulesRotated ? 2 : 0);  // 1,2,3,4
+        switch (ledMode) {
+          case 1: ledMode = 3; break;  // 1  -> 1B
+          case 3: ledMode = 2; break;  // 1B -> 2
+          case 2: ledMode = 4; break;  // 2  -> 2B
+          case 4: ledMode = 1; break;  // 2B -> 1
+          default: ledMode = 1; break;
+        }
+
+        ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
+        ledModulesRotated = (ledMode >= 3);
         maxX = MATRIX_WIDTH * ledModules;  // Update maxX runtime variable
         
         // Reinitialize LED strip with new module count
@@ -2680,7 +2701,7 @@ void switchMenu(int menuPosition){
           }
         }
         
-        saveSingleModeToEEPROM(13, ledModules);
+        saveSingleModeToEEPROM(13, ledMode);
         drawMainSettingStatus(menuPosition);
         break;
         }
@@ -2870,9 +2891,16 @@ void drawLoopLength() {
 }
 
 void drawLedModules() {
-  // Show current LED modules count: 1 or 2
+  // Show current LED mode: 1, 1B, 2, 2B
   extern int ledModules;
-  drawNumber(ledModules, CRGB(0, 255, 0), 3);
+  extern bool ledModulesRotated;
+  clearTextArea(2, 3, 16);
+
+  if (ledModules == 1) {
+    drawText(ledModulesRotated ? "1B" : "1", 2, 3, CRGB(0, 255, 0));
+  } else {
+    drawText(ledModulesRotated ? "2B" : "2", 2, 3, CRGB(0, 255, 0));
+  }
 }
 
 void showNewFileScreen() {

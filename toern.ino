@@ -442,6 +442,8 @@ unsigned int selectedFX = 0;
 
 unsigned long filterDrawEndTime = 0;
 bool filterDrawActive = false;
+int filterDrawValue = 0;
+CRGB filterDrawColor = CRGB::White;
 
 
 unsigned long patternChangeTime = 0;
@@ -507,6 +509,7 @@ int voiceSelect = 1;
 int simpleNotesView = 1;               // Simple notes view: 1=EASY, 2=FULL
 int loopLength = 0;                    // Loop length: 0=OFF, 1-8=force pattern length
 int ledModules = 1;                    // Number of LED modules: 1 or 2
+bool ledModulesRotated = false;        // LED panel orientation flag: false=normal, true=rotated compensation
 unsigned int maxX = MATRIX_WIDTH * 1;  // Runtime variable: total display width (16 or 32)
 unsigned int micGain = 0;              // Microphone gain: 0-64, default 10
 unsigned int lineInLevel = 8;          // Line input level: 0-15, default 8
@@ -2833,6 +2836,18 @@ FLASHMEM void loadColorSchemeAndBrightness() {
   ledBrightness = savedBrightness;
 }
 
+FLASHMEM void loadLedModeEarlyFromEEPROM() {
+  uint8_t ledMode = EEPROM.read(EEPROM_DATA_START + 13);  // 1=1, 2=2, 3=1B, 4=2B
+  if (ledMode < 1 || ledMode > 4) {
+    ledMode = 1;
+    EEPROM.write(EEPROM_DATA_START + 13, 1);
+  }
+
+  ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
+  ledModulesRotated = (ledMode >= 3);
+  maxX = MATRIX_WIDTH * ledModules;
+}
+
 void setup() {
   //Wire.begin();
   //Wire.setClock(10000); // Set to 400 kHz (standard speed)
@@ -2856,6 +2871,9 @@ void setup() {
   extern CRGB stripLeds[];
   extern void initLedStrip();
   FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);
+
+  // Load LED mode (count + rotation) before any startup visuals, including CLR RAM.
+  loadLedModeEarlyFromEEPROM();
   
   // Check for EEPROM clear request (SWITCH_1 held during startup)
   int switch1Value = fastTouchRead(SWITCH_1);
@@ -3743,23 +3761,6 @@ void checkEncoders() {
     }
 
     filtercheck();
-
-
-
-    if (filterDrawActive) {
-      if (millis() <= filterDrawEndTime) {
-
-        FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
-        int page, slot;
-        if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
-          int val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
-          drawFilterCheck(val, dft.idx, filterColors[page][slot]);
-        }
-      } else {
-        // Stop drawing after timeout
-        filterDrawActive = false;
-      }
-    }
   }
 }
 
@@ -3768,7 +3769,6 @@ void filtercheck() {
 
   FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
   int page, slot;
-  static int lastNonzeroVal[NUM_CHANNELS] = { 0 };
 
   if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot) && !filterfreshsetted) {
     int currVal = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
@@ -3781,9 +3781,10 @@ void filtercheck() {
     if (currVal != lastDefaultFastFilterValue[GLOB.currentChannel]) {
       lastDefaultFastFilterValue[GLOB.currentChannel] = currVal;
       filterDrawActive = true;
+      filterDrawValue = currVal;
+      filterDrawColor = filterColors[page][slot];
       // Show longer when not playing (2s) vs when playing (1s)
       filterDrawEndTime = millis() + (isNowPlaying ? 1000 : 500);
-      drawFilterCheck(currVal, dft.idx, filterColors[page][slot]);
     }
   }
 }
@@ -4495,12 +4496,17 @@ void showDoRecord() {
     extern int recMode;
     extern unsigned int lineInLevel;  // From VOL menu (0-15)
     extern unsigned int micGain;      // From VOL menu (0-63)
+    extern bool getSpkrEnabled();
 
     float monitorGain = 0.0f;
     const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
     if (recMode == 1) {
-      // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
-      monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
+      // Mic input: if SPKR is on, disable monitor path to avoid feedback while recording.
+      if (getSpkrEnabled()) {
+        monitorGain = 0.0f;
+      } else {
+        monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
+      }
     } else {
       // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
       monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
@@ -4979,6 +4985,16 @@ void loop() {
       if (pongActive) {
         drawPongBall();
       }
+
+      // Draw fast-filter overlay LAST so timer/base redraws can't overwrite it mid-window.
+      if (filterDrawActive) {
+        if (millis() <= filterDrawEndTime) {
+          drawFilterCheck(filterDrawValue, (FilterType)0, filterDrawColor);
+        } else {
+          filterDrawActive = false;
+        }
+      }
+
       // Yield once per frame after all drawing operations complete (replaces per-pixel yields)
       // This gives the system a chance to process other tasks without causing jitter
       yield();

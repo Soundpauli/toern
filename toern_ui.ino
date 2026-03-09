@@ -9,6 +9,7 @@ extern bool SMP_FLOW_MODE;
 #define LINEOUT_LEVEL_MAX 31
 
 extern uint8_t ledBrightness;  // Add extern declaration
+extern bool ledModulesRotated;
 #define LED_BRIGHTNESS_DEFAULT 64  // Default from EEPROM (range 3-255)
 
 // Fast function to light a specific LED on a specific matrix
@@ -19,15 +20,25 @@ void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB co
   if (x < 1 || x > MATRIX_WIDTH || y < 1 || y > maxY) return;  // Out of bounds
   
   unsigned int matrixOffset = matrixId * 256;  // Each matrix has 256 LEDs
+  unsigned int mappedX = x;
+  unsigned int mappedY = y;
+
+  // Optional panel orientation compensation for matrices that are physically rotated.
+  // This rotates logical content 90° counterclockwise per panel.
+  if (ledModulesRotated) {
+    mappedX = (MATRIX_WIDTH + 1) - y;
+    mappedY = x;
+  }
+
   unsigned int index;
   
   // Calculate index within the matrix using serpentine pattern
-  if (y % 2 == 0) {
+  if (mappedY % 2 == 0) {
     // Even rows: right to left
-    index = (MATRIX_WIDTH - x) + (MATRIX_WIDTH * (y - 1));
+    index = (MATRIX_WIDTH - mappedX) + (MATRIX_WIDTH * (mappedY - 1));
   } else {
     // Odd rows: left to right
-    index = (x - 1) + (MATRIX_WIDTH * (y - 1));
+    index = (mappedX - 1) + (MATRIX_WIDTH * (mappedY - 1));
   }
   
   // Scale color by virtual matrix brightness (software dimming)
@@ -130,6 +141,36 @@ CRGB normalizeToMaxBrightness(CRGB color) {
   return CRGB((uint8_t)r, (uint8_t)g, (uint8_t)b);
 }
 
+static inline void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3) {
+  if (encoderNum < 1 || encoderNum > NUM_ENCODERS) {
+    x1 = x2 = x3 = 1;
+    return;
+  }
+
+  // Stretch indicators only in 2B mode; keep default 16px layout for all other modes.
+  bool is2B = (ledModules == 2 && ledModulesRotated && maxX > MATRIX_WIDTH);
+  if (is2B) {
+    // Exact 2B positions (L-size spans 4 pixels):
+    // E1: 4,5,6,7  E2: 11,12,13,14  E3: 19,20,21,22  E4: 26,27,28,29
+    static const int starts[4] = { 4, 11, 19, 26 };
+    int slotStart = starts[encoderNum - 1];
+
+    x1 = constrain(slotStart, 1, (int)maxX);
+    x2 = constrain(slotStart + 1, 1, (int)maxX);
+    x3 = constrain(slotStart + 2, 1, (int)maxX);
+    return;
+  }
+
+  // Classic (single-matrix style) positions.
+  switch (encoderNum) {
+    case 1: x1 = 1;  x2 = 2;  x3 = 3;  break;
+    case 2: x1 = 5;  x2 = 6;  x3 = 7;  break;
+    case 3: x1 = 9;  x2 = 10; x3 = 11; break;
+    case 4: x1 = 13; x2 = 14; x3 = 15; break;
+    default: x1 = x2 = x3 = 1; break;
+  }
+}
+
 // Draw indicator with new format: SIZE[COLOR]
 void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false) {
   CRGB color = getIndicatorColor(colorCode);
@@ -151,24 +192,10 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
     Encoder[encoderNum - 1].writeRGBCode(rgbCode);
   }
   
-  // Determine x positions based on encoder number
   int x1, x2, x3;
-  switch (encoderNum) {
-    case 1:
-      x1 = 1; x2 = 2; x3 = 3; // L: 1,2,3 / M: 2,3 / S: 3
-      break;
-    case 2:
-      x1 = 5; x2 = 6; x3 = 7; // L: 5,6,7 / M: 6,7 / S: 6
-      break;
-    case 3:
-      x1 = 9; x2 = 10; x3 = 11; // L: 9,10,11 / M: 10,11 / S: 10
-      break;
-    case 4:
-      x1 = 13; x2 = 14; x3 = 15; // L: 13,14,15 / M: 14,15 / S: 14
-      break;
-    default:
-      return; // Invalid encoder number
-  }
+  getIndicatorXPositions(encoderNum, x1, x2, x3);
+  bool is2B = (ledModules == 2 && ledModulesRotated && maxX > MATRIX_WIDTH);
+  int x4 = is2B ? min((int)maxX, x3 + 1) : x3;
   
   // Draw based on size
   switch (size) {
@@ -176,23 +203,36 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
       light(x3, 1, color);
       break;
     case 'M': // Medium: 2px wide, 1px high
-      light(x2, 1, color);
-      light(x3, 1, color);
+      if (is2B) {
+        light(x2, 1, color);
+        light(x3, 1, color);
+        light(x4, 1, color);
+      } else {
+        light(x2, 1, color);
+        light(x3, 1, color);
+      }
       break;
     case 'L': // Large: 3px wide, 1px high
       light(x1, 1, color);
       light(x2, 1, color);
       light(x3, 1, color);
+      if (is2B) {
+        light(x4, 1, color);
+      }
       break;
     case 'C': // Cross: 3px wide, 3px high
       // Draw horizontal line
       light(x1, 1, color);
       light(x2, 1, color);
       light(x3, 1, color);
+      if (is2B) {
+        light(x4, 1, color);
+      }
       // Draw vertical line
-      light(x2, 1, color);
-      light(x2, 2, color);
-      light(x2, 3, color);
+      int vx = is2B ? x3 : x2;
+      light(vx, 1, color);
+      light(vx, 2, color);
+      light(vx, 3, color);
       break;
   }
 }
@@ -212,18 +252,32 @@ FLASHMEM void drawLowResCircle(int startX, int startY, CRGB color) {
   }
 }
  void drawPatternChange(int val){
-  int width = 12;
- if (val > 9) width=8;
-    
-//BLACK BOX
-  for (int x = width; x <= maxX; x++) {      // Cover to end of display
-    for (int y = 7; y <= 13; y++) {   // Box height (adjust as needed)
-      light(x, y, CRGB(0, 0, 0));
+  // Compute text bounds exactly as rendered, so box and text always stay on the same panel.
+  char buffer[16];
+  snprintf(buffer, sizeof(buffer), "%d", val);
+
+  int textPixelWidth = 0;
+  for (int i = 0; buffer[i] != '\0'; i++) {
+    if (buffer[i] >= 32 && buffer[i] <= 126) {
+      textPixelWidth += alphabet[buffer[i] - 32][0] + 1;
     }
   }
-  // Draw the number in light gray / white-ish
-  drawNumber(val, CRGB(220, 220, 220), 8);
 
+  int textStartX = (maxX + 1) - textPixelWidth;
+  if (textStartX < 1) textStartX = 1;
+
+  int boxStartX = max(1, textStartX - 1);
+  int boxEndX = min((int)maxX, textStartX + textPixelWidth);
+
+  // Draw black box background behind the value text only.
+  for (int x = boxStartX; x <= boxEndX; x++) {
+    for (int y = 7; y <= 13; y++) {
+      light(x, y, CRGB::Black);
+    }
+  }
+
+  // Draw the number.
+  drawText(buffer, textStartX, 8, CRGB(220, 220, 220));
  }
 
 void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
@@ -247,17 +301,32 @@ void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
     }
     
   }
- int width = 12;
- if (mappedValue > 9) width=8;
-  // Draw black box background for the number
-  for (int x = width; x <= maxX; x++) {      // Cover to end of display
-    for (int y = 7; y <= 13; y++) {   // Box height (adjust as needed)
-      light(x, y, CRGB(0, 0, 0));
+  // Compute text bounds exactly as rendered, so box and text always stay on the same panel.
+  char buffer[16];
+  snprintf(buffer, sizeof(buffer), "%d", mappedValue);
+
+  int textPixelWidth = 0;
+  for (int i = 0; buffer[i] != '\0'; i++) {
+    if (buffer[i] >= 32 && buffer[i] <= 126) {
+      textPixelWidth += alphabet[buffer[i] - 32][0] + 1;
     }
   }
 
-  // Draw the number in light gray / white-ish
-  drawNumber(mappedValue, color, 8);
+  int textStartX = (maxX + 1) - textPixelWidth;
+  if (textStartX < 1) textStartX = 1;
+
+  int boxStartX = max(1, textStartX - 1);
+  int boxEndX = min((int)maxX, textStartX + textPixelWidth);
+
+  // Draw black box background behind the value text only.
+  for (int x = boxStartX; x <= boxEndX; x++) {
+    for (int y = 7; y <= 13; y++) {
+      light(x, y, CRGB::Black);
+    }
+  }
+
+  // Draw the value text.
+  drawText(buffer, textStartX, 8, color);
 }
 
 
@@ -1031,8 +1100,10 @@ FLASHMEM void drawVelocity() {
     }
   }
 
-  // Draw channel volume at x=10-11
-  for (unsigned int x = 10; x <= 11; x++) {
+  // Draw channel volume at encoder-3 indicator span (classic 10-11, 2B shifted/stretched)
+  int cvX1, cvX2, cvX3;
+  getIndicatorXPositions(3, cvX1, cvX2, cvX3);
+  for (int x = cvX2; x <= cvX3; x++) {
     for (unsigned int y = 1; y < cv + 1; y++) {
       light(x, y, CRGB(0, 20 - y, y * y));
     }
@@ -1104,9 +1175,10 @@ FLASHMEM void drawVelocity() {
 }
 
 FLASHMEM void drawCtrlVolumeOverlay(int volume) {
-  const int overlayWidth = 2;
-  const int startX = 6;
-  const int endX = min((int)maxX, startX + overlayWidth - 1);
+  int x1, x2, x3;
+  getIndicatorXPositions(2, x1, x2, x3);
+  const int startX = x2;
+  const int endX = x3;
   volume = constrain(volume, 0, 16);
 
   if (volume == 0) {
@@ -1128,9 +1200,10 @@ FLASHMEM void drawCtrlVolumeOverlay(int volume) {
 }
 
 FLASHMEM void drawInputGainOverlay(int gain, int maxGain) {
-  const int overlayWidth = 2;
-  const int startX = 6;
-  const int endX = min((int)maxX, startX + overlayWidth - 1);
+  int x1, x2, x3;
+  getIndicatorXPositions(2, x1, x2, x3);
+  const int startX = x2;
+  const int endX = x3;
   gain = constrain(gain, 0, maxGain);
   maxGain = max(maxGain, 1);  // Prevent division by zero
 
@@ -1234,17 +1307,31 @@ void drawPages() {
   //GLOB.edit = 1;
   CRGB ledColor;
   extern int loopLength;
+  const unsigned int numModules = max(1u, maxX / MATRIX_WIDTH);
+  const unsigned int effectiveMaxPages = maxPages / numModules;  // 1 module:16 pages, 2 modules:8 pages
+  const unsigned int effectiveLoopLength = (loopLength > 0) ? min((unsigned int)loopLength, effectiveMaxPages) : 0;
 
   // First, clear the entire top row across all matrices
   for (unsigned int x = 1; x <= maxX; x++) {
     light(x, maxY, CRGB(0, 0, 0));  // Clear to black
   }
 
-  // Then draw page indicators at positions 1-16 (or up to maxPages)
-  for (unsigned int p = 1; p <= maxPages && p <= maxX; p++) {
+  // LOOP active: fill y=16 across all matrices with loop background color.
+  if (effectiveLoopLength > 0) {
+    for (unsigned int x = 1; x <= maxX; x++) {
+      light(x, maxY, CRGB(10, 0, 0));
+    }
+  }
+
+  // Then draw page indicators only on matrix 1 (slots 1..16).
+  // Pages above effectiveMaxPages are intentionally left black (no "no more pages" indicator).
+  for (unsigned int p = 1; p <= maxPages && p <= MATRIX_WIDTH; p++) {
+    if (p > effectiveMaxPages) {
+      continue;
+    }
 
     // Check if page is outside loop range when loop mode is active
-    bool outsideLoop = (loopLength > 0 && p > loopLength);
+    bool outsideLoop = (effectiveLoopLength > 0 && p > effectiveLoopLength);
     
     if (outsideLoop) {
       // Pages outside loop range are dark red
@@ -1268,7 +1355,7 @@ void drawPages() {
       }
     }
 
-    // Set the LED color at position p on top row
+    // Set this page-slot LED color only on matrix 1
     light(p, maxY, ledColor);
   }
 
