@@ -260,6 +260,8 @@ extern int currentMenuPage;
 bool getMuteState(int channel);
 bool getMuteStateForUI(int channel);  // Get mute state for UI display (uses edit page)
 void setMuteState(int channel, bool muted);
+void applyMutesAfterPMODSwitch();
+void toggleDrawRGlobalMute();
 void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
 void initPageMutes();
@@ -842,6 +844,9 @@ EXTMEM uint32_t loadedSampleLen[MAX_CHANNELS];
 DMAMEM int8_t channelDirection[maxFiles];
 DMAMEM static bool prevMuteState[maxY + 1];
 static bool tmpMuteActive = false;
+DMAMEM static bool drawRGlobalMuteSavedGlobal[maxY];
+DMAMEM static bool drawRGlobalMuteSavedPages[maxPages][maxY];
+static bool drawRGlobalMuteActive = false;
 
 // Per-page mute system for PMOD (pattern mode)
 DMAMEM static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
@@ -2431,6 +2436,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+    extern int drawMode;
+    if (drawMode == 1) {
+      toggleDrawRGlobalMute();
+      return;
+    }
     // In single mode, trigger clear page function ONLY when y=16
     if (GLOB.singleMode && GLOB.y == 16) {
       clearPage();
@@ -5259,8 +5269,14 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       }
     } else if (currentMode == &velocity && rModeSavedMode != nullptr && !encoder0Held) {
       // Button released - exit velocity mode and return to saved mode
+      bool shouldToggleGlobalMute = (drawMode == 1 &&
+                                     (rModeSavedMode == &draw || rModeSavedMode == &singleMode) &&
+                                     pressDuration[0] <= longPressDuration[0]);
       switchMode(rModeSavedMode);
       rModeSavedMode = nullptr;
+      if (shouldToggleGlobalMute) {
+        toggleDrawRGlobalMute();
+      }
     }
   }
 
@@ -5663,6 +5679,31 @@ void tmpMuteAll(bool pressed) {
       }
       tmpMuteActive = false;
     }
+  }
+}
+
+static void silenceAllVoicesForDrawRGlobalMute() {
+  for (int ch = 0; ch <= 8; ch++) {
+    for (int note = 36; note <= 96; note++) {
+      _samplers[ch].noteEvent(note, 0, false, false);
+    }
+  }
+
+  stopSynthChannel(13);
+  stopSynthChannel(14);
+}
+
+FLASHMEM void toggleDrawRGlobalMute() {
+  if (!drawRGlobalMuteActive) {
+    memcpy(drawRGlobalMuteSavedGlobal, globalMutes, sizeof(globalMutes));
+    memcpy(drawRGlobalMuteSavedPages, pageMutes, sizeof(pageMutes));
+    drawRGlobalMuteActive = true;
+    silenceAllVoicesForDrawRGlobalMute();
+  } else {
+    memcpy(globalMutes, drawRGlobalMuteSavedGlobal, sizeof(globalMutes));
+    memcpy(pageMutes, drawRGlobalMuteSavedPages, sizeof(pageMutes));
+    drawRGlobalMuteActive = false;
+    applyMutesAfterPMODSwitch();
   }
 }
 
@@ -6311,41 +6352,35 @@ void playNote() {
       GLOB.page = GLOB.edit;
     }
 
-    // Simple loopCount logic: increment when we transition TO page 1, beat 1 while playing
-    static bool wasAtStart = false;  // Track if we were at page 1, beat 1 in previous call
+    // Track condition loops against the page that is actually looping.
+    unsigned int loopStartPage = GLOB.page;
+    unsigned int loopStartBeat = (loopStartPage - 1) * maxX + 1;
+    bool pageChanged = (previousPage != GLOB.page);
+    bool wrappedToLoopStart = (beat == loopStartBeat) && ((previousBeat != loopStartBeat) || pageChanged);
 
-    if (!isNowPlaying) {
-      wasAtStart = false;  // Reset when not playing
-    } else {
-      bool atStart = (GLOB.page == 1 && beat == 1);
-      // Increment if we just arrived at start (weren't here before, but are now)
-      if (atStart && !wasAtStart) {
-        loopCount++;
-        if (loopCount > 256) loopCount = 1;  // Prevent overflow
-        isrDbgLoopCountValue = (uint16_t)loopCount;
-        isrDbgLoopCountChanged = true;
-      }
-      wasAtStart = atStart;
+    if (pageChanged) {
+      loopCount = 1;
+      isrDbgLoopCountValue = (uint16_t)loopCount;
+      isrDbgLoopCountChanged = true;
+    } else if (wrappedToLoopStart) {
+      loopCount++;
+      if (loopCount > 256) loopCount = 1;  // Prevent overflow
+      isrDbgLoopCountValue = (uint16_t)loopCount;
+      isrDbgLoopCountChanged = true;
     }
   } else {
     // Fallback to default behavior:
+    unsigned int previousPage = GLOB.page;
+    unsigned int previousBeat = beat;
     beat++;
     checkPages();
-    // Simple loopCount logic for non-pattern mode: increment when we transition TO page 1, beat 1
-    static bool wasAtStartNP = false;  // Track if we were at page 1, beat 1 in previous call
 
-    if (!isNowPlaying) {
-      wasAtStartNP = false;  // Reset when not playing
-    } else {
-      bool atStartNP = (GLOB.page == 1 && beat == 1);
-      // Increment if we just arrived at start (weren't here before, but are now)
-      if (atStartNP && !wasAtStartNP) {
-        loopCount++;
-        if (loopCount > 256) loopCount = 1;  // Prevent overflow
-        isrDbgLoopCountValue = (uint16_t)loopCount;
-        isrDbgLoopCountChanged = true;
-      }
-      wasAtStartNP = atStartNP;
+    bool wrappedToPatternStart = (GLOB.page == 1 && beat == 1) && ((previousPage != 1) || (previousBeat != 1));
+    if (wrappedToPatternStart) {
+      loopCount++;
+      if (loopCount > 256) loopCount = 1;  // Prevent overflow
+      isrDbgLoopCountValue = (uint16_t)loopCount;
+      isrDbgLoopCountChanged = true;
     }
   }
   for (int ch = 13; ch <= 14; ch++) {  // Only for synth channels 13, 14
@@ -7493,6 +7528,10 @@ FLASHMEM void initPageMutes() {
 // Get mute state for a channel, considering PMOD setting
 // For PLAYBACK: uses playing page in NEXT mode, edit page otherwise
 FLASHMEM bool getMuteState(int channel) {
+  if (drawRGlobalMuteActive) {
+    return true;
+  }
+
   if (SMP_PATTERN_MODE) {
     // Use page-specific mutes when PMOD is enabled
     extern int patternMode;
@@ -7509,6 +7548,10 @@ FLASHMEM bool getMuteState(int channel) {
 
 // Get mute state for UI display - always uses edit page (what you're viewing)
 FLASHMEM bool getMuteStateForUI(int channel) {
+  if (drawRGlobalMuteActive) {
+    return true;
+  }
+
   if (SMP_PATTERN_MODE) {
     // Use page-specific mutes when PMOD is enabled
     // Always use GLOB.edit (edit page) for UI display

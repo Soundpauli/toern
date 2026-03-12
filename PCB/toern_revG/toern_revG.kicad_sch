@@ -11261,7 +11261,7 @@
 	)
 	(wire
 		(pts
-			(xy 189.23 278.13) (xy 193.04 278.13)
+			(xy 181.61 278.13) (xy 193.04 278.13)
 		)
 		(stroke
 			(width 0)
@@ -11628,16 +11628,6 @@
 			(type default)
 		)
 		(uuid "62a01516-6725-4118-9b0f-360a7416d7b6")
-	)
-	(wire
-		(pts
-			(xy 209.55 170.18) (xy 209.55 167.64)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "62a7947b-a1bd-4201-839c-c87aaa21132a")
 	)
 	(wire
 		(pts
@@ -13801,6 +13791,16 @@
 	)
 	(wire
 		(pts
+			(xy 209.55 162.56) (xy 209.55 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f96c1975-0c07-4193-a9eb-d4e1d95fb4fa")
+	)
+	(wire
+		(pts
 			(xy 185.42 163.83) (xy 191.77 163.83)
 		)
 		(stroke
@@ -15244,7 +15244,7 @@
 	)
 	(global_label "VBAT"
 		(shape input)
-		(at 189.23 278.13 180)
+		(at 181.61 278.13 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -15254,7 +15254,7 @@
 		)
 		(uuid "92a0a516-ac88-4981-a06e-42e675629965")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 181.83 278.13 0)
+			(at 174.21 278.13 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -16361,7 +16361,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Polarized")
-		(at 209.55 163.83 0)
+		(at 209.55 166.37 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -16370,15 +16370,6 @@
 		(fields_autoplaced yes)
 		(uuid "0434b8cf-241b-4b1a-a8a8-4c907044b22c")
 		(property "Reference" "C6"
-			(at 213.36 161.6709 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "1000uF"
 			(at 213.36 164.2109 0)
 			(effects
 				(font
@@ -16387,8 +16378,17 @@
 				(justify left)
 			)
 		)
+		(property "Value" "1000uF"
+			(at 213.36 166.7509 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
 		(property "Footprint" "Capacitor_SMD:CP_Elec_8x10.5"
-			(at 210.5152 167.64 0)
+			(at 210.5152 170.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -16397,7 +16397,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 209.55 163.83 0)
+			(at 209.55 166.37 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -16406,7 +16406,25 @@
 			)
 		)
 		(property "Description" "Polarized capacitor"
-			(at 209.55 163.83 0)
+			(at 209.55 166.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "lcsc#" "C5686929"
+			(at 209.55 166.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Field6" ""
+			(at 209.55 166.37 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -17944,7 +17962,7 @@
 		(dnp no)
 		(uuid "216d28f1-b471-401e-b30f-a0b4e97c2548")
 		(property "Reference" "R22"
-			(at 509.27 30.734 90)
+			(at 509.27 33.274 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -17952,7 +17970,7 @@
 			)
 		)
 		(property "Value" "20k"
-			(at 509.016 33.02 90)
+			(at 509.016 37.846 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -17986,8 +18004,17 @@
 				(hide yes)
 			)
 		)
-		(property "lcsnr#" "C4184"
+		(property "lcsnr#" "C4328"
 			(at 509.27 35.56 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "lcsc#" "C4328"
+			(at 509.27 35.56 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18740,6 +18767,15 @@
 				(hide yes)
 			)
 		)
+		(property "lcsc#" "C3664594"
+			(at 142.24 307.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "MH4"
 			(uuid "18b14f1c-11f0-42d7-a5d6-d4ab263a5ae9")
 		)
@@ -19097,6 +19133,15 @@
 					(size 1.27 1.27)
 				)
 				(justify left top)
+				(hide yes)
+			)
+		)
+		(property "lcsc#" "C544783"
+			(at 293.37 275.59 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 				(hide yes)
 			)
 		)
@@ -19651,7 +19696,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Sensor_Audio:POM-2244P-C3310-2-R"
+		(property "Footprint" "GMI6027P-2C38DB-RF75"
 			(at 351.79 128.27 90)
 			(effects
 				(font
@@ -19678,7 +19723,7 @@
 				(hide yes)
 			)
 		)
-		(property "lcsc#" "C3273559"
+		(property "lcsc#" "C529951"
 			(at 351.79 130.81 0)
 			(effects
 				(font
@@ -21472,6 +21517,15 @@
 			)
 		)
 		(property "Description" "3W Filterless Class-D Stereo Audio Amplifier, SOIC-16"
+			(at 528.32 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "lcsc#" "C17337"
 			(at 528.32 45.72 0)
 			(effects
 				(font
@@ -23594,6 +23648,15 @@
 				(hide yes)
 			)
 		)
+		(property "lcsc#" "C4992548"
+			(at 48.26 110.49 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "S"
 			(uuid "a4828685-602e-4487-925a-c00a881bb3bd")
 		)
@@ -23927,10 +23990,9 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "92faa723-3207-47a2-ac67-5cf5fcceb5f7")
 		(property "Reference" "R21"
-			(at 509.27 39.37 90)
+			(at 509.27 43.688 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23938,7 +24000,7 @@
 			)
 		)
 		(property "Value" "20k"
-			(at 509.27 41.91 90)
+			(at 509.27 47.752 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -23972,8 +24034,17 @@
 				(hide yes)
 			)
 		)
-		(property "lcsnr#" "C4184"
+		(property "lcsnr#" "C4328"
 			(at 509.27 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "lcsc#" "C4328"
+			(at 509.27 45.72 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -25266,6 +25337,15 @@
 			)
 		)
 		(property "Description" "Audio Jack, 3 Poles (Stereo / TRS), Grounded Sleeve"
+			(at 138.43 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "lcsc#" "C4992548"
 			(at 138.43 152.4 0)
 			(effects
 				(font
@@ -27694,6 +27774,15 @@
 				(hide yes)
 			)
 		)
+		(property "lcsc#" "C1705"
+			(at 284.48 284.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "a92feb82-748b-4e98-ae68-3090f1206835")
 		)
@@ -28360,6 +28449,24 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 198.12 166.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "lcsc#" "C1525"
+			(at 198.12 166.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Field6" ""
 			(at 198.12 166.37 0)
 			(effects
 				(font

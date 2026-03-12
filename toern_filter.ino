@@ -206,38 +206,30 @@ void setFilters(FilterType filterType, int index, bool initial) {
     case REVERB:
       {
         if (freeverbs[index] != nullptr && freeverbs[index] != 0) {
-          // Map reverb value (0.0-0.79) to smooth wet/dry blend
-          // Every value should have an effect - smooth transition from dry to wet
-          float wetGain = mapf(mappedValue, 0.0f, 0.79f, 0.0f, 1.0f);
-          wetGain = constrain(wetGain, 0.0f, 1.0f);
-          
-          // Dry path (note: wet + dry can otherwise exceed 1.0 and clip on loud signals)
-          float dryGain = mapf(mappedValue, 0.0f, 0.79f, 1.0f, 0.7f);
-          dryGain = constrain(dryGain, 0.7f, 1.0f);
+          // Treat the control as a reverb send instead of a hard wet/dry crossfade.
+          // Big rooms should stay present, not pull the dry signal far down.
+          float verbAmount = mapf(mappedValue, 0.0f, 0.79f, 0.0f, 1.0f);
+          verbAmount = constrain(verbAmount, 0.0f, 1.0f);
 
-          // Safety normalization: guarantee wet+dry <= 1.0 (prevents crackle when reverb is high)
-          float sum = wetGain + dryGain;
-          if (sum > 1.0f) {
-            float s = 1.0f / sum;
-            wetGain *= s;
-            dryGain *= s;
-          }
+          float wetGain = mapf(verbAmount, 0.0f, 1.0f, 0.0f, 0.54f);
+          wetGain = constrain(wetGain, 0.0f, 0.54f);
+
+          float dryGain = mapf(verbAmount, 0.0f, 1.0f, 1.0f, 0.88f);
+          dryGain = constrain(dryGain, 0.88f, 1.0f);
           
           if (freeverbmixers[index] != 0) {
-            freeverbmixers[index]->gain(0, wetGain);  // Smooth wet blend
-            freeverbmixers[index]->gain(3, dryGain);  // Slight dry reduction at high wet
+            freeverbmixers[index]->gain(0, wetGain);
+            freeverbmixers[index]->gain(3, dryGain);
           }
           
           // Set reverb parameters (only when wet is active)
           if (wetGain > 0.01f) {
-            // Map damping from bright (0.01) to darker (0.8) as reverb increases
-            // Low reverb = bright, clear tail; High reverb = darker, more muffled tail
-            float dampingValue = mapf(mappedValue, 0.0f, 0.79f, 0.01f, 0.8f);
-            dampingValue = constrain(dampingValue, 0.01f, 0.8f);
+            // Keep larger rooms lively instead of getting overly dark at the top end.
+            float dampingValue = mapf(verbAmount, 0.0f, 1.0f, 0.01f, 0.42f);
+            dampingValue = constrain(dampingValue, 0.01f, 0.42f);
             freeverbs[index]->damping(dampingValue);
             
-            // Map roomsize smoothly across the range
-            float roomSize = mapf(mappedValue, 0.0f, 0.79f, 0.0f, 0.79f);
+            float roomSize = mapf(verbAmount, 0.0f, 1.0f, 0.0f, 1.0f);
             freeverbs[index]->roomsize(roomSize);
           } else {
             // When off, set to minimum

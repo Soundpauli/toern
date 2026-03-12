@@ -713,6 +713,18 @@
           "label": "Height",
           "name": "Height",
           "show": false
+        },
+        {
+          "group_by": false,
+          "label": "lscs#",
+          "name": "lscs#",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Field6",
+          "name": "Field6",
+          "show": false
         }
       ],
       "filter_string": "",
