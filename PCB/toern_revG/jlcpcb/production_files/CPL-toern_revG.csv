@@ -48,6 +48,14 @@ J14,Conn_01x05,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,65.0,-30.0,0.0,top
 J15,Conn_01x05,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,185.0,-58.865836,90.0,top
 J16,Conn_01x02,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,187.0,-28.5,0.0,top
 J17,AudioJack3_Ground,Jack_3.5mm_CUI_SJ1-3533NG_Horizontal_CircularHoles,184.85,-76.9,-90.0,top
+J18,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,66.0,-58.52,0.0,top
+J19,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,81.998914,-58.52,0.0,top
+J2,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,45.0,-58.52,0.0,top
+J20,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,102.998419,-58.52,0.0,top
+J21,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,119.000726,-58.52,0.0,top
+J22,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,140.0,-58.52,0.0,top
+J23,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,156.001958,-58.52,0.0,top
+J24,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,177.002175,-58.52,0.0,top
 J3,AudioJack3_Ground,Jack_3.5mm_CUI_SJ1-3533NG_Horizontal_CircularHoles,184.85,-89.9,-90.0,top
 J4,USB_C_Receptacle_USB2.0,USB_C_Receptacle_HRO_TYPE-C-31-M-12,35.41,-52.86,-90.0,top
 J5,AudioJack3_Switch,Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal,42.33102,-35.192339,180.0,top
@@ -82,9 +90,6 @@ R8,220R,R_0603_1608Metric,181.5,-68.0,0.0,top
 R9,5.1k,R_0402_1005Metric,40.5,-62.0,0.0,top
 S1,EG2219,EG2219,183.5,-43.0,90.0,top
 U1,SPX3819M5-L-3-3,SOT-23-5,98.75842,-50.53552,0.0,top
-U10,01x05 Connector_PinSocket_2.54mm,DuppaI2CEncoderV2.1,92.5,-58.505025,0.0,top
-U11,01x05 Connector_PinSocket_2.54mm,DuppaI2CEncoderV2.1,55.5,-58.505025,0.0,top
-U12,01x05 Connector_PinSocket_2.54mm,DuppaI2CEncoderV2.1,166.5,-58.505025,0.0,top
 U13,PAM8403D,SOIC-16_3.9x9.9mm_P1.27mm,54.555,-68.475,0.0,top
 U2,SPX3819M5-L-1-8,SOT-23-5,98.77,-46.95,0.0,top
 U3,SGTL5000XNBA3,QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm,108.16,-44.95,90.0,top
@@ -92,4 +97,3 @@ U4,TLP2361V4_E,5pin SO6_TOS,153.7183,-48.59,0.0,top
 U5,74LVC2G14,SOT-23-6,138.77,-48.69,0.0,top
 U6,Teensy4.1,Teensy41,144.77,-34.53,0.0,top
 U7,SPX3819M5-L-3-3,SOT-23-5,97.93,-36.4225,-90.0,top
-U9,01x05 Connector_PinSocket_2.54mm,DuppaI2CEncoderV2.1,129.5,-58.540025,0.0,top
