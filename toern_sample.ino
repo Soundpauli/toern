@@ -415,7 +415,28 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
   _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
 }
 
+static void loadEmptySampleToChannel(unsigned int sampleID) {
+  if (sampleID >= maxFiles) {
+    return;
+  }
 
+  memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
+  _samplers[sampleID].removeAllSamples();
+
+  SampleRate[sampleID] = 3;
+  loadedSampleRate[sampleID] = 3;
+
+  const int END_PAD_SAMPLES = 1024;
+  int bufferSamples = (int)(sizeof(sampled[sampleID]) / 2);
+  int samplerLen = min(END_PAD_SAMPLES, bufferSamples);
+  if (samplerLen < 1) {
+    samplerLen = 1;
+  }
+
+  loadedSampleLen[sampleID] = 0;
+  _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], samplerLen, rateFactor);
+  channelDirection[sampleID] = 1;
+}
 
 FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   drawNoSD();
@@ -443,8 +464,8 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     snprintf(OUTPUTf, sizeof(OUTPUTf), "%d/%d.wav", packID, sampleID);
   }
 
-  if (!SD.exists(OUTPUTf)) {
-    setMuteState(sampleID, true);
+  if (!OUTPUTf[0] || !SD.exists(OUTPUTf)) {
+    loadEmptySampleToChannel(sampleID);
     return;
   }
   // IMPORTANT: do not auto-unmute on successful load.
@@ -453,7 +474,13 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   
 
   File loadSample = SD.open(OUTPUTf);
-  if (loadSample) {
+  if (!loadSample) {
+    loadEmptySampleToChannel(sampleID);
+    yield();
+    return;
+  }
+
+  {
     int fileSize = loadSample.size();
     // All samples are 44.1kHz Mono - no need to check sample rate
     // For 44.1kHz, the original code used SampleRate = 3 (byte 0x44 at offset 24)
@@ -464,6 +491,13 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     if (!findWavDataChunk(loadSample, dataStart, dataSize)) {
       dataStart = 44;
       dataSize = (uint32_t)max(0, fileSize - 44);
+    }
+
+    if (fileSize <= 0 || dataSize == 0) {
+      loadSample.close();
+      loadEmptySampleToChannel(sampleID);
+      yield();
+      return;
     }
 
     // Original calculation: dataSize / (SampleRate * 2) = dataSize / 6 for 44.1kHz

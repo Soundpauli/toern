@@ -426,6 +426,28 @@ void writeWavHeader(File &file, uint32_t sampleRate, uint8_t bitsPerSample, uint
   file.write(header, 44);
 }
 
+void finalizeWavHeader(File &file, uint32_t dataSize) {
+  uint32_t riffSize = dataSize + 36;
+  uint8_t riffBytes[4] = {
+    (uint8_t)(riffSize & 0xff),
+    (uint8_t)((riffSize >> 8) & 0xff),
+    (uint8_t)((riffSize >> 16) & 0xff),
+    (uint8_t)((riffSize >> 24) & 0xff)
+  };
+  uint8_t dataBytes[4] = {
+    (uint8_t)(dataSize & 0xff),
+    (uint8_t)((dataSize >> 8) & 0xff),
+    (uint8_t)((dataSize >> 16) & 0xff),
+    (uint8_t)((dataSize >> 24) & 0xff)
+  };
+
+  if (!file.seek(4)) return;
+  file.write(riffBytes, sizeof(riffBytes));
+  if (!file.seek(40)) return;
+  file.write(dataBytes, sizeof(dataBytes));
+  file.seek(44 + dataSize);
+}
+
 
 void startRecordingRAM() {
   if (isRecording) return;
@@ -507,6 +529,7 @@ void stopRecordingRAM(int fnr, int snr) {
   writeWavHeader(f, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
   // write all your samples in one chunk
   f.write((uint8_t *)recBuffer, recWriteIndex * sizeof(int16_t));
+  finalizeWavHeader(f, recWriteIndex * sizeof(int16_t));
 
   f.close();
   //Serial.print("💾 Saved ");
@@ -2527,6 +2550,7 @@ void startNew() {
   SMP.pack = 1;
   samplePackID = 1;
   EEPROM.put(0, (unsigned int)1);  // Save to EEPROM
+  markSettingsBackupDirty();
   // Reset should overwrite everything (no SP0 preservation)
   loadSamplePack(1, false, false);
   

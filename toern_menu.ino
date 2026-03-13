@@ -203,6 +203,9 @@ static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
 static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 28; // EEPROM_DATA_START + [0..27]
+static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
+static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
+static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
@@ -275,18 +278,27 @@ void markSettingsBackupDirty() {
 }
 
 static bool writeSettingsBackupToSD() {
-  // payload = samplePackID (4 bytes) + menu/settings bytes (EEPROM_DATA_START..+20)
+  // payload = samplePackID (4 bytes, 0 = SP0 fallback) + settings block + SP0 override flags
   unsigned int spid = 1;
-  EEPROM.get(0, spid);
+  EEPROM.get(EEPROM_SAMPLEPACK_ADDR, spid);
+  if (spid > 99) {
+    spid = 0;
+  }
 
   uint8_t block[SETTINGS_EEPROM_BLOCK_LEN];
   for (uint16_t i = 0; i < SETTINGS_EEPROM_BLOCK_LEN; i++) {
     block[i] = (uint8_t)EEPROM.read(EEPROM_DATA_START + i);
   }
 
-  uint8_t payload[sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN];
+  uint8_t sp0Block[EEPROM_SP0_STATE_COUNT];
+  for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
+    sp0Block[i] = (uint8_t)EEPROM.read(EEPROM_SP0_STATE_ADDR + 1 + i);
+  }
+
+  uint8_t payload[sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN + EEPROM_SP0_STATE_COUNT];
   memcpy(payload, &spid, sizeof(unsigned int));
   memcpy(payload + sizeof(unsigned int), block, SETTINGS_EEPROM_BLOCK_LEN);
+  memcpy(payload + sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN, sp0Block, EEPROM_SP0_STATE_COUNT);
   uint32_t crc = crc32_compute(payload, sizeof(payload));
 
   // Write atomically: settings.tmp -> rename to settings.txt
@@ -313,7 +325,7 @@ static bool writeSettingsBackupToSD() {
   return true;
 }
 
-static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *outBlock, size_t outBlockLen) {
+static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *outBlock, size_t outBlockLen, uint8_t *outSp0Block, size_t outSp0BlockLen) {
   if (!SD.exists(SETTINGS_BACKUP_PATH)) return false;
   File f = SD.open(SETTINGS_BACKUP_PATH, FILE_READ);
   if (!f) return false;
@@ -336,7 +348,7 @@ static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *out
 
   // Backward compatible: allow older backups with smaller EEPROM blocks.
   const size_t minLen = sizeof(unsigned int) + 1; // at least 1 byte of settings
-  const size_t maxLen = sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN;
+  const size_t maxLen = sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN + EEPROM_SP0_STATE_COUNT;
   if (len < minLen || len > maxLen) { f.close(); return false; }
   if (strlen(hex) < (size_t)len * 2) { f.close(); return false; }
 
@@ -349,9 +361,16 @@ static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *out
   memcpy(&outSamplePackID, payload, sizeof(unsigned int));
   if (outBlockLen < SETTINGS_EEPROM_BLOCK_LEN) { f.close(); return false; }
   memset(outBlock, 0, SETTINGS_EEPROM_BLOCK_LEN);
+  if (outSp0BlockLen < EEPROM_SP0_STATE_COUNT) { f.close(); return false; }
+  memset(outSp0Block, 0, EEPROM_SP0_STATE_COUNT);
   size_t bytesInFile = (size_t)len - sizeof(unsigned int);
   if (bytesInFile > SETTINGS_EEPROM_BLOCK_LEN) bytesInFile = SETTINGS_EEPROM_BLOCK_LEN;
   memcpy(outBlock, payload + sizeof(unsigned int), bytesInFile);
+  if ((size_t)len > sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN) {
+    size_t sp0BytesInFile = (size_t)len - sizeof(unsigned int) - SETTINGS_EEPROM_BLOCK_LEN;
+    if (sp0BytesInFile > EEPROM_SP0_STATE_COUNT) sp0BytesInFile = EEPROM_SP0_STATE_COUNT;
+    memcpy(outSp0Block, payload + sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN, sp0BytesInFile);
+  }
   f.close();
   return true;
 }
@@ -368,15 +387,22 @@ void serviceSettingsBackup() {
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
     // EEPROM "empty" - try SD backup first, otherwise initialize defaults
-    unsigned int restoredPack = 1;
+    unsigned int restoredPack = 0;
     uint8_t restoredBlock[SETTINGS_EEPROM_BLOCK_LEN];
-    bool restored = readSettingsBackupFromSD(restoredPack, restoredBlock, sizeof(restoredBlock));
+    uint8_t restoredSp0Block[EEPROM_SP0_STATE_COUNT];
+    bool restored = readSettingsBackupFromSD(restoredPack, restoredBlock, sizeof(restoredBlock), restoredSp0Block, sizeof(restoredSp0Block));
 
     if (restored) {
+      if (restoredPack > 99) {
+        restoredPack = 0;
+      }
       EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
-      EEPROM.put(0, restoredPack);
+      EEPROM.put(EEPROM_SAMPLEPACK_ADDR, restoredPack);
       for (uint16_t i = 0; i < SETTINGS_EEPROM_BLOCK_LEN; i++) {
         EEPROM.write(EEPROM_DATA_START + i, restoredBlock[i]);
+      }
+      for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
+        EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, restoredSp0Block[i]);
       }
 
       // Keep runtime in sync for the rest of boot (loadSamplePack uses samplePackID)
@@ -386,7 +412,7 @@ void loadMenuFromEEPROM() {
     } else {
       // first run! write magic + defaults
       EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
-      EEPROM.put(0, (unsigned int)1);            // samplePackID default (1)
+      EEPROM.put(EEPROM_SAMPLEPACK_ADDR, (unsigned int)0);            // samplePackID default (0 = SP0 fallback)
       // Default to LINEIN so the SGTL5000 MIC/capture path is off by default.
       EEPROM.write(EEPROM_DATA_START + 0, -1);   // recMode default
       EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default
@@ -415,6 +441,9 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 25, 1);   // ledStripEnabled default (1 = ON)
       EEPROM.write(EEPROM_DATA_START + 26, 64);  // ledBrightness default (64, range 3-255)
       EEPROM.write(EEPROM_DATA_START + 27, 1);   // spkrEnabled default (1 = ON)
+      for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
+        EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
+      }
 
       // Create/refresh SD backup for defaults (debounced)
       markSettingsBackupDirty();
@@ -438,7 +467,7 @@ void loadMenuFromEEPROM() {
   extern bool ledModulesRotated;
   if (ledMode < 1 || ledMode > 4) {
     ledMode = 1;
-    EEPROM.write(EEPROM_DATA_START + 13, 1);
+    saveSingleModeToEEPROM(13, 1);
   }
   ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
   ledModulesRotated = (ledMode >= 3);
@@ -449,7 +478,7 @@ void loadMenuFromEEPROM() {
   lineInLevel = (unsigned int)EEPROM.read(EEPROM_DATA_START + 16);
   if (lineInLevel > 15) {
     lineInLevel = 8;  // Default to 8 if invalid
-    EEPROM.write(EEPROM_DATA_START + 16, lineInLevel);
+    saveSingleModeToEEPROM(16, lineInLevel);
   }
   
   // Load cursorType from EEPROM (stored at EEPROM_DATA_START + 18)
@@ -457,7 +486,7 @@ void loadMenuFromEEPROM() {
   cursorType = (int8_t)EEPROM.read(EEPROM_DATA_START + 18);
   if (cursorType < 0 || cursorType > 1) {
     cursorType = 0;  // Default to 0 (NORM) if invalid
-    EEPROM.write(EEPROM_DATA_START + 18, cursorType);
+    saveSingleModeToEEPROM(18, cursorType);
   }
   
   // Load showChannelNr from EEPROM (stored at EEPROM_DATA_START + 19)
@@ -468,7 +497,7 @@ void loadMenuFromEEPROM() {
   drawMode = (int8_t)EEPROM.read(EEPROM_DATA_START + 21);
   if (drawMode < 0 || drawMode > 1) {
     drawMode = 0;  // Default to 0 (L+R) if invalid
-    EEPROM.write(EEPROM_DATA_START + 21, drawMode);
+    saveSingleModeToEEPROM(21, drawMode);
   }
 
   // Load stereoChannel from EEPROM (stored at EEPROM_DATA_START + 23)
@@ -479,7 +508,7 @@ void loadMenuFromEEPROM() {
   if (stereoChannel < 0 || stereoChannel > 8) {
     // Invalid value, default to OFF
     stereoChannel = 0;
-    EEPROM.write(EEPROM_DATA_START + 23, stereoChannel);
+    saveSingleModeToEEPROM(23, stereoChannel);
   }
   // Note: Values 1-8 will be converted in menu first enter (old 1->2, old 2-8->2)
   // Apply routing after loading from EEPROM
@@ -493,7 +522,7 @@ void loadMenuFromEEPROM() {
   if (midiSendMode < 0 || midiSendMode > 2) {
     // Invalid value, default to BOTH
     midiSendMode = 2;
-    EEPROM.write(EEPROM_DATA_START + 24, midiSendMode);
+    saveSingleModeToEEPROM(24, midiSendMode);
   }
   
   // Load ledStripEnabled from EEPROM (stored at EEPROM_DATA_START + 25)
@@ -504,7 +533,7 @@ void loadMenuFromEEPROM() {
   if (ledStripValue > 1) {
     // Invalid value, default to ON
     ledStripEnabled = true;
-    EEPROM.write(EEPROM_DATA_START + 25, 1);
+    saveSingleModeToEEPROM(25, 1);
   }
   setLedStripEnabled(ledStripEnabled);
   
@@ -516,11 +545,14 @@ void loadMenuFromEEPROM() {
   if (spkrValue > 1) {
     // Invalid value, default to ON
     spkrEnabled = true;
-    EEPROM.write(EEPROM_DATA_START + 27, 1);
+    saveSingleModeToEEPROM(27, 1);
   }
   setSpkrEnabled(spkrEnabled);
   
-  if (previewVol < 0 || previewVol > 50) previewVol = 20;
+  if (previewVol < 0 || previewVol > 50) {
+    previewVol = 20;
+    saveSingleModeToEEPROM(7, previewVol);
+  }
   
   // Safety: Ensure monitoring is OFF on startup to prevent feedback
   mixer_end.gain(3, 0.0);
@@ -529,47 +561,57 @@ void loadMenuFromEEPROM() {
   extern unsigned int maxX;
   maxX = MATRIX_WIDTH * ledModules;
   
-  if (recChannelClear < 0 || recChannelClear > 3) recChannelClear = 1;  // Default to ON if invalid
+  if (recChannelClear < 0 || recChannelClear > 3) {
+    recChannelClear = 1;  // Default to ON if invalid
+    saveSingleModeToEEPROM(6, recChannelClear);
+  }
   
   // Ensure flowMode is valid (-1 or 1)
   if (flowMode != -1 && flowMode != 1) {
     flowMode = -1;  // Default to OFF if invalid value
+    saveSingleModeToEEPROM(8, flowMode);
   }
   
   // Ensure simpleNotesView is valid (1-2)
   if (simpleNotesView < 1 || simpleNotesView > 2) {
     simpleNotesView = 1;  // Default to EASY if invalid value
+    saveSingleModeToEEPROM(11, simpleNotesView);
   }
   
   if (transportMode != -1 && transportMode != 1 && transportMode != 2) {
     transportMode = -1;  // Default to OFF if invalid value
+    saveSingleModeToEEPROM(2, transportMode);
   }
 
   // Ensure loopLength is valid (0-8)
   if (loopLength < 0 || loopLength > 8) {
     loopLength = 0;  // Default to OFF if invalid value
+    saveSingleModeToEEPROM(12, loopLength);
   }
   
   // Ensure voiceSelect is valid (-1, 1, or 2)
   if (voiceSelect != -1 && voiceSelect != 1 && voiceSelect != 2) {
     voiceSelect = 1;  // Default to MIDI if invalid value
+    saveSingleModeToEEPROM(4, voiceSelect);
   }
   
   // Ensure patternMode is valid (-1, 1, or 2)
   if (patternMode != -1 && patternMode != 1 && patternMode != 2 && patternMode != 3) {
     patternMode = -1;  // Default to OFF if invalid value
+    saveSingleModeToEEPROM(3, patternMode);
   }
   
   // Ensure led mode is valid (1,2,3,4 => 1,2,1B,2B)
   if (ledMode < 1 || ledMode > 4) {
-  if (ctrlMode != 0 && ctrlMode != 1) {
-    ctrlMode = 0;
-  }
-
     ledMode = 1;     // Default to 1 if invalid value
     ledModules = 1;
     ledModulesRotated = false;
-    EEPROM.write(EEPROM_DATA_START + 13, 1);  // Save corrected value
+    saveSingleModeToEEPROM(13, 1);
+  }
+
+  if (ctrlMode != 0 && ctrlMode != 1) {
+    ctrlMode = 0;
+    saveSingleModeToEEPROM(14, ctrlMode);
   }
 
 
@@ -684,14 +726,15 @@ void saveSp0StateToEEPROM() {
   // Use addresses 200-208 for sp0 state (8 voices = 8 bytes)
   for (int i = 1; i < maxFiles; i++) {
     uint8_t value = SMP.sp0Active[i] ? 1 : 0;
-    EEPROM.write(200 + i, value);
+    EEPROM.write(EEPROM_SP0_STATE_ADDR + i, value);
   }
+  markSettingsBackupDirty();
 }
 
 // Load samplepack 0 state from EEPROM
 void loadSp0StateFromEEPROM() {
   for (int i = 1; i < maxFiles; i++) {
-    uint8_t stored = EEPROM.read(200 + i);
+    uint8_t stored = EEPROM.read(EEPROM_SP0_STATE_ADDR + i);
     SMP.sp0Active[i] = (stored == 1);
   }
 }
@@ -2303,6 +2346,8 @@ void switchMenu(int menuPosition){
 
       case 2:
         switchMode(&set_SamplePack);
+        currentMode->pos[3] = SMP.pack;
+        Encoder[3].writeCounter((int32_t)SMP.pack);
         break;
 
       case 3:
@@ -2813,6 +2858,7 @@ void switchMenu(int menuPosition){
         
         // Save scheme selection to EEPROM
         EEPROM.write(EEPROM_DATA_START + 22, currentColorScheme);
+        markSettingsBackupDirty();
         
         // Restore ETC page position to stay on COLR page (page 4)
         currentEtcPage = savedEtcPage;

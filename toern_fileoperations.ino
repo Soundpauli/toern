@@ -85,14 +85,16 @@ FLASHMEM void saveSamplePack(int pack) {
         drawLoadingBar(1, maxFiles, ch, col_base[(maxFiles + 1) - ch], UI_DIM_WHITE, false);
         // Pack = samplepack icon
         showIcons(OLD_ICON_SAMPLEPACK, UI_BG_DIM);
-        FastLED.setBrightness(ledBrightness);
+        // Don't change FastLED global brightness - matrix is dimmed in software (light_single)
         FastLEDshow();
 
         // Check if this voice has a custom sample in samplepack 0
         snprintf(sourcePath, sizeof(sourcePath), "0/%d.wav", ch);
         snprintf(filename, sizeof(filename), "%d/%d.wav", pack, ch);
         
-        if (SD.exists(sourcePath)) {
+        bool useSp0Override = SMP.sp0Active[ch] && SD.exists(sourcePath);
+
+        if (useSp0Override) {
             // Copy from samplepack 0
             // Remove existing file if it exists
             if (SD.exists(filename)) {
@@ -121,7 +123,7 @@ FLASHMEM void saveSamplePack(int pack) {
             
             sourceFile.close();
             destFile.close();
-        } else {
+        } else if (loadedSampleLen[ch] > 0) {
             // Save from RAM (current loaded sample)
             // Remove any existing file at this path
             if (SD.exists(filename)) {
@@ -152,8 +154,21 @@ FLASHMEM void saveSamplePack(int pack) {
               // Yield periodically during large file writes to maintain responsiveness
               if ((offset % (CHUNK_SIZE * 4)) == 0) yield();  // Yield every 32KB
             }
+
+            finalizeWavHeader(outFile, totalBytes);
             
             outFile.close();
+        } else {
+            // Voices without a sample get a zero-byte placeholder file so banks
+            // still contain all 8 slots and load back as silence instead of mute.
+            if (SD.exists(filename)) {
+                SD.remove(filename);
+            }
+
+            File emptyFile = SD.open(filename, O_WRITE | O_CREAT | O_TRUNC);
+            if (emptyFile) {
+                emptyFile.close();
+            }
         }
         yield();
     }

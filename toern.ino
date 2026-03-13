@@ -2808,6 +2808,7 @@ FLASHMEM void loadColorSchemeAndBrightness() {
   if (savedColorScheme > 3) {
     savedColorScheme = 0;
     EEPROM.write(EEPROM_DATA_START + 22, 0);
+    markSettingsBackupDirty();
   }
 
   extern void applyColorScheme(uint8_t scheme);
@@ -2842,6 +2843,7 @@ FLASHMEM void loadColorSchemeAndBrightness() {
   if (savedBrightness < 3 || savedBrightness > 255) {
     savedBrightness = 64;
     EEPROM.write(EEPROM_DATA_START + 26, 64);
+    markSettingsBackupDirty();
   }
   ledBrightness = savedBrightness;
 }
@@ -2851,6 +2853,7 @@ FLASHMEM void loadLedModeEarlyFromEEPROM() {
   if (ledMode < 1 || ledMode > 4) {
     ledMode = 1;
     EEPROM.write(EEPROM_DATA_START + 13, 1);
+    markSettingsBackupDirty();
   }
 
   ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
@@ -2913,9 +2916,10 @@ void setup() {
   }
   
   EEPROM.get(0, samplePackID);
-  if (isnan(samplePackID) || samplePackID == 0 || samplePackID < 1) {  // Check for NaN, zero, or invalid values
-    samplePackID = 1;
-    EEPROM.put(0, samplePackID);  // Save the default to EEPROM
+  if (samplePackID > 99) {
+    samplePackID = 0;
+    EEPROM.put(0, samplePackID);  // Save the default/fallback to EEPROM
+    markSettingsBackupDirty();
   }
 
   // Synchronize SMP.pack with the loaded samplePackID
@@ -3023,12 +3027,6 @@ void setup() {
   }
   drawNoSD();
 
-  // Load color scheme and brightness from EEPROM (after SD is initialized)
-  loadColorSchemeAndBrightness();
-  //delay(500);
-
-
-
   // Manifest-driven sample browser (no legacy lastFile EEPROM tracking).
   // Always use map.txt - if missing, scan and write it, then load it
   if (!loadSampleManifest()) {
@@ -3048,10 +3046,16 @@ void setup() {
   }
   loadMenuFromEEPROM();
 
+  // Load color scheme and brightness from EEPROM AFTER loadMenuFromEEPROM.
+  // Critical: loadMenuFromEEPROM may restore from settings.txt backup when EEPROM is empty;
+  // if we loaded brightness before that, we'd read garbage and never get the restored value.
+  loadColorSchemeAndBrightness();
+
   // Apply all audio settings from globals (after loadMenuFromEEPROM which may have updated values)
   extern void applyAudioSettingsFromGlobals();
   applyAudioSettingsFromGlobals();
 
+  initSamples();
   loadSp0StateFromEEPROM();  // Load samplepack 0 state before loading samplepack
   // Startup load: preserve SP0 custom voices
   loadSamplePack(samplePackID, true, true);
@@ -3062,7 +3066,6 @@ void setup() {
   initGlobalVars();
   GLOB.vol = savedVol;  // Restore vol from EEPROM
 
-  initSamples();
   initPageMutes();  // Initialize per-page mute system
 
   //playTimer.priority(118);
@@ -4766,6 +4769,7 @@ void checkSerialColors() {
 
           // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
           EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
+          markSettingsBackupDirty();
 
           // Update encoder position if in volume_bpm mode
           extern Mode *currentMode;
@@ -4822,6 +4826,7 @@ void checkSerialColors() {
             // Save scheme selection (3) to EEPROM
             // Use EEPROM_DATA_START + 22 (slot 22 is available)
             EEPROM.write(EEPROM_DATA_START + 22, 3);
+            markSettingsBackupDirty();
 
             // Update current color scheme
             currentColorScheme = 3;
@@ -6869,11 +6874,17 @@ FLASHMEM void updateLineOutLevel() {
   if (lineOutLevelSetting != newLevel) {
     lineOutLevelSetting = newLevel;
     EEPROM.write(EEPROM_DATA_START + 15, lineOutLevelSetting);  // Save to EEPROM
+    markSettingsBackupDirty();
   }
   sgtl5000_1.lineOutLevel(lineOutLevelSetting);
 }
 
 void updateBrightness() {
+  // Only apply encoder pos[1] when we're actually in volume_bpm mode.
+  // In other modes (draw, set_SamplePack, loadSaveTrack, etc.) pos[1] means something
+  // else (edit page, pack index, etc.) - using it would corrupt brightness/EEPROM.
+  if (currentMode != &volume_bpm) return;
+
   // New formula: ledBrightness = pos[1] + 3
   // Range: pos[1] from 0 to 252 gives ledBrightness from 3 to 255
   uint8_t newBrightness = constrain(currentMode->pos[1] + 3, 3, 255);
@@ -6881,6 +6892,7 @@ void updateBrightness() {
     ledBrightness = newBrightness;
     // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
     EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
+    markSettingsBackupDirty();
   }
   // FastLED.setBrightness(ledBrightness); // Disabled: global brightness stays at 255, matrix is dimmed in software
 }
@@ -7131,7 +7143,7 @@ void showLoadSave() {
     drawIndicator('M', 'R', 2);         // Bright red for save
     drawNumber(SMP.file, UI_BLUE, 11);  // Blue number for non-existing file
   }
-  FastLED.setBrightness(ledBrightness);
+  // Don't change FastLED global brightness - matrix is dimmed in software (light_single)
   FastLEDshow();
 
   if (currentMode->pos[3] != SMP.file) {
@@ -7186,8 +7198,8 @@ void showSamplePack() {
     drawNumber(SMP.pack, UI_BLUE, 11);  // Blue number for non-existing file
   }
 
-  // Validate samplepack value - ensure it's within valid range (0-99)
-  if (SMP.pack < 0 || SMP.pack > 99) {
+  // Validate samplepack value - 0 means "no saved pack selected", so SP0 acts as fallback.
+  if (SMP.pack > 99) {
     SMP.pack = 0;
     currentMode->pos[3] = 0;
     Encoder[3].writeCounter((int32_t)0);
@@ -7195,7 +7207,7 @@ void showSamplePack() {
     markSettingsBackupDirty();
   }
 
-  FastLED.setBrightness(ledBrightness);
+  // Don't change FastLED global brightness - matrix is dimmed in software (light_single)
   FastLEDshow();
   if (currentMode->pos[3] != SMP.pack) {
     SMP.pack = currentMode->pos[3];
@@ -7205,13 +7217,22 @@ void showSamplePack() {
 void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) {  // Renamed pack to pack_id to avoid conflict
   drawNoSD();
 
-  // Validate pack_id - ensure it's within valid range (0-99)
-  if (pack_id < 0 || pack_id > 99) {
+  // Validate pack_id - 0 means SP0/empty fallback, 1..99 are regular saved packs.
+  if (pack_id > 99) {
     pack_id = 0;
   }
 
+  samplePackID = pack_id;
+  SMP.pack = pack_id;
   EEPROM.put(0, pack_id);  // Save current pack_id to EEPROM
   markSettingsBackupDirty();
+
+  // Samplepack loading must always restore the full stored voice data,
+  // independent of the current preview trim window from SET_WAV.
+  unsigned int savedSeek = GLOB.seek;
+  unsigned int savedSeekEnd = GLOB.seekEnd;
+  GLOB.seek = 0;
+  GLOB.seekEnd = 100;
 
   if (!preserveSp0Custom) {
     // Manual/intentional load: reset SP0 overrides so the chosen pack overwrites everything.
@@ -7261,6 +7282,8 @@ void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) { 
       }
     }
   }
+  GLOB.seek = savedSeek;
+  GLOB.seekEnd = savedSeekEnd;
   // char OUTPUTf[50]; // This seems unused here
   // sprintf(OUTPUTf, "%u/%u.wav", pack_id, 1);
   switchMode(&draw);  // Switch back to draw mode after loading
