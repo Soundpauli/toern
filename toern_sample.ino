@@ -1000,8 +1000,10 @@ void showWave() {
       lastEncoder3Value = 1;
     }
     
-    // Encoder 3 (sample) changed by user -> queue filename after folder timer
-    if (!forceFolderDisplay && currentEncoder3 != lastEncoder3Value) {
+    // Encoder 3 (sample) changed by user -> switch to filename immediately (cancel folder display)
+    if (currentEncoder3 != lastEncoder3Value) {
+      forceFolderDisplay = false;
+      folderDisplayUntilMs = 0;
       showFolderLine = false;
       scrollFileOffset = 0;
       fileDir = 1;
