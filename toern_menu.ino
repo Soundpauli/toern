@@ -179,6 +179,7 @@ bool inRecsSubmenu = false;
 bool inMidiSubmenu = false;
 bool inVolSubmenu = false;
 bool inEtcSubmenu = false;
+bool menuEnteredFromSingleMode = false;  // Restore draw vs single when exiting from submenu
 int aiTargetPage = 6; // Default target page for AI song generation
 int aiBaseStartPage = 1; // Start of base page range for AI analysis
 int aiBaseEndPage = 1;   // End of base page range for AI analysis

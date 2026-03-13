@@ -1901,64 +1901,47 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool inMidiSubmenu;
     extern bool inVolSubmenu;
     extern bool inEtcSubmenu;
-    extern int currentMenuPage;
-    extern void menuRequestFullRedraw();
+    extern bool menuEnteredFromSingleMode;
 
-    // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
-    if (inLookSubmenu) {
-      inLookSubmenu = false;
-      currentMenuPage = 5;
-      currentMode->pos[3] = 5;  // Sync mode position with current page
-      Encoder[3].writeCounter((int32_t)5);
-      menuRequestFullRedraw();
-      return;
-    }
-
-    // If in RECS submenu, exit back to main menu at RECS page (index 6)
-    if (inRecsSubmenu) {
-      inRecsSubmenu = false;
-      currentMenuPage = 6;
-      currentMode->pos[3] = 6;  // Sync mode position with current page
-      Encoder[3].writeCounter((int32_t)6);
-      menuRequestFullRedraw();
-      return;
-    }
-
-    // If in MIDI submenu, exit back to main menu at MIDI page (index 7)
-    if (inMidiSubmenu) {
-      inMidiSubmenu = false;
-      currentMenuPage = 7;
-      currentMode->pos[3] = 7;  // Sync mode position with current page
-      Encoder[3].writeCounter((int32_t)7);
-      menuRequestFullRedraw();
-      return;
-    }
-
-    // If in VOL submenu, exit back to main menu at VOL page (index 4)
-    if (inVolSubmenu) {
-      inVolSubmenu = false;
-      currentMenuPage = 4;
-      currentMode->pos[3] = 4;  // Sync mode position with current page
-      Encoder[3].writeCounter((int32_t)4);
-      menuRequestFullRedraw();
-      return;
-    }
-
-    // If in ETC submenu:
-    // - On AUTO (mainSetting 15): encoder(0) press should start generation (not exit)
-    // - Otherwise: exit back to main menu at ETC page (index 9)
-    if (inEtcSubmenu) {
-      extern int getCurrentMenuMainSetting();
-      int etcSetting = getCurrentMenuMainSetting();
-      if (etcSetting == 15) {
-        switchMenu(15);  // AUTO generate
-        return;
+    // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
+    if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
+      // ETC submenu on AUTO (mainSetting 15): encoder(0) press should start generation (not exit)
+      if (inEtcSubmenu) {
+        extern int getCurrentMenuMainSetting();
+        int etcSetting = getCurrentMenuMainSetting();
+        if (etcSetting == 15) {
+          switchMenu(15);  // AUTO generate
+          return;
+        }
       }
+      int parentPage = 0;
+      if (inLookSubmenu) parentPage = 5;
+      else if (inRecsSubmenu) parentPage = 6;
+      else if (inMidiSubmenu) parentPage = 7;
+      else if (inVolSubmenu) parentPage = 4;
+      else if (inEtcSubmenu) parentPage = 9;
+      inLookSubmenu = false;
+      inRecsSubmenu = false;
+      inMidiSubmenu = false;
+      inVolSubmenu = false;
       inEtcSubmenu = false;
-      currentMenuPage = 9;
-      currentMode->pos[3] = 9;  // Sync mode position with current page
-      Encoder[3].writeCounter((int32_t)9);
-      menuRequestFullRedraw();
+      currentMenuPage = parentPage;
+      currentMode->pos[3] = parentPage;
+      Encoder[3].writeCounter((int32_t)parentPage);
+      if (menuEnteredFromSingleMode) {
+        switchMode(&singleMode);
+        GLOB.singleMode = true;
+      } else {
+        switchMode(&draw);
+        GLOB.singleMode = false;
+      }
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       return;
     }
 
@@ -1970,9 +1953,21 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     if (mainSetting == 15) {
       switchMenu(mainSetting);  // Trigger AI generation
     } else {
-      // For all other menu pages, exit to draw mode
-      switchMode(&draw);
-      GLOB.singleMode = false;
+      // For all other menu pages, exit to draw or single based on state before entering menu
+      if (menuEnteredFromSingleMode) {
+        switchMode(&singleMode);
+        GLOB.singleMode = true;
+      } else {
+        switchMode(&draw);
+        GLOB.singleMode = false;
+      }
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     }
   }
 
@@ -4064,42 +4059,37 @@ void checkTouchInputs() {
         extern bool inMidiSubmenu;
         extern bool inVolSubmenu;
         extern bool inEtcSubmenu;
-        extern int currentMenuPage;
-        // If in LOOK submenu, exit back to main menu at PLAY page (index 5)
-        if (inLookSubmenu) {
+        extern bool menuEnteredFromSingleMode;
+        // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
+        if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
           inLookSubmenu = false;
-          currentMenuPage = 5;
-          currentMode->pos[3] = 5;  // Sync mode position with current page
-          Encoder[3].writeCounter((int32_t)5);
-        } else if (inRecsSubmenu) {
-          // If in RECS submenu, exit back to main menu at RECS page (index 6)
           inRecsSubmenu = false;
-          currentMenuPage = 6;
-          currentMode->pos[3] = 6;  // Sync mode position with current page
-          Encoder[3].writeCounter((int32_t)6);
-        } else if (inMidiSubmenu) {
-          // If in MIDI submenu, exit back to main menu at MIDI page (index 7)
           inMidiSubmenu = false;
-          currentMenuPage = 7;
-          currentMode->pos[3] = 7;  // Sync mode position with current page
-          Encoder[3].writeCounter((int32_t)7);
-        } else if (inVolSubmenu) {
-          // If in VOL submenu, exit back to main menu at VOL page (index 4)
           inVolSubmenu = false;
-          currentMenuPage = 4;
-          currentMode->pos[3] = 4;  // Sync mode position with current page
-          Encoder[3].writeCounter((int32_t)4);
-        } else if (inEtcSubmenu) {
-          // If in ETC submenu, exit back to main menu at ETC page (index 9)
           inEtcSubmenu = false;
-          currentMenuPage = 9;
-          currentMode->pos[3] = 9;  // Sync mode position with current page
-          Encoder[3].writeCounter((int32_t)9);
+          if (menuEnteredFromSingleMode) {
+            switchMode(&singleMode);
+            GLOB.singleMode = true;
+          } else {
+            switchMode(&draw);
+            GLOB.singleMode = false;
+          }
+          extern int drawMode;
+          if (drawMode == 0) {
+            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          } else {
+            Encoder[0].writeRGBCode(0x000000);
+          }
+          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
         } else {
-          // Otherwise exit to draw mode
-          switchMode(&draw);
-          GLOB.singleMode = false;
-          // Update encoder colors to reflect the new currentChannel when switching to draw mode
+          // On main menu, exit to draw or single based on state before entering menu
+          if (menuEnteredFromSingleMode) {
+            switchMode(&singleMode);
+            GLOB.singleMode = true;
+          } else {
+            switchMode(&draw);
+            GLOB.singleMode = false;
+          }
           extern int drawMode;
           if (drawMode == 0) {
             Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
@@ -4129,6 +4119,8 @@ void checkTouchInputs() {
     if (currentMode != &filterMode && touchState[1] && !lastTouchState[1] && (currentTime - lastTouchTime[1] > DEBOUNCE_TIME) && !touchConflict) {
       lastTouchTime[1] = currentTime;
       if (currentMode == &draw || currentMode == &singleMode) {
+        extern bool menuEnteredFromSingleMode;
+        menuEnteredFromSingleMode = (currentMode == &singleMode);
         switchMode(&menu);
       } else if (currentMode == &newFileMode) {
         // Exit NEW mode without generating
@@ -4144,72 +4136,162 @@ void checkTouchInputs() {
         }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &loadSaveTrack) {
-        // Exit DAT mode back to main menu at DAT page (index 0)
-        switchMode(&menu);
+        // Exit FILE (DAT) directly to draw/single, preserve menu page 0 for re-entry
+        extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
+        extern Mode menu;
         currentMenuPage = 0;
+        menu.pos[3] = 0;
         Encoder[3].writeCounter((int32_t)0);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &set_SamplePack) {
-        // Exit KIT mode back to main menu at KIT page (index 1)
-        switchMode(&menu);
+        // Exit PACK (KIT) directly to draw/single, preserve menu page 1 for re-entry
+        extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
+        extern Mode menu;
         currentMenuPage = 1;
+        menu.pos[3] = 1;
         Encoder[3].writeCounter((int32_t)1);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &set_Wav) {
-        // Exit WAV mode back to main menu at WAV page (index 2)
-        switchMode(&menu);
+        // Exit WAVE directly to draw/single, preserve menu page 2 for re-entry
+        extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
+        extern Mode menu;
         currentMenuPage = 2;
+        menu.pos[3] = 2;
         Encoder[3].writeCounter((int32_t)2);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &volume_bpm) {
-        // Exit BPM mode back to main menu at BPM page (index 3)
-        switchMode(&menu);
+        // Exit BPM directly to draw/single, preserve menu page 3 for re-entry
+        extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
+        extern Mode menu;
         currentMenuPage = 3;
+        menu.pos[3] = 3;
         Encoder[3].writeCounter((int32_t)3);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &songMode) {
-        // Exit SONG mode back to main menu at SONG page (index 8)
-        switchMode(&menu);
+        // Exit SONG directly to draw/single, preserve menu page 8 for re-entry
+        extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
+        extern Mode menu;
         currentMenuPage = 8;
+        menu.pos[3] = 8;
         Encoder[3].writeCounter((int32_t)8);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &menu) {
         extern bool inLookSubmenu;
         extern bool inRecsSubmenu;
         extern bool inMidiSubmenu;
         extern bool inVolSubmenu;
         extern bool inEtcSubmenu;
+        extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
-        // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
-        if (inLookSubmenu) {
+        // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
+        if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
+          int parentPage = 0;
+          if (inLookSubmenu) parentPage = 5;
+          else if (inRecsSubmenu) parentPage = 6;
+          else if (inMidiSubmenu) parentPage = 7;
+          else if (inVolSubmenu) parentPage = 4;
+          else if (inEtcSubmenu) parentPage = 9;
           inLookSubmenu = false;
-          currentMenuPage = 5;
-          currentMode->pos[3] = 5;  // Sync mode position with current page
-          Encoder[3].writeCounter((int32_t)5);
-        } else if (inRecsSubmenu) {
-          // If in RECS submenu, exit back to main menu at RECS page (index 6)
           inRecsSubmenu = false;
-          currentMenuPage = 6;
-          Encoder[3].writeCounter((int32_t)6);
-        } else if (inMidiSubmenu) {
-          // If in MIDI submenu, exit back to main menu at MIDI page (index 7)
           inMidiSubmenu = false;
-          currentMenuPage = 7;
-          Encoder[3].writeCounter((int32_t)7);
-        } else if (inVolSubmenu) {
-          // If in VOL submenu, exit back to main menu at VOL page (index 4)
           inVolSubmenu = false;
-          currentMenuPage = 4;
-          Encoder[3].writeCounter((int32_t)4);
-        } else if (inEtcSubmenu) {
-          // If in ETC submenu, exit back to main menu at ETC page (index 9)
           inEtcSubmenu = false;
-          currentMenuPage = 9;
-          Encoder[3].writeCounter((int32_t)9);
+          currentMenuPage = parentPage;
+          menu.pos[3] = parentPage;
+          Encoder[3].writeCounter((int32_t)parentPage);
+          if (menuEnteredFromSingleMode) {
+            switchMode(&singleMode);
+            GLOB.singleMode = true;
+          } else {
+            switchMode(&draw);
+            GLOB.singleMode = false;
+          }
+          extern int drawMode;
+          if (drawMode == 0) {
+            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          } else {
+            Encoder[0].writeRGBCode(0x000000);
+          }
+          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
         } else {
-          // Otherwise exit to draw mode
-          switchMode(&draw);
-          // Update encoder colors to reflect the current channel when exiting menu
+          // On main menu, exit to draw or single based on state before entering menu
+          if (menuEnteredFromSingleMode) {
+            switchMode(&singleMode);
+            GLOB.singleMode = true;
+          } else {
+            switchMode(&draw);
+            GLOB.singleMode = false;
+          }
           extern int drawMode;
           if (drawMode == 0) {
             Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
@@ -4276,27 +4358,51 @@ void checkSingleTouch() {
       GLOB.singleMode = true;
     } else if (currentMode == &menu) {
       extern bool inLookSubmenu;
+      extern bool inRecsSubmenu;
+      extern bool inMidiSubmenu;
+      extern bool inVolSubmenu;
       extern bool inEtcSubmenu;
+      extern bool menuEnteredFromSingleMode;
       extern int currentMenuPage;
-      // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
-      if (inLookSubmenu) {
+      // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
+      if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
+        int parentPage = 0;
+        if (inLookSubmenu) parentPage = 5;
+        else if (inRecsSubmenu) parentPage = 6;
+        else if (inMidiSubmenu) parentPage = 7;
+        else if (inVolSubmenu) parentPage = 4;
+        else if (inEtcSubmenu) parentPage = 9;
         inLookSubmenu = false;
-        currentMenuPage = 5;
-        currentMode->pos[3] = 5;  // Sync mode position with current page
-        Encoder[3].writeCounter((int32_t)5);
-      } else if (inEtcSubmenu) {
+        inRecsSubmenu = false;
+        inMidiSubmenu = false;
+        inVolSubmenu = false;
         inEtcSubmenu = false;
-        currentMenuPage = 9;
-        currentMode->pos[3] = 9;  // Sync mode position with current page
-        Encoder[3].writeCounter((int32_t)9);
-      } else {
-        // Otherwise exit to draw mode
-        if (currentMode == &singleMode) {
-          GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
+        currentMenuPage = parentPage;
+        menu.pos[3] = parentPage;
+        Encoder[3].writeCounter((int32_t)parentPage);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
         }
-        switchMode(&draw);
-        GLOB.singleMode = false;
-        // Update encoder colors to reflect the new currentChannel when switching to draw mode
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        // On main menu, exit to draw or single based on state before entering menu
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
         extern int drawMode;
         if (drawMode == 0) {
           Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
@@ -4334,49 +4440,161 @@ void _checkMenuTouch() {
   if (touchState[1] && !lastTouchState[1]) {
     // Toggle the mode only on a rising edge
     if (currentMode == &draw || currentMode == &singleMode) {
+      extern bool menuEnteredFromSingleMode;
+      menuEnteredFromSingleMode = (currentMode == &singleMode);
       switchMode(&menu);
     } else if (currentMode == &loadSaveTrack) {
-      // Exit DAT mode back to main menu at DAT page (index 0)
-      switchMode(&menu);
+      // Exit FILE (DAT) directly to draw/single, preserve menu page 0 for re-entry
+      extern bool menuEnteredFromSingleMode;
       extern int currentMenuPage;
       currentMenuPage = 0;
+      menu.pos[3] = 0;
       Encoder[3].writeCounter((int32_t)0);
+      if (menuEnteredFromSingleMode) {
+        switchMode(&singleMode);
+        GLOB.singleMode = true;
+      } else {
+        switchMode(&draw);
+        GLOB.singleMode = false;
+      }
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     } else if (currentMode == &set_SamplePack) {
-      // Exit KIT mode back to main menu at KIT page (index 1)
-      switchMode(&menu);
+      // Exit PACK (KIT) directly to draw/single, preserve menu page 1 for re-entry
+      extern bool menuEnteredFromSingleMode;
       extern int currentMenuPage;
       currentMenuPage = 1;
+      menu.pos[3] = 1;
       Encoder[3].writeCounter((int32_t)1);
+      if (menuEnteredFromSingleMode) {
+        switchMode(&singleMode);
+        GLOB.singleMode = true;
+      } else {
+        switchMode(&draw);
+        GLOB.singleMode = false;
+      }
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     } else if (currentMode == &set_Wav) {
-      // Exit WAV mode back to main menu at WAV page (index 2)
-      switchMode(&menu);
+      // Exit WAVE directly to draw/single, preserve menu page 2 for re-entry
+      extern bool menuEnteredFromSingleMode;
       extern int currentMenuPage;
       currentMenuPage = 2;
+      menu.pos[3] = 2;
       Encoder[3].writeCounter((int32_t)2);
+      if (menuEnteredFromSingleMode) {
+        switchMode(&singleMode);
+        GLOB.singleMode = true;
+      } else {
+        switchMode(&draw);
+        GLOB.singleMode = false;
+      }
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     } else if (currentMode == &volume_bpm) {
-      // Exit BPM mode back to main menu at BPM page (index 3)
-      switchMode(&menu);
+      // Exit BPM directly to draw/single, preserve menu page 3 for re-entry
+      extern bool menuEnteredFromSingleMode;
       extern int currentMenuPage;
       currentMenuPage = 3;
+      menu.pos[3] = 3;
       Encoder[3].writeCounter((int32_t)3);
+      if (menuEnteredFromSingleMode) {
+        switchMode(&singleMode);
+        GLOB.singleMode = true;
+      } else {
+        switchMode(&draw);
+        GLOB.singleMode = false;
+      }
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     } else if (currentMode == &songMode) {
-      // Exit SONG mode back to main menu at SONG page (index 8)
-      switchMode(&menu);
+      // Exit SONG directly to draw/single, preserve menu page 8 for re-entry
+      extern bool menuEnteredFromSingleMode;
       extern int currentMenuPage;
       currentMenuPage = 8;
+      menu.pos[3] = 8;
       Encoder[3].writeCounter((int32_t)8);
+      if (menuEnteredFromSingleMode) {
+        switchMode(&singleMode);
+        GLOB.singleMode = true;
+      } else {
+        switchMode(&draw);
+        GLOB.singleMode = false;
+      }
+      extern int drawMode;
+      if (drawMode == 0) {
+        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else {
+        Encoder[0].writeRGBCode(0x000000);
+      }
+      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
     } else if (currentMode == &menu) {
       extern bool inLookSubmenu;
+      extern bool inRecsSubmenu;
+      extern bool inMidiSubmenu;
+      extern bool inVolSubmenu;
+      extern bool inEtcSubmenu;
+      extern bool menuEnteredFromSingleMode;
       extern int currentMenuPage;
-      // If in LOOK submenu (PLAY submenu), exit back to main menu at PLAY page (index 5)
-      if (inLookSubmenu) {
+      // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
+      if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
+        int parentPage = 0;
+        if (inLookSubmenu) parentPage = 5;
+        else if (inRecsSubmenu) parentPage = 6;
+        else if (inMidiSubmenu) parentPage = 7;
+        else if (inVolSubmenu) parentPage = 4;
+        else if (inEtcSubmenu) parentPage = 9;
         inLookSubmenu = false;
-        currentMenuPage = 5;
-        Encoder[3].writeCounter((int32_t)5);
+        inRecsSubmenu = false;
+        inMidiSubmenu = false;
+        inVolSubmenu = false;
+        inEtcSubmenu = false;
+        currentMenuPage = parentPage;
+        menu.pos[3] = parentPage;
+        Encoder[3].writeCounter((int32_t)parentPage);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else {
-        // Otherwise exit to draw mode
-        switchMode(&draw);
-        // Update encoder colors to reflect the current channel when exiting menu
+        // On main menu, exit to draw or single based on state before entering menu
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
         extern int drawMode;
         if (drawMode == 0) {
           Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
