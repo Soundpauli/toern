@@ -501,7 +501,7 @@ unsigned int previewVol = 20;  // Default 20 (0-50 range, 0.00-0.50)
 extern const int PREVIEW_MODE_ON = 0;
 extern const int PREVIEW_MODE_PRESS = 1;
 int previewTriggerMode = PREVIEW_MODE_ON;
-int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1)
+int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1), 4=CLIC (touch3 adds trigger at current beat)
 int transportMode = 1;
 int midiSendMode = 2;  // 0=CLCK, 1=NOTE, 2=BOTH (default to BOTH)
 int patternMode = -1;
@@ -1141,9 +1141,12 @@ FLASHMEM void setVelocity() {
 
   //CHANNEL VOLUME
   if (currentMode->pos[2] != GLOB.velocity) {
-    SMP.channelVol[GLOB.currentChannel] = currentMode->pos[2];
-    float channelvolume = mapf(SMP.channelVol[GLOB.currentChannel], 0, maxY, 0, 1);
-    amps[GLOB.currentChannel]->gain(channelvolume);
+    int ch = GLOB.currentChannel;
+    if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
+      SMP.channelVol[ch] = currentMode->pos[2];
+      float channelvolume = mapf(SMP.channelVol[ch], 0, maxY, 0, 1);
+      amps[ch]->gain(channelvolume);
+    }
   }
 
   drawVelocity();
@@ -1397,6 +1400,17 @@ void refreshCtrlEncoderConfig() {
 }
 
 void switchMode(Mode *newMode) {
+  // Debounce rapid mode switching to prevent corruption during play (e.g. filter/menu/draw thrashing)
+  static unsigned long lastModeSwitchTime = 0;
+  const unsigned long MODE_SWITCH_DEBOUNCE_MS = 80;
+  unsigned long now = millis();
+  if (newMode != currentMode && lastModeSwitchTime != 0 && (now - lastModeSwitchTime) < MODE_SWITCH_DEBOUNCE_MS) {
+    return;
+  }
+  if (newMode != currentMode) {
+    lastModeSwitchTime = now;
+  }
+
   updateLastPage();
 
   drawNoSD_hasRun = false;
@@ -1642,8 +1656,13 @@ void switchMode(Mode *newMode) {
     }
 
     if (currentMode == &filterMode) {
-      //REVERSE left encoder
-      initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
+      // Validate channel before filter init (channels 0,9,10,12,15 have no filter pages)
+      int ch = constrain(GLOB.currentChannel, 0, 15);
+      if (ch == 0 || ch == 9 || ch == 10 || ch == 12 || ch == 15) {
+        ch = 1;  // Fallback to channel 1
+        GLOB.currentChannel = ch;
+      }
+      initSliders(filterPage[ch], ch);
       Encoder[0].begin(
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
@@ -1741,6 +1760,18 @@ void checkFastRec() {
     int touchValue3 = fastTouchRead(SWITCH_3);
     bool currentTouchState = (touchValue3 > touchThreshold);
     touchState[2] = currentTouchState;
+
+    // CLIC mode: touch3 adds a trigger at current beat for current voice (y), no notes deleted
+    if (recChannelClear == 4 && isNowPlaying && currentTouchState && !lastTouchState[2]) {
+      bool validRow = (currentMode == &draw && isPaintableDrawRow(GLOB.y)) || (currentMode == &singleMode && GLOB.y >= 1 && GLOB.y <= 15);
+      if (beat >= 1 && beat <= maxlen && GLOB.y >= 1 && GLOB.y <= (int)maxY && GLOB.currentChannel >= 0 && GLOB.currentChannel <= 15 && validRow) {
+        note[beat][GLOB.y].channel = GLOB.currentChannel;
+        note[beat][GLOB.y].velocity = defaultVelocity;
+        note[beat][GLOB.y].probability = 100;
+        note[beat][GLOB.y].condition = 1;
+      }
+      return;
+    }
 
     // If playing and y=1, touch3 pauses (rising edge only)
     if (isNowPlaying && GLOB.y == 1 && currentTouchState && !lastTouchState[2]) {
@@ -3744,13 +3775,16 @@ void checkEncoders() {
         if (volumeChanged) {
           ctrlLastVolume = requestedVol;
           if (!protectedChannel) {
-            // Track last non-zero volume so unmute can restore it later
-            if (requestedVol > 0 && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
-              lastChannelVolBeforeMute[GLOB.currentChannel] = (uint8_t)requestedVol;
+            int ch = GLOB.currentChannel;
+            if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
+              // Track last non-zero volume so unmute can restore it later
+              if (requestedVol > 0 && ch < (int)maxY) {
+                lastChannelVolBeforeMute[ch] = (uint8_t)requestedVol;
+              }
+              SMP.channelVol[ch] = requestedVol;
+              float channelvolume = mapf(SMP.channelVol[ch], 0, maxY, 0, 1);
+              amps[ch]->gain(channelvolume);
             }
-            SMP.channelVol[GLOB.currentChannel] = requestedVol;
-            float channelvolume = mapf(SMP.channelVol[GLOB.currentChannel], 0, maxY, 0, 1);
-            amps[GLOB.currentChannel]->gain(channelvolume);
             showCtrlVolumeChange(requestedVol);
           } else {
             showCtrlVolumeChange(actualVol);
@@ -3774,20 +3808,22 @@ void checkEncoders() {
 
 
 void filtercheck() {
+  int ch = GLOB.currentChannel;
+  if (ch < 0 || ch >= 15) return;
 
-  FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
+  FilterTarget dft = defaultFastFilter[ch];
   int page, slot;
 
-  if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot) && !filterfreshsetted) {
-    int currVal = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
+  if (findSliderDefPageSlot(ch, dft.arr, dft.idx, page, slot) && !filterfreshsetted) {
+    int currVal = getDefaultFastFilterValue(ch, dft.arr, dft.idx);
 
     // Debounce: if currVal is 0 but last was not, ignore this frame
-    if (currVal == 0 && lastDefaultFastFilterValue[GLOB.currentChannel] != 0) {
-      currVal = lastDefaultFastFilterValue[GLOB.currentChannel];
+    if (currVal == 0 && lastDefaultFastFilterValue[ch] != 0) {
+      currVal = lastDefaultFastFilterValue[ch];
     }
 
-    if (currVal != lastDefaultFastFilterValue[GLOB.currentChannel]) {
-      lastDefaultFastFilterValue[GLOB.currentChannel] = currVal;
+    if (currVal != lastDefaultFastFilterValue[ch]) {
+      lastDefaultFastFilterValue[ch] = currVal;
       filterDrawActive = true;
       filterDrawValue = currVal;
       filterDrawColor = filterColors[page][slot];
@@ -4002,6 +4038,16 @@ void checkTouchInputs() {
     // Action depends on which touch was pressed first
     // Right pressed first (2) -> go to filter mode (if valid channel)
     // Left pressed first (1) OR simultaneous (0) -> go to set_Wav mode
+    //
+    // Cooldown: prevent rapid filter<->set_Wav thrashing when touch1+2 are used
+    // excessively without waiting (avoids conflict/corruption)
+    static unsigned long lastBothTouchHandledTime = 0;
+    const unsigned long BOTH_TOUCH_COOLDOWN_MS = 350;
+    unsigned long now = millis();
+    if (lastBothTouchHandledTime != 0 && (now - lastBothTouchHandledTime) < BOTH_TOUCH_COOLDOWN_MS) {
+      // Skip this both-touch; user must release and wait before next filter/set_Wav switch
+      goto skip_individual_touch;
+    }
 
     if (currentMode == &singleMode || currentMode == &draw || currentMode == &menu) {
       // Validate current channel before any mode switch
@@ -4017,6 +4063,7 @@ void checkTouchInputs() {
           filterPage[GLOB.currentChannel] = 1;
           initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
           switchMode(&filterMode);
+          lastBothTouchHandledTime = now;
         }
         // If channel doesn't support filters, do nothing (don't crash)
       } else {
@@ -4027,12 +4074,15 @@ void checkTouchInputs() {
             GLOB.singleMode = false;
           }
           switchMode(&set_Wav);
+          lastBothTouchHandledTime = now;
         }
         // If channel doesn't support samples, do nothing (don't crash)
       }
     }
-    // skip any individual‐touch handling this frame
-  } else if (!bothTouched) {
+skip_individual_touch:
+    ;  // skip any individual-touch handling this frame when we processed newBoth
+  }
+  if (!bothTouched) {
     // 4) only if *not* holding both, handle individual rising edges
     // Add debouncing to prevent rapid state changes
     static unsigned long lastTouchTime[2] = { 0, 0 };
@@ -4044,8 +4094,14 @@ void checkTouchInputs() {
       lastTouchTime[0] = currentTime;
 
       // If y=1, touch1 starts play immediately (even if already playing)
+      // Dedicated debounce: prevent retrigger when holding slightly (touch flicker)
       if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 1) {
-        play(true);
+        static unsigned long lastTouch1PlayTime = 0;
+        const unsigned long TOUCH1_PLAY_DEBOUNCE_MS = 100;
+        if (lastTouch1PlayTime == 0 || (currentTime - lastTouch1PlayTime) >= TOUCH1_PLAY_DEBOUNCE_MS) {
+          lastTouch1PlayTime = currentTime;
+          play(true);
+        }
         return;
       }
 

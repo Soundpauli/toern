@@ -510,14 +510,20 @@ void setNewFilters() {
   static bool lastTouch = false;
   bool currTouch = (touchValue > touchThreshold);
   uint8_t chan = GLOB.currentChannel;
-  
+
+  // Guard: skip filter processing for channels with no filter pages (avoids division-by-zero)
+  if (chan >= NUM_CHANNELS || filterPageCount[chan] == 0) {
+    lastTouch = currTouch;
+    return;
+  }
+
   static uint8_t lastFilterPage[NUM_CHANNELS] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
   static uint8_t lastEncoderPos[4] = {255, 255, 255, 255};
   static uint8_t lastChannel = 255;
   static unsigned long lastRedrawTime = 0;
   // Throttle redraws to max once per 50ms (20 FPS, intentionally slower than main display RefreshTime)
   const unsigned long REDRAW_THROTTLE_MS = 50;
-  
+
   // Reset encoder tracking when channel changes
   bool channelChanged = (chan != lastChannel);
   if (channelChanged) {
@@ -527,10 +533,10 @@ void setNewFilters() {
       lastEncoderPos[i] = 255;
     }
   }
-  
+
   bool pageChanged = (filterPage[chan] != lastFilterPage[chan]);
   if (currTouch && !lastTouch) {
-    // Use filterPageCount[chan] for wrapping
+    // Use filterPageCount[chan] for wrapping (already guarded above: filterPageCount[chan] > 0)
     filterPage[chan] = (filterPage[chan] + 1) % filterPageCount[chan];
     filterDrawActive = false;
     filterDrawEndTime=0;

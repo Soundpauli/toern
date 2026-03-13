@@ -562,7 +562,7 @@ void loadMenuFromEEPROM() {
   extern unsigned int maxX;
   maxX = MATRIX_WIDTH * ledModules;
   
-  if (recChannelClear < 0 || recChannelClear > 3) {
+  if (recChannelClear < 0 || recChannelClear > 4) {
     recChannelClear = 1;  // Default to ON if invalid
     saveSingleModeToEEPROM(6, recChannelClear);
   }
@@ -2508,7 +2508,7 @@ void switchMenu(int menuPosition){
 
          case 12:
         recChannelClear = recChannelClear + 1;
-        if (recChannelClear > 3) recChannelClear = 0;  // Cycle: 0->1->2->3->0 (OFF->ON->FIX->ON1->OFF)
+        if (recChannelClear > 4) recChannelClear = 0;  // Cycle: 0->1->2->3->4->0 (OFF->ON->FIX->ON1->CLIC->OFF)
         saveSingleModeToEEPROM(6, recChannelClear);
         drawMainSettingStatus(menuPosition);
         break;
@@ -3151,7 +3151,7 @@ FLASHMEM void clearTextArea(int startX, int startY, int width) {
 }
 
 FLASHMEM void drawRecChannelClear(){
-  // Clear text area before drawing (4 chars max: "ON1" or "OFF")
+  // Clear text area before drawing (4 chars max: "ON1", "OFF", "CLIC")
   clearTextArea(2, 3, 16);
   if (recChannelClear == 1) {
     drawText("ON", 2, 3, UI_GREEN);
@@ -3165,6 +3165,9 @@ FLASHMEM void drawRecChannelClear(){
   } else if (recChannelClear == 3) {
     drawText("ON1", 2, 3, UI_CYAN);
     SMP_REC_CHANNEL_CLEAR = true;  // ON1 mode - count-in then record on beat 1
+  } else if (recChannelClear == 4) {
+    drawText("CLIC", 2, 3, UI_MAGENTA);
+    SMP_REC_CHANNEL_CLEAR = false; // CLIC mode - touch3 adds trigger at current beat
   }
 }
 

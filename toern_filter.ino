@@ -253,7 +253,7 @@ void setFilters(FilterType filterType, int index, bool initial) {
           // Use the *exact* audio sample rate for true bypass.
           // Using 44100 here can still engage sample-hold occasionally (audible as grit on transients).
           bitcrushers[index]->sampleRate((int)AUDIO_SAMPLE_RATE_EXACT);
-          amps[index]->gain(channelvolume);
+          if (amps[index] != nullptr) amps[index]->gain(channelvolume);
           break;
         }
 
@@ -269,7 +269,7 @@ void setFilters(FilterType filterType, int index, bool initial) {
 
         // Optional loudness compensation: reduce amp gain slightly as crush increases
         float crushCompGain = mapf((float)mv, 1.0f, 16.0f, max(channelvolume, 0.1f), 0.6f);
-        amps[index]->gain(crushCompGain);
+        if (amps[index] != nullptr) amps[index]->gain(crushCompGain);
         break;
       }
     case EFX:
