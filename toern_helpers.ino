@@ -859,6 +859,8 @@ void drawRandoms(){
       if(note[c][r].channel == channel){
         note[c][r].channel = 0;
         note[c][r].velocity = defaultVelocity;
+        note[c][r].probability = 100;  // Reset probability before new note
+        note[c][r].condition = 1;      // Reset trigger condition before new note
       }
     }
   }

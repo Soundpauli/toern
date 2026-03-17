@@ -865,11 +865,14 @@ FLASHMEM void showLookMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // Default: encoder 4 ring matches submenu text color
+  // PLAY submenu: encoder 2 = value on toggle pages
   CRGB indicatorColor = currentMenuParentTextColor();
-  Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
-  Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-  Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+  const bool playValuePage = (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
+      mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
+      mainSetting == 32 || mainSetting == 33 || mainSetting == 38);
+  Encoder[0].writeRGBCode(0x000000);
+  Encoder[1].writeRGBCode(0x000000);
+  Encoder[2].writeRGBCode(playValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
   Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
 
   // Draw the main setting status
@@ -969,13 +972,13 @@ FLASHMEM void showRecsMenu() {
   // (mainSetting already computed above)
   
   // Set encoder colors based on main setting
-  if (mainSetting == 4 && recMode == 1) {
-    // REC page in MIC mode: no encoder indicators (encoder(2) removed)
-    CRGB orangeColor = currentMenuParentTextColor();
-    Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-    Encoder[2].writeRGBCode(0x000000); // Black (no indicator - removed)
-    Encoder[3].writeRGBCode(orangeColor.r << 16 | orangeColor.g << 8 | orangeColor.b);
+  if (mainSetting == 11 || mainSetting == 4 || mainSetting == 12) {
+    // TRIG, INPT, CLR: encoder 2 = value, encoder 3 = page nav
+    CRGB indicatorColor = currentMenuParentTextColor();
+    Encoder[0].writeRGBCode(0x000000);
+    Encoder[1].writeRGBCode(0x000000);
+    Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+    Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
   } else {
     // Default: encoder 4 ring matches submenu text color
     CRGB indicatorColor = currentMenuParentTextColor();
@@ -1076,11 +1079,12 @@ FLASHMEM void showMidiMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // Default: encoder 4 ring matches submenu text color
+  // MIDI: encoder 2 = value on CH(7), TRAN(8), SEND(13)
   CRGB indicatorColor = currentMenuParentTextColor();
-  Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
-  Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-  Encoder[2].writeRGBCode(0x000000); // Black (no indicator)
+  const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13);
+  Encoder[0].writeRGBCode(0x000000);
+  Encoder[1].writeRGBCode(0x000000);
+  Encoder[2].writeRGBCode(midiValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
   Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
 
   // Draw the main setting status
@@ -1174,12 +1178,12 @@ FLASHMEM void showVolMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // Set encoder colors based on page (will be set in drawMainSettingStatus for each page)
-  // Default: only show page-nav ring on encoder 4 (matches parent text color)
+  // VOL: encoder 2 = value on SPKR(43)
   CRGB indicatorColor = currentMenuParentTextColor();
-  Encoder[0].writeRGBCode(0x000000); // Black (no indicator)
-  Encoder[1].writeRGBCode(0x000000); // Black (no indicator)
-  Encoder[2].writeRGBCode(0x000000); // Black (no indicator) - will be set per page
+  const bool volValuePage = (mainSetting == 43);
+  Encoder[0].writeRGBCode(0x000000);
+  Encoder[1].writeRGBCode(0x000000);
+  Encoder[2].writeRGBCode(volValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
   Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
 
   // Draw the main setting status
@@ -1286,12 +1290,13 @@ FLASHMEM void showEtcMenu() {
       // Page-nav indicator (encoder 4) should always match ETC text color (e.g. "RSET")
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
     } else {
-      // ETC submenu: page-nav indicator should always match ETC text color (e.g. "RSET")
+      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41)
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
       CRGB indicatorColor = currentMenuParentTextColor();
+      const bool etcValuePage = (mainSetting == 40 || mainSetting == 41);
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
-      Encoder[2].writeRGBCode(0x000000);
+      Encoder[2].writeRGBCode(etcValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
       Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
     }
 
@@ -1529,7 +1534,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         const CRGB tc = currentMenuParentTextColor();
         drawText("LGHT", 2, 10, tc);
         bool enabled = getLedStripEnabled();
-        drawText(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+        drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
       }
       break;
       
@@ -1538,9 +1543,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         const CRGB tc = currentMenuParentTextColor();
         drawText("COLR", 2, 10, tc);
         char schemeText[2];
-        // Display: 0 (default), 1, 2, 3 (custom from scheme.txt)
         snprintf(schemeText, sizeof(schemeText), "%d", currentColorScheme);
-        drawText(schemeText, 2, 3, UI_GREEN);
+        drawMenuValue(schemeText, 2, 3, UI_GREEN);
       }
       break;
 
@@ -1615,14 +1619,13 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 24: // PONG toggle
       drawText("PONG", 2, 10, currentMenuParentTextColor());
-      // Clear text areas before drawing
-      clearTextArea(2, 3, 8);  // Clear speed text area
-      clearTextArea(6, 3, 8);  // Clear "OFF" area
-      clearTextArea(10, 3, 8); // Clear "ON" area
+      clearTextArea(2, 3, 8);
+      clearTextArea(6, 3, 8);
+      clearTextArea(10, 3, 8);
       if (pong) {
         drawText("ON", 10, 3, UI_GREEN);
       } else {
-        drawText("OFF", 6, 3, UI_RED);
+        drawMenuValue("OFF", 6, 3, UI_RED);
       }
       if (pong) {
         char speedText[6];
@@ -1649,24 +1652,12 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       
     case 38: // DRAW - Toggle between L+R and R modes
       drawText("DRAW", 2, 10, currentMenuParentTextColor());
-      // Clear text area before drawing (3 chars max: "L+R", 1 char: "R")
-      clearTextArea(2, 3, 16);
-      if (drawMode == 0) {
-        drawText("L+R", 2, 3, UI_GREEN);
-      } else {
-        drawText("R", 2, 3, UI_GREEN);
-      }
+      drawMenuValue(drawMode == 0 ? "L+R" : "R", 2, 3, UI_GREEN);
       break;
 
     case 25: { // CTRL - encoder behaviour
       drawText("CTRL", 2, 10, currentMenuParentTextColor());
-      // Clear text area before drawing (4 chars max: "PAGE", 3 chars: "VOL")
-      clearTextArea(2, 3, 16);
-      if (ctrlMode == 0) {
-        drawText("PAGE", 2, 3, UI_GREEN);
-      } else {
-        drawText("VOL", 2, 3, UI_ORANGE);
-      }
+      drawMenuValue(ctrlMode == 0 ? "PAGE" : "VOL", 2, 3, ctrlMode == 0 ? UI_GREEN : UI_ORANGE);
       break;
     }
     
@@ -1776,57 +1767,31 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
     }
 
-    case 43: { // SPKR - Speaker toggle (ON/OFF)
+    case 43: { // SPKR - Speaker toggle (display inverted: enabled=ON shows "OFF" as action)
       extern bool getSpkrEnabled();
       const CRGB tc = currentMenuParentTextColor();
       drawText("SPKR", 2, 10, tc);
       bool enabled = getSpkrEnabled();
-      // Display inverted: when enabled=true (pin LOW = ON), show "OFF"; when enabled=false (pin HIGH = OFF), show "ON"
-      drawText(enabled ? "OFF" : "ON", 2, 3, enabled ? CRGB(255, 0, 0) : CRGB(0, 255, 0));
+      drawMenuValue(enabled ? "OFF" : "ON", 2, 3, enabled ? CRGB(255, 0, 0) : CRGB(0, 255, 0));
       break;
     }
     
     case 32: { // CRSR - Cursor Type
       drawText("CRSR", 2, 10, currentMenuParentTextColor());
-      // Clear text area before drawing (4 chars max: "NORM", "CHNR", 3 chars: "BIG")
-      clearTextArea(2, 3, 16);
       extern bool showChannelNr;
       extern int cursorType;
-      
-      // Determine current mode: 0=NORM, 1=CHNR, 2=BIG
-      int cursorMode = 0;
-      if (showChannelNr && cursorType == 0) {
-        cursorMode = 1; // CHNR
-      } else if (!showChannelNr && cursorType == 1) {
-        cursorMode = 2; // BIG
-      } else {
-        cursorMode = 0; // NORM
-      }
-      
-      if (cursorMode == 0) {
-        drawText("NORM", 2, 3, CRGB(150, 100, 0)); // Dark green
-      } else if (cursorMode == 1) {
-        drawText("CHNR", 2, 3, CRGB(150, 200, 0)); // Medium green
-      } else {
-        drawText("BIG", 2, 3, CRGB(150, 255, 0)); // Bright green
-      }
-      
-      // Green color for encoder
-      CRGB greenColor = CRGB(0, 255, 0);
-      Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      int cursorMode = (showChannelNr && cursorType == 0) ? 1 : (!showChannelNr && cursorType == 1) ? 2 : 0;
+      const char* lbl = (cursorMode == 0) ? "NORM" : (cursorMode == 1) ? "CHNR" : "BIG";
+      CRGB col = (cursorMode == 0) ? CRGB(150, 100, 0) : (cursorMode == 1) ? CRGB(150, 200, 0) : CRGB(150, 255, 0);
+      drawMenuValue(lbl, 2, 3, col);
+      Encoder[2].writeRGBCode(CRGB(0, 255, 0).r << 16 | CRGB(0, 255, 0).g << 8 | CRGB(0, 255, 0).b);
       break;
     }
 
     case 33: { // PREV - Preview trigger mode
       drawText("PREV", 2, 10, currentMenuParentTextColor());
-      // Clear text area before drawing (4 chars max: "PRSS", 2 chars: "ON")
-      clearTextArea(2, 3, 16);
-      if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-        drawText("PRSS", 2, 3, CRGB(0, 150, 255)); // Blue for press-only
-      } else {
-        drawText("ON", 2, 3, UI_GREEN);
-      }
-      // Encoder color: green by default
+      drawMenuValue(previewTriggerMode == PREVIEW_MODE_PRESS ? "PRSS" : "ON", 2, 3,
+          previewTriggerMode == PREVIEW_MODE_PRESS ? CRGB(0, 150, 255) : UI_GREEN);
       CRGB greenColor = getIndicatorColor('G');
       Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
       break;
@@ -1945,9 +1910,499 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   };
 
   switch (setting) {
-    case 4: // REC page - Mic Gain control removed (encoder(2) disabled)
-      // Encoder(2) functionality removed - no mic gain control in REC menu
+    case 4: { // INPT - MIC/LINE via encoder 2 rotation
+      static int lastRecModeEnc = -1;
+      int encVal = (recMode == 1) ? 0 : 1;  // 0=MIC, 1=LINE
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastRecModeEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastRecModeEnc) {
+        recMode = (currentMode->pos[2] == 0) ? 1 : -1;
+        encVal = (recMode == 1) ? 0 : 1;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastRecModeEnc = encVal;
+        saveSingleModeToEEPROM(0, recMode);
+        recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
+        sgtl5000_1.inputSelect(recInput);
+        if (recInput == AUDIO_INPUT_MIC) sgtl5000_1.micGain(micGain);
+        else sgtl5000_1.micGain(0);
+        redrawMain(setting);
+        redrawAdd(setting);
+      }
       break;
+    }
+
+    case 12: { // CLR - Rec Channel Clear (OFF/ON/FIX/ON1/CLIC) via encoder 2 rotation
+      static int lastRecChannelClear = -1;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)recChannelClear);
+        Encoder[2].writeMax((int32_t)4);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = recChannelClear;
+        lastRecChannelClear = recChannelClear;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastRecChannelClear) {
+        recChannelClear = constrain((int)currentMode->pos[2], 0, 4);
+        Encoder[2].writeCounter((int32_t)recChannelClear);
+        currentMode->pos[2] = recChannelClear;
+        lastRecChannelClear = recChannelClear;
+        saveSingleModeToEEPROM(6, recChannelClear);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 7: { // CH - MIDI Voice Select (YPOS/MIDI/KEYS) via encoder 2 rotation
+      static int lastVoiceEnc = -1;
+      auto vsToEnc = [](int vs) { return (vs == -1) ? 0 : vs; };
+      auto encToVs = [](int e) { return (e == 0) ? -1 : e; };
+      int encVal = vsToEnc(voiceSelect);
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastVoiceEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastVoiceEnc) {
+        voiceSelect = encToVs(constrain((int)currentMode->pos[2], 0, 2));
+        encVal = vsToEnc(voiceSelect);
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastVoiceEnc = encVal;
+        saveSingleModeToEEPROM(4, voiceSelect);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 8: { // TRAN - MIDI Transport (OFF/GET/SEND) via encoder 2 rotation
+      static int lastTransportEnc = -1;
+      auto tmToEnc = [](int tm) { return (tm == -1) ? 0 : tm; };
+      auto encToTm = [](int e) { return (e == 0) ? -1 : e; };
+      int encVal = tmToEnc(transportMode);
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastTransportEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastTransportEnc) {
+        transportMode = encToTm(constrain((int)currentMode->pos[2], 0, 2));
+        encVal = tmToEnc(transportMode);
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastTransportEnc = encVal;
+        saveSingleModeToEEPROM(2, transportMode);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 13: { // SEND - MIDI Send (CLCK/NOTE/BOTH) via encoder 2 rotation
+      static int lastMidiSendEnc = -1;
+      extern int midiSendMode;
+      extern bool MIDI_CLOCK_SEND;
+      extern bool MIDI_NOTE_SEND;
+      extern int clockMode;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)midiSendMode);
+        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = midiSendMode;
+        lastMidiSendEnc = midiSendMode;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastMidiSendEnc) {
+        midiSendMode = constrain((int)currentMode->pos[2], 0, 2);
+        if (midiSendMode == 0) {
+          MIDI_CLOCK_SEND = (clockMode == 1);
+          MIDI_NOTE_SEND = false;
+        } else if (midiSendMode == 1) {
+          MIDI_CLOCK_SEND = false;
+          MIDI_NOTE_SEND = true;
+        } else {
+          MIDI_CLOCK_SEND = (clockMode == 1);
+          MIDI_NOTE_SEND = true;
+        }
+        saveSingleModeToEEPROM(24, midiSendMode);
+        Encoder[2].writeCounter((int32_t)midiSendMode);
+        currentMode->pos[2] = midiSendMode;
+        lastMidiSendEnc = midiSendMode;
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 40: { // LGHT - LED Strip (OFF/ON) via encoder 2 rotation
+      static int lastLghtEnc = -1;
+      extern bool getLedStripEnabled();
+      extern void setLedStripEnabled(bool);
+      int encVal = getLedStripEnabled() ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastLghtEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastLghtEnc) {
+        setLedStripEnabled(currentMode->pos[2] == 1);
+        encVal = getLedStripEnabled() ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastLghtEnc = encVal;
+        saveSingleModeToEEPROM(25, (int8_t)(encVal ? 1 : 0));
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 41: { // COLR - Color scheme (0,1,2,3) via encoder 2 rotation
+      static int lastColrEnc = -1;
+      extern CRGB col[];
+      extern CRGB col_base[];
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)currentColorScheme);
+        Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = currentColorScheme;
+        lastColrEnc = currentColorScheme;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastColrEnc) {
+        uint8_t newScheme = constrain((int)currentMode->pos[2], 0, 3);
+        if (newScheme == 3 && SD.exists("scheme.txt")) {
+          File schemeFile = SD.open("scheme.txt", FILE_READ);
+          if (schemeFile && schemeFile.size() >= 90) {
+            uint8_t buf[90];
+            int bytesRead = schemeFile.read(buf, 90);
+            schemeFile.close();
+            if (bytesRead == 90) {
+              for (int i = 0; i < 15; i++)
+                col[i] = CRGB(buf[i*3], buf[i*3+1], buf[i*3+2]);
+              for (int i = 0; i < 15; i++) {
+                int baseIdx = 45 + i * 3;
+                col_base[i] = CRGB(buf[baseIdx], buf[baseIdx+1], buf[baseIdx+2]);
+              }
+              extern volatile bool colorsUpdatedViaSerial;
+              colorsUpdatedViaSerial = true;
+            } else { newScheme = 0; applyColorScheme(0); }
+          } else { newScheme = 0; applyColorScheme(0); }
+        } else {
+          applyColorScheme(newScheme);
+          extern volatile bool colorsUpdatedViaSerial;
+          colorsUpdatedViaSerial = true;
+        }
+        currentColorScheme = newScheme;
+        EEPROM.write(EEPROM_DATA_START + 22, currentColorScheme);
+        markSettingsBackupDirty();
+        Encoder[2].writeCounter((int32_t)newScheme);
+        currentMode->pos[2] = newScheme;
+        lastColrEnc = newScheme;
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 43: { // SPKR - Speaker (OFF/ON) via encoder 2 rotation
+      static int lastSpkrEnc = -1;
+      extern bool getSpkrEnabled();
+      extern void setSpkrEnabled(bool);
+      int encVal = getSpkrEnabled() ? 1 : 0;  // Display: enabled=ON
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastSpkrEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastSpkrEnc) {
+        setSpkrEnabled(currentMode->pos[2] == 1);
+        encVal = getSpkrEnabled() ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastSpkrEnc = encVal;
+        saveSingleModeToEEPROM(27, (int8_t)(encVal ? 1 : 0));
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 9: { // PMD - Pattern Mode (OFF/ON/SONG/NEXT) via encoder 2 rotation
+      static int lastPatternMode = -2;
+      // Map: encoder 0=-1, 1=1, 2=2, 3=3
+      auto encToPm = [](int e) { return (e == 0) ? -1 : e; };
+      auto pmToEnc = [](int p) { return (p == -1) ? 0 : p; };
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)pmToEnc(patternMode));
+        Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = pmToEnc(patternMode);
+        lastPatternMode = patternMode;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != pmToEnc(patternMode) || lastPatternMode != patternMode) {
+        int enc = constrain((int)currentMode->pos[2], 0, 3);
+        patternMode = encToPm(enc);
+        Encoder[2].writeCounter((int32_t)enc);
+        currentMode->pos[2] = enc;
+        lastPatternMode = patternMode;
+        saveSingleModeToEEPROM(3, patternMode);
+        extern bool songModeActive;
+        songModeActive = (patternMode == 2);
+        if (patternMode != 3) { extern unsigned int pendingPage; pendingPage = 0; }
+        unmuteAllChannels();
+        applyMutesAfterPMODSwitch();
+        if (currentMode == &draw || currentMode == &singleMode) {
+          if (SMP_PATTERN_MODE) { updateLastPage(); Encoder[1].writeMax((int32_t)lastPage); }
+          else { Encoder[1].writeMax((int32_t)maxPages); }
+        }
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 10: { // FLW - Flow Mode (OFF/ON) via encoder 2 rotation
+      static int lastFlowEnc = -1;
+      int encVal = (flowMode == 1) ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastFlowEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastFlowEnc) {
+        flowMode = (currentMode->pos[2] == 1) ? 1 : -1;
+        encVal = (flowMode == 1) ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastFlowEnc = encVal;
+        lastFlowPage = 0;
+        saveSingleModeToEEPROM(8, flowMode);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 17: { // VIEW - Simple Notes View (EASY/FULL) via encoder 2 rotation
+      static int lastViewEnc = -1;
+      int encVal = simpleNotesView - 1;  // 0=EASY, 1=FULL
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastViewEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastViewEnc) {
+        simpleNotesView = constrain((int)currentMode->pos[2], 0, 1) + 1;
+        encVal = simpleNotesView - 1;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastViewEnc = encVal;
+        saveSingleModeToEEPROM(11, simpleNotesView);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 18: { // LOOP - Loop Length (0-8) via encoder 2 rotation
+      static int lastLoopLength = -1;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)loopLength);
+        Encoder[2].writeMax((int32_t)8);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = loopLength;
+        lastLoopLength = loopLength;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastLoopLength) {
+        loopLength = constrain((int)currentMode->pos[2], 0, 8);
+        Encoder[2].writeCounter((int32_t)loopLength);
+        currentMode->pos[2] = loopLength;
+        lastLoopLength = loopLength;
+        saveSingleModeToEEPROM(12, loopLength);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 23: { // LEDS - LED mode (1, 1B, 2, 2B) via encoder 2 rotation
+      static int lastLedMode = -1;
+      extern int ledModules;
+      extern bool ledModulesRotated;
+      uint8_t ledMode = ledModules + (ledModulesRotated ? 2 : 0);  // 1,2,3,4
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)(ledMode - 1));  // 0-3
+        Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = ledMode - 1;
+        lastLedMode = ledMode;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastLedMode - 1) {
+        ledMode = constrain((int)currentMode->pos[2], 0, 3) + 1;  // 1-4
+        ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
+        ledModulesRotated = (ledMode >= 3);
+        maxX = MATRIX_WIDTH * ledModules;
+        extern void initLedStrip();
+        initLedStrip();
+        if (currentMode == &draw || currentMode == &singleMode) {
+          int dynamicPages = (MAX_STEPS / maxX);
+          Encoder[1].writeMax((int32_t)dynamicPages);
+          Encoder[3].writeMax((int32_t)MAX_STEPS);
+          if (currentMode->pos[1] > dynamicPages) {
+            currentMode->pos[1] = dynamicPages;
+            Encoder[1].writeCounter((int32_t)dynamicPages);
+          }
+          if (currentMode->pos[3] > MAX_STEPS) {
+            currentMode->pos[3] = MAX_STEPS;
+            Encoder[3].writeCounter((int32_t)MAX_STEPS);
+          }
+        }
+        saveSingleModeToEEPROM(13, ledMode);
+        Encoder[2].writeCounter((int32_t)(ledMode - 1));
+        currentMode->pos[2] = ledMode - 1;
+        lastLedMode = ledMode;
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 25: { // CTRL - Encoder behaviour (PAGE/VOL) via encoder 2 rotation
+      static int lastCtrlMode = -1;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)ctrlMode);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = ctrlMode;
+        lastCtrlMode = ctrlMode;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastCtrlMode) {
+        ctrlMode = constrain((int)currentMode->pos[2], 0, 1);
+        Encoder[2].writeCounter((int32_t)ctrlMode);
+        currentMode->pos[2] = ctrlMode;
+        lastCtrlMode = ctrlMode;
+        saveSingleModeToEEPROM(14, ctrlMode);
+        refreshCtrlEncoderConfig();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 32: { // CRSR - Cursor Type (NORM/CHNR/BIG) via encoder 2 rotation
+      static int lastCursorMode = -1;
+      extern bool showChannelNr;
+      extern int cursorType;
+      int cursorMode = (showChannelNr && cursorType == 0) ? 1 : (!showChannelNr && cursorType == 1) ? 2 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)cursorMode);
+        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = cursorMode;
+        lastCursorMode = cursorMode;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastCursorMode) {
+        cursorMode = constrain((int)currentMode->pos[2], 0, 2);
+        if (cursorMode == 0) { showChannelNr = false; cursorType = 0; }
+        else if (cursorMode == 1) { showChannelNr = true; cursorType = 0; }
+        else { showChannelNr = false; cursorType = 1; }
+        saveSingleModeToEEPROM(18, cursorType);
+        EEPROM.write(EEPROM_DATA_START + 19, showChannelNr ? 1 : 0);
+        markSettingsBackupDirty();
+        Encoder[2].writeCounter((int32_t)cursorMode);
+        currentMode->pos[2] = cursorMode;
+        lastCursorMode = cursorMode;
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 33: { // PREV - Preview trigger (ON/PRSS) via encoder 2 rotation
+      static int lastPrevEnc = -1;
+      int encVal = (previewTriggerMode == PREVIEW_MODE_PRESS) ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastPrevEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastPrevEnc) {
+        previewTriggerMode = (currentMode->pos[2] == 1) ? PREVIEW_MODE_PRESS : PREVIEW_MODE_ON;
+        encVal = (previewTriggerMode == PREVIEW_MODE_PRESS) ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastPrevEnc = encVal;
+        saveSingleModeToEEPROM(20, (int8_t)previewTriggerMode);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 38: { // DRAW - L+R / R via encoder 2 rotation
+      static int lastDrawMode = -1;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)drawMode);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = drawMode;
+        lastDrawMode = drawMode;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastDrawMode) {
+        drawMode = constrain((int)currentMode->pos[2], 0, 1);
+        Encoder[2].writeCounter((int32_t)drawMode);
+        currentMode->pos[2] = drawMode;
+        lastDrawMode = drawMode;
+        saveSingleModeToEEPROM(21, (int8_t)drawMode);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 11: { // TRIG - Fast Rec Mode (OFF/SENS/-CON/+CON) via encoder 2 rotation
+      static int lastFastRecMode = -1;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)fastRecMode);
+        Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = fastRecMode;
+        lastFastRecMode = fastRecMode;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastFastRecMode) {
+        fastRecMode = constrain((int)currentMode->pos[2], 0, 3);
+        Encoder[2].writeCounter((int32_t)fastRecMode);
+        currentMode->pos[2] = fastRecMode;
+        lastFastRecMode = fastRecMode;
+        saveSingleModeToEEPROM(5, fastRecMode);
+        redrawMain(setting);
+      }
+      break;
+    }
       
     case 15: { // AI page - Base Start (enc1), Base End (enc2), Target Count (enc0)
       static int lastAiTargetPage = -1;
@@ -2035,55 +2490,72 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 40: // LGHT - LED Strip toggle (handled by button press in switchMenu)
-      // Toggle is handled by encoder(4) press via switchMenu() - no encoder control needed
-      break;
-    
-    case 41: // COLR - Color scheme selection (1, 2, 3)
-      {
-        // Note: Encoder(3) is used for ETC page navigation, not color scheme selection
-        // Color scheme is toggled via encoder(3) button press only
-        // Do not modify encoder(3) settings here - let ETC menu handle page navigation
-      }
-      break;
-
     case 42: // BATT - read-only, no encoder control
       break;
     
-    case 24: { // PONG page - speed control on encoder 2
+    case 24: { // PONG page - encoder 2: OFF/ON when !pong, speed when pong
       if (!pong) {
-        pongMenuFirstEnter = true;
-        lastPongSpeed = -1;
-        Encoder[2].writeRGBCode(0x000000);
+        static int lastPongEnc = -1;
+        int encVal = 0;  // OFF
+        if (pongMenuFirstEnter) {
+          Encoder[2].writeCounter((int32_t)0);
+          Encoder[2].writeMax((int32_t)1);
+          Encoder[2].writeMin((int32_t)0);
+          currentMode->pos[2] = 0;
+          lastPongEnc = 0;
+          pongMenuFirstEnter = false;
+        }
+        if (currentMode->pos[2] != lastPongEnc) {
+          if (currentMode->pos[2] == 1) {
+            pong = true;
+            pongMenuFirstEnter = true;
+            lastPongSpeed = -1;
+          }
+          encVal = constrain((int)currentMode->pos[2], 0, 1);
+          Encoder[2].writeCounter((int32_t)encVal);
+          currentMode->pos[2] = encVal;
+          lastPongEnc = encVal;
+          redrawMain(setting);
+        }
         break;
       }
 
       const int pongSpeedMin = 1;
       const int pongSpeedMax = 99;
+      // Encoder 2: 0=OFF, 1-99=speed (rotate down to 0 to turn off)
 
       if (pongMenuFirstEnter) {
         int currentSpeed = pongIntervalToSpeed(pongUpdateInterval);
         Encoder[2].writeCounter(static_cast<int32_t>(currentSpeed));
         Encoder[2].writeMax(static_cast<int32_t>(pongSpeedMax));
-        Encoder[2].writeMin(static_cast<int32_t>(pongSpeedMin));
+        Encoder[2].writeMin(static_cast<int32_t>(0));
         currentMode->pos[2] = currentSpeed;
         lastPongSpeed = currentSpeed;
         pongMenuFirstEnter = false;
       }
 
       if (currentMode->pos[2] != lastPongSpeed) {
-        int newSpeed = currentMode->pos[2];
-        newSpeed = constrain(newSpeed, pongSpeedMin, pongSpeedMax);
-        if (newSpeed != lastPongSpeed) {
-          uint16_t newInterval = pongSpeedToInterval(newSpeed);
-          if (newInterval != pongUpdateInterval) {
-            pongUpdateInterval = newInterval;
-          }
+        int newVal = currentMode->pos[2];
+        if (newVal <= 0) {
+          pong = false;
+          pongMenuFirstEnter = true;
+          Encoder[2].writeCounter((int32_t)0);
+          currentMode->pos[2] = 0;
+          lastPongSpeed = -1;
           redrawMain(setting);
+        } else {
+          int newSpeed = constrain(newVal, pongSpeedMin, pongSpeedMax);
+          if (newSpeed != lastPongSpeed) {
+            uint16_t newInterval = pongSpeedToInterval(newSpeed);
+            if (newInterval != pongUpdateInterval) {
+              pongUpdateInterval = newInterval;
+            }
+            redrawMain(setting);
+          }
+          lastPongSpeed = newSpeed;
+          Encoder[2].writeCounter(static_cast<int32_t>(newSpeed));
+          currentMode->pos[2] = newSpeed;
         }
-        lastPongSpeed = newSpeed;
-        // Keep encoder within bounds in case constrain clipped it
-        Encoder[2].writeCounter(static_cast<int32_t>(newSpeed));
       }
       break;
     }
@@ -2910,46 +3382,24 @@ void resetNewModeState() {
 
 // Simple Notes View functions
 void drawSimpleNotesView() {
-  // Clear text area before drawing (4 chars max: "EASY", "FULL")
-  clearTextArea(2, 3, 16);
-  // Show current state: 1=EASY, 2=FULL
-  switch (simpleNotesView) {
-    case 1:
-      drawText("EASY", 2, 3, CRGB(0, 255, 0));
-      break;
-    case 2:
-      drawText("FULL", 2, 3, CRGB(0, 0, 255));
-      break;
-    default:
-      // Default to EASY if invalid value
-      simpleNotesView = 1;
-      drawText("EASY", 2, 3, CRGB(0, 255, 0));
-      break;
-  }
+  if (simpleNotesView != 1 && simpleNotesView != 2) simpleNotesView = 1;
+  drawMenuValue(simpleNotesView == 1 ? "EASY" : "FULL", 2, 3, simpleNotesView == 1 ? CRGB(0, 255, 0) : CRGB(0, 0, 255));
 }
 
 void drawLoopLength() {
-  // Clear text area before drawing (3 chars max: "OFF", or number)
-  clearTextArea(2, 3, 16);
-  // Show current state: 0=OFF, 1-8=forced length
   if (loopLength == 0) {
-    drawText("OFF", 2, 3, CRGB(100, 100, 100));
+    drawMenuValue("OFF", 2, 3, CRGB(100, 100, 100));
   } else {
+    clearTextArea(2, 3, 16);
     drawNumber(loopLength, CRGB(0, 200, 255), 3);
   }
 }
 
 void drawLedModules() {
-  // Show current LED mode: 1, 1B, 2, 2B
   extern int ledModules;
   extern bool ledModulesRotated;
-  clearTextArea(2, 3, 16);
-
-  if (ledModules == 1) {
-    drawText(ledModulesRotated ? "1B" : "1", 2, 3, CRGB(0, 255, 0));
-  } else {
-    drawText(ledModulesRotated ? "2B" : "2", 2, 3, CRGB(0, 255, 0));
-  }
+  const char* lbl = (ledModules == 1) ? (ledModulesRotated ? "1B" : "1") : (ledModulesRotated ? "2B" : "2");
+  drawMenuValue(lbl, 2, 3, CRGB(0, 255, 0));
 }
 
 void showNewFileScreen() {
@@ -3152,43 +3602,32 @@ FLASHMEM void clearTextArea(int startX, int startY, int width) {
   }
 }
 
+// Draw a menu value option at (x,y) - clears area and draws label with color.
+// Use for ON/OFF, SENS, etc. style subitem toggles to reduce code duplication.
+static inline void drawMenuValue(const char* label, int x, int y, CRGB color) {
+  clearTextArea(x, y, 16);
+  drawText(label, x, y, color);
+}
+
 FLASHMEM void drawRecChannelClear(){
-  // Clear text area before drawing (4 chars max: "ON1", "OFF", "CLIC")
-  clearTextArea(2, 3, 16);
-  if (recChannelClear == 1) {
-    drawText("ON", 2, 3, UI_GREEN);
-    SMP_REC_CHANNEL_CLEAR = true;  // Clear mode
-  } else if (recChannelClear == 0) {
-    drawText("OFF",2, 3, UI_RED);
-    SMP_REC_CHANNEL_CLEAR = false; // Add triggers mode
-  } else if (recChannelClear == 2) {
-    drawText("FIX", 2, 3, UI_YELLOW);
-    SMP_REC_CHANNEL_CLEAR = false; // FIX mode - no manipulation
-  } else if (recChannelClear == 3) {
-    drawText("ON1", 2, 3, UI_CYAN);
-    SMP_REC_CHANNEL_CLEAR = true;  // ON1 mode - count-in then record on beat 1
-  } else if (recChannelClear == 4) {
-    drawText("CLIC", 2, 3, UI_MAGENTA);
-    SMP_REC_CHANNEL_CLEAR = false; // CLIC mode - touch3 adds trigger at current beat
+  const char* lbl; CRGB col;
+  switch (recChannelClear) {
+    case 1: lbl = "ON";   col = UI_GREEN;  SMP_REC_CHANNEL_CLEAR = true;  break;
+    case 0: lbl = "OFF"; col = UI_RED;    SMP_REC_CHANNEL_CLEAR = false; break;
+    case 2: lbl = "FIX"; col = UI_YELLOW; SMP_REC_CHANNEL_CLEAR = false; break;
+    case 3: lbl = "ON1"; col = UI_CYAN;   SMP_REC_CHANNEL_CLEAR = true;  break;
+    case 4: lbl = "CLIC";col = UI_MAGENTA;SMP_REC_CHANNEL_CLEAR = false; break;
+    default: lbl = "OFF"; col = UI_RED; SMP_REC_CHANNEL_CLEAR = false; break;
   }
+  drawMenuValue(lbl, 2, 3, col);
 }
 
 FLASHMEM void drawRecMode() {
-  // Clear text area before drawing (4 chars max: "LINE")
-  clearTextArea(2, 3, 16);
-  if (recMode == 1) {
-    drawText("MIC", 2, 3, UI_WHITE);
-    recInput = AUDIO_INPUT_MIC;
-    sgtl5000_1.inputSelect(AUDIO_INPUT_MIC);
-    sgtl5000_1.micGain(micGain);
-  } else {
-    drawText("LINE", 2, 3, UI_BLUE);
-    recInput = AUDIO_INPUT_LINEIN;
-    sgtl5000_1.inputSelect(AUDIO_INPUT_LINEIN);
-    sgtl5000_1.micGain(0);
-  }
-
-
+  drawMenuValue(recMode == 1 ? "MIC" : "LINE", 2, 3, recMode == 1 ? UI_WHITE : UI_BLUE);
+  recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
+  sgtl5000_1.inputSelect(recInput);
+  if (recInput == AUDIO_INPUT_MIC) sgtl5000_1.micGain(micGain);
+  else sgtl5000_1.micGain(0);
   FastLEDshow();
 }
 
@@ -3236,19 +3675,12 @@ FLASHMEM void drawClockMode() {
 
 
 FLASHMEM void drawMidiVoiceSelect() {
-  // Clear text area before drawing (4 chars max: "MIDI", "KEYS", "YPOS")
-  clearTextArea(2, 3, 16);
-  if (voiceSelect == 1) {
-    drawText("MIDI", 2, 3, UI_BLUE);
-    MIDI_VOICE_SELECT = true;
-  } else if (voiceSelect == 2) {
-    drawText("KEYS", 2, 3, UI_MAGENTA);
-    MIDI_VOICE_SELECT = true;  // KEYS mode also uses MIDI channel info
-  } else {
-    drawText("YPOS", 2, 3, UI_GREEN);
-     MIDI_VOICE_SELECT = false;
+  switch (voiceSelect) {
+    case 1: drawMenuValue("MIDI", 2, 3, UI_BLUE); break;
+    case 2: drawMenuValue("KEYS", 2, 3, UI_MAGENTA); break;
+    default: drawMenuValue("YPOS", 2, 3, UI_GREEN); break;
   }
-
+  MIDI_VOICE_SELECT = (voiceSelect == 1 || voiceSelect == 2);
   FastLEDshow();
 }
 
@@ -3268,129 +3700,66 @@ FLASHMEM void drawPreviewVol() {
 }
 
 FLASHMEM void drawFastRecMode() {
-  // Clear text area before drawing (4 chars max: "+CON", "-CON", "SENS", "OFF")
-  clearTextArea(2, 3, 16);
-  if (fastRecMode == 3) {
-    drawText("+CON", 2, 3, UI_DIM_BLUE);
-    SMP_FAST_REC = 3;
+  switch (fastRecMode) {
+    case 3: drawMenuValue("+CON", 2, 3, UI_DIM_BLUE); break;
+    case 2: drawMenuValue("-CON", 2, 3, UI_DIM_YELLOW); break;
+    case 1: drawMenuValue("SENS", 2, 3, UI_GREEN); break;
+    default: drawMenuValue("OFF", 2, 3, UI_RED); break;
   }
-
-
-  if (fastRecMode == 2) {
-    drawText("-CON", 2, 3, UI_DIM_YELLOW);
-    SMP_FAST_REC = 2;
-   
-  }
-
-
-  if (fastRecMode == 1) {
-    drawText("SENS", 2, 3, UI_GREEN);
-    SMP_FAST_REC = 1;
-   
-  }
-
-  if (fastRecMode == 0) {
-    drawText("OFF", 2, 3, UI_RED);
-    SMP_FAST_REC = 0;
-  }
+  SMP_FAST_REC = fastRecMode;
   FastLEDshow();
 }
 
 
 FLASHMEM void drawPatternMode() {
-  // Clear text area before drawing (4 chars max: "SONG", "NEXT", "OFF")
-  clearTextArea(2, 3, 16);
-  // Also clear area for pending page number if it exists
   clearTextArea(10, 3, 8);
-  if (patternMode == 2) {
-    drawText("SONG", 2, 3, CRGB(255, 255, 0)); // Yellow for SONG mode
-    SMP_PATTERN_MODE = true;
-  } else if (patternMode == 3) {
-    drawText("NEXT", 2, 3, CRGB(0, 255, 255)); // Cyan for NEXT mode
-    SMP_PATTERN_MODE = true;
-    // Show pending page if set
+  switch (patternMode) {
+    case 2: drawMenuValue("SONG", 2, 3, CRGB(255, 255, 0)); break;
+    case 3: drawMenuValue("NEXT", 2, 3, CRGB(0, 255, 255)); break;
+    case 1: drawMenuValue("ON", 2, 3, UI_GREEN); break;
+    default: drawMenuValue("OFF", 2, 3, UI_RED); break;
+  }
+  SMP_PATTERN_MODE = (patternMode == 1 || patternMode == 2 || patternMode == 3);
+  if (patternMode == 3) {
     extern unsigned int pendingPage;
     if (pendingPage > 0) {
       char pageText[4];
       snprintf(pageText, sizeof(pageText), "%02d", (int)pendingPage);
-      drawText(pageText, 10, 3, CRGB(0, 200, 200)); // Dimmer cyan for page number
+      drawText(pageText, 10, 3, CRGB(0, 200, 200));
     }
-  } else if (patternMode == 1) {
-    drawText("ON", 2, 3, UI_GREEN);
-    SMP_PATTERN_MODE = true;
-  } else {
-    drawText("OFF", 2, 3, UI_RED);
-    SMP_PATTERN_MODE = false;
   }
-
   FastLEDshow();
 }
 
 FLASHMEM void drawFlowMode() {
-  // Clear text area before drawing (3 chars max: "OFF", 2 chars: "ON")
-  clearTextArea(2, 3, 16);
-  if (flowMode == 1) {
-    drawText("ON", 2, 3, UI_GREEN);  // Use same coordinates as drawRecChannelClear
-    SMP_FLOW_MODE = true;
-  } else if (flowMode == -1) {
-    drawText("OFF", 2, 3, UI_RED);  // Use same coordinates as drawRecChannelClear
-    SMP_FLOW_MODE = false;
-  } else {
-    // Fallback for any unexpected values
-    drawText("OFF", 2, 3, UI_RED);  // Use same coordinates as drawRecChannelClear
-    SMP_FLOW_MODE = false;
-    flowMode = -1;  // Reset to valid value
-  }
-
+  if (flowMode != 1 && flowMode != -1) flowMode = -1;
+  drawMenuValue(flowMode == 1 ? "ON" : "OFF", 2, 3, flowMode == 1 ? UI_GREEN : UI_RED);
+  SMP_FLOW_MODE = (flowMode == 1);
   FastLEDshow();
 }
 
 
 FLASHMEM void drawMidiTransport() {
-  // Clear text area before drawing (4 chars max: "SEND", 3 chars: "GET", "OFF")
-  clearTextArea(2, 3, 16);
-  if (transportMode == 2) {
-    drawText("SEND", 2, 3, UI_BLUE);
-    MIDI_TRANSPORT_RECEIVE = false;
-    MIDI_TRANSPORT_SEND = true;
-  } else if (transportMode == 1) {
-    drawText("GET", 2, 3, UI_GREEN);
-    MIDI_TRANSPORT_RECEIVE = true;
-    MIDI_TRANSPORT_SEND = false;
-  } else {
-    drawText("OFF", 2, 3, UI_RED);
-    MIDI_TRANSPORT_RECEIVE = false;
-    MIDI_TRANSPORT_SEND = false;
-    transportMode = -1;
+  if (transportMode != -1 && transportMode != 1 && transportMode != 2) transportMode = -1;
+  switch (transportMode) {
+    case 2: drawMenuValue("SEND", 2, 3, UI_BLUE); break;
+    case 1: drawMenuValue("GET", 2, 3, UI_GREEN); break;
+    default: drawMenuValue("OFF", 2, 3, UI_RED); break;
   }
-
+  MIDI_TRANSPORT_RECEIVE = (transportMode == 1);
+  MIDI_TRANSPORT_SEND = (transportMode == 2);
   FastLEDshow();
 }
 
 FLASHMEM void drawMidiSend() {
-  // Clear text area before drawing (4 chars max: "CLCK", "NOTE", "BOTH")
-  clearTextArea(2, 3, 16);
   extern int midiSendMode;
   extern bool MIDI_CLOCK_SEND;
   extern bool MIDI_NOTE_SEND;
   extern int clockMode;
-  
-  if (midiSendMode == 0) {
-    // CLCK only: clock enabled (if clockMode allows), notes disabled
-    drawText("CLCK", 2, 3, UI_YELLOW);
-    MIDI_CLOCK_SEND = (clockMode == 1);  // Respect clockMode setting
-    MIDI_NOTE_SEND = false;
-  } else if (midiSendMode == 1) {
-    // NOTE only: clock disabled, notes enabled
-    drawText("NOTE", 2, 3, UI_GREEN);
-    MIDI_CLOCK_SEND = false;
-    MIDI_NOTE_SEND = true;
-  } else {
-    // BOTH: clock enabled (if clockMode allows), notes enabled
-    drawText("BOTH", 2, 3, UI_BLUE);
-    MIDI_CLOCK_SEND = (clockMode == 1);  // Respect clockMode setting
-    MIDI_NOTE_SEND = true;
+  switch (midiSendMode) {
+    case 0: drawMenuValue("CLCK", 2, 3, UI_YELLOW); MIDI_CLOCK_SEND = (clockMode == 1); MIDI_NOTE_SEND = false; break;
+    case 1: drawMenuValue("NOTE", 2, 3, UI_GREEN); MIDI_CLOCK_SEND = false; MIDI_NOTE_SEND = true; break;
+    default: drawMenuValue("BOTH", 2, 3, UI_BLUE); MIDI_CLOCK_SEND = (clockMode == 1); MIDI_NOTE_SEND = true; break;
   }
-
   FastLEDshow();
 }
