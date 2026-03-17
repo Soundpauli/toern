@@ -378,23 +378,10 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     }
   }
 
-  // Only calculate BPM when we've accumulated a full window of clocks (96 clocks = 1 bar for faster sync)
-  // Calculate if: (1) on BPM page, OR (2) initial sync not done yet (background sync until stable)
+  // Always calculate BPM in EXT mode whenever a full window of clocks has arrived.
+  // This keeps SMP.bpm and isBPMStable current regardless of which screen is active.
   if (clocksSinceLastBPM >= CLOCKS_PER_BPM_WINDOW) {
-    // Check if we're on the BPM page
-    extern Mode *currentMode;
-    extern Mode volume_bpm;
-    bool onBpmPage = (currentMode == &volume_bpm);
-    
-    // Allow calculation if on BPM page OR if initial sync not done yet
-    if (!onBpmPage && initialBpmSyncDone) {
-      // Not on BPM page and initial sync already done: skip calculation but reset window to prevent overflow
-      lastBPMMeasureTime = now_captured;
-      clocksSinceLastBPM = 0;
-      return; // Skip expensive BPM calculation
-    }
-    
-    // Measure BPM over 4 bars and update SMP.bpm directly in EXT mode
+    // Measure BPM over the window and update SMP.bpm directly in EXT mode
     unsigned long deltaTotal = now_captured - lastBPMMeasureTime;
 
     // Expected delta per MIDI clock at BPM_MIN/BPM_MAX
@@ -462,23 +449,30 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
         bool wasStable = isBPMStable;
         isBPMStable = (stableBPMCount > 2);
         
-        // If BPM just became stable, sync playTimer and mark initial sync complete if needed
+        // If BPM just became stable, sync playTimer and auto-exit BPM menu if open
         if (isBPMStable && !wasStable) {
-          // Sync playTimer to the stable BPM
           extern IntervalTimer playTimer;
           extern void playNote();
           if (newBPM > 0) {
             unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / (float)newBPM) / 4.0f);
             playTimer.begin(playNote, currentPlayNoteInterval);
-            #if DEBUG_MIDI_CLOCK_SERIAL
-            #endif
           }
-          
-          // If initial sync not done, mark it complete
+
           if (!initialBpmSyncDone) {
             initialBpmSyncDone = true;
-            #if DEBUG_MIDI_CLOCK_SERIAL
-            #endif
+          }
+
+          // Auto-exit BPM menu when clock locks
+          extern Mode *currentMode;
+          extern Mode volume_bpm;
+          if (currentMode == &volume_bpm) {
+            extern void switchMode(Mode *);
+            extern Mode draw;
+            extern Mode singleMode;
+            extern bool menuEnteredFromSingleMode;
+            extern int currentMenuPage;
+            currentMenuPage = 3;
+            switchMode(menuEnteredFromSingleMode ? &singleMode : &draw);
           }
         }
       } else {

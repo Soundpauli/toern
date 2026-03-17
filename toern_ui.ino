@@ -2193,9 +2193,9 @@ void drawBPMScreen() {
     // INT mode: always cyan
     drawBPMWithReservedSpace(SMP.bpm, UI_CYAN, 6);
   } else {
-    // EXT mode: blue if stable, red if not yet stable
+    // EXT mode: green if stable, red if not yet stable
     bool isStable = getBPMStable();
-    CRGB extColor = isStable ? CRGB(0, 0, 255) : CRGB(255, 0, 0); // Blue if stable, Red if not
+    CRGB extColor = isStable ? CRGB(0, 255, 0) : CRGB(255, 0, 0); // Green if stable, Red if not
     drawBPMWithReservedSpace(SMP.bpm, extColor, 6);
   }
   
