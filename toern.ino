@@ -153,9 +153,9 @@ extern void handleMidiClock();
 #define DATA_PIN 17                   // PIN FOR LEDS
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
 
-#define SWITCH_1 2   // Pin for TPP223 1 //>> SINGLE
-#define SWITCH_2 3   // // Pin for TPP223 3 //3==lowerright, lowerleft== 15! >> MENU
-#define SWITCH_3 4  //Pin for TPP223 2 >> REC /
+#define SWITCH_1 2 // ALT: 16   // Pin for TPP223 1 //>> SINGLE
+#define SWITCH_2 3  // ALT: 3 // Pin for TPP223 3 //3==lowerright, lowerleft== 15! >> MENU
+#define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6
 #define SWITCH_5 39
 
@@ -430,6 +430,7 @@ unsigned int infoIndex = 0;
 // Legacy "lastFile" (EEPROM numeric folder*100+idx) system removed; sample browsing is manifest-driven.
 bool freshPaint, tmpMute = false;
 bool preventPaintUnpaint = false;  // Flag to prevent paint/unpaint after certain operations
+unsigned long suppressDrawRMuteUntilMs = 0;  // Ignore R-mode mute events during velocity enter/exit
 
 
 bool firstcheck = false;
@@ -2463,7 +2464,10 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
     extern int drawMode;
-    if (drawMode == 1) {
+    if (drawMode == 1 && GLOB.y < 16) {
+      if (millis() < suppressDrawRMuteUntilMs) {
+        return;
+      }
       toggleDrawRGlobalMute();
       return;
     }
@@ -2478,9 +2482,18 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
     extern int drawMode;
-    // In R mode, encoder(0) never unpaints - skip unpaint functionality
-    if (drawMode == 1) {
-      return;  // Skip unpaint in R mode
+    // In R mode, mirror 1000 behavior: long-press encoder(0) toggles global mute.
+    if (drawMode == 1 && GLOB.y < 16) {
+      // If this long press targets velocity editing, suppress mute toggle.
+      if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0) {
+        suppressDrawRMuteUntilMs = millis() + 800;
+        return;
+      }
+      if (millis() < suppressDrawRMuteUntilMs) {
+        return;
+      }
+      toggleDrawRGlobalMute();
+      return;
     }
     // In single mode, trigger random function ONLY when y=16
     if (GLOB.singleMode && GLOB.y == 16) {
@@ -3872,6 +3885,53 @@ void checkButtons() {
 
 
 
+void exitMenuFromTouchInput() {
+  extern bool inLookSubmenu;
+  extern bool inRecsSubmenu;
+  extern bool inMidiSubmenu;
+  extern bool inVolSubmenu;
+  extern bool inEtcSubmenu;
+  extern bool menuEnteredFromSingleMode;
+  extern int currentMenuPage;
+
+  // If in any submenu, restore parent page before returning to draw/single.
+  if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
+    int parentPage = 0;
+    if (inLookSubmenu) parentPage = 5;
+    else if (inRecsSubmenu) parentPage = 6;
+    else if (inMidiSubmenu) parentPage = 7;
+    else if (inVolSubmenu) parentPage = 4;
+    else if (inEtcSubmenu) parentPage = 9;
+
+    inLookSubmenu = false;
+    inRecsSubmenu = false;
+    inMidiSubmenu = false;
+    inVolSubmenu = false;
+    inEtcSubmenu = false;
+
+    currentMenuPage = parentPage;
+    menu.pos[3] = parentPage;
+    Encoder[3].writeCounter((int32_t)parentPage);
+  }
+
+  // On main menu (or after submenu unwind), exit to draw/single based on entry mode.
+  if (menuEnteredFromSingleMode) {
+    switchMode(&singleMode);
+    GLOB.singleMode = true;
+  } else {
+    switchMode(&draw);
+    GLOB.singleMode = false;
+  }
+
+  extern int drawMode;
+  if (drawMode == 0) {
+    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+  } else {
+    Encoder[0].writeRGBCode(0x000000);
+  }
+  Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+}
+
 void checkTouchInputs() {
   // remember last time both were held
   // static bool lastBothTouched = false; // Already global
@@ -4110,50 +4170,7 @@ skip_individual_touch:
           animateSingle();
         }
       } else if (currentMode == &menu) {
-        extern bool inLookSubmenu;
-        extern bool inRecsSubmenu;
-        extern bool inMidiSubmenu;
-        extern bool inVolSubmenu;
-        extern bool inEtcSubmenu;
-        extern bool menuEnteredFromSingleMode;
-        // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
-        if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
-          inLookSubmenu = false;
-          inRecsSubmenu = false;
-          inMidiSubmenu = false;
-          inVolSubmenu = false;
-          inEtcSubmenu = false;
-          if (menuEnteredFromSingleMode) {
-            switchMode(&singleMode);
-            GLOB.singleMode = true;
-          } else {
-            switchMode(&draw);
-            GLOB.singleMode = false;
-          }
-          extern int drawMode;
-          if (drawMode == 0) {
-            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-          } else {
-            Encoder[0].writeRGBCode(0x000000);
-          }
-          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        } else {
-          // On main menu, exit to draw or single based on state before entering menu
-          if (menuEnteredFromSingleMode) {
-            switchMode(&singleMode);
-            GLOB.singleMode = true;
-          } else {
-            switchMode(&draw);
-            GLOB.singleMode = false;
-          }
-          extern int drawMode;
-          if (drawMode == 0) {
-            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-          } else {
-            Encoder[0].writeRGBCode(0x000000);
-          }
-          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        }
+        exitMenuFromTouchInput();
       } else {  // If in any other mode, and Switch 1 is touched, go to draw mode.
         if (currentMode == &singleMode) {
           GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
@@ -4302,60 +4319,7 @@ skip_individual_touch:
         }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &menu) {
-        extern bool inLookSubmenu;
-        extern bool inRecsSubmenu;
-        extern bool inMidiSubmenu;
-        extern bool inVolSubmenu;
-        extern bool inEtcSubmenu;
-        extern bool menuEnteredFromSingleMode;
-        extern int currentMenuPage;
-        // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
-        if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
-          int parentPage = 0;
-          if (inLookSubmenu) parentPage = 5;
-          else if (inRecsSubmenu) parentPage = 6;
-          else if (inMidiSubmenu) parentPage = 7;
-          else if (inVolSubmenu) parentPage = 4;
-          else if (inEtcSubmenu) parentPage = 9;
-          inLookSubmenu = false;
-          inRecsSubmenu = false;
-          inMidiSubmenu = false;
-          inVolSubmenu = false;
-          inEtcSubmenu = false;
-          currentMenuPage = parentPage;
-          menu.pos[3] = parentPage;
-          Encoder[3].writeCounter((int32_t)parentPage);
-          if (menuEnteredFromSingleMode) {
-            switchMode(&singleMode);
-            GLOB.singleMode = true;
-          } else {
-            switchMode(&draw);
-            GLOB.singleMode = false;
-          }
-          extern int drawMode;
-          if (drawMode == 0) {
-            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-          } else {
-            Encoder[0].writeRGBCode(0x000000);
-          }
-          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        } else {
-          // On main menu, exit to draw or single based on state before entering menu
-          if (menuEnteredFromSingleMode) {
-            switchMode(&singleMode);
-            GLOB.singleMode = true;
-          } else {
-            switchMode(&draw);
-            GLOB.singleMode = false;
-          }
-          extern int drawMode;
-          if (drawMode == 0) {
-            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-          } else {
-            Encoder[0].writeRGBCode(0x000000);
-          }
-          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        }
+        exitMenuFromTouchInput();
       } else {  // If in any other mode and Switch 2 is touched, go to draw mode.
         switchMode(&draw);
         // Update encoder colors to reflect the current channel when exiting other modes
@@ -5477,8 +5441,10 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     static bool encoder0PressedOnEmptyNote = false;  // Track if encoder(0) was pressed on empty note
     extern bool isPressed[NUM_ENCODERS];
 
-    // Check if encoder(0) button is currently pressed (held down)
+    // Check if encoder(0) button is currently pressed.
     bool encoder0Held = isPressed[0];
+    // In R mode, velocity editor should open only on long press.
+    bool encoder0LongHeld = (buttons[0] == 2);
 
     // Track when encoder(0) is pressed on an empty note
     static bool lastEncoder0State = false;
@@ -5497,8 +5463,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       encoder0PressedOnEmptyNote = false;
     }
 
-    if ((currentMode == &draw || currentMode == &singleMode) && encoder0Held) {
-      // Button is held - enter velocity mode if not already in it
+    if ((currentMode == &draw || currentMode == &singleMode) && encoder0LongHeld) {
+      // Long press reached - enter velocity mode if not already in it
       // Only trigger if note has value AND encoder(0) was not pressed on empty note
       if (currentMode != &velocity && !encoder0PressedOnEmptyNote) {
         rModeSavedMode = currentMode;
@@ -5537,6 +5503,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
           }
 
           GLOB.singleMode = (rModeSavedMode == &singleMode);
+          suppressDrawRMuteUntilMs = millis() + 800;
           switchMode(&velocity);
           Encoder[0].writeCounter((int32_t)velo);
           Encoder[1].writeCounter((int32_t)probStep);
@@ -5547,15 +5514,10 @@ if (SMP.filter_settings[8][ACTIVE]>0){
         }
       }
     } else if (currentMode == &velocity && rModeSavedMode != nullptr && !encoder0Held) {
-      // Button released - exit velocity mode and return to saved mode
-      bool shouldToggleGlobalMute = (drawMode == 1 &&
-                                     (rModeSavedMode == &draw || rModeSavedMode == &singleMode) &&
-                                     pressDuration[0] <= longPressDuration[0]);
+      // Button released - exit velocity mode and return to saved mode.
+      // Never toggle global mute from velocity entry/exit flow.
       switchMode(rModeSavedMode);
       rModeSavedMode = nullptr;
-      if (shouldToggleGlobalMute) {
-        toggleDrawRGlobalMute();
-      }
     }
   }
 
