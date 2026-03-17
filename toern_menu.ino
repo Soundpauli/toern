@@ -2,7 +2,7 @@
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 5
-#define MIDI_PAGES_COUNT 3
+#define MIDI_PAGES_COUNT 4
 #define VOL_PAGES_COUNT 5
 #define ETC_PAGES_COUNT 6
 
@@ -77,8 +77,9 @@ MenuPage recsPages[RECS_PAGES_COUNT] = {
 // MIDI submenu pages
 MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"CH", 7, false, nullptr},            // MIDI Voice Select (Channel)
-  {"TRAN", 8, false, nullptr},         // MIDI Transport
-  {"SEND", 13, false, nullptr}         // MIDI Send (CLCK, NOTE, BOTH)
+  {"TRAN", 8, false, nullptr},          // MIDI Transport
+  {"SEND", 13, false, nullptr},         // MIDI Send (CLCK, NOTE, BOTH)
+  {"RCVE", 44, false, nullptr},         // MIDI Note Receive (OFF/NOTE)
 };
 
 // VOL submenu pages
@@ -203,7 +204,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 28; // EEPROM_DATA_START + [0..27]
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 29; // EEPROM_DATA_START + [0..28]
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -442,6 +443,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 25, 1);   // ledStripEnabled default (1 = ON)
       EEPROM.write(EEPROM_DATA_START + 26, 64);  // ledBrightness default (64, range 3-255)
       EEPROM.write(EEPROM_DATA_START + 27, 1);   // spkrEnabled default (1 = ON)
+      EEPROM.write(EEPROM_DATA_START + 28, 1);   // midiNoteReceive default (1 = NOTE/on)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -549,7 +551,13 @@ void loadMenuFromEEPROM() {
     saveSingleModeToEEPROM(27, 1);
   }
   setSpkrEnabled(spkrEnabled);
-  
+
+  // Load midiNoteReceive from EEPROM (slot 28)
+  extern bool MIDI_NOTE_RECEIVE;
+  uint8_t rcveValue = EEPROM.read(EEPROM_DATA_START + 28);
+  if (rcveValue > 1) { rcveValue = 1; saveSingleModeToEEPROM(28, 1); }
+  MIDI_NOTE_RECEIVE = (rcveValue != 0);
+
   if (previewVol < 0 || previewVol > 50) {
     previewVol = 20;
     saveSingleModeToEEPROM(7, previewVol);
@@ -1489,6 +1497,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawIndicator('L', midiSendMode == 0 ? 'Y' : (midiSendMode == 1 ? 'G' : 'X'), 3);
       }
       break;
+
+    case 44: // RCVE - MIDI Note Receive (OFF/NOTE) - encoder 3
+      {
+        extern bool MIDI_NOTE_RECEIVE;
+        drawText("RCVE", 2, 10, currentMenuParentTextColor());
+        drawMenuValue(MIDI_NOTE_RECEIVE ? "NOTE" : "OFF", 2, 3, MIDI_NOTE_RECEIVE ? UI_GREEN : UI_RED);
+        drawIndicator('L', MIDI_NOTE_RECEIVE ? 'G' : 'R', 3);
+      }
+      break;
       
     case 9: // PMD - Pattern Mode - encoder 3
       drawText("PMODE", 2, 10, currentMenuParentTextColor());
@@ -2061,6 +2078,30 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[2].writeCounter((int32_t)midiSendMode);
         currentMode->pos[2] = midiSendMode;
         lastMidiSendEnc = midiSendMode;
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 44: { // RCVE - MIDI Note Receive (OFF/NOTE) via encoder 2 rotation
+      static int lastRcveEnc = -1;
+      extern bool MIDI_NOTE_RECEIVE;
+      int encVal = MIDI_NOTE_RECEIVE ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastRcveEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastRcveEnc) {
+        MIDI_NOTE_RECEIVE = (currentMode->pos[2] == 1);
+        encVal = MIDI_NOTE_RECEIVE ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastRcveEnc = encVal;
+        saveSingleModeToEEPROM(28, (int8_t)encVal);
         redrawMain(setting);
       }
       break;
@@ -2936,7 +2977,7 @@ void switchMenu(int menuPosition){
           drawMainSettingStatus(menuPosition);
         }
         break;
-    
+
       case 9:
         // Cycle through: -1 (OFF) -> 1 (ON) -> 2 (SONG) -> 3 (NEXT) -> -1 (OFF) ...
         if (patternMode == -1) {

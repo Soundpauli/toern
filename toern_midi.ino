@@ -180,10 +180,6 @@ void checkMidi() {
         handleNoteOff(GLOB.currentChannel, pitch - 60, velocity);
         break;
 
-      case midi::Start:
-        handleStart();
-        break;
-
       case midi::Stop:
         handleStop();
         break;
@@ -552,8 +548,9 @@ void handleStop() {
 
 
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
-  //Serial.println(pitch);
-  // Determine channel based on MIDI mode
+  extern bool MIDI_NOTE_RECEIVE;
+  if (!MIDI_NOTE_RECEIVE) return;
+
   extern int voiceSelect;
   
   if (voiceSelect == 2) {

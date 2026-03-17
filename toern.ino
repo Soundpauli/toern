@@ -149,6 +149,7 @@ struct Note {
 // maxX is now a runtime variable, calculated from ledModules menu setting
 extern unsigned int maxX;
 extern void handleMidiClock();
+extern void handleStart();
 #define NUM_LEDS (256 * LED_MODULES)  // 256 LEDs per matrix
 #define DATA_PIN 17                   // PIN FOR LEDS
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
@@ -346,7 +347,8 @@ bool disableThresholdFlag = false;
 // Allocate the delay lines for left and right channels
 
 bool MIDI_CLOCK_SEND = true;
-bool MIDI_NOTE_SEND = true;  // Control whether MIDI notes are sent (independent from clock)
+bool MIDI_NOTE_SEND = true;    // Control whether MIDI notes are sent (independent from clock)
+bool MIDI_NOTE_RECEIVE = true; // Control whether incoming MIDI notes are acted on
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
@@ -3175,6 +3177,7 @@ void setup() {
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.setHandleNoteOn(handleNoteOn);    // optional MIDI library hook
   MIDI.setHandleClock(handleMidiClock);  // dedicated callback for MIDI clock to reduce jitter
+  MIDI.setHandleStart(handleStart);      // callback for Start so it fires immediately, not in loop()
   resetMidiClockState();
 
 
