@@ -1455,10 +1455,9 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
       
-    case 4: // REC - Recording Mode (menu/mic)
-      // Icon should show in main menu entry (RECS), not inside the REC submenu page.
-      // No red indicator for encoder(2) - removed
+    case 4: // REC - Recording Mode (menu/mic) - encoder 3: MIC/LINE
       drawRecMode();
+      drawIndicator('L', recMode == 1 ? 'W' : 'X', 3);  // White=MIC, Blue=LINE
       break;
       
     case 5: // BPM - BPM/Volume
@@ -1470,29 +1469,37 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
       
-    case 7: // CHN - MIDI Voice Select
+    case 7: // CHN - MIDI Voice Select - encoder 3: YPOS/MIDI/KEYS
       drawText("CH", 2, 10, currentMenuParentTextColor());
       drawMidiVoiceSelect();
+      drawIndicator('L', voiceSelect == 1 ? 'X' : (voiceSelect == 2 ? 'M' : 'G'), 3);
       break;
       
-    case 8: // TRN - MIDI Transport
+    case 8: // TRN - MIDI Transport - encoder 3: OFF/GET/SEND
       drawText("TRAN", 2, 10, currentMenuParentTextColor());
       drawMidiTransport();
+      drawIndicator('L', transportMode == 0 ? 'R' : (transportMode == 1 ? 'G' : 'X'), 3);
       break;
       
-    case 13: // SEND - MIDI Send (CLCK, NOTE, BOTH)
+    case 13: // SEND - MIDI Send (CLCK, NOTE, BOTH) - encoder 3
       drawText("SEND", 2, 10, currentMenuParentTextColor());
       drawMidiSend();
+      {
+        extern int midiSendMode;
+        drawIndicator('L', midiSendMode == 0 ? 'Y' : (midiSendMode == 1 ? 'G' : 'X'), 3);
+      }
       break;
       
-    case 9: // PMD - Pattern Mode
+    case 9: // PMD - Pattern Mode - encoder 3
       drawText("PMODE", 2, 10, currentMenuParentTextColor());
       drawPatternMode();
+      drawIndicator('L', patternMode == -1 ? 'R' : (patternMode == 1 ? 'G' : (patternMode == 2 ? 'Y' : 'N')), 3);
       break;
       
-    case 10: // FLW - Flow Mode
+    case 10: // FLW - Flow Mode - encoder 3
       drawText("FLOW", 2, 10, currentMenuParentTextColor());
       drawFlowMode();
+      drawIndicator('L', flowMode == 1 ? 'G' : 'R', 3);
       break;
       
     case 11: // OTR - Fast Rec Mode
@@ -1500,9 +1507,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawFastRecMode();
       break;
       
-    case 12: // CLR - Rec Channel Clear
+    case 12: // CLR - Rec Channel Clear - encoder 3
       drawText("CLR", 2, 10, currentMenuParentTextColor());
       drawRecChannelClear();
+      drawIndicator('L', 'W', 3);
       break;
       
     case 15: // AI - Song Generation
@@ -1528,23 +1536,25 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawEtcInfoPage();
       break;
       
-    case 40: // LGHT - LED Strip toggle (OFF/ON)
+    case 40: // LGHT - LED Strip toggle (OFF/ON) - encoder 3
       {
         extern bool getLedStripEnabled();
         const CRGB tc = currentMenuParentTextColor();
         drawText("LGHT", 2, 10, tc);
         bool enabled = getLedStripEnabled();
         drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+        drawIndicator('L', enabled ? 'G' : 'R', 3);
       }
       break;
       
-    case 41: // COLR - Color scheme selection (0=default, 1, 2, 3=custom)
+    case 41: // COLR - Color scheme selection (0=default, 1, 2, 3=custom) - encoder 3
       {
         const CRGB tc = currentMenuParentTextColor();
         drawText("COLR", 2, 10, tc);
         char schemeText[2];
         snprintf(schemeText, sizeof(schemeText), "%d", currentColorScheme);
         drawMenuValue(schemeText, 2, 3, UI_GREEN);
+        drawIndicator('L', 'G', 3);
       }
       break;
 
@@ -1602,19 +1612,22 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
       
-    case 17: // VIEW - Simple Notes View
+    case 17: // VIEW - Simple Notes View - encoder 3
       drawText("VIEW", 2, 10, currentMenuParentTextColor());
       drawSimpleNotesView();
+      drawIndicator('L', 'W', 3);
       break;
       
-    case 18: // LOOP - Loop Length
+    case 18: // LOOP - Loop Length - encoder 3
       drawText("LOOP", 2, 10, currentMenuParentTextColor());
       drawLoopLength();
+      drawIndicator('L', 'G', 3);
       break;
       
-    case 23: // LEDS - LED mode (1, 1B, 2, 2B)
+    case 23: // LEDS - LED mode (1, 1B, 2, 2B) - encoder 3
       drawText("LEDS", 2, 10, currentMenuParentTextColor());
       drawLedModules();
+      drawIndicator('L', 'G', 3);
       break;
 
     case 24: // PONG toggle
@@ -1670,7 +1683,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
       
-    case 27: { // MAIN - Headphone output volume
+    case 27: { // MAIN - Headphone output volume - encoder 3
       drawText("MAIN", 2, 10, currentMenuParentTextColor());
       extern Mode *currentMode;
       extern struct GlobalVars GLOB;
@@ -1692,10 +1705,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       int b = 0;
       CRGB volColor = CRGB(r, g, b);
       Encoder[2].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
+      drawIndicator('L', 'O', 3);
       break;
     }
     
-    case 28: { // LOUT - Line output volume
+    case 28: { // LOUT - Line output volume - encoder 3
       drawText("LOUT", 2, 10, currentMenuParentTextColor());
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
@@ -1707,10 +1721,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       // Pink color for encoder
       CRGB pinkColor = CRGB(255, 192, 203);
       Encoder[2].writeRGBCode(pinkColor.r << 16 | pinkColor.g << 8 | pinkColor.b);
+      drawIndicator('L', 'M', 3);
       break;
     }
     
-    case 29: { // PREV - Preview volume
+    case 29: { // PREV - Preview volume - encoder 3
       drawText("PREV", 2, 10, currentMenuParentTextColor());
       extern unsigned int previewVol;
       // Display as 0-50 instead of 0.00-0.50
@@ -1721,10 +1736,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       // Green color for encoder
       CRGB greenColor = CRGB(0, 160, 80);
       Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      drawIndicator('L', 'G', 3);
       break;
     }
     
-    case 30: { // MIC - Microphone gain
+    case 30: { // MIC - Microphone gain - encoder 3
       drawText("MIC", 2, 10, currentMenuParentTextColor());
       extern unsigned int micGain;
       char gainText[8];
@@ -1734,10 +1750,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       // Red color for encoder
       CRGB redColor = CRGB(55, 0, 0);
       Encoder[2].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
+      drawIndicator('L', 'R', 3);
       break;
     }
     
-    case 31: { // L-IN - Line input level
+    case 31: { // L-IN - Line input level - encoder 3
       drawText("L-IN", 2, 10, currentMenuParentTextColor());
       extern unsigned int lineInLevel;
       char levelText[8];
@@ -1747,10 +1764,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       // Blue color for encoder
       CRGB blueColor = CRGB(0, 0, 55);
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+      drawIndicator('L', 'X', 3);
       break;
     }
 
-    case 36: { // 2-CH - Stereo routing (OFF, M+P, or L+R)
+    case 36: { // 2-CH - Stereo routing (OFF, M+P, or L+R) - encoder 3
       drawText("2-CH", 2, 10, currentMenuParentTextColor());
       // Clear text area before drawing (3 chars max: "OFF", "M+P", "L+R")
       clearTextArea(6, 3, 8);
@@ -1764,19 +1782,21 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       CRGB blueColor = getIndicatorColor('X');
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
+      drawIndicator('L', 'X', 3);
       break;
     }
 
-    case 43: { // SPKR - Speaker toggle (display inverted: enabled=ON shows "OFF" as action)
+    case 43: { // SPKR - Speaker toggle - encoder 3
       extern bool getSpkrEnabled();
       const CRGB tc = currentMenuParentTextColor();
       drawText("SPKR", 2, 10, tc);
       bool enabled = getSpkrEnabled();
       drawMenuValue(enabled ? "OFF" : "ON", 2, 3, enabled ? CRGB(255, 0, 0) : CRGB(0, 255, 0));
+      drawIndicator('L', enabled ? 'G' : 'R', 3);
       break;
     }
     
-    case 32: { // CRSR - Cursor Type
+    case 32: { // CRSR - Cursor Type - encoder 3
       drawText("CRSR", 2, 10, currentMenuParentTextColor());
       extern bool showChannelNr;
       extern int cursorType;
@@ -1785,15 +1805,17 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       CRGB col = (cursorMode == 0) ? CRGB(150, 100, 0) : (cursorMode == 1) ? CRGB(150, 200, 0) : CRGB(150, 255, 0);
       drawMenuValue(lbl, 2, 3, col);
       Encoder[2].writeRGBCode(CRGB(0, 255, 0).r << 16 | CRGB(0, 255, 0).g << 8 | CRGB(0, 255, 0).b);
+      drawIndicator('L', 'G', 3);
       break;
     }
 
-    case 33: { // PREV - Preview trigger mode
+    case 33: { // PREV - Preview trigger mode - encoder 3
       drawText("PREV", 2, 10, currentMenuParentTextColor());
       drawMenuValue(previewTriggerMode == PREVIEW_MODE_PRESS ? "PRSS" : "ON", 2, 3,
           previewTriggerMode == PREVIEW_MODE_PRESS ? CRGB(0, 150, 255) : UI_GREEN);
       CRGB greenColor = getIndicatorColor('G');
       Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
+      drawIndicator('L', 'B', 3);
       break;
     }
   }
