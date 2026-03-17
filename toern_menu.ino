@@ -806,10 +806,12 @@ FLASHMEM void showMenu() {
       Encoder[2].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
       Encoder[3].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
     } else {
+      // Keep encoder 4 aligned with the visible menu-navigation indicator color.
+      CRGB menuNavColor = getIndicatorColor('G');
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
       Encoder[2].writeRGBCode(0x000000);
-      Encoder[3].writeRGBCode(0x000000);
+      Encoder[3].writeRGBCode(menuNavColor.r << 16 | menuNavColor.g << 8 | menuNavColor.b);
     }
 
     drawMainSettingStatus(mainSetting);
