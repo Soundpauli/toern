@@ -52,6 +52,7 @@ uint16_t getMidiClockTicks() {
   return midiClockTickCounter;
 }
 static uint8_t externalStepWithinPage = 0;  // Tracks external clock-derived step (1..maxX)
+static unsigned long transportStartDelayUntil = 0; // non-blocking start delay: fire playNote() after this µs timestamp
 static float midiClockSendBPM = 0.0f;
 static unsigned long midiClockIntervalUs = 0;
 static unsigned long midiNextClockMicros = 0;
@@ -134,6 +135,20 @@ void handleMidiClock() {
 }
 
 void checkMidi() {
+  // Fire deferred transport start once the non-blocking delay has elapsed
+  if (transportStartDelayUntil && micros() >= transportStartDelayUntil) {
+    transportStartDelayUntil = 0;
+    isNowPlaying = true;  // Arm exactly here - after the delay, before the first playNote()
+    if (SMP.bpm > 0) {
+      unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+      playTimer.end();
+      playNote();
+      playTimer.begin(playNote, currentPlayNoteInterval);
+    } else {
+      playNote();
+    }
+  }
+
   // No serial output for individual MIDI messages - only show calculated BPM
   // Only Clock messages (0xF8) are used for BPM calculation
   // Active Sensing (0xFE), Note messages, and others are IGNORED for BPM
@@ -251,7 +266,7 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     lastClockSent = now;
     // Ensure playTimer is configured if master
     if (SMP.bpm > 0.0f) {
-        unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+        unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
         playTimer.begin(playNote, currentPlayNoteInterval);
     } else {
         playTimer.end();
@@ -276,7 +291,7 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     
     // Start internal timer with current BPM (will be adjusted by external clock)
     if (SMP.bpm > 0.0f) {
-      unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+      unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
       playTimer.begin(playNote, currentPlayNoteInterval);
       #if DEBUG_MIDI_CLOCK_SERIAL
       #endif
@@ -350,25 +365,22 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           #if DEBUG_MIDI_CLOCK_SERIAL
           #endif
           pendingStartOnBar = false;
-          isNowPlaying = true;
+          // Keep isNowPlaying = false until the deferred playNote() fires,
+          // so the background playTimer ISR cannot race and play beat 1 early.
           if (SMP_PATTERN_MODE) {
-            beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
-            GLOB.page = GLOB.edit;  // Keep the current page
+            beat = (GLOB.edit - 1) * maxX + 1;
+            GLOB.page = GLOB.edit;
           } else {
             beat = 1;
             GLOB.page = 1;
           }
           playStartTime = millis();
 
-          // Immediately trigger the first step so playback starts on beat 1
-          if (SMP.bpm > 0) {
-            unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
-            playTimer.end();
-            playNote();  // Fire the downbeat right away
-            playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
-          } else {
-            playNote();
-          }
+          // Defer first step by one MIDI clock pulse (non-blocking) so the clock settles.
+          unsigned long delayUs = (SMP.bpm > 0)
+            ? (unsigned long)(60000000.0f / (SMP.bpm * 24.0f))
+            : 10000UL;
+          transportStartDelayUntil = micros() + delayUs;
         }
       }
     }
@@ -450,8 +462,15 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           extern IntervalTimer playTimer;
           extern void playNote();
           if (newBPM > 0) {
-            unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / (float)newBPM) / 4.0f);
-            playTimer.begin(playNote, currentPlayNoteInterval);
+            unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)newBPM * 4.0));
+            // Only re-phase (begin) if idle - avoids sync jumps during playback
+            // or while waiting for bar-1 (pendingStartOnBar). In those states just
+            // update the period so the phase that was already locked stays intact.
+            if (!isNowPlaying && !pendingStartOnBar) {
+              playTimer.begin(playNote, currentPlayNoteInterval);
+            } else {
+              playTimer.update(currentPlayNoteInterval);
+            }
           }
 
           if (!initialBpmSyncDone) {
@@ -538,9 +557,11 @@ void handleStop() {
   if (!isNowPlaying || !MIDI_TRANSPORT_RECEIVE) return;
 
   // Called when a MIDI STOP message is received.
+  // skipSave=true: avoid blocking SD write while external clock is still ticking.
+  // The local pause() button path will save normally.
   unsigned long currentTime = millis();
-  if (currentTime - playStartTime > 500) {  // Only pause if play started more than 200ms ago
-    pause();
+  if (currentTime - playStartTime > 500) {
+    pause(true);
   }
 }
 
@@ -716,20 +737,18 @@ void handleStart() {
     MIDI.sendRealTime(midi::Start);
   }
 
-  // Start immediately on the transport command
+  // Start after a short non-blocking delay so the external clock has time to settle.
+  // Delay = 1 MIDI clock pulse at current BPM: 60,000,000 / (bpm * 24)
+  // Falls back to ~10 ms at unknown BPM.
+  // Keep isNowPlaying = false until checkMidi() fires the deferred playNote(),
+  // so the background playTimer ISR cannot race and play beat 1 early.
   pendingStartOnBar = false;
-  isNowPlaying = true;
   beatStartTime = millis();
 
-  // Fire the very first step right away so playback starts on beat 1
-  if (SMP.bpm > 0) {
-    unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
-    playTimer.end();
-    playNote();  // Fire the downbeat right away
-    playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
-  } else {
-  playNote();
-  }
+  unsigned long delayUs = (SMP.bpm > 0)
+    ? (unsigned long)(60000000.0f / (SMP.bpm * 24.0f))
+    : 10000UL;
+  transportStartDelayUntil = micros() + delayUs;
 }
 
 

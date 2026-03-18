@@ -28,6 +28,8 @@ volatile uint32_t missedSteps = 0;  // counts when loop() hasn't consumed the pr
 // === ISR -> main loop deferrals (keep timer interrupt fast and deterministic) ===
 // NOTE: These are written from the timer ISR (playNote) and consumed in loop().
 volatile bool isrPlayButtonTick = false;      // request drawPlayButton() from main loop (one per beat)
+bool pendingPauseUIUpdate = false;            // deferred encoder/LED update after pause (avoid I2C stall)
+bool pendingPauseSkipSave = false;            // whether the pending pause should skip autoSave
 volatile bool isrDbgPatternFinished = false;  // song-mode: pattern finished
 volatile uint16_t isrDbgPatternFinishedBeat = 0;
 volatile bool isrDbgLoopCountChanged = false;  // loopCount incremented
@@ -572,7 +574,7 @@ bool resetTimerActive = false;
 float pulse = 1;
 int dir = 1;
 unsigned int MIDI_CH = 1;
-float playNoteInterval = 150000.0;
+double playNoteInterval = 150000.0;
 // Display refresh timing: RefreshTime = 1000UL / TargetFPS (30 FPS = 33ms per frame)
 // This is the single source of truth for display-related timing across the codebase
 unsigned int RefreshTime = 1000UL / TargetFPS;
@@ -1786,7 +1788,7 @@ void checkFastRec() {
 
     // If playing and y=1, touch3 pauses (rising edge only)
     if (isNowPlaying && GLOB.y == 1 && currentTouchState && !lastTouchState[2]) {
-      pause();
+      pause(false);
       return;
     }
 
@@ -1876,7 +1878,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     } else {
       unsigned long currentTime = millis();
       if (currentTime - playStartTime > 200) {  // Check if play started more than 200ms ago
-        pause();
+        pause(false);
       }
     }
   }
@@ -2155,7 +2157,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern bool songModeActive;
     if (isNowPlaying) {
       // Currently playing - pause and deactivate song mode
-      pause();
+      pause(false);
       songModeActive = false;
       patternMode = -1;  // Set PMOD to OFF
       saveSingleModeToEEPROM(3, patternMode);
@@ -2336,7 +2338,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     } else {
       unsigned long currentTime = millis();
       if (currentTime - playStartTime > 1000) {  // Check if play started more than 200ms ago
-        pause();
+        pause(false);
       }
     }
     return;
@@ -3132,10 +3134,10 @@ void setup() {
 
   //playTimer.priority(118);
   // Run sequencer from IntervalTimer (ISR-safe playNote) so playback continues during SD/UI work
-  playTimer.begin(playNote, playNoteInterval);
+  playTimer.begin(playNote, (uint32_t)lround(playNoteInterval));
   // Start fill timer at 4x the beat rate (for 2x and 4x fills)
   if (playNoteInterval >= 4) {
-    fillTimer.begin(playFillNote, playNoteInterval / 4);
+    fillTimer.begin(playFillNote, (uint32_t)lround(playNoteInterval / 4.0));
   }
   //midiTimer.begin(checkMidi, playNoteInterval);
   //midiTimer.priority(10);
@@ -5156,6 +5158,24 @@ void loop() {
     drawPlayButton();
   }
 
+  // Deferred pause UI update: I2C encoder writes and optional SD save happen here,
+  // not inside pause(), so the MIDI clock ISR isn't starved by blocking bus transactions.
+  if (pendingPauseUIUpdate) {
+    pendingPauseUIUpdate = false;
+    updateLastPage();
+    if (currentMode == &draw || currentMode == &singleMode) {
+      if (ctrlMode == 0 && SMP_PATTERN_MODE) {
+        Encoder[1].writeMax((int32_t)lastPage);
+      } else if (ctrlMode == 1) {
+        refreshCtrlEncoderConfig();
+      }
+    }
+    Encoder[2].writeRGBCode(0x00FF00);
+    if (!pendingPauseSkipSave) {
+      autoSave();
+    }
+  }
+
   if (isrDbgPatternFinished) {
     uint16_t beatCopy;
     // Avoid masking interrupts; occasional duplicate debug print is acceptable.
@@ -6080,7 +6100,7 @@ void play(bool fromStart) {
       // Fire the very first step right away so beat 1 is heard as soon as Play is pressed.
       // Subsequent steps will be driven by playTimer at regular intervals.
       if (SMP.bpm > 0.0f) {
-        unsigned long currentPlayNoteInterval = (unsigned long)((60000000.0f / SMP.bpm) / 4.0f);
+        unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
         playTimer.end();
         playNote();                                          // Fire the downbeat right away
         playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
@@ -6112,7 +6132,7 @@ void play(bool fromStart) {
 
 
 
-void pause() {
+void pause(bool skipSave) {
   // Send MIDI Stop FIRST (before any other operations) to advance it by ~5ms
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
     MIDI.sendRealTime(midi::Stop);  // Send as early as possible for better sync
@@ -6125,33 +6145,21 @@ void pause() {
   ctrlVolumeOverlayActive = false;
   isNowPlaying = false;
   pendingStartOnBar = false;
-  lastFlowPage = 0;  // Reset FLOW page tracking when playback stops
-  fillTimer.end();   // Stop fill timer when playback stops
-  updateLastPage();
-
-  // Update encoder 1 limit if pattern mode is ON
-  if (currentMode == &draw || currentMode == &singleMode) {
-    if (ctrlMode == 0 && SMP_PATTERN_MODE) {
-      Encoder[1].writeMax((int32_t)lastPage);
-    } else if (ctrlMode == 1) {
-      refreshCtrlEncoderConfig();
-    }
-  }
-
+  lastFlowPage = 0;
+  fillTimer.end();
   deleteActiveCopy();
-  autoSave();       // Now safe to do blocking SD card operations - timer is stopped
-  fillTimer.end();  // Stop fill timer on pause
+
+  // Stop audio voices immediately (time-critical, no I2C)
   envelope0.noteOff();
-  // Ensure synth voices 13/14 are silenced on pause
   stopSynthChannel(13);
   stopSynthChannel(14);
-  //allOff();
-  Encoder[2].writeRGBCode(0x00FF00);  // Full brightness green
-  beat = 1;                           // Reset beat on pause
-  beatForUI = beat;                   // Keep UI timer in sync with reset position
-  GLOB.page = 1;                      // Reset page on pause
-  loopCount = 0;                      // Reset loop count to 0 on pause (will be set to 1 on next play)
-  fillHasTriggered = false;           // Reset fill trigger flag on pause
+
+  // Reset playback state immediately
+  beat = 1;
+  beatForUI = beat;
+  GLOB.page = 1;
+  loopCount = 0;
+  fillHasTriggered = false;
   fillRunning = false;
   fillSubTick = 0;
   fillStartSubTick = 0;
@@ -6159,8 +6167,10 @@ void pause() {
   fillActiveVelocity = 0;
   fillActiveRow = 0;
 
-  // Reset static tracking variables on pause to ensure clean state on next play
-  // Note: static variables will be reset when play() is called and we check for page 1, beat 1
+  // Defer all I2C encoder writes and SD save to next loop() iteration so the
+  // MIDI clock callback isn't starved by blocking bus transactions.
+  pendingPauseUIUpdate = true;
+  pendingPauseSkipSave = skipSave;
 }
 
 
@@ -7266,8 +7276,8 @@ FLASHMEM void updateBPM() {
   if (MIDI_CLOCK_SEND) {
     SMP.bpm = currentMode->pos[3];                                    // BPM from encoder
     if (SMP.bpm > 0) {                                                // Avoid division by zero
-      playNoteInterval = ((60.0 * 1000.0 / SMP.bpm) / 4.0) * 1000.0;  // Use floats for precision
-      playTimer.update(playNoteInterval);
+      playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
+      playTimer.update((uint32_t)round(playNoteInterval));
       // Update fill timer to match new beat rate (4x speed)
       if (playNoteInterval >= 4) {
         fillTimer.update(playNoteInterval / 4);

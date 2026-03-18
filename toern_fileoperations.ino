@@ -259,8 +259,8 @@ FLASHMEM void loadPattern(bool autoload) {
   
   Mode *bpm_vol = &volume_bpm;
   bpm_vol->pos[3] = SMP.bpm;
-  playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
-  playTimer.update(playNoteInterval);
+  playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
+  playTimer.update((uint32_t)round(playNoteInterval));
   //midiTimer.update(playNoteInterval / 48);
   bpm_vol->pos[2] = GLOB.vol;
 

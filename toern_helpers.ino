@@ -69,7 +69,7 @@ extern int genreLength;
 extern Device SMP;
 extern Mode volume_bpm;
 extern IntervalTimer playTimer;
-extern float playNoteInterval;
+extern double playNoteInterval;
 extern float detune[13]; // Global detune array for channels 1-12
 extern float channelOctave[9]; // Global octave array for channels 1-8
 extern int8_t channelDirection[maxFiles];
@@ -1732,8 +1732,8 @@ void setGenreBPM() {
 // Apply BPM directly without relying on MIDI clock condition
 void applyBPMDirectly(int bpm) {
   if (bpm > 0) { // Avoid division by zero
-    playNoteInterval = ((60.0 * 1000.0 / bpm) / 4.0) * 1000.0;  // Use floats for precision
-    playTimer.update(playNoteInterval);
+    playNoteInterval = 60000000.0 / ((double)bpm * 4.0);
+    playTimer.update((uint32_t)round(playNoteInterval));
   }
 }
 
@@ -2416,7 +2416,7 @@ void resetAllAudioEffects() {
 void startNew() {
   // Declare all external variables at the beginning
   extern unsigned int samplePackID;
-  extern float playNoteInterval;
+  extern double playNoteInterval;
   extern IntervalTimer playTimer;
   extern bool globalMutes[maxY];
   extern bool pageMutes[maxPages][maxY];
@@ -2559,8 +2559,8 @@ void startNew() {
   // 8. UPDATE BPM AND TIMER
   Mode *bpm_vol = &volume_bpm;
   bpm_vol->pos[3] = SMP.bpm;
-  playNoteInterval = ((60 * 1000 / SMP.bpm) / 4) * 1000;
-  playTimer.update(playNoteInterval);
+  playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
+  playTimer.update((uint32_t)round(playNoteInterval));
   bpm_vol->pos[2] = GLOB.vol;
   
   // 9. RESET WAVE FILE IDS to defaults
