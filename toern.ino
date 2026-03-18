@@ -4979,7 +4979,10 @@ void showDoRecord() {
 }
 
 void checkSerialColors() {
-  // Check for color sync or brightness sync from web interface - works from any mode
+  extern bool inEtcSubmenu;
+  extern int getCurrentMenuMainSetting();
+  if (!inEtcSubmenu || getCurrentMenuMainSetting() != 41) return;
+
   if (Serial.available() >= 4) {
     if (Serial.peek() == 'C') {
       // Color sync: "COLR" header

@@ -39,7 +39,6 @@ static bool isBPMStable = false;                         // True if BPM has been
 static uint8_t midiClockTicks = 0;  // Resets every step (for step tracking)
 static uint16_t midiClockTickCounter = 0;  // Continuous counter for blinking (never resets, wraps at 65535)
 static bool initialBpmSyncDone = false;  // Track if initial background BPM sync is complete
-static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 4;   // Process limited messages per loop to maintain responsiveness
 
 // Function to check if external BPM is stable (for UI display)
 bool getBPMStable() {
@@ -149,76 +148,44 @@ void checkMidi() {
     }
   }
 
-  // No serial output for individual MIDI messages - only show calculated BPM
-  // Only Clock messages (0xF8) are used for BPM calculation
-  // Active Sensing (0xFE), Note messages, and others are IGNORED for BPM
-  
   // CRITICAL: Process Clock messages with ABSOLUTE PRIORITY and minimal overhead
   // When Note messages are in the buffer, they can delay Clock processing, causing timing jitter
   // Solution: Check message type FIRST, process Clock immediately with timestamp capture
   // before ANY other processing (including MIDI.getChannel() or MIDI.getData() calls)
-  
+
+  static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 4;
   uint8_t processedMessages = 0;
   while (MIDI.read()) {
-    // Get message type FIRST - this is fast and doesn't process the message
     uint8_t miditype = MIDI.getType();
-    
-    // Clock messages are handled via MIDI callback (handleMidiClock) for immediate processing
-    // MIDI.read() already triggered the callback, so skip manual processing
-    if (miditype == midi::Clock) {
-      continue;
-    }
-    
-    // NoteOn messages are handled via MIDI callback (handleNoteOn) for immediate processing
-    // MIDI.read() already triggered the callback, so skip manual processing
-    // This reduces latency - callback is triggered immediately when message arrives
-    // rather than processing it later in this loop
-    if (miditype == midi::NoteOn) {
-      continue;  // Skip - callback already handled it immediately
-    }
-    
-    // Process all other message types (non-time-critical) - these can have overhead
-    // Keep draining the input buffer even if we hit the per-loop processing cap,
-    // so clock messages behind heavy traffic still get handled immediately.
-    if (processedMessages >= MAX_MIDI_MESSAGES_PER_LOOP) {
-      continue;
-    }
-    uint8_t pitch, velocity, channel;
-    channel = MIDI.getChannel();
+
+    if (miditype == midi::Clock) continue;
+    if (miditype == midi::NoteOn) continue;  // handled by callback
+
+    if (processedMessages >= MAX_MIDI_MESSAGES_PER_LOOP) continue;
     processedMessages++;
 
     switch (miditype) {
-
-      case midi::NoteOff:
-        pitch = MIDI.getData1();
-        velocity = MIDI.getData2();
+      case midi::NoteOff: {
+        uint8_t pitch    = MIDI.getData1();
+        uint8_t velocity = MIDI.getData2();
         handleNoteOff(GLOB.currentChannel, pitch - 60, velocity);
         break;
-
+      }
       case midi::Stop:
         handleStop();
         break;
-
       case midi::PitchBend: {
-        // Map pitch bend (14-bit) to current channel fast filter
         uint16_t bend14 = (uint16_t)((MIDI.getData1() & 0x7F) | (MIDI.getData2() << 7));
         applyExternalFastFilter(bend14);
         break;
       }
-
       case midi::SongPosition:
         handleSongPosition(MIDI.getData1() | (MIDI.getData2() << 7));
         break;
-
       case midi::TimeCodeQuarterFrame:
         handleTimeCodeQuarterFrame(MIDI.getData1());
         break;
-
       default:
-        // Filter out messages that should NOT affect BPM calculation:
-        // - Active Sensing (0xFE) - ignore completely
-        // - Tune Request, System Exclusive, etc. - ignore
-        // Only Clock messages (0xF8) are used for BPM calculation
         break;
     }
   }
