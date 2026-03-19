@@ -80,7 +80,7 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"TRAN", 8, false, nullptr},          // MIDI Transport
   {"SEND", 13, false, nullptr},         // MIDI Send (CLCK, NOTE, BOTH)
   {"RCVE", 44, false, nullptr},         // MIDI Note Receive (OFF/NOTE)
-  {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 0-2500 ms
+  {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 0-127 ms
 };
 
 // VOL submenu pages
@@ -205,7 +205,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 33; // EEPROM_DATA_START + [0..32] (29-30 SEND, 31-32 RCVE)
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 33; // EEPROM_DATA_START + [0..32] (29 SEND, 31 RCVE, 1 byte each)
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -445,9 +445,9 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 26, 64);  // ledBrightness default (64, range 3-255)
       EEPROM.write(EEPROM_DATA_START + 27, 1);   // spkrEnabled default (1 = ON)
       EEPROM.write(EEPROM_DATA_START + 28, 1);   // midiNoteReceive default (1 = NOTE/on)
-      // Transport delays: slots 29-30 SEND (2 bytes), 31-32 RCVE (2 bytes)
-      EEPROM.put(EEPROM_DATA_START + 29, (uint16_t)17);
-      EEPROM.put(EEPROM_DATA_START + 31, (uint16_t)17);
+      // Transport delays: slot 29 SEND, slot 31 RCVE (1 byte each, 0-127)
+      EEPROM.write(EEPROM_DATA_START + 29, 17);
+      EEPROM.write(EEPROM_DATA_START + 31, 17);
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -562,25 +562,24 @@ void loadMenuFromEEPROM() {
   if (rcveValue > 1) { rcveValue = 1; saveSingleModeToEEPROM(28, 1); }
   MIDI_NOTE_RECEIVE = (rcveValue != 0);
 
-  // Load transport delay settings (slots 29-30 SEND, 31-32 RCVE, 2 bytes each, uint16_t 0-2500)
-  extern uint16_t transportSendDelayMs;
-  extern uint16_t transportRcveDelayMs;
+  // Load transport delay settings (slot 29 SEND, slot 31 RCVE, 1 byte each, uint8_t 0-127)
+  extern uint8_t transportSendDelayMs;
+  extern uint8_t transportRcveDelayMs;
   uint8_t s29 = EEPROM.read(EEPROM_DATA_START + 29);
-  uint8_t s30 = EEPROM.read(EEPROM_DATA_START + 30);
   uint8_t s31 = EEPROM.read(EEPROM_DATA_START + 31);
-  uint8_t s32 = EEPROM.read(EEPROM_DATA_START + 32);
-  // Migration: old 1-byte format had slot 29=SEND, slot 30=RCVE (0-100). Slots 31,32 were unused (0xFF).
-  if (s31 == 0xFF && s32 == 0xFF) {
-    transportSendDelayMs = (uint16_t)(s29 <= 100 ? s29 : 17);
-    transportRcveDelayMs = (uint16_t)(s30 <= 100 ? s30 : 17);
-    EEPROM.put(EEPROM_DATA_START + 29, transportSendDelayMs);
-    EEPROM.put(EEPROM_DATA_START + 31, transportRcveDelayMs);
+  // Migration: old 2-byte format used EEPROM.get. Old 1-byte had slot 31=0xFF, 29=SEND, 30=RCVE.
+  if (s31 == 0xFF) {
+    uint8_t s30 = EEPROM.read(EEPROM_DATA_START + 30);
+    transportSendDelayMs = (s29 <= 127) ? s29 : 17;
+    transportRcveDelayMs = (s30 <= 127) ? s30 : 17;
+    EEPROM.write(EEPROM_DATA_START + 29, transportSendDelayMs);
+    EEPROM.write(EEPROM_DATA_START + 31, transportRcveDelayMs);
   } else {
-    EEPROM.get(EEPROM_DATA_START + 29, transportSendDelayMs);
-    EEPROM.get(EEPROM_DATA_START + 31, transportRcveDelayMs);
+    transportSendDelayMs = (s29 <= 127) ? s29 : 17;
+    transportRcveDelayMs = (s31 <= 127) ? s31 : 17;
   }
-  if (transportSendDelayMs > 2500) { transportSendDelayMs = 17; EEPROM.put(EEPROM_DATA_START + 29, (uint16_t)17); }
-  if (transportRcveDelayMs > 2500) { transportRcveDelayMs = 17; EEPROM.put(EEPROM_DATA_START + 31, (uint16_t)17); }
+  if (transportSendDelayMs > 127) { transportSendDelayMs = 17; EEPROM.write(EEPROM_DATA_START + 29, 17); }
+  if (transportRcveDelayMs > 127) { transportRcveDelayMs = 17; EEPROM.write(EEPROM_DATA_START + 31, 17); }
 
   if (previewVol < 0 || previewVol > 50) {
     previewVol = 20;
@@ -754,10 +753,11 @@ void saveSingleModeToEEPROM(int index, int8_t value) {
   markSettingsBackupDirty();
 }
 
-static void saveTransportDelayToEEPROM(int slotBase, uint16_t value) {
-  EEPROM.put(EEPROM_DATA_START + slotBase, value);
+static void saveTransportDelayToEEPROM(int slotBase, uint8_t value) {
+  EEPROM.write(EEPROM_DATA_START + slotBase, value);
   markSettingsBackupDirty();
 }
+
 
 // Save samplepack 0 state to EEPROM (which voices are using sp0)
 void saveSp0StateToEEPROM() {
@@ -1536,10 +1536,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
-    case 45: // SYNC - Transport delay SNC1/SNC2 0-2500 ms - encoder 1: which, encoder 2: value
+    case 45: // SYNC - Transport delay SNC1/SNC2 0-127 ms - encoder 1: which, encoder 2: value
       {
-        extern uint16_t transportSendDelayMs;
-        extern uint16_t transportRcveDelayMs;
+        extern uint8_t transportSendDelayMs;
+        extern uint8_t transportRcveDelayMs;
         const CRGB tc = currentMenuParentTextColor();
         int syncEdit = (currentMode->pos[1] == 0) ? 0 : 1;
         drawText(syncEdit == 0 ? "SNC1" : "SNC2", 2, 10, tc);
@@ -2152,9 +2152,9 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 45: { // SYNC - Transport delay SNC1/SNC2 0-2500 ms
-      extern uint16_t transportSendDelayMs;
-      extern uint16_t transportRcveDelayMs;
+    case 45: { // SYNC - Transport delay SNC1/SNC2 0-127 ms
+      extern uint8_t transportSendDelayMs;
+      extern uint8_t transportRcveDelayMs;
       static int lastSyncEnc1 = -1;
       static int lastSyncEnc2 = -1;
       int syncEdit = (currentMode->pos[1] == 0) ? 0 : 1;
@@ -2164,7 +2164,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[1].writeMax((int32_t)1);
         Encoder[1].writeMin((int32_t)0);
         Encoder[2].writeCounter((int32_t)syncVal);
-        Encoder[2].writeMax((int32_t)2500);
+        Encoder[2].writeMax((int32_t)127);
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[1] = syncEdit;
         currentMode->pos[2] = syncVal;
@@ -2173,7 +2173,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         menuFirstEnter = false;
       }
       syncEdit = (int)currentMode->pos[1];
-      syncVal = constrain((int)currentMode->pos[2], 0, 2500);
+      syncVal = constrain((int)currentMode->pos[2], 0, 127);
       if (currentMode->pos[1] != lastSyncEnc1) {
         lastSyncEnc1 = syncEdit;
         syncVal = (syncEdit == 0) ? (int)transportSendDelayMs : (int)transportRcveDelayMs;
@@ -2185,10 +2185,10 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lastSyncEnc2 = syncVal;
         currentMode->pos[2] = syncVal;
         if (syncEdit == 0) {
-          transportSendDelayMs = (uint16_t)syncVal;
+          transportSendDelayMs = (uint8_t)syncVal;
           saveTransportDelayToEEPROM(29, transportSendDelayMs);
         } else {
-          transportRcveDelayMs = (uint16_t)syncVal;
+          transportRcveDelayMs = (uint8_t)syncVal;
           saveTransportDelayToEEPROM(31, transportRcveDelayMs);
         }
         redrawMain(setting);

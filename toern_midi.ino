@@ -7,8 +7,8 @@ extern bool isNowPlaying;
 extern bool MIDI_TRANSPORT_SEND;
 extern bool SMP_PATTERN_MODE;
 extern unsigned int beat;
-extern uint16_t transportSendDelayMs;
-extern uint16_t transportRcveDelayMs;
+extern uint8_t transportSendDelayMs;
+extern uint8_t transportRcveDelayMs;
 struct GlobalVars;
 extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
@@ -53,7 +53,7 @@ uint16_t getMidiClockTicks() {
   return midiClockTickCounter;
 }
 static uint8_t externalStepWithinPage = 0;  // Tracks external clock-derived step (1..maxX)
-static unsigned long transportStartDelayUntil = 0; // non-blocking start delay: fire playNote() after this µs timestamp
+static unsigned long transportStartDelayUntil = 0;
 static float midiClockSendBPM = 0.0f;
 static unsigned long midiClockIntervalUs = 0;
 static unsigned long midiNextClockMicros = 0;
@@ -356,7 +356,7 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           }
           playStartTime = millis();
 
-          // Defer first step by transportRcveDelayMs (0-2500). 0 = no delay, start immediately.
+          // Defer first step by transportRcveDelayMs (0-127). 0 = no delay.
           unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
           transportStartDelayUntil = micros() + delayUs;
         }
@@ -715,7 +715,7 @@ void handleStart() {
     MIDI.sendRealTime(midi::Start);
   }
 
-  // Start after transportRcveDelayMs (0-2500). 0 = no delay, start immediately.
+  // Start after transportRcveDelayMs (0-127). 0 = no delay.
   pendingStartOnBar = false;
   beatStartTime = millis();
 

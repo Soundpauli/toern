@@ -354,8 +354,8 @@ bool MIDI_NOTE_RECEIVE = true; // Control whether incoming MIDI notes are acted 
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
-uint16_t transportSendDelayMs = 17;   // 0-2500 ms, configurable in menu>MIDI>SYNC (delay play after send)
-uint16_t transportRcveDelayMs = 17;   // 0-2500 ms (delay play after receive)
+uint8_t transportSendDelayMs = 17;   // 0-127 ms, menu>MIDI>SYNC (delay play after send)
+uint8_t transportRcveDelayMs = 17;   // 0-127 ms (delay play after receive)
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
@@ -721,7 +721,7 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir);
 // Song arrangement data: 64 positions, each holds a pattern number (1-16, or 0 for empty)
 // Using SMP.songArrangement instead to save RAM1 (64 bytes saved)
 bool songModeActive = false;  // When true, playback follows song arrangement
-int currentSongPosition = 0;  // Current position in song arrangement (0-63)
+int currentSongPosition = 0;  // Current position in song arrangement (0-63), -1 = none
 
 // NEXT mode: pending page that will be jumped to when current page completes
 unsigned int pendingPage = 0;  // 0 = no pending page, otherwise page number to jump to
@@ -2359,6 +2359,23 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
     toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel], 0);
+  }
+
+  // SNC1/SNC2: encoder 2 long press = play/pause (like filter mode)
+  if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 2, 0) && was_buttons_0000(oldButtons)) {
+    extern bool inMidiSubmenu;
+    extern int getCurrentMenuMainSetting();
+    if (inMidiSubmenu && getCurrentMenuMainSetting() == 45) {
+      if (!isNowPlaying) {
+        play(true);
+      } else {
+        unsigned long currentTime = millis();
+        if (currentTime - playStartTime > 1000) {
+          pause(false);
+        }
+      }
+      return;
+    }
   }
 
   if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
@@ -6010,9 +6027,6 @@ void deleteActiveCopy() {
 
 void play(bool fromStart) {
   // Send MIDI Start when acting as master.
-  // IMPORTANT: Do NOT inject an extra 0xF8 here; the dedicated midiClockTimer ISR handles clock output.
-  // Injecting an early clock pulse and/or re-phasing the clock timer on play can make external BPM
-  // displays "dip/jiggle" momentarily.
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
     MIDI.sendRealTime(midi::Start);
   }
@@ -6096,8 +6110,8 @@ void play(bool fromStart) {
 
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
-      // Master mode: start internal clock. If transportSendDelayMs > 0, defer play until delay elapses.
-      extern uint16_t transportSendDelayMs;
+      // Master mode: if transportSendDelayMs > 0, defer play until delay elapses.
+      extern uint8_t transportSendDelayMs;
       extern void armMasterTransportStartDelay();
       resetMidiClockState();
       if (transportSendDelayMs == 0) {
