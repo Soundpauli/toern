@@ -354,6 +354,8 @@ bool MIDI_NOTE_RECEIVE = true; // Control whether incoming MIDI notes are acted 
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
+uint16_t transportSendDelayMs = 17;   // 0-2500 ms, configurable in menu>MIDI>SYNC (delay play after send)
+uint16_t transportRcveDelayMs = 17;   // 0-2500 ms (delay play after receive)
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
@@ -6094,34 +6096,35 @@ void play(bool fromStart) {
 
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
-      // Master mode: start internal clock and play immediately on the current beat
-      // Note: MIDI Start was already sent at the beginning of play() function for ~5ms advance
+      // Master mode: start internal clock. If transportSendDelayMs > 0, defer play until delay elapses.
+      extern uint16_t transportSendDelayMs;
+      extern void armMasterTransportStartDelay();
       resetMidiClockState();
-      isNowPlaying = true;
-      playStartTime = millis();
-
-      // Fire the very first step right away so beat 1 is heard as soon as Play is pressed.
-      // Subsequent steps will be driven by playTimer at regular intervals.
-      if (SMP.bpm > 0.0f) {
-        unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
-        playTimer.end();
-        playNote();                                          // Fire the downbeat right away
-        playTimer.begin(playNote, currentPlayNoteInterval);  // Re-align timer phase
-        // Start fill timer at 4x the beat rate
-        if (currentPlayNoteInterval >= 4) {
-          fillTimer.begin(playFillNote, currentPlayNoteInterval / 4);
+      if (transportSendDelayMs == 0) {
+        isNowPlaying = true;
+        playStartTime = millis();
+        if (SMP.bpm > 0.0f) {
+          unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+          playTimer.end();
+          playNote();
+          playTimer.begin(playNote, currentPlayNoteInterval);
+          if (currentPlayNoteInterval >= 4) {
+            fillTimer.begin(playFillNote, currentPlayNoteInterval / 4);
+          }
+        } else {
+          playNote();
         }
+        fillHasTriggered = false;
+        fillRunning = false;
+        fillSubTick = 0;
+        fillStartSubTick = 0;
+        fillActiveChannel = 0;
+        fillActiveVelocity = 0;
+        fillActiveRow = 0;
       } else {
-        playNote();
+        armMasterTransportStartDelay();
+        isNowPlaying = false;
       }
-      // Reset fill trigger flag on play start
-      fillHasTriggered = false;
-      fillRunning = false;
-      fillSubTick = 0;
-      fillStartSubTick = 0;
-      fillActiveChannel = 0;
-      fillActiveVelocity = 0;
-      fillActiveRow = 0;
     } else {
       // slave-mode: arm for the next bar-1 instead of starting now
       pendingStartOnBar = true;

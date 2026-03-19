@@ -7,6 +7,8 @@ extern bool isNowPlaying;
 extern bool MIDI_TRANSPORT_SEND;
 extern bool SMP_PATTERN_MODE;
 extern unsigned int beat;
+extern uint16_t transportSendDelayMs;
+extern uint16_t transportRcveDelayMs;
 struct GlobalVars;
 extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
@@ -137,15 +139,26 @@ void checkMidi() {
   // Fire deferred transport start once the non-blocking delay has elapsed
   if (transportStartDelayUntil && micros() >= transportStartDelayUntil) {
     transportStartDelayUntil = 0;
-    isNowPlaying = true;  // Arm exactly here - after the delay, before the first playNote()
+    isNowPlaying = true;
+    playStartTime = millis();
     if (SMP.bpm > 0) {
       unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
       playTimer.end();
       playNote();
       playTimer.begin(playNote, currentPlayNoteInterval);
+      if (currentPlayNoteInterval >= 4) {
+        fillTimer.begin(playFillNote, currentPlayNoteInterval / 4);
+      }
     } else {
       playNote();
     }
+    fillHasTriggered = false;
+    fillRunning = false;
+    fillSubTick = 0;
+    fillStartSubTick = 0;
+    fillActiveChannel = 0;
+    fillActiveVelocity = 0;
+    fillActiveRow = 0;
   }
 
   // CRITICAL: Process Clock messages with ABSOLUTE PRIORITY and minimal overhead
@@ -343,10 +356,8 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           }
           playStartTime = millis();
 
-          // Defer first step by one MIDI clock pulse (non-blocking) so the clock settles.
-          unsigned long delayUs = (SMP.bpm > 0)
-            ? (unsigned long)(60000000.0f / (SMP.bpm * 24.0f))
-            : 10000UL;
+          // Defer first step by transportRcveDelayMs (0-2500). 0 = no delay, start immediately.
+          unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
           transportStartDelayUntil = micros() + delayUs;
         }
       }
@@ -704,20 +715,18 @@ void handleStart() {
     MIDI.sendRealTime(midi::Start);
   }
 
-  // Start after a short non-blocking delay so the external clock has time to settle.
-  // Delay = 1 MIDI clock pulse at current BPM: 60,000,000 / (bpm * 24)
-  // Falls back to ~10 ms at unknown BPM.
-  // Keep isNowPlaying = false until checkMidi() fires the deferred playNote(),
-  // so the background playTimer ISR cannot race and play beat 1 early.
+  // Start after transportRcveDelayMs (0-2500). 0 = no delay, start immediately.
   pendingStartOnBar = false;
   beatStartTime = millis();
 
-  unsigned long delayUs = (SMP.bpm > 0)
-    ? (unsigned long)(60000000.0f / (SMP.bpm * 24.0f))
-    : 10000UL;
+  unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
   transportStartDelayUntil = micros() + delayUs;
 }
 
+
+void armMasterTransportStartDelay() {
+  transportStartDelayUntil = micros() + (unsigned long)transportSendDelayMs * 1000UL;
+}
 
 void handleTimeCodeQuarterFrame(uint8_t data) {
   // Called on receiving a MIDI Time Code Quarter Frame message.
