@@ -1,7 +1,7 @@
 // External variables
 extern float detune[13]; // Global detune array for channels 1-12
 extern float channelOctave[9]; // Global octave array for channels 1-8
-extern DMAMEM uint8_t waveformsArray[2][5]; // Waveform array for instrument channels
+extern uint8_t waveformsArray[2][5]; // Lives in DTCM (see toern_synths.ino); must not be DMAMEM on T4
 
 // External functions
 void handleWaveformChange(int index, unsigned int waveformType);

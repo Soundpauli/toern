@@ -2,34 +2,100 @@
 #define INSTRUMENT_CHANNELS 2
 #define MAXSLIDER 32.0 // float version of maxfilterResonance
 
-#define AUTO_OFF_TIME 1800  // milliseconds
-DMAMEM unsigned long voiceStartTime[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };
+// (1) Synth globals must not use DMAMEM on Teensy 4.x: OCRAM is cleared at boot and static
+//     initializers are ignored, so waveform/pulse/volume defaults were lost.
+// (2) Explicit per-channel initializers below.
 
-DMAMEM int16_t cents[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };  // Changed from int to int16_t
-DMAMEM int16_t semitones[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };  // Changed from int to int16_t
-DMAMEM int16_t pan[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0, 0, 0 };  // Changed from int to int16_t
-DMAMEM uint8_t volume[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint8_t
+#define NOTE_EMPTY ((int16_t)-1)
 
-DMAMEM uint16_t attackAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
-DMAMEM uint16_t decayAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
-DMAMEM float sustainAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1, 1, 1 };
-DMAMEM uint16_t releaseAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
+unsigned long voiceStartTime[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 0, 0, 0 },
+  { 0, 0, 0 },
+};
 
-DMAMEM uint16_t attackFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
-DMAMEM uint16_t decayFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
-DMAMEM float sustainFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1, 1, 1 };
-DMAMEM uint16_t releaseFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = { 100, 100, 100 };  // Changed from int to uint16_t
+int16_t cents[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 0, 0, 0 },
+  { 0, 0, 0 },
+};
+int16_t semitones[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 0, 0, 0 },
+  { 0, 0, 0 },
+};
+int16_t pan[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 0, 0, 0 },
+  { 0, 0, 0 },
+};
+uint8_t volume[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 100, 100, 100 },
+  { 100, 100, 100 },
+};
 
-DMAMEM uint16_t cutoff[INSTRUMENT_CHANNELS][POLY_VOICES] = { 1000, 1000, 1000 };  // Changed from int to uint16_t
-DMAMEM float resonance[INSTRUMENT_CHANNELS][POLY_VOICES] = { 2.0, 2.0, 2.0 };
-DMAMEM float filterAmount[INSTRUMENT_CHANNELS][POLY_VOICES] = { 2.0, 2.0, 2.0 };
+uint16_t attackAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 100, 100, 100 },
+  { 100, 100, 100 },
+};
+uint16_t decayAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 100, 100, 100 },
+  { 100, 100, 100 },
+};
+float sustainAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 1, 1, 1 },
+  { 1, 1, 1 },
+};
+uint16_t releaseAmp[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 100, 100, 100 },
+  { 100, 100, 100 },
+};
 
-DMAMEM uint8_t waveforms[INSTRUMENT_CHANNELS][POLY_VOICES] = { WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH };  // Changed from int to uint8_t
-DMAMEM uint8_t waveformsArray[INSTRUMENT_CHANNELS][5] = { WAVEFORM_SAWTOOTH, WAVEFORM_PULSE, WAVEFORM_SQUARE, WAVEFORM_TRIANGLE, WAVEFORM_SINE };  // Changed from int to uint8_t
-DMAMEM float pulseWidth[INSTRUMENT_CHANNELS][POLY_VOICES] = { 0.25, 0.25, 0.25 };
+uint16_t attackFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 100, 100, 100 },
+  { 100, 100, 100 },
+};
+uint16_t decayFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 100, 100, 100 },
+  { 100, 100, 100 },
+};
+float sustainFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 1, 1, 1 },
+  { 1, 1, 1 },
+};
+uint16_t releaseFilter[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 100, 100, 100 },
+  { 100, 100, 100 },
+};
 
-DMAMEM int16_t noteArray[INSTRUMENT_CHANNELS][8];  // Changed from int to int16_t
-DMAMEM int16_t notePlaying[2] = { 0 };  // Changed from int to int16_t
+uint16_t cutoff[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 1000, 1000, 1000 },
+  { 1000, 1000, 1000 },
+};
+float resonance[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 2.0f, 2.0f, 2.0f },
+  { 2.0f, 2.0f, 2.0f },
+};
+float filterAmount[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 2.0f, 2.0f, 2.0f },
+  { 2.0f, 2.0f, 2.0f },
+};
+
+uint8_t waveforms[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH },
+  { WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH, WAVEFORM_SAWTOOTH },
+};
+uint8_t waveformsArray[INSTRUMENT_CHANNELS][5] = {
+  { WAVEFORM_SAWTOOTH, WAVEFORM_PULSE, WAVEFORM_SQUARE, WAVEFORM_TRIANGLE, WAVEFORM_SINE },
+  { WAVEFORM_SAWTOOTH, WAVEFORM_PULSE, WAVEFORM_SQUARE, WAVEFORM_TRIANGLE, WAVEFORM_SINE },
+};
+float pulseWidth[INSTRUMENT_CHANNELS][POLY_VOICES] = {
+  { 0.25f, 0.25f, 0.25f },
+  { 0.25f, 0.25f, 0.25f },
+};
+
+// (3)(4) Empty slots use NOTE_EMPTY so MIDI note 0 is not treated as "no note".
+int16_t noteArray[INSTRUMENT_CHANNELS][8] = {
+  { NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY },
+  { NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY, NOTE_EMPTY },
+};
+int16_t notePlaying[INSTRUMENT_CHANNELS] = { 0, 0 };
 
 
 
@@ -513,6 +579,13 @@ void chiptune_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 
 
 
+// waveforms[ch][osc] selects column 0–4 in waveformsArray (saw/pulse/square/tri/sine).
+static inline uint8_t synthWaveformBeginType(int ch, int oscIdx) {
+  uint8_t col = waveforms[ch][oscIdx];
+  if (col > 4) col = 4;
+  return waveformsArray[ch][col];
+}
+
 //–––––– updateVals() Function ––––––//
 // This function updates all the audio objects based on the current global parameters.
 void updateVals(int ch) {
@@ -539,49 +612,15 @@ void updateVals(int ch) {
     SenvelopeFilter1[i]->sustain(sustainFilter[ch][i]);
     SenvelopeFilter1[i]->release(releaseFilter[ch][i]);
 
-    // Set waveform for oscillator 1 (waveform1)
-    if (waveforms[ch][0] == 0) {
-      Swaveform1[i]->begin(waveformsArray[ch][0]);
-    } else if (waveforms[ch][0] == 1) {
-      Swaveform1[i]->begin(waveformsArray[ch][1]);
-    } else if (waveforms[ch][0] == 2) {
-      Swaveform1[i]->begin(waveformsArray[ch][2]);
-    } else if (waveforms[ch][0] == 3) {
-      Swaveform1[i]->begin(waveformsArray[ch][POLY_VOICES]);
-    } else if (waveforms[ch][0] == 4) {
-      Swaveform1[i]->begin(waveformsArray[ch][4]);
-    }
+    Swaveform1[i]->begin(synthWaveformBeginType(ch, 0));
     Swaveform1[i]->amplitude(1.0);
     Swaveform1[i]->pulseWidth(pulseWidth[ch][0]);
 
-    // Set waveform for oscillator 2 (waveform2)
-    if (waveforms[ch][1] == 0) {
-      Swaveform2[i]->begin(waveformsArray[ch][0]);
-    } else if (waveforms[ch][1] == 1) {
-      Swaveform2[i]->begin(waveformsArray[ch][1]);
-    } else if (waveforms[ch][1] == 2) {
-      Swaveform2[i]->begin(waveformsArray[ch][2]);
-    } else if (waveforms[ch][1] == 3) {
-      Swaveform2[i]->begin(waveformsArray[ch][POLY_VOICES]);
-    } else if (waveforms[ch][1] == 4) {
-      Swaveform2[i]->begin(waveformsArray[ch][4]);
-    }
+    Swaveform2[i]->begin(synthWaveformBeginType(ch, 1));
     Swaveform2[i]->amplitude(1.0);
     Swaveform2[i]->pulseWidth(pulseWidth[ch][1]);
 
-    // Set waveform for oscillator 3 (waveform3)
-    if (waveforms[ch][2] == 0) {
-      Swaveform3[i]->begin(waveformsArray[ch][0]);
-    } else if (waveforms[ch][2] == 1) {
-      Swaveform3[i]->begin(waveformsArray[ch][1]);
-    } else if (waveforms[ch][2] == 2) {
-      Swaveform3[i]->begin(waveformsArray[ch][2]);
-    } else if (waveforms[ch][2] == 3) {
-      Swaveform3[i]->begin(waveformsArray[ch][POLY_VOICES]);
-    } else if (waveforms[ch][2] == 4) {
-      Swaveform3[i]->begin(waveformsArray[ch][4]);
-    }
-
+    Swaveform3[i]->begin(synthWaveformBeginType(ch, 2));
     Swaveform3[i]->amplitude(1.0);
     Swaveform3[i]->pulseWidth(pulseWidth[ch][2]);
 
@@ -629,14 +668,9 @@ void playSound(int note, int ch) {
   noteIdx2 = constrain(noteIdx2, 0, NOTES_ARRAY_SIZE - 1);
   
   stopSound(note, ch);
-  notePlaying[ch] += 1;
-  if (notePlaying[ch] >= POLY_VOICES) {
-    notePlaying[ch] = 0;
-  }
-  
-  // Bounds check: notePlaying[ch] should be 0-2, and noteArray[ch] has 8 elements (0-7)
-  // But notePlaying[ch] is constrained to 0-2, so this should be safe
-  int voiceIdx = constrain(notePlaying[ch], 0, POLY_VOICES - 1);
+  // Use current slot first, then advance (was: increment before use → first notes skipped voice 0).
+  int voiceIdx = notePlaying[ch] % POLY_VOICES;
+  notePlaying[ch] = (notePlaying[ch] + 1) % POLY_VOICES;
   noteArray[ch][voiceIdx] = note;
   voiceStartTime[ch][voiceIdx] = millis();  // Record the start time for this voice
 
@@ -655,15 +689,36 @@ void playSound(int note, int ch) {
 
 
 
-// This function checks each voice and auto-offs active notes after AUTO_OFF_TIME.
+// Grid preview often doesn't send note-off; we fake it after a per-instrument timeout.
+// Presets with sustainAmp>0 would otherwise ring until AUTO_OFF (felt "infinite" at ~2s).
+static unsigned synthAutoOffMsForInstrument(int inst) {
+  static const uint16_t kMs[10] = {
+    450,   // BASS   — pluck, short
+    520,   // KEYS
+    260,   // CHIPTUNE — chirp / staccato
+    1700,  // PAD — needs long body
+    750,   // WOW
+    580,   // ORGAN
+    520,   // FLUTE (sustain 1.0 → needs gate)
+    460,   // LEAD
+    480,   // ARP (sustain 1.0)
+    700,   // BRASS
+  };
+  inst = constrain(inst, 0, 9);
+  return kMs[inst];
+}
+
+// This function checks each voice and auto-offs active notes after the per-instrument gate.
 void autoOffActiveNotes() {
   ////Serial.println(persistentNoteOn[11]);
 if (pressedKeyCount[11]>=1) return;
   unsigned long currentTime = millis();
+  int inst = constrain((int)SMP.synth_settings[11][INSTRUMENT], 0, 9);
+  unsigned long offMs = synthAutoOffMsForInstrument(inst);
   for (int ch = 0; ch < 2; ch++) {
     for (int i = 0; i < POLY_VOICES; i++) {
-      if (noteArray[ch][i] != 0) {  // There is an active note on this voice.
-        if (currentTime - voiceStartTime[ch][i] >= AUTO_OFF_TIME) {
+      if (noteArray[ch][i] != NOTE_EMPTY) {  // There is an active note on this voice.
+        if (currentTime - voiceStartTime[ch][i] >= offMs) {
           stopSound(noteArray[ch][i], ch);  // This will call noteOff on all envelopes for that note.
         }
       }
@@ -678,7 +733,7 @@ void stopSound(int note, int ch) {
       Senvelope1[num]->noteOff();
       Senvelope2[num]->noteOff();
       SenvelopeFilter1[num]->noteOff();
-      noteArray[ch][num] = 0;
+      noteArray[ch][num] = NOTE_EMPTY;
     }
   }
 }

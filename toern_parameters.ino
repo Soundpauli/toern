@@ -130,6 +130,67 @@ void setSynthDefaultValues(int ch) {
    // updateSynthVoice(11) is called at the end of resetAllToDefaults() instead
 }
 
+// When ch11 instrument (INST) changes, align synth sliders with that preset’s intended defaults.
+// `*_synth()` uses CUTOFF/RES/FILTER (p1–p3), SEMI (p4) for detune spread, CENT (p5) for octave override
+// `octave[ch] = 1.0 + (p5/MAXSLIDER)*7`, and FORM (p6) for osc1 wavetable index — see toern_synths.ino.
+void applySynthInstrumentPreset(int channel, int instrumentIdx) {
+  if (channel != 11) return;
+  instrumentIdx = constrain(instrumentIdx, 0, 9);
+
+  // Base octave at start of each preset (before p5 override). Maps to CENT slider via 1..8 octave formula.
+  static const uint8_t kCentSliderDefault[10] = {
+    5,   // 0 BASS   — octave 2
+    14,  // 1 KEYS   — octave 4
+    14,  // 2 CHIPTUNE
+    14,  // 3 PAD
+    14,  // 4 WOW
+    18,  // 5 ORGAN  — octave 5
+    18,  // 6 FLUTE  — octave 5
+    14,  // 7 LEAD
+    18,  // 8 ARP    — octave 5
+    14,  // 9 BRASS
+  };
+
+  // p1–p3 drive cutoff / resonance / filter amount in *_synth(). All zeros → same dark 400 Hz
+  // timbre for every preset; give each instrument distinct starting CUT/RES/FILT (0..32).
+  static const uint8_t kCutDefault[10] = {
+    7,   // BASS — darker
+    14,  // KEYS — mid
+    26,  // CHIPTUNE — bright / buzzy
+    11,  // PAD — warm low-mid
+    15,  // WOW
+    10,  // ORGAN
+    17,  // FLUTE — airy
+    21,  // LEAD — bright lead
+    16,  // ARP
+    13,  // BRASS
+  };
+  static const uint8_t kResDefault[10] = {
+    10, 7, 5, 12, 10, 6, 8, 14, 9, 15,
+  };
+  static const uint8_t kFiltDefault[10] = {
+    13, 12, 9, 15, 11, 13, 14, 17, 12, 14,
+  };
+
+  SMP.synth_settings[channel][CUTOFF] = kCutDefault[instrumentIdx];
+  uint8_t filt = kFiltDefault[instrumentIdx];
+  uint8_t res = kResDefault[instrumentIdx];
+  // High resonance + non-zero filter amount sounds harsh; ease RES whenever FLT is active.
+  if (filt > 0) {
+    res = (uint8_t)((res * 2) / 3);
+  }
+  SMP.synth_settings[channel][RESONANCE] = res;
+  SMP.synth_settings[channel][FILTER] = filt;
+  SMP.synth_settings[channel][SEMI] = 16;  // mid → zero extra cent/semi offset from p4 mapping
+  SMP.synth_settings[channel][CENT] = kCentSliderDefault[instrumentIdx];
+  // p6 → newWaveform = floor((FORM/32)*8). CHIPTUNE preset uses 1,1,1 then overwrites [0]; FORM must
+  // yield newWaveform==1 so osc1 stays pulse like osc2/3 (not saw at 0).
+  static const uint8_t kFormDefault[10] = {
+    0, 0, 4, 0, 0, 0, 0, 0, 0, 0,
+  };
+  SMP.synth_settings[channel][FORM] = kFormDefault[instrumentIdx];
+}
+
 
 
 

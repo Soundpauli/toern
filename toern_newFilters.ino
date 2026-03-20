@@ -1,6 +1,9 @@
 extern const uint8_t filterPageCount[NUM_CHANNELS];
 extern uint8_t filterPage[NUM_CHANNELS];
 
+// Defined in toern_parameters.ino — resets CUT/RES/FLT/SEMI/CENT/FORM when ch11 instrument changes.
+void applySynthInstrumentPreset(int channel, int instrumentIdx);
+
 static bool channelHasFreeverb(uint8_t chan) {
   return !(chan == 3 || chan == 4);
 }
@@ -474,7 +477,10 @@ void processAdjustments_new(uint8_t page) {
 
       case ARR_SYNTH:
         SMP.synth_settings[chan][d.idx] = currentMode->pos[i];
-        
+        if (chan == 11 && d.idx == INSTRUMENT) {
+          applySynthInstrumentPreset(chan, (int)constrain(currentMode->pos[i], 0, 9));
+          initSliders(filterPage[chan], chan);
+        }
         break;
 
       case ARR_PARAM:
