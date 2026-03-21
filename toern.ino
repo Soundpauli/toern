@@ -2134,7 +2134,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     switchMode(&set_Wav);  // Switch to showWave mode
 
     // Use direct SD playback (same as first preview in showWave)
-    char OUTPUTf[50];
+    char OUTPUTf[160];
     buildSamplePath(fnr, fileNum, OUTPUTf, sizeof(OUTPUTf));
 
     if (previewTriggerMode == PREVIEW_MODE_ON) {
@@ -4871,7 +4871,7 @@ void showDoRecord() {
         if (pressed[2] && !lastPressed2) {
           int fnr = (int)SMP.wav[GLOB.currentChannel].oldID;
           int fileNum = (int)SMP.wav[GLOB.currentChannel].fileID;
-          char path[50];
+          char path[160];
           buildSamplePath(fnr, fileNum, path, sizeof(path));
 
           if (playSdWav1.isPlaying()) playSdWav1.stop();

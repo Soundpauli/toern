@@ -3,7 +3,7 @@ extern int8_t channelDirection[maxFiles];
 extern bool manifestLoaded;
 extern uint16_t manifestFolderCount;
 extern uint16_t manifestFileCount[];
-extern char manifestFolderNames[][32];
+extern char manifestFolderNames[][96];  // MANIFEST_FOLDER_PATH_MAX in toern_helpers.ino
 bool scanAndWriteManifest();
 extern int previewTriggerMode;
 extern const int PREVIEW_MODE_ON;
@@ -17,7 +17,7 @@ static int lastEncoder3Value_forShowWave = -1;
 struct PeakScanState {
   File f;
   bool active = false;
-  char path[64] = {0};
+  char path[160] = {0};
   uint32_t dataStart = 0;
   uint32_t dataSize = 0;
   uint32_t totalSamples = 0;     // 16-bit samples
@@ -240,7 +240,7 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
   if (playSdWav1.isPlaying()) playSdWav1.stop();
   envelope0.noteOff();
   
-  char OUTPUTf[64];
+  char OUTPUTf[160];
   buildSamplePath(folder, sampleID, OUTPUTf, sizeof(OUTPUTf));
 
   // When encoder(0) is pressed, behave like seek > 0: skip full range path, just play audio
@@ -699,7 +699,7 @@ void showWave() {
   if (folderIdx < 0) folderIdx = 0;
   int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
   if (fileIdx < 1) fileIdx = 1;
-  char OUTPUTf[64];
+  char OUTPUTf[160];
   buildSamplePath(folderIdx, fileIdx, OUTPUTf, sizeof(OUTPUTf));
   
   firstcheck = false;
@@ -1045,7 +1045,7 @@ void showWave() {
       lastScrollFolder = folderIdx;
     }
 
-    char folderLabel[32];
+    char folderLabel[96];  // nested folder paths (see MANIFEST_FOLDER_PATH_MAX)
     char fileLabel[32];
     // Always use manifest mode - never use legacy mode
     if (!manifestLoaded) {
@@ -1233,7 +1233,7 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     
     // Load the sample into cache without triggering preview playback
     // We'll manually load it into sampled[0] and set up the cache
-    char OUTPUTf[64];
+    char OUTPUTf[160];
     buildSamplePath(folderIdx, fileIdx, OUTPUTf, sizeof(OUTPUTf));
     
     yield(); // Yield before SD.open() to prevent blocking main sequencer

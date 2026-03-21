@@ -81,8 +81,10 @@ extern unsigned int RefreshTime;  // Display refresh timing (30 FPS = 33ms per f
 const int MANIFEST_MAX_FOLDERS = 32;
 const int MANIFEST_MAX_FILES_PER_FOLDER = 999;  // Increased from 255 to handle up to 999 files per folder
 const int MANIFEST_NAME_MAX = 32;  // incl null (increased from 24 to handle longer filenames)
+// Relative path under samples/ (e.g. "kit/kicks"); may include multiple segments — keep in sync with toern_sample.ino extern
+const int MANIFEST_FOLDER_PATH_MAX = 96;
 
-EXTMEM char manifestFolderNames[MANIFEST_MAX_FOLDERS][MANIFEST_NAME_MAX];
+EXTMEM char manifestFolderNames[MANIFEST_MAX_FOLDERS][MANIFEST_FOLDER_PATH_MAX];
 EXTMEM char manifestFileNames[MANIFEST_MAX_FOLDERS][MANIFEST_MAX_FILES_PER_FOLDER][MANIFEST_NAME_MAX];
 EXTMEM uint16_t manifestFileCount[MANIFEST_MAX_FOLDERS] = {0};
 uint16_t manifestFolderCount = 0;
@@ -99,13 +101,105 @@ static bool hasWavExt(const char* name) {
   return (ext[0] == '.' || ext[0] == '.') && (tolower(ext[1]) == 'w') && (tolower(ext[2]) == 'a') && (tolower(ext[3]) == 'v');
 }
 
+static void copyBaseName(const char* rawName, char* out, size_t outSz) {
+  const char* base = rawName ? rawName : "";
+  const char* slash = strrchr(base, '/');
+  if (slash) base = slash + 1;
+  strncpy(out, base, outSz - 1);
+  out[outSz - 1] = 0;
+}
+
+// Recursively add manifest entries: each folder path is relative to samples/ (e.g. "a/b").
+// A directory that contains .wav files becomes one entry; subfolders are scanned separately.
+static void recurseScanSamples(const char* relPath) {
+  char path[MANIFEST_FOLDER_PATH_MAX + 24];
+  if (relPath[0] == '\0') {
+    strncpy(path, "samples", sizeof(path));
+    path[sizeof(path) - 1] = 0;
+  } else {
+    snprintf(path, sizeof(path), "samples/%s", relPath);
+  }
+  File dir = SD.open(path);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return;
+  }
+
+  const int MAX_SUBDIRS = 32;
+  char subdirs[MAX_SUBDIRS][MANIFEST_NAME_MAX];
+  int nSub = 0;
+  int wavCount = 0;
+
+  File fe;
+  while ((fe = dir.openNextFile())) {
+    if (fe.isDirectory()) {
+      char base[MANIFEST_NAME_MAX];
+      copyBaseName(fe.name(), base, sizeof(base));
+      if (base[0] && base[0] != '.' && nSub < MAX_SUBDIRS) {
+        strncpy(subdirs[nSub], base, MANIFEST_NAME_MAX - 1);
+        subdirs[nSub][MANIFEST_NAME_MAX - 1] = 0;
+        nSub++;
+      }
+      fe.close();
+    } else {
+      char fbase[MANIFEST_NAME_MAX];
+      copyBaseName(fe.name(), fbase, sizeof(fbase));
+      if (fbase[0] && fbase[0] != '.' && hasWavExt(fbase)) wavCount++;
+      fe.close();
+    }
+  }
+  dir.close();
+
+  if (wavCount > 0 && manifestFolderCount < MANIFEST_MAX_FOLDERS) {
+    int fidx = manifestFolderCount++;
+    strncpy(manifestFolderNames[fidx], relPath, MANIFEST_FOLDER_PATH_MAX - 1);
+    manifestFolderNames[fidx][MANIFEST_FOLDER_PATH_MAX - 1] = 0;
+    manifestFileCount[fidx] = 0;
+
+    dir = SD.open(path);
+    if (dir && dir.isDirectory()) {
+      while ((fe = dir.openNextFile())) {
+        if (!fe.isDirectory()) {
+          char fbase[MANIFEST_NAME_MAX];
+          copyBaseName(fe.name(), fbase, sizeof(fbase));
+          if (fbase[0] && fbase[0] != '.' && hasWavExt(fbase)) {
+            int fi = manifestFileCount[fidx];
+            if (fi < MANIFEST_MAX_FILES_PER_FOLDER) {
+              strncpy(manifestFileNames[fidx][fi], fbase, MANIFEST_NAME_MAX - 1);
+              manifestFileNames[fidx][fi][MANIFEST_NAME_MAX - 1] = 0;
+              manifestFileCount[fidx]++;
+            }
+          }
+        }
+        fe.close();
+      }
+    }
+    if (dir) dir.close();
+  }
+
+  for (int i = 0; i < nSub; i++) {
+    char child[MANIFEST_FOLDER_PATH_MAX];
+    if (relPath[0] == '\0') {
+      strncpy(child, subdirs[i], sizeof(child));
+    } else {
+      snprintf(child, sizeof(child), "%s/%s", relPath, subdirs[i]);
+    }
+    child[sizeof(child) - 1] = 0;
+    recurseScanSamples(child);
+  }
+}
+
 // Generate next numeric filename: rec001.wav ... rec999.wav
 void generateNextNumericName(int folderIdx, char* outName, size_t outSize) {
   const char* folderName = (manifestLoaded && folderIdx < manifestFolderCount) ? manifestFolderNames[folderIdx] : "0";
-  char path[96];
+  char path[160];
   for (int n = 1; n < 1000; ++n) {
     snprintf(outName, outSize, "rec_%02d.wav", n);
-    snprintf(path, sizeof(path), "samples/%s/%s", folderName, outName);
+    if (folderName && folderName[0]) {
+      snprintf(path, sizeof(path), "samples/%s/%s", folderName, outName);
+    } else {
+      snprintf(path, sizeof(path), "samples/%s", outName);
+    }
     if (!SD.exists(path)) return;
   }
   // fallback
@@ -124,7 +218,7 @@ static void clearSampleManifest() {
   manifestLoaded = false;
 }
 
-// Plain text manifest: lines "folder:<name>" then "file:<name>" ... blank lines allowed
+// Plain text manifest: lines "folder:<relative path>" (use / for nested dirs under samples/) then "file:<name>" ... blank lines allowed
 // Path for manifest: "samples/map.txt"
 bool loadSampleManifest() {
   clearSampleManifest();
@@ -142,7 +236,7 @@ bool loadSampleManifest() {
       currentFolder = manifestFolderCount++;
       String name = line.substring(7);
       name.trim();
-      name.toCharArray(manifestFolderNames[currentFolder], MANIFEST_NAME_MAX);
+      name.toCharArray(manifestFolderNames[currentFolder], MANIFEST_FOLDER_PATH_MAX);
       manifestFileCount[currentFolder] = 0;
     } else if (line.startsWith("file:") && currentFolder >= 0) {
       int fi = manifestFileCount[currentFolder];
@@ -169,75 +263,23 @@ bool scanAndWriteManifest() {
   }
   
   clearSampleManifest();
-  File root = SD.open("samples");
-  if (!root || !root.isDirectory()) {
+  File rootProbe = SD.open("samples");
+  if (!rootProbe || !rootProbe.isDirectory()) {
+    if (rootProbe) rootProbe.close();
     return false;
   }
+  rootProbe.close();
 
-  File entry;
-  while ((entry = root.openNextFile())) {
-    if (!entry.isDirectory()) { entry.close(); continue; }
-    const char* rawName = entry.name();
-    if (rawName && rawName[0] == '.') { entry.close(); continue; } // skip hidden
-    if (manifestFolderCount >= MANIFEST_MAX_FOLDERS) { entry.close(); continue; }
-    char fname[MANIFEST_NAME_MAX];
-    // Some SD libs return a path; keep only the last path component.
-    const char* base = rawName ? rawName : "";
-    const char* slash = strrchr(base, '/');
-    if (slash) base = slash + 1;
-    strncpy(fname, base, MANIFEST_NAME_MAX - 1);
-    fname[MANIFEST_NAME_MAX - 1] = 0;
-    int fidx = manifestFolderCount++;
-    strncpy(manifestFolderNames[fidx], fname, MANIFEST_NAME_MAX - 1);
-    manifestFolderNames[fidx][MANIFEST_NAME_MAX - 1] = 0;
-    manifestFileCount[fidx] = 0;
-
-    // scan files
-    File fileEntry;
-    int filesScanned = 0;
-    int filesSkipped = 0;
-    while ((fileEntry = entry.openNextFile())) {
-      if (fileEntry.isDirectory()) { fileEntry.close(); continue; }
-      const char* nm = fileEntry.name();
-      if (nm && nm[0] == '.') { fileEntry.close(); continue; } // skip hidden files
-      // Keep only the base name (strip any path)
-      const char* fbase = nm ? nm : "";
-      const char* fslash = strrchr(fbase, '/');
-      if (fslash) fbase = fslash + 1;
-      filesScanned++;
-      if (!hasWavExt(fbase)) { 
-        fileEntry.close(); 
-        filesSkipped++;
-        continue; 
-      }
-      int fi = manifestFileCount[fidx];
-      if (fi < MANIFEST_MAX_FILES_PER_FOLDER) {
-        int nameLen = strlen(fbase);
-        if (nameLen >= MANIFEST_NAME_MAX) {
-        }
-        strncpy(manifestFileNames[fidx][fi], fbase, MANIFEST_NAME_MAX - 1);
-        manifestFileNames[fidx][fi][MANIFEST_NAME_MAX - 1] = 0;
-        manifestFileCount[fidx]++;
-      } else {
-        fileEntry.close();
-        break; // Stop scanning this folder
-      }
-      fileEntry.close();
-    }
-    if (filesScanned > 0) {
-    }
-    entry.close();
-  }
-  root.close();
+  recurseScanSamples("");
 
   // Sort folders alphabetically (0-9 then a-z via strcasecmp)
   for (int i = 0; i < (int)manifestFolderCount - 1; ++i) {
     for (int j = i + 1; j < (int)manifestFolderCount; ++j) {
       if (cmpName(manifestFolderNames[i], manifestFolderNames[j]) > 0) {
-        char tmpName[MANIFEST_NAME_MAX];
-        memcpy(tmpName, manifestFolderNames[i], MANIFEST_NAME_MAX);
-        memcpy(manifestFolderNames[i], manifestFolderNames[j], MANIFEST_NAME_MAX);
-        memcpy(manifestFolderNames[j], tmpName, MANIFEST_NAME_MAX);
+        char tmpName[MANIFEST_FOLDER_PATH_MAX];
+        memcpy(tmpName, manifestFolderNames[i], MANIFEST_FOLDER_PATH_MAX);
+        memcpy(manifestFolderNames[i], manifestFolderNames[j], MANIFEST_FOLDER_PATH_MAX);
+        memcpy(manifestFolderNames[j], tmpName, MANIFEST_FOLDER_PATH_MAX);
         // swap counts and file arrays
         uint16_t tmpCnt = manifestFileCount[i];
         manifestFileCount[i] = manifestFileCount[j];
@@ -297,7 +339,7 @@ bool scanAndWriteManifest() {
 }
 
 // Build sample path using manifest (required). No numeric fallback.
-// - folderIdx: 0..manifestFolderCount-1
+// - folderIdx: 0..manifestFolderCount-1 (folder name may be "a/b" for nested dirs)
 // - fileIdx: 1..manifestFileCount[folderIdx] (or fileCount+1 for NEW slot)
 void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
   if (outSize > 0) out[0] = '\0';
@@ -316,7 +358,11 @@ void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
       generateNextNumericName(folderIdx, newName, sizeof(newName));
       fileName = newName;
     }
-    snprintf(out, outSize, "samples/%s/%s", (folderName && folderName[0]) ? folderName : "0", fileName);
+    if (folderName && folderName[0]) {
+      snprintf(out, outSize, "samples/%s/%s", folderName, fileName);
+    } else {
+      snprintf(out, outSize, "samples/%s", fileName);
+    }
     return;
   }
 
@@ -520,7 +566,7 @@ void stopRecordingRAM(int fnr, int snr) {
   mixer_end.gain(3, 0.0);
 
   // open WAV on SD
-  char path[64];
+  char path[160];
   buildSamplePath(fnr, snr, path, sizeof(path));
   if (SD.exists(path)) SD.remove(path);
   File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
