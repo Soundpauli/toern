@@ -362,9 +362,8 @@ void drawNoSD() {
 
   if (noSDfound && SD.begin(INT_SD)) {
     FastLEDclear();
-    // Manifest-driven sample browser: rebuild manifest after SD is reinserted.
-    extern bool scanAndWriteManifest();
-    scanAndWriteManifest();
+    extern void sampleBrowserInvalidate();
+    sampleBrowserInvalidate();
   }
 
   drawNoSD_hasRun = true;  // Mark it as run

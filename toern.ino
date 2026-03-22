@@ -210,10 +210,17 @@ extern void handleStart();
 
 #define EEPROM_MENU_ADDR 42
 
-// Manifest (folders/files) helpers from toern_helpers.ino
-extern bool scanAndWriteManifest();
-extern bool manifestLoaded;
-extern uint16_t manifestFolderCount;
+// Dynamic sample browser (toern_helpers.ino)
+extern void sampleBrowserRefreshList(int channel);
+extern void sampleBrowserSyncBrowseFromStoredPath(int channel);
+extern void sampleBrowserNavigatePress(int channel);
+extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
+extern int sampleBrowserBrowseIndexMax(int channel);
+extern unsigned long g_setWavIgnoreLoadUntilMs;
+extern bool sampleBrowserIsLoadableSelection(int channel);
+extern bool sampleBrowserSelectionIsDirectory(int channel);
+extern uint16_t g_wavPickCount;
+extern uint16_t g_folderPickCount;
 
 struct MidiSettings : public midi ::DefaultSettings {
   static const long BaudRate = 31250;
@@ -332,8 +339,7 @@ struct PendingNoteEvent {
 std::vector<PendingNoteEvent> pendingSampleNotes;
 
 struct CachedSample {
-  uint8_t folder;
-  uint16_t sampleID;
+  char pathRel[128];
   uint32_t lengthBytes;
   uint8_t rate;
   bool valid;
@@ -433,7 +439,7 @@ float rateFactor = 44117.0 / 44100.0;
 
 unsigned int infoIndex = 0;
 
-// Legacy "lastFile" (EEPROM numeric folder*100+idx) system removed; sample browsing is manifest-driven.
+// Sample paths for SP0 / SET_WAV are stored in SMP.samplePathRel[] (relative to samples/).
 bool freshPaint, tmpMute = false;
 bool preventPaintUnpaint = false;  // Flag to prevent paint/unpaint after certain operations
 unsigned long suppressDrawRMuteUntilMs = 0;  // Ignore R-mode mute events during velocity enter/exit
@@ -695,7 +701,7 @@ Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilt
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 5, maxY, maxY }, { maxY, 5, 10, 10 }, { 0xFF4400, 0x00FF88, 0x0044FF, 0x888888 } };
 
-Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
+Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
@@ -728,11 +734,9 @@ unsigned int pendingPage = 0;  // 0 = no pending page, otherwise page number to 
 
 
 struct Sample {
-  // Manifest mode:
-  // - oldID  = folder index (0..manifestFolderCount-1)
-  // - fileID = file index within folder (1..manifestFileCount[folder]+1) (+1 is NEW slot)
-  unsigned int oldID : 10;   // 0..1023
-  unsigned int fileID : 10;  // 0..1023
+  // Sample browser: fileID = 1-based index in current combined browse list; oldID unused (0)
+  unsigned int oldID : 10;
+  unsigned int fileID : 10;
 } __attribute__((packed));
 
 
@@ -742,7 +746,8 @@ struct Device {
   float bpm;             // bpm
   unsigned int file;     // current selected save/load id
   unsigned int pack;     // current selected samplepack id
-  Sample wav[maxFiles];  // current selected sample
+  Sample wav[maxFiles];  // current selected sample (oldID/fileID = UI list state)
+  char samplePathRel[maxFiles][128];  // path under samples/ incl. .wav (empty = use pack slot)
   float param_settings[maxY][maxFilters];
   float filter_settings[maxY][maxFilters];
   float synth_settings[maxY][11];
@@ -804,6 +809,7 @@ EXTMEM Device SMP = {
   1,      //pack
   // wav preset: folder 0, file index = channel (1..8)
   { { 0, 1 }, { 0, 1 }, { 0, 2 }, { 0, 3 }, { 0, 4 }, { 0, 5 }, { 0, 6 }, { 0, 7 }, { 0, 8 } },
+  {{0}},                                                              // samplePathRel
   {},                                                                 //param_settings
   {},                                                                 //filter_settings
   {},                                                                 //synth_settings
@@ -1181,18 +1187,8 @@ void staticThresholds(i2cEncoderLibV2 *obj) {
 
 
 
-// Debounce tracking for button presses/releases (in fast RAM for interrupt handlers)
-DMAMEM unsigned long lastButtonChange[NUM_ENCODERS] = { 0, 0, 0, 0 };
-const unsigned long btnDebounce = 30;  // Debounce time in milliseconds
-
 void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
-
-  // Debounce: Only accept button press if enough time has passed since last change
-  if (currentTime - lastButtonChange[encoderIndex] < btnDebounce) {
-    return;  // Ignore spurious button press (debounce)
-  }
-  lastButtonChange[encoderIndex] = currentTime;
 
   buttonPressStartTime[encoderIndex] = currentTime;
   isPressed[encoderIndex] = true;
@@ -1201,13 +1197,6 @@ void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
 
 
 void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
-  // Debounce: Only accept button release if enough time has passed since last change
-  unsigned long currentTime = millis();
-  if (currentTime - lastButtonChange[encoderIndex] < btnDebounce) {
-    return;  // Ignore spurious button release (debounce)
-  }
-  lastButtonChange[encoderIndex] = currentTime;
-
   buttonState[encoderIndex] = RELEASED;
 }
 
@@ -1215,7 +1204,6 @@ void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
 
 
 
-static unsigned long lastBtnChange = 0;
 const unsigned long BUTTON_STUCK_TIMEOUT_MS = 10000;  // 10 seconds - if button appears stuck, force reset
 void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
@@ -1295,22 +1283,9 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
     }
 
   } else {  // Button is not pressed (isPressed[encoderIndex] is false)
-    // Additional safety: If we think button is pressed but encoder says it's not,
-    // verify this state persists before clearing (helps filter I2C glitches)
-    static unsigned long lastNotPressedTime[NUM_ENCODERS] = { 0, 0, 0, 0 };
-    if (buttonState[encoderIndex] != IDLE || isPressed[encoderIndex]) {
-      // If it's not pressed, but state wasn't RELEASED to transition to IDLE,
-      // wait a bit to ensure it's not a transient I2C glitch
-      if (currentTime - lastNotPressedTime[encoderIndex] > btnDebounce) {
-        // State has been "not pressed" for debounce period, safe to reset
-        // This handles cases where isPressed got stuck due to missed callback
-        buttonState[encoderIndex] = IDLE;
-        isPressed[encoderIndex] = false;  // Force reset if stuck
-        buttons[encoderIndex] = 0;
-      }
-      lastNotPressedTime[encoderIndex] = currentTime;
-    } else {
-      lastNotPressedTime[encoderIndex] = 0;  // Reset when in IDLE
+    if (buttonState[encoderIndex] != IDLE) {
+      buttonState[encoderIndex] = IDLE;
+      isPressed[encoderIndex] = false;
     }
     // If button is up and state is IDLE (or just became IDLE)
     // and it wasn't a 1 or 9 event from a RELEASED state this cycle:
@@ -1606,65 +1581,35 @@ void switchMode(Mode *newMode) {
     }
 
     if (currentMode == &set_Wav) {
-      //REVERSE left encoder
       Encoder[0].begin(
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
 
-      // Set folder encoder limits based on manifest (always use manifest, never legacy mode).
-      // NOTE: SET_WAV encoder swap:
-      // - Encoder[2] = folder (pos[1])
-      // - Encoder[1] = seekEnd (pos[2])
-      extern bool manifestLoaded;
-      extern uint16_t manifestFolderCount;
-      // Always use manifest mode - never use legacy mode
-      if (!manifestLoaded) {
-        // Manifest must be loaded - try to load it
-        extern bool loadSampleManifest();
-        extern bool scanAndWriteManifest();
-        if (!loadSampleManifest()) {
-          scanAndWriteManifest();
-          loadSampleManifest();
-        }
-      }
-      int maxFolders = manifestLoaded ? manifestFolderCount : 1;  // Never use FOLDER_MAX
-      if (maxFolders < 1) maxFolders = 1;
+      // SET_WAV: Enc[1]=seekEnd, Enc[2]=load selected file, Enc[3]=browse folders+files
+      int ch = constrain((int)GLOB.currentChannel, 1, 8);
+      sampleBrowserRefreshList(ch);
+      sampleBrowserSyncBrowseFromStoredPath(ch);
+      SMP.wav[ch].fileID = (unsigned int)currentMode->pos[3];
+      SMP.wav[ch].oldID = 0;
+
+      currentMode->pos[1] = 0;
       Encoder[2].writeMin((int32_t)0);
-      Encoder[2].writeMax((int32_t)(maxFolders - 1));
-      // Clamp current position to valid range
-      if ((int)currentMode->pos[1] >= maxFolders) {
-        currentMode->pos[1] = maxFolders - 1;
-        Encoder[2].writeCounter((int32_t)currentMode->pos[1]);
-      }
+      Encoder[2].writeMax((int32_t)0);
+      Encoder[2].writeCounter((int32_t)0);
 
-      // Encoder 3 (sample select) is per-folder, manifest-driven:
-      // 1 .. (fileCount+1) (includes NEW slot).
-      extern uint16_t manifestFileCount[];
-      int folderIdx = constrain((int)SMP.wav[GLOB.currentChannel].oldID, 0, maxFolders - 1);
-      GLOB.folder = (unsigned int)folderIdx;
-      currentMode->pos[1] = folderIdx;
-      Encoder[2].writeCounter((int32_t)folderIdx);
-      int fileCount = (manifestLoaded && folderIdx < (int)manifestFolderCount) ? (int)manifestFileCount[folderIdx] : 0;
-      int maxFilesInFolder = fileCount + 1;  // include NEW slot
-      if (maxFilesInFolder < 1) maxFilesInFolder = 1;
-
-      int encMin = 1;
-      int encMax = maxFilesInFolder;
-      Encoder[3].writeMin((int32_t)encMin);
-      Encoder[3].writeMax((int32_t)encMax);
-
-      // Initialize encoder 3 with the current channel's saved file index
-      int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
-      if (fileIdx < encMin || fileIdx > encMax) fileIdx = encMin;
+      int encMax = max(1, (int)g_wavPickCount);
+      int fileIdx = (int)currentMode->pos[3];
+      if (fileIdx < 1 || fileIdx > encMax) fileIdx = 1;
       currentMode->pos[3] = fileIdx;
+      Encoder[3].writeMin((int32_t)1);
+      Encoder[3].writeMax((int32_t)encMax);
       Encoder[3].writeCounter((int32_t)fileIdx);
 
-      // SeekEnd encoder (Encoder[1]) range 0..100; keep in sync with current seekEnd.
       Encoder[1].writeMin((int32_t)0);
       Encoder[1].writeMax((int32_t)100);
       int seekEnd = (int)GLOB.seekEnd;
-      if (seekEnd <= 0) seekEnd = 100;  // treat 0 as full length
+      if (seekEnd <= 0) seekEnd = 100;
       seekEnd = constrain(seekEnd, 0, 100);
       currentMode->pos[2] = seekEnd;
       Encoder[1].writeCounter((int32_t)seekEnd);
@@ -2083,30 +2028,27 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     return;                                                                                         // Prevent other button actions from being processed
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     switchMode(&draw);
-  } else if ((currentMode == &set_Wav) && (match_buttons(currentButtonStates, 1, 0, 0, 0) || match_buttons(currentButtonStates, 2, 0, 0, 0))) {  // "1000" or "2000"
-    // Encoder 0 press (normal or long) in SET_WAV: manual preview (allowed for PREV==ON and PREV==PRSS)
-    // Note: Only handle state 1 (normal) and state 2 (long press while held), not state 9 (long press release)
-    // to avoid playing twice (once on state 2, once on state 9)
-    // Use current encoder positions, not stored SMP values (which might be stale)
-    extern bool manifestLoaded;
-    extern uint16_t manifestFolderCount;
-    if (!manifestLoaded) {
-      return;  // Cannot proceed without manifest
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010" - encoder 2 loads selected file
+    if (!pressed[3] && !isPressed[3] &&
+        millis() >= g_setWavIgnoreLoadUntilMs &&
+        sampleBrowserIsLoadableSelection(GLOB.currentChannel)) {
+      loadWav();
+      autoSave();
     }
-    int folderIdx = (int)currentMode->pos[1];  // Use current folder encoder position
-    folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
-    int fileIdx = (int)currentMode->pos[3];  // Use current file encoder position
-    if (fileIdx < 1) fileIdx = 1;
-    // Set flag so previewSample knows this is encoder(0) press
-    // Makes it behave like seek > 0: skip peak building, just play audio
+    return;
+  } else if ((currentMode == &set_Wav) && (match_buttons(currentButtonStates, 1, 0, 0, 0) || match_buttons(currentButtonStates, 2, 0, 0, 0))) {  // "1000" or "2000"
+    // Encoder 0 press in SET_WAV: manual preview
     extern void setEncoder0PressedMode(bool state);
     setEncoder0PressedMode(true);
-    previewSample(folderIdx, fileIdx, false);
-    return;                                                                                  // Prevent other button actions from being processed
-  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
-    loadWav();
-    autoSave();
-    return;                                                                                     // Prevent other button actions from being processed
+    extern void previewSample(bool);
+    previewSample(false);
+    return;
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - encoder 3 opens selected directory
+    if (!pressed[2] && !isPressed[2] &&
+        sampleBrowserSelectionIsDirectory(GLOB.currentChannel)) {
+      sampleBrowserNavigatePress(GLOB.currentChannel);
+    }
+    return;
   } else if ((currentMode == &recordMode) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - Exit recordMode
     if (isRecording) {
       stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
@@ -2135,7 +2077,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
     // Use direct SD playback (same as first preview in showWave)
     char OUTPUTf[160];
-    buildSamplePath(fnr, fileNum, OUTPUTf, sizeof(OUTPUTf));
+    buildSamplePath(0, 0, OUTPUTf, sizeof(OUTPUTf));
 
     if (previewTriggerMode == PREVIEW_MODE_ON) {
       previewIsPlaying = true;
@@ -3110,23 +3052,6 @@ void setup() {
   }
   drawNoSD();
 
-  // Manifest-driven sample browser (no legacy lastFile EEPROM tracking).
-  // Always use map.txt - if missing, scan and write it, then load it
-  if (!loadSampleManifest()) {
-    // map.txt is missing, scan and write it
-    scanAndWriteManifest();
-    // Now load the newly created map.txt
-    loadSampleManifest();
-  }
-  // Ensure manifest is loaded - if still not loaded, something is wrong
-  if (!manifestLoaded) {
-    // Last resort: try scanning again
-    scanAndWriteManifest();
-    loadSampleManifest();
-  }
-  if (manifestLoaded && manifestFolderCount > 0) {
-    set_Wav.maxValues[1] = manifestFolderCount - 1;  // 0-based folders
-  }
   loadMenuFromEEPROM();
 
   // Load color scheme and brightness from EEPROM AFTER loadMenuFromEEPROM.
@@ -3344,12 +3269,20 @@ void checkEncoders() {
       currentMode->pos[0] = muteModeEncoderValue;
     } else if (currentMode == &set_Wav) {
       // SET_WAV encoder swap:
-      // - Physical Encoder[2] (rotate) drives folder selection -> pos[1]
+      // - Physical Encoder[2] rotation is unused
       // - Physical Encoder[1] (rotate) drives seekEnd -> pos[2]
+      // - Physical Encoder[3] (rotate) drives the combined browser -> pos[3]
       if (i == 1) {
         currentMode->pos[2] = rawValue;
       } else if (i == 2) {
-        currentMode->pos[1] = rawValue;
+        if (rawValue != 0) Encoder[2].writeCounter((int32_t)0);
+        currentMode->pos[1] = 0;
+      } else if (i == 3) {
+        int ch = constrain((int)GLOB.currentChannel, 1, 8);
+        int vmax = sampleBrowserBrowseIndexMax(ch);
+        int v = constrain(rawValue, 1, vmax);
+        if (v != rawValue) Encoder[3].writeCounter((int32_t)v);
+        currentMode->pos[3] = v;
       } else {
         currentMode->pos[i] = rawValue;
       }
@@ -4872,7 +4805,7 @@ void showDoRecord() {
           int fnr = (int)SMP.wav[GLOB.currentChannel].oldID;
           int fileNum = (int)SMP.wav[GLOB.currentChannel].fileID;
           char path[160];
-          buildSamplePath(fnr, fileNum, path, sizeof(path));
+          buildSamplePath(0, 0, path, sizeof(path));
 
           if (playSdWav1.isPlaying()) playSdWav1.stop();
           playSdWav1.play(path);

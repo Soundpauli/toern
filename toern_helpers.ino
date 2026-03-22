@@ -67,6 +67,9 @@ extern int genreLength;
 
 // External variables from main system
 extern Device SMP;
+extern GlobalVars GLOB;
+extern Mode* currentMode;
+extern i2cEncoderLibV2 Encoder[];
 extern Mode volume_bpm;
 extern IntervalTimer playTimer;
 extern double playNoteInterval;
@@ -76,22 +79,45 @@ extern int8_t channelDirection[maxFiles];
 extern unsigned int recordingStartBeat;  // Beat where recording started
 extern unsigned int RefreshTime;  // Display refresh timing (30 FPS = 33ms per frame)
 
-// ── Sample name manifest (EXTMEM, small, plain text) ─────────────────────
-// Limits (keep small)
-const int MANIFEST_MAX_FOLDERS = 32;
-const int MANIFEST_MAX_FILES_PER_FOLDER = 999;  // Increased from 255 to handle up to 999 files per folder
-const int MANIFEST_NAME_MAX = 32;  // incl null (increased from 24 to handle longer filenames)
-// Relative path under samples/ (e.g. "kit/kicks"); may include multiple segments — keep in sync with toern_sample.ino extern
-const int MANIFEST_FOLDER_PATH_MAX = 96;
+// ── Dynamic sample browser (SD): lists built on demand; no map.txt manifest ──
+// Use #defines so array dimensions work with all Arduino/Teensy .ino compilation modes.
+#define SAMPLE_BROWSER_NAME_MAX 65   // 64 chars + null
+#define SAMPLE_BROWSER_PATH_MAX 128
+#define BROWSE_MAX_TMP 256
+#define SAMPLE_BROWSER_MAX_ENTRIES 384
+#define SAMPLE_BROWSER_ENTRY_PARENT 0
+#define SAMPLE_BROWSER_ENTRY_DIR 1
+#define SAMPLE_BROWSER_ENTRY_FILE 2
 
-EXTMEM char manifestFolderNames[MANIFEST_MAX_FOLDERS][MANIFEST_FOLDER_PATH_MAX];
-EXTMEM char manifestFileNames[MANIFEST_MAX_FOLDERS][MANIFEST_MAX_FILES_PER_FOLDER][MANIFEST_NAME_MAX];
-EXTMEM uint16_t manifestFileCount[MANIFEST_MAX_FOLDERS] = {0};
-uint16_t manifestFolderCount = 0;
+EXTMEM char sbTmpDirs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
+EXTMEM char sbTmpWavs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
+
+// Stubs for legacy menu/ui code
 bool manifestLoaded = false;
+uint16_t manifestFolderCount = 0;
 
-static int cmpName(const char* a, const char* b) {
-  return strcasecmp(a, b);
+bool loadSampleManifest() { return false; }
+bool scanAndWriteManifest() { return true; }
+
+EXTMEM char g_browseDir[maxFiles][SAMPLE_BROWSER_PATH_MAX];
+// Combined browser list on last encoder: [../] (when not at root), dirs first, then files.
+EXTMEM char g_folderPickName[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
+EXTMEM char g_wavPickName[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
+EXTMEM uint8_t g_wavPickType[BROWSE_MAX_TMP];
+uint16_t g_folderPickCount = 0;
+uint16_t g_wavPickCount = 0;
+int g_wavFileCount = 0;  // number of file entries inside the combined list
+bool g_browseListDirty = true;
+// Set when folder navigation resets pos[3] so showWave() does not start a new preview (feels like "load").
+bool g_suppressNextWavPreviewAfterFolderNav = false;
+// After folder enter/up, ignore encoder-2 sample load briefly (I2C / mechanical coupling ghosts).
+unsigned long g_setWavIgnoreLoadUntilMs = 0;
+
+unsigned int sampleBrowserHashName(const char* s) {
+  unsigned int h = 5381;
+  if (!s) return h;
+  while (*s) h = ((h << 5) + h) + (unsigned char)(*s++);
+  return h;
 }
 
 static bool hasWavExt(const char* name) {
@@ -101,7 +127,7 @@ static bool hasWavExt(const char* name) {
   return (ext[0] == '.' || ext[0] == '.') && (tolower(ext[1]) == 'w') && (tolower(ext[2]) == 'a') && (tolower(ext[3]) == 'v');
 }
 
-static void copyBaseName(const char* rawName, char* out, size_t outSz) {
+static void copyBaseName64(const char* rawName, char* out, size_t outSz) {
   const char* base = rawName ? rawName : "";
   const char* slash = strrchr(base, '/');
   if (slash) base = slash + 1;
@@ -109,284 +135,343 @@ static void copyBaseName(const char* rawName, char* out, size_t outSz) {
   out[outSz - 1] = 0;
 }
 
-// Recursively add manifest entries: each folder path is relative to samples/ (e.g. "a/b").
-// A directory that contains .wav files becomes one entry; subfolders are scanned separately.
-static void recurseScanSamples(const char* relPath) {
-  char path[MANIFEST_FOLDER_PATH_MAX + 24];
-  if (relPath[0] == '\0') {
-    strncpy(path, "samples", sizeof(path));
-    path[sizeof(path) - 1] = 0;
-  } else {
-    snprintf(path, sizeof(path), "samples/%s", relPath);
-  }
-  File dir = SD.open(path);
-  if (!dir || !dir.isDirectory()) {
-    if (dir) dir.close();
-    return;
-  }
-
-  const int MAX_SUBDIRS = 32;
-  char subdirs[MAX_SUBDIRS][MANIFEST_NAME_MAX];
-  int nSub = 0;
-  int wavCount = 0;
-
-  File fe;
-  while ((fe = dir.openNextFile())) {
-    if (fe.isDirectory()) {
-      char base[MANIFEST_NAME_MAX];
-      copyBaseName(fe.name(), base, sizeof(base));
-      if (base[0] && base[0] != '.' && nSub < MAX_SUBDIRS) {
-        strncpy(subdirs[nSub], base, MANIFEST_NAME_MAX - 1);
-        subdirs[nSub][MANIFEST_NAME_MAX - 1] = 0;
-        nSub++;
-      }
-      fe.close();
-    } else {
-      char fbase[MANIFEST_NAME_MAX];
-      copyBaseName(fe.name(), fbase, sizeof(fbase));
-      if (fbase[0] && fbase[0] != '.' && hasWavExt(fbase)) wavCount++;
-      fe.close();
-    }
-  }
-  dir.close();
-
-  if (wavCount > 0 && manifestFolderCount < MANIFEST_MAX_FOLDERS) {
-    int fidx = manifestFolderCount++;
-    strncpy(manifestFolderNames[fidx], relPath, MANIFEST_FOLDER_PATH_MAX - 1);
-    manifestFolderNames[fidx][MANIFEST_FOLDER_PATH_MAX - 1] = 0;
-    manifestFileCount[fidx] = 0;
-
-    dir = SD.open(path);
-    if (dir && dir.isDirectory()) {
-      while ((fe = dir.openNextFile())) {
-        if (!fe.isDirectory()) {
-          char fbase[MANIFEST_NAME_MAX];
-          copyBaseName(fe.name(), fbase, sizeof(fbase));
-          if (fbase[0] && fbase[0] != '.' && hasWavExt(fbase)) {
-            int fi = manifestFileCount[fidx];
-            if (fi < MANIFEST_MAX_FILES_PER_FOLDER) {
-              strncpy(manifestFileNames[fidx][fi], fbase, MANIFEST_NAME_MAX - 1);
-              manifestFileNames[fidx][fi][MANIFEST_NAME_MAX - 1] = 0;
-              manifestFileCount[fidx]++;
-            }
-          }
-        }
-        fe.close();
+static void sortNameBlock(char names[][SAMPLE_BROWSER_NAME_MAX], int n) {
+  for (int i = 0; i < n - 1; i++) {
+    for (int j = i + 1; j < n; j++) {
+      if (strcasecmp(names[i], names[j]) > 0) {
+        char tmp[SAMPLE_BROWSER_NAME_MAX];
+        memcpy(tmp, names[i], sizeof(tmp));
+        memcpy(names[i], names[j], sizeof(tmp));
+        memcpy(names[j], tmp, sizeof(tmp));
       }
     }
-    if (dir) dir.close();
-  }
-
-  for (int i = 0; i < nSub; i++) {
-    char child[MANIFEST_FOLDER_PATH_MAX];
-    if (relPath[0] == '\0') {
-      strncpy(child, subdirs[i], sizeof(child));
-    } else {
-      snprintf(child, sizeof(child), "%s/%s", relPath, subdirs[i]);
-    }
-    child[sizeof(child) - 1] = 0;
-    recurseScanSamples(child);
   }
 }
 
-// Generate next numeric filename: rec001.wav ... rec999.wav
+static void browseDirGoParent(int ch) {
+  char* p = g_browseDir[ch];
+  char* slash = strrchr(p, '/');
+  if (slash) *slash = 0;
+  else p[0] = 0;
+}
+
+void sampleBrowserInvalidate() { g_browseListDirty = true; }
+
+void sampleBrowserRefreshList(int channel);
+
+// Highest valid index on the last encoder browse row (1-based on hardware, count on UI).
+int sampleBrowserBrowseIndexMax(int channel) {
+  if (channel < 1 || channel >= maxFiles) return 0;
+  if (g_browseListDirty) sampleBrowserRefreshList(channel);
+  return max(1, (int)g_wavPickCount);
+}
+
+// Single place: last encoder = combined browse row (parent / dirs / files).
+void sampleBrowserClampBrowseIndexAndHardware(int channel) {
+  if (channel < 1 || channel >= maxFiles) return;
+  int vmax = sampleBrowserBrowseIndexMax(channel);
+  Encoder[3].updateStatus();
+  int raw = (int)Encoder[3].readCounterInt();
+  int idx = constrain(raw, 1, vmax);
+  currentMode->pos[3] = (unsigned int)idx;
+  Encoder[3].writeMin((int32_t)1);
+  Encoder[3].writeMax((int32_t)vmax);
+  if (raw != idx) Encoder[3].writeCounter((int32_t)idx);
+}
+
+static bool sampleBrowserAppendFolderSegment(int channel, const char* name) {
+  char* d = g_browseDir[channel];
+  size_t len = strlen(d);
+  size_t nl = strlen(name);
+  if (len + 1 + nl >= (size_t)SAMPLE_BROWSER_PATH_MAX) return false;
+  if (len) {
+    char tmp[SAMPLE_BROWSER_PATH_MAX];
+    snprintf(tmp, sizeof(tmp), "%s/%s", d, name);
+    strncpy(d, tmp, SAMPLE_BROWSER_PATH_MAX - 1);
+    d[SAMPLE_BROWSER_PATH_MAX - 1] = 0;
+  } else {
+    snprintf(d, SAMPLE_BROWSER_PATH_MAX, "%s", name);
+  }
+  return true;
+}
+
+static void sampleBrowserGetLeafFolderName(int channel, char* out, size_t outSize) {
+  if (!out || outSize == 0) return;
+  out[0] = 0;
+  if (channel < 1 || channel >= maxFiles) return;
+  const char* path = g_browseDir[channel];
+  if (!path || !path[0]) return;
+  const char* slash = strrchr(path, '/');
+  const char* leaf = slash ? slash + 1 : path;
+  strncpy(out, leaf, outSize - 1);
+  out[outSize - 1] = 0;
+}
+
+uint8_t sampleBrowserEntryTypeAt(int idx) {
+  if (idx < 0 || idx >= (int)g_wavPickCount) return SAMPLE_BROWSER_ENTRY_FILE;
+  return g_wavPickType[idx];
+}
+
+bool sampleBrowserSelectionIsDirectory(int channel) {
+  if (channel < 1 || channel >= maxFiles) return false;
+  if (g_browseListDirty) sampleBrowserRefreshList(channel);
+  int idx = (int)currentMode->pos[3] - 1;
+  uint8_t type = sampleBrowserEntryTypeAt(idx);
+  return type == SAMPLE_BROWSER_ENTRY_PARENT || type == SAMPLE_BROWSER_ENTRY_DIR;
+}
+
+bool sampleBrowserSelectionIsFile(int channel) {
+  if (channel < 1 || channel >= maxFiles) return false;
+  if (g_browseListDirty) sampleBrowserRefreshList(channel);
+  int idx = (int)currentMode->pos[3] - 1;
+  return sampleBrowserEntryTypeAt(idx) == SAMPLE_BROWSER_ENTRY_FILE;
+}
+
+// After ".." or entering a subfolder: rebuild lists, reset browse picker.
+// If coming from a child folder, keep that folder selected in the parent list.
+static void sampleBrowserFinishFolderStep(int channel, unsigned int prevWavPos, const char* preferredFolderName) {
+  sampleBrowserRefreshList(channel);
+  int vmax = max(1, (int)g_wavPickCount);
+  int browseIdx = 0;
+  if (preferredFolderName && preferredFolderName[0]) {
+    for (int i = 0; i < (int)g_wavPickCount; i++) {
+      if (sampleBrowserEntryTypeAt(i) == SAMPLE_BROWSER_ENTRY_DIR &&
+          strcasecmp(g_wavPickName[i], preferredFolderName) == 0) {
+        browseIdx = i;
+        break;
+      }
+    }
+  } else if (g_wavPickCount >= 2 && sampleBrowserEntryTypeAt(0) != SAMPLE_BROWSER_ENTRY_FILE) {
+    browseIdx = 1;
+  }
+  if (browseIdx < 0) browseIdx = 0;
+  if (browseIdx >= vmax) browseIdx = vmax - 1;
+  currentMode->pos[1] = 0;
+  Encoder[2].writeMin((int32_t)0);
+  Encoder[2].writeMax((int32_t)0);
+  Encoder[2].writeCounter((int32_t)0);
+  currentMode->pos[3] = (unsigned int)(browseIdx + 1);
+  Encoder[3].writeMin((int32_t)1);
+  Encoder[3].writeMax((int32_t)vmax);
+  Encoder[3].writeCounter((int32_t)(browseIdx + 1));
+  if (prevWavPos != (unsigned int)(browseIdx + 1)) g_suppressNextWavPreviewAfterFolderNav = true;
+  g_setWavIgnoreLoadUntilMs = millis() + 220;
+}
+
+void sampleBrowserRefreshList(int channel) {
+  if (channel < 1 || channel >= maxFiles) return;
+  int nd = 0, nw = 0;
+  char fullPath[160];
+  if (g_browseDir[channel][0]) {
+    snprintf(fullPath, sizeof(fullPath), "samples/%s", g_browseDir[channel]);
+  } else {
+    snprintf(fullPath, sizeof(fullPath), "samples");
+  }
+  File dir = SD.open(fullPath);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    g_browseDir[channel][0] = 0;
+    snprintf(fullPath, sizeof(fullPath), "samples");
+    dir = SD.open(fullPath);
+    if (!dir || !dir.isDirectory()) {
+      if (dir) dir.close();
+      g_wavPickCount = 0;
+      g_wavFileCount = 0;
+      g_folderPickCount = 0;
+      g_browseListDirty = false;
+      return;
+    }
+  }
+  File fe;
+  while ((fe = dir.openNextFile())) {
+    char base[SAMPLE_BROWSER_NAME_MAX];
+    copyBaseName64(fe.name(), base, sizeof(base));
+    if (!base[0] || base[0] == '.') {
+      fe.close();
+      continue;
+    }
+    if (fe.isDirectory()) {
+      if (nd < BROWSE_MAX_TMP) {
+        strncpy(sbTmpDirs[nd], base, SAMPLE_BROWSER_NAME_MAX - 1);
+        sbTmpDirs[nd][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+        nd++;
+      }
+    } else if (hasWavExt(base)) {
+      if (nw < BROWSE_MAX_TMP) {
+        strncpy(sbTmpWavs[nw], base, SAMPLE_BROWSER_NAME_MAX - 1);
+        sbTmpWavs[nw][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+        nw++;
+      }
+    }
+    fe.close();
+  }
+  dir.close();
+  sortNameBlock(sbTmpDirs, nd);
+  sortNameBlock(sbTmpWavs, nw);
+
+  /* ---- Legacy folder row retained for compatibility with old overlay code. ---- */
+  uint16_t fn = 0;
+  if (g_browseDir[channel][0]) {
+    strncpy(g_folderPickName[fn], "..", SAMPLE_BROWSER_NAME_MAX - 1);
+    g_folderPickName[fn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+    fn++;
+  }
+  for (int i = 0; i < nd && fn < BROWSE_MAX_TMP; i++) {
+    strncpy(g_folderPickName[fn], sbTmpDirs[i], SAMPLE_BROWSER_NAME_MAX - 1);
+    g_folderPickName[fn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+    fn++;
+  }
+  g_folderPickCount = fn;
+
+  /* ---- Last encoder row: [../] (if needed), then dirs, then files ---- */
+  uint16_t wn = 0;
+  if (g_browseDir[channel][0] && wn < BROWSE_MAX_TMP) {
+    strncpy(g_wavPickName[wn], "[../]", SAMPLE_BROWSER_NAME_MAX - 1);
+    g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+    g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_PARENT;
+    wn++;
+  }
+  for (int i = 0; i < nd && wn < BROWSE_MAX_TMP; i++) {
+    strncpy(g_wavPickName[wn], sbTmpDirs[i], SAMPLE_BROWSER_NAME_MAX - 1);
+    g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+    g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_DIR;
+    wn++;
+  }
+  g_wavFileCount = nw;
+  for (int i = 0; i < nw && wn < BROWSE_MAX_TMP; i++) {
+    strncpy(g_wavPickName[wn], sbTmpWavs[i], SAMPLE_BROWSER_NAME_MAX - 1);
+    g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+    g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_FILE;
+    wn++;
+  }
+  g_wavPickCount = wn;
+  g_browseListDirty = false;
+}
+
+void sampleBrowserSyncBrowseFromStoredPath(int ch) {
+  if (ch < 1 || ch >= maxFiles) return;
+  const char* sp = SMP.samplePathRel[ch];
+  g_browseDir[ch][0] = 0;
+  if (!sp || !sp[0]) {
+    sampleBrowserRefreshList(ch);
+    currentMode->pos[1] = 0;
+    Encoder[2].writeCounter((int32_t)0);
+    Encoder[2].writeMax((int32_t)0);
+    currentMode->pos[3] = (g_wavPickCount > 0) ? 1 : 0;
+    Encoder[3].writeCounter((int32_t)max(1, (int)currentMode->pos[3]));
+    Encoder[3].writeMax((int32_t)max(1, (int)g_wavPickCount));
+    return;
+  }
+  char tmp[128];
+  strncpy(tmp, sp, sizeof(tmp) - 1);
+  tmp[127] = 0;
+  char* slash = strrchr(tmp, '/');
+  const char* leafName = tmp;
+  if (slash) {
+    *slash = 0;
+    strncpy(g_browseDir[ch], tmp, SAMPLE_BROWSER_PATH_MAX - 1);
+    g_browseDir[ch][SAMPLE_BROWSER_PATH_MAX - 1] = 0;
+    leafName = slash + 1;
+  } else {
+    g_browseDir[ch][0] = 0;
+    leafName = tmp;
+  }
+  sampleBrowserRefreshList(ch);
+  for (uint16_t i = 0; i < g_wavPickCount; i++) {
+    if (g_wavPickType[i] == SAMPLE_BROWSER_ENTRY_FILE && strcasecmp(g_wavPickName[i], leafName) == 0) {
+      currentMode->pos[3] = (unsigned int)(i + 1);
+      Encoder[3].writeCounter((int32_t)(i + 1));
+      Encoder[3].writeMax((int32_t)max(1, (int)g_wavPickCount));
+      currentMode->pos[1] = 0;
+      Encoder[2].writeCounter((int32_t)0);
+      Encoder[2].writeMax((int32_t)0);
+      return;
+    }
+  }
+  currentMode->pos[3] = (g_wavPickCount > 0) ? 1 : 0;
+  Encoder[3].writeCounter((int32_t)max(1, (int)currentMode->pos[3]));
+  Encoder[3].writeMax((int32_t)max(1, (int)g_wavPickCount));
+  currentMode->pos[1] = 0;
+  Encoder[2].writeCounter((int32_t)0);
+  Encoder[2].writeMax((int32_t)0);
+}
+
+bool sampleBrowserIsLoadableSelection(int channel) {
+  if (channel < 1 || channel >= maxFiles) return false;
+  if (g_browseListDirty) sampleBrowserRefreshList(channel);
+  int idx = (int)currentMode->pos[3] - 1;
+  if (idx < 0 || idx >= (int)g_wavPickCount) return false;
+  return g_wavPickType[idx] == SAMPLE_BROWSER_ENTRY_FILE;
+}
+
+void sampleBrowserNavigatePress(int channel) {
+  if (channel < 1 || channel >= maxFiles) return;
+  sampleBrowserClampBrowseIndexAndHardware(channel);
+  if (g_wavPickCount == 0) return;
+
+  const unsigned int prevWavPos = currentMode->pos[3];
+  char preferredFolderName[SAMPLE_BROWSER_NAME_MAX];
+  preferredFolderName[0] = 0;
+  const int idx = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
+  const char* name = g_wavPickName[idx];
+  uint8_t type = g_wavPickType[idx];
+
+  if (type == SAMPLE_BROWSER_ENTRY_PARENT) {
+    sampleBrowserGetLeafFolderName(channel, preferredFolderName, sizeof(preferredFolderName));
+    browseDirGoParent(channel);
+  } else if (type == SAMPLE_BROWSER_ENTRY_DIR) {
+    if (!sampleBrowserAppendFolderSegment(channel, name)) return;
+  } else {
+    return;
+  }
+  sampleBrowserFinishFolderStep(channel, prevWavPos, preferredFolderName);
+}
+
+void sampleBrowserClearAll() {
+  for (int i = 0; i < maxFiles; i++) {
+    g_browseDir[i][0] = '\0';
+    SMP.samplePathRel[i][0] = '\0';
+  }
+  g_folderPickCount = 0;
+  g_wavPickCount = 0;
+  g_wavFileCount = 0;
+  g_browseListDirty = true;
+  manifestLoaded = false;
+  manifestFolderCount = 0;
+}
+
+// Generate next numeric filename: rec001.wav ... rec999.wav (in current browse folder)
 void generateNextNumericName(int folderIdx, char* outName, size_t outSize) {
-  const char* folderName = (manifestLoaded && folderIdx < manifestFolderCount) ? manifestFolderNames[folderIdx] : "0";
+  (void)folderIdx;
+  int ch = GLOB.currentChannel;
+  if (ch < 1 || ch >= maxFiles) ch = 1;
   char path[160];
   for (int n = 1; n < 1000; ++n) {
     snprintf(outName, outSize, "rec_%02d.wav", n);
-    if (folderName && folderName[0]) {
-      snprintf(path, sizeof(path), "samples/%s/%s", folderName, outName);
+    if (g_browseDir[ch][0]) {
+      snprintf(path, sizeof(path), "samples/%s/%s", g_browseDir[ch], outName);
     } else {
       snprintf(path, sizeof(path), "samples/%s", outName);
     }
     if (!SD.exists(path)) return;
   }
-  // fallback
   snprintf(outName, outSize, "rec_99.wav");
 }
 
-static void clearSampleManifest() {
-  manifestFolderCount = 0;
-  for (int f = 0; f < MANIFEST_MAX_FOLDERS; ++f) {
-    manifestFolderNames[f][0] = '\0';
-    manifestFileCount[f] = 0;
-    for (int i = 0; i < MANIFEST_MAX_FILES_PER_FOLDER; ++i) {
-      manifestFileNames[f][i][0] = '\0';
-    }
-  }
-  manifestLoaded = false;
-}
-
-// Plain text manifest: lines "folder:<relative path>" (use / for nested dirs under samples/) then "file:<name>" ... blank lines allowed
-// Path for manifest: "samples/map.txt"
-bool loadSampleManifest() {
-  clearSampleManifest();
-  File f = SD.open("samples/map.txt", FILE_READ);
-  if (!f) return false;
-
-  String line;
-  int currentFolder = -1;
-  while (f.available()) {
-    line = f.readStringUntil('\n');
-    line.trim();  // remove CR/LF/space
-    if (line.length() == 0) continue;
-    if (line.startsWith("folder:")) {
-      if (manifestFolderCount >= MANIFEST_MAX_FOLDERS) continue;
-      currentFolder = manifestFolderCount++;
-      String name = line.substring(7);
-      name.trim();
-      name.toCharArray(manifestFolderNames[currentFolder], MANIFEST_FOLDER_PATH_MAX);
-      manifestFileCount[currentFolder] = 0;
-    } else if (line.startsWith("file:") && currentFolder >= 0) {
-      int fi = manifestFileCount[currentFolder];
-      if (fi >= MANIFEST_MAX_FILES_PER_FOLDER) continue;
-      String name = line.substring(5);
-      name.trim();
-      name.toCharArray(manifestFileNames[currentFolder][fi], MANIFEST_NAME_MAX);
-      manifestFileCount[currentFolder]++;
-    }
-  }
-  f.close();
-  manifestLoaded = manifestFolderCount > 0;
-  return manifestLoaded;
-}
-
-// Scan SD for folders/files (natural sorted by simple insertion) and write manifest
-bool scanAndWriteManifest() {
-  
-  // Delete existing map.txt first to ensure clean write
-  if (SD.exists("samples/map.txt")) {
-    if (SD.remove("samples/map.txt")) {
-    } else {
-    }
-  }
-  
-  clearSampleManifest();
-  File rootProbe = SD.open("samples");
-  if (!rootProbe || !rootProbe.isDirectory()) {
-    if (rootProbe) rootProbe.close();
-    return false;
-  }
-  rootProbe.close();
-
-  recurseScanSamples("");
-
-  // Sort folders alphabetically (0-9 then a-z via strcasecmp)
-  for (int i = 0; i < (int)manifestFolderCount - 1; ++i) {
-    for (int j = i + 1; j < (int)manifestFolderCount; ++j) {
-      if (cmpName(manifestFolderNames[i], manifestFolderNames[j]) > 0) {
-        char tmpName[MANIFEST_FOLDER_PATH_MAX];
-        memcpy(tmpName, manifestFolderNames[i], MANIFEST_FOLDER_PATH_MAX);
-        memcpy(manifestFolderNames[i], manifestFolderNames[j], MANIFEST_FOLDER_PATH_MAX);
-        memcpy(manifestFolderNames[j], tmpName, MANIFEST_FOLDER_PATH_MAX);
-        // swap counts and file arrays
-        uint16_t tmpCnt = manifestFileCount[i];
-        manifestFileCount[i] = manifestFileCount[j];
-        manifestFileCount[j] = tmpCnt;
-        // Swap file arrays element-by-element to avoid huge stack allocation
-        // Use the larger of the two counts to ensure we swap all files
-        uint16_t maxFileCount = (manifestFileCount[i] > manifestFileCount[j]) ? manifestFileCount[i] : manifestFileCount[j];
-        char tmpFile[MANIFEST_NAME_MAX];
-        uint16_t fileIdx;
-        for (fileIdx = 0; fileIdx < maxFileCount; fileIdx++) {
-          memcpy(tmpFile, manifestFileNames[i][fileIdx], MANIFEST_NAME_MAX);
-          memcpy(manifestFileNames[i][fileIdx], manifestFileNames[j][fileIdx], MANIFEST_NAME_MAX);
-          memcpy(manifestFileNames[j][fileIdx], tmpFile, MANIFEST_NAME_MAX);
-        }
-      }
-    }
-  }
-
-  // Sort files within each folder alphabetically
-  for (int f = 0; f < (int)manifestFolderCount; ++f) {
-    int fc = manifestFileCount[f];
-    for (int i = 0; i < fc - 1; ++i) {
-      for (int j = i + 1; j < fc; ++j) {
-        if (cmpName(manifestFileNames[f][i], manifestFileNames[f][j]) > 0) {
-          char tmpName[MANIFEST_NAME_MAX];
-          memcpy(tmpName, manifestFileNames[f][i], MANIFEST_NAME_MAX);
-          memcpy(manifestFileNames[f][i], manifestFileNames[f][j], MANIFEST_NAME_MAX);
-          memcpy(manifestFileNames[f][j], tmpName, MANIFEST_NAME_MAX);
-        }
-      }
-    }
-  }
-
-  // write manifest file
-  // Delete existing map.txt first to ensure clean write
-  if (SD.exists("samples/map.txt")) {
-    SD.remove("samples/map.txt");
-  }
-  
-  // Ensure samples directory exists (it should, since we just scanned it)
-  File f = SD.open("samples/map.txt", O_WRITE | O_CREAT | O_TRUNC);
-  if (f) {
-    for (int folder = 0; folder < manifestFolderCount; ++folder) {
-      f.print("folder:");
-      f.println(manifestFolderNames[folder]);
-      for (uint16_t i = 0; i < manifestFileCount[folder]; ++i) {
-        f.print("file:");
-        f.println(manifestFileNames[folder][i]);
-      }
-      f.println();
-    }
-    f.close();
-  } else {
-  }
-  manifestLoaded = manifestFolderCount > 0;
-  return manifestLoaded;
-}
-
-// Build sample path using manifest (required). No numeric fallback.
-// - folderIdx: 0..manifestFolderCount-1 (folder name may be "a/b" for nested dirs)
-// - fileIdx: 1..manifestFileCount[folderIdx] (or fileCount+1 for NEW slot)
+// Playback / recording path from stored relative path (samples/...)
 void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
+  (void)folderIdx;
+  (void)fileIdx;
   if (outSize > 0) out[0] = '\0';
-  if (folderIdx < 0) folderIdx = 0;
-
-  if (manifestLoaded && folderIdx < manifestFolderCount) {
-    int fileCount = manifestFileCount[folderIdx];
-    if (fileIdx < 1) fileIdx = 1;
-    if (fileIdx > fileCount + 1) fileIdx = fileCount + 1;  // allow NEW slot
-    const char* folderName = manifestFolderNames[folderIdx];
-    char newName[MANIFEST_NAME_MAX];
-    const char* fileName = nullptr;
-    if (fileIdx >= 1 && fileIdx <= fileCount) {
-      fileName = manifestFileNames[folderIdx][fileIdx - 1];
-    } else {  // NEW slot
-      generateNextNumericName(folderIdx, newName, sizeof(newName));
-      fileName = newName;
-    }
-    if (folderName && folderName[0]) {
-      snprintf(out, outSize, "samples/%s/%s", folderName, fileName);
-    } else {
-      snprintf(out, outSize, "samples/%s", fileName);
-    }
-    return;
+  int ch = GLOB.currentChannel;
+  if (ch < 1 || ch >= maxFiles) return;
+  if (SMP.samplePathRel[ch][0]) {
+    snprintf(out, outSize, "samples/%s", SMP.samplePathRel[ch]);
   }
-
-  // No manifest available: refuse to construct numeric fallback paths
 }
 
 void EEPROMgetLastFiles() {
-  // Always use map.txt - never use legacy mode
-  // If map.txt is missing, scan and write it, then load it
-  if (!loadSampleManifest()) {
-    // map.txt is missing, scan and write it
-    scanAndWriteManifest();
-    // Now load the newly created map.txt
-    loadSampleManifest();
-  }
-  // Ensure manifest is loaded
-  if (!manifestLoaded) {
-    // Last resort: try scanning again
-    scanAndWriteManifest();
-    loadSampleManifest();
-  }
-  if (manifestLoaded) {
-    set_Wav.maxValues[1] = (manifestFolderCount > 0) ? (manifestFolderCount - 1) : 0;
-  }
+  // Dynamic browser: nothing to preload from SD index files
 }
 
 
@@ -565,9 +650,19 @@ void stopRecordingRAM(int fnr, int snr) {
   // Disable audio input monitoring
   mixer_end.gain(3, 0.0);
 
-  // open WAV on SD
+  // open WAV on SD (next free rec_XX.wav in current browse folder)
+  (void)fnr;
+  (void)snr;
   char path[160];
-  buildSamplePath(fnr, snr, path, sizeof(path));
+  char tmpName[65];
+  generateNextNumericName(0, tmpName, sizeof(tmpName));
+  int ch = GLOB.currentChannel;
+  if (ch < 1 || ch >= maxFiles) ch = 1;
+  if (g_browseDir[ch][0]) {
+    snprintf(path, sizeof(path), "samples/%s/%s", g_browseDir[ch], tmpName);
+  } else {
+    snprintf(path, sizeof(path), "samples/%s", tmpName);
+  }
   if (SD.exists(path)) SD.remove(path);
   File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
   if (!f) { return; }
@@ -581,8 +676,12 @@ void stopRecordingRAM(int fnr, int snr) {
   //Serial.print("💾 Saved ");
   //Serial.println(path);
 
-  // Refresh manifest so the new recording appears in map.txt and UI
-  scanAndWriteManifest();
+  sampleBrowserInvalidate();
+  if (g_browseDir[ch][0]) {
+    snprintf(SMP.samplePathRel[ch], 128, "%s/%s", g_browseDir[ch], tmpName);
+  } else {
+    snprintf(SMP.samplePathRel[ch], 128, "%s", tmpName);
+  }
   
   // Reload the sample metadata after recording
   extern bool sampleIsLoaded;
@@ -844,8 +943,7 @@ void stopFastRecord() {
 }
 
 void EEPROMsetLastFile() {
-  // Legacy lastFile[] writer removed; keep as alias to manifest generation (no numeric progress UI).
-  scanAndWriteManifest();
+  sampleBrowserInvalidate();
 }
 
 
@@ -2480,11 +2578,8 @@ void startNew() {
   extern bool isNowPlaying;
   extern CachedSample previewCache;
   
-  // FULL reset: clear sample manifest + delete map.txt so the next scan is clean
-  clearSampleManifest();
-  if (SD.exists("samples/map.txt")) {
-    SD.remove("samples/map.txt");
-  }
+  // FULL reset: clear dynamic sample browser state
+  sampleBrowserClearAll();
   // Clear any preview/cache state as well
   previewCache.valid = false;
   previewCache.lengthBytes = 0;

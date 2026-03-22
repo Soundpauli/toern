@@ -2980,13 +2980,6 @@ void switchMenu(int menuPosition){
       case 3:
         if (GLOB.currentChannel < 1 || GLOB.currentChannel > 8) return;
         switchMode(&set_Wav);
-        // Manifest selection: folder in oldID, file in fileID
-        currentMode->pos[1] = (int)SMP.wav[GLOB.currentChannel].oldID;
-        currentMode->pos[3] = (int)SMP.wav[GLOB.currentChannel].fileID;
-        Encoder[1].writeCounter((int32_t)currentMode->pos[1]);
-        Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
-        //set encoder to currently Loaded Sample!!
-        //Encoder[3].writeCounter((int32_t)((SMP.wav[GLOB.currentChannel][0] * 4) - 1));
         break;
 
       case 4:
@@ -3149,28 +3142,15 @@ void switchMenu(int menuPosition){
           // Reset effects/parameters to defaults
           resetAllToDefaults();
         } else if (resetMenuOption == 1) {
-          // SD rescan: Rescan samples folder and update map.txt
+          // SD rescan: invalidate dynamic sample browser cache
           FastLEDclear();
           drawText("SCAN", 2, 3, UI_GREEN);
           FastLEDshow();
-          
-          // Rescan and write manifest
-          extern bool scanAndWriteManifest();
-          bool success = scanAndWriteManifest();
-          
-          if (success) {
-            extern bool loadSampleManifest();
-            bool loadSuccess = loadSampleManifest();
-            FastLEDclear();  // Clear before showing result
-            if (loadSuccess) {
-              drawText("DONE", 2, 3, UI_GREEN);
-            } else {
-              drawText("FAIL", 2, 3, UI_RED);
-            }
-          } else {
-            FastLEDclear();  // Clear before showing result
-            drawText("FAIL", 2, 3, UI_RED);
-          }
+
+          extern void sampleBrowserInvalidate();
+          sampleBrowserInvalidate();
+          FastLEDclear();
+          drawText("DONE", 2, 3, UI_GREEN);
           FastLEDshow();
           delay(1000);
           
@@ -3185,28 +3165,14 @@ void switchMenu(int menuPosition){
           extern void startNew();
           startNew();
           
-          // Then rescan SD
           FastLEDclear();
           drawText("SCAN", 2, 3, UI_GREEN);
           FastLEDshow();
-          
-          // Rescan and write manifest
-          extern bool scanAndWriteManifest();
-          bool success = scanAndWriteManifest();
-          
-          if (success) {
-            extern bool loadSampleManifest();
-            bool loadSuccess = loadSampleManifest();
-            FastLEDclear();  // Clear before showing result
-            if (loadSuccess) {
-              drawText("DONE", 2, 3, UI_GREEN);
-            } else {
-              drawText("FAIL", 2, 3, UI_RED);
-            }
-          } else {
-            FastLEDclear();  // Clear before showing result
-            drawText("FAIL", 2, 3, UI_RED);
-          }
+
+          extern void sampleBrowserInvalidate();
+          sampleBrowserInvalidate();
+          FastLEDclear();
+          drawText("DONE", 2, 3, UI_GREEN);
           FastLEDshow();
           delay(1000);
           

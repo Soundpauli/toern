@@ -1,13 +1,23 @@
 
 extern int8_t channelDirection[maxFiles];
-extern bool manifestLoaded;
-extern uint16_t manifestFolderCount;
-extern uint16_t manifestFileCount[];
-extern char manifestFolderNames[][96];  // MANIFEST_FOLDER_PATH_MAX in toern_helpers.ino
-bool scanAndWriteManifest();
+extern uint16_t g_wavPickCount;
+extern uint16_t g_folderPickCount;
+extern int g_wavFileCount;
+extern char g_wavPickName[][65];
+extern uint8_t g_wavPickType[];
+extern char g_folderPickName[][65];
+extern char g_browseDir[][128];
+extern bool g_browseListDirty;
+extern void sampleBrowserRefreshList(int channel);
+extern void sampleBrowserSyncBrowseFromStoredPath(int channel);
+extern unsigned int sampleBrowserHashName(const char*);
+extern uint8_t sampleBrowserEntryTypeAt(int idx);
+void generateNextNumericName(int folderIdx, char* outName, size_t outSize);
 extern int previewTriggerMode;
 extern const int PREVIEW_MODE_ON;
 extern const int PREVIEW_MODE_PRESS;
+extern bool g_suppressNextWavPreviewAfterFolderNav;
+extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
 
 // Track last sample selection in showWave() across calls
 static int lastEncoder3Value_forShowWave = -1;
@@ -37,20 +47,6 @@ bool isEncoder0PressedMode() {
 
 void setEncoder0PressedMode(bool state) {
   g_encoder0PressedMode = state;
-}
-
-// Find 1-based file index within a manifest folder by exact filename (case-insensitive).
-static int manifestFindFileIdx(int folderIdx, const char *filename) {
-  if (!manifestLoaded) return -1;
-  if (folderIdx < 0 || folderIdx >= (int)manifestFolderCount) return -1;
-  if (!filename || !filename[0]) return -1;
-  int fc = (int)manifestFileCount[folderIdx];
-  for (int i = 0; i < fc; i++) {
-    if (strcasecmp(manifestFileNames[folderIdx][i], filename) == 0) {
-      return i + 1; // 1-based
-    }
-  }
-  return -1;
 }
 
 static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
@@ -234,19 +230,32 @@ static void servicePeakScan(uint32_t maxBytesThisCall) {
   }
 }
 
-FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool setMaxSampleLength) {
+FLASHMEM void previewSample(bool setMaxSampleLength) {
   stopPeakScan();
-  
+
   if (playSdWav1.isPlaying()) playSdWav1.stop();
   envelope0.noteOff();
-  
+
+  int ch = constrain((int)GLOB.currentChannel, 1, 8);
+  if (g_browseListDirty) sampleBrowserRefreshList(ch);
+  int idx = (int)currentMode->pos[3] - 1;
+  if (idx < 0 || idx >= (int)g_wavPickCount) return;
+  if (sampleBrowserEntryTypeAt(idx) != 2) return;
+
+  char rel[128];
+  rel[0] = '\0';
+  if (g_browseDir[ch][0]) snprintf(rel, sizeof(rel), "%s/%s", g_browseDir[ch], g_wavPickName[idx]);
+  else snprintf(rel, sizeof(rel), "%s", g_wavPickName[idx]);
+  strncpy(SMP.samplePathRel[ch], rel, 127);
+  SMP.samplePathRel[ch][127] = 0;
+
   char OUTPUTf[160];
-  buildSamplePath(folder, sampleID, OUTPUTf, sizeof(OUTPUTf));
+  snprintf(OUTPUTf, sizeof(OUTPUTf), "samples/%s", rel);
 
   // When encoder(0) is pressed, behave like seek > 0: skip full range path, just play audio
   bool usingFullRange = !g_encoder0PressedMode && (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
   if (usingFullRange && (previewTriggerMode == PREVIEW_MODE_ON || previewTriggerMode == PREVIEW_MODE_PRESS)) {
-    yield(); // Yield before SD.exists() to prevent blocking main sequencer
+    yield();
     if (!SD.exists(OUTPUTf)) {
       return;
     }
@@ -262,30 +271,28 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     previewCache.plen = 0;
 
     previewIsPlaying = true;
-    
-    // Only clear peaks if this is a NEW sample (not just a preview of the same sample)
-    static unsigned int lastPreviewFolder = 999;
-    static unsigned int lastPreviewSampleID = 999;
-    bool isNewSample = (folder != lastPreviewFolder || sampleID != lastPreviewSampleID);
-    
+
+    static char lastPreviewRel[128] = {0};
+    bool isNewSample = (strcasecmp(lastPreviewRel, rel) != 0);
+
     if (isNewSample) {
       peakIndex = 0;
       memset(peakValues, 0, sizeof(peakValues));
-      lastPreviewFolder = folder;
-      lastPreviewSampleID = sampleID;
+      strncpy(lastPreviewRel, rel, sizeof(lastPreviewRel) - 1);
+      lastPreviewRel[sizeof(lastPreviewRel) - 1] = 0;
     }
-    
+
     extern void updatePreviewVolume();
     updatePreviewVolume();
-    
+
     yield();
-    playSdWav1.play(OUTPUTf);  // Stream from SD (no RAM copy)
-    
+    playSdWav1.play(OUTPUTf);
+
     sampleIsLoaded = true;
     return;
   }
 
-  if (!previewCache.valid || previewCache.folder != folder || previewCache.sampleID != sampleID) {
+  if (!previewCache.valid || strcasecmp(previewCache.pathRel, rel) != 0) {
     yield(); // Yield before SD.open() to prevent blocking main sequencer
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
@@ -349,9 +356,8 @@ FLASHMEM void previewSample(unsigned int folder, unsigned int sampleID, bool set
     }
     previewFile.close();
 
-    // Update cache
-    previewCache.folder = folder;
-    previewCache.sampleID = sampleID;
+    strncpy(previewCache.pathRel, rel, sizeof(previewCache.pathRel) - 1);
+    previewCache.pathRel[sizeof(previewCache.pathRel) - 1] = 0;
     previewCache.lengthBytes = plen;
     previewCache.rate = PrevSampleRate;
     previewCache.valid = true;
@@ -580,20 +586,6 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
 
 
 void showWave() {
-  // Ensure manifest is available so folder browsing uses real folder names
-  // Always use map.txt - if missing, scan and write it, then load it
-  if (!manifestLoaded) {
-    if (!loadSampleManifest()) {
-      // map.txt is missing, scan and write it
-      scanAndWriteManifest();
-      // Now load the newly created map.txt
-      loadSampleManifest();
-    }
-  }
-  // Require manifest to be loaded - never use legacy mode
-  if (!manifestLoaded) {
-    return; // Cannot proceed without manifest
-  }
   // ---- Helpers -------------------------------------------------------------
   auto resetSeekRange = []() {
     currentMode->pos[0] = 0;
@@ -643,99 +635,44 @@ void showWave() {
   // Track last channel to detect channel changes
   static int lastChannelInShowWave = -1;
   
-  // Only initialize encoder 3 when channel changes (not every frame)
+  int ch = constrain((int)GLOB.currentChannel, 1, 8);
   if (lastChannelInShowWave != GLOB.currentChannel) {
     lastChannelInShowWave = GLOB.currentChannel;
-    // Manifest-based selection: folderIdx in oldID, fileIdx in fileID
-    int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
-    int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
-
-    // Always use manifest mode - never use legacy mode
-    // If indices are out of range, clamp them to valid values
-    if (manifestLoaded) {
-      bool folderValid = (folderIdx >= 0 && folderIdx < (int)manifestFolderCount);
-      bool fileValid = false;
-      if (folderValid) {
-        int fc = (int)manifestFileCount[folderIdx];
-        fileValid = (fileIdx >= 1 && fileIdx <= fc + 1);
-      }
-      if (!folderValid || !fileValid) {
-        // Clamp to valid range - no legacy mode fallback
-        folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
-        int fc = (int)manifestFileCount[folderIdx];
-        fileIdx = constrain(fileIdx, 1, max(1, fc + 1));
-        SMP.wav[GLOB.currentChannel].oldID = (unsigned int)folderIdx;
-        SMP.wav[GLOB.currentChannel].fileID = (unsigned int)fileIdx;
-      }
-    } else {
-      // Manifest must be loaded - if not, we cannot proceed
-      return;
-    }
-
-    if (manifestLoaded) folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
-    if (folderIdx < 0) folderIdx = 0;
-    GLOB.folder = (unsigned int)folderIdx;
-    currentMode->pos[1] = folderIdx;
-    Encoder[2].writeCounter((int32_t)folderIdx);
-
-    int fileCount = (manifestLoaded && folderIdx < (int)manifestFolderCount) ? (int)manifestFileCount[folderIdx] : 0;
-    int maxFilesInFolder = fileCount + 1; // include NEW slot
-    if (maxFilesInFolder < 1) maxFilesInFolder = 1;
-    Encoder[3].writeMin((int32_t)1);
-    Encoder[3].writeMax((int32_t)maxFilesInFolder);
-
-    if (fileIdx < 1 || fileIdx > maxFilesInFolder) fileIdx = 1;
-    currentMode->pos[3] = fileIdx;
-    Encoder[3].writeCounter((int32_t)fileIdx);
-    lastEncoder3Value_forShowWave = -1;  // Force re-preview
+    ch = constrain((int)GLOB.currentChannel, 1, 8);
+    sampleBrowserRefreshList(ch);
+    sampleBrowserSyncBrowseFromStoredPath(ch);
+    SMP.wav[ch].fileID = (unsigned int)currentMode->pos[3];
+    SMP.wav[ch].oldID = 0;
+    lastEncoder3Value_forShowWave = -1;
   }
-  
-  // Always use manifest mode - never use legacy mode
-  if (!manifestLoaded) {
-    return; // Cannot proceed without manifest
-  }
-  int folderIdx = (int)GLOB.folder;
-  folderIdx = constrain(folderIdx, 0, (int)manifestFolderCount - 1);
-  if (folderIdx < 0) folderIdx = 0;
-  int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
+
+  int fileIdx = (int)SMP.wav[ch].fileID;
   if (fileIdx < 1) fileIdx = 1;
   char OUTPUTf[160];
-  buildSamplePath(folderIdx, fileIdx, OUTPUTf, sizeof(OUTPUTf));
+  OUTPUTf[0] = 0;
+  buildSamplePath(0, 0, OUTPUTf, sizeof(OUTPUTf));
   
   firstcheck = false;
   nofile = false;
 
   FastLEDclear();
-  
-  // Clamp folder encoder to existing folders (always use manifest)
-  // NOTE: Encoder functions are swapped in SET_WAV:
-  // - Encoder[2] (rotate) = folder selection
-  // - Encoder[1] (rotate) = seekEnd (trim)
-  // Always use manifest mode - never use legacy mode
-  if (!manifestLoaded) {
-    return; // Cannot proceed without manifest
-  }
-  int maxFolders = manifestFolderCount;
-  if (maxFolders < 1) maxFolders = 1;
-  Encoder[2].writeMin((int32_t)0);
-  Encoder[2].writeMax((int32_t)(maxFolders - 1));
-  if ((int)currentMode->pos[1] >= maxFolders) {
-    currentMode->pos[1] = maxFolders - 1;
-    Encoder[2].writeCounter((int32_t)currentMode->pos[1]);
-  }
-  
-  // Indicators: ENC0 preview (press), ENC2 seekEnd, ENC3 folder, ENC4 load
-  // Manual preview via encoder(0) press is supported for both PREV==ON and PREV==PRSS.
+
+  if (g_browseListDirty) sampleBrowserRefreshList(ch);
+
+  // Indicators: ENC0 preview (press), ENC1 seekEnd, ENC2 load selected file, ENC3 browse dirs+files
   drawIndicator('L', 'P', 1);
   Encoder[0].writeRGBCode(0xFF00FF);
 
   drawIndicator('L', 'Y', 2);  // Encoder 1: trim/seekEnd (swapped)
-  drawIndicator('L', 'W', 3);  // Encoder 2: folder browse (swapped)
-  drawIndicator('L', 'G', 4);  // Encoder 3: load sample
+  drawIndicator('L', 'G', 3);  // Encoder 2: load selected file
+  drawIndicator('L', 'W', 4);  // Encoder 3: combined browser (dirs first, then files)
   // (Encoder[0] is intentionally kept pink in SET_WAV to advertise preview-press.)
-  
-  // Set encoder colors to match indicators
-  Encoder[2].writeRGBCode(0xFFFFFF); // White (folder)
+
+  // Encoder 2 rotation is unused in SET_WAV.
+  currentMode->pos[1] = 0;
+  Encoder[2].writeMin((int32_t)0);
+  Encoder[2].writeMax((int32_t)0);
+  Encoder[2].writeCounter((int32_t)0);
   Encoder[1].writeRGBCode(0xFFFF00); // Yellow (seekEnd)
   Encoder[1].writeMin((int32_t)0);
   Encoder[1].writeMax((int32_t)100);
@@ -743,7 +680,6 @@ void showWave() {
     currentMode->pos[2] = 100;
     Encoder[1].writeCounter((int32_t)currentMode->pos[2]);
   }
-  Encoder[3].writeRGBCode(0x00FF00); // Green
 
   // ---- Encoder 0: Seek start ----------------------------------------------
   {
@@ -754,45 +690,10 @@ void showWave() {
       // Stop peak building when seek changes (for both PREV modes)
       stopPeakScan();
       if (sampleIsLoaded && previewTriggerMode == PREVIEW_MODE_ON) {
-      yield(); // Yield before file operations
-      previewSample(folderIdx, fileIdx, false);  // Uses cached buffer when available
+      yield();
+      previewSample(false);
       }
     }
-  }
-
-  // ---- Encoder 2: Folder (swapped) ----------------------------------------
-  // Read encoder counter directly and clamp to existing folders
-  int32_t encoder2Counter = Encoder[2].readCounterInt();
-  // Reuse maxFolders from above (already calculated)
-  int clampedFolderPos = constrain((int)encoder2Counter, 0, maxFolders - 1);
-  
-  // Sync encoder hardware and mode position if clamped
-  if (clampedFolderPos != (int)encoder2Counter) {
-    Encoder[2].writeCounter((int32_t)clampedFolderPos);
-  }
-  if (clampedFolderPos != (int)currentMode->pos[1]) {
-    currentMode->pos[1] = clampedFolderPos;
-  }
-  
-  if (currentMode->pos[1] != GLOB.folder) {
-    yield(); // Yield before audio/file operations
-    envelope0.noteOff();
-    playSdWav1.stop();
-    firstcheck = true;
-    nofile = false;
-    GLOB.folder = clampedFolderPos;  // Use clamped value, 0-based folder index
-    int folderIdx = max(0, (int)GLOB.folder);
-    int fileCount = manifestLoaded && folderIdx < (int)manifestFolderCount ? (int)manifestFileCount[folderIdx] : 0;
-    int maxFilesInFolder = fileCount + 1; // include NEW slot
-    if (maxFilesInFolder < 1) maxFilesInFolder = 1;
-    // Store manifest selection into SMP (folderIdx in oldID, fileIdx in fileID)
-    SMP.wav[GLOB.currentChannel].oldID = (unsigned int)folderIdx;
-    SMP.wav[GLOB.currentChannel].fileID = 1;
-    currentMode->pos[3] = 1;
-    Encoder[3].writeMin((int32_t)1);
-    Encoder[3].writeMax((int32_t)maxFilesInFolder);
-    Encoder[3].writeCounter((int32_t)1);
-    lastEncoder3Value_forShowWave = -1;  // Force re-preview after folder change
   }
 
   // ---- Encoder 1: Seek end (swapped) --------------------------------------
@@ -808,38 +709,60 @@ void showWave() {
       // Stop peak building when seekEnd changes (for both PREV modes)
       stopPeakScan();
       if (sampleIsLoaded && previewTriggerMode == PREVIEW_MODE_ON) {
-      yield(); // Yield before file operations
-      previewSample(folderIdx, fileIdx, false);  // Uses cached buffer when available
+      yield();
+      previewSample(false);
       }
     }
   }
 
-  // ---- Encoder 3: Sample selection ---------------------------------------
+  // ---- Encoder 3: combined browser ([../], dirs, files) -------------------
   int encoderSampleValue = (int)currentMode->pos[3];
-  int folderIdxForSample = max(0, (int)GLOB.folder);
-  int fileCountForSample = manifestLoaded && folderIdxForSample < (int)manifestFolderCount ? (int)manifestFileCount[folderIdxForSample] : 0;
-  int maxFilesForSample = fileCountForSample + 1; // include NEW slot
-  if (maxFilesForSample < 1) maxFilesForSample = 1;
+  int maxList = max(1, (int)g_wavPickCount);
   int encoderMin = 1;
-  int encoderMax = maxFilesForSample;
+  int encoderMax = maxList;
   if (encoderSampleValue < encoderMin) encoderSampleValue = encoderMin;
   if (encoderSampleValue > encoderMax) encoderSampleValue = encoderMax;
   if (encoderSampleValue != currentMode->pos[3]) {
     currentMode->pos[3] = encoderSampleValue;
     Encoder[3].writeCounter((int32_t)encoderSampleValue);
   }
+  Encoder[3].writeMin((int32_t)1);
+  Encoder[3].writeMax((int32_t)maxList);
+  sampleBrowserClampBrowseIndexAndHardware(ch);
+  encoderSampleValue = (int)currentMode->pos[3];
 
-  bool sampleChanged = (encoderSampleValue != lastEncoder3Value_forShowWave) ||
-                       (encoderSampleValue != SMP.wav[GLOB.currentChannel].fileID);
+  {
+    Encoder[2].writeRGBCode(0x0000FF);
+    int wi = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
+    bool isDirEntry = (sampleBrowserEntryTypeAt(wi) != 2);
+    Encoder[3].writeRGBCode(isDirEntry ? 0xFFFF00 : 0x0000FF);
+  }
+
+  int selectedIdx = encoderSampleValue - 1;
+  bool selectedIsFile = (selectedIdx >= 0 && selectedIdx < (int)g_wavPickCount &&
+                         sampleBrowserEntryTypeAt(selectedIdx) == 2);
+  bool sampleChanged = selectedIsFile &&
+                       ((encoderSampleValue != lastEncoder3Value_forShowWave) ||
+                        (encoderSampleValue != SMP.wav[ch].fileID));
+
+  if ((int)lastEncoder3Value_forShowWave != encoderSampleValue) {
+    lastEncoder3Value_forShowWave = encoderSampleValue;
+    if (!selectedIsFile) {
+      envelope0.noteOff();
+      previewIsPlaying = false;
+      playSdWav1.stop();
+      sampleIsLoaded = false;
+      firstcheck = true;
+      nofile = false;
+    }
+  }
 
   if (sampleChanged) {
-    lastEncoder3Value_forShowWave = encoderSampleValue;
     fileIdx = encoderSampleValue;
-    SMP.wav[GLOB.currentChannel].oldID = (unsigned int)folderIdxForSample;
-    SMP.wav[GLOB.currentChannel].fileID = (unsigned int)fileIdx;
+    SMP.wav[ch].oldID = 0;
+    SMP.wav[ch].fileID = (unsigned int)fileIdx;
 
-    // Reset preview / state
-    yield(); // Yield before file operations
+    yield();
     envelope0.noteOff();
     previewIsPlaying = false;
     playSdWav1.stop();
@@ -847,19 +770,13 @@ void showWave() {
     firstcheck = true;
     nofile = false;
 
-    buildSamplePath(folderIdxForSample, fileIdx, OUTPUTf, sizeof(OUTPUTf));
-    yield(); // Yield before opening file
-
-
-    // Invalidate preview cache and reset seek positions for new sample
     previewCache.valid = false;
     resetSeekRange();
 
-    if (previewTriggerMode == PREVIEW_MODE_ON) {
-      startSdPreview(OUTPUTf);
-    } else if (previewTriggerMode == PREVIEW_MODE_PRESS) {
-      // PREV==PRESS: start incremental SD peak scan (no audio playback yet)
-      startPeakScan(OUTPUTf, true);
+    if (g_suppressNextWavPreviewAfterFolderNav) {
+      g_suppressNextWavPreviewAfterFolderNav = false;
+    } else {
+      previewSample(false);
     }
   }
   
@@ -879,21 +796,12 @@ void showWave() {
   // Display peaks AFTER encoder processing (so display matches audio)
   refreshPeaksDisplay();
 
-  // Optional overlay: show folder/file names at y=12, animated ping-pong
-  static int scrollFileOffset = 0;
-  static int scrollFolderOffset = 0;
-  static unsigned long nextFileStepMs = 0;
-  static unsigned long nextFolderStepMs = 0;
-  static bool showFolderLine = false;  // true = show folder, false = show filename
-  static unsigned long folderDisplayUntilMs = 0;  // When to switch back to filename after folder change
-  static bool forceFolderDisplay = false;  // explicit flag to lock folder display until timer expires
-  static int lastScrollFile = -1;
-  static int lastScrollFolder = -1;
-  static int lastEncoder1Value = -1;
-  static int lastEncoder3Value = -1;
+  // Overlay: show the current combined browse selection from the last encoder.
+  static int scrollSelectionOffset = 0;
+  static unsigned long nextSelectionStepMs = 0;
+  static int lastOverlayPos3 = -1;
   static bool overlayInit = false;
-  static int fileDir = 1;  // 1 forward, -1 backward
-  static int folderDir = 1;
+  static int selectionDir = 1;  // 1 forward, -1 backward
 
   auto textPixelWidth = [](const char* text) {
     int w = 0;
@@ -971,121 +879,45 @@ void showWave() {
   };
 
   {
-    // Detect encoder changes
-    int currentEncoder1 = currentMode->pos[1];
-    int currentEncoder3 = currentMode->pos[3];
-    
-    // Initialize overlay state once
+    int currentBrowsePos = (int)currentMode->pos[3];
+    static char lastBrowseSnap[128] = {0};
+    static int lastOverlayCh = -1;
+    if (ch != lastOverlayCh) {
+      lastOverlayCh = ch;
+      overlayInit = false;
+    }
+
     if (!overlayInit) {
       overlayInit = true;
-      lastEncoder1Value = currentEncoder1;
-      lastEncoder3Value = currentEncoder3;
-      showFolderLine = false;  // Default to filename
-      folderDisplayUntilMs = 0;
-      forceFolderDisplay = false;
-    }
-    
-    // Encoder 1 (folder) changed - FORCE show folder name for minimum 0.5s (block filename during this)
-    if (currentEncoder1 != lastEncoder1Value) {
-      forceFolderDisplay = true;
-      showFolderLine = true;
-      scrollFolderOffset = 0;
-      folderDir = 1;
-      unsigned long nowFolder = millis();
-      nextFolderStepMs = nowFolder + 300;
-      folderDisplayUntilMs = nowFolder + 1500;   // Show folder for minimum 0.5 second
-      lastScrollFolder = folderIdx;
-      lastEncoder1Value = currentEncoder1;
-      // Folder change auto-sets fileIdx=1; keep overlay state in sync
-      lastEncoder3Value = 1;
-    }
-    
-    // Encoder 3 (sample) changed by user -> switch to filename immediately (cancel folder display)
-    if (currentEncoder3 != lastEncoder3Value) {
-      forceFolderDisplay = false;
-      folderDisplayUntilMs = 0;
-      showFolderLine = false;
-      scrollFileOffset = 0;
-      fileDir = 1;
-      nextFileStepMs = millis() + 300;
-      lastScrollFile = fileIdx;
-      lastEncoder3Value = currentEncoder3;
-    }
-    
-    // Check timer: if folder was forced and timer expired, allow filename view
-    unsigned long now = millis();
-    if (forceFolderDisplay && folderDisplayUntilMs > 0 && now >= folderDisplayUntilMs) {
-      // Timer expired: stop forcing folder, switch to filename
-      forceFolderDisplay = false;
-      folderDisplayUntilMs = 0;
-      showFolderLine = false;
-      scrollFileOffset = 0;
-      fileDir = 1;
-      nextFileStepMs = now + 300;
-    }
-    
-    // FORCE folder display if flag is set (regardless of other state)
-    if (forceFolderDisplay) {
-      showFolderLine = true;
-    }
-    
-    // Reset scroll when sample/folder ID changes (but not encoder change)
-    if ((fileIdx != lastScrollFile || folderIdx != lastScrollFolder) && 
-        currentEncoder1 == lastEncoder1Value && currentEncoder3 == lastEncoder3Value) {
-      if (!showFolderLine) {
-        scrollFileOffset = 0;
-        fileDir = 1;
-        nextFileStepMs = millis() + 300;
-      } else {
-        scrollFolderOffset = 0;
-        folderDir = 1;
-        nextFolderStepMs = millis() + 300;
-      }
-      lastScrollFile = fileIdx;
-      lastScrollFolder = folderIdx;
+      lastOverlayPos3 = currentBrowsePos;
+      strncpy(lastBrowseSnap, g_browseDir[ch], sizeof(lastBrowseSnap) - 1);
+      lastBrowseSnap[sizeof(lastBrowseSnap) - 1] = 0;
     }
 
-    char folderLabel[96];  // nested folder paths (see MANIFEST_FOLDER_PATH_MAX)
-    char fileLabel[32];
-    // Always use manifest mode - never use legacy mode
-    if (!manifestLoaded) {
-      return; // Cannot proceed without manifest
-    }
-    int labelFolderIdx = (int)GLOB.folder;
-    int localIdx = fileIdx;
-    if (localIdx < 1) localIdx = 1;
-    if (manifestLoaded && labelFolderIdx < (int)manifestFolderCount) {
-      snprintf(folderLabel, sizeof(folderLabel), "%s", manifestFolderNames[labelFolderIdx]);
-      int fileCount = (int)manifestFileCount[labelFolderIdx];
-      if (localIdx >= 1 && localIdx <= fileCount) {
-        const char* fname = manifestFileNames[labelFolderIdx][localIdx - 1];
-        size_t len = strlen(fname);
-        if (len > 4 && strcasecmp(fname + len - 4, ".wav") == 0) {
-          // Copy without .wav
-          size_t copyLen = len - 4;
-          if (copyLen >= sizeof(fileLabel)) copyLen = sizeof(fileLabel) - 1;
-          memcpy(fileLabel, fname, copyLen);
-          fileLabel[copyLen] = '\0';
-        } else {
-          snprintf(fileLabel, sizeof(fileLabel), "%s", fname);
-        }
-      } else {
-        snprintf(fileLabel, sizeof(fileLabel), "NEW");
-      }
-    } else {
-      // Manifest not available: don't fall back to numeric names in the UI
-      snprintf(folderLabel, sizeof(folderLabel), "NO MAP");
-      snprintf(fileLabel, sizeof(fileLabel), "");
+    bool browseDirChanged = (strcmp(lastBrowseSnap, g_browseDir[ch]) != 0);
+    bool pos3Changed = (currentBrowsePos != lastOverlayPos3);
+    if (browseDirChanged || pos3Changed) {
+      scrollSelectionOffset = 0;
+      selectionDir = 1;
+      nextSelectionStepMs = millis() + 300;
+      lastOverlayPos3 = currentBrowsePos;
+      strncpy(lastBrowseSnap, g_browseDir[ch], sizeof(lastBrowseSnap) - 1);
+      lastBrowseSnap[sizeof(lastBrowseSnap) - 1] = 0;
     }
 
-    // Folder colors: col_Folder has only 10 entries; wrap safely for folder indexes >=10.
-    const int folderColorCount = (int)(sizeof(col_Folder) / sizeof(col_Folder[0]));
-    CRGB folderColor = col_Folder[(labelFolderIdx >= 0 ? labelFolderIdx : 0) % max(1, folderColorCount)];
-    if (showFolderLine) {
-      renderLine(folderLabel, 12, folderColor, scrollFolderOffset, folderDir, nextFolderStepMs, false);
+    char selectionLabel[128];
+    selectionLabel[0] = '\0';
+    int ei = (int)currentMode->pos[3] - 1;
+    if (ei >= 0 && ei < (int)g_wavPickCount) {
+      snprintf(selectionLabel, sizeof(selectionLabel), "%s", g_wavPickName[ei]);
     } else {
-      renderLine(fileLabel, 12, folderColor, scrollFileOffset, fileDir, nextFileStepMs, true);
+      snprintf(selectionLabel, sizeof(selectionLabel), "-");
     }
+    bool selectionIsFileEntry = (ei >= 0 && ei < (int)g_wavPickCount && sampleBrowserEntryTypeAt(ei) == 2);
+    CRGB selectionColor = selectionIsFileEntry
+        ? CRGB(0, 0, 255)
+        : CRGB(255, 255, 0);
+    renderLine(selectionLabel, 12, selectionColor, scrollSelectionOffset, selectionDir, nextSelectionStepMs, selectionIsFileEntry);
   }
   
   yield(); // Yield at end of function to maintain responsiveness
@@ -1207,12 +1039,7 @@ void reversePreviewSample() {
   Encoder[0].writeCounter((int32_t)GLOB.seek);
   Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
   
-  // Trigger re-preview with current seek settings
-  // Re-preview using manifest selection (folderIdx in oldID, fileIdx in fileID)
-  int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
-  int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
-  if (fileIdx < 1) fileIdx = 1;
-  previewSample(folderIdx, fileIdx, false);
+  previewSample(false);
 }
 
 // Copy the preview sample (channel 0) to the target channel
@@ -1223,18 +1050,15 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   
   extern CachedSample previewCache;
   
-  bool needToLoadPreview = (!previewCache.valid || previewCache.lengthBytes == 0);
+  bool pathMismatch =
+      (SMP.samplePathRel[GLOB.currentChannel][0] == 0) ||
+      (strcasecmp(previewCache.pathRel, SMP.samplePathRel[GLOB.currentChannel]) != 0);
+  bool needToLoadPreview = (!previewCache.valid || previewCache.lengthBytes == 0 || pathMismatch);
   
   // If preview cache is not valid, ensure the sample is loaded first
   if (needToLoadPreview) {
-    int folderIdx = (int)SMP.wav[GLOB.currentChannel].oldID;
-    int fileIdx = (int)SMP.wav[GLOB.currentChannel].fileID;
-    if (fileIdx < 1) fileIdx = 1;
-    
-    // Load the sample into cache without triggering preview playback
-    // We'll manually load it into sampled[0] and set up the cache
     char OUTPUTf[160];
-    buildSamplePath(folderIdx, fileIdx, OUTPUTf, sizeof(OUTPUTf));
+    buildSamplePath(0, 0, OUTPUTf, sizeof(OUTPUTf));
     
     yield(); // Yield before SD.open() to prevent blocking main sequencer
     File previewFile = SD.open(OUTPUTf);
@@ -1274,8 +1098,10 @@ void loadPreviewToChannel(unsigned int targetChannel) {
     previewFile.close();
     
     // Update cache
-    previewCache.folder = folderIdx;
-    previewCache.sampleID = fileIdx;
+    if (SMP.samplePathRel[GLOB.currentChannel][0]) {
+      strncpy(previewCache.pathRel, SMP.samplePathRel[GLOB.currentChannel], sizeof(previewCache.pathRel) - 1);
+      previewCache.pathRel[sizeof(previewCache.pathRel) - 1] = 0;
+    }
     previewCache.lengthBytes = plen;
     previewCache.rate = rate;
     previewCache.valid = true;
@@ -1332,7 +1158,8 @@ void loadPreviewToChannel(unsigned int targetChannel) {
   _samplers[targetChannel].addSample(36, targetBuffer, playLen, rateFactor);
   channelDirection[targetChannel] = 1;
   
-  // Persist manifest selection for the target channel (folderIdx in oldID, fileIdx in fileID)
   SMP.wav[targetChannel].oldID = SMP.wav[GLOB.currentChannel].oldID;
   SMP.wav[targetChannel].fileID = SMP.wav[GLOB.currentChannel].fileID;
+  strncpy(SMP.samplePathRel[targetChannel], SMP.samplePathRel[GLOB.currentChannel], 127);
+  SMP.samplePathRel[targetChannel][127] = 0;
 }
