@@ -13,6 +13,7 @@ struct GlobalVars;
 extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
 extern IntervalTimer midiClockTimer;
+void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity);
 
 // Reduce Serial spam in clock/BPM code paths (can stall Serial and hurt responsiveness).
 #ifndef DEBUG_MIDI_CLOCK_SERIAL
@@ -179,9 +180,10 @@ void checkMidi() {
 
     switch (miditype) {
       case midi::NoteOff: {
-        uint8_t pitch    = MIDI.getData1();
+        uint8_t pitch = MIDI.getData1();
         uint8_t velocity = MIDI.getData2();
-        handleNoteOff(GLOB.currentChannel, pitch - 60, velocity);
+        // Same logical channel as handleNoteOn (cable channel + voice mode), not raw 1..16 only.
+        handleNoteOff(MIDI.getChannel(), pitch, velocity);
         break;
       }
       case midi::Stop:
@@ -546,23 +548,37 @@ void handleStop() {
 
 
 
+// Map incoming MIDI (cable channel + pitch) to the same logical channel 1..16 as note routing.
+static int mapMidiToLogicalChannel(int midiChannel, uint8_t pitch) {
+  extern int voiceSelect;
+  extern bool MIDI_VOICE_SELECT;
+
+  if (voiceSelect == 2) {
+    // KEYS mode: Map MIDI note to channel (C4=60 -> ch1, C#4=61 -> ch2, etc.)
+    int ch = ((int)pitch - 60) % 12 + 1;
+    if (ch < 1) ch += 12;
+    if (ch > 8) ch = 8;
+    return ch;
+  }
+  if (!MIDI_VOICE_SELECT) {
+    // YPOS mode: use currently selected channel (13/14 for synth, etc.)
+    return (int)GLOB.currentChannel;
+  }
+  // MIDI mode: use the channel from the MIDI cable
+  return midiChannel;
+}
+
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   extern bool MIDI_NOTE_RECEIVE;
   if (!MIDI_NOTE_RECEIVE) return;
 
-  extern int voiceSelect;
-  
-  if (voiceSelect == 2) {
-    // KEYS mode: Map MIDI note to channel (C4=60 -> ch1, C#4=61 -> ch2, etc.)
-    // Wrapping: C4-B4 (60-71) = ch1-12, C5-B5 (72-83) = ch1-12, etc.
-    ch = ((pitch - 60) % 12) + 1;
-    if (ch < 1) ch += 12;  // Handle notes below C4
-    if (ch > 8) ch = 8;    // Limit to 8 sample channels
-  } else if (!MIDI_VOICE_SELECT) {
-    // YPOS mode: use current channel
-    ch = GLOB.currentChannel;
+  // Many controllers use Note On velocity 0 as release; treat like Note Off.
+  if (velocity == 0) {
+    handleNoteOff((uint8_t)ch, pitch, velocity);
+    return;
   }
-  // else: MIDI mode uses the ch parameter as-is
+
+  ch = mapMidiToLogicalChannel(ch, pitch);
 
   if (ch < 1 || ch > 16) return;
   pressedKeyCount[ch]++;  // Increment count for this channel
@@ -672,14 +688,17 @@ void onBeatTick() {
 
 
 
-void handleNoteOff(uint8_t channel, uint8_t pitch, uint8_t velocity) {
+void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
+  extern bool MIDI_NOTE_RECEIVE;
+  if (!MIDI_NOTE_RECEIVE) return;
 
-  // For persistent channels (11-14) use the counter.
+  int channel = mapMidiToLogicalChannel((int)midiChannel, pitch);
+
+  // For persistent channels (11-14) use the counter (must match handleNoteOn indexing).
   if (channel >= 11 && channel <= 14) {
     if (pressedKeyCount[channel] > 0)
-      pressedKeyCount[channel]--;  // Decrement counter
+      pressedKeyCount[channel]--;
 
-    // Only release if no keys remain pressed
     if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
       if (!envelopes[channel]) return;
       envelopes[channel]->noteOff();
