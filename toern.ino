@@ -1024,8 +1024,8 @@ FLASHMEM void applyStereoChannelRouting() {
   mixer_stereoL.gain(3, 0.0f);
 }
 
-// Stop synth channels (13/14) immediately
-static inline void stopSynthChannel(int ch) {
+// Stop synth channels (13/14) immediately (also used from MIDI note-off).
+void stopSynthChannel(int ch) {
   if (ch < 13 || ch > 14) return;
   if (envelopes[ch]) envelopes[ch]->noteOff();
   noteOnTriggered[ch] = false;
@@ -6202,6 +6202,16 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   synths[ch][0]->amplitude(WaveFormVelocity);
   synths[ch][1]->amplitude(WaveFormVelocity);
   if (!envelopes[ch]) return;
+
+  // External live MIDI on synth channels should stay audible while key is held.
+  // Grid/preview (persistant=false) keep the configured ADSR behavior.
+  if (persistant && (ch == 13 || ch == 14)) {
+    envelopes[ch]->sustain(maxParamVal[SUSTAIN]);
+  } else if (ch == 13 || ch == 14) {
+    float mappedSustain = mapf(SMP.param_settings[ch][SUSTAIN], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]);
+    envelopes[ch]->sustain(mappedSustain);
+  }
+
   envelopes[ch]->noteOn();
 
   if (persistant) {

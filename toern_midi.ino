@@ -14,13 +14,14 @@ extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
 extern IntervalTimer midiClockTimer;
 void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity);
+void stopSynthChannel(int ch);
 
 // Reduce Serial spam in clock/BPM code paths (can stall Serial and hurt responsiveness).
 #ifndef DEBUG_MIDI_CLOCK_SERIAL
 #define DEBUG_MIDI_CLOCK_SERIAL 0
 #endif
 #ifndef DEBUG_MIDI_RX_SERIAL
-#define DEBUG_MIDI_RX_SERIAL 1
+#define DEBUG_MIDI_RX_SERIAL 0
 #endif
 
 static inline void logMidiRxNoteOn(uint8_t ch, uint8_t pitch, uint8_t velocity) {
@@ -120,6 +121,8 @@ static void markExternalOne() {
   triggerExternalOneBlink();
 }
 static unsigned long lastClockSent = 0;
+// Track held notes per logical channel to avoid stuck counters on duplicate NoteOn events.
+static bool midiHeldNote[17][128] = { false };
 
 // ISR-style callback driven by dedicated IntervalTimer for master MIDI clock
 // Writes directly to Serial8 hardware to bypass MIDI library buffering and avoid blocking
@@ -637,9 +640,20 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   ch = mapMidiToLogicalChannel(ch, pitch);
 
   if (ch < 1 || ch > 16) return;
-  pressedKeyCount[ch]++;  // Increment count for this channel
+  // Only count a NoteOn once per (logical channel, pitch) until a matching NoteOff arrives.
+  if (pitch < 128 && !midiHeldNote[ch][pitch]) {
+    midiHeldNote[ch][pitch] = true;
+  }
+  // Keep pressedKeyCount in sync with the held-note bitmap (fixes stuck / missed releases).
+  {
+    int cnt = 0;
+    for (int p = 0; p < 128; p++) {
+      if (midiHeldNote[ch][p]) cnt++;
+    }
+    pressedKeyCount[ch] = (int16_t)cnt;
+  }
 
-  if (pressedKeyCount[ch] == 1) {
+  if (pressedKeyCount[ch] > 0) {
     persistentNoteOn[ch] = true;
   }
 
@@ -752,14 +766,28 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
 
   // For persistent channels (11-14) use the counter (must match handleNoteOn indexing).
   if (channel >= 11 && channel <= 14) {
-    if (pressedKeyCount[channel] > 0)
-      pressedKeyCount[channel]--;
+    if (pitch < 128) {
+      midiHeldNote[channel][pitch] = false;
+    }
+    {
+      int cnt = 0;
+      for (int p = 0; p < 128; p++) {
+        if (midiHeldNote[channel][p]) cnt++;
+      }
+      pressedKeyCount[channel] = (int16_t)cnt;
+    }
 
     if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
-      if (!envelopes[channel]) return;
-      envelopes[channel]->noteOff();
-      persistentNoteOn[channel] = false;
-      noteOnTriggered[channel] = false;
+      if (channel == 13 || channel == 14) {
+        stopSynthChannel(channel);
+      } else if (envelopes[channel]) {
+        envelopes[channel]->noteOff();
+        persistentNoteOn[channel] = false;
+        noteOnTriggered[channel] = false;
+      } else {
+        persistentNoteOn[channel] = false;
+        noteOnTriggered[channel] = false;
+      }
     }
     return;
   }
