@@ -3145,6 +3145,14 @@ void setup() {
   extern void applyAudioSettingsFromGlobals();
   applyAudioSettingsFromGlobals();
 
+  // DMAMEM retains values across soft resets. Clear MIDI voice-state for ch11-14 so stale
+  // pressedKeyCount or persistentNoteOn from the previous session cannot prevent noteOff.
+  for (int ch = 11; ch <= 14; ch++) {
+    pressedKeyCount[ch]   = 0;
+    persistentNoteOn[ch]  = false;
+    noteOnTriggered[ch]   = false;
+  }
+
   // Ch13/14 need an unconditional final init: the filter mixer transition state is never
   // set up for these channels at boot (setFilterDefaults is only called via resetAllAudioEffects).
   // Without it, gains stay at zero and ADSR/PASS have no effect until something triggers playback.
