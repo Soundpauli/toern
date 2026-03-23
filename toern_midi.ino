@@ -19,6 +19,54 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity);
 #ifndef DEBUG_MIDI_CLOCK_SERIAL
 #define DEBUG_MIDI_CLOCK_SERIAL 0
 #endif
+#ifndef DEBUG_MIDI_RX_SERIAL
+#define DEBUG_MIDI_RX_SERIAL 1
+#endif
+
+static inline void logMidiRxNoteOn(uint8_t ch, uint8_t pitch, uint8_t velocity) {
+#if DEBUG_MIDI_RX_SERIAL
+  Serial.print("MIDI RX NoteOn  ch=");
+  Serial.print(ch);
+  Serial.print(" note=");
+  Serial.print(pitch);
+  Serial.print(" vel=");
+  Serial.println(velocity);
+#endif
+}
+
+static inline void logMidiRxNoteOff(uint8_t ch, uint8_t pitch, uint8_t velocity) {
+#if DEBUG_MIDI_RX_SERIAL
+  Serial.print("MIDI RX NoteOff ch=");
+  Serial.print(ch);
+  Serial.print(" note=");
+  Serial.print(pitch);
+  Serial.print(" vel=");
+  Serial.println(velocity);
+#endif
+}
+
+static inline void logMidiRxSimple(const char *msg) {
+#if DEBUG_MIDI_RX_SERIAL
+  Serial.print("MIDI RX ");
+  Serial.println(msg);
+#endif
+}
+
+static inline void logMidiRxPitchBend(uint8_t ch, uint16_t bend14) {
+#if DEBUG_MIDI_RX_SERIAL
+  Serial.print("MIDI RX PitchBend ch=");
+  Serial.print(ch);
+  Serial.print(" value=");
+  Serial.println(bend14);
+#endif
+}
+
+static inline void logMidiRxSongPosition(uint16_t beats) {
+#if DEBUG_MIDI_RX_SERIAL
+  Serial.print("MIDI RX SongPosition beats=");
+  Serial.println(beats);
+#endif
+}
 
 // move these to file-scope so everybody can reset them
 static unsigned long lastClockTime = 0;                  // legacy, no longer used for BPM
@@ -182,22 +230,29 @@ void checkMidi() {
       case midi::NoteOff: {
         uint8_t pitch = MIDI.getData1();
         uint8_t velocity = MIDI.getData2();
+        logMidiRxNoteOff(MIDI.getChannel(), pitch, velocity);
         // Same logical channel as handleNoteOn (cable channel + voice mode), not raw 1..16 only.
         handleNoteOff(MIDI.getChannel(), pitch, velocity);
         break;
       }
       case midi::Stop:
+        logMidiRxSimple("Stop");
         handleStop();
         break;
       case midi::PitchBend: {
         uint16_t bend14 = (uint16_t)((MIDI.getData1() & 0x7F) | (MIDI.getData2() << 7));
+        logMidiRxPitchBend(MIDI.getChannel(), bend14);
         applyExternalFastFilter(bend14);
         break;
       }
-      case midi::SongPosition:
-        handleSongPosition(MIDI.getData1() | (MIDI.getData2() << 7));
+      case midi::SongPosition: {
+        uint16_t beats = MIDI.getData1() | (MIDI.getData2() << 7);
+        logMidiRxSongPosition(beats);
+        handleSongPosition(beats);
         break;
+      }
       case midi::TimeCodeQuarterFrame:
+        logMidiRxSimple("TimeCodeQuarterFrame");
         handleTimeCodeQuarterFrame(MIDI.getData1());
         break;
       default:
@@ -569,6 +624,7 @@ static int mapMidiToLogicalChannel(int midiChannel, uint8_t pitch) {
 }
 
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
+  logMidiRxNoteOn((uint8_t)ch, pitch, velocity);
   extern bool MIDI_NOTE_RECEIVE;
   if (!MIDI_NOTE_RECEIVE) return;
 
@@ -711,6 +767,7 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
   // Existing logic for non-persistent channels goes here...
 }
 void handleStart() {
+  logMidiRxSimple("Start");
   // only act if we’re supposed to follow external transport
   if (!MIDI_TRANSPORT_RECEIVE) return;
 
