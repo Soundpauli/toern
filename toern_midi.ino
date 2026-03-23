@@ -653,7 +653,13 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
         // Store for grid write on next beat (ISR-safe ring buffer).
         extern bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote);
         enqueuePendingNote(pitch, velocity, (uint8_t)ch, (uint8_t)livenote);
-      }else{
+        // Ch13/14 synths are suppressed in playSynth() when called from the grid ISR with
+        // persistant=false while keys are held (pressedKeyCount[ch] > 0). Play immediately
+        // here with persistant=true so the user hears the note in real time.
+        if (ch > 12 && ch < 15) {
+          playSynth(ch, livenote, velocity, true);
+        }
+      } else {
 
         if (ch < 9) {
           int samplePitch;
@@ -673,15 +679,15 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
             samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
           }
           _samplers[ch].noteEvent(samplePitch, velocity, true, false);
-    } else if (ch > 12 && ch < 15) {
-      playSynth(ch, livenote, velocity, true);
-    } else if (ch == 11) {
+        } else if (ch > 12 && ch < 15) {
+          playSynth(ch, livenote, velocity, true);
+        } else if (ch == 11) {
 
-      // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
-      // Grid formula: 12 * octave[0] + transpose + (row - 1)
-      // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
-      playSound(12 * octave[0] + transpose + pitch - 55, 0);
-    }
+          // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
+          // Grid formula: 12 * octave[0] + transpose + (row - 1)
+          // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
+          playSound(12 * octave[0] + transpose + pitch - 55, 0);
+        }
       }
       // Always play the note immediately
       activeNotes[pitch] = true;

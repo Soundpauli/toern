@@ -1,7 +1,7 @@
 #define VERSION "v2.0"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
-#define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
+#define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
 #define SERIAL8_TX_BUFFER_SIZE 128   // Larger transmit buffer for safety
 #define TargetFPS 60
 
