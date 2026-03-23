@@ -755,11 +755,22 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
     if (pressedKeyCount[channel] > 0)
       pressedKeyCount[channel]--;
 
-    if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
-      if (!envelopes[channel]) return;
-      envelopes[channel]->noteOff();
-      persistentNoteOn[channel] = false;
-      noteOnTriggered[channel] = false;
+    if (channel == 11) {
+      // Ch11 uses the polyphonic voice system (Senvelope1/2/filter), not envelopes[11].
+      // Release this specific note immediately; other voices held by other keys stay alive.
+      int note = (int)(12 * octave[0]) + transpose + (int)pitch - 55;
+      stopSound(note, 0);
+      if (pressedKeyCount[11] == 0) {
+        persistentNoteOn[11] = false;
+        noteOnTriggered[11] = false;
+      }
+    } else {
+      if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
+        if (!envelopes[channel]) return;
+        envelopes[channel]->noteOff();
+        persistentNoteOn[channel] = false;
+        noteOnTriggered[channel] = false;
+      }
     }
     return;
   }
