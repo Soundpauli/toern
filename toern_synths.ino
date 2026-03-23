@@ -754,6 +754,15 @@ void updateSynthVoice(int channel){
         int form = SMP.synth_settings[channel][FORM];
 
         switchSynthVoice(instrumentValue,0, cutoff, resonance, filter, semi, cent, form);
+
+        // After the preset sets its own hardcoded ADSR, override with the user-saved slider values
+        // so that the ADSR controls on the param page always take effect for ch11.
+        if (channel == 11) {
+          setParams(ATTACK,  11);
+          setParams(DECAY,   11);
+          setParams(SUSTAIN, 11);
+          setParams(RELEASE, 11);
+        }
 }
 
 
