@@ -514,6 +514,10 @@ void loadSMPSettings() {
 
     // Load Synths - apply synth settings (only for channel 11)
     if (ch == 11) {
+      // Apply instrument-specific defaults (octave register, waveform) for the saved instrument
+      // before calling updateSynthVoice, exactly as the UI preset-selector does.
+      extern void applySynthInstrumentPreset(int channel, int instrumentIdx);
+      applySynthInstrumentPreset(11, (int)SMP.synth_settings[11][INSTRUMENT]);
       updateSynthVoice(11);
     }
   }
