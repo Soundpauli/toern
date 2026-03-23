@@ -117,7 +117,12 @@ void setFilters(FilterType filterType, int index, bool initial) {
     case PASS:
       {
         filters[index]->frequency(mappedValue);
-        if (SMP.filter_settings[index][filterType] >= maxfilterResolution / 2) {  //16
+        if ((index == 13 || index == 14) && SMP.filter_settings[index][filterType] == 15) {
+          // Default synth state for ch13/14: PASS=15 means neutral passthrough.
+          setMixerGainSmooth(index, 0, 1.0, 32);  // dry on
+          setMixerGainSmooth(index, 1, 0.0, 32);  // low pass off
+          setMixerGainSmooth(index, 2, 0.0, 32);  // high pass off
+        } else if (SMP.filter_settings[index][filterType] >= maxfilterResolution / 2) {  //16
           // Smooth transition to frequency configuration
           setMixerGainSmooth(index, 0, 0.0, 32);  // low pass off
           setMixerGainSmooth(index, 1, 0.0, 32);  // bandpass off
@@ -131,6 +136,15 @@ void setFilters(FilterType filterType, int index, bool initial) {
       }
     case FREQUENCY:
       {
+        if (index == 13 || index == 14) {
+          // For synth channels 13/14, FREQUENCY only controls the filter cutoff frequency.
+          // Mixer routing (dry/LP/HP) is owned exclusively by PASS — never change it here.
+          // This matches playSynth() which also only calls filters[ch]->frequency().
+          float freqSetting = SMP.filter_settings[index][FREQUENCY];
+          if (freqSetting <= 0.0f) freqSetting = (float)maxfilterResolution;
+          filters[index]->frequency(mapf(freqSetting, 0, maxfilterResolution, 0.0f, 10000.0f));
+          break;
+        }
         if (initial) break;
         filters[index]->frequency(mappedValue);
         setMixerGainSmooth(index, 0, 0.0, 64);  // Dry signal off

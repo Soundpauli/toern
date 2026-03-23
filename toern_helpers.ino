@@ -504,22 +504,23 @@ void loadSMPSettings() {
       setFilters((FilterType)f, ch, true);
     }
     
-    // Load Parameters - apply all parameter settings for this channel
-    for (int p = 0; p < 5; p++) {
-    // Set the encoder value to the saved parameter value.S
-    //currentMode->pos[3] = SMP.param_settings[ch][p];
-    // Process the parameter mapping.
-    setParams(p, ch);
-  }
-    
+    // Load Parameters - apply saved envelope settings to the live audio objects.
+    // DELAY is not a hardware envelope setter here; ATTACK..RELEASE are.
+    setParams(ATTACK, ch);
+    setParams(HOLD, ch);
+    setParams(DECAY, ch);
+    setParams(SUSTAIN, ch);
+    setParams(RELEASE, ch);
 
-    
     // Load Synths - apply synth settings (only for channel 11)
-   if (ch == 11) {
-    updateSynthVoice(11);
+    if (ch == 11) {
+      updateSynthVoice(11);
+    }
   }
-  return;
-  }
+
+  // Apply any pending filter mixer targets immediately after loading so synth channels
+  // do not require an extra trigger/play cycle before their routing is correct.
+  forceAllMixerGainsToTarget();
   
   // Legacy drum path removed; no initialization needed.
   
@@ -2552,6 +2553,9 @@ void resetAllAudioEffects() {
       updateSynthVoice(11);
     }
   }
+
+  // Commit post-reset filter routing immediately.
+  forceAllMixerGainsToTarget();
   
 }
 
@@ -2636,13 +2640,13 @@ void startNew() {
     
     // Reset parameter data (no hardware calls)
     // Channel-specific ADSR defaults:
-    // - ch13/14 (synths): A=32, D=16, S=0, R=0
+    // - ch13/14 (synths): A=32, D=9, S=20, R=9
     // - all others: keep existing defaults
     if (ch == 13 || ch == 14) {
       SMP.param_settings[ch][ATTACK] = 32;
-      SMP.param_settings[ch][DECAY] = 16;
-      SMP.param_settings[ch][SUSTAIN] = 0;
-      SMP.param_settings[ch][RELEASE] = 0;
+      SMP.param_settings[ch][DECAY] = 9;
+      SMP.param_settings[ch][SUSTAIN] = 20;
+      SMP.param_settings[ch][RELEASE] = 9;
     } else {
       SMP.param_settings[ch][ATTACK] = 32;
       SMP.param_settings[ch][DECAY] = 0;

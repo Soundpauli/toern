@@ -1032,6 +1032,14 @@ static inline void stopSynthChannel(int ch) {
   persistentNoteOn[ch] = false;
 }
 
+// When playback is stopped or voices are silenced globally, clear MIDI poly counters so they
+// cannot desync from the hardware envelope (phantom Note On counts).
+static inline void resetMidiPressedKeyCount11to14() {
+  for (int c = 11; c <= 14; ++c) {
+    pressedKeyCount[c] = 0;
+  }
+}
+
 // Arp step per channel (used for synth channels)
 static uint32_t arpStepCounter[15] = { 0 };
 // Map external 14-bit input (e.g. pitchbend) to current channel fast filter
@@ -3089,6 +3097,9 @@ void setup() {
   autoLoad();
 
   initSoundChip();
+  // autoLoad() restores SMP before the audio graph is fully initialized.
+  // Re-apply the loaded filter/envelope state now so ch13/14 are correct at boot.
+  loadSMPSettings();
   //mixer0.gain(1, 0.05);  //PREV Sound
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
 
@@ -3127,20 +3138,40 @@ void setup() {
   resetMidiClockState();
 
 
-  for (int f = 0; f < 5; f++) {
-    for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
-      setFilters((FilterType)f, ALL_CHANNELS[i], true);
-    }
-  }
-
-  forceAllMixerGainsToTarget();
-
   // Turn on audio input amplifier after setup is complete
   audioInputAmp.gain(1.0);
 
   // Final application of audio settings to ensure all are applied after all globals are loaded/initialized
   extern void applyAudioSettingsFromGlobals();
   applyAudioSettingsFromGlobals();
+
+  // Ch13/14 need an unconditional final init: the filter mixer transition state is never
+  // set up for these channels at boot (setFilterDefaults is only called via resetAllAudioEffects).
+  // Without it, gains stay at zero and ADSR/PASS have no effect until something triggers playback.
+  for (int ch : {13, 14}) {
+    extern void initFilterTransition(int index);
+    // Seed transition state to dry/passthrough, then immediately commit to hardware.
+    initFilterTransition(ch);
+    if (filtermixers[ch]) {
+      filtermixers[ch]->gain(0, 1.0f);  // dry on
+      filtermixers[ch]->gain(1, 0.0f);
+      filtermixers[ch]->gain(2, 0.0f);
+      filtermixers[ch]->gain(3, 0.0f);
+    }
+    // Now apply whatever was loaded/defaulted for this channel.
+    setFilters(PASS,        ch, true);
+    setFilters(FREQUENCY,   ch, true);
+    setFilters(REVERB,      ch, true);
+    setFilters(BITCRUSHER,  ch, true);
+    setFilters(DETUNE,      ch, true);
+    setFilters(OCTAVE,      ch, true);
+    setParams(ATTACK,   ch);
+    setParams(HOLD,     ch);
+    setParams(DECAY,    ch);
+    setParams(SUSTAIN,  ch);
+    setParams(RELEASE,  ch);
+  }
+  forceAllMixerGainsToTarget();
 
   // Initialize LED strip visualization
   initLedStrip();
@@ -5656,22 +5687,31 @@ FLASHMEM void updateExternalOneBlink() {
 }
 
 float getNoteDuration(int channel) {
-  // Calculate ADSR-derived length in milliseconds
+  // Gate time until we send noteOff() for grid / preview / sequencer triggers.
+  // Teensy AudioEffectEnvelope runs A→D→S while "on"; noteOff() starts R from the current level.
+  // Release must not be included in the hold-open time — that would keep the voice in sustain
+  // during what should be the release slope.
   float delayMs = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
-  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]);
+  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
   float holdMs = mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
   float decayMs = mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
-  float releaseMs = mapf(SMP.param_settings[channel][RELEASE], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
 
-  float timetilloff = delayMs + attackMs + holdMs + decayMs + releaseMs;
+  float gateMs = delayMs + attackMs + holdMs + decayMs;
+
+  if (channel == 13 || channel == 14) {
+    // Grid / preview triggers on the synth channels should be short single hits.
+    // Send noteOff() right after the attack reaches its target; the envelope's own
+    // decay / sustain / release settings then shape the rest of the sound naturally.
+    gateMs = delayMs + attackMs + 8.0f;
+  }
 
   // Ensure attack is actually reached before note-off by enforcing at least (attack + small cushion)
   float minLen = attackMs + 5.0f;  // 5ms cushion beyond attack
-  if (timetilloff < minLen) timetilloff = minLen;
+  if (gateMs < minLen) gateMs = minLen;
 
   // Absolute floor to avoid zero-length
-  if (timetilloff < 5.0f) timetilloff = 5.0f;
-  return timetilloff;
+  if (gateMs < 5.0f) gateMs = 5.0f;
+  return gateMs;
 }
 
 
@@ -5927,6 +5967,7 @@ static void silenceAllVoicesForDrawRGlobalMute() {
 
   stopSynthChannel(13);
   stopSynthChannel(14);
+  resetMidiPressedKeyCount11to14();
 }
 
 FLASHMEM void toggleDrawRGlobalMute() {
@@ -5972,6 +6013,7 @@ void play(bool fromStart) {
   // Ensure synth voices are idle before starting
   stopSynthChannel(13);
   stopSynthChannel(14);
+  resetMidiPressedKeyCount11to14();
 
   if (fromStart) {
     updateLastPage();
@@ -6106,6 +6148,7 @@ void pause(bool skipSave) {
   envelope0.noteOff();
   stopSynthChannel(13);
   stopSynthChannel(14);
+  resetMidiPressedKeyCount11to14();
 
   // Reset playback state immediately
   beat = 1;
@@ -6130,6 +6173,12 @@ void pause(bool skipSave) {
 void playSynth(int ch, int b, int vel, bool persistant) {
   if (ch < 0 || ch >= 15) return;                // Bounds check for synths array
   if (!synths[ch][0] || !synths[ch][1]) return;  // Check if synth objects exist
+
+  // Sequencer / grid / paint preview must not steal or retrigger ch13/14 while MIDI keys are
+  // still held on that channel — envelope should stay in sustain until real Note Off.
+  if (ch >= 13 && ch <= 14 && !persistant && pressedKeyCount[ch] > 0) {
+    return;
+  }
 
   float frequency = fullFrequencies[constrain(b - ch + 13, 0, 26)];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
                                                                      // Constrain index for fullFrequencies
@@ -6206,7 +6255,8 @@ void playSynth(int ch, int b, int vel, bool persistant) {
 
   if (persistant) {
     persistentNoteOn[ch] = true;
-  } else {
+  } else if (pressedKeyCount[ch] == 0) {
+    // Only clear MIDI-hold flag when no keys are down (avoid grid/seq clearing live MIDI state).
     persistentNoteOn[ch] = false;
   }
 
@@ -7063,6 +7113,7 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
   }
   if (channel_to_clear == 13 || channel_to_clear == 14) {
     stopSynthChannel(channel_to_clear);
+    pressedKeyCount[channel_to_clear] = 0;
   }
 }
 
@@ -7836,6 +7887,7 @@ FLASHMEM void setMuteState(int channel, bool muted) {
       }
       if (shouldStop) {
         stopSynthChannel(channel);
+        pressedKeyCount[channel] = 0;
       }
     }
   } else {
@@ -7845,6 +7897,7 @@ FLASHMEM void setMuteState(int channel, bool muted) {
     // Immediately stop synth voices when muted
     if (muted && (channel == 13 || channel == 14)) {
       stopSynthChannel(channel);
+      pressedKeyCount[channel] = 0;
     }
   }
 }

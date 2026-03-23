@@ -80,12 +80,12 @@ void setEnvelopeDefaultValues(int ch) {
   // NOTE: These are "slider" values in the 0..maxfilterResolution range (typically 0..32),
   // not milliseconds directly. `setParams()` maps them to actual envelope times/levels.
   if (ch == 13 || ch == 14) {
-    // Requested default for synth channels 13/14:
-    // A=32, D=16, S=0, R=0
+    // Default synth envelope for channels 13/14:
+    // A=32, D=9, S=20, R=9
     SMP.param_settings[ch][ATTACK] = 32;
-    SMP.param_settings[ch][DECAY] = 16;
-    SMP.param_settings[ch][SUSTAIN] = 0;
-    SMP.param_settings[ch][RELEASE] = 0;
+    SMP.param_settings[ch][DECAY] = 9;
+    SMP.param_settings[ch][SUSTAIN] = 20;
+    SMP.param_settings[ch][RELEASE] = 9;
   } else {
     SMP.param_settings[ch][ATTACK] = 32;
     SMP.param_settings[ch][DECAY] = 32;
