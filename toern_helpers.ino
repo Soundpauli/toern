@@ -91,6 +91,7 @@ extern unsigned int RefreshTime;  // Display refresh timing (30 FPS = 33ms per f
 
 EXTMEM char sbTmpDirs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM char sbTmpWavs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
+EXTMEM uint32_t sbTmpWavSizes[BROWSE_MAX_TMP];
 
 // Stubs for legacy menu/ui code
 bool manifestLoaded = false;
@@ -104,6 +105,7 @@ EXTMEM char g_browseDir[maxFiles][SAMPLE_BROWSER_PATH_MAX];
 EXTMEM char g_folderPickName[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM char g_wavPickName[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM uint8_t g_wavPickType[BROWSE_MAX_TMP];
+EXTMEM uint32_t g_wavPickSize[BROWSE_MAX_TMP];
 uint16_t g_folderPickCount = 0;
 uint16_t g_wavPickCount = 0;
 int g_wavFileCount = 0;  // number of file entries inside the combined list
@@ -143,6 +145,20 @@ static void sortNameBlock(char names[][SAMPLE_BROWSER_NAME_MAX], int n) {
         memcpy(tmp, names[i], sizeof(tmp));
         memcpy(names[i], names[j], sizeof(tmp));
         memcpy(names[j], tmp, sizeof(tmp));
+      }
+    }
+  }
+}
+
+static void sortNameBlockWithSizes(char names[][SAMPLE_BROWSER_NAME_MAX], uint32_t sizes[], int n) {
+  for (int i = 0; i < n - 1; i++) {
+    for (int j = i + 1; j < n; j++) {
+      if (strcasecmp(names[i], names[j]) > 0) {
+        char tmp[SAMPLE_BROWSER_NAME_MAX];
+        memcpy(tmp, names[i], sizeof(tmp));
+        memcpy(names[i], names[j], sizeof(tmp));
+        memcpy(names[j], tmp, sizeof(tmp));
+        uint32_t stmp = sizes[i]; sizes[i] = sizes[j]; sizes[j] = stmp;
       }
     }
   }
@@ -300,6 +316,7 @@ void sampleBrowserRefreshList(int channel) {
       if (nw < BROWSE_MAX_TMP) {
         strncpy(sbTmpWavs[nw], base, SAMPLE_BROWSER_NAME_MAX - 1);
         sbTmpWavs[nw][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+        sbTmpWavSizes[nw] = (uint32_t)fe.size();
         nw++;
       }
     }
@@ -307,7 +324,7 @@ void sampleBrowserRefreshList(int channel) {
   }
   dir.close();
   sortNameBlock(sbTmpDirs, nd);
-  sortNameBlock(sbTmpWavs, nw);
+  sortNameBlockWithSizes(sbTmpWavs, sbTmpWavSizes, nw);
 
   /* ---- Legacy folder row retained for compatibility with old overlay code. ---- */
   uint16_t fn = 0;
@@ -329,12 +346,14 @@ void sampleBrowserRefreshList(int channel) {
     strncpy(g_wavPickName[wn], "[../]", SAMPLE_BROWSER_NAME_MAX - 1);
     g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
     g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_PARENT;
+    g_wavPickSize[wn] = 0;
     wn++;
   }
   for (int i = 0; i < nd && wn < BROWSE_MAX_TMP; i++) {
     strncpy(g_wavPickName[wn], sbTmpDirs[i], SAMPLE_BROWSER_NAME_MAX - 1);
     g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
     g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_DIR;
+    g_wavPickSize[wn] = 0;
     wn++;
   }
   g_wavFileCount = nw;
@@ -342,6 +361,7 @@ void sampleBrowserRefreshList(int channel) {
     strncpy(g_wavPickName[wn], sbTmpWavs[i], SAMPLE_BROWSER_NAME_MAX - 1);
     g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
     g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_FILE;
+    g_wavPickSize[wn] = sbTmpWavSizes[i];
     wn++;
   }
   g_wavPickCount = wn;

@@ -483,7 +483,7 @@ int peakRecIndex = 0;
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
 bool pong = false;
-const long ram = 12582912;                               // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
+const long ram = 15728640;                               // 15MB EXTRAM for sounds (was 12582912/12MB); ~1707KB/slot ~19.8s/voice @ 44.1kHz mono 16-bit
 const unsigned int MAX_STEPS = MATRIX_WIDTH * maxPages;  // Fixed total steps (16 pages * 16 cols = 256)
 const unsigned int maxlen = MAX_STEPS + 1;               // Note array width (1-based)
 const unsigned int SONG_LEN = MAX_STEPS;                 // Song length equals total steps

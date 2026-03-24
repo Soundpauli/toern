@@ -5,6 +5,7 @@ extern uint16_t g_folderPickCount;
 extern int g_wavFileCount;
 extern char g_wavPickName[][65];
 extern uint8_t g_wavPickType[];
+extern uint32_t g_wavPickSize[];
 extern char g_folderPickName[][65];
 extern char g_browseDir[][128];
 extern bool g_browseListDirty;
@@ -585,6 +586,25 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
 
 
 
+// Gradient: green (0–500 KB) → blue (500–1200 KB) → red (approaching 1707 KB)
+static CRGB fileSizeToColor(uint32_t bytes) {
+  const uint32_t KB = 1024;
+  const uint32_t T_GREEN = 500  * KB;
+  const uint32_t T_BLUE  = 1200 * KB;
+  const uint32_t T_RED   = 1707 * KB;
+
+  if (bytes <= T_GREEN) {
+    return CRGB(0, 255, 0);
+  } else if (bytes <= T_BLUE) {
+    float t = (float)(bytes - T_GREEN) / (float)(T_BLUE - T_GREEN);
+    return CRGB(0, (uint8_t)(255 * (1.0f - t)), (uint8_t)(255 * t));
+  } else {
+    float t = (float)(bytes - T_BLUE) / (float)(T_RED - T_BLUE);
+    if (t > 1.0f) t = 1.0f;
+    return CRGB((uint8_t)(255 * t), 0, (uint8_t)(255 * (1.0f - t)));
+  }
+}
+
 void showWave() {
   // ---- Helpers -------------------------------------------------------------
   auto resetSeekRange = []() {
@@ -735,7 +755,12 @@ void showWave() {
     Encoder[2].writeRGBCode(0x0000FF);
     int wi = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
     bool isDirEntry = (sampleBrowserEntryTypeAt(wi) != 2);
-    Encoder[3].writeRGBCode(isDirEntry ? 0xFFFF00 : 0x0000FF);
+    if (isDirEntry) {
+      Encoder[3].writeRGBCode(0xFFFF00);
+    } else {
+      CRGB fc = fileSizeToColor(g_wavPickSize[wi]);
+      Encoder[3].writeRGBCode(((uint32_t)fc.r << 16) | ((uint32_t)fc.g << 8) | fc.b);
+    }
   }
 
   int selectedIdx = encoderSampleValue - 1;
@@ -915,7 +940,7 @@ void showWave() {
     }
     bool selectionIsFileEntry = (ei >= 0 && ei < (int)g_wavPickCount && sampleBrowserEntryTypeAt(ei) == 2);
     CRGB selectionColor = selectionIsFileEntry
-        ? CRGB(0, 0, 255)
+        ? fileSizeToColor(g_wavPickSize[ei])
         : CRGB(255, 255, 0);
     renderLine(selectionLabel, 12, selectionColor, scrollSelectionOffset, selectionDir, nextSelectionStepMs, selectionIsFileEntry);
   }
