@@ -654,6 +654,7 @@ int editpage = 1;
 EXTMEM Note note[maxlen + 1][maxY + 1] = {};
 EXTMEM Note tmp[maxlen + 1][maxY + 1] = {};
 EXTMEM Note original[maxlen + 1][maxY + 1] = {};
+EXTMEM Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1] = {};
 
 EXTMEM unsigned int sample_len[maxFiles];
 bool sampleLengthSet = false;
@@ -5830,9 +5831,7 @@ FLASHMEM void shiftNotes() {
     unsigned int pageStartX = ((GLOB.edit - 1) * maxX) + 1;
     unsigned int pageEndX = GLOB.edit * maxX;
 
-    // Create a temporary array for this page only to avoid overwriting other pages.
-    // IMPORTANT: avoid a VLA on the stack (maxX is runtime 16/32) which can cause stack overflow/hangs.
-    static Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1];
+    // pageTmp is a file-scope EXTMEM array — clear it before use.
     memset(pageTmp, 0, sizeof(pageTmp));
 
     // Step 1: Copy current page notes to pageTmp

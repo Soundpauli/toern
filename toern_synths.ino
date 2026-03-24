@@ -6,7 +6,7 @@
 //     initializers are ignored, so waveform/pulse/volume defaults were lost.
 // (2) Explicit per-channel initializers below.
 
-#define NOTE_EMPTY ((int16_t)-1)
+#define NOTE_EMPTY INT16_MIN
 
 unsigned long voiceStartTime[INSTRUMENT_CHANNELS][POLY_VOICES] = {
   { 0, 0, 0 },
