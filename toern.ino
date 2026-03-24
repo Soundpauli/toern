@@ -188,10 +188,15 @@ extern void handleStart();
 // - mixer2 sums ch5-8
 // - mixer_end sums mixer1 + mixer2 (+ synth + monitoring)
 //
-// Old staging used 0.70f per input on mixer1/2, which can exceed full-scale with only 2 loud hits.
-// The values below keep the *mix* within range (so multiple loud samples don't crackle).
-#define MIX_BUS_HEADROOM 0.25f      // per-input gain into mixer1/mixer2 (4 inputs each)
-#define MIX_END_SAMPLES_GAIN 0.50f  // mixer_end input gain for mixer1 + mixer2
+// Hard limit per bus: N * MIX_BUS_HEADROOM <= 1.0 (N simultaneous voices on that bank, each at
+// full internal level in phase — the theoretical "block" + max velocity case).
+// Eight voices total does NOT relax N: e.g. six voices can still be 4+2, so N is still 4 on one bus.
+//
+// We target typical use: at most 3 sample voices on ch1-4 at once AND at most 3 on ch5-8 (e.g. 3+3=6).
+// Then MIX_BUS_HEADROOM = 1/3 keeps each bus <= 1.0; mixer_end still needs 2 * MIX_END <= 1.0.
+// If you ever fire 4 samples on one bank at full level together, lower MIX_BUS_HEADROOM to 0.25f.
+#define MIX_BUS_HEADROOM (1.0f / 3.0f)  // max ~3 simultaneous sample voices per bank (ch1-4 / ch5-8)
+#define MIX_END_SAMPLES_GAIN 0.50f      // mixer_end: mixer1 + mixer2 (each bus can hit 1.0)
 #define MIX_END_SYNTH_GAIN 0.60f    // mixer_end input gain for mixersynth_end
 
 
@@ -2600,6 +2605,14 @@ void initSamples() {
   synthmixer11.gain(0, 0.12);  // Reduced from GAIN_3 (0.4) to prevent clipping
   synthmixer11.gain(1, 0.12);
   synthmixer11.gain(3, 0.12);
+
+  // CHMixer11 collapses SmixerL4 + SmixerR4 (both stereo buses) into the mono ch11 chain.
+  // Without explicit gain, default 1.0+1.0 = up to 1.98 → hard clips when all 3 oscs play.
+  // 0.5 each restores unity-gain L+R summing.
+  CHMixer11.gain(0, 0.5f);
+  CHMixer11.gain(1, 0.5f);
+  CHMixer11.gain(2, 0.0f);
+  CHMixer11.gain(3, 0.0f);
 
   synthmixer13.gain(0, 0.10);  // Further reduced from 0.15 to prevent clipping
   synthmixer13.gain(1, 0.10);
