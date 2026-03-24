@@ -228,7 +228,6 @@ struct MidiSettings : public midi ::DefaultSettings {
 };
 
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MidiSettings);
-unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 
 unsigned long ganularStartTime = 0;  // Timestamp when the current beat started
 
@@ -379,10 +378,6 @@ bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
 
 bool drawNoSD_hasRun = false;
 
-bool notePending = false;
-uint8_t pendingPitch = 0;
-uint8_t pendingVelocity = 0;
-unsigned long pendingTime = 0;
 
 struct PendingNote {
   uint8_t pitch;
@@ -5172,21 +5167,11 @@ void loop() {
   }
 
   if (isrDbgPatternFinished) {
-    uint16_t beatCopy;
-    // Avoid masking interrupts; occasional duplicate debug print is acceptable.
-    beatCopy = isrDbgPatternFinishedBeat;
     isrDbgPatternFinished = false;
-#if DEBUG_PLAYBACK_SERIAL
-#endif
   }
 
   if (isrDbgLoopCountChanged) {
-    uint16_t lcCopy;
-    // Avoid masking interrupts; occasional duplicate debug print is acceptable.
-    lcCopy = isrDbgLoopCountValue;
     isrDbgLoopCountChanged = false;
-#if DEBUG_PLAYBACK_SERIAL
-#endif
   }
 
   // FLOW mode: SAME playback behavior as normal play.
@@ -6539,7 +6524,6 @@ void playNote() {
     waitForFourBars = false;  // Reset for the next start message
   }
 
-  beatStartTime = millis();
   if (SMP_PATTERN_MODE) {
     extern bool songModeActive;
     extern int patternMode;

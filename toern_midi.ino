@@ -159,11 +159,6 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
   midiClockTimer.begin(midiClockTick, midiClockIntervalUs);
   midiClockTimer.priority(0);  // Highest priority - MIDI clock must be precise
   
-  // Verify actual BPM from calculated interval (for debugging)
-  double actualBPM = 60000000.0 / ((double)midiClockIntervalUs * 24.0);
-  
-  #if DEBUG_MIDI_CLOCK_SERIAL
-  #endif
 }
 
 // Public function to update MIDI clock with exact BPM value (for use from updateBPM)
@@ -330,8 +325,6 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     if (SMP.bpm > 0.0f) {
       unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
       playTimer.begin(playNote, currentPlayNoteInterval);
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
     } else {
       playTimer.end();
     }
@@ -361,10 +354,8 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     lastStableBPM = 0;
     stableBPMCount = 0;
     isBPMStable = false;
-    #if DEBUG_MIDI_CLOCK_SERIAL
-    #endif
   }
-  
+
   // Update last clock received time
   lastClockReceivedTime = now_captured;
 
@@ -399,8 +390,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
         triggerExternalOneBlink();
 
         if (pendingStartOnBar) {
-          #if DEBUG_MIDI_CLOCK_SERIAL
-          #endif
           pendingStartOnBar = false;
           // Keep isNowPlaying = false until the deferred playNote() fires,
           // so the background playTimer ISR cannot race and play beat 1 early.
@@ -468,10 +457,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       bpmEstimate = filteredBPM;
       smoothedBPM = filteredBPM;
 
-      // Serial debug: show raw BPM calculation and filtered value
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
-
       // Round filtered BPM to nearest integer
       int newBPM = round(filteredBPM);
       
@@ -536,12 +521,7 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       // Just update the BPM value - sequencer continues using its own internal timer
       // This allows the BPM display to match external clock while sequencer runs independently
       SMP.bpm = (float)newBPM;
-      
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
     } else {
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
     }
 
     // Reset window for next measurement
@@ -729,22 +709,13 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
 }
 
 void onBeatTick() {
-  
   PendingNote pn;
   extern bool dequeuePendingNote(PendingNote &out);
   while (dequeuePendingNote(pn)) {
-    int targetBeat = beat; //(beat == 1) ? (maxX * lastPage) : (beat);
+    int targetBeat = beat;
     note[targetBeat][pn.livenote].channel = pn.channel;
     note[targetBeat][pn.livenote].velocity = pn.velocity;
   }
-  
-
-  return;
-  // Reset your UI timer immediately for the new beat
-  beatStartTime = millis();
-
-  // Flush any pending grid-writes into the _new_ beat slot?
-  
 }
 
 
@@ -810,7 +781,6 @@ void handleStart() {
 
   // Start after transportRcveDelayMs (0-127). 0 = no delay.
   pendingStartOnBar = false;
-  beatStartTime = millis();
 
   unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
   transportStartDelayUntil = micros() + delayUs;
