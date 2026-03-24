@@ -6172,7 +6172,7 @@ void playSynth(int ch, int b, int vel, bool persistant) {
     return;
   }
 
-  float frequency = notesArray[constrain(b - ch + 49, 36, 62)];
+  float frequency = notesArray[constrain(b - ch + 47, 36, 62)];
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
 
