@@ -17,7 +17,6 @@ DMAMEM unsigned long lastInteraction = millis();  // global timestamp
 const unsigned long FILTER_INTERACTION_TIMEOUT = 1000; // ms before reverting to initial view
 
 
-bool showingAny = false;
 DMAMEM bool showSingleFilter[4] = { false, false, false, false };
 
 static inline bool isWideFilterView2B() {
@@ -345,26 +344,6 @@ void slider(uint8_t page) {
   }
 }
 
-void printSliderDefTarget(uint8_t page, uint8_t encoder) {
-  const auto& def = sliderDef[GLOB.currentChannel][page][encoder];
-  const char* arrName = "UNKNOWN";
-  const char* idxName = "??";
-
-  // Array type string
-  switch (def.arr) {
-    case ARR_FILTER: arrName = "ARR_FILTER"; break;
-    case ARR_SYNTH: arrName = "ARR_SYNTH"; break;
-    case ARR_PARAM: arrName = "ARR_PARAM"; break;
-    default: break;
-  }
-
-  // Use existing `filterNames` array for the label
-  if (encoder < 4 && page < 4) {
-    idxName = def.name;
-  }
-
-}
-
 
 void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
   auto& def = sliderDef[GLOB.currentChannel][page][encoder];
@@ -372,23 +351,15 @@ void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
 
   switch (def.arr) {
     case ARR_FILTER:
-      defaultFastFilter[chan].arr = def.arr;
-      defaultFastFilter[chan].idx = def.idx;
-      //Serial.printf("[Default] FILTER set: ch=%u idx=%u\n", chan, def.idx);
-      break;
-
     case ARR_SYNTH:
       defaultFastFilter[chan].arr = def.arr;
       defaultFastFilter[chan].idx = def.idx;
-      //Serial.printf("[Default] SYNTH set: ch=%u idx=%u\n", chan, def.idx);
       break;
 
     case ARR_PARAM:
       if (def.idx < PARAM_COUNT) {
         defaultFastFilter[chan].arr = def.arr;
         defaultFastFilter[chan].idx = def.idx;
-        //Serial.printf("[Default] PARAM set: ch=%u idx=%u\n", chan, def.idx);
-      } else {
       }
       break;
 
@@ -396,9 +367,6 @@ void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
       break;
   }
 
-  printSliderDefTarget(page, encoder);
-  
-  // Update encoder colors to reflect the new default fast filter
   updateFilterEncoderColors();
 }
 
@@ -439,17 +407,13 @@ void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
       default:
         return; // Don't update colors if we can't set it
     }
-    printSliderDefTarget(page, encoder);
   }
-  
-  // Update encoder colors to reflect the new default fast filter state
+
   updateFilterEncoderColors();
 }
 
 void processAdjustments_new(uint8_t page) {
   uint8_t chan = GLOB.currentChannel;
-  bool pageCountChanged = false;
-
   for (uint8_t i = 0; i < 4; ++i) {
     auto& d = sliderDef[chan][page][i];
     if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip if ARR_NONE
@@ -463,11 +427,6 @@ void processAdjustments_new(uint8_t page) {
     uint8_t prev = readSetting(d.arr, d.idx, chan);
   
     if (val == prev) continue;
-
-    // Print debug output
-    const char* arrType = (d.arr == ARR_FILTER) ? "ARR_FILTER" : (d.arr == ARR_SYNTH) ? "ARR_SYNTH" : (d.arr == ARR_PARAM) ? "ARR_PARAM" : "ARR_NONE";
-
-    float mappedVal = 0;
 
     switch (d.arr) {
       case ARR_FILTER:
@@ -486,8 +445,6 @@ void processAdjustments_new(uint8_t page) {
       case ARR_PARAM:
         SMP.param_settings[chan][d.idx] = currentMode->pos[i];
         setParams(d.idx, chan);
-
-        // Optional: process/update param visuals here
         break;
 
       default:
@@ -496,12 +453,6 @@ void processAdjustments_new(uint8_t page) {
     
   }
   
-  if (pageCountChanged) {
-    initSliders(filterPage[chan], chan);
-    updateFilterEncoderColors();
-  }
-
-
   if (GLOB.currentChannel == 11) updateSynthVoice(11);
 
 }
@@ -640,34 +591,6 @@ void showFilterPages(uint8_t chan) {
 
 
 
-
-void drawSliderValue(uint8_t x0, uint8_t x1, uint8_t val) {
-  char buf[3];
-  int len = snprintf(buf, sizeof(buf), "%u", val);  // 1 or 2 chars
-
-  // estimate font width per character (e.g. 3px)
-  const uint8_t charW = 3;
-  const uint8_t totalW = charW * len;
-
-  // center in between x0..x1
-  int cx = (x0 + x1) / 2;
-  int tx = cx - totalW / 2;
-  // clamp so that text never goes past 1..maxX
-  if (tx < 1) tx = 1;
-  if (tx + totalW > (int)maxX) tx = (int)maxX - totalW;
-
-  // CLEAR just that span on row 6 (or whatever row you chose)
-  for (int x = 1; x <= (int)maxX; ++x) {
-    light(x, 6, CRGB::Black);
-    light(x, 7, CRGB::Black);
-    light(x, 8, CRGB::Black);
-    light(x, 9, CRGB::Black);
-    light(x, 10, CRGB::Black);
-  }
-
-
-  drawText(buf, tx, 6, CRGB::White);
-}
 
 
 void showFilterNames(uint8_t chan) {

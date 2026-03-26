@@ -6,7 +6,7 @@
 //     initializers are ignored, so waveform/pulse/volume defaults were lost.
 // (2) Explicit per-channel initializers below.
 
-#define NOTE_EMPTY ((int16_t)-1)
+#define NOTE_EMPTY INT16_MIN
 
 unsigned long voiceStartTime[INSTRUMENT_CHANNELS][POLY_VOICES] = {
   { 0, 0, 0 },
@@ -754,6 +754,15 @@ void updateSynthVoice(int channel){
         int form = SMP.synth_settings[channel][FORM];
 
         switchSynthVoice(instrumentValue,0, cutoff, resonance, filter, semi, cent, form);
+
+        // After the preset sets its own hardcoded ADSR, override with the user-saved slider values
+        // so that the ADSR controls on the param page always take effect for ch11.
+        if (channel == 11) {
+          setParams(ATTACK,  11);
+          setParams(DECAY,   11);
+          setParams(SUSTAIN, 11);
+          setParams(RELEASE, 11);
+        }
 }
 
 

@@ -80,7 +80,7 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"TRAN", 8, false, nullptr},          // MIDI Transport
   {"SEND", 13, false, nullptr},         // MIDI Send (CLCK, NOTE, BOTH)
   {"RCVE", 44, false, nullptr},         // MIDI Note Receive (OFF/NOTE)
-  {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 0-127 ms
+  {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 −127..+127 ms (+ = this path, − = other path)
 };
 
 // VOL submenu pages
@@ -387,6 +387,15 @@ void serviceSettingsBackup() {
   }
 }
 
+// Flush settings + SP0 backup to SD immediately (no debounce). Use after load/save paths
+// that should not leave a multi-second deferred write for loop() / DRAW mode.
+void flushSettingsBackupNow() {
+  if (!settingsBackupDirty) return;
+  if (writeSettingsBackupToSD()) {
+    settingsBackupDirty = false;
+  }
+}
+
 void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
     // EEPROM "empty" - try SD backup first, otherwise initialize defaults
@@ -562,24 +571,24 @@ void loadMenuFromEEPROM() {
   if (rcveValue > 1) { rcveValue = 1; saveSingleModeToEEPROM(28, 1); }
   MIDI_NOTE_RECEIVE = (rcveValue != 0);
 
-  // Load transport delay settings (slot 29 SEND, slot 31 RCVE, 1 byte each, uint8_t 0-127)
-  extern uint8_t transportSendDelayMs;
-  extern uint8_t transportRcveDelayMs;
-  uint8_t s29 = EEPROM.read(EEPROM_DATA_START + 29);
-  uint8_t s31 = EEPROM.read(EEPROM_DATA_START + 31);
-  // Migration: old 2-byte format used EEPROM.get. Old 1-byte had slot 31=0xFF, 29=SEND, 30=RCVE.
-  if (s31 == 0xFF) {
-    uint8_t s30 = EEPROM.read(EEPROM_DATA_START + 30);
-    transportSendDelayMs = (s29 <= 127) ? s29 : 17;
-    transportRcveDelayMs = (s30 <= 127) ? s30 : 17;
-    EEPROM.write(EEPROM_DATA_START + 29, transportSendDelayMs);
-    EEPROM.write(EEPROM_DATA_START + 31, transportRcveDelayMs);
+  // Load transport delay settings (slot 29 SNC1, slot 31 SNC2, int8_t -127..+127, EEPROM stores raw byte)
+  extern int8_t transportSendDelayMs;
+  extern int8_t transportRcveDelayMs;
+  uint8_t raw29 = EEPROM.read(EEPROM_DATA_START + 29);
+  uint8_t raw31 = EEPROM.read(EEPROM_DATA_START + 31);
+  // Migration: old layout had slot 31=0xFF, 29=SEND, 30=RCVE (unsigned 0-127)
+  if (raw31 == 0xFF) {
+    uint8_t raw30 = EEPROM.read(EEPROM_DATA_START + 30);
+    int8_t v29 = (raw29 <= 127) ? (int8_t)raw29 : 17;
+    int8_t v30 = (raw30 <= 127) ? (int8_t)raw30 : 17;
+    transportSendDelayMs = (int8_t)constrain((int)v29, -127, 127);
+    transportRcveDelayMs = (int8_t)constrain((int)v30, -127, 127);
+    EEPROM.write(EEPROM_DATA_START + 29, (uint8_t)transportSendDelayMs);
+    EEPROM.write(EEPROM_DATA_START + 31, (uint8_t)transportRcveDelayMs);
   } else {
-    transportSendDelayMs = (s29 <= 127) ? s29 : 17;
-    transportRcveDelayMs = (s31 <= 127) ? s31 : 17;
+    transportSendDelayMs = (int8_t)constrain((int)(int8_t)raw29, -127, 127);
+    transportRcveDelayMs = (int8_t)constrain((int)(int8_t)raw31, -127, 127);
   }
-  if (transportSendDelayMs > 127) { transportSendDelayMs = 17; EEPROM.write(EEPROM_DATA_START + 29, 17); }
-  if (transportRcveDelayMs > 127) { transportRcveDelayMs = 17; EEPROM.write(EEPROM_DATA_START + 31, 17); }
 
   if (previewVol < 0 || previewVol > 50) {
     previewVol = 20;
@@ -753,8 +762,8 @@ void saveSingleModeToEEPROM(int index, int8_t value) {
   markSettingsBackupDirty();
 }
 
-static void saveTransportDelayToEEPROM(int slotBase, uint8_t value) {
-  EEPROM.write(EEPROM_DATA_START + slotBase, value);
+static void saveTransportDelayToEEPROM(int slotBase, int8_t value) {
+  EEPROM.write(EEPROM_DATA_START + slotBase, (uint8_t)value);
   markSettingsBackupDirty();
 }
 
@@ -1536,10 +1545,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
-    case 45: // SYNC - Transport delay SNC1/SNC2 0-127 ms - encoder 1: which, encoder 2: value
+    case 45: // SYNC - Transport delay SNC1/SNC2 −127..+127 ms
       {
-        extern uint8_t transportSendDelayMs;
-        extern uint8_t transportRcveDelayMs;
+        extern int8_t transportSendDelayMs;
+        extern int8_t transportRcveDelayMs;
         const CRGB tc = currentMenuParentTextColor();
         int syncEdit = (currentMode->pos[1] == 0) ? 0 : 1;
         drawText(syncEdit == 0 ? "SNC1" : "SNC2", 2, 10, tc);
@@ -2152,43 +2161,47 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 45: { // SYNC - Transport delay SNC1/SNC2 0-127 ms
-      extern uint8_t transportSendDelayMs;
-      extern uint8_t transportRcveDelayMs;
+    case 45: { // SYNC - SNC1/SNC2 −127..+127 ms (encoder raw 0..254 = value + 127; Mode.pos is unsigned)
+      extern int8_t transportSendDelayMs;
+      extern int8_t transportRcveDelayMs;
       static int lastSyncEnc1 = -1;
       static int lastSyncEnc2 = -1;
       int syncEdit = (currentMode->pos[1] == 0) ? 0 : 1;
-      int syncVal = (syncEdit == 0) ? (int)transportSendDelayMs : (int)transportRcveDelayMs;
+      int syncSigned = (syncEdit == 0) ? (int)transportSendDelayMs : (int)transportRcveDelayMs;
+      int syncRaw = syncSigned + 127;
+      syncRaw = constrain(syncRaw, 0, 254);
       if (menuFirstEnter) {
         Encoder[1].writeCounter((int32_t)syncEdit);
         Encoder[1].writeMax((int32_t)1);
         Encoder[1].writeMin((int32_t)0);
-        Encoder[2].writeCounter((int32_t)syncVal);
-        Encoder[2].writeMax((int32_t)127);
+        Encoder[2].writeCounter((int32_t)syncRaw);
+        Encoder[2].writeMax((int32_t)254);
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[1] = syncEdit;
-        currentMode->pos[2] = syncVal;
+        currentMode->pos[2] = syncRaw;
         lastSyncEnc1 = syncEdit;
-        lastSyncEnc2 = syncVal;
+        lastSyncEnc2 = syncRaw;
         menuFirstEnter = false;
       }
       syncEdit = (int)currentMode->pos[1];
-      syncVal = constrain((int)currentMode->pos[2], 0, 127);
+      syncRaw = constrain((int)currentMode->pos[2], 0, 254);
+      syncSigned = syncRaw - 127;
       if (currentMode->pos[1] != lastSyncEnc1) {
         lastSyncEnc1 = syncEdit;
-        syncVal = (syncEdit == 0) ? (int)transportSendDelayMs : (int)transportRcveDelayMs;
-        Encoder[2].writeCounter((int32_t)syncVal);
-        currentMode->pos[2] = syncVal;
-        lastSyncEnc2 = syncVal;
+        syncSigned = (syncEdit == 0) ? (int)transportSendDelayMs : (int)transportRcveDelayMs;
+        syncRaw = constrain(syncSigned + 127, 0, 254);
+        Encoder[2].writeCounter((int32_t)syncRaw);
+        currentMode->pos[2] = syncRaw;
+        lastSyncEnc2 = syncRaw;
       }
-      if (currentMode->pos[2] != lastSyncEnc2) {
-        lastSyncEnc2 = syncVal;
-        currentMode->pos[2] = syncVal;
+      if ((int)currentMode->pos[2] != lastSyncEnc2) {
+        lastSyncEnc2 = syncRaw;
+        currentMode->pos[2] = syncRaw;
         if (syncEdit == 0) {
-          transportSendDelayMs = (uint8_t)syncVal;
+          transportSendDelayMs = (int8_t)constrain(syncSigned, -127, 127);
           saveTransportDelayToEEPROM(29, transportSendDelayMs);
         } else {
-          transportRcveDelayMs = (uint8_t)syncVal;
+          transportRcveDelayMs = (int8_t)constrain(syncSigned, -127, 127);
           saveTransportDelayToEEPROM(31, transportRcveDelayMs);
         }
         redrawMain(setting);

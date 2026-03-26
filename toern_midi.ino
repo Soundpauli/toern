@@ -7,8 +7,25 @@ extern bool isNowPlaying;
 extern bool MIDI_TRANSPORT_SEND;
 extern bool SMP_PATTERN_MODE;
 extern unsigned int beat;
-extern uint8_t transportSendDelayMs;
-extern uint8_t transportRcveDelayMs;
+extern int8_t transportSendDelayMs;
+extern int8_t transportRcveDelayMs;
+
+// Signed SYNC delays (MENU>MIDI SNC1/SNC2): positive = delay this path; negative = delay the other path by |v|.
+unsigned long effectiveTransportSendDelayMs() {
+  long ms = 0;
+  if (transportSendDelayMs > 0) ms += (long)transportSendDelayMs;
+  if (transportRcveDelayMs < 0) ms += -(long)transportRcveDelayMs;
+  if (ms < 0) ms = 0;
+  return (unsigned long)ms;
+}
+
+unsigned long effectiveTransportRecvDelayMs() {
+  long ms = 0;
+  if (transportRcveDelayMs > 0) ms += (long)transportRcveDelayMs;
+  if (transportSendDelayMs < 0) ms += -(long)transportSendDelayMs;
+  if (ms < 0) ms = 0;
+  return (unsigned long)ms;
+}
 struct GlobalVars;
 extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
@@ -162,11 +179,6 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
   midiClockTimer.begin(midiClockTick, midiClockIntervalUs);
   midiClockTimer.priority(0);  // Highest priority - MIDI clock must be precise
   
-  // Verify actual BPM from calculated interval (for debugging)
-  double actualBPM = 60000000.0 / ((double)midiClockIntervalUs * 24.0);
-  
-  #if DEBUG_MIDI_CLOCK_SERIAL
-  #endif
 }
 
 // Public function to update MIDI clock with exact BPM value (for use from updateBPM)
@@ -333,8 +345,6 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     if (SMP.bpm > 0.0f) {
       unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
       playTimer.begin(playNote, currentPlayNoteInterval);
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
     } else {
       playTimer.end();
     }
@@ -364,10 +374,8 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     lastStableBPM = 0;
     stableBPMCount = 0;
     isBPMStable = false;
-    #if DEBUG_MIDI_CLOCK_SERIAL
-    #endif
   }
-  
+
   // Update last clock received time
   lastClockReceivedTime = now_captured;
 
@@ -402,8 +410,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
         triggerExternalOneBlink();
 
         if (pendingStartOnBar) {
-          #if DEBUG_MIDI_CLOCK_SERIAL
-          #endif
           pendingStartOnBar = false;
           // Keep isNowPlaying = false until the deferred playNote() fires,
           // so the background playTimer ISR cannot race and play beat 1 early.
@@ -416,8 +422,8 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           }
           playStartTime = millis();
 
-          // Defer first step by transportRcveDelayMs (0-127). 0 = no delay.
-          unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
+          // Defer first step by effective receive-side delay (SNC2 + cross from negative SNC1).
+          unsigned long delayUs = effectiveTransportRecvDelayMs() * 1000UL;
           transportStartDelayUntil = micros() + delayUs;
         }
       }
@@ -470,10 +476,6 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       // Update filter state
       bpmEstimate = filteredBPM;
       smoothedBPM = filteredBPM;
-
-      // Serial debug: show raw BPM calculation and filtered value
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
 
       // Round filtered BPM to nearest integer
       int newBPM = round(filteredBPM);
@@ -539,12 +541,7 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
       // Just update the BPM value - sequencer continues using its own internal timer
       // This allows the BPM display to match external clock while sequencer runs independently
       SMP.bpm = (float)newBPM;
-      
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
     } else {
-      #if DEBUG_MIDI_CLOCK_SERIAL
-      #endif
     }
 
     // Reset window for next measurement
@@ -667,7 +664,13 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
         // Store for grid write on next beat (ISR-safe ring buffer).
         extern bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote);
         enqueuePendingNote(pitch, velocity, (uint8_t)ch, (uint8_t)livenote);
-      }else{
+        // Ch13/14 synths are suppressed in playSynth() when called from the grid ISR with
+        // persistant=false while keys are held (pressedKeyCount[ch] > 0). Play immediately
+        // here with persistant=true so the user hears the note in real time.
+        if (ch > 12 && ch < 15) {
+          playSynth(ch, livenote, velocity, true);
+        }
+      } else {
 
         if (ch < 9) {
           int samplePitch;
@@ -687,15 +690,15 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
             samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
           }
           _samplers[ch].noteEvent(samplePitch, velocity, true, false);
-    } else if (ch > 12 && ch < 15) {
-      playSynth(ch, livenote, velocity, true);
-    } else if (ch == 11) {
+        } else if (ch > 12 && ch < 15) {
+          playSynth(ch, livenote, velocity, true);
+        } else if (ch == 11) {
 
-      // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
-      // Grid formula: 12 * octave[0] + transpose + (row - 1)
-      // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
-      playSound(12 * octave[0] + transpose + pitch - 55, 0);
-    }
+          // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
+          // Grid formula: 12 * octave[0] + transpose + (row - 1)
+          // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
+          playSound(12 * octave[0] + transpose + pitch - 55, 0);
+        }
       }
       // Always play the note immediately
       activeNotes[pitch] = true;
@@ -737,22 +740,13 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
 }
 
 void onBeatTick() {
-  
   PendingNote pn;
   extern bool dequeuePendingNote(PendingNote &out);
   while (dequeuePendingNote(pn)) {
-    int targetBeat = beat; //(beat == 1) ? (maxX * lastPage) : (beat);
+    int targetBeat = beat;
     note[targetBeat][pn.livenote].channel = pn.channel;
     note[targetBeat][pn.livenote].velocity = pn.velocity;
   }
-  
-
-  return;
-  // Reset your UI timer immediately for the new beat
-  beatStartTime = millis();
-
-  // Flush any pending grid-writes into the _new_ beat slot?
-  
 }
 
 
@@ -777,7 +771,16 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
       pressedKeyCount[channel] = (int16_t)cnt;
     }
 
-    if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
+    if (channel == 11) {
+      // Ch11 uses the polyphonic voice system (Senvelope1/2/filter), not envelopes[11].
+      // Release this specific note immediately; other voices held by other keys stay alive.
+      int note = (int)(12 * octave[0]) + transpose + (int)pitch - 55;
+      stopSound(note, 0);
+      if (pressedKeyCount[11] == 0) {
+        persistentNoteOn[11] = false;
+        noteOnTriggered[11] = false;
+      }
+    } else if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
       if (channel == 13 || channel == 14) {
         stopSynthChannel(channel);
       } else if (envelopes[channel]) {
@@ -819,17 +822,16 @@ void handleStart() {
     MIDI.sendRealTime(midi::Start);
   }
 
-  // Start after transportRcveDelayMs (0-127). 0 = no delay.
+  // Start after effective receive-side delay.
   pendingStartOnBar = false;
-  beatStartTime = millis();
 
-  unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
+  unsigned long delayUs = effectiveTransportRecvDelayMs() * 1000UL;
   transportStartDelayUntil = micros() + delayUs;
 }
 
 
 void armMasterTransportStartDelay() {
-  transportStartDelayUntil = micros() + (unsigned long)transportSendDelayMs * 1000UL;
+  transportStartDelayUntil = micros() + effectiveTransportSendDelayMs() * 1000UL;
 }
 
 void handleTimeCodeQuarterFrame(uint8_t data) {

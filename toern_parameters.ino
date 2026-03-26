@@ -1,3 +1,10 @@
+// Forward declarations for ch11 polyphonic voice arrays (defined in toern_synths.ino).
+extern uint16_t attackAmp[2][3];
+extern uint16_t decayAmp[2][3];
+extern float    sustainAmp[2][3];
+extern uint16_t releaseAmp[2][3];
+extern void     updateVals(int ch);
+
 // Refactored: setParams combines processParameterAdjustment and updateParameterValue
 void setParams(ParameterType paramType, int index) {
 
@@ -5,11 +12,21 @@ void setParams(ParameterType paramType, int index) {
   switch (paramType) {
     case ATTACK:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
-      envelopes[index]->attack(mappedValue);
+      if (index == 11) {
+        for (int v = 0; v < 3; v++) attackAmp[0][v] = (uint16_t)mappedValue;
+        updateVals(0);
+      } else {
+        envelopes[index]->attack(mappedValue);
+      }
       break;
     case DECAY:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
-      envelopes[index]->decay(mappedValue);
+      if (index == 11) {
+        for (int v = 0; v < 3; v++) decayAmp[0][v] = (uint16_t)mappedValue;
+        updateVals(0);
+      } else {
+        envelopes[index]->decay(mappedValue);
+      }
       break;
     /*case HOLD:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
@@ -17,11 +34,21 @@ void setParams(ParameterType paramType, int index) {
       break;*/
     case SUSTAIN:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]);
-      envelopes[index]->sustain(mappedValue);
+      if (index == 11) {
+        for (int v = 0; v < 3; v++) sustainAmp[0][v] = mappedValue;
+        updateVals(0);
+      } else {
+        envelopes[index]->sustain(mappedValue);
+      }
       break;
     case RELEASE:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
-      envelopes[index]->release(mappedValue);
+      if (index == 11) {
+        for (int v = 0; v < 3; v++) releaseAmp[0][v] = (uint16_t)mappedValue;
+        updateVals(0);
+      } else {
+        envelopes[index]->release(mappedValue);
+      }
       break;
   }
 }
@@ -80,12 +107,12 @@ void setEnvelopeDefaultValues(int ch) {
   // NOTE: These are "slider" values in the 0..maxfilterResolution range (typically 0..32),
   // not milliseconds directly. `setParams()` maps them to actual envelope times/levels.
   if (ch == 13 || ch == 14) {
-    // Requested default for synth channels 13/14:
-    // A=32, D=16, S=0, R=0
+    // Default synth envelope for channels 13/14:
+    // A=32, D=9, S=20, R=9
     SMP.param_settings[ch][ATTACK] = 32;
-    SMP.param_settings[ch][DECAY] = 16;
-    SMP.param_settings[ch][SUSTAIN] = 0;
-    SMP.param_settings[ch][RELEASE] = 0;
+    SMP.param_settings[ch][DECAY] = 9;
+    SMP.param_settings[ch][SUSTAIN] = 20;
+    SMP.param_settings[ch][RELEASE] = 9;
   } else {
     SMP.param_settings[ch][ATTACK] = 32;
     SMP.param_settings[ch][DECAY] = 32;
@@ -104,7 +131,7 @@ void setEnvelopeDefaultValues(int ch) {
 // Set default synth values for a single channel
 //SYNTH
 void setSynthDefaultValues(int ch) {
-  SMP.synth_settings[ch][CUTOFF] = 0;
+  SMP.synth_settings[ch][CUTOFF] = 16;
   SMP.synth_settings[ch][RESONANCE] = 0;
   SMP.synth_settings[ch][FILTER] = 0;
   // Default pitch offsets:
@@ -125,6 +152,12 @@ void setSynthDefaultValues(int ch) {
   SMP.synth_settings[ch][LFO_DEPTH] = 0;
   SMP.synth_settings[ch][LFO_PHASE] = 0; // spread index
   SMP.synth_settings[ch][ARP_STEP] = 0;   // note count index
+
+  // Apply BASS-specific slider defaults (CUTOFF, RES, FILTER, CENT, FORM) so the
+  // ch11 synth starts with the correct octave/timbre for instrument 0 (BASS).
+  if (ch == 11) {
+    applySynthInstrumentPreset(ch, 0);
+  }
 
    initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
    // updateSynthVoice(11) is called at the end of resetAllToDefaults() instead
@@ -151,36 +184,7 @@ void applySynthInstrumentPreset(int channel, int instrumentIdx) {
     14,  // 9 BRASS
   };
 
-  // p1–p3 drive cutoff / resonance / filter amount in *_synth(). All zeros → same dark 400 Hz
-  // timbre for every preset; give each instrument distinct starting CUT/RES/FILT (0..32).
-  static const uint8_t kCutDefault[10] = {
-    7,   // BASS — darker
-    14,  // KEYS — mid
-    26,  // CHIPTUNE — bright / buzzy
-    11,  // PAD — warm low-mid
-    15,  // WOW
-    10,  // ORGAN
-    17,  // FLUTE — airy
-    21,  // LEAD — bright lead
-    16,  // ARP
-    13,  // BRASS
-  };
-  static const uint8_t kResDefault[10] = {
-    10, 7, 5, 12, 10, 6, 8, 14, 9, 15,
-  };
-  static const uint8_t kFiltDefault[10] = {
-    13, 12, 9, 15, 11, 13, 14, 17, 12, 14,
-  };
-
-  SMP.synth_settings[channel][CUTOFF] = kCutDefault[instrumentIdx];
-  uint8_t filt = kFiltDefault[instrumentIdx];
-  uint8_t res = kResDefault[instrumentIdx];
-  // High resonance + non-zero filter amount sounds harsh; ease RES whenever FLT is active.
-  if (filt > 0) {
-    res = (uint8_t)((res * 2) / 3);
-  }
-  SMP.synth_settings[channel][RESONANCE] = res;
-  SMP.synth_settings[channel][FILTER] = filt;
+  // CUTOFF / RESONANCE / FILTER are global/persistent — not overridden per preset.
   SMP.synth_settings[channel][SEMI] = 16;  // mid → zero extra cent/semi offset from p4 mapping
   SMP.synth_settings[channel][CENT] = kCentSliderDefault[instrumentIdx];
   // p6 → newWaveform = floor((FORM/32)*8). CHIPTUNE preset uses 1,1,1 then overwrites [0]; FORM must

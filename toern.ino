@@ -1,7 +1,7 @@
 #define VERSION "v2.0"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
-#define SERIAL8_RX_BUFFER_SIZE 2048  // Larger MIDI input buffer for high-frequency clock messages (default is 64)
+#define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
 #define SERIAL8_TX_BUFFER_SIZE 128   // Larger transmit buffer for safety
 #define TargetFPS 60
 
@@ -188,10 +188,15 @@ extern void handleStart();
 // - mixer2 sums ch5-8
 // - mixer_end sums mixer1 + mixer2 (+ synth + monitoring)
 //
-// Old staging used 0.70f per input on mixer1/2, which can exceed full-scale with only 2 loud hits.
-// The values below keep the *mix* within range (so multiple loud samples don't crackle).
-#define MIX_BUS_HEADROOM 0.25f      // per-input gain into mixer1/mixer2 (4 inputs each)
-#define MIX_END_SAMPLES_GAIN 0.50f  // mixer_end input gain for mixer1 + mixer2
+// Hard limit per bus: N * MIX_BUS_HEADROOM <= 1.0 (N simultaneous voices on that bank, each at
+// full internal level in phase — the theoretical "block" + max velocity case).
+// Eight voices total does NOT relax N: e.g. six voices can still be 4+2, so N is still 4 on one bus.
+//
+// We target typical use: at most 3 sample voices on ch1-4 at once AND at most 3 on ch5-8 (e.g. 3+3=6).
+// Then MIX_BUS_HEADROOM = 1/3 keeps each bus <= 1.0; mixer_end still needs 2 * MIX_END <= 1.0.
+// If you ever fire 4 samples on one bank at full level together, lower MIX_BUS_HEADROOM to 0.25f.
+#define MIX_BUS_HEADROOM (1.0f / 3.0f)  // max ~3 simultaneous sample voices per bank (ch1-4 / ch5-8)
+#define MIX_END_SAMPLES_GAIN 0.50f      // mixer_end: mixer1 + mixer2 (each bus can hit 1.0)
 #define MIX_END_SYNTH_GAIN 0.60f    // mixer_end input gain for mixersynth_end
 
 
@@ -214,11 +219,11 @@ extern void handleStart();
 extern void sampleBrowserRefreshList(int channel);
 extern void sampleBrowserSyncBrowseFromStoredPath(int channel);
 extern void sampleBrowserNavigatePress(int channel);
+extern void sampleBrowserLastEncoderPress(int channel);
 extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
 extern int sampleBrowserBrowseIndexMax(int channel);
 extern unsigned long g_setWavIgnoreLoadUntilMs;
 extern bool sampleBrowserIsLoadableSelection(int channel);
-extern bool sampleBrowserSelectionIsDirectory(int channel);
 extern uint16_t g_wavPickCount;
 extern uint16_t g_folderPickCount;
 
@@ -228,7 +233,6 @@ struct MidiSettings : public midi ::DefaultSettings {
 };
 
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MidiSettings);
-unsigned long beatStartTime = 0;  // Timestamp when the current beat started
 
 unsigned long ganularStartTime = 0;  // Timestamp when the current beat started
 
@@ -283,7 +287,11 @@ void triggerGridNote(unsigned int globalX, unsigned int y);
 void drawCtrlVolumeOverlay(int volume);
 void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
-void drawSampleLoadOverlay();
+void drawSampleLoadOverlay(uint8_t progressPercent);
+void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
+void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
+void flushSettingsBackupNow();
+void stopAllSetWavPreviewAudio();
 static int16_t lastDefaultFastFilterValue[NUM_CHANNELS] = { 0 };  // Changed from int to int16_t (32 bytes saved)
 
 const char *const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
@@ -360,8 +368,8 @@ bool MIDI_NOTE_RECEIVE = true; // Control whether incoming MIDI notes are acted 
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
-uint8_t transportSendDelayMs = 17;   // 0-127 ms, menu>MIDI>SYNC (delay play after send)
-uint8_t transportRcveDelayMs = 17;   // 0-127 ms (delay play after receive)
+int8_t transportSendDelayMs = 17;   // -127..+127 ms, MENU>MIDI>SYNC SNC1 (see toern_midi effective* helpers)
+int8_t transportRcveDelayMs = 17; // -127..+127 ms SNC2: + = delay that path; − = delay the other path
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
@@ -379,10 +387,6 @@ bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
 
 bool drawNoSD_hasRun = false;
 
-bool notePending = false;
-uint8_t pendingPitch = 0;
-uint8_t pendingVelocity = 0;
-unsigned long pendingTime = 0;
 
 struct PendingNote {
   uint8_t pitch;
@@ -488,7 +492,7 @@ int peakRecIndex = 0;
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
 bool pong = false;
-const long ram = 12582912;                               // 9* 1058400; //12seconds on 44.1 / 16Bit before: 12582912;  //12MB ram for sounds // 16MB total
+const long ram = 15728640;                               // 15MB EXTRAM for sounds (was 12582912/12MB); ~1707KB/slot ~19.8s/voice @ 44.1kHz mono 16-bit
 const unsigned int MAX_STEPS = MATRIX_WIDTH * maxPages;  // Fixed total steps (16 pages * 16 cols = 256)
 const unsigned int maxlen = MAX_STEPS + 1;               // Note array width (1-based)
 const unsigned int SONG_LEN = MAX_STEPS;                 // Song length equals total steps
@@ -654,6 +658,7 @@ int editpage = 1;
 EXTMEM Note note[maxlen + 1][maxY + 1] = {};
 EXTMEM Note tmp[maxlen + 1][maxY + 1] = {};
 EXTMEM Note original[maxlen + 1][maxY + 1] = {};
+EXTMEM Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1] = {};
 
 EXTMEM unsigned int sample_len[maxFiles];
 bool sampleLengthSet = false;
@@ -705,7 +710,8 @@ Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0,
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
+// pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
+Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
 Mode songMode = { "SONGMODE", { 1, 1, 1, 1 }, { 1, 16, 1, 64 }, { 1, 1, 1, 1 }, { 0x000000, 0xFF00FF, 0x000000, 0xFFFF00 } };
@@ -1030,6 +1036,14 @@ void stopSynthChannel(int ch) {
   if (envelopes[ch]) envelopes[ch]->noteOff();
   noteOnTriggered[ch] = false;
   persistentNoteOn[ch] = false;
+}
+
+// When playback is stopped or voices are silenced globally, clear MIDI poly counters so they
+// cannot desync from the hardware envelope (phantom Note On counts).
+static inline void resetMidiPressedKeyCount11to14() {
+  for (int c = 11; c <= 14; ++c) {
+    pressedKeyCount[c] = 0;
+  }
 }
 
 // Arp step per channel (used for synth channels)
@@ -1428,6 +1442,9 @@ void switchMode(Mode *newMode) {
 
   if (newMode != currentMode) {
 
+    if (currentMode == &set_Wav && newMode != &set_Wav) {
+      stopAllSetWavPreviewAudio();
+    }
 
     if (muteModeActive && currentMode == &subpatternMode && newMode != &subpatternMode) {
       if (tmpMute) {
@@ -1987,7 +2004,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
-        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13)) ||
+        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45)) ||
         (inVolSubmenu && mainSetting == 43) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41)));
     if (mainSetting != 15 && !encoder2ValuePage) {
@@ -2043,10 +2060,9 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern void previewSample(bool);
     previewSample(false);
     return;
-  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - encoder 3 opens selected directory
-    if (!pressed[2] && !isPressed[2] &&
-        sampleBrowserSelectionIsDirectory(GLOB.currentChannel)) {
-      sampleBrowserNavigatePress(GLOB.currentChannel);
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - encoder 4: dir row = navigate; file row in subfolder = up; file at root = no-op
+    if (!pressed[2] && !isPressed[2]) {
+      sampleBrowserLastEncoderPress(GLOB.currentChannel);
     }
     return;
   } else if ((currentMode == &recordMode) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - Exit recordMode
@@ -2388,7 +2404,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       // Apply restored volume
       SMP.channelVol[ch] = (unsigned int)restoreVol;
       float channelvolume = mapf((float)restoreVol, 0, maxY, 0, 1);
-      if (amps[ch] != nullptr) {
+      // amps[] has 15 slots (indices 0..14); GLOB.y==16 => currentChannel 15 — no amp slot
+      if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
         amps[ch]->gain(channelvolume);
       }
 
@@ -2596,6 +2613,14 @@ void initSamples() {
   synthmixer11.gain(0, 0.12);  // Reduced from GAIN_3 (0.4) to prevent clipping
   synthmixer11.gain(1, 0.12);
   synthmixer11.gain(3, 0.12);
+
+  // CHMixer11 collapses SmixerL4 + SmixerR4 (both stereo buses) into the mono ch11 chain.
+  // Without explicit gain, default 1.0+1.0 = up to 1.98 → hard clips when all 3 oscs play.
+  // 0.5 each restores unity-gain L+R summing.
+  CHMixer11.gain(0, 0.5f);
+  CHMixer11.gain(1, 0.5f);
+  CHMixer11.gain(2, 0.0f);
+  CHMixer11.gain(3, 0.0f);
 
   synthmixer13.gain(0, 0.10);  // Further reduced from 0.15 to prevent clipping
   synthmixer13.gain(1, 0.10);
@@ -3089,6 +3114,9 @@ void setup() {
   autoLoad();
 
   initSoundChip();
+  // autoLoad() restores SMP before the audio graph is fully initialized.
+  // Re-apply the loaded filter/envelope state now so ch13/14 are correct at boot.
+  loadSMPSettings();
   //mixer0.gain(1, 0.05);  //PREV Sound
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
 
@@ -3127,20 +3155,48 @@ void setup() {
   resetMidiClockState();
 
 
-  for (int f = 0; f < 5; f++) {
-    for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
-      setFilters((FilterType)f, ALL_CHANNELS[i], true);
-    }
-  }
-
-  forceAllMixerGainsToTarget();
-
   // Turn on audio input amplifier after setup is complete
   audioInputAmp.gain(1.0);
 
   // Final application of audio settings to ensure all are applied after all globals are loaded/initialized
   extern void applyAudioSettingsFromGlobals();
   applyAudioSettingsFromGlobals();
+
+  // DMAMEM retains values across soft resets. Clear MIDI voice-state for ch11-14 so stale
+  // pressedKeyCount or persistentNoteOn from the previous session cannot prevent noteOff.
+  for (int ch = 11; ch <= 14; ch++) {
+    pressedKeyCount[ch]   = 0;
+    persistentNoteOn[ch]  = false;
+    noteOnTriggered[ch]   = false;
+  }
+
+  // Ch13/14 need an unconditional final init: the filter mixer transition state is never
+  // set up for these channels at boot (setFilterDefaults is only called via resetAllAudioEffects).
+  // Without it, gains stay at zero and ADSR/PASS have no effect until something triggers playback.
+  for (int ch : {13, 14}) {
+    extern void initFilterTransition(int index);
+    // Seed transition state to dry/passthrough, then immediately commit to hardware.
+    initFilterTransition(ch);
+    if (filtermixers[ch]) {
+      filtermixers[ch]->gain(0, 1.0f);  // dry on
+      filtermixers[ch]->gain(1, 0.0f);
+      filtermixers[ch]->gain(2, 0.0f);
+      filtermixers[ch]->gain(3, 0.0f);
+    }
+    // Now apply whatever was loaded/defaulted for this channel.
+    setFilters(PASS,        ch, true);
+    setFilters(FREQUENCY,   ch, true);
+    setFilters(REVERB,      ch, true);
+    setFilters(BITCRUSHER,  ch, true);
+    setFilters(DETUNE,      ch, true);
+    setFilters(OCTAVE,      ch, true);
+    setParams(ATTACK,   ch);
+    setParams(HOLD,     ch);
+    setParams(DECAY,    ch);
+    setParams(SUSTAIN,  ch);
+    setParams(RELEASE,  ch);
+  }
+  forceAllMixerGainsToTarget();
 
   // Initialize LED strip visualization
   initLedStrip();
@@ -5132,21 +5188,11 @@ void loop() {
   }
 
   if (isrDbgPatternFinished) {
-    uint16_t beatCopy;
-    // Avoid masking interrupts; occasional duplicate debug print is acceptable.
-    beatCopy = isrDbgPatternFinishedBeat;
     isrDbgPatternFinished = false;
-#if DEBUG_PLAYBACK_SERIAL
-#endif
   }
 
   if (isrDbgLoopCountChanged) {
-    uint16_t lcCopy;
-    // Avoid masking interrupts; occasional duplicate debug print is acceptable.
-    lcCopy = isrDbgLoopCountValue;
     isrDbgLoopCountChanged = false;
-#if DEBUG_PLAYBACK_SERIAL
-#endif
   }
 
   // FLOW mode: SAME playback behavior as normal play.
@@ -5656,22 +5702,31 @@ FLASHMEM void updateExternalOneBlink() {
 }
 
 float getNoteDuration(int channel) {
-  // Calculate ADSR-derived length in milliseconds
+  // Gate time until we send noteOff() for grid / preview / sequencer triggers.
+  // Teensy AudioEffectEnvelope runs A→D→S while "on"; noteOff() starts R from the current level.
+  // Release must not be included in the hold-open time — that would keep the voice in sustain
+  // during what should be the release slope.
   float delayMs = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
-  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, 0, maxParamVal[ATTACK]);
+  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
   float holdMs = mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
   float decayMs = mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
-  float releaseMs = mapf(SMP.param_settings[channel][RELEASE], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
 
-  float timetilloff = delayMs + attackMs + holdMs + decayMs + releaseMs;
+  float gateMs = delayMs + attackMs + holdMs + decayMs;
+
+  if (channel == 13 || channel == 14) {
+    // Grid / preview triggers on the synth channels should be short single hits.
+    // Send noteOff() right after the attack reaches its target; the envelope's own
+    // decay / sustain / release settings then shape the rest of the sound naturally.
+    gateMs = delayMs + attackMs + 8.0f;
+  }
 
   // Ensure attack is actually reached before note-off by enforcing at least (attack + small cushion)
   float minLen = attackMs + 5.0f;  // 5ms cushion beyond attack
-  if (timetilloff < minLen) timetilloff = minLen;
+  if (gateMs < minLen) gateMs = minLen;
 
   // Absolute floor to avoid zero-length
-  if (timetilloff < 5.0f) timetilloff = 5.0f;
-  return timetilloff;
+  if (gateMs < 5.0f) gateMs = 5.0f;
+  return gateMs;
 }
 
 
@@ -5782,9 +5837,7 @@ FLASHMEM void shiftNotes() {
     unsigned int pageStartX = ((GLOB.edit - 1) * maxX) + 1;
     unsigned int pageEndX = GLOB.edit * maxX;
 
-    // Create a temporary array for this page only to avoid overwriting other pages.
-    // IMPORTANT: avoid a VLA on the stack (maxX is runtime 16/32) which can cause stack overflow/hangs.
-    static Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1];
+    // pageTmp is a file-scope EXTMEM array — clear it before use.
     memset(pageTmp, 0, sizeof(pageTmp));
 
     // Step 1: Copy current page notes to pageTmp
@@ -5927,6 +5980,7 @@ static void silenceAllVoicesForDrawRGlobalMute() {
 
   stopSynthChannel(13);
   stopSynthChannel(14);
+  resetMidiPressedKeyCount11to14();
 }
 
 FLASHMEM void toggleDrawRGlobalMute() {
@@ -5972,6 +6026,7 @@ void play(bool fromStart) {
   // Ensure synth voices are idle before starting
   stopSynthChannel(13);
   stopSynthChannel(14);
+  resetMidiPressedKeyCount11to14();
 
   if (fromStart) {
     updateLastPage();
@@ -6043,11 +6098,11 @@ void play(bool fromStart) {
 
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
-      // Master mode: if transportSendDelayMs > 0, defer play until delay elapses.
-      extern uint8_t transportSendDelayMs;
+      // Master mode: defer play until effective send-side delay elapses (SNC1 + cross from negative SNC2).
+      extern unsigned long effectiveTransportSendDelayMs();
       extern void armMasterTransportStartDelay();
       resetMidiClockState();
-      if (transportSendDelayMs == 0) {
+      if (effectiveTransportSendDelayMs() == 0) {
         isNowPlaying = true;
         playStartTime = millis();
         if (SMP.bpm > 0.0f) {
@@ -6106,6 +6161,7 @@ void pause(bool skipSave) {
   envelope0.noteOff();
   stopSynthChannel(13);
   stopSynthChannel(14);
+  resetMidiPressedKeyCount11to14();
 
   // Reset playback state immediately
   beat = 1;
@@ -6131,8 +6187,13 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   if (ch < 0 || ch >= 15) return;                // Bounds check for synths array
   if (!synths[ch][0] || !synths[ch][1]) return;  // Check if synth objects exist
 
-  float frequency = fullFrequencies[constrain(b - ch + 13, 0, 26)];  // y-Wert ist 1-basiert, Array ist 0-basiert // b-1??
-                                                                     // Constrain index for fullFrequencies
+  // Sequencer / grid / paint preview must not steal or retrigger ch13/14 while MIDI keys are
+  // still held on that channel — envelope should stay in sustain until real Note Off.
+  if (ch >= 13 && ch <= 14 && !persistant && pressedKeyCount[ch] > 0) {
+    return;
+  }
+
+  float frequency = notesArray[constrain(b - ch + 47, 36, 62)];
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
 
@@ -6216,7 +6277,8 @@ void playSynth(int ch, int b, int vel, bool persistant) {
 
   if (persistant) {
     persistentNoteOn[ch] = true;
-  } else {
+  } else if (pressedKeyCount[ch] == 0) {
+    // Only clear MIDI-hold flag when no keys are down (avoid grid/seq clearing live MIDI state).
     persistentNoteOn[ch] = false;
   }
 
@@ -6493,7 +6555,6 @@ void playNote() {
     waitForFourBars = false;  // Reset for the next start message
   }
 
-  beatStartTime = millis();
   if (SMP_PATTERN_MODE) {
     extern bool songModeActive;
     extern int patternMode;
@@ -7073,6 +7134,7 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
   }
   if (channel_to_clear == 13 || channel_to_clear == 14) {
     stopSynthChannel(channel_to_clear);
+    pressedKeyCount[channel_to_clear] = 0;
   }
 }
 
@@ -7595,19 +7657,23 @@ void loadWav() {
   preventPaintUnpaint = true;
   freshPaint = false;
 
-  drawSampleLoadOverlay();
+  drawSampleLoadOverlay(0);
   FastLEDshow();
 
   playSdWav1.stop();
 
   // Load the preview sample (which may be reversed/edited) to the target channel
   // This copies from sampled[0] (preview) to sampled[targetChannel]
-  extern void loadPreviewToChannel(unsigned int targetChannel);
-  loadPreviewToChannel(GLOB.currentChannel);
+  loadPreviewToChannel(GLOB.currentChannel, true);
 
   // Auto-save to samplepack 0 after loading individual sample
-  copySampleToSamplepack0(GLOB.currentChannel);
+  copySampleToSamplepack0(GLOB.currentChannel, true);
   saveSp0StateToEEPROM();
+  // SP0 flags mark settings backup dirty; flush now so loop() does not run the heavy SD
+  // write during DRAW (serviceSettingsBackup debounce is ~1.5s after mark).
+  drawSampleLoadOverlay(99);
+  FastLEDshow();
+  flushSettingsBackupNow();
 
   // Store the current edit page before switching modes
   int savedEditPage = GLOB.edit;
@@ -7846,6 +7912,7 @@ FLASHMEM void setMuteState(int channel, bool muted) {
       }
       if (shouldStop) {
         stopSynthChannel(channel);
+        pressedKeyCount[channel] = 0;
       }
     }
   } else {
@@ -7855,6 +7922,7 @@ FLASHMEM void setMuteState(int channel, bool muted) {
     // Immediately stop synth voices when muted
     if (muted && (channel == 13 || channel == 14)) {
       stopSynthChannel(channel);
+      pressedKeyCount[channel] = 0;
     }
   }
 }

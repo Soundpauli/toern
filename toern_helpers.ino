@@ -91,6 +91,7 @@ extern unsigned int RefreshTime;  // Display refresh timing (30 FPS = 33ms per f
 
 EXTMEM char sbTmpDirs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM char sbTmpWavs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
+EXTMEM uint32_t sbTmpWavSizes[BROWSE_MAX_TMP];
 
 // Stubs for legacy menu/ui code
 bool manifestLoaded = false;
@@ -104,6 +105,7 @@ EXTMEM char g_browseDir[maxFiles][SAMPLE_BROWSER_PATH_MAX];
 EXTMEM char g_folderPickName[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM char g_wavPickName[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM uint8_t g_wavPickType[BROWSE_MAX_TMP];
+EXTMEM uint32_t g_wavPickSize[BROWSE_MAX_TMP];
 uint16_t g_folderPickCount = 0;
 uint16_t g_wavPickCount = 0;
 int g_wavFileCount = 0;  // number of file entries inside the combined list
@@ -143,6 +145,20 @@ static void sortNameBlock(char names[][SAMPLE_BROWSER_NAME_MAX], int n) {
         memcpy(tmp, names[i], sizeof(tmp));
         memcpy(names[i], names[j], sizeof(tmp));
         memcpy(names[j], tmp, sizeof(tmp));
+      }
+    }
+  }
+}
+
+static void sortNameBlockWithSizes(char names[][SAMPLE_BROWSER_NAME_MAX], uint32_t sizes[], int n) {
+  for (int i = 0; i < n - 1; i++) {
+    for (int j = i + 1; j < n; j++) {
+      if (strcasecmp(names[i], names[j]) > 0) {
+        char tmp[SAMPLE_BROWSER_NAME_MAX];
+        memcpy(tmp, names[i], sizeof(tmp));
+        memcpy(names[i], names[j], sizeof(tmp));
+        memcpy(names[j], tmp, sizeof(tmp));
+        uint32_t stmp = sizes[i]; sizes[i] = sizes[j]; sizes[j] = stmp;
       }
     }
   }
@@ -300,6 +316,7 @@ void sampleBrowserRefreshList(int channel) {
       if (nw < BROWSE_MAX_TMP) {
         strncpy(sbTmpWavs[nw], base, SAMPLE_BROWSER_NAME_MAX - 1);
         sbTmpWavs[nw][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
+        sbTmpWavSizes[nw] = (uint32_t)fe.size();
         nw++;
       }
     }
@@ -307,7 +324,7 @@ void sampleBrowserRefreshList(int channel) {
   }
   dir.close();
   sortNameBlock(sbTmpDirs, nd);
-  sortNameBlock(sbTmpWavs, nw);
+  sortNameBlockWithSizes(sbTmpWavs, sbTmpWavSizes, nw);
 
   /* ---- Legacy folder row retained for compatibility with old overlay code. ---- */
   uint16_t fn = 0;
@@ -329,12 +346,14 @@ void sampleBrowserRefreshList(int channel) {
     strncpy(g_wavPickName[wn], "[../]", SAMPLE_BROWSER_NAME_MAX - 1);
     g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
     g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_PARENT;
+    g_wavPickSize[wn] = 0;
     wn++;
   }
   for (int i = 0; i < nd && wn < BROWSE_MAX_TMP; i++) {
     strncpy(g_wavPickName[wn], sbTmpDirs[i], SAMPLE_BROWSER_NAME_MAX - 1);
     g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
     g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_DIR;
+    g_wavPickSize[wn] = 0;
     wn++;
   }
   g_wavFileCount = nw;
@@ -342,6 +361,7 @@ void sampleBrowserRefreshList(int channel) {
     strncpy(g_wavPickName[wn], sbTmpWavs[i], SAMPLE_BROWSER_NAME_MAX - 1);
     g_wavPickName[wn][SAMPLE_BROWSER_NAME_MAX - 1] = 0;
     g_wavPickType[wn] = SAMPLE_BROWSER_ENTRY_FILE;
+    g_wavPickSize[wn] = sbTmpWavSizes[i];
     wn++;
   }
   g_wavPickCount = wn;
@@ -427,6 +447,32 @@ void sampleBrowserNavigatePress(int channel) {
   sampleBrowserFinishFolderStep(channel, prevWavPos, preferredFolderName);
 }
 
+// SET_WAV: last encoder press — directory row ([../] or folder): navigate (up or into folder).
+// File row: go up one level when not at samples root; at root, press does nothing.
+void sampleBrowserLastEncoderPress(int channel) {
+  if (channel < 1 || channel >= maxFiles) return;
+  sampleBrowserClampBrowseIndexAndHardware(channel);
+  if (g_wavPickCount == 0) return;
+
+  const int idx = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
+  const uint8_t type = g_wavPickType[idx];
+  const bool onDirectory = (type == SAMPLE_BROWSER_ENTRY_PARENT || type == SAMPLE_BROWSER_ENTRY_DIR);
+
+  if (onDirectory) {
+    sampleBrowserNavigatePress(channel);
+    return;
+  }
+
+  if (!g_browseDir[channel][0]) return;
+
+  const unsigned int prevWavPos = currentMode->pos[3];
+  char preferredFolderName[SAMPLE_BROWSER_NAME_MAX];
+  preferredFolderName[0] = 0;
+  sampleBrowserGetLeafFolderName(channel, preferredFolderName, sizeof(preferredFolderName));
+  browseDirGoParent(channel);
+  sampleBrowserFinishFolderStep(channel, prevWavPos, preferredFolderName);
+}
+
 void sampleBrowserClearAll() {
   for (int i = 0; i < maxFiles; i++) {
     g_browseDir[i][0] = '\0';
@@ -504,22 +550,27 @@ void loadSMPSettings() {
       setFilters((FilterType)f, ch, true);
     }
     
-    // Load Parameters - apply all parameter settings for this channel
-    for (int p = 0; p < 5; p++) {
-    // Set the encoder value to the saved parameter value.S
-    //currentMode->pos[3] = SMP.param_settings[ch][p];
-    // Process the parameter mapping.
-    setParams(p, ch);
-  }
-    
+    // Load Parameters - apply saved envelope settings to the live audio objects.
+    // DELAY is not a hardware envelope setter here; ATTACK..RELEASE are.
+    setParams(ATTACK, ch);
+    setParams(HOLD, ch);
+    setParams(DECAY, ch);
+    setParams(SUSTAIN, ch);
+    setParams(RELEASE, ch);
 
-    
     // Load Synths - apply synth settings (only for channel 11)
-   if (ch == 11) {
-    updateSynthVoice(11);
+    if (ch == 11) {
+      // Apply instrument-specific defaults (octave register, waveform) for the saved instrument
+      // before calling updateSynthVoice, exactly as the UI preset-selector does.
+      extern void applySynthInstrumentPreset(int channel, int instrumentIdx);
+      applySynthInstrumentPreset(11, (int)SMP.synth_settings[11][INSTRUMENT]);
+      updateSynthVoice(11);
+    }
   }
-  return;
-  }
+
+  // Apply any pending filter mixer targets immediately after loading so synth channels
+  // do not require an extra trigger/play cycle before their routing is correct.
+  forceAllMixerGainsToTarget();
   
   // Legacy drum path removed; no initialization needed.
   
@@ -2552,6 +2603,9 @@ void resetAllAudioEffects() {
       updateSynthVoice(11);
     }
   }
+
+  // Commit post-reset filter routing immediately.
+  forceAllMixerGainsToTarget();
   
 }
 
@@ -2636,13 +2690,13 @@ void startNew() {
     
     // Reset parameter data (no hardware calls)
     // Channel-specific ADSR defaults:
-    // - ch13/14 (synths): A=32, D=16, S=0, R=0
+    // - ch13/14 (synths): A=32, D=9, S=20, R=9
     // - all others: keep existing defaults
     if (ch == 13 || ch == 14) {
       SMP.param_settings[ch][ATTACK] = 32;
-      SMP.param_settings[ch][DECAY] = 16;
-      SMP.param_settings[ch][SUSTAIN] = 0;
-      SMP.param_settings[ch][RELEASE] = 0;
+      SMP.param_settings[ch][DECAY] = 9;
+      SMP.param_settings[ch][SUSTAIN] = 20;
+      SMP.param_settings[ch][RELEASE] = 9;
     } else {
       SMP.param_settings[ch][ATTACK] = 32;
       SMP.param_settings[ch][DECAY] = 0;

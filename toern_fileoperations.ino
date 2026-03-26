@@ -114,11 +114,13 @@ FLASHMEM void saveSamplePack(int pack) {
                 continue;
             }
             
-            // Copy file contents
-            uint8_t buffer[512];
+            // Large EXTRAM buffer + periodic yield: fewer SD round-trips, loop stays responsive.
+            static EXTMEM uint8_t packCopyBuf[131072];
             size_t bytesRead;
-            while ((bytesRead = sourceFile.read(buffer, sizeof(buffer))) > 0) {
-                destFile.write(buffer, bytesRead);
+            unsigned copyChunks = 0;
+            while ((bytesRead = sourceFile.read(packCopyBuf, sizeof(packCopyBuf))) > 0) {
+                destFile.write(packCopyBuf, bytesRead);
+                if ((++copyChunks & 1u) == 0) yield();
             }
             
             sourceFile.close();
@@ -146,13 +148,12 @@ FLASHMEM void saveSamplePack(int pack) {
             // Large samples (930KB) can block CPU for 500-1000ms without chunking
             uint32_t totalBytes = sampleCount * sizeof(int16_t);
             uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[ch]);
-            const size_t CHUNK_SIZE = 8192;  // 8KB chunks
-            
+            const size_t CHUNK_SIZE = 131072;
+
             for (uint32_t offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
               size_t chunkSize = min((size_t)CHUNK_SIZE, (size_t)(totalBytes - offset));
               outFile.write(dataPtr + offset, chunkSize);
-              // Yield periodically during large file writes to maintain responsiveness
-              if ((offset % (CHUNK_SIZE * 4)) == 0) yield();  // Yield every 32KB
+              if ((offset / CHUNK_SIZE) % 2u == 0u) yield();
             }
 
             finalizeWavHeader(outFile, totalBytes);
