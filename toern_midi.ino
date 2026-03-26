@@ -7,8 +7,25 @@ extern bool isNowPlaying;
 extern bool MIDI_TRANSPORT_SEND;
 extern bool SMP_PATTERN_MODE;
 extern unsigned int beat;
-extern uint8_t transportSendDelayMs;
-extern uint8_t transportRcveDelayMs;
+extern int8_t transportSendDelayMs;
+extern int8_t transportRcveDelayMs;
+
+// Signed SYNC delays (MENU>MIDI SNC1/SNC2): positive = delay this path; negative = delay the other path by |v|.
+unsigned long effectiveTransportSendDelayMs() {
+  long ms = 0;
+  if (transportSendDelayMs > 0) ms += (long)transportSendDelayMs;
+  if (transportRcveDelayMs < 0) ms += -(long)transportRcveDelayMs;
+  if (ms < 0) ms = 0;
+  return (unsigned long)ms;
+}
+
+unsigned long effectiveTransportRecvDelayMs() {
+  long ms = 0;
+  if (transportRcveDelayMs > 0) ms += (long)transportRcveDelayMs;
+  if (transportSendDelayMs < 0) ms += -(long)transportSendDelayMs;
+  if (ms < 0) ms = 0;
+  return (unsigned long)ms;
+}
 struct GlobalVars;
 extern struct GlobalVars GLOB;
 void triggerExternalOneBlink();
@@ -402,8 +419,8 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
           }
           playStartTime = millis();
 
-          // Defer first step by transportRcveDelayMs (0-127). 0 = no delay.
-          unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
+          // Defer first step by effective receive-side delay (SNC2 + cross from negative SNC1).
+          unsigned long delayUs = effectiveTransportRecvDelayMs() * 1000UL;
           transportStartDelayUntil = micros() + delayUs;
         }
       }
@@ -779,16 +796,16 @@ void handleStart() {
     MIDI.sendRealTime(midi::Start);
   }
 
-  // Start after transportRcveDelayMs (0-127). 0 = no delay.
+  // Start after effective receive-side delay.
   pendingStartOnBar = false;
 
-  unsigned long delayUs = (unsigned long)transportRcveDelayMs * 1000UL;
+  unsigned long delayUs = effectiveTransportRecvDelayMs() * 1000UL;
   transportStartDelayUntil = micros() + delayUs;
 }
 
 
 void armMasterTransportStartDelay() {
-  transportStartDelayUntil = micros() + (unsigned long)transportSendDelayMs * 1000UL;
+  transportStartDelayUntil = micros() + effectiveTransportSendDelayMs() * 1000UL;
 }
 
 void handleTimeCodeQuarterFrame(uint8_t data) {

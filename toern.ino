@@ -219,11 +219,11 @@ extern void handleStart();
 extern void sampleBrowserRefreshList(int channel);
 extern void sampleBrowserSyncBrowseFromStoredPath(int channel);
 extern void sampleBrowserNavigatePress(int channel);
+extern void sampleBrowserLastEncoderPress(int channel);
 extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
 extern int sampleBrowserBrowseIndexMax(int channel);
 extern unsigned long g_setWavIgnoreLoadUntilMs;
 extern bool sampleBrowserIsLoadableSelection(int channel);
-extern bool sampleBrowserSelectionIsDirectory(int channel);
 extern uint16_t g_wavPickCount;
 extern uint16_t g_folderPickCount;
 
@@ -287,7 +287,11 @@ void triggerGridNote(unsigned int globalX, unsigned int y);
 void drawCtrlVolumeOverlay(int volume);
 void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
-void drawSampleLoadOverlay();
+void drawSampleLoadOverlay(uint8_t progressPercent);
+void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
+void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
+void flushSettingsBackupNow();
+void stopAllSetWavPreviewAudio();
 static int16_t lastDefaultFastFilterValue[NUM_CHANNELS] = { 0 };  // Changed from int to int16_t (32 bytes saved)
 
 const char *const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
@@ -364,8 +368,8 @@ bool MIDI_NOTE_RECEIVE = true; // Control whether incoming MIDI notes are acted 
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
-uint8_t transportSendDelayMs = 17;   // 0-127 ms, menu>MIDI>SYNC (delay play after send)
-uint8_t transportRcveDelayMs = 17;   // 0-127 ms (delay play after receive)
+int8_t transportSendDelayMs = 17;   // -127..+127 ms, MENU>MIDI>SYNC SNC1 (see toern_midi effective* helpers)
+int8_t transportRcveDelayMs = 17; // -127..+127 ms SNC2: + = delay that path; − = delay the other path
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
@@ -706,7 +710,8 @@ Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0,
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-Mode menu = { "MENU", { 1, 1, 1, 0 }, { 1, 1, 64, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
+// pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
+Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
 Mode songMode = { "SONGMODE", { 1, 1, 1, 1 }, { 1, 16, 1, 64 }, { 1, 1, 1, 1 }, { 0x000000, 0xFF00FF, 0x000000, 0xFFFF00 } };
@@ -1437,6 +1442,9 @@ void switchMode(Mode *newMode) {
 
   if (newMode != currentMode) {
 
+    if (currentMode == &set_Wav && newMode != &set_Wav) {
+      stopAllSetWavPreviewAudio();
+    }
 
     if (muteModeActive && currentMode == &subpatternMode && newMode != &subpatternMode) {
       if (tmpMute) {
@@ -1996,7 +2004,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
-        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13)) ||
+        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45)) ||
         (inVolSubmenu && mainSetting == 43) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41)));
     if (mainSetting != 15 && !encoder2ValuePage) {
@@ -2052,10 +2060,9 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     extern void previewSample(bool);
     previewSample(false);
     return;
-  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - encoder 3 opens selected directory
-    if (!pressed[2] && !isPressed[2] &&
-        sampleBrowserSelectionIsDirectory(GLOB.currentChannel)) {
-      sampleBrowserNavigatePress(GLOB.currentChannel);
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - encoder 4: dir row = navigate; file row in subfolder = up; file at root = no-op
+    if (!pressed[2] && !isPressed[2]) {
+      sampleBrowserLastEncoderPress(GLOB.currentChannel);
     }
     return;
   } else if ((currentMode == &recordMode) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - Exit recordMode
@@ -2397,7 +2404,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       // Apply restored volume
       SMP.channelVol[ch] = (unsigned int)restoreVol;
       float channelvolume = mapf((float)restoreVol, 0, maxY, 0, 1);
-      if (amps[ch] != nullptr) {
+      // amps[] has 15 slots (indices 0..14); GLOB.y==16 => currentChannel 15 — no amp slot
+      if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
         amps[ch]->gain(channelvolume);
       }
 
@@ -6090,11 +6098,11 @@ void play(bool fromStart) {
 
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
-      // Master mode: if transportSendDelayMs > 0, defer play until delay elapses.
-      extern uint8_t transportSendDelayMs;
+      // Master mode: defer play until effective send-side delay elapses (SNC1 + cross from negative SNC2).
+      extern unsigned long effectiveTransportSendDelayMs();
       extern void armMasterTransportStartDelay();
       resetMidiClockState();
-      if (transportSendDelayMs == 0) {
+      if (effectiveTransportSendDelayMs() == 0) {
         isNowPlaying = true;
         playStartTime = millis();
         if (SMP.bpm > 0.0f) {
@@ -7639,19 +7647,23 @@ void loadWav() {
   preventPaintUnpaint = true;
   freshPaint = false;
 
-  drawSampleLoadOverlay();
+  drawSampleLoadOverlay(0);
   FastLEDshow();
 
   playSdWav1.stop();
 
   // Load the preview sample (which may be reversed/edited) to the target channel
   // This copies from sampled[0] (preview) to sampled[targetChannel]
-  extern void loadPreviewToChannel(unsigned int targetChannel);
-  loadPreviewToChannel(GLOB.currentChannel);
+  loadPreviewToChannel(GLOB.currentChannel, true);
 
   // Auto-save to samplepack 0 after loading individual sample
-  copySampleToSamplepack0(GLOB.currentChannel);
+  copySampleToSamplepack0(GLOB.currentChannel, true);
   saveSp0StateToEEPROM();
+  // SP0 flags mark settings backup dirty; flush now so loop() does not run the heavy SD
+  // write during DRAW (serviceSettingsBackup debounce is ~1.5s after mark).
+  drawSampleLoadOverlay(99);
+  FastLEDshow();
+  flushSettingsBackupNow();
 
   // Store the current edit page before switching modes
   int savedEditPage = GLOB.edit;

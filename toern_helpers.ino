@@ -447,6 +447,32 @@ void sampleBrowserNavigatePress(int channel) {
   sampleBrowserFinishFolderStep(channel, prevWavPos, preferredFolderName);
 }
 
+// SET_WAV: last encoder press — directory row ([../] or folder): navigate (up or into folder).
+// File row: go up one level when not at samples root; at root, press does nothing.
+void sampleBrowserLastEncoderPress(int channel) {
+  if (channel < 1 || channel >= maxFiles) return;
+  sampleBrowserClampBrowseIndexAndHardware(channel);
+  if (g_wavPickCount == 0) return;
+
+  const int idx = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
+  const uint8_t type = g_wavPickType[idx];
+  const bool onDirectory = (type == SAMPLE_BROWSER_ENTRY_PARENT || type == SAMPLE_BROWSER_ENTRY_DIR);
+
+  if (onDirectory) {
+    sampleBrowserNavigatePress(channel);
+    return;
+  }
+
+  if (!g_browseDir[channel][0]) return;
+
+  const unsigned int prevWavPos = currentMode->pos[3];
+  char preferredFolderName[SAMPLE_BROWSER_NAME_MAX];
+  preferredFolderName[0] = 0;
+  sampleBrowserGetLeafFolderName(channel, preferredFolderName, sizeof(preferredFolderName));
+  browseDirGoParent(channel);
+  sampleBrowserFinishFolderStep(channel, prevWavPos, preferredFolderName);
+}
+
 void sampleBrowserClearAll() {
   for (int i = 0; i < maxFiles; i++) {
     g_browseDir[i][0] = '\0';

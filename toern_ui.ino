@@ -1266,33 +1266,48 @@ FLASHMEM void drawChannelNrOverlay(int channelNum, int channelIdx) {
   drawText(numStr, numberX, textY, channelColor);
 }
 
-FLASHMEM void drawSampleLoadOverlay() {
+// progressPercent 0–100: filled portion of the bar between frame uprights (x = 2 .. maxX-1).
+// Caller should call FastLEDshow() after (throttled) updates during long I/O.
+FLASHMEM void drawSampleLoadOverlay(uint8_t progressPercent) {
+  if (progressPercent > 100) {
+    progressPercent = 100;
+  }
+
   FastLED.clear();
 
   const CRGB frameColor = CRGB(20, 20, 40);
   const CRGB textColor = CRGB(180, 220, 255);
+  const CRGB trackColor = CRGB(10, 10, 24);
 
   // Frame around top area
   for (int x = 1; x <= (int)maxX; ++x) {
     light(x, 3, frameColor);
-    //light(x, 4, frameColor);
   }
 
   light(1, 4, frameColor);
   light(maxX, 4, frameColor);
 
-
-  // Load bar on y = 2
   int safeChannel = constrain(GLOB.currentChannel, 1, NUM_CHANNELS - 1);
   CRGB barColor = col[safeChannel];
-  for (int x = 2; x <= (int)maxX - 1; ++x) {
-    light(x, 4, barColor);
-    light(x, 5, barColor);
+
+  const int x0 = 2;
+  const int x1 = (int)maxX - 1;
+  const int barCols = (x1 >= x0) ? (x1 - x0 + 1) : 0;
+  int filledCols = 0;
+  if (barCols > 0) {
+    filledCols = ((int)progressPercent * barCols + 99) / 100;
+    if (progressPercent >= 100) {
+      filledCols = barCols;
+    }
+  }
+  for (int x = x0; x <= x1; ++x) {
+    int idx = x - x0;
+    CRGB c = (idx < filledCols) ? barColor : trackColor;
+    light(x, 4, c);
+    light(x, 5, c);
   }
 
-  // Text on y = 10
   drawText("LOAD", 1, 10, textColor);
-  FastLED.show();
 }
 
 
