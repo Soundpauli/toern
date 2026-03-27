@@ -156,9 +156,9 @@ extern void handleStart();
 #define DATA_PIN 17                   // PIN FOR LEDS
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
 
-#define SWITCH_1 2 // ALT: 16   // Pin for TPP223 1 //>> SINGLE
+#define SWITCH_1 16 // ALT: 16   // Pin for TPP223 1 //>> SINGLE
 #define SWITCH_2 3  // ALT: 3 // Pin for TPP223 3 //3==lowerright, lowerleft== 15! >> MENU
-#define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
+#define SWITCH_3 41 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6
 #define SWITCH_5 39
 
@@ -275,7 +275,13 @@ bool getMuteState(int channel);
 bool getMuteStateForUI(int channel);  // Get mute state for UI display (uses edit page)
 void setMuteState(int channel, bool muted);
 void applyMutesAfterPMODSwitch();
-void toggleDrawRGlobalMute();
+
+enum class DrawRFullMuteState : uint8_t { Inactive = 0, Active = 1 };
+enum class DrawRFullMuteUnmuteMode : uint8_t { RestoreSaved = 0, Ch1And2Only, CustomMask, UnmuteAll };
+
+void enterDrawRFullMute();
+void exitDrawRFullMute(DrawRFullMuteUnmuteMode mode);
+bool drawRFullMuteIsActive();
 void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
 void initPageMutes();
@@ -290,7 +296,7 @@ void drawChannelNrOverlay(int channelNum, int channelIdx);
 void drawSampleLoadOverlay(uint8_t progressPercent);
 void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
 void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
-void flushSettingsBackupNow();
+FLASHMEM void flushSettingsBackupNow();
 void stopAllSetWavPreviewAudio();
 static int16_t lastDefaultFastFilterValue[NUM_CHANNELS] = { 0 };  // Changed from int to int16_t (32 bytes saved)
 
@@ -666,8 +672,8 @@ bool sampleLengthSet = false;
 bool isNowPlaying = false;  // global
 
 // Screensaver: 1 min idle while not playing; reset on encoder / button / touch / menu input
-unsigned long lastUserActivityMs = 0;
-void noteUserActivity() {
+uint32_t lastUserActivityMs = 0;
+FLASHMEM void noteUserActivity() {
   lastUserActivityMs = millis();
 }
 
@@ -871,7 +877,13 @@ DMAMEM static bool prevMuteState[maxY + 1];
 static bool tmpMuteActive = false;
 DMAMEM static bool drawRGlobalMuteSavedGlobal[maxY];
 DMAMEM static bool drawRGlobalMuteSavedPages[maxPages][maxY];
-static bool drawRGlobalMuteActive = false;
+static DrawRFullMuteState drawRFullMuteState = DrawRFullMuteState::Inactive;
+// PLAY>MUTE uses user CH1..CH16; EEPROM bits are internal mute indices 0..15 (CH1→1..CH15→15, CH16→0). Default CH1+CH2 = bits 1|2 = 0x0006.
+uint16_t drawRFullMuteCustomUnmuteMask = 0x0006;
+
+bool drawRFullMuteIsActive() {
+  return drawRFullMuteState == DrawRFullMuteState::Active;
+}
 
 // Per-page mute system for PMOD (pattern mode)
 DMAMEM static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
@@ -1839,6 +1851,41 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if (isRecording) return;
 
+  // DRAW-R full mute (dedicated mode): release chord picks how to leave mute — before play/pause / paint / subpattern.
+  // 1000 / 2000 = restore saved mutes; 0100 = voice ch1+ch2 only (currentChannel 1+2, grid y=2+3); 0010 = PLAY>MUTE mask; 0001 = all unmuted.
+  {
+    extern int drawMode;
+    if (drawMode == 1 && drawRFullMuteIsActive()
+        && (currentMode == &draw || currentMode == &singleMode) && GLOB.y < 16) {
+      if (match_buttons(currentButtonStates, 0, 1, 0, 0)) {
+        exitDrawRFullMute(DrawRFullMuteUnmuteMode::Ch1And2Only);
+        return;
+      }
+      if (match_buttons(currentButtonStates, 0, 0, 1, 0)) {
+        exitDrawRFullMute(DrawRFullMuteUnmuteMode::CustomMask);
+        return;
+      }
+      if (match_buttons(currentButtonStates, 0, 0, 0, 1)) {
+        exitDrawRFullMute(DrawRFullMuteUnmuteMode::UnmuteAll);
+        return;
+      }
+      if (match_buttons(currentButtonStates, 1, 0, 0, 0)) {
+        exitDrawRFullMute(DrawRFullMuteUnmuteMode::RestoreSaved);
+        return;
+      }
+      if (match_buttons(currentButtonStates, 2, 0, 0, 0)) {
+        if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0) {
+          suppressDrawRMuteUntilMs = millis() + 800;
+          return;
+        }
+        if (millis() < suppressDrawRMuteUntilMs) {
+          return;
+        }
+        exitDrawRFullMute(DrawRFullMuteUnmuteMode::RestoreSaved);
+        return;
+      }
+    }
+  }
 
   // Toggle play/pause in draw or single mode
   if ((currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010"
@@ -2477,7 +2524,9 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       if (millis() < suppressDrawRMuteUntilMs) {
         return;
       }
-      toggleDrawRGlobalMute();
+      if (!drawRFullMuteIsActive()) {
+        enterDrawRFullMute();
+      }
       return;
     }
     // In single mode, trigger clear page function ONLY when y=16
@@ -2501,7 +2550,9 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       if (millis() < suppressDrawRMuteUntilMs) {
         return;
       }
-      toggleDrawRGlobalMute();
+      if (!drawRFullMuteIsActive()) {
+        enterDrawRFullMute();
+      }
       return;
     }
     // In single mode, trigger random function ONLY when y=16
@@ -2554,7 +2605,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 // MENU>VOL>HFC: 0 = off (DAP bypass); 10..250 step 10; 256 = MAX. Only SGTL5000 graphic-EQ treble band is cut.
 uint16_t codecHfCut = 110;
 
-void applySgtl5000CodecOutputPath() {
+FLASHMEM void applySgtl5000CodecOutputPath() {
   sgtl5000_1.autoVolumeDisable();
   sgtl5000_1.surroundSoundDisable();
   sgtl5000_1.enhanceBassDisable();
@@ -2567,8 +2618,8 @@ void applySgtl5000CodecOutputPath() {
   uint32_t v = codecHfCut;
   if (v > 256u) v = 256u;
   if (v != 256u) v = (v / 10u) * 10u;
-  float t = (float)v / 256.0f;
-  const float gTreble = -1.0f * t;
+  // Map 0..256 -> treble gain 0..-1.0f without pulling full soft-float path for much logic
+  const float gTreble = -(float)v * (1.0f / 256.0f);
 
   sgtl5000_1.audioPostProcessorEnable();
   sgtl5000_1.eqSelect(GRAPHIC_EQUALIZER);
@@ -6034,18 +6085,65 @@ static void silenceAllVoicesForDrawRGlobalMute() {
   resetMidiPressedKeyCount11to14();
 }
 
-FLASHMEM void toggleDrawRGlobalMute() {
-  if (!drawRGlobalMuteActive) {
-    memcpy(drawRGlobalMuteSavedGlobal, globalMutes, sizeof(globalMutes));
-    memcpy(drawRGlobalMuteSavedPages, pageMutes, sizeof(pageMutes));
-    drawRGlobalMuteActive = true;
-    silenceAllVoicesForDrawRGlobalMute();
-  } else {
-    memcpy(globalMutes, drawRGlobalMuteSavedGlobal, sizeof(globalMutes));
-    memcpy(pageMutes, drawRGlobalMuteSavedPages, sizeof(pageMutes));
-    drawRGlobalMuteActive = false;
-    applyMutesAfterPMODSwitch();
+static void syncMuteArraysToSmp() {
+  for (int ch = 0; ch < maxY; ch++) {
+    SMP.globalMutes[ch] = globalMutes[ch];
+    SMP.mute[ch] = globalMutes[ch] ? 1u : 0u;
+    for (int page = 0; page < maxPages; page++) {
+      SMP.pageMutes[page][ch] = pageMutes[page][ch];
+    }
   }
+}
+
+FLASHMEM void enterDrawRFullMute() {
+  memcpy(drawRGlobalMuteSavedGlobal, globalMutes, sizeof(globalMutes));
+  memcpy(drawRGlobalMuteSavedPages, pageMutes, sizeof(pageMutes));
+  drawRFullMuteState = DrawRFullMuteState::Active;
+  silenceAllVoicesForDrawRGlobalMute();
+}
+
+FLASHMEM void exitDrawRFullMute(DrawRFullMuteUnmuteMode mode) {
+  drawRFullMuteState = DrawRFullMuteState::Inactive;
+
+  switch (mode) {
+    case DrawRFullMuteUnmuteMode::RestoreSaved:
+      memcpy(globalMutes, drawRGlobalMuteSavedGlobal, sizeof(globalMutes));
+      memcpy(pageMutes, drawRGlobalMuteSavedPages, sizeof(pageMutes));
+      break;
+    case DrawRFullMuteUnmuteMode::Ch1And2Only:
+      // Match draw grid: GLOB.currentChannel = GLOB.y - 1 → user "ch1" is index 1 (y=2), "ch2" is index 2 (y=3).
+      for (int ch = 0; ch < maxY; ch++) {
+        bool muted = (ch != 1 && ch != 2);
+        globalMutes[ch] = muted;
+        for (int page = 0; page < maxPages; page++) {
+          pageMutes[page][ch] = muted;
+        }
+      }
+      break;
+    case DrawRFullMuteUnmuteMode::CustomMask: {
+      uint16_t mask = drawRFullMuteCustomUnmuteMask;
+      for (int ch = 0; ch < maxY; ch++) {
+        bool unmuted = (mask & (1u << ch)) != 0;
+        bool muted = !unmuted;
+        globalMutes[ch] = muted;
+        for (int page = 0; page < maxPages; page++) {
+          pageMutes[page][ch] = muted;
+        }
+      }
+      break;
+    }
+    case DrawRFullMuteUnmuteMode::UnmuteAll:
+      for (int ch = 0; ch < maxY; ch++) {
+        globalMutes[ch] = false;
+        for (int page = 0; page < maxPages; page++) {
+          pageMutes[page][ch] = false;
+        }
+      }
+      break;
+  }
+
+  syncMuteArraysToSmp();
+  applyMutesAfterPMODSwitch();
 }
 
 
@@ -7907,7 +8005,7 @@ FLASHMEM void initPageMutes() {
 // Get mute state for a channel, considering PMOD setting
 // For PLAYBACK: uses playing page in NEXT mode, edit page otherwise
 FLASHMEM bool getMuteState(int channel) {
-  if (drawRGlobalMuteActive) {
+  if (drawRFullMuteIsActive()) {
     return true;
   }
 
@@ -7927,7 +8025,7 @@ FLASHMEM bool getMuteState(int channel) {
 
 // Get mute state for UI display - always uses edit page (what you're viewing)
 FLASHMEM bool getMuteStateForUI(int channel) {
-  if (drawRGlobalMuteActive) {
+  if (drawRFullMuteIsActive()) {
     return true;
   }
 

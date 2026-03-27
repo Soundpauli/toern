@@ -359,7 +359,7 @@ void onNoteTriggered(uint8_t channel) {
 }
 
 // Matrix screensaver clears the external strip buffer too (single FastLED.show() drives both)
-void clearLedStripForScreensaver() {
+FLASHMEM void clearLedStripForScreensaver() {
   for (int i = 0; i < ledStripLength; i++) {
     stripLeds[i] = CRGB::Black;
   }

@@ -1,6 +1,6 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 10
+#define LOOK_PAGES_COUNT 11
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 5
 #define VOL_PAGES_COUNT 6
@@ -19,6 +19,19 @@ extern const int PREVIEW_MODE_ON;
 extern const int PREVIEW_MODE_PRESS;
 extern uint8_t currentColorScheme;
 extern void applyColorScheme(uint8_t scheme);
+extern uint16_t drawRFullMuteCustomUnmuteMask;
+
+// PLAY>MUTE & DRAW-R mask: user CH1..CH16 ↔ internal mute index 0..15 (same as draw: CH1=y2→internal 1; CH16=y1→internal 0).
+static inline int userChToInternalDrawR(int uch) {
+  if (uch < 1) uch = 1;
+  if (uch > 16) uch = 16;
+  return (uch == 16) ? 0 : uch;
+}
+static inline int internalToUserChDrawR(int in) {
+  if (in < 0) in = 0;
+  if (in > 15) in = 15;
+  return (in == 0) ? 16 : in;
+}
 
 // Page definitions - each page contains one main setting + additional features
 struct MenuPage {
@@ -52,7 +65,8 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"LEDS", 23, false, nullptr},         // LED mode (1, 1B, 2, 2B)
   {"PONG", 24, false, nullptr},         // Pong Toggle
   {"CRSR", 32, false, nullptr},         // Cursor Type (NORM/CHNR/BIG)
-  {"DRAW", 38, false, nullptr}          // DRAW mode toggle (L+R / R)
+  {"DRAW", 38, false, nullptr},         // DRAW mode toggle (L+R / R)
+  {"MUTE", 47, false, nullptr}          // DRAW-R full mute: custom unmask set (encoder 0010 exit)
 };
 
 static inline uint16_t pongSpeedToInterval(int speed) {
@@ -206,13 +220,18 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 34; // [32]=codecHfCut; [33]=4 HFC format
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 36; // [32]=codecHfCut; [33]=4 HFC format; [34..35]=drawR fullMute custom unmute mask
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
+
+// Large buffers off DTCM: only used from loadMenuFromEEPROM / readSettingsBackupFromSD (single-threaded).
+EXTMEM static char g_settingsBackupReadLine[1024];
+EXTMEM static uint8_t g_eepromRestoredBlock[SETTINGS_EEPROM_BLOCK_LEN];
+EXTMEM static uint8_t g_eepromRestoredSp0[EEPROM_SP0_STATE_COUNT];
 
 static inline uint32_t crc32_update(uint32_t crc, uint8_t data) {
   crc ^= data;
@@ -281,7 +300,7 @@ void markSettingsBackupDirty() {
   settingsBackupDirtyMs = millis();
 }
 
-static bool writeSettingsBackupToSD() {
+FLASHMEM static bool writeSettingsBackupToSD() {
   // payload = samplePackID (4 bytes, 0 = SP0 fallback) + settings block + SP0 override flags
   unsigned int spid = 1;
   EEPROM.get(EEPROM_SAMPLEPACK_ADDR, spid);
@@ -329,24 +348,24 @@ static bool writeSettingsBackupToSD() {
   return true;
 }
 
-static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *outBlock, size_t outBlockLen, uint8_t *outSp0Block, size_t outSp0BlockLen) {
+FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *outBlock, size_t outBlockLen, uint8_t *outSp0Block, size_t outSp0BlockLen) {
   if (!SD.exists(SETTINGS_BACKUP_PATH)) return false;
   File f = SD.open(SETTINGS_BACKUP_PATH, FILE_READ);
   if (!f) return false;
 
-  char line[1024];
-  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  char *const line = g_settingsBackupReadLine;
+  if (!readLine(f, line, sizeof(g_settingsBackupReadLine))) { f.close(); return false; }
   if (strcmp(line, SETTINGS_BACKUP_HEADER) != 0) { f.close(); return false; }
 
-  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  if (!readLine(f, line, sizeof(g_settingsBackupReadLine))) { f.close(); return false; }
   if (strncmp(line, "LEN=", 4) != 0) { f.close(); return false; }
   unsigned int len = (unsigned int)atoi(line + 4);
 
-  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  if (!readLine(f, line, sizeof(g_settingsBackupReadLine))) { f.close(); return false; }
   if (strncmp(line, "CRC=", 4) != 0) { f.close(); return false; }
   uint32_t expectedCrc = (uint32_t)strtoul(line + 4, nullptr, 16);
 
-  if (!readLine(f, line, sizeof(line))) { f.close(); return false; }
+  if (!readLine(f, line, sizeof(g_settingsBackupReadLine))) { f.close(); return false; }
   if (strncmp(line, "DATA=", 5) != 0) { f.close(); return false; }
   const char *hex = line + 5;
 
@@ -356,7 +375,7 @@ static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *out
   if (len < minLen || len > maxLen) { f.close(); return false; }
   if (strlen(hex) < (size_t)len * 2) { f.close(); return false; }
 
-  uint8_t payload[len];
+  uint8_t payload[sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN + EEPROM_SP0_STATE_COUNT];
   if (!decodeHexBytes(hex, payload, (size_t)len)) { f.close(); return false; }
   uint32_t crc = crc32_compute(payload, (size_t)len);
   if (crc != expectedCrc) { f.close(); return false; }
@@ -390,7 +409,7 @@ static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *out
   return true;
 }
 
-void serviceSettingsBackup() {
+FLASHMEM void serviceSettingsBackup() {
   if (!settingsBackupDirty) return;
   if ((uint32_t)(millis() - settingsBackupDirtyMs) < SETTINGS_BACKUP_DEBOUNCE_MS) return;
   // Best effort: if SD write fails, keep dirty flag and try later.
@@ -401,20 +420,41 @@ void serviceSettingsBackup() {
 
 // Flush settings + SP0 backup to SD immediately (no debounce). Use after load/save paths
 // that should not leave a multi-second deferred write for loop() / DRAW mode.
-void flushSettingsBackupNow() {
+FLASHMEM void flushSettingsBackupNow() {
   if (!settingsBackupDirty) return;
   if (writeSettingsBackupToSD()) {
     settingsBackupDirty = false;
   }
 }
 
-void loadMenuFromEEPROM() {
+FLASHMEM static uint16_t hfcNormalize256(uint16_t h) {
+  if (h >= 256u) return 256u;
+  return (uint16_t)((h / 10u) * 10u);
+}
+
+FLASHMEM static uint16_t hfcMigrate22000To256(uint16_t oldv) {
+  if (oldv > 22000u) oldv = 22000u;
+  oldv = (uint16_t)((oldv / 100u) * 100u);
+  uint32_t m = (uint32_t)oldv * 256u + 11000u;
+  uint16_t hv = (uint16_t)(m / 22000u);
+  return hfcNormalize256(hv);
+}
+
+FLASHMEM static uint16_t hfcMigrate44200To256(uint16_t raw3) {
+  if (raw3 > 44200u) raw3 = 44200u;
+  raw3 = (uint16_t)((raw3 / 100u) * 100u);
+  uint32_t m = (uint32_t)raw3 * 256u + 22100u;
+  uint16_t hv = (uint16_t)(m / 44200u);
+  return hfcNormalize256(hv);
+}
+
+FLASHMEM void loadMenuFromEEPROM() {
   if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC) {
     // EEPROM "empty" - try SD backup first, otherwise initialize defaults
     unsigned int restoredPack = 0;
-    uint8_t restoredBlock[SETTINGS_EEPROM_BLOCK_LEN];
-    uint8_t restoredSp0Block[EEPROM_SP0_STATE_COUNT];
-    bool restored = readSettingsBackupFromSD(restoredPack, restoredBlock, sizeof(restoredBlock), restoredSp0Block, sizeof(restoredSp0Block));
+    uint8_t *const restoredBlock = g_eepromRestoredBlock;
+    uint8_t *const restoredSp0Block = g_eepromRestoredSp0;
+    bool restored = readSettingsBackupFromSD(restoredPack, restoredBlock, SETTINGS_EEPROM_BLOCK_LEN, restoredSp0Block, EEPROM_SP0_STATE_COUNT);
 
     if (restored) {
       if (restoredPack > 99) {
@@ -471,6 +511,7 @@ void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 31, 17);
       EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)110);
       EEPROM.write(EEPROM_DATA_START + 33, 4);
+      EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // internal bits 1+2 = user CH1+CH2 (y=2,3)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -611,33 +652,12 @@ void loadMenuFromEEPROM() {
     EEPROM.get(EEPROM_DATA_START + 32, raw);
     uint16_t cut = 110;
 
-    auto normalizeHfc256 = [](uint16_t h) -> uint16_t {
-      if (h >= 256u) return 256u;
-      return (uint16_t)((h / 10u) * 10u);
-    };
-
-    auto migrate22000ToHfc256 = [&normalizeHfc256](uint16_t oldv) -> uint16_t {
-      if (oldv > 22000u) oldv = 22000u;
-      oldv = (uint16_t)((oldv / 100u) * 100u);
-      uint32_t m = (uint32_t)oldv * 256u + 11000u;
-      uint16_t h = (uint16_t)(m / 22000u);
-      return normalizeHfc256(h);
-    };
-
-    auto migrate44200ToHfc256 = [&normalizeHfc256](uint16_t raw3) -> uint16_t {
-      if (raw3 > 44200u) raw3 = 44200u;
-      raw3 = (uint16_t)((raw3 / 100u) * 100u);
-      uint32_t m = (uint32_t)raw3 * 256u + 22100u;
-      uint16_t h = (uint16_t)(m / 44200u);
-      return normalizeHfc256(h);
-    };
-
     if (eqFmt == 4) {
       cut = raw;
       if (cut > 256u) cut = 256u;
-      cut = normalizeHfc256(cut);
+      cut = hfcNormalize256(cut);
     } else if (eqFmt == 3) {
-      cut = migrate44200ToHfc256(raw);
+      cut = hfcMigrate44200To256(raw);
       EEPROM.put(EEPROM_DATA_START + 32, cut);
       EEPROM.write(EEPROM_DATA_START + 33, 4);
       markSettingsBackupDirty();
@@ -647,7 +667,7 @@ void loadMenuFromEEPROM() {
       r = (uint16_t)((r / 10u) * 10u);
       uint32_t m = (uint32_t)r * 256u + 250u;
       uint16_t h = (uint16_t)(m / 500u);
-      cut = normalizeHfc256(h);
+      cut = hfcNormalize256(h);
       EEPROM.put(EEPROM_DATA_START + 32, cut);
       EEPROM.write(EEPROM_DATA_START + 33, 4);
       markSettingsBackupDirty();
@@ -655,15 +675,15 @@ void loadMenuFromEEPROM() {
       uint16_t oldv = raw;
       if (oldv > 22000u) oldv = 22000u;
       oldv = (uint16_t)((oldv / 100u) * 100u);
-      cut = migrate22000ToHfc256(oldv);
+      cut = hfcMigrate22000To256(oldv);
       EEPROM.put(EEPROM_DATA_START + 32, cut);
       EEPROM.write(EEPROM_DATA_START + 33, 4);
       markSettingsBackupDirty();
     } else {
       uint16_t oldv;
       if (raw >= 6000u && raw <= 20000u && (raw % 100u) == 0) {
-        float bright = (float)(raw - 6000u) / 14000.0f;
-        oldv = (uint16_t)((1.0f - bright) * 22000.0f + 0.5f);
+        uint32_t delta = raw - 6000u;
+        oldv = (uint16_t)(((14000u - delta) * 22000u + 7000u) / 14000u);
       } else if (raw > 0u && raw <= 22000u) {
         oldv = raw;
       } else {
@@ -671,12 +691,18 @@ void loadMenuFromEEPROM() {
       }
       oldv = (uint16_t)((oldv / 100u) * 100u);
       if (oldv > 22000u) oldv = 22000u;
-      cut = migrate22000ToHfc256(oldv);
+      cut = hfcMigrate22000To256(oldv);
       EEPROM.put(EEPROM_DATA_START + 32, cut);
       EEPROM.write(EEPROM_DATA_START + 33, 4);
       markSettingsBackupDirty();
     }
     codecHfCut = cut;
+  }
+
+  {
+    uint16_t fm = 0;
+    EEPROM.get(EEPROM_DATA_START + 34, fm);
+    drawRFullMuteCustomUnmuteMask = fm;
   }
 
   if (previewVol < 0 || previewVol > 50) {
@@ -1007,7 +1033,7 @@ FLASHMEM void showLookMenu() {
   CRGB indicatorColor = currentMenuParentTextColor();
   const bool playValuePage = (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
       mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
-      mainSetting == 32 || mainSetting == 33 || mainSetting == 38);
+      mainSetting == 32 || mainSetting == 33 || mainSetting == 38 || mainSetting == 47);
   Encoder[0].writeRGBCode(0x000000);
   Encoder[1].writeRGBCode(0x000000);
   Encoder[2].writeRGBCode(playValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -1830,6 +1856,27 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawText("DRAW", 2, 10, currentMenuParentTextColor());
       drawMenuValue(drawMode == 0 ? "L+R" : "R", 2, 3, UI_GREEN);
       break;
+
+    case 47: { // MUTE — columns 1..16 = user CH1..CH16 (see userChToInternalDrawR); green=in mask, red=out; enc1=CH, enc2=toggle
+      const CRGB tc = currentMenuParentTextColor();
+      drawText("MUTE", 2, 10, tc);
+      int selUch = constrain((int)currentMode->pos[1], 1, 16);
+      const int rowDots = 3;
+      for (int uch = 1; uch <= 16; uch++) {
+        int in = userChToInternalDrawR(uch);
+        bool inMask = (drawRFullMuteCustomUnmuteMask & (1u << in)) != 0;
+        CRGB dot = inMask ? UI_GREEN : UI_RED;
+        if (uch == selUch) {
+          dot.r = (uint8_t)min(255, (int)dot.r + 100);
+          dot.g = (uint8_t)min(255, (int)dot.g + 60);
+          dot.b = (uint8_t)min(255, (int)dot.b + 60);
+        }
+        light(uch, rowDots, dot);
+      }
+      drawIndicator('L', 'Y', 1);
+      drawIndicator('L', 'W', 2);
+      break;
+    }
 
     case 25: { // CTRL - encoder behaviour
       drawText("CTRL", 2, 10, currentMenuParentTextColor());
@@ -2687,6 +2734,61 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = drawMode;
         lastDrawMode = drawMode;
         saveSingleModeToEEPROM(21, (int8_t)drawMode);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 47: { // MUTE — enc1 = user CH1..CH16; enc2 toggles internal bit for that CH
+      static int lastMuteSelUch = -1;
+      static int lastMuteOn = -1;
+      if (menuFirstEnter) {
+        int selUch = 1;
+        for (int in = 0; in < 16; in++) {
+          if (drawRFullMuteCustomUnmuteMask & (1u << in)) {
+            selUch = internalToUserChDrawR(in);
+            break;
+          }
+        }
+        Encoder[1].writeCounter((int32_t)selUch);
+        Encoder[1].writeMax((int32_t)16);
+        Encoder[1].writeMin((int32_t)1);
+        currentMode->pos[1] = selUch;
+        int in = userChToInternalDrawR(selUch);
+        int on = (drawRFullMuteCustomUnmuteMask & (1u << in)) ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)on);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = on;
+        lastMuteSelUch = selUch;
+        lastMuteOn = on;
+        menuFirstEnter = false;
+      }
+      int selUch = constrain((int)currentMode->pos[1], 1, 16);
+      if (selUch != lastMuteSelUch) {
+        lastMuteSelUch = selUch;
+        currentMode->pos[1] = selUch;
+        Encoder[1].writeCounter((int32_t)selUch);
+        int in = userChToInternalDrawR(selUch);
+        int on = (drawRFullMuteCustomUnmuteMask & (1u << in)) ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)on);
+        currentMode->pos[2] = on;
+        lastMuteOn = on;
+        redrawMain(setting);
+      }
+      int inSel = userChToInternalDrawR(selUch);
+      int on = constrain((int)currentMode->pos[2], 0, 1);
+      if (on != lastMuteOn) {
+        lastMuteOn = on;
+        currentMode->pos[2] = on;
+        Encoder[2].writeCounter((int32_t)on);
+        if (on) {
+          drawRFullMuteCustomUnmuteMask |= (uint16_t)(1u << inSel);
+        } else {
+          drawRFullMuteCustomUnmuteMask &= (uint16_t)~(1u << inSel);
+        }
+        EEPROM.put(EEPROM_DATA_START + 34, drawRFullMuteCustomUnmuteMask);
+        markSettingsBackupDirty();
         redrawMain(setting);
       }
       break;

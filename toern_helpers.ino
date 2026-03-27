@@ -1015,7 +1015,7 @@ void clearAllNotesOfChannel() {
   FastLEDshow();     // Optional: Refresh LED grid if used
 }
 
-void FastLEDclear() {
+FLASHMEM void FastLEDclear() {
   // Clear ALL LEDs in the buffer to prevent flickering from uninitialized LEDs
   // Even if only 1 module is active, we must clear the entire buffer
   for (unsigned int i = 0; i < NUM_LEDS; i++) {
@@ -1024,42 +1024,47 @@ void FastLEDclear() {
 }
 
 extern bool isNowPlaying;
-extern unsigned long lastUserActivityMs;
+extern uint32_t lastUserActivityMs;
 extern int ledModules;
 
 void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB color);
 void clearLedStripForScreensaver();
 
-static void drawScreensaverMatrix() {
+// Integer math only (no float): keeps ITCM/stack lighter in this high-rate path.
+FLASHMEM static void drawScreensaverMatrix() {
   FastLEDclear();
   clearLedStripForScreensaver();
 
   const unsigned int y = 8;
-  const int x0 = (ledModules == 2) ? 15 : 7;  // 4 LEDs: 15-18 (dual) or 7-10 (single)
+  const unsigned int x0 = (ledModules == 2) ? 15u : 7u;  // 4 LEDs: 15-18 (dual) or 7-10 (single)
 
-  const unsigned long halfMs = 4000UL;
-  unsigned long cy = millis() % (halfMs * 2);
-  float u = (cy < halfMs) ? (cy / (float)halfMs) : (((halfMs * 2) - cy) / (float)halfMs);
-  float center = u * 3.0f;
+  const uint32_t halfMs = 4000UL;
+  const uint32_t period = halfMs * 2;
+  const uint32_t cy = millis() % period;
+  // Phase 0..4095 (~0..1) triangle wave
+  const uint32_t u4095 = (cy < halfMs) ? ((cy * 4095UL) / halfMs) : (((period - cy) * 4095UL) / halfMs);
+  // center in 1/1024 units: 0..3 span mapped across phase
+  const uint32_t center_x1024 = (u4095 * 3u * 1024u) / 4095u;
 
-  for (int i = 0; i < 4; i++) {
-    float d = center - (float)i;
-    float dist = (d < 0.0f) ? -d : d;
-    float br = 1.0f - dist;
-    if (br < 0.0f) br = 0.0f;
-    if (br > 1.0f) br = 1.0f;
-    br = br * br * (3.0f - 2.0f * br);
-    // Cap peak red at ~10 (not 255) to save power; smoothstep still shapes the marquee
-    const float kScreensaverRedMax = 10.0f;
-    uint8_t r = (uint8_t)(kScreensaverRedMax * br + 0.5f);
-    unsigned int gx = (unsigned int)(x0 + i);
+  for (unsigned int i = 0; i < 4u; i++) {
+    int32_t d = (int32_t)center_x1024 - (int32_t)(i * 1024u);
+    if (d < 0) d = -d;
+    uint32_t br4095 = (d >= 1024) ? 0u : (uint32_t)(((1024 - d) * 4095u) / 1024u);
+    // smoothstep: t*t*(3-2*t) with t in 0..4095
+    uint64_t t = br4095;
+    uint32_t smooth = (uint32_t)((t * t * (12285u - 2u * t)) / 4095u / 4095u);
+    if (smooth > 4095u) smooth = 4095u;
+    // Cap peak red at ~10 (not 255) to save power
+    const uint32_t kRedMax = 10u;
+    uint8_t r = (uint8_t)((smooth * kRedMax + 2048u) / 4095u);
+    unsigned int gx = x0 + i;
     unsigned int matrixNum = (gx - 1) / MATRIX_WIDTH;
     unsigned int localX = ((gx - 1) % MATRIX_WIDTH) + 1;
     light_single(matrixNum, localX, y, CRGB(r, 0, 0));
   }
 }
 
-void FastLEDshow() {
+FLASHMEM void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
     if (!isNowPlaying && (millis() - lastUserActivityMs >= 60000UL)) {
