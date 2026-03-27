@@ -665,6 +665,12 @@ bool sampleLengthSet = false;
 
 bool isNowPlaying = false;  // global
 
+// Screensaver: 1 min idle while not playing; reset on encoder / button / touch / menu input
+unsigned long lastUserActivityMs = 0;
+void noteUserActivity() {
+  lastUserActivityMs = millis();
+}
+
 int PrevSampleRate = 1;
 EXTMEM int SampleRate[maxFiles] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles)];
@@ -2005,7 +2011,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45)) ||
-        (inVolSubmenu && mainSetting == 43) ||
+        (inVolSubmenu && (mainSetting == 43 || mainSetting == 46)) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41)));
     if (mainSetting != 15 && !encoder2ValuePage) {
       switchMenu(mainSetting);
@@ -2545,6 +2551,30 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
 
 
+// MENU>VOL>HFC: 0 = off (DAP bypass); 10..250 step 10; 256 = MAX. Only SGTL5000 graphic-EQ treble band is cut.
+uint16_t codecHfCut = 110;
+
+void applySgtl5000CodecOutputPath() {
+  sgtl5000_1.autoVolumeDisable();
+  sgtl5000_1.surroundSoundDisable();
+  sgtl5000_1.enhanceBassDisable();
+
+  if (codecHfCut == 0) {
+    sgtl5000_1.audioProcessorDisable();
+    return;
+  }
+
+  uint32_t v = codecHfCut;
+  if (v > 256u) v = 256u;
+  if (v != 256u) v = (v / 10u) * 10u;
+  float t = (float)v / 256.0f;
+  const float gTreble = -1.0f * t;
+
+  sgtl5000_1.audioPostProcessorEnable();
+  sgtl5000_1.eqSelect(GRAPHIC_EQUALIZER);
+  sgtl5000_1.eqBands(0.0f, 0.0f, 0.0f, 0.0f, gTreble);
+}
+
 void initSoundChip() {
   // AudioInterrupts();
   // Increased from 64 to 128 blocks to prevent audio block exhaustion (0.218s click issue).
@@ -2585,6 +2615,8 @@ void initSoundChip() {
   //sgtl5000_1.unmuteLineout();
   //sgtl5000_1.lineOutLevel(lineOutLevelSetting);
   sgtl5000_1.lineInLevel(lineInLevel);  // Apply line input level
+
+  applySgtl5000CodecOutputPath();
 }
 
 
@@ -3201,7 +3233,7 @@ void setup() {
   // Initialize LED strip visualization
   initLedStrip();
 
-
+  lastUserActivityMs = millis();
 
   // END SETUP
 }
@@ -3303,10 +3335,18 @@ void checkEncoders() {
   // Calculate hash of encoder positions (replaces String for memory efficiency)
   uint32_t posHash = 0;
 
+  static int32_t screensaverPrevEnc[NUM_ENCODERS];
+  static bool screensaverEncBaselineDone = false;
+
   for (int i = 0; i < NUM_ENCODERS; i++) {
     currentEncoderIndex = i;  // Ensure this is set before calling encoder methods or callbacks that might use it implicitly
     Encoder[i].updateStatus();
     int rawValue = Encoder[i].readCounterInt();
+
+    if (screensaverEncBaselineDone && rawValue != screensaverPrevEnc[i]) {
+      noteUserActivity();
+    }
+    screensaverPrevEnc[i] = rawValue;
 
     if (currentMode == &subpatternMode && muteModeActive && i == 0) {
       if (rawValue != 0) {
@@ -3366,6 +3406,11 @@ void checkEncoders() {
     }
 
     handle_button_state(&Encoder[i], i);  // This updates buttons[i] based on new physical state
+  }
+  screensaverEncBaselineDone = true;
+
+  for (int i = 0; i < NUM_ENCODERS; i++) {
+    if (isPressed[i]) noteUserActivity();
   }
 
   // Handle subpattern mode encoder[1] changes and auto-exit on release
@@ -3880,6 +3925,7 @@ void checkButtons() {
   checkFastRec();
 
   if (changed) {
+    noteUserActivity();
     // Filter out invalid "9" values: a "9" (long release) is only valid if previous state was 1 or 2 (not 0)
     // This prevents ghost "9" events when transitioning from 0
     for (int i = 0; i < NUM_ENCODERS; i++) {
@@ -3968,6 +4014,11 @@ void checkTouchInputs() {
   int tv1 = fastTouchRead(SWITCH_1);
   int tv2 = fastTouchRead(SWITCH_2);
   int tv3 = fastTouchRead(SWITCH_3);
+
+  // Any touch held or tapped counts as user activity (exits / prevents screensaver)
+  if (tv1 > touchThreshold || tv2 > touchThreshold || tv3 > touchThreshold) {
+    noteUserActivity();
+  }
 
   // Tap tempo for BPM menu using touch3
   if (currentMode == &volume_bpm) {
@@ -4409,9 +4460,9 @@ void checkSingleTouch() {
       extern bool inRecsSubmenu;
       extern bool inMidiSubmenu;
       extern bool inVolSubmenu;
-      extern bool inEtcSubmenu;
-      extern bool menuEnteredFromSingleMode;
-      extern int currentMenuPage;
+    extern bool inEtcSubmenu;
+    extern bool menuEnteredFromSingleMode;
+    extern int currentMenuPage;
       // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
       if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
         int parentPage = 0;
@@ -4601,9 +4652,9 @@ void _checkMenuTouch() {
       extern bool inRecsSubmenu;
       extern bool inMidiSubmenu;
       extern bool inVolSubmenu;
-      extern bool inEtcSubmenu;
-      extern bool menuEnteredFromSingleMode;
-      extern int currentMenuPage;
+    extern bool inEtcSubmenu;
+    extern bool menuEnteredFromSingleMode;
+    extern int currentMenuPage;
       // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
       if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
         int parentPage = 0;

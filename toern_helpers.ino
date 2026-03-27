@@ -1023,9 +1023,48 @@ void FastLEDclear() {
   }
 }
 
+extern bool isNowPlaying;
+extern unsigned long lastUserActivityMs;
+extern int ledModules;
+
+void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB color);
+void clearLedStripForScreensaver();
+
+static void drawScreensaverMatrix() {
+  FastLEDclear();
+  clearLedStripForScreensaver();
+
+  const unsigned int y = 8;
+  const int x0 = (ledModules == 2) ? 15 : 7;  // 4 LEDs: 15-18 (dual) or 7-10 (single)
+
+  const unsigned long halfMs = 4000UL;
+  unsigned long cy = millis() % (halfMs * 2);
+  float u = (cy < halfMs) ? (cy / (float)halfMs) : (((halfMs * 2) - cy) / (float)halfMs);
+  float center = u * 3.0f;
+
+  for (int i = 0; i < 4; i++) {
+    float d = center - (float)i;
+    float dist = (d < 0.0f) ? -d : d;
+    float br = 1.0f - dist;
+    if (br < 0.0f) br = 0.0f;
+    if (br > 1.0f) br = 1.0f;
+    br = br * br * (3.0f - 2.0f * br);
+    // Cap peak red at ~10 (not 255) to save power; smoothstep still shapes the marquee
+    const float kScreensaverRedMax = 10.0f;
+    uint8_t r = (uint8_t)(kScreensaverRedMax * br + 0.5f);
+    unsigned int gx = (unsigned int)(x0 + i);
+    unsigned int matrixNum = (gx - 1) / MATRIX_WIDTH;
+    unsigned int localX = ((gx - 1) % MATRIX_WIDTH) + 1;
+    light_single(matrixNum, localX, y, CRGB(r, 0, 0));
+  }
+}
+
 void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
+    if (!isNowPlaying && (millis() - lastUserActivityMs >= 60000UL)) {
+      drawScreensaverMatrix();
+    }
     // Don't change global brightness - matrix is dimmed in software (light_single)
     // Strip stays at full brightness (set in setup() and not modified)
     FastLED.show();  // Shows both matrix (PIN 17) and strip (PIN 24)

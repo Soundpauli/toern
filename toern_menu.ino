@@ -3,7 +3,7 @@
 #define LOOK_PAGES_COUNT 10
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 5
-#define VOL_PAGES_COUNT 5
+#define VOL_PAGES_COUNT 6
 #define ETC_PAGES_COUNT 6
 
 // External variables
@@ -89,7 +89,8 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"LOUT", 28, false, nullptr},         // Line output volume
   {"PREV", 29, false, nullptr},         // Preview volume
   {"2-CH", 36, false, nullptr},         // Stereo routing: OFF, M+P, or L+R
-  {"SPKR", 43, false, nullptr}          // Speaker toggle (ON/OFF)
+  {"SPKR", 43, false, nullptr},         // Speaker toggle (ON/OFF)
+  {"HFC", 46, false, nullptr}           // HF cut 0..256 (step 10, MAX=256) → GEQ treble band only
 };
 
 // ETC submenu pages
@@ -205,7 +206,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 33; // EEPROM_DATA_START + [0..32] (29 SEND, 31 RCVE, 1 byte each)
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 34; // [32]=codecHfCut; [33]=4 HFC format
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -366,13 +367,24 @@ static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uint8_t *out
   memset(outBlock, 0, SETTINGS_EEPROM_BLOCK_LEN);
   if (outSp0BlockLen < EEPROM_SP0_STATE_COUNT) { f.close(); return false; }
   memset(outSp0Block, 0, EEPROM_SP0_STATE_COUNT);
-  size_t bytesInFile = (size_t)len - sizeof(unsigned int);
-  if (bytesInFile > SETTINGS_EEPROM_BLOCK_LEN) bytesInFile = SETTINGS_EEPROM_BLOCK_LEN;
-  memcpy(outBlock, payload + sizeof(unsigned int), bytesInFile);
-  if ((size_t)len > sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN) {
-    size_t sp0BytesInFile = (size_t)len - sizeof(unsigned int) - SETTINGS_EEPROM_BLOCK_LEN;
-    if (sp0BytesInFile > EEPROM_SP0_STATE_COUNT) sp0BytesInFile = EEPROM_SP0_STATE_COUNT;
-    memcpy(outSp0Block, payload + sizeof(unsigned int) + SETTINGS_EEPROM_BLOCK_LEN, sp0BytesInFile);
+  // Payload layout: samplePackID (4) + settings block (variable up to SETTINGS_EEPROM_BLOCK_LEN) + sp0 (8).
+  // Older backups used a shorter block; never read SP0 bytes into the settings block when block grows.
+  {
+    size_t totalAfterSpid = (size_t)len - sizeof(unsigned int);
+    size_t blkInFile = 0;
+    size_t sp0Copy = 0;
+    if (totalAfterSpid >= EEPROM_SP0_STATE_COUNT) {
+      blkInFile = totalAfterSpid - EEPROM_SP0_STATE_COUNT;
+      sp0Copy = EEPROM_SP0_STATE_COUNT;
+    } else {
+      blkInFile = totalAfterSpid;
+    }
+    size_t blkCopy = blkInFile;
+    if (blkCopy > SETTINGS_EEPROM_BLOCK_LEN) blkCopy = SETTINGS_EEPROM_BLOCK_LEN;
+    memcpy(outBlock, payload + sizeof(unsigned int), blkCopy);
+    if (sp0Copy > 0) {
+      memcpy(outSp0Block, payload + sizeof(unsigned int) + blkInFile, sp0Copy);
+    }
   }
   f.close();
   return true;
@@ -457,6 +469,8 @@ void loadMenuFromEEPROM() {
       // Transport delays: slot 29 SEND, slot 31 RCVE (1 byte each, 0-127)
       EEPROM.write(EEPROM_DATA_START + 29, 17);
       EEPROM.write(EEPROM_DATA_START + 31, 17);
+      EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)110);
+      EEPROM.write(EEPROM_DATA_START + 33, 4);
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -588,6 +602,81 @@ void loadMenuFromEEPROM() {
   } else {
     transportSendDelayMs = (int8_t)constrain((int)(int8_t)raw29, -127, 127);
     transportRcveDelayMs = (int8_t)constrain((int)(int8_t)raw31, -127, 127);
+  }
+
+  {
+    extern uint16_t codecHfCut;
+    uint8_t eqFmt = EEPROM.read(EEPROM_DATA_START + 33);
+    uint16_t raw = 0;
+    EEPROM.get(EEPROM_DATA_START + 32, raw);
+    uint16_t cut = 110;
+
+    auto normalizeHfc256 = [](uint16_t h) -> uint16_t {
+      if (h >= 256u) return 256u;
+      return (uint16_t)((h / 10u) * 10u);
+    };
+
+    auto migrate22000ToHfc256 = [&normalizeHfc256](uint16_t oldv) -> uint16_t {
+      if (oldv > 22000u) oldv = 22000u;
+      oldv = (uint16_t)((oldv / 100u) * 100u);
+      uint32_t m = (uint32_t)oldv * 256u + 11000u;
+      uint16_t h = (uint16_t)(m / 22000u);
+      return normalizeHfc256(h);
+    };
+
+    auto migrate44200ToHfc256 = [&normalizeHfc256](uint16_t raw3) -> uint16_t {
+      if (raw3 > 44200u) raw3 = 44200u;
+      raw3 = (uint16_t)((raw3 / 100u) * 100u);
+      uint32_t m = (uint32_t)raw3 * 256u + 22100u;
+      uint16_t h = (uint16_t)(m / 44200u);
+      return normalizeHfc256(h);
+    };
+
+    if (eqFmt == 4) {
+      cut = raw;
+      if (cut > 256u) cut = 256u;
+      cut = normalizeHfc256(cut);
+    } else if (eqFmt == 3) {
+      cut = migrate44200ToHfc256(raw);
+      EEPROM.put(EEPROM_DATA_START + 32, cut);
+      EEPROM.write(EEPROM_DATA_START + 33, 4);
+      markSettingsBackupDirty();
+    } else if (eqFmt == 2) {
+      uint16_t r = raw;
+      if (r > 500u) r = 500u;
+      r = (uint16_t)((r / 10u) * 10u);
+      uint32_t m = (uint32_t)r * 256u + 250u;
+      uint16_t h = (uint16_t)(m / 500u);
+      cut = normalizeHfc256(h);
+      EEPROM.put(EEPROM_DATA_START + 32, cut);
+      EEPROM.write(EEPROM_DATA_START + 33, 4);
+      markSettingsBackupDirty();
+    } else if (eqFmt == 1) {
+      uint16_t oldv = raw;
+      if (oldv > 22000u) oldv = 22000u;
+      oldv = (uint16_t)((oldv / 100u) * 100u);
+      cut = migrate22000ToHfc256(oldv);
+      EEPROM.put(EEPROM_DATA_START + 32, cut);
+      EEPROM.write(EEPROM_DATA_START + 33, 4);
+      markSettingsBackupDirty();
+    } else {
+      uint16_t oldv;
+      if (raw >= 6000u && raw <= 20000u && (raw % 100u) == 0) {
+        float bright = (float)(raw - 6000u) / 14000.0f;
+        oldv = (uint16_t)((1.0f - bright) * 22000.0f + 0.5f);
+      } else if (raw > 0u && raw <= 22000u) {
+        oldv = raw;
+      } else {
+        oldv = 10000;
+      }
+      oldv = (uint16_t)((oldv / 100u) * 100u);
+      if (oldv > 22000u) oldv = 22000u;
+      cut = migrate22000ToHfc256(oldv);
+      EEPROM.put(EEPROM_DATA_START + 32, cut);
+      EEPROM.write(EEPROM_DATA_START + 33, 4);
+      markSettingsBackupDirty();
+    }
+    codecHfCut = cut;
   }
 
   if (previewVol < 0 || previewVol > 50) {
@@ -751,6 +840,9 @@ void applyAudioSettingsFromGlobals() {
   
   // Apply line input level
   sgtl5000_1.lineInLevel(lineInLevel);
+
+  extern void applySgtl5000CodecOutputPath();
+  applySgtl5000CodecOutputPath();
   
   // Apply preview volume
   updatePreviewVolume();
@@ -1226,7 +1318,7 @@ FLASHMEM void showVolMenu() {
   
   // VOL: encoder 2 = value on SPKR(43)
   CRGB indicatorColor = currentMenuParentTextColor();
-  const bool volValuePage = (mainSetting == 43);
+  const bool volValuePage = (mainSetting == 43 || mainSetting == 46);
   Encoder[0].writeRGBCode(0x000000);
   Encoder[1].writeRGBCode(0x000000);
   Encoder[2].writeRGBCode(volValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -1753,7 +1845,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText("VOL", 2, 3, tc);
       }
       break;
-      
+
     case 27: { // MAIN - Headphone output volume - encoder 3
       drawText("MAIN", 2, 10, currentMenuParentTextColor());
       extern Mode *currentMode;
@@ -1864,6 +1956,21 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       bool enabled = getSpkrEnabled();
       drawMenuValue(enabled ? "OFF" : "ON", 2, 3, enabled ? CRGB(255, 0, 0) : CRGB(0, 255, 0));
       drawIndicator('L', enabled ? 'G' : 'R', 3);
+      break;
+    }
+
+    case 46: { // HFC — 0, 10..250, 256 (encoder 2)
+      drawText("HFC", 2, 10, currentMenuParentTextColor());
+      extern uint16_t codecHfCut;
+      char valText[8];
+      unsigned disp = (unsigned)codecHfCut;
+      if (disp > 256u) disp = 256u;
+      if (disp != 256u) disp = (disp / 10u) * 10u;
+      snprintf(valText, sizeof(valText), "%u", disp);
+      drawText(valText, 2, 3, CRGB(200, 40, 40));
+      CRGB encCol = CRGB(200, 40, 40);
+      Encoder[2].writeRGBCode(encCol.r << 16 | encCol.g << 8 | encCol.b);
+      drawIndicator('L', 'R', 3);
       break;
     }
     
@@ -2303,6 +2410,43 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = encVal;
         lastSpkrEnc = encVal;
         saveSingleModeToEEPROM(27, (int8_t)(encVal ? 1 : 0));
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 46: { // HFC — enc 0..25 → 0..250 step 10; enc 26 → 256 (MAX)
+      static int lastEqEnc = -1;
+      extern uint16_t codecHfCut;
+      extern void applySgtl5000CodecOutputPath();
+      const int encMax = 26;
+      if (menuFirstEnter) {
+        int enc0;
+        if (codecHfCut >= 256u) {
+          enc0 = encMax;
+        } else {
+          enc0 = (int)(codecHfCut / 10u);
+        }
+        enc0 = constrain(enc0, 0, encMax);
+        Encoder[2].writeCounter((int32_t)enc0);
+        Encoder[2].writeMax((int32_t)encMax);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = enc0;
+        lastEqEnc = enc0;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastEqEnc) {
+        int encPos = constrain((int)currentMode->pos[2], 0, encMax);
+        uint16_t newCut = (encPos >= encMax) ? 256u : (uint16_t)(encPos * 10);
+        codecHfCut = newCut;
+        EEPROM.put(EEPROM_DATA_START + 32, codecHfCut);
+        EEPROM.write(EEPROM_DATA_START + 33, 4);
+        markSettingsBackupDirty();
+        applySgtl5000CodecOutputPath();
+        Encoder[2].writeCounter((int32_t)encPos);
+        currentMode->pos[2] = encPos;
+        lastEqEnc = encPos;
         menuRequestFullRedraw();
         redrawMain(setting);
       }
@@ -3287,7 +3431,7 @@ void switchMenu(int menuPosition){
         Encoder[3].writeCounter((int32_t)0);
         menuRequestFullRedraw();
         break;
-        
+
         case 17:
         // Cycle through VIEW modes: 1=EASY, 2=FULL
         simpleNotesView = (simpleNotesView == 1) ? 2 : 1;
