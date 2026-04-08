@@ -47,7 +47,7 @@ J13,Conn_01x05,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,78.5,-38.0,0.0,top
 J14,Conn_01x05,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,65.0,-30.0,0.0,top
 J15,Conn_01x05,JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical,185.0,-58.865836,90.0,top
 J16,Conn_01x02,JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical,187.0,-28.5,0.0,top
-J17,AudioJack3_Ground,Jack_3.5mm_CUI_SJ1-3533NG_Horizontal_CircularHoles,184.85,-76.9,-90.0,top
+J17,AudioJack3_Ground,CUI_SJ1-3533,185.7,-76.9,180.0,top
 J18,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,66.0,-58.52,0.0,top
 J19,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,81.998914,-58.52,0.0,top
 J2,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,45.0,-58.52,0.0,top
@@ -56,7 +56,7 @@ J21,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,119.000726,-58.52,0.0,top
 J22,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,140.0,-58.52,0.0,top
 J23,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,156.001958,-58.52,0.0,top
 J24,Conn_01x05_Socket,PinSocket_1x05_P2.54mm_Vertical,177.002175,-58.52,0.0,top
-J3,AudioJack3_Ground,Jack_3.5mm_CUI_SJ1-3533NG_Horizontal_CircularHoles,184.85,-89.9,-90.0,top
+J3,AudioJack3_Ground,CUI_SJ1-3533,185.7,-89.95,180.0,top
 J4,USB_C_Receptacle_USB2.0,USB_C_Receptacle_HRO_TYPE-C-31-M-12,35.41,-52.86,-90.0,top
 J5,AudioJack3_Switch,Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal,42.33102,-35.192339,180.0,top
 J6,AudioJack3_Switch,Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal,164.76,-85.35,-90.0,top
