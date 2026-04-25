@@ -351,6 +351,40 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
   }
 }
 
+// Transport-start variant: ALWAYS re-phases the MIDI clock timer and sends
+// Start + first Clock back-to-back so the slave's beat-1 is phase-aligned.
+// Without re-phasing, the first Clock after Start has a random offset
+// (0 to one full clock period) that scales with BPM, making any fixed-ms
+// SNC compensation inconsistent across tempos.
+void resetMidiClockForTransportStart() {
+  lastClockTime = 0;
+
+  if (!MIDI_CLOCK_SEND) return;
+
+  unsigned long now = micros();
+  int roundedBPM = (int)round(SMP.bpm);
+  if (roundedBPM < 1) roundedBPM = 1;
+  if (roundedBPM > BPM_MAX) roundedBPM = BPM_MAX;
+
+  // Force re-phase regardless of whether BPM changed.
+  configureMidiClockSend((float)roundedBPM, now);
+  lastClockSent = now;
+
+  if (SMP.bpm > 0.0f) {
+    unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+    playTimer.begin(playNote, currentPlayNoteInterval);
+  } else {
+    playTimer.end();
+  }
+
+  // Send Start + first Clock back-to-back via direct serial writes.
+  // Per MIDI spec the slave begins playback on the first Clock after Start.
+  if (MIDI_TRANSPORT_SEND) {
+    Serial8.write(0xFA);  // MIDI Start
+    Serial8.write(0xF8);  // First MIDI Clock — slave's beat-1 fires here
+  }
+}
+
 // Note: MIDI clock timer is never stopped - it always runs in background for precise timing
 // The timer continues running even during pause/stop operations
 

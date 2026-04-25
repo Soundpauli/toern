@@ -156,9 +156,9 @@ extern void handleStart();
 #define DATA_PIN 17                   // PIN FOR LEDS
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
 
-#define SWITCH_1 16 // ALT: 16   // Pin for TPP223 1 //>> SINGLE
+#define SWITCH_1 2 // ALT: 16   // Pin for TPP223 1 //>> SINGLE
 #define SWITCH_2 3  // ALT: 3 // Pin for TPP223 3 //3==lowerright, lowerleft== 15! >> MENU
-#define SWITCH_3 41 // ALT: 41  //Pin for TPP223 2 >> REC /
+#define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6
 #define SWITCH_5 39
 
@@ -6162,10 +6162,8 @@ void deleteActiveCopy() {
 
 
 void play(bool fromStart) {
-  // Send MIDI Start when acting as master.
-  if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
-    MIDI.sendRealTime(midi::Start);
-  }
+  // MIDI Start is now sent by resetMidiClockForTransportStart() below,
+  // after all setup, so the clock timer phase and Start are aligned.
 
   if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
     checkCrashReport();
@@ -6250,7 +6248,8 @@ void play(bool fromStart) {
       // Master mode: defer play until effective send-side delay elapses (SNC1 + cross from negative SNC2).
       extern unsigned long effectiveTransportSendDelayMs();
       extern void armMasterTransportStartDelay();
-      resetMidiClockState();
+      extern void resetMidiClockForTransportStart();
+      resetMidiClockForTransportStart();
       if (effectiveTransportSendDelayMs() == 0) {
         isNowPlaying = true;
         playStartTime = millis();
