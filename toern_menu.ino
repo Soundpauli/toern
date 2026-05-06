@@ -111,10 +111,10 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
 MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"INFO", 39, false, nullptr},          // Info / version / credits
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"RST", 16, true, "MODE"},             // Reset Effects / SD Rescan (EFX or SD)
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
   {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
-  {"BATT", 42, false, nullptr}           // Battery remaining % (3.7V LiPo on pin 0)
+  {"BATT", 42, false, nullptr},          // Battery remaining % (3.7V LiPo on pin 0)
+  {"RSET", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
 };
 
 // --- INFO page animation state ---
@@ -208,7 +208,7 @@ int genreLength = 8; // Default length for genre generation
 // NEW mode state management
 bool newScreenFirstEnter = true;
 
-// Reset menu option: 0 = EFX reset, 1 = SD rescan, 2 = FULL reset
+// Reset menu option: 0 = SD rescan, 1 = EFX reset, 2 = FULL reset
 int resetMenuOption = 0;
 
 // DRAW mode: 0 = L+R (default), 1 = R (right-hand only)
@@ -2001,7 +2001,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       const CRGB tc = currentMenuParentTextColor();
       drawText("SPKR", 2, 10, tc);
       bool enabled = getSpkrEnabled();
-      drawMenuValue(enabled ? "OFF" : "ON", 2, 3, enabled ? CRGB(255, 0, 0) : CRGB(0, 255, 0));
+      drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
       drawIndicator('L', enabled ? 'G' : 'R', 3);
       break;
     }
@@ -2077,12 +2077,12 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       break;
     }
 
-    case 16: { // RST page - show current mode (EFX, SD, or FULL)
+    case 16: { // RST page - show current mode (SD, EFX, or FULL)
       const char* modeText;
       if (resetMenuOption == 0) {
-        modeText = "EFX";
-      } else if (resetMenuOption == 1) {
         modeText = "SD";
+      } else if (resetMenuOption == 1) {
+        modeText = "EFX";
       } else {
         modeText = "FULL";
       }
@@ -2882,12 +2882,12 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 16: { // RST page - Choose between EFX, SD, and FULL reset
+    case 16: { // RST page - Choose between SD, EFX, and FULL reset
       static int lastResetOption = -1;
 
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        Encoder[2].writeMax((int32_t)2);  // 0=EFX, 1=SD, 2=FULL
+        Encoder[2].writeMax((int32_t)2);  // 0=SD, 1=EFX, 2=FULL
         Encoder[2].writeMin((int32_t)0);
         menuFirstEnter = false;
       }
@@ -3398,9 +3398,6 @@ void switchMenu(int menuPosition){
 
         case 16:
         if (resetMenuOption == 0) {
-          // Reset effects/parameters to defaults
-          resetAllToDefaults();
-        } else if (resetMenuOption == 1) {
           // SD rescan: invalidate dynamic sample browser cache
           FastLEDclear();
           drawText("SCAN", 2, 3, UI_GREEN);
@@ -3417,6 +3414,9 @@ void switchMenu(int menuPosition){
           extern Mode draw;
           extern void switchMode(Mode*);
           switchMode(&draw);
+        } else if (resetMenuOption == 1) {
+          // Reset effects/parameters to defaults
+          resetAllToDefaults();
         } else { // resetMenuOption == 2 (FULL)
           // FULL reset: Complete reset (like startNew) AND rescan SD
           

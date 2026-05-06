@@ -2,4 +2,5 @@
   (version 7)
   (lib (name "teensy")(type "KiCad")(uri "D:/PCBs/myKicadLib/teensy_library-master/teensy_library-master/teensy.kicad_sym")(options "")(descr ""))
   (lib (name "SJ1-3533")(type "KiCad")(uri "${KIPRJMOD}/SJ1-3533/SJ1-3533.kicad_sym")(options "")(descr ""))
+  (lib (name "TPS22918DBVR")(type "KiCad")(uri "${KIPRJMOD}/TPS22918DBVR/TPS22918DBVR.kicad_sym")(options "")(descr ""))
 )

@@ -162,13 +162,14 @@ extern void handleStart();
 #define SWITCH_4 6
 #define SWITCH_5 39
 
-// Battery sense: divider on pin 40 (A16). User calibrated: 5k/10k -> ratio ~0.63.
+// Battery sense on A16 with divider + capacitor.
+// Hardware target: 1.5M (top, VBAT->A16) and 1M (bottom, A16->GND), plus smoothing cap.
 #define BATT_ADC_PIN A16
 #define BATT_RAW_ZERO 4           // raw reading when pin connected to GND (0V)
 #define BATT_RAW_FULL 4095        // raw at 3.3V at pin (12-bit max)
-#define BATT_DIVIDER_RATIO 0.60f  // Adjusted to 0.60 to correct "78% at full" reading
-#define BATT_V_MIN 3.55f          // 0% = 3.55V (LiPo empty / cutoff)
-#define BATT_V_MAX 4.2f           // 100% = 4.2V (LiPo full)
+#define BATT_DIVIDER_RATIO 0.595f // Two-point retune from measured 3.53V->0% and 4.26V->75%
+#define BATT_V_MIN 3.33f          // 0% target at 3.33V
+#define BATT_V_MAX 4.26f          // 100% target at 4.26V
 
 #define VOL_MIN 1
 #define VOL_MAX 10
@@ -2995,6 +2996,11 @@ FLASHMEM void loadLedModeEarlyFromEEPROM() {
 }
 
 void setup() {
+  //delay the LED-Matrix-Power on
+  pinMode(36, OUTPUT);
+  digitalWrite(36, LOW);   // keep LEDs off during early boot
+  delay(500);                   // Teensy is booted, supply stable
+  digitalWrite(36, HIGH);  // LEDs now always on
   //Wire.begin();
   //Wire.setClock(10000); // Set to 400 kHz (standard speed)
   NVIC_SET_PRIORITY(IRQ_SOFTWARE, 208);
@@ -3014,9 +3020,13 @@ void setup() {
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
   
   // LED strip initialization (needed for FastLED.show() to work)
+
+
+
   extern CRGB stripLeds[];
   extern void initLedStrip();
   FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, 1000); // Limit to 5V, 1 Amp
 
   // Load LED mode (count + rotation) before any startup visuals, including CLR RAM.
   loadLedModeEarlyFromEEPROM();
@@ -3324,7 +3334,8 @@ void setEncoderColor(int i) {
   Encoder[i].writeRGBCode(0x00FF00);
 }
 
-// Battery: voltage divider on BATT_ADC_PIN (R15=10k, R19=15k). Returns 0-100% for 3.0V-4.2V LiPo.
+// Battery: linear map using divider-corrected VBAT -> 0..100%.
+// Endpoints are defined by BATT_V_MIN/BATT_V_MAX.
 #define BATT_DEBUG_SERIAL 0  // 1 = print raw to Serial every 2s (USB only; off when on battery)
 
 // Raw ADC value (reads every time called - caller handles throttling/display rate)
@@ -3333,6 +3344,7 @@ int getBatteryRaw() {
 }
 
 int getBatteryPercent() {
+  const float BATT_PCT_CURVE = 2.4f;  // Stronger low-end compression while keeping endpoints fixed
   const int samples = 8;
   uint32_t sum = 0;
   for (int i = 0; i < samples; i++) {
@@ -3344,7 +3356,10 @@ int getBatteryPercent() {
   if (corrected < 0) corrected = 0;
   float vMeasured = (float)corrected * (3.3f / (float)(BATT_RAW_FULL - BATT_RAW_ZERO));
   float vBat = vMeasured / BATT_DIVIDER_RATIO;
-  float pct = (vBat - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN) * 100.0f;
+  float norm = (vBat - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN);
+  if (norm < 0.0f) norm = 0.0f;
+  if (norm > 1.0f) norm = 1.0f;
+  float pct = powf(norm, BATT_PCT_CURVE) * 100.0f;
   int result = (int)(pct + 0.5f);
   return constrain(result, 0, 100);
 }
@@ -5248,7 +5263,10 @@ void loop() {
       if (corrected < 0) corrected = 0;
       float vMeasured = (float)corrected * (3.3f / (float)(BATT_RAW_FULL - BATT_RAW_ZERO));
       float vBat = vMeasured / BATT_DIVIDER_RATIO;
-      float pct = (vBat - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN) * 100.0f;
+      float norm = (vBat - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN);
+      if (norm < 0.0f) norm = 0.0f;
+      if (norm > 1.0f) norm = 1.0f;
+      float pct = powf(norm, 2.4f) * 100.0f;
       if (pct < 0.0f) pct = 0.0f;
       if (pct > 100.0f) pct = 100.0f;
       Serial.print("BATT raw=");
