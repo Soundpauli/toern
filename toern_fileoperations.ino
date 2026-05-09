@@ -240,6 +240,11 @@ FLASHMEM void loadPattern(bool autoload) {
       if (loadFile.available()) {
         loadFile.read((uint8_t *)&SMP, sizeof(SMP));
         
+        // Validate BPM after loading (default to 100 if invalid)
+        if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
+          SMP.bpm = 100.0f;
+        }
+        
         // Load mute states from SMP
         for (int ch = 0; ch < maxY; ch++) {
           globalMutes[ch] = SMP.globalMutes[ch];
@@ -261,6 +266,11 @@ FLASHMEM void loadPattern(bool autoload) {
   
   // Reset basic runtime flags when loading a pattern
   GLOB.singleMode = false;
+  
+  // Validate BPM before using (default to 100 if invalid)
+  if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
+    SMP.bpm = 100.0f;
+  }
   
   Mode *bpm_vol = &volume_bpm;
   bpm_vol->pos[3] = SMP.bpm;

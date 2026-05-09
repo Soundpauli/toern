@@ -3059,9 +3059,9 @@ void setup() {
   }
   
   EEPROM.get(0, samplePackID);
-  if (samplePackID > 99) {
-    samplePackID = 0;
-    EEPROM.put(0, samplePackID);  // Save the default/fallback to EEPROM
+  if (samplePackID == 0 || samplePackID > 99) {
+    samplePackID = 1;  // Default to pack 1 if invalid or empty
+    EEPROM.put(0, samplePackID);
     markSettingsBackupDirty();
   }
 
@@ -3091,24 +3091,24 @@ void setup() {
   // Load GLOB.vol from EEPROM (stored at EEPROM_DATA_START + 17, separate from transportMode)
   // Support both legacy (0-10) and new (0-100) ranges
   GLOB.vol = (int8_t)EEPROM.read(EEPROM_DATA_START + 17);
-  if (GLOB.vol < 0 || GLOB.vol > 100) {
-    GLOB.vol = 100;  // Default to 100 if invalid (new range)
+  if (GLOB.vol <= 0 || GLOB.vol > 100) {
+    GLOB.vol = 100;  // Default to 100 if invalid or zero
   } else if (GLOB.vol > 10 && GLOB.vol <= 100) {
     // New range value (11-100): use as-is
   } else {
-    // Legacy range value (0-10): will be converted when menu is accessed
+    // Legacy range value (1-10): will be converted when menu is accessed
   }
 
   // Load micGain from EEPROM
   micGain = (unsigned int)EEPROM.read(EEPROM_DATA_START + 9);
-  if (micGain > 63) {
-    micGain = 10;  // Default to 10 if invalid
+  if (micGain < 1 || micGain > 63) {
+    micGain = 10;  // Default to 10 if invalid or zero
   }
 
   // Load previewVol from EEPROM
   previewVol = (unsigned int)EEPROM.read(EEPROM_DATA_START + 7);
-  if (previewVol > 50) {
-    previewVol = 20;  // Default to mid if invalid
+  if (previewVol < 1 || previewVol > 50) {
+    previewVol = 20;  // Default to mid if invalid or zero
   }
 
   // Load previewTriggerMode (0=ON, 1=PRSS) from EEPROM slot 20
@@ -3117,7 +3117,7 @@ void setup() {
     previewTriggerMode = PREVIEW_MODE_ON;
   }
 
-  // Load lineInLevel from EEPROM
+  // Load lineInLevel from EEPROM (0 is valid = off, but we default to 8 if corrupted)
   lineInLevel = (unsigned int)EEPROM.read(EEPROM_DATA_START + 16);
   if (lineInLevel > 15) {
     lineInLevel = 8;  // Default to 8 if invalid
@@ -3129,11 +3129,11 @@ void setup() {
     lineOutLevelSetting = 30;  // Default to 30 if invalid
   }
 
-  // Load REC input mode early (before initSoundChip), so the codec input isn't accidentally MIC.
-  // Default to LINEIN if EEPROM is invalid.
+  // Load REC input mode early (before initSoundChip).
+  // Default to MIC if EEPROM is invalid.
   recMode = (int8_t)EEPROM.read(EEPROM_DATA_START + 0);
   if (recMode != 1 && recMode != -1) {
-    recMode = -1;  // safe default: LINEIN
+    recMode = 1;  // default: MIC
   }
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
 
@@ -3423,9 +3423,12 @@ void checkEncoders() {
         muteModeEncoderValue = turnedRight ? 1 : 0;
         Encoder[0].writeCounter((int32_t)0);
         rawValue = 0;
-        uint8_t soloChannel = static_cast<uint8_t>(GLOB.currentChannel);
-        if (soloChannel < maxFiles) {
-          applyChannelDirection(soloChannel, targetDir);
+        // Only reverse samples for y=2-9 (sample channels 1-8)
+        if (GLOB.y >= 2 && GLOB.y <= 9) {
+          uint8_t soloChannel = static_cast<uint8_t>(GLOB.currentChannel);
+          if (soloChannel < maxFiles) {
+            applyChannelDirection(soloChannel, targetDir);
+          }
         }
       }
       currentMode->pos[0] = muteModeEncoderValue;

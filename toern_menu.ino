@@ -476,13 +476,12 @@ FLASHMEM void loadMenuFromEEPROM() {
     } else {
       // first run! write magic + defaults
       EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
-      EEPROM.put(EEPROM_SAMPLEPACK_ADDR, (unsigned int)0);            // samplePackID default (0 = SP0 fallback)
-      // Default to LINEIN so the SGTL5000 MIC/capture path is off by default.
-      EEPROM.write(EEPROM_DATA_START + 0, -1);   // recMode default
-      EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default
-      EEPROM.write(EEPROM_DATA_START + 2,  1);   // transportMode default
-      EEPROM.write(EEPROM_DATA_START + 3,  1);   // patternMode default
-      EEPROM.write(EEPROM_DATA_START + 4,  1);   // voiceSelect default
+      EEPROM.put(EEPROM_SAMPLEPACK_ADDR, (unsigned int)1);            // samplePackID default (1)
+      EEPROM.write(EEPROM_DATA_START + 0,  1);   // recMode default (MIC)
+      EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default (INT)
+      EEPROM.write(EEPROM_DATA_START + 2,  2);   // transportMode default (SEND)
+      EEPROM.write(EEPROM_DATA_START + 3,  1);   // patternMode default (ON)
+      EEPROM.write(EEPROM_DATA_START + 4, -1);   // voiceSelect default (OFF)
       EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
       EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
       EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol default (0-50 range, middle = 20)
@@ -502,14 +501,14 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 22, 0);   // colorScheme default (0 = default scheme)
       EEPROM.write(EEPROM_DATA_START + 23, 0);   // stereoChannel default (OFF)
       EEPROM.write(EEPROM_DATA_START + 24, 2);   // midiSendMode default (2 = BOTH)
-      EEPROM.write(EEPROM_DATA_START + 25, 1);   // ledStripEnabled default (1 = ON)
+      EEPROM.write(EEPROM_DATA_START + 25, 0);   // ledStripEnabled default (0 = OFF)
       EEPROM.write(EEPROM_DATA_START + 26, 64);  // ledBrightness default (64, range 3-255)
       EEPROM.write(EEPROM_DATA_START + 27, 1);   // spkrEnabled default (1 = ON)
       EEPROM.write(EEPROM_DATA_START + 28, 1);   // midiNoteReceive default (1 = NOTE/on)
       // Transport delays: slot 29 SEND, slot 31 RCVE (1 byte each, 0-127)
-      EEPROM.write(EEPROM_DATA_START + 29, 17);
-      EEPROM.write(EEPROM_DATA_START + 31, 17);
-      EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)110);
+      EEPROM.write(EEPROM_DATA_START + 29, 0);   // transportSendDelayMs default (0)
+      EEPROM.write(EEPROM_DATA_START + 31, 0);   // transportRcveDelayMs default (0)
+      EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)256);  // codecHfCut default (256)
       EEPROM.write(EEPROM_DATA_START + 33, 4);
       EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // internal bits 1+2 = user CH1+CH2 (y=2,3)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
@@ -521,19 +520,78 @@ FLASHMEM void loadMenuFromEEPROM() {
     }
   }
 
-  // now pull them in
+  // now pull them in with validation for corrupted EEPROM values
   recMode       = (int8_t) EEPROM.read(EEPROM_DATA_START + 0);
+  if (recMode != 1 && recMode != -1) {
+    recMode = 1;  // Default to MIC
+    saveSingleModeToEEPROM(0, recMode);
+  }
+  
   clockMode     = (int8_t) EEPROM.read(EEPROM_DATA_START + 1);
+  if (clockMode != 0 && clockMode != 1) {
+    clockMode = 1;  // Default to INT (internal clock)
+    saveSingleModeToEEPROM(1, clockMode);
+  }
+  
   transportMode = (int8_t) EEPROM.read(EEPROM_DATA_START + 2);
+  if (transportMode != -1 && transportMode != 1 && transportMode != 2) {
+    transportMode = 2;  // Default to SEND
+    saveSingleModeToEEPROM(2, transportMode);
+  }
+  
   patternMode   = (int8_t) EEPROM.read(EEPROM_DATA_START + 3);
+  if (patternMode != -1 && patternMode != 1 && patternMode != 2 && patternMode != 3) {
+    patternMode = 1;  // Default to ON
+    saveSingleModeToEEPROM(3, patternMode);
+  }
+  
   voiceSelect   = (int8_t) EEPROM.read(EEPROM_DATA_START + 4);
+  if (voiceSelect != -1 && voiceSelect != 1 && voiceSelect != 2) {
+    voiceSelect = -1;  // Default to OFF
+    saveSingleModeToEEPROM(4, voiceSelect);
+  }
+  
   fastRecMode   = (int8_t) EEPROM.read(EEPROM_DATA_START + 5);
+  if (fastRecMode < -1 || fastRecMode > 1) {
+    fastRecMode = 1;  // Default to ON
+    saveSingleModeToEEPROM(5, fastRecMode);
+  }
+  
   recChannelClear   = (int8_t) EEPROM.read(EEPROM_DATA_START + 6);
+  if (recChannelClear < 0 || recChannelClear > 4) {
+    recChannelClear = 1;  // Default to ON
+    saveSingleModeToEEPROM(6, recChannelClear);
+  }
+  
   previewVol   = (int8_t) EEPROM.read(EEPROM_DATA_START + 7);
+  if (previewVol < 1 || previewVol > 50) {
+    previewVol = 20;  // Default to mid
+    saveSingleModeToEEPROM(7, previewVol);
+  }
+  
   flowMode     = (int8_t) EEPROM.read(EEPROM_DATA_START + 8);
+  if (flowMode != -1 && flowMode != 1) {
+    flowMode = -1;  // Default to OFF
+    saveSingleModeToEEPROM(8, flowMode);
+  }
+  
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
+  if (micGain < 1 || micGain > 63) {
+    micGain = 10;  // Default to 10
+    saveSingleModeToEEPROM(9, micGain);
+  }
+  
   simpleNotesView = (int) EEPROM.read(EEPROM_DATA_START + 11);
+  if (simpleNotesView < 1 || simpleNotesView > 2) {
+    simpleNotesView = 1;  // Default to EASY
+    saveSingleModeToEEPROM(11, simpleNotesView);
+  }
+  
   loopLength = (int) EEPROM.read(EEPROM_DATA_START + 12);
+  if (loopLength < 0 || loopLength > 8) {
+    loopLength = 0;  // Default to OFF
+    saveSingleModeToEEPROM(12, loopLength);
+  }
   uint8_t ledMode = EEPROM.read(EEPROM_DATA_START + 13);
   extern bool ledModulesRotated;
   if (ledMode < 1 || ledMode > 4) {
@@ -542,7 +600,12 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
   ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
   ledModulesRotated = (ledMode >= 3);
+  
   ctrlMode = (int8_t) EEPROM.read(EEPROM_DATA_START + 14);
+  if (ctrlMode != 0 && ctrlMode != 1) {
+    ctrlMode = 0;  // Default to PAGE
+    saveSingleModeToEEPROM(14, ctrlMode);
+  }
   
   // Load lineInLevel from EEPROM (stored at EEPROM_DATA_START + 16)
   extern unsigned int lineInLevel;
@@ -602,9 +665,9 @@ FLASHMEM void loadMenuFromEEPROM() {
   uint8_t ledStripValue = EEPROM.read(EEPROM_DATA_START + 25);
   bool ledStripEnabled = (ledStripValue != 0);
   if (ledStripValue > 1) {
-    // Invalid value, default to ON
-    ledStripEnabled = true;
-    saveSingleModeToEEPROM(25, 1);
+    // Invalid value, default to OFF
+    ledStripEnabled = false;
+    saveSingleModeToEEPROM(25, 0);
   }
   setLedStripEnabled(ledStripEnabled);
   

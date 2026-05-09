@@ -1030,6 +1030,9 @@ extern int ledModules;
 void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB color);
 void clearLedStripForScreensaver();
 
+// Flag to track if encoder LEDs were turned off by screensaver
+static bool screensaverEncodersOff = false;
+
 // Comical eyes screensaver: eyes look around and blink, after 30s more they close and dim
 // Helper to draw pixel for screensaver (handles matrix addressing)
 static void ssLight(int x, int y, CRGB color) {
@@ -1040,16 +1043,25 @@ static void ssLight(int x, int y, CRGB color) {
 }
 
 FLASHMEM static void drawScreensaverMatrix() {
+  // Turn off encoder LEDs when screensaver is active (only write once on entry)
+  if (!screensaverEncodersOff) {
+    for (int i = 0; i < 4; i++) {
+      Encoder[i].writeRGBCode(0x000000);
+    }
+    screensaverEncodersOff = true;
+  }
+  
   FastLEDclear();
   clearLedStripForScreensaver();
 
   const uint32_t idleMs = millis() - lastUserActivityMs;
   const bool asleep = (idleMs >= 90000UL);  // After 90s total (60s to start + 30s more)
   
-  // Color: white when awake, very dim when asleep
-  const uint8_t brightness = asleep ? 6 : 60;
-  const CRGB eyeColor = CRGB(brightness, brightness, brightness);
-  const CRGB pupilColor = asleep ? CRGB(2, 2, 2) : CRGB(brightness, brightness, brightness);
+  // Eye outline dimmer than pupils - pupils are bright white
+  const uint8_t outlineBrightness = asleep ? 4 : 30;
+  const uint8_t pupilBrightness = asleep ? 2 : 80;
+  const CRGB eyeColor = CRGB(outlineBrightness, outlineBrightness, outlineBrightness);
+  const CRGB pupilColor = CRGB(pupilBrightness, pupilBrightness, pupilBrightness);
   
   // Eye positioning - centered on display
   const int displayWidth = (ledModules == 2) ? 32 : 16;
@@ -1062,19 +1074,27 @@ FLASHMEM static void drawScreensaverMatrix() {
   
   uint32_t now = millis();
   
-  // Dream movement: slow up/down drift when asleep (0 or +1 only)
+  // Dream movement: slow up/down drift when asleep (0 → +1 → 0 → -1 → 0)
   static int8_t dreamOffsetY = 0;
+  static uint8_t dreamPhase = 0;  // 0=center, 1=up, 2=center, 3=down
   static uint32_t lastDreamMs = 0;
   
   if (asleep) {
-    // Slow breathing/dreaming motion every 2 seconds
-    if (now - lastDreamMs >= 2000) {
+    // Cycle through positions every 3 seconds
+    if (now - lastDreamMs >= 3000) {
       lastDreamMs = now;
-      dreamOffsetY = (dreamOffsetY == 0) ? 1 : 0;  // Toggle between 0 and 1
+      dreamPhase = (dreamPhase + 1) % 4;
+      switch (dreamPhase) {
+        case 0: dreamOffsetY = 0; break;   // center
+        case 1: dreamOffsetY = 1; break;   // up
+        case 2: dreamOffsetY = 0; break;   // center
+        case 3: dreamOffsetY = -1; break;  // down
+      }
     }
     eyeY += dreamOffsetY;
   } else {
     dreamOffsetY = 0;
+    dreamPhase = 0;
   }
   
   // Peek: occasionally open one eye while asleep (~every 3 minutes for 1500ms)
@@ -1194,9 +1214,9 @@ FLASHMEM static void drawScreensaverMatrix() {
   bool leftClosed = isBlinking || (asleep && !(isPeeking && peekLeftEye));
   bool rightClosed = isBlinking || (asleep && !(isPeeking && !peekLeftEye));
   
-  // Peeking eye is slightly brighter
-  CRGB peekColor = CRGB(20, 20, 20);
-  CRGB peekPupil = CRGB(20, 20, 20);
+  // Peeking eye: dim outline, brighter pupil
+  CRGB peekColor = CRGB(12, 12, 12);
+  CRGB peekPupil = CRGB(40, 40, 40);
   
   CRGB leftColor = (isPeeking && peekLeftEye) ? peekColor : eyeColor;
   CRGB leftPupil = (isPeeking && peekLeftEye) ? peekPupil : pupilColor;
@@ -1210,8 +1230,12 @@ FLASHMEM static void drawScreensaverMatrix() {
 FLASHMEM void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
-    if (!isNowPlaying && (millis() - lastUserActivityMs >= 60000UL)) {
+    bool screensaverActive = !isNowPlaying && (millis() - lastUserActivityMs >= 60000UL);
+    if (screensaverActive) {
       drawScreensaverMatrix();
+    } else if (screensaverEncodersOff) {
+      // Screensaver just ended - reset flag so encoders can be controlled again
+      screensaverEncodersOff = false;
     }
     // Don't change global brightness - matrix is dimmed in software (light_single)
     // Strip stays at full brightness (set in setup() and not modified)
