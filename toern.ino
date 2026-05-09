@@ -3026,7 +3026,7 @@ void setup() {
   extern CRGB stripLeds[];
   extern void initLedStrip();
   FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, 1000); // Limit to 5V, 1 Amp
+  //FastLED.setMaxPowerInVoltsAndMilliamps(5, 1000); // Limit to 5V, 1 Amp
 
   // Load LED mode (count + rotation) before any startup visuals, including CLR RAM.
   loadLedModeEarlyFromEEPROM();
@@ -3559,7 +3559,7 @@ void checkEncoders() {
         if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
           int val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
           Encoder[2].writeCounter((int32_t)val);
-          // Reset the last encoder value tracking when channel changes
+          currentMode->pos[2] = val;  // Sync mode position with encoder to prevent stale value from being applied
           lastEncVal[GLOB.currentChannel] = val;  // Sync tracking with encoder
         }
         filterfreshsetted = true;
@@ -7464,7 +7464,8 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir) {
 }
 
 FLASHMEM void updateBPM() {
-  if (MIDI_CLOCK_SEND) {
+  extern int clockMode;
+  if (clockMode == 1) {  // INT mode: allow BPM adjustment (don't use MIDI_CLOCK_SEND which depends on midiSendMode)
     SMP.bpm = currentMode->pos[3];                                    // BPM from encoder
     if (SMP.bpm > 0) {                                                // Avoid division by zero
       playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);

@@ -353,14 +353,14 @@ FLASHMEM void previewSample(bool setMaxSampleLength) {
     }
 
     previewFile.seek(readStartBytes);
-    const size_t PREVIEW_IO_CHUNK = 131072;
+    const size_t PREVIEW_IO_CHUNK = 65536;  // Smaller chunks for audio stability
     unsigned prevChunkCount = 0;
     while (plen < bytesToReadAll) {
       size_t toRead = min(PREVIEW_IO_CHUNK, (size_t)(bytesToReadAll - plen));
       size_t bytesRead = previewFile.read(&sampled[0][plen], toRead);
       if (bytesRead == 0) break;
       plen += (int)bytesRead;
-      if ((++prevChunkCount % 3u) == 0u) yield();
+      if ((++prevChunkCount % 1u) == 0u) yield();  // yield every chunk
     }
     previewFile.close();
 
@@ -542,8 +542,9 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     unsigned int i = 0;
     // Do not memset the whole ~1.6MB slot — only the loaded span + pad is used (playLen). Saves ~13MB of
     // writes per 8-voice pack load. SD.read directly into EXTRAM avoids a memcpy per chunk.
-    const size_t CHUNK = 131072;
-    const unsigned YIELD_EVERY_CHUNKS = 2;  // yield every ~256KB
+    // Smaller chunks + frequent yields prevent audio glitches from SD contention.
+    const size_t CHUNK = 65536;
+    const unsigned YIELD_EVERY_CHUNKS = 1;  // yield every ~64KB for audio stability
     size_t bytesToRead = min((size_t)(endOffsetBytes - startOffsetBytes), sizeof(sampled[sampleID]));
     unsigned chunkCount = 0;
     while (i < bytesToRead) {
@@ -1016,6 +1017,10 @@ static void sampleLoadUiThrottled(uint8_t percent, bool enable, uint8_t &lastDra
 
 // Copy currently loaded sample to samplepack 0
 FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress) {
+  // Stop any SD audio playback to prevent contention/glitches
+  extern AudioPlaySdWav playSdWav1;
+  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  
   // Ensure samplepack 0 directory exists
   if (!SD.exists("0")) {
     SD.mkdir("0");
@@ -1070,8 +1075,9 @@ FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgres
   // Write the sample data from RAM
   // Write the raw PCM data from the sampled buffer in chunks to prevent blocking
   // Large samples (930KB) can block CPU for 500-1000ms without chunking
+  // Smaller chunks + frequent yields prevent audio glitches from SD contention.
   uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[channel]);
-  const size_t CHUNK_SIZE = 131072;
+  const size_t CHUNK_SIZE = 65536;  // 64KB chunks for audio stability
 
   uint8_t sp0ProgLast = 255;
   if (showLoadProgress && dataSize == 0) {
@@ -1080,7 +1086,7 @@ FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgres
   for (uint32_t offset = 0; offset < dataSize; offset += CHUNK_SIZE) {
     size_t chunkSize = min((size_t)CHUNK_SIZE, (size_t)(dataSize - offset));
     outFile.write(dataPtr + offset, chunkSize);
-    if ((offset / CHUNK_SIZE) % 2u == 0u) yield();
+    yield();  // yield every chunk for audio stability
     if (showLoadProgress && dataSize > 0) {
       uint32_t done = offset + (uint32_t)chunkSize;
       if (done > dataSize) done = dataSize;
@@ -1191,7 +1197,7 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     // Load data chunk into RAM buffer (no blanket memset)
     previewFile.seek(dataStart);
     int plen = 0;
-    const size_t LPREVIEW_CHUNK = 131072;
+    const size_t LPREVIEW_CHUNK = 65536;  // 64KB chunks for audio stability
     int chunkCount = 0;
     int maxToRead = (int)min((uint32_t)sizeof(sampled[0]), dataSize);
     while (plen < maxToRead) {
@@ -1199,7 +1205,7 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
       size_t bytesRead = previewFile.read(&sampled[0][plen], toRead);
       if (bytesRead == 0) break;
       plen += (int)bytesRead;
-      if ((++chunkCount % 3) == 0) yield();
+      yield();  // yield every chunk for audio stability
       if (showLoadProgress && maxToRead > 0 && (chunkCount % 2) == 0) {
         uint8_t pct = (uint8_t)(4u + (uint32_t)plen * 62u / (uint32_t)maxToRead);
         sampleLoadUiThrottled(pct, true, loadProgLast);

@@ -2200,10 +2200,10 @@ void drawBPMScreen() {
   }
   
   // Draw BPM number starting at x=3 (left-aligned with reserved space)
-  // In EXT mode: BLUE if stable, RED if not yet stable
+  // In EXT mode: GREEN if stable, RED if not yet stable
   // In INT mode: CYAN
   extern bool getBPMStable();
-  if (MIDI_CLOCK_SEND) {
+  if (isInt) {  // Use isInt (based on clockMode) not MIDI_CLOCK_SEND (which depends on midiSendMode)
     // INT mode: always cyan
     drawBPMWithReservedSpace(SMP.bpm, UI_CYAN, 6);
   } else {
@@ -2216,7 +2216,7 @@ void drawBPMScreen() {
   // Draw arrow at right edge (x=maxX-1, y=8)
   // In EXT mode: blink the arrow in sync with MIDI clock (every 24th note)
   bool shouldBlink = false;
-  if (!isInt && !MIDI_CLOCK_SEND) {
+  if (!isInt) {
     // EXT mode: get clock tick count for blinking
     extern uint16_t getMidiClockTicks();
     uint16_t clockTicks = getMidiClockTicks();

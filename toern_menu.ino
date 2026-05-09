@@ -208,7 +208,7 @@ int genreLength = 8; // Default length for genre generation
 // NEW mode state management
 bool newScreenFirstEnter = true;
 
-// Reset menu option: 0 = SD rescan, 1 = EFX reset, 2 = FULL reset
+// Reset menu option: 0 = SD rescan, 1 = EFX reset, 2 = FULL reset, 3 = FILE (wipe saves), 4 = PACK (wipe samplepacks)
 int resetMenuOption = 0;
 
 // DRAW mode: 0 = L+R (default), 1 = R (right-hand only)
@@ -2077,14 +2077,18 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       break;
     }
 
-    case 16: { // RST page - show current mode (SD, EFX, or FULL)
+    case 16: { // RST page - show current mode (SD, EFX, FULL, FILE, PACK)
       const char* modeText;
       if (resetMenuOption == 0) {
         modeText = "SD";
       } else if (resetMenuOption == 1) {
         modeText = "EFX";
-      } else {
+      } else if (resetMenuOption == 2) {
         modeText = "FULL";
+      } else if (resetMenuOption == 3) {
+        modeText = "FILE";
+      } else {
+        modeText = "PACK";
       }
       for (int x = 1; x <= 16; x++) {
         light(x, 8, CRGB::Black);
@@ -2882,18 +2886,18 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 16: { // RST page - Choose between SD, EFX, and FULL reset
+    case 16: { // RST page - Choose between SD, EFX, FULL, FILE, PACK reset
       static int lastResetOption = -1;
 
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        Encoder[2].writeMax((int32_t)2);  // 0=SD, 1=EFX, 2=FULL
+        Encoder[2].writeMax((int32_t)4);  // 0=SD, 1=EFX, 2=FULL, 3=FILE, 4=PACK
         Encoder[2].writeMin((int32_t)0);
         menuFirstEnter = false;
       }
 
       if (currentMode->pos[2] != lastResetOption) {
-        resetMenuOption = constrain(currentMode->pos[2], 0, 2);
+        resetMenuOption = constrain(currentMode->pos[2], 0, 4);
         Encoder[2].writeCounter((int32_t)resetMenuOption);
         redrawMain(setting);
         lastResetOption = resetMenuOption;
@@ -3417,7 +3421,7 @@ void switchMenu(int menuPosition){
         } else if (resetMenuOption == 1) {
           // Reset effects/parameters to defaults
           resetAllToDefaults();
-        } else { // resetMenuOption == 2 (FULL)
+        } else if (resetMenuOption == 2) {
           // FULL reset: Complete reset (like startNew) AND rescan SD
           
           // Call startNew() for complete reset (clears notes, resets all settings, etc.)
@@ -3436,6 +3440,69 @@ void switchMenu(int menuPosition){
           delay(1000);
           
           // startNew() already switches to draw mode, so we don't need to do it again
+        } else if (resetMenuOption == 3) {
+          // FILE: Wipe all saved files (1-99.txt) but keep autosaved.txt
+          FastLEDclear();
+          drawText("WIPE", 2, 10, UI_ORANGE);
+          drawText("FILE", 2, 3, UI_ORANGE);
+          FastLEDshow();
+          
+          char filename[16];
+          int deletedCount = 0;
+          for (int i = 1; i <= 99; i++) {
+            sprintf(filename, "%d.txt", i);
+            if (SD.exists(filename)) {
+              SD.remove(filename);
+              deletedCount++;
+            }
+          }
+          
+          FastLEDclear();
+          drawText("DONE", 2, 3, UI_GREEN);
+          FastLEDshow();
+          delay(1000);
+          
+          extern Mode draw;
+          extern void switchMode(Mode*);
+          switchMode(&draw);
+        } else if (resetMenuOption == 4) {
+          // PACK: Remove all samplepack directories except 1/ (used by FULL reset)
+          FastLEDclear();
+          drawText("WIPE", 2, 10, UI_ORANGE);
+          drawText("PACK", 2, 3, UI_ORANGE);
+          FastLEDshow();
+          
+          char dirname[16];
+          char filepath[32];
+          for (int pack = 0; pack <= 99; pack++) {
+            if (pack == 1) continue;  // Keep samplepack 1 (used by FULL reset)
+            
+            sprintf(dirname, "%d", pack);
+            if (SD.exists(dirname)) {
+              // Delete all .wav files in the directory first
+              for (int sample = 1; sample <= 8; sample++) {
+                sprintf(filepath, "%d/%d.wav", pack, sample);
+                if (SD.exists(filepath)) {
+                  SD.remove(filepath);
+                }
+              }
+              // Try to remove the directory (only works if empty)
+              SD.rmdir(dirname);
+            }
+          }
+          
+          // Invalidate sample browser cache after removing packs
+          extern void sampleBrowserInvalidate();
+          sampleBrowserInvalidate();
+          
+          FastLEDclear();
+          drawText("DONE", 2, 3, UI_GREEN);
+          FastLEDshow();
+          delay(1000);
+          
+          extern Mode draw;
+          extern void switchMode(Mode*);
+          switchMode(&draw);
         }
         break;
         

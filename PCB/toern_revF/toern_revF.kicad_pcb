@@ -34196,7 +34196,7 @@
 			(justify left bottom)
 		)
 	)
-	(gr_text "made in st.pauli \nby jan kuntoff/SP_ctrl\nV2.0  - 03/26\nwww.toern.live\n"
+	(gr_text "made in st.pauli \nby jan kuntoff/warft_ctrl\nV2.0  - 03/26\nwww.toern.live\n"
 		(at 97.5 85 0)
 		(layer "F.SilkS")
 		(uuid "dfa1cfe4-d077-408b-bfd9-3bbea7c76a78")
@@ -34208,7 +34208,7 @@
 			)
 			(justify left top)
 		)
-		(render_cache "made in st.pauli \nby jan kuntoff/SP_ctrl\nV2.0  - 03/26\nwww.toern.live\n"
+		(render_cache "made in st.pauli \nby jan kuntoff/warft_ctrl\nV2.0  - 03/26\nwww.toern.live\n"
 			0
 			(polygon
 				(pts

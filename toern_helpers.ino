@@ -1030,38 +1030,181 @@ extern int ledModules;
 void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB color);
 void clearLedStripForScreensaver();
 
-// Integer math only (no float): keeps ITCM/stack lighter in this high-rate path.
+// Comical eyes screensaver: eyes look around and blink, after 30s more they close and dim
+// Helper to draw pixel for screensaver (handles matrix addressing)
+static void ssLight(int x, int y, CRGB color) {
+  if (x < 1 || y < 1) return;
+  unsigned int matrixNum = (x - 1) / MATRIX_WIDTH;
+  unsigned int localX = ((x - 1) % MATRIX_WIDTH) + 1;
+  light_single(matrixNum, localX, y, color);
+}
+
 FLASHMEM static void drawScreensaverMatrix() {
   FastLEDclear();
   clearLedStripForScreensaver();
 
-  const unsigned int y = 8;
-  const unsigned int x0 = (ledModules == 2) ? 15u : 7u;  // 4 LEDs: 15-18 (dual) or 7-10 (single)
-
-  const uint32_t halfMs = 4000UL;
-  const uint32_t period = halfMs * 2;
-  const uint32_t cy = millis() % period;
-  // Phase 0..4095 (~0..1) triangle wave
-  const uint32_t u4095 = (cy < halfMs) ? ((cy * 4095UL) / halfMs) : (((period - cy) * 4095UL) / halfMs);
-  // center in 1/1024 units: 0..3 span mapped across phase
-  const uint32_t center_x1024 = (u4095 * 3u * 1024u) / 4095u;
-
-  for (unsigned int i = 0; i < 4u; i++) {
-    int32_t d = (int32_t)center_x1024 - (int32_t)(i * 1024u);
-    if (d < 0) d = -d;
-    uint32_t br4095 = (d >= 1024) ? 0u : (uint32_t)(((1024 - d) * 4095u) / 1024u);
-    // smoothstep: t*t*(3-2*t) with t in 0..4095
-    uint64_t t = br4095;
-    uint32_t smooth = (uint32_t)((t * t * (12285u - 2u * t)) / 4095u / 4095u);
-    if (smooth > 4095u) smooth = 4095u;
-    // Cap peak red at ~10 (not 255) to save power
-    const uint32_t kRedMax = 10u;
-    uint8_t r = (uint8_t)((smooth * kRedMax + 2048u) / 4095u);
-    unsigned int gx = x0 + i;
-    unsigned int matrixNum = (gx - 1) / MATRIX_WIDTH;
-    unsigned int localX = ((gx - 1) % MATRIX_WIDTH) + 1;
-    light_single(matrixNum, localX, y, CRGB(r, 0, 0));
+  const uint32_t idleMs = millis() - lastUserActivityMs;
+  const bool asleep = (idleMs >= 90000UL);  // After 90s total (60s to start + 30s more)
+  
+  // Color: white when awake, very dim when asleep
+  const uint8_t brightness = asleep ? 6 : 60;
+  const CRGB eyeColor = CRGB(brightness, brightness, brightness);
+  const CRGB pupilColor = asleep ? CRGB(2, 2, 2) : CRGB(brightness, brightness, brightness);
+  
+  // Eye positioning - centered on display
+  const int displayWidth = (ledModules == 2) ? 32 : 16;
+  const int eyeWidth = 5;
+  const int gap = 2;
+  const int totalWidth = eyeWidth * 2 + gap;  // 12 pixels
+  const int leftEyeX = (displayWidth - totalWidth) / 2 + 1;
+  const int rightEyeX = leftEyeX + eyeWidth + gap;
+  int eyeY = 5;  // Base Y position (bottom of eyes)
+  
+  uint32_t now = millis();
+  
+  // Dream movement: slow up/down drift when asleep (0 or +1 only)
+  static int8_t dreamOffsetY = 0;
+  static uint32_t lastDreamMs = 0;
+  
+  if (asleep) {
+    // Slow breathing/dreaming motion every 2 seconds
+    if (now - lastDreamMs >= 2000) {
+      lastDreamMs = now;
+      dreamOffsetY = (dreamOffsetY == 0) ? 1 : 0;  // Toggle between 0 and 1
+    }
+    eyeY += dreamOffsetY;
+  } else {
+    dreamOffsetY = 0;
   }
+  
+  // Peek: occasionally open one eye while asleep (~every 3 minutes for 1500ms)
+  static uint32_t lastPeekMs = 0;
+  static uint32_t nextPeekInterval = 180000;
+  static bool isPeeking = false;
+  static bool peekLeftEye = true;  // Which eye peeks
+  
+  if (asleep) {
+    if (!isPeeking && (now - lastPeekMs >= nextPeekInterval)) {
+      isPeeking = true;
+      lastPeekMs = now;
+      peekLeftEye = (now % 2) == 0;  // Randomly pick which eye
+    }
+    if (isPeeking && (now - lastPeekMs >= 1500)) {
+      isPeeking = false;
+      nextPeekInterval = 180000;  // 3 minutes
+    }
+  } else {
+    isPeeking = false;
+  }
+  
+  // Blink state: blink every ~3-5 seconds for ~150ms (when awake)
+  static uint32_t lastBlinkMs = 0;
+  static uint32_t nextBlinkInterval = 3000;
+  static bool isBlinking = false;
+  
+  if (!asleep) {
+    if (!isBlinking && (now - lastBlinkMs >= nextBlinkInterval)) {
+      isBlinking = true;
+      lastBlinkMs = now;
+    }
+    if (isBlinking && (now - lastBlinkMs >= 150)) {
+      isBlinking = false;
+      nextBlinkInterval = 2500 + (now % 2500);
+    }
+  } else {
+    isBlinking = false;
+  }
+  
+  // Pupil movement: smooth random looking around (when awake)
+  static int8_t targetPupilX = 0;
+  static int8_t targetPupilY = 0;
+  static int8_t currentPupilX = 0;
+  static int8_t currentPupilY = 0;
+  static uint32_t lastMoveMs = 0;
+  static uint32_t nextMoveInterval = 1500;
+  static uint32_t lastInterpMs = 0;
+  
+  if (!asleep) {
+    if (now - lastMoveMs >= nextMoveInterval) {
+      lastMoveMs = now;
+      targetPupilX = -1 + (int8_t)(now % 3);
+      targetPupilY = -1 + (int8_t)((now / 7) % 3);
+      nextMoveInterval = 800 + (now % 1200);
+    }
+    if (now - lastInterpMs >= 100) {
+      lastInterpMs = now;
+      if (currentPupilX < targetPupilX) currentPupilX++;
+      else if (currentPupilX > targetPupilX) currentPupilX--;
+      if (currentPupilY < targetPupilY) currentPupilY++;
+      else if (currentPupilY > targetPupilY) currentPupilY--;
+    }
+  } else {
+    // When peeking, look to the side
+    if (isPeeking) {
+      currentPupilX = peekLeftEye ? 1 : -1;
+      currentPupilY = 0;
+    } else {
+      currentPupilX = 0;
+      currentPupilY = 0;
+    }
+  }
+  
+  // Draw a single eye
+  auto drawEye = [&](int baseX, int baseY, bool closed, CRGB color, CRGB pColor) {
+    if (closed) {
+      // Closed eye: horizontal line with eyelid curve
+      for (int dx = 0; dx < 5; dx++) {
+        ssLight(baseX + dx, baseY + 3, color);
+      }
+      ssLight(baseX + 1, baseY + 4, color);
+      ssLight(baseX + 2, baseY + 4, color);
+      ssLight(baseX + 3, baseY + 4, color);
+      return;
+    }
+    
+    // Open eye outline
+    ssLight(baseX + 1, baseY + 6, color);
+    ssLight(baseX + 2, baseY + 6, color);
+    ssLight(baseX + 3, baseY + 6, color);
+    ssLight(baseX + 0, baseY + 5, color);
+    ssLight(baseX + 4, baseY + 5, color);
+    for (int dy = 1; dy <= 4; dy++) {
+      ssLight(baseX + 0, baseY + dy, color);
+      ssLight(baseX + 4, baseY + dy, color);
+    }
+    ssLight(baseX + 1, baseY + 0, color);
+    ssLight(baseX + 2, baseY + 0, color);
+    ssLight(baseX + 3, baseY + 0, color);
+    
+    // Pupil
+    int pupilX = baseX + 1 + currentPupilX;
+    int pupilY = baseY + 2 + currentPupilY;
+    if (pupilX < baseX + 1) pupilX = baseX + 1;
+    if (pupilX > baseX + 2) pupilX = baseX + 2;
+    if (pupilY < baseY + 1) pupilY = baseY + 1;
+    if (pupilY > baseY + 3) pupilY = baseY + 3;
+    
+    ssLight(pupilX, pupilY, pColor);
+    ssLight(pupilX + 1, pupilY, pColor);
+    ssLight(pupilX, pupilY + 1, pColor);
+    ssLight(pupilX + 1, pupilY + 1, pColor);
+  };
+  
+  // Determine eye states
+  bool leftClosed = isBlinking || (asleep && !(isPeeking && peekLeftEye));
+  bool rightClosed = isBlinking || (asleep && !(isPeeking && !peekLeftEye));
+  
+  // Peeking eye is slightly brighter
+  CRGB peekColor = CRGB(20, 20, 20);
+  CRGB peekPupil = CRGB(20, 20, 20);
+  
+  CRGB leftColor = (isPeeking && peekLeftEye) ? peekColor : eyeColor;
+  CRGB leftPupil = (isPeeking && peekLeftEye) ? peekPupil : pupilColor;
+  CRGB rightColor = (isPeeking && !peekLeftEye) ? peekColor : eyeColor;
+  CRGB rightPupil = (isPeeking && !peekLeftEye) ? peekPupil : pupilColor;
+  
+  drawEye(leftEyeX, eyeY, leftClosed, leftColor, leftPupil);
+  drawEye(rightEyeX, eyeY, rightClosed, rightColor, rightPupil);
 }
 
 FLASHMEM void FastLEDshow() {

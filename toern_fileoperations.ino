@@ -69,6 +69,10 @@ FLASHMEM void savePattern(bool autosave) {
 
 
 FLASHMEM void saveSamplePack(int pack) {
+    // Stop any SD audio playback to prevent contention/glitches
+    extern AudioPlaySdWav playSdWav1;
+    if (playSdWav1.isPlaying()) playSdWav1.stop();
+    
     char filename[64];
     char sourcePath[64];
 
@@ -114,13 +118,12 @@ FLASHMEM void saveSamplePack(int pack) {
                 continue;
             }
             
-            // Large EXTRAM buffer + periodic yield: fewer SD round-trips, loop stays responsive.
-            static EXTMEM uint8_t packCopyBuf[131072];
+            // EXTRAM buffer + frequent yield: fewer SD round-trips while keeping audio stable.
+            static EXTMEM uint8_t packCopyBuf[65536];  // 64KB chunks for audio stability
             size_t bytesRead;
-            unsigned copyChunks = 0;
             while ((bytesRead = sourceFile.read(packCopyBuf, sizeof(packCopyBuf))) > 0) {
                 destFile.write(packCopyBuf, bytesRead);
-                if ((++copyChunks & 1u) == 0) yield();
+                yield();  // yield every chunk for audio stability
             }
             
             sourceFile.close();
@@ -146,14 +149,15 @@ FLASHMEM void saveSamplePack(int pack) {
             
             // Write the raw PCM data from the sampled buffer in chunks to prevent blocking
             // Large samples (930KB) can block CPU for 500-1000ms without chunking
+            // Smaller chunks + frequent yields prevent audio glitches from SD contention.
             uint32_t totalBytes = sampleCount * sizeof(int16_t);
             uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[ch]);
-            const size_t CHUNK_SIZE = 131072;
+            const size_t CHUNK_SIZE = 65536;  // 64KB chunks for audio stability
 
             for (uint32_t offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
               size_t chunkSize = min((size_t)CHUNK_SIZE, (size_t)(totalBytes - offset));
               outFile.write(dataPtr + offset, chunkSize);
-              if ((offset / CHUNK_SIZE) % 2u == 0u) yield();
+              yield();  // yield every chunk for audio stability
             }
 
             finalizeWavHeader(outFile, totalBytes);
