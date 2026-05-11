@@ -2871,7 +2871,7 @@ void startNew() {
   
   // 2. RESET GLOBAL VARIABLES FIRST (before using GLOB.currentChannel)
   SMP.bpm = 100.0;
-  GLOB.vol = 10;
+  GLOB.vol = 100;  // 0-100 range, default to max
   GLOB.velocity = 10;
   GLOB.currentChannel = 1;  // Set this FIRST before using it
   GLOB.page = 1;
@@ -2879,6 +2879,48 @@ void startNew() {
   GLOB.singleMode = false;
   GLOB.x = 1;
   GLOB.y = 1;
+  
+  // 2b. RESET ALL EEPROM SETTINGS TO DEFAULTS
+  // Write defaults to EEPROM - globals will be reloaded on next boot
+  EEPROM.write(EEPROM_DATA_START + 0,  1);    // recMode (MIC)
+  EEPROM.write(EEPROM_DATA_START + 1,  1);    // clockMode (INT)
+  EEPROM.write(EEPROM_DATA_START + 2,  2);    // transportMode (SEND)
+  EEPROM.write(EEPROM_DATA_START + 3,  1);    // patternMode (ON)
+  EEPROM.write(EEPROM_DATA_START + 4, (uint8_t)-1);  // voiceSelect (OFF)
+  EEPROM.write(EEPROM_DATA_START + 5,  1);    // fastRecMode
+  EEPROM.write(EEPROM_DATA_START + 6,  1);    // recChannelClear
+  EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol
+  EEPROM.write(EEPROM_DATA_START + 8, (uint8_t)-1);  // flowMode (OFF)
+  EEPROM.write(EEPROM_DATA_START + 9,  10);   // micGain
+  EEPROM.write(EEPROM_DATA_START + 11, 1);    // simpleNotesView (EASY)
+  EEPROM.write(EEPROM_DATA_START + 12, 0);    // loopLength (OFF)
+  EEPROM.write(EEPROM_DATA_START + 13, 1);    // ledMode
+  EEPROM.write(EEPROM_DATA_START + 14, 0);    // ctrlMode (PAGE)
+  EEPROM.write(EEPROM_DATA_START + 15, 30);   // lineOutLevelSetting
+  EEPROM.write(EEPROM_DATA_START + 16, 8);    // lineInLevel
+  EEPROM.write(EEPROM_DATA_START + 17, 100);  // GLOB.vol
+  EEPROM.write(EEPROM_DATA_START + 18, 0);    // cursorType
+  EEPROM.write(EEPROM_DATA_START + 19, 0);    // showChannelNr
+  EEPROM.write(EEPROM_DATA_START + 20, 0);    // previewTriggerMode
+  EEPROM.write(EEPROM_DATA_START + 21, 0);    // drawMode
+  EEPROM.write(EEPROM_DATA_START + 22, 0);    // colorScheme
+  EEPROM.write(EEPROM_DATA_START + 23, 0);    // stereoChannel
+  EEPROM.write(EEPROM_DATA_START + 24, 2);    // midiSendMode (BOTH)
+  EEPROM.write(EEPROM_DATA_START + 25, 0);    // ledStripEnabled (OFF)
+  EEPROM.write(EEPROM_DATA_START + 26, 64);   // ledBrightness
+  EEPROM.write(EEPROM_DATA_START + 27, 1);    // spkrEnabled (ON)
+  EEPROM.write(EEPROM_DATA_START + 28, 1);    // midiNoteReceive
+  EEPROM.write(EEPROM_DATA_START + 29, 0);    // transportSendDelayMs
+  EEPROM.write(EEPROM_DATA_START + 31, 0);    // transportRcveDelayMs
+  EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)256);  // codecHfCut
+  EEPROM.write(EEPROM_DATA_START + 33, 4);    // HFC format
+  EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // drawRFullMuteCustomUnmuteMask
+  
+  // Reload settings from EEPROM and apply to hardware
+  extern void loadMenuFromEEPROM();
+  extern void applyAudioSettingsFromGlobals();
+  loadMenuFromEEPROM();
+  applyAudioSettingsFromGlobals();
   
   // 3. RESET ALL FILTER/PARAMETER DATA (just data, no audio hardware yet)
   const int channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
@@ -2980,8 +3022,8 @@ void startNew() {
   
   // 11. RESET PATTERN MODE FLAGS (before switching mode)
   songModeActive = false;
-  SMP_PATTERN_MODE = false;
-  patternMode = -1;  // OFF
+  SMP_PATTERN_MODE = true;   // patternMode=1 means ON
+  patternMode = 1;  // ON (matches EEPROM default)
   
   // Reset paint/unpaint prevention flag
   preventPaintUnpaint = false;
