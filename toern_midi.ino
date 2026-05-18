@@ -32,6 +32,7 @@ void triggerExternalOneBlink();
 extern IntervalTimer midiClockTimer;
 void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity);
 void stopSynthChannel(int ch);
+bool isChildVoiceDisabled(int channel);
 
 // Reduce Serial spam in clock/BPM code paths (can stall Serial and hurt responsiveness).
 #ifndef DEBUG_MIDI_CLOCK_SERIAL
@@ -602,6 +603,7 @@ void MidiSendNoteOn(int pitch, int channel, int velocity) {
   // Clamp channel and velocity to valid MIDI ranges.
   if (channel < 1) channel = 1;
   if (channel > 16) channel = 16;
+  if (isChildVoiceDisabled(channel)) return;
   if (velocity < 0) velocity = 0;
   if (velocity > 127) velocity = 127;
 
@@ -671,6 +673,8 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   ch = mapMidiToLogicalChannel(ch, pitch);
 
   if (ch < 1 || ch > 16) return;
+  if (isChildVoiceDisabled(ch)) return;
+
   // Only count a NoteOn once per (logical channel, pitch) until a matching NoteOff arrives.
   if (pitch < 128 && !midiHeldNote[ch][pitch]) {
     midiHeldNote[ch][pitch] = true;
@@ -777,6 +781,7 @@ void onBeatTick() {
   PendingNote pn;
   extern bool dequeuePendingNote(PendingNote &out);
   while (dequeuePendingNote(pn)) {
+    if (isChildVoiceDisabled((int)pn.channel)) continue;
     int targetBeat = beat;
     note[targetBeat][pn.livenote].channel = pn.channel;
     note[targetBeat][pn.livenote].velocity = pn.velocity;

@@ -1,4 +1,4 @@
-#define VERSION "v2.0"
+#define VERSION "v2.2"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
@@ -255,6 +255,8 @@ void updatePreviewVolume();
 //elapsedMillis recFlushTimer;
 elapsedMillis recTime;
 
+extern i2cEncoderLibV2 Encoder[NUM_ENCODERS];
+
 bool showChannelNr = true;
 int cursorType = 0;  // 0=NORM, 1=BIG (CHNR uses showChannelNr=true, cursorType=0)
 bool lastPinsConnected = false;
@@ -275,6 +277,9 @@ extern int currentMenuPage;
 bool getMuteState(int channel);
 bool getMuteStateForUI(int channel);  // Get mute state for UI display (uses edit page)
 void setMuteState(int channel, bool muted);
+bool isChildVoiceDisabled(int channel);
+bool isChildVoiceMuted(int channel);
+void enforceChildModeRestrictions();
 void applyMutesAfterPMODSwitch();
 
 enum class DrawRFullMuteState : uint8_t { Inactive = 0, Active = 1 };
@@ -291,6 +296,10 @@ void updatePongBall();
 void drawPongBall();
 void resetPongGame();
 void triggerGridNote(unsigned int globalX, unsigned int y);
+int mapXtoPageOffset(int x);
+void stopSound(int note, int ch);
+void stopSynthChannel(int ch);
+static inline void resetMidiPressedKeyCount11to14();
 void drawCtrlVolumeOverlay(int volume);
 void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
@@ -381,6 +390,7 @@ bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
 static bool spkrEnabled = true;  // SPKR toggle state (ON by default)
+static bool childLockEnabled = false;  // Child lock: requires touch2->touch1 sequence to enter menu
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
 bool recMenuFirstEnter = true;   // Track first entry into REC menu
 unsigned int SMP_FAST_REC = false;
@@ -414,6 +424,8 @@ static volatile uint8_t pendingNotesCount = 0;  // number of queued items
 // Enqueue from main loop context (may be called from MIDI handlers in loop()).
 // Returns true on success, false if the queue is full (event dropped).
 bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote) {
+  if (isChildVoiceDisabled((int)channel)) return false;
+
   bool ok = false;
   noInterrupts();
   if (pendingNotesCount < MAX_PENDING_NOTES) {
@@ -507,7 +519,20 @@ const unsigned int SONG_LEN = MAX_STEPS;                 // Song length equals t
 static bool lastBothTouched = false;
 DMAMEM bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
 DMAMEM bool lastTouchState[4] = { false };  // Previous touch state
-const int touchThreshold = 45;
+const int touchThreshold = 45; //45 for M1
+
+/** When true, touch1/touch2 use TTP223 on pins 5 & 22 (digital, INPUT_PULLDOWN) instead of fastTouchRead on SWITCH_1/2. */
+static const bool exttouch = true;
+
+int readTouch1Raw() {
+  if (exttouch) return digitalRead(5) ? (touchThreshold + 1) : 0;
+  return fastTouchRead(SWITCH_1);
+}
+
+int readTouch2Raw() {
+  if (exttouch) return digitalRead(22) ? (touchThreshold + 1) : 0;
+  return fastTouchRead(SWITCH_2);
+}
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
 
@@ -567,6 +592,17 @@ void setSpkrEnabled(bool enabled) {
   spkrEnabled = enabled;
   pinMode(30, OUTPUT);                     // Switch to OUTPUT mode to control the pin
   digitalWrite(30, enabled ? LOW : HIGH);  // ON = LOW, OFF = HIGH
+}
+
+// Get child lock enabled state
+bool getChildLockEnabled() {
+  return childLockEnabled;
+}
+
+// Set child lock enabled state
+void setChildLockEnabled(bool enabled) {
+  childLockEnabled = enabled;
+  enforceChildModeRestrictions();
 }
 
 bool isRecording = false;
@@ -890,6 +926,76 @@ bool drawRFullMuteIsActive() {
 DMAMEM static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
 DMAMEM static bool globalMutes[maxY];          // stores global mute state when PMOD is off
 
+FLASHMEM bool isChildVoiceDisabled(int channel) {
+  return childLockEnabled && channel >= 9 && channel <= 14;
+}
+
+FLASHMEM bool isChildVoiceMuted(int channel) {
+  return childLockEnabled && (channel == 11 || channel == 13 || channel == 14);
+}
+
+FLASHMEM void enforceChildModeRestrictions() {
+  if (!childLockEnabled) return;
+
+  int localX = ((int)GLOB.x - 1) % (int)maxX;
+  if (localX < 0) localX = 0;
+  pendingPage = 0;
+  editpage = 1;
+  GLOB.edit = 1;
+  GLOB.page = 1;
+  if (beat < 1 || beat > maxX) beat = 1;
+
+  GLOB.x = (unsigned int)localX + 1;
+  drawRFullMuteState = DrawRFullMuteState::Inactive;
+  tmpMute = false;
+  tmpMuteActive = false;
+  muteModeActive = false;
+  muteModeReturn = nullptr;
+  muteModeLastChannel = -1;
+  muteModeReturnSingleState = false;
+  muteModeArrowDirection = 0;
+  muteModeArrowUntil = 0;
+  muteModeEncoderValue = 0;
+
+  if (isChildVoiceDisabled((int)GLOB.currentChannel)) {
+    GLOB.currentChannel = 1;
+    if (currentMode == &singleMode) {
+      GLOB.y = 2;
+      currentMode->pos[0] = 2;
+      Encoder[0].writeCounter((int32_t)2);
+    }
+  }
+
+  for (int ch = 0; ch < maxY; ch++) {
+    bool childMuted = isChildVoiceMuted(ch);
+    globalMutes[ch] = childMuted;
+    SMP.globalMutes[ch] = childMuted;
+    SMP.mute[ch] = childMuted ? 1u : 0u;
+    for (int page = 0; page < maxPages; page++) {
+      pageMutes[page][ch] = childMuted;
+      SMP.pageMutes[page][ch] = childMuted;
+    }
+  }
+
+  for (int noteValue = 0; noteValue <= 107; noteValue++) {
+    stopSound(noteValue, 0);
+    stopSound(noteValue, 1);
+  }
+  stopSynthChannel(13);
+  stopSynthChannel(14);
+  resetMidiPressedKeyCount11to14();
+
+  if (currentMode == &draw || currentMode == &singleMode) {
+    currentMode->pos[1] = 1;
+    currentMode->pos[3] = GLOB.x;
+    Encoder[1].writeMin((int32_t)1);
+    Encoder[1].writeMax((int32_t)1);
+    Encoder[1].writeCounter((int32_t)1);
+    Encoder[3].writeMax((int32_t)maxX);
+    Encoder[3].writeCounter((int32_t)GLOB.x);
+  }
+}
+
 //EXTMEM int16_t fastRecBuffer[MAX_CHANNELS][BUFFER_SAMPLES];
 EXTMEM static size_t fastRecWriteIndex[MAX_CHANNELS];
 bool fastRecordActive = false;
@@ -1124,6 +1230,11 @@ void allOff() {
 
 
 FLASHMEM void setVelocity() {
+  if (childLockEnabled) {
+    switchMode(GLOB.singleMode ? &singleMode : &draw);
+    return;
+  }
+
   // Update velocity (encoder[0])
   if (currentMode->pos[0] != GLOB.velocity) {
     GLOB.velocity = currentMode->pos[0];
@@ -1385,7 +1496,7 @@ void refreshCtrlEncoderConfig() {
   if (ctrlMode == 0) {
     resetCtrlModeState();
     updateLastPage();
-    int adjustedMax = SMP_PATTERN_MODE ? lastPage : (MAX_STEPS / maxX);
+    int adjustedMax = childLockEnabled ? 1 : (SMP_PATTERN_MODE ? lastPage : (MAX_STEPS / maxX));
     if (adjustedMax < 1) adjustedMax = 1;
 
     currentMode->minValues[1] = 1;
@@ -1415,6 +1526,11 @@ void refreshCtrlEncoderConfig() {
 }
 
 void switchMode(Mode *newMode) {
+  if (childLockEnabled && (newMode == &filterMode || newMode == &velocity || newMode == &subpatternMode)) {
+    newMode = GLOB.singleMode ? &singleMode : &draw;
+  }
+  enforceChildModeRestrictions();
+
   // Debounce rapid mode switching to prevent corruption during play (e.g. filter/menu/draw thrashing)
   static unsigned long lastModeSwitchTime = 0;
   const unsigned long MODE_SWITCH_DEBOUNCE_MS = 80;
@@ -1501,7 +1617,7 @@ void switchMode(Mode *newMode) {
 
     // When entering draw/single, restore X (encoder 3) from grid position, not prior mode state
     if (currentMode == &draw || currentMode == &singleMode) {
-      int maxStepsRuntime = (int)MAX_STEPS;
+      int maxStepsRuntime = childLockEnabled ? (int)maxX : (int)MAX_STEPS;
       GLOB.x = constrain(GLOB.x, 1, maxStepsRuntime);
       currentMode->pos[3] = GLOB.x;
     }
@@ -1517,7 +1633,9 @@ void switchMode(Mode *newMode) {
       // Special handling for encoder 1 (page control)
       if (i == 1 && (currentMode == &draw || currentMode == &singleMode)) {
         if (ctrlMode == 0) {
-          if (SMP_PATTERN_MODE) {
+          if (childLockEnabled) {
+            maxVal = 1;
+          } else if (SMP_PATTERN_MODE) {
             updateLastPage();
             maxVal = lastPage;
           } else {
@@ -1612,6 +1730,7 @@ void switchMode(Mode *newMode) {
 
     if (currentMode == &draw || currentMode == &singleMode) {
       refreshCtrlEncoderConfig();
+      enforceChildModeRestrictions();
     } else {
       resetCtrlModeState();
     }
@@ -1760,7 +1879,7 @@ void checkFastRec() {
     // CLIC mode: touch3 adds a trigger at current beat for current voice (y), no notes deleted
     if (recChannelClear == 4 && isNowPlaying && currentTouchState && !lastTouchState[2]) {
       bool validRow = (currentMode == &draw && isPaintableDrawRow(GLOB.y)) || (currentMode == &singleMode && GLOB.y >= 1 && GLOB.y <= 15);
-      if (beat >= 1 && beat <= maxlen && GLOB.y >= 1 && GLOB.y <= (int)maxY && GLOB.currentChannel >= 0 && GLOB.currentChannel <= 15 && validRow) {
+      if (beat >= 1 && beat <= maxlen && GLOB.y >= 1 && GLOB.y <= (int)maxY && GLOB.currentChannel >= 0 && GLOB.currentChannel <= 15 && validRow && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
         note[beat][GLOB.y].channel = GLOB.currentChannel;
         note[beat][GLOB.y].velocity = defaultVelocity;
         note[beat][GLOB.y].probability = 100;
@@ -1901,7 +2020,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  if (GLOB.y != 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
+  if (!childLockEnabled && GLOB.y != 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
     if (!muteModeActive) {
       muteModeActive = true;
       muteModeReturn = currentMode;
@@ -1910,7 +2029,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  if (GLOB.y == 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
+  if (!childLockEnabled && GLOB.y == 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
                                                                                                                                                                                               //switch subpattern
     switchMode(&subpatternMode);
     GLOB.singleMode = (currentMode == &singleMode);
@@ -2060,7 +2179,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46)) ||
-        (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41)));
+        (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48)));
     if (mainSetting != 15 && !encoder2ValuePage) {
       switchMenu(mainSetting);
     }
@@ -2202,7 +2321,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     switchMode(&volume_bpm);
   }
 
-  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 2, 0) && was_buttons_0000(oldButtons)) {  // "0020" - must be 0000 before
+  if (!childLockEnabled && (currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 2, 0) && was_buttons_0000(oldButtons)) {  // "0020" - must be 0000 before
     if (GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15) return;
 
     // Only update currentChannel from y-position if in draw mode (not single mode)
@@ -2225,7 +2344,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   // Velocity mode entry on encoder(3) long press - skip in R mode
   extern int drawMode;
-  if (drawMode == 0) {
+  if (drawMode == 0 && !childLockEnabled) {
     // L+R mode: allow velocity mode entry on encoder(3) long press
     if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
       unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
@@ -2425,7 +2544,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     //set loaded sample
   }
 
-  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
+  if (!childLockEnabled && (currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     // At y==1 in draw mode with CTRL==VOL: cycle input monitoring (off -> on -> all -> off)
     if (currentMode == &draw && GLOB.y == 1 && ctrlMode == 1) {
       inputMonitoringState = (inputMonitoringState + 1) % 3;  // Cycle: 0->1->2->0
@@ -2521,7 +2640,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
     extern int drawMode;
-    if (drawMode == 1 && GLOB.y < 16) {
+    if (!childLockEnabled && drawMode == 1 && GLOB.y < 16) {
       if (millis() < suppressDrawRMuteUntilMs) {
         return;
       }
@@ -2542,7 +2661,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
     extern int drawMode;
     // In R mode, mirror 1000 behavior: long-press encoder(0) toggles global mute.
-    if (drawMode == 1 && GLOB.y < 16) {
+    if (!childLockEnabled && drawMode == 1 && GLOB.y < 16) {
       // If this long press targets velocity editing, suppress mute toggle.
       if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0) {
         suppressDrawRMuteUntilMs = millis() + 800;
@@ -2575,7 +2694,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   if (currentMode == &singleMode && match_buttons(currentButtonStates, 3, 0, 0, 0)) {  // "3000"
     GLOB.currentChannel = GLOB.y - 1;                                                  // Set currentChannel based on Y position when exiting single mode
     switchMode(&draw);
-  } else if (currentMode == &draw && match_buttons(currentButtonStates, 3, 0, 0, 0) && ((GLOB.currentChannel >= 1 && GLOB.currentChannel <= maxFiles) || GLOB.currentChannel > 12)) {  // "3000"
+  } else if (currentMode == &draw && match_buttons(currentButtonStates, 3, 0, 0, 0) && !isChildVoiceDisabled((int)GLOB.currentChannel) && ((GLOB.currentChannel >= 1 && GLOB.currentChannel <= maxFiles) || GLOB.currentChannel > 12)) {  // "3000"
     GLOB.currentChannel = GLOB.currentChannel;
     switchMode(&singleMode);
     GLOB.singleMode = true;
@@ -2996,6 +3115,12 @@ FLASHMEM void loadLedModeEarlyFromEEPROM() {
 }
 
 void setup() {
+  Serial.begin(115200);
+  if (exttouch) {
+    pinMode(5, INPUT_PULLDOWN);
+    pinMode(22, INPUT_PULLDOWN);
+  }
+
   //delay the LED-Matrix-Power on
   pinMode(36, OUTPUT);
   digitalWrite(36, LOW);   // keep LEDs off during early boot
@@ -3008,11 +3133,7 @@ void setup() {
   // Priority 64 = higher priority for faster MIDI input handling (was 112)
   NVIC_SET_PRIORITY(IRQ_LPUART8, 64);  // MIDI serial interrupt priority
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
-  Serial.begin(115200);
-  
-  // Configure SWITCH_1 pin immediately for EEPROM clear detection
-  pinMode(SWITCH_1, INPUT_PULLDOWN);
-  
+
   // Avoid allocations / fragmentation when scheduling sample triggers
   pendingSampleNotes.reserve(64);
   
@@ -3032,7 +3153,7 @@ void setup() {
   loadLedModeEarlyFromEEPROM();
   
   // Check for EEPROM clear request (SWITCH_1 held during startup)
-  int switch1Value = fastTouchRead(SWITCH_1);
+  int switch1Value = readTouch1Raw();
   if (switch1Value > touchThreshold) {  // Switch is pressed (same threshold as SWITCH_2 hourglass check)
     // Clear screen to black background
     extern void FastLEDclear();
@@ -3139,7 +3260,7 @@ void setup() {
 
 
   // Check if touch2 (menu button) is pressed during startup for INIT mode
-  int touch2Value = fastTouchRead(SWITCH_2);
+  int touch2Value = readTouch2Raw();
   if (touch2Value > touchThreshold) {
     // INIT MODE: Show hourglass, version, write reset flag file, and enter endless loop
     FastLEDclear();
@@ -3531,7 +3652,7 @@ void checkEncoders() {
     if (posHash != oldPosHash) {
       oldPosHash = posHash;
       static int lastY = -1;
-      int maxStepsRuntime = (int)MAX_STEPS;  // total grid length, independent of modules
+      int maxStepsRuntime = childLockEnabled ? (int)maxX : (int)MAX_STEPS;  // child mode stays on page 1
       currentMode->pos[3] = constrain(currentMode->pos[3], 1, maxStepsRuntime);
       Encoder[3].writeMax((int32_t)maxStepsRuntime);
       GLOB.x = currentMode->pos[3];
@@ -3586,7 +3707,11 @@ void checkEncoders() {
       // In FLOW mode while playing, the display page is owned by the timer-follow logic.
       extern bool songModeActive;
       extern int patternMode;
-      if (!songModeActive && !(SMP_FLOW_MODE && isNowPlaying)) {
+      if (childLockEnabled) {
+        GLOB.edit = 1;
+        editpage = 1;
+        GLOB.page = 1;
+      } else if (!songModeActive && !(SMP_FLOW_MODE && isNowPlaying)) {
         unsigned int newEditPage = getPage(GLOB.x);
         // In NEXT mode, update GLOB.edit (displayed page) when encoder(3) changes X position
         // This allows viewing different pages while playing continues on GLOB.page
@@ -3665,7 +3790,7 @@ void checkEncoders() {
     if ((GLOB.y >= 1 && GLOB.y <= 15)) {  // Paint/unpaint rows 1-15; draw-mode row 1 is filtered below
       if (paintMode && !preventPaintUnpaint) {
         // Continuous paint in draw mode only
-        if (currentMode == &draw && isPaintableDrawRow(GLOB.y)) {
+        if (currentMode == &draw && isPaintableDrawRow(GLOB.y) && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
           // Only set probability to 100% if slot was empty (preserve existing probability)
           if (note[GLOB.x][GLOB.y].channel == 0) {
             note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
@@ -3676,7 +3801,7 @@ void checkEncoders() {
         }
       }
       // Safety check: Only allow paintMode when actually in singleMode
-      if (paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
+      if (paintMode && currentMode == &singleMode && !preventPaintUnpaint && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
         // Single mode: allow painting on all y rows 1-15 (no reserved rows)
         // Only set probability to 100% if slot was empty (preserve existing probability)
         if (note[GLOB.x][GLOB.y].channel == 0) {
@@ -3716,7 +3841,16 @@ void checkEncoders() {
     // Only allow encoder[1] page changes if NOT in song mode (song controls pages automatically)
     extern bool songModeActive;
     extern int patternMode;
-    if (ctrlMode == 0 && currentMode->pos[1] != editpage && !songModeActive) {
+    if (childLockEnabled && ctrlMode == 0) {
+      if (editpage != 1 || currentMode->pos[1] != 1) {
+        editpage = 1;
+        GLOB.edit = 1;
+        GLOB.page = 1;
+        pendingPage = 0;
+        currentMode->pos[1] = 1;
+        Encoder[1].writeCounter((int32_t)1);
+      }
+    } else if (ctrlMode == 0 && currentMode->pos[1] != editpage && !songModeActive) {
       updateLastPage();
       editpage = currentMode->pos[1];
 
@@ -3945,7 +4079,7 @@ void checkEncoders() {
 
         Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
 
-        if (volumeChanged && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
+        if (!childLockEnabled && volumeChanged && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
           int effectiveVol = protectedChannel ? actualVol : requestedVol;
           bool shouldMute = (effectiveVol == 0);
           setMuteState(GLOB.currentChannel, shouldMute);
@@ -4080,8 +4214,8 @@ void checkTouchInputs() {
   // static bool lastBothTouched = false; // Already global
 
   // 1) read raw touch values
-  int tv1 = fastTouchRead(SWITCH_1);
-  int tv2 = fastTouchRead(SWITCH_2);
+  int tv1 = readTouch1Raw();
+  int tv2 = readTouch2Raw();
   int tv3 = fastTouchRead(SWITCH_3);
 
   // Any touch held or tapped counts as user activity (exits / prevents screensaver)
@@ -4297,6 +4431,28 @@ skip_individual_touch:
     unsigned long currentTime = millis();
     const unsigned long DEBOUNCE_TIME = 50;  // 50ms debounce
 
+    // Child lock state machine: when enabled, require touch2 then touch1 to enter menu
+    static bool childLockTouch2Pressed = false;
+    static unsigned long childLockTouch2Time = 0;
+    const unsigned long CHILD_LOCK_TIMEOUT_MS = 2000;  // 2 second window to press touch1 after touch2
+
+    // Reset child lock state if timeout
+    if (childLockTouch2Pressed && (currentTime - childLockTouch2Time > CHILD_LOCK_TIMEOUT_MS)) {
+      childLockTouch2Pressed = false;
+    }
+
+    // Child lock sequence: check BEFORE touchConflict to allow touch1 while touch2 is held
+    if (childLockTouch2Pressed && touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME)) {
+      if (currentMode == &draw || currentMode == &singleMode) {
+        lastTouchTime[0] = currentTime;
+        childLockTouch2Pressed = false;
+        extern bool menuEnteredFromSingleMode;
+        menuEnteredFromSingleMode = (currentMode == &singleMode);
+        switchMode(&menu);
+        goto end_switch1;
+      }
+    }
+
     // SWITCH_1
     if (touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME) && !touchConflict) {
       lastTouchTime[0] = currentTime;
@@ -4310,11 +4466,11 @@ skip_individual_touch:
           lastTouch1PlayTime = currentTime;
           play(true);
         }
-        return;
+        goto end_switch1;
       }
 
       if (currentMode == &draw) {
-        if (!(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
+        if (childLockEnabled || !(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
           animateSingle();
         }
       } else if (currentMode == &menu) {
@@ -4335,14 +4491,40 @@ skip_individual_touch:
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     }
+end_switch1:
 
     // SWITCH_2
+
     if (currentMode != &filterMode && touchState[1] && !lastTouchState[1] && (currentTime - lastTouchTime[1] > DEBOUNCE_TIME) && !touchConflict) {
       lastTouchTime[1] = currentTime;
       if (currentMode == &draw || currentMode == &singleMode) {
-        extern bool menuEnteredFromSingleMode;
-        menuEnteredFromSingleMode = (currentMode == &singleMode);
-        switchMode(&menu);
+        extern bool getChildLockEnabled();
+        if (getChildLockEnabled()) {
+          // Child lock enabled: set flag, wait for touch1, and act like touch1 (toggle single mode)
+          childLockTouch2Pressed = true;
+          childLockTouch2Time = currentTime;
+          // Behave like touch1: toggle single mode
+          if (currentMode == &draw) {
+            if (childLockEnabled || !(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
+              animateSingle();
+            }
+          } else if (currentMode == &singleMode) {
+            switchMode(&draw);
+            GLOB.singleMode = false;
+            extern int drawMode;
+            if (drawMode == 0) {
+              Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+            } else {
+              Encoder[0].writeRGBCode(0x000000);
+            }
+            Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          }
+        } else {
+          // Child lock disabled: enter menu immediately
+          extern bool menuEnteredFromSingleMode;
+          menuEnteredFromSingleMode = (currentMode == &singleMode);
+          switchMode(&menu);
+        }
       } else if (currentMode == &newFileMode) {
         // Exit NEW mode without generating
         extern void resetNewModeState();
@@ -4490,6 +4672,13 @@ skip_individual_touch:
 }
 
 void animateSingle() {
+  if (isChildVoiceDisabled((int)GLOB.currentChannel)) {
+    GLOB.currentChannel = 1;
+    GLOB.y = 2;
+    currentMode->pos[0] = 2;
+    Encoder[0].writeCounter((int32_t)2);
+  }
+
   int yStart = GLOB.currentChannel;              // 0 to 15
   int yCenter = yStart + 1;                      // Because y grid is 1-based
   CRGB animCol = col_base[GLOB.currentChannel];  // Renamed to avoid conflict with global 'col'
@@ -4513,7 +4702,7 @@ void animateSingle() {
 }
 
 void checkSingleTouch() {
-  int touchValue = fastTouchRead(SWITCH_1);
+  int touchValue = readTouch1Raw();
 
   // Determine if the touch is above the threshold
   touchState[0] = (touchValue > touchThreshold);
@@ -4600,7 +4789,7 @@ void checkSingleTouch() {
 }
 
 void _checkMenuTouch() {
-  int touchValue = fastTouchRead(SWITCH_2);
+  int touchValue = readTouch2Raw();
 
   // Determine if the touch is above the threshold
   touchState[1] = (touchValue > touchThreshold);
@@ -4815,7 +5004,9 @@ void checkPendingSampleNotes() {
     }
 
     if (isDue) {
-      _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, true);
+      if (!isChildVoiceDisabled((int)ev.channel)) {
+        _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, true);
+      }
       pendingSampleNotes[i] = pendingSampleNotes.back();
       pendingSampleNotes.pop_back();
       continue;  // re-check this index
@@ -5298,7 +5489,9 @@ void loop() {
     pendingPauseUIUpdate = false;
     updateLastPage();
     if (currentMode == &draw || currentMode == &singleMode) {
-      if (ctrlMode == 0 && SMP_PATTERN_MODE) {
+      if (childLockEnabled) {
+        enforceChildModeRestrictions();
+      } else if (ctrlMode == 0 && SMP_PATTERN_MODE) {
         Encoder[1].writeMax((int32_t)lastPage);
       } else if (ctrlMode == 1) {
         refreshCtrlEncoderConfig();
@@ -5322,7 +5515,7 @@ void loop() {
   // ONLY difference: the visible page follows the beat being played (beatForUI).
   // Do page-follow work in the main loop to avoid mid-frame flicker.
   // Do NOT touch encoder 1 when CTRL-VOL is active (ctrlMode==1).
-  if (SMP_FLOW_MODE && isNowPlaying && (currentMode == &draw || currentMode == &singleMode)) {
+  if (!childLockEnabled && SMP_FLOW_MODE && isNowPlaying && (currentMode == &draw || currentMode == &singleMode)) {
     static uint16_t lastAppliedFlowPage = 0;
     // 32-bit read on ARM is atomic; avoid masking interrupts to keep MIDI clock tight.
     uint16_t bf = beatForUI;
@@ -5594,7 +5787,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       pressed[0] = false;
       unpaint();
     }
-  } else {
+  } else if (!childLockEnabled) {
     // R mode: encoder(3) short press is handled in checkMode() using button events
     // encoder(0) velocity editor is handled below
 
@@ -5688,6 +5881,10 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   if (currentMode == &set_Wav && pressed[1] == true && !isRecording) {
     pressed[1] = false;
     reversePreviewSample();
+  }
+
+  if (childLockEnabled && (currentMode == &filterMode || currentMode == &velocity || currentMode == &subpatternMode)) {
+    switchMode(GLOB.singleMode ? &singleMode : &draw);
   }
 
   // Set stateMashine
@@ -6070,6 +6267,8 @@ FLASHMEM void shiftNotes() {
   preventPaintUnpaint = false;
 }
 void tmpMuteAll(bool pressed) {
+  if (childLockEnabled) return;
+
   if (pressed) {
     // only on the *transition* into pressed do we save & mute
     if (!tmpMuteActive) {
@@ -6117,6 +6316,8 @@ static void syncMuteArraysToSmp() {
 }
 
 FLASHMEM void enterDrawRFullMute() {
+  if (childLockEnabled) return;
+
   memcpy(drawRGlobalMuteSavedGlobal, globalMutes, sizeof(globalMutes));
   memcpy(drawRGlobalMuteSavedPages, pageMutes, sizeof(pageMutes));
   drawRFullMuteState = DrawRFullMuteState::Active;
@@ -6169,6 +6370,8 @@ FLASHMEM void exitDrawRFullMute(DrawRFullMuteUnmuteMode mode) {
 
 
 FLASHMEM void toggleMute() {
+  if (childLockEnabled) return;
+
   // Use getMuteStateForUI() to get mute state from the displayed page (GLOB.edit),
   // not the playing page (GLOB.page). This ensures toggling works correctly in NEXT mode.
   bool currentMuteState = getMuteStateForUI(GLOB.currentChannel);
@@ -6260,6 +6463,8 @@ void play(bool fromStart) {
       beat = 1;
       GLOB.page = 1;
     }
+
+    enforceChildModeRestrictions();
 
     // Reset loop count to 1 when starting playback (first loop)
     loopCount = 1;
@@ -6353,6 +6558,7 @@ void pause(bool skipSave) {
 
 
 void playSynth(int ch, int b, int vel, bool persistant) {
+  if (isChildVoiceDisabled(ch)) return;
   if (ch < 0 || ch >= 15) return;                // Bounds check for synths array
   if (!synths[ch][0] || !synths[ch][1]) return;  // Check if synth objects exist
 
@@ -6490,7 +6696,12 @@ void playNote() {
   // Track last edit page to detect page changes (static persists across function calls)
   static unsigned int lastEdit = GLOB.edit;
 
-  if (SMP_PATTERN_MODE) {
+  if (childLockEnabled) {
+    GLOB.edit = 1;
+    GLOB.page = 1;
+    pendingPage = 0;
+    if (beat < 1 || beat > maxX) beat = 1;
+  } else if (SMP_PATTERN_MODE) {
     extern bool songModeActive;
     extern int patternMode;
 
@@ -6612,7 +6823,7 @@ void playNote() {
       uint8_t cond = note[beat][b].condition;    // Get condition (1, 2, 4 for 1, 1/2, 1/4)
       if (cond == 0) cond = 1;                   // Default to 1 if not set
 
-      if (ch > 0 && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
+      if (ch > 0 && !isChildVoiceDisabled(ch) && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
 
 
         // Check condition - skip if not the right loop iteration
@@ -6720,6 +6931,7 @@ void playNote() {
       GLOB.page = 1;
     }
     if (fastRecordActive) stopFastRecord();
+    enforceChildModeRestrictions();
     isNowPlaying = true;      // Should already be true if MIDI clock started it
     waitForFourBars = false;  // Reset for the next start message
   }
@@ -6862,6 +7074,14 @@ void playNote() {
 void checkPages() {
   extern bool songModeActive;
   extern int currentSongPosition;
+
+  if (childLockEnabled) {
+    GLOB.edit = 1;
+    GLOB.page = 1;
+    pendingPage = 0;
+    if (beat < 1 || beat > maxX) beat = 1;
+    return;
+  }
 
   // Check song mode FIRST, before SMP_PATTERN_MODE
   if (songModeActive) {
@@ -7052,6 +7272,8 @@ void playFillNote() {
 
   // Trigger the fill note (ignore MIDI as requested).
   const int ch = fillActiveChannel;
+  if (isChildVoiceDisabled(ch)) return;
+
   const int vel = (fillActiveVelocity == 0) ? defaultVelocity : fillActiveVelocity;
   const unsigned int row = fillActiveRow;
 
@@ -7079,6 +7301,7 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   Note &cell = note[globalX][y];
   int channel = cell.channel;
   if (channel == 0) return;
+  if (isChildVoiceDisabled(channel)) return;
 
   // Don't trigger muted voices
   if (getMuteState(channel)) return;
@@ -7115,7 +7338,7 @@ void paint() {
   unsigned int current_x = GLOB.x;  // Use global cursor X
   unsigned int current_y = GLOB.y;  // Use global cursor Y
 
-  bool channelBlocked = (GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12);
+  bool channelBlocked = (GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || isChildVoiceDisabled((int)GLOB.currentChannel));
 
   if (!GLOB.singleMode) {  // Draw mode
     // current_y is 1-16. GLOB.currentChannel is 0-14.
@@ -7164,7 +7387,9 @@ void paint() {
     int painted_velocity = note[current_x][current_y].velocity;
     int pitch_from_row = current_y;  // 1-16
 
-    if (painted_channel > 0 && painted_channel < 9) {  // Sampler channels
+    if (isChildVoiceDisabled(painted_channel)) {
+      // Disabled in CHILD mode.
+    } else if (painted_channel > 0 && painted_channel < 9) {  // Sampler channels
       // Play sample as normal
       int pitch = 12 * SampleRate[painted_channel] + pitch_from_row - (painted_channel + 1);
 
@@ -8026,6 +8251,10 @@ FLASHMEM void initPageMutes() {
 // Get mute state for a channel, considering PMOD setting
 // For PLAYBACK: uses playing page in NEXT mode, edit page otherwise
 FLASHMEM bool getMuteState(int channel) {
+  if (childLockEnabled) {
+    return isChildVoiceMuted(channel);
+  }
+
   if (drawRFullMuteIsActive()) {
     return true;
   }
@@ -8046,6 +8275,10 @@ FLASHMEM bool getMuteState(int channel) {
 
 // Get mute state for UI display - always uses edit page (what you're viewing)
 FLASHMEM bool getMuteStateForUI(int channel) {
+  if (childLockEnabled) {
+    return isChildVoiceMuted(channel);
+  }
+
   if (drawRFullMuteIsActive()) {
     return true;
   }
@@ -8064,6 +8297,20 @@ FLASHMEM bool getMuteStateForUI(int channel) {
 
 // Set mute state for a channel, considering PMOD setting
 FLASHMEM void setMuteState(int channel, bool muted) {
+  if (childLockEnabled) {
+    if (channel >= 0 && channel < maxY) {
+      bool childMuted = isChildVoiceMuted(channel);
+      globalMutes[channel] = childMuted;
+      SMP.globalMutes[channel] = childMuted;
+      SMP.mute[channel] = childMuted ? 1u : 0u;
+      for (int page = 0; page < maxPages; page++) {
+        pageMutes[page][channel] = childMuted;
+        SMP.pageMutes[page][channel] = childMuted;
+      }
+    }
+    return;
+  }
+
   if (SMP_PATTERN_MODE) {
     // Set page-specific mute when PMOD is enabled
     extern int patternMode;
@@ -8103,12 +8350,26 @@ FLASHMEM void setMuteState(int channel, bool muted) {
 // Unmute all channels in audio system
 FLASHMEM void unmuteAllChannels() {
   for (int ch = 0; ch < maxY; ch++) {
-    SMP.mute[ch] = false;  // Unmute in audio system
+    bool childMuted = isChildVoiceMuted(ch);
+    SMP.mute[ch] = childMuted ? 1u : 0u;  // In CHILD, selected blocked voices stay muted
+    if (childLockEnabled) {
+      globalMutes[ch] = childMuted;
+      SMP.globalMutes[ch] = childMuted;
+      for (int page = 0; page < maxPages; page++) {
+        pageMutes[page][ch] = childMuted;
+        SMP.pageMutes[page][ch] = childMuted;
+      }
+    }
   }
 }
 
 // Apply saved mutes after PMOD switch
 FLASHMEM void applyMutesAfterPMODSwitch() {
+  if (childLockEnabled) {
+    unmuteAllChannels();
+    return;
+  }
+
   for (int ch = 0; ch < maxY; ch++) {
     bool muteState = getMuteState(ch);
     SMP.mute[ch] = muteState;  // Apply to audio system

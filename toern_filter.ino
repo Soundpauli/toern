@@ -92,7 +92,7 @@ void forceAllMixerGainsToTarget() {
 void setFilters(FilterType filterType, int index, bool initial) {
   // Map encoder value to filter setting
   float mappedValue = 0.0;
-  if (filterType == PASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.0, 9000.0);
+  if (filterType == PASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 281.25, 9000.0);
 
   //if (filterType == LOWPASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 9000);
   //if (filterType == HIGHPASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 9000);
@@ -147,9 +147,6 @@ void setFilters(FilterType filterType, int index, bool initial) {
         }
         if (initial) break;
         filters[index]->frequency(mappedValue);
-        setMixerGainSmooth(index, 0, 0.0, 64);  // Dry signal off
-        setMixerGainSmooth(index, 1, 1.0, 64);  // Lowpass on
-        setMixerGainSmooth(index, 2, 0.0, 64);  // Highpass off
         break;
       }
 

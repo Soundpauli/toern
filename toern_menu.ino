@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 5
 #define VOL_PAGES_COUNT 6
-#define ETC_PAGES_COUNT 6
+#define ETC_PAGES_COUNT 7
 
 // External variables
 extern Mode *currentMode;
@@ -114,6 +114,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
   {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
   {"BATT", 42, false, nullptr},          // Battery remaining % (3.7V LiPo on pin 0)
+  {"CHLD", 48, false, nullptr},          // Child lock: require touch2->touch1 to enter menu
   {"RSET", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
 };
 
@@ -682,6 +683,18 @@ FLASHMEM void loadMenuFromEEPROM() {
     saveSingleModeToEEPROM(27, 1);
   }
   setSpkrEnabled(spkrEnabled);
+
+  // Load childLockEnabled from EEPROM (stored at EEPROM_DATA_START + 36)
+  extern bool getChildLockEnabled();
+  extern void setChildLockEnabled(bool enabled);
+  uint8_t childLockValue = EEPROM.read(EEPROM_DATA_START + 36);
+  bool childLockEnabled = (childLockValue != 0);
+  if (childLockValue > 1) {
+    // Invalid value, default to OFF
+    childLockEnabled = false;
+    saveSingleModeToEEPROM(36, 0);
+  }
+  setChildLockEnabled(childLockEnabled);
 
   // Load midiNoteReceive from EEPROM (slot 28)
   extern bool MIDI_NOTE_RECEIVE;
@@ -1520,7 +1533,7 @@ FLASHMEM void showEtcMenu() {
       // ETC submenu: encoder 2 = value on LGHT(40), COLR(41)
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
       CRGB indicatorColor = currentMenuParentTextColor();
-      const bool etcValuePage = (mainSetting == 40 || mainSetting == 41);
+      const bool etcValuePage = (mainSetting == 40 || mainSetting == 41 || mainSetting == 48);
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
       Encoder[2].writeRGBCode(etcValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -1827,7 +1840,18 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText(pctText, 2, 3, stateColor);
       }
       break;
-      
+
+    case 48: // CHLD - Child lock toggle (OFF/ON) - encoder 3
+      {
+        extern bool getChildLockEnabled();
+        const CRGB tc = currentMenuParentTextColor();
+        drawText("CHLD", 2, 10, tc);
+        bool enabled = getChildLockEnabled();
+        drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+        drawIndicator('L', enabled ? 'G' : 'R', 3);
+      }
+      break;
+
     case 19: // PLAY - Submenu
       // PLAY = settings icon
       {
@@ -2524,6 +2548,32 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = encVal;
         lastSpkrEnc = encVal;
         saveSingleModeToEEPROM(27, (int8_t)(encVal ? 1 : 0));
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 48: { // CHLD - Child lock (OFF/ON) via encoder 2 rotation
+      static int lastChldEnc = -1;
+      extern bool getChildLockEnabled();
+      extern void setChildLockEnabled(bool);
+      int encVal = getChildLockEnabled() ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastChldEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastChldEnc) {
+        setChildLockEnabled(currentMode->pos[2] == 1);
+        encVal = getChildLockEnabled() ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastChldEnc = encVal;
+        saveSingleModeToEEPROM(36, (int8_t)(encVal ? 1 : 0));
         menuRequestFullRedraw();
         redrawMain(setting);
       }
@@ -3778,7 +3828,7 @@ void switchMenu(int menuPosition){
         menuRequestFullRedraw();  // Force VOL submenu to redraw with new state
         break;
       }
-      
+
       case 41: {
         // COLR - Color scheme selection: toggle through 0->1->2->3->0
         // 0 = default, 1 = scheme 1, 2 = scheme 2, 3 = custom from scheme.txt

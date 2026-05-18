@@ -1058,8 +1058,8 @@ FLASHMEM static void drawScreensaverMatrix() {
   const bool asleep = (idleMs >= 90000UL);  // After 90s total (60s to start + 30s more)
   
   // Eye outline dimmer than pupils - pupils are bright white
-  const uint8_t outlineBrightness = asleep ? 4 : 30;
-  const uint8_t pupilBrightness = asleep ? 2 : 80;
+  const uint8_t outlineBrightness = asleep ? 18 : 15;
+  const uint8_t pupilBrightness = asleep ? 18 : 80;
   const CRGB eyeColor = CRGB(outlineBrightness, outlineBrightness, outlineBrightness);
   const CRGB pupilColor = CRGB(pupilBrightness, pupilBrightness, pupilBrightness);
   
@@ -1097,25 +1097,9 @@ FLASHMEM static void drawScreensaverMatrix() {
     dreamPhase = 0;
   }
   
-  // Peek: occasionally open one eye while asleep (~every 3 minutes for 1500ms)
-  static uint32_t lastPeekMs = 0;
-  static uint32_t nextPeekInterval = 180000;
+  // Peek disabled - eyes stay closed while asleep
   static bool isPeeking = false;
-  static bool peekLeftEye = true;  // Which eye peeks
-  
-  if (asleep) {
-    if (!isPeeking && (now - lastPeekMs >= nextPeekInterval)) {
-      isPeeking = true;
-      lastPeekMs = now;
-      peekLeftEye = (now % 2) == 0;  // Randomly pick which eye
-    }
-    if (isPeeking && (now - lastPeekMs >= 1500)) {
-      isPeeking = false;
-      nextPeekInterval = 180000;  // 3 minutes
-    }
-  } else {
-    isPeeking = false;
-  }
+  static bool peekLeftEye = false;
   
   // Blink state: blink every ~3-5 seconds for ~150ms (when awake)
   static uint32_t lastBlinkMs = 0;
