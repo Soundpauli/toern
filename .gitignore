@@ -7,3 +7,5 @@ BOM_KOSTEN.xlsx
 .history/
 _shooting/
 netlify.toml
+# Local Netlify folder
+.netlify

@@ -522,7 +522,7 @@ DMAMEM bool lastTouchState[4] = { false };  // Previous touch state
 const int touchThreshold = 45; //45 for M1
 
 /** When true, touch1/touch2 use TTP223 on pins 5 & 22 (digital, INPUT_PULLDOWN) instead of fastTouchRead on SWITCH_1/2. */
-static const bool exttouch = true;
+static const bool exttouch = false;
 
 int readTouch1Raw() {
   if (exttouch) return digitalRead(5) ? (touchThreshold + 1) : 0;
@@ -3485,26 +3485,34 @@ int getBatteryPercent() {
   return constrain(result, 0, 100);
 }
 
-// Battery warning state (checked every minute, shown for 5 seconds if < 20% but >= 1%)
+// Battery warning: two samples 5s apart each minute (55s + 60s); show 5s only if both match and are 1..15%
 bool getBatteryWarningActive() {
-  static elapsedMillis batteryCheckTimer;
+  static elapsedMillis batteryCycleTimer;
   static bool batteryWarningActive = false;
   static elapsedMillis batteryWarningTimer;
+  static int pendingPct = -1;
+  static bool firstSampleDone = false;
 
-  if (batteryCheckTimer >= 60000) {  // Every 60 seconds
-    batteryCheckTimer = 0;
+  if (!firstSampleDone && batteryCycleTimer >= 55000) {
     int pct = getBatteryPercent();
-    // Show warning only if battery is between 1% and 20% (skip below 1% to avoid false warnings when USB-powered)
-    if (pct >= 1 && pct < 20) {
-      batteryWarningActive = true;
-      batteryWarningTimer = 0;  // Start 5-second timer
-    }
+    pendingPct = (pct >= 1 && pct <= 15) ? pct : -1;
+    firstSampleDone = true;
   }
 
-  // Show warning for 5 seconds
+  if (firstSampleDone && batteryCycleTimer >= 60000) {
+    batteryCycleTimer = 0;
+    firstSampleDone = false;
+    int pct = getBatteryPercent();
+    if (pendingPct >= 0 && pct == pendingPct && pct >= 1 && pct <= 15) {
+      batteryWarningActive = true;
+      batteryWarningTimer = 0;
+    }
+    pendingPct = -1;
+  }
+
   if (batteryWarningActive) {
     if (batteryWarningTimer >= 5000) {
-      batteryWarningActive = false;  // Hide after 5 seconds
+      batteryWarningActive = false;
     } else {
       return true;
     }
