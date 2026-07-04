@@ -1289,3 +1289,57 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   strncpy(SMP.samplePathRel[targetChannel], SMP.samplePathRel[GLOB.currentChannel], 127);
   SMP.samplePathRel[targetChannel][127] = 0;
 }
+
+void soloRandomPreviewCurrentVoice() {
+  int ch = constrain((int)GLOB.currentChannel, 1, 8);
+
+  char rel[SAMPLE_BROWSER_PATH_MAX];
+  if (!soloRandomPickPath(rel, sizeof(rel))) return;
+
+  strncpy(SMP.samplePathRel[ch], rel, 127);
+  SMP.samplePathRel[ch][127] = 0;
+
+  char OUTPUTf[160];
+  snprintf(OUTPUTf, sizeof(OUTPUTf), "samples/%s", rel);
+  if (!SD.exists(OUTPUTf)) return;
+
+  stopPeakScan();
+  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  envelope0.noteOff();
+
+  GLOB.seek = 0;
+  GLOB.seekEnd = 100;
+  previewCache.valid = false;
+  previewCache.lengthBytes = 0;
+  previewCache.plen = 0;
+
+  previewIsPlaying = true;
+  updatePreviewVolume();
+  yield();
+  playSdWav1.play(OUTPUTf);
+}
+
+void soloRandomLoadLastPreview() {
+  int ch = constrain((int)GLOB.currentChannel, 1, 8);
+  const char* rel = soloRandomGetLastPreviewPath();
+  if (!rel || !rel[0]) return;
+
+  char OUTPUTf[160];
+  snprintf(OUTPUTf, sizeof(OUTPUTf), "samples/%s", rel);
+  if (!SD.exists(OUTPUTf)) return;
+
+  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  previewIsPlaying = false;
+
+  strncpy(SMP.samplePathRel[ch], rel, 127);
+  SMP.samplePathRel[ch][127] = 0;
+
+  GLOB.seek = 0;
+  GLOB.seekEnd = 100;
+  previewCache.valid = false;
+
+  loadPreviewToChannel((unsigned int)ch, true);
+  copySampleToSamplepack0((unsigned int)ch, true);
+  saveSp0StateToEEPROM();
+  flushSettingsBackupNow();
+}

@@ -100,6 +100,11 @@ uint16_t manifestFolderCount = 0;
 bool loadSampleManifest() { return false; }
 bool scanAndWriteManifest() { return true; }
 
+EXTMEM char g_soloRandomPaths[BROWSE_MAX_TMP][SAMPLE_BROWSER_PATH_MAX];
+uint16_t g_soloRandomWavCount = 0;
+static char g_soloRandomLastRel[SAMPLE_BROWSER_PATH_MAX] = {0};
+static bool g_soloRandomListDirty = true;
+
 EXTMEM char g_browseDir[maxFiles][SAMPLE_BROWSER_PATH_MAX];
 // Combined browser list on last encoder: [../] (when not at root), dirs first, then files.
 EXTMEM char g_folderPickName[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
@@ -137,6 +142,86 @@ static void copyBaseName64(const char* rawName, char* out, size_t outSz) {
   out[outSz - 1] = 0;
 }
 
+static void soloRandomScanDir(const char* relDir, uint16_t* count) {
+  char fullPath[160];
+  if (relDir && relDir[0]) {
+    snprintf(fullPath, sizeof(fullPath), "samples/%s", relDir);
+  } else {
+    snprintf(fullPath, sizeof(fullPath), "samples");
+  }
+
+  File dir = SD.open(fullPath);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return;
+  }
+
+  File fe;
+  while ((fe = dir.openNextFile()) && *count < BROWSE_MAX_TMP) {
+    char base[SAMPLE_BROWSER_NAME_MAX];
+    copyBaseName64(fe.name(), base, sizeof(base));
+    if (!base[0] || base[0] == '.') {
+      fe.close();
+      continue;
+    }
+
+    if (fe.isDirectory()) {
+      char subRel[SAMPLE_BROWSER_PATH_MAX];
+      if (relDir && relDir[0]) {
+        snprintf(subRel, sizeof(subRel), "%s/%s", relDir, base);
+      } else {
+        snprintf(subRel, sizeof(subRel), "%s", base);
+      }
+      fe.close();
+      soloRandomScanDir(subRel, count);
+    } else if (hasWavExt(base)) {
+      char entry[SAMPLE_BROWSER_PATH_MAX];
+      if (relDir && relDir[0]) {
+        snprintf(entry, sizeof(entry), "%s/%s", relDir, base);
+      } else {
+        snprintf(entry, sizeof(entry), "%s", base);
+      }
+      strncpy(g_soloRandomPaths[*count], entry, SAMPLE_BROWSER_PATH_MAX - 1);
+      g_soloRandomPaths[*count][SAMPLE_BROWSER_PATH_MAX - 1] = 0;
+      (*count)++;
+      fe.close();
+    } else {
+      fe.close();
+    }
+    yield();
+  }
+  dir.close();
+}
+
+void soloRandomRefreshWavList() {
+  g_soloRandomWavCount = 0;
+  soloRandomScanDir("", &g_soloRandomWavCount);
+  g_soloRandomListDirty = false;
+}
+
+bool soloRandomPickPath(char* outRel, size_t outRelSize) {
+  if (g_soloRandomListDirty || g_soloRandomWavCount == 0) {
+    soloRandomRefreshWavList();
+  }
+  if (g_soloRandomWavCount == 0 || outRelSize == 0) {
+    if (outRelSize > 0) outRel[0] = 0;
+    return false;
+  }
+
+  uint16_t idx = (uint16_t)random(g_soloRandomWavCount);
+  const char* picked = g_soloRandomPaths[idx];
+  strncpy(outRel, picked, outRelSize - 1);
+  outRel[outRelSize - 1] = 0;
+
+  strncpy(g_soloRandomLastRel, picked, sizeof(g_soloRandomLastRel) - 1);
+  g_soloRandomLastRel[sizeof(g_soloRandomLastRel) - 1] = 0;
+  return true;
+}
+
+const char* soloRandomGetLastPreviewPath() {
+  return g_soloRandomLastRel[0] ? g_soloRandomLastRel : nullptr;
+}
+
 static void sortNameBlock(char names[][SAMPLE_BROWSER_NAME_MAX], int n) {
   for (int i = 0; i < n - 1; i++) {
     for (int j = i + 1; j < n; j++) {
@@ -171,9 +256,10 @@ static void browseDirGoParent(int ch) {
   else p[0] = 0;
 }
 
-void sampleBrowserInvalidate() { g_browseListDirty = true; }
-
-void sampleBrowserRefreshList(int channel);
+void sampleBrowserInvalidate() {
+  g_browseListDirty = true;
+  g_soloRandomListDirty = true;
+}
 
 // Highest valid index on the last encoder browse row (1-based on hardware, count on UI).
 int sampleBrowserBrowseIndexMax(int channel) {
@@ -482,6 +568,7 @@ void sampleBrowserClearAll() {
   g_wavPickCount = 0;
   g_wavFileCount = 0;
   g_browseListDirty = true;
+  g_soloRandomListDirty = true;
   manifestLoaded = false;
   manifestFolderCount = 0;
 }
