@@ -607,8 +607,6 @@ void showFilterNames(uint8_t chan) {
     }
     
     uint8_t page = filterPage[chan];
-    // Row-12 abbreviations: fixed 16px strip "A_D_S_R_" — 3px glyph + 1px gap (cols 1,5,9,13).
-    static const uint8_t filterAbbrevStripX[4] = { 1, 5, 9, 13 };
     for (uint8_t i = 0; i < 4; ++i) {
         const SliderDefEntry& def = sliderDef[chan][page][i];
         if (def.arr == ARR_NONE && def.idx == -1) continue;
@@ -617,7 +615,8 @@ void showFilterNames(uint8_t chan) {
         if (def.arr == ARR_FILTER && def.idx == REVERB && !channelHasFreeverb(chan)) {
           color = CRGB(4, 4, 4);
         }
-        uint8_t ax = filterAbbrevStripX[i];
+        uint8_t ax, ax1;
+        getFilterSliderCols(i, ax, ax1);
         if (ax > maxX) ax = maxX;
         drawText(abbrev, ax, 12, color);
     }
