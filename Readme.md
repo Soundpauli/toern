@@ -39,17 +39,19 @@ This project uses several external libraries, some of which have been modified f
 
 ### SD card over USB (Menu → ETC → SD)
 
-Open **Menu → ETC → SD** on the device (file server is active only while that page is open). With any USB Type that includes Serial (e.g. **Serial + MIDI**), use the standalone helper:
+TŒRN does **not** mount the microSD as USB mass storage. While **Menu → ETC → SD** is open (screen: WAIT → OK), you can browse and transfer files over USB Serial.
+
+**Primary (browser):** open [https://sdtool.tyng.app](https://sdtool.tyng.app) in desktop **Chrome or Edge**, click **Connect**, pick the Teensy serial port. Stay on ETC → SD for the whole session. WAV uploads are converted to 44.1 kHz mono 16-bit.
+
+**Secondary (local CLI / scripting):** with any USB Type that includes Serial (e.g. **Serial + MIDI**):
 
 ```bash
-cd website/tools/sd-tool-standalone
+cd tools/sd-tool-standalone
 pip install pyserial
-python3 toern_sd.py web
+python3 toern_sd.py -p /dev/cu.usbmodemXXXX list /
+# also: put / rm / mkdir / get
+python3 toern_sd.py web   # optional local UI at http://127.0.0.1:8787
 ```
-
-Or CLI: `python3 toern_sd.py -p /dev/cu.usbmodemXXXX list /` (also `put` / `rm` / `mkdir` / `get`).
-
-Web UI: `http://127.0.0.1:8787` — select the serial port and Connect.
 
 ---
 

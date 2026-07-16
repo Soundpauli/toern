@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Troubleshoot</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — when things look wrong.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="reference.html">14 · Screen index</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">15 · Troubleshoot</span>
+        </nav>
+
+        <section class="handbook-page" id="page-troubleshoot">
+          <h2 class="handbook-page__title">Troubleshooting</h2>
+          <p class="handbook-page__summary">Quick fixes for the surprises new owners hit most often, plus a careful walkthrough of the destructive reset ladder.</p>
+
+          <section class="hb-sub" id="faq">
+            <h2>"I expected X but got Y"</h2>
+            <div class="hb-faq">
+              <details>
+                <summary>The matrix is half-dark — only the top or bottom half lights up.</summary>
+                <p>You have one LED board, but the firmware is set to two-board geometry (or vice-versa). Open <a href="menus.html#play">PLAY → LEDS</a> and try <strong>1</strong>, <strong>1B</strong>, <strong>2</strong>, <strong>2B</strong> in turn — one will match your hardware. The "B" variants flip the image for boards mounted upside down.</p>
+              </details>
+              <details>
+                <summary>No sound on headphones.</summary>
+                <p>Check three places in order: <a href="menus.html#vol">VOL → MAIN</a> (level above 0), <a href="menus.html#vol">VOL → SPKR</a> (sometimes the speaker is overriding routing), and the headphone jack is fully seated. If line-out works but phones don't, you have a hardware fault — open the unit to inspect the TRS jack.</p>
+              </details>
+              <details>
+                <summary>Samples don't show up in the browser.</summary>
+                <p>The firmware caches the browse list. Run <a href="#reset">ETC → RSET → SD</a>: it rescans the card without touching your patterns. If they still don't appear, confirm the files are 16-bit mono WAV at 44.1 kHz and that the card was prepared with the layout from <a href="samples.html#card-layout">SD card setup</a>.</p>
+              </details>
+              <details>
+                <summary>SD tool cannot connect / no serial port.</summary>
+                <p>Use desktop <strong>Chrome or Edge</strong> at <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> — Android / Pixel usually cannot see the Teensy USB serial port. On the unit, stay on <a href="menus.html#sd">ETC → SD</a> (WAIT → OK). Opening the port can reboot the Teensy; if the screen leaves that page, open <strong>ETC → SD</strong> again after Connect. See <a href="samples.html#sd-tool">Samples → SD tool</a>.</p>
+              </details>
+              <details>
+                <summary>External MIDI is in sync but kicks click off by a few ms.</summary>
+                <p>Use <a href="tempo-midi.html#midi-menu">MIDI → SYNC</a>. SNC1 delays your outgoing path; SNC2 delays your incoming path. Loopback a metronome and adjust in ±2 ms steps until both kicks land as one. Save by leaving the page — settings persist.</p>
+              </details>
+              <details>
+                <summary>BPM number is red and won't settle.</summary>
+                <p>You are on EXT clock and the incoming MIDI clock is unstable or absent. Either fix the master (cable, source clock setting) or flip <a href="tempo-midi.html#bpm">BPM → encoder&nbsp;3</a> back to INT to use TŒRN's own clock.</p>
+              </details>
+              <details>
+                <summary>I switched packs and now my pattern sounds wrong.</summary>
+                <p>Packs change what each voice row plays. The pattern still references the same rows, but they now contain different samples. Either reload the previous pack (encoder&nbsp;1 short on the PACK screen with the right number), or — for next time — save a FILE pattern <em>per pack</em> and use the sidecar text file to associate them.</p>
+              </details>
+              <details>
+                <summary>I cleared the wrong page.</summary>
+                <p>There is no undo in RAM. If you previously saved to <a href="files.html#file">FILE</a>, reload that slot. Otherwise, it's gone. The handbook's golden rule: save to FILE when an idea matters.</p>
+              </details>
+              <details>
+                <summary>Battery percentage seems to lie.</summary>
+                <p>The reading is a fuel-gauge estimate from the charger IC. It is good faith but not lab-grade. Charge for at least one full cycle (USB until full, run until shutdown) before trusting the curve.</p>
+              </details>
+              <details>
+                <summary>Touch pads trigger by themselves.</summary>
+                <p>Capacitive pads detect skin contact. If your palms rest on the chassis while turning encoders, you may register phantom touches. Lift your grip; if it persists in dry conditions, a power cycle re-calibrates the pad baseline.</p>
+              </details>
+              <details>
+                <summary>Encoder feels jumpy — values fly when I turn slowly.</summary>
+                <p>The hardware encoders are I²C and can occasionally desync. Power-cycle the unit; on rare occasions, also re-seat the SD card. Persistent issues are a hardware fault.</p>
+              </details>
+              <details>
+                <summary>Long-press encoder 4 on a note doesn't open the editor.</summary>
+                <p>You are in paint mode (PLAY → DRAW = L+R) and encoder&nbsp;4 long is reserved differently. Switch DRAW to the default or use a single tap on encoder&nbsp;1 to enter single mode first.</p>
+              </details>
+              <details>
+                <summary>I see a moving dot when I'm not playing — what is it?</summary>
+                <p>If you see a <strong>bright dot with a short trail</strong> bouncing around your <strong>pattern in draw mode</strong> while <a href="menus.html#play">PLAY → PONG</a> is <strong>ON</strong>, that is <strong>PONG</strong>: each time the ball lands on a step that already holds a note, that note fires again. Turn <strong>PONG</strong> off from the same menu page, or open it to change <strong>speed</strong> (encoder&nbsp;2, 1–99). If you see a <strong>pair of cartoon eyes</strong> after long inactivity when <strong>not playing</strong>, that is the separate <strong>idle matrix animation</strong>, not PONG.</p>
+              </details>
+              <details>
+                <summary>Sample browser won't open — the touch combo seems to do nothing.</summary>
+                <p>The sample browser only opens on <strong>sample voices 1–8</strong>, with the <strong>left pad pressed first</strong>. If your cursor is on a synth row, the combo opens the filter editor instead. Move encoder&nbsp;1 to a sample row and retry.</p>
+              </details>
+              <details>
+                <summary>Note-shift exited without saving my moves.</summary>
+                <p>Note-shift saves continuously — once you exit with a short press on encoder&nbsp;4, the new positions are committed. If a particular nudge looked unsaved, you may have moved a note off the visible page range; check adjacent pages.</p>
+              </details>
+              <details>
+                <summary>Auto-preview is too loud.</summary>
+                <p>Drop <a href="menus.html#vol">VOL → PREV</a>, or switch <a href="menus.html#play">PLAY → PREV</a> from ON to PRSS so previews only fire on explicit gesture.</p>
+              </details>
+            </div>
+          </section>
+
+          <section class="hb-sub" id="reset">
+            <h2>The reset ladder (ETC → RSET)</h2>
+            <p class="lede">Three destructive levels live behind one encoder dial. Encoder&nbsp;3 rotates <code>resetMenuOption</code> through 0 → 1 → 2; a confirmation gesture executes the matching branch. <strong>Read each row before confirming.</strong></p>
+            <article class="hb-device">
+              <div class="hb-led-row">
+                <div><p class="hb-led-label">SD</p><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="et_rset" width="16" height="16" role="img" aria-label="RSET SD"></canvas></div></div>
+                <div><p class="hb-led-label">EFX</p><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="et_rset_efx" width="16" height="16" role="img" aria-label="RSET EFX"></canvas></div></div>
+                <div><p class="hb-led-label">FULL</p><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="et_rset_full" width="16" height="16" role="img" aria-label="RSET FULL"></canvas></div></div>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Mode</th><th>What runs</th><th>What survives</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>SD</strong></td><td>Invalidates the dynamic sample browser cache, flashes SCAN/DONE, returns to draw.</td><td>Everything except the stale browse index. Use when the browse list looks wrong after a card-reader swap or transfers via the <a href="samples.html#sd-tool">SD tool</a>.</td></tr>
+                  <tr><td><strong>EFX</strong></td><td>Resets every tone control — filters, envelopes, synth parameters, octave helpers, audio effects — back to factory values across all voices.</td><td>Patterns and sample assignments survive. Every tone control snaps back to factory.</td></tr>
+                  <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, and rescans the SD card.</td><td>Almost nothing in RAM. Equivalent to a blank session. Only FILE-saved patterns can come back.</td></tr>
+                </tbody>
+              </table>
+              <div class="hb-warn"><strong>There is no undo beyond reloading saved pattern files.</strong> If you choose FULL with unsaved work in RAM, that work is gone.</div>
+            </article>
+          </section>
+
+          <section class="hb-sub" id="last-resort">
+            <h2>Last-resort recovery</h2>
+            <ol>
+              <li><strong>Soft restart</strong> — slide the power switch off, wait five seconds, slide on. Most freezes resolve here.</li>
+              <li><strong>SD re-seat</strong> — power off, push to eject, reinsert firmly, power on. Fixes most "samples missing" cases that SD rescan didn't.</li>
+              <li><strong>Re-flash the firmware</strong> — over USB&nbsp;C, using the Teensy 4.1 boot procedure. Pattern files on the card are not affected by a firmware reflash unless you also reformat the card.</li>
+              <li><strong>If touch pads stay stuck</strong> — make sure the chassis is clean and dry; cap-touch baselines re-calibrate on boot.</li>
+            </ol>
+            <p>For deeper hardware issues (encoder gone, LED out, jack scratchy), inspect the unit; the schematic and KiCad sources are in <code>PCB/toern_revG/</code>.</p>
+          </section>
+
+          <section class="hb-sub" id="next">
+            <h2>You finished the handbook.</h2>
+            <p>That's everything. From here on you are the most experienced TŒRN owner you know. If a feature still surprises you, jump back to the <a href="reference.html">Screen index</a> — recognising a display is the fastest way to find the chapter that explains it. And always: <a href="files.html#file">save to FILE</a> before powering off.</p>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="reference.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Screen index</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <span class="hb-pager__spacer" aria-hidden="true"></span>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

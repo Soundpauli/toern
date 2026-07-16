@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — handbook</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body hb-body--home">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — welcome &amp; first beat.</p>
+        </header>
+
+        <div class="hb-tip" id="handbook-version">
+          <p><strong>A quick heads-up.</strong> These pages were written around firmware <strong>1.5</strong>, while TŒRN today is closer to <strong>v2.2</strong> — so you might spot small differences between what you read here and what your unit does. No worries: the handbook will catch up over the next few weeks. In the meantime, poke around on the hardware and treat the book as a friendly map rather than a contract. Thank you for your patience!</p>
+          <p>TŒRN is open source, so if something feels off or you’d like to nudge a detail, you’re very welcome to leave a comment or open an issue — it genuinely helps things get better in a future release.</p>
+        </div>
+
+        <section class="hb-sub" id="what-it-is">
+          <h2>What TŒRN is</h2>
+          <p class="lede">TŒRN is a sampler and step sequencer. The 16×16 RGB matrix is both the display <em>and</em> the keyboard: time runs left-to-right across each row, sixteen voices stack upward, and four rotary encoders on the edge let you draw, sculpt and arrange. Samples live on a Micro&nbsp;SD card; a built-in three-voice synth and two mono synths cover melodic work; eight sample lanes carry drums and one-shots; everything can be recorded right from the device.</p>
+          <p>This handbook is laid out as a single journey. If you have just received your unit, read it in order — each chapter builds on the one before. Power users can jump directly to <a href="reference.html">Screen index</a> for the "I see X on screen, what is it?" lookup, or to <a href="menus.html">Menu map</a> for the full settings tree.</p>
+        </section>
+
+        <section class="hb-sub" id="first-beat">
+          <h2>Your first beat in one minute</h2>
+          <p class="lede">A quick taste before the deep dive. If you are reading at the unit, follow along — these seven steps work on a fresh-from-the-box TŒRN.</p>
+          <div class="hb-steps">
+            <div class="hb-step hb-step--v1">
+              <div>
+                <h4>Power on.</h4>
+                <p>Flip the side switch. After the boot animation you land in <strong>draw mode</strong> — a mostly dark grid where each voice row shows a <strong>low-lit band</strong> in that lane's colour (rows&nbsp;2–15; see <a href="matrix.html#voice-rows">The matrix → voice lanes</a>).</p>
+              </div>
+            </div>
+            <div class="hb-step hb-step--v2">
+              <div>
+                <h4>Pick a voice.</h4>
+                <p>Turn <strong>encoder&nbsp;1</strong> (leftmost) until the cursor sits on a row whose colour you like — red is voice&nbsp;1, blue is voice&nbsp;6, etc.</p>
+              </div>
+            </div>
+            <div class="hb-step hb-step--v3">
+              <div>
+                <h4>Place a note.</h4>
+                <p>Turn <strong>encoder&nbsp;4</strong> (rightmost) to move along time, then <strong>short-press</strong> it to drop a note at the cursor. Place four notes on every fourth step — that's a kick on the floor.</p>
+              </div>
+            </div>
+            <div class="hb-step hb-step--v4">
+              <div>
+                <h4>Start playback.</h4>
+                <p><strong>Short-press encoder&nbsp;3</strong>. The grid lights up a moving column — that's the playhead. You should hear your kicks.</p>
+              </div>
+            </div>
+            <div class="hb-step hb-step--v5">
+              <div>
+                <h4>Add a second voice.</h4>
+                <p>Turn encoder&nbsp;1 to a new row, drop notes off-beat (steps 5, 9, 13). Watch how each row prints in its own colour.</p>
+              </div>
+            </div>
+            <div class="hb-step hb-step--v6">
+              <div>
+                <h4>Try single mode.</h4>
+                <p>Choose a voice with <strong>encoder&nbsp;1</strong>, then tap <strong>touch&nbsp;1</strong> (left pad) to enter <strong>single mode</strong> — the whole grid tints in that voice's colour. Turn encoder&nbsp;1 to select the pitch and place a few notes; they should sound different from row to row. Tap touch&nbsp;1 again to return to <strong>draw mode</strong>.</p>
+              </div>
+            </div>
+            <div class="hb-step hb-step--v7">
+              <div>
+                <h4>Keep going.</h4>
+                <p>Stop with encoder&nbsp;3 again — pausing <strong>autosaves</strong> the current pattern to the last-used FILE slot (see <a href="files.html#autosave">Files → Autosave</a>). Then read <a href="hardware.html">Hardware</a> → <a href="matrix.html">Matrix</a> → <a href="controls.html">Controls</a> in order. Forty minutes from here you'll know every screen.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="hb-sub" id="how-to-read">
+          <h2>How this handbook is organised</h2>
+          <p>Three groups in the sidebar follow the same arc a new owner walks through:</p>
+          <ul>
+            <li><strong>Get started</strong> — anatomy of the device (hardware, matrix layout, control surface). Read these first.</li>
+            <li><strong>Compose</strong> — actually making music: sequencing modes, per-step editing, sound design, samples.</li>
+            <li><strong>Operate</strong> — running the box as an instrument or studio member: tempo and MIDI, song mode and saving, the full menu, plus a flat <a href="reference.html">screen index</a> and <a href="troubleshooting.html">troubleshooting</a>.</li>
+          </ul>
+          <p>Every chapter shows the matrix display where it applies. Encoder behaviour is given in four-column tables (one card per knob); destructive or sneaky gestures get a callout. Cross-links point to the menu map and screen index whenever a feature has a menu page of its own.</p>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <span class="hb-pager__spacer" aria-hidden="true"></span>
+          <a class="hb-pager__link hb-pager__link--hub" href="#what-it-is">Top</a>
+          <a class="hb-pager__link hb-pager__link--next" href="hardware.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Hardware</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

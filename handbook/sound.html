@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Sound design</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — sound design: filters, envelopes, effects, synths.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="note-detail.html">6 · Note detail</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">7 · Sound design</span>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="samples.html">8 · Samples</a>
+        </nav>
+
+        <section class="handbook-page" id="page-sound">
+          <h2 class="handbook-page__title">Sound design</h2>
+          <p class="handbook-page__summary">Each voice runs through the same chain: source → ADSR → filter → effects → mixer. This chapter walks each stage and the four filter pages where you control them.</p>
+
+          <section class="hb-sub" id="signal-chain">
+            <h2>The signal chain</h2>
+            <p class="lede">Every voice — sample or synth — passes through the same stages:</p>
+            <div class="hb-chain" role="list">
+              <span class="hb-chain__node">Source</span>
+              <span class="hb-chain__arrow">→</span>
+              <span class="hb-chain__node">ADSR envelope</span>
+              <span class="hb-chain__arrow">→</span>
+              <span class="hb-chain__node">Multimode filter</span>
+              <span class="hb-chain__arrow">→</span>
+              <span class="hb-chain__node">Bitcrusher</span>
+              <span class="hb-chain__arrow">→</span>
+              <span class="hb-chain__node">Reverb send</span>
+              <span class="hb-chain__arrow">→</span>
+              <span class="hb-chain__node">Pan / Gain</span>
+              <span class="hb-chain__arrow">→</span>
+              <span class="hb-chain__node">Output</span>
+            </div>
+            <p>Synth voices (11, 13, 14) replace "Source" with oscillator banks (voice&nbsp;11 also has a dedicated filter envelope). Rows <strong>9, 10, and 12</strong> are intentionally empty — no source stage. Sample voices 1–8 use SD-card audio as the source.</p>
+          </section>
+
+          <section class="hb-sub" id="filter">
+            <h2>The four filter pages</h2>
+            <p class="lede">Enter from the grid with the <strong>both-touch</strong> gesture, <strong>right pad first</strong>. (Left-first on sample voices opens the <a href="samples.html#set-wav">sample browser</a> instead.) Each filter page is a vertical mixer strip split into four encoder columns. Turn an encoder to edit; short-press to assign that parameter as the <strong>fast-filter</strong> default (encoder&nbsp;3 from draw mode will recall it). Encoder&nbsp;2 long press is play/pause so you can audition without leaving the editor. Pages cycle with a tap on touch&nbsp;2.</p>
+
+            <div class="hb-tip"><strong>How each filter page is drawn:</strong> at rest the matrix shows four narrow vertical sliders with a <strong>single letter</strong> printed next to each one — that is all the space the grid has. The moment you start turning an encoder, the device replaces those tiny letters with the parameter's <strong>full 4-letter name</strong> spelled out across the lower rows, in the colour of the parameter you are changing. Release the encoder and it falls back to the resting letters.</div>
+
+            <h3 class="hb-subsection-heading">Page 0 — sample lane: PAN · FREQ · RVRB · BITC</h3>
+            <article class="hb-device">
+              <div class="hb-led-row">
+                <div>
+                  <p class="hb-led-label">At rest</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p0" width="16" height="16" role="img" aria-label="Filter page 0 — resting"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Sliders + single-letter tags: <strong>P · F · R · B</strong>.</p>
+                </div>
+                <div>
+                  <p class="hb-led-label">Encoder turning</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p0_named" width="16" height="16" role="img" aria-label="Filter page 0 — editing FREQ"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Full name printed: here <strong>FREQ</strong> is being changed.</p>
+                </div>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>P</strong></td><td>PAN</td><td>Stereo placement of the voice in the mix.</td><td>−16 … +16 (centre = 0)</td></tr>
+                  <tr><td><strong>F</strong></td><td>FREQ</td><td>Multimode filter cutoff — brightness of the voice.</td><td>0 – 10 kHz</td></tr>
+                  <tr><td><strong>R</strong></td><td>RVRB</td><td>Send level into the shared reverb bus.</td><td>0–32 (0 = dry). <em>Not on voices 3, 4, 13, or 14.</em></td></tr>
+                  <tr><td><strong>B</strong></td><td>BITC</td><td>Bitcrusher depth + sample-rate reduction (combined macro).</td><td>0 = bypass, 1–32 increases crush</td></tr>
+                </tbody>
+              </table>
+              <div class="hb-tip"><strong>RVRB availability:</strong> the reverb send appears on sample voices <strong>1, 2, 5–8</strong> and synth voice <strong>11</strong>. Voices <strong>3</strong> and <strong>4</strong> show a dim, inactive slider — no send path. Voices <strong>13</strong> and <strong>14</strong> use <strong>CENT</strong> (coarse pitch) in the third column on page&nbsp;0 instead of RVRB.</div>
+            </article>
+
+            <h3 class="hb-subsection-heading">Page 1 — synth voices: CHRS · RESO · FLNG</h3>
+            <article class="hb-device">
+              <div class="hb-led-row">
+                <div>
+                  <p class="hb-led-label">At rest</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p1" width="16" height="16" role="img" aria-label="Filter page 1 — resting"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Letters <strong>C · R · F</strong> — column 4 is empty on this page.</p>
+                </div>
+                <div>
+                  <p class="hb-led-label">Encoder turning</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p1_named" width="16" height="16" role="img" aria-label="Filter page 1 — editing RESO"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Full name <strong>RESO</strong> while encoder 2 is being moved.</p>
+                </div>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>C</strong></td><td>CHRS</td><td>Chorus depth — adds a detuned doubled copy of the voice.</td><td>0–32</td></tr>
+                  <tr><td><strong>R</strong></td><td>RESO</td><td>Filter resonance peak around the cutoff frequency.</td><td>0.7 – 5.0 (numeric value in firmware)</td></tr>
+                  <tr><td><strong>F</strong></td><td>FLNG</td><td>Flanger amount — short modulated delay.</td><td>0–32</td></tr>
+                </tbody>
+              </table>
+            </article>
+
+            <h3 class="hb-subsection-heading">Page 2 — WAVE · INST · CTOF · SHAP</h3>
+            <article class="hb-device">
+              <div class="hb-led-row">
+                <div>
+                  <p class="hb-led-label">At rest</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p2" width="16" height="16" role="img" aria-label="Filter page 2 — resting"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Letters <strong>W · I · C · S</strong>.</p>
+                </div>
+                <div>
+                  <p class="hb-led-label">Encoder turning</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p2_named" width="16" height="16" role="img" aria-label="Filter page 2 — editing INST"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Full name <strong>INST</strong> while encoder 2 is being moved.</p>
+                </div>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>W</strong></td><td>WAVE</td><td>Oscillator waveshape.</td><td>Sine · Sawtooth · Square · Triangle · Pulse</td></tr>
+                  <tr><td><strong>I</strong></td><td>INST</td><td>Instrument archetype for synth voice 11.</td><td>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</td></tr>
+                  <tr><td><strong>C</strong></td><td>CTOF</td><td>Coarse pitch / cutoff trim depending on voice type.</td><td>Voice-specific (semitones or filter offset)</td></tr>
+                  <tr><td><strong>S</strong></td><td>SHAP</td><td>Pulse width / wavefolder amount where the waveshape allows it.</td><td>0–32</td></tr>
+                </tbody>
+              </table>
+            </article>
+
+            <h3 class="hb-subsection-heading">Page 3 — ADSR: ATCK · DECY · SUST · RELS</h3>
+            <article class="hb-device">
+              <div class="hb-led-row">
+                <div>
+                  <p class="hb-led-label">At rest</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p3" width="16" height="16" role="img" aria-label="Filter page 3 — resting"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Letters <strong>A · D · S · R</strong> — attack, decay, sustain, release.</p>
+                </div>
+                <div>
+                  <p class="hb-led-label">Encoder turning</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p3_named" width="16" height="16" role="img" aria-label="Filter page 3 — editing SUST"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Full name <strong>SUST</strong> while encoder 3 is being moved.</p>
+                </div>
+              </div>
+              <div class="hb-adsr" aria-label="ADSR envelope shape">
+                <svg viewBox="0 0 320 110" role="img" aria-label="ADSR envelope diagram">
+                  <line x1="20" y1="100" x2="300" y2="100" stroke="#71717a" stroke-width="1"/>
+                  <line x1="20" y1="100" x2="20" y2="10" stroke="#71717a" stroke-width="1"/>
+                  <polyline points="20,100 60,15 110,55 220,55 280,100" fill="none" stroke="#2563eb" stroke-width="2"/>
+                  <text x="38" y="105" font-size="10" fill="#71717a">A</text>
+                  <text x="80" y="105" font-size="10" fill="#71717a">D</text>
+                  <text x="160" y="105" font-size="10" fill="#71717a">S (hold)</text>
+                  <text x="250" y="105" font-size="10" fill="#71717a">R</text>
+                  <text x="60" y="11" font-size="9" fill="#2563eb" text-anchor="middle">peak</text>
+                  <text x="220" y="50" font-size="9" fill="#2563eb">sustain level</text>
+                </svg>
+              </div>
+              <p class="hb-device__intro"><strong>Attack</strong> — time from trigger to peak. <strong>Decay</strong> — time from peak to the sustain plateau. <strong>Sustain</strong> — held level while the note remains on. <strong>Release</strong> — fall after note-off. Each parameter is 0–32 on the encoder; the firmware maps it to milliseconds (A / D / R) or 0–1.0 (S).</p>
+              <div class="hb-tip"><strong>Tip:</strong> tweak release last. Long release smears notes into the next step; pair short release with high sustain for staccato drums.</div>
+            </article>
+          </section>
+
+          <section class="hb-sub" id="adsr">
+            <h2>ADSR in detail</h2>
+            <p>All voices share the same envelope generator. Channel&nbsp;11 (poly synth) additionally has a <strong>filter envelope</strong> with its own A/D/S/R that modulates the filter cutoff — same encoder layout, different page nest. Reach it through filter page 1 on voice 11 (the third filter row swaps in for filter-ADSR when applicable).</p>
+            <ul>
+              <li><strong>Attack 0</strong> = instant click. Use for percussive material.</li>
+              <li><strong>Decay 0 + Sustain max</strong> = organ-style hold. Use for pads.</li>
+              <li><strong>Release 0</strong> = note shuts immediately at the next step. Use to tighten busy grooves.</li>
+            </ul>
+          </section>
+
+          <section class="hb-sub" id="effects">
+            <h2>Per-voice effects</h2>
+            <p>Three blocks live after the filter:</p>
+            <table class="opt-table">
+              <thead><tr><th>Block</th><th>Controls</th><th>Range</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Bitcrusher</strong></td><td>Bit depth + sample-rate reduction with loudness compensation.</td><td>1–16 bits; 1000–44117 Hz</td></tr>
+                <tr><td><strong>Reverb</strong></td><td>Room size, damping (bright→dark), wet/dry blend.</td><td>Room 0.0–0.79; Damp 0.01–0.8</td></tr>
+                <tr><td><strong>Filter (multimode)</strong></td><td>LP / HP / BP with cutoff and resonance.</td><td>0–10 kHz; Q 0.7–5.0</td></tr>
+              </tbody>
+            </table>
+            <p>The reverb is a global shared bus. Only voices with an active <strong>RVRB</strong> control can send into it (see filter page&nbsp;0 above). Balance wet against dry by mixing send amounts on the lanes that support it.</p>
+          </section>
+
+          <section class="hb-sub" id="fast-filter">
+            <h2>Fast filter (encoder 3 from the grid)</h2>
+            <p class="lede">From draw or single mode, <strong>turning encoder&nbsp;3</strong> twists the parameter chosen as the fast-filter default for the current channel. That choice is set in the filter editor: <strong>short-press a column</strong> to mark it as that voice's macro. The next time you spin encoder&nbsp;3 from the grid, you are sweeping <em>that</em> control.</p>
+            <p>Most players assign FREQ as the default for sample lanes and CUT for synth lanes. Lanes can each have their own choice — the firmware remembers per channel.</p>
+          </section>
+
+          <section class="hb-sub" id="synths">
+            <h2>The synth voices in detail</h2>
+
+            <h3 class="hb-subsection-heading">Voice 11 — 3-voice polyphonic synth</h3>
+            <p>Three oscillators per voice, three voices of polyphony, ten instrument presets in a single ROM-style table (<strong>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</strong>). Each preset bundles a waveshape recipe, envelope curve, and filter envelope amount. Independent ADSR per voice, independent filter envelope per voice, per-voice pan, gain, waveform, fine pitch (cents), and coarse pitch (semitones).</p>
+
+            <h3 class="hb-subsection-heading">Voices 13 &amp; 14 — 2-oscillator mono synths</h3>
+            <p>Two oscillators each, full ADSR. Filter page&nbsp;0 swaps <strong>RVRB</strong> for <strong>CENT</strong> (coarse pitch) in the third column — there is no reverb send on these lanes. They add two performance modulators:</p>
+            <ul>
+              <li><strong>LFO</strong> — rate 0–2 Hz, depth 0–100%, applied to filter frequency for that voice.</li>
+              <li><strong>Arpeggiator</strong> — step 0–12 semitones, span 2–16 steps, ping-pong pattern. Independent per channel.</li>
+            </ul>
+            <p>Waveforms include sine, sawtooth, square, and triangle. These channels are great for basslines and lead lines where polyphony is unnecessary.</p>
+
+            <h3 class="hb-subsection-heading">Voices 9, 10, 12 — empty rows</h3>
+            <p>These matrix rows are reserved but <strong>intentionally carry no voice</strong>. The cursor can visit them, but placing notes or opening filters has no effect — there is no audio path. See <a href="matrix.html#voice-rows">The matrix → voice lanes</a>.</p>
+          </section>
+
+          <section class="hb-sub" id="tuning">
+            <h2>Per-voice tuning</h2>
+            <ul>
+              <li><strong>Global transpose</strong> — semitone offset added to the synth pitch path. Currently a code-level hook (initialised to 0); no menu page exposes it.</li>
+              <li><strong>Channel detune</strong> — −12 to +12 semitones, per channel.</li>
+              <li><strong>Channel octave</strong> — −3 to +3 octaves, per channel.</li>
+              <li><strong>Synth-11 fine tune</strong> — −50 to +50 cents per voice.</li>
+              <li><strong>Synth-11 semitone offset</strong> — −2 to +2 per voice.</li>
+            </ul>
+            <p>These add together. Big-picture tuning lives in detune + octave; subtle character lives in cents + semitone offset.</p>
+          </section>
+
+          <section class="hb-sub" id="reset-defaults">
+            <h2>Resetting a voice</h2>
+            <p>From the filter editor of any channel, <strong>encoder&nbsp;4 long press</strong> resets envelopes, filters, and synth data for that channel only. Note data in the grid stays intact — only the tone snaps back to factory curves. To reset the whole project's sound layer (every voice), use <a href="menus.html#rset">ETC → RSET → EFX</a>; that one is destructive across the board.</p>
+            <div class="hb-warn"><strong>EFX reset is global.</strong> Patterns and sample assignments survive, but every filter, envelope, synth, and octave helper goes to defaults across all 16 channels.</div>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="note-detail.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Note detail</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="samples.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Samples</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

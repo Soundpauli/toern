@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TŒRN | Audio Converter</title>
+  <meta name="description" content="Convert folders or ZIPs to 44.1 kHz mono WAV.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@300;400;600&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #1a2537;
+      --text-main: #afc0de;
+      --text-muted: #888;
+      --text-topline: #2eb9ff;
+      --text-p: #ffffff;
+      --accent: #ff3b30;
+      --accent-hover: #ff5c52;
+      --grid-line: rgba(255, 255, 255, 0.08);
+      --font-logo: "Bebas Neue", sans-serif;
+      --font-display: "Space Grotesk", sans-serif;
+      --font-body: "Inter", sans-serif;
+      --font-tech: "JetBrains Mono", monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: auto; overflow-x: hidden; width: 100%; }
+
+    html:not(.fonts-loaded) body { opacity: 0; }
+    html.fonts-loaded body { opacity: 1; transition: opacity 0.2s ease-out; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-display);
+      overflow-x: hidden;
+      cursor: default;
+      position: relative;
+      z-index: 1;
+    }
+
+    p, h1, h2, h3, h4, h5, h6, li, blockquote, span, label { cursor: text; }
+    a, a *, button, button *, input[type="submit"], input[type="button"], input[type="reset"], [role="button"] { cursor: pointer; }
+    button:disabled, input:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+
+    p {
+      font-family: var(--font-body);
+      line-height: 1.6;
+      color: var(--text-p);
+      font-weight: 300;
+      font-size: 1.05rem;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+
+    body.tool-page {
+      margin: 0;
+      background-color: var(--bg-dark);
+      color: var(--text-p);
+      font-family: var(--font-display);
+    }
+
+    .tool-nav {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      padding: 1.2rem 2rem 1.2rem 5vw;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+      color: white;
+      background: rgba(26, 37, 55, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      box-sizing: border-box;
+    }
+
+    .tool-nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .tool-nav-logo {
+      font-family: var(--font-logo);
+      font-size: 2rem;
+      letter-spacing: 1px;
+      color: white;
+      opacity: 0.9;
+      text-decoration: none;
+    }
+
+    .tool-nav-label {
+      font-family: var(--font-tech);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-topline);
+      opacity: 0.8;
+    }
+
+    .tool-nav-meta { min-height: 1rem; }
+
+    .tool-shell {
+      min-height: calc(100vh - 5.5rem);
+      padding: 2rem;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(46, 185, 255, 0.14), transparent 36%),
+        radial-gradient(circle at 100% 100%, rgba(255, 59, 48, 0.14), transparent 40%),
+        var(--bg-dark);
+      box-sizing: border-box;
+    }
+
+    .tool-content {
+      width: min(1240px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .tool-section-title {
+      margin: 0 0 0.85rem;
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-topline);
+    }
+
+    .tool-card {
+      width: 100%;
+      border: 1px solid var(--grid-line);
+      background: rgba(12, 19, 31, 0.78);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+      padding: 1.5rem;
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .tool-subline {
+      margin: 0 0 1.1rem;
+      color: var(--text-p);
+    }
+
+    .tool-form { display: grid; gap: 0.65rem; }
+
+    .upload-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 0.75rem;
+      align-items: end;
+    }
+
+    .upload-option { display: grid; gap: 0.45rem; }
+
+    .field-label {
+      font-family: var(--font-tech);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-topline);
+    }
+
+    .tool-form input[type="file"] {
+      width: 100%;
+      border: 1px solid var(--grid-line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+      padding: 0.65rem;
+      font-family: var(--font-body);
+    }
+
+    .tool-form input[type="file"]::file-selector-button {
+      border: 1px solid var(--grid-line);
+      border-radius: 6px;
+      padding: 0.35rem 0.6rem;
+      margin-right: 0.75rem;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    .separator {
+      margin: 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      align-self: center;
+    }
+
+    #submitBtn {
+      margin-top: 0.5rem;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      padding: 0.75rem 1rem;
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: background 0.2s ease;
+    }
+
+    #submitBtn:hover:enabled { background: var(--accent-hover); }
+    #submitBtn:disabled { opacity: 0.6; }
+
+    .sd-download-btn {
+      display: inline-block;
+      margin-top: 0.25rem;
+      border: 1px solid var(--text-topline);
+      border-radius: 8px;
+      background: rgba(46, 185, 255, 0.12);
+      color: #fff;
+      padding: 0.75rem 1rem;
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .sd-download-btn:hover {
+      background: rgba(46, 185, 255, 0.22);
+      border-color: #5fc9ff;
+      color: #fff;
+    }
+
+    .sd-tree-wrap {
+      margin-top: 1.25rem;
+    }
+
+    .sd-tree-label {
+      margin: 0 0 0.5rem;
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-topline);
+    }
+
+    .sd-tree {
+      margin: 0;
+      padding: 1rem 1.1rem;
+      overflow-x: auto;
+      border: 1px solid var(--grid-line);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.28);
+      color: var(--text-main);
+      font-family: var(--font-tech);
+      font-size: 0.78rem;
+      line-height: 1.55;
+      white-space: pre;
+    }
+
+    .sd-tree-highlight {
+      display: block;
+      margin: 0 -1.1rem;
+      padding: 0.1rem 1.1rem;
+      background: rgba(46, 185, 255, 0.16);
+      color: #dff4ff;
+      box-shadow: inset 3px 0 0 var(--text-topline);
+    }
+
+    .sd-tree-note {
+      margin-top: 0.85rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .sd-card-info {
+      margin-top: 1.25rem;
+      display: grid;
+      gap: 1.1rem;
+    }
+
+    .sd-info-block {
+      border: 1px solid var(--grid-line);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.18);
+      padding: 1rem 1.1rem;
+    }
+
+    .sd-info-block p {
+      margin: 0 0 0.65rem;
+      font-size: 0.95rem;
+    }
+
+    .sd-info-list {
+      margin: 0;
+      padding-left: 1.2rem;
+      color: var(--text-main);
+      font-family: var(--font-body);
+      font-size: 0.92rem;
+      line-height: 1.65;
+    }
+
+    .sd-info-list li + li {
+      margin-top: 0.35rem;
+    }
+
+    .sd-info-list strong {
+      color: var(--text-p);
+      font-weight: 500;
+    }
+
+    .status {
+      min-height: 1.5rem;
+      margin-top: 1rem;
+      font-family: var(--font-body);
+      color: var(--text-p);
+    }
+
+    .status.is-error { color: var(--accent); }
+    .status.is-success { color: var(--text-topline); }
+
+    .progress-wrap { margin-top: 0.6rem; }
+
+    .progress-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.35rem;
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-main);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--grid-line);
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--text-topline));
+      transition: width 0.28s ease;
+    }
+
+    .tool-note {
+      margin-top: 1.1rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 720px) {
+      .tool-nav {
+        padding: 1rem 1rem 1rem 1.25rem;
+      }
+
+      .tool-nav-brand { gap: 0.75rem; }
+      .tool-nav-logo { font-size: 1.65rem; }
+      .tool-nav-label { font-size: 0.64rem; }
+      .tool-shell { padding: 1.25rem 1rem; }
+
+      .upload-row {
+        grid-template-columns: 1fr;
+        gap: 0.55rem;
+      }
+
+      .separator { margin: 0.15rem 0; }
+    }
+  </style>
+
+  <script src="./fonts.js"></script>
+</head>
+<body class="tool-page">
+  <noscript><style>html:not(.fonts-loaded) body{opacity:1}</style></noscript>
+  <nav class="tool-nav">
+    <div class="tool-nav-brand">
+      <a href="https://toern.live/" class="tool-nav-logo">TŒRN</a>
+      <span class="tool-nav-label">// AUDIO CONVERTER</span>
+    </div>
+    <div class="tool-nav-meta"></div>
+  </nav>
+
+  <main class="tool-shell">
+    <div class="tool-content">
+      <section class="tool-card" aria-label="Audio Converter">
+        <p class="tool-subline">Upload folder files <strong>or</strong> one ZIP. Output is always 44.1 kHz / mono / WAV.</p>
+
+        <form id="converter-form" class="tool-form">
+          <div class="upload-row">
+            <div class="upload-option">
+              <label class="field-label" for="folderInput">Folder upload</label>
+              <input id="folderInput" name="folderInput" type="file" webkitdirectory directory multiple>
+            </div>
+
+            <div class="separator" aria-hidden="true">or</div>
+
+            <div class="upload-option">
+              <label class="field-label" for="zipInput">ZIP upload</label>
+              <input id="zipInput" name="zipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed">
+            </div>
+          </div>
+
+          <button id="submitBtn" type="submit">Convert & Download ZIP</button>
+        </form>
+
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+
+        <div class="progress-wrap" aria-live="polite" aria-label="Conversion progress">
+          <div class="progress-head">
+            <span id="progressLabel">Idle</span>
+            <span id="progressPercent">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBarWrap">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+
+        <p class="tool-note">Your files stay on your device. Conversion runs entirely in your browser; nothing is uploaded to this server. Special characters in folder/file names are normalized to ASCII. Unsupported characters are replaced with “-”.</p>
+      </section>
+
+      <section class="tool-card" aria-label="SD Card">
+        <h2 class="tool-section-title">SD CARD</h2>
+        <p class="tool-subline">Download the default TŒRN SD card content — sample packs, settings, and folder layout. Extract the ZIP and copy the contents to your microSD card.</p>
+        <a class="sd-download-btn" href="./SD-CARD-CONTENT.zip" download="SD-CARD-CONTENT.zip">Download SD-CARD-CONTENT.zip</a>
+
+        <div class="sd-card-info">
+          <div class="sd-info-block">
+            <p class="sd-tree-label">Recommended card</p>
+            <ul class="sd-info-list">
+              <li><strong>SanDisk Ultra</strong> microSD (grey label)</li>
+              <li><strong>Speed class:</strong> UHS-I (Class 10)</li>
+              <li><strong>Capacity:</strong> up to 64&nbsp;GB</li>
+              <li>Use a genuine card from a trusted retailer — counterfeits often cause read errors or missing samples.</li>
+            </ul>
+          </div>
+
+          <div class="sd-info-block">
+            <p class="sd-tree-label">How to format</p>
+            <ol class="sd-info-list">
+              <li>Insert the microSD card into your computer with a card reader (not the TŒRN unit).</li>
+              <li>Download and run the <a href="https://www.sdcard.org/downloads/formatter/" target="_blank" rel="noopener noreferrer">SD Memory Card Formatter</a> from the SD Association.</li>
+              <li>Select your card, leave <strong>Format type</strong> on <em>Quick format</em>, and click <strong>Format</strong>. Cards up to 32&nbsp;GB are formatted as FAT32; 64&nbsp;GB cards use exFAT — both work with TŒRN.</li>
+              <li>Extract <strong>SD-CARD-CONTENT.zip</strong> and copy all files and folders to the <strong>root</strong> of the card (not inside a subfolder).</li>
+              <li>Eject the card safely, insert it into TŒRN, and power on.</li>
+            </ol>
+            <p class="sd-tree-note">Avoid formatting through Windows Explorer or macOS Disk Utility if possible — the SD Association tool sets the correct partition layout for removable media.</p>
+          </div>
+        </div>
+
+        <div class="sd-tree-wrap">
+          <p class="sd-tree-label">SD card layout</p>
+          <pre class="sd-tree" aria-label="SD card folder structure">/  (SD card root)
+│
+├── settings.txt              # Device settings backup (menu, BPM, etc.)
+├── autosaved.txt             # Auto-saved pattern / project (last session)
+├── 1.txt                     # Saved project slot 1
+├── 2.txt                     # Saved project slot 2
+│   └── …                     # You can have 1.txt … 99.txt
+│
+├── 0/                        # Samplepack 0 — scratch / custom samples
+│   ├── 1.wav                 # Voice 1
+│   ├── 2.wav                 # Voice 2
+│   ├── …
+│   └── 8.wav                 # Voice 8
+│
+├── 1/                        # Samplepack 1 (default pack on boot)
+│   ├── 1.wav … 8.wav
+│
+├── 2/                        # Samplepack 2
+│   ├── 1.wav … 8.wav
+│   └── …                     # Packs 3 … 99 work the same way
+│
+<span class="sd-tree-highlight">└── samples/                  # Extract your converted/downloaded samples in this folder</span>
+    ├── BASE/                 # Main categorized library (~1,269 WAVs)
+    │   ├── BASS/             #   34 samples
+    │   ├── BELLS/            #   61
+    │   ├── CLAP/             #   13
+    │   ├── DIVERSE/          #   35
+    │   ├── HIHAT/            #   66
+    │   ├── KICKS/            #   23
+    │   ├── LOOPS/            #   99
+    │   ├── PADS/             #   50
+    │   ├── PERCUSSION/       #   55
+    │   ├── RAVE/             #   697
+    │   ├── SNARE/            #   50
+    │   ├── TOMS/             #   44
+    │   └── VOCALS/           #   42
+    │
+    └── DRUMS/                # Extra drum one-shots (~177 WAVs)
+        ├── 00 Kick 1.wav
+        ├── 05 Kick 6.wav
+        └── …
+
+# Files the device may create later (not in the default ZIP):
+# ERROR.txt, scheme.txt, settings.tmp</pre>
+          <p class="sd-tree-note">Samplepack WAVs and browser samples should be 44.1 kHz, mono, 16-bit WAV. Extract the ZIP and copy everything to the root of your microSD card.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="./client.js"></script>
+</body>
+</html>

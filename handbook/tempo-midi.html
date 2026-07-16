@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Tempo &amp; MIDI</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — BPM, clock, MIDI.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="sample-packs.html">9 · Sample packs</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">10 · Tempo &amp; MIDI</span>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="song.html">11 · Song</a>
+        </nav>
+
+        <section class="handbook-page" id="page-tempo-midi">
+          <h2 class="handbook-page__title">Tempo &amp; MIDI</h2>
+          <p class="handbook-page__summary">BPM screen, internal vs external clock, MIDI in/out, transport sync, and millisecond latency tuning.</p>
+
+          <section class="hb-sub" id="bpm">
+            <h2>The BPM screen</h2>
+            <p class="lede">Open from menu <strong>BPM</strong>. The firmware mode is <code>VOLUME_BPM</code>: it bundles global tempo, matrix brightness, and the <strong>internal vs external MIDI clock</strong> choice. Audio output level is a separate place — see <a href="menus.html#vol">VOL → MAIN</a>.</p>
+
+            <h3 class="hb-subsection-heading">Clock mode colour key</h3>
+            <table class="opt-table">
+              <thead><tr><th>Mode</th><th>BPM colour</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><strong>INT</strong></td><td>Cyan digits, <em>green arrow pointing right</em> ("out")</td><td>TŒRN is master; emits MIDI clock per <a href="menus.html#midi">MIDI → SEND</a>. External gear can follow.</td></tr>
+                <tr><td><strong>EXT (locked)</strong></td><td>Green digits, <em>green arrow pointing left</em> ("in")</td><td>External clock is stable; the big number tracks the measured BPM coming in.</td></tr>
+                <tr><td><strong>EXT (locking)</strong></td><td>Red digits, <em>red arrow pointing left</em></td><td>Still measuring or jittery — wait, check cables, confirm the master is sending clock.</td></tr>
+              </tbody>
+            </table>
+            <p><strong>Range:</strong> 40–300 BPM. <strong>Tap tempo:</strong> on this screen, repeated taps on the appropriate touch pad are averaged into the live BPM number — a few clean taps will settle it.</p>
+
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="bpm" width="16" height="16" role="img" aria-label="BPM internal"></canvas>
+              </div>
+              <h4 class="hb-device__title">Variant A — Internal clock (master)</h4>
+              <p class="hb-device__intro">Cyan three-digit readout on the left, <strong>green right-pointing arrow</strong> on the right side of the screen showing that clock is being sent <em>out</em>. Encoder 3 ring lights green.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Exit to draw</td><td>Returns to last grid view.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Matrix brightness 3…255</td><td>LEDs only — does not change audio.</td></tr>
+                  <tr><th>Short</th><td>Draw-base colour toggle</td><td>Idle steps as channel tints vs darker base.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>INT ↔ EXT clock</td><td>Flips between internal master and external slave; the choice is remembered across power cycles.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Set BPM (40–300)</td><td>When INT, this is the master tempo.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="bpm_ext_ok" width="16" height="16" role="img" aria-label="BPM external locked"></canvas>
+              </div>
+              <h4 class="hb-device__title">Variant B — External clock, locked</h4>
+              <p class="hb-device__intro">Green three-digit readout on the left, <strong>green left-pointing arrow</strong> on the right showing clock is being received <em>in</em>. The arrow blinks softly with each incoming clock pulse. Encoder rows are identical to variant A; encoder&nbsp;4 in EXT offsets the stored counter without overriding the live clock.</p>
+            </article>
+
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="bpm_ext_warn" width="16" height="16" role="img" aria-label="BPM external warn"></canvas>
+              </div>
+              <h4 class="hb-device__title">Variant C — External clock, unstable</h4>
+              <p class="hb-device__intro">Red three-digit readout and a <strong>red left-pointing arrow</strong> — the measurement is still settling or no clock is arriving. Wait a few bars, then re-check the cable and the master.</p>
+            </article>
+          </section>
+
+          <section class="hb-sub" id="midi-menu">
+            <h2>The MIDI submenu</h2>
+            <p class="lede">Five pages under root menu <strong>MIDI</strong>. Together they decide who follows whom and how cleanly.</p>
+
+            <h3 class="hb-subsection-heading">CH — note mapping strategy</h3>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_ch" width="16" height="16" role="img" aria-label="MIDI CH"></canvas></div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>YPOS</strong></td><td>Map incoming notes by <em>row height</em> on the grid — the controller's pitch picks a voice lane.</td></tr>
+                  <tr><td><strong>MIDI N</strong></td><td>Fixed MIDI channel input; all notes go to one voice.</td></tr>
+                  <tr><td><strong>KEYS</strong></td><td>Keyboard lanes — chromatic playing across the synth voice.</td></tr>
+                </tbody>
+              </table>
+              <p class="hb-device__intro">Choose <strong>YPOS</strong> for grid-style finger drumming with an external pad; <strong>KEYS</strong> for playing the poly synth (voice 11) as a normal keyboard.</p>
+            </article>
+
+            <h3 class="hb-subsection-heading">TRAN — transport</h3>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_tran" width="16" height="16" role="img" aria-label="MIDI TRAN"></canvas></div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>GET</strong></td><td>Listen for MIDI Start / Stop / Continue from outside.</td></tr>
+                  <tr><td><strong>SEND</strong></td><td>Emit transport on play / stop here.</td></tr>
+                  <tr><td><strong>OFF</strong></td><td>Don't react to or send transport.</td></tr>
+                </tbody>
+              </table>
+              <p class="hb-device__intro">Combine sensibly with clock mode: GET pairs with EXT clock; SEND pairs with INT clock.</p>
+            </article>
+
+            <h3 class="hb-subsection-heading">SEND — what goes out</h3>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_send" width="16" height="16" role="img" aria-label="MIDI SEND"></canvas></div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>CLK</strong></td><td>Clock only — for sync-only rigs.</td></tr>
+                  <tr><td><strong>NOTE</strong></td><td>Notes only — TŒRN drives a multitimbral expander.</td></tr>
+                  <tr><td><strong>BOTH</strong></td><td>Clock + notes.</td></tr>
+                </tbody>
+              </table>
+            </article>
+
+            <h3 class="hb-subsection-heading">RCVE — incoming notes</h3>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_rcve" width="16" height="16" role="img" aria-label="MIDI RCVE"></canvas></div>
+              <p class="hb-device__intro">Gate whether incoming MIDI note traffic reaches the internal voices. Use <strong>OFF</strong> as instant "MIDI thru off" when you only want clock; use <strong>NOTE</strong> to play the synth from a controller.</p>
+            </article>
+
+            <h3 class="hb-subsection-heading">SYNC — SNC1 / SNC2 millisecond offsets</h3>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_sync" width="16" height="16" role="img" aria-label="MIDI SYNC"></canvas></div>
+              <p class="hb-device__intro"><strong>SNC1</strong> delays the send path; <strong>SNC2</strong> delays the receive path. Range −127 … +127 ms. Use these when oscilloscope loopback still shows audible flam between TŒRN and another clocked device. Encoder&nbsp;1 picks which line you edit, encoder&nbsp;2 changes the number.</p>
+              <div class="hb-tip"><strong>Tuning workflow:</strong> set up two TŒRNs or a TŒRN + drum machine on the same downbeat; adjust SNC2 in ±2 ms steps until the kicks click as one. Apply the matching negative on the other device's send path if available.</div>
+            </article>
+          </section>
+
+          <section class="hb-sub" id="patterns">
+            <h2>Common sync scenarios</h2>
+            <table class="opt-table">
+              <thead><tr><th>Scenario</th><th>BPM</th><th>TRAN</th><th>SEND</th><th>RCVE</th></tr></thead>
+              <tbody>
+                <tr><td>TŒRN solo, no other gear</td><td>INT</td><td>OFF</td><td>OFF</td><td>OFF</td></tr>
+                <tr><td>TŒRN as master, sync drum machine</td><td>INT</td><td>SEND</td><td>CLK</td><td>OFF</td></tr>
+                <tr><td>TŒRN as slave to a DAW</td><td>EXT</td><td>GET</td><td>OFF</td><td>NOTE (if needed)</td></tr>
+                <tr><td>TŒRN as expander (synth-11 played from controller)</td><td>INT</td><td>OFF</td><td>OFF</td><td>NOTE</td></tr>
+                <tr><td>Two TŒRNs, one leads</td><td>INT / EXT</td><td>SEND / GET</td><td>CLK / OFF</td><td>OFF</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="sample-packs.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Sample packs</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="song.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Song</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

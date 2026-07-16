@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TŒRN | Teensy Loader</title>
+  <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&family=JetBrains+Mono:wght@300;400&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../styles.css">
+  <link rel="stylesheet" href="../tool-shell.css">
+  <script>
+    document.documentElement.classList.add("fonts-loaded");
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(() => {
+        document.documentElement.classList.add("fonts-loaded");
+      });
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body.tool-page { line-height: 1.6; }
+    .teensy-container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .teensy-intro {
+      margin-bottom: 2rem;
+    }
+    .teensy-intro p {
+      font-family: var(--font-body);
+      color: var(--text-p);
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.9;
+    }
+    .teensy-attribution-footer {
+      text-align: center;
+      font-family: var(--font-tech);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 3rem;
+      padding-bottom: 2rem;
+    }
+    .teensy-attribution-footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .teensy-attribution-footer a:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+    .teensy-reset-img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 1rem 0;
+      border-radius: 8px;
+      border: 1px solid var(--grid-line);
+    }
+    .teensy-section {
+      margin: 1.75rem 0;
+      padding: 1.5rem;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--grid-line);
+      border-radius: 12px;
+    }
+    .teensy-section h2 {
+      font-family: var(--font-logo);
+      font-size: 1.8rem;
+      color: var(--text-p);
+      margin-bottom: 0.75rem;
+      font-weight: 400;
+    }
+    .teensy-section p {
+      font-family: var(--font-body);
+      color: var(--text-p);
+      font-size: 0.95rem;
+      opacity: 0.85;
+      margin-bottom: 1rem;
+    }
+    .teensy-section label {
+      display: block;
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-topline);
+      margin-bottom: 0.5rem;
+    }
+    .teensy-firmware-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.25rem;
+      margin: 1rem 0;
+    }
+    .teensy-firmware-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-family: var(--font-tech);
+      font-size: 0.9rem;
+      color: var(--text-p);
+    }
+    .teensy-firmware-option input {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .teensy-beta-warning {
+      display: none;
+      margin-top: 1rem;
+      padding: 1rem;
+      background: rgba(255, 59, 48, 0.12);
+      border: 1px solid rgba(255, 59, 48, 0.4);
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      color: var(--text-p);
+      line-height: 1.5;
+    }
+    .teensy-beta-warning.is-visible {
+      display: block;
+    }
+    .teensy-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    .teensy-btn {
+      background: var(--accent);
+      border: none;
+      padding: 0.6rem 1.25rem;
+      border-radius: 6px;
+      color: white;
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .teensy-btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+    .teensy-btn:active {
+      transform: translateY(0);
+    }
+    .teensy-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .teensy-btn:disabled:hover {
+      background: var(--accent);
+      transform: none;
+    }
+    progress {
+      width: 100%;
+      height: 8px;
+      margin-top: 0.75rem;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    progress::-webkit-progress-bar {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    progress::-webkit-progress-value {
+      background: var(--accent);
+      border-radius: 4px;
+    }
+    progress::-moz-progress-bar {
+      background: var(--accent);
+      border-radius: 4px;
+    }
+    .teensy-status-section {
+      display: none;
+    }
+    .teensy-status-section:has(#status:not(:empty)) {
+      display: block;
+    }
+    #status {
+      background: rgba(0, 0, 0, 0.25);
+      padding: 0.75rem 1rem;
+      margin-top: 0;
+      white-space: pre-wrap;
+      border-radius: 8px;
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      color: var(--text-p);
+      border: 1px solid var(--grid-line);
+    }
+    textarea#log {
+      width: 100%;
+      height: 150px;
+      margin-top: 0.75rem;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--grid-line);
+      border-radius: 8px;
+      color: var(--text-p);
+      font-family: var(--font-tech);
+      font-size: 0.8rem;
+      resize: vertical;
+      padding: 0.75rem;
+    }
+    textarea#log::placeholder {
+      color: var(--text-muted);
+    }
+    /* Collapsible Serial section */
+    .teensy-serial-toggle {
+      margin: 1.75rem 0 0;
+      border: 1px solid var(--grid-line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .teensy-serial-toggle summary {
+      padding: 1rem 1.25rem;
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      transition: background 0.2s, color 0.2s;
+    }
+    .teensy-serial-toggle summary:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-p);
+    }
+    .teensy-serial-toggle summary::-webkit-details-marker {
+      display: none;
+    }
+    .teensy-serial-toggle summary::after {
+      content: '+';
+      font-size: 1.2rem;
+      color: var(--accent);
+      transition: transform 0.25s;
+    }
+    .teensy-serial-toggle[open] summary::after {
+      transform: rotate(45deg);
+    }
+    .teensy-serial-content {
+      padding: 1.25rem 1.5rem;
+      border-top: 1px solid var(--grid-line);
+    }
+  </style>
+</head>
+<body class="tool-page">
+  <noscript><style>html:not(.fonts-loaded) body{opacity:1}</style></noscript>
+  <nav class="tool-nav">
+    <div class="tool-nav-brand">
+      <a href="../../" class="tool-nav-logo">TŒRN</a>
+      <span class="tool-nav-label">// TEENSY LOADER</span>
+    </div>
+    <div class="tool-nav-meta"></div>
+  </nav>
+
+  <main class="tool-shell">
+    <div class="tool-content">
+      <div class="teensy-container">
+        <div class="teensy-intro">
+          <p>Load firmware to your Teensy via WebHID. Choose v2.2 or Beta, put your Teensy in programming mode by pressing the reset button (marked red), then flash firmware:</p>
+          <img src="./public/reset.jpeg" alt="Teensy reset button (marked red)" class="teensy-reset-img">
+        </div>
+
+        <!-- Firmware Selection -->
+        <div class="teensy-section">
+          <h2>1. Firmware</h2>
+          <p>Choose which firmware version to flash.</p>
+          <div class="teensy-firmware-options">
+            <label class="teensy-firmware-option">
+              <input type="radio" name="firmware" value="stable" id="firmwareStable" checked>
+              v2.2
+            </label>
+            <label class="teensy-firmware-option">
+              <input type="radio" name="firmware" value="beta" id="firmwareBeta">
+              Beta
+            </label>
+          </div>
+          <div class="teensy-beta-warning" id="betaWarning">
+            Careful: this is a beta and might introduce troubles, including losing data or settings of your unit. Use at your own risk.
+          </div>
+        </div>
+
+        <!-- Device Selection & Flashing -->
+        <div class="teensy-section">
+          <h2>2. Device & Flash</h2>
+          <p>Press reset on your Teensy to enter programming mode.</p>
+          <div class="teensy-buttons">
+            <button type="button" class="teensy-btn" id="selectDeviceBtn">Select Teensy Device</button>
+            <button type="button" class="teensy-btn" id="uploadFirmwareBtn">Upload Firmware</button>
+          </div>
+          <progress id="flashProgress" value="0" max="1"></progress>
+        </div>
+
+        <!-- Status Output -->
+        <div class="teensy-section teensy-status-section">
+          <div id="status"></div>
+        </div>
+
+        <!-- Serial Port (collapsible, default hidden) -->
+        <details class="teensy-serial-toggle">
+          <summary>Serial Port (optional)</summary>
+          <div class="teensy-serial-content">
+            <button type="button" class="teensy-btn" id="openSerialBtn">Open Serial</button>
+            <button type="button" class="teensy-btn" id="closeSerialBtn">Close Serial</button>
+            <textarea id="log" readonly placeholder="Serial output will appear here..."></textarea>
+          </div>
+        </details>
+
+        <footer class="teensy-attribution-footer">
+          Based on <a href="https://github.com/coelacant1/Teensy-Loader-Javascript" target="_blank" rel="noopener noreferrer">Teensy-Loader-Javascript</a> by Coela Can't
+        </footer>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

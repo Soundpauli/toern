@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Files (load &amp; save)</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — saving, loading, and autosaving your work.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="song.html">11 · Song</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">12 · Files</span>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="menus.html">13 · Menu map</a>
+        </nav>
+
+        <section class="handbook-page" id="page-files">
+          <h2 class="handbook-page__title">Files — load &amp; save</h2>
+          <p class="handbook-page__summary"><strong>FILE</strong> is the pattern slot screen — the only place your work is durably committed. This chapter covers the screen itself, the sidecar text-file mechanism, what autosave does and does not protect, and how patterns relate to <a href="sample-packs.html">sample packs</a>.</p>
+
+          <section class="hb-sub" id="file">
+            <h2>FILE — pattern slots</h2>
+            <p class="lede">Open <strong>FILE</strong> from the root menu. Each slot is one numbered file on the SD card holding <em>all 16 pages, all 16 voices, every per-step value and every tone setting</em> — effectively the whole session except the chosen sample pack.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="loadsave" width="16" height="16" role="img" aria-label="FILE screen"></canvas>
+              </div>
+              <p class="viz-caption--below">Existing slot: large green file number and a confident green load icon on row 1.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Load</td><td>Reads the file into RAM and immediately becomes the live pattern. The big number turns bright green while it loads; brightness reflects whether the file actually exists.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Save</td><td>Writes the live pattern into the chosen slot, <em>overwriting</em> any existing file at that number. No second confirmation — be sure of the slot before pressing.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Sidecar toggle</td><td>Switches between "load pattern only" and "load pattern + sidecar". When sidecar is on (icon brightens), opening a pattern also pulls in extra settings stored next to the file — see below.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Slot number (1–999)</td><td>Spins through file numbers. Existing slots are shown in bright green, empty slots in dim blue.</td></tr>
+                  <tr><th>Short</th><td>Back to grid</td><td>Leaves FILE without acting on the highlighted slot.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+            <div class="hb-tip"><strong>Read brightness as a status light:</strong> the slot number's intensity tells you instantly whether the slot is occupied (bright green) or empty (dim blue) — no need to "try a load" and see what happens.</div>
+          </section>
+
+          <section class="hb-sub" id="sidecar">
+            <h2>Sidecar files (.txt next to .dat)</h2>
+            <p>Every pattern file on the card can have an optional companion text file at the same number — for example <code>patterns/042.dat</code> next to <code>patterns/042.txt</code>. The sidecar is plain text and stores things that don't belong inside the binary pattern: a preferred MIDI sync offset, a colour palette, a pack hint, performance notes you typed on a computer.</p>
+            <p>When the sidecar icon (encoder&nbsp;3) is <strong>on</strong>, loading a pattern also reads the sidecar and applies the settings inside it. When it is <strong>off</strong>, only the binary pattern is loaded — useful when you want to keep your current global settings and just hot-swap notes.</p>
+            <div class="hb-tip"><strong>Use case:</strong> most patterns in the starter bank include a sidecar that points at the matching sample pack, so a fresh load gives you the intended sound right away.</div>
+          </section>
+
+          <section class="hb-sub" id="autosave">
+            <h2>Autosave — what it does and doesn't protect</h2>
+            <p>The firmware autosaves the current pattern at a handful of natural moments:</p>
+            <ul>
+              <li>after a successful sample load in the <a href="samples.html#set-wav">sample browser</a>,</li>
+              <li>after a clean power-down through the right-side switch,</li>
+              <li>and on a small set of menu actions that change persistent global state.</li>
+            </ul>
+            <p>The autosave target is the <strong>last-used FILE slot</strong>. That means autosave protects you from "the battery died" within one session, but it does <em>not</em> protect you from "I loaded the wrong FILE slot and then made changes" — the next autosave will overwrite the slot you accidentally loaded.</p>
+            <div class="hb-warn"><strong>Treat FILE save as the only commit you can trust between sessions.</strong> If the battery dies between two autosave checkpoints you lose what's in RAM after the last checkpoint. Save when you finish an idea.</div>
+          </section>
+
+          <section class="hb-sub" id="kit-link">
+            <h2>How patterns relate to packs</h2>
+            <p>A pattern saved from FILE carries notes, velocities, probabilities, every tone control, and per-voice tuning — but <strong>not</strong> the loaded sample audio. The audio is provided by the active <a href="sample-packs.html">sample pack</a>. So loading the same pattern with two different packs sounds different.</p>
+            <ul>
+              <li>If you want a pattern to come back exactly as you left it next session, also save your pack choice from the <a href="sample-packs.html#pack">PACK</a> screen, or rely on the sidecar mechanism (above) to recall it for you.</li>
+              <li>If you intentionally want to remix old notes with new sounds, swap packs first and then load the pattern — the notes will replay through whatever audio is on the voice rows now.</li>
+            </ul>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="song.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Song</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="menus.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Menu map</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

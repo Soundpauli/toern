@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Note detail</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — per-step editor.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="sequencing.html">5 · Sequencing</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">6 · Note detail</span>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="sound.html">7 · Sound design</a>
+        </nav>
+
+        <section class="handbook-page" id="page-note-detail">
+          <h2 class="handbook-page__title">Note detail</h2>
+          <p class="handbook-page__summary">Per-step velocity, probability, lane volume, and conditional ratchets — opened by a long press on encoder&nbsp;4 on top of an existing note.</p>
+
+          <section class="hb-sub" id="how-to-open">
+            <h2>Opening the editor</h2>
+            <p class="lede">Place a note in draw or single mode, then <strong>long-press encoder&nbsp;4</strong> on top of it. The matrix swaps from the grid to a dedicated layout: four vertical "value bars" with a small text label between them. The note keeps playing whenever the playhead reaches it — you can hear changes live.</p>
+
+            <div class="hb-triplet">
+              <div class="hb-triplet__cell hb-triplet__cell--see">
+                <h6>What you see</h6>
+                <p>A red-orange ramp on the left, a five-stop probability ladder, a blue-cyan lane-volume ramp, and a small fraction (e.g. "1/2") on the right.</p>
+              </div>
+              <div class="hb-triplet__cell hb-triplet__cell--do">
+                <h6>What to do</h6>
+                <p>Turn each encoder to slide its corresponding value. Long-press encoder&nbsp;1 to exit back to the grid; the changes are already saved.</p>
+              </div>
+              <div class="hb-triplet__cell hb-triplet__cell--get">
+                <h6>What changes</h6>
+                <p>The single step you opened — not the whole row. To edit several steps at once, repeat the gesture on each.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="hb-sub" id="layout">
+            <h2>The four columns</h2>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="velocity" width="16" height="16" role="img" aria-label="Velocity screen"></canvas>
+              </div>
+              <p class="viz-caption--below">Example layout: medium velocity, mid chance, high lane volume, "1/2" conditional fraction.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Hit velocity / impact</td><td>Scales how hard the voice is driven through amp + filter. Maps to MIDI 1–127 under the hood.</td></tr>
+                  <tr><th>Long press</th><td>Exit to grid</td><td>Returns to the previous draw or single view.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Probability ladder</td><td>Five stops: <strong>0%</strong> · <strong>25%</strong> · <strong>50%</strong> · <strong>75%</strong> · <strong>100%</strong>. Lower values randomly skip the step during playback to thin busy patterns.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Lane volume trim</td><td>Biases this <em>step</em>'s instrument level vs others without opening the mixer.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Condition / ratchet</td><td>Fractional repeats shown as miniature text. Creates syncopated or every-n-bar hits inside the same grid cell.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+          </section>
+
+          <section class="hb-sub" id="conditions">
+            <h2>Condition triggers explained</h2>
+            <p>The condition column is the most powerful and least obvious feature on the screen. Each setting is a fraction the firmware reads as "this step fires every <em>n</em>-th time the pattern reaches it":</p>
+            <table class="opt-table">
+              <thead><tr><th>Fraction</th><th>Effect</th><th>Use it for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>1/1</strong></td><td>Always fires</td><td>The default — same as a plain note.</td></tr>
+                <tr><td><strong>1/2</strong></td><td>Fires every other pass through the page</td><td>Two-bar variations without painting two pages.</td></tr>
+                <tr><td><strong>1/4</strong>, <strong>1/8</strong>, <strong>1/X</strong></td><td>Sparser — 1 in 4 / 8 / random</td><td>Rare accents and "every fourth fill" hats.</td></tr>
+                <tr><td><strong>2/1</strong>, <strong>4/1</strong>, <strong>8/1</strong></td><td><em>Ratchets</em>: 2 / 4 / 8 quick repeats inside one step</td><td>Drum rolls, glitches, machine-gun hats.</td></tr>
+                <tr><td><strong>X/1</strong></td><td>Random ratchet count</td><td>Lo-fi humanisation.</td></tr>
+              </tbody>
+            </table>
+            <p>Conditions combine with probability: a step set to 50% with a 1/4 condition fires only when both checks succeed — extremely rare, used sparingly.</p>
+          </section>
+
+          <section class="hb-sub" id="tips">
+            <h2>Practical tips</h2>
+            <ul>
+              <li><strong>Velocity follows envelope shape.</strong> If your sound has a long attack, low velocity may not "land" before the next step. Pair velocity with the attack stage in <a href="sound.html#adsr">Sound → ADSR</a>.</li>
+              <li><strong>Probability is also a thinning tool.</strong> Set every hi-hat step to 75% and the loop instantly stops sounding like a machine.</li>
+              <li><strong>Ratchets are loud.</strong> A 4/1 condition plays the same sample four times inside one step — drop velocity or lane volume to compensate.</li>
+              <li>The screen only edits <em>one</em> step. If you want every step on a row to share a velocity, use the velocity encoder live during playback (in single mode + <a href="menus.html#play">PLAY → CTRL = VOL</a>) instead.</li>
+            </ul>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="sequencing.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Sequencing</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="sound.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sound design</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

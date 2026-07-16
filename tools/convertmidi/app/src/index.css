@@ -1,0 +1,211 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design system from main website */
+:root {
+  --bg-dark: #1a2537;
+  --text-main: #afc0de;
+  --text-muted: #888;
+  --text-topline: #2eb9ff;
+  --text-p: #ffffff;
+  --accent: #ff3b30;
+  --accent-hover: #ff5c52;
+  --grid-line: rgba(255, 255, 255, 0.08);
+  --font-logo: 'Bebas Neue', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-tech: 'JetBrains Mono', monospace;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-dark);
+  font-family: var(--font-display);
+}
+
+.tool-nav {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  padding: 1.2rem 2rem 1.2rem 5vw;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
+  color: white;
+  background: rgba(26, 37, 55, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+}
+
+.tool-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.tool-nav-logo {
+  font-family: var(--font-logo);
+  font-size: 2rem;
+  letter-spacing: 1px;
+  color: white;
+  opacity: 0.9;
+  text-decoration: none;
+}
+
+.tool-nav-label {
+  font-family: var(--font-tech);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-topline);
+  opacity: 0.8;
+}
+
+.tool-nav-meta {
+  min-height: 1rem;
+}
+
+.tool-shell {
+  min-height: calc(100vh - 5.5rem);
+  padding: 2rem;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(46, 185, 255, 0.14), transparent 36%),
+    radial-gradient(circle at 100% 100%, rgba(255, 59, 48, 0.14), transparent 40%),
+    var(--bg-dark);
+  box-sizing: border-box;
+}
+
+.tool-content {
+  width: min(1240px, 100%);
+  margin: 0 auto;
+}
+
+/* Override Tailwind gray colors with website palette */
+.bg-gray-900 {
+  background-color: #0c131f !important;
+}
+
+.bg-gray-800 {
+  background-color: rgba(12, 19, 31, 0.78) !important;
+  border: 1px solid var(--grid-line);
+}
+
+.bg-gray-700 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.text-white {
+  color: var(--text-p) !important;
+}
+
+.text-gray-400 {
+  color: var(--text-main) !important;
+}
+
+.text-gray-500 {
+  color: var(--text-muted) !important;
+}
+
+.text-blue-400 {
+  color: var(--text-topline) !important;
+}
+
+/* Typography using website fonts */
+h1, h2, h3 {
+  font-family: var(--font-logo);
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: var(--font-tech) !important;
+}
+
+/* Button styles matching website */
+.bg-blue-600 {
+  background-color: var(--accent) !important;
+}
+
+.bg-blue-600:hover, .hover\:bg-blue-700:hover {
+  background-color: var(--accent-hover) !important;
+}
+
+.bg-green-600 {
+  background-color: #0a8a4a !important;
+}
+
+.hover\:bg-green-700:hover {
+  background-color: #0b9d54 !important;
+}
+
+/* Custom slider styles */
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg-dark);
+}
+
+.slider::-moz-range-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg-dark);
+}
+
+/* Custom scrollbar for page navigation */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 6px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 3px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+  background: var(--text-main);
+}
+
+/* Topline style from website */
+.topline {
+  color: var(--text-topline);
+  font-family: var(--font-tech);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 720px) {
+  .tool-nav {
+    padding: 1rem 1rem 1rem 1.25rem;
+  }
+
+  .tool-nav-brand {
+    gap: 0.75rem;
+  }
+
+  .tool-nav-logo {
+    font-size: 1.65rem;
+  }
+
+  .tool-nav-label {
+    font-size: 0.64rem;
+  }
+
+  .tool-shell {
+    padding: 1.25rem 1rem;
+  }
+}

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Hardware</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — the physical device.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="index.html">1 · Welcome</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">2 · Hardware</span>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="matrix.html">3 · Matrix</a>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="controls.html">4 · Controls</a>
+        </nav>
+
+        <section class="handbook-page" id="page-hardware">
+          <h2 class="handbook-page__title">The device</h2>
+          <p class="handbook-page__summary">Every port, button, and jack on a TŒRN unit — what it does, when you use it, and what to watch out for.</p>
+
+          <section class="hb-sub" id="overview">
+            <h2>Top-down overview</h2>
+            <p class="lede">The face of TŒRN is dominated by the <strong>16×16 RGB matrix</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the top edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–K) run along the top edge. The unit runs from an internal LiPo cell; charging happens over USB&nbsp;C.</p>
+
+            <div class="hb-portmap" aria-label="Annotated device map">
+              <figure class="hb-portmap__photo">
+                <img src="topview.jpg" alt="TŒRN top-down photo of the device" loading="lazy" />
+                <figcaption>The unit, photographed from above. Letters A–F mark the lower left and right edges in the schematic; G–K mark the top edge.</figcaption>
+              </figure>
+              <svg viewBox="-90 0 780 800" role="img" aria-label="Hardware port map" class="hb-portmap__svg">
+                <defs>
+                  <linearGradient id="encRgb" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#2eb9ff"/>
+                    <stop offset="35%" stop-color="#34c759"/>
+                    <stop offset="65%" stop-color="#ffcc00"/>
+                    <stop offset="100%" stop-color="#ff3b30"/>
+                  </linearGradient>
+                </defs>
+                <!-- Chassis (portrait, 3:4 aspect ratio) -->
+                <rect x="60" y="40" width="480" height="640" fill="#0a0a0e" stroke="#2a2a32" stroke-width="2"/>
+                <!-- Matrix area -->
+                <rect x="100" y="80" width="400" height="400" fill="#111114" stroke="#252530" stroke-width="2"/>
+                <text x="300" y="285" fill="#5a5a68" font-family="Space Grotesk, sans-serif" font-size="18" text-anchor="middle">16 × 16 RGB matrix</text>
+                <!-- Touch 1 / Touch 2 — circular pads between matrix and encoders -->
+                <circle cx="165" cy="502" r="16" fill="#1a1a26" stroke="#4a4a5a" stroke-width="1.5"/>
+                <text x="165" y="506" fill="#cfcfdf" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">1</text>
+                <text x="165" y="528" fill="#8a8a98" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">L</text>
+                <circle cx="435" cy="502" r="16" fill="#1a1a26" stroke="#4a4a5a" stroke-width="1.5"/>
+                <text x="435" y="506" fill="#cfcfdf" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">2</text>
+                <text x="435" y="528" fill="#8a8a98" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">R</text>
+
+                <!-- Encoders: 15% tighter spacing, centered on chassis; centers at 147, 249, 351, 453 -->
+                <g>
+                  <circle cx="147" cy="565" r="28" fill="#161620" stroke="url(#encRgb)" stroke-width="3"/>
+                  <text x="147" y="572" fill="#fff" font-size="15" text-anchor="middle" font-weight="700">1</text>
+                  <circle cx="249" cy="565" r="28" fill="#161620" stroke="url(#encRgb)" stroke-width="3"/>
+                  <text x="249" y="572" fill="#fff" font-size="15" text-anchor="middle" font-weight="700">2</text>
+                  <circle cx="351" cy="565" r="28" fill="#161620" stroke="url(#encRgb)" stroke-width="3"/>
+                  <text x="351" y="572" fill="#fff" font-size="15" text-anchor="middle" font-weight="700">3</text>
+                  <circle cx="453" cy="565" r="28" fill="#161620" stroke="url(#encRgb)" stroke-width="3"/>
+                  <text x="453" y="572" fill="#fff" font-size="15" text-anchor="middle" font-weight="700">4</text>
+                </g>
+
+                <!-- Top-edge ports (G–K) — along the rim opposite the matrix in this schematic -->
+                <!-- Letter labels above each port -->
+                <text x="115" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">G</text>
+                <text x="195" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">H</text>
+                <text x="275" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">I</text>
+                <text x="355" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">J</text>
+                <text x="445" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">K</text>
+                <!-- Port hardware glyphs along the top edge -->
+                <g>
+                  <!-- G · Internal mic capsule -->
+                  <circle cx="115" cy="660" r="9" fill="#202028" stroke="#3a3a4a"/>
+                  <circle cx="115" cy="660" r="3" fill="#3a3a4a"/>
+                  <!-- H · Micro SD slot -->
+                  <rect x="178" y="652" width="34" height="16" fill="#202028" stroke="#3a3a4a"/>
+                  <!-- I · Mic in 6.35 mm jack -->
+                  <circle cx="275" cy="660" r="11" fill="#202028" stroke="#3a3a4a"/>
+                  <circle cx="275" cy="660" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
+                  <!-- J · Line in 6.35 mm jack -->
+                  <circle cx="355" cy="660" r="11" fill="#202028" stroke="#3a3a4a"/>
+                  <circle cx="355" cy="660" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
+                  <!-- K · Touch 3 — circular pad -->
+                  <circle cx="445" cy="660" r="15" fill="#1a1a26" stroke="#4a4a5a" stroke-width="1.5"/>
+                  <text x="445" y="664" fill="#cfcfdf" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">3</text>
+                </g>
+                <!-- Descriptive labels below the top-edge ports -->
+                <text x="115" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Internal mic</text>
+                <text x="195" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Micro SD</text>
+                <text x="275" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Mic in</text>
+                <text x="275" y="713" fill="#0e1622" font-size="10" text-anchor="middle">(6.35 mm)</text>
+                <text x="355" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Line in</text>
+                <text x="355" y="713" fill="#0e1622" font-size="10" text-anchor="middle">(6.35 mm)</text>
+                <text x="445" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Touch 3</text>
+
+                <!-- A–C: lower left edge; glyphs on chassis, labels outside (black text) -->
+                <g>
+                  <rect x="62" y="516" width="16" height="14" fill="#202028" stroke="#3a3a4a"/>
+                  <text x="52" y="530" fill="#0e1622" font-size="11" font-weight="600" text-anchor="end">A · Line out</text>
+                  <rect x="66" y="566" width="12" height="14" fill="#202028" stroke="#3a3a4a"/>
+                  <text x="52" y="580" fill="#0e1622" font-size="11" font-weight="600" text-anchor="end">B · USB-C</text>
+                  <circle cx="70" cy="616" r="11" fill="#202028" stroke="#3a3a4a"/>
+                  <circle cx="70" cy="616" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
+                  <text x="52" y="630" fill="#0e1622" font-size="11" font-weight="600" text-anchor="end">C · Headphone out</text>
+                </g>
+
+                <!-- D–F: lower right edge (F→E→D top to bottom); glyphs on chassis, labels outside -->
+                <g>
+                  <rect x="518" y="516" width="18" height="12" fill="#202028" stroke="#3a3a4a"/>
+                  <text x="548" y="530" fill="#0e1622" font-size="11" font-weight="600" text-anchor="start">F · Power switch</text>
+                  <circle cx="530" cy="568" r="11" fill="#202028" stroke="#3a3a4a"/>
+                  <circle cx="530" cy="568" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
+                  <text x="548" y="580" fill="#0e1622" font-size="11" font-weight="600" text-anchor="start">E · MIDI out (TRS)</text>
+                  <circle cx="530" cy="616" r="11" fill="#202028" stroke="#3a3a4a"/>
+                  <circle cx="530" cy="616" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
+                  <text x="548" y="630" fill="#0e1622" font-size="11" font-weight="600" text-anchor="start">D · MIDI in (TRS)</text>
+                </g>
+              </svg>
+              <dl class="hb-portmap__legend">
+                <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level under <a href="menus.html#vol">VOL → LOUT</a>.</dd></div>
+                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Charges the internal LiPo and provides host data for firmware updates via the Teensy boot path.</dd></div>
+                <div><dt>C</dt><dd><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use any phones or in-ears; level under <a href="menus.html#vol">VOL → MAIN</a>.</dd></div>
+                <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device. See <a href="tempo-midi.html">Tempo &amp; MIDI</a>.</dd></div>
+                <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock + notes; pick what to emit under <a href="menus.html#midi">MIDI → SEND</a>.</dd></div>
+                <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Boots when slid on; the current pattern is autosaved before shutdown.</dd></div>
+                <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the top edge for hands-free sampling. Pick it as the active source under <a href="menus.html#rec">REC → INPT</a>.</dd></div>
+                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — top edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject.</dd></div>
+                <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the top edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain under <a href="menus.html#rec">REC → MIC</a>.</dd></div>
+                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo on the top edge. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
+                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the top edge, used for chord gestures and a few menu-specific actions. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
+              </dl>
+            </div>
+
+            <div class="hb-warn"><strong>SD card:</strong> only insert/eject with the unit <em>off</em>. The firmware re-indexes the card on boot. TŒRN does not mount the card as USB mass storage — prepare the initial layout with a card reader, or transfer files while the card stays in the unit via <a href="samples.html#sd-tool">ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (see <a href="samples.html#card-layout">Samples → SD card setup</a>).</div>
+          </section>
+
+          <section class="hb-sub" id="controls">
+            <h2>Controls at a glance</h2>
+            <p>Three input families are wired to the firmware:</p>
+            <ul>
+              <li><strong>Four RGB-lit rotary encoders</strong> (1–4, left to right) on the front edge — each one turns, short-presses, and long-presses. Their function changes per screen. Row&nbsp;1 of the matrix paints additional small hints just above the encoders.</li>
+              <li><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the top edge. They handle back/exit, tap tempo, filter / sample-browser entry, and chord gestures. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
+              <li><strong>Right-side power switch</strong> — physical on/off.</li>
+            </ul>
+            <p>There are no menu buttons or screens beyond the matrix itself. Everything the firmware needs to communicate appears as lit pixels in known regions of the 16×16 area, explained in <a href="matrix.html">The matrix</a>.</p>
+          </section>
+
+          <section class="hb-sub" id="internals">
+            <h2>Internals</h2>
+            <ul>
+              <li><strong>Microcontroller:</strong> Teensy&nbsp;4.1 plus the Teensy Audio Shield.</li>
+              <li><strong>Memory:</strong> 16&nbsp;MB PSRAM (used for sample voices and the preview buffer) + up to 64&nbsp;GB Micro&nbsp;SD.</li>
+              <li><strong>Audio:</strong> 44.1&nbsp;kHz, 16-bit, stereo output. Mono input recording.</li>
+              <li><strong>Battery:</strong> internal LiPo. Estimated percentage shown under <a href="menus.html#etc">ETC → BATT</a> — accurate enough for "is this enough for the set?" decisions.</li>
+              <li><strong>Speaker:</strong> small internal driver; switchable under <a href="menus.html#vol">VOL → SPKR</a>.</li>
+              <li><strong>Internal mic + Mic-in jack:</strong> a built-in capsule for hands-free sampling, plus a dedicated 6.35&nbsp;mm Mic-in jack on the top edge for an external microphone. Pick which one is active under <a href="menus.html#rec">REC → INPT</a>; gain lives under <a href="menus.html#rec">REC → MIC</a>.</li>
+            </ul>
+          </section>
+
+          <section class="hb-sub" id="palette">
+            <h2>Colour scheme</h2>
+            <p>Bright pixels follow the main voice colours below; idle / off pixels use a dim "base" tint of the same hue so empty rows stay readable but quiet. You can switch to alternate palettes (or a custom one from the card) under <a href="menus.html#etc">ETC → COLR</a>.</p>
+            <div class="swatch-row" aria-hidden="true">
+              <span class="swatch" style="background:#ff0000" title="Voice 1"></span>
+              <span class="swatch" style="background:#ff4500" title="Voice 2"></span>
+              <span class="swatch" style="background:#ffff00" title="Voice 3"></span>
+              <span class="swatch" style="background:#00c800" title="Voice 4"></span>
+              <span class="swatch" style="background:#00ffff" title="Voice 5"></span>
+              <span class="swatch" style="background:#0000ff" title="Voice 6"></span>
+              <span class="swatch" style="background:#ff00ff" title="Voice 7"></span>
+              <span class="swatch" style="background:#dc6464" title="Voice 8"></span>
+              <span class="swatch" style="background:#787878" title="Neutral / synth"></span>
+            </div>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="index.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Welcome</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="matrix.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">The matrix</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

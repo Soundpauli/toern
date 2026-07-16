@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TŒRN | SD Tool</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&family=JetBrains+Mono:wght@300;400;600&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="tool-shell.css"/>
+  <script>
+    document.documentElement.classList.add("fonts-loaded");
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(() => {
+        document.documentElement.classList.add("fonts-loaded");
+      });
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body.tool-page { line-height: 1.6; }
+    .sd-container { max-width: 920px; margin: 0 auto; }
+    .sd-section {
+      margin: 1.25rem 0;
+      padding: 1.25rem 1.5rem;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--grid-line);
+      border-radius: 12px;
+      position: relative;
+    }
+    .sd-section h2 {
+      font-family: var(--font-logo);
+      font-size: 1.6rem;
+      color: var(--text-p);
+      margin-bottom: 0.75rem;
+      font-weight: 400;
+    }
+    .sd-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    .sd-help {
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      flex: 1 1 220px;
+      min-width: 0;
+    }
+    .sd-btn, .file-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--grid-line);
+      padding: 0.55rem 1rem;
+      border-radius: 6px;
+      color: var(--text-p);
+      font-family: var(--font-tech);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s, border-color 0.2s;
+      display: inline-block;
+    }
+    .sd-btn:hover, .file-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      transform: translateY(-1px);
+    }
+    .sd-btn.primary, .file-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .sd-btn.primary:hover, .file-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .sd-btn.danger { color: var(--accent); border-color: rgba(255, 59, 48, 0.45); }
+    .sd-btn:disabled, .file-btn.disabled {
+      opacity: 0.45; cursor: not-allowed; pointer-events: none; transform: none;
+    }
+    #fileInput { display: none; }
+    .sd-meta {
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      color: var(--text-topline);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+      padding-bottom: 0.85rem; margin-bottom: 0.75rem;
+      border-bottom: 1px solid var(--grid-line);
+    }
+    .crumbs {
+      position: static; top: auto; left: auto; width: auto; padding: 0; z-index: auto;
+      display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center;
+      gap: 0.15rem 0.35rem;
+      font-family: var(--font-tech); font-size: 0.85rem; min-width: 0;
+      margin: 0 0 0.55rem; color: inherit; transition: none;
+    }
+    .crumbs button {
+      background: none; border: none; color: var(--text-topline); cursor: pointer;
+      padding: 0; font: inherit; flex: none;
+    }
+    .crumbs button:hover { text-decoration: underline; color: var(--accent); }
+    .crumbs .sep { color: var(--text-muted); flex: none; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .autoplay {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-family: var(--font-tech); font-size: 0.75rem; color: var(--text-muted); user-select: none;
+    }
+    .autoplay input { accent-color: var(--accent); }
+    .cols {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) 88px auto;
+      column-gap: 0.85rem; row-gap: 0.5rem; align-items: center;
+      padding: 0.35rem 0.25rem;
+      font-family: var(--font-tech);
+      font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .cols button {
+      background: none; border: none; font: inherit; color: inherit;
+      cursor: pointer; text-align: left; padding: 0;
+    }
+    .cols button:hover, .cols button.active { color: var(--text-topline); }
+    .list { list-style: none; margin: 0; padding: 0; min-height: 280px; outline: none; }
+    .row {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) 88px auto;
+      column-gap: 0.85rem; row-gap: 0.5rem; align-items: center;
+      padding: 0.55rem 0.35rem;
+      border-bottom: 1px solid var(--grid-line);
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+    }
+    .row:last-child { border-bottom: none; }
+    .row:hover { background: rgba(255, 255, 255, 0.03); }
+    .row.selected {
+      background: rgba(46, 185, 255, 0.1);
+      outline: 1px solid rgba(46, 185, 255, 0.35);
+      border-radius: 6px;
+    }
+    .row .name {
+      background: none; border: none; text-align: left; padding: 0;
+      font: inherit; color: var(--text-p); cursor: pointer;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .row .name.dir { color: var(--text-topline); font-weight: 500; }
+    .row .meta { color: var(--text-muted); font-size: 0.75rem; text-align: right; }
+    .row .ops { display: flex; gap: 0.3rem; justify-content: flex-end; }
+    .row .ops .sd-btn { padding: 0.3rem 0.5rem; font-size: 0.75rem; }
+    .empty {
+      padding: 2.5rem 1rem; text-align: center; color: var(--text-muted);
+      font-family: var(--font-body);
+    }
+    .banner {
+      margin-top: 0.85rem; padding: 0.75rem 1rem; font-size: 0.85rem;
+      border-radius: 8px; display: none;
+      font-family: var(--font-body);
+      border: 1px solid var(--grid-line);
+    }
+    .banner.show { display: block; }
+    .banner.err {
+      background: rgba(255, 59, 48, 0.12);
+      border-color: rgba(255, 59, 48, 0.4);
+      color: var(--text-p);
+    }
+    .banner.ok {
+      background: rgba(46, 185, 255, 0.12);
+      border-color: rgba(46, 185, 255, 0.35);
+      color: var(--text-p);
+    }
+    .dbg-panel {
+      margin-top: 0.85rem; padding: 0.65rem 0.85rem;
+      border: 1px solid var(--grid-line); border-radius: 8px;
+      background: rgba(0, 0, 0, 0.35);
+      font-family: var(--font-tech); font-size: 0.7rem;
+      color: var(--text-muted); max-height: 180px; overflow: auto;
+      white-space: pre-wrap; word-break: break-word; line-height: 1.45;
+    }
+    .dbg-panel:empty { display: none; }
+    .dbg-panel .dbg-err { color: #ff6b63; }
+    .dbg-panel .dbg-ok { color: #5ec8ff; }
+    .busy-overlay {
+      display: none; position: absolute; inset: 0; z-index: 5;
+      align-items: center; justify-content: center;
+      background: transparent; pointer-events: all; border-radius: 12px;
+    }
+    .sd-section.loading .busy-overlay { display: flex; }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2.5px solid rgba(255,255,255,0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      background: var(--bg-dark);
+      box-shadow: 0 0 0 6px var(--bg-dark);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .explorer.locked .toolbar,
+    .explorer.locked .crumbs,
+    .explorer.locked .cols,
+    .explorer.locked .list { opacity: 0.4; pointer-events: none; }
+    dialog {
+      position: fixed;
+      inset: 0;
+      margin: auto;
+      width: min(380px, calc(100vw - 2rem));
+      max-width: 380px;
+      height: fit-content;
+      border: 1px solid var(--grid-line);
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem;
+      font: inherit;
+      background: #1a2537;
+      color: var(--text-p);
+      box-sizing: border-box;
+    }
+    dialog::backdrop { background: rgba(10, 14, 22, 0.65); }
+    dialog h2 {
+      font-family: var(--font-logo); font-size: 1.5rem; margin: 0 0 0.85rem; font-weight: 400;
+    }
+    dialog input {
+      width: 100%; font-family: var(--font-tech); padding: 0.55rem 0.65rem;
+      border: 1px solid var(--grid-line); margin-bottom: 0.85rem;
+      background: rgba(0,0,0,0.25); color: var(--text-p); border-radius: 6px;
+    }
+    dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
+    .explorer.dragover {
+      outline: 2px dashed var(--accent);
+      outline-offset: -6px;
+    }
+    .drop-hint {
+      display: none; position: absolute; inset: 0; z-index: 4;
+      align-items: center; justify-content: center;
+      font-family: var(--font-tech); font-size: 0.9rem; color: var(--accent);
+      background: rgba(26, 37, 55, 0.88); pointer-events: none; border-radius: 12px;
+    }
+    .explorer.dragover .drop-hint { display: flex; }
+    .hint {
+      margin-top: 0.85rem; font-size: 0.75rem; color: var(--text-muted);
+      font-family: var(--font-tech); letter-spacing: 0.02em;
+    }
+    .sd-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 1rem; margin-bottom: 0.25rem;
+    }
+    .xfer {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      margin: 0;
+      padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+      border: none;
+      border-top: 1px solid var(--grid-line);
+      border-radius: 0;
+      background: rgba(14, 20, 32, 0.96);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+    }
+    .xfer.show { display: block; }
+    body.tool-page.has-xfer { padding-bottom: 5.5rem; }
+    .xfer-label {
+      font-family: var(--font-tech); font-size: 0.75rem; color: var(--text-topline);
+      margin-bottom: 0.45rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .xfer-track {
+      height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden;
+    }
+    .xfer-fill {
+      height: 100%; width: 0%;
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width 0.12s linear;
+    }
+    .xfer.indeterminate .xfer-fill {
+      width: 35% !important;
+      animation: xferSlide 1.1s ease-in-out infinite;
+    }
+    @keyframes xferSlide {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(320%); }
+    }
+    .xfer-meta {
+      margin-top: 0.35rem;
+      font-family: var(--font-tech); font-size: 0.7rem; color: var(--text-muted);
+      display: flex; justify-content: space-between; gap: 0.5rem;
+    }
+  </style>
+</head>
+<body class="tool-page">
+  <noscript><style>html:not(.fonts-loaded) body{opacity:1}</style></noscript>
+  <nav class="tool-nav">
+    <div class="tool-nav-brand">
+      <a href="/" class="tool-nav-logo">TŒRN</a>
+      <span class="tool-nav-label">// SD TOOL</span>
+    </div>
+    <div class="tool-nav-meta sd-meta" id="connStatus">not connected</div>
+  </nav>
+
+  <main class="tool-shell">
+    <div class="tool-content">
+      <div class="sd-container">
+        <div class="sd-section" id="connectBar">
+          <h2>1. Device</h2>
+          <div class="sd-row">
+            <p class="sd-help" id="serialHelp">Chrome / Edge · Connect, then Menu → ETC → SD (WAIT→OK). Opening USB may reboot Teensy — re-open SD after Connect.</p>
+            <button type="button" class="sd-btn primary" id="btnConnect">Connect</button>
+            <button type="button" class="sd-btn" id="btnDisconnect" disabled>Disconnect</button>
+          </div>
+          <div class="busy-overlay" id="connectOverlay" aria-hidden="true"><div class="spinner" role="status" aria-label="Loading"></div></div>
+        </div>
+
+        <div class="sd-section explorer locked" id="panel">
+          <div class="sd-head">
+            <h2>2. Files</h2>
+          </div>
+          <div class="busy-overlay" id="panelOverlay" aria-hidden="true"><div class="spinner" role="status" aria-label="Loading"></div></div>
+          <div class="drop-hint">Drop files to upload</div>
+          <div class="toolbar">
+            <div class="actions">
+              <button type="button" class="sd-btn" id="btnUp" title="Parent folder">↑ Up</button>
+              <button type="button" class="sd-btn" id="btnNew">New folder</button>
+              <label class="file-btn primary" id="uploadLabel" for="fileInput">Upload</label>
+              <input type="file" id="fileInput" multiple/>
+              <button type="button" class="sd-btn" id="btnRefresh">Refresh</button>
+              <label class="autoplay"><input type="checkbox" id="autoplay"/> Autoplay</label>
+            </div>
+          </div>
+          <nav class="crumbs" id="crumbs" aria-label="Path"></nav>
+          <div class="cols" id="cols">
+            <span></span>
+            <button type="button" data-sort="name" class="active">Name ▾</button>
+            <button type="button" data-sort="size">Size</button>
+            <span></span>
+          </div>
+          <ul class="list" id="list" tabindex="0">
+            <li class="empty">On device: Menu → ETC → SD, then connect here</li>
+          </ul>
+        </div>
+
+        <div class="banner" id="banner"></div>
+        <pre class="dbg-panel" id="dbgLog" aria-label="Debug log"></pre>
+        <p class="hint">↑↓ select · ← parent · → open folder · Enter play/open · Space play · F2 rename · drag files to upload</p>
+      </div>
+    </div>
+  </main>
+
+  <div class="xfer" id="xferBar" aria-live="polite">
+    <div class="xfer-label" id="xferLabel">Working…</div>
+    <div class="xfer-track"><div class="xfer-fill" id="xferFill"></div></div>
+    <div class="xfer-meta">
+      <span id="xferDetail"></span>
+      <span id="xferPct"></span>
+    </div>
+  </div>
+
+<dialog id="mkdirDlg">
+  <h2>New folder</h2>
+  <input id="mkdirName" placeholder="folder name" autocomplete="off"/>
+  <div class="dlg-actions">
+    <button type="button" class="sd-btn" id="mkdirCancel">Cancel</button>
+    <button type="button" class="sd-btn primary" id="mkdirOk">Create</button>
+  </div>
+</dialog>
+
+<dialog id="renameDlg">
+  <h2>Rename</h2>
+  <input id="renameName" placeholder="new name" autocomplete="off"/>
+  <div class="dlg-actions">
+    <button type="button" class="sd-btn" id="renameCancel">Cancel</button>
+    <button type="button" class="sd-btn primary" id="renameOk">Rename</button>
+  </div>
+</dialog>
+
+<audio id="audio" preload="none"></audio>
+
+<script>
+const BAUD = 115200;
+const IO_TIMEOUT_MS = 60000;
+const XFER_IDLE_MS = 8000; // max gap between RX chunks during GET/PUT block
+const LIST_LINE_TIMEOUT_MS = 12000;
+const KEEPALIVE_MS = 4000;
+const HANDSHAKE_MS = 45000;
+const TEENSY_FILTERS = [{ usbVendorId: 0x16c0 }];
+
+const state = {
+  path: "/",
+  busy: false,
+  connected: false,
+  portLabel: null,
+  entries: [],
+  selected: 0,
+  sortKey: "name",
+  sortAsc: true,
+  renameFrom: null,
+};
+
+/** @type {Map<string, Uint8Array>} */
+const playCache = new Map();
+const PLAY_CACHE_MAX = 8;
+
+function dbg(msg, level) {
+  const line = `[${new Date().toISOString().slice(11, 23)}] ${msg}`;
+  if (level === "err") console.error(line);
+  else if (level === "ok") console.log("%c" + line, "color:#5ec8ff");
+  else console.log(line);
+  const el = document.getElementById("dbgLog");
+  if (!el) return;
+  const span = document.createElement("span");
+  if (level === "err") span.className = "dbg-err";
+  else if (level === "ok") span.className = "dbg-ok";
+  span.textContent = line + "\n";
+  el.appendChild(span);
+  while (el.childNodes.length > 80) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+const $ = (id) => document.getElementById(id);
+const listEl = $("list");
+const crumbsEl = $("crumbs");
+const statusEl = $("connStatus");
+const bannerEl = $("banner");
+const panelEl = $("panel");
+const audioEl = $("audio");
+let objectUrl = null;
+let sd = null;
+
+// --- CRC32 (zlib-compatible) -------------------------------------------------
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32Hex(data) {
+  let c = 0xffffffff;
+  for (let i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
+  return ((c ^ 0xffffffff) >>> 0).toString(16).toUpperCase().padStart(8, "0");
+}
+
+function concatBytes(a, b) {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+}
+
+function isHiddenName(name) {
+  return !!name && name.startsWith(".");
+}
+
+function parentSdPath(path) {
+  path = (path || "/").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!path || path === "/") return "/";
+  const idx = path.lastIndexOf("/");
+  if (idx <= 0) return "/";
+  return path.slice(0, idx) || "/";
+}
+
+function joinSdPath(parent, name) {
+  parent = (parent || "/").replace(/\\/g, "/");
+  name = String(name || "").replace(/^\/+|\/+$/g, "").replace(/\\/g, "/");
+  if (parent === "" || parent === "/") return "/" + name;
+  return parent.replace(/\/+$/, "") + "/" + name;
+}
+
+// --- Web Serial SD client ----------------------------------------------------
+
+class ToernSdSerial {
+  constructor() {
+    this.port = null;
+    this.reader = null;
+    this.writer = null;
+    this._rxBuf = new Uint8Array(0);
+    this._rxLen = 0;
+    this._chain = Promise.resolve();
+    this._dataWait = null;
+    this._keepaliveTimer = null;
+    this._closed = false;
+    this._connecting = false;
+    this._opBusy = 0;
+    this._readLoopRunning = false;
+    this._readGen = 0;
+    this._disconnectBound = null;
+    this.onDisconnect = null;
+  }
+
+  get connected() {
+    return !!this.port && !this._closed;
+  }
+
+  _enqueue(fn) {
+    const run = this._chain.then(
+      () => this._runOp(fn),
+      () => this._runOp(fn),
+    );
+    this._chain = run.catch(() => {});
+    return run;
+  }
+
+  async _runOp(fn) {
+    this._opBusy++;
+    try {
+      return await fn();
+    } finally {
+      this._opBusy--;
+    }
+  }
+
+  async _sleep(ms) {
+    await new Promise((r) => setTimeout(r, ms));
+  }
+
+  _clearRx() {
+    this._rxBuf = new Uint8Array(0);
+    this._rxLen = 0;
+  }
+
+  _wakeWaiters(errMsg) {
+    if (!this._dataWait) return;
+    const wake = this._dataWait;
+    this._dataWait = null;
+    try { wake(errMsg || "not connected"); } catch (_) {}
+  }
+
+  async _safeReleaseStreams() {
+    const reader = this.reader;
+    const writer = this.writer;
+    const port = this.port;
+    this.reader = null;
+    this.writer = null;
+    this.port = null;
+    this._clearRx();
+    this._wakeWaiters("not connected");
+    if (reader) {
+      try { await reader.cancel(); } catch (_) {}
+      try { reader.releaseLock(); } catch (_) {}
+    }
+    if (writer) {
+      try { await writer.abort(); } catch (_) {}
+      try { writer.releaseLock(); } catch (_) {}
+    }
+    if (port) {
+      try { await port.close(); } catch (_) {}
+    }
+    // Chrome needs a beat before the same (or re-enumerated) port can open again.
+    await this._sleep(250);
+  }
+
+  async _releasePort() {
+    this._stopKeepalive();
+    this._unbindDisconnect();
+    await this._safeReleaseStreams();
+  }
+
+  _unbindDisconnect() {
+    if (this.port && this._disconnectBound) {
+      try { this.port.removeEventListener("disconnect", this._disconnectBound); } catch (_) {}
+    }
+    this._disconnectBound = null;
+  }
+
+  async _pickPort(preferred) {
+    if (preferred) {
+      try {
+        // Prefer a live port object from getPorts() over a stale handle after USB re-enum.
+        const granted = await navigator.serial.getPorts();
+        for (const p of granted) {
+          if (p === preferred) return p;
+        }
+        if (granted.length === 1) return granted[0];
+        if (granted.length > 1) return preferred;
+        return preferred;
+      } catch (_) {
+        return preferred;
+      }
+    }
+    const granted = await navigator.serial.getPorts();
+    if (granted.length) return granted[0];
+    return null;
+  }
+
+  async _waitForReappear(timeoutMs = 4000) {
+    const now = await navigator.serial.getPorts();
+    if (now.length) return now[0];
+    dbg("waiting for USB re-enumerate…");
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (port) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try { navigator.serial.removeEventListener("connect", onConnect); } catch (_) {}
+        resolve(port || null);
+      };
+      const onConnect = (ev) => finish(ev.target);
+      const timer = setTimeout(async () => {
+        const ports = await navigator.serial.getPorts().catch(() => []);
+        finish(ports[0] || null);
+      }, timeoutMs);
+      navigator.serial.addEventListener("connect", onConnect);
+    });
+  }
+
+  async _openPort(port) {
+    dbg("openPort: closing existing if needed");
+    if (port.readable || port.writable) {
+      try { await port.close(); } catch (_) {}
+      await this._sleep(400);
+    }
+    dbg("openPort: port.open()");
+    await port.open({ baudRate: BAUD, bufferSize: 256 * 1024 });
+    this.port = port;
+    this._closed = false;
+    this.reader = port.readable.getReader();
+    this.writer = port.writable.getWriter();
+    this._clearRx();
+    this._readGen += 1;
+    const gen = this._readGen;
+    this._startReadLoop(gen);
+    // Teensy often reboots when the port opens — give USB + sketch time to come back.
+    dbg("openPort: settling 2200ms (USB blip / possible reboot)");
+    await this._sleep(2200);
+    if (this._rxLen) {
+      const text = new TextDecoder("utf-8", { fatal: false }).decode(this._rxBuf.subarray(0, Math.min(120, this._rxLen)));
+      dbg("openPort: RX during settle (" + this._rxLen + "B): " + JSON.stringify(text));
+    } else {
+      dbg("openPort: no RX during settle — open Menu → ETC → SD if needed");
+    }
+  }
+
+  // Wait for SD banner or a successful PING. Opening the port can reboot the Teensy
+  // and drop out of Menu → ETC → SD; keep pinging so the user can re-enter.
+  async _handshakeSd(onStatus) {
+    const deadline = performance.now() + HANDSHAKE_MS;
+    let n = 0;
+    let sawNeedSd = false;
+
+    const tryConsumeLine = async (timeoutMs) => {
+      try {
+        const line = (await this._readLine(timeoutMs)).trim();
+        dbg("handshake ← " + JSON.stringify(line));
+        return line;
+      } catch (_) {
+        return null;
+      }
+    };
+
+    // Consume banner already in RX (do not ignore it / do not glue with next PING).
+    while (this._findLineEnd() >= 0) {
+      const existing = await tryConsumeLine(500);
+      if (existing && existing.startsWith("OK")) return existing;
+      if (existing && /NEED_SD/i.test(existing)) sawNeedSd = true;
+      if (!existing) break;
+    }
+
+    while (performance.now() < deadline) {
+      if (this._closed) throw new Error("not connected");
+      n += 1;
+      const leftSec = Math.max(1, Math.ceil((deadline - performance.now()) / 1000));
+      const hint = sawNeedSd
+        ? `Device alive — open Menu → ETC → SD (${leftSec}s)`
+        : `Menu → ETC → SD · PING ${n} (${leftSec}s)`;
+      if (onStatus) onStatus(hint);
+      dbg(`handshake PING #${n}`);
+      try {
+        await this._write("PING\n");
+      } catch (err) {
+        dbg("handshake write failed: " + (err && err.message || err), "err");
+        throw err;
+      }
+      const line = await tryConsumeLine(1800);
+      if (line && line.startsWith("OK")) return line;
+      if (line && /NEED_SD/i.test(line)) {
+        sawNeedSd = true;
+        dbg("device says NEED_SD — re-enter Menu → ETC → SD", "err");
+      }
+      await this._sleep(350);
+    }
+    throw new Error(
+      sawNeedSd
+        ? "Device is online but not on SD page — open Menu → ETC → SD (WAIT), then Connect again if needed."
+        : "No serial reply — reflash firmware with SD serial, then Menu → ETC → SD. Opening USB can reboot Teensy; re-enter SD after Connect.",
+    );
+  }
+
+  async connect(existingPort, onStatus) {
+    if (!navigator.serial) {
+      throw new Error("Web Serial not supported — use Chrome or Edge");
+    }
+    await this.close();
+    this._closed = false;
+    this._connecting = true;
+    this._clearRx();
+    this._chain = Promise.resolve();
+
+    let port = existingPort || null;
+    if (!port) {
+      try {
+        port = await navigator.serial.requestPort({ filters: TEENSY_FILTERS });
+      } catch (err) {
+        if (err && err.name === "NotFoundError") {
+          port = await navigator.serial.requestPort();
+        } else {
+          this._connecting = false;
+          throw err;
+        }
+      }
+    }
+
+    let lastErr = null;
+    // At most 2 opens: first try + one reopen if USB re-enumerated. Do NOT reopen
+    // on ping timeout (that reboots Teensy again and kicks you out of SD).
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        dbg(`connect: open ${attempt}/2`);
+        if (onStatus) onStatus(`Opening USB… (${attempt}/2)`);
+        if (attempt > 1) {
+          await this._sleep(1500);
+          const fresh = await this._waitForReappear(4000);
+          if (fresh) port = fresh;
+          else port = await this._pickPort(port);
+          if (!port) throw new Error("serial port not available after disconnect");
+        }
+        await this._openPort(port);
+        if (onStatus) onStatus("Waiting for Menu → ETC → SD…");
+        const msg = await this._handshakeSd(onStatus);
+        dbg("connect: ready → " + msg, "ok");
+        this._connecting = false;
+        this._unbindDisconnect();
+        this._disconnectBound = () => {
+          if (this._connecting) {
+            dbg("disconnect event ignored (still connecting)");
+            return;
+          }
+          dbg("disconnect event → device lost", "err");
+          this._handleLost("Disconnected (device lost)");
+        };
+        port.addEventListener("disconnect", this._disconnectBound);
+        return msg;
+      } catch (err) {
+        lastErr = err;
+        const msg = String(err && err.message || err);
+        dbg(`connect open ${attempt} failed: ${msg}`, "err");
+        this._readGen += 1;
+        try { await this._releasePort(); } catch (_) {}
+
+        // Only reopen if the port itself died — not when SD menu is missing.
+        const usbDied = (err && err.name === "NetworkError")
+          || /device has been lost|Failed to open|not available|not connected/i.test(msg);
+        const needSdOnly = /NEED_SD|not on SD|No serial reply|No SD response/i.test(msg);
+        if (needSdOnly || !usbDied || attempt === 2) break;
+        dbg("USB lost during open — will reopen once");
+        await this._sleep(1800);
+      }
+    }
+    this._connecting = false;
+    this._closed = true;
+    throw lastErr || new Error("connect failed");
+  }
+
+  _startReadLoop(gen) {
+    this._readLoopRunning = true;
+    (async () => {
+      try {
+        while (!this._closed && this._readGen === gen && this.reader) {
+          const reader = this.reader;
+          const { value, done } = await reader.read();
+          if (this._readGen !== gen || this._closed) break;
+          if (done) {
+            dbg("readLoop: stream done", "err");
+            break;
+          }
+          if (value && value.length) {
+            this._pushRx(new Uint8Array(value));
+          }
+        }
+        if (!this._closed && !this._connecting && this._readGen === gen) {
+          dbg("readLoop ended → treat as lost", "err");
+          this._handleLost("Disconnected (device lost)");
+        }
+      } catch (err) {
+        dbg(`readLoop error: ${err && err.message || err}`, "err");
+        if (!this._closed && !this._connecting && this._readGen === gen) {
+          this._handleLost("Disconnected (device lost)");
+        }
+      } finally {
+        if (this._readGen === gen) this._readLoopRunning = false;
+      }
+    })().catch((err) => {
+      dbg(`readLoop unhandled: ${err && err.message || err}`, "err");
+    });
+  }
+
+  _pushRx(chunk) {
+    if (!chunk || !chunk.length || this._closed) return;
+    // Always copy — Web Serial may reuse the underlying buffer.
+    const add = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+    if (this._rxLen === 0) {
+      this._rxBuf = add.slice();
+      this._rxLen = add.length;
+    } else {
+      const next = new Uint8Array(this._rxLen + add.length);
+      next.set(this._rxBuf.subarray(0, this._rxLen), 0);
+      next.set(add, this._rxLen);
+      this._rxBuf = next;
+      this._rxLen += add.length;
+    }
+    if (this._dataWait) {
+      const wake = this._dataWait;
+      this._dataWait = null;
+      wake();
+    }
+  }
+
+  // Wait until RX has at least minLen bytes (installs waiter before re-check to avoid races).
+  _waitUntilRx(minLen, timeoutMs) {
+    if (this._closed) return Promise.reject(new Error("not connected"));
+    if (this._rxLen >= minLen) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this._dataWait === wake) this._dataWait = null;
+        if (this._closed) reject(new Error("not connected"));
+        else if (this._rxLen >= minLen) resolve();
+        else reject(new Error("timeout waiting for data from device"));
+      }, Math.max(1, timeoutMs));
+      const wake = (errMsg) => {
+        if (this._closed || errMsg) {
+          clearTimeout(timer);
+          if (this._dataWait === wake) this._dataWait = null;
+          reject(new Error(errMsg || "not connected"));
+          return;
+        }
+        if (this._rxLen < minLen) {
+          this._dataWait = wake;
+          return;
+        }
+        clearTimeout(timer);
+        if (this._dataWait === wake) this._dataWait = null;
+        resolve();
+      };
+      this._dataWait = wake;
+      if (this._closed) {
+        clearTimeout(timer);
+        if (this._dataWait === wake) this._dataWait = null;
+        reject(new Error("not connected"));
+      } else if (this._rxLen >= minLen) {
+        clearTimeout(timer);
+        if (this._dataWait === wake) this._dataWait = null;
+        resolve();
+      }
+    });
+  }
+
+  _takeRx(n) {
+    if (n <= 0) return new Uint8Array(0);
+    if (n > this._rxLen) throw new Error("internal: short RX buffer");
+    const out = this._rxBuf.slice(0, n); // copy
+    const remain = this._rxLen - n;
+    if (remain <= 0) {
+      this._clearRx();
+    } else {
+      this._rxBuf = this._rxBuf.slice(n, this._rxLen);
+      this._rxLen = remain;
+    }
+    return out;
+  }
+
+  // Index of first line ending (\n, or bare \r not followed by \n). -1 if none yet.
+  _findLineEnd() {
+    for (let i = 0; i < this._rxLen; i++) {
+      const b = this._rxBuf[i];
+      if (b === 0x0a) return i;
+      if (b === 0x0d) {
+        if (i + 1 < this._rxLen) return this._rxBuf[i + 1] === 0x0a ? i + 1 : i;
+        // CR at end of buffer — wait for possible LF
+        return -1;
+      }
+    }
+    return -1;
+  }
+
+  async close() {
+    dbg("close()");
+    this._stopKeepalive();
+    this._unbindDisconnect();
+    this._closed = true;
+    this._readGen = (this._readGen || 0) + 1;
+    await this._safeReleaseStreams();
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  _handleLost(msg) {
+    if (this._closed) return;
+    dbg("_handleLost: " + (msg || "Disconnected"), "err");
+    const cb = this.onDisconnect;
+    this._closed = true;
+    this._readGen = (this._readGen || 0) + 1;
+    this._stopKeepalive();
+    this._unbindDisconnect();
+    this._wakeWaiters("not connected");
+    const reader = this.reader;
+    const writer = this.writer;
+    const port = this.port;
+    this.reader = null;
+    this.writer = null;
+    this.port = null;
+    this._clearRx();
+    // Abort pending read/write so LIST can't hang forever after USB drop.
+    if (reader) {
+      try { reader.cancel().catch(() => {}); } catch (_) {}
+      try { reader.releaseLock(); } catch (_) {}
+    }
+    if (writer) {
+      try { writer.abort().catch(() => {}); } catch (_) {}
+      try { writer.releaseLock(); } catch (_) {}
+    }
+    if (port) {
+      try { port.close().catch(() => {}); } catch (_) {}
+    }
+    if (cb) {
+      try { cb(msg || "Disconnected"); } catch (_) {}
+    }
+  }
+
+  _startKeepalive() {
+    this._stopKeepalive();
+    dbg("keepalive started");
+    let fails = 0;
+    this._keepaliveTimer = setInterval(() => {
+      if (!this.connected || this._opBusy > 0 || state.busy) return;
+      this.ping().then(() => {
+        fails = 0;
+      }).catch(async (err) => {
+        const msg = String(err && err.message || err);
+        dbg("keepalive ping failed (" + (fails + 1) + "): " + msg, "err");
+        // After a failed GET the Teensy may still be waiting for ACK — unblock it.
+        if (/ERR ACK|unexpected response/i.test(msg)) {
+          try {
+            for (let i = 0; i < 3; i++) await this._write("ACK\n");
+            this._clearRx();
+            await this.ping();
+            fails = 0;
+            dbg("keepalive recovered after ACK", "ok");
+            return;
+          } catch (_) {}
+        }
+        fails += 1;
+        if (fails >= 2) this._handleLost("Disconnected (device lost)");
+      });
+    }, KEEPALIVE_MS);
+  }
+
+  _stopKeepalive() {
+    if (this._keepaliveTimer) {
+      clearInterval(this._keepaliveTimer);
+      this._keepaliveTimer = null;
+    }
+  }
+
+  async _readLine(timeoutMs = IO_TIMEOUT_MS) {
+    const deadline = performance.now() + timeoutMs;
+    while (true) {
+      if (this._closed) throw new Error("not connected");
+      const nl = this._findLineEnd();
+      if (nl >= 0) {
+        let lineBytes = this._takeRx(nl + 1);
+        // Trim one trailing LF and/or CR.
+        if (lineBytes.length && lineBytes[lineBytes.length - 1] === 0x0a) {
+          lineBytes = lineBytes.subarray(0, lineBytes.length - 1);
+        }
+        if (lineBytes.length && lineBytes[lineBytes.length - 1] === 0x0d) {
+          lineBytes = lineBytes.subarray(0, lineBytes.length - 1);
+        }
+        let line = new TextDecoder("utf-8", { fatal: false }).decode(lineBytes);
+        // Defense: never return a multi-line blob if buffer math ever glitches.
+        if (/[\r\n]/.test(line)) {
+          const parts = line.split(/\r\n|\n|\r/).filter((p, i, arr) => p.length || i < arr.length - 1);
+          line = parts[0] || "";
+          const rest = parts.slice(1).filter((p) => p.length);
+          if (rest.length) {
+            const enc = new TextEncoder();
+            const back = rest.map((p) => enc.encode(p + "\n"));
+            let total = 0;
+            for (const b of back) total += b.length;
+            const merged = new Uint8Array(total + this._rxLen);
+            let off = 0;
+            for (const b of back) { merged.set(b, off); off += b.length; }
+            if (this._rxLen) merged.set(this._rxBuf.subarray(0, this._rxLen), off);
+            this._rxBuf = merged;
+            this._rxLen = merged.length;
+          }
+        }
+        return line;
+      }
+      const left = deadline - performance.now();
+      if (left <= 0) throw new Error("timeout waiting for line from device");
+      await this._waitUntilRx(this._rxLen + 1, left);
+    }
+  }
+
+  async _readExact(n, idleTimeoutMs = XFER_IDLE_MS, onProgress = null) {
+    if (n <= 0) {
+      if (onProgress) onProgress(0, 0);
+      return new Uint8Array(0);
+    }
+    const started = performance.now();
+    let lastProgress = 0;
+    while (this._rxLen < n) {
+      if (this._closed) throw new Error("not connected");
+      try {
+        await this._waitUntilRx(this._rxLen + 1, idleTimeoutMs);
+      } catch (err) {
+        const got = this._rxLen;
+        throw new Error(
+          `transfer stalled at ${got}/${n} bytes (${Math.round((got / n) * 100)}%) after ${Math.round((performance.now() - started) / 1000)}s — ${err.message || err}`,
+        );
+      }
+      if (onProgress && this._rxLen !== lastProgress) {
+        lastProgress = this._rxLen;
+        onProgress(Math.min(this._rxLen, n), n);
+      }
+    }
+    const out = this._takeRx(n);
+    if (onProgress) onProgress(n, n);
+    return out;
+  }
+
+  async _write(data) {
+    if (!this.writer || this._closed) throw new Error("not connected");
+    const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
+    try {
+      await this.writer.write(bytes);
+    } catch (err) {
+      dbg("write failed: " + (err && err.message || err), "err");
+      throw err;
+    }
+  }
+
+  _expectOk(line, prefix = "OK") {
+    if (line.startsWith("ERR")) throw new Error(line);
+    if (!line.startsWith(prefix)) throw new Error("unexpected response: " + line);
+    return line;
+  }
+
+  ping() {
+    return this._enqueue(async () => {
+      if (this._rxLen) {
+        dbg(`ping: draining ${this._rxLen} stale RX bytes`);
+        this._clearRx();
+      }
+      await this._write("PING\n");
+      return this._expectOk(await this._readLine(8000));
+    });
+  }
+
+  listDir(path = "/", hideDot = true) {
+    return this._enqueue(async () => {
+      if (this._rxLen) {
+        dbg(`listDir: draining ${this._rxLen} stale RX bytes`);
+        this._clearRx();
+      }
+      const cmd = "LIST " + path + "\n";
+      dbg("listDir → " + JSON.stringify(cmd.trim()));
+      await this._write(cmd);
+      const entries = [];
+      let lines = 0;
+      while (true) {
+        if (this._closed) throw new Error("not connected");
+        const line = (await this._readLine(LIST_LINE_TIMEOUT_MS)).trim();
+        lines++;
+        if (lines <= 8 || line === "OK" || line.startsWith("ERR")) {
+          dbg(`listDir ← [${lines}] ${JSON.stringify(line)}`);
+        }
+        if (line === "OK") break;
+        if (line.startsWith("ERR")) throw new Error(line);
+        if (line.startsWith("OK ")) {
+          dbg("listDir: skip banner/ping line");
+          continue;
+        }
+        if (line.startsWith("D ")) {
+          const name = line.slice(2).trim();
+          if (!name) continue;
+          if (hideDot && isHiddenName(name)) continue;
+          entries.push({ type: "dir", name, size: null, duration_ms: null });
+        } else if (line.startsWith("F ")) {
+          const rest = line.slice(2).trim();
+          const parts = rest.split(/\s+/);
+          if (parts.length < 2) continue;
+          const size = parseInt(parts[0], 10);
+          let duration_ms = null;
+          let name;
+          if (parts.length >= 3) {
+            const dur = parseInt(parts[1], 10);
+            name = parts.slice(2).join(" ");
+            duration_ms = Number.isFinite(dur) && dur >= 0 ? dur : null;
+          } else {
+            name = parts.slice(1).join(" ");
+          }
+          if (!name) continue;
+          if (hideDot && isHiddenName(name)) continue;
+          entries.push({ type: "file", name, size, duration_ms });
+        } else if (line) {
+          dbg("listDir: ignore unknown line " + JSON.stringify(line));
+        }
+      }
+      dbg(`listDir done: ${entries.length} entries (${lines} lines)`, "ok");
+      entries.sort((a, b) => {
+        if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      });
+      return entries;
+    });
+  }
+
+  mkdir(path) {
+    return this._enqueue(async () => {
+      if (this._rxLen) this._clearRx();
+      dbg("mkdir → " + path);
+      await this._write("MKDIR " + path + "\n");
+      const line = await this._readLine(15000);
+      dbg("mkdir ← " + JSON.stringify(line));
+      this._expectOk(line);
+    });
+  }
+
+  rm(path) {
+    return this._enqueue(async () => {
+      if (this._rxLen) this._clearRx();
+      dbg("rm → " + path);
+      await this._write("RM " + path + "\n");
+      const line = await this._readLine(15000);
+      dbg("rm ← " + JSON.stringify(line));
+      this._expectOk(line);
+    });
+  }
+
+  rename(src, dst) {
+    return this._enqueue(async () => {
+      if (this._rxLen) this._clearRx();
+      dbg("mv → " + src + " " + dst);
+      await this._write("MV " + src + " " + dst + "\n");
+      const line = await this._readLine(15000);
+      dbg("mv ← " + JSON.stringify(line));
+      this._expectOk(line);
+    });
+  }
+
+  putBytes(remote, data, onProgress) {
+    return this._enqueue(async () => {
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const csum = crc32Hex(bytes);
+      await this._write(`PUT ${remote} ${bytes.length} ${csum}\n`);
+      const ready = await this._readLine();
+      if (ready !== "READY") {
+        throw new Error(ready.startsWith("ERR") ? ready : "expected READY, got: " + ready);
+      }
+      // USB CDC ignores baud rate — must wait for ACK or Teensy RX overruns and hard-faults.
+      const block = 8192;
+      for (let i = 0; i < bytes.length; i += block) {
+        const end = Math.min(i + block, bytes.length);
+        await this._write(bytes.subarray(i, end));
+        const ack = await this._readLine(IO_TIMEOUT_MS);
+        if (ack !== "ACK") {
+          throw new Error(ack.startsWith("ERR") ? ack : "expected ACK, got: " + ack);
+        }
+        if (onProgress) onProgress(end, bytes.length);
+      }
+      this._expectOk(await this._readLine(IO_TIMEOUT_MS));
+    });
+  }
+
+  getBytes(remote, onProgress) {
+    return this._enqueue(async () => {
+      const resync = async () => {
+        for (let i = 0; i < 4; i++) {
+          try { await this._write("ACK\n"); } catch (_) {}
+        }
+        await this._sleep(50);
+        this._clearRx();
+        try {
+          await this._write("PING\n");
+          const line = await this._readLine(3000);
+          dbg("resync ← " + JSON.stringify(line));
+          if (/ERR ACK/i.test(line)) {
+            this._clearRx();
+            await this._write("PING\n");
+            await this._readLine(3000);
+          }
+        } catch (err) {
+          dbg("resync ping: " + (err && err.message || err), "err");
+          this._clearRx();
+        }
+      };
+
+      try {
+        if (this._rxLen) {
+          dbg(`getBytes: draining ${this._rxLen} stale RX bytes`);
+          this._clearRx();
+        }
+        dbg("GET → " + remote);
+        await this._write("GET " + remote + "\n");
+        const header = (await this._readLine(IO_TIMEOUT_MS)).trim();
+        dbg("GET header ← " + JSON.stringify(header));
+        if (header.startsWith("ERR")) throw new Error(header);
+        // New: "OK <size>" then data then "CRC <hex>"
+        // Legacy: "OK <size> <crc>" (reject — needs matching firmware)
+        const mNew = /^OK\s+(\d+)$/.exec(header);
+        const mOld = /^OK\s+(\d+)\s+([0-9A-Fa-f]{1,8})$/.exec(header);
+        if (!mNew && !mOld) throw new Error("unexpected response: " + header);
+        if (mOld && !mNew) {
+          throw new Error("Device firmware too old for GET — reflash with ACK+CRC trailer support");
+        }
+        const size = parseInt(mNew[1], 10);
+
+        await this._write("ACK\n");
+
+        const out = new Uint8Array(size);
+        const block = 512;
+        let off = 0;
+        while (off < size) {
+          const n = Math.min(block, size - off);
+          const piece = await this._readExact(n, XFER_IDLE_MS, (got) => {
+            if (onProgress) onProgress(off + got, size);
+          });
+          out.set(piece, off);
+          off += n;
+          await this._write("ACK\n");
+          if (onProgress) onProgress(off, size);
+          // Let the browser service Web Serial / audio between blocks.
+          await this._sleep(0);
+        }
+
+        const crcLine = (await this._readLine(IO_TIMEOUT_MS)).trim();
+        dbg("GET crc ← " + JSON.stringify(crcLine));
+        const cm = /^CRC\s+([0-9A-Fa-f]{1,8})$/i.exec(crcLine);
+        if (!cm) throw new Error("expected CRC trailer, got: " + crcLine);
+        const expect = cm[1].toUpperCase().padStart(8, "0");
+        const got = crc32Hex(out);
+        if (got !== expect) throw new Error(`CRC mismatch: got ${got} want ${expect}`);
+        dbg(`GET ok: ${size} bytes`, "ok");
+        return out;
+      } catch (err) {
+        dbg("GET failed — resync: " + (err && err.message || err), "err");
+        try { await resync(); } catch (_) {}
+        throw err;
+      }
+    });
+  }
+
+  async rmRecursive(path) {
+    path = path.replace(/\\/g, "/");
+    if (!path || path === "/") throw new Error("ERR REFUSE_ROOT");
+    const parent = parentSdPath(path);
+    const name = path.replace(/\/+$/, "").split("/").pop();
+    let match = null;
+    try {
+      const entries = await this.listDir(parent, false);
+      match = entries.find((e) => e.name === name) || null;
+    } catch (_) {
+      match = null;
+    }
+    if (!match) {
+      await this.rm(path);
+      return;
+    }
+    if (match.type === "dir") {
+      const children = await this.listDir(path, false);
+      for (const child of children) {
+        await this.rmRecursive(joinSdPath(path, child.name));
+      }
+    }
+    await this.rm(path);
+  }
+}
+
+// --- UI helpers --------------------------------------------------------------
+
+function showBanner(msg, ok) {
+  bannerEl.textContent = msg;
+  bannerEl.className = "banner show " + (ok ? "ok" : "err");
+  if (ok) setTimeout(() => bannerEl.classList.remove("show"), 2500);
+}
+
+function fmtXferBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(2) + " MB";
+}
+
+function showProgress(label, ratio, detail) {
+  const bar = $("xferBar");
+  const fill = $("xferFill");
+  bar.classList.add("show");
+  document.body.classList.add("has-xfer");
+  $("xferLabel").textContent = label || "Working…";
+  $("xferDetail").textContent = detail || "";
+  if (ratio == null || !Number.isFinite(ratio)) {
+    bar.classList.add("indeterminate");
+    fill.style.width = "35%";
+    $("xferPct").textContent = "";
+  } else {
+    bar.classList.remove("indeterminate");
+    const pct = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+    fill.style.width = pct + "%";
+    $("xferPct").textContent = pct + "%";
+  }
+}
+
+function hideProgress() {
+  const bar = $("xferBar");
+  bar.classList.remove("show", "indeterminate");
+  document.body.classList.remove("has-xfer");
+  $("xferFill").style.width = "0%";
+  $("xferLabel").textContent = "";
+  $("xferDetail").textContent = "";
+  $("xferPct").textContent = "";
+}
+
+function setBusy(v) {
+  state.busy = v;
+  panelEl.classList.toggle("loading", v);
+  $("connectBar").classList.toggle("loading", v);
+  $("panelOverlay").setAttribute("aria-hidden", v ? "false" : "true");
+  $("connectOverlay").setAttribute("aria-hidden", v ? "false" : "true");
+  if (!v) hideProgress();
+}
+
+function setConnected(connected, portLabel, message) {
+  state.connected = !!connected;
+  state.portLabel = portLabel || null;
+  panelEl.classList.toggle("locked", !state.connected);
+  $("btnConnect").disabled = state.connected;
+  $("btnDisconnect").disabled = !state.connected;
+  if (state.connected) {
+    statusEl.textContent = (message || "connected") + (portLabel ? " · " + portLabel : "");
+  } else {
+    statusEl.textContent = "not connected";
+    crumbsEl.innerHTML = "";
+    state.entries = [];
+    playCache.clear();
+    stopPlayback();
+    listEl.innerHTML = `<li class="empty">On device: Menu → ETC → SD, then connect here</li>`;
+  }
+}
+
+function fmtSize(n) {
+  if (n == null) return "—";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(2) + " MB";
+}
+
+function joinPath(parent, name) {
+  return joinSdPath(parent, name);
+}
+
+function isWav(name) {
+  return /\.wav$/i.test(name || "");
+}
+
+function sortedEntries() {
+  const dirs = state.entries.filter((e) => e.type === "dir");
+  const files = state.entries.filter((e) => e.type !== "dir");
+  const mul = state.sortAsc ? 1 : -1;
+  const cmp = (a, b) => {
+    if (state.sortKey === "size") {
+      return mul * ((a.size || 0) - (b.size || 0)) || a.name.localeCompare(b.name);
+    }
+    return mul * a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  };
+  dirs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  files.sort(cmp);
+  return dirs.concat(files);
+}
+
+function portLabelFrom(port) {
+  try {
+    const info = port.getInfo ? port.getInfo() : {};
+    if (info.usbVendorId != null) {
+      const vid = info.usbVendorId.toString(16).padStart(4, "0");
+      const pid = info.usbProductId != null ? info.usbProductId.toString(16).padStart(4, "0") : "????";
+      return `USB ${vid}:${pid}`;
+    }
+  } catch (_) {}
+  return "serial";
+}
+
+function requireSd() {
+  if (!sd || !sd.connected) throw new Error("not connected");
+  return sd;
+}
+
+function readU16LE(view, off) { return view.getUint16(off, true); }
+function readU32LE(view, off) { return view.getUint32(off, true); }
+
+function wavAlreadyToernFormat(buf) {
+  if (buf.byteLength < 44) return false;
+  const v = new DataView(buf);
+  const tag = (o, n) => String.fromCharCode(...new Uint8Array(buf, o, n));
+  if (tag(0, 4) !== "RIFF" || tag(8, 4) !== "WAVE") return false;
+  let off = 12;
+  let fmtOk = false;
+  while (off + 8 <= buf.byteLength) {
+    const id = tag(off, 4);
+    const sz = readU32LE(v, off + 4);
+    const data = off + 8;
+    if (id === "fmt " && sz >= 16) {
+      const audioFormat = readU16LE(v, data);
+      const channels = readU16LE(v, data + 2);
+      const sampleRate = readU32LE(v, data + 4);
+      const bits = readU16LE(v, data + 14);
+      fmtOk = audioFormat === 1 && channels === 1 && sampleRate === 44100 && bits === 16;
+      break;
+    }
+    off = data + sz + (sz & 1);
+  }
+  return fmtOk;
+}
+
+function encodeWavPcm16Mono44100(floatSamples, filename) {
+  const n = floatSamples.length;
+  const dataSize = n * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, 44100, true);
+  view.setUint32(28, 44100 * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, dataSize, true);
+  let o = 44;
+  for (let i = 0; i < n; i++) {
+    let s = Math.max(-1, Math.min(1, floatSamples[i]));
+    view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    o += 2;
+  }
+  const base = filename.replace(/\.[^.]+$/, "") + ".wav";
+  return new File([buffer], base, { type: "audio/wav" });
+}
+
+function resampleLinear(input, fromRate, toRate) {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const outLen = Math.max(1, Math.round(input.length / ratio));
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src = i * ratio;
+    const i0 = Math.floor(src);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const t = src - i0;
+    out[i] = input[i0] * (1 - t) + input[i1] * t;
+  }
+  return out;
+}
+
+async function prepareUploadFile(file, onProgress) {
+  if (file.name.startsWith(".")) return null;
+  if (!isWav(file.name)) return file;
+
+  if (onProgress) onProgress("Reading " + file.name, null);
+  const ab = await file.arrayBuffer();
+  if (wavAlreadyToernFormat(ab)) {
+    return new File([ab], file.name.replace(/\.[^.]+$/, "") + ".wav", { type: "audio/wav" });
+  }
+
+  if (onProgress) onProgress("Converting " + file.name, null);
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let decoded;
+  try {
+    decoded = await ctx.decodeAudioData(ab.slice(0));
+  } finally {
+    await ctx.close();
+  }
+
+  const chans = decoded.numberOfChannels;
+  const len = decoded.length;
+  const mixed = new Float32Array(len);
+  for (let c = 0; c < chans; c++) {
+    const data = decoded.getChannelData(c);
+    for (let i = 0; i < len; i++) mixed[i] += data[i] / chans;
+  }
+  if (onProgress) onProgress("Resampling " + file.name, 0.55);
+  const samples = resampleLinear(mixed, decoded.sampleRate, 44100);
+  if (onProgress) onProgress("Encoding " + file.name, 0.9);
+  const out = encodeWavPcm16Mono44100(samples, file.name);
+  if (onProgress) onProgress("Converted " + file.name, 1);
+  return out;
+}
+
+async function uploadFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length || !state.connected) return;
+  setBusy(true);
+  try {
+    const client = requireSd();
+    let n = 0;
+    for (let fi = 0; fi < files.length; fi++) {
+      const file = files[fi];
+      const prepared = await prepareUploadFile(file, (label, ratio) => {
+        showProgress(
+          label,
+          ratio,
+          files.length > 1 ? `File ${fi + 1}/${files.length}` : "",
+        );
+      });
+      if (!prepared) continue;
+      const remote = joinPath(state.path, prepared.name);
+      const bytes = new Uint8Array(await prepared.arrayBuffer());
+      await client.putBytes(remote, bytes, (sent, total) => {
+        showProgress(
+          "Uploading " + prepared.name,
+          total ? sent / total : null,
+          fmtXferBytes(sent) + " / " + fmtXferBytes(total),
+        );
+      });
+      n++;
+    }
+    showBanner(n ? `Uploaded ${n} file(s)` : "No files uploaded", !!n);
+    playCache.clear();
+    await refresh();
+  } catch (err) {
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function connectSerial(existingPort) {
+  if (!navigator.serial) {
+    showBanner("Web Serial not supported — use Chrome or Edge over HTTPS", false);
+    return false;
+  }
+  setBusy(true);
+  showProgress("Connecting…", null, "Waiting for Teensy USB (Menu → ETC → SD)");
+  dbg("UI: connect start");
+  try {
+    const client = new ToernSdSerial();
+    client.onDisconnect = (msg) => {
+      dbg("UI: onDisconnect — " + (msg || "Disconnected"), "err");
+      stopPlayback();
+      sd = null;
+      setConnected(false, null);
+      setBusy(false); // clear spinner even if LIST is mid-flight
+      showBanner(msg || "Disconnected", false);
+    };
+    const msg = await client.connect(existingPort, (status) => {
+      showProgress("Connecting…", null, status || "");
+    });
+    sd = client;
+    setConnected(true, portLabelFrom(client.port), msg || "connected");
+    state.path = "/";
+    showBanner("Connected", true);
+    showProgress("Loading folder…", null);
+    dbg("UI: connected, loading folder");
+    // Brief settle before first LIST (USB CDC TX sometimes still settling).
+    await new Promise((r) => setTimeout(r, 150));
+    await refresh();
+    if (sd && sd.connected && state.entries) {
+      sd._startKeepalive();
+      dbg("UI: folder loaded, keepalive on", "ok");
+    } else {
+      dbg("UI: folder load incomplete — keepalive not started", "err");
+    }
+    return true;
+  } catch (err) {
+    dbg("UI: connect failed — " + (err && err.message || err), "err");
+    if (sd) {
+      try { await sd.close(); } catch (_) {}
+      sd = null;
+    }
+    setConnected(false, null);
+    if (err && err.name === "NotFoundError") {
+      showBanner("No port selected", false);
+    } else if (err && (err.name === "NetworkError" || /device has been lost/i.test(String(err.message || err)))) {
+      showBanner("USB lost while opening — try Connect again (keep Menu → ETC → SD)", false);
+    } else {
+      showBanner(String(err.message || err), false);
+    }
+    return false;
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function connectFromUi() {
+  if (!navigator.serial) {
+    showBanner("Web Serial not supported — use Chrome or Edge", false);
+    return;
+  }
+  // Prefer already-authorized ("gekoppeld"/paired) ports — no Chrome picker needed.
+  let port = null;
+  try {
+    const granted = await navigator.serial.getPorts();
+    if (granted.length === 1) {
+      port = granted[0];
+    } else if (granted.length > 1) {
+      // Multiple paired ports: let the user pick (still only shows granted + new).
+      port = await navigator.serial.requestPort({ filters: TEENSY_FILTERS }).catch(async () => {
+        return navigator.serial.requestPort();
+      });
+    }
+  } catch (_) {
+    port = null;
+  }
+  await connectSerial(port);
+}
+
+function renderCrumbs() {
+  const parts = state.path === "/" ? [] : state.path.replace(/^\/+/, "").split("/");
+  let html = `<button type="button" data-path="/">SD</button>`;
+  let acc = "";
+  for (const p of parts) {
+    acc += "/" + p;
+    html += `<span class="sep">/</span><button type="button" data-path="${acc}">${p}</button>`;
+  }
+  crumbsEl.innerHTML = html;
+  crumbsEl.querySelectorAll("button").forEach((btn) => {
+    btn.onclick = () => navigate(btn.dataset.path);
+  });
+  $("btnUp").disabled = state.path === "/";
+}
+
+function renderSortHeaders() {
+  $("cols").querySelectorAll("button[data-sort]").forEach((btn) => {
+    const key = btn.dataset.sort;
+    const active = key === state.sortKey;
+    btn.classList.toggle("active", active);
+    let label = key === "name" ? "Name" : "Size";
+    if (active) label += state.sortAsc ? " ▾" : " ▴";
+    btn.textContent = label;
+  });
+}
+
+function renderList() {
+  const entries = sortedEntries();
+  if (!entries.length) {
+    listEl.innerHTML = `<li class="empty">Empty folder</li>`;
+    return;
+  }
+  if (state.selected < 0) state.selected = 0;
+  if (state.selected >= entries.length) state.selected = entries.length - 1;
+
+  listEl.innerHTML = entries.map((e, idx) => {
+    const full = joinPath(state.path, e.name);
+    const label = e.type === "dir" ? e.name + "/" : e.name;
+    const sel = idx === state.selected ? " selected" : "";
+    const canPlay = e.type === "file" && isWav(e.name);
+    const playCell = canPlay
+      ? `<button type="button" class="sd-btn" data-play="${full}" data-name="${e.name}" title="Play">▶</button>`
+      : `<span></span>`;
+    return `<li class="row${sel}" data-idx="${idx}">
+      ${playCell}
+      <button type="button" class="name ${e.type}" data-idx="${idx}">${label}</button>
+      <span class="meta">${e.type === "dir" ? "folder" : fmtSize(e.size)}</span>
+      <div class="ops">
+        ${e.type === "file" ? `<button type="button" class="sd-btn" data-dl="${full}" data-name="${e.name}">↓</button>` : ""}
+        <button type="button" class="sd-btn" data-ren="${full}" data-name="${e.name}">✎</button>
+        <button type="button" class="sd-btn danger" data-rm="${full}" data-label="${label}">✕</button>
+      </div>
+    </li>`;
+  }).join("");
+
+  listEl.querySelectorAll(".row").forEach((row) => {
+    row.onclick = (ev) => {
+      if (ev.target.closest("button")) return;
+      state.selected = Number(row.dataset.idx);
+      renderList();
+    };
+  });
+  listEl.querySelectorAll(".name").forEach((el) => {
+    el.onclick = () => {
+      state.selected = Number(el.dataset.idx);
+      activateSelected();
+    };
+  });
+  listEl.querySelectorAll("[data-play]").forEach((el) => {
+    if (!el.dataset.play) return;
+    el.onclick = (ev) => {
+      ev.stopPropagation();
+      const row = el.closest(".row");
+      state.selected = Number(row.dataset.idx);
+      renderList();
+      playPath(el.dataset.play, el.dataset.name);
+    };
+  });
+  listEl.querySelectorAll("[data-dl]").forEach((el) => {
+    el.onclick = (ev) => {
+      ev.stopPropagation();
+      download(el.dataset.dl, el.dataset.name);
+    };
+  });
+  listEl.querySelectorAll("[data-ren]").forEach((el) => {
+    el.onclick = (ev) => {
+      ev.stopPropagation();
+      openRename(el.dataset.ren, el.dataset.name);
+    };
+  });
+  listEl.querySelectorAll("[data-rm]").forEach((el) => {
+    el.onclick = (ev) => {
+      ev.stopPropagation();
+      removePath(el.dataset.rm, el.dataset.label);
+    };
+  });
+}
+
+function ensureSelectedVisible() {
+  const selRow = listEl.querySelector(".row.selected");
+  if (selRow) selRow.scrollIntoView({ block: "nearest" });
+}
+
+function stopPlayback() {
+  audioEl.pause();
+  audioEl.removeAttribute("src");
+  audioEl.load();
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl);
+    objectUrl = null;
+  }
+}
+
+async function playPath(path, name) {
+  if (state.busy) {
+    dbg("UI: play ignored (busy)");
+    return;
+  }
+  setBusy(true);
+  stopPlayback();
+  dbg("UI: play " + path);
+  try {
+    let data = playCache.get(path);
+    if (data) {
+      dbg("UI: play cache hit " + path, "ok");
+      showProgress("Loading " + (name || path), 1, fmtXferBytes(data.length));
+    } else {
+      showProgress("Loading " + (name || path), null);
+      data = await requireSd().getBytes(path, (got, total) => {
+        showProgress(
+          "Loading " + (name || path),
+          total ? got / total : null,
+          fmtXferBytes(got) + " / " + fmtXferBytes(total),
+        );
+      });
+      playCache.set(path, data);
+      while (playCache.size > PLAY_CACHE_MAX) {
+        const oldest = playCache.keys().next().value;
+        playCache.delete(oldest);
+      }
+    }
+    const blob = new Blob([data], { type: "audio/wav" });
+    objectUrl = URL.createObjectURL(blob);
+    audioEl.src = objectUrl;
+    await audioEl.play();
+    dbg("UI: play started", "ok");
+  } catch (err) {
+    dbg("UI: play failed — " + (err && err.message || err), "err");
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function maybeAutoplaySelected() {
+  if (!$("autoplay").checked) return;
+  const entries = sortedEntries();
+  const e = entries[state.selected];
+  if (e && e.type === "file" && isWav(e.name)) {
+    playPath(joinPath(state.path, e.name), e.name);
+  }
+}
+
+function activateSelected() {
+  const entries = sortedEntries();
+  const e = entries[state.selected];
+  if (!e) return;
+  const full = joinPath(state.path, e.name);
+  if (e.type === "dir") navigate(full);
+  else if (isWav(e.name)) playPath(full, e.name);
+  else download(full, e.name);
+}
+
+async function refresh() {
+  if (!state.connected) {
+    dbg("refresh skipped (not connected)");
+    return false;
+  }
+  const outerBusy = state.busy;
+  if (!outerBusy) setBusy(true);
+  showProgress("Loading folder…", null, state.path);
+  dbg("refresh: LIST " + state.path);
+  try {
+    state.entries = await requireSd().listDir(state.path);
+    state.selected = 0;
+    renderCrumbs();
+    renderSortHeaders();
+    renderList();
+    statusEl.textContent = (state.portLabel ? state.portLabel + " · " : "") + state.path;
+    listEl.focus({ preventScroll: true });
+    dbg(`refresh ok: ${state.entries.length} items`, "ok");
+    return true;
+  } catch (err) {
+    dbg("refresh failed: " + (err && err.message || err), "err");
+    showBanner(String(err.message || err), false);
+    state.entries = null;
+    return false;
+  } finally {
+    if (!outerBusy) setBusy(false);
+    else hideProgress();
+  }
+}
+
+async function navigate(path) {
+  state.path = path || "/";
+  stopPlayback();
+  await refresh();
+}
+
+async function removePath(path, label) {
+  if (!confirm("Delete " + label + "?")) return;
+  setBusy(true);
+  dbg("UI: delete " + path);
+  try {
+    await requireSd().rmRecursive(path);
+    playCache.clear();
+    showBanner("Deleted " + label, true);
+    await refresh();
+  } catch (err) {
+    dbg("UI: delete failed — " + (err && err.message || err), "err");
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function download(path, name) {
+  setBusy(true);
+  try {
+    showProgress("Downloading " + (name || path), null);
+    const data = await requireSd().getBytes(path, (got, total) => {
+      showProgress(
+        "Downloading " + (name || path),
+        total ? got / total : null,
+        fmtXferBytes(got) + " / " + fmtXferBytes(total),
+      );
+    });
+    const blob = new Blob([data]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name || "file";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function openRename(fullPath, name) {
+  state.renameFrom = fullPath;
+  $("renameName").value = name;
+  $("renameDlg").showModal();
+  $("renameName").focus();
+  $("renameName").select();
+}
+
+$("btnRefresh").onclick = () => refresh();
+$("btnUp").onclick = () => navigate(state.path === "/" ? "/" : state.path.replace(/\/[^/]+\/?$/, "") || "/");
+
+$("cols").querySelectorAll("button[data-sort]").forEach((btn) => {
+  btn.onclick = () => {
+    const key = btn.dataset.sort;
+    if (state.sortKey === key) state.sortAsc = !state.sortAsc;
+    else {
+      state.sortKey = key;
+      state.sortAsc = true;
+    }
+    renderSortHeaders();
+    renderList();
+  };
+});
+
+$("btnConnect").onclick = async () => {
+  await connectFromUi();
+};
+
+$("btnDisconnect").onclick = async () => {
+  setBusy(true);
+  try {
+    if (sd) await sd.close();
+    sd = null;
+    stopPlayback();
+    setConnected(false, null);
+    showBanner("Disconnected", true);
+  } catch (err) {
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+};
+
+$("btnNew").onclick = () => {
+  if (!state.connected) return;
+  $("mkdirName").value = "";
+  $("mkdirDlg").showModal();
+  $("mkdirName").focus();
+};
+$("mkdirCancel").onclick = () => $("mkdirDlg").close();
+$("mkdirOk").onclick = async () => {
+  const name = $("mkdirName").value.trim();
+  if (!name || name.startsWith(".")) {
+    showBanner("Invalid folder name", false);
+    return;
+  }
+  $("mkdirDlg").close();
+  setBusy(true);
+  dbg("UI: mkdir " + name);
+  try {
+    await requireSd().mkdir(joinPath(state.path, name));
+    playCache.clear();
+    showBanner("Created " + name, true);
+    await refresh();
+  } catch (err) {
+    dbg("UI: mkdir failed — " + (err && err.message || err), "err");
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+};
+
+$("renameCancel").onclick = () => $("renameDlg").close();
+$("renameOk").onclick = async () => {
+  const newName = $("renameName").value.trim();
+  if (!newName || newName.startsWith(".") || newName.includes("/") || newName.includes("\\")) {
+    showBanner("Invalid name", false);
+    return;
+  }
+  const fromPath = state.renameFrom;
+  if (!fromPath) return;
+  const toPath = joinPath(state.path, newName);
+  $("renameDlg").close();
+  setBusy(true);
+  dbg("UI: rename " + fromPath + " → " + toPath);
+  try {
+    await requireSd().rename(fromPath, toPath);
+    playCache.clear();
+    showBanner("Renamed", true);
+    await refresh();
+  } catch (err) {
+    dbg("UI: rename failed — " + (err && err.message || err), "err");
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+};
+
+$("fileInput").onchange = async (ev) => {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = "";
+  await uploadFiles(files);
+};
+
+panelEl.addEventListener("dragenter", (ev) => {
+  if (!state.connected) return;
+  ev.preventDefault();
+  panelEl.classList.add("dragover");
+});
+panelEl.addEventListener("dragover", (ev) => {
+  if (!state.connected) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "copy";
+  panelEl.classList.add("dragover");
+});
+panelEl.addEventListener("dragleave", (ev) => {
+  if (!panelEl.contains(ev.relatedTarget)) panelEl.classList.remove("dragover");
+});
+panelEl.addEventListener("drop", async (ev) => {
+  ev.preventDefault();
+  panelEl.classList.remove("dragover");
+  if (!state.connected) return;
+  await uploadFiles(ev.dataTransfer && ev.dataTransfer.files);
+});
+
+document.addEventListener("keydown", (ev) => {
+  if (!state.connected || state.busy) return;
+  if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  if ($("mkdirDlg").open || $("renameDlg").open) return;
+
+  const entries = sortedEntries();
+  if (!entries.length && ev.key !== "ArrowLeft") return;
+
+  if (ev.key === "ArrowDown") {
+    ev.preventDefault();
+    state.selected = Math.min(entries.length - 1, state.selected + 1);
+    renderList();
+    ensureSelectedVisible();
+    maybeAutoplaySelected();
+  } else if (ev.key === "ArrowUp") {
+    ev.preventDefault();
+    state.selected = Math.max(0, state.selected - 1);
+    renderList();
+    ensureSelectedVisible();
+    maybeAutoplaySelected();
+  } else if (ev.key === "ArrowLeft") {
+    ev.preventDefault();
+    if (state.path !== "/") $("btnUp").click();
+  } else if (ev.key === "ArrowRight") {
+    ev.preventDefault();
+    const e = entries[state.selected];
+    if (e && e.type === "dir") activateSelected();
+  } else if (ev.key === "Enter") {
+    ev.preventDefault();
+    activateSelected();
+  } else if (ev.key === " " || ev.code === "Space") {
+    ev.preventDefault();
+    const e = entries[state.selected];
+    if (e && e.type === "file" && isWav(e.name)) {
+      playPath(joinPath(state.path, e.name), e.name);
+    }
+  } else if (ev.key === "F2") {
+    ev.preventDefault();
+    const e = entries[state.selected];
+    if (e) openRename(joinPath(state.path, e.name), e.name);
+  } else if (ev.key === "Delete" || ev.key === "Backspace") {
+    if (ev.key === "Backspace" && !ev.metaKey && !ev.ctrlKey) return;
+    ev.preventDefault();
+    const e = entries[state.selected];
+    if (e) removePath(joinPath(state.path, e.name), e.type === "dir" ? e.name + "/" : e.name);
+  }
+});
+
+(async () => {
+  if (!navigator.serial) {
+    $("serialHelp").textContent = "Web Serial unavailable — open in Chrome or Edge (HTTPS)";
+    $("btnConnect").disabled = true;
+    showBanner("Web Serial not supported in this browser — use Chrome or Edge", false);
+    setConnected(false, null);
+    return;
+  }
+  setConnected(false, null);
+  try {
+    const ports = await navigator.serial.getPorts();
+    if (ports.length === 1) {
+      $("serialHelp").textContent = "Paired port ready · Connect (no picker) · Menu → ETC → SD";
+    } else if (ports.length > 1) {
+      $("serialHelp").textContent = ports.length + " paired ports · Connect to choose · Menu → ETC → SD";
+    } else {
+      $("serialHelp").textContent = "Chrome / Edge · Connect picks the Teensy · Menu → ETC → SD";
+    }
+  } catch (_) {
+    $("serialHelp").textContent = "Chrome / Edge · device on Menu → ETC → SD · USB Serial";
+  }
+})();
+</script>
+</body>
+</html>

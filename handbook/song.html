@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Song mode</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — pattern pages, the song arranger, and seeding new patterns.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="tempo-midi.html">10 · Tempo &amp; MIDI</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">11 · Song</span>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="files.html">12 · Files</a>
+        </nav>
+
+        <section class="handbook-page" id="page-song">
+          <h2 class="handbook-page__title">Song mode</h2>
+          <p class="handbook-page__summary">Turning loops into a set list: how the 16 pattern pages relate, what PMODE does, how the SONG arranger chains pages together, and how to seed a fresh pattern with NEW.</p>
+
+          <section class="hb-sub" id="pages">
+            <h2>Pattern pages, loops, and PMODE</h2>
+            <p class="lede">One pattern holds <strong>16 pages × 16 steps</strong> = 256 steps per song. The page strip on row&nbsp;16 (see <a href="matrix.html#row16">Matrix</a>) shows which pages have content. How playback walks pages is set by <a href="menus.html#play">PLAY → PMD</a> (PMODE):</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="lk_pmd" width="16" height="16" role="img" aria-label="PMODE"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Mode</th><th>What playback does</th><th>Best for</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>OFF</strong></td><td>Stays on one page forever</td><td>DJ-style locked loops; live tweaking.</td></tr>
+                  <tr><td><strong>ON</strong></td><td>Marches forward to the next used page</td><td>A→B→C song form without the arranger.</td></tr>
+                  <tr><td><strong>SONG</strong></td><td>Follows the SONG arranger</td><td>Non-linear set lists, repeats, bridges.</td></tr>
+                  <tr><td><strong>NEXT</strong></td><td>Waits for a cued target then jumps once</td><td>Live transitions on a queue.</td></tr>
+                </tbody>
+              </table>
+            </article>
+            <p>The <a href="menus.html#play">PLAY → LOOP</a> setting caps how many steps in a page actually sound (or OFF for the natural 16). Short loops feel groovebox-like; longer loops feel more linear.</p>
+          </section>
+
+          <section class="hb-sub" id="song">
+            <h2>The SONG arranger</h2>
+            <p class="lede">Open <strong>SONG</strong> from the root menu. The screen shows a chain of up to <strong>64 slots</strong>, each pointing at one of the pattern's 16 pages. With PMODE&nbsp;=&nbsp;SONG, playback steps through the chain and wraps back to the start.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="song" width="16" height="16" role="img" aria-label="Song mode"></canvas>
+              </div>
+              <p class="viz-caption--below">Example: page 07 written into song slot 23.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Back to grid</td><td>Returns to the last grid view without losing the chain.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Pattern page (1–16)</td><td>Picks which page goes into the currently selected song slot. The page number is shown in that page's voice colour.</td></tr>
+                  <tr><th>Short</th><td>Clear slot</td><td>Removes the selected slot from the chain; later slots shift up.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Transport (play/pause)</td><td>Starts and stops the chain. Same role as on the grid.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Song slot (1–64)</td><td>Moves the edit cursor along the chain. The currently sounding slot is shown as a bright dot moving along row 1 while playback runs.</td></tr>
+                  <tr><th>Short</th><td>Insert empty slot</td><td>Pushes later slots down by one.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+            <p><strong>Workflow:</strong> set PMODE to SONG, open the SONG screen, choose a slot with encoder&nbsp;4, dial the pattern page with encoder&nbsp;2, repeat. Empty slots are skipped. During playback you see two strips at once: the page strip on row&nbsp;16 (which pattern page is currently sounding) and a moving green dot on row&nbsp;1 (which song slot you are on).</p>
+            <div class="hb-tip"><strong>Tip:</strong> chains can repeat. Put the same page in three consecutive slots to "stay" on it for three loops before moving on, or alternate page 01 / page 02 / page 01 / page 02 to create a call-and-response.</div>
+          </section>
+
+          <section class="hb-sub" id="new">
+            <h2>NEW — generate a starting pattern</h2>
+            <p class="lede">The NEW screen seeds a fresh pattern from a genre prototype plus a length, or starts blank. It does not <em>load</em> a stored pattern — it <em>generates</em> notes for you using the same scale-aware algorithm that powers single-mode randomize, then loads the result into RAM as the current pattern.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="newfile" width="16" height="16" role="img" aria-label="NEW pattern"></canvas>
+              </div>
+              <p class="viz-caption--below">NEW dialog with a genre selected on the upper rows.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Cancel</td><td>Leaves NEW without touching the current pattern.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Pick a genre</td><td>HOUSE, TECHNO, DRUM&amp;BASS, AMBIENT, HIPHOP, BREAKS, BLANK — each carries its own template of which voices fire on which steps.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Length in pages</td><td>1–16. Picks how many of the 16 pages the generator will fill. Pages beyond the chosen length stay empty.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Generate &amp; load</td><td>Confirms the choice, runs the generator, and drops you back on the grid with the new pattern live.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+            <p>Re-running NEW with the same genre and length will produce a different roll each time — it is not deterministic. Save anything you like to <a href="files.html#file">FILE</a> immediately, because the next NEW will overwrite what's in RAM.</p>
+            <div class="hb-warn"><strong>NEW overwrites the current pattern.</strong> The genre templates set their own BPM, palette, and pack hint — your previously loaded sounds may stop reflecting the new notes. Save first.</div>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="tempo-midi.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Tempo &amp; MIDI</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="files.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Files</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

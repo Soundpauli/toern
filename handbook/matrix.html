@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — The matrix</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
+    <nav class="hb-sidebar__nav">
+      <p class="hb-sidebar__group">Get started</p>
+      <ul>
+        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
+        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
+        <li><a href="matrix.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
+        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Compose</p>
+      <ul>
+        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
+        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
+        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
+        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
+        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
+      </ul>
+      <p class="hb-sidebar__group">Operate</p>
+      <ul>
+        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
+        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
+        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
+        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
+        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
+        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <header>
+          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
+          <p class="tag">Handbook — reading the 16×16 matrix.</p>
+        </header>
+
+        <nav class="hb-journey" aria-label="Reading progress">
+          <a class="hb-journey__step" href="index.html">1 · Welcome</a>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="hardware.html">2 · Hardware</a>
+          <span class="hb-journey__sep">›</span>
+          <span class="hb-journey__step hb-journey__step--here">3 · Matrix</span>
+          <span class="hb-journey__sep">›</span>
+          <a class="hb-journey__step" href="controls.html">4 · Controls</a>
+        </nav>
+
+        <section class="handbook-page" id="page-matrix">
+          <h2 class="handbook-page__title">The matrix</h2>
+          <p class="handbook-page__summary">TŒRN has no screen besides the 16×16 RGB grid — the same surface you tap notes onto is also the display. This chapter teaches you to read every row, lane, and helper before you place a single note.</p>
+
+          <section class="hb-sub" id="axes">
+            <h2>Time goes sideways, voices stack upward</h2>
+            <p class="lede">The grid is a two-dimensional score. The <strong>X axis (columns 1…16)</strong> is musical <em>time</em>: column 1 sounds first, column 16 last. The <strong>Y axis (rows 1…16)</strong> is <em>voices</em> stacked from bottom to top — row 2 is voice 1, row 3 is voice 2, and so on. Two rows are reserved as helper strips: <strong>row 1</strong> at the very bottom and <strong>row 16</strong> at the very top.</p>
+            <div class="hb-tip"><strong>Read direction:</strong> firmware numbers pixels with <code>(x, y)</code> using 1-based coordinates and y=1 at the bottom. Wherever this handbook says "row&nbsp;1" it means the lowest visible row of LEDs, and "row&nbsp;16" the highest.</div>
+
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="matrix_anatomy" width="16" height="16" role="img" aria-label="Matrix anatomy"></canvas>
+              </div>
+              <p class="viz-caption--below">Anatomy: tinted voice bands fill rows 2–15; row&nbsp;1 (bottom) is the 4/4 beat guide; row&nbsp;16 (top) is the page strip.</p>
+            </article>
+          </section>
+
+          <section class="hb-sub" id="row1">
+            <h2>Row 1 — beat guide</h2>
+            <p>In default <a href="sequencing.html#draw">Draw</a> mode the lowest row is <strong>not</strong> a voice lane. It shows a quiet <strong>4/4 orientation bar</strong>: dim markers on steps&nbsp;1, 5, 9, and&nbsp;13 so you can spot beat&nbsp;one and each downbeat while you edit. <strong>No notes can be placed here</strong> — painting starts on row&nbsp;2.</p>
+            <p>With the cursor on <strong>row&nbsp;16</strong>, row&nbsp;1 instead paints <strong>encoder-hint glyphs</strong> so you know which knob is armed for page-wide tools — see <a href="sequencing.html#page-row">Sequencing → The page row</a>.</p>
+            <div class="hb-further">
+              <p><strong>Further information.</strong> Move the cursor onto row&nbsp;1 and the strip becomes a control surface: encoder&nbsp;2 long press opens the <a href="sequencing.html#mutes">mute overlay</a> (see that chapter); when input monitoring is enabled, encoder&nbsp;1 rides live input gain and a short press cycles monitor level — the beat markers change tint to match.</p>
+            </div>
+          </section>
+
+          <section class="hb-sub" id="row16">
+            <h2>Row 16 — the page strip <em>and</em> the power-tool row</h2>
+            <p>The top row of the matrix carries the <strong>page strip</strong>: one LED per pattern page (a song holds up to 16 pages). But row 16 has a second job that is just as important: <strong>it is where every "operate on the whole pattern" tool lives</strong>. The same gesture that paints a single note on a voice row turns into a page-wide action when your cursor sits on row 16.</p>
+
+            <div class="hb-tip"><strong>Row 16 is where these features live — and nowhere else:</strong>
+              <ul>
+                <li>Copy &amp; paste a page</li>
+                <li>Clear an entire page (single mode)</li>
+                <li>Random / scale-aware fill for the focused voice (single mode)</li>
+                <li>Note-shift — moving a whole voice's notes in time / across rows (single mode)</li>
+                <li>Column clear — delete all voices at one step (draw mode unpaint)</li>
+                <li>Mute overlay (encoder&nbsp;2 long press)</li>
+                <li>Per-voice volume on encoder&nbsp;1 (single mode)</li>
+              </ul>
+              Step off row 16 onto any voice row and these gestures all turn back into "paint one note". The cue that the power tools are live is the <strong>hint strip on row 1</strong>: its colours change the moment your cursor crosses onto row 16. See <a href="sequencing.html#page-row">Sequencing → The page row</a> for the full gesture map.
+            </div>
+
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="page_slots" width="16" height="16" role="img" aria-label="Page strip"></canvas>
+              </div>
+              <p class="viz-caption--below">Page strip colours, summarised.</p>
+              <table class="opt-table">
+                <thead><tr><th>Colour</th><th>Meaning</th></tr></thead>
+                <tbody>
+                  <tr><td>Bright yellow-white</td><td>Audible <em>and</em> edit page (you are watching what's playing).</td></tr>
+                  <tr><td>Green</td><td>Audible page; you are editing a different one.</td></tr>
+                  <tr><td>Yellow</td><td>Edit page only (playback is elsewhere or stopped).</td></tr>
+                  <tr><td>Dark blue</td><td>Other page that already contains notes.</td></tr>
+                  <tr><td>Very dark red</td><td>Empty page (no notes recorded yet).</td></tr>
+                  <tr><td>Dim red (full strip)</td><td>Loop mode active and that slot is beyond the loop end.</td></tr>
+                </tbody>
+              </table>
+            </article>
+          </section>
+
+          <section class="hb-sub" id="voice-rows">
+            <h2>Rows 2–15 — the voice lanes</h2>
+            <p class="lede">Fourteen rows in the middle hold the <strong>sixteen voices</strong>. Because the grid is square, two of the voices share visual space with the page / hint strips — there is no row "dedicated" to voices 16 and 1 in the display sense; the firmware re-uses the strips when you scroll the cursor onto them.</p>
+            <p>Each voice has its own permanent <strong>colour</strong>; you will recognise rows by hue at a glance. The mapping below is the firmware default (palette&nbsp;0):</p>
+
+            <div class="hb-voices" role="list">
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#ff0000"></span><span class="hb-voice__num">1</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#ff4500"></span><span class="hb-voice__num">2</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#ffff00"></span><span class="hb-voice__num">3</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#00c800"></span><span class="hb-voice__num">4</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#00ffff"></span><span class="hb-voice__num">5</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#0000ff"></span><span class="hb-voice__num">6</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#ff00ff"></span><span class="hb-voice__num">7</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#dc6464"></span><span class="hb-voice__num">8</span><span><strong>Sample slot</strong></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#2a2a2a;border:1px dashed #555"></span><span class="hb-voice__num">9</span><span><strong>Empty</strong><br><span class="hb-voice__desc">No voice assigned</span></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#2a2a2a;border:1px dashed #555"></span><span class="hb-voice__num">10</span><span><strong>Empty</strong><br><span class="hb-voice__desc">No voice assigned</span></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#787878"></span><span class="hb-voice__num">11</span><span><strong>3-voice poly synth</strong><br><span class="hb-voice__desc">Chords, leads, pads</span></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#2a2a2a;border:1px dashed #555"></span><span class="hb-voice__num">12</span><span><strong>Empty</strong><br><span class="hb-voice__desc">No voice assigned</span></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#00ff46"></span><span class="hb-voice__num">13</span><span><strong>Mono synth A</strong><br><span class="hb-voice__desc">2-osc, LFO, arp</span></span></div>
+              <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#ff3232"></span><span class="hb-voice__num">14</span><span><strong>Mono synth B</strong><br><span class="hb-voice__desc">2-osc, LFO, arp</span></span></div>
+            </div>
+
+            <p><strong>Sample slots 1–8</strong> read audio from the SD card (see <a href="samples.html">Samples</a>). <strong>Voices 9, 10, and 12 are intentionally empty</strong> — no sound engine is wired to those rows; you may still move the cursor there, but notes placed on them do nothing. Voice <strong>11</strong> is a three-voice polyphonic synth with ten instrument presets; voices <strong>13</strong> and <strong>14</strong> are independent mono synths with their own LFO and arpeggiator.</p>
+            <div class="hb-tip"><strong>Reverb send (RVRB):</strong> not available on voices <strong>3, 4, 13, or 14</strong>. On the mono synths, filter page&nbsp;0 uses <strong>CENT</strong> in the third column instead of RVRB. See <a href="sound.html#filter">Sound design → filter pages</a>.</div>
+            <p>For the actual sound chain (oscillators → envelope → filter → effects), see <a href="sound.html">Sound design</a>.</p>
+          </section>
+
+          <section class="hb-sub" id="cursor">
+            <h2>The cursor &amp; the playhead</h2>
+            <p>Two moving dots are easy to confuse at first:</p>
+            <ul>
+              <li>The <strong>edit cursor</strong> is where the next gesture will land. In draw mode it is at <code>(current_x, current_y)</code> set by encoders 4 (column) and 1 (row). You can disguise it (under <a href="menus.html#play">PLAY → CRSR</a>) as a thin cross, a channel-readout dot, or a big block.</li>
+              <li>The <strong>playhead</strong> is the column the sequencer is currently sounding. It walks across the visible page, lights notes brighter as it hits them, and skips muted lanes.</li>
+            </ul>
+            <p>When playback is stopped, only the cursor moves; when playback is running, both move and the playhead is always the brighter of the two on its column.</p>
+          </section>
+
+          <section class="hb-sub" id="modes-preview">
+            <h2>What a "mode" actually means</h2>
+            <p>The matrix swaps role completely between modes. The four core sequencing views are explained in <a href="sequencing.html">Sequencing</a>:</p>
+            <ul>
+              <li><strong>Draw</strong> — full 16×16 grid view, every voice visible at full intensity.</li>
+              <li><strong>Single</strong> — focus on one voice at a time, other voices dimmed.</li>
+              <li><strong>Paint</strong> — two-hand draw: encoder&nbsp;1 picks the row, encoder&nbsp;4 sweeps the column.</li>
+              <li><strong>Unpaint / R-mode</strong> — one-hand erase pattern with a mute mask.</li>
+            </ul>
+            <p>Menu mode overlays the whole matrix with text and submenu dots; you are still "in" your music — just not drawing on it. The <a href="menus.html">Menu map</a> covers every screen.</p>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="hardware.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Hardware</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="controls.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Controls</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+      <script src="handbook-nav.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

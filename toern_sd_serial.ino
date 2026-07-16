@@ -1,6 +1,6 @@
 // SD card file server over USB Serial (Menu → ETC → SD).
 // Active only while that menu page is open; polled from loop().
-// Companion client: website/tools/sd-tool-standalone/toern_sd.py
+// Companion client: tools/sd-tool-standalone/toern_sd.py
 //
 // Line commands (UTF-8, terminated by '\n'):
 //   PING
