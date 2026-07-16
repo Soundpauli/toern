@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 5
 #define VOL_PAGES_COUNT 6
-#define ETC_PAGES_COUNT 7
+#define ETC_PAGES_COUNT 8
 
 // External variables
 extern Mode *currentMode;
@@ -110,6 +110,7 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
 // ETC submenu pages
 MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"INFO", 39, false, nullptr},          // Info / version / credits
+  {"SD", 49, false, nullptr},            // USB Serial SD file server (active while on this page)
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
   {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
@@ -1531,6 +1532,20 @@ FLASHMEM void showEtcMenu() {
   bool fullRedraw = (pageIndex != lastRenderedEtcPage) || (mainSetting != lastRenderedEtcSetting);
   if (takeMenuForceFullRedraw()) fullRedraw = true;
   if (mainSetting == 39) fullRedraw = true;  // INFO animates
+  if (mainSetting == 49) {
+    // SD page: refresh when wait/connected state changes
+    extern bool sdSerialServerIsActive();
+    extern bool sdSerialServerClientConnected();
+    static bool lastSdActive = false;
+    static bool lastSdClient = false;
+    bool nowActive = sdSerialServerIsActive();
+    bool nowClient = sdSerialServerClientConnected();
+    if (nowActive != lastSdActive || nowClient != lastSdClient) {
+      lastSdActive = nowActive;
+      lastSdClient = nowClient;
+      fullRedraw = true;
+    }
+  }
   // BATT (42): redraw every 200 ms for live updates
   if (mainSetting == 42) {
     static elapsedMillis battMenuRedraw;
@@ -1839,6 +1854,17 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 39: // INFO - Version / credits scroll
       drawEtcInfoPage();
+      break;
+
+    case 49: // SD - USB Serial file server (active while this page is open)
+      {
+        extern bool sdSerialServerClientConnected();
+        const CRGB tc = currentMenuParentTextColor();
+        drawText("SD", 2, 10, tc);
+        bool connected = sdSerialServerClientConnected();
+        // WAIT (yellow) until host connects; OK (green) once client talks
+        drawMenuValue(connected ? "OK" : "WAIT", 2, 3, connected ? UI_GREEN : UI_YELLOW);
+      }
       break;
       
     case 40: // LGHT - LED Strip toggle (OFF/ON) - encoder 3

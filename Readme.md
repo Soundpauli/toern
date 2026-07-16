@@ -37,6 +37,20 @@ This project uses several external libraries, some of which have been modified f
 - **i2cEncoderLibV2** — Rotary encoder control
 - **FastTouch** — Touch button interface
 
+### SD card over USB (Menu → ETC → SD)
+
+Open **Menu → ETC → SD** on the device (file server is active only while that page is open). With any USB Type that includes Serial (e.g. **Serial + MIDI**), use the standalone helper:
+
+```bash
+cd website/tools/sd-tool-standalone
+pip install pyserial
+python3 toern_sd.py web
+```
+
+Or CLI: `python3 toern_sd.py -p /dev/cu.usbmodemXXXX list /` (also `put` / `rm` / `mkdir` / `get`).
+
+Web UI: `http://127.0.0.1:8787` — select the serial port and Connect.
+
 ---
 
 ## License

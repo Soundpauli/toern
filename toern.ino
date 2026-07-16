@@ -2508,6 +2508,10 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     setSynthDefaultValues((unsigned int)GLOB.currentChannel);
   }
 
+  if (currentMode == &filterMode && match_buttons(currentButtonStates, 2, 0, 0, 0) && was_buttons_0000(oldButtons)) {  // "2000" - reset current filter page only
+    setCurrentFilterPageDefaultValues((unsigned int)GLOB.currentChannel);
+  }
+
 
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 2, 0)) {  // "0010"
@@ -3361,17 +3365,24 @@ FLASHMEM void setup() {
     drawText(VERSION, 3, 1, CRGB(0, 100, 100));    // Cyan version at (1,1)
     FastLEDshow();
 
-    // Write reset flag file
+    // Ensure SD is mounted before writing reset flag
+    while (!SD.begin(INT_SD)) {
+      FastLEDclear();
+      drawText("SD?", 3, 8, CRGB(100, 0, 0));
+      FastLEDshow();
+      delay(1000);
+      yield();
+    }
+
     File resetFile = SD.open("reset.dat", FILE_WRITE);
     if (resetFile) {
       resetFile.println("RESET");
       resetFile.close();
     }
 
-    // Endless loop with delay
     while (true) {
       delay(500);
-      yield();  // Allow system to handle background tasks
+      yield();
     }
   }
 
@@ -5598,6 +5609,25 @@ void checkSerialColors() {
 
 void loop() {
   checkSerialColors();
+
+  // Menu → ETC → SD: enable serial file server while that page is open
+  {
+    extern bool inEtcSubmenu;
+    extern int getCurrentMenuMainSetting();
+    extern void sdSerialServerSetActive(bool on);
+    extern void sdSerialServerPoll();
+    extern void sdSerialServerPollNeedSdHint();
+    extern bool sdSerialServerIsActive();
+    const bool wantSd = inEtcSubmenu && (getCurrentMenuMainSetting() == 49);
+    if (wantSd != sdSerialServerIsActive()) {
+      sdSerialServerSetActive(wantSd);
+      extern void menuRequestFullRedraw();
+      menuRequestFullRedraw();
+    }
+    if (wantSd) sdSerialServerPoll();
+    else sdSerialServerPollNeedSdHint();
+  }
+
   updateExternalOneBlink();
   checkMidi();  // Process MIDI early in loop for lower latency
   // Debounced SD backup of EEPROM settings (settings.txt)

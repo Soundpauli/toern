@@ -1410,7 +1410,10 @@ FLASHMEM static void drawScreensaverMatrix() {
 FLASHMEM void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
-    bool screensaverActive = !isNowPlaying && (millis() - lastUserActivityMs >= 60000UL);
+    extern bool sdSerialServerClientConnected();
+    bool screensaverActive = !isNowPlaying
+      && !sdSerialServerClientConnected()
+      && (millis() - lastUserActivityMs >= 60000UL);
     if (screensaverActive) {
       drawScreensaverMatrix();
     } else if (screensaverEncodersOff) {

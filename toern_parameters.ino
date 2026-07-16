@@ -163,6 +163,105 @@ void setSynthDefaultValues(int ch) {
    // updateSynthVoice(11) is called at the end of resetAllToDefaults() instead
 }
 
+// Defaults for a single slider setting (mirrors setFilters/Envelope/SynthDefaultValues).
+static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
+  switch (arr) {
+    case ARR_FILTER:
+      switch (idx) {
+        case PASS: return 15;
+        case FREQUENCY: return 0;
+        case REVERB: return 0;
+        case BITCRUSHER: return 0;
+        case DETUNE: return 16;
+        case OCTAVE: return 16;
+        case RES: return 0;
+        case EFX: return 0;
+        case FILTER_WAVEFORM: return 8;
+        default: return 0;
+      }
+    case ARR_PARAM:
+      if (ch == 13 || ch == 14) {
+        switch (idx) {
+          case ATTACK: return 32;
+          case DECAY: return 9;
+          case SUSTAIN: return 20;
+          case RELEASE: return 9;
+          default: return 0;
+        }
+      }
+      switch (idx) {
+        case ATTACK: return 32;
+        case DECAY: return 32;
+        case SUSTAIN: return 10;
+        case RELEASE: return 5;
+        default: return 0;
+      }
+    case ARR_SYNTH:
+      switch (idx) {
+        case CUTOFF: return 16;
+        case RESONANCE: return 0;
+        case FILTER: return 0;
+        case CENT:
+          if (ch == 13) return 0;
+          if (ch == 14) return 8;
+          return 16;
+        case SEMI: return 0;
+        case INSTRUMENT: return 0;
+        case FORM: return 0;
+        case LFO_RATE: return 0;
+        case LFO_DEPTH: return 0;
+        case LFO_PHASE: return 0;
+        case ARP_STEP: return 0;
+        default: return 0;
+      }
+    default:
+      return 0;
+  }
+}
+
+// Reset only the sliders on the current filter page for one channel (FILTERMODE "2000").
+void setCurrentFilterPageDefaultValues(int ch) {
+  if (ch < 0 || ch >= NUM_CHANNELS) return;
+  extern SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
+  extern uint8_t filterPage[NUM_CHANNELS];
+
+  const uint8_t page = filterPage[ch];
+  bool touchedSynth = false;
+
+  for (uint8_t i = 0; i < 4; ++i) {
+    const SliderDefEntry& d = sliderDef[ch][page][i];
+    if (d.arr == ARR_NONE || d.idx < 0) continue;
+    if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) continue;
+
+    const int val = defaultSettingValue(ch, d.arr, d.idx);
+
+    switch (d.arr) {
+      case ARR_FILTER:
+        SMP.filter_settings[ch][d.idx] = val;
+        if (d.idx != EFX) {
+          setFilters((FilterType)d.idx, ch, true);
+        }
+        break;
+      case ARR_PARAM:
+        SMP.param_settings[ch][d.idx] = val;
+        setParams((ParameterType)d.idx, ch);
+        break;
+      case ARR_SYNTH:
+        SMP.synth_settings[ch][d.idx] = val;
+        if (ch == 11 && d.idx == INSTRUMENT) {
+          applySynthInstrumentPreset(ch, val);
+        }
+        touchedSynth = true;
+        break;
+      default:
+        break;
+    }
+  }
+
+  initSliders(page, ch);
+  if (touchedSynth && ch == 11) updateSynthVoice(11);
+}
+
 // When ch11 instrument (INST) changes, align synth sliders with that preset’s intended defaults.
 // `*_synth()` uses CUTOFF/RES/FILTER (p1–p3), SEMI (p4) for detune spread, CENT (p5) for octave override
 // `octave[ch] = 1.0 + (p5/MAXSLIDER)*7`, and FORM (p6) for osc1 wavetable index — see toern_synths.ino.
