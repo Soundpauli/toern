@@ -1,8 +1,18 @@
 
-
 FLASHMEM void savePattern(bool autosave) {
-  
+  extern bool isNowPlaying;
+  extern void stopSdPreviewIfPlaying();
+  extern void sdIoYield();
+  extern void sdIoBeginAudioSafe();
+  extern void sdIoEndAudioSafe();
+
   drawNoSD();
+  // Autosave often runs right after pause while sample/synth voices are still decaying.
+  // Keep Audio library fed for the whole SD burst (isNowPlaying is already false by then).
+  if (autosave) {
+    sdIoBeginAudioSafe();
+  }
+  stopSdPreviewIfPlaying();
   
   // Only clear display for manual saves, not autosaves
   if (!autosave) {
@@ -17,24 +27,41 @@ FLASHMEM void savePattern(bool autosave) {
   } else {
     sprintf(OUTPUTf, "%d.txt", SMP.file);
   }
-  if (SD.exists(OUTPUTf)) {
-    SD.remove(OUTPUTf);
-  }
-  File saveFile = SD.open(OUTPUTf, FILE_WRITE);
+  // Truncate in place — avoid SD.remove() which can stall audio for a long time on large files.
+  File saveFile = SD.open(OUTPUTf, O_WRITE | O_CREAT | O_TRUNC);
   if (saveFile) {
-    // Save notes
+    // Buffer note records (4 bytes each) to avoid per-byte SD calls while playing.
+    uint8_t buf[512];
+    size_t bufLen = 0;
+    unsigned rowCount = 0;
+
     for (unsigned int sdx = 1; sdx < maxlen; sdx++) {
       for (unsigned int sdy = 1; sdy < maxY + 1; sdy++) {
         maxdata = maxdata + note[sdx][sdy].channel;
-        saveFile.write(note[sdx][sdy].channel);
-        saveFile.write(note[sdx][sdy].velocity);
-        saveFile.write(note[sdx][sdy].probability);
-        saveFile.write(note[sdx][sdy].condition);  // Save condition (default 1 if not set)
+        if (bufLen + 4 > sizeof(buf)) {
+          saveFile.write(buf, bufLen);
+          bufLen = 0;
+          sdIoYield();
+        }
+        buf[bufLen++] = note[sdx][sdy].channel;
+        buf[bufLen++] = note[sdx][sdy].velocity;
+        buf[bufLen++] = note[sdx][sdy].probability;
+        buf[bufLen++] = note[sdx][sdy].condition;
+        if ((++rowCount & 0x1Fu) == 0u) {
+          sdIoYield();
+        }
       }
     }
+    if (bufLen > 0) {
+      saveFile.write(buf, bufLen);
+      bufLen = 0;
+      sdIoYield();
+    }
+
     // Use a unique marker to indicate the end of notes and start of SMP data
-    saveFile.write(0xFF);  // Marker byte to indicate end of notes
-    saveFile.write(0xFE);  // Marker byte to indicate start of SMP
+    saveFile.write((uint8_t)0xFF);
+    saveFile.write((uint8_t)0xFE);
+    sdIoYield();
 
     // Save current mute states to SMP before writing
     for (int ch = 0; ch < maxY; ch++) {
@@ -44,19 +71,30 @@ FLASHMEM void savePattern(bool autosave) {
       }
     }
     
-    // Save song arrangement to SMP before writing (already in SMP, no copy needed)
-    
-    // Save SMP struct (file/pattern specific data)
-    saveFile.write((uint8_t *)&SMP, sizeof(SMP));
+    // Save SMP struct (file/pattern specific data) in chunks
+    const uint8_t *smpBytes = (const uint8_t *)&SMP;
+    size_t smpLeft = sizeof(SMP);
+    size_t smpOff = 0;
+    const size_t smpChunk = 256;
+    while (smpLeft > 0) {
+      size_t n = min(smpChunk, smpLeft);
+      saveFile.write(smpBytes + smpOff, n);
+      smpOff += n;
+      smpLeft -= n;
+      sdIoYield();
+    }
+    saveFile.close();
   }
-  saveFile.close();
   // Only delete empty files for manual saves, not autosaves
   // (We want to preserve empty state in autosaved.txt)
   if (maxdata == 0 && !autosave) {
     SD.remove(OUTPUTf);
   }
   if (!autosave) {
-    delay(500);
+    // Skip long delay while playing — it starves UI/audio cooperation.
+    if (!isNowPlaying) {
+      delay(500);
+    }
     switchMode(&draw);
   }
   
@@ -64,14 +102,19 @@ FLASHMEM void savePattern(bool autosave) {
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
   
-  yield();
+  sdIoYield();
+  if (autosave) {
+    sdIoEndAudioSafe();
+  }
 }
 
 
 FLASHMEM void saveSamplePack(int pack) {
-    // Stop any SD audio playback to prevent contention/glitches
-    extern AudioPlaySdWav playSdWav1;
-    if (playSdWav1.isPlaying()) playSdWav1.stop();
+    extern void stopSdPreviewIfPlaying();
+    extern size_t sdIoChunkSize();
+    extern void sdIoYield();
+
+    stopSdPreviewIfPlaying();
     
     char filename[64];
     char sourcePath[64];
@@ -118,12 +161,13 @@ FLASHMEM void saveSamplePack(int pack) {
                 continue;
             }
             
-            // EXTRAM buffer + frequent yield: fewer SD round-trips while keeping audio stable.
-            static EXTMEM uint8_t packCopyBuf[65536];  // 64KB chunks for audio stability
+            // Reuse EXTMEM scratch; read/write in sdIoChunkSize() slices while playing.
+            static EXTMEM uint8_t packCopyBuf[65536];
+            const size_t chunk = sdIoChunkSize();
             size_t bytesRead;
-            while ((bytesRead = sourceFile.read(packCopyBuf, sizeof(packCopyBuf))) > 0) {
+            while ((bytesRead = sourceFile.read(packCopyBuf, chunk)) > 0) {
                 destFile.write(packCopyBuf, bytesRead);
-                yield();  // yield every chunk for audio stability
+                sdIoYield();
             }
             
             sourceFile.close();
@@ -147,17 +191,15 @@ FLASHMEM void saveSamplePack(int pack) {
             // Determine how many samples were recorded for this channel
             uint32_t sampleCount = loadedSampleLen[ch];  // number of int16_t samples
             
-            // Write the raw PCM data from the sampled buffer in chunks to prevent blocking
-            // Large samples (930KB) can block CPU for 500-1000ms without chunking
-            // Smaller chunks + frequent yields prevent audio glitches from SD contention.
+            // Write the raw PCM data from the sampled buffer in audio-safe chunks
             uint32_t totalBytes = sampleCount * sizeof(int16_t);
             uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[ch]);
-            const size_t CHUNK_SIZE = 65536;  // 64KB chunks for audio stability
+            const size_t CHUNK_SIZE = sdIoChunkSize();
 
             for (uint32_t offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
-              size_t chunkSize = min((size_t)CHUNK_SIZE, (size_t)(totalBytes - offset));
+              size_t chunkSize = min(CHUNK_SIZE, (size_t)(totalBytes - offset));
               outFile.write(dataPtr + offset, chunkSize);
-              yield();  // yield every chunk for audio stability
+              sdIoYield();
             }
 
             finalizeWavHeader(outFile, totalBytes);
@@ -175,7 +217,7 @@ FLASHMEM void saveSamplePack(int pack) {
                 emptyFile.close();
             }
         }
-        yield();
+        sdIoYield();
     }
     
     // Clear sp0Active flags when saving a samplepack (all samples now part of this pack)
@@ -188,12 +230,17 @@ FLASHMEM void saveSamplePack(int pack) {
     extern bool preventPaintUnpaint;
     preventPaintUnpaint = false;
     
-   yield();
+   sdIoYield();
 }
 
 
 FLASHMEM void loadPattern(bool autoload) {
+  extern bool isNowPlaying;
+  extern void stopSdPreviewIfPlaying();
+  extern void sdIoYield();
+
   drawNoSD();
+  stopSdPreviewIfPlaying();
   
   FastLEDclear();
   char OUTPUTf[50];
@@ -205,14 +252,16 @@ FLASHMEM void loadPattern(bool autoload) {
   
   // Load .txt file
   if (SD.exists(OUTPUTf)) {
-    // showNumber(SMP.file, CRGB(0, 0, 50), 0);
     File loadFile = SD.open(OUTPUTf);
     if (loadFile) {
       unsigned int sdry = 1;
       unsigned int sdrx = 1;
+      unsigned rowCount = 0;
+      uint8_t rec[4];
 
       while (loadFile.available()) {
         int b = loadFile.read();
+        if (b < 0) break;
 
         // Check for the marker indicating the end of notes
         if (b == 0xFF && loadFile.peek() == 0xFE) {
@@ -220,13 +269,21 @@ FLASHMEM void loadPattern(bool autoload) {
           break;            // Exit the loop to load SMP data
         }
 
-        int v = loadFile.read();
-        int p = loadFile.available() ? loadFile.read() : 100;  // Read probability, default to 100 if not present
-        int c = loadFile.available() ? loadFile.read() : 1;    // Read condition, default to 1 if not present
-        note[sdrx][sdry].channel = b;
-        note[sdrx][sdry].velocity = v;
-        note[sdrx][sdry].probability = p;
-        note[sdrx][sdry].condition = c;
+        // Read remaining 3 bytes of the note record (velocity, probability, condition)
+        rec[0] = (uint8_t)b;
+        int n = loadFile.read(rec + 1, 3);
+        if (n < 1) {
+          // Legacy short record: velocity only
+          note[sdrx][sdry].channel = rec[0];
+          note[sdrx][sdry].velocity = 0;
+          note[sdrx][sdry].probability = 100;
+          note[sdrx][sdry].condition = 1;
+        } else {
+          note[sdrx][sdry].channel = rec[0];
+          note[sdrx][sdry].velocity = (n >= 1) ? rec[1] : 0;
+          note[sdrx][sdry].probability = (n >= 2) ? rec[2] : 100;
+          note[sdrx][sdry].condition = (n >= 3) ? rec[3] : 1;
+        }
         sdry++;
         if (sdry > maxY) {
           sdry = 1;
@@ -234,11 +291,24 @@ FLASHMEM void loadPattern(bool autoload) {
         }
         if (sdrx > maxlen)
           sdrx = 1;
+        if ((++rowCount & 0x3Fu) == 0u) {
+          sdIoYield();
+        }
       }
 
       // Load SMP struct after marker (file/pattern specific data)
       if (loadFile.available()) {
-        loadFile.read((uint8_t *)&SMP, sizeof(SMP));
+        uint8_t *smpBytes = (uint8_t *)&SMP;
+        size_t smpLeft = sizeof(SMP);
+        size_t smpOff = 0;
+        while (smpLeft > 0 && loadFile.available()) {
+          size_t n = min((size_t)512, smpLeft);
+          int got = loadFile.read(smpBytes + smpOff, n);
+          if (got <= 0) break;
+          smpOff += (size_t)got;
+          smpLeft -= (size_t)got;
+          sdIoYield();
+        }
         
         // Validate BPM after loading (default to 100 if invalid)
         if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
@@ -253,15 +323,13 @@ FLASHMEM void loadPattern(bool autoload) {
           }
         }
         
-        // Load song arrangement from SMP (already in SMP, no copy needed)
-        
         // Unmute all channels first, then apply loaded mutes based on PMOD state
         unmuteAllChannels();
         applyMutesAfterPMODSwitch();
       }
     }
     loadFile.close();
-    yield();
+    sdIoYield();
   }
   
   // Reset basic runtime flags when loading a pattern
@@ -276,10 +344,7 @@ FLASHMEM void loadPattern(bool autoload) {
   bpm_vol->pos[3] = SMP.bpm;
   playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
   playTimer.update((uint32_t)round(playNoteInterval));
-  //midiTimer.update(playNoteInterval / 48);
   bpm_vol->pos[2] = GLOB.vol;
-
-  float vol = float(GLOB.vol / 10.0);
 
   // Reset paint/unpaint prevention flag after loadPattern operation
   extern bool preventPaintUnpaint;
@@ -296,16 +361,19 @@ FLASHMEM void loadPattern(bool autoload) {
   updateLastPage();
   
   // Load SMP settings
-  
-  delay(500);
+  if (!isNowPlaying) {
+    delay(500);
+  }
   loadSMPSettings();
   
   if (!autoload) {
-    delay(500);
+    if (!isNowPlaying) {
+      delay(500);
+    }
     switchMode(&draw);
   }
   
-  yield();
+  sdIoYield();
 }
 
 

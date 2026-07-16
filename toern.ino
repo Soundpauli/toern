@@ -30,6 +30,7 @@ volatile uint32_t missedSteps = 0;  // counts when loop() hasn't consumed the pr
 volatile bool isrPlayButtonTick = false;      // request drawPlayButton() from main loop (one per beat)
 bool pendingPauseUIUpdate = false;            // deferred encoder/LED update after pause (avoid I2C stall)
 bool pendingPauseSkipSave = false;            // whether the pending pause should skip autoSave
+bool pendingPauseAutoSave = false;            // run autosave on a later loop tick (after pause UI)
 volatile bool isrDbgPatternFinished = false;  // song-mode: pattern finished
 volatile uint16_t isrDbgPatternFinishedBeat = 0;
 volatile bool isrDbgLoopCountChanged = false;  // loopCount incremented
@@ -221,6 +222,7 @@ extern void sampleBrowserRefreshList(int channel);
 extern void sampleBrowserSyncBrowseFromStoredPath(int channel);
 extern void sampleBrowserNavigatePress(int channel);
 extern void sampleBrowserLastEncoderPress(int channel);
+extern void sampleBrowserGoUpPress(int channel);
 extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
 extern int sampleBrowserBrowseIndexMax(int channel);
 extern unsigned long g_setWavIgnoreLoadUntilMs;
@@ -292,6 +294,7 @@ void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
 void initPageMutes();
 void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false);
+void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
 void updatePongBall();
 void drawPongBall();
 void resetPongGame();
@@ -309,9 +312,20 @@ void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false
 void saveSp0StateToEEPROM();
 FLASHMEM void flushSettingsBackupNow();
 void stopAllSetWavPreviewAudio();
+void stopSdPreviewIfPlaying();
+void beginChannelSampleReload(unsigned int ch);
+void endChannelSampleReload(unsigned int ch);
+bool isChannelSampleReloadBusy(unsigned int ch);
+size_t sdIoChunkSize();
+void sdIoYield();
+void sdIoBeginAudioSafe();
+void sdIoEndAudioSafe();
 bool soloRandomPickPath(char* outRel, size_t outRelSize);
-const char* soloRandomGetLastPreviewPath();
+bool soloRandomRenewPlaylist();
+bool soloRandomStepPlaylist(int delta);
 void soloRandomPreviewCurrentVoice();
+void soloRandomStepAndPreview(int delta);
+const char* soloRandomGetLastPreviewPath();
 void soloRandomLoadLastPreview();
 static int16_t lastDefaultFastFilterValue[NUM_CHANNELS] = { 0 };  // Changed from int to int16_t (32 bytes saved)
 
@@ -396,6 +410,7 @@ bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
 static bool spkrEnabled = true;  // SPKR toggle state (ON by default)
 static bool childLockEnabled = false;  // Child lock: requires touch2->touch1 sequence to enter menu
+static bool bootFullResetRequested = false;  // Touch1 held 10s at power-on (3s CLR + 7s more) → FULL reset late in setup()
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
 bool recMenuFirstEnter = true;   // Track first entry into REC menu
 unsigned int SMP_FAST_REC = false;
@@ -525,6 +540,11 @@ static bool lastBothTouched = false;
 DMAMEM bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
 DMAMEM bool lastTouchState[4] = { false };  // Previous touch state
 const int touchThreshold = 45; //45 for M1
+static bool bypassModeSwitchDebounce = false;
+static bool touch1ModeTogglePending = false;
+static bool touch1ModeToggleToSingle = false;
+static unsigned long touch1ModeToggleDueMs = 0;
+static const unsigned long TOUCH1_CHORD_GRACE_MS = 140;
 
 /** When true, touch1/touch2 use TTP223 on pins 5 & 22 (digital, INPUT_PULLDOWN) instead of fastTouchRead on SWITCH_1/2. */
 static const bool exttouch = false;
@@ -758,7 +778,7 @@ Mode volume_bpm = { "VOLUME_BPM", { 11, 0, 0, BPM_MIN }, { 30, 252, 1, BPM_MAX }
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
-Mode velocity = { "VELOCITY", { 1, 1, 1, 1 }, { maxY, 5, maxY, maxY }, { maxY, 5, 10, 10 }, { 0xFF4400, 0x00FF88, 0x0044FF, 0x888888 } };
+Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, 10, maxY }, { maxY, 5, 1, 10 }, { 0xFF4400, 0x00FF88, 0x888888, 0x0044FF } };
 
 Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
@@ -779,6 +799,8 @@ int muteModeLastChannel = -1;
 int8_t muteModeArrowDirection = 0;
 unsigned long muteModeArrowUntil = 0;
 uint8_t muteModeEncoderValue = 0;
+int8_t soloRandomArrowDirection = 0;  // -1 / +1 while scrolling random playlist
+unsigned long soloRandomArrowUntil = 0;
 
 static void refreshSamplerChannel(uint8_t channel);
 static void reverseChannelInMemory(uint8_t channel);
@@ -1065,7 +1087,7 @@ static const uint8_t sliderCols[4][2] = { { 2, 3 }, { 6, 7 }, { 10, 11 }, { 14, 
 // For each page and slot: {arrayType, settingIndex, name}
 DMAMEM static SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
 
-void initSliderDefTemplates() {
+FLASHMEM void initSliderDefTemplates() {
   static const SliderDefEntry sliderDefTemplate[4][4] = {
     { { ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32 },
       { ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -1277,9 +1299,9 @@ FLASHMEM void setVelocity() {
     note[GLOB.x][GLOB.y].probability = probValue;
   }
 
-  // Update condition (encoder[3])
+  // Update condition (encoder[2] / 3rd) — was wrongly on encoder[3]
   static int lastCondStep = -1;
-  int currentCondStep = currentMode->pos[3];
+  int currentCondStep = currentMode->pos[2];
 
   if (currentCondStep != lastCondStep) {
     lastCondStep = currentCondStep;
@@ -1288,7 +1310,6 @@ FLASHMEM void setVelocity() {
     // Positions 1-5: 1/X conditions -> values 1, 2, 4, 8, 16
     // Positions 6-9: X/1 conditions -> values 17, 18, 19, 20
     // Position 10: F/F condition -> value 21 (fill)
-    // Use PROGMEM lookup table to save RAM
     static const uint8_t condValues[10] PROGMEM = { 1, 2, 4, 8, 16, 17, 18, 19, 20, 21 };
     uint8_t condValue;
     if (currentCondStep >= 1 && currentCondStep <= 10) {
@@ -1297,15 +1318,14 @@ FLASHMEM void setVelocity() {
       condValue = 1;  // Default
     }
     note[GLOB.x][GLOB.y].condition = condValue;
-
-    // Condition changed (debug removed)
   }
 
-  //CHANNEL VOLUME
-  if (currentMode->pos[2] != GLOB.velocity) {
+  // Channel volume (encoder[3] / 4th)
+  {
     int ch = GLOB.currentChannel;
-    if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
-      SMP.channelVol[ch] = currentMode->pos[2];
+    unsigned int newVol = currentMode->pos[3];
+    if (ch >= 0 && ch < 15 && amps[ch] != nullptr && SMP.channelVol[ch] != newVol) {
+      SMP.channelVol[ch] = newVol;
       float channelvolume = mapf(SMP.channelVol[ch], 0, maxY, 0, 1);
       amps[ch]->gain(channelvolume);
     }
@@ -1530,7 +1550,7 @@ void refreshCtrlEncoderConfig() {
   }
 }
 
-void switchMode(Mode *newMode) {
+FLASHMEM void switchMode(Mode *newMode) {
   if (childLockEnabled && (newMode == &filterMode || newMode == &velocity || newMode == &subpatternMode)) {
     newMode = GLOB.singleMode ? &singleMode : &draw;
   }
@@ -1540,7 +1560,8 @@ void switchMode(Mode *newMode) {
   static unsigned long lastModeSwitchTime = 0;
   const unsigned long MODE_SWITCH_DEBOUNCE_MS = 80;
   unsigned long now = millis();
-  if (newMode != currentMode && lastModeSwitchTime != 0 && (now - lastModeSwitchTime) < MODE_SWITCH_DEBOUNCE_MS) {
+  if (newMode != currentMode && lastModeSwitchTime != 0 && !bypassModeSwitchDebounce
+      && (now - lastModeSwitchTime) < MODE_SWITCH_DEBOUNCE_MS) {
     return;
   }
   if (newMode != currentMode) {
@@ -1605,7 +1626,18 @@ void switchMode(Mode *newMode) {
       FastLEDclear();
       FastLEDshow();
     }
+    // Stamp menu-exit time when returning to draw/single from menu or menu child screens,
+    // so re-open within 5s restores last main page; after 5s → FILE.
+    if ((newMode == &draw || newMode == &singleMode)
+        && (oldMode == &menu || oldMode == &loadSaveTrack || oldMode == &set_SamplePack
+            || oldMode == &volume_bpm || oldMode == &songMode || oldMode == &newFileMode
+            || oldMode == &set_Wav)) {
+      extern void noteMenuExit();
+      noteMenuExit();
+    }
     if (newMode == &menu && oldMode != &menu) {
+      extern void prepareMenuEntry();
+      prepareMenuEntry();
       extern void menuRequestFullRedraw();
       menuRequestFullRedraw();
     }
@@ -1671,38 +1703,36 @@ void switchMode(Mode *newMode) {
           counterVal = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
           currentMode->pos[2] = counterVal;  // Update mode's pos[2] to match fastfilter value
         }
-      } else if (currentMode == &velocity && i == 3) {
-        // Encoder[3] in velocity mode: condition range 1-10
-        // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1, 10=F/F
+      } else if (currentMode == &velocity && i == 2) {
+        // Encoder[2] (3rd): condition range 1-10
         maxVal = 10;
         minVal = 1;
-        // Initialize with current note's condition value
         if (note[GLOB.x][GLOB.y].channel != 0) {
           uint8_t cond = note[GLOB.x][GLOB.y].condition;
-          if (cond == 0) cond = 1;  // Default to 1 if not set
-          // Map condition value to encoder position
-          // Values 1-16: 1/X conditions -> positions 1-5
-          // Values 17-20: X/1 conditions -> positions 6-9
-          // Value 21: F/F condition -> position 10
+          if (cond == 0) cond = 1;
           if (cond <= 16) {
             counterVal = (cond == 1) ? 1 : (cond == 2) ? 2
                                          : (cond == 4) ? 3
                                          : (cond == 8) ? 4
                                                        : 5;
           } else if (cond <= 20) {
-            // X/1 conditions: 17=2/1, 18=4/1, 19=8/1, 20=16/1
             counterVal = (cond == 17) ? 6 : (cond == 18) ? 7
                                           : (cond == 19) ? 8
                                                          : 9;
           } else {
-            // F/F condition: 21 -> position 10
             counterVal = (cond == 21) ? 10 : 1;
           }
-          currentMode->pos[3] = counterVal;
+          currentMode->pos[2] = counterVal;
         } else {
-          counterVal = 1;  // Default condition
-          currentMode->pos[3] = 1;
+          counterVal = 1;
+          currentMode->pos[2] = 1;
         }
+      } else if (currentMode == &velocity && i == 3) {
+        // Encoder[3] (4th): channel volume
+        maxVal = maxY;
+        minVal = 0;
+        counterVal = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, (int)maxY);
+        currentMode->pos[3] = counterVal;
       } else {
       }
 
@@ -2028,6 +2058,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       muteModeReturn = currentMode;
       muteModeReturnSingleState = GLOB.singleMode;
       switchMode(&subpatternMode);
+      // Lazy playlist only — no preview until 3rd encoder moves.
+      soloRandomRenewPlaylist();
     }
   }
 
@@ -2038,11 +2070,10 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     return;
   }
 
-  if (!childLockEnabled && GLOB.y == 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
-                                                                                                                                                                                              //switch subpattern
-    switchMode(&subpatternMode);
-    GLOB.singleMode = (currentMode == &singleMode);
-  }
+  // NOTE: The SUBPATTERN selection screen (entered via "0200" at y==16) was removed because it
+  // was triggered accidentally and its value (GLOB.subpattern) is not used anywhere in playback.
+  // The mute/reverse/solo "mute mode" (entered via "0200" at y!=16 with muteModeActive) is a
+  // separate path and remains fully functional.
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 9, 0, 0) && was_not_buttons_0000(oldButtons)) {  // "0900" - must be !=0000 before
     if (tmpMute) tmpMuteAll(false);
@@ -2235,8 +2266,10 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       autoSave();
     }
     return;
-  } else if ((currentMode == &set_Wav) && (match_buttons(currentButtonStates, 1, 0, 0, 0) || match_buttons(currentButtonStates, 2, 0, 0, 0))) {  // "1000" or "2000"
-    // Encoder 0 press in SET_WAV: manual preview
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - encoder 0: directory up
+    sampleBrowserGoUpPress(GLOB.currentChannel);
+    return;
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000" - encoder 0 long: manual preview
     extern void setEncoder0PressedMode(bool state);
     setEncoder0PressedMode(true);
     extern void previewSample(bool);
@@ -2392,9 +2425,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       GLOB.singleMode = true;
       Encoder[0].writeCounter((int32_t)velo);
       Encoder[1].writeCounter((int32_t)probStep);
-      Encoder[3].writeCounter((int32_t)condStep);
+      Encoder[2].writeCounter((int32_t)condStep);
+      Encoder[3].writeCounter((int32_t)constrain((int)SMP.channelVol[GLOB.currentChannel], 0, (int)maxY));
       currentMode->pos[1] = probStep;
-      currentMode->pos[3] = condStep;
+      currentMode->pos[2] = condStep;
+      currentMode->pos[3] = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, (int)maxY);
     }
 
     if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &draw) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
@@ -2435,10 +2470,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       switchMode(&velocity);
       Encoder[0].writeCounter((int32_t)velo);
       Encoder[1].writeCounter((int32_t)probStep);
-      Encoder[2].writeCounter((int32_t)chvol);
-      Encoder[3].writeCounter((int32_t)condStep);
+      Encoder[2].writeCounter((int32_t)condStep);
+      Encoder[3].writeCounter((int32_t)chvol);
       currentMode->pos[1] = probStep;
-      currentMode->pos[3] = condStep;
+      currentMode->pos[2] = condStep;
+      currentMode->pos[3] = chvol;
     }
   }
   // R mode: encoder(3) long press is handled below (paintMode/unpaintMode activation)
@@ -2755,7 +2791,7 @@ FLASHMEM void applySgtl5000CodecOutputPath() {
   sgtl5000_1.eqBands(0.0f, 0.0f, 0.0f, 0.0f, gTreble);
 }
 
-void initSoundChip() {
+FLASHMEM void initSoundChip() {
   // AudioInterrupts();
   // Increased from 64 to 128 blocks to prevent audio block exhaustion (0.218s click issue).
   // When allocate() fails, audio objects return early → silence/click.
@@ -2800,7 +2836,7 @@ void initSoundChip() {
 }
 
 
-void initSamples() {
+FLASHMEM void initSamples() {
   for (unsigned int vx = 1; vx < SONG_LEN + 1; vx++) {
     for (unsigned int vy = 1; vy < maxY + 1; vy++) {
       note[vx][vy].velocity = defaultVelocity;
@@ -2962,7 +2998,7 @@ void initSamples() {
 }
 
 
-void checkCrashReport() {
+FLASHMEM void checkCrashReport() {
   // Print crash info to Serial
   if (CrashReport) {  // Check if CrashReport is non-empty before printing
   }
@@ -3023,7 +3059,7 @@ void checkCrashReport() {
 
 
 
-void initEncoders() {
+FLASHMEM void initEncoders() {
   for (int i = 0; i < NUM_ENCODERS; i++) {
     // Set the global encoder index for callbacks
     currentEncoderIndex = i;
@@ -3123,7 +3159,7 @@ FLASHMEM void loadLedModeEarlyFromEEPROM() {
   maxX = MATRIX_WIDTH * ledModules;
 }
 
-void setup() {
+FLASHMEM void setup() {
   Serial.begin(115200);
   if (exttouch) {
     pinMode(5, INPUT_PULLDOWN);
@@ -3146,7 +3182,7 @@ void setup() {
   // Avoid allocations / fragmentation when scheduling sample triggers
   pendingSampleNotes.reserve(64);
   
-  // Initialize LEDs early for EEPROM clear visual feedback
+  // Initialize LEDs early for boot-hold visual feedback (touch1 FULL reset countdown)
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
   
   // LED strip initialization (needed for FastLED.show() to work)
@@ -3158,33 +3194,81 @@ void setup() {
   FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);
   //FastLED.setMaxPowerInVoltsAndMilliamps(5, 1000); // Limit to 5V, 1 Amp
 
-  // Load LED mode (count + rotation) before any startup visuals, including CLR RAM.
+  // Load LED mode (count + rotation) before any startup visuals.
   loadLedModeEarlyFromEEPROM();
   
-  // Check for EEPROM clear request (SWITCH_1 held during startup)
-  int switch1Value = readTouch1Raw();
-  if (switch1Value > touchThreshold) {  // Switch is pressed (same threshold as SWITCH_2 hourglass check)
-    // Clear screen to black background
+  // Touch1 held at power-on (two stages):
+  //   hold 3s  → wipe entire EEPROM to 0 (CLR RAM), then continue boot
+  //   hold +7s → also arm FULL reset (ETC>RSET>FULL), applied late in setup()
+  // Release before 3s cancels; release after CLR but before FULL keeps EEPROM wipe only.
+  if (readTouch1Raw() > touchThreshold) {
     extern void FastLEDclear();
-    FastLEDclear();
-    
-    // Display "CLR" in yellow on row 1 (y=3)
     extern void drawText(const char *text, int startX, int startY, CRGB color);
-    drawText("CLR", 3, 3, CRGB(255, 255, 0));  // Yellow
-    
-    // Display "RAM" in yellow on row 2 (y=10)
-    drawText("RAM", 3, 10, CRGB(255, 255, 0));  // Yellow
-    
-    // Show the display
     extern void FastLEDshow();
-    FastLEDshow();
-    
-    // Wait 3 seconds
-    delay(3000);
-    
-    // Clear all EEPROM bytes to 0
-    for (unsigned int i = 0; i < EEPROM.length(); i++) {
-      EEPROM.write(i, 0);
+
+    const unsigned long CLR_MS = 3000UL;
+    const unsigned long FULL_MS = 10000UL;  // 3s CLR + another 7s
+    const unsigned long startMs = millis();
+    bool eepromCleared = false;
+    int lastSecShown = -1;
+    int lastStage = -1;  // 0=CLR countdown, 1=FULL countdown
+
+    while (readTouch1Raw() > touchThreshold) {
+      unsigned long held = millis() - startMs;
+
+      if (!eepromCleared && held >= CLR_MS) {
+        eepromCleared = true;
+        FastLEDclear();
+        drawText("CLR", 3, 3, CRGB(255, 255, 0));
+        drawText("RAM", 3, 10, CRGB(255, 255, 0));
+        FastLEDshow();
+        for (unsigned int i = 0; i < EEPROM.length(); i++) {
+          EEPROM.write(i, 0);
+        }
+        lastSecShown = -1;  // force FULL countdown redraw
+        delay(400);
+        continue;
+      }
+
+      if (eepromCleared && held >= FULL_MS) {
+        bootFullResetRequested = true;
+        FastLEDclear();
+        drawText("FULL", 2, 3, CRGB(0, 255, 0));
+        drawText("OK", 5, 10, CRGB(0, 255, 0));
+        FastLEDshow();
+        delay(1000);
+        break;
+      }
+
+      if (!eepromCleared) {
+        int secLeft = (int)((CLR_MS - held + 999UL) / 1000UL);
+        if (secLeft < 1) secLeft = 1;
+        if (lastStage != 0 || secLeft != lastSecShown) {
+          lastStage = 0;
+          lastSecShown = secLeft;
+          FastLEDclear();
+          drawText("CLR", 3, 3, CRGB(255, 255, 0));
+          char buf[4];
+          snprintf(buf, sizeof(buf), "%d", secLeft);
+          drawText(buf, 6, 10, CRGB(255, 255, 0));
+          FastLEDshow();
+        }
+      } else {
+        int secLeft = (int)((FULL_MS - held + 999UL) / 1000UL);
+        if (secLeft < 1) secLeft = 1;
+        if (lastStage != 1 || secLeft != lastSecShown) {
+          lastStage = 1;
+          lastSecShown = secLeft;
+          FastLEDclear();
+          drawText("FULL", 2, 3, CRGB(255, 255, 0));
+          char buf[4];
+          snprintf(buf, sizeof(buf), "%d", secLeft);
+          drawText(buf, 6, 10, CRGB(255, 255, 0));
+          FastLEDshow();
+        }
+      }
+      delay(20);
+      yield();
     }
   }
   
@@ -3208,11 +3292,11 @@ void setup() {
   // SPKR pin 30: set as INPUT_PULLDOWN as early as possible
   pinMode(30, INPUT_PULLDOWN);
 
-  // Note: SWITCH_1 (pin 2) already configured earlier for EEPROM clear detection
+  // Note: SWITCH_1 capacitive read works before pinMode (used for early boot FULL-reset hold)
   pinMode(4, OUTPUT);        // Pin 4 set as output
   digitalWrite(4, LOW);      // Drive Pin 4 LOW
 
-  // Note: FastLED initialization moved earlier (before EEPROM clear check) for visual feedback
+  // Note: FastLED initialization moved earlier (before boot-hold check) for visual feedback
 
   // Early EEPROM load for audio settings (before initSoundChip)
   // Load GLOB.vol, micGain, previewVol, lineInLevel, lineOutLevelSetting directly from EEPROM
@@ -3361,10 +3445,25 @@ void setup() {
   }
   // Note probabilities and conditions initialized (debug removed)
 
-  // Check for reset flag file and trigger startNew() if it exists
-  if (SD.exists("reset.dat")) {
-    SD.remove("reset.dat");  // Delete the flag file
-    startNew();              // Trigger factory reset
+  // Factory / FULL reset: reset.dat (touch2 INIT reboot) or touch1 held >10s at power-on
+  if (SD.exists("reset.dat") || bootFullResetRequested) {
+    if (SD.exists("reset.dat")) {
+      SD.remove("reset.dat");
+    }
+    startNew();
+    if (bootFullResetRequested) {
+      // Match ETC>RSET>FULL: rescan sample browser and show DONE
+      FastLEDclear();
+      drawText("SCAN", 2, 3, CRGB(0, 255, 0));
+      FastLEDshow();
+      extern void sampleBrowserInvalidate();
+      sampleBrowserInvalidate();
+      FastLEDclear();
+      drawText("DONE", 2, 3, CRGB(0, 255, 0));
+      FastLEDshow();
+      delay(1000);
+      bootFullResetRequested = false;
+    }
   }
 
   updateSynthVoice(11);
@@ -3430,7 +3529,7 @@ void setup() {
 }
 
 
-void initGlobalVars() {
+FLASHMEM void initGlobalVars() {
   GLOB.singleMode = false;
   GLOB.currentChannel = 1;
   GLOB.vol = 10;
@@ -3572,10 +3671,13 @@ void checkEncoders() {
       currentMode->pos[0] = muteModeEncoderValue;
     } else if (currentMode == &subpatternMode && muteModeActive && i == 2) {
       if (rawValue != 0) {
+        int delta = (rawValue > 0) ? 1 : -1;
         Encoder[2].writeCounter((int32_t)0);
         rawValue = 0;
         if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
-          soloRandomPreviewCurrentVoice();
+          soloRandomArrowDirection = (int8_t)delta;
+          soloRandomArrowUntil = millis() + 250;
+          soloRandomStepAndPreview(delta);
         }
       }
       currentMode->pos[2] = 0;
@@ -3629,7 +3731,7 @@ void checkEncoders() {
     if (isPressed[i]) noteUserActivity();
   }
 
-  // Handle subpattern mode encoder[1] changes and auto-exit on release
+  // Handle mute-mode (0200) encoder[1] release — never show the old SUB SP# screen.
   if (currentMode == &subpatternMode) {
     if (muteModeActive) {
       if (buttons[0] == 9) {  // Button release event on encoder 1
@@ -3637,11 +3739,10 @@ void checkEncoders() {
         currentMode->pos[0] = 0;
         Encoder[0].writeCounter((int32_t)0);
       }
-      if (buttons[1] == 9) {  // Button release event
+      if (buttons[1] == 9) {  // Button release event — exit mute overlay
         tmpMuteAll(false);
         tmpMute = false;
-        muteModeActive = false;
-        Mode *returnMode = muteModeReturn;
+        Mode *returnMode = muteModeReturn ? muteModeReturn : &draw;
         bool restoreSingleState = muteModeReturnSingleState;
         muteModeReturn = nullptr;
         muteModeLastChannel = -1;
@@ -3649,28 +3750,23 @@ void checkEncoders() {
         muteModeArrowDirection = 0;
         muteModeArrowUntil = 0;
         muteModeEncoderValue = 0;
+        soloRandomArrowDirection = 0;
+        soloRandomArrowUntil = 0;
         currentMode->pos[0] = 0;
         Encoder[0].writeCounter((int32_t)0);
-        if (returnMode) {
-          switchMode(returnMode);
-        } else {
-          switchMode(&draw);
-        }
+        // Leave muteModeActive true until after switch so SUB UI cannot flash,
+        // and bypass debounce (we just entered subpatternMode on press).
+        bypassModeSwitchDebounce = true;
+        switchMode(returnMode);
+        bypassModeSwitchDebounce = false;
+        muteModeActive = false;
         GLOB.singleMode = restoreSingleState;
       }
     } else {
-      GLOB.subpattern = currentMode->pos[1];  // Direct mapping: encoder 0-7 = subpattern 0-7
-      if (GLOB.subpattern > 7) GLOB.subpattern = 7;
-      if (GLOB.subpattern < 0) GLOB.subpattern = 0;
-
-      // Auto-exit subpattern mode when encoder[1] button is released
-      if (buttons[1] == 9) {  // Button release event
-        if (GLOB.singleMode) {
-          switchMode(&singleMode);
-        } else {
-          switchMode(&draw);
-        }
-      }
+      // Safety: subpatternMode without mute overlay should never linger (SUB SP# removed).
+      bypassModeSwitchDebounce = true;
+      switchMode(GLOB.singleMode ? &singleMode : &draw);
+      bypassModeSwitchDebounce = false;
     }
   }
 
@@ -4102,6 +4198,13 @@ void checkEncoders() {
           }
         }
 
+        // At max volume while the user keeps turning up: the encoder counter is clamped at 16,
+        // so no value change is detected and the overlay would confusingly time out mid-turn.
+        // Detect the encoder's "reached maximum" event (RMAX) and keep the overlay shown FULL.
+        if (!protectedChannel && requestedVol >= 16 && Encoder[1].readStatus(i2cEncoderLibV2::RMAX)) {
+          showCtrlVolumeChange(16);
+        }
+
         Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
 
         if (!childLockEnabled && volumeChanged && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
@@ -4230,6 +4333,11 @@ void exitMenuFromTouchInput() {
   }
   Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
 }
+
+static void applyPendingTouch1ModeToggle(unsigned long now);
+static void scheduleTouch1ModeToggle(bool toSingle, unsigned long now);
+void enterSingleModeDirect();
+void exitDrawFromSingleDirect();
 
 void checkTouchInputs() {
   // remember last time both were held
@@ -4384,12 +4492,13 @@ void checkTouchInputs() {
   // Reset conflict when both touches are released
   if (!newTouchState[0] && !newTouchState[1]) {
     touchConflict = false;
-    touch1Held = false;
-    touch2Held = false;
     firstTouchPressed = 0;
   }
 
-  // Update held states
+  // Per-pad held tracking: clear as soon as a pad reads low (don't wait for both released).
+  // Stale touch2Held from capacitive crosstalk was blocking touch1 until both pads released.
+  if (!newTouchState[0]) touch1Held = false;
+  if (!newTouchState[1]) touch2Held = false;
   if (newTouchState[0]) touch1Held = true;
   if (newTouchState[1]) touch2Held = true;
 
@@ -4397,7 +4506,17 @@ void checkTouchInputs() {
   touchState[0] = newTouchState[0];
   touchState[1] = newTouchState[1];
 
+  {
+    const unsigned long touchNow = millis();
+    if (touchState[1] || bothTouched) {
+      touch1ModeTogglePending = false;
+    } else {
+      applyPendingTouch1ModeToggle(touchNow);
+    }
+  }
+
   if (newBoth) {
+    touch1ModeTogglePending = false;
     // only on the first frame where both are pressed:
     // Action depends on which touch was pressed first
     // Right pressed first (2) -> go to filter mode (if valid channel)
@@ -4426,7 +4545,9 @@ void checkTouchInputs() {
           // Reset filter page to 1 when entering filter mode via both touch inputs
           filterPage[GLOB.currentChannel] = 1;
           initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
+          bypassModeSwitchDebounce = true;
           switchMode(&filterMode);
+          bypassModeSwitchDebounce = false;
           lastBothTouchHandledTime = now;
         }
         // If channel doesn't support filters, do nothing (don't crash)
@@ -4437,7 +4558,9 @@ void checkTouchInputs() {
           if (currentMode == &singleMode) {
             GLOB.singleMode = false;
           }
+          bypassModeSwitchDebounce = true;
           switchMode(&set_Wav);
+          bypassModeSwitchDebounce = false;
           lastBothTouchHandledTime = now;
         }
         // If channel doesn't support samples, do nothing (don't crash)
@@ -4451,7 +4574,7 @@ skip_individual_touch:
     // Add debouncing to prevent rapid state changes
     static unsigned long lastTouchTime[2] = { 0, 0 };
     unsigned long currentTime = millis();
-    const unsigned long DEBOUNCE_TIME = 50;  // 50ms debounce
+    const unsigned long DEBOUNCE_TIME = 30;  // 30ms — touch1/touch2 individual taps
 
     // Child lock state machine: when enabled, require touch2 then touch1 to enter menu
     static bool childLockTouch2Pressed = false;
@@ -4475,49 +4598,48 @@ skip_individual_touch:
       }
     }
 
-    // SWITCH_1
-    if (touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME) && !touchConflict) {
-      lastTouchTime[0] = currentTime;
+    // SWITCH_1 — block only when touch2 is also active now (not stale touchConflict latch).
+    if (touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME) && !touchState[1]) {
 
       // If y=1, touch1 starts play immediately (even if already playing)
-      // Dedicated debounce: prevent retrigger when holding slightly (touch flicker)
       if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 1) {
         static unsigned long lastTouch1PlayTime = 0;
         const unsigned long TOUCH1_PLAY_DEBOUNCE_MS = 100;
         if (lastTouch1PlayTime == 0 || (currentTime - lastTouch1PlayTime) >= TOUCH1_PLAY_DEBOUNCE_MS) {
           lastTouch1PlayTime = currentTime;
+          lastTouchTime[0] = currentTime;
           play(true);
         }
         goto end_switch1;
       }
 
       if (currentMode == &draw) {
-        if (childLockEnabled || !(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
-          animateSingle();
-        }
+        scheduleTouch1ModeToggle(true, currentTime);
       } else if (currentMode == &menu) {
         exitMenuFromTouchInput();
-      } else {  // If in any other mode, and Switch 1 is touched, go to draw mode.
-        if (currentMode == &singleMode) {
-          GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
-        }
+        lastTouchTime[0] = currentTime;
+      } else if (currentMode == &singleMode) {
+        scheduleTouch1ModeToggle(false, currentTime);
+      } else {
         switchMode(&draw);
-        GLOB.singleMode = false;
-        // Update encoder colors to reflect the new currentChannel when switching to draw mode
-        extern int drawMode;
-        if (drawMode == 0) {
-          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        } else {
-          Encoder[0].writeRGBCode(0x000000);
+        if (currentMode == &draw) {
+          GLOB.singleMode = false;
+          lastTouchTime[0] = currentTime;
+          extern int drawMode;
+          if (drawMode == 0) {
+            Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+          } else {
+            Encoder[0].writeRGBCode(0x000000);
+          }
+          Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
         }
-        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       }
     }
 end_switch1:
 
     // SWITCH_2
 
-    if (currentMode != &filterMode && touchState[1] && !lastTouchState[1] && (currentTime - lastTouchTime[1] > DEBOUNCE_TIME) && !touchConflict) {
+    if (currentMode != &filterMode && touchState[1] && !lastTouchState[1] && (currentTime - lastTouchTime[1] > DEBOUNCE_TIME) && !touchState[0]) {
       lastTouchTime[1] = currentTime;
       if (currentMode == &draw || currentMode == &singleMode) {
         extern bool getChildLockEnabled();
@@ -4527,19 +4649,9 @@ end_switch1:
           childLockTouch2Time = currentTime;
           // Behave like touch1: toggle single mode
           if (currentMode == &draw) {
-            if (childLockEnabled || !(GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || GLOB.currentChannel == 15)) {
-              animateSingle();
-            }
+            enterSingleModeDirect();
           } else if (currentMode == &singleMode) {
-            switchMode(&draw);
-            GLOB.singleMode = false;
-            extern int drawMode;
-            if (drawMode == 0) {
-              Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-            } else {
-              Encoder[0].writeRGBCode(0x000000);
-            }
-            Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+            exitDrawFromSingleDirect();
           }
         } else {
           // Child lock disabled: enter menu immediately
@@ -4693,34 +4805,58 @@ end_switch1:
   lastTouchState[2] = touchState[2];
 }
 
-void animateSingle() {
+void enterSingleModeDirect() {
+  if (currentMode != &draw) return;
   if (isChildVoiceDisabled((int)GLOB.currentChannel)) {
     GLOB.currentChannel = 1;
     GLOB.y = 2;
     currentMode->pos[0] = 2;
     Encoder[0].writeCounter((int32_t)2);
   }
-
-  int yStart = GLOB.currentChannel;              // 0 to 15
-  int yCenter = yStart + 1;                      // Because y grid is 1-based
-  CRGB animCol = col_base[GLOB.currentChannel];  // Renamed to avoid conflict with global 'col'
-
-  // Animate outward from center
-  for (int offset = 0; offset <= 15; offset++) {
-    int yUp = yCenter - offset;
-    int yDown = yCenter + offset;
-
-    for (int x = 1; x <= 16; x++) {
-      if (yUp >= 1 && yUp <= 15) light(x, yUp, animCol);
-      if (yDown >= 1 && yDown <= 15 && offset != 0) light(x, yDown, animCol);
-    }
-    drawTriggers();
-    //FastLED.show(); // Consider if FastLEDshow() is better here or after full animation
-    //delay(5);  // adjust for animation speed
-  }
-  FastLEDshow();  // Show after the animation loop if not inside
   switchMode(&singleMode);
-  GLOB.singleMode = true;
+  if (currentMode == &singleMode) {
+    GLOB.singleMode = true;
+  }
+}
+
+void exitDrawFromSingleDirect() {
+  if (currentMode != &singleMode) return;
+  GLOB.currentChannel = GLOB.y - 1;
+  switchMode(&draw);
+  if (currentMode == &draw) {
+    GLOB.singleMode = false;
+    extern int drawMode;
+    if (drawMode == 0) {
+      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    } else {
+      Encoder[0].writeRGBCode(0x000000);
+    }
+    Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+  }
+}
+
+static void applyPendingTouch1ModeToggle(unsigned long now) {
+  if (!touch1ModeTogglePending) return;
+  const bool released = (!touchState[0] && !touchState[1]);
+  const bool timedOut = (now >= touch1ModeToggleDueMs);
+  if (!released && !timedOut) return;
+  touch1ModeTogglePending = false;
+  if (touch1ModeToggleToSingle) {
+    enterSingleModeDirect();
+  } else {
+    exitDrawFromSingleDirect();
+  }
+}
+
+static void scheduleTouch1ModeToggle(bool toSingle, unsigned long now) {
+  touch1ModeTogglePending = true;
+  touch1ModeToggleToSingle = toSingle;
+  touch1ModeToggleDueMs = now + TOUCH1_CHORD_GRACE_MS;
+}
+
+// Legacy name kept for call sites — no fill animation (was unreliable on 2/2B wide layouts).
+void animateSingle() {
+  enterSingleModeDirect();
 }
 
 void checkSingleTouch() {
@@ -5026,7 +5162,8 @@ void checkPendingSampleNotes() {
     }
 
     if (isDue) {
-      if (!isChildVoiceDisabled((int)ev.channel)) {
+      if (!isChildVoiceDisabled((int)ev.channel)
+          && !isChannelSampleReloadBusy((unsigned int)ev.channel)) {
         _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, true);
       }
       pendingSampleNotes[i] = pendingSampleNotes.back();
@@ -5505,8 +5642,9 @@ void loop() {
     drawPlayButton();
   }
 
-  // Deferred pause UI update: I2C encoder writes and optional SD save happen here,
-  // not inside pause(), so the MIDI clock ISR isn't starved by blocking bus transactions.
+  // Deferred pause UI update: I2C encoder writes happen here, not inside pause().
+  // Autosave is scheduled for a later iteration so SD I/O doesn't pile onto the same
+  // frame as I2C (and so decaying voices get audio-safe SD yields).
   if (pendingPauseUIUpdate) {
     pendingPauseUIUpdate = false;
     updateLastPage();
@@ -5521,8 +5659,11 @@ void loop() {
     }
     Encoder[2].writeRGBCode(0x00FF00);
     if (!pendingPauseSkipSave) {
-      autoSave();
+      pendingPauseAutoSave = true;
     }
+  } else if (pendingPauseAutoSave) {
+    pendingPauseAutoSave = false;
+    autoSave();
   }
 
   if (isrDbgPatternFinished) {
@@ -5622,6 +5763,35 @@ void loop() {
           drawFilterCheck(filterDrawValue, (FilterType)0, filterDrawColor);
         } else {
           filterDrawActive = false;
+        }
+      }
+
+      // CTRL overlays are drawn here (inside the throttled frame, before present) so they are
+      // part of the same buffer that FastLEDshow() pushes. Drawing them after the present caused
+      // the overlay to flicker while playing (grid presented without overlay, then with it).
+      if (ctrlVolumeOverlayActive && ctrlMode == 1 && (currentMode == &draw || currentMode == &singleMode)) {
+        if (millis() <= ctrlVolumeOverlayUntil) {
+          drawCtrlVolumeOverlay(ctrlVolumeOverlayValue);
+        } else {
+          ctrlVolumeOverlayActive = false;
+        }
+      }
+
+      // Draw input gain overlay when in draw mode at y==1
+      if (inputGainOverlayActive && currentMode == &draw && GLOB.y == 1 && ctrlMode == 1) {
+        if (millis() <= inputGainOverlayUntil) {
+          drawInputGainOverlay(inputGainOverlayValue, inputGainOverlayMax);
+        } else {
+          inputGainOverlayActive = false;
+        }
+      }
+
+      // Draw channel number overlay when in draw mode
+      if (channelNrOverlayActive && currentMode == &draw && showChannelNr) {
+        if (millis() <= channelNrOverlayUntil && GLOB.y <= 9) {
+          drawChannelNrOverlay(channelNrOverlayChannel, GLOB.currentChannel);
+        } else {
+          channelNrOverlayActive = false;
         }
       }
 
@@ -5884,10 +6054,11 @@ if (SMP.filter_settings[8][ACTIVE]>0){
           switchMode(&velocity);
           Encoder[0].writeCounter((int32_t)velo);
           Encoder[1].writeCounter((int32_t)probStep);
-          Encoder[2].writeCounter((int32_t)chvol);
-          Encoder[3].writeCounter((int32_t)condStep);
+          Encoder[2].writeCounter((int32_t)condStep);
+          Encoder[3].writeCounter((int32_t)chvol);
           currentMode->pos[1] = probStep;
-          currentMode->pos[3] = condStep;
+          currentMode->pos[2] = condStep;
+          currentMode->pos[3] = chvol;
         }
       }
     } else if (currentMode == &velocity && rModeSavedMode != nullptr && !encoder0Held) {
@@ -5986,34 +6157,6 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   autoOffActiveNotes();
 
   filterfreshsetted = false;
-
-  if (ctrlVolumeOverlayActive && ctrlMode == 1 && (currentMode == &draw || currentMode == &singleMode)) {
-    if (millis() <= ctrlVolumeOverlayUntil) {
-      drawCtrlVolumeOverlay(ctrlVolumeOverlayValue);
-    } else {
-      ctrlVolumeOverlayActive = false;
-    }
-  }
-
-  // Draw input gain overlay when in draw mode at y==1
-  if (inputGainOverlayActive && currentMode == &draw && GLOB.y == 1 && ctrlMode == 1) {
-    if (millis() <= inputGainOverlayUntil) {
-      drawInputGainOverlay(inputGainOverlayValue, inputGainOverlayMax);
-    } else {
-      inputGainOverlayActive = false;
-    }
-  }
-
-  // Draw channel number overlay when in draw mode
-  if (channelNrOverlayActive && currentMode == &draw && showChannelNr) {
-    if (millis() <= channelNrOverlayUntil && GLOB.y <= 9) {
-      // Pass both channel number (1-indexed for display) and channel index (0-indexed for color)
-      // Only render if y <= 9 (channels 1-8)
-      drawChannelNrOverlay(channelNrOverlayChannel, GLOB.currentChannel);
-    } else {
-      channelNrOverlayActive = false;
-    }
-  }
 
   FastLEDshow();
 
@@ -6906,6 +7049,10 @@ void playNote() {
 
         MidiSendNoteOn(b, ch, vel);
         if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
+          // Skip triggers while this voice's RAM buffer is being rewritten (avoids clicks).
+          if (isChannelSampleReloadBusy((unsigned int)ch)) {
+            continue;
+          }
           int pitch = (12 * SampleRate[ch]) + b - (ch + 1);
 
           // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
@@ -7249,8 +7396,8 @@ void playFillNote() {
   if (fillActiveChannel <= 0) return;
   if (getMuteState(fillActiveChannel)) return;
 
-  // Classic fill length: 4 bars (fixed length for techno fill buildup).
-  const uint32_t fillLengthBeats = (uint32_t)(4U * (uint32_t)maxX);
+  // Fill length: 2 bars (was 4 — too long/dense for most patterns).
+  const uint32_t fillLengthBeats = (uint32_t)(2U * (uint32_t)maxX);
 
   // Position in fill in "beat steps" (each beat step = 4 sub-ticks).
   const uint32_t elapsedSub = (fillSubTick >= fillStartSubTick) ? (fillSubTick - fillStartSubTick) : 0U;
@@ -7263,30 +7410,27 @@ void playFillNote() {
     return;
   }
 
-  // Divide fill into 6 sections for buildup: 1/8, 1/4, 1/2, 1, 2, 4
-  const uint32_t sectionSize = (fillLengthBeats + 5U) / 6U;
+  // 5-section buildup: 1/8 → 1/4 → 1/2 → 1 → 2 (no 4x machine-gun climax).
+  const uint32_t sectionSize = (fillLengthBeats + 4U) / 5U;
   uint32_t section = (positionInFill - 1U) / sectionSize;
-  if (section > 5U) section = 5U;
+  if (section > 4U) section = 4U;
 
   bool shouldTrigger = false;
   switch (section) {
-    case 0:  // 1/8: one hit every 8 beats (sub-beat 0)
+    case 0:  // 1/8: one hit every 8 beats
       shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 8U == 0U));
       break;
-    case 1:  // 1/4: one hit every 4 beats (sub-beat 0)
+    case 1:  // 1/4: one hit every 4 beats
       shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 4U == 0U));
       break;
-    case 2:  // 1/2: one hit every 2 beats (sub-beat 0)
+    case 2:  // 1/2: one hit every 2 beats
       shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 2U == 0U));
       break;
-    case 3:  // 1: one hit every beat (sub-beat 0)
+    case 3:  // 1: one hit every beat
       shouldTrigger = (fillSubBeat == 0);
       break;
-    case 4:  // 2: two hits per beat (sub-beats 0 and 2)
+    case 4:  // 2: two hits per beat (peak — was 4 before)
       shouldTrigger = (fillSubBeat == 0 || fillSubBeat == 2);
-      break;
-    case 5:  // 4: four hits per beat (all sub-beats)
-      shouldTrigger = true;
       break;
   }
 
@@ -7300,6 +7444,7 @@ void playFillNote() {
   const unsigned int row = fillActiveRow;
 
   if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
+    if (isChannelSampleReloadBusy((unsigned int)ch)) return;
     int pitch = (12 * SampleRate[ch]) + (int)row - (ch + 1);
 
     if (ch >= 1 && ch <= 12) {
@@ -7335,6 +7480,7 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   int pitch_from_row = y;
 
   if (channel > 0 && channel < 9) {
+    if (isChannelSampleReloadBusy((unsigned int)channel)) return;
     int pitch = (12 * SampleRate[channel]) + pitch_from_row - (channel + 1);
 
     if (channel >= 1 && channel <= 12) {
@@ -7607,73 +7753,70 @@ void updateBrightness() {
 FLASHMEM void switchSubPattern() {
   FastLEDclear();
 
-  if (muteModeActive) {
-    Mode *savedMode = currentMode;
-    bool savedSingle = GLOB.singleMode;
+  // SUB SP# UI is removed — subpatternMode is only the mute/reverse/random overlay.
+  if (!muteModeActive) {
+    FastLEDshow();
+    return;
+  }
 
-    currentMode = muteModeReturnSingleState ? &singleMode : &draw;
-    GLOB.singleMode = muteModeReturnSingleState;
+  Mode *savedMode = currentMode;
+  bool savedSingle = GLOB.singleMode;
 
-    drawBase();
-    drawTriggers();
-    if (isNowPlaying) {
-      drawTimer();
-    }
-    drawCursor();
+  currentMode = muteModeReturnSingleState ? &singleMode : &draw;
+  GLOB.singleMode = muteModeReturnSingleState;
 
-    currentMode = savedMode;
-    GLOB.singleMode = savedSingle;
+  drawBase();
+  drawTriggers();
+  if (isNowPlaying) {
+    drawTimer();
+  }
+  drawCursor();
 
-    if (muteModeArrowDirection != 0) {
-      if (millis() <= muteModeArrowUntil) {
-        const char *arrow = (muteModeArrowDirection > 0) ? ">>" : "<<";
-        drawText(arrow, 7, 8, CRGB(255, 255, 255));
-      } else {
-        muteModeArrowDirection = 0;
-        muteModeArrowUntil = 0;
-        muteModeEncoderValue = 0;
-        currentMode->pos[0] = 0;
-        Encoder[0].writeCounter((int32_t)0);
-      }
-    }
+  currentMode = savedMode;
+  GLOB.singleMode = savedSingle;
 
-    drawIndicator('L', 'W', 0);
-    extern int drawMode;
-    if (drawMode == 0) {
-      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    } else {
-      Encoder[0].writeRGBCode(0x000000);
-    }
-    CRGB whiteColor = getIndicatorColor('W');
-    Encoder[0].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
-    Encoder[1].writeRGBCode(0x000000);
-    Encoder[2].writeRGBCode(0xFF00FF);  // Pink for random sample preview
-    drawIndicator('L', 'P', 3);
-    Encoder[3].writeRGBCode(0x000000);
-
-    // Draw fast-filter overlay when active (same as draw mode)
-    if (filterDrawActive) {
-      if (millis() <= filterDrawEndTime) {
-        drawFilterCheck(filterDrawValue, (FilterType)0, filterDrawColor);
-      } else {
-        filterDrawActive = false;
-      }
-    }
+  if (muteModeArrowDirection != 0 && millis() <= muteModeArrowUntil) {
+    const char *arrow = (muteModeArrowDirection > 0) ? ">>" : "<<";
+    drawText(arrow, 7, 8, CRGB(255, 255, 255));
+  } else if (soloRandomArrowDirection != 0 && millis() <= soloRandomArrowUntil) {
+    // Random-playlist scroll icon (same spot as reverse >>/<<).
+    const char *rnd = (soloRandomArrowDirection > 0) ? "?>" : "?<";
+    drawText(rnd, 7, 8, CRGB(255, 0, 255));
   } else {
-    drawText("SUB", 2, 10, CRGB(255, 0, 255));
+    if (muteModeArrowDirection != 0 && millis() > muteModeArrowUntil) {
+      muteModeArrowDirection = 0;
+      muteModeArrowUntil = 0;
+      muteModeEncoderValue = 0;
+      currentMode->pos[0] = 0;
+      Encoder[0].writeCounter((int32_t)0);
+    }
+    if (soloRandomArrowDirection != 0 && millis() > soloRandomArrowUntil) {
+      soloRandomArrowDirection = 0;
+      soloRandomArrowUntil = 0;
+    }
+  }
 
-    char subpatternText[8];
-    sprintf(subpatternText, "SP %d", GLOB.subpattern);
-    drawText(subpatternText, 2, 3, CRGB(0, 255, 255));
-
-    drawIndicator('L', 'M', 1);
-
-    CRGB magentaColor = getIndicatorColor('M');
-
+  drawIndicator('L', 'W', 0);
+  extern int drawMode;
+  if (drawMode == 0) {
+    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+  } else {
     Encoder[0].writeRGBCode(0x000000);
-    Encoder[1].writeRGBCode(magentaColor.r << 16 | magentaColor.g << 8 | magentaColor.b);
-    Encoder[2].writeRGBCode(0x000000);
-    Encoder[3].writeRGBCode(0x000000);
+  }
+  CRGB whiteColor = getIndicatorColor('W');
+  Encoder[0].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+  Encoder[1].writeRGBCode(0x000000);
+  Encoder[2].writeRGBCode(0xFF00FF);  // Pink for random sample preview
+  drawIndicator('L', 'P', 3);
+  Encoder[3].writeRGBCode(0x000000);
+
+  // Draw fast-filter overlay when active (same as draw mode)
+  if (filterDrawActive) {
+    if (millis() <= filterDrawEndTime) {
+      drawFilterCheck(filterDrawValue, (FilterType)0, filterDrawColor);
+    } else {
+      filterDrawActive = false;
+    }
   }
 
   FastLEDshow();
@@ -7821,12 +7964,12 @@ FLASHMEM void setVolume() {
 
 
 
-void showExit(int index) {
+FLASHMEM void showExit(int index) {
   //showIcons(HELPER_EXIT, UI_DIM_BLUE);
   //Encoder[index].writeRGBCode(0x0000FF);
 }
 
-void showLoadSave() {
+FLASHMEM void showLoadSave() {
 
   drawNoSD();
   FastLEDclear();
@@ -7885,7 +8028,7 @@ void showLoadSave() {
   }
 }
 
-void showSamplePack() {
+FLASHMEM void showSamplePack() {
   drawNoSD();
   FastLEDclear();
 
@@ -7933,7 +8076,7 @@ void showSamplePack() {
   }
 }
 
-void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) {  // Renamed pack to pack_id to avoid conflict
+FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) {  // Renamed pack to pack_id to avoid conflict
   drawNoSD();
 
   // Validate pack_id - 0 means SP0/empty fallback, 1..99 are regular saved packs.
@@ -8070,7 +8213,7 @@ void updateLastPage() {
   }
 }
 
-void loadWav() {
+FLASHMEM void loadWav() {
   // Prevent paint/unpaint events and note playback during loading
   preventPaintUnpaint = true;
   freshPaint = false;
@@ -8078,7 +8221,7 @@ void loadWav() {
   drawSampleLoadOverlay(0);
   FastLEDshow();
 
-  playSdWav1.stop();
+  stopSdPreviewIfPlaying();
 
   // Load the preview sample (which may be reversed/edited) to the target channel
   // This copies from sampled[0] (preview) to sampled[targetChannel]
@@ -8087,11 +8230,13 @@ void loadWav() {
   // Auto-save to samplepack 0 after loading individual sample
   copySampleToSamplepack0(GLOB.currentChannel, true);
   saveSp0StateToEEPROM();
-  // SP0 flags mark settings backup dirty; flush now so loop() does not run the heavy SD
-  // write during DRAW (serviceSettingsBackup debounce is ~1.5s after mark).
+  // SP0 flags mark settings backup dirty. While playing, leave it deferred so loop()
+  // does not add another heavy SD write on top of the load (serviceSettingsBackup waits).
   drawSampleLoadOverlay(99);
   FastLEDshow();
-  flushSettingsBackupNow();
+  if (!isNowPlaying) {
+    flushSettingsBackupNow();
+  }
 
   // Store the current edit page before switching modes
   int savedEditPage = GLOB.edit;
@@ -8160,7 +8305,8 @@ void setSliderDefForChannel(int channel) {
         { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, EFX, "SND", 1, DISPLAY_ENUM, sndTypeNames, 1 },
+        // No 4th slider (same as ch4–8) — hide SND
+        { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 },
       },
       { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32 },

@@ -124,7 +124,7 @@ static uint32_t infoPageEnterMs = 0;
 
 // Force a full redraw on next menu frame (used when entering/exiting menu/submenus).
 static bool menuForceFullRedraw = false;
-void menuRequestFullRedraw() {
+FLASHMEM void menuRequestFullRedraw() {
   menuForceFullRedraw = true;
 }
 static inline bool takeMenuForceFullRedraw() {
@@ -198,6 +198,33 @@ bool inMidiSubmenu = false;
 bool inVolSubmenu = false;
 bool inEtcSubmenu = false;
 bool menuEnteredFromSingleMode = false;  // Restore draw vs single when exiting from submenu
+
+// After leaving the menu (or a menu child screen), keep last main page for this long;
+// reopen later → jump back to FILE (page 0).
+static unsigned long menuExitMs = 0;
+static const unsigned long MENU_REENTRY_GRACE_MS = 5000;
+
+FLASHMEM void noteMenuExit() {
+  menuExitMs = millis();
+}
+
+FLASHMEM void prepareMenuEntry() {
+  if (menuExitMs != 0 && (millis() - menuExitMs) >= MENU_REENTRY_GRACE_MS) {
+    currentMenuPage = 0;
+    inLookSubmenu = false;
+    inRecsSubmenu = false;
+    inMidiSubmenu = false;
+    inVolSubmenu = false;
+    inEtcSubmenu = false;
+    currentLookPage = 0;
+    currentRecsPage = 0;
+    currentMidiPage = 0;
+    currentVolPage = 0;
+    currentEtcPage = 0;
+  }
+  extern Mode menu;
+  menu.pos[3] = currentMenuPage;
+}
 int aiTargetPage = 6; // Default target page for AI song generation
 int aiBaseStartPage = 1; // Start of base page range for AI analysis
 int aiBaseEndPage = 1;   // End of base page range for AI analysis
@@ -302,6 +329,9 @@ void markSettingsBackupDirty() {
 }
 
 FLASHMEM static bool writeSettingsBackupToSD() {
+  extern void stopSdPreviewIfPlaying();
+  stopSdPreviewIfPlaying();
+
   // payload = samplePackID (4 bytes, 0 = SP0 fallback) + settings block + SP0 override flags
   unsigned int spid = 1;
   EEPROM.get(EEPROM_SAMPLEPACK_ADDR, spid);
@@ -412,6 +442,9 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
 
 FLASHMEM void serviceSettingsBackup() {
   if (!settingsBackupDirty) return;
+  // Defer SD write while sequencer is playing — keep dirty and retry when stopped.
+  extern bool isNowPlaying;
+  if (isNowPlaying) return;
   if ((uint32_t)(millis() - settingsBackupDirtyMs) < SETTINGS_BACKUP_DEBOUNCE_MS) return;
   // Best effort: if SD write fails, keep dirty flag and try later.
   if (writeSettingsBackupToSD()) {
@@ -421,8 +454,11 @@ FLASHMEM void serviceSettingsBackup() {
 
 // Flush settings + SP0 backup to SD immediately (no debounce). Use after load/save paths
 // that should not leave a multi-second deferred write for loop() / DRAW mode.
+// While playing, leave dirty so serviceSettingsBackup flushes after stop.
 FLASHMEM void flushSettingsBackupNow() {
   if (!settingsBackupDirty) return;
+  extern bool isNowPlaying;
+  if (isNowPlaying) return;
   if (writeSettingsBackupToSD()) {
     settingsBackupDirty = false;
   }
@@ -908,7 +944,7 @@ FLASHMEM void loadMenuFromEEPROM() {
 }
 
 // Apply all audio-related global variables to hardware
-void applyAudioSettingsFromGlobals() {
+FLASHMEM void applyAudioSettingsFromGlobals() {
   // GLOB, lineOutLevelSetting, previewVol, micGain, and lineInLevel are already in scope as globals
   extern struct GlobalVars GLOB;
   extern uint8_t lineOutLevelSetting;
@@ -951,7 +987,7 @@ void applyAudioSettingsFromGlobals() {
 }
 
 // call this after you change *any* one of the six modes in switchMenu():
-void saveSingleModeToEEPROM(int index, int8_t value) {
+FLASHMEM void saveSingleModeToEEPROM(int index, int8_t value) {
   EEPROM.write(EEPROM_DATA_START + index, (uint8_t)value);
   markSettingsBackupDirty();
 }
@@ -963,7 +999,7 @@ static void saveTransportDelayToEEPROM(int slotBase, int8_t value) {
 
 
 // Save samplepack 0 state to EEPROM (which voices are using sp0)
-void saveSp0StateToEEPROM() {
+FLASHMEM void saveSp0StateToEEPROM() {
   // Use addresses 200-208 for sp0 state (8 voices = 8 bytes)
   for (int i = 1; i < maxFiles; i++) {
     uint8_t value = SMP.sp0Active[i] ? 1 : 0;
@@ -973,7 +1009,7 @@ void saveSp0StateToEEPROM() {
 }
 
 // Load samplepack 0 state from EEPROM
-void loadSp0StateFromEEPROM() {
+FLASHMEM void loadSp0StateFromEEPROM() {
   for (int i = 1; i < maxFiles; i++) {
     uint8_t stored = EEPROM.read(EEPROM_SP0_STATE_ADDR + i);
     SMP.sp0Active[i] = (stored == 1);
@@ -1634,17 +1670,21 @@ static inline CRGB currentMenuParentTextColor() {
 // This is used where we want the indicator color to match submenu text colors (palette-derived),
 // not one of the fixed indicator color codes.
 static inline void drawLargeIndicatorCustom(CRGB color, int encoderNum) {
+  extern void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
+  extern int ledModules;
+  extern unsigned int maxX;
+
   int x1, x2, x3;
-  switch (encoderNum) {
-    case 1: x1 = 1;  x2 = 2;  x3 = 3;  break;
-    case 2: x1 = 5;  x2 = 6;  x3 = 7;  break;
-    case 3: x1 = 9;  x2 = 10; x3 = 11; break;
-    case 4: x1 = 13; x2 = 14; x3 = 15; break;
-    default: return;
-  }
+  getIndicatorXPositions(encoderNum, x1, x2, x3);
+  const bool isWide = (ledModules == 2 && maxX > 16);
+  const int x4 = isWide ? min((int)maxX, x3 + 1) : x3;
+
   light(x1, 1, color);
   light(x2, 1, color);
   light(x3, 1, color);
+  if (isWide) {
+    light(x4, 1, color);
+  }
 
   if (encoderNum >= 1 && encoderNum <= NUM_ENCODERS) {
     uint32_t rgbCode = (uint32_t(color.r) << 16) | (uint32_t(color.g) << 8) | (uint32_t)color.b;
@@ -2087,9 +2127,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern bool getSpkrEnabled();
       const CRGB tc = currentMenuParentTextColor();
       drawText("SPKR", 2, 10, tc);
-      bool enabled = getSpkrEnabled();
-      drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
-      drawIndicator('L', enabled ? 'G' : 'R', 3);
+      // Display was inverted: the internal "enabled" flag actually corresponds to the speaker
+      // being OFF, so present the real speaker state (ON when !enabled).
+      bool speakerOn = !getSpkrEnabled();
+      drawMenuValue(speakerOn ? "ON" : "OFF", 2, 3, speakerOn ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+      drawIndicator('L', speakerOn ? 'G' : 'R', 3);
       break;
     }
 
@@ -3341,7 +3383,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   return didRedraw;
 }
 
-void switchMenu(int menuPosition){
+FLASHMEM void switchMenu(int menuPosition){
    switch (menuPosition) {
       case 1:
         switchMode(&loadSaveTrack);
@@ -3910,40 +3952,52 @@ void switchMenu(int menuPosition){
 }
 
 // New functions for menu page navigation
-void nextMenuPage() {
+FLASHMEM void nextMenuPage() {
   currentMenuPage = (currentMenuPage + 1) % MENU_PAGES_COUNT;
 }
 
-void previousMenuPage() {
+FLASHMEM void previousMenuPage() {
   currentMenuPage = (currentMenuPage - 1 + MENU_PAGES_COUNT) % MENU_PAGES_COUNT;
 }
 
-void goToMenuPage(int page) {
+FLASHMEM void goToMenuPage(int page) {
   if (page >= 0 && page < MENU_PAGES_COUNT) {
     currentMenuPage = page;
   }
 }
 
 // Function to reset menu state when leaving menu mode
-void resetMenuState() {
-  // This function can be called when exiting menu mode to reset any state
-  // For now, we'll let the static variables handle the reset automatically
+FLASHMEM void resetMenuState() {
+  currentMenuPage = 0;
+  inLookSubmenu = false;
+  inRecsSubmenu = false;
+  inMidiSubmenu = false;
+  inVolSubmenu = false;
+  inEtcSubmenu = false;
+  currentLookPage = 0;
+  currentRecsPage = 0;
+  currentMidiPage = 0;
+  currentVolPage = 0;
+  currentEtcPage = 0;
+  extern Mode menu;
+  menu.pos[3] = 0;
+  menuExitMs = 0;
 }
 
 // Reset NEW mode state when exiting
-void resetNewModeState() {
+FLASHMEM void resetNewModeState() {
   newScreenFirstEnter = true;
 }
 
 // Show NEW screen when creating a new file via DAT
 
 // Simple Notes View functions
-void drawSimpleNotesView() {
+FLASHMEM void drawSimpleNotesView() {
   if (simpleNotesView != 1 && simpleNotesView != 2) simpleNotesView = 1;
   drawMenuValue(simpleNotesView == 1 ? "EASY" : "FULL", 2, 3, simpleNotesView == 1 ? CRGB(0, 255, 0) : CRGB(0, 0, 255));
 }
 
-void drawLoopLength() {
+FLASHMEM void drawLoopLength() {
   if (loopLength == 0) {
     drawMenuValue("OFF", 2, 3, CRGB(100, 100, 100));
   } else {
@@ -3952,20 +4006,20 @@ void drawLoopLength() {
   }
 }
 
-void drawLedModules() {
+FLASHMEM void drawLedModules() {
   extern int ledModules;
   extern bool ledModulesRotated;
   const char* lbl = (ledModules == 1) ? (ledModulesRotated ? "1B" : "1") : (ledModulesRotated ? "2B" : "2");
   drawMenuValue(lbl, 2, 3, CRGB(0, 255, 0));
 }
 
-void showNewFileScreen() {
+FLASHMEM void showNewFileScreen() {
   // Switch to new file mode
   switchMode(&newFileMode);
 }
 
 // Show NEW file mode screen
-void showNewFileMode() {
+FLASHMEM void showNewFileMode() {
   FastLEDclear();
   
   // Draw page title
@@ -4130,7 +4184,7 @@ void showNewFileMode() {
 }
 
 // Helper function to get main setting for current menu page
-int getCurrentMenuMainSetting() {
+FLASHMEM int getCurrentMenuMainSetting() {
   if (inLookSubmenu) {
     return lookPages[currentLookPage].mainSetting;
   }

@@ -75,7 +75,7 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
 }
 
 
-// 2) Helper: full parameter name centered on row 11 (5px font → rows 11–15; y=12 clipped top row).
+// Full parameter name centered — 5px font at y=12 → rows 12–16 (top on y=16).
 void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
   /*int len = strlen(name);
   const uint8_t charW = 3;
@@ -85,9 +85,8 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
   if (tx < 0)           tx = 0;
   if (tx + totalW > 16) tx = 16 - totalW;*/
 
-  // CLEAR headline band (full name uses 5 rows starting at y=11 — was y=12, 1px too high / clipped top)
+  // CLEAR headline band
   for (int x = 1; x <= (int)maxX; ++x) {
-    light(x, 11, CRGB::Black);
     light(x, 12, CRGB::Black);
     light(x, 13, CRGB::Black);
     light(x, 14, CRGB::Black);
@@ -107,7 +106,7 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
   if (tx < 1) tx = 1;
   if (tx + textPixelWidth - 1 > (int)maxX) tx = (int)maxX - textPixelWidth + 1;
   if (tx < 1) tx = 1;
-  drawText(name, tx, 11, filtercol);
+  drawText(name, tx, 12, filtercol);
 }
 
 

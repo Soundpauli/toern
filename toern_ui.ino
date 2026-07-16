@@ -141,16 +141,16 @@ CRGB normalizeToMaxBrightness(CRGB color) {
   return CRGB((uint8_t)r, (uint8_t)g, (uint8_t)b);
 }
 
-static inline void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3) {
+void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3) {
   if (encoderNum < 1 || encoderNum > NUM_ENCODERS) {
     x1 = x2 = x3 = 1;
     return;
   }
 
-  // Stretch indicators only in 2B mode; keep default 16px layout for all other modes.
-  bool is2B = (ledModules == 2 && ledModulesRotated && maxX > MATRIX_WIDTH);
-  if (is2B) {
-    // Exact 2B positions (L-size spans 4 pixels):
+  // Stretch indicators across full width for any 2-module layout (2 and 2B).
+  bool isWide = (ledModules == 2 && maxX > MATRIX_WIDTH);
+  if (isWide) {
+    // Exact wide positions (L-size spans 4 pixels):
     // E1: 4,5,6,7  E2: 11,12,13,14  E3: 19,20,21,22  E4: 26,27,28,29
     static const int starts[4] = { 4, 11, 19, 26 };
     int slotStart = starts[encoderNum - 1];
@@ -194,8 +194,8 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
   
   int x1, x2, x3;
   getIndicatorXPositions(encoderNum, x1, x2, x3);
-  bool is2B = (ledModules == 2 && ledModulesRotated && maxX > MATRIX_WIDTH);
-  int x4 = is2B ? min((int)maxX, x3 + 1) : x3;
+  bool isWide = (ledModules == 2 && maxX > MATRIX_WIDTH);
+  int x4 = isWide ? min((int)maxX, x3 + 1) : x3;
   
   // Draw based on size
   switch (size) {
@@ -203,7 +203,7 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
       light(x3, 1, color);
       break;
     case 'M': // Medium: 2px wide, 1px high
-      if (is2B) {
+      if (isWide) {
         light(x2, 1, color);
         light(x3, 1, color);
         light(x4, 1, color);
@@ -216,7 +216,7 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
       light(x1, 1, color);
       light(x2, 1, color);
       light(x3, 1, color);
-      if (is2B) {
+      if (isWide) {
         light(x4, 1, color);
       }
       break;
@@ -225,11 +225,11 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
       light(x1, 1, color);
       light(x2, 1, color);
       light(x3, 1, color);
-      if (is2B) {
+      if (isWide) {
         light(x4, 1, color);
       }
       // Draw vertical line
-      int vx = is2B ? x3 : x2;
+      int vx = isWide ? x3 : x2;
       light(vx, 1, color);
       light(vx, 2, color);
       light(vx, 3, color);
@@ -1028,149 +1028,120 @@ FLASHMEM void drawNumber(float count, CRGB color, int topY) {
 
 
 FLASHMEM void drawVelocity() {
-  unsigned int vy = currentMode->pos[0];    // Velocity on encoder[0]
+  unsigned int vy = currentMode->pos[0];        // Velocity on encoder[0]
   unsigned int probStep = currentMode->pos[1];  // Probability on encoder[1]
-  unsigned int cv = currentMode->pos[2];    // Channel volume on encoder[2]
-  unsigned int condStep = currentMode->pos[3];  // Condition on encoder[3]
-  
+  unsigned int condStep = currentMode->pos[2];  // Condition on encoder[2] (3rd)
+  unsigned int cv = currentMode->pos[3];        // Channel volume on encoder[3] (4th)
+
+  // Map classic 16-wide layout coords onto full maxX (32 for LED 2 / 2B).
+  auto sx = [](int x16) -> int {
+    if ((int)maxX <= 16) return x16;
+    return 1 + (x16 - 1) * ((int)maxX - 1) / 15;
+  };
+
   FastLEDclear();
 
-  // Draw velocity bar at x=2-3
-  for (unsigned int x = 2; x <= 3; x++) {
+  // Draw velocity bar (classic x=2-3)
+  int velX1 = sx(2), velX2 = sx(3);
+  for (int x = velX1; x <= velX2; x++) {
     for (unsigned int y = 1; y < vy + 1; y++) {
       light(x, y, CRGB(y * y, 20 - y, 0));
     }
   }
-  
-  // Draw probability bars at x=5-8
-  // Layout: y=1 empty, [2-3: 0%] [4: black] [5-6: 25%] [7: black] [8-9: 50%] [10: black] [11-12: 75%] [13: black] [14-15: 100%]
-  // White border at y=1 and y=16, plus sides (x=5 and x=8)
-  
-  // Draw dark white border for probability
+
+  // Probability frame + bars (classic x=5-8)
+  int pL = sx(5), pR = sx(8), pInnerL = sx(6), pInnerR = sx(7);
   CRGB darkWhite = CRGB(30, 30, 30);
-  light(5, 1, darkWhite);   // Bottom left corner
-  light(6, 1, darkWhite);   // Bottom
-  light(7, 1, darkWhite);   // Bottom
-  light(8, 1, darkWhite);  // Bottom right corner
-  light(5, 16, darkWhite);  // Top left corner
-  light(6, 16, darkWhite);  // Top
-  light(7, 16, darkWhite);  // Top
-  light(8, 16, darkWhite); // Top right corner
-  
+  light(pL, 1, darkWhite);
+  light(pInnerL, 1, darkWhite);
+  light(pInnerR, 1, darkWhite);
+  light(pR, 1, darkWhite);
+  light(pL, 16, darkWhite);
+  light(pInnerL, 16, darkWhite);
+  light(pInnerR, 16, darkWhite);
+  light(pR, 16, darkWhite);
+
   for (unsigned int y = 2; y <= 15; y++) {
-    light(5, y, darkWhite);  // Left border
-    light(8, y, darkWhite); // Right border
+    light(pL, y, darkWhite);
+    light(pR, y, darkWhite);
   }
-  
-  // Draw only the active probability bar (not cumulative)
-  for (unsigned int x = 6; x < 8; x++) {
-    // Step 1: 0% - red (y=2-3)
+
+  for (int x = pInnerL; x <= pInnerR; x++) {
     if (probStep == 1) {
       light(x, 2, CRGB(100, 0, 0));
       light(x, 3, CRGB(100, 0, 0));
     }
-    // Black spacer at y=4
-    
-    // Step 2: 25% - orange (y=5-6)
     if (probStep == 2) {
       light(x, 5, CRGB(150, 50, 0));
       light(x, 6, CRGB(150, 50, 0));
     }
-    // Black spacer at y=7
-    
-    // Step 3: 50% - yellow (y=8-9) - only 2 rows
     if (probStep == 3) {
       light(x, 8, CRGB(150, 150, 0));
       light(x, 9, CRGB(150, 150, 0));
     }
-    // Black spacer at y=10
-    
-    // Step 4: 75% - turquoise (y=11-12)
     if (probStep == 4) {
       light(x, 11, CRGB(0, 150, 150));
       light(x, 12, CRGB(0, 150, 150));
     }
-    // Black spacer at y=13
-    
-    // Step 5: 100% - green (y=14-15)
     if (probStep == 5) {
       light(x, 14, CRGB(0, 200, 0));
       light(x, 15, CRGB(0, 200, 0));
     }
   }
 
-  // Draw channel volume at encoder-3 indicator span (classic 10-11, 2B shifted/stretched)
+  // Condition display under 3rd encoder (indicator 3)
+  const char* numeratorText;
+  const char* denominatorText;
+  CRGB textColor;
+  if (condStep == 1) {
+    numeratorText = "1"; denominatorText = "1"; textColor = CRGB(0, 200, 0);
+  } else if (condStep == 2) {
+    numeratorText = "1"; denominatorText = "2"; textColor = CRGB(0, 0, 255);
+  } else if (condStep == 3) {
+    numeratorText = "1"; denominatorText = "4"; textColor = CRGB(200, 0, 255);
+  } else if (condStep == 4) {
+    numeratorText = "1"; denominatorText = "8"; textColor = CRGB(255, 100, 0);
+  } else if (condStep == 5) {
+    numeratorText = "1"; denominatorText = "X"; textColor = CRGB(0, 200, 200);
+  } else if (condStep == 6) {
+    numeratorText = "2"; denominatorText = "1"; textColor = CRGB(0, 150, 255);
+  } else if (condStep == 7) {
+    numeratorText = "4"; denominatorText = "1"; textColor = CRGB(150, 0, 255);
+  } else if (condStep == 8) {
+    numeratorText = "8"; denominatorText = "1"; textColor = CRGB(255, 150, 0);
+  } else if (condStep == 9) {
+    numeratorText = "X"; denominatorText = "1"; textColor = CRGB(0, 255, 200);
+  } else {
+    numeratorText = "F"; denominatorText = "F"; textColor = CRGB(255, 255, 0);
+  }
+
+  if ((int)maxX > 16) {
+    // Wide (LED 2 / 2B): stack fraction under 3rd encoder (was stretched too far right).
+    int ix1, ix2, ix3;
+    getIndicatorXPositions(3, ix1, ix2, ix3);
+    drawText(numeratorText, ix1, 11, textColor);
+    light(ix3 + 1, 10, darkWhite);
+    light(ix3, 9, darkWhite);
+    light(ix2, 8, darkWhite);
+    light(ix1, 7, darkWhite);
+    drawText(denominatorText, ix1 + 1, 2, textColor);
+  } else {
+    drawText(numeratorText, 13, 11, textColor);
+    light(16, 10, darkWhite);
+    light(15, 9, darkWhite);
+    light(14, 8, darkWhite);
+    light(13, 7, darkWhite);
+    drawText(denominatorText, 14, 2, textColor);
+  }
+
+  // Channel volume under 4th encoder (indicator 4)
   int cvX1, cvX2, cvX3;
-  getIndicatorXPositions(3, cvX1, cvX2, cvX3);
+  getIndicatorXPositions(4, cvX1, cvX2, cvX3);
   for (int x = cvX2; x <= cvX3; x++) {
     for (unsigned int y = 1; y < cv + 1; y++) {
       light(x, y, CRGB(0, 20 - y, y * y));
     }
   }
-  
-  // Draw condition display at x=13-16 using drawText
-  // Show condition as "1/1", "1/2", or "1/4" based on condStep
-  
-  // Map condStep to numerator, denominator and color
-  // Positions: 1=1/1, 2=1/2, 3=1/4, 4=1/8, 5=1/16, 6=2/1, 7=4/1, 8=8/1, 9=16/1, 10=F/F
-  const char* numeratorText;
-  const char* denominatorText;
-  CRGB textColor;
-  if (condStep == 1) {
-    numeratorText = "1";
-    denominatorText = "1";
-    textColor = CRGB(0, 200, 0);  // Green for 1/1
-  } else if (condStep == 2) {
-    numeratorText = "1";
-    denominatorText = "2";
-    textColor = CRGB(0, 0, 255);  // Blue for 1/2
-  } else if (condStep == 3) {
-    numeratorText = "1";
-    denominatorText = "4";
-    textColor = CRGB(200, 0, 255);  // Violet for 1/4
-  } else if (condStep == 4) {
-    numeratorText = "1";
-    denominatorText = "8";
-    textColor = CRGB(255, 100, 0);  // Orange for 1/8
-  } else if (condStep == 5) {
-    numeratorText = "1";
-    denominatorText = "X";
-    textColor = CRGB(0, 200, 200);  // Turquoise for 1/16
-  } else if (condStep == 6) {
-    numeratorText = "2";
-    denominatorText = "1";
-    textColor = CRGB(0, 150, 255);  // Light blue for 2/1
-  } else if (condStep == 7) {
-    numeratorText = "4";
-    denominatorText = "1";
-    textColor = CRGB(150, 0, 255);  // Light violet for 4/1
-  } else if (condStep == 8) {
-    numeratorText = "8";
-    denominatorText = "1";
-    textColor = CRGB(255, 150, 0);  // Light orange for 8/1
-  } else if (condStep == 9) {
-    numeratorText = "X";
-    denominatorText = "1";
-    textColor = CRGB(0, 255, 200);  // Light turquoise for 16/1
-  } else {  // condStep == 10 (F/F)
-    numeratorText = "F";
-    denominatorText = "F";
-    textColor = CRGB(255, 255, 0);  // Yellow for F/F (fill)
-  }
-  
-  // Draw numerator at top: x=13, y=11
-  drawText(numeratorText, 13, 11, textColor);
-  
-  // Draw diagonal slash "/" from bottom right to top left: x=12-16, y=8-11
-  // Reuse darkWhite from probability border above
-  // Diagonal line from (16, 8) to (12, 11) - bottom right to top left
-  light(16, 10, darkWhite);
-  light(15, 9, darkWhite);
-  light(14, 8, darkWhite);
-  light(13, 7, darkWhite);
-  
-  // Draw denominator at bottom: x=14, y=2
-  drawText(denominatorText, 14, 2, textColor);
 }
 
 FLASHMEM void drawCtrlVolumeOverlay(int volume) {

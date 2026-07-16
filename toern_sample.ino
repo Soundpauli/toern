@@ -50,6 +50,65 @@ void setEncoder0PressedMode(bool state) {
   g_encoder0PressedMode = state;
 }
 
+// --- Audio-safe SD I/O (cooperative chunks + live-buffer reload lock) --------
+// While the sequencer plays, keep SD work small and never rewrite a live sample
+// slot without muting that channel's triggers first.
+volatile bool channelSampleReloadBusy[maxFiles] = { false };
+
+void stopSdPreviewIfPlaying() {
+  extern AudioPlaySdWav playSdWav1;
+  extern AudioEffectEnvelope envelope0;
+  if (playSdWav1.isPlaying()) {
+    playSdWav1.stop();
+  }
+  envelope0.noteOff();
+}
+
+// When true, SD bursts keep yielding for the Audio library even if the sequencer is paused
+// (voices may still be in release after pause → autosave).
+static volatile bool sdIoKeepAudioFed = false;
+
+void sdIoBeginAudioSafe() { sdIoKeepAudioFed = true; }
+void sdIoEndAudioSafe() { sdIoKeepAudioFed = false; }
+
+size_t sdIoChunkSize() {
+  extern bool isNowPlaying;
+  // Prefer smaller chunks whenever we must keep audio fed (playing or pause-autosave).
+  return (isNowPlaying || sdIoKeepAudioFed) ? (size_t)8192 : (size_t)65536;
+}
+
+void sdIoYield() {
+  extern bool isNowPlaying;
+  yield();
+  // Sequencer paused ≠ audio idle: keep DMA/update fed during SD writes after pause.
+  if (isNowPlaying || sdIoKeepAudioFed) {
+    delayMicroseconds(80);
+  }
+}
+
+bool isChannelSampleReloadBusy(unsigned int ch) {
+  if (ch >= maxFiles) return false;
+  return channelSampleReloadBusy[ch];
+}
+
+void beginChannelSampleReload(unsigned int ch) {
+  if (ch >= maxFiles) return;
+  channelSampleReloadBusy[ch] = true;
+  // Stop any ringing notes on this voice before the buffer is rewritten.
+  for (int note = 36; note <= 96; note++) {
+    _samplers[ch].noteEvent(note, 0, false, false);
+  }
+  if (ch < 15 && envelopes[ch] != nullptr) {
+    envelopes[ch]->noteOff();
+  }
+  _samplers[ch].removeAllSamples();
+}
+
+void endChannelSampleReload(unsigned int ch) {
+  if (ch >= maxFiles) return;
+  channelSampleReloadBusy[ch] = false;
+}
+
 static bool findWavDataChunk(File &f, uint32_t &outStart, uint32_t &outSize) {
   outStart = 0;
   outSize = 0;
@@ -353,14 +412,13 @@ FLASHMEM void previewSample(bool setMaxSampleLength) {
     }
 
     previewFile.seek(readStartBytes);
-    const size_t PREVIEW_IO_CHUNK = 65536;  // Smaller chunks for audio stability
-    unsigned prevChunkCount = 0;
+    const size_t PREVIEW_IO_CHUNK = sdIoChunkSize();
     while (plen < bytesToReadAll) {
       size_t toRead = min(PREVIEW_IO_CHUNK, (size_t)(bytesToReadAll - plen));
       size_t bytesRead = previewFile.read(&sampled[0][plen], toRead);
       if (bytesRead == 0) break;
       plen += (int)bytesRead;
-      if ((++prevChunkCount % 1u) == 0u) yield();  // yield every chunk
+      sdIoYield();
     }
     previewFile.close();
 
@@ -434,9 +492,9 @@ static void loadEmptySampleToChannel(unsigned int sampleID) {
     return;
   }
 
-  memset(sampled[sampleID], 0, sizeof(sampled[sampleID]));
-  _samplers[sampleID].removeAllSamples();
+  beginChannelSampleReload(sampleID);
 
+  // Only clear the pad region we register with the sampler (avoid ~1.7MB memset while playing).
   SampleRate[sampleID] = 3;
   loadedSampleRate[sampleID] = 3;
 
@@ -446,14 +504,17 @@ static void loadEmptySampleToChannel(unsigned int sampleID) {
   if (samplerLen < 1) {
     samplerLen = 1;
   }
+  memset(sampled[sampleID], 0, (size_t)samplerLen * 2);
 
   loadedSampleLen[sampleID] = 0;
   _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], samplerLen, rateFactor);
   channelDirection[sampleID] = 1;
+  endChannelSampleReload(sampleID);
 }
 
 FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   drawNoSD();
+  stopSdPreviewIfPlaying();
 
   char OUTPUTf[64];
   
@@ -490,7 +551,7 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   File loadSample = SD.open(OUTPUTf);
   if (!loadSample) {
     loadEmptySampleToChannel(sampleID);
-    yield();
+    sdIoYield();
     return;
   }
 
@@ -510,7 +571,7 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     if (fileSize <= 0 || dataSize == 0) {
       loadSample.close();
       loadEmptySampleToChannel(sampleID);
-      yield();
+      sdIoYield();
       return;
     }
 
@@ -538,27 +599,26 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     unsigned int endOffsetBytes = endOffset * SampleRate[sampleID] * 2;
     endOffsetBytes = min(endOffsetBytes, (unsigned int)dataSize);
 
+    // Mute this voice before overwriting its live RAM buffer.
+    beginChannelSampleReload(sampleID);
+
     loadSample.seek((uint32_t)dataStart + startOffsetBytes);
     unsigned int i = 0;
-    // Do not memset the whole ~1.6MB slot — only the loaded span + pad is used (playLen). Saves ~13MB of
-    // writes per 8-voice pack load. SD.read directly into EXTRAM avoids a memcpy per chunk.
-    // Smaller chunks + frequent yields prevent audio glitches from SD contention.
-    const size_t CHUNK = 65536;
-    const unsigned YIELD_EVERY_CHUNKS = 1;  // yield every ~64KB for audio stability
+    // Do not memset the whole ~1.6MB slot — only the loaded span + pad is used (playLen).
+    // Smaller chunks while playing + sdIoYield keep audio stable.
+    const size_t CHUNK = sdIoChunkSize();
     size_t bytesToRead = min((size_t)(endOffsetBytes - startOffsetBytes), sizeof(sampled[sampleID]));
-    unsigned chunkCount = 0;
     while (i < bytesToRead) {
       size_t toRead = min(CHUNK, bytesToRead - (size_t)i);
       size_t bytesRead = loadSample.read(&sampled[sampleID][i], toRead);
       if (bytesRead == 0) break;
       i += (unsigned int)bytesRead;
-      if ((++chunkCount % YIELD_EVERY_CHUNKS) == 0) yield();
+      sdIoYield();
     }
     loadSample.close();
 
     // i is bytes read; convert to 16-bit samples
     i = i / 2;
-    _samplers[sampleID].removeAllSamples();
     loadedSampleRate[sampleID] = SampleRate[sampleID];  // e.g. 44100, or whatever
 
     // Add a small zero-tail pad to let downstream FX (filter/bitcrusher) settle to zero.
@@ -581,8 +641,9 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     loadedSampleLen[sampleID] = playLen;
     _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], playLen, rateFactor);
     channelDirection[sampleID] = 1;
+    endChannelSampleReload(sampleID);
   }
-  yield();
+  sdIoYield();
 }
 
 
@@ -727,23 +788,42 @@ void showWave() {
 
   if (g_browseListDirty) sampleBrowserRefreshList(ch);
 
-  // Indicators: ENC0 preview (press), ENC1 seekEnd, ENC2 load selected file, ENC3 browse dirs+files
+  // Selection type first: dir browse = only enc 1+4; file/waveform = also yellow+green (#2+#3).
+  int encoderSampleValue = (int)currentMode->pos[3];
+  int maxList = max(1, (int)g_wavPickCount);
+  if (encoderSampleValue < 1) encoderSampleValue = 1;
+  if (encoderSampleValue > maxList) encoderSampleValue = maxList;
+  if (encoderSampleValue != (int)currentMode->pos[3]) {
+    currentMode->pos[3] = encoderSampleValue;
+  }
+  sampleBrowserClampBrowseIndexAndHardware(ch);
+  encoderSampleValue = (int)currentMode->pos[3];
+  int selectedIdx = encoderSampleValue - 1;
+  bool selectedIsFile = (selectedIdx >= 0 && selectedIdx < (int)g_wavPickCount &&
+                         sampleBrowserEntryTypeAt(selectedIdx) == 2);
+
   drawIndicator('L', 'P', 1);
   Encoder[0].writeRGBCode(0xFF00FF);
-
-  drawIndicator('L', 'Y', 2);  // Encoder 1: trim/seekEnd (swapped)
-  drawIndicator('L', 'G', 3);  // Encoder 2: load selected file
-  drawIndicator('L', 'W', 4);  // Encoder 3: combined browser (dirs first, then files)
-  // (Encoder[0] is intentionally kept pink in SET_WAV to advertise preview-press.)
+  if (selectedIsFile) {
+    drawIndicator('L', 'Y', 2);  // Encoder 1: trim/seekEnd
+    drawIndicator('L', 'G', 3);  // Encoder 2: load selected file
+  }
+  drawIndicator('L', 'W', 4);  // Encoder 3: combined browser
 
   // Encoder 2 rotation is unused in SET_WAV.
   currentMode->pos[1] = 0;
   Encoder[2].writeMin((int32_t)0);
   Encoder[2].writeMax((int32_t)0);
   Encoder[2].writeCounter((int32_t)0);
-  Encoder[1].writeRGBCode(0xFFFF00); // Yellow (seekEnd)
   Encoder[1].writeMin((int32_t)0);
   Encoder[1].writeMax((int32_t)100);
+  if (selectedIsFile) {
+    Encoder[1].writeRGBCode(0xFFFF00); // Yellow (seekEnd)
+    Encoder[2].writeRGBCode(0x0000FF); // Load
+  } else {
+    Encoder[1].writeRGBCode(0x000000);
+    Encoder[2].writeRGBCode(0x000000);
+  }
   if (currentMode->pos[2] > 100) {
     currentMode->pos[2] = 100;
     Encoder[1].writeCounter((int32_t)currentMode->pos[2]);
@@ -784,23 +864,13 @@ void showWave() {
   }
 
   // ---- Encoder 3: combined browser ([../], dirs, files) -------------------
-  int encoderSampleValue = (int)currentMode->pos[3];
-  int maxList = max(1, (int)g_wavPickCount);
-  int encoderMin = 1;
-  int encoderMax = maxList;
-  if (encoderSampleValue < encoderMin) encoderSampleValue = encoderMin;
-  if (encoderSampleValue > encoderMax) encoderSampleValue = encoderMax;
-  if (encoderSampleValue != currentMode->pos[3]) {
-    currentMode->pos[3] = encoderSampleValue;
-    Encoder[3].writeCounter((int32_t)encoderSampleValue);
-  }
   Encoder[3].writeMin((int32_t)1);
   Encoder[3].writeMax((int32_t)maxList);
-  sampleBrowserClampBrowseIndexAndHardware(ch);
-  encoderSampleValue = (int)currentMode->pos[3];
+  if (encoderSampleValue != (int)currentMode->pos[3]) {
+    Encoder[3].writeCounter((int32_t)encoderSampleValue);
+  }
 
   {
-    Encoder[2].writeRGBCode(0x0000FF);
     int wi = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
     bool isDirEntry = (sampleBrowserEntryTypeAt(wi) != 2);
     if (isDirEntry) {
@@ -811,9 +881,6 @@ void showWave() {
     }
   }
 
-  int selectedIdx = encoderSampleValue - 1;
-  bool selectedIsFile = (selectedIdx >= 0 && selectedIdx < (int)g_wavPickCount &&
-                         sampleBrowserEntryTypeAt(selectedIdx) == 2);
   bool sampleChanged = selectedIsFile &&
                        ((encoderSampleValue != lastEncoder3Value_forShowWave) ||
                         (encoderSampleValue != SMP.wav[ch].fileID));
@@ -938,7 +1005,7 @@ void showWave() {
           dir = -1;
           nextStepMs = now + 500;  // pause at end
         } else {
-          nextStepMs = now + 100;  // scroll speed
+          nextStepMs = now + 50;  // scroll speed (2x)
         }
       } else {
         // Scrolling backward: move left until first char is at initialStartX
@@ -948,7 +1015,7 @@ void showWave() {
           dir = 1;
           nextStepMs = now + 500;  // pause at start
         } else {
-          nextStepMs = now + 100;  // scroll speed
+          nextStepMs = now + 50;  // scroll speed (2x)
         }
       }
     }
@@ -1017,9 +1084,7 @@ static void sampleLoadUiThrottled(uint8_t percent, bool enable, uint8_t &lastDra
 
 // Copy currently loaded sample to samplepack 0
 FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress) {
-  // Stop any SD audio playback to prevent contention/glitches
-  extern AudioPlaySdWav playSdWav1;
-  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  stopSdPreviewIfPlaying();
   
   // Ensure samplepack 0 directory exists
   if (!SD.exists("0")) {
@@ -1061,7 +1126,7 @@ FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgres
     1, 0,         // num channels (mono)
     (uint8_t)(sampleRate & 0xff), (uint8_t)((sampleRate >> 8) & 0xff),
     (uint8_t)((sampleRate >> 16) & 0xff), (uint8_t)((sampleRate >> 24) & 0xff),
-    (uint8_t)(byteRate & 0xff), (uint8_t)((byteRate >> 8) & 0xff),
+    (uint8_t)(byteRate & 0xff), (uint8_t)(((byteRate) >> 8) & 0xff),
     (uint8_t)((byteRate >> 16) & 0xff), (uint8_t)((byteRate >> 24) & 0xff),
     blockAlign, 0,
     16, 0,  // bits per sample
@@ -1072,21 +1137,18 @@ FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgres
   
   outFile.write(header, 44);
   
-  // Write the sample data from RAM
-  // Write the raw PCM data from the sampled buffer in chunks to prevent blocking
-  // Large samples (930KB) can block CPU for 500-1000ms without chunking
-  // Smaller chunks + frequent yields prevent audio glitches from SD contention.
+  // Write the sample data from RAM in audio-safe chunks
   uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[channel]);
-  const size_t CHUNK_SIZE = 65536;  // 64KB chunks for audio stability
+  const size_t CHUNK_SIZE = sdIoChunkSize();
 
   uint8_t sp0ProgLast = 255;
   if (showLoadProgress && dataSize == 0) {
     sampleLoadUiThrottled(100, true, sp0ProgLast);
   }
   for (uint32_t offset = 0; offset < dataSize; offset += CHUNK_SIZE) {
-    size_t chunkSize = min((size_t)CHUNK_SIZE, (size_t)(dataSize - offset));
+    size_t chunkSize = min(CHUNK_SIZE, (size_t)(dataSize - offset));
     outFile.write(dataPtr + offset, chunkSize);
-    yield();  // yield every chunk for audio stability
+    sdIoYield();
     if (showLoadProgress && dataSize > 0) {
       uint32_t done = offset + (uint32_t)chunkSize;
       if (done > dataSize) done = dataSize;
@@ -1158,6 +1220,8 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     return;
   }
 
+  stopSdPreviewIfPlaying();
+
   uint8_t loadProgLast = 255;
 
   extern CachedSample previewCache;
@@ -1172,7 +1236,7 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     char OUTPUTf[160];
     buildSamplePath(0, 0, OUTPUTf, sizeof(OUTPUTf));
 
-    yield(); // Yield before SD.open() to prevent blocking main sequencer
+    sdIoYield();
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
       return;
@@ -1194,10 +1258,10 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     // For 44.1kHz, the original code used rate = 3 (byte 0x44 at offset 24)
     int rate = 3;  // 44.1kHz Mono (original mapping: byte 68 = 0x44)
 
-    // Load data chunk into RAM buffer (no blanket memset)
+    // Load data chunk into preview RAM (channel 0) — not a live play voice during SET_WAV load
     previewFile.seek(dataStart);
     int plen = 0;
-    const size_t LPREVIEW_CHUNK = 65536;  // 64KB chunks for audio stability
+    const size_t LPREVIEW_CHUNK = sdIoChunkSize();
     int chunkCount = 0;
     int maxToRead = (int)min((uint32_t)sizeof(sampled[0]), dataSize);
     while (plen < maxToRead) {
@@ -1205,7 +1269,8 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
       size_t bytesRead = previewFile.read(&sampled[0][plen], toRead);
       if (bytesRead == 0) break;
       plen += (int)bytesRead;
-      yield();  // yield every chunk for audio stability
+      sdIoYield();
+      chunkCount++;
       if (showLoadProgress && maxToRead > 0 && (chunkCount % 2) == 0) {
         uint8_t pct = (uint8_t)(4u + (uint32_t)plen * 62u / (uint32_t)maxToRead);
         sampleLoadUiThrottled(pct, true, loadProgLast);
@@ -1246,30 +1311,28 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   
   int trimmedSamples = endSample - startSample;
   
-  // Clear target buffer first to remove any old sample data
-  memset(sampled[targetChannel], 0, sizeof(sampled[targetChannel]));
-  
-  // Copy the trimmed portion from preview (channel 0) to target channel
+  // Mute target voice before rewriting its live buffer (no full-slot memset).
+  beginChannelSampleReload(targetChannel);
+
   int16_t* previewBuffer = (int16_t*)sampled[0];
   int16_t* targetBuffer = (int16_t*)sampled[targetChannel];
-  
-  for (int i = 0; i < trimmedSamples && i < (int)(sizeof(sampled[targetChannel]) / 2); i++) {
-    targetBuffer[i] = previewBuffer[startSample + i];
-  }
-  
-  // Update the sampler for the target channel
-  _samplers[targetChannel].removeAllSamples();
-  loadedSampleRate[targetChannel] = previewCache.rate;
-  // Add small zero-tail pad (see loadSample()) to reduce end-clicks through FX chain.
-  const int END_PAD_SAMPLES = 1024;
   int bufferSamples = (int)(sizeof(sampled[targetChannel]) / 2);
   int samplesRead = trimmedSamples;
   if (samplesRead < 0) samplesRead = 0;
   if (samplesRead > bufferSamples) samplesRead = bufferSamples;
+
+  for (int i = 0; i < samplesRead; i++) {
+    targetBuffer[i] = previewBuffer[startSample + i];
+    // Yield occasionally during large copies while playing
+    if ((i & 0xFFF) == 0) sdIoYield();
+  }
+  
+  loadedSampleRate[targetChannel] = previewCache.rate;
+  // Add small zero-tail pad (see loadSample()) to reduce end-clicks through FX chain.
+  const int END_PAD_SAMPLES = 1024;
   int pad = END_PAD_SAMPLES;
   if (pad > (bufferSamples - samplesRead)) pad = (bufferSamples - samplesRead);
   
-  // Explicitly zero the pad area to ensure no old data remains
   if (pad > 0 && (samplesRead + pad) <= bufferSamples) {
     memset(&sampled[targetChannel][samplesRead * 2], 0, pad * 2);
   }
@@ -1279,6 +1342,7 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   loadedSampleLen[targetChannel] = playLen;
   _samplers[targetChannel].addSample(36, targetBuffer, playLen, rateFactor);
   channelDirection[targetChannel] = 1;
+  endChannelSampleReload(targetChannel);
 
   if (showLoadProgress) {
     sampleLoadUiThrottled(78, true, loadProgLast);
@@ -1304,8 +1368,7 @@ void soloRandomPreviewCurrentVoice() {
   if (!SD.exists(OUTPUTf)) return;
 
   stopPeakScan();
-  if (playSdWav1.isPlaying()) playSdWav1.stop();
-  envelope0.noteOff();
+  stopSdPreviewIfPlaying();
 
   GLOB.seek = 0;
   GLOB.seekEnd = 100;
@@ -1317,6 +1380,12 @@ void soloRandomPreviewCurrentVoice() {
   updatePreviewVolume();
   yield();
   playSdWav1.play(OUTPUTf);
+}
+
+// Step through the fixed random playlist (±1), then preview.
+void soloRandomStepAndPreview(int delta) {
+  if (!soloRandomStepPlaylist(delta)) return;
+  soloRandomPreviewCurrentVoice();
 }
 
 void soloRandomLoadLastPreview() {

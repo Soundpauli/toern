@@ -100,9 +100,14 @@ uint16_t manifestFolderCount = 0;
 bool loadSampleManifest() { return false; }
 bool scanAndWriteManifest() { return true; }
 
-EXTMEM char g_soloRandomPaths[BROWSE_MAX_TMP][SAMPLE_BROWSER_PATH_MAX];
-uint16_t g_soloRandomWavCount = 0;
+// Mute-mode random sample playlist: reservoir-sample up to 99 WAVs from all of samples/
+#define SOLO_RANDOM_PLAYLIST_SIZE 25
+EXTMEM char g_soloRandomPlaylist[SOLO_RANDOM_PLAYLIST_SIZE][SAMPLE_BROWSER_PATH_MAX];
+uint16_t g_soloRandomPlaylistCount = 0;
+int16_t g_soloRandomPlaylistIndex = 0;
 static char g_soloRandomLastRel[SAMPLE_BROWSER_PATH_MAX] = {0};
+static uint32_t g_soloRandomSeenCount = 0;
+// Legacy name kept for invalidate paths
 static bool g_soloRandomListDirty = true;
 
 EXTMEM char g_browseDir[maxFiles][SAMPLE_BROWSER_PATH_MAX];
@@ -142,7 +147,20 @@ static void copyBaseName64(const char* rawName, char* out, size_t outSz) {
   out[outSz - 1] = 0;
 }
 
-static void soloRandomScanDir(const char* relDir, uint16_t* count) {
+static void soloRandomSetLastFromIndex() {
+  g_soloRandomLastRel[0] = 0;
+  if (g_soloRandomPlaylistCount == 0) return;
+  if (g_soloRandomPlaylistIndex < 0) g_soloRandomPlaylistIndex = 0;
+  if (g_soloRandomPlaylistIndex >= (int16_t)g_soloRandomPlaylistCount) {
+    g_soloRandomPlaylistIndex = (int16_t)g_soloRandomPlaylistCount - 1;
+  }
+  strncpy(g_soloRandomLastRel, g_soloRandomPlaylist[g_soloRandomPlaylistIndex], sizeof(g_soloRandomLastRel) - 1);
+  g_soloRandomLastRel[sizeof(g_soloRandomLastRel) - 1] = 0;
+}
+
+// Fast uniform pick of one child (dir or wav) in a directory via one-pass reservoir.
+// Returns false if nothing useful found. outIsDir set when chosen entry is a directory.
+static bool soloRandomPickChild(const char* relDir, char* outName, size_t outNameSz, bool* outIsDir) {
   char fullPath[160];
   if (relDir && relDir[0]) {
     snprintf(fullPath, sizeof(fullPath), "samples/%s", relDir);
@@ -153,69 +171,165 @@ static void soloRandomScanDir(const char* relDir, uint16_t* count) {
   File dir = SD.open(fullPath);
   if (!dir || !dir.isDirectory()) {
     if (dir) dir.close();
-    return;
+    return false;
   }
 
+  char chosen[SAMPLE_BROWSER_NAME_MAX];
+  chosen[0] = 0;
+  bool chosenDir = false;
+  uint32_t seen = 0;
+
   File fe;
-  while ((fe = dir.openNextFile()) && *count < BROWSE_MAX_TMP) {
+  while ((fe = dir.openNextFile())) {
     char base[SAMPLE_BROWSER_NAME_MAX];
     copyBaseName64(fe.name(), base, sizeof(base));
     if (!base[0] || base[0] == '.') {
       fe.close();
       continue;
     }
+    bool isDir = fe.isDirectory();
+    bool isWav = !isDir && hasWavExt(base);
+    fe.close();
+    if (!isDir && !isWav) continue;
 
-    if (fe.isDirectory()) {
-      char subRel[SAMPLE_BROWSER_PATH_MAX];
-      if (relDir && relDir[0]) {
-        snprintf(subRel, sizeof(subRel), "%s/%s", relDir, base);
+    seen++;
+    // Keep with probability 1/seen → uniform among useful children.
+    if (random((long)seen) == 0) {
+      strncpy(chosen, base, sizeof(chosen) - 1);
+      chosen[sizeof(chosen) - 1] = 0;
+      chosenDir = isDir;
+    }
+  }
+  dir.close();
+
+  if (seen == 0 || !chosen[0]) return false;
+  strncpy(outName, chosen, outNameSz - 1);
+  outName[outNameSz - 1] = 0;
+  if (outIsDir) *outIsDir = chosenDir;
+  return true;
+}
+
+// Realtime: random-walk the samples/ tree and return one WAV path. No full-tree scan.
+static bool soloRandomPickOneFast(char* outRel, size_t outRelSz) {
+  if (!outRel || outRelSz == 0) return false;
+  outRel[0] = 0;
+
+  for (int attempt = 0; attempt < 20; attempt++) {
+    char rel[SAMPLE_BROWSER_PATH_MAX];
+    rel[0] = 0;
+
+    for (int depth = 0; depth < 10; depth++) {
+      char name[SAMPLE_BROWSER_NAME_MAX];
+      bool isDir = false;
+      if (!soloRandomPickChild(rel, name, sizeof(name), &isDir)) break;
+
+      char next[SAMPLE_BROWSER_PATH_MAX];
+      if (rel[0]) {
+        snprintf(next, sizeof(next), "%s/%s", rel, name);
       } else {
-        snprintf(subRel, sizeof(subRel), "%s", base);
+        snprintf(next, sizeof(next), "%s", name);
       }
-      fe.close();
-      soloRandomScanDir(subRel, count);
-    } else if (hasWavExt(base)) {
-      char entry[SAMPLE_BROWSER_PATH_MAX];
-      if (relDir && relDir[0]) {
-        snprintf(entry, sizeof(entry), "%s/%s", relDir, base);
-      } else {
-        snprintf(entry, sizeof(entry), "%s", base);
+
+      if (!isDir) {
+        strncpy(outRel, next, outRelSz - 1);
+        outRel[outRelSz - 1] = 0;
+        return true;
       }
-      strncpy(g_soloRandomPaths[*count], entry, SAMPLE_BROWSER_PATH_MAX - 1);
-      g_soloRandomPaths[*count][SAMPLE_BROWSER_PATH_MAX - 1] = 0;
-      (*count)++;
-      fe.close();
-    } else {
-      fe.close();
+      strncpy(rel, next, sizeof(rel) - 1);
+      rel[sizeof(rel) - 1] = 0;
     }
     yield();
   }
-  dir.close();
+  return false;
 }
 
-void soloRandomRefreshWavList() {
-  g_soloRandomWavCount = 0;
-  soloRandomScanDir("", &g_soloRandomWavCount);
+static bool soloRandomAppendOne() {
+  if (g_soloRandomPlaylistCount >= SOLO_RANDOM_PLAYLIST_SIZE) return false;
+  char entry[SAMPLE_BROWSER_PATH_MAX];
+  if (!soloRandomPickOneFast(entry, sizeof(entry))) return false;
+
+  // Avoid immediate duplicates when growing the list.
+  for (uint16_t i = 0; i < g_soloRandomPlaylistCount; i++) {
+    if (strcasecmp(g_soloRandomPlaylist[i], entry) == 0) {
+      // Try once more for a different pick.
+      if (!soloRandomPickOneFast(entry, sizeof(entry))) return false;
+      break;
+    }
+  }
+
+  strncpy(g_soloRandomPlaylist[g_soloRandomPlaylistCount], entry, SAMPLE_BROWSER_PATH_MAX - 1);
+  g_soloRandomPlaylist[g_soloRandomPlaylistCount][SAMPLE_BROWSER_PATH_MAX - 1] = 0;
+  g_soloRandomPlaylistCount++;
+  return true;
+}
+
+// Start a new playlist instantly (one realtime pick). Grows to 99 as user scrolls forward.
+FLASHMEM bool soloRandomRenewPlaylist() {
+  g_soloRandomPlaylistCount = 0;
+  g_soloRandomPlaylistIndex = 0;
+  g_soloRandomSeenCount = 0;
+  g_soloRandomLastRel[0] = 0;
   g_soloRandomListDirty = false;
+  if (!soloRandomAppendOne()) return false;
+  g_soloRandomPlaylistIndex = 0;
+  soloRandomSetLastFromIndex();
+  return true;
+}
+
+FLASHMEM void soloRandomRefreshWavList() {
+  soloRandomRenewPlaylist();
 }
 
 bool soloRandomPickPath(char* outRel, size_t outRelSize) {
-  if (g_soloRandomListDirty || g_soloRandomWavCount == 0) {
-    soloRandomRefreshWavList();
+  if (g_soloRandomListDirty || g_soloRandomPlaylistCount == 0) {
+    soloRandomRenewPlaylist();
   }
-  if (g_soloRandomWavCount == 0 || outRelSize == 0) {
+  if (g_soloRandomPlaylistCount == 0 || outRelSize == 0) {
     if (outRelSize > 0) outRel[0] = 0;
     return false;
   }
-
-  uint16_t idx = (uint16_t)random(g_soloRandomWavCount);
-  const char* picked = g_soloRandomPaths[idx];
-  strncpy(outRel, picked, outRelSize - 1);
+  soloRandomSetLastFromIndex();
+  strncpy(outRel, g_soloRandomLastRel, outRelSize - 1);
   outRel[outRelSize - 1] = 0;
+  return outRel[0] != 0;
+}
 
-  strncpy(g_soloRandomLastRel, picked, sizeof(g_soloRandomLastRel) - 1);
-  g_soloRandomLastRel[sizeof(g_soloRandomLastRel) - 1] = 0;
-  return true;
+bool soloRandomStepPlaylist(int delta) {
+  if (g_soloRandomPlaylistCount == 0) {
+    if (!soloRandomRenewPlaylist()) return false;
+  }
+
+  if (delta > 0) {
+    int next = (int)g_soloRandomPlaylistIndex + 1;
+    if (next < (int)g_soloRandomPlaylistCount) {
+      g_soloRandomPlaylistIndex = (int16_t)next;
+    } else if (g_soloRandomPlaylistCount < SOLO_RANDOM_PLAYLIST_SIZE) {
+      // Grow lazily with one realtime pick — no full tree scan.
+      if (soloRandomAppendOne()) {
+        g_soloRandomPlaylistIndex = (int16_t)(g_soloRandomPlaylistCount - 1);
+      } else if (g_soloRandomPlaylistCount > 0) {
+        g_soloRandomPlaylistIndex = 0;  // wrap if we can't find more
+      }
+    } else {
+      g_soloRandomPlaylistIndex = 0;  // full 99 — wrap
+    }
+  } else if (delta < 0) {
+    int n = (int)g_soloRandomPlaylistCount;
+    int idx = ((int)g_soloRandomPlaylistIndex - 1) % n;
+    if (idx < 0) idx += n;
+    g_soloRandomPlaylistIndex = (int16_t)idx;
+  }
+
+  soloRandomSetLastFromIndex();
+  return g_soloRandomPlaylistCount > 0;
+}
+
+uint16_t soloRandomPlaylistCount() {
+  return g_soloRandomPlaylistCount;
+}
+
+int16_t soloRandomPlaylistIndex() {
+  return g_soloRandomPlaylistIndex;
 }
 
 const char* soloRandomGetLastPreviewPath() {
@@ -360,7 +474,7 @@ static void sampleBrowserFinishFolderStep(int channel, unsigned int prevWavPos, 
   g_setWavIgnoreLoadUntilMs = millis() + 220;
 }
 
-void sampleBrowserRefreshList(int channel) {
+FLASHMEM void sampleBrowserRefreshList(int channel) {
   if (channel < 1 || channel >= maxFiles) return;
   int nd = 0, nw = 0;
   char fullPath[160];
@@ -454,7 +568,7 @@ void sampleBrowserRefreshList(int channel) {
   g_browseListDirty = false;
 }
 
-void sampleBrowserSyncBrowseFromStoredPath(int ch) {
+FLASHMEM void sampleBrowserSyncBrowseFromStoredPath(int ch) {
   if (ch < 1 || ch >= maxFiles) return;
   const char* sp = SMP.samplePathRel[ch];
   g_browseDir[ch][0] = 0;
@@ -510,7 +624,7 @@ bool sampleBrowserIsLoadableSelection(int channel) {
   return g_wavPickType[idx] == SAMPLE_BROWSER_ENTRY_FILE;
 }
 
-void sampleBrowserNavigatePress(int channel) {
+FLASHMEM void sampleBrowserNavigatePress(int channel) {
   if (channel < 1 || channel >= maxFiles) return;
   sampleBrowserClampBrowseIndexAndHardware(channel);
   if (g_wavPickCount == 0) return;
@@ -535,7 +649,7 @@ void sampleBrowserNavigatePress(int channel) {
 
 // SET_WAV: last encoder press — directory row ([../] or folder): navigate (up or into folder).
 // File row: go up one level when not at samples root; at root, press does nothing.
-void sampleBrowserLastEncoderPress(int channel) {
+FLASHMEM void sampleBrowserLastEncoderPress(int channel) {
   if (channel < 1 || channel >= maxFiles) return;
   sampleBrowserClampBrowseIndexAndHardware(channel);
   if (g_wavPickCount == 0) return;
@@ -549,6 +663,12 @@ void sampleBrowserLastEncoderPress(int channel) {
     return;
   }
 
+  sampleBrowserGoUpPress(channel);
+}
+
+// SET_WAV: always go up one directory level (no-op at samples root).
+FLASHMEM void sampleBrowserGoUpPress(int channel) {
+  if (channel < 1 || channel >= maxFiles) return;
   if (!g_browseDir[channel][0]) return;
 
   const unsigned int prevWavPos = currentMode->pos[3];
@@ -559,7 +679,7 @@ void sampleBrowserLastEncoderPress(int channel) {
   sampleBrowserFinishFolderStep(channel, prevWavPos, preferredFolderName);
 }
 
-void sampleBrowserClearAll() {
+FLASHMEM void sampleBrowserClearAll() {
   for (int i = 0; i < maxFiles; i++) {
     g_browseDir[i][0] = '\0';
     SMP.samplePathRel[i][0] = '\0';
@@ -573,26 +693,20 @@ void sampleBrowserClearAll() {
   manifestFolderCount = 0;
 }
 
-// Generate next numeric filename: rec001.wav ... rec999.wav (in current browse folder)
-void generateNextNumericName(int folderIdx, char* outName, size_t outSize) {
+// Generate next numeric filename: rec_01.wav ... rec_999.wav (always in samples/recs)
+FLASHMEM void generateNextNumericName(int folderIdx, char* outName, size_t outSize) {
   (void)folderIdx;
-  int ch = GLOB.currentChannel;
-  if (ch < 1 || ch >= maxFiles) ch = 1;
   char path[160];
   for (int n = 1; n < 1000; ++n) {
     snprintf(outName, outSize, "rec_%02d.wav", n);
-    if (g_browseDir[ch][0]) {
-      snprintf(path, sizeof(path), "samples/%s/%s", g_browseDir[ch], outName);
-    } else {
-      snprintf(path, sizeof(path), "samples/%s", outName);
-    }
+    snprintf(path, sizeof(path), "samples/recs/%s", outName);
     if (!SD.exists(path)) return;
   }
   snprintf(outName, outSize, "rec_99.wav");
 }
 
 // Playback / recording path from stored relative path (samples/...)
-void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
+FLASHMEM void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
   (void)folderIdx;
   (void)fileIdx;
   if (outSize > 0) out[0] = '\0';
@@ -603,7 +717,7 @@ void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
   }
 }
 
-void EEPROMgetLastFiles() {
+FLASHMEM void EEPROMgetLastFiles() {
   // Dynamic browser: nothing to preload from SD index files
 }
 
@@ -613,7 +727,7 @@ void EEPROMgetLastFiles() {
 
 // Wrapper: load all saved SMP settings (parameters, filters, synths)
 // for every channel.
-void loadSMPSettings() {
+FLASHMEM void loadSMPSettings() {
   // Don't load settings if SMP_LOAD_SETTINGS is false
   if (!SMP_LOAD_SETTINGS) {
     return;
@@ -788,7 +902,7 @@ void stopRecordingRAM(int fnr, int snr) {
   // Disable audio input monitoring
   mixer_end.gain(3, 0.0);
 
-  // open WAV on SD (next free rec_XX.wav in current browse folder)
+  // open WAV on SD (next free rec_XX.wav in the dedicated samples/recs folder)
   (void)fnr;
   (void)snr;
   char path[160];
@@ -796,11 +910,10 @@ void stopRecordingRAM(int fnr, int snr) {
   generateNextNumericName(0, tmpName, sizeof(tmpName));
   int ch = GLOB.currentChannel;
   if (ch < 1 || ch >= maxFiles) ch = 1;
-  if (g_browseDir[ch][0]) {
-    snprintf(path, sizeof(path), "samples/%s/%s", g_browseDir[ch], tmpName);
-  } else {
-    snprintf(path, sizeof(path), "samples/%s", tmpName);
-  }
+  // Recorded files always go into samples/recs (created on demand).
+  if (!SD.exists("samples")) SD.mkdir("samples");
+  if (!SD.exists("samples/recs")) SD.mkdir("samples/recs");
+  snprintf(path, sizeof(path), "samples/recs/%s", tmpName);
   if (SD.exists(path)) SD.remove(path);
   File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
   if (!f) { return; }
@@ -815,11 +928,7 @@ void stopRecordingRAM(int fnr, int snr) {
   //Serial.println(path);
 
   sampleBrowserInvalidate();
-  if (g_browseDir[ch][0]) {
-    snprintf(SMP.samplePathRel[ch], 128, "%s/%s", g_browseDir[ch], tmpName);
-  } else {
-    snprintf(SMP.samplePathRel[ch], 128, "%s", tmpName);
-  }
+  snprintf(SMP.samplePathRel[ch], 128, "recs/%s", tmpName);
   
   // Reload the sample metadata after recording
   extern bool sampleIsLoaded;
@@ -1080,13 +1189,13 @@ void stopFastRecord() {
 
 }
 
-void EEPROMsetLastFile() {
+FLASHMEM void EEPROMsetLastFile() {
   sampleBrowserInvalidate();
 }
 
 
 
-void clearAllNotesOfChannel() {
+FLASHMEM void clearAllNotesOfChannel() {
   uint8_t channel = GLOB.currentChannel;
 
   for (uint16_t step = 0; step < maxlen; step++) {
@@ -1323,7 +1432,12 @@ int getPage(int x) {
 
 // Harmonic analysis structure for musical random generation (moved to top of file)
 
-void drawRandoms(){
+// 16-step pattern tiles across the page (maxX may be 16 or 32).
+static inline int randStep16(unsigned int x_rel) {
+  return (int)(((x_rel - 1u) % 16u) + 1u);
+}
+
+FLASHMEM void drawRandoms(){
   
   // Determine current page boundaries.
   unsigned int start = ((GLOB.edit - 1) * maxX) + 1;
@@ -1366,17 +1480,17 @@ void drawRandoms(){
   } else if(channel >= 5 && channel <= 8) {
     // Voice channels (5-8): Generate melodic patterns
     generateMelodicPattern(start, end, channel, harmony);
-  } else if(channel == 11) {
-    // Channel 11: Generate bass or main melody
+  } else if(channel == 11 || channel == 13 || channel == 14) {
+    // Channel 11 / synths 13-14: bass or main melody
     generateBassOrMelody(start, end, channel, harmony);
-    } else {
+  } else {
     // Other channels: Use original logic as fallback
     generateBasicPattern(start, end, channel, harmony);
   }
 }
 
 // Generate rhythmic patterns for channels 1-4
-void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+FLASHMEM void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
   // Define 4/4 time signature patterns with more sophisticated rhythms
   const int strongBeats[] = {1, 5, 9, 13};  // Beat 1, 2, 3, 4
   const int weakBeats[] = {3, 7, 11, 15};   // Off-beats
@@ -1386,7 +1500,7 @@ void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int 
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % maxX) + 1;
+    int beatPosition = randStep16((unsigned int)x_rel); // tile 16-step groove across maxX
     
     bool shouldPlay = false;
     int velocity = defaultVelocity;
@@ -1459,7 +1573,7 @@ void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int 
 }
 
 // Generate melodic patterns for channels 5-8
-void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+FLASHMEM void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
   // Define scale notes based on harmonic analysis
   int scaleNotes[8];
   int scaleSize = 0;
@@ -1493,7 +1607,7 @@ void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int c
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % maxX) + 1;
+    int beatPosition = randStep16((unsigned int)x_rel); // tile 16-step groove across maxX
     
     // Create melodic phrases with musical intervals
     if(beatPosition % phraseLength == 1) {
@@ -1570,7 +1684,7 @@ void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int c
 }
 
 // Generate bass or main melody for channel 11
-void generateBassOrMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+FLASHMEM void generateBassOrMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
   // Channel 11 should primarily be bass lines (80% bass, 20% melody)
   bool generateBass = (random(0, 100) < 80);
   
@@ -1584,7 +1698,7 @@ void generateBassOrMelody(unsigned int start, unsigned int end, unsigned int cha
 }
 
 // Generate bass line
-void generateBassLine(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+FLASHMEM void generateBassLine(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
   // Classic bass notes: root, third, fifth, octave (low register)
   int bassNotes[] = {1, 2, 3, 4, 5, 6, 7, 8}; // Low register (C3 to C4)
   int bassSize = 8;
@@ -1594,7 +1708,7 @@ void generateBassLine(unsigned int start, unsigned int end, unsigned int channel
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % maxX) + 1;
+    int beatPosition = randStep16((unsigned int)x_rel); // tile 16-step groove across maxX
     
     // Create bass phrases
     if(beatPosition % phraseLength == 1) {
@@ -1629,7 +1743,7 @@ void generateBassLine(unsigned int start, unsigned int end, unsigned int channel
 }
 
 // Generate main melody
-void generateMainMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+FLASHMEM void generateMainMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
   // Melody uses higher register and more complex patterns
   int melodyNotes[] = {10, 12, 13, 15, 1, 3, 5, 6};
   int melodySize = 8;
@@ -1639,7 +1753,7 @@ void generateMainMelody(unsigned int start, unsigned int end, unsigned int chann
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % maxX) + 1;
+    int beatPosition = randStep16((unsigned int)x_rel); // tile 16-step groove across maxX
     
     // Create melodic phrases
     if(beatPosition % phraseLength == 1) {
@@ -1766,7 +1880,7 @@ void generateMainMelody(unsigned int start, unsigned int end, unsigned int chann
 }
 
 // Context-aware rhythmic pattern generation that preserves base page rhythm
-void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
+FLASHMEM void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
   // Preserve the original rhythm structure with subtle variations
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
@@ -1820,7 +1934,7 @@ void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, u
 }
 
 // Context-aware melodic pattern generation that preserves base page melody
-void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
+FLASHMEM void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
   // Preserve the original melodic structure with harmonic progressions
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
@@ -1874,7 +1988,7 @@ void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, un
 }
 
 // Create dynamic harmonic progressions with more variation
-int createHarmonicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
+FLASHMEM int createHarmonicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
   // Analyze the base note's harmonic function within the detected scale
   int scaleNotes[16];
   int scaleSize = 0;
@@ -1967,7 +2081,7 @@ int createHarmonicProgression(int baseNote, int pageOffset, HarmonicAnalysis har
 }
 
 // Create dynamic melodic progressions with more variation and excitement
-int createMelodicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
+FLASHMEM int createMelodicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
   // Analyze the base note's harmonic function
   int scaleNotes[16];
   int scaleSize = 0;
@@ -2068,7 +2182,7 @@ int createMelodicProgression(int baseNote, int pageOffset, HarmonicAnalysis harm
 }
 
 // Create very conservative rhythmic progressions that stay close to original pitch
-int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
+FLASHMEM int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
   // For rhythm channels, we want to stay very close to the original pitch
   // Only make minimal changes to maintain the rhythmic character
   
@@ -2115,7 +2229,7 @@ int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAnalysis har
 }
 
 // Generate genre-based track from page 1 to selected length
-void generateGenreTrack() {
+FLASHMEM void generateGenreTrack() {
   // Clear ALL pages first (complete reset)
   for (unsigned int page = 1; page <= maxPages; page++) {
     unsigned int start = (page - 1) * 16 + 1;
@@ -2167,7 +2281,7 @@ void generateGenreTrack() {
 }
 
 // Set genre-appropriate BPM
-void setGenreBPM() {
+FLASHMEM void setGenreBPM() {
   int targetBPM = 100; // Default BPM
   
   switch (genreType) {
@@ -2788,16 +2902,15 @@ FLASHMEM void generateAmbientPattern(unsigned int start, unsigned int end, unsig
 }
 
 // Fallback basic pattern for other channels
-void generateBasicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
-  // Use simplified version of original logic
+FLASHMEM void generateBasicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
+  // Tile 16-step strong beats across page (fixes maxX=32 only-first-half bug)
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
-    
-    // Strong beats get notes
-    if(x_rel == 1 || x_rel == 5 || x_rel == 9 || x_rel == 13) {
-      int noteRow = random(1, 9); // Random note in lower register
-      
-      // Only place note if slot is empty (channel == 0)
+    int s = randStep16((unsigned int)x_rel);
+
+    if(s == 1 || s == 5 || s == 9 || s == 13) {
+      int noteRow = random(1, 9);
+
       if(note[c][noteRow].channel == 0) {
         note[c][noteRow].channel = channel;
         note[c][noteRow].velocity = defaultVelocity;
@@ -2811,7 +2924,7 @@ void generateBasicPattern(unsigned int start, unsigned int end, unsigned int cha
 
 
 
-void clearPage() {
+FLASHMEM void clearPage() {
   //GLOB.edit = 1;
 
   unsigned int start = ((GLOB.edit - 1) * maxX) + 1;
@@ -2829,7 +2942,7 @@ void clearPage() {
   preventPaintUnpaint = false;
 }
 
-void clearPageX(int thatpage) {
+FLASHMEM void clearPageX(int thatpage) {
   //GLOB.edit = 1;
 
   unsigned int start = ((thatpage - 1) * maxX) + 1;
@@ -2845,7 +2958,7 @@ void clearPageX(int thatpage) {
 
 
 // Reset all audio effects/filters to clean defaults
-void resetAllAudioEffects() {
+FLASHMEM void resetAllAudioEffects() {
   
   extern const int ALL_CHANNELS[];
   extern const int NUM_ALL_CHANNELS;
@@ -2893,7 +3006,7 @@ void resetAllAudioEffects() {
 
 
 // Complete reset for NEW start - clears everything and loads fresh defaults
-void startNew() {
+FLASHMEM void startNew() {
   // Declare all external variables at the beginning
   extern unsigned int samplePackID;
   extern double playNoteInterval;
@@ -3267,7 +3380,7 @@ void runAnimation() {
 // Enhanced base page pattern analysis structure (moved to top of file)
 
 // AI Song Generation - extends current pattern across multiple pages with context awareness
-void generateSong() {
+FLASHMEM void generateSong() {
   extern int aiTargetPage; // Access the target page from menu
   extern int aiBaseStartPage; // Access the base start page from menu
   extern int aiBaseEndPage;   // Access the base end page from menu
