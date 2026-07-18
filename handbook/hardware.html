@@ -66,12 +66,12 @@
 
           <section class="hb-sub" id="overview">
             <h2>Top-down overview</h2>
-            <p class="lede">The face of TŒRN is dominated by the <strong>16×16 RGB matrix</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the top edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–K) run along the top edge. The unit runs from an internal LiPo cell; charging happens over USB&nbsp;C.</p>
+            <p class="lede">The face of TŒRN is dominated by the <strong>16×16 RGB matrix</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge. The unit runs from an internal LiPo cell; charging happens over USB&nbsp;C.</p>
 
             <div class="hb-portmap" aria-label="Annotated device map">
               <figure class="hb-portmap__photo">
                 <img src="topview.jpg" alt="TŒRN top-down photo of the device" loading="lazy" />
-                <figcaption>The unit, photographed from above. Letters A–F mark the lower left and right edges in the schematic; G–K mark the top edge.</figcaption>
+                <figcaption>The unit, photographed from above. Letters A–F mark the lower left and right edges in the schematic; G–J mark the bottom edge; K (touch&nbsp;3) is on the right bottom edge.</figcaption>
               </figure>
               <svg viewBox="-90 0 780 800" role="img" aria-label="Hardware port map" class="hb-portmap__svg">
                 <defs>
@@ -107,14 +107,12 @@
                   <text x="453" y="572" fill="#fff" font-size="15" text-anchor="middle" font-weight="700">4</text>
                 </g>
 
-                <!-- Top-edge ports (G–K) — along the rim opposite the matrix in this schematic -->
-                <!-- Letter labels above each port -->
+                <!-- Bottom-edge ports (G–K) -->
                 <text x="115" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">G</text>
                 <text x="195" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">H</text>
                 <text x="275" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">I</text>
                 <text x="355" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">J</text>
                 <text x="445" y="640" fill="#cfcfdf" font-size="14" text-anchor="middle" font-weight="700" font-family="JetBrains Mono, monospace">K</text>
-                <!-- Port hardware glyphs along the top edge -->
                 <g>
                   <!-- G · Internal mic capsule -->
                   <circle cx="115" cy="660" r="9" fill="#202028" stroke="#3a3a4a"/>
@@ -131,7 +129,6 @@
                   <circle cx="445" cy="660" r="15" fill="#1a1a26" stroke="#4a4a5a" stroke-width="1.5"/>
                   <text x="445" y="664" fill="#cfcfdf" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">3</text>
                 </g>
-                <!-- Descriptive labels below the top-edge ports -->
                 <text x="115" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Internal mic</text>
                 <text x="195" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Micro SD</text>
                 <text x="275" y="700" fill="#0e1622" font-size="11" text-anchor="middle" font-weight="600">Mic in</text>
@@ -170,11 +167,11 @@
                 <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device. See <a href="tempo-midi.html">Tempo &amp; MIDI</a>.</dd></div>
                 <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock + notes; pick what to emit under <a href="menus.html#midi">MIDI → SEND</a>.</dd></div>
                 <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Boots when slid on; the current pattern is autosaved before shutdown.</dd></div>
-                <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the top edge for hands-free sampling. Pick it as the active source under <a href="menus.html#rec">REC → INPT</a>.</dd></div>
-                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — top edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject.</dd></div>
-                <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the top edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain under <a href="menus.html#rec">REC → MIC</a>.</dd></div>
-                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo on the top edge. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
-                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the top edge, used for chord gestures and a few menu-specific actions. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
+                <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the bottom edge for hands-free sampling. Pick it as the active source under <a href="menus.html#rec">REC → INPT</a>.</dd></div>
+                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject.</dd></div>
+                <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain under <a href="menus.html#rec">REC → MIC</a>.</dd></div>
+                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo on the bottom edge. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
+                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge, used for chord gestures and a few menu-specific actions. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
               </dl>
             </div>
 
@@ -186,7 +183,7 @@
             <p>Three input families are wired to the firmware:</p>
             <ul>
               <li><strong>Four RGB-lit rotary encoders</strong> (1–4, left to right) on the front edge — each one turns, short-presses, and long-presses. Their function changes per screen. Row&nbsp;1 of the matrix paints additional small hints just above the encoders.</li>
-              <li><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the top edge. They handle back/exit, tap tempo, filter / sample-browser entry, and chord gestures. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
+              <li><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the right bottom edge. They handle back/exit, tap tempo, filter / sample-browser entry, and chord gestures. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
               <li><strong>Right-side power switch</strong> — physical on/off.</li>
             </ul>
             <p>There are no menu buttons or screens beyond the matrix itself. Everything the firmware needs to communicate appears as lit pixels in known regions of the 16×16 area, explained in <a href="matrix.html">The matrix</a>.</p>
@@ -200,7 +197,8 @@
               <li><strong>Audio:</strong> 44.1&nbsp;kHz, 16-bit, stereo output. Mono input recording.</li>
               <li><strong>Battery:</strong> internal LiPo. Estimated percentage shown under <a href="menus.html#etc">ETC → BATT</a> — accurate enough for "is this enough for the set?" decisions.</li>
               <li><strong>Speaker:</strong> small internal driver; switchable under <a href="menus.html#vol">VOL → SPKR</a>.</li>
-              <li><strong>Internal mic + Mic-in jack:</strong> a built-in capsule for hands-free sampling, plus a dedicated 6.35&nbsp;mm Mic-in jack on the top edge for an external microphone. Pick which one is active under <a href="menus.html#rec">REC → INPT</a>; gain lives under <a href="menus.html#rec">REC → MIC</a>.</li>
+              <li><strong>Internal mic + Mic-in jack:</strong> a built-in capsule for hands-free sampling, plus a dedicated 6.35&nbsp;mm Mic-in jack on the bottom edge for an external microphone. Pick which one is active under <a href="menus.html#rec">REC → INPT</a>; gain lives under <a href="menus.html#rec">REC → MIC</a>.</li>
+              <li><strong>Expansion header J11 (I2SC_3V):</strong> onboard JST&nbsp;PH 1×05. Among other signals, the middle/right pins expose Teensy <strong>pin&nbsp;31</strong> and <strong>GND</strong> for a handmade analog clock / trigger cable (see <a href="tempo-midi.html#ppqn">MIDI → PPQN</a>).</li>
             </ul>
           </section>
 

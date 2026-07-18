@@ -1,4 +1,4 @@
-#define VERSION "v2.2"
+#define VERSION "v2.3"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
@@ -15,7 +15,7 @@ struct Mode;
 //#define AUDIO_BLOCK_SAMPLES 128
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
 
-//STILL FREE PINS: 24, 25, 31, 22, 5, 15, 2, 4, 14, 9, 32, 33
+//STILL FREE PINS: 24, 25, 22, 5, 15, 2, 4, 14, 9, 32, 33  (31 = MIDI>PPQN pulse out)
 static const int FAST_DROP_BLOCKS = 5;  // ≈25ms @ 44100Hz with 128-sample blocks (reduced from 200ms to minimize trimming)
 static int fastDropRemaining = 0;
 volatile bool stepIsDue = false;
@@ -2217,7 +2217,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
-        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45)) ||
+        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46)) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48)));
     if (mainSetting != 15 && !encoder2ValuePage) {
@@ -3372,6 +3372,7 @@ FLASHMEM void setup() {
       FastLEDshow();
       delay(1000);
       yield();
+      noteUserActivity();  // keep screensaver from covering SD? while waiting
     }
 
     File resetFile = SD.open("reset.dat", FILE_WRITE);

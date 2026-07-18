@@ -60,7 +60,7 @@
 
         <section class="handbook-page" id="page-tempo-midi">
           <h2 class="handbook-page__title">Tempo &amp; MIDI</h2>
-          <p class="handbook-page__summary">BPM screen, internal vs external clock, MIDI in/out, transport sync, and millisecond latency tuning.</p>
+          <p class="handbook-page__summary">BPM screen, internal vs external clock, MIDI in/out, transport sync, millisecond latency tuning, and optional analog PPQN pulse out.</p>
 
           <section class="hb-sub" id="bpm">
             <h2>The BPM screen</h2>
@@ -119,7 +119,7 @@
 
           <section class="hb-sub" id="midi-menu">
             <h2>The MIDI submenu</h2>
-            <p class="lede">Five pages under root menu <strong>MIDI</strong>. Together they decide who follows whom and how cleanly.</p>
+            <p class="lede">Six pages under root menu <strong>MIDI</strong>. Together they decide who follows whom, how cleanly, and whether TŒRN also emits an analog clock pulse for vintage / modular gear.</p>
 
             <h3 class="hb-subsection-heading">CH — note mapping strategy</h3>
             <article class="hb-device">
@@ -173,6 +173,22 @@
               <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_sync" width="16" height="16" role="img" aria-label="MIDI SYNC"></canvas></div>
               <p class="hb-device__intro"><strong>SNC1</strong> delays the send path; <strong>SNC2</strong> delays the receive path. Range −127 … +127 ms. Use these when oscilloscope loopback still shows audible flam between TŒRN and another clocked device. Encoder&nbsp;1 picks which line you edit, encoder&nbsp;2 changes the number.</p>
               <div class="hb-tip"><strong>Tuning workflow:</strong> set up two TŒRNs or a TŒRN + drum machine on the same downbeat; adjust SNC2 in ±2 ms steps until the kicks click as one. Apply the matching negative on the other device's send path if available.</div>
+            </article>
+
+            <h3 class="hb-subsection-heading" id="ppqn">PPQN — analog clock pulse out</h3>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_ppqn" width="16" height="16" role="img" aria-label="MIDI PPQN"></canvas></div>
+              <p class="hb-device__intro">Optional <strong>analog clock</strong> on Teensy pin&nbsp;31 (not the TRS MIDI jacks). Pulses follow the same tempo grid as MIDI clock: INT uses the internal BPM timer; EXT follows incoming MIDI clock. Pulse width is ~12&nbsp;ms.</p>
+              <table class="opt-table">
+                <thead><tr><th>Control</th><th>Encoder</th><th>Options</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Polarity</strong></td><td>2</td><td><strong>+</strong> = active high (idle low, pulse high); <strong>−</strong> = active low (idle high, pulse low)</td></tr>
+                  <tr><td><strong>Rate</strong></td><td>3</td><td><strong>OFF</strong> (red — fully disabled), then <strong>1, 2, 4, 8, 12, 16, 24, 32</strong> pulses per quarter note</td></tr>
+                  <tr><td>Page nav</td><td>4</td><td>Other MIDI submenu pages</td></tr>
+                </tbody>
+              </table>
+              <p class="hb-device__intro">At rate <strong>1</strong> you get one pulse per beat; at <strong>24</strong> you match classic Sync24 / DIN-style density; <strong>32</strong> is denser than MIDI’s native 24&nbsp;PPQN grid.</p>
+              <div class="hb-tip"><strong>DIY 3.5&nbsp;mm adapter:</strong> tap the onboard <strong>JST PH 1×05</strong> header <strong>J11</strong> (silk / net label <strong>I2SC_3V</strong>). Use the <em>middle</em> and <em>right</em> pins of that five-pin JST: the <strong>white</strong> wire is Teensy <strong>pin&nbsp;31</strong> (clock pulse) → solder to the jack <strong>TIP</strong>; the <strong>blue</strong> wire is <strong>GND</strong> → jack <strong>SLEEVE</strong>. A handmade TRS/TS plug or panel jack is enough for most analog clock / trigger inputs. Do not feed this into a MIDI DIN or line-level audio input without checking the receiving device’s specs (3.3&nbsp;V logic levels).</div>
             </article>
           </section>
 

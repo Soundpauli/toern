@@ -18,6 +18,7 @@ https://sdtool.tyng.app serves **static files**. The browser talks to the Teensy
 - Desktop Chrome/Edge only. Android / Pixel Chrome usually cannot see the Teensy USB serial port.
 - Opening the serial port can reboot the Teensy — if the screen leaves the SD page, open **ETC → SD** again after Connect.
 - WAV uploads are converted in the browser to **44.1 kHz mono 16-bit**.
+- Drag-and-drop accepts **multiple files**, **folders** (nested paths kept), and **`.zip`** archives (extracted in the browser into the current folder). Use **Folder** in the toolbar to pick a directory.
 
 ### Deploy to `/var/www/sdtool.tyng.app`
 

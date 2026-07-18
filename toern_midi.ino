@@ -142,11 +142,160 @@ static unsigned long lastClockSent = 0;
 // Track held notes per logical channel to avoid stuck counters on duplicate NoteOn events.
 static bool midiHeldNote[17][128] = { false };
 
+// --- Analog clock pulse out on pin 31 (MENU>MIDI>PPQN). ---
+#define PULSE_CLOCK_PIN 31
+#define PULSE_WIDTH_US 12000  // ~12 ms — safe for DIN-sync / analog clock gear
+// Encoder 4 rate list: OFF + these PPQN values
+static const uint8_t PULSE_PPQN_TABLE[] = { 1, 2, 4, 8, 12, 16, 24, 32 };
+static const uint8_t PULSE_PPQN_COUNT = sizeof(PULSE_PPQN_TABLE) / sizeof(PULSE_PPQN_TABLE[0]);
+static const uint8_t PULSE_RATE_SEL_COUNT = PULSE_PPQN_COUNT + 1;  // 0=OFF, 1..N = table
+
+static bool pulseClockEnabled = false;
+static bool pulseClockPolarityPositive = true;  // +: active high; -: active low
+static uint8_t pulseClockPpqnIndex = 6;         // default 24 PPQN (table index)
+static uint16_t pulseClockPhase = 0;
+static IntervalTimer pulseEndTimer;
+static volatile bool pulseClockPinActive = false;
+
+static inline uint8_t pulseIdleLevel() {
+  return pulseClockPolarityPositive ? LOW : HIGH;
+}
+static inline uint8_t pulseActiveLevel() {
+  return pulseClockPolarityPositive ? HIGH : LOW;
+}
+
+static void pulseClockEndIsr() {
+  digitalWriteFast(PULSE_CLOCK_PIN, pulseIdleLevel());
+  pulseEndTimer.end();
+  pulseClockPinActive = false;
+}
+
+static void pulseClockEmit() {
+  digitalWriteFast(PULSE_CLOCK_PIN, pulseActiveLevel());
+  pulseClockPinActive = true;
+  pulseEndTimer.begin(pulseClockEndIsr, PULSE_WIDTH_US);
+  pulseEndTimer.priority(1);
+}
+
+static void pulseClockApplyIdle() {
+  pinMode(PULSE_CLOCK_PIN, OUTPUT);
+  digitalWriteFast(PULSE_CLOCK_PIN, pulseIdleLevel());
+  pulseClockPinActive = false;
+}
+
+void pulseClockMidiTick() {
+  if (!pulseClockEnabled) return;
+  uint8_t ppqn = PULSE_PPQN_TABLE[pulseClockPpqnIndex];
+  pulseClockPhase = (uint16_t)(pulseClockPhase + ppqn);
+  while (pulseClockPhase >= 24) {
+    pulseClockPhase = (uint16_t)(pulseClockPhase - 24);
+    pulseClockEmit();
+  }
+}
+
+bool getPulseClockEnabled() { return pulseClockEnabled; }
+bool getPulseClockPolarityPositive() { return pulseClockPolarityPositive; }
+uint8_t getPulseClockPpqnIndex() { return pulseClockPpqnIndex; }
+uint8_t getPulseClockPpqn() { return PULSE_PPQN_TABLE[pulseClockPpqnIndex]; }
+uint8_t getPulseClockPpqnCount() { return PULSE_PPQN_COUNT; }
+uint8_t getPulseClockRateSelCount() { return PULSE_RATE_SEL_COUNT; }
+uint8_t getPulseClockPpqnAt(uint8_t idx) {
+  if (idx >= PULSE_PPQN_COUNT) idx = PULSE_PPQN_COUNT - 1;
+  return PULSE_PPQN_TABLE[idx];
+}
+
+// Encoder 4 position: 0=OFF, 1..8 = PPQN table entries
+uint8_t getPulseClockRateSel() {
+  if (!pulseClockEnabled) return 0;
+  return (uint8_t)(pulseClockPpqnIndex + 1);
+}
+
+static void pulseClockSaveToEEPROM() {
+  // Slot 10: bit0=on, bit1=polarity negative, bits2-4=ppqn index (0..7)
+  uint8_t packed = (pulseClockEnabled ? 1 : 0)
+                 | (pulseClockPolarityPositive ? 0 : 2)
+                 | ((pulseClockPpqnIndex & 0x07) << 2);
+  extern void saveSingleModeToEEPROM(int index, int8_t value);
+  saveSingleModeToEEPROM(10, (int8_t)packed);
+}
+
+void setPulseClockPolarityPositive(bool positive) {
+  pulseClockPolarityPositive = positive;
+  if (pulseClockEnabled && !pulseClockPinActive) {
+    digitalWriteFast(PULSE_CLOCK_PIN, pulseIdleLevel());
+  }
+  pulseClockSaveToEEPROM();
+}
+
+void setPulseClockPpqnIndex(uint8_t idx) {
+  if (idx >= PULSE_PPQN_COUNT) idx = PULSE_PPQN_COUNT - 1;
+  pulseClockPpqnIndex = idx;
+  pulseClockPhase = 0;
+  pulseClockSaveToEEPROM();
+}
+
+void setPulseClockRateSel(uint8_t sel) {
+  if (sel >= PULSE_RATE_SEL_COUNT) sel = PULSE_RATE_SEL_COUNT - 1;
+  if (sel == 0) {
+    setPulseClockEnabled(false);
+    return;
+  }
+  uint8_t idx = (uint8_t)(sel - 1);
+  if (idx >= PULSE_PPQN_COUNT) idx = PULSE_PPQN_COUNT - 1;
+  if (pulseClockPpqnIndex != idx) {
+    pulseClockPpqnIndex = idx;
+    pulseClockPhase = 0;
+  }
+  if (!pulseClockEnabled) {
+    setPulseClockEnabled(true);
+  } else {
+    pulseClockSaveToEEPROM();
+  }
+}
+
+void setPulseClockEnabled(bool enabled) {
+  if (enabled == pulseClockEnabled) return;
+
+  if (enabled) {
+    pulseClockEnabled = true;
+    pulseClockPhase = 0;
+    pulseClockApplyIdle();
+    // Keep master 24-PPQN timer running so pulses track BPM even if MIDI clock send is off
+    extern void updateMidiClockOutput();
+    updateMidiClockOutput();
+  } else {
+    if (pulseClockPinActive) {
+      pulseEndTimer.end();
+      pulseClockPinActive = false;
+    }
+    pulseClockEnabled = false;
+    pulseClockApplyIdle();
+  }
+  pulseClockSaveToEEPROM();
+}
+
+void loadPulseClockFromEEPROM() {
+  uint8_t packed = EEPROM.read(EEPROM_DATA_START + 10);
+  uint8_t idx = (packed >> 2) & 0x07;
+  if (idx >= PULSE_PPQN_COUNT) idx = 6;  // default 24
+  pulseClockPpqnIndex = idx;
+  pulseClockPolarityPositive = ((packed & 2) == 0);
+  bool on = (packed & 1) != 0;
+  pulseClockEnabled = false;
+  if (on) setPulseClockEnabled(true);
+}
+
 // ISR-style callback driven by dedicated IntervalTimer for master MIDI clock
 // Writes directly to Serial8 hardware to bypass MIDI library buffering and avoid blocking
 // This ensures precise timing even when sending many MIDI notes
 // IMPORTANT: Timer always runs in background - never stopped to maintain precise timing
 void midiClockTick() {
+  // Analog pulse out from master 24-PPQN timer (INT only — EXT follows myClock)
+  extern int clockMode;
+  if (pulseClockEnabled && clockMode == 1) {
+    pulseClockMidiTick();
+  }
+
   // Always send clock if in master mode - timer never stops, even during pause/stop
   if (MIDI_CLOCK_SEND) {
     // Write MIDI clock byte (0xF8) directly to Serial8 hardware
@@ -184,7 +333,9 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
 
 // Public function to update MIDI clock with exact BPM value (for use from updateBPM)
 void updateMidiClockOutput() {
-  if (MIDI_CLOCK_SEND) {
+  // Keep timer alive for MIDI clock send and/or analog pulse out (PPQN) in INT mode
+  extern int clockMode;
+  if (MIDI_CLOCK_SEND || (pulseClockEnabled && clockMode == 1)) {
     unsigned long now = micros();
     // Use exact rounded BPM value from SMP.bpm
     int roundedBPM = (int)round(SMP.bpm);
@@ -276,14 +427,11 @@ void checkMidi() {
     }
   }
 
-  // If this device is sending MIDI Clock (master), keep timer in sync with SMP.bpm.
-  // Use exact rounded BPM value for precise clock output
-  if (MIDI_CLOCK_SEND) {
-    // Round SMP.bpm to integer and check if it changed
+  // If this device is sending MIDI Clock (master) or analog PPQN pulse is on in INT mode, keep timer in sync.
+  extern int clockMode;
+  if (MIDI_CLOCK_SEND || (pulseClockEnabled && clockMode == 1)) {
     int currentRoundedBPM = (int)round(SMP.bpm);
     int lastRoundedBPM = (int)round(midiClockSendBPM);
-    
-    // Update if rounded BPM changed (check integer values, not float precision)
     if (currentRoundedBPM != lastRoundedBPM && currentRoundedBPM > 0) {
       unsigned long now = micros();
       configureMidiClockSend((float)currentRoundedBPM, now);
@@ -397,6 +545,9 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
   if (MIDI_CLOCK_SEND) { // Safeguard: Should only run in slave mode (EXT mode)
     return;
   }
+
+  // Analog pulse out follows incoming MIDI clock in EXT mode
+  pulseClockMidiTick();
 
   // Check if we've been without clock for too long - reset Kalman state if so
   // (check BEFORE updating lastClockReceivedTime)

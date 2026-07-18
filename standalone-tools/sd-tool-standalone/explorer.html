@@ -78,7 +78,7 @@
     .sd-btn:disabled, .file-btn.disabled {
       opacity: 0.45; cursor: not-allowed; pointer-events: none; transform: none;
     }
-    #fileInput { display: none; }
+    #fileInput, #folderInput { display: none; }
     .sd-meta {
       font-family: var(--font-tech);
       font-size: 0.75rem;
@@ -88,8 +88,19 @@
     }
     .toolbar {
       display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+      justify-content: space-between;
       padding-bottom: 0.85rem; margin-bottom: 0.75rem;
       border-bottom: 1px solid var(--grid-line);
+    }
+    .toolbar-left, .toolbar-right {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+    }
+    .toolbar-right { margin-left: auto; }
+    .sd-btn.icon {
+      padding: 0.45rem 0.55rem;
+      min-width: 2.1rem;
+      font-size: 1rem;
+      line-height: 1;
     }
     .crumbs {
       position: static; top: auto; left: auto; width: auto; padding: 0; z-index: auto;
@@ -104,7 +115,6 @@
     }
     .crumbs button:hover { text-decoration: underline; color: var(--accent); }
     .crumbs .sep { color: var(--text-muted); flex: none; }
-    .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
     .autoplay {
       display: inline-flex; align-items: center; gap: 0.35rem;
       font-family: var(--font-tech); font-size: 0.75rem; color: var(--text-muted); user-select: none;
@@ -227,6 +237,30 @@
       background: rgba(0,0,0,0.25); color: var(--text-p); border-radius: 6px;
     }
     dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
+    dialog.need-sd-dlg {
+      border-color: rgba(255, 107, 99, 0.45);
+      text-align: left;
+    }
+    dialog.need-sd-dlg p {
+      margin: 0 0 0.65rem;
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      color: var(--text-p);
+      opacity: 0.9;
+      line-height: 1.5;
+    }
+    dialog.need-sd-dlg p:last-child { margin-bottom: 0; }
+    dialog.need-sd-dlg .need-sd-path {
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+    dialog.need-sd-dlg .need-sd-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      opacity: 1;
+    }
     .explorer.dragover {
       outline: 2px dashed var(--accent);
       outline-offset: -6px;
@@ -320,15 +354,19 @@
             <h2>2. Files</h2>
           </div>
           <div class="busy-overlay" id="panelOverlay" aria-hidden="true"><div class="spinner" role="status" aria-label="Loading"></div></div>
-          <div class="drop-hint">Drop files to upload</div>
+          <div class="drop-hint">Drop files, folders, or .zip</div>
           <div class="toolbar">
-            <div class="actions">
+            <div class="toolbar-left">
               <button type="button" class="sd-btn" id="btnUp" title="Parent folder">↑ Up</button>
-              <button type="button" class="sd-btn" id="btnNew">New folder</button>
-              <label class="file-btn primary" id="uploadLabel" for="fileInput">Upload</label>
-              <input type="file" id="fileInput" multiple/>
-              <button type="button" class="sd-btn" id="btnRefresh">Refresh</button>
               <label class="autoplay"><input type="checkbox" id="autoplay"/> Autoplay</label>
+            </div>
+            <div class="toolbar-right">
+              <button type="button" class="sd-btn" id="btnNew">New folder</button>
+              <label class="file-btn primary" id="uploadLabel" for="fileInput">Upload file(s)</label>
+              <input type="file" id="fileInput" multiple/>
+              <label class="file-btn" id="folderLabel" for="folderInput" title="Upload folder(s) — keeps nested paths">Upload folder(s)</label>
+              <input type="file" id="folderInput" webkitdirectory multiple/>
+              <button type="button" class="sd-btn icon" id="btnRefresh" title="Refresh" aria-label="Refresh">↻</button>
             </div>
           </div>
           <nav class="crumbs" id="crumbs" aria-label="Path"></nav>
@@ -345,7 +383,7 @@
 
         <div class="banner" id="banner"></div>
         <pre class="dbg-panel" id="dbgLog" aria-label="Debug log"></pre>
-        <p class="hint">↑↓ select · ← parent · → open folder · Enter play/open · Space play · F2 rename · drag files to upload</p>
+        <p class="hint">↑↓ select · ← parent · → open folder · Enter play/open · Space play · F2 rename · drop files/folders/.zip to upload</p>
       </div>
     </div>
   </main>
@@ -375,6 +413,13 @@
     <button type="button" class="sd-btn" id="renameCancel">Cancel</button>
     <button type="button" class="sd-btn primary" id="renameOk">Rename</button>
   </div>
+</dialog>
+
+<dialog id="needSdDlg" class="need-sd-dlg" aria-labelledby="needSdTitle">
+  <h2 id="needSdTitle">Open SD menu</h2>
+  <p>Device is online but not on the SD page.</p>
+  <p class="need-sd-path">Re-enter Menu → ETC → SD</p>
+  <p class="need-sd-hint">Stay on that page (WAIT → OK). This message closes automatically when the menu is entered.</p>
 </dialog>
 
 <audio id="audio" preload="none"></audio>
@@ -641,10 +686,17 @@ class ToernSdSerial {
 
   // Wait for SD banner or a successful PING. Opening the port can reboot the Teensy
   // and drop out of Menu → ETC → SD; keep pinging so the user can re-enter.
-  async _handshakeSd(onStatus) {
+  async _handshakeSd(onStatus, onNeedSd) {
     const deadline = performance.now() + HANDSHAKE_MS;
     let n = 0;
     let sawNeedSd = false;
+    const markNeedSd = () => {
+      sawNeedSd = true;
+      if (onNeedSd) onNeedSd(true);
+    };
+    const clearNeedSd = () => {
+      if (onNeedSd) onNeedSd(false);
+    };
 
     const tryConsumeLine = async (timeoutMs) => {
       try {
@@ -659,8 +711,11 @@ class ToernSdSerial {
     // Consume banner already in RX (do not ignore it / do not glue with next PING).
     while (this._findLineEnd() >= 0) {
       const existing = await tryConsumeLine(500);
-      if (existing && existing.startsWith("OK")) return existing;
-      if (existing && /NEED_SD/i.test(existing)) sawNeedSd = true;
+      if (existing && existing.startsWith("OK")) {
+        clearNeedSd();
+        return existing;
+      }
+      if (existing && /NEED_SD/i.test(existing)) markNeedSd();
       if (!existing) break;
     }
 
@@ -680,9 +735,12 @@ class ToernSdSerial {
         throw err;
       }
       const line = await tryConsumeLine(1800);
-      if (line && line.startsWith("OK")) return line;
+      if (line && line.startsWith("OK")) {
+        clearNeedSd();
+        return line;
+      }
       if (line && /NEED_SD/i.test(line)) {
-        sawNeedSd = true;
+        markNeedSd();
         dbg("device says NEED_SD — re-enter Menu → ETC → SD", "err");
       }
       await this._sleep(350);
@@ -694,7 +752,7 @@ class ToernSdSerial {
     );
   }
 
-  async connect(existingPort, onStatus) {
+  async connect(existingPort, onStatus, onNeedSd) {
     if (!navigator.serial) {
       throw new Error("Web Serial not supported — use Chrome or Edge");
     }
@@ -734,8 +792,9 @@ class ToernSdSerial {
         }
         await this._openPort(port);
         if (onStatus) onStatus("Waiting for Menu → ETC → SD…");
-        const msg = await this._handshakeSd(onStatus);
+        const msg = await this._handshakeSd(onStatus, onNeedSd);
         dbg("connect: ready → " + msg, "ok");
+        if (onNeedSd) onNeedSd(false);
         this._connecting = false;
         this._unbindDisconnect();
         this._disconnectBound = () => {
@@ -1506,30 +1565,203 @@ async function prepareUploadFile(file, onProgress) {
   return out;
 }
 
-async function uploadFiles(fileList) {
-  const files = Array.from(fileList || []);
-  if (!files.length || !state.connected) return;
+function normalizeRelPath(rel) {
+  const parts = String(rel || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .split("/")
+    .filter((p) => p && p !== ".");
+  if (!parts.length || parts.some((p) => p === "..")) return null;
+  if (parts[0] === "__MACOSX") return null;
+  const base = parts[parts.length - 1];
+  if (!base || base.startsWith(".")) return null;
+  return parts.join("/");
+}
+
+function fileListToUploadItems(fileList) {
+  return Array.from(fileList || [])
+    .map((file) => {
+      const rel = normalizeRelPath(file.webkitRelativePath || file.name);
+      return rel ? { file, relativePath: rel } : null;
+    })
+    .filter(Boolean);
+}
+
+function readDirEntriesBatch(reader) {
+  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+}
+
+async function readAllDirEntries(dirReader) {
+  const all = [];
+  for (;;) {
+    const batch = await readDirEntriesBatch(dirReader);
+    if (!batch.length) break;
+    all.push(...batch);
+  }
+  return all;
+}
+
+async function walkFsEntry(entry, prefix, out) {
+  if (!entry) return;
+  if (entry.isFile) {
+    const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+    const rel = normalizeRelPath(prefix ? prefix + "/" + entry.name : entry.name);
+    if (rel) out.push({ file, relativePath: rel });
+    return;
+  }
+  if (entry.isDirectory) {
+    const next = prefix ? prefix + "/" + entry.name : entry.name;
+    const children = await readAllDirEntries(entry.createReader());
+    for (const child of children) await walkFsEntry(child, next, out);
+  }
+}
+
+async function collectDroppedUploadItems(dataTransfer) {
+  const out = [];
+  const items = dataTransfer && dataTransfer.items;
+  if (items && items.length) {
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind !== "file") continue;
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) entries.push(entry);
+      else {
+        const file = item.getAsFile && item.getAsFile();
+        if (file) {
+          const rel = normalizeRelPath(file.name);
+          if (rel) out.push({ file, relativePath: rel });
+        }
+      }
+    }
+    for (const entry of entries) await walkFsEntry(entry, "", out);
+    if (out.length) return out;
+  }
+  return fileListToUploadItems(dataTransfer && dataTransfer.files);
+}
+
+async function inflateRawDeflate(comp) {
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("Zip extract needs Chrome or Edge");
+  }
+  const stream = new Blob([comp]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function unzipToUploadItems(file, onProgress) {
+  const ab = await file.arrayBuffer();
+  const buf = new Uint8Array(ab);
+  const view = new DataView(ab);
+  let eocd = -1;
+  const minScan = Math.max(0, buf.length - 65557);
+  for (let i = buf.length - 22; i >= minScan; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error("Not a valid zip: " + file.name);
+
+  const cdCount = view.getUint16(eocd + 10, true);
+  let off = view.getUint32(eocd + 16, true);
+  const out = [];
+  for (let n = 0; n < cdCount; n++) {
+    if (off + 46 > buf.length || view.getUint32(off, true) !== 0x02014b50) {
+      throw new Error("Bad zip directory in " + file.name);
+    }
+    const method = view.getUint16(off + 10, true);
+    const compSize = view.getUint32(off + 20, true);
+    const nameLen = view.getUint16(off + 28, true);
+    const extraLen = view.getUint16(off + 30, true);
+    const commentLen = view.getUint16(off + 32, true);
+    const localOff = view.getUint32(off + 42, true);
+    const name = new TextDecoder().decode(buf.subarray(off + 46, off + 46 + nameLen));
+    off += 46 + nameLen + extraLen + commentLen;
+    if (name.endsWith("/")) continue;
+    const rel = normalizeRelPath(name);
+    if (!rel) continue;
+    if (localOff + 30 > buf.length || view.getUint32(localOff, true) !== 0x04034b50) {
+      throw new Error("Bad zip entry: " + rel);
+    }
+    const locNameLen = view.getUint16(localOff + 26, true);
+    const locExtraLen = view.getUint16(localOff + 28, true);
+    const dataStart = localOff + 30 + locNameLen + locExtraLen;
+    const comp = buf.subarray(dataStart, dataStart + compSize);
+    let data;
+    if (method === 0) data = comp;
+    else if (method === 8) data = await inflateRawDeflate(comp);
+    else throw new Error("Unsupported zip compression: " + rel);
+    const base = rel.split("/").pop();
+    out.push({ file: new File([data], base), relativePath: rel });
+    if (onProgress) onProgress(n + 1, cdCount);
+  }
+  return out;
+}
+
+async function expandUploadItems(items, onProgress) {
+  const out = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const isZip =
+      /\.zip$/i.test(item.file.name) &&
+      !item.relativePath.includes("/");
+    if (!isZip) {
+      out.push(item);
+      continue;
+    }
+    if (onProgress) onProgress("Extracting " + item.file.name, null, `${i + 1}/${items.length}`);
+    const inner = await unzipToUploadItems(item.file, (done, total) => {
+      if (onProgress) {
+        onProgress(
+          "Extracting " + item.file.name,
+          total ? done / total : null,
+          `${done}/${total}`,
+        );
+      }
+    });
+    if (!inner.length) throw new Error("Zip is empty: " + item.file.name);
+    out.push(...inner);
+  }
+  return out;
+}
+
+async function uploadFiles(fileListOrItems) {
+  let items = Array.isArray(fileListOrItems)
+    ? fileListOrItems.slice()
+    : fileListToUploadItems(fileListOrItems);
+  if (!items.length || !state.connected) return;
   setBusy(true);
   try {
     const client = requireSd();
+    items = await expandUploadItems(items, (label, ratio, detail) => {
+      showProgress(label, ratio, detail || "");
+    });
     let n = 0;
-    for (let fi = 0; fi < files.length; fi++) {
-      const file = files[fi];
+    for (let fi = 0; fi < items.length; fi++) {
+      const { file, relativePath } = items[fi];
       const prepared = await prepareUploadFile(file, (label, ratio) => {
         showProgress(
           label,
           ratio,
-          files.length > 1 ? `File ${fi + 1}/${files.length}` : "",
+          items.length > 1 ? `File ${fi + 1}/${items.length}` : "",
         );
       });
       if (!prepared) continue;
-      const remote = joinPath(state.path, prepared.name);
+      const dir = relativePath.includes("/")
+        ? relativePath.slice(0, relativePath.lastIndexOf("/"))
+        : "";
+      const remoteRel = dir ? joinPath(dir, prepared.name).replace(/^\//, "") : prepared.name;
+      const remote = joinPath(state.path, remoteRel);
+      if (remote.length >= 128) {
+        throw new Error("Path too long for device: " + remote);
+      }
       const bytes = new Uint8Array(await prepared.arrayBuffer());
       await client.putBytes(remote, bytes, (sent, total) => {
         showProgress(
-          "Uploading " + prepared.name,
+          "Uploading " + remoteRel,
           total ? sent / total : null,
-          fmtXferBytes(sent) + " / " + fmtXferBytes(total),
+          fmtXferBytes(sent) + " / " + fmtXferBytes(total) +
+            (items.length > 1 ? ` · ${fi + 1}/${items.length}` : ""),
         );
       });
       n++;
@@ -1544,6 +1776,25 @@ async function uploadFiles(fileList) {
   }
 }
 
+function showNeedSdModal() {
+  const dlg = $("needSdDlg");
+  if (!dlg || dlg.open) return;
+  dbg("UI: NEED_SD modal open");
+  dlg.showModal();
+}
+
+function hideNeedSdModal() {
+  const dlg = $("needSdDlg");
+  if (!dlg || !dlg.open) return;
+  dbg("UI: NEED_SD modal close");
+  dlg.close();
+}
+
+// Stay up until Menu → ETC → SD is entered (OK) — block Escape / backdrop dismiss.
+$("needSdDlg").addEventListener("cancel", (ev) => {
+  ev.preventDefault();
+});
+
 async function connectSerial(existingPort) {
   if (!navigator.serial) {
     showBanner("Web Serial not supported — use Chrome or Edge over HTTPS", false);
@@ -1556,16 +1807,25 @@ async function connectSerial(existingPort) {
     const client = new ToernSdSerial();
     client.onDisconnect = (msg) => {
       dbg("UI: onDisconnect — " + (msg || "Disconnected"), "err");
+      hideNeedSdModal();
       stopPlayback();
       sd = null;
       setConnected(false, null);
       setBusy(false); // clear spinner even if LIST is mid-flight
       showBanner(msg || "Disconnected", false);
     };
-    const msg = await client.connect(existingPort, (status) => {
-      showProgress("Connecting…", null, status || "");
-    });
+    const msg = await client.connect(
+      existingPort,
+      (status) => {
+        showProgress("Connecting…", null, status || "");
+      },
+      (need) => {
+        if (need) showNeedSdModal();
+        else hideNeedSdModal();
+      },
+    );
     sd = client;
+    hideNeedSdModal();
     setConnected(true, portLabelFrom(client.port), msg || "connected");
     state.path = "/";
     showBanner("Connected", true);
@@ -1597,6 +1857,7 @@ async function connectSerial(existingPort) {
     }
     return false;
   } finally {
+    hideNeedSdModal();
     setBusy(false);
   }
 }
@@ -1981,6 +2242,12 @@ $("fileInput").onchange = async (ev) => {
   await uploadFiles(files);
 };
 
+$("folderInput").onchange = async (ev) => {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = "";
+  await uploadFiles(files);
+};
+
 panelEl.addEventListener("dragenter", (ev) => {
   if (!state.connected) return;
   ev.preventDefault();
@@ -1999,13 +2266,14 @@ panelEl.addEventListener("drop", async (ev) => {
   ev.preventDefault();
   panelEl.classList.remove("dragover");
   if (!state.connected) return;
-  await uploadFiles(ev.dataTransfer && ev.dataTransfer.files);
+  const items = await collectDroppedUploadItems(ev.dataTransfer);
+  await uploadFiles(items);
 });
 
 document.addEventListener("keydown", (ev) => {
   if (!state.connected || state.busy) return;
   if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-  if ($("mkdirDlg").open || $("renameDlg").open) return;
+  if ($("mkdirDlg").open || $("renameDlg").open || $("needSdDlg").open) return;
 
   const entries = sortedEntries();
   if (!entries.length && ev.key !== "ArrowLeft") return;

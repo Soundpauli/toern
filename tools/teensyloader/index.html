@@ -35,6 +35,20 @@
       margin-bottom: 0.75rem;
       opacity: 0.9;
     }
+    .teensy-intro ol {
+      font-family: var(--font-body);
+      color: var(--text-p);
+      font-size: 1rem;
+      opacity: 0.9;
+      margin: 0 0 0.75rem 1.25rem;
+      padding: 0;
+    }
+    .teensy-intro li {
+      margin-bottom: 0.55rem;
+    }
+    .teensy-intro li::marker {
+      color: var(--accent);
+    }
     .teensy-attribution-footer {
       text-align: center;
       font-family: var(--font-tech);
@@ -270,8 +284,18 @@
     <div class="tool-content">
       <div class="teensy-container">
         <div class="teensy-intro">
-          <p>Load firmware to your Teensy via WebHID. Choose v2.2 or Beta, put your Teensy in programming mode by pressing the reset button (marked red), then flash firmware:</p>
+          <p>Load firmware to your Teensy via WebHID. How to flash:</p>
+          <ol>
+            <li>Open TŒRN and connect it (or the Teensy directly) via USB to this computer so it is powered on.</li>
+            <li>Press the reset button (marked red). The small LED on the Teensy lights up red — it is now in programming mode.</li>
+          </ol>
           <img src="./public/reset.jpeg" alt="Teensy reset button (marked red)" class="teensy-reset-img">
+          <ol start="3">
+            <li>Select the firmware you want to flash (v2.2 or Beta).</li>
+            <li>Press <strong>Select Teensy Device</strong>, choose Teensy in the list (it may show as “Unknown device”), then press Connect.</li>
+            <li>Press <strong>Upload Firmware</strong>. The Teensy LED flashes brighter a few times.</li>
+            <li>After a successful flash, TŒRN reboots automatically.</li>
+          </ol>
         </div>
 
         <!-- Firmware Selection -->
@@ -296,7 +320,7 @@
         <!-- Device Selection & Flashing -->
         <div class="teensy-section">
           <h2>2. Device & Flash</h2>
-          <p>Press reset on your Teensy to enter programming mode.</p>
+          <p>With the Teensy in programming mode (red LED on), select the device, then upload.</p>
           <div class="teensy-buttons">
             <button type="button" class="teensy-btn" id="selectDeviceBtn">Select Teensy Device</button>
             <button type="button" class="teensy-btn" id="uploadFirmwareBtn">Upload Firmware</button>

@@ -358,6 +358,8 @@ void drawNoSD() {
     FastLEDshow();
     delay(1000);
     noSDfound = true;
+    extern void noteUserActivity();
+    noteUserActivity();  // keep screensaver from covering SD? while waiting
   }
 
   if (noSDfound && SD.begin(INT_SD)) {
@@ -939,9 +941,11 @@ void drawStatus() {
   // Update marquee animation for noteShift mode OR song mode
   extern bool songModeActive;
   extern Mode songMode;
+  extern int ledModules;
   if (currentMode == &noteShift || songModeActive || currentMode == &songMode) {
-    // Make marquee slower in song mode
-    float speed = (currentMode == &noteShift) ? 1.0 : 0.2;  // Song mode 5x slower
+    // Make marquee slower in song mode; half speed on 1/1B (16-wide) so it matches 2-module feel
+    float speed = (currentMode == &noteShift) ? 1.0f : 0.2f;
+    if (ledModules == 1) speed *= 0.5f;
     
     if (movingForward) {
       marqueePos = marqueePos + speed;

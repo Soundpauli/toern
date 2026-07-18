@@ -1411,7 +1411,10 @@ FLASHMEM void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
     extern bool sdSerialServerClientConnected();
-    bool screensaverActive = !isNowPlaying
+    extern bool drawNoSD_hasRun;
+    // Never start screensaver while stuck on SD? (card missing / not ready yet)
+    bool screensaverActive = drawNoSD_hasRun
+      && !isNowPlaying
       && !sdSerialServerClientConnected()
       && (millis() - lastUserActivityMs >= 60000UL);
     if (screensaverActive) {
@@ -3079,6 +3082,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol
   EEPROM.write(EEPROM_DATA_START + 8, (uint8_t)-1);  // flowMode (OFF)
   EEPROM.write(EEPROM_DATA_START + 9,  10);   // micGain
+  EEPROM.write(EEPROM_DATA_START + 10, (6 << 2)); // PPQN pulse: OFF, +, 24
   EEPROM.write(EEPROM_DATA_START + 11, 1);    // simpleNotesView (EASY)
   EEPROM.write(EEPROM_DATA_START + 12, 0);    // loopLength (OFF)
   EEPROM.write(EEPROM_DATA_START + 13, 1);    // ledMode

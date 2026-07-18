@@ -629,6 +629,8 @@ static void sdSerCmdGet(const char *pathArg) {
 static void sdSerTouchClient() {
   sdSerLastClientMs = millis();
   if (!sdSerClientConnected) {
+    // Stop play only once host is connected (menu shows OK), not while WAIT.
+    sdSerAudioStopForSd();
     sdSerClientConnected = true;
     extern void menuRequestFullRedraw();
     menuRequestFullRedraw();
@@ -688,14 +690,7 @@ void sdSerialServerSetActive(bool on) {
   if (on == sdSerActive) return;
 
   if (on) {
-    extern bool isNowPlaying;
-    extern void pause(bool skipSave);
-    extern void allOff();
-    extern void stopAllSetWavPreviewAudio();
-    if (isNowPlaying) pause(true);
-    allOff();
-    stopAllSetWavPreviewAudio();
-
+    // Stay in WAIT without stopping play; audio stops when host connects (OK).
     Serial.setTimeout(50);
     sdSerDrainRx();
     sdSerClientConnected = false;

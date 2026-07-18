@@ -254,7 +254,7 @@
 
                     <li id="midi">
                       <a href="tempo-midi.html#midi-menu"><span class="node">MIDI</span></a>
-                      <span class="desc">Everything about exchanging clock and notes over the TRS MIDI ports. The five subpages cover note mapping, transport, what to send, what to receive, and fine sync offsets.</span>
+                      <span class="desc">Everything about exchanging clock and notes over the TRS MIDI ports, plus an optional analog PPQN pulse for syncing vintage / modular gear. Six subpages.</span>
                       <ul>
                         <li>
                           <span class="node">CH</span>
@@ -280,6 +280,11 @@
                           <span class="node">SYNC</span>
                           <span class="desc">Per-direction sync offset to compensate for real-world latency. Two adjustable lines: <strong>SNC1</strong> shifts the send path, <strong>SNC2</strong> shifts the receive path.</span>
                           <span class="sub">Encoder&nbsp;1 turn picks which line you edit, encoder&nbsp;2 turn changes the offset in milliseconds, range <strong>−127 … +127&nbsp;ms</strong>. Use when you can hear an audible flam between TŒRN and another clocked device: nudge in ±2&nbsp;ms steps until the downbeats click as one.</span>
+                        </li>
+                        <li>
+                          <a href="tempo-midi.html#ppqn"><span class="node">PPQN</span></a>
+                          <span class="desc">Analog clock / trigger pulse on Teensy pin&nbsp;31 (J11 / I2SC_3V header), independent of TRS MIDI.</span>
+                          <span class="sub">Encoder&nbsp;2 = polarity (<strong>+</strong> / <strong>−</strong>). Encoder&nbsp;3 = <strong>OFF</strong> or rate <strong>1, 2, 4, 8, 12, 16, 24, 32</strong> pulses per quarter note. Follows INT BPM or EXT MIDI clock. DIY 3.5&nbsp;mm jack: white wire (pin&nbsp;31) → tip, blue wire (GND) → sleeve — see <a href="tempo-midi.html#ppqn">Tempo &amp; MIDI → PPQN</a>.</span>
                         </li>
                       </ul>
                     </li>
