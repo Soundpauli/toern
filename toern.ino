@@ -942,7 +942,7 @@ static bool tmpMuteActive = false;
 DMAMEM static bool drawRGlobalMuteSavedGlobal[maxY];
 DMAMEM static bool drawRGlobalMuteSavedPages[maxPages][maxY];
 static DrawRFullMuteState drawRFullMuteState = DrawRFullMuteState::Inactive;
-// PLAY>MUTE uses user CH1..CH16; EEPROM bits are internal mute indices 0..15 (CH1→1..CH15→15, CH16→0). Default CH1+CH2 = bits 1|2 = 0x0006.
+// SETTINGS>MUTE uses user CH1..CH16; EEPROM bits are internal mute indices 0..15 (CH1→1..CH15→15, CH16→0). Default CH1+CH2 = bits 1|2 = 0x0006.
 uint16_t drawRFullMuteCustomUnmuteMask = 0x0006;
 
 bool drawRFullMuteIsActive() {
@@ -2004,7 +2004,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   if (isRecording) return;
 
   // DRAW-R full mute (dedicated mode): release chord picks how to leave mute — before play/pause / paint / subpattern.
-  // 1000 / 2000 = restore saved mutes; 0100 = voice ch1+ch2 only (currentChannel 1+2, grid y=2+3); 0010 = PLAY>MUTE mask; 0001 = all unmuted.
+  // 1000 / 2000 = restore saved mutes; 0100 = voice ch1+ch2 only (currentChannel 1+2, grid y=2+3); 0010 = SETTINGS>MUTE mask; 0001 = all unmuted.
   {
     extern int drawMode;
     if (drawMode == 1 && drawRFullMuteIsActive()
@@ -2207,7 +2207,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       return;          // Explicitly return to prevent any other processing
     }
 
-    // TRIG (11), PLAY (9,10,17,18,23,24,25,32,33,38), REC (4,12), MIDI (7,8,13), VOL (43), ETC (40,41) use encoder 2
+    // TRIG (11), SETTINGS (9,10,17,18,23,24,25,32,33,38), REC (4,12), MIDI (7,8,13), VOL (43), ETC (40,41) use encoder 2
     extern bool inLookSubmenu;
     extern bool inRecsSubmenu;
     extern bool inMidiSubmenu;

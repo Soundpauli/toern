@@ -28,7 +28,7 @@
 
           <section class="hb-sub" id="what-pack">
             <h2>What a pack is</h2>
-            <p class="lede">The SD card holds up to <strong>100 numbered pack folders</strong>. Each folder defines which audio file plays on each of the eight sample voices (channels&nbsp;1–8) when you trigger a step. Switching packs replaces all eight voices in one motion — your <em>pattern</em> stays exactly the same, but the <em>sound</em> changes completely.</p>
+            <p class="lede">The SD card holds up to <strong>100 pack folders</strong> numbered <strong>0–99</strong>. Each folder defines which audio file plays on each of the eight sample voices (channels&nbsp;1–8) when you trigger a step. Switching packs replaces all eight voices in one motion — your <em>pattern</em> stays exactly the same, but the <em>sound</em> changes completely.</p>
             <p>Only sample voices <strong>1–8</strong> are filled from a pack. Synth voices <strong>11, 13, and 14</strong> are generated, not played from files, so they stay the same across packs. Rows <strong>9, 10, and 12</strong> are empty — no voice is assigned there.</p>
           </section>
 
@@ -55,7 +55,7 @@
                   <tr><th>—</th><td>Unused on this page</td><td>—</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Pack number (0–100)</td><td>Spins through pack folders. Existing packs are shown in bright green, empty slots in dim blue.</td></tr>
+                  <tr><th>Turn</th><td>Pack number (0–99)</td><td>Spins through pack folders. Existing packs are shown in bright green, empty slots in dim blue.</td></tr>
                   <tr><th>Short</th><td>Back to grid</td><td>Leaves PACK without acting on the highlighted pack.</td></tr>
                 </tbody></table></div>
               </div>
@@ -79,21 +79,21 @@
 
           <section class="hb-sub" id="card-layout">
             <h2>How packs live on the card</h2>
-            <p>Each pack number maps to a numbered folder on the microSD card. The starter layout from <a href="samples.html#card-layout">SD card setup</a> includes:</p>
+            <p>Each pack number maps to a numbered folder on the microSD card. The starter layout from <a href="hardware.html#card-layout">SD card setup</a> includes:</p>
             <ul>
               <li><code>0/</code>, <code>1/</code> … <code>100/</code> — one folder per pack number. Each folder holds the WAV files for sample voices 1 through 8 plus optional extras.</li>
               <li><code>patterns/001.dat</code>, <code>patterns/001.txt</code>, … — pattern files and their <a href="files.html#sidecar">sidecar text</a> files (see Files).</li>
               <li><code>scheme.txt</code> — colour palette state, written by the <a href="https://toern.io/tools/colorsheme/" rel="noopener" target="_blank">colour-scheme web tool</a>.</li>
             </ul>
-            <p>On boot the firmware indexes the card and your packs show up in PACK. If the list looks stale after swapping the card, refreshing its contents offline, or transferring via the <a href="samples.html#sd-tool">SD tool</a> (card stays in the unit), run <a href="menus.html#rset">ETC → RSET → SD</a>.</p>
+            <p>On boot the firmware indexes the card and your packs show up in PACK. If the list looks stale after swapping the card, refreshing its contents offline, or transferring via the <a href="hardware.html#sd-tool">SD tool</a> (card stays in the unit), run <a href="menus.html#rset">ETC → RSET → SD</a>.</p>
             <div class="hb-tip"><strong>Conventions:</strong> the starter card uses pack folder numbers loosely by genre — low numbers for acoustic drums, mid-range for house/techno, higher for synth-only kits. Stick to the same naming when building new ones and the PACK screen becomes a quick set-list browser.</div>
           </section>
         </section>
 
         <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="samples.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Samples</span></a>
+          <a class="hb-pager__link hb-pager__link--prev" href="files.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Files</span></a>
           <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
-          <a class="hb-pager__link hb-pager__link--next" href="tempo-midi.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Tempo &amp; MIDI</span></a>
+          <a class="hb-pager__link hb-pager__link--next" href="tempo-midi.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Tempo</span></a>
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>

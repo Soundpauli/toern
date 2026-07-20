@@ -732,7 +732,7 @@
       rootMenuPage(m, 4, 5, "VOL");
     },
     mr_play(m) {
-      rootMenuPage(m, 5, 6, "PLAY");
+      rootMenuPage(m, 5, 6, "SETT");
     },
     mr_rec(m) {
       rootMenuPage(m, 6, 7, "REC");

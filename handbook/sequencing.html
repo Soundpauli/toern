@@ -24,7 +24,7 @@
       <div class="wrap">
         <section class="handbook-page" id="page-sequencing">
           <h2 class="handbook-page__title">Sequencing</h2>
-          <p class="handbook-page__summary">Draw, single, L+R paint, R-mode, and the page row — with hint colours and every encoder action spelled out.</p>
+          <p class="handbook-page__summary">Draw, single, and set/remove triggers (L+R vs R). The page row lives in <a href="pages-more.html">Pages+More</a>; mutes, note-shift, copy &amp; paste, and random in <a href="advanced-sequencing.html">Advanced Sequencing</a>.</p>
 
           <section class="hb-sub" id="draw">
             <h2>Draw mode (the default view)</h2>
@@ -41,9 +41,9 @@
                   <tr><th>Long</th><td>Erase while moving</td><td>Latches erase: keep holding and turn to wipe a trail. Held together with encoder&nbsp;4 long, clears the whole page across <strong>all voices</strong>.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Page <em>or</em> per-row vol</td><td>Determined by <a href="menus.html#play">PLAY → CTRL</a>: PAGE flips pattern pages, VOL rides volume for the current row.</td></tr>
-                  <tr><th>Short</th><td>Mute lane</td><td>Toggles the current voice between sounding and silent.</td></tr>
-                  <tr><th>Long</th><td>Mute overlay</td><td>Hold to flip several lanes; release to return.</td></tr>
+                  <tr><th>Turn</th><td>Page <em>or</em> per-row vol</td><td>Determined by <a href="play.html#ctrl">SETTINGS → CTRL</a>: PAGE flips pattern pages, VOL rides volume for the current row.</td></tr>
+                  <tr><th>Short</th><td>Mute lane</td><td>Toggles the current voice between sounding and silent. Overlay detail: <a href="advanced-sequencing.html#mutes">Advanced → Mutes</a>.</td></tr>
+                  <tr><th>Long</th><td>Mute overlay</td><td>Hold to flip several lanes; release to return. See <a href="advanced-sequencing.html#mutes">Advanced → Mutes</a>.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Fast filter</td><td>Twists the parameter chosen as default on the current channel's <a href="sound.html#filter">filter page</a>.</td></tr>
@@ -71,7 +71,7 @@
                 <canvas class="led-matrix" data-scene="single" width="16" height="16" role="img" aria-label="Single mode"></canvas>
               </div>
               <p class="viz-caption--below">Single mode: focus voice is bright white, neighbouring voices show as dim base colours.</p>
-              <p class="hb-device__intro">Enter single mode with <strong>hold L (touch&nbsp;1)</strong> from draw (hold again to return). All gestures from draw apply, but: copy/paste only grabs the focused channel; the clear-page chord (encoder&nbsp;1 + encoder&nbsp;4 both long) only clears the focused channel; randomize from the page row affects only the focused channel.</p>
+              <p class="hb-device__intro">Enter single mode with <strong>hold L (touch&nbsp;1)</strong> from draw (hold again to return). All gestures from draw apply, but: <a href="advanced-sequencing.html#copy-paste">copy/paste</a> only grabs the focused channel; the clear-page chord (encoder&nbsp;1 + encoder&nbsp;4 both long) only clears the focused channel; <a href="advanced-sequencing.html#auto-extend">randomize</a> from the page row affects only the focused channel.</p>
             </article>
           </section>
 
@@ -80,213 +80,94 @@
 
 
           <section class="hb-sub" id="paint">
-            <h2>Paint mode (two-hand draw)</h2>
-            <p class="lede">With <a href="menus.html#play">PLAY → DRAW</a> set to <strong>L+R</strong> (the default), writing notes is a two-hand job. Your left hand on encoder&nbsp;1 chooses the <em>row</em> (which voice). Your right hand on encoder&nbsp;4 chooses the <em>column</em> (which step) and does the writing.</p>
-            <ul>
-              <li><strong>Tap encoder&nbsp;4</strong> — place a note at the cursor.</li>
-              <li><strong>Hold encoder&nbsp;4 and turn</strong> — paint a trail of notes as you move through time (and change row with encoder&nbsp;1 while you hold).</li>
-              <li><strong>Tap encoder&nbsp;1</strong> — erase the note under the cursor. Hold and turn to wipe a trail.</li>
-            </ul>
-            <p>Think of encoder&nbsp;4 as the pen and encoder&nbsp;1 as which stave you are drawing on. A lot of people like this for live playing because each hand owns one axis.</p>
-            <article class="hb-device">
-              <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="paint" width="16" height="16" role="img" aria-label="Paint mode"></canvas>
-              </div>
-            </article>
-          </section>
+            <h2>Set triggers &amp; remove triggers</h2>
+            <p class="lede">Every lit step on the grid is a <strong>trigger</strong> — “play this voice here.” Placing steps is <strong>paint</strong>; clearing them is <strong>unpaint</strong>. How your hands do that depends on <a href="play.html#draw">SETTINGS → DRAW</a>.</p>
 
-
-          <hr />
-
-
-          <section class="hb-sub" id="unpaint">
-            <h2>R-mode (one-hand draw)</h2>
-            <p class="lede">Flip <a href="menus.html#play">PLAY → DRAW</a> to <strong>R</strong> when you want everything on one hand. Encoder&nbsp;4 alone places, erases, and paints; encoder&nbsp;1 is no longer the eraser.</p>
-            <ul>
-              <li><strong>Tap encoder&nbsp;4</strong> — toggle the cell under the cursor (empty → note, note → empty).</li>
-              <li><strong>Hold encoder&nbsp;4</strong> — if the cell is empty, latch continuous paint; if it already has a note, latch continuous erase. Keep holding and turn to sweep.</li>
-              <li><strong>Press encoder&nbsp;1</strong> (short or long, on a voice row) — temporary full mute: everything goes silent so you can drop a break. How you leave that mute decides what comes back:
-                <ul>
-                  <li>Encoder&nbsp;1 again → restore the mutes you had before</li>
-                  <li>Encoder&nbsp;2 → only channels 1 and 2 unmuted</li>
-                  <li>Encoder&nbsp;3 → apply the custom set from <a href="menus.html#play">PLAY → MUTE</a></li>
-                  <li>Encoder&nbsp;4 → unmute everything</li>
-                </ul>
-              </li>
-            </ul>
-            <p><a href="menus.html#play">PLAY → MUTE</a> is that custom unmute set for the exit above — not a gate on which rows you can paint. Use it to define a “kick + snare only” return from a full mute.</p>
-            <article class="hb-device">
-              <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="unpaint" width="16" height="16" role="img" aria-label="R-mode"></canvas>
-              </div>
-              <p class="hb-device__intro">Need a page-wide clear? Use the page-row tools in <a href="#page-row">single mode</a> (or the enc&nbsp;1 + enc&nbsp;4 long chord in draw) — those are the intentional wipe paths.</p>
-            </article>
-          </section>
-
-
-          <hr />
-
-
-          <section class="hb-sub" id="page-row">
-            <h2>The page row</h2>
-            <p class="lede">Turn encoder&nbsp;1 until the cursor sits on the <strong>top strip</strong> of the matrix — that is the <strong>page row</strong> (row&nbsp;16). It shows your 16 pattern pages as a row of dots, <em>and</em> it unlocks the tools that act on a whole page or a whole voice. On any voice row those same presses do something else (or nothing).</p>
-
-            <div class="hb-tip"><strong>You are on the page row when the hint strip on row&nbsp;1 changes colour</strong> and the matching encoder rings light up. That colour change is the cue that power tools are armed.</div>
-
-            <p>What lives here:</p>
-            <ul>
-              <li><strong>Copy &amp; paste</strong> a page (draw = all voices; single = focused voice only)</li>
-              <li><strong>Clear page</strong> for the focused voice — single mode only</li>
-              <li><strong>Random fill</strong> for the focused voice — single mode only</li>
-              <li><strong>Note-shift</strong> — slide the focused voice in time / across rows — single mode only</li>
-            </ul>
-
-            <h3 class="hb-subsection-heading">Hint colours — read the strip</h3>
-            <p>Row&nbsp;1 of the matrix carries four small colour cues, one above each encoder. The encoder rings mirror the same colours. Memorise these three states:</p>
+            <h3 class="hb-subsection-heading">L+R vs R — pick a handedness</h3>
+            <p>Both modes use the same grid. The difference is which encoder <em>writes</em> and which one <em>erases</em> (or does something else).</p>
             <table class="opt-table">
-              <thead><tr><th>State</th><th>Enc 1</th><th>Enc 2</th><th>Enc 3</th><th>Enc 4</th></tr></thead>
+              <thead><tr><th></th><th><strong>L+R</strong> (default)</th><th><strong>R</strong></th></tr></thead>
               <tbody>
-                <tr><td><strong>Draw + page row</strong></td><td>Red</td><td>Off</td><td>Off</td><td>Yellow</td></tr>
-                <tr><td><strong>Single + page row</strong></td><td>Red</td><td>White</td><td>Off</td><td>Yellow</td></tr>
-                <tr><td><strong>Copy armed</strong></td><td>Blue (large)</td><td>Off</td><td>Off</td><td>Yellow (large)</td></tr>
-                <tr><td><strong>Note-shift active</strong></td><td>Green (bright)</td><td>Off</td><td>Off</td><td>Blue (bright)</td></tr>
+                <tr><td><strong>Hands</strong></td><td>Two hands — left on enc&nbsp;1, right on enc&nbsp;4</td><td>One hand — mostly enc&nbsp;4</td></tr>
+                <tr><td><strong>Set a trigger</strong></td><td>Enc&nbsp;4 short (or hold + turn to paint a trail)</td><td>Enc&nbsp;4 short on an empty cell (or hold + turn to paint)</td></tr>
+                <tr><td><strong>Remove a trigger</strong></td><td>Enc&nbsp;1 short (or hold + turn to wipe)</td><td>Enc&nbsp;4 short on a lit cell (or hold + turn to erase)</td></tr>
+                <tr><td><strong>Choose the voice</strong></td><td>Enc&nbsp;1 turn</td><td>Enc&nbsp;1 turn (same)</td></tr>
+                <tr><td><strong>Enc&nbsp;1 press</strong></td><td>Erase</td><td>Temporary full mute (performance break) — see below</td></tr>
+                <tr><td><strong>Best for</strong></td><td>Careful editing: one hand owns the row, one owns time</td><td>Live one-hand drawing and quick breaks</td></tr>
               </tbody>
             </table>
+            <div class="hb-tip">Flip the mode anytime under <a href="play.html#draw">SETTINGS → DRAW</a>. Your pattern stays put — only the gestures change.</div>
 
-            <h3 class="hb-subsection-heading">Draw mode on the page row</h3>
-            <p>Hints: <strong>red</strong> on encoder&nbsp;1, <strong>yellow</strong> on encoder&nbsp;4. The page strip still shows which pages have content; the cursor marks where you are working.</p>
+            <h3 class="hb-subsection-heading" id="set-triggers">Set triggers (paint) — L+R</h3>
+            <p>Left hand = which voice. Right hand = which step, and the pen that writes.</p>
+            <ul>
+              <li><strong>Turn encoder&nbsp;1</strong> — move to another voice row.</li>
+              <li><strong>Turn encoder&nbsp;4</strong> — move along time (steps).</li>
+              <li><strong>Tap encoder&nbsp;4</strong> — place a trigger at the cursor.</li>
+              <li><strong>Hold encoder&nbsp;4 and turn</strong> — paint a continuous trail of triggers as you move.</li>
+            </ul>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="row16_draw" width="16" height="16" role="img" aria-label="Draw mode page row hints"></canvas>
+                <canvas class="led-matrix" data-scene="paint" width="16" height="16" role="img" aria-label="Paint — set triggers"></canvas>
               </div>
-              <p class="viz-caption--below">Draw + page row: red cue over enc&nbsp;1, yellow over enc&nbsp;4.</p>
-              <div class="hb-enc-grid">
-                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · red</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Stay on / leave page row</td><td>Turn down onto a voice row to leave the power tools.</td></tr>
-                  <tr><th>Short</th><td>—</td><td>No clear here in draw (clear-page is single mode, or the chord below).</td></tr>
-                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear page</td><td>Wipes <strong>every voice</strong> on the current edit page. No undo.</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2 · off</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Page or volume</td><td>Same as elsewhere: <a href="menus.html#play">PLAY → CTRL</a> = PAGE or VOL.</td></tr>
-                  <tr><th>Short / Long</th><td>—</td><td>Mute overlay needs a <em>voice</em> row (y≠16). Note-shift needs single mode.</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3 · off</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Play / pause</td><td>Transport still works from the page row.</td></tr>
-                  <tr><th>Long</th><td>Open filters</td><td>In <em>single</em> mode this still opens filters for the focused voice. In draw mode the page row maps to channel&nbsp;15, which has no filter path.</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4 · yellow</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Move along the strip</td><td>Moves the cursor across steps / pages (edit page follows the playhead position of the cursor).</td></tr>
-                  <tr><th>Short</th><td>Copy / paste</td><td><strong>First tap</strong> copies the current edit page (all voices) into a buffer. <strong>Second tap</strong> pastes onto the page you are on now.</td></tr>
-                </tbody></table></div>
-              </div>
+              <p class="viz-caption--below">L+R paint: enc&nbsp;4 writes along the timeline while enc&nbsp;1 picks the lane.</p>
             </article>
 
-            <h3 class="hb-subsection-heading">Copy armed</h3>
-            <p>After the first encoder&nbsp;4 tap, the page strip goes dark and the hints jump to <strong>large blue</strong> (enc&nbsp;1) and <strong>large yellow</strong> (enc&nbsp;4). That means the buffer is full — navigate to the destination page, then tap encoder&nbsp;4 again to paste. Another tap while armed without pasting toggles the armed state off.</p>
+            <h3 class="hb-subsection-heading" id="unpaint">Remove triggers (unpaint) — L+R</h3>
+            <p>Same mode, opposite hand: encoder&nbsp;1 is the eraser.</p>
+            <ul>
+              <li><strong>Tap encoder&nbsp;1</strong> — clear the trigger under the cursor.</li>
+              <li><strong>Hold encoder&nbsp;1 and turn</strong> — wipe a trail of triggers.</li>
+            </ul>
+            <p>You never “toggle” with one knob in L+R — write and erase stay on separate encoders so you can’t accidentally flip the wrong way mid-gesture.</p>
+
+            <h3 class="hb-subsection-heading" id="r-mode">R mode — set &amp; remove on one encoder</h3>
+            <p>With <a href="play.html#draw">DRAW = R</a>, encoder&nbsp;4 does both jobs: tap an empty cell to <strong>set</strong>, tap a lit cell to <strong>remove</strong>. Hold and turn to paint or erase a trail — the latch follows whatever was under the cursor when you pressed.</p>
+            <ul>
+              <li><strong>Tap encoder&nbsp;4</strong> — toggle that cell (empty ↔ trigger).</li>
+              <li><strong>Hold encoder&nbsp;4 and turn</strong> — continuous paint if you started on empty, continuous erase if you started on a trigger.</li>
+              <li><strong>Turn encoder&nbsp;1</strong> — still chooses the voice row.</li>
+            </ul>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="copy_active" width="16" height="16" role="img" aria-label="Copy active"></canvas>
+                <canvas class="led-matrix" data-scene="unpaint" width="16" height="16" role="img" aria-label="R mode"></canvas>
               </div>
-              <p class="viz-caption--below">Copy armed: page strip cleared, blue + yellow large cues.</p>
+              <p class="viz-caption--below">R mode: one hand on enc&nbsp;4 for set/remove; enc&nbsp;1 is free for breaks.</p>
             </article>
 
-            <h3 class="hb-subsection-heading">Single mode on the page row</h3>
-            <p>Hints: <strong>red</strong> (enc&nbsp;1), <strong>white</strong> (enc&nbsp;2), <strong>yellow</strong> (enc&nbsp;4). Same copy/paste idea, but it only grabs the <em>focused</em> voice — so you can copy a hi-hat lane and paste it onto another voice after you change focus.</p>
-            <article class="hb-device">
-              <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="row16_single" width="16" height="16" role="img" aria-label="Single mode page row hints"></canvas>
-              </div>
-              <p class="viz-caption--below">Single + page row: red / white / yellow cues.</p>
-              <div class="hb-enc-grid">
-                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · red</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Clear page</td><td>Deletes every note of the <strong>focused voice</strong> on the current edit page. No undo.</td></tr>
-                  <tr><th>Long</th><td>Randomize</td><td>Writes a fresh scale-aware pattern for the focused voice on this page. Density follows what was already there.</td></tr>
-                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear page</td><td>Same clear as short here (focused voice only).</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2 · white</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Enter note-shift</td><td>Opens note-shift for the focused voice (see below). Only on the page row.</td></tr>
-                  <tr><th>Long</th><td>—</td><td>Mute overlay still needs a voice row (y≠16).</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3 · off</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Play / pause</td><td>Transport.</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4 · yellow</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Copy / paste</td><td>First tap copies only the focused voice; second tap pastes onto the voice you are focused on now (cross-voice paste is allowed).</td></tr>
-                </tbody></table></div>
-              </div>
-            </article>
-
-            <div class="hb-warn"><strong>Clear and randomize have no undo.</strong> If you wipe the wrong page, recover from whatever you last saved under <a href="files.html#file">FILE</a>.</div>
-
-            <h3 class="hb-subsection-heading">Note-shift</h3>
-            <p>From <strong>single mode + page row</strong>, short-press the white encoder&nbsp;2. The firmware snapshots every other voice, then lets you slide only the focused voice. Hints switch to <strong>bright green</strong> (enc&nbsp;1) and <strong>bright blue</strong> (enc&nbsp;4). A grey marquee crawls on row&nbsp;1 while you work.</p>
-            <article class="hb-device">
-              <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="note_shift" width="16" height="16" role="img" aria-label="Note shift"></canvas>
-              </div>
-              <div class="hb-enc-grid">
-                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · green</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Shift pitch / row</td><td>Moves the focused voice’s notes up and down across the whole pattern (wraps at the edges).</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Shift pitch on this page only</td><td>Same up/down idea, but only inside the current edit page.</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Play / pause</td><td>Transport still works while shifting.</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4 · blue</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Shift in time</td><td>Slides the focused voice left/right across the whole pattern (wraps).</td></tr>
-                  <tr><th>Short</th><td>Exit</td><td>Commits the shift and returns to single mode.</td></tr>
-                </tbody></table></div>
-              </div>
-            </article>
-            <p>From a voice row, encoder&nbsp;2 short does <em>not</em> enter note-shift — the white cue on the page row is the reminder that this tool is page-row only.</p>
+            <h3 class="hb-subsection-heading">R mode bonus — temporary full mute</h3>
+            <p>Because erase moved off encoder&nbsp;1, that encoder’s press becomes a <strong>performance mute</strong>: everything goes silent so you can drop a break. How you leave the mute decides what comes back:</p>
+            <ul>
+              <li><strong>Encoder&nbsp;1</strong> again — restore the mutes you had before</li>
+              <li><strong>Encoder&nbsp;2</strong> — only channels 1 and 2 unmuted</li>
+              <li><strong>Encoder&nbsp;3</strong> — apply the custom set from <a href="play.html#mute">SETTINGS → MUTE</a></li>
+              <li><strong>Encoder&nbsp;4</strong> — unmute everything</li>
+            </ul>
+            <p><a href="play.html#mute">SETTINGS → MUTE</a> is that custom “come back to these lanes” mask — not a gate on which rows you can paint. Build a “kick + snare only” return if you want breaks that land on just those voices.</p>
+            <div class="hb-tip">Need to wipe a whole page? On the <a href="pages-more.html#page-row">page row</a>, <strong>unpaint</strong> that page’s strip LED with encoder&nbsp;1 (L+R) — see <a href="pages-more.html#delete-page">Pages+More → Delete a page</a>. Or use the enc&nbsp;1 + enc&nbsp;4 long chord / single-mode clear on the current edit page.</div>
           </section>
 
 
-          <hr />
-
-
-          <section class="hb-sub" id="mutes">
-            <h2>Mutes</h2>
-            <p class="lede">From a <strong>voice row</strong> (not the page row), <strong>long-press encoder&nbsp;2</strong> opens a transient <strong>mute overlay</strong>: while you hold it you can flip lanes; release to return. Short-press encoder&nbsp;2 on a voice row toggles that lane’s mute and the flag sticks.</p>
-            <article class="hb-device">
-              <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="mute" width="16" height="16" role="img" aria-label="Mute overlay"></canvas>
-              </div>
-              <p class="viz-caption--below">Mute overlay: muted lanes dim, active lanes bright.</p>
-            </article>
-            <p>On the page row, encoder&nbsp;2 short is note-shift (single mode) — not mute. Step onto a voice row first if you want the overlay.</p>
-          </section>
-
-
-          <hr />
-
-
-          <section class="hb-sub" id="auto-extend">
-            <h2>Random &amp; auto-fill</h2>
-            <div class="hb-tip"><strong>Where in-grid randomize works:</strong> <strong>single mode</strong> + cursor on the <strong>page row</strong>, with the red encoder&nbsp;1 cue lit. Long-press encoder&nbsp;1. On a voice row the same long press is erase-trail / other context — not randomize.</div>
-            <p>That long press writes a fresh pattern for the focused voice: scale-aware notes, density similar to what was already on the page. Repeat for a new roll; clear with encoder&nbsp;1 short and try again.</p>
-            <p>For multi-page generative fill, use <a href="menus.html#etc">ETC → AUTO</a> in the menu — that one is a menu entry, not a grid gesture.</p>
-          </section>
-
-
-          <hr />
-
-
-          <section class="hb-sub" id="transpose-note">
-            <h2>Transpose vs note shift</h2>
-            <p><strong>Note-shift</strong> moves real step data in time and across rows — it edits the pattern. Enter it from <strong>single mode + page row</strong> with the white encoder&nbsp;2 (see <a href="#page-row">above</a>). Encoder&nbsp;4 slides in time; encoder&nbsp;1 slides pitch across the whole pattern; encoder&nbsp;2 slides pitch on the current page only.</p>
-            <p>There is no global transpose page. To change pitch without rewriting steps, use <strong>detune</strong> and <strong>octave</strong> in <a href="sound.html">Sound design</a>. Use note-shift when you want the melody to start on a different beat or sit on a different row.</p>
-          </section>
         </section>
 
         <nav class="hb-pager" aria-label="Adjacent chapters">
           <a class="hb-pager__link hb-pager__link--prev" href="controls.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Controls</span></a>
           <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
-          <a class="hb-pager__link hb-pager__link--next" href="note-detail.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Note detail</span></a>
+          <a class="hb-pager__link hb-pager__link--next" href="pages-more.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Pages+More</span></a>
         </nav>
       </div>
+      <script>
+        (function () {
+          var map = {
+            mutes: "advanced-sequencing.html#mutes",
+            "auto-extend": "advanced-sequencing.html#auto-extend",
+            "transpose-note": "advanced-sequencing.html#note-shift",
+            "page-row": "pages-more.html#page-row"
+          };
+          var to = map[location.hash.slice(1)];
+          if (to) location.replace(to);
+        })();
+      </script>
       <script src="handbook-led.js" defer></script>
     </div>
   </div>

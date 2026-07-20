@@ -31,7 +31,7 @@
             <div class="hb-faq">
               <details>
                 <summary>The matrix is half-dark — only the top or bottom half lights up.</summary>
-                <p>You have one LED board, but the firmware is set to two-board geometry (or vice-versa). Open <a href="menus.html#play">PLAY → LEDS</a> and try <strong>1</strong>, <strong>1B</strong>, <strong>2</strong>, <strong>2B</strong> in turn — one will match your hardware. The "B" variants flip the image for boards mounted upside down.</p>
+                <p>You have one LED board, but the firmware is set to two-board geometry (or vice-versa). Open <a href="play.html#leds">SETTINGS → LEDS</a> and try <strong>1</strong>, <strong>1B</strong>, <strong>2</strong>, <strong>2B</strong> in turn — one will match your hardware. The "B" variants flip the image for boards mounted upside down.</p>
               </details>
               <details>
                 <summary>No sound on headphones.</summary>
@@ -39,15 +39,15 @@
               </details>
               <details>
                 <summary>Samples don't show up in the browser.</summary>
-                <p>The firmware caches the browse list. Run <a href="#reset">ETC → RSET → SD</a>: it rescans the card without touching your patterns. If they still don't appear, confirm the files are 16-bit mono WAV at 44.1 kHz and that the card was prepared with the layout from <a href="samples.html#card-layout">SD card setup</a>.</p>
+                <p>The firmware caches the browse list. Run <a href="#reset">ETC → RSET → SD</a>: it rescans the card without touching your patterns. If they still don't appear, confirm the files are 16-bit mono WAV at 44.1 kHz and that the card was prepared with the layout from <a href="hardware.html#card-layout">SD card setup</a>.</p>
               </details>
               <details>
                 <summary>SD tool cannot connect / no serial port.</summary>
-                <p>Use desktop <strong>Chrome or Edge</strong> at <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> — Android / Pixel usually cannot see the Teensy USB serial port. On the unit, stay on <a href="menus.html#sd">ETC → SD</a> (WAIT → OK). Opening the port can reboot the Teensy; if the screen leaves that page, open <strong>ETC → SD</strong> again after Connect. See <a href="samples.html#sd-tool">Samples → SD tool</a>.</p>
+                <p>Use desktop <strong>Chrome or Edge</strong> at <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> — Android / Pixel usually cannot see the Teensy USB serial port. On the unit, stay on <a href="menus.html#sd">ETC → SD</a> (WAIT → OK). Opening the port can reboot the Teensy; if the screen leaves that page, open <strong>ETC → SD</strong> again after Connect. See <a href="hardware.html#sd-tool">Hardware → SD tool</a>.</p>
               </details>
               <details>
                 <summary>External MIDI is in sync but kicks click off by a few ms.</summary>
-                <p>Use <a href="tempo-midi.html#midi-menu">MIDI → SYNC</a>. SNC1 delays your outgoing path; SNC2 delays your incoming path. Loopback a metronome and adjust in ±2 ms steps until both kicks land as one. Save by leaving the page — settings persist.</p>
+                <p>Use <a href="midi.html#sync">MIDI → SYNC</a>. SNC1 delays your outgoing path; SNC2 delays your incoming path. Loopback a metronome and adjust in ±2 ms steps until both kicks land as one. Save by leaving the page — settings persist.</p>
               </details>
               <details>
                 <summary>BPM number is red and won't settle.</summary>
@@ -75,11 +75,11 @@
               </details>
               <details>
                 <summary>Long-press encoder 4 on a note doesn't open the editor.</summary>
-                <p>You are in paint mode (PLAY → DRAW = L+R) and encoder&nbsp;4 long is reserved differently. Switch DRAW to the default or use a single tap on encoder&nbsp;1 to enter single mode first.</p>
+                <p>You are in paint mode (SETTINGS → DRAW = L+R) and encoder&nbsp;4 long is reserved differently. Switch DRAW to the default or use a single tap on encoder&nbsp;1 to enter single mode first.</p>
               </details>
               <details>
                 <summary>I see a moving dot when I'm not playing — what is it?</summary>
-                <p>If you see a <strong>bright dot with a short trail</strong> bouncing around your <strong>pattern in draw mode</strong> while <a href="menus.html#play">PLAY → PONG</a> is <strong>ON</strong>, that is <strong>PONG</strong>: each time the ball lands on a step that already holds a note, that note fires again. Turn <strong>PONG</strong> off from the same menu page, or open it to change <strong>speed</strong> (encoder&nbsp;2, 1–99). If you see a <strong>pair of cartoon eyes</strong> after long inactivity when <strong>not playing</strong>, that is the separate <strong>idle matrix animation</strong>, not PONG.</p>
+                <p>If you see a <strong>bright dot with a short trail</strong> bouncing around your <strong>pattern in draw mode</strong> while <a href="play.html#pong">SETTINGS → PONG</a> is <strong>ON</strong>, that is <strong>PONG</strong>: each time the ball lands on a step that already holds a note, that note fires again. Turn <strong>PONG</strong> off from the same menu page, or open it to change <strong>speed</strong> (encoder&nbsp;2, 1–99). If you see a <strong>pair of cartoon eyes</strong> after long inactivity when <strong>not playing</strong>, that is the separate <strong>idle matrix animation</strong>, not PONG.</p>
               </details>
               <details>
                 <summary>Sample browser won't open — the touch combo seems to do nothing.</summary>
@@ -91,7 +91,7 @@
               </details>
               <details>
                 <summary>Auto-preview is too loud.</summary>
-                <p>Drop <a href="menus.html#vol">VOL → PREV</a>, or switch <a href="menus.html#play">PLAY → PREV</a> from ON to PRSS so previews only fire on explicit gesture.</p>
+                <p>Drop <a href="menus.html#vol">VOL → PREV</a>, or switch <a href="play.html#prev">SETTINGS → PREV</a> from ON to PRSS so previews only fire on explicit gesture.</p>
               </details>
             </div>
           </section>
@@ -112,7 +112,7 @@
               <table class="opt-table">
                 <thead><tr><th>Mode</th><th>What runs</th><th>What survives</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>SD</strong></td><td>Invalidates the dynamic sample browser cache, flashes SCAN/DONE, returns to draw.</td><td>Everything except the stale browse index. Use when the browse list looks wrong after a card-reader swap or transfers via the <a href="samples.html#sd-tool">SD tool</a>.</td></tr>
+                  <tr><td><strong>SD</strong></td><td>Invalidates the dynamic sample browser cache, flashes SCAN/DONE, returns to draw.</td><td>Everything except the stale browse index. Use when the browse list looks wrong after a card-reader swap or transfers via the <a href="hardware.html#sd-tool">SD tool</a>.</td></tr>
                   <tr><td><strong>EFX</strong></td><td>Resets every tone control — filters, envelopes, synth parameters, octave helpers, audio effects — back to factory values across all voices.</td><td>Patterns and sample assignments survive. Every tone control snaps back to factory.</td></tr>
                   <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, and rescans the SD card.</td><td>Almost nothing in RAM. Equivalent to a blank session. Only FILE-saved patterns can come back.</td></tr>
                 </tbody>

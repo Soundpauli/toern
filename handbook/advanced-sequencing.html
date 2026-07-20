@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Advanced Sequencing</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-icons.js"></script>
+  <script src="handbook-nav.js"></script>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <section class="handbook-page" id="page-advanced-sequencing">
+          <h2 class="handbook-page__title">Advanced Sequencing</h2>
+          <p class="handbook-page__summary">Mutes, note-shift, copy &amp; paste, and random / auto-fill. Page-row layout and hint colours live in <a href="pages-more.html">Pages+More</a>; core draw modes in <a href="sequencing.html">Sequencing</a>.</p>
+
+          <section class="hb-sub" id="overview">
+            <h2>Where these tools live</h2>
+            <p class="lede">These gestures need the cursor on the <strong>page row</strong> (row&nbsp;16, <code>y==16</code>) — usually in <a href="sequencing.html#single">single mode</a> — or a <strong>voice row</strong> for mutes. If the cursor is not on row&nbsp;16, page-row edits do not run. Hint colours on row&nbsp;1 tell you which encoder is armed — see <a href="pages-more.html#page-row">Pages+More</a> for the colour key.</p>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="mutes">
+            <h2>Mutes</h2>
+            <p class="lede">From a <strong>voice row</strong> (not the page row), <strong>long-press encoder&nbsp;2</strong> opens a transient <strong>mute overlay</strong>: while you hold it you can flip lanes; release to return. Short-press encoder&nbsp;2 on a voice row toggles that lane’s mute and the flag sticks.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="mute" width="16" height="16" role="img" aria-label="Mute overlay"></canvas>
+              </div>
+              <p class="viz-caption--below">Mute overlay: muted lanes dim, active lanes bright.</p>
+            </article>
+            <p>On the page row, encoder&nbsp;2 short is <a href="#note-shift">note-shift</a> (single mode) — not mute. Step onto a voice row first if you want the overlay.</p>
+            <p>R-mode’s temporary full mute (encoder&nbsp;1 on a voice row) is a different path — see <a href="sequencing.html#r-mode">Sequencing → R mode</a> and <a href="play.html#mute">SETTINGS → MUTE</a> for the custom unmute set.</p>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="note-shift">
+            <h2>Note-shift</h2>
+            <p class="lede"><strong>Note-shift</strong> moves real step data in time and across rows — it edits the pattern. There is no separate global “transpose” page: sliding pitch/row here <em>is</em> the in-grid transpose. To change pitch without rewriting steps, use <strong>detune</strong> and <strong>octave</strong> in <a href="sound.html">Sound design</a> instead.</p>
+            <p>Enter from <strong>single mode + page row</strong> with a short press on the white encoder&nbsp;2. The firmware snapshots every other voice, then lets you slide only the focused voice. Hints switch to <strong>bright green</strong> (enc&nbsp;1) and <strong>bright blue</strong> (enc&nbsp;4). A grey marquee crawls on row&nbsp;1 while you work.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="note_shift" width="16" height="16" role="img" aria-label="Note shift"></canvas>
+              </div>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · green</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Shift pitch / row</td><td>Moves the focused voice’s notes up and down across the whole pattern (wraps at the edges).</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Shift pitch on this page only</td><td>Same up/down idea, but only inside the current edit page.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Play / pause</td><td>Transport still works while shifting.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4 · blue</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Shift in time</td><td>Slides the focused voice left/right across the whole pattern (wraps).</td></tr>
+                  <tr><th>Short</th><td>Exit</td><td>Commits the shift and returns to single mode.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+            <p>From a voice row, encoder&nbsp;2 short does <em>not</em> enter note-shift — the white cue on the page row is the reminder that this tool is page-row only.</p>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="copy-paste">
+            <h2>Copy &amp; paste</h2>
+            <p class="lede">On the <a href="pages-more.html#page-row">page row</a>, encoder&nbsp;4 short is copy / paste. <strong>Draw</strong> copies the whole edit page (all voices); <strong>single</strong> copies only the focused voice (you can paste onto a different voice after changing focus).</p>
+
+            <h3 class="hb-subsection-heading">Copy armed</h3>
+            <p>After the first encoder&nbsp;4 tap, the page strip goes dark and the hints jump to <strong>large blue</strong> (enc&nbsp;1) and <strong>large yellow</strong> (enc&nbsp;4). That means the buffer is full — navigate to the destination page, then tap encoder&nbsp;4 again to paste. Another tap while armed without pasting toggles the armed state off.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="copy_active" width="16" height="16" role="img" aria-label="Copy active"></canvas>
+              </div>
+              <p class="viz-caption--below">Copy armed: page strip cleared, blue + yellow large cues.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--3 hb-enc-card--empty"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4 · yellow</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Copy / paste</td><td><strong>First tap</strong> fills the buffer. <strong>Second tap</strong> pastes onto the page (and voice, in single) you are on now.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="auto-extend">
+            <h2>Random &amp; auto-fill</h2>
+            <div class="hb-tip"><strong>Where in-grid randomize works:</strong> <strong>single mode</strong> + cursor on the <strong>page row</strong>, with the red encoder&nbsp;1 cue lit. Long-press encoder&nbsp;1. On a voice row the same long press is erase-trail / other context — not randomize.</div>
+            <p>That long press writes a fresh pattern for the focused voice: scale-aware notes, density similar to what was already on the page. Repeat for a new roll; clear with encoder&nbsp;1 short and try again.</p>
+            <div class="hb-warn"><strong>Clear and randomize have no undo.</strong> If you wipe the wrong page, recover from whatever you last saved under <a href="files.html#file">FILE</a>.</div>
+            <p>For multi-page generative fill, use <a href="menus.html#etc">ETC → AUTO</a> in the menu — that one is a menu entry, not a grid gesture.</p>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="pages-more.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Pages+More</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="samples.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Samples</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -24,7 +24,7 @@
       <div class="wrap">
         <section class="handbook-page" id="page-files">
           <h2 class="handbook-page__title">Files — load &amp; save</h2>
-          <p class="handbook-page__summary"><strong>FILE</strong> is the pattern slot screen — the only place your work is durably committed. This chapter covers the screen itself, the sidecar text-file mechanism, what autosave does and does not protect, and how patterns relate to <a href="sample-packs.html">sample packs</a>.</p>
+          <p class="handbook-page__summary"><strong>FILE</strong> is the pattern slot screen — the only place your work is durably committed. This chapter covers load/save, the <strong>NEW</strong> pattern generator (empty-slot load), sidecars, autosave, and how patterns relate to <a href="sample-packs.html">sample packs</a>.</p>
 
           <section class="hb-sub" id="file">
             <h2>FILE — pattern slots</h2>
@@ -36,7 +36,7 @@
               <p class="viz-caption--below">Existing slot: large green file number and a confident green load icon on row 1.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Load</td><td>Reads the file into RAM and immediately becomes the live pattern. The big number turns bright green while it loads; brightness reflects whether the file actually exists.</td></tr>
+                  <tr><th>Short</th><td>Load</td><td>Reads the file into RAM and immediately becomes the live pattern. The big number turns bright green while it loads; brightness reflects whether the file actually exists. On an empty (dim blue) slot, load opens <a href="#new">NEW</a> instead.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
                   <tr><th>Short</th><td>Save</td><td>Writes the live pattern into the chosen slot, <em>overwriting</em> any existing file at that number. No second confirmation — be sure of the slot before pressing.</td></tr>
@@ -45,12 +45,42 @@
                   <tr><th>Short</th><td>Sidecar toggle</td><td>Switches between "load pattern only" and "load pattern + sidecar". When sidecar is on (icon brightens), opening a pattern also pulls in extra settings stored next to the file — see below.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Slot number (1–999)</td><td>Spins through file numbers. Existing slots are shown in bright green, empty slots in dim blue.</td></tr>
+                  <tr><th>Turn</th><td>Slot number (1–99)</td><td>Spins through file numbers. Existing slots are shown in bright green, empty slots in dim blue.</td></tr>
                   <tr><th>Short</th><td>Back to grid</td><td>Leaves FILE without acting on the highlighted slot.</td></tr>
                 </tbody></table></div>
               </div>
             </article>
             <div class="hb-tip"><strong>Read brightness as a status light:</strong> the slot number's intensity tells you instantly whether the slot is occupied (bright green) or empty (dim blue) — no need to "try a load" and see what happens.</div>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="new">
+            <h2>NEW — generate a starting pattern</h2>
+            <p class="lede">Not a root-menu item — a child of FILE. Spin to an empty (dim blue) slot and press load (encoder&nbsp;1). Missing file → pattern generator. It does not <em>load</em> a store; it <em>invents</em> notes with the same scale-aware brain as single-mode randomize, then parks the result in RAM.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="newfile" width="16" height="16" role="img" aria-label="NEW pattern"></canvas>
+              </div>
+              <p class="viz-caption--below">NEW dialog with a genre selected; cyan title, pink length bar when not BLNK.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Abort</td><td>Back to FILE without changing the live pattern.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Length in pages</td><td>1–16 when a genre is selected. Disabled for <strong>BLNK</strong> (blank means blank — no length bar).</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Genre</td><td><strong>BLNK</strong>, <strong>TECH</strong>, <strong>HIPH</strong>, <strong>DNB</strong>, <strong>HOUS</strong>, <strong>AMBT</strong> — the short labels the matrix actually prints.</td></tr>
+                  <tr><th>Short</th><td>Generate &amp; load</td><td>Runs the generator and drops you on the grid with the new pattern live.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+            <p>Same genre + length still rolls differently each time. Save keepers via <a href="#file">FILE</a> before you invent again.</p>
+            <div class="hb-warn"><strong>NEW overwrites the current pattern in RAM.</strong> Genre templates may also nudge BPM and related state — save first if the old idea still matters.</div>
           </section>
 
 
@@ -95,9 +125,9 @@
         </section>
 
         <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="song.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Song</span></a>
+          <a class="hb-pager__link hb-pager__link--prev" href="note-detail.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Note detail</span></a>
           <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
-          <a class="hb-pager__link hb-pager__link--next" href="menus.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Menu map</span></a>
+          <a class="hb-pager__link hb-pager__link--next" href="sample-packs.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sample packs</span></a>
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>

@@ -68,7 +68,7 @@
                 <tr><td><strong>Tap left-first, both pads together</strong></td><td>Opens the <a href="samples.html#set-wav">sample browser</a> on sample voices 1–8</td><td>Sample channels only.</td></tr>
                 <tr><td><strong>Tap right-first, both pads together</strong></td><td>Opens <a href="sound.html#filter">filters</a> on FX-capable channels</td><td>Both sample and synth voices.</td></tr>
                 <tr><td><strong>Touch&nbsp;2 tap inside filters</strong></td><td>Flips to the next filter page</td><td>Inside any filter page.</td></tr>
-                <tr><td><strong>Touch&nbsp;3</strong> (hold / press)</td><td>Recording — hold in the sample browser to enter <a href="samples.html#record-mode">record mode</a>; press/hold on the grid for live/fast-rec (see <a href="samples.html#live-record">Samples → Live recording</a>)</td><td>Sample browser and grid.</td></tr>
+                <tr><td><strong>Touch&nbsp;3</strong> (hold / press)</td><td>Recording — hold in the sample browser to enter <a href="record.html#record-mode">record mode</a>; press/hold on the grid for live/fast-rec (see <a href="record.html#live-record">Record → Live recording</a>)</td><td>Sample browser and grid.</td></tr>
               </tbody>
             </table>
 
@@ -93,13 +93,14 @@
           <section class="hb-sub" id="chords">
             <h2>Key grid presses</h2>
             <p>Most grid actions are a single encoder press. A couple of destructive or jump-out actions need <strong>two encoders held at once</strong> so they are harder to fire by accident. Everything below is from draw / single on the grid:</p>
-            <div class="hb-tip"><strong>Some of these only work when the cursor is on the page row (row&nbsp;16).</strong> The "Where" column below spells this out. If a gesture seems to do nothing, check first whether your cursor is on a voice row or on the page row — the firmware uses cursor position as a safety lock for pattern-wide actions like randomize, clear page, and note-shift.</div>
+            <div class="hb-tip"><strong>Page-row tools only fire when the cursor is on row&nbsp;16 (<code>y==16</code>).</strong> The "Where" column below spells this out. If a gesture seems to do nothing, check first whether your cursor is on a voice row or on the page row — delete page, copy/paste, randomize, single-mode clear, and note-shift are locked to the page strip.</div>
             <table class="opt-table">
               <thead><tr><th>Gesture</th><th>What it does</th><th>Where</th></tr></thead>
               <tbody>
-                <tr><td><strong>Encoder 1 short</strong> (cursor on page row, single mode)</td><td>Clear page on the focused voice</td><td>Single mode, page row (y==16) only.</td></tr>
+                <tr><td><strong>Encoder 1 press</strong> (cursor on page row, L+R draw)</td><td><a href="pages-more.html#delete-page">Delete page</a> under the cursor (unpaint → clear that page’s notes)</td><td>Draw mode, page row, <a href="play.html#draw">DRAW = L+R</a>.</td></tr>
+                <tr><td><strong>Encoder 1 short</strong> (cursor on page row, single mode)</td><td>Clear <em>current edit page</em> on the focused voice</td><td>Single mode, page row (y==16) only.</td></tr>
                 <tr><td><strong>Encoder 1 long</strong> (cursor on page row, single mode)</td><td>Randomize / scale-aware fill for the focused voice</td><td>Single mode, page row (y==16) only.</td></tr>
-                <tr><td><strong>Encoder 2 short</strong> (cursor on page row, single mode)</td><td>Enter note-shift</td><td>Single mode, page row (y==16) only.</td></tr>
+                <tr><td><strong>Encoder 2 short</strong> (cursor on page row, single mode)</td><td>Enter <a href="advanced-sequencing.html#note-shift">note-shift</a></td><td>Single mode, page row (y==16) only.</td></tr>
                 <tr><td><strong>Encoder 2 long</strong></td><td>Transient mute overlay (release to return)</td><td>Any grid mode.</td></tr>
                 <tr><td><strong>Encoder 3 long</strong></td><td>Open filters for the focused voice</td><td>Draw / single (FX-capable channels).</td></tr>
                 <tr><td><strong>Encoder 4 short</strong></td><td>Toggle note at the cursor</td><td>Draw / single grid.</td></tr>

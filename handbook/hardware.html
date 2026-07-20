@@ -24,7 +24,7 @@
       <div class="wrap">
         <section class="handbook-page" id="page-hardware">
           <h2 class="handbook-page__title">The device</h2>
-          <p class="handbook-page__summary">Every port, button, and jack on a <span class="hb-brand">TŒRN</span> unit — what it does, when you use it, and what to watch out for.</p>
+          <p class="handbook-page__summary">Every port, button, and jack on a <span class="hb-brand">TŒRN</span> unit — what it does, when you use it, and what to watch out for. Includes <a href="#card-layout">SD card setup</a> (format, default content, SD tool).</p>
 
           <section class="hb-sub" id="overview">
             <h2>Top-down overview</h2>
@@ -126,14 +126,14 @@
                 <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level under <a href="menus.html#vol">VOL → LOUT</a>.</dd></div>
                 <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Host data for firmware updates via the Teensy boot path; if a LiPo is installed, also charges that cell.</dd></div>
                 <div><dt>C</dt><dd><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use any phones or in-ears; level under <a href="menus.html#vol">VOL → MAIN</a>.</dd></div>
-                <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device. See <a href="tempo-midi.html">Tempo &amp; MIDI</a>.</dd></div>
-                <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock + notes; pick what to emit under <a href="menus.html#midi">MIDI → SEND</a>.</dd></div>
+                <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device. See <a href="midi.html">MIDI</a> and <a href="tempo-midi.html">Tempo</a> (clock source).</dd></div>
+                <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock + notes; pick what to emit under <a href="midi.html#send">MIDI → SEND</a>.</dd></div>
                 <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Boots when slid on; the current pattern is autosaved before shutdown.</dd></div>
                 <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the bottom edge for hands-free sampling. Pick it as the active source under <a href="menus.html#rec">REC → INPT</a>.</dd></div>
-                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject. Only insert/eject with the unit <em>off</em> — the firmware re-indexes the card on boot. <span class="hb-brand">TŒRN</span> does not mount the card as USB mass storage: prepare the initial layout with a card reader, or transfer files while the card stays in the unit via <a href="samples.html#sd-tool">ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (see <a href="samples.html#card-layout">Samples → SD card setup</a>).</dd></div>
+                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject. Only insert/eject with the unit <em>off</em> — the firmware re-indexes the card on boot. <span class="hb-brand">TŒRN</span> does not mount the card as USB mass storage: prepare the initial layout with a card reader, or transfer files while the card stays in the unit via <a href="#sd-tool">ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (see <a href="#card-layout">SD card setup</a> below).</dd></div>
                 <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain under <a href="menus.html#rec">REC → MIC</a>.</dd></div>
                 <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo on the bottom edge. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
-                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter <a href="samples.html#record-mode">record mode</a> from the sample browser. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
+                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter <a href="record.html#record-mode">record mode</a> from the sample browser. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
               </dl>
             </div>
           </section>
@@ -165,9 +165,45 @@
               <li><strong>Audio:</strong> 44.1&nbsp;kHz, 16-bit, stereo output. Mono input recording.</li>
               <li><strong>Battery:</strong> optional internal LiPo (if installed). Estimated percentage shown under <a href="menus.html#etc">ETC → BATT</a> — accurate enough for "is this enough for the set?" decisions.</li>
               <li><strong>Speaker:</strong> small internal driver; switchable under <a href="menus.html#vol">VOL → SPKR</a>.</li>
-              <li><strong>Internal mic + Mic-in jack:</strong> a built-in capsule for hands-free sampling, plus a dedicated 6.35&nbsp;mm Mic-in jack on the bottom edge for an external microphone. Pick which one is active under <a href="menus.html#rec">REC → INPT</a>; gain lives under <a href="menus.html#rec">REC → MIC</a>.</li>
-              <li><strong>Expansion header J11 (I2SC_3V):</strong> onboard JST&nbsp;PH 1×05. Among other signals, the middle/right pins expose Teensy <strong>pin&nbsp;31</strong> and <strong>GND</strong> for a handmade analog clock / trigger cable (see <a href="tempo-midi.html#ppqn">MIDI → PPQN</a>).</li>
+              <li><strong>Internal mic + Mic-in jack:</strong> a built-in capsule for hands-free sampling, plus a dedicated 6.35&nbsp;mm Mic-in jack on the bottom edge for an external microphone. Pick which one is active under <a href="record.html#inpt">REC → INPT</a>; gain lives under <a href="record.html#mic">REC → MIC</a>.</li>
+              <li><strong>Expansion header J11 (I2SC_3V):</strong> onboard JST&nbsp;PH 1×05. Among other signals, the middle/right pins expose Teensy <strong>pin&nbsp;31</strong> and <strong>GND</strong> for a handmade analog clock / trigger cable (see <a href="midi.html#ppqn">MIDI → PPQN</a>).</li>
             </ul>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="card-layout">
+            <h2>SD card setup</h2>
+            <div class="hb-warn"><strong>Not USB storage:</strong> <span class="hb-brand">TŒRN</span> does <em>not</em> mount the microSD card as a disk drive. You cannot drag files onto it like a USB stick. Use a card reader for first-time setup, or the <a href="#sd-tool">SD tool</a> while the card stays in the unit.</div>
+            <p class="lede">Two ways to get files onto the card: prepare it once with a computer and card reader (below), or transfer while the card stays in <span class="hb-brand">TŒRN</span> via <a href="#sd-tool">Menu → ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a>.</p>
+
+            <h3 class="hb-subsection-heading" id="sd-tool">SD tool (card stays in the unit)</h3>
+            <p>Open <strong>Menu → ETC → SD</strong> on the device (the file server is only active while that page is open — the screen shows <strong>WAIT</strong>, then <strong>OK</strong> when a host connects). On a computer, open <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">https://sdtool.tyng.app</a> in <strong>Chrome or Edge</strong>, click <strong>Connect</strong>, and pick the Teensy serial port. Browse folders, upload WAVs (the site converts to 44.1&nbsp;kHz mono 16-bit), download, rename, or delete. You can drop multiple files, whole folders (subfolders kept), or a <code>.zip</code> (extracted in the browser into the current SD folder).</p>
+            <div class="hb-tip"><strong>Tips:</strong> stay on <strong>ETC → SD</strong> for the whole session. Opening the serial port can reboot the Teensy — if the screen leaves the SD page, open <strong>ETC → SD</strong> again after Connect. Desktop only: Android / Pixel Chrome usually cannot see the Teensy USB serial port. After big transfers, run <a href="menus.html#rset">ETC → RSET → SD</a> if the sample browser still looks stale.</div>
+
+            <h3 class="hb-subsection-heading">Download default content (card reader)</h3>
+            <p>The default folder layout, sample packs, and starter settings are available from the <a href="https://audioconvert.tyng.app/" rel="noopener" target="_blank"><span class="hb-brand">TŒRN</span> Sample converter</a> (<code>audioconvert.tyng.app</code>). Open the <strong>SD CARD</strong> section and download <strong>SD-CARD-CONTENT.zip</strong>. Extract the ZIP and copy all files and folders to the <strong>root</strong> of your microSD card (not inside a subfolder). Full instructions are on that page.</p>
+
+            <h3 class="hb-subsection-heading">Recommended card</h3>
+            <ul>
+              <li><strong>SanDisk Ultra</strong> microSD (grey label)</li>
+              <li><strong>Speed class:</strong> UHS-I (Class 10)</li>
+              <li><strong>Capacity:</strong> up to 64&nbsp;GB</li>
+              <li>Use a genuine card from a trusted retailer — counterfeits often cause read errors or missing samples.</li>
+            </ul>
+
+            <h3 class="hb-subsection-heading">How to format</h3>
+            <ol>
+              <li>Insert the microSD card into your computer with a card reader (not the <span class="hb-brand">TŒRN</span> unit).</li>
+              <li>Download and run the <a href="https://www.sdcard.org/downloads/formatter/" target="_blank" rel="noopener noreferrer">SD Memory Card Formatter</a> from the SD Association.</li>
+              <li>Select your card, leave <strong>Format type</strong> on <em>Quick format</em>, and click <strong>Format</strong>. Cards up to 32&nbsp;GB are formatted as FAT32; 64&nbsp;GB cards use exFAT — both work with <span class="hb-brand">TŒRN</span>.</li>
+              <li>Extract <strong>SD-CARD-CONTENT.zip</strong> and copy all files and folders to the <strong>root</strong> of the card (not inside a subfolder).</li>
+              <li>Eject the card safely, insert it into <span class="hb-brand">TŒRN</span>, and power on.</li>
+            </ol>
+            <div class="hb-tip">Avoid formatting through Windows Explorer or macOS Disk Utility if possible — the SD Association tool sets the correct partition layout for removable media.</div>
+            <p>If the sample browser does not reflect new card content after power-up or after using the SD tool, run <a href="menus.html#rset">ETC → RSET → SD</a> to rescan.</p>
           </section>
 
 

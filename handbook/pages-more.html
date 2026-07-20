@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Pages+More</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-icons.js"></script>
+  <script src="handbook-nav.js"></script>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <section class="handbook-page" id="page-pages-more">
+          <h2 class="handbook-page__title">Pages+More</h2>
+          <p class="handbook-page__summary">The page row (row&nbsp;16) — page-strip colours, deleting pages by unpaint, hint colours, and the encoder map for page-wide tools. Copy, note-shift, and random detail live in <a href="advanced-sequencing.html">Advanced Sequencing</a>.</p>
+
+          <section class="hb-sub" id="page-row">
+            <h2>The page row</h2>
+            <p class="lede">Turn encoder&nbsp;1 until the cursor sits on the <strong>top strip</strong> of the matrix — that is the <strong>page row</strong> (row&nbsp;16, <code>y==16</code>). It shows your 16 pattern pages as a row of dots, <em>and</em> it is the only place the page-wide tools fire.</p>
+
+            <div class="hb-warn"><strong>Cursor lock:</strong> every page-row edit below — delete page, copy/paste, clear page, random fill, note-shift — runs <em>only</em> when the cursor is on row&nbsp;16. On a voice row (<code>y&nbsp;≠&nbsp;16</code>) the same presses paint, erase, mute, or do nothing. No exception.</div>
+
+            <div class="hb-tip"><strong>You are on the page row when the hint strip on row&nbsp;1 changes colour</strong> and the matching encoder rings light up. That colour change is the cue that power tools are armed — if the hints look like normal draw/single, you are still on a voice row.</div>
+
+            <p>What lives here (cursor on row&nbsp;16 required):</p>
+            <ul>
+              <li><strong><a href="#delete-page">Delete a page</a></strong> — unpaint on the page strip (clears that page’s notes)</li>
+              <li><strong><a href="advanced-sequencing.html#copy-paste">Copy &amp; paste</a></strong> a page (draw = all voices; single = focused voice only)</li>
+              <li><strong>Clear page</strong> for the focused voice — single mode, encoder&nbsp;1 short (current edit page)</li>
+              <li><strong><a href="advanced-sequencing.html#auto-extend">Random fill</a></strong> for the focused voice — single mode only</li>
+              <li><strong><a href="advanced-sequencing.html#note-shift">Note-shift</a></strong> — slide the focused voice in time / across rows — single mode only</li>
+            </ul>
+
+            <h3 class="hb-subsection-heading">Page strip colours</h3>
+            <p>Each LED on row&nbsp;16 is one pattern page. Idle pages use <code>hasNotes</code> so you can see which slots still hold triggers:</p>
+            <table class="opt-table">
+              <thead><tr><th>Look</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Dark blue</strong></td><td>Page <em>has notes</em> — something is stored here.</td></tr>
+                <tr><td><strong>Very dark red</strong></td><td>Page is <em>empty</em> — no triggers on any voice.</td></tr>
+                <tr><td>Bright yellow / green / yellow</td><td>Playing and/or edit focus (see <a href="matrix.html#row16">Matrix → page strip</a>).</td></tr>
+              </tbody>
+            </table>
+
+            <h3 class="hb-subsection-heading" id="delete-page">Delete a page — unpaint on the strip</h3>
+            <p class="lede">On the page row, <strong>unpaint does not erase a single step</strong>. It clears the <em>whole page</em> under the cursor — how you “delete” a slot that still shows as has-notes (dark blue).</p>
+            <ol>
+              <li>Move the cursor onto the <strong>page row</strong> (row&nbsp;16) so the hint strip lights up.</li>
+              <li>Turn encoder&nbsp;4 until the cursor sits on the page LED you want gone (a dark-blue “has notes” slot).</li>
+              <li><strong>Unpaint</strong> that cell with <strong>encoder&nbsp;1</strong> in <a href="play.html#draw">DRAW = L+R</a> (the erase hand) — press enc&nbsp;1 on that strip LED.</li>
+            </ol>
+            <p>What gets wiped:</p>
+            <ul>
+              <li><strong>Draw mode</strong> — every voice on that page (all triggers for those 16 steps).</li>
+              <li><strong>Single mode</strong> — only the <em>focused</em> voice on that page (other lanes keep their notes; the page LED stays “has notes” until every voice is empty).</li>
+            </ul>
+            <p>When the page is fully empty, its strip LED drops to <strong>very dark red</strong>. Playback range (<code>lastPage</code>) updates so trailing empty pages fall out of the walk.</p>
+            <div class="hb-tip"><strong>R mode:</strong> encoder&nbsp;4 on the page strip is <a href="advanced-sequencing.html#copy-paste">copy / paste</a>, not erase. Flip to L+R (or use the clear-page gestures below) when you want to wipe a page from the strip.</div>
+            <div class="hb-warn"><strong>No undo.</strong> Unpainting a page strip slot is immediate. Save to <a href="files.html#file">FILE</a> first if you might want that page back.</div>
+            <div class="hb-tip"><strong>Two different “clears”:</strong> unpaint on the strip (cursor <code>y==16</code>) targets the <em>page LED under the cursor</em>. Encoder&nbsp;1 short in <em>single</em> mode on the page row clears the <em>current edit page</em> for the focused voice only — handy mid-edit, different target. The enc&nbsp;1 + enc&nbsp;4 long chord clears the current edit page too and works from <em>any</em> row (all voices in draw; focused voice in single).</div>
+
+            <h3 class="hb-subsection-heading">Hint colours — read the strip</h3>
+            <p>Row&nbsp;1 of the matrix carries four small colour cues, one above each encoder. The encoder rings mirror the same colours. Memorise these states:</p>
+            <table class="opt-table">
+              <thead><tr><th>State</th><th>Enc 1</th><th>Enc 2</th><th>Enc 3</th><th>Enc 4</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Draw + page row</strong></td><td>Red</td><td>Off</td><td>Off</td><td>Yellow</td></tr>
+                <tr><td><strong>Single + page row</strong></td><td>Red</td><td>White</td><td>Off</td><td>Yellow</td></tr>
+                <tr><td><strong>Copy armed</strong></td><td>Blue (large)</td><td>Off</td><td>Off</td><td>Yellow (large)</td></tr>
+                <tr><td><strong>Note-shift active</strong></td><td>Green (bright)</td><td>Off</td><td>Off</td><td>Blue (bright)</td></tr>
+              </tbody>
+            </table>
+
+            <h3 class="hb-subsection-heading">Draw mode on the page row</h3>
+            <p>Hints: <strong>red</strong> on encoder&nbsp;1, <strong>yellow</strong> on encoder&nbsp;4. The page strip still shows which pages have content; the cursor marks where you are working.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="row16_draw" width="16" height="16" role="img" aria-label="Draw mode page row hints"></canvas>
+              </div>
+              <p class="viz-caption--below">Draw + page row: red cue over enc&nbsp;1, yellow over enc&nbsp;4.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · red</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Stay on / leave page row</td><td>Turn down onto a voice row to leave the power tools.</td></tr>
+                  <tr><th>Short / press</th><td><a href="#delete-page">Delete page</a></td><td>L+R unpaint: clears the <em>page under the cursor</em> (all voices). Strip LED goes dark-red when empty.</td></tr>
+                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear edit page</td><td>Wipes <strong>every voice</strong> on the <em>current edit page</em> (not necessarily the LED under the cursor). No undo.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2 · off</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Page or volume</td><td>Same as elsewhere: <a href="play.html#ctrl">SETTINGS → CTRL</a> = PAGE or VOL.</td></tr>
+                  <tr><th>Short / Long</th><td>—</td><td>Mute overlay needs a <em>voice</em> row (y≠16). Note-shift needs single mode.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3 · off</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Play / pause</td><td>Transport still works from the page row.</td></tr>
+                  <tr><th>Long</th><td>Open filters</td><td>In <em>single</em> mode this still opens filters for the focused voice. In draw mode the page row maps to channel&nbsp;15, which has no filter path.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4 · yellow</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Move along the strip</td><td>Moves the cursor across steps / pages (edit page follows the playhead position of the cursor).</td></tr>
+                  <tr><th>Short</th><td>Copy / paste</td><td><strong>First tap</strong> copies the current edit page (all voices) into a buffer. <strong>Second tap</strong> pastes onto the page you are on now. See <a href="advanced-sequencing.html#copy-paste">Advanced → Copy &amp; paste</a>.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+
+            <h3 class="hb-subsection-heading">Copy armed</h3>
+            <p>After the first encoder&nbsp;4 tap, the page strip goes dark and the hints jump to <strong>large blue</strong> (enc&nbsp;1) and <strong>large yellow</strong> (enc&nbsp;4). Full copy / paste flow: <a href="advanced-sequencing.html#copy-paste">Advanced Sequencing → Copy &amp; paste</a>.</p>
+
+            <h3 class="hb-subsection-heading">Single mode on the page row</h3>
+            <p>Hints: <strong>red</strong> (enc&nbsp;1), <strong>white</strong> (enc&nbsp;2), <strong>yellow</strong> (enc&nbsp;4). Same copy/paste idea, but it only grabs the <em>focused</em> voice — so you can copy a hi-hat lane and paste it onto another voice after you change focus.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="row16_single" width="16" height="16" role="img" aria-label="Single mode page row hints"></canvas>
+              </div>
+              <p class="viz-caption--below">Single + page row: red / white / yellow cues.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · red</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Clear page</td><td>Deletes every note of the <strong>focused voice</strong> on the current edit page. No undo.</td></tr>
+                  <tr><th>Long</th><td>Randomize</td><td>Writes a fresh scale-aware pattern for the focused voice on this page. Detail: <a href="advanced-sequencing.html#auto-extend">Advanced → Random</a>.</td></tr>
+                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear page</td><td>Same clear as short here (focused voice only).</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2 · white</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Enter note-shift</td><td>Opens <a href="advanced-sequencing.html#note-shift">note-shift</a> for the focused voice. Only on the page row.</td></tr>
+                  <tr><th>Long</th><td>—</td><td>Mute overlay needs a voice row — see <a href="advanced-sequencing.html#mutes">Advanced → Mutes</a>.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3 · off</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Play / pause</td><td>Transport.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4 · yellow</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Copy / paste</td><td>First tap copies only the focused voice; second tap pastes onto the voice you are focused on now. See <a href="advanced-sequencing.html#copy-paste">Advanced → Copy &amp; paste</a>.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+
+            <div class="hb-warn"><strong>Clear and randomize have no undo.</strong> If you wipe the wrong page, recover from whatever you last saved under <a href="files.html#file">FILE</a>.</div>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="sequencing.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Sequencing</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="advanced-sequencing.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Advanced Sequencing</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

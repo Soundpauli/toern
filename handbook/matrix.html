@@ -46,9 +46,9 @@
           <section class="hb-sub" id="row1">
             <h2>Row 1 — beat guide</h2>
             <p>In default <a href="sequencing.html#draw">Draw</a> mode the lowest row is <strong>not</strong> a voice lane. It shows a quiet <strong>4/4 orientation bar</strong>: dim markers on steps&nbsp;1, 5, 9, and&nbsp;13 so you can spot beat&nbsp;one and each downbeat while you edit. <strong>No notes can be placed here</strong> — painting starts on row&nbsp;2.</p>
-            <p>With the cursor on <strong>row&nbsp;16</strong>, row&nbsp;1 instead paints <strong>encoder-hint glyphs</strong> so you know which knob is armed for page-wide tools — see <a href="sequencing.html#page-row">Sequencing → The page row</a>.</p>
+            <p>With the cursor on <strong>row&nbsp;16</strong>, row&nbsp;1 instead paints <strong>encoder-hint glyphs</strong> so you know which knob is armed for page-wide tools — see <a href="pages-more.html#page-row">Pages+More</a>.</p>
             <div class="hb-further">
-              <p><strong>Further information.</strong> Move the cursor onto row&nbsp;1 and the strip becomes a control surface: encoder&nbsp;2 long press opens the <a href="sequencing.html#mutes">mute overlay</a> (see that chapter); when input monitoring is enabled, encoder&nbsp;1 rides live input gain and a short press cycles monitor level — the beat markers change tint to match.</p>
+              <p><strong>Further information.</strong> Move the cursor onto row&nbsp;1 and the strip becomes a control surface: encoder&nbsp;2 long press opens the <a href="advanced-sequencing.html#mutes">mute overlay</a> (see that chapter); when input monitoring is enabled, encoder&nbsp;1 rides live input gain and a short press cycles monitor level — the beat markers change tint to match.</p>
             </div>
           </section>
 
@@ -60,14 +60,15 @@
             <h2>Row 16 — the page strip <em>and</em> the power-tool row</h2>
             <p>The top row of the matrix carries the <strong>page strip</strong>: one LED per pattern page (a song holds up to 16 pages). But row 16 has a second job that is just as important: <strong>it is where every "operate on the whole pattern" tool lives</strong>. The same gesture that paints a single note on a voice row turns into a page-wide action when your cursor sits on row 16.</p>
 
-            <div class="hb-tip"><strong>Row 16 is where these features live — and nowhere else:</strong>
+            <div class="hb-tip"><strong>Row 16 is where these features live — and nowhere else</strong> (cursor must be on the page strip, <code>y==16</code>):
               <ul>
+                <li><a href="pages-more.html#delete-page">Delete a page</a> by unpainting its strip LED (L+R)</li>
                 <li>Copy &amp; paste a page</li>
-                <li>Clear an entire page (single mode)</li>
+                <li>Clear the current edit page (single mode)</li>
                 <li>Random / scale-aware fill for the focused voice (single mode)</li>
                 <li>Note-shift — moving a whole voice's notes in time / across rows (single mode)</li>
               </ul>
-              Step off row 16 onto any voice row and these gestures turn back into per-note editing. The cue that the power tools are live is the <strong>hint strip on row 1</strong>: its colours change the moment your cursor crosses onto row 16. See <a href="sequencing.html#page-row">Sequencing → The page row</a> for colours and every encoder action.
+              Step off row 16 onto any voice row and these gestures turn back into per-note editing. The cue that the power tools are live is the <strong>hint strip on row 1</strong>: its colours change the moment your cursor crosses onto row 16. See <a href="pages-more.html#page-row">Pages+More</a> for colours and every encoder action.
             </div>
 
             <article class="hb-device">
@@ -128,7 +129,7 @@
             <h2>The cursor &amp; the playhead</h2>
             <p>Two things move on the grid during playback — don't confuse them:</p>
             <ul>
-              <li>The <strong>edit cursor</strong> is where the next gesture will land. In draw mode it is at <code>(current_x, current_y)</code> set by encoders 4 (column) and 1 (row). You can disguise it (under <a href="menus.html#play">PLAY → CRSR</a>) as a thin cross, a channel-readout dot, or a big block.</li>
+              <li>The <strong>edit cursor</strong> is where the next gesture will land. In draw mode it is at <code>(current_x, current_y)</code> set by encoders 4 (column) and 1 (row). You can disguise it (under <a href="play.html#crsr">SETTINGS → CRSR</a>) as a thin cross, a channel-readout dot, or a big block.</li>
               <li>The <strong>playhead</strong> is a <strong>red vertical line</strong> that runs left to right across the visible page — the column the sequencer is currently sounding. Notes under it light brighter as they fire; muted lanes stay dark.</li>
             </ul>
             <p>When playback is stopped, only the cursor moves. When playback is running, the red playhead marches across the page while the cursor stays wherever you left it.</p>
@@ -144,8 +145,7 @@
             <ul>
               <li><strong>Draw</strong> — full 16×16 grid view, every voice visible at full intensity.</li>
               <li><strong>Single</strong> — focus on one voice at a time, other voices dimmed.</li>
-              <li><strong>Paint (L+R)</strong> — two-hand draw: encoder&nbsp;1 picks the row / erases, encoder&nbsp;4 places and paints.</li>
-              <li><strong>R-mode</strong> — one-hand draw on encoder&nbsp;4; encoder&nbsp;1 enters a temporary full mute.</li>
+              <li><strong>Set / remove triggers</strong> — L+R (two-hand write/erase) or R (one-hand toggle + break mute); see <a href="sequencing.html#paint">Sequencing</a>.</li>
             </ul>
             <p>Menu mode overlays the whole matrix with text and submenu dots; you are still "in" your music — just not drawing on it. The <a href="menus.html">Menu map</a> covers every screen.</p>
           </section>

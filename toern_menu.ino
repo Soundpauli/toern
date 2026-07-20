@@ -21,7 +21,7 @@ extern uint8_t currentColorScheme;
 extern void applyColorScheme(uint8_t scheme);
 extern uint16_t drawRFullMuteCustomUnmuteMask;
 
-// PLAY>MUTE & DRAW-R mask: user CH1..CH16 ↔ internal mute index 0..15 (same as draw: CH1=y2→internal 1; CH16=y1→internal 0).
+// SETTINGS>MUTE & DRAW-R mask: user CH1..CH16 ↔ internal mute index 0..15 (same as draw: CH1=y2→internal 1; CH16=y1→internal 0).
 static inline int userChToInternalDrawR(int uch) {
   if (uch < 1) uch = 1;
   if (uch > 16) uch = 16;
@@ -47,14 +47,14 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"WAV", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
   {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LOUT, PREV, 2-CH)
-  {"PLAY", 19, false, nullptr},         // PLAY submenu (FLW, PREV, VIEW, PMD, LOOP)
+  {"SETT", 19, false, nullptr},         // SETTINGS submenu (FLW, PREV, VIEW, PMD, LOOP)
   {"RECS", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"ETC", 34, false, nullptr}           // ETC submenu (AUTO, RST)
 };
 
-// LOOK/PLAY submenu pages (PLAY menu uses LOOK submenu)
+// LOOK/SETTINGS submenu pages (SETTINGS menu uses LOOK submenu)
 MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"FLW", 10, false, nullptr},          // Flow Mode
   {"PREV", 33, false, nullptr},         // Preview trigger mode (ON/PRSS)
@@ -1136,7 +1136,7 @@ FLASHMEM void showLookMenu() {
   // (pageIndex/currentPageInfo already computed above)
   
   // Draw page indicator as a line at y=maxY (right-aligned)
-  // Match the parent menu color (PLAY).
+  // Match the parent menu color (SETTINGS).
   const CRGB parent = currentMenuParentTextColor();
   const CRGB parentDim = dimIconColorFromText(parent);
   int startX = (int)maxX - LOOK_PAGES_COUNT + 1;
@@ -1149,7 +1149,7 @@ FLASHMEM void showLookMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // PLAY submenu: encoder 2 = value on toggle pages
+  // SETTINGS submenu: encoder 2 = value on toggle pages
   CRGB indicatorColor = currentMenuParentTextColor();
   const bool playValuePage = (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
       mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
@@ -1686,7 +1686,7 @@ static inline CRGB menuTextColorFromCol(uint8_t colIndex) {
 
 static inline CRGB currentMenuParentTextColor() {
   // Submenus should match their main-menu parent item color:
-  // PLAY=col[6], RECS=col[7], MIDI=col[8], VOL=col[5], ETC=col[14]
+  // SETT=col[6], RECS=col[7], MIDI=col[8], VOL=col[5], ETC=col[14]
   if (inLookSubmenu) return menuTextColorFromCol(6);
   if (inRecsSubmenu) return menuTextColorFromCol(7);
   if (inMidiSubmenu) return menuTextColorFromCol(8);
@@ -1952,12 +1952,12 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
-    case 19: // PLAY - Submenu
-      // PLAY = settings icon
+    case 19: // SETTINGS - Submenu
+      // SETTINGS = settings icon
       {
         const CRGB tc = menuTextColorFromCol(6);
         showIcons(ICON_SETTINGS_BIG, dimIconColorFromText(tc));
-        drawText("PLAY", 2, 3, tc);
+        drawText("SETT", 2, 3, tc);
       }
       break;
       
@@ -3768,7 +3768,7 @@ FLASHMEM void switchMenu(int menuPosition){
         break;
         
         case 19:
-        // Enter LOOK/PLAY submenu at first page
+        // Enter LOOK/SETTINGS submenu at first page
         inLookSubmenu = true;
         currentLookPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — MIDI</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="handbook-fonts.css" />
+  <link rel="stylesheet" href="handbook.css" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-icons.js"></script>
+  <script src="handbook-nav.js"></script>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <section class="handbook-page" id="page-midi">
+          <h2 class="handbook-page__title">MIDI</h2>
+          <p class="handbook-page__summary">TRS MIDI in/out — note mapping, transport, what you send and receive, latency offsets, plus an optional analog PPQN pulse. Everything under root menu <strong>MIDI</strong>.</p>
+
+          <section class="hb-sub" id="midi-menu">
+            <h2>The MIDI submenu</h2>
+            <p class="lede">Six pages. Encoder&nbsp;4 walks siblings; most values turn on encoder&nbsp;3. Pair with <a href="tempo-midi.html#bpm">BPM → INT/EXT</a> for full master/slave.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="mr_midi" width="16" height="16" role="img" aria-label="MIDI root"></canvas>
+              </div>
+              <p class="viz-caption--below">MIDI family entry on the root menu.</p>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="ch">
+            <h2>CH — note mapping</h2>
+            <p class="lede">How incoming MIDI notes land on voices.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_ch" width="16" height="16" role="img" aria-label="MIDI CH"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>YPOS</strong></td><td>MIDI channel&nbsp;N plays voice row&nbsp;N — fastest for a multi-channel controller.</td></tr>
+                  <tr><td><strong>MIDI</strong></td><td>Notes hit whichever voice is currently selected on the grid.</td></tr>
+                  <tr><td><strong>KEYS</strong></td><td>Pitch drives synth notes; sample voices trigger from velocity.</td></tr>
+                </tbody>
+              </table>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>YPOS / MIDI / KEYS</td><td>Survives reboot.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
+              </div>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="tran">
+            <h2>TRAN — transport</h2>
+            <p class="lede">Start / stop / continue messages.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_tran" width="16" height="16" role="img" aria-label="MIDI TRAN"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>OFF</strong></td><td>Ignore and never send transport.</td></tr>
+                  <tr><td><strong>GET</strong></td><td>Listen for MIDI start/stop so an external sequencer can run <span class="hb-brand">TŒRN</span>.</td></tr>
+                  <tr><td><strong>SEND</strong></td><td>Transmit your transport so external gear follows.</td></tr>
+                </tbody>
+              </table>
+              <p class="hb-device__intro">GET pairs with EXT clock; SEND pairs with INT clock.</p>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="send">
+            <h2>SEND — what leaves the MIDI out</h2>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_send" width="16" height="16" role="img" aria-label="MIDI SEND"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>CLCK</strong></td><td>Clock pulses only — simplest sync-out.</td></tr>
+                  <tr><td><strong>NOTE</strong></td><td>Notes only — drive an external tone module.</td></tr>
+                  <tr><td><strong>BOTH</strong></td><td>Clock + notes.</td></tr>
+                </tbody>
+              </table>
+              <div class="hb-tip">No separate OFF on this page — mute notes via <a href="#rcve">RCVE</a>, or stop being clock master via <a href="tempo-midi.html#bpm">BPM → EXT</a>.</div>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="rcve">
+            <h2>RCVE — incoming notes</h2>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_rcve" width="16" height="16" role="img" aria-label="MIDI RCVE"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>NOTE</strong></td><td>Incoming notes trigger internal voices per <a href="#ch">CH</a>.</td></tr>
+                  <tr><td><strong>OFF</strong></td><td>Ignore notes — pure sequencer / recorder.</td></tr>
+                </tbody>
+              </table>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="sync">
+            <h2>SYNC — SNC1 / SNC2 offsets</h2>
+            <p class="lede">Millisecond latency makeup when two clocked devices flam.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_sync" width="16" height="16" role="img" aria-label="MIDI SYNC"></canvas>
+              </div>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>SNC1 / SNC2</td><td>SNC1 = send path; SNC2 = receive path.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Offset −127…+127&nbsp;ms</td><td>Nudge in ±2&nbsp;ms steps until downbeats click as one.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
+              </div>
+            </article>
+            <div class="hb-tip"><strong>Tuning:</strong> two devices on the same downbeat; adjust SNC2 until the kicks land together. Apply the matching negative on the other device’s send path if available.</div>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="ppqn">
+            <h2>PPQN — analog clock pulse</h2>
+            <p class="lede">Optional analog clock on Teensy pin&nbsp;31 (J11 / I2SC_3V) — independent of the TRS MIDI jacks. Follows INT BPM or EXT MIDI clock. Pulse width ~12&nbsp;ms.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_ppqn" width="16" height="16" role="img" aria-label="MIDI PPQN"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Control</th><th>Encoder</th><th>Options</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Polarity</strong></td><td>2 turn</td><td><strong>+</strong> active high · <strong>−</strong> active low</td></tr>
+                  <tr><td><strong>Rate</strong></td><td>3 turn</td><td><strong>OFF</strong>, then <strong>1, 2, 4, 8, 12, 16, 24, 32</strong> pulses per quarter note</td></tr>
+                  <tr><td>Page nav</td><td>4 turn</td><td>Other MIDI siblings</td></tr>
+                </tbody>
+              </table>
+              <p class="hb-device__intro">Rate <strong>1</strong> = one pulse per beat; <strong>24</strong> ≈ classic Sync24 density; <strong>32</strong> denser than MIDI’s native 24&nbsp;PPQN.</p>
+              <div class="hb-tip"><strong>DIY 3.5&nbsp;mm adapter:</strong> tap the onboard <strong>JST PH 1×05</strong> header <strong>J11</strong> (silk / net <strong>I2SC_3V</strong>). Middle and right pins: <strong>white</strong> = Teensy pin&nbsp;31 → jack <strong>TIP</strong>; <strong>blue</strong> = GND → jack <strong>SLEEVE</strong>. 3.3&nbsp;V logic — not a MIDI DIN or line-level audio input.</div>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="patterns">
+            <h2>Common sync scenarios</h2>
+            <table class="opt-table">
+              <thead><tr><th>Scenario</th><th>BPM</th><th>TRAN</th><th>SEND</th><th>RCVE</th></tr></thead>
+              <tbody>
+                <tr><td><span class="hb-brand">TŒRN</span> solo</td><td>INT</td><td>OFF</td><td>CLCK*</td><td>OFF</td></tr>
+                <tr><td>Master → drum machine</td><td>INT</td><td>SEND</td><td>CLCK</td><td>OFF</td></tr>
+                <tr><td>Slave to a DAW</td><td>EXT</td><td>GET</td><td>CLCK*</td><td>NOTE if needed</td></tr>
+                <tr><td>Synth-11 from a keyboard</td><td>INT</td><td>OFF</td><td>CLCK*</td><td>NOTE</td></tr>
+                <tr><td>Two <span class="hb-brand">TŒRNs</span>, one leads</td><td>INT / EXT</td><td>SEND / GET</td><td>CLCK / …</td><td>OFF</td></tr>
+              </tbody>
+            </table>
+            <p class="how">*SEND has no OFF — pick CLCK when you only care about local play; the slave simply ignores unused clock if unplugged.</p>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Adjacent chapters">
+          <a class="hb-pager__link hb-pager__link--prev" href="play.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Settings</span></a>
+          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+          <a class="hb-pager__link hb-pager__link--next" href="song.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Song</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>
