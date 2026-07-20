@@ -1,209 +1,216 @@
-Attention: This project is currently under very active development. 
-Stay tuned for exciting updates!
+# TŒRN `[tɜːn]`
+
+**DIY open-source hardware sampler-sequencer** — by [warft_ctrl](mailto:jpkuntoff@gmail.com)
+
+> Say it like *turn*. As in: turn the knobs. Turn a doodle into a beat. Turn “I can’t play piano” into “wait, that slap though.”
+
+TŒRN is a sequenced musical device for beginners, makers, and anyone who likes blinking lights more than plugin menus. Think **Etch-A-Sketch™ energy**, but instead of drawing a wobbly staircase you draw drums, synths, and happy accidents — on a vivid **16×16 RGB LED matrix** that is both the screen *and* the keyboard.
+
+It sits on a Teensy 4.1, runs from a Micro SD card full of your WAVs, and is happy on a desk, in a backpack, or on battery at the park where strangers will ask “what *is* that?”
+
+**Status:** under very active development. Things move fast. Stay tuned, and don’t be surprised if yesterday’s weird bug is today’s charming feature (or the other way around).
 
 ---
 
-## External Libraries & Modifications
+## What it is (in plain language)
 
-This project uses several external libraries, some of which have been modified from their standard versions:
+You get:
 
-### Modified Libraries
+- **8 sample voices** for drums, one-shots, loops, and “that weird recording from the metro”
+- **1 three-voice polyphonic synth** with presets (bass, keys, chiptune, pads… the usual suspects)
+- **2 monophonic synths** with LFO and arpeggiator for leads that refuse to sit still
+- A **16-step × 16-page** sequencer (256 steps of room to overthink), pattern chaining into songs, MIDI in/out, filters, bitcrush, reverb, and enough real-time knobs to keep your hands busy and your laptop jealous
 
-- **ResamplingReader.h** (for `teensy-variable-playback` library)
-  - Custom implementation added to support variable playback rates with interpolation
-  - Enhanced with multi-channel support, loop types (repeat/ping-pong), and crossfading capabilities
-  - Located in `src/resamplerReader.h`
+No laptop required once it’s built. Samples live on the SD card. Patterns autosave. You twist, tap, and suddenly it’s 2 a.m.
 
-- **Freeverb Effect** (`effect_freeverb_dmabuf`)
-  - Modified version using DMAMEM for improved memory management on Teensy 4.1
-  - Custom implementation optimized for the audio processing pipeline
-  - Located in `src/effect_freeverb_dmabuf.h` and `src/effect_freeverb_dmabuf.cpp`
+For the friendly guided tour (first beat in about a minute), open the **[handbook](./handbook/index.html)** in this repo.
 
-- **FastLED Library**
-  - Configured with `FASTLED_ALLOW_INTERRUPTS 0` to prevent timing conflicts with audio processing
-  - Custom wrapper functions (`FastLEDshow()`, `FastLEDclear()`) for coordinated display updates
+---
 
-- **MIDI Library**
-  - Custom instance created with modified buffer sizes:
-    - `SERIAL8_RX_BUFFER_SIZE 2048` (increased from default 64 for high-frequency clock messages)
-    - `SERIAL8_TX_BUFFER_SIZE 128` (increased for safety)
-  - Custom MIDI settings struct for TRS MIDI communication
+## A tiny history
 
-### Standard Libraries Used
+TŒRN builds on the legacy of the **NI404**, with more features, fewer cables dangling off the side, and a custom PCB where everything mounts cleanly. The older “extra boards and hope” era is over.
 
-- **TeensyPolyphony** by Nic Newdigate — Core polyphonic audio engine
-- **Audio Library** (PJRC) — Standard Teensy audio processing
-- **WS2812Serial** — LED matrix driver
-- **i2cEncoderLibV2** — Rotary encoder control
-- **FastTouch** — Touch button interface
+Meet the glow-up:
 
-### SD card over USB (Menu → ETC → SD)
+- **RGB-I2C rotary encoders** — smoother, prettier, and they light up like they mean it  
+- **Custom PCB** — order it, put it together; the hard wiring homework is mostly done  
+- **USB-C** — because micro-USB was a character-building experience we no longer need  
+- **LiPo charging port** — optional battery for true “make beats on a train” energy (battery not included; we trust you with electricity)  
+- **Proper audio I/O** — 6.35 mm headphone out, line in/out, mic in, *plus* a built-in mic for “sample the room right now” moments  
+- **TRS MIDI in/out** — play nice with the rest of your setup  
+- **On/off switch** — underrated luxury  
+- **Touch buttons** — for the things knobs shouldn’t monopolize  
+- **Laser-cut acrylic case** — files included; looks finished, not “breadboard cosplay”  
+- **JST connectors** — **no soldering required** for the usual build path  
 
-TŒRN does **not** mount the microSD as USB mass storage. While **Menu → ETC → SD** is open (screen: WAIT → OK), you can browse and transfer files over USB Serial.
+Open source as always: schematics, code, and design files are here for you to poke, fork, and improve.
 
-**Primary (browser):** open [https://sdtool.tyng.app](https://sdtool.tyng.app) in desktop **Chrome or Edge**, click **Connect**, pick the Teensy serial port. Stay on ETC → SD for the whole session. WAV uploads are converted to 44.1 kHz mono 16-bit.
+---
 
-**Secondary (local CLI / scripting):** with any USB Type that includes Serial (e.g. **Serial + MIDI**):
+## Features (the longer version)
+
+### Sequencer
+
+- **16 channels** in spirit: 8 sample voices (1–8), one 3-voice poly synth (11), two mono synths (13–14)  
+- **16 steps per page × 16 pages** → 256 steps per song arrangement space  
+- Store up to **999 patterns**, **999 samples**, **100 samplepacks**  
+- **Autosave / autoload** so your 3 a.m. genius doesn’t vanish at boot  
+- **Switch patterns live** without stopping playback  
+- **Song mode**: chain up to **64** patterns into something resembling a composition  
+- Pattern ops: copy/paste, transpose page/channel (±1 octave), smart random notes (major/minor + rhythm ideas), clear page/channel  
+
+### Sample voices (channels 1–8)
+
+- Up to **~12 seconds** per voice at 44.1 kHz  
+- Browse and load samples **while playing** (yes, really)  
+- Per-voice start/end trim, forward/reverse  
+- Samplepacks (including pack 0 = custom per-voice assignment)  
+- Record from **built-in mic / line-in / mic-in** straight in the sample browser  
+- Save or merge used samples back to the SD card as a pack  
+
+### Synth voices
+
+**Channel 11 — poly synth**
+
+- 3 oscillators per voice × 3 voices  
+- Presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS  
+- Per-voice ADSR, filter envelope, pan, volume, pitch (cents & semitones), waveform  
+
+**Channels 13–14 — mono synths**
+
+- 2 oscillators each  
+- ADSR, LFO (rate/depth), arpeggiator (step/span)  
+- Waveforms: sine, saw, square, triangle  
+
+### Effects (all channels)
+
+- **ADSR** — attack / decay / sustain / release (0–32 range)  
+- **Bitcrusher** — bit depth 1–16 (0 = bypass), sample-rate reduction down to glorious crunch  
+- **Filter** — LP / HP / BP, 0–10 kHz, resonance 0.7–5.0, smooth transitions  
+- **Reverb** — room size, damping, wet/dry  
+- Fast filter access on encoder #3 during runtime (assignable default per channel)  
+
+### MIDI, clock & extras
+
+- TRS MIDI in/out, clock send/receive, notes, transport  
+- BPM **40–300**, internal clock, external MIDI clock, tap tempo via touch  
+- Live recording / looping (touch-hold), up to ~12 s per voice  
+- Note probability, velocity, condition triggers (those “only every other bar” tricks)  
+- Global transpose, per-channel detune & octave, fine cents on the poly synth  
+- Mute / solo, pattern modes (OFF, ON, SONG, NEXT)  
+- Stereo routing options, optional external WS2812 strip for ripple eye-candy synced to the music  
+
+---
+
+## Tech specs
+
+| | |
+|---|---|
+| **Brain** | Teensy 4.1 + Audio Board |
+| **Memory** | 16 MB PSRAM; Micro SD slot (up to 32 GB class of card you already own) |
+| **Audio** | 44.1 kHz, 16-bit mono WAV |
+| **Controls** | 4× RGB illuminated I2C rotary-push encoders, 3 touch switches |
+| **Display** | 16×16 RGB LED matrix (FastLED); up to 2 modules → 32×16 |
+| **LED strip** | External 5 V WS2812 connector (configurable length) |
+| **I/O** | 6.35 mm headphones, line in/out, mic in; built-in mic; TRS MIDI in/out |
+| **Power** | USB-C or optional LiPo + charging |
+
+---
+
+## SD card over USB (Menu → ETC → SD)
+
+TŒRN does **not** mount the Micro SD as USB mass storage. That would be too easy, and also fight the audio engine. Instead:
+
+While **Menu → ETC → SD** is open (screen: WAIT → OK), you can browse and transfer files over **USB Serial**.
+
+### Primary — browser tool
+
+1. On the device: open **Menu → ETC → SD**  
+2. On a computer: open **[https://sdtool.tyng.app](https://sdtool.tyng.app)** in desktop **Chrome or Edge**  
+3. Click **Connect**, pick the Teensy serial port  
+4. Stay on ETC → SD for the whole session  
+
+WAV uploads are converted in the browser to **44.1 kHz mono 16-bit**. Drag folders, multi-file drops, and zip archives are supported.
+
+### Secondary — local CLI / scripting
+
+Any USB Type that includes Serial (e.g. **Serial + MIDI**):
 
 ```bash
-cd tools/sd-tool-standalone
+cd standalone-tools/sd-tool-standalone
 pip install pyserial
 python3 toern_sd.py -p /dev/cu.usbmodemXXXX list /
 # also: put / rm / mkdir / get
-python3 toern_sd.py web   # optional local UI at http://127.0.0.1:8787
+python3 toern_sd.py web       # optional local UI at http://127.0.0.1:8787
 ```
+
+Insert or eject the SD card only with the unit **off** — the firmware re-indexes on boot.
+
+---
+
+## Repo map (where stuff lives)
+
+| Path | What’s there |
+|------|----------------|
+| `toern.ino` + `toern_*.ino` | Firmware (the fun / terrifying part) |
+| `src/` | Modified audio bits (resampler, freeverb DMA) |
+| `PCB/` | Hardware revisions (currently rev G territory) |
+| `handbook/` | Human-friendly operator’s guide |
+| `tools/` / `standalone-tools/` | Helpers; SD file tool lives in `standalone-tools/sd-tool-standalone` |
+| `website/` | Project site bits |
+
+---
+
+## External libraries & modifications
+
+This project leans on several libraries. Some are stock; some got lovingly (and necessary-ly) poked.
+
+### Modified
+
+- **ResamplingReader.h** (`teensy-variable-playback`)  
+  Variable rates, interpolation, multi-channel, loop types (repeat / ping-pong), crossfading — in `src/resamplerReader.h`
+
+- **Freeverb** (`effect_freeverb_dmabuf`)  
+  DMAMEM-friendly reverb for Teensy 4.1 — `src/effect_freeverb_dmabuf.*`
+
+- **FastLED**  
+  `FASTLED_ALLOW_INTERRUPTS 0` so LEDs and audio don’t argue mid-beat; custom `FastLEDshow()` / `FastLEDclear()` wrappers
+
+- **MIDI**  
+  Bigger Serial8 buffers for dense clock traffic (`RX 2048`, `TX 128`) and custom TRS MIDI settings
+
+### Standard / upstream
+
+- **TeensyPolyphony** by Nic Newdigate — polyphonic heart of the thing  
+- **Audio Library** (PJRC)  
+- **WS2812Serial**, **i2cEncoderLibV2**, **FastTouch**
+
+---
+
+## Get one / get involved
+
+- **Build or fork it** — everything lives in this repo. Makers, developers, and musicians are all invited to tweak and share.  
+- **Prefer a finished unit?** Don’t want to become a part-time PCB archaeologist? Write to **jpkuntoff@gmail.com** for a pre-assembled TŒRN or a custom collaboration.  
+- **Handbook** — start at [`handbook/index.html`](./handbook/index.html).  
+- **Issues & ideas** — open an issue or leave a note; open source gets better when people actually poke it.
 
 ---
 
 ## License
 
-- **Software/code**: MIT License — Free for personal and commercial use (see [LICENSE](./LICENSE)).
-- **Hardware design files** (schematics, PCB layouts, Gerbers, etc.):  
-  Licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).  
-  Free to use and modify for personal, non-commercial purposes only.  
-  Commercial use is **not permitted** without prior written consent.
+- **Software / code**: [MIT](./LICENSE) — free for personal and commercial use.  
+- **Hardware design files** (schematics, PCB layouts, Gerbers, etc.): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — personal / non-commercial use and modification. **Commercial hardware use needs written consent.**
 
-For commercial licensing of the hardware, please contact:  
-Jan aka warft_ctrl — jpkuntoff@gmail.com (Hamburg, Germany)
-
-
-# TŒRN [tɜːn] (by warft_ctrl):
-**DIY Open-Source Hardware Sampler-Sequencer**  
-A sequenced driven musical device for beginners, makers and enthusiasts.
-
+Commercial hardware licensing: Jan aka **warft_ctrl** — jpkuntoff@gmail.com (Hamburg, Germany)
 
 ---
 
-## INTRODUCING TŒRN  
-The TŒRN (spoken as: [tɜːn]) builds on the legacy of the NI404 with **enhanced features**, a streamlined design, and superior functionality. From upgraded RGB-I2C rotary encoders to a custom PCB with everything pre-assembled, tœrn_x408 is designed to be the ultimate **DIY sampler-sequencer**—accessible, powerful, and inspiring.  
+## Thank you
 
-No more additional cables or extensions: every component is directly mounted on the PCB, ensuring ease of assembly and a clean build. With **new connectivity options**, expanded audio capabilities, and an updated design, this device is ready to meet the needs of modern music creators.  
+Huge thanks to **Paul Stoffregen** and the PJRC crew for Teensy, to the wider open-source audio community, and an especially loud shoutout to **Nic Newdigate** for teensy-polyphony — basically the soul of this project.
 
----
+Made with too many late nights and exactly the right number of RGB LEDs.
 
-## WHAT'S NEW IN TŒRN 
-
-- **Upgraded Encoders**: High-quality RGB-I2C rotary encoders for smoother and more precise control.  
-- **Custom PCB**: Fully assembled, simplifying the building process—just order and put it together.  
-- **USB-C Port**: Replacing micro-USB for faster and more reliable connectivity.  
-- **Battery Charging Port**: Added support for internal LiPo batteries (not included) for true portability.  
-- **Expanded Audio I/O**:  
-  - **6.35mm headphone output** for studio-grade monitoring.  
-  - **Line-in and line-out jacks (6.35mm)** for external audio integration.  
-  - **Mic-in (6.35mm)** for vocal recording.  
-  - **Built-in internal microphone** for direct sampling without extra hardware.  
-- **TRS MIDI In/Out Ports**: Enhanced MIDI capabilities for seamless integration into larger setups.  
-- **On/Off Switch**: Power control for added convenience.  
-- **Touch Buttons**: For enabling advanced features and future expansions.  
-- **New Casing**: Laser-cut acrylic housing for a polished, durable finish (files included).  
-- **No soldering required**: All connections are JST-Connectors for easy building
-
----
-
-## OPEN-SOURCE AND COMMUNITY-DRIVEN  
-As always, TŒRN remains **fully open-source**, with all schematics, code, and design files available for download. The project encourages collaboration and creativity, inviting users to tweak, modify, and share their own innovations.  
-
----
-
-## FEATURES  
-
-- **Playful Design**: Inspired by the Etch-A-Sketch™ for intuitive and beginner-friendly music creation.  
-- **Vivid 16x16 RGB LED Grid**: Dynamic visual feedback for a seamless creative process.  
-- **Real-Time Control**: Adjust parameters like BPM, volume, effects, and more on the fly—ideal for live performances.  
-- **Customizable Workflow**: Load your own samples (WAV format) via SD card. Supports 8 sample voices plus 3 synth voices.  
-
-### **Sequencer**
-- **16 channels total**: 8 sample voices (channels 1-8), 1 three-voice polyphonic synth (channel 11), 2 monophonic synths (channels 13-14)
-- **Pattern Structure**: 16 steps per page, 16 pages (256 steps total per song)
-- **Storage**: Up to 999 patterns, 999 samples, 100 samplepacks
-- **Autosave/autoload** functionality for convenience
-- **Real-time pattern switching** during playback without stopping
-- **Song Mode**: Chain up to 64 patterns into complete songs
-- **Pattern Operations**: Copy/paste patterns, transpose page/channel (±1 octave), intelligent random note generation (major/minor scales, rhythm patterns), clear page/channel
-
-### **Sample Voices** (Channels 1-8)
-- **8 parallel sample voices** with individual sample assignment
-- Each voice can load samples up to 12 seconds at 44.1kHz
-- **Sample Browser**: Manage up to 999 samples from SD card in real-time during playback
-- **Sample Trimming**: Individual start/end points per voice (0-100% seek/seekEnd)
-- **Sample Direction**: Forward/reverse playback control
-- **Samplepack Support**: Up to 100 samplepacks, live loading during playback
-- **Samplepack 0**: Custom per-voice sample assignment
-- **Recording**: Direct recording from built-in mic/line-in/mic-in in sample browser (input selectable via settings)
-- **Save/Merge**: Save used samples as samplepack to SD card
-
-### **Synth Voices**
-- **Channel 11**: Three-voice polyphonic synth
-  - 3 oscillators per voice (POLY_VOICES = 3)
-  - 10 instrument presets: BASS, KEYS, CHPT (chiptune), PAD, WOW, ORG (organ), FLT (flute), LEAD, ARP (arpeggio), BRSS (brass)
-  - Independent ADSR envelope per voice
-  - Independent filter envelope per voice
-  - Per-voice panning, volume, pitch offset (cents and semitones), waveform selection
-- **Channels 13-14**: Two monophonic synths
-  - 2 oscillators each
-  - Full ADSR envelope control
-  - LFO modulation (rate, depth)
-  - Arpeggiator (step, span)
-  - Waveform selection (SINE, SAW, SQUARE, TRIANGLE)
-
-### **Effects** (All Channels)
-- **ADSR Envelope**: Attack, Decay, Sustain, Release (0-32 range)
-- **Bitcrusher**: Bit depth (1-16 bits, 0 = bypass), sample rate reduction (1000Hz to 44117Hz)
-- **Filter**: Low-pass, High-pass, Band-pass filters
-  - Frequency: 0-10000 Hz
-  - Resonance: 0.7-5.0
-  - Smooth filter transitions
-- **Reverb**: Room size (0.0-0.79), damping (0.01-0.8), wet/dry blend
-- **Fast Filter Access**: Assignable default filter per channel, directly accessible on encoder #3 during runtime
-
-### **MIDI**
-- **MIDI Input**: TRS MIDI in, global MIDI channel selection (1-16), MIDI clock receive, note input, transport control
-- **MIDI Output**: TRS MIDI out, global MIDI out (channels 1-14), single MIDI out channel selection (1-16 per voice), MIDI clock send, note output
-
-### **Clock & Timing**
-- **BPM Range**: 40-300 BPM
-- **Clock Modes**: Internal clock, external MIDI clock (via TRS), tap tempo via touch controls
-
-### **Additional Features**
-- **Live Recording**: 8-channel live-looping, up to 12 seconds per voice, touch-hold recording
-- **Note Properties**: Velocity (1-16, maps to MIDI 1-127), probability (0%, 25%, 50%, 75%, 100%), condition triggers (1/1, 1/2, 1/4, 1/8, 1/X, 2/1, 4/1, 8/1, X/1)
-- **Pitch & Tuning**: Global transpose (semitones), per-channel detune (-12 to +12 semitones), per-channel octave shift (-3 to +3 octaves), fine tuning (-50 to +50 cents for synth channel 11)
-- **Mute/Solo**: Mute individual channels or entire patterns, solo mode
-- **Pattern Mode**: OFF, ON, SONG, NEXT modes
-- **Stereo Routing**: Configurable stereo channel routing (main/preview split, L+R channel separation)
-- **LED Strip**: External WS2812 strip connector for ripple visualization synced to audio and triggered notes
-
----
-
-## TECH SPECS 
-
-- **Microcontroller**: Teensy 4.1 + Audio Board
-- **Memory**: 16MB PSRAM, slot for up to 32GB Micro SD card
-- **Audio Sample Rate**: 44.1kHz, 16-bit WAV (mono)
-- **Encoders**: 4x RGB illuminated I2C rotary-push encoders
-- **Display**: 16x16 RGB LED Matrix (powered by FastLED), supports up to 2 modules (32x16)
-- **LED Strip**: 5V WS2812 strip connectable externally via onboard connector (ripple visualization, configurable length)
-- **Audio I/O**: 
-  - 6.35mm headphone output
-  - 6.35mm line-in and line-out jacks
-  - 6.35mm mic-in jack
-  - Built-in internal microphone
-- **MIDI**: TRS MIDI in/out ports
-- **Power**: USB-C or optional LiPo battery with charging port
-- **Touch Controls**: 3 touch-sensitive switches  
----
-
-## GET INVOLVED  
-
-All source code and 3D files are available under the MIT License. Whether you're a maker, developer, or musician, the tœrn_x408 invites you to explore, modify, and share your ideas.  
-
-
-**Order a TŒRN**: Don’t want to build your own? Contact us at **JPKuntoff@gmail.com** to purchase a pre-assembled unit or collaborate on your custom build.  
-
----
-
-## THANK YOU  
-Special thanks to Paul Stoffregen and the PJRC team for the incredible Teensy platform, as well as the open-source community for contributing essential libraries. A heartfelt shoutout to Nic Newdigate for the teensy-polyphony library, the soul of this project.  
-
-Jan aka warft_ctrl (formaly known as soundpauli)
-Hamburg, May 2026  
+**Jan aka warft_ctrl** (formerly soundpauli)  
+Hamburg, 2026
