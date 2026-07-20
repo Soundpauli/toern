@@ -802,13 +802,13 @@ void showWave() {
   bool selectedIsFile = (selectedIdx >= 0 && selectedIdx < (int)g_wavPickCount &&
                          sampleBrowserEntryTypeAt(selectedIdx) == 2);
 
-  drawIndicator('L', 'P', 1);
-  Encoder[0].writeRGBCode(0xFF00FF);
+  // Matrix indicators only — encoder RGB is owned below (matrix color may differ from ring color)
+  drawIndicator('L', 'P', 1, false, false);
   if (selectedIsFile) {
-    drawIndicator('L', 'Y', 2);  // Encoder 1: trim/seekEnd
-    drawIndicator('L', 'G', 3);  // Encoder 2: load selected file
+    drawIndicator('L', 'Y', 2, false, false);  // Encoder 1: trim/seekEnd
+    drawIndicator('L', 'G', 3, false, false);  // Encoder 2: load selected file
   }
-  drawIndicator('L', 'W', 4);  // Encoder 3: combined browser
+  drawIndicator('L', 'W', 4, false, false);  // Encoder 3: combined browser
 
   // Encoder 2 rotation is unused in SET_WAV.
   currentMode->pos[1] = 0;
@@ -817,12 +817,30 @@ void showWave() {
   Encoder[2].writeCounter((int32_t)0);
   Encoder[1].writeMin((int32_t)0);
   Encoder[1].writeMax((int32_t)100);
+
+  // Cache encoder RGB and only write when changed (showWave runs every frame).
+  // Invalidate after a gap so re-entering SET_WAV refreshes rings after other modes.
+  static uint32_t lastShowWaveRGB[4] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
+  static uint32_t lastShowWaveRgbMs = 0;
+  uint32_t nowMs = millis();
+  if (nowMs - lastShowWaveRgbMs > 50) {
+    for (int i = 0; i < 4; i++) lastShowWaveRGB[i] = 0xFFFFFFFF;
+  }
+  lastShowWaveRgbMs = nowMs;
+  auto setShowWaveRGB = [&](uint8_t i, uint32_t rgb) {
+    if (i < 4 && lastShowWaveRGB[i] != rgb) {
+      lastShowWaveRGB[i] = rgb;
+      Encoder[i].writeRGBCode(rgb);
+    }
+  };
+
+  setShowWaveRGB(0, 0xFF00FF); // Magenta (seek start)
   if (selectedIsFile) {
-    Encoder[1].writeRGBCode(0xFFFF00); // Yellow (seekEnd)
-    Encoder[2].writeRGBCode(0x0000FF); // Load
+    setShowWaveRGB(1, 0xFFFF00); // Yellow (seekEnd)
+    setShowWaveRGB(2, 0x0000FF); // Blue (load)
   } else {
-    Encoder[1].writeRGBCode(0x000000);
-    Encoder[2].writeRGBCode(0x000000);
+    setShowWaveRGB(1, 0x000000);
+    setShowWaveRGB(2, 0x000000);
   }
   if (currentMode->pos[2] > 100) {
     currentMode->pos[2] = 100;
@@ -874,10 +892,10 @@ void showWave() {
     int wi = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
     bool isDirEntry = (sampleBrowserEntryTypeAt(wi) != 2);
     if (isDirEntry) {
-      Encoder[3].writeRGBCode(0xFFFF00);
+      setShowWaveRGB(3, 0xFFFF00);
     } else {
       CRGB fc = fileSizeToColor(g_wavPickSize[wi]);
-      Encoder[3].writeRGBCode(((uint32_t)fc.r << 16) | ((uint32_t)fc.g << 8) | fc.b);
+      setShowWaveRGB(3, ((uint32_t)fc.r << 16) | ((uint32_t)fc.g << 8) | fc.b);
     }
   }
 

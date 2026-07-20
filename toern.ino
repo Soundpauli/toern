@@ -293,7 +293,7 @@ bool drawRFullMuteIsActive();
 void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
 void initPageMutes();
-void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false);
+void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false, bool setEncoderLed = true);
 void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
 void updatePongBall();
 void drawPongBall();

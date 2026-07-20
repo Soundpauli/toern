@@ -1,0 +1,35 @@
+# GitHub Linguist — keep language stats focused on firmware (C++ / Arduino)
+
+# Arduino sketches are C++
+*.ino linguist-language=C++
+*.h linguist-language=C++
+*.cpp linguist-language=C++
+*.c linguist-language=C++
+*.hpp linguist-language=C++
+
+# PADS part files are not Prolog / OpenEdge ABL
+*.p linguist-detectable=false
+
+# PCB CAD, vendor part packs, backups (HTML/CSS/XML/.p noise)
+PCB/** linguist-vendored
+*.kicad_pcb linguist-generated
+*.kicad_sch linguist-generated
+*.kicad_pro linguist-vendored
+*.kicad_prl linguist-vendored
+*.kicad_mod linguist-vendored
+*.kicad_sym linguist-vendored
+
+# Handbook is documentation, not product code
+handbook/** linguist-documentation
+
+# Built / vendored web tool assets
+tools/convertmidi/assets/** linguist-generated
+tools/teensyloader/dist/** linguist-generated
+tools/teensyloader/public/*.hex linguist-generated
+standalone-tools/audio-converter-standalone/ffmpeg-core.* linguist-vendored
+standalone-tools/audio-converter-standalone/jszip.mjs linguist-vendored
+standalone-tools/audio-converter-standalone/SD-CARD-CONTENT/** linguist-vendored
+
+# Lockfiles / package metadata
+package-lock.json linguist-generated
+**/package-lock.json linguist-generated

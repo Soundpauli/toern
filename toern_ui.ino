@@ -172,7 +172,8 @@ void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3) {
 }
 
 // Draw indicator with new format: SIZE[COLOR]
-void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false) {
+// setEncoderLed: when false, only draws the matrix indicator (caller owns encoder RGB).
+void drawIndicator(char size, char colorCode, int encoderNum, bool highlight, bool setEncoderLed) {
   CRGB color = getIndicatorColor(colorCode);
   
   // Handle special case for CH (current channel color)
@@ -185,7 +186,7 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = f
     color = applyHighlight(color, true);
   }
 
-  if (encoderNum >= 1 && encoderNum <= NUM_ENCODERS) {
+  if (setEncoderLed && encoderNum >= 1 && encoderNum <= NUM_ENCODERS) {
     // Normalize color to maximum brightness while preserving hue/ratios
     CRGB maxBrightnessColor = normalizeToMaxBrightness(color);
     uint32_t rgbCode = (uint32_t(maxBrightnessColor.r) << 16) | (uint32_t(maxBrightnessColor.g) << 8) | maxBrightnessColor.b;
@@ -818,16 +819,17 @@ void drawStatus() {
     }
     
     // Show active copy indicators: w[X] / - / - / G[Y]
-    drawIndicator('L', 'X', 1);  // Encoder 1: Large Blue
+    // Matrix only — encoder RGB set below (avoids double/conflicting writes)
+    drawIndicator('L', 'X', 1, false, false);  // Encoder 1: Large Blue
     // Encoder 2: empty (no indicator)
     // Encoder 3: empty (no indicator)
-    drawIndicator('L', 'Y', 4);  // Encoder 4: Large Yellow
+    drawIndicator('L', 'Y', 4, false, false);  // Encoder 4: Large Yellow
     
     // Set encoder colors to match active copy indicators
     CRGB blueColor = getIndicatorColor('X'); // Blue
     CRGB yellowColor = getIndicatorColor('Y'); // Yellow
     
-    setEncoderRGBIfChanged(0, 0xFF0000);
+    setEncoderRGBIfChanged(0, blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
     setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
     setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
     setEncoderRGBIfChanged(3, yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
@@ -835,45 +837,13 @@ void drawStatus() {
     return; // Exit early to prevent any other indicators
   }
 
-  // Add indicators for copy and noteshift functions when cursor is at y=16 in single mode
-  // Only show indicators when copy is NOT active
-  if (GLOB.singleMode && GLOB.y == 16 && !GLOB.activeCopy) {
-    // New indicator system: copypaste: M[X] | | | M[G]
-    drawIndicator('M', 'X', 1);  // Encoder 1: Medium Blue
-    // Encoder 2: empty (no indicator)
-    // Encoder 3: empty (no indicator)
-    drawIndicator('M', 'G', 4);  // Encoder 4: Medium Green
-    
-    // Set encoder colors to match copypaste indicators
-    CRGB blueColor = getIndicatorColor('X'); // Blue
-    CRGB greenColor = getIndicatorColor('G'); // Green
-    
-    setEncoderRGBIfChanged(0, 0xFF0000);
-    setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
-    setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
-    setEncoderRGBIfChanged(3, greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
-    
-    // Note shift indicator: L[W] | L[G] | | L[W]
-    if (currentMode == &noteShift) {
-      
-    } 
-  }
-
-  // Add current channel indicator in single mode (x=4-5)
-  if (GLOB.singleMode) {
-    CRGB channelColor = col_base[GLOB.currentChannel];
-    
-    
- 
-  }
-  
   // Add draw mode indicators when y=16
   if (currentMode == &draw && GLOB.y == 16) {
     // New indicator system: draw(+y=16): M[R] | | | M[Y]
-    drawIndicator('M', 'R', 1);  // Encoder 1: Medium Red
+    drawIndicator('M', 'R', 1, false, false);  // Encoder 1: Medium Red
     // Encoder 2: empty (no indicator)
     // Encoder 3: empty (no indicator)
-    drawIndicator('M', 'Y', 4);  // Encoder 4: Medium Yellow
+    drawIndicator('M', 'Y', 4, false, false);  // Encoder 4: Medium Yellow
     
     // Set encoder colors to match draw mode indicators
     CRGB redColor = getIndicatorColor('R'); // Red
@@ -888,10 +858,10 @@ void drawStatus() {
   // Add single mode indicators when y=16
   if (GLOB.singleMode && GLOB.y == 16) {
     // New indicator system: singlemode(y=16): M[R] | M[W] | | M[Y]
-    drawIndicator('M', 'R', 1);  // Encoder 1: Medium Red
-    drawIndicator('M', 'W', 2);  // Encoder 2: Medium White
+    drawIndicator('M', 'R', 1, false, false);  // Encoder 1: Medium Red
+    drawIndicator('M', 'W', 2, false, false);  // Encoder 2: Medium White
     // Encoder 3: empty (no indicator)
-    drawIndicator('M', 'Y', 4);  // Encoder 4: Medium Yellow
+    drawIndicator('M', 'Y', 4, false, false);  // Encoder 4: Medium Yellow
     
     // Set encoder colors to match single mode indicators
     CRGB redColor = getIndicatorColor('R'); // Red
@@ -925,8 +895,8 @@ void drawStatus() {
     light((unsigned int)currX, 1, CRGB(120, 120, 120));
     lastMarqueeX = currX;
 
-    drawIndicator('L', 'G', 1, true);   // Highlighted green for noteshift active
-    drawIndicator('L', 'X', 4, true);   // Highlighted blue for noteshift active
+    drawIndicator('L', 'G', 1, true, false);   // Highlighted green for noteshift active
+    drawIndicator('L', 'X', 4, true, false);   // Highlighted blue for noteshift active
     
     // Set encoder colors to match noteshift indicators (highlighted)
     CRGB greenColor = applyHighlight(getIndicatorColor('G'), true); // Highlighted Green
