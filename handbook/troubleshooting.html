@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TŒRN — Troubleshoot</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css" />
   <link rel="stylesheet" href="handbook.css" />
 </head>
@@ -13,49 +15,12 @@
 <div class="hb-app">
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
-  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
-    <nav class="hb-sidebar__nav">
-      <p class="hb-sidebar__group">Get started</p>
-      <ul>
-        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
-        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
-        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
-        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Compose</p>
-      <ul>
-        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
-        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
-        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
-        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
-        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Operate</p>
-      <ul>
-        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
-        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
-        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
-        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
-        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
-        <li><a href="troubleshooting.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
-      </ul>
-    </nav>
-  </aside>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-nav.js"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
-        <header>
-          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
-          <p class="tag">Handbook — when things look wrong.</p>
-        </header>
-
-        <nav class="hb-journey" aria-label="Reading progress">
-          <a class="hb-journey__step" href="reference.html">14 · Screen index</a>
-          <span class="hb-journey__sep">›</span>
-          <span class="hb-journey__step hb-journey__step--here">15 · Troubleshoot</span>
-        </nav>
-
         <section class="handbook-page" id="page-troubleshoot">
           <h2 class="handbook-page__title">Troubleshooting</h2>
           <p class="handbook-page__summary">Quick fixes for the surprises new owners hit most often, plus a careful walkthrough of the destructive reset ladder.</p>
@@ -85,7 +50,7 @@
               </details>
               <details>
                 <summary>BPM number is red and won't settle.</summary>
-                <p>You are on EXT clock and the incoming MIDI clock is unstable or absent. Either fix the master (cable, source clock setting) or flip <a href="tempo-midi.html#bpm">BPM → encoder&nbsp;3</a> back to INT to use TŒRN's own clock.</p>
+                <p>You are on EXT clock and the incoming MIDI clock is unstable or absent. Either fix the master (cable, source clock setting) or flip <a href="tempo-midi.html#bpm">BPM → encoder&nbsp;3</a> back to INT to use <span class="hb-brand">TŒRN's</span> own clock.</p>
               </details>
               <details>
                 <summary>I switched packs and now my pattern sounds wrong.</summary>
@@ -130,6 +95,10 @@
             </div>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="reset">
             <h2>The reset ladder (ETC → RSET)</h2>
             <p class="lede">Three destructive levels live behind one encoder dial. Encoder&nbsp;3 rotates <code>resetMenuOption</code> through 0 → 1 → 2; a confirmation gesture executes the matching branch. <strong>Read each row before confirming.</strong></p>
@@ -151,6 +120,10 @@
             </article>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="last-resort">
             <h2>Last-resort recovery</h2>
             <ol>
@@ -162,9 +135,13 @@
             <p>For deeper hardware issues (encoder gone, LED out, jack scratchy), inspect the unit; the schematic and KiCad sources are in <code>PCB/toern_revG/</code>.</p>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="next">
             <h2>You finished the handbook.</h2>
-            <p>That's everything. From here on you are the most experienced TŒRN owner you know. If a feature still surprises you, jump back to the <a href="reference.html">Screen index</a> — recognising a display is the fastest way to find the chapter that explains it. And always: <a href="files.html#file">save to FILE</a> before powering off.</p>
+            <p>That's everything. From here on you are the most experienced <span class="hb-brand">TŒRN</span> owner you know. If a feature still surprises you, jump back to the <a href="reference.html">Screen index</a> — recognising a display is the fastest way to find the chapter that explains it. And always: <a href="files.html#file">save to FILE</a> before powering off.</p>
           </section>
         </section>
 
@@ -175,7 +152,6 @@
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>
-      <script src="handbook-nav.js" defer></script>
     </div>
   </div>
 </div>

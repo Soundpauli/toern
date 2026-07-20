@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TŒRN — Sample packs</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css" />
   <link rel="stylesheet" href="handbook.css" />
 </head>
@@ -13,51 +15,12 @@
 <div class="hb-app">
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
-  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
-    <nav class="hb-sidebar__nav">
-      <p class="hb-sidebar__group">Get started</p>
-      <ul>
-        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
-        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
-        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
-        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Compose</p>
-      <ul>
-        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
-        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
-        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
-        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
-        <li><a href="sample-packs.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Operate</p>
-      <ul>
-        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
-        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
-        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
-        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
-        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
-        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
-      </ul>
-    </nav>
-  </aside>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-nav.js"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
-        <header>
-          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
-          <p class="tag">Handbook — selecting and saving the active sample pack.</p>
-        </header>
-
-        <nav class="hb-journey" aria-label="Reading progress">
-          <a class="hb-journey__step" href="samples.html">8 · Samples</a>
-          <span class="hb-journey__sep">›</span>
-          <span class="hb-journey__step hb-journey__step--here">9 · Sample packs</span>
-          <span class="hb-journey__sep">›</span>
-          <a class="hb-journey__step" href="tempo-midi.html">10 · Tempo &amp; MIDI</a>
-        </nav>
-
         <section class="handbook-page" id="page-sample-packs">
           <h2 class="handbook-page__title">Sample packs</h2>
           <p class="handbook-page__summary">A "pack" is the folder of audio that fills the eight sample voices. This chapter explains the PACK screen, what a pack actually contains, how packs interact with patterns, and the special status of pack&nbsp;0.</p>
@@ -67,6 +30,10 @@
             <p class="lede">The SD card holds up to <strong>100 numbered pack folders</strong>. Each folder defines which audio file plays on each of the eight sample voices (channels&nbsp;1–8) when you trigger a step. Switching packs replaces all eight voices in one motion — your <em>pattern</em> stays exactly the same, but the <em>sound</em> changes completely.</p>
             <p>Only sample voices <strong>1–8</strong> are filled from a pack. Synth voices <strong>11, 13, and 14</strong> are generated, not played from files, so they stay the same across packs. Rows <strong>9, 10, and 12</strong> are empty — no voice is assigned there.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="pack">
             <h2>PACK — sample pack slots</h2>
@@ -95,11 +62,19 @@
             <div class="hb-warn"><strong>Switching packs replaces eight voices at once.</strong> Your pattern still references "voice rows", but the underlying audio files change. Save to <a href="files.html#file">FILE</a> first if you care about recall later — the pack swap by itself is not a backup.</div>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="pack-0">
             <h2>Pack 0 — the scratchpad</h2>
             <p>Pack&nbsp;0 is special. Whenever you load a single sample into a voice through the <a href="samples.html#set-wav">sample browser</a>, the new mapping is written into pack&nbsp;0 so it survives reboot even if you never explicitly save it. Treat pack&nbsp;0 as your <strong>scratchpad</strong>: the place where one-off custom voice assignments accumulate.</p>
             <p>If you build a sound you like in pack&nbsp;0 and want to keep it long-term, switch to another numbered pack on the device and reload your samples there — the firmware doesn't expose a "save as new pack" gesture.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="card-layout">
             <h2>How packs live on the card</h2>
@@ -121,7 +96,6 @@
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>
-      <script src="handbook-nav.js" defer></script>
     </div>
   </div>
 </div>

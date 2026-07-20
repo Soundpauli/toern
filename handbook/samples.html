@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TŒRN — Samples</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css" />
   <link rel="stylesheet" href="handbook.css" />
 </head>
@@ -13,51 +15,12 @@
 <div class="hb-app">
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
-  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
-    <nav class="hb-sidebar__nav">
-      <p class="hb-sidebar__group">Get started</p>
-      <ul>
-        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
-        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
-        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
-        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Compose</p>
-      <ul>
-        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
-        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
-        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
-        <li><a href="samples.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
-        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Operate</p>
-      <ul>
-        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
-        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
-        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
-        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
-        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
-        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
-      </ul>
-    </nav>
-  </aside>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-nav.js"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
-        <header>
-          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
-          <p class="tag">Handbook — samples, kits, browser, recording.</p>
-        </header>
-
-        <nav class="hb-journey" aria-label="Reading progress">
-          <a class="hb-journey__step" href="sound.html">7 · Sound design</a>
-          <span class="hb-journey__sep">›</span>
-          <span class="hb-journey__step hb-journey__step--here">8 · Samples</span>
-          <span class="hb-journey__sep">›</span>
-          <a class="hb-journey__step" href="sample-packs.html">9 · Sample packs</a>
-        </nav>
-
         <section class="handbook-page" id="page-samples">
           <h2 class="handbook-page__title">Samples</h2>
           <p class="handbook-page__summary">Sample packs, the sample browser (folders, trim, reverse, preview), recording on-device, and preparing the SD card.</p>
@@ -67,6 +30,10 @@
             <p class="lede">A <strong>pack</strong> (covered in <a href="sample-packs.html">Sample packs</a>) decides which numbered folder of samples the eight sample voices read from. The <strong>sample browser</strong> covered <em>here</em> — opened via <a href="menus.html#wave">WAVE</a> in the menu or with a both-touch (left-first) from the grid — picks one <code>.wav</code> file under <code>samples/</code> for the current sample voice (channels 1–8), with trim, reverse, and load steps before the audio actually replaces what the voice plays.</p>
             <p>Up to <strong>999 patterns</strong>, <strong>999 samples</strong>, and <strong>100 sample packs</strong> are addressable. Samples are mono 16-bit WAV at 44.1 kHz, up to 12 seconds per voice.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="set-wav">
             <h2>Sample browser</h2>
@@ -138,6 +105,10 @@
             </article>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="record-mode">
             <h2>Recording new samples</h2>
             <p class="lede">From the sample browser, <strong>hold touch&nbsp;3</strong> to enter record mode for the current sample voice. Recordings are written as numbered files such as <code>rec_01.wav</code> inside the <em>current browse folder</em>.</p>
@@ -165,17 +136,21 @@
             <p>Threshold-armed recordings auto-stop after ~1&nbsp;s if the input falls under half the threshold. Maximum take length is 12 seconds per voice. The <a href="menus.html#rec">REC submenu</a> in the menu chooses input source (MIC / LINE), mic and line gains, fast-rec trigger style, and what happens to existing notes on the channel after a successful recording.</p>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="card-layout">
             <h2>SD card setup</h2>
-            <div class="hb-warn"><strong>Not USB storage:</strong> TŒRN does <em>not</em> mount the microSD card as a disk drive. You cannot drag files onto it like a USB stick. Use a card reader for first-time setup, or the <a href="#sd-tool">SD tool</a> while the card stays in the unit.</div>
-            <p class="lede">Two ways to get files onto the card: prepare it once with a computer and card reader (below), or transfer while the card stays in TŒRN via <a href="#sd-tool">Menu → ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a>.</p>
+            <div class="hb-warn"><strong>Not USB storage:</strong> <span class="hb-brand">TŒRN</span> does <em>not</em> mount the microSD card as a disk drive. You cannot drag files onto it like a USB stick. Use a card reader for first-time setup, or the <a href="#sd-tool">SD tool</a> while the card stays in the unit.</div>
+            <p class="lede">Two ways to get files onto the card: prepare it once with a computer and card reader (below), or transfer while the card stays in <span class="hb-brand">TŒRN</span> via <a href="#sd-tool">Menu → ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a>.</p>
 
             <h3 class="hb-subsection-heading" id="sd-tool">SD tool (card stays in the unit)</h3>
             <p>Open <strong>Menu → ETC → SD</strong> on the device (the file server is only active while that page is open — the screen shows <strong>WAIT</strong>, then <strong>OK</strong> when a host connects). On a computer, open <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">https://sdtool.tyng.app</a> in <strong>Chrome or Edge</strong>, click <strong>Connect</strong>, and pick the Teensy serial port. Browse folders, upload WAVs (the site converts to 44.1&nbsp;kHz mono 16-bit), download, rename, or delete. You can drop multiple files, whole folders (subfolders kept), or a <code>.zip</code> (extracted in the browser into the current SD folder).</p>
             <div class="hb-tip"><strong>Tips:</strong> stay on <strong>ETC → SD</strong> for the whole session. Opening the serial port can reboot the Teensy — if the screen leaves the SD page, open <strong>ETC → SD</strong> again after Connect. Desktop only: Android / Pixel Chrome usually cannot see the Teensy USB serial port. After big transfers, run <a href="menus.html#rset">ETC → RSET → SD</a> if the sample browser still looks stale.</div>
 
             <h3 class="hb-subsection-heading">Download default content (card reader)</h3>
-            <p>The default folder layout, sample packs, and starter settings are available from the <a href="https://audioconvert.tyng.app/" rel="noopener" target="_blank">TŒRN Sample converter</a> (<code>audioconvert.tyng.app</code>). Open the <strong>SD CARD</strong> section and download <strong>SD-CARD-CONTENT.zip</strong>. Extract the ZIP and copy all files and folders to the <strong>root</strong> of your microSD card (not inside a subfolder). Full instructions are on that page.</p>
+            <p>The default folder layout, sample packs, and starter settings are available from the <a href="https://audioconvert.tyng.app/" rel="noopener" target="_blank"><span class="hb-brand">TŒRN</span> Sample converter</a> (<code>audioconvert.tyng.app</code>). Open the <strong>SD CARD</strong> section and download <strong>SD-CARD-CONTENT.zip</strong>. Extract the ZIP and copy all files and folders to the <strong>root</strong> of your microSD card (not inside a subfolder). Full instructions are on that page.</p>
 
             <h3 class="hb-subsection-heading">Recommended card</h3>
             <ul>
@@ -187,15 +162,19 @@
 
             <h3 class="hb-subsection-heading">How to format</h3>
             <ol>
-              <li>Insert the microSD card into your computer with a card reader (not the TŒRN unit).</li>
+              <li>Insert the microSD card into your computer with a card reader (not the <span class="hb-brand">TŒRN</span> unit).</li>
               <li>Download and run the <a href="https://www.sdcard.org/downloads/formatter/" target="_blank" rel="noopener noreferrer">SD Memory Card Formatter</a> from the SD Association.</li>
-              <li>Select your card, leave <strong>Format type</strong> on <em>Quick format</em>, and click <strong>Format</strong>. Cards up to 32&nbsp;GB are formatted as FAT32; 64&nbsp;GB cards use exFAT — both work with TŒRN.</li>
+              <li>Select your card, leave <strong>Format type</strong> on <em>Quick format</em>, and click <strong>Format</strong>. Cards up to 32&nbsp;GB are formatted as FAT32; 64&nbsp;GB cards use exFAT — both work with <span class="hb-brand">TŒRN</span>.</li>
               <li>Extract <strong>SD-CARD-CONTENT.zip</strong> and copy all files and folders to the <strong>root</strong> of the card (not inside a subfolder).</li>
-              <li>Eject the card safely, insert it into TŒRN, and power on.</li>
+              <li>Eject the card safely, insert it into <span class="hb-brand">TŒRN</span>, and power on.</li>
             </ol>
             <div class="hb-tip">Avoid formatting through Windows Explorer or macOS Disk Utility if possible — the SD Association tool sets the correct partition layout for removable media.</div>
             <p>If the sample browser does not reflect new card content after power-up or after using the SD tool, run <a href="menus.html#rset">ETC → RSET → SD</a> to rescan.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="live-record">
             <h2>Live recording on a voice</h2>
@@ -210,7 +189,6 @@
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>
-      <script src="handbook-nav.js" defer></script>
     </div>
   </div>
 </div>

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TŒRN — Hardware</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css" />
   <link rel="stylesheet" href="handbook.css" />
 </head>
@@ -13,60 +15,19 @@
 <div class="hb-app">
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
-  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
-    <nav class="hb-sidebar__nav">
-      <p class="hb-sidebar__group">Get started</p>
-      <ul>
-        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
-        <li><a href="hardware.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
-        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
-        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Compose</p>
-      <ul>
-        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
-        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
-        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
-        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
-        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Operate</p>
-      <ul>
-        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
-        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
-        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
-        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
-        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
-        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
-      </ul>
-    </nav>
-  </aside>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-nav.js"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
-        <header>
-          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
-          <p class="tag">Handbook — the physical device.</p>
-        </header>
-
-        <nav class="hb-journey" aria-label="Reading progress">
-          <a class="hb-journey__step" href="index.html">1 · Welcome</a>
-          <span class="hb-journey__sep">›</span>
-          <span class="hb-journey__step hb-journey__step--here">2 · Hardware</span>
-          <span class="hb-journey__sep">›</span>
-          <a class="hb-journey__step" href="matrix.html">3 · Matrix</a>
-          <span class="hb-journey__sep">›</span>
-          <a class="hb-journey__step" href="controls.html">4 · Controls</a>
-        </nav>
-
         <section class="handbook-page" id="page-hardware">
           <h2 class="handbook-page__title">The device</h2>
-          <p class="handbook-page__summary">Every port, button, and jack on a TŒRN unit — what it does, when you use it, and what to watch out for.</p>
+          <p class="handbook-page__summary">Every port, button, and jack on a <span class="hb-brand">TŒRN</span> unit — what it does, when you use it, and what to watch out for.</p>
 
           <section class="hb-sub" id="overview">
             <h2>Top-down overview</h2>
-            <p class="lede">The face of TŒRN is dominated by the <strong>16×16 RGB matrix</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge. The unit runs from an internal LiPo cell; charging happens over USB&nbsp;C.</p>
+            <p class="lede">The face of <span class="hb-brand">TŒRN</span> is dominated by the <strong>16×16 RGB matrix</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge.</p>
 
             <div class="hb-portmap" aria-label="Annotated device map">
               <figure class="hb-portmap__photo">
@@ -86,7 +47,7 @@
                 <rect x="60" y="40" width="480" height="640" fill="#0a0a0e" stroke="#2a2a32" stroke-width="2"/>
                 <!-- Matrix area -->
                 <rect x="100" y="80" width="400" height="400" fill="#111114" stroke="#252530" stroke-width="2"/>
-                <text x="300" y="285" fill="#5a5a68" font-family="Space Grotesk, sans-serif" font-size="18" text-anchor="middle">16 × 16 RGB matrix</text>
+                <text x="300" y="285" fill="#5a5a68" font-family="system-ui, sans-serif" font-size="18" text-anchor="middle">16 × 16 RGB matrix</text>
                 <!-- Touch 1 / Touch 2 — circular pads between matrix and encoders -->
                 <circle cx="165" cy="502" r="16" fill="#1a1a26" stroke="#4a4a5a" stroke-width="1.5"/>
                 <text x="165" y="506" fill="#cfcfdf" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">1</text>
@@ -162,32 +123,38 @@
               </svg>
               <dl class="hb-portmap__legend">
                 <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level under <a href="menus.html#vol">VOL → LOUT</a>.</dd></div>
-                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Charges the internal LiPo and provides host data for firmware updates via the Teensy boot path.</dd></div>
+                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Host data for firmware updates via the Teensy boot path; if a LiPo is installed, also charges that cell.</dd></div>
                 <div><dt>C</dt><dd><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use any phones or in-ears; level under <a href="menus.html#vol">VOL → MAIN</a>.</dd></div>
                 <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device. See <a href="tempo-midi.html">Tempo &amp; MIDI</a>.</dd></div>
                 <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock + notes; pick what to emit under <a href="menus.html#midi">MIDI → SEND</a>.</dd></div>
                 <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Boots when slid on; the current pattern is autosaved before shutdown.</dd></div>
                 <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the bottom edge for hands-free sampling. Pick it as the active source under <a href="menus.html#rec">REC → INPT</a>.</dd></div>
-                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject.</dd></div>
+                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject. Only insert/eject with the unit <em>off</em> — the firmware re-indexes the card on boot. <span class="hb-brand">TŒRN</span> does not mount the card as USB mass storage: prepare the initial layout with a card reader, or transfer files while the card stays in the unit via <a href="samples.html#sd-tool">ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (see <a href="samples.html#card-layout">Samples → SD card setup</a>).</dd></div>
                 <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain under <a href="menus.html#rec">REC → MIC</a>.</dd></div>
                 <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo on the bottom edge. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
-                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge, used for chord gestures and a few menu-specific actions. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
+                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter <a href="samples.html#record-mode">record mode</a> from the sample browser. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
               </dl>
             </div>
-
-            <div class="hb-warn"><strong>SD card:</strong> only insert/eject with the unit <em>off</em>. The firmware re-indexes the card on boot. TŒRN does not mount the card as USB mass storage — prepare the initial layout with a card reader, or transfer files while the card stays in the unit via <a href="samples.html#sd-tool">ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (see <a href="samples.html#card-layout">Samples → SD card setup</a>).</div>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="controls">
             <h2>Controls at a glance</h2>
             <p>Three input families are wired to the firmware:</p>
             <ul>
               <li><strong>Four RGB-lit rotary encoders</strong> (1–4, left to right) on the front edge — each one turns, short-presses, and long-presses. Their function changes per screen. Row&nbsp;1 of the matrix paints additional small hints just above the encoders.</li>
-              <li><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the right bottom edge. They handle back/exit, tap tempo, filter / sample-browser entry, and chord gestures. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
+              <li><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the right bottom edge. Touch&nbsp;1 toggles single mode; touch&nbsp;2 opens the menu; both pads together open filters or the sample browser; touch&nbsp;3 is for recording. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
               <li><strong>Right-side power switch</strong> — physical on/off.</li>
             </ul>
             <p>There are no menu buttons or screens beyond the matrix itself. Everything the firmware needs to communicate appears as lit pixels in known regions of the 16×16 area, explained in <a href="matrix.html">The matrix</a>.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="internals">
             <h2>Internals</h2>
@@ -195,12 +162,16 @@
               <li><strong>Microcontroller:</strong> Teensy&nbsp;4.1 plus the Teensy Audio Shield.</li>
               <li><strong>Memory:</strong> 16&nbsp;MB PSRAM (used for sample voices and the preview buffer) + up to 64&nbsp;GB Micro&nbsp;SD.</li>
               <li><strong>Audio:</strong> 44.1&nbsp;kHz, 16-bit, stereo output. Mono input recording.</li>
-              <li><strong>Battery:</strong> internal LiPo. Estimated percentage shown under <a href="menus.html#etc">ETC → BATT</a> — accurate enough for "is this enough for the set?" decisions.</li>
+              <li><strong>Battery:</strong> optional internal LiPo (if installed). Estimated percentage shown under <a href="menus.html#etc">ETC → BATT</a> — accurate enough for "is this enough for the set?" decisions.</li>
               <li><strong>Speaker:</strong> small internal driver; switchable under <a href="menus.html#vol">VOL → SPKR</a>.</li>
               <li><strong>Internal mic + Mic-in jack:</strong> a built-in capsule for hands-free sampling, plus a dedicated 6.35&nbsp;mm Mic-in jack on the bottom edge for an external microphone. Pick which one is active under <a href="menus.html#rec">REC → INPT</a>; gain lives under <a href="menus.html#rec">REC → MIC</a>.</li>
               <li><strong>Expansion header J11 (I2SC_3V):</strong> onboard JST&nbsp;PH 1×05. Among other signals, the middle/right pins expose Teensy <strong>pin&nbsp;31</strong> and <strong>GND</strong> for a handmade analog clock / trigger cable (see <a href="tempo-midi.html#ppqn">MIDI → PPQN</a>).</li>
             </ul>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="palette">
             <h2>Colour scheme</h2>
@@ -226,7 +197,6 @@
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>
-      <script src="handbook-nav.js" defer></script>
     </div>
   </div>
 </div>

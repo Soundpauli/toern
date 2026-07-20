@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TŒRN — Menu map</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css" />
   <link rel="stylesheet" href="handbook.css" />
 </head>
@@ -13,51 +15,12 @@
 <div class="hb-app">
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
-  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
-    <nav class="hb-sidebar__nav">
-      <p class="hb-sidebar__group">Get started</p>
-      <ul>
-        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
-        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
-        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
-        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Compose</p>
-      <ul>
-        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
-        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
-        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
-        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
-        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Operate</p>
-      <ul>
-        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
-        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
-        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
-        <li><a href="menus.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
-        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
-        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
-      </ul>
-    </nav>
-  </aside>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-nav.js"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
-        <header>
-          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
-          <p class="tag">Handbook — menu tree and navigation logic.</p>
-        </header>
-
-        <nav class="hb-journey" aria-label="Reading progress">
-          <a class="hb-journey__step" href="files.html">12 · Files</a>
-          <span class="hb-journey__sep">›</span>
-          <span class="hb-journey__step hb-journey__step--here">13 · Menu map</span>
-          <span class="hb-journey__sep">›</span>
-          <a class="hb-journey__step" href="reference.html">14 · Screen index</a>
-        </nav>
-
         <section class="handbook-page" id="page-menus">
           <h2 class="handbook-page__title">Menu map</h2>
           <p class="handbook-page__summary">The whole settings tree at a glance — every leaf links into the chapter that explains it. This is the navigation map; the per-screen previews live in the <a href="reference.html">screen index</a>.</p>
@@ -86,6 +49,10 @@
               </div>
             </article>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="tree">
             <h2>The full tree</h2>
@@ -210,12 +177,12 @@
                         <li>
                           <a href="sequencing.html#paint"><span class="node">DRAW</span></a>
                           <span class="desc">Paint mode style.</span>
-                          <span class="sub">Two states: <strong>L+R</strong> (default — both hands required: encoder&nbsp;1 picks the row, encoder&nbsp;4 paints the steps) or <strong>R</strong> (one-handed — only encoder&nbsp;4 paints, gated by the MUTE mask below). Use L+R for careful editing; flip to R for fast live painting.</span>
+                          <span class="sub">Two states: <strong>L+R</strong> (default — encoder&nbsp;1 picks the row / erases, encoder&nbsp;4 places and paints) or <strong>R</strong> (one-handed — encoder&nbsp;4 toggles and paints/erases; encoder&nbsp;1 enters a temporary full mute). Use L+R for careful two-hand editing; flip to R for fast one-hand playing.</span>
                         </li>
                         <li>
                           <a href="sequencing.html#unpaint"><span class="node">MUTE</span></a>
-                          <span class="desc">Per-channel paint mask used by the R draw mode. Decides which rows accept new notes while you paint.</span>
-                          <span class="sub">Each of the 16 channel positions is a toggle: lit = accepts paint, dim = ignored. Use it to constrain a paint pass to "just the kick and snare" so a finger slip can't drop notes onto melody voices.</span>
+                          <span class="desc">Custom unmute set used when leaving R-mode’s temporary full mute via encoder&nbsp;3.</span>
+                          <span class="sub">Each of the 16 channel positions is a toggle: lit = unmuted on exit, dim = stays muted. Define a “kick + snare only” return so a break drops back to just those lanes. This does <em>not</em> gate which rows you can paint.</span>
                         </li>
                       </ul>
                     </li>
@@ -264,22 +231,22 @@
                         <li>
                           <span class="node">TRAN</span>
                           <span class="desc">MIDI transport — start, stop, continue messages.</span>
-                          <span class="sub">Three states: <strong>OFF</strong> (ignore and never send), <strong>GET</strong> (listen for MIDI start/stop so an external sequencer can run TŒRN), <strong>SEND</strong> (transmit your transport so external gear follows). Combine with the clock source on the BPM screen for full master/slave.</span>
+                          <span class="sub">Three states: <strong>OFF</strong> (ignore and never send), <strong>GET</strong> (listen for MIDI start/stop so an external sequencer can run <span class="hb-brand">TŒRN</span>), <strong>SEND</strong> (transmit your transport so external gear follows). Combine with the clock source on the BPM screen for full master/slave.</span>
                         </li>
                         <li>
                           <span class="node">SEND</span>
-                          <span class="desc">What TŒRN emits on the MIDI out jack.</span>
-                          <span class="sub">Three states: <strong>OFF</strong> (silent — useful when MIDI cable is plugged in only for return), <strong>CLK</strong> (clock pulses only — the simplest sync setup), <strong>NOTE</strong> (notes only — drive an external multitimbral synth), <strong>BOTH</strong> (clock + notes). Pick CLK when slaving a drum machine; pick NOTE when using TŒRN as a sequencer for a separate tone module.</span>
+                          <span class="desc">What <span class="hb-brand">TŒRN</span> emits on the MIDI out jack.</span>
+                          <span class="sub">Three states: <strong>OFF</strong> (silent — useful when MIDI cable is plugged in only for return), <strong>CLK</strong> (clock pulses only — the simplest sync setup), <strong>NOTE</strong> (notes only — drive an external multitimbral synth), <strong>BOTH</strong> (clock + notes). Pick CLK when slaving a drum machine; pick NOTE when using <span class="hb-brand">TŒRN</span> as a sequencer for a separate tone module.</span>
                         </li>
                         <li>
                           <span class="node">RCVE</span>
                           <span class="desc">Whether incoming MIDI notes actually trigger the internal voices.</span>
-                          <span class="sub">Two states: <strong>ON</strong> (notes coming in light up the internal sample / synth voices according to the CH mapping above) or <strong>OFF</strong> (incoming notes are ignored — TŒRN becomes a pure sequencer/recorder).</span>
+                          <span class="sub">Two states: <strong>ON</strong> (notes coming in light up the internal sample / synth voices according to the CH mapping above) or <strong>OFF</strong> (incoming notes are ignored — <span class="hb-brand">TŒRN</span> becomes a pure sequencer/recorder).</span>
                         </li>
                         <li>
                           <span class="node">SYNC</span>
                           <span class="desc">Per-direction sync offset to compensate for real-world latency. Two adjustable lines: <strong>SNC1</strong> shifts the send path, <strong>SNC2</strong> shifts the receive path.</span>
-                          <span class="sub">Encoder&nbsp;1 turn picks which line you edit, encoder&nbsp;2 turn changes the offset in milliseconds, range <strong>−127 … +127&nbsp;ms</strong>. Use when you can hear an audible flam between TŒRN and another clocked device: nudge in ±2&nbsp;ms steps until the downbeats click as one.</span>
+                          <span class="sub">Encoder&nbsp;1 turn picks which line you edit, encoder&nbsp;2 turn changes the offset in milliseconds, range <strong>−127 … +127&nbsp;ms</strong>. Use when you can hear an audible flam between <span class="hb-brand">TŒRN</span> and another clocked device: nudge in ±2&nbsp;ms steps until the downbeats click as one.</span>
                         </li>
                         <li>
                           <a href="tempo-midi.html#ppqn"><span class="node">PPQN</span></a>
@@ -357,7 +324,6 @@
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>
-      <script src="handbook-nav.js" defer></script>
     </div>
   </div>
 </div>

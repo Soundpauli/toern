@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TŒRN — Screen index</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css" />
   <link rel="stylesheet" href="handbook.css" />
 </head>
@@ -13,51 +15,12 @@
 <div class="hb-app">
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
-  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
-    <nav class="hb-sidebar__nav">
-      <p class="hb-sidebar__group">Get started</p>
-      <ul>
-        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
-        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
-        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
-        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Compose</p>
-      <ul>
-        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
-        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
-        <li><a href="sound.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
-        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
-        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Operate</p>
-      <ul>
-        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
-        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
-        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
-        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
-        <li><a href="reference.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
-        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
-      </ul>
-    </nav>
-  </aside>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-nav.js"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
-        <header>
-          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
-          <p class="tag">Handbook — every display, side by side.</p>
-        </header>
-
-        <nav class="hb-journey" aria-label="Reading progress">
-          <a class="hb-journey__step" href="menus.html">13 · Menu map</a>
-          <span class="hb-journey__sep">›</span>
-          <span class="hb-journey__step hb-journey__step--here">14 · Screen index</span>
-          <span class="hb-journey__sep">›</span>
-          <a class="hb-journey__step" href="troubleshooting.html">15 · Troubleshoot</a>
-        </nav>
-
         <section class="handbook-page" id="page-reference">
           <h2 class="handbook-page__title">Screen index</h2>
           <p class="handbook-page__summary">"I see <em>this</em> on screen — what is it?" A flat grid of every menu and mode display. Click any tile to jump back into the chapter that explains it.</p>
@@ -78,6 +41,10 @@
             </div>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="root-menu">
             <h2>Root menu pages</h2>
             <div class="hb-ref-grid">
@@ -94,6 +61,10 @@
             </div>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="vol">
             <h2>VOL submenu</h2>
             <div class="hb-ref-grid">
@@ -105,6 +76,10 @@
               <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_hfc" width="16" height="16"></canvas><div class="hb-ref-card__name">HFC</div><div class="hb-ref-card__desc">Treble soften</div></a>
             </div>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="play">
             <h2>PLAY submenu</h2>
@@ -120,9 +95,13 @@
               <a class="hb-ref-card" href="menus.html#play"><canvas class="led-matrix" data-scene="lk_pong" width="16" height="16"></canvas><div class="hb-ref-card__name">PONG</div><div class="hb-ref-card__desc">Ball retriggers notes</div></a>
               <a class="hb-ref-card" href="menus.html#play"><canvas class="led-matrix" data-scene="lk_crsr" width="16" height="16"></canvas><div class="hb-ref-card__name">CRSR</div><div class="hb-ref-card__desc">Cursor style</div></a>
               <a class="hb-ref-card" href="sequencing.html#paint"><canvas class="led-matrix" data-scene="lk_draw" width="16" height="16"></canvas><div class="hb-ref-card__name">DRAW</div><div class="hb-ref-card__desc">L+R / R</div></a>
-              <a class="hb-ref-card" href="sequencing.html#unpaint"><canvas class="led-matrix" data-scene="lk_mute" width="16" height="16"></canvas><div class="hb-ref-card__name">MUTE</div><div class="hb-ref-card__desc">Paint mask</div></a>
+              <a class="hb-ref-card" href="sequencing.html#unpaint"><canvas class="led-matrix" data-scene="lk_mute" width="16" height="16"></canvas><div class="hb-ref-card__name">MUTE</div><div class="hb-ref-card__desc">R-mode unmute set</div></a>
             </div>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="rec">
             <h2>REC submenu</h2>
@@ -136,6 +115,10 @@
             </div>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="midi-screens">
             <h2>MIDI submenu</h2>
             <div class="hb-ref-grid">
@@ -147,6 +130,10 @@
               <a class="hb-ref-card" href="tempo-midi.html#ppqn"><canvas class="led-matrix" data-scene="md_ppqn" width="16" height="16"></canvas><div class="hb-ref-card__name">PPQN</div><div class="hb-ref-card__desc">Analog clock</div></a>
             </div>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="etc">
             <h2>ETC submenu</h2>
@@ -163,6 +150,10 @@
             </div>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="bpm-states">
             <h2>BPM &amp; clock variants</h2>
             <div class="hb-ref-grid">
@@ -171,6 +162,10 @@
               <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm_ext_warn" width="16" height="16"></canvas><div class="hb-ref-card__name">BPM (EXT WARN)</div><div class="hb-ref-card__desc">Locking, red</div></a>
             </div>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="filters">
             <h2>Filter / sound design pages</h2>
@@ -181,6 +176,10 @@
               <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p3" width="16" height="16"></canvas><div class="hb-ref-card__name">FILTER 3</div><div class="hb-ref-card__desc">ADSR</div></a>
             </div>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="samples-screens">
             <h2>Sample browser screens</h2>
@@ -202,7 +201,6 @@
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>
-      <script src="handbook-nav.js" defer></script>
     </div>
   </div>
 </div>

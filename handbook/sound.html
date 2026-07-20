@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TŒRN — Sound design</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css" />
   <link rel="stylesheet" href="handbook.css" />
 </head>
@@ -13,51 +15,12 @@
 <div class="hb-app">
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
-  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters">
-    <nav class="hb-sidebar__nav">
-      <p class="hb-sidebar__group">Get started</p>
-      <ul>
-        <li><a href="index.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Welcome</span><span class="hb-sidebar__link-desc">First boot</span></a></li>
-        <li><a href="hardware.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Hardware</span><span class="hb-sidebar__link-desc">Ports &amp; buttons</span></a></li>
-        <li><a href="matrix.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">The matrix</span><span class="hb-sidebar__link-desc">Rows &amp; voices</span></a></li>
-        <li><a href="controls.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Controls</span><span class="hb-sidebar__link-desc">Encoders &amp; touch</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Compose</p>
-      <ul>
-        <li><a href="sequencing.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sequencing</span><span class="hb-sidebar__link-desc">Draw, paint, single</span></a></li>
-        <li><a href="note-detail.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Note detail</span><span class="hb-sidebar__link-desc">Per-step edit</span></a></li>
-        <li><a href="sound.html" class="hb-sidebar__link hb-sidebar__link--active" aria-current="page"><span class="hb-sidebar__link-title">Sound design</span><span class="hb-sidebar__link-desc">Filters &amp; ADSR</span></a></li>
-        <li><a href="samples.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Samples</span><span class="hb-sidebar__link-desc">Sample browser, record</span></a></li>
-        <li><a href="sample-packs.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Sample packs</span><span class="hb-sidebar__link-desc">Pack slots &amp; folders</span></a></li>
-      </ul>
-      <p class="hb-sidebar__group">Operate</p>
-      <ul>
-        <li><a href="tempo-midi.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Tempo &amp; MIDI</span><span class="hb-sidebar__link-desc">Clock &amp; sync</span></a></li>
-        <li><a href="song.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Song</span><span class="hb-sidebar__link-desc">Arranger &amp; pages</span></a></li>
-        <li><a href="files.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Files</span><span class="hb-sidebar__link-desc">Load, save, autosave</span></a></li>
-        <li><a href="menus.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Menu map</span><span class="hb-sidebar__link-desc">Full tree</span></a></li>
-        <li><a href="reference.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Screen index</span><span class="hb-sidebar__link-desc">All displays</span></a></li>
-        <li><a href="troubleshooting.html" class="hb-sidebar__link"><span class="hb-sidebar__link-title">Troubleshoot</span><span class="hb-sidebar__link-desc">Fix surprises</span></a></li>
-      </ul>
-    </nav>
-  </aside>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-nav.js"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
-        <header>
-          <h1><a href="index.html" style="text-decoration:none;color:inherit">TŒRN</a></h1>
-          <p class="tag">Handbook — sound design: filters, envelopes, effects, synths.</p>
-        </header>
-
-        <nav class="hb-journey" aria-label="Reading progress">
-          <a class="hb-journey__step" href="note-detail.html">6 · Note detail</a>
-          <span class="hb-journey__sep">›</span>
-          <span class="hb-journey__step hb-journey__step--here">7 · Sound design</span>
-          <span class="hb-journey__sep">›</span>
-          <a class="hb-journey__step" href="samples.html">8 · Samples</a>
-        </nav>
-
         <section class="handbook-page" id="page-sound">
           <h2 class="handbook-page__title">Sound design</h2>
           <p class="handbook-page__summary">Each voice runs through the same chain: source → ADSR → filter → effects → mixer. This chapter walks each stage and the four filter pages where you control them.</p>
@@ -82,6 +45,10 @@
             </div>
             <p>Synth voices (11, 13, 14) replace "Source" with oscillator banks (voice&nbsp;11 also has a dedicated filter envelope). Rows <strong>9, 10, and 12</strong> are intentionally empty — no source stage. Sample voices 1–8 use SD-card audio as the source.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="filter">
             <h2>The four filter pages</h2>
@@ -212,6 +179,10 @@
             </article>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="adsr">
             <h2>ADSR in detail</h2>
             <p>All voices share the same envelope generator. Channel&nbsp;11 (poly synth) additionally has a <strong>filter envelope</strong> with its own A/D/S/R that modulates the filter cutoff — same encoder layout, different page nest. Reach it through filter page 1 on voice 11 (the third filter row swaps in for filter-ADSR when applicable).</p>
@@ -221,6 +192,10 @@
               <li><strong>Release 0</strong> = note shuts immediately at the next step. Use to tighten busy grooves.</li>
             </ul>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="effects">
             <h2>Per-voice effects</h2>
@@ -236,11 +211,19 @@
             <p>The reverb is a global shared bus. Only voices with an active <strong>RVRB</strong> control can send into it (see filter page&nbsp;0 above). Balance wet against dry by mixing send amounts on the lanes that support it.</p>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="fast-filter">
             <h2>Fast filter (encoder 3 from the grid)</h2>
             <p class="lede">From draw or single mode, <strong>turning encoder&nbsp;3</strong> twists the parameter chosen as the fast-filter default for the current channel. That choice is set in the filter editor: <strong>short-press a column</strong> to mark it as that voice's macro. The next time you spin encoder&nbsp;3 from the grid, you are sweeping <em>that</em> control.</p>
             <p>Most players assign FREQ as the default for sample lanes and CUT for synth lanes. Lanes can each have their own choice — the firmware remembers per channel.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="synths">
             <h2>The synth voices in detail</h2>
@@ -260,6 +243,10 @@
             <p>These matrix rows are reserved but <strong>intentionally carry no voice</strong>. The cursor can visit them, but placing notes or opening filters has no effect — there is no audio path. See <a href="matrix.html#voice-rows">The matrix → voice lanes</a>.</p>
           </section>
 
+
+          <hr />
+
+
           <section class="hb-sub" id="tuning">
             <h2>Per-voice tuning</h2>
             <ul>
@@ -271,6 +258,10 @@
             </ul>
             <p>These add together. Big-picture tuning lives in detune + octave; subtle character lives in cents + semitone offset.</p>
           </section>
+
+
+          <hr />
+
 
           <section class="hb-sub" id="reset-defaults">
             <h2>Resetting a voice</h2>
@@ -286,7 +277,6 @@
         </nav>
       </div>
       <script src="handbook-led.js" defer></script>
-      <script src="handbook-nav.js" defer></script>
     </div>
   </div>
 </div>
