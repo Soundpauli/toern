@@ -3,34 +3,58 @@
     {
       group: "Get started",
       items: [
-        { href: "index.html", title: "Welcome", desc: "First boot" },
-        { href: "hardware.html", title: "Hardware", desc: "Ports & buttons" },
-        { href: "matrix.html", title: "The matrix", desc: "Rows & voices" },
-        { href: "controls.html", title: "Controls", desc: "Encoders & touch" },
-        { href: "troubleshooting.html", title: "Troubleshoot", desc: "Fix surprises", tone: "alert" }
+        { href: "index.html", title: "Welcome", desc: "First boot", icon: "welcome" },
+        { href: "hardware.html", title: "Hardware", desc: "Ports & buttons", icon: "hardware" },
+        { href: "matrix.html", title: "The matrix", desc: "Rows & voices", icon: "matrix" },
+        { href: "controls.html", title: "Controls", desc: "Encoders & touch", icon: "controls" },
+        { href: "troubleshooting.html", title: "Troubleshoot", desc: "Fix surprises", tone: "alert", icon: "alert" }
       ]
     },
     {
       group: "Compose",
       items: [
-        { href: "sequencing.html", title: "Sequencing", desc: "Draw, paint, single" },
-        { href: "note-detail.html", title: "Note detail", desc: "Per-step edit" },
-        { href: "sound.html", title: "Sound design", desc: "Filters & ADSR" },
-        { href: "samples.html", title: "Samples", desc: "Sample browser, record" },
-        { href: "sample-packs.html", title: "Sample packs", desc: "Pack slots & folders" }
+        { href: "sequencing.html", title: "Sequencing", desc: "Draw, paint, single", icon: "sequencing" },
+        { href: "note-detail.html", title: "Note detail", desc: "Per-step edit", icon: "note" },
+        { href: "sound.html", title: "Sound design", desc: "Filters & ADSR", icon: "sound" },
+        { href: "samples.html", title: "Samples", desc: "Sample browser, record", icon: "samples" },
+        { href: "sample-packs.html", title: "Sample packs", desc: "Pack slots & folders", icon: "packs" }
       ]
     },
     {
       group: "Operate",
       items: [
-        { href: "tempo-midi.html", title: "Tempo & MIDI", desc: "Clock & sync" },
-        { href: "song.html", title: "Song", desc: "Arranger & pages" },
-        { href: "files.html", title: "Files", desc: "Load, save, autosave" },
-        { href: "menus.html", title: "Menu map", desc: "Full tree" },
-        { href: "reference.html", title: "Screen index", desc: "All displays" }
+        { href: "tempo-midi.html", title: "Tempo & MIDI", desc: "Clock & sync", icon: "tempo" },
+        { href: "song.html", title: "Song", desc: "Arranger & pages", icon: "song" },
+        { href: "files.html", title: "Files", desc: "Load, save, autosave", icon: "files" },
+        { href: "menus.html", title: "Menu map", desc: "Full tree", icon: "menus" },
+        { href: "reference.html", title: "Screen index", desc: "All displays", icon: "reference" }
       ]
     }
   ];
+
+  /* Fallback icons if handbook-icons.js is not yet available (sync load order). */
+  var FALLBACK = {
+    welcome: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M2.5 7.2 8 2.5l5.5 4.7V14H9.5V10H6.5v4H2.5z"/></svg>',
+    hardware: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2.5" width="10" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    matrix: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.3" d="M2.5 2.5h11v11h-11zM2.5 6.2h11M2.5 9.8h11M6.2 2.5v11M9.8 2.5v11"/></svg>',
+    controls: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>',
+    alert: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M8 2.4 14.2 13.2H1.8z"/><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 6.2v3.2M8 11.2v.1"/></svg>',
+    sequencing: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M2.5 11.5h2.2M6.2 8.2h2.2M9.9 4.8h2.2"/><circle cx="3.6" cy="11.5" r="1.1" fill="currentColor"/><circle cx="7.3" cy="8.2" r="1.1" fill="currentColor"/><circle cx="11" cy="4.8" r="1.1" fill="currentColor"/></svg>',
+    note: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M6.2 12.2V4.2l6.1-1.4v8"/><circle cx="4.6" cy="12.2" r="1.7" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="10.7" cy="10.8" r="1.7" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    sound: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M2.5 8h1.4l1.5-3.2 1.8 6.4 1.7-4.6 1.4 2.6H13.5"/></svg>',
+    samples: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.4" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    packs: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M2.5 5.2h4.2l1.3 1.4H13.5v6.4H2.5z"/></svg>',
+    tempo: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8.2" r="5.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M8 5v3.4l2.4 1.5"/></svg>',
+    song: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M3 4.2h10M3 8h10M3 11.8h7"/></svg>',
+    files: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M4 2.8h5.2L12.5 6v7.2H4z"/></svg>',
+    menus: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M3 4h10M3 8h10M3 12h10"/></svg>',
+    reference: '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="5" height="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="3" width="5" height="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.5" y="8.8" width="5" height="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="8.8" width="5" height="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>'
+  };
+
+  function iconHtml(name) {
+    var pack = window.HBIcons || FALLBACK;
+    return pack[name] || FALLBACK[name] || "";
+  }
 
   function currentPage() {
     var file = (location.pathname.split("/").pop() || "").split("?")[0];
@@ -71,11 +95,13 @@
             classes +
             "\"" +
             (active ? ' aria-current="page"' : "") +
-            "><span class=\"hb-sidebar__link-title\">" +
+            '><span class="hb-sidebar__link-ico" aria-hidden="true">' +
+            iconHtml(item.icon) +
+            '</span><span class="hb-sidebar__link-text"><span class="hb-sidebar__link-title">' +
             escapeHtml(item.title) +
             '</span><span class="hb-sidebar__link-desc">' +
             escapeHtml(item.desc) +
-            "</span></a></li>"
+            "</span></span></a></li>"
         );
       });
       html.push("</ul>");
