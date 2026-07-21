@@ -62,6 +62,7 @@ const sidebars = {
       items: [
         'contributing/build-setup',
         'contributing/memory',
+        'contributing/docs-site',
       ],
     },
   ],

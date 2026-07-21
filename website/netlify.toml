@@ -32,4 +32,4 @@
   status = 200
 
 # Shop config (sold_out, max_orders) is now in Supabase – see website/supabase/
-# Code/hardware docs: built from ../devdocs into ./docs (see npm run build:docs)
+# Code/hardware docs: website/devdocs → built into ./docs (npm run build:docs)

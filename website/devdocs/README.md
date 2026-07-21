@@ -2,7 +2,17 @@
 
 Developer documentation for the TŒRN firmware — how the code is structured and how the pieces talk to each other.
 
-This is **not** the operator handbook (device usage). That lives in [`../handbook/`](../handbook/) (and the repo-root `handbook/` copy).
+This is **not** the operator handbook (device usage). That lives in [`../handbook/`](../handbook/) on the site, and in the repo-root `handbook/` tree.
+
+## Layout (important for Netlify)
+
+| Path | Role |
+|------|------|
+| `website/devdocs/` | This Docusaurus app (source of truth) |
+| `website/docs/` | Built static files served at `/docs/` |
+| `website/scripts/sync-docs.js` | `npm run build:docs` helper |
+
+Netlify uses **`base = website`**, so the docs app must live **inside** `website/` (a repo-root `devdocs/` sibling is invisible to that build).
 
 ## Local preview
 
@@ -12,21 +22,19 @@ npm install
 npm start
 ```
 
-Open http://localhost:3000/docs/ (or the port printed in the terminal).  
-`baseUrl` is `/docs/` so the site matches production paths.
+Open the URL from the terminal (routes are under `/docs/…`).  
+`baseUrl` is `/docs/` to match production: https://toern.live/docs/
 
-## Production (toern.live/docs)
-
-Lives under `website/devdocs` so Netlify’s `base = website` can see it (no sibling outside the site tree).
+## Production build
 
 ```bash
 cd website
-npm run build:docs   # or full: npm run build
+npm run build:docs   # or full site: npm run build
 ```
 
-That builds this app and copies output into `website/docs/`.
+Details: [docs → Contributing → This docs site](./docs/contributing/docs-site.md).
 
-## Docs layout
+## Docs sections
 
 | Section | What it covers |
 |---------|----------------|
@@ -35,6 +43,6 @@ That builds this app and copies output into `website/docs/`.
 | Audio | Teensy Audio graph, samples, synths, FX |
 | Subsystems | UI/LEDs, MIDI/clock, menu, SD |
 | Hardware (rev G) | KiCad board map, connectors, power, fab exports |
-| Contributing | Build toolchain, RAM placement tips |
+| Contributing | Firmware build, memory tips, **this docs site** |
 
 Edit Markdown under `docs/`. Sidebar order is in `sidebars.js`.

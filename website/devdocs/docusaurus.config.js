@@ -79,7 +79,7 @@ const config = {
             items: [
               {label: 'Architecture', to: '/architecture/overview'},
               {label: 'File map', to: '/architecture/file-map'},
-              {label: 'Main loop', to: '/architecture/main-loop'},
+              {label: 'This docs site', to: '/contributing/docs-site'},
             ],
           },
           {
