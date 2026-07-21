@@ -32,7 +32,7 @@ For MIDI + serial SD tool use a USB type that includes **Serial** (and MIDI if y
 ## Docs site (this site)
 
 ```bash
-cd devdocs
+cd website/devdocs
 npm install
 npm start
 ```
