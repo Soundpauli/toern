@@ -7,7 +7,7 @@ description: Developer docs for how TŒRN firmware is structured — not the dev
 
 # TŒRN code docs
 
-These pages explain **how the firmware is organized** and how the major pieces cooperate: sequencer data, UI modes, the Teensy Audio graph, MIDI/clock, and SD I/O — plus **hardware design docs** for the current PCB (`toern_revG`).
+These pages explain **how the firmware is organized** and how the major pieces cooperate: sequencer data, UI modes, the Teensy Audio graph, MIDI/clock, and SD I/O — plus **hardware design docs** for the current PCB (`toern_revG`) and **host-side tools** (sample converter, MIDI convert, SD tool, …).
 
 If you want to *use* the device (first beat, controls, sequencing), open the **[operator handbook](https://github.com/Soundpauli/toern/tree/main/handbook)** instead.
 
@@ -31,6 +31,7 @@ Arduino concatenates all `.ino` files in the sketch folder; headers and `src/` a
 3. [Main loop](./architecture/main-loop) — ISR vs loop work (timing-critical path)  
 4. [Modes](./core/modes) — how encoders and screens switch behavior  
 5. [Hardware overview (rev G)](./hardware/overview) — KiCad board, connectors, power  
+6. [Tools overview](./tools/overview) — sample converter, MIDI, SD tool, firmware loader, …  
 
 ## Explicit non-goals
 

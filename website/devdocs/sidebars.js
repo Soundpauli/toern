@@ -46,6 +46,20 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Tools',
+      collapsed: false,
+      items: [
+        'tools/overview',
+        'tools/sample-converter',
+        'tools/midi-convert',
+        'tools/sd-tool',
+        'tools/firmware-loader',
+        'tools/color-scheme',
+        'tools/annotate',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Hardware (rev G)',
       collapsed: false,
       items: [

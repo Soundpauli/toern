@@ -42,7 +42,8 @@ Details: [docs → Contributing → This docs site](./docs/contributing/docs-sit
 | Core concepts | Modes, note/pattern data, channel map |
 | Audio | Teensy Audio graph, samples, synths, FX |
 | Subsystems | UI/LEDs, MIDI/clock, menu, SD |
+| Tools | Sample converter, MIDI convert, SD tool, firmware loader, color editor, annotate |
 | Hardware (rev G) | KiCad board map, connectors, power, fab exports |
-| Contributing | Firmware build, memory tips, **this docs site** |
+| Contributing | Firmware build, memory tips, this docs site |
 
 Edit Markdown under `docs/`. Sidebar order is in `sidebars.js`.
