@@ -23,7 +23,6 @@ Besides the firmware and PCB, the repo ships **browser and CLI tools** for sampl
 | Tool | Path | Role |
 |------|------|------|
 | SD CLI | `standalone-tools/sd-tool-standalone/toern_sd.py` | Scripted list/put/get over USB serial |
-| Annotate | `tools/annotate/` | Handbook-style callout images |
 
 ## How they relate to the device
 
@@ -48,5 +47,4 @@ Operator-facing how-to stays in the **handbook**; these pages describe **what ea
 - [MIDI convert](./midi-convert)  
 - [SD tool](./sd-tool)  
 - [Firmware loader](./firmware-loader)  
-- [Color scheme editor](./color-scheme)  
-- [Annotate](./annotate)
+- [Color scheme editor](./color-scheme)

@@ -55,7 +55,6 @@ const sidebars = {
         'tools/sd-tool',
         'tools/firmware-loader',
         'tools/color-scheme',
-        'tools/annotate',
       ],
     },
     {
