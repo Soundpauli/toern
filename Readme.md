@@ -157,7 +157,7 @@ Insert or eject the SD card only with the unit **off** — the firmware re-index
 | `src/` | Modified audio bits (resampler, freeverb DMA) |
 | `PCB/` | Hardware revisions (currently rev G territory) |
 | `handbook/` | Human-friendly operator’s guide (how to *use* the device) |
-| `devdocs/` | [Docusaurus](./devdocs/) code **and** hardware (rev G) docs |
+| `website/devdocs/` | [Docusaurus](./website/devdocs/) code **and** hardware (rev G) docs → published at `/docs/` |
 | `tools/` / `standalone-tools/` | Helpers; SD file tool lives in `standalone-tools/sd-tool-standalone` |
 | `website/` | Project site bits |
 
@@ -194,7 +194,7 @@ This project leans on several libraries. Some are stock; some got lovingly (and 
 - **Build or fork it** — everything lives in this repo. Makers, developers, and musicians are all invited to tweak and share.  
 - **Prefer a finished unit?** Don’t want to become a part-time PCB archaeologist? Write to **jpkuntoff@gmail.com** for a pre-assembled TŒRN or a custom collaboration.  
 - **Handbook** — start at [`handbook/index.html`](./handbook/index.html).  
-- **Code docs** — architecture & hardware (rev G) in [`devdocs/`](./devdocs/); published at **`/docs/`** on the site (`cd website && npm run build:docs`). Local preview: `cd devdocs && npm start` → `/docs/`.  
+- **Code docs** — architecture & hardware (rev G) in [`website/devdocs/`](./website/devdocs/); published at **`/docs/`** on the site (`cd website && npm run build:docs`). Local preview: `cd website/devdocs && npm start` → `/docs/`.
 - **Issues & ideas** — open an issue or leave a note; open source gets better when people actually poke it.
 
 ---

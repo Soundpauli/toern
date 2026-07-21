@@ -33,7 +33,7 @@ const config = {
         docs: {
           routeBasePath: '/',
           sidebarPath: './sidebars.js',
-          editUrl: 'https://github.com/Soundpauli/toern/tree/main/devdocs/',
+          editUrl: 'https://github.com/Soundpauli/toern/tree/main/website/devdocs/',
         },
         blog: false,
         theme: {

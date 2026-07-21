@@ -1,0 +1,28 @@
+{
+  "name": "toern-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TŒRN website with Netlify functions",
+  "scripts": {
+    "build": "npm run install:convertmidi && npm run install:invoice && npm run build:convertmidi && npm run build:invoice && npm run build:docs",
+    "build:convertmidi": "npm --prefix tools/convertmidi/app run build",
+    "build:invoice": "npm --prefix invoice run build",
+    "build:docs": "node scripts/sync-docs.js --build",
+    "dev": "node dev-runner.js",
+    "install:convertmidi": "npm --prefix tools/convertmidi/app ci",
+    "install:invoice": "npm --prefix invoice ci",
+    "start": "npm run build:convertmidi && node audio-converter-server.js",
+    "postinstall": "node scripts/chmod-ffmpeg.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "busboy": "^1.6.0",
+    "express": "^4.21.2",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "unzipper": "^0.12.3"
+  }
+}

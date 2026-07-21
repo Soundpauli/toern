@@ -1,0 +1,35 @@
+[build]
+  command = "npm run build"
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  included_files = ["node_modules/ffmpeg-static/**"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/docs"
+  to = "/docs/"
+  status = 301
+
+[[redirects]]
+  from = "/invoice/*"
+  to = "/cmgmt/:splat"
+  status = 301
+
+[[redirects]]
+  from = "/cmgmt"
+  to = "/cmgmt/"
+  status = 301
+
+[[redirects]]
+  from = "/cmgmt/*"
+  to = "/cmgmt/index.html"
+  status = 200
+
+# Shop config (sold_out, max_orders) is now in Supabase – see website/supabase/
+# Code/hardware docs: built from ../devdocs into ./docs (see npm run build:docs)

@@ -2,12 +2,12 @@
 
 Developer documentation for the TŒRN firmware — how the code is structured and how the pieces talk to each other.
 
-This is **not** the operator handbook (device usage). That lives in [`../handbook/`](../handbook/).
+This is **not** the operator handbook (device usage). That lives in [`../handbook/`](../handbook/) (and the repo-root `handbook/` copy).
 
 ## Local preview
 
 ```bash
-cd devdocs
+cd website/devdocs
 npm install
 npm start
 ```
@@ -17,14 +17,14 @@ Open http://localhost:3000/docs/ (or the port printed in the terminal).
 
 ## Production (toern.live/docs)
 
-The main Netlify site (`website/`) builds these docs and publishes them at **`/docs/`**:
+Lives under `website/devdocs` so Netlify’s `base = website` can see it (no sibling outside the site tree).
 
 ```bash
 cd website
 npm run build:docs   # or full: npm run build
 ```
 
-That runs `devdocs` production build and copies output into `website/docs/`.
+That builds this app and copies output into `website/docs/`.
 
 ## Docs layout
 
