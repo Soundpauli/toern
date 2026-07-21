@@ -1,0 +1,58 @@
+---
+sidebar_position: 2
+title: File map
+description: What each firmware file is responsible for.
+---
+
+# File map
+
+Arduino builds every `.ino` in the sketch root as one program. Treat the filenames as modules even though they share a global namespace.
+
+## Sketch root
+
+| File | Responsibility |
+|------|----------------|
+| [`toern.ino`](https://github.com/Soundpauli/toern/blob/main/toern.ino) | Version, includes, enums, `Mode`/`Note`/`Device`/`GlobalVars`, encoder + touch input, mode switching, playback timers, `setup`/`loop`, most glue |
+| [`toern_ui.ino`](https://github.com/Soundpauli/toern/blob/main/toern_ui.ino) | LED matrix drawing: grid, cursor, status, BPM screen, overlays |
+| [`toern_menu.ino`](https://github.com/Soundpauli/toern/blob/main/toern_menu.ino) | Nested menu UI (LOOK / RECS / MIDI / VOL / ETC), settings persistence hooks |
+| [`toern_helpers.ino`](https://github.com/Soundpauli/toern/blob/main/toern_helpers.ino) | Pattern generation helpers, sample browser lists, misc utilities |
+| [`toern_sample.ino`](https://github.com/Soundpauli/toern/blob/main/toern_sample.ino) | Sample preview, trim, load into voices, SD I/O yielding while audio runs |
+| [`toern_synths.ino`](https://github.com/Soundpauli/toern/blob/main/toern_synths.ino) | Poly/mono synth voice allocation, presets, `playSound` / `stopSound` |
+| [`toern_midi.ino`](https://github.com/Soundpauli/toern/blob/main/toern_midi.ino) | MIDI in/out, clock master/slave, transport, pulse-clock options |
+| [`toern_filter.ino`](https://github.com/Soundpauli/toern/blob/main/toern_filter.ino) | Apply filter/FX graph parameters; smooth mixer gain transitions |
+| [`toern_filterUI.ino`](https://github.com/Soundpauli/toern/blob/main/toern_filterUI.ino) | Filter-mode sliders on the matrix, encoder color cues |
+| [`toern_parameters.ino`](https://github.com/Soundpauli/toern/blob/main/toern_parameters.ino) | Defaults and parameter setters (`setParams`, envelopes, synth presets) |
+| [`toern_fileoperations.ino`](https://github.com/Soundpauli/toern/blob/main/toern_fileoperations.ino) | Pattern/project save & load on SD |
+| [`toern_sd_serial.ino`](https://github.com/Soundpauli/toern/blob/main/toern_sd_serial.ino) | USB-serial SD file server (Menu → ETC → SD) |
+| [`toern_leds.ino`](https://github.com/Soundpauli/toern/blob/main/toern_leds.ino) | Optional external WS2812 strip ripples synced to notes |
+
+## Headers
+
+| File | Responsibility |
+|------|----------------|
+| [`audioinit.h`](https://github.com/Soundpauli/toern/blob/main/audioinit.h) | Full Teensy Audio object graph + connections |
+| [`notes.h`](https://github.com/Soundpauli/toern/blob/main/notes.h) | Pitch/frequency tables |
+| [`colors.h`](https://github.com/Soundpauli/toern/blob/main/colors.h) | Channel / UI color definitions |
+| [`font_3x5.h`](https://github.com/Soundpauli/toern/blob/main/font_3x5.h) | Tiny bitmap font for matrix text |
+| [`icons.h`](https://github.com/Soundpauli/toern/blob/main/icons.h) | Icon bitmaps for menu/status |
+
+## `src/` (custom audio)
+
+| File | Responsibility |
+|------|----------------|
+| [`src/resamplerReader.h`](https://github.com/Soundpauli/toern/blob/main/src/resamplerReader.h) | Modified variable-rate sample playback (from teensy-variable-playback lineage) |
+| [`src/effect_freeverb_dmabuf.*`](https://github.com/Soundpauli/toern/blob/main/src/effect_freeverb_dmabuf.h) | Freeverb variant that keeps large buffers in DMAMEM |
+
+## Other trees (not this docs site)
+
+| Path | Role |
+|------|------|
+| `handbook/` | End-user guide (HTML) |
+| `PCB/toern_revG/` | Current KiCad board — see [Hardware overview](../hardware/overview) |
+| `tools/`, `standalone-tools/` | Host-side utilities (SD tool, converters, …) |
+| `website/` | Project website (gitignored locally) |
+| `_internal-docs/` | Scratch notes / plans (gitignored) |
+
+## Size intuition
+
+`toern.ino` is the largest file by far (~8k+ lines). Prefer adding focused logic to an existing `toern_*.ino` (or a new one) rather than growing the main file further when practical.
