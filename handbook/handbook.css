@@ -135,7 +135,9 @@ h2 {
   paint-order: stroke fill;
   line-height: 1.05;
 }
-h2 span:not(.hb-brand) { color: var(--accent); font-weight: 400; }
+h2 span:not(.hb-brand):not(.hb-mention) { color: var(--accent); font-weight: 400; }
+h2 .hb-mention,
+h2 .hb-mention .hb-ico { color: inherit; }
 h3 {
   font-size: 1rem;
   font-weight: 600;
@@ -785,12 +787,17 @@ ul.menu-tree ul ul .sub { border-left-color: rgba(255, 59, 48, 0.35); background
   border-right: 1px solid var(--sidebar-line);
 }
 .hb-sidebar__brand {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 0.15rem;
   margin: 0;
   padding: 1.35rem 1.25rem 1rem;
   text-align: left;
+}
+@media (min-width: 901px) {
+  .hb-sidebar__brand {
+    display: flex;
+  }
 }
 .hb-sidebar__brand h1 {
   margin: 0;
@@ -1007,7 +1014,8 @@ ul.menu-tree ul ul .sub { border-left-color: rgba(255, 59, 48, 0.35); background
   color: #3a6478;
 }
 
-/* Mobile burger — hidden on desktop */
+/* Mobile chrome — hidden on desktop */
+.hb-mobile-bar,
 .hb-nav-toggle,
 .hb-nav-backdrop {
   display: none;
@@ -1020,6 +1028,35 @@ ul.menu-tree ul ul .sub { border-left-color: rgba(255, 59, 48, 0.35); background
   cursor: pointer;
   padding: 0;
 }
+.hb-mobile-bar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+.hb-mobile-bar__logo {
+  font-family: var(--font-logo);
+  font-weight: 400;
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #000;
+  line-height: 1;
+  -webkit-text-stroke: 0.35px #000;
+  paint-order: stroke fill;
+}
+.hb-mobile-bar__kicker {
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sidebar-muted);
+  line-height: 1;
+}
+.hb-mobile-bar__brand:hover .hb-mobile-bar__logo { color: #000; }
 .hb-nav-toggle:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -1271,25 +1308,42 @@ a:focus-visible {
 }
 
 @media (max-width: 900px) {
-  :root { --sidebar-w: 100%; }
+  :root {
+    --sidebar-w: 100%;
+    --hb-mobile-bar-h: 3.15rem;
+  }
+  html { scroll-padding-top: calc(var(--hb-mobile-bar-h) + env(safe-area-inset-top, 0px) + 0.5rem); }
   .hb-pager__spacer { display: none; }
   .hb-app {
     grid-template-columns: 1fr;
     min-height: auto;
+    padding-top: calc(var(--hb-mobile-bar-h) + env(safe-area-inset-top, 0px));
   }
-  /* Mobile: burger + slide-in drawer (sidebar off-canvas) */
-  .hb-nav-toggle {
+  /* Mobile: logo header + burger + slide-in drawer */
+  .hb-mobile-bar {
     display: flex;
     position: fixed;
-    top: calc(0.55rem + env(safe-area-inset-top, 0px));
-    right: calc(0.55rem + env(safe-area-inset-right, 0px));
+    top: 0;
+    left: 0;
+    right: 0;
     z-index: 310;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    height: calc(var(--hb-mobile-bar-h) + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 0.55rem 0 0.95rem;
+    background: var(--sidebar-bg);
+    border-bottom: 1px solid var(--sidebar-line);
+  }
+  .hb-nav-toggle {
+    display: flex;
+    position: static;
+    flex-shrink: 0;
     width: 2.85rem;
     height: 2.85rem;
     border-radius: 0;
     border: 1px solid var(--sidebar-line);
     background: var(--sidebar-bg);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
   }
   .hb-nav-backdrop {
     display: block;
@@ -1311,10 +1365,10 @@ a:focus-visible {
   .hb-sidebar {
     position: fixed;
     left: 0;
-    top: 0;
+    top: calc(var(--hb-mobile-bar-h) + env(safe-area-inset-top, 0px));
     bottom: 0;
     width: min(20rem, 88vw);
-    height: 100vh;
+    height: auto;
     max-height: none;
     align-self: stretch;
     transform: translateX(-102%);
@@ -1337,7 +1391,7 @@ a:focus-visible {
     letter-spacing: 0.16em;
   }
   .hb-sidebar__group:first-child {
-    margin-top: 0.25rem;
+    margin-top: 0.65rem;
   }
   .hb-sidebar__nav ul {
     display: flex;
@@ -1351,9 +1405,6 @@ a:focus-visible {
   }
   .hb-sidebar__nav ul::-webkit-scrollbar {
     display: block;
-  }
-  .hb-sidebar__brand {
-    padding: 1rem 1.25rem 1rem;
   }
   .hb-sidebar__link {
     padding: 0.5rem 1.25rem;
@@ -1532,6 +1583,22 @@ a:focus-visible {
   min-width: 1.5rem;
 }
 .hb-voice__desc { color: var(--muted); font-size: 0.78rem; line-height: 1.35; }
+
+/* Full-width handbook figures (e.g. annotated hardware photo) */
+.hb-figure {
+  margin: 0.85rem 0 1.5rem;
+  padding: 0;
+}
+.hb-figure--full {
+  width: 100%;
+  max-width: none;
+}
+.hb-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #ececef;
+}
 
 /* Hardware port map (SVG outline) */
 .hb-portmap {
@@ -1953,7 +2020,9 @@ h2 {
   text-transform: uppercase;
   color: #000;
 }
-h2 span:not(.hb-brand) { color: var(--brand-red); }
+h2 span:not(.hb-brand):not(.hb-mention) { color: var(--brand-red); }
+h2 .hb-mention,
+h2 .hb-mention .hb-ico { color: inherit; }
 
 code, .hb-gest {
   font-family: var(--font-tech);

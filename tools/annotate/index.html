@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TŒRN | Image Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="../../handbook/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../tool-shell.css" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="tool-page ann-page">
+  <nav class="tool-nav">
+    <div class="tool-nav-meta ann-nav-actions">
+      <button type="button" class="ann-btn ann-btn--ghost" id="btn-undo" title="Undo (⌘Z)">Undo</button>
+      <button type="button" class="ann-btn ann-btn--ghost" id="btn-redo" title="Redo (⌘⇧Z)">Redo</button>
+      <span class="ann-nav-sep" aria-hidden="true"></span>
+      <button type="button" class="ann-btn" id="btn-select-all" title="Select all callouts (⌘A)">Select all</button>
+      <button type="button" class="ann-btn ann-btn--ghost" id="btn-select-none">Clear</button>
+      <span class="ann-nav-sep" aria-hidden="true"></span>
+      <button type="button" class="ann-btn ann-btn--ghost" id="btn-load">Load</button>
+      <button type="button" class="ann-btn ann-btn--ghost" id="btn-save">Save</button>
+      <button type="button" class="ann-btn" id="btn-export-image" title="Cropped photo only">Image</button>
+      <button type="button" class="ann-btn ann-btn--accent" id="btn-export" title="Cropped photo + callouts">PNG</button>
+      <button type="button" class="ann-btn ann-btn--accent" id="btn-export-html" title="Self-contained HTML">HTML</button>
+      <input type="file" id="file-json" accept="application/json,.json" hidden />
+      <input type="file" id="file-image" accept="image/*" hidden />
+    </div>
+  </nav>
+
+  <main class="tool-shell ann-shell">
+    <div class="ann-layout">
+      <aside class="ann-rail" aria-label="Modes">
+        <button type="button" class="ann-mode is-active" data-mode="image" title="Crop, rotate, zoom">Image</button>
+        <button type="button" class="ann-mode" data-mode="annotate" title="Place callouts">Draw</button>
+        <button type="button" class="ann-mode" data-mode="select" title="Select &amp; edit">Edit</button>
+        <div class="ann-rail__spacer"></div>
+        <button type="button" class="ann-btn ann-btn--block" id="btn-open">Open</button>
+      </aside>
+
+      <section class="ann-stage-wrap">
+        <div class="ann-toolbar" id="view-toolbar">
+          <div class="ann-toolbar__group">
+            <label class="ann-inline">Zoom
+              <input type="range" id="view-zoom" min="0.2" max="4" step="0.05" value="1" />
+              <span id="view-zoom-val">100%</span>
+            </label>
+            <button type="button" class="ann-btn ann-btn--ghost" id="btn-fit">Fit</button>
+            <button type="button" class="ann-btn ann-btn--ghost" id="btn-reset-view">Reset</button>
+          </div>
+          <div class="ann-toolbar__group">
+            <label class="ann-inline">
+              <input type="checkbox" id="snap-enabled" checked /> Snap
+            </label>
+            <label class="ann-inline" for="snap-grid">
+              <input type="number" id="snap-grid" min="1" max="200" value="50" />
+              px
+            </label>
+          </div>
+          <span id="sel-count">None selected</span>
+          <div class="ann-toolbar__group" style="margin-left:auto">
+            <label class="ann-inline">Scale
+              <select id="export-scale">
+                <option value="1">1×</option>
+                <option value="2" selected>2×</option>
+                <option value="3">3×</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="ann-stage" id="stage">
+          <canvas id="canvas" width="1200" height="800"></canvas>
+          <div class="ann-drop" id="drop-hint">
+            <p><strong>Drop an image</strong> or click Open</p>
+            <p class="ann-muted">Crop → Draw a callout → style live on the right</p>
+          </div>
+        </div>
+      </section>
+
+      <aside class="ann-inspector" aria-label="Inspector">
+        <div class="ann-panel" data-panel="image">
+          <h2 class="ann-panel__title">Image</h2>
+          <div class="ann-field">
+            <label for="img-rotate">Rotate</label>
+            <div class="ann-row">
+              <input type="range" id="img-rotate" min="-180" max="180" step="1" value="0" />
+              <input type="number" id="img-rotate-num" min="-180" max="180" step="1" value="0" />
+              <span class="ann-muted">°</span>
+            </div>
+            <div class="ann-seg" style="margin-top:0.45rem">
+              <button type="button" class="ann-btn" data-rot="-90">−90°</button>
+              <button type="button" class="ann-btn" data-rot="0">0°</button>
+              <button type="button" class="ann-btn" data-rot="90">+90°</button>
+              <button type="button" class="ann-btn" data-rot="180">180°</button>
+            </div>
+          </div>
+          <div class="ann-field">
+            <label>Crop</label>
+            <p class="ann-hint">Drag the crop on the canvas. Callouts stay locked to image points.</p>
+            <div class="ann-seg">
+              <button type="button" class="ann-btn" id="crop-reset">Full</button>
+              <button type="button" class="ann-btn" data-aspect="1">1:1</button>
+              <button type="button" class="ann-btn" data-aspect="16:9">16:9</button>
+              <button type="button" class="ann-btn" data-aspect="4:3">4:3</button>
+              <button type="button" class="ann-btn" data-aspect="3:2">3:2</button>
+            </div>
+          </div>
+          <div class="ann-field">
+            <label for="bg-color">Background</label>
+            <input type="color" id="bg-color" value="#e8e8ec" />
+          </div>
+        </div>
+
+        <div class="ann-panel" data-panel="annotate" hidden>
+          <h2 class="ann-panel__title">Annotation</h2>
+          <p class="ann-hint" id="ann-hint">Click a point, drag to place the label.</p>
+
+          <div class="ann-field">
+            <label for="ann-title">Title</label>
+            <input type="text" id="ann-title" placeholder="Feature name" />
+          </div>
+          <div class="ann-field">
+            <label for="ann-subtitle">Subtitle</label>
+            <input type="text" id="ann-subtitle" placeholder="Short description" />
+          </div>
+
+          <div class="ann-field">
+            <label>Align</label>
+            <div class="ann-seg">
+              <button type="button" class="ann-btn" id="align-left">Left</button>
+              <button type="button" class="ann-btn" id="align-right">Right</button>
+              <button type="button" class="ann-btn" id="align-distribute">Dist. Y</button>
+              <button type="button" class="ann-btn" id="align-elbows">Elbows</button>
+            </div>
+            <div class="ann-metrics" style="margin-top:0.5rem">
+              <label class="ann-metric" for="align-gap"><span>Gap</span>
+                <input type="number" id="align-gap" min="0" max="200" value="24" />
+              </label>
+              <label class="ann-metric" for="align-margin"><span>Margin</span>
+                <input type="number" id="align-margin" min="0" max="400" value="36" />
+              </label>
+            </div>
+          </div>
+
+          <div class="ann-field">
+            <label>Callouts</label>
+            <ul class="ann-list" id="ann-list"></ul>
+            <button type="button" class="ann-btn ann-btn--danger ann-btn--block" id="btn-delete" disabled>Delete selected</button>
+          </div>
+        </div>
+
+        <div class="ann-panel ann-panel--style">
+          <h2 class="ann-panel__title">Style</h2>
+          <p class="ann-hint">Live — applies to every callout.</p>
+
+          <div class="ann-field">
+            <label for="style-line-attach">Line → label</label>
+            <select id="style-line-attach">
+              <option value="on">On line (under text)</option>
+              <option value="left">Ends left of label</option>
+              <option value="right">Ends right of label</option>
+            </select>
+            <div class="ann-metrics" style="margin-top:0.5rem">
+              <label class="ann-metric" for="style-line-margin"><span>Gap Y</span>
+                <input type="number" id="style-line-margin" min="0" max="120" value="12" />
+              </label>
+              <label class="ann-metric" for="style-line-x-gap"><span>X gap</span>
+                <input type="number" id="style-line-x-gap" min="0" max="200" value="8" />
+              </label>
+              <label class="ann-metric" for="style-line-x-offset"><span>X offset</span>
+                <input type="number" id="style-line-x-offset" min="-200" max="200" value="0" />
+              </label>
+              <div class="ann-metric" style="justify-content:center">
+                <span id="style-gap-hint">px under text</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ann-field">
+            <label for="style-font">Font</label>
+            <select id="style-font">
+              <option value="jetbrains">JetBrains Mono</option>
+              <option value="space">Space Grotesk</option>
+              <option value="inter">Inter</option>
+              <option value="bebas">Bebas Neue</option>
+              <option value="system">System</option>
+            </select>
+          </div>
+
+          <div class="ann-metrics">
+            <label class="ann-metric" for="style-title-size"><span>Title size</span>
+              <input type="number" id="style-title-size" min="8" max="96" value="22" />
+            </label>
+            <label class="ann-metric" for="style-sub-size"><span>Sub size</span>
+              <input type="number" id="style-sub-size" min="8" max="72" value="15" />
+            </label>
+            <label class="ann-metric" for="style-line-width"><span>Line width</span>
+              <input type="number" id="style-line-width" min="0.5" max="12" step="0.25" value="1.7" />
+            </label>
+            <label class="ann-metric" for="style-dot"><span>Dot</span>
+              <input type="number" id="style-dot" min="0" max="20" step="0.5" value="3.5" />
+            </label>
+            <label class="ann-metric" for="style-max-width"><span>Max width</span>
+              <input type="number" id="style-max-width" min="40" max="800" value="280" />
+            </label>
+            <label class="ann-metric"><span>Halo</span>
+              <span class="ann-inline">
+                <input type="checkbox" id="style-halo" checked />
+              </span>
+            </label>
+            <label class="ann-metric" for="style-halo-text"><span>Text border</span>
+              <input type="number" id="style-halo-text" min="0" max="40" step="0.5" value="4" />
+            </label>
+            <label class="ann-metric" for="style-halo-line"><span>Line border</span>
+              <input type="number" id="style-halo-line" min="0" max="40" step="0.5" value="4" />
+            </label>
+          </div>
+
+          <div class="ann-field" style="margin-top:0.75rem;margin-bottom:0">
+            <label>Colors</label>
+            <div class="ann-row ann-row--wrap" style="gap:0.75rem">
+              <label class="ann-inline" for="style-title-color">Text
+                <input type="color" id="style-title-color" value="#0e1622" />
+              </label>
+              <label class="ann-inline" for="style-sub-color">Sub
+                <input type="color" id="style-sub-color" value="#3a3845" />
+              </label>
+              <label class="ann-inline" for="style-line-color">Line
+                <input type="color" id="style-line-color" value="#0e1622" />
+              </label>
+              <label class="ann-inline" for="style-halo-color">Halo
+                <input type="color" id="style-halo-color" value="#e8e8ec" />
+              </label>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

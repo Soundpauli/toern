@@ -58,7 +58,13 @@
     PRE: 1,
     TEXTAREA: 1,
     KBD: 1,
-    CANVAS: 1
+    CANVAS: 1,
+    H1: 1,
+    H2: 1,
+    H3: 1,
+    H4: 1,
+    H5: 1,
+    H6: 1
   };
 
   function iconMarkup(kind) {

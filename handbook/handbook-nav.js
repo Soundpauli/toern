@@ -4,6 +4,7 @@
       group: "Get started",
       items: [
         { href: "index.html", title: "Welcome", desc: "First boot", icon: "welcome" },
+        { href: "first-beat.html", title: "First beat in 1 min", desc: "Seven quick steps", icon: "sequencing" },
         { href: "hardware.html", title: "Hardware", desc: "Ports & buttons", icon: "hardware" },
         { href: "matrix.html", title: "The matrix", desc: "Rows & voices", icon: "matrix" },
         { href: "controls.html", title: "Controls", desc: "Encoders & touch", icon: "controls" },
@@ -172,9 +173,36 @@
     });
   }
 
+  function ensureMobileBar() {
+    var app = document.querySelector(".hb-app");
+    var toggle = document.getElementById("hb-nav-toggle");
+    if (!app || document.getElementById("hb-mobile-bar")) return;
+
+    var bar = document.createElement("header");
+    bar.id = "hb-mobile-bar";
+    bar.className = "hb-mobile-bar";
+    bar.setAttribute("aria-label", "Handbook");
+
+    var brand = document.createElement("a");
+    brand.href = "index.html";
+    brand.className = "hb-mobile-bar__brand";
+    brand.innerHTML =
+      '<span class="hb-mobile-bar__logo">TŒRN</span>' +
+      '<span class="hb-mobile-bar__kicker">Handbook</span>';
+    bar.appendChild(brand);
+
+    if (toggle) {
+      app.insertBefore(bar, toggle);
+      bar.appendChild(toggle);
+    } else {
+      app.insertBefore(bar, app.firstChild);
+    }
+  }
+
   function init() {
     var sidebar = document.getElementById("hb-sidebar");
     if (!sidebar) return;
+    ensureMobileBar();
     renderSidebar(sidebar);
     initMobileNav(sidebar);
   }

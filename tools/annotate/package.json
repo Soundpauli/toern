@@ -1,0 +1,9 @@
+{
+  "name": "toern-annotate",
+  "private": true,
+  "description": "Handbook-style image callout editor",
+  "scripts": {
+    "test": "node test.cjs",
+    "start": "python3 -m http.server 8765"
+  }
+}
