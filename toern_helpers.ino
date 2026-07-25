@@ -61,6 +61,14 @@ static inline void placeGenNote(unsigned int c, int row, uint8_t ch, int vel, ui
   note[c][row].condition = cond;
 }
 
+// drawRandoms / single-mode y=16: empty-slot only; always 100% probability + condition 1 (1/1).
+static inline bool placeRandomNoteIfEmpty(unsigned int c, int row, uint8_t ch, int vel) {
+  if (row < 1 || row > 16) return false;
+  if (note[c][row].channel != 0) return false;
+  placeGenNote(c, row, ch, vel, 100, 1);  // 100% / always
+  return true;
+}
+
 // External variables from menu
 extern int genreType;
 extern int genreLength;
@@ -1493,6 +1501,16 @@ FLASHMEM void drawRandoms(){
     // Other channels: Use original logic as fallback
     generateBasicPattern(start, end, channel, harmony);
   }
+
+  // --- Step 4: Force 100% / always (1/1) on every note just placed for this channel ---
+  for (unsigned int c = start; c < end; c++) {
+    for (unsigned int r = 1; r <= 16; r++) {
+      if (note[c][r].channel == channel) {
+        note[c][r].probability = 100;
+        note[c][r].condition = 1;
+      }
+    }
+  }
 }
 
 // Generate rhythmic patterns for channels 1-4
@@ -1569,11 +1587,7 @@ FLASHMEM void generateRhythmicPattern(unsigned int start, unsigned int end, unsi
         noteRow = random(1, 9); // Random if no harmony detected
       }
       
-      // Only place note if slot is empty (channel == 0)
-      if(note[c][noteRow].channel == 0) {
-        note[c][noteRow].channel = channel;
-        note[c][noteRow].velocity = velocity;
-      }
+      placeRandomNoteIfEmpty(c, noteRow, channel, velocity);
     }
   }
 }
@@ -1679,12 +1693,7 @@ FLASHMEM void generateMelodicPattern(unsigned int start, unsigned int end, unsig
     
     if(shouldPlay && scaleSize > 0) {
       int noteRow = scaleNotes[currentNote];
-      
-      // Only place note if slot is empty (channel == 0)
-      if(note[c][noteRow].channel == 0) {
-        note[c][noteRow].channel = channel;
-        note[c][noteRow].velocity = velocity;
-      }
+      placeRandomNoteIfEmpty(c, noteRow, channel, velocity);
     }
   }
 }
@@ -1738,12 +1747,7 @@ FLASHMEM void generateBassLine(unsigned int start, unsigned int end, unsigned in
     
     if(shouldPlay) {
       int noteRow = bassNotes[currentBassNote];
-      
-      // Only place note if slot is empty (channel == 0)
-      if(note[c][noteRow].channel == 0) {
-        note[c][noteRow].channel = channel;
-        note[c][noteRow].velocity = defaultVelocity + random(10, 31); // Stronger bass with variation
-      }
+      placeRandomNoteIfEmpty(c, noteRow, channel, defaultVelocity + random(10, 31));
     }
   }
 }
@@ -1792,11 +1796,7 @@ FLASHMEM void generateMainMelody(unsigned int start, unsigned int end, unsigned 
       int rootNote = melodyNotes[currentNote];
       
       if(noteCount == 1) {
-        // Single note - only place if slot is empty
-        if(note[c][rootNote].channel == 0) {
-          note[c][rootNote].channel = channel;
-          note[c][rootNote].velocity = defaultVelocity + random(-10, 31);
-        }
+        placeRandomNoteIfEmpty(c, rootNote, channel, defaultVelocity + random(-10, 31));
       } else if(noteCount == 2) {
         // Two-note chord - convert rootNote (1-16) to piano index (0-15), add intervals, convert back
         int rootPianoIndex = rootNote - 1; // Convert 1-16 to 0-15
@@ -1816,16 +1816,8 @@ FLASHMEM void generateMainMelody(unsigned int start, unsigned int end, unsigned 
         
         int secondNote = secondPianoIndex + 1; // Convert back to 1-16
         
-        // Place both notes - only if slots are empty
-        if(note[c][rootNote].channel == 0) {
-          note[c][rootNote].channel = channel;
-          note[c][rootNote].velocity = defaultVelocity + random(-5, 21); // Root note slightly louder
-        }
-        
-        if(note[c][secondNote].channel == 0) {
-          note[c][secondNote].channel = channel;
-          note[c][secondNote].velocity = defaultVelocity + random(-10, 16); // Second note
-        }
+        placeRandomNoteIfEmpty(c, rootNote, channel, defaultVelocity + random(-5, 21));
+        placeRandomNoteIfEmpty(c, secondNote, channel, defaultVelocity + random(-10, 16));
       } else { // noteCount == 3
         // Three-note chord - 50% major, 50% minor (with occasional sus4)
         int chordType;
@@ -1865,21 +1857,9 @@ FLASHMEM void generateMainMelody(unsigned int start, unsigned int end, unsigned 
         int secondNote = secondPianoIndex + 1; // Convert back to 1-16
         int thirdNote = thirdPianoIndex + 1;   // Convert back to 1-16
         
-        // Place all three notes - only if slots are empty
-        if(note[c][rootNote].channel == 0) {
-          note[c][rootNote].channel = channel;
-          note[c][rootNote].velocity = defaultVelocity + random(-5, 21); // Root note slightly louder
-        }
-        
-        if(note[c][secondNote].channel == 0) {
-          note[c][secondNote].channel = channel;
-          note[c][secondNote].velocity = defaultVelocity + random(-10, 16); // Second note
-        }
-        
-        if(note[c][thirdNote].channel == 0) {
-          note[c][thirdNote].channel = channel;
-          note[c][thirdNote].velocity = defaultVelocity + random(-10, 16); // Third note
-        }
+        placeRandomNoteIfEmpty(c, rootNote, channel, defaultVelocity + random(-5, 21));
+        placeRandomNoteIfEmpty(c, secondNote, channel, defaultVelocity + random(-10, 16));
+        placeRandomNoteIfEmpty(c, thirdNote, channel, defaultVelocity + random(-10, 16));
       }
     }
   }
@@ -1930,11 +1910,7 @@ FLASHMEM void generateContextAwareRhythmicPattern(unsigned int start, unsigned i
       if (velocity < 40) velocity = 40;
       if (velocity > 127) velocity = 127;
       
-      // Only place note if slot is empty (channel == 0)
-      if(note[c][noteRow].channel == 0) {
-        note[c][noteRow].channel = channel;
-        note[c][noteRow].velocity = velocity;
-      }
+      placeRandomNoteIfEmpty(c, noteRow, channel, velocity);
     }
   }
 }
@@ -1984,11 +1960,7 @@ FLASHMEM void generateContextAwareMelodicPattern(unsigned int start, unsigned in
       if (velocity < 40) velocity = 40;
       if (velocity > 127) velocity = 127;
       
-      // Only place note if slot is empty (channel == 0)
-      if(note[c][noteRow].channel == 0) {
-        note[c][noteRow].channel = channel;
-        note[c][noteRow].velocity = velocity;
-      }
+      placeRandomNoteIfEmpty(c, noteRow, channel, velocity);
     }
   }
 }
@@ -2916,11 +2888,7 @@ FLASHMEM void generateBasicPattern(unsigned int start, unsigned int end, unsigne
 
     if(s == 1 || s == 5 || s == 9 || s == 13) {
       int noteRow = random(1, 9);
-
-      if(note[c][noteRow].channel == 0) {
-        note[c][noteRow].channel = channel;
-        note[c][noteRow].velocity = defaultVelocity;
-      }
+      placeRandomNoteIfEmpty(c, noteRow, channel, defaultVelocity);
     }
   }
 }

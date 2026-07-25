@@ -8,8 +8,6 @@ static bool channelHasFreeverb(uint8_t chan) {
   return !(chan == 3 || chan == 4);
 }
 
-// With drum sliders removed, filter pages remain static.
-static bool updateFilterPageAvailability(uint8_t /*chan*/) { return false; }
 DMAMEM unsigned long lastEncoderChange[4] = { 0, 0, 0, 0 };
 
 int8_t lastChangedEncoder = -1;

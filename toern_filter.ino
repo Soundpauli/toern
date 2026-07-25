@@ -19,26 +19,33 @@ struct GainTransition {
 GainTransition filterMixerTransitions[NUM_FILTERS];
 
 
-// Call this regularly in your main loop to update gains smoothly
+// Advance one channel's smooth filter-mixer gains (dry/LP/HP crossfade).
 void updateMixerGains(int i) {
-  // Only update the current channel for better performance
-  
-  //int i = GLOB.currentChannel;
-  if (i >= 0 && i < NUM_FILTERS && filtermixers[i] != nullptr) {
-    for (int ch = 0; ch < NUM_MIXER_CHANNELS; ++ch) {
-      if (filterMixerTransitions[i].active[ch]) {
-        float& cur = filterMixerTransitions[i].currentGain[ch];
-        float tgt = filterMixerTransitions[i].targetGain[ch];
-        float stp = filterMixerTransitions[i].step[ch];
-        if (fabs(cur - tgt) <= fabs(stp)) {
-          cur = tgt;
-          filterMixerTransitions[i].active[ch] = false;
-        } else {
-          cur += stp;
-        }
-        filtermixers[i]->gain(ch, cur);
-      }
+  if (i < 0 || i >= NUM_FILTERS || filtermixers[i] == nullptr) return;
+
+  for (int ch = 0; ch < NUM_MIXER_CHANNELS; ++ch) {
+    if (!filterMixerTransitions[i].active[ch]) continue;
+    float& cur = filterMixerTransitions[i].currentGain[ch];
+    float tgt = filterMixerTransitions[i].targetGain[ch];
+    float stp = filterMixerTransitions[i].step[ch];
+    if (fabs(cur - tgt) <= fabs(stp)) {
+      cur = tgt;
+      filterMixerTransitions[i].active[ch] = false;
+    } else {
+      cur += stp;
     }
+    filtermixers[i]->gain(ch, cur);
+  }
+}
+
+// Must run for every voice with an active transition — not only GLOB.currentChannel.
+// Previously only the selected channel advanced, so switching away mid-PASS crossfade
+// could freeze dry/HP near 0 (silent) until a filter/EFX reset snapped targets.
+void updateAllMixerGains() {
+  extern const int ALL_CHANNELS[];
+  extern const int NUM_ALL_CHANNELS;
+  for (int n = 0; n < NUM_ALL_CHANNELS; ++n) {
+    updateMixerGains(ALL_CHANNELS[n]);
   }
 }
 
@@ -78,7 +85,7 @@ void forceAllMixerGainsToTarget() {
     extern const int NUM_ALL_CHANNELS;
     for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
         int idx = ALL_CHANNELS[i];
-        if (filtermixers[idx] == nullptr) return;
+        if (filtermixers[idx] == nullptr) continue;
   
         for (int ch = 0; ch < NUM_MIXER_CHANNELS; ++ch) {
             filterMixerTransitions[idx].currentGain[ch] = filterMixerTransitions[idx].targetGain[ch];

@@ -96,10 +96,6 @@ static float bpmEstimate = 0.0f;                         // Kalman filter: curre
 static float bpmEstimateError = 1.0f;                    // Kalman filter: estimate error covariance
 static const float BPM_PROCESS_NOISE = 0.8f;             // Kalman filter: process noise (how much BPM can change) - LOWER = harder filtering
 static const float BPM_MEASUREMENT_NOISE = 0.5f;         // Kalman filter: measurement noise (BPM measurement uncertainty) - HIGHER = harder filtering (reduced from 0.8 for faster sync)
-static float displayedBPM = 0.0f;                        // BPM value committed to SMP.bpm / UI
-static unsigned long lastBPMUpdateMillis = 0;            // last time we updated displayed BPM
-static const unsigned long BPM_UPDATE_INTERVAL_MS = 200; // minimum time between BPM UI updates
-static const float BPM_UPDATE_THRESHOLD = 0.5f;          // minimum delta to force BPM UI update
 static const uint32_t CLOCKS_PER_BPM_WINDOW = 24 * 4;    // 4/4: 24 clocks/beat * 4 beats/bar = 96 clocks (calculate BPM every 1 bar for faster sync)
 static const unsigned long NO_CLOCK_TIMEOUT_US = 2000000; // 2 seconds: if no clock received, reset Kalman state
 static unsigned long lastClockReceivedTime = 0;          // Timestamp of last received clock

@@ -6,6 +6,11 @@ FLASHMEM void savePattern(bool autosave) {
   extern void sdIoBeginAudioSafe();
   extern void sdIoEndAudioSafe();
 
+  // FILE slot 0 is autosaved.txt — load-only from the FILE menu.
+  if (!autosave && SMP.file == 0) {
+    return;
+  }
+
   drawNoSD();
   // Autosave often runs right after pause while sample/synth voices are still decaying.
   // Keep Audio library fed for the whole SD burst (isNowPlaying is already false by then).
@@ -21,14 +26,19 @@ FLASHMEM void savePattern(bool autosave) {
   
   unsigned int maxdata = 0;
   char OUTPUTf[50];
-  // Save to autosave.txt if autosave is true
   if (autosave) {
     sprintf(OUTPUTf, "autosaved.txt");
   } else {
-    sprintf(OUTPUTf, "%d.txt", SMP.file);
+    sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
   }
-  // Truncate in place — avoid SD.remove() which can stall audio for a long time on large files.
-  File saveFile = SD.open(OUTPUTf, O_WRITE | O_CREAT | O_TRUNC);
+
+  // Teensy SD/SdFat: FILE_WRITE is reliable; O_TRUNC-only opens were failing silently
+  // so pause autosave never wrote autosaved.txt (autoload looked broken).
+  if (SD.exists(OUTPUTf)) {
+    SD.remove(OUTPUTf);
+    sdIoYield();
+  }
+  File saveFile = SD.open(OUTPUTf, FILE_WRITE);
   if (saveFile) {
     // Buffer note records (4 bytes each) to avoid per-byte SD calls while playing.
     uint8_t buf[512];
@@ -244,10 +254,11 @@ FLASHMEM void loadPattern(bool autoload) {
   
   FastLEDclear();
   char OUTPUTf[50];
-  if (autoload) {
+  // autoload, or FILE menu slot 0 → autosaved.txt
+  if (autoload || SMP.file == 0) {
     sprintf(OUTPUTf, "autosaved.txt");
   } else {
-    sprintf(OUTPUTf, "%d.txt", SMP.file);
+    sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
   }
   
   // Load .txt file
@@ -350,12 +361,13 @@ FLASHMEM void loadPattern(bool autoload) {
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
   
-  // If no file was loaded, show NEW screen
+  // Missing manual file → NEW screen. Missing autosave on boot → stay empty (no NEW).
   if (!SD.exists(OUTPUTf)) {
-    // File not found - show NEW screen for genre generation when creating new file
-    extern void showNewFileScreen();
-    showNewFileScreen();
-    return; // Don't continue with normal load flow
+    if (!autoload && SMP.file != 0) {
+      extern void showNewFileScreen();
+      showNewFileScreen();
+    }
+    return;
   }
 
   updateLastPage();
@@ -388,20 +400,18 @@ FLASHMEM void autoLoad() {
 }
 
 FLASHMEM void autoSave() {
-  // Prevent autosave if last save was less than 10 seconds ago
+  // Only skip if we already saved within the last 5 seconds.
   static unsigned long lastAutoSaveTime = 0;
-  const unsigned long AUTO_SAVE_COOLDOWN_MS = 10000;  // 10 seconds
-  
+  const unsigned long AUTO_SAVE_COOLDOWN_MS = 5000;
+
   unsigned long currentTime = millis();
   if (lastAutoSaveTime > 0 && (currentTime - lastAutoSaveTime) < AUTO_SAVE_COOLDOWN_MS) {
-    // Too soon since last autosave - skip this one
     return;
   }
-  
+
   savePattern(true);
-  lastAutoSaveTime = currentTime;  // Update timestamp after successful save
-  
-  // Reset paint/unpaint prevention flag after autoSave operation
+  lastAutoSaveTime = currentTime;
+
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
 }

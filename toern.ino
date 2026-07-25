@@ -52,6 +52,10 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include <EEPROM.h>
 #include <FastTouch.h>
 #include <TeensyPolyphony.h>
+// Adafruit_seesaw uses unqualified `byte`; disambiguate vs C++17 std::byte
+#define byte uint8_t
+#include "Adafruit_seesaw.h"
+#undef byte
 
 #include <Mapf.h>
 #include "notes.h"
@@ -304,6 +308,12 @@ void stopSound(int note, int ch);
 void stopSynthChannel(int ch);
 static inline void resetMidiPressedKeyCount11to14();
 void drawCtrlVolumeOverlay(int volume);
+void initNeoSlider();
+void updateNeoSliderVolume();
+void serviceNeoSliderGainSlew();
+void reapplyAllSampleChannelGains();
+void updateAllMixerGains();
+void forceAllMixerGainsToTarget();
 void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
 void drawSampleLoadOverlay(uint8_t progressPercent);
@@ -783,15 +793,16 @@ Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, 10, maxY }, { maxY, 5, 
 Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+// FILE slot 0 = autosaved.txt (load-only); slots 1..99 = normal pattern files
+Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
 Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
 Mode songMode = { "SONGMODE", { 1, 1, 1, 1 }, { 1, 16, 1, 64 }, { 1, 1, 1, 1 }, { 0x000000, 0xFF00FF, 0x000000, 0xFFFF00 } };
-// Declare currentMode as a global variable
-Mode *currentMode;
-Mode *oldMode;
+// Declare currentMode as a global variable (start in draw so boot limits are sane)
+Mode *currentMode = &draw;
+Mode *oldMode = &draw;
 Mode *muteModeReturn = nullptr;
 bool muteModeActive = false;
 bool muteModeReturnSingleState = false;
@@ -1080,6 +1091,57 @@ i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
 };
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
+
+// Adafruit NeoSlider @ I2C 0x30 → always controls voice 1 volume.
+// Uses Adafruit_seesaw (no Wire.h / Wire.* in this sketch). LED colors via FastLED CRGB.
+#define NEOSLIDER_I2C_ADDR 0x30
+#define NEOSLIDER_VOICE_CH 1
+#define NEOSLIDER_NUM_LEDS 4
+#define NEOSLIDER_LED_BRIGHTNESS 40
+
+// Channels that have a real volume/amp path (CTRL=VOL); NeoSlider always drives voice1 on every Y.
+static inline bool isVolumeVoiceChannel(int ch) {
+  return (ch >= 1 && ch <= 8) || ch == 11 || ch == 13 || ch == 14;
+}
+#define SS_NEOPIXEL_BASE 0x0E
+#define SS_NEOPIXEL_PIN 0x01
+#define SS_NEOPIXEL_SPEED 0x02
+#define SS_NEOPIXEL_BUF_LENGTH 0x03
+#define SS_NEOPIXEL_BUF 0x04
+#define SS_NEOPIXEL_SHOW 0x05
+// ATtiny (seesaw) pin ids in the I2C register map — NOT Teensy pins
+#define SS_NEOSLIDER_ADC_CH 18
+#define SS_NEOSLIDER_LED_PIN 14
+
+// Expose seesaw register helpers. Avoid Adafruit_seesaw::analogRead() — it ends
+// with delay(1) every call and stalls the main loop (cursor pulse, encoders).
+class NeoSliderSeesaw : public Adafruit_seesaw {
+public:
+  bool writeReg(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num) {
+    return write(regHigh, regLow, buf, num);
+  }
+  bool writeReg8(uint8_t regHigh, uint8_t regLow, uint8_t value) {
+    return write8(regHigh, regLow, value);
+  }
+  // Same ADC path as analogRead(), without the blocking delay(1).
+  uint16_t analogReadFast(uint8_t pin) {
+    uint8_t buf[2];
+    if (!read(SEESAW_ADC_BASE, (uint8_t)(SEESAW_ADC_CHANNEL_OFFSET + pin), buf, 2, 500)) {
+      return 0;
+    }
+    return ((uint16_t)buf[0] << 8) | buf[1];
+  }
+};
+
+static NeoSliderSeesaw neoSliderSS;
+static bool neoSliderPresent = false;
+static int neoSliderLastVol = -1;
+static bool neoSliderMuteLatched = false;
+static float neoSliderTargetGain = 1.0f;
+static float neoSliderCurrentGain = 1.0f;
+static CRGB neoSliderLeds[NEOSLIDER_NUM_LEDS];
+static elapsedMillis neoSliderActiveUntil;  // faster ADC while fader is moving
+static int neoSliderPendingLedVol = -1;    // defer NeoPixel I2C until fader settles
 
 // Slider column positions (2 LEDs each)
 static const uint8_t sliderCols[4][2] = { { 2, 3 }, { 6, 7 }, { 10, 11 }, { 14, 15 } };
@@ -1845,16 +1907,21 @@ FLASHMEM void switchMode(Mode *newMode) {
 
     if (currentMode == &loadSaveTrack) {
       // Initialize encoder[2] to current SMP_LOAD_SETTINGS value
-      // Only allow settings loading if file exists
+      // Only allow settings loading if file exists (slot 0 = autosaved.txt)
       char OUTPUTf[50];
-      sprintf(OUTPUTf, "%u.txt", SMP.file);
+      if (SMP.file == 0) {
+        sprintf(OUTPUTf, "autosaved.txt");
+      } else {
+        sprintf(OUTPUTf, "%u.txt", SMP.file);
+      }
       if (SD.exists(OUTPUTf)) {
         currentMode->pos[2] = SMP_LOAD_SETTINGS ? 1 : 0;
       } else {
-        // For empty files, force settings loading off
         currentMode->pos[2] = 0;
       }
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+      Encoder[3].writeMin((int32_t)0);
+      Encoder[3].writeMax((int32_t)99);
     }
 
     if (currentMode == &subpatternMode && muteModeActive) {
@@ -2242,9 +2309,12 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     preventPaintUnpaint = false;  // Reset flag when exiting loadSaveTrack mode
     switchMode(&draw);
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
-    savePattern(false);
-    preventPaintUnpaint = true;                                                                    // Prevent paint/unpaint after save
-    return;                                                                                        // Prevent other button actions from being processed
+    // Slot 0 = autosave: load-only, never write from FILE menu
+    if (SMP.file != 0) {
+      savePattern(false);
+      preventPaintUnpaint = true;
+    }
+    return;
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
     loadPattern(false);
     preventPaintUnpaint = true;                                                                     // Prevent paint/unpaint after load
@@ -3063,6 +3133,217 @@ FLASHMEM void checkCrashReport() {
 
 
 
+// Push FastLED CRGB[] to NeoSlider LEDs via seesaw (ATtiny LED data pin 14).
+FLASHMEM static void neoSliderShowLeds() {
+  if (!neoSliderPresent) return;
+  // Seesaw LED buffer: 2-byte offset + GRB bytes
+  uint8_t writeBuf[2 + NEOSLIDER_NUM_LEDS * 3];
+  writeBuf[0] = 0;
+  writeBuf[1] = 0;
+  for (uint8_t i = 0; i < NEOSLIDER_NUM_LEDS; i++) {
+    CRGB c = neoSliderLeds[i];
+    c.nscale8(NEOSLIDER_LED_BRIGHTNESS);
+    const uint8_t base = 2 + i * 3;
+    writeBuf[base + 0] = c.g;
+    writeBuf[base + 1] = c.r;
+    writeBuf[base + 2] = c.b;
+  }
+  neoSliderSS.writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF, writeBuf, sizeof(writeBuf));
+  neoSliderSS.writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SHOW, nullptr, 0);
+}
+
+FLASHMEM static void neoSliderUpdateLeds(int vol) {
+  int lit = (vol <= 0) ? 0 : ((vol * NEOSLIDER_NUM_LEDS + 15) / 16);
+  if (lit > NEOSLIDER_NUM_LEDS) lit = NEOSLIDER_NUM_LEDS;
+  CRGB on = CRGB((uint8_t)constrain(vol * vol, 0, 255),
+                 (uint8_t)constrain(max(0, 40 - vol * 2), 0, 255),
+                 0);
+  fill_solid(neoSliderLeds, NEOSLIDER_NUM_LEDS, CRGB::Black);
+  for (int i = 0; i < lit; i++) {
+    neoSliderLeds[i] = on;
+  }
+  neoSliderShowLeds();
+}
+
+FLASHMEM void initNeoSlider() {
+  neoSliderPresent = false;
+  neoSliderLastVol = -1;
+  neoSliderMuteLatched = false;
+  neoSliderTargetGain = 1.0f;
+  neoSliderCurrentGain = 1.0f;
+  fill_solid(neoSliderLeds, NEOSLIDER_NUM_LEDS, CRGB::Black);
+
+  if (!neoSliderSS.begin(NEOSLIDER_I2C_ADDR)) {
+    return;
+  }
+
+  uint16_t pid = 0;
+  uint8_t year = 0, mon = 0, day = 0;
+  neoSliderSS.getProdDatecode(&pid, &year, &mon, &day);
+  if (pid != 5295) {
+    return;
+  }
+
+  // Configure ATtiny LED strand (pin 14 on the seesaw, not Teensy)
+  neoSliderSS.writeReg8(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SPEED, 1);  // 800 kHz
+  const uint8_t numBytes = NEOSLIDER_NUM_LEDS * 3;
+  uint8_t lenBuf[2] = { (uint8_t)(numBytes >> 8), (uint8_t)(numBytes & 0xFF) };
+  neoSliderSS.writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF_LENGTH, lenBuf, 2);
+  neoSliderSS.writeReg8(SS_NEOPIXEL_BASE, SS_NEOPIXEL_PIN, SS_NEOSLIDER_LED_PIN);
+  neoSliderPresent = true;
+  neoSliderShowLeds();
+}
+
+// Restore amp gains from channelVol for sample/synth voices that have amps[].
+// Also snap filter-mixer crossfades: mid-PASS transitions on non-selected
+// channels used to freeze (dry≈0) until a filter/EFX reset — same symptom.
+FLASHMEM void reapplyAllSampleChannelGains() {
+  for (int ch = 1; ch <= 8; ch++) {
+    if (amps[ch] == nullptr) continue;
+    // Voice 1 may be mid-slew from the NeoSlider — don't stomp it.
+    if (neoSliderPresent && ch == NEOSLIDER_VOICE_CH) continue;
+    float channelvolume = mapf((float)SMP.channelVol[ch], 0, maxY, 0.0f, 1.0f);
+    amps[ch]->gain(channelvolume);
+  }
+  for (int ch = 11; ch <= 14; ch++) {
+    if (ch == 12 || amps[ch] == nullptr) continue;
+    float channelvolume = mapf((float)SMP.channelVol[ch], 0, maxY, 0.0f, 1.0f);
+    amps[ch]->gain(channelvolume);
+  }
+  forceAllMixerGainsToTarget();
+}
+
+// Smooth voice1 amp gain toward fader target (kills zipper/crackle on fast moves).
+void serviceNeoSliderGainSlew() {
+  if (!neoSliderPresent) return;
+  const int ch = NEOSLIDER_VOICE_CH;
+  if (ch < 0 || ch >= 15 || amps[ch] == nullptr) return;
+
+  static elapsedMicros slewTimer;
+  if (slewTimer < 1000) return;  // 1 ms
+  slewTimer = 0;
+
+  float d = neoSliderTargetGain - neoSliderCurrentGain;
+  if (d > -0.0005f && d < 0.0005f) {
+    if (neoSliderCurrentGain != neoSliderTargetGain) {
+      neoSliderCurrentGain = neoSliderTargetGain;
+      amps[ch]->gain(neoSliderCurrentGain);
+    }
+    return;
+  }
+  // Full-scale slew ≈ ~16 ms (snappier tracking)
+  const float maxDelta = 0.06f;
+  if (d > maxDelta) d = maxDelta;
+  else if (d < -maxDelta) d = -maxDelta;
+  neoSliderCurrentGain += d;
+  if (neoSliderCurrentGain < 0.0f) neoSliderCurrentGain = 0.0f;
+  if (neoSliderCurrentGain > 1.0f) neoSliderCurrentGain = 1.0f;
+  amps[ch]->gain(neoSliderCurrentGain);
+}
+
+FLASHMEM void updateNeoSliderVolume() {
+  if (!neoSliderPresent) return;
+
+  // Encoders share the I2C bus: skip while an encoder INT is pending.
+  if (digitalRead(INT_PIN) == LOW) return;
+
+  // Always drive voice1 volume on every Y (volume bar + amp).
+  // Adaptive poll — without Adafruit's delay(1), ~12ms is smooth and leaves
+  // the bus free for encoder RGB / cursor animation.
+  static elapsedMillis neoSliderPoll;
+  const unsigned int pollMs = (neoSliderActiveUntil < 300) ? 12 : 30;
+  if (neoSliderPoll < pollMs) return;
+  neoSliderPoll = 0;
+
+  uint16_t slideVal = neoSliderSS.analogReadFast(SS_NEOSLIDER_ADC_CH);  // 0..1023, no delay(1)
+  // Inverted: physical top/bottom matched to louder/quieter
+  slideVal = 1023 - slideVal;
+
+  static uint16_t lastRaw = 0xFFFF;
+  int rawDelta = 0;
+  if (lastRaw != 0xFFFF) {
+    rawDelta = (int)slideVal - (int)lastRaw;
+    if (rawDelta < 0) rawDelta = -rawDelta;
+  }
+  if (rawDelta >= 6) {
+    neoSliderActiveUntil = 0;  // mark active for next ~300ms of fast polls
+  }
+
+  // Continuous gain target from raw ADC (avoids stair-step zipper noise)
+  neoSliderTargetGain = (float)slideVal * (1.0f / 1023.0f);
+
+  int vol = (int)((slideVal * 16UL + 511UL) / 1023UL);
+  if (vol > 16) vol = 16;
+
+  // Light hysteresis: ignore tiny 1-step chatter only
+  if (neoSliderLastVol >= 0 && vol != neoSliderLastVol && lastRaw != 0xFFFF) {
+    int stepDelta = vol - neoSliderLastVol;
+    if (stepDelta < 0) stepDelta = -stepDelta;
+    if (stepDelta == 1 && rawDelta < 24) {
+      vol = neoSliderLastVol;
+    }
+  }
+  lastRaw = slideVal;
+
+  // While moving: update gain target every poll (above). Discrete UI only on step change.
+  if (vol == neoSliderLastVol) {
+    // After motion settles, push slider LEDs once (I2C) without spamming during drag.
+    if (neoSliderActiveUntil >= 80 && neoSliderPendingLedVol >= 0 && digitalRead(INT_PIN) != LOW) {
+      neoSliderUpdateLeds(neoSliderPendingLedVol);
+      neoSliderPendingLedVol = -1;
+    }
+    return;
+  }
+  neoSliderLastVol = vol;
+  neoSliderActiveUntil = 0;
+
+  // Voice 1 only: volume UI + mute indicator (never touch other channels)
+  const int ch = NEOSLIDER_VOICE_CH;
+  if (ch < 0 || ch >= (int)maxY) return;
+  if (vol > 0) {
+    lastChannelVolBeforeMute[ch] = (uint8_t)vol;
+  }
+  SMP.channelVol[ch] = (unsigned int)vol;
+
+  // Show muted when fader fully down; unmute voice1 when raised (ch1 only)
+  bool wantMute = (vol == 0);
+  if (wantMute != neoSliderMuteLatched) {
+    setMuteState(ch, wantMute);
+    SMP.mute[ch] = wantMute ? 1u : 0u;
+    neoSliderMuteLatched = wantMute;
+  }
+
+  // Sync CTRL=VOL encoder position (throttle I2C writeCounter while dragging)
+  bool ctrlEditingVoice1Vol = (ctrlMode == 1
+                               && (currentMode == &draw || currentMode == &singleMode)
+                               && (int)GLOB.currentChannel == ch
+                               && !(currentMode == &draw && GLOB.y == 1));
+  if (ctrlEditingVoice1Vol) {
+    currentMode->pos[1] = vol;
+    ctrlLastVolume = vol;
+    static elapsedMillis encSyncThrottle;
+    if (encSyncThrottle >= 40) {
+      encSyncThrottle = 0;
+      Encoder[1].writeCounter((int32_t)vol);
+    }
+  }
+
+  if (currentMode == &velocity && (int)GLOB.currentChannel == ch) {
+    currentMode->pos[3] = vol;
+    static elapsedMillis velEncThrottle;
+    if (velEncThrottle >= 40) {
+      velEncThrottle = 0;
+      Encoder[3].writeCounter((int32_t)vol);
+    }
+  }
+
+  // Matrix volume bar: cheap flag update (drawn once per display frame)
+  showCtrlVolumeChange(vol);
+
+  // Slider NeoPixels: defer until settle — heavy I2C during drag.
+  neoSliderPendingLedVol = vol;
+}
+
 FLASHMEM void initEncoders() {
   for (int i = 0; i < NUM_ENCODERS; i++) {
     // Set the global encoder index for callbacks
@@ -3086,7 +3367,15 @@ FLASHMEM void initEncoders() {
 
     Encoder[i].writeAntibouncingPeriod(10);  //10?
     Encoder[i].writeCounter((int32_t)1);
-    Encoder[i].writeMax((int32_t)maxX * 4);  //maxval scaled to display width
+    // Encoder 0 = Y (1..maxY). Do not init it to maxX*4 — that allowed y>16 until
+    // the first draw↔single switchMode re-applied limits.
+    if (i == 0) {
+      Encoder[i].writeMax((int32_t)maxY);
+    } else if (i == 3) {
+      Encoder[i].writeMax((int32_t)(maxlen - 1));
+    } else {
+      Encoder[i].writeMax((int32_t)maxX * 4);
+    }
     Encoder[i].writeMin((int32_t)1);         //minval
     Encoder[i].writeStep((int32_t)1);        //steps
 
@@ -3438,6 +3727,7 @@ FLASHMEM void setup() {
   loadSMPSettings();
   //mixer0.gain(1, 0.05);  //PREV Sound
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
+  initNeoSlider();  // Optional NeoSlider @0x30 → voice1 volume (I2C only)
 
 
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
@@ -3790,7 +4080,16 @@ void checkEncoders() {
       currentMode->pos[3] = constrain(currentMode->pos[3], 1, maxStepsRuntime);
       Encoder[3].writeMax((int32_t)maxStepsRuntime);
       GLOB.x = currentMode->pos[3];
-      GLOB.y = currentMode->pos[0];
+      // Clamp Y in software + re-assert hardware max (boot/init could leave max too high)
+      {
+        unsigned int yClamped = constrain(currentMode->pos[0], 1u, maxY);
+        if (currentMode->pos[0] != yClamped) {
+          currentMode->pos[0] = yClamped;
+          Encoder[0].writeMax((int32_t)maxY);
+          Encoder[0].writeCounter((int32_t)yClamped);
+        }
+        GLOB.y = yClamped;
+      }
 
       // Check y change after updating GLOB.y
       bool yChanged = (GLOB.y != lastY);
@@ -4153,15 +4452,19 @@ void checkEncoders() {
           }
         }  // End of monitoring ON else block
       } else if (GLOB.y == 16) {
+        // y==16 is tools row — don't edit channel volume via CTRL encoder here,
+        // but never clear NeoSlider/CTRL volume overlay (it was killed every frame).
         int channelVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
-        currentMode->pos[1] = channelVol;
-        Encoder[1].writeCounter((int32_t)channelVol);
-        Encoder[1].writeRGBCode(currentMode->knobcolor[1]);
-        ctrlVolumeOverlayActive = false;
+        if (currentMode->pos[1] != channelVol || ctrlLastChannel != -1) {
+          currentMode->pos[1] = channelVol;
+          Encoder[1].writeCounter((int32_t)channelVol);
+          Encoder[1].writeRGBCode(currentMode->knobcolor[1]);
+        }
         ctrlLastChannel = -1;
         ctrlLastVolume = channelVol;
       } else {
-        if (ctrlLastChannel != (int)GLOB.currentChannel) {
+        bool channelJustChanged = (ctrlLastChannel != (int)GLOB.currentChannel);
+        if (channelJustChanged) {
           ctrlLastChannel = GLOB.currentChannel;
           int channelVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
           currentMode->pos[1] = channelVol;
@@ -4171,7 +4474,8 @@ void checkEncoders() {
 
         int requestedVol = constrain((int)currentMode->pos[1], 0, 16);
         int actualVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
-        bool protectedChannel = (GLOB.currentChannel == 0 || GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12);
+        // Volume only for voices 1-8, 11, 13, 14 (not y==1/16 / empty lanes)
+        bool protectedChannel = !isVolumeVoiceChannel((int)GLOB.currentChannel);
         int prevVolume = ctrlLastVolume;
 
         if (protectedChannel) {
@@ -4205,6 +4509,8 @@ void checkEncoders() {
               amps[ch]->gain(channelvolume);
             }
             showCtrlVolumeChange(requestedVol);
+            // Neighbor voices were going silent under heavy I2C without mute/UI change.
+            reapplyAllSampleChannelGains();
           } else {
             showCtrlVolumeChange(actualVol);
           }
@@ -4217,7 +4523,11 @@ void checkEncoders() {
           showCtrlVolumeChange(16);
         }
 
-        Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
+        // Only touch encoder RGB over I2C when volume/channel actually changes.
+        // Writing every checkEncoders() frame was starving the bus (pseudo-mutes).
+        if (volumeChanged || channelJustChanged) {
+          Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
+        }
 
         if (!childLockEnabled && volumeChanged && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
           int effectiveVol = protectedChannel ? actualVol : requestedVol;
@@ -5673,9 +5983,10 @@ void loop() {
     drawPlayButton();
   }
 
-  // Deferred pause UI update: I2C encoder writes happen here, not inside pause().
-  // Autosave is scheduled for a later iteration so SD I/O doesn't pile onto the same
-  // frame as I2C (and so decaying voices get audio-safe SD yields).
+  // Deferred pause UI (I2C) on one loop tick; autosave on a *later* tick so SD
+  // I/O doesn't pile onto the same frame (avoids audio glitches while voices decay).
+  // Always schedule autosave after a normal pause — only skipSave (MIDI/SD) opts out.
+  // The only other skip is autoSave()'s 5s cooldown.
   if (pendingPauseUIUpdate) {
     pendingPauseUIUpdate = false;
     updateLastPage();
@@ -5690,8 +6001,9 @@ void loop() {
     }
     Encoder[2].writeRGBCode(0x00FF00);
     if (!pendingPauseSkipSave) {
-      pendingPauseAutoSave = true;
+      pendingPauseAutoSave = true;  // next loop iteration
     }
+    pendingPauseSkipSave = false;
   } else if (pendingPauseAutoSave) {
     pendingPauseAutoSave = false;
     autoSave();
@@ -5797,10 +6109,8 @@ void loop() {
         }
       }
 
-      // CTRL overlays are drawn here (inside the throttled frame, before present) so they are
-      // part of the same buffer that FastLEDshow() pushes. Drawing them after the present caused
-      // the overlay to flicker while playing (grid presented without overlay, then with it).
-      if (ctrlVolumeOverlayActive && ctrlMode == 1 && (currentMode == &draw || currentMode == &singleMode)) {
+      // CTRL / NeoSlider volume overlays (NeoSlider may show even when CTRL!==VOL).
+      if (ctrlVolumeOverlayActive && (currentMode == &draw || currentMode == &singleMode)) {
         if (millis() <= ctrlVolumeOverlayUntil) {
           drawCtrlVolumeOverlay(ctrlVolumeOverlayValue);
         } else {
@@ -5898,6 +6208,9 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
 
   checkEncoders();
+  // After encoders: NeoSlider I2C when bus free; gain slew runs every loop (no I2C)
+  updateNeoSliderVolume();
+  serviceNeoSliderGainSlew();
   // Never draw the cursor while in MENU (or its submenus).
   if (currentMode != &velocity && currentMode != &filterMode && currentMode != &menu) drawCursor();
   checkButtons();
@@ -5949,8 +6262,10 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     drawModeInputMonitorActive = false;
   }
 
-  // Update smooth filter mixer gains
-  updateMixerGains(GLOB.currentChannel);
+  // Advance ALL active filter-mixer crossfades (not only the selected channel).
+  // Updating only currentChannel froze mid-PASS transitions on neighbors → silent
+  // until a filter/EFX reset snapped gains (matches "fixed once after filter reset").
+  updateAllMixerGains();
 
   // Recovery mechanism: Detect and reset stuck pressed[] states
   // If pressed[] is true but no button event is active, it might be stuck
@@ -7172,8 +7487,6 @@ void playNote() {
 
     // Advance and wrap within this page:
     // Track previous state BEFORE incrementing
-    static unsigned int lastPageAfterWrap = 0;
-    static unsigned int lastBeatAfterWrap = 0;
     unsigned int previousPage = GLOB.page;
     unsigned int previousBeat = beat;
 
@@ -8005,46 +8318,48 @@ FLASHMEM void showLoadSave() {
   drawNoSD();
   FastLEDclear();
 
-  // FILE icon: green if loading is possible (file exists), dim red otherwise.
-  // Move icon down to y=3..9 (oy=7).
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "%u.txt", SMP.file);
-  bool txtExists = SD.exists(OUTPUTf);
-  CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
-  showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
-
-  // New indicator system: file: M[G] | M[R] | C[W] (conditional) | L[X]
-  drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
-  drawIndicator('M', 'R', 2);  // Encoder 2: Medium Red
-  // Encoder 3: Cross White only if SMP_LOAD_SETTINGS is true
-  if (SMP_LOAD_SETTINGS) {
-    drawIndicator('C', 'W', 3);  // Encoder 3: Cross White
-  }
-  drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
-
-  // Check for .txt file
-  // (OUTPUTf/txtExists already computed above for icon color)
-
-  if (txtExists) {
-    // .txt file exists - bright green for load, dark red for save
-    drawIndicator('M', 'G', 1);                 // Bright green for load
-    drawIndicator('M', 'D', 2);                 // Dark red for save
-    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);  // Bright green number for existing file
-  } else {
-    // No file exists - dark green for load, bright red for save
-    drawIndicator('M', 'E', 1);         // Dark green for load
-    drawIndicator('M', 'R', 2);         // Bright red for save
-    drawNumber(SMP.file, UI_BLUE, 11);  // Blue number for non-existing file
-  }
-  // Don't change FastLED global brightness - matrix is dimmed in software (light_single)
-  FastLEDshow();
-
   if (currentMode->pos[3] != SMP.file) {
     SMP.file = currentMode->pos[3];
   }
 
-  // Update SMP_LOAD_SETTINGS based on encoder[2] position
-  // Only allow settings loading if .txt file exists
+  // Slot 0 = autosaved.txt (load-only). Slots 1..99 = N.txt
+  const bool isAutosaveSlot = (SMP.file == 0);
+  char OUTPUTf[50];
+  if (isAutosaveSlot) {
+    sprintf(OUTPUTf, "autosaved.txt");
+  } else {
+    sprintf(OUTPUTf, "%u.txt", SMP.file);
+  }
+  bool txtExists = SD.exists(OUTPUTf);
+  CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
+  showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
+
+  // FILE: M[G] load | M[R] save (disabled on autosave slot) | C[W] settings | L[X]
+  drawIndicator('L', 'X', 4);
+
+  if (isAutosaveSlot) {
+    // Load-only autosave slot: green load if present, no save affordance
+    drawIndicator('M', txtExists ? 'G' : 'E', 1);
+    drawIndicator('M', 'E', 2);  // dim: cannot save to autosave from menu
+    if (SMP_LOAD_SETTINGS && txtExists) {
+      drawIndicator('C', 'W', 3);
+    }
+    drawText("A", 11, 11, txtExists ? UI_BRIGHT_GREEN : UI_BLUE);
+  } else if (txtExists) {
+    drawIndicator('M', 'G', 1);
+    drawIndicator('M', 'D', 2);
+    if (SMP_LOAD_SETTINGS) {
+      drawIndicator('C', 'W', 3);
+    }
+    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
+  } else {
+    drawIndicator('M', 'E', 1);
+    drawIndicator('M', 'R', 2);
+    drawNumber(SMP.file, UI_BLUE, 11);
+  }
+  FastLEDshow();
+
+  // Settings toggle only when a file exists
   if (txtExists) {
     if (currentMode->pos[2] == 1) {
       SMP_LOAD_SETTINGS = true;
@@ -8052,7 +8367,6 @@ FLASHMEM void showLoadSave() {
       SMP_LOAD_SETTINGS = false;
     }
   } else {
-    // For empty files, force settings loading off and disable encoder
     SMP_LOAD_SETTINGS = false;
     currentMode->pos[2] = 0;
     Encoder[2].writeCounter((int32_t)0);
@@ -8497,16 +8811,16 @@ FLASHMEM bool getMuteStateForUI(int channel) {
 
 // Set mute state for a channel, considering PMOD setting
 FLASHMEM void setMuteState(int channel, bool muted) {
+  if (channel < 0 || channel >= (int)maxY) return;
+
   if (childLockEnabled) {
-    if (channel >= 0 && channel < maxY) {
-      bool childMuted = isChildVoiceMuted(channel);
-      globalMutes[channel] = childMuted;
-      SMP.globalMutes[channel] = childMuted;
-      SMP.mute[channel] = childMuted ? 1u : 0u;
-      for (int page = 0; page < maxPages; page++) {
-        pageMutes[page][channel] = childMuted;
-        SMP.pageMutes[page][channel] = childMuted;
-      }
+    bool childMuted = isChildVoiceMuted(channel);
+    globalMutes[channel] = childMuted;
+    SMP.globalMutes[channel] = childMuted;
+    SMP.mute[channel] = childMuted ? 1u : 0u;
+    for (int page = 0; page < maxPages; page++) {
+      pageMutes[page][channel] = childMuted;
+      SMP.pageMutes[page][channel] = childMuted;
     }
     return;
   }
@@ -8518,6 +8832,7 @@ FLASHMEM void setMuteState(int channel, bool muted) {
     // In ON/SONG mode, edit and play page are the same, so use GLOB.edit
     unsigned int mutePage = GLOB.edit;
     if (mutePage == 0) mutePage = 1;           // Fallback
+    if (mutePage > maxPages) mutePage = maxPages;
     pageMutes[mutePage - 1][channel] = muted;  // Page is 1-indexed, array is 0-indexed
 
     // Immediately stop synth voices when muted (only if muting the currently playing page)
