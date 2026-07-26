@@ -205,6 +205,16 @@
   color: var(--cg-ink);
 }
 
+.cg-panel__subtitle {
+  margin: 1.1rem 0 0.65rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}
+
 .cg-hint-text {
   margin: 0 0 1rem;
   font-size: 0.78rem;

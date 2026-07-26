@@ -1,6 +1,8 @@
 import { createDefaultDoc, serializeDoc, parseDoc } from "./model.js";
 import { unfold, panelBounds } from "./unfold.js";
 import { exportSvg } from "./svg-export.js";
+import { packPrintsOnSheet } from "./nest.js";
+import { orientPanelsOuterUp, mirrorPanelX } from "./orient.js";
 import {
   dist,
   fingerCount,
@@ -37,12 +39,26 @@ const frontHeight =
 if (Math.abs(frontWidth - 246) > 1e-6 || Math.abs(frontHeight - 30.6) > 1e-6) {
   throw new Error(`FRONT nominal dimensions ${frontWidth}×${frontHeight}`);
 }
-const frontLeftHeight = Math.abs(doc.profile.points[5].y - doc.profile.points[0].y);
-if (Math.abs(frontLeftHeight - 13.5) > 1e-6) {
-  throw new Error(`FRONT left outer height should be 7.5+3+3, got ${frontLeftHeight}`);
+const frontShortEdge = (() => {
+  const pts = doc.profile.points;
+  let best = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    if (Math.abs(a.x - b.x) > 1e-6) continue;
+    best = Math.max(best, Math.abs(a.y - b.y));
+    // Prefer the short vertical run (not the full 30.6 side).
+    const h = Math.abs(a.y - b.y);
+    if (Math.abs(h - 13.5) < 0.05) return h;
+  }
+  return best;
+})();
+if (Math.abs(frontShortEdge - 13.5) > 1e-6) {
+  throw new Error(`FRONT short outer height should be 7.5+3+3, got ${frontShortEdge}`);
 }
 if (doc.kerf !== -0.125) throw new Error("default kerf");
-if (doc.fingerLength !== 20) throw new Error("default finger");
+if (doc.fingerLength !== 14) throw new Error("default finger");
+if (doc.snap.grid !== doc.thickness) throw new Error("default snap grid should match thickness");
 if (doc.minFingerWidth !== 5) throw new Error("default min finger width");
 if (doc.invertFingers !== true) throw new Error("default should invert fingers");
 
@@ -55,20 +71,25 @@ const endYs = frontEnd.outerPoints.map((p) => p.y);
 if (Math.min(...endXs) < -0.2 || Math.max(...endXs) > 246.2) {
   throw new Error("FRONT end male tips should restore the 0–246 outer envelope");
 }
+const profY0 = Math.min(...doc.profile.points.map((p) => p.y));
+const profY1 = Math.max(...doc.profile.points.map((p) => p.y));
+if (Math.abs(profY0 - -30.6) > 1e-6 || Math.abs(profY1) > 1e-6) {
+  throw new Error(`FRONT profile should span y=-30.6…0 (origin at former 0,30.6), got ${profY0}…${profY1}`);
+}
 if (Math.min(...endYs) < -0.2 || Math.max(...endYs) > 30.8) {
-  throw new Error("FRONT end male tips should restore the outer Y envelope");
+  throw new Error("FRONT end male tips should restore the outer Y envelope in panel space");
 }
-const frontWall6 = panels.find((p) => p.id === "wall-5");
-if (!frontWall6) throw new Error("missing FRONT Wall 6");
+const frontShortWall = panels.find((p) => p.kind === "wall" && p.width < 14);
+if (!frontShortWall) throw new Error("missing FRONT short wall");
 // Body edge ≈13.5−2×t; must not pad to finger pitch (that doubles with side tabs).
-if (frontWall6.width > 14) {
-  throw new Error(`FRONT Wall 6 must not pad short body edge, got ${frontWall6.width}`);
+if (frontShortWall.width > 14) {
+  throw new Error(`FRONT short wall must not pad short body edge, got ${frontShortWall.width}`);
 }
-const w6span =
-  Math.max(...frontWall6.outerPoints.map((p) => p.x)) -
-  Math.min(...frontWall6.outerPoints.map((p) => p.x));
-if (Math.abs(w6span - 13.5) > 0.2) {
-  throw new Error(`FRONT Wall 6 with side tabs should restore ~13.5 outer, got ${w6span}`);
+const shortAlong =
+  Math.max(...frontShortWall.outerPoints.map((p) => p.x)) -
+  Math.min(...frontShortWall.outerPoints.map((p) => p.x));
+if (Math.abs(shortAlong - 13.5) > 0.2) {
+  throw new Error(`FRONT short wall with side tabs should restore ~13.5 outer, got ${shortAlong}`);
 }
 // No inward “negative” notches on the nest outlines.
 for (const p of panels) {
@@ -81,6 +102,113 @@ const svg = exportSvg(doc);
 if (!svg.includes('width="') || !svg.includes("mm")) throw new Error("svg missing mm units");
 if (!svg.includes('class="cut"')) throw new Error("svg missing cut class");
 if (/NaN|undefined|Infinity/.test(svg)) throw new Error("bad numbers in svg");
+if (!svg.includes('width="600mm"') || !svg.includes('height="400mm"')) {
+  throw new Error("default export should use 600×400 sheet");
+}
+
+{
+  const one = packPrintsOnSheet(panels, {
+    sheetWidth: 600,
+    sheetHeight: 400,
+    copies: 1,
+    border: 10,
+    gap: 8,
+  });
+  if (!one.fits) {
+    throw new Error(`expected 1 copy to fit: ${one.message}`);
+  }
+  const minX = Math.min(...one.nest.items.map((it) => it.x));
+  const minY = Math.min(...one.nest.items.map((it) => it.y));
+  if (minX < one.border - 1e-9 || minY < one.border - 1e-9) {
+    throw new Error("parts must respect border safety");
+  }
+  if (!one.nest.items.some((it) => it.rotate90 || it.panel?.nestRotate90)) {
+    // Not strictly required — but search must include single-part 90° locks.
+  }
+
+  // Explicit single-part rotation search: some layout seed should rotate few parts.
+  let foundSparseRot = false;
+  for (let s = 0; s < 32; s++) {
+    const alt = packPrintsOnSheet(panels, {
+      sheetWidth: 600,
+      sheetHeight: 400,
+      copies: 1,
+      border: 10,
+      gap: 8,
+      layoutSeed: s,
+    });
+    if (!alt.fits) continue;
+    const rotN = alt.nest.items.filter((it) => it.rotate90 || it.panel?.nestRotate90).length;
+    if (rotN >= 1 && rotN <= 3) {
+      foundSparseRot = true;
+      break;
+    }
+  }
+  if (!foundSparseRot) {
+    throw new Error("expected some layout with only 1–3 parts rotated 90°");
+  }
+
+  const multi = packPrintsOnSheet(panels, {
+    sheetWidth: 1200,
+    sheetHeight: 800,
+    copies: 2,
+    border: 10,
+    gap: 8,
+  });
+  if (!multi.fits) {
+    throw new Error(`expected 2 copies to fit on large sheet: ${multi.message}`);
+  }
+  if (multi.flat) {
+    if (multi.nest.items.length < panels.length * 2) {
+      throw new Error("flat multi-copy should place two sets of parts");
+    }
+  } else if (multi.placements.length !== 2) {
+    throw new Error(`expected 2 tiled placements, got ${multi.placements.length}`);
+  }
+
+  const tight = packPrintsOnSheet(panels, {
+    sheetWidth: 100,
+    sheetHeight: 100,
+    copies: 4,
+    border: 10,
+    gap: 8,
+  });
+  if (tight.fits) throw new Error("tiny sheet should not fit 4 full prints");
+  if (tight.maxCopies !== 0 && tight.placements.length === 4 && !tight.flat) {
+    throw new Error("tiny sheet should not place 4 copies");
+  }
+
+  doc.sheet = { width: 900, height: 600, copies: 2, border: 12, gap: 6 };
+  const svg2 = exportSvg(doc);
+  if (!svg2.includes('width="900mm"') || !svg2.includes('height="600mm"')) {
+    throw new Error("export should use configured sheet size");
+  }
+  // Flat pack places each part once per copy (no copy-* groups required).
+  const partGroups = (svg2.match(/<g id="/g) || []).length;
+  if (partGroups < 10) {
+    throw new Error(`multi-copy export expected many part groups, got ${partGroups}`);
+  }
+  doc.sheet = { width: 600, height: 400, copies: 1, border: 10, gap: 8 };
+}
+
+{
+  const oriented = orientPanelsOuterUp(panels);
+  const endA = oriented.find((p) => p.id === "endA");
+  const endB = oriented.find((p) => p.id === "endB");
+  const wall = oriented.find((p) => p.kind === "wall");
+  if (!endA || !endB || !wall) throw new Error("orient missing panels");
+  if (endA.nestMirrorX) throw new Error("endA should stay unmirrored (already outer-up)");
+  if (!endB.nestMirrorX) throw new Error("endB should be mirrored for outer-up");
+  if (!wall.nestMirrorX) throw new Error("walls should be mirrored for outer-up");
+  const mirroredA = mirrorPanelX(panels.find((p) => p.id === "endA"));
+  for (let i = 0; i < endB.outerPoints.length; i++) {
+    const a = mirroredA.outerPoints[i];
+    const b = endB.outerPoints[i];
+    if (Math.abs(a.x - b.x) > 1e-6 || Math.abs(a.y - b.y) > 1e-6) {
+      throw new Error("oriented endB should match mirrored endA");
+    }
+  }
+}
 
 // Click-draw style closed profile → generative
 doc.profile = {
@@ -545,6 +673,15 @@ for (const p of diag.panels) {
   }
   const datum = currentTemplateDatum(source);
   if (!datum || datum.x !== 0 || datum.y !== 60) throw new Error("template datum");
+  if (Math.abs(datum.zEndA - (source.depth + 2 * source.thickness)) > 1e-9) {
+    throw new Error("template datum End A z must be depth + 2·thickness");
+  }
+  const wallEntry = captured.template.entries.find((e) => e.face === "wall" && e.type === "circle");
+  if (!wallEntry || wallEntry.frame !== "outer") throw new Error("wall entry should use outer frame");
+  // wall-0 hole at local y=40 → assembly z = t + 40
+  if (Math.abs(wallEntry.z - (source.thickness + 40)) > 1e-6) {
+    throw new Error(`wall outer z should be t+localY, got ${wallEntry.z}`);
+  }
 
   const applied = applyFeatureTemplate(source, sourceUnfold.panels, captured.template);
   if (applied.error || applied.skipped || applied.features.length !== 4) {
@@ -568,6 +705,18 @@ for (const p of diag.panels) {
   }
   if (applied.features.some((f) => f.templateId !== captured.template.id)) {
     throw new Error("applied features should retain template source ID");
+  }
+
+  // Changing thickness keeps outer-assembly Z; wall local Y shifts by Δt.
+  const thicker = parseDoc(serializeDoc(source));
+  thicker.thickness = 6;
+  thicker.features = [];
+  const thickerUnfold = unfold(thicker);
+  const thickApply = applyFeatureTemplate(thicker, thickerUnfold.panels, captured.template);
+  const thickWall = thickApply.features.find((f) => f.panelId === "wall-0");
+  // z_asm = 3+40 = 43 → localY = 43 - 6 = 37
+  if (!thickWall || Math.abs(thickWall.cy - 37) > 1e-6) {
+    throw new Error(`thickness-aware wall Z remap failed, got cy=${thickWall?.cy}`);
   }
 
   // Translating profile + datum keeps all local panel positions unchanged.

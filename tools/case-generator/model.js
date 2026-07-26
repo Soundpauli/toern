@@ -2,16 +2,18 @@
 
 /**
  * Outer contour of the production FRONT panel with individual teeth removed.
- * The source baseline is expanded by the default 3 mm finger depth at the top
- * and bottom; X already uses the panel's outer 0…246 mm extents.
+ * Drawn Y-down (canvas), mirrored horizontally vs the DXF source so the
+ * stepped lip sits on the left. Origin at the bottom-left outer corner (0,0);
+ * Y is negative toward the top of the panel (height 30.6 mm). Baseline expanded
+ * by the default 3 mm finger depth; X uses 0…246 mm.
  */
 export const TOERN_FRONT_PROFILE = [
-  { x: 0, y: 17.3 },
-  { x: 164.205, y: 17.3 },
-  { x: 174.001, y: 0.2 },
-  { x: 246, y: 0.2 },
-  { x: 246, y: 30.8 },
-  { x: 0, y: 30.8 },
+  { x: 0, y: -30.6 },
+  { x: 71.999, y: -30.6 },
+  { x: 81.795, y: -13.5 },
+  { x: 246, y: -13.5 },
+  { x: 246, y: 0 },
+  { x: 0, y: 0 },
 ];
 
 export function createDefaultDoc() {
@@ -20,14 +22,26 @@ export function createDefaultDoc() {
     units: "mm",
     name: "TŒRN M1 Front Profile",
     thickness: 3,
-    fingerLength: 20,
+    fingerLength: 14,
     /** Ignore joints when any finger segment would be ≤ this width (mm). */
     minFingerWidth: 5,
     kerf: -0.125,
     /** When true, swap male/female on every joint (ends female, walls male on long edges). */
     invertFingers: true,
     depth: 160,
-    snap: { enabled: true, grid: 10 },
+    snap: { enabled: true, grid: 3 },
+    /** Laser sheet packing for export / nest preview */
+    sheet: {
+      width: 600,
+      height: 400,
+      copies: 1,
+      /** Safety margin from sheet outer edge to nearest cut (mm). */
+      border: 10,
+      /** Gap between panels and between copies (mm). */
+      gap: 8,
+      /** Cycles alternate near-optimal nest layouts ("Try new layout"). */
+      layoutSeed: 0,
+    },
     // Editable profile derived from the nominal FRONT panel outer contour.
     profile: {
       points: cloneData(TOERN_FRONT_PROFILE),
@@ -69,6 +83,18 @@ export function normalizeDoc(raw) {
   if (raw.snap && typeof raw.snap === "object") {
     if (typeof raw.snap.enabled === "boolean") doc.snap.enabled = raw.snap.enabled;
     if (typeof raw.snap.grid === "number") doc.snap.grid = raw.snap.grid;
+  }
+  if (raw.sheet && typeof raw.sheet === "object") {
+    if (typeof raw.sheet.width === "number") doc.sheet.width = Math.max(1, raw.sheet.width);
+    if (typeof raw.sheet.height === "number") doc.sheet.height = Math.max(1, raw.sheet.height);
+    if (typeof raw.sheet.copies === "number") {
+      doc.sheet.copies = Math.max(1, Math.min(200, Math.floor(raw.sheet.copies)));
+    }
+    if (typeof raw.sheet.border === "number") doc.sheet.border = Math.max(0, raw.sheet.border);
+    if (typeof raw.sheet.gap === "number") doc.sheet.gap = Math.max(0, raw.sheet.gap);
+    if (typeof raw.sheet.layoutSeed === "number") {
+      doc.sheet.layoutSeed = Math.max(0, Math.floor(raw.sheet.layoutSeed));
+    }
   }
   if (raw.profile && Array.isArray(raw.profile.points)) {
     doc.profile.points = raw.profile.points
@@ -157,8 +183,10 @@ function normalizeTemplateEntry(raw) {
     dx: Number(raw.dx) || 0,
     dy: Number(raw.dy) || 0,
   };
+  if (raw.frame === "outer") entry.frame = "outer";
+  if (typeof raw.z === "number" && Number.isFinite(raw.z)) entry.z = raw.z;
   if (face === "wall") {
-    entry.z = Number(raw.z) || 0;
+    if (entry.z == null) entry.z = 0;
     const nx = Number(raw.normal?.x);
     const ny = Number(raw.normal?.y);
     if (!Number.isFinite(nx) || !Number.isFinite(ny)) return null;

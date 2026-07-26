@@ -45,7 +45,7 @@
               <span class="cg-unit">mm</span>
             </label>
             <label class="cg-inline" for="param-finger">Finger
-              <input type="number" id="param-finger" min="10" max="100" step="0.1" value="20" />
+              <input type="number" id="param-finger" min="10" max="100" step="0.1" value="14" />
               <span class="cg-unit">mm</span>
             </label>
             <label class="cg-inline" for="param-min-finger" title="Joints are skipped when finger segments would be at or below this width">Min finger
@@ -69,7 +69,7 @@
               <input type="checkbox" id="snap-enabled" checked /> Snap
             </label>
             <label class="cg-inline" for="snap-grid">
-              <input type="number" id="snap-grid" min="0.1" max="50" step="0.1" value="10" />
+              <input type="number" id="snap-grid" min="0.1" max="50" step="0.1" value="3" />
               <span class="cg-unit">mm</span>
             </label>
           </div>
@@ -115,7 +115,7 @@
           </div>
           <div class="cg-field">
             <label>Template origin</label>
-            <p class="cg-hint-text" id="template-origin-status">Not set. Choose a profile corner as assembly (0,0,0).</p>
+            <p class="cg-hint-text" id="template-origin-status">Not set. Choose a profile corner as outer End B origin (0,0,0).</p>
             <button type="button" class="cg-btn cg-btn--ghost cg-btn--block" id="btn-set-template-origin">Set template origin</button>
           </div>
           <div class="cg-field">
@@ -130,6 +130,13 @@
           <div class="cg-field">
             <label for="feature-panel">Panel</label>
             <select id="feature-panel"></select>
+          </div>
+          <div class="cg-field">
+            <label>Placement</label>
+            <label class="cg-inline">
+              <input type="checkbox" id="feat-snap-centerlines" checked /> Snap to centerlines
+            </label>
+            <p class="cg-hint-text">Dotted H/V guides through the panel center. Snaps when you place or drag near them.</p>
           </div>
           <div class="cg-field">
             <label>Tool</label>
@@ -208,7 +215,7 @@
 
         <div class="cg-panel" data-panel="nest" hidden>
           <h2 class="cg-panel__title">Nest</h2>
-          <p class="cg-hint-text">Flat layout of all panels with finger joints. Export SVG for cutting.</p>
+          <p class="cg-hint-text">Flat layout of all panels with finger joints. Export packs copies onto a sheet.</p>
           <div class="cg-field">
             <label>Panels</label>
             <ul class="cg-list" id="nest-list"></ul>
@@ -218,11 +225,69 @@
               <input type="checkbox" id="nest-labels" checked /> Show labels
             </label>
           </div>
+          <h3 class="cg-panel__subtitle">Sheet</h3>
+          <div class="cg-field">
+            <label for="sheet-preset">Preset</label>
+            <select id="sheet-preset">
+              <option value="600x400">600 × 400 mm</option>
+              <option value="900x600">900 × 600 mm</option>
+              <option value="600x300">600 × 300 mm</option>
+              <option value="420x297">A3 (420 × 297)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="cg-row">
+            <div class="cg-field">
+              <label for="sheet-width">Width</label>
+              <label class="cg-inline">
+                <input type="number" id="sheet-width" min="10" max="5000" step="1" value="600" />
+                <span class="cg-unit">mm</span>
+              </label>
+            </div>
+            <div class="cg-field">
+              <label for="sheet-height">Height</label>
+              <label class="cg-inline">
+                <input type="number" id="sheet-height" min="10" max="5000" step="1" value="400" />
+                <span class="cg-unit">mm</span>
+              </label>
+            </div>
+          </div>
+          <div class="cg-row">
+            <div class="cg-field">
+              <label for="sheet-copies">Copies</label>
+              <input type="number" id="sheet-copies" min="1" max="200" step="1" value="1" />
+            </div>
+            <div class="cg-field">
+              <label for="sheet-border">Border safety</label>
+              <label class="cg-inline">
+                <input type="number" id="sheet-border" min="0" max="200" step="0.5" value="10" />
+                <span class="cg-unit">mm</span>
+              </label>
+            </div>
+          </div>
+          <div class="cg-field">
+            <label for="sheet-gap">Part / copy gap</label>
+            <label class="cg-inline">
+              <input type="number" id="sheet-gap" min="0" max="100" step="0.5" value="8" />
+              <span class="cg-unit">mm</span>
+            </label>
+          </div>
+          <div class="cg-field">
+            <button type="button" class="cg-btn cg-btn--accent cg-btn--block" id="btn-auto-fit">
+              Auto fit on sheet
+            </button>
+          </div>
+          <div class="cg-field">
+            <button type="button" class="cg-btn cg-btn--ghost cg-btn--block" id="btn-try-layout">
+              Try new layout
+            </button>
+          </div>
+          <p class="cg-hint-text" id="sheet-status">—</p>
         </div>
       </aside>
     </div>
   </main>
 
-  <script type="module" src="app.js?v=20260726-3d-holes-through"></script>
+  <script type="module" src="app.js?v=20260726-canvas-pan"></script>
 </body>
 </html>
