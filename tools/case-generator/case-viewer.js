@@ -75,6 +75,7 @@ function meshFingeredAssembly(panels, t, doc) {
       }), t, MATTE.faceEnd, panel.id, {
         outerAt: t,
         priority: prio,
+        holes: panel.holes,
       });
     } else if (panel.kind === "wall" && panel.edgeA && panel.edgeB) {
       const a = panel.edgeA;
@@ -99,6 +100,7 @@ function meshFingeredAssembly(panels, t, doc) {
       }, t, face, panel.id, {
         outerAt: t, // s=t is outside the body baseline
         priority: prio,
+        holes: panel.holes,
       });
     }
   }
@@ -187,6 +189,7 @@ function meshM1WoodBox(doc, t) {
  * Extrude cut outline into a plate — outer + cavity faces + rim.
  * Both faces get cut outlines when they face the camera (needed so diagonal
  * walls read clearly when looking into the case).
+ * Optional `opts.holes` punch openings through the plate (caps + bore walls).
  */
 function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, opts = {}) {
   if (!ring2d?.length || thickness <= 0) return;
@@ -239,6 +242,12 @@ function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, op
     side: "outer",
     panelId,
     priority: priority + 2,
+    cutouts2d: (opts.holes || [])
+      .map(holeRing2d)
+      .filter((r) => r && r.length >= 3)
+      .map((r) => ensureCCW(r)),
+    map2d: map,
+    mapS: outerS,
   });
   faces.push({
     pts: pushedIn,
@@ -247,6 +256,12 @@ function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, op
     side: "inner",
     panelId,
     priority: priority + 1,
+    cutouts2d: (opts.holes || [])
+      .map(holeRing2d)
+      .filter((r) => r && r.length >= 3)
+      .map((r) => ensureCCW(r)),
+    map2d: map,
+    mapS: innerS,
   });
 
   const nR = ring.length;
@@ -282,8 +297,126 @@ function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, op
     });
   }
 
+  addPanelHoleBores(faces, opts.holes || [], map, outerS, innerS, nOut, panelId, priority);
+
   void edges;
   void nInn;
+}
+
+/** Bore walls through the plate — double-sided so the tunnel reads from either end. */
+const HOLE_BORE = [72, 76, 82];
+
+function addPanelHoleBores(faces, holes, map, outerS, innerS, nOut, panelId, priority) {
+  for (const hole of holes) {
+    const ring2d = holeRing2d(hole);
+    if (!ring2d || ring2d.length < 3) continue;
+    const ring = ensureCCW(ring2d);
+
+    const outRing = ring.map((p) => {
+      const q = map(p, outerS);
+      return {
+        x: q.x + nOut.x * FACE_EPS,
+        y: q.y + nOut.y * FACE_EPS,
+        z: q.z + nOut.z * FACE_EPS,
+      };
+    });
+    const inRing = ring.map((p) => {
+      const q = map(p, innerS);
+      return {
+        x: q.x - nOut.x * FACE_EPS,
+        y: q.y - nOut.y * FACE_EPS,
+        z: q.z - nOut.z * FACE_EPS,
+      };
+    });
+
+    const holeMid = {
+      x: (centroid(outRing).x + centroid(inRing).x) * 0.5,
+      y: (centroid(outRing).y + centroid(inRing).y) * 0.5,
+      z: (centroid(outRing).z + centroid(inRing).z) * 0.5,
+    };
+
+    const nH = ring.length;
+    for (let i = 0; i < nH; i++) {
+      const j = (i + 1) % nH;
+      if (dist(ring[i], ring[j]) < 1e-9) continue;
+      const a = outRing[i];
+      const b = outRing[j];
+      const c = inRing[j];
+      const d = inRing[i];
+      let bore = [a, b, c, d];
+      // Face toward the hole axis so looking into the opening sees the wall.
+      const bn = polygonNormal(bore);
+      const bc = centroid(bore);
+      const inward = sub3(holeMid, bc);
+      if (dot3(bn, inward) < 0) bore = [a, d, c, b];
+
+      faces.push({
+        pts: bore,
+        rgb: HOLE_BORE,
+        role: "edge",
+        panelId,
+        priority: priority + 0.5,
+      });
+      // Opposite winding for the other viewing direction through the bore.
+      faces.push({
+        pts: [...bore].reverse(),
+        rgb: HOLE_BORE,
+        role: "edge",
+        panelId,
+        priority: priority + 0.4,
+      });
+    }
+  }
+}
+
+/** Panel-local hole outline as a closed polyline. */
+function holeRing2d(hole) {
+  if (!hole) return null;
+  if (hole.type === "circle" && hole.r > 0) {
+    const n = Math.max(12, Math.min(32, Math.ceil(hole.r * 4)));
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      pts.push({
+        x: hole.cx + Math.cos(a) * hole.r,
+        y: hole.cy + Math.sin(a) * hole.r,
+      });
+    }
+    return pts;
+  }
+  if (hole.type === "roundRect" && hole.w > 0 && hole.h > 0) {
+    return roundRectRing2d(hole.x, hole.y, hole.w, hole.h, hole.r || 0);
+  }
+  if (hole.type === "path" && Array.isArray(hole.points) && hole.points.length >= 3) {
+    return hole.points.map((p) => ({ x: p.x, y: p.y }));
+  }
+  return null;
+}
+
+function roundRectRing2d(x, y, w, h, r) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  if (rr < 1e-6) {
+    return [
+      { x, y },
+      { x: x + w, y },
+      { x: x + w, y: y + h },
+      { x, y: y + h },
+    ];
+  }
+  const pts = [];
+  const arc = (cx, cy, a0, a1) => {
+    const steps = Math.max(3, Math.ceil((Math.abs(a1 - a0) / (Math.PI / 2)) * 4));
+    for (let i = 0; i <= steps; i++) {
+      const t = a0 + (a1 - a0) * (i / steps);
+      pts.push({ x: cx + Math.cos(t) * rr, y: cy + Math.sin(t) * rr });
+    }
+  };
+  // CCW from top-left going right (Y-down canvas coords).
+  arc(x + rr, y + rr, Math.PI, Math.PI * 1.5);
+  arc(x + w - rr, y + rr, Math.PI * 1.5, Math.PI * 2);
+  arc(x + w - rr, y + h - rr, 0, Math.PI * 0.5);
+  arc(x + rr, y + h - rr, Math.PI * 0.5, Math.PI);
+  return pts;
 }
 
 function polygonNormal(pts) {
@@ -596,34 +729,38 @@ export function drawAssembledCase(ctx, mesh, cam, rect, opts = {}) {
   // Opaque first (writes depth), then translucent overlays (depth-test only).
   for (const item of opaque) {
     const proj = item.face.pts.map((p) => projectPoint(p, cam, bounds, srect));
+    const cutouts = projectFaceCutouts(item.face, cam, bounds, srect);
     rasterizePolygon(proj, item.rgb, item.priority, color, zbuf, pbuf, rw, rh, {
       alpha: 1,
       writeDepth: true,
+      cutouts,
     });
   }
   for (const item of glass) {
     const proj = item.face.pts.map((p) => projectPoint(p, cam, bounds, srect));
+    const cutouts = projectFaceCutouts(item.face, cam, bounds, srect);
     rasterizePolygon(proj, item.rgb, item.priority, color, zbuf, pbuf, rw, rh, {
       alpha: item.alpha,
       writeDepth: false,
+      cutouts,
     });
   }
 
-  // Cut outlines: focus always; ghost panels get faint lines when still visible.
+  // Cut outlines: panel edges + punched hole rims on faces.
   for (const item of [...opaque, ...glass]) {
-    if (item.face.role !== "face") continue;
+    if (item.face.role !== "face" && item.face.role !== "edge") continue;
     const isFocus = hasHi && item.face.panelId === highlightPanelId;
     if (hasHi && !isFocus && item.alpha < 0.08) continue;
     if (hasHi && !isFocus && !ghosting) continue;
-    const proj = item.face.pts.map((p) => projectPoint(p, cam, bounds, srect));
-    const outlineRgb = isFocus || !hasHi ? (hasHi ? [28, 86, 140] : [32, 36, 44]) : [70, 76, 88];
-    const outlineStr = isFocus || !hasHi ? (hasHi ? 0.95 : 0.88) : 0.35 * item.alpha;
-    const n = proj.length;
-    for (let i = 0; i < n; i++) {
-      const a = proj[i];
-      const b = proj[(i + 1) % n];
-      if (Math.hypot(b.x - a.x, b.y - a.y) < 0.4) continue;
-      strokeVisibleEdge(a, b, outlineRgb, color, zbuf, rw, rh, outlineStr);
+    if (item.face.role === "face") {
+      const proj = item.face.pts.map((p) => projectPoint(p, cam, bounds, srect));
+      const outlineRgb = isFocus || !hasHi ? (hasHi ? [28, 86, 140] : [32, 36, 44]) : [70, 76, 88];
+      const outlineStr = isFocus || !hasHi ? (hasHi ? 0.95 : 0.88) : 0.35 * item.alpha;
+      strokeProjectedLoop(proj, outlineRgb, color, zbuf, rw, rh, outlineStr);
+      const cutouts = projectFaceCutouts(item.face, cam, bounds, srect);
+      for (const cut of cutouts) {
+        strokeProjectedLoop(cut, outlineRgb, color, zbuf, rw, rh, outlineStr);
+      }
     }
   }
 
@@ -645,10 +782,48 @@ export function drawAssembledCase(ctx, mesh, cam, rect, opts = {}) {
 
 const DEPTH_EPS = 0.35;
 
+function projectFaceCutouts(face, cam, bounds, rect) {
+  if (!face?.cutouts2d?.length || typeof face.map2d !== "function") return [];
+  const s = face.mapS ?? 0;
+  const out = [];
+  for (const ring2d of face.cutouts2d) {
+    if (!ring2d?.length) continue;
+    const ring3d = ring2d.map((p) => face.map2d(p, s));
+    out.push(ring3d.map((p) => projectPoint(p, cam, bounds, rect)));
+  }
+  return out;
+}
+
+function strokeProjectedLoop(proj, rgb, color, zbuf, w, h, strength) {
+  const n = proj.length;
+  for (let i = 0; i < n; i++) {
+    const a = proj[i];
+    const b = proj[(i + 1) % n];
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 0.4) continue;
+    strokeVisibleEdge(a, b, rgb, color, zbuf, w, h, strength);
+  }
+}
+
+function pointInProjectedPoly(x, y, poly) {
+  let inside = false;
+  const n = poly.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = poly[i].x;
+    const yi = poly[i].y;
+    const xj = poly[j].x;
+    const yj = poly[j].y;
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 function rasterizePolygon(proj, rgb, priority, color, zbuf, pbuf, w, h, opts = {}) {
   if (proj.length < 3) return;
   const alpha = opts.alpha == null ? 1 : opts.alpha;
   const writeDepth = opts.writeDepth !== false;
+  const cutouts = opts.cutouts || [];
   if (alpha < 0.02) return;
   const [cr, cg, cb] = rgb;
   let p0 = proj[0];
@@ -704,7 +879,18 @@ function rasterizePolygon(proj, rgb, priority, color, zbuf, pbuf, w, h, opts = {
       const x0 = Math.max(minX, Math.ceil(xs[k]));
       const x1 = Math.min(maxX, Math.floor(xs[k + 1]));
       for (let x = x0; x <= x1; x++) {
-        const z = ax * (x + 0.5) + ay * ys + az;
+        const px = x + 0.5;
+        if (cutouts.length) {
+          let punched = false;
+          for (const cut of cutouts) {
+            if (pointInProjectedPoly(px, ys, cut)) {
+              punched = true;
+              break;
+            }
+          }
+          if (punched) continue;
+        }
+        const z = ax * px + ay * ys + az;
         const idx = y * w + x;
         const zPrev = zbuf[idx];
         if (writeDepth) {

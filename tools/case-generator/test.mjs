@@ -58,6 +58,18 @@ if (Math.min(...endXs) < -0.2 || Math.max(...endXs) > 246.2) {
 if (Math.min(...endYs) < -0.2 || Math.max(...endYs) > 30.8) {
   throw new Error("FRONT end male tips should restore the outer Y envelope");
 }
+const frontWall6 = panels.find((p) => p.id === "wall-5");
+if (!frontWall6) throw new Error("missing FRONT Wall 6");
+// Body edge ≈13.5−2×t; must not pad to finger pitch (that doubles with side tabs).
+if (frontWall6.width > 14) {
+  throw new Error(`FRONT Wall 6 must not pad short body edge, got ${frontWall6.width}`);
+}
+const w6span =
+  Math.max(...frontWall6.outerPoints.map((p) => p.x)) -
+  Math.min(...frontWall6.outerPoints.map((p) => p.x));
+if (Math.abs(w6span - 13.5) > 0.2) {
+  throw new Error(`FRONT Wall 6 with side tabs should restore ~13.5 outer, got ${w6span}`);
+}
 // No inward “negative” notches on the nest outlines.
 for (const p of panels) {
   const b = panelBounds(p);
@@ -621,6 +633,38 @@ const frontDoc = createDefaultDoc();
 const meshFront = buildAssembledCase(frontDoc);
 if (meshFront.error || meshFront.kind !== "assembled" || meshFront.faces.length < 6) {
   throw new Error("FRONT profile should produce assembled case viewer geometry");
+}
+
+// Feature holes punch through both faces of the 3D mesh.
+{
+  const withHoles = createDefaultDoc();
+  withHoles.fixedPanels = null;
+  withHoles.profile = {
+    closed: true,
+    points: [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 60 },
+      { x: 0, y: 60 },
+    ],
+  };
+  withHoles.depth = 80;
+  withHoles.features = [
+    createCircleFeature("endA", 40, 30, 6),
+    createRoundRectFeature("wall-0", 20, 20, 16, 10, 25),
+  ];
+  const meshH = buildAssembledCase(withHoles);
+  if (meshH.error) throw new Error(meshH.error);
+  const punched = meshH.faces.filter(
+    (f) => f.role === "face" && f.cutouts2d?.length
+  );
+  if (punched.length < 4) {
+    throw new Error(`expected punched faces on both sides, got ${punched.length}`);
+  }
+  const sides = new Set(punched.map((f) => `${f.panelId}:${f.side}`));
+  if (![...sides].some((s) => s.endsWith(":outer")) || ![...sides].some((s) => s.endsWith(":inner"))) {
+    throw new Error("holes must punch both outer and inner faces");
+  }
 }
 
 console.log("ok", {

@@ -214,9 +214,10 @@ export function unfold(doc) {
     );
     const a = add(nominalA, scale(edgeDir, startTrim));
     const edgeLen = dist(a, b);
-    // Wall length along body edge — must match end edge for finger mating.
-    // Ortho short edges may pad to fingerLength; diagonals keep exact length.
-    const w = isAxisAligned(a, b) ? Math.max(fingerLength, edgeLen) : edgeLen;
+    // Wall body matches the inset profile edge. Side tabs at ortho corners
+    // restore the outer envelope — never pad short walls up to finger pitch
+    // (that stacks with side tabs and doubles the blank).
+    const w = edgeLen;
     const h = depth;
 
     // Edges: bottom (→ endB), right (→ next wall), top (→ endA), left (→ prev wall)
