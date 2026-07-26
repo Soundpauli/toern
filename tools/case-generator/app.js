@@ -14,7 +14,7 @@ import {
   setPanelFingersInverted,
 } from "./model.js";
 import { dist, simplifyPolyline, polygonSelfIntersects, isAxisAligned } from "./joints.js";
-import { unfold, panelBounds } from "./unfold.js";
+import { unfold, panelBounds, measureInsideCavity } from "./unfold.js";
 import { exportSvg, buildCutModel } from "./svg-export.js";
 import { mapNestPoint } from "./nest.js";
 import {
@@ -767,6 +767,20 @@ function refreshView3dPanelList() {
   }
 
   syncView3dInvertControl();
+  syncView3dInsideMeasure();
+}
+
+function syncView3dInsideMeasure() {
+  const el = document.getElementById("view3d-inside");
+  if (!el) return;
+  const m = measureInsideCavity(doc);
+  if (m.error) {
+    el.textContent = m.error;
+    el.classList.add("cg-muted");
+    return;
+  }
+  el.classList.remove("cg-muted");
+  el.textContent = `${fmt(m.width)} × ${fmt(m.height)} × ${fmt(m.depth)} mm`;
 }
 
 function syncView3dInvertControl() {

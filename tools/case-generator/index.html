@@ -193,6 +193,11 @@
           <h2 class="cg-panel__title">Case Viewer</h2>
           <p class="cg-hint-text">Assembled case with finger joints. Drag to orbit · scroll to zoom.</p>
           <div class="cg-field">
+            <label>Inside (max)</label>
+            <p class="cg-metric-line" id="view3d-inside">—</p>
+            <p class="cg-hint-text">Clear cavity AABB: body profile × depth (outer minus thickness).</p>
+          </div>
+          <div class="cg-field">
             <label for="view3d-panel">Focus panel</label>
             <select id="view3d-panel">
               <option value="">Whole case</option>
@@ -295,6 +300,6 @@
     </div>
   </main>
 
-  <script type="module" src="app.js?v=20260726-invert-live"></script>
+  <script type="module" src="app.js?v=20260726-inside-ends"></script>
 </body>
 </html>

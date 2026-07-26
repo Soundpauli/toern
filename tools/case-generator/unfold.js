@@ -20,9 +20,45 @@ import {
   isConvexOrthogonalCorner,
   isValidFingerLength,
   MIN_FINGER_LENGTH,
+  fingerWidths,
 } from "./joints.js";
 import { panelLabel, jointStartMale, jointInvertMode } from "./model.js";
 import { roundRectRadiusMm } from "./features.js";
+
+/**
+ * Maximum clear inside size (body-profile AABB × depth).
+ * Outer drawn profile minus joint depth on each side; Z span is doc.depth.
+ */
+export function measureInsideCavity(doc) {
+  if (doc.fixedPanels?.length) {
+    return { error: "Inside size is for generated profiles only." };
+  }
+  const rawPts = doc.profile?.points;
+  if (!doc.profile?.closed || !rawPts || rawPts.length < 3) {
+    return { error: "Close a profile to measure inside." };
+  }
+  const simplified = simplifyPolyline(rawPts, { closed: true });
+  if (simplified.length < 3 || polygonSelfIntersects(simplified)) {
+    return { error: "Profile is not a valid closed outline." };
+  }
+  const thickness = Math.max(0.05, doc.thickness || 3);
+  const kerf = doc.kerf || 0;
+  const jointDepth = Math.max(0, thickness - kerf * 0.5);
+  const depth = Math.max(thickness * 2, doc.depth || 1);
+  const outer = ensureCCW(simplified);
+  const body = offsetPolygon(outer, -jointDepth);
+  if (body.length < 3 || polygonSelfIntersects(body)) {
+    return { error: "Profile too small for this thickness." };
+  }
+  const b = boundsOf(body);
+  return {
+    width: b.width,
+    height: b.height,
+    depth,
+    jointDepth,
+    error: null,
+  };
+}
 
 /**
  * @returns {{ panels: Panel[], error?: string }}
@@ -83,6 +119,27 @@ export function unfold(doc) {
   const profile = bodyProfile;
   const n = profile.length;
 
+  // Allow a full-edge tongue on edges too short for normal finger pitch
+  // (e.g. FRONT lip at t≳4 mm with minFinger 5), so End↔wall still mates
+  // and male tips can restore the outer envelope. Also covers the “dead zone”
+  // where L is too long for a valid n=1 skip but too short for n=3 ends.
+  const shortTongueFloor = 0.75;
+
+  /** Usable edge length can take a finger joint (normal or short tongue). */
+  const canJoint = (usable) => usable >= shortTongueFloor;
+
+  /** Finger layout for usable length, or null if only a forced tongue works. */
+  const layoutWidths = (usable) =>
+    fingerWidths(usable, fingerLength, { minFingerLength: minFinger });
+
+  /** True when the joint will be a single full-edge tab (not an alternating run). */
+  const isSingleSpanEdge = (usable) => {
+    if (!canJoint(usable)) return false;
+    if (usable <= minFinger) return true;
+    const widths = layoutWidths(usable);
+    return !widths || widths.length === 1;
+  };
+
   // Concave corners use a square-cut butt trim on the outgoing wall. Convex
   // corners retain their full run and finger-joint eligibility.
   const wallStartTrims = profile.map((a, i) => {
@@ -104,6 +161,7 @@ export function unfold(doc) {
    * Per-edge joint. Fingers only when every finger exceeds minFingerWidth; else plain.
    * Diagonals use end clearance + a shorter pitch when needed.
    * opts.panelId / opts.mateId drive global + per-panel invert for this joint.
+   * Short / dead-zone edges get a single full-length tongue with a relaxed min.
    */
   const edgeJoint = (startMaleBase, a, b, opts = {}) => {
     const panelId = opts.panelId;
@@ -114,25 +172,32 @@ export function unfold(doc) {
         : startMaleBase;
     const invertJoint =
       panelId && mateId ? jointInvertMode(doc, panelId, mateId) : !!doc.invertFingers;
-    const base = {
-      thickness,
-      fingerLength,
-      startMale,
-      kerf,
-      minFingerLength: minFinger,
-    };
     const extraStart = Math.max(0, opts.startClearance || 0);
     const extraEnd = Math.max(0, opts.finishClearance || 0);
+
+    const build = (usable, clearStart, clearEnd, { allowForceTongue = true } = {}) => {
+      if (!canJoint(usable)) return null;
+      const widths = layoutWidths(usable);
+      const forceTongue =
+        allowForceTongue && (usable <= minFinger || !widths);
+      if (!forceTongue && !widths && usable > minFinger) return null;
+      return {
+        thickness,
+        fingerLength: forceTongue ? usable : fingerLength,
+        startMale,
+        kerf,
+        minFingerLength: forceTongue
+          ? Math.max(shortTongueFloor - 1e-6, usable - 1e-6)
+          : minFinger,
+        startClearance: clearStart,
+        finishClearance: clearEnd,
+      };
+    };
+
     if (isAxisAligned(a, b)) {
       const L = dist(a, b);
       const usable = L - extraStart - extraEnd;
-      return isValidFingerLength(usable, minFinger)
-        ? {
-            ...base,
-            startClearance: extraStart,
-            finishClearance: extraEnd,
-          }
-        : null;
+      return build(usable, extraStart, extraEnd, { allowForceTongue: true });
     }
 
     const L = dist(a, b);
@@ -148,6 +213,7 @@ export function unfold(doc) {
       clear + extraEnd
     );
     const usable = Math.max(0, L - clearStart - clearEnd);
+    // Diagonals: keep strict finger layout (no forced tongue fallback).
     if (!isValidFingerLength(usable, minFinger)) return null;
 
     const f = Math.min(
@@ -157,24 +223,33 @@ export function unfold(doc) {
     if (!isValidFingerLength(f, minFinger)) return null;
 
     return {
-      ...base,
+      thickness,
       fingerLength: f,
+      startMale,
+      kerf,
+      minFingerLength: minFinger,
       startClearance: clearStart,
       finishClearance: clearEnd,
     };
   };
 
   // --- End caps — female on active runs by default (invertFingers off restores male) ---
-  // Bounds from the outer envelope so nest size matches the drawn profile.
-  // End A/B share one blank; invert uses endA (synced with endB in the doc).
+  // Single-span edges use the opposite base gender so the end owns the male
+  // tongue when invert is on (end blank restores the outer silhouette).
+  // Bounds from the outer envelope keep feature / assembly origins stable.
   const endBounds = boundsOf(outerProfile);
   const endEdgeSpecs = [];
   for (let i = 0; i < n; i++) {
     const a = profile[i];
     const b = profile[(i + 1) % n];
+    const startTrim = wallStartTrims[i];
+    const usable = dist(a, b) - startTrim;
+    // Single-span / forced tongue on axis-aligned edges: end owns male when invert is on.
+    const baseMale =
+      isAxisAligned(a, b) && isSingleSpanEdge(usable) ? false : true;
     endEdgeSpecs.push(
-      edgeJoint(true, a, b, {
-        startClearance: wallStartTrims[i],
+      edgeJoint(baseMale, a, b, {
+        startClearance: startTrim,
         panelId: "endA",
         mateId: `wall-${i}`,
       })
@@ -182,6 +257,7 @@ export function unfold(doc) {
   }
   const endPath = fingeredPolygon(profile, endEdgeSpecs);
   const endLocal = shiftToOrigin(endPath, endBounds);
+  const endCut = boundsOf(endLocal);
 
   const panels = [];
 
@@ -189,8 +265,8 @@ export function unfold(doc) {
     id: "endA",
     label: panelLabel("endA"),
     kind: "end",
-    width: endBounds.width,
-    height: endBounds.height,
+    width: endCut.width,
+    height: endCut.height,
     outerPoints: endLocal.map((p) => ({ ...p })),
     outerPath: pointsToPathD(endLocal),
     holes: [],
@@ -202,8 +278,8 @@ export function unfold(doc) {
     id: "endB",
     label: panelLabel("endB"),
     kind: "end",
-    width: endBounds.width,
-    height: endBounds.height,
+    width: endCut.width,
+    height: endCut.height,
     // Same outline as End A (symmetric / interchangeable)
     outerPoints: endLocal.map((p) => ({ ...p })),
     outerPath: pointsToPathD(endLocal),
@@ -232,12 +308,17 @@ export function unfold(doc) {
 
     // Edges: bottom (→ endB), right (→ next wall), top (→ endA), left (→ prev wall)
     // Default (invert): ends female ⇒ wall long edges male. Off swaps that.
+    // Single-span edges: wall base male=true so invert makes wall female (end owns male).
     // Wall top is walked b→a in the CCW rect — keep the same startMale as bottom.
     const wallId = `wall-${i}`;
     const rightMate = `wall-${(i + 1) % n}`;
     const leftMate = `wall-${(i - 1 + n) % n}`;
-    const bottom = edgeJoint(false, a, b, { panelId: wallId, mateId: "endB" });
-    const top = edgeJoint(false, a, b, { panelId: wallId, mateId: "endA" });
+    const longUsable = edgeLen;
+    // Only remap gender for axis-aligned single-span / forced tongues (not diagonals).
+    const longBaseMale =
+      isAxisAligned(a, b) && isSingleSpanEdge(longUsable) ? true : false;
+    const bottom = edgeJoint(longBaseMale, a, b, { panelId: wallId, mateId: "endB" });
+    const top = edgeJoint(longBaseMale, a, b, { panelId: wallId, mateId: "endA" });
     // Side edges: right walked bottom→top, left walked top→bottom (CCW).
     // Finger sides only at convex ~90° corners — diagonal / concave corners
     // cannot interlock in-plane without piercing the neighbor face.

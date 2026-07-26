@@ -1,5 +1,5 @@
 import { createDefaultDoc, serializeDoc, parseDoc, cloneDoc, normalizeDoc } from "./model.js";
-import { unfold, panelBounds } from "./unfold.js";
+import { unfold, panelBounds, measureInsideCavity } from "./unfold.js";
 import { exportSvg } from "./svg-export.js";
 import { packPrintsOnSheet } from "./nest.js";
 import { orientPanelsOuterUp, mirrorPanelX } from "./orient.js";
@@ -641,6 +641,39 @@ for (const p of diag.panels) {
   if (minX > 1e-6 || maxX < shortDiagonal.width - 1e-6) {
     throw new Error("inverted wall tabs must reach both connected edge corners");
   }
+}
+
+// Thick stock: short FRONT lip still fingers; End A/B restore the outer envelope.
+{
+  const thick = createDefaultDoc();
+  thick.fixedPanels = null;
+  thick.thickness = 5;
+  thick.kerf = 0;
+  thick.fingerLength = 14;
+  thick.minFingerWidth = 5;
+  thick.invertFingers = true;
+  thick.features = [];
+  const { panels: tp, error: te } = unfold(thick);
+  if (te) throw new Error(te);
+  const end = tp.find((p) => p.id === "endA");
+  const b = panelBounds(end);
+  if (Math.abs(end.width - b.width) > 1e-6 || Math.abs(end.height - b.height) > 1e-6) {
+    throw new Error("end width/height should match the fingered cut bounds");
+  }
+  const xs = end.outerPoints.map((p) => p.x + end.originShift.x);
+  const ys = end.outerPoints.map((p) => p.y + end.originShift.y);
+  if (Math.min(...xs) > 0.05 || Math.max(...xs) < 245.95) {
+    throw new Error(`thick End A should restore outer X 0…246, got ${Math.min(...xs)}…${Math.max(...xs)}`);
+  }
+  if (Math.min(...ys) > -30.55 || Math.max(...ys) < -0.05) {
+    throw new Error(`thick End A should restore outer Y -30.6…0, got ${Math.min(...ys)}…${Math.max(...ys)}`);
+  }
+  const inside = measureInsideCavity(thick);
+  if (inside.error) throw new Error(inside.error);
+  if (Math.abs(inside.width - 236) > 1e-6 || Math.abs(inside.height - 20.6) > 1e-6) {
+    throw new Error(`inside should be 236×20.6×depth, got ${inside.width}×${inside.height}`);
+  }
+  if (inside.depth !== thick.depth) throw new Error("inside depth should match doc.depth");
 }
 
 // Per-panel invert flips only that panel’s joints; mate stays complementary.
