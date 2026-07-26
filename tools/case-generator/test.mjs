@@ -1,4 +1,4 @@
-import { createDefaultDoc, serializeDoc, parseDoc } from "./model.js";
+import { createDefaultDoc, serializeDoc, parseDoc, cloneDoc, normalizeDoc } from "./model.js";
 import { unfold, panelBounds } from "./unfold.js";
 import { exportSvg } from "./svg-export.js";
 import { packPrintsOnSheet } from "./nest.js";
@@ -640,6 +640,63 @@ for (const p of diag.panels) {
   const maxX = Math.max(...bottom.map((p) => p.x));
   if (minX > 1e-6 || maxX < shortDiagonal.width - 1e-6) {
     throw new Error("inverted wall tabs must reach both connected edge corners");
+  }
+}
+
+// Per-panel invert flips only that panel’s joints; mate stays complementary.
+{
+  const base = createDefaultDoc();
+  base.fixedPanels = null;
+  base.invertFingers = true;
+  base.invertPanels = {};
+  base.profile = {
+    closed: true,
+    points: [
+      { x: 0, y: 0 },
+      { x: 80, y: 0 },
+      { x: 80, y: 50 },
+      { x: 0, y: 50 },
+    ],
+  };
+  base.depth = 40;
+  base.thickness = 3;
+  base.fingerLength = 14;
+  base.minFingerWidth = 5;
+  base.kerf = 0;
+  base.features = [];
+
+  const { panels: a, error: ae } = unfold(base);
+  if (ae) throw new Error(ae);
+  const wall0a = a.find((p) => p.id === "wall-0");
+  const endAa = a.find((p) => p.id === "endA");
+
+  const flipped = cloneDoc(base);
+  flipped.invertPanels = { "wall-0": true };
+  const { panels: b, error: be } = unfold(flipped);
+  if (be) throw new Error(be);
+  const wall0b = b.find((p) => p.id === "wall-0");
+  const endAb = b.find((p) => p.id === "endA");
+  const wall1b = b.find((p) => p.id === "wall-1");
+
+  const pathKey = (p) => p.outerPath;
+  if (pathKey(wall0a) === pathKey(wall0b)) {
+    throw new Error("per-panel invert should change wall-0 outline");
+  }
+  if (pathKey(endAa) === pathKey(endAb)) {
+    throw new Error("inverting wall-0 should also flip the mating end edge");
+  }
+  // Neighbor wall without invert flag: only the shared side joint flips.
+  const wall1a = a.find((p) => p.id === "wall-1");
+  if (pathKey(wall1a) === pathKey(wall1b)) {
+    throw new Error("neighbor wall should change on the shared side joint");
+  }
+
+  // Ends stay linked when either end flag is set.
+  const ends = cloneDoc(base);
+  ends.invertPanels = { endB: true };
+  const norm = normalizeDoc(ends);
+  if (!norm.invertPanels.endA || !norm.invertPanels.endB) {
+    throw new Error("end invert flags should sync");
   }
 }
 

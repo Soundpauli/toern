@@ -60,7 +60,7 @@
               <input type="number" id="param-depth" min="1" max="2000" step="0.1" value="160" />
               <span class="cg-unit">mm</span>
             </label>
-            <label class="cg-inline" title="Swap male/female on all finger joints">
+            <label class="cg-inline" title="Swap male/female on all joints. Per-panel invert: Viewer → focus a part.">
               <input type="checkbox" id="param-invert-fingers" checked /> Invert fingers
             </label>
           </div>
@@ -206,6 +206,13 @@
             </label>
             <p class="cg-hint-text">Select a focus panel, then fade the rest (0% hides them).</p>
           </div>
+          <div class="cg-field" id="view3d-invert-wrap" hidden>
+            <label class="cg-inline" for="view3d-invert">
+              <input type="checkbox" id="view3d-invert" />
+              <span id="view3d-invert-label">Invert fingers</span>
+            </label>
+            <p class="cg-hint-text">Flips this part’s joints; mates stay complementary. Ends share one setting.</p>
+          </div>
           <div class="cg-field">
             <label>Parts</label>
             <ul class="cg-list" id="view3d-list"></ul>
@@ -288,6 +295,6 @@
     </div>
   </main>
 
-  <script type="module" src="app.js?v=20260726-canvas-pan"></script>
+  <script type="module" src="app.js?v=20260726-invert-live"></script>
 </body>
 </html>

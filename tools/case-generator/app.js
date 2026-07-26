@@ -10,6 +10,8 @@ import {
   panelLabel,
   clearFixedPanels,
   restoreToernFrontProfile,
+  isPanelFingersInverted,
+  setPanelFingersInverted,
 } from "./model.js";
 import { dist, simplifyPolyline, polygonSelfIntersects, isAxisAligned } from "./joints.js";
 import { unfold, panelBounds } from "./unfold.js";
@@ -70,6 +72,19 @@ const undoStack = [];
 const redoStack = [];
 const MAX_UNDO = 80;
 
+function invalidateMeshCache() {
+  meshCache = { key: "", mesh: null };
+}
+
+/** Joint / panel geometry changed — refresh both Viewer and Nest immediately. */
+function afterJointGeometryChange() {
+  invalidateMeshCache();
+  refreshNestList();
+  refreshView3dPanelList();
+  refreshSheetStatus();
+  paintNow();
+}
+
 // —— DOM ——
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -106,6 +121,7 @@ const els = {
   view3dPanel: document.getElementById("view3d-panel"),
   view3dGhost: document.getElementById("view3d-ghost"),
   view3dGhostVal: document.getElementById("view3d-ghost-val"),
+  view3dInvert: document.getElementById("view3d-invert"),
   fileJson: document.getElementById("file-json"),
   templateOriginStatus: document.getElementById("template-origin-status"),
   templateName: document.getElementById("template-name"),
@@ -158,9 +174,10 @@ function undo() {
   if (!undoStack.length) return;
   redoStack.push(cloneDoc(doc));
   doc = undoStack.pop();
+  invalidateMeshCache();
   syncParamsFromDoc();
   refreshInspectors();
-  render();
+  paintNow();
   updateUndoButtons();
 }
 
@@ -168,9 +185,10 @@ function redo() {
   if (!redoStack.length) return;
   undoStack.push(cloneDoc(doc));
   doc = redoStack.pop();
+  invalidateMeshCache();
   syncParamsFromDoc();
   refreshInspectors();
-  render();
+  paintNow();
   updateUndoButtons();
 }
 
@@ -701,7 +719,8 @@ function refreshNestList() {
   for (const p of panels) {
     const b = panelBounds(p);
     const li = document.createElement("li");
-    li.innerHTML = `<span>${p.label}</span><span class="cg-muted">${fmt(b.width)}×${fmt(b.height)}</span>`;
+    const inv = isPanelFingersInverted(doc, p.id);
+    li.innerHTML = `<span>${p.label}${inv ? ' <span class="cg-muted">inv</span>' : ""}</span><span class="cg-muted">${fmt(b.width)}×${fmt(b.height)}</span>`;
     li.style.cursor = "default";
     ul.appendChild(li);
   }
@@ -735,7 +754,8 @@ function refreshView3dPanelList() {
   for (const p of panels) {
     const li = document.createElement("li");
     li.className = p.id === highlightPanelId ? "is-active" : "";
-    li.innerHTML = `<span>${p.label || p.id}</span><span class="cg-muted">${p.kind || ""}</span>`;
+    const inverted = isPanelFingersInverted(doc, p.id);
+    li.innerHTML = `<span>${p.label || p.id}</span><span class="cg-muted">${inverted ? "inv · " : ""}${p.kind || ""}</span>`;
     li.style.cursor = "pointer";
     li.addEventListener("click", () => {
       highlightPanelId = highlightPanelId === p.id ? null : p.id;
@@ -745,6 +765,33 @@ function refreshView3dPanelList() {
     });
     ul.appendChild(li);
   }
+
+  syncView3dInvertControl();
+}
+
+function syncView3dInvertControl() {
+  const wrap = document.getElementById("view3d-invert-wrap");
+  const cb = els.view3dInvert;
+  const label = document.getElementById("view3d-invert-label");
+  if (!wrap || !cb) return;
+
+  const allow = !doc.fixedPanels?.length && !!highlightPanelId;
+  wrap.hidden = !allow;
+  if (!allow) return;
+
+  const id = highlightPanelId;
+  cb.checked = isPanelFingersInverted(doc, id);
+  if (label) {
+    const name = panelLabel(id, doc);
+    label.textContent =
+      id === "endA" || id === "endB"
+        ? `Invert fingers (${name} · both ends)`
+        : `Invert fingers (${name})`;
+  }
+  cb.title =
+    id === "endA" || id === "endB"
+      ? "Invert fingers on both ends (shared blank)"
+      : "Invert fingers on this panel (mates stay complementary)";
 }
 
 function fmt(n) {
@@ -821,6 +868,15 @@ function render() {
     paintRaf = 0;
     paint();
   });
+}
+
+/** Paint on this turn — used when joint geometry must update immediately. */
+function paintNow() {
+  if (paintRaf) {
+    cancelAnimationFrame(paintRaf);
+    paintRaf = 0;
+  }
+  paint();
 }
 
 function paint() {
@@ -1308,6 +1364,7 @@ function meshCacheKey(d) {
     k: d.kerf,
     d: d.depth,
     inv: !!d.invertFingers,
+    invP: d.invertPanels || {},
     closed: d.profile?.closed,
     pts: d.profile?.points,
     feats: d.features,
@@ -1699,7 +1756,7 @@ function bindUI() {
   els.invertFingers?.addEventListener("change", () => {
     pushUndo();
     doc.invertFingers = !!els.invertFingers.checked;
-    render();
+    afterJointGeometryChange();
   });
 
   els.snapEnabled.addEventListener("change", () => {
@@ -1723,6 +1780,13 @@ function bindUI() {
     highlightPanelId = els.view3dPanel.value || null;
     refreshView3dPanelList();
     render();
+  });
+
+  els.view3dInvert?.addEventListener("change", () => {
+    if (!highlightPanelId || doc.fixedPanels?.length) return;
+    pushUndo();
+    setPanelFingersInverted(doc, highlightPanelId, !!els.view3dInvert.checked);
+    afterJointGeometryChange();
   });
 
   els.view3dGhost?.addEventListener("input", () => {

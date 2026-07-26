@@ -21,7 +21,7 @@ import {
   isValidFingerLength,
   MIN_FINGER_LENGTH,
 } from "./joints.js";
-import { panelLabel } from "./model.js";
+import { panelLabel, jointStartMale, jointInvertMode } from "./model.js";
 import { roundRectRadiusMm } from "./features.js";
 
 /**
@@ -52,8 +52,6 @@ export function unfold(doc) {
   const kerf = doc.kerf;
   const jointDepth = Math.max(0, thickness - kerf * 0.5);
   const depth = Math.max(thickness * 2, doc.depth);
-  const invert = !!doc.invertFingers;
-  const male = (m) => (invert ? !m : m);
 
   // Drawn profile is the finished outside envelope. Finger baselines sit on an
   // inset body so male tabs restore (rather than exceed) that envelope, and
@@ -105,12 +103,21 @@ export function unfold(doc) {
   /**
    * Per-edge joint. Fingers only when every finger exceeds minFingerWidth; else plain.
    * Diagonals use end clearance + a shorter pitch when needed.
+   * opts.panelId / opts.mateId drive global + per-panel invert for this joint.
    */
-  const edgeJoint = (startMale, a, b, opts = {}) => {
+  const edgeJoint = (startMaleBase, a, b, opts = {}) => {
+    const panelId = opts.panelId;
+    const mateId = opts.mateId;
+    const startMale =
+      panelId && mateId
+        ? jointStartMale(doc, startMaleBase, panelId, mateId)
+        : startMaleBase;
+    const invertJoint =
+      panelId && mateId ? jointInvertMode(doc, panelId, mateId) : !!doc.invertFingers;
     const base = {
       thickness,
       fingerLength,
-      startMale: male(startMale),
+      startMale,
       kerf,
       minFingerLength: minFinger,
     };
@@ -132,7 +139,7 @@ export function unfold(doc) {
     // In inverted mode the wall owns the outer male runs and the end cap owns
     // the alternating runs. Let that complementary pair cover the whole
     // diagonal edge; plain corner clearance would leave visible holes.
-    const clear = invert
+    const clear = invertJoint
       ? 0
       : Math.max(thickness, Math.min(L * 0.2, thickness * 1.25));
     const clearStart = Math.min(L * 0.9, clear + extraStart);
@@ -159,6 +166,7 @@ export function unfold(doc) {
 
   // --- End caps — female on active runs by default (invertFingers off restores male) ---
   // Bounds from the outer envelope so nest size matches the drawn profile.
+  // End A/B share one blank; invert uses endA (synced with endB in the doc).
   const endBounds = boundsOf(outerProfile);
   const endEdgeSpecs = [];
   for (let i = 0; i < n; i++) {
@@ -167,6 +175,8 @@ export function unfold(doc) {
     endEdgeSpecs.push(
       edgeJoint(true, a, b, {
         startClearance: wallStartTrims[i],
+        panelId: "endA",
+        mateId: `wall-${i}`,
       })
     );
   }
@@ -223,8 +233,11 @@ export function unfold(doc) {
     // Edges: bottom (→ endB), right (→ next wall), top (→ endA), left (→ prev wall)
     // Default (invert): ends female ⇒ wall long edges male. Off swaps that.
     // Wall top is walked b→a in the CCW rect — keep the same startMale as bottom.
-    const bottom = edgeJoint(false, a, b);
-    const top = edgeJoint(false, a, b);
+    const wallId = `wall-${i}`;
+    const rightMate = `wall-${(i + 1) % n}`;
+    const leftMate = `wall-${(i - 1 + n) % n}`;
+    const bottom = edgeJoint(false, a, b, { panelId: wallId, mateId: "endB" });
+    const top = edgeJoint(false, a, b, { panelId: wallId, mateId: "endA" });
     // Side edges: right walked bottom→top, left walked top→bottom (CCW).
     // Finger sides only at convex ~90° corners — diagonal / concave corners
     // cannot interlock in-plane without piercing the neighbor face.
@@ -232,12 +245,12 @@ export function unfold(doc) {
     const next = profile[(i + 2) % n];
     const leftOk = isConvexOrthogonalCorner(prev, a, b);
     const rightOk = isConvexOrthogonalCorner(a, b, next);
-    const sideMale = male(i % 2 === 0);
+    const sideBase = i % 2 === 0;
     const rightOrtho = rightOk
       ? {
           thickness,
           fingerLength,
-          startMale: sideMale,
+          startMale: jointStartMale(doc, sideBase, wallId, rightMate),
           kerf,
           minFingerLength: minFinger,
         }
@@ -246,7 +259,7 @@ export function unfold(doc) {
       ? {
           thickness,
           fingerLength,
-          startMale: sideMale,
+          startMale: jointStartMale(doc, sideBase, wallId, leftMate),
           kerf,
           minFingerLength: minFinger,
         }

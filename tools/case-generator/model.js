@@ -28,6 +28,8 @@ export function createDefaultDoc() {
     kerf: -0.125,
     /** When true, swap male/female on every joint (ends female, walls male on long edges). */
     invertFingers: true,
+    /** Per-panel finger invert (relative to global). Ends share one setting. */
+    invertPanels: {},
     depth: 160,
     snap: { enabled: true, grid: 3 },
     /** Laser sheet packing for export / nest preview */
@@ -79,6 +81,17 @@ export function normalizeDoc(raw) {
   }
   if (typeof raw.kerf === "number") doc.kerf = raw.kerf;
   if (typeof raw.invertFingers === "boolean") doc.invertFingers = raw.invertFingers;
+  if (raw.invertPanels && typeof raw.invertPanels === "object") {
+    doc.invertPanels = {};
+    for (const [id, v] of Object.entries(raw.invertPanels)) {
+      if (v) doc.invertPanels[String(id)] = true;
+    }
+    // Ends are the same blank — keep flags synced.
+    if (doc.invertPanels.endA || doc.invertPanels.endB) {
+      doc.invertPanels.endA = true;
+      doc.invertPanels.endB = true;
+    }
+  }
   if (typeof raw.depth === "number") doc.depth = raw.depth;
   if (raw.snap && typeof raw.snap === "object") {
     if (typeof raw.snap.enabled === "boolean") doc.snap.enabled = raw.snap.enabled;
@@ -239,6 +252,53 @@ export function panelIdsForDoc(doc) {
   return ids;
 }
 
+/** True when this panel’s fingers are inverted vs the global default. */
+export function isPanelFingersInverted(doc, panelId) {
+  if (!doc?.invertPanels) return false;
+  if (panelId === "endA" || panelId === "endB") {
+    return !!(doc.invertPanels.endA || doc.invertPanels.endB);
+  }
+  return !!doc.invertPanels[panelId];
+}
+
+/** Toggle/set per-panel invert. End A/B stay linked (identical blanks). */
+export function setPanelFingersInverted(doc, panelId, inverted) {
+  if (!doc.invertPanels || typeof doc.invertPanels !== "object") doc.invertPanels = {};
+  const on = !!inverted;
+  if (panelId === "endA" || panelId === "endB") {
+    if (on) {
+      doc.invertPanels.endA = true;
+      doc.invertPanels.endB = true;
+    } else {
+      delete doc.invertPanels.endA;
+      delete doc.invertPanels.endB;
+    }
+    return;
+  }
+  if (on) doc.invertPanels[panelId] = true;
+  else delete doc.invertPanels[panelId];
+}
+
+/**
+ * Male flag for a panel edge that mates with `mateId`.
+ * Global invert and per-panel invert (XOR across the joint) stay complementary.
+ */
+export function jointStartMale(doc, baseMale, panelId, mateId) {
+  let m = !!baseMale;
+  if (doc.invertFingers) m = !m;
+  if (isPanelFingersInverted(doc, panelId) !== isPanelFingersInverted(doc, mateId)) {
+    m = !m;
+  }
+  return m;
+}
+
+/** Effective invert mode for clearance / diagonal style on a joint. */
+export function jointInvertMode(doc, panelId, mateId) {
+  const panelXor =
+    isPanelFingersInverted(doc, panelId) !== isPanelFingersInverted(doc, mateId);
+  return !!doc.invertFingers !== panelXor;
+}
+
 export function panelLabel(panelId, doc) {
   if (doc?.fixedPanels?.length) {
     const p = doc.fixedPanels.find((x) => x.id === panelId);
@@ -263,6 +323,7 @@ export function restoreToernFrontProfile(doc) {
   doc.minFingerWidth = fresh.minFingerWidth;
   doc.kerf = fresh.kerf;
   doc.invertFingers = fresh.invertFingers;
+  doc.invertPanels = {};
   doc.depth = fresh.depth;
   doc.profile = cloneData(fresh.profile);
   doc.fixedPanels = null;
