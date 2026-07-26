@@ -1,0 +1,10 @@
+{
+  "name": "toern-case-generator",
+  "private": true,
+  "type": "module",
+  "description": "Parametric laser-cut case generator with finger joints",
+  "scripts": {
+    "start": "cd .. && python3 -m http.server 8766",
+    "test": "node test.mjs"
+  }
+}

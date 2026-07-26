@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TŒRN | Case Generator</title>
+  <link rel="icon" type="image/svg+xml" href="../../handbook/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../tool-shell.css" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="tool-page cg-page">
+  <nav class="tool-nav">
+    <div class="tool-nav-brand">
+      <a class="tool-nav-logo" href="../">TŒRN</a>
+      <span class="tool-nav-label">Case Generator</span>
+    </div>
+    <div class="tool-nav-meta cg-nav-actions">
+      <button type="button" class="cg-btn cg-btn--ghost" id="btn-undo" title="Undo (⌘Z)">Undo</button>
+      <button type="button" class="cg-btn cg-btn--ghost" id="btn-redo" title="Redo (⌘⇧Z)">Redo</button>
+      <span class="cg-nav-sep" aria-hidden="true"></span>
+      <button type="button" class="cg-btn cg-btn--ghost" id="btn-load">Load</button>
+      <button type="button" class="cg-btn cg-btn--ghost" id="btn-save">Save</button>
+      <button type="button" class="cg-btn cg-btn--accent" id="btn-export">Export SVG</button>
+      <input type="file" id="file-json" accept="application/json,.json" hidden />
+    </div>
+  </nav>
+
+  <main class="tool-shell cg-shell">
+    <div class="cg-layout">
+      <aside class="cg-rail" aria-label="Modes">
+        <button type="button" class="cg-mode is-active" data-mode="profile" title="Draw case profile">Profile</button>
+        <button type="button" class="cg-mode" data-mode="features" title="Place holes & openings">Features</button>
+        <button type="button" class="cg-mode" data-mode="view3d" title="Assembled case viewer">Viewer</button>
+        <button type="button" class="cg-mode" data-mode="nest" title="Flat nest preview">Nest</button>
+      </aside>
+
+      <section class="cg-stage-wrap">
+        <div class="cg-toolbar" id="params-bar">
+          <div class="cg-toolbar__group">
+            <label class="cg-inline" for="param-thickness">Thickness
+              <input type="number" id="param-thickness" min="0.1" max="50" step="0.1" value="3" />
+              <span class="cg-unit">mm</span>
+            </label>
+            <label class="cg-inline" for="param-finger">Finger
+              <input type="number" id="param-finger" min="10" max="100" step="0.1" value="20" />
+              <span class="cg-unit">mm</span>
+            </label>
+            <label class="cg-inline" for="param-min-finger" title="Joints are skipped when finger segments would be at or below this width">Min finger
+              <input type="number" id="param-min-finger" min="0.5" max="50" step="0.1" value="5" />
+              <span class="cg-unit">mm</span>
+            </label>
+            <label class="cg-inline" for="param-kerf">Kerf
+              <input type="number" id="param-kerf" min="-1" max="2" step="0.001" value="-0.125" />
+              <span class="cg-unit">mm</span>
+            </label>
+            <label class="cg-inline" for="param-depth">Depth
+              <input type="number" id="param-depth" min="1" max="2000" step="0.1" value="160" />
+              <span class="cg-unit">mm</span>
+            </label>
+            <label class="cg-inline" title="Swap male/female on all finger joints">
+              <input type="checkbox" id="param-invert-fingers" checked /> Invert fingers
+            </label>
+          </div>
+          <div class="cg-toolbar__group">
+            <label class="cg-inline">
+              <input type="checkbox" id="snap-enabled" checked /> Snap
+            </label>
+            <label class="cg-inline" for="snap-grid">
+              <input type="number" id="snap-grid" min="0.1" max="50" step="0.1" value="10" />
+              <span class="cg-unit">mm</span>
+            </label>
+          </div>
+          <div class="cg-toolbar__group" style="margin-left:auto">
+            <label class="cg-inline">Zoom
+              <input type="range" id="view-zoom" min="0.25" max="6" step="0.05" value="1" />
+              <span id="view-zoom-val">100%</span>
+            </label>
+            <button type="button" class="cg-btn cg-btn--ghost" id="btn-fit">Fit</button>
+          </div>
+        </div>
+
+        <div class="cg-stage" id="stage">
+          <canvas id="canvas" width="1200" height="800"></canvas>
+          <div class="cg-hint" id="mode-hint">Click to place profile vertices. Click near the first point to close.</div>
+        </div>
+      </section>
+
+      <aside class="cg-inspector" aria-label="Inspector">
+        <div class="cg-panel" data-panel="profile">
+          <h2 class="cg-panel__title">Profile</h2>
+          <p class="cg-hint-text">Click-draw free outline (diagonals OK; Shift = H/V). Drag corners, click edge/+ to add one point, Delete to remove. Cleanup runs on close.</p>
+          <div class="cg-field">
+            <label>Vertices</label>
+            <ul class="cg-list" id="vertex-list"></ul>
+            <div class="cg-row">
+              <button type="button" class="cg-btn" id="btn-draw-profile">Draw new</button>
+              <button type="button" class="cg-btn cg-btn--ghost" id="btn-close-profile">Close</button>
+              <button type="button" class="cg-btn cg-btn--danger" id="btn-clear-profile">Clear</button>
+            </div>
+          </div>
+          <div class="cg-field" id="vertex-edit" hidden>
+            <label>Selected vertex</label>
+            <div class="cg-metrics">
+              <label class="cg-metric" for="vtx-x"><span>X</span>
+                <input type="number" id="vtx-x" step="0.1" />
+              </label>
+              <label class="cg-metric" for="vtx-y"><span>Y</span>
+                <input type="number" id="vtx-y" step="0.1" />
+              </label>
+            </div>
+            <button type="button" class="cg-btn cg-btn--danger cg-btn--block" id="btn-delete-vertex">Delete vertex</button>
+          </div>
+          <div class="cg-field">
+            <label>Template origin</label>
+            <p class="cg-hint-text" id="template-origin-status">Not set. Choose a profile corner as assembly (0,0,0).</p>
+            <button type="button" class="cg-btn cg-btn--ghost cg-btn--block" id="btn-set-template-origin">Set template origin</button>
+          </div>
+          <div class="cg-field">
+            <button type="button" class="cg-btn cg-btn--block" id="btn-front-profile">Load FRONT profile</button>
+            <button type="button" class="cg-btn cg-btn--ghost cg-btn--block" id="btn-rect-preset">Insert 100×60 rect</button>
+          </div>
+        </div>
+
+        <div class="cg-panel" data-panel="features" hidden>
+          <h2 class="cg-panel__title">Features</h2>
+          <p class="cg-hint-text">Select a panel, then place a hole or opening.</p>
+          <div class="cg-field">
+            <label for="feature-panel">Panel</label>
+            <select id="feature-panel"></select>
+          </div>
+          <div class="cg-field">
+            <label>Tool</label>
+            <div class="cg-seg">
+              <button type="button" class="cg-btn is-active" data-feat="circle" id="feat-circle">Circle</button>
+              <button type="button" class="cg-btn" data-feat="roundRect" id="feat-roundrect">Round rect</button>
+              <button type="button" class="cg-btn" data-feat="select" id="feat-select">Select</button>
+            </div>
+          </div>
+          <div class="cg-field" id="feat-circle-params">
+            <div class="cg-metrics">
+              <label class="cg-metric" for="feat-r"><span>Radius</span>
+                <input type="number" id="feat-r" min="0.1" step="0.1" value="3" />
+              </label>
+            </div>
+          </div>
+          <div class="cg-field" id="feat-rect-params" hidden>
+            <div class="cg-metrics">
+              <label class="cg-metric" for="feat-w"><span>Width</span>
+                <input type="number" id="feat-w" min="0.1" step="0.1" value="12" />
+              </label>
+              <label class="cg-metric" for="feat-h"><span>Height</span>
+                <input type="number" id="feat-h" min="0.1" step="0.1" value="8" />
+              </label>
+              <label class="cg-metric" for="feat-rr"><span>Radius %</span>
+                <input type="number" id="feat-rr" min="0" max="100" step="1" value="25" />
+              </label>
+            </div>
+          </div>
+          <div class="cg-field" id="feature-edit" hidden>
+            <label>Selected feature</label>
+            <div class="cg-metrics" id="feature-edit-fields"></div>
+            <button type="button" class="cg-btn cg-btn--danger cg-btn--block" id="btn-delete-feature">Delete feature</button>
+          </div>
+          <div class="cg-field" id="feature-templates">
+            <label>Hole templates</label>
+            <p class="cg-hint-text">Capture holes across all panels relative to the selected profile origin.</p>
+            <input type="text" id="template-name" maxlength="120" placeholder="PCB mounting holes" />
+            <button type="button" class="cg-btn cg-btn--ghost cg-btn--block" id="btn-save-template">Save current holes as template</button>
+            <select id="template-select"></select>
+            <div class="cg-row">
+              <button type="button" class="cg-btn" id="btn-apply-template">Apply</button>
+              <button type="button" class="cg-btn cg-btn--danger" id="btn-delete-template">Delete</button>
+            </div>
+            <p class="cg-hint-text" id="template-status"></p>
+          </div>
+          <div class="cg-field">
+            <label>On this panel</label>
+            <ul class="cg-list" id="feature-list"></ul>
+          </div>
+        </div>
+
+        <div class="cg-panel" data-panel="view3d" hidden>
+          <h2 class="cg-panel__title">Case Viewer</h2>
+          <p class="cg-hint-text">Assembled case with finger joints. Drag to orbit · scroll to zoom.</p>
+          <div class="cg-field">
+            <label for="view3d-panel">Focus panel</label>
+            <select id="view3d-panel">
+              <option value="">Whole case</option>
+            </select>
+          </div>
+          <div class="cg-field">
+            <label for="view3d-ghost">Other panels</label>
+            <label class="cg-inline">
+              <input type="range" id="view3d-ghost" min="0" max="100" step="5" value="100" />
+              <span id="view3d-ghost-val">100%</span>
+            </label>
+            <p class="cg-hint-text">Select a focus panel, then fade the rest (0% hides them).</p>
+          </div>
+          <div class="cg-field">
+            <label>Parts</label>
+            <ul class="cg-list" id="view3d-list"></ul>
+          </div>
+          <p class="cg-hint-text" id="view3d-note">Shows the finished case (not the flat nest).</p>
+        </div>
+
+        <div class="cg-panel" data-panel="nest" hidden>
+          <h2 class="cg-panel__title">Nest</h2>
+          <p class="cg-hint-text">Flat layout of all panels with finger joints. Export SVG for cutting.</p>
+          <div class="cg-field">
+            <label>Panels</label>
+            <ul class="cg-list" id="nest-list"></ul>
+          </div>
+          <div class="cg-field">
+            <label class="cg-inline">
+              <input type="checkbox" id="nest-labels" checked /> Show labels
+            </label>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script type="module" src="app.js?v=20260726-inset-body-tabs"></script>
+</body>
+</html>
