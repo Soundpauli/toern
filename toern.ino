@@ -1,4 +1,4 @@
-#define VERSION "v2.3"
+#define VERSION "v2.4"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
@@ -1097,7 +1097,8 @@ int currentEncoderIndex = 0;
 #define NEOSLIDER_I2C_ADDR 0x30
 #define NEOSLIDER_VOICE_CH 1
 #define NEOSLIDER_NUM_LEDS 4
-#define NEOSLIDER_LED_BRIGHTNESS 40
+// Lit LEDs use full channel color; no global dim (was making the bar muddy).
+#define NEOSLIDER_LED_BRIGHTNESS 255
 
 // Channels that have a real volume/amp path (CTRL=VOL); NeoSlider always drives voice1 on every Y.
 static inline bool isVolumeVoiceChannel(int ch) {
@@ -1141,7 +1142,7 @@ static float neoSliderTargetGain = 1.0f;
 static float neoSliderCurrentGain = 1.0f;
 static CRGB neoSliderLeds[NEOSLIDER_NUM_LEDS];
 static elapsedMillis neoSliderActiveUntil;  // faster ADC while fader is moving
-static int neoSliderPendingLedVol = -1;    // defer NeoPixel I2C until fader settles
+static int neoSliderLedVolShown = -1;      // last volume pushed to NeoPixels
 
 // Slider column positions (2 LEDs each)
 static const uint8_t sliderCols[4][2] = { { 2, 3 }, { 6, 7 }, { 10, 11 }, { 14, 15 } };
@@ -3153,16 +3154,40 @@ FLASHMEM static void neoSliderShowLeds() {
 }
 
 FLASHMEM static void neoSliderUpdateLeds(int vol) {
+  // Volume bar: 0 = all off, 16 = all 4 full, 8 (50%) = lowest 2 full, etc.
+  // Color = voice1 channel color at full brightness.
+  vol = constrain(vol, 0, 16);
   int lit = (vol <= 0) ? 0 : ((vol * NEOSLIDER_NUM_LEDS + 15) / 16);
   if (lit > NEOSLIDER_NUM_LEDS) lit = NEOSLIDER_NUM_LEDS;
-  CRGB on = CRGB((uint8_t)constrain(vol * vol, 0, 255),
-                 (uint8_t)constrain(max(0, 40 - vol * 2), 0, 255),
-                 0);
+
+  extern CRGB col[];
+  CRGB on = col[NEOSLIDER_VOICE_CH];
+  if (on.r == 0 && on.g == 0 && on.b == 0) {
+    on = CRGB(0, 180, 40);  // fallback if palette not ready
+  }
+
   fill_solid(neoSliderLeds, NEOSLIDER_NUM_LEDS, CRGB::Black);
   for (int i = 0; i < lit; i++) {
     neoSliderLeds[i] = on;
   }
   neoSliderShowLeds();
+  neoSliderLedVolShown = vol;
+}
+
+// Push LEDs when the lit segment count would change; light throttle keeps I2C sane.
+FLASHMEM static void neoSliderMaybeUpdateLeds(int vol) {
+  if (!neoSliderPresent) return;
+  if (digitalRead(INT_PIN) == LOW) return;
+  vol = constrain(vol, 0, 16);
+  int lit = (vol <= 0) ? 0 : ((vol * NEOSLIDER_NUM_LEDS + 15) / 16);
+  int shownLit = (neoSliderLedVolShown <= 0) ? 0
+                                             : ((neoSliderLedVolShown * NEOSLIDER_NUM_LEDS + 15) / 16);
+  if (lit == shownLit && neoSliderLedVolShown >= 0) return;
+
+  static elapsedMillis ledThrottle;
+  if (ledThrottle < 18) return;  // responsive, but not every ADC poll
+  ledThrottle = 0;
+  neoSliderUpdateLeds(vol);
 }
 
 FLASHMEM void initNeoSlider() {
@@ -3286,14 +3311,7 @@ FLASHMEM void updateNeoSliderVolume() {
   lastRaw = slideVal;
 
   // While moving: update gain target every poll (above). Discrete UI only on step change.
-  if (vol == neoSliderLastVol) {
-    // After motion settles, push slider LEDs once (I2C) without spamming during drag.
-    if (neoSliderActiveUntil >= 80 && neoSliderPendingLedVol >= 0 && digitalRead(INT_PIN) != LOW) {
-      neoSliderUpdateLeds(neoSliderPendingLedVol);
-      neoSliderPendingLedVol = -1;
-    }
-    return;
-  }
+  if (vol == neoSliderLastVol) return;
   neoSliderLastVol = vol;
   neoSliderActiveUntil = 0;
 
@@ -3340,8 +3358,8 @@ FLASHMEM void updateNeoSliderVolume() {
   // Matrix volume bar: cheap flag update (drawn once per display frame)
   showCtrlVolumeChange(vol);
 
-  // Slider NeoPixels: defer until settle — heavy I2C during drag.
-  neoSliderPendingLedVol = vol;
+  // Fader NeoPixels: channel-color bar, updates as soon as lit segment changes
+  neoSliderMaybeUpdateLeds(vol);
 }
 
 FLASHMEM void initEncoders() {

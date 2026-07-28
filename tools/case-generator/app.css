@@ -28,9 +28,37 @@
   border-bottom: 1px solid var(--cg-line);
 }
 
+.cg-demo-banner {
+  margin: 0;
+  padding: 0.65rem 1.5rem;
+  background: rgba(255, 180, 40, 0.12);
+  border-bottom: 1px solid rgba(255, 180, 40, 0.35);
+  color: #f0e6d0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.cg-demo-banner strong {
+  color: #ffc857;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+.cg-demo-banner a {
+  color: var(--cg-cyan);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cg-demo-banner a:hover {
+  color: #7ad4ff;
+}
+
 .cg-page .tool-shell.cg-shell {
   padding: 0;
-  min-height: calc(100vh - 4.6rem);
+  min-height: calc(100vh - 4.6rem - 2.8rem);
   background:
     radial-gradient(ellipse 80% 50% at 10% -10%, rgba(46, 185, 255, 0.1), transparent 55%),
     radial-gradient(ellipse 60% 40% at 100% 100%, rgba(255, 59, 48, 0.08), transparent 50%),
@@ -55,7 +83,7 @@
 .cg-layout {
   display: grid;
   grid-template-columns: 5.5rem minmax(0, 1fr) minmax(17rem, 21rem);
-  min-height: calc(100vh - 4.6rem);
+  min-height: calc(100vh - 4.6rem - 2.8rem);
 }
 
 .cg-rail {

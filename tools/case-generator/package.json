@@ -5,6 +5,7 @@
   "description": "Parametric laser-cut case generator with finger joints",
   "scripts": {
     "start": "cd .. && python3 -m http.server 8766",
-    "test": "node test.mjs"
+    "test": "node test.mjs",
+    "build:revg-template": "node scripts/build-revg-template.mjs"
   }
 }

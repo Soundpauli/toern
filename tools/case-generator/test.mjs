@@ -906,6 +906,26 @@ if (meshFront.error || meshFront.kind !== "assembled" || meshFront.faces.length 
   }
 }
 
+// Built-in revG hole template applies cleanly on the FRONT profile.
+{
+  const fs = await import("fs");
+  const tpl = JSON.parse(
+    fs.readFileSync(new URL("./templates/revG-holes.json", import.meta.url), "utf8")
+  );
+  const front = createDefaultDoc();
+  front.fixedPanels = null;
+  front.templateDatum = { vertexIndex: 5, x: 0, y: 0 };
+  const { panels: fp, error: fe } = unfold(front);
+  if (fe) throw new Error(fe);
+  const applied = applyFeatureTemplate(front, fp, tpl);
+  if (applied.error) throw new Error(applied.error);
+  if (applied.skipped || applied.features.length !== tpl.entries.length) {
+    throw new Error(
+      `revG template should apply all entries, got ${applied.features.length}/${tpl.entries.length} skipped=${applied.skipped}`
+    );
+  }
+}
+
 console.log("ok", {
   frontPanels: panels.map((p) => `${p.label} ${p.width}x${p.height}`),
   holes: panels.reduce((n, p) => n + p.holes.length, 0),

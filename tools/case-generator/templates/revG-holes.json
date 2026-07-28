@@ -1,0 +1,236 @@
+{
+  "id": "tpl-revg-from-dxf",
+  "name": "TŒRN revG holes",
+  "createdAt": 1785101979167,
+  "entries": [
+    {
+      "type": "circle",
+      "r": 4.8,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 41.88323872517696,
+      "dy": -30.5375,
+      "z": 23,
+      "normal": {
+        "x": 0,
+        "y": -1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 4.8,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 41.88323872517696,
+      "dy": -30.5375,
+      "z": 63,
+      "normal": {
+        "x": 0,
+        "y": -1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 4.8,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 41.88323872517696,
+      "dy": -30.5375,
+      "z": 103,
+      "normal": {
+        "x": 0,
+        "y": -1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 4.8,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 41.88323872517696,
+      "dy": -30.5375,
+      "z": 143,
+      "normal": {
+        "x": 0,
+        "y": -1
+      }
+    },
+    {
+      "type": "roundRect",
+      "w": 9,
+      "h": 3.5,
+      "r": 100,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 0.0625,
+      "dy": -15.3,
+      "z": 31,
+      "normal": {
+        "x": -1,
+        "y": 0
+      }
+    },
+    {
+      "type": "circle",
+      "r": 3.25,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 245.9375,
+      "dy": -6.75,
+      "z": 140,
+      "normal": {
+        "x": 1,
+        "y": 0
+      }
+    },
+    {
+      "type": "circle",
+      "r": 3.25,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 245.9375,
+      "dy": -6.75,
+      "z": 153,
+      "normal": {
+        "x": 1,
+        "y": 0
+      }
+    },
+    {
+      "type": "roundRect",
+      "w": 4,
+      "h": 2,
+      "r": 50,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 245.9375,
+      "dy": -6.75,
+      "z": 50,
+      "normal": {
+        "x": 1,
+        "y": 0
+      }
+    },
+    {
+      "type": "roundRect",
+      "w": 12,
+      "h": 2.2,
+      "r": 100,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 155.23442934767942,
+      "dy": -13.4375,
+      "z": 93,
+      "normal": {
+        "x": 0,
+        "y": -1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 4,
+      "face": "endB",
+      "frame": "outer",
+      "dx": 40,
+      "dy": -15.100000000000001,
+      "z": 0
+    },
+    {
+      "type": "circle",
+      "r": 1.5,
+      "face": "endB",
+      "frame": "outer",
+      "dx": 58,
+      "dy": -15.100000000000001,
+      "z": 0
+    },
+    {
+      "type": "circle",
+      "r": 3.4,
+      "face": "endA",
+      "frame": "outer",
+      "dx": 222.4,
+      "dy": -10.600000000000001,
+      "z": 166
+    },
+    {
+      "type": "circle",
+      "r": 3.4,
+      "face": "endA",
+      "frame": "outer",
+      "dx": 236.2,
+      "dy": -10.600000000000001,
+      "z": 166
+    },
+    {
+      "type": "circle",
+      "r": 1.25,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 152.37,
+      "dy": -0.0625,
+      "z": 131.57000000000002,
+      "normal": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 1.25,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 121.66999999999999,
+      "dy": -0.0625,
+      "z": 6.370000000000001,
+      "normal": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 1.25,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 114.72,
+      "dy": -0.0625,
+      "z": 160.07000000000002,
+      "normal": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 1.25,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 114.01999999999998,
+      "dy": -0.0625,
+      "z": 91.61999999999999,
+      "normal": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "circle",
+      "r": 1.25,
+      "face": "wall",
+      "frame": "outer",
+      "dx": 108.82,
+      "dy": -0.0625,
+      "z": 43.47,
+      "normal": {
+        "x": 0,
+        "y": 1
+      }
+    }
+  ],
+  "source": {
+    "dxf": "TOERN_M1_FINAL.dxf",
+    "pcb": "PCB/toern_revG"
+  },
+  "notes": "M1 DXF hole faces/diameters, nudged toward toern_revG (Neutrik row, USB-C, MIDI TRS, microSD, M2 mounts, mic). Template origin: FRONT (0,0)."
+}

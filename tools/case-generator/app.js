@@ -497,6 +497,19 @@ function refreshProfileUi() {
   render();
 }
 
+async function loadBuiltinTemplates() {
+  try {
+    const url = new URL("./templates/revG-holes.json", import.meta.url);
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const raw = await res.json();
+    const list = normalizeDoc({ templates: [raw] }).templates;
+    return list;
+  } catch {
+    return [];
+  }
+}
+
 function loadTemplateLibrary() {
   try {
     const raw = JSON.parse(localStorage.getItem(TEMPLATE_LIBRARY_KEY) || "[]");
@@ -2185,11 +2198,17 @@ function downloadBlob(blob, name) {
 }
 
 // —— Boot ——
-templateLibrary = mergeTemplateLibraries(loadTemplateLibrary(), doc.templates);
-bindUI();
-syncParamsFromDoc();
-syncFeatureToolButtons();
-updateUndoButtons();
-setMode("profile");
-resizeCanvas();
-fitView();
+async function boot() {
+  const builtins = await loadBuiltinTemplates();
+  templateLibrary = mergeTemplateLibraries(builtins, loadTemplateLibrary(), doc.templates);
+  doc.templates = mergeTemplateLibraries(doc.templates, builtins);
+  bindUI();
+  syncParamsFromDoc();
+  syncFeatureToolButtons();
+  updateUndoButtons();
+  setMode("profile");
+  resizeCanvas();
+  fitView();
+}
+
+boot();

@@ -28,6 +28,12 @@
     </div>
   </nav>
 
+  <aside class="cg-demo-banner" role="note">
+    <strong>Attention:</strong> this is (still) only a demo. If you want to print your own case, use the
+    <a href="TOERN_M1_FINAL.dxf" download>DXF file</a> provided (kerf: ca.&nbsp;−0.125&nbsp;mm) and adapt to your needs.
+    Do not think the results will be 110% perfect ;)
+  </aside>
+
   <main class="tool-shell cg-shell">
     <div class="cg-layout">
       <aside class="cg-rail" aria-label="Modes">
@@ -173,7 +179,7 @@
           </div>
           <div class="cg-field" id="feature-templates">
             <label>Hole templates</label>
-            <p class="cg-hint-text">Capture holes across all panels relative to the selected profile origin.</p>
+            <p class="cg-hint-text">Capture holes across all panels relative to the selected profile origin. Built-in: <em>TŒRN revG holes</em> (from M1 DXF + revG PCB).</p>
             <input type="text" id="template-name" maxlength="120" placeholder="PCB mounting holes" />
             <button type="button" class="cg-btn cg-btn--ghost cg-btn--block" id="btn-save-template">Save current holes as template</button>
             <select id="template-select"></select>
@@ -300,6 +306,6 @@
     </div>
   </main>
 
-  <script type="module" src="app.js?v=20260726-inside-ends"></script>
+  <script type="module" src="app.js?v=20260726-revg-template"></script>
 </body>
 </html>

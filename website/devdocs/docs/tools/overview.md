@@ -17,6 +17,7 @@ Besides the firmware and PCB, the repo ships **browser and CLI tools** for sampl
 | Firmware tool | [toern.live/tools/teensyloader/](https://toern.live/tools/teensyloader/) | `tools/teensyloader/` (also under `website/tools/`) |
 | Color scheme editor | [toern.live/tools/colorsheme/](https://toern.live/tools/colorsheme/) | `tools/colorsheme/` |
 | MIDI → pattern | [toern.live/tools/convertmidi/](https://toern.live/tools/convertmidi/) | `tools/convertmidi/` |
+| Case generator (demo) | [toern.live/tools/case-generator/](https://toern.live/tools/case-generator/) | `tools/case-generator/` |
 
 ## Local / contributor helpers
 
