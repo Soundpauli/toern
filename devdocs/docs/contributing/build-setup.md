@@ -31,21 +31,22 @@ For MIDI + serial SD tool use a USB type that includes **Serial** (and MIDI if y
 
 ## Docs site (this site)
 
-Sources live in **`website/devdocs/`** (not a repo-root sibling). Full publish / Netlify details: [This docs site](./docs-site).
+Sources live in repo-root **`devdocs/`** (same pattern as `handbook/`). Publish details: [This docs site](./docs-site).
 
 ```bash
-cd website/devdocs
+cd devdocs
 npm install
 npm start
 ```
 
 Node **≥ 20** required (see `package.json` engines).
 
-To produce the static files Netlify serves under `/docs/`:
+To produce the static files served under `/docs/`:
 
 ```bash
-cd website
-npm run build:docs
+cd devdocs
+npm run build
+# then copy build/ → website/docs/ for deploy
 ```
 
 ## Operator handbook

@@ -2,22 +2,21 @@
 
 Developer documentation for the TŒRN firmware — how the code is structured and how the pieces talk to each other.
 
-This is **not** the operator handbook (device usage). That lives in [`../handbook/`](../handbook/) on the site, and in the repo-root `handbook/` tree.
+This is **not** the operator handbook (device usage). That lives in the repo-root [`handbook/`](../handbook/) tree (copied into `website/handbook/` for deploy, same pattern as this docs site).
 
-## Layout (important for Netlify)
+## Layout
 
 | Path | Role |
 |------|------|
-| `website/devdocs/` | This Docusaurus app (source of truth) |
-| `website/docs/` | Built static files served at `/docs/` |
-| `website/scripts/sync-docs.js` | `npm run build:docs` helper |
+| `devdocs/` | This Docusaurus app (source of truth in the repo) |
+| `website/docs/` | Built static files served at `/docs/` (copied in manually for deploy) |
 
-Netlify uses **`base = website`**, so the docs app must live **inside** `website/` (a repo-root `devdocs/` sibling is invisible to that build).
+Like `handbook/`, sources live at the repo root. Publish by building here and copying the output into `website/docs/` before deploy.
 
 ## Local preview
 
 ```bash
-cd website/devdocs
+cd devdocs
 npm install
 npm start
 ```
@@ -25,11 +24,20 @@ npm start
 Open the URL from the terminal (routes are under `/docs/…`).  
 `baseUrl` is `/docs/` to match production: https://toern.live/docs/
 
-## Production build
+## Production build (then copy into website)
+
+```bash
+cd devdocs
+npm install
+npm run build
+# copy build/ → website/docs/  (manual, like handbook → website/handbook/)
+```
+
+Or from the website package (if present locally):
 
 ```bash
 cd website
-npm run build:docs   # or full site: npm run build
+npm run build:docs   # uses scripts/sync-docs.js against ../devdocs
 ```
 
 Details: [docs → Contributing → This docs site](./docs/contributing/docs-site.md).

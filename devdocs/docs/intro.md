@@ -37,9 +37,9 @@ Arduino concatenates all `.ino` files in the sketch folder; headers and `src/` a
 
 - Device operation / music-making tutorials → handbook  
 - Step-by-step “build the kit” / faceplate tour → handbook hardware page (these docs are design/pinout oriented)  
-- Marketing / shop chrome → the rest of `website/` (this Docusaurus app is only `website/devdocs`)
+- Marketing / shop chrome → `website/` (local/deploy-only; this Docusaurus app is repo-root `devdocs/`)
 
 ## Where this site lives
 
-Source: **`website/devdocs/`** in the repo. Published at **`/docs/`** on [toern.live](https://toern.live/docs/).  
-How to edit, preview, and how Netlify builds it: [This docs site](./contributing/docs-site).
+Source: **`devdocs/`** in the repo. Published at **`/docs/`** on [toern.live](https://toern.live/docs/) (built output copied into `website/docs/` for deploy, like the handbook).  
+How to edit and preview: [This docs site](./contributing/docs-site).

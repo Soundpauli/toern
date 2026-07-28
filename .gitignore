@@ -1,17 +1,7 @@
 samples/
 .cursor/
-# Website is mostly local/deploy-only; track docs app + build wiring for Netlify /docs
-website/*
-!website/devdocs/
-!website/devdocs/**
-!website/package.json
-!website/package-lock.json
-!website/netlify.toml
-!website/scripts/
-!website/scripts/**
-website/devdocs/node_modules/
-website/devdocs/build/
-website/devdocs/.docusaurus/
+# Website is local/deploy-only; handbook + docs are copied in manually
+website/
 
 BOM_KOSTEN.xlsx
 .history/
