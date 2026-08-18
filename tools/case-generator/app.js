@@ -20,8 +20,18 @@ import { mapNestPoint } from "./nest.js";
 import {
   createCircleFeature,
   createRoundRectFeature,
+  createTextFeature,
   hitTestFeature,
   roundRectRadiusMm,
+  featureCenter,
+  featureBounds,
+  boundsIntersect,
+  snapRelative,
+  setFeatureDistanceFromPoint,
+  TEXT_FONT_FAMILY,
+  TEXT_FONT_WEIGHT,
+  estimateTextSizeMm,
+  textWorldCorners,
 } from "./features.js";
 import {
   buildAssembledCase,
@@ -40,7 +50,9 @@ let doc = createDefaultDoc();
 let mode = "profile"; // profile | features | view3d | nest
 let selectedVertex = -1;
 let selectedFeatureId = null;
-let featureTool = "circle"; // circle | roundRect | select
+/** Multi-select set (includes primary `selectedFeatureId` when set). */
+let selectedFeatureIds = new Set();
+let featureTool = "circle"; // circle | roundRect | text | select | measure
 let selectedPanelId = "panel-0";
 let hoverWorld = null;
 let hoverRaw = null;
@@ -48,6 +60,34 @@ let shiftDown = false;
 let dragging = null; // { type, ... }
 let settingTemplateDatum = false;
 let templateLibrary = [];
+/** Measure tool: { a, b } where each is { x, y, featureId? } | null */
+let measurePick = { a: null, b: null };
+let measureAxis = "along"; // along | horizontal | vertical
+
+function clearFeatureSelection() {
+  selectedFeatureIds = new Set();
+  selectedFeatureId = null;
+}
+
+function setFeatureSelection(ids, primaryId = null) {
+  const list = [...new Set(ids.filter(Boolean))];
+  selectedFeatureIds = new Set(list);
+  if (primaryId && selectedFeatureIds.has(primaryId)) {
+    selectedFeatureId = primaryId;
+  } else {
+    selectedFeatureId = list.length ? list[list.length - 1] : null;
+  }
+}
+
+function isFeatureSelected(id) {
+  return selectedFeatureIds.has(id);
+}
+
+function selectedFeaturesOnPanel() {
+  return doc.features.filter(
+    (f) => f.panelId === selectedPanelId && selectedFeatureIds.has(f.id)
+  );
+}
 
 const TEMPLATE_LIBRARY_KEY = "toern.case-generator.templates.v1";
 
@@ -56,6 +96,10 @@ const view = {
   zoom: 1,
   panX: 40,
   panY: 40,
+};
+
+const savedViews = {
+  profile: { ...view },
 };
 
 /** Orbit camera for Case Viewer */
@@ -107,7 +151,15 @@ const els = {
   featW: document.getElementById("feat-w"),
   featH: document.getElementById("feat-h"),
   featRR: document.getElementById("feat-rr"),
+  featTextStr: document.getElementById("feat-text-str"),
+  featTextSize: document.getElementById("feat-text-size"),
+  featTextTracking: document.getElementById("feat-text-tracking"),
+  featTextRot: document.getElementById("feat-text-rot"),
   featSnapCenterlines: document.getElementById("feat-snap-centerlines"),
+  measureReadout: document.getElementById("measure-readout"),
+  measureDistance: document.getElementById("measure-distance"),
+  measureSetWrap: document.getElementById("measure-set-wrap"),
+  measureClearOnly: document.getElementById("btn-measure-clear-only"),
   nestLabels: document.getElementById("nest-labels"),
   sheetPreset: document.getElementById("sheet-preset"),
   sheetWidth: document.getElementById("sheet-width"),
@@ -290,10 +342,11 @@ function centerlineSnapEnabled() {
 }
 
 /**
- * Snap feature placement: pull to panel H/V centerlines when close, otherwise
- * use the normal grid snap.
+ * Snap feature placement/drag.
+ * @param {{x,y}|null} origin when set, grid snaps relative to that point
+ *   (feature-zero), not absolute world 0.
  */
-function snapFeaturePoint(raw, panel) {
+function snapFeaturePoint(raw, panel, origin = null) {
   let x = raw.x;
   let y = raw.y;
   let snappedX = false;
@@ -311,8 +364,16 @@ function snapFeaturePoint(raw, panel) {
     }
   }
   if (doc.snap.enabled && doc.snap.grid > 0) {
-    if (!snappedX) x = snapValue(x, true, doc.snap.grid);
-    if (!snappedY) y = snapValue(y, true, doc.snap.grid);
+    if (!snappedX) {
+      x = origin
+        ? snapRelative(x, origin.x, true, doc.snap.grid)
+        : snapValue(x, true, doc.snap.grid);
+    }
+    if (!snappedY) {
+      y = origin
+        ? snapRelative(y, origin.y, true, doc.snap.grid)
+        : snapValue(y, true, doc.snap.grid);
+    }
   }
   return { x, y, snappedX, snappedY, lines };
 }
@@ -321,6 +382,116 @@ function selectedFeaturePanel() {
   if (mode !== "features" || !selectedPanelId) return null;
   const { panels } = unfold(doc);
   return panels.find((p) => p.id === selectedPanelId) || null;
+}
+
+function clearMeasure() {
+  measurePick = { a: null, b: null };
+}
+
+function measureEndpoints() {
+  const a = measurePick.a;
+  if (!a) return null;
+  let b = measurePick.b;
+  if (!b && featureTool === "measure" && hoverWorld) {
+    b = resolveMeasureHover(hoverWorld, hoverRaw);
+  }
+  if (!b) return { a, b: null, live: false };
+  return { a, b, live: !measurePick.b };
+}
+
+function resolveMeasureHover(snapped, raw) {
+  const from = measurePick.a;
+  let pt = snapped;
+  if (from && shiftDown) {
+    const dx = Math.abs(snapped.x - from.x);
+    const dy = Math.abs(snapped.y - from.y);
+    pt = dx >= dy ? { x: snapped.x, y: from.y } : { x: from.x, y: snapped.y };
+  }
+  const hit = pickMeasureAnchor(raw || pt, pt);
+  return hit;
+}
+
+/** Prefer feature center when pointer hits a feature; else use snapped free point. */
+function pickMeasureAnchor(raw, snapped) {
+  const feats = doc.features.filter((f) => f.panelId === selectedPanelId);
+  const tol = Math.max(3 / pxPerMm(), 1.5);
+  for (let i = feats.length - 1; i >= 0; i--) {
+    const f = feats[i];
+    if (hitTestFeature(f, raw.x, raw.y, tol)) {
+      const c = featureCenter(f);
+      return { x: c.x, y: c.y, featureId: f.id };
+    }
+  }
+  return { x: snapped.x, y: snapped.y };
+}
+
+function refreshMeasurePanel() {
+  const panel = document.getElementById("feat-measure-panel");
+  if (!panel) return;
+  panel.hidden = featureTool !== "measure";
+  if (featureTool !== "measure") return;
+
+  const ep = measureEndpoints();
+  const setWrap = els.measureSetWrap;
+  const clearOnly = els.measureClearOnly;
+
+  if (!ep?.a) {
+    els.measureReadout.textContent = "Click first point";
+    if (setWrap) setWrap.hidden = true;
+    if (clearOnly) clearOnly.hidden = true;
+    return;
+  }
+
+  if (!ep.b) {
+    els.measureReadout.textContent = `A ${fmt(ep.a.x)}, ${fmt(ep.a.y)} · click second point`;
+    if (setWrap) setWrap.hidden = true;
+    if (clearOnly) clearOnly.hidden = false;
+    return;
+  }
+
+  const dx = ep.b.x - ep.a.x;
+  const dy = ep.b.y - ep.a.y;
+  const d = Math.hypot(dx, dy);
+  const live = ep.live ? " (live)" : "";
+  els.measureReadout.textContent =
+    `${fmt(d)} mm${live} · Δx ${fmt(dx)} · Δy ${fmt(dy)}`;
+
+  const canSet = !!ep.b.featureId && !ep.live;
+  if (setWrap) setWrap.hidden = !canSet;
+  if (clearOnly) clearOnly.hidden = canSet;
+
+  if (canSet && els.measureDistance && document.activeElement !== els.measureDistance) {
+    els.measureDistance.value = String(Math.round(d * 1000) / 1000);
+  }
+
+  document.querySelectorAll("[data-measure-axis]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.measureAxis === measureAxis);
+  });
+}
+
+function applyMeasureDistance() {
+  const a = measurePick.a;
+  const b = measurePick.b;
+  if (!a || !b?.featureId) return;
+  const feature = doc.features.find((f) => f.id === b.featureId);
+  if (!feature) return;
+  const distance = num(els.measureDistance?.value, NaN);
+  if (!Number.isFinite(distance) || distance < 0) {
+    alert("Enter a non-negative distance in mm.");
+    return;
+  }
+  pushUndo();
+  const result = setFeatureDistanceFromPoint(feature, a, distance, measureAxis);
+  if (!result.ok) {
+    alert(result.error || "Could not set distance");
+    return;
+  }
+  // Refresh pick B to the new center
+  const c = featureCenter(feature);
+  measurePick.b = { x: c.x, y: c.y, featureId: feature.id };
+  setFeatureSelection([feature.id], feature.id);
+  refreshInspectors();
+  render();
 }
 
 /** Optional Shift axis-lock from `from` toward `to`, then snap. */
@@ -454,13 +625,25 @@ function updateModeHint() {
     modeHint.textContent = "Click a profile corner to set the template assembly origin (0,0,0).";
     return;
   }
+  if (mode === "features" && featureTool === "measure") {
+    if (!measurePick.a) {
+      modeHint.textContent = "Measure — click first point (snaps to hole centers). Shift = H/V.";
+    } else if (!measurePick.b) {
+      modeHint.textContent = "Measure — click second point. Shift = H/V lock · Esc clears.";
+    } else {
+      modeHint.textContent = "Measure locked. Apply distance in the inspector, or click to start over · Esc clears.";
+    }
+    return;
+  }
   const hints = {
     profile: !doc.profile.closed
       ? doc.profile.points.length === 0
         ? "Click to place corners (free / diagonal OK). Hold Shift for H/V. Click the first point to close."
         : "Click to add corners. Hold Shift for H/V. Click first point / Close / Enter to finish. Esc cancels."
       : "Drag corners · drag empty canvas to pan · scroll to zoom. Click edge/+ to add. Delete removes.",
-    features: "Select a panel, place holes. Drag empty canvas to pan · scroll to zoom.",
+    features: featureTool === "select"
+      ? "Select — click holes · drag empty for marquee · Shift adds · drag moves (grid from feature start)."
+      : "Select a panel, place holes. Drag empty canvas to pan · scroll to zoom. Measure tool for spacing.",
     view3d: "Case Viewer — drag to orbit · scroll to zoom · Fit frames the assembled case.",
     nest: doc.fixedPanels?.length
       ? "Imported fixed-panel nest. Drag to pan, scroll to zoom."
@@ -470,7 +653,11 @@ function updateModeHint() {
 }
 
 function setMode(next) {
+  const prev = mode;
   const changed = mode !== next;
+  if (changed && prev === "profile") {
+    savedViews.profile = { ...view };
+  }
   mode = next;
   document.querySelectorAll(".cg-mode").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.mode === mode);
@@ -482,13 +669,22 @@ function setMode(next) {
   // Only clear selection when switching modes — not on every edit refresh
   if (changed) {
     selectedVertex = -1;
-    selectedFeatureId = null;
+    clearFeatureSelection();
     dragging = null;
+    clearMeasure();
     if (next !== "profile") settingTemplateDatum = false;
   }
   refreshInspectors();
-  if (changed && (mode === "nest" || mode === "features" || mode === "view3d")) fitView();
-  else render();
+  if (changed && mode === "profile" && savedViews.profile) {
+    Object.assign(view, savedViews.profile);
+    els.zoom.value = String(view.zoom);
+    els.zoomVal.textContent = `${Math.round(view.zoom * 100)}%`;
+    render();
+  } else if (changed && (mode === "nest" || mode === "features" || mode === "view3d")) {
+    fitView();
+  } else {
+    render();
+  }
 }
 
 function refreshProfileUi() {
@@ -583,6 +779,7 @@ function refreshInspectors() {
   refreshView3dPanelList();
   refreshVertexEdit();
   refreshFeatureEdit();
+  refreshMeasurePanel();
   syncTemplateUi();
   refreshSheetStatus();
 }
@@ -649,16 +846,26 @@ function refreshFeatureList() {
   }
   for (const f of feats) {
     const li = document.createElement("li");
-    li.className = f.id === selectedFeatureId ? "is-active" : "";
+    li.className = isFeatureSelected(f.id) ? "is-active" : "";
     const detail =
       f.type === "circle"
         ? `⌀ ${fmt(f.r * 2)}`
-        : `${fmt(f.w)}×${fmt(f.h)} r${fmt(f.r)}%`;
+        : f.type === "text"
+          ? `“${String(f.text || "").slice(0, 16)}” ${fmt(f.size)}mm`
+          : `${fmt(f.w)}×${fmt(f.h)} r${fmt(f.r)}%`;
     li.innerHTML = `<span>${f.type}</span><span class="cg-muted">${detail}</span>`;
-    li.addEventListener("click", () => {
-      selectedFeatureId = f.id;
+    li.addEventListener("click", (e) => {
+      if (e.shiftKey && selectedFeatureIds.size) {
+        const next = new Set(selectedFeatureIds);
+        if (next.has(f.id)) next.delete(f.id);
+        else next.add(f.id);
+        setFeatureSelection([...next], f.id);
+      } else {
+        setFeatureSelection([f.id], f.id);
+      }
       featureTool = "select";
       syncFeatureToolButtons();
+      updateModeHint();
       refreshInspectors();
       render();
     });
@@ -669,13 +876,23 @@ function refreshFeatureList() {
 function refreshFeatureEdit() {
   const box = document.getElementById("feature-edit");
   const fields = document.getElementById("feature-edit-fields");
-  const f = doc.features.find((x) => x.id === selectedFeatureId);
-  if (!f) {
+  const selected = selectedFeaturesOnPanel();
+  if (!selected.length) {
     box.hidden = true;
     fields.innerHTML = "";
     return;
   }
   box.hidden = false;
+
+  if (selected.length > 1) {
+    fields.innerHTML = `
+      <p class="cg-metric-line">${selected.length} features selected</p>
+      <p class="cg-hint-text">Drag to move together (grid snaps from the grabbed feature’s start). Edit one by selecting it alone.</p>
+    `;
+    return;
+  }
+
+  const f = selected[0];
   if (f.type === "circle") {
     fields.innerHTML = `
       <label class="cg-metric" for="edit-cx"><span>CX</span><input type="number" id="edit-cx" step="0.1" value="${f.cx}" /></label>
@@ -687,6 +904,29 @@ function refreshFeatureEdit() {
       f.cx = num(document.getElementById("edit-cx").value, f.cx);
       f.cy = num(document.getElementById("edit-cy").value, f.cy);
       f.r = Math.max(0.1, num(document.getElementById("edit-r").value, f.r));
+      refreshFeatureList();
+      render();
+    });
+  } else if (f.type === "text") {
+    fields.innerHTML = `
+      <label class="cg-inline" for="edit-text" style="width:100%;margin-bottom:0.4rem">Text
+        <input type="text" id="edit-text" maxlength="120" value="${escapeHtmlAttr(f.text)}" style="flex:1;min-width:0" />
+      </label>
+      <label class="cg-metric" for="edit-tx"><span>X</span><input type="number" id="edit-tx" step="0.1" value="${f.x}" /></label>
+      <label class="cg-metric" for="edit-ty"><span>Y</span><input type="number" id="edit-ty" step="0.1" value="${f.y}" /></label>
+      <label class="cg-metric" for="edit-tsize"><span>Size</span><input type="number" id="edit-tsize" min="0.5" step="0.1" value="${f.size}" /></label>
+      <label class="cg-metric" for="edit-tspace" title="Letter spacing (mm)"><span>Spacing</span><input type="number" id="edit-tspace" step="0.1" value="${f.letterSpacing}" /></label>
+      <label class="cg-metric" for="edit-trot"><span>Rot °</span><input type="number" id="edit-trot" step="1" value="${f.rotation}" /></label>
+      <p class="cg-hint-text">Bebas Neue bold · drag the orange handle to rotate</p>
+    `;
+    bindEdit(["edit-text", "edit-tx", "edit-ty", "edit-tsize", "edit-tspace", "edit-trot"], () => {
+      pushUndo();
+      f.text = String(document.getElementById("edit-text").value || "").slice(0, 120);
+      f.x = num(document.getElementById("edit-tx").value, f.x);
+      f.y = num(document.getElementById("edit-ty").value, f.y);
+      f.size = Math.max(0.5, num(document.getElementById("edit-tsize").value, f.size));
+      f.letterSpacing = num(document.getElementById("edit-tspace").value, f.letterSpacing);
+      f.rotation = num(document.getElementById("edit-trot").value, f.rotation);
       refreshFeatureList();
       render();
     });
@@ -709,6 +949,13 @@ function refreshFeatureEdit() {
       render();
     });
   }
+}
+
+function escapeHtmlAttr(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
 }
 
 function bindEdit(ids, onChange) {
@@ -869,6 +1116,16 @@ function fitView() {
       minY = Math.min(...pts.map((p) => p.y));
       maxX = Math.max(...pts.map((p) => p.x));
       maxY = Math.max(...pts.map((p) => p.y));
+    } else {
+      // No profile yet — center origin in viewport
+      view.scale = 4;
+      view.zoom = 1;
+      els.zoom.value = "1";
+      els.zoomVal.textContent = "100%";
+      view.panX = rect.width / 2;
+      view.panY = rect.height / 2;
+      render();
+      return;
     }
   }
 
@@ -959,10 +1216,30 @@ function drawGrid(rect) {
   ctx.restore();
 }
 
+function drawCenterCross(rect) {
+  const o = worldToScreen({ x: 0, y: 0 });
+  const arm = 14;
+  ctx.save();
+  ctx.strokeStyle = "rgba(139,155,181,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(o.x - arm, o.y);
+  ctx.lineTo(o.x + arm, o.y);
+  ctx.moveTo(o.x, o.y - arm);
+  ctx.lineTo(o.x, o.y + arm);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(o.x, o.y, 3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawProfileMode() {
   const pts = doc.profile.points;
   const ppm = pxPerMm();
   const rect = stage.getBoundingClientRect();
+
+  drawCenterCross(rect);
 
   if (pts.length === 0) {
     ctx.save();
@@ -1132,23 +1409,49 @@ function drawFeaturesMode() {
   // Features from doc (editable positions)
   const feats = doc.features.filter((f) => f.panelId === selectedPanelId);
   for (const f of feats) {
-    drawFeatureOverlay(f, f.id === selectedFeatureId);
+    drawFeatureOverlay(f, isFeatureSelected(f.id));
   }
 
   // Placement ghost
-  if (hoverWorld && (featureTool === "circle" || featureTool === "roundRect")) {
-    const ghost =
-      featureTool === "circle"
-        ? { type: "circle", cx: hoverWorld.x, cy: hoverWorld.y, r: num(els.featR.value, 3) }
-        : {
-            type: "roundRect",
-            x: hoverWorld.x - num(els.featW.value, 12) / 2,
-            y: hoverWorld.y - num(els.featH.value, 8) / 2,
-            w: num(els.featW.value, 12),
-            h: num(els.featH.value, 8),
-            r: num(els.featRR.value, 25),
-          };
+  if (hoverWorld && (featureTool === "circle" || featureTool === "roundRect" || featureTool === "text")) {
+    let ghost;
+    if (featureTool === "circle") {
+      ghost = { type: "circle", cx: hoverWorld.x, cy: hoverWorld.y, r: num(els.featR.value, 3) };
+    } else if (featureTool === "roundRect") {
+      ghost = {
+        type: "roundRect",
+        x: hoverWorld.x - num(els.featW.value, 12) / 2,
+        y: hoverWorld.y - num(els.featH.value, 8) / 2,
+        w: num(els.featW.value, 12),
+        h: num(els.featH.value, 8),
+        r: num(els.featRR.value, 25),
+      };
+    } else {
+      ghost = {
+        type: "text",
+        x: hoverWorld.x,
+        y: hoverWorld.y,
+        text: els.featTextStr?.value || "TEXT",
+        size: num(els.featTextSize?.value, 8),
+        letterSpacing: num(els.featTextTracking?.value, 0),
+        rotation: num(els.featTextRot?.value, 0),
+      };
+    }
     drawFeatureOverlay(ghost, false, true);
+  }
+
+  // Rotate handle for single selected text
+  if (featureTool === "select" && selectedFeatureIds.size === 1) {
+    const only = doc.features.find((f) => f.id === selectedFeatureId);
+    if (only?.type === "text") drawTextRotateHandle(only);
+  }
+
+  if (featureTool === "measure" && (measurePick.a || measurePick.b)) {
+    drawMeasureOverlay();
+  }
+
+  if (dragging?.type === "marquee") {
+    drawMarqueeOverlay(dragging);
   }
 
   ctx.fillStyle = "rgba(46,185,255,0.8)";
@@ -1213,6 +1516,190 @@ function drawFeatureOverlay(f, selected, ghost = false) {
     const r = roundRectRadiusMm(f.w, f.h, f.r) * pxPerMm();
     roundRectPath(ctx, a.x, a.y, w, h, r);
     ctx.stroke();
+  } else if (f.type === "text") {
+    drawTextFeature(f, { selected, ghost });
+  }
+  ctx.restore();
+}
+
+function textFontCss(sizePx) {
+  return `${TEXT_FONT_WEIGHT} ${Math.max(1, sizePx)}px ${TEXT_FONT_FAMILY}`;
+}
+
+function drawTextFeature(f, { selected = false, ghost = false } = {}) {
+  const c = worldToScreen({ x: f.x, y: f.y });
+  const sizePx = (Number(f.size) || 8) * pxPerMm();
+  const spacingPx = (Number(f.letterSpacing) || 0) * pxPerMm();
+  const rot = ((Number(f.rotation) || 0) * Math.PI) / 180;
+
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.rotate(rot);
+  ctx.font = textFontCss(sizePx);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const label = String(f.text || "");
+  if (ghost) {
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "rgba(46,185,255,0.7)";
+    drawSpacedText(ctx, label, spacingPx, "fill");
+  } else {
+    ctx.strokeStyle = selected ? "#ff3b30" : "#2eb9ff";
+    ctx.lineWidth = selected ? 1.6 : 1.2;
+    drawSpacedText(ctx, label, spacingPx, "stroke");
+    ctx.fillStyle = selected ? "rgba(255,59,48,0.15)" : "rgba(46,185,255,0.12)";
+    drawSpacedText(ctx, label, spacingPx, "fill");
+  }
+  ctx.restore();
+
+  if (selected && !ghost) {
+    const corners = textWorldCorners(f).map((p) => worldToScreen(p));
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,59,48,0.55)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    corners.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** Centered text with optional letter-spacing (px). */
+function drawSpacedText(c, text, spacingPx, mode) {
+  const chars = [...String(text || "")];
+  if (!chars.length) return;
+  const widths = chars.map((ch) => c.measureText(ch).width);
+  const total =
+    widths.reduce((a, b) => a + b, 0) + (Number(spacingPx) || 0) * Math.max(0, chars.length - 1);
+  let x = -total / 2;
+  for (let i = 0; i < chars.length; i++) {
+    if (mode === "stroke") c.strokeText(chars[i], x, 0);
+    else c.fillText(chars[i], x, 0);
+    x += widths[i] + (Number(spacingPx) || 0);
+  }
+}
+
+function textRotateHandleWorld(f) {
+  const { h } = estimateTextSizeMm(f.text, f.size, f.letterSpacing);
+  const reach = h / 2 + Math.max(4, (Number(f.size) || 8) * 0.6);
+  const rad = ((Number(f.rotation) || 0) * Math.PI) / 180;
+  // Handle above text in local space (negative Y = up in panel coords? panel Y grows down typically)
+  // Panel coords: Y down like canvas. "Above" text visually = smaller Y.
+  return {
+    x: f.x + Math.sin(rad) * reach,
+    y: f.y - Math.cos(rad) * reach,
+  };
+}
+
+function drawTextRotateHandle(f) {
+  const c = worldToScreen({ x: f.x, y: f.y });
+  const h = worldToScreen(textRotateHandleWorld(f));
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 160, 60, 0.95)";
+  ctx.fillStyle = "rgba(255, 160, 60, 0.95)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(c.x, c.y);
+  ctx.lineTo(h.x, h.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(h.x, h.y, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function hitTextRotateHandle(f, worldPt) {
+  const h = textRotateHandleWorld(f);
+  const tol = Math.max(3, 10 / pxPerMm());
+  return Math.hypot(worldPt.x - h.x, worldPt.y - h.y) <= tol;
+}
+
+function marqueeRect(drag) {
+  const x0 = Math.min(drag.x0, drag.x1);
+  const y0 = Math.min(drag.y0, drag.y1);
+  const x1 = Math.max(drag.x0, drag.x1);
+  const y1 = Math.max(drag.y0, drag.y1);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+function drawMarqueeOverlay(drag) {
+  const r = marqueeRect(drag);
+  const a = worldToScreen({ x: r.x, y: r.y });
+  const b = worldToScreen({ x: r.x + r.w, y: r.y + r.h });
+  ctx.save();
+  ctx.fillStyle = "rgba(46, 185, 255, 0.12)";
+  ctx.strokeStyle = "rgba(46, 185, 255, 0.9)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+  ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+  ctx.restore();
+}
+
+function featuresInMarquee(rect) {
+  return doc.features.filter((f) => {
+    if (f.panelId !== selectedPanelId) return false;
+    return boundsIntersect(featureBounds(f), rect);
+  });
+}
+
+function drawMeasureOverlay() {
+  const ep = measureEndpoints();
+  if (!ep?.a) return;
+  const a = worldToScreen(ep.a);
+  const bPt = ep.b || null;
+  const b = bPt ? worldToScreen(bPt) : null;
+
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = ep.live ? "rgba(255, 196, 72, 0.85)" : "rgba(255, 196, 72, 1)";
+  ctx.fillStyle = "rgba(255, 196, 72, 0.95)";
+
+  // Point A marker
+  ctx.beginPath();
+  ctx.arc(a.x, a.y, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (b) {
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.setLineDash(ep.live ? [5, 4] : []);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    // End ticks perpendicular to the measure line
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    const tick = 7;
+    const tx = Math.cos(ang + Math.PI / 2) * tick;
+    const ty = Math.sin(ang + Math.PI / 2) * tick;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(a.x - tx, a.y - ty);
+    ctx.lineTo(a.x + tx, a.y + ty);
+    ctx.moveTo(b.x - tx, b.y - ty);
+    ctx.lineTo(b.x + tx, b.y + ty);
+    ctx.stroke();
+
+    const dx = bPt.x - ep.a.x;
+    const dy = bPt.y - ep.a.y;
+    const d = Math.hypot(dx, dy);
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const label = `${fmt(d)} mm`;
+    ctx.font = "600 12px JetBrains Mono, monospace";
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(8, 12, 20, 0.82)";
+    ctx.fillRect(midX - tw / 2 - 5, midY - 16, tw + 10, 18);
+    ctx.fillStyle = "rgba(255, 220, 120, 1)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, midX, midY - 7);
   }
   ctx.restore();
 }
@@ -1270,6 +1757,23 @@ function drawPanelPathsMapped(panel, toScreen) {
       const r = Math.min(hole.r * pxPerMm(), w / 2, h / 2);
       roundRectPath(ctx, x, y, w, h, r);
       ctx.stroke();
+    } else if (hole.type === "text") {
+      const s = toScreen(hole.x, hole.y);
+      const s2 = toScreen(hole.x + 1, hole.y);
+      const ppm = Math.hypot(s2.x - s.x, s2.y - s.y) || pxPerMm();
+      const sizePx = (Number(hole.size) || 8) * ppm;
+      const spacingPx = (Number(hole.letterSpacing) || 0) * ppm;
+      const rot = ((Number(hole.rotation) || 0) * Math.PI) / 180;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(rot);
+      ctx.font = textFontCss(sizePx);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.strokeStyle = "#2eb9ff";
+      ctx.lineWidth = 1.2;
+      drawSpacedText(ctx, String(hole.text || ""), spacingPx, "stroke");
+      ctx.restore();
     }
   }
   ctx.restore();
@@ -1296,7 +1800,9 @@ function drawNestMode() {
 
   if (pack?.flat) {
     for (const item of nest.items) {
-      const toScreen = (px, py) => worldToScreen({ x: px + item.x, y: py + item.y });
+      const bx = item.bounds?.minX || 0;
+      const by = item.bounds?.minY || 0;
+      const toScreen = (px, py) => worldToScreen({ x: px - bx + item.x, y: py - by + item.y });
       if (dim) {
         ctx.save();
         ctx.globalAlpha = 0.45;
@@ -1306,7 +1812,7 @@ function drawNestMode() {
         drawPanelPathsMapped(item.panel, toScreen);
       }
       if (showLabels) {
-        const s = toScreen(1, 4);
+        const s = toScreen((item.bounds?.minX || 0) + 1, (item.bounds?.minY || 0) + 4);
         ctx.fillStyle = "rgba(139,155,181,0.9)";
         ctx.font = "11px JetBrains Mono, monospace";
         ctx.fillText(item.panel.label || item.panel.id, s.x, s.y);
@@ -1329,8 +1835,10 @@ function drawNestMode() {
 
     for (const place of placements) {
       for (const item of nest.items) {
+        const bx = item.bounds?.minX || 0;
+        const by = item.bounds?.minY || 0;
         const toScreen = (px, py) => {
-          const local = { x: px + item.x, y: py + item.y };
+          const local = { x: px - bx + item.x, y: py - by + item.y };
           const mapped = mapNestPoint(local.x, local.y, nw, nh, place.rotate90);
           return worldToScreen({ x: mapped.x + place.x, y: mapped.y + place.y });
         };
@@ -1343,7 +1851,7 @@ function drawNestMode() {
           drawPanelPathsMapped(item.panel, toScreen);
         }
         if (showLabels) {
-          const s = toScreen(1, 4);
+          const s = toScreen((item.bounds?.minX || 0) + 1, (item.bounds?.minY || 0) + 4);
           ctx.fillStyle = "rgba(139,155,181,0.9)";
           ctx.font = "11px JetBrains Mono, monospace";
           ctx.fillText(item.panel.label, s.x, s.y);
@@ -1600,34 +2108,126 @@ function closeProfile() {
 function onFeaturesDown(world) {
   if (!selectedPanelId) return false;
 
+  if (featureTool === "measure") {
+    const raw = hoverRaw || world;
+    let pt = pickMeasureAnchor(raw, world);
+    if (measurePick.a && !measurePick.b && shiftDown) {
+      const dx = Math.abs(pt.x - measurePick.a.x);
+      const dy = Math.abs(pt.y - measurePick.a.y);
+      const locked =
+        dx >= dy
+          ? { x: pt.x, y: measurePick.a.y }
+          : { x: measurePick.a.x, y: pt.y };
+      if (
+        pt.featureId &&
+        Math.abs(locked.x - pt.x) < 1e-9 &&
+        Math.abs(locked.y - pt.y) < 1e-9
+      ) {
+        locked.featureId = pt.featureId;
+      }
+      pt = locked;
+    }
+
+    if (!measurePick.a || measurePick.b) {
+      measurePick = { a: pt, b: null };
+    } else {
+      measurePick.b = pt;
+      if (pt.featureId) setFeatureSelection([pt.featureId], pt.featureId);
+    }
+    updateModeHint();
+    refreshMeasurePanel();
+    render();
+    return true;
+  }
+
   if (featureTool === "select") {
     const feats = doc.features.filter((f) => f.panelId === selectedPanelId);
     const tol = 3 / pxPerMm();
+    const raw = hoverRaw || world;
+
+    // Rotate handle on single selected text takes priority
+    if (selectedFeatureIds.size === 1) {
+      const only = doc.features.find((f) => f.id === selectedFeatureId);
+      if (only?.type === "text" && hitTextRotateHandle(only, raw)) {
+        pushUndo();
+        dragging = {
+          type: "text-rotate",
+          id: only.id,
+        };
+        render();
+        return true;
+      }
+    }
+
     let hit = null;
     for (let i = feats.length - 1; i >= 0; i--) {
-      if (hitTestFeature(feats[i], world.x, world.y, Math.max(tol, 1.5))) {
+      if (hitTestFeature(feats[i], raw.x, raw.y, Math.max(tol, 1.5))) {
         hit = feats[i];
         break;
       }
     }
-    selectedFeatureId = hit ? hit.id : null;
+
     if (hit) {
+      if (shiftDown) {
+        const next = new Set(selectedFeatureIds);
+        if (next.has(hit.id)) next.delete(hit.id);
+        else next.add(hit.id);
+        setFeatureSelection([...next], hit.id);
+      } else if (!selectedFeatureIds.has(hit.id)) {
+        setFeatureSelection([hit.id], hit.id);
+      } else {
+        selectedFeatureId = hit.id;
+      }
+
+      // Drag whole selection; grid snaps relative to grabbed feature's start.
+      const ids = selectedFeatureIds.size
+        ? [...selectedFeatureIds]
+        : [hit.id];
+      if (!ids.includes(hit.id)) ids.push(hit.id);
+      setFeatureSelection(ids, hit.id);
+
       pushUndo();
-      // Offsets from unsnapped pointer so drag + centerline snap stay stable.
-      const grab = hoverRaw || world;
+      const grab = raw;
+      const startCenters = {};
+      const startPos = {};
+      for (const id of ids) {
+        const f = doc.features.find((x) => x.id === id);
+        if (!f) continue;
+        const c = featureCenter(f);
+        startCenters[id] = { x: c.x, y: c.y };
+        if (f.type === "circle") startPos[id] = { cx: f.cx, cy: f.cy };
+        else startPos[id] = { x: f.x, y: f.y };
+      }
+      const primaryC = startCenters[hit.id];
       dragging = {
         type: "feature",
         id: hit.id,
-        ox: grab.x - (hit.type === "circle" ? hit.cx : hit.x),
-        oy: grab.y - (hit.type === "circle" ? hit.cy : hit.y),
+        ids,
+        grabOffX: grab.x - primaryC.x,
+        grabOffY: grab.y - primaryC.y,
+        startCenters,
+        startPos,
       };
       refreshInspectors();
       render();
       return true;
     }
+
+    // Empty space → marquee (Shift keeps / adds to previous selection)
+    const prevIds = shiftDown ? [...selectedFeatureIds] : [];
+    if (!shiftDown) clearFeatureSelection();
+    dragging = {
+      type: "marquee",
+      x0: raw.x,
+      y0: raw.y,
+      x1: raw.x,
+      y1: raw.y,
+      additive: shiftDown,
+      prevIds,
+    };
     refreshInspectors();
     render();
-    return false;
+    return true;
   }
 
   pushUndo();
@@ -1635,14 +2235,23 @@ function onFeaturesDown(world) {
     const r = Math.max(0.1, num(els.featR.value, 3));
     const f = createCircleFeature(selectedPanelId, world.x, world.y, r);
     doc.features.push(f);
-    selectedFeatureId = f.id;
+    setFeatureSelection([f.id], f.id);
   } else if (featureTool === "roundRect") {
     const w = Math.max(0.1, num(els.featW.value, 12));
     const h = Math.max(0.1, num(els.featH.value, 8));
     const r = Math.max(0, Math.min(100, num(els.featRR.value, 25)));
     const f = createRoundRectFeature(selectedPanelId, world.x - w / 2, world.y - h / 2, w, h, r);
     doc.features.push(f);
-    selectedFeatureId = f.id;
+    setFeatureSelection([f.id], f.id);
+  } else if (featureTool === "text") {
+    const f = createTextFeature(selectedPanelId, world.x, world.y, {
+      text: els.featTextStr?.value || "TEXT",
+      size: num(els.featTextSize?.value, 8),
+      letterSpacing: num(els.featTextTracking?.value, 0),
+      rotation: num(els.featTextRot?.value, 0),
+    });
+    doc.features.push(f);
+    setFeatureSelection([f.id], f.id);
   }
   refreshInspectors();
   render();
@@ -1703,38 +2312,78 @@ function onPointerMove(e) {
     return;
   }
 
-  if (dragging?.type === "feature") {
+  if (dragging?.type === "marquee") {
+    dragging.x1 = raw.x;
+    dragging.y1 = raw.y;
+    const rect = marqueeRect(dragging);
+    const hitIds = featuresInMarquee(rect).map((f) => f.id);
+    const ids = dragging.additive
+      ? [...new Set([...dragging.prevIds, ...hitIds])]
+      : hitIds;
+    setFeatureSelection(ids);
+    refreshFeatureList();
+    refreshFeatureEdit();
+    render();
+    return;
+  }
+
+  if (dragging?.type === "text-rotate") {
     const f = doc.features.find((x) => x.id === dragging.id);
-    if (f) {
-      const panel = selectedFeaturePanel();
-      if (f.type === "circle") {
-        const c = snapFeaturePoint(
-          { x: raw.x - dragging.ox, y: raw.y - dragging.oy },
-          panel
-        );
-        f.cx = c.x;
-        f.cy = c.y;
-      } else {
-        const center = snapFeaturePoint(
-          {
-            x: raw.x - dragging.ox + f.w / 2,
-            y: raw.y - dragging.oy + f.h / 2,
-          },
-          panel
-        );
-        f.x = center.x - f.w / 2;
-        f.y = center.y - f.h / 2;
-      }
+    if (f?.type === "text") {
+      // atan2(dx, -dy): 0° = up (negative Y), CW positive to match SVG rotate
+      const ang = (Math.atan2(raw.x - f.x, -(raw.y - f.y)) * 180) / Math.PI;
+      f.rotation = Math.round(ang * 10) / 10;
       refreshFeatureEdit();
       render();
     }
     return;
   }
 
-  if (mode === "profile" || mode === "features") render();
+  if (dragging?.type === "feature") {
+    const panel = selectedFeaturePanel();
+    const origin = dragging.startCenters[dragging.id];
+    if (!origin) return;
+    const want = snapFeaturePoint(
+      {
+        x: raw.x - dragging.grabOffX,
+        y: raw.y - dragging.grabOffY,
+      },
+      panel,
+      origin
+    );
+    const dx = want.x - origin.x;
+    const dy = want.y - origin.y;
+    for (const id of dragging.ids || [dragging.id]) {
+      const f = doc.features.find((x) => x.id === id);
+      const s = dragging.startPos?.[id];
+      if (!f || !s) continue;
+      if (f.type === "circle") {
+        f.cx = s.cx + dx;
+        f.cy = s.cy + dy;
+      } else {
+        f.x = s.x + dx;
+        f.y = s.y + dy;
+      }
+    }
+    refreshFeatureEdit();
+    render();
+    return;
+  }
+
+  if (mode === "profile" || mode === "features") {
+    if (mode === "features" && featureTool === "measure") {
+      refreshMeasurePanel();
+      updateModeHint();
+    }
+    render();
+  }
 }
 
 function onPointerUp() {
+  if (dragging?.type === "marquee") {
+    refreshInspectors();
+    updateModeHint();
+  }
   dragging = null;
 }
 
@@ -1842,8 +2491,29 @@ function bindUI() {
     fitView();
   });
 
-  document.getElementById("btn-close-profile").addEventListener("click", () => {
-    closeProfile();
+
+  document.getElementById("btn-deselect-vertex")?.addEventListener("click", () => {
+    selectedVertex = -1;
+    refreshInspectors();
+    render();
+  });
+
+  document.getElementById("btn-profile-advanced")?.addEventListener("click", () => {
+    const body = document.getElementById("profile-advanced-body");
+    const btn = document.getElementById("btn-profile-advanced");
+    if (body && btn) {
+      body.hidden = !body.hidden;
+      btn.textContent = body.hidden ? "Advanced ▸" : "Advanced ▾";
+    }
+  });
+
+  document.getElementById("btn-features-advanced")?.addEventListener("click", () => {
+    const body = document.getElementById("features-advanced-body");
+    const btn = document.getElementById("btn-features-advanced");
+    if (body && btn) {
+      body.hidden = !body.hidden;
+      btn.textContent = body.hidden ? "Advanced ▸" : "Advanced ▾";
+    }
   });
 
   document.getElementById("btn-set-template-origin").addEventListener("click", () => {
@@ -1855,44 +2525,12 @@ function bindUI() {
     render();
   });
 
-  document.getElementById("btn-clear-profile").addEventListener("click", () => {
-    pushUndo();
-    clearFixedPanels(doc);
-    doc.profile.points = [];
-    doc.profile.closed = false;
-    doc.features = [];
-    doc.templateDatum = null;
-    settingTemplateDatum = false;
-    selectedVertex = -1;
-    dragging = null;
-    refreshProfileUi();
-  });
-
-  document.getElementById("btn-rect-preset").addEventListener("click", () => {
-    pushUndo();
-    clearFixedPanels(doc);
-    doc.profile.points = [
-      { x: 0, y: 0 },
-      { x: 100, y: 0 },
-      { x: 100, y: 60 },
-      { x: 0, y: 60 },
-    ];
-    doc.profile.closed = true;
-    doc.features = [];
-    doc.templateDatum = null;
-    settingTemplateDatum = false;
-    selectedVertex = -1;
-    dragging = null;
-    refreshProfileUi();
-    fitView();
-  });
-
   document.getElementById("btn-front-profile").addEventListener("click", () => {
     pushUndo();
     restoreToernFrontProfile(doc);
     syncParamsFromDoc();
     selectedVertex = -1;
-    selectedFeatureId = null;
+    clearFeatureSelection();
     selectedPanelId = "panel-0";
     dragging = null;
     settingTemplateDatum = false;
@@ -1931,7 +2569,8 @@ function bindUI() {
 
   els.featurePanel.addEventListener("change", () => {
     selectedPanelId = els.featurePanel.value;
-    selectedFeatureId = null;
+    clearFeatureSelection();
+    clearMeasure();
     refreshInspectors();
     fitView();
   });
@@ -1939,18 +2578,52 @@ function bindUI() {
   document.querySelectorAll("[data-feat]").forEach((btn) => {
     btn.addEventListener("click", () => {
       featureTool = btn.dataset.feat;
+      if (featureTool !== "measure") clearMeasure();
       syncFeatureToolButtons();
-      // show/hide param groups
-      document.getElementById("feat-circle-params").hidden = featureTool !== "circle";
-      document.getElementById("feat-rect-params").hidden = featureTool !== "roundRect";
+      updateModeHint();
+      refreshMeasurePanel();
+      render();
     });
   });
 
+  document.querySelectorAll("[data-measure-axis]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      measureAxis = btn.dataset.measureAxis || "along";
+      document.querySelectorAll("[data-measure-axis]").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.measureAxis === measureAxis);
+      });
+    });
+  });
+
+  document.getElementById("btn-measure-apply")?.addEventListener("click", () => {
+    applyMeasureDistance();
+  });
+  const clearMeasureUi = () => {
+    clearMeasure();
+    updateModeHint();
+    refreshMeasurePanel();
+    render();
+  };
+  document.getElementById("btn-measure-clear")?.addEventListener("click", clearMeasureUi);
+  document.getElementById("btn-measure-clear-only")?.addEventListener("click", clearMeasureUi);
+  els.measureDistance?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      applyMeasureDistance();
+    }
+  });
+
   document.getElementById("btn-delete-feature").addEventListener("click", () => {
-    if (!selectedFeatureId) return;
+    const ids = selectedFeatureIds.size
+      ? [...selectedFeatureIds]
+      : selectedFeatureId
+        ? [selectedFeatureId]
+        : [];
+    if (!ids.length) return;
     pushUndo();
-    doc.features = doc.features.filter((f) => f.id !== selectedFeatureId);
-    selectedFeatureId = null;
+    const kill = new Set(ids);
+    doc.features = doc.features.filter((f) => !kill.has(f.id));
+    clearFeatureSelection();
     refreshInspectors();
     render();
   });
@@ -1995,7 +2668,10 @@ function bindUI() {
     pushUndo();
     doc.features.push(...result.features);
     addTemplateToProject(template);
-    selectedFeatureId = result.features[0].id;
+    setFeatureSelection(
+      result.features.map((f) => f.id),
+      result.features[0].id
+    );
     els.templateStatus.textContent = `Applied ${result.features.length} holes${result.skipped ? ` · skipped ${result.skipped}` : ""}.`;
     refreshInspectors();
     render();
@@ -2081,7 +2757,7 @@ function bindUI() {
       persistTemplateLibrary();
       syncParamsFromDoc();
       selectedVertex = -1;
-      selectedFeatureId = null;
+      clearFeatureSelection();
       settingTemplateDatum = false;
       refreshInspectors();
       fitView();
@@ -2141,7 +2817,7 @@ function bindUI() {
     if (e.code === "Space") spaceDown = true;
     if (e.key === "Shift") {
       shiftDown = true;
-      if (mode === "profile") render();
+      if (mode === "profile" || (mode === "features" && featureTool === "measure")) render();
     }
     const meta = e.metaKey || e.ctrlKey;
     if (meta && e.key === "z" && !e.shiftKey) {
@@ -2150,6 +2826,12 @@ function bindUI() {
     } else if (meta && (e.key === "Z" || (e.key === "z" && e.shiftKey))) {
       e.preventDefault();
       redo();
+    } else if (e.key === "Escape" && mode === "features" && featureTool === "measure" && (measurePick.a || measurePick.b)) {
+      e.preventDefault();
+      clearMeasure();
+      updateModeHint();
+      refreshMeasurePanel();
+      render();
     } else if (e.key === "Escape" && mode === "profile" && !doc.profile.closed) {
       e.preventDefault();
       pushUndo();
@@ -2159,12 +2841,12 @@ function bindUI() {
       refreshProfileUi();
     } else if (e.key === "Enter" && mode === "profile" && !doc.profile.closed && doc.profile.points.length >= 3) {
       e.preventDefault();
-      document.getElementById("btn-close-profile").click();
+      closeProfile();
     } else if ((e.key === "Delete" || e.key === "Backspace") && mode === "profile" && selectedVertex >= 0) {
       if (document.activeElement?.tagName === "INPUT") return;
       e.preventDefault();
       deleteSelectedVertex();
-    } else if ((e.key === "Delete" || e.key === "Backspace") && mode === "features" && selectedFeatureId) {
+    } else if ((e.key === "Delete" || e.key === "Backspace") && mode === "features" && (selectedFeatureIds.size || selectedFeatureId)) {
       if (document.activeElement?.tagName === "INPUT") return;
       e.preventDefault();
       document.getElementById("btn-delete-feature").click();
@@ -2174,7 +2856,7 @@ function bindUI() {
     if (e.code === "Space") spaceDown = false;
     if (e.key === "Shift") {
       shiftDown = false;
-      if (mode === "profile") render();
+      if (mode === "profile" || (mode === "features" && featureTool === "measure")) render();
     }
   });
 
@@ -2187,6 +2869,11 @@ function syncFeatureToolButtons() {
   });
   document.getElementById("feat-circle-params").hidden = featureTool !== "circle";
   document.getElementById("feat-rect-params").hidden = featureTool !== "roundRect";
+  const textParams = document.getElementById("feat-text-params");
+  if (textParams) textParams.hidden = featureTool !== "text";
+  const measurePanel = document.getElementById("feat-measure-panel");
+  if (measurePanel) measurePanel.hidden = featureTool !== "measure";
+  if (featureTool === "measure") refreshMeasurePanel();
 }
 
 function downloadBlob(blob, name) {

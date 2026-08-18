@@ -1092,15 +1092,18 @@ i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
 
-// Adafruit NeoSlider @ I2C 0x30 → always controls voice 1 volume.
+// Adafruit NeoSliders @ I2C 0x30..0x33 → always control voices 1..4 volume.
+// Address: default 0x30; A0→0x31, A1→0x32, A0+A1→0x33. LEDs use that voice's col[].
 // Uses Adafruit_seesaw (no Wire.h / Wire.* in this sketch). LED colors via FastLED CRGB.
-#define NEOSLIDER_I2C_ADDR 0x30
-#define NEOSLIDER_VOICE_CH 1
+#define NEOSLIDER_COUNT 4
 #define NEOSLIDER_NUM_LEDS 4
 // Lit LEDs use full channel color; no global dim (was making the bar muddy).
 #define NEOSLIDER_LED_BRIGHTNESS 255
 
-// Channels that have a real volume/amp path (CTRL=VOL); NeoSlider always drives voice1 on every Y.
+static const uint8_t neoSliderAddrs[NEOSLIDER_COUNT] = { 0x30, 0x31, 0x32, 0x33 };
+static const uint8_t neoSliderVoiceCh[NEOSLIDER_COUNT] = { 1, 2, 3, 4 };
+
+// Channels that have a real volume/amp path (CTRL=VOL); NeoSliders always drive voices 1-4 on every Y.
 static inline bool isVolumeVoiceChannel(int ch) {
   return (ch >= 1 && ch <= 8) || ch == 11 || ch == 13 || ch == 14;
 }
@@ -1134,15 +1137,20 @@ public:
   }
 };
 
-static NeoSliderSeesaw neoSliderSS;
-static bool neoSliderPresent = false;
-static int neoSliderLastVol = -1;
-static bool neoSliderMuteLatched = false;
-static float neoSliderTargetGain = 1.0f;
-static float neoSliderCurrentGain = 1.0f;
-static CRGB neoSliderLeds[NEOSLIDER_NUM_LEDS];
-static elapsedMillis neoSliderActiveUntil;  // faster ADC while fader is moving
-static int neoSliderLedVolShown = -1;      // last volume pushed to NeoPixels
+static NeoSliderSeesaw neoSliderSS[NEOSLIDER_COUNT];
+static bool neoSliderPresent[NEOSLIDER_COUNT];
+static int neoSliderLastVol[NEOSLIDER_COUNT];
+static bool neoSliderMuteLatched[NEOSLIDER_COUNT];
+static float neoSliderTargetGain[NEOSLIDER_COUNT];
+static float neoSliderCurrentGain[NEOSLIDER_COUNT];
+static CRGB neoSliderLeds[NEOSLIDER_COUNT][NEOSLIDER_NUM_LEDS];
+static elapsedMillis neoSliderActiveUntil[NEOSLIDER_COUNT];  // faster ADC while fader is moving
+static int neoSliderLedVolShown[NEOSLIDER_COUNT];           // last volume pushed to NeoPixels
+static bool neoSliderAnyPresent = false;
+
+static inline bool isNeoSliderControlledChannel(int ch) {
+  return ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
+}
 
 // Slider column positions (2 LEDs each)
 static const uint8_t sliderCols[4][2] = { { 2, 3 }, { 6, 7 }, { 10, 11 }, { 14, 15 } };
@@ -3135,88 +3143,122 @@ FLASHMEM void checkCrashReport() {
 
 
 // Push FastLED CRGB[] to NeoSlider LEDs via seesaw (ATtiny LED data pin 14).
-FLASHMEM static void neoSliderShowLeds() {
-  if (!neoSliderPresent) return;
+FLASHMEM static void neoSliderShowLeds(int idx) {
+  if (idx < 0 || idx >= NEOSLIDER_COUNT || !neoSliderPresent[idx]) return;
   // Seesaw LED buffer: 2-byte offset + GRB bytes
   uint8_t writeBuf[2 + NEOSLIDER_NUM_LEDS * 3];
   writeBuf[0] = 0;
   writeBuf[1] = 0;
   for (uint8_t i = 0; i < NEOSLIDER_NUM_LEDS; i++) {
-    CRGB c = neoSliderLeds[i];
+    CRGB c = neoSliderLeds[idx][i];
     c.nscale8(NEOSLIDER_LED_BRIGHTNESS);
     const uint8_t base = 2 + i * 3;
     writeBuf[base + 0] = c.g;
     writeBuf[base + 1] = c.r;
     writeBuf[base + 2] = c.b;
   }
-  neoSliderSS.writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF, writeBuf, sizeof(writeBuf));
-  neoSliderSS.writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SHOW, nullptr, 0);
+  neoSliderSS[idx].writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF, writeBuf, sizeof(writeBuf));
+  neoSliderSS[idx].writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SHOW, nullptr, 0);
 }
 
-FLASHMEM static void neoSliderUpdateLeds(int vol) {
+// Red plastic over NeoPixels eats green/blue: orange→red, yellow→orange.
+// Compensate only for NeoSlider LEDs (matrix/encoder colors stay untouched).
+FLASHMEM static CRGB neoSliderPlasticCompensated(CRGB c) {
+  if ((c.r | c.g | c.b) == 0) return c;
+
+  CHSV hsv = rgb2hsv_approximate(c);
+  // FastLED hue: 0=red, ~32=orange, ~64=yellow, ~96=green.
+  // Only red→yellow need help; leave green (and cooler hues) alone.
+  if (hsv.h > 80) return c;
+
+  // Shift toward green so the red filter lands near the intended hue.
+  // red(~0): little; orange: some; yellow: more.
+  hsv.h = qadd8(hsv.h, scale8(hsv.h, 100));
+  // Mix white (lower sat) — yellows need more white than pure red.
+  uint8_t desat = scale8(hsv.h, 120);
+  hsv.s = qsub8(hsv.s, desat);
+  // Keep perceived brightness up after desat
+  hsv.v = qadd8(hsv.v, scale8(desat, 90));
+
+  CRGB out = hsv;
+  // Extra G/B the plastic still absorbs (even after HSV tweak).
+  out.g = qadd8(out.g, scale8(out.g, 90));   // +~35%
+  out.b = qadd8(out.b, scale8(out.b, 70));   // +~27%
+  return out;
+}
+
+FLASHMEM static void neoSliderUpdateLeds(int idx, int vol) {
   // Volume bar: 0 = all off, 16 = all 4 full, 8 (50%) = lowest 2 full, etc.
-  // Color = voice1 channel color at full brightness.
+  // Color = that voice's channel color (col[1]..col[4]), plastic-compensated.
+  if (idx < 0 || idx >= NEOSLIDER_COUNT) return;
   vol = constrain(vol, 0, 16);
   int lit = (vol <= 0) ? 0 : ((vol * NEOSLIDER_NUM_LEDS + 15) / 16);
   if (lit > NEOSLIDER_NUM_LEDS) lit = NEOSLIDER_NUM_LEDS;
 
+  const int voiceCh = neoSliderVoiceCh[idx];
   extern CRGB col[];
-  CRGB on = col[NEOSLIDER_VOICE_CH];
+  CRGB on = col[voiceCh];
   if (on.r == 0 && on.g == 0 && on.b == 0) {
     on = CRGB(0, 180, 40);  // fallback if palette not ready
   }
+  on = neoSliderPlasticCompensated(on);
 
-  fill_solid(neoSliderLeds, NEOSLIDER_NUM_LEDS, CRGB::Black);
+  fill_solid(neoSliderLeds[idx], NEOSLIDER_NUM_LEDS, CRGB::Black);
   for (int i = 0; i < lit; i++) {
-    neoSliderLeds[i] = on;
+    neoSliderLeds[idx][i] = on;
   }
-  neoSliderShowLeds();
-  neoSliderLedVolShown = vol;
+  neoSliderShowLeds(idx);
+  neoSliderLedVolShown[idx] = vol;
 }
 
 // Push LEDs when the lit segment count would change; light throttle keeps I2C sane.
-FLASHMEM static void neoSliderMaybeUpdateLeds(int vol) {
-  if (!neoSliderPresent) return;
+FLASHMEM static void neoSliderMaybeUpdateLeds(int idx, int vol) {
+  if (idx < 0 || idx >= NEOSLIDER_COUNT || !neoSliderPresent[idx]) return;
   if (digitalRead(INT_PIN) == LOW) return;
   vol = constrain(vol, 0, 16);
   int lit = (vol <= 0) ? 0 : ((vol * NEOSLIDER_NUM_LEDS + 15) / 16);
-  int shownLit = (neoSliderLedVolShown <= 0) ? 0
-                                             : ((neoSliderLedVolShown * NEOSLIDER_NUM_LEDS + 15) / 16);
-  if (lit == shownLit && neoSliderLedVolShown >= 0) return;
+  int shownLit = (neoSliderLedVolShown[idx] <= 0) ? 0
+                                                  : ((neoSliderLedVolShown[idx] * NEOSLIDER_NUM_LEDS + 15) / 16);
+  if (lit == shownLit && neoSliderLedVolShown[idx] >= 0) return;
 
   static elapsedMillis ledThrottle;
   if (ledThrottle < 18) return;  // responsive, but not every ADC poll
   ledThrottle = 0;
-  neoSliderUpdateLeds(vol);
+  neoSliderUpdateLeds(idx, vol);
 }
 
 FLASHMEM void initNeoSlider() {
-  neoSliderPresent = false;
-  neoSliderLastVol = -1;
-  neoSliderMuteLatched = false;
-  neoSliderTargetGain = 1.0f;
-  neoSliderCurrentGain = 1.0f;
-  fill_solid(neoSliderLeds, NEOSLIDER_NUM_LEDS, CRGB::Black);
+  neoSliderAnyPresent = false;
+  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
+    neoSliderPresent[i] = false;
+    neoSliderLastVol[i] = -1;
+    neoSliderMuteLatched[i] = false;
+    neoSliderTargetGain[i] = 1.0f;
+    neoSliderCurrentGain[i] = 1.0f;
+    neoSliderLedVolShown[i] = -1;
+    fill_solid(neoSliderLeds[i], NEOSLIDER_NUM_LEDS, CRGB::Black);
 
-  if (!neoSliderSS.begin(NEOSLIDER_I2C_ADDR)) {
-    return;
+    if (!neoSliderSS[i].begin(neoSliderAddrs[i])) {
+      continue;
+    }
+
+    uint16_t pid = 0;
+    uint8_t year = 0, mon = 0, day = 0;
+    neoSliderSS[i].getProdDatecode(&pid, &year, &mon, &day);
+    if (pid != 5295) {
+      continue;
+    }
+
+    // Configure ATtiny LED strand (pin 14 on the seesaw, not Teensy)
+    neoSliderSS[i].writeReg8(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SPEED, 1);  // 800 kHz
+    const uint8_t numBytes = NEOSLIDER_NUM_LEDS * 3;
+    uint8_t lenBuf[2] = { (uint8_t)(numBytes >> 8), (uint8_t)(numBytes & 0xFF) };
+    neoSliderSS[i].writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF_LENGTH, lenBuf, 2);
+    neoSliderSS[i].writeReg8(SS_NEOPIXEL_BASE, SS_NEOPIXEL_PIN, SS_NEOSLIDER_LED_PIN);
+    neoSliderPresent[i] = true;
+    neoSliderAnyPresent = true;
+    neoSliderShowLeds(i);
   }
-
-  uint16_t pid = 0;
-  uint8_t year = 0, mon = 0, day = 0;
-  neoSliderSS.getProdDatecode(&pid, &year, &mon, &day);
-  if (pid != 5295) {
-    return;
-  }
-
-  // Configure ATtiny LED strand (pin 14 on the seesaw, not Teensy)
-  neoSliderSS.writeReg8(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SPEED, 1);  // 800 kHz
-  const uint8_t numBytes = NEOSLIDER_NUM_LEDS * 3;
-  uint8_t lenBuf[2] = { (uint8_t)(numBytes >> 8), (uint8_t)(numBytes & 0xFF) };
-  neoSliderSS.writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF_LENGTH, lenBuf, 2);
-  neoSliderSS.writeReg8(SS_NEOPIXEL_BASE, SS_NEOPIXEL_PIN, SS_NEOSLIDER_LED_PIN);
-  neoSliderPresent = true;
-  neoSliderShowLeds();
 }
 
 // Restore amp gains from channelVol for sample/synth voices that have amps[].
@@ -3225,8 +3267,8 @@ FLASHMEM void initNeoSlider() {
 FLASHMEM void reapplyAllSampleChannelGains() {
   for (int ch = 1; ch <= 8; ch++) {
     if (amps[ch] == nullptr) continue;
-    // Voice 1 may be mid-slew from the NeoSlider — don't stomp it.
-    if (neoSliderPresent && ch == NEOSLIDER_VOICE_CH) continue;
+    // Voices 1-4 may be mid-slew from NeoSliders — don't stomp them.
+    if (isNeoSliderControlledChannel(ch)) continue;
     float channelvolume = mapf((float)SMP.channelVol[ch], 0, maxY, 0.0f, 1.0f);
     amps[ch]->gain(channelvolume);
   }
@@ -3238,128 +3280,143 @@ FLASHMEM void reapplyAllSampleChannelGains() {
   forceAllMixerGainsToTarget();
 }
 
-// Smooth voice1 amp gain toward fader target (kills zipper/crackle on fast moves).
+// Smooth amp gains toward fader targets (kills zipper/crackle on fast moves).
 void serviceNeoSliderGainSlew() {
-  if (!neoSliderPresent) return;
-  const int ch = NEOSLIDER_VOICE_CH;
-  if (ch < 0 || ch >= 15 || amps[ch] == nullptr) return;
+  if (!neoSliderAnyPresent) return;
 
   static elapsedMicros slewTimer;
   if (slewTimer < 1000) return;  // 1 ms
   slewTimer = 0;
 
-  float d = neoSliderTargetGain - neoSliderCurrentGain;
-  if (d > -0.0005f && d < 0.0005f) {
-    if (neoSliderCurrentGain != neoSliderTargetGain) {
-      neoSliderCurrentGain = neoSliderTargetGain;
-      amps[ch]->gain(neoSliderCurrentGain);
+  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
+    if (!neoSliderPresent[i]) continue;
+    const int ch = neoSliderVoiceCh[i];
+    if (ch < 0 || ch >= 15 || amps[ch] == nullptr) continue;
+
+    float d = neoSliderTargetGain[i] - neoSliderCurrentGain[i];
+    if (d > -0.0005f && d < 0.0005f) {
+      if (neoSliderCurrentGain[i] != neoSliderTargetGain[i]) {
+        neoSliderCurrentGain[i] = neoSliderTargetGain[i];
+        amps[ch]->gain(neoSliderCurrentGain[i]);
+      }
+      continue;
     }
-    return;
+    // Full-scale slew ≈ ~16 ms (snappier tracking)
+    const float maxDelta = 0.06f;
+    if (d > maxDelta) d = maxDelta;
+    else if (d < -maxDelta) d = -maxDelta;
+    neoSliderCurrentGain[i] += d;
+    if (neoSliderCurrentGain[i] < 0.0f) neoSliderCurrentGain[i] = 0.0f;
+    if (neoSliderCurrentGain[i] > 1.0f) neoSliderCurrentGain[i] = 1.0f;
+    amps[ch]->gain(neoSliderCurrentGain[i]);
   }
-  // Full-scale slew ≈ ~16 ms (snappier tracking)
-  const float maxDelta = 0.06f;
-  if (d > maxDelta) d = maxDelta;
-  else if (d < -maxDelta) d = -maxDelta;
-  neoSliderCurrentGain += d;
-  if (neoSliderCurrentGain < 0.0f) neoSliderCurrentGain = 0.0f;
-  if (neoSliderCurrentGain > 1.0f) neoSliderCurrentGain = 1.0f;
-  amps[ch]->gain(neoSliderCurrentGain);
 }
 
 FLASHMEM void updateNeoSliderVolume() {
-  if (!neoSliderPresent) return;
+  if (!neoSliderAnyPresent) return;
 
   // Encoders share the I2C bus: skip while an encoder INT is pending.
   if (digitalRead(INT_PIN) == LOW) return;
 
-  // Always drive voice1 volume on every Y (volume bar + amp).
+  // Always drive voices 1-4 volume on every Y (volume bar + amp).
   // Adaptive poll — without Adafruit's delay(1), ~12ms is smooth and leaves
   // the bus free for encoder RGB / cursor animation.
+  bool anyActive = false;
+  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
+    if (neoSliderPresent[i] && neoSliderActiveUntil[i] < 300) {
+      anyActive = true;
+      break;
+    }
+  }
   static elapsedMillis neoSliderPoll;
-  const unsigned int pollMs = (neoSliderActiveUntil < 300) ? 12 : 30;
+  const unsigned int pollMs = anyActive ? 12 : 30;
   if (neoSliderPoll < pollMs) return;
   neoSliderPoll = 0;
 
-  uint16_t slideVal = neoSliderSS.analogReadFast(SS_NEOSLIDER_ADC_CH);  // 0..1023, no delay(1)
-  // Inverted: physical top/bottom matched to louder/quieter
-  slideVal = 1023 - slideVal;
+  static uint16_t lastRaw[NEOSLIDER_COUNT] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
+  static elapsedMillis encSyncThrottle;
+  static elapsedMillis velEncThrottle;
 
-  static uint16_t lastRaw = 0xFFFF;
-  int rawDelta = 0;
-  if (lastRaw != 0xFFFF) {
-    rawDelta = (int)slideVal - (int)lastRaw;
-    if (rawDelta < 0) rawDelta = -rawDelta;
-  }
-  if (rawDelta >= 6) {
-    neoSliderActiveUntil = 0;  // mark active for next ~300ms of fast polls
-  }
+  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
+    if (!neoSliderPresent[i]) continue;
 
-  // Continuous gain target from raw ADC (avoids stair-step zipper noise)
-  neoSliderTargetGain = (float)slideVal * (1.0f / 1023.0f);
+    uint16_t slideVal = neoSliderSS[i].analogReadFast(SS_NEOSLIDER_ADC_CH);  // 0..1023, no delay(1)
+    // Inverted: physical top/bottom matched to louder/quieter
+    slideVal = 1023 - slideVal;
 
-  int vol = (int)((slideVal * 16UL + 511UL) / 1023UL);
-  if (vol > 16) vol = 16;
-
-  // Light hysteresis: ignore tiny 1-step chatter only
-  if (neoSliderLastVol >= 0 && vol != neoSliderLastVol && lastRaw != 0xFFFF) {
-    int stepDelta = vol - neoSliderLastVol;
-    if (stepDelta < 0) stepDelta = -stepDelta;
-    if (stepDelta == 1 && rawDelta < 24) {
-      vol = neoSliderLastVol;
+    int rawDelta = 0;
+    if (lastRaw[i] != 0xFFFF) {
+      rawDelta = (int)slideVal - (int)lastRaw[i];
+      if (rawDelta < 0) rawDelta = -rawDelta;
     }
-  }
-  lastRaw = slideVal;
+    if (rawDelta >= 6) {
+      neoSliderActiveUntil[i] = 0;  // mark active for next ~300ms of fast polls
+    }
 
-  // While moving: update gain target every poll (above). Discrete UI only on step change.
-  if (vol == neoSliderLastVol) return;
-  neoSliderLastVol = vol;
-  neoSliderActiveUntil = 0;
+    // Continuous gain target from raw ADC (avoids stair-step zipper noise)
+    neoSliderTargetGain[i] = (float)slideVal * (1.0f / 1023.0f);
 
-  // Voice 1 only: volume UI + mute indicator (never touch other channels)
-  const int ch = NEOSLIDER_VOICE_CH;
-  if (ch < 0 || ch >= (int)maxY) return;
-  if (vol > 0) {
-    lastChannelVolBeforeMute[ch] = (uint8_t)vol;
-  }
-  SMP.channelVol[ch] = (unsigned int)vol;
+    int vol = (int)((slideVal * 16UL + 511UL) / 1023UL);
+    if (vol > 16) vol = 16;
 
-  // Show muted when fader fully down; unmute voice1 when raised (ch1 only)
-  bool wantMute = (vol == 0);
-  if (wantMute != neoSliderMuteLatched) {
-    setMuteState(ch, wantMute);
-    SMP.mute[ch] = wantMute ? 1u : 0u;
-    neoSliderMuteLatched = wantMute;
-  }
+    // Light hysteresis: ignore tiny 1-step chatter only
+    if (neoSliderLastVol[i] >= 0 && vol != neoSliderLastVol[i] && lastRaw[i] != 0xFFFF) {
+      int stepDelta = vol - neoSliderLastVol[i];
+      if (stepDelta < 0) stepDelta = -stepDelta;
+      if (stepDelta == 1 && rawDelta < 24) {
+        vol = neoSliderLastVol[i];
+      }
+    }
+    lastRaw[i] = slideVal;
 
-  // Sync CTRL=VOL encoder position (throttle I2C writeCounter while dragging)
-  bool ctrlEditingVoice1Vol = (ctrlMode == 1
+    // While moving: update gain target every poll (above). Discrete UI only on step change.
+    if (vol == neoSliderLastVol[i]) continue;
+    neoSliderLastVol[i] = vol;
+    neoSliderActiveUntil[i] = 0;
+
+    const int ch = neoSliderVoiceCh[i];
+    if (ch < 0 || ch >= (int)maxY) continue;
+    if (vol > 0) {
+      lastChannelVolBeforeMute[ch] = (uint8_t)vol;
+    }
+    SMP.channelVol[ch] = (unsigned int)vol;
+
+    // Show muted when fader fully down; unmute when raised
+    bool wantMute = (vol == 0);
+    if (wantMute != neoSliderMuteLatched[i]) {
+      setMuteState(ch, wantMute);
+      SMP.mute[ch] = wantMute ? 1u : 0u;
+      neoSliderMuteLatched[i] = wantMute;
+    }
+
+    // Sync CTRL=VOL encoder position (throttle I2C writeCounter while dragging)
+    bool ctrlEditingThisVol = (ctrlMode == 1
                                && (currentMode == &draw || currentMode == &singleMode)
                                && (int)GLOB.currentChannel == ch
                                && !(currentMode == &draw && GLOB.y == 1));
-  if (ctrlEditingVoice1Vol) {
-    currentMode->pos[1] = vol;
-    ctrlLastVolume = vol;
-    static elapsedMillis encSyncThrottle;
-    if (encSyncThrottle >= 40) {
-      encSyncThrottle = 0;
-      Encoder[1].writeCounter((int32_t)vol);
+    if (ctrlEditingThisVol) {
+      currentMode->pos[1] = vol;
+      ctrlLastVolume = vol;
+      if (encSyncThrottle >= 40) {
+        encSyncThrottle = 0;
+        Encoder[1].writeCounter((int32_t)vol);
+      }
     }
-  }
 
-  if (currentMode == &velocity && (int)GLOB.currentChannel == ch) {
-    currentMode->pos[3] = vol;
-    static elapsedMillis velEncThrottle;
-    if (velEncThrottle >= 40) {
-      velEncThrottle = 0;
-      Encoder[3].writeCounter((int32_t)vol);
+    if (currentMode == &velocity && (int)GLOB.currentChannel == ch) {
+      currentMode->pos[3] = vol;
+      if (velEncThrottle >= 40) {
+        velEncThrottle = 0;
+        Encoder[3].writeCounter((int32_t)vol);
+      }
     }
+
+    // Matrix volume bar: cheap flag update (drawn once per display frame)
+    showCtrlVolumeChange(vol);
+
+    // Fader NeoPixels: that voice's channel color
+    neoSliderMaybeUpdateLeds(i, vol);
   }
-
-  // Matrix volume bar: cheap flag update (drawn once per display frame)
-  showCtrlVolumeChange(vol);
-
-  // Fader NeoPixels: channel-color bar, updates as soon as lit segment changes
-  neoSliderMaybeUpdateLeds(vol);
 }
 
 FLASHMEM void initEncoders() {
@@ -3745,7 +3802,7 @@ FLASHMEM void setup() {
   loadSMPSettings();
   //mixer0.gain(1, 0.05);  //PREV Sound
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
-  initNeoSlider();  // Optional NeoSlider @0x30 → voice1 volume (I2C only)
+  initNeoSlider();  // Optional NeoSliders @0x30..0x33 → voices 1..4 volume (I2C only)
 
 
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)

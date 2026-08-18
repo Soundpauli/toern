@@ -43,7 +43,7 @@ export function measureInsideCavity(doc) {
   }
   const thickness = Math.max(0.05, doc.thickness || 3);
   const kerf = doc.kerf || 0;
-  const jointDepth = Math.max(0, thickness - kerf * 0.5);
+  const jointDepth = Math.max(0, thickness + 0.2 - kerf * 0.5);
   const depth = Math.max(thickness * 2, doc.depth || 1);
   const outer = ensureCCW(simplified);
   const body = offsetPolygon(outer, -jointDepth);
@@ -86,7 +86,11 @@ export function unfold(doc) {
   const fingerLength = Math.max(10, doc.fingerLength);
   const minFinger = Math.max(0.5, doc.minFingerWidth ?? MIN_FINGER_LENGTH);
   const kerf = doc.kerf;
-  const jointDepth = Math.max(0, thickness - kerf * 0.5);
+  // Finger depth slightly longer than material for snug press-fit (+0.2 mm).
+  // Finger depth slightly longer than material for snug press-fit (+0.2 mm).
+  const fingerDepthOversize = 0.2;
+  const fingerThickness = thickness + fingerDepthOversize;
+  const jointDepth = Math.max(0, fingerThickness - kerf * 0.5);
   const depth = Math.max(thickness * 2, doc.depth);
 
   // Drawn profile is the finished outside envelope. Finger baselines sit on an
@@ -182,7 +186,7 @@ export function unfold(doc) {
         allowForceTongue && (usable <= minFinger || !widths);
       if (!forceTongue && !widths && usable > minFinger) return null;
       return {
-        thickness,
+        thickness: fingerThickness,
         fingerLength: forceTongue ? usable : fingerLength,
         startMale,
         kerf,
@@ -223,7 +227,7 @@ export function unfold(doc) {
     if (!isValidFingerLength(f, minFinger)) return null;
 
     return {
-      thickness,
+      thickness: fingerThickness,
       fingerLength: f,
       startMale,
       kerf,
@@ -329,7 +333,7 @@ export function unfold(doc) {
     const sideBase = i % 2 === 0;
     const rightOrtho = rightOk
       ? {
-          thickness,
+          thickness: fingerThickness,
           fingerLength,
           startMale: jointStartMale(doc, sideBase, wallId, rightMate),
           kerf,
@@ -338,7 +342,7 @@ export function unfold(doc) {
       : null;
     const leftOrtho = leftOk
       ? {
-          thickness,
+          thickness: fingerThickness,
           fingerLength,
           startMale: jointStartMale(doc, sideBase, wallId, leftMate),
           kerf,
@@ -433,6 +437,17 @@ function applyFeatures(panels, features) {
         h: f.h,
         r: rMm,
         rPercent: f.r,
+      });
+    } else if (f.type === "text") {
+      panel.holes.push({
+        id: f.id,
+        type: "text",
+        x: f.x,
+        y: f.y,
+        text: f.text,
+        size: f.size,
+        letterSpacing: f.letterSpacing,
+        rotation: f.rotation,
       });
     }
   }

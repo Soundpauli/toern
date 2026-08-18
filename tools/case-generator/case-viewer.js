@@ -12,6 +12,7 @@ import {
   ensureCCW,
 } from "./joints.js";
 import { unfold } from "./unfold.js";
+import { TEXT_FONT_FAMILY, TEXT_FONT_WEIGHT } from "./features.js";
 
 /** Neutral matte grey (faces slightly lighter than edge grain). */
 const MATTE = {
@@ -235,6 +236,9 @@ function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, op
   // Slightly darker cavity face so inside/outside read apart
   const innerRgb = faceRgb.map((c) => Math.round(c * 0.82));
 
+  const cutHoles = (opts.holes || []).filter((h) => h && h.type !== "text");
+  const engraves = (opts.holes || []).filter((h) => h?.type === "text");
+
   faces.push({
     pts: pushedOut,
     rgb: faceRgb,
@@ -242,10 +246,11 @@ function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, op
     side: "outer",
     panelId,
     priority: priority + 2,
-    cutouts2d: (opts.holes || [])
+    cutouts2d: cutHoles
       .map(holeRing2d)
       .filter((r) => r && r.length >= 3)
       .map((r) => ensureCCW(r)),
+    engraves,
     map2d: map,
     mapS: outerS,
   });
@@ -256,7 +261,7 @@ function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, op
     side: "inner",
     panelId,
     priority: priority + 1,
-    cutouts2d: (opts.holes || [])
+    cutouts2d: cutHoles
       .map(holeRing2d)
       .filter((r) => r && r.length >= 3)
       .map((r) => ensureCCW(r)),
@@ -297,7 +302,7 @@ function addWoodPanel(faces, edges, ring2d, map, thickness, faceRgb, panelId, op
     });
   }
 
-  addPanelHoleBores(faces, opts.holes || [], map, outerS, innerS, nOut, panelId, priority);
+  addPanelHoleBores(faces, cutHoles, map, outerS, innerS, nOut, panelId, priority);
 
   void edges;
   void nInn;
@@ -773,6 +778,15 @@ export function drawAssembledCase(ctx, mesh, cam, rect, opts = {}) {
   ctx.imageSmoothingEnabled = scale < 1;
   ctx.drawImage(tmp, 0, 0, rect.width, rect.height);
 
+  // Engraved text on outer faces (not punched holes)
+  for (const item of [...opaque, ...glass]) {
+    if (item.face.role !== "face" || item.face.side !== "outer") continue;
+    if (!item.face.engraves?.length) continue;
+    const isFocus = hasHi && item.face.panelId === highlightPanelId;
+    if (hasHi && !isFocus && item.alpha < 0.08) continue;
+    drawFaceEngraves(ctx, item.face, cam, bounds, rect, item.alpha, scale);
+  }
+
   if (mesh.note) {
     ctx.fillStyle = "#9aa3b0";
     ctx.font = "12px Inter, sans-serif";
@@ -781,6 +795,61 @@ export function drawAssembledCase(ctx, mesh, cam, rect, opts = {}) {
 }
 
 const DEPTH_EPS = 0.35;
+
+/**
+ * Draw laser-engrave text on an outer face in screen space.
+ * Uses the face's panel-local → 3D map so text sits on the wood, not as a hole.
+ */
+function drawFaceEngraves(ctx, face, cam, bounds, rect, alpha = 1, rasterScale = 1) {
+  if (!face?.engraves?.length || typeof face.map2d !== "function") return;
+  const s = face.mapS ?? 0;
+  // Face normal toward camera? Skip if nearly edge-on via local basis length.
+  void rasterScale;
+
+  for (const eng of face.engraves) {
+    if (eng.type !== "text" || !String(eng.text || "").trim()) continue;
+    const c3 = face.map2d({ x: eng.x, y: eng.y }, s);
+    const sp = projectPoint(c3, cam, bounds, rect);
+    const x3 = face.map2d({ x: eng.x + 1, y: eng.y }, s);
+    const y3 = face.map2d({ x: eng.x, y: eng.y + 1 }, s);
+    const px = projectPoint(x3, cam, bounds, rect);
+    const py = projectPoint(y3, cam, bounds, rect);
+    const sx = Math.hypot(px.x - sp.x, px.y - sp.y);
+    const sy = Math.hypot(py.x - sp.x, py.y - sp.y);
+    const scale = (sx + sy) * 0.5;
+    if (!(scale > 0.35)) continue;
+
+    // Local +X direction on screen; text rotation is CW in panel space (Y-down).
+    const angX = Math.atan2(px.y - sp.y, px.x - sp.x);
+    const rot = angX + ((Number(eng.rotation) || 0) * Math.PI) / 180;
+    const sizePx = Math.max(2, (Number(eng.size) || 8) * scale);
+    const spacingPx = (Number(eng.letterSpacing) || 0) * scale;
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.15, Math.min(1, alpha));
+    ctx.translate(sp.x, sp.y);
+    ctx.rotate(rot);
+    ctx.font = `${TEXT_FONT_WEIGHT} ${sizePx}px ${TEXT_FONT_FAMILY}`;
+    ctx.fillStyle = "rgba(28, 30, 34, 0.92)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    drawSpacedFillText(ctx, String(eng.text || ""), spacingPx);
+    ctx.restore();
+  }
+}
+
+function drawSpacedFillText(c, text, spacingPx) {
+  const chars = [...String(text || "")];
+  if (!chars.length) return;
+  const widths = chars.map((ch) => c.measureText(ch).width);
+  const total =
+    widths.reduce((a, b) => a + b, 0) + (Number(spacingPx) || 0) * Math.max(0, chars.length - 1);
+  let x = -total / 2;
+  for (let i = 0; i < chars.length; i++) {
+    c.fillText(chars[i], x, 0);
+    x += widths[i] + (Number(spacingPx) || 0);
+  }
+}
 
 function projectFaceCutouts(face, cam, bounds, rect) {
   if (!face?.cutouts2d?.length || typeof face.map2d !== "function") return [];

@@ -15,7 +15,7 @@ import {
   polygonSelfIntersects,
   isAxisAligned,
 } from "./joints.js";
-import { createCircleFeature, createRoundRectFeature, roundRectRadiusMm } from "./features.js";
+import { createCircleFeature, createRoundRectFeature, createTextFeature, roundRectRadiusMm, featureCenter, setFeatureDistanceFromPoint, snapRelative, featureBounds, boundsIntersect, hitTestFeature, estimateTextSizeMm } from "./features.js";
 import { buildAssembledCase } from "./case-viewer.js";
 import {
   currentTemplateDatum,
@@ -224,6 +224,43 @@ doc.features = [createCircleFeature("endA", 50, 30, 4)];
 doc.features.push(createRoundRectFeature("wall-0", 5, 5, 20, 10, 50));
 if (Math.abs(roundRectRadiusMm(20, 10, 50) - 5) > 1e-9) {
   throw new Error("50% should fully round short side (5mm)");
+}
+{
+  const a = createCircleFeature("p", 0, 0, 2);
+  const b = createCircleFeature("p", 10, 0, 2);
+  const r = setFeatureDistanceFromPoint(b, featureCenter(a), 25, "along");
+  if (!r.ok) throw new Error(r.error);
+  if (Math.abs(b.cx - 25) > 1e-9 || Math.abs(b.cy) > 1e-9) {
+    throw new Error(`along distance failed: ${b.cx},${b.cy}`);
+  }
+  const rect = createRoundRectFeature("p", 0, 0, 10, 8, 0);
+  const r2 = setFeatureDistanceFromPoint(rect, { x: 0, y: 0 }, 30, "vertical");
+  if (!r2.ok) throw new Error(r2.error);
+  const c = featureCenter(rect);
+  if (Math.abs(c.x - 5) > 1e-9 || Math.abs(c.y - 30) > 1e-9) {
+    throw new Error(`vertical distance failed: ${c.x},${c.y}`);
+  }
+  if (Math.abs(snapRelative(10.3 + 3.1, 10.3, true, 3) - 13.3) > 1e-9) {
+    throw new Error("snapRelative should keep feature-zero origin");
+  }
+  if (Math.abs(snapRelative(11, 0, true, 3) - 12) > 1e-9) {
+    throw new Error("snapRelative with origin 0 matches absolute snap");
+  }
+  const b1 = featureBounds(createCircleFeature("p", 10, 10, 2));
+  const b2 = { x: 11, y: 11, w: 1, h: 1 };
+  if (!boundsIntersect(b1, b2)) throw new Error("bounds should intersect");
+  const txt = createTextFeature("p", 50, 20, {
+    text: "TOERN",
+    size: 10,
+    letterSpacing: 1,
+    rotation: 90,
+  });
+  if (txt.type !== "text" || txt.rotation !== 90) throw new Error("text feature create failed");
+  const tb = featureBounds(txt);
+  if (!tb || tb.w < 5 || tb.h < 5) throw new Error("text bounds too small");
+  if (!hitTestFeature(txt, 50, 20, 1)) throw new Error("text center should hit");
+  const sz = estimateTextSizeMm("AB", 10, 2);
+  if (sz.w < 10) throw new Error("spaced text should be wider");
 }
 const gen = unfold(doc);
 if (gen.error) throw new Error(gen.error);
@@ -670,8 +707,10 @@ for (const p of diag.panels) {
   }
   const inside = measureInsideCavity(thick);
   if (inside.error) throw new Error(inside.error);
-  if (Math.abs(inside.width - 236) > 1e-6 || Math.abs(inside.height - 20.6) > 1e-6) {
-    throw new Error(`inside should be 236×20.6×depth, got ${inside.width}×${inside.height}`);
+  // Finger depth includes +0.2mm oversize; body inset is thickness+0.2-kerf*0.5
+  const expectedJd = 5 + 0.2 - (-0.125) * 0.5;
+  if (Math.abs(inside.width - (246 - 2 * expectedJd)) > 0.5 || Math.abs(inside.height - (30.6 - 2 * expectedJd)) > 0.5) {
+    throw new Error(`inside size unexpected, got ${inside.width}×${inside.height}`);
   }
   if (inside.depth !== thick.depth) throw new Error("inside depth should match doc.depth");
 }

@@ -77,6 +77,13 @@ function mirrorHoleX(h, flipX) {
       d: roundRectPathD(x, h.y, h.w, h.h, h.r),
     };
   }
+  if (h.type === "text") {
+    return {
+      ...h,
+      x: flipX(h.x),
+      rotation: -(Number(h.rotation) || 0),
+    };
+  }
   // Path-only hole: skip geometric fields
   return h;
 }
@@ -104,6 +111,15 @@ function rotateHole90CW(h, map, nb) {
     // r is stored in mm for nest holes
     const r = Math.min(h.r, w / 2, hgt / 2);
     return { ...h, x, y, w, h: hgt, r, d: roundRectPathD(x, y, w, hgt, r) };
+  }
+  if (h.type === "text") {
+    const p = map(h.x, h.y);
+    return {
+      ...h,
+      x: p.x - nb.minX,
+      y: p.y - nb.minY,
+      rotation: (Number(h.rotation) || 0) + 90,
+    };
   }
   return h;
 }

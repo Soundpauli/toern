@@ -170,6 +170,21 @@ function normalizeFeature(f) {
     if (f.templateId) feature.templateId = String(f.templateId);
     return feature;
   }
+  if (f.type === "text") {
+    const feature = {
+      id: f.id || uid("feat"),
+      type: "text",
+      panelId: String(f.panelId),
+      x: Number(f.x) || 0,
+      y: Number(f.y) || 0,
+      text: String(f.text ?? "TEXT").slice(0, 120),
+      size: Math.max(0.5, Number(f.size) || 8),
+      letterSpacing: Number.isFinite(Number(f.letterSpacing)) ? Number(f.letterSpacing) : 0,
+      rotation: Number.isFinite(Number(f.rotation)) ? Number(f.rotation) : 0,
+    };
+    if (f.templateId) feature.templateId = String(f.templateId);
+    return feature;
+  }
   return null;
 }
 
