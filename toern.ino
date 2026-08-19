@@ -557,7 +557,9 @@ static unsigned long touch1ModeToggleDueMs = 0;
 static const unsigned long TOUCH1_CHORD_GRACE_MS = 140;
 
 /** When true, touch1/touch2 use TTP223 on pins 5 & 22 (digital, INPUT_PULLDOWN) instead of fastTouchRead on SWITCH_1/2. */
-static const bool exttouch = false;
+static const bool exttouch = true;
+/** When false, skip all NeoSlider I2C (init/ADC/LEDs/slew). This unit has faders. */
+static const bool deviceHasFaders = true;
 
 int readTouch1Raw() {
   if (exttouch) return digitalRead(5) ? (touchThreshold + 1) : 0;
@@ -1082,12 +1084,23 @@ ButtonState buttonState[NUM_ENCODERS] = { IDLE };
 bool isPressed[NUM_ENCODERS] = { false };
 bool pressed[NUM_ENCODERS] = { false };
 
-
+/*
 i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
   i2cEncoderLibV2(0x01),  // third encoder address
   i2cEncoderLibV2(0x41),  // 2nd encoder address +
   i2cEncoderLibV2(0x20),  // First encoder address
   i2cEncoderLibV2(0x61),  // First encoder address
+};
+*/
+i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
+  i2cEncoderLibV2(0x61),  // First encoder address
+  i2cEncoderLibV2(0x20),  // First encoder address
+  i2cEncoderLibV2(0x41),  // 2nd encoder address +
+
+  i2cEncoderLibV2(0x01),  // third encoder address
+  
+  
+  
 };
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
@@ -1128,12 +1141,16 @@ public:
     return write8(regHigh, regLow, value);
   }
   // Same ADC path as analogRead(), without the blocking delay(1).
-  uint16_t analogReadFast(uint8_t pin) {
+  // 10-bit seesaw ADC is 0..1023. Failed I2C / not-ready is often 0xFFFF.
+  bool analogReadFast(uint8_t pin, uint16_t &value) {
     uint8_t buf[2];
     if (!read(SEESAW_ADC_BASE, (uint8_t)(SEESAW_ADC_CHANNEL_OFFSET + pin), buf, 2, 500)) {
-      return 0;
+      return false;
     }
-    return ((uint16_t)buf[0] << 8) | buf[1];
+    uint16_t v = ((uint16_t)buf[0] << 8) | buf[1];
+    if (v > 1023) return false;
+    value = v;
+    return true;
   }
 };
 
@@ -1149,7 +1166,7 @@ static int neoSliderLedVolShown[NEOSLIDER_COUNT];           // last volume pushe
 static bool neoSliderAnyPresent = false;
 
 static inline bool isNeoSliderControlledChannel(int ch) {
-  return ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
+  return deviceHasFaders && ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
 }
 
 // Slider column positions (2 LEDs each)
@@ -3082,62 +3099,48 @@ FLASHMEM void initSamples() {
 
 
 FLASHMEM void checkCrashReport() {
-  // Print crash info to Serial
-  if (CrashReport) {  // Check if CrashReport is non-empty before printing
+  // Log only. Never wipe EEPROM, delete autosaved.txt, or delay —
+  // that left muted/white-LED voices until FULL reset, and made Play wait ~1 bar.
+  if (!CrashReport) return;
+
+  File errorFile = SD.open("ERROR.txt", O_WRONLY | O_CREAT | O_APPEND);
+  if (errorFile) {
+    static char buf[120];
+    uint32_t uptimeMs = millis();
+    uint32_t uptimeSec = uptimeMs / 1000;
+    uint32_t h = uptimeSec / 3600;
+    uint32_t m = (uptimeSec % 3600) / 60;
+    uint32_t s = uptimeSec % 60;
+
+    errorFile.println("\n========================================");
+    sprintf(buf, "CRASH REPORT - %s %s %s", __FILE__, __DATE__, __TIME__);
+    errorFile.println(buf);
+    errorFile.println("========================================");
+    errorFile.print(CrashReport);  // consumes the report
+    errorFile.println();
+    errorFile.println("--- System Information ---");
+    sprintf(buf, "Uptime: %luh, %lumin, %lusec (%lu ms)", h, m, s, uptimeMs);
+    errorFile.println(buf);
+
+    char *heapEnd = (char *)sbrk(0);
+    char *stackPtr = (char *)__builtin_frame_address(0);
+    uint32_t freeRam = ((uintptr_t)stackPtr > (uintptr_t)heapEnd) ? (uint32_t)((uintptr_t)stackPtr - (uintptr_t)heapEnd) : 0;
+    sprintf(buf, "Free RAM: %lu bytes", freeRam);
+    errorFile.println(buf);
+
+    sprintf(buf, "Audio CPU: %.1f%% (max: %.1f%%)",
+            AudioProcessorUsage(), AudioProcessorUsageMax());
+    errorFile.println(buf);
+    sprintf(buf, "Audio Memory: %d/%d blocks",
+            AudioMemoryUsage(), AudioMemoryUsageMax());
+    errorFile.println(buf);
+
+    errorFile.println("========================================");
+    errorFile.println();
+    errorFile.close();
+  } else {
+    Serial.print(CrashReport);  // still consume if SD file can't be opened
   }
-
-  // Try to write crash info to SD card ERROR.txt
-  if (SD.begin(INT_SD)) {
-    File errorFile = SD.open("ERROR.txt", O_WRONLY | O_CREAT | O_APPEND);
-    if (errorFile) {
-      static char buf[120];  // Reusable buffer
-      uint32_t uptimeMs = millis();
-      uint32_t uptimeSec = uptimeMs / 1000;
-      uint32_t h = uptimeSec / 3600;
-      uint32_t m = (uptimeSec % 3600) / 60;
-      uint32_t s = uptimeSec % 60;
-
-      errorFile.println("\n========================================");
-      sprintf(buf, "CRASH REPORT - %s %s %s", __FILE__, __DATE__, __TIME__);
-      errorFile.println(buf);
-      errorFile.println("========================================");
-
-      if (CrashReport) {
-        errorFile.print(CrashReport);
-        errorFile.println();
-      }
-
-      errorFile.println("--- System Information ---");
-      sprintf(buf, "Uptime: %luh, %lumin, %lusec (%lu ms)", h, m, s, uptimeMs);
-      errorFile.println(buf);
-
-      char *heapEnd = (char *)sbrk(0);
-      char *stackPtr = (char *)__builtin_frame_address(0);
-      uint32_t freeRam = ((uintptr_t)stackPtr > (uintptr_t)heapEnd) ? (uint32_t)((uintptr_t)stackPtr - (uintptr_t)heapEnd) : 0;
-      sprintf(buf, "Free RAM: %lu bytes", freeRam);
-      errorFile.println(buf);
-
-      sprintf(buf, "Audio CPU: %.1f%% (max: %.1f%%)",
-              AudioProcessorUsage(), AudioProcessorUsageMax());
-      errorFile.println(buf);
-      sprintf(buf, "Audio Memory: %d/%d blocks",
-              AudioMemoryUsage(), AudioMemoryUsageMax());
-      errorFile.println(buf);
-
-      errorFile.println("========================================");
-      errorFile.println();
-      errorFile.close();
-    }
-  }
-
-  delay(1000);
-  for (unsigned int i = 0; i < EEPROM.length(); i++) EEPROM.write(i, 0);
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "autosaved.txt");
-  if (SD.exists(OUTPUTf)) {
-    SD.remove(OUTPUTf);
-  }
-  delay(2000);
 }
 
 
@@ -3204,14 +3207,16 @@ FLASHMEM static void neoSliderUpdateLeds(int idx, int vol) {
   on = neoSliderPlasticCompensated(on);
 
   fill_solid(neoSliderLeds[idx], NEOSLIDER_NUM_LEDS, CRGB::Black);
+  // LED 0 is at the physical top of the slider; light from the bottom up.
   for (int i = 0; i < lit; i++) {
-    neoSliderLeds[idx][i] = on;
+    neoSliderLeds[idx][NEOSLIDER_NUM_LEDS - 1 - i] = on;
   }
   neoSliderShowLeds(idx);
   neoSliderLedVolShown[idx] = vol;
 }
 
-// Push LEDs when the lit segment count would change; light throttle keeps I2C sane.
+// Push LEDs only when the lit segment count changes. The ATtiny keeps the last
+// frame — do not rewrite/SHOW on every ADC poll.
 FLASHMEM static void neoSliderMaybeUpdateLeds(int idx, int vol) {
   if (idx < 0 || idx >= NEOSLIDER_COUNT || !neoSliderPresent[idx]) return;
   if (digitalRead(INT_PIN) == LOW) return;
@@ -3220,15 +3225,13 @@ FLASHMEM static void neoSliderMaybeUpdateLeds(int idx, int vol) {
   int shownLit = (neoSliderLedVolShown[idx] <= 0) ? 0
                                                   : ((neoSliderLedVolShown[idx] * NEOSLIDER_NUM_LEDS + 15) / 16);
   if (lit == shownLit && neoSliderLedVolShown[idx] >= 0) return;
-
-  static elapsedMillis ledThrottle;
-  if (ledThrottle < 18) return;  // responsive, but not every ADC poll
-  ledThrottle = 0;
   neoSliderUpdateLeds(idx, vol);
 }
 
 FLASHMEM void initNeoSlider() {
   neoSliderAnyPresent = false;
+  if (!deviceHasFaders) return;
+
   for (int i = 0; i < NEOSLIDER_COUNT; i++) {
     neoSliderPresent[i] = false;
     neoSliderLastVol[i] = -1;
@@ -3257,7 +3260,7 @@ FLASHMEM void initNeoSlider() {
     neoSliderSS[i].writeReg8(SS_NEOPIXEL_BASE, SS_NEOPIXEL_PIN, SS_NEOSLIDER_LED_PIN);
     neoSliderPresent[i] = true;
     neoSliderAnyPresent = true;
-    neoSliderShowLeds(i);
+    // Leave LEDs off until the first real volume change (no boot SHOW).
   }
 }
 
@@ -3282,7 +3285,7 @@ FLASHMEM void reapplyAllSampleChannelGains() {
 
 // Smooth amp gains toward fader targets (kills zipper/crackle on fast moves).
 void serviceNeoSliderGainSlew() {
-  if (!neoSliderAnyPresent) return;
+  if (!deviceHasFaders || !neoSliderAnyPresent) return;
 
   static elapsedMicros slewTimer;
   if (slewTimer < 1000) return;  // 1 ms
@@ -3313,110 +3316,76 @@ void serviceNeoSliderGainSlew() {
 }
 
 FLASHMEM void updateNeoSliderVolume() {
-  if (!neoSliderAnyPresent) return;
+  if (!deviceHasFaders || !neoSliderAnyPresent) return;
 
   // Encoders share the I2C bus: skip while an encoder INT is pending.
   if (digitalRead(INT_PIN) == LOW) return;
 
-  // Always drive voices 1-4 volume on every Y (volume bar + amp).
-  // Adaptive poll — without Adafruit's delay(1), ~12ms is smooth and leaves
-  // the bus free for encoder RGB / cursor animation.
-  bool anyActive = false;
-  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
-    if (neoSliderPresent[i] && neoSliderActiveUntil[i] < 300) {
-      anyActive = true;
+  // 25 ADC reads/s total (one slider per 40ms, round-robin).
+  static elapsedMillis neoSliderPoll;
+  if (neoSliderPoll < 40) return;
+  neoSliderPoll = 0;
+
+  static uint8_t rr = 0;
+  int i = -1;
+  for (uint8_t n = 0; n < NEOSLIDER_COUNT; n++) {
+    uint8_t idx = (uint8_t)((rr + n) % NEOSLIDER_COUNT);
+    if (neoSliderPresent[idx]) {
+      i = (int)idx;
       break;
     }
   }
-  static elapsedMillis neoSliderPoll;
-  const unsigned int pollMs = anyActive ? 12 : 30;
-  if (neoSliderPoll < pollMs) return;
-  neoSliderPoll = 0;
+  if (i < 0) return;
+  rr = (uint8_t)((i + 1) % NEOSLIDER_COUNT);
 
   static uint16_t lastRaw[NEOSLIDER_COUNT] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
-  static elapsedMillis encSyncThrottle;
-  static elapsedMillis velEncThrottle;
 
-  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
-    if (!neoSliderPresent[i]) continue;
-
-    uint16_t slideVal = neoSliderSS[i].analogReadFast(SS_NEOSLIDER_ADC_CH);  // 0..1023, no delay(1)
-    // Inverted: physical top/bottom matched to louder/quieter
-    slideVal = 1023 - slideVal;
-
-    int rawDelta = 0;
-    if (lastRaw[i] != 0xFFFF) {
-      rawDelta = (int)slideVal - (int)lastRaw[i];
-      if (rawDelta < 0) rawDelta = -rawDelta;
-    }
-    if (rawDelta >= 6) {
-      neoSliderActiveUntil[i] = 0;  // mark active for next ~300ms of fast polls
-    }
-
-    // Continuous gain target from raw ADC (avoids stair-step zipper noise)
-    neoSliderTargetGain[i] = (float)slideVal * (1.0f / 1023.0f);
-
-    int vol = (int)((slideVal * 16UL + 511UL) / 1023UL);
-    if (vol > 16) vol = 16;
-
-    // Light hysteresis: ignore tiny 1-step chatter only
-    if (neoSliderLastVol[i] >= 0 && vol != neoSliderLastVol[i] && lastRaw[i] != 0xFFFF) {
-      int stepDelta = vol - neoSliderLastVol[i];
-      if (stepDelta < 0) stepDelta = -stepDelta;
-      if (stepDelta == 1 && rawDelta < 24) {
-        vol = neoSliderLastVol[i];
-      }
-    }
-    lastRaw[i] = slideVal;
-
-    // While moving: update gain target every poll (above). Discrete UI only on step change.
-    if (vol == neoSliderLastVol[i]) continue;
-    neoSliderLastVol[i] = vol;
-    neoSliderActiveUntil[i] = 0;
-
-    const int ch = neoSliderVoiceCh[i];
-    if (ch < 0 || ch >= (int)maxY) continue;
-    if (vol > 0) {
-      lastChannelVolBeforeMute[ch] = (uint8_t)vol;
-    }
-    SMP.channelVol[ch] = (unsigned int)vol;
-
-    // Show muted when fader fully down; unmute when raised
-    bool wantMute = (vol == 0);
-    if (wantMute != neoSliderMuteLatched[i]) {
-      setMuteState(ch, wantMute);
-      SMP.mute[ch] = wantMute ? 1u : 0u;
-      neoSliderMuteLatched[i] = wantMute;
-    }
-
-    // Sync CTRL=VOL encoder position (throttle I2C writeCounter while dragging)
-    bool ctrlEditingThisVol = (ctrlMode == 1
-                               && (currentMode == &draw || currentMode == &singleMode)
-                               && (int)GLOB.currentChannel == ch
-                               && !(currentMode == &draw && GLOB.y == 1));
-    if (ctrlEditingThisVol) {
-      currentMode->pos[1] = vol;
-      ctrlLastVolume = vol;
-      if (encSyncThrottle >= 40) {
-        encSyncThrottle = 0;
-        Encoder[1].writeCounter((int32_t)vol);
-      }
-    }
-
-    if (currentMode == &velocity && (int)GLOB.currentChannel == ch) {
-      currentMode->pos[3] = vol;
-      if (velEncThrottle >= 40) {
-        velEncThrottle = 0;
-        Encoder[3].writeCounter((int32_t)vol);
-      }
-    }
-
-    // Matrix volume bar: cheap flag update (drawn once per display frame)
-    showCtrlVolumeChange(vol);
-
-    // Fader NeoPixels: that voice's channel color
-    neoSliderMaybeUpdateLeds(i, vol);
+  uint16_t raw = 0;
+  if (!neoSliderSS[i].analogReadFast(SS_NEOSLIDER_ADC_CH, raw)) {
+    return;  // keep last; never treat fail as 0 (invert would look like 100%)
   }
+  uint16_t slideVal = (uint16_t)(1023 - raw);
+
+  int rawDelta = 0;
+  if (lastRaw[i] != 0xFFFF) {
+    rawDelta = (int)slideVal - (int)lastRaw[i];
+    if (rawDelta < 0) rawDelta = -rawDelta;
+  }
+
+  neoSliderTargetGain[i] = (float)slideVal * (1.0f / 1023.0f);
+
+  int vol = (int)((slideVal * 16UL + 511UL) / 1023UL);
+  if (vol > 16) vol = 16;
+
+  if (neoSliderLastVol[i] >= 0 && vol != neoSliderLastVol[i] && lastRaw[i] != 0xFFFF) {
+    int stepDelta = vol - neoSliderLastVol[i];
+    if (stepDelta < 0) stepDelta = -stepDelta;
+    if (stepDelta == 1 && rawDelta < 24) {
+      vol = neoSliderLastVol[i];
+    }
+  }
+  lastRaw[i] = slideVal;
+
+  if (vol == neoSliderLastVol[i]) return;
+  neoSliderLastVol[i] = vol;
+
+  const int ch = neoSliderVoiceCh[i];
+  if (ch < 0 || ch >= (int)maxY) return;
+  if (vol > 0) {
+    lastChannelVolBeforeMute[ch] = (uint8_t)vol;
+  }
+  SMP.channelVol[ch] = (unsigned int)vol;
+
+  bool wantMute = (vol == 0);
+  if (wantMute != neoSliderMuteLatched[i]) {
+    setMuteState(ch, wantMute);
+    SMP.mute[ch] = wantMute ? 1u : 0u;
+    neoSliderMuteLatched[i] = wantMute;
+  }
+
+  // Matrix volume bar: RAM flags only, no I2C. Never writeCounter from faders.
+  showCtrlVolumeChange(vol);
+  neoSliderMaybeUpdateLeds(i, vol);
 }
 
 FLASHMEM void initEncoders() {
@@ -3755,10 +3724,10 @@ FLASHMEM void setup() {
 
   runAnimation();
 
-  if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
+  drawNoSD();
+  if (CrashReport) {
     checkCrashReport();
   }
-  drawNoSD();
 
   loadMenuFromEEPROM();
 
@@ -3802,7 +3771,7 @@ FLASHMEM void setup() {
   loadSMPSettings();
   //mixer0.gain(1, 0.05);  //PREV Sound
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
-  initNeoSlider();  // Optional NeoSliders @0x30..0x33 → voices 1..4 volume (I2C only)
+  if (deviceHasFaders) initNeoSlider();  // NeoSliders @0x30..0x33 → voices 1..4 volume
 
 
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
@@ -6283,9 +6252,10 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
 
   checkEncoders();
-  // After encoders: NeoSlider I2C when bus free; gain slew runs every loop (no I2C)
-  updateNeoSliderVolume();
-  serviceNeoSliderGainSlew();
+  if (deviceHasFaders) {
+    updateNeoSliderVolume();
+    serviceNeoSliderGainSlew();
+  }
   // Never draw the cursor while in MENU (or its submenus).
   if (currentMode != &velocity && currentMode != &filterMode && currentMode != &menu) drawCursor();
   checkButtons();
@@ -6974,10 +6944,6 @@ void deleteActiveCopy() {
 void play(bool fromStart) {
   // MIDI Start is now sent by resetMidiClockForTransportStart() below,
   // after all setup, so the clock timer phase and Start are aligned.
-
-  if (CrashReport) {  // This implicitly calls operator bool() or similar if defined by CrashReportClass
-    checkCrashReport();
-  }
 
   ctrlVolumeOverlayActive = false;
   // Ensure synth voices are idle before starting
