@@ -2954,8 +2954,8 @@ FLASHMEM void resetAllAudioEffects() {
     int ch = channels[i];
     
     // Apply filters to hardware (setFilters reads from SMP.filter_settings and applies)
-    setFilters(PASS, ch, true);
-    setFilters(FREQUENCY, ch, true);
+    setFilters(HCUT, ch, true);
+    setFilters(LOWCUT, ch, true);
     setFilters(REVERB, ch, true);
     setFilters(BITCRUSHER, ch, true);
     setFilters(DETUNE, ch, true);
@@ -3092,8 +3092,8 @@ FLASHMEM void startNew() {
     SMP.channelVol[ch] = 10;
     
     // Reset filter data (no hardware calls)
-    SMP.filter_settings[ch][PASS] = 15;
-    SMP.filter_settings[ch][FREQUENCY] = 0;
+    SMP.filter_settings[ch][HCUT] = 32;
+    SMP.filter_settings[ch][LOWCUT] = 0;
     SMP.filter_settings[ch][REVERB] = 0;
     SMP.filter_settings[ch][BITCRUSHER] = 0;
     SMP.filter_settings[ch][DETUNE] = 16;

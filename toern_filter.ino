@@ -95,11 +95,33 @@ void forceAllMixerGainsToTarget() {
     }
 }
 
+void applyVoiceCuts(int index) {
+  if (index < 0 || index >= 15 || filters[index] == nullptr) return;
+  float hcut = SMP.filter_settings[index][HCUT];
+  float lcut = SMP.filter_settings[index][LOWCUT];
+  float hz;
+  if (lcut > 0.0f) {
+    // SVF highpass — LCUT owns routing; 0 is off so HCUT lowpass can run.
+    float s = constrain(lcut, 1.0f, (float)maxfilterResolution);
+    hz = mapf(s, 1.0f, (float)maxfilterResolution, 40.0f, 2500.0f);
+    setMixerGainSmooth(index, 0, 0.0, 32);
+    setMixerGainSmooth(index, 1, 0.0, 32);
+    setMixerGainSmooth(index, 2, 1.0, 32);
+  } else {
+    hz = mapf(constrain(hcut, 0.0f, (float)maxfilterResolution), 0.0f, (float)maxfilterResolution, 281.25f, 10000.0f);
+    setMixerGainSmooth(index, 0, 1.0, 32);
+    setMixerGainSmooth(index, 1, 0.0, 32);
+    setMixerGainSmooth(index, 2, 0.0, 32);
+  }
+  filters[index]->frequency(hz);
+}
+
 // Refactored: setFilters combines processFilterAdjustment and updateFilterValue
 void setFilters(FilterType filterType, int index, bool initial) {
   // Map encoder value to filter setting
   float mappedValue = 0.0;
-  if (filterType == PASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 281.25, 9000.0);
+  if (filterType == HCUT) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 281.25, 10000.0);
+  if (filterType == LOWCUT) mappedValue = mapf(SMP.filter_settings[index][filterType], 1, maxfilterResolution, 40.0, 2500.0);
 
   //if (filterType == LOWPASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 9000);
   //if (filterType == HIGHPASS) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 9000);
@@ -110,7 +132,6 @@ void setFilters(FilterType filterType, int index, bool initial) {
 
   if (filterType == RES) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.7, 5.0);
   if (filterType == OCTAVE) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.0, 7.0);
-  if (filterType == FREQUENCY) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.0, 10000.0);
   if (filterType == REVERB) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.0, 0.79);
 
   if (filterType == BITCRUSHER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 1.0, 16.0);
@@ -121,39 +142,10 @@ void setFilters(FilterType filterType, int index, bool initial) {
   // Now update the filter value (was updateFilterValue)
   switch (filterType) {
 
-    case PASS:
+    case HCUT:
+    case LOWCUT:
       {
-        filters[index]->frequency(mappedValue);
-        if ((index == 13 || index == 14) && SMP.filter_settings[index][filterType] == 15) {
-          // Default synth state for ch13/14: PASS=15 means neutral passthrough.
-          setMixerGainSmooth(index, 0, 1.0, 32);  // dry on
-          setMixerGainSmooth(index, 1, 0.0, 32);  // low pass off
-          setMixerGainSmooth(index, 2, 0.0, 32);  // high pass off
-        } else if (SMP.filter_settings[index][filterType] >= maxfilterResolution / 2) {  //16
-          // Smooth transition to frequency configuration
-          setMixerGainSmooth(index, 0, 0.0, 32);  // low pass off
-          setMixerGainSmooth(index, 1, 0.0, 32);  // bandpass off
-          setMixerGainSmooth(index, 2, 1.0, 32);  // Highpass ON
-        } else {
-          setMixerGainSmooth(index, 0, 1.0, 32);  // LOWPASS ON
-          setMixerGainSmooth(index, 1, 0.0, 32);  // bandpass off
-          setMixerGainSmooth(index, 2, 0.0, 32);  // Highpass off
-        }
-        break;
-      }
-    case FREQUENCY:
-      {
-        if (index == 13 || index == 14) {
-          // For synth channels 13/14, FREQUENCY only controls the filter cutoff frequency.
-          // Mixer routing (dry/LP/HP) is owned exclusively by PASS — never change it here.
-          // This matches playSynth() which also only calls filters[ch]->frequency().
-          float freqSetting = SMP.filter_settings[index][FREQUENCY];
-          if (freqSetting <= 0.0f) freqSetting = (float)maxfilterResolution;
-          filters[index]->frequency(mapf(freqSetting, 0, maxfilterResolution, 0.0f, 10000.0f));
-          break;
-        }
-        if (initial) break;
-        filters[index]->frequency(mappedValue);
+        applyVoiceCuts(index);
         break;
       }
 

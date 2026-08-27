@@ -57,7 +57,7 @@
 
             <div class="hb-tip"><strong>How each filter page is drawn:</strong> at rest the matrix shows four narrow vertical sliders with a <strong>single letter</strong> printed next to each one — that is all the space the grid has. The moment you start turning an encoder, the device replaces those tiny letters with the parameter's <strong>full 4-letter name</strong> spelled out across the lower rows, in the colour of the parameter you are changing. Release the encoder and it falls back to the resting letters.</div>
 
-            <h3 class="hb-subsection-heading">Page 0 — sample lane: PAN · FREQ · RVRB · BITC</h3>
+            <h3 class="hb-subsection-heading">Page 0 — sample lane: HCUT · LCUT · RVRB · BITC</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -65,21 +65,21 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p0" width="16" height="16" role="img" aria-label="Filter page 0 — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Sliders + single-letter tags: <strong>P · F · R · B</strong>.</p>
+                  <p class="viz-caption--below">Sliders + single-letter tags: <strong>H · L · R · B</strong>.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p0_named" width="16" height="16" role="img" aria-label="Filter page 0 — editing FREQ"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p0_named" width="16" height="16" role="img" aria-label="Filter page 0 — editing LCUT"></canvas>
                   </div>
-                  <p class="viz-caption--below">Full name printed: here <strong>FREQ</strong> is being changed.</p>
+                  <p class="viz-caption--below">Full name printed: here <strong>LCUT</strong> is being changed.</p>
                 </div>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>P</strong></td><td>PAN</td><td>Stereo placement of the voice in the mix.</td><td>−16 … +16 (centre = 0)</td></tr>
-                  <tr><td><strong>F</strong></td><td>FREQ</td><td>Multimode filter cutoff — brightness of the voice.</td><td>0 – 10 kHz</td></tr>
+                  <tr><td><strong>H</strong></td><td>HCUT</td><td>High cut — SVF lowpass. Full 0–32 fader (no LP/HP split).</td><td>0–32 ≈ 280 Hz – 10 kHz (32 = open)</td></tr>
+                  <tr><td><strong>L</strong></td><td>LCUT</td><td>Low cut — SVF highpass. 0 uses HCUT (lowpass); 1–32 switches the mixer to highpass.</td><td>0 = off, 1–32 ≈ 40 Hz – 2.5 kHz</td></tr>
                   <tr><td><strong>R</strong></td><td>RVRB</td><td>Send level into the shared reverb bus.</td><td>0–32 (0 = dry). <em>Not on voices 3, 4, 13, or 14.</em></td></tr>
                   <tr><td><strong>B</strong></td><td>BITC</td><td>Bitcrusher depth + sample-rate reduction (combined macro).</td><td>0 = bypass, 1–32 increases crush</td></tr>
                 </tbody>
@@ -219,7 +219,7 @@
           <section class="hb-sub" id="fast-filter">
             <h2>Fast filter (encoder 3 from the grid)</h2>
             <p class="lede">From draw or single mode, <strong>turning encoder&nbsp;3</strong> twists the parameter chosen as the fast-filter default for the current channel. That choice is set in the filter editor: <strong>short-press a column</strong> to mark it as that voice's macro. The next time you spin encoder&nbsp;3 from the grid, you are sweeping <em>that</em> control.</p>
-            <p>Most players assign FREQ as the default for sample lanes and CUT for synth lanes. Lanes can each have their own choice — the firmware remembers per channel.</p>
+            <p>Most players assign HCUT as the default for sample lanes and CUT for synth lanes. Lanes can each have their own choice — the firmware remembers per channel.</p>
           </section>
 
 

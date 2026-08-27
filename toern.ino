@@ -84,8 +84,8 @@ enum ParameterType : uint8_t {
 
 enum FilterType : uint8_t {
   NULL_,
-  PASS,
-  FREQUENCY,
+  HCUT,     // was PASS — same storage slot
+  LOWCUT,   // was FREQUENCY — same storage slot
   REVERB,
   BITCRUSHER,
   DETUNE,
@@ -1093,7 +1093,7 @@ FLASHMEM const float maxParamVal[12] = { 1000.0, 2000.0, 1000.0, 1000.0, 1.0, 10
 
 
 
-FilterType defaultFilter[maxFiles] = { PASS };
+FilterType defaultFilter[maxFiles] = { HCUT };
 
 const char *const activeMidiSetType[6] PROGMEM = { "IN", "OUT", "OUT", "INPT", "SCTL", "RCTL" };
 
@@ -1196,8 +1196,8 @@ DMAMEM static SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
 
 FLASHMEM void initSliderDefTemplates() {
   static const SliderDefEntry sliderDefTemplate[4][4] = {
-    { { ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32 },
-      { ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32 },
+    { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
+      { ARR_FILTER, LOWCUT, "LCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
       { ARR_FILTER, REVERB, "RVRB", 32, DISPLAY_NUMERIC, nullptr, 32 },
       { ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32 } },
     { { ARR_SYNTH, CUTOFF, "CUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -3870,8 +3870,8 @@ FLASHMEM void setup() {
       filtermixers[ch]->gain(3, 0.0f);
     }
     // Now apply whatever was loaded/defaulted for this channel.
-    setFilters(PASS,        ch, true);
-    setFilters(FREQUENCY,   ch, true);
+    setFilters(HCUT,        ch, true);
+    setFilters(LOWCUT,      ch, true);
     setFilters(REVERB,      ch, true);
     setFilters(BITCRUSHER,  ch, true);
     setFilters(DETUNE,      ch, true);
@@ -7192,11 +7192,14 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   // Apply LFO to filter frequency instead of pitch (channels 13/14 only)
   if (ch == 13 || ch == 14) {
     if (filters[ch]) {
-      // Backward-compatible default:
-      // If FREQUENCY is 0 (old defaults), treat it as "open" so synth isn't silently low-passed.
-      float freqSetting = SMP.filter_settings[ch][FREQUENCY];
-      if (freqSetting <= 0.0f) freqSetting = (float)maxfilterResolution;
-      float baseFreqHz = mapf(freqSetting, 0, maxfilterResolution, 0.0f, 10000.0f);
+      // SVF cutoff: LCUT>0 is highpass Hz, else HCUT lowpass Hz.
+      float lcut = SMP.filter_settings[ch][LOWCUT];
+      float baseFreqHz;
+      if (lcut > 0.0f) {
+        baseFreqHz = mapf(constrain(lcut, 1.0f, (float)maxfilterResolution), 1.0f, (float)maxfilterResolution, 40.0f, 2500.0f);
+      } else {
+        baseFreqHz = mapf(SMP.filter_settings[ch][HCUT], 0, maxfilterResolution, 281.25f, 10000.0f);
+      }
       float modFreq = baseFreqHz;
       if (lfo_ratio != 1.0f) {
         modFreq = baseFreqHz * lfo_ratio;
@@ -8696,8 +8699,8 @@ void setSliderDefForChannel(int channel) {
   // Channel 1-3 (index 1-3):
   if (channel >= 1 && channel <= 3) {
     static const SliderDefEntry ch1_3Template[3][4] = {
-      { { ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32 },
+      { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_FILTER, LOWCUT, "LCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, REVERB, "RVRB", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32 } },
       {
@@ -8724,8 +8727,8 @@ void setSliderDefForChannel(int channel) {
   // Channel 4-8 (index 4-8):
   if (channel >= 4 && channel <= 8) {
     static const SliderDefEntry ch4_8Template[3][4] = {
-      { { ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32 },
+      { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_FILTER, LOWCUT, "LCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, REVERB, "RVRB", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32 } },
       { { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -8756,8 +8759,8 @@ void setSliderDefForChannel(int channel) {
   // Channel 13 and 14: custom 3 pages
   if (channel == 13 || channel == 14) {
     static const SliderDefEntry ch13_14Template[4][4] = {
-      { { ARR_FILTER, PASS, "PASS", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, FREQUENCY, "FREQ", 32, DISPLAY_NUMERIC, nullptr, 32 },
+      { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_FILTER, LOWCUT, "LCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         // Use CENT (synth) instead of REVERB to shift oscillators up/down
         { ARR_SYNTH, CENT, "CENT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32 } },

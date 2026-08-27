@@ -183,16 +183,6 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
     }
   }
 
-  // Check if this is a PASS filter with value == 15
-  bool isPassFilterAt15 = false;
-  if (chan < NUM_CHANNELS) {
-    if (sliderDef[chan][page][sliderIndex].arr == ARR_FILTER && 
-        sliderDef[chan][page][sliderIndex].idx == PASS && 
-        val == 15) {
-      isPassFilterAt15 = true;
-    }
-  }
-
   // Check if this is DETUNE or OCTAVE at middle value (maxVal/2 for centered parameters)
   bool isDetuneOctaveAtMiddle = false;
   if (chan < NUM_CHANNELS) {
@@ -215,12 +205,7 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
       // For switchtype, val is 0 or 1, displayVal is 1 or displayResolution
       c = (y < displayVal) ? CRGB::Green : CRGB::Red;
     } else if (lowHighSlider) {
-      // Special case: PASS filter at value 15 shows bright green
-      if (isPassFilterAt15) {
-        c = CRGB(0, 255, 0); // Bright Green
-      } else {
-        c = (y < displayVal) ? CRGB(148, 0, 211) : CRGB::Red; // Violet : Red
-      }
+      c = (y < displayVal) ? CRGB(148, 0, 211) : CRGB::Red; // Violet : Red
     } else {
       // Special case: DETUNE and OCTAVE at middle value show green at top
       if (isDetuneOctaveAtMiddle && y == 1) {
@@ -282,7 +267,7 @@ void slider(uint8_t page) {
     const auto& meta = sliderDef[chan][page][i];
     uint8_t val = constrain(currentMode->pos[i], 0, meta.maxValue);
     // lowHighSlider is true if (old logic) OR if maxValue == 2
-    bool isLowHigh = (def.arr == ARR_FILTER && def.idx == PASS); // or even others
+    bool isLowHigh = false;
     bool switchtype = (def.arr == ARR_FILTER && def.idx == EFX) || (def.arr == ARR_FILTER && def.idx == ACTIVE); // or even others
     // Skip drawing if interaction is active and this isn't the last touched encoder
     if (activeInteraction && i != lastChangedEncoder) {

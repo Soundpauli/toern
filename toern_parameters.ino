@@ -79,8 +79,8 @@ void handleWaveformChange(int index, unsigned int waveformType) {
 
 // Set default filter values for a single channel
 void setFiltersDefaultValues(int ch) {
-  SMP.filter_settings[ch][PASS] = 15;
-  SMP.filter_settings[ch][FREQUENCY] = 0;
+  SMP.filter_settings[ch][HCUT] = 32;
+  SMP.filter_settings[ch][LOWCUT] = 0;
   SMP.filter_settings[ch][REVERB] = 0;
   SMP.filter_settings[ch][BITCRUSHER] = 0;
   SMP.filter_settings[ch][DETUNE] = 16;
@@ -88,8 +88,8 @@ void setFiltersDefaultValues(int ch) {
   // EFX setting: 0 = SAMPLE mode (default for all channels)
   SMP.filter_settings[ch][EFX] = 0;
 
-  setFilters(PASS, ch, true);
-  setFilters(FREQUENCY, ch, true);
+  setFilters(HCUT, ch, true);
+  setFilters(LOWCUT, ch, true);
   setFilters(REVERB, ch, true);
   setFilters(BITCRUSHER, ch, true);
   setFilters(DETUNE, ch, true);
@@ -168,8 +168,8 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
   switch (arr) {
     case ARR_FILTER:
       switch (idx) {
-        case PASS: return 15;
-        case FREQUENCY: return 0;
+        case HCUT: return 32;
+        case LOWCUT: return 0;
         case REVERB: return 0;
         case BITCRUSHER: return 0;
         case DETUNE: return 16;
