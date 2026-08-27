@@ -459,13 +459,12 @@ void processAdjustments_new(uint8_t page) {
 
 
 
-extern int readTouch2Raw(void);
+extern bool readTouch2Pressed(void);
 
 // Handle touch-triggered page switching and conditional update propagation
 void setNewFilters() {
-  int touchValue = readTouch2Raw();
   static bool lastTouch = false;
-  bool currTouch = (touchValue > touchThreshold);
+  bool currTouch = readTouch2Pressed();
   uint8_t chan = GLOB.currentChannel;
 
   // Guard: skip filter processing for channels with no filter pages (avoids division-by-zero)

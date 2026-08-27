@@ -161,8 +161,10 @@ extern void handleStart();
 #define DATA_PIN 17                   // PIN FOR LEDS
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
 
-#define SWITCH_1 2 // ALT: 16   // Pin for TPP223 1 //>> SINGLE
-#define SWITCH_2 3  // ALT: 3 // Pin for TPP223 3 //3==lowerright, lowerleft== 15! >> MENU
+#define SWITCH_1 2 // ALT: 16   // Capacitive input 1 >> SINGLE
+#define SWITCH_2 3 // ALT: 3    // Capacitive input 2 >> MENU
+#define BUTTON_A 5  // External SINGLE button, active LOW
+#define BUTTON_B 22 // External MENU button, active LOW
 #define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6
 #define SWITCH_5 39
@@ -556,19 +558,19 @@ static bool touch1ModeToggleToSingle = false;
 static unsigned long touch1ModeToggleDueMs = 0;
 static const unsigned long TOUCH1_CHORD_GRACE_MS = 140;
 
-/** When true, touch1/touch2 use TTP223 on pins 5 & 22 (digital, INPUT_PULLDOWN) instead of fastTouchRead on SWITCH_1/2. */
+/** true: use grounded buttons A/B; false: use capacitive SWITCH_1/2. */
 static const bool exttouch = true;
 /** When false, skip all NeoSlider I2C (init/ADC/LEDs/slew). This unit has faders. */
 static const bool deviceHasFaders = true;
 
-int readTouch1Raw() {
-  if (exttouch) return digitalRead(5) ? (touchThreshold + 1) : 0;
-  return fastTouchRead(SWITCH_1);
+bool readTouch1Pressed() {
+  if (exttouch) return digitalReadFast(BUTTON_A) == LOW;
+  return fastTouchRead(SWITCH_1) > touchThreshold;
 }
 
-int readTouch2Raw() {
-  if (exttouch) return digitalRead(22) ? (touchThreshold + 1) : 0;
-  return fastTouchRead(SWITCH_2);
+bool readTouch2Pressed() {
+  if (exttouch) return digitalReadFast(BUTTON_B) == LOW;
+  return fastTouchRead(SWITCH_2) > touchThreshold;
 }
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
@@ -732,9 +734,6 @@ volatile int fillActiveVelocity = 0;
 volatile unsigned int fillActiveRow = 0;
 unsigned int lastPage = 1;
 int editpage = 1;
-
-
-
 EXTMEM Note note[maxlen + 1][maxY + 1] = {};
 EXTMEM Note tmp[maxlen + 1][maxY + 1] = {};
 EXTMEM Note original[maxlen + 1][maxY + 1] = {};
@@ -932,6 +931,30 @@ GlobalVars GLOB = {
   0       //subpattern
 };
 
+// LEDS=2/2B: pages are maxX=32 wide → only MAX_STEPS/maxX (=8) legal pages.
+// Unclamped page indices (or initEncoders maxX*4) remap X past note[] and crash.
+static inline int effectivePageCount() {
+  int n = (maxX > 0) ? (int)(MAX_STEPS / maxX) : (int)maxPages;
+  if (n < 1) n = 1;
+  if (n > (int)maxPages) n = (int)maxPages;
+  return n;
+}
+
+static inline int encoderPageMax() {
+  if (childLockEnabled) return 1;
+  int maxPg = effectivePageCount();
+  if (SMP_PATTERN_MODE && (int)lastPage >= 1 && (int)lastPage < maxPg) return (int)lastPage;
+  return maxPg;
+}
+
+static inline void clampGridCursor() {
+  unsigned int xmax = childLockEnabled ? maxX : MAX_STEPS;
+  if (xmax < 1) xmax = 1;
+  if (GLOB.x < 1) GLOB.x = 1;
+  else if (GLOB.x > xmax) GLOB.x = xmax;
+  if (GLOB.y < 1) GLOB.y = 1;
+  else if (GLOB.y > maxY) GLOB.y = maxY;
+}
 
 float myFreq = 80;
 float freqValue = 1000;
@@ -1096,11 +1119,7 @@ i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
   i2cEncoderLibV2(0x61),  // First encoder address
   i2cEncoderLibV2(0x20),  // First encoder address
   i2cEncoderLibV2(0x41),  // 2nd encoder address +
-
   i2cEncoderLibV2(0x01),  // third encoder address
-  
-  
-  
 };
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
@@ -1609,7 +1628,7 @@ void refreshCtrlEncoderConfig() {
   if (ctrlMode == 0) {
     resetCtrlModeState();
     updateLastPage();
-    int adjustedMax = childLockEnabled ? 1 : (SMP_PATTERN_MODE ? lastPage : (MAX_STEPS / maxX));
+    int adjustedMax = encoderPageMax();
     if (adjustedMax < 1) adjustedMax = 1;
 
     currentMode->minValues[1] = 1;
@@ -1760,11 +1779,9 @@ FLASHMEM void switchMode(Mode *newMode) {
         if (ctrlMode == 0) {
           if (childLockEnabled) {
             maxVal = 1;
-          } else if (SMP_PATTERN_MODE) {
-            updateLastPage();
-            maxVal = lastPage;
           } else {
-            maxVal = MAX_STEPS / maxX;
+            updateLastPage();
+            maxVal = encoderPageMax();
           }
           minVal = 1;
           counterVal = constrain(editpage, (int)minVal, (int)maxVal);
@@ -3415,6 +3432,9 @@ FLASHMEM void initEncoders() {
     // the first draw↔single switchMode re-applied limits.
     if (i == 0) {
       Encoder[i].writeMax((int32_t)maxY);
+    } else if (i == 1) {
+      // CTRL=PAGE: never maxX*4 — with LEDS=2 that is 128 and page 9+ walks note[] off PSRAM.
+      Encoder[i].writeMax((int32_t)effectivePageCount());
     } else if (i == 3) {
       Encoder[i].writeMax((int32_t)(maxlen - 1));
     } else {
@@ -3499,8 +3519,8 @@ FLASHMEM void loadLedModeEarlyFromEEPROM() {
 FLASHMEM void setup() {
   Serial.begin(115200);
   if (exttouch) {
-    pinMode(5, INPUT_PULLDOWN);
-    pinMode(22, INPUT_PULLDOWN);
+    pinMode(BUTTON_A, INPUT_PULLUP);
+    pinMode(BUTTON_B, INPUT_PULLUP);
   }
 
   //delay the LED-Matrix-Power on
@@ -3538,7 +3558,7 @@ FLASHMEM void setup() {
   //   hold 3s  → wipe entire EEPROM to 0 (CLR RAM), then continue boot
   //   hold +7s → also arm FULL reset (ETC>RSET>FULL), applied late in setup()
   // Release before 3s cancels; release after CLR but before FULL keeps EEPROM wipe only.
-  if (readTouch1Raw() > touchThreshold) {
+  if (readTouch1Pressed()) {
     extern void FastLEDclear();
     extern void drawText(const char *text, int startX, int startY, CRGB color);
     extern void FastLEDshow();
@@ -3550,7 +3570,7 @@ FLASHMEM void setup() {
     int lastSecShown = -1;
     int lastStage = -1;  // 0=CLR countdown, 1=FULL countdown
 
-    while (readTouch1Raw() > touchThreshold) {
+    while (readTouch1Pressed()) {
       unsigned long held = millis() - startMs;
 
       if (!eepromCleared && held >= CLR_MS) {
@@ -3622,14 +3642,13 @@ FLASHMEM void setup() {
   pinMode(INT_PIN, INPUT_PULLUP);     // Interrups for encoder
   pinMode(BATT_ADC_PIN, INPUT);       // Battery sense (no pull) - voltage divider on schematic
   analogReadResolution(12);           // 0-4095 so BATT raw reflects actual voltage (was 10-bit 1023 max)
-  pinMode(SWITCH_1, INPUT_PULLDOWN);  // Use defined name
-  pinMode(SWITCH_2, INPUT_PULLDOWN);  // Use defined name
+  pinMode(SWITCH_1, INPUT_PULLDOWN);  // Capacitive input
+  pinMode(SWITCH_2, INPUT_PULLDOWN);  // Capacitive input
   pinMode(SWITCH_3, INPUT_PULLDOWN);  // Use defined name
 
   // SPKR pin 30: set as INPUT_PULLDOWN as early as possible
   pinMode(30, INPUT_PULLDOWN);
 
-  // Note: SWITCH_1 capacitive read works before pinMode (used for early boot FULL-reset hold)
   pinMode(4, OUTPUT);        // Pin 4 set as output
   digitalWrite(4, LOW);      // Drive Pin 4 LOW
 
@@ -3690,8 +3709,7 @@ FLASHMEM void setup() {
 
 
   // Check if touch2 (menu button) is pressed during startup for INIT mode
-  int touch2Value = readTouch2Raw();
-  if (touch2Value > touchThreshold) {
+  if (readTouch2Pressed()) {
     // INIT MODE: Show hourglass, version, write reset flag file, and enter endless loop
     FastLEDclear();
     showIcons(ICON_HOURGLASS, CRGB(100, 100, 0));  // Yellow hourglass
@@ -3991,6 +4009,21 @@ void checkEncoders() {
     currentEncoderIndex = i;  // Ensure this is set before calling encoder methods or callbacks that might use it implicitly
     Encoder[i].updateStatus();
     int rawValue = Encoder[i].readCounterInt();
+    // Soft-clamp draw/single page+X: Duppa can report past writeMax under fast I2C turns.
+    if (currentMode == &draw || currentMode == &singleMode) {
+      if (i == 0) {
+        if (rawValue < 1) rawValue = 1;
+        if (rawValue > (int)maxY) rawValue = (int)maxY;
+      } else if (i == 1 && ctrlMode == 0) {
+        int pmax = encoderPageMax();
+        if (rawValue < 1) rawValue = 1;
+        if (rawValue > pmax) rawValue = pmax;
+      } else if (i == 3) {
+        int xmax = childLockEnabled ? (int)maxX : (int)MAX_STEPS;
+        if (rawValue < 1) rawValue = 1;
+        if (rawValue > xmax) rawValue = xmax;
+      }
+    }
 
     if (screensaverEncBaselineDone && rawValue != screensaverPrevEnc[i]) {
       noteUserActivity();
@@ -4124,6 +4157,7 @@ void checkEncoders() {
       currentMode->pos[3] = constrain(currentMode->pos[3], 1, maxStepsRuntime);
       Encoder[3].writeMax((int32_t)maxStepsRuntime);
       GLOB.x = currentMode->pos[3];
+      clampGridCursor();
       // Clamp Y in software + re-assert hardware max (boot/init could leave max too high)
       {
         unsigned int yClamped = constrain(currentMode->pos[0], 1u, maxY);
@@ -4326,62 +4360,53 @@ void checkEncoders() {
         currentMode->pos[1] = 1;
         Encoder[1].writeCounter((int32_t)1);
       }
-    } else if (ctrlMode == 0 && currentMode->pos[1] != editpage && !songModeActive) {
+    } else if (ctrlMode == 0 && currentMode->pos[1] != (unsigned int)editpage && !songModeActive) {
       updateLastPage();
-      editpage = currentMode->pos[1];
-
-      // In NEXT mode, set pending page instead of immediately changing
-      if (patternMode == 3) {
-        // NEXT mode: store as pending page, will jump when current page completes
-        pendingPage = editpage;
-        // Update display to show pending page (what will play next)
-        GLOB.edit = editpage;  // Show the selected page in UI
-        // IMPORTANT: Don't change GLOB.page here - it represents the actual playing page
-        // If not playing, initialize GLOB.page to the selected page
-        extern bool isNowPlaying;
-        if (!isNowPlaying) {
-          GLOB.page = editpage;
-          // Also update beat position when not playing
-          beat = (editpage - 1) * maxX + 1;
-        }
-        // Preserve relative X position within the CURRENT edit page (GLOB.edit)
-        // Get the relative position within the current edit page
-        int relativeX = mapXtoPageOffset(GLOB.x);
-        // Verify GLOB.x is actually on the current edit page, if not use default
-        unsigned int currentPageStart = (GLOB.edit - 1) * maxX + 1;
-        unsigned int currentPageEnd = GLOB.edit * maxX;
-        if (GLOB.x < currentPageStart || GLOB.x > currentPageEnd) {
-          relativeX = 1;  // Default to first column if X is not on the current edit page
-        }
-        // Constrain relativeX to valid range
-        relativeX = constrain(relativeX, 1, (int)maxX);
-        // Calculate new X position on the new edit page
-        int xval = relativeX + ((editpage - 1) * maxX);
-        Encoder[3].writeCounter((int32_t)xval);
-        GLOB.x = xval;
-        // Don't change the actual playback page yet when playing - that happens in playNote()
+      int pmax = encoderPageMax();
+      int oldEdit = editpage;
+      int requested = constrain((int)currentMode->pos[1], 1, pmax);
+      currentMode->pos[1] = (unsigned int)requested;
+      if (requested == oldEdit) {
+        editpage = requested;
       } else {
-        // Normal mode: change page immediately
-        int xval = mapXtoPageOffset(GLOB.x) + ((editpage - 1) * maxX);  // Use maxX instead of hardcoded 16
-        Encoder[3].writeCounter((int32_t)xval);
-        GLOB.x = xval;
+        editpage = requested;
+        // Column within page via modulo — mapXtoPageOffset can go negative if edit/x disagree.
+        int rel = ((int)GLOB.x - 1) % (int)maxX + 1;
+        if (rel < 1) rel = 1;
+        if (rel > (int)maxX) rel = (int)maxX;
+        int xval = rel + (editpage - 1) * (int)maxX;
+        xval = constrain(xval, 1, (int)MAX_STEPS);
 
-        // Handle mute system when page changes in PMOD mode
-        if (SMP_PATTERN_MODE) {
-          // Save current page mutes before changing page
-          for (int ch = 0; ch < maxY; ch++) {
-            pageMutes[GLOB.edit - 1][ch] = getMuteState(ch);
+        if (patternMode == 3) {
+          pendingPage = editpage;
+          GLOB.edit = (unsigned int)editpage;
+          extern bool isNowPlaying;
+          if (!isNowPlaying) {
+            GLOB.page = (unsigned int)editpage;
+            beat = (editpage - 1) * maxX + 1;
           }
-          // Load mutes for the new page
-          GLOB.edit = editpage;
-          for (int ch = 0; ch < maxY; ch++) {
-            // The getMuteState function will now use the new page
-          }
-          patternChangeTime = millis() + 2000;  // 2 seconds window
-          patternChangeActive = true;
+          Encoder[3].writeCounter((int32_t)xval);
+          GLOB.x = (unsigned int)xval;
+          currentMode->pos[3] = (unsigned int)xval;
         } else {
-          GLOB.edit = editpage;
+          Encoder[3].writeCounter((int32_t)xval);
+          GLOB.x = (unsigned int)xval;
+          currentMode->pos[3] = (unsigned int)xval;
+
+          if (SMP_PATTERN_MODE) {
+            unsigned int muteFrom = (oldEdit < 1) ? 1u : (unsigned int)oldEdit;
+            if (muteFrom > maxPages) muteFrom = maxPages;
+            for (int ch = 0; ch < maxY; ch++) {
+              pageMutes[muteFrom - 1][ch] = getMuteState(ch);
+            }
+            GLOB.edit = (unsigned int)editpage;
+            patternChangeTime = millis() + 2000;
+            patternChangeActive = true;
+          } else {
+            GLOB.edit = (unsigned int)editpage;
+          }
         }
+        clampGridCursor();
       }
     }
 
@@ -4709,13 +4734,13 @@ void checkTouchInputs() {
   // remember last time both were held
   // static bool lastBothTouched = false; // Already global
 
-  // 1) read raw touch values
-  int tv1 = readTouch1Raw();
-  int tv2 = readTouch2Raw();
+  // 1) read inputs (buttons A/B when exttouch; capacitive threshold only for SWITCH_1/2/3)
+  bool tv1 = readTouch1Pressed();
+  bool tv2 = readTouch2Pressed();
   int tv3 = fastTouchRead(SWITCH_3);
 
   // Any touch held or tapped counts as user activity (exits / prevents screensaver)
-  if (tv1 > touchThreshold || tv2 > touchThreshold || tv3 > touchThreshold) {
+  if (tv1 || tv2 || tv3 > touchThreshold) {
     noteUserActivity();
   }
 
@@ -4822,10 +4847,9 @@ void checkTouchInputs() {
     lastTouch3State = currentTouch3State;
   }
 
-  // 2) threshold into boolean states
   bool newTouchState[2];
-  newTouchState[0] = (tv1 > touchThreshold);
-  newTouchState[1] = (tv2 > touchThreshold);
+  newTouchState[0] = tv1;
+  newTouchState[1] = tv2;
   //touchState[2] = (tv3 > touchThreshold);
 
   // 3) detect "rising edge" of both‐pressed
@@ -4964,7 +4988,7 @@ skip_individual_touch:
       }
     }
 
-    // SWITCH_1 — block only when touch2 is also active now (not stale touchConflict latch).
+    // SWITCH_1 / BUTTON_A — block only when input 2 is also active now.
     if (touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME) && !touchState[1]) {
 
       // If y=1, touch1 starts play immediately (even if already playing)
@@ -5003,7 +5027,7 @@ skip_individual_touch:
     }
 end_switch1:
 
-    // SWITCH_2
+    // SWITCH_2 / BUTTON_B
 
     if (currentMode != &filterMode && touchState[1] && !lastTouchState[1] && (currentTime - lastTouchTime[1] > DEBOUNCE_TIME) && !touchState[0]) {
       lastTouchTime[1] = currentTime;
@@ -5226,10 +5250,7 @@ void animateSingle() {
 }
 
 void checkSingleTouch() {
-  int touchValue = readTouch1Raw();
-
-  // Determine if the touch is above the threshold
-  touchState[0] = (touchValue > touchThreshold);
+  touchState[0] = readTouch1Pressed();
   // Check for a rising edge (LOW to HIGH transition)
   if (touchState[0] && !lastTouchState[0]) {
     // Toggle the mode only on a rising edge
@@ -5313,10 +5334,7 @@ void checkSingleTouch() {
 }
 
 void _checkMenuTouch() {
-  int touchValue = readTouch2Raw();
-
-  // Determine if the touch is above the threshold
-  touchState[1] = (touchValue > touchThreshold);
+  touchState[1] = readTouch2Pressed();
   // Check for a rising edge (LOW to HIGH transition)
   if (touchState[1] && !lastTouchState[1]) {
     // Toggle the mode only on a rising edge
@@ -8542,16 +8560,12 @@ FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0C
 
 
 void updateLastPage() {
-  // Calculate max selectable pages based on LED modules
-  int numModules = maxX / MATRIX_WIDTH;      // 1 or 2
-  int effectiveMaxPages = MAX_STEPS / maxX;  // Keep total steps fixed; fewer pages when wider
+  int effectiveMaxPages = effectivePageCount();
 
-  // If LOOP is set (1-8), force lastPage to that value
   extern int loopLength;
   if (loopLength > 0) {
     lastPage = min(loopLength, effectiveMaxPages);
-    // Still update hasNotes array for potential other uses
-    for (unsigned int p = 1; p <= effectiveMaxPages; p++) {
+    for (unsigned int p = 1; p <= (unsigned int)effectiveMaxPages; p++) {
       bool pageHasNotesThisPage = false;
       unsigned int baseIndex = (p - 1) * maxX;
       for (unsigned int ix = 1; ix <= maxX; ix++) {
@@ -8565,37 +8579,36 @@ void updateLastPage() {
       }
       hasNotes[p] = pageHasNotesThisPage;
     }
+    for (unsigned int p = (unsigned int)effectiveMaxPages + 1; p <= maxPages; p++) {
+      hasNotes[p] = false;
+    }
     return;
   }
 
-  // Original logic when LOOP is OFF
-  lastPage = 0;  // Start by assuming no notes
-  for (unsigned int p = 1; p <= effectiveMaxPages; p++) {
-    bool pageHasNotesThisPage = false;  // Renamed to avoid conflict
+  // Highest page that still holds any note (playback / CTRL=PAGE ceiling in pattern mode).
+  lastPage = 0;
+  for (unsigned int p = 1; p <= (unsigned int)effectiveMaxPages; p++) {
+    bool pageHasNotesThisPage = false;
     unsigned int baseIndex = (p - 1) * maxX;
     for (unsigned int ix = 1; ix <= maxX; ix++) {
       for (unsigned int iy = 1; iy <= maxY; iy++) {
-        // Always consider notes from any channel for playback range
-        // The current channel filtering should only affect visual display, not playback
         if (note[baseIndex + ix][iy].channel > 0) {
           pageHasNotesThisPage = true;
           break;
         }
       }
-      if (pageHasNotesThisPage) {
-        lastPage = p;
-        break;
-      }
+      if (pageHasNotesThisPage) break;
     }
-    hasNotes[p] = pageHasNotesThisPage;  // Store if this page has notes
-    if (!pageHasNotesThisPage && p > 1 && !hasNotes[p - 1]) {
-      // If current page is empty and previous was also empty,
-      // we can potentially stop early if lastPage was already found.
-      // However, the current logic correctly finds the *highest* page with notes.
+    hasNotes[p] = pageHasNotesThisPage;
+    if (pageHasNotesThisPage) {
+      lastPage = p;  // keep scanning — last write wins = highest occupied page
     }
   }
-  if (lastPage == 0) {  // If no notes found on any page
-    lastPage = 1;       // Default to page 1
+  for (unsigned int p = (unsigned int)effectiveMaxPages + 1; p <= maxPages; p++) {
+    hasNotes[p] = false;
+  }
+  if (lastPage == 0) {
+    lastPage = 1;
   }
 }
 
