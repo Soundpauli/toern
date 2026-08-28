@@ -13,15 +13,36 @@ extern void sampleBrowserRefreshList(int channel);
 extern void sampleBrowserSyncBrowseFromStoredPath(int channel);
 extern unsigned int sampleBrowserHashName(const char*);
 extern uint8_t sampleBrowserEntryTypeAt(int idx);
+FLASHMEM void previewSample(bool setMaxSampleLength);
+FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio);
+FLASHMEM void previewSampleNow();
 void generateNextNumericName(int folderIdx, char* outName, size_t outSize);
 extern int previewTriggerMode;
 extern const int PREVIEW_MODE_ON;
 extern const int PREVIEW_MODE_PRESS;
+extern const int PREVIEW_MODE_SYNC;
 extern bool g_suppressNextWavPreviewAfterFolderNav;
 extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
+extern void updatePreviewVolume();
+extern bool encoderI2cWritesAllowed();
+extern bool isNowPlaying;
 
 // Track last sample selection in showWave() across calls
 static int lastEncoder3Value_forShowWave = -1;
+
+// SD preview must never overlap AudioPlaySdWav's ISR reads (eDMA bus fault 0x400E80B0).
+static char g_queuedSdPreviewPath[160];
+static bool g_queuedSdPreview = false;
+static elapsedMillis g_sdPreviewQuietMs;
+static bool g_previewPlayImmediate = false;
+static const unsigned SD_PREVIEW_SETTLE_MS = 45;
+// Live peak1 capture only when ON (or SYNC while stopped). PRESS keeps the peak-scan waveform.
+bool g_previewUseLivePeaks = true;
+
+static inline bool previewPlaysOnSelect() {
+  return previewTriggerMode == PREVIEW_MODE_ON ||
+         (previewTriggerMode == PREVIEW_MODE_SYNC && !isNowPlaying);
+}
 
 // --- PREV==PRSS: incremental SD peak scanner (no audio playback) ------------
 // This avoids AudioPlaySdWav SD reads in the audio thread (which can click/crash).
@@ -50,6 +71,46 @@ void setEncoder0PressedMode(bool state) {
   g_encoder0PressedMode = state;
 }
 
+extern Mode set_Wav;
+extern Mode *currentMode;
+
+volatile bool g_pendingSyncPreviewPlay = false;
+
+bool shouldSkipVoiceTriggerForSyncPreview(int ch) {
+  if (previewTriggerMode != PREVIEW_MODE_SYNC) return false;
+  if (currentMode != &set_Wav) return false;
+  if (ch < 1 || ch > 8) return false;
+  if (ch != (int)GLOB.currentChannel) return false;
+  return sampleIsLoaded;
+}
+
+void triggerSetWavSyncPreview(uint8_t vel) {
+  (void)vel;
+  if (!sampleIsLoaded) return;
+  g_pendingSyncPreviewPlay = true;
+}
+
+void serviceSetWavSyncPreview() {
+  if (!g_pendingSyncPreviewPlay) return;
+  g_pendingSyncPreviewPlay = false;
+  if (currentMode != &set_Wav) return;
+  if (previewTriggerMode != PREVIEW_MODE_SYNC) return;
+  g_previewPlayImmediate = true;
+  previewSample(false);
+}
+
+static bool buildCurrentBrowseSamplePath(char *out, size_t outSize) {
+  if (!out || outSize == 0) return false;
+  out[0] = '\0';
+  int ch = constrain((int)GLOB.currentChannel, 1, 8);
+  int idx = (int)currentMode->pos[3] - 1;
+  if (idx < 0 || idx >= (int)g_wavPickCount) return false;
+  if (sampleBrowserEntryTypeAt(idx) != 2) return false;
+  if (g_browseDir[ch][0]) snprintf(out, outSize, "samples/%s/%s", g_browseDir[ch], g_wavPickName[idx]);
+  else snprintf(out, outSize, "samples/%s", g_wavPickName[idx]);
+  return true;
+}
+
 // --- Audio-safe SD I/O (cooperative chunks + live-buffer reload lock) --------
 // While the sequencer plays, keep SD work small and never rewrite a live sample
 // slot without muting that channel's triggers first.
@@ -62,6 +123,48 @@ void stopSdPreviewIfPlaying() {
     playSdWav1.stop();
   }
   envelope0.noteOff();
+}
+
+static void stopSdPreviewAndWait() {
+  const bool needSettle = g_peakScan.active || playSdWav1.isPlaying();
+  stopPeakScan();
+  stopSdPreviewIfPlaying();
+  if (!needSettle) {
+    previewIsPlaying = false;
+    return;
+  }
+  elapsedMicros waited;
+  while (playSdWav1.isPlaying() && waited < 10000) {
+    yield();
+  }
+  // Give the audio ISR one block to drop its File before we SD.open again.
+  delayMicroseconds(3000);
+  previewIsPlaying = false;
+}
+
+static void startSdPreviewNow(const char *path) {
+  if (!path || !path[0]) return;
+  g_queuedSdPreview = false;
+  stopSdPreviewAndWait();
+  updatePreviewVolume();
+  previewIsPlaying = true;
+  sampleIsLoaded = true;
+  playSdWav1.play(path);
+}
+
+static void requestSdPreview(const char *path) {
+  if (!path || !path[0]) return;
+  strncpy(g_queuedSdPreviewPath, path, sizeof(g_queuedSdPreviewPath) - 1);
+  g_queuedSdPreviewPath[sizeof(g_queuedSdPreviewPath) - 1] = 0;
+  g_queuedSdPreview = true;
+  g_sdPreviewQuietMs = 0;
+}
+
+void serviceSdPreviewRequests() {
+  if (!g_queuedSdPreview) return;
+  if (g_sdPreviewQuietMs < SD_PREVIEW_SETTLE_MS) return;
+  g_queuedSdPreview = false;
+  startSdPreviewNow(g_queuedSdPreviewPath);
 }
 
 // When true, SD bursts keep yielding for the Audio library even if the sequencer is paused
@@ -183,6 +286,7 @@ static void stopPeakScan() {
 // Public wrapper to start peak scan
 void startPeakScan(const char *path, bool resetPeaks = true) {
   stopPeakScan();
+  if (playSdWav1.isPlaying() || g_queuedSdPreview) return;
   strncpy(g_peakScan.path, path, sizeof(g_peakScan.path) - 1);
   g_peakScan.path[sizeof(g_peakScan.path) - 1] = 0;
 
@@ -292,21 +396,19 @@ static void servicePeakScan(uint32_t maxBytesThisCall) {
 
 // Call when leaving SET_WAV: SD preview, RAM preview (ch0), and peak scan must stop immediately.
 void stopAllSetWavPreviewAudio() {
-  stopPeakScan();
-  if (playSdWav1.isPlaying()) {
-    playSdWav1.stop();
-  }
+  g_queuedSdPreview = false;
+  g_pendingSyncPreviewPlay = false;
+  stopSdPreviewAndWait();
   envelope0.noteOff();
   _samplers[0].removeAllSamples();
   previewIsPlaying = false;
   sampleIsLoaded = false;
 }
 
-FLASHMEM void previewSample(bool setMaxSampleLength) {
-  stopPeakScan();
+FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
+  g_previewPlayImmediate = false;
 
-  if (playSdWav1.isPlaying()) playSdWav1.stop();
-  envelope0.noteOff();
+  stopSdPreviewAndWait();
 
   int ch = constrain((int)GLOB.currentChannel, 1, 8);
   if (g_browseListDirty) sampleBrowserRefreshList(ch);
@@ -324,43 +426,42 @@ FLASHMEM void previewSample(bool setMaxSampleLength) {
   char OUTPUTf[160];
   snprintf(OUTPUTf, sizeof(OUTPUTf), "samples/%s", rel);
 
-  // When encoder(0) is pressed, behave like seek > 0: skip full range path, just play audio
+  // Instant SD audition (ON, PRESS 1000, SYNC pattern hits). Never RAM-load the whole file here —
+  // that path OOMs/crashes on long wavs. Trimmed windows still use the RAM slice below.
   bool usingFullRange = !g_encoder0PressedMode && (GLOB.seek == 0) && (GLOB.seekEnd == 100 || GLOB.seekEnd == 0);
-  if (usingFullRange && (previewTriggerMode == PREVIEW_MODE_ON || previewTriggerMode == PREVIEW_MODE_PRESS)) {
-    yield();
-    if (!SD.exists(OUTPUTf)) {
+  if (usingFullRange) {
+    if (!playAudio) {
+      sampleIsLoaded = true;
       return;
     }
-
     if (GLOB.seekEnd == 0) {
       GLOB.seekEnd = 100;
       currentMode->pos[2] = GLOB.seekEnd;
-      Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
+      if (encoderI2cWritesAllowed()) Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
     }
 
     previewCache.valid = false;
     previewCache.lengthBytes = 0;
     previewCache.plen = 0;
 
-    previewIsPlaying = true;
-
     static char lastPreviewRel[128] = {0};
     bool isNewSample = (strcasecmp(lastPreviewRel, rel) != 0);
-
     if (isNewSample) {
-      peakIndex = 0;
-      memset(peakValues, 0, sizeof(peakValues));
       strncpy(lastPreviewRel, rel, sizeof(lastPreviewRel) - 1);
       lastPreviewRel[sizeof(lastPreviewRel) - 1] = 0;
     }
 
-    extern void updatePreviewVolume();
-    updatePreviewVolume();
+    // PRESS / SYNC-while-playing already have a peak-scan waveform — don't wipe it.
+    bool keepPeaks = (peakIndex > 0) &&
+                     (previewTriggerMode == PREVIEW_MODE_PRESS ||
+                      (previewTriggerMode == PREVIEW_MODE_SYNC && isNowPlaying));
+    g_previewUseLivePeaks = !keepPeaks;
+    if (!keepPeaks) {
+      peakIndex = 0;
+      memset(peakValues, 0, sizeof(peakValues));
+    }
 
-    yield();
-    playSdWav1.play(OUTPUTf);
-
-    sampleIsLoaded = true;
+    startSdPreviewNow(OUTPUTf);
     return;
   }
 
@@ -443,7 +544,7 @@ FLASHMEM void previewSample(bool setMaxSampleLength) {
     endOffset = GLOB.smplen;
     GLOB.seekEnd = 100;
     currentMode->pos[2] = GLOB.seekEnd;
-    Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
+    if (encoderI2cWritesAllowed()) Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
   }
 
   // Use original calculation: offset * PrevSampleRate * 2
@@ -484,7 +585,18 @@ FLASHMEM void previewSample(bool setMaxSampleLength) {
   );
   sampleIsLoaded = true;
 
-  _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
+  if (playAudio) {
+    _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
+  }
+}
+
+FLASHMEM void previewSample(bool setMaxSampleLength) {
+  previewSample(setMaxSampleLength, true);
+}
+
+FLASHMEM void previewSampleNow() {
+  g_previewPlayImmediate = true;
+  previewSample(false);
 }
 
 static void loadEmptySampleToChannel(unsigned int sampleID) {
@@ -719,27 +831,12 @@ void showWave() {
   auto resetSeekRange = []() {
     currentMode->pos[0] = 0;
     GLOB.seek = 0;
-    Encoder[0].writeCounter((int32_t)0);
     currentMode->pos[2] = 100;
     GLOB.seekEnd = 100;
-    Encoder[1].writeCounter((int32_t)100);
-  };
-
-  auto startSdPreview = [&](const char* path) {
-    previewIsPlaying = true;
-    peakIndex = 0;
-    memset(peakValues, 0, sizeof(peakValues));
-    
-    // Ensure PREV volume setting is applied before starting SD playback
-    extern void updatePreviewVolume();
-    updatePreviewVolume();
-    
-    yield(); // Yield before file playback operations
-    if (playSdWav1.isPlaying()) {
-      playSdWav1.stop();
+    if (encoderI2cWritesAllowed()) {
+      Encoder[0].writeCounter((int32_t)0);
+      Encoder[1].writeCounter((int32_t)100);
     }
-    playSdWav1.play(path);
-    sampleIsLoaded = true;
   };
 
   auto refreshPeaksDisplay = [&]() {
@@ -810,13 +907,18 @@ void showWave() {
   }
   drawIndicator('L', 'W', 4, false, false);  // Encoder 3: combined browser
 
+  const bool allowEncWrite = encoderI2cWritesAllowed();
+  static bool seekHwResetPending = false;
+
   // Encoder 2 rotation is unused in SET_WAV.
   currentMode->pos[1] = 0;
-  Encoder[2].writeMin((int32_t)0);
-  Encoder[2].writeMax((int32_t)0);
-  Encoder[2].writeCounter((int32_t)0);
-  Encoder[1].writeMin((int32_t)0);
-  Encoder[1].writeMax((int32_t)100);
+  if (allowEncWrite) {
+    Encoder[2].writeMin((int32_t)0);
+    Encoder[2].writeMax((int32_t)0);
+    Encoder[2].writeCounter((int32_t)0);
+    Encoder[1].writeMin((int32_t)0);
+    Encoder[1].writeMax((int32_t)100);
+  }
 
   // Cache encoder RGB and only write when changed (showWave runs every frame).
   // Invalidate after a gap so re-entering SET_WAV refreshes rings after other modes.
@@ -830,7 +932,7 @@ void showWave() {
   auto setShowWaveRGB = [&](uint8_t i, uint32_t rgb) {
     if (i < 4 && lastShowWaveRGB[i] != rgb) {
       lastShowWaveRGB[i] = rgb;
-      Encoder[i].writeRGBCode(rgb);
+      if (allowEncWrite) Encoder[i].writeRGBCode(rgb);
     }
   };
 
@@ -842,50 +944,61 @@ void showWave() {
     setShowWaveRGB(1, 0x000000);
     setShowWaveRGB(2, 0x000000);
   }
-  if (currentMode->pos[2] > 100) {
+
+  bool sampleChanged = selectedIsFile &&
+                       ((encoderSampleValue != lastEncoder3Value_forShowWave) ||
+                        (encoderSampleValue != SMP.wav[ch].fileID));
+
+  // New wav: reset trim for THIS file before leftover seek-encoder values are applied.
+  if (sampleChanged) {
+    resetSeekRange();
+    seekHwResetPending = true;
+  } else if (seekHwResetPending) {
+    resetSeekRange();
+    if ((int)Encoder[0].readCounterInt() == 0 && (int)Encoder[1].readCounterInt() == 100) {
+      seekHwResetPending = false;
+    }
+  } else if (currentMode->pos[2] > 100) {
     currentMode->pos[2] = 100;
-    Encoder[1].writeCounter((int32_t)currentMode->pos[2]);
+    if (allowEncWrite) Encoder[1].writeCounter((int32_t)currentMode->pos[2]);
   }
 
-  // ---- Encoder 0: Seek start ----------------------------------------------
-  {
-    int newSeek = constrain(currentMode->pos[0], 0, GLOB.seekEnd - 1);  // Ensure seek < seekEnd
+  // ---- Encoder 0/1: Seek start/end (skip while we force 0/100 onto a new wav)
+  if (!sampleChanged && !seekHwResetPending) {
+    int newSeek = constrain(currentMode->pos[0], 0, GLOB.seekEnd - 1);
     if (newSeek != GLOB.seek) {
       GLOB.seek = newSeek;
-      currentMode->pos[0] = newSeek;  // Update encoder to match
-      // Stop peak building when seek changes (for both PREV modes)
+      currentMode->pos[0] = newSeek;
       stopPeakScan();
-      if (sampleIsLoaded && previewTriggerMode == PREVIEW_MODE_ON) {
-      yield();
-      previewSample(false);
+      if (sampleIsLoaded) {
+        yield();
+        previewSample(false, previewPlaysOnSelect());
       }
     }
-  }
 
-  // ---- Encoder 1: Seek end (swapped) --------------------------------------
-  {
     int32_t encoder1Counter = Encoder[1].readCounterInt();
-    int newSeekEnd = constrain((int)encoder1Counter, GLOB.seek + 1, 100);  // Ensure seekEnd > seek
-    if (newSeekEnd != (int)encoder1Counter) {
+    int newSeekEnd = constrain((int)encoder1Counter, GLOB.seek + 1, 100);
+    if (newSeekEnd != (int)encoder1Counter && allowEncWrite) {
       Encoder[1].writeCounter((int32_t)newSeekEnd);
     }
     if (newSeekEnd != GLOB.seekEnd) {
       GLOB.seekEnd = newSeekEnd;
-      currentMode->pos[2] = newSeekEnd;  // Update encoder to match
-      // Stop peak building when seekEnd changes (for both PREV modes)
+      currentMode->pos[2] = newSeekEnd;
       stopPeakScan();
-      if (sampleIsLoaded && previewTriggerMode == PREVIEW_MODE_ON) {
-      yield();
-      previewSample(false);
+      if (sampleIsLoaded) {
+        yield();
+        previewSample(false, previewPlaysOnSelect());
       }
     }
   }
 
   // ---- Encoder 3: combined browser ([../], dirs, files) -------------------
-  Encoder[3].writeMin((int32_t)1);
-  Encoder[3].writeMax((int32_t)maxList);
-  if (encoderSampleValue != (int)currentMode->pos[3]) {
-    Encoder[3].writeCounter((int32_t)encoderSampleValue);
+  if (allowEncWrite) {
+    Encoder[3].writeMin((int32_t)1);
+    Encoder[3].writeMax((int32_t)maxList);
+    if (encoderSampleValue != (int)currentMode->pos[3]) {
+      Encoder[3].writeCounter((int32_t)encoderSampleValue);
+    }
   }
 
   {
@@ -899,18 +1012,12 @@ void showWave() {
     }
   }
 
-  bool sampleChanged = selectedIsFile &&
-                       ((encoderSampleValue != lastEncoder3Value_forShowWave) ||
-                        (encoderSampleValue != SMP.wav[ch].fileID));
-
   if ((int)lastEncoder3Value_forShowWave != encoderSampleValue) {
     lastEncoder3Value_forShowWave = encoderSampleValue;
     if (!selectedIsFile) {
       stopPeakScan();
       peakIndex = 0;
-      envelope0.noteOff();
-      previewIsPlaying = false;
-      playSdWav1.stop();
+      stopSdPreviewAndWait();
       sampleIsLoaded = false;
       firstcheck = true;
       nofile = false;
@@ -923,24 +1030,30 @@ void showWave() {
     SMP.wav[ch].fileID = (unsigned int)fileIdx;
 
     yield();
-    envelope0.noteOff();
-    previewIsPlaying = false;
-    playSdWav1.stop();
+    stopSdPreviewAndWait();
     sampleIsLoaded = false;
     firstcheck = true;
     nofile = false;
 
     previewCache.valid = false;
-    resetSeekRange();
+    // seek already reset at the top of this frame (before leftover encoder values apply)
 
     if (g_suppressNextWavPreviewAfterFolderNav) {
       g_suppressNextWavPreviewAfterFolderNav = false;
+    } else if (previewPlaysOnSelect()) {
+      previewSampleNow();
     } else {
-      previewSample(false);
+      // PRESS / SYNC-while-playing: waveform via peak scan, no instant audition.
+      sampleIsLoaded = true;
+      char peakPath[160];
+      if (buildCurrentBrowseSamplePath(peakPath, sizeof(peakPath))) {
+        startPeakScan(peakPath);
+      }
     }
   }
   
-  if (selectedIsFile && previewTriggerMode == PREVIEW_MODE_PRESS && !playSdWav1.isPlaying()) {
+  if (selectedIsFile && (previewTriggerMode == PREVIEW_MODE_PRESS || previewTriggerMode == PREVIEW_MODE_SYNC)
+      && !playSdWav1.isPlaying() && !g_queuedSdPreview) {
     // Process peaks in smaller chunks with yields to avoid blocking
     servicePeakScan(4096);
     yield(); // Yield after peak processing to keep UI responsive
@@ -950,7 +1063,7 @@ void showWave() {
   if (GLOB.seekEnd > 100) {
     GLOB.seekEnd = 100;
     currentMode->pos[2] = GLOB.seekEnd;
-    Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
+    if (allowEncWrite) Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
   }
   
   // Display peaks after encoder processing, or folder depth when a directory row is selected
@@ -1226,10 +1339,12 @@ void reversePreviewSample() {
   currentMode->pos[2] = GLOB.seekEnd;
   
   extern i2cEncoderLibV2 Encoder[];
-  Encoder[0].writeCounter((int32_t)GLOB.seek);
-  Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
+  if (encoderI2cWritesAllowed()) {
+    Encoder[0].writeCounter((int32_t)GLOB.seek);
+    Encoder[1].writeCounter((int32_t)GLOB.seekEnd);
+  }
   
-  previewSample(false);
+  previewSample(false, previewPlaysOnSelect());
 }
 
 // Copy the preview sample (channel 0) to the target channel
@@ -1386,7 +1501,7 @@ void soloRandomPreviewCurrentVoice() {
   if (!SD.exists(OUTPUTf)) return;
 
   stopPeakScan();
-  stopSdPreviewIfPlaying();
+  stopSdPreviewAndWait();
 
   GLOB.seek = 0;
   GLOB.seekEnd = 100;
@@ -1394,10 +1509,7 @@ void soloRandomPreviewCurrentVoice() {
   previewCache.lengthBytes = 0;
   previewCache.plen = 0;
 
-  previewIsPlaying = true;
-  updatePreviewVolume();
-  yield();
-  playSdWav1.play(OUTPUTf);
+  startSdPreviewNow(OUTPUTf);
 }
 
 // Step through the fixed random playlist (±1), then preview.

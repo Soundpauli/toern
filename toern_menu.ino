@@ -17,6 +17,7 @@ void updatePreviewVolume();
 extern int previewTriggerMode;
 extern const int PREVIEW_MODE_ON;
 extern const int PREVIEW_MODE_PRESS;
+extern const int PREVIEW_MODE_SYNC;
 extern uint8_t currentColorScheme;
 extern void applyColorScheme(uint8_t scheme);
 extern uint16_t drawRFullMuteCustomUnmuteMask;
@@ -57,7 +58,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
 // LOOK/SETTINGS submenu pages (SETTINGS menu uses LOOK submenu)
 MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"FLW", 10, false, nullptr},          // Flow Mode
-  {"PREV", 33, false, nullptr},         // Preview trigger mode (ON/PRSS)
+  {"PREV", 33, false, nullptr},         // Preview trigger mode (ON/PRSS/SYNC)
   {"VIEW", 17, false, nullptr},         // Simple Notes View
   {"PMD", 9, false, nullptr},           // Pattern Mode
   {"LOOP", 18, false, nullptr},         // Loop Length
@@ -2225,8 +2226,16 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 33: { // PREV - Preview trigger mode - encoder 3
       drawText("PREV", 2, 10, currentMenuParentTextColor());
-      drawMenuValue(previewTriggerMode == PREVIEW_MODE_PRESS ? "PRSS" : "ON", 2, 3,
-          previewTriggerMode == PREVIEW_MODE_PRESS ? CRGB(0, 150, 255) : UI_GREEN);
+      const char* prevLbl = "ON";
+      CRGB prevCol = UI_GREEN;
+      if (previewTriggerMode == PREVIEW_MODE_PRESS) {
+        prevLbl = "PRSS";
+        prevCol = CRGB(0, 150, 255);
+      } else if (previewTriggerMode == PREVIEW_MODE_SYNC) {
+        prevLbl = "SYNC";
+        prevCol = CRGB(255, 165, 0);
+      }
+      drawMenuValue(prevLbl, 2, 3, prevCol);
       CRGB greenColor = getIndicatorColor('G');
       Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
       drawIndicator('L', 'B', 3);
@@ -2960,20 +2969,20 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 33: { // PREV - Preview trigger (ON/PRSS) via encoder 2 rotation
+    case 33: { // PREV - Preview trigger (ON/PRSS/SYNC) via encoder 2 rotation
       static int lastPrevEnc = -1;
-      int encVal = (previewTriggerMode == PREVIEW_MODE_PRESS) ? 1 : 0;
+      int encVal = constrain(previewTriggerMode, 0, 2);
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)encVal);
-        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMax((int32_t)2);
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = encVal;
         lastPrevEnc = encVal;
         menuFirstEnter = false;
       }
       if (currentMode->pos[2] != lastPrevEnc) {
-        previewTriggerMode = (currentMode->pos[2] == 1) ? PREVIEW_MODE_PRESS : PREVIEW_MODE_ON;
-        encVal = (previewTriggerMode == PREVIEW_MODE_PRESS) ? 1 : 0;
+        previewTriggerMode = constrain((int)currentMode->pos[2], 0, 2);
+        encVal = previewTriggerMode;
         Encoder[2].writeCounter((int32_t)encVal);
         currentMode->pos[2] = encVal;
         lastPrevEnc = encVal;
@@ -3946,8 +3955,10 @@ FLASHMEM void switchMenu(int menuPosition){
       }
 
       case 33: {
-        // Toggle preview trigger mode: ON -> PRSS -> ON
-        previewTriggerMode = (previewTriggerMode == PREVIEW_MODE_ON) ? PREVIEW_MODE_PRESS : PREVIEW_MODE_ON;
+        // Toggle preview trigger mode: ON -> PRSS -> SYNC -> ON
+        if (previewTriggerMode == PREVIEW_MODE_ON) previewTriggerMode = PREVIEW_MODE_PRESS;
+        else if (previewTriggerMode == PREVIEW_MODE_PRESS) previewTriggerMode = PREVIEW_MODE_SYNC;
+        else previewTriggerMode = PREVIEW_MODE_ON;
         saveSingleModeToEEPROM(20, (int8_t)previewTriggerMode);
         drawMainSettingStatus(menuPosition);
         break;

@@ -64,7 +64,6 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include "font_3x5.h"
 #include "icons.h"
 
-
 // === Core types (must be defined early for Arduino auto-prototype generation) ===
 enum ValueDisplayMode : uint8_t {
   DISPLAY_NUMERIC = 0,
@@ -233,6 +232,13 @@ extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
 extern int sampleBrowserBrowseIndexMax(int channel);
 extern unsigned long g_setWavIgnoreLoadUntilMs;
 extern bool sampleBrowserIsLoadableSelection(int channel);
+extern bool shouldSkipVoiceTriggerForSyncPreview(int ch);
+extern void triggerSetWavSyncPreview(uint8_t vel);
+extern void previewSample(bool setMaxSampleLength);
+extern void previewSample(bool setMaxSampleLength, bool playAudio);
+extern void previewSampleNow();
+extern void serviceSetWavSyncPreview();
+extern void serviceSdPreviewRequests();
 extern uint16_t g_wavPickCount;
 extern uint16_t g_folderPickCount;
 
@@ -528,6 +534,7 @@ uint8_t oldButtons[NUM_ENCODERS] = { 0, 0, 0, 0 };  // Changed from int to uint8
 unsigned long playStartTime = 0;  // To track when play(true) was last called
 
 bool previewIsPlaying = false;
+extern bool g_previewUseLivePeaks;
 
 const int maxPeaks = 512;  // Adjust based on your needs
 DMAMEM float peakValues[maxPeaks];
@@ -561,7 +568,7 @@ static const unsigned long TOUCH1_CHORD_GRACE_MS = 140;
 /** true: use grounded buttons A/B; false: use capacitive SWITCH_1/2. */
 static const bool exttouch = true;
 /** When false, skip all NeoSlider I2C (init/ADC/LEDs/slew). This unit has faders. */
-static const bool deviceHasFaders = true;
+static const bool deviceHasFaders = exttouch;
 
 bool readTouch1Pressed() {
   if (exttouch) return digitalReadFast(BUTTON_A) == LOW;
@@ -585,9 +592,10 @@ unsigned long lastCheckTime = 0;          // Get the current time
 int recMode = -1;
 unsigned int fastRecMode = 0;
 unsigned int previewVol = 20;  // Default 20 (0-50 range, 0.00-0.50)
-// Preview trigger mode: 0 = automatic preview on selection/seek, 1 = only on encoder(0) press in SET_WAV
+// Preview trigger mode: 0 = auto on selection/seek, 1 = encoder(0) press only, 2 = in-sync with voice triggers
 extern const int PREVIEW_MODE_ON = 0;
 extern const int PREVIEW_MODE_PRESS = 1;
+extern const int PREVIEW_MODE_SYNC = 2;
 int previewTriggerMode = PREVIEW_MODE_ON;
 int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1), 4=CLIC (touch3 adds trigger at current beat)
 int transportMode = 1;
@@ -1107,19 +1115,13 @@ ButtonState buttonState[NUM_ENCODERS] = { IDLE };
 bool isPressed[NUM_ENCODERS] = { false };
 bool pressed[NUM_ENCODERS] = { false };
 
-/*
+
 i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
-  i2cEncoderLibV2(0x01),  // third encoder address
-  i2cEncoderLibV2(0x41),  // 2nd encoder address +
-  i2cEncoderLibV2(0x20),  // First encoder address
-  i2cEncoderLibV2(0x61),  // First encoder address
-};
-*/
-i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
-  i2cEncoderLibV2(0x61),  // First encoder address
-  i2cEncoderLibV2(0x20),  // First encoder address
-  i2cEncoderLibV2(0x41),  // 2nd encoder address +
-  i2cEncoderLibV2(0x01),  // third encoder address
+  // exttouch: panel was soldered 4,3,2,1 — reverse I2C address order.
+  i2cEncoderLibV2(exttouch ? 0x61 : 0x01),
+  i2cEncoderLibV2(exttouch ? 0x20 : 0x41),
+  i2cEncoderLibV2(exttouch ? 0x41 : 0x20),
+  i2cEncoderLibV2(exttouch ? 0x01 : 0x61),
 };
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
@@ -1163,7 +1165,7 @@ public:
   // 10-bit seesaw ADC is 0..1023. Failed I2C / not-ready is often 0xFFFF.
   bool analogReadFast(uint8_t pin, uint16_t &value) {
     uint8_t buf[2];
-    if (!read(SEESAW_ADC_BASE, (uint8_t)(SEESAW_ADC_CHANNEL_OFFSET + pin), buf, 2, 500)) {
+    if (!read(SEESAW_ADC_BASE, (uint8_t)(SEESAW_ADC_CHANNEL_OFFSET + pin), buf, 2, 15)) {
       return false;
     }
     uint16_t v = ((uint16_t)buf[0] << 8) | buf[1];
@@ -1175,6 +1177,7 @@ public:
 
 static NeoSliderSeesaw neoSliderSS[NEOSLIDER_COUNT];
 static bool neoSliderPresent[NEOSLIDER_COUNT];
+static bool neoSliderAnyPresent = false;
 static int neoSliderLastVol[NEOSLIDER_COUNT];
 static bool neoSliderMuteLatched[NEOSLIDER_COUNT];
 static float neoSliderTargetGain[NEOSLIDER_COUNT];
@@ -1182,7 +1185,14 @@ static float neoSliderCurrentGain[NEOSLIDER_COUNT];
 static CRGB neoSliderLeds[NEOSLIDER_COUNT][NEOSLIDER_NUM_LEDS];
 static elapsedMillis neoSliderActiveUntil[NEOSLIDER_COUNT];  // faster ADC while fader is moving
 static int neoSliderLedVolShown[NEOSLIDER_COUNT];           // last volume pushed to NeoPixels
-static bool neoSliderAnyPresent = false;
+static elapsedMillis g_faderMovedAgo = 1000;
+
+bool encoderI2cWritesAllowed() {
+  if (!deviceHasFaders || !neoSliderAnyPresent) return true;
+  return g_faderMovedAgo >= 80;
+}
+
+static void applyLongCableI2cTiming();
 
 static inline bool isNeoSliderControlledChannel(int ch) {
   return deviceHasFaders && ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
@@ -1703,6 +1713,7 @@ FLASHMEM void switchMode(Mode *newMode) {
       i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
       | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_ENABLE
       | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+    applyLongCableI2cTiming();
   }
   /// NEW ACTIONS
   // Synchronize oldButtons with current buttons state
@@ -1877,6 +1888,7 @@ FLASHMEM void switchMode(Mode *newMode) {
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+      applyLongCableI2cTiming();
 
       // SET_WAV: Enc[1]=seekEnd, Enc[2]=load selected file, Enc[3]=browse folders+files
       int ch = constrain((int)GLOB.currentChannel, 1, 8);
@@ -1919,6 +1931,7 @@ FLASHMEM void switchMode(Mode *newMode) {
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+      applyLongCableI2cTiming();
 
       // Set encoder colors dynamically based on current filter page and default fast filter
       updateFilterEncoderColors();
@@ -2379,14 +2392,19 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       autoSave();
     }
     return;
-  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - encoder 0: directory up
-    sampleBrowserGoUpPress(GLOB.currentChannel);
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - encoder 0: preview selected wav (never directory up)
+    if (previewTriggerMode != PREVIEW_MODE_SYNC || !isNowPlaying) {
+      if (sampleBrowserIsLoadableSelection(GLOB.currentChannel)) {
+        previewSampleNow();
+      }
+    }
     return;
-  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000" - encoder 0 long: manual preview
-    extern void setEncoder0PressedMode(bool state);
-    setEncoder0PressedMode(true);
-    extern void previewSample(bool);
-    previewSample(false);
+  } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000" - encoder 0 long: same as 1000 (manual preview)
+    if (previewTriggerMode != PREVIEW_MODE_SYNC || !isNowPlaying) {
+      if (sampleBrowserIsLoadableSelection(GLOB.currentChannel)) {
+        previewSampleNow();
+      }
+    }
     return;
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" - encoder 4: dir row = navigate; file row in subfolder = up; file at root = no-op
     if (!pressed[2] && !isPressed[2]) {
@@ -3120,6 +3138,10 @@ FLASHMEM void checkCrashReport() {
   // that left muted/white-LED voices until FULL reset, and made Play wait ~1 bar.
   if (!CrashReport) return;
 
+  // I2S DMA already runs from AudioInputI2S constructors. SD I/O here without
+  // stopping the audio ISR is the 0x400E80B0 / poisoned-graph reboot crash.
+  AudioNoInterrupts();
+
   File errorFile = SD.open("ERROR.txt", O_WRONLY | O_CREAT | O_APPEND);
   if (errorFile) {
     static char buf[120];
@@ -3158,6 +3180,7 @@ FLASHMEM void checkCrashReport() {
   } else {
     Serial.print(CrashReport);  // still consume if SD file can't be opened
   }
+  AudioInterrupts();
 }
 
 
@@ -3334,9 +3357,13 @@ void serviceNeoSliderGainSlew() {
 
 FLASHMEM void updateNeoSliderVolume() {
   if (!deviceHasFaders || !neoSliderAnyPresent) return;
+  // Menu and SET_WAV hammer encoder I2C every frame — don't touch faders on the same bus.
+  if (currentMode == &menu || currentMode == &set_Wav) return;
 
   // Encoders share the I2C bus: skip while an encoder INT is pending.
   if (digitalRead(INT_PIN) == LOW) return;
+  // SD preview uses eDMA; fader I2C during that is the AudioInputI2S TCD bus fault (0x400E80B0).
+  if (playSdWav1.isPlaying()) return;
 
   // 25 ADC reads/s total (one slider per 40ms, round-robin).
   static elapsedMillis neoSliderPoll;
@@ -3385,6 +3412,7 @@ FLASHMEM void updateNeoSliderVolume() {
 
   if (vol == neoSliderLastVol[i]) return;
   neoSliderLastVol[i] = vol;
+  g_faderMovedAgo = 0;
 
   const int ch = neoSliderVoiceCh[i];
   if (ch < 0 || ch >= (int)maxY) return;
@@ -3402,7 +3430,28 @@ FLASHMEM void updateNeoSliderVolume() {
 
   // Matrix volume bar: RAM flags only, no I2C. Never writeCounter from faders.
   showCtrlVolumeChange(vol);
-  neoSliderMaybeUpdateLeds(i, vol);
+  if (encoderI2cWritesAllowed()) {
+    neoSliderMaybeUpdateLeds(i, vol);
+  }
+}
+
+// Teensy 4 Wire::setClock() only has 100 kHz / 400 kHz / 1 MHz. A ~3.5 m I2C
+// cable cannot run 100 kHz (rise time / NACKs / SCL stretch → audio DMA bus fault).
+// Program LPI2C1 directly for ~26 kHz after encoder/seesaw begin() (they reset to 100 kHz).
+static void applyLongCableI2cTiming() {
+  if (!exttouch) return;
+  IMXRT_LPI2C_t *port = &IMXRT_LPI2C1;
+  port->MCR = 0;
+  port->MCCR0 = LPI2C_MCCR0_CLKHI(55) | LPI2C_MCCR0_CLKLO(59) |
+                LPI2C_MCCR0_DATAVD(25) | LPI2C_MCCR0_SETHOLD(40);
+  port->MCFGR1 = LPI2C_MCFGR1_PRESCALE(3);  // 24 MHz / 8 → ~26 kHz
+  port->MCFGR2 = LPI2C_MCFGR2_FILTSDA(15) | LPI2C_MCFGR2_FILTSCL(15) |
+                 LPI2C_MCFGR2_BUSIDLE(4095);
+  port->MCFGR3 = LPI2C_MCFGR3_PINLOW(4095);
+  port->MCCR1 = port->MCCR0;
+  port->MCFGR0 = 0;
+  port->MFCR = LPI2C_MFCR_RXWATER(1) | LPI2C_MFCR_TXWATER(1);
+  port->MCR = LPI2C_MCR_MEN;
 }
 
 FLASHMEM void initEncoders() {
@@ -3681,9 +3730,9 @@ FLASHMEM void setup() {
     previewVol = 20;  // Default to mid if invalid or zero
   }
 
-  // Load previewTriggerMode (0=ON, 1=PRSS) from EEPROM slot 20
+  // Load previewTriggerMode (0=ON, 1=PRSS, 2=SYNC) from EEPROM slot 20
   previewTriggerMode = (int)EEPROM.read(EEPROM_DATA_START + 20);
-  if (previewTriggerMode != PREVIEW_MODE_ON && previewTriggerMode != PREVIEW_MODE_PRESS) {
+  if (previewTriggerMode != PREVIEW_MODE_ON && previewTriggerMode != PREVIEW_MODE_PRESS && previewTriggerMode != PREVIEW_MODE_SYNC) {
     previewTriggerMode = PREVIEW_MODE_ON;
   }
 
@@ -3790,6 +3839,7 @@ FLASHMEM void setup() {
   //mixer0.gain(1, 0.05);  //PREV Sound
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
   if (deviceHasFaders) initNeoSlider();  // NeoSliders @0x30..0x33 → voices 1..4 volume
+  applyLongCableI2cTiming();
 
 
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
@@ -4004,6 +4054,7 @@ void checkEncoders() {
 
   static int32_t screensaverPrevEnc[NUM_ENCODERS];
   static bool screensaverEncBaselineDone = false;
+  const bool allowEncWrite = encoderI2cWritesAllowed();
 
   for (int i = 0; i < NUM_ENCODERS; i++) {
     currentEncoderIndex = i;  // Ensure this is set before calling encoder methods or callbacks that might use it implicitly
@@ -4037,7 +4088,7 @@ void checkEncoders() {
         muteModeArrowDirection = targetDir;
         muteModeArrowUntil = millis() + 250;
         muteModeEncoderValue = turnedRight ? 1 : 0;
-        Encoder[0].writeCounter((int32_t)0);
+        if (allowEncWrite) Encoder[0].writeCounter((int32_t)0);
         rawValue = 0;
         // Only reverse samples for y=2-9 (sample channels 1-8)
         if (GLOB.y >= 2 && GLOB.y <= 9) {
@@ -4051,7 +4102,7 @@ void checkEncoders() {
     } else if (currentMode == &subpatternMode && muteModeActive && i == 2) {
       if (rawValue != 0) {
         int delta = (rawValue > 0) ? 1 : -1;
-        Encoder[2].writeCounter((int32_t)0);
+        if (allowEncWrite) Encoder[2].writeCounter((int32_t)0);
         rawValue = 0;
         if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
           soloRandomArrowDirection = (int8_t)delta;
@@ -4068,13 +4119,13 @@ void checkEncoders() {
       if (i == 1) {
         currentMode->pos[2] = rawValue;
       } else if (i == 2) {
-        if (rawValue != 0) Encoder[2].writeCounter((int32_t)0);
+        if (rawValue != 0 && allowEncWrite) Encoder[2].writeCounter((int32_t)0);
         currentMode->pos[1] = 0;
       } else if (i == 3) {
         int ch = constrain((int)GLOB.currentChannel, 1, 8);
         int vmax = sampleBrowserBrowseIndexMax(ch);
         int v = constrain(rawValue, 1, vmax);
-        if (v != rawValue) Encoder[3].writeCounter((int32_t)v);
+        if (v != rawValue && allowEncWrite) Encoder[3].writeCounter((int32_t)v);
         currentMode->pos[3] = v;
       } else {
         currentMode->pos[i] = rawValue;
@@ -4116,7 +4167,7 @@ void checkEncoders() {
       if (buttons[0] == 9) {  // Button release event on encoder 1
         muteModeEncoderValue = 0;
         currentMode->pos[0] = 0;
-        Encoder[0].writeCounter((int32_t)0);
+        if (allowEncWrite) Encoder[0].writeCounter((int32_t)0);
       }
       if (buttons[1] == 9) {  // Button release event — exit mute overlay
         tmpMuteAll(false);
@@ -4132,8 +4183,7 @@ void checkEncoders() {
         soloRandomArrowDirection = 0;
         soloRandomArrowUntil = 0;
         currentMode->pos[0] = 0;
-        Encoder[0].writeCounter((int32_t)0);
-        // Leave muteModeActive true until after switch so SUB UI cannot flash,
+        if (allowEncWrite) Encoder[0].writeCounter((int32_t)0);
         // and bypass debounce (we just entered subpatternMode on press).
         bypassModeSwitchDebounce = true;
         switchMode(returnMode);
@@ -4155,7 +4205,7 @@ void checkEncoders() {
       static int lastY = -1;
       int maxStepsRuntime = childLockEnabled ? (int)maxX : (int)MAX_STEPS;  // child mode stays on page 1
       currentMode->pos[3] = constrain(currentMode->pos[3], 1, maxStepsRuntime);
-      Encoder[3].writeMax((int32_t)maxStepsRuntime);
+      if (allowEncWrite) Encoder[3].writeMax((int32_t)maxStepsRuntime);
       GLOB.x = currentMode->pos[3];
       clampGridCursor();
       // Clamp Y in software + re-assert hardware max (boot/init could leave max too high)
@@ -4163,8 +4213,10 @@ void checkEncoders() {
         unsigned int yClamped = constrain(currentMode->pos[0], 1u, maxY);
         if (currentMode->pos[0] != yClamped) {
           currentMode->pos[0] = yClamped;
-          Encoder[0].writeMax((int32_t)maxY);
-          Encoder[0].writeCounter((int32_t)yClamped);
+          if (allowEncWrite) {
+            Encoder[0].writeMax((int32_t)maxY);
+            Encoder[0].writeCounter((int32_t)yClamped);
+          }
         }
         GLOB.y = yClamped;
       }
@@ -4193,7 +4245,7 @@ void checkEncoders() {
         int page, slot;
         if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
           int val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
-          Encoder[2].writeCounter((int32_t)val);
+          if (allowEncWrite) Encoder[2].writeCounter((int32_t)val);
           currentMode->pos[2] = val;  // Sync mode position with encoder to prevent stale value from being applied
           lastEncVal[GLOB.currentChannel] = val;  // Sync tracking with encoder
         }
@@ -4207,12 +4259,12 @@ void checkEncoders() {
       extern int drawMode;
       if (drawMode == 0) {
         // L+R mode: color encoder(0) with channel color
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        if (allowEncWrite) Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else {
         // R mode: don't color encoder(0)
-        Encoder[0].writeRGBCode(0x000000);
+        if (allowEncWrite) Encoder[0].writeRGBCode(0x000000);
       }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      if (allowEncWrite) Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
 
       // Only update edit page from X position if NOT in song mode and NOT in active FLOW-follow playback.
       // In FLOW mode while playing, the display page is owned by the timer-follow logic.
@@ -4233,7 +4285,7 @@ void checkEncoders() {
             // Update encoder[1] and editpage to reflect the new edit page
             if (ctrlMode == 0) {
               currentMode->pos[1] = (int)newEditPage;
-              Encoder[1].writeCounter((int32_t)newEditPage);
+              if (allowEncWrite) Encoder[1].writeCounter((int32_t)newEditPage);
               editpage = newEditPage;  // Keep editpage in sync
             }
           }
@@ -5548,7 +5600,11 @@ void checkPendingSampleNotes() {
     if (isDue) {
       if (!isChildVoiceDisabled((int)ev.channel)
           && !isChannelSampleReloadBusy((unsigned int)ev.channel)) {
-        _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, true);
+        if (shouldSkipVoiceTriggerForSyncPreview((int)ev.channel)) {
+          triggerSetWavSyncPreview(ev.velocity);
+        } else {
+          _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, true);
+        }
       }
       pendingSampleNotes[i] = pendingSampleNotes.back();
       pendingSampleNotes.pop_back();
@@ -6244,7 +6300,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     if (peakCaptureTimer > 15) {  // capture peaks at ~66 fps max
       peakCaptureTimer = 0;
       // Capture peaks from the audible preview for both ON and PRESS modes while playing
-      if (playSdWav1.isPlaying() && peakIndex < maxPeaks) {
+      if (playSdWav1.isPlaying() && g_previewUseLivePeaks && peakIndex < maxPeaks) {
         extern AudioAnalyzePeak peak1;
         if (peak1.available()) {
           peakValues[peakIndex] = peak1.read();
@@ -6279,6 +6335,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   checkButtons();
   checkTouchInputs();
   checkPendingSampleNotes();
+  serviceSetWavSyncPreview();
+  serviceSdPreviewRequests();
 
   // Periodic system stats to Serial removed (requested): keep runtime silent by default.
 
@@ -7456,7 +7514,10 @@ void playNote() {
         onNoteTriggered(ch);
 
         MidiSendNoteOn(b, ch, vel);
-        if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
+        if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
+          // SET_WAV + PREV==SYNC: keep the voice unmuted, skip its sampler trigger, audition the browse file instead.
+          triggerSetWavSyncPreview((uint8_t)((vel == 0) ? defaultVelocity : vel));
+        } else if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
           // Skip triggers while this voice's RAM buffer is being rewritten (avoids clicks).
           if (isChannelSampleReloadBusy((unsigned int)ch)) {
             continue;
@@ -7849,6 +7910,11 @@ void playFillNote() {
   const int vel = (fillActiveVelocity == 0) ? defaultVelocity : fillActiveVelocity;
   const unsigned int row = fillActiveRow;
 
+  if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
+    triggerSetWavSyncPreview((uint8_t)vel);
+    return;
+  }
+
   if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
     if (isChannelSampleReloadBusy((unsigned int)ch)) return;
     int pitch = (12 * SampleRate[ch]) + (int)row - (ch + 1);
@@ -7884,6 +7950,11 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
 
   int velocity = cell.velocity > 0 ? cell.velocity : defaultVelocity;
   int pitch_from_row = y;
+
+  if (shouldSkipVoiceTriggerForSyncPreview(channel)) {
+    triggerSetWavSyncPreview((uint8_t)velocity);
+    return;
+  }
 
   if (channel > 0 && channel < 9) {
     if (isChannelSampleReloadBusy((unsigned int)channel)) return;

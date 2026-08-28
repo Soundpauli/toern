@@ -248,10 +248,17 @@ FLASHMEM void loadPattern(bool autoload) {
   extern bool isNowPlaying;
   extern void stopSdPreviewIfPlaying();
   extern void sdIoYield();
+  extern void sdIoBeginAudioSafe();
+  extern void sdIoEndAudioSafe();
 
   drawNoSD();
   stopSdPreviewIfPlaying();
-  
+  // Menu load runs with I2S DMA + encoder/fader I2C already live. Byte-at-a-time
+  // SD reads deadlock the eDMA (hang, no CrashReport). Autoload is before initEncoders.
+  if (!autoload) {
+    sdIoBeginAudioSafe();
+  }
+
   FastLEDclear();
   char OUTPUTf[50];
   // autoload, or FILE menu slot 0 → autosaved.txt
@@ -260,58 +267,83 @@ FLASHMEM void loadPattern(bool autoload) {
   } else {
     sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
   }
-  
+
   // Load .txt file
   if (SD.exists(OUTPUTf)) {
     File loadFile = SD.open(OUTPUTf);
     if (loadFile) {
+      for (unsigned int x = 1; x < maxlen; x++) {
+        for (unsigned int y = 1; y <= maxY; y++) {
+          note[x][y].channel = 0;
+          note[x][y].velocity = 0;
+          note[x][y].probability = 100;
+          note[x][y].condition = 1;
+        }
+      }
+
+      uint8_t buf[512];
+      size_t have = 0;
+      size_t pos = 0;
       unsigned int sdry = 1;
       unsigned int sdrx = 1;
-      unsigned rowCount = 0;
-      uint8_t rec[4];
 
-      while (loadFile.available()) {
-        int b = loadFile.read();
-        if (b < 0) break;
-
-        // Check for the marker indicating the end of notes
-        if (b == 0xFF && loadFile.peek() == 0xFE) {
-          loadFile.read();  // Consume the second marker byte
-          break;            // Exit the loop to load SMP data
+      while (true) {
+        if (pos >= have) {
+          have = 0;
+          pos = 0;
+          if (!loadFile.available()) break;
+          int got = loadFile.read(buf, sizeof(buf));
+          if (got <= 0) break;
+          have = (size_t)got;
+          sdIoYield();
         }
-
-        // Read remaining 3 bytes of the note record (velocity, probability, condition)
-        rec[0] = (uint8_t)b;
-        int n = loadFile.read(rec + 1, 3);
-        if (n < 1) {
-          // Legacy short record: velocity only
-          note[sdrx][sdry].channel = rec[0];
-          note[sdrx][sdry].velocity = 0;
-          note[sdrx][sdry].probability = 100;
-          note[sdrx][sdry].condition = 1;
-        } else {
-          note[sdrx][sdry].channel = rec[0];
-          note[sdrx][sdry].velocity = (n >= 1) ? rec[1] : 0;
-          note[sdrx][sdry].probability = (n >= 2) ? rec[2] : 100;
-          note[sdrx][sdry].condition = (n >= 3) ? rec[3] : 1;
+        if (have - pos >= 2 && buf[pos] == 0xFF && buf[pos + 1] == 0xFE) {
+          pos += 2;
+          break;
         }
+        if (have - pos < 4) {
+          if (pos > 0) {
+            memmove(buf, buf + pos, have - pos);
+            have -= pos;
+            pos = 0;
+          }
+          if (!loadFile.available()) break;
+          int got = loadFile.read(buf + have, sizeof(buf) - have);
+          if (got <= 0) break;
+          have += (size_t)got;
+          sdIoYield();
+          continue;
+        }
+        if (buf[pos] == 0xFF && buf[pos + 1] == 0xFE) {
+          pos += 2;
+          break;
+        }
+        if (sdrx < maxlen && sdry >= 1 && sdry <= maxY) {
+          note[sdrx][sdry].channel = buf[pos];
+          note[sdrx][sdry].velocity = buf[pos + 1];
+          note[sdrx][sdry].probability = buf[pos + 2];
+          note[sdrx][sdry].condition = buf[pos + 3];
+        }
+        pos += 4;
         sdry++;
         if (sdry > maxY) {
           sdry = 1;
           sdrx++;
         }
-        if (sdrx > maxlen)
-          sdrx = 1;
-        if ((++rowCount & 0x3Fu) == 0u) {
-          sdIoYield();
-        }
       }
 
-      // Load SMP struct after marker (file/pattern specific data)
-      if (loadFile.available()) {
+      // Any leftover in buf after the marker belongs to SMP; then the rest of the file.
+      if (loadFile.available() || pos < have) {
         uint8_t *smpBytes = (uint8_t *)&SMP;
         size_t smpLeft = sizeof(SMP);
         size_t smpOff = 0;
+        if (pos < have) {
+          size_t take = min(have - pos, smpLeft);
+          memcpy(smpBytes, buf + pos, take);
+          smpOff += take;
+          smpLeft -= take;
+          pos += take;
+        }
         while (smpLeft > 0 && loadFile.available()) {
           size_t n = min((size_t)512, smpLeft);
           int got = loadFile.read(smpBytes + smpOff, n);
@@ -320,12 +352,12 @@ FLASHMEM void loadPattern(bool autoload) {
           smpLeft -= (size_t)got;
           sdIoYield();
         }
-        
+
         // Validate BPM after loading (default to 100 if invalid)
         if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
           SMP.bpm = 100.0f;
         }
-        
+
         // Load mute states from SMP
         for (int ch = 0; ch < maxY; ch++) {
           globalMutes[ch] = SMP.globalMutes[ch];
@@ -333,13 +365,13 @@ FLASHMEM void loadPattern(bool autoload) {
             pageMutes[page][ch] = SMP.pageMutes[page][ch];
           }
         }
-        
+
         // Unmute all channels first, then apply loaded mutes based on PMOD state
         unmuteAllChannels();
         applyMutesAfterPMODSwitch();
       }
+      loadFile.close();
     }
-    loadFile.close();
     sdIoYield();
   }
   
@@ -363,6 +395,7 @@ FLASHMEM void loadPattern(bool autoload) {
   
   // Missing manual file → NEW screen. Missing autosave on boot → stay empty (no NEW).
   if (!SD.exists(OUTPUTf)) {
+    if (!autoload) sdIoEndAudioSafe();
     if (!autoload && SMP.file != 0) {
       extern void showNewFileScreen();
       showNewFileScreen();
@@ -373,7 +406,7 @@ FLASHMEM void loadPattern(bool autoload) {
   updateLastPage();
   
   // Load SMP settings
-  if (!isNowPlaying) {
+  if (!autoload && !isNowPlaying) {
     delay(500);
   }
   loadSMPSettings();
@@ -386,6 +419,7 @@ FLASHMEM void loadPattern(bool autoload) {
   }
   
   sdIoYield();
+  if (!autoload) sdIoEndAudioSafe();
 }
 
 

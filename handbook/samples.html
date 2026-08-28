@@ -75,9 +75,9 @@
 
             <h3 class="hb-subsection-heading">Preview &amp; reverse</h3>
             <ul>
-              <li><strong>Encoder&nbsp;1 short or long</strong> → forces a manual preview from RAM regardless of auto-preview state.</li>
+              <li><strong>Encoder&nbsp;1 short or long</strong> → previews the highlighted wav (PREV = ON or PRSS, or SYNC while stopped). Does not go up a directory. In SYNC while the sequencer is running this press does not play.</li>
               <li><strong>Encoder&nbsp;2 short</strong> — reverses the highlighted sample. The waveform on screen flips end-for-end and the preview re-triggers from the start so you can hear the reversed take. Hit it again to flip back.</li>
-              <li>Auto-preview policy is set under <a href="play.html#prev">SETTINGS → PREV</a>: <strong>ON</strong> auditions every selection automatically, <strong>PRSS</strong> waits for an explicit gesture.</li>
+              <li>Auto-preview policy is set under <a href="play.html#prev">SETTINGS → PREV</a>: <strong>ON</strong> auditions every selection automatically, <strong>PRSS</strong> waits for encoder&nbsp;1 on a selected wav, <strong>SYNC</strong> auto-plays while stopped and, while playing, fires the highlighted file on that voice's pattern triggers instead of the loaded sample.</li>
             </ul>
 
             <h3 class="hb-subsection-heading">Loading</h3>
@@ -89,7 +89,7 @@
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Trim start (%)</td><td>Restarts auto preview when on.</td></tr>
-                  <tr><th>Short / long</th><td>Manual preview</td><td>Audition the highlighted file without loading it.</td></tr>
+                  <tr><th>Short / long</th><td>Manual preview</td><td>Audition the highlighted wav (ON / PRSS, or SYNC while stopped). Does not leave the folder.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Trim end (%)</td><td>Stops just after the trim start.</td></tr>

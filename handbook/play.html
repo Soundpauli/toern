@@ -78,12 +78,18 @@
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_prev" width="16" height="16" role="img" aria-label="PREV PRSS"></canvas>
               </div>
-              <p class="viz-caption--below">PREV = PRSS — press to preview only.</p>
+              <p class="viz-caption--below">PREV = PRSS — press encoder&nbsp;1 on a selected wav to preview. Never goes up a folder.</p>
+            </article>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="lk_prev_sync" width="16" height="16" role="img" aria-label="PREV SYNC"></canvas>
+              </div>
+              <p class="viz-caption--below">PREV = SYNC — while playing, pattern notes on this voice audition the highlighted file. While stopped, encoder&nbsp;4 auto-plays like ON.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>ON</strong> / <strong>PRSS</strong></td><td>ON = auto-audition while spinning files. PRSS = only when you explicitly press (safer on stage).</td></tr>
+                  <tr><th>Turn</th><td><strong>ON</strong> / <strong>PRSS</strong> / <strong>SYNC</strong></td><td>ON = auto-audition while spinning files. PRSS = encoder&nbsp;1 press on a wav. SYNC = auto-audition while stopped; while playing, the browse file fires on that voice's pattern hits (real voice is not muted, its triggers are skipped).</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>

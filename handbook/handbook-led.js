@@ -782,6 +782,10 @@
       playSubFrame(m, 1, "PREV", "", "G");
       drawText(m, "ON", 2, 3, 0, 255, 0);
     },
+    lk_prev_sync(m) {
+      playSubFrame(m, 1, "PREV", "", "Y");
+      drawText(m, "SYNC", 2, 3, 255, 165, 0);
+    },
     bpm_ext_ok(m) {
       drawBPMScreenLike(m, 124.0, "ext_ok");
     },

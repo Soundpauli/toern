@@ -398,9 +398,11 @@ void sampleBrowserClampBrowseIndexAndHardware(int channel) {
   int raw = (int)Encoder[3].readCounterInt();
   int idx = constrain(raw, 1, vmax);
   currentMode->pos[3] = (unsigned int)idx;
-  Encoder[3].writeMin((int32_t)1);
-  Encoder[3].writeMax((int32_t)vmax);
-  if (raw != idx) Encoder[3].writeCounter((int32_t)idx);
+  if (encoderI2cWritesAllowed()) {
+    Encoder[3].writeMin((int32_t)1);
+    Encoder[3].writeMax((int32_t)vmax);
+    if (raw != idx) Encoder[3].writeCounter((int32_t)idx);
+  }
 }
 
 static bool sampleBrowserAppendFolderSegment(int channel, const char* name) {
