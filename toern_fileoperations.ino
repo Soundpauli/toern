@@ -1,3 +1,34 @@
+static const char *PATTERN_TMP_PATH = "pattern.tmp";
+static const char *AUTOSAVE_PATH = "autosaved.txt";
+bool g_enterNewFileAfterCorruptAutoload = false;
+
+FLASHMEM void clearPatternNotes() {
+  for (unsigned int x = 0; x <= maxlen; x++) {
+    for (unsigned int y = 0; y <= maxY; y++) {
+      note[x][y].channel = 0;
+      note[x][y].velocity = defaultVelocity;
+      note[x][y].probability = 100;
+      note[x][y].condition = 1;
+    }
+  }
+}
+
+FLASHMEM void deleteAutosaveFile() {
+  if (SD.exists(AUTOSAVE_PATH)) SD.remove(AUTOSAVE_PATH);
+  if (SD.exists(PATTERN_TMP_PATH)) SD.remove(PATTERN_TMP_PATH);
+}
+
+static bool patternWriteAll(File &f, const uint8_t *data, size_t len) {
+  extern void sdIoYield();
+  while (len > 0) {
+    size_t n = f.write(data, len);
+    if (n == 0) return false;
+    data += n;
+    len -= n;
+    sdIoYield();
+  }
+  return true;
+}
 
 FLASHMEM void savePattern(bool autosave) {
   extern bool isNowPlaying;
@@ -27,31 +58,34 @@ FLASHMEM void savePattern(bool autosave) {
   unsigned int maxdata = 0;
   char OUTPUTf[50];
   if (autosave) {
-    sprintf(OUTPUTf, "autosaved.txt");
+    sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
   } else {
     sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
   }
 
-  // Teensy SD/SdFat: FILE_WRITE is reliable; O_TRUNC-only opens were failing silently
-  // so pause autosave never wrote autosaved.txt (autoload looked broken).
-  if (SD.exists(OUTPUTf)) {
-    SD.remove(OUTPUTf);
+  // Atomic write: pattern.tmp → rename. Never truncate autosaved.txt first —
+  // a crash mid-save used to leave a truncated/garbage file that autoload treated as notes.
+  if (SD.exists(PATTERN_TMP_PATH)) {
+    SD.remove(PATTERN_TMP_PATH);
     sdIoYield();
   }
-  File saveFile = SD.open(OUTPUTf, FILE_WRITE);
+  File saveFile = SD.open(PATTERN_TMP_PATH, O_WRITE | O_CREAT | O_TRUNC);
+  bool wroteOk = false;
   if (saveFile) {
-    // Buffer note records (4 bytes each) to avoid per-byte SD calls while playing.
     uint8_t buf[512];
     size_t bufLen = 0;
     unsigned rowCount = 0;
+    wroteOk = true;
 
-    for (unsigned int sdx = 1; sdx < maxlen; sdx++) {
+    for (unsigned int sdx = 1; sdx < maxlen && wroteOk; sdx++) {
       for (unsigned int sdy = 1; sdy < maxY + 1; sdy++) {
         maxdata = maxdata + note[sdx][sdy].channel;
         if (bufLen + 4 > sizeof(buf)) {
-          saveFile.write(buf, bufLen);
+          if (!patternWriteAll(saveFile, buf, bufLen)) {
+            wroteOk = false;
+            break;
+          }
           bufLen = 0;
-          sdIoYield();
         }
         buf[bufLen++] = note[sdx][sdy].channel;
         buf[bufLen++] = note[sdx][sdy].velocity;
@@ -62,42 +96,54 @@ FLASHMEM void savePattern(bool autosave) {
         }
       }
     }
-    if (bufLen > 0) {
-      saveFile.write(buf, bufLen);
+    if (wroteOk && bufLen > 0) {
+      wroteOk = patternWriteAll(saveFile, buf, bufLen);
       bufLen = 0;
-      sdIoYield();
     }
 
-    // Use a unique marker to indicate the end of notes and start of SMP data
-    saveFile.write((uint8_t)0xFF);
-    saveFile.write((uint8_t)0xFE);
-    sdIoYield();
+    if (wroteOk) {
+      const uint8_t marker[2] = { 0xFF, 0xFE };
+      wroteOk = patternWriteAll(saveFile, marker, 2);
+    }
 
-    // Save current mute states to SMP before writing
     for (int ch = 0; ch < maxY; ch++) {
       SMP.globalMutes[ch] = globalMutes[ch];
       for (int page = 0; page < maxPages; page++) {
         SMP.pageMutes[page][ch] = pageMutes[page][ch];
       }
     }
-    
-    // Save SMP struct (file/pattern specific data) in chunks
-    const uint8_t *smpBytes = (const uint8_t *)&SMP;
-    size_t smpLeft = sizeof(SMP);
-    size_t smpOff = 0;
-    const size_t smpChunk = 256;
-    while (smpLeft > 0) {
-      size_t n = min(smpChunk, smpLeft);
-      saveFile.write(smpBytes + smpOff, n);
-      smpOff += n;
-      smpLeft -= n;
-      sdIoYield();
+
+    if (wroteOk) {
+      const uint8_t *smpBytes = (const uint8_t *)&SMP;
+      size_t smpLeft = sizeof(SMP);
+      size_t smpOff = 0;
+      const size_t smpChunk = 256;
+      while (smpLeft > 0 && wroteOk) {
+        size_t n = min(smpChunk, smpLeft);
+        wroteOk = patternWriteAll(saveFile, smpBytes + smpOff, n);
+        smpOff += n;
+        smpLeft -= n;
+      }
     }
     saveFile.close();
   }
+
+  if (wroteOk) {
+    if (SD.exists(OUTPUTf)) {
+      SD.remove(OUTPUTf);
+      sdIoYield();
+    }
+    if (!SD.rename(PATTERN_TMP_PATH, OUTPUTf)) {
+      wroteOk = false;
+      // Keep pattern.tmp — autoLoad will rename it if dest is missing.
+    }
+  } else if (SD.exists(PATTERN_TMP_PATH)) {
+    SD.remove(PATTERN_TMP_PATH);
+  }
+
   // Only delete empty files for manual saves, not autosaves
   // (We want to preserve empty state in autosaved.txt)
-  if (maxdata == 0 && !autosave) {
+  if (wroteOk && maxdata == 0 && !autosave) {
     SD.remove(OUTPUTf);
   }
   if (!autosave) {
@@ -263,116 +309,162 @@ FLASHMEM void loadPattern(bool autoload) {
   char OUTPUTf[50];
   // autoload, or FILE menu slot 0 → autosaved.txt
   if (autoload || SMP.file == 0) {
-    sprintf(OUTPUTf, "autosaved.txt");
+    sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
   } else {
     sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
   }
 
-  // Load .txt file
+  const bool isAutosaveSlot = autoload || SMP.file == 0;
+  bool loadedOk = false;
+  const size_t expectedNotes = (size_t)(maxlen - 1) * (size_t)maxY;
+
   if (SD.exists(OUTPUTf)) {
     File loadFile = SD.open(OUTPUTf);
     if (loadFile) {
-      for (unsigned int x = 1; x < maxlen; x++) {
-        for (unsigned int y = 1; y <= maxY; y++) {
-          note[x][y].channel = 0;
-          note[x][y].velocity = 0;
-          note[x][y].probability = 100;
-          note[x][y].condition = 1;
-        }
-      }
+      const size_t minBytes = expectedNotes * 4u + 2u;
+      if (loadFile.size() >= minBytes) {
+        clearPatternNotes();
 
-      uint8_t buf[512];
-      size_t have = 0;
-      size_t pos = 0;
-      unsigned int sdry = 1;
-      unsigned int sdrx = 1;
+        uint8_t buf[512];
+        size_t have = 0;
+        size_t pos = 0;
+        unsigned int sdry = 1;
+        unsigned int sdrx = 1;
+        size_t notesRead = 0;
+        bool foundMarker = false;
 
-      while (true) {
-        if (pos >= have) {
-          have = 0;
-          pos = 0;
-          if (!loadFile.available()) break;
-          int got = loadFile.read(buf, sizeof(buf));
-          if (got <= 0) break;
-          have = (size_t)got;
-          sdIoYield();
-        }
-        if (have - pos >= 2 && buf[pos] == 0xFF && buf[pos + 1] == 0xFE) {
-          pos += 2;
-          break;
-        }
-        if (have - pos < 4) {
-          if (pos > 0) {
-            memmove(buf, buf + pos, have - pos);
-            have -= pos;
+        while (notesRead < expectedNotes) {
+          if (pos >= have) {
+            have = 0;
             pos = 0;
+            if (!loadFile.available()) break;
+            int got = loadFile.read(buf, sizeof(buf));
+            if (got <= 0) break;
+            have = (size_t)got;
+            sdIoYield();
           }
-          if (!loadFile.available()) break;
-          int got = loadFile.read(buf + have, sizeof(buf) - have);
-          if (got <= 0) break;
-          have += (size_t)got;
-          sdIoYield();
-          continue;
-        }
-        if (buf[pos] == 0xFF && buf[pos + 1] == 0xFE) {
-          pos += 2;
-          break;
-        }
-        if (sdrx < maxlen && sdry >= 1 && sdry <= maxY) {
-          note[sdrx][sdry].channel = buf[pos];
-          note[sdrx][sdry].velocity = buf[pos + 1];
-          note[sdrx][sdry].probability = buf[pos + 2];
-          note[sdrx][sdry].condition = buf[pos + 3];
-        }
-        pos += 4;
-        sdry++;
-        if (sdry > maxY) {
-          sdry = 1;
-          sdrx++;
-        }
-      }
-
-      // Any leftover in buf after the marker belongs to SMP; then the rest of the file.
-      if (loadFile.available() || pos < have) {
-        uint8_t *smpBytes = (uint8_t *)&SMP;
-        size_t smpLeft = sizeof(SMP);
-        size_t smpOff = 0;
-        if (pos < have) {
-          size_t take = min(have - pos, smpLeft);
-          memcpy(smpBytes, buf + pos, take);
-          smpOff += take;
-          smpLeft -= take;
-          pos += take;
-        }
-        while (smpLeft > 0 && loadFile.available()) {
-          size_t n = min((size_t)512, smpLeft);
-          int got = loadFile.read(smpBytes + smpOff, n);
-          if (got <= 0) break;
-          smpOff += (size_t)got;
-          smpLeft -= (size_t)got;
-          sdIoYield();
-        }
-
-        // Validate BPM after loading (default to 100 if invalid)
-        if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
-          SMP.bpm = 100.0f;
-        }
-
-        // Load mute states from SMP
-        for (int ch = 0; ch < maxY; ch++) {
-          globalMutes[ch] = SMP.globalMutes[ch];
-          for (int page = 0; page < maxPages; page++) {
-            pageMutes[page][ch] = SMP.pageMutes[page][ch];
+          if (have - pos < 4) {
+            if (pos > 0) {
+              memmove(buf, buf + pos, have - pos);
+              have -= pos;
+              pos = 0;
+            }
+            if (!loadFile.available()) break;
+            int got = loadFile.read(buf + have, sizeof(buf) - have);
+            if (got <= 0) break;
+            have += (size_t)got;
+            sdIoYield();
+            continue;
+          }
+          if (sdrx < maxlen && sdry >= 1 && sdry <= maxY) {
+            note[sdrx][sdry].channel = buf[pos];
+            note[sdrx][sdry].velocity = buf[pos + 1];
+            note[sdrx][sdry].probability = buf[pos + 2];
+            note[sdrx][sdry].condition = buf[pos + 3];
+          }
+          pos += 4;
+          notesRead++;
+          sdry++;
+          if (sdry > maxY) {
+            sdry = 1;
+            sdrx++;
           }
         }
 
-        // Unmute all channels first, then apply loaded mutes based on PMOD state
-        unmuteAllChannels();
-        applyMutesAfterPMODSwitch();
+        if (notesRead == expectedNotes) {
+          while (have - pos < 2) {
+            if (pos > 0 && pos < have) {
+              memmove(buf, buf + pos, have - pos);
+              have -= pos;
+              pos = 0;
+            } else if (pos >= have) {
+              have = 0;
+              pos = 0;
+            }
+            if (!loadFile.available()) break;
+            int got = loadFile.read(buf + have, sizeof(buf) - have);
+            if (got <= 0) break;
+            have += (size_t)got;
+            sdIoYield();
+          }
+          if (have - pos >= 2 && buf[pos] == 0xFF && buf[pos + 1] == 0xFE) {
+            pos += 2;
+            foundMarker = true;
+          }
+        }
+
+        if (foundMarker) {
+          uint8_t *smpBytes = (uint8_t *)&SMP;
+          size_t smpLeft = sizeof(SMP);
+          size_t smpOff = 0;
+          if (pos < have) {
+            size_t take = min(have - pos, smpLeft);
+            memcpy(smpBytes, buf + pos, take);
+            smpOff += take;
+            smpLeft -= take;
+            pos += take;
+          }
+          while (smpLeft > 0 && loadFile.available()) {
+            size_t n = min((size_t)512, smpLeft);
+            int got = loadFile.read(smpBytes + smpOff, n);
+            if (got <= 0) break;
+            smpOff += (size_t)got;
+            smpLeft -= (size_t)got;
+            sdIoYield();
+          }
+
+          if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
+            SMP.bpm = 100.0f;
+          }
+          if (SMP.file > 99) SMP.file = 1;
+          if (SMP.pack < 1 || SMP.pack > 99) SMP.pack = 1;
+
+          for (int ch = 0; ch < maxY; ch++) {
+            globalMutes[ch] = SMP.globalMutes[ch];
+            for (int page = 0; page < maxPages; page++) {
+              pageMutes[page][ch] = SMP.pageMutes[page][ch];
+            }
+          }
+
+          unmuteAllChannels();
+          applyMutesAfterPMODSwitch();
+          loadedOk = true;
+        }
       }
       loadFile.close();
     }
     sdIoYield();
+  }
+
+  if (!loadedOk) {
+    // EXTMEM/PSRAM is not a blank canvas after reset — always zero the grid.
+    clearPatternNotes();
+    const bool fileWasPresent = SD.exists(OUTPUTf);
+    if (isAutosaveSlot && fileWasPresent) {
+      SD.remove(OUTPUTf);
+    }
+    if (!autoload) sdIoEndAudioSafe();
+    if (fileWasPresent) {
+      extern void FastLEDclear();
+      extern void FastLEDshow();
+      extern void drawText(const char *text, int startX, int startY, CRGB color);
+      FastLEDclear();
+      drawText("ERR", 3, 8, CRGB(255, 0, 0));
+      FastLEDshow();
+      delay(700);
+      if (autoload) {
+        g_enterNewFileAfterCorruptAutoload = true;
+      } else {
+        extern void showNewFileScreen();
+        showNewFileScreen();
+      }
+    } else if (!autoload && SMP.file != 0) {
+      extern void showNewFileScreen();
+      showNewFileScreen();
+    }
+    extern bool preventPaintUnpaint;
+    preventPaintUnpaint = false;
+    return;
   }
   
   // Reset basic runtime flags when loading a pattern
@@ -392,16 +484,6 @@ FLASHMEM void loadPattern(bool autoload) {
   // Reset paint/unpaint prevention flag after loadPattern operation
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
-  
-  // Missing manual file → NEW screen. Missing autosave on boot → stay empty (no NEW).
-  if (!SD.exists(OUTPUTf)) {
-    if (!autoload) sdIoEndAudioSafe();
-    if (!autoload && SMP.file != 0) {
-      extern void showNewFileScreen();
-      showNewFileScreen();
-    }
-    return;
-  }
 
   updateLastPage();
   
@@ -425,7 +507,10 @@ FLASHMEM void loadPattern(bool autoload) {
 
 
 FLASHMEM void autoLoad() {
-  
+  // Finish an interrupted atomic save (pattern.tmp already complete, rename never ran).
+  if (!SD.exists(AUTOSAVE_PATH) && SD.exists(PATTERN_TMP_PATH)) {
+    SD.rename(PATTERN_TMP_PATH, AUTOSAVE_PATH);
+  }
   loadPattern(true);
   
   // Reset paint/unpaint prevention flag after autoLoad operation

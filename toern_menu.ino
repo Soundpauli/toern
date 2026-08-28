@@ -6,6 +6,9 @@
 #define VOL_PAGES_COUNT 6
 #define ETC_PAGES_COUNT 8
 
+// PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
+static uint8_t g_ppqnUiFocus = 0;
+
 // External variables
 extern Mode *currentMode;
 extern int ctrlMode;
@@ -96,7 +99,7 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"SEND", 13, false, nullptr},         // MIDI Send (CLCK, NOTE, BOTH)
   {"RCVE", 44, false, nullptr},         // MIDI Note Receive (OFF/NOTE)
   {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 −127..+127 ms (+ = this path, − = other path)
-  {"PPQN", 50, false, nullptr},         // Analog clock pulse on pin 31 (enc2 POL, enc3 OFF/rate)
+  {"PPQN", 50, false, nullptr},         // Analog clock: enc1 width, enc2 STOP/CONT, enc3 rate + click POL
 };
 
 // VOL submenu pages
@@ -129,6 +132,13 @@ static uint32_t infoPageEnterMs = 0;
 static bool menuForceFullRedraw = false;
 FLASHMEM void menuRequestFullRedraw() {
   menuForceFullRedraw = true;
+}
+
+FLASHMEM void togglePulseClockPolarityFromMenu() {
+  extern void togglePulseClockPolarity();
+  togglePulseClockPolarity();
+  g_ppqnUiFocus = 0;
+  menuRequestFullRedraw();
 }
 static inline bool takeMenuForceFullRedraw() {
   if (!menuForceFullRedraw) return false;
@@ -239,7 +249,7 @@ int genreLength = 8; // Default length for genre generation
 // NEW mode state management
 bool newScreenFirstEnter = true;
 
-// Reset menu option: 0 = SD rescan, 1 = EFX reset, 2 = FULL reset, 3 = FILE (wipe saves), 4 = PACK (wipe samplepacks)
+// Reset menu option: 0 = SD, 1 = EFX, 2 = FULL, 3 = FILE, 4 = PACK, 5 = ASAV (wipe autosaved.txt)
 int resetMenuOption = 0;
 
 // DRAW mode: 0 = L+R (default), 1 = R (right-hand only)
@@ -527,8 +537,9 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol default (0-50 range, middle = 20)
       EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
       EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
-      // slot 10: PPQN packed (bit0=on, bit1=polarity-, bits2-4=ppqn idx); default OFF / + / 24
+      // slot 10: PPQN packed (bit0=on, bit1=polarity-, bits2-4=ppqn idx, bit5=STOP); default OFF / + / 24 / CONT
       EEPROM.write(EEPROM_DATA_START + 10, (uint8_t)(6 << 2));
+      EEPROM.write(EEPROM_DATA_START + 30, 12);  // PPQN pulse width ms
       EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
       EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
       EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledMode default (1 = one panel, normal orientation)
@@ -713,10 +724,6 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
   setLedStripEnabled(ledStripEnabled);
 
-  // Load PPQN pulse settings (analog clock on pin 31)
-  extern void loadPulseClockFromEEPROM();
-  loadPulseClockFromEEPROM();
-  
   // Load spkrEnabled from EEPROM (stored at EEPROM_DATA_START + 27)
   extern bool getSpkrEnabled();
   extern void setSpkrEnabled(bool enabled);
@@ -761,9 +768,16 @@ FLASHMEM void loadMenuFromEEPROM() {
     transportRcveDelayMs = (int8_t)constrain((int)v30, -127, 127);
     EEPROM.write(EEPROM_DATA_START + 29, (uint8_t)transportSendDelayMs);
     EEPROM.write(EEPROM_DATA_START + 31, (uint8_t)transportRcveDelayMs);
+    EEPROM.write(EEPROM_DATA_START + 30, 12);  // slot 30 reused as PPQN pulse width ms
   } else {
     transportSendDelayMs = (int8_t)constrain((int)(int8_t)raw29, -127, 127);
     transportRcveDelayMs = (int8_t)constrain((int)(int8_t)raw31, -127, 127);
+  }
+
+  // Load PPQN pulse settings after delay migration so slot 30 is pulse width, not leftover RCVE
+  {
+    extern void loadPulseClockFromEEPROM();
+    loadPulseClockFromEEPROM();
   }
 
   {
@@ -1365,13 +1379,18 @@ FLASHMEM void showMidiMenu() {
   // (mainSetting already computed above)
   
   // MIDI: encoder 2 = value on CH/TRAN/SEND/RCVE; enc1+2 = SYNC;
-  // PPQN: enc2=POL, enc3=OFF/rate; enc4 = page nav
+  // PPQN: enc1=width, enc2=STOP/CONT, enc3=OFF/rate (click=POL); enc4 = page nav
   CRGB indicatorColor = currentMenuParentTextColor();
   const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50);
   Encoder[0].writeRGBCode(0x000000);
   if (mainSetting == 50) {
-    Encoder[1].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
-    Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+    extern bool getPulseClockPolarityPositive();
+    extern bool getPulseClockStopWithPlay();
+    const bool polPos = getPulseClockPolarityPositive();
+    const bool stopPlay = getPulseClockStopWithPlay();
+    Encoder[0].writeRGBCode(0xFFFFFF);
+    Encoder[1].writeRGBCode(stopPlay ? 0xFF0000 : 0x00FF00);
+    Encoder[2].writeRGBCode(polPos ? 0x00FF00 : 0xFF0000);
     Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
   } else {
     Encoder[1].writeRGBCode(mainSetting == 45 ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -1825,23 +1844,33 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
-    case 50: { // PPQN - enc2 POL (+/-), enc3 OFF/1/2/4/8/12/16/24/32
+    case 50: { // PPQN - enc1 width, enc2 STOP/CONT, enc3 OFF/rate (click POL)
       extern bool getPulseClockEnabled();
       extern bool getPulseClockPolarityPositive();
+      extern bool getPulseClockStopWithPlay();
       extern uint8_t getPulseClockPpqn();
+      extern uint8_t getPulseClockWidthMs();
       const CRGB tc = currentMenuParentTextColor();
       drawText("PPQN", 2, 10, tc);
       bool on = getPulseClockEnabled();
       bool polPos = getPulseClockPolarityPositive();
-      if (!on) {
+      bool stopPlay = getPulseClockStopWithPlay();
+      if (g_ppqnUiFocus == 2) {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%u", (unsigned)getPulseClockWidthMs());
+        drawMenuValue(buf, 2, 3, UI_WHITE);
+      } else if (g_ppqnUiFocus == 1) {
+        drawMenuValue(stopPlay ? "STOP" : "CONT", 2, 3, stopPlay ? UI_RED : UI_GREEN);
+      } else if (!on) {
         drawMenuValue("OFF", 2, 3, UI_RED);
       } else {
         char buf[8];
         snprintf(buf, sizeof(buf), "%c%u", polPos ? '+' : '-', (unsigned)getPulseClockPpqn());
-        drawMenuValue(buf, 2, 3, UI_GREEN);
+        drawMenuValue(buf, 2, 3, polPos ? UI_GREEN : UI_RED);
       }
-      drawIndicator('L', polPos ? 'G' : 'R', 2);
-      drawIndicator('L', on ? 'G' : 'R', 3);
+      drawIndicator('L', 'W', 1);
+      drawIndicator('L', stopPlay ? 'R' : 'G', 2);
+      drawIndicator('L', polPos ? 'G' : 'R', 3);
       break;
     }
       
@@ -2275,7 +2304,7 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       break;
     }
 
-    case 16: { // RST page - show current mode (SD, EFX, FULL, FILE, PACK)
+    case 16: { // RST page - show current mode (SD, EFX, FULL, FILE, PACK, ASAV)
       const char* modeText;
       if (resetMenuOption == 0) {
         modeText = "SD";
@@ -2285,8 +2314,10 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
         modeText = "FULL";
       } else if (resetMenuOption == 3) {
         modeText = "FILE";
-      } else {
+      } else if (resetMenuOption == 4) {
         modeText = "PACK";
+      } else {
+        modeText = "ASAV";
       }
       for (int x = 1; x <= 16; x++) {
         light(x, 8, CRGB::Black);
@@ -2346,6 +2377,12 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     lastStereoCh = -1;
     infoPageFirstEnter = true;
     lastPongSpeed = -1;
+    if (lastSetting == 50) {
+      Encoder[0].writeMin((int32_t)1);
+      Encoder[0].writeMax((int32_t)1);
+      Encoder[0].writeCounter((int32_t)1);
+      currentMode->pos[0] = 1;
+    }
     lastSetting = setting;
   }
   
@@ -2565,37 +2602,62 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 50: { // PPQN - enc2 POL (+/-), enc3 OFF/1/2/4/8/12/16/24/32
-      extern bool getPulseClockPolarityPositive();
+    case 50: { // PPQN - enc1 width, enc2 STOP/CONT, enc3 OFF/rate
+      extern bool getPulseClockStopWithPlay();
       extern uint8_t getPulseClockRateSel();
       extern uint8_t getPulseClockRateSelCount();
-      extern void setPulseClockPolarityPositive(bool);
+      extern uint8_t getPulseClockWidthMs();
+      extern uint8_t getPulseClockWidthMsMin();
+      extern uint8_t getPulseClockWidthMsMax();
+      extern void setPulseClockStopWithPlay(bool);
       extern void setPulseClockRateSel(uint8_t);
-      static int lastPpqnPol = -1;
+      extern void setPulseClockWidthMs(uint8_t);
+      static int lastPpqnWidth = -1;
+      static int lastPpqnRun = -1;
       static int lastPpqnRate = -1;
-      int polVal = getPulseClockPolarityPositive() ? 0 : 1;  // 0=+, 1=-
+      int widthVal = (int)getPulseClockWidthMs();
+      int widthMin = (int)getPulseClockWidthMsMin();
+      int widthMax = (int)getPulseClockWidthMsMax();
+      int runVal = getPulseClockStopWithPlay() ? 0 : 1;  // 0=STOP, 1=CONT
       int rateSel = (int)getPulseClockRateSel();
       uint8_t rateMax = getPulseClockRateSelCount() > 0 ? (uint8_t)(getPulseClockRateSelCount() - 1) : 0;
       if (menuFirstEnter) {
-        Encoder[1].writeCounter((int32_t)polVal);
-        Encoder[1].writeMax((int32_t)1);
+        Encoder[0].writeMin((int32_t)widthMin);
+        Encoder[0].writeMax((int32_t)widthMax);
+        Encoder[0].writeCounter((int32_t)widthVal);
         Encoder[1].writeMin((int32_t)0);
-        Encoder[2].writeCounter((int32_t)rateSel);
-        Encoder[2].writeMax((int32_t)rateMax);
+        Encoder[1].writeMax((int32_t)1);
+        Encoder[1].writeCounter((int32_t)runVal);
         Encoder[2].writeMin((int32_t)0);
-        currentMode->pos[1] = polVal;
-        currentMode->pos[2] = rateSel;
-        lastPpqnPol = polVal;
+        Encoder[2].writeMax((int32_t)rateMax);
+        Encoder[2].writeCounter((int32_t)rateSel);
+        currentMode->pos[0] = (unsigned int)widthVal;
+        currentMode->pos[1] = (unsigned int)runVal;
+        currentMode->pos[2] = (unsigned int)rateSel;
+        lastPpqnWidth = widthVal;
+        lastPpqnRun = runVal;
         lastPpqnRate = rateSel;
+        g_ppqnUiFocus = 0;
         menuFirstEnter = false;
       }
-      if ((int)currentMode->pos[1] != lastPpqnPol) {
-        polVal = constrain((int)currentMode->pos[1], 0, 1);
-        setPulseClockPolarityPositive(polVal == 0);
-        polVal = getPulseClockPolarityPositive() ? 0 : 1;
-        Encoder[1].writeCounter((int32_t)polVal);
-        currentMode->pos[1] = polVal;
-        lastPpqnPol = polVal;
+      if ((int)currentMode->pos[0] != lastPpqnWidth) {
+        widthVal = constrain((int)currentMode->pos[0], widthMin, widthMax);
+        setPulseClockWidthMs((uint8_t)widthVal);
+        widthVal = (int)getPulseClockWidthMs();
+        Encoder[0].writeCounter((int32_t)widthVal);
+        currentMode->pos[0] = (unsigned int)widthVal;
+        lastPpqnWidth = widthVal;
+        g_ppqnUiFocus = 2;
+        redrawMain(setting);
+      }
+      if ((int)currentMode->pos[1] != lastPpqnRun) {
+        runVal = constrain((int)currentMode->pos[1], 0, 1);
+        setPulseClockStopWithPlay(runVal == 0);
+        runVal = getPulseClockStopWithPlay() ? 0 : 1;
+        Encoder[1].writeCounter((int32_t)runVal);
+        currentMode->pos[1] = (unsigned int)runVal;
+        lastPpqnRun = runVal;
+        g_ppqnUiFocus = 1;
         redrawMain(setting);
       }
       if ((int)currentMode->pos[2] != lastPpqnRate) {
@@ -2603,8 +2665,9 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         setPulseClockRateSel((uint8_t)rateSel);
         rateSel = (int)getPulseClockRateSel();
         Encoder[2].writeCounter((int32_t)rateSel);
-        currentMode->pos[2] = rateSel;
+        currentMode->pos[2] = (unsigned int)rateSel;
         lastPpqnRate = rateSel;
+        g_ppqnUiFocus = 0;
         menuRequestFullRedraw();
         redrawMain(setting);
       }
@@ -3156,18 +3219,18 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 16: { // RST page - Choose between SD, EFX, FULL, FILE, PACK reset
+    case 16: { // RST page - Choose between SD, EFX, FULL, FILE, PACK, ASAV
       static int lastResetOption = -1;
 
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        Encoder[2].writeMax((int32_t)4);  // 0=SD, 1=EFX, 2=FULL, 3=FILE, 4=PACK
+        Encoder[2].writeMax((int32_t)5);  // 0=SD, 1=EFX, 2=FULL, 3=FILE, 4=PACK, 5=ASAV
         Encoder[2].writeMin((int32_t)0);
         menuFirstEnter = false;
       }
 
       if (currentMode->pos[2] != lastResetOption) {
-        resetMenuOption = constrain(currentMode->pos[2], 0, 4);
+        resetMenuOption = constrain(currentMode->pos[2], 0, 5);
         Encoder[2].writeCounter((int32_t)resetMenuOption);
         redrawMain(setting);
         lastResetOption = resetMenuOption;
@@ -3770,6 +3833,26 @@ FLASHMEM void switchMenu(int menuPosition){
           FastLEDshow();
           delay(1000);
           
+          extern Mode draw;
+          extern void switchMode(Mode*);
+          switchMode(&draw);
+        } else if (resetMenuOption == 5) {
+          // ASAV: remove autosaved.txt (and leftover pattern.tmp)
+          FastLEDclear();
+          drawText("WIPE", 2, 10, UI_ORANGE);
+          drawText("ASAV", 2, 3, UI_ORANGE);
+          FastLEDshow();
+
+          extern void deleteAutosaveFile();
+          extern void clearPatternNotes();
+          deleteAutosaveFile();
+          clearPatternNotes();
+
+          FastLEDclear();
+          drawText("DONE", 2, 3, UI_GREEN);
+          FastLEDshow();
+          delay(1000);
+
           extern Mode draw;
           extern void switchMode(Mode*);
           switchMode(&draw);

@@ -1916,6 +1916,11 @@ void processPeaks() {
     }
   }
 
+  // No file peaks yet: trim bar only (don't paint a fake floor at y=5).
+  if (peakIndex <= 0) {
+    return;
+  }
+
   // Light up LEDs with normalized values - limit drawing to y=5..10
   for (int i = 0; i < maxX; i++) {
     int x = i + 1;  // Ensure x values go from 1 to maxX

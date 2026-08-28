@@ -22,7 +22,7 @@ extern const int PREVIEW_MODE_ON;
 extern const int PREVIEW_MODE_PRESS;
 extern const int PREVIEW_MODE_SYNC;
 extern bool g_suppressNextWavPreviewAfterFolderNav;
-extern void sampleBrowserClampBrowseIndexAndHardware(int channel);
+extern void sampleBrowserClampBrowseIndex(int channel);
 extern void updatePreviewVolume();
 extern bool encoderI2cWritesAllowed();
 extern bool isNowPlaying;
@@ -36,7 +36,7 @@ static bool g_queuedSdPreview = false;
 static elapsedMillis g_sdPreviewQuietMs;
 static bool g_previewPlayImmediate = false;
 static const unsigned SD_PREVIEW_SETTLE_MS = 45;
-// Live peak1 capture only when ON (or SYNC while stopped). PRESS keeps the peak-scan waveform.
+// Live peak1 capture only when the file scan has nothing to show yet.
 bool g_previewUseLivePeaks = true;
 
 static inline bool previewPlaysOnSelect() {
@@ -452,6 +452,7 @@ FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
     }
 
     // PRESS / SYNC-while-playing already have a peak-scan waveform — don't wipe it.
+    // ON starts from empty and fills from live peak1 while playSdWav1 runs.
     bool keepPeaks = (peakIndex > 0) &&
                      (previewTriggerMode == PREVIEW_MODE_PRESS ||
                       (previewTriggerMode == PREVIEW_MODE_SYNC && isNowPlaying));
@@ -840,10 +841,7 @@ void showWave() {
   };
 
   auto refreshPeaksDisplay = [&]() {
-    // Update peaks whenever data exists
-    if (peakIndex > 0) {
-      processPeaks();
-    }
+    processPeaks();
   };
 
   // ---- Early exits / setup -------------------------------------------------
@@ -893,7 +891,7 @@ void showWave() {
   if (encoderSampleValue != (int)currentMode->pos[3]) {
     currentMode->pos[3] = encoderSampleValue;
   }
-  sampleBrowserClampBrowseIndexAndHardware(ch);
+  sampleBrowserClampBrowseIndex(ch);
   encoderSampleValue = (int)currentMode->pos[3];
   int selectedIdx = encoderSampleValue - 1;
   bool selectedIsFile = (selectedIdx >= 0 && selectedIdx < (int)g_wavPickCount &&
@@ -909,24 +907,25 @@ void showWave() {
 
   const bool allowEncWrite = encoderI2cWritesAllowed();
   static bool seekHwResetPending = false;
+  static uint8_t seekHwResetTries = 0;
 
-  // Encoder 2 rotation is unused in SET_WAV.
+  // Encoder 2 rotation is unused in SET_WAV. Range/counter: once per entry, not every frame
+  // (writeMin/Max every loop on the slow encoder bus makes turning look dead).
   currentMode->pos[1] = 0;
-  if (allowEncWrite) {
-    Encoder[2].writeMin((int32_t)0);
-    Encoder[2].writeMax((int32_t)0);
-    Encoder[2].writeCounter((int32_t)0);
-    Encoder[1].writeMin((int32_t)0);
-    Encoder[1].writeMax((int32_t)100);
-  }
 
   // Cache encoder RGB and only write when changed (showWave runs every frame).
   // Invalidate after a gap so re-entering SET_WAV refreshes rings after other modes.
   static uint32_t lastShowWaveRGB[4] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
   static uint32_t lastShowWaveRgbMs = 0;
+  static bool encRangeSynced = false;
+  static int lastSyncedMaxList = -1;
+  static int lastPeakScanKey = -1;
   uint32_t nowMs = millis();
   if (nowMs - lastShowWaveRgbMs > 50) {
     for (int i = 0; i < 4; i++) lastShowWaveRGB[i] = 0xFFFFFFFF;
+    encRangeSynced = false;
+    lastSyncedMaxList = -1;
+    lastPeakScanKey = -1;
   }
   lastShowWaveRgbMs = nowMs;
   auto setShowWaveRGB = [&](uint8_t i, uint32_t rgb) {
@@ -936,28 +935,36 @@ void showWave() {
     }
   };
 
+  if (allowEncWrite && !encRangeSynced) {
+    Encoder[2].writeMin((int32_t)0);
+    Encoder[2].writeMax((int32_t)0);
+    Encoder[2].writeCounter((int32_t)0);
+    Encoder[1].writeMin((int32_t)0);
+    Encoder[1].writeMax((int32_t)100);
+    encRangeSynced = true;
+  }
+
   setShowWaveRGB(0, 0xFF00FF); // Magenta (seek start)
   if (selectedIsFile) {
     setShowWaveRGB(1, 0xFFFF00); // Yellow (seekEnd)
-    setShowWaveRGB(2, 0x0000FF); // Blue (load)
+    setShowWaveRGB(2, 0x00FF00); // Green (load) — matches L[G]
   } else {
     setShowWaveRGB(1, 0x000000);
     setShowWaveRGB(2, 0x000000);
   }
+  setShowWaveRGB(3, 0xFFFFFF); // White (browser) — matches L[W]
 
   bool sampleChanged = selectedIsFile &&
                        ((encoderSampleValue != lastEncoder3Value_forShowWave) ||
                         (encoderSampleValue != SMP.wav[ch].fileID));
 
-  // New wav: reset trim for THIS file before leftover seek-encoder values are applied.
+  // New wav: reset trim once. Do not rewrite 0/100 every frame — that fights the knobs.
   if (sampleChanged) {
     resetSeekRange();
     seekHwResetPending = true;
+    seekHwResetTries = 0;
   } else if (seekHwResetPending) {
-    resetSeekRange();
-    if ((int)Encoder[0].readCounterInt() == 0 && (int)Encoder[1].readCounterInt() == 100) {
-      seekHwResetPending = false;
-    }
+    if (++seekHwResetTries > 3) seekHwResetPending = false;
   } else if (currentMode->pos[2] > 100) {
     currentMode->pos[2] = 100;
     if (allowEncWrite) Encoder[1].writeCounter((int32_t)currentMode->pos[2]);
@@ -969,47 +976,32 @@ void showWave() {
     if (newSeek != GLOB.seek) {
       GLOB.seek = newSeek;
       currentMode->pos[0] = newSeek;
-      stopPeakScan();
-      if (sampleIsLoaded) {
+      if (sampleIsLoaded && previewPlaysOnSelect() && !g_peakScan.active) {
         yield();
-        previewSample(false, previewPlaysOnSelect());
+        previewSample(false, true);
       }
     }
 
-    int32_t encoder1Counter = Encoder[1].readCounterInt();
-    int newSeekEnd = constrain((int)encoder1Counter, GLOB.seek + 1, 100);
-    if (newSeekEnd != (int)encoder1Counter && allowEncWrite) {
+    int newSeekEnd = constrain((int)currentMode->pos[2], GLOB.seek + 1, 100);
+    if (newSeekEnd != (int)currentMode->pos[2] && allowEncWrite) {
       Encoder[1].writeCounter((int32_t)newSeekEnd);
+      currentMode->pos[2] = (unsigned int)newSeekEnd;
     }
     if (newSeekEnd != GLOB.seekEnd) {
       GLOB.seekEnd = newSeekEnd;
       currentMode->pos[2] = newSeekEnd;
-      stopPeakScan();
-      if (sampleIsLoaded) {
+      if (sampleIsLoaded && previewPlaysOnSelect() && !g_peakScan.active) {
         yield();
-        previewSample(false, previewPlaysOnSelect());
+        previewSample(false, true);
       }
     }
   }
 
   // ---- Encoder 3: combined browser ([../], dirs, files) -------------------
-  if (allowEncWrite) {
+  if (allowEncWrite && maxList != lastSyncedMaxList) {
     Encoder[3].writeMin((int32_t)1);
     Encoder[3].writeMax((int32_t)maxList);
-    if (encoderSampleValue != (int)currentMode->pos[3]) {
-      Encoder[3].writeCounter((int32_t)encoderSampleValue);
-    }
-  }
-
-  {
-    int wi = constrain((int)currentMode->pos[3] - 1, 0, max(0, (int)g_wavPickCount - 1));
-    bool isDirEntry = (sampleBrowserEntryTypeAt(wi) != 2);
-    if (isDirEntry) {
-      setShowWaveRGB(3, 0xFFFF00);
-    } else {
-      CRGB fc = fileSizeToColor(g_wavPickSize[wi]);
-      setShowWaveRGB(3, ((uint32_t)fc.r << 16) | ((uint32_t)fc.g << 8) | fc.b);
-    }
+    lastSyncedMaxList = maxList;
   }
 
   if ((int)lastEncoder3Value_forShowWave != encoderSampleValue) {
@@ -1041,22 +1033,34 @@ void showWave() {
     if (g_suppressNextWavPreviewAfterFolderNav) {
       g_suppressNextWavPreviewAfterFolderNav = false;
     } else if (previewPlaysOnSelect()) {
+      // Audition immediately — do not wait for the file peak scan (SD bus is exclusive).
+      sampleIsLoaded = true;
       previewSampleNow();
     } else {
-      // PRESS / SYNC-while-playing: waveform via peak scan, no instant audition.
-      sampleIsLoaded = true;
       char peakPath[160];
       if (buildCurrentBrowseSamplePath(peakPath, sizeof(peakPath))) {
         startPeakScan(peakPath);
       }
+      sampleIsLoaded = true;
+      lastPeakScanKey = (ch << 16) | encoderSampleValue;
+    }
+  }
+
+  // After ON preview (or on re-entry): build the matrix from the file if still empty.
+  int peakScanKey = (ch << 16) | encoderSampleValue;
+  if (selectedIsFile && peakIndex == 0 && !g_peakScan.active && !playSdWav1.isPlaying()
+      && !previewIsPlaying && !g_queuedSdPreview && lastPeakScanKey != peakScanKey) {
+    lastPeakScanKey = peakScanKey;
+    char peakPath[160];
+    if (buildCurrentBrowseSamplePath(peakPath, sizeof(peakPath))) {
+      startPeakScan(peakPath);
+      sampleIsLoaded = true;
     }
   }
   
-  if (selectedIsFile && (previewTriggerMode == PREVIEW_MODE_PRESS || previewTriggerMode == PREVIEW_MODE_SYNC)
-      && !playSdWav1.isPlaying() && !g_queuedSdPreview) {
-    // Process peaks in smaller chunks with yields to avoid blocking
+  if (selectedIsFile && !playSdWav1.isPlaying() && !g_queuedSdPreview) {
     servicePeakScan(4096);
-    yield(); // Yield after peak processing to keep UI responsive
+    yield();
   }
 
   // Safety clamp
@@ -1191,6 +1195,16 @@ void showWave() {
       snprintf(selectionLabel, sizeof(selectionLabel), "-");
     }
     bool selectionIsFileEntry = (ei >= 0 && ei < (int)g_wavPickCount && sampleBrowserEntryTypeAt(ei) == 2);
+    if (selectionIsFileEntry) {
+      size_t labLen = strlen(selectionLabel);
+      if (labLen > 4) {
+        char *ext = selectionLabel + (labLen - 4);
+        if (ext[0] == '.' && (ext[1] == 'w' || ext[1] == 'W') &&
+            (ext[2] == 'a' || ext[2] == 'A') && (ext[3] == 'v' || ext[3] == 'V')) {
+          *ext = '\0';
+        }
+      }
+    }
     CRGB selectionColor = selectionIsFileEntry
         ? fileSizeToColor(g_wavPickSize[ei])
         : CRGB(255, 255, 0);

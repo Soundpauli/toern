@@ -333,6 +333,9 @@ void resetAllToDefaults() {
   // Reset all audio effects/filters to clean defaults
   extern void resetAllAudioEffects();
   resetAllAudioEffects();
+
+  extern void resetAllChannelVolumesToDefault();
+  resetAllChannelVolumesToDefault();
   
   // Add delay before switching mode
   delay(300);

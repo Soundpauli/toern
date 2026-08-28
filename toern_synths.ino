@@ -647,7 +647,7 @@ void updateVals(int ch) {
 }
 
 // Modify playSound() so that when a note is played, you store its start time.
-void playSound(int note, int ch) {
+void playSound(int note, int ch, int velocity) {
   // Bounds check: ch must be 0 or 1 (INSTRUMENT_CHANNELS = 2)
   if (ch < 0 || ch >= INSTRUMENT_CHANNELS) {
     return;  // Invalid channel, skip
@@ -682,6 +682,13 @@ void playSound(int note, int ch) {
     notesArray[noteIdx1] * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
   Swaveform3[voiceIdx]->frequency(
     notesArray[noteIdx2] * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+  int velMidi = velocity;
+  if (velMidi <= 0) velMidi = defaultVelocity;
+  if (velMidi > 127) velMidi = 127;
+  float amp = mapf((float)velMidi, 1.0f, 127.0f, 0.0f, 1.0f);
+  Swaveform1[voiceIdx]->amplitude(amp);
+  Swaveform2[voiceIdx]->amplitude(amp);
+  Swaveform3[voiceIdx]->amplitude(amp);
   Senvelope1[voiceIdx]->noteOn();
   Senvelope2[voiceIdx]->noteOn();
   SenvelopeFilter1[voiceIdx]->noteOn();

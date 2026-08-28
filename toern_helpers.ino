@@ -390,18 +390,26 @@ int sampleBrowserBrowseIndexMax(int channel) {
   return max(1, (int)g_wavPickCount);
 }
 
-// Single place: last encoder = combined browse row (parent / dirs / files).
-void sampleBrowserClampBrowseIndexAndHardware(int channel) {
+// RAM-only clamp. checkEncoders() already owns Encoder[3] reads.
+void sampleBrowserClampBrowseIndex(int channel) {
   if (channel < 1 || channel >= maxFiles) return;
   int vmax = sampleBrowserBrowseIndexMax(channel);
+  int idx = constrain((int)currentMode->pos[3], 1, vmax);
+  currentMode->pos[3] = (unsigned int)idx;
+}
+
+// Navigate / mode-entry: clamp, then snap hardware only if it is out of range.
+void sampleBrowserClampBrowseIndexAndHardware(int channel) {
+  sampleBrowserClampBrowseIndex(channel);
+  if (!encoderI2cWritesAllowed()) return;
+  int vmax = sampleBrowserBrowseIndexMax(channel);
+  int idx = (int)currentMode->pos[3];
   Encoder[3].updateStatus();
   int raw = (int)Encoder[3].readCounterInt();
-  int idx = constrain(raw, 1, vmax);
-  currentMode->pos[3] = (unsigned int)idx;
-  if (encoderI2cWritesAllowed()) {
+  if (raw != idx) {
     Encoder[3].writeMin((int32_t)1);
     Encoder[3].writeMax((int32_t)vmax);
-    if (raw != idx) Encoder[3].writeCounter((int32_t)idx);
+    Encoder[3].writeCounter((int32_t)idx);
   }
 }
 
@@ -2255,6 +2263,9 @@ FLASHMEM void generateGenreTrack() {
   
   // Set genre-appropriate BPM
   setGenreBPM();
+
+  extern void resetAllChannelVolumesToDefault();
+  resetAllChannelVolumesToDefault();
   
   // Auto close menu after generation
   switchMode(&draw);
@@ -3021,13 +3032,8 @@ FLASHMEM void startNew() {
   FastLEDshow();
   
   // 1. CLEAR ALL NOTES (all pages, all channels, all velocities, all probabilities)
-  for (unsigned int x = 0; x <= maxlen; x++) {
-    for (unsigned int y = 0; y <= maxY; y++) {
-      note[x][y].channel = 0;
-      note[x][y].velocity = defaultVelocity;  // Reset to default velocity
-      note[x][y].probability = 100;  // Reset to 100% probability
-    }
-  }
+  extern void clearPatternNotes();
+  clearPatternNotes();
   
   // 2. RESET GLOBAL VARIABLES FIRST (before using GLOB.currentChannel)
   SMP.bpm = 100.0;
@@ -3042,6 +3048,9 @@ FLASHMEM void startNew() {
   
   // 2b. RESET ALL EEPROM SETTINGS TO DEFAULTS
   // Write defaults to EEPROM - globals will be reloaded on next boot
+  // SETT>LEDS (panel count / rotation) stays — full reset should not undress the hardware.
+  uint8_t preserveLedMode = EEPROM.read(EEPROM_DATA_START + 13);
+  if (preserveLedMode < 1 || preserveLedMode > 4) preserveLedMode = 1;
   EEPROM.write(EEPROM_DATA_START + 0,  1);    // recMode (MIC)
   EEPROM.write(EEPROM_DATA_START + 1,  1);    // clockMode (INT)
   EEPROM.write(EEPROM_DATA_START + 2,  2);    // transportMode (SEND)
@@ -3052,10 +3061,11 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol
   EEPROM.write(EEPROM_DATA_START + 8, (uint8_t)-1);  // flowMode (OFF)
   EEPROM.write(EEPROM_DATA_START + 9,  10);   // micGain
-  EEPROM.write(EEPROM_DATA_START + 10, (6 << 2)); // PPQN pulse: OFF, +, 24
+  EEPROM.write(EEPROM_DATA_START + 10, (6 << 2)); // PPQN pulse: OFF, +, 24, CONT
+  EEPROM.write(EEPROM_DATA_START + 30, 12);   // PPQN pulse width ms
   EEPROM.write(EEPROM_DATA_START + 11, 1);    // simpleNotesView (EASY)
   EEPROM.write(EEPROM_DATA_START + 12, 0);    // loopLength (OFF)
-  EEPROM.write(EEPROM_DATA_START + 13, 1);    // ledMode
+  EEPROM.write(EEPROM_DATA_START + 13, preserveLedMode);  // ledMode: keep SETT>LEDS
   EEPROM.write(EEPROM_DATA_START + 14, 0);    // ctrlMode (PAGE)
   EEPROM.write(EEPROM_DATA_START + 15, 30);   // lineOutLevelSetting
   EEPROM.write(EEPROM_DATA_START + 16, 8);    // lineInLevel
@@ -3089,9 +3099,6 @@ FLASHMEM void startNew() {
   
   for (int i = 0; i < numChannels; i++) {
     int ch = channels[i];
-    
-    // Reset channel volume
-    SMP.channelVol[ch] = 10;
     
     // Reset filter data (no hardware calls)
     SMP.filter_settings[ch][HCUT] = 32;
@@ -3213,6 +3220,9 @@ FLASHMEM void startNew() {
   // 14. RESET ALL AUDIO EFFECTS/FILTERS TO CLEAN DEFAULTS
   resetAllAudioEffects();
 
+  extern void resetAllChannelVolumesToDefault();
+  resetAllChannelVolumesToDefault();
+
   // 14b. Ensure synth channels (13/14) become immediately audible after FULL reset.
   // This mirrors FILTERMODE "0002" (long-press) behavior, so you don't have to manually reset once.
   setEnvelopeDefaultValues(13);
@@ -3228,8 +3238,10 @@ FLASHMEM void startNew() {
   FastLEDshow();
   
   // 16. AUTOSAVE EMPTY STATE
-  // Save the clean/empty state to autosaved.txt
+  // Drop any corrupt/stale autosave first, then write a known-empty file.
+  extern void deleteAutosaveFile();
   extern void savePattern(bool autosave);
+  deleteAutosaveFile();
   savePattern(true);
   
 }

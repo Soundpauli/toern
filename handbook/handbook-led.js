@@ -899,7 +899,7 @@
       drawText(m, "-12", 2, 3, 0, 255, 0);
     },
     md_ppqn(m) {
-      midiSubFrame(m, 5, "PPQN", "", "G", "G");
+      midiSubFrame(m, 5, "PPQN", "W", "G", "G");
       drawText(m, "+24", 2, 3, 0, 255, 0);
     },
     et_info(m) {

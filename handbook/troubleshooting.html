@@ -102,7 +102,7 @@
 
           <section class="hb-sub" id="reset">
             <h2>The reset ladder (ETC → RSET)</h2>
-            <p class="lede">Three destructive levels live behind one encoder dial. Encoder&nbsp;3 rotates <code>resetMenuOption</code> through 0 → 1 → 2; a confirmation gesture executes the matching branch. <strong>Read each row before confirming.</strong></p>
+            <p class="lede">Six rungs live behind one encoder dial. Encoder&nbsp;3 rotates the mode; encoder&nbsp;4 confirms. <strong>Read each row before confirming.</strong></p>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div><p class="hb-led-label">SD</p><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="et_rset" width="16" height="16" role="img" aria-label="RSET SD"></canvas></div></div>
@@ -114,7 +114,10 @@
                 <tbody>
                   <tr><td><strong>SD</strong></td><td>Invalidates the dynamic sample browser cache, flashes SCAN/DONE, returns to draw.</td><td>Everything except the stale browse index. Use when the browse list looks wrong after a card-reader swap or transfers via the <a href="hardware.html#sd-tool">SD tool</a>.</td></tr>
                   <tr><td><strong>EFX</strong></td><td>Resets every tone control — filters, envelopes, synth parameters, octave helpers, audio effects — back to factory values across all voices.</td><td>Patterns and sample assignments survive. Every tone control snaps back to factory.</td></tr>
-                  <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, and rescans the SD card.</td><td>Almost nothing in RAM. Equivalent to a blank session. Only FILE-saved patterns can come back.</td></tr>
+                  <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, deletes then rewrites <code>autosaved.txt</code>, and rescans the SD card.</td><td><a href="play.html#leds">SETTINGS → LEDS</a> (panel 1 / 1B / 2 / 2B). FILE-saved patterns. Almost nothing else in RAM.</td></tr>
+                  <tr><td><strong>FILE</strong></td><td>Deletes pattern files <code>1–99.txt</code>.</td><td><code>autosaved.txt</code> and the current RAM session.</td></tr>
+                  <tr><td><strong>PACK</strong></td><td>Deletes sample-pack folders except pack&nbsp;1.</td><td>Patterns. Pack&nbsp;1.</td></tr>
+                  <tr><td><strong>ASAV</strong></td><td>Deletes <code>autosaved.txt</code> (and a leftover <code>pattern.tmp</code>) and clears the grid.</td><td>Settings, FILE slots, packs. Next boot is blank if you don't pause-autosave first — use FULL if the session itself is garbage.</td></tr>
                 </tbody>
               </table>
               <div class="hb-warn"><strong>There is no undo beyond reloading saved pattern files.</strong> If you choose FULL with unsaved work in RAM, that work is gone.</div>

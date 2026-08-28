@@ -1,4 +1,4 @@
-#define VERSION "v2.4"
+#define VERSION "v2.7"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
@@ -313,13 +313,16 @@ void resetPongGame();
 void triggerGridNote(unsigned int globalX, unsigned int y);
 int mapXtoPageOffset(int x);
 void stopSound(int note, int ch);
+void playSound(int note, int ch, int velocity);
 void stopSynthChannel(int ch);
 static inline void resetMidiPressedKeyCount11to14();
 void drawCtrlVolumeOverlay(int volume);
 void initNeoSlider();
 void updateNeoSliderVolume();
-void serviceNeoSliderGainSlew();
 void reapplyAllSampleChannelGains();
+void resetAllChannelVolumesToDefault();
+void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger);
+uint8_t scaledNoteVelocity(int ch, int vel);
 void updateAllMixerGains();
 void forceAllMixerGainsToTarget();
 void drawInputGainOverlay(int gain, int maxGain);
@@ -627,7 +630,7 @@ static int inputGainOverlayMax = 63;
 static bool channelNrOverlayActive = false;
 static unsigned long channelNrOverlayUntil = 0;
 static int channelNrOverlayChannel = 0;
-static const int DEFAULT_CHANNEL_VOLUME = 10;
+static const int DEFAULT_CHANNEL_VOLUME = 16;  // 100% of CTRL=VOL (0–16)
 
 // Get SPKR enabled state
 bool getSpkrEnabled() {
@@ -799,7 +802,7 @@ Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilt
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, 10, maxY }, { maxY, 5, 1, 10 }, { 0xFF4400, 0x00FF88, 0x888888, 0x0044FF } };
 
-Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };  // pos[3]=combined browser selection
+Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0xFFFFFF } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // FILE slot 0 = autosaved.txt (load-only); slots 1..99 = normal pattern files
@@ -1180,8 +1183,10 @@ static bool neoSliderPresent[NEOSLIDER_COUNT];
 static bool neoSliderAnyPresent = false;
 static int neoSliderLastVol[NEOSLIDER_COUNT];
 static bool neoSliderMuteLatched[NEOSLIDER_COUNT];
-static float neoSliderTargetGain[NEOSLIDER_COUNT];
-static float neoSliderCurrentGain[NEOSLIDER_COUNT];
+static bool neoSliderInMuteDz[NEOSLIDER_COUNT];
+static bool neoSliderInFullDz[NEOSLIDER_COUNT];
+static float neoSliderVelScale[NEOSLIDER_COUNT];      // 0..1 live velocity scaler (not AMP)
+static float neoSliderLastVelNorm[NEOSLIDER_COUNT];  // last note vel 0..1, so fader can re-scale the current hit
 static CRGB neoSliderLeds[NEOSLIDER_COUNT][NEOSLIDER_NUM_LEDS];
 static elapsedMillis neoSliderActiveUntil[NEOSLIDER_COUNT];  // faster ADC while fader is moving
 static int neoSliderLedVolShown[NEOSLIDER_COUNT];           // last volume pushed to NeoPixels
@@ -1189,6 +1194,8 @@ static elapsedMillis g_faderMovedAgo = 1000;
 
 bool encoderI2cWritesAllowed() {
   if (!deviceHasFaders || !neoSliderAnyPresent) return true;
+  // SET_WAV skips fader I2C; allow one-shot encoder range/RGB writes (not every frame).
+  if (currentMode == &set_Wav || currentMode == &menu) return true;
   return g_faderMovedAgo >= 80;
 }
 
@@ -1197,6 +1204,41 @@ static void applyLongCableI2cTiming();
 static inline bool isNeoSliderControlledChannel(int ch) {
   return deviceHasFaders && ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
 }
+
+// 10-bit travel: bottom/top 5% are mute / full stops (plus ~24-count hysteresis).
+static const uint16_t FADER_ADC_MAX = 1023;
+static const uint16_t FADER_MUTE_RAW = 51;    // 5%
+static const uint16_t FADER_FULL_RAW = 972;   // 95%
+static const uint16_t FADER_RAW_HYST = 24;
+
+static float faderVelScaleFromSlide(uint16_t slideVal, bool inMute, bool inFull) {
+  if (inMute) return 0.0f;
+  if (inFull) return 1.0f;
+  const float lo = (float)(FADER_MUTE_RAW + 1);
+  const float hi = (float)(FADER_FULL_RAW - 1);
+  float t = ((float)slideVal - lo) / (hi - lo);
+  if (t < 0.0f) t = 0.0f;
+  if (t > 1.0f) t = 1.0f;
+  return t;
+}
+
+static int faderVolFromSlide(uint16_t slideVal, bool inMute, bool inFull) {
+  if (inMute) return 0;
+  if (inFull) return 16;
+  const int lo = (int)FADER_MUTE_RAW + 1;
+  const int hi = (int)FADER_FULL_RAW - 1;
+  int span = hi - lo;
+  if (span < 1) span = 1;
+  int pos = (int)slideVal - lo;
+  if (pos < 0) pos = 0;
+  if (pos > span) pos = span;
+  int vol = 1 + (pos * 15) / span;
+  if (vol < 1) vol = 1;
+  if (vol > 15) vol = 15;
+  return vol;
+}
+
+static void applyVoiceAmpGainFromVol(int ch, int vol);
 
 // Slider column positions (2 LEDs each)
 static const uint8_t sliderCols[4][2] = { { 2, 3 }, { 6, 7 }, { 10, 11 }, { 14, 15 } };
@@ -1443,8 +1485,7 @@ FLASHMEM void setVelocity() {
     unsigned int newVol = currentMode->pos[3];
     if (ch >= 0 && ch < 15 && amps[ch] != nullptr && SMP.channelVol[ch] != newVol) {
       SMP.channelVol[ch] = newVol;
-      float channelvolume = mapf(SMP.channelVol[ch], 0, maxY, 0, 1);
-      amps[ch]->gain(channelvolume);
+      applyVoiceAmpGainFromVol(ch, (int)newVol);
     }
   }
 
@@ -2435,19 +2476,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     sampleIsLoaded = false;
     firstcheck = true;
 
-    switchMode(&set_Wav);  // Switch to showWave mode
-
-    // Use direct SD playback (same as first preview in showWave)
-    char OUTPUTf[160];
-    buildSamplePath(0, 0, OUTPUTf, sizeof(OUTPUTf));
-
-    if (previewTriggerMode == PREVIEW_MODE_ON) {
-      previewIsPlaying = true;
-      playSdWav1.play(OUTPUTf);
-
-      peakIndex = 0;
-      memset(peakValues, 0, sizeof(peakValues));
-    }
+    switchMode(&set_Wav);  // showWave scans the file, then previews
     sampleIsLoaded = true;
   } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
     int songPosition = songMode.pos[3];                                                     // 1-64
@@ -2672,6 +2701,17 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel], 0);
   }
 
+  // PPQN: encoder 3 click = toggle analog-clock polarity (− / +)
+  if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 1, 0)) {
+    extern bool inMidiSubmenu;
+    extern int getCurrentMenuMainSetting();
+    extern void togglePulseClockPolarityFromMenu();
+    if (inMidiSubmenu && getCurrentMenuMainSetting() == 50) {
+      togglePulseClockPolarityFromMenu();
+      return;
+    }
+  }
+
   // SNC1/SNC2: encoder 2 long press = play/pause (like filter mode)
   if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 2, 0) && was_buttons_0000(oldButtons)) {
     extern bool inMidiSubmenu;
@@ -2756,11 +2796,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
       // Apply restored volume
       SMP.channelVol[ch] = (unsigned int)restoreVol;
-      float channelvolume = mapf((float)restoreVol, 0, maxY, 0, 1);
-      // amps[] has 15 slots (indices 0..14); GLOB.y==16 => currentChannel 15 — no amp slot
-      if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
-        amps[ch]->gain(channelvolume);
-      }
+      applyVoiceAmpGainFromVol(ch, restoreVol);
 
       // Keep encoder(1) in sync with the restored volume
       currentMode->pos[1] = restoreVol;
@@ -3276,8 +3312,11 @@ FLASHMEM void initNeoSlider() {
     neoSliderPresent[i] = false;
     neoSliderLastVol[i] = -1;
     neoSliderMuteLatched[i] = false;
-    neoSliderTargetGain[i] = 1.0f;
-    neoSliderCurrentGain[i] = 1.0f;
+    neoSliderInMuteDz[i] = false;
+    neoSliderInFullDz[i] = false;
+    neoSliderVelScale[i] = 1.0f;
+    neoSliderLastVelNorm[i] = 1.0f;
+    neoSliderActiveUntil[i] = 1000;
     neoSliderLedVolShown[i] = -1;
     fill_solid(neoSliderLeds[i], NEOSLIDER_NUM_LEDS, CRGB::Black);
 
@@ -3304,58 +3343,171 @@ FLASHMEM void initNeoSlider() {
   }
 }
 
+static void applyVoiceAmpGainFromVol(int ch, int vol) {
+  vol = constrain(vol, 0, 16);
+  if (vol <= 0) return;  // never AMP=0 — silence via play amplitude / mute
+  if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
+    float channelvolume = mapf((float)vol, 0, maxY, 0.0f, 1.0f);
+    amps[ch]->gain(channelvolume);
+  }
+}
+
+static inline uint8_t effectiveNoteVelocity(int vel) {
+  if (vel <= 0) return (uint8_t)defaultVelocity;
+  if (vel > 127) return 127;
+  return (uint8_t)vel;
+}
+
+uint8_t scaledNoteVelocity(int ch, int vel) {
+  uint8_t v = effectiveNoteVelocity(vel);
+  if (!isNeoSliderControlledChannel(ch)) return v;
+  float s = neoSliderVelScale[ch - 1];
+  if (s <= 0.0f) return 0;
+  int out = (int)((float)v * s + 0.5f);
+  if (out < 1) out = 1;
+  if (out > 127) out = 127;
+  return (uint8_t)out;
+}
+
+static void applyPlayAmplitude(int ch, float amp) {
+  if (ch < 0 || ch > 8 || voices[ch] == nullptr) return;
+  if (amp < 0.0f) amp = 0.0f;
+  if (amp > 1.0f) amp = 1.0f;
+  voices[ch]->setAmplitude(amp);
+}
+
+static float playAmpForVoice(int ch) {
+  if (isNeoSliderControlledChannel(ch)) {
+    return neoSliderLastVelNorm[ch - 1] * neoSliderVelScale[ch - 1];
+  }
+  return 1.0f;
+}
+
+void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
+  if (ch < 0 || ch > 8) return;
+  const float noteN = (float)effectiveNoteVelocity(vel) / 127.0f;
+  const float scale = isNeoSliderControlledChannel(ch) ? neoSliderVelScale[ch - 1] : 1.0f;
+  const float amp = noteN * scale;
+  if (amp <= 0.0f) return;
+  applyPlayAmplitude(ch, amp);
+  if (isNeoSliderControlledChannel(ch)) {
+    neoSliderLastVelNorm[ch - 1] = noteN;
+  }
+  uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
+  _samplers[ch].noteEvent((uint8_t)pitch, sv, true, retrigger);
+}
+
 // Restore amp gains from channelVol for sample/synth voices that have amps[].
 // Also snap filter-mixer crossfades: mid-PASS transitions on non-selected
 // channels used to freeze (dry≈0) until a filter/EFX reset — same symptom.
 FLASHMEM void reapplyAllSampleChannelGains() {
   for (int ch = 1; ch <= 8; ch++) {
     if (amps[ch] == nullptr) continue;
-    // Voices 1-4 may be mid-slew from NeoSliders — don't stomp them.
-    if (isNeoSliderControlledChannel(ch)) continue;
-    float channelvolume = mapf((float)SMP.channelVol[ch], 0, maxY, 0.0f, 1.0f);
+    int vol = constrain((int)SMP.channelVol[ch], 0, 16);
+    if (vol <= 0) continue;
+    float channelvolume = mapf((float)vol, 0, maxY, 0.0f, 1.0f);
     amps[ch]->gain(channelvolume);
   }
   for (int ch = 11; ch <= 14; ch++) {
     if (ch == 12 || amps[ch] == nullptr) continue;
-    float channelvolume = mapf((float)SMP.channelVol[ch], 0, maxY, 0.0f, 1.0f);
+    int vol = constrain((int)SMP.channelVol[ch], 0, 16);
+    if (vol <= 0) continue;
+    float channelvolume = mapf((float)vol, 0, maxY, 0.0f, 1.0f);
     amps[ch]->gain(channelvolume);
   }
   forceAllMixerGainsToTarget();
 }
 
-// Smooth amp gains toward fader targets (kills zipper/crackle on fast moves).
-void serviceNeoSliderGainSlew() {
-  if (!deviceHasFaders || !neoSliderAnyPresent) return;
+FLASHMEM void resetAllChannelVolumesToDefault() {
+  for (int ch = 0; ch < (int)maxY; ch++) {
+    SMP.channelVol[ch] = (unsigned int)DEFAULT_CHANNEL_VOLUME;
+    lastChannelVolBeforeMute[ch] = (uint8_t)DEFAULT_CHANNEL_VOLUME;
+  }
+  reapplyAllSampleChannelGains();
+}
 
-  static elapsedMicros slewTimer;
-  if (slewTimer < 1000) return;  // 1 ms
-  slewTimer = 0;
+// One seesaw ADC + mute / per-note velocity scale. Does not touch AMP.
+static void processOneNeoSlider(int i, uint16_t *lastRaw) {
+  uint16_t raw = 0;
+  if (!neoSliderSS[i].analogReadFast(SS_NEOSLIDER_ADC_CH, raw)) {
+    return;  // keep last; never treat fail as 0 (invert would look like 100%)
+  }
+  uint16_t slideVal = (uint16_t)(FADER_ADC_MAX - raw);
+  if (slideVal > FADER_ADC_MAX) slideVal = FADER_ADC_MAX;
 
-  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
-    if (!neoSliderPresent[i]) continue;
-    const int ch = neoSliderVoiceCh[i];
-    if (ch < 0 || ch >= 15 || amps[ch] == nullptr) continue;
+  const bool first = (lastRaw[i] == 0xFFFF);
+  int rawDelta = 0;
+  if (!first) {
+    rawDelta = (int)slideVal - (int)lastRaw[i];
+    if (rawDelta < 0) rawDelta = -rawDelta;
+  }
 
-    float d = neoSliderTargetGain[i] - neoSliderCurrentGain[i];
-    if (d > -0.0005f && d < 0.0005f) {
-      if (neoSliderCurrentGain[i] != neoSliderTargetGain[i]) {
-        neoSliderCurrentGain[i] = neoSliderTargetGain[i];
-        amps[ch]->gain(neoSliderCurrentGain[i]);
-      }
-      continue;
+  const bool wasMuteDz = neoSliderInMuteDz[i];
+  const bool wasFullDz = neoSliderInFullDz[i];
+  if (neoSliderInMuteDz[i]) {
+    if (slideVal >= (uint16_t)(FADER_MUTE_RAW + FADER_RAW_HYST)) neoSliderInMuteDz[i] = false;
+  } else if (slideVal <= FADER_MUTE_RAW) {
+    neoSliderInMuteDz[i] = true;
+  }
+  if (neoSliderInFullDz[i]) {
+    if (slideVal <= (uint16_t)(FADER_FULL_RAW - FADER_RAW_HYST)) neoSliderInFullDz[i] = false;
+  } else if (slideVal >= FADER_FULL_RAW) {
+    neoSliderInFullDz[i] = true;
+  }
+  const bool inMuteDz = neoSliderInMuteDz[i];
+  const bool inFullDz = neoSliderInFullDz[i];
+  const bool leftMuteDz = wasMuteDz && !inMuteDz;
+  const bool muteDzChanged = (inMuteDz != wasMuteDz);
+  const bool fullDzChanged = (inFullDz != wasFullDz);
+
+  int vol = faderVolFromSlide(slideVal, inMuteDz, inFullDz);
+
+  if (neoSliderLastVol[i] >= 0 && vol != neoSliderLastVol[i] && !first) {
+    int stepDelta = vol - neoSliderLastVol[i];
+    if (stepDelta < 0) stepDelta = -stepDelta;
+    if (stepDelta == 1 && rawDelta < (int)FADER_RAW_HYST) {
+      vol = neoSliderLastVol[i];
     }
-    // Full-scale slew ≈ ~16 ms (snappier tracking)
-    const float maxDelta = 0.06f;
-    if (d > maxDelta) d = maxDelta;
-    else if (d < -maxDelta) d = -maxDelta;
-    neoSliderCurrentGain[i] += d;
-    if (neoSliderCurrentGain[i] < 0.0f) neoSliderCurrentGain[i] = 0.0f;
-    if (neoSliderCurrentGain[i] > 1.0f) neoSliderCurrentGain[i] = 1.0f;
-    amps[ch]->gain(neoSliderCurrentGain[i]);
+  }
+
+  const bool rawMoved = first || (rawDelta >= (int)FADER_RAW_HYST);
+  if (rawMoved) neoSliderActiveUntil[i] = 0;
+
+  lastRaw[i] = slideVal;
+
+  const int ch = neoSliderVoiceCh[i];
+  if (ch < 0 || ch >= (int)maxY) return;
+
+  if (inMuteDz) {
+    if (!getMuteStateForUI(ch)) {
+      setMuteState(ch, true);
+      SMP.mute[ch] = 1u;
+    }
+  } else if (!first && (leftMuteDz || rawMoved) && getMuteStateForUI(ch)) {
+    // Unmute on leaving the bottom stop, or any real fader move above it.
+    setMuteState(ch, false);
+    SMP.mute[ch] = 0u;
+  }
+  neoSliderMuteLatched[i] = getMuteStateForUI(ch);
+
+  if (rawMoved || muteDzChanged || fullDzChanged) {
+    neoSliderVelScale[i] = faderVelScaleFromSlide(slideVal, inMuteDz, inFullDz);
+    applyPlayAmplitude(ch, neoSliderLastVelNorm[i] * neoSliderVelScale[i]);
+  }
+
+  if (rawMoved) g_faderMovedAgo = 0;
+  if (vol == neoSliderLastVol[i]) return;
+  neoSliderLastVol[i] = vol;
+  g_faderMovedAgo = 0;
+
+  // Matrix fader bar: RAM flags only, no I2C. Never writeCounter from faders.
+  showCtrlVolumeChange(vol);
+  if (encoderI2cWritesAllowed()) {
+    neoSliderMaybeUpdateLeds(i, vol);
   }
 }
 
-FLASHMEM void updateNeoSliderVolume() {
+void updateNeoSliderVolume() {
   if (!deviceHasFaders || !neoSliderAnyPresent) return;
   // Menu and SET_WAV hammer encoder I2C every frame — don't touch faders on the same bus.
   if (currentMode == &menu || currentMode == &set_Wav) return;
@@ -3365,73 +3517,22 @@ FLASHMEM void updateNeoSliderVolume() {
   // SD preview uses eDMA; fader I2C during that is the AudioInputI2S TCD bus fault (0x400E80B0).
   if (playSdWav1.isPlaying()) return;
 
-  // 25 ADC reads/s total (one slider per 40ms, round-robin).
-  static elapsedMillis neoSliderPoll;
-  if (neoSliderPoll < 40) return;
-  neoSliderPoll = 0;
-
-  static uint8_t rr = 0;
-  int i = -1;
-  for (uint8_t n = 0; n < NEOSLIDER_COUNT; n++) {
-    uint8_t idx = (uint8_t)((rr + n) % NEOSLIDER_COUNT);
-    if (neoSliderPresent[idx]) {
-      i = (int)idx;
+  bool moving = false;
+  for (int n = 0; n < NEOSLIDER_COUNT; n++) {
+    if (neoSliderPresent[n] && neoSliderActiveUntil[n] < 250) {
+      moving = true;
       break;
     }
   }
-  if (i < 0) return;
-  rr = (uint8_t)((i + 1) % NEOSLIDER_COUNT);
+  static elapsedMillis neoSliderPoll;
+  if (neoSliderPoll < (moving ? 4 : 8)) return;
+  neoSliderPoll = 0;
 
   static uint16_t lastRaw[NEOSLIDER_COUNT] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
-
-  uint16_t raw = 0;
-  if (!neoSliderSS[i].analogReadFast(SS_NEOSLIDER_ADC_CH, raw)) {
-    return;  // keep last; never treat fail as 0 (invert would look like 100%)
-  }
-  uint16_t slideVal = (uint16_t)(1023 - raw);
-
-  int rawDelta = 0;
-  if (lastRaw[i] != 0xFFFF) {
-    rawDelta = (int)slideVal - (int)lastRaw[i];
-    if (rawDelta < 0) rawDelta = -rawDelta;
-  }
-
-  neoSliderTargetGain[i] = (float)slideVal * (1.0f / 1023.0f);
-
-  int vol = (int)((slideVal * 16UL + 511UL) / 1023UL);
-  if (vol > 16) vol = 16;
-
-  if (neoSliderLastVol[i] >= 0 && vol != neoSliderLastVol[i] && lastRaw[i] != 0xFFFF) {
-    int stepDelta = vol - neoSliderLastVol[i];
-    if (stepDelta < 0) stepDelta = -stepDelta;
-    if (stepDelta == 1 && rawDelta < 24) {
-      vol = neoSliderLastVol[i];
-    }
-  }
-  lastRaw[i] = slideVal;
-
-  if (vol == neoSliderLastVol[i]) return;
-  neoSliderLastVol[i] = vol;
-  g_faderMovedAgo = 0;
-
-  const int ch = neoSliderVoiceCh[i];
-  if (ch < 0 || ch >= (int)maxY) return;
-  if (vol > 0) {
-    lastChannelVolBeforeMute[ch] = (uint8_t)vol;
-  }
-  SMP.channelVol[ch] = (unsigned int)vol;
-
-  bool wantMute = (vol == 0);
-  if (wantMute != neoSliderMuteLatched[i]) {
-    setMuteState(ch, wantMute);
-    SMP.mute[ch] = wantMute ? 1u : 0u;
-    neoSliderMuteLatched[i] = wantMute;
-  }
-
-  // Matrix volume bar: RAM flags only, no I2C. Never writeCounter from faders.
-  showCtrlVolumeChange(vol);
-  if (encoderI2cWritesAllowed()) {
-    neoSliderMaybeUpdateLeds(i, vol);
+  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
+    if (!neoSliderPresent[i]) continue;
+    if (digitalRead(INT_PIN) == LOW) return;
+    processOneNeoSlider(i, lastRaw);
   }
 }
 
@@ -3840,6 +3941,13 @@ FLASHMEM void setup() {
   initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
   if (deviceHasFaders) initNeoSlider();  // NeoSliders @0x30..0x33 → voices 1..4 volume
   applyLongCableI2cTiming();
+
+  extern bool g_enterNewFileAfterCorruptAutoload;
+  if (g_enterNewFileAfterCorruptAutoload) {
+    g_enterNewFileAfterCorruptAutoload = false;
+    extern void showNewFileScreen();
+    showNewFileScreen();
+  }
 
 
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
@@ -4624,10 +4732,13 @@ void checkEncoders() {
               // Track last non-zero volume so unmute can restore it later
               if (requestedVol > 0 && ch < (int)maxY) {
                 lastChannelVolBeforeMute[ch] = (uint8_t)requestedVol;
+                SMP.channelVol[ch] = requestedVol;
+                applyVoiceAmpGainFromVol(ch, requestedVol);
+                applyPlayAmplitude(ch, playAmpForVoice(ch));
+              } else {
+                // Encoder 0: mute + play-amp 0. AMP / channelVol stay at last non-zero.
+                applyPlayAmplitude(ch, 0.0f);
               }
-              SMP.channelVol[ch] = requestedVol;
-              float channelvolume = mapf(SMP.channelVol[ch], 0, maxY, 0, 1);
-              amps[ch]->gain(channelvolume);
             }
             showCtrlVolumeChange(requestedVol);
             // Neighbor voices were going silent under heavy I2C without mute/UI change.
@@ -5603,7 +5714,7 @@ void checkPendingSampleNotes() {
         if (shouldSkipVoiceTriggerForSyncPreview((int)ev.channel)) {
           triggerSetWavSyncPreview(ev.velocity);
         } else {
-          _samplers[ev.channel].noteEvent(ev.pitch, ev.velocity, true, true);
+          triggerSamplerVoice(ev.channel, ev.pitch, ev.velocity, true);
         }
       }
       pendingSampleNotes[i] = pendingSampleNotes.back();
@@ -6328,10 +6439,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   checkEncoders();
   if (deviceHasFaders) {
     updateNeoSliderVolume();
-    serviceNeoSliderGainSlew();
   }
   // Never draw the cursor while in MENU (or its submenus).
-  if (currentMode != &velocity && currentMode != &filterMode && currentMode != &menu) drawCursor();
+  // Never draw the grid cursor on screens that own the whole matrix.
+  if (currentMode != &velocity && currentMode != &filterMode && currentMode != &menu
+      && currentMode != &set_Wav && currentMode != &recordMode) {
+    drawCursor();
+  }
   checkButtons();
   checkTouchInputs();
   checkPendingSampleNotes();
@@ -7107,6 +7221,8 @@ void play(bool fromStart) {
       if (effectiveTransportSendDelayMs() == 0) {
         isNowPlaying = true;
         playStartTime = millis();
+        extern void pulseClockOnTransportStart();
+        pulseClockOnTransportStart();
         if (SMP.bpm > 0.0f) {
           unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
           playTimer.end();
@@ -7513,7 +7629,7 @@ void playNote() {
         // Trigger LED strip ripple only if note is actually played (passed cond/prob checks)
         onNoteTriggered(ch);
 
-        MidiSendNoteOn(b, ch, vel);
+        MidiSendNoteOn(b, ch, scaledNoteVelocity(ch, vel));
         if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
           // SET_WAV + PREV==SYNC: keep the voice unmuted, skip its sampler trigger, audition the browse file instead.
           triggerSetWavSyncPreview((uint8_t)((vel == 0) ? defaultVelocity : vel));
@@ -7534,11 +7650,11 @@ void playNote() {
             pitch += (int)(channelOctave[ch] * 12);  // Add octave semitones (12 semitones per octave)
           }
 
-          _samplers[ch].noteEvent(pitch, vel, true, true);
+          triggerSamplerVoice(ch, pitch, vel, true);
         } else if (ch == 11) {  // Assuming ch 11 is a specific synth
           // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
           // playSound expects MIDI note number (0-indexed pitch offset from row)
-          playSound(12 * (int)octave[0] + transpose + (b - 1), 0);  // b-1 to match paint preview
+          playSound(12 * (int)octave[0] + transpose + (b - 1), 0, vel);  // b-1 to match paint preview
 
         } else if (ch >= 13 && ch < 15) {  // Synth channels 13, 14
           playSynth(ch, b, vel, false);    // b is 1-indexed for grid row
@@ -7926,9 +8042,9 @@ void playFillNote() {
       pitch += (int)(channelOctave[ch] * 12);
     }
 
-    _samplers[ch].noteEvent(pitch, vel, true, true);
+    triggerSamplerVoice(ch, pitch, vel, true);
   } else if (ch == 11) {
-    playSound(12 * (int)octave[0] + transpose + ((int)row - 1), 0);
+    playSound(12 * (int)octave[0] + transpose + ((int)row - 1), 0, vel);
   } else if (ch >= 13 && ch < 15) {
     playSynth(ch, (int)row, vel, false);
   }
@@ -7968,9 +8084,9 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
       pitch += static_cast<int>(channelOctave[channel] * 12);
     }
 
-    _samplers[channel].noteEvent(pitch, velocity, true, true);
+    triggerSamplerVoice(channel, pitch, velocity, true);
   } else if (channel == 11) {
-    playSound((12 * static_cast<int>(octave[0])) + transpose + (pitch_from_row - 1), 0);
+    playSound((12 * static_cast<int>(octave[0])) + transpose + (pitch_from_row - 1), 0, velocity);
   } else if (channel >= 13 && channel < 15) {
     playSynth(channel, pitch_from_row, velocity, false);
   }
@@ -8048,12 +8164,12 @@ void paint() {
         pitch += (int)(channelOctave[painted_channel] * 12);  // Add octave semitones (12 semitones per octave)
       }
 
-      _samplers[painted_channel].noteEvent(pitch, painted_velocity, true, true);
+      triggerSamplerVoice(painted_channel, pitch, painted_velocity, true);
     } else if (painted_channel == 11) {  // Specific synth
       // Calculate note value and clamp to reasonable range (0-107 for notesArray)
       int noteValue = (12 * (int)octave[0]) + transpose + (pitch_from_row - 1);
       noteValue = constrain(noteValue, 0, 107);  // Clamp to valid notesArray range
-      playSound(noteValue, 0);
+      playSound(noteValue, 0, painted_velocity);
     } else if (painted_channel >= 13 && painted_channel < 15) {  // General synths
       playSynth(painted_channel, pitch_from_row, painted_velocity, false);
     }

@@ -140,14 +140,18 @@ static bool midiHeldNote[17][128] = { false };
 
 // --- Analog clock pulse out on pin 31 (MENU>MIDI>PPQN). ---
 #define PULSE_CLOCK_PIN 31
-#define PULSE_WIDTH_US 12000  // ~12 ms — safe for DIN-sync / analog clock gear
-// Encoder 4 rate list: OFF + these PPQN values
+#define PULSE_WIDTH_MS_MIN 1
+#define PULSE_WIDTH_MS_MAX 50
+#define PULSE_WIDTH_MS_DEFAULT 12
+// Encoder 3 turn: OFF + these PPQN values
 static const uint8_t PULSE_PPQN_TABLE[] = { 1, 2, 4, 8, 12, 16, 24, 32 };
 static const uint8_t PULSE_PPQN_COUNT = sizeof(PULSE_PPQN_TABLE) / sizeof(PULSE_PPQN_TABLE[0]);
 static const uint8_t PULSE_RATE_SEL_COUNT = PULSE_PPQN_COUNT + 1;  // 0=OFF, 1..N = table
 
 static bool pulseClockEnabled = false;
 static bool pulseClockPolarityPositive = true;  // +: active high; -: active low
+static bool pulseClockStopWithPlay = false;     // STOP: gate with transport; CONT: always
+static uint8_t pulseClockWidthMs = PULSE_WIDTH_MS_DEFAULT;
 static uint8_t pulseClockPpqnIndex = 6;         // default 24 PPQN (table index)
 static uint16_t pulseClockPhase = 0;
 static IntervalTimer pulseEndTimer;
@@ -166,10 +170,20 @@ static void pulseClockEndIsr() {
   pulseClockPinActive = false;
 }
 
+static void pulseClockForceIdle() {
+  if (pulseClockPinActive) {
+    pulseEndTimer.end();
+    pulseClockPinActive = false;
+  }
+  digitalWriteFast(PULSE_CLOCK_PIN, pulseIdleLevel());
+}
+
 static void pulseClockEmit() {
   digitalWriteFast(PULSE_CLOCK_PIN, pulseActiveLevel());
   pulseClockPinActive = true;
-  pulseEndTimer.begin(pulseClockEndIsr, PULSE_WIDTH_US);
+  uint32_t us = (uint32_t)pulseClockWidthMs * 1000u;
+  if (us < 1000u) us = 1000u;
+  pulseEndTimer.begin(pulseClockEndIsr, us);
   pulseEndTimer.priority(1);
 }
 
@@ -181,6 +195,11 @@ static void pulseClockApplyIdle() {
 
 void pulseClockMidiTick() {
   if (!pulseClockEnabled) return;
+  extern bool isNowPlaying;
+  if (pulseClockStopWithPlay && !isNowPlaying) {
+    pulseClockForceIdle();
+    return;
+  }
   uint8_t ppqn = PULSE_PPQN_TABLE[pulseClockPpqnIndex];
   pulseClockPhase = (uint16_t)(pulseClockPhase + ppqn);
   while (pulseClockPhase >= 24) {
@@ -189,8 +208,25 @@ void pulseClockMidiTick() {
   }
 }
 
+// Downbeat pulse with sequencer / MIDI Start. Phase stays 0 so the next
+// midiClockTick is pulse #2 (24 PPQN) or the start of the divider (lower rates).
+// Without this, STOP waits a full 24 MIDI clocks at 1 PPQN, and even 24 PPQN
+// waits one IntervalTimer period because midiClockTick is not called on start.
+void pulseClockOnTransportStart() {
+  if (!pulseClockEnabled) return;
+  noInterrupts();
+  pulseClockForceIdle();
+  pulseClockPhase = 0;
+  pulseClockEmit();
+  interrupts();
+}
+
 bool getPulseClockEnabled() { return pulseClockEnabled; }
 bool getPulseClockPolarityPositive() { return pulseClockPolarityPositive; }
+bool getPulseClockStopWithPlay() { return pulseClockStopWithPlay; }
+uint8_t getPulseClockWidthMs() { return pulseClockWidthMs; }
+uint8_t getPulseClockWidthMsMin() { return PULSE_WIDTH_MS_MIN; }
+uint8_t getPulseClockWidthMsMax() { return PULSE_WIDTH_MS_MAX; }
 uint8_t getPulseClockPpqnIndex() { return pulseClockPpqnIndex; }
 uint8_t getPulseClockPpqn() { return PULSE_PPQN_TABLE[pulseClockPpqnIndex]; }
 uint8_t getPulseClockPpqnCount() { return PULSE_PPQN_COUNT; }
@@ -207,12 +243,18 @@ uint8_t getPulseClockRateSel() {
 }
 
 static void pulseClockSaveToEEPROM() {
-  // Slot 10: bit0=on, bit1=polarity negative, bits2-4=ppqn index (0..7)
+  // Slot 10: bit0=on, bit1=polarity-, bits2-4=ppqn index, bit5=STOP (0=CONT for old EEPROM)
   uint8_t packed = (pulseClockEnabled ? 1 : 0)
                  | (pulseClockPolarityPositive ? 0 : 2)
-                 | ((pulseClockPpqnIndex & 0x07) << 2);
+                 | ((pulseClockPpqnIndex & 0x07) << 2)
+                 | (pulseClockStopWithPlay ? 0x20 : 0);
   extern void saveSingleModeToEEPROM(int index, int8_t value);
   saveSingleModeToEEPROM(10, (int8_t)packed);
+}
+
+static void pulseClockSaveWidthToEEPROM() {
+  extern void saveSingleModeToEEPROM(int index, int8_t value);
+  saveSingleModeToEEPROM(30, (int8_t)pulseClockWidthMs);
 }
 
 void setPulseClockPolarityPositive(bool positive) {
@@ -221,6 +263,26 @@ void setPulseClockPolarityPositive(bool positive) {
     digitalWriteFast(PULSE_CLOCK_PIN, pulseIdleLevel());
   }
   pulseClockSaveToEEPROM();
+}
+
+void togglePulseClockPolarity() {
+  setPulseClockPolarityPositive(!pulseClockPolarityPositive);
+}
+
+void setPulseClockStopWithPlay(bool stopWithPlay) {
+  pulseClockStopWithPlay = stopWithPlay;
+  if (pulseClockStopWithPlay) {
+    extern bool isNowPlaying;
+    if (!isNowPlaying) pulseClockForceIdle();
+  }
+  pulseClockSaveToEEPROM();
+}
+
+void setPulseClockWidthMs(uint8_t ms) {
+  if (ms < PULSE_WIDTH_MS_MIN) ms = PULSE_WIDTH_MS_MIN;
+  if (ms > PULSE_WIDTH_MS_MAX) ms = PULSE_WIDTH_MS_MAX;
+  pulseClockWidthMs = ms;
+  pulseClockSaveWidthToEEPROM();
 }
 
 void setPulseClockPpqnIndex(uint8_t idx) {
@@ -260,10 +322,7 @@ void setPulseClockEnabled(bool enabled) {
     extern void updateMidiClockOutput();
     updateMidiClockOutput();
   } else {
-    if (pulseClockPinActive) {
-      pulseEndTimer.end();
-      pulseClockPinActive = false;
-    }
+    pulseClockForceIdle();
     pulseClockEnabled = false;
     pulseClockApplyIdle();
   }
@@ -276,6 +335,10 @@ void loadPulseClockFromEEPROM() {
   if (idx >= PULSE_PPQN_COUNT) idx = 6;  // default 24
   pulseClockPpqnIndex = idx;
   pulseClockPolarityPositive = ((packed & 2) == 0);
+  pulseClockStopWithPlay = ((packed & 0x20) != 0);  // unset bit = CONT (legacy)
+  uint8_t w = EEPROM.read(EEPROM_DATA_START + 30);
+  if (w < PULSE_WIDTH_MS_MIN || w > PULSE_WIDTH_MS_MAX) w = PULSE_WIDTH_MS_DEFAULT;
+  pulseClockWidthMs = w;
   bool on = (packed & 1) != 0;
   pulseClockEnabled = false;
   if (on) setPulseClockEnabled(true);
@@ -353,6 +416,7 @@ void checkMidi() {
     transportStartDelayUntil = 0;
     isNowPlaying = true;
     playStartTime = millis();
+    pulseClockOnTransportStart();
     if (SMP.bpm > 0) {
       unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
       playTimer.end();
@@ -874,7 +938,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
           if (ch >= 1 && ch <= 8) {
             samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
           }
-          _samplers[ch].noteEvent(samplePitch, velocity, true, false);
+          triggerSamplerVoice(ch, samplePitch, velocity, false);
         } else if (ch > 12 && ch < 15) {
           playSynth(ch, livenote, velocity, true);
         } else if (ch == 11) {
@@ -882,7 +946,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
           // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
           // Grid formula: 12 * octave[0] + transpose + (row - 1)
           // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
-          playSound(12 * octave[0] + transpose + pitch - 55, 0);
+          playSound(12 * octave[0] + transpose + pitch - 55, 0, velocity);
         }
       }
       // Always play the note immediately
@@ -910,7 +974,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
       if (ch >= 1 && ch <= 8) {
         samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
       }
-      _samplers[ch].noteEvent(samplePitch, velocity, true, false);
+      triggerSamplerVoice(ch, samplePitch, velocity, false);
     } else if (ch > 12 && ch < 15) {
       playSynth(ch, livenote, velocity, true);
     } else if (ch == 11) {
@@ -918,7 +982,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
       // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
       // Grid formula: 12 * octave[0] + transpose + (row - 1)
       // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
-      playSound(12 * octave[0] + transpose + pitch - 55, 0);
+      playSound(12 * octave[0] + transpose + pitch - 55, 0, velocity);
     }
     }
   }

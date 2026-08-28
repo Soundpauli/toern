@@ -106,7 +106,7 @@
               <li>after a clean power-down through the right-side switch,</li>
               <li>and on a small set of menu actions that change persistent global state.</li>
             </ul>
-            <p>The autosave target is the <strong>last-used FILE slot</strong>. That means autosave protects you from "the battery died" within one session, but it does <em>not</em> protect you from "I loaded the wrong FILE slot and then made changes" — the next autosave will overwrite the slot you accidentally loaded.</p>
+            <p>On boot the firmware loads <code>autosaved.txt</code> — a dedicated last-session file, not the last FILE slot. If that file is missing or fails a format check (truncated / garbage), the grid starts empty instead of showing leftover PSRAM noise. Pause writes it atomically via <code>pattern.tmp</code> so a crash mid-save cannot leave a half-written boot file. <a href="menus.html#rset">ETC → RSET → ASAV</a> deletes it; <strong>FULL</strong> deletes it and writes a known-empty one.</p>
             <div class="hb-warn"><strong>Treat FILE save as the only commit you can trust between sessions.</strong> If the battery dies between two autosave checkpoints you lose what's in RAM after the last checkpoint. Save when you finish an idea.</div>
           </section>
 

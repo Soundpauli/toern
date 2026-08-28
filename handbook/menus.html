@@ -487,8 +487,10 @@
                           <span class="desc">Analog clock pulse on Teensy pin&nbsp;31 (J11 / I2SC_3V), independent of TRS MIDI.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>Enc&nbsp;2 turn</strong> — polarity <strong>+</strong> / <strong>−</strong></li>
+                              <li><strong>Enc&nbsp;1 turn</strong> — pulse width <strong>1–50&nbsp;ms</strong> (default 12)</li>
+                              <li><strong>Enc&nbsp;2 turn</strong> — <strong>STOP</strong> (gate while paused) / <strong>CONT</strong> (always)</li>
                               <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong> or <strong>1, 2, 4, 8, 12, 16, 24, 32</strong> PPQN</li>
+                              <li><strong>Enc&nbsp;3 click</strong> — polarity <strong>+</strong> / <strong>−</strong></li>
                             </ul>
                             <span class="how">Follows INT BPM or EXT MIDI clock. DIY jack: white → tip, blue → sleeve — see <a href="midi.html#ppqn">MIDI → PPQN</a>.</span>
                           </span>
@@ -601,14 +603,15 @@
                         </li>
                         <li id="rset">
                           <a href="troubleshooting.html#reset"><span class="node">RSET</span></a>
-                          <span class="desc">Five rungs of increasingly spicy recovery. Pick with encoder&nbsp;3, confirm with encoder&nbsp;4 — then wait for DONE.</span>
+                          <span class="desc">Six rungs of increasingly spicy recovery. Pick with encoder&nbsp;3, confirm with encoder&nbsp;4 — then wait for DONE.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>SD</strong> — rescan the card (safe; useful after swapping files)</li>
                               <li><strong>EFX</strong> — factory-reset every tone control (patterns &amp; sample assignments survive)</li>
-                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; only FILE-saved work comes back)</li>
+                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">SETTINGS → LEDS</a>; only FILE-saved work comes back)</li>
                               <li><strong>FILE</strong> — wipe saved patterns <code>1–99.txt</code> (keeps autosave)</li>
                               <li><strong>PACK</strong> — delete pack folders except pack&nbsp;1</li>
+                              <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
                             </ul>
                             <span class="how">FILE and PACK are the “I meant it” buttons.</span>
                           </span>
