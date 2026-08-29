@@ -24247,7 +24247,7 @@
 				)
 			)
 		)
-		(property "Value" "47k"
+		(property "Value" "200"
 			(at 283.21 273.05 90)
 			(effects
 				(font
@@ -24282,7 +24282,7 @@
 				(hide yes)
 			)
 		)
-		(property "lcsc#" "C25792"
+		(property "lcsc#" "C25087"
 			(at 283.21 273.05 0)
 			(effects
 				(font
@@ -24757,7 +24757,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "49.9k"
 			(at 289.56 266.7 90)
 			(effects
 				(font
@@ -24792,7 +24792,7 @@
 				(hide yes)
 			)
 		)
-		(property "lcsc#" "C25744"
+		(property "lcsc#" "C100457"
 			(at 289.56 266.7 0)
 			(effects
 				(font

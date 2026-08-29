@@ -119,7 +119,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
   {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
-  {"BATT", 42, false, nullptr},          // Battery remaining % (3.7V LiPo on pin 0)
+  {"BATT", 42, false, nullptr},          // Estimated LiPo percentage from Teensy A16 / pin 40
   {"CHLD", 48, false, nullptr},          // Child lock: require touch2->touch1 to enter menu
   {"RSET", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
 };
@@ -1953,7 +1953,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
-    case 42: // BATT - Battery remaining % (calibrated 0.63 ratio)
+    case 42: // BATT - voltage-based estimate using calibrated divider ratio
       {
         extern int getBatteryPercent();
         const CRGB tc = currentMenuParentTextColor();

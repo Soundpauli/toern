@@ -43,8 +43,8 @@ Firmware can gate power to an external WS2812 strip / accessory so it isn’t dr
 
 Firmware reads battery through **`A16` (pin 40)** with a divider documented in `toern.ino`:
 
-- Target: **1.5M** top (VBAT → A16), **1M** bottom (A16 → GND), plus smoothing cap  
-- BOM includes **1.5M (`R19`)** and **1M (`R15`)** matching that intent  
+- **1M (`R15`)** top (VBAT → A16), **1.5M (`R19`)** bottom (A16 → GND), plus smoothing cap  
+- Nominal divider ratio: `1.5 / (1.0 + 1.5) = 0.600`; firmware uses calibrated `0.595`
 
 See [Firmware pin map](./firmware-pins) for the ADC constants.
 

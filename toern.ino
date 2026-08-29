@@ -169,13 +169,14 @@ extern void handleStart();
 #define SWITCH_5 39
 
 // Battery sense on A16 with divider + capacitor.
-// Hardware target: 1.5M (top, VBAT->A16) and 1M (bottom, A16->GND), plus smoothing cap.
+// Rev G: R15 1M (top, VBAT->A16), R19 1.5M (bottom, A16->GND), plus smoothing cap.
 #define BATT_ADC_PIN A16
 #define BATT_RAW_ZERO 4           // raw reading when pin connected to GND (0V)
 #define BATT_RAW_FULL 4095        // raw at 3.3V at pin (12-bit max)
-#define BATT_DIVIDER_RATIO 0.595f // Two-point retune from measured 3.53V->0% and 4.26V->75%
-#define BATT_V_MIN 3.33f          // 0% target at 3.33V
-#define BATT_V_MAX 4.26f          // 100% target at 4.26V
+#define BATT_DIVIDER_RATIO 0.595f // Calibrated close to nominal divider ratio 1.5/(1.0+1.5) = 0.600
+#define BATT_V_MIN 3.30f          // Display 0% at 3.30V
+#define BATT_V_MAX 4.20f          // Display 100% at 4.20V
+#define BATT_PCT_CURVE 1.6f       // Pragmatic voltage-to-display curve; not a fuel gauge
 
 #define VOL_MIN 1
 #define VOL_MAX 10
@@ -569,7 +570,7 @@ static unsigned long touch1ModeToggleDueMs = 0;
 static const unsigned long TOUCH1_CHORD_GRACE_MS = 140;
 
 /** true: use grounded buttons A/B; false: use capacitive SWITCH_1/2. */
-static const bool exttouch = true;
+static const bool exttouch = false;
 /** When false, skip all NeoSlider I2C (init/ADC/LEDs/slew). This unit has faders. */
 static const bool deviceHasFaders = exttouch;
 
@@ -1190,6 +1191,7 @@ static float neoSliderLastVelNorm[NEOSLIDER_COUNT];  // last note vel 0..1, so f
 static CRGB neoSliderLeds[NEOSLIDER_COUNT][NEOSLIDER_NUM_LEDS];
 static elapsedMillis neoSliderActiveUntil[NEOSLIDER_COUNT];  // faster ADC while fader is moving
 static int neoSliderLedVolShown[NEOSLIDER_COUNT];           // last volume pushed to NeoPixels
+static int neoSliderLedVolWanted[NEOSLIDER_COUNT];          // desired bar; SHOW is retried separately
 static elapsedMillis g_faderMovedAgo = 1000;
 
 bool encoderI2cWritesAllowed() {
@@ -3238,6 +3240,7 @@ FLASHMEM static void neoSliderShowLeds(int idx) {
   }
   neoSliderSS[idx].writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF, writeBuf, sizeof(writeBuf));
   neoSliderSS[idx].writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SHOW, nullptr, 0);
+  applyLongCableI2cTiming();
 }
 
 // Red plastic over NeoPixels eats green/blue: orange→red, yellow→orange.
@@ -3291,17 +3294,30 @@ FLASHMEM static void neoSliderUpdateLeds(int idx, int vol) {
   neoSliderLedVolShown[idx] = vol;
 }
 
-// Push LEDs only when the lit segment count changes. The ATtiny keeps the last
-// frame — do not rewrite/SHOW on every ADC poll.
-FLASHMEM static void neoSliderMaybeUpdateLeds(int idx, int vol) {
-  if (idx < 0 || idx >= NEOSLIDER_COUNT || !neoSliderPresent[idx]) return;
+// At most one slider SHOW per poll. Never share the bus with a pending encoder INT
+// or SD preview DMA. Do not use encoderI2cWritesAllowed() here — that gate is
+// false on the same frame the fader moves, so LEDs would never catch up.
+static void neoSliderFlushPendingLeds() {
   if (digitalRead(INT_PIN) == LOW) return;
-  vol = constrain(vol, 0, 16);
-  int lit = (vol <= 0) ? 0 : ((vol * NEOSLIDER_NUM_LEDS + 15) / 16);
-  int shownLit = (neoSliderLedVolShown[idx] <= 0) ? 0
-                                                  : ((neoSliderLedVolShown[idx] * NEOSLIDER_NUM_LEDS + 15) / 16);
-  if (lit == shownLit && neoSliderLedVolShown[idx] >= 0) return;
-  neoSliderUpdateLeds(idx, vol);
+  if (playSdWav1.isPlaying()) return;
+  if (currentMode == &menu || currentMode == &set_Wav) return;
+
+  static uint8_t next = 0;
+  for (int n = 0; n < NEOSLIDER_COUNT; n++) {
+    int i = (int)((next + n) % NEOSLIDER_COUNT);
+    if (!neoSliderPresent[i]) continue;
+    int want = neoSliderLedVolWanted[i];
+    if (want < 0) continue;
+    want = constrain(want, 0, 16);
+    int lit = (want <= 0) ? 0 : ((want * NEOSLIDER_NUM_LEDS + 15) / 16);
+    int shownLit = (neoSliderLedVolShown[i] <= 0) ? 0
+                                                 : ((neoSliderLedVolShown[i] * NEOSLIDER_NUM_LEDS + 15) / 16);
+    if (lit == shownLit && neoSliderLedVolShown[i] >= 0) continue;
+    if (digitalRead(INT_PIN) == LOW) return;
+    neoSliderUpdateLeds(i, want);
+    next = (uint8_t)((i + 1) % NEOSLIDER_COUNT);
+    return;
+  }
 }
 
 FLASHMEM void initNeoSlider() {
@@ -3318,6 +3334,7 @@ FLASHMEM void initNeoSlider() {
     neoSliderLastVelNorm[i] = 1.0f;
     neoSliderActiveUntil[i] = 1000;
     neoSliderLedVolShown[i] = -1;
+    neoSliderLedVolWanted[i] = -1;
     fill_solid(neoSliderLeds[i], NEOSLIDER_NUM_LEDS, CRGB::Black);
 
     if (!neoSliderSS[i].begin(neoSliderAddrs[i])) {
@@ -3496,15 +3513,13 @@ static void processOneNeoSlider(int i, uint16_t *lastRaw) {
   }
 
   if (rawMoved) g_faderMovedAgo = 0;
+  neoSliderLedVolWanted[i] = vol;
   if (vol == neoSliderLastVol[i]) return;
   neoSliderLastVol[i] = vol;
   g_faderMovedAgo = 0;
 
   // Matrix fader bar: RAM flags only, no I2C. Never writeCounter from faders.
   showCtrlVolumeChange(vol);
-  if (encoderI2cWritesAllowed()) {
-    neoSliderMaybeUpdateLeds(i, vol);
-  }
 }
 
 void updateNeoSliderVolume() {
@@ -3534,6 +3549,7 @@ void updateNeoSliderVolume() {
     if (digitalRead(INT_PIN) == LOW) return;
     processOneNeoSlider(i, lastRaw);
   }
+  neoSliderFlushPendingLeds();
 }
 
 // Teensy 4 Wire::setClock() only has 100 kHz / 400 kHz / 1 MHz. A ~3.5 m I2C
@@ -4085,8 +4101,8 @@ void setEncoderColor(int i) {
   Encoder[i].writeRGBCode(0x00FF00);
 }
 
-// Battery: linear map using divider-corrected VBAT -> 0..100%.
-// Endpoints are defined by BATT_V_MIN/BATT_V_MAX.
+// Battery: divider-corrected VBAT mapped through BATT_PCT_CURVE to 0..100%.
+// This is a pragmatic voltage display, not charge-state measurement.
 #define BATT_DEBUG_SERIAL 0  // 1 = print raw to Serial every 2s (USB only; off when on battery)
 
 // Raw ADC value (reads every time called - caller handles throttling/display rate)
@@ -4095,7 +4111,6 @@ int getBatteryRaw() {
 }
 
 int getBatteryPercent() {
-  const float BATT_PCT_CURVE = 2.4f;  // Stronger low-end compression while keeping endpoints fixed
   const int samples = 8;
   uint32_t sum = 0;
   for (int i = 0; i < samples; i++) {
@@ -6189,7 +6204,7 @@ void loop() {
       float norm = (vBat - BATT_V_MIN) / (BATT_V_MAX - BATT_V_MIN);
       if (norm < 0.0f) norm = 0.0f;
       if (norm > 1.0f) norm = 1.0f;
-      float pct = powf(norm, 2.4f) * 100.0f;
+      float pct = powf(norm, BATT_PCT_CURVE) * 100.0f;
       if (pct < 0.0f) pct = 0.0f;
       if (pct > 100.0f) pct = 100.0f;
       Serial.print("BATT raw=");

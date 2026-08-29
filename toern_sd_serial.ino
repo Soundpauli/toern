@@ -588,7 +588,7 @@ static void sdSerHandleLine(char *line) {
   char *args = sdSerSkipSpaces(line + i);
 
   if (strcasecmp(cmd, "PING") == 0) {
-    sdSerCmdPing();
+    sdSerCmdPing  ();
   } else if (strcasecmp(cmd, "LIST") == 0) {
     sdSerCmdList(args && *args ? args : "/");
   } else if (strcasecmp(cmd, "RM") == 0) {
