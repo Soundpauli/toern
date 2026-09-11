@@ -1,27 +1,4 @@
 
-// Forward declarations for musical random generation functions
-struct HarmonicAnalysis {
-  bool hasRoot = false;
-  bool hasThird = false;
-  bool hasFifth = false;
-  bool hasSeventh = false;
-  int rootNote = 0;
-  bool isMajor = false;
-  bool isMinor = false;
-};
-
-struct BasePagePattern {
-  bool hasNotes[16];           // Which steps have notes for this channel
-  int noteRows[16];           // Which rows (pitches) are used on each step
-  int velocities[16];         // Velocity values for each step
-  int stepCount;              // How many steps have notes
-  float density;              // Note density (steps with notes / total steps)
-  int mostCommonRow;          // Most frequently used note row
-  int rhythmPattern[16];      // Rhythm pattern (1 = note, 0 = rest)
-  bool isRhythmic;            // True if this channel has rhythmic patterns
-  bool isMelodic;             // True if this channel has melodic patterns
-};
-
 // Global buffer for AI generation in external RAM (prevents stack overflow)
 EXTMEM BasePagePattern g_channelPatterns[16];
 
@@ -87,9 +64,9 @@ extern int8_t channelDirection[maxFiles];
 extern unsigned int recordingStartBeat;  // Beat where recording started
 extern unsigned int RefreshTime;  // Display refresh timing (30 FPS = 33ms per frame)
 
-// ── Dynamic sample browser (SD): lists built on demand; no map.txt manifest ──
-// Use #defines so array dimensions work with all Arduino/Teensy .ino compilation modes.
-#define SAMPLE_BROWSER_NAME_MAX 65   // 64 chars + null
+// ── Dynamic sample browser (SD): SET_WAV lists built on demand ──
+// Mute-mode random (?>) uses samples/toern_wavs.txt from ETC→RSET→SD scan.
+// Encoder ticks never walk directories (that races AudioPlaySdWav / eDMA).
 #define SAMPLE_BROWSER_PATH_MAX 128
 #define BROWSE_MAX_TMP 256
 #define SAMPLE_BROWSER_MAX_ENTRIES 384
@@ -97,25 +74,29 @@ extern unsigned int RefreshTime;  // Display refresh timing (30 FPS = 33ms per f
 #define SAMPLE_BROWSER_ENTRY_DIR 1
 #define SAMPLE_BROWSER_ENTRY_FILE 2
 
+#define TOERN_WAV_INDEX_FILE "samples/toern_wavs.txt"
+#define TOERN_WAV_INDEX_MAX 2048
+#define TOERN_WAV_INDEX_PATH 96
+#define TOERN_WAV_MIN_BYTES 44
+#define TOERN_WAV_SCAN_DIR_STACK 64
+#define SOLO_RANDOM_PLAYLIST_SIZE 32
+
 EXTMEM char sbTmpDirs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM char sbTmpWavs[BROWSE_MAX_TMP][SAMPLE_BROWSER_NAME_MAX];
 EXTMEM uint32_t sbTmpWavSizes[BROWSE_MAX_TMP];
 
-// Stubs for legacy menu/ui code
 bool manifestLoaded = false;
 uint16_t manifestFolderCount = 0;
 
-bool loadSampleManifest() { return false; }
-bool scanAndWriteManifest() { return true; }
+EXTMEM char g_wavIndex[TOERN_WAV_INDEX_MAX][TOERN_WAV_INDEX_PATH];
+uint16_t g_wavIndexCount = 0;
+bool g_wavIndexLoaded = false;
+EXTMEM char g_wavScanDirStack[TOERN_WAV_SCAN_DIR_STACK][TOERN_WAV_INDEX_PATH];
 
-// Mute-mode random sample playlist: reservoir-sample up to 99 WAVs from all of samples/
-#define SOLO_RANDOM_PLAYLIST_SIZE 25
-EXTMEM char g_soloRandomPlaylist[SOLO_RANDOM_PLAYLIST_SIZE][SAMPLE_BROWSER_PATH_MAX];
+uint16_t g_soloRandomPlaylist[SOLO_RANDOM_PLAYLIST_SIZE];
 uint16_t g_soloRandomPlaylistCount = 0;
 int16_t g_soloRandomPlaylistIndex = 0;
-static char g_soloRandomLastRel[SAMPLE_BROWSER_PATH_MAX] = {0};
-static uint32_t g_soloRandomSeenCount = 0;
-// Legacy name kept for invalidate paths
+static char g_soloRandomLastRel[TOERN_WAV_INDEX_PATH] = {0};
 static bool g_soloRandomListDirty = true;
 
 EXTMEM char g_browseDir[maxFiles][SAMPLE_BROWSER_PATH_MAX];
@@ -155,6 +136,20 @@ static void copyBaseName64(const char* rawName, char* out, size_t outSz) {
   out[outSz - 1] = 0;
 }
 
+static bool soloRandomIsJunkName(const char* base) {
+  if (!base || !base[0] || base[0] == '.') return true;
+  if (strcasecmp(base, "System Volume Information") == 0) return true;
+  if (strcasecmp(base, "TRASH") == 0) return true;
+  if (strcasecmp(base, "$RECYCLE.BIN") == 0) return true;
+  if (strcasecmp(base, "FOUND.000") == 0) return true;
+  return false;
+}
+
+static void soloRandomJoinRel(char* out, size_t outSz, const char* dir, const char* name) {
+  if (dir && dir[0]) snprintf(out, outSz, "%s/%s", dir, name);
+  else snprintf(out, outSz, "%s", name ? name : "");
+}
+
 static void soloRandomSetLastFromIndex() {
   g_soloRandomLastRel[0] = 0;
   if (g_soloRandomPlaylistCount == 0) return;
@@ -162,123 +157,265 @@ static void soloRandomSetLastFromIndex() {
   if (g_soloRandomPlaylistIndex >= (int16_t)g_soloRandomPlaylistCount) {
     g_soloRandomPlaylistIndex = (int16_t)g_soloRandomPlaylistCount - 1;
   }
-  strncpy(g_soloRandomLastRel, g_soloRandomPlaylist[g_soloRandomPlaylistIndex], sizeof(g_soloRandomLastRel) - 1);
+  uint16_t wi = g_soloRandomPlaylist[g_soloRandomPlaylistIndex];
+  if (wi >= g_wavIndexCount) return;
+  strncpy(g_soloRandomLastRel, g_wavIndex[wi], sizeof(g_soloRandomLastRel) - 1);
   g_soloRandomLastRel[sizeof(g_soloRandomLastRel) - 1] = 0;
 }
 
-// Fast uniform pick of one child (dir or wav) in a directory via one-pass reservoir.
-// Returns false if nothing useful found. outIsDir set when chosen entry is a directory.
-static bool soloRandomPickChild(const char* relDir, char* outName, size_t outNameSz, bool* outIsDir) {
-  char fullPath[160];
-  if (relDir && relDir[0]) {
-    snprintf(fullPath, sizeof(fullPath), "samples/%s", relDir);
+// Playlist entries are SD-root paths. samplePathRel stays samples/-relative when possible;
+// paths outside samples/ are stored with a leading '*' so buildSamplePath can open them.
+bool soloRandomBuildPlayPath(const char* stored, char* out, size_t outSz) {
+  if (!out || outSz == 0) return false;
+  out[0] = 0;
+  if (!stored || !stored[0]) return false;
+  if (stored[0] == '*') {
+    strncpy(out, stored + 1, outSz - 1);
   } else {
-    snprintf(fullPath, sizeof(fullPath), "samples");
+    strncpy(out, stored, outSz - 1);
   }
+  out[outSz - 1] = 0;
+  return out[0] != 0;
+}
 
-  File dir = SD.open(fullPath);
-  if (!dir || !dir.isDirectory()) {
-    if (dir) dir.close();
+void soloRandomCommitPathToChannel(int ch, const char* fullSdPath) {
+  if (ch < 1 || ch >= maxFiles || !fullSdPath || !fullSdPath[0]) return;
+  if (strncmp(fullSdPath, "samples/", 8) == 0) {
+    strncpy(SMP.samplePathRel[ch], fullSdPath + 8, 127);
+  } else {
+    snprintf(SMP.samplePathRel[ch], 128, "*%s", fullSdPath);
+  }
+  SMP.samplePathRel[ch][127] = 0;
+}
+
+bool soloRandomIsPlayableWav(const char* fullPath) {
+  if (!fullPath || !fullPath[0]) return false;
+  if (!SD.exists(fullPath)) return false;
+  File f = SD.open(fullPath);
+  if (!f) return false;
+  if (f.isDirectory()) {
+    f.close();
     return false;
   }
+  uint32_t sz = f.size();
+  f.close();
+  return sz >= TOERN_WAV_MIN_BYTES;
+}
 
-  char chosen[SAMPLE_BROWSER_NAME_MAX];
-  chosen[0] = 0;
-  bool chosenDir = false;
-  uint32_t seen = 0;
-
-  File fe;
-  while ((fe = dir.openNextFile())) {
-    char base[SAMPLE_BROWSER_NAME_MAX];
-    copyBaseName64(fe.name(), base, sizeof(base));
-    if (!base[0] || base[0] == '.') {
-      fe.close();
-      continue;
-    }
-    bool isDir = fe.isDirectory();
-    bool isWav = !isDir && hasWavExt(base);
-    fe.close();
-    if (!isDir && !isWav) continue;
-
-    seen++;
-    // Keep with probability 1/seen → uniform among useful children.
-    if (random((long)seen) == 0) {
-      strncpy(chosen, base, sizeof(chosen) - 1);
-      chosen[sizeof(chosen) - 1] = 0;
-      chosenDir = isDir;
-    }
-  }
-  dir.close();
-
-  if (seen == 0 || !chosen[0]) return false;
-  strncpy(outName, chosen, outNameSz - 1);
-  outName[outNameSz - 1] = 0;
-  if (outIsDir) *outIsDir = chosenDir;
+static bool wavIndexPushPath(const char* path) {
+  if (!path || !path[0]) return false;
+  if (g_wavIndexCount >= TOERN_WAV_INDEX_MAX) return false;
+  size_t n = strlen(path);
+  if (n == 0 || n >= TOERN_WAV_INDEX_PATH) return false;
+  strncpy(g_wavIndex[g_wavIndexCount], path, TOERN_WAV_INDEX_PATH - 1);
+  g_wavIndex[g_wavIndexCount][TOERN_WAV_INDEX_PATH - 1] = 0;
+  g_wavIndexCount++;
   return true;
 }
 
-// Realtime: random-walk the samples/ tree and return one WAV path. No full-tree scan.
-static bool soloRandomPickOneFast(char* outRel, size_t outRelSz) {
-  if (!outRel || outRelSz == 0) return false;
-  outRel[0] = 0;
+FLASHMEM bool loadSampleManifest() {
+  extern void sdIoBeginAudioSafe();
+  extern void sdIoEndAudioSafe();
+  extern void sdIoYield();
 
-  for (int attempt = 0; attempt < 20; attempt++) {
-    char rel[SAMPLE_BROWSER_PATH_MAX];
-    rel[0] = 0;
+  g_wavIndexCount = 0;
+  g_wavIndexLoaded = false;
+  manifestLoaded = false;
 
-    for (int depth = 0; depth < 10; depth++) {
-      char name[SAMPLE_BROWSER_NAME_MAX];
-      bool isDir = false;
-      if (!soloRandomPickChild(rel, name, sizeof(name), &isDir)) break;
+  if (!SD.exists(TOERN_WAV_INDEX_FILE)) return false;
 
-      char next[SAMPLE_BROWSER_PATH_MAX];
-      if (rel[0]) {
-        snprintf(next, sizeof(next), "%s/%s", rel, name);
-      } else {
-        snprintf(next, sizeof(next), "%s", name);
+  sdIoBeginAudioSafe();
+  File f = SD.open(TOERN_WAV_INDEX_FILE, FILE_READ);
+  if (!f) {
+    sdIoEndAudioSafe();
+    return false;
+  }
+
+  char line[TOERN_WAV_INDEX_PATH];
+  size_t n = 0;
+  uint16_t lines = 0;
+  while (f.available() && g_wavIndexCount < TOERN_WAV_INDEX_MAX) {
+    int c = f.read();
+    if (c < 0) break;
+    if (c == '\r') continue;
+    if (c == '\n') {
+      line[n] = 0;
+      if (n > 4) {
+        const char* base = strrchr(line, '/');
+        base = base ? base + 1 : line;
+        if (hasWavExt(base)) wavIndexPushPath(line);
       }
-
-      if (!isDir) {
-        strncpy(outRel, next, outRelSz - 1);
-        outRel[outRelSz - 1] = 0;
-        return true;
-      }
-      strncpy(rel, next, sizeof(rel) - 1);
-      rel[sizeof(rel) - 1] = 0;
+      n = 0;
+      if ((++lines & 31u) == 0u) sdIoYield();
+      continue;
     }
-    yield();
+    if (n + 1 < sizeof(line)) line[n++] = (char)c;
+    else n = sizeof(line) - 1;
+  }
+  if (n > 4) {
+    line[n] = 0;
+    const char* base = strrchr(line, '/');
+    base = base ? base + 1 : line;
+    if (hasWavExt(base)) wavIndexPushPath(line);
+  }
+  f.close();
+  sdIoEndAudioSafe();
+
+  g_wavIndexLoaded = (g_wavIndexCount > 0);
+  manifestLoaded = g_wavIndexLoaded;
+  return g_wavIndexLoaded;
+}
+
+// ETC → RSET → SD: walk whole card once, write samples/toern_wavs.txt, keep RAM index.
+FLASHMEM bool scanAndWriteManifest() {
+  extern void stopAllSetWavPreviewAudio();
+  extern void sdIoBeginAudioSafe();
+  extern void sdIoEndAudioSafe();
+  extern void sdIoYield();
+
+  stopAllSetWavPreviewAudio();
+  sdIoBeginAudioSafe();
+
+  g_wavIndexCount = 0;
+  g_wavIndexLoaded = false;
+  manifestLoaded = false;
+
+  int stackTop = 1;
+  g_wavScanDirStack[0][0] = 0;  // empty = SD root
+
+  while (stackTop > 0 && g_wavIndexCount < TOERN_WAV_INDEX_MAX) {
+    stackTop--;
+    char rel[TOERN_WAV_INDEX_PATH];
+    strncpy(rel, g_wavScanDirStack[stackTop], sizeof(rel) - 1);
+    rel[sizeof(rel) - 1] = 0;
+
+    char openPath[160];
+    if (rel[0]) snprintf(openPath, sizeof(openPath), "%s", rel);
+    else snprintf(openPath, sizeof(openPath), "/");
+
+    File dir = SD.open(openPath);
+    if (!dir || !dir.isDirectory()) {
+      if (dir) dir.close();
+      sdIoYield();
+      continue;
+    }
+
+    File fe;
+    uint16_t seen = 0;
+    while ((fe = dir.openNextFile())) {
+      char base[SAMPLE_BROWSER_NAME_MAX];
+      copyBaseName64(fe.name(), base, sizeof(base));
+      if (soloRandomIsJunkName(base)) {
+        fe.close();
+        continue;
+      }
+
+      if (strlen(rel) + 1 + strlen(base) >= TOERN_WAV_INDEX_PATH) {
+        fe.close();
+        continue;
+      }
+
+      char child[TOERN_WAV_INDEX_PATH];
+      soloRandomJoinRel(child, sizeof(child), rel, base);
+
+      if (fe.isDirectory()) {
+        fe.close();
+        if (stackTop < TOERN_WAV_SCAN_DIR_STACK) {
+          strncpy(g_wavScanDirStack[stackTop], child, TOERN_WAV_INDEX_PATH - 1);
+          g_wavScanDirStack[stackTop][TOERN_WAV_INDEX_PATH - 1] = 0;
+          stackTop++;
+        }
+      } else if (hasWavExt(base)) {
+        uint32_t sz = fe.size();
+        fe.close();
+        if (sz >= TOERN_WAV_MIN_BYTES) wavIndexPushPath(child);
+      } else {
+        fe.close();
+      }
+
+      if ((++seen & 7u) == 0u) sdIoYield();
+    }
+    dir.close();
+    sdIoYield();
+  }
+
+  if (!SD.exists("samples")) SD.mkdir("samples");
+  if (SD.exists(TOERN_WAV_INDEX_FILE)) SD.remove(TOERN_WAV_INDEX_FILE);
+
+  File out = SD.open(TOERN_WAV_INDEX_FILE, FILE_WRITE);
+  if (out) {
+    for (uint16_t i = 0; i < g_wavIndexCount; i++) {
+      out.println(g_wavIndex[i]);
+      if ((i & 15u) == 0u) sdIoYield();
+    }
+    out.close();
+  }
+
+  sdIoEndAudioSafe();
+
+  g_wavIndexLoaded = (g_wavIndexCount > 0);
+  manifestLoaded = g_wavIndexLoaded;
+  g_soloRandomListDirty = true;
+  return g_wavIndexLoaded;
+}
+
+void soloRandomDropCurrentEntry() {
+  if (g_soloRandomPlaylistCount == 0) return;
+  int idx = (int)g_soloRandomPlaylistIndex;
+  if (idx < 0) idx = 0;
+  if (idx >= (int)g_soloRandomPlaylistCount) idx = (int)g_soloRandomPlaylistCount - 1;
+  for (int i = idx; i < (int)g_soloRandomPlaylistCount - 1; i++) {
+    g_soloRandomPlaylist[i] = g_soloRandomPlaylist[i + 1];
+  }
+  g_soloRandomPlaylistCount--;
+  if (g_soloRandomPlaylistCount == 0) {
+    g_soloRandomPlaylistIndex = 0;
+    g_soloRandomLastRel[0] = 0;
+    return;
+  }
+  if (g_soloRandomPlaylistIndex >= (int16_t)g_soloRandomPlaylistCount) {
+    g_soloRandomPlaylistIndex = (int16_t)g_soloRandomPlaylistCount - 1;
+  }
+  soloRandomSetLastFromIndex();
+}
+
+static bool soloRandomAppendOneFromIndex() {
+  if (g_soloRandomPlaylistCount >= SOLO_RANDOM_PLAYLIST_SIZE) return false;
+  if (g_wavIndexCount == 0) return false;
+
+  for (int attempt = 0; attempt < 12; attempt++) {
+    uint16_t pick = (uint16_t)random((long)g_wavIndexCount);
+    bool dup = false;
+    for (uint16_t i = 0; i < g_soloRandomPlaylistCount; i++) {
+      if (g_soloRandomPlaylist[i] == pick) {
+        dup = true;
+        break;
+      }
+    }
+    if (dup && g_soloRandomPlaylistCount < g_wavIndexCount) continue;
+    g_soloRandomPlaylist[g_soloRandomPlaylistCount++] = pick;
+    return true;
   }
   return false;
 }
 
-static bool soloRandomAppendOne() {
-  if (g_soloRandomPlaylistCount >= SOLO_RANDOM_PLAYLIST_SIZE) return false;
-  char entry[SAMPLE_BROWSER_PATH_MAX];
-  if (!soloRandomPickOneFast(entry, sizeof(entry))) return false;
-
-  // Avoid immediate duplicates when growing the list.
-  for (uint16_t i = 0; i < g_soloRandomPlaylistCount; i++) {
-    if (strcasecmp(g_soloRandomPlaylist[i], entry) == 0) {
-      // Try once more for a different pick.
-      if (!soloRandomPickOneFast(entry, sizeof(entry))) return false;
-      break;
-    }
-  }
-
-  strncpy(g_soloRandomPlaylist[g_soloRandomPlaylistCount], entry, SAMPLE_BROWSER_PATH_MAX - 1);
-  g_soloRandomPlaylist[g_soloRandomPlaylistCount][SAMPLE_BROWSER_PATH_MAX - 1] = 0;
-  g_soloRandomPlaylistCount++;
-  return true;
-}
-
-// Start a new playlist instantly (one realtime pick). Grows to 99 as user scrolls forward.
 FLASHMEM bool soloRandomRenewPlaylist() {
   g_soloRandomPlaylistCount = 0;
   g_soloRandomPlaylistIndex = 0;
-  g_soloRandomSeenCount = 0;
   g_soloRandomLastRel[0] = 0;
   g_soloRandomListDirty = false;
-  if (!soloRandomAppendOne()) return false;
+
+  if (!g_wavIndexLoaded || g_wavIndexCount == 0) {
+    if (!loadSampleManifest()) return false;
+  }
+  if (g_wavIndexCount == 0) return false;
+
+  uint16_t want = SOLO_RANDOM_PLAYLIST_SIZE;
+  if (want > g_wavIndexCount) want = g_wavIndexCount;
+  for (uint16_t n = 0; n < want; n++) {
+    if (!soloRandomAppendOneFromIndex()) break;
+  }
+  if (g_soloRandomPlaylistCount == 0) return false;
   g_soloRandomPlaylistIndex = 0;
   soloRandomSetLastFromIndex();
   return true;
@@ -311,15 +448,15 @@ bool soloRandomStepPlaylist(int delta) {
     int next = (int)g_soloRandomPlaylistIndex + 1;
     if (next < (int)g_soloRandomPlaylistCount) {
       g_soloRandomPlaylistIndex = (int16_t)next;
-    } else if (g_soloRandomPlaylistCount < SOLO_RANDOM_PLAYLIST_SIZE) {
-      // Grow lazily with one realtime pick — no full tree scan.
-      if (soloRandomAppendOne()) {
+    } else if (g_soloRandomPlaylistCount < SOLO_RANDOM_PLAYLIST_SIZE &&
+               g_soloRandomPlaylistCount < g_wavIndexCount) {
+      if (soloRandomAppendOneFromIndex()) {
         g_soloRandomPlaylistIndex = (int16_t)(g_soloRandomPlaylistCount - 1);
-      } else if (g_soloRandomPlaylistCount > 0) {
-        g_soloRandomPlaylistIndex = 0;  // wrap if we can't find more
+      } else {
+        g_soloRandomPlaylistIndex = 0;
       }
     } else {
-      g_soloRandomPlaylistIndex = 0;  // full 99 — wrap
+      g_soloRandomPlaylistIndex = 0;
     }
   } else if (delta < 0) {
     int n = (int)g_soloRandomPlaylistCount;
@@ -590,7 +727,8 @@ FLASHMEM void sampleBrowserSyncBrowseFromStoredPath(int ch) {
   if (ch < 1 || ch >= maxFiles) return;
   const char* sp = SMP.samplePathRel[ch];
   g_browseDir[ch][0] = 0;
-  if (!sp || !sp[0]) {
+  if (!sp || !sp[0] || sp[0] == '*') {
+    // Empty or SD-root absolute (outside samples/) — browse from samples root.
     sampleBrowserRefreshList(ch);
     currentMode->pos[1] = 0;
     Encoder[2].writeCounter((int32_t)0);
@@ -724,13 +862,17 @@ FLASHMEM void generateNextNumericName(int folderIdx, char* outName, size_t outSi
 }
 
 // Playback / recording path from stored relative path (samples/...)
+// Leading '*' means SD-root absolute (used by mute-mode random outside samples/).
 FLASHMEM void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outSize) {
   (void)folderIdx;
   (void)fileIdx;
   if (outSize > 0) out[0] = '\0';
   int ch = GLOB.currentChannel;
   if (ch < 1 || ch >= maxFiles) return;
-  if (SMP.samplePathRel[ch][0]) {
+  if (!SMP.samplePathRel[ch][0]) return;
+  if (SMP.samplePathRel[ch][0] == '*') {
+    snprintf(out, outSize, "%s", SMP.samplePathRel[ch] + 1);
+  } else {
     snprintf(out, outSize, "samples/%s", SMP.samplePathRel[ch]);
   }
 }

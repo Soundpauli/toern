@@ -1,5 +1,8 @@
 samples/
 .cursor/
+.pio/
+.cache/
+compile_commands.json
 # Website is local/deploy-only; handbook + docs are copied in manually
 website/
 

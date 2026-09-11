@@ -35,7 +35,7 @@ static char g_queuedSdPreviewPath[160];
 static bool g_queuedSdPreview = false;
 static elapsedMillis g_sdPreviewQuietMs;
 static bool g_previewPlayImmediate = false;
-static const unsigned SD_PREVIEW_SETTLE_MS = 45;
+static const unsigned SD_PREVIEW_SETTLE_MS = 70;
 // Live peak1 capture only when the file scan has nothing to show yet.
 bool g_previewUseLivePeaks = true;
 
@@ -1362,9 +1362,9 @@ void reversePreviewSample() {
 }
 
 // Copy the preview sample (channel 0) to the target channel
-void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
+bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   if (targetChannel < 1 || targetChannel >= maxFiles) {
-    return;
+    return false;
   }
 
   stopSdPreviewIfPlaying();
@@ -1386,7 +1386,7 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     sdIoYield();
     File previewFile = SD.open(OUTPUTf);
     if (!previewFile) {
-      return;
+      return false;
     }
 
     if (showLoadProgress) {
@@ -1437,9 +1437,17 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     previewCache.rate = rate;
     previewCache.valid = true;
     previewCache.plen = plen;
+    if (plen < 2) {
+      previewCache.valid = false;
+      return false;
+    }
   } else if (showLoadProgress) {
     drawSampleLoadOverlay(50);
     FastLEDshow();
+  }
+
+  if (previewCache.lengthBytes < 2) {
+    return false;
   }
 
   // Calculate the trimmed portion based on seek/seekEnd
@@ -1499,31 +1507,31 @@ void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   SMP.wav[targetChannel].fileID = SMP.wav[GLOB.currentChannel].fileID;
   strncpy(SMP.samplePathRel[targetChannel], SMP.samplePathRel[GLOB.currentChannel], 127);
   SMP.samplePathRel[targetChannel][127] = 0;
+  return true;
 }
 
 void soloRandomPreviewCurrentVoice() {
   int ch = constrain((int)GLOB.currentChannel, 1, 8);
 
-  char rel[SAMPLE_BROWSER_PATH_MAX];
-  if (!soloRandomPickPath(rel, sizeof(rel))) return;
-
-  strncpy(SMP.samplePathRel[ch], rel, 127);
-  SMP.samplePathRel[ch][127] = 0;
+  char stored[128];
+  if (!soloRandomPickPath(stored, sizeof(stored))) return;
 
   char OUTPUTf[160];
-  snprintf(OUTPUTf, sizeof(OUTPUTf), "samples/%s", rel);
-  if (!SD.exists(OUTPUTf)) return;
+  if (!soloRandomBuildPlayPath(stored, OUTPUTf, sizeof(OUTPUTf))) return;
+  if (!OUTPUTf[0]) return;
+
+  // Index already filtered empty files. Do not SD.open/exists here — that
+  // races the audio ISR when the 3rd encoder is spun.
+  soloRandomCommitPathToChannel(ch, OUTPUTf);
 
   stopPeakScan();
-  stopSdPreviewAndWait();
-
   GLOB.seek = 0;
   GLOB.seekEnd = 100;
   previewCache.valid = false;
   previewCache.lengthBytes = 0;
   previewCache.plen = 0;
 
-  startSdPreviewNow(OUTPUTf);
+  requestSdPreview(OUTPUTf);
 }
 
 // Step through the fixed random playlist (±1), then preview.
@@ -1534,25 +1542,36 @@ void soloRandomStepAndPreview(int delta) {
 
 void soloRandomLoadLastPreview() {
   int ch = constrain((int)GLOB.currentChannel, 1, 8);
-  const char* rel = soloRandomGetLastPreviewPath();
-  if (!rel || !rel[0]) return;
+  const char* stored = soloRandomGetLastPreviewPath();
+  if (!stored || !stored[0]) return;
 
   char OUTPUTf[160];
-  snprintf(OUTPUTf, sizeof(OUTPUTf), "samples/%s", rel);
-  if (!SD.exists(OUTPUTf)) return;
+  if (!soloRandomBuildPlayPath(stored, OUTPUTf, sizeof(OUTPUTf))) return;
+  if (!OUTPUTf[0]) return;
 
-  if (playSdWav1.isPlaying()) playSdWav1.stop();
+  // Stop SD preview BEFORE any further SD.open (eDMA bus fault if they overlap).
+  g_queuedSdPreview = false;
+  stopSdPreviewAndWait();
   previewIsPlaying = false;
 
-  strncpy(SMP.samplePathRel[ch], rel, 127);
-  SMP.samplePathRel[ch][127] = 0;
+  soloRandomCommitPathToChannel(ch, OUTPUTf);
 
   GLOB.seek = 0;
   GLOB.seekEnd = 100;
   previewCache.valid = false;
+  previewCache.lengthBytes = 0;
+  previewCache.plen = 0;
 
-  loadPreviewToChannel((unsigned int)ch, true);
-  copySampleToSamplepack0((unsigned int)ch, true);
-  saveSp0StateToEEPROM();
-  flushSettingsBackupNow();
+  preventPaintUnpaint = true;
+  sdIoBeginAudioSafe();
+  bool loaded = loadPreviewToChannel((unsigned int)ch, true);
+  if (loaded) {
+    copySampleToSamplepack0((unsigned int)ch, true);
+    saveSp0StateToEEPROM();
+    if (!isNowPlaying) {
+      flushSettingsBackupNow();
+    }
+  }
+  sdIoEndAudioSafe();
+  preventPaintUnpaint = false;
 }

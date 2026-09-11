@@ -21,6 +21,23 @@ description: How to build and flash the Teensy firmware.
 
 Custom audio sources in `src/` compile with the sketch — no extra package step.
 
+## PlatformIO
+
+The repository includes a pinned PlatformIO environment for Teensy 4.1:
+
+```bash
+pio run                         # build .pio/build/teensy41/firmware.hex
+pio run --target upload         # build and open the Teensy upload flow
+pio device monitor              # 115200 baud USB serial monitor
+pio run --target compiledb      # generate compile_commands.json for IDE/AI tooling
+```
+
+The environment uses **Faster** optimization and the **MIDI + Serial** USB type.
+Serial is retained for diagnostics; USB Audio is not enabled. Its pre-build
+script applies the project's sampler, amplitude-ramping, and resampler changes
+to the pinned upstream audio libraries, so no manually edited Arduino libraries
+are needed.
+
 ## Open the sketch
 
 Open `toern.ino` from the repo root (the folder containing all `toern_*.ino` files). Arduino treats that folder as one sketch.

@@ -112,7 +112,7 @@
               <table class="opt-table">
                 <thead><tr><th>Mode</th><th>What runs</th><th>What survives</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>SD</strong></td><td>Invalidates the dynamic sample browser cache, flashes SCAN/DONE, returns to draw.</td><td>Everything except the stale browse index. Use when the browse list looks wrong after a card-reader swap or transfers via the <a href="hardware.html#sd-tool">SD tool</a>.</td></tr>
+                  <tr><td><strong>SD</strong></td><td>Walks the whole card, writes <code>samples/toern_wavs.txt</code> (used by mute-mode random preview <code>?&gt;</code>), invalidates the sample browser cache, flashes SCAN/DONE, returns to draw.</td><td>Everything except the stale browse/random index. Use after a card-reader swap or transfers via the <a href="hardware.html#sd-tool">SD tool</a>.</td></tr>
                   <tr><td><strong>EFX</strong></td><td>Resets every tone control — filters, envelopes, synth parameters, octave helpers, audio effects — back to factory values across all voices.</td><td>Patterns and sample assignments survive. Every tone control snaps back to factory.</td></tr>
                   <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, deletes then rewrites <code>autosaved.txt</code>, and rescans the SD card.</td><td><a href="play.html#leds">SETTINGS → LEDS</a> (panel 1 / 1B / 2 / 2B). FILE-saved patterns. Almost nothing else in RAM.</td></tr>
                   <tr><td><strong>FILE</strong></td><td>Deletes pattern files <code>1–99.txt</code>.</td><td><code>autosaved.txt</code> and the current RAM session.</td></tr>

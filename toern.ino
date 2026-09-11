@@ -1,3 +1,5 @@
+#include "src/toern_build_types.h"
+
 #define VERSION "v2.7"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
@@ -51,7 +53,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include <Audio.h>
 #include <EEPROM.h>
 #include <FastTouch.h>
-#include <TeensyPolyphony.h>
+#include <sampler.h>  // TeensyPolyphony arraysampler API
 // Adafruit_seesaw uses unqualified `byte`; disambiguate vs C++17 std::byte
 #define byte uint8_t
 #include "Adafruit_seesaw.h"
@@ -329,7 +331,7 @@ void forceAllMixerGainsToTarget();
 void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
 void drawSampleLoadOverlay(uint8_t progressPercent);
-void loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
+bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
 void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
 void saveSp0StateToEEPROM();
 FLASHMEM void flushSettingsBackupNow();
@@ -345,6 +347,10 @@ void sdIoEndAudioSafe();
 bool soloRandomPickPath(char* outRel, size_t outRelSize);
 bool soloRandomRenewPlaylist();
 bool soloRandomStepPlaylist(int delta);
+bool soloRandomBuildPlayPath(const char* stored, char* out, size_t outSz);
+bool soloRandomIsPlayableWav(const char* fullPath);
+void soloRandomCommitPathToChannel(int ch, const char* fullSdPath);
+void soloRandomDropCurrentEntry();
 void soloRandomPreviewCurrentVoice();
 void soloRandomStepAndPreview(int delta);
 const char* soloRandomGetLastPreviewPath();
@@ -1539,10 +1545,15 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
   // `isPressed[encoderIndex]` is true if button is physically down, false if up.
   // `buttonState[encoderIndex]` is our FSM state: IDLE, LONG_PRESSED, RELEASED.
 
+  // Mute-mode is an intentional long hold on encoder 2 (index 1). The 10s
+  // "stuck button" reset was clearing that hold, so 3rd-encoder load (0210)
+  // stopped matching after ~10 seconds.
+  const bool muteHold = muteModeActive && encoderIndex == 1;
+
   // Recovery mechanism: If button appears stuck pressed for too long, force reset
   // This handles cases where I2C communication fails or callbacks are missed
   // Also reset if button state is 2 (long press) for more than 10 seconds
-  if (isPressed[encoderIndex] && buttonState[encoderIndex] != IDLE) {
+  if (!muteHold && isPressed[encoderIndex] && buttonState[encoderIndex] != IDLE) {
     unsigned long pressDuration;
     // Handle millis() wraparound (happens every ~50 days)
     if (currentTime < buttonPressStartTime[encoderIndex]) {
@@ -1559,7 +1570,7 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
       buttons[encoderIndex] = 0;
       buttonPressStartTime[encoderIndex] = 0;  // Reset for next valid press
     }
-  } else if (buttons[encoderIndex] == 2 && buttonState[encoderIndex] == LONG_PRESSED) {
+  } else if (!muteHold && buttons[encoderIndex] == 2 && buttonState[encoderIndex] == LONG_PRESSED) {
     // Also check if button state 2 (long press) has been active for too long
     unsigned long pressDuration;
     // Handle millis() wraparound
@@ -2229,7 +2240,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  if (currentMode == &subpatternMode && muteModeActive && match_buttons(currentButtonStates, 0, 2, 1, 0)) {  // "0210" - load last random preview
+  // Load last random preview: 3rd encoder short press while mute overlay is open.
+  // 0210 = still holding encoder 2 (normal). 0010 = hold state already idle (fallback).
+  if (currentMode == &subpatternMode && muteModeActive &&
+      (match_buttons(currentButtonStates, 0, 2, 1, 0) ||
+       match_buttons(currentButtonStates, 0, 0, 1, 0))) {
     if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
       soloRandomLoadLastPreview();
     }
@@ -3909,6 +3924,10 @@ FLASHMEM void setup() {
   runAnimation();
 
   drawNoSD();
+  {
+    extern bool loadSampleManifest();
+    loadSampleManifest();  // samples/toern_wavs.txt for mute-mode random (?>)
+  }
   if (CrashReport) {
     checkCrashReport();
   }
@@ -3994,7 +4013,9 @@ FLASHMEM void setup() {
       FastLEDclear();
       drawText("SCAN", 2, 3, CRGB(0, 255, 0));
       FastLEDshow();
+      extern bool scanAndWriteManifest();
       extern void sampleBrowserInvalidate();
+      scanAndWriteManifest();
       sampleBrowserInvalidate();
       FastLEDclear();
       drawText("DONE", 2, 3, CRGB(0, 255, 0));
@@ -4313,6 +4334,8 @@ void checkEncoders() {
         bypassModeSwitchDebounce = false;
         muteModeActive = false;
         GLOB.singleMode = restoreSingleState;
+        // Drop any coalesced random preview that was still waiting to start.
+        stopAllSetWavPreviewAudio();
       }
     } else {
       // Safety: subpatternMode without mute overlay should never linger (SUB SP# removed).

@@ -25,6 +25,13 @@ extern uint8_t currentColorScheme;
 extern void applyColorScheme(uint8_t scheme);
 extern uint16_t drawRFullMuteCustomUnmuteMask;
 
+static inline CRGB dimIconColorFromText(CRGB textColor);
+static inline CRGB menuTextColorFromCol(uint8_t colIndex);
+static inline CRGB currentMenuParentTextColor();
+static inline void drawLargeIndicatorCustom(CRGB color, int encoderNum);
+static inline uint32_t hashEncoderPositions(const Mode *m);
+static inline void drawMenuValue(const char* label, int x, int y, CRGB color);
+
 // SETTINGS>MUTE & DRAW-R mask: user CH1..CH16 ↔ internal mute index 0..15 (same as draw: CH1=y2→internal 1; CH16=y1→internal 0).
 static inline int userChToInternalDrawR(int uch) {
   if (uch < 1) uch = 1;
@@ -3740,7 +3747,9 @@ FLASHMEM void switchMenu(int menuPosition){
           drawText("SCAN", 2, 3, UI_GREEN);
           FastLEDshow();
 
+          extern bool scanAndWriteManifest();
           extern void sampleBrowserInvalidate();
+          scanAndWriteManifest();
           sampleBrowserInvalidate();
           FastLEDclear();
           drawText("DONE", 2, 3, UI_GREEN);
@@ -3765,7 +3774,9 @@ FLASHMEM void switchMenu(int menuPosition){
           drawText("SCAN", 2, 3, UI_GREEN);
           FastLEDshow();
 
+          extern bool scanAndWriteManifest();
           extern void sampleBrowserInvalidate();
+          scanAndWriteManifest();
           sampleBrowserInvalidate();
           FastLEDclear();
           drawText("DONE", 2, 3, UI_GREEN);
