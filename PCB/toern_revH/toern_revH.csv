@@ -23,6 +23,7 @@
 "J9","Conn_01x03","Connector_JST:JST_PH_B3B-PH-K_1x03_P2.00mm_Vertical","1","C131339"
 "J10,J16,J25,J26","Conn_01x02","Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical","4","C131337"
 "J11,J11.5,J12,J13,J14,J15","Conn_01x05","Connector_JST:JST_PH_B5B-PH-K_1x05_P2.00mm_Vertical","6","C157993"
+"J28,J29,J30,J31","929870-01-12-RA","3M_929870-01-12-RA:3M_929870-01-12-RA_Assembly","4","C20926467"
 "MK1","Microphone_Condenser","Sensor_Audio:POM-2244P-C3310-2-R","1","C529951"
 "R1,R2,R3,R4,R5","22R","Resistor_SMD:R_0402_1005Metric","5","C25092"
 "R6,R20","220R","Resistor_SMD:R_0603_1608Metric","2","C22962"

@@ -1,0 +1,93 @@
+#VRML V2.0 utf8
+# Dimension-based model reconstructed from official 3M drawing TS-0211-12.
+# KiCad VRML units are 0.1 inch (2.54 mm).
+
+DEF BLACK Appearance {
+  material Material {
+    diffuseColor 0.055 0.055 0.06
+    specularColor 0.12 0.12 0.12
+    shininess 0.25
+  }
+}
+
+DEF GOLD Appearance {
+  material Material {
+    diffuseColor 0.82 0.58 0.16
+    specularColor 0.75 0.62 0.28
+    shininess 0.7
+  }
+}
+
+DEF TIN Appearance {
+  material Material {
+    diffuseColor 0.68 0.70 0.72
+    specularColor 0.55 0.58 0.62
+    shininess 0.6
+  }
+}
+
+# 30.48 x 2.54 x 3.81 mm low-profile insulator.
+Transform {
+  translation 0 0 0.75
+  children [
+    Shape {
+      appearance USE BLACK
+      geometry Box { size 12 1 1.5 }
+    }
+  ]
+}
+
+# Matte-tin 0.635 mm square solder tails, 3.18 mm below PCB.
+DEF TAIL Transform {
+  translation 0 0 -0.625984
+  children [
+    Shape {
+      appearance USE TIN
+      geometry Box { size 0.25 0.25 1.251969 }
+    }
+  ]
+}
+Transform { translation -5.5 0 0 children [ USE TAIL ] }
+Transform { translation -4.5 0 0 children [ USE TAIL ] }
+Transform { translation -3.5 0 0 children [ USE TAIL ] }
+Transform { translation -2.5 0 0 children [ USE TAIL ] }
+Transform { translation -1.5 0 0 children [ USE TAIL ] }
+Transform { translation -0.5 0 0 children [ USE TAIL ] }
+Transform { translation  0.5 0 0 children [ USE TAIL ] }
+Transform { translation  1.5 0 0 children [ USE TAIL ] }
+Transform { translation  2.5 0 0 children [ USE TAIL ] }
+Transform { translation  3.5 0 0 children [ USE TAIL ] }
+Transform { translation  4.5 0 0 children [ USE TAIL ] }
+Transform { translation  5.5 0 0 children [ USE TAIL ] }
+
+# Gold-plated contact openings on the mating face.
+DEF CONTACT Transform {
+  translation 0 0 1.502
+  children [
+    Shape {
+      appearance USE GOLD
+      geometry Box { size 0.52 0.52 0.025 }
+    }
+    Transform {
+      translation 0 0 0.008
+      children [
+        Shape {
+          appearance USE BLACK
+          geometry Box { size 0.30 0.30 0.026 }
+        }
+      ]
+    }
+  ]
+}
+Transform { translation -5.5 0 0 children [ USE CONTACT ] }
+Transform { translation -4.5 0 0 children [ USE CONTACT ] }
+Transform { translation -3.5 0 0 children [ USE CONTACT ] }
+Transform { translation -2.5 0 0 children [ USE CONTACT ] }
+Transform { translation -1.5 0 0 children [ USE CONTACT ] }
+Transform { translation -0.5 0 0 children [ USE CONTACT ] }
+Transform { translation  0.5 0 0 children [ USE CONTACT ] }
+Transform { translation  1.5 0 0 children [ USE CONTACT ] }
+Transform { translation  2.5 0 0 children [ USE CONTACT ] }
+Transform { translation  3.5 0 0 children [ USE CONTACT ] }
+Transform { translation  4.5 0 0 children [ USE CONTACT ] }
+Transform { translation  5.5 0 0 children [ USE CONTACT ] }

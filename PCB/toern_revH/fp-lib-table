@@ -1,4 +1,7 @@
 (fp_lib_table
   (version 7)
   (lib (name "SJ1-3533")(type "KiCad")(uri "${KIPRJMOD}/SJ1-3533")(options "")(descr ""))
+  (lib (name "YZP0354-20100-01")(type "KiCad")(uri "${KIPRJMOD}/YZP0354-20100-01")(options "")(descr "Xinyangze through-hole pogo pin C5157282"))
+  (lib (name "3M_929870-01-12-RA")(type "KiCad")(uri "${KIPRJMOD}/3M_929870-01-12-RA.pretty")(options "")(descr "3M low-profile 1x12 socket C20926467 assembly overlay"))
+  (lib (name "C529951")(type "KiCad")(uri "${KIPRJMOD}/C529951.pretty")(options "")(descr "INGHAi GMI6027P-2C38DB-RF75 electret microphone"))
 )
