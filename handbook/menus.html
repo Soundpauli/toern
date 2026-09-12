@@ -431,9 +431,9 @@
                           <span class="desc">How incoming notes map onto voices.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>YPOS</strong> — MIDI ch&nbsp;N → row&nbsp;N</li>
-                              <li><strong>MIDI</strong> — notes hit the currently selected voice</li>
-                              <li><strong>KEYS</strong> — pitch drives synth notes; samples trigger from velocity</li>
+                              <li><strong>YPOS</strong> — notes hit the voice selected by the grid’s Y position</li>
+                              <li><strong>MIDI</strong> — MIDI ch&nbsp;N → voice&nbsp;N</li>
+                              <li><strong>KEYS</strong> — legacy pitch-class selector for sample voices 1–8 at base pitch</li>
                             </ul>
                           </span>
                         </li>
@@ -468,6 +468,16 @@
                             <ul class="sub-opts">
                               <li><strong>NOTE</strong> — yes, per CH mapping</li>
                               <li><strong>OFF</strong> — ignore notes (pure sequencer/recorder mode)</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#clmp"><span class="node">CLMP</span></a>
+                          <span class="desc">Choose whether incoming YPOS/MIDI pitches are folded into the visible register.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>ON</strong> — visible row is also the played pitch</li>
+                              <li><strong>OFF</strong> — preserve the original pitch while storing the note on rows 1–15</li>
                             </ul>
                           </span>
                         </li>

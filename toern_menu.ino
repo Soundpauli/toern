@@ -2,7 +2,7 @@
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 11
 #define RECS_PAGES_COUNT 5
-#define MIDI_PAGES_COUNT 6
+#define MIDI_PAGES_COUNT 7
 #define VOL_PAGES_COUNT 6
 #define ETC_PAGES_COUNT 8
 
@@ -105,6 +105,7 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"TRAN", 8, false, nullptr},          // MIDI Transport
   {"SEND", 13, false, nullptr},         // MIDI Send (CLCK, NOTE, BOTH)
   {"RCVE", 44, false, nullptr},         // MIDI Note Receive (OFF/NOTE)
+  {"CLMP", 51, false, nullptr},         // Fold incoming pitch into the visible grid (ON/OFF)
   {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 −127..+127 ms (+ = this path, − = other path)
   {"PPQN", 50, false, nullptr},         // Analog clock: enc1 width, enc2 STOP/CONT, enc3 rate + click POL
 };
@@ -273,7 +274,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 36; // [32]=codecHfCut; [33]=4 HFC format; [34..35]=drawR fullMute custom unmute mask
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 38; // [36]=child lock; [37]=MIDI pitch clamp
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -440,6 +441,9 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
   memcpy(&outSamplePackID, payload, sizeof(unsigned int));
   if (outBlockLen < SETTINGS_EEPROM_BLOCK_LEN) { f.close(); return false; }
   memset(outBlock, 0, SETTINGS_EEPROM_BLOCK_LEN);
+  // Added after the V1 backup format shipped: an absent CLMP byte must preserve
+  // the historical pitch-folding behavior (ON), not restore as OFF.
+  outBlock[37] = 1;
   if (outSp0BlockLen < EEPROM_SP0_STATE_COUNT) { f.close(); return false; }
   memset(outSp0Block, 0, EEPROM_SP0_STATE_COUNT);
   // Payload layout: samplePackID (4) + settings block (variable up to SETTINGS_EEPROM_BLOCK_LEN) + sp0 (8).
@@ -576,6 +580,8 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)256);  // codecHfCut default (256)
       EEPROM.write(EEPROM_DATA_START + 33, 4);
       EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // internal bits 1+2 = user CH1+CH2 (y=2,3)
+      EEPROM.write(EEPROM_DATA_START + 36, 0);   // childLockEnabled default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 37, 1);   // MIDI pitch clamp default (ON)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -765,6 +771,16 @@ FLASHMEM void loadMenuFromEEPROM() {
   uint8_t rcveValue = EEPROM.read(EEPROM_DATA_START + 28);
   if (rcveValue > 1) { rcveValue = 1; saveSingleModeToEEPROM(28, 1); }
   MIDI_NOTE_RECEIVE = (rcveValue != 0);
+
+  // Load MIDI pitch clamp (slot 37). Existing EEPROM is 0xFF here, which
+  // migrates to ON so firmware behavior does not change after upgrading.
+  extern bool MIDI_NOTE_CLAMP;
+  uint8_t clampValue = EEPROM.read(EEPROM_DATA_START + 37);
+  if (clampValue > 1) {
+    clampValue = 1;
+    saveSingleModeToEEPROM(37, 1);
+  }
+  MIDI_NOTE_CLAMP = (clampValue != 0);
 
   // Load transport delay settings (slot 29 SNC1, slot 31 SNC2, int8_t -127..+127, EEPROM stores raw byte)
   extern int8_t transportSendDelayMs;
@@ -1390,10 +1406,10 @@ FLASHMEM void showMidiMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // MIDI: encoder 2 = value on CH/TRAN/SEND/RCVE; enc1+2 = SYNC;
+  // MIDI: encoder 2 = value on CH/TRAN/SEND/RCVE/CLMP; enc1+2 = SYNC;
   // PPQN: enc1=width, enc2=STOP/CONT, enc3=OFF/rate (click=POL); enc4 = page nav
   CRGB indicatorColor = currentMenuParentTextColor();
-  const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50);
+  const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 51 || mainSetting == 45 || mainSetting == 50);
   Encoder[0].writeRGBCode(0x000000);
   if (mainSetting == 50) {
     extern bool getPulseClockPolarityPositive();
@@ -1837,6 +1853,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText("RCVE", 2, 10, currentMenuParentTextColor());
         drawMenuValue(MIDI_NOTE_RECEIVE ? "NOTE" : "OFF", 2, 3, MIDI_NOTE_RECEIVE ? UI_GREEN : UI_RED);
         drawIndicator('L', MIDI_NOTE_RECEIVE ? 'G' : 'R', 3);
+      }
+      break;
+
+    case 51: // CLMP - fold incoming pitch into the visible grid
+      {
+        extern bool MIDI_NOTE_CLAMP;
+        drawText("CLMP", 2, 10, currentMenuParentTextColor());
+        drawMenuValue(MIDI_NOTE_CLAMP ? "ON" : "OFF", 2, 3, MIDI_NOTE_CLAMP ? UI_GREEN : UI_RED);
+        drawIndicator('L', MIDI_NOTE_CLAMP ? 'G' : 'R', 3);
       }
       break;
 
@@ -2561,6 +2586,30 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = encVal;
         lastRcveEnc = encVal;
         saveSingleModeToEEPROM(28, (int8_t)encVal);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 51: { // CLMP - MIDI pitch clamp (OFF/ON) via encoder 2 rotation
+      static int lastClampEnc = -1;
+      extern bool MIDI_NOTE_CLAMP;
+      int encVal = MIDI_NOTE_CLAMP ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastClampEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastClampEnc) {
+        MIDI_NOTE_CLAMP = (currentMode->pos[2] == 1);
+        encVal = MIDI_NOTE_CLAMP ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastClampEnc = encVal;
+        saveSingleModeToEEPROM(37, (int8_t)encVal);
         redrawMain(setting);
       }
       break;

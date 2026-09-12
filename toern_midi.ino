@@ -136,7 +136,7 @@ static void markExternalOne() {
 }
 static unsigned long lastClockSent = 0;
 // Track held notes per logical channel to avoid stuck counters on duplicate NoteOn events.
-static bool midiHeldNote[17][128] = { false };
+static volatile bool midiHeldNote[17][128] = { false };
 
 // --- Analog clock pulse out on pin 31 (MENU>MIDI>PPQN). ---
 #define PULSE_CLOCK_PIN 31
@@ -825,20 +825,34 @@ void MidiSendNoteOn(int pitch, int channel, int velocity) {
   if (isChildVoiceDisabled(channel)) return;
   if (velocity < 0) velocity = 0;
   if (velocity > 127) velocity = 127;
-
-  // Optionally, if y is not already a MIDI note number, map it here.
-  // For example, if y is from 0 to 15 and you want to map it to notes 60-75:
-  // y = map(y, 0, 15, 60, 75);
-  // Optionally, if you want a specific scale (e.g. only C major notes) use an array:
-  // const int scaleNotes[16] = {48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74};
-  // int note = scaleNotes[y - 1];
-
-  const int baseNote = 48;
-  // Map y to a MIDI note: y=1 gives baseNote, y=2 gives baseNote+1, etc.
-  int note = baseNote + (pitch - 1);
+  int note = constrain(pitch, 0, 127);
 
   // Send the Note On event using the MIDI library.
   MIDI.sendNoteOn(note, velocity, channel);
+
+  // Keep a bounded list for release at the next sequencer step (or pause).
+  // At most one cell per grid row can trigger during a step.
+  static_assert(maxY <= 16, "MIDI output release queue assumes at most 16 rows");
+  extern uint8_t sequencerMidiOutCount;
+  extern uint8_t sequencerMidiOutPitch[16];
+  extern uint8_t sequencerMidiOutChannel[16];
+  if (sequencerMidiOutCount < 16) {
+    sequencerMidiOutPitch[sequencerMidiOutCount] = (uint8_t)note;
+    sequencerMidiOutChannel[sequencerMidiOutCount] = (uint8_t)channel;
+    sequencerMidiOutCount++;
+  }
+}
+
+void MidiReleaseSequencerNotes() {
+  extern uint8_t sequencerMidiOutCount;
+  extern uint8_t sequencerMidiOutPitch[16];
+  extern uint8_t sequencerMidiOutChannel[16];
+  uint8_t count = sequencerMidiOutCount;
+  sequencerMidiOutCount = 0;
+  for (uint8_t i = 0; i < count && i < 16; i++) {
+    MIDI.sendNoteOff(sequencerMidiOutPitch[i], 0,
+                     sequencerMidiOutChannel[i]);
+  }
 }
 
 
@@ -878,6 +892,63 @@ static int mapMidiToLogicalChannel(int midiChannel, uint8_t pitch) {
   return midiChannel;
 }
 
+// Fold an incoming pitch into the editable single-mode rows without losing its
+// pitch class. Repeated wrapping handles the complete MIDI 0..127 range.
+static uint8_t midiPitchToGridRow(int channel, uint8_t pitch) {
+  int anchorRow;
+  if (channel == 11) {
+    anchorRow = 12;            // ch11 calibrated manual anchor
+  } else if (channel == 13 || channel == 14) {
+    anchorRow = channel - 11;  // ch13 row2 / ch14 row3 = manual C3 base
+  } else {
+    anchorRow = channel + 1;   // sample voice's normal DRAW row
+  }
+  int row = anchorRow + (int)pitch - 60;
+  while (row < 1) row += 12;
+  while (row > 15) row -= 12;
+  return (uint8_t)row;
+}
+
+static bool preserveIncomingMidiPitch() {
+  extern bool MIDI_NOTE_CLAMP;
+  extern int voiceSelect;
+  return !MIDI_NOTE_CLAMP && voiceSelect != 2;
+}
+
+static void playIncomingMidiNote(int ch, uint8_t pitch, uint8_t row,
+                                 uint8_t velocity) {
+  extern int voiceSelect;
+  const bool preservePitch = preserveIncomingMidiPitch();
+
+  if (ch < 9) {
+    int samplePitch;
+    if (voiceSelect == 2) {
+      // KEYS remains a pitch-class-to-sample-voice trigger mode.
+      samplePitch = SampleRate[ch] * 12;
+    } else if (preservePitch) {
+      samplePitch = (SampleRate[ch] * 12) + (int)pitch - 72;
+    } else {
+      samplePitch = (SampleRate[ch] * 12) + (int)row - (ch + 1);
+    }
+    samplePitch += (int)detune[ch];
+    samplePitch += (int)(channelOctave[ch] * 12);
+    triggerSamplerVoice(ch, samplePitch, velocity, false);
+  } else if (ch == 11) {
+    int noteValue = 12 * (int)octave[0] + transpose;
+    noteValue += preservePitch ? ((int)pitch - 60) : ((int)row - 1);
+    extern int16_t midiHeldCh11SoundNote[128];
+    midiHeldCh11SoundNote[pitch] = (int16_t)noteValue;
+    playSound(noteValue, 0, velocity);
+  } else if (ch == 13 || ch == 14) {
+    if (preservePitch) {
+      extern void playSynthMidi(int ch, uint8_t midiPitch, int vel, bool persistant);
+      playSynthMidi(ch, pitch, velocity, true);
+    } else {
+      playSynth(ch, row, velocity, true);
+    }
+  }
+}
+
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   logMidiRxNoteOn((uint8_t)ch, pitch, velocity);
   extern bool MIDI_NOTE_RECEIVE;
@@ -911,99 +982,76 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
     persistentNoteOn[ch] = true;
   }
 
-  unsigned int livenote = (ch + 1) + pitch - 60;
-  if (livenote > 16) livenote -= 12;
-  if (livenote < 1) livenote += 12;
-  if (livenote >= 1 && livenote <= 16) {
+  const uint8_t livenote = midiPitchToGridRow(ch, pitch);
+  const uint8_t storedPitch = preserveIncomingMidiPitch()
+                                ? pitch : NOTE_MIDI_PITCH_NONE;
 
-    if (isNowPlaying) {
+  if (isNowPlaying) {
       if (GLOB.singleMode) {
-        // Store for grid write on next beat (ISR-safe ring buffer).
+        // Quantize the grid write at enqueue time (ISR-safe ring buffer).
         extern bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote);
-        enqueuePendingNote(pitch, velocity, (uint8_t)ch, (uint8_t)livenote);
-        // Ch13/14 synths are suppressed in playSynth() when called from the grid ISR with
-        // persistant=false while keys are held (pressedKeyCount[ch] > 0). Play immediately
-        // here with persistant=true so the user hears the note in real time.
-        if (ch > 12 && ch < 15) {
-          playSynth(ch, livenote, velocity, true);
-        }
+        enqueuePendingNote(storedPitch, velocity, (uint8_t)ch, livenote);
+        // Preview immediately; the queued cell is committed after sequencer
+        // audio on the next tick, so it cannot produce a second attack.
+        playIncomingMidiNote(ch, pitch, livenote, velocity);
       } else {
-
-        if (ch < 9) {
-          int samplePitch;
-          if (voiceSelect == 2) {
-            // KEYS mode: Play at base pitch (no MIDI pitch transposition)
-            samplePitch = SampleRate[ch] * 12;
-          } else {
-            // YPOS/MIDI mode: Transpose by MIDI pitch
-            samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
-          }
-          // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-          if (ch >= 1 && ch <= 12) {
-            samplePitch += (int)detune[ch]; // Add detune semitones
-          }
-          // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-          if (ch >= 1 && ch <= 8) {
-            samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
-          }
-          triggerSamplerVoice(ch, samplePitch, velocity, false);
-        } else if (ch > 12 && ch < 15) {
-          playSynth(ch, livenote, velocity, true);
-        } else if (ch == 11) {
-
-          // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
-          // Grid formula: 12 * octave[0] + transpose + (row - 1)
-          // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
-          playSound(12 * octave[0] + transpose + pitch - 55, 0, velocity);
-        }
+        playIncomingMidiNote(ch, pitch, livenote, velocity);
       }
-      // Always play the note immediately
-      activeNotes[pitch] = true;
-    }
-    else{ 
+    // Always play the note immediately
+    activeNotes[pitch] = true;
+  } else {
     // Live mode: play note and show light
     //light(mapXtoPageOffset(GLOB.x), livenote, CRGB(255, 255, 255));
     //FastLED.show();
-
-    if (ch < 9) {
-      int samplePitch;
-      if (voiceSelect == 2) {
-        // KEYS mode: Play at base pitch (no MIDI pitch transposition)
-        samplePitch = SampleRate[ch] * 12;
-      } else {
-        // YPOS/MIDI mode: Transpose by MIDI pitch
-        samplePitch = ((SampleRate[ch] * 12) + pitch - 60);
-      }
-      // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-      if (ch >= 1 && ch <= 12) {
-        samplePitch += (int)detune[ch]; // Add detune semitones
-      }
-      // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-      if (ch >= 1 && ch <= 8) {
-        samplePitch += (int)(channelOctave[ch] * 12); // Add octave semitones (12 semitones per octave)
-      }
-      triggerSamplerVoice(ch, samplePitch, velocity, false);
-    } else if (ch > 12 && ch < 15) {
-      playSynth(ch, livenote, velocity, true);
-    } else if (ch == 11) {
-
-      // Map MIDI pitch to match grid rows: MIDI 60 (middle C) = row 6
-      // Grid formula: 12 * octave[0] + transpose + (row - 1)
-      // So: MIDI pitch - 55 = row - 1 (fixed: was -49, off by 6 semitones)
-      playSound(12 * octave[0] + transpose + pitch - 55, 0, velocity);
-    }
-    }
+    playIncomingMidiNote(ch, pitch, livenote, velocity);
   }
 }
 
-void onBeatTick() {
+static bool midiRecordCellMatches(const Note &cell, uint8_t channel,
+                                  uint8_t pitch) {
+  if (cell.channel != channel) return false;
+  return cell.midiPitch <= 127 ? cell.midiPitch == pitch
+                               : cell.midiPitch == NOTE_MIDI_PITCH_NONE;
+}
+
+void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
   PendingNote pn;
   extern bool dequeuePendingNote(PendingNote &out);
   while (dequeuePendingNote(pn)) {
     if (isChildVoiceDisabled((int)pn.channel)) continue;
-    int targetBeat = beat;
+    unsigned int targetBeat = pn.targetBeat;
+    if (targetBeat < 1 || targetBeat >= maxlen) continue;
     note[targetBeat][pn.livenote].channel = pn.channel;
     note[targetBeat][pn.livenote].velocity = pn.velocity;
+    note[targetBeat][pn.livenote].probability = 100;
+    note[targetBeat][pn.livenote].condition = 1;
+    note[targetBeat][pn.livenote].midiPitch = pn.pitch;
+  }
+
+  // While a synth key remains down, render adjacent continuation cells as
+  // G/L. They are written after audio playback, so live MIDI remains the only
+  // audible trigger during recording; later sequencer playback holds/slides.
+  if (!GLOB.singleMode || currentBeat < 1 || currentBeat >= maxlen) return;
+  if (previousBeat < 1 || previousBeat >= maxlen) return;
+
+  const uint8_t synthChannels[] = { 11, 13, 14 };
+  for (uint8_t channel : synthChannels) {
+    if (isChildVoiceDisabled(channel)) continue;
+    for (int p = 0; p < 128; p++) {
+      uint8_t pitch = (uint8_t)p;
+      if (!midiHeldNote[channel][pitch]) continue;
+      uint8_t row = midiPitchToGridRow(channel, pitch);
+      Note &current = note[currentBeat][row];
+      if (midiRecordCellMatches(current, channel, pitch)) continue;
+      Note &previous = note[previousBeat][row];
+      if (!midiRecordCellMatches(previous, channel, pitch)) continue;
+      if (current.channel != 0 && current.channel != channel) continue;
+      current.channel = channel;
+      current.velocity = previous.velocity;
+      current.probability = 100;
+      current.condition = NOTE_CONDITION_GLIDE;
+      current.midiPitch = previous.midiPitch;
+    }
   }
 }
 
@@ -1031,8 +1079,10 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
 
     if (channel == 11) {
       // Ch11 uses the polyphonic voice system (Senvelope1/2/filter), not envelopes[11].
-      // Release this specific note immediately; other voices held by other keys stay alive.
-      int note = (int)(12 * octave[0]) + transpose + (int)pitch - 55;
+      // Release the exact voice identity created by Note On. This remains
+      // correct even if CLMP is toggled while a key is held.
+      extern int16_t midiHeldCh11SoundNote[128];
+      int note = (int)midiHeldCh11SoundNote[pitch];
       stopSound(note, 0);
       if (pressedKeyCount[11] == 0) {
         persistentNoteOn[11] = false;

@@ -1,5 +1,8 @@
 static const char *PATTERN_TMP_PATH = "pattern.tmp";
 static const char *AUTOSAVE_PATH = "autosaved.txt";
+static const uint8_t PITCH_EXTENSION_HEADER[8] = {
+  'T', 'P', 'I', 'T', 1, 0x10, 0x00, 0
+}; // magic, version 1, 4096 entries (big-endian), reserved
 bool g_enterNewFileAfterCorruptAutoload = false;
 
 FLASHMEM void clearPatternNotes() {
@@ -9,6 +12,7 @@ FLASHMEM void clearPatternNotes() {
       note[x][y].velocity = defaultVelocity;
       note[x][y].probability = 100;
       note[x][y].condition = 1;
+      note[x][y].midiPitch = NOTE_MIDI_PITCH_NONE;
     }
   }
 }
@@ -123,6 +127,29 @@ FLASHMEM void savePattern(bool autosave) {
         wroteOk = patternWriteAll(saveFile, smpBytes + smpOff, n);
         smpOff += n;
         smpLeft -= n;
+      }
+    }
+
+    // Optional v1 pitch extension. It follows the unchanged legacy note blob,
+    // marker, and SMP payload, so older firmware can safely ignore it.
+    if (wroteOk) {
+      wroteOk = patternWriteAll(saveFile, PITCH_EXTENSION_HEADER,
+                                sizeof(PITCH_EXTENSION_HEADER));
+    }
+    if (wroteOk) {
+      size_t pitchLen = 0;
+      for (unsigned int sdx = 1; sdx < maxlen && wroteOk; sdx++) {
+        for (unsigned int sdy = 1; sdy <= maxY; sdy++) {
+          buf[pitchLen++] = note[sdx][sdy].midiPitch;
+          if (pitchLen == sizeof(buf)) {
+            wroteOk = patternWriteAll(saveFile, buf, pitchLen);
+            pitchLen = 0;
+            sdIoYield();
+          }
+        }
+      }
+      if (wroteOk && pitchLen > 0) {
+        wroteOk = patternWriteAll(saveFile, buf, pitchLen);
       }
     }
     saveFile.close();
@@ -361,6 +388,7 @@ FLASHMEM void loadPattern(bool autoload) {
             note[sdrx][sdry].velocity = buf[pos + 1];
             note[sdrx][sdry].probability = buf[pos + 2];
             note[sdrx][sdry].condition = buf[pos + 3];
+            note[sdrx][sdry].midiPitch = NOTE_MIDI_PITCH_NONE;
           }
           pos += 4;
           notesRead++;
@@ -411,6 +439,45 @@ FLASHMEM void loadPattern(bool autoload) {
             smpOff += (size_t)got;
             smpLeft -= (size_t)got;
             sdIoYield();
+          }
+
+          // Read the optional trailing pitch extension. A missing, truncated,
+          // or unknown extension leaves every note in legacy row-derived mode.
+          if (smpLeft == 0 && loadFile.available() >= (int)sizeof(PITCH_EXTENSION_HEADER)) {
+            uint8_t pitchHeader[sizeof(PITCH_EXTENSION_HEADER)];
+            int headerRead = loadFile.read(pitchHeader, sizeof(pitchHeader));
+            bool validPitchExtension =
+                headerRead == (int)sizeof(pitchHeader) &&
+                memcmp(pitchHeader, PITCH_EXTENSION_HEADER,
+                       sizeof(PITCH_EXTENSION_HEADER)) == 0 &&
+                loadFile.available() >= (int)expectedNotes;
+            if (validPitchExtension) {
+              size_t pitchIndex = 0;
+              while (pitchIndex < expectedNotes) {
+                size_t want = min(sizeof(buf), expectedNotes - pitchIndex);
+                int got = loadFile.read(buf, want);
+                if (got != (int)want) {
+                  validPitchExtension = false;
+                  break;
+                }
+                for (int i = 0; i < got; i++, pitchIndex++) {
+                  unsigned int x = (unsigned int)(pitchIndex / maxY) + 1;
+                  unsigned int y = (unsigned int)(pitchIndex % maxY) + 1;
+                  uint8_t stored = buf[i];
+                  note[x][y].midiPitch =
+                      (stored <= 127 || stored == NOTE_MIDI_PITCH_NONE)
+                        ? stored : NOTE_MIDI_PITCH_NONE;
+                }
+                sdIoYield();
+              }
+              if (!validPitchExtension) {
+                for (unsigned int x = 1; x < maxlen; x++) {
+                  for (unsigned int y = 1; y <= maxY; y++) {
+                    note[x][y].midiPitch = NOTE_MIDI_PITCH_NONE;
+                  }
+                }
+              }
+            }
           }
 
           if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {

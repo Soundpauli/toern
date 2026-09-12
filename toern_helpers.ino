@@ -36,6 +36,7 @@ static inline void placeGenNote(unsigned int c, int row, uint8_t ch, int vel, ui
   note[c][row].velocity = clampVel(vel);
   note[c][row].probability = prob;
   note[c][row].condition = cond;
+  note[c][row].midiPitch = NOTE_MIDI_PITCH_NONE;
 }
 
 // drawRandoms / single-mode y=16: empty-slot only; always 100% probability + condition 1 (1/1).
@@ -1132,6 +1133,9 @@ void startFastRecord() {
   if (recChannelClear != 2) {
     note[beat][GLOB.currentChannel+1].channel = GLOB.currentChannel;
     note[beat][GLOB.currentChannel+1].velocity = defaultVelocity;
+    note[beat][GLOB.currentChannel+1].probability = 100;
+    note[beat][GLOB.currentChannel+1].condition = 1;
+    note[beat][GLOB.currentChannel+1].midiPitch = NOTE_MIDI_PITCH_NONE;
   }
             
   // 1) Stop & clear any queued audio so old data never sneaks in
@@ -1342,6 +1346,9 @@ void stopFastRecord() {
     // Set note at x=1
     note[nextBeat1][ch+1].channel = ch;
     note[nextBeat1][ch+1].velocity = defaultVelocity;
+    note[nextBeat1][ch+1].probability = 100;
+    note[nextBeat1][ch+1].condition = 1;
+    note[nextBeat1][ch+1].midiPitch = NOTE_MIDI_PITCH_NONE;
   }
   
   // give back your knob color + preview
@@ -1365,6 +1372,9 @@ FLASHMEM void clearAllNotesOfChannel() {
       if (note[step][pitch].channel == channel) {
         note[step][pitch].channel = 0;
         note[step][pitch].velocity = defaultVelocity;
+        note[step][pitch].probability = 100;
+        note[step][pitch].condition = 1;
+        note[step][pitch].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
   }
@@ -1769,6 +1779,7 @@ static void clearCompanionChannelPage(int page, uint8_t channel) {
       note[c][row].velocity = defaultVelocity;
       note[c][row].probability = 100;
       note[c][row].condition = 1;
+      note[c][row].midiPitch = NOTE_MIDI_PITCH_NONE;
     }
   }
 }
@@ -1782,6 +1793,7 @@ static void clearCompanionPage(int page) {
       note[c][row].velocity = defaultVelocity;
       note[c][row].probability = 100;
       note[c][row].condition = 1;
+      note[c][row].midiPitch = NOTE_MIDI_PITCH_NONE;
     }
   }
 }
@@ -3077,6 +3089,9 @@ FLASHMEM void generateGenreTrack() {
       for (int row = 1; row <= 16; row++) {
         note[c][row].channel = 0;
         note[c][row].velocity = 0;
+        note[c][row].probability = 100;
+        note[c][row].condition = 1;
+        note[c][row].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
   }
@@ -3937,6 +3952,8 @@ FLASHMEM void startNew() {
   EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)256);  // codecHfCut
   EEPROM.write(EEPROM_DATA_START + 33, 4);    // HFC format
   EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // drawRFullMuteCustomUnmuteMask
+  EEPROM.write(EEPROM_DATA_START + 36, 0);    // childLockEnabled (OFF)
+  EEPROM.write(EEPROM_DATA_START + 37, 1);    // MIDI pitch clamp (ON)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();
@@ -4122,6 +4139,9 @@ void setNote(uint16_t step,  uint8_t pitch, uint8_t channel, uint8_t velocity) {
   if (step < maxlen && channel < NUM_CHANNELS) {
     note[step][pitch].channel = channel;
     note[step][pitch].velocity = velocity;
+    note[step][pitch].probability = 100;
+    note[step][pitch].condition = 1;
+    note[step][pitch].midiPitch = NOTE_MIDI_PITCH_NONE;
   }
 }
 
@@ -4131,7 +4151,7 @@ Note getNote(uint16_t step, uint8_t channel) {
     return note[step][channel];
   }
   // Return a default Note if indices are out-of-range.
-  return {0, 0};
+  return {0, 0, 100, 1, NOTE_MIDI_PITCH_NONE};
 }
 
 
@@ -4537,6 +4557,9 @@ FLASHMEM void generateSongLegacy() {
       for (unsigned int r = 1; r <= maxY; r++) {
         note[c][r].channel = 0;
         note[c][r].velocity = defaultVelocity;
+        note[c][r].probability = 100;
+        note[c][r].condition = 1;
+        note[c][r].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
     

@@ -147,8 +147,11 @@ struct Note {
   uint8_t velocity;     // velocity (0-127)
   uint8_t probability;  // 0-100
   uint8_t condition;    // condition encoding (see codebase)
+  uint8_t midiPitch;    // 0..127 = preserved MIDI input pitch; 255 = derive from grid row
 } __attribute__((packed));
+static_assert(sizeof(Note) == 5, "Note persistence layout must remain packed");
 
+static constexpr uint8_t NOTE_MIDI_PITCH_NONE = 0xFF;
 static constexpr uint8_t NOTE_CONDITION_FILL = 21;
 static constexpr uint8_t NOTE_CONDITION_GLIDE = 22;
 static constexpr uint8_t NOTE_CONDITION_STEP_COUNT = 11;
@@ -329,7 +332,7 @@ void playSequencedSound(int note, int ch, int velocity, uint32_t tick,
 void finishSequencedSoundTick(uint32_t tick, bool hadNotes);
 void resetSequencedSynthLegato();
 void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
-                        bool allowLegato);
+                        bool allowLegato, int midiPitchOverride);
 void finishSequencedMonoSynthTick(uint32_t tick, bool had13, bool had14);
 void stopSynthChannel(int ch);
 static inline void resetMidiPressedKeyCount11to14();
@@ -442,6 +445,7 @@ bool disableThresholdFlag = false;
 bool MIDI_CLOCK_SEND = true;
 bool MIDI_NOTE_SEND = true;    // Control whether MIDI notes are sent (independent from clock)
 bool MIDI_NOTE_RECEIVE = true; // Control whether incoming MIDI notes are acted on
+bool MIDI_NOTE_CLAMP = true;   // Fold incoming pitch into rows 1..15; OFF preserves absolute MIDI pitch
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
@@ -472,6 +476,7 @@ struct PendingNote {
   uint8_t velocity;
   uint8_t channel;
   uint8_t livenote;
+  uint16_t targetBeat;
 };
 
 // A small FIFO for upcoming grid-writes.
@@ -487,11 +492,15 @@ static volatile uint8_t pendingNotesCount = 0;  // number of queued items
 // Returns true on success, false if the queue is full (event dropped).
 bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote) {
   if (isChildVoiceDisabled((int)channel)) return false;
+  extern uint16_t quantizedMidiRecordBeat();
+  uint16_t targetBeat = quantizedMidiRecordBeat();
 
   bool ok = false;
   noInterrupts();
   if (pendingNotesCount < MAX_PENDING_NOTES) {
-    pendingNotesBuf[pendingNotesHead] = { pitch, velocity, channel, livenote };
+    pendingNotesBuf[pendingNotesHead] = {
+      pitch, velocity, channel, livenote, targetBeat
+    };
     pendingNotesHead = (uint8_t)((pendingNotesHead + 1) % MAX_PENDING_NOTES);
     pendingNotesCount++;
     ok = true;
@@ -510,6 +519,14 @@ bool dequeuePendingNote(PendingNote &out) {
   return true;
 }
 
+void clearPendingMidiRecordNotes() {
+  noInterrupts();
+  pendingNotesHead = 0;
+  pendingNotesTail = 0;
+  pendingNotesCount = 0;
+  interrupts();
+}
+
 
 // ----- Intro Animation Timing (in ms) -----
 // Boot: 1s sine fade-in, 2.5s logo fade-in, 1.5s combined fade-out = 5s.
@@ -521,6 +538,10 @@ const unsigned long totalAnimationTime =
 bool filterfreshsetted = true;
 
 DMAMEM bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
+DMAMEM int16_t midiHeldCh11SoundNote[128] = {}; // Exact live voice identity for matching Note Off
+DMAMEM uint8_t sequencerMidiOutPitch[16] = {};
+DMAMEM uint8_t sequencerMidiOutChannel[16] = {};
+uint8_t sequencerMidiOutCount = 0;
 
 float rateFactor = 44117.0 / 44100.0;
 
@@ -722,7 +743,7 @@ DMAMEM bool noteOnTriggered[maxY] = { false };  // Flag to indicate if noteOn ha
 DMAMEM bool persistentNoteOn[maxY] = { false };
 DMAMEM int16_t pressedKeyCount[maxY] = { 0 };  // Changed from int to int16_t
 DMAMEM uint32_t sequencedMonoSynthLastTick[maxY] = { 0 };
-DMAMEM int8_t sequencedMonoSynthLastRow[maxY] = { 0 };
+DMAMEM int16_t sequencedMonoSynthLastPitch[maxY] = { 0 };
 DMAMEM bool sequencedMonoSynthActive[maxY] = { false };
 
 bool waitForFourBars = false;
@@ -754,10 +775,33 @@ static inline bool canEnterSingleMode(unsigned int y, int channel) {
 
 // Global sequencer position (1..maxlen)
 unsigned int beat = 1;
+volatile uint16_t sequencerRecordBeat = 1;
+volatile uint16_t sequencerPreviousRecordBeat = 1;
+volatile uint32_t sequencerRecordStepStartedUs = 0;
+volatile uint32_t sequencerRecordStepDurationUs = 150000;
 uint32_t sequencerSynthTick = 0;
 // Beat index that was last used for audio playback / sequencing.
 // UI components should use this to stay visually in sync with what was just played.
 unsigned int beatForUI = 1;
+
+uint16_t quantizedMidiRecordBeat() {
+  uint16_t playedBeat;
+  uint16_t upcomingBeat;
+  uint32_t startedUs;
+  uint32_t durationUs;
+  noInterrupts();
+  playedBeat = sequencerRecordBeat;
+  upcomingBeat = (uint16_t)beat;
+  startedUs = sequencerRecordStepStartedUs;
+  durationUs = sequencerRecordStepDurationUs;
+  interrupts();
+
+  if (startedUs == 0 || durationUs == 0) return upcomingBeat;
+  uint32_t elapsed = micros() - startedUs;
+  // Nearest-step quantization: the first half of a step belongs to the beat
+  // the player just heard; the second half anticipates the upcoming beat.
+  return elapsed < (durationUs / 2u) ? playedBeat : upcomingBeat;
+}
 // Loop counter for condition feature (increments when beat resets to 1)
 uint16_t loopCount = 0;
 unsigned int samplePackID, fileID = 1;
@@ -782,6 +826,7 @@ volatile uint32_t fillStartSubTick = 0;  // sub-tick when fill started
 volatile int fillActiveChannel = 0;
 volatile int fillActiveVelocity = 0;
 volatile unsigned int fillActiveRow = 0;
+volatile uint8_t fillActiveMidiPitch = NOTE_MIDI_PITCH_NONE;
 unsigned int lastPage = 1;
 int editpage = 1;
 EXTMEM Note note[maxlen + 1][maxY + 1] = {};
@@ -2123,6 +2168,7 @@ void checkFastRec() {
         note[beat][GLOB.y].velocity = defaultVelocity;
         note[beat][GLOB.y].probability = 100;
         note[beat][GLOB.y].condition = 1;
+        note[beat][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
       return;
     }
@@ -2310,6 +2356,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         original[nx][ny].velocity = defaultVelocity;
         original[nx][ny].probability = 100;  // Default probability
         original[nx][ny].condition = 1;      // Default condition
+        original[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
 
@@ -2425,7 +2472,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       return;
     }
 
-    // TRIG (11), SETTINGS (9,10,17,18,23,24,25,32,33,38), REC (4,12), MIDI (7,8,13), VOL (43), ETC (40,41) use encoder 2
+    // TRIG (11), SETTINGS (9,10,17,18,23,24,25,32,33,38), REC (4,12), MIDI values, VOL (43), ETC (40,41) use encoder 2
     extern bool inLookSubmenu;
     extern bool inRecsSubmenu;
     extern bool inMidiSubmenu;
@@ -2435,7 +2482,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
-        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50)) ||
+        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46)) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48)));
     if (mainSetting != 15 && !encoder2ValuePage) {
@@ -3432,7 +3479,7 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
     neoSliderLastVelNorm[ch - 1] = noteN;
   }
   uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
-  _samplers[ch].noteEvent((uint8_t)pitch, sv, true, retrigger);
+  _samplers[ch].noteEvent((uint8_t)constrain(pitch, 0, 127), sv, true, retrigger);
 }
 
 // Restore amp gains from channelVol for sample/synth voices that have amps[].
@@ -4519,6 +4566,7 @@ void checkEncoders() {
           if (note[GLOB.x][GLOB.y].channel == 0) {
             note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
             note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+            note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
           }
           note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
           note[GLOB.x][GLOB.y].velocity = defaultVelocity;
@@ -4531,6 +4579,7 @@ void checkEncoders() {
         if (note[GLOB.x][GLOB.y].channel == 0) {
           note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
           note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+          note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
         }
         note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;
         note[GLOB.x][GLOB.y].velocity = defaultVelocity;
@@ -4543,6 +4592,9 @@ void checkEncoders() {
           if (note[GLOB.x][GLOB.y].channel == GLOB.currentChannel) {
             note[GLOB.x][GLOB.y].channel = 0;
             note[GLOB.x][GLOB.y].velocity = defaultVelocity;
+            note[GLOB.x][GLOB.y].probability = 100;
+            note[GLOB.x][GLOB.y].condition = 1;
+            note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
             updateLastPage();
             // Update encoder 1 limit if pattern mode is ON or if in single mode
             if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
@@ -4552,6 +4604,9 @@ void checkEncoders() {
         } else {
           note[GLOB.x][GLOB.y].channel = 0;
           note[GLOB.x][GLOB.y].velocity = defaultVelocity;
+          note[GLOB.x][GLOB.y].probability = 100;
+          note[GLOB.x][GLOB.y].condition = 1;
+          note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
           updateLastPage();
           // Update encoder 1 limit if pattern mode is ON or if in single mode
           if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
@@ -6855,6 +6910,7 @@ FLASHMEM void shiftNotes() {
         tmp[nx][ny].velocity = defaultVelocity;
         tmp[nx][ny].probability = 100;  // Default probability
         tmp[nx][ny].condition = 1;      // Default condition
+        tmp[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
 
@@ -6874,6 +6930,7 @@ FLASHMEM void shiftNotes() {
           tmp[newposX][ny].velocity = note[nx][ny].velocity;
           tmp[newposX][ny].probability = note[nx][ny].probability;
           tmp[newposX][ny].condition = note[nx][ny].condition;
+          tmp[newposX][ny].midiPitch = note[nx][ny].midiPitch;
         }
       }
     }
@@ -6899,24 +6956,29 @@ FLASHMEM void shiftNotes() {
         tmp[nx][ny].velocity = defaultVelocity;
         tmp[nx][ny].probability = 100;  // Default probability
         tmp[nx][ny].condition = 1;      // Default condition
+        tmp[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
 
     // Step 2: Shift notes of the current channel into tmp array
     for (unsigned int nx = 1; nx <= patternLength; nx++) {
-      for (unsigned int ny = 1; ny <= maxY; ny++) {
+      for (unsigned int ny = 1; ny <= 15; ny++) {
         if (note[nx][ny].channel == GLOB.currentChannel) {
           int newposY = ny + shiftDirectionY;
           // Handle wrapping around the edges
           if (newposY < 1) {
-            newposY = maxY;
-          } else if (newposY > maxY) {
+            newposY = 15;
+          } else if (newposY > 15) {
             newposY = 1;
           }
           tmp[nx][newposY].channel = GLOB.currentChannel;
           tmp[nx][newposY].velocity = note[nx][ny].velocity;
           tmp[nx][newposY].probability = note[nx][ny].probability;
           tmp[nx][newposY].condition = note[nx][ny].condition;
+          tmp[nx][newposY].midiPitch =
+              note[nx][ny].midiPitch <= 127
+                ? (uint8_t)constrain((int)note[nx][ny].midiPitch + shiftDirectionY, 0, 127)
+                : NOTE_MIDI_PITCH_NONE;
         }
       }
     }
@@ -6956,58 +7018,70 @@ FLASHMEM void shiftNotes() {
     if (shiftDirectionY1 > 0) {
       // Shifting down: process from bottom to top
       for (unsigned int nx = 1; nx <= maxX; nx++) {
-        for (int ny = maxY; ny >= 1; ny--) {
+        for (int ny = 15; ny >= 1; ny--) {
           if (pageTmp[nx][ny].channel == GLOB.currentChannel) {
             int newposY = ny + shiftDirectionY1;
             // Handle wrapping around the edges
             if (newposY < 1) {
-              newposY = maxY;
-            } else if (newposY > maxY) {
+              newposY = 15;
+            } else if (newposY > 15) {
               newposY = 1;
             }
             // Store the note data before clearing
             int originalVelocity = pageTmp[nx][ny].velocity;
             uint8_t originalProbability = pageTmp[nx][ny].probability;
             uint8_t originalCondition = pageTmp[nx][ny].condition;
+            uint8_t originalMidiPitch = pageTmp[nx][ny].midiPitch;
             // Clear the old position
             pageTmp[nx][ny].channel = 0;
             pageTmp[nx][ny].velocity = defaultVelocity;
             pageTmp[nx][ny].probability = 100;  // Default probability
             pageTmp[nx][ny].condition = 1;      // Default condition
+            pageTmp[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
             // Set the new position
             pageTmp[nx][newposY].channel = GLOB.currentChannel;
             pageTmp[nx][newposY].velocity = originalVelocity;
             pageTmp[nx][newposY].probability = originalProbability;
             pageTmp[nx][newposY].condition = originalCondition;
+            pageTmp[nx][newposY].midiPitch =
+                originalMidiPitch <= 127
+                  ? (uint8_t)constrain((int)originalMidiPitch + shiftDirectionY1, 0, 127)
+                  : NOTE_MIDI_PITCH_NONE;
           }
         }
       }
     } else {
       // Shifting up: process from top to bottom
       for (unsigned int nx = 1; nx <= maxX; nx++) {
-        for (unsigned int ny = 1; ny <= maxY; ny++) {
+        for (unsigned int ny = 1; ny <= 15; ny++) {
           if (pageTmp[nx][ny].channel == GLOB.currentChannel) {
             int newposY = ny + shiftDirectionY1;
             // Handle wrapping around the edges
             if (newposY < 1) {
-              newposY = maxY;
-            } else if (newposY > maxY) {
+              newposY = 15;
+            } else if (newposY > 15) {
               newposY = 1;
             }
             // Store the note data before clearing
             int originalVelocity = pageTmp[nx][ny].velocity;
             uint8_t originalProbability = pageTmp[nx][ny].probability;
             uint8_t originalCondition = pageTmp[nx][ny].condition;
+            uint8_t originalMidiPitch = pageTmp[nx][ny].midiPitch;
             // Clear the old position
             pageTmp[nx][ny].channel = 0;
             pageTmp[nx][ny].velocity = defaultVelocity;
             pageTmp[nx][ny].probability = 100;  // Default probability
             pageTmp[nx][ny].condition = 1;      // Default condition
+            pageTmp[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
             // Set the new position
             pageTmp[nx][newposY].channel = GLOB.currentChannel;
             pageTmp[nx][newposY].velocity = originalVelocity;
             pageTmp[nx][newposY].probability = originalProbability;
             pageTmp[nx][newposY].condition = originalCondition;
+            pageTmp[nx][newposY].midiPitch =
+                originalMidiPitch <= 127
+                  ? (uint8_t)constrain((int)originalMidiPitch + shiftDirectionY1, 0, 127)
+                  : NOTE_MIDI_PITCH_NONE;
           }
         }
       }
@@ -7035,6 +7109,7 @@ FLASHMEM void shiftNotes() {
           note[nx][ny].velocity = defaultVelocity;
           note[nx][ny].probability = 100;  // Default probability
           note[nx][ny].condition = 1;      // Default condition
+          note[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
         }
         // Then overlay the shifted notes for the current channel
         if (tmp[nx][ny].channel == GLOB.currentChannel) {
@@ -7282,6 +7357,7 @@ void play(bool fromStart) {
         fillActiveChannel = 0;
         fillActiveVelocity = 0;
         fillActiveRow = 0;
+        fillActiveMidiPitch = NOTE_MIDI_PITCH_NONE;
       } else {
         armMasterTransportStartDelay();
         isNowPlaying = false;
@@ -7304,6 +7380,9 @@ void pause(bool skipSave) {
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
     MIDI.sendRealTime(midi::Stop);  // Send as early as possible for better sync
   }
+  MidiReleaseSequencerNotes();
+  clearPendingMidiRecordNotes();
+  sequencerRecordStepStartedUs = 0;
 
   // MIDI clock timer continues running in background - never stopped for precise timing
   // Don't reset clock state - timer keeps running in background
@@ -7336,6 +7415,7 @@ void pause(bool skipSave) {
   fillActiveChannel = 0;
   fillActiveVelocity = 0;
   fillActiveRow = 0;
+  fillActiveMidiPitch = NOTE_MIDI_PITCH_NONE;
 
   // Defer all I2C encoder writes and SD save to next loop() iteration so the
   // MIDI clock callback isn't starved by blocking bus transactions.
@@ -7345,7 +7425,7 @@ void pause(bool skipSave) {
 
 
 static void playSynthInternal(int ch, int b, int vel, bool persistant,
-                              bool legato) {
+                              bool legato, int midiPitchOverride) {
   if (isChildVoiceDisabled(ch)) return;
   if (ch < 0 || ch >= 15) return;                // Bounds check for synths array
   if (!synths[ch][0] || !synths[ch][1]) return;  // Check if synth objects exist
@@ -7356,7 +7436,14 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
     return;
   }
 
-  float frequency = notesArray[constrain(b - ch + 47, 36, 62)];
+  float frequency;
+  if (midiPitchOverride >= 0 && midiPitchOverride <= 127) {
+    // MIDI 60 is C. Keep the mono synths one whole octave below the standard
+    // MIDI register, without any additional semitone calibration.
+    frequency = 440.0f * powf(2.0f, ((float)midiPitchOverride - 81.0f) / 12.0f);
+  } else {
+    frequency = notesArray[constrain(b - ch + 47, 36, 62)];
+  }
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
 
@@ -7456,18 +7543,25 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
 
 void playSynth(int ch, int b, int vel, bool persistant) {
   if (ch == 13 || ch == 14) sequencedMonoSynthActive[ch] = false;
-  playSynthInternal(ch, b, vel, persistant, false);
+  playSynthInternal(ch, b, vel, persistant, false, -1);
+}
+
+void playSynthMidi(int ch, uint8_t midiPitch, int vel, bool persistant) {
+  if (ch == 13 || ch == 14) sequencedMonoSynthActive[ch] = false;
+  playSynthInternal(ch, 0, vel, persistant, false, (int)midiPitch);
 }
 
 void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
-                        bool allowLegato) {
+                        bool allowLegato, int midiPitchOverride) {
   if (ch != 13 && ch != 14) return;
   if (pressedKeyCount[ch] > 0) return;
+  const int pitchKey = (midiPitchOverride >= 0)
+                         ? (128 + midiPitchOverride) : b;
   bool legato = allowLegato && sequencedMonoSynthActive[ch] &&
                  sequencedMonoSynthLastTick[ch] != 0 &&
                  tick == sequencedMonoSynthLastTick[ch] + 1 &&
                  !persistentNoteOn[ch];
-  if (legato && sequencedMonoSynthLastRow[ch] == b) {
+  if (legato && sequencedMonoSynthLastPitch[ch] == pitchKey) {
     // Same pitch on the next step: extend the gate without touching frequency
     // or restarting the envelope.
     startTime[ch] = millis();
@@ -7475,9 +7569,9 @@ void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
     sequencedMonoSynthActive[ch] = true;
     return;
   }
-  playSynthInternal(ch, b, vel, false, legato);
+  playSynthInternal(ch, b, vel, false, legato, midiPitchOverride);
   sequencedMonoSynthLastTick[ch] = tick;
-  sequencedMonoSynthLastRow[ch] = (int8_t)b;
+  sequencedMonoSynthLastPitch[ch] = (int16_t)pitchKey;
   sequencedMonoSynthActive[ch] = true;
 }
 
@@ -7491,7 +7585,7 @@ void finishSequencedMonoSynthTick(uint32_t tick, bool had13, bool had14) {
       stopSynthChannel(ch);
       sequencedMonoSynthActive[ch] = false;
       sequencedMonoSynthLastTick[ch] = 0;
-      sequencedMonoSynthLastRow[ch] = 0;
+      sequencedMonoSynthLastPitch[ch] = 0;
     }
   }
 }
@@ -7514,6 +7608,27 @@ void handlePageSwitch(int newEdit) {
   }
 }
 
+static inline bool noteHasMidiPitch(const Note &cell) {
+  return cell.midiPitch <= 127;
+}
+
+static inline int midiPitchForOutput(const Note &cell, int row) {
+  return noteHasMidiPitch(cell) ? (int)cell.midiPitch : 48 + row - 1;
+}
+
+static inline int samplePitchForNote(const Note &cell, int channel, int row) {
+  if (noteHasMidiPitch(cell)) {
+    return (12 * SampleRate[channel]) + (int)cell.midiPitch - 72;
+  }
+  return (12 * SampleRate[channel]) + row - (channel + 1);
+}
+
+static inline int ch11PitchForNote(const Note &cell, int row) {
+  int pitch = 12 * (int)octave[0] + transpose;
+  pitch += noteHasMidiPitch(cell) ? ((int)cell.midiPitch - 60) : (row - 1);
+  return pitch;
+}
+
 void playNote() {
 
   // Remember which beat is actually being played for UI highlighting
@@ -7524,6 +7639,7 @@ void playNote() {
   if (!isNowPlaying) {
     return;
   }
+  MidiReleaseSequencerNotes();
 
   // Handle PMOD page change detection and beat adjustment BEFORE triggering notes
   // This prevents double-trigger of first note when pages change during playback
@@ -7552,6 +7668,23 @@ void playNote() {
       lastEdit = GLOB.edit;
     }
   }
+  beatForUI = beat;
+  sequencerPreviousRecordBeat =
+      sequencerRecordStepStartedUs == 0 ? (uint16_t)beat
+                                        : sequencerRecordBeat;
+  sequencerRecordBeat = (uint16_t)beat;
+  uint32_t recordStepNowUs = micros();
+  uint32_t measuredStepDurationUs =
+      recordStepNowUs - sequencerRecordStepStartedUs;
+  if (sequencerRecordStepStartedUs != 0 &&
+      measuredStepDurationUs >= 1000 &&
+      measuredStepDurationUs <= 5000000) {
+    sequencerRecordStepDurationUs = measuredStepDurationUs;
+  } else {
+    sequencerRecordStepDurationUs =
+        (uint32_t)max(1.0, playNoteInterval);
+  }
+  sequencerRecordStepStartedUs = recordStepNowUs;
 
   // Handle count-in pending: wait for next beat 1 (full bar) before starting count-in
   if (countInPending && isNowPlaying) {
@@ -7644,8 +7777,6 @@ void playNote() {
   if (currentMode == &draw || currentMode == &singleMode || currentMode == &velocity) {
   }
 
-  onBeatTick();
-
   // Defer LED updates (slow) to main loop
   isrPlayButtonTick = true;
 
@@ -7711,18 +7842,21 @@ void playNote() {
             fillActiveChannel = ch;
             fillActiveVelocity = (vel == 0) ? defaultVelocity : vel;
             fillActiveRow = b;
+            fillActiveMidiPitch = note[beat][b].midiPitch;
           }
           continue;  // Fill notes are handled by separate fillTimer ISR
         }
 
         // Trigger MIDI and audio as close together as possible.
         // NOTE: 'ch' is stored 1-based in 'note' (1=voice1, 2=voice2, etc.), and MIDI channels are 1-16.
-        // 'b' is the grid row (1-16) which MidiSendNoteOn maps to a MIDI note.
+        // Stored MIDI input notes retain their original outgoing pitch; ordinary
+        // grid notes keep the historical row-1 -> MIDI 48 mapping.
 
         // Trigger LED strip ripple only if note is actually played (passed cond/prob checks)
         onNoteTriggered(ch);
 
-        MidiSendNoteOn(b, ch, scaledNoteVelocity(ch, vel));
+        MidiSendNoteOn(midiPitchForOutput(note[beat][b], b), ch,
+                       scaledNoteVelocity(ch, vel));
         if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
           // SET_WAV + PREV==SYNC: keep the voice unmuted, skip its sampler trigger, audition the browse file instead.
           triggerSetWavSyncPreview((uint8_t)((vel == 0) ? defaultVelocity : vel));
@@ -7731,7 +7865,7 @@ void playNote() {
           if (isChannelSampleReloadBusy((unsigned int)ch)) {
             continue;
           }
-          int pitch = (12 * SampleRate[ch]) + b - (ch + 1);
+          int pitch = samplePitchForNote(note[beat][b], ch, b);
 
           // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
           if (ch >= 1 && ch <= 12) {
@@ -7748,7 +7882,7 @@ void playNote() {
           // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
           // playSound expects MIDI note number (0-indexed pitch offset from row)
           if (pressedKeyCount[11] == 0) {
-            playSequencedSound(12 * (int)octave[0] + transpose + (b - 1),
+            playSequencedSound(ch11PitchForNote(note[beat][b], b),
                                0, vel, sequencerSynthTick,
                                cond == NOTE_CONDITION_GLIDE);
             sequencedCh11HadNotes = true;
@@ -7756,8 +7890,10 @@ void playNote() {
 
         } else if (ch >= 13 && ch < 15) {  // Synth channels 13, 14
           if (pressedKeyCount[ch] == 0) {
+            const int midiPitch = noteHasMidiPitch(note[beat][b])
+                                    ? (int)note[beat][b].midiPitch : -1;
             playSequencedSynth(ch, b, vel, sequencerSynthTick,
-                               cond == NOTE_CONDITION_GLIDE);
+                               cond == NOTE_CONDITION_GLIDE, midiPitch);
             if (ch == 13) sequencedCh13HadNotes = true;
             else sequencedCh14HadNotes = true;
           }
@@ -7770,6 +7906,9 @@ void playNote() {
   finishSequencedSoundTick(sequencerSynthTick, sequencedCh11HadNotes);
   finishSequencedMonoSynthTick(sequencerSynthTick, sequencedCh13HadNotes,
                                sequencedCh14HadNotes);
+  // Commit quantized MIDI recording after this step has sounded. This prevents
+  // the just-recorded grid cell from racing the immediate MIDI preview.
+  onBeatTick(beat, sequencerPreviousRecordBeat);
 
   // midi functions
   if (waitForFourBars && pulseCount >= totalPulsesToWait) {
@@ -8025,6 +8164,9 @@ void unpaint() {
               if (note[current_x][y].channel == voiceToUnpaint) {
                 note[current_x][y].channel = 0;
                 note[current_x][y].velocity = defaultVelocity;
+                note[current_x][y].probability = 100;
+                note[current_x][y].condition = 1;
+                note[current_x][y].midiPitch = NOTE_MIDI_PITCH_NONE;
               }
             }
           }
@@ -8032,11 +8174,17 @@ void unpaint() {
           // Normal unpaint behavior
           note[current_x][current_y].channel = 0;
           note[current_x][current_y].velocity = defaultVelocity;
+          note[current_x][current_y].probability = 100;
+          note[current_x][current_y].condition = 1;
+          note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
         }
       } else {
         if (note[current_x][current_y].channel == GLOB.currentChannel) {
           note[current_x][current_y].channel = 0;
           note[current_x][current_y].velocity = defaultVelocity;
+          note[current_x][current_y].probability = 100;
+          note[current_x][current_y].condition = 1;
+          note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
         }
       }
     } else if (current_y == 16) {  // Row 16 (top row)
@@ -8120,6 +8268,12 @@ void playFillNote() {
 
   const int vel = (fillActiveVelocity == 0) ? defaultVelocity : fillActiveVelocity;
   const unsigned int row = fillActiveRow;
+  Note fillCell = {};
+  fillCell.channel = (uint8_t)ch;
+  fillCell.velocity = (uint8_t)vel;
+  fillCell.probability = 100;
+  fillCell.condition = NOTE_CONDITION_FILL;
+  fillCell.midiPitch = fillActiveMidiPitch;
 
   if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
     triggerSetWavSyncPreview((uint8_t)vel);
@@ -8128,7 +8282,7 @@ void playFillNote() {
 
   if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
     if (isChannelSampleReloadBusy((unsigned int)ch)) return;
-    int pitch = (12 * SampleRate[ch]) + (int)row - (ch + 1);
+    int pitch = samplePitchForNote(fillCell, ch, (int)row);
 
     if (ch >= 1 && ch <= 12) {
       pitch += (int)detune[ch];
@@ -8139,9 +8293,13 @@ void playFillNote() {
 
     triggerSamplerVoice(ch, pitch, vel, true);
   } else if (ch == 11) {
-    playSound(12 * (int)octave[0] + transpose + ((int)row - 1), 0, vel);
+    playSound(ch11PitchForNote(fillCell, (int)row), 0, vel);
   } else if (ch >= 13 && ch < 15) {
-    playSynth(ch, (int)row, vel, false);
+    if (noteHasMidiPitch(fillCell)) {
+      playSynthMidi(ch, fillCell.midiPitch, vel, false);
+    } else {
+      playSynth(ch, (int)row, vel, false);
+    }
   }
 }
 
@@ -8169,7 +8327,7 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
 
   if (channel > 0 && channel < 9) {
     if (isChannelSampleReloadBusy((unsigned int)channel)) return;
-    int pitch = (12 * SampleRate[channel]) + pitch_from_row - (channel + 1);
+    int pitch = samplePitchForNote(cell, channel, pitch_from_row);
 
     if (channel >= 1 && channel <= 12) {
       pitch += static_cast<int>(detune[channel]);
@@ -8181,9 +8339,13 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
 
     triggerSamplerVoice(channel, pitch, velocity, true);
   } else if (channel == 11) {
-    playSound((12 * static_cast<int>(octave[0])) + transpose + (pitch_from_row - 1), 0, velocity);
+    playSound(ch11PitchForNote(cell, pitch_from_row), 0, velocity);
   } else if (channel >= 13 && channel < 15) {
-    playSynth(channel, pitch_from_row, velocity, false);
+    if (noteHasMidiPitch(cell)) {
+      playSynthMidi(channel, cell.midiPitch, velocity, false);
+    } else {
+      playSynth(channel, pitch_from_row, velocity, false);
+    }
   }
 }
 
@@ -8209,6 +8371,7 @@ void paint() {
         note[current_x][current_y].velocity = defaultVelocity;
         note[current_x][current_y].probability = 100;  // Default 100% probability
         note[current_x][current_y].condition = 1;      // Default condition: 1 (every loop)
+        note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     } else if (current_y == 16) {  // Top row (GLOB.y == 16)
       toggleCopyPaste();
@@ -8221,6 +8384,7 @@ void paint() {
         note[current_x][current_y].velocity = defaultVelocity;
         note[current_x][current_y].probability = 100;  // Default 100% probability
         note[current_x][current_y].condition = 1;      // Default condition: 1 (every loop)
+        note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     } else if (current_y == 16) {  // Top row (GLOB.y == 16) - enable copypaste in single mode
       toggleCopyPaste();
@@ -8230,6 +8394,7 @@ void paint() {
   // Visual feedback if channel goes out of bounds (original logic)
   if (note[current_x][current_y].channel > maxY - 2) {  // maxY-2 is 14. Channels 0-14.
     note[current_x][current_y].channel = 0;             // Reset to channel 0 (sampler 1, typically kick)
+    note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
                                                         // Original used 1, but 0 seems more consistent for 0-indexed channels.
     for (unsigned int vx = 1; vx < maxX + 1; vx++) {    // Light up the row
       light(vx, note[current_x][current_y].channel + 1, col[note[current_x][current_y].channel] * 12);
@@ -8242,12 +8407,13 @@ void paint() {
     int painted_channel = note[current_x][current_y].channel;
     int painted_velocity = note[current_x][current_y].velocity;
     int pitch_from_row = current_y;  // 1-16
+    Note &paintedCell = note[current_x][current_y];
 
     if (isChildVoiceDisabled(painted_channel)) {
       // Disabled in CHILD mode.
     } else if (painted_channel > 0 && painted_channel < 9) {  // Sampler channels
       // Play sample as normal
-      int pitch = 12 * SampleRate[painted_channel] + pitch_from_row - (painted_channel + 1);
+      int pitch = samplePitchForNote(paintedCell, painted_channel, pitch_from_row);
 
       // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
       if (painted_channel >= 1 && painted_channel <= 12) {
@@ -8261,12 +8427,19 @@ void paint() {
 
       triggerSamplerVoice(painted_channel, pitch, painted_velocity, true);
     } else if (painted_channel == 11) {  // Specific synth
-      // Calculate note value and clamp to reasonable range (0-107 for notesArray)
-      int noteValue = (12 * (int)octave[0]) + transpose + (pitch_from_row - 1);
-      noteValue = constrain(noteValue, 0, 107);  // Clamp to valid notesArray range
+      // Legacy grid notes stay in the historical table range. Preserved MIDI
+      // notes use the extended equal-tempered path in setSoundVoice().
+      int noteValue = ch11PitchForNote(paintedCell, pitch_from_row);
+      if (!noteHasMidiPitch(paintedCell)) {
+        noteValue = constrain(noteValue, 0, 107);
+      }
       playSound(noteValue, 0, painted_velocity);
     } else if (painted_channel >= 13 && painted_channel < 15) {  // General synths
-      playSynth(painted_channel, pitch_from_row, painted_velocity, false);
+      if (noteHasMidiPitch(paintedCell)) {
+        playSynthMidi(painted_channel, paintedCell.midiPitch, painted_velocity, false);
+      } else {
+        playSynth(painted_channel, pitch_from_row, painted_velocity, false);
+      }
     }
   }
 
@@ -8306,6 +8479,7 @@ void toggleCopyPaste() {
             tmp[src][y].velocity = defaultVelocity;
             tmp[src][y].probability = 100;  // Default probability
             tmp[src][y].condition = 1;      // Default condition
+            tmp[src][y].midiPitch = NOTE_MIDI_PITCH_NONE;
           }
         } else {
           // In draw mode, copy all notes
@@ -8329,6 +8503,7 @@ void toggleCopyPaste() {
             note[c][y].velocity = defaultVelocity;
             note[c][y].probability = 100;  // Default probability
             note[c][y].condition = 1;      // Default condition
+            note[c][y].midiPitch = NOTE_MIDI_PITCH_NONE;
           }
           // Then paste notes from the copied channel to the current channel
           if (tmp[src][y].channel == GLOB.copyChannel) {
@@ -8336,6 +8511,7 @@ void toggleCopyPaste() {
             note[c][y].velocity = tmp[src][y].velocity;
             note[c][y].probability = tmp[src][y].probability;
             note[c][y].condition = tmp[src][y].condition;
+            note[c][y].midiPitch = tmp[src][y].midiPitch;
           }
           // Don't modify other channels when pasting in single mode
         } else {
@@ -8373,12 +8549,14 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
           note[c][y].velocity = defaultVelocity;
           note[c][y].probability = 100;  // Default probability
           note[c][y].condition = 1;      // Default condition
+          note[c][y].midiPitch = NOTE_MIDI_PITCH_NONE;
         }
       } else {  // Clear all notes in the range on column c regardless of their channel
         note[c][y].channel = 0;
         note[c][y].velocity = defaultVelocity;
         note[c][y].probability = 100;  // Default probability
         note[c][y].condition = 1;      // Default condition
+        note[c][y].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
   }

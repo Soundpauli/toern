@@ -28,7 +28,7 @@
 
           <section class="hb-sub" id="midi-menu">
             <h2>The MIDI submenu</h2>
-            <p class="lede">Six pages. Encoder&nbsp;4 walks siblings; most values turn on encoder&nbsp;3. Pair with <a href="tempo-midi.html#bpm">BPM → INT/EXT</a> for full master/slave.</p>
+            <p class="lede">Seven pages. Encoder&nbsp;4 walks siblings; most values turn on encoder&nbsp;3. Pair with <a href="tempo-midi.html#bpm">BPM → INT/EXT</a> for full master/slave.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="mr_midi" width="16" height="16" role="img" aria-label="MIDI root"></canvas>
@@ -51,9 +51,9 @@
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>YPOS</strong></td><td>MIDI channel&nbsp;N plays voice row&nbsp;N — fastest for a multi-channel controller.</td></tr>
-                  <tr><td><strong>MIDI</strong></td><td>Notes hit whichever voice is currently selected on the grid.</td></tr>
-                  <tr><td><strong>KEYS</strong></td><td>Pitch drives synth notes; sample voices trigger from velocity.</td></tr>
+                  <tr><td><strong>YPOS</strong></td><td>All incoming channels play whichever voice is currently selected by the grid’s Y position.</td></tr>
+                  <tr><td><strong>MIDI</strong></td><td>MIDI channel&nbsp;N plays voice&nbsp;N — fastest for a multi-channel controller.</td></tr>
+                  <tr><td><strong>KEYS</strong></td><td>Legacy trigger selector: pitch classes C through G choose sample voices 1–8 at their base pitch; G♯ through B also select voice&nbsp;8.</td></tr>
                 </tbody>
               </table>
               <div class="hb-enc-grid">
@@ -129,6 +129,26 @@
                   <tr><td><strong>OFF</strong></td><td>Ignore notes — pure sequencer / recorder.</td></tr>
                 </tbody>
               </table>
+            </article>
+          </section>
+
+
+          <hr />
+
+          <section class="hb-sub" id="clmp">
+            <h2>CLMP — incoming pitch range</h2>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_clmp" width="16" height="16" role="img" aria-label="MIDI CLMP"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>ON</strong></td><td>Fold incoming YPOS/MIDI notes by octaves into rows 1–15; preview and playback use the visible row pitch.</td></tr>
+                  <tr><td><strong>OFF</strong></td><td>Keep the original MIDI pitch for preview, recording, playback, and MIDI out. The note is still folded into a visible editable row; moving it vertically transposes the stored pitch.</td></tr>
+                </tbody>
+              </table>
+              <p class="hb-device__intro">CLMP does not alter the legacy KEYS trigger mapping. The setting defaults to ON and survives reboot.</p>
             </article>
           </section>
 

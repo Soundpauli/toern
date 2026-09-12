@@ -16,6 +16,7 @@ struct Note {
   uint8_t velocity;     // 0–127 internally
   uint8_t probability;  // 0–100
   uint8_t condition;    // conditional trigger encoding
+  uint8_t midiPitch;    // 0–127 preserved MIDI pitch; 255 = derive from Y
 } __attribute__((packed));
 ```
 
@@ -28,6 +29,9 @@ EXTMEM Note note[maxlen + 1][maxY + 1];
 - **X** is step (across pages × matrix width).  
 - **Y** is row / pitch lane on the matrix.  
 - Empty cells use `channel == 0`.
+- `midiPitch == 255` keeps the historical row-derived pitch. With
+  `MIDI > CLMP` off, recorded YPOS/MIDI notes store their absolute incoming
+  pitch here while Y remains a folded display/edit position.
 - Condition bytes `1,2,4,8,16,17–20` encode loop conditions, `21` is F/F
   fill, and `22` is G/L destination-note glide/legato. Unknown values should
   fall back to always-trigger behavior rather than becoming sparse implicitly.
@@ -66,8 +70,14 @@ Playback page vs edit page can diverge (e.g. FLOW mode follows `beatForUI` for t
 
 Patterns and settings are written through file-operation helpers (`toern_fileoperations.ino`) and autosave paths triggered from UI/transport (often deferred so SD I/O doesn’t land inside an ISR). EEPROM is used for a smaller set of device preferences (menu address constant `EEPROM_MENU_ADDR`, pulse-clock settings, etc.).
 
+Pattern files retain the legacy `4096 × 4-byte Note` prefix, `FF FE` marker,
+and raw `SMP` payload. New saves append an optional `TPIT` version-1 extension
+containing one `midiPitch` byte per grid cell. New firmware treats files without
+that extension as row-derived; older firmware ignores the trailing extension.
+
 ## Invariants worth preserving
 
-- Treat `channel == 0` as empty; don’t leave orphan probability/condition without a channel.  
+- Treat `channel == 0` as empty; reset its probability/condition and
+  `midiPitch` metadata rather than leaving orphan state.
 - Prefer updating `note`/`SMP` first, then redraw — LEDs should mirror state, not invent it.  
 - Large buffers belong in `EXTMEM` / `DMAMEM`, not as function-local `static` arrays (those land in RAM1).

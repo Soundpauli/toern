@@ -102,21 +102,27 @@ static uint32_t sequencedSoundLastTick = 0;
 static bool sequencedSoundLegato = false;
 static bool sequencedSoundTouched[POLY_VOICES] = {};
 
+static float synthNoteFrequency(int noteIndex) {
+  if (noteIndex >= 0 && noteIndex < 108) return notesArray[noteIndex];
+  // notesArray index 0 is C0. Extend the same equal-tempered tuning beyond
+  // the table so preserved MIDI octaves are not flattened at either edge.
+  return NOTE_C0 * powf(2.0f, (float)noteIndex / 12.0f);
+}
+
 static void setSoundVoice(int note, int ch, int velocity, int voiceIdx,
                           bool triggerEnvelope) {
-  const int NOTES_ARRAY_SIZE = 108;
-  int noteIdx0 = constrain(note + semitones[ch][0], 0, NOTES_ARRAY_SIZE - 1);
-  int noteIdx1 = constrain(note + semitones[ch][1], 0, NOTES_ARRAY_SIZE - 1);
-  int noteIdx2 = constrain(note + semitones[ch][2], 0, NOTES_ARRAY_SIZE - 1);
+  int noteIdx0 = note + semitones[ch][0];
+  int noteIdx1 = note + semitones[ch][1];
+  int noteIdx2 = note + semitones[ch][2];
 
   noteArray[ch][voiceIdx] = note;
   voiceStartTime[ch][voiceIdx] = millis();
   Swaveform1[voiceIdx]->frequency(
-    notesArray[noteIdx0] * pow(2, cents[ch][0] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+    synthNoteFrequency(noteIdx0) * pow(2, cents[ch][0] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
   Swaveform2[voiceIdx]->frequency(
-    notesArray[noteIdx1] * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+    synthNoteFrequency(noteIdx1) * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
   Swaveform3[voiceIdx]->frequency(
-    notesArray[noteIdx2] * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+    synthNoteFrequency(noteIdx2) * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
 
   int velMidi = constrain(velocity > 0 ? velocity : defaultVelocity, 1, 127);
   float amp = mapf((float)velMidi, 1.0f, 127.0f, 0.0f, 1.0f);
@@ -847,8 +853,8 @@ void resetSequencedSynthLegato() {
   }
   sequencedMonoSynthLastTick[13] = 0;
   sequencedMonoSynthLastTick[14] = 0;
-  sequencedMonoSynthLastRow[13] = 0;
-  sequencedMonoSynthLastRow[14] = 0;
+  sequencedMonoSynthLastPitch[13] = 0;
+  sequencedMonoSynthLastPitch[14] = 0;
   sequencedMonoSynthActive[13] = false;
   sequencedMonoSynthActive[14] = false;
 }
