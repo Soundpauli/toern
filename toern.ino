@@ -149,6 +149,13 @@ struct Note {
   uint8_t condition;    // condition encoding (see codebase)
 } __attribute__((packed));
 
+static constexpr uint8_t NOTE_CONDITION_FILL = 21;
+static constexpr uint8_t NOTE_CONDITION_GLIDE = 22;
+static constexpr uint8_t NOTE_CONDITION_STEP_COUNT = 11;
+static const uint8_t noteConditionValues[NOTE_CONDITION_STEP_COUNT] PROGMEM = {
+  1, 2, 4, 8, 16, 17, 18, 19, 20, NOTE_CONDITION_FILL, NOTE_CONDITION_GLIDE
+};
+
 #define LED_MODULES 2    // Max number of 16x16 matrices that can be chained (hardware limit)
 #define MATRIX_WIDTH 16  // Width of each individual matrix
 #define maxY 16
@@ -317,6 +324,13 @@ void triggerGridNote(unsigned int globalX, unsigned int y);
 int mapXtoPageOffset(int x);
 void stopSound(int note, int ch);
 void playSound(int note, int ch, int velocity);
+void playSequencedSound(int note, int ch, int velocity, uint32_t tick,
+                        bool allowLegato);
+void finishSequencedSoundTick(uint32_t tick, bool hadNotes);
+void resetSequencedSynthLegato();
+void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
+                        bool allowLegato);
+void finishSequencedMonoSynthTick(uint32_t tick, bool had13, bool had14);
 void stopSynthChannel(int ch);
 static inline void resetMidiPressedKeyCount11to14();
 void drawCtrlVolumeOverlay(int volume);
@@ -498,9 +512,12 @@ bool dequeuePendingNote(PendingNote &out) {
 
 
 // ----- Intro Animation Timing (in ms) -----
-// Phase 1: 2 seconds (rainbow logo only)
-const unsigned long phase1Duration = 2000;
-const unsigned long totalAnimationTime = phase1Duration;  // Only phase 1, no phase 2
+// Boot: 1s sine fade-in, 2.5s logo fade-in, 1.5s combined fade-out = 5s.
+const unsigned long phase1Duration = 1000;
+const unsigned long phase2Duration = 2500;
+const unsigned long phase3Duration = 1500;
+const unsigned long totalAnimationTime =
+    phase1Duration + phase2Duration + phase3Duration;
 bool filterfreshsetted = true;
 
 DMAMEM bool activeNotes[128] = { false };  // Track active MIDI notes (0-127)
@@ -704,6 +721,9 @@ DMAMEM unsigned int startTime[maxY] = { 0 };    // Variable to store the start t
 DMAMEM bool noteOnTriggered[maxY] = { false };  // Flag to indicate if noteOn has been triggered
 DMAMEM bool persistentNoteOn[maxY] = { false };
 DMAMEM int16_t pressedKeyCount[maxY] = { 0 };  // Changed from int to int16_t
+DMAMEM uint32_t sequencedMonoSynthLastTick[maxY] = { 0 };
+DMAMEM int8_t sequencedMonoSynthLastRow[maxY] = { 0 };
+DMAMEM bool sequencedMonoSynthActive[maxY] = { false };
 
 bool waitForFourBars = false;
 unsigned int pulseCount = 0;
@@ -720,9 +740,21 @@ static inline bool isPaintableDrawRow(unsigned int y) {
   return true;
 }
 
+static inline bool isSingleModeChannelAllowed(int channel) {
+  return (channel >= 1 && channel <= 8) ||
+         channel == 11 || channel == 13 || channel == 14;
+}
+
+static inline bool canEnterSingleMode(unsigned int y, int channel) {
+  return y < 16 &&
+         isSingleModeChannelAllowed(channel) &&
+         !isChildVoiceDisabled(channel);
+}
+
 
 // Global sequencer position (1..maxlen)
 unsigned int beat = 1;
+uint32_t sequencerSynthTick = 0;
 // Beat index that was last used for audio playback / sequencing.
 // UI components should use this to stay visually in sync with what was just played.
 unsigned int beatForUI = 1;
@@ -807,7 +839,7 @@ Mode volume_bpm = { "VOLUME_BPM", { 11, 0, 0, BPM_MIN }, { 30, 252, 1, BPM_MAX }
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
-Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, 10, maxY }, { maxY, 5, 1, 10 }, { 0xFF4400, 0x00FF88, 0x888888, 0x0044FF } };
+Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, NOTE_CONDITION_STEP_COUNT, maxY }, { maxY, 5, 1, 10 }, { 0xFF4400, 0x00FF88, 0x888888, 0x0044FF } };
 
 Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0xFFFFFF } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
@@ -841,8 +873,9 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir);
 bool songModeActive = false;  // When true, playback follows song arrangement
 int currentSongPosition = 0;  // Current position in song arrangement (0-63), -1 = none
 
-// NEXT mode: pending page that will be jumped to when current page completes
-unsigned int pendingPage = 0;  // 0 = no pending page, otherwise page number to jump to
+// NEXT mode UI indicator. Playback reads GLOB.edit at the page boundary so
+// both page-selection encoders always target the page currently visible.
+unsigned int pendingPage = 0;  // 0 = visible page is already playing
 
 
 struct Sample {
@@ -961,6 +994,9 @@ static inline int effectivePageCount() {
 static inline int encoderPageMax() {
   if (childLockEnabled) return 1;
   int maxPg = effectivePageCount();
+  // NEXT is a live page cue: like PMOD OFF, every page must remain reachable,
+  // including empty pages beyond the last page that currently contains notes.
+  if (patternMode == 3) return maxPg;
   if (SMP_PATTERN_MODE && (int)lastPage >= 1 && (int)lastPage < maxPg) return (int)lastPage;
   return maxPg;
 }
@@ -1355,6 +1391,7 @@ void stopSynthChannel(int ch) {
   if (envelopes[ch]) envelopes[ch]->noteOff();
   noteOnTriggered[ch] = false;
   persistentNoteOn[ch] = false;
+  sequencedMonoSynthActive[ch] = false;
 }
 
 // When playback is stopped or voices are silenced globally, clear MIDI poly counters so they
@@ -1423,6 +1460,19 @@ void allOff() {
 
 
 
+static uint8_t noteConditionFromStep(int step) {
+  if (step < 1 || step > NOTE_CONDITION_STEP_COUNT) return 1;
+  return pgm_read_byte(&noteConditionValues[step - 1]);
+}
+
+static int noteConditionToStep(uint8_t condition) {
+  if (condition == 0) condition = 1;
+  for (int step = 1; step <= NOTE_CONDITION_STEP_COUNT; step++) {
+    if (pgm_read_byte(&noteConditionValues[step - 1]) == condition) return step;
+  }
+  return 1;
+}
+
 FLASHMEM void setVelocity() {
   if (childLockEnabled) {
     switchMode(GLOB.singleMode ? &singleMode : &draw);
@@ -1473,18 +1523,11 @@ FLASHMEM void setVelocity() {
   if (currentCondStep != lastCondStep) {
     lastCondStep = currentCondStep;
 
-    // Map encoder steps 1-10 to condition values
+    // Map encoder steps 1-11 to condition values
     // Positions 1-5: 1/X conditions -> values 1, 2, 4, 8, 16
     // Positions 6-9: X/1 conditions -> values 17, 18, 19, 20
-    // Position 10: F/F condition -> value 21 (fill)
-    static const uint8_t condValues[10] PROGMEM = { 1, 2, 4, 8, 16, 17, 18, 19, 20, 21 };
-    uint8_t condValue;
-    if (currentCondStep >= 1 && currentCondStep <= 10) {
-      condValue = pgm_read_byte(&condValues[currentCondStep - 1]);
-    } else {
-      condValue = 1;  // Default
-    }
-    note[GLOB.x][GLOB.y].condition = condValue;
+    // Position 10: F/F fill; position 11: G/L glide/legato.
+    note[GLOB.x][GLOB.y].condition = noteConditionFromStep(currentCondStep);
   }
 
   // Channel volume (encoder[3] / 4th)
@@ -1874,24 +1917,11 @@ FLASHMEM void switchMode(Mode *newMode) {
           currentMode->pos[2] = counterVal;  // Update mode's pos[2] to match fastfilter value
         }
       } else if (currentMode == &velocity && i == 2) {
-        // Encoder[2] (3rd): condition range 1-10
-        maxVal = 10;
+        // Encoder[2] (3rd): condition range 1-11
+        maxVal = NOTE_CONDITION_STEP_COUNT;
         minVal = 1;
         if (note[GLOB.x][GLOB.y].channel != 0) {
-          uint8_t cond = note[GLOB.x][GLOB.y].condition;
-          if (cond == 0) cond = 1;
-          if (cond <= 16) {
-            counterVal = (cond == 1) ? 1 : (cond == 2) ? 2
-                                         : (cond == 4) ? 3
-                                         : (cond == 8) ? 4
-                                                       : 5;
-          } else if (cond <= 20) {
-            counterVal = (cond == 17) ? 6 : (cond == 18) ? 7
-                                          : (cond == 19) ? 8
-                                                         : 9;
-          } else {
-            counterVal = (cond == 21) ? 10 : 1;
-          }
+          counterVal = noteConditionToStep(note[GLOB.x][GLOB.y].condition);
           currentMode->pos[2] = counterVal;
         } else {
           counterVal = 1;
@@ -2388,6 +2418,13 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       return;          // Explicitly return to prevent any other processing
     }
 
+    // ETC → INFO: encoder 4 loops the startup logo animation until pressed again.
+    if (inEtcSubmenu && mainSetting == 39) {
+      extern void runInfoLogoAnimationLoop();
+      runInfoLogoAnimationLoop();
+      return;
+    }
+
     // TRIG (11), SETTINGS (9,10,17,18,23,24,25,32,33,38), REC (4,12), MIDI (7,8,13), VOL (43), ETC (40,41) use encoder 2
     extern bool inLookSubmenu;
     extern bool inRecsSubmenu;
@@ -2578,25 +2615,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       else if (prob == 75) probStep = 4;
       else probStep = 5;  // 100%
 
-      // Map condition to encoder range 1-10
-      // Values 1-16: 1/X conditions -> positions 1-5
-      // Values 17-20: X/1 conditions -> positions 6-9
-      // Value 21: F/F condition -> position 10
-      uint8_t cond = note[GLOB.x][GLOB.y].condition;
-      if (cond == 0) cond = 1;  // Default to 1 if not set
-      unsigned int condStep;
-      if (cond <= 16) {
-        condStep = (cond == 1) ? 1 : (cond == 2) ? 2
-                                   : (cond == 4) ? 3
-                                   : (cond == 8) ? 4
-                                                 : 5;
-      } else if (cond <= 20) {
-        condStep = (cond == 17) ? 6 : (cond == 18) ? 7
-                                    : (cond == 19) ? 8
-                                                   : 9;
-      } else {
-        condStep = (cond == 21) ? 10 : 1;
-      }
+      unsigned int condStep =
+          noteConditionToStep(note[GLOB.x][GLOB.y].condition);
 
       switchMode(&velocity);
       GLOB.singleMode = true;
@@ -2623,25 +2643,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       else if (prob == 75) probStep = 4;
       else probStep = 5;  // 100%
 
-      // Map condition to encoder range 1-10
-      // Values 1-16: 1/X conditions -> positions 1-5
-      // Values 17-20: X/1 conditions -> positions 6-9
-      // Value 21: F/F condition -> position 10
-      uint8_t cond = note[GLOB.x][GLOB.y].condition;
-      if (cond == 0) cond = 1;  // Default to 1 if not set
-      unsigned int condStep;
-      if (cond <= 16) {
-        condStep = (cond == 1) ? 1 : (cond == 2) ? 2
-                                   : (cond == 4) ? 3
-                                   : (cond == 8) ? 4
-                                                 : 5;
-      } else if (cond <= 20) {
-        condStep = (cond == 17) ? 6 : (cond == 18) ? 7
-                                    : (cond == 19) ? 8
-                                                   : 9;
-      } else {
-        condStep = (cond == 21) ? 10 : 1;
-      }
+      unsigned int condStep =
+          noteConditionToStep(note[GLOB.x][GLOB.y].condition);
 
       GLOB.singleMode = false;
       switchMode(&velocity);
@@ -2927,7 +2930,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   if (currentMode == &singleMode && match_buttons(currentButtonStates, 3, 0, 0, 0)) {  // "3000"
     GLOB.currentChannel = GLOB.y - 1;                                                  // Set currentChannel based on Y position when exiting single mode
     switchMode(&draw);
-  } else if (currentMode == &draw && match_buttons(currentButtonStates, 3, 0, 0, 0) && !isChildVoiceDisabled((int)GLOB.currentChannel) && ((GLOB.currentChannel >= 1 && GLOB.currentChannel <= maxFiles) || GLOB.currentChannel > 12)) {  // "3000"
+  } else if (currentMode == &draw && match_buttons(currentButtonStates, 3, 0, 0, 0)
+             && canEnterSingleMode(GLOB.y, (int)GLOB.currentChannel)) {  // "3000"
     GLOB.currentChannel = GLOB.currentChannel;
     switchMode(&singleMode);
     GLOB.singleMode = true;
@@ -3045,10 +3049,12 @@ FLASHMEM void initSamples() {
 
 
 
-  // Reduced synth gains to prevent clipping (was 0.4 for 11, 0.15 for 13/14)
-  synthmixer11.gain(0, 0.12);  // Reduced from GAIN_3 (0.4) to prevent clipping
-  synthmixer11.gain(1, 0.12);
-  synthmixer11.gain(3, 0.12);
+  // Ch11 keeps substantial polyphonic headroom here, but 0.12 made it much
+  // quieter than the sample voices. 0.20 restores about 4.4 dB while remaining
+  // half of the old 0.4 level that could clip on dense three-note voicings.
+  synthmixer11.gain(0, 0.20);
+  synthmixer11.gain(1, 0.20);
+  synthmixer11.gain(3, 0.20);
 
   // CHMixer11 collapses SmixerL4 + SmixerR4 (both stereo buses) into the mono ch11 chain.
   // Without explicit gain, default 1.0+1.0 = up to 1.98 → hard clips when all 3 oscs play.
@@ -4412,15 +4418,17 @@ void checkEncoders() {
       }
       if (allowEncWrite) Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
 
-      // Only update edit page from X position if NOT in song mode and NOT in active FLOW-follow playback.
-      // In FLOW mode while playing, the display page is owned by the timer-follow logic.
+      // Only update edit page from X position if NOT in song mode and NOT in
+      // active FLOW-follow playback. NEXT takes precedence over FLOW because
+      // its visible page must remain independently selectable.
       extern bool songModeActive;
       extern int patternMode;
       if (childLockEnabled) {
         GLOB.edit = 1;
         editpage = 1;
         GLOB.page = 1;
-      } else if (!songModeActive && !(SMP_FLOW_MODE && isNowPlaying)) {
+      } else if (!songModeActive &&
+                 !(SMP_FLOW_MODE && isNowPlaying && patternMode != 3)) {
         unsigned int newEditPage = getPage(GLOB.x);
         // In NEXT mode, update GLOB.edit (displayed page) when encoder(3) changes X position
         // This allows viewing different pages while playing continues on GLOB.page
@@ -4428,6 +4436,14 @@ void checkEncoders() {
           // NEXT mode: update edit page, but don't change playing page
           if (newEditPage != GLOB.edit) {
             GLOB.edit = newEditPage;
+            if (isNowPlaying) {
+              pendingPage =
+                  (newEditPage != GLOB.page) ? newEditPage : 0;
+            } else {
+              GLOB.page = newEditPage;
+              beat = (newEditPage - 1) * maxX + 1;
+              pendingPage = 0;
+            }
             // Update encoder[1] and editpage to reflect the new edit page
             if (ctrlMode == 0) {
               currentMode->pos[1] = (int)newEditPage;
@@ -4530,7 +4546,7 @@ void checkEncoders() {
             updateLastPage();
             // Update encoder 1 limit if pattern mode is ON or if in single mode
             if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
-              Encoder[1].writeMax((int32_t)lastPage);
+              Encoder[1].writeMax((int32_t)encoderPageMax());
             }
           }
         } else {
@@ -4539,7 +4555,7 @@ void checkEncoders() {
           updateLastPage();
           // Update encoder 1 limit if pattern mode is ON or if in single mode
           if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
-            Encoder[1].writeMax((int32_t)lastPage);
+            Encoder[1].writeMax((int32_t)encoderPageMax());
           }
         }
       }
@@ -4576,12 +4592,15 @@ void checkEncoders() {
         xval = constrain(xval, 1, (int)MAX_STEPS);
 
         if (patternMode == 3) {
-          pendingPage = editpage;
           GLOB.edit = (unsigned int)editpage;
           extern bool isNowPlaying;
-          if (!isNowPlaying) {
+          if (isNowPlaying) {
+            pendingPage =
+                (GLOB.edit != GLOB.page) ? GLOB.edit : 0;
+          } else {
             GLOB.page = (unsigned int)editpage;
             beat = (editpage - 1) * maxX + 1;
+            pendingPage = 0;
           }
           Encoder[3].writeCounter((int32_t)xval);
           GLOB.x = (unsigned int)xval;
@@ -5192,8 +5211,9 @@ skip_individual_touch:
     // SWITCH_1 / BUTTON_A — block only when input 2 is also active now.
     if (touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME) && !touchState[1]) {
 
-      // If y=1, touch1 starts play immediately (even if already playing)
-      if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 1) {
+      // In draw at y=1, touch1 starts play immediately (even if already playing).
+      // Single mode must retain touch1's normal exit behavior on every row.
+      if (currentMode == &draw && GLOB.y == 1) {
         static unsigned long lastTouch1PlayTime = 0;
         const unsigned long TOUCH1_PLAY_DEBOUNCE_MS = 100;
         if (lastTouch1PlayTime == 0 || (currentTime - lastTouch1PlayTime) >= TOUCH1_PLAY_DEBOUNCE_MS) {
@@ -5398,12 +5418,7 @@ end_switch1:
 
 void enterSingleModeDirect() {
   if (currentMode != &draw) return;
-  if (isChildVoiceDisabled((int)GLOB.currentChannel)) {
-    GLOB.currentChannel = 1;
-    GLOB.y = 2;
-    currentMode->pos[0] = 2;
-    Encoder[0].writeCounter((int32_t)2);
-  }
+  if (!canEnterSingleMode(GLOB.y, (int)GLOB.currentChannel)) return;
   switchMode(&singleMode);
   if (currentMode == &singleMode) {
     GLOB.singleMode = true;
@@ -5456,9 +5471,7 @@ void checkSingleTouch() {
   if (touchState[0] && !lastTouchState[0]) {
     // Toggle the mode only on a rising edge
     if (currentMode == &draw) {
-      // GLOB.currentChannel = GLOB.currentChannel; // This line is redundant
-      switchMode(&singleMode);
-      GLOB.singleMode = true;
+      enterSingleModeDirect();
     } else if (currentMode == &menu) {
       extern bool inLookSubmenu;
       extern bool inRecsSubmenu;
@@ -6261,7 +6274,7 @@ void loop() {
       if (childLockEnabled) {
         enforceChildModeRestrictions();
       } else if (ctrlMode == 0 && SMP_PATTERN_MODE) {
-        Encoder[1].writeMax((int32_t)lastPage);
+        Encoder[1].writeMax((int32_t)encoderPageMax());
       } else if (ctrlMode == 1) {
         refreshCtrlEncoderConfig();
       }
@@ -6288,7 +6301,9 @@ void loop() {
   // ONLY difference: the visible page follows the beat being played (beatForUI).
   // Do page-follow work in the main loop to avoid mid-frame flicker.
   // Do NOT touch encoder 1 when CTRL-VOL is active (ctrlMode==1).
-  if (!childLockEnabled && SMP_FLOW_MODE && isNowPlaying && (currentMode == &draw || currentMode == &singleMode)) {
+  if (!childLockEnabled && SMP_FLOW_MODE && patternMode != 3 &&
+      isNowPlaying &&
+      (currentMode == &draw || currentMode == &singleMode)) {
     static uint16_t lastAppliedFlowPage = 0;
     // 32-bit read on ARM is atomic; avoid masking interrupts to keep MIDI clock tight.
     uint16_t bf = beatForUI;
@@ -6648,25 +6663,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
           else if (prob == 75) probStep = 4;
           else probStep = 5;  // 100%
 
-          // Map condition to encoder range 1-10
-          // Values 1-16: 1/X conditions -> positions 1-5
-          // Values 17-20: X/1 conditions -> positions 6-9
-          // Value 21: F/F condition -> position 10
-          uint8_t cond = note[GLOB.x][GLOB.y].condition;
-          if (cond == 0) cond = 1;  // Default to 1 if not set
-          unsigned int condStep;
-          if (cond <= 16) {
-            condStep = (cond == 1) ? 1 : (cond == 2) ? 2
-                                       : (cond == 4) ? 3
-                                       : (cond == 8) ? 4
-                                                     : 5;
-          } else if (cond <= 20) {
-            condStep = (cond == 17) ? 6 : (cond == 18) ? 7
-                                        : (cond == 19) ? 8
-                                                       : 9;
-          } else {
-            condStep = (cond == 21) ? 10 : 1;
-          }
+          unsigned int condStep =
+              noteConditionToStep(note[GLOB.x][GLOB.y].condition);
 
           GLOB.singleMode = (rModeSavedMode == &singleMode);
           suppressDrawRMuteUntilMs = millis() + 800;
@@ -6766,7 +6764,9 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     unsigned long noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
 
-    if (noteOnTriggered[ch] && !persistentNoteOn[ch] && (millis() - startTime[ch] >= noteLen)) {
+    if (noteOnTriggered[ch] && !persistentNoteOn[ch] &&
+        !sequencedMonoSynthActive[ch] &&
+        (millis() - startTime[ch] >= noteLen)) {
       if (!envelopes[ch]) continue;
       envelopes[ch]->noteOff();
       noteOnTriggered[ch] = false;
@@ -7178,6 +7178,8 @@ void play(bool fromStart) {
   stopSynthChannel(13);
   stopSynthChannel(14);
   resetMidiPressedKeyCount11to14();
+  sequencerSynthTick = 0;
+  resetSequencedSynthLegato();
 
   if (fromStart) {
     updateLastPage();
@@ -7185,7 +7187,7 @@ void play(bool fromStart) {
     // Update encoder 1 limit if pattern mode is ON
     if (currentMode == &draw || currentMode == &singleMode) {
       if (ctrlMode == 0 && SMP_PATTERN_MODE) {
-        Encoder[1].writeMax((int32_t)lastPage);
+        Encoder[1].writeMax((int32_t)encoderPageMax());
       } else if (ctrlMode == 1) {
         refreshCtrlEncoderConfig();
       }
@@ -7229,11 +7231,12 @@ void play(bool fromStart) {
       // In pattern mode, start from the current page's first beat
       extern int patternMode;
       if (patternMode == 3) {
-        // NEXT mode: use GLOB.page as the playing page (may differ from GLOB.edit if pending)
-        if (GLOB.page == 0) {
-          GLOB.page = GLOB.edit;  // Initialize if not set
-        }
-        beat = (GLOB.page - 1) * maxX + 1;  // Start from first beat of playing page
+        // NEXT always starts the page that is visible at transport start.
+        GLOB.edit = constrain(
+            (int)GLOB.edit, 1, effectivePageCount());
+        GLOB.page = GLOB.edit;
+        pendingPage = 0;
+        beat = (GLOB.page - 1) * maxX + 1;
       } else {
         // Other pattern modes: use GLOB.edit
         beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
@@ -7318,6 +7321,8 @@ void pause(bool skipSave) {
   stopSynthChannel(13);
   stopSynthChannel(14);
   resetMidiPressedKeyCount11to14();
+  sequencerSynthTick = 0;
+  resetSequencedSynthLegato();
 
   // Reset playback state immediately
   beat = 1;
@@ -7339,7 +7344,8 @@ void pause(bool skipSave) {
 }
 
 
-void playSynth(int ch, int b, int vel, bool persistant) {
+static void playSynthInternal(int ch, int b, int vel, bool persistant,
+                              bool legato) {
   if (isChildVoiceDisabled(ch)) return;
   if (ch < 0 || ch >= 15) return;                // Bounds check for synths array
   if (!synths[ch][0] || !synths[ch][1]) return;  // Check if synth objects exist
@@ -7354,8 +7360,9 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
 
-  // Ensure any prior note is released so the new trigger starts clean
-  stopSynthChannel(ch);
+  // A directly adjacent sequencer note reuses the open envelope. Frequency
+  // changes become a legato slide; an equal pitch is a true hold.
+  if (!legato) stopSynthChannel(ch);
 
   // Global cent shift for both oscillators (0..32 -> -24..+24 semitones)
   float centSemis = mapf(SMP.synth_settings[ch][CENT], 0, maxfilterResolution, -24.0f, 24.0f);
@@ -7433,7 +7440,7 @@ void playSynth(int ch, int b, int vel, bool persistant) {
     envelopes[ch]->sustain(mappedSustain);
   }
 
-  envelopes[ch]->noteOn();
+  if (!legato) envelopes[ch]->noteOn();
 
   if (persistant) {
     persistentNoteOn[ch] = true;
@@ -7445,6 +7452,48 @@ void playSynth(int ch, int b, int vel, bool persistant) {
   //unsigned long delay_ms = mapf(SMP.param_settings[ch][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
   startTime[ch] = millis();    // + delay_ms;    // Record the start time
   noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
+}
+
+void playSynth(int ch, int b, int vel, bool persistant) {
+  if (ch == 13 || ch == 14) sequencedMonoSynthActive[ch] = false;
+  playSynthInternal(ch, b, vel, persistant, false);
+}
+
+void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
+                        bool allowLegato) {
+  if (ch != 13 && ch != 14) return;
+  if (pressedKeyCount[ch] > 0) return;
+  bool legato = allowLegato && sequencedMonoSynthActive[ch] &&
+                 sequencedMonoSynthLastTick[ch] != 0 &&
+                 tick == sequencedMonoSynthLastTick[ch] + 1 &&
+                 !persistentNoteOn[ch];
+  if (legato && sequencedMonoSynthLastRow[ch] == b) {
+    // Same pitch on the next step: extend the gate without touching frequency
+    // or restarting the envelope.
+    startTime[ch] = millis();
+    sequencedMonoSynthLastTick[ch] = tick;
+    sequencedMonoSynthActive[ch] = true;
+    return;
+  }
+  playSynthInternal(ch, b, vel, false, legato);
+  sequencedMonoSynthLastTick[ch] = tick;
+  sequencedMonoSynthLastRow[ch] = (int8_t)b;
+  sequencedMonoSynthActive[ch] = true;
+}
+
+void finishSequencedMonoSynthTick(uint32_t tick, bool had13, bool had14) {
+  for (int ch = 13; ch <= 14; ch++) {
+    bool hadNote = ch == 13 ? had13 : had14;
+    if (hadNote || !sequencedMonoSynthActive[ch]) continue;
+    if (sequencedMonoSynthLastTick[ch] != 0 &&
+        tick == sequencedMonoSynthLastTick[ch] + 1 &&
+        pressedKeyCount[ch] == 0) {
+      stopSynthChannel(ch);
+      sequencedMonoSynthActive[ch] = false;
+      sequencedMonoSynthLastTick[ch] = 0;
+      sequencedMonoSynthLastRow[ch] = 0;
+    }
+  }
 }
 
 
@@ -7600,6 +7649,12 @@ void playNote() {
   // Defer LED updates (slow) to main loop
   isrPlayButtonTick = true;
 
+  sequencerSynthTick++;
+  if (sequencerSynthTick == 0) sequencerSynthTick = 1;
+  bool sequencedCh11HadNotes = false;
+  bool sequencedCh13HadNotes = false;
+  bool sequencedCh14HadNotes = false;
+
   for (unsigned int b = 1; b < maxY + 1; b++) {  // b is 1-indexed (row on grid)
     if (beat > 0 && beat <= maxlen) {            // Ensure beat is within valid range for note array
       int ch = note[beat][b].channel;            // ch is 0-indexed for internal use (e.g. SMP arrays)
@@ -7613,7 +7668,7 @@ void playNote() {
 
         // Check condition - skip if not the right loop iteration
         // Condition 21 (F/F) always plays (handled separately for fill)
-        if (cond > 1 && cond != 21) {
+        if (cond > 1 && cond <= 20) {
           bool shouldPlay = false;
           if (cond <= 16) {
             // 1/X conditions: play when (loopCount % cond) == 0
@@ -7646,7 +7701,7 @@ void playNote() {
         }
 
         // Skip normal trigger for fill notes - they're handled by fillTimer ISR
-        if (cond == 21) {
+        if (cond == NOTE_CONDITION_FILL) {
           // Initialize fill ONCE per playback cycle (locks out until pause/play resets).
           // Start as soon as we encounter the fill trigger note during playback.
           if (!fillHasTriggered && !fillRunning) {
@@ -7692,27 +7747,41 @@ void playNote() {
         } else if (ch == 11) {  // Assuming ch 11 is a specific synth
           // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
           // playSound expects MIDI note number (0-indexed pitch offset from row)
-          playSound(12 * (int)octave[0] + transpose + (b - 1), 0, vel);  // b-1 to match paint preview
+          if (pressedKeyCount[11] == 0) {
+            playSequencedSound(12 * (int)octave[0] + transpose + (b - 1),
+                               0, vel, sequencerSynthTick,
+                               cond == NOTE_CONDITION_GLIDE);
+            sequencedCh11HadNotes = true;
+          }
 
         } else if (ch >= 13 && ch < 15) {  // Synth channels 13, 14
-          playSynth(ch, b, vel, false);    // b is 1-indexed for grid row
+          if (pressedKeyCount[ch] == 0) {
+            playSequencedSynth(ch, b, vel, sequencerSynthTick,
+                               cond == NOTE_CONDITION_GLIDE);
+            if (ch == 13) sequencedCh13HadNotes = true;
+            else sequencedCh14HadNotes = true;
+          }
         }
 
         // Note: LED strip ripple is triggered earlier, before mute check, so it shows all triggers
       }
     }
   }
+  finishSequencedSoundTick(sequencerSynthTick, sequencedCh11HadNotes);
+  finishSequencedMonoSynthTick(sequencerSynthTick, sequencedCh13HadNotes,
+                               sequencedCh14HadNotes);
 
   // midi functions
   if (waitForFourBars && pulseCount >= totalPulsesToWait) {
     extern int patternMode;
     if (SMP_PATTERN_MODE) {
       if (patternMode == 3) {
-        // NEXT mode: use GLOB.page as the playing page
-        if (GLOB.page == 0) {
-          GLOB.page = GLOB.edit;  // Initialize if not set
-        }
-        beat = (GLOB.page - 1) * maxX + 1;  // Start from first beat of playing page
+        // A delayed start also uses whichever page is visible when it begins.
+        GLOB.edit = constrain(
+            (int)GLOB.edit, 1, effectivePageCount());
+        GLOB.page = GLOB.edit;
+        pendingPage = 0;
+        beat = (GLOB.page - 1) * maxX + 1;
       } else {
         // Other pattern modes: use GLOB.edit
         beat = (GLOB.edit - 1) * maxX + 1;  // Start from first beat of current page
@@ -7781,31 +7850,18 @@ void playNote() {
         GLOB.page = GLOB.edit;
       }
     } else if (patternMode == 3) {
-      // NEXT mode: check if we've reached the end of current playing page, then jump to pending page
-      if (beat > pageEnd && pendingPage > 0) {
-        // Current page completed - jump to pending page
-        unsigned int newPageStart = (pendingPage - 1) * maxX + 1;
-        beat = newPageStart;
-        unsigned int oldPendingPage = pendingPage;
-        pendingPage = 0;  // Clear pending page after jump
-
-        // Update page variables - now the pending page becomes the playing page
-        GLOB.page = oldPendingPage;  // This is now the actual playing page
-        GLOB.edit = oldPendingPage;  // Display matches playing page
-        editpage = oldPendingPage;
-        lastEdit = oldPendingPage;
-
-        // Update encoder positions to match
-        currentMode->pos[1] = (int)oldPendingPage;
-        Encoder[1].writeCounter((int32_t)oldPendingPage);
-        int xval = mapXtoPageOffset(GLOB.x) + ((oldPendingPage - 1) * maxX);
-        Encoder[3].writeCounter((int32_t)xval);
-        GLOB.x = xval;
-      } else if (beat < pageStart || beat > pageEnd) {
-        // Wrap within page if no pending page (shouldn't normally happen in NEXT mode)
+      // Finish the current playing page, then use the page visible at this
+      // exact boundary. This supports repeated target changes during the loop.
+      if (beat > pageEnd) {
+        unsigned int targetPage = (unsigned int)constrain(
+            (int)GLOB.edit, 1, effectivePageCount());
+        GLOB.page = targetPage;
+        beat = (targetPage - 1) * maxX + 1;
+        pendingPage = 0;
+      } else if (beat < pageStart) {
         beat = pageStart;
       }
-      // In NEXT mode, don't update GLOB.page from GLOB.edit - keep them separate
+      lastEdit = GLOB.edit;
     } else {
       // Normal pattern mode - wrap within page
       if (beat < pageStart || beat > pageEnd) {
@@ -7850,7 +7906,8 @@ void playNote() {
     }
   }
   for (int ch = 13; ch <= 14; ch++) {  // Only for synth channels 13, 14
-    if (noteOnTriggered[ch] && !persistentNoteOn[ch]) {
+    if (noteOnTriggered[ch] && !persistentNoteOn[ch] &&
+        !sequencedMonoSynthActive[ch]) {
       float noteLen = getNoteDuration(ch);          // Calculate duration
       if ((millis() - startTime[ch] >= noteLen)) {  // Cast noteLen to ulong for comparison
         if (!envelopes[ch]) continue;
@@ -7991,7 +8048,7 @@ void unpaint() {
   // Update encoder 1 limit if pattern mode is ON or if in single mode
   if (currentMode == &draw || currentMode == &singleMode) {
     if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode)) {
-      Encoder[1].writeMax((int32_t)lastPage);
+      Encoder[1].writeMax((int32_t)encoderPageMax());
     } else if (ctrlMode == 1) {
       refreshCtrlEncoderConfig();
     }
@@ -8218,7 +8275,7 @@ void paint() {
   // Update encoder 1 limit if pattern mode is ON or if in single mode
   if (currentMode == &draw || currentMode == &singleMode) {
     if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode)) {
-      Encoder[1].writeMax((int32_t)lastPage);
+      Encoder[1].writeMax((int32_t)encoderPageMax());
     } else if (ctrlMode == 1) {
       refreshCtrlEncoderConfig();
     }
@@ -8293,7 +8350,7 @@ void toggleCopyPaste() {
   // Update encoder 1 limit if pattern mode is ON or if in single mode
   if (currentMode == &draw || currentMode == &singleMode) {
     if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode)) {
-      Encoder[1].writeMax((int32_t)lastPage);
+      Encoder[1].writeMax((int32_t)encoderPageMax());
     } else if (ctrlMode == 1) {
       refreshCtrlEncoderConfig();
     }

@@ -164,6 +164,11 @@ static int textPixelWidth_3x5(const char *text) {
   return w;
 }
 
+FLASHMEM void resetEtcInfoPageAnimation() {
+  infoPageFirstEnter = true;
+  infoPageEnterMs = 0;
+}
+
 FLASHMEM static void drawEtcInfoPage() {
   // Layout matches other menu pages: title at y=10, value at y=3.
   drawText("INFO", 2, 10, currentMenuParentTextColor());
@@ -2870,7 +2875,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         unmuteAllChannels();
         applyMutesAfterPMODSwitch();
         if (currentMode == &draw || currentMode == &singleMode) {
-          if (SMP_PATTERN_MODE) { updateLastPage(); Encoder[1].writeMax((int32_t)lastPage); }
+          if (SMP_PATTERN_MODE) { updateLastPage(); Encoder[1].writeMax((int32_t)encoderPageMax()); }
           else { Encoder[1].writeMax((int32_t)maxPages); }
         }
         redrawMain(setting);
@@ -3701,9 +3706,10 @@ FLASHMEM void switchMenu(int menuPosition){
         // Update encoder 1 limit when pattern mode is toggled
         if (currentMode == &draw || currentMode == &singleMode) {
           if (SMP_PATTERN_MODE) {
-            // Pattern mode is ON - limit to lastPage
+            // Pattern modes normally stop at lastPage; NEXT deliberately
+            // exposes every runtime-valid page for live cueing.
             updateLastPage();
-            Encoder[1].writeMax((int32_t)lastPage);
+            Encoder[1].writeMax((int32_t)encoderPageMax());
           } else {
             // Pattern mode is OFF - allow up to maxPages
             Encoder[1].writeMax((int32_t)maxPages);
@@ -4543,10 +4549,12 @@ FLASHMEM void drawPatternMode() {
   }
   SMP_PATTERN_MODE = (patternMode == 1 || patternMode == 2 || patternMode == 3);
   if (patternMode == 3) {
-    extern unsigned int pendingPage;
-    if (pendingPage > 0) {
+    extern bool isNowPlaying;
+    unsigned int queuedPage =
+        (isNowPlaying && GLOB.edit != GLOB.page) ? GLOB.edit : 0;
+    if (queuedPage > 0) {
       char pageText[4];
-      snprintf(pageText, sizeof(pageText), "%02d", (int)pendingPage);
+      snprintf(pageText, sizeof(pageText), "%02d", (int)queuedPage);
       drawText(pageText, 10, 3, CRGB(0, 200, 200));
     }
   }

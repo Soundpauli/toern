@@ -186,27 +186,16 @@ void setFilters(FilterType filterType, int index, bool initial) {
       {
         // Handle waveform changes for synth channels 11, 13-14
         if (index == 11) {
-          // Channel 11 uses waveformsArray system (ch=0 in instrument system)
-          // Map WAVE value from 0-16 to 0-3 (SIN/SQR/SAW/TRI)
-          // Value 0-3 = SIN, 4-7 = SQR, 8-11 = SAW, 12-15 = TRI, 16 = SIN
-          uint8_t waveformIndex = mapf(SMP.filter_settings[index][FILTER_WAVEFORM], 0, 16, 0, 3);
-          waveformIndex = constrain(waveformIndex, 0, 3);
-          
-          // Update waveformsArray for channel 11 (maps to ch=0 in instrument system)
-          waveformsArray[0][0] = (waveformIndex == 0) ? WAVEFORM_SINE : 
-                                 (waveformIndex == 1) ? WAVEFORM_SQUARE :
-                                 (waveformIndex == 2) ? WAVEFORM_SAWTOOTH :
-                                 WAVEFORM_TRIANGLE;
-          
-          // Update synth voice to apply waveform change
+          // updateSynthVoice rebuilds the preset recipe, then applies WAVE to
+          // osc1 or to all three oscillators when that recipe is uniform.
           extern void updateSynthVoice(int channel);
           updateSynthVoice(11);
         } else if (index >= 13 && index <= 14) {
           // Channels 13-14 use synth objects
-          // Map WAVE value from 0-16 to 1-4 (SIN/SQR/SAW/TRI)
-          // Value 0-3 = SIN, 4-7 = SQR, 8-11 = SAW, 12-15 = TRI, 16 = SIN
-          uint8_t waveformType = mapf(SMP.filter_settings[index][FILTER_WAVEFORM], 0, 16, 1, 4);
-          waveformType = constrain(waveformType, 1, 4);
+          uint8_t waveformType =
+              constrain((int)mapf(
+                  SMP.filter_settings[index][FILTER_WAVEFORM],
+                  0, 16, 0, 3), 0, 3) + 1;
           
           handleWaveformChange(index, waveformType);
         }

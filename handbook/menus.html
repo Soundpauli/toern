@@ -272,7 +272,7 @@
                               <li><strong>OFF</strong> — loop this page forever</li>
                               <li><strong>ON</strong> — advance to the next page that has notes</li>
                               <li><strong>SONG</strong> — follow the <a href="song.html#song">SONG</a> chain</li>
-                              <li><strong>NEXT</strong> — jump once to a queued page at loop end (live transitions)</li>
+                              <li><strong>NEXT</strong> — play the visible page; while it plays, browse to a target page and it takes over exactly when the current page ends</li>
                             </ul>
                           </span>
                         </li>
@@ -521,8 +521,8 @@
                           <span class="desc">Firmware version, then a scrolling thank-you.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li>Read-only</li>
                               <li>Version holds in yellow for two seconds, then the credits crawl</li>
+                              <li><strong>Enc&nbsp;4 short</strong> — play the logo animation (fade in, then hold); press again to stop and return to draw mode</li>
                             </ul>
                             <span class="how">Confirm the build before filing a bug report.</span>
                           </span>
@@ -541,7 +541,7 @@
                         </li>
                         <li>
                           <a href="advanced-sequencing.html#auto-extend"><span class="node">AUTO</span></a>
-                          <span class="desc">Generative fill: learn a base page range, then invent the pages after it in the same style. Orange strip = source pages; green strip = pages about to be written.</span>
+                          <span class="desc">Companion fill: analyse voices, accents, velocities, harmony and BPM across a base-page range, then write coordinated variations after it. Orange strip = source pages; green strip = pages about to be written.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>Enc&nbsp;1 turn</strong> — how many extra pages to generate (<strong>1–16</strong>)</li>
@@ -549,7 +549,7 @@
                               <li><strong>Enc&nbsp;2 turn</strong> — base start page</li>
                               <li><strong>Enc&nbsp;3 turn</strong> — base end page</li>
                             </ul>
-                            <span class="how">Same settings → fresh dice every time.</span>
+                            <span class="how">Uses the same role-aware engine as single-mode page-row randomize. An empty base creates a varied 4/4 starter ensemble; every run is different.</span>
                           </span>
                         </li>
                         <li>

@@ -921,10 +921,12 @@ FLASHMEM void loadSMPSettings() {
 
     // Load Synths - apply synth settings (only for channel 11)
     if (ch == 11) {
-      // Apply instrument-specific defaults (octave register, waveform) for the saved instrument
-      // before calling updateSynthVoice, exactly as the UI preset-selector does.
-      extern void applySynthInstrumentPreset(int channel, int instrumentIdx);
-      applySynthInstrumentPreset(11, (int)SMP.synth_settings[11][INSTRUMENT]);
+      // FORM is an internal preset identity rather than an exposed user control.
+      // Refresh it for older projects, but preserve their saved filter, pitch,
+      // and ADSR controls.
+      extern void applySynthInstrumentFormDefault(int channel, int instrumentIdx);
+      applySynthInstrumentFormDefault(
+          11, (int)SMP.synth_settings[11][INSTRUMENT]);
       updateSynthVoice(11);
     }
   }
@@ -1603,66 +1605,773 @@ static inline int randStep16(unsigned int x_rel) {
   return (int)(((x_rel - 1u) % 16u) + 1u);
 }
 
-FLASHMEM void drawRandoms(){
-  
-  // Determine current page boundaries.
-  unsigned int start = ((GLOB.edit - 1) * maxX) + 1;
-  unsigned int end = start + maxX;
-  unsigned int channel = GLOB.currentChannel;
-  
-  // --- Step 1: Clear notes on the current page for the current channel ---
-  for(unsigned int c = start; c < end; c++){
-    for(unsigned int r = 1; r <= 16; r++){
-      if(note[c][r].channel == channel){
-        note[c][r].channel = 0;
-        note[c][r].velocity = defaultVelocity;
-        note[c][r].probability = 100;  // Reset probability before new note
-        note[c][r].condition = 1;      // Reset trigger condition before new note
+static CompanionRole companionRoleForChannel(uint8_t channel) {
+  switch (channel) {
+    case 1: return CompanionRole::Kick;
+    case 2: return CompanionRole::Snare;
+    case 3: return CompanionRole::ClosedHat;
+    case 4: return CompanionRole::Clap;
+    case 5: return CompanionRole::Tom;
+    case 6:
+    case 11: return CompanionRole::Bass;
+    case 7:
+    case 13:
+    case 14: return CompanionRole::Keys;
+    case 8: return CompanionRole::VocalsPad;
+    default: return CompanionRole::Unknown;
+  }
+}
+
+static bool companionChannelSupported(uint8_t channel) {
+  return companionRoleForChannel(channel) != CompanionRole::Unknown;
+}
+
+static int companionEffectivePages() {
+  int pages = (maxX > 0) ? (int)(MAX_STEPS / maxX) : 1;
+  if (pages < 1) pages = 1;
+  if (pages > (int)maxPages) pages = (int)maxPages;
+  return pages;
+}
+
+static int companionActivePages() {
+  extern int loopLength;
+  int pages = loopLength > 0 ? loopLength : (int)lastPage;
+  if (pages < (int)GLOB.edit) pages = (int)GLOB.edit;
+  int limit = companionEffectivePages();
+  if (pages < 1) pages = 1;
+  if (pages > limit) pages = limit;
+  return pages;
+}
+
+static void companionAddRoleWeight(CompanionContext &ctx, CompanionRole role,
+                                   int phase, uint16_t weight) {
+  switch (role) {
+    case CompanionRole::Kick: ctx.kickWeight[phase] += weight; break;
+    case CompanionRole::Snare: ctx.snareWeight[phase] += weight; break;
+    case CompanionRole::Clap: ctx.clapWeight[phase] += weight; break;
+    case CompanionRole::ClosedHat: ctx.hatWeight[phase] += weight; break;
+    case CompanionRole::Tom: ctx.tomWeight[phase] += weight; break;
+    case CompanionRole::Bass: ctx.bassWeight[phase] += weight; break;
+    case CompanionRole::Keys:
+    case CompanionRole::VocalsPad: ctx.harmonicWeight[phase] += weight; break;
+    default: break;
+  }
+}
+
+static int companionPitchClassForRow(uint8_t channel, int row) {
+  int noteValue = row - 1;
+  if (channel >= 1 && channel <= 8) {
+    noteValue = 12 * SampleRate[channel] + row - (channel + 1);
+    noteValue += (int)detune[channel] + (int)(channelOctave[channel] * 12);
+  } else if (channel == 11) {
+    noteValue = 12 * (int)octave[0] + transpose + row - 1;
+  } else if (channel == 13 || channel == 14) {
+    noteValue = row - channel + 47;
+  }
+  noteValue %= 12;
+  return noteValue < 0 ? noteValue + 12 : noteValue;
+}
+
+// Analyze other voices over a bounded page range. The destination page carries
+// the most weight, adjacent pages less, and distant pages establish style/key.
+static CompanionContext analyzeCompanionContext(int firstPage, int lastSourcePage,
+                                                int focusPage, uint8_t excludeChannel) {
+  CompanionContext ctx;
+  int limit = companionEffectivePages();
+  firstPage = constrain(firstPage, 1, limit);
+  lastSourcePage = constrain(lastSourcePage, firstPage, limit);
+  focusPage = constrain(focusPage, 1, limit);
+
+  for (int page = firstPage; page <= lastSourcePage; page++) {
+    int distance = abs(page - focusPage);
+    uint16_t pageWeight = (distance == 0) ? 4 : ((distance == 1) ? 2 : 1);
+    unsigned int start = (unsigned int)(page - 1) * maxX + 1;
+    unsigned int end = min((unsigned int)MAX_STEPS + 1u, start + maxX);
+    ctx.sourcePages++;
+
+    for (unsigned int c = start; c < end; c++) {
+      int phase = randStep16(c - start + 1) - 1;
+      for (int row = 1; row <= 16; row++) {
+        uint8_t ch = note[c][row].channel;
+        if (ch == 0 || ch == excludeChannel || !companionChannelSupported(ch)) continue;
+
+        uint16_t velocityWeight = (uint16_t)max(1, (int)note[c][row].velocity / 24);
+        uint16_t weight = pageWeight * velocityWeight;
+        ctx.stepWeight[phase] += weight;
+        ctx.stepVelocity[phase] += (uint32_t)note[c][row].velocity * weight;
+        companionAddRoleWeight(ctx, companionRoleForChannel(ch), phase, weight);
+        ctx.totalWeight += weight;
+        ctx.empty = false;
+
+        CompanionRole role = companionRoleForChannel(ch);
+        if (role == CompanionRole::Bass || role == CompanionRole::Keys ||
+            role == CompanionRole::VocalsPad) {
+          ctx.rowWeight[row] += weight;
+          ctx.pitchClassWeight[companionPitchClassForRow(ch, row)] += weight;
+        }
       }
     }
-  }
-  
-  // --- Step 2: Analyze existing harmonic content ---
-  HarmonicAnalysis harmony;
-  
-  // Analyze existing notes to determine key/scale
-  for(unsigned int c = start; c < end; c++){
-    for(unsigned int r = 1; r <= 16; r++){
-      if(note[c][r].channel != 0){
-        // Map row to scale degrees (1-based)
-        if(r == 1 || r == 8 || r == 15) { harmony.hasRoot = true; harmony.rootNote = r; }
-        if(r == 3 || r == 10) { harmony.hasThird = true; harmony.isMajor = true; }
-        if(r == 6 || r == 13) { harmony.hasThird = true; harmony.isMinor = true; }
-        if(r == 5 || r == 12) { harmony.hasFifth = true; }
-        if(r == 2 || r == 9) { harmony.hasSeventh = true; }
-      }
-    }
-  }
-  
-  // --- Step 3: Channel-specific generation ---
-  if(channel >= 1 && channel <= 4) {
-    // Rhythm channels (1-4): Generate rhythmic patterns
-    generateRhythmicPattern(start, end, channel, harmony);
-  } else if(channel >= 5 && channel <= 8) {
-    // Voice channels (5-8): Generate melodic patterns
-    generateMelodicPattern(start, end, channel, harmony);
-  } else if(channel == 11 || channel == 13 || channel == 14) {
-    // Channel 11 / synths 13-14: bass or main melody
-    generateBassOrMelody(start, end, channel, harmony);
-  } else {
-    // Other channels: Use original logic as fallback
-    generateBasicPattern(start, end, channel, harmony);
   }
 
-  // --- Step 4: Force 100% / always (1/1) on every note just placed for this channel ---
-  for (unsigned int c = start; c < end; c++) {
-    for (unsigned int r = 1; r <= 16; r++) {
-      if (note[c][r].channel == channel) {
-        note[c][r].probability = 100;
-        note[c][r].condition = 1;
+  uint16_t best = 0;
+  for (int row = 1; row <= 16; row++) {
+    if (ctx.rowWeight[row] > best) {
+      best = ctx.rowWeight[row];
+      ctx.rootRow = (uint8_t)row;
+    }
+  }
+
+  // Score all tonic/mode candidates rather than assuming the busiest note is
+  // the root. Chord tones carry more evidence; out-of-scale notes are penalized.
+  static const int8_t majorScale[] = {0, 2, 4, 5, 7, 9, 11};
+  static const int8_t minorScale[] = {0, 2, 3, 5, 7, 8, 10};
+  int bestScore = -32768;
+  int bestRootPc = (ctx.rootRow - 1) % 12;
+  bool bestMinor = false;
+  for (int root = 0; root < 12; root++) {
+    for (int mode = 0; mode < 2; mode++) {
+      const int8_t *scale = mode ? minorScale : majorScale;
+      int score = 0;
+      for (int pc = 0; pc < 12; pc++) {
+        int degree = -1;
+        for (int d = 0; d < 7; d++) {
+          if ((root + scale[d]) % 12 == pc) {
+            degree = d;
+            break;
+          }
+        }
+        int multiplier = -2;
+        if (degree == 0) multiplier = 5;
+        else if (degree == 2 || degree == 4) multiplier = 3;
+        else if (degree >= 0) multiplier = 1;
+        score += (int)ctx.pitchClassWeight[pc] * multiplier;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestRootPc = root;
+        bestMinor = mode != 0;
       }
     }
   }
+  if (ctx.empty) bestRootPc = (ctx.rootRow - 1) % 12;
+  ctx.rootRow = (uint8_t)(bestRootPc + 1);
+  ctx.isMinor = bestMinor;
+  return ctx;
+}
+
+static void clearCompanionChannelPage(int page, uint8_t channel) {
+  unsigned int start = (unsigned int)(page - 1) * maxX + 1;
+  unsigned int end = min((unsigned int)MAX_STEPS + 1u, start + maxX);
+  for (unsigned int c = start; c < end; c++) {
+    for (int row = 1; row <= 16; row++) {
+      if (note[c][row].channel != channel) continue;
+      note[c][row].channel = 0;
+      note[c][row].velocity = defaultVelocity;
+      note[c][row].probability = 100;
+      note[c][row].condition = 1;
+    }
+  }
+}
+
+static void clearCompanionPage(int page) {
+  unsigned int start = (unsigned int)(page - 1) * maxX + 1;
+  unsigned int end = min((unsigned int)MAX_STEPS + 1u, start + maxX);
+  for (unsigned int c = start; c < end; c++) {
+    for (int row = 1; row <= 16; row++) {
+      note[c][row].channel = 0;
+      note[c][row].velocity = defaultVelocity;
+      note[c][row].probability = 100;
+      note[c][row].condition = 1;
+    }
+  }
+}
+
+static int companionFreeRow(unsigned int step, int preferred);
+
+static int companionScaleRow(const CompanionContext &ctx, bool lowRegister, int motion) {
+  static const int8_t majorIntervals[] = {0, 2, 4, 5, 7, 9, 11};
+  static const int8_t minorIntervals[] = {0, 2, 3, 5, 7, 8, 10};
+  const int8_t *scale = ctx.isMinor ? minorIntervals : majorIntervals;
+  int root = ctx.empty ? random(1, 6) : (int)ctx.rootRow;
+  int degree = motion % 7;
+  if (degree < 0) degree += 7;
+  int row = 1 + ((root - 1 + scale[degree]) % 12);
+  if (lowRegister) {
+    while (row > 8) row -= 7;
+    if (row < 1) row = 1;
+  } else {
+    while (row < 5) row += 7;
+    while (row > 16) row -= 12;
+  }
+  return constrain(row, 1, 16);
+}
+
+static CompanionHarmony companionMakeHarmony(const CompanionContext &ctx, int variation) {
+  CompanionHarmony harm;
+  uint32_t tonalWeight = 0;
+  for (int pc = 0; pc < 12; pc++) tonalWeight += ctx.pitchClassWeight[pc];
+  bool noTonalContext = tonalWeight == 0;
+  harm.rootPc = noTonalContext ? (uint8_t)((variation * 5) % 12)
+                               : (uint8_t)((ctx.rootRow - 1) % 12);
+  harm.isMinor = noTonalContext ? (((variation / 2) & 1) == 0) : ctx.isMinor;
+
+  // Common diatonic loops (scale degrees 0..6). Minor defaults to i–VI–III–VII.
+  static const uint8_t majorProg[][4] = {
+      {0, 4, 5, 3},  // I V vi IV
+      {0, 3, 4, 0},  // I IV V I
+      {0, 5, 3, 4},  // I vi IV V
+      {5, 3, 0, 4},  // vi IV I V
+  };
+  static const uint8_t minorProg[][4] = {
+      {0, 5, 2, 6},  // i VI III VII
+      {0, 3, 5, 4},  // i iv VI V
+      {0, 5, 3, 4},  // i VI iv V
+      {0, 2, 5, 6},  // i III VI VII
+  };
+  const uint8_t (*table)[4] = harm.isMinor ? minorProg : majorProg;
+  const uint8_t *prog = table[(variation / 3) & 3];
+  for (int i = 0; i < 4; i++) harm.degree[i] = prog[i];
+  return harm;
+}
+
+static void companionFillScalePcs(const CompanionHarmony &harm, int8_t out[7]) {
+  static const int8_t majorIntervals[] = {0, 2, 4, 5, 7, 9, 11};
+  static const int8_t minorIntervals[] = {0, 2, 3, 5, 7, 8, 10};
+  const int8_t *intervals = harm.isMinor ? minorIntervals : majorIntervals;
+  for (int i = 0; i < 7; i++) {
+    out[i] = (int8_t)((harm.rootPc + intervals[i]) % 12);
+  }
+}
+
+static int companionChordPcs(const CompanionHarmony &harm, int bar, bool withSeventh,
+                             int8_t out[4]) {
+  int8_t scale[7];
+  companionFillScalePcs(harm, scale);
+  int deg = harm.degree[constrain(bar, 0, 3)] % 7;
+  out[0] = scale[deg];
+  out[1] = scale[(deg + 2) % 7];
+  out[2] = scale[(deg + 4) % 7];
+  if (!withSeventh) return 3;
+  out[3] = scale[(deg + 6) % 7];
+  return 4;
+}
+
+static int companionPcToChannelRow(int pc, uint8_t channel, int lo, int hi, int prefer) {
+  pc = ((pc % 12) + 12) % 12;
+  lo = constrain(lo, 1, 16);
+  hi = constrain(hi, lo, 16);
+  prefer = constrain(prefer, lo, hi);
+  int best = lo;
+  int bestDist = 99;
+  for (int row = lo; row <= hi; row++) {
+    if (companionPitchClassForRow(channel, row) != pc) continue;
+    int dist = abs(row - prefer);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = row;
+    }
+  }
+  if (bestDist < 99) return best;
+  // A short row range may not contain every pitch class.
+  return prefer;
+}
+
+// 60% chord tone / 30% other scale tone / 10% chromatic passing tone.
+// Bass prefers root + fifth; pads stay on chord tones.
+static int companionPickPitchClass(const CompanionHarmony &harm, int bar,
+                                   CompanionRole role, int prevPc) {
+  int8_t chord[4];
+  bool seventh = (role == CompanionRole::Keys && random(100) < 40);
+  int nChord = companionChordPcs(harm, bar, seventh, chord);
+  int8_t scale[7];
+  companionFillScalePcs(harm, scale);
+
+  auto pickChord = [&](bool rootFifthBias) -> int {
+    if (rootFifthBias) {
+      int r = random(100);
+      if (r < 55) return chord[0];
+      if (r < 85) return chord[2];  // fifth
+      return chord[1];              // third
+    }
+    return chord[random(0, nChord)];
+  };
+
+  auto pickScaleOther = [&]() -> int {
+    for (int attempt = 0; attempt < 8; attempt++) {
+      int pc = scale[random(0, 7)];
+      bool inChord = false;
+      for (int i = 0; i < nChord; i++) {
+        if (pc == chord[i]) {
+          inChord = true;
+          break;
+        }
+      }
+      if (!inChord) return pc;
+    }
+    return scale[random(0, 7)];
+  };
+
+  auto pickChromatic = [&]() -> int {
+    int base = (prevPc >= 0) ? prevPc : chord[0];
+    int delta = (random(100) < 50) ? 1 : -1;
+    return (base + delta + 12) % 12;
+  };
+
+  if (role == CompanionRole::Bass) {
+    int r = random(100);
+    if (r < 55) return chord[0];
+    if (r < 85) return chord[2];
+    if (r < 95) return pickScaleOther();
+    return pickChromatic();
+  }
+
+  if (role == CompanionRole::VocalsPad) {
+    int r = random(100);
+    if (r < 88) return pickChord(true);
+    if (r < 97) return pickScaleOther();
+    return pickChromatic();
+  }
+
+  // Keys / lead: 60% chord / 30% other scale / 10% chromatic.
+  int r = random(100);
+  if (r < 60) return pickChord(false);
+  if (r < 90) return pickScaleOther();
+  return pickChromatic();
+}
+
+static int companionToneRow(const CompanionHarmony &harm, int bar, CompanionRole role,
+                            uint8_t channel, int prevPc, int lo, int hi, int prefer) {
+  int pc = companionPickPitchClass(harm, bar, role, prevPc);
+  return companionPcToChannelRow(pc, channel, lo, hi, prefer);
+}
+
+// Channels 13+14 form one two-note chord: each lane gets one distinct chord tone.
+static int companionChordLaneRow(const CompanionHarmony &harm, int bar,
+                                 uint8_t channel, int variation) {
+  int8_t chord[4];
+  bool seventh = ((variation + bar) % 4) == 0;
+  int n = companionChordPcs(harm, bar, seventh, chord);
+  int inversion = (variation / 3 + bar) % 3;
+  int idx = channel == 13 ? inversion : (inversion + (seventh ? 3 : 2)) % n;
+  int prefer = channel == 13 ? 7 : 11;
+  return companionPcToChannelRow(chord[idx], channel, 1, 16, prefer);
+}
+
+static bool companionEuclideanHit(int phase, int pulses, int rotation) {
+  pulses = constrain(pulses, 0, 16);
+  int shifted = (phase - rotation) % 16;
+  if (shifted < 0) shifted += 16;
+  return pulses > 0 && ((shifted * pulses) % 16) < pulses;
+}
+
+static uint32_t companionMixHash(uint32_t value) {
+  value ^= value >> 16;
+  value *= 0x7feb352dUL;
+  value ^= value >> 15;
+  value *= 0x846ca68bUL;
+  return value ^ (value >> 16);
+}
+
+static int8_t companionSoftShift(uint32_t value) {
+  // Keep half of anchors conventional; distribute the rest one step around it.
+  int bucket = value % 4;
+  return bucket == 0 ? -1 : (bucket == 3 ? 1 : 0);
+}
+
+static CompanionGroove companionMakeGroove(const CompanionContext &ctx,
+                                           int page, int variation) {
+  uint32_t hash = companionMixHash((uint32_t)variation * 131UL +
+                                   (uint32_t)page * 977UL + ctx.totalWeight);
+  for (int phase = 0; phase < 16; phase++) {
+    hash = companionMixHash(hash + (uint32_t)ctx.stepWeight[phase] * (phase + 17));
+  }
+
+  CompanionGroove groove;
+  groove.hatPulses = 3 + (hash & 3);  // E(3..6,16)
+  groove.hatRotation = (hash >> 3) & 15;
+  groove.clapPulses = 2 + ((hash >> 7) % 3);  // E(2..4,16)
+  groove.clapRotation = (hash >> 11) & 15;
+  groove.tomRotation = (hash >> 15) & 15;
+  groove.snareShiftA = companionSoftShift(hash >> 19);
+  groove.snareShiftB = companionSoftShift(hash >> 22);
+  groove.secondHalfShift = companionSoftShift(hash >> 25);
+  groove.secondHalfRotation = 3 + ((hash >> 28) % 7);
+  return groove;
+}
+
+static uint16_t companionMaxPhaseWeight(const uint16_t weights[16]) {
+  uint16_t maximum = 0;
+  for (int phase = 0; phase < 16; phase++) maximum = max(maximum, weights[phase]);
+  return maximum;
+}
+
+static int companionRelativeWeight(uint16_t value, uint16_t maximum) {
+  if (maximum == 0) return 0;
+  return constrain((int)((uint32_t)value * 100UL / maximum), 0, 100);
+}
+
+// Sample-rate pitch lanes for drums/percussion. Homes stay role-typical, but every
+// hit can move so generated pages are not stuck on one monotone row.
+static int companionPercussionRow(CompanionRole role, int phase, bool structural,
+                                  int variation, int &motif, const CompanionContext &ctx) {
+  int home = 5;
+  int lo = 1;
+  int hi = 16;
+  int wander = 2;
+  switch (role) {
+    case CompanionRole::Kick:
+      home = 3;
+      lo = 1;
+      hi = 7;
+      wander = structural ? 1 : 2;
+      break;
+    case CompanionRole::Snare:
+      home = 5;
+      lo = 2;
+      hi = 11;
+      wander = structural ? 2 : 3;
+      break;
+    case CompanionRole::ClosedHat:
+      home = 7;
+      lo = 3;
+      hi = 14;
+      wander = 4;
+      break;
+    case CompanionRole::Clap:
+      home = 9;
+      lo = 4;
+      hi = 14;
+      wander = structural ? 2 : 3;
+      break;
+    case CompanionRole::Tom:
+      home = 6;
+      lo = 2;
+      hi = 12;
+      wander = 4;
+      break;
+    default:
+      break;
+  }
+
+  // Seed a short motif from the page variation so repeats still feel related.
+  if ((phase == 0 && (variation & 1)) || random(100) < 18) {
+    motif += random(1, 3);
+  }
+
+  int row = home;
+  if (role == CompanionRole::ClosedHat || role == CompanionRole::Clap) {
+    // Hats/claps share the melodic centre when context exists; otherwise wander.
+    row = companionScaleRow(ctx, false, motif + (phase / 2) + (variation % 5));
+    if (abs(row - home) > wander + 2) {
+      row = home + ((row > home) ? wander : -wander) + random(-1, 2);
+    }
+  } else if (role == CompanionRole::Tom) {
+    row = (phase >= 12) ? (home + ((phase + variation + motif) % 5) - 1)
+                        : (home + ((motif + phase / 4) % 3) - 1);
+  } else {
+    // Kick/snare: accents near home, ghosts and pickups roam more.
+    int offset = structural ? random(-1, 2) : random(-wander, wander + 1);
+    if (!structural && (phase == 3 || phase == 6 || phase == 11 || phase == 14)) {
+      offset += (variation & 1) ? 1 : -1;
+    }
+    row = home + offset + ((motif % 3) - 1);
+  }
+
+  // Occasional wider jump so a page is not visually/audibly flat.
+  if (random(100) < (structural ? 8 : 22)) {
+    row += random(-wander, wander + 1);
+  }
+  return constrain(row, lo, hi);
+}
+
+static int companionFreeRow(unsigned int step, int preferred) {
+  preferred = constrain(preferred, 1, 16);
+  if (note[step][preferred].channel == 0) return preferred;
+  for (int distance = 1; distance <= 4; distance++) {
+    int up = preferred + distance;
+    int down = preferred - distance;
+    if (up <= 16 && note[step][up].channel == 0) return up;
+    if (down >= 1 && note[step][down].channel == 0) return down;
+  }
+  return 0;
+}
+
+static int companionChannelStepLimit(uint8_t channel) {
+  if (channel == 11) return 3;
+  return 1;  // samples 1–8 and each 13/14 synth lane are monophonic
+}
+
+static bool companionPlaceLimited(unsigned int step, int preferredRow,
+                                  uint8_t channel, int velocity,
+                                  uint8_t probability = 100,
+                                  uint8_t condition = 1) {
+  int used = 0;
+  for (int row = 1; row <= 16; row++) {
+    if (note[step][row].channel == channel) used++;
+  }
+  if (used >= companionChannelStepLimit(channel)) return false;
+
+  int freeRow = companionFreeRow(step, preferredRow);
+  if (freeRow == 0) return false;
+  placeGenNote(step, freeRow, channel, velocity, probability, condition);
+  return true;
+}
+
+static int companionVelocity(const CompanionContext &ctx, int phase, int base) {
+  int velocity = base;
+  if (ctx.stepWeight[phase] > 0) {
+    int weighted = (int)(ctx.stepVelocity[phase] / ctx.stepWeight[phase]);
+    if (weighted > 0 && weighted <= 127) velocity = (velocity + weighted) / 2;
+  }
+  bool quarter = (phase == 0 || phase == 4 || phase == 8 || phase == 12);
+  velocity += quarter ? random(5, 14) : random(-14, 8);
+  return constrain(velocity, 24, 127);
+}
+
+static int companionTempoDensity() {
+  int bpm = constrain((int)SMP.bpm, 40, 300);
+  if (bpm >= 190) return 58;
+  if (bpm >= 155) return 72;
+  if (bpm <= 65) return 88;
+  if (bpm <= 90) return 96;
+  return 100;
+}
+
+static void generateCompanionChannelPage(int page, uint8_t channel,
+                                         const CompanionContext &ctx,
+                                         const CompanionHarmony &harm,
+                                         const CompanionGroove &groove,
+                                         int variation) {
+  CompanionRole role = companionRoleForChannel(channel);
+  if (role == CompanionRole::Unknown) return;
+
+  unsigned int start = (unsigned int)(page - 1) * maxX + 1;
+  unsigned int end = min((unsigned int)MAX_STEPS + 1u, start + maxX);
+  int tempoDensity = companionTempoDensity();
+  int percMotif = random(0, 5) + (variation % 7);
+  int prevPc = -1;
+  uint16_t maxStepWeight = companionMaxPhaseWeight(ctx.stepWeight);
+  uint16_t maxHatWeight = companionMaxPhaseWeight(ctx.hatWeight);
+  uint16_t maxClapWeight = companionMaxPhaseWeight(ctx.clapWeight);
+  uint16_t maxBassWeight = companionMaxPhaseWeight(ctx.bassWeight);
+
+  for (unsigned int c = start; c < end; c++) {
+    unsigned int pageOffset = c - start;
+    int segment = pageOffset / 16;
+    int phase = randStep16(pageOffset + 1) - 1;
+    int bar = phase / 4;  // four harmonic slots across one 16-step page
+    bool quarter = (phase == 0 || phase == 4 || phase == 8 || phase == 12);
+    int segmentShift = segment > 0 ? groove.secondHalfShift : 0;
+    int snareAnchorA = constrain(4 + groove.snareShiftA + segmentShift, 3, 5);
+    int snareAnchorB = constrain(12 + groove.snareShiftB - segmentShift, 11, 13);
+    bool backbeat = (phase == snareAnchorA || phase == snareAnchorB);
+    bool chordChange = (phase % 4 == 0);
+    bool structural = false;
+    bool pitchedPerc = false;
+    int chance = 0;
+    int row = 1;
+    int baseVelocity = 92;
+
+    switch (role) {
+      case CompanionRole::Kick:
+        chance = (phase == 0) ? 96 : ((phase == 8) ? 82 : 0);
+        structural = (phase == 0 || phase == 8);
+        pitchedPerc = true;
+        if (ctx.bassWeight[phase]) chance = max(chance, 62);
+        if ((phase == 6 || phase == 10 || phase == 15) && random(100) < 35) chance = 24;
+        baseVelocity = 112;
+        break;
+
+      case CompanionRole::Snare:
+        if (backbeat) {
+          chance = 82;
+          if (ctx.kickWeight[phase]) chance += 8;
+          // A clap may layer the backbeat, but should not force a duplicate snare.
+          if (ctx.clapWeight[phase]) chance -= 22;
+          if (!ctx.kickWeight[phase] &&
+              companionRelativeWeight(ctx.stepWeight[phase], maxStepWeight) > 70) {
+            chance -= 12;
+          }
+          structural = true;
+        } else {
+          int prev = (phase + 15) % 16;
+          int next = (phase + 1) % 16;
+          bool nearBackbeat = (next == snareAnchorA || next == snareAnchorB ||
+                               prev == snareAnchorA || prev == snareAnchorB);
+          bool ghostCandidate =
+              nearBackbeat || companionEuclideanHit(phase, 3, groove.tomRotation);
+          chance = ghostCandidate ? 10 : 1;
+          if (ctx.kickWeight[phase] || ctx.kickWeight[next]) chance += 8;
+          int density = companionRelativeWeight(ctx.stepWeight[phase], maxStepWeight);
+          chance += density < 25 ? 7 : (density > 70 ? -5 : 0);
+        }
+        pitchedPerc = true;
+        baseVelocity = 102;
+        break;
+
+      case CompanionRole::ClosedHat:
+        // Euclidean candidates fill ensemble gaps instead of cloning one mask.
+        {
+          int pulses = groove.hatPulses - (tempoDensity < 70 ? 1 : 0);
+          int rotation = (groove.hatRotation +
+                          (segment > 0 ? groove.secondHalfRotation : 0)) % 16;
+          bool candidate = companionEuclideanHit(phase, max(3, pulses), rotation);
+          int density = companionRelativeWeight(ctx.stepWeight[phase], maxStepWeight);
+          chance = candidate ? (84 - density / 3) : 2;
+          if (ctx.kickWeight[phase] || ctx.snareWeight[phase]) chance -= 8;
+          if (ctx.snareWeight[(phase + 15) % 16]) chance += 8;
+          int existingHat = companionRelativeWeight(ctx.hatWeight[phase], maxHatWeight);
+          chance = chance * (100 - existingHat / 2) / 100;
+          structural = candidate && chance >= 65;
+        }
+        pitchedPerc = true;
+        if (phase == 15) chance = max(chance, 10);
+        baseVelocity = 78;
+        break;
+
+      case CompanionRole::Clap:
+        {
+          int rotation = (groove.clapRotation +
+                          (segment > 0 ? groove.secondHalfRotation : 0)) % 16;
+          bool candidate =
+              companionEuclideanHit(phase, groove.clapPulses, rotation);
+          if (backbeat) {
+            // Sometimes reinforce a snare; more often carry an empty backbeat.
+            chance = ctx.snareWeight[phase] ? 43 : 69;
+            structural = true;
+          } else if (candidate) {
+            int density = companionRelativeWeight(ctx.stepWeight[phase], maxStepWeight);
+            chance = density < 50 ? 28 : 16;
+          } else {
+            chance = (phase == 15) ? 8 : 2;
+          }
+          int existingClap =
+              companionRelativeWeight(ctx.clapWeight[phase], maxClapWeight);
+          chance = chance * (100 - existingClap / 2) / 100;
+        }
+        pitchedPerc = true;
+        baseVelocity = 94;
+        break;
+
+      case CompanionRole::Tom:
+        {
+          int rotation = (groove.tomRotation +
+                          (segment > 0 ? groove.secondHalfRotation : 0)) % 16;
+          chance = companionEuclideanHit(phase, 3, rotation) ? 18 : 2;
+        }
+        if (phase >= 13) chance = max(chance, 30);
+        pitchedPerc = true;
+        if (ctx.snareWeight[phase] || ctx.tomWeight[phase]) chance /= 3;
+        baseVelocity = 88;
+        break;
+
+      case CompanionRole::Bass: {
+        // Root/fifth-led line follows kick accents and leaves room for harmony.
+        chance = ctx.kickWeight[phase] ? 76 : (quarter ? 38 : 5);
+        structural = ctx.kickWeight[phase] || (phase == 0 || phase == 8);
+        if (ctx.empty) chance = quarter ? 62 : ((phase == 6 || phase == 14) ? 12 : 2);
+        int existingBass =
+            companionRelativeWeight(ctx.bassWeight[phase], maxBassWeight);
+        if (existingBass > 0) chance = chance * max(20, 70 - existingBass / 2) / 100;
+        if (ctx.harmonicWeight[phase] && !ctx.kickWeight[phase]) chance = chance * 65 / 100;
+        if (!quarter && ctx.snareWeight[(phase + 1) % 16]) chance = max(chance, 17);
+        if (!ctx.kickWeight[phase] &&
+            companionRelativeWeight(ctx.stepWeight[phase], maxStepWeight) > 75) {
+          chance = chance * 70 / 100;
+        }
+        baseVelocity = 104;
+        row = companionToneRow(harm, bar, role, channel, prevPc, 1, 8, 3);
+        prevPc = companionPitchClassForRow(channel, row);
+        break;
+      }
+
+      case CompanionRole::Keys: {
+        // Sample key lane 7 stays mono. Synth lanes 13+14 form a dyad together,
+        // one chord tone per lane; neither lane receives stacked notes.
+        baseVelocity = 82;
+        if (chordChange) {
+          chance = (phase == 0 || phase == 8) ? 88 : 62;
+          structural = true;
+        } else if (phase == 2 || phase == 6 || phase == 10 || phase == 14) {
+          chance = 10;
+        } else {
+          chance = 2;
+        }
+        if (channel == 7 && ctx.harmonicWeight[phase]) {
+          chance = chance * (structural ? 65 : 45) / 100;
+        }
+        if (!structural) chance = chance * tempoDensity / 100;
+        chance = constrain(chance, 0, 100);
+        // The deterministic gate keeps channels 13 and 14 rhythmically paired.
+        int gate = (variation * 29 + phase * 17 + segment * 37) % 100;
+        if (gate < chance) {
+          if (channel == 13 || channel == 14) {
+            row = companionChordLaneRow(harm, bar, channel,
+                                        variation + segment * 5);
+          } else {
+            row = companionToneRow(harm, bar, role, channel, prevPc, 1, 16, 9);
+          }
+          prevPc = companionPitchClassForRow(channel, row);
+        } else {
+          continue;
+        }
+        break;
+      }
+
+      case CompanionRole::VocalsPad: {
+        // Channel 8 is mono: sparse sustained chord tones, never stacked chords.
+        baseVelocity = 72;
+        if (phase == 0 || phase == 8) {
+          chance = 78;
+          structural = true;
+        } else if (phase == 4 || phase == 12) {
+          chance = 18;
+        } else {
+          chance = 0;
+        }
+        if (!structural) chance = chance * tempoDensity / 100;
+        chance = constrain(chance, 0, 100);
+        if ((int)random(100) < chance) {
+          row = companionToneRow(harm, bar, role, channel, prevPc, 1, 16, 10);
+          prevPc = companionPitchClassForRow(channel, row);
+          companionPlaceLimited(c, row, channel,
+                                companionVelocity(ctx, phase, baseVelocity));
+        }
+        continue;
+      }
+
+      default:
+        break;
+    }
+
+    // Tempo thins embellishments, not the 4/4 anchors that make the result usable.
+    if (role != CompanionRole::Keys && role != CompanionRole::VocalsPad) {
+      if (!structural) chance = chance * tempoDensity / 100;
+      chance = constrain(chance, 0, 100);
+      if ((int)random(100) >= chance) continue;
+    }
+    if (pitchedPerc) {
+      row = companionPercussionRow(role, phase, structural, variation, percMotif, ctx);
+    }
+    companionPlaceLimited(c, row, channel,
+                          companionVelocity(ctx, phase, baseVelocity));
+  }
+}
+
+FLASHMEM void drawRandoms() {
+  uint8_t channel = (uint8_t)GLOB.currentChannel;
+  if (!companionChannelSupported(channel)) return;
+
+  int page = constrain((int)GLOB.edit, 1, companionEffectivePages());
+  int activePages = companionActivePages();
+  CompanionContext context = analyzeCompanionContext(1, activePages, page, channel);
+  int seed = random(0, 256);
+  CompanionHarmony harm = companionMakeHarmony(context, seed);
+  CompanionGroove groove = companionMakeGroove(context, page, seed);
+
+  clearCompanionChannelPage(page, channel);
+  generateCompanionChannelPage(page, channel, context, harm, groove, seed);
+  updateLastPage();
 }
 
 // Generate rhythmic patterns for channels 1-4
@@ -3457,61 +4166,220 @@ CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
 
 
 
+// Shared logo+sine frame. holdNoFadeOut keeps full brightness after fade-in
+// (INFO loop); boot mode still fades everything out at the end.
+static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNoFadeOut) {
+  extern void light(unsigned int x, unsigned int y, CRGB color);
+
+  const unsigned long fadeOutStart = phase1Duration + phase2Duration;
+  const float sineFade = constrain(
+      (float)elapsedMs / (float)phase1Duration, 0.0f, 1.0f);
+  const float logoFade = constrain(
+      ((float)elapsedMs - (float)phase1Duration) /
+          (float)phase2Duration,
+      0.0f, 1.0f);
+  const float fadeOut = holdNoFadeOut
+      ? 1.0f
+      : ((elapsedMs <= fadeOutStart)
+             ? 1.0f
+             : constrain(
+                   1.0f - ((float)(elapsedMs - fadeOutStart) /
+                               (float)phase3Duration),
+                   0.0f, 1.0f));
+
+  // Continuous motion time so INFO can keep scrolling after fade-in.
+  const float timeSec = (float)elapsedMs * 0.001f;
+  const float hueProgress = fmodf(timeSec * 0.22f, 1.0f);
+  const float amplitude =
+      3.1f + 0.45f * sinf(timeSec * 1.4f);
+  const float centerY = ((float)maxY + 1.0f) * 0.5f;
+  const float whiteYOffset = -0.85f;  // matrix Y grows downward → negative = up
+  const float blueYOffset = 0.85f;
+  const float blueXPhaseOffset = 0.55f;
+  const float widthDenominator = (maxX > 1) ? (float)(maxX - 1) : 1.0f;
+  const int logoStartX =
+      ((int)maxX - (int)MATRIX_WIDTH) / 2 + 1;
+
+  // White travels faster so the two waves keep changing their overlap.
+  const float whiteTravel = timeSec * 5.4f;
+  const float blueTravel = timeSec * 2.6f;
+
+  auto waveTouchesLogo = [&](unsigned int x, int wavePixelY) -> bool {
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        const int logoX = (int)x + dx - logoStartX;
+        const int logoY = wavePixelY + dy - 1;
+        if (logoX >= 0 && logoX < (int)MATRIX_WIDTH &&
+            logoY >= 0 && logoY < (int)maxY &&
+            logo16_on_P(logo_rows, (uint8_t)logoX, (uint8_t)logoY)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  auto drawWavePixel = [&](unsigned int x, float waveY, CRGB baseColor) {
+    const int wavePixelY = (int)roundf(waveY);
+    if (wavePixelY < 1 || wavePixelY > (int)maxY) return;
+
+    float contourScale =
+        waveTouchesLogo(x, wavePixelY) ? (1.0f - 0.90f * logoFade) : 1.0f;
+    float level = sineFade * fadeOut * contourScale;
+    if (level <= 0.0f) return;
+
+    CRGB color = baseColor;
+    color.nscale8((uint8_t)constrain((int)roundf(255.0f * level), 0, 255));
+    if (color.r | color.g | color.b) {
+      light(x, (unsigned int)wavePixelY, color);
+    }
+  };
+
+  for (unsigned int x = 1; x <= maxX; x++) {
+    const float xNorm = (float)(x - 1) / widthDenominator;
+    const float xPhase = xNorm * 4.0f * (float)M_PI;
+
+    // Darker dual sines; blue first so white stays readable on overlap.
+    drawWavePixel(
+        x,
+        centerY + blueYOffset +
+            amplitude * sinf(xPhase + blueXPhaseOffset - blueTravel),
+        CRGB(3, 8, 28));
+    drawWavePixel(
+        x,
+        centerY + whiteYOffset +
+            amplitude * sinf(xPhase - whiteTravel),
+        CRGB(26, 26, 26));
+  }
+
+  const uint8_t logoBrightness = (uint8_t)constrain(
+      (int)roundf(255.0f * logoFade * fadeOut), 0, 255);
+  for (uint8_t y = 0; y < maxY; y++) {
+    for (uint8_t x = 0; x < MATRIX_WIDTH; x++) {
+      if (logo16_on_P(logo_rows, x, y)) {
+        CRGB color = getLogoPixelColor(x, y, hueProgress);
+        color.nscale8(logoBrightness);
+        if (logoBrightness > 0) {
+          light((unsigned int)(logoStartX + x), y + 1, color);
+        }
+      }
+    }
+  }
+}
+
 // ----- Run the Animation Once (Called in setup) -----
 void runAnimation() {
-  // Clear ALL LEDs first to ensure clean start (all matrices stay black)
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
   FastLEDshow();
-  
+
   unsigned long startTime = millis();
   unsigned long lastFrameTime = millis();
-  
+
   while (true) {
     unsigned long currentTime = millis();
     unsigned long elapsed = currentTime - startTime;
-    
-    // Frame rate limiting - only update display at consistent intervals (uses RefreshTime from toern.ino for 30 FPS)
+
     if (currentTime - lastFrameTime < (unsigned long)RefreshTime) {
-      yield();  // Give CPU time to other tasks
-      continue;  // Skip this iteration if not enough time has passed
+      yield();
+      continue;
     }
     lastFrameTime = currentTime;
-    
+
     if (elapsed > totalAnimationTime) {
       elapsed = totalAnimationTime;
     }
 
-    // Update ONLY the first matrix (16×16 grid)
-    // Second matrix stays black (already cleared above)
-    extern void light_single(unsigned int matrixId, unsigned int x, unsigned int y, CRGB color);
-    for (uint8_t y = 0; y < maxY; y++) {
-      for (uint8_t x = 0; x < MATRIX_WIDTH; x++) {
-        CRGB color = getPixelColor(x, y, elapsed);
-        light_single(0, x + 1, y + 1, color);
-      }
+    for (uint16_t i = 0; i < NUM_LEDS; i++) {
+      leds[i] = CRGB::Black;
     }
-    
+    drawLogoAnimationFrame(elapsed, false);
     FastLEDshow();
 
-    // Stop after totalAnimationTime
     if (elapsed >= totalAnimationTime) {
       break;
     }
   }
 
-  // Clear the display at end - all matrices
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
   FastLEDshow();
 }
 
+// ETC → INFO (encoder 4 / 0001): fade in, then keep animating until the same
+// button is pressed again. No fade-out while held open.
+void runInfoLogoAnimationLoop() {
+  extern bool pressed[NUM_ENCODERS];
+  extern bool isPressed[NUM_ENCODERS];
+  extern uint8_t buttons[NUM_ENCODERS];
+  extern ButtonState buttonState[NUM_ENCODERS];
+  extern int currentEncoderIndex;
+  extern void resetEtcInfoPageAnimation();
+
+  auto pollEncoder4 = []() {
+    currentEncoderIndex = 3;
+    Encoder[3].updateStatus();
+  };
+
+  // INFO starts from the short-release event (0001), so consume that event
+  // without waiting on another I2C release callback inside this blocking loop.
+  buttons[3] = 0;
+  pressed[3] = false;
+  isPressed[3] = false;
+  buttonState[3] = IDLE;
+
+  unsigned long startTime = millis();
+  unsigned long lastFrameTime = 0;
+  bool sawRelease = true;
+
+  for (;;) {
+    pollEncoder4();
+    const bool down = pressed[3] || isPressed[3];
+    if (!down) {
+      sawRelease = true;
+    } else if (sawRelease) {
+      // Fresh press: exit immediately. Waiting here for the release callback
+      // can deadlock the main thread while audio/serial interrupts keep running.
+      break;
+    }
+
+    unsigned long currentTime = millis();
+    if (currentTime - lastFrameTime < (unsigned long)RefreshTime) {
+      yield();
+      continue;
+    }
+    lastFrameTime = currentTime;
+
+    for (uint16_t i = 0; i < NUM_LEDS; i++) {
+      leds[i] = CRGB::Black;
+    }
+    drawLogoAnimationFrame(currentTime - startTime, true);
+    FastLEDshow();
+  }
+
+  // Clear stale button edge state so checkMode doesn't re-fire or leave menu blank.
+  buttons[3] = 0;
+  pressed[3] = false;
+  isPressed[3] = false;
+  buttonState[3] = IDLE;
+
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB::Black;
+  }
+  FastLEDshow();
+  resetEtcInfoPageAnimation();
+  GLOB.singleMode = false;
+  switchMode(&draw);
+}
+
 // Enhanced base page pattern analysis structure (moved to top of file)
 
-// AI Song Generation - extends current pattern across multiple pages with context awareness
-FLASHMEM void generateSong() {
+// Retained only as reference while the companion engine replaces the old,
+// separate AUTO implementation.
+#if 0
+FLASHMEM void generateSongLegacy() {
   extern int aiTargetPage; // Access the target page from menu
   extern int aiBaseStartPage; // Access the base start page from menu
   extern int aiBaseEndPage;   // Access the base end page from menu
@@ -3766,6 +4634,76 @@ FLASHMEM void generateSong() {
   }
   
   // Auto-close menu and return to main interface
+  extern void switchMode(Mode *newMode);
+  extern Mode draw;
+  switchMode(&draw);
+}
+#endif
+
+// ETC > AUTO: extend the selected base range with the same role-aware engine
+// used by single-mode 2000. Empty bases create a coordinated starter ensemble.
+FLASHMEM void generateSong() {
+  extern int aiTargetPage;
+  extern int aiBaseStartPage;
+  extern int aiBaseEndPage;
+
+  int pageLimit = companionEffectivePages();
+  int baseStart = constrain(aiBaseStartPage, 1, pageLimit);
+  int baseEnd = constrain(aiBaseEndPage, baseStart, pageLimit);
+  int outputStart = baseEnd + 1;
+  int outputEnd = min(pageLimit, outputStart + max(1, aiTargetPage) - 1);
+  if (outputStart > pageLimit) {
+    extern void switchMode(Mode *newMode);
+    extern Mode draw;
+    switchMode(&draw);
+    return;
+  }
+
+  bool channelsUsed[16] = {};
+  bool baseEmpty = true;
+  for (int page = baseStart; page <= baseEnd; page++) {
+    unsigned int start = (unsigned int)(page - 1) * maxX + 1;
+    unsigned int end = min((unsigned int)MAX_STEPS + 1u, start + maxX);
+    for (unsigned int c = start; c < end; c++) {
+      for (int row = 1; row <= 16; row++) {
+        uint8_t ch = note[c][row].channel;
+        if (ch < 16 && companionChannelSupported(ch)) {
+          channelsUsed[ch] = true;
+          baseEmpty = false;
+        }
+      }
+    }
+  }
+
+  // Role order matters: harmony/rhythm companions can react to earlier voices.
+  static const uint8_t generationOrder[] = {1, 2, 3, 4, 5, 6, 11, 13, 14, 7, 8};
+  if (baseEmpty) {
+    for (uint8_t ch : generationOrder) channelsUsed[ch] = true;
+  }
+
+  preventPaintUnpaint = true;
+  for (int page = outputStart; page <= outputEnd; page++) {
+    clearCompanionPage(page);
+    // One page-level harmony seed so bass/keys/pads share the same progression.
+    int pageSeed = page * 31 + baseEnd * 7 + random(0, 256);
+    CompanionContext pageContext =
+        analyzeCompanionContext(baseStart, page, page, 0);
+    CompanionHarmony pageHarm = companionMakeHarmony(pageContext, pageSeed);
+    CompanionGroove pageGroove =
+        companionMakeGroove(pageContext, page, pageSeed);
+
+    for (uint8_t ch : generationOrder) {
+      if (!channelsUsed[ch]) continue;
+      // Include generated voices on this page as companions for later roles.
+      CompanionContext context =
+          analyzeCompanionContext(baseStart, page, page, ch);
+      generateCompanionChannelPage(page, ch, context, pageHarm,
+                                   pageGroove, pageSeed);
+    }
+  }
+  preventPaintUnpaint = false;
+  updateLastPage();
+
   extern void switchMode(Mode *newMode);
   extern Mode draw;
   switchMode(&draw);

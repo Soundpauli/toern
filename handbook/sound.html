@@ -115,7 +115,7 @@
               </table>
             </article>
 
-            <h3 class="hb-subsection-heading">Page 2 — WAVE · INST · CTOF · SHAP</h3>
+            <h3 class="hb-subsection-heading">Page 2 — WAVE · INST · CENT · SEMI</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -136,10 +136,10 @@
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>W</strong></td><td>WAVE</td><td>Oscillator waveshape.</td><td>Sine · Sawtooth · Square · Triangle · Pulse</td></tr>
+                  <tr><td><strong>W</strong></td><td>WAVE</td><td>Changes oscillator 1; uniform three-oscillator presets change all three together. Selecting INST restores and displays that preset's waveform default.</td><td>Sine · Square/Pulse · Sawtooth · Triangle</td></tr>
                   <tr><td><strong>I</strong></td><td>INST</td><td>Instrument archetype for synth voice 11.</td><td>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</td></tr>
-                  <tr><td><strong>C</strong></td><td>CTOF</td><td>Coarse pitch / cutoff trim depending on voice type.</td><td>Voice-specific (semitones or filter offset)</td></tr>
-                  <tr><td><strong>S</strong></td><td>SHAP</td><td>Pulse width / wavefolder amount where the waveshape allows it.</td><td>0–32</td></tr>
+                  <tr><td><strong>C</strong></td><td>CENT</td><td>Coarse register control.</td><td>0–32</td></tr>
+                  <tr><td><strong>S</strong></td><td>SEMI</td><td>Fine and semitone pitch offset.</td><td>0–32, centred at 16</td></tr>
                 </tbody>
               </table>
             </article>
@@ -231,6 +231,7 @@
 
             <h3 class="hb-subsection-heading">Voice 11 — 3-voice polyphonic synth</h3>
             <p>Three oscillators per voice, three voices of polyphony, ten instrument presets in a single ROM-style table (<strong>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</strong>). Each preset bundles a waveshape recipe, envelope curve, and filter envelope amount. Independent ADSR per voice, independent filter envelope per voice, per-voice pan, gain, waveform, fine pitch (cents), and coarse pitch (semitones).</p>
+            <p>Selecting an instrument loads its matching filter, register, waveform, and ADSR defaults. The presets deliberately cover different roles: PAD and WOW swell, ORG uses clean drawbar-style harmonics, FLT is breathy, LEAD is a square-forward pluck, ARP is a tight pulse stack, and BRSS uses a darker saw body with a slower filter bloom. You can edit the loaded values immediately; saved projects retain those edits.</p>
 
             <h3 class="hb-subsection-heading">Voices 13 &amp; 14 — 2-oscillator mono synths</h3>
             <p>Two oscillators each, full ADSR. Filter page&nbsp;0 swaps <strong>RVRB</strong> for <strong>CENT</strong> (coarse pitch) in the third column — there is no reverb send on these lanes. They add two performance modulators:</p>
@@ -239,6 +240,7 @@
               <li><strong>Arpeggiator</strong> — step 0–12 semitones, span 2–16 steps, ping-pong pattern. Independent per channel.</li>
             </ul>
             <p>Waveforms include sine, sawtooth, square, and triangle. These channels are great for basslines and lead lines where polyphony is unnecessary.</p>
+            <p>Normal sequencer notes retrigger their envelope. To connect adjacent notes on voices 11, 13, or 14, mark the <em>destination</em> note <strong>G/L</strong> in note detail: repeating the same pitch holds the existing envelope, while a different pitch retunes the active voice without restarting it. G/L without an adjacent source attacks normally; a gap ends the phrase. No separate R/T setting is needed because every non-G/L note already retriggers.</p>
 
             <h3 class="hb-subsection-heading">Voices 9, 10, 12 — empty rows</h3>
             <p>These matrix rows are reserved but <strong>intentionally carry no voice</strong>. The cursor can visit them, but placing notes or opening filters has no effect — there is no audio path. See <a href="matrix.html#voice-rows">The matrix → voice lanes</a>.</p>

@@ -56,18 +56,17 @@ void setParams(ParameterType paramType, int index) {
 
 // Handle waveform changes
 void handleWaveformChange(int index, unsigned int waveformType) {
-  //Serial.println(index);
-
-  if (synths[index][0] != nullptr && synths[index][0] != 0) {
+  // Mono synth presets keep oscillator 2 as their contrasting layer.
+  if (synths[index][0] != nullptr) {
     switch (waveformType) {
       case 1:
         synths[index][0]->begin(WAVEFORM_SINE);
         break;
       case 2:
-        synths[index][0]->begin(WAVEFORM_SAWTOOTH);
+        synths[index][0]->begin(WAVEFORM_SQUARE);
         break;
       case 3:
-        synths[index][0]->begin(WAVEFORM_SQUARE);
+        synths[index][0]->begin(WAVEFORM_SAWTOOTH);
         break;
       case 4:
         synths[index][0]->begin(WAVEFORM_TRIANGLE);
@@ -262,14 +261,67 @@ void setCurrentFilterPageDefaultValues(int ch) {
   if (touchedSynth && ch == 11) updateSynthVoice(11);
 }
 
-// When ch11 instrument (INST) changes, align synth sliders with that preset’s intended defaults.
-// `*_synth()` uses CUTOFF/RES/FILTER (p1–p3), SEMI (p4) for detune spread, CENT (p5) for octave override
-// `octave[ch] = 1.0 + (p5/MAXSLIDER)*7`, and FORM (p6) for osc1 wavetable index — see toern_synths.ino.
+static uint8_t synthInstrumentFormDefault(int instrumentIdx) {
+  // p6 chooses osc1's waveform column: saw, pulse, square, triangle, sine.
+  static const uint8_t kFormDefault[10] = {
+    0, 8, 4, 16, 12, 16, 12, 8, 4, 0,
+  };
+  return kFormDefault[constrain(instrumentIdx, 0, 9)];
+}
+
+uint8_t synthInstrumentWaveDefault(int instrumentIdx) {
+  // Raw WAVE slider values: SIN=0, SQR=4, SAW=8, TRI=12.
+  // Pulse-based presets use SQR as their displayed waveform family; returning
+  // to that value restores their original pulse recipe.
+  static const uint8_t kWaveDefault[10] = {
+    8, 4, 4, 0, 12, 0, 12, 4, 4, 8,
+  };
+  return kWaveDefault[constrain(instrumentIdx, 0, 9)];
+}
+
+void applySynthInstrumentFormDefault(int channel, int instrumentIdx) {
+  if (channel != 11) return;
+  SMP.synth_settings[channel][FORM] =
+      synthInstrumentFormDefault(instrumentIdx);
+}
+
+// When ch11 instrument (INST) changes, align synth and envelope sliders with
+// that preset's intended defaults. Loaded user-editable project values remain
+// authoritative until the user explicitly chooses a different instrument.
 void applySynthInstrumentPreset(int channel, int instrumentIdx) {
   if (channel != 11) return;
   instrumentIdx = constrain(instrumentIdx, 0, 9);
 
-  // Base octave at start of each preset (before p5 override). Maps to CENT slider via 1..8 octave formula.
+  // The three synth controls have a few preset-specific meanings (for example,
+  // PAD uses control 1 for decay and controls 2/3 for cutoff/resonance).
+  static const uint8_t kControl1Default[10] = {
+    8, 20, 12, 18, 5, 24, 20, 22, 26, 9,
+  };
+  static const uint8_t kControl2Default[10] = {
+    5, 4, 2, 10, 24, 1, 22, 14, 6, 10,
+  };
+  static const uint8_t kControl3Default[10] = {
+    12, 8, 2, 3, 20, 2, 2, 14, 4, 18,
+  };
+
+  // Slider values: attack runs backwards (32 = instant); decay/release run
+  // forwards; sustain is 0..32. These preserve each preset's articulation
+  // when updateSynthVoice() reapplies the editable ADSR controls.
+  static const uint8_t kAttackDefault[10] = {
+    32, 32, 32, 8, 26, 32, 28, 32, 32, 30,
+  };
+  static const uint8_t kDecayDefault[10] = {
+    6, 14, 1, 32, 32, 2, 0, 5, 0, 28,
+  };
+  static const uint8_t kSustainDefault[10] = {
+    0, 2, 28, 20, 26, 28, 31, 0, 31, 26,
+  };
+  static const uint8_t kReleaseDefault[10] = {
+    2, 6, 2, 24, 20, 3, 10, 5, 1, 10,
+  };
+
+  // Base octave at start of each preset (before p5 override). Maps to CENT
+  // slider via the 1..8 octave formula.
   static const uint8_t kCentSliderDefault[10] = {
     5,   // 0 BASS   — octave 2
     14,  // 1 KEYS   — octave 4
@@ -283,15 +335,18 @@ void applySynthInstrumentPreset(int channel, int instrumentIdx) {
     14,  // 9 BRASS
   };
 
-  // CUTOFF / RESONANCE / FILTER are global/persistent — not overridden per preset.
+  SMP.synth_settings[channel][CUTOFF] = kControl1Default[instrumentIdx];
+  SMP.synth_settings[channel][RESONANCE] = kControl2Default[instrumentIdx];
+  SMP.synth_settings[channel][FILTER] = kControl3Default[instrumentIdx];
   SMP.synth_settings[channel][SEMI] = 16;  // mid → zero extra cent/semi offset from p4 mapping
   SMP.synth_settings[channel][CENT] = kCentSliderDefault[instrumentIdx];
-  // p6 → newWaveform = floor((FORM/32)*8). CHIPTUNE preset uses 1,1,1 then overwrites [0]; FORM must
-  // yield newWaveform==1 so osc1 stays pulse like osc2/3 (not saw at 0).
-  static const uint8_t kFormDefault[10] = {
-    0, 0, 4, 0, 0, 0, 0, 0, 0, 0,
-  };
-  SMP.synth_settings[channel][FORM] = kFormDefault[instrumentIdx];
+  SMP.filter_settings[channel][FILTER_WAVEFORM] =
+      synthInstrumentWaveDefault(instrumentIdx);
+  applySynthInstrumentFormDefault(channel, instrumentIdx);
+  SMP.param_settings[channel][ATTACK] = kAttackDefault[instrumentIdx];
+  SMP.param_settings[channel][DECAY] = kDecayDefault[instrumentIdx];
+  SMP.param_settings[channel][SUSTAIN] = kSustainDefault[instrumentIdx];
+  SMP.param_settings[channel][RELEASE] = kReleaseDefault[instrumentIdx];
 }
 
 

@@ -1085,8 +1085,12 @@ FLASHMEM void drawVelocity() {
     numeratorText = "8"; denominatorText = "1"; textColor = CRGB(255, 150, 0);
   } else if (condStep == 9) {
     numeratorText = "X"; denominatorText = "1"; textColor = CRGB(0, 255, 200);
-  } else {
+  } else if (condStep == 10) {
     numeratorText = "F"; denominatorText = "F"; textColor = CRGB(255, 255, 0);
+  } else if (condStep == 11) {
+    numeratorText = "G"; denominatorText = "L"; textColor = CRGB(0, 255, 120);
+  } else {
+    numeratorText = "1"; denominatorText = "1"; textColor = CRGB(0, 200, 0);
   }
 
   if ((int)maxX > 16) {
@@ -1401,6 +1405,8 @@ FLASHMEM void drawTriggers() {
             noteColor = (blinkPhase == 0) ? CRGB(255, 150, 0) : UI_BRIGHT_WHITE;
           } else if (cond == 20) {
             noteColor = (blinkPhase == 0) ? CRGB(0, 255, 200) : UI_BRIGHT_WHITE;
+          } else if (cond == NOTE_CONDITION_GLIDE) {
+            noteColor = (blinkPhase == 0) ? CRGB(0, 255, 120) : UI_BRIGHT_WHITE;
           } else if (prob < 100) {
             // Probability blink (red/white)
             if (blinkPhase == 0) {
@@ -1447,6 +1453,7 @@ void drawTimer() {
   // Determine which page to check against for timer display
   extern bool SMP_FLOW_MODE;
   extern bool SMP_PATTERN_MODE;
+  extern int patternMode;
   bool shouldShowTimer = false;
   
   if (SMP_FLOW_MODE) {
@@ -1455,10 +1462,10 @@ void drawTimer() {
     // Therefore, show the timer when beatForUI belongs to the page currently being displayed (GLOB.edit).
     shouldShowTimer = (beatForUIPage == GLOB.edit);
   } else if (SMP_PATTERN_MODE) {
-    // Pattern mode: show timer on the edit page at the current timer column position
-    // This allows the timer to be visible when switching pages mid-beat
-    // The timer column (1..maxX) is always valid for any page
-    shouldShowTimer = true;
+    // NEXT may display a target page while another page finishes. Do not draw
+    // the old page's playhead over the target page's notes.
+    shouldShowTimer =
+        (patternMode != 3) || (beatForUIPage == GLOB.edit);
   } else {
     // Normal mode (not pattern mode): GLOB.edit is what the user is viewing/editing
     // GLOB.page can automatically switch in normal mode, but GLOB.edit only

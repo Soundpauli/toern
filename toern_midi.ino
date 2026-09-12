@@ -414,6 +414,14 @@ void checkMidi() {
   // Fire deferred transport start once the non-blocking delay has elapsed
   if (transportStartDelayUntil && micros() >= transportStartDelayUntil) {
     transportStartDelayUntil = 0;
+    extern int patternMode;
+    if (SMP_PATTERN_MODE && patternMode == 3) {
+      // NEXT starts from the page visible when the delayed transport actually
+      // begins, not the page visible when Play was first armed.
+      GLOB.page = GLOB.edit;
+      beat = (GLOB.page - 1) * maxX + 1;
+      pendingPage = 0;
+    }
     isNowPlaying = true;
     playStartTime = millis();
     pulseClockOnTransportStart();

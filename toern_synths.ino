@@ -97,17 +97,48 @@ int16_t noteArray[INSTRUMENT_CHANNELS][8] = {
 };
 int16_t notePlaying[INSTRUMENT_CHANNELS] = { 0, 0 };
 
+static uint32_t sequencedSoundCurrentTick = 0;
+static uint32_t sequencedSoundLastTick = 0;
+static bool sequencedSoundLegato = false;
+static bool sequencedSoundTouched[POLY_VOICES] = {};
 
+static void setSoundVoice(int note, int ch, int velocity, int voiceIdx,
+                          bool triggerEnvelope) {
+  const int NOTES_ARRAY_SIZE = 108;
+  int noteIdx0 = constrain(note + semitones[ch][0], 0, NOTES_ARRAY_SIZE - 1);
+  int noteIdx1 = constrain(note + semitones[ch][1], 0, NOTES_ARRAY_SIZE - 1);
+  int noteIdx2 = constrain(note + semitones[ch][2], 0, NOTES_ARRAY_SIZE - 1);
+
+  noteArray[ch][voiceIdx] = note;
+  voiceStartTime[ch][voiceIdx] = millis();
+  Swaveform1[voiceIdx]->frequency(
+    notesArray[noteIdx0] * pow(2, cents[ch][0] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+  Swaveform2[voiceIdx]->frequency(
+    notesArray[noteIdx1] * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+  Swaveform3[voiceIdx]->frequency(
+    notesArray[noteIdx2] * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+
+  int velMidi = constrain(velocity > 0 ? velocity : defaultVelocity, 1, 127);
+  float amp = mapf((float)velMidi, 1.0f, 127.0f, 0.0f, 1.0f);
+  Swaveform1[voiceIdx]->amplitude(amp);
+  Swaveform2[voiceIdx]->amplitude(amp);
+  Swaveform3[voiceIdx]->amplitude(amp);
+  if (triggerEnvelope) {
+    Senvelope1[voiceIdx]->noteOn();
+    Senvelope2[voiceIdx]->noteOn();
+    SenvelopeFilter1[voiceIdx]->noteOn();
+  }
+}
 
 // arp_synth preset (menuIndex==?) with additional parameters
 
 void arp_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   // Default tuning and sound parameters
   octave[ch] = 5.0;
-  cents[ch][0] = 10;  cents[ch][1] = -10; cents[ch][2] = 0;
-  semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 0;
-  pan[ch][0] = -100; pan[ch][1] = 100; pan[ch][2] = 0;
-  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 100;
+  cents[ch][0] = 7;  cents[ch][1] = -7; cents[ch][2] = 0;
+  semitones[ch][0] = 0; semitones[ch][1] = 12; semitones[ch][2] = 19;
+  pan[ch][0] = -70; pan[ch][1] = 70; pan[ch][2] = 0;
+  volume[ch][0] = 100; volume[ch][1] = 65; volume[ch][2] = 35;
 
   attackAmp[ch][0] = 0;  attackAmp[ch][1] = 0;  attackAmp[ch][2] = 0;
   decayAmp[ch][0] = 0;   decayAmp[ch][1] = 0;   decayAmp[ch][2] = 0;
@@ -131,8 +162,8 @@ void arp_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   filterAmount[ch][0] = filterAmount[ch][1] = filterAmount[ch][2] = mappedFilterAmount;
 
   // Default waveform settings (for voices 1–3 remain)
-  waveforms[ch][0] = 0;
-  waveforms[ch][1] = 0;
+  waveforms[ch][0] = 1;
+  waveforms[ch][1] = 1;
   waveforms[ch][2] = 0;
 
   // --- Additional modulation ---
@@ -161,10 +192,10 @@ void arp_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 // lead_synth preset (menuIndex==?) with additional parameters
 void lead_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   octave[ch] = 4.0;
-  cents[ch][0] = 0;   cents[ch][1] = 0;   cents[ch][2] = 0;
-  semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 0;
-  pan[ch][0] = 0;     pan[ch][1] = 0;     pan[ch][2] = 0;
-  volume[ch][0] = 100; volume[ch][1] = 0;   volume[ch][2] = 0;
+  cents[ch][0] = 0;   cents[ch][1] = -7;  cents[ch][2] = 7;
+  semitones[ch][0] = 0; semitones[ch][1] = 12; semitones[ch][2] = 0;
+  pan[ch][0] = 0;     pan[ch][1] = 35;    pan[ch][2] = -35;
+  volume[ch][0] = 100; volume[ch][1] = 45; volume[ch][2] = 20;
 
   attackAmp[ch][0] = 0;  attackAmp[ch][1] = 0;  attackAmp[ch][2] = 0;
   decayAmp[ch][0] = 250; decayAmp[ch][1] = 250; decayAmp[ch][2] = 250;
@@ -188,8 +219,8 @@ void lead_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   filterAmount[ch][0] = filterAmount[ch][1] = filterAmount[ch][2] = mappedFilterAmount;
 
   waveforms[ch][0] = 2;
-  waveforms[ch][1] = 2;
-  waveforms[ch][2] = 2;
+  waveforms[ch][1] = 1;
+  waveforms[ch][2] = 3;
 
   // --- Additional modulation ---
   float offsetCents = -50.0 + (p4 / MAXSLIDER) * 100.0;
@@ -260,7 +291,7 @@ void pad_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   cents[ch][0] = 15;   cents[ch][1] = -15;  cents[ch][2] = 0;
   semitones[ch][0] = 0; semitones[ch][1] = 0;  semitones[ch][2] = 0;
   pan[ch][0] = -100;   pan[ch][1] = 100;   pan[ch][2] = 0;
-  volume[ch][0] = 100; volume[ch][1] = 100;  volume[ch][2] = 0;
+  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 60;
   
   attackAmp[ch][0] = 1500; attackAmp[ch][1] = 1500; attackAmp[ch][2] = 1500;
   sustainAmp[ch][0] = 0.6;  sustainAmp[ch][1] = 0.6;  sustainAmp[ch][2] = 0.6;
@@ -304,9 +335,9 @@ void pad_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 void organ_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   octave[ch] = 5.0;
   cents[ch][0] = 0;  cents[ch][1] = 0;  cents[ch][2] = 0;
-  semitones[ch][0] = 0; semitones[ch][1] = -12; semitones[ch][2] = 7;
+  semitones[ch][0] = 0; semitones[ch][1] = 12; semitones[ch][2] = 19;
   pan[ch][0] = 0;    pan[ch][1] = 0;    pan[ch][2] = 0;
-  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 100;
+  volume[ch][0] = 85; volume[ch][1] = 70; volume[ch][2] = 55;
 
   attackAmp[ch][0] = 0;  attackAmp[ch][1] = 0;  attackAmp[ch][2] = 0;
   decayAmp[ch][0] = 100; decayAmp[ch][1] = 100; decayAmp[ch][2] = 100;
@@ -352,7 +383,7 @@ void flute_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   cents[ch][0] = -1;  cents[ch][1] = 1;  cents[ch][2] = 0;
   semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 12;
   pan[ch][0] = -100;  pan[ch][1] = 100;  pan[ch][2] = 0;
-  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 10;
+  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 45;
 
   decayAmp[ch][0] = 0; decayAmp[ch][1] = 0; decayAmp[ch][2] = 0;
   sustainAmp[ch][0] = 1.0; sustainAmp[ch][1] = 1.0; sustainAmp[ch][2] = 1.0;
@@ -396,9 +427,9 @@ void flute_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 // wow_synth preset (menuIndex==9) with additional parameters
 void wow_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   octave[ch] = 4.0;
-  cents[ch][0] = 5;  cents[ch][1] = -5;  cents[ch][2] = 0;
-  semitones[ch][0] = 7; semitones[ch][1] = 0; semitones[ch][2] = -12;
-  pan[ch][0] = -50; pan[ch][1] = 50; pan[ch][2] = 0;
+  cents[ch][0] = 12; cents[ch][1] = -12; cents[ch][2] = 4;
+  semitones[ch][0] = 0; semitones[ch][1] = 7; semitones[ch][2] = 19;
+  pan[ch][0] = -80; pan[ch][1] = 80; pan[ch][2] = 0;
   volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 100;
   attackAmp[ch][0] = 400; attackAmp[ch][1] = 400; attackAmp[ch][2] = 400;
   decayAmp[ch][0] = 4000; decayAmp[ch][1] = 4000; decayAmp[ch][2] = 4000;
@@ -422,7 +453,7 @@ void wow_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   float mappedResonance = minResonance + (p2 / MAXSLIDER) * (maxResonance - minResonance);
   resonance[ch][0] = resonance[ch][1] = resonance[ch][2] = mappedResonance;
 
-  waveforms[ch][0] = 0;  waveforms[ch][1] = 0;  waveforms[ch][2] = 0;
+  waveforms[ch][0] = 3; waveforms[ch][1] = 3; waveforms[ch][2] = 0;
   
   // --- Additional modulation ---
   float offsetCents = -50.0 + (p4 / MAXSLIDER) * 100.0;
@@ -489,10 +520,10 @@ void bass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 // brass_synth preset (menuIndex==5) with additional parameters
 void brass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   octave[ch] = 4.0;
-  cents[ch][0] = -4;  cents[ch][1] = 4;  cents[ch][2] = 0;
-  semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 0;
+  cents[ch][0] = -7; cents[ch][1] = 7; cents[ch][2] = 0;
+  semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = -12;
   pan[ch][0] = -100;  pan[ch][1] = 100; pan[ch][2] = 0;
-  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 100;
+  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 55;
 
   attackAmp[ch][0] = 0;  attackAmp[ch][1] = 0;  attackAmp[ch][2] = 0;
   decayAmp[ch][0] = 2500; decayAmp[ch][1] = 2500; decayAmp[ch][2] = 2500;
@@ -515,7 +546,7 @@ void brass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
   resonance[ch][0] = resonance[ch][1] = resonance[ch][2] = mappedResonance;
   filterAmount[ch][0] = filterAmount[ch][1] = filterAmount[ch][2] = mappedFilterAmount;
 
-  waveforms[ch][0] = 0; waveforms[ch][1] = 0; waveforms[ch][2] = 0;
+  waveforms[ch][0] = 0; waveforms[ch][1] = 0; waveforms[ch][2] = 2;
 
   // --- Additional modulation ---
   float offsetCents = -50.0 + (p4 / MAXSLIDER) * 100.0;
@@ -646,6 +677,41 @@ void updateVals(int ch) {
   }
 }
 
+static uint8_t synthWaveformControlColumn(uint8_t rawValue) {
+  uint8_t choice = constrain(
+      (int)mapf(rawValue, 0, 16, 0, 3), 0, 3);
+  switch (choice) {
+    case 0: return 4;  // sine
+    case 1: return 2;  // square
+    case 2: return 0;  // saw
+    default: return 3; // triangle
+  }
+}
+
+static void applySynthWaveformControl(int instrument, int ch,
+                                      uint8_t rawValue) {
+  extern uint8_t synthInstrumentWaveDefault(int instrumentIdx);
+
+  // The preset's displayed default means "restore the original recipe". This
+  // preserves pulse oscillators even though the four-state UI groups pulse
+  // with the square family.
+  if (synthWaveformControlColumn(rawValue) ==
+      synthWaveformControlColumn(synthInstrumentWaveDefault(instrument))) {
+    return;
+  }
+
+  const bool uniformRecipe =
+      waveforms[ch][0] == waveforms[ch][1] &&
+      waveforms[ch][1] == waveforms[ch][2];
+  const uint8_t selectedColumn = synthWaveformControlColumn(rawValue);
+  waveforms[ch][0] = selectedColumn;
+  if (uniformRecipe) {
+    waveforms[ch][1] = selectedColumn;
+    waveforms[ch][2] = selectedColumn;
+  }
+  updateVals(ch);
+}
+
 // Modify playSound() so that when a note is played, you store its start time.
 void playSound(int note, int ch, int velocity) {
   // Bounds check: ch must be 0 or 1 (INSTRUMENT_CHANNELS = 2)
@@ -653,45 +719,138 @@ void playSound(int note, int ch, int velocity) {
     return;  // Invalid channel, skip
   }
   
-  // Bounds check: notesArray has 108 elements (indices 0-107)
-  // Check each voice's note index before accessing notesArray
-  const int NOTES_ARRAY_SIZE = 108;
-  
-  // Calculate note indices for each voice
-  int noteIdx0 = note + semitones[ch][0];
-  int noteIdx1 = note + semitones[ch][1];
-  int noteIdx2 = note + semitones[ch][2];
-  
-  // Clamp indices to valid range
-  noteIdx0 = constrain(noteIdx0, 0, NOTES_ARRAY_SIZE - 1);
-  noteIdx1 = constrain(noteIdx1, 0, NOTES_ARRAY_SIZE - 1);
-  noteIdx2 = constrain(noteIdx2, 0, NOTES_ARRAY_SIZE - 1);
-  
   stopSound(note, ch);
   // Use current slot first, then advance (was: increment before use → first notes skipped voice 0).
   int voiceIdx = notePlaying[ch] % POLY_VOICES;
   notePlaying[ch] = (notePlaying[ch] + 1) % POLY_VOICES;
-  noteArray[ch][voiceIdx] = note;
-  voiceStartTime[ch][voiceIdx] = millis();  // Record the start time for this voice
+  setSoundVoice(note, ch, velocity, voiceIdx, true);
+}
 
-  // Play note with frequency calculations, etc. (using clamped indices)
-  // Ensure voiceIdx is within bounds for Swaveform arrays (0-2)
-  Swaveform1[voiceIdx]->frequency(
-    notesArray[noteIdx0] * pow(2, cents[ch][0] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  Swaveform2[voiceIdx]->frequency(
-    notesArray[noteIdx1] * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  Swaveform3[voiceIdx]->frequency(
-    notesArray[noteIdx2] * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  int velMidi = velocity;
-  if (velMidi <= 0) velMidi = defaultVelocity;
-  if (velMidi > 127) velMidi = 127;
-  float amp = mapf((float)velMidi, 1.0f, 127.0f, 0.0f, 1.0f);
-  Swaveform1[voiceIdx]->amplitude(amp);
-  Swaveform2[voiceIdx]->amplitude(amp);
-  Swaveform3[voiceIdx]->amplitude(amp);
-  Senvelope1[voiceIdx]->noteOn();
-  Senvelope2[voiceIdx]->noteOn();
-  SenvelopeFilter1[voiceIdx]->noteOn();
+// Sequencer-only ch11 path. Consecutive steps reuse voices: equal notes hold,
+// changed notes retune the oscillator while its envelope remains open.
+void playSequencedSound(int note, int ch, int velocity, uint32_t tick,
+                        bool allowLegato) {
+  if (ch < 0 || ch >= INSTRUMENT_CHANNELS) return;
+
+  if (sequencedSoundCurrentTick != tick) {
+    sequencedSoundCurrentTick = tick;
+    sequencedSoundLegato =
+        sequencedSoundLastTick != 0 && tick == sequencedSoundLastTick + 1;
+    for (int voice = 0; voice < POLY_VOICES; voice++) {
+      sequencedSoundTouched[voice] = false;
+    }
+  }
+
+  if (allowLegato && sequencedSoundLegato) {
+    // First preserve an identical voice (true hold).
+    for (int voice = 0; voice < POLY_VOICES; voice++) {
+      if (!sequencedSoundTouched[voice] && noteArray[ch][voice] == note) {
+        sequencedSoundTouched[voice] = true;
+        voiceStartTime[ch][voice] = millis();
+        return;
+      }
+    }
+    // Otherwise slide an unmatched voice to the new pitch without noteOn().
+    for (int voice = 0; voice < POLY_VOICES; voice++) {
+      if (!sequencedSoundTouched[voice] && noteArray[ch][voice] != NOTE_EMPTY) {
+        sequencedSoundTouched[voice] = true;
+        setSoundVoice(note, ch, velocity, voice, false);
+        return;
+      }
+    }
+  }
+
+  // Default articulation is retrigger. Prefer reusing the matching old voice
+  // so a repeated non-G/L note gets a clean attack without stealing a held tone.
+  int voiceIdx = -1;
+  for (int voice = 0; voice < POLY_VOICES; voice++) {
+    if (!sequencedSoundTouched[voice] && noteArray[ch][voice] == note) {
+      Senvelope1[voice]->noteOff();
+      Senvelope2[voice]->noteOff();
+      SenvelopeFilter1[voice]->noteOff();
+      noteArray[ch][voice] = NOTE_EMPTY;
+      voiceIdx = voice;
+      break;
+    }
+  }
+  for (int voice = 0; voice < POLY_VOICES; voice++) {
+    if (voiceIdx < 0 && noteArray[ch][voice] == NOTE_EMPTY) {
+      voiceIdx = voice;
+      break;
+    }
+  }
+  if (voiceIdx < 0) {
+    for (int voice = 0; voice < POLY_VOICES; voice++) {
+      if (!sequencedSoundTouched[voice]) {
+        voiceIdx = voice;
+        break;
+      }
+    }
+  }
+  if (voiceIdx < 0) voiceIdx = notePlaying[ch] % POLY_VOICES;
+  if (noteArray[ch][voiceIdx] != NOTE_EMPTY) {
+    Senvelope1[voiceIdx]->noteOff();
+    Senvelope2[voiceIdx]->noteOff();
+    SenvelopeFilter1[voiceIdx]->noteOff();
+  }
+  notePlaying[ch] = (voiceIdx + 1) % POLY_VOICES;
+  sequencedSoundTouched[voiceIdx] = true;
+  setSoundVoice(note, ch, velocity, voiceIdx, true);
+}
+
+void finishSequencedSoundTick(uint32_t tick, bool hadNotes) {
+  if (hadNotes && sequencedSoundCurrentTick == tick) {
+    if (sequencedSoundLegato) {
+      for (int voice = 0; voice < POLY_VOICES; voice++) {
+        if (!sequencedSoundTouched[voice] && noteArray[0][voice] != NOTE_EMPTY) {
+          Senvelope1[voice]->noteOff();
+          Senvelope2[voice]->noteOff();
+          SenvelopeFilter1[voice]->noteOff();
+          noteArray[0][voice] = NOTE_EMPTY;
+        }
+      }
+    }
+    sequencedSoundLastTick = tick;
+    return;
+  }
+
+  if (!hadNotes && sequencedSoundLastTick != 0 &&
+      tick == sequencedSoundLastTick + 1) {
+    if (pressedKeyCount[11] == 0) {
+      for (int voice = 0; voice < POLY_VOICES; voice++) {
+        if (noteArray[0][voice] != NOTE_EMPTY) {
+          Senvelope1[voice]->noteOff();
+          Senvelope2[voice]->noteOff();
+          SenvelopeFilter1[voice]->noteOff();
+          noteArray[0][voice] = NOTE_EMPTY;
+        }
+      }
+    }
+    // A live MIDI hold owns the envelopes now; either way, the sequencer chain
+    // ends so auto-off cannot remain suppressed indefinitely.
+    sequencedSoundLastTick = 0;
+  }
+}
+
+void resetSequencedSynthLegato() {
+  sequencedSoundCurrentTick = 0;
+  sequencedSoundLastTick = 0;
+  sequencedSoundLegato = false;
+  for (int voice = 0; voice < POLY_VOICES; voice++) {
+    sequencedSoundTouched[voice] = false;
+    if (noteArray[0][voice] != NOTE_EMPTY) {
+      Senvelope1[voice]->noteOff();
+      Senvelope2[voice]->noteOff();
+      SenvelopeFilter1[voice]->noteOff();
+      noteArray[0][voice] = NOTE_EMPTY;
+    }
+  }
+  sequencedMonoSynthLastTick[13] = 0;
+  sequencedMonoSynthLastTick[14] = 0;
+  sequencedMonoSynthLastRow[13] = 0;
+  sequencedMonoSynthLastRow[14] = 0;
+  sequencedMonoSynthActive[13] = false;
+  sequencedMonoSynthActive[14] = false;
 }
 
 
@@ -723,6 +882,9 @@ if (pressedKeyCount[11]>=1) return;
   int inst = constrain((int)SMP.synth_settings[11][INSTRUMENT], 0, 9);
   unsigned long offMs = synthAutoOffMsForInstrument(inst);
   for (int ch = 0; ch < 2; ch++) {
+    // Sequencer ch11 voices stay open until the next step decides whether to
+    // retrigger, glide/hold, or release on a gap.
+    if (ch == 0 && sequencedSoundLastTick != 0) continue;
     for (int i = 0; i < POLY_VOICES; i++) {
       if (noteArray[ch][i] != NOTE_EMPTY) {  // There is an active note on this voice.
         if (currentTime - voiceStartTime[ch][i] >= offMs) {
@@ -761,6 +923,9 @@ void updateSynthVoice(int channel){
         int form = SMP.synth_settings[channel][FORM];
 
         switchSynthVoice(instrumentValue,0, cutoff, resonance, filter, semi, cent, form);
+        applySynthWaveformControl(
+            instrumentValue, 0,
+            (uint8_t)SMP.filter_settings[channel][FILTER_WAVEFORM]);
 
         // After the preset sets its own hardcoded ADSR, override with the user-saved slider values
         // so that the ADSR controls on the param page always take effect for ch11.

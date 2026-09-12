@@ -28,6 +28,9 @@ EXTMEM Note note[maxlen + 1][maxY + 1];
 - **X** is step (across pages × matrix width).  
 - **Y** is row / pitch lane on the matrix.  
 - Empty cells use `channel == 0`.
+- Condition bytes `1,2,4,8,16,17–20` encode loop conditions, `21` is F/F
+  fill, and `22` is G/L destination-note glide/legato. Unknown values should
+  fall back to always-trigger behavior rather than becoming sparse implicitly.
 
 UI often maps displayed velocity (1–16 rows) to MIDI-ish 1–127 with `mapf`.
 
