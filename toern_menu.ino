@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 7
 #define VOL_PAGES_COUNT 6
-#define ETC_PAGES_COUNT 8
+#define ETC_PAGES_COUNT 9
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
@@ -123,6 +123,7 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
 // ETC submenu pages
 MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"INFO", 39, false, nullptr},          // Info / version / credits
+  {"RAM", 52, false, nullptr},           // Live audio/reverb/memory dashboard
   {"SD", 49, false, nullptr},            // USB Serial SD file server (active while on this page)
   {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
@@ -168,6 +169,83 @@ static int textPixelWidth_3x5(const char *text) {
 FLASHMEM void resetEtcInfoPageAnimation() {
   infoPageFirstEnter = true;
   infoPageEnterMs = 0;
+}
+
+#ifndef TOERN_AUDIO_MEMORY_BLOCKS
+#define TOERN_AUDIO_MEMORY_BLOCKS 96
+#endif
+
+static int etcRamMetric = 0;  // 0=AUD%, 1=REV%, 2=FREE blocks, 3=CPU%
+static int lastEtcRamEnc = -1;
+
+static int computeReverbUsagePercent() {
+  // Freeverb-equipped voices: average REVERB send vs slider max.
+  static const uint8_t kFreeverbChannels[] = { 1, 2, 5, 6, 7, 8, 11 };
+  int sum = 0;
+  int n = 0;
+  for (uint8_t ch : kFreeverbChannels) {
+    sum += (int)SMP.filter_settings[ch][REVERB];
+    n++;
+  }
+  if (n <= 0) return 0;
+  return constrain((sum * 100) / (n * (int)maxfilterResolution), 0, 100);
+}
+
+static int computeAudioUsedPercent() {
+  int used = (int)AudioMemoryUsage();
+  int pool = TOERN_AUDIO_MEMORY_BLOCKS;
+  if (pool < 1) pool = 1;
+  return constrain((used * 100) / pool, 0, 100);
+}
+
+static int computeAudioFreeBlocks() {
+  int used = (int)AudioMemoryUsage();
+  int freeBlocks = TOERN_AUDIO_MEMORY_BLOCKS - used;
+  return freeBlocks < 0 ? 0 : freeBlocks;
+}
+
+FLASHMEM static void drawEtcRamPage() {
+  const CRGB tc = currentMenuParentTextColor();
+  drawText("RAM", 2, 10, tc);
+
+  char line[8];
+  CRGB valueColor = UI_GREEN;
+  switch (etcRamMetric) {
+    case 1: {
+      int rev = computeReverbUsagePercent();
+      snprintf(line, sizeof(line), "R%d", rev);
+      valueColor = rev > 70 ? UI_YELLOW : UI_GREEN;
+      break;
+    }
+    case 2: {
+      int freeBlocks = computeAudioFreeBlocks();
+      snprintf(line, sizeof(line), "F%d", freeBlocks);
+      valueColor = freeBlocks < 12 ? UI_RED : (freeBlocks < 24 ? UI_YELLOW : UI_GREEN);
+      break;
+    }
+    case 3: {
+      int cpu = constrain((int)lroundf(AudioProcessorUsage()), 0, 99);
+      snprintf(line, sizeof(line), "C%d", cpu);
+      valueColor = cpu > 80 ? UI_RED : (cpu > 55 ? UI_YELLOW : UI_GREEN);
+      break;
+    }
+    default: {
+      int used = computeAudioUsedPercent();
+      int peak = constrain(
+          ((int)AudioMemoryUsageMax() * 100) / max(1, TOERN_AUDIO_MEMORY_BLOCKS),
+          0, 100);
+      // Prefer live usage; show peak when it is clearly higher.
+      if (peak > used + 5) {
+        snprintf(line, sizeof(line), "A%d", peak);
+      } else {
+        snprintf(line, sizeof(line), "A%d", used);
+      }
+      valueColor = used > 85 ? UI_RED : (used > 65 ? UI_YELLOW : UI_GREEN);
+      break;
+    }
+  }
+  drawMenuValue(line, 2, 3, valueColor);
+  drawIndicator('L', 'G', 3);
 }
 
 FLASHMEM static void drawEtcInfoPage() {
@@ -1594,6 +1672,14 @@ FLASHMEM void showEtcMenu() {
   bool fullRedraw = (pageIndex != lastRenderedEtcPage) || (mainSetting != lastRenderedEtcSetting);
   if (takeMenuForceFullRedraw()) fullRedraw = true;
   if (mainSetting == 39) fullRedraw = true;  // INFO animates
+  // RAM (52): live audio/reverb/free dashboard
+  if (mainSetting == 52) {
+    static elapsedMillis ramMenuRedraw;
+    if (ramMenuRedraw >= 200) {
+      ramMenuRedraw = 0;
+      fullRedraw = true;
+    }
+  }
   if (mainSetting == 49) {
     // SD page: refresh when wait/connected state changes
     extern bool sdSerialServerIsActive();
@@ -1643,10 +1729,12 @@ FLASHMEM void showEtcMenu() {
       // Page-nav indicator (encoder 4) should always match ETC text color (e.g. "RSET")
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
     } else {
-      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41)
+      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41), CHLD(48), RAM(52)
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
       CRGB indicatorColor = currentMenuParentTextColor();
-      const bool etcValuePage = (mainSetting == 40 || mainSetting == 41 || mainSetting == 48);
+      const bool etcValuePage =
+          (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
+           mainSetting == 52);
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
       Encoder[2].writeRGBCode(etcValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -1957,6 +2045,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawEtcInfoPage();
       break;
 
+    case 52: // RAM - live audio memory / reverb / free blocks dashboard
+      drawEtcRamPage();
+      break;
+
     case 49: // SD - USB Serial file server (active while this page is open)
       {
         extern bool sdSerialServerClientConnected();
@@ -2127,8 +2219,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         }
         light(uch, rowDots, dot);
       }
-      drawIndicator('L', 'Y', 1);
-      drawIndicator('L', 'W', 2);
+      drawIndicator('L', 'Y', 2);
+      drawIndicator('L', 'W', 3);
       break;
     }
 
@@ -2729,6 +2821,27 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = (unsigned int)rateSel;
         lastPpqnRate = rateSel;
         g_ppqnUiFocus = 0;
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 52: { // RAM - encoder 2 selects metric; click resets audio peak counters
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)etcRamMetric);
+        Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = (unsigned int)etcRamMetric;
+        lastEtcRamEnc = etcRamMetric;
+        menuFirstEnter = false;
+      }
+      int encVal = constrain((int)currentMode->pos[2], 0, 3);
+      if (encVal != lastEtcRamEnc) {
+        etcRamMetric = encVal;
+        lastEtcRamEnc = encVal;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = (unsigned int)encVal;
         menuRequestFullRedraw();
         redrawMain(setting);
       }
@@ -4122,6 +4235,14 @@ FLASHMEM void switchMenu(int menuPosition){
         setLedStripEnabled(newState);
         saveSingleModeToEEPROM(25, (int8_t)(newState ? 1 : 0));
         menuRequestFullRedraw();  // Force ETC submenu to redraw with new state
+        break;
+      }
+
+      case 52: {
+        // RAM dashboard: encoder press resets audio peak counters
+        AudioMemoryUsageMaxReset();
+        AudioProcessorUsageMaxReset();
+        menuRequestFullRedraw();
         break;
       }
 

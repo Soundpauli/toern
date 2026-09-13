@@ -34,8 +34,31 @@
 
 #include "utility/dspinst.h"
 
+void AudioEffectFreeverbDMAMEM::clearTanks()
+{
+	memset(comb1buf, 0, sizeof(comb1buf));
+	memset(comb2buf, 0, sizeof(comb2buf));
+	memset(comb3buf, 0, sizeof(comb3buf));
+	memset(comb4buf, 0, sizeof(comb4buf));
+	memset(comb5buf, 0, sizeof(comb5buf));
+	memset(comb6buf, 0, sizeof(comb6buf));
+	memset(comb7buf, 0, sizeof(comb7buf));
+	memset(comb8buf, 0, sizeof(comb8buf));
+	comb1index = comb2index = comb3index = comb4index = 0;
+	comb5index = comb6index = comb7index = comb8index = 0;
+	comb1filter = comb2filter = comb3filter = comb4filter = 0;
+	comb5filter = comb6filter = comb7filter = comb8filter = 0;
+	memset(allpass1buf, 0, sizeof(allpass1buf));
+	memset(allpass2buf, 0, sizeof(allpass2buf));
+	memset(allpass3buf, 0, sizeof(allpass3buf));
+	memset(allpass4buf, 0, sizeof(allpass4buf));
+	allpass1index = allpass2index = allpass3index = allpass4index = 0;
+}
+
 AudioEffectFreeverbDMAMEM::AudioEffectFreeverbDMAMEM() : AudioStream(1, inputQueueArray)
 {
+	bypassed = true;
+	pendingClear = false;
 	memset(comb1buf, 0, sizeof(comb1buf));
 	memset(comb2buf, 0, sizeof(comb2buf));
 	memset(comb3buf, 0, sizeof(comb3buf));
@@ -138,6 +161,16 @@ void AudioEffectFreeverbDMAMEM::update()
 	int16_t input, bufout, output;
 	int32_t sum;
 
+	if (pendingClear) {
+		clearTanks();
+		pendingClear = false;
+	}
+	if (bypassed) {
+		audio_block_t *tmp = receiveReadOnly(0);
+		if (tmp) release(tmp);
+		return;
+	}
+
 	outblock = allocate();
 	if (!outblock) {
 		audio_block_t *tmp = receiveReadOnly(0);
@@ -148,8 +181,8 @@ void AudioEffectFreeverbDMAMEM::update()
 	if (!block) block = &zeroblock;
 
 	for (i=0; i < AUDIO_BLOCK_SAMPLES; i++) {
-		// TODO: scale numerical range depending on roomsize & damping
-		input = sat16(block->data[i] * 8738, 17); // for numerical headroom
+		// Stock Teensy input scale. Overflow was in the comb *mix*, not here.
+		input = sat16(block->data[i] * 8738, 17);
 		sum = 0;
 
 		bufout = comb1buf[comb1index];
@@ -200,7 +233,9 @@ void AudioEffectFreeverbDMAMEM::update()
 		comb8buf[comb8index] = sat16(input + sat16(comb8filter * combfeeback, 15), 0);
 		if (++comb8index >= sizeof(comb8buf)/sizeof(int16_t)) comb8index = 0;
 
-		output = sat16(sum * 31457, 17);
+		// Stock sat16(sum * 31457, 17) overflows int32 when tanks are hot.
+		// Same ~0.24 scale: (sum>>3)*31457 fits in int32, then >>14.
+		output = sat16((sum >> 3) * 31457, 14);
 
 		bufout = allpass1buf[allpass1index];
 		allpass1buf[allpass1index] = output + (bufout >> 1);
@@ -222,9 +257,6 @@ void AudioEffectFreeverbDMAMEM::update()
 		output = sat16(bufout - output, 1);
 		if (++allpass4index >= sizeof(allpass4buf)/sizeof(int16_t)) allpass4index = 0;
 
-		// Gain staging: the internal fixed-point path already applies attenuation.
-		// Keep the final makeup gain modest to avoid hard clipping (which sounds like
-		// gritty, high-frequency distortion).
 		outblock->data[i] = sat16(output * 8, 0);
 	}
 	transmit(outblock);

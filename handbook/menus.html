@@ -313,7 +313,7 @@
                         </li>
                         <li>
                           <span class="node">PONG</span>
-                          <span class="desc">A ball bounces the grid in draw mode; every time it hits a cell that already has a note, that note fires again.</span>
+                          <span class="desc">A ball bounces the grid in draw mode; it only hits and fires notes on muted voices, so unmuted play is unaffected.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>OFF</strong> / <strong>ON</strong></li>
@@ -535,6 +535,20 @@
                               <li><strong>Enc&nbsp;4 short</strong> — play the logo animation (fade in, then hold); press again to stop and return to draw mode</li>
                             </ul>
                             <span class="how">Confirm the build before filing a bug report.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">RAM</span>
+                          <span class="desc">Live audio-memory dashboard (pool is 96 blocks).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>A##</strong> — audio memory used % (peak if higher)</li>
+                              <li><strong>R##</strong> — average freeverb send %</li>
+                              <li><strong>F###</strong> — free audio blocks</li>
+                              <li><strong>C##</strong> — audio CPU %</li>
+                              <li><strong>Enc&nbsp;3</strong> — switch metric; press resets peak counters</li>
+                            </ul>
+                            <span class="how">If A climbs near 100 after a long session, distortion/clicks on mute/save are likely block exhaustion.</span>
                           </span>
                         </li>
                         <li id="sd">

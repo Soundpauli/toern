@@ -134,7 +134,7 @@ void setFilters(FilterType filterType, int index, bool initial) {
   if (filterType == OCTAVE) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.0, 7.0);
   if (filterType == REVERB) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0.0, 0.79);
 
-  if (filterType == BITCRUSHER) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 1.0, 16.0);
+  if (filterType == BITCRUSHER) mappedValue = SMP.filter_settings[index][filterType];
 
   if (filterType == ACTIVE) mappedValue = mapf(SMP.filter_settings[index][filterType], 0, maxfilterResolution, 0, 1);
 
@@ -205,8 +205,8 @@ void setFilters(FilterType filterType, int index, bool initial) {
     case REVERB:
       {
         if (freeverbs[index] != nullptr && freeverbs[index] != 0) {
-          // Treat the control as a reverb send instead of a hard wet/dry crossfade.
-          // Big rooms should stay present, not pull the dry signal far down.
+          // Send, not a wet/dry crossfade. Comb mix saturates in the
+          // effect, so room can go to 1 without wrapping into garbage.
           float verbAmount = mapf(mappedValue, 0.0f, 0.79f, 0.0f, 1.0f);
           verbAmount = constrain(verbAmount, 0.0f, 1.0f);
 
@@ -215,58 +215,63 @@ void setFilters(FilterType filterType, int index, bool initial) {
 
           float dryGain = mapf(verbAmount, 0.0f, 1.0f, 1.0f, 0.88f);
           dryGain = constrain(dryGain, 0.88f, 1.0f);
-          
+
           if (freeverbmixers[index] != 0) {
             freeverbmixers[index]->gain(0, wetGain);
             freeverbmixers[index]->gain(3, dryGain);
           }
-          
-          // Set reverb parameters (only when wet is active)
+          if (index == 11) {
+            // ch11 has no freeverbmixer: wet is synthmixer11 input 0, dry is 3.
+            // Scale the send with the slider; keep dry at the voice's
+            // nominal gain (original never ducked ch11 dry).
+            synthmixer11.gain(0, 0.20f * verbAmount);
+            synthmixer11.gain(3, 0.20f);
+          }
+
           if (wetGain > 0.01f) {
-            // Keep larger rooms lively instead of getting overly dark at the top end.
             float dampingValue = mapf(verbAmount, 0.0f, 1.0f, 0.01f, 0.42f);
             dampingValue = constrain(dampingValue, 0.01f, 0.42f);
             freeverbs[index]->damping(dampingValue);
-            
             float roomSize = mapf(verbAmount, 0.0f, 1.0f, 0.0f, 1.0f);
             freeverbs[index]->roomsize(roomSize);
           } else {
-            // When off, set to minimum
-            freeverbs[index]->roomsize(0.0);
-            freeverbs[index]->damping(0.01);
+            // Bypass + drain tanks so the next raise starts from silence.
+            freeverbs[index]->roomsize(0.0f);
+            freeverbs[index]->damping(0.25f);
+            if (index == 11) {
+              synthmixer11.gain(0, 0.0f);
+            }
           }
         }
         break;
       }
     case BITCRUSHER:
       {
-        // 0 must be a true bypass.
-        int mv = (int)round(mappedValue);
-        mv = constrain(mv, 0, 16);
+        // Slider 0 is true bypass. Do not map 0→1 or sample-hold still engages.
+        int slider = (int)SMP.filter_settings[index][BITCRUSHER];
+        slider = constrain(slider, 0, (int)maxfilterResolution);
 
         float channelvolume = mapf(SMP.channelVol[index], 0, maxY, 0.0f, 1.0f);
 
-        if (mv == 0) {
-          // Transparent: 16-bit @ 44.1kHz, restore normal amp gain (channel volume)
+        if (slider <= 0) {
           bitcrushers[index]->bits(16);
-          // Use the *exact* audio sample rate for true bypass.
-          // Using 44100 here can still engage sample-hold occasionally (audible as grit on transients).
-          bitcrushers[index]->sampleRate((int)AUDIO_SAMPLE_RATE_EXACT);
+          bitcrushers[index]->sampleRate((float)AUDIO_SAMPLE_RATE_EXACT);
           if (amps[index] != nullptr) amps[index]->gain(channelvolume);
           break;
         }
 
-        // mv: 1..16 (1 = subtle, 16 = heavy)
-        int bitDepth = (int)round(mapf((float)mv, 1.0f, 16.0f, 16.0f, 1.0f));      // 16..1 bits
+        int mv = (int)round(mapf((float)slider, 1.0f, maxfilterResolution, 1.0f, 16.0f));
+        mv = constrain(mv, 1, 16);
+
+        int bitDepth = (int)round(mapf((float)mv, 1.0f, 16.0f, 16.0f, 1.0f));
         int xsampleRate = (int)round(mapf((float)mv, 1.0f, 16.0f,
-                                          (float)AUDIO_SAMPLE_RATE_EXACT, 1000.0f)); // ~44117..1000 Hz
+                                          (float)AUDIO_SAMPLE_RATE_EXACT, 1000.0f));
         bitDepth = constrain(bitDepth, 1, 16);
         xsampleRate = constrain(xsampleRate, 1000, (int)AUDIO_SAMPLE_RATE_EXACT);
 
         bitcrushers[index]->bits(bitDepth);
-        bitcrushers[index]->sampleRate(xsampleRate);
+        bitcrushers[index]->sampleRate((float)xsampleRate);
 
-        // Optional loudness compensation: reduce amp gain slightly as crush increases
         float crushCompGain = mapf((float)mv, 1.0f, 16.0f, max(channelvolume, 0.1f), 0.6f);
         if (amps[index] != nullptr) amps[index]->gain(crushCompGain);
         break;

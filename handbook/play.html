@@ -232,7 +232,7 @@
 
           <section class="hb-sub" id="pong">
             <h2>PONG — bouncing retriggers</h2>
-            <p class="lede">A ball bounces across the grid in <strong>draw</strong> mode. Every time it lands on a cell that already has a note, that note fires again.</p>
+            <p class="lede">A ball bounces across the grid in <strong>draw</strong> mode. It only hits and fires notes on <strong>muted</strong> voices, so unmuted playback stays untouched.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_pong" width="16" height="16" role="img" aria-label="PONG"></canvas>
@@ -307,13 +307,13 @@
               </div>
               <p class="viz-caption--below">Sixteen dots = channels 1–16. Green = in the unmute mask; red = stays muted.</p>
               <div class="hb-enc-grid">
-                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Select channel 1–16</td><td>Highlight which lane you are editing.</td></tr>
                 </tbody></table></div>
-                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Toggle mask bit</td><td>Green = unmuted on exit; red = stays muted.</td></tr>
                 </tbody></table></div>
-                <div class="hb-enc-card hb-enc--3 hb-enc-card--empty"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>

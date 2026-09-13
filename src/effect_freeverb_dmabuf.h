@@ -37,7 +37,16 @@ public:
 	void roomsize(float n) {
 		if (n > 1.0f) n = 1.0f;
 		else if (n < 0.0f) n = 0.0f;
-		combfeeback = (int)(n * 9175.04f) + 22937;
+		const bool wantBypass = (n <= 0.001f);
+		__disable_irq();
+		if (wantBypass != bypassed) {
+			bypassed = wantBypass;
+			pendingClear = true;
+		}
+		if (!wantBypass) {
+			combfeeback = (int)(n * 9175.04f) + 22937;
+		}
+		__enable_irq();
 	}
 	void damping(float n) {
 		if (n > 1.0f) n = 1.0f;
@@ -50,6 +59,9 @@ public:
 		__enable_irq();
 	}
 private:
+	void clearTanks();
+	volatile bool bypassed;
+	volatile bool pendingClear;
 	audio_block_t *inputQueueArray[1];
 	 int16_t comb1buf[1116];
 	 int16_t comb2buf[1188];

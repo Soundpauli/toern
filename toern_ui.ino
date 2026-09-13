@@ -1,5 +1,5 @@
 extern const unsigned int maxlen;
-extern void triggerGridNote(unsigned int globalX, unsigned int y);
+extern void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted = false);
 extern CRGB col[];
 extern unsigned int beatForUI;
 extern uint8_t lineOutLevelSetting;
@@ -619,10 +619,11 @@ static bool pongNoteAt(int px, int py) {
 
   int channel = note[globalX][py].channel;
   if (channel == 0) return false;
-  
-  // Don't bounce off muted voices
-  if (getMuteState(channel)) return false;
-  
+  if (isChildVoiceDisabled(channel)) return false;
+
+  // Pong only interacts with muted voices so unmuted playback stays untouched.
+  if (!getMuteState(channel)) return false;
+
   return true;
 }
 
@@ -637,7 +638,8 @@ static void triggerPongCollision(int px, int py) {
     return;
   }
 
-  triggerGridNote(globalX, py);
+  // Force-play muted cells; unmuted cells are filtered out in pongNoteAt().
+  triggerGridNote(globalX, py, true);
 }
 
 FLASHMEM void updatePongBall() {
@@ -745,6 +747,54 @@ FLASHMEM void drawPongBall() {
   
   // Draw bright white ball at current position
   light(pongBallX, pongBallY, CRGB(255, 255, 255));
+}
+
+FLASHMEM void showSaveSuccessAnimation() {
+  extern void FastLEDclear();
+  extern void FastLEDshow();
+  extern void sdIoYield();
+  extern Mode draw;
+  extern void switchMode(Mode *newMode);
+
+  const int cx = (int)((maxX + 1) / 2);
+  const int cy = (int)((maxY + 1) / 2);
+  // Panel Y grows upward (y=1 is the bottom row). Check: down, then up-right.
+  static const int8_t pts[][2] = {
+    { -3, -1 }, { -2, -2 }, { -1, -3 }, { 0, -2 },
+    { 1, -1 }, { 2, 0 }, { 3, 1 }, { 4, 2 }
+  };
+  const int npts = 8;
+  const uint32_t t0 = millis();
+  const uint32_t dur = 1000;
+
+  while ((millis() - t0) < dur) {
+    const uint32_t t = millis() - t0;
+    FastLEDclear();
+
+    int reveal = (int)((t * npts) / 420);
+    if (reveal > npts) reveal = npts;
+
+    uint8_t bri = 220;
+    if (t < 120) {
+      bri = (uint8_t)map((long)t, 0, 120, 40, 220);
+    } else if (t > 780) {
+      bri = (uint8_t)map((long)t, 780, (long)dur, 220, 20);
+    }
+    const CRGB col = CRGB(0, bri, 0);
+
+    for (int i = 0; i < reveal; i++) {
+      const int x = cx + pts[i][0];
+      const int y = cy + pts[i][1];
+      if (x >= 1 && x <= (int)maxX && y >= 1 && y <= (int)maxY) {
+        light((unsigned int)x, (unsigned int)y, col);
+      }
+    }
+    FastLEDshow();
+    sdIoYield();
+    delay(16);
+  }
+
+  switchMode(&draw);
 }
 
 FLASHMEM void drawRecordingBorder() {

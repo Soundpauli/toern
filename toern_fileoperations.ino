@@ -47,11 +47,9 @@ FLASHMEM void savePattern(bool autosave) {
   }
 
   drawNoSD();
-  // Autosave often runs right after pause while sample/synth voices are still decaying.
-  // Keep Audio library fed for the whole SD burst (isNowPlaying is already false by then).
-  if (autosave) {
-    sdIoBeginAudioSafe();
-  }
+  // Keep Audio library fed for the whole SD burst — manual saves while playing
+  // and pause-autosaves both starve the pool if chunks run too large.
+  sdIoBeginAudioSafe();
   stopSdPreviewIfPlaying();
   
   // Only clear display for manual saves, not autosaves
@@ -174,11 +172,12 @@ FLASHMEM void savePattern(bool autosave) {
     SD.remove(OUTPUTf);
   }
   if (!autosave) {
-    // Skip long delay while playing — it starves UI/audio cooperation.
-    if (!isNowPlaying) {
-      delay(500);
+    extern void showSaveSuccessAnimation();
+    if (wroteOk) {
+      showSaveSuccessAnimation();
+    } else {
+      switchMode(&draw);
     }
-    switchMode(&draw);
   }
   
   // Reset paint/unpaint prevention flag after savePattern operation
@@ -186,9 +185,7 @@ FLASHMEM void savePattern(bool autosave) {
   preventPaintUnpaint = false;
   
   sdIoYield();
-  if (autosave) {
-    sdIoEndAudioSafe();
-  }
+  sdIoEndAudioSafe();
 }
 
 
@@ -196,7 +193,10 @@ FLASHMEM void saveSamplePack(int pack) {
     extern void stopSdPreviewIfPlaying();
     extern size_t sdIoChunkSize();
     extern void sdIoYield();
+    extern void sdIoBeginAudioSafe();
+    extern void sdIoEndAudioSafe();
 
+    sdIoBeginAudioSafe();
     stopSdPreviewIfPlaying();
     
     char filename[64];
@@ -314,6 +314,11 @@ FLASHMEM void saveSamplePack(int pack) {
     preventPaintUnpaint = false;
     
    sdIoYield();
+   sdIoEndAudioSafe();
+   {
+     extern void showSaveSuccessAnimation();
+     showSaveSuccessAnimation();
+   }
 }
 
 

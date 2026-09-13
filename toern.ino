@@ -323,7 +323,7 @@ void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
 void updatePongBall();
 void drawPongBall();
 void resetPongGame();
-void triggerGridNote(unsigned int globalX, unsigned int y);
+void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted = false);
 int mapXtoPageOffset(int x);
 void stopSound(int note, int ch);
 void playSound(int note, int ch, int velocity);
@@ -3030,13 +3030,14 @@ FLASHMEM void applySgtl5000CodecOutputPath() {
   sgtl5000_1.eqBands(0.0f, 0.0f, 0.0f, 0.0f, gTreble);
 }
 
+#ifndef TOERN_AUDIO_MEMORY_BLOCKS
+#define TOERN_AUDIO_MEMORY_BLOCKS 96
+#endif
+
 FLASHMEM void initSoundChip() {
   // AudioInterrupts();
-  // Increased from 64 to 128 blocks to prevent audio block exhaustion (0.218s click issue).
-  // When allocate() fails, audio objects return early → silence/click.
-  // 128 blocks = 32KB, still reasonable for complex audio routing.
-  // 256 blocks = 64KB (was causing SD card slowdown, but may be needed if 128 isn't enough).
-  AudioMemory(128);
+  // 96 blocks ≈ 24KB RAM2. Usage stays near ~6–10 blocks in normal play.
+  AudioMemory(TOERN_AUDIO_MEMORY_BLOCKS);
   // turn on the output
   sgtl5000_1.enable();
 
@@ -3111,6 +3112,15 @@ FLASHMEM void initSamples() {
   CHMixer11.gain(2, 0.0f);
   CHMixer11.gain(3, 0.0f);
 
+  // mixer_waveform11 still has leftover mono oscs on 0/1 and unused envelope11 on 2.
+  // Default mixer gain is 1.0, so those oscillators were feeding freeverb11 even
+  // with no notes — runaway hiss at high RVRB, including while paused.
+  // Only the poly bus on input 3 is the real ch11 voice.
+  mixer_waveform11.gain(0, 0.0f);
+  mixer_waveform11.gain(1, 0.0f);
+  mixer_waveform11.gain(2, 0.0f);
+  mixer_waveform11.gain(3, 1.0f);
+
   synthmixer13.gain(0, 0.10);  // Further reduced from 0.15 to prevent clipping
   synthmixer13.gain(1, 0.10);
   synthmixer13.gain(3, 0.10);
@@ -3178,8 +3188,9 @@ FLASHMEM void initSamples() {
 
   float amplitude[15][2] = { { 0.0f } };
 
-  amplitude[11][0] = 0.3f;
-  amplitude[11][1] = 0.3f;
+  // ch11 poly voices live on CHMixer11, not these leftover objects.
+  amplitude[11][0] = 0.0f;
+  amplitude[11][1] = 0.0f;
   // Set amplitude values similarly
 
   amplitude[13][0] = 0.1125f;  // Reduced to half of current (0.225 * 0.5 = 0.1125)
@@ -3190,8 +3201,9 @@ FLASHMEM void initSamples() {
 
 
 
-  // Initialize your waveforms in a loop safely:
-  for (int pairIndex = 11; pairIndex <= 14; pairIndex++) {
+  // Initialize leftover mono synths for ch13/14. ch11 poly voices are separate
+  // (Sosc/Senvelope); do not begin waveform11_* or they leak into freeverb.
+  for (int pairIndex = 13; pairIndex <= 14; pairIndex++) {
     for (int synthIndex = 0; synthIndex < 2; synthIndex++) {
       if (synths[pairIndex][synthIndex] != nullptr) {
         synths[pairIndex][synthIndex]->begin(waveformType[pairIndex][synthIndex]);
@@ -3276,8 +3288,9 @@ FLASHMEM void checkCrashReport() {
     sprintf(buf, "Audio CPU: %.1f%% (max: %.1f%%)",
             AudioProcessorUsage(), AudioProcessorUsageMax());
     errorFile.println(buf);
-    sprintf(buf, "Audio Memory: %d/%d blocks",
-            AudioMemoryUsage(), AudioMemoryUsageMax());
+    sprintf(buf, "Audio Memory: %d/%d blocks (pool %d)",
+            AudioMemoryUsage(), AudioMemoryUsageMax(),
+            TOERN_AUDIO_MEMORY_BLOCKS);
     errorFile.println(buf);
 
     errorFile.println("========================================");
@@ -8303,7 +8316,7 @@ void playFillNote() {
   }
 }
 
-void triggerGridNote(unsigned int globalX, unsigned int y) {
+void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted) {
   if (globalX < 1 || globalX > maxlen || y < 1 || y > maxY) return;
 
   Note &cell = note[globalX][y];
@@ -8311,8 +8324,9 @@ void triggerGridNote(unsigned int globalX, unsigned int y) {
   if (channel == 0) return;
   if (isChildVoiceDisabled(channel)) return;
 
-  // Don't trigger muted voices
-  if (getMuteState(channel)) return;
+  // Normal triggers skip muted voices. Pong may force muted voices so the
+  // ball can audition them without touching unmuted playback.
+  if (!allowMuted && getMuteState(channel)) return;
 
   // Trigger LED strip ripple only if channel is not muted (audible)
   onNoteTriggered(channel);
@@ -9326,6 +9340,28 @@ FLASHMEM bool getMuteStateForUI(int channel) {
   }
 }
 
+static void stopMutedVoiceAudio(int ch) {
+  // Release currently sounding notes so mute does not leave hot voices
+  // holding audio blocks / freeverb tails under memory pressure.
+  if (ch >= 1 && ch <= 8) {
+    for (int note = 36; note <= 96; note++) {
+      _samplers[ch].noteEvent(note, 0, false, false);
+    }
+    if (ch < 15 && envelopes[ch] != nullptr) {
+      envelopes[ch]->noteOff();
+    }
+  } else if (ch == 11) {
+    for (int noteValue = 0; noteValue <= 107; noteValue++) {
+      stopSound(noteValue, 0);
+      stopSound(noteValue, 1);
+    }
+    pressedKeyCount[11] = 0;
+  } else if (ch == 13 || ch == 14) {
+    stopSynthChannel(ch);
+    pressedKeyCount[ch] = 0;
+  }
+}
+
 // Set mute state for a channel, considering PMOD setting
 FLASHMEM void setMuteState(int channel, bool muted) {
   if (channel < 0 || channel >= (int)maxY) return;
@@ -9352,26 +9388,23 @@ FLASHMEM void setMuteState(int channel, bool muted) {
     if (mutePage > maxPages) mutePage = maxPages;
     pageMutes[mutePage - 1][channel] = muted;  // Page is 1-indexed, array is 0-indexed
 
-    // Immediately stop synth voices when muted (only if muting the currently playing page)
-    if (muted && (channel == 13 || channel == 14)) {
+    // Immediately stop voices when muted (only if muting the currently playing page)
+    if (muted) {
       bool shouldStop = true;
       if (patternMode == 3) {
-        // In NEXT mode, only stop synth if we're muting the playing page (GLOB.page)
+        // In NEXT mode, only stop if we're muting the playing page (GLOB.page)
         shouldStop = (GLOB.page > 0 && mutePage == GLOB.page);
       }
       if (shouldStop) {
-        stopSynthChannel(channel);
-        pressedKeyCount[channel] = 0;
+        stopMutedVoiceAudio(channel);
       }
     }
   } else {
     // Set global mute when PMOD is disabled
     globalMutes[channel] = muted;
     SMP.mute[channel] = muted;  // Keep SMP.mute in sync for backward compatibility
-    // Immediately stop synth voices when muted
-    if (muted && (channel == 13 || channel == 14)) {
-      stopSynthChannel(channel);
-      pressedKeyCount[channel] = 0;
+    if (muted) {
+      stopMutedVoiceAudio(channel);
     }
   }
 }
