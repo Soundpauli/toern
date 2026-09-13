@@ -172,7 +172,6 @@ FLASHMEM void savePattern(bool autosave) {
     SD.remove(OUTPUTf);
   }
   if (!autosave) {
-    extern void showSaveSuccessAnimation();
     if (wroteOk) {
       showSaveSuccessAnimation();
     } else {
@@ -315,10 +314,7 @@ FLASHMEM void saveSamplePack(int pack) {
     
    sdIoYield();
    sdIoEndAudioSafe();
-   {
-     extern void showSaveSuccessAnimation();
-     showSaveSuccessAnimation();
-   }
+   showSaveSuccessAnimation();
 }
 
 

@@ -355,12 +355,6 @@ void applySynthInstrumentPreset(int channel, int instrumentIdx) {
 
 // Reset ALL filters, envelopes, drums and synths to default values
 void resetAllToDefaults() {
-  // Visual feedback - clear display and show reset message
-  FastLEDclear();
-  drawText("RESET", 6, 8, CRGB(255, 100, 0));
-  FastLEDshow();
- // delay(500);
-  
   // Reset all channels (1-8, 11, 13-14)
   const int channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
   const int numChannels = sizeof(channels) / sizeof(channels[0]);
@@ -391,10 +385,6 @@ void resetAllToDefaults() {
 
   extern void resetAllChannelVolumesToDefault();
   resetAllChannelVolumesToDefault();
-  
-  // Add delay before switching mode
-  delay(300);
-  
-  // Switch to draw mode after reset
-  switchMode(&draw);
+
+  showSaveSuccessAnimation();
 }

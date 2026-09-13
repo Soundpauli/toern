@@ -323,6 +323,7 @@ void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
 void updatePongBall();
 void drawPongBall();
 void resetPongGame();
+void showSaveSuccessAnimation(bool returnToDraw = true);
 void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted = false);
 int mapXtoPageOffset(int x);
 void stopSound(int note, int ch);
@@ -4075,7 +4076,7 @@ FLASHMEM void setup() {
     }
     startNew();
     if (bootFullResetRequested) {
-      // Match ETC>RSET>FULL: rescan sample browser and show DONE
+      // Match ETC>RSET>FULL: rescan sample browser, then the green check.
       FastLEDclear();
       drawText("SCAN", 2, 3, CRGB(0, 255, 0));
       FastLEDshow();
@@ -4083,10 +4084,7 @@ FLASHMEM void setup() {
       extern void sampleBrowserInvalidate();
       scanAndWriteManifest();
       sampleBrowserInvalidate();
-      FastLEDclear();
-      drawText("DONE", 2, 3, CRGB(0, 255, 0));
-      FastLEDshow();
-      delay(1000);
+      showSaveSuccessAnimation(false);
       bootFullResetRequested = false;
     }
   }

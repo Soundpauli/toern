@@ -2088,3 +2088,29 @@ code, .hb-gest {
   box-shadow: 0 0 0 2px rgba(14, 22, 34, 0.85) inset, 0 0 8px rgba(46, 185, 255, 0.25);
 }
 
+/* Audio-path SVG graphs */
+.ap-graph {
+  margin: 1rem 0 1.35rem;
+  padding: 0.65rem 0.4rem 0.4rem;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--panel-edge);
+  -webkit-overflow-scrolling: touch;
+}
+.ap-svg { display: block; max-width: none; height: auto; }
+.ap-nlabel {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  pointer-events: none;
+}
+.ap-nsub, .ap-elabel {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  pointer-events: none;
+}
+.ap-elabel { fill: #5b6878; }
+.ap-node:hover rect { filter: brightness(0.97); }
+.ap-code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.82em; }
+
+

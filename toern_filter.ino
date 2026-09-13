@@ -263,11 +263,14 @@ void setFilters(FilterType filterType, int index, bool initial) {
         int mv = (int)round(mapf((float)slider, 1.0f, maxfilterResolution, 1.0f, 16.0f));
         mv = constrain(mv, 1, 16);
 
-        int bitDepth = (int)round(mapf((float)mv, 1.0f, 16.0f, 16.0f, 1.0f));
-        int xsampleRate = (int)round(mapf((float)mv, 1.0f, 16.0f,
+        // Slider 32 used to hit 1-bit / ~1 kHz. Cap at 80% of that extreme so
+        // high BITC + high RVRB does not fill the comb tanks with square-wave junk.
+        const float crushAmt = mapf((float)mv, 1.0f, 16.0f, 0.0f, 0.80f);
+        int bitDepth = (int)round(mapf(crushAmt, 0.0f, 1.0f, 16.0f, 1.0f));
+        int xsampleRate = (int)round(mapf(crushAmt, 0.0f, 1.0f,
                                           (float)AUDIO_SAMPLE_RATE_EXACT, 1000.0f));
-        bitDepth = constrain(bitDepth, 1, 16);
-        xsampleRate = constrain(xsampleRate, 1000, (int)AUDIO_SAMPLE_RATE_EXACT);
+        bitDepth = constrain(bitDepth, 4, 16);
+        xsampleRate = constrain(xsampleRate, 9600, (int)AUDIO_SAMPLE_RATE_EXACT);
 
         bitcrushers[index]->bits(bitDepth);
         bitcrushers[index]->sampleRate((float)xsampleRate);

@@ -3919,15 +3919,7 @@ FLASHMEM void switchMenu(int menuPosition){
           extern void sampleBrowserInvalidate();
           scanAndWriteManifest();
           sampleBrowserInvalidate();
-          FastLEDclear();
-          drawText("DONE", 2, 3, UI_GREEN);
-          FastLEDshow();
-          delay(1000);
-          
-          // Close menu and return to draw mode
-          extern Mode draw;
-          extern void switchMode(Mode*);
-          switchMode(&draw);
+          showSaveSuccessAnimation();
         } else if (resetMenuOption == 1) {
           // Reset effects/parameters to defaults
           resetAllToDefaults();
@@ -3946,12 +3938,7 @@ FLASHMEM void switchMenu(int menuPosition){
           extern void sampleBrowserInvalidate();
           scanAndWriteManifest();
           sampleBrowserInvalidate();
-          FastLEDclear();
-          drawText("DONE", 2, 3, UI_GREEN);
-          FastLEDshow();
-          delay(1000);
-          
-          // startNew() already switches to draw mode, so we don't need to do it again
+          showSaveSuccessAnimation();
         } else if (resetMenuOption == 3) {
           // FILE: Wipe all saved files (1-99.txt) but keep autosaved.txt
           FastLEDclear();
@@ -3969,14 +3956,7 @@ FLASHMEM void switchMenu(int menuPosition){
             }
           }
           
-          FastLEDclear();
-          drawText("DONE", 2, 3, UI_GREEN);
-          FastLEDshow();
-          delay(1000);
-          
-          extern Mode draw;
-          extern void switchMode(Mode*);
-          switchMode(&draw);
+          showSaveSuccessAnimation();
         } else if (resetMenuOption == 4) {
           // PACK: Remove all samplepack directories except 1/ (used by FULL reset)
           FastLEDclear();
@@ -4006,15 +3986,8 @@ FLASHMEM void switchMenu(int menuPosition){
           // Invalidate sample browser cache after removing packs
           extern void sampleBrowserInvalidate();
           sampleBrowserInvalidate();
-          
-          FastLEDclear();
-          drawText("DONE", 2, 3, UI_GREEN);
-          FastLEDshow();
-          delay(1000);
-          
-          extern Mode draw;
-          extern void switchMode(Mode*);
-          switchMode(&draw);
+
+          showSaveSuccessAnimation();
         } else if (resetMenuOption == 5) {
           // ASAV: remove autosaved.txt (and leftover pattern.tmp)
           FastLEDclear();
@@ -4027,14 +4000,7 @@ FLASHMEM void switchMenu(int menuPosition){
           deleteAutosaveFile();
           clearPatternNotes();
 
-          FastLEDclear();
-          drawText("DONE", 2, 3, UI_GREEN);
-          FastLEDshow();
-          delay(1000);
-
-          extern Mode draw;
-          extern void switchMode(Mode*);
-          switchMode(&draw);
+          showSaveSuccessAnimation();
         }
         break;
         

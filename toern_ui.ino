@@ -749,7 +749,7 @@ FLASHMEM void drawPongBall() {
   light(pongBallX, pongBallY, CRGB(255, 255, 255));
 }
 
-FLASHMEM void showSaveSuccessAnimation() {
+FLASHMEM void showSaveSuccessAnimation(bool returnToDraw) {
   extern void FastLEDclear();
   extern void FastLEDshow();
   extern void sdIoYield();
@@ -794,7 +794,9 @@ FLASHMEM void showSaveSuccessAnimation() {
     delay(16);
   }
 
-  switchMode(&draw);
+  if (returnToDraw) {
+    switchMode(&draw);
+  }
 }
 
 FLASHMEM void drawRecordingBorder() {

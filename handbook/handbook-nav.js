@@ -19,6 +19,7 @@
         { href: "advanced-sequencing.html", title: "Advanced Sequencing", desc: "Mutes, shift, copy", icon: "advanced" },
         { href: "samples.html", title: "Samples", desc: "Sample browser", icon: "samples" },
         { href: "sound.html", title: "Sound design", desc: "Filters & ADSR", icon: "sound" },
+        { href: "audiopath.html", title: "Audio path", desc: "Gains & mixers", icon: "sound" },
         { href: "record.html", title: "Record", desc: "Capture & REC menu", icon: "record" },
         { href: "note-detail.html", title: "Note detail", desc: "Per-step edit", icon: "note" }
       ]
