@@ -1,12 +1,12 @@
 ---
 sidebar_position: 2
 title: Connectors & pinouts
-description: Audio jacks, MIDI, USB-C, microSD, and JST expansion headers on toern_revG.
+description: Audio jacks, MIDI, USB-C, microSD, and JST expansion headers on toern_revH.
 ---
 
-# Connectors & pinouts (rev G)
+# Connectors & pinouts (rev H)
 
-Pin tables below are taken from the **rev G PCB netlist** (`toern_revG.kicad_pcb`). Teensy pin names use the schematic global-label style (`18_A4_SDA` = digital pin 18 / A4 / SDA, etc.).
+Pin tables below follow the **rev H netlist** (`toern_revH.net`). Teensy pin names use the schematic global-label style (`18_A4_SDA` = digital pin 18 / A4 / SDA, etc.). The [schematic PDF](../../../PCB/toern_revH/schematic.pdf) wins if a silk label disagrees.
 
 For *which jack is which on the finished box*, see the handbook hardware page — this doc is the electrical map.
 
@@ -30,7 +30,7 @@ Exact silk labels on a built unit may use friendly names (LINE OUT, MIDI IN, …
 |-----|------|------------|
 | **J16** | JST-PH 1×02 | `1` GND · `2` VBAT — LiPo |
 | **J10** | JST-PH 1×02 | Speaker outputs from PAM8403 (`U13`) |
-| **J9** | JST-PH 1×03 | Load-switched rail via **TPS22918** (`U8`, enable on Teensy `36`) — typically external LED-strip / accessory 5V |
+| **J9** | JST-PH 1×03 | Matrix / strip: pin 1 = Teensy **17** through **R20** (220 Ω), pin 2 = GND, pin 3 = switched 5 V from **TPS22918** `U8` (enable is Teensy **36**) |
 | **S1** | EG2219 slide switch | Main power path between charger system rail and +5V distribution |
 
 ## Encoder sockets (I2C RGB encoders)
@@ -71,4 +71,4 @@ Same I²C bus as the encoder chain (distinct 7-bit addresses).
 
 ## Schematic PDF
 
-Full readable schematic: [`PCB/toern_revG/schematic.pdf`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revG/schematic.pdf).
+Full readable schematic: [`PCB/toern_revH/schematic.pdf`](../../../PCB/toern_revH/schematic.pdf).

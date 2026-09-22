@@ -1,16 +1,16 @@
 ---
 sidebar_position: 1
-title: Overview (rev G)
+title: Overview (rev H)
 description: Current PCB revision — KiCad sources, major blocks, and how hardware docs relate to the handbook.
 ---
 
-# Hardware overview — toern_revG
+# Hardware overview — toern_revH
 
-Current production-oriented board lives in [`PCB/toern_revG/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revG). These pages document the **design files and electrical architecture**, not how to play the device (that’s the [handbook](https://github.com/Soundpauli/toern/tree/main/handbook)).
+Current board lives in [`PCB/toern_revH/`](../../../PCB/toern_revH/). Ordering, the off-board shopping list, and first power-up are in the repo-root [BUILD.md](../../../BUILD.md). These pages are the electrical map, not how to play the device (that’s the [handbook](../../../handbook/index.html)).
 
-## What rev G is
+## What rev H is
 
-A custom carrier that mounts a **Teensy 4.1**, integrates an **SGTL5000** codec path (same role as the Teensy Audio Board), and brings out front-panel I/O with **JST** interconnects so the usual build avoids soldering the harness.
+A custom carrier that mounts a **Teensy 4.1** and an **SGTL5000** codec, and brings the panel I/O out on **JST** headers. Jacks, sockets, and the power switch are through-hole; the shopping list is in [BUILD.md](../../../BUILD.md).
 
 | Area | On-board parts (high level) |
 |------|-----------------------------|
@@ -23,19 +23,17 @@ A custom carrier that mounts a **Teensy 4.1**, integrates an **SGTL5000** codec 
 
 Board stackup: **4-layer**, **1.6 mm** (`F.Cu` / `In1.Cu` / `In2.Cu` / `B.Cu`).
 
-## Files in `PCB/toern_revG/`
+## Files in `PCB/toern_revH/`
 
 | Path | Role |
 |------|------|
-| [`toern_revG.kicad_pro`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revG/toern_revG.kicad_pro) / `.kicad_sch` / `.kicad_pcb` | KiCad 7+ project (schematic + layout) |
-| [`schematic.pdf`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revG/schematic.pdf) | Plot of the schematic |
-| [`Gerber/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revG/Gerber) | Gerber + drill export |
-| [`jlcpcb/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revG/jlcpcb) | JLCPCB-oriented gerbers, BOM, CPL |
-| `LIB_*`, `TPS22918DBVR/`, `SJ1-3533/` | Local footprints / symbols for key parts |
-| `toern_revG-backups/` | KiCad autosave archives |
-| Older `toern_revF_*` copies | Historical leftovers inside the rev G folder |
-
-Also in `PCB/`: `toern_revF/` (previous revision) and `backups/`.
+| [`toern_revH.kicad_pro`](../../../PCB/toern_revH/toern_revH.kicad_pro) / `.kicad_sch` / `.kicad_pcb` | KiCad project (schematic + layout) |
+| [`schematic.pdf`](../../../PCB/toern_revH/schematic.pdf) | Plot of the schematic |
+| [`Gerber/`](../../../PCB/toern_revH/Gerber) | Gerber + drill export |
+| [`jlcpcb/`](../../../PCB/toern_revH/jlcpcb) | JLCPCB-oriented gerbers, BOM, CPL |
+| [`teensy/teensy.kicad_sym`](../../../PCB/toern_revH/teensy/teensy.kicad_sym) | Teensy 4.1 symbol, vendored so the schematic opens off this repo |
+| `LIB_*`, `TPS22918DBVR/`, `SJ1-3533/` | Local footprints / symbols for key parts. The `LIB_*` trees also contain unused EasyEDA / Eagle / Altium exports |
+| `toern_revH-backups/` | KiCad autosave archives |
 
 ## Block diagram
 

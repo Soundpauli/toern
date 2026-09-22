@@ -1,6 +1,6 @@
 # TŒRN `[tɜːn]`
 
-**DIY open-source hardware sampler-sequencer** — by [warft_ctrl](mailto:jpkuntoff@gmail.com)
+**Open-source sequencer and sampler** — by [warft_ctrl](mailto:jpkuntoff@gmail.com)
 
 > Say it like *turn*. As in: turn the knobs. Turn a doodle into a beat. Turn “I can’t play piano” into “wait, that slap though.”
 
@@ -34,7 +34,7 @@ TŒRN builds on the legacy of the **NI404**, with more features, fewer cables da
 Meet the glow-up:
 
 - **RGB-I2C rotary encoders** — smoother, prettier, and they light up like they mean it  
-- **Custom PCB** — order it, put it together; the hard wiring homework is mostly done  
+- **Custom PCB** — codec, charging, and jacks on one board  
 - **USB-C** — because micro-USB was a character-building experience we no longer need  
 - **LiPo charging port** — optional battery for true “make beats on a train” energy (battery not included; we trust you with electricity)  
 - **Proper audio I/O** — 6.35 mm headphone out, line in/out, mic in, *plus* a built-in mic for “sample the room right now” moments  
@@ -42,7 +42,7 @@ Meet the glow-up:
 - **On/off switch** — underrated luxury  
 - **Touch buttons** — for the things knobs shouldn’t monopolize  
 - **Laser-cut acrylic case** — files included; looks finished, not “breadboard cosplay”  
-- **JST connectors** — **no soldering required** for the usual build path  
+- **JST connectors** — expansion leads plug in  
 
 Open source as always: schematics, code, and design files are here for you to poke, fork, and improve.
 
@@ -107,8 +107,8 @@ Open source as always: schematics, code, and design files are here for you to po
 
 | | |
 |---|---|
-| **Brain** | Teensy 4.1 + Audio Board |
-| **Memory** | 16 MB PSRAM; Micro SD slot (up to 32 GB class of card you already own) |
+| **Brain** | Teensy 4.1, PSRAM fitted. Audio codec is the SGTL5000 on the carrier |
+| **Memory** | 16 MB PSRAM target; Micro SD (handbook suggests up to 64 GB, SanDisk Ultra) |
 | **Audio** | 44.1 kHz, 16-bit mono WAV |
 | **Controls** | 4× RGB illuminated I2C rotary-push encoders, 3 touch switches |
 | **Display** | 16×16 RGB LED matrix (FastLED); up to 2 modules → 32×16 |
@@ -155,9 +155,11 @@ Insert or eject the SD card only with the unit **off** — the firmware re-index
 |------|----------------|
 | `toern.ino` + `toern_*.ino` | Firmware (the fun / terrifying part) |
 | `src/` | Modified audio bits (resampler, freeverb DMA) |
-| `PCB/` | Hardware revisions (currently rev G territory) |
+| [`BUILD.md`](./BUILD.md) | Order the rev H board, what to solder, first power-up |
+| [`info.md`](./info.md) | Compile and flash (PlatformIO) |
+| `PCB/toern_revH/` | Current KiCad board, gerbers, JLCPCB BOM |
 | `handbook/` | Human-friendly operator’s guide (how to *use* the device) |
-| `devdocs/` | [Docusaurus](./devdocs/) code **and** hardware (rev G) docs → published at `/docs/` |
+| `devdocs/` | [Docusaurus](./devdocs/) code and hardware (rev H) docs → published at `/docs/` |
 | `tools/` / `standalone-tools/` | Helpers; SD file tool lives in `standalone-tools/sd-tool-standalone` |
 | `website/` | Project site (local/deploy-only; handbook + docs copied in manually) |
 
@@ -189,13 +191,13 @@ This project leans on several libraries. Some are stock; some got lovingly (and 
 
 ---
 
-## Get one / get involved
+## Get one
 
-- **Build or fork it** — everything lives in this repo. Makers, developers, and musicians are all invited to tweak and share.  
-- **Prefer a finished unit?** Don’t want to become a part-time PCB archaeologist? Write to **jpkuntoff@gmail.com** for a pre-assembled TŒRN or a custom collaboration.  
-- **Handbook** — start at [`handbook/index.html`](./handbook/index.html).  
-- **Code docs** — architecture & hardware (rev G) in [`devdocs/`](./devdocs/); published at **`/docs/`** on the site (build + copy into `website/docs/` for deploy). Local preview: `cd devdocs && npm start` → `/docs/`.
-- **Issues & ideas** — open an issue or leave a note; open source gets better when people actually poke it.
+Order a TŒRN at **[toern.live](https://toern.live/)**. Questions go to **info@toern.live**.
+
+When it arrives, open the **[handbook](./handbook/index.html)** and start at First beat. Power is USB-C. A battery and a microSD card are not in the parcel; the buy page and the handbook hardware chapter name what to get.
+
+Firmware changes: [`info.md`](./info.md) to flash, [`devdocs/`](./devdocs/) for how the code is shaped, [`firmware-edits`](./devdocs/docs/contributing/firmware-edits.md) for a new menu page. Fabricating a board from the design files is [`BUILD.md`](./BUILD.md) — that is not how a TŒRN is ordered.
 
 ---
 

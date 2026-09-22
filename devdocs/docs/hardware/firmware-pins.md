@@ -1,18 +1,18 @@
 ---
 sidebar_position: 4
 title: Firmware pin map
-description: How toern.ino pin defines line up with toern_revG nets.
+description: How toern.ino pin defines line up with toern_revH nets.
 ---
 
-# Firmware ↔ rev G pin map
+# Firmware ↔ rev H pin map
 
-Defines live in [`toern.ino`](https://github.com/Soundpauli/toern/blob/main/toern.ino). Net names below are from the rev G PCB.
+Defines live in [`toern.ino`](../../../toern.ino). Net names below match the rev H netlist (`PCB/toern_revH/toern_revH.net`). The [schematic PDF](../../../PCB/toern_revH/schematic.pdf) wins if a silk label disagrees.
 
 ## Core defines
 
 | Firmware | Teensy pin | Board use |
 |----------|------------|-----------|
-| `DATA_PIN` | **17** | WS2812 / matrix data (`17_A3_TX4_SDA1` net family) |
+| `DATA_PIN` | **17** | WS2812 data. Series **R20** (220 Ω) then **J9 pin 1** |
 | `INT_PIN` | **27** | Shared encoder interrupt (pad 5 on encoder sockets) |
 | `INT_SD` | **10** | microSD chip-select |
 | `SWITCH_1` | **2** | Touch / TTP223 — single mode |
@@ -31,11 +31,11 @@ MIDI on **Serial8** uses pins **34/35** (`RX8`/`TX8`) with enlarged buffers — 
 | I²C0 | 18 / 19 | Encoders + SGTL5000 control |
 | SPI (SD) | 10–13 | microSD `J8` |
 | I²S (codec) | (Audio library defaults on Teensy 4 + SGTL wiring) | `U3` data/clocks — see schematic |
-| USB | D+/D− pads on `U6` | Via USB-C `J4` |
+| USB | D+/D− pads on `U6` | USB-C `J4` via pogo pins **CN1** (D−) and **CN2** (D+) |
 
 ## When changing pins
 
 1. Update the PCB net / jumper **and** the `#define`s.  
 2. Re-check encoder INT (must be common open-drain style as wired).  
 3. Re-check SD CS vs any other SPI CS uses.  
-4. Battery divider ratios in firmware must match the assembled resistors.
+4. Battery divider in firmware must match the assembled resistors. On rev H that is **R15** 1 MΩ (VBAT → A16) and **R19** 1.5 MΩ (A16 → GND).

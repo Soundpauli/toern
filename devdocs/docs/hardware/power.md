@@ -4,7 +4,7 @@ title: Power
 description: USB-C, LiPo charger, regulators, switch, and load-switched accessory rail.
 ---
 
-# Power (rev G)
+# Power (rev H)
 
 ## Sources
 
@@ -17,7 +17,16 @@ The BQ24075 provides USB-friendly charging and power-path management (system rai
 
 **EG2219 (`S1`)** sits between the charger system output path and the board **+5V** distribution used by Teensy VIN-side power, encoder 5V, PAM8403, etc.
 
-`JP1` is a 3-pad solder jumper between **VBUS**, a center node, and **VYS** (charger SYS) — for alternate power wiring / bring-up; leave as designed unless you know you need to change it.
+`JP1` is a 3-pad solder jumper and it **ships open**. The center pad goes to the “on” side of **S1**. The switch common is the board **+5V** rail (Teensy VIN, the LDOs, encoder 5 V, PAM8403). With no bridge, sliding the switch does nothing and the rail stays dead.
+
+Bridge **one** side only:
+
+| Bridge | What runs |
+|--------|-----------|
+| Center ↔ **VYS** (pad B, the end opposite the pin-1 mark) | Normal use. +5V comes from the BQ24075 system output. USB and the LiPo both feed the board through the charger, and **S1** switches that rail. |
+| Center ↔ **VBUS** (pad A, the pin-1 end) | USB only. +5V is raw USB 5 V, ahead of the charger output. Unplugging USB kills the rail even if a battery is connected. Useful while checking the board before you trust the charger path. |
+
+Bridging both ends shorts USB 5 V to the charger output.
 
 ## Regulated rails
 

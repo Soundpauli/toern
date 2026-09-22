@@ -1,5 +1,7 @@
 # Compile & upload
 
+Hardware order and first power-up: [BUILD.md](BUILD.md).
+
 Firmware for **Teensy 4.1**. Open the sketch from the **repo root** (`toern.ino` plus the `toern_*.ino` tabs). Custom audio lives in `src/` and is compiled with the sketch.
 
 Match these board options in both Arduino IDE and PlatformIO:

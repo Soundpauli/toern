@@ -94,7 +94,7 @@ const config = {
           {
             title: 'Hardware',
             items: [
-              {label: 'rev G overview', to: '/hardware/overview'},
+              {label: 'rev H overview', to: '/hardware/overview'},
               {label: 'Connectors', to: '/hardware/connectors'},
               {label: 'Fabrication', to: '/hardware/fabrication'},
             ],
@@ -112,7 +112,7 @@ const config = {
               },
               {
                 label: 'PCB sources',
-                href: 'https://github.com/Soundpauli/toern/tree/main/PCB/toern_revG',
+                href: 'https://github.com/Soundpauli/toern/tree/platformio/PCB/toern_revH',
               },
               {
                 label: 'Source repo',

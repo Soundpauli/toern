@@ -51,7 +51,7 @@ Details: [docs → Contributing → This docs site](./docs/contributing/docs-sit
 | Audio | Teensy Audio graph, samples, synths, FX |
 | Subsystems | UI/LEDs, MIDI/clock, menu, SD |
 | Tools | Sample converter, MIDI convert, SD tool, firmware loader, color editor |
-| Hardware (rev G) | KiCad board map, connectors, power, fab exports |
-| Contributing | Firmware build, memory tips, this docs site |
+| Hardware (rev H) | KiCad board map, connectors, power, fab exports |
+| Contributing | Firmware build, menu/EEPROM edit map, memory tips, this docs site |
 
 Edit Markdown under `docs/`. Sidebar order is in `sidebars.js`.

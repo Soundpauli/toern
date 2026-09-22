@@ -30,7 +30,4 @@ Menu changes can mark settings dirty (`markSettingsBackupDirty`) and later flush
 
 ## Adding a menu item
 
-1. Allocate a setting id / page slot in the menu tables.  
-2. Handle encoder adjust + button confirm in the menu update path.  
-3. Persist if needed (EEPROM and/or settings file).  
-4. Ensure drawing covers the new label on the matrix font/icon set.
+The file list and the EEPROM offset table are in [Firmware edits](../contributing/firmware-edits). Short version: a free `mainSetting` id, a `MenuPage` row, a draw `case`, an encoder `case`, and a new EEPROM offset at the end of the settings block if it must survive reboot.

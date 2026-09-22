@@ -48,7 +48,7 @@ Arduino builds every `.ino` in the sketch root as one program. Treat the filenam
 | Path | Role |
 |------|------|
 | `handbook/` | End-user guide (HTML); copied into `website/handbook/` for deploy |
-| `PCB/toern_revG/` | Current KiCad board — see [Hardware overview](../hardware/overview) |
+| `PCB/toern_revH/` | Current KiCad board — see [Hardware overview](../hardware/overview) |
 | `tools/`, `standalone-tools/` | Host-side utilities — see [Tools overview](../tools/overview) |
 | `devdocs/` | **This** Docusaurus site (code + hardware + tools docs) → published at `/docs/` |
 | `website/docs/` | Built static output copied in for deploy (see [This docs site](../contributing/docs-site)) |

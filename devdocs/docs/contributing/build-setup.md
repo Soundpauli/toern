@@ -6,6 +6,8 @@ description: How to build and flash the Teensy firmware.
 
 # Build setup
 
+Ordering the board, the off-board parts, and first power-up are in the repo-root [BUILD.md](../../../BUILD.md). This page is only the firmware compile.
+
 ## Requirements
 
 - [Arduino IDE](https://www.arduino.cc/) or [`arduino-cli`](https://arduino.github.io/arduino-cli/) with **Teensyduino** support  

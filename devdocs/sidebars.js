@@ -59,7 +59,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Hardware (rev G)',
+      label: 'Hardware (rev H)',
       collapsed: false,
       items: [
         'hardware/overview',
@@ -74,6 +74,7 @@ const sidebars = {
       label: 'Contributing',
       items: [
         'contributing/build-setup',
+        'contributing/firmware-edits',
         'contributing/memory',
         'contributing/docs-site',
       ],

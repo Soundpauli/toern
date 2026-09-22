@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: This docs site
 description: Where the Docusaurus app lives, how /docs is published, and how to edit it.
 ---
