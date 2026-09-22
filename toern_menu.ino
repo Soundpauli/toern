@@ -3,11 +3,25 @@
 #define LOOK_PAGES_COUNT 11
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 7
-#define VOL_PAGES_COUNT 6
+#define VOL_PAGES_COUNT 7
 #define ETC_PAGES_COUNT 9
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
+// VOL→GAIN: encoder 3 edits ALL (1) or SYN (0). Click toggles.
+static uint8_t g_gainEnc3IsAll = 1;
+static uint8_t g_gainUiFocus = 3; // 0=1-4, 1=5-8, 2=SYN, 3=ALL
+// Encoder 1 (1–4) is inverted: hardware 0 → 2.0, hardware 20 → 0.0
+static inline int mixGainEnc0FromStored(uint8_t g) {
+  int v = (int)g;
+  if (v < 0) v = 0;
+  if (v > MIX_GAIN_MAX) v = MIX_GAIN_MAX;
+  return MIX_GAIN_MAX - v;
+}
+static inline uint8_t mixGainStoredFromEnc0(int pos) {
+  pos = constrain(pos, 0, MIX_GAIN_MAX);
+  return (uint8_t)(MIX_GAIN_MAX - pos);
+}
 
 // External variables
 extern Mode *currentMode;
@@ -57,7 +71,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"KIT", 2, false, nullptr},           // Sample Pack
   {"WAV", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
-  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, LOUT, PREV, 2-CH)
+  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, GAIN, LOUT, PREV, 2-CH)
   {"SETT", 19, false, nullptr},         // SETTINGS submenu (FLW, PREV, VIEW, PMD, LOOP)
   {"RECS", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
@@ -113,6 +127,7 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
 // VOL submenu pages
 MenuPage volPages[VOL_PAGES_COUNT] = {
   {"MAIN", 27, false, nullptr},         // Headphone output volume
+  {"GAIN", 53, false, nullptr},         // Mix bus / synth / master trim (0.0x–2.0x, 1.0x = unity)
   {"LOUT", 28, false, nullptr},         // Line output volume
   {"PREV", 29, false, nullptr},         // Preview volume
   {"2-CH", 36, false, nullptr},         // Stereo routing: OFF, M+P, or L+R
@@ -147,6 +162,12 @@ FLASHMEM void togglePulseClockPolarityFromMenu() {
   extern void togglePulseClockPolarity();
   togglePulseClockPolarity();
   g_ppqnUiFocus = 0;
+  menuRequestFullRedraw();
+}
+
+FLASHMEM void toggleMixGainEnc3Target() {
+  g_gainEnc3IsAll = g_gainEnc3IsAll ? 0 : 1;
+  g_gainUiFocus = g_gainEnc3IsAll ? 3 : 2;
   menuRequestFullRedraw();
 }
 static inline bool takeMenuForceFullRedraw() {
@@ -352,7 +373,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 38; // [36]=child lock; [37]=MIDI pitch clamp
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 42; // [36]=child lock; [37]=MIDI pitch clamp; [38..41]=VOL GAIN
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -522,6 +543,11 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
   // Added after the V1 backup format shipped: an absent CLMP byte must preserve
   // the historical pitch-folding behavior (ON), not restore as OFF.
   outBlock[37] = 1;
+  // Absent GAIN bytes (old backups) stay at current staging, not mute.
+  outBlock[38] = 10;
+  outBlock[39] = 10;
+  outBlock[40] = 10;
+  outBlock[41] = 10;
   if (outSp0BlockLen < EEPROM_SP0_STATE_COUNT) { f.close(); return false; }
   memset(outSp0Block, 0, EEPROM_SP0_STATE_COUNT);
   // Payload layout: samplePackID (4) + settings block (variable up to SETTINGS_EEPROM_BLOCK_LEN) + sp0 (8).
@@ -660,6 +686,10 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // internal bits 1+2 = user CH1+CH2 (y=2,3)
       EEPROM.write(EEPROM_DATA_START + 36, 0);   // childLockEnabled default (OFF)
       EEPROM.write(EEPROM_DATA_START + 37, 1);   // MIDI pitch clamp default (ON)
+      EEPROM.write(EEPROM_DATA_START + 38, 10);  // mixGain14 default (unity)
+      EEPROM.write(EEPROM_DATA_START + 39, 10);  // mixGain58 default (unity)
+      EEPROM.write(EEPROM_DATA_START + 40, 10);  // mixGainSynth default (unity)
+      EEPROM.write(EEPROM_DATA_START + 41, 10);  // mixGainMaster default (unity)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -859,6 +889,28 @@ FLASHMEM void loadMenuFromEEPROM() {
     saveSingleModeToEEPROM(37, 1);
   }
   MIDI_NOTE_CLAMP = (clampValue != 0);
+
+  // VOL→GAIN (slots 38–41). Virgin 0xFF and any value >20 migrate to 10 (current staging).
+  {
+    extern uint8_t mixGain14;
+    extern uint8_t mixGain58;
+    extern uint8_t mixGainSynth;
+    extern uint8_t mixGainMaster;
+    uint8_t g14 = EEPROM.read(EEPROM_DATA_START + EEPROM_MIX_GAIN_14);
+    uint8_t g58 = EEPROM.read(EEPROM_DATA_START + EEPROM_MIX_GAIN_58);
+    uint8_t gSyn = EEPROM.read(EEPROM_DATA_START + EEPROM_MIX_GAIN_SYN);
+    uint8_t gAll = EEPROM.read(EEPROM_DATA_START + EEPROM_MIX_GAIN_ALL);
+    bool migrated = false;
+    if (g14 > MIX_GAIN_MAX) { g14 = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_14, g14); migrated = true; }
+    if (g58 > MIX_GAIN_MAX) { g58 = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_58, g58); migrated = true; }
+    if (gSyn > MIX_GAIN_MAX) { gSyn = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_SYN, gSyn); migrated = true; }
+    if (gAll > MIX_GAIN_MAX) { gAll = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_ALL, gAll); migrated = true; }
+    mixGain14 = g14;
+    mixGain58 = g58;
+    mixGainSynth = gSyn;
+    mixGainMaster = gAll;
+    if (migrated) markSettingsBackupDirty();
+  }
 
   // Load transport delay settings (slot 29 SNC1, slot 31 SNC2, int8_t -127..+127, EEPROM stores raw byte)
   extern int8_t transportSendDelayMs;
@@ -1113,6 +1165,9 @@ FLASHMEM void applyAudioSettingsFromGlobals() {
   
   // Apply preview volume
   updatePreviewVolume();
+
+  extern void applyMixBusGains();
+  applyMixBusGains();
 }
 
 // call this after you change *any* one of the six modes in switchMenu():
@@ -1595,12 +1650,17 @@ FLASHMEM void showVolMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // VOL: encoder 2 = value on SPKR(43)
+  // VOL: encoder 3 = value on SPKR/HFC; GAIN uses enc1–3
   CRGB indicatorColor = currentMenuParentTextColor();
+  const bool volGainPage = (mainSetting == 53);
   const bool volValuePage = (mainSetting == 43 || mainSetting == 46);
-  Encoder[0].writeRGBCode(0x000000);
-  Encoder[1].writeRGBCode(0x000000);
-  Encoder[2].writeRGBCode(volValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
+  Encoder[0].writeRGBCode(volGainPage ? 0x00C8C8 : 0x000000); // 1-4 cyan
+  Encoder[1].writeRGBCode(volGainPage ? 0xC86400 : 0x000000); // 5-8 orange
+  if (volGainPage) {
+    Encoder[2].writeRGBCode(g_gainEnc3IsAll ? 0x00FF00 : 0xC828C8); // ALL green / SYN magenta
+  } else {
+    Encoder[2].writeRGBCode(volValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
+  }
   Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
 
   // Draw the main setting status
@@ -2368,6 +2428,41 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawIndicator('L', 'R', 3);
       break;
     }
+
+    case 53: { // GAIN — enc1 1-4, enc2 5-8, enc3 SYN or ALL (click toggles)
+      extern uint8_t mixGain14;
+      extern uint8_t mixGain58;
+      extern uint8_t mixGainSynth;
+      extern uint8_t mixGainMaster;
+      const char* title = "ALL";
+      uint8_t shown = mixGainMaster;
+      CRGB valCol = CRGB(0, 255, 0);
+      if (g_gainUiFocus == 0) { title = "1-4"; shown = mixGain14; valCol = CRGB(0, 200, 200); }
+      else if (g_gainUiFocus == 1) { title = "5-8"; shown = mixGain58; valCol = CRGB(200, 100, 0); }
+      else if (g_gainUiFocus == 2) { title = "SYN"; shown = mixGainSynth; valCol = CRGB(200, 40, 200); }
+      drawText(title, 2, 10, currentMenuParentTextColor());
+      char valText[8];
+      snprintf(valText, sizeof(valText), "%u.%ux", (unsigned)(shown / 10u), (unsigned)(shown % 10u));
+      drawText(valText, 2, 3, valCol);
+      const uint8_t bars[4] = { mixGain14, mixGain58, mixGainSynth, mixGainMaster };
+      const CRGB barCol[4] = { CRGB(0, 200, 200), CRGB(200, 100, 0), CRGB(200, 40, 200), CRGB(0, 255, 0) };
+      for (int i = 0; i < 4; i++) {
+        int filled = ((int)bars[i] * 4 + MIX_GAIN_MAX / 2) / MIX_GAIN_MAX;
+        if (filled > 4) filled = 4;
+        int x0 = 1 + i * 4;
+        CRGB on = barCol[i];
+        if ((int)g_gainUiFocus != i) {
+          on.nscale8(90);
+        }
+        for (int k = 0; k < 4; k++) {
+          light(x0 + k, 8, (k < filled) ? on : CRGB(0, 0, 0));
+        }
+      }
+      drawIndicator('L', 'X', 1);
+      drawIndicator('L', 'O', 2);
+      drawIndicator('L', g_gainEnc3IsAll ? 'G' : 'M', 3);
+      break;
+    }
     
     case 32: { // CRSR - Cursor Type - encoder 3
       drawText("CRSR", 2, 10, currentMenuParentTextColor());
@@ -2506,11 +2601,15 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     lastStereoCh = -1;
     infoPageFirstEnter = true;
     lastPongSpeed = -1;
-    if (lastSetting == 50) {
+    if (lastSetting == 50 || lastSetting == 53) {
       Encoder[0].writeMin((int32_t)1);
       Encoder[0].writeMax((int32_t)1);
       Encoder[0].writeCounter((int32_t)1);
       currentMode->pos[0] = 1;
+      Encoder[1].writeMin((int32_t)1);
+      Encoder[1].writeMax((int32_t)1);
+      Encoder[1].writeCounter((int32_t)1);
+      currentMode->pos[1] = 1;
     }
     lastSetting = setting;
   }
@@ -3724,6 +3823,84 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
+    case 53: { // GAIN — enc1 1-4, enc2 5-8, enc3 SYN or ALL
+      extern uint8_t mixGain14;
+      extern uint8_t mixGain58;
+      extern uint8_t mixGainSynth;
+      extern uint8_t mixGainMaster;
+      extern void applyMixBusGains();
+      static int lastG14 = -1;
+      static int lastG58 = -1;
+      static int lastGEnc3 = -1;
+      static int lastEnc3IsAll = -1;
+      if (menuFirstEnter) {
+        g_gainEnc3IsAll = 1;
+        g_gainUiFocus = 3;
+        int enc0 = mixGainEnc0FromStored(mixGain14);
+        Encoder[0].writeMin((int32_t)0);
+        Encoder[0].writeMax((int32_t)MIX_GAIN_MAX);
+        Encoder[0].writeCounter((int32_t)enc0);
+        Encoder[1].writeMin((int32_t)0);
+        Encoder[1].writeMax((int32_t)MIX_GAIN_MAX);
+        Encoder[1].writeCounter((int32_t)mixGain58);
+        Encoder[2].writeMin((int32_t)0);
+        Encoder[2].writeMax((int32_t)MIX_GAIN_MAX);
+        Encoder[2].writeCounter((int32_t)mixGainMaster);
+        currentMode->pos[0] = (unsigned int)enc0;
+        currentMode->pos[1] = mixGain58;
+        currentMode->pos[2] = mixGainMaster;
+        lastG14 = enc0;
+        lastG58 = (int)mixGain58;
+        lastGEnc3 = (int)mixGainMaster;
+        lastEnc3IsAll = 1;
+        menuFirstEnter = false;
+      }
+      if ((int)g_gainEnc3IsAll != lastEnc3IsAll) {
+        uint8_t v = g_gainEnc3IsAll ? mixGainMaster : mixGainSynth;
+        Encoder[2].writeMin((int32_t)0);
+        Encoder[2].writeMax((int32_t)MIX_GAIN_MAX);
+        Encoder[2].writeCounter((int32_t)v);
+        currentMode->pos[2] = v;
+        lastGEnc3 = (int)v;
+        lastEnc3IsAll = (int)g_gainEnc3IsAll;
+        redrawMain(setting);
+      }
+      if ((int)currentMode->pos[0] != lastG14) {
+        int pos = constrain((int)currentMode->pos[0], 0, MIX_GAIN_MAX);
+        mixGain14 = mixGainStoredFromEnc0(pos);
+        Encoder[0].writeCounter((int32_t)pos);
+        currentMode->pos[0] = (unsigned int)pos;
+        lastG14 = pos;
+        g_gainUiFocus = 0;
+        saveSingleModeToEEPROM(EEPROM_MIX_GAIN_14, (int8_t)mixGain14);
+        applyMixBusGains();
+        redrawMain(setting);
+      }
+      if ((int)currentMode->pos[1] != lastG58) {
+        mixGain58 = (uint8_t)constrain((int)currentMode->pos[1], 0, MIX_GAIN_MAX);
+        Encoder[1].writeCounter((int32_t)mixGain58);
+        currentMode->pos[1] = mixGain58;
+        lastG58 = (int)mixGain58;
+        g_gainUiFocus = 1;
+        saveSingleModeToEEPROM(EEPROM_MIX_GAIN_58, (int8_t)mixGain58);
+        applyMixBusGains();
+        redrawMain(setting);
+      }
+      if ((int)currentMode->pos[2] != lastGEnc3) {
+        uint8_t v = (uint8_t)constrain((int)currentMode->pos[2], 0, MIX_GAIN_MAX);
+        if (g_gainEnc3IsAll) mixGainMaster = v;
+        else mixGainSynth = v;
+        Encoder[2].writeCounter((int32_t)v);
+        currentMode->pos[2] = v;
+        lastGEnc3 = (int)v;
+        g_gainUiFocus = g_gainEnc3IsAll ? 3 : 2;
+        saveSingleModeToEEPROM(g_gainEnc3IsAll ? EEPROM_MIX_GAIN_ALL : EEPROM_MIX_GAIN_SYN, (int8_t)v);
+        applyMixBusGains();
+        redrawMain(setting);
+      }
+      break;
+    }
+
          default:
        // Reset first enter flags when not on pages with additional features
        recMenuFirstEnter = true;
@@ -4209,6 +4386,11 @@ FLASHMEM void switchMenu(int menuPosition){
         AudioMemoryUsageMaxReset();
         AudioProcessorUsageMaxReset();
         menuRequestFullRedraw();
+        break;
+      }
+
+      case 53: {
+        toggleMixGainEnc3Target();
         break;
       }
 

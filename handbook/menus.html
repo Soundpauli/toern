@@ -161,7 +161,7 @@
 
                     <li id="vol">
                       <a href="reference.html#vol"><span class="node">VOL</span></a>
-                      <span class="desc">Where sound leaves the box. Six leaves. Encoder&nbsp;4 walks siblings; encoder&nbsp;3 usually turns the value (watch the lit cue).</span>
+                      <span class="desc">Where sound leaves the box. Seven leaves. Encoder&nbsp;4 walks siblings; encoder&nbsp;3 usually turns the value (watch the lit cue). GAIN uses encoders&nbsp;1–3.</span>
                       <ul>
                         <li>
                           <span class="node">MAIN</span>
@@ -171,6 +171,20 @@
                               <li><strong>Enc&nbsp;3 turn</strong> — <strong>0–100</strong></li>
                               <li>Quiet rehearsal → couch hero → neighbour complaint. Orange-ish digits climb with the level</li>
                             </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">GAIN</span>
+                          <span class="desc">Mix-bus trim on top of the fixed headroom. 1.0x is the old default; 2.0x is double. ALL multiplies the other three, so 2.0x×2.0x is 4× on that bus.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1</strong> — voices <strong>1–4</strong> (<span class="ap-code">mixer1</span>). Rotation is reversed vs the other two knobs</li>
+                              <li><strong>Enc&nbsp;2</strong> — voices <strong>5–8</strong> (<span class="ap-code">mixer2</span>)</li>
+                              <li><strong>Enc&nbsp;3</strong> — <strong>ALL</strong> (master) or <strong>SYN</strong> (ch11/13/14). Click encoder&nbsp;3 to switch</li>
+                              <li>Range <strong>0.0x–2.0x</strong>. Survives reboot. Preview and input monitor stay on their own knobs</li>
+                              <li>Hot stacks can clip — if it cracks, ease ALL or the busy bank before blaming the kick</li>
+                            </ul>
+                            <span class="how">Applied at <span class="ap-code">mixer1</span>/<span class="ap-code">mixer2</span> inputs and <span class="ap-code">mixer_end</span> synth send, so <a href="audiopath.html#output">2-CH L+R</a> still hears 1–4 / 5–8 / ALL. Synths drop out of L+R as before.</span>
                           </span>
                         </li>
                         <li>

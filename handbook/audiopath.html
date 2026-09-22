@@ -33,9 +33,9 @@
               <tbody>
                 <tr><td><span class="ap-code">AUDIO_SAMPLE_RATE_EXACT</span></td><td>44 117 Hz (Teensy default)</td><td>All streams</td></tr>
                 <tr><td><span class="ap-code">TOERN_AUDIO_MEMORY_BLOCKS</span></td><td>96 (~24 KB RAM2)</td><td><span class="ap-code">AudioMemory()</span></td></tr>
-                <tr><td><span class="ap-code">MIX_BUS_HEADROOM</span></td><td>1/3 ≈ 0.333</td><td><span class="ap-code">mixer1</span> / <span class="ap-code">mixer2</span> every input</td></tr>
+                <tr><td><span class="ap-code">MIX_BUS_HEADROOM</span></td><td>1/3 ≈ 0.333 × GAIN 1–4 or 5–8 × ALL</td><td><span class="ap-code">mixer1</span> / <span class="ap-code">mixer2</span> every input</td></tr>
                 <tr><td><span class="ap-code">MIX_END_SAMPLES_GAIN</span></td><td>0.50</td><td><span class="ap-code">mixer_end</span> in 0 and 1</td></tr>
-                <tr><td><span class="ap-code">MIX_END_SYNTH_GAIN</span></td><td>0.60</td><td><span class="ap-code">mixer_end</span> in 2</td></tr>
+                <tr><td><span class="ap-code">MIX_END_SYNTH_GAIN</span></td><td>0.60 × GAIN SYN × ALL</td><td><span class="ap-code">mixer_end</span> in 2</td></tr>
                 <tr><td><span class="ap-code">GAIN_4</span></td><td>0.80</td><td><span class="ap-code">mixersynth_end</span> in 0, 2, 3</td></tr>
                 <tr><td><span class="ap-code">GAIN_1</span> / <span class="ap-code">GAIN_2</span> / <span class="ap-code">GAIN_3</span></td><td>0.4 / 0.8 / 0.4</td><td>Defined, unused</td></tr>
                 <tr><td>Default channel volume</td><td>16 / 16 → amp gain 1.0</td><td><span class="ap-code">amp1–8, 11, 13, 14</span></td></tr>
@@ -64,7 +64,7 @@
                 <tr><td>Filter mixer</td><td><span class="ap-code">filtermixerN</span></td><td>Default in0=1, in1=0, in2=0 (LP). Smooth 32-step crossfade. LCUT uses in2=1.</td></tr>
                 <tr><td>Reverb send</td><td><span class="ap-code">freeverb1,2,5–8</span></td><td>Room 0–1 from RVRB; damping 0.01–0.42. RVRB 0 bypasses and clears delay tanks. <strong>No freeverb on 3 or 4.</strong></td></tr>
                 <tr><td>Wet / dry</td><td><span class="ap-code">freeverbmixerN</span></td><td>in0 wet 0 → 0.54; in3 dry 1.0 → 0.88 (send, not a hard crossfade). Off: wet 0, dry 1.</td></tr>
-                <tr><td>Bank mix</td><td><span class="ap-code">mixer1</span> (ch1–4), <span class="ap-code">mixer2</span> (ch5–8)</td><td>Every input <span class="ap-code">MIX_BUS_HEADROOM</span> = 1/3. Sized for ~3 full-level hits per bank.</td></tr>
+                <tr><td>Bank mix</td><td><span class="ap-code">mixer1</span> (ch1–4), <span class="ap-code">mixer2</span> (ch5–8)</td><td>Every input <span class="ap-code">MIX_BUS_HEADROOM</span> = 1/3 × <a href="menus.html#vol">VOL → GAIN</a> (1–4 or 5–8) × ALL. Sized for ~3 full-level hits per bank at 10/10.</td></tr>
               </tbody>
             </table>
             <p><span class="ap-code">mixer1</span> inputs: 0 = ch1 verb mix, 1 = ch2 verb mix, 2 = ch3 dry filter, 3 = ch4 dry filter. <span class="ap-code">mixer2</span>: 0–3 = ch5–8 verb mixes.</p>
@@ -108,25 +108,25 @@
             <table class="opt-table">
               <thead><tr><th>Mixer</th><th>In</th><th>Source</th><th>Gain</th></tr></thead>
               <tbody>
-                <tr><td rowspan="4"><span class="ap-code">mixer1</span></td><td>0</td><td>ch1 verb mix</td><td>1/3</td></tr>
-                <tr><td>1</td><td>ch2 verb mix</td><td>1/3</td></tr>
-                <tr><td>2</td><td>ch3 filter (no verb)</td><td>1/3</td></tr>
-                <tr><td>3</td><td>ch4 filter (no verb)</td><td>1/3</td></tr>
-                <tr><td rowspan="4"><span class="ap-code">mixer2</span></td><td>0</td><td>ch5 verb mix</td><td>1/3</td></tr>
-                <tr><td>1</td><td>ch6 verb mix</td><td>1/3</td></tr>
-                <tr><td>2</td><td>ch7 verb mix</td><td>1/3</td></tr>
-                <tr><td>3</td><td>ch8 verb mix</td><td>1/3</td></tr>
+                <tr><td rowspan="4"><span class="ap-code">mixer1</span></td><td>0</td><td>ch1 verb mix</td><td>1/3 × GAIN 1–4 × ALL</td></tr>
+                <tr><td>1</td><td>ch2 verb mix</td><td>1/3 × GAIN 1–4 × ALL</td></tr>
+                <tr><td>2</td><td>ch3 filter (no verb)</td><td>1/3 × GAIN 1–4 × ALL</td></tr>
+                <tr><td>3</td><td>ch4 filter (no verb)</td><td>1/3 × GAIN 1–4 × ALL</td></tr>
+                <tr><td rowspan="4"><span class="ap-code">mixer2</span></td><td>0</td><td>ch5 verb mix</td><td>1/3 × GAIN 5–8 × ALL</td></tr>
+                <tr><td>1</td><td>ch6 verb mix</td><td>1/3 × GAIN 5–8 × ALL</td></tr>
+                <tr><td>2</td><td>ch7 verb mix</td><td>1/3 × GAIN 5–8 × ALL</td></tr>
+                <tr><td>3</td><td>ch8 verb mix</td><td>1/3 × GAIN 5–8 × ALL</td></tr>
                 <tr><td rowspan="4"><span class="ap-code">mixersynth_end</span></td><td>0</td><td>ch11</td><td>0.80</td></tr>
                 <tr><td>1</td><td>—</td><td>unset (default 1.0, nothing patched)</td></tr>
                 <tr><td>2</td><td>ch13</td><td>0.80</td></tr>
                 <tr><td>3</td><td>ch14</td><td>0.80</td></tr>
                 <tr><td rowspan="4"><span class="ap-code">mixer_end</span></td><td>0</td><td>mixer1</td><td>0.50</td></tr>
                 <tr><td>1</td><td>mixer2</td><td>0.50</td></tr>
-                <tr><td>2</td><td>mixersynth_end</td><td>0.60</td></tr>
+                <tr><td>2</td><td>mixersynth_end</td><td>0.60 × GAIN SYN × ALL</td></tr>
                 <tr><td>3</td><td>audioInputAmp (monitor / pass-through)</td><td>0 by default; see Input</td></tr>
               </tbody>
             </table>
-            <p>Worst-case samples: 3 hot hits on a bank → mixer bus ≈ 1.0; both banks into <span class="ap-code">mixer_end</span> at 0.50 + 0.50 = 1.0 before synth (0.60) and monitor. Four simultaneous full-level hits on one bank can clip — drop <span class="ap-code">MIX_BUS_HEADROOM</span> to 0.25 if that is a real pattern.</p>
+            <p>Worst-case samples: 3 hot hits on a bank → mixer bus ≈ 1.0 at GAIN 1.0x/1.0x; both banks into <span class="ap-code">mixer_end</span> at 0.50 + 0.50 = 1.0 before synth (0.60) and monitor. <a href="menus.html#vol">VOL → GAIN</a> 0.0x–2.0x scales 1–4, 5–8, SYN, and ALL (1.0x = this table). Four simultaneous full-level hits on one bank can clip — drop a GAIN knob or <span class="ap-code">MIX_BUS_HEADROOM</span> to 0.25 if that is a real pattern.</p>
             <p><span class="ap-code">peakOutput</span> listens to <span class="ap-code">mixer_end</span> for the LED-strip meter. It does not change the mix.</p>
           </section>
 
@@ -173,7 +173,7 @@
                 <tr><td>L+R (2)</td><td>0</td><td>0</td><td>1</td><td>0</td><td>0</td><td>1</td></tr>
               </tbody>
             </table>
-            <p>L+R taps <span class="ap-code">mixer1</span> (voices 1–4) to left and <span class="ap-code">mixer2</span> (5–8) to right, and mutes <span class="ap-code">mixer_end</span> on both sides — synths 11/13/14 and input monitor drop out of that mode. Stereo in 3 is always 0.</p>
+            <p>L+R taps <span class="ap-code">mixer1</span> (voices 1–4) to left and <span class="ap-code">mixer2</span> (5–8) to right, and mutes <span class="ap-code">mixer_end</span> on both sides — synths 11/13/14 and input monitor drop out of that mode. Stereo in 3 is always 0. <a href="menus.html#vol">VOL → GAIN</a> 1–4 / 5–8 / ALL still apply because they live on mixer1/2; SYN does not in L+R.</p>
             <div class="ap-graph" data-ap-graph="stereo"></div>
             <table class="opt-table">
               <thead><tr><th>Codec</th><th>Control</th><th>Range</th></tr></thead>

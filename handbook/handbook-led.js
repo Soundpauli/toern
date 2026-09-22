@@ -274,12 +274,14 @@
     if (enc3) m.indL(3, enc3);
   }
 
-  function volSubFrame(m, pageIdx, title, enc3) {
+  function volSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
     m.clear();
     largeInd4Parent(m, 5);
-    drawSubmenuDots16(m, pageIdx, 6, 5);
+    drawSubmenuDots16(m, pageIdx, 7, 5);
     const tc = menuTextFromCol(5);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
+    if (enc1) m.indL(1, enc1);
+    if (enc2) m.indL(2, enc2);
     if (enc3) m.indL(3, enc3);
   }
 
@@ -747,27 +749,45 @@
       rootMenuPage(m, 9, 14, "ETC");
     },
     vol_main(m) {
-      volSubFrame(m, 0, "MAIN", "O");
+      volSubFrame(m, 0, "MAIN", "", "", "O");
       drawText(m, "72", 2, 3, 200, 80, 0);
     },
+    vol_gain(m) {
+      volSubFrame(m, 1, "ALL", "X", "O", "G");
+      drawText(m, "1.0x", 2, 3, 0, 255, 0);
+      const cols = [
+        [0, 200, 200],
+        [200, 100, 0],
+        [200, 40, 200],
+        [0, 255, 0]
+      ];
+      for (let i = 0; i < 4; i++) {
+        const filled = 2;
+        const x0 = 1 + i * 4;
+        const c = cols[i];
+        for (let k = 0; k < 4; k++) {
+          if (k < filled) m.set(x0 + k, 8, c[0], c[1], c[2]);
+        }
+      }
+    },
     vol_lout(m) {
-      volSubFrame(m, 1, "LOUT", "M");
+      volSubFrame(m, 2, "LOUT", "", "", "M");
       drawText(m, "12", 2, 3, 255, 180, 200);
     },
     vol_prev(m) {
-      volSubFrame(m, 2, "PREV", "G");
+      volSubFrame(m, 3, "PREV", "", "", "G");
       drawText(m, "35", 2, 3, 0, 160, 80);
     },
     vol_2ch(m) {
-      volSubFrame(m, 3, "2-CH", "X");
+      volSubFrame(m, 4, "2-CH", "", "", "X");
       drawText(m, "M+P", 6, 3, 0, 200, 0);
     },
     vol_spkr(m) {
-      volSubFrame(m, 4, "SPKR", "G");
+      volSubFrame(m, 5, "SPKR", "", "", "G");
       drawText(m, "ON", 2, 3, 0, 255, 0);
     },
     vol_hfc(m) {
-      volSubFrame(m, 5, "HFC", "R");
+      volSubFrame(m, 6, "HFC", "", "", "R");
       drawText(m, "120", 2, 3, 200, 40, 40);
     },
     lk_flw(m) {

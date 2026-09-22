@@ -218,6 +218,13 @@ extern void handleStart();
 #define MIX_BUS_HEADROOM (1.0f / 3.0f)  // max ~3 simultaneous sample voices per bank (ch1-4 / ch5-8)
 #define MIX_END_SAMPLES_GAIN 0.50f      // mixer_end: mixer1 + mixer2 (each bus can hit 1.0)
 #define MIX_END_SYNTH_GAIN 0.60f    // mixer_end input gain for mixersynth_end
+// VOL→GAIN: stored 0..20 tenths (UI 0.0–2.0), 10 = current staging (1.0×). Bus × master, so 2.0×2.0 = 4×.
+#define MIX_GAIN_UNITY 10
+#define MIX_GAIN_MAX 20
+#define EEPROM_MIX_GAIN_14 38
+#define EEPROM_MIX_GAIN_58 39
+#define EEPROM_MIX_GAIN_SYN 40
+#define EEPROM_MIX_GAIN_ALL 41
 
 
 #define NUM_ENCODERS 4
@@ -641,6 +648,10 @@ unsigned long lastCheckTime = 0;          // Get the current time
 int recMode = -1;
 unsigned int fastRecMode = 0;
 unsigned int previewVol = 20;  // Default 20 (0-50 range, 0.00-0.50)
+uint8_t mixGain14 = MIX_GAIN_UNITY;     // VOL→GAIN: mixer1 (voices 1–4)
+uint8_t mixGain58 = MIX_GAIN_UNITY;     // mixer2 (voices 5–8)
+uint8_t mixGainSynth = MIX_GAIN_UNITY;  // mixer_end synth bus (ch11/13/14)
+uint8_t mixGainMaster = MIX_GAIN_UNITY; // scales 1–4, 5–8, and synth together
 // Preview trigger mode: 0 = auto on selection/seek, 1 = encoder(0) press only, 2 = in-sync with voice triggers
 extern const int PREVIEW_MODE_ON = 0;
 extern const int PREVIEW_MODE_PRESS = 1;
@@ -1429,6 +1440,33 @@ FLASHMEM void applyStereoChannelRouting() {
   // Ensure unused inputs are muted
   mixer_stereoR.gain(3, 0.0f);
   mixer_stereoL.gain(3, 0.0f);
+}
+
+static inline uint8_t clampMixGain(uint8_t g) {
+  return (g > MIX_GAIN_MAX) ? (uint8_t)MIX_GAIN_UNITY : g;
+}
+
+static inline float mixGainScale(uint8_t g) {
+  return (float)clampMixGain(g) * (1.0f / (float)MIX_GAIN_UNITY);
+}
+
+// Apply VOL→GAIN onto mixer1 / mixer2 / mixer_end synth. Does not touch mixer_end in3 (monitor)
+// or preview. L+R 2-CH taps mixer1/2 directly, so bus+master still apply there.
+FLASHMEM void applyMixBusGains() {
+  const float master = mixGainScale(mixGainMaster);
+  const float g14 = MIX_BUS_HEADROOM * mixGainScale(mixGain14) * master;
+  const float g58 = MIX_BUS_HEADROOM * mixGainScale(mixGain58) * master;
+  mixer1.gain(0, g14);
+  mixer1.gain(1, g14);
+  mixer1.gain(2, g14);
+  mixer1.gain(3, g14);
+  mixer2.gain(0, g58);
+  mixer2.gain(1, g58);
+  mixer2.gain(2, g58);
+  mixer2.gain(3, g58);
+  mixer_end.gain(0, MIX_END_SAMPLES_GAIN);
+  mixer_end.gain(1, MIX_END_SAMPLES_GAIN);
+  mixer_end.gain(2, MIX_END_SYNTH_GAIN * mixGainScale(mixGainSynth) * master);
 }
 
 // Stop synth channels (13/14) immediately (also used from MIDI note-off).
@@ -2484,7 +2522,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51)) ||
-        (inVolSubmenu && (mainSetting == 43 || mainSetting == 46)) ||
+        (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48)));
     if (mainSetting != 15 && !encoder2ValuePage) {
       switchMenu(mainSetting);
@@ -2770,12 +2808,20 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   // PPQN: encoder 3 click = toggle analog-clock polarity (− / +)
+  // VOL→GAIN: encoder 3 click = SYN ↔ ALL on that knob
   if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 1, 0)) {
     extern bool inMidiSubmenu;
+    extern bool inVolSubmenu;
     extern int getCurrentMenuMainSetting();
     extern void togglePulseClockPolarityFromMenu();
-    if (inMidiSubmenu && getCurrentMenuMainSetting() == 50) {
+    extern void toggleMixGainEnc3Target();
+    int mainSetting = getCurrentMenuMainSetting();
+    if (inMidiSubmenu && mainSetting == 50) {
       togglePulseClockPolarityFromMenu();
+      return;
+    }
+    if (inVolSubmenu && mainSetting == 53) {
+      toggleMixGainEnc3Target();
       return;
     }
   }
@@ -3135,30 +3181,13 @@ FLASHMEM void initSamples() {
 
 
   // Gain staging:
-  // Keep chain close to unity and apply headroom primarily at the first summing busses (mixer1/mixer2).
-  // Global loudness is handled at mixer_stereoR/L (per user).
+  // Headroom at mixer1/mixer2; VOL→GAIN multiplies those buses plus the synth send.
   mixersynth_end.gain(0, GAIN_4);
   mixersynth_end.gain(2, GAIN_4);
   mixersynth_end.gain(3, GAIN_4);
 
-
-
-  // First summing busses (prevent clipping when multiple loud samples overlap)
-  mixer1.gain(0, MIX_BUS_HEADROOM);
-  mixer1.gain(1, MIX_BUS_HEADROOM);
-  mixer1.gain(2, MIX_BUS_HEADROOM);
-  mixer1.gain(3, MIX_BUS_HEADROOM);
-
-  mixer2.gain(0, MIX_BUS_HEADROOM);
-  mixer2.gain(1, MIX_BUS_HEADROOM);
-  mixer2.gain(2, MIX_BUS_HEADROOM);
-  mixer2.gain(3, MIX_BUS_HEADROOM);
-
-  // Second summing bus (mixer_end): prevent clipping when both busses (1-4 and 5-8) hit together.
-  mixer_end.gain(0, MIX_END_SAMPLES_GAIN);  // mixer1 -> mixer_end
-  mixer_end.gain(1, MIX_END_SAMPLES_GAIN);  // mixer2 -> mixer_end
-  mixer_end.gain(2, MIX_END_SYNTH_GAIN);    // synth bus -> mixer_end
-  mixer_end.gain(3, 0.0f);                  // No monitoring by default - ensure OFF on startup
+  applyMixBusGains();
+  mixer_end.gain(3, 0.0f);  // No monitoring by default - ensure OFF on startup
 
 
   // Global loudness stage (final summing before i2s)

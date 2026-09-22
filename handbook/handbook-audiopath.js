@@ -201,7 +201,7 @@
         { id: "syn", l: "ch 11 / 13 / 14", s: "mixersynth_end  ·  0.80", k: "bus", c: 0, r: 2 },
         { id: "prev", l: "preview", s: "mixer0", k: "source", c: 0, r: 3 },
         { id: "inp", l: "I2S in", s: "audioInputAmp 1.0", k: "source", c: 0, r: 4 },
-        { id: "end", l: "mixer_end", s: "0.50 / 0.50 / 0.60 / mon", k: "mix", c: 1, r: 1, h: 2 },
+        { id: "end", l: "mixer_end", s: "0.50 / 0.50 / SYN / mon", k: "mix", c: 1, r: 1, h: 2 },
         { id: "st", l: "mixer_stereo L/R", s: "VOL → 2-CH", k: "mix", c: 2, r: 1, h: 2 },
         { id: "dac", l: "i2s1", s: "R=0  L=1", k: "out", c: 3, r: 1 },
         { id: "cod", l: "SGTL5000", s: "phones + line", k: "out", c: 4, r: 1 }

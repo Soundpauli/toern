@@ -1,4 +1,11 @@
-26733393787649223
+26738760959693505
+3M_929870-01-12-RA
+3M_929870-01-12-RA_Assembly
+Assembly-only overlay for 3M 929870-01-12-RA low-profile 1x12 socket; electrical pads and drills are supplied by the underlying Teensy 4.1 footprint
+3M 929870 1x12 2.54mm low profile C20926467 assembly overlay
+0
+0
+0
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -2810,6 +2817,13 @@ Buzzer_Beeper
 Speaker_CUI_CMR-1206S-67
 Speaker, 30mW, 300-7000Hz, IP67 face, 12x6x2,25mm, https://www.cuidevices.com/product/resource/cmr-12062s-67.pdf
 speaker CUI
+0
+2
+2
+C529951
+MIC-TH_BD6.0-P1.90-D0.4-L-FD
+INGHAi GMI6027P-2C38DB-RF75 electret microphone, LCSC C529951, 6.0 mm diameter, 1.90 mm pitch; pin 1 positive
+C529951 electret microphone THT
 0
 2
 2
@@ -106364,3 +106378,10 @@ Varistor VF
 0
 2
 2
+YZP0354-20100-01
+YZP0354-20100-01
+Xinyangze YZP0354-20100-01 through-hole pogo pin; EasyEDA UUID 717ea0c0017f4715b4b308a4536ca606
+pogo pin spring contact through-hole C5157282
+0
+1
+1

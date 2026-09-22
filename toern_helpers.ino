@@ -3954,6 +3954,10 @@ FLASHMEM void startNew() {
   EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // drawRFullMuteCustomUnmuteMask
   EEPROM.write(EEPROM_DATA_START + 36, 0);    // childLockEnabled (OFF)
   EEPROM.write(EEPROM_DATA_START + 37, 1);    // MIDI pitch clamp (ON)
+  EEPROM.write(EEPROM_DATA_START + 38, 10);   // mixGain14 (unity)
+  EEPROM.write(EEPROM_DATA_START + 39, 10);   // mixGain58 (unity)
+  EEPROM.write(EEPROM_DATA_START + 40, 10);   // mixGainSynth (unity)
+  EEPROM.write(EEPROM_DATA_START + 41, 10);   // mixGainMaster (unity)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();
