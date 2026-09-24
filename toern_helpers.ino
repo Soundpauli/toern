@@ -1583,10 +1583,10 @@ FLASHMEM void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
     extern bool sdSerialServerClientConnected();
-    extern bool drawNoSD_hasRun;
-    // Never start screensaver while stuck on SD? (card missing / not ready yet)
-    bool screensaverActive = drawNoSD_hasRun
-      && !isNowPlaying
+    // SD? wait loops already call noteUserActivity(), so idle timeout covers that case.
+    // Do not gate on drawNoSD_hasRun — switchMode() clears it, which permanently
+    // blocked the screensaver after any mode change.
+    bool screensaverActive = !isNowPlaying
       && !sdSerialServerClientConnected()
       && (millis() - lastUserActivityMs >= 60000UL);
     if (screensaverActive) {
