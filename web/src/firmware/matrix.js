@@ -107,8 +107,8 @@ export function createMatrix(canvas) {
     return [slot, slot + 1, slot + 2, Math.min(COLS, slot + 3)];
   }
 
-  function setRing(encoderNum, rgb) {
-    if (encoderNum >= 1 && encoderNum <= 4) rings[encoderNum - 1] = normalize(rgb);
+  function setRing(encoderNum, rgb, keepLevel = false) {
+    if (encoderNum >= 1 && encoderNum <= 4) rings[encoderNum - 1] = keepLevel ? rgb : normalize(rgb);
   }
 
   function drawIndicator(size, code, encoderNum, highlight = false, channelColor = null) {
@@ -130,21 +130,39 @@ export function createMatrix(canvas) {
     setRing(encoderNum, color);
   }
 
+  const shown = new Int32Array(COLS * ROWS).fill(-1);
+  const gamma = new Uint8Array(256);
+  let brightness = 64;
+  let gammaFor = -1;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  function setBrightness(value) { brightness = value; }
+
   function present() {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (gammaFor !== brightness) {
+      const f = brightness / 64;
+      for (let c = 0; c < 256; c++) {
+        const v = Math.min(255, c * f);
+        gamma[c] = v <= 0 ? 0 : Math.round(Math.pow(v / 255, 0.42) * 255);
+      }
+      gammaFor = brightness;
+      shown.fill(-1);
+    }
     for (let y = 1; y <= ROWS; y++) {
       const cy = (ROWS - y) * PITCH + PITCH / 2;
       for (let x = 1; x <= COLS; x++) {
-        const i = ((y - 1) * COLS + (x - 1)) * 4;
-        const r = pix[i];
-        const g = pix[i + 1];
-        const b = pix[i + 2];
-        const lit = r | g | b;
-        const view = (c) => (c <= 0 ? 0 : Math.round(Math.pow(c / 255, 0.42) * 255));
+        const k = (y - 1) * COLS + (x - 1);
+        const i = k * 4;
+        const key = (pix[i] << 16) | (pix[i + 1] << 8) | pix[i + 2];
+        if (shown[k] === key) continue;
+        shown[k] = key;
+        const cx = (x - 1) * PITCH + PITCH / 2;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(cx - PITCH / 2, cy - PITCH / 2, PITCH, PITCH);
         ctx.beginPath();
-        ctx.fillStyle = lit ? `rgb(${view(r)},${view(g)},${view(b)})` : "#070707";
-        ctx.arc((x - 1) * PITCH + PITCH / 2, cy, LED, 0, Math.PI * 2);
+        ctx.fillStyle = key ? `rgb(${gamma[pix[i]]},${gamma[pix[i + 1]]},${gamma[pix[i + 2]]})` : "#070707";
+        ctx.arc(cx, cy, LED, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -152,6 +170,6 @@ export function createMatrix(canvas) {
 
   return {
     clear, light, pixel, drawChar, drawText, drawNumber,
-    drawIndicator, drawLargeCustom, setRing, present, rings,
+    drawIndicator, drawLargeCustom, setRing, present, rings, setBrightness,
   };
 }

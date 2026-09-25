@@ -32,6 +32,10 @@ export function listDir(dir, { parent = true } = {}) {
   return items;
 }
 
+export function sampleWavs() {
+  return files.filter((file) => file.rel.startsWith("samples/") && /\.wav$/i.test(file.rel));
+}
+
 export function patternUrl(slot) {
   const name = slot === 0 ? "autosaved.txt" : `${slot}.txt`;
   return files.find((file) => file.rel === name)?.url || null;

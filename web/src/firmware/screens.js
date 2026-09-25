@@ -150,7 +150,7 @@ export function drawTriggers(matrix, s, now) {
         matrix.light(ix, iy, baseCol[ch] || [0, 0, 0]);
         continue;
       }
-      if (s.drawR && s.rMask && s.rMask[ch] === false) {
+      if (s.fullMute) {
         matrix.light(ix, iy, baseCol[ch] || [0, 0, 0]);
         continue;
       }
@@ -185,7 +185,7 @@ export function drawTimer(matrix, s) {
   }
 }
 
-export function drawCursor(matrix, s) {
+export function drawCursor(matrix, s, now = performance.now()) {
   s.pulse += s.pulseDir * 8;
   if (s.pulse > 230) s.pulseDir = -1;
   if (s.pulse < 1) s.pulseDir = 1;
@@ -194,17 +194,28 @@ export function drawCursor(matrix, s) {
   const ch = s.note[s.GLOB.x][y].channel;
   const col = pal(s).col;
   if (s.cursorType === 2) {
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-      if (dx * dx + dy * dy < 3 || dx * dx + dy * dy > 6) continue;
-      const px = x + dx; const py = y + dy;
-      if (px >= 1 && px <= COLS && py >= 1 && py <= ROWS) matrix.light(px, py, [40, 40, 40]);
+    const bpm = s.bpm >= 40 ? s.bpm : 120;
+    const stepMs = Math.max(10, (60000 / bpm * 2) / 16);
+    const radius = (Math.floor(now / stepMs) % 16) + 1;
+    const r2 = radius * radius;
+    for (let dx = -radius; dx <= radius; dx++) for (let dy = -radius; dy <= radius; dy++) {
+      const d = dx * dx + dy * dy;
+      if (d < r2 || d > r2 + 2) continue;
+      matrix.light(x + dx, y + dy, [50, 50, 50]);
     }
   }
   if (s.GLOB.singleMode && ch && ch !== s.GLOB.currentChannel) {
     matrix.light(x, y, pal(s).base[ch] || [0, 0, 0]);
   } else if (ch) matrix.light(x, y, nscale(col[ch], s.pulse));
-  else if (s.cursorType === 1) matrix.light(x, y, nscale(col[s.GLOB.currentChannel] || [255, 255, 255], s.pulse));
   else matrix.light(x, y, hsv(s.pulse, 255, 255));
+}
+
+function drawChannelNr(matrix, s) {
+  const ch = s.chNr;
+  const color = pal(s).col[ch] || UI_WHITE;
+  for (let x = 1; x <= 5; x++) for (let y = 11; y <= 16; y++) matrix.light(x, y, [0, 0, 0]);
+  for (let x = 1; x <= 5; x++) matrix.light(x, 10, color);
+  matrix.drawText(String(ch), 2, 12, color);
 }
 
 export function drawVelocity(matrix, s) {
@@ -314,17 +325,42 @@ export function drawMenu(matrix, s) {
   matrix.drawText(label, 2, 3, tc);
 }
 
-export function drawSubmenu(matrix, s) {
+const SOON = {
+  look: new Set([6, 7]),
+  recs: new Set([0, 1, 2, 3, 4]),
+  midi: new Set([0, 1, 2, 3, 4, 5, 6]),
+  vol: new Set([2, 5, 6]),
+  etc: new Set([1, 2, 3, 4, 5, 6]),
+};
+
+export function drawSubmenu(matrix, s, now = performance.now()) {
   const pages = SUBS[s.mode];
   const parent = menuText(SUB_PARENT[s.mode]);
   const dim = scaleTo(parent, 20);
   matrix.drawLargeCustom(parent, 4);
   pageDots(matrix, pages.length, s.subIndex, parent, dim);
+  if (s.mode === "etc" && s.subIndex === 0) {
+    drawInfo(matrix, s, now, parent);
+    return;
+  }
+  s.infoAt = 0;
   const lookTitle = ["FLOW", "PREV", "VIEW", "PMODE", "LOOP", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"];
   const name = s.mode === "look" ? lookTitle[s.subIndex] : pages[s.subIndex];
   matrix.drawText(name, 2, 10, parent);
+  if (s.mode === "look" && s.subIndex === 10) {
+    for (let uch = 1; uch <= 16; uch++) {
+      const bit = uch === 16 ? 0 : uch;
+      let dot = (s.muteMask & (1 << bit)) ? UI_GREEN.slice() : UI_RED.slice();
+      if (uch === s.muteSel) dot = [Math.min(255, dot[0] + 100), Math.min(255, dot[1] + 60), Math.min(255, dot[2] + 60)];
+      matrix.light(uch, 3, dot);
+    }
+    matrix.drawIndicator("L", "Y", 2);
+    matrix.drawIndicator("L", "W", 3);
+    return;
+  }
   const value = s.subValue(s.mode, s.subIndex);
   matrix.drawText(value.text, 2, 3, value.color);
+  if (SOON[s.mode]?.has(s.subIndex)) matrix.drawText("SOON", 12, 6, [90, 90, 90]);
   if (value.code) matrix.drawIndicator("L", value.code, 3);
   else matrix.setRing?.(3, value.color);
 }
@@ -506,10 +542,30 @@ export function drawBoot(matrix, now, bootAt) {
   return t >= 5000;
 }
 
+const VERSION = "v2.7";
+const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
+
+function drawInfo(matrix, s, now, color) {
+  matrix.drawText("INFO", 2, 10, color);
+  if (!s.infoAt) s.infoAt = now;
+  if (now - s.infoAt < 2000) {
+    matrix.drawText(VERSION, 2, 3, [255, 255, 0]);
+    return;
+  }
+  const offset = Math.floor((now - s.infoAt - 2000) / 60);
+  const msgX = COLS + 1 - offset;
+  matrix.drawText(VERSION, 2 - offset, 3, [255, 255, 0]);
+  matrix.drawText(INFO_MSG, msgX, 3, UI_WHITE);
+  if (msgX < -textPixelWidth(INFO_MSG) - 2) s.infoAt = now;
+}
+
 function drawBpm(matrix, s) {
-  for (let x = 1; x <= 8; x++) {
-    matrix.light(x, 15, [255, 255, 0]);
-    matrix.light(x, 16, [255, 255, 0]);
+  const b = s.ledBrightness;
+  const leds = Math.max(1, Math.min(16, Math.floor(((b - 3) * 16) / 252) + 1));
+  for (let x = 1; x <= leds; x++) {
+    const color = b === 64 ? [255, 255, 0] : [16 * x, 16 * x, 16 * x];
+    matrix.light(x, 15, color);
+    matrix.light(x, 16, color);
   }
   matrix.drawIndicator("L", "W", 2);
   matrix.drawIndicator("L", s.clockInt ? "G" : "R", 3);
@@ -529,18 +585,42 @@ function drawBpm(matrix, s) {
   }
 }
 
+function drawOk(matrix, t) {
+  const pts = [[-3, -1], [-2, -2], [-1, -3], [0, -2], [1, -1], [2, 0], [3, 1], [4, 2]];
+  const reveal = Math.min(pts.length, Math.floor((t * pts.length) / 420));
+  let bri = 220;
+  if (t < 120) bri = Math.round(40 + (t / 120) * 180);
+  else if (t > 780) bri = Math.round(220 - ((t - 780) / 220) * 200);
+  for (let i = 0; i < reveal; i++) matrix.light(16 + pts[i][0], 8 + pts[i][1], [0, bri, 0]);
+}
+
 export function renderFrame(matrix, s, now) {
   matrix.clear();
+  matrix.setBrightness(s.ledBrightness);
+  if (s.mode !== "etc") s.infoAt = 0;
+  if (s.okAt && now - s.okAt < 1000) {
+    drawOk(matrix, now - s.okAt);
+    matrix.present();
+    return;
+  }
   if (s.mode === "boot") {
     if (drawBoot(matrix, now, s.bootAt)) s.mode = "draw";
   } else if (s.mode === "draw" || s.mode === "single" || s.mode === "shift") {
-    if (s.GLOB.singleMode) matrix.setRing(3, [0, 255, 0]);
-    else {
-      matrix.setRing(1, [0x11, 0x00, 0x11]);
-      matrix.setRing(3, [0, 255, 0]);
-      matrix.setRing(4, [0x11, 0x00, 0x11]);
+    const voice = (pal(s).col[s.GLOB.currentChannel] || [255, 0, 0]).slice();
+    matrix.setRing(1, voice);
+    matrix.setRing(2, [0, 0, 0]);
+    matrix.setRing(3, [0, 255, 0]);
+    matrix.setRing(4, voice);
+    if (s.playing) {
+      const fade = Math.min(1, Math.max(0, s.beatPos || 0));
+      matrix.setRing(3, [Math.round(0x55 + (255 - 0x55) * (1 - fade) ** 2), 0, 0], true);
     }
-    if (s.playing) matrix.setRing(3, s.beat % 4 === 1 ? [255, 0, 0] : [0x55, 0, 0]);
+    if (s.solo) {
+      matrix.setRing(1, [255, 255, 255]);
+      matrix.setRing(2, [0, 0, 0]);
+      matrix.setRing(3, [255, 0, 255]);
+      matrix.setRing(4, [0, 0, 0]);
+    }
     drawBase(matrix, s);
     drawTriggers(matrix, s, now);
     if (s.playing) drawTimer(matrix, s);
@@ -548,12 +628,21 @@ export function renderFrame(matrix, s, now) {
       const i = FILTER_NAMES.indexOf(s.filterFlash);
       drawFilterCheck(matrix, s.filt[s.GLOB.currentChannel][["h", "l", "r", "b"][i]], FILTER_COLORS[i] || UI_WHITE);
     }
-    drawCursor(matrix, s);
+    if (s.volBarAt && now - s.volBarAt < 600) {
+      const vol = s.volBar || 0;
+      for (const x of [12, 13]) {
+        if (!vol) matrix.light(x, 1, [60, 0, 0]);
+        else for (let y = 1; y <= vol; y++) matrix.light(x, y, hsv(Math.round((y / 16) * 96), 255, Math.round(180 + (y / 16) * 75)));
+      }
+    }
+    drawCursor(matrix, s, now);
+    if (s.chNrAt && now - s.chNrAt < 800 && s.mode === "draw" && s.GLOB.y <= 9) drawChannelNr(matrix, s);
+    if (s.solo && now - s.soloArrowAt < 250 && s.soloArrow) matrix.drawText(s.soloArrow, 7, 8, [255, 255, 255]);
     if (s.mode === "shift") matrix.drawText("SHFT", 2, 11, [120, 120, 0]);
   } else if (s.mode === "velocity") drawVelocity(matrix, s);
   else if (s.mode === "filter") drawFilter(matrix, s, now);
   else if (s.mode === "menu") drawMenu(matrix, s);
-  else if (SUBS[s.mode]) drawSubmenu(matrix, s);
+  else if (SUBS[s.mode]) drawSubmenu(matrix, s, now);
   else if (s.mode === "dat") drawLoadSave(matrix, s);
   else if (s.mode === "kit") drawPack(matrix, s);
   else if (s.mode === "wav") drawWave(matrix, s, now);

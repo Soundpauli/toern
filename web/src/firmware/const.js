@@ -80,7 +80,7 @@ export const FILTER_PAGES = [
 ];
 
 export function emptyFilt() {
-  return { h: 32, l: 0, r: 0, b: 0, fast: 0, res: 8, detune: 16, oct: 16, att: 0, dec: 10, sus: 24, rel: 12 };
+  return { h: 32, l: 0, r: 0, b: 0, fast: 0, res: 0, detune: 16, oct: 16, att: 32, dec: 32, sus: 10, rel: 5 };
 }
 export const COND_LABEL = ["1/1", "1/2", "1/4", "1/8", "1/X", "2/1", "4/1", "8/1", "X/1", "F/F", "G/L"];
 export const COND_VALUE = [1, 2, 4, 8, 16, 17, 18, 19, 20, 21, 22];
