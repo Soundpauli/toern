@@ -87,7 +87,7 @@ export function createEngine() {
     const verb = makeVerb(ctx);
     verb.wet.connect(master);
     KINDS.forEach((kind) => { buffers[kind] = makeBuffer(ctx, kind); });
-    for (let ch = 1; ch <= 8; ch++) {
+    for (const ch of [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]) {
       const input = ctx.createGain();
       const shaper = ctx.createWaveShaper();
       shaper.curve = null;
@@ -129,7 +129,7 @@ export function createEngine() {
     if (!ctx) return;
     master.gain.setTargetAtTime((main / 100) * 0.75, ctx.currentTime, 0.02);
     ctx.__preview.gain.setTargetAtTime(preview / 16, ctx.currentTime, 0.02);
-    for (let ch = 1; ch <= 8; ch++) chains[ch].pan.pan.setTargetAtTime(mix(ch, stereo), ctx.currentTime, 0.02);
+    for (const ch of [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]) chains[ch].pan.pan.setTargetAtTime(mix(ch, stereo), ctx.currentTime, 0.02);
   }
 
   function apply(ch, filt, vol, gain = 1) {
@@ -167,6 +167,13 @@ export function createEngine() {
     c.dry.gain.setTargetAtTime(dry, now, 0.02);
     c.room = verbAmount;
     if (c.send) c.send.gain.setTargetAtTime(wet, now, 0.02);
+    if (ch === 11) {
+      const base = mapf(filt.cut ?? 16, 0, 32, 220, 7000);
+      const open = mapf(filt.h ?? 32, 0, 32, 0.2, 1);
+      c.lp.frequency.setTargetAtTime(base * open, now, 0.02);
+      c.lp.Q.setTargetAtTime(mapf(Math.max(filt.res || 0, filt.flt || 0), 0, 32, 0.7, 8), now, 0.02);
+    }
+    if (ch === 13 || ch === 14) setLfo(ch, filt.lfoR || 0, filt.lfoD || 0);
     const tank = chains.verb;
     let room = 0;
     for (let i = 1; i <= 8; i++) room = Math.max(room, chains[i].room || 0);
@@ -199,6 +206,10 @@ export function createEngine() {
 
   async function loadUrl(ch, url) {
     custom[ch] = await decodeUrl(url);
+  }
+  function loadBuffer(ch, buffer) {
+    ensure();
+    custom[ch] = buffer;
   }
 
   const reversed = new WeakMap();
@@ -261,8 +272,88 @@ export function createEngine() {
     }
   }
 
+  const mono = {};
+  const arpAt = {};
+  const lfos = {};
+  const INST = [
+    { type: "sawtooth", a: 0.005, d: 0.12, s: 0.15, r: 0.12 },
+    { type: "triangle", a: 0.008, d: 0.18, s: 0.45, r: 0.22 },
+    { type: "square", a: 0.002, d: 0.06, s: 0.1, r: 0.05 },
+    { type: "sawtooth", a: 0.08, d: 0.4, s: 0.7, r: 0.8 },
+    { type: "sine", a: 0.02, d: 0.2, s: 0.35, r: 0.3 },
+    { type: "square", a: 0.004, d: 0.05, s: 0.85, r: 0.12 },
+    { type: "triangle", a: 0.03, d: 0.15, s: 0.5, r: 0.2 },
+    { type: "sawtooth", a: 0.006, d: 0.1, s: 0.55, r: 0.16 },
+    { type: "square", a: 0.002, d: 0.08, s: 0.2, r: 0.08 },
+    { type: "sawtooth", a: 0.02, d: 0.16, s: 0.6, r: 0.25 },
+  ];
+  const WAVES = ["sine", "square", "sawtooth", "triangle"];
+  function setLfo(ch, rate, depth) {
+    const c = chains[ch];
+    if (!lfos[ch]) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 0.01;
+      g.gain.value = 0;
+      osc.connect(g);
+      g.connect(c.lp.frequency);
+      osc.start();
+      lfos[ch] = { osc, g };
+    }
+    const now = ctx.currentTime;
+    lfos[ch].osc.frequency.setTargetAtTime(Math.max(0.05, (rate / 32) * 2), now, 0.03);
+    lfos[ch].g.gain.setTargetAtTime(rate > 0 && depth > 0 ? (depth / 32) * 1800 : 0, now, 0.03);
+  }
+  function synth(ch, velocity, when, row, wav = {}) {
+    let midi = ch === 11 ? 36 + (row - 1) : 48 + (row - 1);
+    midi += ((wav.cent ?? 16) - 16) / 16 * 24;
+    midi += (wav.semi || 0) / 32 * 12;
+    midi += wav.detune || 0;
+    midi += wav.oct || 0;
+    if (ch !== 11 && wav.arp > 0) {
+      const semis = (wav.arp / 32) * 12;
+      const span = Math.max(2, Math.round(2 + ((wav.span || 0) / 32) * 14));
+      const up = span - 1;
+      const period = up * 2;
+      const step = arpAt[ch] = ((arpAt[ch] || 0) + 1) % period;
+      const reflected = step > up ? period - step : step;
+      midi += (reflected / up) * semis;
+    }
+    const freq = 440 * 2 ** ((midi - 69) / 12);
+    const preset = INST[Math.max(0, Math.min(9, wav.inst || 0))];
+    const osc = ctx.createOscillator();
+    osc.type = ch === 11 ? (wav.wave ? WAVES[wav.wave] : preset.type) : (WAVES[wav.wave | 0] || "triangle");
+    osc.frequency.setValueAtTime(Math.max(20, freq), when);
+    const env = wav.env || {};
+    const a = ch === 11 ? preset.a : Math.max(0.005, (env.att ?? 8) / 32 * 0.4);
+    const d = ch === 11 ? preset.d : Math.max(0.02, (env.dec ?? 16) / 32 * 0.5);
+    const s = ch === 11 ? preset.s : Math.max(0.05, (env.sus ?? 16) / 32);
+    const rel = ch === 11 ? preset.r : Math.max(0.02, (env.rel ?? 8) / 32 * 0.6);
+    const g = ctx.createGain();
+    const peak = Math.max(0.02, (velocity / 127) * (ch === 11 ? 0.22 : 0.28));
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(peak, when + a);
+    g.gain.linearRampToValueAtTime(peak * s, when + a + d);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + a + d + rel);
+    osc.connect(g);
+    g.connect(chains[ch].input);
+    if (ch !== 11 && mono[ch]) {
+      mono[ch].g.gain.cancelScheduledValues(when);
+      mono[ch].g.gain.setTargetAtTime(0.0001, when, 0.008);
+      mono[ch].osc.stop(when + 0.04);
+    }
+    if (ch !== 11) mono[ch] = { osc, g };
+    osc.start(when);
+    osc.stop(when + a + d + rel + 0.02);
+  }
+
   function trigger(ch, velocity, when, wav, row) {
     if (!SOUND_CH.has(ch) || !chains[ch]) return;
+    if (ch === 11 || ch === 13 || ch === 14) {
+      synth(ch, velocity, when, row ?? ch + 1, wav);
+      return;
+    }
     const home = ch + 1;
     const rate = 2 ** ((((row ?? home) - home) + (wav.detune || 0) + (wav.oct || 0) * 12) / 12);
     play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch]);
@@ -274,5 +365,27 @@ export function createEngine() {
     play(KINDS[wav.index] || "kick", wav.velocity ?? 100, ctx.currentTime, wav.seek, wav.end, wav.inv, ctx.__preview, 1, wav.env, wav.buffer || null);
   }
 
-  return { ensure, apply, setBus, loadUrl, decodeUrl, trigger, preview, now: () => (ctx ? ctx.currentTime : 0) };
+  let clickBuf = null;
+  function click() {
+    const audio = ensure();
+    if (audio.state === "suspended") audio.resume();
+    if (!clickBuf) {
+      clickBuf = audio.createBuffer(1, 160, audio.sampleRate);
+      const data = clickBuf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 2;
+    }
+    const src = audio.createBufferSource();
+    src.buffer = clickBuf;
+    const hp = audio.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 1400;
+    const gain = audio.createGain();
+    gain.gain.value = 0.08;
+    src.connect(hp);
+    hp.connect(gain);
+    gain.connect(audio.destination);
+    src.start();
+  }
+
+  return { ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
 }

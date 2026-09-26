@@ -1,9 +1,11 @@
 import {
-  COLS, COND_VALUE, DUMMY_PACKS, FILTER_CH, FILTER_PAGES, LONG_MS, PAGES, PAINT_ROWS, PROB, ROWS, SOUND_CH, STEPS, WAVS, emptyFilt, emptyNote,
+  COLS, COND_VALUE, DUMMY_PACKS, FILTER_CH, LONG_MS, PAGES, PAINT_ROWS, PROB, ROWS, SOUND_CH, STEPS, WAVS, emptyFilt, emptyNote, filterPagesFor, setLayout,
 } from "./const.js";
 import { createEngine } from "../audio/engine.js";
-import { MENU_PAGES, SUBS, renderFrame } from "./screens.js";
+import { MENU_PAGES, SUBS, isSoon, renderFrame } from "./screens.js";
 import { listDir, packWavs, parsePattern, patternUrl, sampleWavs } from "./library.js";
+import { drawRandoms } from "./random.js";
+import { GENRES, generateGenre } from "./genres.js";
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
@@ -81,6 +83,7 @@ export function createDevice(matrix, statusEl, rings) {
     GLOB: { x: 1, y: 2, edit: 1, page: 1, currentChannel: 1, singleMode: false },
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
     menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK",
+    genre: 0, genreLength: 8,
     seekOf, endOf, invOf, browse: 0, browseDir: "samples", browseItems: listDir("samples", { parent: false }),
     wavFile: false, peaks: null, shownWav: "", sampleUrl: Array(16).fill(null),
     vel: { v: 8, p: 5, c: 1, vol: 16, backSingle: false }, okAt: 0,
@@ -107,6 +110,23 @@ export function createDevice(matrix, statusEl, rings) {
   function stepSec() { return 60 / s.bpm / 4; }
   function channelOfRow(y) { return y - 1; }
   function localX(globalX) { return ((globalX - 1) % COLS) + 1; }
+  function viewPage(page, local) {
+    page = clamp(page, 1, PAGES);
+    const column = local ?? localX(s.GLOB.x);
+    const changed = page !== s.GLOB.edit;
+    s.GLOB.edit = page;
+    s.GLOB.x = (page - 1) * COLS + column;
+    if (!changed) return;
+    if (!s.playing) {
+      s.GLOB.page = page;
+      return;
+    }
+    if (s.pmode === 1) {
+      const step = ((s.beat - 1) % COLS) + 1;
+      s.GLOB.page = page;
+      s.beat = (page - 1) * COLS + step;
+    }
+  }
   function syncChannel() {
     if (s.GLOB.singleMode) return;
     const ch = channelOfRow(s.GLOB.y);
@@ -118,6 +138,8 @@ export function createDevice(matrix, statusEl, rings) {
       index: wavOf[ch] || 0, seek: seekOf[ch], end: endOf[ch], inv: invOf[ch],
       detune: ((f.detune ?? 16) / 32) * 24 - 12, oct: ((f.oct ?? 16) / 32) * 6 - 3,
       env: { att: f.att, dec: f.dec, sus: f.sus, rel: f.rel },
+      wave: f.wave || 0, inst: f.inst || 0, cent: f.cent ?? 16, semi: f.semi || 0,
+      lfoR: f.lfoR || 0, lfoD: f.lfoD || 0, span: f.span || 0, arp: f.arp || 0,
     };
   }
   const SAMPLE_ROOT = "samples";
@@ -220,18 +242,30 @@ export function createDevice(matrix, statusEl, rings) {
     engine.trigger(n.channel, n.velocity, engine.now(), wavOpts(n.channel), y);
   }
   function selectVoice(ch) {
-    if (ch < 1 || ch > 8) return;
+    if (!((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14)) return;
     s.GLOB.currentChannel = ch;
     s.GLOB.y = ch + 1;
     if (s.mode === "draw" || s.mode === "single") {
       s.GLOB.x = (s.GLOB.edit - 1) * COLS + localX(s.GLOB.x);
     }
-    if (s.mode === "wav") refreshBrowse();
+    if (s.mode === "wav" && ch <= 8) refreshBrowse();
+  }
+  function drawRandomPage() {
+    drawRandoms({
+      note, filt, channel: s.GLOB.currentChannel, page: s.GLOB.edit,
+      loopLength: s.loopLength, bpm: s.bpm,
+    });
+    queueAutosave();
   }
   function clearPage() {
     const base = (s.GLOB.edit - 1) * COLS;
+    const only = s.mode === "single" ? s.GLOB.currentChannel : 0;
     for (let x = 1; x <= COLS; x++) {
-      for (let y = 1; y <= ROWS; y++) note[base + x][y].channel = 0;
+      for (let y = 1; y <= ROWS; y++) {
+        const n = note[base + x][y];
+        if (only && n.channel !== only) continue;
+        n.channel = 0;
+      }
     }
     queueAutosave();
   }
@@ -306,26 +340,31 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function shiftNotes(dx, dy, pageOnly) {
     const ch = s.GLOB.currentChannel;
-    const pages = pageOnly ? [s.GLOB.edit] : Array.from({ length: PAGES }, (_, i) => i + 1);
+    const last = pageOnly ? s.GLOB.edit : (s.loopLength > 0 ? Math.min(s.loopLength, PAGES) : (() => {
+      let hi = 1;
+      for (let p = 1; p <= PAGES; p++) if (hasPageNotes(p)) hi = p;
+      return hi;
+    })());
+    const x0 = pageOnly ? (s.GLOB.edit - 1) * COLS + 1 : 1;
+    const x1 = last * COLS;
     const hits = [];
-    for (const p of pages) {
-      const base = (p - 1) * COLS;
-      for (let x = 1; x <= COLS; x++) for (let y = 1; y <= ROWS; y++) {
-        const n = note[base + x][y];
-        if (n.channel !== ch) continue;
-        hits.push({ p, x, y, n: { ...n } });
-        n.channel = 0;
-      }
+    for (let x = x0; x <= x1; x++) for (let y = 1; y <= 15; y++) {
+      const n = note[x][y];
+      if (n.channel !== ch) continue;
+      hits.push({ x, y, n: { ...n } });
+      Object.assign(n, emptyNote());
     }
     for (const hit of hits) {
       let x = hit.x + dx;
-      let p = hit.p;
-      while (x > COLS) { x -= COLS; p = p >= PAGES ? 1 : p + 1; }
-      while (x < 1) { x += COLS; p = p <= 1 ? PAGES : p - 1; }
-      if (pageOnly) { p = hit.p; x = clamp(hit.x + dx, 1, COLS); }
-      const y = clamp(hit.y + dy, 1, 15);
-      const dst = note[(p - 1) * COLS + x][y];
-      if (!dst.channel) Object.assign(dst, hit.n);
+      if (dx) {
+        if (x < x0) x = x1;
+        else if (x > x1) x = x0;
+      }
+      let y = hit.y + dy;
+      if (y < 1) y = 15;
+      else if (y > 15) y = 1;
+      const midi = hit.n.midiPitch <= 127 ? clamp(hit.n.midiPitch + dy, 0, 127) : 255;
+      Object.assign(note[x][y], hit.n, { midiPitch: midi });
     }
     queueAutosave();
   }
@@ -363,14 +402,14 @@ export function createDevice(matrix, statusEl, rings) {
   function applyMix() {
     engine.ensure();
     engine.setBus({ main: s.mainVol, preview: s.prevVol, stereo: s.stereo });
-    for (let ch = 1; ch <= 8; ch++) engine.apply(ch, filt[ch], chVol[ch], s.gain);
+    for (const ch of SOUND_CH) engine.apply(ch, filt[ch], chVol[ch], s.gain);
   }
-  function applyFilt(ch) { if (ch >= 1 && ch <= 8) engine.apply(ch, filt[ch], chVol[ch], s.gain); }
+  function applyFilt(ch) { if (SOUND_CH.has(ch)) engine.apply(ch, filt[ch], chVol[ch], s.gain); }
   function clearNotes() {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
   }
   function resetEffects() {
-    for (let ch = 1; ch <= 8; ch++) Object.assign(filt[ch], emptyFilt());
+    for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt());
     chVol.fill(16);
     s.vel.vol = 16;
     applyMix();
@@ -421,11 +460,16 @@ export function createDevice(matrix, statusEl, rings) {
     s.playing = !s.playing;
     if (!s.playing) queueAutosave();
     if (s.playing) {
-      s.beat = 1;
-      s.GLOB.page = 1;
+      if (s.pmode === 1) {
+        s.GLOB.page = s.GLOB.edit;
+        s.beat = (s.GLOB.edit - 1) * COLS + 1;
+      } else {
+        s.beat = 1;
+        s.GLOB.page = 1;
+      }
       const t = engine.now();
       nextAt = t + stepSec();
-      fire(1, t);
+      fire(s.beat, t);
     }
   }
   function enterFilter() {
@@ -468,15 +512,17 @@ export function createDevice(matrix, statusEl, rings) {
     const ch = s.GLOB.currentChannel;
     if (!FILTER_CH.has(ch)) return;
     const f = filt[ch];
-    const spec = (FILTER_PAGES[filterPages[ch]] || FILTER_PAGES[0])[f.fast];
+    const pages = filterPagesFor(ch);
+    const spec = (pages[filterPages[ch]] || pages[0])[f.fast];
     if (!spec) return;
-    f[spec.key] = clamp(f[spec.key] + dir, 0, 32);
+    f[spec.key] = clamp(f[spec.key] + dir, 0, spec.max ?? 32);
     applyFilt(ch);
     s.filterFlash = spec.name;
     s.filterFlashAt = performance.now();
   }
   const EEPROM_KEY = "toern-web-eeprom";
   let persist = false;
+  let deviceChosen = false;
   let patternDirty = false;
   let autosaveTimer = 0;
   function loadStore(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch { return {}; } }
@@ -522,13 +568,17 @@ export function createDevice(matrix, statusEl, rings) {
       },
       mainVol: s.mainVol, gain: s.gain, prevVol: s.prevVol, stereo: s.stereo,
       bpm: s.bpm, clockInt: s.clockInt, muteMask: s.muteMask, packSlot: s.packSlot, ledBrightness: s.ledBrightness,
+      deviceChosen,
     };
     try { localStorage.setItem(EEPROM_KEY, JSON.stringify(data)); } catch { /* storage full */ }
   }
   function loadEeprom() {
     let data = null;
     try { data = JSON.parse(localStorage.getItem(EEPROM_KEY) || "null"); } catch { data = null; }
-    if (!data) return;
+    if (!data) {
+      loadPack(1);
+      return;
+    }
     for (const mode of Object.keys(subPick)) {
       const saved = data.subPick?.[mode];
       if (!Array.isArray(saved)) continue;
@@ -544,13 +594,24 @@ export function createDevice(matrix, statusEl, rings) {
     if (typeof data.clockInt === "boolean") s.clockInt = data.clockInt;
     if (Number.isFinite(data.muteMask)) s.muteMask = data.muteMask & 0xffff;
     if (Number.isFinite(data.ledBrightness)) s.ledBrightness = clamp(data.ledBrightness, 3, 255);
-    if (Number.isFinite(data.packSlot)) s.packSlot = clamp(data.packSlot, 0, 99);
+    if (!data.deviceChosen) subPick.look[6] = 2;
+    s.packSlot = Number.isFinite(data.packSlot) && data.packSlot >= 1 && data.packSlot <= 99 ? data.packSlot : 1;
     applySub("look", 0);
+    applyLedLayout();
     applySub("etc", 5);
     applySub("etc", 7);
     applySub("vol", 4);
-    const urls = packWavs(s.packSlot);
-    if (urls.some(Boolean)) urls.forEach((url, i) => { if (url) engine.loadUrl(i + 1, url); });
+    loadPack(s.packSlot);
+  }
+  function loadPack(slot) {
+    s.packSlot = slot;
+    const urls = packWavs(slot);
+    if (!urls.some(Boolean)) return;
+    urls.forEach((url, i) => { if (url) engine.loadUrl(i + 1, url); });
+    s.wavName = `PACK ${slot}`;
+  }
+  function patternHasNotes(data) {
+    return Array.isArray(data) && data.some((n) => (Array.isArray(n) ? n[0] : n));
   }
   function queueAutosave() {
     patternDirty = true;
@@ -558,18 +619,30 @@ export function createDevice(matrix, statusEl, rings) {
     autosaveTimer = setTimeout(() => saveSlot("toern-web-patterns", 0, snapshot()), 400);
   }
   function autoload() {
+    s.mute[1] = false;
     const stored = loadStore("toern-web-patterns")["0"];
-    if (Array.isArray(stored)) {
+    if (patternHasNotes(stored)) {
       restore(stored);
+      s.mute[1] = false;
       return;
     }
-    const url = patternUrl(0);
+    const url = patternUrl(0) || patternUrl(1);
     if (!url) return;
     parsePattern(url).then((data) => {
-      if (!data || patternDirty) return;
+      if (!data || patternDirty || !patternHasNotes(data)) return;
       restore(data);
+      s.mute[1] = false;
       saveSlot("toern-web-patterns", 0, data);
     });
+  }
+  function applyLedLayout() {
+    const wide = subPick.look[6] >= 2;
+    setLayout(wide ? 32 : 16);
+    matrix.layout(COLS);
+    s.GLOB.x = clamp(s.GLOB.x, 1, STEPS);
+    s.GLOB.edit = clamp(Math.floor((s.GLOB.x - 1) / COLS) + 1, 1, PAGES);
+    if (!s.playing) s.GLOB.page = s.GLOB.edit;
+    if (s.GLOB.page > PAGES) s.GLOB.page = PAGES;
   }
   function snapshot() {
     const out = [];
@@ -610,6 +683,8 @@ export function createDevice(matrix, statusEl, rings) {
       s.ctrlVol = subPick.look[5] === 1;
       s.cursorType = subPick.look[8];
       s.drawR = subPick.look[9] === 1;
+      if (index === 6) deviceChosen = true;
+      applyLedLayout();
       if (!s.drawR && s.fullMute) exitFullMute(0);
     }
     if (mode === "etc") {
@@ -655,9 +730,23 @@ export function createDevice(matrix, statusEl, rings) {
     s.GLOB.singleMode = false;
     s.mode = "draw";
   }
+  function writeGenre(type) {
+    const pages = type === 0 ? 0 : clamp(s.genreLength, 1, PAGES);
+    generateGenre(note, type, pages, COLS, STEPS);
+    const drift = type === 0 ? 0 : Math.floor(Math.random() * 9) - 4;
+    s.bpm = clamp((GENRES[type]?.bpm || 100) + drift, 40, 240);
+    s.GLOB.edit = 1;
+    s.GLOB.page = 1;
+    s.GLOB.x = 1;
+    s.beat = 1;
+    saveEeprom();
+    queueAutosave();
+    finishLoad();
+  }
   function openMenuPage() {
     const name = MENU_PAGES[s.menuIndex].name;
     if (name === "DAT") s.mode = "dat";
+    else if (name === "PAT") { s.subIndex = 0; s.mode = "pat"; }
     else if (name === "KIT") s.mode = "kit";
     else if (name === "WAV" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
       refreshBrowse();
@@ -674,6 +763,7 @@ export function createDevice(matrix, statusEl, rings) {
 
   function turn(enc, dir) {
     if (s.mode === "boot") return;
+    engine.click();
     s.knobAngle[enc] += dir * 15;
     if (hold[enc]) hold[enc].turned = true;
     if (s.mode === "velocity") {
@@ -685,10 +775,10 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "filter") {
-      const page = FILTER_PAGES[filterPages[s.GLOB.currentChannel]] || FILTER_PAGES[0];
+      const page = filterPagesFor(s.GLOB.currentChannel)[filterPages[s.GLOB.currentChannel]] || filterPagesFor(s.GLOB.currentChannel)[0];
       const spec = page[enc];
       if (!spec) return;
-      filt[s.GLOB.currentChannel][spec.key] = clamp(filt[s.GLOB.currentChannel][spec.key] + dir, 0, 32);
+      filt[s.GLOB.currentChannel][spec.key] = clamp(filt[s.GLOB.currentChannel][spec.key] + dir, 0, spec.max ?? 32);
       s.filterTouch = enc;
       s.filterTouchAt = performance.now();
       applyFilt(s.GLOB.currentChannel);
@@ -696,8 +786,8 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (s.mode === "shift") {
       if (enc === 3) shiftNotes(dir, 0, false);
-      else if (enc === 0) shiftNotes(0, dir, false);
-      else if (enc === 1) shiftNotes(0, dir, true);
+      else if (enc === 0) shiftNotes(0, -dir, false);
+      else if (enc === 1) shiftNotes(0, -dir, true);
       return;
     }
     if (s.solo && (s.mode === "draw" || s.mode === "single")) {
@@ -728,13 +818,17 @@ export function createDevice(matrix, statusEl, rings) {
           s.volBarAt = performance.now();
           applyFilt(ch);
         } else if (!s.childLock) {
-          s.GLOB.edit = clamp(s.GLOB.edit + dir, 1, PAGES);
-          s.GLOB.x = (s.GLOB.edit - 1) * COLS + localX(s.GLOB.x);
+          viewPage(s.GLOB.edit + dir);
         }
       } else if (enc === 2) nudgeFast(dir);
       else {
         if (hold[3]) paintCell(s.GLOB.x, s.GLOB.y);
-        s.GLOB.x = (s.GLOB.edit - 1) * COLS + clamp(localX(s.GLOB.x) + dir, 1, COLS);
+        let page = s.GLOB.edit;
+        let local = localX(s.GLOB.x) + dir;
+        if (!s.childLock && local > COLS && page < PAGES) { page += 1; local = 1; }
+        else if (!s.childLock && local < 1 && page > 1) { page -= 1; local = COLS; }
+        else local = clamp(local, 1, COLS);
+        viewPage(page, local);
         if (hold[3]) paintCell(s.GLOB.x, s.GLOB.y);
       }
       return;
@@ -747,6 +841,16 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "bpm" && enc === 1) {
       s.ledBrightness = clamp(s.ledBrightness + dir * 4, 3, 255);
       saveEeprom();
+      return;
+    }
+    if (s.mode === "new") {
+      if (enc === 2) s.genre = clamp(s.genre + dir, 0, GENRES.length - 1);
+      else if (enc === 3 && s.genre) s.genreLength = clamp(s.genreLength + dir, 1, PAGES);
+      return;
+    }
+    if (s.mode === "pat") {
+      if (enc === 2) s.subIndex = clamp(s.subIndex + dir, 0, SUBS.pat.length - 1);
+      else if (enc === 3) s.genreLength = clamp(s.genreLength + dir, 1, PAGES);
       return;
     }
     if (SUBS[s.mode] && enc === 3) s.subIndex = clamp(s.subIndex + dir, 0, SUBS[s.mode].length - 1);
@@ -838,7 +942,13 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "filter" && enc <= 3) { filt[s.GLOB.currentChannel].fast = enc; return; }
+    if (s.mode === "new" && enc === 0) { s.mode = "dat"; return; }
+    if ((s.mode === "new" && enc === 3) || (s.mode === "pat" && enc === 3)) {
+      writeGenre(s.mode === "pat" ? s.subIndex + 1 : s.genre);
+      return;
+    }
     if (s.mode === "dat" && enc === 0) {
+      if (s.slot !== 0 && !slotExists("toern-web-patterns", s.slot)) { s.mode = "new"; return; }
       const url = patternUrl(s.slot);
       const stored = loadStore("toern-web-patterns")[String(s.slot)];
       if (s.slot === 0 && Array.isArray(stored)) {
@@ -888,6 +998,17 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (s.mode === "wav" && enc === 0) previewWav(true);
     if (s.mode === "wav" && enc === 3) browserPress();
+    if (s.mode === "rec") {
+      if (enc === 1) startMicRec();
+      else if (enc === 2) {
+        if (s.recOn) stopMicRec();
+        else playMicRec();
+      } else if (enc === 3) {
+        closeMic();
+        s.mode = "wav";
+      }
+      return;
+    }
     if (s.mode === "wav" && enc === 2) {
       const item = currentFile();
       if (item?.url && item.name.endsWith(".wav")) {
@@ -905,10 +1026,21 @@ export function createDevice(matrix, statusEl, rings) {
     if (enc === 3 && s.mode === "menu") openMenuPage();
   }
 
-  function cycleFilter() {
+  function cycleFilter(dir = 1) {
     const ch = s.GLOB.currentChannel;
-    filterPages[ch] = (filterPages[ch] + 1) % FILTER_PAGES.length;
+    const n = filterPagesFor(ch).length;
+    filterPages[ch] = (filterPages[ch] + dir + n) % n;
     s.filterPage = filterPages[ch];
+  }
+  function resetFilterPage(ch) {
+    const page = filterPagesFor(ch)[filterPages[ch]] || filterPagesFor(ch)[0];
+    const defaults = emptyFilt();
+    for (const spec of page) if (spec) filt[ch][spec.key] = defaults[spec.key];
+    applyFilt(ch);
+  }
+  function resetVoiceFilters(ch) {
+    Object.assign(filt[ch], emptyFilt());
+    applyFilt(ch);
   }
   function tapTempo() {
     if (!s.clockInt) return;
@@ -923,8 +1055,89 @@ export function createDevice(matrix, statusEl, rings) {
     s.bpm = clamp(bpm, 40, 240);
     saveEeprom();
   }
+  let recStream = null;
+  let recProc = null;
+  let recChunks = [];
+  let recTake = null;
+  async function openMic() {
+    if (recStream) return recStream;
+    const ctx = engine.ensure();
+    if (ctx.state === "suspended") await ctx.resume();
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
+    const src = ctx.createMediaStreamSource(recStream);
+    const sink = ctx.createGain();
+    sink.gain.value = 0;
+    recProc = ctx.createScriptProcessor(2048, 1, 1);
+    recProc.onaudioprocess = (e) => {
+      const data = e.inputBuffer.getChannelData(0);
+      let peak = 0;
+      for (let i = 0; i < data.length; i += 8) peak = Math.max(peak, Math.abs(data[i]));
+      s.recLevel = peak;
+      if (s.recOn) recChunks.push(new Float32Array(data));
+    };
+    src.connect(recProc);
+    recProc.connect(sink);
+    sink.connect(ctx.destination);
+    return recStream;
+  }
+  async function startMicRec() {
+    if (s.recOn) return;
+    try {
+      await openMic();
+    } catch {
+      s.wavName = "MIC?";
+      return;
+    }
+    recChunks = [];
+    s.recOn = true;
+    s.recPlay = false;
+    s.recAt = performance.now();
+  }
+  function stopMicRec() {
+    if (!s.recOn) return;
+    s.recOn = false;
+    const ctx = engine.ensure();
+    const parts = recChunks;
+    recChunks = [];
+    let n = 0;
+    for (const part of parts) n += part.length;
+    if (!n) return;
+    const buffer = ctx.createBuffer(1, n, ctx.sampleRate);
+    const out = buffer.getChannelData(0);
+    let o = 0;
+    for (const part of parts) { out.set(part, o); o += part.length; }
+    const ch = s.GLOB.currentChannel;
+    recTake = buffer;
+    engine.loadBuffer(ch, buffer);
+    s.sampleUrl[ch] = null;
+    s.wavName = "REC";
+    s.peaks = null;
+  }
+  function playMicRec() {
+    if (!recTake) return;
+    const ch = s.GLOB.currentChannel;
+    engine.preview({ index: 0, seek: 0, end: 100, inv: false, velocity: 100, buffer: recTake, env: wavOpts(ch).env });
+    s.recPlay = true;
+    s.recPlayAt = performance.now();
+  }
+  function closeMic() {
+    if (s.recOn) stopMicRec();
+    recProc?.disconnect();
+    recProc = null;
+    recStream?.getTracks().forEach((t) => t.stop());
+    recStream = null;
+  }
   function onTouch3(down) {
-    if (down && s.mode === "bpm") tapTempo();
+    if (!down) return;
+    if (s.mode === "filter") { resetFilterPage(s.GLOB.currentChannel); return; }
+    if (s.mode === "bpm") tapTempo();
+    if (s.mode === "wav" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
+      s.recOn = false;
+      s.recPlay = false;
+      s.recLevel = 0;
+      s.mode = "rec";
+      openMic().catch(() => { s.wavName = "MIC?"; });
+    }
   }
   function onMeta(down) {
     touch.m = down;
@@ -947,9 +1160,29 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (!touch.l) { touch.first = 0; touch.chord = false; }
   }
+  function toggleSingle() {
+    if (s.mode === "single") {
+      s.GLOB.singleMode = false;
+      s.mode = "draw";
+      return;
+    }
+    if (s.GLOB.y >= 16) return;
+    const ch = channelOfRow(s.GLOB.y);
+    if ((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14) {
+      s.GLOB.currentChannel = ch;
+      s.GLOB.singleMode = true;
+      s.mode = "single";
+    }
+  }
   function onTouchL(down) {
     touch.l = down;
     if (down) {
+      if (s.mode === "filter") {
+        s.GLOB.singleMode = false;
+        s.mode = "draw";
+        touch.chord = true;
+        return;
+      }
       if (!touch.first) touch.first = 1;
       if (touch.m && touch.first === 2 && (s.mode === "draw" || s.mode === "single")) { enterFilter(); touch.chord = true; }
       if (touch.m && touch.first === 1 && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
@@ -985,16 +1218,20 @@ export function createDevice(matrix, statusEl, rings) {
 
   function isTab(e) { return e.code === "Tab" || e.key === "Tab"; }
   function isCommand(e) { return e.key === "Meta" || e.code === "MetaLeft" || e.code === "MetaRight"; }
+  function isTouch1Key(e) { return e.key === "ß" || e.key === "ẞ" || e.key === "-" || e.code === "Minus"; }
+  function isTouch2Key(e) { return e.key === "´" || e.code === "Equal"; }
 
   function keydown(e) {
-    const turning = ["KeyQ", "KeyW", "KeyJ", "KeyK", "Comma", "Period", "ArrowLeft", "ArrowRight"].includes(e.code);
-    if (isTab(e) || isCommand(e) || e.key === " " || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    const ue = e.code === "BracketLeft" || e.key === "ü" || e.key === "Ü" || e.key === "[";
+    const turning = ["KeyQ", "KeyW", "KeyR", "KeyT", "KeyU", "KeyI", "KeyP", "BracketLeft", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.code) || ue;
+    if (isTab(e) || isCommand(e) || isTouch1Key(e) || isTouch2Key(e) || e.key === " " || e.key === "Enter" || e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
       e.preventDefault();
       e.stopPropagation();
     }
     if (e.repeat && !turning) return;
     if (s.mode === "boot") return;
     if (e.key === "Escape") {
+      if (s.mode === "rec") closeMic();
       if (s.mode === "single") {
         s.GLOB.singleMode = false;
         s.mode = "draw";
@@ -1002,31 +1239,45 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (e.key >= "1" && e.key <= "8" && !e.metaKey && !e.ctrlKey && !e.altKey) { selectVoice(Number(e.key)); return; }
-    if (e.code === "KeyF" && (s.mode === "draw" || s.mode === "single")) { enterFilter(); return; }
+    if (e.code === "KeyF") {
+      if (s.mode === "filter") { s.GLOB.singleMode = false; s.mode = "draw"; return; }
+      if (s.mode === "draw" || s.mode === "single") { enterFilter(); return; }
+    }
+    if (e.code === "KeyS" && (s.mode === "draw" || s.mode === "single")) { toggleSingle(); return; }
+    if (e.code === "KeyL" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
+      if (s.mode === "wav") { backToGrid(); return; }
+      if (s.mode === "draw" || s.mode === "single") { refreshBrowse(); s.mode = "wav"; previewWav(); return; }
+    }
     if (e.code === "KeyD" && (s.mode === "draw" || s.mode === "single")) { clearPage(); return; }
-    if (e.code === "KeyQ") turn(0, -1);
-    else if (e.code === "KeyW") turn(0, 1);
-    else if (e.code === "KeyJ") turn(1, -1);
-    else if (e.code === "KeyK") turn(1, 1);
-    else if (e.code === "Comma") turn(2, -1);
-    else if (e.code === "Period") turn(2, 1);
-    else if (e.key === "ArrowLeft") turn(3, -1);
-    else if (e.key === "ArrowRight") turn(3, 1);
+    if (e.code === "KeyQ") turn(0, 1);
+    else if (e.code === "KeyW") turn(0, -1);
+    else if (e.key === "ArrowDown") turn(0, -1);
+    else if (e.key === "ArrowUp") turn(0, 1);
+    else if (e.code === "KeyR") turn(1, -1);
+    else if (e.code === "KeyT") turn(1, 1);
+    else if (e.code === "KeyU") turn(2, -1);
+    else if (e.code === "KeyI") turn(2, 1);
+    else if (e.key === "ArrowLeft" || e.code === "KeyP") turn(3, -1);
+    else if (e.key === "ArrowRight" || ue) turn(3, 1);
     else if (isTab(e)) {
-      hold[0] = { at: performance.now(), turned: false, fired: true };
-      shortPress(0);
+      if (s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
+      else {
+        hold[0] = { at: performance.now(), turned: false, fired: true };
+        shortPress(0);
+      }
     } else if (isCommand(e)) {
       if ((s.mode === "draw" || s.mode === "single") && s.GLOB.y !== 16) hold[1] = { at: performance.now(), turned: false, fired: false };
       else shortPress(1);
     } else if (e.key === " ") {
       if (s.mode === "filter") togglePlay();
       else hold[2] = { at: performance.now(), turned: false };
-    }     else if (e.key === "Enter") {
+    } else if (e.key === "Enter") {
       if (s.mode === "velocity") { backToGrid(); return; }
-      if (s.mode === "draw" || s.mode === "single") hold[3] = { at: performance.now(), turned: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
+      if (s.mode === "draw" || s.mode === "single" || s.mode === "filter") hold[3] = { at: performance.now(), turned: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
       else shortPress(3);
     } else if (e.key === "m" || e.key === "M") onMeta(true);
-    else if (e.key === "l" || e.key === "L") onTouchL(true);
+    else if (isTouch1Key(e)) onTouchL(true);
+    else if (isTouch2Key(e)) onMeta(true);
   }
   function keyup(e) {
     if (isTab(e) && hold[0]) {
@@ -1044,12 +1295,21 @@ export function createDevice(matrix, statusEl, rings) {
       if (h.fired) return;
       if (!h.turned) shortPress(3);
     } else if (e.key === "m" || e.key === "M") onMeta(false);
-    else if (e.key === "l" || e.key === "L") onTouchL(false);
+    else if (isTouch1Key(e)) onTouchL(false);
+    else if (isTouch2Key(e)) onMeta(false);
   }
   function tick(now) {
     if (!s.bootAt) s.bootAt = now;
+    if (s.mode === "single" && s.GLOB.y === 16 && hold[0] && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
+      hold[0].fired = true;
+      drawRandomPage();
+    }
     if ((s.mode === "draw" || s.mode === "single") && hold[3] && !hold[3].turned && !hold[3].fired && hold[3].had && now - hold[3].at >= LONG_MS) {
       hold[3].fired = true; enterVelocity();
+    }
+    if (s.mode === "filter" && hold[3] && !hold[3].turned && !hold[3].fired && now - hold[3].at >= LONG_MS) {
+      hold[3].fired = true;
+      resetVoiceFilters(s.GLOB.currentChannel);
     }
     if ((s.mode === "draw" || s.mode === "single") && hold[2] && !hold[2].turned && !hold[2].fired && now - hold[2].at >= LONG_MS) {
       hold[2].fired = true; enterFilter();
@@ -1060,22 +1320,30 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.playing && s.clockInt) {
       const t = engine.now();
       while (nextAt <= t + 0.05) {
-        const end = patternEnd();
-        if (s.beat >= end) {
-          if (s.pmode === 3 && s.GLOB.edit !== s.GLOB.page) {
-            s.GLOB.page = s.GLOB.edit;
-            s.beat = (s.GLOB.page - 1) * COLS + 1;
-          } else if (s.pmode === 2) {
-            if (!advanceSong()) { s.playing = false; break; }
-          } else if (s.pmode === 3) {
-            s.beat = (s.GLOB.page - 1) * COLS + 1;
-          } else {
-            s.beat = 1;
-            s.GLOB.page = 1;
-          }
+        if (s.pmode === 1) {
+          const start = (s.GLOB.page - 1) * COLS + 1;
+          const end = start + COLS - 1;
+          if (s.beat < start || s.beat > end) s.beat = start + ((s.beat - 1) % COLS);
+          else s.beat += 1;
+          if (s.beat > end) s.beat = start;
         } else {
-          s.beat += 1;
-          s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
+          const end = patternEnd();
+          if (s.beat >= end) {
+            if (s.pmode === 3 && s.GLOB.edit !== s.GLOB.page) {
+              s.GLOB.page = s.GLOB.edit;
+              s.beat = (s.GLOB.page - 1) * COLS + 1;
+            } else if (s.pmode === 2) {
+              if (!advanceSong()) { s.playing = false; break; }
+            } else if (s.pmode === 3) {
+              s.beat = (s.GLOB.page - 1) * COLS + 1;
+            } else {
+              s.beat = 1;
+              s.GLOB.page = 1;
+            }
+          } else {
+            s.beat += 1;
+            s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
+          }
         }
         if (s.flow && s.pmode !== 3) s.GLOB.edit = s.GLOB.page;
         fire(s.beat, Math.max(nextAt, t));
@@ -1102,6 +1370,26 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.knobAngle[i] !== shownAngle[i]) el.style.setProperty("--turn", `${shownAngle[i] = s.knobAngle[i]}deg`);
     });
     requestAnimationFrame(tick);
+  }
+  function cellTaken(col, row) {
+    if (s.mode !== "draw" && s.mode !== "single") return false;
+    const n = note[(s.GLOB.edit - 1) * COLS + col]?.[row];
+    if (!n?.channel) return false;
+    if (s.GLOB.singleMode && n.channel !== s.GLOB.currentChannel) return false;
+    return true;
+  }
+  function hover(col, row) {
+    if (s.mode !== "draw" && s.mode !== "single") return;
+    if (col < 1 || row < 1 || col > COLS || row > ROWS) return;
+    if (s.GLOB.y === row && localX(s.GLOB.x) === col) return;
+    const prevY = s.GLOB.y;
+    s.GLOB.y = row;
+    s.GLOB.x = (s.GLOB.edit - 1) * COLS + col;
+    syncChannel();
+    if (s.GLOB.y !== prevY && s.cursorType === 1 && s.mode === "draw" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
+      s.chNr = s.GLOB.currentChannel;
+      s.chNrAt = performance.now();
+    }
   }
   function pointer(col, row, erase, audition) {
     if (s.mode !== "draw" && s.mode !== "single") return;
@@ -1160,11 +1448,19 @@ export function createDevice(matrix, statusEl, rings) {
     press(enc) { shortPress(enc); },
     knobDown(enc) {
       const grid = s.mode === "draw" || s.mode === "single";
+      if (enc === 0 && s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
       if (enc === 1 && grid && s.GLOB.y !== 16) hold[1] = { at: performance.now(), turned: false, fired: false };
       if (enc === 2 && grid) hold[2] = { at: performance.now(), turned: false, fired: false };
-      if (enc === 3 && grid) hold[3] = { at: performance.now(), turned: false, fired: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
+      if (enc === 3 && (grid || s.mode === "filter")) hold[3] = { at: performance.now(), turned: false, fired: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
     },
     knobUp(enc, turned) {
+      if (enc === 0) {
+        const h = hold[0];
+        hold[0] = null;
+        if (h?.fired || turned) return;
+        shortPress(0);
+        return;
+      }
       if (enc === 1) {
         const h = hold[1];
         hold[1] = null;
@@ -1188,7 +1484,50 @@ export function createDevice(matrix, statusEl, rings) {
       else onTouch3(down);
     },
     rotate(enc, dir) { turn(enc, dir); },
+    hover, cellTaken, velocity: enterVelocity,
     voice() { return s.GLOB.currentChannel; },
+    muted(ch) { return !!s.mute[ch]; },
     gridMode() { return s.mode === "draw" || s.mode === "single"; },
+    cursor() {
+      return { on: s.mode === "draw" || s.mode === "single", x: localX(s.GLOB.x), y: s.GLOB.y };
+    },
+    mode() { return s.mode; },
+    soon() { return isSoon(s.mode, s.subIndex); },
+    cols() { return COLS; },
+    loadGenre(type) {
+      if (s.mode === "boot") return;
+      writeGenre(type);
+    },
+    setDevice(gen) {
+      deviceChosen = true;
+      const rotated = subPick.look[6] % 2 === 1;
+      subPick.look[6] = gen === 1 ? (rotated ? 1 : 0) : (rotated ? 3 : 2);
+      applyLedLayout();
+      saveEeprom();
+    },
+    jump(name) {
+      if (s.mode === "boot") return;
+      if (name === "draw") { s.GLOB.singleMode = false; s.mode = "draw"; return; }
+      if (name === "single") {
+        const ch = s.GLOB.currentChannel;
+        if (!((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14)) return;
+        s.GLOB.singleMode = true;
+        s.mode = "single";
+        return;
+      }
+      if (name === "filter") { enterFilter(); return; }
+      if (name === "menu") { s.menuIndex = 0; s.mode = "menu"; return; }
+      if (name === "wav") {
+        if (s.GLOB.currentChannel < 1 || s.GLOB.currentChannel > 8) return;
+        refreshBrowse();
+        s.mode = "wav";
+        previewWav();
+        return;
+      }
+      if (name === "velocity") { enterVelocity(); return; }
+      if (name === "bpm") { s.mode = "bpm"; return; }
+      if (name === "song") { s.mode = "song"; return; }
+      if (name === "play") togglePlay();
+    },
   };
 }

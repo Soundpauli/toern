@@ -1,7 +1,8 @@
-import { COL, COL_BASE, COLS, ROWS, PAGES, SCHEMES, FILTER_PAGES } from "./const.js";
+import { COL, COL_BASE, COLS, ROWS, PAGES, SCHEMES, filterPagesFor } from "./const.js";
 import { blend, hsv, nscale } from "./matrix.js";
 import { glyphWidth, textPixelWidth } from "./font.js";
 import { showIcon } from "./icons.js";
+import { GENRES } from "./genres.js";
 
 const UI_RED = [120, 0, 0];
 const UI_GREEN = [0, 120, 0];
@@ -13,7 +14,9 @@ const UI_BRIGHT_WHITE = [150, 150, 150];
 const UI_BRIGHT_GREEN = [0, 150, 0];
 const UI_DIM_RED = [20, 0, 0];
 const UI_DIM_GREEN = [0, 20, 0];
-const FILTER_COLS = [[5, 6], [12, 13], [20, 21], [27, 28]];
+const FILTER_WIDE = [[5, 6], [12, 13], [20, 21], [27, 28]];
+const FILTER_NARROW = [[2, 3], [6, 7], [10, 11], [14, 15]];
+function filterCols() { return COLS <= 16 ? FILTER_NARROW : FILTER_WIDE; }
 const FILTER_NAMES = ["HCUT", "LCUT", "RVRB", "BITC"];
 const FILTER_COLORS = [[255, 0, 0], [255, 64, 0], [255, 128, 0], [255, 191, 0]];
 const LOGO = [
@@ -23,6 +26,7 @@ const LOGO = [
 
 export const MENU_PAGES = [
   { name: "DAT", label: "FILE", icon: "folder", col: 1 },
+  { name: "PAT", label: "PAT", icon: "pattern", col: 3 },
   { name: "KIT", label: "PACK", icon: "pack", col: 2 },
   { name: "WAV", label: "WAVE", icon: "sample", col: 3 },
   { name: "BPM", label: "BPM", icon: "clock", col: 4 },
@@ -40,9 +44,10 @@ export const SUBS = {
   midi: ["CH", "TRAN", "SEND", "RCVE", "CLMP", "SYNC", "PPQN"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
   etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "CHLD", "RSET"],
+  pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
 
-const SUB_PARENT = { look: 6, recs: 7, midi: 8, vol: 5, etc: 14 };
+const SUB_PARENT = { look: 6, recs: 7, midi: 8, vol: 5, etc: 14, pat: 3 };
 
 function scaleTo(rgb, target) {
   const max = Math.max(rgb[0], rgb[1], rgb[2]);
@@ -178,9 +183,9 @@ export function drawTimer(matrix, s) {
   const x = ((s.beat - 1) % COLS) + 1;
   for (let y = 1; y < ROWS; y++) {
     const ch = s.note[(s.GLOB.edit - 1) * COLS + x][y].channel;
-    matrix.light(x, y, [10, 0, 0]);
+    matrix.light(x, y, [28, 0, 0]);
     if (ch > 0 && !s.mute[ch]) {
-      if (!s.GLOB.singleMode || s.GLOB.currentChannel === ch) matrix.light(x, y, UI_BRIGHT_WHITE);
+      if (!s.GLOB.singleMode || s.GLOB.currentChannel === ch) matrix.light(x, y, [255, 255, 255]);
     } else if (ch > 0 && !s.GLOB.singleMode) matrix.light(x, y, [0, 0, 0]);
   }
 }
@@ -208,6 +213,7 @@ export function drawCursor(matrix, s, now = performance.now()) {
     matrix.light(x, y, pal(s).base[ch] || [0, 0, 0]);
   } else if (ch) matrix.light(x, y, nscale(col[ch], s.pulse));
   else matrix.light(x, y, hsv(s.pulse, 255, 255));
+  matrix.setCursor(x, y);
 }
 
 function drawChannelNr(matrix, s) {
@@ -265,14 +271,18 @@ const FILTER_PAGES_COLORS = [
   [[255, 0, 0], [255, 64, 0], [255, 128, 0], [255, 191, 0]],
   [[0, 80, 255], [0, 140, 255], [0, 200, 220], [0, 220, 180]],
   [[80, 255, 0], [140, 255, 0], [180, 220, 0], [80, 180, 40]],
+  [[255, 0, 180], [255, 80, 160], [180, 80, 255], [80, 180, 255]],
 ];
+const WAVE_NAMES = ["SIN", "SQR", "SAW", "TRI"];
+const INST_NAMES = ["BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS"];
 
 export function drawFilter(matrix, s, now) {
   const f = s.filt[s.GLOB.currentChannel];
-  const page = FILTER_PAGES[s.filterPage || 0] || FILTER_PAGES[0];
+  const pages = filterPagesFor(s.GLOB.currentChannel);
+  const page = pages[s.filterPage || 0] || pages[0];
   const pageColors = FILTER_PAGES_COLORS[s.filterPage || 0] || FILTER_PAGES_COLORS[0];
   pageColors.forEach((c, i) => matrix.setRing(i + 1, c));
-  for (let p = 0; p < FILTER_PAGES.length; p++) matrix.light(COLS - FILTER_PAGES.length + 1 + p, ROWS, p === (s.filterPage || 0) ? [255, 255, 255] : [30, 30, 30]);
+  for (let p = 0; p < pages.length; p++) matrix.light(COLS - pages.length + 1 + p, ROWS, p === (s.filterPage || 0) ? [255, 255, 255] : [30, 30, 30]);
   const focus = s.filterTouch;
   const active = now - s.filterTouchAt < 1000 && focus >= 0 && focus < 4 && page[focus];
   for (let i = 0; i < 4; i++) {
@@ -280,9 +290,10 @@ export function drawFilter(matrix, s, now) {
     if (!spec) continue;
     if (active && i !== focus) continue;
     const val = f[spec.key] ?? 0;
-    const display = Math.max(1, Math.min(10, Math.round((val / 32) * 9) + 1));
-    const color = blend([0, 0, 0], pageColors[i], Math.round((val / 32) * 255));
-    const [x0, x1] = FILTER_COLS[i];
+    const max = spec.max ?? 32;
+    const display = Math.max(1, Math.min(10, Math.round((val / max) * 9) + 1));
+    const color = blend([0, 0, 0], pageColors[i], Math.round((val / max) * 255));
+    const [x0, x1] = filterCols()[i];
     for (let y = 1; y <= 10; y++) {
       let c = [0, 0, 0];
       if (y === display) c = i === f.fast ? [255, 255, 0] : [255, 255, 255];
@@ -295,12 +306,13 @@ export function drawFilter(matrix, s, now) {
   if (active) {
     const spec = page[focus];
     const val = f[spec.key] ?? 0;
-    const [x0, x1] = FILTER_COLS[focus];
+    const [x0, x1] = filterCols()[focus];
     const width = textPixelWidth(spec.name);
     let tx = Math.floor((COLS - width + 1) / 2);
     if (tx < 1) tx = 1;
     matrix.drawText(spec.name, tx, 12, pageColors[focus]);
-    matrix.drawText(String(val), focus < 2 ? x1 + 4 : Math.max(1, x0 - 10), 5, blend([255, 0, 0], [0, 255, 0], Math.round((val / 32) * 255)));
+    const label = spec.key === "wave" ? WAVE_NAMES[val] || String(val) : spec.key === "inst" ? INST_NAMES[val] || String(val) : String(val);
+    matrix.drawText(label, focus < 2 ? x1 + 4 : Math.max(1, x0 - 10), 5, blend([255, 0, 0], [0, 255, 0], Math.round((val / (spec.max ?? 32)) * 255)));
   }
 }
 
@@ -325,13 +337,35 @@ export function drawMenu(matrix, s) {
   matrix.drawText(label, 2, 3, tc);
 }
 
+export function isSoon(mode, index) {
+  return !!SOON[mode]?.has(index);
+}
+
 const SOON = {
-  look: new Set([6, 7]),
+  look: new Set([7]),
   recs: new Set([0, 1, 2, 3, 4]),
   midi: new Set([0, 1, 2, 3, 4, 5, 6]),
   vol: new Set([2, 5, 6]),
   etc: new Set([1, 2, 3, 4, 5, 6]),
 };
+
+function drawLength(matrix, s, y, withNumber) {
+  const n = Math.max(1, Math.min(s.genreLength || 1, PAGES));
+  for (let x = 1; x <= Math.min(COLS, 16); x++) matrix.light(x, y, x <= n ? [255, 0, 255] : [0, 0, 0]);
+  if (withNumber) matrix.drawNumber(n, [255, 0, 255], 3);
+}
+
+export function drawNew(matrix, s) {
+  const genre = GENRES[s.genre] || GENRES[0];
+  matrix.drawText("NEW", 6, 12, [0, 255, 255]);
+  matrix.drawText(genre.name, 2, 3, genre.color);
+  matrix.drawLargeCustom(genre.color, 3);
+  if (s.genre) {
+    drawLength(matrix, s, 10, false);
+    matrix.drawIndicator("L", "V", 4);
+    matrix.light(10, 1, [255, 0, 255]);
+  } else matrix.drawIndicator("L", "N", 4);
+}
 
 export function drawSubmenu(matrix, s, now = performance.now()) {
   const pages = SUBS[s.mode];
@@ -339,6 +373,14 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
   const dim = scaleTo(parent, 20);
   matrix.drawLargeCustom(parent, 4);
   pageDots(matrix, pages.length, s.subIndex, parent, dim);
+  if (s.mode === "pat") {
+    const genre = GENRES[(s.subIndex || 0) + 1];
+    matrix.drawText(pages[s.subIndex], 2, 10, genre.color);
+    drawLength(matrix, s, 8, true);
+    matrix.drawLargeCustom(genre.color, 3);
+    matrix.drawIndicator("L", "V", 4);
+    return;
+  }
   if (s.mode === "etc" && s.subIndex === 0) {
     drawInfo(matrix, s, now, parent);
     return;
@@ -360,7 +402,6 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
   }
   const value = s.subValue(s.mode, s.subIndex);
   matrix.drawText(value.text, 2, 3, value.color);
-  if (SOON[s.mode]?.has(s.subIndex)) matrix.drawText("SOON", 12, 6, [90, 90, 90]);
   if (value.code) matrix.drawIndicator("L", value.code, 3);
   else matrix.setRing?.(3, value.color);
 }
@@ -475,8 +516,11 @@ export function drawWave(matrix, s, now) {
   matrix.setRing(4, [255, 255, 255]);
   if (file) {
     const ch = s.GLOB.currentChannel;
-    const seekStartX = Math.max(1, Math.min(COLS, Math.round(1 + (s.seekOf[ch] / 100) * (COLS - 1))));
-    const seekEndX = Math.max(seekStartX + 1, Math.min(COLS, Math.round(1 + (s.endOf[ch] / 100) * (COLS - 1))));
+    const inv = !!s.invOf[ch];
+    const seek = inv ? 100 - s.endOf[ch] : s.seekOf[ch];
+    const end = inv ? 100 - s.seekOf[ch] : s.endOf[ch];
+    const seekStartX = Math.max(1, Math.min(COLS, Math.round(1 + (seek / 100) * (COLS - 1))));
+    const seekEndX = Math.max(seekStartX + 1, Math.min(COLS, Math.round(1 + (end / 100) * (COLS - 1))));
     for (let x = 1; x <= COLS; x++) matrix.light(x, 3, [0, 0, 50]);
     for (let x = 1; x <= seekStartX; x++) matrix.light(x, 3, [0, 80, 0]);
     for (let x = seekEndX; x <= COLS; x++) matrix.light(x, 3, [80, 0, 0]);
@@ -484,8 +528,9 @@ export function drawWave(matrix, s, now) {
       const max = Math.max(0.05, ...s.peaks);
       const gain = Math.min(10, 1 / max);
       for (let x = 1; x <= COLS; x++) {
-        const pos = s.seekOf[ch] + ((x - 1) / (COLS - 1)) * (s.endOf[ch] - s.seekOf[ch]);
-        const idx = Math.max(0, Math.min(s.peaks.length - 1, (pos / 100) * (s.peaks.length - 1)));
+        const pos = seek + ((x - 1) / (COLS - 1)) * (end - seek);
+        let idx = Math.max(0, Math.min(s.peaks.length - 1, (pos / 100) * (s.peaks.length - 1)));
+        if (inv) idx = s.peaks.length - 1 - idx;
         const lo = Math.floor(idx);
         const hi = Math.min(s.peaks.length - 1, lo + 1);
         const v = (s.peaks[lo] * (1 - (idx - lo)) + s.peaks[hi] * (idx - lo)) * gain;
@@ -585,6 +630,29 @@ function drawBpm(matrix, s) {
   }
 }
 
+export function drawRecord(matrix, s, now) {
+  matrix.setRing(1, [255, 255, 0]);
+  matrix.drawIndicator("L", "Y", 1);
+  if (s.recOn) matrix.setRing(2, [0, 0, 0]);
+  else {
+    matrix.setRing(2, [255, 0, 0]);
+    matrix.drawIndicator("L", "R", 2);
+  }
+  matrix.setRing(3, [0, 255, 0]);
+  matrix.drawIndicator("L", "G", 3);
+  matrix.setRing(4, [0, 0, 255]);
+  matrix.drawIndicator("L", "X", 4);
+  const level = Math.max(0, Math.min(16, Math.round((s.recLevel || 0) * 16)));
+  for (let y = 1; y <= level; y++) matrix.light(2, y, [255, 0, 0]);
+  if (s.recOn) {
+    const sec = Math.max(0, (now - s.recAt) / 1000);
+    matrix.drawText(sec.toFixed(1).padStart(4, " "), 3, 5, [255, 140, 0]);
+  } else if (s.recPlay) {
+    const sec = Math.max(0, (now - s.recPlayAt) / 1000);
+    matrix.drawText(sec.toFixed(1).padStart(4, " "), 3, 5, [0, 255, 0]);
+  } else matrix.drawText("RDY", 5, 5, [255, 100, 0]);
+}
+
 function drawOk(matrix, t) {
   const pts = [[-3, -1], [-2, -2], [-1, -3], [0, -2], [1, -1], [2, 0], [3, 1], [4, 2]];
   const reveal = Math.min(pts.length, Math.floor((t * pts.length) / 420));
@@ -597,6 +665,7 @@ function drawOk(matrix, t) {
 export function renderFrame(matrix, s, now) {
   matrix.clear();
   matrix.setBrightness(s.ledBrightness);
+  matrix.setCursor(0, 0);
   if (s.mode !== "etc") s.infoAt = 0;
   if (s.okAt && now - s.okAt < 1000) {
     drawOk(matrix, now - s.okAt);
@@ -644,8 +713,10 @@ export function renderFrame(matrix, s, now) {
   else if (s.mode === "menu") drawMenu(matrix, s);
   else if (SUBS[s.mode]) drawSubmenu(matrix, s, now);
   else if (s.mode === "dat") drawLoadSave(matrix, s);
+  else if (s.mode === "new") drawNew(matrix, s);
   else if (s.mode === "kit") drawPack(matrix, s);
   else if (s.mode === "wav") drawWave(matrix, s, now);
+  else if (s.mode === "rec") drawRecord(matrix, s, now);
   else if (s.mode === "song") drawSong(matrix, s);
   else if (s.mode === "bpm") drawBpm(matrix, s);
   matrix.present();

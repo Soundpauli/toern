@@ -5162,6 +5162,16 @@ void checkTouchInputs() {
     lastTouch3State = currentTouch3State;
   }
 
+  // Filter mode: touch3 resets only the open filter page. Encoder 4 long press ("0002") still resets every filter on the voice.
+  if (currentMode == &filterMode) {
+    static bool lastFilterTouch3 = false;
+    bool pressed = tv3 > touchThreshold;
+    if (pressed && !lastFilterTouch3) {
+      setCurrentFilterPageDefaultValues((unsigned int)GLOB.currentChannel);
+    }
+    lastFilterTouch3 = pressed;
+  }
+
   bool newTouchState[2];
   newTouchState[0] = tv1;
   newTouchState[1] = tv2;

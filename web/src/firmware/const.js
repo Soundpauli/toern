@@ -1,7 +1,12 @@
-export const COLS = 32;
+export let COLS = 32;
 export const ROWS = 16;
-export const PAGES = 8;
-export const STEPS = COLS * PAGES;
+export const STEPS = 256;
+export let PAGES = STEPS / COLS;
+
+export function setLayout(cols) {
+  COLS = cols <= 16 ? 16 : 32;
+  PAGES = STEPS / COLS;
+}
 export const BPM = 120;
 export const STEP_SEC = 60 / BPM / 4;
 export const LONG_MS = 500;
@@ -57,10 +62,10 @@ export const SCHEMES = [
 ];
 
 export const PAINT_ROWS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 12, 14, 15]);
-export const SOUND_CH = new Set([1, 2, 3, 4, 5, 6, 7, 8]);
+export const SOUND_CH = new Set([1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]);
 export const FILTER_CH = new Set([1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]);
 
-export const MENU = ["DAT", "KIT", "WAV", "BPM", "VOL", "SETT", "RECS", "MIDI", "SONG", "ETC"];
+export const MENU = ["DAT", "PAT", "KIT", "WAV", "BPM", "VOL", "SETT", "RECS", "MIDI", "SONG", "ETC"];
 export const WAVS = ["KICK", "SNARE", "HAT", "CLAP", "TOM", "RIDE", "PERC", "BASS", "SHKR", "CRSH"];
 export const DUMMY_PACKS = {
   1: { name: "DRUM", wavs: [0, 1, 2, 3, 4, 5, 6, 7] },
@@ -73,14 +78,38 @@ export const FILTERS = [
   { key: "b", name: "BITC", letter: "B" },
 ];
 
-export const FILTER_PAGES = [
+const ADSR = [
+  { key: "att", name: "ATTC" }, { key: "dec", name: "DCAY" }, { key: "sus", name: "SUST" }, { key: "rel", name: "RLSE" },
+];
+const SAMPLE_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "r", name: "RVRB" }, { key: "b", name: "BITC" }],
   [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV" }, null],
-  [{ key: "att", name: "ATTC" }, { key: "dec", name: "DCAY" }, { key: "sus", name: "SUST" }, { key: "rel", name: "RLSE" }],
+  ADSR,
 ];
+const CH11_FILTER_PAGES = [
+  [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "r", name: "RVRB" }, { key: "b", name: "BITC" }],
+  [{ key: "cut", name: "CUT" }, { key: "res", name: "RES" }, { key: "flt", name: "FLT" }, null],
+  [{ key: "wave", name: "WAVE", max: 3 }, { key: "inst", name: "INST", max: 9 }, { key: "cent", name: "CENT" }, { key: "semi", name: "SEMI" }],
+  ADSR,
+];
+const KEYS_FILTER_PAGES = [
+  [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "cent", name: "CENT" }, { key: "b", name: "BITC" }],
+  [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV" }, { key: "wave", name: "WAVE", max: 3 }],
+  ADSR,
+  [{ key: "lfoR", name: "LFOR" }, { key: "lfoD", name: "LFOD" }, { key: "span", name: "SPAN" }, { key: "arp", name: "ARP" }],
+];
+export const FILTER_PAGES = SAMPLE_FILTER_PAGES;
+export function filterPagesFor(ch) {
+  if (ch === 11) return CH11_FILTER_PAGES;
+  if (ch === 13 || ch === 14) return KEYS_FILTER_PAGES;
+  return SAMPLE_FILTER_PAGES;
+}
 
 export function emptyFilt() {
-  return { h: 32, l: 0, r: 0, b: 0, fast: 0, res: 0, detune: 16, oct: 16, att: 32, dec: 32, sus: 10, rel: 5 };
+  return {
+    h: 32, l: 0, r: 0, b: 0, fast: 0, res: 0, detune: 16, oct: 16, att: 32, dec: 32, sus: 10, rel: 5,
+    cut: 16, flt: 0, wave: 0, inst: 0, cent: 16, semi: 0, lfoR: 0, lfoD: 0, span: 0, arp: 0,
+  };
 }
 export const COND_LABEL = ["1/1", "1/2", "1/4", "1/8", "1/X", "2/1", "4/1", "8/1", "X/1", "F/F", "G/L"];
 export const COND_VALUE = [1, 2, 4, 8, 16, 17, 18, 19, 20, 21, 22];
