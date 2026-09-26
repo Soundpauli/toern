@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "@tonejs/midi": "^2.0.28"
   }
 }

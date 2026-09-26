@@ -306,7 +306,9 @@ export function createEngine() {
     lfos[ch].g.gain.setTargetAtTime(rate > 0 && depth > 0 ? (depth / 32) * 1800 : 0, now, 0.03);
   }
   function synth(ch, velocity, when, row, wav = {}) {
-    let midi = ch === 11 ? 36 + (row - 1) : 48 + (row - 1);
+    let midi = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127
+      ? wav.midiPitch
+      : (ch === 11 ? 36 + (row - 1) : 48 + (row - 1));
     midi += ((wav.cent ?? 16) - 16) / 16 * 24;
     midi += (wav.semi || 0) / 32 * 12;
     midi += wav.detune || 0;
@@ -355,7 +357,12 @@ export function createEngine() {
       return;
     }
     const home = ch + 1;
-    const rate = 2 ** ((((row ?? home) - home) + (wav.detune || 0) + (wav.oct || 0) * 12) / 12);
+    const r = row ?? home;
+    // Firmware: midiPitch uses absolute MIDI (root C5=72); else row relative to voice home.
+    const semis = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127
+      ? (wav.midiPitch - 72)
+      : (r - home);
+    const rate = 2 ** ((semis + (wav.detune || 0) + (wav.oct || 0) * 12) / 12);
     play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch]);
   }
 

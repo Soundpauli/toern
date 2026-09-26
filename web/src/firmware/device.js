@@ -97,6 +97,8 @@ export function createDevice(matrix, statusEl, rings) {
     mainVol: 80, gain: 1, prevVol: 8, stereo: 0,
     songPos: 1, songPattern: 1, bpm: 120, bootAt: 0,
     hasPageNotes, slotExists, subValue,
+    deviceFocus: true,
+    onAnnounce: null,
   };
 
   let nextAt = 0;
@@ -239,7 +241,7 @@ export function createDevice(matrix, statusEl, rings) {
     engine.ensure();
     const ctx = engine.ensure();
     if (ctx.state === "suspended") ctx.resume();
-    engine.trigger(n.channel, n.velocity, engine.now(), wavOpts(n.channel), y);
+    engine.trigger(n.channel, n.velocity, engine.now(), { ...wavOpts(n.channel), midiPitch: n.midiPitch }, y);
   }
   function selectVoice(ch) {
     if (!((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14)) return;
@@ -448,7 +450,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (!n.channel || !SOUND_CH.has(n.channel) || !heard(n.channel)) continue;
       if (Math.random() * 100 >= n.probability) continue;
       if (!condOk(n.condition, step)) continue;
-      const wav = wavOpts(n.channel);
+      const wav = { ...wavOpts(n.channel), midiPitch: n.midiPitch };
       if (s.prevMode === 2 && n.channel === s.GLOB.currentChannel && s.mode === "wav") wav.index = s.browse;
       engine.trigger(n.channel, n.velocity, when, wav, y);
     }
@@ -648,7 +650,9 @@ export function createDevice(matrix, statusEl, rings) {
     const out = [];
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) {
       const n = note[x][y];
-      out.push(n.channel ? [n.channel, n.velocity, n.probability, n.condition] : 0);
+      out.push(n.channel
+        ? [n.channel, n.velocity, n.probability, n.condition, n.midiPitch <= 127 ? n.midiPitch : 255]
+        : 0);
     }
     return out;
   }
@@ -661,6 +665,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (Array.isArray(n)) {
         note[x][y].channel = n[0]; note[x][y].velocity = n[1];
         note[x][y].probability = n[2]; note[x][y].condition = n[3];
+        note[x][y].midiPitch = n[4] <= 127 ? n[4] : 255;
       }
     }
     queueAutosave();
@@ -1221,13 +1226,108 @@ export function createDevice(matrix, statusEl, rings) {
   function isTouch1Key(e) { return e.key === "ß" || e.key === "ẞ" || e.key === "-" || e.code === "Minus"; }
   function isTouch2Key(e) { return e.key === "´" || e.code === "Equal"; }
 
+  /** True when hardware-sim keys should capture Tab/Space/Enter/arrows. */
+  function deviceKeysActive() {
+    const ae = document.activeElement;
+    if (!ae || ae === document.body) return !!s.deviceFocus;
+    if (ae.id === "matrix") return true;
+    if (ae.closest?.(".jump")) return false;
+    const tag = ae.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON") return false;
+    if (ae.isContentEditable) return false;
+    return !!s.deviceFocus;
+  }
+
+  function cellAtCursor() {
+    const n = note[s.GLOB.x]?.[s.GLOB.y];
+    if (!n?.channel) return { empty: true, step: s.GLOB.x, row: s.GLOB.y, page: s.GLOB.edit };
+    return {
+      empty: false,
+      step: s.GLOB.x,
+      row: s.GLOB.y,
+      page: s.GLOB.edit,
+      channel: n.channel,
+      velocity: n.velocity,
+      probability: n.probability,
+      condition: n.condition,
+    };
+  }
+
+  function pageNotes() {
+    const base = (s.GLOB.edit - 1) * COLS;
+    const out = [];
+    for (let x = 1; x <= COLS; x++) {
+      for (let y = 1; y <= ROWS; y++) {
+        const n = note[base + x][y];
+        if (!n?.channel) continue;
+        if (s.GLOB.singleMode && n.channel !== s.GLOB.currentChannel) continue;
+        out.push({
+          col: x,
+          row: y,
+          step: base + x,
+          channel: n.channel,
+          velocity: n.velocity,
+          probability: n.probability,
+        });
+      }
+    }
+    return out;
+  }
+
+  function menuSummary() {
+    const mode = s.mode;
+    if (mode === "draw" || mode === "single") {
+      return { title: mode === "single" || s.GLOB.singleMode ? "Single" : "Draw", detail: `Page ${s.GLOB.edit}` };
+    }
+    if (SUBS[mode]) {
+      const pages = SUBS[mode];
+      const name = pages[s.subIndex] || mode;
+      const value = subValue(mode, s.subIndex);
+      return { title: mode.toUpperCase(), detail: `${name}: ${value.text}` };
+    }
+    if (mode === "menu") {
+      const page = MENU_PAGES[s.menuIndex];
+      return { title: "Menu", detail: page?.name || String(s.menuIndex + 1) };
+    }
+    if (mode === "dat") return { title: "FILE", detail: s.slot === 0 ? "Autosave" : `Slot ${s.slot}` };
+    if (mode === "bpm") return { title: "BPM", detail: String(s.bpm) };
+    if (mode === "wav") return { title: "WAV", detail: s.wavName || "" };
+    if (mode === "filter") return { title: "Filter", detail: `Voice ${s.GLOB.currentChannel}` };
+    if (mode === "velocity") return { title: "Velocity", detail: `Voice ${s.GLOB.currentChannel}` };
+    return { title: mode, detail: "" };
+  }
+
+  function announceState() {
+    if (typeof s.onAnnounce !== "function") return;
+    const cell = cellAtCursor();
+    const label = s.mode === "draw" && s.GLOB.singleMode ? "single" : s.mode;
+    let cellText = "empty";
+    if (!cell.empty) cellText = `voice ${cell.channel}, velocity ${cell.velocity}`;
+    const menu = menuSummary();
+    const parts = [
+      label,
+      `page ${s.GLOB.edit}`,
+      s.playing ? "playing" : "stopped",
+      `voice ${s.GLOB.currentChannel}`,
+    ];
+    if (s.mode === "draw" || s.mode === "single") {
+      parts.push(`cursor step ${s.GLOB.x}, row ${s.GLOB.y}`, cellText);
+    } else {
+      parts.push(menu.title, menu.detail);
+    }
+    s.onAnnounce(parts.filter(Boolean).join(". "));
+  }
+
   function keydown(e) {
+    const active = deviceKeysActive();
     const ue = e.code === "BracketLeft" || e.key === "ü" || e.key === "Ü" || e.key === "[";
     const turning = ["KeyQ", "KeyW", "KeyR", "KeyT", "KeyU", "KeyI", "KeyP", "BracketLeft", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.code) || ue;
-    if (isTab(e) || isCommand(e) || isTouch1Key(e) || isTouch2Key(e) || e.key === " " || e.key === "Enter" || e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+    const steal = isTab(e) || isCommand(e) || isTouch1Key(e) || isTouch2Key(e) || e.key === " " || e.key === "Enter" || e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown";
+    if (steal && active) {
       e.preventDefault();
       e.stopPropagation();
     }
+    if (!active) return;
     if (e.repeat && !turning) return;
     if (s.mode === "boot") return;
     if (e.key === "Escape") {
@@ -1236,19 +1336,22 @@ export function createDevice(matrix, statusEl, rings) {
         s.GLOB.singleMode = false;
         s.mode = "draw";
       } else if (s.mode !== "draw") backToGrid();
+      announceState();
       return;
     }
-    if (e.key >= "1" && e.key <= "8" && !e.metaKey && !e.ctrlKey && !e.altKey) { selectVoice(Number(e.key)); return; }
+    if (e.key >= "1" && e.key <= "8" && !e.metaKey && !e.ctrlKey && !e.altKey) { selectVoice(Number(e.key)); announceState(); return; }
     if (e.code === "KeyF") {
-      if (s.mode === "filter") { s.GLOB.singleMode = false; s.mode = "draw"; return; }
-      if (s.mode === "draw" || s.mode === "single") { enterFilter(); return; }
+      if (s.mode === "filter") { s.GLOB.singleMode = false; s.mode = "draw"; announceState(); return; }
+      if (s.mode === "draw" || s.mode === "single") { enterFilter(); announceState(); return; }
     }
-    if (e.code === "KeyS" && (s.mode === "draw" || s.mode === "single")) { toggleSingle(); return; }
+    if (e.code === "KeyS" && (s.mode === "draw" || s.mode === "single")) { toggleSingle(); announceState(); return; }
     if (e.code === "KeyL" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
-      if (s.mode === "wav") { backToGrid(); return; }
-      if (s.mode === "draw" || s.mode === "single") { refreshBrowse(); s.mode = "wav"; previewWav(); return; }
+      if (s.mode === "wav") { backToGrid(); announceState(); return; }
+      if (s.mode === "draw" || s.mode === "single") { refreshBrowse(); s.mode = "wav"; previewWav(); announceState(); return; }
     }
-    if (e.code === "KeyD" && (s.mode === "draw" || s.mode === "single")) { clearPage(); return; }
+    if (e.code === "KeyD" && (s.mode === "draw" || s.mode === "single")) { clearPage(); announceState(); return; }
+    const beforeX = s.GLOB.x;
+    const beforeY = s.GLOB.y;
     if (e.code === "KeyQ") turn(0, 1);
     else if (e.code === "KeyW") turn(0, -1);
     else if (e.key === "ArrowDown") turn(0, -1);
@@ -1272,28 +1375,34 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.mode === "filter") togglePlay();
       else hold[2] = { at: performance.now(), turned: false };
     } else if (e.key === "Enter") {
-      if (s.mode === "velocity") { backToGrid(); return; }
+      if (s.mode === "velocity") { backToGrid(); announceState(); return; }
       if (s.mode === "draw" || s.mode === "single" || s.mode === "filter") hold[3] = { at: performance.now(), turned: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
       else shortPress(3);
     } else if (e.key === "m" || e.key === "M") onMeta(true);
     else if (isTouch1Key(e)) onTouchL(true);
     else if (isTouch2Key(e)) onMeta(true);
+    if (s.GLOB.x !== beforeX || s.GLOB.y !== beforeY) announceState();
   }
   function keyup(e) {
+    if (!deviceKeysActive()) return;
     if (isTab(e) && hold[0]) {
       const h = hold[0]; hold[0] = null;
       if (!h.fired && !h.turned) shortPress(0);
+      announceState();
     } else if (isCommand(e)) {
       const h = hold[1]; hold[1] = null;
       if (s.solo) exitSolo();
       else if (h && !h.fired && !h.turned) shortPress(1);
+      announceState();
     } else if (e.key === " " && hold[2]) {
       const h = hold[2]; hold[2] = null;
       if (!h.fired && !h.turned) shortPress(2);
+      announceState();
     } else if (e.key === "Enter" && hold[3]) {
       const h = hold[3]; hold[3] = null;
       if (h.fired) return;
       if (!h.turned) shortPress(3);
+      announceState();
     } else if (e.key === "m" || e.key === "M") onMeta(false);
     else if (isTouch1Key(e)) onTouchL(false);
     else if (isTouch2Key(e)) onMeta(false);
@@ -1444,7 +1553,12 @@ export function createDevice(matrix, statusEl, rings) {
   });
   return {
     start() { requestAnimationFrame(tick); },
-    keydown, keyup, pointer, selectVoice,
+    keydown, keyup,
+    pointer(col, row, erase, audition) {
+      pointer(col, row, erase, audition);
+      announceState();
+    },
+    selectVoice(ch) { selectVoice(ch); announceState(); },
     press(enc) { shortPress(enc); },
     knobDown(enc) {
       const grid = s.mode === "draw" || s.mode === "single";
@@ -1489,14 +1603,109 @@ export function createDevice(matrix, statusEl, rings) {
     muted(ch) { return !!s.mute[ch]; },
     gridMode() { return s.mode === "draw" || s.mode === "single"; },
     cursor() {
-      return { on: s.mode === "draw" || s.mode === "single", x: localX(s.GLOB.x), y: s.GLOB.y };
+      return { on: s.mode === "draw" || s.mode === "single", x: localX(s.GLOB.x), y: s.GLOB.y, step: s.GLOB.x };
+    },
+    cellAtCursor,
+    pageNotes,
+    menuSummary,
+    announceState,
+    setDeviceFocus(on) { s.deviceFocus = !!on; },
+    deviceFocus() { return !!s.deviceFocus; },
+    onAnnounce(fn) { s.onAnnounce = fn; },
+    playing() { return !!s.playing; },
+    page() { return s.GLOB.edit; },
+    togglePlay() { togglePlay(); announceState(); },
+    clearPage() { clearPage(); announceState(); },
+    moveCursor(col, row) {
+      if (s.mode !== "draw" && s.mode !== "single") return;
+      hover(col, row);
+      announceState();
+    },
+    paintAtCursor() {
+      if (s.mode !== "draw" && s.mode !== "single") return;
+      paintCell(s.GLOB.x, s.GLOB.y);
+      announceState();
+    },
+    eraseAtCursor() {
+      if (s.mode !== "draw" && s.mode !== "single") return;
+      eraseCell(s.GLOB.x, s.GLOB.y);
+      announceState();
     },
     mode() { return s.mode; },
+    subIndex() { return s.subIndex; },
     soon() { return isSoon(s.mode, s.subIndex); },
+    bpm() { return s.bpm; },
+    exportPatternCells() {
+      const cells = [];
+      for (let x = 1; x <= STEPS; x++) {
+        for (let y = 1; y <= ROWS; y++) {
+          const n = note[x][y];
+          if (n.channel) {
+            cells.push({
+              channel: n.channel,
+              velocity: n.velocity,
+              probability: n.probability,
+              condition: n.condition,
+              midiPitch: n.midiPitch <= 127 ? n.midiPitch : 255,
+            });
+          } else {
+            cells.push({ channel: 0, velocity: 0, probability: 100, condition: 1, midiPitch: 255 });
+          }
+        }
+      }
+      return cells;
+    },
+    importPatternCells(cells, bpm) {
+      if (s.mode === "boot") return;
+      for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
+      let i = 0;
+      for (let x = 1; x <= STEPS; x++) {
+        for (let y = 1; y <= ROWS; y++) {
+          const c = cells[i++];
+          if (!c || !c.channel) continue;
+          Object.assign(note[x][y], {
+            channel: c.channel,
+            velocity: c.velocity || 100,
+            probability: c.probability != null ? c.probability : 100,
+            condition: c.condition != null ? c.condition : 1,
+            midiPitch: c.midiPitch <= 127 ? c.midiPitch : 255,
+          });
+        }
+      }
+      if (Number.isFinite(bpm)) s.bpm = clamp(Math.round(bpm), 40, 240);
+      s.GLOB.edit = 1;
+      s.GLOB.page = 1;
+      s.GLOB.x = 1;
+      s.beat = 1;
+      saveEeprom();
+      queueAutosave();
+      finishLoad();
+    },
     cols() { return COLS; },
     loadGenre(type) {
       if (s.mode === "boot") return;
       writeGenre(type);
+    },
+    importMidi(cells, bpm) {
+      if (s.mode === "boot") return;
+      for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
+      for (const cell of cells || []) {
+        const n = note[cell.step]?.[cell.row];
+        if (!n) continue;
+        n.channel = cell.channel;
+        n.velocity = cell.velocity;
+        n.probability = cell.probability != null ? cell.probability : 100;
+        n.condition = 1;
+        n.midiPitch = cell.midiPitch <= 127 ? cell.midiPitch : 255;
+      }
+      if (Number.isFinite(bpm)) s.bpm = clamp(Math.round(bpm), 40, 240);
+      s.GLOB.edit = 1;
+      s.GLOB.page = 1;
+      s.GLOB.x = 1;
+      s.beat = 1;
+      saveEeprom();
+      queueAutosave();
+      finishLoad();
     },
     setDevice(gen) {
       deviceChosen = true;

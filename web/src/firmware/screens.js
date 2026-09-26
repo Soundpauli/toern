@@ -346,7 +346,7 @@ const SOON = {
   recs: new Set([0, 1, 2, 3, 4]),
   midi: new Set([0, 1, 2, 3, 4, 5, 6]),
   vol: new Set([2, 5, 6]),
-  etc: new Set([1, 2, 3, 4, 5, 6]),
+  etc: new Set([1, 3, 4, 5, 6]),
 };
 
 function drawLength(matrix, s, y, withNumber) {
