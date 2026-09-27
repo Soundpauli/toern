@@ -1,6 +1,6 @@
 #include "src/toern_build_types.h"
 
-#define VERSION "v2.7"
+#define VERSION "v3.0"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
