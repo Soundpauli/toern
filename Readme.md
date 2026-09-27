@@ -160,7 +160,8 @@ Insert or eject the SD card only with the unit **off** — the firmware re-index
 | `PCB/toern_revH/` | Current KiCad board, gerbers, JLCPCB BOM |
 | `handbook/` | Human-friendly operator’s guide (how to *use* the device) |
 | `devdocs/` | [Docusaurus](./devdocs/) code and hardware (rev H) docs → published at `/docs/` |
-| `tools/` / `standalone-tools/` | Helpers; SD file tool lives in `standalone-tools/sd-tool-standalone` |
+| `tools/` / `standalone-tools/` | Helpers; SD tool, sample converter, browser sim → tyng.app |
+| `standalone-tools/web-standalone/` | Browser simulator → [sim.tyng.app](https://sim.tyng.app/) |
 | `website/` | Project site (local/deploy-only; handbook + docs copied in manually) |
 
 ---

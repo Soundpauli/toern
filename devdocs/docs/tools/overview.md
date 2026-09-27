@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Overview
-description: Host-side tools that support TŒRN — sample conversion, MIDI, SD transfer, firmware, and more.
+description: Host-side tools that support TŒRN — sample conversion, SD transfer, firmware, and more.
 ---
 
 # Tools overview
@@ -14,9 +14,9 @@ Besides the firmware and PCB, the repo ships **browser and CLI tools** for sampl
 |------|-----|--------|
 | Sample converter | [audioconvert.tyng.app](https://audioconvert.tyng.app/) | `standalone-tools/audio-converter-standalone/` |
 | SD tool | [sdtool.tyng.app](https://sdtool.tyng.app/) | `standalone-tools/sd-tool-standalone/` |
+| Browser simulator | [sim.tyng.app](https://sim.tyng.app/) | `standalone-tools/web-standalone/` |
 | Firmware tool | [toern.live/tools/teensyloader/](https://toern.live/tools/teensyloader/) | `tools/teensyloader/` (also under `website/tools/`) |
 | Color scheme editor | [toern.live/tools/colorsheme/](https://toern.live/tools/colorsheme/) | `tools/colorsheme/` |
-| MIDI → pattern | [toern.live/tools/convertmidi/](https://toern.live/tools/convertmidi/) | `tools/convertmidi/` |
 | Case generator (demo) | [toern.live/tools/case-generator/](https://toern.live/tools/case-generator/) | `tools/case-generator/` |
 
 ## Local / contributor helpers
@@ -31,9 +31,7 @@ Besides the firmware and PCB, the repo ships **browser and CLI tools** for sampl
 flowchart LR
   WAV[WAVs / ZIPs] --> CONV[Sample converter]
   CONV --> SD[microSD layout]
-  MID[MIDI file] --> M2T[MIDI convert]
-  M2T --> PAT[pattern_*.txt]
-  PAT --> SD
+  MID[MIDI file] --> SIM[Simulator]
   HOST[Browser / CLI] --> SDTOOL[SD tool]
   SDTOOL -->|ETC → SD serial| TEENSY[Teensy]
   HEX[.hex firmware] --> LOADER[Firmware tool]
@@ -45,7 +43,6 @@ Operator-facing how-to stays in the **handbook**; these pages describe **what ea
 ## Next
 
 - [Sample converter](./sample-converter)  
-- [MIDI convert](./midi-convert)  
 - [SD tool](./sd-tool)  
 - [Firmware loader](./firmware-loader)  
 - [Color scheme editor](./color-scheme)

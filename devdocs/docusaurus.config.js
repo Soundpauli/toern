@@ -87,7 +87,6 @@ const config = {
             items: [
               {label: 'Overview', to: '/tools/overview'},
               {label: 'Sample converter', to: '/tools/sample-converter'},
-              {label: 'MIDI convert', to: '/tools/midi-convert'},
               {label: 'SD tool', to: '/tools/sd-tool'},
             ],
           },

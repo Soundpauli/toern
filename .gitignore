@@ -1,4 +1,8 @@
+# Large WAV libraries (~600MB). Small demo slots in SD-CARD-CONTENT/0, 1, and 2 stay tracked.
 samples/
+standalone-tools/web-standalone/SD-CARD-CONTENT/samples/
+standalone-tools/audio-converter-standalone/SD-CARD-CONTENT/samples/
+standalone-tools/web-standalone/dist/sd/samples/
 .cursor/
 .pio/
 .cache/
@@ -10,6 +14,7 @@ BOM_KOSTEN.xlsx
 .history/
 _shooting/
 _internal-docs/
+_old-code/
 /netlify.toml
 # Local Netlify folder
 .netlify
