@@ -1,15 +1,15 @@
 ---
 sidebar_position: 5
 title: Firmware loader
-description: Browser Teensy flasher (WebHID) served at /tools/teensyloader/.
+description: Browser Teensy flasher (WebHID) at firmware.tyng.app. GPL-3.0.
 ---
 
 # Firmware loader
 
-**Live:** [https://toern.live/tools/teensyloader/](https://toern.live/tools/teensyloader/)  
-**Source:** [`tools/teensyloader/`](https://github.com/Soundpauli/toern/tree/main/tools/teensyloader)
+**Live:** [https://firmware.tyng.app/](https://firmware.tyng.app/)  
+**Source:** [`standalone-tools/teensyloader-standalone/`](https://github.com/Soundpauli/toern/tree/main/standalone-tools/teensyloader-standalone)
 
-Based on the open **Teensy Loader Javascript** stack (WebHID flash + optional serial). Used to put a `.hex` / `.bin` onto a Teensy 4.1 from Chrome/Edge without the desktop Teensy Loader app.
+Based on **Teensy Loader Javascript** (WebHID flash + optional serial). Used to put a `.hex` / `.bin` onto a Teensy 4.1 from Chrome/Edge without the desktop Teensy Loader app. The same upstream tree is also kept at `tools/teensyloader/`.
 
 ## Typical flow
 
@@ -20,14 +20,13 @@ Based on the open **Teensy Loader Javascript** stack (WebHID flash + optional se
 
 ## Code / licensing
 
-Upstream-style layout: loader JS, example HTML, AGPL-3.0 (see `LICENSE` in that folder). Treat contributions to this vendored tool accordingly.
+`Teensy-Loader.js` is from [coelacant1/Teensy-Loader-Javascript](https://github.com/coelacant1/Teensy-Loader-Javascript) and is **GPL-3.0**. That license covers `standalone-tools/teensyloader-standalone/` and `tools/teensyloader/` only. The rest of this repository stays MIT. See `LICENSE` in those folders.
+
+`public/toern_firmware_3.0.ino.hex` is the frozen 3.0 build. A later firmware build copies the new hex to `public/toern_firmware_beta.ino.hex` only.
 
 ## Local run
 
 ```bash
-cd tools/teensyloader
+cd standalone-tools/teensyloader-standalone
 python3 -m http.server 8000
-# open the example / index HTML from http://127.0.0.1:8000/
 ```
-
-The site copy under `website/tools/teensyloader/` is what Netlify serves at `/tools/teensyloader/`.

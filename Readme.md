@@ -162,6 +162,7 @@ Insert or eject the SD card only with the unit **off** — the firmware re-index
 | `devdocs/` | [Docusaurus](./devdocs/) code and hardware (rev H) docs → published at `/docs/` |
 | `tools/` / `standalone-tools/` | Helpers; SD tool, sample converter, browser sim → tyng.app |
 | `standalone-tools/web-standalone/` | Browser simulator → [sim.tyng.app](https://sim.tyng.app/) |
+| `standalone-tools/teensyloader-standalone/` | Firmware flasher → [firmware.tyng.app](https://firmware.tyng.app/) (GPL-3.0) |
 | `website/` | Project site (local/deploy-only; handbook + docs copied in manually) |
 
 ---
@@ -205,6 +206,7 @@ Firmware changes: [`info.md`](./info.md) to flash, [`devdocs/`](./devdocs/) for 
 ## License
 
 - **Software / code**: [MIT](./LICENSE) — free for personal and commercial use.  
+- **Firmware loader** (`standalone-tools/teensyloader-standalone/` and `tools/teensyloader/`): [GPL-3.0](./standalone-tools/teensyloader-standalone/LICENSE), because that tool is Teensy Loader Javascript. GPL-3.0 applies only to those folders.  
 - **Hardware design files** (schematics, PCB layouts, Gerbers, etc.): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — personal / non-commercial use and modification. **Commercial hardware use needs written consent.**
 
 Commercial hardware licensing: Jan aka **warft_ctrl** — jpkuntoff@gmail.com (Hamburg, Germany)

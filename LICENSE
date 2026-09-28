@@ -1,4 +1,9 @@
-MIT License (for all software/code in this repository)
+MIT License (for the software in this repository, except the firmware loader)
+
+The folders `standalone-tools/teensyloader-standalone/` and `tools/teensyloader/`
+are Teensy Loader Javascript (https://github.com/coelacant1/Teensy-Loader-Javascript)
+and are licensed under GPL-3.0 only. See the LICENSE file in each of those folders.
+GPL-3.0 does not apply to the rest of this repository.
 
 Copyright (c) 2025 Jan-Peter Kuntoff
 

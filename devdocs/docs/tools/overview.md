@@ -15,7 +15,7 @@ Besides the firmware and PCB, the repo ships **browser and CLI tools** for sampl
 | Sample converter | [audioconvert.tyng.app](https://audioconvert.tyng.app/) | `standalone-tools/audio-converter-standalone/` |
 | SD tool | [sdtool.tyng.app](https://sdtool.tyng.app/) | `standalone-tools/sd-tool-standalone/` |
 | Browser simulator | [sim.tyng.app](https://sim.tyng.app/) | `standalone-tools/web-standalone/` |
-| Firmware tool | [toern.live/tools/teensyloader/](https://toern.live/tools/teensyloader/) | `tools/teensyloader/` (also under `website/tools/`) |
+| Firmware tool | [firmware.tyng.app](https://firmware.tyng.app/) | `standalone-tools/teensyloader-standalone/` (GPL-3.0) |
 | Color scheme editor | [toern.live/tools/colorsheme/](https://toern.live/tools/colorsheme/) | `tools/colorsheme/` |
 | Case generator (demo) | [toern.live/tools/case-generator/](https://toern.live/tools/case-generator/) | `tools/case-generator/` |
 
