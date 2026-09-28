@@ -2,8 +2,8 @@ import { COL } from "./firmware/const.js";
 import { createMatrix } from "./firmware/matrix.js";
 import { createDevice } from "./firmware/device.js";
 import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildImportCells } from "./firmware/midiImport.js";
-import { ToernSdSerial, joinSdPath, parentSdPath } from "./firmware/sdSerial.js";
-import { encodePatternFile, decodePatternFile } from "./firmware/patternFile.js";
+import { ToernSdSerial, joinSdPath } from "./firmware/sdSerial.js";
+import { encodePatternRam, decodePatternFile } from "./firmware/patternFile.js";
 
 const W = 480;
 const H = 440;
@@ -168,10 +168,11 @@ app.innerHTML = `
     <div id="jump-home">
     <h1 class="jump-title">Menu</h1>
     <button type="button" data-jump="empty">Empty New Track</button>
+    <hr>
     <button type="button" data-jump="draw">Draw</button>
     <button type="button" data-jump="single">SingleMode</button>
-    <button type="button" data-jump="filter">FilterMode</button>
     <button type="button" data-jump="menu">Open MainMenu</button>
+    <button type="button" data-jump="filter">FilterMode</button>
     <button type="button" data-jump="wav">LoadSample</button>
     <button type="button" data-jump="bpm">BPM</button>
     <button type="button" id="load-track">load Track</button>
@@ -182,7 +183,9 @@ app.innerHTML = `
       <button type="button" data-track="4">House</button>
       <button type="button" data-track="5">Ambient</button>
     </div>
-    <button type="button" id="import-midi">import</button>
+    <hr>
+    <button type="button" id="import-midi">Import MIDI File</button>
+    <button type="button" id="transfer-open">Transfer SIM&lt;&gt;DEVICE</button>
     <hr>
     <p class="status" id="status" role="status"></p>
     <p class="jump-help" id="jump-help"></p>
@@ -244,34 +247,47 @@ app.innerHTML = `
     <div class="jump-layer" id="sd-layer" hidden>
       <div class="jump-layer-head">
         <button type="button" id="sd-back">← Menu</button>
-        <h2 class="jump-title">ETC · SD</h2>
+        <h2 class="jump-title sd-title">Transfer SIM&lt;&gt;DEVICE</h2>
       </div>
-      <p class="jump-panel-meta muted" id="sd-help">On the device open Menu → ETC → SD (WAIT). Connect with Chrome/Edge, then browse the card.</p>
       <div class="sd-toolbar">
-        <button type="button" class="jump-panel-reset" id="sd-connect">Connect</button>
-        <button type="button" class="jump-panel-reset" id="sd-disconnect" disabled>Disconnect</button>
         <span class="jump-readout" id="sd-status" role="status">offline</span>
       </div>
-      <div class="jump-panel-row">
-        <label>Pattern slot
-          <input type="number" id="sd-slot" min="1" max="99" step="1" value="1">
+      <div class="sd-tabs" role="tablist" aria-label="Transfer">
+        <button type="button" class="sd-tab" role="tab" id="sd-tab-pattern" aria-selected="true" aria-controls="sd-panel-pattern">Current pattern</button>
+        <button type="button" class="sd-tab" role="tab" id="sd-tab-file" aria-selected="false" aria-controls="sd-panel-file">Pattern file</button>
+      </div>
+      <div id="sd-panel-pattern" role="tabpanel" aria-labelledby="sd-tab-pattern">
+        <p class="jump-panel-meta muted">Replaces the current pattern in RAM. Nothing is written to a file.</p>
+        <div class="sd-actions">
+          <button type="button" class="jump-panel-reset" id="sd-push">SIM &gt; DEVICE</button>
+          <button type="button" class="jump-panel-reset" id="sd-pull-slot">DEVICE &gt; SIM</button>
+        </div>
+      </div>
+      <div id="sd-panel-file" role="tabpanel" aria-labelledby="sd-tab-file" hidden>
+        <p class="jump-panel-meta muted">Browse and replace pattern files on the SD card.</p>
+        <div class="sd-crumbs" id="sd-crumbs"></div>
+        <div class="sd-list" id="sd-list" role="listbox" aria-label="SD card files"></div>
+        <div class="sd-actions">
+          <button type="button" class="jump-panel-reset" id="sd-pull" disabled>Replace sim with selected file</button>
+        </div>
+        <label class="jump-drop" id="sd-upload">
+          <input type="file" id="sd-upload-file" multiple hidden>
+          <span>Replace same name in this folder</span>
         </label>
       </div>
-      <div class="sd-actions">
-        <button type="button" class="jump-panel-reset" id="sd-push" disabled>Write slot → device SD</button>
-        <button type="button" class="jump-panel-reset" id="sd-pull-slot" disabled>Load slot → sim</button>
-        <button type="button" class="jump-panel-reset" id="sd-pull" disabled>Load selected → sim</button>
-      </div>
-      <div class="sd-crumbs" id="sd-crumbs"></div>
-      <div class="sd-list" id="sd-list" role="listbox" aria-label="SD card files"></div>
-      <label class="jump-drop" id="sd-upload">
-        <input type="file" id="sd-upload-file" multiple hidden>
-        <span>Upload files to current folder</span>
-      </label>
       <p class="jump-panel-err" id="sd-err" role="alert" hidden></p>
       <p class="jump-panel-meta" id="sd-xfer" role="status"></p>
     </div>
   </aside>
+  <div class="xfer-modal" id="xfer-modal" hidden>
+    <div class="xfer-modal-card" role="dialog" aria-modal="true" aria-labelledby="xfer-modal-text">
+      <p id="xfer-modal-text"></p>
+      <div class="xfer-modal-actions">
+        <button type="button" id="xfer-cancel">Cancel</button>
+        <button type="button" id="xfer-ok">Replace</button>
+      </div>
+    </div>
+  </div>
 `;
 
 const matrix = createMatrix(document.querySelector("#matrix"));
@@ -857,7 +873,7 @@ function clearChannel(channel) {
 
 function closeImport() {
   importLayer.hidden = true;
-  jumpHome.hidden = !sdLayer.hidden;
+  jumpHome.hidden = !sdLayer?.hidden;
   importMidiBtn.classList.remove("on");
   midiAssign.hidden = true;
   midiAssign.classList.remove("on");
@@ -1187,13 +1203,13 @@ importTranspose.addEventListener("change", scheduleImportApply);
 importOverlap.addEventListener("change", scheduleImportApply);
 importReset.addEventListener("click", resetImportToMidi);
 
-// --- ETC → SD (Web Serial file server, same as sd-tool-standalone) ------------
+// --- Transfer SIM<>DEVICE (sidebar: pattern RAM + SD files) ------------
+const TEENSY_VID = 0x16c0;
+const TEENSY_MIDI_PID = 0x0489;
+const transferOpen = document.querySelector("#transfer-open");
 const sdLayer = document.querySelector("#sd-layer");
 const sdBack = document.querySelector("#sd-back");
-const sdConnect = document.querySelector("#sd-connect");
-const sdDisconnect = document.querySelector("#sd-disconnect");
 const sdStatus = document.querySelector("#sd-status");
-const sdSlot = document.querySelector("#sd-slot");
 const sdPush = document.querySelector("#sd-push");
 const sdPullSlot = document.querySelector("#sd-pull-slot");
 const sdPull = document.querySelector("#sd-pull");
@@ -1203,14 +1219,22 @@ const sdUpload = document.querySelector("#sd-upload");
 const sdUploadFile = document.querySelector("#sd-upload-file");
 const sdErr = document.querySelector("#sd-err");
 const sdXfer = document.querySelector("#sd-xfer");
+const sdTabPattern = document.querySelector("#sd-tab-pattern");
+const sdTabFile = document.querySelector("#sd-tab-file");
+const sdPanelPattern = document.querySelector("#sd-panel-pattern");
+const sdPanelFile = document.querySelector("#sd-panel-file");
+const xferModal = document.querySelector("#xfer-modal");
+const xferText = document.querySelector("#xfer-modal-text");
+const xferOk = document.querySelector("#xfer-ok");
+const xferCancel = document.querySelector("#xfer-cancel");
 
 let sd = null;
 let sdPath = "/";
 let sdEntries = [];
 let sdSelected = null;
 let sdBusy = false;
-let sdPanelWanted = false;
-let sdSmpCache = null; // preserve Device SMP blob when rewriting a slot
+let sdSmpCache = null;
+let sdAutoConnecting = false;
 
 function setSdErr(msg) {
   sdErr.hidden = !msg;
@@ -1221,15 +1245,98 @@ function setSdStatus(text) {
   sdStatus.textContent = text;
 }
 
+function refreshSdStatus() {
+  if (sd?.connected) setSdStatus(sdPath && sdPath !== "/" ? `online · ${sdPath}` : "online");
+  else if (sdAutoConnecting) setSdStatus("connecting…");
+  else setSdStatus("offline");
+}
+
 function setSdBusy(on) {
   sdBusy = on;
   const live = !!(sd && sd.connected);
-  sdConnect.disabled = on || live;
-  sdDisconnect.disabled = on || !live;
-  sdPush.disabled = on || !live;
-  sdPullSlot.disabled = on || !live;
+  sdPush.disabled = on;
+  sdPullSlot.disabled = on;
   sdPull.disabled = on || !live || !sdSelected || sdSelected.type !== "file";
   sdUpload.classList.toggle("dim", on || !live);
+  refreshSdStatus();
+}
+
+function showSdTab(which) {
+  const pattern = which === "pattern";
+  sdTabPattern.setAttribute("aria-selected", pattern ? "true" : "false");
+  sdTabFile.setAttribute("aria-selected", pattern ? "false" : "true");
+  sdTabPattern.classList.toggle("on", pattern);
+  sdTabFile.classList.toggle("on", !pattern);
+  sdPanelPattern.hidden = !pattern;
+  sdPanelFile.hidden = pattern;
+}
+
+function askModal(message, okLabel) {
+  return new Promise((resolve) => {
+    xferText.textContent = message;
+    xferOk.hidden = !okLabel;
+    xferOk.textContent = okLabel || "Replace";
+    xferCancel.textContent = okLabel ? "Cancel" : "Close";
+    xferModal.hidden = false;
+    (okLabel ? xferOk : xferCancel).focus();
+    const finish = (yes) => {
+      xferModal.hidden = true;
+      xferOk.removeEventListener("click", onOk);
+      xferCancel.removeEventListener("click", onCancel);
+      document.removeEventListener("keydown", onKey);
+      resolve(yes);
+    };
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKey = (ev) => {
+      if (ev.key === "Escape") finish(false);
+    };
+    xferOk.addEventListener("click", onOk);
+    xferCancel.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+function showXferError(err) {
+  return askModal(err?.message || String(err), "");
+}
+
+async function pickTeensyPort() {
+  const ports = await navigator.serial.getPorts();
+  const infoOf = (port) => port.getInfo?.() || {};
+  const midi = ports.find((port) => {
+    const info = infoOf(port);
+    return info.usbVendorId === TEENSY_VID && info.usbProductId === TEENSY_MIDI_PID;
+  });
+  if (midi) return midi;
+  const teensy = ports.find((port) => infoOf(port).usbVendorId === TEENSY_VID);
+  if (teensy) return teensy;
+  if (ports.length === 1) return ports[0];
+  return null;
+}
+
+async function ensureTeensy({ requestIfMissing = true } = {}) {
+  if (sd?.connected) return true;
+  if (!navigator.serial) throw new Error("Web Serial needs Chrome or Edge.");
+  let port = await pickTeensyPort();
+  if (!port) {
+    if (!requestIfMissing) return false;
+    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: TEENSY_VID }] });
+  }
+  if (sd) {
+    try { await sd.close(); } catch (_) {}
+    sd = null;
+  }
+  sd = new ToernSdSerial();
+  sd.onDisconnect = () => {
+    sd = null;
+    refreshSdStatus();
+    setSdBusy(false);
+  };
+  setSdStatus("connecting…");
+  await sd.connect(port, (msg) => setSdStatus(msg || "connecting…"));
+  setSdStatus("online");
+  return true;
 }
 
 function openSdPanel() {
@@ -1237,29 +1344,32 @@ function openSdPanel() {
   closeLoadTrack();
   jumpHome.hidden = true;
   sdLayer.hidden = false;
-  sdPanelWanted = true;
-  document.querySelector("#sd-connect")?.focus();
+  transferOpen.classList.add("on");
+  showSdTab("pattern");
+  setSdErr("");
+  sdXfer.textContent = "";
+  refreshSdStatus();
+  sdBack.focus();
 }
 
 function closeSdPanel() {
   sdLayer.hidden = true;
-  sdPanelWanted = false;
+  transferOpen.classList.remove("on");
   if (importLayer.hidden) jumpHome.hidden = false;
 }
 
-function syncSdPanel() {
-  const onSd = device.mode() === "etc" && device.subIndex() === 2;
-  if (onSd && sdLayer.hidden) openSdPanel();
-  else if (!onSd && !sdLayer.hidden && sdPanelWanted) closeSdPanel();
+function showDraw() {
+  device.jump("draw");
+  canvas.focus({ preventScroll: true });
 }
 
 function renderSdCrumbs() {
   const parts = sdPath === "/" ? [] : sdPath.replace(/^\/+|\/+$/g, "").split("/");
   let html = `<button type="button" data-path="/">/</button>`;
   let acc = "";
-  for (const p of parts) {
-    acc += "/" + p;
-    html += `<span class="sep">/</span><button type="button" data-path="${acc}">${p}</button>`;
+  for (const part of parts) {
+    acc += "/" + part;
+    html += `<span class="sep">/</span><button type="button" data-path="${acc}">${part}</button>`;
   }
   sdCrumbs.innerHTML = html;
   sdCrumbs.querySelectorAll("button").forEach((btn) => {
@@ -1321,100 +1431,68 @@ function renderSdList() {
 }
 
 async function sdBrowse(path) {
-  if (!sd?.connected) return;
   setSdBusy(true);
   setSdErr("");
   try {
+    await ensureTeensy();
     sdPath = path || "/";
     sdSelected = null;
     sdEntries = await sd.listDir(sdPath);
     renderSdList();
     setSdStatus(`online · ${sdPath}`);
   } catch (err) {
-    setSdErr(err?.message || String(err));
+    if (err?.name !== "NotFoundError") setSdErr(err?.message || String(err));
   } finally {
     setSdBusy(false);
   }
 }
 
-async function connectSd() {
-  setSdErr("");
-  setSdBusy(true);
-  try {
-    if (sd) {
-      try { await sd.close(); } catch (_) {}
-    }
-    sd = new ToernSdSerial();
-    sd.onDisconnect = () => {
-      setSdStatus("offline");
-      setSdBusy(false);
-      setSdErr("Disconnected");
-    };
-    await sd.connect(null, (msg) => setSdStatus(msg), (need) => {
-      if (need) setSdErr("Device online — open Menu → ETC → SD on the hardware.");
-      else setSdErr("");
-    });
-    setSdStatus("online");
-    await sdBrowse("/");
-  } catch (err) {
-    setSdErr(err?.message || String(err));
-    setSdStatus("offline");
-    sd = null;
-  } finally {
-    setSdBusy(false);
-  }
-}
-
-async function disconnectSd() {
-  setSdBusy(true);
-  try {
-    if (sd) await sd.close();
-  } catch (_) {}
-  sd = null;
-  sdEntries = [];
-  sdSelected = null;
-  renderSdList();
-  setSdStatus("offline");
-  setSdErr("");
-  setSdBusy(false);
-}
-
-function slotPath(slot) {
-  const n = Math.max(1, Math.min(99, Math.round(Number(sdSlot.value) || 1)));
-  sdSlot.value = String(n);
-  return `/${n}.txt`;
-}
-
-async function buildPatternBytes() {
-  const cells = device.exportPatternCells();
-  let smpTail = sdSmpCache;
-  const remote = slotPath();
-  if (sd?.connected) {
-    try {
-      const existing = await sd.getBytes(remote);
-      const decoded = decodePatternFile(existing);
-      if (decoded.smpTail?.length) smpTail = decoded.smpTail;
-    } catch (_) {
-      // slot empty / unreadable — use cache or stub
-    }
-  }
-  return encodePatternFile(cells, { bpm: device.bpm(), smpTail });
-}
-
-async function pushPatternToSd() {
-  if (!sd?.connected) return;
+async function pushPatternRam() {
+  if (sdBusy) return;
+  const ok = await askModal("Replace the current pattern in device RAM with the sim pattern? This does not write a file.", "Replace");
+  if (!ok) return;
   setSdBusy(true);
   setSdErr("");
   sdXfer.textContent = "";
   try {
-    const remote = slotPath();
-    const bytes = await buildPatternBytes();
-    await sd.putBytes(remote, bytes, (done, total) => {
-      sdXfer.textContent = `Writing ${remote}… ${Math.round((done / total) * 100)}%`;
+    await ensureTeensy();
+    const bytes = encodePatternRam(device.exportPatternCells(), device.bpm());
+    await sd.putPatternRam(bytes, (done, total) => {
+      sdXfer.textContent = `SIM → DEVICE… ${Math.round((done / total) * 100)}%`;
     });
-    sdXfer.textContent = `Wrote ${remote} (${bytes.length} B). Load it on the device via Menu → FILE.`;
-    await sdBrowse(parentSdPath(remote));
+    sdXfer.textContent = "Device RAM updated.";
+    setSdStatus("online");
+    showDraw();
   } catch (err) {
+    if (err?.name === "NotFoundError") return;
+    await showXferError(err);
+    setSdErr(err?.message || String(err));
+    sdXfer.textContent = "";
+  } finally {
+    setSdBusy(false);
+  }
+}
+
+async function pullPatternRam() {
+  if (sdBusy) return;
+  const ok = await askModal("Replace the current pattern in sim RAM with the device pattern?", "Replace");
+  if (!ok) return;
+  setSdBusy(true);
+  setSdErr("");
+  sdXfer.textContent = "";
+  try {
+    await ensureTeensy();
+    const bytes = await sd.getPatternRam((done, total) => {
+      sdXfer.textContent = `DEVICE → SIM… ${Math.round((done / total) * 100)}%`;
+    });
+    const { cells, bpm } = decodePatternFile(bytes);
+    device.importPatternCells(cells, bpm);
+    sdXfer.textContent = `Sim RAM updated${bpm ? ` @ ${bpm.toFixed(1)} BPM` : ""}.`;
+    setSdStatus("online");
+    showDraw();
+  } catch (err) {
+    if (err?.name === "NotFoundError") return;
+    await showXferError(err);
     setSdErr(err?.message || String(err));
     sdXfer.textContent = "";
   } finally {
@@ -1423,20 +1501,21 @@ async function pushPatternToSd() {
 }
 
 async function loadSdFileToSim(remote) {
-  if (!sd?.connected) return;
   setSdBusy(true);
   setSdErr("");
   sdXfer.textContent = "";
   try {
+    await ensureTeensy();
     const bytes = await sd.getBytes(remote, (done, total) => {
       sdXfer.textContent = `Reading ${remote}… ${Math.round((done / total) * 100)}%`;
     });
     const { cells, bpm, smpTail } = decodePatternFile(bytes);
     if (smpTail?.length) sdSmpCache = smpTail;
     device.importPatternCells(cells, bpm);
-    sdXfer.textContent = `Loaded ${remote} into sim grid${bpm ? ` @ ${bpm.toFixed(1)} BPM` : ""}.`;
+    sdXfer.textContent = `Loaded ${remote} into sim${bpm ? ` @ ${bpm.toFixed(1)} BPM` : ""}.`;
+    showDraw();
   } catch (err) {
-    setSdErr(err?.message || String(err));
+    if (err?.name !== "NotFoundError") setSdErr(err?.message || String(err));
     sdXfer.textContent = "";
   } finally {
     setSdBusy(false);
@@ -1444,10 +1523,11 @@ async function loadSdFileToSim(remote) {
 }
 
 async function uploadSdFiles(files) {
-  if (!sd?.connected || !files?.length) return;
+  if (!files?.length) return;
   setSdBusy(true);
   setSdErr("");
   try {
+    await ensureTeensy();
     for (const file of files) {
       const remote = joinSdPath(sdPath, file.name);
       const buf = new Uint8Array(await file.arrayBuffer());
@@ -1458,26 +1538,22 @@ async function uploadSdFiles(files) {
     sdXfer.textContent = `Uploaded ${files.length} file(s).`;
     await sdBrowse(sdPath);
   } catch (err) {
-    setSdErr(err?.message || String(err));
+    if (err?.name !== "NotFoundError") setSdErr(err?.message || String(err));
   } finally {
     setSdBusy(false);
   }
 }
 
-sdBack.addEventListener("click", () => {
-  closeSdPanel();
-  device.jump("menu");
-});
-sdConnect.addEventListener("click", () => connectSd());
-sdDisconnect.addEventListener("click", () => disconnectSd());
-sdPush.addEventListener("click", () => pushPatternToSd());
-sdPullSlot.addEventListener("click", () => loadSdFileToSim(slotPath()));
+transferOpen.addEventListener("click", () => openSdPanel());
+sdBack.addEventListener("click", () => closeSdPanel());
+sdPush.addEventListener("click", () => pushPatternRam());
+sdPullSlot.addEventListener("click", () => pullPatternRam());
 sdPull.addEventListener("click", () => {
   if (!sdSelected || sdSelected.type !== "file") return;
   loadSdFileToSim(joinSdPath(sdPath, sdSelected.name));
 });
 sdUpload.addEventListener("click", () => {
-  if (!sd?.connected || sdBusy) return;
+  if (sdBusy) return;
   sdUploadFile.click();
 });
 sdUploadFile.addEventListener("change", () => {
@@ -1485,7 +1561,13 @@ sdUploadFile.addEventListener("change", () => {
   sdUploadFile.value = "";
   if (files.length) uploadSdFiles(files);
 });
+sdTabPattern.addEventListener("click", () => showSdTab("pattern"));
+sdTabFile.addEventListener("click", async () => {
+  showSdTab("file");
+  await sdBrowse(sdPath || "/");
+});
 renderSdList();
+showSdTab("pattern");
 setSdBusy(false);
 
 const HELP = {
@@ -1507,7 +1589,7 @@ const HELP = {
   vol: "Output levels. Encoder 4 picks main, gain, or preview, encoder 3 changes it.",
   recs: "Recording input. Encoder 4 picks a row, encoder 3 changes it.",
   midi: "MIDI. Encoder 4 picks a row, encoder 3 changes it.",
-  etc: "ETC. Encoder 4 picks INFO / RAM / SD / …. On SD, the side panel talks to the hardware over Web Serial — stay on WAIT→OK. Esc leaves.",
+  etc: "ETC. Encoder 4 picks INFO / RAM / SD / …. Transfer SIM<>DEVICE opens the side panel for RAM and SD file copy. Esc leaves.",
   shift: "Shift moves the current voice. Encoder 4 moves it in time, encoder 1 moves it in pitch, encoder 2 moves only this page. Esc leaves.",
   boot: "The device is starting.",
 };
@@ -1532,7 +1614,6 @@ function markVoice() {
   if (clearBtn) clearBtn.disabled = mode !== "draw" && mode !== "single";
   document.querySelector(".soon").hidden = !device.soon();
   document.querySelector(".voices").classList.toggle("on", mode === "draw" || mode === "single" || mode === "filter");
-  syncSdPanel();
   refreshAssistive(false);
   document.querySelectorAll(".jump button[data-jump]").forEach((btn) => {
     const on = btn.dataset.jump === mode;

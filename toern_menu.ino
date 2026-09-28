@@ -4681,7 +4681,46 @@ FLASHMEM void showNewFileMode() {
   }
 }
 
-// Helper function to get main setting for current menu page
+// Host PING while USB serial is up: land on Menu → ETC → SD so the session can go online.
+FLASHMEM void enterEtcSdFromHost() {
+  extern Mode menu;
+  extern Mode *currentMode;
+  extern void switchMode(Mode *newMode);
+
+  if (currentMode != &menu) {
+    switchMode(&menu);
+  }
+  if (currentMode != &menu) return;
+
+  int sdPage = 0;
+  for (int i = 0; i < ETC_PAGES_COUNT; i++) {
+    if (etcPages[i].mainSetting == 49) {
+      sdPage = i;
+      break;
+    }
+  }
+  int etcParent = 0;
+  for (int i = 0; i < MENU_PAGES_COUNT; i++) {
+    if (menuPages[i].mainSetting == 34) {
+      etcParent = i;
+      break;
+    }
+  }
+
+  inLookSubmenu = false;
+  inRecsSubmenu = false;
+  inMidiSubmenu = false;
+  inVolSubmenu = false;
+  inEtcSubmenu = true;
+  currentMenuPage = etcParent;
+  currentEtcPage = sdPage;
+  currentMode->pos[3] = sdPage;
+  Encoder[3].writeMin((int32_t)0);
+  Encoder[3].writeMax((int32_t)(ETC_PAGES_COUNT - 1));
+  Encoder[3].writeCounter((int32_t)sdPage);
+  menuRequestFullRedraw();
+}
+
 FLASHMEM int getCurrentMenuMainSetting() {
   if (inLookSubmenu) {
     return lookPages[currentLookPage].mainSetting;

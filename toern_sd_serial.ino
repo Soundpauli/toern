@@ -19,6 +19,9 @@
 //     → <512-byte data blocks>
 //     ← ACK                    (after each block)
 //     → CRC <crc32>
+//   GETPAT / PUTPAT <size> <crc32>
+//     Same framing as GET / PUT, but the bytes are the current pattern in RAM
+//     (notes, BPM, MIDI pitches). Nothing is written to the SD card.
 //
 // LIST file lines: F <size> <duration_ms> <name>  (duration_ms = -1 if unknown/non-WAV)
 // Binary transfers follow PUT/GET handshake; CRC32 is IEEE (zlib/binascii compatible).
@@ -556,20 +559,208 @@ static void sdSerCmdGet(const char *pathArg) {
 #endif
 }
 
-static void sdSerTouchClient() {
+// Host is talking (PING / pattern transfer). Does not stop audio.
+static void sdSerNoteHostPresent() {
   sdSerLastClientMs = millis();
-  if (!sdSerClientConnected) {
-    // Stop play only once host is connected (menu shows OK), not while WAIT.
-    sdSerAudioStopForSd();
-    sdSerClientConnected = true;
+  sdSerClientConnected = true;
+}
+
+static void sdSerExpireClient() {
+  if (!sdSerClientConnected) return;
+  if ((uint32_t)(millis() - sdSerLastClientMs) <= SD_SER_CLIENT_TIMEOUT_MS) return;
+  sdSerClientConnected = false;
+  if (sdSerActive) {
     extern void menuRequestFullRedraw();
     menuRequestFullRedraw();
   }
 }
 
+static void sdSerTouchClient() {
+  const bool was = sdSerClientConnected;
+  sdSerNoteHostPresent();
+  if (was) return;
+  // First contact on the SD page stops play so the card is safe to touch.
+  sdSerAudioStopForSd();
+  extern void menuRequestFullRedraw();
+  menuRequestFullRedraw();
+}
+
 static char *sdSerSkipSpaces(char *s) {
   while (s && (*s == ' ' || *s == '\t')) s++;
   return s;
+}
+
+// Current-pattern RAM image: notes (x then y) + FF FE + float BPM + TPIT pitches.
+static const size_t SD_PAT_NOTES = 256u * 16u;
+static const size_t SD_PAT_NOTE_BYTES = SD_PAT_NOTES * 4u;
+static const size_t SD_PAT_BYTES = SD_PAT_NOTE_BYTES + 2u + 4u + 8u + SD_PAT_NOTES;
+static const uint8_t SD_PAT_PITCH_HDR[8] = { 'T', 'P', 'I', 'T', 1, 0x10, 0x00, 0 };
+static EXTMEM uint8_t sdPatBuf[SD_PAT_BYTES];
+
+static void sdPatPack() {
+  size_t i = 0;
+  for (unsigned int x = 1; x <= 256; x++) {
+    for (unsigned int y = 1; y <= 16; y++) {
+      sdPatBuf[i++] = note[x][y].channel;
+      sdPatBuf[i++] = note[x][y].velocity;
+      sdPatBuf[i++] = note[x][y].probability;
+      sdPatBuf[i++] = note[x][y].condition;
+    }
+  }
+  sdPatBuf[i++] = 0xFF;
+  sdPatBuf[i++] = 0xFE;
+  float bpm = SMP.bpm;
+  memcpy(sdPatBuf + i, &bpm, sizeof(bpm));
+  i += sizeof(bpm);
+  memcpy(sdPatBuf + i, SD_PAT_PITCH_HDR, sizeof(SD_PAT_PITCH_HDR));
+  i += sizeof(SD_PAT_PITCH_HDR);
+  for (unsigned int x = 1; x <= 256; x++) {
+    for (unsigned int y = 1; y <= 16; y++) {
+      sdPatBuf[i++] = note[x][y].midiPitch;
+    }
+  }
+}
+
+static bool sdPatApply() {
+  if (sdPatBuf[SD_PAT_NOTE_BYTES] != 0xFF || sdPatBuf[SD_PAT_NOTE_BYTES + 1] != 0xFE) return false;
+  const size_t pitchAt = SD_PAT_NOTE_BYTES + 2u + 4u;
+  if (memcmp(sdPatBuf + pitchAt, SD_PAT_PITCH_HDR, sizeof(SD_PAT_PITCH_HDR)) != 0) return false;
+
+  size_t i = 0;
+  for (unsigned int x = 1; x <= 256; x++) {
+    for (unsigned int y = 1; y <= 16; y++) {
+      note[x][y].channel = sdPatBuf[i++];
+      note[x][y].velocity = sdPatBuf[i++];
+      note[x][y].probability = sdPatBuf[i++];
+      note[x][y].condition = sdPatBuf[i++];
+      note[x][y].midiPitch = NOTE_MIDI_PITCH_NONE;
+    }
+  }
+
+  float bpm = 0;
+  memcpy(&bpm, sdPatBuf + SD_PAT_NOTE_BYTES + 2, sizeof(bpm));
+  if (bpm >= 40.0f && bpm <= 300.0f) {
+    SMP.bpm = bpm;
+    volume_bpm.pos[3] = (unsigned int)bpm;
+    playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
+    playTimer.update((uint32_t)round(playNoteInterval));
+  }
+
+  size_t p = pitchAt + sizeof(SD_PAT_PITCH_HDR);
+  for (unsigned int x = 1; x <= 256; x++) {
+    for (unsigned int y = 1; y <= 16; y++) {
+      uint8_t stored = sdPatBuf[p++];
+      note[x][y].midiPitch =
+          (stored <= 127 || stored == NOTE_MIDI_PITCH_NONE) ? stored : NOTE_MIDI_PITCH_NONE;
+    }
+  }
+  return true;
+}
+
+static void sdSerCmdGetPat() {
+  sdPatPack();
+  sdSerAudioStopForSd();
+  sdSerReplyf("OK %lu", (unsigned long)SD_PAT_BYTES);
+#if defined(CORE_TEENSY)
+  Serial.send_now();
+#endif
+  if (!sdSerWaitAck(SD_SER_IO_TIMEOUT_MS)) {
+    sdSerDrainRx();
+    sdSerReply("ERR ACK");
+    return;
+  }
+
+  uint32_t crc = 0;
+  uint32_t left = (uint32_t)SD_PAT_BYTES;
+  uint32_t sent = 0;
+  while (left > 0) {
+    size_t n = left > SD_SER_GET_BLOCK ? SD_SER_GET_BLOCK : (size_t)left;
+    crc = sdSerCrc32Update(crc, sdPatBuf + sent, n);
+    if (!sdSerWriteAll(sdPatBuf + sent, n)) {
+      sdSerDrainRx();
+      sdSerReply("ERR IO");
+      return;
+    }
+    Serial.flush();
+#if defined(CORE_TEENSY)
+    Serial.send_now();
+#endif
+    if (!sdSerWaitAck(SD_SER_IO_TIMEOUT_MS)) {
+      sdSerDrainRx();
+      sdSerReply("ERR ACK");
+      return;
+    }
+    left -= (uint32_t)n;
+    sent += (uint32_t)n;
+    sdSerLastClientMs = millis();
+    if ((sent & 0x1fff) == 0) delayMicroseconds(200);
+  }
+  sdSerReplyf("CRC %08lX", (unsigned long)crc);
+#if defined(CORE_TEENSY)
+  Serial.send_now();
+#endif
+  extern void showDrawAfterPatternTransfer();
+  showDrawAfterPatternTransfer();
+}
+
+static void sdSerCmdPutPat(char *args) {
+  char *sizeTok = strtok(args ? args : (char *)"", " \t");
+  char *crcTok = strtok(NULL, " \t");
+  if (!sizeTok || !crcTok) {
+    sdSerReply("ERR USAGE");
+    return;
+  }
+  uint32_t size = (uint32_t)strtoul(sizeTok, NULL, 10);
+  uint32_t expectCrc = (uint32_t)strtoul(crcTok, NULL, 16);
+  if (size != (uint32_t)SD_PAT_BYTES) {
+    sdSerReply("ERR SIZE");
+    return;
+  }
+
+  sdSerReplyFlush("READY");
+  sdSerAudioStopForSd();
+
+  uint32_t remaining = size;
+  uint32_t crc = 0;
+  uint32_t filled = 0;
+  bool ok = true;
+  while (remaining > 0) {
+    size_t block = remaining > SD_SER_PUT_BLOCK ? SD_SER_PUT_BLOCK : (size_t)remaining;
+    size_t got = 0;
+    while (got < block) {
+      size_t n = (block - got) > SD_SER_CHUNK ? SD_SER_CHUNK : (block - got);
+      if (!sdSerReadExact(sdPatBuf + filled, n, SD_SER_IO_TIMEOUT_MS)) {
+        ok = false;
+        break;
+      }
+      crc = sdSerCrc32Update(crc, sdPatBuf + filled, n);
+      got += n;
+      filled += (uint32_t)n;
+      remaining -= (uint32_t)n;
+      sdSerLastClientMs = millis();
+    }
+    if (!ok) break;
+    sdSerReplyFlush("ACK");
+  }
+  if (!ok) {
+    sdSerDrainRx();
+    sdSerReplyFlush("ERR IO");
+    return;
+  }
+  if (crc != expectCrc) {
+    sdSerDrainRx();
+    char err[64];
+    snprintf(err, sizeof(err), "ERR CRC got=%08lX want=%08lX", (unsigned long)crc, (unsigned long)expectCrc);
+    sdSerReplyFlush(err);
+    return;
+  }
+  if (!sdPatApply()) {
+    sdSerReplyFlush("ERR PATTERN");
+    return;
+  }
+  sdSerReplyFlush("OK");
+  extern void showDrawAfterPatternTransfer();
+  showDrawAfterPatternTransfer();
 }
 
 static void sdSerHandleLine(char *line) {
@@ -603,6 +794,10 @@ static void sdSerHandleLine(char *line) {
     else sdSerReply("ERR USAGE");
   } else if (strcasecmp(cmd, "GET") == 0) {
     sdSerCmdGet(args);
+  } else if (strcasecmp(cmd, "GETPAT") == 0) {
+    sdSerCmdGetPat();
+  } else if (strcasecmp(cmd, "PUTPAT") == 0) {
+    sdSerCmdPutPat(args);
   } else {
     sdSerReply("ERR UNKNOWN");
   }
@@ -613,7 +808,10 @@ bool sdSerialServerIsActive() {
 }
 
 bool sdSerialServerClientConnected() {
-  return sdSerActive && sdSerClientConnected;
+  // True while a host keepalive is recent, including pattern transfer from Draw.
+  // The SD page is not required.
+  if (!sdSerClientConnected) return false;
+  return (uint32_t)(millis() - sdSerLastClientMs) <= SD_SER_CLIENT_TIMEOUT_MS;
 }
 
 void sdSerialServerSetActive(bool on) {
@@ -621,16 +819,14 @@ void sdSerialServerSetActive(bool on) {
 
   if (on) {
     // Stay in WAIT without stopping play; audio stops when host connects (OK).
+    // Keep a live off-page session so the screensaver does not start on the way in.
     Serial.setTimeout(50);
     sdSerDrainRx();
-    sdSerClientConnected = false;
-    sdSerLastClientMs = 0;
+    sdSerExpireClient();
     sdSerActive = true;
     sdSerReplyf("OK TOERN SD %s", VERSION);
   } else {
     sdSerActive = false;
-    sdSerClientConnected = false;
-    sdSerLastClientMs = 0;
     sdSerDrainRx();
   }
 }
@@ -638,11 +834,7 @@ void sdSerialServerSetActive(bool on) {
 void sdSerialServerPoll() {
   if (!sdSerActive) return;
 
-  if (sdSerClientConnected && (millis() - sdSerLastClientMs > SD_SER_CLIENT_TIMEOUT_MS)) {
-    sdSerClientConnected = false;
-    extern void menuRequestFullRedraw();
-    menuRequestFullRedraw();
-  }
+  sdSerExpireClient();
 
   while (Serial.available()) {
     int b = Serial.read();
@@ -667,9 +859,63 @@ void sdSerialServerPoll() {
   }
 }
 
-// When SD page is not open, still answer PING so the host knows the device is alive.
+// Pattern + file exchange works from any screen. PING does not open the SD page.
+static void sdSerHandleOffPage(char *line) {
+  line = sdSerSkipSpaces(line);
+  if (line[0] == '\0') return;
+
+  char cmd[16];
+  size_t i = 0;
+  while (line[i] && line[i] != ' ' && line[i] != '\t' && i + 1 < sizeof(cmd)) {
+    cmd[i] = line[i];
+    i++;
+  }
+  cmd[i] = '\0';
+  char *args = sdSerSkipSpaces(line + i);
+
+  if (strcasecmp(cmd, "PING") == 0) {
+    sdSerNoteHostPresent();
+    sdSerReplyf("OK TOERN SD %s", VERSION);
+    return;
+  }
+
+  // Same commands as the SD page, without forcing the OK screen.
+  // Do not call sdSerTouchClient — that pauses audio for the SD menu OK state.
+  if (strcasecmp(cmd, "LIST") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdList(args && *args ? args : "/");
+  } else if (strcasecmp(cmd, "RM") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdRm(args);
+  } else if (strcasecmp(cmd, "MKDIR") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdMkdir(args);
+  } else if (strcasecmp(cmd, "MV") == 0 || strcasecmp(cmd, "REN") == 0) {
+    sdSerNoteHostPresent();
+    if (args && *args) sdSerCmdMv(args);
+    else sdSerReply("ERR USAGE");
+  } else if (strcasecmp(cmd, "PUT") == 0) {
+    sdSerNoteHostPresent();
+    if (args && *args) sdSerCmdPut(args);
+    else sdSerReply("ERR USAGE");
+  } else if (strcasecmp(cmd, "GET") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdGet(args);
+  } else if (strcasecmp(cmd, "GETPAT") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdGetPat();
+  } else if (strcasecmp(cmd, "PUTPAT") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdPutPat(args);
+  } else {
+    sdSerReply("ERR NEED_SD");
+  }
+}
+
 void sdSerialServerPollNeedSdHint() {
   if (sdSerActive) return;
+  sdSerExpireClient();
+
   // Don't steal binary color protocols (COLR/BRIT/SAVE) — those run on ETC→COLR.
   while (Serial.available()) {
     int peek = Serial.peek();
@@ -684,11 +930,7 @@ void sdSerialServerPollNeedSdHint() {
       if (sdSerLineLen > 0 && sdSerLineBuf[sdSerLineLen - 1] == '\r') {
         sdSerLineBuf[sdSerLineLen - 1] = '\0';
       }
-      char *line = sdSerSkipSpaces(sdSerLineBuf);
-      if (line[0] != '\0') {
-        // Any text command while not on SD page.
-        sdSerReply("ERR NEED_SD");
-      }
+      sdSerHandleOffPage(sdSerLineBuf);
       sdSerLineLen = 0;
     } else if (c != '\r') {
       if (sdSerLineLen + 1 < sizeof(sdSerLineBuf)) {

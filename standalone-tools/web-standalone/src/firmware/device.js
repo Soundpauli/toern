@@ -97,7 +97,7 @@ export function createDevice(matrix, statusEl, rings) {
     scheme: 0, childLock: false, copyArmed: false, solo: false, soloSaved: null, soloArrow: "", soloArrowAt: 0,
     volBar: 0, volBarAt: 0, chVol,
     muteMask: 0x0006, muteSel: 1, fullMute: false, fullMuteSaved: null,
-    ledBrightness: 64, chNr: 1, chNrAt: 0, infoAt: 0, knobAngle: [0, 0, 0, 0],
+    ledBrightness: 64, chNr: 1, chNrAt: 0, pageNr: 1, pageNrAt: 0, infoAt: 0, knobAngle: [0, 0, 0, 0],
     mainVol: 80, gain: 1, prevVol: 8, stereo: 0,
     micGain: 20, lineInLevel: 5,
     fastRecMode: 1, recChannelClear: 1, recInput: 0,
@@ -852,6 +852,7 @@ export function createDevice(matrix, statusEl, rings) {
         if (s.GLOB.y !== prevY && s.cursorType === 1 && s.mode === "draw" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
           s.chNr = s.GLOB.currentChannel;
           s.chNrAt = performance.now();
+          s.pageNrAt = 0;
         }
       } else if (enc === 1) {
         if (s.ctrlVol) {
@@ -861,7 +862,13 @@ export function createDevice(matrix, statusEl, rings) {
           s.volBarAt = performance.now();
           applyFilt(ch);
         } else if (!s.childLock) {
+          const prev = s.GLOB.edit;
           viewPage(s.GLOB.edit + dir);
+          if (s.GLOB.edit !== prev && s.cursorType === 1) {
+            s.pageNr = s.GLOB.edit;
+            s.pageNrAt = performance.now();
+            s.chNrAt = 0;
+          }
         }
       } else if (enc === 2) nudgeFast(dir);
       else {

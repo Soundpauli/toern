@@ -263,8 +263,8 @@ export class ToernSdSerial {
       n += 1;
       const leftSec = Math.max(1, Math.ceil((deadline - performance.now()) / 1000));
       const hint = sawNeedSd
-        ? `Device alive — open Menu → ETC → SD (${leftSec}s)`
-        : `Menu → ETC → SD · PING ${n} (${leftSec}s)`;
+        ? `Opening Menu → ETC → SD (${leftSec}s)`
+        : `Connecting… (${leftSec}s)`;
       if (onStatus) onStatus(hint);
       sdLog(`handshake PING #${n}`);
       try {
@@ -543,7 +543,6 @@ export class ToernSdSerial {
       }).catch(async (err) => {
         const msg = String(err && err.message || err);
         sdLog("keepalive ping failed (" + (fails + 1) + "): " + msg, "err");
-        // After a failed GET the Teensy may still be waiting for ACK — unblock it.
         if (/ERR ACK|unexpected response/i.test(msg)) {
           try {
             for (let i = 0; i < 3; i++) await this._write("ACK\n");
@@ -555,7 +554,8 @@ export class ToernSdSerial {
           } catch (_) {}
         }
         fails += 1;
-        if (fails >= 2) this._handleLost("Disconnected (device lost)");
+        // Be patient — transient USB stalls should not tear the session down.
+        if (fails >= 5) this._handleLost("Disconnected (device lost)");
       });
     }, KEEPALIVE_MS);
   }
@@ -755,15 +755,29 @@ export class ToernSdSerial {
     });
   }
 
+  async _readExpectReady() {
+    // Keepalive / connect banners ("OK TOERN SD …") can land in RX just before
+    // a PUT. Drain those; only ERR or a non-OK line is fatal.
+    for (let n = 0; n < 6; n++) {
+      const line = (await this._readLine()).trim();
+      if (line === "READY") return;
+      if (line.startsWith("ERR")) throw new Error(line);
+      if (line.startsWith("OK")) {
+        sdLog("skipping stale OK before READY: " + line);
+        continue;
+      }
+      throw new Error("expected READY, got: " + line);
+    }
+    throw new Error("expected READY, got repeated OK banners");
+  }
+
   putBytes(remote, data, onProgress) {
     return this._enqueue(async () => {
+      if (this._rxLen) this._clearRx();
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
       const csum = crc32Hex(bytes);
       await this._write(`PUT ${remote} ${bytes.length} ${csum}\n`);
-      const ready = await this._readLine();
-      if (ready !== "READY") {
-        throw new Error(ready.startsWith("ERR") ? ready : "expected READY, got: " + ready);
-      }
+      await this._readExpectReady();
       // USB CDC ignores baud rate — must wait for ACK or Teensy RX overruns and hard-faults.
       const block = 8192;
       for (let i = 0; i < bytes.length; i += block) {
@@ -854,6 +868,72 @@ export class ToernSdSerial {
         try { await resync(); } catch (_) {}
         throw err;
       }
+    });
+  }
+
+  /** Current pattern in device RAM. Does not read or write a file. */
+  getPatternRam(onProgress) {
+    return this._enqueue(async () => {
+      if (this._rxLen) this._clearRx();
+      await this._write("GETPAT\n");
+      let header = "";
+      for (let n = 0; n < 6; n++) {
+        header = (await this._readLine(IO_TIMEOUT_MS)).trim();
+        if (header.startsWith("ERR")) throw new Error(header);
+        if (/^OK\s+\d+$/.test(header)) break;
+        if (header.startsWith("OK")) {
+          sdLog("skipping stale OK before GETPAT size: " + header);
+          continue;
+        }
+        throw new Error("unexpected response: " + header);
+      }
+      const m = /^OK\s+(\d+)$/.exec(header);
+      if (!m) throw new Error("unexpected response: " + header);
+      const size = parseInt(m[1], 10);
+      await this._write("ACK\n");
+      const out = new Uint8Array(size);
+      const block = 512;
+      let off = 0;
+      while (off < size) {
+        const n = Math.min(block, size - off);
+        const piece = await this._readExact(n, XFER_IDLE_MS, (got) => {
+          if (onProgress) onProgress(off + got, size);
+        });
+        out.set(piece, off);
+        off += n;
+        await this._write("ACK\n");
+        if (onProgress) onProgress(off, size);
+        await this._sleep(0);
+      }
+      const crcLine = (await this._readLine(IO_TIMEOUT_MS)).trim();
+      const cm = /^CRC\s+([0-9A-Fa-f]{1,8})$/i.exec(crcLine);
+      if (!cm) throw new Error("expected CRC trailer, got: " + crcLine);
+      const expect = cm[1].toUpperCase().padStart(8, "0");
+      const got = crc32Hex(out);
+      if (got !== expect) throw new Error(`CRC mismatch: got ${got} want ${expect}`);
+      return out;
+    });
+  }
+
+  /** Replace the current pattern in device RAM. Does not write a file. */
+  putPatternRam(data, onProgress) {
+    return this._enqueue(async () => {
+      if (this._rxLen) this._clearRx();
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const csum = crc32Hex(bytes);
+      await this._write(`PUTPAT ${bytes.length} ${csum}\n`);
+      await this._readExpectReady();
+      const block = 8192;
+      for (let i = 0; i < bytes.length; i += block) {
+        const end = Math.min(i + block, bytes.length);
+        await this._write(bytes.subarray(i, end));
+        const ack = await this._readLine(IO_TIMEOUT_MS);
+        if (ack !== "ACK") {
+          throw new Error(ack.startsWith("ERR") ? ack : "expected ACK, got: " + ack);
+        }
+        if (onProgress) onProgress(end, bytes.length);
+      }
+      this._expectOk(await this._readLine(IO_TIMEOUT_MS));
     });
   }
 

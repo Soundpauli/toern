@@ -59,6 +59,14 @@ export function encodePatternFile(cells, opts = {}) {
   return out;
 }
 
+/** Current-pattern RAM image: notes + marker + 4-byte BPM + pitch extension. No file, no SMP blob. */
+export function encodePatternRam(cells, bpm) {
+  const stub = new Uint8Array(4);
+  const value = Number.isFinite(bpm) ? bpm : 100;
+  new DataView(stub.buffer).setFloat32(0, value, true);
+  return encodePatternFile(cells, { bpm: value, smpTail: stub });
+}
+
 /**
  * @param {Uint8Array} bytes
  * @returns {{ cells: Array, bpm: number|null, smpTail: Uint8Array|null }}

@@ -354,6 +354,7 @@ void updateAllMixerGains();
 void forceAllMixerGainsToTarget();
 void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
+void drawPageNrOverlay(int pageNum);
 void drawSampleLoadOverlay(uint8_t progressPercent);
 bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
 void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
@@ -686,6 +687,9 @@ static int inputGainOverlayMax = 63;
 static bool channelNrOverlayActive = false;
 static unsigned long channelNrOverlayUntil = 0;
 static int channelNrOverlayChannel = 0;
+static bool pageNrOverlayActive = false;
+static unsigned long pageNrOverlayUntil = 0;
+static int pageNrOverlayPage = 0;
 static const int DEFAULT_CHANNEL_VOLUME = 16;  // 100% of CTRL=VOL (0–16)
 
 // Get SPKR enabled state
@@ -1845,6 +1849,24 @@ void refreshCtrlEncoderConfig() {
     CRGB volColor = CRGB(currentVol * currentVol, max(0, 20 - currentVol), 0);
     Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
   }
+}
+
+// After a RAM pattern exchange, show the grid. Skip the SD OK page.
+void showDrawAfterPatternTransfer() {
+  extern bool inLookSubmenu;
+  extern bool inRecsSubmenu;
+  extern bool inMidiSubmenu;
+  extern bool inVolSubmenu;
+  extern bool inEtcSubmenu;
+  inLookSubmenu = false;
+  inRecsSubmenu = false;
+  inMidiSubmenu = false;
+  inVolSubmenu = false;
+  inEtcSubmenu = false;
+  if (currentMode == &draw) return;
+  bypassModeSwitchDebounce = true;
+  switchMode(&draw);
+  bypassModeSwitchDebounce = false;
 }
 
 FLASHMEM void switchMode(Mode *newMode) {
@@ -4491,6 +4513,7 @@ void checkEncoders() {
             channelNrOverlayChannel = channelNum;
             channelNrOverlayActive = true;
             channelNrOverlayUntil = millis() + 800;  // Show for 800ms
+            pageNrOverlayActive = false;
           }
         }
         FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
@@ -4698,6 +4721,14 @@ void checkEncoders() {
         if (rel > (int)maxX) rel = (int)maxX;
         int xval = rel + (editpage - 1) * (int)maxX;
         xval = constrain(xval, 1, (int)MAX_STEPS);
+
+        // CTRL=PAGE + CRSR=CHNR: flash page number like the channel readout.
+        if (showChannelNr && (currentMode == &draw || currentMode == &singleMode)) {
+          pageNrOverlayPage = editpage;
+          pageNrOverlayActive = true;
+          pageNrOverlayUntil = millis() + 800;
+          channelNrOverlayActive = false;
+        }
 
         if (patternMode == 3) {
           GLOB.edit = (unsigned int)editpage;
@@ -6533,6 +6564,16 @@ void loop() {
           drawChannelNrOverlay(channelNrOverlayChannel, GLOB.currentChannel);
         } else {
           channelNrOverlayActive = false;
+        }
+      }
+
+      // CTRL=PAGE page number (same gate as CRSR=CHNR)
+      if (pageNrOverlayActive && showChannelNr
+          && (currentMode == &draw || currentMode == &singleMode)) {
+        if (millis() <= pageNrOverlayUntil) {
+          drawPageNrOverlay(pageNrOverlayPage);
+        } else {
+          pageNrOverlayActive = false;
         }
       }
 

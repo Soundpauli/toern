@@ -1267,6 +1267,41 @@ FLASHMEM void drawChannelNrOverlay(int channelNum, int channelIdx) {
   drawText(numStr, numberX, textY, channelColor);
 }
 
+FLASHMEM void drawPageNrOverlay(int pageNum) {
+  // Right edge, same style as CHNR but mirrored; white so it reads as page.
+  pageNum = constrain(pageNum, 1, 999);
+  const CRGB pageColor = CRGB(220, 220, 220);
+  const int borderY = 10;
+  const int textY = 12;
+
+  char numStr[8];
+  snprintf(numStr, sizeof(numStr), "%d", pageNum);
+
+  int textPixelWidth = 0;
+  for (int i = 0; numStr[i] != '\0'; i++) {
+    if (numStr[i] >= 32 && numStr[i] <= 126) {
+      textPixelWidth += alphabet[numStr[i] - 32][0] + 1;
+    }
+  }
+
+  int textStartX = (int)maxX + 1 - textPixelWidth;
+  if (textStartX < 1) textStartX = 1;
+  int boxStartX = max(1, textStartX - 1);
+  int boxEndX = min((int)maxX, textStartX + textPixelWidth);
+
+  for (int x = boxStartX; x <= boxEndX; x++) {
+    for (int y = 11; y <= 16 && y <= (int)maxY; y++) {
+      light(x, y, CRGB(0, 0, 0));
+    }
+  }
+  for (int x = boxStartX; x <= boxEndX; x++) {
+    if (borderY >= 1 && borderY <= (int)maxY) {
+      light(x, borderY, pageColor);
+    }
+  }
+  drawText(numStr, textStartX, textY, pageColor);
+}
+
 // progressPercent 0–100: filled portion of the bar between frame uprights (x = 2 .. maxX-1).
 // Caller should call FastLEDshow() after (throttled) updates during long I/O.
 FLASHMEM void drawSampleLoadOverlay(uint8_t progressPercent) {

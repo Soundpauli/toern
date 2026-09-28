@@ -223,6 +223,20 @@ function drawChannelNr(matrix, s) {
   matrix.drawText(String(ch), 2, 12, color);
 }
 
+function drawPageNr(matrix, s) {
+  const page = s.pageNr || 1;
+  const color = UI_WHITE;
+  const text = String(page);
+  const width = textPixelWidth(text);
+  let textStartX = COLS + 1 - width;
+  if (textStartX < 1) textStartX = 1;
+  const boxStartX = Math.max(1, textStartX - 1);
+  const boxEndX = Math.min(COLS, textStartX + width);
+  for (let x = boxStartX; x <= boxEndX; x++) for (let y = 11; y <= 16; y++) matrix.light(x, y, [0, 0, 0]);
+  for (let x = boxStartX; x <= boxEndX; x++) matrix.light(x, 10, color);
+  matrix.drawText(text, textStartX, 12, color);
+}
+
 export function drawVelocity(matrix, s) {
   matrix.setRing(1, [255, 68, 0]);
   matrix.setRing(2, [0, 255, 136]);
@@ -719,6 +733,7 @@ export function renderFrame(matrix, s, now) {
     }
     drawCursor(matrix, s, now);
     if (s.chNrAt && now - s.chNrAt < 800 && s.mode === "draw" && s.GLOB.y <= 9) drawChannelNr(matrix, s);
+    if (s.pageNrAt && now - s.pageNrAt < 800 && (s.mode === "draw" || s.mode === "single")) drawPageNr(matrix, s);
     if (s.solo && now - s.soloArrowAt < 250 && s.soloArrow) matrix.drawText(s.soloArrow, 7, 8, [255, 255, 255]);
     if (s.mode === "shift") matrix.drawText("SHFT", 2, 11, [120, 120, 0]);
     if (s.fastRecActive) drawRecordingBorder(matrix);

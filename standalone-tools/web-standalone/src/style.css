@@ -316,9 +316,73 @@ body {
   margin-bottom: 8px;
 }
 
+.sd-toolbar #sd-status {
+  flex: 1 1 100%;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.jump-title.sd-title {
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+}
+
 .sd-toolbar .jump-panel-reset {
   width: auto !important;
   padding: 6px 10px !important;
+}
+
+.sd-toolbar .sd-connect-btn {
+  background: #1d2027 !important;
+  color: #fff !important;
+  border-color: #1d2027 !important;
+  font-weight: 700;
+}
+
+.sd-toolbar .sd-connect-btn.is-ready {
+  background: #ff3b30 !important;
+  border-color: #ff3b30 !important;
+  color: #fff !important;
+}
+
+.sd-toolbar .sd-connect-btn:disabled {
+  opacity: 0.38;
+}
+
+.sd-toolbar .sd-connect-btn.is-ready:hover {
+  background: #e0342b !important;
+  border-color: #e0342b !important;
+  color: #fff !important;
+}
+
+.sd-tabs {
+  display: flex;
+  margin: 0 0 8px;
+  border-bottom: 1px solid #e4e4e6;
+}
+
+.sd-tab {
+  flex: 1;
+  text-align: center !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  padding: 8px 6px !important;
+  color: #5d6068 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.04em;
+}
+
+.sd-tab:hover,
+.sd-tab.on,
+.sd-tab[aria-selected="true"] {
+  color: #1d2027 !important;
+  background: transparent !important;
+  border-bottom-color: #ff3b30 !important;
+  font-weight: 700;
 }
 
 .sd-actions {
@@ -397,6 +461,62 @@ body {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+.xfer-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(29, 32, 39, 0.45);
+  padding: 24px;
+}
+
+.xfer-modal[hidden] { display: none; }
+
+.xfer-modal-card {
+  width: min(420px, 100%);
+  background: #fff;
+  color: #1d2027;
+  border-radius: 6px;
+  padding: 20px 20px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.xfer-modal-card p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.xfer-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.xfer-modal-actions button {
+  appearance: none;
+  border: 1px solid #e4e4e6;
+  background: #fff;
+  color: #1d2027;
+  border-radius: 3px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.xfer-modal-actions #xfer-ok {
+  background: #ff3b30;
+  border-color: #ff3b30;
+  color: #fff;
+}
+
+.xfer-modal-actions #xfer-ok[hidden] { display: none; }
 
 .jump-drop.dim {
   opacity: 0.45;
