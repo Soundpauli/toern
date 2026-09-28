@@ -292,7 +292,6 @@ elapsedMillis recTime;
 extern i2cEncoderLibV2 Encoder[NUM_ENCODERS];
 
 bool showChannelNr = true;
-int cursorType = 0;  // 0=NORM, 1=BIG (CHNR uses showChannelNr=true, cursorType=0)
 bool lastPinsConnected = false;
 unsigned long lastChangeTime = 0;
 const unsigned long debounceDelay = 500;  // 100ms debounce

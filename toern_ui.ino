@@ -1613,57 +1613,6 @@ void drawCursor() {
 
   int cursorX = mapXtoPageOffset(GLOB.x);
   int cursorY = GLOB.y;
-  
-  // Draw white circle outline for BIG cursor mode (cursorType == 1)
-  extern int cursorType;
-  if (cursorType == 1) {
-    CRGB whiteColor = CRGB(50, 50, 50); // Darker white
-    
-    // Animate circle: grow from radius 1 to 16, synced with BPM
-    static unsigned long lastCircleUpdate = 0;
-    static int animatedRadius = 1;
-    
-    // Get BPM and calculate update interval
-    extern struct Device SMP;
-    float bpm = SMP.bpm;
-    if (bpm < 40) bpm = 120.0f; // Default to 120 BPM if invalid
-    
-    // Calculate interval: one full cycle (1->16) per 2 beats (half speed)
-    // Time per 2 beats = 60000ms / BPM * 2
-    // Interval per step = (60000ms / BPM * 2) / 16 steps
-    unsigned long circleUpdateInterval = (unsigned long)((60000.0f / bpm * 2.0f) / 16.0f);
-    if (circleUpdateInterval < 10) circleUpdateInterval = 10; // Minimum 10ms for stability
-    
-    unsigned long currentTime = millis();
-    if (currentTime - lastCircleUpdate >= circleUpdateInterval) {
-      animatedRadius++;
-      if (animatedRadius > 16) {
-        animatedRadius = 1; // Loop back to radius 1
-      }
-      lastCircleUpdate = currentTime;
-    }
-    
-    // Draw circle outline around cursor position with animated radius
-    for (int dx = -animatedRadius; dx <= animatedRadius; dx++) {
-      for (int dy = -animatedRadius; dy <= animatedRadius; dy++) {
-        int distanceSquared = dx * dx + dy * dy;
-        int radiusSquared = animatedRadius * animatedRadius;
-        
-        // Draw outline: only pixels where distance is approximately equal to radius
-        // Exclude interior: distanceSquared must be >= radiusSquared
-        // Include perimeter: distanceSquared <= radiusSquared + 2
-        if (distanceSquared >= radiusSquared && distanceSquared <= radiusSquared + 2) {
-          int x = cursorX + dx;
-          int y = cursorY + dy;
-          
-          // Only draw if within bounds
-          if (x >= 1 && x <= (int)maxX && y >= 1 && y <= (int)maxY) {
-            light(x, y, whiteColor);
-          }
-        }
-      }
-    }
-  }
 
   uint8_t hue = pulse; // Directly use pulse as hue for smooth cycling
   if (note[GLOB.x][GLOB.y].channel) {

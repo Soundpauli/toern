@@ -1403,11 +1403,50 @@ static bool screensaverEncodersOff = false;
 
 // Comical eyes screensaver: eyes look around and blink, after 30s more they close and dim
 // Helper to draw pixel for screensaver (handles matrix addressing)
-static void ssLight(int x, int y, CRGB color) {
+FLASHMEM static void ssLight(int x, int y, CRGB color) {
   if (x < 1 || y < 1) return;
   unsigned int matrixNum = (x - 1) / MATRIX_WIDTH;
   unsigned int localX = ((x - 1) % MATRIX_WIDTH) + 1;
   light_single(matrixNum, localX, y, color);
+}
+
+FLASHMEM static void drawScreensaverEye(int baseX, int baseY, bool closed,
+                                        CRGB color, CRGB pColor,
+                                        int pupilOffX, int pupilOffY) {
+  if (closed) {
+    for (int dx = 0; dx < 5; dx++) {
+      ssLight(baseX + dx, baseY + 3, color);
+    }
+    ssLight(baseX + 1, baseY + 4, color);
+    ssLight(baseX + 2, baseY + 4, color);
+    ssLight(baseX + 3, baseY + 4, color);
+    return;
+  }
+
+  ssLight(baseX + 1, baseY + 6, color);
+  ssLight(baseX + 2, baseY + 6, color);
+  ssLight(baseX + 3, baseY + 6, color);
+  ssLight(baseX + 0, baseY + 5, color);
+  ssLight(baseX + 4, baseY + 5, color);
+  for (int dy = 1; dy <= 4; dy++) {
+    ssLight(baseX + 0, baseY + dy, color);
+    ssLight(baseX + 4, baseY + dy, color);
+  }
+  ssLight(baseX + 1, baseY + 0, color);
+  ssLight(baseX + 2, baseY + 0, color);
+  ssLight(baseX + 3, baseY + 0, color);
+
+  int pupilX = baseX + 1 + pupilOffX;
+  int pupilY = baseY + 2 + pupilOffY;
+  if (pupilX < baseX + 1) pupilX = baseX + 1;
+  if (pupilX > baseX + 2) pupilX = baseX + 2;
+  if (pupilY < baseY + 1) pupilY = baseY + 1;
+  if (pupilY > baseY + 3) pupilY = baseY + 3;
+
+  ssLight(pupilX, pupilY, pColor);
+  ssLight(pupilX + 1, pupilY, pColor);
+  ssLight(pupilX, pupilY + 1, pColor);
+  ssLight(pupilX + 1, pupilY + 1, pColor);
 }
 
 FLASHMEM static void drawScreensaverMatrix() {
@@ -1521,47 +1560,6 @@ FLASHMEM static void drawScreensaverMatrix() {
     }
   }
   
-  // Draw a single eye
-  auto drawEye = [&](int baseX, int baseY, bool closed, CRGB color, CRGB pColor) {
-    if (closed) {
-      // Closed eye: horizontal line with eyelid curve
-      for (int dx = 0; dx < 5; dx++) {
-        ssLight(baseX + dx, baseY + 3, color);
-      }
-      ssLight(baseX + 1, baseY + 4, color);
-      ssLight(baseX + 2, baseY + 4, color);
-      ssLight(baseX + 3, baseY + 4, color);
-      return;
-    }
-    
-    // Open eye outline
-    ssLight(baseX + 1, baseY + 6, color);
-    ssLight(baseX + 2, baseY + 6, color);
-    ssLight(baseX + 3, baseY + 6, color);
-    ssLight(baseX + 0, baseY + 5, color);
-    ssLight(baseX + 4, baseY + 5, color);
-    for (int dy = 1; dy <= 4; dy++) {
-      ssLight(baseX + 0, baseY + dy, color);
-      ssLight(baseX + 4, baseY + dy, color);
-    }
-    ssLight(baseX + 1, baseY + 0, color);
-    ssLight(baseX + 2, baseY + 0, color);
-    ssLight(baseX + 3, baseY + 0, color);
-    
-    // Pupil
-    int pupilX = baseX + 1 + currentPupilX;
-    int pupilY = baseY + 2 + currentPupilY;
-    if (pupilX < baseX + 1) pupilX = baseX + 1;
-    if (pupilX > baseX + 2) pupilX = baseX + 2;
-    if (pupilY < baseY + 1) pupilY = baseY + 1;
-    if (pupilY > baseY + 3) pupilY = baseY + 3;
-    
-    ssLight(pupilX, pupilY, pColor);
-    ssLight(pupilX + 1, pupilY, pColor);
-    ssLight(pupilX, pupilY + 1, pColor);
-    ssLight(pupilX + 1, pupilY + 1, pColor);
-  };
-  
   // Determine eye states
   bool leftClosed = isBlinking || (asleep && !(isPeeking && peekLeftEye));
   bool rightClosed = isBlinking || (asleep && !(isPeeking && !peekLeftEye));
@@ -1575,8 +1573,8 @@ FLASHMEM static void drawScreensaverMatrix() {
   CRGB rightColor = (isPeeking && !peekLeftEye) ? peekColor : eyeColor;
   CRGB rightPupil = (isPeeking && !peekLeftEye) ? peekPupil : pupilColor;
   
-  drawEye(leftEyeX, eyeY, leftClosed, leftColor, leftPupil);
-  drawEye(rightEyeX, eyeY, rightClosed, rightColor, rightPupil);
+  drawScreensaverEye(leftEyeX, eyeY, leftClosed, leftColor, leftPupil, currentPupilX, currentPupilY);
+  drawScreensaverEye(rightEyeX, eyeY, rightClosed, rightColor, rightPupil, currentPupilX, currentPupilY);
 }
 
 FLASHMEM void FastLEDshow() {
@@ -1615,7 +1613,7 @@ static inline int randStep16(unsigned int x_rel) {
   return (int)(((x_rel - 1u) % 16u) + 1u);
 }
 
-static CompanionRole companionRoleForChannel(uint8_t channel) {
+FLASHMEM static CompanionRole companionRoleForChannel(uint8_t channel) {
   switch (channel) {
     case 1: return CompanionRole::Kick;
     case 2: return CompanionRole::Snare;
@@ -1632,18 +1630,18 @@ static CompanionRole companionRoleForChannel(uint8_t channel) {
   }
 }
 
-static bool companionChannelSupported(uint8_t channel) {
+FLASHMEM static bool companionChannelSupported(uint8_t channel) {
   return companionRoleForChannel(channel) != CompanionRole::Unknown;
 }
 
-static int companionEffectivePages() {
+FLASHMEM static int companionEffectivePages() {
   int pages = (maxX > 0) ? (int)(MAX_STEPS / maxX) : 1;
   if (pages < 1) pages = 1;
   if (pages > (int)maxPages) pages = (int)maxPages;
   return pages;
 }
 
-static int companionActivePages() {
+FLASHMEM static int companionActivePages() {
   extern int loopLength;
   int pages = loopLength > 0 ? loopLength : (int)lastPage;
   if (pages < (int)GLOB.edit) pages = (int)GLOB.edit;
@@ -1653,7 +1651,7 @@ static int companionActivePages() {
   return pages;
 }
 
-static void companionAddRoleWeight(CompanionContext &ctx, CompanionRole role,
+FLASHMEM static void companionAddRoleWeight(CompanionContext &ctx, CompanionRole role,
                                    int phase, uint16_t weight) {
   switch (role) {
     case CompanionRole::Kick: ctx.kickWeight[phase] += weight; break;
@@ -1668,7 +1666,7 @@ static void companionAddRoleWeight(CompanionContext &ctx, CompanionRole role,
   }
 }
 
-static int companionPitchClassForRow(uint8_t channel, int row) {
+FLASHMEM static int companionPitchClassForRow(uint8_t channel, int row) {
   int noteValue = row - 1;
   if (channel >= 1 && channel <= 8) {
     noteValue = 12 * SampleRate[channel] + row - (channel + 1);
@@ -1684,7 +1682,7 @@ static int companionPitchClassForRow(uint8_t channel, int row) {
 
 // Analyze other voices over a bounded page range. The destination page carries
 // the most weight, adjacent pages less, and distant pages establish style/key.
-static CompanionContext analyzeCompanionContext(int firstPage, int lastSourcePage,
+FLASHMEM static CompanionContext analyzeCompanionContext(int firstPage, int lastSourcePage,
                                                 int focusPage, uint8_t excludeChannel) {
   CompanionContext ctx;
   int limit = companionEffectivePages();
@@ -1769,7 +1767,7 @@ static CompanionContext analyzeCompanionContext(int firstPage, int lastSourcePag
   return ctx;
 }
 
-static void clearCompanionChannelPage(int page, uint8_t channel) {
+FLASHMEM static void clearCompanionChannelPage(int page, uint8_t channel) {
   unsigned int start = (unsigned int)(page - 1) * maxX + 1;
   unsigned int end = min((unsigned int)MAX_STEPS + 1u, start + maxX);
   for (unsigned int c = start; c < end; c++) {
@@ -1784,7 +1782,7 @@ static void clearCompanionChannelPage(int page, uint8_t channel) {
   }
 }
 
-static void clearCompanionPage(int page) {
+FLASHMEM static void clearCompanionPage(int page) {
   unsigned int start = (unsigned int)(page - 1) * maxX + 1;
   unsigned int end = min((unsigned int)MAX_STEPS + 1u, start + maxX);
   for (unsigned int c = start; c < end; c++) {
@@ -1798,9 +1796,9 @@ static void clearCompanionPage(int page) {
   }
 }
 
-static int companionFreeRow(unsigned int step, int preferred);
+FLASHMEM static int companionFreeRow(unsigned int step, int preferred);
 
-static int companionScaleRow(const CompanionContext &ctx, bool lowRegister, int motion) {
+FLASHMEM static int companionScaleRow(const CompanionContext &ctx, bool lowRegister, int motion) {
   static const int8_t majorIntervals[] = {0, 2, 4, 5, 7, 9, 11};
   static const int8_t minorIntervals[] = {0, 2, 3, 5, 7, 8, 10};
   const int8_t *scale = ctx.isMinor ? minorIntervals : majorIntervals;
@@ -1818,7 +1816,7 @@ static int companionScaleRow(const CompanionContext &ctx, bool lowRegister, int 
   return constrain(row, 1, 16);
 }
 
-static CompanionHarmony companionMakeHarmony(const CompanionContext &ctx, int variation) {
+FLASHMEM static CompanionHarmony companionMakeHarmony(const CompanionContext &ctx, int variation) {
   CompanionHarmony harm;
   uint32_t tonalWeight = 0;
   for (int pc = 0; pc < 12; pc++) tonalWeight += ctx.pitchClassWeight[pc];
@@ -1846,7 +1844,7 @@ static CompanionHarmony companionMakeHarmony(const CompanionContext &ctx, int va
   return harm;
 }
 
-static void companionFillScalePcs(const CompanionHarmony &harm, int8_t out[7]) {
+FLASHMEM static void companionFillScalePcs(const CompanionHarmony &harm, int8_t out[7]) {
   static const int8_t majorIntervals[] = {0, 2, 4, 5, 7, 9, 11};
   static const int8_t minorIntervals[] = {0, 2, 3, 5, 7, 8, 10};
   const int8_t *intervals = harm.isMinor ? minorIntervals : majorIntervals;
@@ -1855,7 +1853,7 @@ static void companionFillScalePcs(const CompanionHarmony &harm, int8_t out[7]) {
   }
 }
 
-static int companionChordPcs(const CompanionHarmony &harm, int bar, bool withSeventh,
+FLASHMEM static int companionChordPcs(const CompanionHarmony &harm, int bar, bool withSeventh,
                              int8_t out[4]) {
   int8_t scale[7];
   companionFillScalePcs(harm, scale);
@@ -1868,7 +1866,7 @@ static int companionChordPcs(const CompanionHarmony &harm, int bar, bool withSev
   return 4;
 }
 
-static int companionPcToChannelRow(int pc, uint8_t channel, int lo, int hi, int prefer) {
+FLASHMEM static int companionPcToChannelRow(int pc, uint8_t channel, int lo, int hi, int prefer) {
   pc = ((pc % 12) + 12) % 12;
   lo = constrain(lo, 1, 16);
   hi = constrain(hi, lo, 16);
@@ -1890,7 +1888,7 @@ static int companionPcToChannelRow(int pc, uint8_t channel, int lo, int hi, int 
 
 // 60% chord tone / 30% other scale tone / 10% chromatic passing tone.
 // Bass prefers root + fifth; pads stay on chord tones.
-static int companionPickPitchClass(const CompanionHarmony &harm, int bar,
+FLASHMEM static int companionPickPitchClass(const CompanionHarmony &harm, int bar,
                                    CompanionRole role, int prevPc) {
   int8_t chord[4];
   bool seventh = (role == CompanionRole::Keys && random(100) < 40);
@@ -1951,14 +1949,14 @@ static int companionPickPitchClass(const CompanionHarmony &harm, int bar,
   return pickChromatic();
 }
 
-static int companionToneRow(const CompanionHarmony &harm, int bar, CompanionRole role,
+FLASHMEM static int companionToneRow(const CompanionHarmony &harm, int bar, CompanionRole role,
                             uint8_t channel, int prevPc, int lo, int hi, int prefer) {
   int pc = companionPickPitchClass(harm, bar, role, prevPc);
   return companionPcToChannelRow(pc, channel, lo, hi, prefer);
 }
 
 // Channels 13+14 form one two-note chord: each lane gets one distinct chord tone.
-static int companionChordLaneRow(const CompanionHarmony &harm, int bar,
+FLASHMEM static int companionChordLaneRow(const CompanionHarmony &harm, int bar,
                                  uint8_t channel, int variation) {
   int8_t chord[4];
   bool seventh = ((variation + bar) % 4) == 0;
@@ -1969,14 +1967,14 @@ static int companionChordLaneRow(const CompanionHarmony &harm, int bar,
   return companionPcToChannelRow(chord[idx], channel, 1, 16, prefer);
 }
 
-static bool companionEuclideanHit(int phase, int pulses, int rotation) {
+FLASHMEM static bool companionEuclideanHit(int phase, int pulses, int rotation) {
   pulses = constrain(pulses, 0, 16);
   int shifted = (phase - rotation) % 16;
   if (shifted < 0) shifted += 16;
   return pulses > 0 && ((shifted * pulses) % 16) < pulses;
 }
 
-static uint32_t companionMixHash(uint32_t value) {
+FLASHMEM static uint32_t companionMixHash(uint32_t value) {
   value ^= value >> 16;
   value *= 0x7feb352dUL;
   value ^= value >> 15;
@@ -1984,13 +1982,13 @@ static uint32_t companionMixHash(uint32_t value) {
   return value ^ (value >> 16);
 }
 
-static int8_t companionSoftShift(uint32_t value) {
+FLASHMEM static int8_t companionSoftShift(uint32_t value) {
   // Keep half of anchors conventional; distribute the rest one step around it.
   int bucket = value % 4;
   return bucket == 0 ? -1 : (bucket == 3 ? 1 : 0);
 }
 
-static CompanionGroove companionMakeGroove(const CompanionContext &ctx,
+FLASHMEM static CompanionGroove companionMakeGroove(const CompanionContext &ctx,
                                            int page, int variation) {
   uint32_t hash = companionMixHash((uint32_t)variation * 131UL +
                                    (uint32_t)page * 977UL + ctx.totalWeight);
@@ -2011,20 +2009,20 @@ static CompanionGroove companionMakeGroove(const CompanionContext &ctx,
   return groove;
 }
 
-static uint16_t companionMaxPhaseWeight(const uint16_t weights[16]) {
+FLASHMEM static uint16_t companionMaxPhaseWeight(const uint16_t weights[16]) {
   uint16_t maximum = 0;
   for (int phase = 0; phase < 16; phase++) maximum = max(maximum, weights[phase]);
   return maximum;
 }
 
-static int companionRelativeWeight(uint16_t value, uint16_t maximum) {
+FLASHMEM static int companionRelativeWeight(uint16_t value, uint16_t maximum) {
   if (maximum == 0) return 0;
   return constrain((int)((uint32_t)value * 100UL / maximum), 0, 100);
 }
 
 // Sample-rate pitch lanes for drums/percussion. Homes stay role-typical, but every
 // hit can move so generated pages are not stuck on one monotone row.
-static int companionPercussionRow(CompanionRole role, int phase, bool structural,
+FLASHMEM static int companionPercussionRow(CompanionRole role, int phase, bool structural,
                                   int variation, int &motif, const CompanionContext &ctx) {
   int home = 5;
   int lo = 1;
@@ -2096,7 +2094,7 @@ static int companionPercussionRow(CompanionRole role, int phase, bool structural
   return constrain(row, lo, hi);
 }
 
-static int companionFreeRow(unsigned int step, int preferred) {
+FLASHMEM static int companionFreeRow(unsigned int step, int preferred) {
   preferred = constrain(preferred, 1, 16);
   if (note[step][preferred].channel == 0) return preferred;
   for (int distance = 1; distance <= 4; distance++) {
@@ -2108,12 +2106,12 @@ static int companionFreeRow(unsigned int step, int preferred) {
   return 0;
 }
 
-static int companionChannelStepLimit(uint8_t channel) {
+FLASHMEM static int companionChannelStepLimit(uint8_t channel) {
   if (channel == 11) return 3;
   return 1;  // samples 1–8 and each 13/14 synth lane are monophonic
 }
 
-static bool companionPlaceLimited(unsigned int step, int preferredRow,
+FLASHMEM static bool companionPlaceLimited(unsigned int step, int preferredRow,
                                   uint8_t channel, int velocity,
                                   uint8_t probability = 100,
                                   uint8_t condition = 1) {
@@ -2129,7 +2127,7 @@ static bool companionPlaceLimited(unsigned int step, int preferredRow,
   return true;
 }
 
-static int companionVelocity(const CompanionContext &ctx, int phase, int base) {
+FLASHMEM static int companionVelocity(const CompanionContext &ctx, int phase, int base) {
   int velocity = base;
   if (ctx.stepWeight[phase] > 0) {
     int weighted = (int)(ctx.stepVelocity[phase] / ctx.stepWeight[phase]);
@@ -2140,7 +2138,7 @@ static int companionVelocity(const CompanionContext &ctx, int phase, int base) {
   return constrain(velocity, 24, 127);
 }
 
-static int companionTempoDensity() {
+FLASHMEM static int companionTempoDensity() {
   int bpm = constrain((int)SMP.bpm, 40, 300);
   if (bpm >= 190) return 58;
   if (bpm >= 155) return 72;
@@ -2149,7 +2147,7 @@ static int companionTempoDensity() {
   return 100;
 }
 
-static void generateCompanionChannelPage(int page, uint8_t channel,
+FLASHMEM static void generateCompanionChannelPage(int page, uint8_t channel,
                                          const CompanionContext &ctx,
                                          const CompanionHarmony &harm,
                                          const CompanionGroove &groove,
@@ -4190,9 +4188,42 @@ CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
 
 
 
+FLASHMEM static bool logoWaveTouches(unsigned int x, int wavePixelY, int logoStartX) {
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      const int logoX = (int)x + dx - logoStartX;
+      const int logoY = wavePixelY + dy - 1;
+      if (logoX >= 0 && logoX < (int)MATRIX_WIDTH &&
+          logoY >= 0 && logoY < (int)maxY &&
+          logo16_on_P(logo_rows, (uint8_t)logoX, (uint8_t)logoY)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+FLASHMEM static void drawLogoWavePixel(unsigned int x, float waveY, CRGB baseColor,
+                                       int logoStartX, float logoFade,
+                                       float sineFade, float fadeOut) {
+  const int wavePixelY = (int)roundf(waveY);
+  if (wavePixelY < 1 || wavePixelY > (int)maxY) return;
+
+  float contourScale =
+      logoWaveTouches(x, wavePixelY, logoStartX) ? (1.0f - 0.90f * logoFade) : 1.0f;
+  float level = sineFade * fadeOut * contourScale;
+  if (level <= 0.0f) return;
+
+  CRGB color = baseColor;
+  color.nscale8((uint8_t)constrain((int)roundf(255.0f * level), 0, 255));
+  if (color.r | color.g | color.b) {
+    light(x, (unsigned int)wavePixelY, color);
+  }
+}
+
 // Shared logo+sine frame. holdNoFadeOut keeps full brightness after fade-in
 // (INFO loop); boot mode still fades everything out at the end.
-static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNoFadeOut) {
+FLASHMEM static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNoFadeOut) {
   extern void light(unsigned int x, unsigned int y, CRGB color);
 
   const unsigned long fadeOutStart = phase1Duration + phase2Duration;
@@ -4228,52 +4259,23 @@ static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNoFadeOut) 
   const float whiteTravel = timeSec * 5.4f;
   const float blueTravel = timeSec * 2.6f;
 
-  auto waveTouchesLogo = [&](unsigned int x, int wavePixelY) -> bool {
-    for (int dy = -1; dy <= 1; dy++) {
-      for (int dx = -1; dx <= 1; dx++) {
-        const int logoX = (int)x + dx - logoStartX;
-        const int logoY = wavePixelY + dy - 1;
-        if (logoX >= 0 && logoX < (int)MATRIX_WIDTH &&
-            logoY >= 0 && logoY < (int)maxY &&
-            logo16_on_P(logo_rows, (uint8_t)logoX, (uint8_t)logoY)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
-  auto drawWavePixel = [&](unsigned int x, float waveY, CRGB baseColor) {
-    const int wavePixelY = (int)roundf(waveY);
-    if (wavePixelY < 1 || wavePixelY > (int)maxY) return;
-
-    float contourScale =
-        waveTouchesLogo(x, wavePixelY) ? (1.0f - 0.90f * logoFade) : 1.0f;
-    float level = sineFade * fadeOut * contourScale;
-    if (level <= 0.0f) return;
-
-    CRGB color = baseColor;
-    color.nscale8((uint8_t)constrain((int)roundf(255.0f * level), 0, 255));
-    if (color.r | color.g | color.b) {
-      light(x, (unsigned int)wavePixelY, color);
-    }
-  };
-
   for (unsigned int x = 1; x <= maxX; x++) {
     const float xNorm = (float)(x - 1) / widthDenominator;
     const float xPhase = xNorm * 4.0f * (float)M_PI;
 
     // Darker dual sines; blue first so white stays readable on overlap.
-    drawWavePixel(
+    drawLogoWavePixel(
         x,
         centerY + blueYOffset +
             amplitude * sinf(xPhase + blueXPhaseOffset - blueTravel),
-        CRGB(3, 8, 28));
-    drawWavePixel(
+        CRGB(3, 8, 28),
+        logoStartX, logoFade, sineFade, fadeOut);
+    drawLogoWavePixel(
         x,
         centerY + whiteYOffset +
             amplitude * sinf(xPhase - whiteTravel),
-        CRGB(26, 26, 26));
+        CRGB(26, 26, 26),
+        logoStartX, logoFade, sineFade, fadeOut);
   }
 
   const uint8_t logoBrightness = (uint8_t)constrain(
@@ -4292,7 +4294,7 @@ static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNoFadeOut) 
 }
 
 // ----- Run the Animation Once (Called in setup) -----
-void runAnimation() {
+FLASHMEM void runAnimation() {
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
@@ -4334,18 +4336,13 @@ void runAnimation() {
 
 // ETC → INFO (encoder 4 / 0001): fade in, then keep animating until the same
 // button is pressed again. No fade-out while held open.
-void runInfoLogoAnimationLoop() {
+FLASHMEM void runInfoLogoAnimationLoop() {
   extern bool pressed[NUM_ENCODERS];
   extern bool isPressed[NUM_ENCODERS];
   extern uint8_t buttons[NUM_ENCODERS];
   extern ButtonState buttonState[NUM_ENCODERS];
   extern int currentEncoderIndex;
   extern void resetEtcInfoPageAnimation();
-
-  auto pollEncoder4 = []() {
-    currentEncoderIndex = 3;
-    Encoder[3].updateStatus();
-  };
 
   // INFO starts from the short-release event (0001), so consume that event
   // without waiting on another I2C release callback inside this blocking loop.
@@ -4359,7 +4356,8 @@ void runInfoLogoAnimationLoop() {
   bool sawRelease = true;
 
   for (;;) {
-    pollEncoder4();
+    currentEncoderIndex = 3;
+    Encoder[3].updateStatus();
     const bool down = pressed[3] || isPressed[3];
     if (!down) {
       sawRelease = true;
