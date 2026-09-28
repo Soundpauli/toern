@@ -16,6 +16,7 @@ const SUB_VALUES = {
     { opts: ["FULL", "EASY"], colors: [[0, 0, 120], [0, 120, 0]], codes: ["X", "G"] },
     { opts: ["OFF", "ON", "SONG", "NEXT"], colors: [[120, 0, 0], [0, 120, 0], [255, 255, 0], [0, 255, 255]], codes: ["R", "G", "Y", "N"] },
     { opts: ["OFF", "1", "2", "3", "4", "5", "6", "7", "8"], colors: [[100, 100, 100]], codes: ["G"] },
+    { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["PAGE", "VOL"], colors: [[0, 120, 0], [120, 60, 0]], codes: ["G", "O"] },
     { opts: ["1", "1B", "2", "2B"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
@@ -76,12 +77,12 @@ export function createDevice(matrix, statusEl, rings) {
   const invOf = Array(16).fill(false);
   const mute = Array(16).fill(false);
   const song = Array(64).fill(0);
-  const subPick = { look: Array(11).fill(0), recs: Array(5).fill(0), midi: Array(7).fill(0), vol: Array(7).fill(0), etc: Array(9).fill(0) };
+  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(7).fill(0), vol: Array(7).fill(0), etc: Array(9).fill(0) };
   // Firmware EEPROM defaults: TRIG=SENS, CLR=ON, FLOW=ON
   subPick.recs[3] = 1;
   subPick.recs[4] = 1;
   subPick.look[0] = 1;
-  subPick.look[6] = 2;
+  subPick.look[7] = 2;
 
   const s = {
     GLOB: { x: 1, y: 2, edit: 1, page: 1, currentChannel: 1, singleMode: false },
@@ -93,7 +94,9 @@ export function createDevice(matrix, statusEl, rings) {
     vel: { v: 8, p: 5, c: 1, vol: 16, backSingle: false }, okAt: 0,
     filterTouch: 0, filterTouchAt: 0, filterFlash: "", filterFlashAt: 0, filterPage: 0,
     drawBaseColorMode: true, monitor: 0, loopLength: 0, simpleNotes: false, clockInt: true,
-    flow: true, pmode: 0, ctrlVol: false, prevMode: 0, drawR: false, cursorType: 0,
+    flow: true, voiceMode: false, voiceLen: Array(16).fill(0), voiceMask: Array(16).fill(0), voicePages: 1,
+    voiceLoop: Array(16).fill(1), voiceOffset: Array(16).fill(0), voiceEdit: Array(16).fill(0),
+    pmode: 0, ctrlVol: false, prevMode: 0, drawR: false, cursorType: 0,
     scheme: 0, childLock: false, copyArmed: false, solo: false, soloSaved: null, soloArrow: "", soloArrowAt: 0,
     volBar: 0, volBarAt: 0, chVol,
     muteMask: 0x0006, muteSel: 1, fullMute: false, fullMuteSaved: null,
@@ -251,6 +254,17 @@ export function createDevice(matrix, statusEl, rings) {
     if (ctx.state === "suspended") ctx.resume();
     engine.trigger(n.channel, n.velocity, engine.now(), { ...wavOpts(n.channel), midiPitch: n.midiPitch }, y);
   }
+  function applyVoiceEdit(ch) {
+    if (s.mode !== "draw" || !s.voiceMode || s.pmode === 2 || s.ctrlVol || s.childLock) return;
+    refreshVoiceLens();
+    const pages = filledPages(ch);
+    let page = s.voiceEdit[ch] || 1;
+    if (pages.length) {
+      page = nearestFilled(ch, page);
+      s.voiceEdit[ch] = page;
+    } else page = clamp(page, 1, PAGES);
+    viewPage(page);
+  }
   function selectVoice(ch) {
     if (!((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14)) return;
     s.GLOB.currentChannel = ch;
@@ -258,6 +272,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "draw" || s.mode === "single") {
       s.GLOB.x = (s.GLOB.edit - 1) * COLS + localX(s.GLOB.x);
     }
+    if (s.mode === "draw") applyVoiceEdit(ch);
     if (s.mode === "wav" && ch <= 8) refreshBrowse();
   }
   function drawRandomPage() {
@@ -386,7 +401,8 @@ export function createDevice(matrix, statusEl, rings) {
   function pageCount() {
     // Firmware: LOOP > 0 forces length; otherwise lastPage = highest page with notes.
     // PMOD OFF still wraps at lastPage (not all PAGES). PMOD ON loops one page in tick().
-    if (s.loopLength > 0) return Math.min(s.loopLength, PAGES);
+    // VMOD ignores LOOP; the cycle is the longest voice.
+    if (!s.voiceMode && s.loopLength > 0) return Math.min(s.loopLength, PAGES);
     let last = 1;
     for (let p = 1; p <= PAGES; p++) if (hasPageNotes(p)) last = p;
     return last;
@@ -456,18 +472,125 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.fullMute) return false;
     return true;
   }
+  function refreshVoiceLens() {
+    const len = Array(16).fill(0);
+    const mask = Array(16).fill(0);
+    for (let p = 1; p <= PAGES; p++) {
+      const base = (p - 1) * COLS;
+      for (let x = 1; x <= COLS; x++) {
+        for (let y = 1; y <= ROWS; y++) {
+          const ch = note[base + x][y].channel;
+          if (!ch || ch > 15) continue;
+          if (p > len[ch]) len[ch] = p;
+          mask[ch] |= 1 << (p - 1);
+        }
+      }
+    }
+    let longest = 1;
+    for (let c = 1; c < 16; c++) if (len[c] > longest) longest = len[c];
+    s.voiceLen = len;
+    s.voiceMask = mask;
+    s.voicePages = longest;
+  }
+  s.refreshVoiceLens = refreshVoiceLens;
+  function voicePageFor(ch, gPage) {
+    const len = s.voiceLen[ch] > 0 ? s.voiceLen[ch] : 1;
+    let idx = (Math.max(1, gPage) - 1) + (s.voiceOffset[ch] || 0);
+    idx %= len;
+    if (idx < 0) idx += len;
+    return idx + 1;
+  }
+  function voiceOwnedStep(row, col, gPage) {
+    for (let ch = 1; ch < 16; ch++) {
+      if (!s.voiceLen[ch]) continue;
+      const src = (voicePageFor(ch, gPage) - 1) * COLS + col;
+      if (note[src]?.[row]?.channel === ch) return src;
+    }
+    return 0;
+  }
+  s.voicePageFor = voicePageFor;
+  s.voiceOwnedStep = voiceOwnedStep;
+  function filledPages(ch) {
+    const mask = s.voiceMask[ch] || 0;
+    const pages = [];
+    for (let p = 1; p <= PAGES && p <= 16; p++) if (mask & (1 << (p - 1))) pages.push(p);
+    return pages;
+  }
+  function stepFilled(ch, from, dir) {
+    const pages = filledPages(ch);
+    if (dir > 0) {
+      for (const p of pages) if (p > from) return p;
+    } else {
+      for (let i = pages.length - 1; i >= 0; i--) if (pages[i] < from) return pages[i];
+    }
+    return 0;
+  }
+  function nearestFilled(ch, page) {
+    const pages = filledPages(ch);
+    if (!pages.length) return page;
+    let best = pages[0];
+    let dist = 99;
+    for (const p of pages) {
+      const d = Math.abs(page - p);
+      if (d < dist) { dist = d; best = p; }
+    }
+    return best;
+  }
+  function cueVoice(ch, page) {
+    const len = s.voiceLen[ch] > 0 ? s.voiceLen[ch] : 1;
+    const wrapped = ((Math.max(1, page) - 1) % len) + 1;
+    const gPage = s.playing ? Math.floor(((s.beat || 1) - 1) / COLS) + 1 : (s.GLOB.page || 1);
+    let off = (wrapped - 1) - (gPage - 1);
+    off %= len;
+    if (off < 0) off += len;
+    s.voiceOffset[ch] = off;
+  }
+  function voiceStep(row, beat) {
+    if (!s.voiceMode || s.pmode === 2) return beat;
+    const col = ((beat - 1) % COLS) + 1;
+    const gPage = Math.floor((beat - 1) / COLS) + 1;
+    return voiceOwnedStep(row, col, gPage);
+  }
+  function bumpVoiceLoops(prevBeat, beat) {
+    const prevPage = Math.floor((Math.max(1, prevBeat) - 1) / COLS) + 1;
+    const newPage = Math.floor((Math.max(1, beat) - 1) / COLS) + 1;
+    if (prevPage === newPage) return;
+    for (let c = 1; c < 16; c++) {
+      const len = s.voiceLen[c];
+      if (!len) continue;
+      const prevV = voicePageFor(c, prevPage);
+      const newV = voicePageFor(c, newPage);
+      if (prevV === len && newV === 1) {
+        s.voiceLoop[c] = (s.voiceLoop[c] || 1) + 1;
+        if (s.voiceLoop[c] > 256) s.voiceLoop[c] = 1;
+      }
+    }
+  }
+  function condOkVoice(cond, loopN) {
+    const n = loopN < 1 ? 1 : loopN;
+    if (cond <= 1 || cond === 17 || cond === 21 || cond === 22) return true;
+    if (cond <= 16) return n % cond === 0;
+    const x = cond === 18 ? 4 : cond === 19 ? 8 : cond === 20 ? 16 : 2;
+    return n % x === 1;
+  }
   function fire(step, when) {
     fired.push({ step, when });
     if (fired.length > 8) fired.shift();
+    if (s.voiceMode) refreshVoiceLens();
     // Sample voices 1–8 are monophonic (one sampler per channel, like firmware
     // retrigger). If several notes share a step+voice, keep the highest row only.
     const samplePick = new Map();
     const otherHits = [];
     for (let y = 1; y <= ROWS; y++) {
-      const n = note[step][y];
+      const src = s.voiceMode && s.pmode !== 2 ? voiceStep(y, step) : step;
+      if (!src) continue;
+      const n = note[src][y];
       if (!n.channel || !SOUND_CH.has(n.channel) || !heard(n.channel)) continue;
       if (Math.random() * 100 >= n.probability) continue;
-      if (!condOk(n.condition, step)) continue;
+      const ok = s.voiceMode && s.pmode !== 2
+        ? condOkVoice(n.condition, s.voiceLoop[n.channel] || 1)
+        : condOk(n.condition, step);
+      if (!ok) continue;
       if (n.channel >= 1 && n.channel <= 8) {
         const prev = samplePick.get(n.channel);
         if (!prev || y > prev.y) samplePick.set(n.channel, { n, y });
@@ -489,7 +612,12 @@ export function createDevice(matrix, statusEl, rings) {
     s.playing = !s.playing;
     if (!s.playing) queueAutosave();
     if (s.playing) {
-      if (s.pmode === 1) {
+      if (s.voiceMode && s.pmode !== 2) {
+        refreshVoiceLens();
+        s.voiceLoop = Array(16).fill(1);
+        s.beat = 1;
+        s.GLOB.page = 1;
+      } else if (s.pmode === 1) {
         s.GLOB.page = s.GLOB.edit;
         s.beat = (s.GLOB.edit - 1) * COLS + 1;
       } else {
@@ -610,6 +738,10 @@ export function createDevice(matrix, statusEl, rings) {
       loadPack(1);
       return;
     }
+    if (Array.isArray(data.subPick?.look) && data.subPick.look.length === 11 && subPick.look.length === 12) {
+      data.subPick.look = data.subPick.look.slice();
+      data.subPick.look.splice(5, 0, 0);
+    }
     for (const mode of Object.keys(subPick)) {
       const saved = data.subPick?.[mode];
       if (!Array.isArray(saved)) continue;
@@ -627,7 +759,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (typeof data.clockInt === "boolean") s.clockInt = data.clockInt;
     if (Number.isFinite(data.muteMask)) s.muteMask = data.muteMask & 0xffff;
     if (Number.isFinite(data.ledBrightness)) s.ledBrightness = clamp(data.ledBrightness, 3, 255);
-    if (!data.deviceChosen) subPick.look[6] = 2;
+    if (!data.deviceChosen) subPick.look[7] = 2;
     s.packSlot = Number.isFinite(data.packSlot) && data.packSlot >= 1 && data.packSlot <= 99 ? data.packSlot : 1;
     applySub("look", 0);
     applyLedLayout();
@@ -672,7 +804,7 @@ export function createDevice(matrix, statusEl, rings) {
     });
   }
   function applyLedLayout() {
-    const wide = subPick.look[6] >= 2;
+    const wide = subPick.look[7] >= 2;
     setLayout(wide ? 32 : 16);
     matrix.layout(COLS);
     s.GLOB.x = clamp(s.GLOB.x, 1, STEPS);
@@ -721,9 +853,10 @@ export function createDevice(matrix, statusEl, rings) {
       s.simpleNotes = subPick.look[2] === 1;
       s.pmode = subPick.look[3];
       s.loopLength = subPick.look[4];
-      s.ctrlVol = subPick.look[5] === 1;
-      s.cursorType = subPick.look[8];
-      s.drawR = subPick.look[9] === 1;
+      s.voiceMode = subPick.look[5] === 1;
+      s.ctrlVol = subPick.look[6] === 1;
+      s.cursorType = subPick.look[9];
+      s.drawR = subPick.look[10] === 1;
       if (index === 6) deviceChosen = true;
       applyLedLayout();
       if (!s.drawR && s.fullMute) exitFullMute(0);
@@ -849,6 +982,7 @@ export function createDevice(matrix, statusEl, rings) {
         const prevY = s.GLOB.y;
         s.GLOB.y = clamp(s.GLOB.y + dir, 1, ROWS);
         syncChannel();
+        if (s.GLOB.y !== prevY) applyVoiceEdit(s.GLOB.currentChannel);
         if (s.GLOB.y !== prevY && s.cursorType === 1 && s.mode === "draw" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
           s.chNr = s.GLOB.currentChannel;
           s.chNrAt = performance.now();
@@ -863,7 +997,18 @@ export function createDevice(matrix, statusEl, rings) {
           applyFilt(ch);
         } else if (!s.childLock) {
           const prev = s.GLOB.edit;
-          viewPage(s.GLOB.edit + dir);
+          if (s.voiceMode && s.pmode !== 2) {
+            refreshVoiceLens();
+            const ch = s.GLOB.currentChannel;
+            const pages = filledPages(ch);
+            let next = s.GLOB.edit + dir;
+            if (pages.length) {
+              next = pages.includes(s.GLOB.edit) ? (stepFilled(ch, s.GLOB.edit, dir) || s.GLOB.edit) : nearestFilled(ch, s.GLOB.edit);
+            } else next = clamp(next, 1, PAGES);
+            viewPage(next);
+            s.voiceEdit[ch] = s.GLOB.edit;
+            cueVoice(ch, s.GLOB.edit);
+          } else viewPage(s.GLOB.edit + dir);
           if (s.GLOB.edit !== prev && s.cursorType === 1) {
             s.pageNr = s.GLOB.edit;
             s.pageNrAt = performance.now();
@@ -877,15 +1022,16 @@ export function createDevice(matrix, statusEl, rings) {
         // which the pointer gesture always looks like.
         let page = s.GLOB.edit;
         let local = localX(s.GLOB.x) + dir;
-        if (!s.childLock && local > COLS && page < PAGES) { page += 1; local = 1; }
-        else if (!s.childLock && local < 1 && page > 1) { page -= 1; local = COLS; }
+        const lockVoicePage = s.voiceMode && s.playing && s.pmode !== 2;
+        if (!s.childLock && !lockVoicePage && local > COLS && page < PAGES) { page += 1; local = 1; }
+        else if (!s.childLock && !lockVoicePage && local < 1 && page > 1) { page -= 1; local = COLS; }
         else local = clamp(local, 1, COLS);
         viewPage(page, local);
       }
       return;
     }
     if (s.mode === "menu" && enc === 3) s.menuIndex = clamp(s.menuIndex + dir, 0, MENU_PAGES.length - 1);
-    if (s.mode === "look" && s.subIndex === 10 && enc === 1) {
+    if (s.mode === "look" && s.subIndex === 11 && enc === 1) {
       s.muteSel = clamp(s.muteSel + dir, 1, 16);
       return;
     }
@@ -911,7 +1057,7 @@ export function createDevice(matrix, statusEl, rings) {
       else if (s.mode === "vol" && s.subIndex === 3) s.prevVol = clamp(s.prevVol + dir, 0, 16);
       else if (s.mode === "recs" && s.subIndex === 1) { s.micGain = clamp(s.micGain + dir, 0, 63); saveEeprom(); return; }
       else if (s.mode === "recs" && s.subIndex === 2) { s.lineInLevel = clamp(s.lineInLevel + dir, 0, 15); saveEeprom(); return; }
-      else if (s.mode === "look" && s.subIndex === 10) {
+      else if (s.mode === "look" && s.subIndex === 11) {
         const bit = 1 << (s.muteSel === 16 ? 0 : s.muteSel);
         s.muteMask = dir > 0 ? s.muteMask | bit : s.muteMask & ~bit;
         saveEeprom();
@@ -1565,7 +1711,19 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.playing && s.clockInt) {
       const t = engine.now();
       while (nextAt <= t + 0.05) {
-        if (s.pmode === 1) {
+        if (s.voiceMode && s.pmode !== 2) {
+          refreshVoiceLens();
+          const end = Math.max(1, s.voicePages || 1) * COLS;
+          const prev = s.beat;
+          if (s.beat >= end) {
+            s.beat = 1;
+            s.GLOB.page = 1;
+          } else {
+            s.beat += 1;
+            s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
+          }
+          bumpVoiceLoops(prev, s.beat);
+        } else if (s.pmode === 1) {
           const start = (s.GLOB.page - 1) * COLS + 1;
           const end = start + COLS - 1;
           if (s.beat < start || s.beat > end) s.beat = start + ((s.beat - 1) % COLS);
@@ -1590,7 +1748,7 @@ export function createDevice(matrix, statusEl, rings) {
             s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
           }
         }
-        if (s.flow && s.pmode !== 3) s.GLOB.edit = s.GLOB.page;
+        if (s.flow && !s.voiceMode && s.pmode !== 3) s.GLOB.edit = s.GLOB.page;
         fire(s.beat, Math.max(nextAt, t));
         nextAt += stepSec();
       }
@@ -1884,8 +2042,8 @@ export function createDevice(matrix, statusEl, rings) {
     },
     setDevice(gen) {
       deviceChosen = true;
-      const rotated = subPick.look[6] % 2 === 1;
-      subPick.look[6] = gen === 1 ? (rotated ? 1 : 0) : (rotated ? 3 : 2);
+      const rotated = subPick.look[7] % 2 === 1;
+      subPick.look[7] = gen === 1 ? (rotated ? 1 : 0) : (rotated ? 3 : 2);
       applyLedLayout();
       saveEeprom();
     },

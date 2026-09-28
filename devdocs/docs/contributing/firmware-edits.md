@@ -25,7 +25,7 @@ Pages are `MenuPage` rows near the top of [`toern_menu.ino`](../../../toern_menu
 
 Settings live at absolute address `EEPROM_DATA_START + offset` with `EEPROM_DATA_START` = **43**. A magic byte `0x5A` sits at absolute address **42**. Sample-pack 0 flags sit at absolute address **200** (`EEPROM_SP0_STATE_ADDR`), outside this table.
 
-`SETTINGS_EEPROM_BLOCK_LEN` is **42**, so offsets **0 through 41** are copied to the SD settings backup. The next free offset is **42**. Raise `SETTINGS_EEPROM_BLOCK_LEN` in the same change. Inserting a byte in the middle shifts every saved unit.
+`SETTINGS_EEPROM_BLOCK_LEN` is **43**, so offsets **0 through 42** are copied to the SD settings backup. The next free offset is **43**. Raise `SETTINGS_EEPROM_BLOCK_LEN` in the same change. Inserting a byte in the middle shifts every saved unit. A shorter backup leaves the missing bytes at 0; offset 42 absent means VMOD off.
 
 Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is also written as a single format byte. Leave 32–35 alone.
 
@@ -71,5 +71,6 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 39 | mixGain58 |
 | 40 | mixGainSynth |
 | 41 | mixGainMaster |
+| 42 | voiceMode (VMOD), 0 = off, 1 = on |
 
-Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`.
+Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offset 42 is a raw byte at `EEPROM_DATA_START + 42`.

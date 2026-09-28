@@ -16,7 +16,7 @@ The 16×16 (optionally dual-module) matrix is both display and note grid. Drawin
 | `light_single(...)` | Address a specific module |
 | `drawBase` / `drawCursor` / `drawPages` / `drawStatus` | Compose the main sequencer view |
 | `drawIndicator` | Encoder-related on-matrix cues |
-| `drawNumber` / overlays | Transient values (volume, channel, load %) |
+| `drawNumber` / overlays | Transient values (volume, channel, load %). `drawPageNrOverlay` flashes the page number on the right when CRSR is CHNR and CTRL is PAGE: digits on rows 11–15, no underline. The channel overlay stays on the left. |
 
 Colors come from `colors.h` and mode `knobcolor[]` values.
 

@@ -38,7 +38,7 @@ export const MENU_PAGES = [
 ];
 
 export const SUBS = {
-  look: ["FLW", "PREV", "VIEW", "PMD", "LOOP", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"],
+  look: ["FLW", "PREV", "VIEW", "PMD", "LOOP", "VMOD", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"],
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "CLMP", "SYNC", "PPQN"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
@@ -108,7 +108,29 @@ function drawStatus(matrix, s) {
   }
 }
 
+function voiceGlobalPage(s) {
+  return Math.floor(((s.beat || 1) - 1) / COLS) + 1;
+}
+
 export function drawPages(matrix, s) {
+  if (s.voiceMode && s.pmode !== 2) {
+    if (s.refreshVoiceLens) s.refreshVoiceLens();
+    const ch = s.GLOB.currentChannel || 0;
+    const mask = s.voiceMask?.[ch] || 0;
+    const len = Math.max(1, s.voiceLen?.[ch] || 1);
+    const playP = s.playing && s.voicePageFor ? s.voicePageFor(ch, voiceGlobalPage(s)) : 0;
+    for (let x = 1; x <= COLS; x++) matrix.light(x, ROWS, [0, 0, 0]);
+    for (let p = 1; p <= PAGES; p++) {
+      const has = (mask & (1 << (p - 1))) !== 0;
+      let color;
+      if (playP === p && s.GLOB.edit === p) color = [255, 255, 50];
+      else if (playP === p) color = [0, 255, 0];
+      else if (s.GLOB.edit === p) color = [255, 255, 0];
+      else color = has ? [220, 220, 220] : [1, 0, 0];
+      matrix.light(p, ROWS, color);
+    }
+    return;
+  }
   const loop = s.loopLength;
   for (let x = 1; x <= COLS; x++) matrix.light(x, ROWS, loop > 0 ? [10, 0, 0] : [0, 0, 0]);
   for (let p = 1; p <= PAGES; p++) {
@@ -129,16 +151,23 @@ const COND_BLINK = {
 
 export function drawTriggers(matrix, s, now) {
   const blink = ((now / 300) | 0) & 1;
-  const base = (s.GLOB.edit - 1) * COLS;
   const easy = s.simpleNotes && !s.GLOB.singleMode;
+  const voiceGrid = s.voiceMode && s.playing && s.pmode !== 2;
   const col = pal(s).col;
   const baseCol = pal(s).base;
   for (let ix = 1; ix <= COLS; ix++) {
     for (let iy = 1; iy <= ROWS; iy++) {
-      const cell = s.note[base + ix][iy];
+      let cell;
+      if (voiceGrid && s.voiceOwnedStep) {
+        const src = s.voiceOwnedStep(iy, ix, voiceGlobalPage(s));
+        if (!src) continue;
+        cell = s.note[src][iy];
+      } else {
+        cell = s.note[(s.GLOB.edit - 1) * COLS + ix][iy];
+      }
       const ch = cell.channel;
       if (!ch) continue;
-      if (easy) {
+      if (easy && !voiceGrid) {
         const voiceY = ch + 1;
         matrix.light(ix, iy, [0, 0, 0]);
         if (voiceY >= 1 && voiceY <= ROWS) {
@@ -178,10 +207,15 @@ export function drawTriggers(matrix, s, now) {
 
 export function drawTimer(matrix, s) {
   const page = Math.floor((s.beat - 1) / COLS) + 1;
-  if (page !== s.GLOB.edit) return;
+  const voiceGrid = s.voiceMode && s.playing && s.pmode !== 2;
+  if (!voiceGrid && page !== s.GLOB.edit) return;
   const x = ((s.beat - 1) % COLS) + 1;
   for (let y = 1; y < ROWS; y++) {
-    const ch = s.note[(s.GLOB.edit - 1) * COLS + x][y].channel;
+    let ch = 0;
+    if (voiceGrid && s.voiceOwnedStep) {
+      const src = s.voiceOwnedStep(y, x, voiceGlobalPage(s));
+      ch = src ? s.note[src][y].channel : 0;
+    } else ch = s.note[(s.GLOB.edit - 1) * COLS + x][y].channel;
     matrix.light(x, y, [28, 0, 0]);
     if (ch > 0 && !s.mute[ch]) {
       if (!s.GLOB.singleMode || s.GLOB.currentChannel === ch) matrix.light(x, y, [255, 255, 255]);
@@ -232,9 +266,8 @@ function drawPageNr(matrix, s) {
   if (textStartX < 1) textStartX = 1;
   const boxStartX = Math.max(1, textStartX - 1);
   const boxEndX = Math.min(COLS, textStartX + width);
-  for (let x = boxStartX; x <= boxEndX; x++) for (let y = 11; y <= 16; y++) matrix.light(x, y, [0, 0, 0]);
-  for (let x = boxStartX; x <= boxEndX; x++) matrix.light(x, 10, color);
-  matrix.drawText(text, textStartX, 12, color);
+  for (let x = boxStartX; x <= boxEndX; x++) for (let y = 11; y <= 15; y++) matrix.light(x, y, [0, 0, 0]);
+  matrix.drawText(text, textStartX, 11, color);
 }
 
 export function drawVelocity(matrix, s) {
@@ -398,10 +431,10 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     return;
   }
   s.infoAt = 0;
-  const lookTitle = ["FLOW", "PREV", "VIEW", "PMODE", "LOOP", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"];
+  const lookTitle = ["FLOW", "PREV", "VIEW", "PMODE", "LOOP", "VMOD", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"];
   const name = s.mode === "look" ? lookTitle[s.subIndex] : pages[s.subIndex];
   matrix.drawText(name, 2, 10, parent);
-  if (s.mode === "look" && s.subIndex === 10) {
+  if (s.mode === "look" && s.subIndex === 11) {
     for (let uch = 1; uch <= 16; uch++) {
       const bit = uch === 16 ? 0 : uch;
       let dot = (s.muteMask & (1 << bit)) ? UI_GREEN.slice() : UI_RED.slice();

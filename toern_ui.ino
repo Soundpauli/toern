@@ -1268,11 +1268,10 @@ FLASHMEM void drawChannelNrOverlay(int channelNum, int channelIdx) {
 }
 
 FLASHMEM void drawPageNrOverlay(int pageNum) {
-  // Right edge, same style as CHNR but mirrored; white so it reads as page.
+  // Right edge. Digits sit one row below the top (rows 11–15). No underline.
   pageNum = constrain(pageNum, 1, 999);
   const CRGB pageColor = CRGB(220, 220, 220);
-  const int borderY = 10;
-  const int textY = 12;
+  const int textY = 11;
 
   char numStr[8];
   snprintf(numStr, sizeof(numStr), "%d", pageNum);
@@ -1290,13 +1289,8 @@ FLASHMEM void drawPageNrOverlay(int pageNum) {
   int boxEndX = min((int)maxX, textStartX + textPixelWidth);
 
   for (int x = boxStartX; x <= boxEndX; x++) {
-    for (int y = 11; y <= 16 && y <= (int)maxY; y++) {
+    for (int y = 11; y <= 15 && y <= (int)maxY; y++) {
       light(x, y, CRGB(0, 0, 0));
-    }
-  }
-  for (int x = boxStartX; x <= boxEndX; x++) {
-    if (borderY >= 1 && borderY <= (int)maxY) {
-      light(x, borderY, pageColor);
     }
   }
   drawText(numStr, textStartX, textY, pageColor);
@@ -1359,7 +1353,10 @@ void drawPages() {
   extern int loopLength;
   const unsigned int numModules = max(1u, maxX / MATRIX_WIDTH);
   const unsigned int effectiveMaxPages = maxPages / numModules;  // 1 module:16 pages, 2 modules:8 pages
-  const unsigned int effectiveLoopLength = (loopLength > 0) ? min((unsigned int)loopLength, effectiveMaxPages) : 0;
+  extern bool voiceMode;
+  extern bool songModeActive;
+  const bool voiceDots = voiceMode && !songModeActive;
+  const unsigned int effectiveLoopLength = (!voiceDots && loopLength > 0) ? min((unsigned int)loopLength, effectiveMaxPages) : 0;
 
   // First, clear the entire top row across all matrices
   for (unsigned int x = 1; x <= maxX; x++) {
@@ -1367,6 +1364,7 @@ void drawPages() {
   }
 
   // LOOP active: fill y=16 across all matrices with loop background color.
+  // VMOD leaves this wash off; LOOP's stored value is unchanged.
   if (effectiveLoopLength > 0) {
     for (unsigned int x = 1; x <= maxX; x++) {
       light(x, maxY, CRGB(10, 0, 0));
@@ -1380,10 +1378,33 @@ void drawPages() {
       continue;
     }
 
+    extern uint16_t voicePageMask[16];
+    extern unsigned int voicePageFor(int channel, unsigned int globalPage);
+    extern unsigned int beatForUI;
+    int voiceCh = (int)GLOB.currentChannel;
+    if (voiceCh < 0) voiceCh = 0;
+    if (voiceCh > 15) voiceCh = 15;
+    unsigned int voicePlayPage = 0;
+    if (voiceDots && isNowPlaying && maxX > 0 && beatForUI > 0) {
+      voicePlayPage = voicePageFor(voiceCh, ((beatForUI - 1) / maxX) + 1);
+    }
+    bool voiceHas = voiceDots && voiceCh > 0 && (voicePageMask[voiceCh] & (uint16_t)(1u << (p - 1)));
+
     // Check if page is outside loop range when loop mode is active
     bool outsideLoop = (effectiveLoopLength > 0 && p > effectiveLoopLength);
     
-    if (outsideLoop) {
+    if (voiceDots) {
+      bool playingHere = voicePlayPage == p;
+      if (playingHere && GLOB.edit == p) {
+        ledColor = CRGB(255, 255, 50);
+      } else if (playingHere) {
+        ledColor = CRGB(0, 255, 0);
+      } else if (GLOB.edit == p) {
+        ledColor = CRGB(255, 255, 0);
+      } else {
+        ledColor = voiceHas ? CRGB(220, 220, 220) : CRGB(1, 0, 0);
+      }
+    } else if (outsideLoop) {
       // Pages outside loop range are dark red
       ledColor = CRGB(10, 0, 0);
     } else {
@@ -1427,7 +1448,13 @@ void drawPages() {
 FLASHMEM void drawTriggers() {
   // why?
   //GLOB.edit = 1;
-  const unsigned int baseX = (GLOB.edit - 1) * maxX;
+  extern bool voiceMode;
+  extern bool songModeActive;
+  extern unsigned int voiceOwnedStep(unsigned int row, unsigned int col, unsigned int globalPage);
+  extern unsigned int beatForUI;
+  const bool voiceGrid = voiceMode && isNowPlaying && !songModeActive;
+  unsigned int voiceGlobalPage = 1;
+  if (voiceGrid && beatForUI > 0 && maxX > 0) voiceGlobalPage = ((beatForUI - 1) / maxX) + 1;
   const bool isSingle = GLOB.singleMode;
   const bool isSimpleNotes = (simpleNotesView == 1 && !isSingle);
 
@@ -1444,15 +1471,22 @@ FLASHMEM void drawTriggers() {
   const uint8_t blinkPhase = (uint8_t)((now / 300) & 0x1);
 
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
-    const unsigned int globalX = baseX + ix;
     for (unsigned int iy = 1; iy < maxY + 1; iy++) {
+      unsigned int globalX;
+      if (voiceGrid) {
+        globalX = voiceOwnedStep(iy, ix, voiceGlobalPage);
+        if (globalX == 0) continue;
+      } else {
+        unsigned int rowPage = GLOB.edit > 0 ? GLOB.edit : 1;
+        globalX = (rowPage - 1) * maxX + ix;
+      }
       Note &cell = note[globalX][iy];
       int thisNote = cell.channel;
       if (thisNote <= 0) continue;
 
       // Simple Notes View: draw notes at their voice Y position and clear original position.
       // Do it in one pass to avoid a second full scan of the grid.
-      if (isSimpleNotes) {
+      if (isSimpleNotes && !voiceGrid) {
         int voiceY = thisNote + 1;
         if (voiceY >= 1 && voiceY <= (int)maxY) {
           light(ix, iy, CRGB(0, 0, 0));
@@ -1543,7 +1577,14 @@ void drawTimer() {
   extern int patternMode;
   bool shouldShowTimer = false;
   
-  if (SMP_FLOW_MODE) {
+  extern bool voiceMode;
+  extern bool songModeActive;
+  extern unsigned int voiceOwnedStep(unsigned int row, unsigned int col, unsigned int globalPage);
+  const bool voiceGrid = voiceMode && isNowPlaying && !songModeActive;
+  if (voiceGrid) {
+    // The grid is one composite voice page, so the shared column is always visible.
+    shouldShowTimer = true;
+  } else if (SMP_FLOW_MODE) {
     // FLOW mode: playback is identical to normal play.
     // ONLY difference: the visible page follows beatForUI (handled by setting GLOB.edit in the main loop).
     // Therefore, show the timer when beatForUI belongs to the page currently being displayed (GLOB.edit).
@@ -1565,7 +1606,18 @@ void drawTimer() {
   if (shouldShowTimer) {
       if (timer < 1) timer = 1;
       for (unsigned int y = 1; y < maxY; y++) {
-        int ch = note[((GLOB.edit - 1) * maxX) + timer][y].channel;
+        unsigned int srcStep;
+        if (voiceGrid) {
+          srcStep = voiceOwnedStep(y, timer, beatForUIPage);
+          if (srcStep == 0) {
+            light(timer, y, CRGB(10, 0, 0));
+            continue;
+          }
+        } else {
+          unsigned int notePage = GLOB.edit > 0 ? GLOB.edit : 1;
+          srcStep = (notePage - 1) * maxX + timer;
+        }
+        int ch = note[srcStep][y].channel;
         light(timer, y, CRGB(10, 0, 0));
 
         if (ch> 0) {

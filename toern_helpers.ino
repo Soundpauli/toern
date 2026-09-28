@@ -3956,6 +3956,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 39, 10);   // mixGain58 (unity)
   EEPROM.write(EEPROM_DATA_START + 40, 10);   // mixGainSynth (unity)
   EEPROM.write(EEPROM_DATA_START + 41, 10);   // mixGainMaster (unity)
+  EEPROM.write(EEPROM_DATA_START + 42, 0);     // voiceMode (OFF)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();

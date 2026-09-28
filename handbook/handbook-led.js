@@ -267,7 +267,7 @@
   function playSubFrame(m, pageIdx, title, enc2, enc3) {
     m.clear();
     largeInd4Parent(m, 6);
-    drawSubmenuDots16(m, pageIdx, 11, 6);
+    drawSubmenuDots16(m, pageIdx, 12, 6);
     const tc = menuTextFromCol(6);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc2) m.indL(2, enc2);
@@ -832,16 +832,20 @@
       playSubFrame(m, 4, "LOOP", "", "G");
       drawText(m, "16", 2, 3, 0, 200, 255);
     },
+    lk_vmod(m) {
+      playSubFrame(m, 5, "VMOD", "", "G");
+      drawText(m, "ON", 2, 3, 0, 255, 0);
+    },
     lk_ctrl(m) {
-      playSubFrame(m, 5, "CTRL", "", "G");
+      playSubFrame(m, 6, "CTRL", "", "G");
       drawText(m, "PAGE", 2, 3, 0, 255, 0);
     },
     lk_leds(m) {
-      playSubFrame(m, 6, "LEDS", "", "G");
+      playSubFrame(m, 7, "LEDS", "", "G");
       drawText(m, "2B", 2, 3, 0, 255, 0);
     },
     lk_pong(m) {
-      playSubFrame(m, 7, "PONG", "", "B");
+      playSubFrame(m, 8, "PONG", "", "B");
       const on = true;
       if (on) {
         drawText(m, "ON", 10, 3, 0, 255, 0);
@@ -854,15 +858,15 @@
       }
     },
     lk_crsr(m) {
-      playSubFrame(m, 8, "CRSR", "", "G");
+      playSubFrame(m, 9, "CRSR", "", "G");
       drawText(m, "CHNR", 2, 3, 150, 200, 0);
     },
     lk_draw(m) {
-      playSubFrame(m, 9, "DRAW", "", "G");
+      playSubFrame(m, 10, "DRAW", "", "G");
       drawText(m, "L+R", 2, 3, 0, 255, 0);
     },
     lk_mute(m) {
-      playSubFrame(m, 10, "MUTE", "Y", "W");
+      playSubFrame(m, 11, "MUTE", "Y", "W");
       const sel = 5;
       for (let uch = 1; uch <= 16; uch++) {
         const inMask = uch === 2 || uch === 5 || uch === 8 || uch === 12;

@@ -176,6 +176,32 @@
           <hr />
 
 
+          <section class="hb-sub" id="vmod">
+            <h2>VMOD — voice loops</h2>
+            <p class="lede">Each voice loops on its own pages. Pitches of that voice, on any row, stay with it.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="lk_vmod" width="16" height="16" role="img" aria-label="VMOD"></canvas>
+              </div>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td><strong>OFF</strong> / <strong>ON</strong></td><td>Choice survives reboot.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
+              </div>
+            </article>
+            <p>A voice’s length is the highest page that holds any of its notes. Empty voices do not stretch the cycle. The pattern runs as long as the longest voice. On each pass, a voice plays its own page in the same column, then wraps. Repeats such as 1/2 and 1/4 count that voice’s wraps.</p>
+            <p>While VMOD is on, FLOW, LOOP, and pattern-mode page lock leave playback and the page dots alone. Song mode is unchanged.</p>
+            <p>On the grid, encoder&nbsp;2 (CTRL&nbsp;= PAGE) steps only the pages that contain the current voice. A voice with no notes still uses the full page range, so the first notes can be painted. Changing voice jumps to that voice’s page. Encoder&nbsp;4 does not change pages while voice mode is playing.</p>
+            <p>Page dots: white marks pages that contain the voice under encoder&nbsp;1. Green and yellow follow that voice’s loop page and the page you are editing.</p>
+          </section>
+
+
+          <hr />
+
+
           <section class="hb-sub" id="ctrl">
             <h2>CTRL — encoder&nbsp;2 on the grid</h2>
             <p class="lede">What encoder&nbsp;2 does in draw / single mode when you are not in a special overlay.</p>
@@ -265,7 +291,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>NORM</strong> / <strong>CHNR</strong> / <strong>BIG</strong></td><td>NORM = thin white ring. CHNR = only on the focused voice in single mode. BIG = chunky 3×3 halo for distance reading.</td></tr>
+                  <tr><th>Turn</th><td><strong>NORM</strong> / <strong>CHNR</strong> / <strong>BIG</strong></td><td>NORM = thin white ring. CHNR = only on the focused voice in single mode. BIG = chunky 3×3 halo for distance reading. With CHNR and CTRL&nbsp;= PAGE, turning encoder&nbsp;2 flashes the page number on the right edge, one row below the top, with no underline.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>

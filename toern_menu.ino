@@ -1,6 +1,6 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 11
+#define LOOK_PAGES_COUNT 12
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 7
 #define VOL_PAGES_COUNT 7
@@ -86,6 +86,7 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"VIEW", 17, false, nullptr},         // Simple Notes View
   {"PMD", 9, false, nullptr},           // Pattern Mode
   {"LOOP", 18, false, nullptr},         // Loop Length
+  {"VMOD", 54, false, nullptr},         // Voice mode: each channel loops its own pages
   {"CTRL", 25, false, nullptr},         // Encoder control mode
   {"LEDS", 23, false, nullptr},         // LED mode (1, 1B, 2, 2B)
   {"PONG", 24, false, nullptr},         // Pong Toggle
@@ -373,7 +374,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 42; // [36]=child lock; [37]=MIDI pitch clamp; [38..41]=VOL GAIN
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 43; // [42]=VMOD; [36]=child lock; [37]=MIDI pitch clamp; [38..41]=VOL GAIN
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -690,6 +691,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 39, 10);  // mixGain58 default (unity)
       EEPROM.write(EEPROM_DATA_START + 40, 10);  // mixGainSynth default (unity)
       EEPROM.write(EEPROM_DATA_START + 41, 10);  // mixGainMaster default (unity)
+      EEPROM.write(EEPROM_DATA_START + 42, 0);   // voiceMode default (OFF)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -752,6 +754,13 @@ FLASHMEM void loadMenuFromEEPROM() {
   if (flowMode != -1 && flowMode != 1) {
     flowMode = -1;  // Default to OFF
     saveSingleModeToEEPROM(8, flowMode);
+  }
+
+  {
+    extern bool voiceMode;
+    uint8_t voiceModeValue = EEPROM.read(EEPROM_DATA_START + 42);
+    voiceMode = (voiceModeValue == 1);
+    if (voiceModeValue > 1) EEPROM.write(EEPROM_DATA_START + 42, 0);
   }
   
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
@@ -1326,7 +1335,8 @@ FLASHMEM void showLookMenu() {
   CRGB indicatorColor = currentMenuParentTextColor();
   const bool playValuePage = (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
       mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
-      mainSetting == 32 || mainSetting == 33 || mainSetting == 38 || mainSetting == 47);
+      mainSetting == 32 || mainSetting == 33 || mainSetting == 38 || mainSetting == 47 ||
+      mainSetting == 54);
   Encoder[0].writeRGBCode(0x000000);
   Encoder[1].writeRGBCode(0x000000);
   Encoder[2].writeRGBCode(playValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -2216,6 +2226,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawLoopLength();
       drawIndicator('L', 'G', 3);
       break;
+
+    case 54: { // VMOD - per-voice page loops (OFF/ON)
+      extern bool voiceMode;
+      const CRGB tc = currentMenuParentTextColor();
+      drawText("VMOD", 2, 10, tc);
+      drawMenuValue(voiceMode ? "ON" : "OFF", 2, 3, voiceMode ? UI_GREEN : UI_RED);
+      drawIndicator('L', voiceMode ? 'G' : 'R', 3);
+      break;
+    }
       
     case 23: // LEDS - LED mode (1, 1B, 2, 2B) - encoder 3
       drawText("LEDS", 2, 10, currentMenuParentTextColor());
@@ -3203,6 +3222,31 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = loopLength;
         lastLoopLength = loopLength;
         saveSingleModeToEEPROM(12, loopLength);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 54: { // VMOD - per-voice page loops (OFF/ON) via encoder 2
+      extern bool voiceMode;
+      static int lastVoiceEnc = -1;
+      int encVal = voiceMode ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastVoiceEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastVoiceEnc) {
+        voiceMode = (currentMode->pos[2] == 1);
+        encVal = voiceMode ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastVoiceEnc = encVal;
+        EEPROM.write(EEPROM_DATA_START + 42, voiceMode ? 1 : 0);
+        updateLastPage();
         redrawMain(setting);
       }
       break;
@@ -4253,6 +4297,15 @@ FLASHMEM void switchMenu(int menuPosition){
         saveSingleModeToEEPROM(12, loopLength);
         drawMainSettingStatus(menuPosition);
         break;
+
+        case 54: {
+        extern bool voiceMode;
+        voiceMode = !voiceMode;
+        EEPROM.write(EEPROM_DATA_START + 42, voiceMode ? 1 : 0);
+        updateLastPage();
+        drawMainSettingStatus(menuPosition);
+        break;
+        }
         
         case 22: {
         // Enter SONG mode

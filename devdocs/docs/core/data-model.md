@@ -60,6 +60,8 @@ Placing `SMP` in **EXTMEM** (PSRAM) keeps DTCM (RAM1) free for hot code/data.
 
 Playback page vs edit page can diverge (e.g. FLOW mode follows `beatForUI` for the visible page while playback owns `GLOB.page` carefully — see comments in `loop()`).
 
+Voice mode (`voiceMode`, SETT → VMOD) gives each channel its own loop length: the highest page that contains any cell of that channel. The transport cycle is the longest voice. At global page G, voice C reads page `((G − 1 + offset) mod len) + 1` in the same column. The offset is set when encoder 2 cues that voice. Notes are matched by `note.channel`, so pitches on other rows stay with the voice. While it is on, FLOW, LOOP, and pattern-mode page lock do not steer playback or the page dots. Song mode is left alone. Encoder 2 steps only pages that contain the current voice (full range if the voice is empty). Changing voice snaps the edit page to that voice. Encoder 4 does not change pages while voice mode is playing. Condition repeats count that voice’s wraps (`voiceLoopCount`).
+
 ## Song mode
 
 - `songModeActive` — follow arrangement instead of a single pattern loop.  

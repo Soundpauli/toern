@@ -462,6 +462,13 @@ int8_t transportRcveDelayMs = 17; // -127..+127 ms SNC2: + = delay that path; âˆ
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
+bool voiceMode = false;          // VMOD: each channel loops its own pages
+uint8_t voicePageLen[16] = {0};  // highest page that contains this channel (0 = empty)
+uint16_t voicePageMask[16] = {0};
+uint8_t voiceModePages = 1;      // longest voice, at least 1
+uint16_t voiceLoopCount[16] = {0};
+uint8_t voiceEditPage[16] = {0}; // per-voice edit page (2nd encoder), 0 = page 1
+int8_t voicePageOffset[16] = {0}; // added to the global page so the 2nd encoder can cue one voice
 static bool spkrEnabled = true;  // SPKR toggle state (ON by default)
 static bool childLockEnabled = false;  // Child lock: requires touch2->touch1 sequence to enter menu
 static bool bootFullResetRequested = false;  // Touch1 held 10s at power-on (3s CLR + 7s more) â†’ FULL reset late in setup()
@@ -2298,6 +2305,8 @@ void checkFastRec() {
   }
 }
 
+unsigned int cursorNoteStep();
+
 void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   //checkFastRec();
 
@@ -2967,8 +2976,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   // R mode: encoder(3) short press - one-time paint/unpaint (no flags)
   extern int drawMode;
   if (drawMode == 1 && (currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 1) && !preventPaintUnpaint) {  // "0001" - short press release
-    // Toggle based on current note state: if note exists, unpaint it; if empty, paint it
-    if (note[GLOB.x][GLOB.y].channel == 0) {
+    // Toggle based on the note on screen: if it exists, unpaint it; if empty, paint it
+    if (note[cursorNoteStep()][GLOB.y].channel == 0) {
       // Note is empty - paint it
       freshPaint = true;
       paint();
@@ -2988,8 +2997,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         unpaintMode = false;
         preventPaintUnpaint = false;  // Reset flag when paintMode is activated
       } else {
-        // R mode: activate paintMode or unpaintMode based on note state
-        if (note[GLOB.x][GLOB.y].channel == 0) {
+        // R mode: activate paintMode or unpaintMode based on the note on screen
+        if (note[cursorNoteStep()][GLOB.y].channel == 0) {
           // Note is empty - activate paintMode
           paintMode = true;
           unpaintMode = false;
@@ -4546,7 +4555,22 @@ void checkEncoders() {
       // its visible page must remain independently selectable.
       extern bool songModeActive;
       extern int patternMode;
-      if (childLockEnabled) {
+      if (voiceMode && isNowPlaying && !songModeActive && !childLockEnabled) {
+        // Last encoder must not change pages while a voice pattern is playing.
+        unsigned int page = GLOB.edit < 1 ? 1 : GLOB.edit;
+        unsigned int pageStart = (page - 1) * maxX + 1;
+        unsigned int pageEnd = pageStart + maxX - 1;
+        if (GLOB.x < pageStart || GLOB.x > pageEnd) {
+          int rel = ((int)GLOB.x - 1) % (int)maxX + 1;
+          if (rel < 1) rel = 1;
+          unsigned int xval = pageStart + (unsigned int)rel - 1;
+          if (xval < pageStart) xval = pageStart;
+          if (xval > pageEnd) xval = pageEnd;
+          GLOB.x = xval;
+          currentMode->pos[3] = xval;
+          if (allowEncWrite) Encoder[3].writeCounter((int32_t)xval);
+        }
+      } else if (childLockEnabled) {
         GLOB.edit = 1;
         editpage = 1;
         GLOB.page = 1;
@@ -4578,6 +4602,9 @@ void checkEncoders() {
           // Other modes: edit and play page are the same
           GLOB.edit = newEditPage;
         }
+      }
+      if (currentMode == &draw && yChanged && voiceMode && !songModeActive && !childLockEnabled) {
+        voiceApplyEditPage((int)GLOB.currentChannel);
       }
     }
 
@@ -4635,42 +4662,45 @@ void checkEncoders() {
     }
 
     if ((GLOB.y >= 1 && GLOB.y <= 15)) {  // Paint/unpaint rows 1-15; draw-mode row 1 is filtered below
+      const unsigned int paintStep = cursorNoteStep();
       if (paintMode && !preventPaintUnpaint) {
         // Continuous paint in draw mode only
         if (currentMode == &draw && isPaintableDrawRow(GLOB.y) && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
           // Only set probability to 100% if slot was empty (preserve existing probability)
-          if (note[GLOB.x][GLOB.y].channel == 0) {
-            note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
-            note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
-            note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+          if (note[paintStep][GLOB.y].channel == 0) {
+            note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
+            note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+            note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
           }
-          note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
-          note[GLOB.x][GLOB.y].velocity = defaultVelocity;
+          note[paintStep][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
+          note[paintStep][GLOB.y].velocity = defaultVelocity;
+          if (voiceMode) updateLastPage();
         }
       }
       // Safety check: Only allow paintMode when actually in singleMode
       if (paintMode && currentMode == &singleMode && !preventPaintUnpaint && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
         // Single mode: allow painting on all y rows 1-15 (no reserved rows)
         // Only set probability to 100% if slot was empty (preserve existing probability)
-        if (note[GLOB.x][GLOB.y].channel == 0) {
-          note[GLOB.x][GLOB.y].probability = 100;  // Default 100% probability for new notes
-          note[GLOB.x][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
-          note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+        if (note[paintStep][GLOB.y].channel == 0) {
+          note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
+          note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+          note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
         }
-        note[GLOB.x][GLOB.y].channel = GLOB.currentChannel;
-        note[GLOB.x][GLOB.y].velocity = defaultVelocity;
+        note[paintStep][GLOB.y].channel = GLOB.currentChannel;
+        note[paintStep][GLOB.y].velocity = defaultVelocity;
+        if (voiceMode) updateLastPage();
       }
 
 
       // Safety check: Only allow unpaintMode when actually in draw/singleMode
       if (unpaintMode && (currentMode == &draw || currentMode == &singleMode) && !preventPaintUnpaint) {
         if (GLOB.singleMode) {
-          if (note[GLOB.x][GLOB.y].channel == GLOB.currentChannel) {
-            note[GLOB.x][GLOB.y].channel = 0;
-            note[GLOB.x][GLOB.y].velocity = defaultVelocity;
-            note[GLOB.x][GLOB.y].probability = 100;
-            note[GLOB.x][GLOB.y].condition = 1;
-            note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+          if (note[paintStep][GLOB.y].channel == GLOB.currentChannel) {
+            note[paintStep][GLOB.y].channel = 0;
+            note[paintStep][GLOB.y].velocity = defaultVelocity;
+            note[paintStep][GLOB.y].probability = 100;
+            note[paintStep][GLOB.y].condition = 1;
+            note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
             updateLastPage();
             // Update encoder 1 limit if pattern mode is ON or if in single mode
             if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
@@ -4678,11 +4708,11 @@ void checkEncoders() {
             }
           }
         } else {
-          note[GLOB.x][GLOB.y].channel = 0;
-          note[GLOB.x][GLOB.y].velocity = defaultVelocity;
-          note[GLOB.x][GLOB.y].probability = 100;
-          note[GLOB.x][GLOB.y].condition = 1;
-          note[GLOB.x][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+          note[paintStep][GLOB.y].channel = 0;
+          note[paintStep][GLOB.y].velocity = defaultVelocity;
+          note[paintStep][GLOB.y].probability = 100;
+          note[paintStep][GLOB.y].condition = 1;
+          note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
           updateLastPage();
           // Update encoder 1 limit if pattern mode is ON or if in single mode
           if (ctrlMode == 0 && (SMP_PATTERN_MODE || GLOB.singleMode) && (currentMode == &draw || currentMode == &singleMode)) {
@@ -4710,7 +4740,34 @@ void checkEncoders() {
       int pmax = encoderPageMax();
       int oldEdit = editpage;
       int requested = constrain((int)currentMode->pos[1], 1, pmax);
+      if (voiceMode && (currentMode == &draw || currentMode == &singleMode)) {
+        int ch = (int)GLOB.currentChannel;
+        if (voiceFilledCount(ch) > 0) {
+          int dir = (requested > oldEdit) ? 1 : (requested < oldEdit) ? -1 : 0;
+          int steps = requested - oldEdit;
+          if (steps < 0) steps = -steps;
+          if (steps < 1) steps = 1;
+          if (steps > 16) steps = 16;
+          int page = oldEdit;
+          if (!voicePageFilled(ch, page)) {
+            page = voiceNearestFilledPage(ch, page);
+          } else if (dir != 0) {
+            for (int i = 0; i < steps; i++) {
+              int n = voiceStepFilledPage(ch, page, dir);
+              if (n < 1) break;
+              page = n;
+            }
+          }
+          if (page < 1) page = voiceFirstFilledPage(ch);
+          if (page >= 1) requested = page;
+          voiceLimitPageEncoder(ch);
+        } else {
+          Encoder[1].writeMin((int32_t)1);
+          Encoder[1].writeMax((int32_t)pmax);
+        }
+      }
       currentMode->pos[1] = (unsigned int)requested;
+      Encoder[1].writeCounter((int32_t)requested);
       if (requested == oldEdit) {
         editpage = requested;
       } else {
@@ -4760,6 +4817,13 @@ void checkEncoders() {
             patternChangeActive = true;
           } else {
             GLOB.edit = (unsigned int)editpage;
+          }
+        }
+        if (voiceMode && !songModeActive) {
+          int ch = (int)GLOB.currentChannel;
+          if (ch >= 0 && ch < 16 && editpage >= 1 && editpage <= 255) {
+            voiceEditPage[ch] = (uint8_t)editpage;
+            voiceCuePage(ch, editpage);
           }
         }
         clampGridCursor();
@@ -6450,7 +6514,8 @@ void loop() {
   // ONLY difference: the visible page follows the beat being played (beatForUI).
   // Do page-follow work in the main loop to avoid mid-frame flicker.
   // Do NOT touch encoder 1 when CTRL-VOL is active (ctrlMode==1).
-  if (!childLockEnabled && SMP_FLOW_MODE && patternMode != 3 &&
+  extern bool songModeActive;
+  if (!childLockEnabled && SMP_FLOW_MODE && !(voiceMode && !songModeActive) && patternMode != 3 &&
       isNowPlaying &&
       (currentMode == &draw || currentMode == &singleMode)) {
     static uint16_t lastAppliedFlowPage = 0;
@@ -6754,7 +6819,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
   if (drawMode == 0) {
     // L+R mode: encoder(3) paints, encoder(0) unpaints (current behavior)
-    if (note[GLOB.x][GLOB.y].channel == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
+    if (note[cursorNoteStep()][GLOB.y].channel == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
       paintMode = false;
       freshPaint = true;
       unpaintMode = false;
@@ -7430,6 +7495,15 @@ void play(bool fromStart) {
 
     // Reset loop count to 1 when starting playback (first loop)
     loopCount = 1;
+    if (voiceMode) {
+      extern bool songModeActive;
+      updateVoiceLengths();
+      for (int c = 0; c < 16; c++) voiceLoopCount[c] = 1;
+      if (!songModeActive && !childLockEnabled) {
+        beat = 1;
+        GLOB.page = 1;
+      }
+    }
 
     Encoder[2].writeRGBCode(0xFFFF00);
     if (MIDI_CLOCK_SEND) {
@@ -7891,11 +7965,12 @@ void playNote() {
   bool sequencedCh14HadNotes = false;
 
   for (unsigned int b = 1; b < maxY + 1; b++) {  // b is 1-indexed (row on grid)
-    if (beat > 0 && beat <= maxlen) {            // Ensure beat is within valid range for note array
-      int ch = note[beat][b].channel;            // ch is 0-indexed for internal use (e.g. SMP arrays)
-      int vel = note[beat][b].velocity;
-      uint8_t prob = note[beat][b].probability;  // Get probability (0-100)
-      uint8_t cond = note[beat][b].condition;    // Get condition (1, 2, 4 for 1, 1/2, 1/4)
+    unsigned int srcBeat = voiceReadStep(b, beat);
+    if (srcBeat > 0 && srcBeat <= maxlen) {      // Ensure beat is within valid range for note array
+      int ch = note[srcBeat][b].channel;         // ch is 0-indexed for internal use (e.g. SMP arrays)
+      int vel = note[srcBeat][b].velocity;
+      uint8_t prob = note[srcBeat][b].probability;  // Get probability (0-100)
+      uint8_t cond = note[srcBeat][b].condition;    // Get condition (1, 2, 4 for 1, 1/2, 1/4)
       if (cond == 0) cond = 1;                   // Default to 1 if not set
 
       if (ch > 0 && !isChildVoiceDisabled(ch) && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
@@ -7905,11 +7980,17 @@ void playNote() {
         // Condition 21 (F/F) always plays (handled separately for fill)
         if (cond > 1 && cond <= 20) {
           bool shouldPlay = false;
+          uint16_t condLoop = loopCount;
+          if (voiceMode && ch > 0 && ch < 16) {
+            extern bool songModeActive;
+            if (!songModeActive) condLoop = voiceLoopCount[ch];
+          }
+          if (condLoop < 1) condLoop = 1;
           if (cond <= 16) {
             // 1/X conditions: play when (loopCount % cond) == 0
             // 1/2: every 2nd loop (2, 4, 6, 8...)
             // 1/4: every 4th loop (4, 8, 12, 16...)
-            shouldPlay = (loopCount % cond) == 0;
+            shouldPlay = (condLoop % cond) == 0;
           } else {
             // X/1 conditions: play on every Xth loop, starting with the first
             // 2/1: every 2nd loop starting with first (1, 3, 5, 7...)
@@ -7919,7 +8000,7 @@ void playNote() {
             uint8_t x = (cond == 17) ? 2 : (cond == 18) ? 4
                                          : (cond == 19) ? 8
                                                         : 16;
-            shouldPlay = (loopCount % x) == 1;
+            shouldPlay = (condLoop % x) == 1;
           }
 
           if (!shouldPlay) {
@@ -7946,7 +8027,7 @@ void playNote() {
             fillActiveChannel = ch;
             fillActiveVelocity = (vel == 0) ? defaultVelocity : vel;
             fillActiveRow = b;
-            fillActiveMidiPitch = note[beat][b].midiPitch;
+            fillActiveMidiPitch = note[srcBeat][b].midiPitch;
           }
           continue;  // Fill notes are handled by separate fillTimer ISR
         }
@@ -7959,7 +8040,7 @@ void playNote() {
         // Trigger LED strip ripple only if note is actually played (passed cond/prob checks)
         onNoteTriggered(ch);
 
-        MidiSendNoteOn(midiPitchForOutput(note[beat][b], b), ch,
+        MidiSendNoteOn(midiPitchForOutput(note[srcBeat][b], b), ch,
                        scaledNoteVelocity(ch, vel));
         if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
           // SET_WAV + PREV==SYNC: keep the voice unmuted, skip its sampler trigger, audition the browse file instead.
@@ -7969,7 +8050,7 @@ void playNote() {
           if (isChannelSampleReloadBusy((unsigned int)ch)) {
             continue;
           }
-          int pitch = samplePitchForNote(note[beat][b], ch, b);
+          int pitch = samplePitchForNote(note[srcBeat][b], ch, b);
 
           // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
           if (ch >= 1 && ch <= 12) {
@@ -7986,7 +8067,7 @@ void playNote() {
           // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
           // playSound expects MIDI note number (0-indexed pitch offset from row)
           if (pressedKeyCount[11] == 0) {
-            playSequencedSound(ch11PitchForNote(note[beat][b], b),
+            playSequencedSound(ch11PitchForNote(note[srcBeat][b], b),
                                0, vel, sequencerSynthTick,
                                cond == NOTE_CONDITION_GLIDE);
             sequencedCh11HadNotes = true;
@@ -7994,8 +8075,8 @@ void playNote() {
 
         } else if (ch >= 13 && ch < 15) {  // Synth channels 13, 14
           if (pressedKeyCount[ch] == 0) {
-            const int midiPitch = noteHasMidiPitch(note[beat][b])
-                                    ? (int)note[beat][b].midiPitch : -1;
+            const int midiPitch = noteHasMidiPitch(note[srcBeat][b])
+                                    ? (int)note[srcBeat][b].midiPitch : -1;
             playSequencedSynth(ch, b, vel, sequencerSynthTick,
                                cond == NOTE_CONDITION_GLIDE, midiPitch);
             if (ch == 13) sequencedCh13HadNotes = true;
@@ -8017,7 +8098,12 @@ void playNote() {
   // midi functions
   if (waitForFourBars && pulseCount >= totalPulsesToWait) {
     extern int patternMode;
-    if (SMP_PATTERN_MODE) {
+    extern bool songModeActive;
+    if (voiceMode && !songModeActive && !childLockEnabled) {
+      beat = 1;
+      GLOB.page = 1;
+      for (int c = 0; c < 16; c++) voiceLoopCount[c] = 1;
+    } else if (SMP_PATTERN_MODE) {
       if (patternMode == 3) {
         // A delayed start also uses whichever page is visible when it begins.
         GLOB.edit = constrain(
@@ -8040,8 +8126,31 @@ void playNote() {
     waitForFourBars = false;  // Reset for the next start message
   }
 
-  if (SMP_PATTERN_MODE) {
-    extern bool songModeActive;
+  extern bool songModeActive;
+  if (voiceMode && !songModeActive && !childLockEnabled) {
+    unsigned int prevBeat = beat;
+    unsigned int pages = voiceModePages < 1 ? 1 : voiceModePages;
+    unsigned int cycleEnd = pages * maxX;
+    if (cycleEnd < 1) cycleEnd = maxX;
+    beat++;
+    if (beat > cycleEnd || beat < 1) beat = 1;
+    unsigned int newPage = (beat > 0) ? ((beat - 1) / maxX + 1) : 1;
+    unsigned int prevPage = (prevBeat > 0) ? ((prevBeat - 1) / maxX + 1) : newPage;
+    GLOB.page = newPage;
+    if (newPage != prevPage) {
+      for (int c = 1; c < 16; c++) {
+        uint8_t len = voicePageLen[c];
+        if (len < 1) continue;
+        unsigned int prevV = ((prevPage - 1) % len) + 1;
+        unsigned int newV = ((newPage - 1) % len) + 1;
+        if (prevV == len && newV == 1) {
+          uint16_t n = voiceLoopCount[c] + 1;
+          if (n > 256) n = 1;
+          voiceLoopCount[c] = n;
+        }
+      }
+    }
+  } else if (SMP_PATTERN_MODE) {
     extern int patternMode;
 
     // In NEXT mode, ALWAYS use GLOB.page (actual playing page) for calculations
@@ -8243,13 +8352,15 @@ void checkPages() {
 }
 
 
+unsigned int cursorNoteStep();
+
 void unpaint() {
   paintMode = false;
   preventPaintUnpaint = false;  // Reset flag when unpaint function is called
   // GLOB.x is already global X (1 to maxlen-1), GLOB.y is global Y (1 to maxY)
   // No need to recalculate from GLOB.edit and GLOB.x for the current view
   // unsigned int x_coord = (GLOB.edit - 1) * maxX + GLOB.x; // This is if GLOB.x was page-local
-  unsigned int current_x = GLOB.x;  // Use the global cursor X
+  unsigned int current_x = cursorNoteStep();  // Visible voice page while VMOD is playing
   unsigned int current_y = GLOB.y;  // Use the global cursor Y
 
 
@@ -8259,7 +8370,7 @@ void unpaint() {
                                                // Assuming general unpaint for rows 1-15, and 16 is special.
     if (current_y < 16) {                      // Rows 1-15 for notes
       if (!GLOB.singleMode) {
-        if (simpleNotesView == 1) {
+        if (simpleNotesView == 1 && !(voiceMode && isNowPlaying && !songModeActive)) {
           // In simple notes view, find the voice that should be at this Y position (voice = Y-1)
           int voiceToUnpaint = current_y - 1;  // Y position 3 = voice 2, Y position 4 = voice 3, etc.
           if (voiceToUnpaint >= 0 && voiceToUnpaint < maxY) {
@@ -8458,7 +8569,7 @@ void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted) {
 void paint() {
   preventPaintUnpaint = false;  // Reset flag when paint function is called
 
-  unsigned int current_x = GLOB.x;  // Use global cursor X
+  unsigned int current_x = cursorNoteStep();  // Visible voice page while VMOD is playing
   unsigned int current_y = GLOB.y;  // Use global cursor Y
 
   bool channelBlocked = (GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || isChildVoiceDisabled((int)GLOB.currentChannel));
@@ -9127,11 +9238,220 @@ FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0C
 }
 
 
+void updateVoiceLengths() {
+  for (int c = 0; c < 16; c++) {
+    voicePageLen[c] = 0;
+    voicePageMask[c] = 0;
+  }
+  int pages = effectivePageCount();
+  if (pages < 1) pages = 1;
+  if (pages > 16) pages = 16;
+  for (int p = 1; p <= pages; p++) {
+    unsigned int base = (unsigned int)(p - 1) * maxX;
+    for (unsigned int ix = 1; ix <= maxX; ix++) {
+      unsigned int x = base + ix;
+      if (x >= maxlen) break;
+      for (unsigned int iy = 1; iy <= maxY; iy++) {
+        uint8_t ch = note[x][iy].channel;
+        if (ch == 0 || ch > 15) continue;
+        if ((uint8_t)p > voicePageLen[ch]) voicePageLen[ch] = (uint8_t)p;
+        voicePageMask[ch] |= (uint16_t)(1u << (p - 1));
+      }
+    }
+  }
+  uint8_t longest = 1;
+  for (int c = 1; c < 16; c++) {
+    if (voicePageLen[c] > longest) longest = voicePageLen[c];
+  }
+  voiceModePages = longest;
+}
+
+// Page a channel is reading while VMOD is playing.
+unsigned int voicePageFor(int channel, unsigned int globalPage) {
+  uint8_t len = 1;
+  int offset = 0;
+  if (channel >= 0 && channel < 16) {
+    if (voicePageLen[channel] > 0) len = voicePageLen[channel];
+    offset = voicePageOffset[channel];
+  }
+  if (globalPage < 1) globalPage = 1;
+  int idx = (int)(globalPage - 1) + offset;
+  idx %= (int)len;
+  if (idx < 0) idx += (int)len;
+  return (unsigned int)idx + 1;
+}
+
+// Cue one voice onto a page, the way PMOD locks a page, without moving the others.
+void voiceCuePage(int channel, int page) {
+  extern bool isNowPlaying;
+  extern unsigned int beatForUI;
+  if (channel < 0 || channel > 15) return;
+  uint8_t len = voicePageLen[channel];
+  if (len < 1) len = 1;
+  if (page < 1) page = 1;
+  int wrapped = ((page - 1) % (int)len) + 1;
+  unsigned int gPage = 1;
+  if (isNowPlaying && beatForUI > 0 && maxX > 0) gPage = ((beatForUI - 1) / maxX) + 1;
+  else if (GLOB.page > 0) gPage = GLOB.page;
+  int off = (wrapped - 1) - (int)(gPage - 1);
+  off %= (int)len;
+  if (off < 0) off += (int)len;
+  voicePageOffset[channel] = (int8_t)off;
+}
+
+// Step that holds this row's note for the voice that owns it. Pitches of a
+// voice sit on other rows; the page comes from the note's channel, not row-1.
+// Returns 0 when no voice has a note on this row at the current column.
+unsigned int voiceOwnedStep(unsigned int row, unsigned int col, unsigned int globalPage) {
+  if (maxX < 1 || col < 1 || row < 1) return 0;
+  for (int ch = 1; ch < 16; ch++) {
+    if (voicePageLen[ch] < 1) continue;
+    unsigned int page = voicePageFor(ch, globalPage);
+    unsigned int src = (page - 1) * maxX + col;
+    if (src < 1 || src >= maxlen) continue;
+    if (note[src][row].channel == (uint8_t)ch) return src;
+  }
+  return 0;
+}
+
+// While voice mode is playing, the grid shows each voice's loop page.
+// Paint and unpaint follow that cell. An empty cell is written on the
+// current voice's loop page, so the new note is the one on screen.
+unsigned int cursorNoteStep() {
+  extern bool isNowPlaying;
+  extern bool songModeActive;
+  extern unsigned int beatForUI;
+  if (!voiceMode || !isNowPlaying || songModeActive || childLockEnabled) return GLOB.x;
+  if (maxX < 1 || GLOB.x < 1 || GLOB.y < 1) return GLOB.x;
+  unsigned int col = ((GLOB.x - 1) % maxX) + 1;
+  unsigned int gPage = (beatForUI > 0) ? ((beatForUI - 1) / maxX) + 1 : 1;
+  unsigned int owned = voiceOwnedStep(GLOB.y, col, gPage);
+  if (owned > 0) return owned;
+  int ch = (int)GLOB.currentChannel;
+  if (ch < 1 || ch > 15) return GLOB.x;
+  unsigned int page = voicePageFor(ch, gPage);
+  unsigned int src = (page - 1) * maxX + col;
+  if (src < 1 || src >= maxlen) return GLOB.x;
+  return src;
+}
+
+unsigned int voiceReadStep(unsigned int row, unsigned int globalBeat) {
+  extern bool songModeActive;
+  if (!voiceMode || songModeActive) return globalBeat;
+  if (globalBeat < 1 || maxX < 1) return 0;
+  unsigned int col = ((globalBeat - 1) % maxX) + 1;
+  unsigned int gPage = ((globalBeat - 1) / maxX) + 1;
+  return voiceOwnedStep(row, col, gPage);
+}
+
+bool voicePageFilled(int channel, int page) {
+  if (channel < 1 || channel > 15 || page < 1 || page > 16) return false;
+  return (voicePageMask[channel] & (uint16_t)(1u << (page - 1))) != 0;
+}
+
+int voiceFirstFilledPage(int channel) {
+  int pages = effectivePageCount();
+  if (pages > 16) pages = 16;
+  for (int p = 1; p <= pages; p++) if (voicePageFilled(channel, p)) return p;
+  return 0;
+}
+
+int voiceLastFilledPage(int channel) {
+  int pages = effectivePageCount();
+  if (pages > 16) pages = 16;
+  int last = 0;
+  for (int p = 1; p <= pages; p++) if (voicePageFilled(channel, p)) last = p;
+  return last;
+}
+
+int voiceFilledCount(int channel) {
+  int pages = effectivePageCount();
+  if (pages > 16) pages = 16;
+  int n = 0;
+  for (int p = 1; p <= pages; p++) if (voicePageFilled(channel, p)) n++;
+  return n;
+}
+
+int voiceNearestFilledPage(int channel, int page) {
+  if (voicePageFilled(channel, page)) return page;
+  int pages = effectivePageCount();
+  if (pages > 16) pages = 16;
+  int best = 0;
+  int bestDist = 99;
+  for (int p = 1; p <= pages; p++) {
+    if (!voicePageFilled(channel, p)) continue;
+    int d = page - p;
+    if (d < 0) d = -d;
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
+// Next or previous page that contains this voice. 0 means there is none in that direction.
+int voiceStepFilledPage(int channel, int from, int dir) {
+  int pages = effectivePageCount();
+  if (pages > 16) pages = 16;
+  if (dir > 0) {
+    for (int p = from + 1; p <= pages; p++) if (voicePageFilled(channel, p)) return p;
+  } else if (dir < 0) {
+    for (int p = from - 1; p >= 1; p--) if (voicePageFilled(channel, p)) return p;
+  }
+  return 0;
+}
+
+void voiceLimitPageEncoder(int channel) {
+  int first = voiceFirstFilledPage(channel);
+  int last = voiceLastFilledPage(channel);
+  if (first < 1 || last < first) {
+    Encoder[1].writeMin((int32_t)1);
+    Encoder[1].writeMax((int32_t)encoderPageMax());
+    return;
+  }
+  Encoder[1].writeMin((int32_t)first);
+  Encoder[1].writeMax((int32_t)last);
+}
+
+void voiceApplyEditPage(int channel) {
+  extern bool songModeActive;
+  extern int ctrlMode;
+  if (!voiceMode || songModeActive || ctrlMode != 0 || childLockEnabled) return;
+  if (channel < 0) channel = 0;
+  if (channel > 15) channel = 15;
+  updateLastPage();
+  int page = voiceEditPage[channel];
+  if (page < 1) page = 1;
+  int pmax = effectivePageCount();
+  if (page > pmax) page = pmax;
+  if (voiceFilledCount(channel) > 0) {
+    int snapped = voiceNearestFilledPage(channel, page);
+    if (snapped >= 1) page = snapped;
+    voiceEditPage[channel] = (uint8_t)page;
+  }
+  voiceLimitPageEncoder(channel);
+  editpage = page;
+  GLOB.edit = (unsigned int)page;
+  if (currentMode) {
+    currentMode->pos[1] = (unsigned int)page;
+    int rel = ((int)GLOB.x - 1) % (int)maxX + 1;
+    if (rel < 1) rel = 1;
+    int xval = rel + (page - 1) * (int)maxX;
+    xval = constrain(xval, 1, (int)MAX_STEPS);
+    GLOB.x = (unsigned int)xval;
+    currentMode->pos[3] = (unsigned int)xval;
+  }
+  Encoder[1].writeCounter((int32_t)page);
+  Encoder[3].writeCounter((int32_t)GLOB.x);
+}
+
 void updateLastPage() {
+  updateVoiceLengths();
   int effectiveMaxPages = effectivePageCount();
 
   extern int loopLength;
-  if (loopLength > 0) {
+  if (!voiceMode && loopLength > 0) {
     lastPage = min(loopLength, effectiveMaxPages);
     for (unsigned int p = 1; p <= (unsigned int)effectiveMaxPages; p++) {
       bool pageHasNotesThisPage = false;
