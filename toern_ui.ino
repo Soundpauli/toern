@@ -1564,6 +1564,168 @@ FLASHMEM void drawTriggers() {
       TIMER
   *************************************************/
 
+// Rising embers. Fixed pool, no heap. FLASHMEM: keep this out of ITCM when FIRE is off.
+struct FireFly {
+  int8_t x;
+  int8_t y;
+  int8_t drift;
+  uint8_t life;
+  uint8_t ch;
+};
+static const int FIRE_POOL = 25;
+static FireFly fireFlies[FIRE_POOL];
+static uint8_t fireSeenCol = 0;
+static uint16_t fireSeenPage = 0;
+static unsigned long fireTickAt = 0;
+static bool firePoolActive = false;
+
+static void fireClear() {
+  if (!firePoolActive) return;
+  for (int i = 0; i < FIRE_POOL; i++) fireFlies[i].life = 0;
+  firePoolActive = false;
+}
+
+FLASHMEM static int fireLiving() {
+  int n = 0;
+  for (int i = 0; i < FIRE_POOL; i++) if (fireFlies[i].life) n++;
+  return n;
+}
+
+FLASHMEM static int fireOldestSlot() {
+  int slot = 0;
+  uint8_t best = 255;
+  for (int i = 0; i < FIRE_POOL; i++) {
+    if (!fireFlies[i].life) return i;
+    if (fireFlies[i].life < best) {
+      best = fireFlies[i].life;
+      slot = i;
+    }
+  }
+  return slot;
+}
+
+FLASHMEM static void fireTrim(int cap) {
+  for (;;) {
+    int living = 0;
+    int oldest = -1;
+    uint8_t best = 255;
+    for (int i = 0; i < FIRE_POOL; i++) {
+      if (!fireFlies[i].life) continue;
+      living++;
+      if (fireFlies[i].life < best) {
+        best = fireFlies[i].life;
+        oldest = i;
+      }
+    }
+    if (living <= cap || oldest < 0) return;
+    fireFlies[oldest].life = 0;
+  }
+}
+
+FLASHMEM static void fireSpawnOne(int x, int y, uint8_t ch, int n) {
+  if (ch < 1 || ch > 14) return;
+  int8_t drift = (n & 1) ? 1 : -1;
+  // 90° from the old rise: leave the playhead sideways, spread up/down.
+  int nx = x + 1;
+  int ny = y - drift;
+  if (nx > (int)maxX) nx = x;
+  if (ny < 1) ny = 1;
+  if (ny >= (int)maxY) ny = (int)maxY - 1;
+  if (nx < 1) nx = 1;
+  if (ny < 1 || ny >= (int)maxY) return;
+  FireFly &f = fireFlies[fireOldestSlot()];
+  f.x = (int8_t)nx;
+  f.y = (int8_t)ny;
+  f.drift = drift;
+  f.life = 10;
+  f.ch = ch;
+  firePoolActive = true;
+}
+
+FLASHMEM static void fireSpawnColumn(const uint8_t *xs, const uint8_t *ys, const uint8_t *chs, int nHits) {
+  extern uint8_t fireLevel;
+  if (!nHits || !fireLevel) return;
+  int cap = fireLevel;
+  if (cap > FIRE_POOL) cap = FIRE_POOL;
+  if (cap < 1) cap = 1;
+  int room = cap - fireLiving();
+  int born = room > 0 ? room : (cap + 3) / 4;
+  if (born < 1) born = 1;
+  if (born > cap) born = cap;
+  for (int n = 0; n < born; n++) {
+    int h = n % nHits;
+    fireSpawnOne(xs[h], ys[h], chs[h], n);
+  }
+  fireTrim(cap);
+}
+
+FLASHMEM static void firePixel(int x, int y, int playX, const CRGB &c) {
+  if (x < 1 || x > (int)maxX || y < 1 || y >= (int)maxY) return;
+  if (x == playX) return;
+  light(x, y, c);
+}
+
+FLASHMEM static void fireDraw(int playX) {
+  extern uint8_t fireSize;
+  extern uint8_t fireGravity;
+  extern uint8_t fireColor;
+  extern CRGB col[];
+  if (!firePoolActive) return;
+  unsigned long now = millis();
+  const bool step = (unsigned long)(now - fireTickAt) >= 32;
+  if (step) fireTickAt = now;
+  const int gravPeriod = fireGravity ? (9 - (int)fireGravity) : 0;
+  bool any = false;
+  for (int i = 0; i < FIRE_POOL; i++) {
+    FireFly &f = fireFlies[i];
+    if (!f.life) continue;
+    if (step) {
+      f.life--;
+      if ((f.life & 1) == 0) {
+        f.x = (int8_t)(f.x + 1);
+        if ((f.life & 2) == 0) f.y = (int8_t)(f.y - f.drift);
+      }
+      if (gravPeriod > 0 && (f.life % gravPeriod) == 0) f.x = (int8_t)(f.x - 1);
+    }
+    if (!f.life || f.y < 1 || f.y >= (int)maxY || f.x < 1 || f.x > (int)maxX || f.ch < 1 || f.ch > 14) {
+      f.life = 0;
+      continue;
+    }
+    any = true;
+    if (f.x == playX) continue;
+    CRGB voice = col[f.ch];
+    CRGB base = voice;
+    if (fireColor == 0) base = CRGB(230, 230, 230);
+    else if (fireColor < 8) base = blend(CRGB(230, 230, 230), voice, (uint8_t)(fireColor * 32));
+    uint8_t scale = (uint8_t)(f.life * 25);
+    base.nscale8(scale);
+    if (fireSize >= 2) {
+      CRGB side = base;
+      side.nscale8(110);
+      firePixel(f.x, f.y - 1, playX, side);
+      firePixel(f.x, f.y + 1, playX, side);
+    }
+    if (fireSize >= 3) {
+      CRGB up = base;
+      up.nscale8(80);
+      firePixel(f.x + 1, f.y, playX, up);
+    }
+    if (fireSize >= 4) {
+      CRGB corner = base;
+      corner.nscale8(50);
+      firePixel(f.x + 1, f.y - 1, playX, corner);
+      firePixel(f.x + 1, f.y + 1, playX, corner);
+    }
+    if (f.life > 5 && f.x > 1) {
+      CRGB trail = base;
+      trail.nscale8(64);
+      firePixel(f.x - 1, f.y, playX, trail);
+    }
+    firePixel(f.x, f.y, playX, base);
+  }
+  if (!any) firePoolActive = false;
+}
+
 void drawTimer() {
  
   unsigned int timer = ((beatForUI - 1) % maxX + 1);
@@ -1605,6 +1767,23 @@ void drawTimer() {
   // Show timer if conditions are met
   if (shouldShowTimer) {
       if (timer < 1) timer = 1;
+      extern uint8_t fireVoice;
+      extern uint8_t fireLevel;
+      const bool fireOn = fireVoice && fireLevel;
+      if (!fireOn) fireClear();
+
+      uint8_t fireHits = 0;
+      uint8_t fireHitX[15];
+      uint8_t fireHitY[15];
+      uint8_t fireHitCh[15];
+      bool freshCol = false;
+      if (fireOn) {
+        freshCol = (timer != fireSeenCol) || (beatForUIPage != fireSeenPage);
+        if (freshCol) {
+          fireSeenCol = (uint8_t)timer;
+          fireSeenPage = (uint16_t)beatForUIPage;
+        }
+      }
       for (unsigned int y = 1; y < maxY; y++) {
         unsigned int srcStep;
         if (voiceGrid) {
@@ -1622,17 +1801,28 @@ void drawTimer() {
 
         if (ch> 0) {
           if (getMuteState(ch) == false) {
-            
-                    if( !GLOB.singleMode ) {light(timer, y, UI_BRIGHT_WHITE);
-        }else{
-          if (GLOB.currentChannel == ch){light(timer, y, UI_BRIGHT_WHITE);}
-        }
-            
+            const bool lit = !GLOB.singleMode || (GLOB.currentChannel == ch);
+            if (lit) {
+              light(timer, y, UI_BRIGHT_WHITE);
+              if (fireOn && freshCol && fireHits < 15 &&
+                  (fireVoice == 15 || (uint8_t)ch == fireVoice)) {
+                fireHitX[fireHits] = (uint8_t)timer;
+                fireHitY[fireHits] = (uint8_t)y;
+                fireHitCh[fireHits] = (uint8_t)ch;
+                fireHits++;
+              }
+            }
           } else {
             if( !GLOB.singleMode ) light(timer, y, CRGB(00, 00, 00));
           }
         }
       }
+      if (fireOn) {
+        if (freshCol && fireHits) fireSpawnColumn(fireHitX, fireHitY, fireHitCh, fireHits);
+        fireDraw((int)timer);
+      }
+    } else {
+      fireClear();
     }
 }
 

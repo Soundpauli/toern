@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 7
 #define VOL_PAGES_COUNT 7
-#define ETC_PAGES_COUNT 9
+#define ETC_PAGES_COUNT 10
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
@@ -44,6 +44,7 @@ static inline CRGB menuTextColorFromCol(uint8_t colIndex);
 static inline CRGB currentMenuParentTextColor();
 static inline void drawLargeIndicatorCustom(CRGB color, int encoderNum);
 static inline uint32_t hashEncoderPositions(const Mode *m);
+static inline void clearTextArea(int startX, int startY, int width);
 static inline void drawMenuValue(const char* label, int x, int y, CRGB color);
 
 // SETTINGS>MUTE & DRAW-R mask: user CH1..CH16 ↔ internal mute index 0..15 (same as draw: CH1=y2→internal 1; CH16=y1→internal 0).
@@ -146,6 +147,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
   {"BATT", 42, false, nullptr},          // Estimated LiPo percentage from Teensy A16 / pin 40
   {"CHLD", 48, false, nullptr},          // Child lock: require touch2->touch1 to enter menu
+  {"FIRE", 55, false, nullptr},          // Playhead sparks on one voice
   {"RSET", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
 };
 
@@ -374,7 +376,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 43; // [42]=VMOD; [36]=child lock; [37]=MIDI pitch clamp; [38..41]=VOL GAIN
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 48; // [47]=FIRE colour; [46]=FIRE gravity; [45]=FIRE size; [44]=FIRE count; [43]=FIRE voice; [42]=VMOD
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -692,6 +694,11 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 40, 10);  // mixGainSynth default (unity)
       EEPROM.write(EEPROM_DATA_START + 41, 10);  // mixGainMaster default (unity)
       EEPROM.write(EEPROM_DATA_START + 42, 0);   // voiceMode default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 43, 0);   // fireVoice default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 44, 8);   // fireLevel default (8 particles)
+      EEPROM.write(EEPROM_DATA_START + 45, 1);   // fireSize default (1 cell)
+      EEPROM.write(EEPROM_DATA_START + 46, 0);   // fireGravity default (float up)
+      EEPROM.write(EEPROM_DATA_START + 47, 8);   // fireColor default (full voice colour)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -761,6 +768,47 @@ FLASHMEM void loadMenuFromEEPROM() {
     uint8_t voiceModeValue = EEPROM.read(EEPROM_DATA_START + 42);
     voiceMode = (voiceModeValue == 1);
     if (voiceModeValue > 1) EEPROM.write(EEPROM_DATA_START + 42, 0);
+  }
+
+  {
+    extern uint8_t fireVoice;
+    extern uint8_t fireLevel;
+    extern uint8_t fireSize;
+    extern uint8_t fireGravity;
+    extern uint8_t fireColor;
+    uint8_t fireValue = EEPROM.read(EEPROM_DATA_START + 43);
+    const bool fireOk = (fireValue == 0) || (fireValue == 15) ||
+                        (fireValue >= 1 && fireValue <= 8) ||
+                        fireValue == 11 || fireValue == 13 || fireValue == 14;
+    if (!fireOk) {
+      fireValue = 0;
+      saveSingleModeToEEPROM(43, 0);
+    }
+    fireVoice = fireValue;
+    uint8_t levelValue = EEPROM.read(EEPROM_DATA_START + 44);
+    if (levelValue < 1 || levelValue > 25) {
+      levelValue = 8;
+      saveSingleModeToEEPROM(44, 8);
+    }
+    fireLevel = levelValue;
+    uint8_t sizeValue = EEPROM.read(EEPROM_DATA_START + 45);
+    if (sizeValue < 1 || sizeValue > 4) {
+      sizeValue = 1;
+      saveSingleModeToEEPROM(45, 1);
+    }
+    fireSize = sizeValue;
+    uint8_t gravValue = EEPROM.read(EEPROM_DATA_START + 46);
+    if (gravValue > 8) {
+      gravValue = 0;
+      saveSingleModeToEEPROM(46, 0);
+    }
+    fireGravity = gravValue;
+    uint8_t colorValue = EEPROM.read(EEPROM_DATA_START + 47);
+    if (colorValue > 8) {
+      colorValue = 8;
+      saveSingleModeToEEPROM(47, 8);
+    }
+    fireColor = colorValue;
   }
   
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
@@ -1801,7 +1849,7 @@ FLASHMEM void showEtcMenu() {
       CRGB indicatorColor = currentMenuParentTextColor();
       const bool etcValuePage =
           (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
-           mainSetting == 52);
+           mainSetting == 52 || mainSetting == 55);
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
       Encoder[2].writeRGBCode(etcValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -2176,6 +2224,68 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         bool enabled = getChildLockEnabled();
         drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
         drawIndicator('L', enabled ? 'G' : 'R', 3);
+      }
+      break;
+
+    case 55: // FIRE - enc1 size, enc2 count, enc3 voice (click: gravity, colour)
+      {
+        extern uint8_t fireVoice;
+        extern uint8_t fireLevel;
+        extern uint8_t fireSize;
+        extern uint8_t fireGravity;
+        extern uint8_t fireColor;
+        extern uint8_t fireFocus;
+        extern CRGB col[];
+        const CRGB tc = currentMenuParentTextColor();
+        drawText("FIRE", 2, 10, tc);
+        clearTextArea(1, 3, (int)maxX);
+        char num[4];
+        snprintf(num, sizeof(num), "%u", fireSize);
+        drawText(num, 1, 3, CRGB(255, 140, 20));
+        snprintf(num, sizeof(num), "%u", fireLevel);
+        drawText(num, (int)maxX >= 24 ? 8 : 5, 3, CRGB(255, 180, 60));
+        const bool wide = (int)maxX >= 24;
+        int voiceX = wide ? 26 : 12;
+        if (wide) {
+          snprintf(num, sizeof(num), "%u", fireGravity);
+          drawText(num, 14, 3, fireFocus == 1 ? CRGB(220, 220, 220) : CRGB(70, 70, 70));
+          snprintf(num, sizeof(num), "%u", fireColor);
+          drawText(num, 20, 3, fireFocus == 2 ? CRGB(255, 220, 120) : CRGB(80, 70, 30));
+        }
+        if (!wide && fireFocus != 0) {
+          snprintf(num, sizeof(num), "%u", fireFocus == 1 ? fireGravity : fireColor);
+          drawText(num, 12, 3, fireFocus == 1 ? CRGB(220, 220, 220) : CRGB(255, 220, 120));
+        } else if (!fireVoice) {
+          drawText(wide ? "OFF" : "-", voiceX, 3, CRGB(255, 0, 0));
+        } else if (fireVoice == 15) {
+          drawText(wide ? "ALL" : "A", voiceX, 3, CRGB(255, 220, 120));
+        } else {
+          snprintf(num, sizeof(num), "%u", fireVoice);
+          int vx = voiceX;
+          if (!wide && fireVoice >= 10) vx = 10;
+          drawText(num, vx, 3, col[fireVoice]);
+        }
+        int half = (int)maxX / 2;
+        if (half < 1) half = 1;
+        int gDots = (fireGravity * half) / 8;
+        int cDots = (fireColor * ((int)maxX - half)) / 8;
+        for (int x = 1; x <= (int)maxX; x++) {
+          CRGB bar = CRGB(0, 0, 0);
+          if (x <= half && x <= gDots) {
+            bar = CRGB(180, 180, 180);
+            if (fireFocus == 1) bar = CRGB(255, 255, 255);
+          } else if (x > half && (x - half) <= cDots) {
+            bar = CRGB(140, 90, 20);
+            if (fireFocus == 2) bar = CRGB(255, 200, 60);
+          }
+          light(x, 8, bar);
+        }
+        drawIndicator('L', 'O', 1);
+        drawIndicator('L', 'O', 2);
+        char focusCode = fireVoice ? 'G' : 'R';
+        if (fireFocus == 1) focusCode = 'W';
+        else if (fireFocus == 2) focusCode = 'Y';
+        drawIndicator('L', focusCode, 3);
       }
       break;
 
@@ -2585,6 +2695,12 @@ FLASHMEM void drawGenreSelection() {
   drawText(genres[genreType], 2, 3, genreColors[genreType]);
 }
 
+void cycleFireMenuFocus() {
+  extern uint8_t fireFocus;
+  fireFocus = (uint8_t)((fireFocus + 1) % 3);
+  menuRequestFullRedraw();
+}
+
 FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   static bool recMenuFirstEnter = true;
   static bool aiMenuFirstEnter = true;
@@ -2616,7 +2732,9 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     lastStereoCh = -1;
     infoPageFirstEnter = true;
     lastPongSpeed = -1;
-    if (lastSetting == 50 || lastSetting == 53) {
+    if (lastSetting == 50 || lastSetting == 53 || lastSetting == 55) {
+      extern uint8_t fireFocus;
+      if (lastSetting == 55) fireFocus = 0;
       Encoder[0].writeMin((int32_t)1);
       Encoder[0].writeMax((int32_t)1);
       Encoder[0].writeCounter((int32_t)1);
@@ -3056,6 +3174,95 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = encVal;
         lastSpkrEnc = encVal;
         saveSingleModeToEEPROM(27, (int8_t)(encVal ? 1 : 0));
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 55: { // FIRE - enc1 size 1–4, enc2 count 1–25, enc3 voice / gravity / colour
+      static const uint8_t kFireChoices[] = {0, 15, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14};
+      static int lastFireEnc = -1;
+      static int lastFireLevel = -1;
+      static int lastFireSize = -1;
+      static int lastFireFocus = -1;
+      extern uint8_t fireVoice;
+      extern uint8_t fireLevel;
+      extern uint8_t fireSize;
+      extern uint8_t fireGravity;
+      extern uint8_t fireColor;
+      extern uint8_t fireFocus;
+      int voiceIdx = 0;
+      for (int i = 0; i < 13; i++) {
+        if (kFireChoices[i] == fireVoice) voiceIdx = i;
+      }
+      int focusVal = voiceIdx;
+      int focusMax = 12;
+      if (fireFocus == 1) {
+        focusVal = constrain((int)fireGravity, 0, 8);
+        focusMax = 8;
+      } else if (fireFocus == 2) {
+        focusVal = constrain((int)fireColor, 0, 8);
+        focusMax = 8;
+      }
+      Encoder[0].writeMin((int32_t)1);
+      Encoder[0].writeMax((int32_t)4);
+      Encoder[1].writeMin((int32_t)1);
+      Encoder[1].writeMax((int32_t)25);
+      Encoder[2].writeMin((int32_t)0);
+      Encoder[2].writeMax((int32_t)focusMax);
+      if (menuFirstEnter || (int)fireFocus != lastFireFocus) {
+        int size = constrain((int)fireSize, 1, 4);
+        int level = constrain((int)fireLevel, 1, 25);
+        fireSize = (uint8_t)size;
+        fireLevel = (uint8_t)level;
+        Encoder[0].writeCounter((int32_t)size);
+        currentMode->pos[0] = (unsigned int)size;
+        lastFireSize = size;
+        Encoder[1].writeCounter((int32_t)level);
+        currentMode->pos[1] = (unsigned int)level;
+        lastFireLevel = level;
+        Encoder[2].writeCounter((int32_t)focusVal);
+        currentMode->pos[2] = (unsigned int)focusVal;
+        lastFireEnc = focusVal;
+        lastFireFocus = fireFocus;
+        menuFirstEnter = false;
+      }
+      if ((int)currentMode->pos[0] != lastFireSize) {
+        int size = constrain((int)currentMode->pos[0], 1, 4);
+        fireSize = (uint8_t)size;
+        Encoder[0].writeCounter((int32_t)size);
+        currentMode->pos[0] = (unsigned int)size;
+        lastFireSize = size;
+        saveSingleModeToEEPROM(45, (int8_t)fireSize);
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      if ((int)currentMode->pos[1] != lastFireLevel) {
+        int level = constrain((int)currentMode->pos[1], 1, 25);
+        fireLevel = (uint8_t)level;
+        Encoder[1].writeCounter((int32_t)level);
+        currentMode->pos[1] = (unsigned int)level;
+        lastFireLevel = level;
+        saveSingleModeToEEPROM(44, (int8_t)fireLevel);
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      if ((int)currentMode->pos[2] != lastFireEnc) {
+        int raw = constrain((int)currentMode->pos[2], 0, focusMax);
+        if (fireFocus == 1) {
+          fireGravity = (uint8_t)raw;
+          saveSingleModeToEEPROM(46, (int8_t)fireGravity);
+        } else if (fireFocus == 2) {
+          fireColor = (uint8_t)raw;
+          saveSingleModeToEEPROM(47, (int8_t)fireColor);
+        } else {
+          fireVoice = kFireChoices[raw];
+          saveSingleModeToEEPROM(43, (int8_t)fireVoice);
+        }
+        Encoder[2].writeCounter((int32_t)raw);
+        currentMode->pos[2] = (unsigned int)raw;
+        lastFireEnc = raw;
         menuRequestFullRedraw();
         redrawMain(setting);
       }

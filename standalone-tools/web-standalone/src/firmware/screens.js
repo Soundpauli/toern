@@ -42,7 +42,7 @@ export const SUBS = {
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "CLMP", "SYNC", "PPQN"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
-  etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "CHLD", "RSET"],
+  etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "CHLD", "FIRE", "RSET"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
 
@@ -205,11 +205,153 @@ export function drawTriggers(matrix, s, now) {
   }
 }
 
+const FIRE_POOL = 25;
+const FIRE_FLIES = Array.from({ length: FIRE_POOL }, () => ({ x: 0, y: 0, drift: 1, life: 0, ch: 0 }));
+let fireSeenCol = 0;
+let fireSeenPage = 0;
+let fireTickAt = 0;
+let firePoolActive = false;
+
+function fireClear() {
+  if (!firePoolActive) return;
+  for (const f of FIRE_FLIES) f.life = 0;
+  firePoolActive = false;
+}
+
+function fireLiving() {
+  let n = 0;
+  for (const f of FIRE_FLIES) if (f.life) n++;
+  return n;
+}
+
+function fireOldestSlot() {
+  let slot = 0;
+  let best = 255;
+  for (let i = 0; i < FIRE_POOL; i++) {
+    if (!FIRE_FLIES[i].life) return i;
+    if (FIRE_FLIES[i].life < best) { best = FIRE_FLIES[i].life; slot = i; }
+  }
+  return slot;
+}
+
+function fireTrim(cap) {
+  for (;;) {
+    let living = 0;
+    let oldest = -1;
+    let best = 255;
+    for (let i = 0; i < FIRE_POOL; i++) {
+      if (!FIRE_FLIES[i].life) continue;
+      living++;
+      if (FIRE_FLIES[i].life < best) { best = FIRE_FLIES[i].life; oldest = i; }
+    }
+    if (living <= cap || oldest < 0) return;
+    FIRE_FLIES[oldest].life = 0;
+  }
+}
+
+function firePixel(matrix, x, y, playX, color) {
+  if (x < 1 || x > COLS || y < 1 || y >= ROWS || x === playX) return;
+  matrix.light(x, y, color);
+}
+
+function fireSpawnOne(x, y, ch, n) {
+  if (ch < 1 || ch > 14) return;
+  const drift = n & 1 ? 1 : -1;
+  let nx = x + 1;
+  let ny = y - drift;
+  if (nx > COLS) nx = x;
+  if (ny < 1) ny = 1;
+  if (ny >= ROWS) ny = ROWS - 1;
+  if (nx < 1) nx = 1;
+  if (ny < 1 || ny >= ROWS) return;
+  const f = FIRE_FLIES[fireOldestSlot()];
+  f.x = nx;
+  f.y = ny;
+  f.drift = drift;
+  f.life = 10;
+  f.ch = ch;
+  firePoolActive = true;
+}
+
+function fireSpawnColumn(hits) {
+  const cap = Math.max(1, Math.min(FIRE_POOL, hits.level | 0));
+  if (!hits.n) return;
+  const room = cap - fireLiving();
+  let born = room > 0 ? room : Math.floor((cap + 3) / 4);
+  if (born < 1) born = 1;
+  if (born > cap) born = cap;
+  for (let n = 0; n < born; n++) fireSpawnOne(hits.x[n % hits.n], hits.y[n % hits.n], hits.ch[n % hits.n], n);
+  fireTrim(cap);
+}
+
+function fireDraw(matrix, s, playX) {
+  if (!firePoolActive) return;
+  if (!s.fireVoice || !s.fireLevel) {
+    fireClear();
+    return;
+  }
+  const now = performance.now();
+  const step = now - fireTickAt >= 32;
+  if (step) fireTickAt = now;
+  const col = pal(s).col;
+  const gravPeriod = s.fireGravity ? 9 - (s.fireGravity | 0) : 0;
+  const size = s.fireSize || 1;
+  const colorness = s.fireColor == null ? 8 : s.fireColor;
+  let any = false;
+  for (const f of FIRE_FLIES) {
+    if (!f.life) continue;
+    if (step) {
+      f.life--;
+      if ((f.life & 1) === 0) {
+        f.x += 1;
+        if ((f.life & 2) === 0) f.y -= f.drift;
+      }
+      if (gravPeriod > 0 && f.life % gravPeriod === 0) f.x -= 1;
+    }
+    if (!f.life || f.y < 1 || f.y >= ROWS || f.x < 1 || f.x > COLS || f.ch < 1 || f.ch > 14) {
+      f.life = 0;
+      continue;
+    }
+    any = true;
+    if (f.x === playX) continue;
+    const voice = col[f.ch] || [255, 160, 40];
+    const base = colorness <= 0 ? [230, 230, 230] : colorness >= 8 ? voice : blend([230, 230, 230], voice, colorness * 32);
+    const scaled = base.map((v) => Math.round(v * f.life * 25 / 255));
+    const dim = (amt) => scaled.map((v) => Math.round(v * amt));
+    if (size >= 2) {
+      firePixel(matrix, f.x, f.y - 1, playX, dim(0.43));
+      firePixel(matrix, f.x, f.y + 1, playX, dim(0.43));
+    }
+    if (size >= 3) firePixel(matrix, f.x + 1, f.y, playX, dim(0.31));
+    if (size >= 4) {
+      firePixel(matrix, f.x + 1, f.y - 1, playX, dim(0.2));
+      firePixel(matrix, f.x + 1, f.y + 1, playX, dim(0.2));
+    }
+    if (f.life > 5 && f.x > 1) firePixel(matrix, f.x - 1, f.y, playX, dim(0.25));
+    firePixel(matrix, f.x, f.y, playX, scaled);
+  }
+  if (!any) firePoolActive = false;
+}
+
 export function drawTimer(matrix, s) {
   const page = Math.floor((s.beat - 1) / COLS) + 1;
   const voiceGrid = s.voiceMode && s.playing && s.pmode !== 2;
-  if (!voiceGrid && page !== s.GLOB.edit) return;
+  if (!voiceGrid && page !== s.GLOB.edit) {
+    fireClear();
+    return;
+  }
   const x = ((s.beat - 1) % COLS) + 1;
+  const fireOn = s.fireVoice && s.fireLevel;
+  if (!fireOn) fireClear();
+  let fresh = false;
+  const hits = { x: [], y: [], ch: [], n: 0, level: s.fireLevel | 0 };
+  if (fireOn) {
+    fresh = x !== fireSeenCol || page !== fireSeenPage;
+    if (fresh) {
+      fireSeenCol = x;
+      fireSeenPage = page;
+    }
+  }
   for (let y = 1; y < ROWS; y++) {
     let ch = 0;
     if (voiceGrid && s.voiceOwnedStep) {
@@ -218,8 +360,21 @@ export function drawTimer(matrix, s) {
     } else ch = s.note[(s.GLOB.edit - 1) * COLS + x][y].channel;
     matrix.light(x, y, [28, 0, 0]);
     if (ch > 0 && !s.mute[ch]) {
-      if (!s.GLOB.singleMode || s.GLOB.currentChannel === ch) matrix.light(x, y, [255, 255, 255]);
+      const lit = !s.GLOB.singleMode || s.GLOB.currentChannel === ch;
+      if (lit) {
+        matrix.light(x, y, [255, 255, 255]);
+        if (fireOn && fresh && hits.n < 15 && (s.fireVoice === 15 || ch === s.fireVoice)) {
+          hits.x[hits.n] = x;
+          hits.y[hits.n] = y;
+          hits.ch[hits.n] = ch;
+          hits.n++;
+        }
+      }
     } else if (ch > 0 && !s.GLOB.singleMode) matrix.light(x, y, [0, 0, 0]);
+  }
+  if (fireOn) {
+    if (fresh && hits.n) fireSpawnColumn(hits);
+    fireDraw(matrix, s, x);
   }
 }
 
@@ -443,6 +598,38 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     }
     matrix.drawIndicator("L", "Y", 2);
     matrix.drawIndicator("L", "W", 3);
+    return;
+  }
+  if (s.mode === "etc" && s.subIndex === 8) {
+    const value = s.subValue(s.mode, s.subIndex);
+    const wide = COLS >= 24;
+    const focus = s.fireFocus | 0;
+    let voiceColor = value.color;
+    if (value.text !== "OFF" && value.text !== "ALL") voiceColor = pal(s).col[Number(value.text)] || value.color;
+    matrix.drawText(String(s.fireSize || 1), 1, 3, [255, 140, 20]);
+    matrix.drawText(String(s.fireLevel || 1), wide ? 8 : 5, 3, [255, 180, 60]);
+    if (wide) {
+      matrix.drawText(String(s.fireGravity || 0), 14, 3, focus === 1 ? [220, 220, 220] : [70, 70, 70]);
+      matrix.drawText(String(s.fireColor == null ? 8 : s.fireColor), 20, 3, focus === 2 ? [255, 220, 120] : [80, 70, 30]);
+      matrix.drawText(value.text, 26, 3, voiceColor);
+    } else if (focus === 1) {
+      matrix.drawText(String(s.fireGravity || 0), 12, 3, [220, 220, 220]);
+    } else if (focus === 2) {
+      matrix.drawText(String(s.fireColor == null ? 8 : s.fireColor), 12, 3, [255, 220, 120]);
+    } else {
+      const label = value.text === "ALL" ? "A" : value.text === "OFF" ? "-" : value.text;
+      matrix.drawText(label, label.length > 1 ? 10 : 12, 3, voiceColor);
+    }
+    const half = Math.max(1, Math.floor(COLS / 2));
+    const gDots = Math.round(((s.fireGravity || 0) * half) / 8);
+    const cDots = Math.round(((s.fireColor == null ? 8 : s.fireColor) * (COLS - half)) / 8);
+    for (let x = 1; x <= COLS; x++) {
+      if (x <= half && x <= gDots) matrix.light(x, 8, focus === 1 ? [255, 255, 255] : [180, 180, 180]);
+      else if (x > half && x - half <= cDots) matrix.light(x, 8, focus === 2 ? [255, 200, 60] : [140, 90, 20]);
+    }
+    matrix.drawIndicator("L", "O", 1);
+    matrix.drawIndicator("L", "O", 2);
+    matrix.drawIndicator("L", focus === 1 ? "W" : focus === 2 ? "Y" : value.text === "OFF" ? "R" : "G", 3);
     return;
   }
   const value = s.subValue(s.mode, s.subIndex);
@@ -744,8 +931,8 @@ export function renderFrame(matrix, s, now) {
     if (s.solo) {
       matrix.setRing(1, [255, 255, 255]);
       matrix.setRing(2, [0, 0, 0]);
-      matrix.setRing(3, [255, 0, 255]);
-      matrix.setRing(4, [0, 0, 0]);
+      matrix.setRing(3, [0, 255, 0]);
+      matrix.setRing(4, [255, 0, 255]);
     }
     if (s.fastRecActive) {
       matrix.setRing(3, [255, 40, 0]);

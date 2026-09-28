@@ -58,6 +58,7 @@ const SUB_VALUES = {
     { opts: ["0", "1", "2"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["--"], colors: [[120, 120, 0]], codes: ["Y"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
+    { opts: ["OFF", "ALL", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [255, 220, 120], [255, 80, 20]], codes: ["R", "Y", "O"] },
     { opts: ["SD", "EFX", "FULL", "FILE", "PACK", "ASAV"], colors: [[120, 60, 0]], codes: ["O"] },
   ],
 };
@@ -77,7 +78,7 @@ export function createDevice(matrix, statusEl, rings) {
   const invOf = Array(16).fill(false);
   const mute = Array(16).fill(false);
   const song = Array(64).fill(0);
-  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(7).fill(0), vol: Array(7).fill(0), etc: Array(9).fill(0) };
+  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(7).fill(0), vol: Array(7).fill(0), etc: Array(10).fill(0) };
   // Firmware EEPROM defaults: TRIG=SENS, CLR=ON, FLOW=ON
   subPick.recs[3] = 1;
   subPick.recs[4] = 1;
@@ -94,7 +95,7 @@ export function createDevice(matrix, statusEl, rings) {
     vel: { v: 8, p: 5, c: 1, vol: 16, backSingle: false }, okAt: 0,
     filterTouch: 0, filterTouchAt: 0, filterFlash: "", filterFlashAt: 0, filterPage: 0,
     drawBaseColorMode: true, monitor: 0, loopLength: 0, simpleNotes: false, clockInt: true,
-    flow: true, voiceMode: false, voiceLen: Array(16).fill(0), voiceMask: Array(16).fill(0), voicePages: 1,
+    flow: true, voiceMode: false, fireVoice: 0, fireLevel: 8, fireSize: 1, fireGravity: 0, fireColor: 8, fireFocus: 0, voiceLen: Array(16).fill(0), voiceMask: Array(16).fill(0), voicePages: 1,
     voiceLoop: Array(16).fill(1), voiceOffset: Array(16).fill(0), voiceEdit: Array(16).fill(0),
     pmode: 0, ctrlVol: false, prevMode: 0, drawR: false, cursorType: 0,
     scheme: 0, childLock: false, copyArmed: false, solo: false, soloSaved: null, soloArrow: "", soloArrowAt: 0,
@@ -446,7 +447,7 @@ export function createDevice(matrix, statusEl, rings) {
     applyMix();
   }
   function runReset() {
-    const opt = subPick.etc[8] || 0;
+    const opt = subPick.etc[9] || 0;
     if (opt === 0) refreshBrowse();
     else if (opt === 1) resetEffects();
     else if (opt === 2) resetFull();
@@ -724,6 +725,7 @@ export function createDevice(matrix, statusEl, rings) {
         vol: subPick.vol.slice(), etc: subPick.etc.slice(),
       },
       mainVol: s.mainVol, gain: s.gain, prevVol: s.prevVol, stereo: s.stereo,
+      fireLevel: s.fireLevel, fireSize: s.fireSize, fireGravity: s.fireGravity, fireColor: s.fireColor,
       micGain: s.micGain, lineInLevel: s.lineInLevel,
       bpm: s.bpm, clockInt: s.clockInt, muteMask: s.muteMask, packSlot: s.packSlot, ledBrightness: s.ledBrightness,
       deviceChosen,
@@ -742,6 +744,13 @@ export function createDevice(matrix, statusEl, rings) {
       data.subPick.look = data.subPick.look.slice();
       data.subPick.look.splice(5, 0, 0);
     }
+    if (Array.isArray(data.subPick?.etc) && data.subPick.etc.length === 9 && subPick.etc.length === 10) {
+      data.subPick.etc = data.subPick.etc.slice();
+      data.subPick.etc.splice(8, 0, 0);
+    }
+    if (data.fireLevel == null && Array.isArray(data.subPick?.etc) && data.subPick.etc[8] > 0) {
+      data.subPick.etc[8] += 1;
+    }
     for (const mode of Object.keys(subPick)) {
       const saved = data.subPick?.[mode];
       if (!Array.isArray(saved)) continue;
@@ -750,6 +759,10 @@ export function createDevice(matrix, statusEl, rings) {
         if (Number.isFinite(saved[i])) subPick[mode][i] = clamp(saved[i], 0, (spec?.opts.length || 1) - 1);
       }
     }
+    if (Number.isFinite(data.fireLevel)) s.fireLevel = data.fireLevel < 1 ? 8 : clamp(data.fireLevel, 1, 25);
+    if (Number.isFinite(data.fireSize)) s.fireSize = clamp(data.fireSize, 1, 4);
+    if (Number.isFinite(data.fireGravity)) s.fireGravity = clamp(data.fireGravity, 0, 8);
+    if (Number.isFinite(data.fireColor)) s.fireColor = clamp(data.fireColor, 0, 8);
     if (Number.isFinite(data.mainVol)) s.mainVol = clamp(data.mainVol, 0, 100);
     if (Number.isFinite(data.gain)) s.gain = clamp(Math.round(data.gain * 10) / 10, 0, 2);
     if (Number.isFinite(data.prevVol)) s.prevVol = clamp(data.prevVol, 0, 16);
@@ -864,6 +877,9 @@ export function createDevice(matrix, statusEl, rings) {
     if (mode === "etc") {
       if (index === 5) s.scheme = subPick.etc[5];
       if (index === 7) s.childLock = subPick.etc[7] === 1;
+      const fireChoices = [0, 15, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14];
+      const fireIdx = subPick.etc[8] | 0;
+      s.fireVoice = fireChoices[fireIdx] ?? 0;
     }
     if (mode === "vol") {
       s.stereo = subPick.vol[4] || 0;
@@ -974,7 +990,8 @@ export function createDevice(matrix, statusEl, rings) {
         invOf[ch] = dir < 0;
         s.soloArrow = dir < 0 ? "<<" : ">>";
         s.soloArrowAt = performance.now();
-      } else if (enc === 2 && ch >= 1 && ch <= 8) stepRandom(dir);
+      } else if (enc === 2) nudgeFast(dir);
+      else if (enc === 3 && ch >= 1 && ch <= 8) stepRandom(dir);
       return;
     }
     if (s.mode === "draw" || s.mode === "single") {
@@ -1049,6 +1066,12 @@ export function createDevice(matrix, statusEl, rings) {
       if (enc === 2) s.subIndex = clamp(s.subIndex + dir, 0, SUBS.pat.length - 1);
       else if (enc === 3) s.genreLength = clamp(s.genreLength + dir, 1, PAGES);
       return;
+    }
+    if (s.mode === "etc" && s.subIndex === 8) {
+      if (enc === 0) { s.fireSize = clamp((s.fireSize || 1) + dir, 1, 4); saveEeprom(); return; }
+      if (enc === 1) { s.fireLevel = clamp((s.fireLevel || 1) + dir, 1, 25); saveEeprom(); return; }
+      if (enc === 2 && s.fireFocus === 1) { s.fireGravity = clamp((s.fireGravity | 0) + dir, 0, 8); saveEeprom(); return; }
+      if (enc === 2 && s.fireFocus === 2) { s.fireColor = clamp((s.fireColor == null ? 8 : s.fireColor) + dir, 0, 8); saveEeprom(); return; }
     }
     if (SUBS[s.mode] && enc === 3) s.subIndex = clamp(s.subIndex + dir, 0, SUBS[s.mode].length - 1);
     if (SUBS[s.mode] && enc === 2) {
@@ -1221,7 +1244,8 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "song" && enc === 0) song[s.songPos - 1] = 0;
     if (s.mode === "song" && (enc === 1 || enc === 3)) song[s.songPos - 1] = s.songPattern;
     if (s.mode === "song" && enc === 2) toggleSong();
-    if (s.mode === "etc" && s.subIndex === 8 && enc === 3) { runReset(); return; }
+    if (s.mode === "etc" && s.subIndex === 8 && enc === 2) { s.fireFocus = ((s.fireFocus | 0) + 1) % 3; return; }
+    if (s.mode === "etc" && s.subIndex === 9 && enc === 3) { runReset(); return; }
     if (enc === 3 && s.mode === "menu") openMenuPage();
   }
 

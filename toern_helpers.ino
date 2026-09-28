@@ -3957,6 +3957,11 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 40, 10);   // mixGainSynth (unity)
   EEPROM.write(EEPROM_DATA_START + 41, 10);   // mixGainMaster (unity)
   EEPROM.write(EEPROM_DATA_START + 42, 0);     // voiceMode (OFF)
+  EEPROM.write(EEPROM_DATA_START + 43, 0);     // fireVoice (OFF)
+  EEPROM.write(EEPROM_DATA_START + 44, 8);     // fireLevel (8 particles)
+  EEPROM.write(EEPROM_DATA_START + 45, 1);     // fireSize (1 cell)
+  EEPROM.write(EEPROM_DATA_START + 46, 0);     // fireGravity (float up)
+  EEPROM.write(EEPROM_DATA_START + 47, 8);     // fireColor (full voice colour)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();

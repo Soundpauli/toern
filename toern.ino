@@ -463,6 +463,12 @@ bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
 bool voiceMode = false;          // VMOD: each channel loops its own pages
+uint8_t fireVoice = 0;           // ETC FIRE: 0 off, 15 all voices, else 1–8 / 11 / 13 / 14
+uint8_t fireLevel = 8;           // ETC FIRE: encoder 2 particle count, 1–25
+uint8_t fireSize = 1;            // ETC FIRE: encoder 1 particle size, 1–4
+uint8_t fireGravity = 0;         // ETC FIRE: 0 floats up, 8 falls hard
+uint8_t fireColor = 8;           // ETC FIRE: 0 white, 8 full voice colour
+uint8_t fireFocus = 0;           // encoder 3 edits 0 voice, 1 gravity, 2 colour
 uint8_t voicePageLen[16] = {0};  // highest page that contains this channel (0 = empty)
 uint16_t voicePageMask[16] = {0};
 uint8_t voiceModePages = 1;      // longest voice, at least 1
@@ -923,6 +929,7 @@ Mode *currentMode = &draw;
 Mode *oldMode = &draw;
 Mode *muteModeReturn = nullptr;
 bool muteModeActive = false;
+bool muteModeRingsDirty = false;  // rewrite solo encoder RGB once per enter / channel change
 bool muteModeReturnSingleState = false;
 int muteModeLastChannel = -1;
 int8_t muteModeArrowDirection = 0;
@@ -2016,11 +2023,25 @@ FLASHMEM void switchMode(Mode *newMode) {
         counterVal = 0;
         currentMode->pos[0] = 0;
       } else if (currentMode == &subpatternMode && muteModeActive && i == 2) {
+        // 3rd encoder stays the fast filter while solo (0200) is held.
+        FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
+        int page, slot;
+        int val = 0;
+        if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
+          val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
+        }
+        val = constrain(val, 0, (int)maxfilterResolution);
+        minVal = 0;
+        maxVal = (int32_t)maxfilterResolution;
+        counterVal = val;
+        currentMode->pos[2] = (unsigned int)val;
+      } else if (currentMode == &subpatternMode && muteModeActive && i == 3) {
+        // Last encoder scrolls the random sample list (was the 3rd encoder).
         maxVal = 1;
         minVal = -1;
         counterVal = 0;
-        currentMode->pos[2] = 0;
-      } else if (i == 2 && (currentMode == &draw || currentMode == &singleMode) && oldMode == &filterMode) {
+        currentMode->pos[3] = 0;
+      } else if (i == 2 && (currentMode == &draw || currentMode == &singleMode) && (oldMode == &filterMode || oldMode == &subpatternMode)) {
         // When exiting filtermode to draw/singleMode, preserve the fastfilter value in encoder 2
         FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
         int page, slot;
@@ -2377,19 +2398,20 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   if (!childLockEnabled && GLOB.y != 16 && (currentMode == &draw || currentMode == &singleMode || currentMode == &noteShift) && match_buttons(currentButtonStates, 0, 2, 0, 0) && was_buttons_0000(oldButtons)) {  // "0200" - must be 0000 before
     if (!muteModeActive) {
       muteModeActive = true;
+      muteModeRingsDirty = true;
       muteModeReturn = currentMode;
       muteModeReturnSingleState = GLOB.singleMode;
       switchMode(&subpatternMode);
-      // Lazy playlist only — no preview until 3rd encoder moves.
+      // Lazy playlist only — no preview until the last encoder moves.
       soloRandomRenewPlaylist();
     }
   }
 
-  // Load last random preview: 3rd encoder short press while mute overlay is open.
-  // 0210 = still holding encoder 2 (normal). 0010 = hold state already idle (fallback).
+  // Load last random preview: last encoder short press while mute overlay is open.
+  // 0201 = still holding encoder 2. 0001 = hold state already idle (fallback).
   if (currentMode == &subpatternMode && muteModeActive &&
-      (match_buttons(currentButtonStates, 0, 2, 1, 0) ||
-       match_buttons(currentButtonStates, 0, 0, 1, 0))) {
+      (match_buttons(currentButtonStates, 0, 2, 0, 1) ||
+       match_buttons(currentButtonStates, 0, 0, 0, 1))) {
     if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
       soloRandomLoadLastPreview();
     }
@@ -2567,7 +2589,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
-        (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48)));
+        (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
     if (mainSetting != 15 && !encoder2ValuePage) {
       switchMenu(mainSetting);
     }
@@ -2866,6 +2888,12 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
     if (inVolSubmenu && mainSetting == 53) {
       toggleMixGainEnc3Target();
+      return;
+    }
+    extern bool inEtcSubmenu;
+    if (inEtcSubmenu && mainSetting == 55) {
+      extern void cycleFireMenuFocus();
+      cycleFireMenuFocus();
       return;
     }
   }
@@ -4380,10 +4408,10 @@ void checkEncoders() {
         }
       }
       currentMode->pos[0] = muteModeEncoderValue;
-    } else if (currentMode == &subpatternMode && muteModeActive && i == 2) {
+    } else if (currentMode == &subpatternMode && muteModeActive && i == 3) {
       if (rawValue != 0) {
         int delta = (rawValue > 0) ? 1 : -1;
-        if (allowEncWrite) Encoder[2].writeCounter((int32_t)0);
+        if (allowEncWrite) Encoder[3].writeCounter((int32_t)0);
         rawValue = 0;
         if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
           soloRandomArrowDirection = (int8_t)delta;
@@ -4391,7 +4419,7 @@ void checkEncoders() {
           soloRandomStepAndPreview(delta);
         }
       }
-      currentMode->pos[2] = 0;
+      currentMode->pos[3] = 0;
     } else if (currentMode == &set_Wav) {
       // SET_WAV encoder swap:
       // - Physical Encoder[2] rotation is unused
@@ -4607,34 +4635,6 @@ void checkEncoders() {
         voiceApplyEditPage((int)GLOB.currentChannel);
       }
     }
-
-  // --- update value from encoder2 in draw mode for all SettingArray types ---
-  if (currentMode == &draw) {
-    FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
-    int page, slot;
-    if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
-      int encVal = currentMode->pos[2];
-      if (encVal != lastEncVal[GLOB.currentChannel]) {
-        lastEncVal[GLOB.currentChannel] = encVal;
-        if (getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx) != encVal) {
-          setDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx, encVal);
-          switch (dft.arr) {
-            case ARR_FILTER:
-              setFilters(dft.idx, GLOB.currentChannel, false);
-              break;
-            case ARR_SYNTH:
-              if (GLOB.currentChannel == 11) updateSynthVoice(11);
-              break;
-            case ARR_PARAM:
-              setParams(dft.idx, GLOB.currentChannel);
-              break;
-            default:
-              break;
-          }
-        }
-      }
-    }
-  }
 
     // Recovery mechanism: Auto-reset stuck paintMode/unpaintMode after timeout
     static unsigned long paintModeSetTime = 0;
@@ -5031,6 +5031,36 @@ void checkEncoders() {
     }
 
     filtercheck();
+  }
+
+  // Encoder 3 (index 2) is the fast filter in draw, and again while solo (0200) is held.
+  // This stays outside the draw/single block: solo's current mode is subpatternMode.
+  if (currentMode == &draw || (muteModeActive && currentMode == &subpatternMode)) {
+    FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
+    int page, slot;
+    if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
+      int encVal = currentMode->pos[2];
+      if (encVal != lastEncVal[GLOB.currentChannel]) {
+        lastEncVal[GLOB.currentChannel] = encVal;
+        if (getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx) != encVal) {
+          setDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx, encVal);
+          switch (dft.arr) {
+            case ARR_FILTER:
+              setFilters(dft.idx, GLOB.currentChannel, false);
+              break;
+            case ARR_SYNTH:
+              if (GLOB.currentChannel == 11) updateSynthVoice(11);
+              break;
+            case ARR_PARAM:
+              setParams(dft.idx, GLOB.currentChannel);
+              break;
+            default:
+              break;
+          }
+        }
+      }
+    }
+    if (muteModeActive) filtercheck();
   }
 }
 
@@ -8880,17 +8910,29 @@ FLASHMEM void switchSubPattern() {
 
   drawIndicator('L', 'W', 0);
   extern int drawMode;
-  if (drawMode == 0) {
-    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-  } else {
-    Encoder[0].writeRGBCode(0x000000);
+  // Solo overlay: paint encoder rings once per enter/channel. Rewriting RGB every
+  // frame over I2C was starving the bus (same class of glitch as unchecked ctrl-volume writes).
+  static uint8_t soloRingCh = 255;
+  static int8_t soloRingDrawMode = -1;
+  const uint8_t chNow = (uint8_t)GLOB.currentChannel;
+  const bool ringsDirty = muteModeRingsDirty || (soloRingCh != chNow) || (soloRingDrawMode != (int8_t)drawMode);
+  if (ringsDirty) {
+    muteModeRingsDirty = false;
+    soloRingCh = chNow;
+    soloRingDrawMode = (int8_t)drawMode;
+    if (drawMode == 0) {
+      Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+    } else {
+      Encoder[0].writeRGBCode(0x000000);
+    }
+    CRGB whiteColor = getIndicatorColor('W');
+    Encoder[0].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+    Encoder[1].writeRGBCode(0x000000);
+    Encoder[2].writeRGBCode(0x00FF00);  // Fast filter, same as draw
+    Encoder[3].writeRGBCode(0xFF00FF);  // Pink: random sample on the last encoder
   }
-  CRGB whiteColor = getIndicatorColor('W');
-  Encoder[0].writeRGBCode(whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
-  Encoder[1].writeRGBCode(0x000000);
-  Encoder[2].writeRGBCode(0xFF00FF);  // Pink for random sample preview
-  drawIndicator('L', 'P', 3);
-  Encoder[3].writeRGBCode(0x000000);
+  drawIndicator('L', 'G', 3, false, false);
+  drawIndicator('L', 'P', 4, false, false);
 
   // Draw fast-filter overlay when active (same as draw mode)
   if (filterDrawActive) {

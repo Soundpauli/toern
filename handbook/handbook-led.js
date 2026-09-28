@@ -309,7 +309,7 @@
   function etcSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
     m.clear();
     largeInd4Parent(m, 14);
-    drawSubmenuDots16(m, pageIdx, 9, 14);
+    drawSubmenuDots16(m, pageIdx, 10, 14);
     const tc = menuTextFromCol(14);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc1) m.indL(1, enc1);
@@ -963,18 +963,25 @@
       etcSubFrame(m, 6, "BATT", "", "", "");
       drawText(m, "78%", 2, 3, 0, 255, 0);
     },
+    et_fire(m) {
+      etcSubFrame(m, 8, "FIRE", "O", "O", "G");
+      drawText(m, "1", 1, 3, 255, 140, 20);
+      drawText(m, "8", 5, 3, 255, 180, 60);
+      drawText(m, "A", 12, 3, 255, 220, 120);
+      for (let x = 9; x <= 16; x++) m.set(x, 8, 140, 90, 20);
+    },
     et_rset(m) {
-      etcSubFrame(m, 8, "RSET", "", "", "O");
+      etcSubFrame(m, 9, "RSET", "", "", "O");
       for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "SD", 2, 3, 255, 140, 0);
     },
     et_rset_efx(m) {
-      etcSubFrame(m, 8, "RSET", "", "", "O");
+      etcSubFrame(m, 9, "RSET", "", "", "O");
       for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "EFX", 2, 3, 255, 100, 0);
     },
     et_rset_full(m) {
-      etcSubFrame(m, 8, "RSET", "", "", "O");
+      etcSubFrame(m, 9, "RSET", "", "", "O");
       for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "FULL", 2, 3, 255, 60, 0);
     },
