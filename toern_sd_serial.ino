@@ -916,11 +916,16 @@ void sdSerialServerPollNeedSdHint() {
   if (sdSerActive) return;
   sdSerExpireClient();
 
-  // Don't steal binary color protocols (COLR/BRIT/SAVE) — those run on ETC→COLR.
+  // Only defer to the color protocol while Menu → ETC → COLR is open.
+  // Elsewhere a leftover 'C'/'B'/'S' must not block PING/GETPAT/LIST forever.
+  extern bool inEtcSubmenu;
+  extern int getCurrentMenuMainSetting();
+  const bool onColr = inEtcSubmenu && (getCurrentMenuMainSetting() == 41);
+
   while (Serial.available()) {
     int peek = Serial.peek();
     if (peek < 0) break;
-    if (peek == 'C' || peek == 'B' || peek == 'S') return;
+    if (onColr && (peek == 'C' || peek == 'B' || peek == 'S')) return;
 
     int b = Serial.read();
     if (b < 0) break;

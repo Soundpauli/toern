@@ -45,11 +45,9 @@ export function foldRow(midiNote, channel) {
 }
 
 /** Map MIDI notes onto the TŒRN grid (16 steps per page, rows 1–15).
- *  Transpose on: octave-fold into range and play from the grid row.
- *  Transpose off:
- *    - in-range → natural row, play from row (same as draw mode)
- *    - out-of-range → still draw at the folded row, but play the original
- *      MIDI pitch (like firmware MIDI-in), so they stay audible
+ *  Transpose on (default): octave-fold into range and play from the grid row.
+ *  Transpose off: still draw at the folded row, but keep the original MIDI pitch
+ *  (same idea as firmware MIDI → NOTE CLAMP = OFF).
  */
 export function mapNotesToGrid(notes, bpm = 120, subdivision = 16, timeOffset = 0, transpose = true) {
   if (!notes.length) return [];
@@ -69,19 +67,10 @@ export function mapNotesToGrid(notes, bpm = 120, subdivision = 16, timeOffset = 
     const folded = foldRow(note.note, channel);
     if (folded.row < 1 || folded.row > 15) continue;
 
-    let row;
-    let midiPitch = 255;
-    if (transpose) {
-      row = folded.row;
-      midiPitch = 255; // play folded pitch from row
-    } else if (inRange) {
-      row = natural;
-      midiPitch = 255; // play from row — do not use absolute MIDI (would drop ~2 oct)
-    } else {
-      // Show where it would land if transposed; play original pitch.
-      row = folded.row;
-      midiPitch = note.note;
-    }
+    // Always place on the folded row so out-of-range notes stay visible.
+    const row = folded.row;
+    // Transpose off → keep absolute pitch; on → play from row (midiPitch none).
+    const midiPitch = transpose ? 255 : note.note;
 
     const key = `${note.track}-${page}-${x}-${row - 1}`;
     if (occupied.has(key)) continue;
@@ -99,6 +88,7 @@ export function mapNotesToGrid(notes, bpm = 120, subdivision = 16, timeOffset = 
       page,
       play: true,
       outOfRange: !inRange,
+      transpose,
     });
   }
   return out;
@@ -122,8 +112,11 @@ export function filterOverlappingNotes(notes, priority = "highest") {
   return [...byCell.values()];
 }
 
-/** Build apply payload from an explicit track→channel map (values 1–8). */
-export function buildImportCells(gridNotes, trackToChannel) {
+/** Build apply payload from an explicit track→channel map (values 1–8).
+ *  Folding + pitch policy are decided here for the *assigned* voice so remapping
+ *  a track does not drop absolute pitches when transpose is off.
+ */
+export function buildImportCells(gridNotes, trackToChannel, transpose = true) {
   const toCh = trackToChannel instanceof Map
     ? trackToChannel
     : new Map(Object.entries(trackToChannel || {}).map(([id, ch]) => [Number(id), Number(ch)]));
@@ -134,12 +127,10 @@ export function buildImportCells(gridNotes, trackToChannel) {
     if (!ch) continue;
     const step = n.page * 16 + n.x + 1;
     const src = Number.isFinite(n.original) ? n.original : n.note;
-    const natural = src - 47 + ch;
-    const inRange = natural >= 1 && natural <= 15;
+    if (!Number.isFinite(src) || src < 0 || src > 127) continue;
+    const wantTranspose = n.transpose != null ? !!n.transpose : !!transpose;
     const folded = foldRow(src, ch);
-    // Absolute midiPitch from mapper = transpose-off out-of-range (MIDI-in style).
-    const preservePitch = n.midiPitch <= 127;
-    const row = preservePitch || !inRange ? folded.row : natural;
+    const row = folded.row;
     if (step < 1 || step > 256 || row < 1 || row > 15) continue;
     pages.add(n.page + 1);
     cells.push({
@@ -147,7 +138,8 @@ export function buildImportCells(gridNotes, trackToChannel) {
       row,
       channel: ch,
       velocity: Math.max(1, Math.min(127, Math.round(n.velocity * 127))),
-      midiPitch: preservePitch ? src : 255,
+      // Off: keep original pitch while still drawing at the folded row.
+      midiPitch: wantTranspose ? 255 : src,
       probability: 100,
     });
   }

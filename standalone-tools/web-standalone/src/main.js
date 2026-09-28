@@ -251,6 +251,7 @@ app.innerHTML = `
       </div>
       <div class="sd-toolbar">
         <span class="jump-readout" id="sd-status" role="status">offline</span>
+        <button type="button" class="jump-panel-reset" id="sd-disconnect" disabled>Disconnect</button>
       </div>
       <div class="sd-tabs" role="tablist" aria-label="Transfer">
         <button type="button" class="sd-tab" role="tab" id="sd-tab-pattern" aria-selected="true" aria-controls="sd-panel-pattern">Current pattern</button>
@@ -1090,7 +1091,7 @@ function applyImportNow() {
   const toCh = trackToChannelMap();
   const enabled = [...toCh.keys()];
   const rawCount = grid.filter((n) => toCh.has(n.track)).length;
-  const { cells, pages } = buildImportCells(grid, toCh);
+  const { cells, pages } = buildImportCells(grid, toCh, transpose);
   const voices = toCh.size;
   importMeta.textContent = `${midiDraft.name} · ${cells.length}/${rawCount} notes · ${voices} voices`;
   if (!pages.length) importPages.textContent = "Pages taken: none";
@@ -1209,6 +1210,7 @@ const TEENSY_MIDI_PID = 0x0489;
 const transferOpen = document.querySelector("#transfer-open");
 const sdLayer = document.querySelector("#sd-layer");
 const sdBack = document.querySelector("#sd-back");
+const sdDisconnect = document.querySelector("#sd-disconnect");
 const sdStatus = document.querySelector("#sd-status");
 const sdPush = document.querySelector("#sd-push");
 const sdPullSlot = document.querySelector("#sd-pull-slot");
@@ -1256,8 +1258,9 @@ function setSdBusy(on) {
   const live = !!(sd && sd.connected);
   sdPush.disabled = on;
   sdPullSlot.disabled = on;
-  sdPull.disabled = on || !live || !sdSelected || sdSelected.type !== "file";
-  sdUpload.classList.toggle("dim", on || !live);
+  sdPull.disabled = on || !sdSelected || sdSelected.type !== "file";
+  sdDisconnect.disabled = on || !live;
+  sdUpload.classList.toggle("dim", on);
   refreshSdStatus();
 }
 
@@ -1316,8 +1319,22 @@ async function pickTeensyPort() {
 }
 
 async function ensureTeensy({ requestIfMissing = true } = {}) {
-  if (sd?.connected) return true;
   if (!navigator.serial) throw new Error("Web Serial needs Chrome or Edge.");
+
+  // Port open ≠ device answering. Probe first; reconnect on a dead session.
+  if (sd?.connected) {
+    try {
+      await sd.ping();
+      setSdStatus("online");
+      return true;
+    } catch (err) {
+      sdLogReconnect(err);
+      try { await sd.close(); } catch (_) {}
+      sd = null;
+      refreshSdStatus();
+    }
+  }
+
   let port = await pickTeensyPort();
   if (!port) {
     if (!requestIfMissing) return false;
@@ -1335,8 +1352,41 @@ async function ensureTeensy({ requestIfMissing = true } = {}) {
   };
   setSdStatus("connecting…");
   await sd.connect(port, (msg) => setSdStatus(msg || "connecting…"));
+  // Prove the host↔device line is live before claiming online.
+  await sd.ping();
   setSdStatus("online");
   return true;
+}
+
+function sdLogReconnect(err) {
+  try {
+    console.warn("[toern-sd] stale session, reconnecting:", err?.message || err);
+  } catch (_) {}
+}
+
+async function dropDeadSession(err) {
+  if (!/timeout|not connected|network|FAILED|ERR /i.test(String(err?.message || err))) return;
+  try { if (sd) await sd.close(); } catch (_) {}
+  sd = null;
+  refreshSdStatus();
+}
+
+async function disconnectSd() {
+  // Always allow disconnect, even mid-transfer.
+  sdBusy = false;
+  setSdErr("");
+  sdXfer.textContent = "";
+  setSdStatus("disconnecting…");
+  const session = sd;
+  sd = null;
+  try {
+    if (session) await session.close();
+  } catch (_) {}
+  sdEntries = [];
+  sdSelected = null;
+  renderSdList();
+  setSdStatus("offline");
+  setSdBusy(false);
 }
 
 function openSdPanel() {
@@ -1441,7 +1491,10 @@ async function sdBrowse(path) {
     renderSdList();
     setSdStatus(`online · ${sdPath}`);
   } catch (err) {
-    if (err?.name !== "NotFoundError") setSdErr(err?.message || String(err));
+    if (err?.name !== "NotFoundError") {
+      await dropDeadSession(err);
+      setSdErr(err?.message || String(err));
+    }
   } finally {
     setSdBusy(false);
   }
@@ -1465,6 +1518,7 @@ async function pushPatternRam() {
     showDraw();
   } catch (err) {
     if (err?.name === "NotFoundError") return;
+    await dropDeadSession(err);
     await showXferError(err);
     setSdErr(err?.message || String(err));
     sdXfer.textContent = "";
@@ -1492,6 +1546,7 @@ async function pullPatternRam() {
     showDraw();
   } catch (err) {
     if (err?.name === "NotFoundError") return;
+    await dropDeadSession(err);
     await showXferError(err);
     setSdErr(err?.message || String(err));
     sdXfer.textContent = "";
@@ -1515,7 +1570,10 @@ async function loadSdFileToSim(remote) {
     sdXfer.textContent = `Loaded ${remote} into sim${bpm ? ` @ ${bpm.toFixed(1)} BPM` : ""}.`;
     showDraw();
   } catch (err) {
-    if (err?.name !== "NotFoundError") setSdErr(err?.message || String(err));
+    if (err?.name !== "NotFoundError") {
+      await dropDeadSession(err);
+      setSdErr(err?.message || String(err));
+    }
     sdXfer.textContent = "";
   } finally {
     setSdBusy(false);
@@ -1538,7 +1596,10 @@ async function uploadSdFiles(files) {
     sdXfer.textContent = `Uploaded ${files.length} file(s).`;
     await sdBrowse(sdPath);
   } catch (err) {
-    if (err?.name !== "NotFoundError") setSdErr(err?.message || String(err));
+    if (err?.name !== "NotFoundError") {
+      await dropDeadSession(err);
+      setSdErr(err?.message || String(err));
+    }
   } finally {
     setSdBusy(false);
   }
@@ -1546,6 +1607,7 @@ async function uploadSdFiles(files) {
 
 transferOpen.addEventListener("click", () => openSdPanel());
 sdBack.addEventListener("click", () => closeSdPanel());
+sdDisconnect.addEventListener("click", () => disconnectSd());
 sdPush.addEventListener("click", () => pushPatternRam());
 sdPullSlot.addEventListener("click", () => pullPatternRam());
 sdPull.addEventListener("click", () => {

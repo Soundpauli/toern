@@ -494,9 +494,13 @@ export class ToernSdSerial {
     this._stopKeepalive();
     this._unbindDisconnect();
     this._closed = true;
+    this._connecting = false;
     this._readGen = (this._readGen || 0) + 1;
-    await this._safeReleaseStreams();
-    await new Promise((r) => setTimeout(r, 0));
+    this._wakeWaiters("not connected");
+    // Cap wait — a stuck reader must not freeze Disconnect.
+    try {
+      await Promise.race([this._safeReleaseStreams(), this._sleep(1500)]);
+    } catch (_) {}
   }
 
   _handleLost(msg) {
@@ -659,7 +663,7 @@ export class ToernSdSerial {
         this._clearRx();
       }
       await this._write("PING\n");
-      return this._expectOk(await this._readLine(8000));
+      return this._expectOk(await this._readLine(3000));
     });
   }
 
