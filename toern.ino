@@ -899,9 +899,9 @@ Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, NOTE_CONDITION_STEP_COU
 
 Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0xFFFFFF } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
-Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-// FILE slot 0 = autosaved.txt (load-only); slots 1..99 = normal pattern files
-Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+// FILE slot 0 = autosaved.txt (load-only); slots 1..999 = normal pattern files
+Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
 Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
@@ -2144,7 +2144,7 @@ FLASHMEM void switchMode(Mode *newMode) {
       }
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
       Encoder[3].writeMin((int32_t)0);
-      Encoder[3].writeMax((int32_t)99);
+      Encoder[3].writeMax((int32_t)999);
     }
 
     if (currentMode == &subpatternMode && muteModeActive) {
@@ -2488,6 +2488,15 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
+  if (currentMode == &menu && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
+    extern bool inEtcSubmenu;
+    extern int getCurrentMenuMainSetting();
+    if (inEtcSubmenu && getCurrentMenuMainSetting() == 16) {
+      switchMenu(16);  // ETC → RSET: encoder 2 applies the chosen reset
+      return;
+    }
+  }
+
   if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     // Get the main setting for the current page
     extern int getCurrentMenuMainSetting();
@@ -2507,6 +2516,11 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     if (inEtcSubmenu && mainSetting == 39) {
       extern void runInfoLogoAnimationLoop();
       runInfoLogoAnimationLoop();
+      return;
+    }
+
+    // ETC → RSET applies on encoder 2, not this encoder.
+    if (inEtcSubmenu && mainSetting == 16) {
       return;
     }
 
@@ -3906,7 +3920,7 @@ FLASHMEM void setup() {
   }
   
   EEPROM.get(0, samplePackID);
-  if (samplePackID == 0 || samplePackID > 99) {
+  if (samplePackID == 0 || samplePackID > 999) {
     samplePackID = 1;  // Default to pack 1 if invalid or empty
     EEPROM.put(0, samplePackID);
     markSettingsBackupDirty();
@@ -8894,7 +8908,7 @@ FLASHMEM void showLoadSave() {
     SMP.file = currentMode->pos[3];
   }
 
-  // Slot 0 = autosaved.txt (load-only). Slots 1..99 = N.txt
+  // Slot 0 = autosaved.txt (load-only). Slots 1..999 = N.txt
   const bool isAutosaveSlot = (SMP.file == 0);
   char OUTPUTf[50];
   if (isAutosaveSlot) {
@@ -8910,9 +8924,9 @@ FLASHMEM void showLoadSave() {
   drawIndicator('L', 'X', 4);
 
   if (isAutosaveSlot) {
-    // Load-only autosave slot: green load if present, no save affordance
+    // Load-only autosave slot: green load if present. Encoder 2 does nothing here.
     drawIndicator('M', txtExists ? 'G' : 'E', 1);
-    drawIndicator('M', 'E', 2);  // dim: cannot save to autosave from menu
+    Encoder[1].writeRGBCode(0x000000);
     if (SMP_LOAD_SETTINGS && txtExists) {
       drawIndicator('C', 'W', 3);
     }
@@ -8978,7 +8992,7 @@ FLASHMEM void showSamplePack() {
   }
 
   // Validate samplepack value - 0 means "no saved pack selected", so SP0 acts as fallback.
-  if (SMP.pack > 99) {
+  if (SMP.pack > 999) {
     SMP.pack = 0;
     currentMode->pos[3] = 0;
     Encoder[3].writeCounter((int32_t)0);
@@ -8996,8 +9010,8 @@ FLASHMEM void showSamplePack() {
 FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) {  // Renamed pack to pack_id to avoid conflict
   drawNoSD();
 
-  // Validate pack_id - 0 means SP0/empty fallback, 1..99 are regular saved packs.
-  if (pack_id > 99) {
+  // Validate pack_id - 0 means SP0/empty fallback, 1..999 are regular saved packs.
+  if (pack_id > 999) {
     pack_id = 0;
   }
 

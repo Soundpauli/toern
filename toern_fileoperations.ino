@@ -484,8 +484,8 @@ FLASHMEM void loadPattern(bool autoload) {
           if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
             SMP.bpm = 100.0f;
           }
-          if (SMP.file > 99) SMP.file = 1;
-          if (SMP.pack < 1 || SMP.pack > 99) SMP.pack = 1;
+          if (SMP.file > 999) SMP.file = 1;
+          if (SMP.pack < 1 || SMP.pack > 999) SMP.pack = 1;
 
           for (int ch = 0; ch < maxY; ch++) {
             globalMutes[ch] = SMP.globalMutes[ch];

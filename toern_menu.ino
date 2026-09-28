@@ -460,7 +460,7 @@ FLASHMEM static bool writeSettingsBackupToSD() {
   // payload = samplePackID (4 bytes, 0 = SP0 fallback) + settings block + SP0 override flags
   unsigned int spid = 1;
   EEPROM.get(EEPROM_SAMPLEPACK_ADDR, spid);
-  if (spid > 99) {
+  if (spid > 999) {
     spid = 0;
   }
 
@@ -627,7 +627,7 @@ FLASHMEM void loadMenuFromEEPROM() {
     bool restored = readSettingsBackupFromSD(restoredPack, restoredBlock, SETTINGS_EEPROM_BLOCK_LEN, restoredSp0Block, EEPROM_SP0_STATE_COUNT);
 
     if (restored) {
-      if (restoredPack > 99) {
+      if (restoredPack > 999) {
         restoredPack = 0;
       }
       EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC);
@@ -2094,7 +2094,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       } else {
         drawText("FULL", 2, 3, CRGB(100, 0, 0));  // Dark Red
       }*/
-      drawIndicator('L', 'O', 3);  // Encoder 3: Large Orange indicator
+      drawIndicator('L', 'G', 2);  // Encoder 2: press applies the reset
+      drawIndicator('L', 'O', 3);  // Encoder 3: turn to pick SD/EFX/FULL/FILE/PACK/ASAV
       
       break;
 
@@ -4109,7 +4110,7 @@ FLASHMEM void switchMenu(int menuPosition){
           sampleBrowserInvalidate();
           showSaveSuccessAnimation();
         } else if (resetMenuOption == 3) {
-          // FILE: Wipe all saved files (1-99.txt) but keep autosaved.txt
+          // FILE: Wipe all saved files (1-999.txt) but keep autosaved.txt
           FastLEDclear();
           drawText("WIPE", 2, 10, UI_ORANGE);
           drawText("FILE", 2, 3, UI_ORANGE);
@@ -4117,7 +4118,7 @@ FLASHMEM void switchMenu(int menuPosition){
           
           char filename[16];
           int deletedCount = 0;
-          for (int i = 1; i <= 99; i++) {
+          for (int i = 1; i <= 999; i++) {
             sprintf(filename, "%d.txt", i);
             if (SD.exists(filename)) {
               SD.remove(filename);
@@ -4135,7 +4136,7 @@ FLASHMEM void switchMenu(int menuPosition){
           
           char dirname[16];
           char filepath[32];
-          for (int pack = 0; pack <= 99; pack++) {
+          for (int pack = 0; pack <= 999; pack++) {
             if (pack == 1) continue;  // Keep samplepack 1 (used by FULL reset)
             
             sprintf(dirname, "%d", pack);

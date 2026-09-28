@@ -6,7 +6,7 @@ import {
 } from './Teensy-Loader.js';
 
 const FIRMWARE_URLS = {
-  stable: './public/toern_firmware_2.2.ino.hex',
+  stable: './public/toern_firmware_3.0.ino.hex',
   beta: './public/toern_firmware_beta.ino.hex'
 };
 
@@ -44,7 +44,7 @@ serialManager.onData = (line) => {
 async function loadFirmware() {
   const isBeta = document.getElementById('firmwareBeta').checked;
   const url = isBeta ? FIRMWARE_URLS.beta : FIRMWARE_URLS.stable;
-  const name = isBeta ? 'toern_firmware_beta.ino.hex' : 'toern_firmware_2.2.ino.hex';
+  const name = isBeta ? 'toern_firmware_beta.ino.hex' : 'toern_firmware_3.0.ino.hex';
   try {
     setStatus('Loading firmware...');
     const res = await fetch(url);
@@ -70,7 +70,7 @@ document.getElementById('firmwareBeta').addEventListener('change', () => {
   loadFirmware();
 });
 
-// Load firmware on page load (v2.2 default)
+// Load firmware on page load (v3.0 default)
 loadFirmware();
 
 const uploadBtn = document.getElementById('uploadFirmwareBtn');
