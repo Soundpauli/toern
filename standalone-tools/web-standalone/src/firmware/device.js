@@ -300,6 +300,8 @@ export function createDevice(matrix, statusEl, rings) {
     if (!s.GLOB.singleMode && !PAINT_ROWS.has(y)) return false;
     const n = note[x][y];
     if (s.GLOB.singleMode) {
+      // Never overwrite notes belonging to other voices (matches firmware paint/paintMode)
+      if (n.channel && n.channel !== s.GLOB.currentChannel) return false;
       if (!n.channel) {
         n.velocity = 100;
         n.probability = 100;
@@ -894,16 +896,29 @@ export function createDevice(matrix, statusEl, rings) {
   }
   let playlist = null;
   let playIdx = 0;
+  let lastRandomPreview = null;
   function stepRandom(dir) {
     if (!playlist) playlist = sampleWavs();
     if (!playlist.length) return;
     const ch = s.GLOB.currentChannel;
     playIdx = (playIdx + (dir > 0 ? 1 : -1) + playlist.length) % playlist.length;
     const file = playlist[playIdx];
+    lastRandomPreview = file;
     s.soloArrow = dir < 0 ? "?<" : "?>";
     s.soloArrowAt = performance.now();
     engine.loadUrl(ch, file.url).then(() => {
       s.sampleUrl[ch] = file.url;
+      engine.trigger(ch, 110, engine.now(), { ...wavOpts(ch), seek: 0, end: 100 }, ch + 1);
+    });
+  }
+  function loadLastRandom() {
+    const ch = s.GLOB.currentChannel;
+    if (ch < 1 || ch > 8) return;
+    const file = lastRandomPreview || (playlist && playlist[playIdx]);
+    if (!file) return;
+    engine.loadUrl(ch, file.url).then(() => {
+      s.sampleUrl[ch] = file.url;
+      s.wavName = (file.name || "SAMPLE").replace(/\.wav$/i, "").slice(0, 8);
       engine.trigger(ch, 110, engine.now(), { ...wavOpts(ch), seek: 0, end: 100 }, ch + 1);
     });
   }
@@ -1142,6 +1157,13 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "draw" || s.mode === "single") {
+      if (s.solo) {
+        // Last encoder short press loads the last random preview (firmware 0201 / 0001).
+        if (enc === 3) {
+          loadLastRandom();
+          return;
+        }
+      }
       if (s.drawR && s.fullMute && s.GLOB.y < 16) {
         exitFullMute(enc);
         return;

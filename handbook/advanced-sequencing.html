@@ -37,13 +37,19 @@
 
           <section class="hb-sub" id="mutes">
             <h2>Mutes</h2>
-            <p class="lede">From a <strong>voice row</strong> (not the page row), <strong>long-press encoder&nbsp;2</strong> opens a transient <strong>mute overlay</strong>: while you hold it you can flip lanes; release to return. Short-press encoder&nbsp;2 on a voice row toggles that lane’s mute and the flag sticks.</p>
+            <p class="lede">From a <strong>voice row</strong> (not the page row), <strong>long-press encoder&nbsp;2</strong> opens a transient <strong>mute / solo overlay</strong>: other lanes mute so the current voice solos; release to restore. Short-press encoder&nbsp;2 on a voice row toggles that lane’s mute and the flag sticks.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="mute" width="16" height="16" role="img" aria-label="Mute overlay"></canvas>
               </div>
               <p class="viz-caption--below">Mute overlay: muted lanes dim, active lanes bright.</p>
             </article>
+            <p>While you hold encoder&nbsp;2, the other knobs stay useful:</p>
+            <ul>
+              <li><strong>Encoder&nbsp;3</strong> (green) — <a href="sound.html#fast-filter">fast filter</a> for the current voice, same as from the grid</li>
+              <li><strong>Encoder&nbsp;4</strong> (pink) — scroll a random sample playlist (<code>?&gt;</code> / <code>?&lt;</code>); short press loads the last preview onto that voice</li>
+              <li><strong>Encoder&nbsp;1</strong> — reverse the current sample (channels&nbsp;1–8)</li>
+            </ul>
             <p>On the page row, encoder&nbsp;2 short is <a href="#note-shift">note-shift</a> (single mode) — not mute. Step onto a voice row first if you want the overlay.</p>
             <p>R-mode’s temporary full mute (encoder&nbsp;1 on a voice row) is a different path — see <a href="sequencing.html#r-mode">Sequencing → R mode</a> and <a href="play.html#mute">SETTINGS → MUTE</a> for the custom unmute set.</p>
           </section>

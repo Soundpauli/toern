@@ -4100,13 +4100,10 @@ FLASHMEM void startNew() {
   resetAllChannelVolumesToDefault();
 
   // 14b. Ensure synth channels (13/14) become immediately audible after FULL reset.
-  // This mirrors FILTERMODE "0002" (long-press) behavior, so you don't have to manually reset once.
-  setEnvelopeDefaultValues(13);
-  setFiltersDefaultValues(13);
-  setSynthDefaultValues(13);
-  setEnvelopeDefaultValues(14);
-  setFiltersDefaultValues(14);
-  setSynthDefaultValues(14);
+  // Same path as FILTERMODE "0002" (all filter pages for that voice).
+  extern void setAllFilterPagesDefaultValues(int ch);
+  setAllFilterPagesDefaultValues(13);
+  setAllFilterPagesDefaultValues(14);
   
   // 15. FORCE DISPLAY REFRESH
   // Clear any stale display data and force a complete redraw

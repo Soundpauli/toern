@@ -18,7 +18,8 @@ const config = {
   organizationName: 'Soundpauli',
   projectName: 'toern',
 
-  onBrokenLinks: 'throw',
+  // Repo-root links (BUILD.md, PCB/, handbook) are intentional; they are not part of /docs/.
+  onBrokenLinks: 'warn',
 
   i18n: {
     defaultLocale: 'en',

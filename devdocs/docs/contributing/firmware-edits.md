@@ -75,7 +75,7 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 43 | fireVoice (ETC → FIRE), 0 = off, 15 = all voices, else voice 1–8, 11, 13, or 14 |
 | 44 | fireLevel (ETC → FIRE), particle count 1–25. Encoder 2. Out of range loads as 8 |
 | 45 | fireSize (ETC → FIRE), particle size 1–4. Encoder 1. Out of range loads as 1 |
-| 46 | fireGravity (ETC → FIRE), 0–8. 0 floats up. Encoder 3 after one click. Above 8 loads as 0 |
+| 46 | fireGravity (ETC → FIRE), 0–8. 0 keeps drifting sideways. Higher pulls toward the playhead. Encoder 3 after one click. Above 8 loads as 0 |
 | 47 | fireColor (ETC → FIRE), 0–8. 0 white, 8 voice colour. Encoder 3 after a second click. Above 8 loads as 8 |
 
 Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offsets 42 through 47 are raw bytes at `EEPROM_DATA_START + offset`.

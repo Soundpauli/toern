@@ -466,11 +466,12 @@ bool voiceMode = false;          // VMOD: each channel loops its own pages
 uint8_t fireVoice = 0;           // ETC FIRE: 0 off, 15 all voices, else 1–8 / 11 / 13 / 14
 uint8_t fireLevel = 8;           // ETC FIRE: encoder 2 particle count, 1–25
 uint8_t fireSize = 1;            // ETC FIRE: encoder 1 particle size, 1–4
-uint8_t fireGravity = 0;         // ETC FIRE: 0 floats up, 8 falls hard
+uint8_t fireGravity = 0;         // ETC FIRE: 0 drifts sideways, 8 pulls hard toward playhead
 uint8_t fireColor = 8;           // ETC FIRE: 0 white, 8 full voice colour
 uint8_t fireFocus = 0;           // encoder 3 edits 0 voice, 1 gravity, 2 colour
 uint8_t voicePageLen[16] = {0};  // highest page that contains this channel (0 = empty)
 uint16_t voicePageMask[16] = {0};
+uint16_t voiceRowMask[16] = {0}; // bit (row-1) if this channel has any note on that row
 uint8_t voiceModePages = 1;      // longest voice, at least 1
 uint16_t voiceLoopCount[16] = {0};
 uint8_t voiceEditPage[16] = {0}; // per-voice edit page (2nd encoder), 0 = page 1
@@ -1117,7 +1118,7 @@ bool drawRFullMuteIsActive() {
 DMAMEM static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
 DMAMEM static bool globalMutes[maxY];          // stores global mute state when PMOD is off
 
-FLASHMEM bool isChildVoiceDisabled(int channel) {
+bool isChildVoiceDisabled(int channel) {
   return childLockEnabled && channel >= 9 && channel <= 14;
 }
 
@@ -2835,9 +2836,9 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
-    setEnvelopeDefaultValues((unsigned int)GLOB.currentChannel);
-    setFiltersDefaultValues((unsigned int)GLOB.currentChannel);
-    setSynthDefaultValues((unsigned int)GLOB.currentChannel);
+    // Walk every filter page for this voice (RES / WAVE / LFO / ARP / INST included).
+    extern void setAllFilterPagesDefaultValues(int ch);
+    setAllFilterPagesDefaultValues((int)GLOB.currentChannel);
   }
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 2, 0, 0, 0) && was_buttons_0000(oldButtons)) {  // "2000" - reset current filter page only
@@ -4679,16 +4680,20 @@ void checkEncoders() {
       }
       // Safety check: Only allow paintMode when actually in singleMode
       if (paintMode && currentMode == &singleMode && !preventPaintUnpaint && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
-        // Single mode: allow painting on all y rows 1-15 (no reserved rows)
-        // Only set probability to 100% if slot was empty (preserve existing probability)
-        if (note[paintStep][GLOB.y].channel == 0) {
-          note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
-          note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
-          note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+        // Single mode: allow painting on all y rows 1-15 (no reserved rows).
+        // Never overwrite notes belonging to other voices (same rule as single-tap paint).
+        uint8_t existingCh = note[paintStep][GLOB.y].channel;
+        if (existingCh == 0 || existingCh == GLOB.currentChannel) {
+          // Only set probability to 100% if slot was empty (preserve existing probability)
+          if (existingCh == 0) {
+            note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
+            note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+            note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+          }
+          note[paintStep][GLOB.y].channel = GLOB.currentChannel;
+          note[paintStep][GLOB.y].velocity = defaultVelocity;
+          if (voiceMode) updateLastPage();
         }
-        note[paintStep][GLOB.y].channel = GLOB.currentChannel;
-        note[paintStep][GLOB.y].velocity = defaultVelocity;
-        if (voiceMode) updateLastPage();
       }
 
 
@@ -5300,7 +5305,7 @@ void checkTouchInputs() {
     lastTouch3State = currentTouch3State;
   }
 
-  // Filter mode: touch3 resets only the open filter page. Encoder 4 long press ("0002") still resets every filter on the voice.
+  // Filter mode: touch3 resets the open filter page only. Encoder 4 long press ("0002") resets every page on the voice.
   if (currentMode == &filterMode) {
     static bool lastFilterTouch3 = false;
     bool pressed = tv3 > touchThreshold;
@@ -7994,8 +7999,20 @@ void playNote() {
   bool sequencedCh13HadNotes = false;
   bool sequencedCh14HadNotes = false;
 
+  // One page lookup per voice for this step. The row loop then only touches
+  // PSRAM for voices that actually use that row. Same note selection as
+  // voiceOwnedStep, without repeating the page math 16 times inside the ISR.
+  extern bool songModeActive;
+  extern void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]);
+  extern unsigned int voicePickStep(const unsigned int src[16], unsigned int row);
+  unsigned int voiceSrc[16];
+  const bool useVoiceRead = voiceMode && !songModeActive && beat >= 1 && maxX >= 1;
+  if (useVoiceRead) {
+    voiceFillColumn(((beat - 1) % maxX) + 1, ((beat - 1) / maxX) + 1, voiceSrc);
+  }
+
   for (unsigned int b = 1; b < maxY + 1; b++) {  // b is 1-indexed (row on grid)
-    unsigned int srcBeat = voiceReadStep(b, beat);
+    unsigned int srcBeat = useVoiceRead ? voicePickStep(voiceSrc, b) : beat;
     if (srcBeat > 0 && srcBeat <= maxlen) {      // Ensure beat is within valid range for note array
       int ch = note[srcBeat][b].channel;         // ch is 0-indexed for internal use (e.g. SMP arrays)
       int vel = note[srcBeat][b].velocity;
@@ -8625,7 +8642,9 @@ void paint() {
   } else {  // Single mode (painting for the globally selected GLOB.currentChannel)
     // Single mode: allow painting on all y rows 1-15 (no reserved rows)
     if ((current_y > 0 && current_y <= 15)) {
-      if (!channelBlocked) {
+      uint8_t existingCh = note[current_x][current_y].channel;
+      // Do not overwrite notes belonging to other voices
+      if (!channelBlocked && (existingCh == 0 || existingCh == GLOB.currentChannel)) {
         note[current_x][current_y].channel = GLOB.currentChannel;
         note[current_x][current_y].velocity = defaultVelocity;
         note[current_x][current_y].probability = 100;  // Default 100% probability
@@ -9281,10 +9300,9 @@ FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0C
 
 
 void updateVoiceLengths() {
-  for (int c = 0; c < 16; c++) {
-    voicePageLen[c] = 0;
-    voicePageMask[c] = 0;
-  }
+  uint8_t len[16] = {0};
+  uint16_t pageMask[16] = {0};
+  uint16_t rowMask[16] = {0};
   int pages = effectivePageCount();
   if (pages < 1) pages = 1;
   if (pages > 16) pages = 16;
@@ -9296,16 +9314,55 @@ void updateVoiceLengths() {
       for (unsigned int iy = 1; iy <= maxY; iy++) {
         uint8_t ch = note[x][iy].channel;
         if (ch == 0 || ch > 15) continue;
-        if ((uint8_t)p > voicePageLen[ch]) voicePageLen[ch] = (uint8_t)p;
-        voicePageMask[ch] |= (uint16_t)(1u << (p - 1));
+        if ((uint8_t)p > len[ch]) len[ch] = (uint8_t)p;
+        pageMask[ch] |= (uint16_t)(1u << (p - 1));
+        if (iy >= 1 && iy <= 16) rowMask[ch] |= (uint16_t)(1u << (iy - 1));
       }
     }
   }
   uint8_t longest = 1;
-  for (int c = 1; c < 16; c++) {
-    if (voicePageLen[c] > longest) longest = voicePageLen[c];
+  for (int c = 0; c < 16; c++) {
+    // Publish length last so the ISR never sees a live voice with an empty row mask.
+    if (len[c] == 0) {
+      voicePageLen[c] = 0;
+      voicePageMask[c] = 0;
+      voiceRowMask[c] = 0;
+    } else {
+      voiceRowMask[c] = rowMask[c];
+      voicePageMask[c] = pageMask[c];
+      voicePageLen[c] = len[c];
+      if (c >= 1 && len[c] > longest) longest = len[c];
+    }
   }
   voiceModePages = longest;
+}
+
+unsigned int voicePageFor(int channel, unsigned int globalPage);
+
+// Source step for each voice at this column. Channel 0 is unused.
+void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]) {
+  for (int ch = 0; ch < 16; ch++) srcOut[ch] = 0;
+  if (maxX < 1 || col < 1) return;
+  for (int ch = 1; ch < 16; ch++) {
+    if (voicePageLen[ch] < 1) continue;
+    unsigned int page = voicePageFor(ch, globalPage);
+    unsigned int src = (page - 1) * maxX + col;
+    if (src < 1 || src >= maxlen) continue;
+    srcOut[ch] = src;
+  }
+}
+
+// First voice that owns this row at the cached column. Same result as voiceOwnedStep.
+unsigned int voicePickStep(const unsigned int src[16], unsigned int row) {
+  if (row < 1 || row > 16) return 0;
+  const uint16_t bit = (uint16_t)(1u << (row - 1));
+  for (int ch = 1; ch < 16; ch++) {
+    unsigned int s = src[ch];
+    if (!s) continue;
+    if ((voiceRowMask[ch] & bit) == 0) continue;
+    if (note[s][row].channel == (uint8_t)ch) return s;
+  }
+  return 0;
 }
 
 // Page a channel is reading while VMOD is playing.
@@ -9345,15 +9402,9 @@ void voiceCuePage(int channel, int page) {
 // voice sit on other rows; the page comes from the note's channel, not row-1.
 // Returns 0 when no voice has a note on this row at the current column.
 unsigned int voiceOwnedStep(unsigned int row, unsigned int col, unsigned int globalPage) {
-  if (maxX < 1 || col < 1 || row < 1) return 0;
-  for (int ch = 1; ch < 16; ch++) {
-    if (voicePageLen[ch] < 1) continue;
-    unsigned int page = voicePageFor(ch, globalPage);
-    unsigned int src = (page - 1) * maxX + col;
-    if (src < 1 || src >= maxlen) continue;
-    if (note[src][row].channel == (uint8_t)ch) return src;
-  }
-  return 0;
+  unsigned int src[16];
+  voiceFillColumn(col, globalPage, src);
+  return voicePickStep(src, row);
 }
 
 // While voice mode is playing, the grid shows each voice's loop page.
@@ -9748,7 +9799,7 @@ FLASHMEM void initPageMutes() {
 
 // Get mute state for a channel, considering PMOD setting
 // For PLAYBACK: uses playing page in NEXT mode, edit page otherwise
-FLASHMEM bool getMuteState(int channel) {
+bool getMuteState(int channel) {
   if (childLockEnabled) {
     return isChildVoiceMuted(channel);
   }

@@ -218,13 +218,11 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
   }
 }
 
-// Reset only the sliders on the current filter page for one channel (FILTERMODE "2000").
-void setCurrentFilterPageDefaultValues(int ch) {
+// Reset sliders on one filter page for one channel (FILTERMODE touch3 / "2000").
+static void setFilterPageDefaultValues(int ch, uint8_t page) {
   if (ch < 0 || ch >= NUM_CHANNELS) return;
   extern SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
-  extern uint8_t filterPage[NUM_CHANNELS];
 
-  const uint8_t page = filterPage[ch];
   bool touchedSynth = false;
 
   for (uint8_t i = 0; i < 4; ++i) {
@@ -257,8 +255,36 @@ void setCurrentFilterPageDefaultValues(int ch) {
     }
   }
 
-  initSliders(page, ch);
   if (touchedSynth && ch == 11) updateSynthVoice(11);
+}
+
+void setCurrentFilterPageDefaultValues(int ch) {
+  if (ch < 0 || ch >= NUM_CHANNELS) return;
+  extern uint8_t filterPage[NUM_CHANNELS];
+  const uint8_t page = filterPage[ch];
+  setFilterPageDefaultValues(ch, page);
+  initSliders(page, ch);
+}
+
+// Reset every filter page for one voice (FILTERMODE "0002").
+// Walks sliderDef so sample RES, ch11 INST/WAVE pages, and ch13/14 LFO/ARP are included —
+// the older hard-coded setFilters/Envelope/SynthDefaultValues missed those.
+void setAllFilterPagesDefaultValues(int ch) {
+  if (ch < 0 || ch >= NUM_CHANNELS) return;
+  extern uint8_t filterPage[NUM_CHANNELS];
+  extern const uint8_t filterPageCount[NUM_CHANNELS];
+
+  int pages = filterPageCount[ch];
+  if (pages <= 0) pages = 4;
+  if (pages > 4) pages = 4;
+  for (int p = 0; p < pages; ++p) {
+    setFilterPageDefaultValues(ch, (uint8_t)p);
+  }
+  // EFX is not on every voice's slider pages but still owns sample routing.
+  SMP.filter_settings[ch][EFX] = 0;
+
+  initSliders(filterPage[ch], ch);
+  if (ch == 11) updateSynthVoice(11);
 }
 
 static uint8_t synthInstrumentFormDefault(int instrumentIdx) {
@@ -361,17 +387,7 @@ void resetAllToDefaults() {
   
   for (int i = 0; i < numChannels; i++) {
     int ch = channels[i];
-    
-    // Reset filters
-    setFiltersDefaultValues(ch);
-    
-    // Reset envelopes
-    setEnvelopeDefaultValues(ch);
-    
-    // Reset synths (only for channels 11, 13-14)
-    if (ch == 11 || ch == 13 || ch == 14) {
-      setSynthDefaultValues(ch);
-    }
+    setAllFilterPagesDefaultValues(ch);
   }
 
   // Make ch11 one octave deeper by default (used by playSound()).

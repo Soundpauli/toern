@@ -55,6 +55,7 @@ Open source as always: schematics, code, and design files are here for you to po
 - **16 channels** in spirit: 8 sample voices (1–8), one 3-voice poly synth (11), two mono synths (13–14)  
 - **16 steps per page × 16 pages** → 256 steps per song arrangement space  
 - **Voice mode**: each voice keeps its own pattern length. It loops the pages that hold its notes, pitches included, while the other voices keep looping on their own  
+- **FIRE** (ETC menu): optional playhead sparks when a chosen voice’s notes light white  
 - Store up to **999 patterns**, **999 samples**, **100 samplepacks**  
 - **Autosave / autoload** so your 3 a.m. genius doesn’t vanish at boot  
 - **Switch patterns live** without stopping playback  

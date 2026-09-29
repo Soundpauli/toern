@@ -1451,6 +1451,8 @@ FLASHMEM void drawTriggers() {
   extern bool voiceMode;
   extern bool songModeActive;
   extern unsigned int voiceOwnedStep(unsigned int row, unsigned int col, unsigned int globalPage);
+  extern void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]);
+  extern unsigned int voicePickStep(const unsigned int src[16], unsigned int row);
   extern unsigned int beatForUI;
   const bool voiceGrid = voiceMode && isNowPlaying && !songModeActive;
   unsigned int voiceGlobalPage = 1;
@@ -1470,11 +1472,18 @@ FLASHMEM void drawTriggers() {
   const unsigned long now = millis();
   const uint8_t blinkPhase = (uint8_t)((now / 300) & 0x1);
 
+  unsigned int voiceSrc[16];
+  unsigned int voiceSrcCol = 0;
+
   for (unsigned int ix = 1; ix < maxX + 1; ix++) {
+    if (voiceGrid && voiceSrcCol != ix) {
+      voiceFillColumn(ix, voiceGlobalPage, voiceSrc);
+      voiceSrcCol = ix;
+    }
     for (unsigned int iy = 1; iy < maxY + 1; iy++) {
       unsigned int globalX;
       if (voiceGrid) {
-        globalX = voiceOwnedStep(iy, ix, voiceGlobalPage);
+        globalX = voicePickStep(voiceSrc, iy);
         if (globalX == 0) continue;
       } else {
         unsigned int rowPage = GLOB.edit > 0 ? GLOB.edit : 1;
@@ -1564,7 +1573,7 @@ FLASHMEM void drawTriggers() {
       TIMER
   *************************************************/
 
-// Rising embers. Fixed pool, no heap. FLASHMEM: keep this out of ITCM when FIRE is off.
+// Sideways embers. Fixed pool, no heap. FLASHMEM: keep this out of ITCM when FIRE is off.
 struct FireFly {
   int8_t x;
   int8_t y;
@@ -1741,7 +1750,8 @@ void drawTimer() {
   
   extern bool voiceMode;
   extern bool songModeActive;
-  extern unsigned int voiceOwnedStep(unsigned int row, unsigned int col, unsigned int globalPage);
+  extern void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]);
+  extern unsigned int voicePickStep(const unsigned int src[16], unsigned int row);
   const bool voiceGrid = voiceMode && isNowPlaying && !songModeActive;
   if (voiceGrid) {
     // The grid is one composite voice page, so the shared column is always visible.
@@ -1784,10 +1794,16 @@ void drawTimer() {
           fireSeenPage = (uint16_t)beatForUIPage;
         }
       }
+      unsigned int voiceSrc[16];
+      bool voiceSrcReady = false;
       for (unsigned int y = 1; y < maxY; y++) {
         unsigned int srcStep;
         if (voiceGrid) {
-          srcStep = voiceOwnedStep(y, timer, beatForUIPage);
+          if (!voiceSrcReady) {
+            voiceFillColumn(timer, beatForUIPage, voiceSrc);
+            voiceSrcReady = true;
+          }
+          srcStep = voicePickStep(voiceSrc, y);
           if (srcStep == 0) {
             light(timer, y, CRGB(10, 0, 0));
             continue;
