@@ -4762,24 +4762,10 @@ void checkEncoders() {
       int requested = constrain((int)currentMode->pos[1], 1, pmax);
       if (voiceMode && (currentMode == &draw || currentMode == &singleMode)) {
         int ch = (int)GLOB.currentChannel;
-        if (voiceFilledCount(ch) > 0) {
-          int dir = (requested > oldEdit) ? 1 : (requested < oldEdit) ? -1 : 0;
-          int steps = requested - oldEdit;
-          if (steps < 0) steps = -steps;
-          if (steps < 1) steps = 1;
-          if (steps > 16) steps = 16;
-          int page = oldEdit;
-          if (!voicePageFilled(ch, page)) {
-            page = voiceNearestFilledPage(ch, page);
-          } else if (dir != 0) {
-            for (int i = 0; i < steps; i++) {
-              int n = voiceStepFilledPage(ch, page, dir);
-              if (n < 1) break;
-              page = n;
-            }
-          }
-          if (page < 1) page = voiceFirstFilledPage(ch);
-          if (page >= 1) requested = page;
+        int last = voiceLastFilledPage(ch);
+        if (last >= 1) {
+          // Allow empty pages from 1 through last filled; do not skip gaps.
+          requested = constrain(requested, 1, last);
           voiceLimitPageEncoder(ch);
         } else {
           Encoder[1].writeMin((int32_t)1);
@@ -9540,15 +9526,20 @@ int voiceStepFilledPage(int channel, int from, int dir) {
 }
 
 void voiceLimitPageEncoder(int channel) {
-  int first = voiceFirstFilledPage(channel);
   int last = voiceLastFilledPage(channel);
-  if (first < 1 || last < first) {
-    Encoder[1].writeMin((int32_t)1);
-    Encoder[1].writeMax((int32_t)encoderPageMax());
-    return;
-  }
-  Encoder[1].writeMin((int32_t)first);
-  Encoder[1].writeMax((int32_t)last);
+  // Allow empty lead-in / gap pages: 1 .. last filled (not first-filled..last).
+  // Duppa min/max are I2C — only rewrite when the range changes.
+  static int sentCh = -2;
+  static int sentMin = -1;
+  static int sentMax = -1;
+  int minV = 1;
+  int maxV = (last < 1) ? encoderPageMax() : last;
+  if (channel == sentCh && minV == sentMin && maxV == sentMax) return;
+  sentCh = channel;
+  sentMin = minV;
+  sentMax = maxV;
+  Encoder[1].writeMin((int32_t)minV);
+  Encoder[1].writeMax((int32_t)maxV);
 }
 
 void voiceApplyEditPage(int channel) {
@@ -9562,9 +9553,10 @@ void voiceApplyEditPage(int channel) {
   if (page < 1) page = 1;
   int pmax = effectivePageCount();
   if (page > pmax) page = pmax;
-  if (voiceFilledCount(channel) > 0) {
-    int snapped = voiceNearestFilledPage(channel, page);
-    if (snapped >= 1) page = snapped;
+  // Keep empty pages in range when this voice has later content (1 .. last filled).
+  int last = voiceLastFilledPage(channel);
+  if (last >= 1) {
+    if (page > last) page = last;
     voiceEditPage[channel] = (uint8_t)page;
   }
   voiceLimitPageEncoder(channel);
