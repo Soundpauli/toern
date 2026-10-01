@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 7
 #define VOL_PAGES_COUNT 7
-#define ETC_PAGES_COUNT 11
+#define ETC_PAGES_COUNT 12
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
@@ -146,6 +146,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
   {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
   {"BATT", 42, false, nullptr},          // Estimated LiPo percentage from Teensy A16 / pin 40
+  {"EYES", 57, false, nullptr},          // Screensaver eyes: OFF / ON / BAT
   {"CHLD", 48, false, nullptr},          // Child lock: require touch2->touch1 to enter menu
   {"FIRE", 55, false, nullptr},          // Playhead sparks on one voice
   {"IMG", 56, false, nullptr},           // Image mode: black matrix, paint cycles voice/color
@@ -377,7 +378,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 49; // [48]=IMG; [47]=FIRE colour; [46]=FIRE gravity; [45]=FIRE size; [44]=FIRE count; [43]=FIRE voice; [42]=VMOD
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 50; // [49]=EYES; [48]=IMG; [47]=FIRE colour; [46]=FIRE gravity; [45]=FIRE size; [44]=FIRE count; [43]=FIRE voice; [42]=VMOD
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -701,6 +702,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 46, 0);   // fireGravity default (float up)
       EEPROM.write(EEPROM_DATA_START + 47, 8);   // fireColor default (full voice colour)
       EEPROM.write(EEPROM_DATA_START + 48, 0);   // imageMode default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 49, 1);   // eyesMode default (ON)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -838,6 +840,16 @@ FLASHMEM void loadMenuFromEEPROM() {
       extern void enforceImageModeConstraints();
       enforceImageModeConstraints();
     }
+  }
+
+  {
+    extern uint8_t eyesMode;
+    uint8_t eyesValue = EEPROM.read(EEPROM_DATA_START + 49);
+    if (eyesValue > 2) {
+      eyesValue = 1;  // default ON
+      EEPROM.write(EEPROM_DATA_START + 49, 1);
+    }
+    eyesMode = eyesValue;
   }
   
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
@@ -1873,12 +1885,13 @@ FLASHMEM void showEtcMenu() {
       // Page-nav indicator (encoder 4) should always match ETC text color (e.g. "RSET")
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
     } else {
-      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41), CHLD(48), RAM(52), FIRE(55), IMG(56)
+      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41), CHLD(48), RAM(52), FIRE(55), IMG(56), EYES(57)
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
       CRGB indicatorColor = currentMenuParentTextColor();
       const bool etcValuePage =
           (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
-           mainSetting == 52 || mainSetting == 55 || mainSetting == 56);
+           mainSetting == 52 || mainSetting == 55 || mainSetting == 56 ||
+           mainSetting == 57);
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
       Encoder[2].writeRGBCode(etcValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -2262,6 +2275,17 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawText("IMG", 2, 10, tc);
       drawMenuValue(imageMode ? "ON" : "OFF", 2, 3, imageMode ? UI_GREEN : UI_RED);
       drawIndicator('L', imageMode ? 'G' : 'R', 3);
+      break;
+    }
+
+    case 57: { // EYES - screensaver OFF / ON / BAT
+      extern uint8_t eyesMode;
+      const CRGB tc = currentMenuParentTextColor();
+      drawText("EYES", 2, 10, tc);
+      const char *label = (eyesMode == 0) ? "OFF" : (eyesMode == 2) ? "BAT" : "ON";
+      CRGB vc = (eyesMode == 0) ? UI_RED : (eyesMode == 2) ? CRGB(255, 165, 0) : UI_GREEN;
+      drawMenuValue(label, 2, 3, vc);
+      drawIndicator('L', (eyesMode == 0) ? 'R' : (eyesMode == 2) ? 'O' : 'G', 3);
       break;
     }
 
@@ -3377,6 +3401,31 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lastImgEnc = encVal;
         saveSingleModeToEEPROM(48, (int8_t)encVal);
         if (imageMode) enforceImageModeConstraints();
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 57: { // EYES - OFF/ON/BAT via encoder 2
+      extern uint8_t eyesMode;
+      static int lastEyesEnc = -1;
+      int encVal = constrain((int)eyesMode, 0, 2);
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastEyesEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastEyesEnc) {
+        encVal = constrain((int)currentMode->pos[2], 0, 2);
+        eyesMode = (uint8_t)encVal;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastEyesEnc = encVal;
+        saveSingleModeToEEPROM(49, (int8_t)encVal);
         menuRequestFullRedraw();
         redrawMain(setting);
       }
@@ -4722,6 +4771,15 @@ FLASHMEM void switchMenu(int menuPosition){
         imageMode = !imageMode;
         saveSingleModeToEEPROM(48, (int8_t)(imageMode ? 1 : 0));
         if (imageMode) enforceImageModeConstraints();
+        menuRequestFullRedraw();
+        break;
+      }
+
+      case 57: {
+        // Cycle EYES: OFF → ON → BAT → OFF
+        extern uint8_t eyesMode;
+        eyesMode = (uint8_t)((eyesMode + 1) % 3);
+        saveSingleModeToEEPROM(49, (int8_t)eyesMode);
         menuRequestFullRedraw();
         break;
       }

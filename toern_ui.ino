@@ -965,21 +965,20 @@ void drawStatus() {
       light(s, 16, CRGB(0, 0, 0));
     }
     
-    // Show active copy indicators: w[X] / - / - / G[Y]
-    // Matrix only — encoder RGB set below (avoids double/conflicting writes)
-    drawIndicator('L', 'X', 1, false, false);  // Encoder 1: Large Blue
+    // Copy armed: M[X] cancel / - / - / M[G] paste
+    drawIndicator('M', 'X', 1, false, false);  // Encoder 1: Medium Blue = cancel
     // Encoder 2: empty (no indicator)
     // Encoder 3: empty (no indicator)
-    drawIndicator('L', 'Y', 4, false, false);  // Encoder 4: Large Yellow
+    drawIndicator('M', 'G', 4, false, false);  // Encoder 4: Medium Green = paste
     
     // Set encoder colors to match active copy indicators
     CRGB blueColor = getIndicatorColor('X'); // Blue
-    CRGB yellowColor = getIndicatorColor('Y'); // Yellow
+    CRGB greenColor = getIndicatorColor('G'); // Green
     
     setEncoderRGBIfChanged(0, blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
     setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
     setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
-    setEncoderRGBIfChanged(3, yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
+    setEncoderRGBIfChanged(3, greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
     
     return; // Exit early to prevent any other indicators
   }

@@ -1465,8 +1465,9 @@ FLASHMEM static void drawScreensaverMatrix() {
   const bool asleep = (idleMs >= 90000UL);  // After 90s total (60s to start + 30s more)
   
   // Eye outline dimmer than pupils - pupils are bright white
-  const uint8_t outlineBrightness = asleep ? 18 : 15;
-  const uint8_t pupilBrightness = asleep ? 18 : 80;
+  // Asleep: closed lids dimmed further for less glare
+  const uint8_t outlineBrightness = asleep ? 7 : 15;
+  const uint8_t pupilBrightness = asleep ? 7 : 80;
   const CRGB eyeColor = CRGB(outlineBrightness, outlineBrightness, outlineBrightness);
   const CRGB pupilColor = CRGB(pupilBrightness, pupilBrightness, pupilBrightness);
   
@@ -1581,10 +1582,25 @@ FLASHMEM void FastLEDshow() {
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
     extern bool sdSerialServerClientConnected();
+    extern bool imageMode;
+    extern bool fullMuteIsActive();
+    extern bool eyesScreensaverEnabled();
+    extern Mode draw;
+    extern Mode singleMode;
+    extern Mode filterMode;
+    // While playing, keep the grid visible in draw / single / filter / IMG / fullMute.
+    // Screensaver may still run during playback in other contexts (e.g. menu).
+    const bool playingGridFocus = isNowPlaying && (
+      currentMode == &draw ||
+      currentMode == &singleMode ||
+      currentMode == &filterMode ||
+      imageMode ||
+      fullMuteIsActive());
     // SD? wait loops already call noteUserActivity(), so idle timeout covers that case.
     // Do not gate on drawNoSD_hasRun — switchMode() clears it, which permanently
     // blocked the screensaver after any mode change.
-    bool screensaverActive = !isNowPlaying
+    bool screensaverActive = !playingGridFocus
+      && eyesScreensaverEnabled()
       && !sdSerialServerClientConnected()
       && (millis() - lastUserActivityMs >= 60000UL);
     if (screensaverActive) {
@@ -3963,6 +3979,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 46, 0);     // fireGravity (float up)
   EEPROM.write(EEPROM_DATA_START + 47, 8);     // fireColor (full voice colour)
   EEPROM.write(EEPROM_DATA_START + 48, 0);     // imageMode (OFF)
+  EEPROM.write(EEPROM_DATA_START + 49, 1);     // eyesMode (ON)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();

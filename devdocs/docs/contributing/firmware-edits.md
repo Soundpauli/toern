@@ -25,7 +25,7 @@ Pages are `MenuPage` rows near the top of [`toern_menu.ino`](../../../toern_menu
 
 Settings live at absolute address `EEPROM_DATA_START + offset` with `EEPROM_DATA_START` = **43**. A magic byte `0x5A` sits at absolute address **42**. Sample-pack 0 flags sit at absolute address **200** (`EEPROM_SP0_STATE_ADDR`), outside this table.
 
-`SETTINGS_EEPROM_BLOCK_LEN` is **48**, so offsets **0 through 47** are copied to the SD settings backup. The next free offset is **48**. Raise `SETTINGS_EEPROM_BLOCK_LEN` in the same change. Inserting a byte in the middle shifts every saved unit. A shorter backup leaves the missing bytes at 0; offset 42 absent means VMOD off, offset 43 absent means FIRE off. Offset 44 absent or out of 1–25 loads as count 8. Offset 45 absent loads as size 1. Offset 46 absent loads as gravity 0. Offset 47 absent loads as colour 8.
+`SETTINGS_EEPROM_BLOCK_LEN` is **50**, so offsets **0 through 49** are copied to the SD settings backup. The next free offset is **50** (reserved as IMG migrate marker `0xA5` at `EEPROM_DATA_START + 50`). Raise `SETTINGS_EEPROM_BLOCK_LEN` in the same change. Inserting a byte in the middle shifts every saved unit. A shorter backup leaves the missing bytes at 0; offset 42 absent means VMOD off, offset 43 absent means FIRE off. Offset 44 absent or out of 1–25 loads as count 8. Offset 45 absent loads as size 1. Offset 46 absent loads as gravity 0. Offset 47 absent loads as colour 8. Offset 48 absent means IMG off. Offset 49 absent or out of 0–2 loads as EYES ON.
 
 Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is also written as a single format byte. Leave 32–35 alone.
 
@@ -77,5 +77,7 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 45 | fireSize (ETC → FIRE), particle size 1–4. Encoder 1. Out of range loads as 1 |
 | 46 | fireGravity (ETC → FIRE), 0–8. 0 keeps drifting sideways. Higher pulls toward the playhead. Encoder 3 after one click. Above 8 loads as 0 |
 | 47 | fireColor (ETC → FIRE), 0–8. 0 white, 8 voice colour. Encoder 3 after a second click. Above 8 loads as 8 |
+| 48 | imageMode (ETC → IMG), 0 = off, 1 = on |
+| 49 | eyesMode (ETC → EYES), 0 = OFF, 1 = ON, 2 = BAT (screensaver only when USB unplugged). Out of range loads as 1 |
 
-Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offsets 42 through 47 are raw bytes at `EEPROM_DATA_START + offset`.
+Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offsets 42 through 49 are raw bytes at `EEPROM_DATA_START + offset`.

@@ -471,6 +471,7 @@ bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playi
 bool voiceMode = false;          // VMOD: each channel loops its own pages
 bool imageMode = false;          // IMG: black matrix; paint cycles voice/color from voice1
 int imgBrushChannel = 1;         // IMG: selected brush voice/color (1–8); touch1 cycles
+uint8_t eyesMode = 1;            // ETC EYES: 0=OFF, 1=ON, 2=BAT (screensaver only on battery)
 uint8_t fireVoice = 0;           // ETC FIRE: 0 off, 15 all voices, else 1–8 / 11 / 13 / 14
 uint8_t fireLevel = 8;           // ETC FIRE: encoder 2 particle count, 1–25
 uint8_t fireSize = 1;            // ETC FIRE: encoder 1 particle size, 1–4
@@ -3154,6 +3155,12 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+    // Copy armed: enc1 short cancels (blue cue)
+    if (GLOB.activeCopy) {
+      deleteActiveCopy();
+      preventPaintUnpaint = true;
+      return;
+    }
     extern int drawMode;
     if (!childLockEnabled && drawMode == 1 && GLOB.y < 16) {
       if (millis() < suppressDrawRMuteUntilMs) {
@@ -3195,13 +3202,19 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       drawRandoms();
       preventPaintUnpaint = true;  // Prevent paint/unpaint after random
       return;                      // Prevent other button actions from being processed
-    } else {
-      // Normal unpaint functionality for draw mode (L+R mode only)
-      unpaint();
-      unpaintMode = true;
-      deleteActiveCopy();
-      preventPaintUnpaint = false;  // Reset flag after unpaint operation
     }
+    // Draw + page row: long-press enc1 clears the current edit page (all voices)
+    if (currentMode == &draw && GLOB.y == 16) {
+      clearPage();
+      deleteActiveCopy();
+      preventPaintUnpaint = true;
+      return;
+    }
+    // Normal unpaint functionality for draw mode (L+R mode only)
+    unpaint();
+    unpaintMode = true;
+    deleteActiveCopy();
+    preventPaintUnpaint = false;  // Reset flag after unpaint operation
   }
 
   // Assuming '3' is a valid state that buttons[i] can take.
@@ -4427,6 +4440,19 @@ int getBatteryPercent() {
   float pct = powf(norm, BATT_PCT_CURVE) * 100.0f;
   int result = (int)(pct + 0.5f);
   return constrain(result, 0, 100);
+}
+
+// True when no USB host is enumerated — treat as running on battery.
+bool isRunningOnBattery() {
+  extern volatile uint8_t usb_configuration;
+  return usb_configuration == 0;
+}
+
+// ETC → EYES: whether the idle screensaver may run.
+bool eyesScreensaverEnabled() {
+  if (eyesMode == 0) return false;       // OFF
+  if (eyesMode == 2) return isRunningOnBattery();  // BAT
+  return true;                           // ON
 }
 
 // Battery warning: two samples 5s apart each minute (55s + 60s); show 5s only if both match and are 1..15%
@@ -7079,10 +7105,15 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
 
     if ((currentMode == &draw || currentMode == &singleMode) && pressed[0] == true && !preventPaintUnpaint) {
-      paintMode = false;
-      unpaintMode = false;
-      pressed[0] = false;
-      unpaint();
+      // Page-row clear is long-press (2000) only — don't wipe on press-down.
+      if (GLOB.y == 16) {
+        pressed[0] = false;
+      } else {
+        paintMode = false;
+        unpaintMode = false;
+        pressed[0] = false;
+        unpaint();
+      }
     }
   } else if (!childLockEnabled) {
     // R mode: encoder(3) short press is handled in checkMode() using button events
@@ -8684,8 +8715,8 @@ void unpaint() {
           note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
         }
       }
-    } else if (current_y == 16) {  // Row 16 (top row)
-      clearPageX(current_x);       // Clear entire column x if cursor is on top row
+    } else if (current_y == 16) {  // Row 16 (top row) — clear current edit page
+      clearPage();
     }
   }
   updateLastPage();
