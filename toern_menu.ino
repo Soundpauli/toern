@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 7
 #define VOL_PAGES_COUNT 7
-#define ETC_PAGES_COUNT 10
+#define ETC_PAGES_COUNT 11
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
@@ -148,6 +148,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"BATT", 42, false, nullptr},          // Estimated LiPo percentage from Teensy A16 / pin 40
   {"CHLD", 48, false, nullptr},          // Child lock: require touch2->touch1 to enter menu
   {"FIRE", 55, false, nullptr},          // Playhead sparks on one voice
+  {"IMG", 56, false, nullptr},           // Image mode: black matrix, paint cycles voice/color
   {"RSET", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
 };
 
@@ -376,7 +377,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 48; // [47]=FIRE colour; [46]=FIRE gravity; [45]=FIRE size; [44]=FIRE count; [43]=FIRE voice; [42]=VMOD
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 49; // [48]=IMG; [47]=FIRE colour; [46]=FIRE gravity; [45]=FIRE size; [44]=FIRE count; [43]=FIRE voice; [42]=VMOD
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -699,6 +700,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 45, 1);   // fireSize default (1 cell)
       EEPROM.write(EEPROM_DATA_START + 46, 0);   // fireGravity default (float up)
       EEPROM.write(EEPROM_DATA_START + 47, 8);   // fireColor default (full voice colour)
+      EEPROM.write(EEPROM_DATA_START + 48, 0);   // imageMode default (OFF)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -809,6 +811,33 @@ FLASHMEM void loadMenuFromEEPROM() {
       saveSingleModeToEEPROM(47, 8);
     }
     fireColor = colorValue;
+  }
+
+  {
+    extern bool imageMode;
+    extern bool voiceMode;
+    // One-time recovery: early IMG bring-up could leave EEPROM+48 stuck ON, which
+    // hides draw-mode base colors and looked like “IMG always on”. Clear once.
+    const int IMG_MIGRATE_ADDR = EEPROM_DATA_START + 50;
+    if (EEPROM.read(IMG_MIGRATE_ADDR) != 0xA5) {
+      EEPROM.write(EEPROM_DATA_START + 48, 0);
+      EEPROM.write(IMG_MIGRATE_ADDR, 0xA5);
+    }
+    uint8_t imageModeValue = EEPROM.read(EEPROM_DATA_START + 48);
+    imageMode = (imageModeValue == 1);
+    if (imageModeValue > 1) {
+      imageMode = false;
+      EEPROM.write(EEPROM_DATA_START + 48, 0);
+    }
+    // VMOD is not allowed with IMG — force VMOD off if both were stored on.
+    if (imageMode && voiceMode) {
+      voiceMode = false;
+      EEPROM.write(EEPROM_DATA_START + 42, 0);
+    }
+    if (imageMode) {
+      extern void enforceImageModeConstraints();
+      enforceImageModeConstraints();
+    }
   }
   
   micGain     = (int8_t) EEPROM.read(EEPROM_DATA_START + 9);
@@ -1844,12 +1873,12 @@ FLASHMEM void showEtcMenu() {
       // Page-nav indicator (encoder 4) should always match ETC text color (e.g. "RSET")
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
     } else {
-      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41), CHLD(48), RAM(52)
+      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41), CHLD(48), RAM(52), FIRE(55), IMG(56)
       drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
       CRGB indicatorColor = currentMenuParentTextColor();
       const bool etcValuePage =
           (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
-           mainSetting == 52 || mainSetting == 55);
+           mainSetting == 52 || mainSetting == 55 || mainSetting == 56);
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
       Encoder[2].writeRGBCode(etcValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -2227,6 +2256,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
+    case 56: { // IMG - Image mode (OFF/ON)
+      extern bool imageMode;
+      const CRGB tc = currentMenuParentTextColor();
+      drawText("IMG", 2, 10, tc);
+      drawMenuValue(imageMode ? "ON" : "OFF", 2, 3, imageMode ? UI_GREEN : UI_RED);
+      drawIndicator('L', imageMode ? 'G' : 'R', 3);
+      break;
+    }
+
     case 55: // FIRE - enc1 size, enc2 count, enc3 voice (click: gravity, colour)
       {
         extern uint8_t fireVoice;
@@ -2339,10 +2377,13 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 54: { // VMOD - per-voice page loops (OFF/ON)
       extern bool voiceMode;
+      extern bool imageMode;
       const CRGB tc = currentMenuParentTextColor();
       drawText("VMOD", 2, 10, tc);
-      drawMenuValue(voiceMode ? "ON" : "OFF", 2, 3, voiceMode ? UI_GREEN : UI_RED);
-      drawIndicator('L', voiceMode ? 'G' : 'R', 3);
+      // VMOD locked off while IMG is on.
+      const bool on = voiceMode && !imageMode;
+      drawMenuValue(on ? "ON" : "OFF", 2, 3, on ? UI_GREEN : UI_RED);
+      drawIndicator('L', on ? 'G' : 'R', 3);
       break;
     }
       
@@ -2788,21 +2829,38 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     }
 
     case 12: { // CLR - Rec Channel Clear (OFF/ON/FIX/ON1/CLIC) via encoder 2 rotation
+      extern bool imageMode;
       static int lastRecChannelClear = -1;
+      // IMG forces FIX (2); lock the control while IMG is on.
+      if (imageMode && recChannelClear != 2) {
+        recChannelClear = 2;
+        saveSingleModeToEEPROM(6, 2);
+        SMP_REC_CHANNEL_CLEAR = false;
+      }
+      int shown = imageMode ? 2 : recChannelClear;
       if (menuFirstEnter) {
-        Encoder[2].writeCounter((int32_t)recChannelClear);
+        Encoder[2].writeCounter((int32_t)shown);
         Encoder[2].writeMax((int32_t)4);
         Encoder[2].writeMin((int32_t)0);
-        currentMode->pos[2] = recChannelClear;
-        lastRecChannelClear = recChannelClear;
+        currentMode->pos[2] = shown;
+        lastRecChannelClear = shown;
         menuFirstEnter = false;
       }
       if (currentMode->pos[2] != lastRecChannelClear) {
-        recChannelClear = constrain((int)currentMode->pos[2], 0, 4);
-        Encoder[2].writeCounter((int32_t)recChannelClear);
-        currentMode->pos[2] = recChannelClear;
-        lastRecChannelClear = recChannelClear;
-        saveSingleModeToEEPROM(6, recChannelClear);
+        if (imageMode) {
+          recChannelClear = 2;
+          Encoder[2].writeCounter((int32_t)2);
+          currentMode->pos[2] = 2;
+          lastRecChannelClear = 2;
+          saveSingleModeToEEPROM(6, 2);
+          SMP_REC_CHANNEL_CLEAR = false;
+        } else {
+          recChannelClear = constrain((int)currentMode->pos[2], 0, 4);
+          Encoder[2].writeCounter((int32_t)recChannelClear);
+          currentMode->pos[2] = recChannelClear;
+          lastRecChannelClear = recChannelClear;
+          saveSingleModeToEEPROM(6, recChannelClear);
+        }
         redrawMain(setting);
       }
       break;
@@ -3297,6 +3355,34 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
+    case 56: { // IMG - Image mode (OFF/ON) via encoder 2
+      extern bool imageMode;
+      extern bool voiceMode;
+      extern void enforceImageModeConstraints();
+      static int lastImgEnc = -1;
+      int encVal = imageMode ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastImgEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastImgEnc) {
+        imageMode = (currentMode->pos[2] == 1);
+        encVal = imageMode ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastImgEnc = encVal;
+        saveSingleModeToEEPROM(48, (int8_t)encVal);
+        if (imageMode) enforceImageModeConstraints();
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
     case 46: { // HFC — enc 0..25 → 0..250 step 10; enc 26 → 256 (MAX)
       static int lastEqEnc = -1;
       extern uint16_t codecHfCut;
@@ -3438,8 +3524,9 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
 
     case 54: { // VMOD - per-voice page loops (OFF/ON) via encoder 2
       extern bool voiceMode;
+      extern bool imageMode;
       static int lastVoiceEnc = -1;
-      int encVal = voiceMode ? 1 : 0;
+      int encVal = (voiceMode && !imageMode) ? 1 : 0;
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)encVal);
         Encoder[2].writeMax((int32_t)1);
@@ -3449,13 +3536,23 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         menuFirstEnter = false;
       }
       if (currentMode->pos[2] != lastVoiceEnc) {
-        voiceMode = (currentMode->pos[2] == 1);
-        encVal = voiceMode ? 1 : 0;
-        Encoder[2].writeCounter((int32_t)encVal);
-        currentMode->pos[2] = encVal;
-        lastVoiceEnc = encVal;
-        EEPROM.write(EEPROM_DATA_START + 42, voiceMode ? 1 : 0);
-        updateLastPage();
+        if (imageMode) {
+          // VMOD not allowed while IMG is on — snap encoder back to OFF.
+          voiceMode = false;
+          encVal = 0;
+          Encoder[2].writeCounter((int32_t)0);
+          currentMode->pos[2] = 0;
+          lastVoiceEnc = 0;
+          saveSingleModeToEEPROM(42, 0);
+        } else {
+          voiceMode = (currentMode->pos[2] == 1);
+          encVal = voiceMode ? 1 : 0;
+          Encoder[2].writeCounter((int32_t)encVal);
+          currentMode->pos[2] = encVal;
+          lastVoiceEnc = encVal;
+          saveSingleModeToEEPROM(42, (int8_t)encVal);
+          updateLastPage();
+        }
         redrawMain(setting);
       }
       break;
@@ -4319,12 +4416,18 @@ FLASHMEM void switchMenu(int menuPosition){
         drawMainSettingStatus(menuPosition);
         break;
 
-         case 12:
-        recChannelClear = recChannelClear + 1;
-        if (recChannelClear > 4) recChannelClear = 0;  // Cycle: 0->1->2->3->4->0 (OFF->ON->FIX->ON1->CLIC->OFF)
+         case 12: {
+        extern bool imageMode;
+        if (imageMode) {
+          recChannelClear = 2;  // FIX locked while IMG on
+        } else {
+          recChannelClear = recChannelClear + 1;
+          if (recChannelClear > 4) recChannelClear = 0;  // Cycle: 0->1->2->3->4->0 (OFF->ON->FIX->ON1->CLIC->OFF)
+        }
         saveSingleModeToEEPROM(6, recChannelClear);
         drawMainSettingStatus(menuPosition);
         break;
+        }
 
         case 15:
         // AI Song Generation - generate song from current page to target page
@@ -4509,9 +4612,16 @@ FLASHMEM void switchMenu(int menuPosition){
 
         case 54: {
         extern bool voiceMode;
-        voiceMode = !voiceMode;
-        EEPROM.write(EEPROM_DATA_START + 42, voiceMode ? 1 : 0);
-        updateLastPage();
+        extern bool imageMode;
+        if (imageMode) {
+          // VMOD not allowed while IMG is on.
+          voiceMode = false;
+          saveSingleModeToEEPROM(42, 0);
+        } else {
+          voiceMode = !voiceMode;
+          saveSingleModeToEEPROM(42, (int8_t)(voiceMode ? 1 : 0));
+          updateLastPage();
+        }
         drawMainSettingStatus(menuPosition);
         break;
         }
@@ -4603,6 +4713,16 @@ FLASHMEM void switchMenu(int menuPosition){
         setLedStripEnabled(newState);
         saveSingleModeToEEPROM(25, (int8_t)(newState ? 1 : 0));
         menuRequestFullRedraw();  // Force ETC submenu to redraw with new state
+        break;
+      }
+
+      case 56: {
+        extern bool imageMode;
+        extern void enforceImageModeConstraints();
+        imageMode = !imageMode;
+        saveSingleModeToEEPROM(48, (int8_t)(imageMode ? 1 : 0));
+        if (imageMode) enforceImageModeConstraints();
+        menuRequestFullRedraw();
         break;
       }
 
@@ -5020,8 +5140,10 @@ static inline void drawMenuValue(const char* label, int x, int y, CRGB color) {
 }
 
 FLASHMEM void drawRecChannelClear(){
+  extern bool imageMode;
+  int mode = imageMode ? 2 : recChannelClear;  // IMG locks CLR to FIX
   const char* lbl; CRGB col;
-  switch (recChannelClear) {
+  switch (mode) {
     case 1: lbl = "ON";   col = UI_GREEN;  SMP_REC_CHANNEL_CLEAR = true;  break;
     case 0: lbl = "OFF"; col = UI_RED;    SMP_REC_CHANNEL_CLEAR = false; break;
     case 2: lbl = "FIX"; col = UI_YELLOW; SMP_REC_CHANNEL_CLEAR = false; break;

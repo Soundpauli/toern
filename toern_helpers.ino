@@ -3962,6 +3962,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 45, 1);     // fireSize (1 cell)
   EEPROM.write(EEPROM_DATA_START + 46, 0);     // fireGravity (float up)
   EEPROM.write(EEPROM_DATA_START + 47, 8);     // fireColor (full voice colour)
+  EEPROM.write(EEPROM_DATA_START + 48, 0);     // imageMode (OFF)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();

@@ -469,6 +469,8 @@ bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
 bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
 bool voiceMode = false;          // VMOD: each channel loops its own pages
+bool imageMode = false;          // IMG: black matrix; paint cycles voice/color from voice1
+int imgBrushChannel = 1;         // IMG: selected brush voice/color (1–8); touch1 cycles
 uint8_t fireVoice = 0;           // ETC FIRE: 0 off, 15 all voices, else 1–8 / 11 / 13 / 14
 uint8_t fireLevel = 8;           // ETC FIRE: encoder 2 particle count, 1–25
 uint8_t fireSize = 1;            // ETC FIRE: encoder 1 particle size, 1–4
@@ -791,8 +793,9 @@ bool unpaintMode, paintMode = false;
 static inline bool isPaintableDrawRow(unsigned int y) {
   // Draw-mode: row 16 reserved for UI/copy, row 1 is special UI row.
   if (y <= 1 || y > 15) return false;
-  // Reserved rows in DRAW mode only (must not accept painted notes)
-  if (y == 10 || y == 11 || y == 13) return false;
+  // Reserved rows in normal DRAW (map to blocked channels 9/10/12).
+  // IMG paints voice/color independently of Y, so allow the full y=2..15 plane.
+  if (!imageMode && (y == 10 || y == 11 || y == 13)) return false;
   return true;
 }
 
@@ -801,11 +804,39 @@ static inline bool isSingleModeChannelAllowed(int channel) {
          channel == 11 || channel == 13 || channel == 14;
 }
 
+// IMG mode: empty cell → voice 1; re-paint advances through voices 1–8 and wraps.
+// Selecting / cycling to a voice always unmutes it.
+static inline int imageModePaintChannel(int existingChannel) {
+  static const int seq[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+  const int n = (int)(sizeof(seq) / sizeof(seq[0]));
+  int start = 0;
+  if (existingChannel > 0) {
+    for (int i = 0; i < n; i++) {
+      if (seq[i] == existingChannel) {
+        start = (i + 1) % n;
+        break;
+      }
+    }
+  }
+  for (int k = 0; k < n; k++) {
+    int ch = seq[(start + k) % n];
+    if (!isChildVoiceDisabled(ch)) {
+      setMuteState(ch, false);
+      return ch;
+    }
+  }
+  setMuteState(1, false);
+  return 1;
+}
+
 static inline bool canEnterSingleMode(unsigned int y, int channel) {
+  if (imageMode) return false;  // IMG: single mode disabled
   return y < 16 &&
          isSingleModeChannelAllowed(channel) &&
          !isChildVoiceDisabled(channel);
 }
+
+void enforceImageModeConstraints();
 
 
 // Global sequencer position (1..maxlen)
@@ -1062,6 +1093,58 @@ GlobalVars GLOB = {
   0,      //shiftY1
   0       //subpattern
 };
+
+// Cycle IMG brush (touch1); sync current channel + encoder LEDs.
+static inline void cycleImgBrush() {
+  extern int drawMode;
+  imgBrushChannel = imageModePaintChannel(imgBrushChannel);
+  GLOB.currentChannel = imgBrushChannel;
+  if (drawMode == 0) {
+    Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+  }
+  Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+}
+
+// Resolve paint channel in IMG: empty uses brush; occupied cycles and updates brush.
+static inline int imageModeResolvePaintChannel(uint8_t existingCh) {
+  int ch;
+  if (existingCh == 0) {
+    ch = imgBrushChannel;
+    if (ch < 1 || ch > 8 || isChildVoiceDisabled(ch)) {
+      ch = imageModePaintChannel(0);
+    } else {
+      setMuteState(ch, false);
+    }
+  } else {
+    ch = imageModePaintChannel(existingCh);
+  }
+  imgBrushChannel = ch;
+  return ch;
+}
+
+// When IMG is on: VMOD off, CLR=FIX, leave single mode.
+FLASHMEM void enforceImageModeConstraints() {
+  if (!imageMode) return;
+
+  if (voiceMode) {
+    voiceMode = false;
+    EEPROM.write(EEPROM_DATA_START + 42, 0);
+    updateLastPage();
+  }
+
+  if (recChannelClear != 2) {
+    recChannelClear = 2;  // FIX — no note manipulation while recording
+    EEPROM.write(EEPROM_DATA_START + 6, 2);
+    SMP_REC_CHANNEL_CLEAR = false;
+  }
+
+  if (GLOB.singleMode || currentMode == &singleMode) {
+    GLOB.singleMode = false;
+    if (currentMode == &singleMode) {
+      switchMode(&draw);
+    }
+  }
+}
 
 // LEDS=2/2B: pages are maxX=32 wide → only MAX_STEPS/maxX (=8) legal pages.
 // Unclamped page indices (or initEncoders maxX*4) remap X past note[] and crash.
@@ -2515,8 +2598,14 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       currentMode->pos[3] = parentPage;
       Encoder[3].writeCounter((int32_t)parentPage);
       if (menuEnteredFromSingleMode) {
-        switchMode(&singleMode);
-        GLOB.singleMode = true;
+        extern bool imageMode;
+        if (imageMode) {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        } else {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        }
       } else {
         switchMode(&draw);
         GLOB.singleMode = false;
@@ -2541,8 +2630,14 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     } else {
       // For all other menu pages, exit to draw or single based on state before entering menu
       if (menuEnteredFromSingleMode) {
-        switchMode(&singleMode);
-        GLOB.singleMode = true;
+        extern bool imageMode;
+        if (imageMode) {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        } else {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        }
       } else {
         switchMode(&draw);
         GLOB.singleMode = false;
@@ -2766,9 +2861,9 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   }
 
 
-  // Velocity mode entry on encoder(3) long press - skip in R mode
+  // Velocity mode entry on encoder(3) long press - skip in R mode and IMG mode
   extern int drawMode;
-  if (drawMode == 0 && !childLockEnabled) {
+  if (drawMode == 0 && !childLockEnabled && !imageMode) {
     // L+R mode: allow velocity mode entry on encoder(3) long press
     if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
       unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
@@ -3017,19 +3112,21 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
     }
   }
 
-  // R mode: encoder(3) short press - one-time paint/unpaint (no flags)
+  // R mode / IMG: encoder(3) short press — paint, cycle, or unpaint
   extern int drawMode;
-  if (drawMode == 1 && (currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 1) && !preventPaintUnpaint) {  // "0001" - short press release
-    // Toggle based on the note on screen: if it exists, unpaint it; if empty, paint it
-    if (note[cursorNoteStep()][GLOB.y].channel == 0) {
-      // Note is empty - paint it
-      freshPaint = true;
-      paint();
-    } else {
-      // Note exists - unpaint it
-      unpaint();
+  if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 1) && !preventPaintUnpaint) {  // "0001"
+    if (drawMode == 1 || imageMode) {
+      const unsigned int step = cursorNoteStep();
+      if (note[step][GLOB.y].channel == 0 || imageMode) {
+        // Empty → paint; IMG occupied → cycle voice/color
+        freshPaint = true;
+        paint();
+      } else if (drawMode == 1) {
+        // R mode without IMG: occupied → unpaint
+        unpaint();
+      }
+      preventPaintUnpaint = false;
     }
-    preventPaintUnpaint = false;
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
@@ -3042,8 +3139,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         preventPaintUnpaint = false;  // Reset flag when paintMode is activated
       } else {
         // R mode: activate paintMode or unpaintMode based on the note on screen
-        if (note[cursorNoteStep()][GLOB.y].channel == 0) {
-          // Note is empty - activate paintMode
+        if (note[cursorNoteStep()][GLOB.y].channel == 0 || imageMode) {
+          // Empty, or IMG (cycle/paint; erase via unpaint elsewhere / L+R enc0)
           paintMode = true;
           unpaintMode = false;
         } else {
@@ -4553,19 +4650,27 @@ void checkEncoders() {
       lastY = GLOB.y;
 
       //filterDrawActive = false;
-      if (currentMode == &draw) {
+      if (imageMode) {
+        // IMG: current voice follows the note color under the cursor.
+        uint8_t noteCh = note[cursorNoteStep()][GLOB.y].channel;
+        if (noteCh != 0 && isSingleModeChannelAllowed((int)noteCh)
+            && !isChildVoiceDisabled((int)noteCh)) {
+          GLOB.currentChannel = noteCh;
+        }
+      } else if (currentMode == &draw) {
         GLOB.currentChannel = GLOB.y - 1;
+      }
 
-        // Show channel number overlay when y changes (if enabled and channel is valid)
-        if (yChanged && showChannelNr) {
-          // Valid channels: 1-8 only (y=2-9 maps to channels 1-8)
-          // GLOB.currentChannel = GLOB.y - 1 (0-indexed: y=2->1, y=3->2, ..., y=9->8)
-          // Display number = GLOB.currentChannel (y=2->channel 1->display "1", y=3->channel 2->display "2", etc.)
-          int channelNum = GLOB.currentChannel;  // Display number equals currentChannel (1-indexed display)
+      if (currentMode == &draw || imageMode) {
+        // Show channel number overlay when selection changes (if enabled and channel is valid)
+        static int lastOverlayCh = -1;
+        if (showChannelNr && (yChanged || GLOB.currentChannel != lastOverlayCh)) {
+          lastOverlayCh = (int)GLOB.currentChannel;
+          int channelNum = GLOB.currentChannel;
           if (channelNum >= 1 && channelNum <= 8) {
             channelNrOverlayChannel = channelNum;
             channelNrOverlayActive = true;
-            channelNrOverlayUntil = millis() + 800;  // Show for 800ms
+            channelNrOverlayUntil = millis() + 800;
             pageNrOverlayActive = false;
           }
         }
@@ -4574,8 +4679,8 @@ void checkEncoders() {
         if (findSliderDefPageSlot(GLOB.currentChannel, dft.arr, dft.idx, page, slot)) {
           int val = getDefaultFastFilterValue(GLOB.currentChannel, dft.arr, dft.idx);
           if (allowEncWrite) Encoder[2].writeCounter((int32_t)val);
-          currentMode->pos[2] = val;  // Sync mode position with encoder to prevent stale value from being applied
-          lastEncVal[GLOB.currentChannel] = val;  // Sync tracking with encoder
+          currentMode->pos[2] = val;
+          lastEncVal[GLOB.currentChannel] = val;
         }
         filterfreshsetted = true;
       }
@@ -4657,11 +4762,18 @@ void checkEncoders() {
     static unsigned long unpaintModeSetTime = 0;
     static bool lastPaintMode = false;
     static bool lastUnpaintMode = false;
+    // IMG drag-paint: first cell sets brush color; later cells stamp that color (no +1).
+    static unsigned int lastImgPaintStep = 0;
+    static unsigned int lastImgPaintY = 0;
+    static int imgPaintBrushCh = 0;
     unsigned long now = millis();
 
     if (paintMode != lastPaintMode) {
       paintModeSetTime = now;
       lastPaintMode = paintMode;
+      lastImgPaintStep = 0;
+      lastImgPaintY = 0;
+      imgPaintBrushCh = 0;
     } else if (paintMode && (now - paintModeSetTime > 30000)) {
       // paintMode has been active for 30+ seconds - likely stuck, force reset
       paintMode = false;
@@ -4681,25 +4793,108 @@ void checkEncoders() {
       const unsigned int paintStep = cursorNoteStep();
       if (paintMode && !preventPaintUnpaint) {
         // Continuous paint in draw mode only
-        if (currentMode == &draw && isPaintableDrawRow(GLOB.y) && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
-          // Only set probability to 100% if slot was empty (preserve existing probability)
-          if (note[paintStep][GLOB.y].channel == 0) {
-            note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
-            note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
-            note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+        if (currentMode == &draw && isPaintableDrawRow(GLOB.y)) {
+          uint8_t existingCh = note[paintStep][GLOB.y].channel;
+          if (imageMode) {
+            const bool newCell = (paintStep != lastImgPaintStep || GLOB.y != lastImgPaintY);
+            if (imgPaintBrushCh == 0) {
+              // First paint of this drag: empty → selected brush; occupied → keep that color as brush.
+              int ch = (existingCh == 0) ? imageModeResolvePaintChannel(0) : (int)existingCh;
+              if (ch >= 1 && ch <= 8 && !isChildVoiceDisabled(ch)) {
+                if (existingCh == 0) {
+                  note[paintStep][GLOB.y].probability = 100;
+                  note[paintStep][GLOB.y].condition = 1;
+                  note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+                } else {
+                  imgBrushChannel = ch;
+                  setMuteState(ch, false);
+                }
+                note[paintStep][GLOB.y].channel = (uint8_t)ch;
+                note[paintStep][GLOB.y].velocity = defaultVelocity;
+                setMuteState(ch, false);
+                imgPaintBrushCh = ch;
+                GLOB.currentChannel = ch;
+                lastImgPaintStep = paintStep;
+                lastImgPaintY = GLOB.y;
+                if (voiceMode) updateLastPage();
+              }
+            } else if (newCell) {
+              // Stamp brush color onto empties and over existing notes (no color +1).
+              int ch = imgPaintBrushCh;
+              if (ch >= 1 && ch <= 8 && !isChildVoiceDisabled(ch)) {
+                if (existingCh == 0) {
+                  note[paintStep][GLOB.y].probability = 100;
+                  note[paintStep][GLOB.y].condition = 1;
+                  note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+                }
+                note[paintStep][GLOB.y].channel = (uint8_t)ch;
+                note[paintStep][GLOB.y].velocity = defaultVelocity;
+                setMuteState(ch, false);
+                GLOB.currentChannel = ch;
+                lastImgPaintStep = paintStep;
+                lastImgPaintY = GLOB.y;
+                if (voiceMode) updateLastPage();
+              }
+            }
+          } else if (!isChildVoiceDisabled((int)GLOB.currentChannel)) {
+            // Only set probability to 100% if slot was empty (preserve existing probability)
+            if (existingCh == 0) {
+              note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
+              note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
+              note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+            }
+            note[paintStep][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
+            note[paintStep][GLOB.y].velocity = defaultVelocity;
+            if (voiceMode) updateLastPage();
           }
-          note[paintStep][GLOB.y].channel = GLOB.currentChannel;  // GLOB.currentChannel is 0-based
-          note[paintStep][GLOB.y].velocity = defaultVelocity;
-          if (voiceMode) updateLastPage();
         }
       }
       // Safety check: Only allow paintMode when actually in singleMode
-      if (paintMode && currentMode == &singleMode && !preventPaintUnpaint && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
+      if (paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
         // Single mode: allow painting on all y rows 1-15 (no reserved rows).
-        // Never overwrite notes belonging to other voices (same rule as single-tap paint).
         uint8_t existingCh = note[paintStep][GLOB.y].channel;
-        if (existingCh == 0 || existingCh == GLOB.currentChannel) {
-          // Only set probability to 100% if slot was empty (preserve existing probability)
+        if (imageMode) {
+          const bool newCell = (paintStep != lastImgPaintStep || GLOB.y != lastImgPaintY);
+          if (imgPaintBrushCh == 0) {
+            int ch = (existingCh == 0) ? imageModeResolvePaintChannel(0) : (int)existingCh;
+            if (ch >= 1 && ch <= 8 && !isChildVoiceDisabled(ch)) {
+              if (existingCh == 0) {
+                note[paintStep][GLOB.y].probability = 100;
+                note[paintStep][GLOB.y].condition = 1;
+                note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+              } else {
+                imgBrushChannel = ch;
+                setMuteState(ch, false);
+              }
+              note[paintStep][GLOB.y].channel = (uint8_t)ch;
+              note[paintStep][GLOB.y].velocity = defaultVelocity;
+              setMuteState(ch, false);
+              imgPaintBrushCh = ch;
+              GLOB.currentChannel = ch;
+              lastImgPaintStep = paintStep;
+              lastImgPaintY = GLOB.y;
+              if (voiceMode) updateLastPage();
+            }
+          } else if (newCell) {
+            int ch = imgPaintBrushCh;
+            if (ch >= 1 && ch <= 8 && !isChildVoiceDisabled(ch)) {
+              if (existingCh == 0) {
+                note[paintStep][GLOB.y].probability = 100;
+                note[paintStep][GLOB.y].condition = 1;
+                note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+              }
+              note[paintStep][GLOB.y].channel = (uint8_t)ch;
+              note[paintStep][GLOB.y].velocity = defaultVelocity;
+              setMuteState(ch, false);
+              GLOB.currentChannel = ch;
+              lastImgPaintStep = paintStep;
+              lastImgPaintY = GLOB.y;
+              if (voiceMode) updateLastPage();
+            }
+          }
+        } else if (!isChildVoiceDisabled((int)GLOB.currentChannel) &&
+                   (existingCh == 0 || existingCh == GLOB.currentChannel)) {
+          // Never overwrite notes belonging to other voices (same rule as single-tap paint).
           if (existingCh == 0) {
             note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
             note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
@@ -5167,7 +5362,7 @@ void exitMenuFromTouchInput() {
   }
 
   // On main menu (or after submenu unwind), exit to draw/single based on entry mode.
-  if (menuEnteredFromSingleMode) {
+  if (menuEnteredFromSingleMode && !imageMode) {
     switchMode(&singleMode);
     GLOB.singleMode = true;
   } else {
@@ -5320,6 +5515,7 @@ void checkTouchInputs() {
   newTouchState[0] = tv1;
   newTouchState[1] = tv2;
   //touchState[2] = (tv3 > touchThreshold);
+
 
   // 3) detect "rising edge" of both‐pressed
   bool bothTouched = newTouchState[0] && newTouchState[1];
@@ -5474,7 +5670,13 @@ skip_individual_touch:
       }
 
       if (currentMode == &draw) {
-        scheduleTouch1ModeToggle(true, currentTime);
+        if (imageMode) {
+          // IMG: touch1 cycles brush color (alt to enc4 paint cycle)
+          lastTouchTime[0] = currentTime;
+          cycleImgBrush();
+        } else {
+          scheduleTouch1ModeToggle(true, currentTime);
+        }
       } else if (currentMode == &menu) {
         exitMenuFromTouchInput();
         lastTouchTime[0] = currentTime;
@@ -5507,9 +5709,13 @@ end_switch1:
           // Child lock enabled: set flag, wait for touch1, and act like touch1 (toggle single mode)
           childLockTouch2Pressed = true;
           childLockTouch2Time = currentTime;
-          // Behave like touch1: toggle single mode
+          // Behave like touch1: toggle single mode (or cycle IMG brush)
           if (currentMode == &draw) {
-            enterSingleModeDirect();
+            if (imageMode) {
+              cycleImgBrush();
+            } else {
+              enterSingleModeDirect();
+            }
           } else if (currentMode == &singleMode) {
             exitDrawFromSingleDirect();
           }
@@ -6860,20 +7066,19 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   extern int drawMode;  // 0 = L+R (default), 1 = R (right-hand only)
 
   if (drawMode == 0) {
-    // L+R mode: encoder(3) paints, encoder(0) unpaints (current behavior)
-    if (note[cursorNoteStep()][GLOB.y].channel == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
+    // L+R mode: encoder(3) paints, encoder(0) unpaints.
+    // IMG short-press paint/cycle is handled in checkMode via "0001" (avoid double-fire here).
+    if (!imageMode && note[cursorNoteStep()][GLOB.y].channel == 0
+        && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
       paintMode = false;
       freshPaint = true;
       unpaintMode = false;
       pressed[3] = false;
       paint();
-      preventPaintUnpaint = false;  // Reset flag after paint operation
-      // return; // This return might skip drawing updates if not careful
+      preventPaintUnpaint = false;
     }
 
-    // In R mode, encoder(0) never unpaints - skip unpaint functionality
-    extern int drawMode;
-    if (drawMode == 0 && (currentMode == &draw || currentMode == &singleMode) && pressed[0] == true && !preventPaintUnpaint) {
+    if ((currentMode == &draw || currentMode == &singleMode) && pressed[0] == true && !preventPaintUnpaint) {
       paintMode = false;
       unpaintMode = false;
       pressed[0] = false;
@@ -6910,7 +7115,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       encoder0PressedOnEmptyNote = false;
     }
 
-    if ((currentMode == &draw || currentMode == &singleMode) && encoder0LongHeld) {
+    if ((currentMode == &draw || currentMode == &singleMode) && encoder0LongHeld && !imageMode) {
       // Long press reached - enter velocity mode if not already in it
       // Only trigger if note has value AND encoder(0) was not pressed on empty note
       if (currentMode != &velocity && !encoder0PressedOnEmptyNote) {
@@ -8652,36 +8857,53 @@ void paint() {
   bool channelBlocked = (GLOB.currentChannel == 9 || GLOB.currentChannel == 10 || GLOB.currentChannel == 12 || isChildVoiceDisabled((int)GLOB.currentChannel));
 
   if (!GLOB.singleMode) {  // Draw mode
-    // current_y is 1-16. GLOB.currentChannel is 0-14.
-    // If painting on grid rows 1-15 (GLOB.y from encoder), channel is GLOB.y - 1.
-    // Original condition: (y > 1 && y <= 9) || (y == 12) || (y > 13 && y <= 15)
-    // This implies specific rows map to specific channel types/groups.
-    // For simplicity, let's assume if current_y maps to a valid channel (1-15), we paint it.
-    // GLOB.currentChannel is already set based on GLOB.y in checkEncoders for draw mode.
-    if (isPaintableDrawRow(current_y)) {                                 // Draw mode: paintable grid rows only
-      if (!channelBlocked && note[current_x][current_y].channel == 0) {  // Only paint if empty
-        note[current_x][current_y].channel = GLOB.currentChannel;        // GLOB.currentChannel should be correct 0-indexed channel
+    if (isPaintableDrawRow(current_y)) {
+      uint8_t existingCh = note[current_x][current_y].channel;
+      if (imageMode) {
+        int ch = imageModeResolvePaintChannel(existingCh);
+        if (!isChildVoiceDisabled(ch)) {
+          if (existingCh == 0) {
+            note[current_x][current_y].probability = 100;
+            note[current_x][current_y].condition = 1;
+            note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
+          }
+          note[current_x][current_y].channel = (uint8_t)ch;
+          note[current_x][current_y].velocity = defaultVelocity;
+          GLOB.currentChannel = ch;
+        }
+      } else if (!channelBlocked && existingCh == 0) {  // Only paint if empty
+        note[current_x][current_y].channel = GLOB.currentChannel;
         note[current_x][current_y].velocity = defaultVelocity;
-        note[current_x][current_y].probability = 100;  // Default 100% probability
-        note[current_x][current_y].condition = 1;      // Default condition: 1 (every loop)
+        note[current_x][current_y].probability = 100;
+        note[current_x][current_y].condition = 1;
         note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     } else if (current_y == 16) {  // Top row (GLOB.y == 16)
       toggleCopyPaste();
     }
-  } else {  // Single mode (painting for the globally selected GLOB.currentChannel)
-    // Single mode: allow painting on all y rows 1-15 (no reserved rows)
+  } else {  // Single mode
     if ((current_y > 0 && current_y <= 15)) {
       uint8_t existingCh = note[current_x][current_y].channel;
-      // Do not overwrite notes belonging to other voices
-      if (!channelBlocked && (existingCh == 0 || existingCh == GLOB.currentChannel)) {
+      if (imageMode) {
+        int ch = imageModeResolvePaintChannel(existingCh);
+        if (!isChildVoiceDisabled(ch)) {
+          if (existingCh == 0) {
+            note[current_x][current_y].probability = 100;
+            note[current_x][current_y].condition = 1;
+            note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
+          }
+          note[current_x][current_y].channel = (uint8_t)ch;
+          note[current_x][current_y].velocity = defaultVelocity;
+          GLOB.currentChannel = ch;
+        }
+      } else if (!channelBlocked && (existingCh == 0 || existingCh == GLOB.currentChannel)) {
         note[current_x][current_y].channel = GLOB.currentChannel;
         note[current_x][current_y].velocity = defaultVelocity;
-        note[current_x][current_y].probability = 100;  // Default 100% probability
-        note[current_x][current_y].condition = 1;      // Default condition: 1 (every loop)
+        note[current_x][current_y].probability = 100;
+        note[current_x][current_y].condition = 1;
         note[current_x][current_y].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
-    } else if (current_y == 16) {  // Top row (GLOB.y == 16) - enable copypaste in single mode
+    } else if (current_y == 16) {
       toggleCopyPaste();
     }
   }

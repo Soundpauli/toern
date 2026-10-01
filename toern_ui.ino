@@ -399,13 +399,17 @@ void drawBase() {
     static uint8_t lastColorScheme = 255;  // Initialize to invalid value
     extern volatile bool colorsUpdatedViaSerial;
     
-    // Recalculate colors if drawBaseColorMode changed, color scheme changed, colors updated via serial, or not cached
-    if (!colorsCached || drawBaseColorMode != lastDrawBaseColorMode || currentColorScheme != lastColorScheme || colorsUpdatedViaSerial) {
+    // Recalculate colors if drawBaseColorMode / imageMode / scheme / serial colors changed
+    extern bool imageMode;
+    static bool lastImageMode = false;
+    if (!colorsCached || drawBaseColorMode != lastDrawBaseColorMode || imageMode != lastImageMode
+        || currentColorScheme != lastColorScheme || colorsUpdatedViaSerial) {
       for (unsigned int y = 0; y < maxY; y++) {
         cachedColors[y] = col_base[y];
       }
       colorsCached = true;
       lastDrawBaseColorMode = drawBaseColorMode;
+      lastImageMode = imageMode;
       lastColorScheme = currentColorScheme;
       colorsUpdatedViaSerial = false;  // Reset flag after cache is updated
     }
@@ -413,7 +417,8 @@ void drawBase() {
     unsigned int colors = 0;
     for (unsigned int y = 1; y < maxY; y++) {
       const bool rowMuted = muteCache[y - 1];
-      const bool useColor = drawBaseColorMode;
+      // Base row wash: normal draw when drawBaseColorMode; black only in IMG.
+      const bool useColor = drawBaseColorMode && !imageMode;
       const CRGB rowColor = cachedColors[colors];
       for (unsigned int x = 1; x < maxX + 1; x++) {
         if (rowMuted) {
@@ -422,7 +427,7 @@ void drawBase() {
           if (useColor) {
             light(x, y, rowColor);  // Use cached color
           } else {
-            light(x, y, CRGB(0, 0, 0));  // schwarz wenn drawBaseColorMode = false
+            light(x, y, CRGB(0, 0, 0));  // black when drawBaseColorMode off, or IMG
           }
         }
       }
@@ -459,6 +464,15 @@ void drawBase() {
     }
 
     for (unsigned int y = 1; y < maxY; y++) {
+      // IMG: black matrix (no base wash); notes still drawn by drawTriggers.
+      extern bool imageMode;
+      if (imageMode) {
+        for (unsigned int x = 1; x < maxX + 1; x++) {
+          light(x, y, CRGB(0, 0, 0));
+        }
+        continue;
+      }
+
       // Determine color once per row
       CRGB color = (y == currentChannel + 1) ? cachedHighlightColor : cachedSingleModeColor;
       
@@ -491,10 +505,18 @@ void drawBase() {
 
    // 4/4-Takt-Hilfslinien in Zeile 1 (z. B. Start jeder Viertel)
    // Mark every 4th position across the full width
-   // Show monitoring state: dark white (off), dark green (on), dark yellow (all)
+   // IMG: show selected brush color; else monitoring state
    extern int inputMonitoringState;
+   extern bool imageMode;
+   extern int imgBrushChannel;
    CRGB helperColor;
-   if (inputMonitoringState == 0) {
+   if (imageMode) {
+     int brush = imgBrushChannel;
+     if (brush < 1) brush = 1;
+     if (brush > 8) brush = 8;
+     helperColor = col[brush];
+     helperColor.nscale8(48);  // dim for status-bar dots
+   } else if (inputMonitoringState == 0) {
      helperColor = CRGB(10, 10, 10);  // Dark white when off
    } else if (inputMonitoringState == 1) {
      helperColor = CRGB(30, 30, 0);    // Dark yellow when on (y==1 only)
