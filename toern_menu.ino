@@ -271,7 +271,7 @@ FLASHMEM static void drawEtcRamPage() {
     }
   }
   drawMenuValue(line, 2, 3, valueColor);
-  drawIndicator('L', 'G', 3);
+  drawIndicator('L', 'G', 3, false, false);
 }
 
 FLASHMEM static void drawEtcInfoPage() {
@@ -338,7 +338,32 @@ FLASHMEM void noteMenuExit() {
   menuExitMs = millis();
 }
 
+// Shared enc3 min/max cache across all menu/submenu screens. Per-screen statics
+// skipped writeMax when wantMax matched a prior visit, while switchMode/draw had
+// already raised HW max (menu.maxValues[3]=16) → dead steps past last page.
+static int g_cachedEnc3Max = -999;
+static int g_cachedEnc3Min = -999;
+
+FLASHMEM void invalidateEnc3RangeCache() {
+  g_cachedEnc3Max = -999;
+  g_cachedEnc3Min = -999;
+}
+
+FLASHMEM static void ensureEnc3Range(int wantMin, int wantMax) {
+  if (g_cachedEnc3Max != wantMax) {
+    Encoder[3].writeMax((int32_t)wantMax);
+    g_cachedEnc3Max = wantMax;
+  }
+  if (g_cachedEnc3Min != wantMin) {
+    Encoder[3].writeMin((int32_t)wantMin);
+    g_cachedEnc3Min = wantMin;
+  }
+}
+
 FLASHMEM void prepareMenuEntry() {
+  // switchMode(&menu) writes Mode.maxValues[3] (16) before showMenu runs —
+  // drop cache so the active page-count max is re-applied.
+  invalidateEnc3RangeCache();
   if (menuExitMs != 0 && (millis() - menuExitMs) >= MENU_REENTRY_GRACE_MS) {
     currentMenuPage = 0;
     inLookSubmenu = false;
@@ -385,6 +410,33 @@ static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
 static bool settingsBackupDirty = false;
 static uint32_t settingsBackupDirtyMs = 0;
 static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
+// Bits 0..3 = 1-4 / 5-8 / SYN / ALL — EEPROM write deferred while sequencer plays
+// (Teensy EEPROM is flash-backed; mid-playback writes stall FlexSPI and can bus-fault
+// the audio eDMA → CrashReport / HalfKay 7-blink reboot after ~8s).
+static uint8_t g_pendingMixGainMask = 0;
+static bool g_pendingSp0Eeprom = false;
+// All other settings-block bytes deferred the same way while isNowPlaying.
+static uint8_t g_pendingEepromBytes[SETTINGS_EEPROM_BLOCK_LEN];
+static uint8_t g_pendingEepromMask[(SETTINGS_EEPROM_BLOCK_LEN + 7) / 8];
+static bool g_pendingEepromAny = false;
+
+static inline void pendingEepromSet(int index, uint8_t value) {
+  if (index < 0 || index >= (int)SETTINGS_EEPROM_BLOCK_LEN) return;
+  g_pendingEepromBytes[index] = value;
+  g_pendingEepromMask[index >> 3] |= (uint8_t)(1u << (index & 7));
+  g_pendingEepromAny = true;
+}
+
+FLASHMEM static void flushPendingEepromWrites() {
+  if (!g_pendingEepromAny) return;
+  for (int i = 0; i < (int)SETTINGS_EEPROM_BLOCK_LEN; i++) {
+    if (g_pendingEepromMask[i >> 3] & (uint8_t)(1u << (i & 7))) {
+      EEPROM.write(EEPROM_DATA_START + i, g_pendingEepromBytes[i]);
+    }
+  }
+  memset(g_pendingEepromMask, 0, sizeof(g_pendingEepromMask));
+  g_pendingEepromAny = false;
+}
 
 // Large buffers off DTCM: only used from loadMenuFromEEPROM / readSettingsBackupFromSD (single-threaded).
 EXTMEM static char g_settingsBackupReadLine[1024];
@@ -548,11 +600,7 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
   // Added after the V1 backup format shipped: an absent CLMP byte must preserve
   // the historical pitch-folding behavior (ON), not restore as OFF.
   outBlock[37] = 1;
-  // Absent GAIN bytes (old backups) stay at current staging, not mute.
-  outBlock[38] = 10;
-  outBlock[39] = 10;
-  outBlock[40] = 10;
-  outBlock[41] = 10;
+  // GAIN defaults applied after memcpy (see below) so short/old backups don't mute.
   if (outSp0BlockLen < EEPROM_SP0_STATE_COUNT) { f.close(); return false; }
   memset(outSp0Block, 0, EEPROM_SP0_STATE_COUNT);
   // Payload layout: samplePackID (4) + settings block (variable up to SETTINGS_EEPROM_BLOCK_LEN) + sp0 (8).
@@ -573,15 +621,53 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
     if (sp0Copy > 0) {
       memcpy(outSp0Block, payload + sizeof(unsigned int) + blkInFile, sp0Copy);
     }
+    // CLMP absent in short backups
+    if (blkCopy <= 37) outBlock[37] = 1;
+    // VOL→GAIN (38–41): absent, virgin 0xFF, or zero-padded old backups → 1.0×
+    {
+      const bool gainAbsentOrBlank =
+          (blkCopy <= 38) ||
+          ((outBlock[38] | outBlock[39] | outBlock[40] | outBlock[41]) == 0);
+      for (int i = 38; i <= 41; i++) {
+        if (blkCopy <= (size_t)i || outBlock[i] > MIX_GAIN_MAX || gainAbsentOrBlank) {
+          outBlock[i] = (uint8_t)MIX_GAIN_UNITY;
+        }
+      }
+    }
   }
   f.close();
   return true;
 }
 
 FLASHMEM void serviceSettingsBackup() {
+  // Persist anything deferred while the sequencer was running.
+  extern bool isNowPlaying;
+  extern uint8_t mixGain14;
+  extern uint8_t mixGain58;
+  extern uint8_t mixGainSynth;
+  extern uint8_t mixGainMaster;
+  if (!isNowPlaying) {
+    if (g_pendingMixGainMask) {
+      if (g_pendingMixGainMask & 0x01) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_14, mixGain14);
+      if (g_pendingMixGainMask & 0x02) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_58, mixGain58);
+      if (g_pendingMixGainMask & 0x04) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_SYN, mixGainSynth);
+      if (g_pendingMixGainMask & 0x08) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_ALL, mixGainMaster);
+      g_pendingMixGainMask = 0;
+      markSettingsBackupDirty();
+    }
+    if (g_pendingEepromAny) {
+      flushPendingEepromWrites();
+      markSettingsBackupDirty();
+    }
+    // SP0 voice flags deferred while playing (same flash/bus-fault class as mix-gain).
+    if (g_pendingSp0Eeprom) {
+      g_pendingSp0Eeprom = false;
+      saveSp0StateToEEPROM();
+    }
+  }
+
   if (!settingsBackupDirty) return;
   // Defer SD write while sequencer is playing — keep dirty and retry when stopped.
-  extern bool isNowPlaying;
   if (isNowPlaying) return;
   if ((uint32_t)(millis() - settingsBackupDirtyMs) < SETTINGS_BACKUP_DEBOUNCE_MS) return;
   // Best effort: if SD write fails, keep dirty flag and try later.
@@ -985,7 +1071,8 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
   MIDI_NOTE_CLAMP = (clampValue != 0);
 
-  // VOL→GAIN (slots 38–41). Virgin 0xFF and any value >20 migrate to 10 (current staging).
+  // VOL→GAIN (slots 38–41). Missing EEPROM / virgin 0xFF / >20 → 1.0× (10).
+  // All-zero (pre-GAIN firmware or zero-padded backup) also → 1.0× for every bus.
   {
     extern uint8_t mixGain14;
     extern uint8_t mixGain58;
@@ -996,14 +1083,23 @@ FLASHMEM void loadMenuFromEEPROM() {
     uint8_t gSyn = EEPROM.read(EEPROM_DATA_START + EEPROM_MIX_GAIN_SYN);
     uint8_t gAll = EEPROM.read(EEPROM_DATA_START + EEPROM_MIX_GAIN_ALL);
     bool migrated = false;
-    if (g14 > MIX_GAIN_MAX) { g14 = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_14, g14); migrated = true; }
-    if (g58 > MIX_GAIN_MAX) { g58 = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_58, g58); migrated = true; }
-    if (gSyn > MIX_GAIN_MAX) { gSyn = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_SYN, gSyn); migrated = true; }
-    if (gAll > MIX_GAIN_MAX) { gAll = MIX_GAIN_UNITY; EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_ALL, gAll); migrated = true; }
-    mixGain14 = g14;
-    mixGain58 = g58;
-    mixGainSynth = gSyn;
-    mixGainMaster = gAll;
+    const bool blank = ((g14 | g58 | gSyn | gAll) == 0);
+    auto fixGain = [&](uint8_t g) -> uint8_t {
+      if (blank || g > MIX_GAIN_MAX) return (uint8_t)MIX_GAIN_UNITY;
+      return g;
+    };
+    uint8_t n14 = fixGain(g14);
+    uint8_t n58 = fixGain(g58);
+    uint8_t nSyn = fixGain(gSyn);
+    uint8_t nAll = fixGain(gAll);
+    if (n14 != g14) { EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_14, n14); migrated = true; }
+    if (n58 != g58) { EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_58, n58); migrated = true; }
+    if (nSyn != gSyn) { EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_SYN, nSyn); migrated = true; }
+    if (nAll != gAll) { EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_ALL, nAll); migrated = true; }
+    mixGain14 = n14;
+    mixGain58 = n58;
+    mixGainSynth = nSyn;
+    mixGainMaster = nAll;
     if (migrated) markSettingsBackupDirty();
   }
 
@@ -1267,18 +1363,55 @@ FLASHMEM void applyAudioSettingsFromGlobals() {
 
 // call this after you change *any* one of the six modes in switchMenu():
 FLASHMEM void saveSingleModeToEEPROM(int index, int8_t value) {
+  extern bool isNowPlaying;
+  if (index < 0 || index >= (int)SETTINGS_EEPROM_BLOCK_LEN) return;
+  if (isNowPlaying) {
+    pendingEepromSet(index, (uint8_t)value);
+    markSettingsBackupDirty();
+    return;
+  }
   EEPROM.write(EEPROM_DATA_START + index, (uint8_t)value);
   markSettingsBackupDirty();
 }
 
+// Live-apply mix gain; defer flash EEPROM while playing (avoids mid-playback stalls).
+static inline void saveMixGainToEEPROM(int eepromIndex, uint8_t value, uint8_t pendingBit) {
+  extern bool isNowPlaying;
+  if (isNowPlaying) {
+    g_pendingMixGainMask |= pendingBit;
+    return;
+  }
+  saveSingleModeToEEPROM(eepromIndex, (int8_t)value);
+}
+
 static void saveTransportDelayToEEPROM(int slotBase, int8_t value) {
-  EEPROM.write(EEPROM_DATA_START + slotBase, (uint8_t)value);
+  saveSingleModeToEEPROM(slotBase, value);
+}
+
+// uint16 settings (HFC cut, draw mute mask). Format byte written separately when needed.
+FLASHMEM static void saveSettingsU16ToEEPROM(int index, uint16_t value) {
+  extern bool isNowPlaying;
+  if (index < 0 || index + 1 >= (int)SETTINGS_EEPROM_BLOCK_LEN) return;
+  if (isNowPlaying) {
+    pendingEepromSet(index, (uint8_t)(value & 0xFF));
+    pendingEepromSet(index + 1, (uint8_t)((value >> 8) & 0xFF));
+    markSettingsBackupDirty();
+    return;
+  }
+  EEPROM.put(EEPROM_DATA_START + index, value);
   markSettingsBackupDirty();
 }
 
 
 // Save samplepack 0 state to EEPROM (which voices are using sp0)
 FLASHMEM void saveSp0StateToEEPROM() {
+  extern bool isNowPlaying;
+  // Mid-playback flash writes stall the same way mix-gain did — defer until stopped.
+  if (isNowPlaying) {
+    g_pendingSp0Eeprom = true;
+    markSettingsBackupDirty();
+    return;
+  }
   // Use addresses 200-208 for sp0 state (8 voices = 8 bytes)
   for (int i = 1; i < maxFiles; i++) {
     uint8_t value = SMP.sp0Active[i] ? 1 : 0;
@@ -1316,9 +1449,7 @@ FLASHMEM void showMenu() {
     menuFirstEnter = false;
   }
   
-  // Always set encoder limits to ensure they match current MENU_PAGES_COUNT
-  Encoder[3].writeMax((int32_t)(MENU_PAGES_COUNT - 1));
-  Encoder[3].writeMin((int32_t)0);
+  ensureEnc3Range(0, (int)(MENU_PAGES_COUNT - 1));
   
   if (currentMode->pos[3] != lastPagePosition) {
     currentMenuPage = currentMode->pos[3];
@@ -1462,9 +1593,7 @@ FLASHMEM void showLookMenu() {
     lookMenuFirstEnter = false;
   }
   
-  // Always set encoder limits to ensure they match current LOOK_PAGES_COUNT
-  Encoder[3].writeMax((int32_t)(LOOK_PAGES_COUNT - 1));
-  Encoder[3].writeMin((int32_t)0);
+  ensureEnc3Range(0, (int)(LOOK_PAGES_COUNT - 1));
   
   if (currentMode->pos[3] != lastLookPagePosition) {
     currentLookPage = currentMode->pos[3];
@@ -1481,9 +1610,10 @@ FLASHMEM void showLookMenu() {
   }
 
   // Mark render dirty on any encoder movement while in submenu.
+  // Skip if controls already redrew this frame (avoids re-I2C RGB on every tick).
   uint32_t h = hashEncoderPositions(currentMode);
   if (h != lastPosHash) {
-    menuRequestFullRedraw();
+    if (!didRedraw) menuRequestFullRedraw();
     lastPosHash = h;
   }
 }
@@ -1575,9 +1705,7 @@ FLASHMEM void showRecsMenu() {
     recsMenuFirstEnter = false;
   }
   
-  // Always set encoder limits to ensure they match current RECS_PAGES_COUNT
-  Encoder[3].writeMax((int32_t)(RECS_PAGES_COUNT - 1));
-  Encoder[3].writeMin((int32_t)0);
+  ensureEnc3Range(0, (int)(RECS_PAGES_COUNT - 1));
   
   if (currentMode->pos[3] != lastRecsPagePosition) {
     currentRecsPage = currentMode->pos[3];
@@ -1594,9 +1722,10 @@ FLASHMEM void showRecsMenu() {
   }
 
   // Mark render dirty on any encoder movement while in submenu.
+  // Skip if controls already redrew this frame (avoids re-I2C RGB on every tick).
   uint32_t h = hashEncoderPositions(currentMode);
   if (h != lastPosHash) {
-    menuRequestFullRedraw();
+    if (!didRedraw) menuRequestFullRedraw();
     lastPosHash = h;
   }
 }
@@ -1686,9 +1815,7 @@ FLASHMEM void showMidiMenu() {
     midiMenuFirstEnter = false;
   }
   
-  // Always set encoder limits to ensure they match current MIDI_PAGES_COUNT
-  Encoder[3].writeMax((int32_t)(MIDI_PAGES_COUNT - 1));
-  Encoder[3].writeMin((int32_t)0);
+  ensureEnc3Range(0, (int)(MIDI_PAGES_COUNT - 1));
   
   if (currentMode->pos[3] != lastMidiPagePosition) {
     currentMidiPage = currentMode->pos[3];
@@ -1705,9 +1832,10 @@ FLASHMEM void showMidiMenu() {
   }
 
   // Mark render dirty on any encoder movement while in submenu.
+  // Skip if controls already redrew this frame (avoids re-I2C RGB on every tick).
   uint32_t h = hashEncoderPositions(currentMode);
   if (h != lastPosHash) {
-    menuRequestFullRedraw();
+    if (!didRedraw) menuRequestFullRedraw();
     lastPosHash = h;
   }
 }
@@ -1790,9 +1918,7 @@ FLASHMEM void showVolMenu() {
     volMenuFirstEnter = false;
   }
   
-  // Always set encoder limits to ensure they match current VOL_PAGES_COUNT
-  Encoder[3].writeMax((int32_t)(VOL_PAGES_COUNT - 1));
-  Encoder[3].writeMin((int32_t)0);
+  ensureEnc3Range(0, (int)(VOL_PAGES_COUNT - 1));
   
   if (currentMode->pos[3] != lastVolPagePosition) {
     currentVolPage = currentMode->pos[3];
@@ -1809,9 +1935,10 @@ FLASHMEM void showVolMenu() {
   }
 
   // Mark render dirty on any encoder movement while in submenu.
+  // Skip if controls already redrew this frame (GAIN used to double-redraw + re-I2C).
   uint32_t h = hashEncoderPositions(currentMode);
   if (h != lastPosHash) {
-    menuRequestFullRedraw();
+    if (!didRedraw) menuRequestFullRedraw();
     lastPosHash = h;
   }
 }
@@ -1876,26 +2003,59 @@ FLASHMEM void showEtcMenu() {
     // Indicators / encoder ring colors
     // For AUTO (mainSetting 15): encoder(0) is the green "generate" trigger; no blue exit indicator on encoder(3).
     // Otherwise keep ETC parent-colored encoder(3) ring (page nav).
+    // Cache RGB: INFO/RAM/BATT force fullRedraw periodically — repeating identical
+    // Duppa writes every frame stalls while playing.
+    static uint32_t lastEtcRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+    static int lastEtcRgbPage = -1;
+    if (pageIndex != lastEtcRgbPage) {
+      for (int i = 0; i < 4; i++) lastEtcRGB[i] = 0xFFFFFFFFu;
+      lastEtcRgbPage = pageIndex;
+    }
+    auto setEtcRGB = [&](int enc, uint32_t rgb) {
+      if (enc < 0 || enc > 3) return;
+      if (lastEtcRGB[enc] == rgb) return;
+      lastEtcRGB[enc] = rgb;
+      Encoder[enc].writeRGBCode(rgb);
+    };
     if (mainSetting == 15) {
-      drawIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
+      drawIndicator('L', 'G', 1, false, false);  // Encoder(0): Large Green (generate)
       // Keep encoder(1)/(2) indicators from AI page itself (drawMainSettingStatus/drawAdditionalFeatures)
-      Encoder[0].writeRGBCode(0x00FF00);
-      Encoder[1].writeRGBCode(getIndicatorColor('Y').r << 16 | getIndicatorColor('Y').g << 8 | getIndicatorColor('Y').b);
-      Encoder[2].writeRGBCode(getIndicatorColor('W').r << 16 | getIndicatorColor('W').g << 8 | getIndicatorColor('W').b);
+      setEtcRGB(0, 0x00FF00);
+      CRGB y = getIndicatorColor('Y');
+      CRGB w = getIndicatorColor('W');
+      setEtcRGB(1, (uint32_t)y.r << 16 | (uint32_t)y.g << 8 | y.b);
+      setEtcRGB(2, (uint32_t)w.r << 16 | (uint32_t)w.g << 8 | w.b);
       // Page-nav indicator (encoder 4) should always match ETC text color (e.g. "RSET")
-      drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+      {
+        CRGB c = currentMenuParentTextColor();
+        drawLargeIndicatorCustom(c, 4);
+        // drawLargeIndicatorCustom writes RGB — re-cache so later frames skip
+        lastEtcRGB[3] = (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b;
+      }
     } else {
-      // ETC submenu: encoder 2 = value on LGHT(40), COLR(41), CHLD(48), RAM(52), FIRE(55), IMG(56), EYES(57)
-      drawLargeIndicatorCustom(currentMenuParentTextColor(), 4);
+      // ETC submenu: encoder 3 = value on RSET(16), LGHT(40), COLR(41), CHLD(48), RAM(52), FIRE(55), IMG(56), EYES(57)
       CRGB indicatorColor = currentMenuParentTextColor();
       const bool etcValuePage =
-          (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
+          (mainSetting == 16 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
            mainSetting == 52 || mainSetting == 55 || mainSetting == 56 ||
            mainSetting == 57);
-      Encoder[0].writeRGBCode(0x000000);
-      Encoder[1].writeRGBCode(0x000000);
-      Encoder[2].writeRGBCode(etcValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
-      Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+      // Matrix chrome without I2C; rings via cache
+      {
+        extern void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
+        extern int ledModules;
+        int x1, x2, x3;
+        getIndicatorXPositions(4, x1, x2, x3);
+        const bool isWide = (ledModules == 2 && maxX > 16);
+        const int x4 = isWide ? min((int)maxX, x3 + 1) : x3;
+        light(x1, 1, indicatorColor);
+        light(x2, 1, indicatorColor);
+        light(x3, 1, indicatorColor);
+        if (isWide) light(x4, 1, indicatorColor);
+      }
+      setEtcRGB(0, 0x000000);
+      setEtcRGB(1, 0x000000);
+      setEtcRGB(2, etcValuePage ? ((uint32_t)indicatorColor.r << 16 | (uint32_t)indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
+      setEtcRGB(3, (uint32_t)indicatorColor.r << 16 | (uint32_t)indicatorColor.g << 8 | indicatorColor.b);
     }
 
     drawMainSettingStatus(mainSetting);
@@ -1926,8 +2086,7 @@ FLASHMEM void showEtcMenu() {
     etcMenuFirstEnter = false;
   }
   
-  Encoder[3].writeMax((int32_t)(ETC_PAGES_COUNT - 1));
-  Encoder[3].writeMin((int32_t)0);
+  ensureEnc3Range(0, (int)(ETC_PAGES_COUNT - 1));
   if (currentMode->pos[3] != lastEtcPagePosition) {
     currentEtcPage = currentMode->pos[3];
     if (currentEtcPage >= ETC_PAGES_COUNT) currentEtcPage = ETC_PAGES_COUNT - 1;
@@ -1942,10 +2101,11 @@ FLASHMEM void showEtcMenu() {
   }
 
   // Mark render dirty on any encoder movement while in submenu (except INFO which animates).
+  // Skip if controls already redrew this frame (avoids re-I2C RGB on every tick).
   if (mainSetting != 39) {
     uint32_t h = hashEncoderPositions(currentMode);
     if (h != lastPosHash) {
-      menuRequestFullRedraw();
+      if (!didRedraw) menuRequestFullRedraw();
       lastPosHash = h;
     }
   }
@@ -2616,6 +2776,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       if (disp > 256u) disp = 256u;
       if (disp != 256u) disp = (disp / 10u) * 10u;
       snprintf(valText, sizeof(valText), "%u", disp);
+      clearTextArea(2, 3, 16);
       drawText(valText, 2, 3, CRGB(200, 40, 40));
       CRGB encCol = CRGB(200, 40, 40);
       Encoder[2].writeRGBCode(encCol.r << 16 | encCol.g << 8 | encCol.b);
@@ -2634,6 +2795,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       if (g_gainUiFocus == 0) { title = "1-4"; shown = mixGain14; valCol = CRGB(0, 200, 200); }
       else if (g_gainUiFocus == 1) { title = "5-8"; shown = mixGain58; valCol = CRGB(200, 100, 0); }
       else if (g_gainUiFocus == 2) { title = "SYN"; shown = mixGainSynth; valCol = CRGB(200, 40, 200); }
+      // Title length changes (ALL/1-4/SYN) — clear before draw (partial redraw path).
+      clearTextArea(1, 10, (int)maxX);
       drawText(title, 2, 10, currentMenuParentTextColor());
       char valText[8];
       snprintf(valText, sizeof(valText), "%u.%ux", (unsigned)(shown / 10u), (unsigned)(shown % 10u));
@@ -2735,11 +2898,7 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       } else {
         modeText = "ASAV";
       }
-      for (int x = 1; x <= 16; x++) {
-        light(x, 8, CRGB::Black);
-      }
-      drawText(modeText, 2, 3, UI_ORANGE);
-      FastLEDshow();
+      drawMenuValue(modeText, 2, 3, UI_ORANGE);
       break;
     }
     
@@ -2815,6 +2974,10 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   }
   
   auto redrawMain = [&](int s) {
+    // Partial redraws skip FastLEDclear — wipe value + title rows full-width
+    // (GAIN title ALL/1-4/SYN; numeric width changes; LOOP OFF↔digit).
+    clearTextArea(1, 3, (int)maxX);
+    clearTextArea(1, 10, (int)maxX);
     drawMainSettingStatus(s);
     didRedraw = true;
   };
@@ -3227,8 +3390,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
           colorsUpdatedViaSerial = true;
         }
         currentColorScheme = newScheme;
-        EEPROM.write(EEPROM_DATA_START + 22, currentColorScheme);
-        markSettingsBackupDirty();
+        saveSingleModeToEEPROM(22, (int8_t)currentColorScheme);
         Encoder[2].writeCounter((int32_t)newScheme);
         currentMode->pos[2] = newScheme;
         lastColrEnc = newScheme;
@@ -3270,6 +3432,8 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       static int lastFireLevel = -1;
       static int lastFireSize = -1;
       static int lastFireFocus = -1;
+      static int lastFireFocusMax = -1;
+      static bool fireLimitsSynced = false;
       extern uint8_t fireVoice;
       extern uint8_t fireLevel;
       extern uint8_t fireSize;
@@ -3289,12 +3453,16 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         focusVal = constrain((int)fireColor, 0, 8);
         focusMax = 8;
       }
-      Encoder[0].writeMin((int32_t)1);
-      Encoder[0].writeMax((int32_t)4);
-      Encoder[1].writeMin((int32_t)1);
-      Encoder[1].writeMax((int32_t)25);
-      Encoder[2].writeMin((int32_t)0);
-      Encoder[2].writeMax((int32_t)focusMax);
+      if (menuFirstEnter || !fireLimitsSynced || focusMax != lastFireFocusMax) {
+        Encoder[0].writeMin((int32_t)1);
+        Encoder[0].writeMax((int32_t)4);
+        Encoder[1].writeMin((int32_t)1);
+        Encoder[1].writeMax((int32_t)25);
+        Encoder[2].writeMin((int32_t)0);
+        Encoder[2].writeMax((int32_t)focusMax);
+        lastFireFocusMax = focusMax;
+        fireLimitsSynced = true;
+      }
       if (menuFirstEnter || (int)fireFocus != lastFireFocus) {
         int size = constrain((int)fireSize, 1, 4);
         int level = constrain((int)fireLevel, 1, 25);
@@ -3456,9 +3624,8 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         int encPos = constrain((int)currentMode->pos[2], 0, encMax);
         uint16_t newCut = (encPos >= encMax) ? 256u : (uint16_t)(encPos * 10);
         codecHfCut = newCut;
-        EEPROM.put(EEPROM_DATA_START + 32, codecHfCut);
-        EEPROM.write(EEPROM_DATA_START + 33, 4);
-        markSettingsBackupDirty();
+        saveSettingsU16ToEEPROM(32, codecHfCut);
+        saveSingleModeToEEPROM(33, 4);
         applySgtl5000CodecOutputPath();
         Encoder[2].writeCounter((int32_t)encPos);
         currentMode->pos[2] = encPos;
@@ -3687,8 +3854,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         cursorMode = constrain((int)currentMode->pos[2], 0, 1);
         showChannelNr = (cursorMode == 1);
         saveSingleModeToEEPROM(18, 0);
-        EEPROM.write(EEPROM_DATA_START + 19, showChannelNr ? 1 : 0);
-        markSettingsBackupDirty();
+        saveSingleModeToEEPROM(19, (int8_t)(showChannelNr ? 1 : 0));
         Encoder[2].writeCounter((int32_t)cursorMode);
         currentMode->pos[2] = cursorMode;
         lastCursorMode = cursorMode;
@@ -3789,8 +3955,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         } else {
           drawRFullMuteCustomUnmuteMask &= (uint16_t)~(1u << inSel);
         }
-        EEPROM.put(EEPROM_DATA_START + 34, drawRFullMuteCustomUnmuteMask);
-        markSettingsBackupDirty();
+        saveSettingsU16ToEEPROM(34, drawRFullMuteCustomUnmuteMask);
         redrawMain(setting);
       }
       break;
@@ -3891,13 +4056,17 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
         Encoder[2].writeMax((int32_t)5);  // 0=SD, 1=EFX, 2=FULL, 3=FILE, 4=PACK, 5=ASAV
         Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = (unsigned int)resetMenuOption;
+        lastResetOption = resetMenuOption;
         menuFirstEnter = false;
       }
 
-      if (currentMode->pos[2] != lastResetOption) {
-        resetMenuOption = constrain(currentMode->pos[2], 0, 5);
+      if ((int)currentMode->pos[2] != lastResetOption) {
+        resetMenuOption = constrain((int)currentMode->pos[2], 0, 5);
+        currentMode->pos[2] = (unsigned int)resetMenuOption;
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        redrawMain(setting);
+        // Option label is in drawAdditionalFeatures (drawMenuValue clears the row).
+        redrawAdd(setting);
         lastResetOption = resetMenuOption;
       }
       break;
@@ -4264,7 +4433,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[0] = (unsigned int)pos;
         lastG14 = pos;
         g_gainUiFocus = 0;
-        saveSingleModeToEEPROM(EEPROM_MIX_GAIN_14, (int8_t)mixGain14);
+        saveMixGainToEEPROM(EEPROM_MIX_GAIN_14, mixGain14, 0x01);
         applyMixBusGains();
         redrawMain(setting);
       }
@@ -4274,7 +4443,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[1] = mixGain58;
         lastG58 = (int)mixGain58;
         g_gainUiFocus = 1;
-        saveSingleModeToEEPROM(EEPROM_MIX_GAIN_58, (int8_t)mixGain58);
+        saveMixGainToEEPROM(EEPROM_MIX_GAIN_58, mixGain58, 0x02);
         applyMixBusGains();
         redrawMain(setting);
       }
@@ -4286,7 +4455,10 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = v;
         lastGEnc3 = (int)v;
         g_gainUiFocus = g_gainEnc3IsAll ? 3 : 2;
-        saveSingleModeToEEPROM(g_gainEnc3IsAll ? EEPROM_MIX_GAIN_ALL : EEPROM_MIX_GAIN_SYN, (int8_t)v);
+        saveMixGainToEEPROM(
+          g_gainEnc3IsAll ? EEPROM_MIX_GAIN_ALL : EEPROM_MIX_GAIN_SYN,
+          v,
+          g_gainEnc3IsAll ? 0x08 : 0x04);
         applyMixBusGains();
         redrawMain(setting);
       }
@@ -4585,6 +4757,7 @@ FLASHMEM void switchMenu(int menuPosition){
         currentLookPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        invalidateEnc3RangeCache();
         menuRequestFullRedraw();
         break;
         
@@ -4601,8 +4774,7 @@ FLASHMEM void switchMenu(int menuPosition){
           extern bool showChannelNr;
           showChannelNr = !showChannelNr;
           saveSingleModeToEEPROM(18, 0);
-          EEPROM.write(EEPROM_DATA_START + 19, showChannelNr ? 1 : 0);
-          markSettingsBackupDirty();
+          saveSingleModeToEEPROM(19, (int8_t)(showChannelNr ? 1 : 0));
           
           drawMainSettingStatus(menuPosition);
         }
@@ -4614,6 +4786,7 @@ FLASHMEM void switchMenu(int menuPosition){
         currentRecsPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        invalidateEnc3RangeCache();
         menuRequestFullRedraw();
         break;
         
@@ -4623,6 +4796,7 @@ FLASHMEM void switchMenu(int menuPosition){
         currentMidiPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        invalidateEnc3RangeCache();
         menuRequestFullRedraw();
         break;
         
@@ -4632,6 +4806,7 @@ FLASHMEM void switchMenu(int menuPosition){
         currentVolPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        invalidateEnc3RangeCache();
         menuRequestFullRedraw();
         break;
 
@@ -4641,6 +4816,7 @@ FLASHMEM void switchMenu(int menuPosition){
         currentEtcPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
         Encoder[3].writeCounter((int32_t)0);
+        invalidateEnc3RangeCache();
         menuRequestFullRedraw();
         break;
 
@@ -4869,8 +5045,7 @@ FLASHMEM void switchMenu(int menuPosition){
         }
         
         // Save scheme selection to EEPROM
-        EEPROM.write(EEPROM_DATA_START + 22, currentColorScheme);
-        markSettingsBackupDirty();
+        saveSingleModeToEEPROM(22, (int8_t)currentColorScheme);
         
         // Restore ETC page position to stay on COLR page (page 4)
         currentEtcPage = savedEtcPage;
@@ -4917,6 +5092,7 @@ FLASHMEM void resetMenuState() {
   currentMidiPage = 0;
   currentVolPage = 0;
   currentEtcPage = 0;
+  invalidateEnc3RangeCache();
   extern Mode menu;
   menu.pos[3] = 0;
   menuExitMs = 0;
@@ -4939,8 +5115,11 @@ FLASHMEM void drawLoopLength() {
   if (loopLength == 0) {
     drawMenuValue("OFF", 2, 3, CRGB(100, 100, 100));
   } else {
-    clearTextArea(2, 3, 16);
-    drawNumber(loopLength, CRGB(0, 200, 255), 3);
+    // Avoid drawNumber (right-align + nested FastLEDshow).
+    char buf[2];
+    buf[0] = (char)('0' + constrain((int)loopLength, 1, 8));
+    buf[1] = '\0';
+    drawMenuValue(buf, 2, 3, CRGB(0, 200, 255));
   }
 }
 
@@ -5155,8 +5334,7 @@ FLASHMEM void enterEtcSdFromHost() {
   currentMenuPage = etcParent;
   currentEtcPage = sdPage;
   currentMode->pos[3] = sdPage;
-  Encoder[3].writeMin((int32_t)0);
-  Encoder[3].writeMax((int32_t)(ETC_PAGES_COUNT - 1));
+  ensureEnc3Range(0, (int)(ETC_PAGES_COUNT - 1));
   Encoder[3].writeCounter((int32_t)sdPage);
   menuRequestFullRedraw();
 }

@@ -2515,7 +2515,7 @@ FLASHMEM void drawBPMWithReservedSpace(float bpm, CRGB color, int topY) {
   drawText(buffer, 2, topY, color);
 }
 
-void drawBPMScreen() {
+FLASHMEM void drawBPMScreen() {
 
   FastLEDclear();
   // Volume bars and indicators removed - volume controls now in VOL menu
@@ -2527,9 +2527,10 @@ void drawBPMScreen() {
   // - Encoder 2: white
   // - Encoder 3: green
   // - Encoder 4: turquoise
-  drawIndicator('L', 'W', 2);
-  drawIndicator('L', 'G', 3);
-  drawIndicator('L', 'N', 4);
+  // Matrix only — rings cached below (setVolume calls this every loop).
+  drawIndicator('L', 'W', 2, false, false);
+  drawIndicator('L', 'G', 3, false, false);
+  drawIndicator('L', 'N', 4, false, false);
   
   // Draw MIDI INT/EXT arrow indicator using encoder[2] position
   extern Mode *currentMode;
@@ -2574,11 +2575,24 @@ void drawBPMScreen() {
   if (currentMode == &volume_bpm) {
     // Green for INT, Red for EXT
     char arrowColor = isInt ? 'G' : 'R';
-    drawIndicator('L', arrowColor, 3);  // Encoder 3: Large indicator matching arrow color
-    
-    // Set encoder color to match
-    CRGB indicatorColor = getIndicatorColor(arrowColor);
-    Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+    drawIndicator('L', arrowColor, 3, false, false);
+
+    static uint32_t lastBpmRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+    auto setBpmRGB = [&](int enc, uint32_t rgb) {
+      if (enc < 0 || enc > 3) return;
+      if (lastBpmRGB[enc] == rgb) return;
+      lastBpmRGB[enc] = rgb;
+      Encoder[enc].writeRGBCode(rgb);
+    };
+    CRGB w = getIndicatorColor('W');
+    CRGB n = getIndicatorColor('N');
+    CRGB arrow = getIndicatorColor(arrowColor);
+    CRGB wM = normalizeToMaxBrightness(w);
+    CRGB nM = normalizeToMaxBrightness(n);
+    CRGB aM = normalizeToMaxBrightness(arrow);
+    setBpmRGB(1, (uint32_t)wM.r << 16 | (uint32_t)wM.g << 8 | wM.b);
+    setBpmRGB(2, (uint32_t)aM.r << 16 | (uint32_t)aM.g << 8 | aM.b);
+    setBpmRGB(3, (uint32_t)nM.r << 16 | (uint32_t)nM.g << 8 | nM.b);
   }
 }
 
@@ -2593,7 +2607,7 @@ void drawKnobColorDefault(){
 /************************************************
       SONG MODE
   *************************************************/
-void showSongMode() {
+FLASHMEM void showSongMode() {
   extern Mode songMode;
   extern bool songModeActive;
   
@@ -2614,9 +2628,22 @@ void showSongMode() {
     light(round(marqueePos), 1, CRGB(0, 80, 0));  // Darker green moving marquee on bottom row
   }
   
-  // Show indicators for song mode
-  drawIndicator('L', 'M', 2);  // Encoder 1: Large Magenta (pattern select)
-  drawIndicator('L', 'N', 4);  // Encoder 4: Large Cyan (match SONGMODE cyan)
+  // Show indicators for song mode (matrix only; rings cached — showSongMode runs every loop)
+  drawIndicator('L', 'M', 2, false, false);  // Encoder 1: Large Magenta (pattern select)
+  drawIndicator('L', 'N', 4, false, false);  // Encoder 4: Large Cyan (match SONGMODE cyan)
+  {
+    static uint32_t lastSongRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+    auto setSongRGB = [&](int enc, uint32_t rgb) {
+      if (enc < 0 || enc > 3) return;
+      if (lastSongRGB[enc] == rgb) return;
+      lastSongRGB[enc] = rgb;
+      Encoder[enc].writeRGBCode(rgb);
+    };
+    CRGB m = normalizeToMaxBrightness(getIndicatorColor('M'));
+    CRGB n = normalizeToMaxBrightness(getIndicatorColor('N'));
+    setSongRGB(1, (uint32_t)m.r << 16 | (uint32_t)m.g << 8 | m.b);
+    setSongRGB(3, (uint32_t)n.r << 16 | (uint32_t)n.g << 8 | n.b);
+  }
   
   // Show selected pattern number in rainbow color (left side)
   char patText[8];

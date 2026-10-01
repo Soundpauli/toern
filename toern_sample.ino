@@ -111,6 +111,22 @@ static bool buildCurrentBrowseSamplePath(char *out, size_t outSize) {
   return true;
 }
 
+// PREV=SYNC while playing (and PRESS without manual preview) skip previewSample(),
+// which is the only place that used to write samplePathRel. Commit the browse row
+// so loadWav/loadPreviewToChannel open the selected file, not an empty/stale path.
+static bool commitCurrentBrowsePathToChannel(int ch) {
+  ch = constrain(ch, 1, 8);
+  int idx = (int)currentMode->pos[3] - 1;
+  if (idx < 0 || idx >= (int)g_wavPickCount) return false;
+  if (sampleBrowserEntryTypeAt(idx) != 2) return false;
+  char rel[128];
+  if (g_browseDir[ch][0]) snprintf(rel, sizeof(rel), "%s/%s", g_browseDir[ch], g_wavPickName[idx]);
+  else snprintf(rel, sizeof(rel), "%s", g_wavPickName[idx]);
+  strncpy(SMP.samplePathRel[ch], rel, 127);
+  SMP.samplePathRel[ch][127] = 0;
+  return true;
+}
+
 // --- Audio-safe SD I/O (cooperative chunks + live-buffer reload lock) --------
 // While the sequencer plays, keep SD work small and never rewrite a live sample
 // slot without muting that channel's triggers first.
@@ -1032,11 +1048,16 @@ void showWave() {
 
     if (g_suppressNextWavPreviewAfterFolderNav) {
       g_suppressNextWavPreviewAfterFolderNav = false;
+      // Still bind the landed-on file so loadWav works without another encoder turn.
+      if (selectedIsFile) commitCurrentBrowsePathToChannel(ch);
     } else if (previewPlaysOnSelect()) {
       // Audition immediately — do not wait for the file peak scan (SD bus is exclusive).
       sampleIsLoaded = true;
       previewSampleNow();
     } else {
+      // SYNC-while-playing / PRESS: no audition, but still bind the selected file path
+      // so encoder-2 loadWav works on empty voices and doesn't reload a stale path.
+      commitCurrentBrowsePathToChannel(ch);
       char peakPath[160];
       if (buildCurrentBrowseSamplePath(peakPath, sizeof(peakPath))) {
         startPeakScan(peakPath);
@@ -1373,6 +1394,10 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
 
   extern CachedSample previewCache;
 
+  // If browse selection never ran previewSample (SYNC+playing / PRESS), samplePathRel
+  // may be empty or still pointing at an older file — bind the current SET_WAV row first.
+  commitCurrentBrowsePathToChannel((int)GLOB.currentChannel);
+
   bool pathMismatch =
       (SMP.samplePathRel[GLOB.currentChannel][0] == 0) ||
       (strcasecmp(previewCache.pathRel, SMP.samplePathRel[GLOB.currentChannel]) != 0);
@@ -1381,7 +1406,11 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   // If preview cache is not valid, ensure the sample is loaded first
   if (needToLoadPreview) {
     char OUTPUTf[160];
+    OUTPUTf[0] = '\0';
     buildSamplePath(0, 0, OUTPUTf, sizeof(OUTPUTf));
+    if (!OUTPUTf[0] && !buildCurrentBrowseSamplePath(OUTPUTf, sizeof(OUTPUTf))) {
+      return false;
+    }
 
     sdIoYield();
     File previewFile = SD.open(OUTPUTf);

@@ -1,6 +1,6 @@
 #include "src/toern_build_types.h"
 
-#define VERSION "v3.01c"
+#define VERSION "v3.01d"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
@@ -365,6 +365,7 @@ void drawSampleLoadOverlay(uint8_t progressPercent);
 bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
 void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
 void saveSp0StateToEEPROM();
+void saveSingleModeToEEPROM(int index, int8_t value);
 FLASHMEM void flushSettingsBackupNow();
 void stopAllSetWavPreviewAudio();
 void stopSdPreviewIfPlaying();
@@ -6590,8 +6591,7 @@ void checkSerialColors() {
           ledBrightness = brightness;
 
           // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
-          EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
-          markSettingsBackupDirty();
+          saveSingleModeToEEPROM(26, (int8_t)ledBrightness);
 
           // Update encoder position if in volume_bpm mode
           extern Mode *currentMode;
@@ -9140,8 +9140,7 @@ FLASHMEM void updateLineOutLevel() {
   }
   if (lineOutLevelSetting != newLevel) {
     lineOutLevelSetting = newLevel;
-    EEPROM.write(EEPROM_DATA_START + 15, lineOutLevelSetting);  // Save to EEPROM
-    markSettingsBackupDirty();
+    saveSingleModeToEEPROM(15, (int8_t)lineOutLevelSetting);
   }
   sgtl5000_1.lineOutLevel(lineOutLevelSetting);
 }
@@ -9158,8 +9157,7 @@ void updateBrightness() {
   if (newBrightness != ledBrightness) {
     ledBrightness = newBrightness;
     // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
-    EEPROM.write(EEPROM_DATA_START + 26, ledBrightness);
-    markSettingsBackupDirty();
+    saveSingleModeToEEPROM(26, (int8_t)ledBrightness);
   }
   // FastLED.setBrightness(ledBrightness); // Disabled: global brightness stays at 255, matrix is dimmed in software
 }
@@ -9398,7 +9396,6 @@ FLASHMEM void showExit(int index) {
 FLASHMEM void showLoadSave() {
 
   drawNoSD();
-  FastLEDclear();
 
   if (currentMode->pos[3] != SMP.file) {
     SMP.file = currentMode->pos[3];
@@ -9412,34 +9409,34 @@ FLASHMEM void showLoadSave() {
   } else {
     sprintf(OUTPUTf, "%u.txt", SMP.file);
   }
-  bool txtExists = SD.exists(OUTPUTf);
-  CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
-  showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
 
-  // FILE: M[G] load | M[R] save (disabled on autosave slot) | C[W] settings | L[X]
-  drawIndicator('L', 'X', 4);
-
-  if (isAutosaveSlot) {
-    // Load-only autosave slot: green load if present. Encoder 2 does nothing here.
-    drawIndicator('M', txtExists ? 'G' : 'E', 1);
-    Encoder[1].writeRGBCode(0x000000);
-    if (SMP_LOAD_SETTINGS && txtExists) {
-      drawIndicator('C', 'W', 3);
-    }
-    drawText("A", 11, 11, txtExists ? UI_BRIGHT_GREEN : UI_BLUE);
-  } else if (txtExists) {
-    drawIndicator('M', 'G', 1);
-    drawIndicator('M', 'D', 2);
-    if (SMP_LOAD_SETTINGS) {
-      drawIndicator('C', 'W', 3);
-    }
-    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
-  } else {
-    drawIndicator('M', 'E', 1);
-    drawIndicator('M', 'R', 2);
-    drawNumber(SMP.file, UI_BLUE, 11);
+  // SD.exists + full redraw + Duppa RGB every loop stalled play — only when slot/state changes.
+  // Invalidate when re-entering this mode (gap = we weren't called last frames).
+  static int lastFile = -2;
+  static int8_t lastExists = -1;
+  static int8_t lastLoadSettings = -1;
+  static bool lastAutosave = false;
+  static uint32_t lastFileRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+  static uint32_t lastCallMs = 0;
+  uint32_t nowMs = millis();
+  if (nowMs - lastCallMs > 50) {
+    lastFile = -2;
+    lastExists = -1;
+    lastLoadSettings = -1;
+    for (int i = 0; i < 4; i++) lastFileRGB[i] = 0xFFFFFFFFu;
   }
-  FastLEDshow();
+  lastCallMs = nowMs;
+
+  bool fileChanged = ((int)SMP.file != lastFile);
+  bool txtExists;
+  if (fileChanged) {
+    txtExists = SD.exists(OUTPUTf);
+    lastFile = (int)SMP.file;
+    lastExists = txtExists ? 1 : 0;
+    lastAutosave = isAutosaveSlot;
+  } else {
+    txtExists = (lastExists == 1);
+  }
 
   // Settings toggle only when a file exists
   if (txtExists) {
@@ -9450,41 +9447,77 @@ FLASHMEM void showLoadSave() {
     }
   } else {
     SMP_LOAD_SETTINGS = false;
-    currentMode->pos[2] = 0;
-    Encoder[2].writeCounter((int32_t)0);
+    if (currentMode->pos[2] != 0) {
+      currentMode->pos[2] = 0;
+      Encoder[2].writeCounter((int32_t)0);
+    }
   }
+
+  const int8_t loadSettingsDrawn = SMP_LOAD_SETTINGS ? 1 : 0;
+  if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn
+      && lastAutosave == isAutosaveSlot) {
+    return;
+  }
+  lastLoadSettings = loadSettingsDrawn;
+  lastAutosave = isAutosaveSlot;
+  lastExists = txtExists ? 1 : 0;
+
+  FastLEDclear();
+
+  CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
+  showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
+
+  // FILE: M[G] load | M[R] save (disabled on autosave slot) | C[W] settings | L[X]
+  // Matrix indicators only — rings via cached writes (showLoadSave runs every loop).
+  auto setFileRGB = [&](int enc, uint32_t rgb) {
+    if (enc < 0 || enc > 3) return;
+    if (lastFileRGB[enc] == rgb) return;
+    lastFileRGB[enc] = rgb;
+    Encoder[enc].writeRGBCode(rgb);
+  };
+  auto matrixInd = [&](char size, char colorCode, int encoderNum) {
+    drawIndicator(size, colorCode, encoderNum, false, false);
+    CRGB c = getIndicatorColor(colorCode);
+    if (colorCode == 'C') c = getCurrentChannelColor();
+    CRGB maxB = normalizeToMaxBrightness(c);
+    setFileRGB(encoderNum - 1, (uint32_t)maxB.r << 16 | (uint32_t)maxB.g << 8 | maxB.b);
+  };
+
+  matrixInd('L', 'X', 4);
+
+  if (isAutosaveSlot) {
+    // Load-only autosave slot: green load if present. Encoder 2 does nothing here.
+    matrixInd('M', txtExists ? 'G' : 'E', 1);
+    setFileRGB(1, 0x000000);
+    if (SMP_LOAD_SETTINGS && txtExists) {
+      matrixInd('C', 'W', 3);
+    } else {
+      setFileRGB(2, 0x000000);
+    }
+    drawText("A", 11, 11, txtExists ? UI_BRIGHT_GREEN : UI_BLUE);
+  } else if (txtExists) {
+    matrixInd('M', 'G', 1);
+    matrixInd('M', 'D', 2);
+    if (SMP_LOAD_SETTINGS) {
+      matrixInd('C', 'W', 3);
+    } else {
+      setFileRGB(2, 0x000000);
+    }
+    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
+  } else {
+    matrixInd('M', 'E', 1);
+    matrixInd('M', 'R', 2);
+    setFileRGB(2, 0x000000);
+    drawNumber(SMP.file, UI_BLUE, 11);
+  }
+  FastLEDshow();
 }
 
 FLASHMEM void showSamplePack() {
   drawNoSD();
-  FastLEDclear();
 
-  // Samplepack icon: green if loading is possible (pack exists), dim red otherwise.
-  // Move icon down to y=3..9 (oy=7).
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);
-  bool wavExists = SD.exists(OUTPUTf);
-  CRGB packIconColor = wavExists ? UI_GREEN : UI_DIM_RED;
-  showIconsAt(OLD_ICON_SAMPLEPACK, packIconColor, 2, 7);
-
-  // New indicator system: pack: M[G] | M[R] | | L[X]
-  drawIndicator('M', 'G', 1);  // Encoder 1: Medium Green
-  drawIndicator('M', 'R', 2);  // Encoder 2: Medium Red
-  // Encoder 3: empty (no indicator)
-  drawIndicator('L', 'X', 4);  // Encoder 4: Large Blue
-
-  // Apply different colors for load/save operations based on file existence
-  // (OUTPUTf/wavExists already computed above for icon color)
-  if (wavExists) {
-    // File exists - bright green for load, dark red for save
-    drawIndicator('M', 'G', 1);                 // Bright green for load
-    drawIndicator('M', 'D', 2);                 // Dark red for save
-    drawNumber(SMP.pack, UI_BRIGHT_GREEN, 11);  // Bright green number for existing file
-  } else {
-    // File doesn't exist - dark green for load, bright red for save
-    drawIndicator('M', 'E', 1);         // Dark green for load
-    drawIndicator('M', 'R', 2);         // Bright red for save
-    drawNumber(SMP.pack, UI_BLUE, 11);  // Blue number for non-existing file
+  if (currentMode->pos[3] != SMP.pack) {
+    SMP.pack = currentMode->pos[3];
   }
 
   // Validate samplepack value - 0 means "no saved pack selected", so SP0 acts as fallback.
@@ -9496,11 +9529,68 @@ FLASHMEM void showSamplePack() {
     markSettingsBackupDirty();
   }
 
+  // SD.exists + full redraw + Duppa RGB every loop stalled play — only when pack changes.
+  // Invalidate when re-entering this mode (gap = we weren't called last frames).
+  static int lastPack = -2;
+  static int8_t lastExists = -1;
+  static uint32_t lastPackRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+  static uint32_t lastCallMs = 0;
+  uint32_t nowMs = millis();
+  if (nowMs - lastCallMs > 50) {
+    lastPack = -2;
+    lastExists = -1;
+    for (int i = 0; i < 4; i++) lastPackRGB[i] = 0xFFFFFFFFu;
+  }
+  lastCallMs = nowMs;
+
+  char OUTPUTf[50];
+  sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);
+  bool packChanged = ((int)SMP.pack != lastPack);
+  bool wavExists;
+  if (packChanged) {
+    wavExists = SD.exists(OUTPUTf);
+    lastPack = (int)SMP.pack;
+    lastExists = wavExists ? 1 : 0;
+  } else {
+    return;
+  }
+
+  FastLEDclear();
+
+  // Samplepack icon: green if loading is possible (pack exists), dim red otherwise.
+  // Move icon down to y=3..9 (oy=7).
+  CRGB packIconColor = wavExists ? UI_GREEN : UI_DIM_RED;
+  showIconsAt(OLD_ICON_SAMPLEPACK, packIconColor, 2, 7);
+
+  // New indicator system: pack: M[G] | M[R] | | L[X]
+  auto setPackRGB = [&](int enc, uint32_t rgb) {
+    if (enc < 0 || enc > 3) return;
+    if (lastPackRGB[enc] == rgb) return;
+    lastPackRGB[enc] = rgb;
+    Encoder[enc].writeRGBCode(rgb);
+  };
+  auto matrixInd = [&](char size, char colorCode, int encoderNum) {
+    drawIndicator(size, colorCode, encoderNum, false, false);
+    CRGB c = getIndicatorColor(colorCode);
+    CRGB maxB = normalizeToMaxBrightness(c);
+    setPackRGB(encoderNum - 1, (uint32_t)maxB.r << 16 | (uint32_t)maxB.g << 8 | maxB.b);
+  };
+
+  matrixInd('L', 'X', 4);
+
+  if (wavExists) {
+    matrixInd('M', 'G', 1);
+    matrixInd('M', 'D', 2);
+    drawNumber(SMP.pack, UI_BRIGHT_GREEN, 11);
+  } else {
+    matrixInd('M', 'E', 1);
+    matrixInd('M', 'R', 2);
+    drawNumber(SMP.pack, UI_BLUE, 11);
+  }
+  setPackRGB(2, 0x000000);
+
   // Don't change FastLED global brightness - matrix is dimmed in software (light_single)
   FastLEDshow();
-  if (currentMode->pos[3] != SMP.pack) {
-    SMP.pack = currentMode->pos[3];
-  }
 }
 
 FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0Custom) {  // Renamed pack to pack_id to avoid conflict
@@ -9894,7 +9984,11 @@ FLASHMEM void loadWav() {
 
   // Load the preview sample (which may be reversed/edited) to the target channel
   // This copies from sampled[0] (preview) to sampled[targetChannel]
-  loadPreviewToChannel(GLOB.currentChannel, true);
+  if (!loadPreviewToChannel(GLOB.currentChannel, true)) {
+    // Stay in SET_WAV so the user can retry (empty path / SD open fail).
+    preventPaintUnpaint = false;
+    return;
+  }
 
   // Auto-save to samplepack 0 after loading individual sample
   copySampleToSamplepack0(GLOB.currentChannel, true);
