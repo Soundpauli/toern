@@ -1,6 +1,6 @@
 #include "src/toern_build_types.h"
 
-#define VERSION "v3.0"
+#define VERSION "v3.01c"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 #define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
@@ -181,14 +181,16 @@ extern void handleStart();
 #define SWITCH_5 39
 
 // Battery sense on A16 with divider + capacitor.
-// Rev G: R15 1M (top, VBAT->A16), R19 1.5M (bottom, A16->GND), plus smoothing cap.
+// Rev G/H: R15 1M (top, VBAT->A16), R19 1.5M (bottom, A16->GND), plus smoothing cap.
 #define BATT_ADC_PIN A16
 #define BATT_RAW_ZERO 4           // raw reading when pin connected to GND (0V)
 #define BATT_RAW_FULL 4095        // raw at 3.3V at pin (12-bit max)
-#define BATT_DIVIDER_RATIO 0.595f // Calibrated close to nominal divider ratio 1.5/(1.0+1.5) = 0.600
+// Nominal divider 1.5/(1.0+1.5)=0.600. Recalibrated on device: meter 4.125V
+// read 87% with 0.577 (fw ~4.04V); 0.565 brings that sample to ~4.125V.
+#define BATT_DIVIDER_RATIO 0.565f
 #define BATT_V_MIN 3.30f          // Display 0% at 3.30V
-#define BATT_V_MAX 4.20f          // Display 100% at 4.20V
-#define BATT_PCT_CURVE 1.6f       // Pragmatic voltage-to-display curve; not a fuel gauge
+#define BATT_V_MAX 4.125f         // Display 100% at measured full pack
+#define BATT_PCT_CURVE 1.0f       // Linear voltage→%
 
 #define VOL_MIN 1
 #define VOL_MAX 10

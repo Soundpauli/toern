@@ -238,22 +238,22 @@ void AudioEffectFreeverbDMAMEM::update()
 		output = sat16((sum >> 3) * 31457, 14);
 
 		bufout = allpass1buf[allpass1index];
-		allpass1buf[allpass1index] = output + (bufout >> 1);
+		allpass1buf[allpass1index] = sat16((int32_t)output + (bufout >> 1), 0);
 		output = sat16(bufout - output, 1);
 		if (++allpass1index >= sizeof(allpass1buf)/sizeof(int16_t)) allpass1index = 0;
 
 		bufout = allpass2buf[allpass2index];
-		allpass2buf[allpass2index] = output + (bufout >> 1);
+		allpass2buf[allpass2index] = sat16((int32_t)output + (bufout >> 1), 0);
 		output = sat16(bufout - output, 1);
 		if (++allpass2index >= sizeof(allpass2buf)/sizeof(int16_t)) allpass2index = 0;
 
 		bufout = allpass3buf[allpass3index];
-		allpass3buf[allpass3index] = output + (bufout >> 1);
+		allpass3buf[allpass3index] = sat16((int32_t)output + (bufout >> 1), 0);
 		output = sat16(bufout - output, 1);
 		if (++allpass3index >= sizeof(allpass3buf)/sizeof(int16_t)) allpass3index = 0;
 
 		bufout = allpass4buf[allpass4index];
-		allpass4buf[allpass4index] = output + (bufout >> 1);
+		allpass4buf[allpass4index] = sat16((int32_t)output + (bufout >> 1), 0);
 		output = sat16(bufout - output, 1);
 		if (++allpass4index >= sizeof(allpass4buf)/sizeof(int16_t)) allpass4index = 0;
 

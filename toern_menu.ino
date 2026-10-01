@@ -2414,6 +2414,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 25: { // CTRL - encoder behaviour
       drawText("CTRL", 2, 10, currentMenuParentTextColor());
       drawMenuValue(ctrlMode == 0 ? "PAGE" : "VOL", 2, 3, ctrlMode == 0 ? UI_GREEN : UI_ORANGE);
+      // Enc3 edits PAGE/VOL — green for PAGE, orange for VOL (ring + row-1 indicator).
+      drawIndicator('L', ctrlMode == 0 ? 'G' : 'O', 3);
       break;
     }
     
