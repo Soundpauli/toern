@@ -317,16 +317,20 @@ bool isChildVoiceMuted(int channel);
 void enforceChildModeRestrictions();
 void applyMutesAfterPMODSwitch();
 
-enum class DrawRFullMuteState : uint8_t { Inactive = 0, Active = 1 };
-enum class DrawRFullMuteUnmuteMode : uint8_t { RestoreSaved = 0, Ch1And2Only, CustomMask, UnmuteAll };
+// DRAW-R fullMute: stay in draw/single; enc1 enter/exit; enc2/3/4 toggle views in-mode.
+enum class FullMuteView : uint8_t { AllMuted = 0, Ch12, Custom, UnmuteAll };
 
-void enterDrawRFullMute();
-void exitDrawRFullMute(DrawRFullMuteUnmuteMode mode);
-bool drawRFullMuteIsActive();
+void fullMuteEnter();
+void fullMuteExitRestore();
+void fullMuteToggleView(FullMuteView target);
+void fullMuteApplyView();
+bool fullMuteIsActive();
 void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
 void initPageMutes();
 void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false, bool setEncoderLed = true);
+void drawFullMuteBorder();
+void drawFullMuteIndicators();
 void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
 void updatePongBall();
 void drawPongBall();
@@ -1106,14 +1110,16 @@ EXTMEM uint32_t loadedSampleLen[MAX_CHANNELS];
 DMAMEM int8_t channelDirection[maxFiles];
 DMAMEM static bool prevMuteState[maxY + 1];
 static bool tmpMuteActive = false;
-DMAMEM static bool drawRGlobalMuteSavedGlobal[maxY];
-DMAMEM static bool drawRGlobalMuteSavedPages[maxPages][maxY];
-static DrawRFullMuteState drawRFullMuteState = DrawRFullMuteState::Inactive;
+// Snapshot taken on fullMute enter; restored only on enc1 exit (never by enc2/3/4 views).
+DMAMEM static bool fullMuteSavedGlobal[maxY];
+DMAMEM static bool fullMuteSavedPages[maxPages][maxY];
+static bool fullMuteActive = false;
+static FullMuteView fullMuteView = FullMuteView::AllMuted;
 // SETTINGS>MUTE uses user CH1..CH16; EEPROM bits are internal mute indices 0..15 (CH1→1..CH15→15, CH16→0). Default CH1+CH2 = bits 1|2 = 0x0006.
 uint16_t drawRFullMuteCustomUnmuteMask = 0x0006;
 
-bool drawRFullMuteIsActive() {
-  return drawRFullMuteState == DrawRFullMuteState::Active;
+bool fullMuteIsActive() {
+  return fullMuteActive;
 }
 
 // Per-page mute system for PMOD (pattern mode)
@@ -1140,7 +1146,8 @@ FLASHMEM void enforceChildModeRestrictions() {
   if (beat < 1 || beat > maxX) beat = 1;
 
   GLOB.x = (unsigned int)localX + 1;
-  drawRFullMuteState = DrawRFullMuteState::Inactive;
+  fullMuteActive = false;
+  fullMuteView = FullMuteView::AllMuted;
   tmpMute = false;
   tmpMuteActive = false;
   muteModeActive = false;
@@ -2349,26 +2356,32 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if (isRecording) return;
 
-  // DRAW-R full mute (dedicated mode): release chord picks how to leave mute — before play/pause / paint / subpattern.
-  // 1000 / 2000 = restore saved mutes; 0100 = voice ch1+ch2 only (currentChannel 1+2, grid y=2+3); 0010 = SETTINGS>MUTE mask; 0001 = all unmuted.
+  // DRAW-R fullMute: stay in draw/single. Enc1 enter/exit-restore; enc2/3/4 toggle views in-mode.
+  // Handle while active before play/pause / paint so those chords do not also fire.
   {
     extern int drawMode;
-    if (drawMode == 1 && drawRFullMuteIsActive()
-        && (currentMode == &draw || currentMode == &singleMode) && GLOB.y < 16) {
+    const bool drawRFullMuteContext =
+        !childLockEnabled && drawMode == 1
+        && (currentMode == &draw || currentMode == &singleMode) && GLOB.y < 16;
+
+    if (drawRFullMuteContext && fullMuteIsActive()) {
       if (match_buttons(currentButtonStates, 0, 1, 0, 0)) {
-        exitDrawRFullMute(DrawRFullMuteUnmuteMode::Ch1And2Only);
+        fullMuteToggleView(FullMuteView::Ch12);
         return;
       }
       if (match_buttons(currentButtonStates, 0, 0, 1, 0)) {
-        exitDrawRFullMute(DrawRFullMuteUnmuteMode::CustomMask);
+        fullMuteToggleView(FullMuteView::Custom);
         return;
       }
       if (match_buttons(currentButtonStates, 0, 0, 0, 1)) {
-        exitDrawRFullMute(DrawRFullMuteUnmuteMode::UnmuteAll);
+        fullMuteToggleView(FullMuteView::UnmuteAll);
         return;
       }
       if (match_buttons(currentButtonStates, 1, 0, 0, 0)) {
-        exitDrawRFullMute(DrawRFullMuteUnmuteMode::RestoreSaved);
+        if (millis() < suppressDrawRMuteUntilMs) {
+          return;
+        }
+        fullMuteExitRestore();
         return;
       }
       if (match_buttons(currentButtonStates, 2, 0, 0, 0)) {
@@ -2379,7 +2392,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
         if (millis() < suppressDrawRMuteUntilMs) {
           return;
         }
-        exitDrawRFullMute(DrawRFullMuteUnmuteMode::RestoreSaved);
+        fullMuteExitRestore();
         return;
       }
     }
@@ -3049,8 +3062,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       if (millis() < suppressDrawRMuteUntilMs) {
         return;
       }
-      if (!drawRFullMuteIsActive()) {
-        enterDrawRFullMute();
+      if (!fullMuteIsActive()) {
+        fullMuteEnter();
       }
       return;
     }
@@ -3065,7 +3078,7 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
     extern int drawMode;
-    // In R mode, mirror 1000 behavior: long-press encoder(0) toggles global mute.
+    // R mode: long-press enc1 enters fullMute (velocity long-press is suppressed).
     if (!childLockEnabled && drawMode == 1 && GLOB.y < 16) {
       // If this long press targets velocity editing, suppress mute toggle.
       if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0) {
@@ -3075,8 +3088,8 @@ void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
       if (millis() < suppressDrawRMuteUntilMs) {
         return;
       }
-      if (!drawRFullMuteIsActive()) {
-        enterDrawRFullMute();
+      if (!fullMuteIsActive()) {
+        fullMuteEnter();
       }
       return;
     }
@@ -6622,6 +6635,12 @@ void loop() {
         drawRecordingBorder();
       }
 
+      // DRAW-R fullMute overlay: dark-blue border + W/Y/G/N indicators
+      if (fullMuteIsActive()) {
+        drawFullMuteBorder();
+        drawFullMuteIndicators();
+      }
+
       // Battery warning overlay (red border + empty battery icon)
       extern void drawBatteryWarning();
       extern bool getBatteryWarningActive();
@@ -7358,7 +7377,7 @@ void tmpMuteAll(bool pressed) {
   }
 }
 
-static void silenceAllVoicesForDrawRGlobalMute() {
+static void silenceAllVoicesForFullMute() {
   for (int ch = 0; ch <= 8; ch++) {
     for (int note = 36; note <= 96; note++) {
       _samplers[ch].noteEvent(note, 0, false, false);
@@ -7380,57 +7399,80 @@ static void syncMuteArraysToSmp() {
   }
 }
 
-FLASHMEM void enterDrawRFullMute() {
-  if (childLockEnabled) return;
-
-  memcpy(drawRGlobalMuteSavedGlobal, globalMutes, sizeof(globalMutes));
-  memcpy(drawRGlobalMuteSavedPages, pageMutes, sizeof(pageMutes));
-  drawRFullMuteState = DrawRFullMuteState::Active;
-  silenceAllVoicesForDrawRGlobalMute();
-}
-
-FLASHMEM void exitDrawRFullMute(DrawRFullMuteUnmuteMode mode) {
-  drawRFullMuteState = DrawRFullMuteState::Inactive;
-
-  switch (mode) {
-    case DrawRFullMuteUnmuteMode::RestoreSaved:
-      memcpy(globalMutes, drawRGlobalMuteSavedGlobal, sizeof(globalMutes));
-      memcpy(pageMutes, drawRGlobalMuteSavedPages, sizeof(pageMutes));
-      break;
-    case DrawRFullMuteUnmuteMode::Ch1And2Only:
-      // Match draw grid: GLOB.currentChannel = GLOB.y - 1 → user "ch1" is index 1 (y=2), "ch2" is index 2 (y=3).
-      for (int ch = 0; ch < maxY; ch++) {
-        bool muted = (ch != 1 && ch != 2);
-        globalMutes[ch] = muted;
-        for (int page = 0; page < maxPages; page++) {
-          pageMutes[page][ch] = muted;
-        }
+FLASHMEM void fullMuteApplyView() {
+  for (int ch = 0; ch < maxY; ch++) {
+    bool muted = true;
+    switch (fullMuteView) {
+      case FullMuteView::AllMuted:
+        muted = true;
+        break;
+      case FullMuteView::Ch12:
+        // User ch1/ch2 = mute indices 1/2 (grid y=2/3).
+        muted = (ch != 1 && ch != 2);
+        break;
+      case FullMuteView::Custom: {
+        uint16_t mask = drawRFullMuteCustomUnmuteMask;
+        muted = (mask & (1u << ch)) == 0;
+        break;
       }
-      break;
-    case DrawRFullMuteUnmuteMode::CustomMask: {
-      uint16_t mask = drawRFullMuteCustomUnmuteMask;
-      for (int ch = 0; ch < maxY; ch++) {
-        bool unmuted = (mask & (1u << ch)) != 0;
-        bool muted = !unmuted;
-        globalMutes[ch] = muted;
-        for (int page = 0; page < maxPages; page++) {
-          pageMutes[page][ch] = muted;
-        }
-      }
-      break;
+      case FullMuteView::UnmuteAll:
+        muted = false;
+        break;
     }
-    case DrawRFullMuteUnmuteMode::UnmuteAll:
-      for (int ch = 0; ch < maxY; ch++) {
-        globalMutes[ch] = false;
-        for (int page = 0; page < maxPages; page++) {
-          pageMutes[page][ch] = false;
-        }
-      }
-      break;
+    globalMutes[ch] = muted;
+    for (int page = 0; page < maxPages; page++) {
+      pageMutes[page][ch] = muted;
+    }
   }
-
   syncMuteArraysToSmp();
   applyMutesAfterPMODSwitch();
+  if (fullMuteView == FullMuteView::AllMuted) {
+    silenceAllVoicesForFullMute();
+  } else {
+    // Stop voices that this view keeps muted (e.g. UnmuteAll -> Ch12).
+    for (int ch = 0; ch < maxY; ch++) {
+      if (!globalMutes[ch]) continue;
+      if (ch >= 1 && ch <= 8) {
+        for (int note = 36; note <= 96; note++) {
+          _samplers[ch].noteEvent(note, 0, false, false);
+        }
+      } else if (ch == 13 || ch == 14) {
+        stopSynthChannel(ch);
+      }
+    }
+  }
+}
+
+FLASHMEM void fullMuteEnter() {
+  if (childLockEnabled) return;
+  if (fullMuteActive) return;
+
+  memcpy(fullMuteSavedGlobal, globalMutes, sizeof(globalMutes));
+  memcpy(fullMuteSavedPages, pageMutes, sizeof(pageMutes));
+  fullMuteActive = true;
+  fullMuteView = FullMuteView::AllMuted;
+  fullMuteApplyView();
+}
+
+FLASHMEM void fullMuteExitRestore() {
+  if (!fullMuteActive) return;
+
+  fullMuteActive = false;
+  fullMuteView = FullMuteView::AllMuted;
+  memcpy(globalMutes, fullMuteSavedGlobal, sizeof(globalMutes));
+  memcpy(pageMutes, fullMuteSavedPages, sizeof(pageMutes));
+  syncMuteArraysToSmp();
+  applyMutesAfterPMODSwitch();
+}
+
+FLASHMEM void fullMuteToggleView(FullMuteView target) {
+  if (!fullMuteActive) return;
+  if (fullMuteView == target) {
+    fullMuteView = FullMuteView::AllMuted;
+  } else {
+    fullMuteView = target;
+  }
+  fullMuteApplyView();
 }
 
 
@@ -9806,10 +9848,6 @@ bool getMuteState(int channel) {
     return isChildVoiceMuted(channel);
   }
 
-  if (drawRFullMuteIsActive()) {
-    return true;
-  }
-
   if (SMP_PATTERN_MODE) {
     // Use page-specific mutes when PMOD is enabled
     extern int patternMode;
@@ -9828,10 +9866,6 @@ bool getMuteState(int channel) {
 FLASHMEM bool getMuteStateForUI(int channel) {
   if (childLockEnabled) {
     return isChildVoiceMuted(channel);
-  }
-
-  if (drawRFullMuteIsActive()) {
-    return true;
   }
 
   if (SMP_PATTERN_MODE) {

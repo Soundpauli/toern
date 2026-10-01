@@ -816,6 +816,72 @@ FLASHMEM void drawRecordingBorder() {
   }
 }
 
+FLASHMEM void drawFullMuteBorder() {
+  // Dark blue frame; same geometry as recording border.
+  CRGB borderColor = CRGB(0, 0, 80);
+
+  for (unsigned int x = 1; x <= maxX; x++) {
+    light(x, 1, borderColor);
+    light(x, maxY, borderColor);
+  }
+
+  for (unsigned int y = 2; y < maxY; y++) {
+    light(1, y, borderColor);
+    light(maxX, y, borderColor);
+  }
+}
+
+// Stack label chars vertically above the y=1 indicator (like velocity 1/2).
+FLASHMEM static void drawFullMuteVerticalLabel(const char *text, int encoderNum, char colorCode) {
+  if (!text || text[0] == '\0') return;
+  int x1, x2, x3;
+  getIndicatorXPositions(encoderNum, x1, x2, x3);
+  CRGB color = getIndicatorColor(colorCode);
+
+  // At most 2 chars; upper glyph bottom y=9 (spans 9–13), lower at y=3.
+  // Single glyph sits on the bottom slot.
+  char c0 = text[0];
+  char c1 = text[1];
+  bool two = (c1 != '\0');
+  if (two) {
+    drawChar(c0, x1, 9, color);
+    drawChar(c1, x1, 3, color);
+  } else {
+    drawChar(c0, x1, 3, color);
+  }
+}
+
+FLASHMEM void drawFullMuteIndicators() {
+  // Matrix: large W / Y / G / N on encoders 1-4. Encoder RGB via change cache only.
+  drawIndicator('L', 'W', 1, false, false);
+  drawIndicator('L', 'Y', 2, false, false);
+  drawIndicator('L', 'G', 3, false, false);
+  drawIndicator('L', 'N', 4, false, false);
+
+  // Vertical labels above indicators (enc1 restore / enc2 ch1+2 / enc3 custom / enc4 unmute-all).
+  drawFullMuteVerticalLabel("-", 1, 'W');
+  drawFullMuteVerticalLabel("21", 2, 'Y');
+  drawFullMuteVerticalLabel("U", 3, 'G');
+  drawFullMuteVerticalLabel("F", 4, 'N');
+
+  static uint32_t lastFullMuteEncoderRGB[4] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
+  auto setEncoderRGBIfChanged = [&lastFullMuteEncoderRGB](uint8_t i, uint32_t rgb) {
+    if (i < 4 && lastFullMuteEncoderRGB[i] != rgb) {
+      lastFullMuteEncoderRGB[i] = rgb;
+      Encoder[i].writeRGBCode(rgb);
+    }
+  };
+
+  CRGB w = getIndicatorColor('W');
+  CRGB y = getIndicatorColor('Y');
+  CRGB g = getIndicatorColor('G');
+  CRGB n = getIndicatorColor('N');
+  setEncoderRGBIfChanged(0, (uint32_t)w.r << 16 | (uint32_t)w.g << 8 | w.b);
+  setEncoderRGBIfChanged(1, (uint32_t)y.r << 16 | (uint32_t)y.g << 8 | y.b);
+  setEncoderRGBIfChanged(2, (uint32_t)g.r << 16 | (uint32_t)g.g << 8 | g.b);
+  setEncoderRGBIfChanged(3, (uint32_t)n.r << 16 | (uint32_t)n.g << 8 | n.b);
+}
+
 FLASHMEM void drawBatteryWarning() {
   // Clear screen to fully black background first
   extern void FastLEDclear();
@@ -860,6 +926,13 @@ void drawStatus() {
       Encoder[i].writeRGBCode(rgb);
     }
   };
+
+  // fullMute owns encoder RGB via drawFullMuteIndicators(); invalidate so exit restores next frame.
+  extern bool fullMuteIsActive();
+  if (fullMuteIsActive() && (currentMode == &draw || currentMode == &singleMode)) {
+    for (int i = 0; i < 4; i++) lastEncoderRGB[i] = 0xFFFFFFFF;
+    return;
+  }
 
   // If copy is active, show specific indicators
   if (GLOB.activeCopy) {
