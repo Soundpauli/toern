@@ -886,10 +886,14 @@ volatile unsigned int fillSubBeat = 0;
 volatile uint32_t fillSubTick = 0;
 // Fill state machine:
 // - fillRunning: fill currently playing
-// - fillHasTriggered: fill completed once in this playback cycle (lockout until pause/play)
+// - fillHasTriggered: legacy lockout (kept for pause/stop clears); normal completion
+//   demotes the F/F trigger note to 1/1 and clears lockout so re-setting F/F re-arms.
 volatile bool fillRunning = false;
 volatile bool fillHasTriggered = false;
 volatile uint32_t fillStartSubTick = 0;  // sub-tick when fill started
+// Grid cell that armed the current/last fill (1-based step + row).
+volatile unsigned int fillTriggerStep = 0;
+volatile unsigned int fillTriggerRow = 0;
 // Active fill playback parameters (copied from triggering note).
 volatile int fillActiveChannel = 0;
 volatile int fillActiveVelocity = 0;
@@ -7833,6 +7837,8 @@ void play(bool fromStart) {
         fillRunning = false;
         fillSubTick = 0;
         fillStartSubTick = 0;
+        fillTriggerStep = 0;
+        fillTriggerRow = 0;
         fillActiveChannel = 0;
         fillActiveVelocity = 0;
         fillActiveRow = 0;
@@ -7891,6 +7897,8 @@ void pause(bool skipSave) {
   fillRunning = false;
   fillSubTick = 0;
   fillStartSubTick = 0;
+  fillTriggerStep = 0;
+  fillTriggerRow = 0;
   fillActiveChannel = 0;
   fillActiveVelocity = 0;
   fillActiveRow = 0;
@@ -8107,6 +8115,8 @@ static inline int ch11PitchForNote(const Note &cell, int row) {
   pitch += noteHasMidiPitch(cell) ? ((int)cell.midiPitch - 60) : (row - 1);
   return pitch;
 }
+
+FLASHMEM static void triggerActiveFillHit();
 
 void playNote() {
 
@@ -8331,16 +8341,34 @@ void playNote() {
 
         // Skip normal trigger for fill notes - they're handled by fillTimer ISR
         if (cond == NOTE_CONDITION_FILL) {
-          // Initialize fill ONCE per playback cycle (locks out until pause/play resets).
-          // Start as soon as we encounter the fill trigger note during playback.
+          // One-shot per arming: after fill completes, lock out until the trigger
+          // note is removed/changed (re-placing F/F re-arms; pause/stop also clears).
+          if (fillHasTriggered || fillRunning) {
+            if (fillTriggerStep >= 1 && fillTriggerStep <= maxlen &&
+                fillTriggerRow >= 1 && fillTriggerRow <= maxY) {
+              const Note &trig = note[fillTriggerStep][fillTriggerRow];
+              if (trig.channel == 0 || trig.condition != NOTE_CONDITION_FILL) {
+                fillHasTriggered = false;
+                fillRunning = false;
+                fillTriggerStep = 0;
+                fillTriggerRow = 0;
+              }
+            }
+          }
           if (!fillHasTriggered && !fillRunning) {
             fillRunning = true;
-            // Start on the next sub-tick to avoid a double-hit on the same sub-tick edge.
-            fillStartSubTick = fillSubTick + 1;
+            // Align fill clock to this sequencer step's beat (not +1 subtick).
+            // Old start=fillSubTick+1 waited for the *next* fillSubBeat==0 ≈ 1 beat late,
+            // and F/F skips the normal playNote hit — so the first sound was late.
+            fillStartSubTick = fillSubTick & ~3u;
+            fillTriggerStep = srcBeat;
+            fillTriggerRow = b;
             fillActiveChannel = ch;
             fillActiveVelocity = (vel == 0) ? defaultVelocity : vel;
             fillActiveRow = b;
             fillActiveMidiPitch = note[srcBeat][b].midiPitch;
+            // Sound on the F/F step itself (section-0 first hit).
+            triggerActiveFillHit();
           }
           continue;  // Fill notes are handled by separate fillTimer ISR
         }
@@ -8733,12 +8761,65 @@ void unpaint() {
   // Display update is handled by the main loop frame presenter (FastLEDshow()).
 }
 
+// Sound one hit using the armed fill voice params (shared by arm + fill ISR).
+FLASHMEM static void triggerActiveFillHit() {
+  const int ch = fillActiveChannel;
+  if (ch <= 0) return;
+  if (isChildVoiceDisabled(ch)) return;
+  if (getMuteState(ch)) return;
+
+  const int vel = (fillActiveVelocity == 0) ? defaultVelocity : fillActiveVelocity;
+  const unsigned int row = fillActiveRow;
+  Note fillCell = {};
+  fillCell.channel = (uint8_t)ch;
+  fillCell.velocity = (uint8_t)vel;
+  fillCell.probability = 100;
+  fillCell.condition = NOTE_CONDITION_FILL;
+  fillCell.midiPitch = fillActiveMidiPitch;
+
+  if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
+    triggerSetWavSyncPreview((uint8_t)vel);
+    return;
+  }
+
+  if (ch < 9) {
+    if (isChannelSampleReloadBusy((unsigned int)ch)) return;
+    int pitch = samplePitchForNote(fillCell, ch, (int)row);
+    if (ch >= 1 && ch <= 12) pitch += (int)detune[ch];
+    if (ch >= 1 && ch <= 8) pitch += (int)(channelOctave[ch] * 12);
+    triggerSamplerVoice(ch, pitch, vel, true);
+  } else if (ch == 11) {
+    playSound(ch11PitchForNote(fillCell, (int)row), 0, vel);
+  } else if (ch >= 13 && ch < 15) {
+    if (noteHasMidiPitch(fillCell)) {
+      playSynthMidi(ch, fillCell.midiPitch, vel, false);
+    } else {
+      playSynth(ch, (int)row, vel, false);
+    }
+  }
+}
+
 // Fill timer ISR - runs at 4x the beat rate to handle fill triggers
 void playFillNote() {
   if (!isNowPlaying) return;
 
-  // Hard lockout once the fill completed. Only pause()/play() clears this.
-  if (fillHasTriggered) return;
+  // After completion, stay locked out only while the original F/F trigger remains.
+  // Remove/change that note (then set F/F again) to re-arm without pause/stop.
+  if (fillHasTriggered) {
+    if (fillTriggerStep >= 1 && fillTriggerStep <= maxlen &&
+        fillTriggerRow >= 1 && fillTriggerRow <= maxY) {
+      const Note &trig = note[fillTriggerStep][fillTriggerRow];
+      if (trig.channel == 0 || trig.condition != NOTE_CONDITION_FILL) {
+        fillHasTriggered = false;
+        fillTriggerStep = 0;
+        fillTriggerRow = 0;
+      } else {
+        return;
+      }
+    } else {
+      return;
+    }
+  }
 
   // Advance monotonic fill clock (independent of pattern looping).
   fillSubTick++;
@@ -8746,23 +8827,51 @@ void playFillNote() {
 
   // No active fill -> nothing to do.
   if (!fillRunning) return;
-  if (fillStartSubTick == 0) return;
   if (fillActiveChannel <= 0) return;
+
+  // Trigger removed mid-fill → abort and re-arm for a new F/F placement.
+  if (fillTriggerStep >= 1 && fillTriggerStep <= maxlen &&
+      fillTriggerRow >= 1 && fillTriggerRow <= maxY) {
+    const Note &trig = note[fillTriggerStep][fillTriggerRow];
+    if (trig.channel == 0 || trig.condition != NOTE_CONDITION_FILL) {
+      fillRunning = false;
+      fillHasTriggered = false;
+      fillTriggerStep = 0;
+      fillTriggerRow = 0;
+      return;
+    }
+  }
+
   if (getMuteState(fillActiveChannel)) return;
 
   // Fill length: 2 bars (was 4 — too long/dense for most patterns).
   const uint32_t fillLengthBeats = (uint32_t)(2U * (uint32_t)maxX);
 
   // Position in fill in "beat steps" (each beat step = 4 sub-ticks).
+  // fillStartSubTick is aligned to the F/F step's beat start; first hit is fired
+  // from playNote on arm so we must not double-fire that same downbeat here.
   const uint32_t elapsedSub = (fillSubTick >= fillStartSubTick) ? (fillSubTick - fillStartSubTick) : 0U;
   const uint32_t positionInFill = (elapsedSub / 4U) + 1U;  // starts at 1
 
   if (positionInFill > fillLengthBeats) {
-    // Fill completed: stop forever until pause()/play() resets.
+    // Fill completed: demote trigger F/F → 1/1 (one-shot). Re-set F/F to fire again;
+    // pause/stop not required.
+    if (fillTriggerStep >= 1 && fillTriggerStep <= maxlen &&
+        fillTriggerRow >= 1 && fillTriggerRow <= maxY) {
+      Note &trig = note[fillTriggerStep][fillTriggerRow];
+      if (trig.channel != 0 && trig.condition == NOTE_CONDITION_FILL) {
+        trig.condition = 1;
+      }
+    }
     fillRunning = false;
-    fillHasTriggered = true;
+    fillHasTriggered = false;
+    fillTriggerStep = 0;
+    fillTriggerRow = 0;
     return;
   }
+
+  // Skip the arm beat's downbeat — already sounded via triggerActiveFillHit() in playNote.
+  if (elapsedSub < 4u && fillSubBeat == 0) return;
 
   // 5-section buildup: 1/8 → 1/4 → 1/2 → 1 → 2 (no 4x machine-gun climax).
   const uint32_t sectionSize = (fillLengthBeats + 4U) / 5U;
@@ -8789,46 +8898,7 @@ void playFillNote() {
   }
 
   if (!shouldTrigger) return;
-
-  // Trigger the fill note (ignore MIDI as requested).
-  const int ch = fillActiveChannel;
-  if (isChildVoiceDisabled(ch)) return;
-
-  const int vel = (fillActiveVelocity == 0) ? defaultVelocity : fillActiveVelocity;
-  const unsigned int row = fillActiveRow;
-  Note fillCell = {};
-  fillCell.channel = (uint8_t)ch;
-  fillCell.velocity = (uint8_t)vel;
-  fillCell.probability = 100;
-  fillCell.condition = NOTE_CONDITION_FILL;
-  fillCell.midiPitch = fillActiveMidiPitch;
-
-  if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
-    triggerSetWavSyncPreview((uint8_t)vel);
-    return;
-  }
-
-  if (ch < 9) {  // Sample channels (0-8 are _samplers[0] to _samplers[8])
-    if (isChannelSampleReloadBusy((unsigned int)ch)) return;
-    int pitch = samplePitchForNote(fillCell, ch, (int)row);
-
-    if (ch >= 1 && ch <= 12) {
-      pitch += (int)detune[ch];
-    }
-    if (ch >= 1 && ch <= 8) {
-      pitch += (int)(channelOctave[ch] * 12);
-    }
-
-    triggerSamplerVoice(ch, pitch, vel, true);
-  } else if (ch == 11) {
-    playSound(ch11PitchForNote(fillCell, (int)row), 0, vel);
-  } else if (ch >= 13 && ch < 15) {
-    if (noteHasMidiPitch(fillCell)) {
-      playSynthMidi(ch, fillCell.midiPitch, vel, false);
-    } else {
-      playSynth(ch, (int)row, vel, false);
-    }
-  }
+  triggerActiveFillHit();
 }
 
 void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted) {

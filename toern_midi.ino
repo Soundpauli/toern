@@ -440,6 +440,8 @@ void checkMidi() {
     fillRunning = false;
     fillSubTick = 0;
     fillStartSubTick = 0;
+    fillTriggerStep = 0;
+    fillTriggerRow = 0;
     fillActiveChannel = 0;
     fillActiveVelocity = 0;
     fillActiveRow = 0;
