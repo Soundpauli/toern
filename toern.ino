@@ -1,10 +1,10 @@
 #include "src/toern_build_types.h"
 
-#define VERSION "v3.01d"
+#define VERSION "v3.01e"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
-#define SERIAL8_RX_BUFFER_SIZE 512   // Smaller buffer keeps notes arriving quickly; 512 bytes is enough for MIDI clock + notes
-#define SERIAL8_TX_BUFFER_SIZE 128   // Larger transmit buffer for safety
+#define SERIAL8_RX_BUFFER_SIZE 256   // USB audio needs DTCM headroom; 256 is enough for clock+notes
+#define SERIAL8_TX_BUFFER_SIZE 64
 #define TargetFPS 60
 
 // Playback diagnostics / debug (keep OFF for reliability)

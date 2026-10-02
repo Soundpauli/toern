@@ -144,6 +144,7 @@ AudioAnalyzePeak                peakOutput;     //xy=3788,1300  // For LED strip
 EXTMEM AudioMixer4                     mixer_stereoR;  //xy=3932,748
 EXTMEM AudioMixer4                     mixer_stereoL;  //xy=3931,848
 AudioOutputI2S                  i2s1;           //xy=4154,795
+AudioOutputUSB                  usb1;           // host USB audio (same mix as headphones)
 
 // Audio Connections (all connections (aka wires or links))
 EXTMEM AudioConnection        patchCord13(waveform11_1, 0, mixer_waveform11, 0);
@@ -343,6 +344,9 @@ EXTMEM AudioConnection        patchCord230(mixer1, 0, mixer_stereoL, 2);  // ch1
 EXTMEM AudioConnection        patchCord231(mixer2, 0, mixer_stereoR, 2);  // ch5-8 -> R
 EXTMEM AudioConnection        patchCord227(mixer_stereoR, 0, i2s1, 0);
 EXTMEM AudioConnection        patchCord228(mixer_stereoL, 0, i2s1, 1);
+// USB out mirrors I2S channel mapping so host hears the same L/R as headphones/line.
+EXTMEM AudioConnection        patchCordUsb0(mixer_stereoR, 0, usb1, 0);
+EXTMEM AudioConnection        patchCordUsb1(mixer_stereoL, 0, usb1, 1);
 EXTMEM AudioConnection        patchCord229(audioInputAmp, 0, mixer_end, 3);
 
 
