@@ -177,7 +177,7 @@ extern void handleStart();
 #define BUTTON_A 5  // External SINGLE button, active LOW
 #define BUTTON_B 22 // External MENU button, active LOW
 #define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
-#define SWITCH_4 6
+#define SWITCH_4 6   // Capacitive touch4 >> current-voice audition (+ base-pitch note in SINGLE while playing)
 #define SWITCH_5 39
 
 // Battery sense on A16 with divider + capacitor.
@@ -804,6 +804,14 @@ static inline bool isPaintableDrawRow(unsigned int y) {
 static inline bool isSingleModeChannelAllowed(int channel) {
   return (channel >= 1 && channel <= 8) ||
          channel == 11 || channel == 13 || channel == 14;
+}
+
+// Row used as the voice's "natural" / base pitch (DRAW home row / MIDI anchor).
+static inline int basePitchRowForChannel(int channel) {
+  if (channel >= 1 && channel <= 8) return channel + 1;
+  if (channel == 11) return 12;
+  if (channel == 13 || channel == 14) return channel - 11;  // ch13→2, ch14→3
+  return -1;
 }
 
 // IMG mode: empty cell → voice 1; re-paint advances through voices 1–8 and wraps.
@@ -4125,6 +4133,7 @@ FLASHMEM void setup() {
   pinMode(SWITCH_1, INPUT_PULLDOWN);  // Capacitive input
   pinMode(SWITCH_2, INPUT_PULLDOWN);  // Capacitive input
   pinMode(SWITCH_3, INPUT_PULLDOWN);  // Use defined name
+  pinMode(SWITCH_4, INPUT_PULLDOWN);  // Capacitive touch4 (voice audition)
 
   // SPKR pin 30: set as INPUT_PULLDOWN as early as possible
   pinMode(30, INPUT_PULLDOWN);
@@ -5414,19 +5423,56 @@ static void applyPendingTouch1ModeToggle(unsigned long now);
 static void scheduleTouch1ModeToggle(bool toSingle, unsigned long now);
 void enterSingleModeDirect();
 void exitDrawFromSingleDirect();
+static void triggerCurrentVoiceAudition(int pitchRow);
 
 void checkTouchInputs() {
   // remember last time both were held
   // static bool lastBothTouched = false; // Already global
 
-  // 1) read inputs (buttons A/B when exttouch; capacitive threshold only for SWITCH_1/2/3)
+  // 1) read inputs (buttons A/B when exttouch; capacitive SWITCH_1/2/3/4)
   bool tv1 = readTouch1Pressed();
   bool tv2 = readTouch2Pressed();
   int tv3 = fastTouchRead(SWITCH_3);
+  int tv4 = fastTouchRead(SWITCH_4);
+  const bool touch4Pressed = (tv4 > touchThreshold);
 
   // Any touch held or tapped counts as user activity (exits / prevents screensaver)
-  if (tv1 || tv2 || tv3 > touchThreshold) {
+  if (tv1 || tv2 || tv3 > touchThreshold || touch4Pressed) {
     noteUserActivity();
+  }
+
+  // touch4: audition current voice (FX path). No grid write except SINGLE+playing
+  // (base-pitch note on current beat). SINGLE while stopped uses cursor Y pitch.
+  {
+    static unsigned long lastTouch4Time = 0;
+    const unsigned long TOUCH4_DEBOUNCE_MS = 30;
+    const unsigned long now4 = millis();
+    if (touch4Pressed && !lastTouchState[3] && (now4 - lastTouch4Time > TOUCH4_DEBOUNCE_MS)) {
+      lastTouch4Time = now4;
+      const int ch = (int)GLOB.currentChannel;
+      int auditionRow = basePitchRowForChannel(ch);
+      if (currentMode == &singleMode && !isNowPlaying && GLOB.y >= 1 && GLOB.y <= 15) {
+        auditionRow = (int)GLOB.y;  // pitched to cursor, no note written
+      }
+      triggerCurrentVoiceAudition(auditionRow);
+      if (currentMode == &singleMode && isNowPlaying) {
+        const int row = basePitchRowForChannel(ch);
+        if (row >= 1 && row <= 15 && beat >= 1 && beat <= maxlen
+            && isSingleModeChannelAllowed(ch) && !isChildVoiceDisabled(ch)) {
+          const uint8_t existing = note[beat][row].channel;
+          if (existing == 0 || existing == (uint8_t)ch) {
+            note[beat][row].channel = (uint8_t)ch;
+            note[beat][row].velocity = defaultVelocity;
+            note[beat][row].probability = 100;
+            note[beat][row].condition = 1;
+            note[beat][row].midiPitch = NOTE_MIDI_PITCH_NONE;
+            updateLastPage();
+          }
+        }
+      }
+    }
+    lastTouchState[3] = touch4Pressed;
+    touchState[3] = touch4Pressed;
   }
 
   // Tap tempo for BPM menu using touch3
@@ -8899,6 +8945,38 @@ void playFillNote() {
 
   if (!shouldTrigger) return;
   triggerActiveFillHit();
+}
+
+// Play currentChannel through the normal voice path (filters/effects), without
+// writing the grid. pitchRow selects sample/synth pitch (base or cursor Y).
+static void triggerCurrentVoiceAudition(int pitchRow) {
+  const int ch = (int)GLOB.currentChannel;
+  if (!isSingleModeChannelAllowed(ch) || isChildVoiceDisabled(ch)) return;
+
+  const int row = (pitchRow >= 1) ? pitchRow : basePitchRowForChannel(ch);
+  if (row < 1) return;
+
+  const int velocity = defaultVelocity;
+  Note cell = {};
+  cell.channel = (uint8_t)ch;
+  cell.velocity = (uint8_t)velocity;
+  cell.probability = 100;
+  cell.condition = 1;
+  cell.midiPitch = NOTE_MIDI_PITCH_NONE;
+
+  onNoteTriggered(ch);
+
+  if (ch >= 1 && ch <= 8) {
+    if (isChannelSampleReloadBusy((unsigned int)ch)) return;
+    int pitch = samplePitchForNote(cell, ch, row);
+    pitch += (int)detune[ch];
+    pitch += (int)(channelOctave[ch] * 12);
+    triggerSamplerVoice(ch, pitch, velocity, true);
+  } else if (ch == 11) {
+    playSound(ch11PitchForNote(cell, row), 0, velocity);
+  } else if (ch == 13 || ch == 14) {
+    playSynth(ch, row, velocity, false);
+  }
 }
 
 void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted) {

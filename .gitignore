@@ -15,6 +15,7 @@ BOM_KOSTEN.xlsx
 _shooting/
 _internal-docs/
 _old-code/
+_audiofixes/
 /netlify.toml
 # Local Netlify folder
 .netlify
