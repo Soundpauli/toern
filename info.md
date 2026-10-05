@@ -4,15 +4,16 @@ Hardware order and first power-up: [BUILD.md](BUILD.md).
 
 Firmware for **Teensy 4.1**. Open the sketch from the **repo root** (`toern.ino` plus the `toern_*.ino` tabs). Custom audio lives in `src/` and is compiled with the sketch.
 
-Match these board options in both Arduino IDE and PlatformIO:
+Match these board options in both Arduino IDE and PlatformIO
+(canonical / verified config — keep FLASHMEM on large UI handlers):
 
 | Setting | Value |
 |---|---|
 | Board | Teensy 4.1 |
-| USB Type | **Serial + MIDI** (`USB_MIDI_SERIAL`) |
-| CPU Speed | **600 MHz** |
-| Optimize | **Faster** (`-O2`, `TEENSY_OPT_FASTER`) |
-| USB Audio | off (Serial is required for the SD tool and diagnostics) |
+| USB Type | **Serial + MIDI + Audio** (`USB_MIDI_AUDIO_SERIAL`) |
+| CPU Speed | **816 MHz** |
+| Optimize | **Smallest Code** (`TEENSY_OPT_SMALLEST_CODE`) |
+| Serial | required for the SD tool and diagnostics |
 
 Serial monitor: **115200** baud.
 
@@ -85,9 +86,9 @@ TEENSY_TOOLS="$HOME/Library/Arduino15/packages/teensy/tools/teensy-tools/1.59.0"
 2. **File → Open** `toern.ino` from the repo root (not a copy of a single tab).
 3. **Tools**:
    - Board: **Teensy 4.1**
-   - USB Type: **Serial + MIDI**
-   - CPU Speed: **600 MHz**
-   - Optimize: **Faster**
+   - USB Type: **Serial + MIDI + Audio**
+   - CPU Speed: **816 MHz**
+   - Optimize: **Smallest Code**
 4. **Sketch → Upload** (opens Teensy Loader). Or compile only, then use `teensy_post_compile` as above.
 
 ### Libraries
