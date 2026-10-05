@@ -1157,10 +1157,9 @@ void startFastRecord() {
   // Also stop all notes on the sampler for channels 0-8 (sample channels)
   // Stop notes in the typical MIDI range (36-96 covers most sample pitches)
   if (ch >= 0 && ch <= 8) {
-    extern arraysampler _samplers[];
     // Stop notes in a reasonable range (MIDI note 36-96, covering most sample pitches)
     for (int note = 36; note <= 96; note++) {
-      _samplers[ch].noteEvent(note, 0, false, false);
+      samplerNoteEvent(ch, note, 0, false, false);
     }
   }
   
@@ -1329,8 +1328,8 @@ void stopFastRecord() {
   saveSp0StateToEEPROM();
   
   // Now load into sampler (do this after saves to minimize interruption)
-  _samplers[ch].removeAllSamples();
-  _samplers[ch].addSample(
+  samplerRemoveSamples(ch);
+  samplerAddSample(ch,
     36,                            // MIDI note #
     (int16_t*)sampled[ch],         // reinterpret bytes → int16_t
     idx,                           // sample-count
@@ -1353,7 +1352,7 @@ void stopFastRecord() {
   
   // give back your knob color + preview
  // Encoder[0].writeRGBCode(CRGBToUint32(col[ch]));
- // _samplers[ch].noteEvent(36, defaultVelocity, true, false);
+ // samplerNoteEvent(ch, 36, defaultVelocity, true, false);
   //Serial.printf("◀ FASTREC ch%u, %u samples\n", ch, (unsigned)idx);
 
 }

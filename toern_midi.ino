@@ -183,8 +183,8 @@ static void pulseClockEmit() {
   pulseClockPinActive = true;
   uint32_t us = (uint32_t)pulseClockWidthMs * 1000u;
   if (us < 1000u) us = 1000u;
+  pulseEndTimer.priority(toern_audio::kTimerPriority);
   pulseEndTimer.begin(pulseClockEndIsr, us);
-  pulseEndTimer.priority(1);
 }
 
 static void pulseClockApplyIdle() {
@@ -344,10 +344,8 @@ void loadPulseClockFromEEPROM() {
   if (on) setPulseClockEnabled(true);
 }
 
-// ISR-style callback driven by dedicated IntervalTimer for master MIDI clock
-// Writes directly to Serial8 hardware to bypass MIDI library buffering and avoid blocking
-// This ensures precise timing even when sending many MIDI notes
-// IMPORTANT: Timer always runs in background - never stopped to maintain precise timing
+// Master clock callback. UART, I2S DMA and audio may preempt this shared PIT ISR.
+// Serial8.write can wait if its ring is full; attached buffers cover note bursts.
 void midiClockTick() {
   // Analog pulse out from master 24-PPQN timer (INT only — EXT follows myClock)
   extern int clockMode;
@@ -358,10 +356,8 @@ void midiClockTick() {
   // Always send clock if in master mode - timer never stops, even during pause/stop
   if (MIDI_CLOCK_SEND) {
     // Write MIDI clock byte (0xF8) directly to Serial8 hardware
-    // This bypasses the MIDI library buffer and won't block even when sending many notes
-    // Serial8.write() is non-blocking if hardware buffer has space (which it should for single byte)
-    // Serial8 is already declared globally (from Teensy core)
-    // Note: SERIAL8_TX_BUFFER_SIZE is set to 128 in toern.ino to ensure adequate buffer space
+    // Real TX storage is attached in setup(). If it still fills, UART + I2S
+    // DMA + audio update may preempt PIT while write() waits for space.
     Serial8.write(0xF8);  // MIDI Clock message (realtime message, single byte)
     // Never skip clock pulses - missing a pulse would cause drift
   }
@@ -384,9 +380,10 @@ static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
   midiNextClockMicros = nowMicros;
   
   // Configure dedicated IntervalTimer for MIDI clock output (separate from MIDI input/output)
-  // Set highest priority (0 = highest on ARM) to ensure precise timing
+  // All IntervalTimers share PIT: priority 0 here also elevated playNote/fill
+  // above I2S DMA and audio. Audio deadlines take precedence over clock jitter.
+  midiClockTimer.priority(toern_audio::kTimerPriority);
   midiClockTimer.begin(midiClockTick, midiClockIntervalUs);
-  midiClockTimer.priority(0);  // Highest priority - MIDI clock must be precise
   
 }
 

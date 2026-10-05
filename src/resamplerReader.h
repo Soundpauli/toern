@@ -7,6 +7,7 @@
 #include "loop_type.h"
 #include "interpolation.h"
 #include "waveheaderparser.h"
+#include "toern_pcm_interpolation.h"
 
 // Simple debug print helper (can be enabled/disabled)
 // Keep this off in production builds: Serial I/O can cause timing issues/glitches.
@@ -327,98 +328,43 @@ public:
              RR_DEBUG_PRINT("read() ERR: _numChannels %d > MAX_LOCAL_BUF_CHANNELS %d\n", _numChannels, MAX_LOCAL_BUF_CHANNELS);
              return 0;
         }
-        int16_t *index[MAX_LOCAL_BUF_CHANNELS]; // Local stack array for channel audio data pointers
-
-        unsigned int count = 0; // Count of sample frames read
-        for (int channel=0; channel < _numChannels; channel++) {
-            index[channel] = (int16_t*)buf[channel];
-        }
-
+        unsigned int count = 0;
+        bool retried = false;
         while (count < nsamples) {
-            for (int channel=0; channel < _numChannels; channel++) {
-                if (readNextValue(index[channel], channel)) { // Tries to read one int16_t sample for this channel
-                    if (channel == _numChannels - 1) // If last channel for this frame was read successfully
-                        count++; // Increment sample frame count
-                    index[channel]++; // Advance pointer in output buffer for this channel
+            bool frameOK = true;
+            for (int channel = 0; channel < _numChannels; ++channel) {
+                // Address by completed frame, not by successful individual channels.
+                // A retry must not advance one channel past the output allocation.
+                int16_t *out = static_cast<int16_t *>(buf[channel]) + count;
+                if (!readNextValue(out, channel)) { frameOK = false; break; }
+            }
+            if (frameOK) { ++count; retried = false; continue; }
+
+            if (_loopType == looptype_none || retried) {
+                // One failed reposition is enough: never spin inside audio update.
+                for (int channel = 0; channel < _numChannels; ++channel) {
+                    int16_t *out = static_cast<int16_t *>(buf[channel]);
+                    for (unsigned int frame = count; frame < nsamples; ++frame) out[frame] = 0;
                 }
-                else { // readNextValue returned false (end of playable data for this direction)
-                    switch (_loopType) {
-                        case looptype_repeat:
-                        {
-                            _crossfade = 0.0; _crossfadeState = 0;
-                            if (_playbackRate >= 0.0) 
-                                _bufferPosition1 = _loop_start;
-                            else // Reverse playback
-                                _bufferPosition1 = _loop_finish - _numChannels; // Position at start of last frame in loop
-                            
-                            // Sanity check positions
-                            if (_bufferPosition1 < _header_offset) _bufferPosition1 = _header_offset;
-                            if (_bufferPosition1 >= _loop_finish && _loop_finish > _loop_start) _bufferPosition1 = _loop_finish - _numChannels;
-
-                            _numInterpolationPoints = 0; // Reset interpolation history
-                            break; // Break from channel loop, continue in while(count < nsamples)
-                        }
-                        case looptype_pingpong:
-                        {
-                            _crossfade = 0.0; _crossfadeState = 0;
-                            if (_playbackRate >= 0.0) { // Was playing forward, now reverse
-                                _bufferPosition1 = _loop_finish - _numChannels;
-                            } else { // Was playing reverse, now forward
-                                _bufferPosition1 = (_play_start == play_start::play_start_sample) ? _header_offset : _loop_start;
-                            }
-                            // Sanity check positions
-                            if (_bufferPosition1 < _header_offset) _bufferPosition1 = _header_offset;
-                            if (_bufferPosition1 >= _loop_finish && _loop_finish > _loop_start) _bufferPosition1 = _loop_finish - _numChannels;
-                            
-                            _playbackRate = -_playbackRate;
-                            _remainder = -_remainder; // Invert to maintain phase
-                            _numInterpolationPoints = 0; // Reset interpolation history
-                            break; // Break from channel loop
-                        }            
-                        case looptype_none:            
-                        default:
-                        {
-                            // IMPORTANT: avoid end-of-sample clicks.
-                            // Many callers expect the full audio block to be written. If we return early,
-                            // the remaining samples may contain old/garbage data, producing a click at the end.
-                            //
-                            // Strategy:
-                            // - Write zeros for the remainder of the current block (all channels)
-                            // - Stop playback so subsequent calls return 0 available
-                            // - Return nsamples to indicate buffers are fully written
-
-                            // Zero current channel sample
-                            *index[channel] = 0;
-                            index[channel]++;
-
-                            // Zero remaining channels for this frame
-                            for (int ch2 = channel + 1; ch2 < _numChannels; ch2++) {
-                                *index[ch2] = 0;
-                                index[ch2]++;
-                            }
-
-                            // We just completed one frame worth of output (zeros for remaining channels)
-                            count++;
-
-                            // Zero-fill remaining frames
-                            while (count < nsamples) {
-                                for (int ch2 = 0; ch2 < _numChannels; ch2++) {
-                                    *index[ch2] = 0;
-                                    index[ch2]++;
-                                }
-                                count++;
-                            }
-
-                            stop(); // Sets _playing = false
-                            return nsamples;
-                        }
-                    } // End switch _loopType  
-                    // After handling loop/pingpong, we might need to break the inner channel loop
-                    // and restart reading for the new position if count < nsamples.
-                    // The current structure will attempt to read the next channel, which might be fine.
-                } // End if readNextValue
-            } // End for channel
-        } // End while count < nsamples
+                stop();
+                return nsamples;
+            }
+            retried = true;
+            _crossfade = 0.0;
+            _crossfadeState = 0;
+            if (_loopType == looptype_pingpong) {
+                _bufferPosition1 = _playbackRate >= 0.0 ? _loop_finish - _numChannels :
+                    (_play_start == play_start::play_start_sample ? _header_offset : _loop_start);
+                _playbackRate = -_playbackRate;
+                _remainder = -_remainder;
+            } else {
+                _bufferPosition1 = _playbackRate >= 0.0 ? _loop_start : _loop_finish - _numChannels;
+            }
+            if (_bufferPosition1 < _header_offset) _bufferPosition1 = _header_offset;
+            if (_bufferPosition1 >= _loop_finish && _loop_finish > _loop_start)
+                _bufferPosition1 = _loop_finish - _numChannels;
+            _numInterpolationPoints = 0;
+        }
         return count;
     }
 
@@ -572,7 +518,7 @@ public:
                     // else: result remains raw if _numInterpolationPoints is 0
                 } else if (_interpolationType == ResampleInterpolationType::resampleinterpolation_quadratic) {
                     if (_numInterpolationPoints >= 4) {
-                        result = fastinterpolate(ip[0].y, ip[1].y, ip[2].y, ip[3].y, 1.0 + abs_remainder);
+                        result = toern_audio::interpolatePcm16(ip[0].y, ip[1].y, ip[2].y, ip[3].y, 1.0f + (float)abs_remainder);
                     } else if (_numInterpolationPoints > 0) { // Fallback for quadratic if not enough points
                         result = static_cast<int16_t>(ip[_numInterpolationPoints - 1].y);
                     }
@@ -915,4 +861,4 @@ protected:
 
 } // namespace newdigate
 
-#endif //TEENSYAUDIOLIBRARY_RESAMPLINGREADER_H          
+#endif //TEENSYAUDIOLIBRARY_RESAMPLINGREADER_H

@@ -73,10 +73,15 @@ for library_dir in libdeps_dir.glob("TeensyAudioSampler*"):
         text,
         flags=re.MULTILINE,
     )
+    # No USB Serial waits inside the sampler transaction, including rare paths.
+    text = re.sub(r'^(\s*)(Serial\.printf\([^\n]*\);)', r'\1// \2', text, flags=re.MULTILINE)
     polyphonic_sampler.write_text(text)
 
 
 for source_dir in libdeps_dir.glob("TeensyVariablePlayback@src-*/src"):
+    (source_dir / "toern_pcm_interpolation.h").write_text(
+        (project_dir / "src" / "toern_pcm_interpolation.h").read_text()
+    )
     reader = source_dir / "ResamplingReader.h"
     reader.write_text((project_dir / "src" / "resamplerReader.h").read_text())
 

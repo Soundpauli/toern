@@ -194,7 +194,7 @@ void setFilters(FilterType filterType, int index, bool initial) {
           // Channels 13-14 use synth objects
           uint8_t waveformType =
               constrain((int)mapf(
-                  SMP.filter_settings[index][FILTER_WAVEFORM],
+                  filterSetting(index, FILTER_WAVEFORM),
                   0, 16, 0, 3), 0, 3) + 1;
           
           handleWaveformChange(index, waveformType);
@@ -318,7 +318,7 @@ void setFilterDefaults(int channel) {
 
   SMP.filter_settings[channel][OCTAVE] = 16;  // middle = 0
   SMP.filter_settings[channel][DETUNE] = 16;  // middle = 0
-  SMP.filter_settings[channel][FILTER_WAVEFORM] = 8;  // SAW (value 2)
+  filterSetting(channel, FILTER_WAVEFORM) = 8;  // SAW (value 2)
   
   // Initialize detune array for channels 1-12
   if (channel >= 1 && channel <= 12) {

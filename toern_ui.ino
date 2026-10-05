@@ -405,7 +405,7 @@ void drawBase() {
     if (!colorsCached || drawBaseColorMode != lastDrawBaseColorMode || imageMode != lastImageMode
         || currentColorScheme != lastColorScheme || colorsUpdatedViaSerial) {
       for (unsigned int y = 0; y < maxY; y++) {
-        cachedColors[y] = col_base[y];
+        cachedColors[y] = y < 15 ? col_base[y] : CRGB(0, 0, 0);
       }
       colorsCached = true;
       lastDrawBaseColorMode = drawBaseColorMode;

@@ -234,7 +234,7 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
 
     switch (d.arr) {
       case ARR_FILTER:
-        SMP.filter_settings[ch][d.idx] = val;
+        filterSetting(ch, d.idx) = val;
         if (d.idx != EFX) {
           setFilters((FilterType)d.idx, ch, true);
         }
@@ -366,7 +366,7 @@ void applySynthInstrumentPreset(int channel, int instrumentIdx) {
   SMP.synth_settings[channel][FILTER] = kControl3Default[instrumentIdx];
   SMP.synth_settings[channel][SEMI] = 16;  // mid → zero extra cent/semi offset from p4 mapping
   SMP.synth_settings[channel][CENT] = kCentSliderDefault[instrumentIdx];
-  SMP.filter_settings[channel][FILTER_WAVEFORM] =
+  filterSetting(channel, FILTER_WAVEFORM) =
       synthInstrumentWaveDefault(instrumentIdx);
   applySynthInstrumentFormDefault(channel, instrumentIdx);
   SMP.param_settings[channel][ATTACK] = kAttackDefault[instrumentIdx];

@@ -64,7 +64,7 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
   //if (idx < 0) return 0;
   uint8_t raw = 0;
   switch (arr) {
-    case ARR_FILTER: raw = constrain(SMP.filter_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
+    case ARR_FILTER: raw = constrain(filterSetting(chan, idx), 0, MAX_FILTER_RESOLUTION); break;
     case ARR_SYNTH: raw = constrain(SMP.synth_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_PARAM: raw = constrain(SMP.param_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     default: return 0;
@@ -413,7 +413,7 @@ void processAdjustments_new(uint8_t page) {
 
     switch (d.arr) {
       case ARR_FILTER:
-          SMP.filter_settings[chan][d.idx] = currentMode->pos[i];
+          filterSetting(chan, d.idx) = currentMode->pos[i];
           setFilters(d.idx, chan, false);
         break;
 

@@ -1,10 +1,10 @@
 #include "src/toern_build_types.h"
 
-#define VERSION "v3.01e"
+#define VERSION "v3.01e-audiofix5c-clean"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
-#define SERIAL8_RX_BUFFER_SIZE 256   // USB audio needs DTCM headroom; 256 is enough for clock+notes
-#define SERIAL8_TX_BUFFER_SIZE 64
+// Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
+// Real additional buffers are attached in setup(), including Arduino IDE builds.
 #define TargetFPS 60
 
 // Playback diagnostics / debug (keep OFF for reliability)
@@ -51,6 +51,9 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include <i2cEncoderLibV2.h>
 #include <MIDI.h>
 #include <Audio.h>
+#include "src/toern_audio_runtime.h"
+#include "src/toern_pcm_interpolation.h"
+#include "src/toern_legacy_filter.h"
 #include <EEPROM.h>
 #include <FastTouch.h>
 #include <sampler.h>  // TeensyPolyphony arraysampler API
@@ -270,6 +273,8 @@ struct MidiSettings : public midi ::DefaultSettings {
 };
 
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MidiSettings);
+static uint8_t midiTxExtra[128];
+static uint8_t midiRxExtra[512];
 
 unsigned long ganularStartTime = 0;  // Timestamp when the current beat started
 
@@ -1199,6 +1204,11 @@ float gainValue = 2.0;
 
 
 #define NUM_PARAMS (sizeof(SMP.param_settings[0]) / sizeof(SMP.param_settings[0][0]))
+static_assert(FILTER_WAVEFORM == maxFilters, "Review legacy waveform slot mapping");
+float& filterSetting(int channel, int index) {
+  return toern_audio::legacyFilterValue(SMP.filter_settings, SMP.synth_settings, channel, index);
+}
+
 #define NUM_FILTERS (sizeof(SMP.filter_settings[0]) / sizeof(SMP.filter_settings[0][0]))
 #define MAX_CHANNELS maxY  // maxY is the number of channels (e.g. 16)
 
@@ -2435,7 +2445,8 @@ void checkFastRec() {
 
 unsigned int cursorNoteStep();
 
-void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
+// UI button dispatch is not an audio/PIT callback; keep it out of ITCM.
+FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
   //checkFastRec();
 
 
@@ -3722,18 +3733,37 @@ static float playAmpForVoice(int ch) {
   return 1.0f;
 }
 
+void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool retrigger) {
+  if (ch < 0 || ch > 8) return;
+  toern_audio::StateGuard guard;
+  _samplers[ch].noteEvent(pitch, velocity, on, retrigger);
+}
+
+void samplerRemoveSamples(int ch) {
+  if (ch < 0 || ch > 8) return;
+  toern_audio::StateGuard guard;
+  _samplers[ch].removeAllSamples();
+}
+
+void samplerAddSample(int ch, uint8_t root, int16_t *data, uint32_t frames, uint16_t channels) {
+  if (ch < 0 || ch > 8) return;
+  toern_audio::StateGuard guard;
+  _samplers[ch].addSample(root, data, frames, channels);
+}
+
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
   if (ch < 0 || ch > 8) return;
   const float noteN = (float)effectiveNoteVelocity(vel) / 127.0f;
   const float scale = isNeoSliderControlledChannel(ch) ? neoSliderVelScale[ch - 1] : 1.0f;
   const float amp = noteN * scale;
   if (amp <= 0.0f) return;
+  toern_audio::StateGuard guard;  // amplitude, reader reset/rate and envelope are one transaction
   applyPlayAmplitude(ch, amp);
   if (isNeoSliderControlledChannel(ch)) {
     neoSliderLastVelNorm[ch - 1] = noteN;
   }
   uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
-  _samplers[ch].noteEvent((uint8_t)constrain(pitch, 0, 127), sv, true, retrigger);
+  samplerNoteEvent(ch, (uint8_t)constrain(pitch, 0, 127), sv, true, retrigger);
 }
 
 // Restore amp gains from channelVol for sample/synth voices that have amps[].
@@ -4018,10 +4048,9 @@ FLASHMEM void setup() {
   digitalWrite(36, HIGH);  // LEDs now always on
   //Wire.begin();
   //Wire.setClock(10000); // Set to 400 kHz (standard speed)
-  NVIC_SET_PRIORITY(IRQ_SOFTWARE, 208);
-  // Set MIDI (Serial8/LPUART8) interrupt priority - lower number = higher priority
-  // Priority 64 = higher priority for faster MIDI input handling (was 112)
-  NVIC_SET_PRIORITY(IRQ_LPUART8, 64);  // MIDI serial interrupt priority
+  NVIC_SET_PRIORITY(IRQ_SOFTWARE, toern_audio::kAudioPriority);
+  // Teensy 4.1 Serial8 is LPUART5 (not LPUART8). UART must preempt PIT.
+  NVIC_SET_PRIORITY(IRQ_LPUART5, 64);
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
 
   // Avoid allocations / fragmentation when scheduling sample triggers
@@ -4264,7 +4293,8 @@ FLASHMEM void setup() {
 
   initPageMutes();  // Initialize per-page mute system
 
-  //playTimer.priority(118);
+  playTimer.priority(toern_audio::kTimerPriority);
+  fillTimer.priority(toern_audio::kTimerPriority);
   // Run sequencer from IntervalTimer (ISR-safe playNote) so playback continues during SD/UI work
   playTimer.begin(playNote, (uint32_t)lround(playNoteInterval));
   // Start fill timer at 4x the beat rate (for 2x and 4x fills)
@@ -4333,6 +4363,8 @@ FLASHMEM void setup() {
   updateSynthVoice(11);
   switchMode(&draw);
 
+  Serial8.addMemoryForWrite(midiTxExtra, sizeof(midiTxExtra));
+  Serial8.addMemoryForRead(midiRxExtra, sizeof(midiRxExtra));
   Serial8.begin(31250);
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.setHandleNoteOn(handleNoteOn);    // optional MIDI library hook
@@ -4505,7 +4537,8 @@ bool getBatteryWarningActive() {
   return false;
 }
 
-void checkEncoders() {
+// UI encoder polling follows the existing menu FLASHMEM placement.
+FLASHMEM void checkEncoders() {
   // Track mode changes globally for this function to detect re-entry into Draw/Single modes
   static Mode *lastSeenMode = nullptr;
   bool modeChangedGlobal = (currentMode != lastSeenMode);
@@ -7652,7 +7685,7 @@ void tmpMuteAll(bool pressed) {
 static void silenceAllVoicesForFullMute() {
   for (int ch = 0; ch <= 8; ch++) {
     for (int note = 36; note <= 96; note++) {
-      _samplers[ch].noteEvent(note, 0, false, false);
+      samplerNoteEvent(ch, note, 0, false, false);
     }
   }
 
@@ -7706,7 +7739,7 @@ FLASHMEM void fullMuteApplyView() {
       if (!globalMutes[ch]) continue;
       if (ch >= 1 && ch <= 8) {
         for (int note = 36; note <= 96; note++) {
-          _samplers[ch].noteEvent(note, 0, false, false);
+          samplerNoteEvent(ch, note, 0, false, false);
         }
       } else if (ch == 13 || ch == 14) {
         stopSynthChannel(ch);
@@ -9413,6 +9446,7 @@ static void refreshSamplerChannel(uint8_t channel) {
   if (sampleCount == 0) return;
 
   int16_t *buffer = reinterpret_cast<int16_t *>(sampled[channel]);
+  toern_audio::StateGuard guard;
   _samplers[channel].removeAllSamples();
   _samplers[channel].addSample(36, buffer, sampleCount, rateFactor);
 }
@@ -10183,7 +10217,7 @@ bool findSliderDefPageSlot(int chan, SettingArray arr, int8_t idx, int &page, in
 // Helpers to get/set value for defaultFastFilter
 int getDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx) {
   switch (arr) {
-    case ARR_FILTER: return SMP.filter_settings[channel][idx];
+    case ARR_FILTER: return filterSetting(channel, idx);
     case ARR_SYNTH: return SMP.synth_settings[channel][idx];
     case ARR_PARAM: return SMP.param_settings[channel][idx];
     default: return 0;
@@ -10191,7 +10225,7 @@ int getDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx) {
 }
 void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int value) {
   switch (arr) {
-    case ARR_FILTER: SMP.filter_settings[channel][idx] = value; break;
+    case ARR_FILTER: filterSetting(channel, idx) = value; break;
     case ARR_SYNTH: SMP.synth_settings[channel][idx] = value; break;
     case ARR_PARAM: SMP.param_settings[channel][idx] = value; break;
     default: break;
@@ -10372,7 +10406,7 @@ static void stopMutedVoiceAudio(int ch) {
   // holding audio blocks / freeverb tails under memory pressure.
   if (ch >= 1 && ch <= 8) {
     for (int note = 36; note <= 96; note++) {
-      _samplers[ch].noteEvent(note, 0, false, false);
+      samplerNoteEvent(ch, note, 0, false, false);
     }
     if (ch < 15 && envelopes[ch] != nullptr) {
       envelopes[ch]->noteOff();

@@ -212,15 +212,18 @@ bool isChannelSampleReloadBusy(unsigned int ch) {
 
 void beginChannelSampleReload(unsigned int ch) {
   if (ch >= maxFiles) return;
+  toern_audio::StateGuard guard;
   channelSampleReloadBusy[ch] = true;
+  // noteOff alone leaves a releasing player reading the buffer being rewritten.
+  if (voices[ch]) voices[ch]->stop();
   // Stop any ringing notes on this voice before the buffer is rewritten.
   for (int note = 36; note <= 96; note++) {
-    _samplers[ch].noteEvent(note, 0, false, false);
+    samplerNoteEvent(ch, note, 0, false, false);
   }
   if (ch < 15 && envelopes[ch] != nullptr) {
     envelopes[ch]->noteOff();
   }
-  _samplers[ch].removeAllSamples();
+  samplerRemoveSamples(ch);
 }
 
 void endChannelSampleReload(unsigned int ch) {
@@ -416,7 +419,7 @@ void stopAllSetWavPreviewAudio() {
   g_pendingSyncPreviewPlay = false;
   stopSdPreviewAndWait();
   envelope0.noteOff();
-  _samplers[0].removeAllSamples();
+  samplerRemoveSamples(0);
   previewIsPlaying = false;
   sampleIsLoaded = false;
 }
@@ -593,8 +596,8 @@ FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
   size_t    frameCount = byteCount / 2;
 
   // Finally hand off only valid data to the sampler
-  _samplers[0].removeAllSamples();
-  _samplers[0].addSample(
+  samplerRemoveSamples(0);
+  samplerAddSample(0,
     36,              // midi note root
     samplePtr,       // pointer to your aligned data
     frameCount,      // number of 16-bit samples
@@ -603,7 +606,7 @@ FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
   sampleIsLoaded = true;
 
   if (playAudio) {
-    _samplers[0].noteEvent(12 * PrevSampleRate, defaultVelocity, true, false);
+    samplerNoteEvent(0, 12 * PrevSampleRate, defaultVelocity, true, false);
   }
 }
 
@@ -636,12 +639,13 @@ static void loadEmptySampleToChannel(unsigned int sampleID) {
   memset(sampled[sampleID], 0, (size_t)samplerLen * 2);
 
   loadedSampleLen[sampleID] = 0;
-  _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], samplerLen, rateFactor);
+  samplerAddSample(sampleID, 36, (int16_t *)sampled[sampleID], samplerLen, rateFactor);
   channelDirection[sampleID] = 1;
   endChannelSampleReload(sampleID);
 }
 
 FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
+  if (sampleID >= maxFiles) return;
   drawNoSD();
   stopSdPreviewIfPlaying();
 
@@ -768,7 +772,7 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     int playLen = samplesRead + pad;
 
     loadedSampleLen[sampleID] = playLen;
-    _samplers[sampleID].addSample(36, (int16_t *)sampled[sampleID], playLen, rateFactor);
+    samplerAddSample(sampleID, 36, (int16_t *)sampled[sampleID], playLen, rateFactor);
     channelDirection[sampleID] = 1;
     endChannelSampleReload(sampleID);
   }
@@ -1524,7 +1528,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   int playLen = samplesRead + pad;
 
   loadedSampleLen[targetChannel] = playLen;
-  _samplers[targetChannel].addSample(36, targetBuffer, playLen, rateFactor);
+  samplerAddSample(targetChannel, 36, targetBuffer, playLen, rateFactor);
   channelDirection[targetChannel] = 1;
   endChannelSampleReload(targetChannel);
 

@@ -931,7 +931,7 @@ void updateSynthVoice(int channel){
         switchSynthVoice(instrumentValue,0, cutoff, resonance, filter, semi, cent, form);
         applySynthWaveformControl(
             instrumentValue, 0,
-            (uint8_t)SMP.filter_settings[channel][FILTER_WAVEFORM]);
+            (uint8_t)filterSetting(channel, FILTER_WAVEFORM));
 
         // After the preset sets its own hardcoded ADSR, override with the user-saved slider values
         // so that the ADSR controls on the param page always take effect for ch11.
