@@ -99,29 +99,22 @@ void setFiltersDefaultValues(int ch) {
 }
 
 
-// Set default envelope values for a single channel
-//ASDR
-void setEnvelopeDefaultValues(int ch) {
-  // Channel-specific ADSR defaults.
-  // NOTE: These are "slider" values in the 0..maxfilterResolution range (typically 0..32),
-  // not milliseconds directly. `setParams()` maps them to actual envelope times/levels.
-  if (ch == 13 || ch == 14) {
-    // Default synth envelope for channels 13/14:
-    // A=32, D=9, S=20, R=9
-    SMP.param_settings[ch][ATTACK] = 32;
-    SMP.param_settings[ch][DECAY] = 9;
-    SMP.param_settings[ch][SUSTAIN] = 20;
-    SMP.param_settings[ch][RELEASE] = 9;
-  } else {
-    SMP.param_settings[ch][ATTACK] = 32;
-    SMP.param_settings[ch][DECAY] = 32;
-    SMP.param_settings[ch][SUSTAIN] = 10;
-    SMP.param_settings[ch][RELEASE] = 5;
-  }
+// Unified ADSR slider defaults (0..maxfilterResolution): A=32, D=32, S=32, R=0
+static void applyDefaultAdsrSettings(int ch) {
+  SMP.param_settings[ch][ATTACK] = 32;
+  SMP.param_settings[ch][DECAY] = 32;
+  SMP.param_settings[ch][SUSTAIN] = 32;
+  SMP.param_settings[ch][RELEASE] = 0;
   setParams(ATTACK, ch);
   setParams(DECAY, ch);
   setParams(SUSTAIN, ch);
   setParams(RELEASE, ch);
+}
+
+// Set default envelope values for a single channel
+//ASDR
+void setEnvelopeDefaultValues(int ch) {
+  applyDefaultAdsrSettings(ch);
   initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
   updateSynthVoice(11);
 }
@@ -179,20 +172,12 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
         default: return 0;
       }
     case ARR_PARAM:
-      if (ch == 13 || ch == 14) {
-        switch (idx) {
-          case ATTACK: return 32;
-          case DECAY: return 9;
-          case SUSTAIN: return 20;
-          case RELEASE: return 9;
-          default: return 0;
-        }
-      }
+      // Default ADSR for all channels: A=32, D=32, S=32, R=0
       switch (idx) {
         case ATTACK: return 32;
         case DECAY: return 32;
-        case SUSTAIN: return 10;
-        case RELEASE: return 5;
+        case SUSTAIN: return 32;
+        case RELEASE: return 0;
         default: return 0;
       }
     case ARR_SYNTH:
@@ -224,6 +209,7 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
   extern SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
 
   bool touchedSynth = false;
+  bool touchedAdsr = false;
 
   for (uint8_t i = 0; i < 4; ++i) {
     const SliderDefEntry& d = sliderDef[ch][page][i];
@@ -242,6 +228,9 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
       case ARR_PARAM:
         SMP.param_settings[ch][d.idx] = val;
         setParams((ParameterType)d.idx, ch);
+        if (d.idx == ATTACK || d.idx == DECAY || d.idx == SUSTAIN || d.idx == RELEASE) {
+          touchedAdsr = true;
+        }
         break;
       case ARR_SYNTH:
         SMP.synth_settings[ch][d.idx] = val;
@@ -253,6 +242,11 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
       default:
         break;
     }
+  }
+
+  // Force unified ADSR after any page that owns those sliders (also wins over INST preset).
+  if (touchedAdsr) {
+    applyDefaultAdsrSettings(ch);
   }
 
   if (touchedSynth && ch == 11) updateSynthVoice(11);
@@ -282,6 +276,9 @@ void setAllFilterPagesDefaultValues(int ch) {
   }
   // EFX is not on every voice's slider pages but still owns sample routing.
   SMP.filter_settings[ch][EFX] = 0;
+
+  // Always end on unified ADSR (INST preset must not leave stale A/D/S/R).
+  applyDefaultAdsrSettings(ch);
 
   initSliders(filterPage[ch], ch);
   if (ch == 11) updateSynthVoice(11);

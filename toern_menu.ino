@@ -1351,6 +1351,8 @@ FLASHMEM void applyAudioSettingsFromGlobals() {
   // Apply line input level
   sgtl5000_1.lineInLevel(lineInLevel);
 
+  extern void applySgtl5000AdcHighPass();
+  applySgtl5000AdcHighPass();
   extern void applySgtl5000CodecOutputPath();
   applySgtl5000CodecOutputPath();
   
@@ -3009,6 +3011,8 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         sgtl5000_1.inputSelect(recInput);
         if (recInput == AUDIO_INPUT_MIC) sgtl5000_1.micGain(micGain);
         else sgtl5000_1.micGain(0);
+        extern void applySgtl5000AdcHighPass();
+        applySgtl5000AdcHighPass();
         redrawMain(setting);
         redrawAdd(setting);
       }
@@ -4505,6 +4509,8 @@ FLASHMEM void switchMenu(int menuPosition){
         } else {
           sgtl5000_1.micGain(0);
         }
+        extern void applySgtl5000AdcHighPass();
+        applySgtl5000AdcHighPass();
         
         drawMainSettingStatus(menuPosition);
         drawAdditionalFeatures(menuPosition);
@@ -5396,6 +5402,8 @@ FLASHMEM void drawRecMode() {
   sgtl5000_1.inputSelect(recInput);
   if (recInput == AUDIO_INPUT_MIC) sgtl5000_1.micGain(micGain);
   else sgtl5000_1.micGain(0);
+  extern void applySgtl5000AdcHighPass();
+  applySgtl5000AdcHighPass();
   FastLEDshow();
 }
 

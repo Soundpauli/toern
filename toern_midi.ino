@@ -987,11 +987,9 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
 
   if (isNowPlaying) {
       if (GLOB.singleMode) {
-        // Quantize the grid write at enqueue time (ISR-safe ring buffer).
-        extern bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote);
-        enqueuePendingNote(storedPitch, velocity, (uint8_t)ch, livenote);
-        // Preview immediately; the queued cell is committed after sequencer
-        // audio on the next tick, so it cannot produce a second attack.
+        extern bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
+                                      uint8_t midiPitch, bool protectOtherVoices);
+        placeLiveGridNote((uint8_t)ch, livenote, velocity, storedPitch, false);
         playIncomingMidiNote(ch, pitch, livenote, velocity);
       } else {
         playIncomingMidiNote(ch, pitch, livenote, velocity);

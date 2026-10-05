@@ -525,6 +525,12 @@ static volatile uint8_t pendingNotesHead = 0;   // next write index
 static volatile uint8_t pendingNotesTail = 0;   // next read index
 static volatile uint8_t pendingNotesCount = 0;  // number of queued items
 
+// If a live MIDI/touch4 write lands on the upcoming sequencer step, skip that
+// one trigger so the immediate preview is the only attack. The cell is already
+// on the grid (visible now) and plays on the next pass.
+volatile uint16_t liveRecordSkipBeat = 0;
+volatile uint16_t liveRecordSkipRows = 0;
+
 // Enqueue from main loop context (may be called from MIDI handlers in loop()).
 // Returns true on success, false if the queue is full (event dropped).
 bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote) {
@@ -561,7 +567,56 @@ void clearPendingMidiRecordNotes() {
   pendingNotesHead = 0;
   pendingNotesTail = 0;
   pendingNotesCount = 0;
+  liveRecordSkipBeat = 0;
+  liveRecordSkipRows = 0;
   interrupts();
+}
+
+static void markLiveRecordSkip(uint16_t targetBeat, uint8_t row) {
+  extern unsigned int beat;
+  noInterrupts();
+  uint16_t upcoming = (uint16_t)beat;
+  if (targetBeat == upcoming && row >= 1 && row <= 15) {
+    if (liveRecordSkipBeat != targetBeat) {
+      liveRecordSkipBeat = targetBeat;
+      liveRecordSkipRows = 0;
+    }
+    liveRecordSkipRows |= (uint16_t)(1u << row);
+  }
+  interrupts();
+}
+
+static bool consumeLiveRecordSkip(uint16_t srcBeat, unsigned int row) {
+  if (liveRecordSkipBeat != srcBeat || row > 15) return false;
+  uint16_t bit = (uint16_t)(1u << row);
+  if ((liveRecordSkipRows & bit) == 0) return false;
+  liveRecordSkipRows = (uint16_t)(liveRecordSkipRows & ~bit);
+  if (liveRecordSkipRows == 0) liveRecordSkipBeat = 0;
+  return true;
+}
+
+// Write a live-recorded note immediately so SINGLE/DRAW can show it, without
+// waiting for the next sequencer tick. Skip-once covers the current playhead.
+bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
+                       uint8_t midiPitch, bool protectOtherVoices) {
+  extern Note note[][maxY + 1];
+  if (channel < 1 || row < 1 || row > 15) return false;
+  if (isChildVoiceDisabled((int)channel)) return false;
+  extern uint16_t quantizedMidiRecordBeat();
+  uint16_t targetBeat = quantizedMidiRecordBeat();
+  if (targetBeat < 1) return false;
+  Note &cell = note[targetBeat][row];
+  if (protectOtherVoices && cell.channel != 0 && cell.channel != channel) {
+    return false;
+  }
+  markLiveRecordSkip(targetBeat, row);
+  cell.velocity = velocity > 0 ? velocity : (uint8_t)defaultVelocity;
+  cell.probability = 100;
+  cell.condition = 1;
+  cell.midiPitch = midiPitch;
+  cell.channel = channel;
+  updateLastPage();
+  return true;
 }
 
 
@@ -1307,7 +1362,8 @@ FLASHMEM void enforceChildModeRestrictions() {
 //EXTMEM int16_t fastRecBuffer[MAX_CHANNELS][BUFFER_SAMPLES];
 EXTMEM static size_t fastRecWriteIndex[MAX_CHANNELS];
 bool fastRecordActive = false;
-//static uint8_t fastRecordChannel = 0;
+uint8_t fastRecordChannel = 0;  // channel whose sample buffer is being overwritten
+bool recordingBorderArmed = false;  // red border shown before/during armed capture
 bool countInActive = false;              // Count-in active for ON1 mode
 int countInBeat = 0;                     // Current count-in beat (0-4, where 0=waiting, 1-4=count, 5=start recording)
 bool countInComplete = false;            // Flag to track when count-in (1,2,3,4) is complete
@@ -1317,6 +1373,8 @@ bool touch3PressProcessed = false;       // Whether the >300ms press has been pr
 unsigned int recordingStartBeat = 0;     // Beat where recording started (to stop before reaching it again)
 unsigned int recordingBeatCount = 0;     // Absolute beat counter for recording (doesn't wrap)
 bool pendingStopFastRecord = false;      // Flag to defer stopFastRecord() from interrupt to main loop
+bool pendingStartFastRecord = false;     // Start from main loop after the red border is shown
+bool fastRecWaitRelease = false;         // After auto-stop, don't re-arm until the trigger is released
 
 
 // State variables
@@ -2331,8 +2389,23 @@ void checkFastRec() {
 
   bool allowStart = channelAllowed && (GLOB.y > 1);
 
+  // Arm only — main loop presents the border, then starts capture.
+  // Never FastLED.show() / startFastRecord() from the playNote ISR.
+  auto armRecordingBorder = []() {
+    recordingBorderArmed = true;
+    extern void presentRecordingBorder();
+    presentRecordingBorder();
+  };
+  auto requestFastRecord = [&]() {
+    if (fastRecWaitRelease) return;
+    recordingBorderArmed = true;
+    pendingStartFastRecord = true;
+  };
+
   if ((currentMode == &draw || currentMode == &singleMode) && SMP_FAST_REC == 2 || SMP_FAST_REC == 3) {
     bool pinsConnected = (digitalRead(2) == LOW);
+    if (SMP_FAST_REC == 2 && !pinsConnected) fastRecWaitRelease = false;
+    if (SMP_FAST_REC == 3 && pinsConnected) fastRecWaitRelease = false;
 
     if (pinsConnected != lastPinsConnected && millis() - lastChangeTime > debounceDelay) {
       lastChangeTime = millis();  // Update timestamp
@@ -2341,7 +2414,7 @@ void checkFastRec() {
       if (SMP_FAST_REC == 2) {
         if (pinsConnected && !fastRecordActive) {
           if (!allowStart) return;
-          startFastRecord();
+          requestFastRecord();
           return;
         } else if (!pinsConnected && fastRecordActive) {
           stopFastRecord();
@@ -2351,7 +2424,7 @@ void checkFastRec() {
       if (SMP_FAST_REC == 3) {
         if (!pinsConnected && !fastRecordActive) {
           if (!allowStart) return;
-          startFastRecord();
+          requestFastRecord();
           return;
         } else if (pinsConnected && fastRecordActive) {
           stopFastRecord();
@@ -2410,6 +2483,7 @@ void checkFastRec() {
                 countInBeat = 0;           // Reset count-in
                 countInComplete = false;   // Reset completion flag
                 touch3PressStartTime = 0;  // Reset timer
+                armRecordingBorder();      // Border visible through pending + count-in
                 return;
               }
               touch3PressStartTime = 0;  // Reset timer
@@ -2425,6 +2499,7 @@ void checkFastRec() {
           touch3PressProcessed = false;
           touch3PressStartTime = 0;
         }
+        if (!currentTouchState) fastRecWaitRelease = false;
       } else {
         // Non-ON1 modes: start/stop directly on touch/release (old behavior)
         if (currentTouchState && !fastRecordActive) {
@@ -2432,12 +2507,13 @@ void checkFastRec() {
           if (allowStart) {
             recordingStartBeat = beat;  // Track where recording starts
             recordingBeatCount = 0;     // Reset absolute beat counter
-            startFastRecord();
+            requestFastRecord();
           }
         } else if (!currentTouchState && fastRecordActive) {
           // Touch3 released - stop recording immediately
           stopFastRecord();
         }
+        if (!currentTouchState) fastRecWaitRelease = false;
       }
     }
   }
@@ -3299,6 +3375,11 @@ FLASHMEM void applySgtl5000CodecOutputPath() {
   sgtl5000_1.eqBands(0.0f, 0.0f, 0.0f, 0.0f, gTreble);
 }
 
+// ADC high-pass cuts mic DC / rumble on the capture path.
+FLASHMEM void applySgtl5000AdcHighPass() {
+  sgtl5000_1.adcHighPassFilterEnable();
+}
+
 #ifndef TOERN_AUDIO_MEMORY_BLOCKS
 #define TOERN_AUDIO_MEMORY_BLOCKS 96
 #endif
@@ -3335,10 +3416,8 @@ FLASHMEM void initSoundChip() {
     sgtl5000_1.micGain(0);
   }
 
-  //sgtl5000_1.adcHighPassFilterEnable();  //ENABLED //matze
-  //sgtl5000_1.adcHighPassFilterDisable();  //for mic?
-  //sgtl5000_1.unmuteLineout();
-  //sgtl5000_1.lineOutLevel(lineOutLevelSetting);
+  applySgtl5000AdcHighPass();
+
   sgtl5000_1.lineInLevel(lineInLevel);  // Apply line input level
 
   applySgtl5000CodecOutputPath();
@@ -3753,6 +3832,8 @@ void samplerAddSample(int ch, uint8_t root, int16_t *data, uint32_t frames, uint
 
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
   if (ch < 0 || ch > 8) return;
+  // Don't re-arm a reader into the buffer currently being recorded.
+  if (fastRecordActive && (uint8_t)ch == fastRecordChannel) return;
   const float noteN = (float)effectiveNoteVelocity(vel) / 127.0f;
   const float scale = isNeoSliderControlledChannel(ch) ? neoSliderVelScale[ch - 1] : 1.0f;
   const float amp = noteN * scale;
@@ -5490,17 +5571,10 @@ void checkTouchInputs() {
       triggerCurrentVoiceAudition(auditionRow);
       if (currentMode == &singleMode && isNowPlaying) {
         const int row = basePitchRowForChannel(ch);
-        if (row >= 1 && row <= 15 && beat >= 1 && beat <= maxlen
-            && isSingleModeChannelAllowed(ch) && !isChildVoiceDisabled(ch)) {
-          const uint8_t existing = note[beat][row].channel;
-          if (existing == 0 || existing == (uint8_t)ch) {
-            note[beat][row].channel = (uint8_t)ch;
-            note[beat][row].velocity = defaultVelocity;
-            note[beat][row].probability = 100;
-            note[beat][row].condition = 1;
-            note[beat][row].midiPitch = NOTE_MIDI_PITCH_NONE;
-            updateLastPage();
-          }
+        if (row >= 1 && row <= 15 && isSingleModeChannelAllowed(ch)
+            && !isChildVoiceDisabled(ch)) {
+          placeLiveGridNote((uint8_t)ch, (uint8_t)row, (uint8_t)defaultVelocity,
+                            NOTE_MIDI_PITCH_NONE, true);
         }
       }
     }
@@ -6861,12 +6935,40 @@ void loop() {
     isrDbgLoopCountChanged = false;
   }
 
+  // Handle deferred stop recording (from timer interrupt)
+  if (pendingStopFastRecord) {
+    pendingStopFastRecord = false;
+    stopFastRecord();
+  }
+
+  // Present red border, then start capture — never from the playNote ISR.
+  if (pendingStartFastRecord && !fastRecordActive) {
+    pendingStartFastRecord = false;
+    recordingBorderArmed = true;
+    extern void presentRecordingBorder();
+    presentRecordingBorder();
+    startFastRecord();
+  }
+
+  // Drain ADC queue as early/often as possible while capturing.
+  if (fastRecordActive) {
+    flushAudioQueueToRAM();
+
+    // Minimal stop-path only: no grid redraw, no FastLED, no I2C encoder polling.
+    extern void checkFastRec();
+    checkFastRec();
+    checkTouchInputs();
+    flushAudioQueueToRAM();
+    yield();
+    return;
+  }
+
   // FLOW mode: SAME playback behavior as normal play.
   // ONLY difference: the visible page follows the beat being played (beatForUI).
   // Do page-follow work in the main loop to avoid mid-frame flicker.
   // Do NOT touch encoder 1 when CTRL-VOL is active (ctrlMode==1).
   extern bool songModeActive;
-  if (!childLockEnabled && SMP_FLOW_MODE && !(voiceMode && !songModeActive) && patternMode != 3 &&
+  if (!fastRecordActive && !childLockEnabled && SMP_FLOW_MODE && !(voiceMode && !songModeActive) && patternMode != 3 &&
       isNowPlaying &&
       (currentMode == &draw || currentMode == &singleMode)) {
     static uint16_t lastAppliedFlowPage = 0;
@@ -6930,9 +7032,10 @@ void loop() {
         drawCountIn();
       }
 
-      // Draw red border when recording
-      extern void drawRecordingBorder();
-      if (fastRecordActive) {
+      // Red border while armed / count-in (before capture). During capture the
+      // framebuffer is frozen so this overlay is not redrawn.
+      if (recordingBorderArmed || countInActive || countInPending) {
+        extern void drawRecordingBorder();
         drawRecordingBorder();
       }
 
@@ -7009,7 +7112,7 @@ void loop() {
 
   // Update LED strip visualization (only if enabled - optimization #3)
   extern bool getLedStripEnabled();
-  if (getLedStripEnabled()) {
+  if (!fastRecordActive && getLedStripEnabled()) {
     updateLedStrip();
   }
 
@@ -7024,23 +7127,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 }else{granular1.stop();}
 */
 
-  // Handle deferred stop recording (from timer interrupt)
-  if (pendingStopFastRecord) {
-    pendingStopFastRecord = false;
-    stopFastRecord();
-  }
-
-  if (fastRecordActive) {
-    flushAudioQueueToRAM();     // grab incoming audio into RAM
-    checkMode(buttons, false);  // MODIFIED call
-    drawTimer();
-    checkPendingSampleNotes();
-    //return;  // skip the rest while we're fast-recording // This return might be intended
-  }
-
-
-
-  if (previewIsPlaying) {
+  if (!fastRecordActive && previewIsPlaying) {
     static elapsedMillis peakCaptureTimer;
     if (peakCaptureTimer > 15) {  // capture peaks at ~66 fps max
       peakCaptureTimer = 0;
@@ -7071,17 +7158,25 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
 
   checkEncoders();
-  if (deviceHasFaders) {
+  if (!fastRecordActive && deviceHasFaders) {
     updateNeoSliderVolume();
   }
   // Never draw the cursor while in MENU (or its submenus).
   // Never draw the grid cursor on screens that own the whole matrix.
-  if (currentMode != &velocity && currentMode != &filterMode && currentMode != &menu
+  if (!fastRecordActive && currentMode != &velocity && currentMode != &filterMode && currentMode != &menu
       && currentMode != &set_Wav && currentMode != &recordMode) {
     drawCursor();
   }
   checkButtons();
   checkTouchInputs();
+
+  // While capturing: drain queue again, then skip paint / SD / mixer slew work.
+  if (fastRecordActive) {
+    flushAudioQueueToRAM();
+    yield();
+    return;
+  }
+
   checkPendingSampleNotes();
   serviceSetWavSyncPreview();
   serviceSdPreviewRequests();
@@ -8296,13 +8391,12 @@ void playNote() {
       countInActive = false;
       countInBeat = 0;
       countInComplete = false;
-      // Clear all triggers from selected channel
-      clearAllNotesOfChannel();
       // Track starting beat for auto-stop before reaching it again
       recordingStartBeat = beat;
       recordingBeatCount = 0;  // Reset absolute beat counter
-      // Start fast recording (note at x=1 will be set after recording completes)
-      startFastRecord();
+      // Defer start to main loop so the red border is shown first (not from ISR).
+      recordingBorderArmed = true;
+      pendingStartFastRecord = true;
     }
   }
 
@@ -8374,6 +8468,10 @@ void playNote() {
       uint8_t prob = note[srcBeat][b].probability;  // Get probability (0-100)
       uint8_t cond = note[srcBeat][b].condition;    // Get condition (1, 2, 4 for 1, 1/2, 1/4)
       if (cond == 0) cond = 1;                   // Default to 1 if not set
+
+      if (consumeLiveRecordSkip(srcBeat, b)) {
+        continue;  // Live preview already sounded this cell
+      }
 
       if (ch > 0 && !isChildVoiceDisabled(ch) && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
 

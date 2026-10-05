@@ -1113,8 +1113,8 @@ void startFastRecord() {
   if (fastRecordActive) return;
 
   // Handle different recording modes based on recChannelClear
-  if (recChannelClear == 1) {
-    // ON mode: Clear all existing notes of channel, then add triggers/notes
+  if (recChannelClear == 1 || recChannelClear == 3) {
+    // ON / ON1: Clear all existing notes of channel, then add triggers/notes
     clearAllNotesOfChannel();
   }
   // OFF mode (recChannelClear == 0): Add triggers/notes as soon as recording starts
@@ -1147,17 +1147,20 @@ void startFastRecord() {
 
   // 2) Reset our write index and drop counter
   int ch = GLOB.currentChannel;
+  fastRecordChannel = (uint8_t)constrain(ch, 0, 255);
   
   // Immediately stop any playing sound on the recording channel
+  extern AudioPlayArrayResmp *voices[];
+  if (ch >= 0 && ch <= 8 && voices[ch] != nullptr) {
+    voices[ch]->stop();  // stop reader before we overwrite sampled[ch]
+  }
   extern AudioEffectEnvelope *envelopes[];
   if (ch >= 0 && ch < 15 && envelopes[ch] != nullptr) {
     envelopes[ch]->noteOff();
   }
   
   // Also stop all notes on the sampler for channels 0-8 (sample channels)
-  // Stop notes in the typical MIDI range (36-96 covers most sample pitches)
   if (ch >= 0 && ch <= 8) {
-    // Stop notes in a reasonable range (MIDI note 36-96, covering most sample pitches)
     for (int note = 36; note <= 96; note++) {
       samplerNoteEvent(ch, note, 0, false, false);
     }
@@ -1175,6 +1178,9 @@ void startFastRecord() {
   // 3) Restart recording queue
   queue1.begin();
   fastRecordActive = true;
+
+  // Red border is armed + shown from main loop before this runs.
+  // Do not FastLED.show() here — ON1 starts from the playNote ISR.
   
   // Enable audio input monitoring using VOL menu input level settings
   extern int recMode;
@@ -1215,19 +1221,25 @@ void flushAudioQueueToRAM() {
       int16_t *block = (int16_t *)queue1.readBuffer();
 
       if (fastDropRemaining > 0) {
-        // still skipping the first 200ms
         fastDropRemaining--;
-      } else if (idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES) {
-        // copy 128 samples (256 bytes) into our buffer
-        memcpy(dest + idx, block, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
-        idx += AUDIO_BLOCK_SAMPLES;
+        queue1.freeBuffer();
+        continue;
       }
 
+      if (idx >= BUFFER_SAMPLES) {
+        queue1.freeBuffer();
+        pendingStopFastRecord = true;
+        break;
+      }
+
+      size_t room = BUFFER_SAMPLES - idx;
+      size_t n = (room < (size_t)AUDIO_BLOCK_SAMPLES) ? room : (size_t)AUDIO_BLOCK_SAMPLES;
+      memcpy(dest + idx, block, n * sizeof(int16_t));
+      idx += n;
       queue1.freeBuffer();
 
-      // auto-stop if full
       if (idx >= BUFFER_SAMPLES) {
-        stopFastRecord();
+        pendingStopFastRecord = true;
         break;
       }
     }
@@ -1271,6 +1283,10 @@ void stopFastRecord() {
   
   // Now safe to stop recording
   fastRecordActive = false;
+  fastRecordChannel = 0;
+  recordingBorderArmed = false;
+  pendingStartFastRecord = false;
+  fastRecWaitRelease = true;
   
   // Flush one more time before ending the queue
   flushAudioQueueToRAM();
@@ -1379,7 +1395,11 @@ FLASHMEM void clearAllNotesOfChannel() {
   }
 
   updateLastPage();  // Optional: If your UI tracks last updated page
-  FastLEDshow();     // Optional: Refresh LED grid if used
+  // Don't FastLED.show() here — startFastRecord can run while the border is
+  // already in the framebuffer, and a throttled show would wipe/skip it.
+  if (!recordingBorderArmed && !fastRecordActive && !pendingStartFastRecord) {
+    FastLEDshow();
+  }
 }
 
 FLASHMEM void FastLEDclear() {
@@ -1599,6 +1619,8 @@ FLASHMEM void FastLEDshow() {
     // Do not gate on drawNoSD_hasRun — switchMode() clears it, which permanently
     // blocked the screensaver after any mode change.
     bool screensaverActive = !playingGridFocus
+      && !recordingBorderArmed
+      && !fastRecordActive
       && eyesScreensaverEnabled()
       && !sdSerialServerClientConnected()
       && (millis() - lastUserActivityMs >= 60000UL);
@@ -1614,7 +1636,15 @@ FLASHMEM void FastLEDshow() {
   }
 }
 
-
+// One-shot present: bypass FPS throttle so the red border is actually on the LEDs
+// before capture starts (throttled FastLEDshow() was the missing-border case).
+void presentRecordingBorder() {
+  lastUserActivityMs = millis();
+  extern void drawRecordingBorder();
+  drawRecordingBorder();
+  lastUpdate = 0;
+  FastLEDshow();
+}
 
 int getPage(int x) {
   //updateLastPage();
@@ -4003,20 +4033,11 @@ FLASHMEM void startNew() {
     SMP.filter_settings[ch][EFX] = 0;  // Sample mode
     
     // Reset parameter data (no hardware calls)
-    // Channel-specific ADSR defaults:
-    // - ch13/14 (synths): A=32, D=9, S=20, R=9
-    // - all others: keep existing defaults
-    if (ch == 13 || ch == 14) {
-      SMP.param_settings[ch][ATTACK] = 32;
-      SMP.param_settings[ch][DECAY] = 9;
-      SMP.param_settings[ch][SUSTAIN] = 20;
-      SMP.param_settings[ch][RELEASE] = 9;
-    } else {
-      SMP.param_settings[ch][ATTACK] = 32;
-      SMP.param_settings[ch][DECAY] = 0;
-      SMP.param_settings[ch][SUSTAIN] = 10;
-      SMP.param_settings[ch][RELEASE] = 5;
-    }
+    // Default ADSR for all channels: A=32, D=32, S=32, R=0
+    SMP.param_settings[ch][ATTACK] = 32;
+    SMP.param_settings[ch][DECAY] = 32;
+    SMP.param_settings[ch][SUSTAIN] = 32;
+    SMP.param_settings[ch][RELEASE] = 0;
     
     // Reset synth data (only for channels 11, 13-14)
     if (ch == 11 || ch == 13 || ch == 14) {
