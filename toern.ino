@@ -3389,12 +3389,19 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
 uint16_t codecHfCut = 110;
 
 FLASHMEM void applySgtl5000CodecOutputPath() {
+  // Codec I2C while the audio update IRQ is live wedges Wire (post-flash
+  // stall after the logo, and the same class of fault as SD vs I2S DMA).
+  // Restore the previous enable bit so a caller that already paused audio
+  // (boot SD window) is not turned back on mid-transfer.
+  const bool audioWasEnabled = NVIC_IS_ENABLED(IRQ_SOFTWARE) != 0;
+  NVIC_DISABLE_IRQ(IRQ_SOFTWARE);
   sgtl5000_1.autoVolumeDisable();
   sgtl5000_1.surroundSoundDisable();
   sgtl5000_1.enhanceBassDisable();
 
   if (codecHfCut == 0) {
     sgtl5000_1.audioProcessorDisable();
+    if (audioWasEnabled) NVIC_ENABLE_IRQ(IRQ_SOFTWARE);
     return;
   }
 
@@ -3407,6 +3414,7 @@ FLASHMEM void applySgtl5000CodecOutputPath() {
   sgtl5000_1.audioPostProcessorEnable();
   sgtl5000_1.eqSelect(GRAPHIC_EQUALIZER);
   sgtl5000_1.eqBands(0.0f, 0.0f, 0.0f, 0.0f, gTreble);
+  if (audioWasEnabled) NVIC_ENABLE_IRQ(IRQ_SOFTWARE);
 }
 
 // ADC high-pass cuts mic DC / rumble on the capture path.
@@ -4039,6 +4047,8 @@ static void applyLongCableI2cTiming() {
 }
 
 FLASHMEM void initEncoders() {
+  // Seesaw I2C while the audio update IRQ runs can stretch SCL until Wire stalls.
+  AudioNoInterrupts();
   for (int i = 0; i < NUM_ENCODERS; i++) {
     // Set the global encoder index for callbacks
     currentEncoderIndex = i;
@@ -4088,6 +4098,7 @@ FLASHMEM void initEncoders() {
     delay(50);
     Encoder[i].updateStatus();
   }
+  AudioInterrupts();
 }
 
 FLASHMEM void loadColorSchemeAndBrightness() {
@@ -4372,13 +4383,20 @@ FLASHMEM void setup() {
 
   runAnimation();
 
+  // I2S DMA is already running (global AudioInputI2S / AudioOutputI2S).
+  // SD on this same bus deadlocks the first boot after a flash: that boot is
+  // the one that still has a CrashReport, and the host has just opened USB audio.
+  // A second power cycle has neither, so the same code used to continue.
+  AudioNoInterrupts();
   drawNoSD();
   {
     extern bool loadSampleManifest();
     loadSampleManifest();  // samples/toern_wavs.txt for mute-mode random (?>)
   }
   if (CrashReport) {
-    checkCrashReport();
+    // Do not append ERROR.txt here. That SD write is unique to the post-flash
+    // boot and is what left the matrix sitting on the end of the logo.
+    CrashReport.clear();
   }
 
   loadMenuFromEEPROM();
@@ -4388,9 +4406,8 @@ FLASHMEM void setup() {
   // if we loaded brightness before that, we'd read garbage and never get the restored value.
   loadColorSchemeAndBrightness();
 
-  // Apply all audio settings from globals (after loadMenuFromEEPROM which may have updated values)
-  extern void applyAudioSettingsFromGlobals();
-  applyAudioSettingsFromGlobals();
+  // Do not call applyAudioSettingsFromGlobals() yet. SGTL5000 EQ writes
+  // (eqBands) block until sgtl5000_1.enable() in initSoundChip().
 
   initSamples();
   loadSp0StateFromEEPROM();  // Load samplepack 0 state before loading samplepack
@@ -4419,6 +4436,12 @@ FLASHMEM void setup() {
   autoLoad();
 
   initSoundChip();
+  // Codec is enabled now; this is the first safe time to push EQ / levels.
+  {
+    extern void applyAudioSettingsFromGlobals();
+    applyAudioSettingsFromGlobals();
+  }
+  AudioInterrupts();
   // autoLoad() restores SMP before the audio graph is fully initialized.
   // Re-apply the loaded filter/envelope state now so ch13/14 are correct at boot.
   loadSMPSettings();

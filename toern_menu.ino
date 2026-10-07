@@ -1290,12 +1290,9 @@ FLASHMEM void loadMenuFromEEPROM() {
     MIDI_NOTE_SEND = true;
   }
   
-  // Apply mic gain only when MIC is selected; otherwise force 0 to keep MIC path off.
-  if (recInput == AUDIO_INPUT_MIC) {
-    sgtl5000_1.micGain(micGain);
-  } else {
-    sgtl5000_1.micGain(0);
-  }
+  // Codec I2C is applied later by initSoundChip() / applyAudioSettingsFromGlobals().
+  // Writing the SGTL5000 here runs before enable() on the boot path and wedges
+  // the bus on the first start after a flash.
 
   // Note: These draw functions are for menu display, not startup initialization.
   // They should only be called when actually displaying the menu, not during setup().
@@ -1309,10 +1306,6 @@ FLASHMEM void loadMenuFromEEPROM() {
   // drawMidiVoiceSelect();
   // drawFastRecMode();
   // drawRecChannelClear();
-  
-  // Apply input selection from recMode.
-  extern unsigned int recInput;
-  sgtl5000_1.inputSelect(recInput);
 }
 
 // Apply all audio-related global variables to hardware
