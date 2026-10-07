@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Build + flash TŒRN (Teensy 4.1) with the canonical platformio.ini settings:
+#   USB Serial + MIDI + Audio, 816 MHz, smallest-code.
+# Usage: flash.toern
+set -euo pipefail
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+  [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+cd "$ROOT"
+
+if ! command -v pio >/dev/null 2>&1; then
+  echo "flash.toern: pio not found on PATH" >&2
+  exit 1
+fi
+
+exec pio run --environment teensy41 --target upload "$@"

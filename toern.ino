@@ -699,6 +699,11 @@ static bool lastBothTouched = false;
 DMAMEM bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
 DMAMEM bool lastTouchState[4] = { false };  // Previous touch state
 const int touchThreshold = 45; //45 for M1
+// Rec (SWITCH_3) is polled every tight-loop tick while FastRec is active.
+// Debounce in time at the same threshold as the other pads — a wide Schmitt
+// (OFF=28) never unlatched because idle FastTouch often sits at 30–44.
+static const unsigned long REC_TOUCH_PRESS_MS = 20;
+static const unsigned long REC_TOUCH_RELEASE_MS = 40;
 static bool bypassModeSwitchDebounce = false;
 static bool touch1ModeTogglePending = false;
 static bool touch1ModeToggleToSingle = false;
@@ -718,6 +723,28 @@ bool readTouch1Pressed() {
 bool readTouch2Pressed() {
   if (exttouch) return digitalReadFast(BUTTON_B) == LOW;
   return fastTouchRead(SWITCH_2) > touchThreshold;
+}
+
+bool readRecTouchHeld() {
+  static bool latched = false;
+  static bool timing = false;
+  static unsigned long disagreeSince = 0;
+  const bool raw = fastTouchRead(SWITCH_3) > touchThreshold;
+  const unsigned long now = millis();
+  if (raw == latched) {
+    timing = false;
+    return latched;
+  }
+  if (!timing) {
+    timing = true;
+    disagreeSince = now;
+  }
+  const unsigned long need = latched ? REC_TOUCH_RELEASE_MS : REC_TOUCH_PRESS_MS;
+  if ((now - disagreeSince) >= need) {
+    latched = raw;
+    timing = false;
+  }
+  return latched;
 }
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
@@ -989,6 +1016,14 @@ int PrevSampleRate = 1;
 EXTMEM int SampleRate[maxFiles] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles)];
 static const uint32_t MAX_SAMPLES = sizeof(sampled[0]) / sizeof(sampled[0][0]);
+// Fastrec writes int16 into sampled[ch]. 12s @ 44.1 kHz (double the old ~6s BUFFER_SAMPLES
+// cap); never past the voice slot (~19.8s).
+static const size_t FASTREC_SLOT_SAMPLES = sizeof(sampled[0]) / sizeof(int16_t);
+static const size_t FASTREC_MAX_SECONDS = 12;
+static const size_t FASTREC_MAX_SAMPLES =
+    ((size_t)44100 * FASTREC_MAX_SECONDS < FASTREC_SLOT_SAMPLES)
+        ? ((size_t)44100 * FASTREC_MAX_SECONDS)
+        : FASTREC_SLOT_SAMPLES;
 
 
 
@@ -2434,8 +2469,7 @@ void checkFastRec() {
   }
 
   if (currentMode == &draw || currentMode == &singleMode) {
-    int touchValue3 = fastTouchRead(SWITCH_3);
-    bool currentTouchState = (touchValue3 > touchThreshold);
+    bool currentTouchState = readRecTouchHeld();
     touchState[2] = currentTouchState;
 
     // CLIC mode: touch3 adds a trigger at current beat for current voice (y), no notes deleted
@@ -4242,14 +4276,11 @@ FLASHMEM void setup() {
   analogReadResolution(12);           // 0-4095 so BATT raw reflects actual voltage (was 10-bit 1023 max)
   pinMode(SWITCH_1, INPUT_PULLDOWN);  // Capacitive input
   pinMode(SWITCH_2, INPUT_PULLDOWN);  // Capacitive input
-  pinMode(SWITCH_3, INPUT_PULLDOWN);  // Use defined name
+  pinMode(SWITCH_3, INPUT_PULLDOWN);  // Rec touch (same pin as Teensy D4)
   pinMode(SWITCH_4, INPUT_PULLDOWN);  // Capacitive touch4 (voice audition)
 
   // SPKR pin 30: set as INPUT_PULLDOWN as early as possible
   pinMode(30, INPUT_PULLDOWN);
-
-  pinMode(4, OUTPUT);        // Pin 4 set as output
-  digitalWrite(4, LOW);      // Drive Pin 4 LOW
 
   // Note: FastLED initialization moved earlier (before boot-hold check) for visual feedback
 
@@ -6954,10 +6985,14 @@ void loop() {
   if (fastRecordActive) {
     flushAudioQueueToRAM();
 
-    // Minimal stop-path only: no grid redraw, no FastLED, no I2C encoder polling.
-    extern void checkFastRec();
-    checkFastRec();
-    checkTouchInputs();
+    // FastTouchRead() takes noInterrupts() and was called on every pad every tick
+    // via checkTouchInputs() — that drops AudioRecordQueue blocks (clicks/gaps).
+    // a0dbff6 already skipped FastLED/I2C here; do not re-introduce pad scans.
+    static elapsedMillis recTriggerPoll;
+    if (recTriggerPoll >= 8) {
+      recTriggerPoll = 0;
+      checkFastRec();
+    }
     flushAudioQueueToRAM();
     yield();
     return;

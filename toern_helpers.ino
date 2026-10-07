@@ -1226,19 +1226,19 @@ void flushAudioQueueToRAM() {
         continue;
       }
 
-      if (idx >= BUFFER_SAMPLES) {
+      if (idx >= FASTREC_MAX_SAMPLES) {
         queue1.freeBuffer();
         pendingStopFastRecord = true;
         break;
       }
 
-      size_t room = BUFFER_SAMPLES - idx;
+      size_t room = FASTREC_MAX_SAMPLES - idx;
       size_t n = (room < (size_t)AUDIO_BLOCK_SAMPLES) ? room : (size_t)AUDIO_BLOCK_SAMPLES;
       memcpy(dest + idx, block, n * sizeof(int16_t));
       idx += n;
       queue1.freeBuffer();
 
-      if (idx >= BUFFER_SAMPLES) {
+      if (idx >= FASTREC_MAX_SAMPLES) {
         pendingStopFastRecord = true;
         break;
       }
@@ -1299,11 +1299,13 @@ void stopFastRecord() {
   lastQueueSize = -1;
   stableCount = 0;
   
-  while (queue1.available() && idx + AUDIO_BLOCK_SAMPLES <= BUFFER_SAMPLES) {
+  while (queue1.available() && idx < FASTREC_MAX_SAMPLES) {
     int currentQueueSize = queue1.available();
     int16_t *block = (int16_t *)queue1.readBuffer();
-    memcpy(dest + idx, block, AUDIO_BLOCK_SAMPLES * sizeof(int16_t));
-    idx += AUDIO_BLOCK_SAMPLES;
+    size_t room = FASTREC_MAX_SAMPLES - idx;
+    size_t n = (room < (size_t)AUDIO_BLOCK_SAMPLES) ? room : (size_t)AUDIO_BLOCK_SAMPLES;
+    memcpy(dest + idx, block, n * sizeof(int16_t));
+    idx += n;
     queue1.freeBuffer();
     flushCount++;
     
@@ -3821,9 +3823,31 @@ FLASHMEM void generateBasicPattern(unsigned int start, unsigned int end, unsigne
 
 
 FLASHMEM void clearPage() {
-  //GLOB.edit = 1;
+  extern bool voiceMode;
+  extern bool songModeActive;
+  extern bool isNowPlaying;
+  extern unsigned int beatForUI;
+  extern uint8_t voiceEditPage[16];
+  extern unsigned int voicePageFor(int channel, unsigned int globalPage);
 
-  unsigned int start = ((GLOB.edit - 1) * maxX) + 1;
+  // VMOD draw is a composite of per-voice pages — a global page wipe is meaningless.
+  if (voiceMode && !songModeActive && !GLOB.singleMode) {
+    return;
+  }
+
+  unsigned int page = GLOB.edit < 1 ? 1 : GLOB.edit;
+  if (voiceMode && !songModeActive && GLOB.singleMode) {
+    int ch = (int)GLOB.currentChannel;
+    if (isNowPlaying && beatForUI > 0 && maxX > 0) {
+      unsigned int gPage = ((beatForUI - 1) / maxX) + 1;
+      page = voicePageFor(ch, gPage);
+    } else if (ch >= 0 && ch < 16 && voiceEditPage[ch] >= 1) {
+      page = voiceEditPage[ch];
+    }
+  }
+  if (page < 1) page = 1;
+
+  unsigned int start = ((page - 1) * maxX) + 1;
   unsigned int end = start + maxX;
   unsigned int channel = GLOB.currentChannel;
   bool singleMode = GLOB.singleMode;

@@ -2220,6 +2220,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
       
     case 4: // REC - Recording Mode (menu/mic) - encoder 3: MIC/LINE
+      drawText("INPT", 2, 10, currentMenuParentTextColor());
       drawRecMode();
       drawIndicator('L', recMode == 1 ? 'W' : 'X', 3);  // White=MIC, Blue=LINE
       break;
@@ -3815,6 +3816,8 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[2].writeCounter((int32_t)(ledMode - 1));
         currentMode->pos[2] = ledMode - 1;
         lastLedMode = ledMode;
+        FastLEDclear();
+        menuRequestFullRedraw();
         redrawMain(setting);
       }
       break;
