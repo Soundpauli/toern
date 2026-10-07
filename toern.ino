@@ -1,6 +1,6 @@
 #include "src/toern_build_types.h"
 
-#define VERSION "v3.01e-audiofix5c-clean"
+#define VERSION "v3.01f"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -7221,8 +7221,11 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   }
   // Never draw the cursor while in MENU (or its submenus).
   // Never draw the grid cursor on screens that own the whole matrix.
+  // FILE (load/save) and PACK redraw only when the slot changes, so a cursor
+  // drawn on the idle frames stays on top of those screens.
   if (!fastRecordActive && currentMode != &velocity && currentMode != &filterMode && currentMode != &menu
-      && currentMode != &set_Wav && currentMode != &recordMode) {
+      && currentMode != &set_Wav && currentMode != &recordMode
+      && currentMode != &loadSaveTrack && currentMode != &set_SamplePack) {
     drawCursor();
   }
   checkButtons();
