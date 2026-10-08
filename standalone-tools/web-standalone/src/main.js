@@ -698,18 +698,19 @@ ledStyle.addEventListener("change", () => {
   matrix.setPhoto(ledStyle.checked);
 });
 document.querySelectorAll(".encoder").forEach((encoder, i) => {
-  const ring = encoder.querySelector(".ring");
   let gesture = null;
+  // Linear drag like common web knobs: vertical (and horizontal) distance in
+  // pixels, not angular travel around the ring centre.
+  const DETENT_PX = 14;
   encoder.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     encoder.classList.add("pressed");
     device.knobDown(i);
-    const rect = ring.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
     gesture = {
-      cx, cy, x: e.clientX, y: e.clientY,
-      last: Math.atan2(e.clientY - cy, e.clientX - cx),
+      x: e.clientX,
+      y: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
       acc: 0,
       turned: false,
     };
@@ -718,24 +719,22 @@ document.querySelectorAll(".encoder").forEach((encoder, i) => {
   encoder.addEventListener("pointermove", (e) => {
     if (!gesture) return;
     const moved = Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y);
-    const radius = Math.hypot(e.clientX - gesture.cx, e.clientY - gesture.cy);
-    if (moved < 8 || radius < 12) return;
-    const ang = Math.atan2(e.clientY - gesture.cy, e.clientX - gesture.cx);
-    let delta = ang - gesture.last;
-    if (delta > Math.PI) delta -= Math.PI * 2;
-    if (delta < -Math.PI) delta += Math.PI * 2;
-    gesture.last = ang;
-    gesture.acc += delta;
-    const step = 0.35;
+    if (moved < 6) return;
+    const dx = e.clientX - gesture.lastX;
+    const dy = e.clientY - gesture.lastY;
+    gesture.lastX = e.clientX;
+    gesture.lastY = e.clientY;
+    // Down / right → same direction as wheel-down; up / left → opposite.
+    gesture.acc += dy + dx;
     const sense = i === 0 && device.gridMode() ? -1 : 1;
-    while (gesture.acc >= step) {
+    while (gesture.acc >= DETENT_PX) {
       device.rotate(i, sense);
-      gesture.acc -= step;
+      gesture.acc -= DETENT_PX;
       gesture.turned = true;
     }
-    while (gesture.acc <= -step) {
+    while (gesture.acc <= -DETENT_PX) {
       device.rotate(i, -sense);
-      gesture.acc += step;
+      gesture.acc += DETENT_PX;
       gesture.turned = true;
     }
   });
@@ -747,6 +746,7 @@ document.querySelectorAll(".encoder").forEach((encoder, i) => {
   encoder.addEventListener("pointerup", release);
   encoder.addEventListener("pointercancel", () => {
     encoder.classList.remove("pressed");
+    if (gesture) device.knobUp(i, !!gesture.turned);
     gesture = null;
   });
   let wheelAcc = 0;
