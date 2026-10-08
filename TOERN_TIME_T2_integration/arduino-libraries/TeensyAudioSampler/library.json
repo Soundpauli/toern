@@ -1,0 +1,38 @@
+{
+    "name": "TeensyAudioSampler",
+    "frameworks": "Arduino",
+    "platforms": "Teensy",
+    "keywords": "newdigate, sound, audio, sd, flash, sample, sampler, polyphony, phoyphonic",
+    "description": "play multi-polyphonic audio samples with teensy audio library",
+    "url": "https://github.com/newdigate/teensy-polyphony",
+    "version": "1.0.7",
+    "export": {
+      "exclude": [
+        ".vscode",
+        ".github",
+        "extras",
+        "test",
+        "cmake",
+        "docs"
+      ]
+    },
+    "authors":
+    {
+      "name": "Nic Newdigate",
+      "maintainer": true
+    },
+    "repository":
+    {
+      "type": "git",
+      "url": "https://github.com/newdigate/teensy-polyphony"
+    },
+    "dependencies":
+    {
+      "name": "TeensyVariablePlayback",
+      "frameworks": "arduino"
+    },
+    "examples": [
+      "examples/*/*.ino",
+      "examples/*/*/*.ino"
+    ]
+  }

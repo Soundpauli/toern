@@ -1,0 +1,11 @@
+{
+  "base_commit": "924fe4d36fc667a36b7fae56b2c58d634dbd5ae2",
+  "files_sha256": {
+    "toern.ino": "f9c6e30a6d44314bb5ab25ed09479466790779600f6242ffb082b5f84e7fc98e",
+    "toern_filterUI.ino": "111075193340df1c7ed1e079b78e2e018383735265a49ccd77a57f90d000dbbe",
+    "toern_wsola.cpp": "4dfce53acdaa455e0ed5e99142a07e59eee4cee7b702c474aa679708dfb892f3",
+    "src/resamplerReader.h": "45c2b4c138d6251caaffbfa1d87d1c8d4f90a959f84c49fac6a443dc0e7248c9",
+    "src/toern_wsola.h": "24e7d2c091ecc068460b0768ce4cf98032f17754f0eb567163ddc3fb0fddba41",
+    "scripts/platformio_patch_dependencies.py": "8da2829369be10abf3aea29ca16b9f3a17f7c364a8950120908461d3e8fe8cf1"
+  }
+}
