@@ -480,7 +480,7 @@ bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playi
 bool voiceMode = false;          // VMOD: each channel loops its own pages
 bool imageMode = false;          // IMG: black matrix; paint cycles voice/color from voice1
 int imgBrushChannel = 1;         // IMG: selected brush voice/color (1–8); touch1 cycles
-uint8_t eyesMode = 1;            // ETC EYES: 0=OFF, 1=ON, 2=BAT (screensaver only on battery)
+uint8_t eyesMode = 1;            // ETC EYES: 0=OFF, 1=1min, 2=5min, 3=15min idle before screensaver
 uint8_t fireVoice = 0;           // ETC FIRE: 0 off, 15 all voices, else 1–8 / 11 / 13 / 14
 uint8_t fireLevel = 8;           // ETC FIRE: encoder 2 particle count, 1–25
 uint8_t fireSize = 1;            // ETC FIRE: encoder 1 particle size, 1–4
@@ -1012,7 +1012,7 @@ bool sampleLengthSet = false;
 
 bool isNowPlaying = false;  // global
 
-// Screensaver: 1 min idle while not playing; reset on encoder / button / touch / menu input
+// Screensaver idle timer; delay from ETC→EYES (1/5/15 min). Reset on encoder / button / touch / menu.
 uint32_t lastUserActivityMs = 0;
 FLASHMEM void noteUserActivity() {
   lastUserActivityMs = millis();
@@ -4651,11 +4651,19 @@ bool isRunningOnBattery() {
   return usb_configuration == 0;
 }
 
-// ETC → EYES: whether the idle screensaver may run.
+// ETC → EYES: whether the idle screensaver may run (anything except OFF).
 bool eyesScreensaverEnabled() {
-  if (eyesMode == 0) return false;       // OFF
-  if (eyesMode == 2) return isRunningOnBattery();  // BAT
-  return true;                           // ON
+  return eyesMode != 0;
+}
+
+// Idle delay before screensaver starts (0 when OFF).
+uint32_t eyesScreensaverIdleMs() {
+  switch (eyesMode) {
+    case 1: return 60000UL;    // 1 min
+    case 2: return 300000UL;   // 5 min
+    case 3: return 900000UL;   // 15 min
+    default: return 0;
+  }
 }
 
 // Battery warning: two samples 5s apart each minute (55s + 60s); show 5s only if both match and are 1..15%

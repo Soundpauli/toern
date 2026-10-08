@@ -1606,6 +1606,7 @@ FLASHMEM void FastLEDshow() {
     extern bool imageMode;
     extern bool fullMuteIsActive();
     extern bool eyesScreensaverEnabled();
+    extern uint32_t eyesScreensaverIdleMs();
     extern Mode draw;
     extern Mode singleMode;
     extern Mode filterMode;
@@ -1620,12 +1621,14 @@ FLASHMEM void FastLEDshow() {
     // SD? wait loops already call noteUserActivity(), so idle timeout covers that case.
     // Do not gate on drawNoSD_hasRun — switchMode() clears it, which permanently
     // blocked the screensaver after any mode change.
+    const uint32_t eyesIdleMs = eyesScreensaverIdleMs();
     bool screensaverActive = !playingGridFocus
       && !recordingBorderArmed
       && !fastRecordActive
       && eyesScreensaverEnabled()
+      && eyesIdleMs > 0
       && !sdSerialServerClientConnected()
-      && (millis() - lastUserActivityMs >= 60000UL);
+      && (millis() - lastUserActivityMs >= eyesIdleMs);
     if (screensaverActive) {
       drawScreensaverMatrix();
     } else if (screensaverEncodersOff) {
@@ -4032,7 +4035,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 46, 0);     // fireGravity (float up)
   EEPROM.write(EEPROM_DATA_START + 47, 8);     // fireColor (full voice colour)
   EEPROM.write(EEPROM_DATA_START + 48, 0);     // imageMode (OFF)
-  EEPROM.write(EEPROM_DATA_START + 49, 1);     // eyesMode (ON)
+  EEPROM.write(EEPROM_DATA_START + 49, 1);     // eyesMode (1 min)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();

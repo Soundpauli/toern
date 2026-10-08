@@ -146,7 +146,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
   {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
   {"BATT", 42, false, nullptr},          // Estimated LiPo percentage from Teensy A16 / pin 40
-  {"EYES", 57, false, nullptr},          // Screensaver eyes: OFF / ON / BAT
+  {"EYES", 57, false, nullptr},          // Screensaver idle: OFF / 1MIN / 5MIN / 15MIN
   {"CHLD", 48, false, nullptr},          // Child lock: require touch2->touch1 to enter menu
   {"FIRE", 55, false, nullptr},          // Playhead sparks on one voice
   {"IMG", 56, false, nullptr},           // Image mode: black matrix, paint cycles voice/color
@@ -788,7 +788,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 46, 0);   // fireGravity default (float up)
       EEPROM.write(EEPROM_DATA_START + 47, 8);   // fireColor default (full voice colour)
       EEPROM.write(EEPROM_DATA_START + 48, 0);   // imageMode default (OFF)
-      EEPROM.write(EEPROM_DATA_START + 49, 1);   // eyesMode default (ON)
+      EEPROM.write(EEPROM_DATA_START + 49, 1);   // eyesMode default (1 min)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -931,8 +931,9 @@ FLASHMEM void loadMenuFromEEPROM() {
   {
     extern uint8_t eyesMode;
     uint8_t eyesValue = EEPROM.read(EEPROM_DATA_START + 49);
-    if (eyesValue > 2) {
-      eyesValue = 1;  // default ON
+    // 0=OFF, 1=1min, 2=5min, 3=15min (legacy BAT/ON values 0–2 still map sanely)
+    if (eyesValue > 3) {
+      eyesValue = 1;  // default 1 min
       EEPROM.write(EEPROM_DATA_START + 49, 1);
     }
     eyesMode = eyesValue;
@@ -2434,14 +2435,17 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
     }
 
-    case 57: { // EYES - screensaver OFF / ON / BAT
+    case 57: { // EYES - screensaver idle OFF / 1MIN / 5MIN / 15MIN
       extern uint8_t eyesMode;
       const CRGB tc = currentMenuParentTextColor();
       drawText("EYES", 2, 10, tc);
-      const char *label = (eyesMode == 0) ? "OFF" : (eyesMode == 2) ? "BAT" : "ON";
-      CRGB vc = (eyesMode == 0) ? UI_RED : (eyesMode == 2) ? CRGB(255, 165, 0) : UI_GREEN;
+      const char *label = "OFF";
+      CRGB vc = UI_RED;
+      if (eyesMode == 1) { label = "1MIN"; vc = UI_GREEN; }
+      else if (eyesMode == 2) { label = "5MIN"; vc = UI_GREEN; }
+      else if (eyesMode == 3) { label = "15MIN"; vc = UI_GREEN; }
       drawMenuValue(label, 2, 3, vc);
-      drawIndicator('L', (eyesMode == 0) ? 'R' : (eyesMode == 2) ? 'O' : 'G', 3);
+      drawIndicator('L', eyesMode == 0 ? 'R' : 'G', 3);
       break;
     }
 
@@ -3573,20 +3577,20 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 57: { // EYES - OFF/ON/BAT via encoder 2
+    case 57: { // EYES - OFF/1MIN/5MIN/15MIN via encoder 2
       extern uint8_t eyesMode;
       static int lastEyesEnc = -1;
-      int encVal = constrain((int)eyesMode, 0, 2);
+      int encVal = constrain((int)eyesMode, 0, 3);
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)encVal);
-        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeMax((int32_t)3);
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = encVal;
         lastEyesEnc = encVal;
         menuFirstEnter = false;
       }
       if (currentMode->pos[2] != lastEyesEnc) {
-        encVal = constrain((int)currentMode->pos[2], 0, 2);
+        encVal = constrain((int)currentMode->pos[2], 0, 3);
         eyesMode = (uint8_t)encVal;
         Encoder[2].writeCounter((int32_t)encVal);
         currentMode->pos[2] = encVal;
@@ -4954,9 +4958,9 @@ FLASHMEM void switchMenu(int menuPosition){
       }
 
       case 57: {
-        // Cycle EYES: OFF → ON → BAT → OFF
+        // Cycle EYES: OFF → 1MIN → 5MIN → 15MIN → OFF
         extern uint8_t eyesMode;
-        eyesMode = (uint8_t)((eyesMode + 1) % 3);
+        eyesMode = (uint8_t)((eyesMode + 1) % 4);
         saveSingleModeToEEPROM(49, (int8_t)eyesMode);
         menuRequestFullRedraw();
         break;
