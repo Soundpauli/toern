@@ -1074,7 +1074,8 @@ Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 999 }, { 1
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
 Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
-Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 5, 16, 0, 0 }, { 0, 8, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0x000000, 0x000000 } };
+// NEW: enc0=load (press), enc1=length, enc2=template, enc3=back to FILE (blue like FILE menu)
+Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 0, 16, 5, 0 }, { 0, 8, 0, 0 }, { 0x00FF00, 0xFF00FF, 0xFFFF00, 0x0000FF } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
 Mode songMode = { "SONGMODE", { 1, 1, 1, 1 }, { 1, 16, 1, 64 }, { 1, 1, 1, 1 }, { 0x000000, 0xFF00FF, 0x000000, 0xFFFF00 } };
 // Declare currentMode as a global variable (start in draw so boot limits are sane)
@@ -1158,11 +1159,9 @@ struct GlobalVars {
 
 DMAMEM float octave[2];
 
-// Global detune array for channels 1-12 (excluding synth channels 13-14)
-DMAMEM float detune[13];  // Index 0 unused, indices 1-12 for channels 1-12
-
-// Global octave array for channels 1-8 (excluding synth channels 13-14)
-DMAMEM float channelOctave[9];  // Index 0 unused, indices 1-8 for channels 1-8
+// Sample voices 1-8: detune = fine semis (−1..+1); channelOctave = whole semis (−24..+24).
+DMAMEM float detune[13];  // Index 0 unused; 1-8 fine tune, 9-12 legacy
+DMAMEM float channelOctave[9];  // Index 0 unused; 1-8 OCTV whole-semitone offset
 
 //#define GRANULAR_MEMORY_SIZE 95280  // enough for 800 ms at 44.1 kHz
 //DMAMEM int16_t granularMemory[GRANULAR_MEMORY_SIZE];
@@ -2852,15 +2851,15 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     if (mainSetting != 15 && !encoder2ValuePage) {
       switchMenu(mainSetting);
     }
-  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
-    // NEW mode: start generation on encoder(3) press
+  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+    // NEW mode: load/generate on encoder(0) press (1st encoder)
     extern void generateGenreTrack();
     extern void resetNewModeState();
     resetNewModeState();
     generateGenreTrack();
     return;
-  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
-    // NEW mode: encoder(0) press exits (no generation)
+  } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
+    // NEW mode: 4th encoder press goes back to FILE/pattern load
     extern void resetNewModeState();
     resetNewModeState();
     switchMode(&loadSaveTrack);
@@ -3900,7 +3899,16 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
     neoSliderLastVelNorm[ch - 1] = noteN;
   }
   uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
-  samplerNoteEvent(ch, (uint8_t)constrain(pitch, 0, 127), sv, true, retrigger);
+  const uint8_t midiPitch = (uint8_t)constrain(pitch, 0, 127);
+  samplerNoteEvent(ch, midiPitch, sv, true, retrigger);
+  // DTNE fine tune (±1 semitone) for sample voices — rate multiply after integer note.
+  if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
+    const float fine = detune[ch];
+    if (fine != 0.0f) {
+      // Samples are registered at MIDI root 36 (see load paths / samplerAddSample).
+      voices[ch]->setPlaybackRate(powf(2.0f, ((float)midiPitch + fine - 36.0f) / 12.0f));
+    }
+  }
 }
 
 // Restore amp gains from channelVol for sample/synth voices that have amps[].
@@ -8352,6 +8360,12 @@ static inline int midiPitchForOutput(const Note &cell, int row) {
   return noteHasMidiPitch(cell) ? (int)cell.midiPitch : 48 + row - 1;
 }
 
+// OCTV for sample voices: channelOctave[] holds whole-semitone offsets (−24..+24).
+static inline int sampleVoiceOctaveSemis(int ch) {
+  if (ch < 1 || ch > 8) return 0;
+  return (int)lroundf(channelOctave[ch]);
+}
+
 static inline int samplePitchForNote(const Note &cell, int channel, int row) {
   if (noteHasMidiPitch(cell)) {
     return (12 * SampleRate[channel]) + (int)cell.midiPitch - 72;
@@ -8644,17 +8658,8 @@ void playNote() {
             continue;
           }
           int pitch = samplePitchForNote(note[srcBeat][b], ch, b);
-
-          // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-          if (ch >= 1 && ch <= 12) {
-            pitch += (int)detune[ch];  // Add detune semitones
-          }
-
-          // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-          if (ch >= 1 && ch <= 8) {
-            pitch += (int)(channelOctave[ch] * 12);  // Add octave semitones (12 semitones per octave)
-          }
-
+          // OCTV whole semis; DTNE fine tune applied inside triggerSamplerVoice.
+          pitch += sampleVoiceOctaveSemis(ch);
           triggerSamplerVoice(ch, pitch, vel, true);
         } else if (ch == 11) {  // Assuming ch 11 is a specific synth
           // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
@@ -9036,8 +9041,7 @@ FLASHMEM static void triggerActiveFillHit() {
   if (ch < 9) {
     if (isChannelSampleReloadBusy((unsigned int)ch)) return;
     int pitch = samplePitchForNote(fillCell, ch, (int)row);
-    if (ch >= 1 && ch <= 12) pitch += (int)detune[ch];
-    if (ch >= 1 && ch <= 8) pitch += (int)(channelOctave[ch] * 12);
+    pitch += sampleVoiceOctaveSemis(ch);
     triggerSamplerVoice(ch, pitch, vel, true);
   } else if (ch == 11) {
     playSound(ch11PitchForNote(fillCell, (int)row), 0, vel);
@@ -9174,8 +9178,7 @@ static void triggerCurrentVoiceAudition(int pitchRow) {
   if (ch >= 1 && ch <= 8) {
     if (isChannelSampleReloadBusy((unsigned int)ch)) return;
     int pitch = samplePitchForNote(cell, ch, row);
-    pitch += (int)detune[ch];
-    pitch += (int)(channelOctave[ch] * 12);
+    pitch += sampleVoiceOctaveSemis(ch);
     triggerSamplerVoice(ch, pitch, velocity, true);
   } else if (ch == 11) {
     playSound(ch11PitchForNote(cell, row), 0, velocity);
@@ -9210,15 +9213,7 @@ void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted) {
   if (channel > 0 && channel < 9) {
     if (isChannelSampleReloadBusy((unsigned int)channel)) return;
     int pitch = samplePitchForNote(cell, channel, pitch_from_row);
-
-    if (channel >= 1 && channel <= 12) {
-      pitch += static_cast<int>(detune[channel]);
-    }
-
-    if (channel >= 1 && channel <= 8) {
-      pitch += static_cast<int>(channelOctave[channel] * 12);
-    }
-
+    pitch += sampleVoiceOctaveSemis(channel);
     triggerSamplerVoice(channel, pitch, velocity, true);
   } else if (channel == 11) {
     playSound(ch11PitchForNote(cell, pitch_from_row), 0, velocity);
@@ -9315,17 +9310,7 @@ void paint() {
     } else if (painted_channel > 0 && painted_channel < 9) {  // Sampler channels
       // Play sample as normal
       int pitch = samplePitchForNote(paintedCell, painted_channel, pitch_from_row);
-
-      // Apply detune offset for channels 1-12 (excluding synth channels 13-14)
-      if (painted_channel >= 1 && painted_channel <= 12) {
-        pitch += (int)detune[painted_channel];  // Add detune semitones
-      }
-
-      // Apply octave offset for channels 1-8 (excluding synth channels 13-14)
-      if (painted_channel >= 1 && painted_channel <= 8) {
-        pitch += (int)(channelOctave[painted_channel] * 12);  // Add octave semitones (12 semitones per octave)
-      }
-
+      pitch += sampleVoiceOctaveSemis(painted_channel);
       triggerSamplerVoice(painted_channel, pitch, painted_velocity, true);
     } else if (painted_channel == 11) {  // Specific synth
       // Legacy grid notes stay in the historical table range. Preserved MIDI
@@ -10450,7 +10435,7 @@ void setSliderDefForChannel(int channel) {
       {
         { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_FILTER, OCTAVE, "OCTV", 48, DISPLAY_NUMERIC, nullptr, 48 },
         // No 4th slider (same as ch4–8) — hide SND
         { ARR_STRETCH, 0, "TIME", 22, DISPLAY_NUMERIC, nullptr, 23 },
       },
@@ -10477,7 +10462,7 @@ void setSliderDefForChannel(int channel) {
         { ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32 } },
       { { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_FILTER, OCTAVE, "OCTV", 48, DISPLAY_NUMERIC, nullptr, 48 },
         { ARR_STRETCH, 0, "TIME", 22, DISPLAY_NUMERIC, nullptr, 23 } },
       { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32 },

@@ -376,6 +376,7 @@ export function createEngine() {
     const semis = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127
       ? (wav.midiPitch - 72)
       : (r - home);
+    // wav.detune = fine semis (±1); wav.oct = octave shift (±2) from device.js wavOpts.
     const rate = 2 ** ((semis + (wav.detune || 0) + (wav.oct || 0) * 12) / 12);
     play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch], ch);
   }

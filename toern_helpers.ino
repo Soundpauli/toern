@@ -1717,7 +1717,7 @@ FLASHMEM static int companionPitchClassForRow(uint8_t channel, int row) {
   int noteValue = row - 1;
   if (channel >= 1 && channel <= 8) {
     noteValue = 12 * SampleRate[channel] + row - (channel + 1);
-    noteValue += (int)detune[channel] + (int)(channelOctave[channel] * 12);
+    noteValue += (int)lroundf(detune[channel]) + (int)lroundf(channelOctave[channel]);
   } else if (channel == 11) {
     noteValue = 12 * (int)octave[0] + transpose + row - 1;
   } else if (channel == 13 || channel == 14) {
@@ -4053,7 +4053,7 @@ FLASHMEM void startNew() {
     SMP.filter_settings[ch][REVERB] = 0;
     SMP.filter_settings[ch][BITCRUSHER] = 0;
     SMP.filter_settings[ch][DETUNE] = 16;
-    SMP.filter_settings[ch][OCTAVE] = 16;
+    SMP.filter_settings[ch][OCTAVE] = (ch >= 1 && ch <= 8) ? 24 : 16;
     SMP.filter_settings[ch][EFX] = 0;  // Sample mode
     
     // Reset parameter data (no hardware calls)

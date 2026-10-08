@@ -31,16 +31,17 @@ function roleFor(channel) {
 function pitchAdjust(filt, channel) {
   if (channel < 1 || channel > 8) return { detune: 0, oct: 0 };
   const f = filt[channel];
-  const detune = ((f.detune ?? 16) / 32) * 24 - 12;
-  const octShift = ((f.oct ?? 16) / 32) * 6 - 3;
-  return { detune: detune | 0, oct: (octShift * 12) | 0 };
+  // Match firmware: DTNE ±1 semi (fine), OCTV whole semis ±24 (slider 0..48 center 24).
+  const detune = ((f.detune ?? 16) / 32) * 2 - 1;
+  const octSemis = (f.oct ?? 24) - 24;
+  return { detune, oct: octSemis };
 }
 
 function pitchClass(filt, channel, row) {
   const adj = pitchAdjust(filt, channel);
   let noteValue = row - 1;
   if (channel >= 1 && channel <= 8) {
-    noteValue = 12 + row - (channel + 1) + adj.detune + adj.oct;
+    noteValue = 12 + row - (channel + 1) + Math.round(adj.detune) + adj.oct;
   } else if (channel === 11) {
     noteValue = 12 * -1 + row - 1;
   } else if (channel === 13 || channel === 14) {

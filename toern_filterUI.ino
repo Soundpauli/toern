@@ -52,6 +52,19 @@ uint8_t scaleFromDisplay(const SliderDefEntry& meta, uint8_t val) {
   return (meta.displayRange < meta.maxValue) ? constrain(mapf(val, 0, meta.displayRange - 1, 0, meta.maxValue), 0, meta.maxValue) : val;
 }
 
+// DTNE / CENT / SEMI: 0..32 center 16. Sample OCTV: 0..48 center 24 (1 step = 1 semi).
+static inline bool isBipolarCenteredParam(const SliderDefEntry& meta) {
+  if (meta.arr == ARR_FILTER && meta.idx == DETUNE && meta.maxValue == 32) return true;
+  if (meta.arr == ARR_FILTER && meta.idx == OCTAVE && meta.maxValue == 48) return true;
+  if (meta.arr == ARR_SYNTH && (meta.idx == CENT || meta.idx == SEMI) && meta.maxValue == 32) return true;
+  return false;
+}
+
+static inline int bipolarCenter(const SliderDefEntry& meta) {
+  if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) return 24;
+  return 16;
+}
+
 
 #define MAX_FILTER_RESOLUTION 32.0
 #define FILTER_BYPASS MAX_FILTER_RESOLUTION
@@ -59,12 +72,16 @@ uint8_t scaleFromDisplay(const SliderDefEntry& meta, uint8_t val) {
 #define FILTER_MID (MAX_FILTER_RESOLUTION / 2)
 #define PARAM_COUNT 6  // Number of valid params, must include RELEASE (index 5)
 
-// Read raw 0..MAX_FILTER_RESOLUTION setting directly
+// Read raw setting; sample OCTV allows 0..48, most others 0..32.
 uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
   //if (idx < 0) return 0;
   uint8_t raw = 0;
   switch (arr) {
-    case ARR_FILTER: raw = constrain(filterSetting(chan, idx), 0, MAX_FILTER_RESOLUTION); break;
+    case ARR_FILTER: {
+      const int hi = (idx == OCTAVE && chan >= 1 && chan <= 8) ? 48 : (int)MAX_FILTER_RESOLUTION;
+      raw = constrain((int)lroundf(filterSetting(chan, idx)), 0, hi);
+      break;
+    }
     case ARR_SYNTH: raw = constrain(SMP.synth_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_PARAM: raw = constrain(SMP.param_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_STRETCH: raw = chan >= 1 && chan <= 8 ? sampleTimeStretch[chan] : 0; break;
@@ -141,6 +158,7 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
 
   char buf[6];
   uint8_t shownVal = scaleToDisplay(meta, val);
+  const bool bipolar = isBipolarCenteredParam(meta);
 
   if (meta.arr == ARR_STRETCH) {
     if (val == 11) snprintf(buf, sizeof(buf), "OFF");
@@ -148,6 +166,16 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
     else snprintf(buf, sizeof(buf), "+%u%%", val - 12);
   } else if (meta.displayMode == DISPLAY_ENUM && shownVal < meta.displayRange && meta.enumNames && meta.enumNames[shownVal]) {
     snprintf(buf, sizeof(buf), "%s", meta.enumNames[shownVal]);
+  } else if (bipolar) {
+    // Sample DTNE: cents. Sample OCTV: whole semis (val − 24). CENT/SEMI: val − 16.
+    if (meta.arr == ARR_FILTER && meta.idx == DETUNE) {
+      int cents = (int)lroundf(mapf((float)val, 0.0f, 32.0f, -100.0f, 100.0f));
+      snprintf(buf, sizeof(buf), "%d", cents);
+    } else if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) {
+      snprintf(buf, sizeof(buf), "%d", (int)val - bipolarCenter(meta));
+    } else {
+      snprintf(buf, sizeof(buf), "%d", (int)val - 16);  // CENT / SEMI
+    }
   } else {
     snprintf(buf, sizeof(buf), "%u", shownVal);
   }
@@ -157,16 +185,30 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   CRGB dimmed = baseColor;
   dimmed.nscale8(64);
   uint8_t blendVal = mapf(val, 0, meta.maxValue, 0, 255);
-  CRGB textColor = blend(CRGB::Red, CRGB::Green, blendVal);
+  // RES / BITC: 0 = green (safe/off), 32 = red (max). Others keep red→green with value.
+  const bool dangerHighFlip =
+      (meta.arr == ARR_FILTER && (meta.idx == RES || meta.idx == BITCRUSHER))
+      || (meta.arr == ARR_SYNTH && meta.idx == RESONANCE);
+  CRGB textColor = dangerHighFlip ? blend(CRGB::Green, CRGB::Red, blendVal)
+                                  : blend(CRGB::Red, CRGB::Green, blendVal);
 
-  if (meta.arr == ARR_STRETCH) {
-    // Four glyphs such as -10% must fit both 16px and 32px panels.
+  if (meta.arr == ARR_STRETCH || bipolar) {
+    // Signed labels (e.g. -16, -10%) need a wider clear than the default 6px box.
     int width = -1;
     for (const char *p = buf; *p; ++p) width += alphabet[*p - 32][0] + 1;
     x = constrain((int)x, 1, max(1, (int)maxX - width + 1));
     for (int px = x; px < x + width && px <= maxX; ++px)
       for (uint8_t py = y - 1; py < y + h - 1; ++py) light(px, py, CRGB::Black);
-    textColor = val == 11 ? CRGB(100,100,100) : CRGB::Green;
+    if (meta.arr == ARR_STRETCH) {
+      textColor = val == 11 ? CRGB(100,100,100) : CRGB::Green;
+    } else if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) {
+      // Full-octave marks (0, ±12, ±24) → white; other values keep red→green blend.
+      const int semis = (int)val - bipolarCenter(meta);
+      if (semis == 0 || semis == 12 || semis == -12 || semis == 24 || semis == -24)
+        textColor = CRGB::White;
+    } else if ((int)val == bipolarCenter(meta)) {
+      textColor = CRGB(100, 100, 100);
+    }
   }
   drawText(buf, x, y, textColor);
 }
@@ -197,15 +239,14 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
     }
   }
 
-  // Check if this is DETUNE or OCTAVE at middle value (maxVal/2 for centered parameters)
+  // Centered bipolar params at neutral; TIME OFF at 11.
   bool isDetuneOctaveAtMiddle = false;
   if (chan < NUM_CHANNELS) {
     if (sliderDef[chan][page][sliderIndex].arr == ARR_STRETCH && val == 11) {
       isDetuneOctaveAtMiddle = true;
     }
-    if (sliderDef[chan][page][sliderIndex].arr == ARR_FILTER && 
-        (sliderDef[chan][page][sliderIndex].idx == DETUNE || sliderDef[chan][page][sliderIndex].idx == OCTAVE) && 
-        val == 16) { // Middle value for maxVal=32
+    const auto &metaMid = sliderDef[chan][page][sliderIndex];
+    if (isBipolarCenteredParam(metaMid) && (int)val == bipolarCenter(metaMid)) {
       isDetuneOctaveAtMiddle = true;
     }
   }
@@ -517,7 +558,7 @@ void setNewFilters() {
     auto& d = sliderDef[chan][filterPage[chan]][i];
     if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip if ARR_NONE
     if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) continue;
-    uint8_t val = constrain(currentMode->pos[i], 0, MAX_FILTER_RESOLUTION);
+    uint8_t val = constrain(currentMode->pos[i], 0, d.maxValue);
     uint8_t prev = readSetting(d.arr, d.idx, chan);
     
     // Check if encoder position changed (for redraw detection)

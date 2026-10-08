@@ -1644,7 +1644,7 @@ const HELP = {
   bpm: "Tempo. Encoder 4 sets the BPM. Tap T3 to set the tempo by hand.",
   velocity: "Velocity of the note under the cursor: encoder 1 is level, 2 is probability, 3 is condition, 4 is voice volume. Enter leaves.",
   dat: "Save or load a pattern. Encoder 4 picks the slot. Encoder 1 loads it, encoder 2 saves it. An empty slot opens NEW.",
-  new: "NEW writes a pattern. Encoder 3 picks BLNK, TECH, HIPH, DNB, HOUS, or AMBT. Encoder 4 sets how many pages, except for BLNK. Enter writes it. Encoder 1 goes back to the file.",
+  new: "NEW writes a pattern. Encoder 1 loads it. Encoder 2 sets how many pages (not on BLNK). Encoder 3 picks BLNK, TECH, HIPH, DNB, HOUS, or AMBT. Encoder 4 goes back to FILE.",
   kit: "Load a sound pack onto the eight voices. Encoder 4 picks the pack, encoder 2 loads it.",
   song: "Song arranges patterns in order. Encoder 4 moves through the song, encoder 2 picks the pattern. Encoder 3 starts the song.",
   look: "Settings. Encoder 4 picks a row, encoder 3 changes it. LEDS 1 and 1B use a 16×16 matrix, 2 and 2B use 32×16. Esc leaves.",

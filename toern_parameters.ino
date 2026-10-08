@@ -83,7 +83,7 @@ void setFiltersDefaultValues(int ch) {
   SMP.filter_settings[ch][REVERB] = 0;
   SMP.filter_settings[ch][BITCRUSHER] = 0;
   SMP.filter_settings[ch][DETUNE] = 16;
-  SMP.filter_settings[ch][OCTAVE] = 16;
+  SMP.filter_settings[ch][OCTAVE] = (ch >= 1 && ch <= 8) ? 24 : 16;
   // EFX setting: 0 = SAMPLE mode (default for all channels)
   SMP.filter_settings[ch][EFX] = 0;
 
@@ -165,7 +165,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
         case REVERB: return 0;
         case BITCRUSHER: return 0;
         case DETUNE: return 16;
-        case OCTAVE: return 16;
+        case OCTAVE: return (ch >= 1 && ch <= 8) ? 24 : 16;
         case RES: return 0;
         case EFX: return 0;
         case FILTER_WAVEFORM: return 8;

@@ -512,8 +512,28 @@ export function drawFilter(matrix, s, now) {
     let tx = Math.floor((COLS - width + 1) / 2);
     if (tx < 1) tx = 1;
     matrix.drawText(spec.name, tx, 12, pageColors[focus]);
-    const label = spec.key === "wave" ? WAVE_NAMES[val] || String(val) : spec.key === "inst" ? INST_NAMES[val] || String(val) : String(val);
-    matrix.drawText(label, focus < 2 ? x1 + 4 : Math.max(1, x0 - 10), 5, blend([255, 0, 0], [0, 255, 0], Math.round((val / (spec.max ?? 32)) * 255)));
+    const bipolarKeys = new Set(["detune", "oct", "cent", "semi"]);
+    let label;
+    if (spec.key === "wave") label = WAVE_NAMES[val] || String(val);
+    else if (spec.key === "inst") label = INST_NAMES[val] || String(val);
+    else if (spec.key === "detune" && (spec.max ?? 32) === 32) {
+      label = String(Math.round((val / 32) * 200 - 100)); // cents
+    } else if (spec.key === "oct" && (spec.max ?? 48) === 48) {
+      label = String(val - 24); // whole semis ±2 oct
+    } else if (bipolarKeys.has(spec.key) && (spec.max ?? 32) === 32) label = String(val - 16);
+    else label = String(val);
+    const t = Math.round((val / (spec.max ?? 32)) * 255);
+    let valueColor = (spec.key === "res" || spec.key === "b")
+      ? blend([0, 255, 0], [255, 0, 0], t)
+      : blend([255, 0, 0], [0, 255, 0], t);
+    if (spec.key === "oct" && (spec.max ?? 48) === 48) {
+      const semis = val - 24;
+      if (semis === 0 || semis === 12 || semis === -12 || semis === 24 || semis === -24)
+        valueColor = [255, 255, 255];
+    } else if (bipolarKeys.has(spec.key) && val === 16) {
+      valueColor = [100, 100, 100];
+    }
+    matrix.drawText(label, focus < 2 ? x1 + 4 : Math.max(1, x0 - 10), 5, valueColor);
   }
 }
 
@@ -560,11 +580,13 @@ export function drawNew(matrix, s) {
   matrix.drawText("NEW", 6, 12, [0, 255, 255]);
   matrix.drawText(genre.name, 2, 3, genre.color);
   matrix.drawLargeCustom(genre.color, 3);
+  matrix.drawIndicator("M", "G", 1);
   if (s.genre) {
     drawLength(matrix, s, 10, false);
-    matrix.drawIndicator("L", "V", 4);
-    matrix.light(10, 1, [255, 0, 255]);
-  } else matrix.drawIndicator("L", "N", 4);
+    matrix.drawIndicator("L", "M", 2);
+  }
+  matrix.drawIndicator("L", "Y", 3);
+  matrix.drawIndicator("L", "X", 4);
 }
 
 export function drawSubmenu(matrix, s, now = performance.now()) {

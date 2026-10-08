@@ -5165,36 +5165,26 @@ FLASHMEM void showNewFileMode() {
     }
   }
   
-  // New indicator system: new: | | M[V] | L[N]
-  // Encoder 0: no indicator (no functionality)
-  // Encoder 1: empty (no indicator)
-  
-  // Only show L[V] if not BLNK (genreType != 0)
+  // NEW controls: enc0=load (green M), enc1=length (pink L), enc2=template (yellow L),
+  // enc3=back to FILE (blue L — same as FILE menu enc4). Matrix-only draw so a later
+  // LED write cannot reshape the L pixels; no extra helper dots on row 1.
+  drawIndicator('M', 'G', 1, false, false);
   if (genreType != 0) {
-    drawIndicator('L', 'V', 3);  // Encoder 3: Large Violet (only for non-BLNK)
+    drawIndicator('L', 'M', 2, false, false);
   }
-  // Encoder 3: empty if BLNK
-  
-  // Encoder(3) press starts generation -> match indicator to NEW text color (cyan)
-  drawIndicator('L', 'N', 4);
+  drawIndicator('L', 'Y', 3, false, false);
+  drawIndicator('L', 'X', 4, false, false);
 
-  // Set encoder colors to match indicators
-  // Encoder 0: Black (no indicator)
-  Encoder[0].writeRGBCode(0x000000);
-  // Encoder 1: Black (no indicator)
-  Encoder[1].writeRGBCode(0x000000);
-  
-  // Encoder 3: Large Violet (L[V]) only if genreType != 0 (not BLNK)
-  if (genreType != 0) {
-    CRGB violetColor = getIndicatorColor('V'); // Violet
-    Encoder[2].writeRGBCode(violetColor.r << 16 | violetColor.g << 8 | violetColor.b);
-  } else {
-    Encoder[2].writeRGBCode(0x000000); // Black when BLNK
-  }
-  
-  // Encoder 4: Large Cyan (L[N]) to match NEW title
-  CRGB cyanColor = newColor;
-  Encoder[3].writeRGBCode(cyanColor.r << 16 | cyanColor.g << 8 | cyanColor.b);
+  CRGB pinkColor = getIndicatorColor('M');
+  CRGB yellowColor = getIndicatorColor('Y');
+  CRGB blueColor = getIndicatorColor('X');
+  uint32_t pinkRgb = (uint32_t)pinkColor.r << 16 | (uint32_t)pinkColor.g << 8 | pinkColor.b;
+  uint32_t yellowRgb = (uint32_t)yellowColor.r << 16 | (uint32_t)yellowColor.g << 8 | yellowColor.b;
+  uint32_t blueRgb = (uint32_t)blueColor.r << 16 | (uint32_t)blueColor.g << 8 | blueColor.b;
+  Encoder[0].writeRGBCode(0x00FF00);
+  Encoder[1].writeRGBCode(genreType != 0 ? pinkRgb : 0x000000);
+  Encoder[2].writeRGBCode(yellowRgb);
+  Encoder[3].writeRGBCode(blueRgb);
 
   
   // FastLED.setBrightness(ledBrightness);
@@ -5206,34 +5196,42 @@ FLASHMEM void showNewFileMode() {
   
   // Always initialize encoders when entering NEW mode
   if (newScreenFirstEnter) {
-    // Genre selection by last encoder (encoder 3)
-    Encoder[3].writeCounter((int32_t)genreType);
-    Encoder[3].writeMax((int32_t)5);
-    Encoder[3].writeMin((int32_t)0);
-    
-    if (genreType != 0) { // Only enable length control for non-BLNK genres
-      // Length selection by 3rd encoder (encoder 2)
-      Encoder[2].writeCounter((int32_t)genreLength);
-      Encoder[2].writeMax((int32_t)16);
-      Encoder[2].writeMin((int32_t)1);
+    // Template selection on 3rd encoder (encoder 2)
+    Encoder[2].writeCounter((int32_t)genreType);
+    Encoder[2].writeMax((int32_t)5);
+    Encoder[2].writeMin((int32_t)0);
+    currentMode->pos[2] = genreType;
+
+    // Length on 2nd encoder (encoder 1) — only for non-BLNK
+    if (genreType != 0) {
+      Encoder[1].writeCounter((int32_t)genreLength);
+      Encoder[1].writeMax((int32_t)16);
+      Encoder[1].writeMin((int32_t)1);
+      currentMode->pos[1] = genreLength;
     } else {
-      // Disable encoder 2 for BLNK
-      Encoder[2].writeCounter((int32_t)0);
-      Encoder[2].writeMax((int32_t)0);
-      Encoder[2].writeMin((int32_t)0);
+      Encoder[1].writeCounter((int32_t)0);
+      Encoder[1].writeMax((int32_t)0);
+      Encoder[1].writeMin((int32_t)0);
+      currentMode->pos[1] = 0;
     }
-    
-    // Update currentMode positions to match encoders
-    currentMode->pos[3] = genreType;
-    currentMode->pos[2] = genreType != 0 ? genreLength : 0;
+
+    // 1st encoder: press-only (load); 4th unused
+    Encoder[0].writeCounter((int32_t)0);
+    Encoder[0].writeMax((int32_t)0);
+    Encoder[0].writeMin((int32_t)0);
+    Encoder[3].writeCounter((int32_t)0);
+    Encoder[3].writeMax((int32_t)0);
+    Encoder[3].writeMin((int32_t)0);
+    currentMode->pos[0] = 0;
+    currentMode->pos[3] = 0;
     
     lastGenreType = genreType;
     lastGenreLength = genreLength;
     newScreenFirstEnter = false;
   }
   
-  // Handle genre type (encoder 3 - last encoder)
-  int currentGenreType = currentMode->pos[3];
+  // Handle template type (encoder 2 - 3rd encoder)
+  int currentGenreType = currentMode->pos[2];
   if (currentGenreType != lastGenreType) {
     genreType = currentGenreType;
     if (genreType > 5) genreType = 5;
@@ -5241,40 +5239,33 @@ FLASHMEM void showNewFileMode() {
     
     // Update encoder to match clamped value
     if (genreType != currentGenreType) {
-      Encoder[3].writeCounter((int32_t)genreType);
-      currentMode->pos[3] = genreType;
+      Encoder[2].writeCounter((int32_t)genreType);
+      currentMode->pos[2] = genreType;
     }
     
     drawGenreSelection();
     
-    // Update pink helper based on genre type
-    if (genreType != 0) { // Not BLNK - show pink helper dot
-      light(10, 1, CRGB(255, 0, 255)); // Pink helper dot
-    } else { // BLNK - clear pink helper
-      light(10, 1, CRGB(0, 0, 0)); // Clear pink helper
-    }
-    FastLEDshow(); // Update display to show pink helper change
-    
-    // Update encoder 2 based on genre type
-    if (genreType != 0) { // Enable length control for non-BLNK genres
-      Encoder[2].writeCounter((int32_t)genreLength);
-      Encoder[2].writeMax((int32_t)16);
-      Encoder[2].writeMin((int32_t)1);
-      currentMode->pos[2] = genreLength;
+    // Enable/disable length on 2nd encoder based on template
+    if (genreType != 0) {
+      Encoder[1].writeCounter((int32_t)genreLength);
+      Encoder[1].writeMax((int32_t)16);
+      Encoder[1].writeMin((int32_t)1);
+      currentMode->pos[1] = genreLength;
+      Encoder[1].writeRGBCode(pinkRgb);
     } else {
-      // Disable encoder 2 for BLNK
-      Encoder[2].writeCounter((int32_t)0);
-      Encoder[2].writeMax((int32_t)0);
-      Encoder[2].writeMin((int32_t)0);
-      currentMode->pos[2] = 0;
+      Encoder[1].writeCounter((int32_t)0);
+      Encoder[1].writeMax((int32_t)0);
+      Encoder[1].writeMin((int32_t)0);
+      currentMode->pos[1] = 0;
+      Encoder[1].writeRGBCode(0x000000);
     }
     
     lastGenreType = genreType;
   }
   
-  // Handle genre length (encoder 2 - 3rd encoder) - only for non-BLNK genres
+  // Handle template length (encoder 1 - 2nd encoder) - only for non-BLNK
   if (genreType != 0) {
-    int currentGenreLength = currentMode->pos[2];
+    int currentGenreLength = currentMode->pos[1];
     if (currentGenreLength != lastGenreLength) {
       genreLength = currentGenreLength;
       if (genreLength > 16) genreLength = 16;
@@ -5282,8 +5273,8 @@ FLASHMEM void showNewFileMode() {
       
       // Update encoder to match clamped value
       if (genreLength != currentGenreLength) {
-        Encoder[2].writeCounter((int32_t)genreLength);
-        currentMode->pos[2] = genreLength;
+        Encoder[1].writeCounter((int32_t)genreLength);
+        currentMode->pos[1] = genreLength;
       }
       
       // Redraw length meter

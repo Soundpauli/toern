@@ -150,7 +150,9 @@ export function createDevice(matrix, statusEl, rings) {
     const f = filt[ch];
     return {
       index: wavOf[ch] || 0, seek: seekOf[ch], end: endOf[ch], inv: invOf[ch],
-      detune: ((f.detune ?? 16) / 32) * 24 - 12, oct: ((f.oct ?? 16) / 32) * 6 - 3,
+      // Sample voices: DTNE ±1 semi (fine), OCTV whole semis ±24 (±2 oct).
+      // wav.oct is in octaves for engine (semis/12); raw slider is 0..48 center 24.
+      detune: ((f.detune ?? 16) / 32) * 2 - 1, oct: ((f.oct ?? 24) - 24) / 12,
       env: { att: f.att, dec: f.dec, sus: f.sus, rel: f.rel },
       wave: f.wave || 0, inst: f.inst || 0, cent: f.cent ?? 16, semi: f.semi || 0,
       lfoR: f.lfoR || 0, lfoD: f.lfoD || 0, span: f.span || 0, arp: f.arp || 0,
@@ -1074,7 +1076,7 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (s.mode === "new") {
       if (enc === 2) s.genre = clamp(s.genre + dir, 0, GENRES.length - 1);
-      else if (enc === 3 && s.genre) s.genreLength = clamp(s.genreLength + dir, 1, PAGES);
+      else if (enc === 1 && s.genre) s.genreLength = clamp(s.genreLength + dir, 1, PAGES);
       return;
     }
     if (s.mode === "pat") {
@@ -1186,9 +1188,13 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "filter" && enc <= 3) { filt[s.GLOB.currentChannel].fast = enc; return; }
-    if (s.mode === "new" && enc === 0) { s.mode = "dat"; return; }
-    if ((s.mode === "new" && enc === 3) || (s.mode === "pat" && enc === 3)) {
-      writeGenre(s.mode === "pat" ? s.subIndex + 1 : s.genre);
+    if (s.mode === "new" && enc === 0) {
+      writeGenre(s.genre);
+      return;
+    }
+    if (s.mode === "new" && enc === 3) { s.mode = "dat"; return; }
+    if (s.mode === "pat" && enc === 3) {
+      writeGenre(s.subIndex + 1);
       return;
     }
     if (s.mode === "dat" && enc === 0) {

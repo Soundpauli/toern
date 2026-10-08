@@ -929,8 +929,8 @@ static void playIncomingMidiNote(int ch, uint8_t pitch, uint8_t row,
     } else {
       samplePitch = (SampleRate[ch] * 12) + (int)row - (ch + 1);
     }
-    samplePitch += (int)detune[ch];
-    samplePitch += (int)(channelOctave[ch] * 12);
+    // OCTV whole semis; DTNE fine tune applied inside triggerSamplerVoice.
+    if (ch >= 1 && ch <= 8) samplePitch += (int)lroundf(channelOctave[ch]);
     triggerSamplerVoice(ch, samplePitch, velocity, false);
   } else if (ch == 11) {
     int noteValue = 12 * (int)octave[0] + transpose;

@@ -157,12 +157,11 @@ void setFilters(FilterType filterType, int index, bool initial) {
 
         case OCTAVE:
       {
-        // For channels 1-8, store octave value in global array
+        // Sample voices 1-8: one slider step = one semitone, ±2 octaves.
+        // Storage 0..48 with center 24 (not the shared 0..32 filter max).
         if (index >= 1 && index <= 8) {
-          // Map octave value from 0-maxfilterResolution to -3 to +3 octaves
-          // Center value (maxfilterResolution/2) = 0 octave shift
-          float octaveShift = mapf(SMP.filter_settings[index][OCTAVE], 0, maxfilterResolution, -3.0, 3.0);
-          channelOctave[index] = octaveShift;
+          int raw = constrain((int)lroundf(SMP.filter_settings[index][OCTAVE]), 0, 48);
+          channelOctave[index] = (float)(raw - 24);
         } else {
           // For synth channels (13-14), use the original filter octave control
           filters[index]->octaveControl(mappedValue);
@@ -172,12 +171,12 @@ void setFilters(FilterType filterType, int index, bool initial) {
 
       case DETUNE:
       {
-        // Only apply detune to channels 1-12 (excluding synth channels 13-14)
-        if (index >= 1 && index <= 12) {
-          // Map detune value from 0-maxfilterResolution to -12 to +12 semitones
-          // Center value (maxfilterResolution/2) = 0 detune
-          float detuneSemitones = mapf(SMP.filter_settings[index][DETUNE], 0, maxfilterResolution, -12.0, 12.0);
-          detune[index] = detuneSemitones;
+        if (index >= 1 && index <= 8) {
+          // Fine tune within ±1 semitone (center = in tune). Applied as rate in trigger.
+          detune[index] = mapf(SMP.filter_settings[index][DETUNE], 0, maxfilterResolution, -1.0f, 1.0f);
+        } else if (index >= 9 && index <= 12) {
+          // Legacy path for non-sample slots that still read detune[].
+          detune[index] = mapf(SMP.filter_settings[index][DETUNE], 0, maxfilterResolution, -12.0f, 12.0f);
         }
         break;
       }
@@ -318,6 +317,8 @@ void setFilterDefaults(int channel) {
 
   SMP.filter_settings[channel][OCTAVE] = 16;  // middle = 0
   SMP.filter_settings[channel][DETUNE] = 16;  // middle = 0
+  // Sample OCTV uses 0..48 (center 24); synth OCTAVE path still uses 0..32.
+  SMP.filter_settings[channel][OCTAVE] = (channel >= 1 && channel <= 8) ? 24 : 16;
   filterSetting(channel, FILTER_WAVEFORM) = 8;  // SAW (value 2)
   
   // Initialize detune array for channels 1-12

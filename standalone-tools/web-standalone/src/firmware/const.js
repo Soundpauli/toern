@@ -83,7 +83,7 @@ const ADSR = [
 ];
 const SAMPLE_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "r", name: "RVRB" }, { key: "b", name: "BITC" }],
-  [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV" }, null],
+  [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV", max: 48 }, null],
   ADSR,
 ];
 const CH11_FILTER_PAGES = [
@@ -94,7 +94,7 @@ const CH11_FILTER_PAGES = [
 ];
 const KEYS_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "cent", name: "CENT" }, { key: "b", name: "BITC" }],
-  [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV" }, { key: "wave", name: "WAVE", max: 3 }],
+  [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV", max: 48 }, { key: "wave", name: "WAVE", max: 3 }],
   ADSR,
   [{ key: "lfoR", name: "LFOR" }, { key: "lfoD", name: "LFOD" }, { key: "span", name: "SPAN" }, { key: "arp", name: "ARP" }],
 ];
@@ -107,7 +107,7 @@ export function filterPagesFor(ch) {
 
 export function emptyFilt() {
   return {
-    h: 32, l: 0, r: 0, b: 0, fast: 0, res: 0, detune: 16, oct: 16, att: 32, dec: 32, sus: 10, rel: 5,
+    h: 32, l: 0, r: 0, b: 0, fast: 0, res: 0, detune: 16, oct: 24, att: 32, dec: 32, sus: 10, rel: 5,
     cut: 16, flt: 0, wave: 0, inst: 0, cent: 16, semi: 0, lfoR: 0, lfoD: 0, span: 0, arp: 0,
   };
 }
