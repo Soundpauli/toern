@@ -67,6 +67,7 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
     case ARR_FILTER: raw = constrain(filterSetting(chan, idx), 0, MAX_FILTER_RESOLUTION); break;
     case ARR_SYNTH: raw = constrain(SMP.synth_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_PARAM: raw = constrain(SMP.param_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
+    case ARR_STRETCH: raw = chan >= 1 && chan <= 8 ? sampleTimeStretch[chan] : 0; break;
     default: return 0;
   }
   return raw;
@@ -138,10 +139,14 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
     }
   }
 
-  char buf[4];
+  char buf[6];
   uint8_t shownVal = scaleToDisplay(meta, val);
 
-  if (meta.displayMode == DISPLAY_ENUM && shownVal < meta.displayRange && meta.enumNames && meta.enumNames[shownVal]) {
+  if (meta.arr == ARR_STRETCH) {
+    if (val == 11) snprintf(buf, sizeof(buf), "OFF");
+    else if (val < 11) snprintf(buf, sizeof(buf), "-%u%%", 10 - val);
+    else snprintf(buf, sizeof(buf), "+%u%%", val - 12);
+  } else if (meta.displayMode == DISPLAY_ENUM && shownVal < meta.displayRange && meta.enumNames && meta.enumNames[shownVal]) {
     snprintf(buf, sizeof(buf), "%s", meta.enumNames[shownVal]);
   } else {
     snprintf(buf, sizeof(buf), "%u", shownVal);
@@ -154,6 +159,15 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   uint8_t blendVal = mapf(val, 0, meta.maxValue, 0, 255);
   CRGB textColor = blend(CRGB::Red, CRGB::Green, blendVal);
 
+  if (meta.arr == ARR_STRETCH) {
+    // Four glyphs such as -10% must fit both 16px and 32px panels.
+    int width = -1;
+    for (const char *p = buf; *p; ++p) width += alphabet[*p - 32][0] + 1;
+    x = constrain((int)x, 1, max(1, (int)maxX - width + 1));
+    for (int px = x; px < x + width && px <= maxX; ++px)
+      for (uint8_t py = y - 1; py < y + h - 1; ++py) light(px, py, CRGB::Black);
+    textColor = val == 11 ? CRGB(100,100,100) : CRGB::Green;
+  }
   drawText(buf, x, y, textColor);
 }
 
@@ -186,6 +200,9 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
   // Check if this is DETUNE or OCTAVE at middle value (maxVal/2 for centered parameters)
   bool isDetuneOctaveAtMiddle = false;
   if (chan < NUM_CHANNELS) {
+    if (sliderDef[chan][page][sliderIndex].arr == ARR_STRETCH && val == 11) {
+      isDetuneOctaveAtMiddle = true;
+    }
     if (sliderDef[chan][page][sliderIndex].arr == ARR_FILTER && 
         (sliderDef[chan][page][sliderIndex].idx == DETUNE || sliderDef[chan][page][sliderIndex].idx == OCTAVE) && 
         val == 16) { // Middle value for maxVal=32
@@ -428,6 +445,10 @@ void processAdjustments_new(uint8_t page) {
       case ARR_PARAM:
         SMP.param_settings[chan][d.idx] = currentMode->pos[i];
         setParams(d.idx, chan);
+        break;
+
+      case ARR_STRETCH:
+        setSampleTimeStretch(chan, currentMode->pos[i]);
         break;
 
       default:

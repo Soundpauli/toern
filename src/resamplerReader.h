@@ -8,6 +8,7 @@
 #include "interpolation.h"
 #include "waveheaderparser.h"
 #include "toern_pcm_interpolation.h"
+#include "toern_wsola.h"
 
 // Simple debug print helper (can be enabled/disabled)
 // Keep this off in production builds: Serial I/O can cause timing issues/glitches.
@@ -312,6 +313,13 @@ public:
 
     bool isPlaying(void) { return _playing; }
 
+    // Atomic request only: audio update owns all WSOLA state.
+    void setTimeStretch(bool enabled) { _timeStretchSetting = enabled ? 12 : 11; }
+    // 0..10 = -10%..-0%, 11 = OFF, 12..22 = +0%..+10% length.
+    void setTimeStretchAmount(uint8_t value) {
+        _timeStretchSetting = value <= 22 ? value : 11;
+    }
+
     unsigned int read(void **buf, uint16_t nsamples) {
         if (!_playing || _numChannels <= 0) {
              // RR_DEBUG_PRINT("read() abort: playing=%d, numCh=%d\n", _playing, _numChannels);
@@ -322,6 +330,14 @@ public:
              RR_DEBUG_PRINT("read() ERR: _numChannels %d > MAX_LOCAL_BUF_CHANNELS %d\n", _numChannels, MAX_LOCAL_BUF_CHANNELS);
              return 0;
         }
+        const float pitch = fabsf((float)_playbackRate);
+        const uint8_t stretchSetting = _timeStretchSetting;
+        const bool useStretch = stretchSetting != 11 && _numChannels == 1 &&
+            _loopType == looptype_none && !_useDualPlaybackHead &&
+            pitch >= 0.5f && pitch <= 2.0f;
+        if (useStretch) return readTimeStretch(buf, nsamples, pitch, stretchSetting);
+        _stretchActive = false;
+        _wsola.reset();
         unsigned int count = 0;
         bool retried = false;
         while (count < nsamples) {
@@ -551,6 +567,8 @@ public:
     int available(void) { return _playing ? AUDIO_BLOCK_SAMPLES : 0; }
 
     void reset(void) {
+        _stretchActive = false;
+        _wsola.reset();
         RR_DEBUG_PRINT("reset(): _numCh=%d, _pbRate=%.2f, _play_start=%d, _header=%ld, _loop_s=%ld, _loop_f=%ld\n", 
             _numChannels, _playbackRate, (int)_play_start, _header_offset, _loop_start, _loop_finish);
 
@@ -668,6 +686,94 @@ public:
     }
     
 protected:
+    volatile uint8_t _timeStretchSetting = 11;
+    uint8_t _stretchLatchedSetting = 11;
+    int32_t _stretchOutputLimit = 0;
+    uint64_t _stretchProgressQ32 = 0;
+    uint64_t _stretchStepQ32 = 1ULL << 32;
+    float _stretchSourceStep = 1;
+    bool _stretchNeedsWsola = false;
+    int _stretchLengthPercent = 100;
+    bool _stretchActive = false;
+    int32_t _stretchStart = 0, _stretchFrames = 0, _stretchOutput = 0;
+    int _stretchDirection = 1;
+    float _stretchPitch = 1;
+    ToernWsola _wsola;
+
+    float stretchSource(float position, bool fast) {
+        // One-shot boundary extension only, never read outside the trim.
+        if (position < 0) position = 0;
+        if (position > _stretchFrames - 1) position = _stretchFrames - 1;
+        const int32_t frame = (int32_t)position;
+        const float frac = position - frame;
+        auto point = [&](int32_t f) -> int16_t {
+            if (f < 0) f = 0;
+            if (f >= _stretchFrames) f = _stretchFrames - 1;
+            return getSourceBufferValue(_stretchStart + _stretchDirection * f);
+        };
+        const int16_t b = point(frame);
+        if (frac == 0) return b;
+        if (fast) return b + frac * ((int32_t)point(frame + 1) - b);
+        return toern_audio::interpolatePcm16(point(frame - 1), b, point(frame + 1),
+                                point(frame + 2), 1.0f + frac);
+    }
+    unsigned int readTimeStretch(void **buf, uint16_t nsamples, float pitch, uint8_t setting) {
+        if (!_sourceBuffer) { stop(); return 0; }
+        if (_stretchActive && (_stretchPitch != pitch ||
+            _stretchDirection != (_playbackRate < 0 ? -1 : 1))) _stretchActive = false;
+        if (!_stretchActive) {
+            _stretchPitch = pitch;
+            _stretchLatchedSetting = setting;
+            _stretchLengthPercent = setting < 11 ? 90 + setting : 100 + setting - 12;
+            _stretchStepQ32 = (100ULL << 32) / _stretchLengthPercent;
+            _stretchSourceStep = 100.0f / _stretchLengthPercent;
+            _remainder = 0;
+            _stretchDirection = _playbackRate < 0 ? -1 : 1;
+            _stretchStart = _bufferPosition1;
+            const int32_t finish = _loop_finish < _file_size / 2 ?
+                _loop_finish : _file_size / 2;
+            const int32_t start = _play_start == play_start::play_start_sample ?
+                _header_offset : _loop_start;
+            _stretchFrames = _stretchDirection > 0 ? finish - _stretchStart :
+                _stretchStart - start + 1;
+            if (_stretchStart < start || _stretchStart >= finish || _stretchFrames <= 0) {
+                stop(); return 0;
+            }
+            _stretchNeedsWsola = pitch != 1.0f || _stretchLengthPercent != 100;
+            _stretchOutput = 0;
+            _stretchProgressQ32 = 0;
+            _stretchOutputLimit = (int32_t)(((int64_t)_stretchFrames * _stretchLengthPercent + 50) / 100);
+            if (_stretchOutputLimit < 1) _stretchOutputLimit = 1;
+            _wsola.reset();
+            _stretchActive = true;
+        }
+        // Adjust remaining duration without restarting the running grain.
+        if (_stretchLatchedSetting != setting) {
+            _stretchLatchedSetting = setting;
+            _stretchLengthPercent = setting < 11 ? 90 + setting : 100 + setting - 12;
+            _stretchStepQ32 = (100ULL << 32) / _stretchLengthPercent;
+            _stretchSourceStep = 100.0f / _stretchLengthPercent;
+            if (_stretchLengthPercent != 100) _stretchNeedsWsola = true;
+            const int32_t remaining = _stretchFrames - (int32_t)(_stretchProgressQ32 >> 32);
+            int32_t extra = (int32_t)(((int64_t)remaining * _stretchLengthPercent + 50) / 100);
+            if (extra < 1) extra = 1;
+            _stretchOutputLimit = _stretchOutput + extra;
+        }
+        int16_t *out = static_cast<int16_t *>(buf[0]);
+        unsigned int n = 0;
+        for (; n < nsamples && _stretchOutput < _stretchOutputLimit; ++n) {
+            // Unity is bit-exact and costs no correlation search.
+            out[n] = !_stretchNeedsWsola ? getSourceBufferValue(_bufferPosition1) :
+                _wsola.next([&](float pos, bool fast) { return stretchSource(pos, fast); }, pitch, _stretchSourceStep, (float)(_stretchProgressQ32 >> 32));
+            ++_stretchOutput;
+            _stretchProgressQ32 += _stretchStepQ32;
+            int32_t sourceFrame = (int32_t)(_stretchProgressQ32 >> 32);
+            if (sourceFrame >= _stretchFrames) sourceFrame = _stretchFrames - 1;
+            _bufferPosition1 = _stretchStart + _stretchDirection * sourceFrame;
+        }
+        if (_stretchOutput == _stretchOutputLimit) stop();
+        return n;
+    }
     volatile bool _playing;
 
     int32_t _file_size;

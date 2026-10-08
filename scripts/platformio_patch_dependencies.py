@@ -80,12 +80,15 @@ for library_dir in libdeps_dir.glob("TeensyAudioSampler*"):
 
 playback_src_dirs = list(libdeps_dir.glob("TeensyVariablePlayback@src-*/src"))
 plain_playback_src = libdeps_dir / "TeensyVariablePlayback" / "src"
-if plain_playback_src.is_dir():
+if plain_playback_src.is_dir() and not playback_src_dirs:
     playback_src_dirs.append(plain_playback_src)
 
 for source_dir in playback_src_dirs:
     (source_dir / "toern_pcm_interpolation.h").write_text(
         (project_dir / "src" / "toern_pcm_interpolation.h").read_text()
+    )
+    (source_dir / "toern_wsola.h").write_text(
+        (project_dir / "src" / "toern_wsola.h").read_text()
     )
     reader = source_dir / "ResamplingReader.h"
     reader.write_text((project_dir / "src" / "resamplerReader.h").read_text())
@@ -184,4 +187,12 @@ for source_dir in playback_src_dirs:
             }""",
             "amplitude reset after playback",
         )
+    if "void setTimeStretch(bool enabled)" not in text:
+        text = replace_once(text, "        void setPlaybackRate(float f) {",
+            "        void setTimeStretch(bool enabled) { reader->setTimeStretch(enabled); }\n\n        void setPlaybackRate(float f) {",
+            "WSOLA enable forwarding")
+    if "void setTimeStretchAmount(uint8_t value)" not in text:
+        text = replace_once(text, "        void setPlaybackRate(float f) {",
+            "        void setTimeStretchAmount(uint8_t value) { reader->setTimeStretchAmount(value); }\n\n        void setPlaybackRate(float f) {",
+            "WSOLA length forwarding")
     playresmp.write_text(text)

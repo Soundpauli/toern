@@ -1,6 +1,6 @@
 #include "src/toern_build_types.h"
 
-#define VERSION "v3.01f"
+#define VERSION "v3.01f-T2"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -132,7 +132,8 @@ enum MidiSetTypes : uint8_t {
 enum SettingArray : uint8_t { ARR_FILTER,
                               ARR_SYNTH,
                               ARR_PARAM,
-                              ARR_NONE };
+                              ARR_NONE,
+                              ARR_STRETCH };
 
 // Define named struct for sliderDef
 struct SliderDefEntry {
@@ -359,6 +360,8 @@ void initNeoSlider();
 void updateNeoSliderVolume();
 void reapplyAllSampleChannelGains();
 void resetAllChannelVolumesToDefault();
+void extendLastPageForLiveNote(uint16_t targetBeat);
+void updateLastPage();
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger);
 uint8_t scaledNoteVelocity(int ch, int vel);
 void updateAllMixerGains();
@@ -615,7 +618,10 @@ bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
   cell.condition = 1;
   cell.midiPitch = midiPitch;
   cell.channel = channel;
-  updateLastPage();
+  // Do not full-scan EXTMEM here: updateLastPage() briefly publishes lastPage=0
+  // (and understated mid-scan values) that the playNote ISR can treat as a wrap
+  // to beat 1 when many MIDI notes land while playing.
+  extendLastPageForLiveNote(targetBeat);
   return true;
 }
 
@@ -1615,6 +1621,13 @@ DMAMEM FilterTarget defaultFastFilter[NUM_CHANNELS];  // one per channel
 
 EXTMEM arraysampler _samplers[9];
 AudioPlayArrayResmp *voices[9] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8 };
+static uint8_t sampleTimeStretch[9] = {11,11,11,11,11,11,11,11,11};
+void setSampleTimeStretch(uint8_t channel, int value) {
+  if (channel < 1 || channel > 8) return;
+  sampleTimeStretch[channel] = constrain(value, 0, 22);
+  voices[channel]->setTimeStretchAmount(sampleTimeStretch[channel]);
+}
+
 
 AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, nullptr, &envelope13, &envelope14 };
 AudioAmplifier *amps[15] = { nullptr, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, nullptr, &amp13, &amp14 };
@@ -3603,6 +3616,7 @@ FLASHMEM void initSamples() {
   for (unsigned int i = 0; i < 9; i++) {
     if (voices[i]) {  // Check if voice exists
       voices[i]->enableInterpolation(true);
+      if (i == 0) ToernWsola::init();
     }
   }
 
@@ -8918,13 +8932,12 @@ void checkPages() {
 
   uint16_t newPage = (beat - 1) / maxX + 1;
 
-  // if we stepped past the last non-empty page, restart at the top
-  if (newPage > lastPage && lastPage > 0) {  // Ensure lastPage is valid before comparison
+  // if we stepped past the last non-empty page, restart at the top.
+  // lastPage == 0 is treated as "not published yet" — never reset the playhead
+  // for a transient zero (MIDI live-paint used to race that value).
+  if (lastPage > 0 && newPage > lastPage) {
     beat = 1;
     //if (fastRecordActive) stopFastRecord(); // This might stop recording prematurely if looping
-    newPage = 1;
-  } else if (lastPage == 0) {  // Should not happen if updateLastPage ensures it's at least 1
-    beat = 1;
     newPage = 1;
   }
   GLOB.page = newPage;
@@ -10259,13 +10272,38 @@ void voiceApplyEditPage(int channel) {
   Encoder[3].writeCounter((int32_t)GLOB.x);
 }
 
+// Live MIDI/touch paint: extend the pattern ceiling without a full EXTMEM scan.
+// Adding a note can only raise (or keep) lastPage; deletions still use updateLastPage().
+void extendLastPageForLiveNote(uint16_t targetBeat) {
+  if (targetBeat < 1 || maxX < 1) return;
+  unsigned int notePage = (targetBeat - 1) / maxX + 1;
+  int effectiveMaxPages = effectivePageCount();
+  if (effectiveMaxPages < 1) effectiveMaxPages = 1;
+  if (notePage < 1 || notePage > (unsigned int)effectiveMaxPages) return;
+
+  hasNotes[notePage] = true;
+
+  extern int loopLength;
+  if (voiceMode) {
+    // VMOD lengths need a recount; voiceModePages is published once at the end.
+    updateVoiceLengths();
+    return;
+  }
+  // PMOD: lastPage stays tied to loopLength via updateLastPage / play start.
+  if (loopLength > 0) return;
+
+  // Publish once — never clear lastPage first (ISR checkPages reads it).
+  if (notePage > lastPage) lastPage = notePage;
+}
+
 void updateLastPage() {
   updateVoiceLengths();
   int effectiveMaxPages = effectivePageCount();
 
   extern int loopLength;
   if (!voiceMode && loopLength > 0) {
-    lastPage = min(loopLength, effectiveMaxPages);
+    unsigned int newLast = (unsigned int)min(loopLength, effectiveMaxPages);
+    if (newLast < 1) newLast = 1;
     for (unsigned int p = 1; p <= (unsigned int)effectiveMaxPages; p++) {
       bool pageHasNotesThisPage = false;
       unsigned int baseIndex = (p - 1) * maxX;
@@ -10283,11 +10321,14 @@ void updateLastPage() {
     for (unsigned int p = (unsigned int)effectiveMaxPages + 1; p <= maxPages; p++) {
       hasNotes[p] = false;
     }
+    lastPage = newLast;
     return;
   }
 
   // Highest page that still holds any note (playback / CTRL=PAGE ceiling in pattern mode).
-  lastPage = 0;
+  // Compute into a local, then publish once so the playNote ISR never sees lastPage=0
+  // or an understated mid-scan value (MIDI note floods used to trip that race).
+  unsigned int newLast = 0;
   for (unsigned int p = 1; p <= (unsigned int)effectiveMaxPages; p++) {
     bool pageHasNotesThisPage = false;
     unsigned int baseIndex = (p - 1) * maxX;
@@ -10302,15 +10343,14 @@ void updateLastPage() {
     }
     hasNotes[p] = pageHasNotesThisPage;
     if (pageHasNotesThisPage) {
-      lastPage = p;  // keep scanning — last write wins = highest occupied page
+      newLast = p;  // keep scanning — last write wins = highest occupied page
     }
   }
   for (unsigned int p = (unsigned int)effectiveMaxPages + 1; p <= maxPages; p++) {
     hasNotes[p] = false;
   }
-  if (lastPage == 0) {
-    lastPage = 1;
-  }
+  if (newLast == 0) newLast = 1;
+  lastPage = newLast;
 }
 
 FLASHMEM void loadWav() {
@@ -10379,6 +10419,7 @@ int getDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx) {
     case ARR_FILTER: return filterSetting(channel, idx);
     case ARR_SYNTH: return SMP.synth_settings[channel][idx];
     case ARR_PARAM: return SMP.param_settings[channel][idx];
+    case ARR_STRETCH: return channel >= 1 && channel <= 8 ? sampleTimeStretch[channel] : 0;
     default: return 0;
   }
 }
@@ -10387,6 +10428,7 @@ void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int va
     case ARR_FILTER: filterSetting(channel, idx) = value; break;
     case ARR_SYNTH: SMP.synth_settings[channel][idx] = value; break;
     case ARR_PARAM: SMP.param_settings[channel][idx] = value; break;
+    case ARR_STRETCH: setSampleTimeStretch(channel, value); break;
     default: break;
   }
 }
@@ -10410,7 +10452,7 @@ void setSliderDefForChannel(int channel) {
         { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32 },
         // No 4th slider (same as ch4–8) — hide SND
-        { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 },
+        { ARR_STRETCH, 0, "TIME", 22, DISPLAY_NUMERIC, nullptr, 23 },
       },
       { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -10436,7 +10478,7 @@ void setSliderDefForChannel(int channel) {
       { { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 } },
+        { ARR_STRETCH, 0, "TIME", 22, DISPLAY_NUMERIC, nullptr, 23 } },
       { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_PARAM, SUSTAIN, "SUST", 32, DISPLAY_NUMERIC, nullptr, 32 },
