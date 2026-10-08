@@ -317,12 +317,6 @@ public:
              // RR_DEBUG_PRINT("read() abort: playing=%d, numCh=%d\n", _playing, _numChannels);
              return 0;
         }
-        // Interpolation specific check
-        if (_interpolationType != ResampleInterpolationType::resampleinterpolation_none && !_interpolationPoints) {
-            RR_DEBUG_PRINT("read() abort: Interpolation enabled but _interpolationPoints is NULL\n");
-            return 0; 
-        }
-        
         const int MAX_LOCAL_BUF_CHANNELS = 8; // Static check for local array size
         if (_numChannels > MAX_LOCAL_BUF_CHANNELS) {
              RR_DEBUG_PRINT("read() ERR: _numChannels %d > MAX_LOCAL_BUF_CHANNELS %d\n", _numChannels, MAX_LOCAL_BUF_CHANNELS);
@@ -443,90 +437,26 @@ public:
             }
         }
 
-        int16_t result = 0;
-        if (!_sourceBuffer) { RR_DEBUG_PRINT("RNV ERR: _sourceBuffer is NULL before getSource!\n"); *value = 0; return false; }
+        if (!_sourceBuffer) { *value = 0; return false; }
 
-        if (!_useDualPlaybackHead || abs(_crossfade) < 0.0001) { // Effectively head 1
-            if (_bufferPosition1 + channel < current_play_start_boundary || _bufferPosition1 + channel >= current_play_finish_boundary) 
-                { /* RR_DEBUG_PRINT("RNV OOB H1: %ld (ch %u)\n", _bufferPosition1 + channel, channel); */ *value = 0; return false; } 
-            result =  getSourceBufferValue(_bufferPosition1 + channel);
-        } else if (abs(_crossfade - 1.0) < 0.0001){ // Effectively head 2
-            if (_bufferPosition2 + channel < current_play_start_boundary || _bufferPosition2 + channel >= current_play_finish_boundary) 
-                { /* RR_DEBUG_PRINT("RNV OOB H2: %ld (ch %u)\n", _bufferPosition2 + channel, channel); */ *value = 0; return false; }
-            result =  getSourceBufferValue(_bufferPosition2 + channel);
-        } else { // Crossfading
-            int16_t r1 = 0, r2 = 0;
-            if (_bufferPosition1 + channel >= current_play_start_boundary && _bufferPosition1 + channel < current_play_finish_boundary) 
-                r1 = getSourceBufferValue(_bufferPosition1 + channel);
-            // else { RR_DEBUG_PRINT("RNV OOB XF1: %ld (ch %u)\n", _bufferPosition1 + channel, channel); }
-            if (_bufferPosition2 + channel >= current_play_start_boundary && _bufferPosition2 + channel < current_play_finish_boundary) 
-                r2 = getSourceBufferValue(_bufferPosition2 + channel);
-            // else { RR_DEBUG_PRINT("RNV OOB XF2: %ld (ch %u)\n", _bufferPosition2 + channel, channel); }
-            result = static_cast<int16_t>(((1.0 - _crossfade ) * r1) + (_crossfade * r2));
+        // Interpolate each head at its actual fractional source position.
+        // Output-history samples are not uniformly spaced when rate is fractional
+        // or exceeds unity, so they cannot serve as source interpolation points.
+        int16_t result;
+        if (!_useDualPlaybackHead || _crossfade < 0.0001) {
+            result = interpolateHead(_bufferPosition1, channel,
+                                     current_play_start_boundary, current_play_finish_boundary);
+        } else if (_crossfade > 0.9999) {
+            result = interpolateHead(_bufferPosition2, channel,
+                                     current_play_start_boundary, current_play_finish_boundary);
+        } else {
+            const int16_t r1 = interpolateHead(_bufferPosition1, channel,
+                                              current_play_start_boundary, current_play_finish_boundary);
+            const int16_t r2 = interpolateHead(_bufferPosition2, channel,
+                                              current_play_start_boundary, current_play_finish_boundary);
+            result = static_cast<int16_t>((1.0 - _crossfade) * r1 + _crossfade * r2);
         }
 
-        // --- Interpolation Logic from your original file, with added null/bounds checks ---
-        if (_interpolationType != ResampleInterpolationType::resampleinterpolation_none) {
-            // Check if interpolation points are usable for this channel
-            if (!_interpolationPoints || channel >= (uint16_t)_numInterpolationPointsChannels || !_interpolationPoints[channel]) {
-                // RR_DEBUG_PRINT("RNV SkipInterp: no ipPoints for ch %u (alloc for %u)\n", channel, _numInterpolationPointsChannels);
-                // Use raw 'result' if no valid interpolation buffer
-            } else {
-                InterpolationData* ip = _interpolationPoints[channel]; // Safe to use ip now
-                double abs_remainder = abs(_remainder);
-                bool new_whole_sample_crossed = false;
-                if (_playbackRate > 0 && (_remainder - _playbackRate < 0.0)) new_whole_sample_crossed = true;
-                if (_playbackRate < 0 && (_remainder - _playbackRate > 0.0)) new_whole_sample_crossed = true;
-
-                if (new_whole_sample_crossed) { // Update history
-                    if (_interpolationType == ResampleInterpolationType::resampleinterpolation_linear) {
-                        ip[0].y = ip[1].y;
-                        ip[1].y = result; // 'result' is current raw sample
-                        if (_numInterpolationPoints < 2) _numInterpolationPoints++;
-                    } else if (_interpolationType == ResampleInterpolationType::resampleinterpolation_quadratic) {
-                        int numSamplesToUpdate = abs(floor(_playbackRate));
-                        if (numSamplesToUpdate == 0 && abs(_playbackRate) < 1.0) numSamplesToUpdate = 1;
-                        if (numSamplesToUpdate > 4) numSamplesToUpdate = 4;
-
-                        for (int k_update = 0; k_update < numSamplesToUpdate; k_update++) {
-                            ip[0].y = ip[1].y; ip[1].y = ip[2].y; ip[2].y = ip[3].y;
-                            if (k_update == numSamplesToUpdate - 1) {
-                                ip[3].y = result; // Newest point is current raw sample
-                            } else { // Need to fetch historical point
-                                int32_t fetch_offset = (numSamplesToUpdate - 1 - k_update);
-                                int32_t fetch_idx_base = (_playbackRate > 0) ? 
-                                                         _bufferPosition1 - (fetch_offset * _numChannels) : 
-                                                         _bufferPosition1 + (fetch_offset * _numChannels);
-                                int32_t fetch_idx = fetch_idx_base + channel;
-                                if (fetch_idx >= current_play_start_boundary && fetch_idx < current_play_finish_boundary) {
-                                    ip[3].y = getSourceBufferValue(fetch_idx);
-                                } else {
-                                    ip[3].y = ip[2].y; // Fallback: repeat previous point if out of bounds
-                                }
-                            }
-                        }
-                        if (_numInterpolationPoints < 4) _numInterpolationPoints += numSamplesToUpdate;
-                        if (_numInterpolationPoints > 4) _numInterpolationPoints = 4;
-                    }
-                }
-                
-                // Perform actual interpolation
-                if (_interpolationType == ResampleInterpolationType::resampleinterpolation_linear) {
-                    if (_numInterpolationPoints >= 2) {
-                        result = static_cast<int16_t>(abs_remainder * ip[1].y + (1.0 - abs_remainder) * ip[0].y);
-                    } else if (_numInterpolationPoints == 1) { result = static_cast<int16_t>(ip[0].y); }
-                    // else: result remains raw if _numInterpolationPoints is 0
-                } else if (_interpolationType == ResampleInterpolationType::resampleinterpolation_quadratic) {
-                    if (_numInterpolationPoints >= 4) {
-                        result = toern_audio::interpolatePcm16(ip[0].y, ip[1].y, ip[2].y, ip[3].y, 1.0f + (float)abs_remainder);
-                    } else if (_numInterpolationPoints > 0) { // Fallback for quadratic if not enough points
-                        result = static_cast<int16_t>(ip[_numInterpolationPoints - 1].y);
-                    }
-                    // else: result remains raw
-                }
-            } // end else (interpolation points are valid)
-        } // end if interpolation enabled
-  
         if (channel == _numChannels - 1) { // Only advance position after all channels of a frame are processed
             _remainder += _playbackRate;
             double samples_to_advance_exact = _remainder;
@@ -766,6 +696,56 @@ protected:
     unsigned int _numInterpolationPoints; 
     InterpolationData **_interpolationPoints; 
     
+    // Boundary access is in complete interleaved frames, never across channels.
+    int16_t interpolationPoint(int32_t head, int offset, uint16_t channel,
+                               int32_t start, int32_t finish) {
+        // A first pass can begin before loop_start; do not wrap that prefix.
+        if (_loopType != looptype_none && head >= _loop_start && _loop_start > start)
+            start = _loop_start;
+        const int32_t frames = (finish - start) / _numChannels;
+        if (frames <= 0) return 0;
+        const int32_t index = head + offset * _numChannels + channel;
+        const int32_t completeFinish = start + frames * _numChannels;
+        if (index >= start && index < completeFinish)
+            return getSourceBufferValue(index);
+
+        int32_t frame = (head - start) / _numChannels + offset;
+        if (_loopType == looptype_repeat) {
+            frame %= frames;
+            if (frame < 0) frame += frames;
+        } else if (_loopType == looptype_pingpong && frames > 1) {
+            const int32_t period = 2 * (frames - 1);
+            frame %= period;
+            if (frame < 0) frame += period;
+            if (frame >= frames) frame = period - frame;
+        } else {
+            if (frame < 0) frame = 0;
+            if (frame >= frames) frame = frames - 1;
+        }
+        return getSourceBufferValue(start + frame * _numChannels + channel);
+    }
+
+    int16_t interpolateHead(int32_t head, uint16_t channel,
+                            int32_t start, int32_t finish) {
+        if (_interpolationType == resampleinterpolation_none) {
+            const int32_t index = head + channel;
+            return index >= start && index < finish ? getSourceBufferValue(index) : 0;
+        }
+        // floor-based phase works in both directions. Ping-pong recovery can
+        // temporarily negate the remainder, so normalize it before lookup.
+        const int phaseFrames = static_cast<int>(floor(_remainder));
+        head += phaseFrames * _numChannels;
+        const float fraction = static_cast<float>(_remainder - phaseFrames);
+        const int16_t b = interpolationPoint(head, 0, channel, start, finish);
+        if (fraction == 0.0f) return b; // Exact/integer-rate playback is transparent.
+        const int16_t c = interpolationPoint(head, 1, channel, start, finish);
+        if (_interpolationType == resampleinterpolation_linear)
+            return static_cast<int16_t>(b + fraction * (static_cast<int32_t>(c) - b));
+        const int16_t a = interpolationPoint(head, -1, channel, start, finish);
+        const int16_t d = interpolationPoint(head, 2, channel, start, finish);
+        return toern_audio::interpolatePcm16(a, b, c, d, 1.0f + fraction);
+    }
+
     void initializeInterpolationPoints(void) {
         RR_DEBUG_PRINT("initializeInterpolationPoints(): _numChannels=%d, _numIPC=%u, _ipPoints=%p\n", 
                        _numChannels, _numInterpolationPointsChannels, _interpolationPoints);

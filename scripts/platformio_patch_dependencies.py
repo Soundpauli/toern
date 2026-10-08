@@ -78,7 +78,12 @@ for library_dir in libdeps_dir.glob("TeensyAudioSampler*"):
     polyphonic_sampler.write_text(text)
 
 
-for source_dir in libdeps_dir.glob("TeensyVariablePlayback@src-*/src"):
+playback_src_dirs = list(libdeps_dir.glob("TeensyVariablePlayback@src-*/src"))
+plain_playback_src = libdeps_dir / "TeensyVariablePlayback" / "src"
+if plain_playback_src.is_dir():
+    playback_src_dirs.append(plain_playback_src)
+
+for source_dir in playback_src_dirs:
     (source_dir / "toern_pcm_interpolation.h").write_text(
         (project_dir / "src" / "toern_pcm_interpolation.h").read_text()
     )
