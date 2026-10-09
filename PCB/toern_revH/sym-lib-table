@@ -4,4 +4,5 @@
   (lib (name "SJ1-3533")(type "KiCad")(uri "${KIPRJMOD}/SJ1-3533/SJ1-3533.kicad_sym")(options "")(descr ""))
   (lib (name "TPS22918DBVR")(type "KiCad")(uri "${KIPRJMOD}/TPS22918DBVR/TPS22918DBVR.kicad_sym")(options "")(descr ""))
   (lib (name "YZP0354-20100-01")(type "KiCad")(uri "${KIPRJMOD}/YZP0354-20100-01/YZP0354-20100-01.kicad_sym")(options "")(descr "Xinyangze through-hole pogo pin C5157282"))
+  (lib (name "toern")(type "KiCad")(uri "${KIPRJMOD}/toern.kicad_sym")(options "")(descr "Project symbols (BAT54S pinout)"))
 )
