@@ -2475,7 +2475,11 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
 // x, y: position to draw the arrow (tip position)
 // blink: if true, dim the arrow (for clock-synced blinking in EXT mode)
 FLASHMEM void drawMidiArrow(bool direction, int x, int y, bool blink = false) {
-  CRGB color = direction ? CRGB(0, 255, 0) : CRGB(255, 0, 0); // Green for INT, Red for EXT
+  CRGB color = direction ? CRGB(0, 255, 0) : CRGB(255, 0, 0); // Green for INT, Red for MIDI EXT
+  if (!direction) {
+    extern bool getAnalogExtClock();
+    if (getAnalogExtClock()) color = CRGB(255, 165, 0);  // Orange: analog PPQN in
+  }
   
   // Dim the color if blinking (reduce brightness to 30% for visible blink effect)
   if (blink) {
@@ -2549,32 +2553,35 @@ FLASHMEM void drawBPMScreen() {
   // In EXT mode: GREEN if stable, RED if not yet stable
   // In INT mode: CYAN
   extern bool getBPMStable();
-  if (isInt) {  // Use isInt (based on clockMode) not MIDI_CLOCK_SEND (which depends on midiSendMode)
-    // INT mode: always cyan
+  extern bool getAnalogExtClock();
+  const bool analogExt = !isInt && getAnalogExtClock();
+  if (isInt) {
     drawBPMWithReservedSpace(SMP.bpm, UI_CYAN, 6);
+  } else if (analogExt) {
+    drawBPMWithReservedSpace(SMP.bpm, CRGB(255, 165, 0), 6);
   } else {
-    // EXT mode: green if stable, red if not yet stable
     bool isStable = getBPMStable();
-    CRGB extColor = isStable ? CRGB(0, 255, 0) : CRGB(255, 0, 0); // Green if stable, Red if not
+    CRGB extColor = isStable ? CRGB(0, 255, 0) : CRGB(255, 0, 0);
     drawBPMWithReservedSpace(SMP.bpm, extColor, 6);
   }
-  
-  // Draw arrow at right edge (x=maxX-1, y=8)
-  // In EXT mode: blink the arrow in sync with MIDI clock (every 24th note)
+
   bool shouldBlink = false;
   if (!isInt) {
-    // EXT mode: get clock tick count for blinking
-    extern uint16_t getMidiClockTicks();
-    uint16_t clockTicks = getMidiClockTicks();
-    // Blink every 12 clocks (~half a beat at 24 PPQN): dim for first 6 ticks, bright for next 6
-    shouldBlink = ((clockTicks % 12) < 6);
+    if (analogExt) {
+      extern bool analogClockPulseFresh();
+      shouldBlink = !analogClockPulseFresh();
+    } else {
+      extern uint16_t getMidiClockTicks();
+      uint16_t clockTicks = getMidiClockTicks();
+      shouldBlink = ((clockTicks % 12) < 6);
+    }
   }
   drawMidiArrow(isInt, maxX - 1, 8, shouldBlink);
   
   // Add indicator to encoder[2]: L size, color matching arrow, encoder 3
   if (currentMode == &volume_bpm) {
-    // Green for INT, Red for EXT
-    char arrowColor = isInt ? 'G' : 'R';
+    // Green INT, red MIDI-in, orange analog PPQN-in
+    char arrowColor = isInt ? 'G' : (analogExt ? 'O' : 'R');
     drawIndicator('L', arrowColor, 3, false, false);
 
     static uint32_t lastBpmRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };

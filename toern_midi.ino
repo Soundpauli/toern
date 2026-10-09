@@ -98,7 +98,8 @@ static const float BPM_PROCESS_NOISE = 0.8f;             // Kalman filter: proce
 static const float BPM_MEASUREMENT_NOISE = 0.5f;         // Kalman filter: measurement noise (BPM measurement uncertainty) - HIGHER = harder filtering (reduced from 0.8 for faster sync)
 static const uint32_t CLOCKS_PER_BPM_WINDOW = 24 * 4;    // 4/4: 24 clocks/beat * 4 beats/bar = 96 clocks (calculate BPM every 1 bar for faster sync)
 static const unsigned long NO_CLOCK_TIMEOUT_US = 2000000; // 2 seconds: if no clock received, reset Kalman state
-static unsigned long lastClockReceivedTime = 0;          // Timestamp of last received clock
+static unsigned long lastClockReceivedTime = 0;          // Timestamp of last received clock (MIDI or analog)
+static unsigned long lastMidiClockUs = 0;                // MIDI F8 only — analog in yields while this is fresh
 static int lastStableBPM = 0;                            // Last BPM value for stability tracking
 static int stableBPMCount = 0;                           // Count of consecutive same BPM values
 static bool isBPMStable = false;                         // True if BPM has been stable (>2 consecutive same values)
@@ -138,15 +139,26 @@ static unsigned long lastClockSent = 0;
 // Track held notes per logical channel to avoid stuck counters on duplicate NoteOn events.
 static volatile bool midiHeldNote[17][128] = { false };
 
-// --- Analog clock pulse out on pin 31 (MENU>MIDI>PPQN). ---
-#define PULSE_CLOCK_PIN 31
+// Analog clock / sidechain on rev H dedicated 2-pin JSTs (not the J11 expansion row).
+// CLK-OUT(5V) J25 ← pin 37 via 74AHCT1G125; CLK-IN(3–5V) J26 → pin 38 via 74LVC1G17;
+// SIDEC-5V J27 ← pin 28 via 74AHCT1G125. Pin 31 on J11 is unused GPIO.
+#define PULSE_CLOCK_PIN 37
+#define ANALOG_CLOCK_IN_PIN 38
+#define SIDECHAIN_OUT_PIN 28
+#define LEGACY_PULSE_CLOCK_PIN 31
 #define PULSE_WIDTH_MS_MIN 1
 #define PULSE_WIDTH_MS_MAX 50
 #define PULSE_WIDTH_MS_DEFAULT 12
+#define ANALOG_CLOCK_REARM_US 500u
+#define ANALOG_IN_HOLD_MS_MIN 1
+#define ANALOG_IN_HOLD_MS_MAX 32
 // Encoder 3 turn: OFF + these PPQN values
 static const uint8_t PULSE_PPQN_TABLE[] = { 1, 2, 4, 8, 12, 16, 24, 32 };
 static const uint8_t PULSE_PPQN_COUNT = sizeof(PULSE_PPQN_TABLE) / sizeof(PULSE_PPQN_TABLE[0]);
 static const uint8_t PULSE_RATE_SEL_COUNT = PULSE_PPQN_COUNT + 1;  // 0=OFF, 1..N = table
+// Below 4 PPQN a pulse spans several 16th steps; see analogDirectPulse().
+static const uint8_t ANALOG_IN_PPQN_TABLE[] = { 1, 2, 4, 8, 12, 16, 24, 32 };
+static const uint8_t ANALOG_IN_PPQN_COUNT = sizeof(ANALOG_IN_PPQN_TABLE) / sizeof(ANALOG_IN_PPQN_TABLE[0]);
 
 static bool pulseClockEnabled = false;
 static bool pulseClockPolarityPositive = true;  // +: active high; -: active low
@@ -156,6 +168,23 @@ static uint8_t pulseClockPpqnIndex = 6;         // default 24 PPQN (table index)
 static uint16_t pulseClockPhase = 0;
 static IntervalTimer pulseEndTimer;
 static volatile bool pulseClockPinActive = false;
+static IntervalTimer sidechainEndTimer;
+static volatile bool sidechainPinActive = false;
+static volatile uint32_t analogClockLastUs = 0;   // last counted rise
+
+bool analogClockPulseFresh() {
+  if (!analogClockLastUs) return false;
+  return ((micros() - analogClockLastUs) / 1000u) < 80u;
+}
+static volatile uint32_t analogClockFallUs = 0;
+static volatile uint32_t analogClockPeriodUs = 0; // rise to rise (1/2 PPQN spacing)
+static volatile bool analogClockHigh = false;
+static uint8_t analogInPpqnIndex = 2;  // default 4 PPQN (Volca / 16ths)
+static volatile uint8_t analogSubstepsLeft = 0;  // 1/2 PPQN: steps still due before the next pulse
+static uint8_t analogInHoldMs = ANALOG_IN_HOLD_MS_MIN;
+static volatile uint32_t analogInHoldUs = ANALOG_IN_HOLD_MS_MIN * 1000u;
+static volatile uint8_t analogStepPulse = 0;  // pulse index within the current step
+static volatile uint8_t analogFillSubs = 0;   // fill sub-ticks fired in the current step
 
 static inline uint8_t pulseIdleLevel() {
   return pulseClockPolarityPositive ? LOW : HIGH;
@@ -191,6 +220,284 @@ static void pulseClockApplyIdle() {
   pinMode(PULSE_CLOCK_PIN, OUTPUT);
   digitalWriteFast(PULSE_CLOCK_PIN, pulseIdleLevel());
   pulseClockPinActive = false;
+}
+
+static void sidechainApplyIdle() {
+  pinMode(SIDECHAIN_OUT_PIN, OUTPUT);
+  digitalWriteFast(SIDECHAIN_OUT_PIN, pulseIdleLevel());
+  sidechainPinActive = false;
+}
+
+static void sidechainEndIsr() {
+  digitalWriteFast(SIDECHAIN_OUT_PIN, pulseIdleLevel());
+  sidechainEndTimer.end();
+  sidechainPinActive = false;
+}
+
+static uint8_t sidechainVoice = 1;  // 0=OFF, else 1–8 / 11 / 13 / 14
+static bool analogExtClock = false;  // EXT source: false = MIDI F8, true = analog CLK-IN (J26)
+
+static bool sidechainVoiceOk(uint8_t ch) {
+  return ch == 0 || (ch >= 1 && ch <= 8) || ch == 11 || ch == 13 || ch == 14;
+}
+
+uint8_t getSidechainVoice() { return sidechainVoice; }
+
+void setSidechainVoice(uint8_t ch) {
+  if (!sidechainVoiceOk(ch)) ch = 1;
+  sidechainVoice = ch;
+  extern void saveSingleModeToEEPROM(int index, int8_t value);
+  saveSingleModeToEEPROM(51, (int8_t)sidechainVoice);
+}
+
+void loadSidechainFromEEPROM() {
+  uint8_t ch = EEPROM.read(EEPROM_DATA_START + 51);
+  if (!sidechainVoiceOk(ch)) ch = 1;
+  sidechainVoice = ch;
+}
+
+bool getAnalogExtClock() { return analogExtClock; }
+
+static void analogClockSyncListen();
+
+void setAnalogExtClock(bool analog) {
+  analogExtClock = analog;
+  analogClockSyncListen();
+  extern void saveSingleModeToEEPROM(int index, int8_t value);
+  saveSingleModeToEEPROM(52, analogExtClock ? 1 : 0);
+}
+
+void toggleAnalogExtClock() {
+  setAnalogExtClock(!analogExtClock);
+}
+
+void loadAnalogExtClockFromEEPROM() {
+  uint8_t v = EEPROM.read(EEPROM_DATA_START + 52);
+  analogExtClock = (v == 1);
+  // Slot 53: bits 0-2 = CIN PPQN index, bits 3-7 = hold-off ms - 1.
+  uint8_t packed = EEPROM.read(EEPROM_DATA_START + 53);
+  uint8_t idx = packed & 0x07u;
+  if (idx >= ANALOG_IN_PPQN_COUNT) idx = 2;
+  analogInPpqnIndex = idx;
+  analogInHoldMs = (uint8_t)((packed >> 3) + 1u);
+  analogInHoldUs = (uint32_t)analogInHoldMs * 1000u;
+  analogClockSyncListen();
+}
+
+static void saveAnalogInSettings() {
+  extern void saveSingleModeToEEPROM(int index, int8_t value);
+  const uint8_t packed = (uint8_t)((analogInPpqnIndex & 0x07u) | ((uint8_t)(analogInHoldMs - 1u) << 3));
+  saveSingleModeToEEPROM(53, (int8_t)packed);
+}
+
+void sidechainOnVoice(uint8_t ch) {
+  if (!sidechainVoice || ch != sidechainVoice) return;
+  digitalWriteFast(SIDECHAIN_OUT_PIN, pulseActiveLevel());
+  sidechainPinActive = true;
+  uint32_t us = (uint32_t)pulseClockWidthMs * 1000u;
+  if (us < 1000u) us = 1000u;
+  sidechainEndTimer.priority(toern_audio::kTimerPriority);
+  sidechainEndTimer.begin(sidechainEndIsr, us);
+}
+
+static uint8_t analogClockInPpqn() {
+  return ANALOG_IN_PPQN_TABLE[analogInPpqnIndex];
+}
+
+uint8_t getAnalogInPpqn() { return analogClockInPpqn(); }
+uint8_t getAnalogInPpqnIndex() { return analogInPpqnIndex; }
+uint8_t getAnalogInPpqnCount() { return ANALOG_IN_PPQN_COUNT; }
+
+void setAnalogInPpqnIndex(uint8_t idx) {
+  if (idx >= ANALOG_IN_PPQN_COUNT) idx = ANALOG_IN_PPQN_COUNT - 1;
+  if (idx == analogInPpqnIndex) return;
+  noInterrupts();
+  analogInPpqnIndex = idx;
+  analogStepPulse = 0;
+  interrupts();
+  saveAnalogInSettings();
+}
+
+uint8_t getAnalogInHoldMs() { return analogInHoldMs; }
+
+void setAnalogInHoldMs(uint8_t ms) {
+  if (ms < ANALOG_IN_HOLD_MS_MIN) ms = ANALOG_IN_HOLD_MS_MIN;
+  if (ms > ANALOG_IN_HOLD_MS_MAX) ms = ANALOG_IN_HOLD_MS_MAX;
+  if (ms == analogInHoldMs) return;
+  analogInHoldMs = ms;
+  analogInHoldUs = (uint32_t)ms * 1000u;
+  saveAnalogInSettings();
+}
+
+void pulseClockOnTransportStart();
+
+static void analogPlayWholeStep() {
+  extern void playNote();
+  extern void playFillNote();
+  playNote();
+  for (uint8_t k = 0; k < 4u; k++) playFillNote();
+}
+
+static void analogSubstepIsr() {
+  extern IntervalTimer playTimer;
+  if (!analogSubstepsLeft || !isNowPlaying) {
+    analogSubstepsLeft = 0;
+    playTimer.end();
+    return;
+  }
+  analogSubstepsLeft--;
+  analogPlayWholeStep();
+  if (!analogSubstepsLeft) playTimer.end();
+}
+
+// Orange EXT: pulses are the only clock. Steps and fill sub-ticks fire from
+// here; playTimer/fillTimer stay stopped (see resetMidiClockState).
+static void analogDirectPulse() {
+  extern void playNote();
+  extern void playFillNote();
+  extern bool pendingStartOnBar;
+  extern int patternMode;
+  extern unsigned long playStartTime;
+  extern IntervalTimer playTimer;
+  extern IntervalTimer fillTimer;
+  if (pendingStartOnBar) {
+    pendingStartOnBar = false;
+    if (SMP_PATTERN_MODE && patternMode == 3) {
+      GLOB.page = GLOB.edit;
+      beat = (GLOB.page - 1) * maxX + 1;
+    } else if (SMP_PATTERN_MODE) {
+      beat = (GLOB.edit - 1) * maxX + 1;
+      GLOB.page = GLOB.edit;
+    } else {
+      beat = 1;
+      GLOB.page = 1;
+    }
+    fillHasTriggered = false;
+    fillRunning = false;
+    fillSubTick = 0;
+    fillStartSubTick = 0;
+    fillTriggerStep = 0;
+    fillTriggerRow = 0;
+    fillActiveChannel = 0;
+    fillActiveVelocity = 0;
+    fillActiveRow = 0;
+    fillActiveMidiPitch = NOTE_MIDI_PITCH_NONE;
+    playStartTime = millis();
+    analogStepPulse = 0;
+    analogSubstepsLeft = 0;
+    playTimer.end();
+    fillTimer.end();
+    isNowPlaying = true;
+    pulseClockOnTransportStart();
+  }
+  if (!isNowPlaying) return;
+
+  const uint8_t ppqn = analogClockInPpqn();
+  if (ppqn < 4u) {
+    // One pulse spans 4/ppqn steps: play one now, space the rest over the last
+    // pulse interval. Steps the next pulse finds still due fire at once so the
+    // bar stays on the pulses.
+    extern IntervalTimer playTimer;
+    playTimer.end();
+    while (analogSubstepsLeft) {
+      analogSubstepsLeft--;
+      analogPlayWholeStep();
+    }
+    analogPlayWholeStep();
+    const uint8_t stepsPerPulse = (uint8_t)(4u / ppqn);
+    const uint32_t period = analogClockPeriodUs;
+    if (period && period <= NO_CLOCK_TIMEOUT_US) {
+      analogSubstepsLeft = (uint8_t)(stepsPerPulse - 1u);
+      playTimer.begin(analogSubstepIsr, period / stepsPerPulse);
+    }
+    return;
+  }
+
+  const uint8_t pulsesPerStep = ppqn / 4u;
+  const uint8_t i = analogStepPulse;
+  const bool lastPulse = (uint8_t)(i + 1u) >= pulsesPerStep;
+  if (i == 0) {
+    analogFillSubs = 0;
+    playNote();
+  }
+  // Four fill sub-ticks per step, placed on the nearest pulse; below 16 PPQN
+  // the step's last pulse fires the ones that have no pulse of their own.
+  const uint8_t due = lastPulse ? 4u : (uint8_t)(4u * i / pulsesPerStep + 1u);
+  while (analogFillSubs < due) {
+    analogFillSubs++;
+    playFillNote();
+  }
+  analogStepPulse = lastPulse ? 0 : (uint8_t)(i + 1u);
+}
+
+FASTRUN static inline void analogClockCountRise(uint32_t now) {
+  if (analogClockLastUs && (uint32_t)(now - analogClockLastUs) < analogInHoldUs) return;
+  if (analogClockLastUs) analogClockPeriodUs = now - analogClockLastUs;
+  analogClockLastUs = now;
+  midiClockTickCounter++;
+  if (analogClockPeriodUs && analogClockPeriodUs <= NO_CLOCK_TIMEOUT_US) {
+    const float bpm = 60000000.0f / ((float)analogClockPeriodUs * (float)analogClockInPpqn());
+    int shown = (int)lroundf(bpm);
+    if (shown < BPM_MIN) shown = BPM_MIN;
+    if (shown > BPM_MAX) shown = BPM_MAX;
+    SMP.bpm = (float)shown;
+    extern double playNoteInterval;
+    playNoteInterval = (double)analogClockPeriodUs * (double)analogClockInPpqn() / 4.0;
+  }
+  analogDirectPulse();
+}
+
+FASTRUN static void analogClockIsr() {
+  const uint32_t now = micros();
+  const bool level = digitalReadFast(ANALOG_CLOCK_IN_PIN) != 0;
+  if (level) {
+    if (analogClockHigh) {
+      // Missed the falling edge: this CHANGE is a new pulse if hold-off has passed.
+      if (analogClockLastUs && (uint32_t)(now - analogClockLastUs) >= analogInHoldUs)
+        analogClockCountRise(now);
+      return;
+    }
+    analogClockHigh = true;
+    if ((uint32_t)(now - analogClockFallUs) < ANALOG_CLOCK_REARM_US) return;
+    analogClockCountRise(now);
+  } else if (analogClockHigh) {
+    analogClockHigh = false;
+    analogClockFallUs = now;
+  } else if ((uint32_t)(now - analogClockFallUs) >= ANALOG_CLOCK_REARM_US) {
+    analogClockCountRise(now);
+    analogClockFallUs = now;
+  }
+}
+
+static void analogClockSyncListen() {
+  detachInterrupt(digitalPinToInterrupt(ANALOG_CLOCK_IN_PIN));
+  pinMode(ANALOG_CLOCK_IN_PIN, INPUT_PULLDOWN);
+  analogClockHigh = digitalReadFast(ANALOG_CLOCK_IN_PIN) != 0;
+  extern int clockMode;
+  // EXT is 0 (encoder-3 analog click) or -1 (encoder-2 INT/EXT). Only INT (1) is silent.
+  if (!analogExtClock || clockMode == 1) return;
+  attachInterrupt(digitalPinToInterrupt(ANALOG_CLOCK_IN_PIN), analogClockIsr, CHANGE);
+  NVIC_SET_PRIORITY(IRQ_GPIO6789, toern_audio::kTimerPriority);
+}
+
+// If Play is armed while CLK-IN is already high, the rise ISR already ran
+// (and did nothing). Catch that pulse now so beat 1 is not delayed to the next one.
+void analogClockCatchIfHigh() {
+  extern bool pendingStartOnBar;
+  if (!analogExtClock || !pendingStartOnBar) return;
+  noInterrupts();
+  analogClockHigh = digitalReadFast(ANALOG_CLOCK_IN_PIN) != 0;
+  // DirectPulse, not CountRise: this pulse's rise already set lastUs, so hold-off
+  // would drop the catch and delay beat 1 until the next clock.
+  if (analogClockHigh) analogDirectPulse();
+  interrupts();
+}
+
+void initAnalogClockHardware() {
+  pinMode(LEGACY_PULSE_CLOCK_PIN, INPUT);
+  pulseClockApplyIdle();
+  sidechainApplyIdle();
+  analogClockSyncListen();
 }
 
 void pulseClockMidiTick() {
@@ -259,8 +566,11 @@ static void pulseClockSaveWidthToEEPROM() {
 
 void setPulseClockPolarityPositive(bool positive) {
   pulseClockPolarityPositive = positive;
-  if (pulseClockEnabled && !pulseClockPinActive) {
+  if (!pulseClockPinActive) {
     digitalWriteFast(PULSE_CLOCK_PIN, pulseIdleLevel());
+  }
+  if (!sidechainPinActive) {
+    digitalWriteFast(SIDECHAIN_OUT_PIN, pulseIdleLevel());
   }
   pulseClockSaveToEEPROM();
 }
@@ -341,6 +651,7 @@ void loadPulseClockFromEEPROM() {
   pulseClockWidthMs = w;
   bool on = (packed & 1) != 0;
   pulseClockEnabled = false;
+  initAnalogClockHardware();
   if (on) setPulseClockEnabled(true);
 }
 
@@ -557,14 +868,19 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
     midiClockTickCounter = 0;   // Reset clock tick counter for blinking
     initialBpmSyncDone = false; // Reset initial sync flag - will sync again in background
     
-    // Start internal timer with current BPM (will be adjusted by external clock)
-    if (SMP.bpm > 0.0f) {
+    // Orange EXT plays from CIN pulses only; red EXT runs the timer and syncs it to MIDI clock.
+    if (analogExtClock) {
+      analogSubstepsLeft = 0;
+      playTimer.end();
+      fillTimer.end();
+    } else if (SMP.bpm > 0.0f) {
       unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
       playTimer.begin(playNote, currentPlayNoteInterval);
     } else {
       playTimer.end();
     }
   }
+  analogClockSyncListen();
 }
 
 // Transport-start variant: ALWAYS re-phases the MIDI clock timer and sends
@@ -612,6 +928,9 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
   if (MIDI_CLOCK_SEND) { // Safeguard: Should only run in slave mode (EXT mode)
     return;
   }
+  if (analogExtClock) return;  // EXT analog: ignore MIDI F8 for tempo
+
+  lastMidiClockUs = now_captured;
 
   // Analog pulse out follows incoming MIDI clock in EXT mode
   pulseClockMidiTick();
@@ -1125,6 +1444,12 @@ void handleStart() {
     // If we're master and also listening to incoming start, re-broadcast start
     // Send early for better sync
     MIDI.sendRealTime(midi::Start);
+  }
+
+  if (!MIDI_CLOCK_SEND && analogExtClock) {
+    pendingStartOnBar = true;
+    analogClockCatchIfHigh();
+    return;
   }
 
   // Start after effective receive-side delay.

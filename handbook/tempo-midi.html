@@ -35,8 +35,9 @@
               <thead><tr><th>Mode</th><th>BPM colour</th><th>Meaning</th></tr></thead>
               <tbody>
                 <tr><td><strong>INT</strong></td><td>Cyan digits, <em>green arrow pointing right</em> ("out")</td><td><span class="hb-brand">TŒRN</span> is master; emits MIDI clock per <a href="midi.html#send">MIDI → SEND</a>. External gear can follow.</td></tr>
-                <tr><td><strong>EXT (locked)</strong></td><td>Green digits, <em>green arrow pointing left</em> ("in")</td><td>External clock is stable; the big number tracks the measured BPM coming in.</td></tr>
-                <tr><td><strong>EXT (locking)</strong></td><td>Red digits, <em>red arrow pointing left</em></td><td>Still measuring or jittery — wait, check cables, confirm the master is sending clock.</td></tr>
+                <tr><td><strong>EXT MIDI (locked)</strong></td><td>Green digits, <em>red &lt;</em> blinking</td><td>TRS MIDI clock is stable. Encoder 3 ring red.</td></tr>
+                <tr><td><strong>EXT analog</strong></td><td>Orange digits, <em>orange &lt;</em> flashing on each pulse</td><td>CLK-IN (J26) pulses drive play immediately (no lock wait) at the PPQN set on MIDI → CIN. The number is the measured tempo.</td></tr>
+                <tr><td><strong>EXT MIDI (locking)</strong></td><td>Red digits, red &lt;</td><td>Still measuring MIDI clock — wait, check the cable.</td></tr>
               </tbody>
             </table>
             <p><strong>Range:</strong> 40–300 BPM. <strong>Tap tempo:</strong> on this screen, repeated taps on the appropriate touch pad are averaged into the live BPM number — a few clean taps will settle it.</p>
@@ -56,7 +57,8 @@
                   <tr><th>Short</th><td>Draw-base colour toggle</td><td>Idle steps as channel tints vs darker base.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>INT ↔ EXT clock</td><td>Flips between internal master and external slave; the choice is remembered across power cycles.</td></tr>
+                  <tr><th>Turn</th><td>INT ↔ EXT clock</td><td>Green <strong>&gt;</strong> = internal master. Left arrow = slave.</td></tr>
+                  <tr><th>Click</th><td>MIDI in ↔ analog PPQN in</td><td>EXT only: <strong>red &lt;</strong> = TRS MIDI clock. <strong>Orange &lt;</strong> = CLK-IN (J26). Clicking from INT jumps to EXT on that source.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Set BPM (40–300)</td><td>When INT, this is the master tempo.</td></tr>

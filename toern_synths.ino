@@ -724,7 +724,9 @@ void playSound(int note, int ch, int velocity) {
   if (ch < 0 || ch >= INSTRUMENT_CHANNELS) {
     return;  // Invalid channel, skip
   }
-  
+  extern void sidechainOnVoice(uint8_t);
+  sidechainOnVoice(11);
+
   stopSound(note, ch);
   // Use current slot first, then advance (was: increment before use → first notes skipped voice 0).
   int voiceIdx = notePlaying[ch] % POLY_VOICES;
@@ -737,6 +739,9 @@ void playSound(int note, int ch, int velocity) {
 void playSequencedSound(int note, int ch, int velocity, uint32_t tick,
                         bool allowLegato) {
   if (ch < 0 || ch >= INSTRUMENT_CHANNELS) return;
+
+  extern void sidechainOnVoice(uint8_t);
+  sidechainOnVoice(11);
 
   if (sequencedSoundCurrentTick != tick) {
     sequencedSoundCurrentTick = tick;

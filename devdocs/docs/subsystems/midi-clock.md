@@ -12,14 +12,14 @@ description: MIDI I/O, master/slave clock, and transport handling.
 
 - TRS MIDI via Serial (custom `MidiSettings`, enlarged Serial8 buffers in `toern.ino`)  
 - `MIDI.h` handlers for note on/off, clock, start/stop  
-- Optional pulse-clock output helpers (`pulseClock*`, EEPROM load/store)
+- Analog pulse I/O: CLK-OUT pin 37 (`pulseClock*`), CLK-IN pin 38, SIDEC pin 28 (`sidechainOnVoice`, MIDI → SIDE). The CLK-IN GPIO interrupt is attached only in BPM orange EXT.
 
 ## Clock paths
 
 | Direction | Entry points |
 |-----------|----------------|
 | Soft MIDI clock out | `updateMidiClockOutput`, `midiClockTick` |
-| External clock in | `myClock`, averaging / BPM stability helpers |
+| External clock in | `myClock` (MIDI F8) and `analogClockIsr` (J26, orange EXT only) |
 | Sequencer beat | `playTimer` / playback aligned with transport state |
 
 `checkMidi()` is called early in `loop()` for lower latency.

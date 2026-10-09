@@ -448,7 +448,7 @@
 
                     <li id="midi">
                       <a href="midi.html"><span class="node">MIDI</span></a>
-                      <span class="desc">TRS MIDI in/out plus an optional analog PPQN pulse for modular / vintage friends.</span>
+                      <span class="desc">TRS MIDI in/out plus analog PPQN clock, analog clock-in, and a sidechain trigger.</span>
                       <ul>
                         <li>
                           <span class="node">CH</span>
@@ -518,7 +518,7 @@
                         </li>
                         <li>
                           <a href="midi.html#ppqn"><span class="node">PPQN</span></a>
-                          <span class="desc">Analog clock pulse on Teensy pin&nbsp;31 (J11 / I2SC_3V), independent of TRS MIDI.</span>
+                          <span class="desc">Analog clock on CLK-OUT J25 (5&nbsp;V) / CLK-IN J26 (3–5&nbsp;V), independent of TRS MIDI.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>Enc&nbsp;1 turn</strong> — pulse width <strong>1–50&nbsp;ms</strong> (default 12)</li>
@@ -526,7 +526,28 @@
                               <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong> or <strong>1, 2, 4, 8, 12, 16, 24, 32</strong> PPQN</li>
                               <li><strong>Enc&nbsp;3 click</strong> — polarity <strong>+</strong> / <strong>−</strong></li>
                             </ul>
-                            <span class="how">Follows INT BPM or EXT MIDI clock. DIY jack: white → tip, blue → sleeve — see <a href="midi.html#ppqn">MIDI → PPQN</a>.</span>
+                            <span class="how">Follows INT BPM or EXT MIDI/analog clock. Headers: see <a href="midi.html#ppqn">MIDI → PPQN</a>.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#side"><span class="node">SIDE</span></a>
+                          <span class="desc">Which voice pulses SIDEC-5V (J27).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong> or voices <strong>1–8, 11, 13, 14</strong> (default 1)</li>
+                            </ul>
+                            <span class="how">Width and +/− polarity follow PPQN. 5&nbsp;V trigger, not audio.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#cin"><span class="node">CIN</span></a>
+                          <span class="desc">CLK-IN (J26) rate and hold-off. In orange EXT each pulse drives play.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 turn</strong> — <strong>WID</strong> hold-off 1–32&nbsp;ms</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>PPQN</strong> 1 / 2 / 4 / 8 / 12 / 16 / 24 / 32</li>
+                            </ul>
+                            <span class="how">Same layout as PPQN. Headers: see <a href="midi.html#cin">MIDI → CIN</a>.</span>
                           </span>
                         </li>
                       </ul>

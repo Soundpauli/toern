@@ -2,12 +2,13 @@
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 12
 #define RECS_PAGES_COUNT 5
-#define MIDI_PAGES_COUNT 7
+#define MIDI_PAGES_COUNT 9
 #define VOL_PAGES_COUNT 7
 #define ETC_PAGES_COUNT 12
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
+static uint8_t g_cinFocus = 0;  // MIDI → CIN last turned: 0 PPQN (enc3), 1 width (enc1)
 // VOL→GAIN: encoder 3 edits ALL (1) or SYN (0). Click toggles.
 static uint8_t g_gainEnc3IsAll = 1;
 static uint8_t g_gainUiFocus = 3; // 0=1-4, 1=5-8, 2=SYN, 3=ALL
@@ -124,6 +125,8 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"CLMP", 51, false, nullptr},         // Fold incoming pitch into the visible grid (ON/OFF)
   {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 −127..+127 ms (+ = this path, − = other path)
   {"PPQN", 50, false, nullptr},         // Analog clock: enc1 width, enc2 STOP/CONT, enc3 rate + click POL
+  {"SIDE", 58, false, nullptr},         // Sidechain out: which voice pulses J27
+  {"CIN", 59, false, nullptr},          // Analog CLK-IN (J26): pulse count + input PPQN
 };
 
 // VOL submenu pages
@@ -403,7 +406,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 50; // [49]=EYES; [48]=IMG; [47]=FIRE colour; [46]=FIRE gravity; [45]=FIRE size; [44]=FIRE count; [43]=FIRE voice; [42]=VMOD
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 54; // [53]=CIN PPQN idx + hold-off; [52]=EXT analog CLK-IN; [51]=SIDE …
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -789,6 +792,9 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 47, 8);   // fireColor default (full voice colour)
       EEPROM.write(EEPROM_DATA_START + 48, 0);   // imageMode default (OFF)
       EEPROM.write(EEPROM_DATA_START + 49, 1);   // eyesMode default (1 min)
+      EEPROM.write(EEPROM_DATA_START + 51, 1);   // SIDE voice default (CH1)
+      EEPROM.write(EEPROM_DATA_START + 52, 0);   // EXT clock source: 0=MIDI, 1=analog PPQN
+      EEPROM.write(EEPROM_DATA_START + 53, 2);   // CIN: 4 PPQN, 1 ms hold-off
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -1128,6 +1134,10 @@ FLASHMEM void loadMenuFromEEPROM() {
   {
     extern void loadPulseClockFromEEPROM();
     loadPulseClockFromEEPROM();
+    extern void loadSidechainFromEEPROM();
+    loadSidechainFromEEPROM();
+    extern void loadAnalogExtClockFromEEPROM();
+    loadAnalogExtClockFromEEPROM();
   }
 
   {
@@ -1760,10 +1770,10 @@ FLASHMEM void showMidiMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // MIDI: encoder 2 = value on CH/TRAN/SEND/RCVE/CLMP; enc1+2 = SYNC;
+  // MIDI: encoder 2 = value on CH/TRAN/SEND/RCVE/CLMP/SIDE; enc1+2 = SYNC;
   // PPQN: enc1=width, enc2=STOP/CONT, enc3=OFF/rate (click=POL); enc4 = page nav
   CRGB indicatorColor = currentMenuParentTextColor();
-  const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 51 || mainSetting == 45 || mainSetting == 50);
+  const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 51 || mainSetting == 45 || mainSetting == 50 || mainSetting == 58 || mainSetting == 59);
   Encoder[0].writeRGBCode(0x000000);
   if (mainSetting == 50) {
     extern bool getPulseClockPolarityPositive();
@@ -1773,6 +1783,11 @@ FLASHMEM void showMidiMenu() {
     Encoder[0].writeRGBCode(0xFFFFFF);
     Encoder[1].writeRGBCode(stopPlay ? 0xFF0000 : 0x00FF00);
     Encoder[2].writeRGBCode(polPos ? 0x00FF00 : 0xFF0000);
+    Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
+  } else if (mainSetting == 59) {
+    Encoder[0].writeRGBCode(0xFFFFFF);
+    Encoder[1].writeRGBCode(0x000000);
+    Encoder[2].writeRGBCode(0xFFFFFF);
     Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
   } else {
     Encoder[1].writeRGBCode(mainSetting == 45 ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -2310,6 +2325,42 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawIndicator('L', 'W', 1);
       drawIndicator('L', stopPlay ? 'R' : 'G', 2);
       drawIndicator('L', polPos ? 'G' : 'R', 3);
+      break;
+    }
+
+    case 58: { // SIDE - which voice pulses analog sidechain out
+      extern uint8_t getSidechainVoice();
+      extern CRGB col[];
+      const uint8_t ch = getSidechainVoice();
+      drawText("SIDE", 2, 10, currentMenuParentTextColor());
+      if (!ch) {
+        drawMenuValue("OFF", 2, 3, UI_RED);
+        drawIndicator('L', 'R', 3);
+      } else {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%u", (unsigned)ch);
+        drawMenuValue(buf, 2, 3, col[ch]);
+        drawIndicator('L', 'G', 3);
+      }
+      break;
+    }
+
+    case 59: { // CIN - enc1 width (hold-off ms), enc3 PPQN
+      extern uint8_t getAnalogInPpqn();
+      extern uint8_t getAnalogInHoldMs();
+      const CRGB tc = currentMenuParentTextColor();
+      char buf[8];
+      if (g_cinFocus == 1) {
+        drawText("WID", 2, 10, tc);
+        snprintf(buf, sizeof(buf), "%u", (unsigned)getAnalogInHoldMs());
+        drawMenuValue(buf, 2, 3, UI_WHITE);
+      } else {
+        drawText("CIN", 2, 10, tc);
+        snprintf(buf, sizeof(buf), "%u", (unsigned)getAnalogInPpqn());
+        drawMenuValue(buf, 2, 3, UI_WHITE);
+      }
+      drawIndicator('L', 'W', 1);
+      drawIndicator('L', 'W', 3);
       break;
     }
       
@@ -3302,6 +3353,84 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = (unsigned int)rateSel;
         lastPpqnRate = rateSel;
         g_ppqnUiFocus = 0;
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 58: { // SIDE - encoder 3 selects voice (OFF, 1–8, 11, 13, 14)
+      static const uint8_t kSideChoices[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14 };
+      static const int kSideCount = 12;
+      static int lastSideEnc = -1;
+      extern uint8_t getSidechainVoice();
+      extern void setSidechainVoice(uint8_t);
+      int voiceIdx = 1;
+      uint8_t cur = getSidechainVoice();
+      for (int i = 0; i < kSideCount; i++) {
+        if (kSideChoices[i] == cur) voiceIdx = i;
+      }
+      if (menuFirstEnter) {
+        Encoder[2].writeMin((int32_t)0);
+        Encoder[2].writeMax((int32_t)(kSideCount - 1));
+        Encoder[2].writeCounter((int32_t)voiceIdx);
+        currentMode->pos[2] = (unsigned int)voiceIdx;
+        lastSideEnc = voiceIdx;
+        menuFirstEnter = false;
+      }
+      if ((int)currentMode->pos[2] != lastSideEnc) {
+        int raw = constrain((int)currentMode->pos[2], 0, kSideCount - 1);
+        setSidechainVoice(kSideChoices[raw]);
+        voiceIdx = raw;
+        Encoder[2].writeCounter((int32_t)voiceIdx);
+        currentMode->pos[2] = (unsigned int)voiceIdx;
+        lastSideEnc = voiceIdx;
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 59: { // CIN - enc1 width (hold-off ms), enc3 PPQN
+      extern uint8_t getAnalogInHoldMs();
+      extern void setAnalogInHoldMs(uint8_t);
+      extern uint8_t getAnalogInPpqnIndex();
+      extern uint8_t getAnalogInPpqnCount();
+      extern void setAnalogInPpqnIndex(uint8_t);
+      static const int kCinHoldMin = 1;
+      static const int kCinHoldMax = 32;
+      static int lastCinHold = -1;
+      static int lastCinRate = -1;
+      const int rateMax = (int)getAnalogInPpqnCount() - 1;
+      if (menuFirstEnter) {
+        Encoder[0].writeMin((int32_t)kCinHoldMin);
+        Encoder[0].writeMax((int32_t)kCinHoldMax);
+        Encoder[0].writeCounter((int32_t)getAnalogInHoldMs());
+        Encoder[2].writeMin((int32_t)0);
+        Encoder[2].writeMax((int32_t)rateMax);
+        Encoder[2].writeCounter((int32_t)getAnalogInPpqnIndex());
+        currentMode->pos[0] = (unsigned int)getAnalogInHoldMs();
+        currentMode->pos[2] = (unsigned int)getAnalogInPpqnIndex();
+        lastCinHold = (int)currentMode->pos[0];
+        lastCinRate = (int)currentMode->pos[2];
+        g_cinFocus = 0;
+        menuFirstEnter = false;
+      }
+      if ((int)currentMode->pos[0] != lastCinHold) {
+        setAnalogInHoldMs((uint8_t)constrain((int)currentMode->pos[0], kCinHoldMin, kCinHoldMax));
+        lastCinHold = (int)getAnalogInHoldMs();
+        Encoder[0].writeCounter((int32_t)lastCinHold);
+        currentMode->pos[0] = (unsigned int)lastCinHold;
+        g_cinFocus = 1;
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      if ((int)currentMode->pos[2] != lastCinRate) {
+        setAnalogInPpqnIndex((uint8_t)constrain((int)currentMode->pos[2], 0, rateMax));
+        lastCinRate = (int)getAnalogInPpqnIndex();
+        Encoder[2].writeCounter((int32_t)lastCinRate);
+        currentMode->pos[2] = (unsigned int)lastCinRate;
+        g_cinFocus = 0;
         menuRequestFullRedraw();
         redrawMain(setting);
       }

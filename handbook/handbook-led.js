@@ -298,7 +298,7 @@
   function midiSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
     m.clear();
     largeInd4Parent(m, 8);
-    drawSubmenuDots16(m, pageIdx, 7, 8);
+    drawSubmenuDots16(m, pageIdx, 9, 8);
     const tc = menuTextFromCol(8);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc1) m.indL(1, enc1);
@@ -929,6 +929,14 @@
     md_ppqn(m) {
       midiSubFrame(m, 6, "PPQN", "W", "G", "G");
       drawText(m, "+24", 2, 3, 0, 255, 0);
+    },
+    md_side(m) {
+      midiSubFrame(m, 7, "SIDE", "", "", "G");
+      drawText(m, "1", 2, 3, 255, 0, 0);
+    },
+    md_cin(m) {
+      midiSubFrame(m, 8, "CIN", "W", "", "W");
+      drawText(m, "0", 2, 3, 0, 255, 0);
     },
     et_info(m) {
       etcSubFrame(m, 0, "INFO", "", "", "");

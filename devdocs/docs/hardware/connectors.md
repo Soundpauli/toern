@@ -47,6 +47,20 @@ Several **1×05 pin sockets** share the same bus (examples: `J2`, `J18`–`J24`)
 
 These match Duppa / i2cEncoderLibV2-style modules used in firmware.
 
+## Analog clock / sidechain (JST-PH 1×02)
+
+Silk on rev H. Pads: **1** = signal, **2** = GND.
+
+| Silk | Ref | Teensy pin | Path |
+|------|-----|------------|------|
+| **CLK-OUT(5V)** | **J25** | **37** | MCU → 74AHCT1G125 (`U15`, 5 V) → 1 kΩ → jack |
+| **CLK-IN(3-5V)** | **J26** | **38** | Jack → 22 kΩ → Schottky clamp (`D2`) → 74LVC1G17 Schmitt (`U14`, 3.3 V) → MCU |
+| **SIDEC-5V** | **J27** | **28** | MCU → 74AHCT1G125 (`U16`, 5 V) → 1 kΩ → jack |
+
+Firmware: MENU → MIDI → PPQN drives **J25** (rate / width / polarity / STOP). MENU → MIDI → **CIN** sets the **J26** rate (1–32 PPQN) and hold-off. The pin-38 interrupt is attached only in BPM orange EXT and then calls `playNote()` / `playFillNote()` directly; `fillTimer` stays stopped, and `playTimer` only runs as a pulse-relocked one-shot that spaces the extra steps at 1/2 PPQN. Rev H **D2** (BAT54S) is placed with common and cathode swapped, which holds U14's input at 3.3 V. Remove it, or refit with pin 1 = GND, pin 3 = signal, pin 2 = +3.3 V. Without D2 the input is only safe up to 5 V. MENU → MIDI → **SIDE** picks which voice pulses **J27** (same width/polarity as PPQN; OFF disables).
+
+Do not use **J11** pin 31 for clock — that pad is unused GPIO.
+
 ## Expansion JST-PH 1×05
 
 | Ref | Pad 1 | Pad 2 | Pad 3 | Pad 4 | Pad 5 |
@@ -58,7 +72,7 @@ These match Duppa / i2cEncoderLibV2-style modules used in firmware.
 | **J14** | `14` | `9` | `16` | +3.3V | GND |
 | **J15** | `33` MCLK2 | `32` | `41` | +3.3V | GND |
 
-Handbook note: **J11** exposes pin **31** (+ GND) for a DIY pulse-clock / trigger cable (MIDI → PPQN). Prefer the **3.3V** header (`J11`) for logic-level accessories unless the peripheral needs 5V (`J11.5`).
+**J11** / **J11.5** are I2C2 + pin 31 expansion, not the analog clock jacks (those are **J25–J27** above).
 
 ## Codec I²C
 

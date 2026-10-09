@@ -17,7 +17,8 @@ struct Mode;
 //#define AUDIO_BLOCK_SAMPLES 128
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
 
-//STILL FREE PINS: 24, 25, 22, 5, 15, 2, 4, 14, 9, 32, 33  (31 = MIDI>PPQN pulse out)
+//STILL FREE PINS: 24, 25, 22, 5, 15, 2, 4, 14, 9, 32, 33, 31
+// CLK-OUT J25 = 37, CLK-IN J26 = 38, SIDEC J27 = 28 (rev H 5V analog I/O)
 static const int FAST_DROP_BLOCKS = 5;  // ≈25ms @ 44100Hz with 128-sample blocks (reduced from 200ms to minimize trimming)
 static int fastDropRemaining = 0;
 volatile bool stepIsDue = false;
@@ -2845,7 +2846,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
-        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51)) ||
+        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
     if (mainSetting != 15 && !encoder2ValuePage) {
@@ -3171,6 +3172,29 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       }
       return;
     }
+  }
+
+  if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // encoder 3 click
+    // EXT source: red < = MIDI clock in, orange < = analog CLK-IN (J26).
+    extern void toggleAnalogExtClock();
+    extern void resetMidiClockState();
+    extern void drawBPMScreen();
+    toggleAnalogExtClock();
+    if (clockMode == 1) {
+      clockMode = 0;
+      currentMode->pos[2] = 0;
+      Encoder[2].writeCounter((int32_t)0);
+      extern void saveSingleModeToEEPROM(int index, int8_t value);
+      saveSingleModeToEEPROM(1, clockMode);
+      extern bool MIDI_CLOCK_SEND;
+      extern bool MIDI_NOTE_SEND;
+      extern int midiSendMode;
+      MIDI_CLOCK_SEND = false;
+      MIDI_NOTE_SEND = (midiSendMode != 0);
+    }
+    resetMidiClockState();
+    drawBPMScreen();
+    return;
   }
 
   if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
@@ -3893,6 +3917,8 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
   const float scale = isNeoSliderControlledChannel(ch) ? neoSliderVelScale[ch - 1] : 1.0f;
   const float amp = noteN * scale;
   if (amp <= 0.0f) return;
+  extern void sidechainOnVoice(uint8_t);
+  sidechainOnVoice((uint8_t)ch);
   toern_audio::StateGuard guard;  // amplitude, reader reset/rate and envelope are one transaction
   applyPlayAmplitude(ch, amp);
   if (isNeoSliderControlledChannel(ch)) {
@@ -4314,6 +4340,9 @@ FLASHMEM void setup() {
 
   // SPKR pin 30: set as INPUT_PULLDOWN as early as possible
   pinMode(30, INPUT_PULLDOWN);
+
+  extern void initAnalogClockHardware();
+  initAnalogClockHardware();
 
   // Note: FastLED initialization moved earlier (before boot-hold check) for visual feedback
 
@@ -8116,6 +8145,9 @@ void play(bool fromStart) {
       // slave-mode: arm for the next bar-1 instead of starting now
       pendingStartOnBar = true;
       isNowPlaying = false;  // It's not playing YET. MIDI clock will start it.
+      extern bool getAnalogExtClock();
+      extern void analogClockCatchIfHigh();
+      if (getAnalogExtClock()) analogClockCatchIfHigh();
     }
   }
   // If !fromStart, it implies a continue, which MIDI also supports.
@@ -8187,6 +8219,9 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
   if (ch >= 13 && ch <= 14 && !persistant && pressedKeyCount[ch] > 0) {
     return;
   }
+
+  extern void sidechainOnVoice(uint8_t);
+  sidechainOnVoice((uint8_t)ch);
 
   float frequency;
   if (midiPitchOverride >= 0 && midiPitchOverride <= 127) {

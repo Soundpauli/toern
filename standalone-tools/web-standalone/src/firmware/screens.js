@@ -40,7 +40,7 @@ export const MENU_PAGES = [
 export const SUBS = {
   look: ["FLW", "PREV", "VIEW", "PMD", "LOOP", "VMOD", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"],
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
-  midi: ["CH", "TRAN", "SEND", "RCVE", "CLMP", "SYNC", "PPQN"],
+  midi: ["CH", "TRAN", "SEND", "RCVE", "CLMP", "SYNC", "PPQN", "SIDE", "CIN"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
   etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "CHLD", "FIRE", "RSET"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
