@@ -1,0 +1,9 @@
+1_drums_Kick
+2_drums_Snare
+3_bass_Bass root 45, tune 20c | root MIDI 45
+4_other_Lead/Keys root 62, tune 0c | root MIDI 62
+5_drums_HiHat
+6_drums_unused
+7_unused_unused
+8_unused_unused
+11_vocals_Vocal melody -> CH11 poly synth

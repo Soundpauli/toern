@@ -560,7 +560,16 @@ FLASHMEM void loadPattern(bool autoload) {
     delay(500);
   }
   loadSMPSettings();
-  
+
+  // Restore sampler TIME. New files encode TIME+1 in the legacy SPEED slot.
+  // Old files normally contain 0 here and therefore remain backward-compatible:
+  // they load with TIME OFF (11), matching the current neutral/default behavior.
+  for (int ch = 1; ch <= 8; ch++) {
+    const int encoded = (int)lroundf(SMP.filter_settings[ch][SPEED]);
+    const int stretch = (encoded >= 1 && encoded <= 22) ? (encoded - 1) : 11;
+    setSampleTimeStretch(ch, (uint8_t)stretch);
+  }
+
   if (!autoload) {
     if (!isNowPlaying) {
       delay(500);

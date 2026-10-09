@@ -748,6 +748,22 @@ export class ToernSdSerial {
     });
   }
 
+  /** One-line command that answers with a single OK/ERR line (e.g. IMPORTSAVE). */
+  command(line, timeoutMs = 15000) {
+    return this._enqueue(async () => {
+      if (this._rxLen) this._clearRx();
+      sdLog("cmd → " + line);
+      await this._write(line + "\n");
+      for (let n = 0; n < 6; n++) {
+        const reply = (await this._readLine(timeoutMs)).trim();
+        sdLog("cmd ← " + JSON.stringify(reply));
+        if (/^OK TOERN SD/.test(reply)) continue;
+        return this._expectOk(reply);
+      }
+      throw new Error("no reply to " + line);
+    });
+  }
+
   rename(src, dst) {
     return this._enqueue(async () => {
       if (this._rxLen) this._clearRx();

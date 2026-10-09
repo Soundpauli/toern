@@ -578,8 +578,11 @@ export function createDevice(matrix, statusEl, rings) {
     const x = cond === 18 ? 4 : cond === 19 ? 8 : cond === 20 ? 16 : 2;
     return n % x === 1;
   }
+  let onStepHook = null;
+  let onTransportHook = null;
   function fire(step, when) {
     fired.push({ step, when });
+    if (onStepHook) onStepHook(step, when);
     if (fired.length > 8) fired.shift();
     if (s.voiceMode) refreshVoiceLens();
     // Sample voices 1–8 are monophonic (one sampler per channel, like firmware
@@ -616,6 +619,7 @@ export function createDevice(matrix, statusEl, rings) {
     applyMix();
     s.playing = !s.playing;
     if (!s.playing) queueAutosave();
+    if (onTransportHook) onTransportHook(s.playing);
     if (s.playing) {
       if (s.voiceMode && s.pmode !== 2) {
         refreshVoiceLens();
@@ -2071,7 +2075,29 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.mode === "boot") return;
       writeGenre(type);
     },
-    importMidi(cells, bpm) {
+    audioContext() { return engine.ensure(); },
+    onStep(fn) { onStepHook = fn; },
+    onTransport(fn) { onTransportHook = fn; },
+    /** Audio import: voices 1–8 get decoded buffers and IMPORTSAVE's neutral settings. */
+    loadImportVoices(buffers, names = {}, { resetSettings = true } = {}) {
+      for (let ch = 1; ch <= 8; ch++) {
+        const buffer = buffers[ch];
+        if (!buffer) continue;
+        engine.loadBuffer(ch, buffer);
+        s.sampleUrl[ch] = null;
+        if (!resetSettings) continue;
+        seekOf[ch] = 0;
+        endOf[ch] = 100;
+        invOf[ch] = false;
+        Object.assign(filt[ch], emptyFilt(), { att: 32, dec: 32, sus: 32, rel: 0 });
+        chVol[ch] = 16;
+        s.mute[ch] = false;
+        applyFilt(ch);
+      }
+      const ch = s.GLOB.currentChannel;
+      if (names[ch]) s.wavName = String(names[ch]).slice(0, 8).toUpperCase();
+    },
+    importMidi(cells, bpm, { exactBpm = false, keepTransport = false } = {}) {
       if (s.mode === "boot") return;
       for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
       for (const cell of cells || []) {
@@ -2083,7 +2109,11 @@ export function createDevice(matrix, statusEl, rings) {
         n.condition = 1;
         n.midiPitch = cell.midiPitch <= 127 ? cell.midiPitch : 255;
       }
-      if (Number.isFinite(bpm)) s.bpm = clamp(Math.round(bpm), 40, 240);
+      if (Number.isFinite(bpm)) s.bpm = clamp(exactBpm ? Math.round(bpm * 100) / 100 : Math.round(bpm), 40, 240);
+      if (keepTransport) {
+        queueAutosave();
+        return;
+      }
       s.GLOB.edit = 1;
       s.GLOB.page = 1;
       s.GLOB.x = 1;

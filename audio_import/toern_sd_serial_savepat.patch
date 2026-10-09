@@ -1,0 +1,101 @@
+--- a/toern_sd_serial.ino
++++ b/toern_sd_serial.ino
+@@
+ //   GETPAT / PUTPAT <size> <crc32>
+ //     Same framing as GET / PUT, but the bytes are the current pattern in RAM
+ //     (notes, BPM, MIDI pitches). Nothing is written to the SD card.
++//   IMPORTCFG <pack>
++//     Load samplepack and apply neutral/source-faithful sample playback settings.
++//   SAVEPAT <slot>
++//     Save current RAM pattern + SMP settings to normal pattern slot 1..999.
+@@
+ static void sdSerCmdPutPat(char *args) {
+@@
+ }
++
++static bool sdSerParseSlot(const char *args, long &slot) {
++  if (!args || !*args) return false;
++  char *end = nullptr;
++  slot = strtol(args, &end, 10);
++  while (end && (*end == ' ' || *end == '\t')) end++;
++  return slot >= 1 && slot <= 999 && (!end || *end == '\0');
++}
++
++static void sdSerCmdImportCfg(const char *args) {
++  long pack = 0;
++  if (!sdSerParseSlot(args, pack)) {
++    sdSerReply("ERR SLOT");
++    return;
++  }
++
++  sdSerAudioStopForSd();
++
++  // Source-derived packs should be heard as recorded: full volume, no reverb,
++  // no bitcrush, no low-cut, high-cut fully open, no sample detune/octave offset.
++  // ATTACK storage is reversed in setParams(): 32 => 0 ms.
++  for (int ch = 1; ch <= 8; ch++) {
++    SMP.channelVol[ch] = 16;
++    SMP.filter_settings[ch][HCUT] = 32;
++    SMP.filter_settings[ch][LOWCUT] = 0;
++    SMP.filter_settings[ch][REVERB] = 0;
++    SMP.filter_settings[ch][BITCRUSHER] = 0;
++    SMP.filter_settings[ch][DETUNE] = 16;
++    SMP.filter_settings[ch][OCTAVE] = 16;
++    SMP.filter_settings[ch][RES] = 0;
++    SMP.param_settings[ch][ATTACK] = 32;
++    SMP.param_settings[ch][DECAY] = 0;
++    SMP.param_settings[ch][SUSTAIN] = 32;
++    SMP.param_settings[ch][RELEASE] = 0;
++    detune[ch] = 0.0f;
++    channelOctave[ch] = 0.0f;
++    setSampleTimeStretch(ch, 0);
++  }
++
++  SMP.pack = (unsigned int)pack;
++  loadSamplePack((unsigned int)pack, false, false);
++  reapplyAllSampleChannelGains();
++
++  // Apply ADSR values immediately to the live envelopes.
++  for (int ch = 1; ch <= 8; ch++) {
++    setParams(ATTACK, ch);
++    setParams(DECAY, ch);
++    setParams(SUSTAIN, ch);
++    setParams(RELEASE, ch);
++  }
++  sdSerReplyFlush("OK");
++}
++
++static void sdSerCmdSavePat(const char *args) {
++  long slot = 0;
++  if (!sdSerParseSlot(args, slot)) {
++    sdSerReply("ERR SLOT");
++    return;
++  }
++  sdSerAudioStopForSd();
++  SMP.file = (unsigned int)slot;
++  savePattern(false);
++  sdSerReplyFlush("OK");
++}
+@@
+   } else if (strcasecmp(cmd, "PUTPAT") == 0) {
+     sdSerCmdPutPat(args);
++  } else if (strcasecmp(cmd, "IMPORTCFG") == 0) {
++    sdSerCmdImportCfg(args);
++  } else if (strcasecmp(cmd, "SAVEPAT") == 0) {
++    sdSerCmdSavePat(args);
+   } else {
+     sdSerReply("ERR UNKNOWN");
+   }
+@@
+   } else if (strcasecmp(cmd, "PUTPAT") == 0) {
+     sdSerNoteHostPresent();
+     sdSerCmdPutPat(args);
++  } else if (strcasecmp(cmd, "IMPORTCFG") == 0) {
++    sdSerNoteHostPresent();
++    sdSerCmdImportCfg(args);
++  } else if (strcasecmp(cmd, "SAVEPAT") == 0) {
++    sdSerNoteHostPresent();
++    sdSerCmdSavePat(args);
+   } else {
+     sdSerReply("ERR NEED_SD");
+   }

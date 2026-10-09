@@ -490,6 +490,9 @@ void processAdjustments_new(uint8_t page) {
 
       case ARR_STRETCH:
         setSampleTimeStretch(chan, currentMode->pos[i]);
+        // Device/SMP currently has no dedicated TIME field. Persist it in the
+        // legacy SPEED filter slot as value+1. Zero remains a legacy/no-value marker.
+        SMP.filter_settings[chan][SPEED] = (float)(constrain((int)currentMode->pos[i], 0, 21) + 1);
         break;
 
       default:

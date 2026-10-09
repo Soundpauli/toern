@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createReadStream } from "node:fs";
 import { defineConfig } from "vite";
+import { audioImportServer } from "./audioImportServer.js";
 
 function walk(dir, base = "") {
   const out = [];
@@ -64,5 +65,5 @@ export default defineConfig({
   root: ".",
   base: "/",
   server: { port: 5173, strictPort: true },
-  plugins: [sdFiles()],
+  plugins: [sdFiles(), audioImportServer()],
 });

@@ -1,0 +1,10 @@
+demucs
+librosa>=0.10.2
+numpy
+scipy
+soundfile
+pretty_midi
+pyserial
+basic-pitch
+setuptools==65.5.0
+scikit-learn==1.5.1

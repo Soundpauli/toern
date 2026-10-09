@@ -22,13 +22,20 @@
 //   GETPAT / PUTPAT <size> <crc32>
 //     Same framing as GET / PUT, but the bytes are the current pattern in RAM
 //     (notes, BPM, MIDI pitches). Nothing is written to the SD card.
+//   IMPORTSAVE <slot>
+//     Configure source-faithful sampler defaults, load samplepack <slot>, save the
+//     current RAM pattern through the normal TŒRN save path, then load it back
+//     through the normal TŒRN pattern loader. This persists the full SMP struct.
 //
 // LIST file lines: F <size> <duration_ms> <name>  (duration_ms = -1 if unknown/non-WAV)
 // Binary transfers follow PUT/GET handshake; CRC32 is IEEE (zlib/binascii compatible).
 
 #if defined(ARDUINO)
 
-static const size_t SD_SER_CHUNK = 4096;
+// Reliability over raw speed: smaller synchronous SdFat writes avoid short
+// writes/ERR IO on some cards while USB CDC is active. The external PUT ACK
+// framing stays 8192 bytes, so existing host tools remain compatible.
+static const size_t SD_SER_CHUNK = 512;
 static const size_t SD_SER_PUT_BLOCK = 8192;  // host waits for ACK after each block (USB flow control)
 static const size_t SD_SER_GET_BLOCK = 512;   // host ACKs each block (USB flow control)
 static const uint32_t SD_SER_IO_TIMEOUT_MS = 60000;
@@ -763,6 +770,134 @@ static void sdSerCmdPutPat(char *args) {
   showDrawAfterPatternTransfer();
 }
 
+static bool sdSerParsePatternSlot(const char *args, long &slot) {
+  if (!args || !*args) return false;
+  char *end = nullptr;
+  slot = strtol(args, &end, 10);
+  while (end && (*end == ' ' || *end == '\t')) end++;
+  return slot >= 1 && slot <= 999 && (!end || *end == '\0');
+}
+
+// TIME is a runtime array, not part of Device/SMP in the current firmware.
+// We persist it backward-compatibly in the otherwise unused legacy SPEED slot:
+// stored = TIME + 1, so legacy zero means "not stored" and loads as OFF (11).
+static inline void sdSerStoreTimeStretchInSmp(int ch, uint8_t value) {
+  SMP.filter_settings[ch][SPEED] = (float)(constrain((int)value, 0, 21) + 1);
+}
+
+static bool sdSerImportedSettingsOk(unsigned int slot) {
+  if (SMP.file != slot || SMP.pack != slot) return false;
+  for (int ch = 1; ch <= 8; ch++) {
+    if ((int)lroundf(SMP.channelVol[ch]) != 16) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][HCUT]) != 32) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][LOWCUT]) != 0) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][REVERB]) != 0) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][BITCRUSHER]) != 0) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][DETUNE]) != 16) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][OCTAVE]) != 24) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][RES]) != 0) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][EFX]) != 0) return false;
+    if ((int)lroundf(SMP.filter_settings[ch][SPEED]) != 12) return false; // TIME OFF = 11, encoded +1
+    if ((int)lroundf(SMP.param_settings[ch][ATTACK]) != 32) return false;
+    if ((int)lroundf(SMP.param_settings[ch][DECAY]) != 32) return false;
+    if ((int)lroundf(SMP.param_settings[ch][SUSTAIN]) != 32) return false;
+    if ((int)lroundf(SMP.param_settings[ch][RELEASE]) != 0) return false;
+  }
+  return true;
+}
+
+static void sdSerCmdImportSave(const char *args) {
+  long slotLong = 0;
+  if (!sdSerParsePatternSlot(args, slotLong)) {
+    sdSerReply("ERR SLOT");
+    return;
+  }
+  const unsigned int slot = (unsigned int)slotLong;
+
+  sdSerAudioStopForSd();
+
+  // Force ordinary samplepack paths (<slot>/1.wav ... <slot>/8.wav), not custom
+  // browser selections, then load the pack before applying playback parameters.
+  for (int ch = 1; ch <= 8; ch++) {
+    SMP.samplePathRel[ch][0] = '\0';
+    SMP.sp0Active[ch] = false;
+  }
+  SMP.pack = slot;
+  loadSamplePack(slot, false, false);
+
+  // Use TŒRN's own current defaults. This is deliberately neutral because the
+  // extracted WAV already contains the source track's timbre/filtering.
+  // Current defaults include HCUT=32, LOWCUT=0, REV=0, BITC=0, DTNE=16,
+  // sample OCTV=24, RES=0, EFX=0 and ADSR A/D/S/R=32/32/32/0.
+  for (int ch = 1; ch <= 8; ch++) {
+    setAllFilterPagesDefaultValues(ch);
+    SMP.channelVol[ch] = 16;
+    setSampleTimeStretch(ch, 11); // TIME OFF
+    sdSerStoreTimeStretchInSmp(ch, 11);
+
+    // Imported patterns should not mysteriously load muted.
+    SMP.globalMutes[ch] = false;
+    globalMutes[ch] = false;
+    SMP.mute[ch] = 0;
+    for (int page = 0; page < maxPages; page++) {
+      SMP.pageMutes[page][ch] = false;
+      pageMutes[page][ch] = false;
+    }
+  }
+  reapplyAllSampleChannelGains();
+
+  // Save through the exact normal pattern writer. That writes:
+  // notes + FF FE + complete raw SMP struct + TPIT pitch extension.
+  SMP.file = slot;
+  savePattern(false);
+
+  char path[24];
+  snprintf(path, sizeof(path), "%u.txt", slot);
+  if (!SD.exists(path)) {
+    sdSerReplyFlush("ERR SAVE_NOT_FOUND");
+    return;
+  }
+
+  // Critical verification: reload the file through the exact normal loader.
+  // loadPattern() restores SMP and then calls loadSMPSettings(), so this tests the
+  // same path the user will use later from the device UI.
+  SMP.file = slot;
+  loadPattern(false);
+  if (!sdSerImportedSettingsOk(slot)) {
+    sdSerReplyFlush("ERR VERIFY_SETTINGS");
+    return;
+  }
+
+  // Verify every sampler channel actually referenced by the imported pattern has
+  // a non-empty sample loaded after the canonical reload.
+  bool usedSampleChannel[9] = { false, false, false, false, false, false, false, false, false };
+  for (unsigned int x = 1; x <= 256; x++) {
+    for (unsigned int y = 1; y <= 16; y++) {
+      const int ch = (int)note[x][y].channel;
+      if (ch >= 1 && ch <= 8) usedSampleChannel[ch] = true;
+    }
+  }
+  for (int ch = 1; ch <= 8; ch++) {
+    if (usedSampleChannel[ch] && loadedSampleLen[ch] == 0) {
+      char err[40];
+      snprintf(err, sizeof(err), "ERR SAMPLE_CH%d", ch);
+      sdSerReplyFlush(err);
+      return;
+    }
+  }
+
+  File verify = SD.open(path, FILE_READ);
+  uint32_t size = verify ? (uint32_t)verify.size() : 0;
+  if (verify) verify.close();
+  if (size == 0) {
+    sdSerReplyFlush("ERR VERIFY_FILE");
+    return;
+  }
+  char ok[64];
+  snprintf(ok, sizeof(ok), "OK SAVED %u.txt %lu", slot, (unsigned long)size);
+  sdSerReplyFlush(ok);
+}
+
 static void sdSerHandleLine(char *line) {
   line = sdSerSkipSpaces(line);
   if (*line == '\0') return;
@@ -798,6 +933,8 @@ static void sdSerHandleLine(char *line) {
     sdSerCmdGetPat();
   } else if (strcasecmp(cmd, "PUTPAT") == 0) {
     sdSerCmdPutPat(args);
+  } else if (strcasecmp(cmd, "IMPORTSAVE") == 0) {
+    sdSerCmdImportSave(args);
   } else {
     sdSerReply("ERR UNKNOWN");
   }
@@ -907,6 +1044,9 @@ static void sdSerHandleOffPage(char *line) {
   } else if (strcasecmp(cmd, "PUTPAT") == 0) {
     sdSerNoteHostPresent();
     sdSerCmdPutPat(args);
+  } else if (strcasecmp(cmd, "IMPORTSAVE") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdImportSave(args);
   } else {
     sdSerReply("ERR NEED_SD");
   }

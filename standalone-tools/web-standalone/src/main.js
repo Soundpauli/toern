@@ -4,6 +4,7 @@ import { createDevice } from "./firmware/device.js";
 import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildImportCells } from "./firmware/midiImport.js";
 import { ToernSdSerial, joinSdPath } from "./firmware/sdSerial.js";
 import { encodePatternRam, decodePatternFile } from "./firmware/patternFile.js";
+import { createAudioImport } from "./audioImportUi.js";
 
 const W = 480;
 const H = 440;
@@ -185,6 +186,7 @@ app.innerHTML = `
     </div>
     <hr>
     <button type="button" id="import-midi">Import MIDI File</button>
+    <button type="button" id="import-audio">Import Audio (MP3)</button>
     <button type="button" id="transfer-open">Transfer SIM&lt;&gt;DEVICE</button>
     <hr>
     <p class="status" id="status" role="status"></p>
@@ -233,7 +235,7 @@ app.innerHTML = `
           <span class="jump-readout" id="import-offset-readout">0.00</span>
         </label>
         <label class="jump-panel-check">
-          <input type="checkbox" id="import-transpose" checked> Transpose out-of-range notes
+          <input type="checkbox" id="import-transpose"> Transpose out-of-range notes
         </label>
         <label class="jump-panel-check">
           <input type="checkbox" id="import-overlap" checked> Filter overlapping notes
@@ -243,6 +245,85 @@ app.innerHTML = `
         <button type="button" class="jump-panel-reset" id="import-reset">Reset to MIDI</button>
       </div>
       <p class="jump-panel-err" id="import-err" role="alert" hidden></p>
+    </div>
+    <div class="jump-layer" id="audio-layer" hidden>
+      <div class="jump-layer-head">
+        <button type="button" id="audio-back">← Menu</button>
+        <h2 class="jump-title">Import Audio</h2>
+      </div>
+      <label class="jump-drop" id="audio-drop">
+        <input type="file" id="audio-file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff" hidden>
+        <span id="audio-drop-label">Drop .mp3 / .wav or browse</span>
+      </label>
+      <div class="audio-progress" id="audio-progress" hidden>
+        <div class="audio-progress-bar"><i id="audio-progress-fill"></i></div>
+        <span class="jump-panel-meta" id="audio-progress-text"></span>
+      </div>
+      <div class="jump-layer-body" id="audio-settings" hidden>
+        <p class="jump-panel-meta" id="audio-meta"></p>
+        <canvas class="audio-overview" id="audio-overview" aria-label="Whole track. Click to move the pattern start to the nearest bar."></canvas>
+        <canvas class="audio-zoom" id="audio-zoom" aria-label="Grid close-up of one bar. Drag sideways to nudge the grid, scroll to move through bars."></canvas>
+        <p class="jump-panel-meta muted">Top: click to pick the section. Bottom: drag to nudge the grid, scroll for other bars. Markers are detected hits, lines are TŒRN steps.</p>
+        <div class="audio-start" role="group" aria-label="Pattern start">
+          <button type="button" data-start="-16" aria-label="Start one bar earlier" title="1 bar earlier">◀◀</button>
+          <button type="button" data-start="-4" aria-label="Start one beat earlier" title="1 beat earlier">◀</button>
+          <button type="button" data-start="-1" aria-label="Start one 16th earlier" title="1/16 earlier">‹</button>
+          <span class="jump-readout" id="audio-start-readout"></span>
+          <button type="button" data-start="1" aria-label="Start one 16th later" title="1/16 later">›</button>
+          <button type="button" data-start="4" aria-label="Start one beat later" title="1 beat later">▶</button>
+          <button type="button" data-start="16" aria-label="Start one bar later" title="1 bar later">▶▶</button>
+        </div>
+        <div class="jump-panel-row">
+          <label>Grid
+            <select id="audio-mode">
+              <option value="fixed">Fixed tempo</option>
+              <option value="beats">Follow beats</option>
+            </select>
+          </label>
+          <label>Length
+            <select id="audio-bars">
+              <option value="4">4 bars</option>
+              <option value="8">8 bars</option>
+              <option value="16" selected>16 bars</option>
+            </select>
+          </label>
+        </div>
+        <div class="jump-panel-row">
+          <label>BPM
+            <input type="number" id="audio-bpm" min="40" max="240" step="0.01">
+          </label>
+          <div class="audio-bpm-tools">
+            <button type="button" id="audio-half" aria-label="Half tempo">½</button>
+            <button type="button" id="audio-double" aria-label="Double tempo">×2</button>
+            <button type="button" id="audio-refit">Fit</button>
+          </div>
+        </div>
+        <label class="jump-field">Grid nudge
+          <input type="range" id="audio-nudge" min="-120" max="120" step="1" value="0">
+          <span class="jump-readout" id="audio-nudge-readout">0 ms</span>
+        </label>
+        <label class="jump-field">Snap window
+          <input type="range" id="audio-tol" min="0.15" max="0.5" step="0.01" value="0.5">
+          <span class="jump-readout" id="audio-tol-readout">keep all</span>
+        </label>
+        <table class="audio-lanes" id="audio-lanes"></table>
+        <div class="audio-sample-ed" id="audio-sample-ed" hidden></div>
+        <button type="button" class="jump-panel-reset" id="audio-autoalign">Auto-align lanes</button>
+        <label class="jump-field">Original track (A/B)
+          <input type="range" id="audio-ref" min="0" max="100" step="1" value="0">
+          <span class="jump-readout" id="audio-ref-readout">off</span>
+        </label>
+        <button type="button" class="jump-panel-reset" id="audio-play">Play / Stop</button>
+        <div class="jump-panel-row">
+          <label>Device slot
+            <input type="number" id="audio-slot" min="1" max="999" step="1" value="29">
+          </label>
+          <button type="button" class="jump-panel-reset" id="audio-reset">Reset to auto</button>
+        </div>
+        <button type="button" class="audio-push" id="audio-push">Push pattern + samples to device</button>
+        <p class="jump-panel-meta" id="audio-xfer" role="status"></p>
+      </div>
+      <p class="jump-panel-err" id="audio-err" role="alert" hidden></p>
     </div>
     <div class="jump-layer" id="sd-layer" hidden>
       <div class="jump-layer-head">
@@ -883,6 +964,7 @@ function closeImport() {
 function openImport() {
   closeLoadTrack();
   closeSdPanel();
+  closeAudio();
   jumpHome.hidden = true;
   importLayer.hidden = false;
   importMidiBtn.classList.add("on");
@@ -1116,7 +1198,7 @@ function resetImportToMidi() {
   importBpm.value = midiDraft.bpm;
   importSub.value = "16";
   importOffset.value = "0";
-  importTranspose.checked = true;
+  importTranspose.checked = false;
   importOverlap.checked = true;
   midiDraft.tracks = midiDraft.originalTracks.map((t) => ({ ...t }));
   midiDraft.slots = defaultSlots(midiDraft.tracks);
@@ -1146,7 +1228,7 @@ async function loadMidiFile(file) {
     importBpm.value = bpm;
     importSub.value = "16";
     importOffset.value = "0";
-    importTranspose.checked = true;
+    importTranspose.checked = false;
     importOverlap.checked = true;
     importSettings.hidden = false;
     syncBpmReadout();
@@ -1203,6 +1285,72 @@ importOffset.addEventListener("input", () => { syncOffsetReadout(); scheduleImpo
 importTranspose.addEventListener("change", scheduleImportApply);
 importOverlap.addEventListener("change", scheduleImportApply);
 importReset.addEventListener("click", resetImportToMidi);
+
+// --- Import Audio (local analyzer → sim preview → device) --------------
+const importAudioBtn = document.querySelector("#import-audio");
+const audioLayer = document.querySelector("#audio-layer");
+const appRoot = document.querySelector("#app");
+
+function openAudio() {
+  closeImport();
+  closeSdPanel();
+  closeLoadTrack();
+  jumpHome.hidden = true;
+  audioLayer.hidden = false;
+  importAudioBtn.classList.add("on");
+  appRoot.classList.add("audio-wide");
+  requestAnimationFrame(() => audioImport.redraw());
+  document.querySelector("#audio-back")?.focus();
+}
+
+function closeAudio() {
+  if (audioLayer.hidden) return;
+  audioLayer.hidden = true;
+  importAudioBtn.classList.remove("on");
+  appRoot.classList.remove("audio-wide");
+  if (importLayer.hidden && sdLayer.hidden) jumpHome.hidden = false;
+}
+
+/** PUTPAT, samples to /<slot>/1..8.wav, then IMPORTSAVE (save + reload on device). */
+async function pushAudioImport(slot, samples, status) {
+  if (sdBusy) throw new Error("Another transfer is running.");
+  setSdBusy(true);
+  try {
+    status("Connecting… (device: Menu → ETC → SD)");
+    await ensureTeensy();
+    const bytes = encodePatternRam(device.exportPatternCells(), device.bpm());
+    await sd.putPatternRam(bytes, (done, total) => status(`Pattern… ${Math.round((done / total) * 100)}%`));
+    try { await sd.mkdir(String(slot)); } catch (err) {
+      if (!/EXIST|MKDIR/i.test(String(err?.message || err))) throw err;
+    }
+    const chans = Object.keys(samples).map(Number).sort((a, b) => a - b);
+    // The device's SD writes sporadically answer ERR IO mid-file; a fresh PUT succeeds.
+    for (const ch of chans) {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await sd.putBytes(`${slot}/${ch}.wav`, samples[ch], (done, total) => {
+            status(`Sample ${ch}/8… ${Math.round((done / total) * 100)}%${attempt > 1 ? ` (retry ${attempt - 1})` : ""}`);
+          });
+          break;
+        } catch (err) {
+          if (attempt >= 4 || !/ERR IO|expected ACK/i.test(String(err?.message || err))) throw err;
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+    }
+    status(`Saving ${slot}.txt on device…`);
+    return await sd.command(`IMPORTSAVE ${slot}`, 120000);
+  } catch (err) {
+    await dropDeadSession(err);
+    throw err;
+  } finally {
+    setSdBusy(false);
+  }
+}
+
+const audioImport = createAudioImport({ device, push: pushAudioImport });
+importAudioBtn.addEventListener("click", () => openAudio());
+document.querySelector("#audio-back").addEventListener("click", () => closeAudio());
 
 // --- Transfer SIM<>DEVICE (sidebar: pattern RAM + SD files) ------------
 const TEENSY_VID = 0x16c0;
@@ -1391,6 +1539,7 @@ async function disconnectSd() {
 
 function openSdPanel() {
   closeImport();
+  closeAudio();
   closeLoadTrack();
   jumpHome.hidden = true;
   sdLayer.hidden = false;
