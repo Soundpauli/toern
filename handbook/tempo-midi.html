@@ -70,16 +70,24 @@
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="bpm_ext_ok" width="16" height="16" role="img" aria-label="BPM external locked"></canvas>
               </div>
-              <h4 class="hb-device__title">Variant B — External clock, locked</h4>
-              <p class="hb-device__intro">Green three-digit readout on the left, <strong>green left-pointing arrow</strong> on the right showing clock is being received <em>in</em>. The arrow blinks softly with each incoming clock pulse. Encoder rows are identical to variant A; encoder&nbsp;4 in EXT offsets the stored counter without overriding the live clock.</p>
+              <h4 class="hb-device__title">Variant B — MIDI external clock, locked</h4>
+              <p class="hb-device__intro">Green three-digit readout on the left, <strong>red left-pointing arrow</strong> on the right showing TRS MIDI clock is being received. The arrow blinks with the clock. Encoder&nbsp;3 click switches to analog EXT (variant&nbsp;D). Encoder&nbsp;4 offsets the stored counter without overriding the live clock.</p>
             </article>
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="bpm_ext_warn" width="16" height="16" role="img" aria-label="BPM external warn"></canvas>
               </div>
-              <h4 class="hb-device__title">Variant C — External clock, unstable</h4>
-              <p class="hb-device__intro">Red three-digit readout and a <strong>red left-pointing arrow</strong> — the measurement is still settling or no clock is arriving. Wait a few bars, then re-check the cable and the master.</p>
+              <h4 class="hb-device__title">Variant C — MIDI external clock, unstable</h4>
+              <p class="hb-device__intro">Red three-digit readout and a <strong>red left-pointing arrow</strong> — the measurement is still settling or no MIDI clock is arriving. Wait a few bars, then re-check the cable and the master.</p>
+            </article>
+
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="bpm_ext_analog" width="16" height="16" role="img" aria-label="BPM analog EXT"></canvas>
+              </div>
+              <h4 class="hb-device__title">Variant D — Analog EXT (CLK-IN)</h4>
+              <p class="hb-device__intro"><strong>Orange</strong> three-digit readout (measured tempo) and an <strong>orange left-pointing arrow</strong> that flashes on each CLK-IN pulse. Pulses drive the sequencer immediately — no green “lock” wait. Rate and hold-off are set on <a href="midi.html#cin">MIDI → CIN</a>. Encoder&nbsp;3 click returns to MIDI EXT (red <strong>&lt;</strong>).</p>
             </article>
           </section>
         </section>

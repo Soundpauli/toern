@@ -196,6 +196,31 @@
             <p>While VMOD is on, FLOW, LOOP, and pattern-mode page lock leave playback and the page dots alone. Song mode is unchanged.</p>
             <p>On the grid, encoder&nbsp;2 (CTRL&nbsp;= PAGE) steps only the pages that contain the current voice. A voice with no notes still uses the full page range, so the first notes can be painted. Changing voice jumps to that voice’s page. Encoder&nbsp;4 does not change pages while voice mode is playing.</p>
             <p>Page dots: white marks pages that contain the voice under encoder&nbsp;1. Green and yellow follow that voice’s loop page and the page you are editing.</p>
+            <div class="hb-tip"><strong>IMG lock:</strong> while <a href="#img">ETC → IMG</a> is on, VMOD is forced off and the SETTINGS → VMOD control snaps back to OFF.</div>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="img">
+            <h2>IMG — image paint mode</h2>
+            <p class="lede">Black matrix, colour-cycle paint — sketch with voices 1–8 instead of the usual row-lane drawing rules.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="et_img" width="16" height="16" role="img" aria-label="ETC IMG"></canvas>
+              </div>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td><strong>OFF</strong> / <strong>ON</strong></td><td>On ETC → IMG. Survives reboot.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
+              </div>
+            </article>
+            <p>When IMG is on, draw-mode base colours disappear (black canvas). Painting a cell cycles through sample voices <strong>1–8</strong> (and their colours). <strong>Touch&nbsp;1</strong> cycles the brush voice without painting. Stay in DRAW — single mode is not used here.</p>
+            <p><a href="#vmod">VMOD</a> is forced off. RECS → CLR is forced to <strong>FIX</strong> so page clears do not wipe the sketch unexpectedly.</p>
           </section>
 
 

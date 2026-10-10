@@ -42,9 +42,18 @@ export const SUBS = {
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "CLMP", "SYNC", "PPQN", "SIDE", "CIN", "WRTE"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
-  etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "CHLD", "FIRE", "RSET"],
+  etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "EYES", "CHLD", "FIRE", "IMG", "RSET"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
+
+export const CIN_PPQN_TABLE = [1, 2, 4, 8, 12, 16, 24, 32];
+export const PPQN_RATE_LABELS = ["OFF", "1", "2", "4", "8", "12", "16", "24", "32"];
+export const SIDE_VOICE_CHOICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14];
+export const ETC_FIRE_INDEX = 9;
+export const ETC_IMG_INDEX = 10;
+export const ETC_RSET_INDEX = 11;
+export const ETC_EYES_INDEX = 7;
+export const ETC_CHLD_INDEX = 8;
 
 const SUB_PARENT = { look: 6, recs: 7, midi: 8, vol: 5, etc: 14 };
 
@@ -71,7 +80,11 @@ function sx(x16) {
 }
 
 export function drawBase(matrix, s) {
-  if (!s.GLOB.singleMode) {
+  if (s.imageMode) {
+    for (let y = 1; y < ROWS; y++) {
+      for (let x = 1; x <= COLS; x++) matrix.light(x, y, [0, 0, 0]);
+    }
+  } else if (!s.GLOB.singleMode) {
     let colors = 0;
     for (let y = 1; y < ROWS; y++) {
       const muted = s.mute[y - 1];
@@ -564,9 +577,9 @@ export function isSoon(mode, index) {
 
 const SOON = {
   look: new Set([7]),
-  midi: new Set([0, 1, 2, 3, 4, 5, 6]),
+  midi: new Set(),
   vol: new Set([2, 5, 6]),
-  etc: new Set([1, 3, 4, 5, 6]),
+  etc: new Set([1, 2, 3, 4, 6]), // RAM SD AUTO LGHT BATT stay stubbed
 };
 
 function drawLength(matrix, s, y, withNumber) {
@@ -622,7 +635,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", "W", 3);
     return;
   }
-  if (s.mode === "etc" && s.subIndex === 8) {
+  if (s.mode === "etc" && s.subIndex === ETC_FIRE_INDEX) {
     const value = s.subValue(s.mode, s.subIndex);
     const wide = COLS >= 24;
     const focus = s.fireFocus | 0;
@@ -654,11 +667,51 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", focus === 1 ? "W" : focus === 2 ? "Y" : value.text === "OFF" ? "R" : "G", 3);
     return;
   }
+  if (s.mode === "midi" && s.subIndex === 5) {
+    // SYNC SNC1/SNC2
+    const edit = s.syncEdit | 0;
+    const ms = edit === 0 ? (s.syncSendMs | 0) : (s.syncRcveMs | 0);
+    matrix.drawText(edit === 0 ? "SNC1" : "SNC2", 2, 10, parent);
+    const label = (ms >= 0 ? "+" : "") + String(ms);
+    matrix.drawText(label, 2, 3, UI_WHITE);
+    matrix.drawIndicator("L", "Y", 2);
+    matrix.drawIndicator("L", "W", 3);
+    return;
+  }
+  if (s.mode === "midi" && s.subIndex === 6) {
+    // PPQN out
+    const focus = s.ppqnFocus | 0;
+    const width = s.ppqnWidthMs || 1;
+    const stop = s.ppqnStopWithPlay ? "STOP" : "CONT";
+    const rate = PPQN_RATE_LABELS[s.ppqnRateSel | 0] || "OFF";
+    let shown = rate;
+    let code = rate === "OFF" ? "R" : "G";
+    if (focus === 1) { shown = stop; code = s.ppqnStopWithPlay ? "R" : "G"; }
+    else if (focus === 2) { shown = String(width); code = "W"; }
+    matrix.drawText(shown, 2, 3, code === "R" ? UI_RED : code === "G" ? UI_GREEN : UI_WHITE);
+    matrix.drawIndicator("L", "W", 1);
+    matrix.drawIndicator("L", s.ppqnStopWithPlay ? "R" : "G", 2);
+    matrix.drawIndicator("L", code, 3);
+    return;
+  }
+  if (s.mode === "midi" && s.subIndex === 8) {
+    // CIN hold + PPQN
+    const focus = s.cinFocus | 0;
+    const hold = clampUi(s.cinHoldMs || 1, 1, 32);
+    const ppqn = CIN_PPQN_TABLE[s.cinPpqnIndex | 0] || 4;
+    const shown = focus === 1 ? String(hold) : String(ppqn);
+    matrix.drawText(shown, 2, 3, UI_WHITE);
+    matrix.drawIndicator("L", focus === 1 ? "W" : "G", 1);
+    matrix.drawIndicator("L", focus === 1 ? "G" : "W", 3);
+    return;
+  }
   const value = s.subValue(s.mode, s.subIndex);
   matrix.drawText(value.text, 2, 3, value.color);
   if (value.code) matrix.drawIndicator("L", value.code, 3);
   else matrix.setRing?.(3, value.color);
 }
+
+function clampUi(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 export function drawLoadSave(matrix, s) {
   const exists = s.slotExists("toern-web-patterns", s.slot);
@@ -866,13 +919,21 @@ function drawBpm(matrix, s) {
     matrix.light(x, 15, color);
     matrix.light(x, 16, color);
   }
+  const analogExt = !s.clockInt && s.analogExtClock;
+  const arrowCode = s.clockInt ? "G" : analogExt ? "O" : "R";
   matrix.drawIndicator("L", "W", 2);
-  matrix.drawIndicator("L", s.clockInt ? "G" : "R", 3);
+  matrix.drawIndicator("L", arrowCode, 3);
   matrix.drawIndicator("L", "N", 4);
   const text = String(Math.round(s.bpm)).padStart(3, " ");
-  matrix.drawText(text, 2, 6, s.clockInt ? [0, 120, 120] : [0, 255, 0]);
+  // INT: cyan digits; MIDI EXT: green; analog EXT: orange
+  const digitColor = s.clockInt ? [0, 120, 120] : analogExt ? [255, 140, 0] : [0, 255, 0];
+  matrix.drawText(text, 2, 6, digitColor);
   const x = COLS - 1;
-  const color = s.clockInt ? [0, 255, 0] : [255, 0, 0];
+  const now = performance.now();
+  const pulseFresh = analogExt && s.analogPulseAt && (now - s.analogPulseAt) < 80;
+  const color = s.clockInt ? [0, 255, 0] : analogExt
+    ? (pulseFresh ? [255, 180, 40] : [180, 90, 0])
+    : [255, 0, 0];
   if (s.clockInt) {
     matrix.light(x + 1, 8, color);
     matrix.light(x, 7, color);
@@ -882,6 +943,50 @@ function drawBpm(matrix, s) {
     matrix.light(x, 7, color);
     matrix.light(x, 9, color);
   }
+}
+
+/** Comical eyes screensaver (simplified firmware port). */
+export function drawEyesScreensaver(matrix, s, now) {
+  const idleMs = now - (s.lastActivityAt || now);
+  const asleep = idleMs >= 90000;
+  const outline = asleep ? 7 : 15;
+  const pupil = asleep ? 7 : 80;
+  const eyeColor = [outline, outline, outline];
+  const pupilColor = [pupil, pupil, pupil];
+  const eyeWidth = 5;
+  const gap = 2;
+  const totalWidth = eyeWidth * 2 + gap;
+  const leftEyeX = Math.floor((COLS - totalWidth) / 2) + 1;
+  const rightEyeX = leftEyeX + eyeWidth + gap;
+  let eyeY = 5;
+  if (asleep) {
+    const phase = Math.floor(now / 3000) % 4;
+    eyeY += phase === 1 ? 1 : phase === 3 ? -1 : 0;
+  }
+  const blinking = !asleep && (Math.floor(now / 3000) % 17 === 0) && ((now % 3000) < 150);
+  function drawEye(ox) {
+    for (let dx = 0; dx < eyeWidth; dx++) {
+      matrix.light(ox + dx, eyeY, eyeColor);
+      matrix.light(ox + dx, eyeY + 4, eyeColor);
+    }
+    for (let dy = 1; dy <= 3; dy++) {
+      matrix.light(ox, eyeY + dy, eyeColor);
+      matrix.light(ox + eyeWidth - 1, eyeY + dy, eyeColor);
+    }
+    if (blinking || asleep) {
+      for (let dx = 1; dx < eyeWidth - 1; dx++) matrix.light(ox + dx, eyeY + 2, eyeColor);
+      return;
+    }
+    const look = Math.floor(now / 1800) % 5;
+    const px = ox + 1 + (look === 1 ? 1 : look === 2 ? 2 : look === 3 ? 0 : 1);
+    const py = eyeY + 1 + (look === 4 ? 1 : 0);
+    matrix.light(px, py, pupilColor);
+    matrix.light(px + 1, py, pupilColor);
+    matrix.light(px, py + 1, pupilColor);
+    matrix.light(px + 1, py + 1, pupilColor);
+  }
+  drawEye(leftEyeX);
+  drawEye(rightEyeX);
 }
 
 export function drawRecord(matrix, s, now) {
@@ -935,6 +1040,13 @@ export function renderFrame(matrix, s, now) {
   if (s.mode !== "etc") s.infoAt = 0;
   if (s.okAt && now - s.okAt < 1000) {
     drawOk(matrix, now - s.okAt);
+    matrix.present();
+    return;
+  }
+  const eyesIdle = s.eyesIdleMs || 0;
+  if (eyesIdle > 0 && s.lastActivityAt && (now - s.lastActivityAt) >= eyesIdle
+      && (s.mode === "draw" || s.mode === "single") && !s.playing) {
+    drawEyesScreensaver(matrix, s, now);
     matrix.present();
     return;
   }

@@ -147,14 +147,15 @@
 
                     <li id="bpm">
                       <a href="tempo-midi.html#bpm"><span class="node">BPM</span></a>
-                      <span class="desc">Tempo + who owns the clock. Colour gossip: cyan digits + green right-arrow = you are master (INT); green digits + green left-arrow = external locked; red + red left-arrow = still hunting or the cable is lying.</span>
+                      <span class="desc">Tempo + who owns the clock. Cyan digits + green <strong>&gt;</strong> = INT master; green digits + red <strong>&lt;</strong> = MIDI EXT locked; red digits + red <strong>&lt;</strong> = MIDI still hunting; <strong>orange</strong> digits + orange <strong>&lt;</strong> = analog CLK-IN (J26) driving play.</span>
                       <span class="sub">
                         <ul class="sub-opts">
                           <li><strong>Enc&nbsp;2 turn</strong> — matrix brightness <strong>3–255</strong> (pretty, not loud)</li>
                           <li><strong>Enc&nbsp;2 short</strong> — toggle idle tint</li>
                           <li><strong>Enc&nbsp;3 turn</strong> — <strong>INT ↔ EXT</strong> (survives reboot)</li>
+                          <li><strong>Enc&nbsp;3 click</strong> — when EXT: toggle <strong>MIDI in</strong> (red <strong>&lt;</strong>) ↔ <strong>analog CLK-IN</strong> (orange <strong>&lt;</strong>)</li>
                           <li><strong>Enc&nbsp;4 turn</strong> — BPM <strong>40–300</strong> in INT; in EXT only nudges a stored offset</li>
-                          <li><strong>Touch pads</strong> — tap-tempo on this screen</li>
+                          <li><strong>Touch pads</strong> — tap-tempo on this screen (INT)</li>
                         </ul>
                       </span>
                     </li>
@@ -308,7 +309,7 @@
                             <ul class="sub-opts">
                               <li><strong>OFF</strong> / <strong>ON</strong></li>
                             </ul>
-                            <span class="how">While on, FLOW, LOOP, and pattern-mode page lock leave playback alone. Encoder&nbsp;2 steps that voice’s filled pages. Encoder&nbsp;4 does not change pages during play. Song mode is unchanged.</span>
+                            <span class="how">While on, FLOW, LOOP, and pattern-mode page lock leave playback alone. Encoder&nbsp;2 steps that voice’s filled pages. Encoder&nbsp;4 does not change pages during play. Song mode is unchanged. Locked <strong>OFF</strong> while <a href="play.html#img">ETC → IMG</a> is on.</span>
                           </span>
                         </li>
                         <li>
@@ -579,7 +580,7 @@
 
                     <li id="etc">
                       <a href="reference.html#etc"><span class="node">ETC</span></a>
-                      <span class="desc">The junk drawer that somehow contains the cool stuff: credits, SD file server, AI fill, ring light, palette, battery, child lock, nuclear resets.</span>
+                      <span class="desc">Credits, SD file server, AI fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
                       <ul>
                         <li>
                           <span class="node">INFO</span>
@@ -666,18 +667,20 @@
                             <span class="how">Plug USB-C before the red argument starts.</span>
                           </span>
                         </li>
-                        <li>
+                        <li id="eyes">
                           <span class="node">EYES</span>
-                          <span class="desc">Idle screensaver (sleeping eyes).</span>
+                          <span class="desc">Idle screensaver (sleeping eyes on the matrix).</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>ON</strong> — eyes after one minute idle</li>
                               <li><strong>OFF</strong> — never</li>
-                              <li><strong>BAT</strong> — only when running on battery (USB unplugged)</li>
+                              <li><strong>1MIN</strong> — eyes after one minute idle (default)</li>
+                              <li><strong>5MIN</strong> — five minutes</li>
+                              <li><strong>15MIN</strong> — fifteen minutes</li>
                             </ul>
+                            <span class="how">Runs only when stopped on the grid. Any encoder / touch wakes the unit.</span>
                           </span>
                         </li>
-                        <li>
+                        <li id="chld">
                           <span class="node">CHLD</span>
                           <span class="desc">Child lock — simplified play mode for small hands (or reckless bandmates).</span>
                           <span class="sub">
@@ -703,6 +706,20 @@
                               <li><strong>Colour 0–8</strong> — click encoder&nbsp;3 again, then turn it. 0 is white. 8 is the voice colour</li>
                             </ul>
                             <span class="how">The bar under the title is gravity on the left and colour on the right. Another click on encoder&nbsp;3 returns to the voice.</span>
+                          </span>
+                        </li>
+                        <li id="img">
+                          <a href="play.html#img"><span class="node">IMG</span></a>
+                          <span class="desc">Image mode — black matrix; paint cycles voice colours like a pixel sketchpad.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> / <strong>ON</strong> — survives reboot</li>
+                              <li>Base row colours hide; the grid stays black until you paint</li>
+                              <li>Paint on rows 1–15 cycles voices <strong>1–8</strong>; touch&nbsp;1 cycles the brush voice</li>
+                              <li><a href="play.html#vmod">VMOD</a> is forced off and locked while IMG is on</li>
+                              <li>RECS → CLR is forced to <strong>FIX</strong> while IMG is on</li>
+                            </ul>
+                            <span class="how">Single mode is not used in IMG — stay in DRAW and paint.</span>
                           </span>
                         </li>
                         <li id="rset">

@@ -2,7 +2,12 @@ import {
   COLS, COND_VALUE, DUMMY_PACKS, FILTER_CH, LONG_MS, PAGES, PAINT_ROWS, PROB, ROWS, SOUND_CH, STEPS, WAVS, emptyFilt, emptyNote, filterPagesFor, setLayout,
 } from "./const.js";
 import { createEngine } from "../audio/engine.js";
-import { MENU_PAGES, SUBS, isSoon, renderFrame } from "./screens.js";
+import {
+  MENU_PAGES, SUBS, isSoon, renderFrame,
+  CIN_PPQN_TABLE, PPQN_RATE_LABELS, SIDE_VOICE_CHOICES,
+  ETC_FIRE_INDEX, ETC_IMG_INDEX, ETC_RSET_INDEX, ETC_EYES_INDEX, ETC_CHLD_INDEX,
+} from "./screens.js";
+import { foldRow } from "./midiImport.js";
 import { listDir, packWavs, parsePattern, patternUrl, sampleWavs } from "./library.js";
 import { drawRandoms } from "./random.js";
 import { GENRES, generateGenre } from "./genres.js";
@@ -37,8 +42,11 @@ const SUB_VALUES = {
     { opts: ["CLCK", "NOTE", "BOTH"], colors: [[120, 120, 0], [0, 120, 0], [0, 0, 120]], codes: ["Y", "G", "X"] },
     { opts: ["OFF", "NOTE"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["0"], colors: [[120, 120, 120]], codes: ["W"] },
-    { opts: ["OFF"], colors: [[120, 0, 0]], codes: ["R"] },
+    { opts: ["SYNC"], colors: [[120, 120, 120]], codes: ["W"] }, // custom UI
+    { opts: ["PPQN"], colors: [[120, 120, 120]], codes: ["W"] }, // custom UI
+    { opts: ["OFF", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
+    { opts: ["CIN"], colors: [[120, 120, 120]], codes: ["W"] }, // custom UI
+    { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
   ],
   vol: [
     { opts: ["80"], colors: [[55, 10, 0]], codes: ["O"] },
@@ -57,11 +65,16 @@ const SUB_VALUES = {
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["0", "1", "2"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["--"], colors: [[120, 120, 0]], codes: ["Y"] },
+    { opts: ["OFF", "1MIN", "5MIN", "15MIN"], colors: [[120, 0, 0], [0, 120, 0], [0, 120, 0], [0, 120, 0]], codes: ["R", "G", "G", "G"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["OFF", "ALL", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [255, 220, 120], [255, 80, 20]], codes: ["R", "Y", "O"] },
+    { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["SD", "EFX", "FULL", "FILE", "PACK", "ASAV"], colors: [[120, 60, 0]], codes: ["O"] },
   ],
 };
+
+const EYES_IDLE_MS = [0, 60_000, 300_000, 900_000];
+const FIRE_VOICE_CHOICES = [0, 15, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14];
 
 export function createDevice(matrix, statusEl, rings) {
   const engine = createEngine();
@@ -78,12 +91,15 @@ export function createDevice(matrix, statusEl, rings) {
   const invOf = Array(16).fill(false);
   const mute = Array(16).fill(false);
   const song = Array(64).fill(0);
-  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(7).fill(0), vol: Array(7).fill(0), etc: Array(10).fill(0) };
-  // Firmware EEPROM defaults: TRIG=SENS, CLR=ON, FLOW=ON
+  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(10).fill(0), vol: Array(7).fill(0), etc: Array(12).fill(0) };
+  // Firmware EEPROM defaults: TRIG=SENS, CLR=ON, FLOW=ON, EYES=1MIN
   subPick.recs[3] = 1;
   subPick.recs[4] = 1;
   subPick.look[0] = 1;
   subPick.look[7] = 2;
+  subPick.etc[ETC_EYES_INDEX] = 1;
+  subPick.midi[3] = 1; // RCVE NOTE
+  subPick.midi[4] = 1; // CLMP ON
 
   const s = {
     GLOB: { x: 1, y: 2, edit: 1, page: 1, currentChannel: 1, singleMode: false },
@@ -95,6 +111,14 @@ export function createDevice(matrix, statusEl, rings) {
     vel: { v: 8, p: 5, c: 1, vol: 16, backSingle: false }, okAt: 0,
     filterTouch: 0, filterTouchAt: 0, filterFlash: "", filterFlashAt: 0, filterPage: 0,
     drawBaseColorMode: true, monitor: 0, loopLength: 0, simpleNotes: false, clockInt: true,
+    analogExtClock: false, analogPulseAt: 0,
+    cinHoldMs: 2, cinPpqnIndex: 2, cinFocus: 0,
+    syncEdit: 0, syncSendMs: 17, syncRcveMs: 17,
+    ppqnWidthMs: 10, ppqnStopWithPlay: true, ppqnRateSel: 0, ppqnFocus: 0, ppqnPolarityPos: true,
+    sideVoice: 0, sidePulseAt: 0, clkOutPulseAt: 0,
+    midiChMode: 0, midiTransport: 0, midiSend: 0, midiReceive: true, midiClamp: true, midiWriteOverwrite: false,
+    eyesMode: 1, eyesIdleMs: EYES_IDLE_MS[1], lastActivityAt: 0,
+    imageMode: false, imgBrushChannel: 1,
     flow: true, voiceMode: false, fireVoice: 0, fireLevel: 8, fireSize: 1, fireGravity: 0, fireColor: 8, fireFocus: 0, voiceLen: Array(16).fill(0), voiceMask: Array(16).fill(0), voicePages: 1,
     voiceLoop: Array(16).fill(1), voiceOffset: Array(16).fill(0), voiceEdit: Array(16).fill(0),
     pmode: 0, ctrlVol: false, prevMode: 0, drawR: false, cursorType: 0,
@@ -114,10 +138,15 @@ export function createDevice(matrix, statusEl, rings) {
   };
 
   let nextAt = 0;
+  let analogNextPulseAt = 0;
+  let analogPulsePhase = 0;
+  let ppqnNextPulseAt = 0;
+  let ppqnPhase = 0;
   const taps = [];
   const filterPages = Array(16).fill(0);
   let clip = null;
   let clipCh = 0;
+  let midiAccess = null;
   const hold = {};
   const touch = { l: false, m: false, first: 0, chord: false };
 
@@ -299,6 +328,25 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function paintCell(x, y) {
     if (y < 1 || y > 15) return false;
+    if (s.imageMode) {
+      // IMG: paint cycles voice/color on any row 1..15
+      const n = note[x][y];
+      if (!n.channel) {
+        n.channel = s.imgBrushChannel || 1;
+        n.velocity = 100;
+        n.probability = 100;
+        n.condition = 1;
+        n.midiPitch = 255;
+      } else {
+        let next = (n.channel % 8) + 1;
+        if (next < 1 || next > 8) next = 1;
+        n.channel = next;
+        s.imgBrushChannel = next;
+        s.GLOB.currentChannel = next;
+      }
+      queueAutosave();
+      return true;
+    }
     if (!s.GLOB.singleMode && !PAINT_ROWS.has(y)) return false;
     const n = note[x][y];
     if (s.GLOB.singleMode) {
@@ -326,6 +374,38 @@ export function createDevice(matrix, statusEl, rings) {
     if (y === 16) { toggleCopy(); return; }
     if (s.drawR && note[x][y].channel) { eraseCell(x, y); return; }
     if (paintCell(x, y)) playCell(x, y);
+  }
+  /** MIDI live grid write in SINGLE; WRTE OFF skips occupied cells. */
+  function placeLiveGridNote(step, row, channel, velocity = 100, midiPitch = 255) {
+    if (!s.midiReceive) return false;
+    if (row < 1 || row > 15 || step < 1 || step > STEPS) return false;
+    const n = note[step][row];
+    if (!s.midiWriteOverwrite && n.channel) return false;
+    n.channel = channel;
+    n.velocity = clamp(velocity, 1, 127);
+    n.probability = 100;
+    n.condition = 1;
+    n.midiPitch = midiPitch <= 127 ? midiPitch : 255;
+    queueAutosave();
+    return true;
+  }
+  function enforceImageModeConstraints() {
+    if (!s.imageMode) return;
+    s.voiceMode = false;
+    subPick.look[5] = 0;
+    s.recChannelClear = 2; // FIX
+    subPick.recs[4] = 2;
+    s.drawBaseColorMode = false;
+  }
+  function applyDrawSingleYEncoderLimits() {
+    if (s.mode !== "draw" && s.mode !== "single") return;
+    s.GLOB.y = clamp(s.GLOB.y, 1, ROWS);
+  }
+  function noteActivity() {
+    s.lastActivityAt = performance.now();
+  }
+  function eyesIdleFromMode(mode) {
+    return EYES_IDLE_MS[clamp(mode | 0, 0, 3)] || 0;
   }
   function eraseCell(x, y) {
     if (y === 16) { clearColumn(x); return; }
@@ -451,7 +531,7 @@ export function createDevice(matrix, statusEl, rings) {
     applyMix();
   }
   function runReset() {
-    const opt = subPick.etc[9] || 0;
+    const opt = subPick.etc[ETC_RSET_INDEX] || 0;
     if (opt === 0) refreshBrowse();
     else if (opt === 1) resetEffects();
     else if (opt === 2) resetFull();
@@ -466,6 +546,7 @@ export function createDevice(matrix, statusEl, rings) {
     }
     s.okAt = performance.now();
     finishLoad();
+    applyDrawSingleYEncoderLimits();
   }
   function resetFull() {
     resetEffects();
@@ -608,6 +689,86 @@ export function createDevice(matrix, statusEl, rings) {
       const wav = { ...wavOpts(n.channel), midiPitch: n.midiPitch };
       if (s.prevMode === 2 && n.channel === s.GLOB.currentChannel && s.mode === "wav") wav.index = s.browse;
       engine.trigger(n.channel, n.velocity, when, wav, y);
+      if (s.sideVoice && n.channel === s.sideVoice) {
+        s.sidePulseAt = performance.now();
+      }
+    }
+  }
+  function advanceOneStep(when) {
+    if (s.voiceMode && s.pmode !== 2) {
+      refreshVoiceLens();
+      const end = Math.max(1, s.voicePages || 1) * COLS;
+      const prev = s.beat;
+      if (s.beat >= end) {
+        s.beat = 1;
+        s.GLOB.page = 1;
+      } else {
+        s.beat += 1;
+        s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
+      }
+      bumpVoiceLoops(prev, s.beat);
+    } else if (s.pmode === 1) {
+      const start = (s.GLOB.page - 1) * COLS + 1;
+      const end = start + COLS - 1;
+      if (s.beat < start || s.beat > end) s.beat = start + ((s.beat - 1) % COLS);
+      else s.beat += 1;
+      if (s.beat > end) s.beat = start;
+    } else {
+      const end = patternEnd();
+      if (s.beat >= end) {
+        if (s.pmode === 3 && s.GLOB.edit !== s.GLOB.page) {
+          s.GLOB.page = s.GLOB.edit;
+          s.beat = (s.GLOB.page - 1) * COLS + 1;
+        } else if (s.pmode === 2) {
+          if (!advanceSong()) { s.playing = false; return false; }
+        } else if (s.pmode === 3) {
+          s.beat = (s.GLOB.page - 1) * COLS + 1;
+        } else {
+          s.beat = 1;
+          s.GLOB.page = 1;
+        }
+      } else {
+        s.beat += 1;
+        s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
+      }
+    }
+    if (s.flow && !s.voiceMode && s.pmode !== 3) s.GLOB.edit = s.GLOB.page;
+    fire(s.beat, when);
+    return true;
+  }
+  function cinPpqn() { return CIN_PPQN_TABLE[s.cinPpqnIndex | 0] || 4; }
+  function ppqnOutEnabled() { return (s.ppqnRateSel | 0) > 0; }
+  function ppqnOutPpqn() {
+    const sel = s.ppqnRateSel | 0;
+    if (sel <= 0) return 0;
+    return CIN_PPQN_TABLE[sel - 1] || 4;
+  }
+  /** Soft CLK-IN pulse (orange EXT). Advances sequencer for 4/ppqn steps-per-pulse. */
+  function analogClockPulse(when = engine.now(), { catchFirst = false } = {}) {
+    s.analogPulseAt = performance.now();
+    const ppqn = cinPpqn();
+    if (catchFirst) {
+      fire(s.beat, when);
+      if (ppqn <= 2) {
+        const extra = Math.round(4 / ppqn) - 1;
+        for (let i = 0; i < extra && s.playing; i++) {
+          if (!advanceOneStep(when + (i + 1) * stepSec())) break;
+        }
+      }
+      return;
+    }
+    if (ppqn <= 2) {
+      const steps = Math.round(4 / ppqn);
+      for (let i = 0; i < steps && s.playing; i++) {
+        if (!advanceOneStep(when + i * stepSec())) break;
+      }
+      return;
+    }
+    analogPulsePhase += 1;
+    const need = Math.max(1, Math.round(ppqn / 4));
+    if (analogPulsePhase >= need) {
+      analogPulsePhase = 0;
+      advanceOneStep(when);
     }
   }
   function togglePlay() {
@@ -615,23 +776,35 @@ export function createDevice(matrix, statusEl, rings) {
     if (ctx.state === "suspended") ctx.resume();
     applyMix();
     s.playing = !s.playing;
-    if (!s.playing) queueAutosave();
-    if (s.playing) {
-      if (s.voiceMode && s.pmode !== 2) {
-        refreshVoiceLens();
-        s.voiceLoop = Array(16).fill(1);
-        s.beat = 1;
-        s.GLOB.page = 1;
-      } else if (s.pmode === 1) {
-        s.GLOB.page = s.GLOB.edit;
-        s.beat = (s.GLOB.edit - 1) * COLS + 1;
-      } else {
-        s.beat = 1;
-        s.GLOB.page = 1;
-      }
-      const t = engine.now();
-      nextAt = t + stepSec();
+    noteActivity();
+    if (!s.playing) {
+      queueAutosave();
+      if (s.ppqnStopWithPlay) s.clkOutPulseAt = 0;
+      return;
+    }
+    if (s.voiceMode && s.pmode !== 2) {
+      refreshVoiceLens();
+      s.voiceLoop = Array(16).fill(1);
+      s.beat = 1;
+      s.GLOB.page = 1;
+    } else if (s.pmode === 1) {
+      s.GLOB.page = s.GLOB.edit;
+      s.beat = (s.GLOB.edit - 1) * COLS + 1;
+    } else {
+      s.beat = 1;
+      s.GLOB.page = 1;
+    }
+    const t = engine.now();
+    nextAt = t + stepSec();
+    analogNextPulseAt = t + ((60 / Math.max(40, s.bpm)) / cinPpqn());
+    analogPulsePhase = 0;
+    ppqnNextPulseAt = t;
+    ppqnPhase = 0;
+    if (s.clockInt) {
       fire(s.beat, t);
+    } else if (s.analogExtClock) {
+      // Orange EXT: catch in-progress pulse immediately (firmware analogClockCatchIfHigh)
+      analogClockPulse(t, { catchFirst: true });
     }
   }
   function enterFilter() {
@@ -731,7 +904,14 @@ export function createDevice(matrix, statusEl, rings) {
       mainVol: s.mainVol, gain: s.gain, prevVol: s.prevVol, stereo: s.stereo,
       fireLevel: s.fireLevel, fireSize: s.fireSize, fireGravity: s.fireGravity, fireColor: s.fireColor,
       micGain: s.micGain, lineInLevel: s.lineInLevel,
-      bpm: s.bpm, clockInt: s.clockInt, muteMask: s.muteMask, packSlot: s.packSlot, ledBrightness: s.ledBrightness,
+      bpm: s.bpm, clockInt: s.clockInt, analogExtClock: s.analogExtClock,
+      cinHoldMs: s.cinHoldMs, cinPpqnIndex: s.cinPpqnIndex,
+      syncSendMs: s.syncSendMs, syncRcveMs: s.syncRcveMs,
+      ppqnWidthMs: s.ppqnWidthMs, ppqnStopWithPlay: s.ppqnStopWithPlay, ppqnRateSel: s.ppqnRateSel,
+      ppqnPolarityPos: s.ppqnPolarityPos, sideVoice: s.sideVoice,
+      midiWriteOverwrite: s.midiWriteOverwrite, eyesMode: s.eyesMode, imageMode: s.imageMode,
+      imgBrushChannel: s.imgBrushChannel,
+      muteMask: s.muteMask, packSlot: s.packSlot, ledBrightness: s.ledBrightness,
       deviceChosen,
     };
     try { localStorage.setItem(EEPROM_KEY, JSON.stringify(data)); } catch { /* storage full */ }
@@ -741,6 +921,8 @@ export function createDevice(matrix, statusEl, rings) {
     try { data = JSON.parse(localStorage.getItem(EEPROM_KEY) || "null"); } catch { data = null; }
     if (!data) {
       applySub("look", 0);
+      applySub("midi", 0);
+      applySub("etc", ETC_EYES_INDEX);
       loadPack(1);
       return;
     }
@@ -748,12 +930,27 @@ export function createDevice(matrix, statusEl, rings) {
       data.subPick.look = data.subPick.look.slice();
       data.subPick.look.splice(5, 0, 0);
     }
-    if (Array.isArray(data.subPick?.etc) && data.subPick.etc.length === 9 && subPick.etc.length === 10) {
-      data.subPick.etc = data.subPick.etc.slice();
-      data.subPick.etc.splice(8, 0, 0);
+    // Migrate etc: 9→10 (FIRE insert) then 10→12 (EYES@7 + IMG@10)
+    if (Array.isArray(data.subPick?.etc)) {
+      let etc = data.subPick.etc.slice();
+      if (etc.length === 9) {
+        etc.splice(8, 0, 0); // insert FIRE slot
+        if (data.fireLevel == null && etc[8] > 0) etc[8] += 1;
+      }
+      if (etc.length === 10) {
+        // old: INFO RAM SD AUTO LGHT COLR BATT CHLD FIRE RSET
+        // new: … BATT EYES CHLD FIRE IMG RSET
+        const chld = etc[7] | 0;
+        const fire = etc[8] | 0;
+        const rset = etc[9] | 0;
+        etc = etc.slice(0, 7).concat([1, chld, fire, 0, rset]); // EYES default 1MIN, IMG OFF
+      }
+      data.subPick.etc = etc;
     }
-    if (data.fireLevel == null && Array.isArray(data.subPick?.etc) && data.subPick.etc[8] > 0) {
-      data.subPick.etc[8] += 1;
+    if (Array.isArray(data.subPick?.midi) && data.subPick.midi.length < 10) {
+      const midi = data.subPick.midi.slice();
+      while (midi.length < 10) midi.push(0);
+      data.subPick.midi = midi;
     }
     for (const mode of Object.keys(subPick)) {
       const saved = data.subPick?.[mode];
@@ -774,14 +971,47 @@ export function createDevice(matrix, statusEl, rings) {
     if (Number.isFinite(data.lineInLevel)) s.lineInLevel = clamp(data.lineInLevel, 0, 15);
     if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
     if (typeof data.clockInt === "boolean") s.clockInt = data.clockInt;
+    if (typeof data.analogExtClock === "boolean") s.analogExtClock = data.analogExtClock;
+    if (Number.isFinite(data.cinHoldMs)) s.cinHoldMs = clamp(data.cinHoldMs, 1, 32);
+    if (Number.isFinite(data.cinPpqnIndex)) s.cinPpqnIndex = clamp(data.cinPpqnIndex, 0, CIN_PPQN_TABLE.length - 1);
+    if (Number.isFinite(data.syncSendMs)) s.syncSendMs = clamp(data.syncSendMs, -127, 127);
+    if (Number.isFinite(data.syncRcveMs)) s.syncRcveMs = clamp(data.syncRcveMs, -127, 127);
+    if (Number.isFinite(data.ppqnWidthMs)) s.ppqnWidthMs = clamp(data.ppqnWidthMs, 1, 50);
+    if (typeof data.ppqnStopWithPlay === "boolean") s.ppqnStopWithPlay = data.ppqnStopWithPlay;
+    if (Number.isFinite(data.ppqnRateSel)) s.ppqnRateSel = clamp(data.ppqnRateSel, 0, PPQN_RATE_LABELS.length - 1);
+    if (typeof data.ppqnPolarityPos === "boolean") s.ppqnPolarityPos = data.ppqnPolarityPos;
+    if (Number.isFinite(data.sideVoice)) s.sideVoice = data.sideVoice;
+    if (typeof data.midiWriteOverwrite === "boolean") {
+      s.midiWriteOverwrite = data.midiWriteOverwrite;
+      subPick.midi[9] = data.midiWriteOverwrite ? 1 : 0;
+    }
+    if (Number.isFinite(data.eyesMode)) {
+      s.eyesMode = clamp(data.eyesMode, 0, 3);
+      subPick.etc[ETC_EYES_INDEX] = s.eyesMode;
+    }
+    if (typeof data.imageMode === "boolean") {
+      s.imageMode = data.imageMode;
+      subPick.etc[ETC_IMG_INDEX] = data.imageMode ? 1 : 0;
+    }
+    if (Number.isFinite(data.imgBrushChannel)) s.imgBrushChannel = clamp(data.imgBrushChannel, 1, 8);
     if (Number.isFinite(data.muteMask)) s.muteMask = data.muteMask & 0xffff;
     if (Number.isFinite(data.ledBrightness)) s.ledBrightness = clamp(data.ledBrightness, 3, 255);
     if (!data.deviceChosen) subPick.look[7] = 2;
     s.packSlot = Number.isFinite(data.packSlot) && data.packSlot >= 1 && data.packSlot <= 99 ? data.packSlot : 1;
+    // Sync SIDE pick from saved voice
+    {
+      let sideIdx = 0;
+      for (let i = 0; i < SIDE_VOICE_CHOICES.length; i++) if (SIDE_VOICE_CHOICES[i] === s.sideVoice) sideIdx = i;
+      subPick.midi[7] = sideIdx;
+    }
     applySub("look", 0);
     applyLedLayout();
     applySub("etc", 5);
-    applySub("etc", 7);
+    applySub("etc", ETC_EYES_INDEX);
+    applySub("etc", ETC_CHLD_INDEX);
+    applySub("etc", ETC_FIRE_INDEX);
+    applySub("etc", ETC_IMG_INDEX);
+    applySub("midi", 0);
     applySub("vol", 4);
     applySub("recs", 0);
     applySub("recs", 3);
@@ -859,8 +1089,18 @@ export function createDevice(matrix, statusEl, rings) {
     if (mode === "vol" && index === 3) return { text: String(s.prevVol), color: [0, 120, 120], code: "N" };
     if (mode === "recs" && index === 1) return { text: String(s.micGain), color: [0, 120, 120], code: "N" };
     if (mode === "recs" && index === 2) return { text: String(s.lineInLevel), color: [0, 0, 120], code: "X" };
-    const spec = SUB_VALUES[mode][index];
-    const pick = subPick[mode][index] % spec.opts.length;
+    if (mode === "midi" && index === 7) {
+      const v = s.sideVoice | 0;
+      return v ? { text: String(v), color: [0, 120, 0], code: "G" } : { text: "OFF", color: [120, 0, 0], code: "R" };
+    }
+    if (mode === "midi" && index === 9) {
+      return s.midiWriteOverwrite
+        ? { text: "ON", color: [0, 120, 0], code: "G" }
+        : { text: "OFF", color: [120, 0, 0], code: "R" };
+    }
+    const spec = SUB_VALUES[mode]?.[index];
+    if (!spec?.opts?.length) return { text: "—", color: [120, 120, 120], code: "W" };
+    const pick = (subPick[mode][index] || 0) % spec.opts.length;
     return { text: spec.opts[pick], color: spec.colors[Math.min(pick, spec.colors.length - 1)], code: spec.codes[Math.min(pick, spec.codes.length - 1)] };
   }
   function applySub(mode, index) {
@@ -870,7 +1110,12 @@ export function createDevice(matrix, statusEl, rings) {
       s.simpleNotes = subPick.look[2] === 1;
       s.pmode = subPick.look[3];
       s.loopLength = subPick.look[4];
-      s.voiceMode = subPick.look[5] === 1;
+      if (s.imageMode) {
+        s.voiceMode = false;
+        subPick.look[5] = 0;
+      } else {
+        s.voiceMode = subPick.look[5] === 1;
+      }
       s.ctrlVol = subPick.look[6] === 1;
       s.cursorType = subPick.look[9];
       s.drawR = subPick.look[10] === 1;
@@ -878,12 +1123,30 @@ export function createDevice(matrix, statusEl, rings) {
       applyLedLayout();
       if (!s.drawR && s.fullMute) exitFullMute(0);
     }
+    if (mode === "midi") {
+      s.midiChMode = subPick.midi[0] || 0;
+      s.midiTransport = subPick.midi[1] || 0;
+      s.midiSend = subPick.midi[2] || 0;
+      s.midiReceive = (subPick.midi[3] || 0) !== 0;
+      s.midiClamp = (subPick.midi[4] || 0) !== 0;
+      const sideIdx = clamp(subPick.midi[7] | 0, 0, SIDE_VOICE_CHOICES.length - 1);
+      s.sideVoice = SIDE_VOICE_CHOICES[sideIdx] || 0;
+      s.midiWriteOverwrite = (subPick.midi[9] || 0) === 1;
+    }
     if (mode === "etc") {
       if (index === 5) s.scheme = subPick.etc[5];
-      if (index === 7) s.childLock = subPick.etc[7] === 1;
-      const fireChoices = [0, 15, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14];
-      const fireIdx = subPick.etc[8] | 0;
-      s.fireVoice = fireChoices[fireIdx] ?? 0;
+      if (index === ETC_EYES_INDEX) {
+        s.eyesMode = clamp(subPick.etc[ETC_EYES_INDEX] | 0, 0, 3);
+        s.eyesIdleMs = eyesIdleFromMode(s.eyesMode);
+      }
+      if (index === ETC_CHLD_INDEX) s.childLock = subPick.etc[ETC_CHLD_INDEX] === 1;
+      const fireIdx = subPick.etc[ETC_FIRE_INDEX] | 0;
+      s.fireVoice = FIRE_VOICE_CHOICES[fireIdx] ?? 0;
+      if (index === ETC_IMG_INDEX) {
+        s.imageMode = subPick.etc[ETC_IMG_INDEX] === 1;
+        if (s.imageMode) enforceImageModeConstraints();
+        else s.drawBaseColorMode = true;
+      }
     }
     if (mode === "vol") {
       s.stereo = subPick.vol[4] || 0;
@@ -892,7 +1155,12 @@ export function createDevice(matrix, statusEl, rings) {
     if (mode === "recs") {
       s.recInput = subPick.recs[0] || 0;
       s.fastRecMode = subPick.recs[3] || 0;
-      s.recChannelClear = subPick.recs[4] || 0;
+      if (s.imageMode) {
+        s.recChannelClear = 2;
+        subPick.recs[4] = 2;
+      } else {
+        s.recChannelClear = subPick.recs[4] || 0;
+      }
     }
     saveEeprom();
   }
@@ -941,6 +1209,8 @@ export function createDevice(matrix, statusEl, rings) {
   function finishLoad() {
     s.GLOB.singleMode = false;
     s.mode = "draw";
+    applyDrawSingleYEncoderLimits();
+    noteActivity();
   }
   function writeGenre(type) {
     const pages = type === 0 ? 0 : clamp(s.genreLength, 1, PAGES);
@@ -974,6 +1244,7 @@ export function createDevice(matrix, statusEl, rings) {
 
   function turn(enc, dir) {
     if (s.mode === "boot") return;
+    noteActivity();
     engine.click();
     s.knobAngle[enc] += dir * 15;
     if (hold[enc]) hold[enc].turned = true;
@@ -1014,6 +1285,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "draw" || s.mode === "single") {
       if (enc === 0) {
         const prevY = s.GLOB.y;
+        applyDrawSingleYEncoderLimits();
         s.GLOB.y = clamp(s.GLOB.y + dir, 1, ROWS);
         syncChannel();
         if (s.GLOB.y !== prevY) applyVoiceEdit(s.GLOB.currentChannel);
@@ -1084,11 +1356,45 @@ export function createDevice(matrix, statusEl, rings) {
       else if (enc === 3) s.genreLength = clamp(s.genreLength + dir, 1, PAGES);
       return;
     }
-    if (s.mode === "etc" && s.subIndex === 8) {
+    if (s.mode === "etc" && s.subIndex === ETC_FIRE_INDEX) {
       if (enc === 0) { s.fireSize = clamp((s.fireSize || 1) + dir, 1, 4); saveEeprom(); return; }
       if (enc === 1) { s.fireLevel = clamp((s.fireLevel || 1) + dir, 1, 25); saveEeprom(); return; }
       if (enc === 2 && s.fireFocus === 1) { s.fireGravity = clamp((s.fireGravity | 0) + dir, 0, 8); saveEeprom(); return; }
       if (enc === 2 && s.fireFocus === 2) { s.fireColor = clamp((s.fireColor == null ? 8 : s.fireColor) + dir, 0, 8); saveEeprom(); return; }
+    }
+    if (s.mode === "midi" && s.subIndex === 5) {
+      if (enc === 1) { s.syncEdit = dir > 0 ? 1 : 0; return; }
+      if (enc === 2) {
+        if (s.syncEdit === 0) s.syncSendMs = clamp(s.syncSendMs + dir, -127, 127);
+        else s.syncRcveMs = clamp(s.syncRcveMs + dir, -127, 127);
+        saveEeprom();
+        return;
+      }
+    }
+    if (s.mode === "midi" && s.subIndex === 6) {
+      if (enc === 0) { s.ppqnWidthMs = clamp(s.ppqnWidthMs + dir, 1, 50); s.ppqnFocus = 2; saveEeprom(); return; }
+      if (enc === 1) { s.ppqnStopWithPlay = dir < 0; s.ppqnFocus = 1; saveEeprom(); return; }
+      if (enc === 2) {
+        s.ppqnRateSel = clamp(s.ppqnRateSel + dir, 0, PPQN_RATE_LABELS.length - 1);
+        s.ppqnFocus = 0;
+        saveEeprom();
+        return;
+      }
+    }
+    if (s.mode === "midi" && s.subIndex === 8) {
+      if (enc === 0) { s.cinHoldMs = clamp(s.cinHoldMs + dir, 1, 32); s.cinFocus = 1; saveEeprom(); return; }
+      if (enc === 2) {
+        s.cinPpqnIndex = clamp(s.cinPpqnIndex + dir, 0, CIN_PPQN_TABLE.length - 1);
+        s.cinFocus = 0;
+        saveEeprom();
+        return;
+      }
+    }
+    if (s.mode === "look" && s.subIndex === 5 && s.imageMode && enc === 2) {
+      // VMOD locked OFF while IMG is on
+      subPick.look[5] = 0;
+      s.voiceMode = false;
+      return;
     }
     if (SUBS[s.mode] && enc === 3) s.subIndex = clamp(s.subIndex + dir, 0, SUBS[s.mode].length - 1);
     if (SUBS[s.mode] && enc === 2) {
@@ -1097,6 +1403,9 @@ export function createDevice(matrix, statusEl, rings) {
       else if (s.mode === "vol" && s.subIndex === 3) s.prevVol = clamp(s.prevVol + dir, 0, 16);
       else if (s.mode === "recs" && s.subIndex === 1) { s.micGain = clamp(s.micGain + dir, 0, 63); saveEeprom(); return; }
       else if (s.mode === "recs" && s.subIndex === 2) { s.lineInLevel = clamp(s.lineInLevel + dir, 0, 15); saveEeprom(); return; }
+      else if (s.mode === "midi" && (s.subIndex === 5 || s.subIndex === 6 || s.subIndex === 8)) {
+        // handled above
+      }
       else if (s.mode === "look" && s.subIndex === 11) {
         const bit = 1 << (s.muteSel === 16 ? 0 : s.muteSel);
         s.muteMask = dir > 0 ? s.muteMask | bit : s.muteMask & ~bit;
@@ -1105,6 +1414,7 @@ export function createDevice(matrix, statusEl, rings) {
       }
       else {
         const spec = SUB_VALUES[s.mode][s.subIndex];
+        if (!spec?.opts?.length) return;
         subPick[s.mode][s.subIndex] = clamp(subPick[s.mode][s.subIndex] + (dir > 0 ? 1 : -1), 0, spec.opts.length - 1);
       }
       applySub(s.mode, s.subIndex);
@@ -1137,7 +1447,11 @@ export function createDevice(matrix, statusEl, rings) {
       }
       if (s.wavFile && (enc === 0 || enc === 1 || enc === 3)) previewWav(false);
     }
-    if (s.mode === "bpm" && enc === 2 && s.clockInt !== (dir > 0)) { s.clockInt = dir > 0; saveEeprom(); }
+    if (s.mode === "bpm" && enc === 2 && s.clockInt !== (dir > 0)) {
+      s.clockInt = dir > 0;
+      if (s.clockInt) s.analogExtClock = false;
+      saveEeprom();
+    }
     if (s.mode === "bpm" && enc === 3) { s.bpm = clamp(s.bpm + dir, 40, 240); saveEeprom(); }
     if (s.mode === "song" && enc === 1) s.songPattern = clamp(s.songPattern + dir, 1, 16);
     if (s.mode === "song" && enc === 3) s.songPos = clamp(s.songPos + dir, 1, 64);
@@ -1154,6 +1468,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
 
   function shortPress(enc) {
+    noteActivity();
     if (s.mode === "shift") {
       if (enc === 1) backToGrid();
       return;
@@ -1272,8 +1587,19 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "song" && enc === 0) song[s.songPos - 1] = 0;
     if (s.mode === "song" && (enc === 1 || enc === 3)) song[s.songPos - 1] = s.songPattern;
     if (s.mode === "song" && enc === 2) toggleSong();
-    if (s.mode === "etc" && s.subIndex === 8 && enc === 2) { s.fireFocus = ((s.fireFocus | 0) + 1) % 3; return; }
-    if (s.mode === "etc" && s.subIndex === 9 && enc === 3) { runReset(); return; }
+    if (s.mode === "etc" && s.subIndex === ETC_FIRE_INDEX && enc === 2) { s.fireFocus = ((s.fireFocus | 0) + 1) % 3; return; }
+    if (s.mode === "etc" && s.subIndex === ETC_RSET_INDEX && enc === 3) { runReset(); return; }
+    if (s.mode === "midi" && s.subIndex === 6 && enc === 3) {
+      s.ppqnPolarityPos = !s.ppqnPolarityPos;
+      saveEeprom();
+      return;
+    }
+    if (s.mode === "bpm" && (enc === 2 || enc === 3) && !s.clockInt) {
+      // Toggle MIDI EXT ↔ orange analog EXT
+      s.analogExtClock = !s.analogExtClock;
+      saveEeprom();
+      return;
+    }
     if (enc === 3 && s.mode === "menu") openMenuPage();
   }
 
@@ -1508,6 +1834,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function onTouchL(down) {
     touch.l = down;
+    noteActivity();
     if (down) {
       if (s.mode === "filter") {
         s.GLOB.singleMode = false;
@@ -1528,6 +1855,12 @@ export function createDevice(matrix, statusEl, rings) {
     if (touch.arm && !touch.m && (s.mode === "draw" || s.mode === "single")) {
       touch.arm = false;
       s.mode = "menu";
+      applyDrawSingleYEncoderLimits();
+    } else if (!touch.chord && touch.first === 1 && !touch.m && s.imageMode && (s.mode === "draw" || s.mode === "single")) {
+      // IMG: touch1 cycles brush voice 1–8
+      s.imgBrushChannel = (s.imgBrushChannel % 8) + 1;
+      s.GLOB.currentChannel = s.imgBrushChannel;
+      saveEeprom();
     } else if (!touch.chord && touch.first === 1 && !touch.m && s.mode === "draw" && s.GLOB.y === 1) {
       togglePlay();
     } else if (!touch.chord && touch.first === 1 && !touch.m && (s.mode === "draw" || s.mode === "single")) {
@@ -1544,8 +1877,60 @@ export function createDevice(matrix, statusEl, rings) {
         }
       }
     }
-    if (!touch.chord && s.mode !== "draw" && s.mode !== "single" && s.mode !== "boot") backToGrid();
+    if (!touch.chord && s.mode !== "draw" && s.mode !== "single" && s.mode !== "boot") {
+      backToGrid();
+      applyDrawSingleYEncoderLimits();
+    }
     if (!touch.m) { touch.first = 0; touch.chord = false; }
+  }
+  function onMidiMessage(ev) {
+    const [status, data1, data2] = ev.data || [];
+    if (status == null) return;
+    const type = status & 0xf0;
+    if (type === 0x90 && data2 > 0) {
+      if (!s.midiReceive) return;
+      const ch = s.GLOB.currentChannel || 1;
+      const folded = foldRow(data1, ch);
+      const row = folded.row;
+      const step = s.playing ? s.beat : s.GLOB.x;
+      if (s.mode === "single" || s.GLOB.singleMode) {
+        placeLiveGridNote(step, row, ch, data2, s.midiClamp ? 255 : data1);
+      }
+      noteActivity();
+    } else if (status === 0xfa || status === 0xfb) {
+      // MIDI Start/Continue — honor transport GET/SEND loosely
+      if ((s.midiTransport === 1 || s.midiTransport === 0) && !s.playing && !s.clockInt && !s.analogExtClock) {
+        const delay = Math.max(0, effectiveRcveDelayMs());
+        setTimeout(() => { if (!s.playing) togglePlay(); }, delay);
+      }
+    } else if (status === 0xfc) {
+      if (s.playing && !s.clockInt && !s.analogExtClock) togglePlay();
+    }
+  }
+  function effectiveSendDelayMs() {
+    const a = s.syncSendMs | 0;
+    const b = s.syncRcveMs | 0;
+    if (a >= 0) return a;
+    return Math.abs(b < 0 ? 0 : a); // negative send → delay other path; simplify to |a| on receive elsewhere
+  }
+  function effectiveRcveDelayMs() {
+    const a = s.syncSendMs | 0;
+    const b = s.syncRcveMs | 0;
+    if (b >= 0) return b;
+    return Math.abs(b);
+  }
+  function bindWebMidi() {
+    if (!navigator.requestMIDIAccess || midiAccess) return;
+    navigator.requestMIDIAccess({ sysex: false }).then((access) => {
+      midiAccess = access;
+      const hook = () => {
+        for (const input of access.inputs.values()) {
+          input.onmidimessage = onMidiMessage;
+        }
+      };
+      hook();
+      access.onstatechange = hook;
+    }).catch(() => { /* permission / unsupported */ });
   }
 
   function isTab(e) { return e.code === "Tab" || e.key === "Tab"; }
@@ -1760,49 +2145,30 @@ export function createDevice(matrix, statusEl, rings) {
     if (hold[1] && !hold[1].turned && !s.solo && now - hold[1].at >= LONG_MS && s.GLOB.y !== 16 && (s.mode === "draw" || s.mode === "single")) {
       enterSolo();
     }
+    const t = engine.now();
+    // Soft PPQN CLK-OUT while playing (and CONT keeps pulsing when stopped)
+    if (ppqnOutEnabled() && (s.playing || !s.ppqnStopWithPlay) && s.clockInt) {
+      const outPpqn = ppqnOutPpqn();
+      const pulseSec = (60 / Math.max(40, s.bpm)) / outPpqn;
+      while (ppqnNextPulseAt <= t + 0.05) {
+        s.clkOutPulseAt = performance.now();
+        ppqnPhase += 1;
+        ppqnNextPulseAt += pulseSec;
+      }
+    }
     if (s.playing && s.clockInt) {
-      const t = engine.now();
       while (nextAt <= t + 0.05) {
-        if (s.voiceMode && s.pmode !== 2) {
-          refreshVoiceLens();
-          const end = Math.max(1, s.voicePages || 1) * COLS;
-          const prev = s.beat;
-          if (s.beat >= end) {
-            s.beat = 1;
-            s.GLOB.page = 1;
-          } else {
-            s.beat += 1;
-            s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
-          }
-          bumpVoiceLoops(prev, s.beat);
-        } else if (s.pmode === 1) {
-          const start = (s.GLOB.page - 1) * COLS + 1;
-          const end = start + COLS - 1;
-          if (s.beat < start || s.beat > end) s.beat = start + ((s.beat - 1) % COLS);
-          else s.beat += 1;
-          if (s.beat > end) s.beat = start;
-        } else {
-          const end = patternEnd();
-          if (s.beat >= end) {
-            if (s.pmode === 3 && s.GLOB.edit !== s.GLOB.page) {
-              s.GLOB.page = s.GLOB.edit;
-              s.beat = (s.GLOB.page - 1) * COLS + 1;
-            } else if (s.pmode === 2) {
-              if (!advanceSong()) { s.playing = false; break; }
-            } else if (s.pmode === 3) {
-              s.beat = (s.GLOB.page - 1) * COLS + 1;
-            } else {
-              s.beat = 1;
-              s.GLOB.page = 1;
-            }
-          } else {
-            s.beat += 1;
-            s.GLOB.page = Math.floor((s.beat - 1) / COLS) + 1;
-          }
-        }
-        if (s.flow && !s.voiceMode && s.pmode !== 3) s.GLOB.edit = s.GLOB.page;
-        fire(s.beat, Math.max(nextAt, t));
+        if (!advanceOneStep(Math.max(nextAt, t))) break;
         nextAt += stepSec();
+      }
+    } else if (s.playing && !s.clockInt && s.analogExtClock) {
+      // Soft CLK-IN generator at BPM × CIN PPQN (simulates external pulses)
+      const ppqn = cinPpqn();
+      const pulseSec = (60 / Math.max(40, s.bpm)) / ppqn;
+      // Derive displayed BPM from period (already using s.bpm as source)
+      while (analogNextPulseAt <= t + 0.05) {
+        analogClockPulse(Math.max(analogNextPulseAt, t));
+        analogNextPulseAt += pulseSec;
       }
     }
     const audioNow = engine.now();
@@ -1897,8 +2263,12 @@ export function createDevice(matrix, statusEl, rings) {
     saveEeprom();
     saveSlot("toern-web-patterns", 0, snapshot());
   });
+  bindWebMidi();
+  s.lastActivityAt = performance.now();
   return {
     start() { requestAnimationFrame(tick); },
+    placeLiveGridNote,
+    analogClockPulse,
     keydown, keyup,
     pointer(col, row, erase, audition) {
       pointer(col, row, erase, audition);

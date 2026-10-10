@@ -87,20 +87,50 @@
               <div class="hb-tip"><strong>RVRB availability:</strong> the reverb send appears on sample voices <strong>1, 2, 5–8</strong> and synth voice <strong>11</strong>. Voices <strong>3</strong> and <strong>4</strong> show a dim, inactive slider — no send path. Voices <strong>13</strong> and <strong>14</strong> use <strong>CENT</strong> (coarse pitch) in the third column on page&nbsp;0 instead of RVRB.</div>
             </article>
 
+            <h3 class="hb-subsection-heading">Page 1 — sample lane: RES · DTNE · OCTV · TIME</h3>
+            <article class="hb-device">
+              <div class="hb-led-row">
+                <div>
+                  <p class="hb-led-label">At rest</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p1_sample" width="16" height="16" role="img" aria-label="Filter page 1 sample — resting"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Letters <strong>R · D · O · T</strong> on voices 1–8.</p>
+                </div>
+                <div>
+                  <p class="hb-led-label">Encoder turning</p>
+                  <div class="hb-led-wrap hb-display-image">
+                    <canvas class="led-matrix" data-scene="filter_p1_sample_named" width="16" height="16" role="img" aria-label="Filter page 1 sample — editing TIME"></canvas>
+                  </div>
+                  <p class="viz-caption--below">Full name <strong>TIME</strong> while encoder 4 is being moved.</p>
+                </div>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>R</strong></td><td>RES</td><td>Filter resonance around the cutoff.</td><td>0–32</td></tr>
+                  <tr><td><strong>D</strong></td><td>DTNE</td><td>Fine pitch — fractional semitone detune after OCTV.</td><td>0–32 (centre = in tune)</td></tr>
+                  <tr><td><strong>O</strong></td><td>OCTV</td><td>Coarse pitch in whole semitones.</td><td>−24…+24 semis (encoder scale 0–48, centre = 0)</td></tr>
+                  <tr><td><strong>T</strong></td><td>TIME</td><td>Independent time-stretch (WSOLA). Lengthens or shortens without changing pitch the same way OCTV does.</td><td>0–22; <strong>11 = OFF</strong> (default). Below 11 shortens (~−10%…0%); above 11 lengthens (~0%…+10%).</td></tr>
+                </tbody>
+              </table>
+              <div class="hb-tip"><strong>Pitch vs TIME:</strong> OCTV/DTNE change playback rate (pitch). TIME stretches duration around the current pitch. Leave TIME at 11 unless you want that smear.</div>
+            </article>
+
             <h3 class="hb-subsection-heading">Page 1 — synth voices: CHRS · RESO · FLNG</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
                   <p class="hb-led-label">At rest</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p1" width="16" height="16" role="img" aria-label="Filter page 1 — resting"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p1" width="16" height="16" role="img" aria-label="Filter page 1 synth — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Letters <strong>C · R · F</strong> — column 4 is empty on this page.</p>
+                  <p class="viz-caption--below">Letters <strong>C · R · F</strong> — column 4 is empty on this page (poly / mono synth lanes).</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p1_named" width="16" height="16" role="img" aria-label="Filter page 1 — editing RESO"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p1_named" width="16" height="16" role="img" aria-label="Filter page 1 synth — editing RESO"></canvas>
                   </div>
                   <p class="viz-caption--below">Full name <strong>RESO</strong> while encoder 2 is being moved.</p>
                 </div>

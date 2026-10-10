@@ -309,7 +309,7 @@
   function etcSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
     m.clear();
     largeInd4Parent(m, 14);
-    drawSubmenuDots16(m, pageIdx, 10, 14);
+    drawSubmenuDots16(m, pageIdx, 12, 14);
     const tc = menuTextFromCol(14);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc1) m.indL(1, enc1);
@@ -458,12 +458,16 @@
       m.indL(3, "G");
     } else if (mode === "ext_ok") {
       textR = 0; textG = 255; textB = 0;
-      // EXT mode locked → green inbound arrow
-      arrowR = 0; arrowG = 220; arrowB = 0;
-      m.indL(3, "G");
+      // MIDI EXT locked → green digits, red inbound arrow (encoder cue)
+      arrowR = 255; arrowG = 40; arrowB = 40;
+      m.indL(3, "R");
+    } else if (mode === "ext_analog") {
+      textR = 255; textG = 140; textB = 0;
+      arrowR = 255; arrowG = 160; arrowB = 40;
+      m.indL(3, "O");
     } else {
       textR = 255; textG = 40; textB = 40;
-      // EXT mode with no clock → red arrow
+      // MIDI EXT hunting → red digits + red arrow
       arrowR = 255; arrowG = 30; arrowB = 30;
       m.indL(3, "R");
     }
@@ -496,12 +500,16 @@
     { letters: ["W", "I", "C", "S"], vals: [10, 14, 18, 12], names: ["WAVE", "INST", "CTOF", "SHAP"] },
     { letters: ["A", "D", "S", "R"], vals: [20, 16, 14, 24], names: ["ATCK", "DECY", "SUST", "RELS"] }
   ];
+  /* Sample voices page 1 (firmware RES · DTNE · OCTV · TIME). */
+  const FILTER_PAGE_SAMPLE_1 = {
+    letters: ["R", "D", "O", "T"], vals: [16, 16, 24, 11], names: ["RES", "DTNE", "OCTV", "TIME"]
+  };
   const FILTER_PAIRS = [[2, 3], [6, 7], [10, 11], [14, 15]];
 
   /* Resting view of a filter page: four vertical sliders; row-12 letters sit on a
    * fixed 16px strip A_D_S_R_ (cols 1,5,9,13 — 3px letter + 1px gap). */
-  function drawFilterPageScene(m, pageIdx) {
-    const p = FILTER_PAGES[Math.max(0, Math.min(3, pageIdx))] || FILTER_PAGES[0];
+  function drawFilterPageScene(m, pageIdx, pageOverride) {
+    const p = pageOverride || FILTER_PAGES[Math.max(0, Math.min(3, pageIdx))] || FILTER_PAGES[0];
     const abbrevStripX = [1, 5, 9, 13];
     m.clear();
     for (let i = 0; i < 4; i++) {
@@ -516,8 +524,8 @@
   /* "Edit" view of a filter page: same four sliders, but the parameter being
    * turned is highlighted and its full 4-letter name is printed on row 12
    * (5px font → rows 12–16), matching firmware drawSliderName(). */
-  function drawFilterPageEditScene(m, pageIdx, editI) {
-    const p = FILTER_PAGES[Math.max(0, Math.min(3, pageIdx))] || FILTER_PAGES[0];
+  function drawFilterPageEditScene(m, pageIdx, editI, pageOverride) {
+    const p = pageOverride || FILTER_PAGES[Math.max(0, Math.min(3, pageIdx))] || FILTER_PAGES[0];
     m.clear();
     for (let i = 0; i < 4; i++) {
       const letter = p.letters[i];
@@ -812,12 +820,17 @@
     bpm_ext_warn(m) {
       drawBPMScreenLike(m, 124.0, "ext_bad");
     },
+    bpm_ext_analog(m) {
+      drawBPMScreenLike(m, 120.0, "ext_analog");
+    },
     filter_p0(m) { drawFilterPageScene(m, 0); },
     filter_p1(m) { drawFilterPageScene(m, 1); },
+    filter_p1_sample(m) { drawFilterPageScene(m, 1, FILTER_PAGE_SAMPLE_1); },
     filter_p2(m) { drawFilterPageScene(m, 2); },
     filter_p3(m) { drawFilterPageScene(m, 3); },
     filter_p0_named(m) { drawFilterPageEditScene(m, 0, 1); /* LCUT */ },
     filter_p1_named(m) { drawFilterPageEditScene(m, 1, 1); /* RESO */ },
+    filter_p1_sample_named(m) { drawFilterPageEditScene(m, 1, 3, FILTER_PAGE_SAMPLE_1); /* TIME */ },
     filter_p2_named(m) { drawFilterPageEditScene(m, 2, 1); /* INST */ },
     filter_p3_named(m) { drawFilterPageEditScene(m, 3, 2); /* SUST */ },
     lk_view(m) {
@@ -944,7 +957,7 @@
     },
     et_info(m) {
       etcSubFrame(m, 0, "INFO", "", "", "");
-      drawText(m, "1.0", 2, 3, 255, 220, 0);
+      drawText(m, "3.0x", 2, 3, 255, 220, 0);
     },
     et_ram(m) {
       etcSubFrame(m, 1, "RAM", "", "", "G");
@@ -975,25 +988,37 @@
       etcSubFrame(m, 6, "BATT", "", "", "");
       drawText(m, "78%", 2, 3, 0, 255, 0);
     },
+    et_eyes(m) {
+      etcSubFrame(m, 7, "EYES", "", "", "G");
+      drawText(m, "1MIN", 2, 3, 0, 255, 0);
+    },
+    et_chld(m) {
+      etcSubFrame(m, 8, "CHLD", "", "", "R");
+      drawText(m, "OFF", 2, 3, 255, 0, 0);
+    },
     et_fire(m) {
-      etcSubFrame(m, 8, "FIRE", "O", "O", "G");
+      etcSubFrame(m, 9, "FIRE", "O", "O", "G");
       drawText(m, "1", 1, 3, 255, 140, 20);
       drawText(m, "8", 5, 3, 255, 180, 60);
       drawText(m, "A", 12, 3, 255, 220, 120);
       for (let x = 9; x <= 16; x++) m.set(x, 8, 140, 90, 20);
     },
+    et_img(m) {
+      etcSubFrame(m, 10, "IMG", "", "", "G");
+      drawText(m, "ON", 2, 3, 0, 255, 0);
+    },
     et_rset(m) {
-      etcSubFrame(m, 9, "RSET", "", "", "O");
+      etcSubFrame(m, 11, "RSET", "", "", "O");
       for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "SD", 2, 3, 255, 140, 0);
     },
     et_rset_efx(m) {
-      etcSubFrame(m, 9, "RSET", "", "", "O");
+      etcSubFrame(m, 11, "RSET", "", "", "O");
       for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "EFX", 2, 3, 255, 100, 0);
     },
     et_rset_full(m) {
-      etcSubFrame(m, 9, "RSET", "", "", "O");
+      etcSubFrame(m, 11, "RSET", "", "", "O");
       for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "FULL", 2, 3, 255, 60, 0);
     },
