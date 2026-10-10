@@ -100,13 +100,15 @@
       '<nav class="hb-sidebar__nav">'
     );
 
-    NAV.forEach(function (section) {
+    var chapter = 0;
+    NAV.forEach(function (section, sectionIndex) {
       var tone = sectionTone(section.group);
       var sectionClasses = "hb-sidebar__section hb-sidebar__section--" + tone;
 
       html.push('<div class="' + sectionClasses + '">');
-      html.push('<p class="hb-sidebar__group">' + escapeHtml(section.group) + "</p><ul>");
+      html.push('<p class="hb-sidebar__group">' + '<span aria-hidden="true">0' + (sectionIndex + 1) + ' / </span>' + escapeHtml(section.group) + "</p><ul>");
       section.items.forEach(function (item) {
+        var number = String(chapter++).padStart(2, "0");
         var active = item.href === page;
         var classes = "hb-sidebar__link";
         if (active) classes += " hb-sidebar__link--active";
@@ -118,7 +120,7 @@
             classes +
             "\"" +
             (active ? ' aria-current="page"' : "") +
-            '><span class="hb-sidebar__link-ico" aria-hidden="true">' +
+            ' data-chapter="' + number + '"><span class="hb-sidebar__link-ico" aria-hidden="true">' +
             iconHtml(item.icon) +
             '</span><span class="hb-sidebar__link-text"><span class="hb-sidebar__link-title">' +
             escapeHtml(item.title) +
@@ -206,6 +208,19 @@
     ensureMobileBar();
     renderSidebar(sidebar);
     initMobileNav(sidebar);
+    var currentSection = NAV.find(function (section) {
+      return section.items.some(function (item) { return item.href === currentPage(); });
+    });
+    if (currentSection) document.body.dataset.hbSection = sectionTone(currentSection.group);
+    var items = NAV.reduce(function (all, section) { return all.concat(section.items); }, []);
+    var index = items.findIndex(function (item) { return item.href === currentPage(); });
+    var wrap = document.querySelector(".wrap");
+    if (wrap && index !== -1) {
+      var meta = document.createElement("div");
+      meta.className = "hb-chapter-meta";
+      meta.innerHTML = '<a href="index.html">TŒRN / Handbook</a><span>CHAPTER ' + String(index).padStart(2, "0") + ' / ' + String(items.length - 1).padStart(2, "0") + '</span>';
+      wrap.insertBefore(meta, wrap.firstChild);
+    }
   }
 
   if (document.readyState === "loading") {
