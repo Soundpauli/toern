@@ -25,7 +25,7 @@ Pages are `MenuPage` rows near the top of [`toern_menu.ino`](../../../toern_menu
 
 Settings live at absolute address `EEPROM_DATA_START + offset` with `EEPROM_DATA_START` = **43**. A magic byte `0x5A` sits at absolute address **42**. Sample-pack 0 flags sit at absolute address **200** (`EEPROM_SP0_STATE_ADDR`), outside this table.
 
-`SETTINGS_EEPROM_BLOCK_LEN` is **54**, so offsets **0 through 53** are copied to the SD settings backup. Offset **50** is the IMG migrate marker `0xA5`. Offset **51** is MIDI → SIDE (sidechain voice). Offset **52** is BPM EXT analog vs MIDI clock in. Offset **53** is MIDI → CIN: bits 0–2 PPQN index, bits 3–7 hold-off ms − 1. Inserting a byte in the middle shifts every saved unit. A shorter backup leaves the missing bytes at 0; offset 42 absent means VMOD off, offset 43 absent means FIRE off. Offset 44 absent or out of 1–25 loads as count 8. Offset 45 absent loads as size 1. Offset 46 absent loads as gravity 0. Offset 47 absent loads as colour 8. Offset 48 absent means IMG off. Offset 49 absent or out of 0–2 loads as EYES ON. Offset 51 absent or invalid loads as voice 1. Offset 53 absent loads as 1 PPQN, 1 ms.
+`SETTINGS_EEPROM_BLOCK_LEN` is **55**, so offsets **0 through 54** are copied to the SD settings backup. Offset **50** is the IMG migrate marker `0xA5`. Offset **51** is MIDI → SIDE (sidechain voice). Offset **52** is BPM EXT analog vs MIDI clock in. Offset **53** is MIDI → CIN: bits 0–2 PPQN index, bits 3–7 hold-off ms − 1. Offset **54** is MIDI → WRTE (0 = keep occupied cells, 1 = overwrite). Inserting a byte in the middle shifts every saved unit. A shorter backup leaves the missing bytes at 0; offset 42 absent means VMOD off, offset 43 absent means FIRE off. Offset 44 absent or out of 1–25 loads as count 8. Offset 45 absent loads as size 1. Offset 46 absent loads as gravity 0. Offset 47 absent loads as colour 8. Offset 48 absent means IMG off. Offset 49 absent or out of 0–2 loads as EYES ON. Offset 51 absent or invalid loads as voice 1. Offset 53 absent loads as 1 PPQN, 1 ms. Offset 54 absent or >1 loads as WRTE OFF.
 
 Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is also written as a single format byte. Leave 32–35 alone.
 
@@ -83,5 +83,6 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 51 | sidechainVoice (MIDI → SIDE), 0 = OFF, else voice 1–8, 11, 13, or 14. Invalid loads as 1 |
 | 52 | analogExtClock (BPM encoder-3 click in EXT), 0 = MIDI clock in, 1 = analog CLK-IN (J26) |
 | 53 | MIDI → CIN. Bits 0–2: PPQN index 0..7 = 1/2/4/8/12/16/24/32. Bits 3–7: hold-off ms − 1 (1–32 ms). Default 2 (4 PPQN, 1 ms) |
+| 54 | MIDI → WRTE, 0 = OFF (do not overwrite occupied cells), 1 = ON. Absent or >1 loads as 0 |
 
 Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offsets 42 through 49 are raw bytes at `EEPROM_DATA_START + offset`.

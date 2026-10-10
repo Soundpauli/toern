@@ -24,11 +24,11 @@
       <div class="wrap">
         <section class="handbook-page" id="page-midi">
           <h2 class="handbook-page__title">MIDI</h2>
-          <p class="handbook-page__summary">TRS MIDI in/out — note mapping, transport, what you send and receive, latency offsets, analog PPQN, analog clock-in diagnostics, and a sidechain trigger. Everything under root menu <strong>MIDI</strong>.</p>
+          <p class="handbook-page__summary">TRS MIDI in/out — note mapping, transport, what you send and receive, whether MIDI overwrites the grid, latency offsets, analog PPQN, analog clock-in, and a sidechain trigger. Everything under root menu <strong>MIDI</strong>.</p>
 
           <section class="hb-sub" id="midi-menu">
             <h2>The MIDI submenu</h2>
-            <p class="lede">Nine pages. Encoder&nbsp;4 walks siblings; most values turn on encoder&nbsp;3. Pair with <a href="tempo-midi.html#bpm">BPM → INT/EXT</a> for full master/slave.</p>
+            <p class="lede">Ten pages. Encoder&nbsp;4 walks siblings; most values turn on encoder&nbsp;3. Pair with <a href="tempo-midi.html#bpm">BPM → INT/EXT</a> for full master/slave.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="mr_midi" width="16" height="16" role="img" aria-label="MIDI root"></canvas>
@@ -129,6 +129,26 @@
                   <tr><td><strong>OFF</strong></td><td>Ignore notes — pure sequencer / recorder.</td></tr>
                 </tbody>
               </table>
+            </article>
+          </section>
+
+
+          <hr />
+
+          <section class="hb-sub" id="wrte">
+            <h2>WRTE — overwrite grid notes</h2>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_wrte" width="16" height="16" role="img" aria-label="MIDI WRTE"></canvas>
+              </div>
+              <table class="opt-table">
+                <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>OFF</strong></td><td>Incoming MIDI only fills empty cells. Notes already on the grid (same or other voice) stay put. Default.</td></tr>
+                  <tr><td><strong>ON</strong></td><td>Incoming MIDI replaces whatever is already in that cell.</td></tr>
+                </tbody>
+              </table>
+              <p class="hb-device__intro">Live play still sounds. WRTE only affects what gets written while recording in SINGLE. The setting survives reboot.</p>
             </article>
           </section>
 

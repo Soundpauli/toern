@@ -2,7 +2,7 @@
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 12
 #define RECS_PAGES_COUNT 5
-#define MIDI_PAGES_COUNT 9
+#define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 7
 #define ETC_PAGES_COUNT 12
 
@@ -126,7 +126,8 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 −127..+127 ms (+ = this path, − = other path)
   {"PPQN", 50, false, nullptr},         // Analog clock: enc1 width, enc2 STOP/CONT, enc3 rate + click POL
   {"SIDE", 58, false, nullptr},         // Sidechain out: which voice pulses J27
-  {"CIN", 59, false, nullptr},          // Analog CLK-IN (J26): pulse count + input PPQN
+  {"CIN", 59, false, nullptr},          // Analog CLK-IN (J26): hold-off + input PPQN
+  {"WRTE", 60, false, nullptr},         // MIDI grid write: overwrite occupied cells
 };
 
 // VOL submenu pages
@@ -406,7 +407,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 54; // [53]=CIN PPQN idx + hold-off; [52]=EXT analog CLK-IN; [51]=SIDE …
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 55; // [54]=MIDI WRTE; [53]=CIN PPQN idx + hold-off; [52]=EXT analog CLK-IN; [51]=SIDE …
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -795,6 +796,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 51, 1);   // SIDE voice default (CH1)
       EEPROM.write(EEPROM_DATA_START + 52, 0);   // EXT clock source: 0=MIDI, 1=analog PPQN
       EEPROM.write(EEPROM_DATA_START + 53, 2);   // CIN: 4 PPQN, 1 ms hold-off
+      EEPROM.write(EEPROM_DATA_START + 54, 0);   // MIDI WRTE default (0 = OFF, keep existing notes)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
       }
@@ -1077,6 +1079,14 @@ FLASHMEM void loadMenuFromEEPROM() {
     saveSingleModeToEEPROM(37, 1);
   }
   MIDI_NOTE_CLAMP = (clampValue != 0);
+
+  extern bool MIDI_WRITE_OVERWRITE;
+  uint8_t wrteValue = EEPROM.read(EEPROM_DATA_START + 54);
+  if (wrteValue > 1) {
+    wrteValue = 0;
+    saveSingleModeToEEPROM(54, 0);
+  }
+  MIDI_WRITE_OVERWRITE = (wrteValue != 0);
 
   // VOL→GAIN (slots 38–41). Missing EEPROM / virgin 0xFF / >20 → 1.0× (10).
   // All-zero (pre-GAIN firmware or zero-padded backup) also → 1.0× for every bus.
@@ -1773,7 +1783,7 @@ FLASHMEM void showMidiMenu() {
   // MIDI: encoder 2 = value on CH/TRAN/SEND/RCVE/CLMP/SIDE; enc1+2 = SYNC;
   // PPQN: enc1=width, enc2=STOP/CONT, enc3=OFF/rate (click=POL); enc4 = page nav
   CRGB indicatorColor = currentMenuParentTextColor();
-  const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 51 || mainSetting == 45 || mainSetting == 50 || mainSetting == 58 || mainSetting == 59);
+  const bool midiValuePage = (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 51 || mainSetting == 45 || mainSetting == 50 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60);
   Encoder[0].writeRGBCode(0x000000);
   if (mainSetting == 50) {
     extern bool getPulseClockPolarityPositive();
@@ -2270,6 +2280,14 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawText("RCVE", 2, 10, currentMenuParentTextColor());
         drawMenuValue(MIDI_NOTE_RECEIVE ? "NOTE" : "OFF", 2, 3, MIDI_NOTE_RECEIVE ? UI_GREEN : UI_RED);
         drawIndicator('L', MIDI_NOTE_RECEIVE ? 'G' : 'R', 3);
+      }
+      break;
+
+    case 60: { // WRTE - MIDI overwrite occupied grid cells
+        extern bool MIDI_WRITE_OVERWRITE;
+        drawText("WRTE", 2, 10, currentMenuParentTextColor());
+        drawMenuValue(MIDI_WRITE_OVERWRITE ? "ON" : "OFF", 2, 3, MIDI_WRITE_OVERWRITE ? UI_GREEN : UI_RED);
+        drawIndicator('L', MIDI_WRITE_OVERWRITE ? 'G' : 'R', 3);
       }
       break;
 
@@ -3210,6 +3228,30 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = encVal;
         lastRcveEnc = encVal;
         saveSingleModeToEEPROM(28, (int8_t)encVal);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 60: { // WRTE - overwrite occupied cells (OFF/ON) via encoder 3
+      static int lastWrteEnc = -1;
+      extern bool MIDI_WRITE_OVERWRITE;
+      int encVal = MIDI_WRITE_OVERWRITE ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastWrteEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastWrteEnc) {
+        MIDI_WRITE_OVERWRITE = (currentMode->pos[2] == 1);
+        encVal = MIDI_WRITE_OVERWRITE ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastWrteEnc = encVal;
+        saveSingleModeToEEPROM(54, (int8_t)encVal);
         redrawMain(setting);
       }
       break;

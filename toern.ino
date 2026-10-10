@@ -13,6 +13,7 @@ extern "C" char *sbrk(int incr);
 // Forward declarations to keep Arduino's auto-prototype generator happy
 // (it may emit function prototypes that reference these types before they are defined).
 struct Mode;
+FLASHMEM void applyDrawSingleYEncoderLimits();
 
 //#define AUDIO_BLOCK_SAMPLES 128
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
@@ -470,6 +471,7 @@ bool MIDI_CLOCK_SEND = true;
 bool MIDI_NOTE_SEND = true;    // Control whether MIDI notes are sent (independent from clock)
 bool MIDI_NOTE_RECEIVE = true; // Control whether incoming MIDI notes are acted on
 bool MIDI_NOTE_CLAMP = true;   // Fold incoming pitch into rows 1..15; OFF preserves absolute MIDI pitch
+bool MIDI_WRITE_OVERWRITE = false; // MIDI>WRTE: ON replaces occupied grid cells; OFF leaves them
 
 bool MIDI_TRANSPORT_RECEIVE = true;
 bool MIDI_TRANSPORT_SEND = false;
@@ -602,7 +604,8 @@ static bool consumeLiveRecordSkip(uint16_t srcBeat, unsigned int row) {
 // Write a live-recorded note immediately so SINGLE/DRAW can show it, without
 // waiting for the next sequencer tick. Skip-once covers the current playhead.
 bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
-                       uint8_t midiPitch, bool protectOtherVoices) {
+                       uint8_t midiPitch, bool protectOtherVoices,
+                       bool protectOccupied) {
   extern Note note[][maxY + 1];
   if (channel < 1 || row < 1 || row > 15) return false;
   if (isChildVoiceDisabled((int)channel)) return false;
@@ -610,6 +613,7 @@ bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
   uint16_t targetBeat = quantizedMidiRecordBeat();
   if (targetBeat < 1) return false;
   Note &cell = note[targetBeat][row];
+  if (protectOccupied && cell.channel != 0) return false;
   if (protectOtherVoices && cell.channel != 0 && cell.channel != channel) {
     return false;
   }
@@ -1287,6 +1291,23 @@ static inline void clampGridCursor() {
   else if (GLOB.x > xmax) GLOB.x = xmax;
   if (GLOB.y < 1) GLOB.y = 1;
   else if (GLOB.y > maxY) GLOB.y = maxY;
+}
+
+// DRAW/SINGLE encoder 0 is Y (1..maxY). NEW/CIN/GAIN/load often leave the Duppa
+// chip min/max/counter as-is because switchMode(&draw) is a no-op when already
+// in DRAW — then the first encoder is out of bounds until a draw↔single hop.
+FLASHMEM void applyDrawSingleYEncoderLimits() {
+  if (currentMode != &draw && currentMode != &singleMode) return;
+  int y = (int)GLOB.y;
+  if (currentMode->pos[0] >= 1u && currentMode->pos[0] <= maxY) {
+    y = (int)currentMode->pos[0];
+  }
+  y = constrain(y, 1, (int)maxY);
+  GLOB.y = (unsigned int)y;
+  currentMode->pos[0] = (unsigned int)y;
+  Encoder[0].writeMax((int32_t)maxY);
+  Encoder[0].writeMin((int32_t)1);
+  Encoder[0].writeCounter((int32_t)y);
 }
 
 float myFreq = 80;
@@ -2100,7 +2121,10 @@ void showDrawAfterPatternTransfer() {
   inMidiSubmenu = false;
   inVolSubmenu = false;
   inEtcSubmenu = false;
-  if (currentMode == &draw) return;
+  if (currentMode == &draw) {
+    applyDrawSingleYEncoderLimits();
+    return;
+  }
   bypassModeSwitchDebounce = true;
   switchMode(&draw);
   bypassModeSwitchDebounce = false;
@@ -2289,6 +2313,12 @@ FLASHMEM void switchMode(Mode *newMode) {
         minVal = 0;
         counterVal = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, (int)maxY);
         currentMode->pos[3] = counterVal;
+      } else if (i == 0 && (currentMode == &draw || currentMode == &singleMode)) {
+        minVal = 1;
+        maxVal = (int32_t)maxY;
+        counterVal = constrain(currentMode->pos[0] >= 1u ? (int)currentMode->pos[0] : (int)GLOB.y, 1, (int)maxY);
+        currentMode->pos[0] = (unsigned int)counterVal;
+        GLOB.y = (unsigned int)counterVal;
       } else {
       }
 
@@ -2424,6 +2454,8 @@ FLASHMEM void switchMode(Mode *newMode) {
       tmpMute = true;
       tmpMuteAll(true);
     }
+  } else if (newMode == &draw || newMode == &singleMode) {
+    applyDrawSingleYEncoderLimits();
   }
 
   drawPlayButton();
@@ -2846,7 +2878,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
-        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59)) ||
+        (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
         (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
     if (mainSetting != 15 && !encoder2ValuePage) {
@@ -4117,22 +4149,25 @@ FLASHMEM void initEncoders() {
     Encoder[2].writeDoublePushPeriod(0);
     Encoder[3].writeDoublePushPeriod(0);
 
-    Encoder[i].writeAntibouncingPeriod(10);  //10?
-    Encoder[i].writeCounter((int32_t)1);
-    // Encoder 0 = Y (1..maxY). Do not init it to maxX*4 — that allowed y>16 until
-    // the first draw↔single switchMode re-applied limits.
+      Encoder[i].writeAntibouncingPeriod(10);  //10?
+    // Encoder 0 = Y (1..maxY). Min/max before counter — writing CVAL while CMAX is
+    // still the chip default leaves Y out of bounds until the first switchMode.
     if (i == 0) {
       Encoder[i].writeMax((int32_t)maxY);
+      Encoder[i].writeMin((int32_t)1);
     } else if (i == 1) {
       // CTRL=PAGE: never maxX*4 — with LEDS=2 that is 128 and page 9+ walks note[] off PSRAM.
       Encoder[i].writeMax((int32_t)effectivePageCount());
+      Encoder[i].writeMin((int32_t)1);
     } else if (i == 3) {
       Encoder[i].writeMax((int32_t)(maxlen - 1));
+      Encoder[i].writeMin((int32_t)1);
     } else {
       Encoder[i].writeMax((int32_t)maxX * 4);
+      Encoder[i].writeMin((int32_t)1);
     }
-    Encoder[i].writeMin((int32_t)1);         //minval
     Encoder[i].writeStep((int32_t)1);        //steps
+    Encoder[i].writeCounter((int32_t)1);
 
     // Assign static callback wrappers
     Encoder[i].onButtonPush = staticButtonPushed;
@@ -4548,6 +4583,7 @@ FLASHMEM void setup() {
 
   updateSynthVoice(11);
   switchMode(&draw);
+  applyDrawSingleYEncoderLimits();
 
   Serial8.addMemoryForWrite(midiTxExtra, sizeof(midiTxExtra));
   Serial8.addMemoryForRead(midiRxExtra, sizeof(midiRxExtra));
@@ -4745,6 +4781,10 @@ FLASHMEM void checkEncoders() {
   static bool screensaverEncBaselineDone = false;
   const bool allowEncWrite = encoderI2cWritesAllowed();
 
+  if (modeChangedGlobal && (currentMode == &draw || currentMode == &singleMode)) {
+    applyDrawSingleYEncoderLimits();
+  }
+
   for (int i = 0; i < NUM_ENCODERS; i++) {
     currentEncoderIndex = i;  // Ensure this is set before calling encoder methods or callbacks that might use it implicitly
     Encoder[i].updateStatus();
@@ -4752,8 +4792,15 @@ FLASHMEM void checkEncoders() {
     // Soft-clamp draw/single page+X: Duppa can report past writeMax under fast I2C turns.
     if (currentMode == &draw || currentMode == &singleMode) {
       if (i == 0) {
-        if (rawValue < 1) rawValue = 1;
-        if (rawValue > (int)maxY) rawValue = (int)maxY;
+        int clampedY = rawValue;
+        if (clampedY < 1) clampedY = 1;
+        if (clampedY > (int)maxY) clampedY = (int)maxY;
+        if (clampedY != rawValue && allowEncWrite) {
+          Encoder[0].writeMax((int32_t)maxY);
+          Encoder[0].writeMin((int32_t)1);
+          Encoder[0].writeCounter((int32_t)clampedY);
+        }
+        rawValue = clampedY;
       } else if (i == 1 && ctrlMode == 0) {
         int pmax = encoderPageMax();
         if (rawValue < 1) rawValue = 1;
@@ -5687,7 +5734,7 @@ void checkTouchInputs() {
         if (row >= 1 && row <= 15 && isSingleModeChannelAllowed(ch)
             && !isChildVoiceDisabled(ch)) {
           placeLiveGridNote((uint8_t)ch, (uint8_t)row, (uint8_t)defaultVelocity,
-                            NOTE_MIDI_PITCH_NONE, true);
+                            NOTE_MIDI_PITCH_NONE, true, false);
         }
       }
     }
@@ -10048,6 +10095,7 @@ FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0C
   // char OUTPUTf[50]; // This seems unused here
   // sprintf(OUTPUTf, "%u/%u.wav", pack_id, 1);
   switchMode(&draw);  // Switch back to draw mode after loading
+  applyDrawSingleYEncoderLimits();
 
   // Reset paint/unpaint prevention flag after loadSamplePack operation
   preventPaintUnpaint = false;

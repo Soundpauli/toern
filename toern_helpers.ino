@@ -4039,6 +4039,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 51, 1);     // SIDE voice (CH1)
   EEPROM.write(EEPROM_DATA_START + 52, 0);     // EXT clock source MIDI (not analog)
   EEPROM.write(EEPROM_DATA_START + 53, 2);     // CIN: 4 PPQN, 1 ms hold-off
+  EEPROM.write(EEPROM_DATA_START + 54, 0);     // MIDI WRTE (OFF)
   
   // Reload settings from EEPROM and apply to hardware
   extern void loadMenuFromEEPROM();
@@ -4143,9 +4144,12 @@ FLASHMEM void startNew() {
   // 12. SWITCH TO DRAW MODE
   delay(300);  // Brief delay to show "NEW" message
   switchMode(&draw);
+  applyDrawSingleYEncoderLimits();
   
   // 13. SYNC ENCODERS WITH CURRENT POSITION
   // Force encoder positions to match reset state
+  Encoder[0].writeMax((int32_t)maxY);
+  Encoder[0].writeMin((int32_t)1);
   Encoder[0].writeCounter((int32_t)GLOB.y);       // Y position (channel)
   Encoder[1].writeCounter((int32_t)GLOB.edit);    // Page
   Encoder[2].writeCounter((int32_t)maxfilterResolution);  // Filter/velocity

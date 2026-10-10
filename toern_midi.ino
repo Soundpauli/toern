@@ -1307,8 +1307,11 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   if (isNowPlaying) {
       if (GLOB.singleMode) {
         extern bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
-                                      uint8_t midiPitch, bool protectOtherVoices);
-        placeLiveGridNote((uint8_t)ch, livenote, velocity, storedPitch, false);
+                                      uint8_t midiPitch, bool protectOtherVoices,
+                                      bool protectOccupied);
+        extern bool MIDI_WRITE_OVERWRITE;
+        placeLiveGridNote((uint8_t)ch, livenote, velocity, storedPitch, false,
+                          !MIDI_WRITE_OVERWRITE);
         playIncomingMidiNote(ch, pitch, livenote, velocity);
       } else {
         playIncomingMidiNote(ch, pitch, livenote, velocity);
@@ -1337,6 +1340,8 @@ void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
     if (isChildVoiceDisabled((int)pn.channel)) continue;
     unsigned int targetBeat = pn.targetBeat;
     if (targetBeat < 1 || targetBeat >= maxlen) continue;
+    extern bool MIDI_WRITE_OVERWRITE;
+    if (!MIDI_WRITE_OVERWRITE && note[targetBeat][pn.livenote].channel != 0) continue;
     note[targetBeat][pn.livenote].channel = pn.channel;
     note[targetBeat][pn.livenote].velocity = pn.velocity;
     note[targetBeat][pn.livenote].probability = 100;
@@ -1361,7 +1366,8 @@ void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
       if (midiRecordCellMatches(current, channel, pitch)) continue;
       Note &previous = note[previousBeat][row];
       if (!midiRecordCellMatches(previous, channel, pitch)) continue;
-      if (current.channel != 0 && current.channel != channel) continue;
+      extern bool MIDI_WRITE_OVERWRITE;
+      if (!MIDI_WRITE_OVERWRITE && current.channel != 0) continue;
       current.channel = channel;
       current.velocity = previous.velocity;
       current.probability = 100;

@@ -566,6 +566,7 @@ FLASHMEM void loadPattern(bool autoload) {
       delay(500);
     }
     switchMode(&draw);
+    applyDrawSingleYEncoderLimits();
   }
   
   sdIoYield();
