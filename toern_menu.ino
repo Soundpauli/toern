@@ -5,7 +5,7 @@
 #define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 7
 #define ETC_PAGES_COUNT 5
-#define MODE_PAGES_COUNT 9
+#define MODE_PAGES_COUNT 10
 #define ADV_PAGES_COUNT 7
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
@@ -152,6 +152,7 @@ MenuPage modePages[MODE_PAGES_COUNT] = {
   {"IMG", 56, false, nullptr},
   {"PONG", 24, false, nullptr},
   {"SONG", 22, false, nullptr},
+  {"TCHY", 63, false, nullptr},
   {"AUTO", 15, true, "PAGES"}
 };
 MenuPage advancedPages[ADV_PAGES_COUNT] = {
@@ -2086,7 +2087,7 @@ FLASHMEM void showEtcMenu() {
       CRGB indicatorColor = currentMenuParentTextColor();
       const bool etcValuePage =
           (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 ||
-           mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 16 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
+           mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 63 || mainSetting == 16 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
            mainSetting == 52 || mainSetting == 55 || mainSetting == 56 ||
            mainSetting == 57);
       // Matrix chrome without I2C; rings via cache
@@ -2700,6 +2701,13 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
+    case 63: {
+      extern bool touchyEnabled;
+      drawText("TCHY", 2, 10, currentMenuParentTextColor());
+      drawMenuValue(touchyEnabled ? "ON" : "OFF", 2, 3, touchyEnabled ? UI_GREEN : UI_RED);
+      drawIndicator('L', touchyEnabled ? 'G' : 'R', 3);
+      break;
+    }
     case 61: { // MODE inherits the former SONG main-menu identity.
       const CRGB tc = menuTextColorFromCol(13);
       showIcons(ICON_SONG, dimIconColorFromText(tc));
@@ -3763,6 +3771,20 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
+    case 63: {
+      extern bool touchyEnabled;
+      extern void setTouchyEnabled(bool enabled);
+      if (menuFirstEnter) {
+        currentMode->pos[2] = touchyEnabled ? 1 : 0;
+        Encoder[2].writeMin((int32_t)0);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+        menuFirstEnter = false;
+      }
+      bool enabled = currentMode->pos[2] != 0;
+      if (enabled != touchyEnabled) { setTouchyEnabled(enabled); redrawMain(setting); }
+      break;
+    }
     case 56: { // IMG - Image mode (OFF/ON) via encoder 2
       extern bool imageMode;
       extern bool voiceMode;
@@ -5768,4 +5790,15 @@ FLASHMEM void drawMidiSend() {
     default: drawMenuValue("BOTH", 2, 3, UI_BLUE); MIDI_CLOCK_SEND = (clockMode == 1); MIDI_NOTE_SEND = true; break;
   }
   FastLEDshow();
+}
+// TOUCHY's long encoder-4 gesture opens the existing root menu at MODE.
+FLASHMEM void openTouchyMainMenu() {
+  switchMode(&menu);
+  if (currentMode != &menu) return;
+  inLookSubmenu = inRecsSubmenu = inMidiSubmenu = inVolSubmenu = inEtcSubmenu = false;
+  currentMenuPage = 8;
+  menu.pos[3] = 8;
+  Encoder[3].writeCounter((int32_t)8);
+  invalidateEnc3RangeCache();
+  menuRequestFullRedraw();
 }

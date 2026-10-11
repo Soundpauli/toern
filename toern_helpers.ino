@@ -1113,7 +1113,7 @@ void startFastRecord() {
   if (fastRecordActive) return;
 
   // Handle different recording modes based on recChannelClear
-  if (recChannelClear == 1 || recChannelClear == 3) {
+  if (!touchyEnabled && (recChannelClear == 1 || recChannelClear == 3)) {
     // ON / ON1: Clear all existing notes of channel, then add triggers/notes
     clearAllNotesOfChannel();
   }
@@ -1130,7 +1130,7 @@ void startFastRecord() {
             preventPaintUnpaint = false;
             
   // Only add triggers/notes if not in FIX mode
-  if (recChannelClear != 2) {
+  if (!touchyEnabled && recChannelClear != 2) {
     note[beat][GLOB.currentChannel+1].channel = GLOB.currentChannel;
     note[beat][GLOB.currentChannel+1].velocity = defaultVelocity;
     note[beat][GLOB.currentChannel+1].probability = 100;
@@ -1210,7 +1210,7 @@ void startFastRecord() {
 // --------------------
 void flushAudioQueueToRAM() {
   if (fastRecordActive) {
-    int ch = GLOB.currentChannel;
+    int ch = fastRecordChannel;
     auto &idx = fastRecWriteIndex[ch];
 
     // Treat your byte buffer as an int16_t array for cleaner pointer math:
@@ -1248,10 +1248,11 @@ void flushAudioQueueToRAM() {
 }
 
 void stopFastRecord() {
+  if (!fastRecordActive) return;
   // CRITICAL: Disable audio input first to stop new data from entering queue
   mixer_end.gain(3, 0.0);
   
-  int ch = GLOB.currentChannel;
+  int ch = fastRecordChannel;
   auto &idx = fastRecWriteIndex[ch];
   int16_t *dest = reinterpret_cast<int16_t *>(sampled[ch]);
   
@@ -1356,7 +1357,7 @@ void stopFastRecord() {
   channelDirection[ch] = 1;
   
   // For ON1 mode: Set note at x=1 after recording and copy are complete
-  if (recChannelClear == 3 && savedStartBeat > 0) {
+  if (!touchyEnabled && recChannelClear == 3 && savedStartBeat > 0) {
     // Find the next x=1 position (beat 1 in the next bar)
     // Since recording stopped at maxX, the next x=1 is at the start of the next bar
     unsigned int nextBeat1 = ((savedStartBeat - 1) / maxX + 1) * maxX + 1;
@@ -1622,7 +1623,7 @@ FLASHMEM void FastLEDshow() {
     // Do not gate on drawNoSD_hasRun — switchMode() clears it, which permanently
     // blocked the screensaver after any mode change.
     const uint32_t eyesIdleMs = eyesScreensaverIdleMs();
-    bool screensaverActive = !playingGridFocus
+    bool screensaverActive = currentMode != &touchyMode && !playingGridFocus
       && !recordingBorderArmed
       && !fastRecordActive
       && eyesScreensaverEnabled()

@@ -43,14 +43,14 @@ export const SUBS = {
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PPQN", "TRIG", "CIN", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
-  mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "AUTO"],
+  mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO"],
   etc: ["INFO", "SD", "BATT", "ADV", "RSET"],
   adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
 const SUB_SLOTS = {
   look: [["look", 2], ["look", 6], ["look", 10], ["look", 11]],
-  mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["etc", 3]],
+  mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["touchy", 0], ["etc", 3]],
   etc: [["etc", 0], ["etc", 2], ["etc", 6], ["adv", 0], ["etc", 11]],
   adv: [["look", 9], ["look", 7], ["etc", 1], ["etc", 4], ["etc", 5], ["etc", 7], ["etc", 9]],
 };
@@ -731,7 +731,9 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", focus === 1 ? "G" : "W", 3);
     return;
   }
-  const value = s.legacySubValue(pageMode, pageIndex);
+  const value = pageMode === "touchy"
+    ? { text: s.touchyEnabled ? "ON" : "OFF", color: s.touchyEnabled ? UI_GREEN : UI_RED, code: s.touchyEnabled ? "G" : "R" }
+    : s.legacySubValue(pageMode, pageIndex);
   matrix.drawText(value.text, 2, 3, value.color);
   if (value.code) matrix.drawIndicator("L", value.code, 3);
   else matrix.setRing?.(3, value.color);
@@ -1059,6 +1061,58 @@ function drawRecordingBorder(matrix) {
   }
 }
 
+export const TOUCHY_COLORS = [[255,64,64], [255,170,32], [64,255,128], [64,128,255], [220,64,255]];
+export const TOUCHY_SPRITE = ["     BBBBBBBBBBBB    ", "    BCCCCCCCCCCCCB   ", "    BCEEFEEFDEEECB D ", "    BCEFEFEDGDFECBDGD", " DD BCEEEEEDGGDDDDGGD", "DGGDBCEEEEEDGGGGGGGGD", " DD BCEEFEEDGKJGGKJGD", "    BCFEEEEDEJJGGJJED", "   DBCCCCCCCDGGGGGGD ", "  DGGBBBBBBBDDDDDDD  ", "   DD DD     D  DD   "];
+export const TOUCHY_RAINBOW = [[215,2,29],[255,144,36],[255,255,0],[65,255,76],[0,191,255],[212,38,255]];
+export const TOUCHY_PALETTE = {
+  B:[72,30,5], C:[170,86,22], D:[0,0,0], E:[170,62,105],
+  F:[255,4,94], G:[48,48,56], J:[0,0,0], K:[200,195,170]
+};
+export function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
+  const phase = Math.floor(now / 250) % 4;
+  // The nose reaches the last column, then floats back only 20% of panel width.
+  const x0 = columns - 20 - Math.floor(columns * .2) * (1 - Math.cos(now * Math.PI / 3000)) / 2;
+  const top = 14 + .65 * Math.sin(now * Math.PI / 1800);
+  const sprite = Array.from({length:11},()=>Array(21).fill(" "));
+  TOUCHY_SPRITE.forEach((row,y)=>{
+    for(let x=0;x<21;x++) if(row[x]!==" ") {
+      const px=x+(y===10?phase%2:0), py=y-(x<4&&y<9?phase%2:0);
+      if(px<21&&py>=0)sprite[py][px]=row[x];
+    }
+  });
+  for(let x=1;x<=columns;x++) {
+    const wave = .65*Math.sin(x*.6-now*Math.PI/600);
+    for(let y=1;y<=16;y++) {
+      const color=[0,0,0];
+      if(x<x0+5) {
+        const ry=top-4+wave-y, r=Math.floor(ry), f=ry-r;
+        for(let i=0;i<2;i++) if(r+i>=0&&r+i<6) {
+          const weight=i?f:1-f;
+          for(let c=0;c<3;c++)color[c]+=TOUCHY_RAINBOW[r+i][c]*weight;
+        }
+      }
+      // Fractional LED coverage smooths motion without blurring the source sprite.
+      const sx=x-x0, sy=top-y, ix=Math.floor(sx), iy=Math.floor(sy), fx=sx-ix, fy=sy-iy;
+      const foreground=[0,0,0]; let alpha=0;
+      for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++) {
+        const pixel=sprite[iy+dy]?.[ix+dx];
+        if(!pixel||pixel===" ")continue;
+        const weight=(dx?fx:1-fx)*(dy?fy:1-fy);
+        const ink=pixel==="E"?tint:TOUCHY_PALETTE[pixel];
+        alpha+=weight;
+        for(let c=0;c<3;c++)foreground[c]+=ink[c]*weight;
+      }
+      light(x,y,color.map((v,c)=>Math.round(v*(1-alpha)+foreground[c])));
+    }
+  }
+}
+
+export function drawTouchy(matrix, s, now) {
+  const tint = s.touchyTintActive ? TOUCHY_COLORS[(s.touchyLastVoice || 1)-1].map(v=>Math.floor(v*3/5)) : TOUCHY_PALETTE.E;
+  drawTouchyCat((x,y,color)=>matrix.light(x,y,color),COLS,now,tint);
+  for(let i=0;i<4;i++)matrix.setRing?.(i+1,TOUCHY_COLORS[i]);
+}
+
 export function renderFrame(matrix, s, now) {
   matrix.clear();
   matrix.setBrightness(s.ledBrightness);
@@ -1120,6 +1174,7 @@ export function renderFrame(matrix, s, now) {
   } else if (s.mode === "velocity") drawVelocity(matrix, s);
   else if (s.mode === "filter") drawFilter(matrix, s, now);
   else if (s.mode === "menu") drawMenu(matrix, s);
+  else if (s.mode === "touchy") drawTouchy(matrix, s, now);
   else if (SUBS[s.mode]) drawSubmenu(matrix, s, now);
   else if (s.mode === "dat") drawLoadSave(matrix, s);
   else if (s.mode === "new") drawNew(matrix, s);

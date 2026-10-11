@@ -353,6 +353,7 @@ static void analogSubstepIsr() {
 // Orange EXT: pulses are the only clock. Steps and fill sub-ticks fire from
 // here; playTimer/fillTimer stay stopped (see resetMidiClockState).
 static void analogDirectPulse() {
+  if (touchyEnabled) return;
   extern void playNote();
   extern void playFillNote();
   extern bool pendingStartOnBar;
@@ -719,6 +720,7 @@ void handleMidiClock() {
 }
 
 void checkMidi() {
+  if (touchyEnabled) transportStartDelayUntil = 0;
   // Fire deferred transport start once the non-blocking delay has elapsed
   if (transportStartDelayUntil && micros() >= transportStartDelayUntil) {
     transportStartDelayUntil = 0;
@@ -1428,6 +1430,7 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
   // Existing logic for non-persistent channels goes here...
 }
 void handleStart() {
+  if (touchyEnabled) return;
   logMidiRxSimple("Start");
   // only act if we’re supposed to follow external transport
   if (!MIDI_TRANSPORT_RECEIVE) return;

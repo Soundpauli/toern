@@ -194,9 +194,9 @@ extern void handleStart();
 // Nominal divider 1.5/(1.0+1.5)=0.600. Recalibrated on device: meter 4.125V
 // read 87% with 0.577 (fw ~4.04V); 0.565 brings that sample to ~4.125V.
 #define BATT_DIVIDER_RATIO 0.565f
-// Pack dies / unit stops around the old mid-scale reading (~50% with V_MIN=3.30).
-// Map that knee to 0% so BATT reaches 0 before brownout; 100% stays at full charge.
-#define BATT_V_MIN 3.7125f        // Display 0% (was 3.30 → false ~50% at cutoff)
+// Device still operates at the previous 0% point (3.7125V). Map that point
+// to 8%, keeping measured full charge at 100%: newMin=(3.7125-0.08*4.125)/0.92.
+#define BATT_V_MIN 3.67663f       // Display 0%; previous zero now displays 8%
 #define BATT_V_MAX 4.125f         // Display 100% at measured full pack
 #define BATT_PCT_CURVE 1.0f       // Linear voltage→%
 #define BATT_WARN_PCT 8           // Warning / red band on remapped display %
@@ -1086,6 +1086,8 @@ Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x00
 // NEW: enc0=load (press), enc1=length, enc2=template, enc3=back to FILE (blue like FILE menu)
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 0, 16, 5, 0 }, { 0, 8, 0, 0 }, { 0x00FF00, 0xFF00FF, 0xFFFF00, 0x0000FF } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
+bool touchyEnabled = false;
+Mode touchyMode = { "TCHY", { 0, 1, 0, 0 }, { 48, 127, 32, 32 }, { 24, 100, 0, 0 }, { 0xFF4040, 0xFFAA20, 0x40FF80, 0x4080FF } };
 Mode songMode = { "SONGMODE", { 1, 1, 1, 1 }, { 1, 16, 1, 64 }, { 1, 1, 1, 1 }, { 0x000000, 0xFF00FF, 0x000000, 0xFFFF00 } };
 // Declare currentMode as a global variable (start in draw so boot limits are sane)
 Mode *currentMode = &draw;
@@ -1940,7 +1942,7 @@ void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
   // Mute-mode is an intentional long hold on encoder 2 (index 1). The 10s
   // "stuck button" reset was clearing that hold, so 3rd-encoder load (0210)
   // stopped matching after ~10 seconds.
-  const bool muteHold = muteModeActive && encoderIndex == 1;
+  const bool muteHold = (muteModeActive && encoderIndex == 1) || (touchyEnabled && fastRecordActive && encoderIndex == 0);
 
   // Recovery mechanism: If button appears stuck pressed for too long, force reset
   // This handles cases where I2C communication fails or callbacks are missed
@@ -2135,9 +2137,10 @@ void showDrawAfterPatternTransfer() {
 }
 
 FLASHMEM void switchMode(Mode *newMode) {
-  if (childLockEnabled && (newMode == &filterMode || newMode == &velocity || newMode == &subpatternMode)) {
+  if (childLockEnabled && !touchyEnabled && (newMode == &filterMode || newMode == &velocity || newMode == &subpatternMode)) {
     newMode = GLOB.singleMode ? &singleMode : &draw;
   }
+  if (touchyEnabled && (newMode == &draw || newMode == &singleMode)) newMode = &touchyMode;
   enforceChildModeRestrictions();
 
   // Debounce rapid mode switching to prevent corruption during play (e.g. filter/menu/draw thrashing)
@@ -2228,6 +2231,10 @@ FLASHMEM void switchMode(Mode *newMode) {
     }
 
     currentMode = newMode;
+    if (currentMode == &touchyMode) {
+      extern void syncTouchyEncoders();
+      syncTouchyEncoders();
+    }
     if (currentMode == &subpatternMode && muteModeActive) {
       muteModeLastChannel = GLOB.currentChannel;
       currentMode->pos[0] = 0;
@@ -2467,6 +2474,7 @@ FLASHMEM void switchMode(Mode *newMode) {
 
 
 void checkFastRec() {
+  if (touchyEnabled) return; // Performance pads never arm the recorder.
   bool channelAllowed = (GLOB.currentChannel <= 8);
 
   if (!channelAllowed && !fastRecordActive) return;
@@ -2606,6 +2614,13 @@ unsigned int cursorNoteStep();
 
 // UI button dispatch is not an audio/PIT callback; keep it out of ITCM.
 FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool reset) {
+  if (currentMode == &touchyMode) {
+    extern void handleTouchyButtons(const uint8_t states[NUM_ENCODERS]);
+    handleTouchyButtons(currentButtonStates);
+    return;
+  }
+  extern bool consumeTouchyEntryHold(const uint8_t states[NUM_ENCODERS]);
+  if (consumeTouchyEntryHold(currentButtonStates)) return;
   //checkFastRec();
 
 
@@ -2884,7 +2899,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
-        (inEtcSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 56 || mainSetting == 57 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
+        (inEtcSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 63 || mainSetting == 56 || mainSetting == 57 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
     if (mainSetting != 15 && !encoder2ValuePage) {
       switchMenu(mainSetting);
     }
@@ -4375,6 +4390,7 @@ FLASHMEM void setup() {
   pinMode(SWITCH_1, INPUT_PULLDOWN);  // Capacitive input
   pinMode(SWITCH_2, INPUT_PULLDOWN);  // Capacitive input
   pinMode(SWITCH_3, INPUT_PULLDOWN);  // Rec touch (same pin as Teensy D4)
+  pinMode(SWITCH_5, INPUT_PULLDOWN);
   pinMode(SWITCH_4, INPUT_PULLDOWN);  // Capacitive touch4 (voice audition)
 
   // SPKR pin 30: set as INPUT_PULLDOWN as early as possible
@@ -5701,9 +5717,14 @@ static void applyPendingTouch1ModeToggle(unsigned long now);
 static void scheduleTouch1ModeToggle(bool toSingle, unsigned long now);
 void enterSingleModeDirect();
 void exitDrawFromSingleDirect();
-static void triggerCurrentVoiceAudition(int pitchRow);
+static void triggerCurrentVoiceAudition(int pitchRow, int auditionVelocity = -1);
 
 void checkTouchInputs() {
+  if (currentMode == &touchyMode) {
+    extern void checkTouchyTouches();
+    checkTouchyTouches();
+    return;
+  }
   // remember last time both were held
   // static bool lastBothTouched = false; // Already global
 
@@ -7124,7 +7145,13 @@ void loop() {
     static elapsedMillis recTriggerPoll;
     if (recTriggerPoll >= 8) {
       recTriggerPoll = 0;
-      checkFastRec();
+      if (currentMode == &touchyMode) {
+        // Poll only the recording button; avoid pad scans and LED writes here.
+        currentEncoderIndex = 0;
+        Encoder[0].updateStatus();
+        handle_button_state(&Encoder[0], 0);
+        checkButtons();
+      } else checkFastRec();
     }
     flushAudioQueueToRAM();
     yield();
@@ -7334,7 +7361,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   // FILE (load/save) and PACK redraw only when the slot changes, so a cursor
   // drawn on the idle frames stays on top of those screens.
   if (!fastRecordActive && currentMode != &velocity && currentMode != &filterMode && currentMode != &menu
-      && currentMode != &set_Wav && currentMode != &recordMode
+      && currentMode != &set_Wav && currentMode != &recordMode && currentMode != &touchyMode
       && currentMode != &loadSaveTrack && currentMode != &set_SamplePack) {
     drawCursor();
   }
@@ -7544,12 +7571,15 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     reversePreviewSample();
   }
 
-  if (childLockEnabled && (currentMode == &filterMode || currentMode == &velocity || currentMode == &subpatternMode)) {
+  if (childLockEnabled && !touchyEnabled && (currentMode == &filterMode || currentMode == &velocity || currentMode == &subpatternMode)) {
     switchMode(GLOB.singleMode ? &singleMode : &draw);
   }
 
   // Set stateMashine
-  if (currentMode->name == "FILTERMODE") {
+  if (currentMode == &touchyMode) {
+    extern void showTouchyMode();
+    showTouchyMode();
+  } else if (currentMode->name == "FILTERMODE") {
     //setFilters();
 
     setNewFilters();
@@ -8064,6 +8094,7 @@ void deleteActiveCopy() {
 
 
 void play(bool fromStart) {
+  if (touchyEnabled) return; // TOUCHY is played directly, including while editing its samples/filters.
   // MIDI Start is now sent by resetMidiClockForTransportStart() below,
   // after all setup, so the clock timer phase and Start are aligned.
 
@@ -9252,14 +9283,14 @@ void playFillNote() {
 
 // Play currentChannel through the normal voice path (filters/effects), without
 // writing the grid. pitchRow selects sample/synth pitch (base or cursor Y).
-static void triggerCurrentVoiceAudition(int pitchRow) {
+static void triggerCurrentVoiceAudition(int pitchRow, int auditionVelocity) {
   const int ch = (int)GLOB.currentChannel;
   if (!isSingleModeChannelAllowed(ch) || isChildVoiceDisabled(ch)) return;
 
   const int row = (pitchRow >= 1) ? pitchRow : basePitchRowForChannel(ch);
   if (row < 1) return;
 
-  const int velocity = defaultVelocity;
+  const int velocity = auditionVelocity < 0 ? defaultVelocity : constrain(auditionVelocity, 1, 127);
   Note cell = {};
   cell.channel = (uint8_t)ch;
   cell.velocity = (uint8_t)velocity;
@@ -10471,8 +10502,10 @@ FLASHMEM void loadWav() {
 
   // Restore the edit page and set encoder[1] to match
   GLOB.edit = savedEditPage;
-  currentMode->pos[1] = savedEditPage;
-  Encoder[1].writeCounter((int32_t)savedEditPage);
+  if (currentMode != &touchyMode) {
+    currentMode->pos[1] = savedEditPage;
+    Encoder[1].writeCounter((int32_t)savedEditPage);
+  }
 
   // Keep preventPaintUnpaint true for this frame to prevent immediate paint detection
   // It will be reset on the next encoder button press or in the next frame

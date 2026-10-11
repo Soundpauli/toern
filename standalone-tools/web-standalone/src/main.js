@@ -1,3 +1,4 @@
+import { TOUCHY_COLORS } from "./firmware/screens.js";
 import { COL } from "./firmware/const.js";
 import { createMatrix } from "./firmware/matrix.js";
 import { createDevice } from "./firmware/device.js";
@@ -155,6 +156,8 @@ app.innerHTML = `
         ${io("front", "jack", 215, "6.35mm mic-input")}
         ${io("front", "jack", 295, "6.35mm stereo TRS line-in (left channel recorded)")}
         <nav class="mobile-shortcuts" hidden aria-label="Shortcuts">
+          <button type="button" data-touch="4" hidden>Voice 4</button>
+          <button type="button" data-touch="5" hidden>Voice 5</button>
           <button type="button" data-shortcut="single">Single</button>
           <button type="button" data-shortcut="wav">Sample</button>
           <button type="button" data-shortcut="filter">Filter</button>
@@ -176,6 +179,7 @@ app.innerHTML = `
     <button type="button" data-jump="filter">Sound controls</button>
     <button type="button" data-jump="wav">Sample browser</button>
     <button type="button" data-jump="bpm">BPM</button>
+    <div id="touchy-extra-pads" hidden><button type="button" data-touch="4">Touch 4 · voice 4</button><button type="button" data-touch="5">Touch 5 · voice 5</button></div>
     <button type="button" id="load-track">Load demo pattern</button>
     <div class="jump-sub" id="load-track-sub" hidden>
       <button type="button" data-track="1">Techno</button>
@@ -1652,7 +1656,8 @@ const HELP = {
   vol: "Output levels. Encoder 4 selects a page; encoder 3 changes its value. On PREV, encoder 2 selects ON / PRSS / SYNC and encoder 3 changes preview volume.",
   recs: "Recording input. Encoder 4 picks a row, encoder 3 changes it.",
   midi: "MIDI. Encoder 4 picks a row, encoder 3 changes it.",
-  mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, AUTO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger. Esc leaves.",
+  touchy: "TOUCHY: pads 1–5 play voices 1–5 (keyboard 1–5). Knobs 1–4 control the last played voice: pitch, velocity, reverb (voices 1, 2 and 5), highpass. Channel volume stays full. Click to choose voices 1–4 samples. Hold knob 1 to fast-record into the last played voice; release to stop. Hold knob 3 for the last played voice’s filter, or knob 4 for the main menu. Turn MODE → TCHY OFF to leave.",
+  mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger. Esc leaves.",
   etc: "ETC: INFO, SD, BATT, ADV, RSET. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. Esc leaves.",
   adv: "ADV: CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE. Encoder 4 selects a page; encoder 3 changes its value. LEDS 1 / 1B select 16×16, 2 / 2B select 32×16. Esc leaves.",
   shift: "Shift moves the current voice. Encoder 4 moves it in time, encoder 1 moves it in pitch, encoder 2 moves only this page. Esc leaves.",
@@ -1685,8 +1690,26 @@ function markVoice() {
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
+  document.querySelector("#touchy-extra-pads").hidden = mode !== "touchy";
+  document.querySelectorAll(".mobile-shortcuts [data-touch]").forEach(pad => { pad.hidden = mode !== "touchy"; });
+  document.querySelectorAll(".mobile-shortcuts [data-shortcut]").forEach(btn => {
+    btn.hidden = mode === "touchy" && btn.dataset.shortcut !== "menu";
+  });
+  document.querySelectorAll("[data-touch]").forEach(pad => {
+    const id = Number(pad.dataset.touch), touchy = mode === "touchy";
+    const label = touchy ? `Voice ${id}` : ["", "Singlemode + Exit", "Menu", "Hold to record"][id];
+    if (id <= 3) {
+      pad.querySelector(".io-label").textContent = label;
+      pad.setAttribute("aria-label", `Touch ${id}, ${label}`);
+    }
+    pad.style.outline = touchy ? `1px solid rgb(${TOUCHY_COLORS[id - 1].join(",")})` : "";
+    pad.title = touchy ? `Touch ${id}: voice ${id}` : `Touch ${id}`;
+  });
   if (mode !== helpMode) {
     helpMode = mode;
+    document.querySelector("#matrix").setAttribute("aria-label", mode === "touchy"
+      ? "TOUCHY instrument. Focus here for device keys. Keys 1–5 play voices 1–5. Hold Enter for the main menu."
+      : "TŒRN grid. Focus here for device keys. Arrow keys move, Enter paints, Space plays.");
     helpEl.textContent = HELP[mode] || "Esc leaves this screen.";
     device.announceState();
   }

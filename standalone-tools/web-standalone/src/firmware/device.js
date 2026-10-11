@@ -103,6 +103,7 @@ export function createDevice(matrix, statusEl, rings) {
 
   const s = {
     GLOB: { x: 1, y: 2, edit: 1, page: 1, currentChannel: 1, singleMode: false },
+    touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(100), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
     menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK",
     genre: 0, genreLength: 8,
@@ -137,6 +138,7 @@ export function createDevice(matrix, statusEl, rings) {
     onAnnounce: null,
   };
 
+  let touchySavedVolume = null;
   let nextAt = 0;
   let analogNextPulseAt = 0;
   let analogPulsePhase = 0;
@@ -772,6 +774,7 @@ export function createDevice(matrix, statusEl, rings) {
     }
   }
   function togglePlay() {
+    if (s.touchyEnabled) return;
     const ctx = engine.ensure();
     if (ctx.state === "suspended") ctx.resume();
     applyMix();
@@ -1084,6 +1087,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function subValue(mode, index) {
+    if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
     return legacySubValue(slot.mode, slot.index);
   }
@@ -1212,10 +1216,10 @@ export function createDevice(matrix, statusEl, rings) {
     s.soloSaved = null;
     s.soloArrow = "";
   }
-  function backToGrid() { s.mode = s.GLOB.singleMode ? "single" : "draw"; }
+  function backToGrid() { s.mode = s.touchyEnabled ? "touchy" : s.GLOB.singleMode ? "single" : "draw"; }
   function finishLoad() {
     s.GLOB.singleMode = false;
-    s.mode = "draw";
+    s.mode = s.touchyEnabled ? "touchy" : "draw";
     applyDrawSingleYEncoderLimits();
     noteActivity();
   }
@@ -1252,6 +1256,22 @@ export function createDevice(matrix, statusEl, rings) {
   function turn(enc, dir) {
     if (s.mode === "boot") return;
     noteActivity();
+    if (s.mode === "touchy") {
+      s.knobAngle[enc] += dir * 15;
+      if (hold[enc]) hold[enc].turned = true;
+      const ch = s.touchyLastVoice;
+      s.GLOB.currentChannel = ch;
+      s.GLOB.y = ch + 1;
+      chVol[ch] = 16;
+      if (enc === 1) s.touchyVelocity[ch] = clamp(s.touchyVelocity[ch] + dir, 1, 127);
+      else {
+        if (enc === 2 && (ch === 3 || ch === 4)) return;
+        const key = ["oct", null, "r", "l"][enc];
+        filt[ch][key] = clamp(filt[ch][key] + dir, 0, enc === 0 ? 48 : 32);
+      }
+      applyFilt(ch);
+      return;
+    }
     engine.click();
     s.knobAngle[enc] += dir * 15;
     if (hold[enc]) hold[enc].turned = true;
@@ -1410,6 +1430,16 @@ export function createDevice(matrix, statusEl, rings) {
       applySub("look", 1);
       return;
     }
+    if (s.mode === "mode" && s.subIndex === 8 && enc === 2) {
+      if (dir > 0 && s.playing) togglePlay();
+      const enabled = dir > 0;
+      if (enabled !== s.touchyEnabled) {
+        if (enabled) touchySavedVolume = chVol.slice();
+        for (let ch=1;ch<=5;ch++) { chVol[ch] = enabled ? 16 : touchySavedVolume[ch]; applyFilt(ch); }
+        s.touchyEnabled = enabled;
+      }
+      return;
+    }
     if (SUBS[s.mode] && enc === 2) {
       if (pageMode === "vol" && pageIndex === 0) s.mainVol = clamp(s.mainVol + dir, 0, 100);
       else if (pageMode === "vol" && pageIndex === 1) s.gain = clamp(Math.round((s.gain + dir * 0.1) * 10) / 10, 0, 2);
@@ -1480,7 +1510,58 @@ export function createDevice(matrix, statusEl, rings) {
     }
   }
 
+  function openTouchyBrowser(voice) {
+    s.GLOB.currentChannel = voice;
+    s.GLOB.y = voice + 1;
+    refreshBrowse();
+    s.mode = "wav";
+    previewWav();
+  }
+  function touchyLongPress(enc) {
+    if (enc === 0) {
+      s.GLOB.currentChannel = s.touchyLastVoice;
+      s.GLOB.y = s.touchyLastVoice + 1;
+      s.touchyRecHeld = true;
+      s.touchyRecToken++;
+      startFastRec();
+    }
+    else if (enc === 2) {
+      s.GLOB.currentChannel = s.touchyLastVoice;
+      s.GLOB.y = s.touchyLastVoice + 1;
+      enterFilter();
+    } else if (enc === 3) { s.mode = "menu"; s.menuIndex = 8; }
+  }
+  const touchyTouchDown = Array(5).fill(false);
+  const touchyTouchLatched = Array(5).fill(false);
+  const touchyReleasedAt = Array(5).fill(0);
+  function releaseTouchyPad(pad) {
+    if (touchyTouchDown[pad]) touchyReleasedAt[pad] = performance.now();
+    touchyTouchDown[pad] = false;
+  }
+  function touchyTouch(id, down) {
+    if (id < 1 || id > 5) return;
+    // A pad release after returning from FILTER must clear its exit gesture.
+    touch.l = touch.m = touch.chord = touch.arm = false;
+    touch.first = 0;
+    const pad = id - 1, now = performance.now();
+    if (!touchyTouchDown[pad] && now - touchyReleasedAt[pad] >= 60) touchyTouchLatched[pad] = false;
+    if (!down && touchyTouchDown[pad]) touchyReleasedAt[pad] = now;
+    if (down && !touchyTouchLatched[pad]) {
+      touchyTouchLatched[pad] = true;
+      s.touchyLastVoice = id;
+      s.touchyTintActive = true;
+      s.GLOB.currentChannel = id;
+      s.GLOB.y = id + 1;
+      noteActivity();
+      engine.ensure();
+      chVol[id] = 16;
+      applyFilt(id);
+      engine.trigger(id, s.touchyVelocity[id], engine.now(), wavOpts(id), id + 1);
+    }
+    touchyTouchDown[id - 1] = down;
+  }
   function shortPress(enc) {
+    if (s.mode === "touchy") { openTouchyBrowser(enc + 1); return; }
     noteActivity();
     if (s.mode === "shift") {
       if (enc === 1) backToGrid();
@@ -1686,7 +1767,7 @@ export function createDevice(matrix, statusEl, rings) {
     s.recPlay = false;
     s.recAt = performance.now();
   }
-  function stopMicRec() {
+  function stopMicRec(channel = s.GLOB.currentChannel) {
     if (!s.recOn) return;
     s.recOn = false;
     const ctx = engine.ensure();
@@ -1699,7 +1780,7 @@ export function createDevice(matrix, statusEl, rings) {
     const out = buffer.getChannelData(0);
     let o = 0;
     for (const part of parts) { out.set(part, o); o += part.length; }
-    const ch = s.GLOB.currentChannel;
+    const ch = channel;
     recTake = buffer;
     engine.loadBuffer(ch, buffer);
     s.sampleUrl[ch] = null;
@@ -1744,28 +1825,35 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.fastRecActive || s.recOn) return;
     const ch = s.GLOB.currentChannel;
     if (ch < 1 || ch > 8) return;
-    if (s.recChannelClear === 1) clearChannelNotes(ch);
-    if (s.recChannelClear !== 2) placeRecTrigger(true);
+    const touchyCapture = s.mode === "touchy";
+    const captureToken = s.touchyRecToken;
+    if (!touchyCapture && s.recChannelClear === 1) clearChannelNotes(ch);
+    if (!touchyCapture && s.recChannelClear !== 2) placeRecTrigger(true);
     try {
       await openMic();
     } catch {
       s.wavName = "MIC?";
       return;
     }
+    // Release while microphone permission is pending must cancel this capture.
+    if (touchyCapture && (!s.touchyRecHeld || captureToken !== s.touchyRecToken)) return;
     recChunks = [];
     s.recOn = true;
     s.recPlay = false;
     s.recAt = performance.now();
+    s.fastRecChannel = ch;
     s.fastRecActive = true;
     s.wavName = "REC…";
   }
   function stopFastRec() {
     if (!s.fastRecActive) return;
     s.fastRecActive = false;
-    stopMicRec();
+    stopMicRec(s.fastRecChannel);
+    s.fastRecChannel = 0;
     queueAutosave();
   }
   function onTouch3(down) {
+    if (s.mode === "touchy") { touchyTouch(3, down); return; }
     if (s.mode === "filter") {
       if (down) resetFilterPage(s.GLOB.currentChannel);
       return;
@@ -1814,6 +1902,7 @@ export function createDevice(matrix, statusEl, rings) {
     }
   }
   function onMeta(down) {
+    if (s.mode === "touchy") { touchyTouch(2, down); return; }
     touch.m = down;
     if (down && s.mode === "filter") { cycleFilter(); return; }
     if (down) {
@@ -1837,7 +1926,7 @@ export function createDevice(matrix, statusEl, rings) {
   function toggleSingle() {
     if (s.mode === "single") {
       s.GLOB.singleMode = false;
-      s.mode = "draw";
+      s.mode = s.touchyEnabled ? "touchy" : "draw";
       return;
     }
     if (s.GLOB.y >= 16) return;
@@ -1849,12 +1938,13 @@ export function createDevice(matrix, statusEl, rings) {
     }
   }
   function onTouchL(down) {
+    if (s.mode === "touchy") { touchyTouch(1, down); return; }
     touch.l = down;
     noteActivity();
     if (down) {
       if (s.mode === "filter") {
         s.GLOB.singleMode = false;
-        s.mode = "draw";
+        s.mode = s.touchyEnabled ? "touchy" : "draw";
         touch.chord = true;
         return;
       }
@@ -1883,7 +1973,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.mode === "single") {
         s.GLOB.currentChannel = channelOfRow(s.GLOB.y);
         s.GLOB.singleMode = false;
-        s.mode = "draw";
+        s.mode = s.touchyEnabled ? "touchy" : "draw";
       } else if (s.GLOB.y < 16) {
         const ch = channelOfRow(s.GLOB.y);
         if ((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14) {
@@ -2064,19 +2154,21 @@ export function createDevice(matrix, statusEl, rings) {
     if (!active) return;
     if (e.repeat && !turning) return;
     if (s.mode === "boot") return;
+    if (e.key === "Escape" && s.mode === "touchy") { s.mode = "menu"; s.menuIndex = 8; return; }
     if (e.key === "Escape") {
       if (s.fastRecActive) stopFastRec();
       if (s.mode === "rec") closeMic();
       if (s.mode === "single") {
         s.GLOB.singleMode = false;
-        s.mode = "draw";
+        s.mode = s.touchyEnabled ? "touchy" : "draw";
       } else if (s.mode !== "draw") backToGrid();
       announceState();
       return;
     }
+    if (s.mode === "touchy" && e.key >= "1" && e.key <= "5") { touchyTouch(Number(e.key), true); return; }
     if (e.key >= "1" && e.key <= "8" && !e.metaKey && !e.ctrlKey && !e.altKey) { selectVoice(Number(e.key)); announceState(); return; }
     if (e.code === "KeyF") {
-      if (s.mode === "filter") { s.GLOB.singleMode = false; s.mode = "draw"; announceState(); return; }
+      if (s.mode === "filter") { s.GLOB.singleMode = false; s.mode = s.touchyEnabled ? "touchy" : "draw"; announceState(); return; }
       if (s.mode === "draw" || s.mode === "single") { enterFilter(); announceState(); return; }
     }
     if (e.code === "KeyS" && (s.mode === "draw" || s.mode === "single")) { toggleSingle(); announceState(); return; }
@@ -2097,6 +2189,10 @@ export function createDevice(matrix, statusEl, rings) {
     else if (e.code === "KeyI") turn(2, 1);
     else if (e.key === "ArrowLeft" || e.code === "KeyP") turn(3, -1);
     else if (e.key === "ArrowRight" || ue) turn(3, 1);
+    else if (s.mode === "touchy" && (isTab(e) || isEncoder2Click(e) || e.key === " " || e.key === "Enter")) {
+      const enc = isTab(e) ? 0 : isEncoder2Click(e) ? 1 : e.key === " " ? 2 : 3;
+      hold[enc] = { at: performance.now(), turned: false, fired: false };
+    }
     else if (isTab(e)) {
       if (s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
       else {
@@ -2119,8 +2215,11 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.GLOB.x !== beforeX || s.GLOB.y !== beforeY) announceState();
   }
   function keyup(e) {
+    if (s.mode !== "touchy" && e.key >= "1" && e.key <= "5") releaseTouchyPad(Number(e.key) - 1);
+    if (s.mode === "touchy" && e.key >= "1" && e.key <= "5") { touchyTouch(Number(e.key), false); return; }
     if (!deviceKeysActive()) return;
     if (isTab(e) && hold[0]) {
+      if (s.touchyRecHeld) { s.touchyRecHeld = false; s.touchyRecToken++; stopFastRec(); }
       const h = hold[0]; hold[0] = null;
       if (!h.fired && !h.turned) shortPress(0);
       announceState();
@@ -2144,6 +2243,13 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function tick(now) {
     if (!s.bootAt) s.bootAt = now;
+    if (s.mode === "touchy") {
+      for (let i=0;i<4;i++) if (hold[i] && !hold[i].turned && !hold[i].fired && now - hold[i].at >= LONG_MS) {
+        hold[i].fired = true;
+        touchyLongPress(i);
+        break;
+      }
+    }
     if (s.mode === "single" && s.GLOB.y === 16 && hold[0] && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
       hold[0].fired = true;
       drawRandomPage();
@@ -2318,6 +2424,7 @@ export function createDevice(matrix, statusEl, rings) {
     soloRelease() { exitSolo(); liveMix(); announceState(); },
     press(enc) { shortPress(enc); },
     knobDown(enc) {
+      if (s.mode === "touchy") { hold[enc] = { at: performance.now(), turned: false, fired: false }; return; }
       const grid = s.mode === "draw" || s.mode === "single";
       if (enc === 0 && s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
       if (enc === 1 && grid && s.GLOB.y !== 16) hold[1] = { at: performance.now(), turned: false, fired: false };
@@ -2325,6 +2432,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (enc === 3 && (grid || s.mode === "filter")) hold[3] = { at: performance.now(), turned: false, fired: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
     },
     knobUp(enc, turned) {
+      if (enc === 0 && s.touchyRecHeld) { s.touchyRecHeld = false; s.touchyRecToken++; stopFastRec(); }
       if (enc === 0) {
         const h = hold[0];
         hold[0] = null;
@@ -2350,6 +2458,9 @@ export function createDevice(matrix, statusEl, rings) {
       if (!turned) shortPress(enc);
     },
     touch(id, down) {
+      if (s.mode !== "touchy" && !down && id >= 1 && id <= 5) releaseTouchyPad(id - 1);
+      if (s.mode === "touchy") { touchyTouch(id, down); return; }
+      if (id === 4 || id === 5) return;
       if (id === 1) onTouchL(down);
       else if (id === 2) onMeta(down);
       else onTouch3(down);
@@ -2493,7 +2604,7 @@ export function createDevice(matrix, statusEl, rings) {
         finishLoad();
         return;
       }
-      if (name === "draw") { s.GLOB.singleMode = false; s.mode = "draw"; return; }
+      if (name === "draw") { s.GLOB.singleMode = false; s.mode = s.touchyEnabled ? "touchy" : "draw"; return; }
       if (name === "single") {
         const ch = s.GLOB.currentChannel;
         if (!((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14)) return;

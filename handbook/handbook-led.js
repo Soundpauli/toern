@@ -2,6 +2,51 @@
 (function () {
   "use strict";
 
+  const TOUCHY_SPRITE = ["     BBBBBBBBBBBB    ", "    BCCCCCCCCCCCCB   ", "    BCEEFEEFDEEECB D ", "    BCEFEFEDGDFECBDGD", " DD BCEEEEEDGGDDDDGGD", "DGGDBCEEEEEDGGGGGGGGD", " DD BCEEFEEDGKJGGKJGD", "    BCFEEEEDEJJGGJJED", "   DBCCCCCCCDGGGGGGD ", "  DGGBBBBBBBDDDDDDD  ", "   DD DD     D  DD   "];
+const TOUCHY_RAINBOW = [[215,2,29],[255,144,36],[255,255,0],[65,255,76],[0,191,255],[212,38,255]];
+const TOUCHY_PALETTE = {
+  B:[72,30,5], C:[170,86,22], D:[0,0,0], E:[170,62,105],
+  F:[255,4,94], G:[48,48,56], J:[0,0,0], K:[200,195,170]
+};
+function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
+  const phase = Math.floor(now / 250) % 4;
+  // The nose reaches the last column, then floats back only 20% of panel width.
+  const x0 = columns - 20 - Math.floor(columns * .2) * (1 - Math.cos(now * Math.PI / 3000)) / 2;
+  const top = 14 + .65 * Math.sin(now * Math.PI / 1800);
+  const sprite = Array.from({length:11},()=>Array(21).fill(" "));
+  TOUCHY_SPRITE.forEach((row,y)=>{
+    for(let x=0;x<21;x++) if(row[x]!==" ") {
+      const px=x+(y===10?phase%2:0), py=y-(x<4&&y<9?phase%2:0);
+      if(px<21&&py>=0)sprite[py][px]=row[x];
+    }
+  });
+  for(let x=1;x<=columns;x++) {
+    const wave = .65*Math.sin(x*.6-now*Math.PI/600);
+    for(let y=1;y<=16;y++) {
+      const color=[0,0,0];
+      if(x<x0+5) {
+        const ry=top-4+wave-y, r=Math.floor(ry), f=ry-r;
+        for(let i=0;i<2;i++) if(r+i>=0&&r+i<6) {
+          const weight=i?f:1-f;
+          for(let c=0;c<3;c++)color[c]+=TOUCHY_RAINBOW[r+i][c]*weight;
+        }
+      }
+      // Fractional LED coverage smooths motion without blurring the source sprite.
+      const sx=x-x0, sy=top-y, ix=Math.floor(sx), iy=Math.floor(sy), fx=sx-ix, fy=sy-iy;
+      const foreground=[0,0,0]; let alpha=0;
+      for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++) {
+        const pixel=sprite[iy+dy]?.[ix+dx];
+        if(!pixel||pixel===" ")continue;
+        const weight=(dx?fx:1-fx)*(dy?fy:1-fy);
+        const ink=pixel==="E"?tint:TOUCHY_PALETTE[pixel];
+        alpha+=weight;
+        for(let c=0;c<3;c++)foreground[c]+=ink[c]*weight;
+      }
+      light(x,y,color.map((v,c)=>Math.round(v*(1-alpha)+foreground[c])));
+    }
+  }
+}
+
   const ALPH = [[3,0,0,0],[1,23,0,0],[3,3,0,3],[3,31,10,31],[3,11,31,13],[3,25,4,19],[3,10,21,26],[1,3,0,0],[2,14,17,0],[2,17,14,0],[3,5,2,5],[3,4,14,4],[1,24,0,0],[3,4,4,4],[1,16,0,0],[3,24,4,3],[3,31,17,31],[3,18,31,16],[3,25,21,18],[3,17,21,31],[3,7,4,31],[3,23,21,29],[3,30,21,29],[3,1,1,31],[3,31,21,31],[3,23,21,29],[1,10,0,0],[1,26,0,0],[3,4,10,17],[3,10,10,10],[3,17,10,4],[3,1,21,3],[3,14,17,23],[3,31,5,31],[3,31,21,27],[3,31,17,17],[3,31,17,14],[3,31,21,17],[3,31,5,1],[3,31,17,29],[3,31,4,31],[3,17,31,17],[3,24,16,31],[3,31,4,27],[3,31,16,16],[3,31,6,31],[3,31,1,31],[3,31,17,31],[3,31,5,7],[3,15,25,15],[3,31,5,26],[3,23,21,29],[3,1,31,1],[3,31,16,31],[3,15,16,31],[3,31,12,31],[3,27,4,27],[3,7,28,7],[3,25,21,19],[2,31,17,0],[3,3,4,24],[2,17,31,0],[3,2,1,2],[3,16,16,16],[2,1,2,0],[3,12,18,30],[3,31,18,12],[3,30,18,18],[3,12,18,31],[3,12,26,20],[3,4,31,5],[3,18,21,14],[3,31,4,24],[1,29,0,0],[2,16,13,0],[3,31,4,26],[1,31,0,0],[3,30,4,30],[3,30,2,30],[3,30,18,30],[3,31,9,6],[3,6,9,31],[3,30,2,4],[3,20,22,10],[3,2,15,18],[3,30,16,30],[3,14,16,14],[3,30,8,30],[3,26,4,26],[3,23,20,15],[3,26,18,22],[3,4,31,17],[1,31,0,0],[3,17,31,4],[3,4,12,8]];
 
   const COL0 = [
@@ -265,7 +310,7 @@
   }
 
   function playSubFrame(m, pageIdx, title, enc2, enc3) {
-    const slots = [[0,9,13], [3,7,5], [0,4,6], [1,9,13], [2,9,13], [3,9,13], [1,4,6], [1,7,14], [6,9,13], [0,7,14], [2,4,6], [3,4,6]];
+    const slots = [[0,10,13], [3,7,5], [0,4,6], [1,10,13], [2,10,13], [3,10,13], [1,4,6], [1,7,14], [6,10,13], [0,7,14], [2,4,6], [3,4,6]];
     const [index, count, parent] = slots[pageIdx];
     m.clear();
     largeInd4Parent(m, parent);
@@ -309,7 +354,7 @@
   }
 
   function etcSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
-    const slots = [[0,5,14], [2,7,14], [1,5,14], [8,9,13], [3,7,14], [4,7,14], [2,5,14], [5,7,14], [4,9,13], [6,7,14], [5,9,13], [4,5,14]];
+    const slots = [[0,5,14], [2,7,14], [1,5,14], [9,10,13], [3,7,14], [4,7,14], [2,5,14], [5,7,14], [4,10,13], [6,7,14], [5,10,13], [4,5,14]];
     const [index, count, parent] = slots[pageIdx];
     m.clear();
     largeInd4Parent(m, parent);
@@ -966,10 +1011,21 @@
       const tc = menuTextFromCol(14);
       drawText(m, "ADV", 2, 10, tc[0], tc[1], tc[2]);
     },
+    md_touchy(m) {
+      m.clear(); largeInd4Parent(m, 13); drawSubmenuDots16(m, 8, 10, 13);
+      const tc = menuTextFromCol(13);
+      drawText(m, "TCHY", 2, 10, tc[0], tc[1], tc[2]);
+      drawText(m, "OFF", 2, 3, 120, 0, 0); m.indL(3, "R");
+    },
+    touchy(m) {
+      m.clear();
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      drawTouchyCat((x,y,color)=>m.set(x,y,...color),m.w,reduced?4200:performance.now());
+    },
     md_song(m) {
       m.clear();
       largeInd4Parent(m, 13);
-      drawSubmenuDots16(m, 7, 9, 13);
+      drawSubmenuDots16(m, 7, 10, 13);
       const tc = menuTextFromCol(13);
       drawText(m, "SONG", 2, 10, tc[0], tc[1], tc[2]);
     },
@@ -1265,4 +1321,10 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initAll);
   else initAll();
+  if (document.querySelector("canvas[data-scene='touchy']") && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    setInterval(() => {
+      if (document.hidden) return;
+      document.querySelectorAll("canvas[data-scene='touchy']").forEach(cv => runScene("touchy", cv));
+    },50);
+  }
 })();
