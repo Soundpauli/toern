@@ -1,4 +1,5 @@
-static const char *PATTERN_TMP_PATH = "pattern.tmp";
+#include "src/pattern_transaction.h"
+static bool lastPatternSaveOk = false;
 static const char *AUTOSAVE_PATH = "autosaved.txt";
 static const uint8_t PITCH_EXTENSION_HEADER[8] = {
   'T', 'P', 'I', 'T', 1, 0x10, 0x00, 0
@@ -19,7 +20,8 @@ FLASHMEM void clearPatternNotes() {
 
 FLASHMEM void deleteAutosaveFile() {
   if (SD.exists(AUTOSAVE_PATH)) SD.remove(AUTOSAVE_PATH);
-  if (SD.exists(PATTERN_TMP_PATH)) SD.remove(PATTERN_TMP_PATH);
+  SD.remove("autosaved.txt.tmp");
+  SD.remove("autosaved.txt.bak");
 }
 
 static bool patternWriteAll(File &f, const uint8_t *data, size_t len) {
@@ -34,6 +36,43 @@ static bool patternWriteAll(File &f, const uint8_t *data, size_t len) {
   return true;
 }
 
+// Validate without changing live notes/settings. Legacy patterns have no pitch tail.
+FLASHMEM bool validPatternFile(const char *path, bool requirePitch) {
+  File f = SD.open(path);
+  if (!f) return false;
+  const size_t notes = (size_t)(maxlen - 1) * maxY;
+  const size_t base = notes * 4u + 2u + sizeof(SMP);
+  const size_t total = base + sizeof(PITCH_EXTENSION_HEADER) + notes;
+  bool ok = f.size() >= (requirePitch ? total : base);
+  if (ok) {
+    ok = f.seek(notes * 4u) && f.read() == 0xFF && f.read() == 0xFE;
+  }
+  if (ok && requirePitch) {
+    uint8_t header[sizeof(PITCH_EXTENSION_HEADER)];
+    ok = f.seek(base) && f.read(header, sizeof(header)) == (int)sizeof(header)
+      && memcmp(header, PITCH_EXTENSION_HEADER, sizeof(header)) == 0;
+  }
+  // Check readability of the entire required payload, including settings.
+  if (ok) {
+    ok = f.seek(0);
+    uint8_t buf[512];
+    size_t left = requirePitch ? total : base;
+    while (ok && left) {
+      const size_t count = min(left, sizeof(buf));
+      ok = f.read(buf, count) == (int)count;
+      left -= count;
+      sdIoYield();
+    }
+  }
+  f.close();
+  return ok;
+}
+
+FLASHMEM void showPatternResult(bool success) {
+  if (success) showSaveSuccessAnimation(false);
+  else showSaveFailureAnimation(false);
+}
+
 FLASHMEM void savePattern(bool autosave) {
   extern bool isNowPlaying;
   extern void stopSdPreviewIfPlaying();
@@ -41,7 +80,8 @@ FLASHMEM void savePattern(bool autosave) {
   extern void sdIoBeginAudioSafe();
   extern void sdIoEndAudioSafe();
 
-  // FILE slot 0 is autosaved.txt — load-only from the FILE menu.
+  lastPatternSaveOk = false;
+  // PAT slot 0 is autosaved.txt — load-only from the FILE menu.
   if (!autosave && SMP.file == 0) {
     return;
   }
@@ -57,7 +97,7 @@ FLASHMEM void savePattern(bool autosave) {
     FastLEDclear();
   }
   
-  unsigned int maxdata = 0;
+
   char OUTPUTf[50];
   if (autosave) {
     sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
@@ -65,13 +105,33 @@ FLASHMEM void savePattern(bool autosave) {
     sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
   }
 
-  // Atomic write: pattern.tmp → rename. Never truncate autosaved.txt first —
-  // a crash mid-save used to leave a truncated/garbage file that autoload treated as notes.
-  if (SD.exists(PATTERN_TMP_PATH)) {
-    SD.remove(PATTERN_TMP_PATH);
-    sdIoYield();
+  char tmpPath[64], backupPath[64];
+  snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", OUTPUTf);
+  snprintf(backupPath, sizeof(backupPath), "%s.bak", OUTPUTf);
+  bool empty = true;
+  for (unsigned int x = 1; x < maxlen && empty; x++) {
+    for (unsigned int y = 1; y <= maxY; y++) {
+      if (note[x][y].channel != 0) { empty = false; break; }
+    }
   }
-  File saveFile = SD.open(PATTERN_TMP_PATH, O_WRITE | O_CREAT | O_TRUNC);
+  // Preserve the intentional gesture: saving an empty grid clears this slot.
+  // Autosave still retains the empty session, rather than reviving old notes.
+  if (!autosave && empty) {
+    lastPatternSaveOk = deletePatternTransaction(SD, OUTPUTf, tmpPath, backupPath);
+    sdIoEndAudioSafe();
+    showPatternResult(lastPatternSaveOk);
+    switchMode(&draw);
+    return;
+  }
+  recoverPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
+  // Do not discard the only recoverable generation after failed recovery.
+  if (!validPatternFile(OUTPUTf, false) && (validPatternFile(tmpPath, true) || validPatternFile(backupPath, false))) {
+    sdIoEndAudioSafe();
+    if (!autosave) { showPatternResult(false); switchMode(&draw); }
+    return;
+  }
+  if (!autosave) { drawText("SAVE", 1, 8, UI_GREEN); FastLEDshow(); }
+  File saveFile = SD.open(tmpPath, O_WRITE | O_CREAT | O_TRUNC);
   bool wroteOk = false;
   if (saveFile) {
     uint8_t buf[512];
@@ -81,7 +141,6 @@ FLASHMEM void savePattern(bool autosave) {
 
     for (unsigned int sdx = 1; sdx < maxlen && wroteOk; sdx++) {
       for (unsigned int sdy = 1; sdy < maxY + 1; sdy++) {
-        maxdata = maxdata + note[sdx][sdy].channel;
         if (bufLen + 4 > sizeof(buf)) {
           if (!patternWriteAll(saveFile, buf, bufLen)) {
             wroteOk = false;
@@ -154,27 +213,18 @@ FLASHMEM void savePattern(bool autosave) {
   }
 
   if (wroteOk) {
-    if (SD.exists(OUTPUTf)) {
-      SD.remove(OUTPUTf);
-      sdIoYield();
-    }
-    if (!SD.rename(PATTERN_TMP_PATH, OUTPUTf)) {
-      wroteOk = false;
-      // Keep pattern.tmp — autoLoad will rename it if dest is missing.
-    }
-  } else if (SD.exists(PATTERN_TMP_PATH)) {
-    SD.remove(PATTERN_TMP_PATH);
+    wroteOk = commitPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
+  } else {
+    // Only this destination's incomplete temporary file is disposable.
+    SD.remove(tmpPath);
   }
-
-  // Only delete empty files for manual saves, not autosaves
-  // (We want to preserve empty state in autosaved.txt)
-  if (wroteOk && maxdata == 0 && !autosave) {
-    SD.remove(OUTPUTf);
-  }
+  lastPatternSaveOk = wroteOk;
   if (!autosave) {
     if (wroteOk) {
-      showSaveSuccessAnimation();
+      showPatternResult(true);
+      switchMode(&draw);
     } else {
+      showPatternResult(false);
       switchMode(&draw);
     }
   }
@@ -198,6 +248,7 @@ FLASHMEM void saveSamplePack(int pack) {
     sdIoBeginAudioSafe();
     stopSdPreviewIfPlaying();
     
+    bool packSaved = true;
     char filename[64];
     char sourcePath[64];
 
@@ -205,11 +256,11 @@ FLASHMEM void saveSamplePack(int pack) {
     // Ensure the directory exists
     snprintf(dirPath, sizeof(dirPath), "%d", pack);
     if (!SD.exists(dirPath)) {
-        SD.mkdir(dirPath);
+        packSaved = SD.mkdir(dirPath);
     }
 
     // Iterate over each sample channel (1..8)
-    for (uint8_t ch = 1; ch <= 8; ch++) {
+    for (uint8_t ch = 1; ch <= 8 && packSaved; ch++) {
         // Use the same progress bar UI as samplepack load
         drawLoadingBar(1, maxFiles, ch, col_base[(maxFiles + 1) - ch], UI_DIM_WHITE, false);
         // Pack = samplepack icon
@@ -227,44 +278,51 @@ FLASHMEM void saveSamplePack(int pack) {
             // Copy from samplepack 0
             // Remove existing file if it exists
             if (SD.exists(filename)) {
-                SD.remove(filename);
+                if (!SD.remove(filename)) { packSaved = false; break; }
             }
             
             // Open source file for reading
             File sourceFile = SD.open(sourcePath, FILE_READ);
             if (!sourceFile) {
-                continue;
+                packSaved = false;
+                break;
             }
             
             // Open destination file for writing
             File destFile = SD.open(filename, FILE_WRITE);
             if (!destFile) {
                 sourceFile.close();
-                continue;
+                packSaved = false;
+                break;
             }
             
             // Reuse EXTMEM scratch; read/write in sdIoChunkSize() slices while playing.
             static EXTMEM uint8_t packCopyBuf[65536];
             const size_t chunk = sdIoChunkSize();
-            size_t bytesRead;
+            const size_t sourceSize = sourceFile.size();
+            size_t copied = 0;
+            int bytesRead;
             while ((bytesRead = sourceFile.read(packCopyBuf, chunk)) > 0) {
-                destFile.write(packCopyBuf, bytesRead);
+                if (!patternWriteAll(destFile, packCopyBuf, (size_t)bytesRead)) { packSaved = false; break; }
+                copied += (size_t)bytesRead;
                 sdIoYield();
             }
             
+            packSaved = packSaved && copied == sourceSize;
             sourceFile.close();
             destFile.close();
         } else if (loadedSampleLen[ch] > 0) {
             // Save from RAM (current loaded sample)
             // Remove any existing file at this path
             if (SD.exists(filename)) {
-                SD.remove(filename);
+                if (!SD.remove(filename)) { packSaved = false; break; }
             }
             
             // Open a new file for writing
             File outFile = SD.open(filename, FILE_WRITE);
             if (!outFile) {
-                continue;
+                packSaved = false;
+                break;
             }
             
             // Write standard 44-byte WAV header (mono, 16-bit, AUDIO_SAMPLE_RATE_EXACT)
@@ -280,33 +338,49 @@ FLASHMEM void saveSamplePack(int pack) {
 
             for (uint32_t offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
               size_t chunkSize = min(CHUNK_SIZE, (size_t)(totalBytes - offset));
-              outFile.write(dataPtr + offset, chunkSize);
+              if (!patternWriteAll(outFile, dataPtr + offset, chunkSize)) { packSaved = false; break; }
               sdIoYield();
             }
 
             finalizeWavHeader(outFile, totalBytes);
             
+            packSaved = packSaved && outFile.size() == totalBytes + 44u;
             outFile.close();
+            // Header finalisation also writes to the card. Size alone cannot
+            // detect a failed RIFF/data-length update, so verify after close.
+            if (packSaved) {
+                File verifyFile = SD.open(filename, FILE_READ);
+                uint8_t header[44] = {};
+                packSaved = verifyFile && verifyFile.size() == totalBytes + 44u
+                    && verifyFile.read(header, sizeof(header)) == (int)sizeof(header);
+                uint32_t riffBytes = 0, pcmBytes = 0;
+                memcpy(&riffBytes, header + 4, 4);
+                memcpy(&pcmBytes, header + 40, 4);
+                packSaved = packSaved && memcmp(header, "RIFF", 4) == 0
+                    && memcmp(header + 8, "WAVE", 4) == 0
+                    && riffBytes == totalBytes + 36u && pcmBytes == totalBytes;
+                verifyFile.close();
+            }
         } else {
             // Voices without a sample get a zero-byte placeholder file so banks
             // still contain all 8 slots and load back as silence instead of mute.
             if (SD.exists(filename)) {
-                SD.remove(filename);
+                if (!SD.remove(filename)) { packSaved = false; break; }
             }
 
             File emptyFile = SD.open(filename, O_WRITE | O_CREAT | O_TRUNC);
             if (emptyFile) {
                 emptyFile.close();
-            }
+            } else { packSaved = false; }
         }
         sdIoYield();
     }
     
     // Clear sp0Active flags when saving a samplepack (all samples now part of this pack)
-    for (uint8_t ch = 1; ch < maxFiles; ch++) {
+    for (uint8_t ch = 1; packSaved && ch < maxFiles; ch++) {
         SMP.sp0Active[ch] = false;
     }
-    saveSp0StateToEEPROM();
+    if (packSaved) saveSp0StateToEEPROM();
     
     // Reset paint/unpaint prevention flag after saveSamplePack operation
     extern bool preventPaintUnpaint;
@@ -314,7 +388,8 @@ FLASHMEM void saveSamplePack(int pack) {
     
    sdIoYield();
    sdIoEndAudioSafe();
-   showSaveSuccessAnimation();
+   showPatternResult(packSaved);
+   switchMode(&draw);
 }
 
 
@@ -342,189 +417,92 @@ FLASHMEM void loadPattern(bool autoload) {
     sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
   }
 
+  char tmpPath[64], backupPath[64];
+  snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", OUTPUTf);
+  snprintf(backupPath, sizeof(backupPath), "%s.bak", OUTPUTf);
+  recoverPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
+  if (!autoload) { drawText("LOAD", 1, 8, UI_GREEN); FastLEDshow(); }
   const bool isAutosaveSlot = autoload || SMP.file == 0;
   bool loadedOk = false;
   const size_t expectedNotes = (size_t)(maxlen - 1) * (size_t)maxY;
 
-  if (SD.exists(OUTPUTf)) {
-    File loadFile = SD.open(OUTPUTf);
-    if (loadFile) {
-      const size_t minBytes = expectedNotes * 4u + 2u;
-      if (loadFile.size() >= minBytes) {
-        clearPatternNotes();
-
-        uint8_t buf[512];
-        size_t have = 0;
-        size_t pos = 0;
-        unsigned int sdry = 1;
-        unsigned int sdrx = 1;
-        size_t notesRead = 0;
-        bool foundMarker = false;
-
-        while (notesRead < expectedNotes) {
-          if (pos >= have) {
-            have = 0;
-            pos = 0;
-            if (!loadFile.available()) break;
-            int got = loadFile.read(buf, sizeof(buf));
-            if (got <= 0) break;
-            have = (size_t)got;
-            sdIoYield();
-          }
-          if (have - pos < 4) {
-            if (pos > 0) {
-              memmove(buf, buf + pos, have - pos);
-              have -= pos;
-              pos = 0;
-            }
-            if (!loadFile.available()) break;
-            int got = loadFile.read(buf + have, sizeof(buf) - have);
-            if (got <= 0) break;
-            have += (size_t)got;
-            sdIoYield();
-            continue;
-          }
-          if (sdrx < maxlen && sdry >= 1 && sdry <= maxY) {
-            note[sdrx][sdry].channel = buf[pos];
-            note[sdrx][sdry].velocity = buf[pos + 1];
-            note[sdrx][sdry].probability = buf[pos + 2];
-            note[sdrx][sdry].condition = buf[pos + 3];
-            note[sdrx][sdry].midiPitch = NOTE_MIDI_PITCH_NONE;
-          }
-          pos += 4;
-          notesRead++;
-          sdry++;
-          if (sdry > maxY) {
-            sdry = 1;
-            sdrx++;
-          }
-        }
-
-        if (notesRead == expectedNotes) {
-          while (have - pos < 2) {
-            if (pos > 0 && pos < have) {
-              memmove(buf, buf + pos, have - pos);
-              have -= pos;
-              pos = 0;
-            } else if (pos >= have) {
-              have = 0;
-              pos = 0;
-            }
-            if (!loadFile.available()) break;
-            int got = loadFile.read(buf + have, sizeof(buf) - have);
-            if (got <= 0) break;
-            have += (size_t)got;
-            sdIoYield();
-          }
-          if (have - pos >= 2 && buf[pos] == 0xFF && buf[pos + 1] == 0xFE) {
-            pos += 2;
-            foundMarker = true;
-          }
-        }
-
-        if (foundMarker) {
-          uint8_t *smpBytes = (uint8_t *)&SMP;
-          size_t smpLeft = sizeof(SMP);
-          size_t smpOff = 0;
-          if (pos < have) {
-            size_t take = min(have - pos, smpLeft);
-            memcpy(smpBytes, buf + pos, take);
-            smpOff += take;
-            smpLeft -= take;
-            pos += take;
-          }
-          while (smpLeft > 0 && loadFile.available()) {
-            size_t n = min((size_t)512, smpLeft);
-            int got = loadFile.read(smpBytes + smpOff, n);
-            if (got <= 0) break;
-            smpOff += (size_t)got;
-            smpLeft -= (size_t)got;
-            sdIoYield();
-          }
-
-          // Read the optional trailing pitch extension. A missing, truncated,
-          // or unknown extension leaves every note in legacy row-derived mode.
-          if (smpLeft == 0 && loadFile.available() >= (int)sizeof(PITCH_EXTENSION_HEADER)) {
-            uint8_t pitchHeader[sizeof(PITCH_EXTENSION_HEADER)];
-            int headerRead = loadFile.read(pitchHeader, sizeof(pitchHeader));
-            bool validPitchExtension =
-                headerRead == (int)sizeof(pitchHeader) &&
-                memcmp(pitchHeader, PITCH_EXTENSION_HEADER,
-                       sizeof(PITCH_EXTENSION_HEADER)) == 0 &&
-                loadFile.available() >= (int)expectedNotes;
-            if (validPitchExtension) {
-              size_t pitchIndex = 0;
-              while (pitchIndex < expectedNotes) {
-                size_t want = min(sizeof(buf), expectedNotes - pitchIndex);
-                int got = loadFile.read(buf, want);
-                if (got != (int)want) {
-                  validPitchExtension = false;
-                  break;
-                }
-                for (int i = 0; i < got; i++, pitchIndex++) {
-                  unsigned int x = (unsigned int)(pitchIndex / maxY) + 1;
-                  unsigned int y = (unsigned int)(pitchIndex % maxY) + 1;
-                  uint8_t stored = buf[i];
-                  note[x][y].midiPitch =
-                      (stored <= 127 || stored == NOTE_MIDI_PITCH_NONE)
-                        ? stored : NOTE_MIDI_PITCH_NONE;
-                }
-                sdIoYield();
-              }
-              if (!validPitchExtension) {
-                for (unsigned int x = 1; x < maxlen; x++) {
-                  for (unsigned int y = 1; y <= maxY; y++) {
-                    note[x][y].midiPitch = NOTE_MIDI_PITCH_NONE;
-                  }
-                }
-              }
-            }
-          }
-
-          if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
-            SMP.bpm = 100.0f;
-          }
-          if (SMP.file > 999) SMP.file = 1;
-          if (SMP.pack < 1 || SMP.pack > 999) SMP.pack = 1;
-
-          for (int ch = 0; ch < maxY; ch++) {
-            globalMutes[ch] = SMP.globalMutes[ch];
-            for (int page = 0; page < maxPages; page++) {
-              pageMutes[page][ch] = SMP.pageMutes[page][ch];
-            }
-          }
-
-          unmuteAllChannels();
-          applyMutesAfterPMODSwitch();
-          loadedOk = true;
+  // Stage a complete payload in PSRAM. Failed reads never partly replace the
+  // live notes or Device settings. This does not change the on-card format.
+  static EXTMEM uint8_t payload[(maxlen - 1) * maxY * 5u + 2u
+                              + sizeof(SMP) + sizeof(PITCH_EXTENSION_HEADER)];
+  const size_t baseBytes = expectedNotes * 4u + 2u + sizeof(SMP);
+  File loadFile = SD.open(OUTPUTf);
+  bool pitchPresent = false;
+  if (loadFile) {
+    size_t offset = 0;
+    bool readOk = loadFile.size() >= baseBytes;
+    while (readOk && offset < baseBytes) {
+      const size_t count = min((size_t)512, baseBytes - offset);
+      readOk = loadFile.read(payload + offset, count) == (int)count;
+      offset += count;
+      sdIoYield();
+    }
+    readOk = readOk && payload[expectedNotes * 4u] == 0xFF
+                    && payload[expectedNotes * 4u + 1u] == 0xFE;
+    if (readOk && loadFile.available() >= (int)(sizeof(PITCH_EXTENSION_HEADER) + expectedNotes)) {
+      pitchPresent = loadFile.read(payload + baseBytes, sizeof(PITCH_EXTENSION_HEADER))
+                       == (int)sizeof(PITCH_EXTENSION_HEADER)
+        && memcmp(payload + baseBytes, PITCH_EXTENSION_HEADER, sizeof(PITCH_EXTENSION_HEADER)) == 0;
+      size_t pitchOffset = 0;
+      while (pitchPresent && pitchOffset < expectedNotes) {
+        const size_t count = min((size_t)512, expectedNotes - pitchOffset);
+        pitchPresent = loadFile.read(payload + baseBytes + sizeof(PITCH_EXTENSION_HEADER)
+                                     + pitchOffset, count) == (int)count;
+        pitchOffset += count;
+        sdIoYield();
+      }
+    }
+    loadFile.close();
+    if (readOk) {
+      clearPatternNotes();
+      size_t index = 0;
+      for (unsigned int x = 1; x < maxlen; x++) {
+        for (unsigned int y = 1; y <= maxY; y++, index++) {
+          const uint8_t *cell = payload + index * 4u;
+          note[x][y].channel = cell[0] <= 16 ? cell[0] : 0;
+          note[x][y].velocity = min(cell[1], (uint8_t)127);
+          note[x][y].probability = min(cell[2], (uint8_t)100);
+          note[x][y].condition = cell[3];
+          const uint8_t pitch = pitchPresent
+            ? payload[baseBytes + sizeof(PITCH_EXTENSION_HEADER) + index] : NOTE_MIDI_PITCH_NONE;
+          note[x][y].midiPitch = (pitch <= 127 || pitch == NOTE_MIDI_PITCH_NONE)
+            ? pitch : NOTE_MIDI_PITCH_NONE;
         }
       }
-      loadFile.close();
+      memcpy(&SMP, payload + expectedNotes * 4u + 2u, sizeof(SMP));
+      if (!isfinite(SMP.bpm) || SMP.bpm < 40.0f || SMP.bpm > 300.0f) SMP.bpm = 100.0f;
+      if (SMP.file > 999) SMP.file = 1;
+      if (SMP.pack > 999) SMP.pack = 1;
+      for (int ch = 0; ch < maxY; ch++) {
+        globalMutes[ch] = SMP.globalMutes[ch];
+        for (int page = 0; page < maxPages; page++) pageMutes[page][ch] = SMP.pageMutes[page][ch];
+      }
+      unmuteAllChannels();
+      applyMutesAfterPMODSwitch();
+      loadedOk = true;
     }
     sdIoYield();
   }
 
   if (!loadedOk) {
     // EXTMEM/PSRAM is not a blank canvas after reset — always zero the grid.
-    clearPatternNotes();
+    if (autoload) clearPatternNotes();
     const bool fileWasPresent = SD.exists(OUTPUTf);
-    if (isAutosaveSlot && fileWasPresent) {
-      SD.remove(OUTPUTf);
-    }
     if (!autoload) sdIoEndAudioSafe();
     if (fileWasPresent) {
       extern void FastLEDclear();
       extern void FastLEDshow();
       extern void drawText(const char *text, int startX, int startY, CRGB color);
-      FastLEDclear();
-      drawText("ERR", 3, 8, CRGB(255, 0, 0));
-      FastLEDshow();
-      delay(700);
+      showPatternResult(false);
       if (autoload) {
         g_enterNewFileAfterCorruptAutoload = true;
       } else {
-        extern void showNewFileScreen();
-        showNewFileScreen();
+        switchMode(&draw);
       }
     } else if (!autoload && SMP.file != 0) {
       extern void showNewFileScreen();
@@ -539,7 +517,7 @@ FLASHMEM void loadPattern(bool autoload) {
   GLOB.singleMode = false;
   
   // Validate BPM before using (default to 100 if invalid)
-  if (SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
+  if (!isfinite(SMP.bpm) || SMP.bpm < 40.0f || SMP.bpm > 300.0f) {
     SMP.bpm = 100.0f;
   }
   
@@ -576,10 +554,8 @@ FLASHMEM void loadPattern(bool autoload) {
 
 
 FLASHMEM void autoLoad() {
-  // Finish an interrupted atomic save (pattern.tmp already complete, rename never ran).
-  if (!SD.exists(AUTOSAVE_PATH) && SD.exists(PATTERN_TMP_PATH)) {
-    SD.rename(PATTERN_TMP_PATH, AUTOSAVE_PATH);
-  }
+  // loadPattern recovers only autosaved.txt.tmp / .bak. The historical shared
+  // pattern.tmp has no destination identity and must never become an autosave.
   loadPattern(true);
   
   // Reset paint/unpaint prevention flag after autoLoad operation
@@ -598,7 +574,7 @@ FLASHMEM void autoSave() {
   }
 
   savePattern(true);
-  lastAutoSaveTime = currentTime;
+  if (lastPatternSaveOk) lastAutoSaveTime = currentTime;
 
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;

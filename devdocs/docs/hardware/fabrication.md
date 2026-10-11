@@ -6,7 +6,7 @@ description: Gerbers, JLCPCB BOM/CPL, and how to open the KiCad project.
 
 # Fabrication (rev H)
 
-Maker steps (what to order, what is through-hole, first power) are in the repo-root [BUILD.md](../../../BUILD.md). This page is the file map.
+Maker steps (what to order, what is through-hole, first power) are in the repo-root [BUILD.md](https://github.com/Soundpauli/toern/blob/main/BUILD.md). This page is the file map.
 
 ## Open the design
 
@@ -20,10 +20,10 @@ The Teensy 4.1 **symbol** is vendored at [`teensy/teensy.kicad_sym`](../../../PC
 
 | Export | Location |
 |--------|----------|
-| KiCad plot | [`PCB/toern_revH/Gerber/`](../../../PCB/toern_revH/Gerber) — Cu top/inner/bottom, mask, silk, paste, edge cuts, `.drl` |
-| JLCPCB pack | [`PCB/toern_revH/jlcpcb/`](../../../PCB/toern_revH/jlcpcb) — `gerber/`, `production_files/` |
+| KiCad plot | [`PCB/toern_revH/Gerber/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revH/Gerber) — Cu top/inner/bottom, mask, silk, paste, edge cuts, `.drl` |
+| JLCPCB pack | [`PCB/toern_revH/jlcpcb/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revH/jlcpcb) — `gerber/`, `production_files/` |
 
-Stackup: **4 layers**, **1.6 mm**. The placed JLCPCB order Y12 (10 boards, top-side assembly) is written up in [`order-y12.html`](../../../PCB/toern_revH/jlcpcb/order-y12.html).
+Stackup: **4 layers**, **1.6 mm**. The placed JLCPCB order Y12 (10 boards, top-side assembly) is written up in [`order-y12.html`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/jlcpcb/order-y12.html).
 
 ## JLCPCB SMT helpers
 
@@ -53,7 +53,7 @@ Passives are in the CSV. Key ICs:
 | USB-C | J4 | C165948 |
 | microSD | J8 | C597972 |
 
-Jacks, the switch, JST headers, encoder sockets, the Teensy sockets, pogo pins, the mic, and the 1000 µF cap are in the same CSV and are through-hole. The Teensy module, Duppa encoders, LED matrix, LiPo, speaker, and case are not in the CSV. Both lists are in [BUILD.md](../../../BUILD.md).
+Jacks, the switch, JST headers, encoder sockets, the Teensy sockets, pogo pins, the mic, and the 1000 µF cap are in the same CSV and are through-hole. The Teensy module, Duppa encoders, LED matrix, LiPo, speaker, and case are not in the CSV. Both lists are in [BUILD.md](https://github.com/Soundpauli/toern/blob/main/BUILD.md).
 
 ## Ordering checklist
 
@@ -61,4 +61,4 @@ Jacks, the switch, JST headers, encoder sockets, the Teensy sockets, pogo pins, 
 2. Confirm 4-layer, 1.6 mm, and the silk/mask colors you want.
 3. If using SMT assembly: upload BOM + CPL. Resolve codec / charger substitutions before paying.
 4. Solder the through-hole parts. Seat the Teensy only after the 5 V and 3.3 V rails measure right.
-5. Flash firmware ([info.md](../../../info.md)). Check USB, SD, headphone audio, one encoder, and the matrix on J9.
+5. Flash firmware ([info.md](https://github.com/Soundpauli/toern/blob/main/info.md)). Check USB, SD, headphone audio, one encoder, and the matrix on J9.

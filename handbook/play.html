@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="handbook-fonts.css?v=20261011b" />
-  <link rel="stylesheet" href="handbook.css?v=20261011b" />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261011d" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,14 +17,14 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011b"></script>
+  <script src="handbook-nav.js?v=20261011d"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-play">
           <h2 class="handbook-page__title">Settings</h2>
-          <p class="handbook-page__summary">How the grid <em>behaves</em> — lighting, page walking, paint style, cursor, LEDs, and PONG. None of these change the audio engine; they shape interaction and visuals only. Open from the root menu as <strong>SETTINGS</strong>; encoder&nbsp;4 walks the eleven leaves below.</p>
+          <p class="handbook-page__summary">How the grid <em>behaves</em> — lighting, page walking, paint style, cursor, LEDs, and PONG. These settings affect playback, auditioning and the display. Open from the root menu as <strong>SETTINGS</strong>; encoder&nbsp;4 walks the twelve leaves below.</p>
 
           <section class="hb-sub" id="play-root">
             <h2>Entering SETTINGS</h2>
@@ -132,8 +132,8 @@
               <table class="opt-table">
                 <thead><tr><th>Mode</th><th>What playback does</th><th>Best for</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>OFF</strong></td><td>Stays on one page forever</td><td>DJ-style locked loops; live tweaking</td></tr>
-                  <tr><td><strong>ON</strong></td><td>Marches to the next page that has notes</td><td>Simple A→B→C song form</td></tr>
+                  <tr><td><strong>OFF</strong></td><td>Advances through the pattern pages</td><td>A→B→C sequences</td></tr>
+                  <tr><td><strong>ON</strong></td><td>Loops the selected edit page</td><td>Locked loops and live tweaking</td></tr>
                   <tr><td><strong>SONG</strong></td><td>Follows the SONG arranger chain</td><td>Non-linear set lists, repeats, bridges</td></tr>
                   <tr><td><strong>NEXT</strong></td><td>Starts the visible page, finishes it even if you browse away, then starts whichever page is visible at the boundary</td><td>Live transitions on a cue</td></tr>
                 </tbody>
@@ -220,7 +220,7 @@
               </div>
             </article>
             <p>When IMG is on, draw-mode base colours disappear (black canvas). Painting a cell cycles through sample voices <strong>1–8</strong> (and their colours). <strong>Touch&nbsp;1</strong> cycles the brush voice without painting. Stay in DRAW — single mode is not used here.</p>
-            <p><a href="#vmod">VMOD</a> is forced off. RECS → CLR is forced to <strong>FIX</strong> so page clears do not wipe the sketch unexpectedly.</p>
+            <p><a href="#vmod">VMOD</a> is forced off. REC → CLR is forced to <strong>FIX</strong> so page clears do not wipe the sketch unexpectedly.</p>
           </section>
 
 
@@ -378,7 +378,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="midi.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">MIDI</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js" defer></script>
+      <script src="handbook-led.js?v=20261011d" defer></script>
     </div>
   </div>
 </div>

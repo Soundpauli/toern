@@ -69,13 +69,13 @@ struct MenuPage {
 };
 
 MenuPage menuPages[MENU_PAGES_COUNT] = {
-  {"DAT", 1, false, nullptr},           // Load/Save
+  {"PAT", 1, false, nullptr},           // Load/Save
   {"KIT", 2, false, nullptr},           // Sample Pack
-  {"WAV", 3, false, nullptr},           // Wave Selection
+  {"SMP", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
   {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, GAIN, LOUT, PREV, 2-CH)
   {"SETT", 19, false, nullptr},         // SETTINGS submenu (FLW, PREV, VIEW, PMD, LOOP)
-  {"RECS", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
+  {"REC", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
   {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
   {"ETC", 34, false, nullptr}           // ETC submenu (AUTO, RST)
@@ -122,12 +122,12 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"TRAN", 8, false, nullptr},          // MIDI Transport
   {"SEND", 13, false, nullptr},         // MIDI Send (CLCK, NOTE, BOTH)
   {"RCVE", 44, false, nullptr},         // MIDI Note Receive (OFF/NOTE)
-  {"CLMP", 51, false, nullptr},         // Fold incoming pitch into the visible grid (ON/OFF)
+  {"FOLD", 51, false, nullptr},         // Fold incoming pitch into the visible grid (ON/OFF)
   {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 −127..+127 ms (+ = this path, − = other path)
   {"PPQN", 50, false, nullptr},         // Analog clock: enc1 width, enc2 STOP/CONT, enc3 rate + click POL
-  {"SIDE", 58, false, nullptr},         // Sidechain out: which voice pulses J27
+  {"TRIG", 58, false, nullptr},         // Sidechain out: which voice pulses J27
   {"CIN", 59, false, nullptr},          // Analog CLK-IN (J26): hold-off + input PPQN
-  {"WRTE", 60, false, nullptr},         // MIDI grid write: overwrite occupied cells
+  {"OVWR", 60, false, nullptr},         // MIDI grid write: overwrite occupied cells
 };
 
 // VOL submenu pages
@@ -2212,7 +2212,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(1);
         showIcons(ICON_FOLDER_BIG, dimIconColorFromText(tc));
-        drawText("FILE", 2, 3, tc);
+        drawText("PAT", 2, 3, tc);
       }
       break;
       
@@ -2221,7 +2221,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(2);
         showIcons(OLD_ICON_SAMPLEPACK, dimIconColorFromText(tc));
-        drawText("PACK", 2, 3, tc);
+        drawText("KIT", 2, 3, tc);
       }
       break;
       
@@ -2231,7 +2231,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         const CRGB tc = menuTextColorFromCol(3);
         showIcons(ICON_SAMPLE_BIG, dimIconColorFromText(tc));
       if (GLOB.currentChannel > 0 && GLOB.currentChannel < 9) {
-        drawText("WAVE", 2, 3, tc);
+        drawText("SMP", 2, 3, tc);
       } else {
         drawText("(-)", 2, 3, tc);
       }
@@ -2285,7 +2285,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 60: { // WRTE - MIDI overwrite occupied grid cells
         extern bool MIDI_WRITE_OVERWRITE;
-        drawText("WRTE", 2, 10, currentMenuParentTextColor());
+        drawText("OVWR", 2, 10, currentMenuParentTextColor());
         drawMenuValue(MIDI_WRITE_OVERWRITE ? "ON" : "OFF", 2, 3, MIDI_WRITE_OVERWRITE ? UI_GREEN : UI_RED);
         drawIndicator('L', MIDI_WRITE_OVERWRITE ? 'G' : 'R', 3);
       }
@@ -2294,7 +2294,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 51: // CLMP - fold incoming pitch into the visible grid
       {
         extern bool MIDI_NOTE_CLAMP;
-        drawText("CLMP", 2, 10, currentMenuParentTextColor());
+        drawText("FOLD", 2, 10, currentMenuParentTextColor());
         drawMenuValue(MIDI_NOTE_CLAMP ? "ON" : "OFF", 2, 3, MIDI_NOTE_CLAMP ? UI_GREEN : UI_RED);
         drawIndicator('L', MIDI_NOTE_CLAMP ? 'G' : 'R', 3);
       }
@@ -2350,7 +2350,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern uint8_t getSidechainVoice();
       extern CRGB col[];
       const uint8_t ch = getSidechainVoice();
-      drawText("SIDE", 2, 10, currentMenuParentTextColor());
+      drawText("TRIG", 2, 10, currentMenuParentTextColor());
       if (!ch) {
         drawMenuValue("OFF", 2, 3, UI_RED);
         drawIndicator('L', 'R', 3);
@@ -2961,9 +2961,9 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       } else if (resetMenuOption == 2) {
         modeText = "FULL";
       } else if (resetMenuOption == 3) {
-        modeText = "FILE";
+        modeText = "PAT";
       } else if (resetMenuOption == 4) {
-        modeText = "PACK";
+        modeText = "KIT";
       } else {
         modeText = "ASAV";
       }
@@ -4867,10 +4867,10 @@ FLASHMEM void switchMenu(int menuPosition){
           // FILE: Wipe all saved files (1-999.txt) but keep autosaved.txt
           FastLEDclear();
           drawText("WIPE", 2, 10, UI_ORANGE);
-          drawText("FILE", 2, 3, UI_ORANGE);
+          drawText("PAT", 2, 3, UI_ORANGE);
           FastLEDshow();
           
-          char filename[16];
+          char filename[24];
           int deletedCount = 0;
           for (int i = 1; i <= 999; i++) {
             sprintf(filename, "%d.txt", i);
@@ -4878,6 +4878,8 @@ FLASHMEM void switchMenu(int menuPosition){
               SD.remove(filename);
               deletedCount++;
             }
+            sprintf(filename, "%d.txt.tmp", i); SD.remove(filename);
+            sprintf(filename, "%d.txt.bak", i); SD.remove(filename);
           }
           
           showSaveSuccessAnimation();
@@ -4885,7 +4887,7 @@ FLASHMEM void switchMenu(int menuPosition){
           // PACK: Remove all samplepack directories except 1/ (used by FULL reset)
           FastLEDclear();
           drawText("WIPE", 2, 10, UI_ORANGE);
-          drawText("PACK", 2, 3, UI_ORANGE);
+          drawText("KIT", 2, 3, UI_ORANGE);
           FastLEDshow();
           
           char dirname[16];
@@ -5616,7 +5618,7 @@ FLASHMEM void drawMidiVoiceSelect() {
   switch (voiceSelect) {
     case 1: drawMenuValue("MIDI", 2, 3, UI_BLUE); break;
     case 2: drawMenuValue("KEYS", 2, 3, UI_MAGENTA); break;
-    default: drawMenuValue("YPOS", 2, 3, UI_GREEN); break;
+    default: drawMenuValue("SEL", 2, 3, UI_GREEN); break;
   }
   MIDI_VOICE_SELECT = (voiceSelect == 1 || voiceSelect == 2);
   FastLEDshow();

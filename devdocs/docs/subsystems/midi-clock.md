@@ -12,7 +12,7 @@ description: MIDI I/O, master/slave clock, and transport handling.
 
 - TRS MIDI via Serial (custom `MidiSettings`, enlarged Serial8 buffers in `toern.ino`)  
 - `MIDI.h` handlers for note on/off, clock, start/stop  
-- Analog pulse I/O: CLK-OUT pin 37 (`pulseClock*`), CLK-IN pin 38, SIDEC pin 28 (`sidechainOnVoice`, MIDI → SIDE). The CLK-IN GPIO interrupt is attached only in BPM orange EXT.
+- Analog pulse I/O: CLK-OUT pin 37 (`pulseClock*`), CLK-IN pin 38, SIDEC pin 28 (`sidechainOnVoice`, MIDI → TRIG). The CLK-IN GPIO interrupt is attached only in BPM orange EXT.
 
 ## Clock paths
 

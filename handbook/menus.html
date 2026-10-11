@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="handbook-fonts.css?v=20261011b" />
-  <link rel="stylesheet" href="handbook.css?v=20261011b" />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261011d" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011b"></script>
+  <script src="handbook-nav.js?v=20261011d"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -28,7 +28,7 @@
 
           <section class="hb-sub" id="root-nav">
             <h2>Root menu — how navigation works</h2>
-            <p class="lede">Open the menu by holding a touch pad from the grid. The root list uses red and blue dots on <strong>row 16</strong>; the encoder 4 hint strip is green to signal "this knob navigates". Submenu families re-colour the same row with the parent menu colour, so you always know which world of settings you are inside.</p>
+            <p class="lede">Open the menu by tapping touch&nbsp;2 (the right pad) from the grid. The root list uses red and blue dots on <strong>row 16</strong>; the encoder 4 hint strip is green to signal "this knob navigates". Submenu families re-colour the same row with the parent menu colour, so you always know which world of settings you are inside.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="menu" width="16" height="16" role="img" aria-label="Root menu"></canvas>
@@ -67,7 +67,7 @@
               </div>
               <div class="tree-legend__row">
                 <span class="tree-legend__swatch tree-legend__swatch--blue" aria-hidden="true"></span>
-                <span class="node" style="background:#1f2937">FILE</span>
+                <span class="node" style="background:#1f2937">PAT</span>
                 <span><strong>Blue tint</strong> = depth&nbsp;1 — a root-menu family you enter with encoder&nbsp;4. On the device these are the coloured dots on row&nbsp;16.</span>
               </div>
               <div class="tree-legend__row">
@@ -82,18 +82,18 @@
               <ul class="menu-tree">
                 <li>
                   <span class="node">MENU</span>
-                  <span class="desc">Hold a front touch pad from the grid. Playback keeps running — the menu is a translucent overlay, not a pause button. Encoder&nbsp;4 spins the ten family dots on row&nbsp;16; short-press enters. Encoder&nbsp;1 short steps back. Re-open within five seconds and you land on the last family; wait longer and you start on FILE again (the firmware’s polite “where were we?”).</span>
+                  <span class="desc">Tap touch&nbsp;2 (the right pad) from the grid. Playback keeps running — the menu is a translucent overlay, not a pause button. Encoder&nbsp;4 spins the ten family dots on row&nbsp;16; short-press enters. Encoder&nbsp;1 short steps back. Re-open within five seconds and you land on the last family; wait longer and you start on PAT again (the firmware’s polite “where were we?”).</span>
                   <ul>
 
                     <li id="file">
-                      <a href="files.html#file"><span class="node">FILE</span></a>
+                      <a href="files.html#file"><span class="node">PAT</span></a>
                       <span class="desc">Pattern vault. One slot = the whole session on the card: all 16 pages, every voice, every per-step value, every tone knob — everything except which sample pack is loaded.</span>
                       <span class="sub">
                         <ul class="sub-opts">
                           <li><strong>Enc&nbsp;1 short</strong> — load</li>
                           <li><strong>Enc&nbsp;2 short</strong> — save (overwrites, no “are you sure?”)</li>
-                          <li><strong>Enc&nbsp;3 short</strong> — sidecar on/off (when on, load also pulls the matching <code>.txt</code>: palette, MIDI offsets, pack hint)</li>
-                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–99</strong> (bright green = occupied, dim blue = empty)</li>
+                          <li><strong>Enc&nbsp;3 turn</strong> — apply sound settings on/off (stored inside the pattern file)</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>0–999</strong> (0/A = load-only recovery) (bright green = occupied, dim blue = empty)</li>
                           <li><strong>Enc&nbsp;4 short</strong> — back to the grid</li>
                         </ul>
                       </span>
@@ -101,10 +101,10 @@
                       <ul>
                         <li id="new-menu">
                           <a href="files.html#new"><span class="node">NEW</span></a>
-                          <span class="desc">Genre pattern generator — not a root menu item. Reached only by loading an empty FILE slot. Seeds a fresh pattern into RAM, then drops you on the grid.</span>
+                          <span class="desc">Genre pattern generator — not a root menu item. Reached only by loading an empty PAT slot. Seeds a fresh pattern into RAM, then drops you on the grid.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>Enc&nbsp;1 short</strong> — abort back to FILE</li>
+                              <li><strong>Enc&nbsp;1 short</strong> — abort back to PAT</li>
                               <li><strong>Enc&nbsp;3 turn</strong> — length <strong>1–16</strong> pages (disabled for BLNK — blank is blank)</li>
                               <li><strong>Enc&nbsp;4 turn</strong> — genre: <strong>BLNK</strong> (wipe clean), <strong>TECH</strong>, <strong>HIPH</strong>, <strong>DNB</strong>, <strong>HOUS</strong>, <strong>AMBT</strong></li>
                               <li><strong>Enc&nbsp;4 short</strong> — generate &amp; load</li>
@@ -116,7 +116,7 @@
                     </li>
 
                     <li id="pack">
-                      <a href="sample-packs.html#pack"><span class="node">PACK</span></a>
+                      <a href="sample-packs.html#pack"><span class="node">KIT</span></a>
                       <span class="desc">Which numbered folder of WAVs fills sample voices 1–8. Synths 11 / 13 / 14 ignore this; rows 9, 10, 12 stay empty forever (by design, not by bug).</span>
                       <span class="sub">
                         <ul class="sub-opts">
@@ -129,7 +129,7 @@
                     </li>
 
                     <li id="wave">
-                      <a href="samples.html#set-wav"><span class="node">WAVE</span></a>
+                      <a href="samples.html#set-wav"><span class="node">SMP</span></a>
                       <span class="desc">Sample browser for voices 1–8. Also opens with a both-touch (left-first) from the grid on a sample row. On a synth / empty row the root entry shows <strong>(−)</strong> and refuses to open — no WAV for a voice that has no sample engine.</span>
                       <span class="sub">
                         <ul class="sub-opts">
@@ -284,8 +284,8 @@
                           <span class="desc">Pattern mode — what happens when a page finishes.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>OFF</strong> — loop this page forever</li>
-                              <li><strong>ON</strong> — advance to the next page that has notes</li>
+                              <li><strong>OFF</strong> — advance through the pattern pages</li>
+                              <li><strong>ON</strong> — loop the selected edit page</li>
                               <li><strong>SONG</strong> — follow the <a href="song.html#song">SONG</a> chain</li>
                               <li><strong>NEXT</strong> — play the visible page; while it plays, browse to a target page and it takes over exactly when the current page ends</li>
                             </ul>
@@ -449,14 +449,14 @@
 
                     <li id="midi">
                       <a href="midi.html"><span class="node">MIDI</span></a>
-                      <span class="desc">TRS MIDI in/out plus analog PPQN clock, analog clock-in, and a sidechain trigger.</span>
+                      <span class="desc">TRS MIDI in/out plus analog PPQN clock, analog clock-in, and a selected-voice trigger.</span>
                       <ul>
                         <li>
                           <span class="node">CH</span>
                           <span class="desc">How incoming notes map onto voices.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>YPOS</strong> — notes hit the voice selected by the grid’s Y position</li>
+                              <li><strong>SEL</strong> — notes hit the voice selected by the grid’s Y position</li>
                               <li><strong>MIDI</strong> — MIDI ch&nbsp;N → voice&nbsp;N</li>
                               <li><strong>KEYS</strong> — legacy pitch-class selector for sample voices 1–8 at base pitch</li>
                             </ul>
@@ -497,8 +497,8 @@
                           </span>
                         </li>
                         <li>
-                          <a href="midi.html#clmp"><span class="node">CLMP</span></a>
-                          <span class="desc">Choose whether incoming YPOS/MIDI pitches are folded into the visible register.</span>
+                          <a href="midi.html#clmp"><span class="node">FOLD</span></a>
+                          <span class="desc">Choose whether incoming SEL/MIDI pitches are folded into the visible register.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>ON</strong> — visible row is also the played pitch</li>
@@ -531,7 +531,7 @@
                           </span>
                         </li>
                         <li>
-                          <a href="midi.html#side"><span class="node">SIDE</span></a>
+                          <a href="midi.html#side"><span class="node">TRIG</span></a>
                           <span class="desc">Which voice pulses SIDEC-5V (J27).</span>
                           <span class="sub">
                             <ul class="sub-opts">
@@ -552,7 +552,7 @@
                           </span>
                         </li>
                         <li>
-                          <a href="midi.html#wrte"><span class="node">WRTE</span></a>
+                          <a href="midi.html#wrte"><span class="node">OVWR</span></a>
                           <span class="desc">Whether incoming MIDI may replace notes already on the grid.</span>
                           <span class="sub">
                             <ul class="sub-opts">
@@ -580,7 +580,7 @@
 
                     <li id="etc">
                       <a href="reference.html#etc"><span class="node">ETC</span></a>
-                      <span class="desc">Credits, SD file server, AI fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
+                      <span class="desc">Credits, SD file server, generated fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
                       <ul>
                         <li>
                           <span class="node">INFO</span>
@@ -717,7 +717,7 @@
                               <li>Base row colours hide; the grid stays black until you paint</li>
                               <li>Paint on rows 1–15 cycles voices <strong>1–8</strong>; touch&nbsp;1 cycles the brush voice</li>
                               <li><a href="play.html#vmod">VMOD</a> is forced off and locked while IMG is on</li>
-                              <li>RECS → CLR is forced to <strong>FIX</strong> while IMG is on</li>
+                              <li>REC → CLR is forced to <strong>FIX</strong> while IMG is on</li>
                             </ul>
                             <span class="how">Single mode is not used in IMG — stay in DRAW and paint.</span>
                           </span>
@@ -729,12 +729,12 @@
                             <ul class="sub-opts">
                               <li><strong>SD</strong> — rescan the whole card into <code>samples/toern_wavs.txt</code> (mute-mode <code>?&gt;</code> random + sample browser cache)</li>
                               <li><strong>EFX</strong> — factory-reset every tone control (patterns &amp; sample assignments survive)</li>
-                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">SETTINGS → LEDS</a>; only FILE-saved work comes back)</li>
-                              <li><strong>FILE</strong> — wipe saved patterns <code>1–99.txt</code> (keeps autosave)</li>
-                              <li><strong>PACK</strong> — delete pack folders except pack&nbsp;1</li>
+                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">SETTINGS → LEDS</a>; only PAT-saved work comes back)</li>
+                              <li><strong>PAT</strong> — wipe saved patterns <code>1–999.txt</code> (keeps autosave)</li>
+                              <li><strong>KIT</strong> — delete pack folders except pack&nbsp;1</li>
                               <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
                             </ul>
-                            <span class="how">FILE and PACK are the “I meant it” buttons.</span>
+                            <span class="how">PAT and KIT are the “I meant it” buttons.</span>
                           </span>
                         </li>
                       </ul>
@@ -753,7 +753,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="reference.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Screen index</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js" defer></script>
+      <script src="handbook-led.js?v=20261011d" defer></script>
     </div>
   </div>
 </div>

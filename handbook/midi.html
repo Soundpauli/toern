@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="handbook-fonts.css?v=20261011b" />
-  <link rel="stylesheet" href="handbook.css?v=20261011b" />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261011d" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,17 +17,18 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011b"></script>
+  <script src="handbook-nav.js?v=20261011d"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-midi">
           <h2 class="handbook-page__title">MIDI</h2>
-          <p class="handbook-page__summary">TRS MIDI in/out — note mapping, transport, what you send and receive, whether MIDI overwrites the grid, latency offsets, analog PPQN, analog clock-in, and a sidechain trigger. Everything under root menu <strong>MIDI</strong>.</p>
+          <p class="handbook-page__summary">TRS MIDI in/out — note mapping, transport, what you send and receive, whether MIDI overwrites the grid, latency offsets, analog PPQN, analog clock-in, and a selected-voice trigger. Everything under root menu <strong>MIDI</strong>.</p>
 
           <section class="hb-sub" id="midi-menu">
             <h2>The MIDI submenu</h2>
+            <p>Musical MIDI handlers use the TRS MIDI ports. Although the USB build exposes a MIDI interface, USB note, clock and transport handling is not implemented here; use TRS for those connections. USB audio output is available separately for recording the mix in a computer.</p>
             <p class="lede">Ten pages. Encoder&nbsp;4 walks siblings; most values turn on encoder&nbsp;3. Pair with <a href="tempo-midi.html#bpm">BPM → INT/EXT</a> for full master/slave.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
@@ -51,7 +52,7 @@
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>YPOS</strong></td><td>All incoming channels play whichever voice is currently selected by the grid’s Y position.</td></tr>
+                  <tr><td><strong>SEL</strong></td><td>All incoming channels play whichever voice is currently selected by the grid’s Y position.</td></tr>
                   <tr><td><strong>MIDI</strong></td><td>MIDI channel&nbsp;N plays voice&nbsp;N — fastest for a multi-channel controller.</td></tr>
                   <tr><td><strong>KEYS</strong></td><td>Legacy trigger selector: pitch classes C through G choose sample voices 1–8 at their base pitch; G♯ through B also select voice&nbsp;8.</td></tr>
                 </tbody>
@@ -60,7 +61,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>YPOS / MIDI / KEYS</td><td>Survives reboot.</td></tr>
+                  <tr><th>Turn</th><td>SEL / MIDI / KEYS</td><td>Survives reboot.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -136,19 +137,19 @@
           <hr />
 
           <section class="hb-sub" id="clmp">
-            <h2>CLMP — incoming pitch range</h2>
+            <h2>FOLD — incoming pitch range</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_clmp" width="16" height="16" role="img" aria-label="MIDI CLMP"></canvas>
+                <canvas class="led-matrix" data-scene="md_clmp" width="16" height="16" role="img" aria-label="MIDI FOLD"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>ON</strong></td><td>Fold incoming YPOS/MIDI notes by octaves into rows 1–15; preview and playback use the visible row pitch.</td></tr>
+                  <tr><td><strong>ON</strong></td><td>Fold incoming SEL/MIDI notes by octaves into rows 1–15; preview and playback use the visible row pitch.</td></tr>
                   <tr><td><strong>OFF</strong></td><td>Keep the original MIDI pitch for preview, recording, playback, and MIDI out. The note is still folded into a visible editable row; moving it vertically transposes the stored pitch.</td></tr>
                 </tbody>
               </table>
-              <p class="hb-device__intro">CLMP does not alter the legacy KEYS trigger mapping. The setting defaults to ON and survives reboot.</p>
+              <p class="hb-device__intro">FOLD does not alter the legacy KEYS trigger mapping. The setting defaults to ON and survives reboot.</p>
             </article>
           </section>
 
@@ -202,7 +203,7 @@
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
               <p class="hb-device__intro">Rate <strong>1</strong> = one pulse per beat; <strong>24</strong> ≈ classic Sync24 density; <strong>32</strong> denser than MIDI’s native 24&nbsp;PPQN. Display follows the last encoder you turned: width, STOP/CONT, or ±rate. This page is <em>output</em> on J25. Incoming analog rate is <a href="#cin">CIN</a>.</p>
-              <div class="hb-tip"><strong>Jacks (rev&nbsp;H silk):</strong> <strong>CLK-OUT(5V)</strong> = J25, <strong>CLK-IN(3–5V)</strong> = J26, <strong>SIDEC-5V</strong> = J27 (see <a href="#side">SIDE</a>). Pin 1 = signal, pin 2 = GND. Incoming analog clock is read on <a href="#cin">CIN</a>, not here. Not MIDI DIN and not line-level audio.</div>
+              <div class="hb-tip"><strong>Jacks (rev&nbsp;H silk):</strong> <strong>CLK-OUT(5V)</strong> = J25, <strong>CLK-IN(3–5V)</strong> = J26, <strong>SIDEC-5V</strong> = J27 (see <a href="#side">TRIG</a>). Pin 1 = signal, pin 2 = GND. Incoming analog clock is read on <a href="#cin">CIN</a>, not here. Not MIDI DIN and not line-level audio.</div>
             </article>
           </section>
 
@@ -211,11 +212,11 @@
 
 
           <section class="hb-sub" id="side">
-            <h2>SIDE — analog sidechain pulse</h2>
-            <p class="lede">5&nbsp;V trigger on <strong>SIDEC-5V (J27)</strong> whenever the selected voice actually sounds. Pulse width and polarity follow <a href="#ppqn">PPQN</a>.</p>
+            <h2>TRIG — selected-voice trigger output</h2>
+            <p class="lede">5&nbsp;V trigger on <strong>SIDEC-5V (J27)</strong> whenever the selected voice actually sounds. This is a trigger signal for external equipment, not built-in sidechain compression. Pulse width and polarity follow <a href="#ppqn">PPQN</a>.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_side" width="16" height="16" role="img" aria-label="MIDI SIDE"></canvas>
+                <canvas class="led-matrix" data-scene="md_side" width="16" height="16" role="img" aria-label="MIDI TRIG"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -257,10 +258,10 @@
           <hr />
 
           <section class="hb-sub" id="wrte">
-            <h2>WRTE — overwrite grid notes</h2>
+            <h2>OVWR — overwrite grid notes</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_wrte" width="16" height="16" role="img" aria-label="MIDI WRTE"></canvas>
+                <canvas class="led-matrix" data-scene="md_wrte" width="16" height="16" role="img" aria-label="MIDI OVWR"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -269,7 +270,7 @@
                   <tr><td><strong>ON</strong></td><td>Incoming MIDI replaces whatever is already in that cell.</td></tr>
                 </tbody>
               </table>
-              <p class="hb-device__intro">Live play still sounds. WRTE only affects what gets written while recording in SINGLE. The setting survives reboot.</p>
+              <p class="hb-device__intro">Live play still sounds. OVWR only affects what gets written while recording in SINGLE. The setting survives reboot.</p>
             </article>
           </section>
 
@@ -299,7 +300,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="song.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Song</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js" defer></script>
+      <script src="handbook-led.js?v=20261011d" defer></script>
     </div>
   </div>
 </div>

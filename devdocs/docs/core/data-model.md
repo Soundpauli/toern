@@ -30,7 +30,7 @@ EXTMEM Note note[maxlen + 1][maxY + 1];
 - **Y** is row / pitch lane on the matrix.  
 - Empty cells use `channel == 0`.
 - `midiPitch == 255` keeps the historical row-derived pitch. With
-  `MIDI > CLMP` off, recorded YPOS/MIDI notes store their absolute incoming
+  `MIDI > FOLD` off, recorded SEL/MIDI notes store their absolute incoming
   pitch here while Y remains a folded display/edit position.
 - Condition bytes `1,2,4,8,16,17–20` encode loop conditions, `21` is F/F
   fill, and `22` is G/L destination-note glide/legato. Unknown values should
@@ -50,7 +50,7 @@ UI often maps displayed velocity (1–16 rows) to MIDI-ish 1–127 with `mapf`.
 | `mute[]`, `channelVol[]` | Mutes and channel volumes |
 | `globalMutes` / `pageMutes` | Mute behavior depending on pattern mode |
 | `sp0Active[]` | Samplepack-0 (per-voice custom sample) flags |
-| `songArrangement[64]` | Song mode: pattern id per arrangement slot |
+| `songArrangement[64]` | Song mode: page number per arrangement slot |
 
 Placing `SMP` in **EXTMEM** (PSRAM) keeps DTCM (RAM1) free for hot code/data.
 
@@ -65,7 +65,7 @@ Voice mode (`voiceMode`, SETT → VMOD) gives each channel its own loop length: 
 ## Song mode
 
 - `songModeActive` — follow arrangement instead of a single pattern loop.  
-- `SMP.songArrangement[i]` — pattern number at song position `i` (0 = empty).  
+- `SMP.songArrangement[i]` — page number in the current pattern at song position `i` (0 = empty).
 - `currentSongPosition` — arrangement cursor.
 
 ## Persistence
@@ -83,3 +83,5 @@ that extension as row-derived; older firmware ignores the trailing extension.
   `midiPitch` metadata rather than leaving orphan state.
 - Prefer updating `note`/`SMP` first, then redraw — LEDs should mirror state, not invent it.  
 - Large buffers belong in `EXTMEM` / `DMAMEM`, not as function-local `static` arrays (those land in RAM1).
+
+Saves use destination-specific `N.txt.tmp` / `N.txt.bak` (or `autosaved.txt.tmp` / `.bak`). A valid destination wins; recovery otherwise validates a complete temporary file or the previous generation. Shared `pattern.tmp` is not promoted. Empty patterns are saved normally. Loading stages the full note/settings payload before replacing live state.

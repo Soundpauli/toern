@@ -418,7 +418,7 @@
         m.set(x, 15, 0, 200, 0);
       }
     }
-    const cvX = [9, 10, 11];
+    const cvX = [13, 14, 15];
     for (let x = cvX[1]; x <= cvX[2]; x++) {
       for (let y = 1; y < cv + 1; y++) {
         m.set(x, y, 0, Math.max(0, 20 - y), y * y);
@@ -432,12 +432,12 @@
       den = "2";
       tc = [0, 0, 255];
     }
-    drawText(m, num, 13, 11, tc[0], tc[1], tc[2]);
-    m.set(16, 10, dw[0], dw[1], dw[2]);
-    m.set(15, 9, dw[0], dw[1], dw[2]);
-    m.set(14, 8, dw[0], dw[1], dw[2]);
-    m.set(13, 7, dw[0], dw[1], dw[2]);
-    drawText(m, den, 14, 2, tc[0], tc[1], tc[2]);
+    drawText(m, num, 9, 11, tc[0], tc[1], tc[2]);
+    m.set(12, 10, dw[0], dw[1], dw[2]);
+    m.set(11, 9, dw[0], dw[1], dw[2]);
+    m.set(10, 8, dw[0], dw[1], dw[2]);
+    m.set(9, 7, dw[0], dw[1], dw[2]);
+    drawText(m, den, 10, 2, tc[0], tc[1], tc[2]);
   }
 
   function drawBPMLike(m, bpm, intMode) {
@@ -567,6 +567,7 @@
     m.indM(2, txtExists ? "D" : "R");
     m.indL(4, "X");
     const numC = txtExists ? UI.BRIGHT_GREEN : UI.BLUE;
+    drawText(m, txtExists ? "USED" : "NEW", 1, 3, numC[0], numC[1], numC[2]);
     const s = String(fileNum);
     let tw = 0;
     for (let i = 0; i < s.length; i++) tw += (ALPH[s.charCodeAt(i) - 32][0] + 1);
@@ -724,16 +725,16 @@
       m.indL(4, "R");
     },
     menu(m) {
-      rootMenuPage(m, 0, 1, "FILE");
+      rootMenuPage(m, 0, 1, "PAT");
     },
     mr_dat(m) {
-      rootMenuPage(m, 0, 1, "FILE");
+      rootMenuPage(m, 0, 1, "PAT");
     },
     mr_kit(m) {
-      rootMenuPage(m, 1, 2, "PACK");
+      rootMenuPage(m, 1, 2, "KIT");
     },
     mr_wav(m) {
-      rootMenuPage(m, 2, 3, "WAVE");
+      rootMenuPage(m, 2, 3, "SMP");
     },
     mr_bpm(m) {
       rootMenuPage(m, 3, 4, "BPM");
@@ -932,7 +933,7 @@
       drawText(m, "NOTE", 2, 3, 0, 255, 0);
     },
     md_clmp(m) {
-      midiSubFrame(m, 4, "CLMP", "", "", "G");
+      midiSubFrame(m, 4, "FOLD", "", "", "G");
       drawText(m, "ON", 2, 3, 0, 255, 0);
     },
     md_sync(m) {
@@ -944,7 +945,7 @@
       drawText(m, "+24", 2, 3, 0, 255, 0);
     },
     md_side(m) {
-      midiSubFrame(m, 7, "SIDE", "", "", "G");
+      midiSubFrame(m, 7, "TRIG", "", "", "G");
       drawText(m, "1", 2, 3, 255, 0, 0);
     },
     md_cin(m) {
@@ -952,7 +953,7 @@
       drawText(m, "0", 2, 3, 0, 255, 0);
     },
     md_wrte(m) {
-      midiSubFrame(m, 9, "WRTE", "", "", "R");
+      midiSubFrame(m, 9, "OVWR", "", "", "R");
       drawText(m, "OFF", 2, 3, 255, 0, 0);
     },
     et_info(m) {
@@ -1043,7 +1044,7 @@
       m.indM(2, "R");
       m.indL(4, "X");
       const tc = menuTextFromCol(2);
-      drawText(m, "PACK", 2, 3, tc[0], tc[1], tc[2]);
+      drawText(m, "KIT", 2, 3, tc[0], tc[1], tc[2]);
     },
     mute(m) {
       // Show 8 voice lanes (rows 2-9 here = voices 1-8) with voices 2 and 5 muted (dim base tint),

@@ -25,13 +25,13 @@ const LOGO = [
 ];
 
 export const MENU_PAGES = [
-  { name: "DAT", label: "FILE", icon: "folder", col: 1 },
-  { name: "KIT", label: "PACK", icon: "pack", col: 2 },
-  { name: "WAV", label: "WAVE", icon: "sample", col: 3 },
+  { name: "PAT", label: "PAT", icon: "folder", col: 1 },
+  { name: "KIT", label: "KIT", icon: "pack", col: 2 },
+  { name: "SMP", label: "SMP", icon: "sample", col: 3 },
   { name: "BPM", label: "BPM", icon: "clock", col: 4 },
   { name: "VOL", label: "VOL", icon: "volume", col: 5 },
   { name: "SETT", label: "SETT", icon: "settings", col: 6 },
-  { name: "RECS", label: "REC", icon: "record", col: 7 },
+  { name: "REC", label: "REC", icon: "record", col: 7 },
   { name: "MIDI", label: "MIDI", icon: "midi", col: 8 },
   { name: "SONG", label: "SONG", icon: "song", col: 13 },
   { name: "ETC", label: "ETC", icon: "pattern", col: 14 },
@@ -40,7 +40,7 @@ export const MENU_PAGES = [
 export const SUBS = {
   look: ["FLW", "PREV", "VIEW", "PMD", "LOOP", "VMOD", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"],
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
-  midi: ["CH", "TRAN", "SEND", "RCVE", "CLMP", "SYNC", "PPQN", "SIDE", "CIN", "WRTE"],
+  midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PPQN", "TRIG", "CIN", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
   etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "EYES", "CHLD", "FIRE", "IMG", "RSET"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
@@ -467,16 +467,16 @@ export function drawVelocity(matrix, s) {
     ["F", "F", [255, 255, 0]], ["G", "L", [0, 255, 120]],
   ];
   const [num, den, tc] = fracs[c - 1] || fracs[0];
-  const ix1 = 19;
-  const ix2 = 20;
-  const ix3 = 21;
+  const ix1 = COLS <= 16 ? 9 : 19;
+  const ix2 = ix1 + 1;
+  const ix3 = ix1 + 2;
   matrix.drawText(num, ix1, 11, tc);
   matrix.light(ix3 + 1, 10, frame);
   matrix.light(ix3, 9, frame);
   matrix.light(ix2, 8, frame);
   matrix.light(ix1, 7, frame);
   matrix.drawText(den, ix1 + 1, 2, tc);
-  for (let x = 27; x <= 28; x++) {
+  for (let x = COLS <= 16 ? 14 : 27; x <= (COLS <= 16 ? 15 : 28); x++) {
     for (let y = 1; y < vol + 1; y++) matrix.light(x, y, [0, Math.max(0, 20 - y), Math.min(255, y * y)]);
   }
 }
@@ -567,7 +567,7 @@ export function drawMenu(matrix, s) {
   matrix.drawIndicator("L", "G", 4);
   pageDots(matrix, MENU_PAGES.length, s.menuIndex, UI_RED, UI_BLUE);
   showIcon(matrix, page.icon, 2, 1, scaleTo(tc, 20));
-  const label = page.name === "WAV" && (s.GLOB.currentChannel < 1 || s.GLOB.currentChannel > 8) ? "(-)" : page.label;
+  const label = page.name === "SMP" && (s.GLOB.currentChannel < 1 || s.GLOB.currentChannel > 8) ? "(-)" : page.label;
   matrix.drawText(label, 2, 3, tc);
 }
 
@@ -715,6 +715,7 @@ function clampUi(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 export function drawLoadSave(matrix, s) {
   const exists = s.slotExists("toern-web-patterns", s.slot);
+  matrix.drawText(exists ? "USED" : "NEW", 1, 3, exists ? UI_GREEN : UI_BLUE);
   showIcon(matrix, "folder", 2, 7, exists ? UI_GREEN : UI_DIM_RED);
   matrix.drawIndicator("L", "X", 4);
   if (s.slot === 0) {

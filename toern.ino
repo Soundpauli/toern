@@ -344,6 +344,7 @@ void updatePongBall();
 void drawPongBall();
 void resetPongGame();
 void showSaveSuccessAnimation(bool returnToDraw = true);
+void showSaveFailureAnimation(bool returnToDraw = true);
 void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted = false);
 int mapXtoPageOffset(int x);
 void stopSound(int note, int ch);
@@ -9895,6 +9896,7 @@ FLASHMEM void showLoadSave() {
 
   CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
   showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
+  drawText(txtExists ? "USED" : "NEW", 1, 3, fileIconColor);
 
   // FILE: M[G] load | M[R] save (disabled on autosave slot) | C[W] settings | L[X]
   // Matrix indicators only — rings via cached writes (showLoadSave runs every loop).

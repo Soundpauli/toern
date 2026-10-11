@@ -16,7 +16,8 @@ For *which jack is which on the finished box*, see the handbook hardware page �
 |-----|-----------------|------|
 | **J4** | USB-C receptacle | Host USB (D+/D−, VBUS) |
 | **J1** | 6.35 mm Neutrik-style | Headphone out from SGTL5000 HP_L / HP_R / HP_VGND |
-| **J5**, **J6** | 6.35 mm | Line-level paths (AC-coupled nets into/out of the codec side) |
+| **J5** | 6.35 mm stereo TRS | Line out: tip → C17 → LINEOUT_L; ring → C16 → LINEOUT_R; sleeve GND |
+| **J6** | 6.35 mm stereo TRS | Line in: tip → C19 → LINEIN_L; ring → C18 → LINEIN_R; sleeve GND. Firmware records input channel 0 (left) only. |
 | **J7** | 6.35 mm | Mic / related input path (tip tied toward mic capsule net; sleeve GND) |
 | **J3**, **J17** | CUI SJ1-3533 (3.5 mm) | TRS MIDI in/out (opto / serial side via TLP2361 etc.) |
 | **MK1** | POM-2244P condenser | Built-in mic → codec MIC / MICBIAS path |
@@ -57,7 +58,7 @@ Silk on rev H. Pads: **1** = signal, **2** = GND.
 | **CLK-IN(3-5V)** | **J26** | **38** | Jack → 22 kΩ → Schottky clamp (`D2`) → 74LVC1G17 Schmitt (`U14`, 3.3 V) → MCU |
 | **SIDEC-5V** | **J27** | **28** | MCU → 74AHCT1G125 (`U16`, 5 V) → 1 kΩ → jack |
 
-Firmware: MENU → MIDI → PPQN drives **J25** (rate / width / polarity / STOP). MENU → MIDI → **CIN** sets the **J26** rate (1–32 PPQN) and hold-off. The pin-38 interrupt is attached only in BPM orange EXT and then calls `playNote()` / `playFillNote()` directly; `fillTimer` stays stopped, and `playTimer` only runs as a pulse-relocked one-shot that spaces the extra steps at 1/2 PPQN. **D2** is BAT54S in standard SOT-23 (`toern:BAT54S`: pin 1 anode to GND, pin 2 cathode to +3.3 V, pin 3 common to the clamp node). Early rev H boards used KiCad `D_Schottky_Dual_Series_ACK` (pin 2 = common, pin 3 = cathode), which pulled U14's input to 3.3 V; those boards need D2 removed or bodged. MENU → MIDI → **SIDE** picks which voice pulses **J27** (same width/polarity as PPQN; OFF disables).
+Firmware: MENU → MIDI → PPQN drives **J25** (rate / width / polarity / STOP). MENU → MIDI → **CIN** sets the **J26** rate (1–32 PPQN) and hold-off. The pin-38 interrupt is attached only in BPM orange EXT and then calls `playNote()` / `playFillNote()` directly; `fillTimer` stays stopped, and `playTimer` only runs as a pulse-relocked one-shot that spaces the extra steps at 1/2 PPQN. **D2** is BAT54S in standard SOT-23 (`toern:BAT54S`: pin 1 anode to GND, pin 2 cathode to +3.3 V, pin 3 common to the clamp node). Early rev H boards used KiCad `D_Schottky_Dual_Series_ACK` (pin 2 = common, pin 3 = cathode), which pulled U14's input to 3.3 V; those boards need D2 removed or bodged. MENU → MIDI → **TRIG** picks which voice pulses **J27** (same width/polarity as PPQN; OFF disables).
 
 Do not use **J11** pin 31 for clock — that pad is unused GPIO.
 

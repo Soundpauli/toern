@@ -37,7 +37,7 @@ const SUB_VALUES = {
     { opts: ["OFF", "ON", "FIX", "ON1", "CLIC"], colors: [[120, 0, 0], [0, 120, 0], [120, 120, 0], [0, 120, 120], [120, 0, 120]], codes: ["R", "G", "Y", "N", "M"] },
   ],
   midi: [
-    { opts: ["YPOS", "MIDI", "KEYS"], colors: [[0, 120, 0], [0, 0, 120], [120, 0, 120]], codes: ["G", "X", "M"] },
+    { opts: ["SEL", "MIDI", "KEYS"], colors: [[0, 120, 0], [0, 0, 120], [120, 0, 120]], codes: ["G", "X", "M"] },
     { opts: ["OFF", "GET", "SEND"], colors: [[120, 0, 0], [0, 120, 0], [0, 0, 120]], codes: ["R", "G", "X"] },
     { opts: ["CLCK", "NOTE", "BOTH"], colors: [[120, 120, 0], [0, 120, 0], [0, 0, 120]], codes: ["Y", "G", "X"] },
     { opts: ["OFF", "NOTE"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
@@ -69,7 +69,7 @@ const SUB_VALUES = {
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["OFF", "ALL", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [255, 220, 120], [255, 80, 20]], codes: ["R", "Y", "O"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["SD", "EFX", "FULL", "FILE", "PACK", "ASAV"], colors: [[120, 60, 0]], codes: ["O"] },
+    { opts: ["SD", "EFX", "FULL", "PAT", "KIT", "ASAV"], colors: [[120, 60, 0]], codes: ["O"] },
   ],
 };
 
@@ -1227,16 +1227,16 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function openMenuPage() {
     const name = MENU_PAGES[s.menuIndex].name;
-    if (name === "DAT") s.mode = "dat";
+    if (name === "PAT") s.mode = "dat";
     else if (name === "KIT") s.mode = "kit";
-    else if (name === "WAV" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
+    else if (name === "SMP" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
       refreshBrowse();
       s.mode = "wav";
       previewWav();
     } else if (name === "BPM") s.mode = "bpm";
     else if (name === "VOL") { s.subIndex = 0; s.mode = "vol"; }
     else if (name === "SETT") { s.subIndex = 0; s.mode = "look"; }
-    else if (name === "RECS") { s.subIndex = 0; s.mode = "recs"; }
+    else if (name === "REC") { s.subIndex = 0; s.mode = "recs"; }
     else if (name === "MIDI") { s.subIndex = 0; s.mode = "midi"; }
     else if (name === "SONG") s.mode = "song";
     else if (name === "ETC") { s.subIndex = 0; s.mode = "etc"; }
@@ -1550,7 +1550,7 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (s.mode === "kit" && enc === 1) {
       saveSlot("toern-web-packs", s.packSlot, {
-        name: DUMMY_PACKS[s.packSlot]?.name || "PACK",
+        name: DUMMY_PACKS[s.packSlot]?.name || "KIT",
         wavs: [1, 2, 3, 4, 5, 6, 7, 8].map((ch) => wavOf[ch] || 0),
       });
       s.okAt = performance.now();
@@ -2007,9 +2007,9 @@ export function createDevice(matrix, statusEl, rings) {
       const page = MENU_PAGES[s.menuIndex];
       return { title: "Menu", detail: page?.name || String(s.menuIndex + 1) };
     }
-    if (mode === "dat") return { title: "FILE", detail: s.slot === 0 ? "Autosave" : `Slot ${s.slot}` };
+    if (mode === "dat") return { title: "PAT", detail: s.slot === 0 ? "Autosave" : `Slot ${s.slot}` };
     if (mode === "bpm") return { title: "BPM", detail: String(s.bpm) };
-    if (mode === "wav") return { title: "WAV", detail: s.wavName || "" };
+    if (mode === "wav") return { title: "SMP", detail: s.wavName || "" };
     if (mode === "filter") return { title: "Filter", detail: `Voice ${s.GLOB.currentChannel}` };
     if (mode === "velocity") return { title: "Velocity", detail: `Voice ${s.GLOB.currentChannel}` };
     return { title: mode, detail: "" };

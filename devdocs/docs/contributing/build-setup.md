@@ -6,7 +6,7 @@ description: How to build and flash the Teensy firmware.
 
 # Build setup
 
-Ordering the board, the off-board parts, and first power-up are in the repo-root [BUILD.md](../../../BUILD.md). This page is only the firmware compile.
+Ordering the board, the off-board parts, and first power-up are in the repo-root [BUILD.md](https://github.com/Soundpauli/toern/blob/main/BUILD.md). This page is only the firmware compile.
 
 ## Requirements
 

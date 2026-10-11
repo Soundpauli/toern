@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="handbook-fonts.css?v=20261011b" />
-  <link rel="stylesheet" href="handbook.css?v=20261011b" />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261011d" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011b"></script>
+  <script src="handbook-nav.js?v=20261011d"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -127,16 +127,16 @@
                 </g>
               </svg>
               <dl class="hb-portmap__legend">
-                <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level under <a href="menus.html#vol">VOL → LOUT</a>.</dd></div>
-                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Host data for firmware updates via the Teensy boot path; if a LiPo is installed, also charges that cell.</dd></div>
+                <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level under <a href="menus.html#vol">VOL → LOUT</a>.</dd></div>
+                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Power, firmware updates, serial access for the SD tool and two-channel USB audio output to a computer. USB audio follows the output routing under VOL → 2-CH; if a LiPo is installed, USB also charges that cell.</dd></div>
                 <div><dt>C</dt><dd><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use any phones or in-ears; level under <a href="menus.html#vol">VOL → MAIN</a>.</dd></div>
                 <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device. See <a href="midi.html">MIDI</a> and <a href="tempo-midi.html">Tempo</a> (clock source).</dd></div>
                 <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock + notes; pick what to emit under <a href="midi.html#send">MIDI → SEND</a>.</dd></div>
-                <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Boots when slid on; the current pattern is autosaved before shutdown.</dd></div>
+                <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Boots when slid on; save to PAT before switching off; the switch cuts power without saving.</dd></div>
                 <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the bottom edge for hands-free sampling. Pick it as the active source under <a href="menus.html#rec">REC → INPT</a>.</dd></div>
                 <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject. Only insert/eject with the unit <em>off</em> — the firmware re-indexes the card on boot. <span class="hb-brand">TŒRN</span> does not mount the card as USB mass storage: prepare the initial layout with a card reader, or transfer files while the card stays in the unit via <a href="#sd-tool">ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (see <a href="#card-layout">SD card setup</a> below).</dd></div>
                 <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain under <a href="menus.html#rec">REC → MIC</a>.</dd></div>
-                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo on the bottom edge. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
+                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the bottom edge. The current recording path uses the left input only and saves mono WAVs. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
                 <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter <a href="record.html#record-mode">record mode</a> from the sample browser. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
               </dl>
             </div>
@@ -237,7 +237,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="matrix.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">The matrix</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js" defer></script>
+      <script src="handbook-led.js?v=20261011d" defer></script>
     </div>
   </div>
 </div>

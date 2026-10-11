@@ -63,7 +63,7 @@ app.innerHTML = `
       <p class="welcome-kicker">What's this?</p>
       <h2 class="welcome-title" id="welcome-title">TŒRN Simulator</h2>
       <p>This is an early browser emulator of the TŒRN groovebox — meant to show the concept and how the instrument feels to play.</p>
-      <p>It is a work in progress. Timing, sound, menus, and hardware details will differ from the real device. Treat it as a sketch, not a finished product.</p>
+      <p>It is a work in progress. Timing, sound, menus, and hardware details will differ from the real device. Use it to explore the controls; browser sound and timing are approximate. For the physical instrument, follow the <a href="https://toern.live/handbook/first-beat.html" target="_blank" rel="noopener">first beat guide</a>.</p>
       <div class="welcome-actions">
         <button type="button" class="welcome-dismiss" id="welcome-dismiss">Got it</button>
         <label class="welcome-remember">
@@ -79,7 +79,8 @@ app.innerHTML = `
       <p class="key-brand-sub">Simulator 1.0</p>
       <button type="button" class="key-brand-what" id="welcome-open">What's this?</button>
     </div>
-    <h1 class="jump-title">Keys</h1>
+    <h1 class="jump-title">Browser shortcuts</h1>
+    <p>Press Space to play / pause. Click the grid first to activate browser audio. Turn the onscreen knobs with your mouse or use the keys below.</p>
     <ul class="key-legend-list">
       <li><kbd>1</kbd>–<kbd>8</kbd> voice</li>
       <li><kbd>S</kbd> single mode</li>
@@ -143,7 +144,7 @@ app.innerHTML = `
         <button type="button" class="pad" data-touch="2" style="left:${px(420)};top:${py(266)}" aria-label="Touch 2, Menu" title="Touch 2"><span>T2</span><span class="io-label pad-hint pad-hint--l">Menu</span></button>
         ${encoders}
         <button type="button" class="pad pad--front" data-touch="3" style="left:${px(420)}" aria-label="Touch 3, hold to record into voice" title="Touch 3 (hold to record)"><span>T3</span><span class="io-label">Hold to record</span></button>
-        ${io("l", "jack", 310, "6.35mm line-out (mono)")}
+        ${io("l", "jack", 310, "6.35mm stereo TRS line-out")}
         ${io("l", "usb", 362, "USB-C port")}
         ${io("l", "jack", 414, "6.35mm headphone-out")}
         ${io("r", "switch", 310, "On/off switch")}
@@ -152,7 +153,7 @@ app.innerHTML = `
         ${io("front", "mini", 60, "PPQN sync port")}
         ${io("front", "mic", 135, "Internal microphone")}
         ${io("front", "jack", 215, "6.35mm mic-input")}
-        ${io("front", "jack", 295, "6.35mm line-in (mono)")}
+        ${io("front", "jack", 295, "6.35mm stereo TRS line-in (left channel recorded)")}
         <nav class="mobile-shortcuts" hidden aria-label="Shortcuts">
           <button type="button" data-shortcut="single">Single</button>
           <button type="button" data-shortcut="wav">Sample</button>
@@ -167,15 +168,15 @@ app.innerHTML = `
   <aside class="jump" id="jump">
     <div id="jump-home">
     <h1 class="jump-title">Menu</h1>
-    <button type="button" data-jump="empty">Empty New Track</button>
+    <button type="button" data-jump="empty">New empty pattern</button>
     <hr>
     <button type="button" data-jump="draw">Draw</button>
-    <button type="button" data-jump="single">SingleMode</button>
-    <button type="button" data-jump="menu">Open MainMenu</button>
-    <button type="button" data-jump="filter">FilterMode</button>
-    <button type="button" data-jump="wav">LoadSample</button>
+    <button type="button" data-jump="single">Single mode</button>
+    <button type="button" data-jump="menu">Main menu</button>
+    <button type="button" data-jump="filter">Sound controls</button>
+    <button type="button" data-jump="wav">Sample browser</button>
     <button type="button" data-jump="bpm">BPM</button>
-    <button type="button" id="load-track">load Track</button>
+    <button type="button" id="load-track">Load demo pattern</button>
     <div class="jump-sub" id="load-track-sub" hidden>
       <button type="button" data-track="1">Techno</button>
       <button type="button" data-track="2">Hip-hop</button>
@@ -185,13 +186,13 @@ app.innerHTML = `
     </div>
     <hr>
     <button type="button" id="import-midi">Import MIDI File</button>
-    <button type="button" id="transfer-open">Transfer SIM&lt;&gt;DEVICE</button>
+    <button type="button" id="transfer-open">Transfer patterns</button>
     <hr>
     <p class="status" id="status" role="status"></p>
     <p class="jump-help" id="jump-help"></p>
     <div class="jump-footer">
       <label class="jump-led">
-        <span id="build-version-label">BuildVersion · V2</span>
+        <span id="build-version-label">Panel layout · 32×16</span>
         <input type="checkbox" id="build-version" role="switch" aria-labelledby="build-version-label" checked>
       </label>
       <label class="jump-led jump-led--inline">
@@ -247,7 +248,7 @@ app.innerHTML = `
     <div class="jump-layer" id="sd-layer" hidden>
       <div class="jump-layer-head">
         <button type="button" id="sd-back">← Menu</button>
-        <h2 class="jump-title sd-title">Transfer SIM&lt;&gt;DEVICE</h2>
+        <h2 class="jump-title sd-title">Transfer patterns</h2>
       </div>
       <div class="sd-toolbar">
         <span class="jump-readout" id="sd-status" role="status">offline</span>
@@ -258,14 +259,14 @@ app.innerHTML = `
         <button type="button" class="sd-tab" role="tab" id="sd-tab-file" aria-selected="false" aria-controls="sd-panel-file">Pattern file</button>
       </div>
       <div id="sd-panel-pattern" role="tabpanel" aria-labelledby="sd-tab-pattern">
-        <p class="jump-panel-meta muted">Replaces the current pattern in RAM. Nothing is written to a file.</p>
+        <p class="jump-panel-meta muted">Transfers grid notes and tempo, not a complete kit or sound setup. Replaces the current pattern in RAM; nothing is written to a file.</p>
         <div class="sd-actions">
           <button type="button" class="jump-panel-reset" id="sd-push">SIM &gt; DEVICE</button>
           <button type="button" class="jump-panel-reset" id="sd-pull-slot">DEVICE &gt; SIM</button>
         </div>
       </div>
       <div id="sd-panel-file" role="tabpanel" aria-labelledby="sd-tab-file" hidden>
-        <p class="jump-panel-meta muted">Browse and replace pattern files on the SD card.</p>
+        <p class="jump-panel-meta muted">Browse and replace pattern files on the SD card. Simulator editing transfers notes and tempo; samples and complete sound recall require the device and matching kit.</p>
         <div class="sd-crumbs" id="sd-crumbs"></div>
         <div class="sd-list" id="sd-list" role="listbox" aria-label="SD card files"></div>
         <div class="sd-actions">
@@ -678,7 +679,7 @@ function syncBuildVersion(wide) {
   const isV2 = !!wide;
   buildVersion.checked = isV2;
   buildVersion.setAttribute("aria-checked", isV2 ? "true" : "false");
-  buildVersionLabel.textContent = `BuildVersion · ${isV2 ? "V2" : "V1"}`;
+  buildVersionLabel.textContent = `Panel layout · ${isV2 ? "32×16" : "16×16"}`;
 }
 buildVersion.addEventListener("change", () => {
   device.setDevice(buildVersion.checked ? 2 : 1);
@@ -1634,7 +1635,7 @@ setSdBusy(false);
 
 const HELP = {
   draw: "Draw is the grid. Move with the encoders, Enter paints a note, Space plays. Hold T3 to record into the current voice when REC→TRIG is SENS. D clears this page. T1 enters single mode on the current row. T2 opens the main menu.",
-  empty: "Empty New Track clears all notes and effects (ETC → RSET → FULL), then returns to Draw.",
+  empty: "New empty pattern clears all notes and effects (ETC → RSET → FULL), then returns to Draw.",
   single: "Single mode is one voice, and each row is a pitch. Enter paints that voice. On the bottom row, hold Tab to generate a pattern. D clears only this voice. T1 returns to draw.",
   filter: "Filter shapes the current voice. The four encoders are the controls on this page. T2 moves to the next filter page. T1 leaves. T3 resets this page.",
   menu: "Main menu. Encoder 4 moves through the pages, Enter opens the one you are on. T2 or Esc leaves.",

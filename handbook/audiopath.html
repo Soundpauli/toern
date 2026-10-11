@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="handbook-fonts.css?v=20261011b" />
-  <link rel="stylesheet" href="handbook.css?v=20261011b" />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261011d" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011b"></script>
+  <script src="handbook-nav.js?v=20261011d"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -195,7 +195,7 @@
               <li>Rows <strong>9, 10, 12</strong> — no voice objects.</li>
               <li>Channels <strong>3, 4, 13, 14</strong> — no freeverb.</li>
               <li><span class="ap-code">envelope11</span> — patched into <span class="ap-code">mixer_waveform11</span> in2, but that input is held at 0. Poly envelopes are <span class="ap-code">Senvelope1/2</span>.</li>
-              <li>USB audio is not enabled. USB is Serial + MIDI only.</li>
+              <li>USB audio output is enabled. The two output mixers also feed <span class="ap-code">usb1</span>; the computer receives the same two-channel routing as the headphone and line outputs.</li>
             </ul>
             <div class="hb-tip"><strong>Clipping checklist:</strong> four sample hits on one bank; ch11 RVRB stacked on dry at 0.20 + 0.20; BITC + RVRB (crush before the tanks). Channel mute releases envelopes so tails do not sit in the pool.</div>
           </section>

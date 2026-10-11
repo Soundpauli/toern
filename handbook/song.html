@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="handbook-fonts.css?v=20261011b" />
-  <link rel="stylesheet" href="handbook.css?v=20261011b" />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261011d" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011b"></script>
+  <script src="handbook-nav.js?v=20261011d"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -28,7 +28,7 @@
 
           <section class="hb-sub" id="pages">
             <h2>Pattern pages, loops, and PMODE</h2>
-            <p class="lede">One pattern holds <strong>16 pages × 16 steps</strong> = 256 steps per song. The page strip on row&nbsp;16 (see <a href="matrix.html#row16">Matrix</a>) shows which pages have content. How playback walks pages is set by <a href="play.html#pmd">SETTINGS → PMD</a> (PMODE):</p>
+            <p class="lede">One pattern holds <strong>256 steps</strong>: 16 pages × 16 steps on a single panel, or 8 pages × 32 steps on a wide panel. The page strip on row&nbsp;16 (see <a href="matrix.html#row16">Matrix</a>) shows which pages have content. How playback walks pages is set by <a href="play.html#pmd">SETTINGS → PMD</a> (PMODE):</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_pmd" width="16" height="16" role="img" aria-label="PMODE"></canvas>
@@ -36,8 +36,8 @@
               <table class="opt-table">
                 <thead><tr><th>Mode</th><th>What playback does</th><th>Best for</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>OFF</strong></td><td>Stays on one page forever</td><td>DJ-style locked loops; live tweaking.</td></tr>
-                  <tr><td><strong>ON</strong></td><td>Marches forward to the next used page</td><td>A→B→C song form without the arranger.</td></tr>
+                  <tr><td><strong>OFF</strong></td><td>Advances through the pattern pages</td><td>A→B→C sequences</td></tr>
+                  <tr><td><strong>ON</strong></td><td>Loops the selected edit page</td><td>Locked loops and live tweaking</td></tr>
                   <tr><td><strong>SONG</strong></td><td>Follows the SONG arranger</td><td>Non-linear set lists, repeats, bridges.</td></tr>
                   <tr><td><strong>NEXT</strong></td><td>Waits for a cued target then jumps once</td><td>Live transitions on a queue.</td></tr>
                 </tbody>
@@ -60,22 +60,22 @@
               <p class="viz-caption--below">Example: page 07 written into song slot 23.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Back to grid</td><td>Returns to the last grid view without losing the chain.</td></tr>
+                  <tr><th>Short</th><td>Clear assignment</td><td>Clears the selected slot; later slots stay in place.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Pattern page (1–16)</td><td>Picks which page goes into the currently selected song slot. The page number is shown in that page's voice colour.</td></tr>
-                  <tr><th>Short</th><td>Clear slot</td><td>Removes the selected slot from the chain; later slots shift up.</td></tr>
+                  <tr><th>Short</th><td>Assign page</td><td>Writes the selected page to this slot.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Transport (play/pause)</td><td>Starts and stops the chain. Same role as on the grid.</td></tr>
+                  <tr><th>Short</th><td>Transport (play/pause)</td><td>Starts the chain in SONG mode. Stopping also sets PMD to OFF.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Song slot (1–64)</td><td>Moves the edit cursor along the chain. The currently sounding slot is shown as a bright dot moving along row 1 while playback runs.</td></tr>
-                  <tr><th>Short</th><td>Insert empty slot</td><td>Pushes later slots down by one.</td></tr>
+                  <tr><th>Short</th><td>Assign page</td><td>Same as encoder 2: writes the selected page to this slot.</td></tr>
                 </tbody></table></div>
               </div>
             </article>
-            <p><strong>Workflow:</strong> set PMODE to SONG, open the SONG screen, choose a slot with encoder&nbsp;4, dial the pattern page with encoder&nbsp;2, repeat. Empty slots are skipped. During playback you see two strips at once: the page strip on row&nbsp;16 (which pattern page is currently sounding) and a moving green dot on row&nbsp;1 (which song slot you are on).</p>
+            <p><strong>Workflow:</strong> set PMODE to SONG, open the SONG screen, choose a slot with encoder&nbsp;4, dial the pattern page with encoder&nbsp;2, press encoder&nbsp;2 or&nbsp;4 to assign it, then repeat. Empty slots are skipped. During playback you see two strips at once: the page strip on row&nbsp;16 (which pattern page is currently sounding) and a moving green dot on row&nbsp;1 (which song slot you are on).</p>
             <div class="hb-tip"><strong>Tip:</strong> chains can repeat. Put the same page in three consecutive slots to "stay" on it for three loops before moving on, or alternate page 01 / page 02 / page 01 / page 02 to create a call-and-response.</div>
           </section>
         </section>
@@ -86,7 +86,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="menus.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Menu map</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js" defer></script>
+      <script src="handbook-led.js?v=20261011d" defer></script>
     </div>
   </div>
 </div>

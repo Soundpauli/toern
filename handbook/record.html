@@ -7,8 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="handbook-fonts.css?v=20261011b" />
-  <link rel="stylesheet" href="handbook.css?v=20261011b" />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261011d" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011b"></script>
+  <script src="handbook-nav.js?v=20261011d"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -29,6 +29,7 @@
           <section class="hb-sub" id="record-mode">
             <h2>Record mode dialog</h2>
             <p class="lede">From the <a href="samples.html#set-wav">sample browser</a>, <strong>hold touch&nbsp;3</strong> to enter record mode for the current sample voice. Recordings are written as numbered files such as <code>rec_01.wav</code> inside the <em>current browse folder</em>.</p>
+            <div class="hb-tip"><strong>Record to a computer via USB:</strong> connect USB-C with a data cable, select TŒRN’s USB audio device as the input in your DAW or recorder, and record its two channels. USB audio follows <a href="menus.html#vol">VOL → 2-CH</a>, just like the headphone and line outputs. This captures the output directly; it does not create a sample on the SD card.</div>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="record_mode" width="16" height="16" role="img" aria-label="Record mode idle"></canvas>
@@ -92,7 +93,7 @@
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
                 <tbody>
                   <tr><td><strong>MIC</strong></td><td>Mic path — built-in capsule or Mic-in jack (see <a href="hardware.html">Hardware</a>).</td></tr>
-                  <tr><td><strong>LINE</strong></td><td>Top-edge stereo line in — synths, drum machines, modular.</td></tr>
+                  <tr><td><strong>LINE</strong></td><td>Stereo TRS line-in jack — synths, drum machines, modular. Recording uses the left input and saves mono WAVs.</td></tr>
                 </tbody>
               </table>
               <p class="hb-device__intro">Flips which gain page (<a href="#mic">MIC</a> vs <a href="#lin">L-IN</a>) actually matters.</p>
@@ -193,7 +194,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="note-detail.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Note detail</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js" defer></script>
+      <script src="handbook-led.js?v=20261011d" defer></script>
     </div>
   </div>
 </div>

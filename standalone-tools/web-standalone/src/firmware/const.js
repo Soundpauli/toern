@@ -65,7 +65,7 @@ export const PAINT_ROWS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 12, 14, 15]);
 export const SOUND_CH = new Set([1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]);
 export const FILTER_CH = new Set([1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]);
 
-export const MENU = ["DAT", "KIT", "WAV", "BPM", "VOL", "SETT", "RECS", "MIDI", "SONG", "ETC"];
+export const MENU = ["PAT", "KIT", "SMP", "BPM", "VOL", "SETT", "REC", "MIDI", "SONG", "ETC"];
 export const WAVS = ["KICK", "SNARE", "HAT", "CLAP", "TOM", "RIDE", "PERC", "BASS", "SHKR", "CRSH"];
 export const DUMMY_PACKS = {
   1: { name: "DRUM", wavs: [0, 1, 2, 3, 4, 5, 6, 7] },

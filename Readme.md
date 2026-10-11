@@ -19,7 +19,7 @@ You get:
 - **8 sample voices** for drums, one-shots, loops, and “that weird recording from the metro”
 - **1 three-voice polyphonic synth** with presets (bass, keys, chiptune, pads… the usual suspects)
 - **2 monophonic synths** with LFO and arpeggiator for leads that refuse to sit still
-- A **16-step × 16-page** sequencer (256 steps of room to overthink), pattern chaining into songs, MIDI in/out, filters, bitcrush, reverb, and enough real-time knobs to keep your hands busy and your laptop jealous
+- A **16-step × 16-page** sequencer (256 steps of room to overthink), page chaining into songs, MIDI in/out, filters, bitcrush, reverb, and enough real-time knobs to keep your hands busy and your laptop jealous
 
 No laptop required once it’s built. Samples live on the SD card. Patterns autosave. You twist, tap, and suddenly it’s 2 a.m.
 
@@ -53,13 +53,13 @@ Open source as always: schematics, code, and design files are here for you to po
 ### Sequencer
 
 - **16 channels** in spirit: 8 sample voices (1–8), one 3-voice poly synth (11), two mono synths (13–14)  
-- **16 steps per page × 16 pages** → 256 steps per song arrangement space  
+- **16 steps per page × 16 pages** → 256 steps per pattern
 - **Voice mode**: each voice keeps its own pattern length. It loops the pages that hold its notes, pitches included, while the other voices keep looping on their own  
 - **FIRE** (ETC menu): optional playhead sparks when a chosen voice’s notes light white  
 - Store up to **999 patterns**, **999 samples**, **100 samplepacks**  
 - **Autosave / autoload** so your 3 a.m. genius doesn’t vanish at boot  
 - **Switch patterns live** without stopping playback  
-- **Song mode**: chain up to **64** patterns into something resembling a composition  
+- **Song mode**: chain up to **64** page assignments from the current pattern
 - Pattern ops: copy/paste, transpose page/channel (±1 octave), smart random notes (major/minor + rhythm ideas), clear page/channel  
 
 ### Sample voices (channels 1–8)

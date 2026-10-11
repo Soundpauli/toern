@@ -821,6 +821,28 @@ FLASHMEM void showSaveSuccessAnimation(bool returnToDraw) {
   }
 }
 
+FLASHMEM void showSaveFailureAnimation(bool returnToDraw) {
+  const int cx = (int)((maxX + 1) / 2);
+  const int cy = (int)((maxY + 1) / 2);
+  const uint32_t started = millis();
+  const uint32_t duration = 1000;
+  while (millis() - started < duration) {
+    const uint32_t elapsed = millis() - started;
+    const int radius = min(3, (int)(elapsed / 70));
+    uint8_t brightness = elapsed > 780
+      ? (uint8_t)map((long)elapsed, 780, (long)duration, 220, 20) : 220;
+    FastLEDclear();
+    for (int offset = -radius; offset <= radius; offset++) {
+      light(cx + offset, cy + offset, CRGB(brightness, 0, 0));
+      light(cx + offset, cy - offset, CRGB(brightness, 0, 0));
+    }
+    FastLEDshow();
+    sdIoYield();
+    delay(16);
+  }
+  if (returnToDraw) switchMode(&draw);
+}
+
 FLASHMEM void drawRecordingBorder() {
   // Draw red border around entire screen
   CRGB redColor = CRGB(255, 0, 0);
@@ -1239,24 +1261,15 @@ FLASHMEM void drawVelocity() {
     numeratorText = "1"; denominatorText = "1"; textColor = CRGB(0, 200, 0);
   }
 
-  if ((int)maxX > 16) {
-    // Wide (LED 2 / 2B): stack fraction under 3rd encoder (was stretched too far right).
-    int ix1, ix2, ix3;
-    getIndicatorXPositions(3, ix1, ix2, ix3);
-    drawText(numeratorText, ix1, 11, textColor);
-    light(ix3 + 1, 10, darkWhite);
-    light(ix3, 9, darkWhite);
-    light(ix2, 8, darkWhite);
-    light(ix1, 7, darkWhite);
-    drawText(denominatorText, ix1 + 1, 2, textColor);
-  } else {
-    drawText(numeratorText, 13, 11, textColor);
-    light(16, 10, darkWhite);
-    light(15, 9, darkWhite);
-    light(14, 8, darkWhite);
-    light(13, 7, darkWhite);
-    drawText(denominatorText, 14, 2, textColor);
-  }
+  // Condition is encoder 3 in both layouts; volume occupies encoder 4.
+  int ix1, ix2, ix3;
+  getIndicatorXPositions(3, ix1, ix2, ix3);
+  drawText(numeratorText, ix1, 11, textColor);
+  light(ix3 + 1, 10, darkWhite);
+  light(ix3, 9, darkWhite);
+  light(ix2, 8, darkWhite);
+  light(ix1, 7, darkWhite);
+  drawText(denominatorText, ix1 + 1, 2, textColor);
 
   // Channel volume under 4th encoder (indicator 4)
   int cvX1, cvX2, cvX3;
@@ -2720,6 +2733,5 @@ FLASHMEM void showSongMode() {
     }
   }
 }
-
 
 

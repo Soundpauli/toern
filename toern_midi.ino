@@ -762,13 +762,13 @@ void checkMidi() {
 
   static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 4;
   uint8_t processedMessages = 0;
-  while (MIDI.read()) {
+  while (processedMessages < MAX_MIDI_MESSAGES_PER_LOOP && MIDI.read()) {
     uint8_t miditype = MIDI.getType();
 
     if (miditype == midi::Clock) continue;
     if (miditype == midi::NoteOn) continue;  // handled by callback
 
-    if (processedMessages >= MAX_MIDI_MESSAGES_PER_LOOP) continue;
+    // Stop reading at the budget: unread messages remain queued for next loop.
     processedMessages++;
 
     switch (miditype) {

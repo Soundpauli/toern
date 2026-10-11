@@ -14,7 +14,7 @@ Arduino builds every `.ino` in the sketch root as one program. Treat the filenam
 |------|----------------|
 | [`toern.ino`](https://github.com/Soundpauli/toern/blob/main/toern.ino) | Version, includes, enums, `Mode`/`Note`/`Device`/`GlobalVars`, encoder + touch input, mode switching, playback timers, `setup`/`loop`, most glue |
 | [`toern_ui.ino`](https://github.com/Soundpauli/toern/blob/main/toern_ui.ino) | LED matrix drawing: grid, cursor, status, BPM screen, overlays |
-| [`toern_menu.ino`](https://github.com/Soundpauli/toern/blob/main/toern_menu.ino) | Nested menu UI (LOOK / RECS / MIDI / VOL / ETC), settings persistence hooks |
+| [`toern_menu.ino`](https://github.com/Soundpauli/toern/blob/main/toern_menu.ino) | Nested menu UI (LOOK / REC / MIDI / VOL / ETC), settings persistence hooks |
 | [`toern_helpers.ino`](https://github.com/Soundpauli/toern/blob/main/toern_helpers.ino) | Pattern generation helpers, sample browser lists, misc utilities |
 | [`toern_sample.ino`](https://github.com/Soundpauli/toern/blob/main/toern_sample.ino) | Sample preview, trim, load into voices, SD I/O yielding while audio runs |
 | [`toern_synths.ino`](https://github.com/Soundpauli/toern/blob/main/toern_synths.ino) | Poly/mono synth voice allocation, presets, `playSound` / `stopSound` |
