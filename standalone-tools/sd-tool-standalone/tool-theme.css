@@ -42,6 +42,8 @@ body.tool-page { margin: 0; padding-bottom: 0; background: var(--bg-dark); color
 .tool-card { margin: 0; }
 .tool-card h2, .sd-section h2, .teensy-section h2, dialog h2 { font-family: var(--font-display); font-size: 1.25rem; line-height: 1.25; font-weight: 500; letter-spacing: -.025em; text-transform: none; color: var(--text-p); }
 .tool-card h2 { margin-bottom: .75rem; }
+.teensy-section h2 { font-family: var(--font-logo); font-size: 1.65rem; font-weight: 400; letter-spacing: .01em; text-transform: uppercase; }
+.tool-page:has(.teensy-container) { font-family: var(--font-body); }
 .teensy-section p, .teensy-intro p, .teensy-intro ol { opacity: 1; }
 .tool-subline, .sd-help { color: var(--text-muted); }
 .tool-page button, .file-btn, .sd-download-btn { min-height: 42px; }
