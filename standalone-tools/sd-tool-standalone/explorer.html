@@ -8,7 +8,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&family=JetBrains+Mono:wght@300;400;600&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="styles.css"/>
   <link rel="stylesheet" href="tool-shell.css"/>
   <script>
     document.documentElement.classList.add("fonts-loaded");
@@ -325,20 +324,23 @@
       display: flex; justify-content: space-between; gap: 0.5rem;
     }
   </style>
+  <link rel="stylesheet" href="tool-theme.css?v=20261011">
 </head>
 <body class="tool-page">
   <noscript><style>html:not(.fonts-loaded) body{opacity:1}</style></noscript>
   <nav class="tool-nav">
     <div class="tool-nav-brand">
-      <a href="/" class="tool-nav-logo">TŒRN</a>
+      <a href="https://toern.live/" class="tool-nav-logo">TŒRN</a>
       <span class="tool-nav-label">// SD TOOL</span>
     </div>
+    <div class="tool-nav-links"><a href="https://toern.live/handbook/">Handbook</a><a href="https://sim.tyng.app/">Simulator</a></div>
     <div class="tool-nav-meta sd-meta" id="connStatus">not connected</div>
   </nav>
 
   <main class="tool-shell">
     <div class="tool-content">
       <div class="sd-container">
+      <header class="tool-header"><p class="tool-kicker">// SD tool</p><h1>Your sounds, in place.</h1><p>Manage samples and patterns through the local SD tool connection.</p></header>
         <div class="sd-section" id="connectBar">
           <h2>1. Device</h2>
           <div class="sd-row">

@@ -22,8 +22,8 @@ Colors come from `colors.h` and mode `knobcolor[]` values.
 
 ## FastLED constraints
 
-- `FASTLED_ALLOW_INTERRUPTS 0` — LED show must not nest badly with audio.  
-- Prefer **one** show per frame from the main loop path.  
+- `FASTLED_ALLOW_INTERRUPTS 0` — LED show must not nest badly with audio.
+- Prefer **one** show per frame from the main loop path.
 - WS2812 data pin and module count: `DATA_PIN`, `LED_MODULES`, runtime `maxX`.
 
 ## Encoder RGB
@@ -33,3 +33,9 @@ Colors come from `colors.h` and mode `knobcolor[]` values.
 ## External strip
 
 `toern_leds.ino` maintains an optional WS2812 strip: length/enable settings, `triggerLedStripRipple(channel)` on note triggers, `updateLedStrip()` from the main loop.
+
+## Current display contract
+
+PATT shows the slot number and load/save indicators. Occupied slots use green numbers; empty slots use blue. There is no USED/NEW text. `showSaveSuccessAnimation` draws a green checkmark; `showSaveFailureAnimation` draws a red cross. Both yield during animation to keep audio service running.
+
+In note detail, the condition fraction belongs under encoder 3 and voice volume under encoder 4 in both panel layouts. The matrix is a display controlled by the encoders and touch pads, not a matrix of physical playable buttons.

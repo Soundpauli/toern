@@ -1,34 +1,45 @@
-/**
- * TŒRN code docs — Infima overrides.
- * Accent leans LED-matrix teal; avoid stock purple gradients.
- */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
-
+/* TŒRN docs: the same type and surface palette as the website and host tools. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 :root {
-  --ifm-color-primary: #0d9488;
-  --ifm-color-primary-dark: #0c857a;
-  --ifm-color-primary-darker: #0b7d73;
-  --ifm-color-primary-darkest: #09675f;
-  --ifm-color-primary-light: #0fa39a;
-  --ifm-color-primary-lighter: #14b8a6;
-  --ifm-color-primary-lightest: #2dd4bf;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(13, 148, 136, 0.12);
-  --ifm-font-family-base: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
-  --ifm-heading-font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
-  --ifm-font-family-monospace: 'IBM Plex Mono', 'SF Mono', ui-monospace, monospace;
+  --ifm-color-primary: #c62828;
+  --ifm-color-primary-dark: #b22424;
+  --ifm-color-primary-darker: #a82222;
+  --ifm-color-primary-darkest: #8b1c1c;
+  --ifm-color-primary-light: #d33333;
+  --ifm-color-primary-lighter: #d74040;
+  --ifm-color-primary-lightest: #e06565;
+  --ifm-background-color: #ebebeb;
+  --ifm-background-surface-color: #fff;
+  --ifm-navbar-background-color: #ebebeb;
+  --ifm-footer-background-color: #e7e7e4;
+  --ifm-font-color-base: #1a1a1c;
+  --ifm-font-family-base: 'Inter', sans-serif;
+  --ifm-heading-font-family: 'Space Grotesk', sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, monospace;
+  --ifm-heading-font-weight: 500;
+  --ifm-code-font-size: 90%;
+  --ifm-global-radius: 5px;
+  --docusaurus-highlighted-code-line-bg: rgba(30, 127, 217, .10);
 }
-
+.navbar { box-shadow: none; border-bottom: 1px solid rgba(0,0,0,.12); }
+.navbar__title { font-family: var(--ifm-heading-font-family); letter-spacing: -.03em; }
+.navbar__link { font-family: var(--ifm-font-family-monospace); font-size: .8rem; }
+.markdown h1 { letter-spacing: -.04em; }
+.markdown h2, .markdown h3 { letter-spacing: -.025em; }
+.markdown table { background: var(--ifm-background-surface-color); font-size: .9rem; }
 [data-theme='dark'] {
-  --ifm-color-primary: #2dd4bf;
-  --ifm-color-primary-dark: #14b8a6;
-  --ifm-color-primary-darker: #0d9488;
-  --ifm-color-primary-darkest: #0f766e;
-  --ifm-color-primary-light: #5eead4;
-  --ifm-color-primary-lighter: #99f6e4;
-  --ifm-color-primary-lightest: #ccfbf1;
-  --docusaurus-highlighted-code-line-bg: rgba(45, 212, 191, 0.18);
-  --ifm-background-color: #0f1419;
-  --ifm-navbar-background-color: #121820;
-  --ifm-footer-background-color: #0a0e12;
+  --ifm-color-primary: #ff756c;
+  --ifm-color-primary-dark: #ff5145;
+  --ifm-color-primary-darker: #ff3f31;
+  --ifm-color-primary-darkest: #f10e00;
+  --ifm-color-primary-light: #ff9993;
+  --ifm-color-primary-lighter: #ffaba7;
+  --ifm-color-primary-lightest: #ffe2df;
+  --ifm-background-color: #1a1a1c;
+  --ifm-background-surface-color: #242426;
+  --ifm-navbar-background-color: #1a1a1c;
+  --ifm-footer-background-color: #242426;
+  --ifm-font-color-base: #ebebeb;
+  --docusaurus-highlighted-code-line-bg: rgba(30,127,217,.2);
 }
+[data-theme='dark'] .navbar { border-bottom-color: rgba(255,255,255,.12); }

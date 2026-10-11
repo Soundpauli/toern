@@ -8,7 +8,7 @@ description: USB-C, LiPo charger, regulators, switch, and load-switched accessor
 
 ## Sources
 
-1. **USB-C (`J4`)** — VBUS into the charger / power-path IC; D+/D− to the Teensy USB pads.  
+1. **USB-C (`J4`)** — VBUS into the charger / power-path IC; D+/D− to the Teensy USB pads.
 2. **LiPo (`J16`)** — VBAT / GND into **BQ24075** (`IC1`).
 
 The BQ24075 provides USB-friendly charging and power-path management (system rail while charging). Status LEDs **D4** (red) / **D5** (yellow) hang off charger status pins.
@@ -42,8 +42,8 @@ Keep digital and analog returns as in the layout — don’t casually short `+3.
 
 **TPS22918 (`U8`)**:
 
-- Input from **+5V**  
-- Enable from Teensy pin **`36`**  
+- Input from **+5V**
+- Enable from Teensy pin **`36`**
 - Switched output feeds **`J9`** (with GND)
 
 Firmware can gate power to an external WS2812 strip / accessory so it isn’t drawing when disabled.
@@ -52,7 +52,7 @@ Firmware can gate power to an external WS2812 strip / accessory so it isn’t dr
 
 Firmware reads battery through **`A16` (pin 40)** with a divider documented in `toern.ino`:
 
-- **1M (`R15`)** top (VBAT → A16), **1.5M (`R19`)** bottom (A16 → GND), plus smoothing cap  
+- **1M (`R15`)** top (VBAT → A16), **1.5M (`R19`)** bottom (A16 → GND), plus smoothing cap
 - Nominal divider ratio: `1.5 / (1.0 + 1.5) = 0.600`; firmware uses calibrated `0.595`
 
 See [Firmware pin map](./firmware-pins) for the ADC constants.
@@ -60,3 +60,7 @@ See [Firmware pin map](./firmware-pins) for the ADC constants.
 ## Speaker amp
 
 **PAM8403 (`U13`)** runs from **+5V**, takes analog feed from the audio path, and drives **`J10`**. Shutdown / control ties into Teensy GPIO (net `30_CRX3` on the enable-related pin in the PCB netlist).
+
+## Power-off and storage
+
+S1 cuts the supply directly. Firmware cannot perform a shutdown save after that cut. Save to a numbered PATT slot before switching off; autosave is a separate pause/sample-load checkpoint with a five-second cooldown.

@@ -55,11 +55,11 @@
               </details>
               <details>
                 <summary>I switched packs and now my pattern sounds wrong.</summary>
-                <p>Packs change what each voice row plays. The pattern still references the same rows, but they now contain different samples. Either reload the previous pack (encoder&nbsp;1 short on the KIT screen with the right number), or — for next time — save a PAT pattern <em>per pack</em> and record the matching kit number alongside it.</p>
+                <p>Packs change what each voice row plays. The pattern still references the same rows, but they now contain different samples. Either reload the previous pack (encoder&nbsp;1 short on the KIT screen with the right number), or — for next time — save a PATT pattern <em>per pack</em> and record the matching kit number alongside it.</p>
               </details>
               <details>
                 <summary>I cleared the wrong page.</summary>
-                <p>There is no undo in RAM. If you previously saved to <a href="files.html#file">PAT</a>, reload that slot. Otherwise, it's gone. The handbook's golden rule: save to PAT when an idea matters.</p>
+                <p>There is no undo in RAM. If you previously saved to <a href="files.html#file">PATT</a>, reload that slot. Otherwise, it's gone. The handbook's golden rule: save to PATT when an idea matters.</p>
               </details>
               <details>
                 <summary>Battery percentage seems to lie.</summary>
@@ -114,10 +114,10 @@
                 <tbody>
                   <tr><td><strong>SD</strong></td><td>Walks the whole card, writes <code>samples/toern_wavs.txt</code> (used by mute-mode random preview <code>?&gt;</code>), invalidates the sample browser cache, flashes SCAN then a green checkmark, returns to draw.</td><td>Everything except the stale browse/random index. Use after a card-reader swap or transfers via the <a href="hardware.html#sd-tool">SD tool</a>.</td></tr>
                   <tr><td><strong>EFX</strong></td><td>Resets every tone control — filters, envelopes, synth parameters, octave helpers, audio effects — back to factory values across all voices.</td><td>Patterns and sample assignments survive. Every tone control snaps back to factory.</td></tr>
-                  <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, deletes then rewrites <code>autosaved.txt</code>, and rescans the SD card.</td><td><a href="play.html#leds">SETTINGS → LEDS</a> (panel 1 / 1B / 2 / 2B). PAT-saved patterns. Almost nothing else in RAM.</td></tr>
-                  <tr><td><strong>PAT</strong></td><td>Deletes pattern files <code>1–999.txt</code>.</td><td><code>autosaved.txt</code> and the current RAM session.</td></tr>
+                  <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, deletes then rewrites <code>autosaved.txt</code>, and rescans the SD card.</td><td><a href="play.html#leds">SETTINGS → LEDS</a> (panel 1 / 1B / 2 / 2B). PATT-saved patterns. Almost nothing else in RAM.</td></tr>
+                  <tr><td><strong>PATT</strong></td><td>Deletes pattern files <code>1–999.txt</code>.</td><td><code>autosaved.txt</code> and the current RAM session.</td></tr>
                   <tr><td><strong>KIT</strong></td><td>Deletes sample-pack folders except pack&nbsp;1.</td><td>Patterns. Pack&nbsp;1.</td></tr>
-                  <tr><td><strong>ASAV</strong></td><td>Deletes <code>autosaved.txt</code> and its <code>.tmp</code> / <code>.bak</code> recovery files and clears the grid.</td><td>Settings, PAT slots, packs. Next boot is blank if you don't pause-autosave first — use FULL if the session itself is garbage.</td></tr>
+                  <tr><td><strong>ASAV</strong></td><td>Deletes <code>autosaved.txt</code> and its <code>.tmp</code> / <code>.bak</code> recovery files and clears the grid.</td><td>Settings, PATT slots, packs. Next boot is blank if you don't pause-autosave first — use FULL if the session itself is garbage.</td></tr>
                 </tbody>
               </table>
               <div class="hb-warn"><strong>There is no undo beyond reloading saved pattern files.</strong> If you choose FULL with unsaved work in RAM, that work is gone.</div>
@@ -145,7 +145,7 @@
 
           <section class="hb-sub" id="next">
             <h2>You finished the handbook.</h2>
-            <p>That's everything. From here on you are the most experienced <span class="hb-brand">TŒRN</span> owner you know. If a feature still surprises you, jump back to the <a href="reference.html">Screen index</a> — recognising a display is the fastest way to find the chapter that explains it. And always: <a href="files.html#file">save to PAT</a> before powering off.</p>
+            <p>That's everything. From here on you are the most experienced <span class="hb-brand">TŒRN</span> owner you know. If a feature still surprises you, jump back to the <a href="reference.html">Screen index</a> — recognising a display is the fastest way to find the chapter that explains it. And always: <a href="files.html#file">save to PATT</a> before powering off.</p>
           </section>
         </section>
 
@@ -155,7 +155,7 @@
           <span class="hb-pager__spacer" aria-hidden="true"></span>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011d" defer></script>
+      <script src="handbook-led.js?v=20261011f" defer></script>
     </div>
   </div>
 </div>

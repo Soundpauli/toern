@@ -81,7 +81,7 @@ FLASHMEM void savePattern(bool autosave) {
   extern void sdIoEndAudioSafe();
 
   lastPatternSaveOk = false;
-  // PAT slot 0 is autosaved.txt — load-only from the FILE menu.
+  // PATT slot 0 is autosaved.txt — load-only from the FILE menu.
   if (!autosave && SMP.file == 0) {
     return;
   }

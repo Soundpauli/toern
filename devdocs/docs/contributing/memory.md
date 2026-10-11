@@ -18,17 +18,17 @@ Teensy 4.1 memory is easy to exhaust in **RAM1 (DTCM)** even when PSRAM is free.
 
 ## Patterns already used
 
-- `EXTMEM Note note[...]` — pattern grid  
-- `EXTMEM Device SMP` — project/session bag  
-- `EXTMEM` on many Audio mixers/oscillators in `audioinit.h`  
-- `DMAMEM` for some float tables (`detune`, `channelOctave`, …)  
+- `EXTMEM Note note[...]` — pattern grid
+- `EXTMEM Device SMP` — project/session bag
+- `EXTMEM` on many Audio mixers/oscillators in `audioinit.h`
+- `DMAMEM` for some float tables (`detune`, `channelOctave`, …)
 - Freeverb DMA buffers via `effect_freeverb_dmabuf`
 
 ## Anti-patterns
 
-- Large `static` locals inside functions → still land in RAM1  
-- Growing `String` members in big tables → heap + RAM pressure (slider names were moved to PROGMEM index tables for this reason)  
-- Duplicating the note grid “temporarily” on the stack/DTCM  
+- Large `static` locals inside functions → still land in RAM1
+- Growing `String` members in big tables → heap + RAM pressure (slider names were moved to PROGMEM index tables for this reason)
+- Duplicating the note grid “temporarily” on the stack/DTCM
 
 ## When you add features
 

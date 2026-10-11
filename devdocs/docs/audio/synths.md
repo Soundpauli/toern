@@ -10,16 +10,16 @@ Synth code lives mainly in [`toern_synths.ino`](https://github.com/Soundpauli/to
 
 ## Channel 11 — poly
 
-- Up to `POLY_VOICES` (3) simultaneous voices  
-- Multi-oscillator stacks per voice (`Swaveform*`, mixers, ladder filters, envelopes)  
-- Instrument presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS  
-- Preset application: `applySynthInstrumentPreset` / `*_synth(...)` helpers  
+- Up to `POLY_VOICES` (3) simultaneous voices
+- Multi-oscillator stacks per voice (`Swaveform*`, mixers, ladder filters, envelopes)
+- Instrument presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS
+- Preset application: `applySynthInstrumentPreset` / `*_synth(...)` helpers
 
 ## Channels 13–14 — mono
 
-- Dual oscillators each (`waveform13_*`, `waveform14_*`)  
-- ADSR, LFO, arpeggiator parameters in synth/filter setting tables  
-- Share the crush → filter → reverb pattern with other instruments  
+- Dual oscillators each (`waveform13_*`, `waveform14_*`)
+- ADSR, LFO, arpeggiator parameters in synth/filter setting tables
+- Each has its own crush/filter path; neither mono synth has a reverb send
 
 ## Voice lifecycle
 
@@ -35,4 +35,4 @@ Voice timing/state arrays (`voiceStartTime`, sustain levels, resonance, …) sit
 
 ## Interaction with FX
 
-Bitcrush / filter / reverb for synth channels are the same conceptual FX slots as samples, applied through `setFilters` / mixer gain helpers so UI sliders stay consistent across channel types.
+Channel 11 feeds its shared bitcrusher/filter/reverb chain after the poly voice mix. Channels 13–14 have bitcrusher and filter stages but no freeverb connection. Their first filter page uses CENT instead of RVRB. `setFilters` and parameter helpers apply the voice-specific mappings.

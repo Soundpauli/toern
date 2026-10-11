@@ -14,7 +14,7 @@ Arduino builds every `.ino` in the sketch root as one program. Treat the filenam
 |------|----------------|
 | [`toern.ino`](https://github.com/Soundpauli/toern/blob/main/toern.ino) | Version, includes, enums, `Mode`/`Note`/`Device`/`GlobalVars`, encoder + touch input, mode switching, playback timers, `setup`/`loop`, most glue |
 | [`toern_ui.ino`](https://github.com/Soundpauli/toern/blob/main/toern_ui.ino) | LED matrix drawing: grid, cursor, status, BPM screen, overlays |
-| [`toern_menu.ino`](https://github.com/Soundpauli/toern/blob/main/toern_menu.ino) | Nested menu UI (LOOK / REC / MIDI / VOL / ETC), settings persistence hooks |
+| [`toern_menu.ino`](https://github.com/Soundpauli/toern/blob/main/toern_menu.ino) | Nested menu UI (PATT / KIT / SMP / BPM / VOL / SETT / REC / MIDI / SONG / ETC), settings persistence hooks |
 | [`toern_helpers.ino`](https://github.com/Soundpauli/toern/blob/main/toern_helpers.ino) | Pattern generation helpers, sample browser lists, misc utilities |
 | [`toern_sample.ino`](https://github.com/Soundpauli/toern/blob/main/toern_sample.ino) | Sample preview, trim, load into voices, SD I/O yielding while audio runs |
 | [`toern_synths.ino`](https://github.com/Soundpauli/toern/blob/main/toern_synths.ino) | Poly/mono synth voice allocation, presets, `playSound` / `stopSound` |
@@ -36,7 +36,7 @@ Arduino builds every `.ino` in the sketch root as one program. Treat the filenam
 | [`font_3x5.h`](https://github.com/Soundpauli/toern/blob/main/font_3x5.h) | Tiny bitmap font for matrix text |
 | [`icons.h`](https://github.com/Soundpauli/toern/blob/main/icons.h) | Icon bitmaps for menu/status |
 
-## `src/` (custom audio)
+## `src/` (custom audio and storage helpers)
 
 | File | Responsibility |
 |------|----------------|
@@ -58,3 +58,5 @@ Arduino builds every `.ino` in the sketch root as one program. Treat the filenam
 ## Size intuition
 
 `toern.ino` is the largest file by far (~8k+ lines). Prefer adding focused logic to an existing `toern_*.ino` (or a new one) rather than growing the main file further when practical.
+
+`src/pattern_transaction.h` provides destination-specific pattern commit, recovery and explicit slot deletion helpers. Tests for storage and MIDI live under `tests/`.

@@ -13,7 +13,7 @@ flowchart TB
   subgraph inputs [Inputs]
     ENC[Encoders + buttons]
     TOUCH[Touch switches]
-    MIDI_IN[TRS / USB MIDI]
+    MIDI_IN[TRS MIDI]
     SD[Micro SD]
   end
 
@@ -26,7 +26,7 @@ flowchart TB
   end
 
   subgraph out [Outputs]
-    LED[16×16 LED matrix]
+    LED[LED grid: 16×16 or 32×16]
     ENCLED[Encoder RGB]
     AUDIO[Audio graph]
     MIDI_OUT[MIDI out / clock]
@@ -61,8 +61,8 @@ You edit a 2D grid of `Note` cells (step × pitch/row). Playback walks the X axi
 
 ### 2. Pattern + session state
 
-- `note[x][y]` — packed note events for the loaded pattern (in EXTMEM)  
-- `Device SMP` — BPM, samplepack/paths, filter/synth params, mutes, song arrangement  
+- `note[x][y]` — packed note events for the loaded pattern (in EXTMEM)
+- `Device SMP` — BPM, samplepack/paths, filter/synth params, mutes, song arrangement
 - `GlobalVars GLOB` — cursor, channel, page, velocity, copy state, …
 
 See [Data model](../core/data-model).
@@ -73,7 +73,7 @@ See [Data model](../core/data-model).
 
 ### 4. Audio graph
 
-Declared in `audioinit.h`: sample players, synth oscillators, envelopes, bitcrushers, filters, freeverb, mixers → SGTL5000. Parameters are applied from filter/synth setting arrays. See [Audio graph](../audio/graph).
+Declared in `audioinit.h`: sample players, synth oscillators, envelopes, bitcrushers, filters, freeverb, mixers → SGTL5000 and USB audio output. Parameters are applied from filter/synth setting arrays. See [Audio graph](../audio/graph).
 
 ## Channel map (quick)
 

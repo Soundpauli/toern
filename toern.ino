@@ -9896,7 +9896,6 @@ FLASHMEM void showLoadSave() {
 
   CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
   showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
-  drawText(txtExists ? "USED" : "NEW", 1, 3, fileIconColor);
 
   // FILE: M[G] load | M[R] save (disabled on autosave slot) | C[W] settings | L[X]
   // Matrix indicators only — rings via cached writes (showLoadSave runs every loop).

@@ -25,7 +25,7 @@ const LOGO = [
 ];
 
 export const MENU_PAGES = [
-  { name: "PAT", label: "PAT", icon: "folder", col: 1 },
+  { name: "PATT", label: "PATT", icon: "folder", col: 1 },
   { name: "KIT", label: "KIT", icon: "pack", col: 2 },
   { name: "SMP", label: "SMP", icon: "sample", col: 3 },
   { name: "BPM", label: "BPM", icon: "clock", col: 4 },
@@ -715,7 +715,6 @@ function clampUi(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 export function drawLoadSave(matrix, s) {
   const exists = s.slotExists("toern-web-patterns", s.slot);
-  matrix.drawText(exists ? "USED" : "NEW", 1, 3, exists ? UI_GREEN : UI_BLUE);
   showIcon(matrix, "folder", 2, 7, exists ? UI_GREEN : UI_DIM_RED);
   matrix.drawIndicator("L", "X", 4);
   if (s.slot === 0) {
@@ -895,7 +894,7 @@ export function drawBoot(matrix, now, bootAt) {
   return t >= 5000;
 }
 
-const VERSION = "v2.7";
+const VERSION = "v3.01f-T2";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
 function drawInfo(matrix, s, now, color) {

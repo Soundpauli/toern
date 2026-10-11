@@ -22,15 +22,15 @@ For a typical sample channel:
 
 **envelope → bitcrusher → filter → freeverb → mixers → output**
 
-Synth channels insert oscillator/ladder stages earlier but still land in crush/filter/verb → mix.
+This reverb path exists on sample voices 1, 2 and 5–8. Samples 3 and 4 bypass reverb. Poly voice 11 has a shared bitcrusher/filter/reverb chain after its oscillator/ladder stages; mono voices 13 and 14 have bitcrusher/filter stages without reverb.
 
 ## UI value vs audio value
 
 The matrix usually shows **0–32** (or enums as text). Mapping functions convert those into Hz, resonance, wet/dry, bit depth, etc. When adding a parameter:
 
-1. Extend the settings array / `FilterType` or related enum if needed.  
-2. Teach `setFilters` / `setParams` the mapping.  
-3. Add a slider definition for filter UI (`SliderDefEntry` / name index tables).  
+1. Extend the settings array / `FilterType` or related enum if needed.
+2. Teach `setFilters` / `setParams` the mapping.
+3. Add a slider definition for filter UI (`SliderDefEntry` / name index tables).
 4. Keep display enums in sync with `enumNames` pointers.
 
 ## Fast filter encoder

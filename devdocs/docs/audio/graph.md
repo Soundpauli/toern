@@ -12,34 +12,20 @@ The Teensy Audio design lives in [`audioinit.h`](https://github.com/Soundpauli/t
 
 ```mermaid
 flowchart LR
-  subgraph samples [Samples 1-8]
-    S[AudioPlayArrayResmp]
-    SE[Envelope]
-    SB[Bitcrusher]
-    SF[Filter]
-    SR[Freeverb]
-  end
-
-  subgraph poly [Poly synth ch11]
-    PO[Oscillators]
-    PM[Mix / ladder / env]
-  end
-
-  subgraph mono [Mono synths 13-14]
-    MO[Oscillators]
-    ME[Env / crush / filter / verb]
-  end
-
-  subgraph mix [Output]
-    M1[mixer banks]
-    END[mixer_end]
-    COD[SGTL5000]
-  end
-
-  S --> SE --> SB --> SF --> SR --> M1
-  PO --> PM --> M1
-  MO --> ME --> M1
-  M1 --> END --> COD
+  S[Samples 1-8] --> ENV[Envelopes] --> BIT[Bitcrushers] --> FIL[Filters]
+  FIL -->|1, 2, 5-8| VERB[Freeverb sends]
+  FIL -->|3, 4 dry| BANK[Sample buses]
+  VERB --> BANK
+  POLY[Poly 11: oscillators / ladders / envelopes] --> PFX[Shared crush / filter / reverb]
+  MONO[Mono 13-14: oscillators / envelopes] --> MFX[Crush / filter: no reverb]
+  BANK --> END[Final mix]
+  PFX --> END
+  MFX --> END
+  END --> ROUTE[Output routing: VOL 2-CH]
+  BANK -->|Split-bank mode| ROUTE
+  PREV[Sample preview] --> ROUTE
+  ROUTE --> CODEC[SGTL5000: headphone / line out]
+  ROUTE --> USB[Two-channel USB audio out]
 ```
 
 Exact node names differ per channel (`sound1`, `envelope1`, `bitcrusher1`, … and synth-side `Swaveform*`, `Senvelope*`, `Sladder*`).
@@ -63,7 +49,7 @@ Large Audio objects and mixers are annotated `EXTMEM` so their state lives in PS
 
 ## Changing the graph
 
-1. Edit objects/connections in `audioinit.h` (Arduino Audio System Design Tool exports are a common starting point).  
-2. Update any pointers/arrays in filter/synth code that assume channel → object mapping.  
-3. Revisit mixer gain constants (`GAIN_*`, `MIX_*`) so summed voices don’t clip.  
+1. Edit objects/connections in `audioinit.h` (Arduino Audio System Design Tool exports are a common starting point).
+2. Update any pointers/arrays in filter/synth code that assume channel → object mapping.
+3. Revisit mixer gain constants (`GAIN_*`, `MIX_*`) so summed voices don’t clip.
 4. Test with multiple simultaneous sample hits + synths — headroom bugs show up under load, not silence.

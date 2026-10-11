@@ -42,12 +42,12 @@ If you use the local website package, `cd website && npm run build:docs` runs th
 
 ## Editing content
 
-1. Edit Markdown under `devdocs/docs/`  
-2. Sidebar order: `devdocs/sidebars.js`  
-3. Site config / `baseUrl`: `devdocs/docusaurus.config.js`  
+1. Edit Markdown under `devdocs/docs/`
+2. Sidebar order: `devdocs/sidebars.js`
+3. Site config / `baseUrl`: `devdocs/docusaurus.config.js`
 4. Preview with `npm start`, then commit the **source** under `devdocs/` (not anything under `website/`)
 
 ## Related
 
-- Operator handbook (device usage): repo `handbook/` / site `/handbook/`  
+- Operator handbook (device usage): repo `handbook/` / site `/handbook/`
 - Firmware sketch: repo root `toern.ino` + `toern_*.ino`

@@ -10,16 +10,16 @@ Ordering the board, the off-board parts, and first power-up are in the repo-root
 
 ## Requirements
 
-- [Arduino IDE](https://www.arduino.cc/) or [`arduino-cli`](https://arduino.github.io/arduino-cli/) with **Teensyduino** support  
-- Teensy 4.1 board support  
-- Libraries referenced from `toern.ino` / README, including:  
-  - Teensy Audio  
-  - FastLED + WS2812Serial  
-  - MIDI  
-  - i2cEncoderLibV2  
-  - FastTouch  
-  - TeensyPolyphony  
-  - Mapf  
+- [Arduino IDE](https://www.arduino.cc/) or [`arduino-cli`](https://arduino.github.io/arduino-cli/) with **Teensyduino** support
+- Teensy 4.1 board support
+- Libraries referenced from `toern.ino` / README, including:
+  - Teensy Audio
+  - FastLED + WS2812Serial
+  - MIDI
+  - i2cEncoderLibV2
+  - FastTouch
+  - TeensyPolyphony
+  - Mapf
 
 Custom audio sources in `src/` compile with the sketch — no extra package step.
 
@@ -34,8 +34,11 @@ pio device monitor              # 115200 baud USB serial monitor
 pio run --target compiledb      # generate compile_commands.json for IDE/AI tooling
 ```
 
-The environment uses **Faster** optimization and the **MIDI + Serial** USB type.
-Serial is retained for diagnostics; USB Audio is not enabled. Its pre-build
+The canonical environment runs the Teensy at **816 MHz**, uses **smallest-code**
+optimization (`TEENSY_OPT_SMALLEST_CODE`), and enables **MIDI + Audio + Serial**
+(`USB_MIDI_AUDIO_SERIAL`). USB audio carries the two output channels to a host.
+Serial is retained for the SD tool and diagnostics. Musical MIDI handlers currently
+use Serial8/TRS; exposing a USB MIDI interface does not implement USB note or clock handling. Its pre-build
 script applies the project's sampler, amplitude-ramping, and resampler changes
 to the pinned upstream audio libraries, so no manually edited Arduino libraries
 are needed.
@@ -46,7 +49,7 @@ Open `toern.ino` from the repo root (the folder containing all `toern_*.ino` fil
 
 ## USB type
 
-For MIDI + serial SD tool use a USB type that includes **Serial** (and MIDI if you want USB MIDI). The SD serial server and debug prints need the serial interface.
+Match `platformio.ini`: **MIDI + Audio + Serial**. The SD server needs Serial; `AudioOutputUSB` needs Audio. Use the TRS ports for musical MIDI. No USB audio input is connected to the sampler.
 
 ## Docs site (this site)
 

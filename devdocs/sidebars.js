@@ -51,6 +51,7 @@ const sidebars = {
       items: [
         'tools/overview',
         'tools/sample-converter',
+        'tools/simulator',
         'tools/sd-tool',
         'tools/firmware-loader',
         'tools/color-scheme',

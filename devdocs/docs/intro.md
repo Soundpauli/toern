@@ -9,7 +9,7 @@ description: Developer docs for how TŒRN firmware is structured — not the dev
 
 These pages explain **how the firmware is organized** and how the major pieces cooperate: sequencer data, UI modes, the Teensy Audio graph, MIDI/clock, and SD I/O — plus **hardware design docs** for the current PCB (`toern_revH`) and **host-side tools** (sample converter, simulator, SD tool, …).
 
-If you want to *use* the device (first beat, controls, sequencing), open the **[operator handbook](https://github.com/Soundpauli/toern/tree/main/handbook)** instead.
+If you want to *use* the device (first beat, controls, sequencing), open the **[operator handbook](https://toern.live/handbook/)** instead.
 
 ## What you are looking at
 
@@ -26,20 +26,20 @@ Arduino concatenates all `.ino` files in the sketch folder; headers and `src/` a
 
 ## Start here
 
-1. [Architecture overview](./architecture/overview) — mental model of the whole system  
-2. [File map](./architecture/file-map) — which file owns which concern  
-3. [Main loop](./architecture/main-loop) — ISR vs loop work (timing-critical path)  
-4. [Modes](./core/modes) — how encoders and screens switch behavior  
-5. [Hardware overview (rev H)](./hardware/overview) — KiCad board, connectors, power  
-6. [Tools overview](./tools/overview) — sample converter, simulator, SD tool, firmware loader, …  
+1. [Architecture overview](./architecture/overview) — mental model of the whole system
+2. [File map](./architecture/file-map) — which file owns which concern
+3. [Main loop](./architecture/main-loop) — ISR vs loop work (timing-critical path)
+4. [Modes](./core/modes) — how encoders and screens switch behavior
+5. [Hardware overview (rev H)](./hardware/overview) — KiCad board, connectors, power
+6. [Tools overview](./tools/overview) — sample converter, simulator, SD tool, firmware loader, …
 
 ## Explicit non-goals
 
-- Device operation / music-making tutorials → handbook  
-- How to play a TŒRN → handbook  
+- Device operation / music-making tutorials → handbook
+- How to play a TŒRN → handbook
 - Marketing / shop chrome → `website/` (local/deploy-only; this Docusaurus app is repo-root `devdocs/`)
 
 ## Where this site lives
 
-Source: **`devdocs/`** in the repo. Published at **`/docs/`** on [toern.live](https://toern.live/docs/) (built output copied into `website/docs/` for deploy, like the handbook).  
+Source: **`devdocs/`** in the repo. Published at **`/docs/`** on [toern.live](https://toern.live/docs/) (built output copied into `website/docs/` for deploy, like the handbook).
 How to edit and preview: [This docs site](./contributing/docs-site).

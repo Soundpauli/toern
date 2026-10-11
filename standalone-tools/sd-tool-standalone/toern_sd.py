@@ -457,11 +457,13 @@ def _resolve_website_assets() -> dict[str, Path]:
         "/styles.css": website / "styles.css",
         "/tool-shell.css": website / "tools" / "tool-shell.css",
         "/favicon.svg": website / "favicon.svg",
+        "/tool-theme.css": here / "tool-theme.css",
     }
     flat_assets = {
         "/styles.css": here / "styles.css",
         "/tool-shell.css": here / "tool-shell.css",
         "/favicon.svg": here / "favicon.svg",
+        "/tool-theme.css": here / "tool-theme.css",
     }
     for mapping in (repo_assets, flat_assets):
         if all(p.is_file() for p in mapping.values()):

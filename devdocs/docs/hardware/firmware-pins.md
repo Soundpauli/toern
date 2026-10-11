@@ -6,7 +6,7 @@ description: How toern.ino pin defines line up with toern_revH nets.
 
 # Firmware ↔ rev H pin map
 
-Defines live in [`toern.ino`](../../../toern.ino). Net names below match the rev H netlist (`PCB/toern_revH/toern_revH.net`). The [schematic PDF](../../../PCB/toern_revH/schematic.pdf) wins if a silk label disagrees.
+Defines live in [`toern.ino`](https://github.com/Soundpauli/toern/blob/main/toern.ino). Net names below match the rev H netlist (`PCB/toern_revH/toern_revH.net`). The [schematic PDF](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/schematic.pdf) wins if a silk label disagrees.
 
 ## Core defines
 
@@ -35,7 +35,7 @@ MIDI on **Serial8** uses pins **34/35** (`RX8`/`TX8`) with enlarged buffers — 
 
 ## When changing pins
 
-1. Update the PCB net / jumper **and** the `#define`s.  
-2. Re-check encoder INT (must be common open-drain style as wired).  
-3. Re-check SD CS vs any other SPI CS uses.  
+1. Update the PCB net / jumper **and** the `#define`s.
+2. Re-check encoder INT (must be common open-drain style as wired).
+3. Re-check SD CS vs any other SPI CS uses.
 4. Battery divider in firmware must match the assembled resistors. On rev H that is **R15** 1 MΩ (VBAT → A16) and **R19** 1.5 MΩ (A16 → GND).

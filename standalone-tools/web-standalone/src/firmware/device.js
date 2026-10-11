@@ -69,7 +69,7 @@ const SUB_VALUES = {
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["OFF", "ALL", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [255, 220, 120], [255, 80, 20]], codes: ["R", "Y", "O"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["SD", "EFX", "FULL", "PAT", "KIT", "ASAV"], colors: [[120, 60, 0]], codes: ["O"] },
+    { opts: ["SD", "EFX", "FULL", "PATT", "KIT", "ASAV"], colors: [[120, 60, 0]], codes: ["O"] },
   ],
 };
 
@@ -1227,7 +1227,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function openMenuPage() {
     const name = MENU_PAGES[s.menuIndex].name;
-    if (name === "PAT") s.mode = "dat";
+    if (name === "PATT") s.mode = "dat";
     else if (name === "KIT") s.mode = "kit";
     else if (name === "SMP" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
       refreshBrowse();
@@ -2007,7 +2007,7 @@ export function createDevice(matrix, statusEl, rings) {
       const page = MENU_PAGES[s.menuIndex];
       return { title: "Menu", detail: page?.name || String(s.menuIndex + 1) };
     }
-    if (mode === "dat") return { title: "PAT", detail: s.slot === 0 ? "Autosave" : `Slot ${s.slot}` };
+    if (mode === "dat") return { title: "PATT", detail: s.slot === 0 ? "Autosave" : `Slot ${s.slot}` };
     if (mode === "bpm") return { title: "BPM", detail: String(s.bpm) };
     if (mode === "wav") return { title: "SMP", detail: s.wavName || "" };
     if (mode === "filter") return { title: "Filter", detail: `Voice ${s.GLOB.currentChannel}` };

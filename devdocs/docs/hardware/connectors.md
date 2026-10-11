@@ -6,7 +6,7 @@ description: Audio jacks, MIDI, USB-C, microSD, and JST expansion headers on toe
 
 # Connectors & pinouts (rev H)
 
-Pin tables below follow the **rev H netlist** (`toern_revH.net`). Teensy pin names use the schematic global-label style (`18_A4_SDA` = digital pin 18 / A4 / SDA, etc.). The [schematic PDF](../../../PCB/toern_revH/schematic.pdf) wins if a silk label disagrees.
+Pin tables below follow the **rev H netlist** (`toern_revH.net`). Teensy pin names use the schematic global-label style (`18_A4_SDA` = digital pin 18 / A4 / SDA, etc.). The [schematic PDF](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/schematic.pdf) wins if a silk label disagrees.
 
 For *which jack is which on the finished box*, see the handbook hardware page — this doc is the electrical map.
 
@@ -79,11 +79,15 @@ Do not use **J11** pin 31 for clock — that pad is unused GPIO.
 
 SGTL5000 (`U3`) control lines:
 
-- SDA → Teensy `18`  
-- SCL → Teensy `19`  
+- SDA → Teensy `18`
+- SCL → Teensy `19`
 
 Same I²C bus as the encoder chain (distinct 7-bit addresses).
 
 ## Schematic PDF
 
-Full readable schematic: [`PCB/toern_revH/schematic.pdf`](../../../PCB/toern_revH/schematic.pdf).
+Full readable schematic: [`PCB/toern_revH/schematic.pdf`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/schematic.pdf).
+
+## Audio routing versus connector wiring
+
+J1, J5 and J6 are stereo TRS connectors. Normal playback sends the main mono mix to both output channels; `VOL → 2-CH` can separate main/preview or sample banks. Those output mixers also feed USB audio. The current onboard recording path reads the left line-input channel only and writes mono WAVs. See [Audio graph](../audio/graph) and the [recording handbook](https://toern.live/handbook/record.html).

@@ -11,10 +11,10 @@ Maker steps (what to order, what is through-hole, first power) are in the repo-r
 ## Open the design
 
 1. Install a recent **KiCad** (7+; project files are `.kicad_pro` / `.kicad_sch` / `.kicad_pcb`).
-2. Open [`PCB/toern_revH/toern_revH.kicad_pro`](../../../PCB/toern_revH/toern_revH.kicad_pro).
+2. Open [`PCB/toern_revH/toern_revH.kicad_pro`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/toern_revH.kicad_pro).
 3. Project-local libraries are wired via `fp-lib-table` / `sym-lib-table` (`SJ1-3533`, `TPS22918DBVR`, `teensy`, …).
 
-The Teensy 4.1 **symbol** is vendored at [`teensy/teensy.kicad_sym`](../../../PCB/toern_revH/teensy/teensy.kicad_sym) and `sym-lib-table` points at it with `${KIPRJMOD}`. The placed Teensy **footprint** is stored inside `toern_revH.kicad_pcb` (`myLibKicad:Teensy41`). That footprint library is not in the repo. Opening and ordering the board works from the embedded footprint. Updating the footprint from a library needs `myLibKicad` on your machine.
+The Teensy 4.1 **symbol** is vendored at [`teensy/teensy.kicad_sym`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/teensy/teensy.kicad_sym) and `sym-lib-table` points at it with `${KIPRJMOD}`. The placed Teensy **footprint** is stored inside `toern_revH.kicad_pcb` (`myLibKicad:Teensy41`). That footprint library is not in the repo. Opening and ordering the board works from the embedded footprint. Updating the footprint from a library needs `myLibKicad` on your machine.
 
 ## Gerbers in-repo
 
@@ -31,8 +31,8 @@ Under `jlcpcb/production_files/`:
 
 | File | Use |
 |------|-----|
-| [`BOM-toern_revH.csv`](../../../PCB/toern_revH/jlcpcb/production_files/BOM-toern_revH.csv) | Comment / Designator / Footprint / LCSC / Qty |
-| [`CPL-toern_revH.csv`](../../../PCB/toern_revH/jlcpcb/production_files/CPL-toern_revH.csv) | Component placement |
+| [`BOM-toern_revH.csv`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/jlcpcb/production_files/BOM-toern_revH.csv) | Comment / Designator / Footprint / LCSC / Qty |
+| [`CPL-toern_revH.csv`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/jlcpcb/production_files/CPL-toern_revH.csv) | Component placement |
 | `GERBER-toern_revH.zip` | Zipped gerbers for upload |
 
 `fabrication-toolkit-options.json` stores KiCad Fabrication Toolkit plugin flags used when generating those exports.

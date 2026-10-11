@@ -24,14 +24,14 @@
       <div class="wrap">
         <section class="handbook-page" id="page-files">
           <h2 class="handbook-page__title">Files — load &amp; save</h2>
-          <p class="handbook-page__summary"><strong>PAT</strong> is the pattern slot screen — the place to save a numbered pattern. This chapter covers load/save, the <strong>NEW</strong> pattern generator (empty-slot load), stored settings, autosave, and how patterns relate to <a href="sample-packs.html">sample packs</a>.</p>
+          <p class="handbook-page__summary"><strong>PATT</strong> is the pattern slot screen — the place to save a numbered pattern. This chapter covers load/save, the <strong>NEW</strong> pattern generator (empty-slot load), stored settings, autosave, and how patterns relate to <a href="sample-packs.html">sample packs</a>.</p>
 
           <section class="hb-sub" id="file">
-            <h2>PAT — pattern slots</h2>
-            <p class="lede">Open <strong>PAT</strong> from the root menu. Each slot is one numbered file on the SD card holding <em>all pages, all voice lanes, every per-step value and every tone setting</em> — effectively the whole session except the sample audio.</p>
+            <h2>PATT — pattern slots</h2>
+            <p class="lede">Open <strong>PATT</strong> from the root menu. Each slot is one numbered file on the SD card holding <em>all pages, all voice lanes, every per-step value and every tone setting</em> — effectively the whole session except the sample audio.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="loadsave" width="16" height="16" role="img" aria-label="PAT screen"></canvas>
+                <canvas class="led-matrix" data-scene="loadsave" width="16" height="16" role="img" aria-label="PATT screen"></canvas>
               </div>
               <p class="viz-caption--below">Existing slot: large green file number and a confident green load icon on row 1.</p>
               <div class="hb-enc-grid">
@@ -45,12 +45,12 @@
                   <tr><th>Turn</th><td>Apply sound settings</td><td>Encoder 3 selects whether the loaded sound settings are applied to the audio objects. Settings are stored inside the pattern file; see below.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Slot number (0–999)</td><td>Slot 0 (A) loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. USED means occupied; NEW means no file.</td></tr>
-                  <tr><th>Short</th><td>Back to grid</td><td>Leaves PAT without acting on the highlighted slot.</td></tr>
+                  <tr><th>Turn</th><td>Slot number (0–999)</td><td>Slot 0 (A) loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
+                  <tr><th>Short</th><td>Back to grid</td><td>Leaves PATT without acting on the highlighted slot.</td></tr>
                 </tbody></table></div>
               </div>
             </article>
-            <div class="hb-tip"><strong>Read brightness as a status light:</strong> USED and NEW identify occupied and empty slots; green and blue reinforce that status. A green animated checkmark confirms a successful save; a red animated cross signals a failed operation.</div>
+            <div class="hb-tip"><strong>Read brightness as a status light:</strong> Green identifies an occupied slot; blue identifies an empty slot. A green animated checkmark confirms a successful save; a red animated cross signals a failed operation.</div>
           </section>
 
 
@@ -59,7 +59,7 @@
 
           <section class="hb-sub" id="new">
             <h2>NEW — generate a starting pattern</h2>
-            <p class="lede">Not a root-menu item — a child of PAT. Spin to an empty (dim blue) slot and press load (encoder&nbsp;1). Missing file → pattern generator. It does not <em>load</em> a store; it <em>invents</em> notes with the same scale-aware generator as single-mode randomize, then parks the result in RAM.</p>
+            <p class="lede">Not a root-menu item — a child of PATT. Spin to an empty (dim blue) slot and press load (encoder&nbsp;1). Missing file → pattern generator. It does not <em>load</em> a store; it <em>invents</em> notes with the same scale-aware generator as single-mode randomize, then parks the result in RAM.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="newfile" width="16" height="16" role="img" aria-label="NEW pattern"></canvas>
@@ -67,7 +67,7 @@
               <p class="viz-caption--below">NEW dialog with a genre selected; cyan title, pink length bar when not BLNK.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Abort</td><td>Back to PAT without changing the live pattern.</td></tr>
+                  <tr><th>Short</th><td>Abort</td><td>Back to PATT without changing the live pattern.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
@@ -79,7 +79,7 @@
                 </tbody></table></div>
               </div>
             </article>
-            <p>Same genre + length still rolls differently each time. Save keepers via <a href="#file">PAT</a> before you invent again.</p>
+            <p>Same genre + length still rolls differently each time. Save keepers via <a href="#file">PATT</a> before you invent again.</p>
             <div class="hb-warn"><strong>NEW overwrites the current pattern in RAM.</strong> Genre templates may also nudge BPM and related state — save first if the old idea still matters.</div>
           </section>
 
@@ -100,10 +100,10 @@
 
           <section class="hb-sub" id="autosave">
             <h2>Autosave — session recovery</h2>
-            <p>Pausing playback and successful sample loads request a save to <code>autosaved.txt</code>. Successful autosaves have a five-second cooldown, so closely spaced actions may not create another checkpoint. Autosave does not overwrite the numbered PAT slot.</p>
+            <p>Pausing playback and successful sample loads request a save to <code>autosaved.txt</code>. Successful autosaves have a five-second cooldown, so closely spaced actions may not create another checkpoint. Autosave does not overwrite the numbered PATT slot.</p>
             <p>At boot, the firmware loads that recovery file. Saves use a temporary file for their destination (<code>autosaved.txt.tmp</code> or <code>42.txt.tmp</code>) and retain the previous generation as <code>.bak</code>. A valid destination takes priority; if it is missing or unreadable, a complete temporary file or backup can be recovered for that same destination. The old shared <code>pattern.tmp</code> is not automatically loaded because it does not identify its target slot.</p>
-            <p><a href="menus.html#rset">ETC → RSET → ASAV</a> removes the recovery file and its transaction files. FULL resets the session and writes an empty recovery file. Saving an empty grid to a numbered PAT slot intentionally clears that slot, including its temporary file and backup. Autosave still preserves an empty session.</p>
-            <div class="hb-warn"><strong>Save, then switch off.</strong> The physical power switch does not perform an automatic shutdown save. Save important work to a numbered PAT slot; a power loss after the latest checkpoint loses later edits.</div>
+            <p><a href="menus.html#rset">ETC → RSET → ASAV</a> removes the recovery file and its transaction files. FULL resets the session and writes an empty recovery file. Saving an empty grid to a numbered PATT slot intentionally clears that slot, including its temporary file and backup. Autosave still preserves an empty session.</p>
+            <div class="hb-warn"><strong>Save, then switch off.</strong> The physical power switch does not perform an automatic shutdown save. Save important work to a numbered PATT slot; a power loss after the latest checkpoint loses later edits.</div>
           </section>
 
 
@@ -112,8 +112,8 @@
 
           <section class="hb-sub" id="kit-link">
             <h2>How patterns relate to kits</h2>
-            <p>PAT saves notes and sound settings; KIT saves the sample audio used by voices 1–8. Save both when you have replaced or recorded samples and want to recreate the session. Loading a pattern does not reload its samples.</p>
-            <p>To recall an idea, load its matching KIT, then its PAT and enable applying sound settings. To remix it, load another kit before loading the pattern. Keep a note of which kit belongs to each numbered pattern.</p>
+            <p>PATT saves notes and sound settings; KIT saves the sample audio used by voices 1–8. Save both when you have replaced or recorded samples and want to recreate the session. Loading a pattern does not reload its samples.</p>
+            <p>To recall an idea, load its matching KIT, then its PATT and enable applying sound settings. To remix it, load another kit before loading the pattern. Keep a note of which kit belongs to each numbered pattern.</p>
           </section>
         </section>
 
@@ -123,7 +123,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="sample-packs.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sample packs</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011d" defer></script>
+      <script src="handbook-led.js?v=20261011f" defer></script>
     </div>
   </div>
 </div>

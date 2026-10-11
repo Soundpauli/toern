@@ -24,12 +24,12 @@ Declared in `toern.ino`:
 
 Rough order of concerns (see `void loop()` in `toern.ino`):
 
-1. Optional SD serial server poll when Menu → ETC → SD is open  
-2. MIDI input (`checkMidi`) early for latency  
-3. Deferred settings backup / pause UI / autosave flags  
-4. Encoder + button + touch handling (`checkEncoders`, `checkButtons`, `checkTouchInputs`, …)  
-5. Mode-specific UI updates and drawing  
-6. A single (or carefully limited) LED refresh per frame  
+1. Optional SD serial server poll when Menu → ETC → SD is open
+2. MIDI input (`checkMidi`) early for latency
+3. Deferred settings backup / pause UI / autosave flags
+4. Encoder + button + touch handling (`checkEncoders`, `checkButtons`, `checkTouchInputs`, …)
+5. Mode-specific UI updates and drawing
+6. A single (or carefully limited) LED refresh per frame
 
 Flags such as `pendingPauseUIUpdate` / `pendingPauseAutoSave` exist so pause can return quickly from timing-sensitive code and finish I2C/SD on a later iteration.
 
@@ -53,7 +53,7 @@ Sample load and file ops call `sdIoBeginAudioSafe()` / `sdIoYield()` / `sdIoEndA
 
 ## Practical rules when editing
 
-1. **If it must happen on the beat** → keep it in the timer path, but only the minimal trigger.  
-2. **If it touches hardware slowly** (I2C, SD, Serial, LEDs) → do it from `loop()`.  
-3. **Avoid nested `FastLED.show()`** inside draw helpers — prefer one show per frame (see historical notes in `_internal-docs/OPTIMIZATION_PLAN.md` locally).  
+1. **If it must happen on the beat** → keep it in the timer path, but only the minimal trigger.
+2. **If it touches hardware slowly** (I2C, SD, Serial, LEDs) → do it from `loop()`.
+3. **Avoid nested `FastLED.show()`** inside draw helpers — prefer one show per frame (see historical notes in `_internal-docs/OPTIMIZATION_PLAN.md` locally).
 4. **Don’t add `yield()` per pixel** in `light()`-style helpers; yield at frame/block granularity.

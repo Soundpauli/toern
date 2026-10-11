@@ -69,7 +69,7 @@ struct MenuPage {
 };
 
 MenuPage menuPages[MENU_PAGES_COUNT] = {
-  {"PAT", 1, false, nullptr},           // Load/Save
+  {"PATT", 1, false, nullptr},           // Load/Save
   {"KIT", 2, false, nullptr},           // Sample Pack
   {"SMP", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
@@ -2212,7 +2212,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(1);
         showIcons(ICON_FOLDER_BIG, dimIconColorFromText(tc));
-        drawText("PAT", 2, 3, tc);
+        drawText("PATT", 2, 3, tc);
       }
       break;
       
@@ -2961,7 +2961,7 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       } else if (resetMenuOption == 2) {
         modeText = "FULL";
       } else if (resetMenuOption == 3) {
-        modeText = "PAT";
+        modeText = "PATT";
       } else if (resetMenuOption == 4) {
         modeText = "KIT";
       } else {
@@ -4867,7 +4867,7 @@ FLASHMEM void switchMenu(int menuPosition){
           // FILE: Wipe all saved files (1-999.txt) but keep autosaved.txt
           FastLEDclear();
           drawText("WIPE", 2, 10, UI_ORANGE);
-          drawText("PAT", 2, 3, UI_ORANGE);
+          drawText("PATT", 2, 3, UI_ORANGE);
           FastLEDshow();
           
           char filename[24];

@@ -27,11 +27,11 @@ Board stackup: **4-layer**, **1.6 mm** (`F.Cu` / `In1.Cu` / `In2.Cu` / `B.Cu`).
 
 | Path | Role |
 |------|------|
-| [`toern_revH.kicad_pro`](../../../PCB/toern_revH/toern_revH.kicad_pro) / `.kicad_sch` / `.kicad_pcb` | KiCad project (schematic + layout) |
-| [`schematic.pdf`](../../../PCB/toern_revH/schematic.pdf) | Plot of the schematic |
+| [`toern_revH.kicad_pro`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/toern_revH.kicad_pro) / `.kicad_sch` / `.kicad_pcb` | KiCad project (schematic + layout) |
+| [`schematic.pdf`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/schematic.pdf) | Plot of the schematic |
 | [`Gerber/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revH/Gerber) | Gerber + drill export |
 | [`jlcpcb/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revH/jlcpcb) | JLCPCB-oriented gerbers, BOM, CPL |
-| [`teensy/teensy.kicad_sym`](../../../PCB/toern_revH/teensy/teensy.kicad_sym) | Teensy 4.1 symbol, vendored so the schematic opens off this repo |
+| [`teensy/teensy.kicad_sym`](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/teensy/teensy.kicad_sym) | Teensy 4.1 symbol, vendored so the schematic opens off this repo |
 | `LIB_*`, `TPS22918DBVR/`, `SJ1-3533/` | Local footprints / symbols for key parts. The `LIB_*` trees also contain unused EasyEDA / Eagle / Altium exports |
 | `toern_revH-backups/` | KiCad autosave archives |
 
@@ -61,7 +61,7 @@ Hardware design files are **[CC BY-NC 4.0](https://creativecommons.org/licenses/
 
 ## Next
 
-- [Connectors & pinouts](./connectors) — jacks and JST headers as laid out  
-- [Power](./power) — USB, battery, rails, load switch  
-- [Firmware pin map](./firmware-pins) — how `toern.ino` matches the board  
+- [Connectors & pinouts](./connectors) — jacks and JST headers as laid out
+- [Power](./power) — USB, battery, rails, load switch
+- [Firmware pin map](./firmware-pins) — how `toern.ino` matches the board
 - [Fabrication](./fabrication) — ordering from Gerbers / JLCPCB exports

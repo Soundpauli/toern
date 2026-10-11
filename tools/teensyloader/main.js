@@ -6,8 +6,8 @@ import {
 } from './Teensy-Loader.js';
 
 const FIRMWARE_URLS = {
-  stable: './public/toern_firmware_3.0.ino.hex',
-  beta: './public/toern_firmware_beta.ino.hex'
+  stable: new URL('./public/toern_firmware_3.0.ino.hex', import.meta.url).href,
+  beta: new URL('./public/toern_firmware_beta.ino.hex', import.meta.url).href
 };
 
 let selectedDevice = null;

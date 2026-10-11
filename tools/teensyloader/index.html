@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TŒRN | Teensy Loader</title>
-  <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+  <title>TŒRN | Firmware Tool</title>
+  <link rel="icon" type="image/svg+xml" href="./public/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&family=JetBrains+Mono:wght@300;400&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../../styles.css">
-  <link rel="stylesheet" href="../tool-shell.css">
+
+
   <script>
     document.documentElement.classList.add("fonts-loaded");
     if (document.fonts?.ready) {
@@ -269,27 +269,31 @@
       border-top: 1px solid var(--grid-line);
     }
   </style>
+  <link rel="stylesheet" href="tool-theme.css?v=20261011">
 </head>
 <body class="tool-page">
   <noscript><style>html:not(.fonts-loaded) body{opacity:1}</style></noscript>
   <nav class="tool-nav">
     <div class="tool-nav-brand">
-      <a href="../../" class="tool-nav-logo">TŒRN</a>
-      <span class="tool-nav-label">// TEENSY LOADER</span>
+      <a href="https://toern.live/" class="tool-nav-logo">TŒRN</a>
+      <span class="tool-nav-label">// FIRMWARE TOOL</span>
     </div>
-    <div class="tool-nav-meta"></div>
+    <div class="tool-nav-links"><a href="https://toern.live/handbook/">Handbook</a><a href="https://sim.tyng.app/">Simulator</a></div>
   </nav>
 
   <main class="tool-shell">
     <div class="tool-content">
       <div class="teensy-container">
-        <div class="teensy-intro">
+      <header class="tool-header"><p class="tool-kicker">// Firmware tool</p><h1>Update your instrument.</h1><p>Choose a firmware build and flash your Teensy over USB. Use Chrome or Edge on a desktop computer.</p></header>
+        <details class="teensy-serial-toggle teensy-guide">
+          <summary>Before you flash: enter programming mode</summary>
+          <div class="teensy-serial-content">
           <p>Load firmware to your Teensy via WebHID. How to flash:</p>
           <ol>
             <li>Open TŒRN and connect it (or the Teensy directly) via USB to this computer so it is powered on.</li>
-            <li>Press the reset button (marked red). The small LED on the Teensy lights up red — it is now in programming mode.</li>
+            <li>Press the programming button (marked red). The small LED on the Teensy lights up red — it is now in programming mode.</li>
           </ol>
-          <img src="./public/reset.jpeg" alt="Teensy reset button (marked red)" class="teensy-reset-img">
+          <img src="./public/reset.jpeg" alt="Teensy programming button (marked red)" class="teensy-reset-img">
           <ol start="3">
             <li>Select the firmware you want to flash (v3.0 or Beta).</li>
             <li>Press <strong>Select Teensy Device</strong>, choose Teensy in the list (it may show as “Unknown device”), then press Connect.</li>
@@ -297,6 +301,7 @@
             <li>After a successful flash, TŒRN reboots automatically.</li>
           </ol>
         </div>
+        </details>
 
         <!-- Firmware Selection -->
         <div class="teensy-section">

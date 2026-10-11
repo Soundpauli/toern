@@ -15,7 +15,7 @@ Besides the firmware and PCB, the repo ships **browser and CLI tools** for sampl
 | Sample converter | [audioconvert.tyng.app](https://audioconvert.tyng.app/) | `standalone-tools/audio-converter-standalone/` |
 | SD tool | [sdtool.tyng.app](https://sdtool.tyng.app/) | `standalone-tools/sd-tool-standalone/` |
 | Browser simulator | [sim.tyng.app](https://sim.tyng.app/) | `standalone-tools/web-standalone/` |
-| Firmware tool | [firmware.tyng.app](https://firmware.tyng.app/) | `standalone-tools/teensyloader-standalone/` (GPL-3.0) |
+| Firmware tool | [firmware.tyng.app](https://firmware.tyng.app/) | `tools/teensyloader/` (GPL-3.0) |
 | Color scheme editor | [toern.live/tools/colorsheme/](https://toern.live/tools/colorsheme/) | `tools/colorsheme/` |
 | Case generator (demo) | [toern.live/tools/case-generator/](https://toern.live/tools/case-generator/) | `tools/case-generator/` |
 
@@ -42,7 +42,19 @@ Operator-facing how-to stays in the **handbook**; these pages describe **what ea
 
 ## Next
 
-- [Sample converter](./sample-converter)  
-- [SD tool](./sd-tool)  
-- [Firmware loader](./firmware-loader)  
+- [Sample converter](./sample-converter)
+- [SD tool](./sd-tool)
+- [Firmware loader](./firmware-loader)
 - [Color scheme editor](./color-scheme)
+
+## Shared visual design
+
+The firmware tool, sample converter and both SD browser views use `tools/tool-theme.css`: the website’s grey backgrounds, white surfaces, red actions and TŒRN font family (Bebas Neue, Space Grotesk, Inter, JetBrains Mono). Each independently hosted tool includes its own copy so it does not depend on the website’s CSS.
+
+After editing the canonical theme, run from the repository root:
+
+```bash
+python3 tools/sync-tool-theme.py
+```
+
+Page-specific styles retain their functional layout. Keep input IDs and event bindings stable when changing presentation. The simulator approximates device audio/timing; its transfer feature does not transfer complete KIT sounds. See [Browser simulator](./simulator).

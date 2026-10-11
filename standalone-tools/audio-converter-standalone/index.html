@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TŒRN | Audio Converter</title>
+  <title>TŒRN | Sample Converter</title>
   <meta name="description" content="Convert folders or ZIPs to 44.1 kHz mono WAV.">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -379,33 +379,36 @@
   </style>
 
   <script src="./fonts.js"></script>
+  <link rel="stylesheet" href="tool-theme.css?v=20261011">
 </head>
 <body class="tool-page">
   <noscript><style>html:not(.fonts-loaded) body{opacity:1}</style></noscript>
   <nav class="tool-nav">
     <div class="tool-nav-brand">
       <a href="https://toern.live/" class="tool-nav-logo">TŒRN</a>
-      <span class="tool-nav-label">// AUDIO CONVERTER</span>
+      <span class="tool-nav-label">// SAMPLE CONVERTER</span>
     </div>
-    <div class="tool-nav-meta"></div>
+    <div class="tool-nav-links"><a href="https://toern.live/handbook/">Handbook</a><a href="https://sim.tyng.app/">Simulator</a></div>
   </nav>
 
   <main class="tool-shell">
     <div class="tool-content">
-      <section class="tool-card" aria-label="Audio Converter">
-        <p class="tool-subline">Upload folder files <strong>or</strong> one ZIP. Output is always 44.1 kHz / mono / WAV.</p>
+      <header class="tool-header"><p class="tool-kicker">// Sample converter</p><h1>Prepare your next sound.</h1><p>Convert your audio to TŒRN-ready samples, or set up a fresh SD card.</p></header>
+      <section class="tool-card" aria-label="Sample converter">
+        <h2>1. Convert samples</h2>
+        <p class="tool-subline">Choose folder files <strong>or</strong> one ZIP. Output is 44.1 kHz / mono / 16-bit WAV.</p>
 
         <form id="converter-form" class="tool-form">
           <div class="upload-row">
             <div class="upload-option">
-              <label class="field-label" for="folderInput">Folder upload</label>
+              <label class="field-label" for="folderInput">Choose a folder</label>
               <input id="folderInput" name="folderInput" type="file" webkitdirectory directory multiple>
             </div>
 
             <div class="separator" aria-hidden="true">or</div>
 
             <div class="upload-option">
-              <label class="field-label" for="zipInput">ZIP upload</label>
+              <label class="field-label" for="zipInput">Choose a ZIP</label>
               <input id="zipInput" name="zipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed">
             </div>
           </div>
@@ -429,7 +432,7 @@
       </section>
 
       <section class="tool-card" aria-label="SD Card">
-        <h2 class="tool-section-title">SD CARD</h2>
+        <h2 class="tool-section-title">2. Set up an SD card</h2>
         <p class="tool-subline">Download the default TŒRN SD card content — sample packs, settings, and folder layout. Extract the ZIP and copy the contents to your microSD card.</p>
         <a class="sd-download-btn" href="./SD-CARD-CONTENT.zip" download="SD-CARD-CONTENT.zip">Download SD-CARD-CONTENT.zip</a>
 
@@ -461,11 +464,11 @@
           <p class="sd-tree-label">SD card layout</p>
           <pre class="sd-tree" aria-label="SD card folder structure">/  (SD card root)
 │
-├── settings.txt              # Device settings backup (menu, BPM, etc.)
+├── settings.txt              # Device preferences backup (menu settings)
 ├── autosaved.txt             # Auto-saved pattern / project (last session)
 ├── 1.txt                     # Saved project slot 1
 ├── 2.txt                     # Saved project slot 2
-│   └── …                     # You can have 1.txt … 99.txt
+│   └── …                     # You can have 1.txt … 999.txt
 │
 ├── 0/                        # Samplepack 0 — scratch / custom samples
 │   ├── 1.wav                 # Voice 1
@@ -478,7 +481,7 @@
 │
 ├── 2/                        # Samplepack 2
 │   ├── 1.wav … 8.wav
-│   └── …                     # Packs 3 … 99 work the same way
+│   └── …                     # Kits 3 … 999 work the same way
 │
 <span class="sd-tree-highlight">└── samples/                  # Extract your converted/downloaded samples in this folder</span>
     ├── BASE/                 # Main categorized library (~1,269 WAVs)

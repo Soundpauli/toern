@@ -54,3 +54,15 @@ Contributions are welcome! To contribute:
 ## License Agreement
 
 This project is licensed under the [GPL-3.0](./LICENSE). The copy in this repository is GPL-3.0, not AGPL.
+
+
+## TŒRN standalone build
+
+This fork presents the bundled v3.0 and Beta firmware presets in the shared TŒRN tool design. Its page also runs directly from a static HTTP server. For an independent production deployment:
+
+```bash
+npm ci
+npm run build
+```
+
+Deploy `dist/`. Vite bundles firmware HEX files and the programming-button illustration with relative asset paths. The shared `tool-theme.css` is generated from `tools/tool-theme.css`; run `python3 tools/sync-tool-theme.py` from the repository root after changing that theme. The flashing library and GPL-3.0 attribution are retained.

@@ -24,10 +24,11 @@ https://sdtool.tyng.app serves **static files**. The browser talks to the Teensy
 
 ```bash
 rsync -avz --delete \
-  /Users/jank/git/toern/tools/sd-tool-standalone/index.html \
-  /Users/jank/git/toern/tools/sd-tool-standalone/styles.css \
-  /Users/jank/git/toern/tools/sd-tool-standalone/tool-shell.css \
-  /Users/jank/git/toern/tools/sd-tool-standalone/favicon.svg \
+  /Users/jank/git/toern/standalone-tools/sd-tool-standalone/index.html \
+  /Users/jank/git/toern/standalone-tools/sd-tool-standalone/styles.css \
+  /Users/jank/git/toern/standalone-tools/sd-tool-standalone/tool-shell.css \
+  /Users/jank/git/toern/standalone-tools/sd-tool-standalone/tool-theme.css \
+  /Users/jank/git/toern/standalone-tools/sd-tool-standalone/favicon.svg \
   root@tyng.app:/var/www/sdtool.tyng.app/
 ```
 

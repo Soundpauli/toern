@@ -567,7 +567,6 @@
     m.indM(2, txtExists ? "D" : "R");
     m.indL(4, "X");
     const numC = txtExists ? UI.BRIGHT_GREEN : UI.BLUE;
-    drawText(m, txtExists ? "USED" : "NEW", 1, 3, numC[0], numC[1], numC[2]);
     const s = String(fileNum);
     let tw = 0;
     for (let i = 0; i < s.length; i++) tw += (ALPH[s.charCodeAt(i) - 32][0] + 1);
@@ -725,10 +724,10 @@
       m.indL(4, "R");
     },
     menu(m) {
-      rootMenuPage(m, 0, 1, "PAT");
+      rootMenuPage(m, 0, 1, "PATT");
     },
     mr_dat(m) {
-      rootMenuPage(m, 0, 1, "PAT");
+      rootMenuPage(m, 0, 1, "PATT");
     },
     mr_kit(m) {
       rootMenuPage(m, 1, 2, "KIT");

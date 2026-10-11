@@ -12,7 +12,7 @@ Build with PlatformIO (`pio run` from the repo root). See [Build setup](./build-
 
 ## Add a menu page
 
-Pages are `MenuPage` rows near the top of [`toern_menu.ino`](../../../toern_menu.ino). Each row has a 4-character name and an integer `mainSetting`. That integer is the `case` label in the draw and input switches. Pick one that is not already in `menuPages`, `lookPages`, `recsPages`, `midiPages`, `volPages`, or `etcPages`.
+Pages are `MenuPage` rows near the top of [`toern_menu.ino`](https://github.com/Soundpauli/toern/blob/main/toern_menu.ino). Each row has a 4-character name and an integer `mainSetting`. That integer is the `case` label in the draw and input switches. Pick one that is not already in `menuPages`, `lookPages`, `recsPages`, `midiPages`, `volPages`, or `etcPages`.
 
 1. Add the row and bump the matching `*_PAGES_COUNT`.
 2. Draw it in `drawMainSettingStatus`.
@@ -25,7 +25,7 @@ Pages are `MenuPage` rows near the top of [`toern_menu.ino`](../../../toern_menu
 
 Settings live at absolute address `EEPROM_DATA_START + offset` with `EEPROM_DATA_START` = **43**. A magic byte `0x5A` sits at absolute address **42**. Sample-pack 0 flags sit at absolute address **200** (`EEPROM_SP0_STATE_ADDR`), outside this table.
 
-`SETTINGS_EEPROM_BLOCK_LEN` is **55**, so offsets **0 through 54** are copied to the SD settings backup. Offset **50** is the IMG migrate marker `0xA5`. Offset **51** is MIDI → TRIG (sidechain voice). Offset **52** is BPM EXT analog vs MIDI clock in. Offset **53** is MIDI → CIN: bits 0–2 PPQN index, bits 3–7 hold-off ms − 1. Offset **54** is MIDI → OVWR (0 = keep occupied cells, 1 = overwrite). Inserting a byte in the middle shifts every saved unit. A shorter backup leaves the missing bytes at 0; offset 42 absent means VMOD off, offset 43 absent means FIRE off. Offset 44 absent or out of 1–25 loads as count 8. Offset 45 absent loads as size 1. Offset 46 absent loads as gravity 0. Offset 47 absent loads as colour 8. Offset 48 absent means IMG off. Offset 49 absent or out of 0–3 loads as EYES 1MIN. Offset 51 absent or invalid loads as voice 1. Offset 53 absent loads as 1 PPQN, 1 ms. Offset 54 absent or >1 loads as OVWR OFF.
+`SETTINGS_EEPROM_BLOCK_LEN` is **55**, so offsets **0 through 54** are copied to the SD settings backup. Offset **50** is the IMG migrate marker `0xA5`. Offset **51** is MIDI → TRIG (sidechain voice). Offset **52** is BPM EXT analog vs MIDI clock in. Offset **53** is MIDI → CIN: bits 0–2 PPQN index, bits 3–7 hold-off ms − 1. Offset **54** is MIDI → OVWR (0 = keep occupied cells, 1 = overwrite). Inserting a byte in the middle shifts every saved unit. A shorter backup leaves the missing bytes at 0; offset 42 absent means VMOD off, offset 43 absent means FIRE off. Offset 44 absent or out of 1–25 loads as count 8. Offset 45 absent loads as size 1. Offset 46 absent loads as gravity 0. Offset 47 absent loads as colour 8. Offset 48 absent means IMG off. Offset 49 absent or out of 0–3 loads as EYES 1MIN. Offset 51 absent or invalid loads as voice 1. Offset 53 defaults to byte 2 (4 PPQN, 1 ms hold-off). Offset 54 absent or >1 loads as OVWR OFF.
 
 Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is also written as a single format byte. Leave 32–35 alone.
 

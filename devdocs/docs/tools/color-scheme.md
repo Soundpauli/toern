@@ -6,7 +6,7 @@ description: Edit LED / UI palette colors and sync live to a connected device.
 
 # Color scheme editor
 
-**Live:** [https://toern.live/tools/colorsheme/](https://toern.live/tools/colorsheme/)  
+**Live:** [https://toern.live/tools/colorsheme/](https://toern.live/tools/colorsheme/)
 **Source:** [`tools/colorsheme/`](https://github.com/Soundpauli/toern/tree/main/tools/colorsheme) (`index.html` SPA)
 
 ## What it does

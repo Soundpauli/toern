@@ -19,13 +19,27 @@ The Micro SD card holds samples, patterns, and settings. Firmware never exposes 
 
 ## Host tools
 
-- Browser: [sdtool.tyng.app](https://sdtool.tyng.app) (Web Serial)  
-- CLI: `standalone-tools/sd-tool-standalone`
+- Browser: [sdtool.tyng.app](https://sdtool.tyng.app) (Web Serial)
+- CLI and local browser server: `standalone-tools/sd-tool-standalone/toern_sd.py`
 
 Protocol details belong with those tools; the device side is `sdSerialServerPoll()` while Menu → ETC → SD is active.
 
 ## Rules of thumb
 
-- Don’t mount/unmount the card while powered if the firmware assumes a stable volume — users are told to insert/eject powered off.  
-- Autosave and settings backup should stay in `loop()`, often deferred after UI.  
+- Don’t mount/unmount the card while powered if the firmware assumes a stable volume — users are told to insert/eject powered off.
+- Autosave and settings backup should stay in `loop()`, often deferred after UI.
 - During SD I/O with audio running, use the `sdIo*` helpers so the codec keeps ticking.
+
+## Card layout and save semantics
+
+- Root `1.txt` … `999.txt`: binary patterns (notes + sound settings + mutes + page arrangement).
+- Root `autosaved.txt`: session recovery, independent of the last numbered slot.
+- `0/`: scratch/custom samples; `1/` … `999/`: kits, each with `1.wav` … `8.wav`.
+- `samples/`: browser library; it is not embedded in a pattern.
+- `settings.txt`: device-preference backup; the filename does not make a binary pattern editable text.
+
+Pattern saves validate `<destination>.tmp`, keep the previous generation as `<destination>.bak`, then install the new file. Recovery prefers a valid destination, otherwise a valid destination-specific temporary file or backup. The old shared `pattern.tmp` is not promoted because it has no slot identity. Loading stages the complete payload before changing notes/settings.
+
+Saving an empty grid manually clears its numbered PATT slot and recovery companions. Autosave preserves an empty session. The five-second cooldown is updated only after a successful autosave. The power switch simply cuts power; it does not trigger saving.
+
+KIT writes check copied bytes and WAV headers and report success/failure. They are **not atomic across all eight files**. PATT save does not save sample audio, and PATT load does not reload the matching KIT.

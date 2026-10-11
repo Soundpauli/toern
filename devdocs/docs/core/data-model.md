@@ -26,8 +26,8 @@ The live pattern grid:
 EXTMEM Note note[maxlen + 1][maxY + 1];
 ```
 
-- **X** is step (across pages × matrix width).  
-- **Y** is row / pitch lane on the matrix.  
+- **X** is step (across pages × matrix width).
+- **Y** is row / pitch lane on the matrix.
 - Empty cells use `channel == 0`.
 - `midiPitch == 255` keeps the historical row-derived pitch. With
   `MIDI > FOLD` off, recorded SEL/MIDI notes store their absolute incoming
@@ -64,7 +64,7 @@ Voice mode (`voiceMode`, SETT → VMOD) gives each channel its own loop length: 
 
 ## Song mode
 
-- `songModeActive` — follow arrangement instead of a single pattern loop.  
+- `songModeActive` — follow arrangement instead of a single pattern loop.
 - `SMP.songArrangement[i]` — page number in the current pattern at song position `i` (0 = empty).
 - `currentSongPosition` — arrangement cursor.
 
@@ -81,7 +81,17 @@ that extension as row-derived; older firmware ignores the trailing extension.
 
 - Treat `channel == 0` as empty; reset its probability/condition and
   `midiPitch` metadata rather than leaving orphan state.
-- Prefer updating `note`/`SMP` first, then redraw — LEDs should mirror state, not invent it.  
+- Prefer updating `note`/`SMP` first, then redraw — LEDs should mirror state, not invent it.
 - Large buffers belong in `EXTMEM` / `DMAMEM`, not as function-local `static` arrays (those land in RAM1).
 
-Saves use destination-specific `N.txt.tmp` / `N.txt.bak` (or `autosaved.txt.tmp` / `.bak`). A valid destination wins; recovery otherwise validates a complete temporary file or the previous generation. Shared `pattern.tmp` is not promoted. Empty patterns are saved normally. Loading stages the full note/settings payload before replacing live state.
+Saves use destination-specific `N.txt.tmp` / `N.txt.bak` (or `autosaved.txt.tmp` / `.bak`). A valid destination wins; recovery otherwise validates a complete temporary file or the previous generation. Shared `pattern.tmp` is not promoted. A manual save of an empty grid deliberately deletes the selected numbered slot, including its temporary file and backup. Autosave still stores an empty session. Loading stages the full note/settings payload before replacing live state.
+
+## Recall and boundaries
+
+PATT uses slots **1–999**; slot **0/A** loads `autosaved.txt` and is load-only. KIT uses numbered folders **1–999**, with **0** as the scratch/custom-sample kit. A pattern stores notes, sound settings, mutes and the 64-slot page arrangement, but not sample PCM. Loading it does not reload sample buffers: load its matching KIT separately.
+
+Encoder 3 on PATT toggles applying loaded sound settings to audio objects. The `SMP` payload is still read into memory when that option is off; it is not a notes-only import. There are no `.dat` files or sidecars.
+
+Pausing playback and successful sample loads request autosave. The five-second cooldown advances only after a successful save. The physical power switch does not save. Pattern loading stages the complete base payload before changing live state; legacy files without `TPIT` remain readable.
+
+SONG holds **64 page assignments within the current pattern**, not saved pattern IDs. Clearing an assignment leaves later slots in place. Standard sequencing holds 256 steps: 16 pages × 16 columns or 8 pages × 32 columns. PMD OFF advances pages, ON loops the selected edit page; SONG and NEXT select their existing alternate playback paths.
