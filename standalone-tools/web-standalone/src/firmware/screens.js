@@ -905,10 +905,22 @@ export function drawBoot(matrix, now, bootAt) {
   for (let x = 1; x <= COLS; x++) {
     const phase = ((x - 1) / (COLS - 1)) * Math.PI * 4;
     const level = sineFade * fadeOut;
-    const blue = Math.round(center + 0.85 + amp * Math.sin(phase + 0.55 - timeSec * 2.6));
-    const white = Math.round(center - 0.85 + amp * Math.sin(phase - timeSec * 5.4));
-    if (blue >= 1 && blue <= ROWS) matrix.light(x, blue, [Math.round(3 * level), Math.round(8 * level), Math.round(28 * level)]);
-    if (white >= 1 && white <= ROWS) matrix.light(x, white, [Math.round(26 * level), Math.round(26 * level), Math.round(26 * level)]);
+    const wavePixel = (waveY, baseColor) => {
+      const firstY = Math.floor(waveY), fraction = waveY - firstY;
+      for(let i=0;i<2;i++) {
+        const y=firstY+i, coverage=i?fraction:1-fraction;
+        if(y<1||y>ROWS||coverage<=0)continue;
+        let touches=false;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++) {
+          const lx=x+dx-logoX0, ly=y+dy-1;
+          if(lx>=0&&lx<16&&ly>=0&&ly<16&&((LOGO[ly]>>(15-lx))&1))touches=true;
+        }
+        const ink=baseColor.map(c=>Math.round(c*level*coverage*(touches?1-.9*logoFade:1)));
+        if(ink.some(c=>c>0))matrix.light(x,y,ink);
+      }
+    };
+    wavePixel(center + 0.85 + amp * Math.sin(phase + 0.55 - timeSec * 2.6), [3,8,28]);
+    wavePixel(center - 0.85 + amp * Math.sin(phase - timeSec * 5.4), [26,26,26]);
   }
   if (logoFade * fadeOut > 0) {
     for (let y = 0; y < 16; y++) {
@@ -1062,47 +1074,42 @@ function drawRecordingBorder(matrix) {
 }
 
 export const TOUCHY_COLORS = [[255,64,64], [255,170,32], [64,255,128], [64,128,255], [220,64,255]];
-export const TOUCHY_SPRITE = ["     BBBBBBBBBBBB    ", "    BCCCCCCCCCCCCB   ", "    BCEEFEEFDEEECB D ", "    BCEFEFEDGDFECBDGD", " DD BCEEEEEDGGDDDDGGD", "DGGDBCEEEEEDGGGGGGGGD", " DD BCEEFEEDGKJGGKJGD", "    BCFEEEEDEJJGGJJED", "   DBCCCCCCCDGGGGGGD ", "  DGGBBBBBBBDDDDDDD  ", "   DD DD     D  DD   "];
+export const TOUCHY_SPRITE = ["     BBBBBBBBBBBB    ", "    BCCCCCCCCCCCCB   ", "    BCEEFEEFDEEECB D ", "OO  BCEFEFEDGDFECBDGD", "OLO BCEEEEEDGGDDDDGGD", " OLOBCEEEEEDGGGGGGGGD", "  OLBCEEFEEDGKJGGKJGD", "  OOBCFEEEEDEJJGGJJED", "   DBCCCCCCCDGGGGGGD ", "    OLOBOLOBOLODOLO  ", "    OLL LLO OLL LLO  "];
 export const TOUCHY_RAINBOW = [[215,2,29],[255,144,36],[255,255,0],[65,255,76],[0,191,255],[212,38,255]];
 export const TOUCHY_PALETTE = {
   B:[72,30,5], C:[170,86,22], D:[0,0,0], E:[170,62,105],
-  F:[255,4,94], G:[48,48,56], J:[0,0,0], K:[200,195,170]
+  F:[255,4,94], G:[48,48,56], L:[112,112,124], O:[28,28,36], J:[0,0,0], K:[200,195,170]
 };
 export function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   const phase = Math.floor(now / 250) % 4;
   // The nose reaches the last column, then floats back only 20% of panel width.
-  const x0 = columns - 20 - Math.floor(columns * .2) * (1 - Math.cos(now * Math.PI / 3000)) / 2;
-  const top = 14 + .65 * Math.sin(now * Math.PI / 1800);
-  const sprite = Array.from({length:11},()=>Array(21).fill(" "));
-  TOUCHY_SPRITE.forEach((row,y)=>{
-    for(let x=0;x<21;x++) if(row[x]!==" ") {
-      const px=x+(y===10?phase%2:0), py=y-(x<4&&y<9?phase%2:0);
-      if(px<21&&py>=0)sprite[py][px]=row[x];
+  const x0 = Math.round(columns - 20 - Math.floor(columns * .2) * (1 - Math.cos(now * Math.PI / 3000)) / 2);
+  const top = Math.round(14 + .65 * Math.sin(now * Math.PI / 1800));
+  // Fixed leg roots; only the toes tuck in/out, in opposing pairs.
+  const sprite = TOUCHY_SPRITE.map(row=>row.split(""));
+  const tails = [
+    ["OO  ","OLO "," OLO","  OL","  OO"],
+    ["    ","OO  ","OLLO"," OLL","  OO"],
+    ["    ","    "," OOO","OLLL","OOOO"]
+  ];
+  const tail = tails[[0,1,2,1][phase]];
+  for(let y=0;y<5;y++)for(let x=0;x<4;x++)sprite[y+3][x]=tail[y][x];
+  const toes=["OLL","OLO","LLO","OLO"];
+  [4,8,12,16].forEach((x,leg)=>{
+    const toe=toes[(phase+(leg%2)*2)%4];
+    for(let dx=0;dx<3;dx++) {
+      sprite[9][x+dx]="OLO"[dx];
+      sprite[10][x+dx]=toe[dx];
     }
   });
   for(let x=1;x<=columns;x++) {
-    const wave = .65*Math.sin(x*.6-now*Math.PI/600);
+    const wave = Math.round(.65*Math.sin(x*.6-now*Math.PI/600));
     for(let y=1;y<=16;y++) {
-      const color=[0,0,0];
-      if(x<x0+5) {
-        const ry=top-4+wave-y, r=Math.floor(ry), f=ry-r;
-        for(let i=0;i<2;i++) if(r+i>=0&&r+i<6) {
-          const weight=i?f:1-f;
-          for(let c=0;c<3;c++)color[c]+=TOUCHY_RAINBOW[r+i][c]*weight;
-        }
-      }
-      // Fractional LED coverage smooths motion without blurring the source sprite.
-      const sx=x-x0, sy=top-y, ix=Math.floor(sx), iy=Math.floor(sy), fx=sx-ix, fy=sy-iy;
-      const foreground=[0,0,0]; let alpha=0;
-      for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++) {
-        const pixel=sprite[iy+dy]?.[ix+dx];
-        if(!pixel||pixel===" ")continue;
-        const weight=(dx?fx:1-fx)*(dy?fy:1-fy);
-        const ink=pixel==="E"?tint:TOUCHY_PALETTE[pixel];
-        alpha+=weight;
-        for(let c=0;c<3;c++)foreground[c]+=ink[c]*weight;
-      }
-      light(x,y,color.map((v,c)=>Math.round(v*(1-alpha)+foreground[c])));
+      const row=top-4+wave-y;
+      let color=x<x0+5 && row>=0 && row<6 ? TOUCHY_RAINBOW[row] : [0,0,0];
+      const pixel=sprite[top-y]?.[x-x0];
+      if(pixel && pixel!==" ")color=pixel==="E"?tint:TOUCHY_PALETTE[pixel];
+      light(x,y,color);
     }
   }
 }

@@ -4282,18 +4282,20 @@ FLASHMEM static bool logoWaveTouches(unsigned int x, int wavePixelY, int logoSta
 FLASHMEM static void drawLogoWavePixel(unsigned int x, float waveY, CRGB baseColor,
                                        int logoStartX, float logoFade,
                                        float sineFade, float fadeOut) {
-  const int wavePixelY = (int)roundf(waveY);
-  if (wavePixelY < 1 || wavePixelY > (int)maxY) return;
-
-  float contourScale =
-      logoWaveTouches(x, wavePixelY, logoStartX) ? (1.0f - 0.90f * logoFade) : 1.0f;
-  float level = sineFade * fadeOut * contourScale;
-  if (level <= 0.0f) return;
-
-  CRGB color = baseColor;
-  color.nscale8((uint8_t)constrain((int)roundf(255.0f * level), 0, 255));
-  if (color.r | color.g | color.b) {
-    light(x, (unsigned int)wavePixelY, color);
+  // Split each curve between neighbouring LEDs instead of rounding its Y.
+  const int firstY = (int)floorf(waveY);
+  const float fraction = waveY - firstY;
+  for (int i = 0; i < 2; i++) {
+    const int pixelY = firstY + i;
+    if (pixelY < 1 || pixelY > (int)maxY) continue;
+    const float coverage = i ? fraction : 1.0f - fraction;
+    const float contourScale =
+        logoWaveTouches(x, pixelY, logoStartX) ? (1.0f - 0.90f * logoFade) : 1.0f;
+    const float level = sineFade * fadeOut * contourScale * coverage;
+    if (level <= 0.0f) continue;
+    CRGB color = baseColor;
+    color.nscale8((uint8_t)constrain((int)roundf(255.0f * level), 0, 255));
+    if (color.r | color.g | color.b) light(x, (unsigned int)pixelY, color);
   }
 }
 

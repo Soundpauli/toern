@@ -1,6 +1,6 @@
 // Exercise the real simulator controls with mocked audio, SD and browser boundaries.
 import assert from "node:assert/strict";
-import { drawSubmenu, drawMenu, drawTouchy, TOUCHY_COLORS, TOUCHY_SPRITE, TOUCHY_RAINBOW, drawTouchyCat, TOUCHY_PALETTE } from "../standalone-tools/web-standalone/src/firmware/screens.js";
+import { drawSubmenu, drawMenu, drawBoot, drawTouchy, TOUCHY_COLORS, TOUCHY_SPRITE, TOUCHY_RAINBOW, drawTouchyCat, TOUCHY_PALETTE } from "../standalone-tools/web-standalone/src/firmware/screens.js";
 import { setLayout } from "../standalone-tools/web-standalone/src/firmware/const.js";
 import { build } from "../standalone-tools/web-standalone/node_modules/esbuild/lib/main.js";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -267,6 +267,18 @@ drawTouchyCat((...p)=>still.push(p),32,4200);
 drawTouchyCat((...p)=>animated.push(p),32,4380);
 assert.notDeepEqual(still,animated);
 assert(still.filter(([x,y,c])=>x===1&&c.some(v=>v>0)).length>=6);
+// Startup curves split their brightness over adjacent LEDs before logo fade-in.
+setLayout(32);
+const bootPixels=[];
+assert.equal(drawBoot({light:(x,y,color)=>bootPixels.push({x,y,color})},333,0),false);
+assert(bootPixels.every(p=>Number.isInteger(p.y)&&p.y>=1&&p.y<=16));
+assert(bootPixels.filter(p=>p.x===1).length>=3);
+assert.equal(drawBoot({light(){}},5000,0),true);
+// Every animated LED stays an exact palette colour; no smoothing/blends.
+const exactCatColors = new Set([[0,0,0],...TOUCHY_RAINBOW,...Object.values(TOUCHY_PALETTE)].map(c=>JSON.stringify(c)));
+for(const columns of [16,32]) for(const time of [333,777,1501,4200,4380]) {
+  drawTouchyCat((x,y,color)=>assert(exactCatColors.has(JSON.stringify(color))),columns,time);
+}
 assert.deepEqual(TOUCHY_PALETTE.D,[0,0,0]);
 assert(TOUCHY_PALETTE.G.every(v=>v<64));
 // The rightmost nontransparent sprite column stays in the final fifth of width.

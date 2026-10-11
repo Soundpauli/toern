@@ -46,18 +46,27 @@ int main(){
     clockMs+=59; checkTouchyTouches();
     readings[pad]=100; checkTouchyTouches();
     assert(triggers[pad+1]==1);
-    readings[pad]=0; checkTouchyTouches();
+    // Untouched hardware can settle near 40, above the old 31 release threshold.
+    readings[pad]=40; checkTouchyTouches();
     clockMs+=60; checkTouchyTouches();
     readings[pad]=100; checkTouchyTouches();
     assert(triggers[pad+1]==2);
     readings[pad]=0; checkTouchyTouches();
     clockMs+=60; checkTouchyTouches();
   }
+  // Repeat real taps with released readings close to the normal threshold.
+  for(int pad=0;pad<5;pad++) for(int hit=0;hit<20;hit++) {
+    readings[pad]=45; checkTouchyTouches(); clockMs+=60; checkTouchyTouches();
+    readings[pad]=100; checkTouchyTouches(); checkTouchyTouches();
+    assert(triggers[pad+1]==3+hit);
+  }
+  for(int pad=0;pad<5;pad++) readings[pad]=40;
+  checkTouchyTouches(); clockMs+=60; checkTouchyTouches();
   // The external-button variant uses the same stable-release latch.
   exttouch=true;
-  readings[0]=100; checkTouchyTouches(); assert(triggers[1]==3);
+  readings[0]=100; checkTouchyTouches(); assert(triggers[1]==23);
   readings[0]=0; checkTouchyTouches(); clockMs+=20;
-  readings[0]=100; checkTouchyTouches(); assert(triggers[1]==3);
+  readings[0]=100; checkTouchyTouches(); assert(triggers[1]==23);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='toern-touchy-inputs-') as directory:

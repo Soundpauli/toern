@@ -58,7 +58,8 @@ FLASHMEM void checkTouchyTouches() {
     fastTouchRead(SWITCH_3), fastTouchRead(SWITCH_4), fastTouchRead(SWITCH_5)
   };
   const unsigned long now = millis();
-  const int releaseThreshold = touchThreshold * 7 / 10;
+  // Rearm at the normal untouched threshold; idle readings can stay above 70%.
+  const int releaseThreshold = touchThreshold;
   for (int i = 0; i < 5; i++) {
     if (!latched[i] && raw[i] > touchThreshold) {
       latched[i] = true;
@@ -71,7 +72,7 @@ FLASHMEM void checkTouchyTouches() {
       applyVoiceAmpGainFromVol(touchyLastVoice, 16);
       triggerCurrentVoiceAudition(basePitchRowForChannel(touchyLastVoice), touchyVelocity[touchyLastVoice]);
     } else if (latched[i]) {
-      if (raw[i] < releaseThreshold) {
+      if (raw[i] <= releaseThreshold) {
         if (!releasing[i]) { releasing[i] = true; releaseSince[i] = now; }
         if (now - releaseSince[i] >= 60) { latched[i] = false; releasing[i] = false; }
       } else {
@@ -145,8 +146,8 @@ FLASHMEM void showTouchyMode() {
   FastLEDclear();
   const unsigned long now = millis();
   const int phase = (now / 250) % 4;
-  const float x0 = (int)maxX - 20 - ((int)maxX / 5) * (1.0f - cosf(now * PI / 3000.0f)) * .5f;
-  const float top = 14.0f + .65f * sinf(now * PI / 1800.0f);
+  const int x0 = (int)lroundf((int)maxX - 20 - ((int)maxX / 5) * (1.0f - cosf(now * PI / 3000.0f)) * .5f);
+  const int top = (int)lroundf(14.0f + .65f * sinf(now * PI / 1800.0f));
   CRGB tint(170,62,105);
   if (touchyTintActive) {
     const CRGB pad = touchyPadColors[touchyLastVoice - 1];
@@ -157,65 +158,55 @@ FLASHMEM void showTouchyMode() {
     "     BBBBBBBBBBBB    ",
     "    BCCCCCCCCCCCCB   ",
     "    BCEEFEEFDEEECB D ",
-    "    BCEFEFEDGDFECBDGD",
-    " DD BCEEEEEDGGDDDDGGD",
-    "DGGDBCEEEEEDGGGGGGGGD",
-    " DD BCEEFEEDGKJGGKJGD",
-    "    BCFEEEEDEJJGGJJED",
+    "OO  BCEFEFEDGDFECBDGD",
+    "OLO BCEEEEEDGGDDDDGGD",
+    " OLOBCEEEEEDGGGGGGGGD",
+    "  OLBCEEFEEDGKJGGKJGD",
+    "  OOBCFEEEEDEJJGGJJED",
     "   DBCCCCCCCDGGGGGGD ",
-    "  DGGBBBBBBBDDDDDDD  ",
-    "   DD DD     D  DD   "
+    "    OLOBOLOBOLODOLO  ",
+    "    OLL LLO OLL LLO  "
   };
   static const CRGB rainbow[6] = {
     CRGB(215,2,29), CRGB(255,144,36), CRGB(255,255,0),
     CRGB(65,255,76), CRGB(0,191,255), CRGB(212,38,255)
   };
   char animated[11][21];
-  memset(animated, ' ', sizeof(animated));
-  for (int y = 0; y < 11; y++) for (int x = 0; x < 21; x++) {
-    if (sprite[y][x] == ' ') continue;
-    const int px = x + (y == 10 ? phase % 2 : 0);
-    const int py = y - (x < 4 && y < 9 ? phase % 2 : 0);
-    if (px < 21 && py >= 0) animated[py][px] = sprite[y][x];
+  for (int y=0; y<11; y++) memcpy(animated[y], sprite[y], 21);
+  // Tail root stays attached; only the bend changes through up/level/down/level.
+  static const char *tails[3][5] = {
+    {"OO  ","OLO "," OLO","  OL","  OO"},
+    {"    ","OO  ","OLLO"," OLL","  OO"},
+    {"    ","    "," OOO","OLLL","OOOO"}
+  };
+  static const uint8_t tailPose[4] = {0,1,2,1};
+  for (int y=0; y<5; y++) memcpy(animated[y+3], tails[tailPose[phase]][y], 4);
+  static const char *toes[4] = {"OLL","OLO","LLO","OLO"};
+  for (int leg=0; leg<4; leg++) {
+    const int x=4+leg*4;
+    memcpy(animated[9]+x, "OLO", 3);
+    memcpy(animated[10]+x, toes[(phase+(leg%2)*2)%4], 3);
   }
   for (int x = 1; x <= (int)maxX; x++) {
-    const float wave = .65f * sinf(x * .6f - now * PI / 600.0f);
+    const int wave = (int)lroundf(.65f * sinf(x * .6f - now * PI / 600.0f));
     for (int y = 1; y <= 16; y++) {
-      float background[3] = {};
-      if (x < x0 + 5) {
-        const float ry = top - 4 + wave - y;
-        const int row = floorf(ry);
-        const float f = ry - row;
-        for (int i = 0; i < 2; i++) if (row + i >= 0 && row + i < 6) {
-          const float weight = i ? f : 1 - f;
-          for (int c = 0; c < 3; c++) background[c] += rainbow[row + i][c] * weight;
+      CRGB color = CRGB::Black;
+      const int row = top - 4 + wave - y;
+      if (x < x0 + 5 && row >= 0 && row < 6) color = rainbow[row];
+      const int sx = x - x0, sy = top - y;
+      if (sx >= 0 && sx < 21 && sy >= 0 && sy < 11) {
+        switch (animated[sy][sx]) {
+          case 'B': color = CRGB(72,30,5); break;
+          case 'C': color = CRGB(170,86,22); break;
+          case 'D': case 'J': color = CRGB::Black; break;
+          case 'E': color = tint; break;
+          case 'F': color = CRGB(255,4,94); break;
+          case 'G': color = CRGB(48,48,56); break;
+          case 'L': color = CRGB(112,112,124); break;
+          case 'O': color = CRGB(28,28,36); break;
+          case 'K': color = CRGB(200,195,170); break;
         }
       }
-      const float sx = x - x0, sy = top - y;
-      const int ix = floorf(sx), iy = floorf(sy);
-      const float fx = sx - ix, fy = sy - iy;
-      float foreground[3] = {}, alpha = 0;
-      for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 2; dx++) {
-        if (ix + dx < 0 || ix + dx >= 21 || iy + dy < 0 || iy + dy >= 11) continue;
-        const char pixel = animated[iy + dy][ix + dx];
-        if (pixel == ' ') continue;
-        const float weight = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
-        CRGB ink;
-        switch (pixel) {
-          case 'B': ink = CRGB(72,30,5); break;
-          case 'C': ink = CRGB(170,86,22); break;
-          case 'D': case 'J': ink = CRGB::Black; break;
-          case 'E': ink = tint; break;
-          case 'F': ink = CRGB(255,4,94); break;
-          case 'G': ink = CRGB(48,48,56); break;
-          case 'K': ink = CRGB(200,195,170); break;
-          default: continue;
-        }
-        alpha += weight;
-        for (int c = 0; c < 3; c++) foreground[c] += ink[c] * weight;
-      }
-      CRGB color;
-      for (int c = 0; c < 3; c++) color[c] = (uint8_t)lroundf(background[c] * (1 - alpha) + foreground[c]);
       light(x, y, color);
     }
   }
