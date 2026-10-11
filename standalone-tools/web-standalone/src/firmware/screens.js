@@ -33,18 +33,31 @@ export const MENU_PAGES = [
   { name: "SETT", label: "SETT", icon: "settings", col: 6 },
   { name: "REC", label: "REC", icon: "record", col: 7 },
   { name: "MIDI", label: "MIDI", icon: "midi", col: 8 },
-  { name: "SONG", label: "SONG", icon: "song", col: 13 },
+  { name: "MODE", label: "MODE", icon: "song", col: 13 },
   { name: "ETC", label: "ETC", icon: "pattern", col: 14 },
 ];
 
+// Navigation is separate from the persisted legacy setting slots.
 export const SUBS = {
-  look: ["FLW", "PREV", "VIEW", "PMD", "LOOP", "VMOD", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"],
+  look: ["VIEW", "CTRL", "DRAW", "MUTE"],
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PPQN", "TRIG", "CIN", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
-  etc: ["INFO", "RAM", "SD", "AUTO", "LGHT", "COLR", "BATT", "EYES", "CHLD", "FIRE", "IMG", "RSET"],
+  mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "AUTO"],
+  etc: ["INFO", "SD", "BATT", "ADV", "RSET"],
+  adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
+const SUB_SLOTS = {
+  look: [["look", 2], ["look", 6], ["look", 10], ["look", 11]],
+  mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["etc", 3]],
+  etc: [["etc", 0], ["etc", 2], ["etc", 6], ["adv", 0], ["etc", 11]],
+  adv: [["look", 9], ["look", 7], ["etc", 1], ["etc", 4], ["etc", 5], ["etc", 7], ["etc", 9]],
+};
+export function resolveSubPage(mode, index) {
+  const slot = SUB_SLOTS[mode]?.[index];
+  return slot ? { mode: slot[0], index: slot[1] } : { mode, index };
+}
 
 export const CIN_PPQN_TABLE = [1, 2, 4, 8, 12, 16, 24, 32];
 export const PPQN_RATE_LABELS = ["OFF", "1", "2", "4", "8", "12", "16", "24", "32"];
@@ -55,7 +68,7 @@ export const ETC_RSET_INDEX = 11;
 export const ETC_EYES_INDEX = 7;
 export const ETC_CHLD_INDEX = 8;
 
-const SUB_PARENT = { look: 6, recs: 7, midi: 8, vol: 5, etc: 14 };
+const SUB_PARENT = { look: 6, recs: 7, midi: 8, vol: 5, mode: 13, etc: 14, adv: 14 };
 
 function scaleTo(rgb, target) {
   const max = Math.max(rgb[0], rgb[1], rgb[2]);
@@ -572,7 +585,8 @@ export function drawMenu(matrix, s) {
 }
 
 export function isSoon(mode, index) {
-  return !!SOON[mode]?.has(index);
+  const slot = resolveSubPage(mode, index);
+  return !!SOON[slot.mode]?.has(slot.index);
 }
 
 const SOON = {
@@ -604,6 +618,8 @@ export function drawNew(matrix, s) {
 
 export function drawSubmenu(matrix, s, now = performance.now()) {
   const pages = SUBS[s.mode];
+  const name = pages[s.subIndex];
+  const visibleMode = s.mode, visibleIndex = s.subIndex;
   const parent = menuText(SUB_PARENT[s.mode]);
   const dim = scaleTo(parent, 20);
   matrix.drawLargeCustom(parent, 4);
@@ -616,15 +632,25 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", "V", 4);
     return;
   }
-  if (s.mode === "etc" && s.subIndex === 0) {
+  const { mode: pageMode, index: pageIndex } = resolveSubPage(s.mode, s.subIndex);
+  if (pageMode === "etc" && pageIndex === 0) {
     drawInfo(matrix, s, now, parent);
     return;
   }
   s.infoAt = 0;
-  const lookTitle = ["FLOW", "PREV", "VIEW", "PMODE", "LOOP", "VMOD", "CTRL", "LEDS", "PONG", "CRSR", "DRAW", "MUTE"];
-  const name = s.mode === "look" ? lookTitle[s.subIndex] : pages[s.subIndex];
+  if ((visibleMode === "etc" && visibleIndex === 3) || (visibleMode === "mode" && visibleIndex === 7)) {
+    matrix.drawText(name, 2, 10, parent);
+    return;
+  }
+  if (pageMode === "vol" && pageIndex === 3) {
+    matrix.drawText(["ON", "PRSS", "SYNC"][s.prevMode] || "ON", 2, 10, s.prevMode === 0 ? UI_GREEN : parent);
+    matrix.drawText(String(s.prevVol), 2, 3, [0, 160, 80]);
+    matrix.drawIndicator("L", "Y", 2);
+    matrix.drawIndicator("L", "G", 3);
+    return;
+  }
   matrix.drawText(name, 2, 10, parent);
-  if (s.mode === "look" && s.subIndex === 11) {
+  if (pageMode === "look" && pageIndex === 11) {
     for (let uch = 1; uch <= 16; uch++) {
       const bit = uch === 16 ? 0 : uch;
       let dot = (s.muteMask & (1 << bit)) ? UI_GREEN.slice() : UI_RED.slice();
@@ -635,8 +661,8 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", "W", 3);
     return;
   }
-  if (s.mode === "etc" && s.subIndex === ETC_FIRE_INDEX) {
-    const value = s.subValue(s.mode, s.subIndex);
+  if (pageMode === "etc" && pageIndex === ETC_FIRE_INDEX) {
+    const value = s.legacySubValue(pageMode, pageIndex);
     const wide = COLS >= 24;
     const focus = s.fireFocus | 0;
     let voiceColor = value.color;
@@ -667,7 +693,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", focus === 1 ? "W" : focus === 2 ? "Y" : value.text === "OFF" ? "R" : "G", 3);
     return;
   }
-  if (s.mode === "midi" && s.subIndex === 5) {
+  if (pageMode === "midi" && pageIndex === 5) {
     // SYNC SNC1/SNC2
     const edit = s.syncEdit | 0;
     const ms = edit === 0 ? (s.syncSendMs | 0) : (s.syncRcveMs | 0);
@@ -678,7 +704,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", "W", 3);
     return;
   }
-  if (s.mode === "midi" && s.subIndex === 6) {
+  if (pageMode === "midi" && pageIndex === 6) {
     // PPQN out
     const focus = s.ppqnFocus | 0;
     const width = s.ppqnWidthMs || 1;
@@ -694,7 +720,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", code, 3);
     return;
   }
-  if (s.mode === "midi" && s.subIndex === 8) {
+  if (pageMode === "midi" && pageIndex === 8) {
     // CIN hold + PPQN
     const focus = s.cinFocus | 0;
     const hold = clampUi(s.cinHoldMs || 1, 1, 32);
@@ -705,7 +731,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", focus === 1 ? "G" : "W", 3);
     return;
   }
-  const value = s.subValue(s.mode, s.subIndex);
+  const value = s.legacySubValue(pageMode, pageIndex);
   matrix.drawText(value.text, 2, 3, value.color);
   if (value.code) matrix.drawIndicator("L", value.code, 3);
   else matrix.setRing?.(3, value.color);

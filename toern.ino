@@ -194,9 +194,12 @@ extern void handleStart();
 // Nominal divider 1.5/(1.0+1.5)=0.600. Recalibrated on device: meter 4.125V
 // read 87% with 0.577 (fw ~4.04V); 0.565 brings that sample to ~4.125V.
 #define BATT_DIVIDER_RATIO 0.565f
-#define BATT_V_MIN 3.30f          // Display 0% at 3.30V
+// Pack dies / unit stops around the old mid-scale reading (~50% with V_MIN=3.30).
+// Map that knee to 0% so BATT reaches 0 before brownout; 100% stays at full charge.
+#define BATT_V_MIN 3.7125f        // Display 0% (was 3.30 → false ~50% at cutoff)
 #define BATT_V_MAX 4.125f         // Display 100% at measured full pack
 #define BATT_PCT_CURVE 1.0f       // Linear voltage→%
+#define BATT_WARN_PCT 8           // Warning / red band on remapped display %
 
 #define VOL_MIN 1
 #define VOL_MAX 10
@@ -2769,7 +2772,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       else if (inRecsSubmenu) parentPage = 6;
       else if (inMidiSubmenu) parentPage = 7;
       else if (inVolSubmenu) parentPage = 4;
-      else if (inEtcSubmenu) parentPage = 9;
+      else if (inEtcSubmenu) { extern int systemMenuParentPage(); parentPage = systemMenuParentPage(); }
       inLookSubmenu = false;
       inRecsSubmenu = false;
       inMidiSubmenu = false;
@@ -2881,7 +2884,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
-        (inEtcSubmenu && (mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
+        (inEtcSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 56 || mainSetting == 57 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
     if (mainSetting != 15 && !encoder2ValuePage) {
       switchMenu(mainSetting);
     }
@@ -4732,7 +4735,7 @@ uint32_t eyesScreensaverIdleMs() {
   }
 }
 
-// Battery warning: two samples 5s apart each minute (55s + 60s); show 5s only if both match and are 1..15%
+// Battery warning: two samples 5s apart each minute (55s + 60s); show 5s only if both match and are 1..BATT_WARN_PCT
 bool getBatteryWarningActive() {
   static elapsedMillis batteryCycleTimer;
   static bool batteryWarningActive = false;
@@ -4742,7 +4745,7 @@ bool getBatteryWarningActive() {
 
   if (!firstSampleDone && batteryCycleTimer >= 55000) {
     int pct = getBatteryPercent();
-    pendingPct = (pct >= 1 && pct <= 15) ? pct : -1;
+    pendingPct = (pct >= 1 && pct <= BATT_WARN_PCT) ? pct : -1;
     firstSampleDone = true;
   }
 
@@ -4750,7 +4753,7 @@ bool getBatteryWarningActive() {
     batteryCycleTimer = 0;
     firstSampleDone = false;
     int pct = getBatteryPercent();
-    if (pendingPct >= 0 && pct == pendingPct && pct >= 1 && pct <= 15) {
+    if (pendingPct >= 0 && pct == pendingPct && pct >= 1 && pct <= BATT_WARN_PCT) {
       batteryWarningActive = true;
       batteryWarningTimer = 0;
     }
@@ -5663,7 +5666,7 @@ void exitMenuFromTouchInput() {
     else if (inRecsSubmenu) parentPage = 6;
     else if (inMidiSubmenu) parentPage = 7;
     else if (inVolSubmenu) parentPage = 4;
-    else if (inEtcSubmenu) parentPage = 9;
+    else if (inEtcSubmenu) { extern int systemMenuParentPage(); parentPage = systemMenuParentPage(); }
 
     inLookSubmenu = false;
     inRecsSubmenu = false;
@@ -6287,7 +6290,7 @@ void checkSingleTouch() {
         else if (inRecsSubmenu) parentPage = 6;
         else if (inMidiSubmenu) parentPage = 7;
         else if (inVolSubmenu) parentPage = 4;
-        else if (inEtcSubmenu) parentPage = 9;
+        else if (inEtcSubmenu) { extern int systemMenuParentPage(); parentPage = systemMenuParentPage(); }
         inLookSubmenu = false;
         inRecsSubmenu = false;
         inMidiSubmenu = false;
@@ -6476,7 +6479,7 @@ void _checkMenuTouch() {
         else if (inRecsSubmenu) parentPage = 6;
         else if (inMidiSubmenu) parentPage = 7;
         else if (inVolSubmenu) parentPage = 4;
-        else if (inEtcSubmenu) parentPage = 9;
+        else if (inEtcSubmenu) { extern int systemMenuParentPage(); parentPage = systemMenuParentPage(); }
         inLookSubmenu = false;
         inRecsSubmenu = false;
         inMidiSubmenu = false;

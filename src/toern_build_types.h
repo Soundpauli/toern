@@ -1,5 +1,7 @@
 #pragma once
 
+struct MenuPage; // Arduino-generated menu helper prototypes
+
 #define SAMPLE_BROWSER_NAME_MAX 65
 
 struct HarmonicAnalysis {

@@ -73,7 +73,7 @@
               <div class="tree-legend__row">
                 <span class="tree-legend__swatch tree-legend__swatch--red" aria-hidden="true"></span>
                 <span class="node" style="background:#1d4ed8">MAIN</span>
-                <span><strong>Red tint</strong> = depth&nbsp;2 — a leaf inside a family (VOL, SETTINGS, REC, MIDI, ETC). Blue badge, warmer row: you are one click deeper.</span>
+                <span><strong>Red tint</strong> = depth&nbsp;2 — a leaf inside a family (VOL, SETT, REC, MIDI, ETC). Blue badge, warmer row: you are one click deeper.</span>
               </div>
               <p class="how" style="margin:0.35rem 0 0">The colours are a handbook nesting cue — not the device’s voice palette. On hardware, submenu text re-colours to match its parent family so you always know which world you are inside.</p>
             </div>
@@ -82,7 +82,7 @@
               <ul class="menu-tree">
                 <li>
                   <span class="node">MENU</span>
-                  <span class="desc">Tap touch&nbsp;2 (the right pad) from the grid. Playback keeps running — the menu is a translucent overlay, not a pause button. Encoder&nbsp;4 spins the ten family dots on row&nbsp;16; short-press enters. Encoder&nbsp;1 short steps back. Re-open within five seconds and you land on the last family; wait longer and you start on PATT again (the firmware’s polite “where were we?”).</span>
+                  <span class="desc">Tap touch&nbsp;2 (the right pad) from the grid. Playback keeps running — the menu is a translucent overlay, not a pause button. Encoder&nbsp;4 spins the ten family dots on row&nbsp;16; short-press enters. Tap touch&nbsp;2 to return to the grid. Re-open within five seconds and you land on the last family; wait longer and you start on PATT again (the firmware’s polite “where were we?”).</span>
                   <ul>
 
                     <li id="file">
@@ -200,9 +200,13 @@
                         </li>
                         <li>
                           <span class="node">PREV</span>
-                          <span class="desc">How loud the sample browser auditions files.</span>
+                          <span class="desc">Sample-browser preview mode and loudness.</span>
                           <span class="sub">
-                            <ul class="sub-opts">
+                            <ul class="sub-opts"><li><strong>Enc&nbsp;2 turn</strong> — choose ON, PRSS or SYNC</li>
+                              <li><strong>ON</strong> — auto-audition while you spin files</li>
+                              <li><strong>PRSS</strong> — only when you press encoder&nbsp;1 on a highlighted wav (so a clumsy turn does not scream into the PA)</li>
+                              <li><strong>SYNC</strong> — no instant preview; the highlighted wav plays on that voice's pattern triggers instead of the loaded sample (voice stays unmuted)</li>
+
                               <li><strong>Enc&nbsp;3 turn</strong> — <strong>0–50</strong></li>
                               <li>Zero = silent browsing (blessed on stage). Independent of MAIN/LOUT</li>
                             </ul>
@@ -245,31 +249,10 @@
                     </li>
 
                     <li id="play">
-                      <a href="play.html"><span class="node">SETTINGS</span></a>
-                      <span class="desc">How the grid <em>behaves</em> — visuals, page walking, paint style. Zero effect on the audio engine; pure “feel”.</span>
+                      <a href="play.html"><span class="node">SETT</span></a>
+                      <span class="desc">Grid view, encoder control, drawing and mute selection.</span>
                       <ul>
-                        <li>
-                          <span class="node">FLW</span>
-                          <span class="desc">Follow — whole-grid pulse on the beat.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>ON</strong> — soft wash in time (club-dark friendly)</li>
-                              <li><strong>OFF</strong> — only the playhead column (editor-clean)</li>
-                            </ul>
-                          </span>
-                        </li>
-                        <li>
-                          <span class="node">PREV</span>
-                          <span class="desc">Sample-browser preview policy (not the VOL→PREV loudness).</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>ON</strong> — auto-audition while you spin files</li>
-                              <li><strong>PRSS</strong> — only when you press encoder&nbsp;1 on a highlighted wav (so a clumsy turn does not scream into the PA)</li>
-                              <li><strong>SYNC</strong> — no instant preview; the highlighted wav plays on that voice's pattern triggers instead of the loaded sample (voice stays unmuted)</li>
-                            </ul>
-                          </span>
-                        </li>
-                        <li>
+<li>
                           <span class="node">VIEW</span>
                           <span class="desc">How densely notes paint on the grid.</span>
                           <span class="sub">
@@ -279,40 +262,7 @@
                             </ul>
                           </span>
                         </li>
-                        <li>
-                          <a href="play.html#pmd"><span class="node">PMD</span></a>
-                          <span class="desc">Pattern mode — what happens when a page finishes.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>OFF</strong> — advance through the pattern pages</li>
-                              <li><strong>ON</strong> — loop the selected edit page</li>
-                              <li><strong>SONG</strong> — follow the <a href="song.html#song">SONG</a> chain</li>
-                              <li><strong>NEXT</strong> — play the visible page; while it plays, browse to a target page and it takes over exactly when the current page ends</li>
-                            </ul>
-                          </span>
-                        </li>
-                        <li>
-                          <a href="play.html#loop"><span class="node">LOOP</span></a>
-                          <span class="desc">How many steps of a page actually sound before it wraps.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>OFF</strong> — full 16 steps</li>
-                              <li><strong>1–16</strong> — chop short</li>
-                            </ul>
-                            <span class="how">Odd lengths (5, 7, 9…) = instant groovebox weirdness.</span>
-                          </span>
-                        </li>
-                        <li>
-                          <a href="play.html#vmod"><span class="node">VMOD</span></a>
-                          <span class="desc">Each voice loops on its own pages. Pitches stay with that voice.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>OFF</strong> / <strong>ON</strong></li>
-                            </ul>
-                            <span class="how">While on, FLOW, LOOP, and pattern-mode page lock leave playback alone. Encoder&nbsp;2 steps that voice’s filled pages. Encoder&nbsp;4 does not change pages during play. Song mode is unchanged. Locked <strong>OFF</strong> while <a href="play.html#img">ETC → IMG</a> is on.</span>
-                          </span>
-                        </li>
-                        <li>
+<li>
                           <a href="play.html#ctrl"><span class="node">CTRL</span></a>
                           <span class="desc">What encoder&nbsp;2 does on the draw/single grid when you are not in a special mode.</span>
                           <span class="sub">
@@ -323,42 +273,7 @@
                             <span class="how">Survives reboot.</span>
                           </span>
                         </li>
-                        <li>
-                          <span class="node">LEDS</span>
-                          <span class="desc">Which LED panel hardware is bolted on.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>1</strong> — one panel</li>
-                              <li><strong>1B</strong> — one mirrored</li>
-                              <li><strong>2</strong> — two stacked (16×32)</li>
-                              <li><strong>2B</strong> — two mirrored</li>
-                            </ul>
-                            <span class="how">Wrong setting = pixels vacationing off-screen.</span>
-                          </span>
-                        </li>
-                        <li>
-                          <span class="node">PONG</span>
-                          <span class="desc">A ball bounces the grid in draw mode; it only hits and fires notes on muted voices, so unmuted play is unaffected.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>OFF</strong> / <strong>ON</strong></li>
-                              <li><strong>Enc&nbsp;3 turn</strong> — speed <strong>1–99</strong> when on (higher = faster)</li>
-                            </ul>
-                            <span class="how">Not the idle “eyes” screensaver — that is a separate boredom animation.</span>
-                          </span>
-                        </li>
-                        <li>
-                          <span class="node">CRSR</span>
-                          <span class="desc">Cursor cosmetics.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>NORM</strong> — thin white ring</li>
-                              <li><strong>CHNR</strong> — only on the focused voice in single mode. With CTRL&nbsp;= PAGE, encoder&nbsp;2 flashes the page number on the right, one row below the top, with no underline.</li>
-                              <li><strong>BIG</strong> — chunky 3×3 halo for balcony viewers</li>
-                            </ul>
-                          </span>
-                        </li>
-                        <li>
+<li>
                           <a href="play.html#draw"><span class="node">DRAW</span></a>
                           <span class="desc">Paint-handedness.</span>
                           <span class="sub">
@@ -369,7 +284,7 @@
                             <span class="how">Careful two-hand edit vs one-hand set/remove. Detail: <a href="sequencing.html#paint">Sequencing → triggers</a>.</span>
                           </span>
                         </li>
-                        <li>
+<li>
                           <a href="play.html#mute"><span class="node">MUTE</span></a>
                           <span class="desc">Custom unmute mask for leaving R-mode’s temporary full mute (enc&nbsp;3).</span>
                           <span class="sub">
@@ -382,7 +297,7 @@
                             <span class="how">Build a “kick+snare only” return set. Does not gate which rows you can paint.</span>
                           </span>
                         </li>
-                      </ul>
+</ul>
                     </li>
 
                     <li id="rec">
@@ -564,123 +479,51 @@
                       </ul>
                     </li>
 
-                    <li id="song-menu">
-                      <a href="song.html#song"><span class="node">SONG</span></a>
-                      <span class="desc">64-slot arranger. Each slot points at one of the 16 pages. With PMD&nbsp;= SONG, playback walks the chain and wraps.</span>
-                      <span class="sub">
-                        <ul class="sub-opts">
-                          <li><strong>Enc&nbsp;2 turn</strong> — page <strong>1–16</strong> (or empty)</li>
-                          <li><strong>Enc&nbsp;2 short</strong> — clear slot</li>
-                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–64</strong></li>
-                          <li><strong>Enc&nbsp;4 short</strong> — insert empty slot</li>
-                        </ul>
-                        <span class="how">Empty slots are skipped. Playing: page strip on row&nbsp;16 + green song-slot dot on row&nbsp;1.</span>
-                      </span>
-                    </li>
-
-                    <li id="etc">
-                      <a href="reference.html#etc"><span class="node">ETC</span></a>
-                      <span class="desc">Credits, SD file server, generated fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
-                      <ul>
-                        <li>
-                          <span class="node">INFO</span>
-                          <span class="desc">Firmware version, then a scrolling thank-you.</span>
+                    <li id="mode"><a href="play.html#mode-root"><span class="node">MODE</span></a><span class="desc">Playback and performance modes. Press encoder&nbsp;4 to open.</span><ul>
+<li>
+                          <span class="node">FLOW</span>
+                          <span class="desc">Follow — whole-grid pulse on the beat.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li>Version holds in yellow for two seconds, then the credits crawl</li>
-                              <li><strong>Enc&nbsp;4 short</strong> — play the logo animation (fade in, then hold); press again to stop and return to draw mode</li>
-                            </ul>
-                            <span class="how">Confirm the build before filing a bug report.</span>
-                          </span>
-                        </li>
-                        <li>
-                          <span class="node">RAM</span>
-                          <span class="desc">Live audio-memory dashboard (pool is 96 blocks).</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>A##</strong> — audio memory used % (peak if higher)</li>
-                              <li><strong>R##</strong> — average freeverb send %</li>
-                              <li><strong>F###</strong> — free audio blocks</li>
-                              <li><strong>C##</strong> — audio CPU %</li>
-                              <li><strong>Enc&nbsp;3</strong> — switch metric; press resets peak counters</li>
-                            </ul>
-                            <span class="how">If A climbs near 100 after a long session, distortion/clicks on mute/save are likely block exhaustion.</span>
-                          </span>
-                        </li>
-                        <li id="sd">
-                          <a href="hardware.html#sd-tool"><span class="node">SD</span></a>
-                          <span class="desc">USB serial file server — stay on this page while a computer talks to the card.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>WAIT</strong> — until a host connects</li>
-                              <li><strong>OK</strong> — connected</li>
-                              <li>Use <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (Chrome/Edge + Web Serial)</li>
-                            </ul>
-                            <span class="how">Reopen after Connect if the unit reboots. Details: <a href="hardware.html#sd-tool">Hardware → SD tool</a>.</span>
-                          </span>
-                        </li>
-                        <li>
-                          <a href="advanced-sequencing.html#auto-extend"><span class="node">AUTO</span></a>
-                          <span class="desc">Companion fill: analyse voices, accents, velocities, harmony and BPM across a base-page range, then write coordinated variations after it. Orange strip = source pages; green strip = pages about to be written.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>Enc&nbsp;1 turn</strong> — how many extra pages to generate (<strong>1–16</strong>)</li>
-                              <li><strong>Enc&nbsp;1 short</strong> — run generation (green cue — the rare “press 1 to create” exception)</li>
-                              <li><strong>Enc&nbsp;2 turn</strong> — base start page</li>
-                              <li><strong>Enc&nbsp;3 turn</strong> — base end page</li>
-                            </ul>
-                            <span class="how">Uses the same role-aware engine as single-mode page-row randomize. An empty base creates a varied 4/4 starter ensemble; every run is different.</span>
-                          </span>
-                        </li>
-                        <li>
-                          <span class="node">LGHT</span>
-                          <span class="desc">Optional chassis ring-LED strip.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>ON</strong> — mirrors the matrix accent</li>
-                              <li><strong>OFF</strong> — saves juice / keeps the stage dark</li>
+                              <li><strong>ON</strong> — soft wash in time (club-dark friendly)</li>
+                              <li><strong>OFF</strong> — only the playhead column (editor-clean)</li>
                             </ul>
                           </span>
                         </li>
-                        <li>
-                          <span class="node">COLR</span>
-                          <span class="desc">Voice palette / scheme.</span>
+<li>
+                          <a href="play.html#pmd"><span class="node">PMOD</span></a>
+                          <span class="desc">Pattern mode — what happens when a page finishes.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>0</strong> — factory rainbow</li>
-                              <li><strong>1</strong> — blue-ish</li>
-                              <li><strong>2</strong> — high-contrast red/violet</li>
-                              <li>Custom fourth slot appears when you drop a <code>scheme.txt</code> from the <a href="../tools/colorsheme/index.html">colour-scheme tool</a></li>
+                              <li><strong>OFF</strong> — advance through the pattern pages</li>
+                              <li><strong>ON</strong> — loop the selected edit page</li>
+                              <li><strong>SONG</strong> — follow the <a href="song.html#song">SONG</a> chain</li>
+                              <li><strong>NEXT</strong> — play the visible page; while it plays, browse to a target page and it takes over exactly when the current page ends</li>
                             </ul>
                           </span>
                         </li>
-                        <li>
-                          <span class="node">BATT</span>
-                          <span class="desc">State of charge.</span>
+<li>
+                          <a href="play.html#loop"><span class="node">LOOP</span></a>
+                          <span class="desc">How many steps of a page actually sound before it wraps.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li>Read-only %</li>
-                              <li><strong>Green</strong> — &gt;&nbsp;30&nbsp;%</li>
-                              <li><strong>Orange</strong> — 15–30&nbsp;%</li>
-                              <li><strong>Red</strong> — &lt;&nbsp;15&nbsp;%</li>
+                              <li><strong>OFF</strong> — full 16 steps</li>
+                              <li><strong>1–16</strong> — chop short</li>
                             </ul>
-                            <span class="how">Plug USB-C before the red argument starts.</span>
+                            <span class="how">Odd lengths (5, 7, 9…) = instant groovebox weirdness.</span>
                           </span>
                         </li>
-                        <li id="eyes">
-                          <span class="node">EYES</span>
-                          <span class="desc">Idle screensaver (sleeping eyes on the matrix).</span>
+<li>
+                          <a href="play.html#vmod"><span class="node">VMOD</span></a>
+                          <span class="desc">Each voice loops on its own pages. Pitches stay with that voice.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>OFF</strong> — never</li>
-                              <li><strong>1MIN</strong> — eyes after one minute idle (default)</li>
-                              <li><strong>5MIN</strong> — five minutes</li>
-                              <li><strong>15MIN</strong> — fifteen minutes</li>
+                              <li><strong>OFF</strong> / <strong>ON</strong></li>
                             </ul>
-                            <span class="how">Runs only when stopped on the grid. Any encoder / touch wakes the unit.</span>
+                            <span class="how">While on, FLOW, LOOP, and pattern-mode page lock leave playback alone. Encoder&nbsp;2 steps that voice’s filled pages. Encoder&nbsp;4 does not change pages during play. Song mode is unchanged. Locked <strong>OFF</strong> while <a href="play.html#img">MODE → IMG</a> is on.</span>
                           </span>
                         </li>
-                        <li id="chld">
+<li id="chld">
                           <span class="node">CHLD</span>
                           <span class="desc">Child lock — simplified play mode for small hands (or reckless bandmates).</span>
                           <span class="sub">
@@ -694,21 +537,7 @@
                             <span class="how">Training wheels with opinions.</span>
                           </span>
                         </li>
-                        <li id="fire">
-                          <span class="node">FIRE</span>
-                          <span class="desc">Sideways embers on the playhead. When a chosen voice’s note lights white, sparks drift sideways off the cell, spread up and down, and fade. Gravity pulls them back toward the playhead.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>Size 1–4</strong> — encoder&nbsp;1. 1 is a single cell. Higher adds a wider glow</li>
-                              <li><strong>Count 1–25</strong> — encoder&nbsp;2. How many embers are alive at once</li>
-                              <li><strong>Voice</strong> — encoder&nbsp;3. <strong>OFF</strong>, <strong>ALL</strong>, or <strong>1–8</strong>, <strong>11</strong>, <strong>13</strong>, <strong>14</strong></li>
-                              <li><strong>Gravity 0–8</strong> — click encoder&nbsp;3 once, then turn it. 0 keeps drifting sideways. Higher pulls the embers back toward the playhead</li>
-                              <li><strong>Colour 0–8</strong> — click encoder&nbsp;3 again, then turn it. 0 is white. 8 is the voice colour</li>
-                            </ul>
-                            <span class="how">The bar under the title is gravity on the left and colour on the right. Another click on encoder&nbsp;3 returns to the voice.</span>
-                          </span>
-                        </li>
-                        <li id="img">
+<li id="img">
                           <a href="play.html#img"><span class="node">IMG</span></a>
                           <span class="desc">Image mode — black matrix; paint cycles voice colours like a pixel sketchpad.</span>
                           <span class="sub">
@@ -722,14 +551,182 @@
                             <span class="how">Single mode is not used in IMG — stay in DRAW and paint.</span>
                           </span>
                         </li>
-                        <li id="rset">
+<li>
+                          <span class="node">PONG</span>
+                          <span class="desc">A ball bounces the grid in draw mode; it only hits and fires notes on muted voices, so unmuted play is unaffected.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> / <strong>ON</strong></li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — speed <strong>1–99</strong> when on (higher = faster)</li>
+                            </ul>
+                            <span class="how">Not the idle “eyes” screensaver — that is a separate boredom animation.</span>
+                          </span>
+                        </li>
+<li id="song-menu">
+                      <a href="song.html#song"><span class="node">SONG</span></a>
+                      <span class="desc">64-slot arranger. Each slot points at one of the 16 pages. With PMOD&nbsp;= SONG, playback walks the chain and wraps.</span>
+                      <span class="sub">
+                        <ul class="sub-opts">
+                          <li><strong>Enc&nbsp;2 turn</strong> — page <strong>1–16</strong> (or empty)</li>
+                          <li><strong>Enc&nbsp;2 short</strong> — clear slot</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–64</strong></li>
+                          <li><strong>Enc&nbsp;4 short</strong> — insert empty slot</li>
+                        </ul>
+                        <span class="how">Empty slots are skipped. Playing: page strip on row&nbsp;16 + green song-slot dot on row&nbsp;1.</span>
+                      </span>
+                    </li>
+<li>
+                          <a href="advanced-sequencing.html#auto-extend"><span class="node">AUTO</span></a>
+                          <span class="desc">Companion fill: analyse voices, accents, velocities, harmony and BPM across a base-page range, then write coordinated variations after it. Orange strip = source pages; green strip = pages about to be written.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 turn</strong> — how many extra pages to generate (<strong>1–16</strong>)</li>
+                              <li><strong>Enc&nbsp;1 short</strong> — run generation (green cue — the rare “press 1 to create” exception)</li>
+                              <li><strong>Enc&nbsp;2 turn</strong> — base start page</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — base end page</li>
+                            </ul>
+                            <span class="how">Uses the same role-aware engine as single-mode page-row randomize. An empty base creates a varied 4/4 starter ensemble; every run is different.</span>
+                          </span>
+                        </li>
+</ul></li>
+
+                    <li id="etc">
+                      <a href="reference.html#etc"><span class="node">ETC</span></a>
+                      <span class="desc">Credits, SD file server, generated fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
+                      <ul>
+<li>
+                          <span class="node">INFO</span>
+                          <span class="desc">Firmware version, then a scrolling thank-you.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li>Version holds in yellow for two seconds, then the credits crawl</li>
+                              <li><strong>Enc&nbsp;4 short</strong> — play the logo animation (fade in, then hold); press again to stop and return to draw mode</li>
+                            </ul>
+                            <span class="how">Confirm the build before filing a bug report.</span>
+                          </span>
+                        </li>
+<li id="sd">
+                          <a href="hardware.html#sd-tool"><span class="node">SD</span></a>
+                          <span class="desc">USB serial file server — stay on this page while a computer talks to the card.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>WAIT</strong> — until a host connects</li>
+                              <li><strong>OK</strong> — connected</li>
+                              <li>Use <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (Chrome/Edge + Web Serial)</li>
+                            </ul>
+                            <span class="how">Reopen after Connect if the unit reboots. Details: <a href="hardware.html#sd-tool">Hardware → SD tool</a>.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">BATT</span>
+                          <span class="desc">State of charge.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li>Read-only %</li>
+                              <li><strong>Green</strong> — &gt;&nbsp;30&nbsp;%</li>
+                              <li><strong>Orange</strong> — 15–30&nbsp;%</li>
+                              <li><strong>Red</strong> — &lt;&nbsp;15&nbsp;%</li>
+                            </ul>
+                            <span class="how">Plug USB-C before the red argument starts.</span>
+                          </span>
+                        </li>
+<li id="adv"><span class="node">ADV</span><span class="desc">Display and diagnostic settings. Press encoder&nbsp;4 to open.</span><ul>
+<li>
+                          <span class="node">CRSR</span>
+                          <span class="desc">Cursor cosmetics.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>NORM</strong> — thin white ring</li>
+                              <li><strong>CHNR</strong> — only on the focused voice in single mode. With CTRL&nbsp;= PAGE, encoder&nbsp;2 flashes the page number on the right, one row below the top, with no underline.</li>
+                              <li><strong>BIG</strong> — chunky 3×3 halo for balcony viewers</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">LEDS</span>
+                          <span class="desc">Which LED panel hardware is bolted on.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>1</strong> — one panel</li>
+                              <li><strong>1B</strong> — one mirrored</li>
+                              <li><strong>2</strong> — two stacked (16×32)</li>
+                              <li><strong>2B</strong> — two mirrored</li>
+                            </ul>
+                            <span class="how">Wrong setting = pixels vacationing off-screen.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">RAM</span>
+                          <span class="desc">Live audio-memory dashboard (pool is 96 blocks).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>A##</strong> — audio memory used % (peak if higher)</li>
+                              <li><strong>R##</strong> — average freeverb send %</li>
+                              <li><strong>F###</strong> — free audio blocks</li>
+                              <li><strong>C##</strong> — audio CPU %</li>
+                              <li><strong>Enc&nbsp;3</strong> — switch metric; press resets peak counters</li>
+                            </ul>
+                            <span class="how">If A climbs near 100 after a long session, distortion/clicks on mute/save are likely block exhaustion.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">LGHT</span>
+                          <span class="desc">Optional chassis ring-LED strip.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>ON</strong> — mirrors the matrix accent</li>
+                              <li><strong>OFF</strong> — saves juice / keeps the stage dark</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">COLR</span>
+                          <span class="desc">Voice palette / scheme.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>0</strong> — factory rainbow</li>
+                              <li><strong>1</strong> — blue-ish</li>
+                              <li><strong>2</strong> — high-contrast red/violet</li>
+                              <li>Custom fourth slot appears when you drop a <code>scheme.txt</code> from the <a href="../tools/colorsheme/index.html">colour-scheme tool</a></li>
+                            </ul>
+                          </span>
+                        </li>
+<li id="eyes">
+                          <span class="node">EYES</span>
+                          <span class="desc">Idle screensaver (sleeping eyes on the matrix).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — never</li>
+                              <li><strong>1MIN</strong> — eyes after one minute idle (default)</li>
+                              <li><strong>5MIN</strong> — five minutes</li>
+                              <li><strong>15MIN</strong> — fifteen minutes</li>
+                            </ul>
+                            <span class="how">Runs only when stopped on the grid. Any encoder / touch wakes the unit.</span>
+                          </span>
+                        </li>
+<li id="fire">
+                          <span class="node">FIRE</span>
+                          <span class="desc">Sideways embers on the playhead. When a chosen voice’s note lights white, sparks drift sideways off the cell, spread up and down, and fade. Gravity pulls them back toward the playhead.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Size 1–4</strong> — encoder&nbsp;1. 1 is a single cell. Higher adds a wider glow</li>
+                              <li><strong>Count 1–25</strong> — encoder&nbsp;2. How many embers are alive at once</li>
+                              <li><strong>Voice</strong> — encoder&nbsp;3. <strong>OFF</strong>, <strong>ALL</strong>, or <strong>1–8</strong>, <strong>11</strong>, <strong>13</strong>, <strong>14</strong></li>
+                              <li><strong>Gravity 0–8</strong> — click encoder&nbsp;3 once, then turn it. 0 keeps drifting sideways. Higher pulls the embers back toward the playhead</li>
+                              <li><strong>Colour 0–8</strong> — click encoder&nbsp;3 again, then turn it. 0 is white. 8 is the voice colour</li>
+                            </ul>
+                            <span class="how">The bar under the title is gravity on the left and colour on the right. Another click on encoder&nbsp;3 returns to the voice.</span>
+                          </span>
+                        </li>
+</ul></li>
+<li id="rset">
                           <a href="troubleshooting.html#reset"><span class="node">RSET</span></a>
-                          <span class="desc">Six rungs of increasingly spicy recovery. Pick with encoder&nbsp;3, confirm with encoder&nbsp;4 — then wait for the green checkmark.</span>
+                          <span class="desc">Six rungs of increasingly spicy recovery. Pick with encoder&nbsp;3, confirm with encoder&nbsp;2 — then wait for the green checkmark.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>SD</strong> — rescan the whole card into <code>samples/toern_wavs.txt</code> (mute-mode <code>?&gt;</code> random + sample browser cache)</li>
                               <li><strong>EFX</strong> — factory-reset every tone control (patterns &amp; sample assignments survive)</li>
-                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">SETTINGS → LEDS</a>; only PATT-saved work comes back)</li>
+                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">ETC → ADV → LEDS</a>; only PATT-saved work comes back)</li>
                               <li><strong>PATT</strong> — wipe saved patterns <code>1–999.txt</code> (keeps autosave)</li>
                               <li><strong>KIT</strong> — delete pack folders except pack&nbsp;1</li>
                               <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
@@ -737,7 +734,7 @@
                             <span class="how">PATT and KIT are the “I meant it” buttons.</span>
                           </span>
                         </li>
-                      </ul>
+</ul>
                     </li>
                   </ul>
                 </li>
@@ -753,7 +750,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="reference.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Screen index</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011f" defer></script>
+      <script src="handbook-led.js?v=20261011q" defer></script>
     </div>
   </div>
 </div>

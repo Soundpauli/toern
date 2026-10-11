@@ -72,13 +72,13 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 40 | mixGainSynth |
 | 41 | mixGainMaster |
 | 42 | voiceMode (VMOD), 0 = off, 1 = on |
-| 43 | fireVoice (ETC → FIRE), 0 = off, 15 = all voices, else voice 1–8, 11, 13, or 14 |
-| 44 | fireLevel (ETC → FIRE), particle count 1–25. Encoder 2. Out of range loads as 8 |
-| 45 | fireSize (ETC → FIRE), particle size 1–4. Encoder 1. Out of range loads as 1 |
-| 46 | fireGravity (ETC → FIRE), 0–8. 0 keeps drifting sideways. Higher pulls toward the playhead. Encoder 3 after one click. Above 8 loads as 0 |
-| 47 | fireColor (ETC → FIRE), 0–8. 0 white, 8 voice colour. Encoder 3 after a second click. Above 8 loads as 8 |
-| 48 | imageMode (ETC → IMG), 0 = off, 1 = on |
-| 49 | eyesMode (ETC → EYES), 0 = OFF, 1 = 1MIN, 2 = 5MIN, 3 = 15MIN. Out of range loads as 1 |
+| 43 | fireVoice (ETC → ADV → FIRE), 0 = off, 15 = all voices, else voice 1–8, 11, 13, or 14 |
+| 44 | fireLevel (ETC → ADV → FIRE), particle count 1–25. Encoder 2. Out of range loads as 8 |
+| 45 | fireSize (ETC → ADV → FIRE), particle size 1–4. Encoder 1. Out of range loads as 1 |
+| 46 | fireGravity (ETC → ADV → FIRE), 0–8. 0 keeps drifting sideways. Higher pulls toward the playhead. Encoder 3 after one click. Above 8 loads as 0 |
+| 47 | fireColor (ETC → ADV → FIRE), 0–8. 0 white, 8 voice colour. Encoder 3 after a second click. Above 8 loads as 8 |
+| 48 | imageMode (MODE → IMG), 0 = off, 1 = on |
+| 49 | eyesMode (ETC → ADV → EYES), 0 = OFF, 1 = 1MIN, 2 = 5MIN, 3 = 15MIN. Out of range loads as 1 |
 | 50 | IMG one-time migrate marker (`0xA5`) |
 | 51 | sidechainVoice (MIDI → TRIG), 0 = OFF, else voice 1–8, 11, 13, or 14. Invalid loads as 1 |
 | 52 | analogExtClock (BPM encoder-3 click in EXT), 0 = MIDI clock in, 1 = analog CLK-IN (J26) |

@@ -1,10 +1,12 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 12
+#define LOOK_PAGES_COUNT 4
 #define RECS_PAGES_COUNT 5
 #define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 7
-#define ETC_PAGES_COUNT 12
+#define ETC_PAGES_COUNT 5
+#define MODE_PAGES_COUNT 9
+#define ADV_PAGES_COUNT 7
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
@@ -74,27 +76,19 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"SMP", 3, false, nullptr},           // Wave Selection
   {"BPM", 5, false, nullptr},           // BPM/Volume
   {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, GAIN, LOUT, PREV, 2-CH)
-  {"SETT", 19, false, nullptr},         // SETTINGS submenu (FLW, PREV, VIEW, PMD, LOOP)
+  {"SETT", 19, false, nullptr},         // SETT submenu (VIEW, CTRL, DRAW, MUTE)
   {"REC", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
-  {"SONG", 22, false, nullptr},         // Song Mode - arrange patterns into songs
-  {"ETC", 34, false, nullptr}           // ETC submenu (AUTO, RST)
+  {"MODE", 61, false, nullptr},         // Performance modes; inherits SONG icon/color
+  {"ETC", 34, false, nullptr}           // ETC submenu (INFO, SD, BATT, ADV, RSET)
 };
 
 // LOOK/SETTINGS submenu pages (SETTINGS menu uses LOOK submenu)
 MenuPage lookPages[LOOK_PAGES_COUNT] = {
-  {"FLW", 10, false, nullptr},          // Flow Mode
-  {"PREV", 33, false, nullptr},         // Preview trigger mode (ON/PRSS/SYNC)
-  {"VIEW", 17, false, nullptr},         // Simple Notes View
-  {"PMD", 9, false, nullptr},           // Pattern Mode
-  {"LOOP", 18, false, nullptr},         // Loop Length
-  {"VMOD", 54, false, nullptr},         // Voice mode: each channel loops its own pages
-  {"CTRL", 25, false, nullptr},         // Encoder control mode
-  {"LEDS", 23, false, nullptr},         // LED mode (1, 1B, 2, 2B)
-  {"PONG", 24, false, nullptr},         // Pong Toggle
-  {"CRSR", 32, false, nullptr},         // Cursor type (NORM/CHNR)
-  {"DRAW", 38, false, nullptr},         // DRAW mode toggle (L+R / R)
-  {"MUTE", 47, false, nullptr}          // DRAW-R full mute: custom unmask set (encoder 0010 exit)
+  {"VIEW", 17, false, nullptr},
+  {"CTRL", 25, false, nullptr},
+  {"DRAW", 38, false, nullptr},
+  {"MUTE", 47, false, nullptr}
 };
 
 static inline uint16_t pongSpeedToInterval(int speed) {
@@ -143,19 +137,51 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
 
 // ETC submenu pages
 MenuPage etcPages[ETC_PAGES_COUNT] = {
-  {"INFO", 39, false, nullptr},          // Info / version / credits
-  {"RAM", 52, false, nullptr},           // Live audio/reverb/memory dashboard
-  {"SD", 49, false, nullptr},            // USB Serial SD file server (active while on this page)
-  {"AUTO", 15, true, "PAGES"},          // AI Song Generation + Page Count
-  {"LGHT", 40, false, nullptr},          // LED Strip toggle (OFF/ON)
-  {"COLR", 41, false, nullptr},          // Color scheme selection (1, 2, 3)
-  {"BATT", 42, false, nullptr},          // Estimated LiPo percentage from Teensy A16 / pin 40
-  {"EYES", 57, false, nullptr},          // Screensaver idle: OFF / 1MIN / 5MIN / 15MIN
-  {"CHLD", 48, false, nullptr},          // Child lock: require touch2->touch1 to enter menu
-  {"FIRE", 55, false, nullptr},          // Playhead sparks on one voice
-  {"IMG", 56, false, nullptr},           // Image mode: black matrix, paint cycles voice/color
-  {"RSET", 16, true, "MODE"}             // Reset Effects / SD Rescan (EFX or SD)
+  {"INFO", 39, false, nullptr},
+  {"SD", 49, false, nullptr},
+  {"BATT", 42, false, nullptr},
+  {"ADV", 62, false, nullptr},
+  {"RSET", 16, true, "MODE"}
 };
+MenuPage modePages[MODE_PAGES_COUNT] = {
+  {"FLOW", 10, false, nullptr},
+  {"PMOD", 9, false, nullptr},
+  {"LOOP", 18, false, nullptr},
+  {"VMOD", 54, false, nullptr},
+  {"CHLD", 48, false, nullptr},
+  {"IMG", 56, false, nullptr},
+  {"PONG", 24, false, nullptr},
+  {"SONG", 22, false, nullptr},
+  {"AUTO", 15, true, "PAGES"}
+};
+MenuPage advancedPages[ADV_PAGES_COUNT] = {
+  {"CRSR", 32, false, nullptr},
+  {"LEDS", 23, false, nullptr},
+  {"RAM", 52, false, nullptr},
+  {"LGHT", 40, false, nullptr},
+  {"COLR", 41, false, nullptr},
+  {"EYES", 57, false, nullptr},
+  {"FIRE", 55, false, nullptr}
+};
+
+// These groups share the existing setting renderer/control handlers. IDs and
+// EEPROM offsets stay unchanged; only their navigation hierarchy changes.
+enum class SystemMenuGroup : uint8_t { Etc, Mode, Advanced };
+static SystemMenuGroup currentSystemMenuGroup = SystemMenuGroup::Etc;
+static MenuPage* activeSystemPages() {
+  if (currentSystemMenuGroup == SystemMenuGroup::Mode) return modePages;
+  if (currentSystemMenuGroup == SystemMenuGroup::Advanced) return advancedPages;
+  return etcPages;
+}
+static int activeSystemPageCount() {
+  if (currentSystemMenuGroup == SystemMenuGroup::Mode) return MODE_PAGES_COUNT;
+  if (currentSystemMenuGroup == SystemMenuGroup::Advanced) return ADV_PAGES_COUNT;
+  return ETC_PAGES_COUNT;
+}
+// Returning from MODE restores the MODE root; ADV restores ETC.
+int systemMenuParentPage() {
+  return currentSystemMenuGroup == SystemMenuGroup::Mode ? 8 : 9;
+}
 
 // --- INFO page animation state ---
 static bool infoPageFirstEnter = true;
@@ -380,6 +406,7 @@ FLASHMEM void prepareMenuEntry() {
     currentMidiPage = 0;
     currentVolPage = 0;
     currentEtcPage = 0;
+    currentSystemMenuGroup = SystemMenuGroup::Etc;
   }
   extern Mode menu;
   menu.pos[3] = currentMenuPage;
@@ -1967,8 +1994,9 @@ FLASHMEM void showVolMenu() {
 FLASHMEM void showEtcMenu() {
   static uint32_t lastPosHash = 0;
   // Redraw only when page/setting changes, except INFO which animates continuously.
-  int pageIndex = currentEtcPage;
-  MenuPage* currentPageInfo = &etcPages[pageIndex];
+  const int pageCount = activeSystemPageCount();
+  int pageIndex = constrain(currentEtcPage, 0, pageCount - 1);
+  MenuPage* currentPageInfo = &activeSystemPages()[pageIndex];
   int mainSetting = currentPageInfo->mainSetting;
 
   static int lastRenderedEtcPage = -1;
@@ -2014,9 +2042,9 @@ FLASHMEM void showEtcMenu() {
     // Match the parent menu color (ETC).
     const CRGB parent = currentMenuParentTextColor();
     const CRGB parentDim = dimIconColorFromText(parent);
-    int startX = (int)maxX - ETC_PAGES_COUNT + 1;
+    int startX = (int)maxX - pageCount + 1;
     if (startX < 1) startX = 1;
-    for (int i = 0; i < ETC_PAGES_COUNT; i++) {
+    for (int i = 0; i < pageCount; i++) {
       CRGB indicatorColor = (i == pageIndex) ? parent : parentDim;
       light(startX + i, maxY, indicatorColor);
     }
@@ -2057,7 +2085,8 @@ FLASHMEM void showEtcMenu() {
       // ETC submenu: encoder 3 = value on RSET(16), LGHT(40), COLR(41), CHLD(48), RAM(52), FIRE(55), IMG(56), EYES(57)
       CRGB indicatorColor = currentMenuParentTextColor();
       const bool etcValuePage =
-          (mainSetting == 16 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
+          (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 ||
+           mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 16 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
            mainSetting == 52 || mainSetting == 55 || mainSetting == 56 ||
            mainSetting == 57);
       // Matrix chrome without I2C; rings via cache
@@ -2107,10 +2136,10 @@ FLASHMEM void showEtcMenu() {
     etcMenuFirstEnter = false;
   }
   
-  ensureEnc3Range(0, (int)(ETC_PAGES_COUNT - 1));
+  ensureEnc3Range(0, (int)(pageCount - 1));
   if (currentMode->pos[3] != lastEtcPagePosition) {
     currentEtcPage = currentMode->pos[3];
-    if (currentEtcPage >= ETC_PAGES_COUNT) currentEtcPage = ETC_PAGES_COUNT - 1;
+    if (currentEtcPage >= pageCount) currentEtcPage = pageCount - 1;
     if (currentEtcPage < 0) currentEtcPage = 0;
     lastEtcPagePosition = currentEtcPage;
   }
@@ -2165,7 +2194,7 @@ static inline CRGB currentMenuParentTextColor() {
   if (inRecsSubmenu) return menuTextColorFromCol(7);
   if (inMidiSubmenu) return menuTextColorFromCol(8);
   if (inVolSubmenu)  return menuTextColorFromCol(5);
-  if (inEtcSubmenu)  return menuTextColorFromCol(14);
+  if (inEtcSubmenu)  return menuTextColorFromCol(currentSystemMenuGroup == SystemMenuGroup::Mode ? 13 : 14);
   return UI_WHITE;
 }
 
@@ -2450,7 +2479,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         const CRGB tc = currentMenuParentTextColor();
         drawText("LGHT", 2, 10, tc);
         bool enabled = getLedStripEnabled();
-        drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+        drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? UI_GREEN : UI_RED);
         drawIndicator('L', enabled ? 'G' : 'R', 3);
       }
       break;
@@ -2478,8 +2507,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         char pctText[6];
         snprintf(pctText, sizeof(pctText), "%d%%", pct);
         
-        // Color scale: >30% Green, 15-30% Orange, <15% Red
-        CRGB stateColor = (pct > 30) ? UI_GREEN : (pct > 15) ? CRGB(255, 165, 0) : UI_RED;
+        // Color scale: >20% Green, (BATT_WARN_PCT+1)–20% Orange, ≤BATT_WARN_PCT Red
+        CRGB stateColor = (pct > 20) ? UI_GREEN
+                                     : (pct > BATT_WARN_PCT) ? CRGB(255, 165, 0)
+                                                             : UI_RED;
         drawText(pctText, 2, 3, stateColor);
       }
       break;
@@ -2490,7 +2521,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         const CRGB tc = currentMenuParentTextColor();
         drawText("CHLD", 2, 10, tc);
         bool enabled = getChildLockEnabled();
-        drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+        drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? UI_GREEN : UI_RED);
         drawIndicator('L', enabled ? 'G' : 'R', 3);
       }
       break;
@@ -2547,7 +2578,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
           snprintf(num, sizeof(num), "%u", fireFocus == 1 ? fireGravity : fireColor);
           drawText(num, 12, 3, fireFocus == 1 ? CRGB(220, 220, 220) : CRGB(255, 220, 120));
         } else if (!fireVoice) {
-          drawText(wide ? "OFF" : "-", voiceX, 3, CRGB(255, 0, 0));
+          drawText(wide ? "OFF" : "-", voiceX, 3, UI_RED);
         } else if (fireVoice == 15) {
           drawText(wide ? "ALL" : "A", voiceX, 3, CRGB(255, 220, 120));
         } else {
@@ -2607,12 +2638,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
       
-    case 22: // SONG - Song Mode
-      // SONG = song
+    case 22: // MODE > SONG: plain entry label
       {
         const CRGB tc = menuTextColorFromCol(13);
-        showIcons(ICON_SONG, dimIconColorFromText(tc));
-        drawText("SONG", 2, 3, tc);
+        drawText("SONG", 2, 10, tc);
       }
       break;
       
@@ -2652,15 +2681,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       clearTextArea(6, 3, 8);
       clearTextArea(10, 3, 8);
       if (pong) {
-        drawText("ON", 10, 3, UI_GREEN);
+        drawText("ON", 2, 3, UI_GREEN);
       } else {
-        drawMenuValue("OFF", 6, 3, UI_RED);
+        drawMenuValue("OFF", 2, 3, UI_RED);
       }
       if (pong) {
         char speedText[6];
         int speedValue = pongIntervalToSpeed(pongUpdateInterval);
         snprintf(speedText, sizeof(speedText), "%02d", speedValue);
-        drawText(speedText, 2, 3, CRGB(0, 150, 255));
+        drawText(speedText, 10, 3, CRGB(0, 150, 255));
         {
           CRGB indicatorColor = getIndicatorColor('B');
           Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
@@ -2670,6 +2699,18 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         Encoder[2].writeRGBCode(0x000000);
       }
       break;
+
+    case 61: { // MODE inherits the former SONG main-menu identity.
+      const CRGB tc = menuTextColorFromCol(13);
+      showIcons(ICON_SONG, dimIconColorFromText(tc));
+      drawText("MODE", 2, 3, tc);
+      break;
+    }
+    case 62: { // ETC > ADV
+      const CRGB tc = currentMenuParentTextColor();
+      drawText("ADV", 2, 10, tc);
+      break;
+    }
 
     case 34: // ETC - Submenu
       {
@@ -2765,7 +2806,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     
     case 29: { // PREV - Preview volume - encoder 3
-      drawText("PREV", 2, 10, currentMenuParentTextColor());
+      const char* trigger = previewTriggerMode == PREVIEW_MODE_PRESS ? "PRSS" :
+          (previewTriggerMode == PREVIEW_MODE_SYNC ? "SYNC" : "ON");
+      drawText(trigger, 2, 10, previewTriggerMode == PREVIEW_MODE_ON ? UI_GREEN : currentMenuParentTextColor());
+      drawIndicator('L', 'Y', 2);
+      Encoder[1].writeRGBCode(0xFFFF00);
       extern unsigned int previewVol;
       // Display as 0-50 instead of 0.00-0.50
       char volText[8];
@@ -2813,7 +2858,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       clearTextArea(6, 3, 8);
       extern int8_t stereoChannel;
       if (stereoChannel == 0) {
-        drawText("OFF", 6, 3, UI_RED);
+        drawText("OFF", 2, 3, UI_RED);
       } else if (stereoChannel == 1) {
         drawText("M+P", 6, 3, UI_GREEN);
       } else { // stereoChannel == 2
@@ -2832,7 +2877,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       // Display was inverted: the internal "enabled" flag actually corresponds to the speaker
       // being OFF, so present the real speaker state (ON when !enabled).
       bool speakerOn = !getSpkrEnabled();
-      drawMenuValue(speakerOn ? "ON" : "OFF", 2, 3, speakerOn ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+      drawMenuValue(speakerOn ? "ON" : "OFF", 2, 3, speakerOn ? UI_GREEN : UI_RED);
       drawIndicator('L', speakerOn ? 'G' : 'R', 3);
       break;
     }
@@ -2947,8 +2992,6 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
         }
       }
       
-      // Draw "PAGE" text in pink at the bottom
-      drawText("PAGE", 2, 3, CRGB(0, 0, 10)); // Pink color
       break;
     }
 
@@ -4409,10 +4452,17 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     
     case 29: { // PREV - Preview volume
       static int lastPvVol = -1;
+      static int lastPreviewTrigger = -1;
       
       extern unsigned int previewVol;
       
       if (prevMenuFirstEnter) {
+        const int trigger = constrain(previewTriggerMode, 0, 2);
+        Encoder[1].writeMin((int32_t)0);
+        Encoder[1].writeMax((int32_t)2);
+        Encoder[1].writeCounter((int32_t)trigger);
+        currentMode->pos[1] = trigger;
+        lastPreviewTrigger = trigger;
         // Load previewVol from EEPROM (0-50), direct mapping to encoder range (0-50)
         int encoderVal = constrain((int)previewVol, 0, 50);
         
@@ -4427,6 +4477,13 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         updatePreviewVolume();
       }
       
+      if ((int)currentMode->pos[1] != lastPreviewTrigger) {
+        previewTriggerMode = constrain((int)currentMode->pos[1], 0, 2);
+        lastPreviewTrigger = previewTriggerMode;
+        currentMode->pos[1] = previewTriggerMode;
+        saveSingleModeToEEPROM(20, (int8_t)previewTriggerMode);
+        redrawMain(setting);
+      }
       if (currentMode->pos[2] != lastPvVol) {
         int encoderPos = constrain(currentMode->pos[2], 0, 50);
         previewVol = encoderPos;  // Store 0-50 (0.00-0.50)
@@ -4989,8 +5046,12 @@ FLASHMEM void switchMenu(int menuPosition){
         menuRequestFullRedraw();
         break;
 
+        case 61:
+        case 62:
         case 34:
-        // Enter ETC submenu at first page
+        currentSystemMenuGroup = menuPosition == 61 ? SystemMenuGroup::Mode :
+            (menuPosition == 62 ? SystemMenuGroup::Advanced : SystemMenuGroup::Etc);
+        // Enter the selected group at its first page
         inEtcSubmenu = true;
         currentEtcPage = 0;
         currentMode->pos[3] = 0;  // Set mode position to match
@@ -5031,7 +5092,9 @@ FLASHMEM void switchMenu(int menuPosition){
         }
         
         case 22: {
-        // Enter SONG mode
+        // Enter SONG mode from MODE, without leaving stale submenu state.
+        inEtcSubmenu = false;
+        currentMenuPage = 8;
         extern Mode songMode;
         switchMode(&songMode);
         break;
@@ -5292,7 +5355,7 @@ FLASHMEM void drawSimpleNotesView() {
 
 FLASHMEM void drawLoopLength() {
   if (loopLength == 0) {
-    drawMenuValue("OFF", 2, 3, CRGB(100, 100, 100));
+    drawMenuValue("OFF", 2, 3, UI_RED);
   } else {
     // Avoid drawNumber (right-align + nested FastLEDshow).
     char buf[2];
@@ -5501,6 +5564,7 @@ FLASHMEM void enterEtcSdFromHost() {
   inMidiSubmenu = false;
   inVolSubmenu = false;
   inEtcSubmenu = true;
+  currentSystemMenuGroup = SystemMenuGroup::Etc;
   currentMenuPage = etcParent;
   currentEtcPage = sdPage;
   currentMode->pos[3] = sdPage;
@@ -5523,7 +5587,7 @@ FLASHMEM int getCurrentMenuMainSetting() {
     return volPages[currentVolPage].mainSetting;
   }
   if (inEtcSubmenu) {
-    return etcPages[currentEtcPage].mainSetting;
+    return activeSystemPages()[constrain(currentEtcPage, 0, activeSystemPageCount() - 1)].mainSetting;
   }
   return menuPages[currentMenuPage].mainSetting;
 }

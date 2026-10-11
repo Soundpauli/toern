@@ -33,6 +33,10 @@ The matrix usually shows **0–32** (or enums as text). Mapping functions conver
 3. Add a slider definition for filter UI (`SliderDefEntry` / name index tables).
 4. Keep display enums in sync with `enumNames` pointers.
 
+## Sample page 1 — TIME
+
+On sample channels, filter UI page 1 includes **TIME** (`ARR_STRETCH`): independent WSOLA time-stretch, separate from OCTV/DTNE pitch. Default **11 = off**. Implementation and player wiring are covered under [Samples](./samples#time--independent-stretch-wsola).
+
 ## Fast filter encoder
 
 During play, encoder #3 can adjust a per-channel “default fast filter” target (`defaultFastFilter`, `setDefaultFastFilterValue`) without entering full filter mode — useful when tracing runtime parameter paths.

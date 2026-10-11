@@ -265,10 +265,12 @@
   }
 
   function playSubFrame(m, pageIdx, title, enc2, enc3) {
+    const slots = [[0,9,13], [3,7,5], [0,4,6], [1,9,13], [2,9,13], [3,9,13], [1,4,6], [1,7,14], [6,9,13], [0,7,14], [2,4,6], [3,4,6]];
+    const [index, count, parent] = slots[pageIdx];
     m.clear();
-    largeInd4Parent(m, 6);
-    drawSubmenuDots16(m, pageIdx, 12, 6);
-    const tc = menuTextFromCol(6);
+    largeInd4Parent(m, parent);
+    drawSubmenuDots16(m, index, count, parent);
+    const tc = menuTextFromCol(parent);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc2) m.indL(2, enc2);
     if (enc3) m.indL(3, enc3);
@@ -278,7 +280,7 @@
     m.clear();
     largeInd4Parent(m, 5);
     drawSubmenuDots16(m, pageIdx, 7, 5);
-    const tc = menuTextFromCol(5);
+    const tc = title === "ON" ? [0, 120, 0] : title === "OFF" ? [120, 0, 0] : menuTextFromCol(5);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc1) m.indL(1, enc1);
     if (enc2) m.indL(2, enc2);
@@ -307,10 +309,12 @@
   }
 
   function etcSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
+    const slots = [[0,5,14], [2,7,14], [1,5,14], [8,9,13], [3,7,14], [4,7,14], [2,5,14], [5,7,14], [4,9,13], [6,7,14], [5,9,13], [4,5,14]];
+    const [index, count, parent] = slots[pageIdx];
     m.clear();
-    largeInd4Parent(m, 14);
-    drawSubmenuDots16(m, pageIdx, 12, 14);
-    const tc = menuTextFromCol(14);
+    largeInd4Parent(m, parent);
+    drawSubmenuDots16(m, index, count, parent);
+    const tc = menuTextFromCol(parent);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc1) m.indL(1, enc1);
     if (enc2) m.indL(2, enc2);
@@ -751,7 +755,7 @@
       rootMenuPage(m, 7, 8, "MIDI");
     },
     mr_song(m) {
-      rootMenuPage(m, 8, 13, "SONG");
+      rootMenuPage(m, 8, 13, "MODE");
     },
     mr_etc(m) {
       rootMenuPage(m, 9, 14, "ETC");
@@ -783,7 +787,7 @@
       drawText(m, "12", 2, 3, 255, 180, 200);
     },
     vol_prev(m) {
-      volSubFrame(m, 3, "PREV", "", "", "G");
+      volSubFrame(m, 3, "ON", "", "Y", "G");
       drawText(m, "35", 2, 3, 0, 160, 80);
     },
     vol_2ch(m) {
@@ -792,7 +796,7 @@
     },
     vol_spkr(m) {
       volSubFrame(m, 5, "SPKR", "", "", "G");
-      drawText(m, "ON", 2, 3, 0, 255, 0);
+      drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     vol_hfc(m) {
       volSubFrame(m, 6, "HFC", "", "", "R");
@@ -800,19 +804,19 @@
     },
     lk_flw(m) {
       playSubFrame(m, 0, "FLOW", "", "G");
-      drawText(m, "ON", 2, 3, 0, 255, 0);
+      drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     lk_prev(m) {
-      playSubFrame(m, 1, "PREV", "", "B");
-      drawText(m, "PRSS", 2, 3, 0, 150, 255);
+      volSubFrame(m, 3, "PRSS", "", "Y", "G");
+      drawText(m, "35", 2, 3, 0, 160, 80);
     },
     lk_prev_on(m) {
-      playSubFrame(m, 1, "PREV", "", "G");
-      drawText(m, "ON", 2, 3, 0, 255, 0);
+      volSubFrame(m, 3, "ON", "", "Y", "G");
+      drawText(m, "35", 2, 3, 0, 160, 80);
     },
     lk_prev_sync(m) {
-      playSubFrame(m, 1, "PREV", "", "Y");
-      drawText(m, "SYNC", 2, 3, 255, 165, 0);
+      volSubFrame(m, 3, "SYNC", "", "Y", "G");
+      drawText(m, "35", 2, 3, 0, 160, 80);
     },
     bpm_ext_ok(m) {
       drawBPMScreenLike(m, 124.0, "ext_ok");
@@ -838,7 +842,7 @@
       drawText(m, "FULL", 2, 3, 200, 200, 200);
     },
     lk_pmd(m) {
-      playSubFrame(m, 3, "PMODE", "", "Y");
+      playSubFrame(m, 3, "PMOD", "", "Y");
       drawText(m, "SONG", 2, 3, 255, 255, 0);
     },
     lk_loop(m) {
@@ -847,7 +851,7 @@
     },
     lk_vmod(m) {
       playSubFrame(m, 5, "VMOD", "", "G");
-      drawText(m, "ON", 2, 3, 0, 255, 0);
+      drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     lk_ctrl(m) {
       playSubFrame(m, 6, "CTRL", "", "G");
@@ -861,13 +865,13 @@
       playSubFrame(m, 8, "PONG", "", "B");
       const on = true;
       if (on) {
-        drawText(m, "ON", 10, 3, 0, 255, 0);
-        drawText(m, "42", 2, 3, 0, 150, 255);
+        drawText(m, "ON", 2, 3, 0, 120, 0);
+        drawText(m, "42", 10, 3, 0, 150, 255);
         const bx = 3 + (hbPongPhase % 10);
         m.set(bx, 6, 0, 200, 255);
         m.set(bx + 1, 6, 0, 160, 220);
       } else {
-        drawText(m, "OFF", 6, 3, 255, 0, 0);
+        drawText(m, "OFF", 2, 3, 120, 0, 0);
       }
     },
     lk_crsr(m) {
@@ -933,7 +937,7 @@
     },
     md_clmp(m) {
       midiSubFrame(m, 4, "FOLD", "", "", "G");
-      drawText(m, "ON", 2, 3, 0, 255, 0);
+      drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     md_sync(m) {
       midiSubFrame(m, 5, "SNC1", "Y", "W", "");
@@ -953,7 +957,21 @@
     },
     md_wrte(m) {
       midiSubFrame(m, 9, "OVWR", "", "", "R");
-      drawText(m, "OFF", 2, 3, 255, 0, 0);
+      drawText(m, "OFF", 2, 3, 120, 0, 0);
+    },
+    et_adv(m) {
+      m.clear();
+      largeInd4Parent(m, 14);
+      drawSubmenuDots16(m, 3, 5, 14);
+      const tc = menuTextFromCol(14);
+      drawText(m, "ADV", 2, 10, tc[0], tc[1], tc[2]);
+    },
+    md_song(m) {
+      m.clear();
+      largeInd4Parent(m, 13);
+      drawSubmenuDots16(m, 7, 9, 13);
+      const tc = menuTextFromCol(13);
+      drawText(m, "SONG", 2, 10, tc[0], tc[1], tc[2]);
     },
     et_info(m) {
       etcSubFrame(m, 0, "INFO", "", "", "");
@@ -974,11 +992,11 @@
         else if (x >= 9 && x <= 12) m.set(x, 8, 0, 255, 0);
         else m.set(x, 8, 0, 0, 0);
       }
-      drawText(m, "PAGE", 2, 3, 80, 80, 120);
+
     },
     et_lght(m) {
       etcSubFrame(m, 4, "LGHT", "", "", "G");
-      drawText(m, "ON", 2, 3, 0, 255, 0);
+      drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     et_colr(m) {
       etcSubFrame(m, 5, "COLR", "", "", "G");
@@ -994,7 +1012,7 @@
     },
     et_chld(m) {
       etcSubFrame(m, 8, "CHLD", "", "", "R");
-      drawText(m, "OFF", 2, 3, 255, 0, 0);
+      drawText(m, "OFF", 2, 3, 120, 0, 0);
     },
     et_fire(m) {
       etcSubFrame(m, 9, "FIRE", "O", "O", "G");
@@ -1005,7 +1023,7 @@
     },
     et_img(m) {
       etcSubFrame(m, 10, "IMG", "", "", "G");
-      drawText(m, "ON", 2, 3, 0, 255, 0);
+      drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     et_rset(m) {
       etcSubFrame(m, 11, "RSET", "", "", "O");

@@ -15,6 +15,7 @@ Sample voices are channels **1–8**. Logic concentrates in `toern_sample.ino` a
 - Load into a channel’s playback buffer / resampler
 - Trim start/end (`GLOB.seek`, `GLOB.seekEnd`, …)
 - Reverse / direction handling
+- Independent time-stretch via filter page 1 **TIME** (`ARR_STRETCH` / WSOLA in the resampler)
 - Samplepack 0: per-voice custom paths (`SMP.samplePathRel`, `SMP.sp0Active`)
 - Record paths feeding the same sample machinery
 
@@ -31,6 +32,15 @@ Call these around blocking file work when audio should keep playing.
 ## Players
 
 `AudioPlayArrayResmp` instances (`sound0`…`sound8` in `audioinit.h`) play from memory with rate control via the custom resampler. Channel 0 is used for preview / utility paths; performance voices are 1–8.
+
+## TIME — independent stretch (WSOLA)
+
+Sample filter page 1 exposes **TIME** next to RES / DTNE / OCTV (`ARR_STRETCH` in the slider tables). UI range is **0–22**; **11 = OFF** (default). Values below 11 shorten (~−10%…0%); above 11 lengthen (~0%…+10%).
+
+- **OCTV / DTNE** change playback rate (pitch moves with rate).
+- **TIME** stretches duration around the current pitched rate via WSOLA in `src/toern_wsola.h`, driven from `src/resamplerReader.h` (`setTimeStretch` / `_timeStretchSetting`).
+
+Operator-facing detail lives in the handbook sound chapter; keep firmware mappings and those docs in sync when the range changes.
 
 ## UI modes
 
