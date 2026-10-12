@@ -73,4 +73,4 @@ npm run build
 
 ## Operator handbook
 
-End-user docs are static HTML under `handbook/` — separate from this Docusaurus tree.
+End-user docs are static HTML under `handbook/`, served at [handbook.toern.live](https://handbook.toern.live/) — not copied into the Netlify website.

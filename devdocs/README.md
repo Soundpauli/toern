@@ -2,7 +2,7 @@
 
 Developer documentation for the TŒRN firmware — how the code is structured and how the pieces talk to each other.
 
-This is **not** the operator handbook (device usage). That lives in the repo-root [`handbook/`](../handbook/) tree (copied into `website/handbook/` for deploy, same pattern as this docs site).
+This is **not** the operator handbook (device usage). That lives in the repo-root [`handbook/`](../handbook/) tree and is published at [handbook.toern.live](https://handbook.toern.live/).
 
 ## Layout
 
@@ -11,7 +11,7 @@ This is **not** the operator handbook (device usage). That lives in the repo-roo
 | `devdocs/` | This Docusaurus app (source of truth in the repo) |
 | `website/docs/` | Built static files served at `/docs/` (copied in manually for deploy) |
 
-Like `handbook/`, sources live at the repo root. Publish by building here and copying the output into `website/docs/` before deploy.
+Sources live at the repo root. Publish by building here and copying the output into `website/docs/` before deploy.
 
 ## Local preview
 
@@ -30,7 +30,7 @@ Open the URL from the terminal (routes are under `/docs/…`).
 cd devdocs
 npm install
 npm run build
-# copy build/ → website/docs/  (manual, like handbook → website/handbook/)
+# copy build/ → website/docs/  (manual)
 ```
 
 Or from the website package (if present locally):

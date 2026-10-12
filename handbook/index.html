@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body hb-body--home">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -26,16 +27,16 @@
           <div class="hb-cover__copy">
             <p class="hb-cover__label">Sampler / Sequencer / Instrument</p>
             <h1>The handbook</h1>
-            <div class="hb-cover__bottom"><span>TŒRN</span><span>16 × 16<br />Firmware v3.0x</span></div>
+            <div class="hb-cover__bottom"><span>TŒRN</span><span><span data-hb-size>32 × 16</span><br />Firmware v3.0x</span></div>
           </div>
-          <div class="hb-cover__matrix" aria-hidden="true"><div></div></div>
+          <div class="hb-cover__matrix"><canvas class="led-matrix" data-scene="boot_cover" data-decoration width="640" height="320" role="img" aria-label="Startup animation: two moving curves and the colour-changing TŒRN logo."></canvas></div>
         </header>
         <section class="hb-sub hb-welcome-top" id="what-it-is">
           <aside class="hb-sticky" id="handbook-version">
             <p><strong>Firmware.</strong> This handbook matches the <strong>v3.0x</strong> line (the exact build string is on ETC → INFO). Menu pages, clock colours, and encoder tables below describe that generation.</p>
             <p>Questions about an order: <a href="mailto:info@toern.live">info@toern.live</a>. If a page and the unit disagree, <a href="https://github.com/Soundpauli/toern/issues" rel="noopener" target="_blank">an issue on GitHub</a> helps the next revision.</p>
           </aside>
-          <p class="lede"><span class="hb-brand">TŒRN</span> is a sampler and step sequencer. The 16×16 RGB matrix is the display: time runs left-to-right across each row, sixteen voices stack upward, and four rotary encoders on the edge let you draw, sculpt and arrange. Samples live on a Micro&nbsp;SD card; a built-in three-voice synth and two mono synths cover melodic work; eight sample lanes carry drums and one-shots; everything can be recorded right from the device.</p>
+          <p class="lede"><span class="hb-brand">TŒRN</span> is a sampler and step sequencer. The RGB LED grid is the display: time runs left-to-right across each row, voice lanes stack upward, and four rotary encoders on the edge let you draw, sculpt and arrange. Samples live on a Micro&nbsp;SD card; a built-in three-voice synth and two mono synths cover melodic work; eight sample lanes carry drums and one-shots; everything can be recorded right from the device.</p>
           <p>This handbook is the path after your <span class="hb-brand">TŒRN</span> arrives. Start with <a href="first-beat.html">First beat in 1 minute</a>, then read onward — each chapter builds on the one before. Power is USB-C. A battery and a microSD card come from you; card setup is on the <a href="hardware.html#card-layout">hardware page</a>. Power users can jump to the <a href="reference.html">screen index</a> or the <a href="menus.html">menu map</a>.</p>
         </section>
 

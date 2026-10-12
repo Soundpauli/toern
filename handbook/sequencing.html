@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -31,7 +32,7 @@
             <p class="lede">Draw mode is what greets you on power-up. Every voice is visible at full intensity; the red playhead line runs across all rows at once; the cursor is the focus point.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="draw" width="16" height="16" role="img" aria-label="Draw grid"></canvas>
+                <canvas class="led-matrix" data-scene="draw" width="640" height="320" role="img" aria-label="Draw grid"></canvas>
               </div>
               <p class="viz-caption--below">Example draw grid: notes from four voices, playhead behind column 7.</p>
               <div class="hb-enc-grid">
@@ -51,7 +52,7 @@
                   <tr><th>Long</th><td>Open filters</td><td>Jumps into the filter editor for the focused voice (FX-capable channels).</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Move column (time)</td><td>Slides the cursor across steps 1…16.</td></tr>
+                  <tr><th>Turn</th><td>Move column (time)</td><td>Slides the cursor across steps 1…<span data-hb-steps>32</span>.</td></tr>
                   <tr><th>Short</th><td>Place note</td><td>Writes a note at the cursor if the cell is empty.</td></tr>
                   <tr><th>Long</th><td>Paint trail <em>or</em> <a href="note-detail.html">note detail</a></td><td>On an empty cell: latch paint and turn to draw a trail. On an existing note: open the per-step editor.</td></tr>
                 </tbody></table></div>
@@ -68,7 +69,7 @@
             <p class="lede">Same logic as draw, but only the selected voice is drawn at full intensity; everything else fades to its base tint. Good for working on a single instrument without visual noise from the others.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="single" width="16" height="16" role="img" aria-label="Single mode"></canvas>
+                <canvas class="led-matrix" data-scene="single" width="640" height="320" role="img" aria-label="Single mode"></canvas>
               </div>
               <p class="viz-caption--below">Single mode: focus voice is bright white, neighbouring voices show as dim base colours.</p>
               <p class="hb-device__intro">Enter single mode with <strong>tap L (touch&nbsp;1)</strong> from draw while the cursor selects voice 1–8, 11, 13, or 14 (tap again to return). Entry is blocked on the page strip (row&nbsp;16) and empty voice rows 9, 10, and 12. Once inside single mode, row&nbsp;16 remains available for page tools. All gestures from draw apply, but: <a href="advanced-sequencing.html#copy-paste">copy/paste</a> only grabs the focused channel; the clear-page chord (encoder&nbsp;1 + encoder&nbsp;4 both long) only clears the focused channel; <a href="advanced-sequencing.html#auto-extend">randomize</a> from the page row affects only the focused channel.</p>
@@ -108,7 +109,7 @@
             </ul>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="paint" width="16" height="16" role="img" aria-label="Paint — set triggers"></canvas>
+                <canvas class="led-matrix" data-scene="paint" width="640" height="320" role="img" aria-label="Paint — set triggers"></canvas>
               </div>
               <p class="viz-caption--below">L+R paint: enc&nbsp;4 writes along the timeline while enc&nbsp;1 picks the lane.</p>
             </article>
@@ -130,7 +131,7 @@
             </ul>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="unpaint" width="16" height="16" role="img" aria-label="R mode"></canvas>
+                <canvas class="led-matrix" data-scene="unpaint" width="640" height="320" role="img" aria-label="R mode"></canvas>
               </div>
               <p class="viz-caption--below">R mode: one hand on enc&nbsp;4 for set/remove; enc&nbsp;1 is free for breaks.</p>
             </article>

@@ -6,7 +6,7 @@ description: Where the Docusaurus app lives, how /docs is published, and how to 
 
 # This docs site
 
-These pages are a **Docusaurus** app. Source lives at the repo root; the built site is copied into `website/` for deploy (same idea as the operator handbook).
+These pages are a **Docusaurus** app. Source lives at the repo root; the built site is copied into `website/docs/` for deploy.
 
 ## Layout
 
@@ -16,7 +16,7 @@ These pages are a **Docusaurus** app. Source lives at the repo root; the built s
 | `website/docs/` | **Built** static output copied in for deploy (not edited by hand) |
 | Public URL | **https://toern.live/docs/** (`baseUrl` = `/docs/`) |
 
-`website/` is local/deploy-only (gitignored). Like [`handbook/`](https://github.com/Soundpauli/toern/tree/main/handbook) → `website/handbook/`, you copy the built docs into `website/docs/` when publishing.
+`website/` is local/deploy-only (gitignored). Copy the built docs into `website/docs/` when publishing. The operator handbook is **not** copied into the website; it lives in repo [`handbook/`](https://github.com/Soundpauli/toern/tree/main/handbook) and is served at [handbook.toern.live](https://handbook.toern.live/).
 
 ## Local preview
 
@@ -49,5 +49,5 @@ If you use the local website package, `cd website && npm run build:docs` runs th
 
 ## Related
 
-- Operator handbook (device usage): repo `handbook/` / site `/handbook/`
+- Operator handbook (device usage): repo `handbook/` / [handbook.toern.live](https://handbook.toern.live/)
 - Firmware sketch: repo root `toern.ino` + `toern_*.ino`

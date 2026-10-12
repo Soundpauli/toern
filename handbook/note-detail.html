@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -54,7 +55,7 @@
             <h2>The four columns</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="velocity" width="16" height="16" role="img" aria-label="Velocity screen"></canvas>
+                <canvas class="led-matrix" data-scene="velocity" width="640" height="320" role="img" aria-label="Velocity screen"></canvas>
               </div>
               <p class="viz-caption--below">Example layout: medium velocity, mid chance, "1/2" conditional fraction, high voice volume.</p>
               <div class="hb-enc-grid">

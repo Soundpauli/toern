@@ -7,7 +7,7 @@ standalone-tools/web-standalone/dist/sd/samples/
 .pio/
 .cache/
 compile_commands.json
-# Website is local/deploy-only; handbook + docs are copied in manually
+# Website is local/deploy-only; docs are copied in manually. Handbook is not copied here.
 website/
 
 BOM_KOSTEN.xlsx

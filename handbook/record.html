@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -32,7 +33,7 @@
             <div class="hb-tip"><strong>Record to a computer via USB:</strong> connect USB-C with a data cable, select TŒRN’s USB audio device as the input in your DAW or recorder, and record its two channels. USB audio follows <a href="menus.html#vol">VOL → 2-CH</a>, just like the headphone and line outputs. This captures the output directly; it does not create a sample on the SD card.</div>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="record_mode" width="16" height="16" role="img" aria-label="Record mode idle"></canvas>
+                <canvas class="led-matrix" data-scene="record_mode" width="640" height="320" role="img" aria-label="Record mode idle"></canvas>
               </div>
               <p class="viz-caption--below">Idle: threshold column, live level column, RDY text, Y/R/G/X hints.</p>
               <div class="hb-enc-grid">
@@ -73,7 +74,7 @@
             <p class="lede">Root menu <strong>REC</strong> — five leaves for which jack, how hot, when capture starts, and what happens to notes after a re-record. Encoder&nbsp;4 walks siblings.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="mr_rec" width="16" height="16" role="img" aria-label="REC root"></canvas>
+                <canvas class="led-matrix" data-scene="mr_rec" width="640" height="320" role="img" aria-label="REC root"></canvas>
               </div>
               <p class="viz-caption--below">REC family entry on the root menu.</p>
             </article>
@@ -87,7 +88,7 @@
             <h2>INPT — input source</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="rc_inpt" width="16" height="16" role="img" aria-label="REC INPT"></canvas>
+                <canvas class="led-matrix" data-scene="rc_inpt" width="640" height="320" role="img" aria-label="REC INPT"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -108,7 +109,7 @@
             <h2>MIC — mic preamp gain</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="rc_mic" width="16" height="16" role="img" aria-label="REC MIC"></canvas>
+                <canvas class="led-matrix" data-scene="rc_mic" width="640" height="320" role="img" aria-label="REC MIC"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -129,7 +130,7 @@
             <h2>L-IN — line input trim</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="rc_lin" width="16" height="16" role="img" aria-label="REC L-IN"></canvas>
+                <canvas class="led-matrix" data-scene="rc_lin" width="640" height="320" role="img" aria-label="REC L-IN"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -150,7 +151,7 @@
             <h2>TRIG — when capture starts</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="rc_trig" width="16" height="16" role="img" aria-label="REC TRIG"></canvas>
+                <canvas class="led-matrix" data-scene="rc_trig" width="640" height="320" role="img" aria-label="REC TRIG"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -172,7 +173,7 @@
             <p class="lede">What happens to notes on the voice you just re-recorded into.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="rc_clr" width="16" height="16" role="img" aria-label="REC CLR"></canvas>
+                <canvas class="led-matrix" data-scene="rc_clr" width="640" height="320" role="img" aria-label="REC CLR"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>

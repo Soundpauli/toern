@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -28,7 +29,7 @@
 
           <section class="hb-sub" id="page-row">
             <h2>The page row</h2>
-            <p class="lede">Turn encoder&nbsp;1 until the cursor sits on the <strong>top strip</strong> of the matrix — that is the <strong>page row</strong> (row&nbsp;16, <code>y==16</code>). It shows your 16 pattern pages as a row of dots, <em>and</em> it is the only place the page-wide tools fire.</p>
+            <p class="lede">Turn encoder&nbsp;1 until the cursor sits on the <strong>top strip</strong> of the matrix — that is the <strong>page row</strong> (row&nbsp;16, <code>y==16</code>). It shows your <span data-hb-pages>8</span> pattern pages as a row of dots, <em>and</em> it is the only place the page-wide tools fire.</p>
 
             <div class="hb-warn"><strong>Cursor lock:</strong> every page-row edit below — delete page, copy/paste, clear page, random fill, note-shift — runs <em>only</em> when the cursor is on row&nbsp;16. On a voice row (<code>y&nbsp;≠&nbsp;16</code>) the same presses paint, erase, mute, or do nothing. No exception.</div>
 
@@ -63,7 +64,7 @@
             </ol>
             <p>What gets wiped:</p>
             <ul>
-              <li><strong>Draw mode</strong> — every voice on that page (all triggers for those 16 steps).</li>
+              <li><strong>Draw mode</strong> — every voice on that page (all triggers for those <span data-hb-steps>32</span> steps).</li>
               <li><strong>Single mode</strong> — only the <em>focused</em> voice on that page (other lanes keep their notes; the page LED stays “has notes” until every voice is empty).</li>
             </ul>
             <p>When the page is fully empty, its strip LED drops to <strong>very dark red</strong>. Playback range (<code>lastPage</code>) updates so trailing empty pages fall out of the walk.</p>
@@ -87,7 +88,7 @@
             <p>Hints: <strong>red</strong> on encoder&nbsp;1, <strong>yellow</strong> on encoder&nbsp;4. The page strip still shows which pages have content; the cursor marks where you are working.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="row16_draw" width="16" height="16" role="img" aria-label="Draw mode page row hints"></canvas>
+                <canvas class="led-matrix" data-scene="row16_draw" width="640" height="320" role="img" aria-label="Draw mode page row hints"></canvas>
               </div>
               <p class="viz-caption--below">Draw + page row: red cue over enc&nbsp;1, yellow over enc&nbsp;4.</p>
               <div class="hb-enc-grid">
@@ -118,7 +119,7 @@
             <p>Hints: <strong>red</strong> (enc&nbsp;1), <strong>white</strong> (enc&nbsp;2), <strong>yellow</strong> (enc&nbsp;4). Same copy/paste idea, but it only grabs the <em>focused</em> voice — so you can copy a hi-hat lane and paste it onto another voice after you change focus.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="row16_single" width="16" height="16" role="img" aria-label="Single mode page row hints"></canvas>
+                <canvas class="led-matrix" data-scene="row16_single" width="640" height="320" role="img" aria-label="Single mode page row hints"></canvas>
               </div>
               <p class="viz-caption--below">Single + page row: red / white / yellow cues.</p>
               <div class="hb-enc-grid">

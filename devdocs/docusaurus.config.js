@@ -104,7 +104,7 @@ const config = {
             items: [
               {
                 label: 'Operator handbook',
-                href: 'https://toern.live/handbook/',
+                href: 'https://handbook.toern.live/',
               },
               {
                 label: 'Main site',

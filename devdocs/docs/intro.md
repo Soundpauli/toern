@@ -9,7 +9,7 @@ description: Developer docs for how TŒRN firmware is structured — not the dev
 
 These pages explain **how the firmware is organized** and how the major pieces cooperate: sequencer data, UI modes, the Teensy Audio graph, MIDI/clock, and SD I/O — plus **hardware design docs** for the current PCB (`toern_revH`) and **host-side tools** (sample converter, simulator, SD tool, …).
 
-If you want to *use* the device (first beat, controls, sequencing), open the **[operator handbook](https://toern.live/handbook/)** instead.
+If you want to *use* the device (first beat, controls, sequencing), open the **[operator handbook](https://handbook.toern.live/)** instead.
 
 ## What you are looking at
 
@@ -41,5 +41,5 @@ Arduino concatenates all `.ino` files in the sketch folder; headers and `src/` a
 
 ## Where this site lives
 
-Source: **`devdocs/`** in the repo. Published at **`/docs/`** on [toern.live](https://toern.live/docs/) (built output copied into `website/docs/` for deploy, like the handbook).
+Source: **`devdocs/`** in the repo. Published at **`/docs/`** on [toern.live](https://toern.live/docs/) (built output copied into `website/docs/` for deploy).
 How to edit and preview: [This docs site](./contributing/docs-site).

@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -32,7 +33,7 @@
             <p class="lede">Ten pages. Encoder&nbsp;4 walks siblings; most values turn on encoder&nbsp;3. Pair with <a href="tempo-midi.html#bpm">BPM → INT/EXT</a> for full master/slave.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="mr_midi" width="16" height="16" role="img" aria-label="MIDI root"></canvas>
+                <canvas class="led-matrix" data-scene="mr_midi" width="640" height="320" role="img" aria-label="MIDI root"></canvas>
               </div>
               <p class="viz-caption--below">MIDI family entry on the root menu.</p>
             </article>
@@ -47,7 +48,7 @@
             <p class="lede">How incoming MIDI notes land on voices.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_ch" width="16" height="16" role="img" aria-label="MIDI CH"></canvas>
+                <canvas class="led-matrix" data-scene="md_ch" width="640" height="320" role="img" aria-label="MIDI CH"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -77,7 +78,7 @@
             <p class="lede">Start / stop / continue messages.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_tran" width="16" height="16" role="img" aria-label="MIDI TRAN"></canvas>
+                <canvas class="led-matrix" data-scene="md_tran" width="640" height="320" role="img" aria-label="MIDI TRAN"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -99,7 +100,7 @@
             <h2>SEND — what leaves the MIDI out</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_send" width="16" height="16" role="img" aria-label="MIDI SEND"></canvas>
+                <canvas class="led-matrix" data-scene="md_send" width="640" height="320" role="img" aria-label="MIDI SEND"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -121,7 +122,7 @@
             <h2>RCVE — incoming notes</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_rcve" width="16" height="16" role="img" aria-label="MIDI RCVE"></canvas>
+                <canvas class="led-matrix" data-scene="md_rcve" width="640" height="320" role="img" aria-label="MIDI RCVE"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -140,7 +141,7 @@
             <h2>FOLD — incoming pitch range</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_clmp" width="16" height="16" role="img" aria-label="MIDI FOLD"></canvas>
+                <canvas class="led-matrix" data-scene="md_clmp" width="640" height="320" role="img" aria-label="MIDI FOLD"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
@@ -162,7 +163,7 @@
             <p class="lede">Millisecond latency makeup when two clocked devices flam.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_sync" width="16" height="16" role="img" aria-label="MIDI SYNC"></canvas>
+                <canvas class="led-matrix" data-scene="md_sync" width="640" height="320" role="img" aria-label="MIDI SYNC"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -187,7 +188,7 @@
             <p class="lede">Analog clock on the dedicated 2-pin headers — independent of TRS MIDI. <strong>CLK-OUT (J25)</strong> is 5&nbsp;V. <strong>CLK-IN (J26)</strong> is 3–5&nbsp;V: on the BPM screen, click encoder&nbsp;3 for an <strong>orange &lt;</strong> (analog in) instead of the <strong>red &lt;</strong> (MIDI in). Pulse width 1–50&nbsp;ms (default 12).</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_ppqn" width="16" height="16" role="img" aria-label="MIDI PPQN"></canvas>
+                <canvas class="led-matrix" data-scene="md_ppqn" width="640" height="320" role="img" aria-label="MIDI PPQN"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
@@ -216,7 +217,7 @@
             <p class="lede">5&nbsp;V trigger on <strong>SIDEC-5V (J27)</strong> whenever the selected voice actually sounds. This is a trigger signal for external equipment, not built-in sidechain compression. Pulse width and polarity follow <a href="#ppqn">PPQN</a>.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_side" width="16" height="16" role="img" aria-label="MIDI TRIG"></canvas>
+                <canvas class="led-matrix" data-scene="md_side" width="640" height="320" role="img" aria-label="MIDI TRIG"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -238,7 +239,7 @@
             <p class="lede">Config for <strong>CLK-IN (J26)</strong>. With <strong>orange &lt;</strong> EXT on the BPM screen, incoming pulses advance the sequencer. At 4&nbsp;PPQN each pulse is one step, at 24&nbsp;PPQN every sixth pulse is.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_cin" width="16" height="16" role="img" aria-label="MIDI CIN"></canvas>
+                <canvas class="led-matrix" data-scene="md_cin" width="640" height="320" role="img" aria-label="MIDI CIN"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
@@ -261,7 +262,7 @@
             <h2>OVWR — overwrite grid notes</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_wrte" width="16" height="16" role="img" aria-label="MIDI OVWR"></canvas>
+                <canvas class="led-matrix" data-scene="md_wrte" width="640" height="320" role="img" aria-label="MIDI OVWR"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>

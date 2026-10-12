@@ -91,12 +91,27 @@
 
   function renderSidebar(sidebar) {
     var page = currentPage();
+    var q = "";
+    try {
+      q = new URLSearchParams(location.search).get("q") || "";
+    } catch (e) {}
     var html = [];
     html.push(
       '<header class="hb-sidebar__brand">',
       '<h1><a href="index.html" class="hb-sidebar__logo">TŒRN</a></h1>',
       '<p class="hb-sidebar__kicker">HANDBOOK</p>',
       "</header>",
+      '<form class="hb-sidebar__search" action="search.html" method="get" role="search">',
+      '<label class="hb-vh" for="hb-sidebar-q">Search the handbook</label>',
+      '<div class="hb-sidebar__search-row">',
+      '<input type="search" name="q" id="hb-sidebar-q" class="hb-sidebar__search-input" placeholder="Search…" value="' +
+        escapeHtml(q) +
+        '" autocomplete="off" enterkeyhint="search" />',
+      '<button type="submit" class="hb-sidebar__search-btn" aria-label="Search">',
+      '<svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M10.1 10.1 13.4 13.4"/></svg>',
+      "</button>",
+      "</div>",
+      "</form>",
       '<nav class="hb-sidebar__nav">'
     );
 
@@ -202,11 +217,78 @@
     }
   }
 
-  function init() {
+  var SCROLL_KEY = "hb-sidebar-scroll";
+  var sidebarBound = false;
+
+  function persistSidebarScroll(sidebar) {
+    if (!sidebar) return;
+    try {
+      sessionStorage.setItem(SCROLL_KEY, String(sidebar.scrollTop || 0));
+    } catch (e) {}
+  }
+
+  function restoreSidebarScroll(sidebar) {
+    if (!sidebar) return;
+    var y = 0;
+    try {
+      y = parseInt(sessionStorage.getItem(SCROLL_KEY) || "0", 10) || 0;
+    } catch (e) {}
+    sidebar.scrollTop = y;
+  }
+
+  function bindSidebarScroll(sidebar) {
+    if (!sidebar || sidebarBound) return;
+    sidebarBound = true;
+    sidebar.addEventListener(
+      "scroll",
+      function () {
+        persistSidebarScroll(sidebar);
+      },
+      { passive: true }
+    );
+    sidebar.addEventListener(
+      "click",
+      function (e) {
+        var a = e.target.closest("a[href]");
+        if (!a || !sidebar.contains(a)) return;
+        persistSidebarScroll(sidebar);
+        var href = (a.getAttribute("href") || "").split("#")[0];
+        if (!href || href === currentPage()) {
+          if (!a.getAttribute("href") || a.getAttribute("href").indexOf("#") !== 0) {
+            e.preventDefault();
+          }
+        }
+      },
+      true
+    );
+    window.addEventListener("pagehide", function () {
+      persistSidebarScroll(sidebar);
+    });
+    window.addEventListener("pageshow", function () {
+      restoreSidebarScroll(sidebar);
+    });
+  }
+
+  function paintSidebar() {
     var sidebar = document.getElementById("hb-sidebar");
+    if (!sidebar) return null;
+    renderSidebar(sidebar);
+    restoreSidebarScroll(sidebar);
+    requestAnimationFrame(function () {
+      restoreSidebarScroll(sidebar);
+    });
+    bindSidebarScroll(sidebar);
+    return sidebar;
+  }
+
+  var chromeReady = false;
+
+  function initChrome(sidebar) {
+    if (chromeReady) return;
+    chromeReady = true;
+    if (!sidebar) sidebar = document.getElementById("hb-sidebar");
     if (!sidebar) return;
     ensureMobileBar();
-    renderSidebar(sidebar);
     initMobileNav(sidebar);
     var currentSection = NAV.find(function (section) {
       return section.items.some(function (item) { return item.href === currentPage(); });
@@ -215,17 +297,37 @@
     var items = NAV.reduce(function (all, section) { return all.concat(section.items); }, []);
     var index = items.findIndex(function (item) { return item.href === currentPage(); });
     var wrap = document.querySelector(".wrap");
-    if (wrap && index !== -1) {
+    if (wrap && index !== -1 && !wrap.querySelector(".hb-chapter-meta")) {
       var meta = document.createElement("div");
       meta.className = "hb-chapter-meta";
       meta.innerHTML = '<a href="index.html">TŒRN / Handbook</a><span>CHAPTER ' + String(index).padStart(2, "0") + ' / ' + String(items.length - 1).padStart(2, "0") + '</span>';
       wrap.insertBefore(meta, wrap.firstChild);
+      if (window.HBLayout) window.HBLayout.mount(meta);
     }
   }
 
+  window.HBHandbook = {
+    pages: NAV.reduce(function (all, section) {
+      return all.concat(
+        section.items.map(function (item) {
+          return {
+            href: item.href,
+            title: item.title,
+            desc: item.desc,
+            group: section.group,
+            icon: item.icon
+          };
+        })
+      );
+    }, [])
+  };
+
+  var sidebarEl = paintSidebar();
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", function () {
+      initChrome(sidebarEl);
+    });
   } else {
-    init();
+    initChrome(sidebarEl);
   }
 })();

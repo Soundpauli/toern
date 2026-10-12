@@ -1,4 +1,4 @@
-/* TOERN matrix preview — 16×16, 1-based x/y like firmware light(). Font from font_3x5.h. */
+/* TŒRN matrix previews, selectable panel width; firmware-style 1-based x/y. */
 (function () {
   "use strict";
 
@@ -91,6 +91,10 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   }
 
   function getIndX(enc) {
+    if (window.HBLayout && window.HBLayout.width === 32) {
+      const start = [4, 11, 19, 26][enc - 1] || 4;
+      return [start, start + 1, start + 2];
+    }
     switch (enc) {
       case 1: return [1, 2, 3];
       case 2: return [5, 6, 7];
@@ -104,7 +108,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     constructor(canvas) {
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
-      this.w = 16;
+      this.w = window.HBLayout ? window.HBLayout.width : 32;
       this.h = 16;
       this.data = new Uint8ClampedArray(this.w * this.h * 4);
       for (let i = 3; i < this.data.length; i += 4) this.data[i] = 255;
@@ -126,7 +130,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       this.cursorY = y | 0;
     }
     set(x, y, r, g, b) {
-      if (x < 1 || x > 16 || y < 1 || y > 16) return;
+      if (x < 1 || x > this.w || y < 1 || y > this.h) return;
       const ix = (y - 1) * this.w + (x - 1);
       const o = ix * 4;
       this.data[o] = r;
@@ -140,26 +144,31 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       this.set(x1, 1, c[0], c[1], c[2]);
       this.set(x2, 1, c[0], c[1], c[2]);
       this.set(x3, 1, c[0], c[1], c[2]);
+      if (this.w === 32) this.set(x3 + 1, 1, ...c);
     }
     indM(enc, code) {
       const [, x2, x3] = getIndX(enc);
       const c = indColor(code);
       this.set(x2, 1, c[0], c[1], c[2]);
       this.set(x3, 1, c[0], c[1], c[2]);
+      if (this.w === 32) this.set(x3 + 1, 1, ...c);
     }
     blit() {
-      const LOGICAL = 320;
+      const LOGICAL = this.w * 20;
+      const HEIGHT = this.h * 20;
+      const decoration = this.canvas.hasAttribute("data-decoration");
       const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
       const ctx = this.ctx;
       this.canvas.width = Math.round(LOGICAL * dpr);
-      this.canvas.height = Math.round(LOGICAL * dpr);
+      this.canvas.height = Math.round(HEIGHT * dpr);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, LOGICAL, HEIGHT);
       ctx.fillStyle = "#0e0e12";
-      ctx.fillRect(0, 0, LOGICAL, LOGICAL);
+      ctx.fillRect(0, 0, LOGICAL, HEIGHT);
 
-      const pitch = LOGICAL / 16;
-      const radius = pitch * 0.38;
+      const pitch = 20;
+      const radius = pitch * (decoration ? 0.28 : 0.38);
 
       // Mirror the device renderer (see tools/colorsheme): hardware brightness ~64/255 means
       // raw dim values like (5,0,0) would be invisible on screen. We apply a gamma lift so the
@@ -169,12 +178,13 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
         if (v <= 0) return 0;
         // gamma ≈ 0.45 (sRGB-style) + linear floor for very low channels so 1–6 range remains visible
         const lifted = Math.pow(v / 255, 0.45) * 255;
-        return Math.min(255, Math.max(lifted, v < 4 ? v * 12 : lifted));
+        const brightness = Math.max(lifted, v < 4 ? v * 12 : lifted);
+        return Math.min(255, brightness * (decoration ? 1.65 : 1));
       };
 
       for (let sy = 0; sy < 16; sy++) {
-        for (let sx = 0; sx < 16; sx++) {
-          const o = (sy * 16 + sx) * 4;
+        for (let sx = 0; sx < this.w; sx++) {
+          const o = (sy * this.w + sx) * 4;
           const r = this.data[o];
           const g = this.data[o + 1];
           const b = this.data[o + 2];
@@ -186,7 +196,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
           const lg = liftLow(g) | 0;
           const lb = liftLow(b) | 0;
           // Subtle bloom for lit pixels so the preview reads like a real LED
-          if (r + g + b > 2) {
+          if (!decoration && r + g + b > 2) {
             const bright = (lr + lg + lb) / 3;
             ctx.shadowColor = `rgba(${lr},${lg},${lb},0.55)`;
             ctx.shadowBlur = Math.min(pitch * 0.9, 6 + bright / 40);
@@ -211,7 +221,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       ctx.shadowBlur = 0;
 
       // White cursor ring on top, drawn just outside the LED dot for clarity.
-      if (this.cursorX >= 1 && this.cursorX <= 16 && this.cursorY >= 1 && this.cursorY <= 16) {
+      if (!decoration && this.cursorX >= 1 && this.cursorX <= this.w && this.cursorY >= 1 && this.cursorY <= 16) {
         const dx = this.cursorX - 1;
         const dy = 16 - this.cursorY;
         const cx = dx * pitch + pitch * 0.5;
@@ -276,7 +286,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   function drawSubmenuDots16(m, activeIdx, total, parentColIdx) {
     const p = menuTextFromCol(parentColIdx);
     const d = dimRgb(p, 0.38);
-    let startX = 16 - total + 1;
+    let startX = m.w - total + 1;
     if (startX < 1) startX = 1;
     for (let i = 0; i < total; i++) {
       const c = i === activeIdx ? p : d;
@@ -289,6 +299,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     m.set(x1, 1, r, g, b);
     m.set(x2, 1, r, g, b);
     m.set(x3, 1, r, g, b);
+    if (m.w === 32) m.set(x3 + 1, 1, r, g, b);
   }
 
   function largeInd4Parent(m, parentColIdx) {
@@ -299,7 +310,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   function rootMenuPage(m, pageIdx, titleColIdx, titleStr) {
     m.clear();
     m.indL(4, "G");
-    drawMenuPageDots(m, pageIdx, 10, 16);
+    drawMenuPageDots(m, pageIdx, 10, m.w);
     const tc = menuTextFromCol(titleColIdx);
     drawText(m, titleStr, 2, 3, tc[0], tc[1], tc[2]);
   }
@@ -422,66 +433,33 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   function drawVelocityLike(m, vy, probStep, cv, condStep) {
     m.clear();
-    for (let x = 2; x <= 3; x++) {
-      for (let y = 1; y < vy + 1; y++) {
-        m.set(x, y, y * y, Math.max(0, 20 - y), 0);
-      }
+    const sx = x => m.w === 16 ? x : 1 + Math.floor((x - 1) * (m.w - 1) / 15);
+    for (let x = sx(2); x <= sx(3); x++) {
+      for (let y = 1; y <= vy; y++) m.set(x, y, y * y, Math.max(0, 20 - y), 0);
     }
     const dw = UI.DIM_WHITE;
-    m.set(5, 1, dw[0], dw[1], dw[2]);
-    m.set(6, 1, dw[0], dw[1], dw[2]);
-    m.set(7, 1, dw[0], dw[1], dw[2]);
-    m.set(8, 1, dw[0], dw[1], dw[2]);
-    m.set(5, 16, dw[0], dw[1], dw[2]);
-    m.set(6, 16, dw[0], dw[1], dw[2]);
-    m.set(7, 16, dw[0], dw[1], dw[2]);
-    m.set(8, 16, dw[0], dw[1], dw[2]);
+    for (const x of [sx(5), sx(6), sx(7), sx(8)]) {
+      m.set(x, 1, ...dw); m.set(x, 16, ...dw);
+    }
     for (let y = 2; y <= 15; y++) {
-      m.set(5, y, dw[0], dw[1], dw[2]);
-      m.set(8, y, dw[0], dw[1], dw[2]);
+      m.set(sx(5), y, ...dw); m.set(sx(8), y, ...dw);
     }
-    for (let x = 6; x < 8; x++) {
-      if (probStep === 1) {
-        m.set(x, 2, 100, 0, 0);
-        m.set(x, 3, 100, 0, 0);
-      }
-      if (probStep === 2) {
-        m.set(x, 5, 150, 50, 0);
-        m.set(x, 6, 150, 50, 0);
-      }
-      if (probStep === 3) {
-        m.set(x, 8, 150, 150, 0);
-        m.set(x, 9, 150, 150, 0);
-      }
-      if (probStep === 4) {
-        m.set(x, 11, 0, 150, 150);
-        m.set(x, 12, 0, 150, 150);
-      }
-      if (probStep === 5) {
-        m.set(x, 14, 0, 200, 0);
-        m.set(x, 15, 0, 200, 0);
-      }
+    const barColors = [[100, 0, 0], [150, 50, 0], [150, 150, 0], [0, 150, 150], [0, 200, 0]];
+    const barY = 2 + (probStep - 1) * 3;
+    for (let x = sx(6); x <= sx(7); x++) {
+      m.set(x, barY, ...barColors[probStep - 1]);
+      m.set(x, barY + 1, ...barColors[probStep - 1]);
     }
-    const cvX = [13, 14, 15];
-    for (let x = cvX[1]; x <= cvX[2]; x++) {
-      for (let y = 1; y < cv + 1; y++) {
-        m.set(x, y, 0, Math.max(0, 20 - y), y * y);
-      }
+    const [ix1, ix2, ix3] = getIndX(3);
+    const tc = condStep === 2 ? [0, 0, 255] : [0, 200, 0];
+    drawText(m, "1", ix1, 11, ...tc);
+    m.set(ix3 + 1, 10, ...dw); m.set(ix3, 9, ...dw);
+    m.set(ix2, 8, ...dw); m.set(ix1, 7, ...dw);
+    drawText(m, condStep === 2 ? "2" : "1", ix1 + 1, 2, ...tc);
+    const [, cvX1, cvX2] = getIndX(4);
+    for (let x = cvX1; x <= cvX2; x++) {
+      for (let y = 1; y <= cv; y++) m.set(x, y, 0, Math.max(0, 20 - y), y * y);
     }
-    let num = "1",
-      den = "1",
-      tc = [0, 200, 0];
-    if (condStep === 2) {
-      num = "1";
-      den = "2";
-      tc = [0, 0, 255];
-    }
-    drawText(m, num, 9, 11, tc[0], tc[1], tc[2]);
-    m.set(12, 10, dw[0], dw[1], dw[2]);
-    m.set(11, 9, dw[0], dw[1], dw[2]);
-    m.set(10, 8, dw[0], dw[1], dw[2]);
-    m.set(9, 7, dw[0], dw[1], dw[2]);
-    drawText(m, den, 10, 2, tc[0], tc[1], tc[2]);
   }
 
   function drawBPMLike(m, bpm, intMode) {
@@ -523,14 +501,14 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     const cy = 8;
     if (mode === "int") {
       // ">"  three pixels: (14, cy-1), (15, cy), (14, cy+1)
-      m.set(14, cy - 1, arrowR, arrowG, arrowB);
-      m.set(15, cy,     arrowR, arrowG, arrowB);
-      m.set(14, cy + 1, arrowR, arrowG, arrowB);
+      m.set(m.w - 2, cy - 1, arrowR, arrowG, arrowB);
+      m.set(m.w - 1, cy,     arrowR, arrowG, arrowB);
+      m.set(m.w - 2, cy + 1, arrowR, arrowG, arrowB);
     } else {
       // "<"  three pixels: (15, cy-1), (14, cy), (15, cy+1)
-      m.set(15, cy - 1, arrowR, arrowG, arrowB);
-      m.set(14, cy,     arrowR, arrowG, arrowB);
-      m.set(15, cy + 1, arrowR, arrowG, arrowB);
+      m.set(m.w - 1, cy - 1, arrowR, arrowG, arrowB);
+      m.set(m.w - 2, cy,     arrowR, arrowG, arrowB);
+      m.set(m.w - 1, cy + 1, arrowR, arrowG, arrowB);
     }
   }
 
@@ -548,18 +526,18 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   const FILTER_PAGE_SAMPLE_1 = {
     letters: ["R", "D", "O", "T"], vals: [16, 16, 24, 11], names: ["RES", "DTNE", "OCTV", "TIME"]
   };
-  const FILTER_PAIRS = [[2, 3], [6, 7], [10, 11], [14, 15]];
+  function filterPairs(m) { return m.w === 32 ? [[5, 6], [12, 13], [20, 21], [27, 28]] : [[2, 3], [6, 7], [10, 11], [14, 15]]; }
 
   /* Resting view of a filter page: four vertical sliders; row-12 letters sit on a
    * fixed 16px strip A_D_S_R_ (cols 1,5,9,13 — 3px letter + 1px gap). */
   function drawFilterPageScene(m, pageIdx, pageOverride) {
     const p = pageOverride || FILTER_PAGES[Math.max(0, Math.min(3, pageIdx))] || FILTER_PAGES[0];
-    const abbrevStripX = [1, 5, 9, 13];
+    const abbrevStripX = m.w === 32 ? [4, 11, 19, 26] : [1, 5, 9, 13];
     m.clear();
     for (let i = 0; i < 4; i++) {
       const letter = p.letters[i];
       if (!letter) continue;
-      drawVerticalSliderLike(m, FILTER_PAIRS[i][0], FILTER_PAIRS[i][1], p.vals[i], 32, filterBaseHue(i));
+      drawVerticalSliderLike(m, filterPairs(m)[i][0], filterPairs(m)[i][1], p.vals[i], 32, filterBaseHue(i));
       const tc = filterBaseHue(i);
       drawText(m, letter, abbrevStripX[i], 12, tc[0], tc[1], tc[2]);
     }
@@ -574,22 +552,22 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     for (let i = 0; i < 4; i++) {
       const letter = p.letters[i];
       if (!letter) continue;
-      drawVerticalSliderLike(m, FILTER_PAIRS[i][0], FILTER_PAIRS[i][1], p.vals[i], 32, filterBaseHue(i));
+      drawVerticalSliderLike(m, filterPairs(m)[i][0], filterPairs(m)[i][1], p.vals[i], 32, filterBaseHue(i));
     }
     // Full name on row 12 (same as device); y=13 clipped the top row of the 5px font in preview.
     const idx = Math.max(0, Math.min(3, editI));
     const name = p.names[idx] || "";
     const tc = filterBaseHue(idx);
     if (name) {
-      drawText(m, name, 1, 12, tc[0], tc[1], tc[2]);
+      drawText(m, name, m.w === 32 ? Math.floor((m.w - name.length * 4 + 2) / 2) : 1, 12, tc[0], tc[1], tc[2]);
     }
     // Brighten the active slider so the user knows which one is being edited.
-    const ax0 = FILTER_PAIRS[idx][0];
-    const ax1 = FILTER_PAIRS[idx][1];
+    const ax0 = filterPairs(m)[idx][0];
+    const ax1 = filterPairs(m)[idx][1];
     for (let y = 1; y <= 10; y++) {
       // Soft halo of the parameter colour next to the active slider.
       m.set(ax0 - 1 < 1 ? 1 : ax0 - 1, y, (tc[0] * 0.15) | 0, (tc[1] * 0.15) | 0, (tc[2] * 0.15) | 0);
-      m.set(ax1 + 1 > 16 ? 16 : ax1 + 1, y, (tc[0] * 0.15) | 0, (tc[1] * 0.15) | 0, (tc[2] * 0.15) | 0);
+      m.set(ax1 + 1 > m.w ? m.w : ax1 + 1, y, (tc[0] * 0.15) | 0, (tc[1] * 0.15) | 0, (tc[2] * 0.15) | 0);
     }
   }
 
@@ -600,7 +578,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     const ps = pat < 10 ? "0" + pat : String(pat);
     drawText(m, ps, 1, 11, rgb[0], rgb[1], rgb[2]);
     const poss = pos < 10 ? "0" + pos : String(pos);
-    drawText(m, poss, 10, 11, 0, 255, 255);
+    drawText(m, poss, m.w - 6, 11, 0, 255, 255);
     m.indL(2, "M");
     m.indL(4, "N");
   }
@@ -614,7 +592,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     const s = String(fileNum);
     let tw = 0;
     for (let i = 0; i < s.length; i++) tw += (ALPH[s.charCodeAt(i) - 32][0] + 1);
-    let startX = 17 - tw;
+    let startX = m.w + 1 - tw;
     if (startX < 1) startX = 1;
     drawText(m, s, startX, 11, numC[0], numC[1], numC[2]);
   }
@@ -626,8 +604,10 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     for (let y = 2; y <= 15; y++) {
       const voice = y - 1;
       const b = COLB0[voice] || [0, 0, 0];
-      for (let x = 1; x <= 16; x++) m.set(x, y, b[0], b[1], b[2]);
+      for (let x = 1; x <= m.w; x++) m.set(x, y, b[0], b[1], b[2]);
     }
+    for (let x = 1; x <= m.w - 3; x += 4) m.set(x, 1, 10, 10, 10);
+    drawPageSlotsRow16(m, 1, 1, []);
     for (const n of notes) {
       const c = COL0[n.ch] || [40, 40, 40];
       m.set(n.x, n.y, c[0], c[1], c[2]);
@@ -643,9 +623,9 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     }
   }
 
-  /** Bottom row (y=16) page slots — colours follow firmware drawPages(): edit+play, play, edit, has-notes, empty. */
+  /** Top row (y=16): eight page slots on a wide panel, sixteen on a single panel. */
   function drawPageSlotsRow16(m, editPage, playPage, hasMask) {
-    for (let p = 1; p <= 16; p++) {
+    for (let p = 1; p <= 256 / m.w; p++) {
       const has = !!(hasMask && hasMask[p]);
       let r, g, b;
       if (playPage === editPage && p === editPage) {
@@ -665,7 +645,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
         g = 0;
         b = 35;
       } else {
-        r = 10;
+        r = 1;
         g = 0;
         b = 0;
       }
@@ -682,7 +662,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     const baseTint = COLB0[curCh] || [0, 0, 0];
     const liteTint = COL0[curCh]  || [40, 40, 40];
     for (let y = 2; y <= 15; y++) {
-      for (let x = 1; x <= 16; x++) m.set(x, y, baseTint[0], baseTint[1], baseTint[2]);
+      for (let x = 1; x <= m.w; x++) m.set(x, y, baseTint[0], baseTint[1], baseTint[2]);
     }
     for (const n of notes) {
       m.set(n.x, n.y, liteTint[0], liteTint[1], liteTint[2]);
@@ -699,8 +679,52 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   }
 
   let hbPongPhase = 0;
+  const bootStartedAt = performance.now();
+  // icons.h logo_rows; timing and dual sine curves from drawLogoAnimationFrame().
+  const BOOT_LOGO = [0, 0, 0x07f8, 0x1ff8, 0x1980, 0x1980, 0x1980, 0x19f0,
+    0x19f0, 0x1980, 0x1980, 0x1980, 0x1ff8, 0x07f8, 0, 0];
+
+  function drawStartup(m) {
+    m.clear();
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const t = reducedMotion ? 3000 : (performance.now() - bootStartedAt) % 5000;
+    const sineFade = Math.min(1, t / 1000);
+    const logoFade = Math.max(0, Math.min(1, (t - 1000) / 2500));
+    const fadeOut = t <= 3500 ? 1 : Math.max(0, 1 - (t - 3500) / 1500);
+    const sec = t / 1000;
+    const amplitude = 3.1 + .45 * Math.sin(sec * 1.4);
+    const startX = (m.w - 16) / 2 + 1;
+    const logoOn = (x, y) => x >= 0 && x < 16 && y >= 0 && y < 16 && ((BOOT_LOGO[y] >> (15 - x)) & 1);
+    const wavePixel = (x, y, color) => {
+      const firstY=Math.floor(y), fraction=y-firstY;
+      for(let i=0;i<2;i++) {
+        const pixelY=firstY+i, coverage=i?fraction:1-fraction;
+        if(pixelY<1||pixelY>16||coverage<=0)continue;
+        let touches = false;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) touches ||= !!logoOn(x + dx - startX, pixelY + dy - 1);
+        }
+        const level = sineFade * fadeOut * (touches ? 1 - .9 * logoFade : 1) * coverage;
+        const ink=color.map(c=>Math.round(c*level));
+        if(ink.some(c=>c>0))m.set(x,pixelY,...ink);
+      }
+    };
+    for (let x = 1; x <= m.w; x++) {
+      const phase = (x - 1) / (m.w - 1) * 4 * Math.PI;
+      wavePixel(x, 8.5 + .85 + amplitude * Math.sin(phase + .55 - sec * 2.6), [3, 8, 28]);
+      wavePixel(x, 8.5 - .85 + amplitude * Math.sin(phase - sec * 5.4), [26, 26, 26]);
+    }
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        if (!logoOn(x, y)) continue;
+        const hue = ((x + y) * 20 + Math.floor((sec * .22 % 1) * 360)) % 360;
+        m.set(startX + x, y + 1, ...chsvToRgb(hue * 255 / 360, 255, Math.round(255 * logoFade * fadeOut)));
+      }
+    }
+  }
 
   const scenes = {
+    boot_cover: drawStartup,
     draw(m) {
       drawDrawGrid(
         m,
@@ -887,7 +911,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     lk_loop(m) {
       playSubFrame(m, 4, "LOOP", "", "G");
-      drawText(m, "16", 2, 3, 0, 200, 255);
+      drawText(m, String(256 / m.w), 2, 3, 0, 200, 255);
     },
     lk_vmod(m) {
       playSubFrame(m, 5, "VMOD", "", "G");
@@ -899,7 +923,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     lk_leds(m) {
       playSubFrame(m, 7, "LEDS", "", "G");
-      drawText(m, "2B", 2, 3, 0, 255, 0);
+      drawText(m, m.w === 32 ? "2B" : "1B", 2, 3, 0, 255, 0);
     },
     lk_pong(m) {
       playSubFrame(m, 8, "PONG", "", "B");
@@ -907,7 +931,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       if (on) {
         drawText(m, "ON", 2, 3, 0, 120, 0);
         drawText(m, "42", 10, 3, 0, 150, 255);
-        const bx = 3 + (hbPongPhase % 10);
+        const bx = 3 + (hbPongPhase % (m.w - 6));
         m.set(bx, 6, 0, 200, 255);
         m.set(bx + 1, 6, 0, 160, 220);
       } else {
@@ -1038,9 +1062,9 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     et_auto(m) {
       etcSubFrame(m, 3, "AUTO", "G", "Y", "W");
-      for (let x = 1; x <= 16; x++) {
-        if (x >= 3 && x <= 8) m.set(x, 8, 255, 165, 0);
-        else if (x >= 9 && x <= 12) m.set(x, 8, 0, 255, 0);
+      for (let x = 1; x <= m.w; x++) {
+        if (x >= Math.round(m.w * 3 / 16) && x <= m.w / 2) m.set(x, 8, 255, 165, 0);
+        else if (x > m.w / 2 && x <= m.w * .75) m.set(x, 8, 0, 255, 0);
         else m.set(x, 8, 0, 0, 0);
       }
 
@@ -1070,7 +1094,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawText(m, "1", 1, 3, 255, 140, 20);
       drawText(m, "8", 5, 3, 255, 180, 60);
       drawText(m, "A", 12, 3, 255, 220, 120);
-      for (let x = 9; x <= 16; x++) m.set(x, 8, 140, 90, 20);
+      for (let x = m.w / 2 + 1; x <= m.w; x++) m.set(x, 8, 140, 90, 20);
     },
     et_img(m) {
       etcSubFrame(m, 10, "IMG", "", "", "G");
@@ -1078,17 +1102,17 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     et_rset(m) {
       etcSubFrame(m, 11, "RSET", "", "", "O");
-      for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
+      for (let x = 1; x <= m.w; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "SD", 2, 3, 255, 140, 0);
     },
     et_rset_efx(m) {
       etcSubFrame(m, 11, "RSET", "", "", "O");
-      for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
+      for (let x = 1; x <= m.w; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "EFX", 2, 3, 255, 100, 0);
     },
     et_rset_full(m) {
       etcSubFrame(m, 11, "RSET", "", "", "O");
-      for (let x = 1; x <= 16; x++) m.set(x, 8, 0, 0, 0);
+      for (let x = 1; x <= m.w; x++) m.set(x, 8, 0, 0, 0);
       drawText(m, "FULL", 2, 3, 255, 60, 0);
     },
     filter(m) {
@@ -1133,7 +1157,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
         const fill = isMuted
           ? c.map((v) => Math.round(v * 0.6))
           : c.map((v) => Math.round(v * 0.18));
-        for (let x = 1; x <= 16; x++) m.set(x, y, fill[0], fill[1], fill[2]);
+        for (let x = 1; x <= m.w; x++) m.set(x, y, fill[0], fill[1], fill[2]);
       }
       for (const n of notes) {
         if (!muted[n.ch]) {
@@ -1193,7 +1217,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
         { x: 10, y: 9, ch: 2 }
       ];
       drawDrawGrid(m, notes, 9);
-      for (let p = 1; p <= 16; p++) m.set(p, 16, 0, 0, 0);
+      for (let p = 1; p <= m.w; p++) m.set(p, 16, 0, 0, 0);
       m.cursor(10, 9);
       m.indL(1, "X");
       m.indL(4, "Y");
@@ -1224,13 +1248,13 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       const dimB = [0, 0, 50];
       const g = [0, 80, 0];
       const rd = [80, 0, 0];
-      for (let x = 1; x <= 16; x++) m.set(x, 3, dimB[0], dimB[1], dimB[2]);
-      for (let x = 1; x <= 4; x++) m.set(x, 3, g[0], g[1], g[2]);
-      for (let x = 12; x <= 16; x++) m.set(x, 3, rd[0], rd[1], rd[2]);
+      for (let x = 1; x <= m.w; x++) m.set(x, 3, dimB[0], dimB[1], dimB[2]);
+      for (let x = 1; x <= m.w / 4; x++) m.set(x, 3, g[0], g[1], g[2]);
+      for (let x = Math.ceil(m.w * .75); x <= m.w; x++) m.set(x, 3, rd[0], rd[1], rd[2]);
       const peaks = [5, 7, 6, 9, 10, 8, 9, 7, 6, 8, 9, 8, 7, 6, 8, 7];
-      for (let i = 0; i < 16; i++) {
+      for (let i = 0; i < m.w; i++) {
         const xh = i + 1;
-        for (let yy = 5; yy <= peaks[i]; yy++) {
+        for (let yy = 5; yy <= peaks[Math.floor(i * 16 / m.w)]; yy++) {
           const t = (yy - 5) / 5;
           m.set(xh, yy, (200 * (1 - t)) | 0, (60 + 140 * t) | 0, (20 + 80 * t) | 0);
         }
@@ -1244,7 +1268,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       m.indL(2, "Y");
       m.indL(3, "G");
       m.indL(4, "W");
-      for (let x = 1; x <= 16; x++) {
+      for (let x = 1; x <= m.w; x++) {
         for (let y = 2; y <= 10; y++) m.set(x, y, 0, 0, 0);
       }
       drawChar(m, ".", 1, 6, 0, 220, 0);
@@ -1268,8 +1292,8 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       for (let y = 1; y <= 5; y++) m.set(2, y, 255, 40, 40);
       drawText(m, "RDY", 5, 5, 255, 100, 0);
     },
-    /** Matrix anatomy: faithful resting view of the grid in DRAW mode.
-     * y=1 = encoder hint row (4 dim cues), y=16 = page strip (one tile per page),
+    /** Matrix anatomy: example of the grid during DRAW-mode playback.
+     * y=1 = beat guide, y=16 = page strip (one tile per page),
      * y=2..15 = voice lanes tinted by their col_base[]; a couple of bright notes
      * and the live playhead column give the viewer a real reference. */
     matrix_anatomy(m) {
@@ -1286,10 +1310,6 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       const has = []; has[1] = has[2] = true;
       drawPageSlotsRow16(m, 1, 2, has);
       m.cursor(9, 8);
-      m.indM(1, "G");
-      m.indM(2, "Y");
-      m.indM(3, "G");
-      m.indM(4, "W");
     }
   };
 
@@ -1316,10 +1336,15 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initAll);
   else initAll();
-  if (document.querySelector("canvas[data-scene='touchy']") && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  window.addEventListener("hb-layout-change", initAll);
+  // The cover and TOUCHY animate; other instructional previews keep their chosen scene.
+  if (document.querySelector("canvas[data-scene='boot_cover'], canvas[data-scene='touchy']") && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     setInterval(() => {
       if (document.hidden) return;
-      document.querySelectorAll("canvas[data-scene='touchy']").forEach(cv => runScene("touchy", cv));
-    },50);
+      document.querySelectorAll("canvas[data-scene='boot_cover'], canvas[data-scene='touchy']").forEach(cv => {
+        const rect = cv.getBoundingClientRect();
+        if (rect.bottom >= 0 && rect.top <= window.innerHeight) runScene(cv.getAttribute("data-scene"), cv);
+      });
+    }, 50);
   }
 })();

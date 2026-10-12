@@ -9,7 +9,7 @@ description: Browser UI, approximate audio, panel layouts and pattern transfer.
 **Live:** [sim.tyng.app](https://sim.tyng.app/)
 **Source:** [`standalone-tools/web-standalone/`](https://github.com/Soundpauli/toern/tree/main/standalone-tools/web-standalone)
 
-The simulator provides a browser version of the grid, four encoders, touch gestures and menus. Its audio engine and timing approximate the device; it is not the Teensy firmware running in an emulator. Use the [first-beat handbook](https://toern.live/handbook/first-beat.html) for the physical instrument.
+The simulator provides a browser version of the grid, four encoders, touch gestures and menus. Its audio engine and timing approximate the device; it is not the Teensy firmware running in an emulator. Use the [first-beat handbook](https://handbook.toern.live/first-beat.html) for the physical instrument.
 
 ## Controls and labels
 

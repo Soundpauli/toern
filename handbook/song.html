@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,22 +16,23 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-song">
           <h2 class="handbook-page__title">Song mode</h2>
-          <p class="handbook-page__summary">Turning loops into a set list: how the 16 pattern pages relate, what PMOD does, and how the SONG arranger chains pages together.</p>
+          <p class="handbook-page__summary">Turning loops into a set list: how the <span data-hb-pages>8</span> pattern pages relate, what PMOD does, and how the SONG arranger chains pages together.</p>
 
           <section class="hb-sub" id="pages">
             <h2>Pattern pages, loops, and PMOD</h2>
-            <p class="lede">One pattern holds <strong>256 steps</strong>: 16 pages × 16 steps on a single panel, or 8 pages × 32 steps on a wide panel. The page strip on row&nbsp;16 (see <a href="matrix.html#row16">Matrix</a>) shows which pages have content. How playback walks pages is set by <a href="play.html#pmd">MODE → PMOD</a> (PMOD):</p>
+            <p class="lede">One pattern holds <strong>256 steps</strong>: <span data-hb-pages>8</span> pages × <span data-hb-steps>32</span> steps in the selected layout. The page strip on row&nbsp;16 (see <a href="matrix.html#row16">Matrix</a>) shows which pages have content. How playback walks pages is set by <a href="play.html#pmd">MODE → PMOD</a> (PMOD):</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_pmd" width="16" height="16" role="img" aria-label="PMOD"></canvas>
+                <canvas class="led-matrix" data-scene="lk_pmd" width="640" height="320" role="img" aria-label="PMOD"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Mode</th><th>What playback does</th><th>Best for</th></tr></thead>
@@ -52,10 +53,10 @@
 
           <section class="hb-sub" id="song">
             <h2>The SONG arranger</h2>
-            <p class="lede">Open <strong>MODE → SONG</strong>: enter MODE, turn encoder&nbsp;4 to SONG and press it. The screen shows a chain of up to <strong>64 slots</strong>, each pointing at one of the pattern's 16 pages. With PMOD&nbsp;=&nbsp;SONG, playback steps through the chain and wraps back to the start.</p>
+            <p class="lede">Open <strong>MODE → SONG</strong>: enter MODE, turn encoder&nbsp;4 to SONG and press it. The screen shows a chain of up to <strong>64 slots</strong>, each pointing at one of the pattern's <span data-hb-pages>8</span> pages. With PMOD&nbsp;=&nbsp;SONG, playback steps through the chain and wraps back to the start.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="song" width="16" height="16" role="img" aria-label="Song mode"></canvas>
+                <canvas class="led-matrix" data-scene="song" width="640" height="320" role="img" aria-label="Song mode"></canvas>
               </div>
               <p class="viz-caption--below">Example: page 07 written into song slot 23.</p>
               <div class="hb-enc-grid">

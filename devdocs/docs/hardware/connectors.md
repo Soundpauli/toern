@@ -90,4 +90,4 @@ Full readable schematic: [`PCB/toern_revH/schematic.pdf`](https://github.com/Sou
 
 ## Audio routing versus connector wiring
 
-J1, J5 and J6 are stereo TRS connectors. Normal playback sends the main mono mix to both output channels; `VOL → 2-CH` can separate main/preview or sample banks. Those output mixers also feed USB audio. The current onboard recording path reads the left line-input channel only and writes mono WAVs. See [Audio graph](../audio/graph) and the [recording handbook](https://toern.live/handbook/record.html).
+J1, J5 and J6 are stereo TRS connectors. Normal playback sends the main mono mix to both output channels; `VOL → 2-CH` can separate main/preview or sample banks. Those output mixers also feed USB audio. The current onboard recording path reads the left line-input channel only and writes mono WAVs. See [Audio graph](../audio/graph) and the [recording handbook](https://handbook.toern.live/record.html).

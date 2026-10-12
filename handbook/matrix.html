@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,24 +16,25 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-matrix">
           <h2 class="handbook-page__title">The matrix</h2>
-          <p class="handbook-page__summary"><span class="hb-brand">TŒRN</span> has no screen besides the 16×16 RGB grid — the same surface you tap notes onto is also the display. This chapter teaches you to read every row, lane, and helper before you place a single note.</p>
+          <p class="handbook-page__summary"><span class="hb-brand">TŒRN</span> has no screen besides the RGB LED grid — the same surface you tap notes onto is also the display. This chapter teaches you to read every row, lane, and helper before you place a single note.</p>
 
           <section class="hb-sub" id="axes">
             <h2>Time goes sideways, voices stack upward</h2>
-            <p class="lede">The grid is a two-dimensional score. The <strong>X axis (columns 1…16)</strong> is musical <em>time</em>: column 1 sounds first, column 16 last. The <strong>Y axis (rows 1…16)</strong> is <em>voices</em> stacked from bottom to top — row 2 is voice 1, row 3 is voice 2, and so on. Two rows are reserved as helper strips: <strong>row 1</strong> at the very bottom and <strong>row 16</strong> at the very top.</p>
+            <p class="lede">The grid is a two-dimensional score. The <strong>X axis (columns 1…<span data-hb-steps>32</span>)</strong> is musical <em>time</em>: column 1 sounds first, column <span data-hb-steps>32</span> last. The <strong>Y axis (rows 1…16)</strong> is <em>voices</em> stacked from bottom to top — row 2 is voice 1, row 3 is voice 2, and so on. Two rows are reserved as helper strips: <strong>row 1</strong> at the very bottom and <strong>row 16</strong> at the very top.</p>
             <div class="hb-tip"><strong>Read direction:</strong> firmware numbers pixels with <code>(x, y)</code> using 1-based coordinates and y=1 at the bottom. Wherever this handbook says "row&nbsp;1" it means the lowest visible row of LEDs, and "row&nbsp;16" the highest.</div>
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="matrix_anatomy" width="16" height="16" role="img" aria-label="Matrix anatomy"></canvas>
+                <canvas class="led-matrix" data-scene="matrix_anatomy" width="640" height="320" role="img" aria-label="Matrix anatomy"></canvas>
               </div>
               <p class="viz-caption--below">Anatomy: tinted voice bands fill rows 2–15; row&nbsp;1 (bottom) is the 4/4 beat guide; row&nbsp;16 (top) is the page strip.</p>
             </article>
@@ -45,7 +46,7 @@
 
           <section class="hb-sub" id="row1">
             <h2>Row 1 — beat guide</h2>
-            <p>In default <a href="sequencing.html#draw">Draw</a> mode the lowest row is <strong>not</strong> a voice lane. It shows a quiet <strong>4/4 orientation bar</strong>: dim markers on steps&nbsp;1, 5, 9, and&nbsp;13 so you can spot beat&nbsp;one and each downbeat while you edit. <strong>No notes can be placed here</strong> — painting starts on row&nbsp;2.</p>
+            <p>In default <a href="sequencing.html#draw">Draw</a> mode the lowest row is <strong>not</strong> a voice lane. It shows a quiet <strong>4/4 orientation bar</strong>: dim markers every fourth step, starting at step&nbsp;1, across the full grid width so you can spot beat&nbsp;one and each downbeat while you edit. <strong>No notes can be placed here</strong> — painting starts on row&nbsp;2.</p>
             <p>With the cursor on <strong>row&nbsp;16</strong>, row&nbsp;1 instead paints <strong>encoder-hint glyphs</strong> so you know which knob is armed for page-wide tools — see <a href="pages-more.html#page-row">Pages+More</a>.</p>
             <div class="hb-further">
               <p><strong>Further information.</strong> Move the cursor onto row&nbsp;1 and the strip becomes a control surface: encoder&nbsp;2 long press opens the <a href="advanced-sequencing.html#mutes">mute overlay</a> (see that chapter); when input monitoring is enabled, encoder&nbsp;1 rides live input gain and a short press cycles monitor level — the beat markers change tint to match.</p>
@@ -58,7 +59,7 @@
 
           <section class="hb-sub" id="row16">
             <h2>Row 16 — the page strip <em>and</em> the power-tool row</h2>
-            <p>The top row of the matrix carries the <strong>page strip</strong>: one LED per pattern page (a song holds up to 16 pages). But row 16 has a second job that is just as important: <strong>it is where every "operate on the whole pattern" tool lives</strong>. The same gesture that paints a single note on a voice row turns into a page-wide action when your cursor sits on row 16.</p>
+            <p>The top row of the matrix carries the <strong>page strip</strong>: one LED per pattern page (a pattern holds up to <span data-hb-pages>8</span> pages). But row 16 has a second job that is just as important: <strong>it is where every "operate on the whole pattern" tool lives</strong>. The same gesture that paints a single note on a voice row turns into a page-wide action when your cursor sits on row 16.</p>
 
             <div class="hb-tip"><strong>Row 16 is where these features live — and nowhere else</strong> (cursor must be on the page strip, <code>y==16</code>):
               <ul>
@@ -73,7 +74,7 @@
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="page_slots" width="16" height="16" role="img" aria-label="Page strip"></canvas>
+                <canvas class="led-matrix" data-scene="page_slots" width="640" height="320" role="img" aria-label="Page strip"></canvas>
               </div>
               <p class="viz-caption--below">Page strip colours, summarised.</p>
               <table class="opt-table">
@@ -143,7 +144,7 @@
             <h2>What a "mode" actually means</h2>
             <p>The matrix swaps role completely between modes. The four core sequencing views are explained in <a href="sequencing.html">Sequencing</a>:</p>
             <ul>
-              <li><strong>Draw</strong> — full 16×16 grid view, every voice visible at full intensity.</li>
+              <li><strong>Draw</strong> — full LED grid view, every voice visible at full intensity.</li>
               <li><strong>Single</strong> — focus on one voice at a time, other voices dimmed.</li>
               <li><strong>Set / remove triggers</strong> — L+R (two-hand write/erase) or R (one-hand toggle + break mute); see <a href="sequencing.html#paint">Sequencing</a>.</li>
             </ul>

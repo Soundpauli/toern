@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -31,7 +32,7 @@
             <p class="lede">From the root menu, highlight <strong>SETT</strong> and short-press encoder&nbsp;4. Row&nbsp;16 re-colours to the SETT family tint so you always know you are inside this world. Encoder&nbsp;4 turn flips siblings; tap touch&nbsp;2 to return to the grid. Reopening the menu restores the parent family.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="mr_play" width="16" height="16" role="img" aria-label="SETT root"></canvas>
+                <canvas class="led-matrix" data-scene="mr_play" width="640" height="320" role="img" aria-label="SETT root"></canvas>
               </div>
               <p class="viz-caption--below">SETT family entry on the root menu.</p>
             </article>
@@ -66,7 +67,7 @@
             <p class="lede">A soft whole-grid wash that pulses with the beat — performance glow vs clean editor.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_flw" width="16" height="16" role="img" aria-label="FLOW"></canvas>
+                <canvas class="led-matrix" data-scene="lk_flw" width="640" height="320" role="img" aria-label="FLOW"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -90,19 +91,19 @@
             <p class="lede">How the <a href="samples.html#set-wav">sample browser</a> auditions files while you hunt. Open <a href="menus.html#vol">VOL → PREV</a>: encoder&nbsp;2 selects the mode; encoder&nbsp;3 changes preview volume (0–50).</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_prev_on" width="16" height="16" role="img" aria-label="PREV ON"></canvas>
+                <canvas class="led-matrix" data-scene="lk_prev_on" width="640" height="320" role="img" aria-label="PREV ON"></canvas>
               </div>
               <p class="viz-caption--below">PREV = ON — every file under the cursor auto-plays.</p>
             </article>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_prev" width="16" height="16" role="img" aria-label="PREV PRSS"></canvas>
+                <canvas class="led-matrix" data-scene="lk_prev" width="640" height="320" role="img" aria-label="PREV PRSS"></canvas>
               </div>
               <p class="viz-caption--below">PREV = PRSS — press encoder&nbsp;1 on a selected wav to preview. Never goes up a folder.</p>
             </article>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_prev_sync" width="16" height="16" role="img" aria-label="PREV SYNC"></canvas>
+                <canvas class="led-matrix" data-scene="lk_prev_sync" width="640" height="320" role="img" aria-label="PREV SYNC"></canvas>
               </div>
               <p class="viz-caption--below">PREV = SYNC — while playing, pattern notes on this voice audition the highlighted file. While stopped, encoder&nbsp;4 auto-plays like ON.</p>
               <div class="hb-enc-grid">
@@ -125,7 +126,7 @@
             <p class="lede">How much of the pattern you see while editing one page.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_view" width="16" height="16" role="img" aria-label="VIEW"></canvas>
+                <canvas class="led-matrix" data-scene="lk_view" width="640" height="320" role="img" aria-label="VIEW"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -147,7 +148,7 @@
             <p class="lede">What happens when a page finishes playing. This is the bridge between a single loop and the <a href="song.html#song">SONG</a> arranger.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_pmd" width="16" height="16" role="img" aria-label="PMOD"></canvas>
+                <canvas class="led-matrix" data-scene="lk_pmd" width="640" height="320" role="img" aria-label="PMOD"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Mode</th><th>What playback does</th><th>Best for</th></tr></thead>
@@ -176,16 +177,16 @@
 
           <section class="hb-sub" id="loop">
             <h2>MODE → LOOP — page length cap</h2>
-            <p class="lede">How many steps of a page actually sound before it wraps.</p>
+            <p class="lede">Set the number of pattern pages played before the loop wraps. OFF follows the populated pattern length.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_loop" width="16" height="16" role="img" aria-label="LOOP"></canvas>
+                <canvas class="led-matrix" data-scene="lk_loop" width="640" height="320" role="img" aria-label="LOOP"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>OFF</strong> or <strong>1–16</strong></td><td>OFF = natural 16 steps. Short odd lengths (5, 7, 9…) = instant groovebox weirdness.</td></tr>
+                  <tr><th>Turn</th><td><strong>OFF</strong> or <strong>1–8 pages</strong></td><td>OFF follows the populated pattern length; a number forces that many pages before playback wraps.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -201,7 +202,7 @@
             <p class="lede">Each voice loops on its own pages. Pitches of that voice, on any row, stay with it.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_vmod" width="16" height="16" role="img" aria-label="VMOD"></canvas>
+                <canvas class="led-matrix" data-scene="lk_vmod" width="640" height="320" role="img" aria-label="VMOD"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -228,7 +229,7 @@
             <p class="lede">Black matrix, colour-cycle paint — sketch with voices 1–8 instead of the usual row-lane drawing rules.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="et_img" width="16" height="16" role="img" aria-label="MODE IMG"></canvas>
+                <canvas class="led-matrix" data-scene="et_img" width="640" height="320" role="img" aria-label="MODE IMG"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -252,7 +253,7 @@
             <p class="lede">What encoder&nbsp;2 does in draw / single mode when you are not in a special overlay.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_ctrl" width="16" height="16" role="img" aria-label="CTRL"></canvas>
+                <canvas class="led-matrix" data-scene="lk_ctrl" width="640" height="320" role="img" aria-label="CTRL"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -275,7 +276,7 @@
             <p class="lede">Tell the firmware which LED panel(s) are actually bolted on. Wrong setting = pixels off the visible area.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_leds" width="16" height="16" role="img" aria-label="LEDS"></canvas>
+                <canvas class="led-matrix" data-scene="lk_leds" width="640" height="320" role="img" aria-label="LEDS"></canvas>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
@@ -306,7 +307,7 @@
             <p class="lede">A ball bounces across the grid in <strong>draw</strong> mode. It only hits and fires notes on <strong>muted</strong> voices, so unmuted playback stays untouched.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_pong" width="16" height="16" role="img" aria-label="PONG"></canvas>
+                <canvas class="led-matrix" data-scene="lk_pong" width="640" height="320" role="img" aria-label="PONG"></canvas>
               </div>
               <p class="viz-caption--below">PONG on: speed readout left, ON right, ball on the middle rows.</p>
               <div class="hb-enc-grid">
@@ -330,7 +331,7 @@
             <p class="lede">How the edit cursor draws on the grid.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_crsr" width="16" height="16" role="img" aria-label="CRSR"></canvas>
+                <canvas class="led-matrix" data-scene="lk_crsr" width="640" height="320" role="img" aria-label="CRSR"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -352,7 +353,7 @@
             <p class="lede">Two-hand careful editing vs one-hand set/remove. Full gesture detail: <a href="sequencing.html#paint">Sequencing → Set &amp; remove triggers</a>.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_draw" width="16" height="16" role="img" aria-label="DRAW"></canvas>
+                <canvas class="led-matrix" data-scene="lk_draw" width="640" height="320" role="img" aria-label="DRAW"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -374,7 +375,7 @@
             <p class="lede">Custom set of channels that come back unmuted when you leave R-mode’s temporary full mute (encoder&nbsp;3). Not a paint gate.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_mute" width="16" height="16" role="img" aria-label="MUTE"></canvas>
+                <canvas class="led-matrix" data-scene="lk_mute" width="640" height="320" role="img" aria-label="MUTE"></canvas>
               </div>
               <p class="viz-caption--below">Sixteen dots = channels 1–16. Green = in the unmute mask; red = stays muted.</p>
               <div class="hb-enc-grid">

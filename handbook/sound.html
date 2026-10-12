@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -63,14 +64,14 @@
                 <div>
                   <p class="hb-led-label">At rest</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p0" width="16" height="16" role="img" aria-label="Filter page 0 — resting"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p0" width="640" height="320" role="img" aria-label="Filter page 0 — resting"></canvas>
                   </div>
                   <p class="viz-caption--below">Sliders + single-letter tags: <strong>H · L · R · B</strong>.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p0_named" width="16" height="16" role="img" aria-label="Filter page 0 — editing LCUT"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p0_named" width="640" height="320" role="img" aria-label="Filter page 0 — editing LCUT"></canvas>
                   </div>
                   <p class="viz-caption--below">Full name printed: here <strong>LCUT</strong> is being changed.</p>
                 </div>
@@ -93,14 +94,14 @@
                 <div>
                   <p class="hb-led-label">At rest</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p1_sample" width="16" height="16" role="img" aria-label="Filter page 1 sample — resting"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p1_sample" width="640" height="320" role="img" aria-label="Filter page 1 sample — resting"></canvas>
                   </div>
                   <p class="viz-caption--below">Letters <strong>R · D · O · T</strong> on voices 1–8.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p1_sample_named" width="16" height="16" role="img" aria-label="Filter page 1 sample — editing TIME"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p1_sample_named" width="640" height="320" role="img" aria-label="Filter page 1 sample — editing TIME"></canvas>
                   </div>
                   <p class="viz-caption--below">Full name <strong>TIME</strong> while encoder 4 is being moved.</p>
                 </div>
@@ -123,14 +124,14 @@
                 <div>
                   <p class="hb-led-label">At rest</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p1" width="16" height="16" role="img" aria-label="Filter page 1 synth — resting"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p1" width="640" height="320" role="img" aria-label="Filter page 1 synth — resting"></canvas>
                   </div>
                   <p class="viz-caption--below">Letters <strong>C · R · F</strong> — column 4 is empty on this page (poly / mono synth lanes).</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p1_named" width="16" height="16" role="img" aria-label="Filter page 1 synth — editing RESO"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p1_named" width="640" height="320" role="img" aria-label="Filter page 1 synth — editing RESO"></canvas>
                   </div>
                   <p class="viz-caption--below">Full name <strong>RESO</strong> while encoder 2 is being moved.</p>
                 </div>
@@ -151,14 +152,14 @@
                 <div>
                   <p class="hb-led-label">At rest</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p2" width="16" height="16" role="img" aria-label="Filter page 2 — resting"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p2" width="640" height="320" role="img" aria-label="Filter page 2 — resting"></canvas>
                   </div>
                   <p class="viz-caption--below">Letters <strong>W · I · C · S</strong>.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p2_named" width="16" height="16" role="img" aria-label="Filter page 2 — editing INST"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p2_named" width="640" height="320" role="img" aria-label="Filter page 2 — editing INST"></canvas>
                   </div>
                   <p class="viz-caption--below">Full name <strong>INST</strong> while encoder 2 is being moved.</p>
                 </div>
@@ -180,14 +181,14 @@
                 <div>
                   <p class="hb-led-label">At rest</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p3" width="16" height="16" role="img" aria-label="Filter page 3 — resting"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p3" width="640" height="320" role="img" aria-label="Filter page 3 — resting"></canvas>
                   </div>
                   <p class="viz-caption--below">Letters <strong>A · D · S · R</strong> — attack, decay, sustain, release.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
-                    <canvas class="led-matrix" data-scene="filter_p3_named" width="16" height="16" role="img" aria-label="Filter page 3 — editing SUST"></canvas>
+                    <canvas class="led-matrix" data-scene="filter_p3_named" width="640" height="320" role="img" aria-label="Filter page 3 — editing SUST"></canvas>
                   </div>
                   <p class="viz-caption--below">Full name <strong>SUST</strong> while encoder 3 is being moved.</p>
                 </div>

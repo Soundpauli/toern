@@ -51,7 +51,7 @@
       <p class="welcome-kicker">What's this?</p>
       <h2 class="welcome-title" id="welcome-title">TŒRN Simulator</h2>
       <p>This is an early browser emulator of the TŒRN groovebox — meant to show the concept and how the instrument feels to play.</p>
-      <p>It is a work in progress. Timing, sound, menus, and hardware details will differ from the real device. Use it to explore the controls; browser sound and timing are approximate. For the physical instrument, follow the <a href="https://toern.live/handbook/first-beat.html" target="_blank" rel="noopener">first beat guide</a>.</p>
+      <p>It is a work in progress. Timing, sound, menus, and hardware details will differ from the real device. Use it to explore the controls; browser sound and timing are approximate. For the physical instrument, follow the <a href="https://handbook.toern.live/first-beat.html" target="_blank" rel="noopener">first beat guide</a>.</p>
       <div class="welcome-actions">
         <button type="button" class="welcome-dismiss" id="welcome-dismiss">Got it</button>
         <label class="welcome-remember">

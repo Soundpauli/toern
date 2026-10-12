@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -40,7 +41,7 @@
             <p class="lede">From a <strong>voice row</strong> (not the page row), <strong>long-press encoder&nbsp;2</strong> opens a transient <strong>mute / solo overlay</strong>: other lanes mute so the current voice solos; release to restore. Short-press encoder&nbsp;2 on a voice row toggles that lane’s mute and the flag sticks.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="mute" width="16" height="16" role="img" aria-label="Mute overlay"></canvas>
+                <canvas class="led-matrix" data-scene="mute" width="640" height="320" role="img" aria-label="Mute overlay"></canvas>
               </div>
               <p class="viz-caption--below">Mute overlay: muted lanes dim, active lanes bright.</p>
             </article>
@@ -64,7 +65,7 @@
             <p>Enter from <strong>single mode + page row</strong> with a short press on the white encoder&nbsp;2. The firmware snapshots every other voice, then lets you slide only the focused voice. Hints switch to <strong>bright green</strong> (enc&nbsp;1) and <strong>bright blue</strong> (enc&nbsp;4). A grey marquee crawls on row&nbsp;1 while you work.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="note_shift" width="16" height="16" role="img" aria-label="Note shift"></canvas>
+                <canvas class="led-matrix" data-scene="note_shift" width="640" height="320" role="img" aria-label="Note shift"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · green</h5><table class="enc-act"><tbody>
@@ -97,7 +98,7 @@
             <p>After the first encoder&nbsp;4 tap, the page strip goes dark and the hints jump to <strong>large blue</strong> (enc&nbsp;1) and <strong>large yellow</strong> (enc&nbsp;4). That means the buffer is full — navigate to the destination page, then tap encoder&nbsp;4 again to paste. Another tap while armed without pasting toggles the armed state off.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="copy_active" width="16" height="16" role="img" aria-label="Copy active"></canvas>
+                <canvas class="led-matrix" data-scene="copy_active" width="640" height="320" role="img" aria-label="Copy active"></canvas>
               </div>
               <p class="viz-caption--below">Copy armed: page strip cleared, blue + yellow large cues.</p>
               <div class="hb-enc-grid">

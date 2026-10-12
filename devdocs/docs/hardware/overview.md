@@ -6,7 +6,7 @@ description: Current PCB revision — KiCad sources, major blocks, and how hardw
 
 # Hardware overview — toern_revH
 
-Current board lives in [`PCB/toern_revH/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revH/). Ordering, the off-board shopping list, and first power-up are in the repo-root [BUILD.md](https://github.com/Soundpauli/toern/blob/main/BUILD.md). These pages are the electrical map, not how to play the device (that’s the [handbook](https://toern.live/handbook/)).
+Current board lives in [`PCB/toern_revH/`](https://github.com/Soundpauli/toern/tree/main/PCB/toern_revH/). Ordering, the off-board shopping list, and first power-up are in the repo-root [BUILD.md](https://github.com/Soundpauli/toern/blob/main/BUILD.md). These pages are the electrical map, not how to play the device (that’s the [handbook](https://handbook.toern.live/)).
 
 ## What rev H is
 

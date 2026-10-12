@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -44,7 +45,7 @@
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="bpm" width="16" height="16" role="img" aria-label="BPM internal"></canvas>
+                <canvas class="led-matrix" data-scene="bpm" width="640" height="320" role="img" aria-label="BPM internal"></canvas>
               </div>
               <h4 class="hb-device__title">Variant A — Internal clock (master)</h4>
               <p class="hb-device__intro">Cyan three-digit readout on the left, <strong>green right-pointing arrow</strong> on the right showing that clock is being sent <em>out</em>. Encoder 3 ring lights green.</p>
@@ -68,7 +69,7 @@
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="bpm_ext_ok" width="16" height="16" role="img" aria-label="BPM external locked"></canvas>
+                <canvas class="led-matrix" data-scene="bpm_ext_ok" width="640" height="320" role="img" aria-label="BPM external locked"></canvas>
               </div>
               <h4 class="hb-device__title">Variant B — MIDI external clock, locked</h4>
               <p class="hb-device__intro">Green three-digit readout on the left, <strong>red left-pointing arrow</strong> on the right showing TRS MIDI clock is being received. The arrow blinks with the clock. Encoder&nbsp;3 click switches to analog EXT (variant&nbsp;D). Encoder&nbsp;4 offsets the stored counter without overriding the live clock.</p>
@@ -76,7 +77,7 @@
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="bpm_ext_warn" width="16" height="16" role="img" aria-label="BPM external warn"></canvas>
+                <canvas class="led-matrix" data-scene="bpm_ext_warn" width="640" height="320" role="img" aria-label="BPM external warn"></canvas>
               </div>
               <h4 class="hb-device__title">Variant C — MIDI external clock, unstable</h4>
               <p class="hb-device__intro">Red three-digit readout and a <strong>red left-pointing arrow</strong> — the measurement is still settling or no MIDI clock is arriving. Wait a few bars, then re-check the cable and the master.</p>
@@ -84,7 +85,7 @@
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="bpm_ext_analog" width="16" height="16" role="img" aria-label="BPM analog EXT"></canvas>
+                <canvas class="led-matrix" data-scene="bpm_ext_analog" width="640" height="320" role="img" aria-label="BPM analog EXT"></canvas>
               </div>
               <h4 class="hb-device__title">Variant D — Analog EXT (CLK-IN)</h4>
               <p class="hb-device__intro"><strong>Orange</strong> three-digit readout (measured tempo) and an <strong>orange left-pointing arrow</strong> that flashes on each CLK-IN pulse. Pulses drive the sequencer immediately — no green “lock” wait. Rate and hold-off are set on <a href="midi.html#cin">MIDI → CIN</a>. Encoder&nbsp;3 click returns to MIDI EXT (red <strong>&lt;</strong>).</p>

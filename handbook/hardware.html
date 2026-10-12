@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -32,7 +33,7 @@
 
           <section class="hb-sub" id="overview">
             <h2>Top-down overview</h2>
-            <p class="lede">The face of <span class="hb-brand">TŒRN</span> is dominated by the <strong>16×16 RGB matrix</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge.</p>
+            <p class="lede">The face of <span class="hb-brand">TŒRN</span> is dominated by the <strong>RGB LED grid</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge.</p>
 
             <div class="hb-portmap" aria-label="Annotated device map">
               <figure class="hb-portmap__photo">
@@ -51,8 +52,8 @@
                 <!-- Chassis (portrait, 3:4 aspect ratio) -->
                 <rect x="60" y="40" width="480" height="640" fill="#0a0a0e" stroke="#2a2a32" stroke-width="2"/>
                 <!-- Matrix area -->
-                <rect x="100" y="80" width="400" height="400" fill="#111114" stroke="#252530" stroke-width="2"/>
-                <text x="300" y="285" fill="#5a5a68" font-family="system-ui, sans-serif" font-size="18" text-anchor="middle">16 × 16 RGB matrix</text>
+                <rect data-hb-matrix-area x="100" y="180" width="400" height="200" fill="#111114" stroke="#252530" stroke-width="2"/>
+                <text x="300" y="285" fill="#5a5a68" font-family="system-ui, sans-serif" font-size="18" text-anchor="middle">RGB LED grid</text>
                 <!-- Touch 1 / Touch 2 — circular pads between matrix and encoders -->
                 <circle cx="165" cy="502" r="16" fill="#1a1a26" stroke="#4a4a5a" stroke-width="1.5"/>
                 <text x="165" y="506" fill="#cfcfdf" font-size="9" text-anchor="middle" font-family="JetBrains Mono, monospace">1</text>
@@ -154,7 +155,7 @@
               <li><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the right bottom edge. Touch&nbsp;1 toggles single mode; touch&nbsp;2 opens the menu; both pads together open filters or the sample browser; touch&nbsp;3 is for recording. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
               <li><strong>Right-side power switch</strong> — physical on/off.</li>
             </ul>
-            <p>There are no menu buttons or screens beyond the matrix itself. Everything the firmware needs to communicate appears as lit pixels in known regions of the 16×16 area, explained in <a href="matrix.html">The matrix</a>.</p>
+            <p>There are no menu buttons or screens beyond the matrix itself. Everything the firmware needs to communicate appears as lit pixels in known regions of the LED grid, explained in <a href="matrix.html">The matrix</a>.</p>
           </section>
 
 

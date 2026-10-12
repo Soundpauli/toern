@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -31,7 +32,7 @@
             <p class="lede">Open the menu by tapping touch&nbsp;2 (the right pad) from the grid. The root list uses red and blue dots on <strong>row 16</strong>; the encoder 4 hint strip is green to signal "this knob navigates". Submenu families re-colour the same row with the parent menu colour, so you always know which world of settings you are inside.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="menu" width="16" height="16" role="img" aria-label="Root menu"></canvas>
+                <canvas class="led-matrix" data-scene="menu" width="640" height="320" role="img" aria-label="Root menu"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
@@ -73,7 +74,7 @@
               <div class="tree-legend__row">
                 <span class="tree-legend__swatch tree-legend__swatch--red" aria-hidden="true"></span>
                 <span class="node" style="background:#1d4ed8">MAIN</span>
-                <span><strong>Red tint</strong> = depth&nbsp;2 — a leaf inside a family (VOL, SETT, REC, MIDI, ETC). Blue badge, warmer row: you are one click deeper.</span>
+                <span><strong>Red tint</strong> = depth&nbsp;2 — a leaf inside a family (VOL, SETT, REC, MIDI, MODE, ETC). Blue badge, warmer row: you are one click deeper.</span>
               </div>
               <p class="how" style="margin:0.35rem 0 0">The colours are a handbook nesting cue — not the device’s voice palette. On hardware, submenu text re-colours to match its parent family so you always know which world you are inside.</p>
             </div>
@@ -87,7 +88,7 @@
 
                     <li id="file">
                       <a href="files.html#file"><span class="node">PATT</span></a>
-                      <span class="desc">Pattern vault. One slot = the whole session on the card: all 16 pages, every voice, every per-step value, every tone knob — everything except which sample pack is loaded.</span>
+                      <span class="desc">Pattern vault. One slot = the whole session on the card: all <span data-hb-pages>8</span> pages, every voice, every per-step value, every tone knob — everything except which sample pack is loaded.</span>
                       <span class="sub">
                         <ul class="sub-opts">
                           <li><strong>Enc&nbsp;1 short</strong> — load</li>
@@ -267,7 +268,7 @@
                           <span class="desc">What encoder&nbsp;2 does on the draw/single grid when you are not in a special mode.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>PAGE</strong> — flip pages 1–16</li>
+                              <li><strong>PAGE</strong> — flip pages 1–<span data-hb-pages>8</span></li>
                               <li><strong>VOL</strong> — per-row volume for the cursor’s lane (live mix fader)</li>
                             </ul>
                             <span class="how">Survives reboot.</span>
@@ -504,13 +505,13 @@
                         </li>
 <li>
                           <a href="play.html#loop"><span class="node">LOOP</span></a>
-                          <span class="desc">How many steps of a page actually sound before it wraps.</span>
+                          <span class="desc">Set the number of pattern pages played before the loop wraps. OFF follows the populated pattern length.</span>
                           <span class="sub">
                             <ul class="sub-opts">
-                              <li><strong>OFF</strong> — full 16 steps</li>
-                              <li><strong>1–16</strong> — chop short</li>
+                              <li><strong>OFF</strong> — follow the populated pattern length</li>
+                              <li><strong>1–8</strong> — force that many pages</li>
                             </ul>
-                            <span class="how">Odd lengths (5, 7, 9…) = instant groovebox weirdness.</span>
+                            <span class="how">Each page contains <span data-hb-steps>32</span> steps in the selected layout.</span>
                           </span>
                         </li>
 <li>
@@ -564,10 +565,10 @@
                         </li>
 <li id="song-menu">
                       <a href="song.html#song"><span class="node">SONG</span></a>
-                      <span class="desc">64-slot arranger. Each slot points at one of the 16 pages. With PMOD&nbsp;= SONG, playback walks the chain and wraps.</span>
+                      <span class="desc">64-slot arranger. Each slot points at one of the <span data-hb-pages>8</span> pages. With PMOD&nbsp;= SONG, playback walks the chain and wraps.</span>
                       <span class="sub">
                         <ul class="sub-opts">
-                          <li><strong>Enc&nbsp;2 turn</strong> — page <strong>1–16</strong> (or empty)</li>
+                          <li><strong>Enc&nbsp;2 turn</strong> — page <strong>1–<span data-hb-pages>8</span></strong> (or empty)</li>
                           <li><strong>Enc&nbsp;2 short</strong> — clear slot</li>
                           <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–64</strong></li>
                           <li><strong>Enc&nbsp;4 short</strong> — insert empty slot</li>

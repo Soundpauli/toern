@@ -65,6 +65,6 @@ Pointer comparison against the global mode objects is the canonical check — do
 
 Menu labels are **PATT, KIT, SMP, BPM, VOL, SETT, REC, MIDI, MODE, ETC**. Internal mode names remain unchanged. Tap touch 1 to toggle DRAW/SINGLE on a sound voice; tap touch 2 to open the menu. The short touch-1 chord grace period lets the second pad join a sample-browser/filter gesture; it is not a hold requirement. Note detail maps encoders 1–4 to velocity, probability, condition/ratchet and whole-voice volume.
 
-See the [handbook controls](https://toern.live/handbook/controls.html) and [note detail](https://toern.live/handbook/note-detail.html) for complete gestures.
+See the [handbook controls](https://handbook.toern.live/controls.html) and [note detail](https://handbook.toern.live/note-detail.html) for complete gestures.
 
 TOUCHY is enabled with MODE → TCHY, is OFF after reboot, and stops sequencer playback. Touch 1–5 trigger voices 1–5 without writing notes. Encoders 1–4 edit the last pad-triggered voice’s pitch, velocity, reverb (where available), and highpass. Channel volumes stay full while enabled and are restored on disable. Short presses open SMP for voices 1–4. Hold encoder 1 to fast-record into the last pad-triggered voice and release to stop; recording does not change pattern notes. Hold encoder 3 for the last pad-triggered voice’s FILTER, and encoder 4 for the main menu. Existing browser/filter exits return to TOUCHY until its MODE toggle is OFF.

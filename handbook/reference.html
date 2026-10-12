@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261012b" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,8 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261011j"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261011d"></script>
+  <script src="handbook-nav.js?v=20261012b"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -29,16 +30,16 @@
           <section class="hb-sub" id="grid-modes">
             <h2>Grid &amp; performance modes</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="sequencing.html#draw"><canvas class="led-matrix" data-scene="draw" width="16" height="16"></canvas><div class="hb-ref-card__name">DRAW</div><div class="hb-ref-card__desc">Full grid view</div></a>
-              <a class="hb-ref-card" href="sequencing.html#single"><canvas class="led-matrix" data-scene="single" width="16" height="16"></canvas><div class="hb-ref-card__name">SINGLE</div><div class="hb-ref-card__desc">One voice focus</div></a>
-              <a class="hb-ref-card" href="sequencing.html#paint"><canvas class="led-matrix" data-scene="paint" width="16" height="16"></canvas><div class="hb-ref-card__name">SET TRIGGERS</div><div class="hb-ref-card__desc">Paint (L+R / R)</div></a>
-              <a class="hb-ref-card" href="sequencing.html#unpaint"><canvas class="led-matrix" data-scene="unpaint" width="16" height="16"></canvas><div class="hb-ref-card__name">REMOVE TRIGGERS</div><div class="hb-ref-card__desc">Unpaint / R mode</div></a>
-              <a class="hb-ref-card" href="pages-more.html#page-row"><canvas class="led-matrix" data-scene="row16_draw" width="16" height="16"></canvas><div class="hb-ref-card__name">PAGE ROW (DRAW)</div><div class="hb-ref-card__desc">Copy/paste hints</div></a>
-              <a class="hb-ref-card" href="pages-more.html#page-row"><canvas class="led-matrix" data-scene="row16_single" width="16" height="16"></canvas><div class="hb-ref-card__name">PAGE ROW (SINGLE)</div><div class="hb-ref-card__desc">R/W/Y hints</div></a>
-              <a class="hb-ref-card" href="advanced-sequencing.html#copy-paste"><canvas class="led-matrix" data-scene="copy_active" width="16" height="16"></canvas><div class="hb-ref-card__name">COPY ARMED</div><div class="hb-ref-card__desc">X / Y indicators</div></a>
-              <a class="hb-ref-card" href="advanced-sequencing.html#note-shift"><canvas class="led-matrix" data-scene="note_shift" width="16" height="16"></canvas><div class="hb-ref-card__name">NOTE SHIFT</div><div class="hb-ref-card__desc">Time-slide notes</div></a>
-              <a class="hb-ref-card" href="advanced-sequencing.html#mutes"><canvas class="led-matrix" data-scene="mute" width="16" height="16"></canvas><div class="hb-ref-card__name">MUTE OVERLAY</div><div class="hb-ref-card__desc">Lane silencing</div></a>
-              <a class="hb-ref-card" href="note-detail.html"><canvas class="led-matrix" data-scene="velocity" width="16" height="16"></canvas><div class="hb-ref-card__name">NOTE DETAIL</div><div class="hb-ref-card__desc">Vel / prob / cond</div></a>
+              <a class="hb-ref-card" href="sequencing.html#draw"><canvas class="led-matrix" data-scene="draw" width="640" height="320"></canvas><div class="hb-ref-card__name">DRAW</div><div class="hb-ref-card__desc">Full grid view</div></a>
+              <a class="hb-ref-card" href="sequencing.html#single"><canvas class="led-matrix" data-scene="single" width="640" height="320"></canvas><div class="hb-ref-card__name">SINGLE</div><div class="hb-ref-card__desc">One voice focus</div></a>
+              <a class="hb-ref-card" href="sequencing.html#paint"><canvas class="led-matrix" data-scene="paint" width="640" height="320"></canvas><div class="hb-ref-card__name">SET TRIGGERS</div><div class="hb-ref-card__desc">Paint (L+R / R)</div></a>
+              <a class="hb-ref-card" href="sequencing.html#unpaint"><canvas class="led-matrix" data-scene="unpaint" width="640" height="320"></canvas><div class="hb-ref-card__name">REMOVE TRIGGERS</div><div class="hb-ref-card__desc">Unpaint / R mode</div></a>
+              <a class="hb-ref-card" href="pages-more.html#page-row"><canvas class="led-matrix" data-scene="row16_draw" width="640" height="320"></canvas><div class="hb-ref-card__name">PAGE ROW (DRAW)</div><div class="hb-ref-card__desc">Copy/paste hints</div></a>
+              <a class="hb-ref-card" href="pages-more.html#page-row"><canvas class="led-matrix" data-scene="row16_single" width="640" height="320"></canvas><div class="hb-ref-card__name">PAGE ROW (SINGLE)</div><div class="hb-ref-card__desc">R/W/Y hints</div></a>
+              <a class="hb-ref-card" href="advanced-sequencing.html#copy-paste"><canvas class="led-matrix" data-scene="copy_active" width="640" height="320"></canvas><div class="hb-ref-card__name">COPY ARMED</div><div class="hb-ref-card__desc">X / Y indicators</div></a>
+              <a class="hb-ref-card" href="advanced-sequencing.html#note-shift"><canvas class="led-matrix" data-scene="note_shift" width="640" height="320"></canvas><div class="hb-ref-card__name">NOTE SHIFT</div><div class="hb-ref-card__desc">Time-slide notes</div></a>
+              <a class="hb-ref-card" href="advanced-sequencing.html#mutes"><canvas class="led-matrix" data-scene="mute" width="640" height="320"></canvas><div class="hb-ref-card__name">MUTE OVERLAY</div><div class="hb-ref-card__desc">Lane silencing</div></a>
+              <a class="hb-ref-card" href="note-detail.html"><canvas class="led-matrix" data-scene="velocity" width="640" height="320"></canvas><div class="hb-ref-card__name">NOTE DETAIL</div><div class="hb-ref-card__desc">Vel / prob / cond</div></a>
             </div>
           </section>
 
@@ -49,16 +50,16 @@
           <section class="hb-sub" id="root-menu">
             <h2>Root menu pages</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="files.html#file"><canvas class="led-matrix" data-scene="mr_dat" width="16" height="16"></canvas><div class="hb-ref-card__name">PATT</div><div class="hb-ref-card__desc">Pattern slots</div></a>
-              <a class="hb-ref-card" href="sample-packs.html#pack"><canvas class="led-matrix" data-scene="mr_kit" width="16" height="16"></canvas><div class="hb-ref-card__name">KIT</div><div class="hb-ref-card__desc">Sample pack</div></a>
-              <a class="hb-ref-card" href="samples.html#set-wav"><canvas class="led-matrix" data-scene="mr_wav" width="16" height="16"></canvas><div class="hb-ref-card__name">SMP</div><div class="hb-ref-card__desc">Sample browser</div></a>
-              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="mr_bpm" width="16" height="16"></canvas><div class="hb-ref-card__name">BPM</div><div class="hb-ref-card__desc">Tempo &amp; clock</div></a>
-              <a class="hb-ref-card" href="#vol"><canvas class="led-matrix" data-scene="mr_vol" width="16" height="16"></canvas><div class="hb-ref-card__name">VOL</div><div class="hb-ref-card__desc">Output mixer</div></a>
-              <a class="hb-ref-card" href="play.html"><canvas class="led-matrix" data-scene="mr_play" width="16" height="16"></canvas><div class="hb-ref-card__name">SETT</div><div class="hb-ref-card__desc">UI behaviour</div></a>
-              <a class="hb-ref-card" href="record.html"><canvas class="led-matrix" data-scene="mr_rec" width="16" height="16"></canvas><div class="hb-ref-card__name">REC</div><div class="hb-ref-card__desc">Recording</div></a>
-              <a class="hb-ref-card" href="midi.html"><canvas class="led-matrix" data-scene="mr_midi" width="16" height="16"></canvas><div class="hb-ref-card__name">MIDI</div><div class="hb-ref-card__desc">Clock &amp; notes</div></a>
-              <a class="hb-ref-card" href="#mode"><canvas class="led-matrix" data-scene="mr_song" width="16" height="16"></canvas><div class="hb-ref-card__name">SONG</div><div class="hb-ref-card__desc">Arranger</div></a>
-              <a class="hb-ref-card" href="#etc"><canvas class="led-matrix" data-scene="mr_etc" width="16" height="16"></canvas><div class="hb-ref-card__name">ETC</div><div class="hb-ref-card__desc">Misc / reset</div></a>
+              <a class="hb-ref-card" href="files.html#file"><canvas class="led-matrix" data-scene="mr_dat" width="640" height="320"></canvas><div class="hb-ref-card__name">PATT</div><div class="hb-ref-card__desc">Pattern slots</div></a>
+              <a class="hb-ref-card" href="sample-packs.html#pack"><canvas class="led-matrix" data-scene="mr_kit" width="640" height="320"></canvas><div class="hb-ref-card__name">KIT</div><div class="hb-ref-card__desc">Sample pack</div></a>
+              <a class="hb-ref-card" href="samples.html#set-wav"><canvas class="led-matrix" data-scene="mr_wav" width="640" height="320"></canvas><div class="hb-ref-card__name">SMP</div><div class="hb-ref-card__desc">Sample browser</div></a>
+              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="mr_bpm" width="640" height="320"></canvas><div class="hb-ref-card__name">BPM</div><div class="hb-ref-card__desc">Tempo &amp; clock</div></a>
+              <a class="hb-ref-card" href="#vol"><canvas class="led-matrix" data-scene="mr_vol" width="640" height="320"></canvas><div class="hb-ref-card__name">VOL</div><div class="hb-ref-card__desc">Output mixer</div></a>
+              <a class="hb-ref-card" href="play.html"><canvas class="led-matrix" data-scene="mr_play" width="640" height="320"></canvas><div class="hb-ref-card__name">SETT</div><div class="hb-ref-card__desc">UI behaviour</div></a>
+              <a class="hb-ref-card" href="record.html"><canvas class="led-matrix" data-scene="mr_rec" width="640" height="320"></canvas><div class="hb-ref-card__name">REC</div><div class="hb-ref-card__desc">Recording</div></a>
+              <a class="hb-ref-card" href="midi.html"><canvas class="led-matrix" data-scene="mr_midi" width="640" height="320"></canvas><div class="hb-ref-card__name">MIDI</div><div class="hb-ref-card__desc">Clock &amp; notes</div></a>
+              <a class="hb-ref-card" href="#mode"><canvas class="led-matrix" data-scene="mr_song" width="640" height="320"></canvas><div class="hb-ref-card__name">MODE</div><div class="hb-ref-card__desc">Playback and performance</div></a>
+              <a class="hb-ref-card" href="#etc"><canvas class="led-matrix" data-scene="mr_etc" width="640" height="320"></canvas><div class="hb-ref-card__name">ETC</div><div class="hb-ref-card__desc">Misc / reset</div></a>
             </div>
           </section>
 
@@ -69,40 +70,41 @@
           <section class="hb-sub" id="vol">
             <h2>VOL submenu</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_main" width="16" height="16"></canvas><div class="hb-ref-card__name">MAIN</div><div class="hb-ref-card__desc">Phones level</div></a>
-              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_gain" width="16" height="16"></canvas><div class="hb-ref-card__name">GAIN</div><div class="hb-ref-card__desc">Mix / synth / master</div></a>
-              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_lout" width="16" height="16"></canvas><div class="hb-ref-card__name">LOUT</div><div class="hb-ref-card__desc">Line out</div></a>
-              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_prev" width="16" height="16"></canvas><div class="hb-ref-card__name">PREV</div><div class="hb-ref-card__desc">Preview gain</div></a>
-              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_2ch" width="16" height="16"></canvas><div class="hb-ref-card__name">2-CH</div><div class="hb-ref-card__desc">Stereo routing</div></a>
-              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_spkr" width="16" height="16"></canvas><div class="hb-ref-card__name">SPKR</div><div class="hb-ref-card__desc">Internal spkr</div></a>
-              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_hfc" width="16" height="16"></canvas><div class="hb-ref-card__name">HFC</div><div class="hb-ref-card__desc">Treble soften</div></a>
+              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_main" width="640" height="320"></canvas><div class="hb-ref-card__name">MAIN</div><div class="hb-ref-card__desc">Phones level</div></a>
+              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_gain" width="640" height="320"></canvas><div class="hb-ref-card__name">GAIN</div><div class="hb-ref-card__desc">Mix / synth / master</div></a>
+              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_lout" width="640" height="320"></canvas><div class="hb-ref-card__name">LOUT</div><div class="hb-ref-card__desc">Line out</div></a>
+              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_prev" width="640" height="320"></canvas><div class="hb-ref-card__name">PREV</div><div class="hb-ref-card__desc">Preview gain</div></a>
+              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_2ch" width="640" height="320"></canvas><div class="hb-ref-card__name">2-CH</div><div class="hb-ref-card__desc">Stereo routing</div></a>
+              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_spkr" width="640" height="320"></canvas><div class="hb-ref-card__name">SPKR</div><div class="hb-ref-card__desc">Internal spkr</div></a>
+              <a class="hb-ref-card" href="menus.html#vol"><canvas class="led-matrix" data-scene="vol_hfc" width="640" height="320"></canvas><div class="hb-ref-card__name">HFC</div><div class="hb-ref-card__desc">Treble soften</div></a>
+<a class="hb-ref-card" href="play.html#prev"><canvas class="led-matrix" data-scene="lk_prev_on" width="640" height="320"></canvas><div class="hb-ref-card__name">PREV (ON)</div><div class="hb-ref-card__desc">Auto preview</div></a>
+<a class="hb-ref-card" href="play.html#prev"><canvas class="led-matrix" data-scene="lk_prev" width="640" height="320"></canvas><div class="hb-ref-card__name">PREV (PRSS)</div><div class="hb-ref-card__desc">Press-to-preview</div></a>
+<a class="hb-ref-card" href="play.html#prev"><canvas class="led-matrix" data-scene="lk_prev_sync" width="640" height="320"></canvas><div class="hb-ref-card__name">PREV (SYNC)</div><div class="hb-ref-card__desc">Play on voice triggers</div></a>
+</div>
+</section>
 
-<a class="hb-ref-card" href="play.html#prev"><canvas class="led-matrix" data-scene="lk_prev_on" width="16" height="16"></canvas><div class="hb-ref-card__name">PREV (ON)</div><div class="hb-ref-card__desc">Auto preview</div></a>
-<a class="hb-ref-card" href="play.html#prev"><canvas class="led-matrix" data-scene="lk_prev" width="16" height="16"></canvas><div class="hb-ref-card__name">PREV (PRSS)</div><div class="hb-ref-card__desc">Press-to-preview</div></a>
-<a class="hb-ref-card" href="play.html#prev"><canvas class="led-matrix" data-scene="lk_prev_sync" width="16" height="16"></canvas><div class="hb-ref-card__name">PREV (SYNC)</div><div class="hb-ref-card__desc">Play on voice triggers</div></a></div>
-          </section>
 
 
           <hr />
 
 
           <section class="hb-sub" id="play"><h2>SETT submenu</h2><div class="hb-ref-grid">
-<a class="hb-ref-card" href="play.html#view"><canvas class="led-matrix" data-scene="lk_view" width="16" height="16"></canvas><div class="hb-ref-card__name">VIEW</div><div class="hb-ref-card__desc">Density</div></a>
-<a class="hb-ref-card" href="play.html#ctrl"><canvas class="led-matrix" data-scene="lk_ctrl" width="16" height="16"></canvas><div class="hb-ref-card__name">CTRL</div><div class="hb-ref-card__desc">Enc 2 role</div></a>
-<a class="hb-ref-card" href="play.html#draw"><canvas class="led-matrix" data-scene="lk_draw" width="16" height="16"></canvas><div class="hb-ref-card__name">DRAW</div><div class="hb-ref-card__desc">L+R / R</div></a>
-<a class="hb-ref-card" href="play.html#mute"><canvas class="led-matrix" data-scene="lk_mute" width="16" height="16"></canvas><div class="hb-ref-card__name">MUTE</div><div class="hb-ref-card__desc">R-mode unmute set</div></a>
+<a class="hb-ref-card" href="play.html#view"><canvas class="led-matrix" data-scene="lk_view" width="640" height="320"></canvas><div class="hb-ref-card__name">VIEW</div><div class="hb-ref-card__desc">Density</div></a>
+<a class="hb-ref-card" href="play.html#ctrl"><canvas class="led-matrix" data-scene="lk_ctrl" width="640" height="320"></canvas><div class="hb-ref-card__name">CTRL</div><div class="hb-ref-card__desc">Enc 2 role</div></a>
+<a class="hb-ref-card" href="play.html#draw"><canvas class="led-matrix" data-scene="lk_draw" width="640" height="320"></canvas><div class="hb-ref-card__name">DRAW</div><div class="hb-ref-card__desc">L+R / R</div></a>
+<a class="hb-ref-card" href="play.html#mute"><canvas class="led-matrix" data-scene="lk_mute" width="640" height="320"></canvas><div class="hb-ref-card__name">MUTE</div><div class="hb-ref-card__desc">R-mode unmute set</div></a>
 </div></section>
 <section class="hb-sub" id="mode"><h2>MODE submenu</h2><div class="hb-ref-grid">
-<a class="hb-ref-card" href="play.html#flw"><canvas class="led-matrix" data-scene="lk_flw" width="16" height="16"></canvas><div class="hb-ref-card__name">FLOW</div><div class="hb-ref-card__desc">Flow lighting</div></a>
-<a class="hb-ref-card" href="play.html#pmd"><canvas class="led-matrix" data-scene="lk_pmd" width="16" height="16"></canvas><div class="hb-ref-card__name">PMOD</div><div class="hb-ref-card__desc">Pattern mode</div></a>
-<a class="hb-ref-card" href="play.html#loop"><canvas class="led-matrix" data-scene="lk_loop" width="16" height="16"></canvas><div class="hb-ref-card__name">LOOP</div><div class="hb-ref-card__desc">Length cap</div></a>
-<a class="hb-ref-card" href="play.html#vmod"><canvas class="led-matrix" data-scene="lk_vmod" width="16" height="16"></canvas><div class="hb-ref-card__name">VMOD</div><div class="hb-ref-card__desc">Per-voice loops</div></a>
-<a class="hb-ref-card" href="menus.html#chld"><canvas class="led-matrix" data-scene="et_chld" width="16" height="16"></canvas><div class="hb-ref-card__name">CHLD</div><div class="hb-ref-card__desc">Child lock</div></a>
-<a class="hb-ref-card" href="play.html#img"><canvas class="led-matrix" data-scene="et_img" width="16" height="16"></canvas><div class="hb-ref-card__name">IMG</div><div class="hb-ref-card__desc">Image paint</div></a>
-<a class="hb-ref-card" href="play.html#pong"><canvas class="led-matrix" data-scene="lk_pong" width="16" height="16"></canvas><div class="hb-ref-card__name">PONG</div><div class="hb-ref-card__desc">Ball fires muted notes</div></a>
-<a class="hb-ref-card" href="song.html#song"><canvas class="led-matrix" data-scene="md_song" width="16" height="16"></canvas><div class="hb-ref-card__name">SONG</div><div class="hb-ref-card__desc">Arranger</div></a>
+<a class="hb-ref-card" href="play.html#flw"><canvas class="led-matrix" data-scene="lk_flw" width="640" height="320"></canvas><div class="hb-ref-card__name">FLOW</div><div class="hb-ref-card__desc">Flow lighting</div></a>
+<a class="hb-ref-card" href="play.html#pmd"><canvas class="led-matrix" data-scene="lk_pmd" width="640" height="320"></canvas><div class="hb-ref-card__name">PMOD</div><div class="hb-ref-card__desc">Pattern mode</div></a>
+<a class="hb-ref-card" href="play.html#loop"><canvas class="led-matrix" data-scene="lk_loop" width="640" height="320"></canvas><div class="hb-ref-card__name">LOOP</div><div class="hb-ref-card__desc">Length cap</div></a>
+<a class="hb-ref-card" href="play.html#vmod"><canvas class="led-matrix" data-scene="lk_vmod" width="640" height="320"></canvas><div class="hb-ref-card__name">VMOD</div><div class="hb-ref-card__desc">Per-voice loops</div></a>
+<a class="hb-ref-card" href="menus.html#chld"><canvas class="led-matrix" data-scene="et_chld" width="640" height="320"></canvas><div class="hb-ref-card__name">CHLD</div><div class="hb-ref-card__desc">Child lock</div></a>
+<a class="hb-ref-card" href="play.html#img"><canvas class="led-matrix" data-scene="et_img" width="640" height="320"></canvas><div class="hb-ref-card__name">IMG</div><div class="hb-ref-card__desc">Image paint</div></a>
+<a class="hb-ref-card" href="play.html#pong"><canvas class="led-matrix" data-scene="lk_pong" width="640" height="320"></canvas><div class="hb-ref-card__name">PONG</div><div class="hb-ref-card__desc">Ball fires muted notes</div></a>
+<a class="hb-ref-card" href="song.html#song"><canvas class="led-matrix" data-scene="md_song" width="640" height="320"></canvas><div class="hb-ref-card__name">SONG</div><div class="hb-ref-card__desc">Arranger</div></a>
 <a class="hb-ref-card" href="play.html#touchy"><canvas class="led-matrix" data-scene="md_touchy" width="16" height="16"></canvas><div class="hb-ref-card__name">TCHY</div><div class="hb-ref-card__desc">Five-pad sample instrument</div></a>
-<a class="hb-ref-card" href="advanced-sequencing.html#auto-extend"><canvas class="led-matrix" data-scene="et_auto" width="16" height="16"></canvas><div class="hb-ref-card__name">AUTO</div><div class="hb-ref-card__desc">generated fill</div></a>
+<a class="hb-ref-card" href="advanced-sequencing.html#auto-extend"><canvas class="led-matrix" data-scene="et_auto" width="640" height="320"></canvas><div class="hb-ref-card__name">AUTO</div><div class="hb-ref-card__desc">generated fill</div></a>
 </div></section>
 
 
@@ -112,12 +114,12 @@
           <section class="hb-sub" id="rec">
             <h2>REC submenu</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="record.html#inpt"><canvas class="led-matrix" data-scene="rc_inpt" width="16" height="16"></canvas><div class="hb-ref-card__name">INPT</div><div class="hb-ref-card__desc">MIC / LINE</div></a>
-              <a class="hb-ref-card" href="record.html#mic"><canvas class="led-matrix" data-scene="rc_mic" width="16" height="16"></canvas><div class="hb-ref-card__name">MIC</div><div class="hb-ref-card__desc">Mic gain</div></a>
-              <a class="hb-ref-card" href="record.html#lin"><canvas class="led-matrix" data-scene="rc_lin" width="16" height="16"></canvas><div class="hb-ref-card__name">L-IN</div><div class="hb-ref-card__desc">Line trim</div></a>
-              <a class="hb-ref-card" href="record.html#trig"><canvas class="led-matrix" data-scene="rc_trig" width="16" height="16"></canvas><div class="hb-ref-card__name">TRIG</div><div class="hb-ref-card__desc">Auto-fire</div></a>
-              <a class="hb-ref-card" href="record.html#clr"><canvas class="led-matrix" data-scene="rc_clr" width="16" height="16"></canvas><div class="hb-ref-card__name">CLR</div><div class="hb-ref-card__desc">Note clear policy</div></a>
-              <a class="hb-ref-card" href="record.html#record-mode"><canvas class="led-matrix" data-scene="record_mode" width="16" height="16"></canvas><div class="hb-ref-card__name">Record mode</div><div class="hb-ref-card__desc">Take dialog</div></a>
+              <a class="hb-ref-card" href="record.html#inpt"><canvas class="led-matrix" data-scene="rc_inpt" width="640" height="320"></canvas><div class="hb-ref-card__name">INPT</div><div class="hb-ref-card__desc">MIC / LINE</div></a>
+              <a class="hb-ref-card" href="record.html#mic"><canvas class="led-matrix" data-scene="rc_mic" width="640" height="320"></canvas><div class="hb-ref-card__name">MIC</div><div class="hb-ref-card__desc">Mic gain</div></a>
+              <a class="hb-ref-card" href="record.html#lin"><canvas class="led-matrix" data-scene="rc_lin" width="640" height="320"></canvas><div class="hb-ref-card__name">L-IN</div><div class="hb-ref-card__desc">Line trim</div></a>
+              <a class="hb-ref-card" href="record.html#trig"><canvas class="led-matrix" data-scene="rc_trig" width="640" height="320"></canvas><div class="hb-ref-card__name">TRIG</div><div class="hb-ref-card__desc">Auto-fire</div></a>
+              <a class="hb-ref-card" href="record.html#clr"><canvas class="led-matrix" data-scene="rc_clr" width="640" height="320"></canvas><div class="hb-ref-card__name">CLR</div><div class="hb-ref-card__desc">Note clear policy</div></a>
+              <a class="hb-ref-card" href="record.html#record-mode"><canvas class="led-matrix" data-scene="record_mode" width="640" height="320"></canvas><div class="hb-ref-card__name">Record mode</div><div class="hb-ref-card__desc">Take dialog</div></a>
             </div>
           </section>
 
@@ -128,16 +130,16 @@
           <section class="hb-sub" id="midi-screens">
             <h2>MIDI submenu</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="midi.html#ch"><canvas class="led-matrix" data-scene="md_ch" width="16" height="16"></canvas><div class="hb-ref-card__name">CH</div><div class="hb-ref-card__desc">Note mapping</div></a>
-              <a class="hb-ref-card" href="midi.html#tran"><canvas class="led-matrix" data-scene="md_tran" width="16" height="16"></canvas><div class="hb-ref-card__name">TRAN</div><div class="hb-ref-card__desc">Transport</div></a>
-              <a class="hb-ref-card" href="midi.html#send"><canvas class="led-matrix" data-scene="md_send" width="16" height="16"></canvas><div class="hb-ref-card__name">SEND</div><div class="hb-ref-card__desc">Out path</div></a>
-              <a class="hb-ref-card" href="midi.html#rcve"><canvas class="led-matrix" data-scene="md_rcve" width="16" height="16"></canvas><div class="hb-ref-card__name">RCVE</div><div class="hb-ref-card__desc">Notes in</div></a>
-              <a class="hb-ref-card" href="midi.html#clmp"><canvas class="led-matrix" data-scene="md_clmp" width="16" height="16"></canvas><div class="hb-ref-card__name">FOLD</div><div class="hb-ref-card__desc">Pitch range</div></a>
-              <a class="hb-ref-card" href="midi.html#sync"><canvas class="led-matrix" data-scene="md_sync" width="16" height="16"></canvas><div class="hb-ref-card__name">SYNC</div><div class="hb-ref-card__desc">SNC1 / SNC2</div></a>
-              <a class="hb-ref-card" href="midi.html#ppqn"><canvas class="led-matrix" data-scene="md_ppqn" width="16" height="16"></canvas><div class="hb-ref-card__name">PPQN</div><div class="hb-ref-card__desc">Analog clock</div></a>
-              <a class="hb-ref-card" href="midi.html#side"><canvas class="led-matrix" data-scene="md_side" width="16" height="16"></canvas><div class="hb-ref-card__name">TRIG</div><div class="hb-ref-card__desc">Sidechain voice</div></a>
-              <a class="hb-ref-card" href="midi.html#cin"><canvas class="led-matrix" data-scene="md_cin" width="16" height="16"></canvas><div class="hb-ref-card__name">CIN</div><div class="hb-ref-card__desc">Analog clock in</div></a>
-              <a class="hb-ref-card" href="midi.html#wrte"><canvas class="led-matrix" data-scene="md_wrte" width="16" height="16"></canvas><div class="hb-ref-card__name">OVWR</div><div class="hb-ref-card__desc">Overwrite grid</div></a>
+              <a class="hb-ref-card" href="midi.html#ch"><canvas class="led-matrix" data-scene="md_ch" width="640" height="320"></canvas><div class="hb-ref-card__name">CH</div><div class="hb-ref-card__desc">Note mapping</div></a>
+              <a class="hb-ref-card" href="midi.html#tran"><canvas class="led-matrix" data-scene="md_tran" width="640" height="320"></canvas><div class="hb-ref-card__name">TRAN</div><div class="hb-ref-card__desc">Transport</div></a>
+              <a class="hb-ref-card" href="midi.html#send"><canvas class="led-matrix" data-scene="md_send" width="640" height="320"></canvas><div class="hb-ref-card__name">SEND</div><div class="hb-ref-card__desc">Out path</div></a>
+              <a class="hb-ref-card" href="midi.html#rcve"><canvas class="led-matrix" data-scene="md_rcve" width="640" height="320"></canvas><div class="hb-ref-card__name">RCVE</div><div class="hb-ref-card__desc">Notes in</div></a>
+              <a class="hb-ref-card" href="midi.html#clmp"><canvas class="led-matrix" data-scene="md_clmp" width="640" height="320"></canvas><div class="hb-ref-card__name">FOLD</div><div class="hb-ref-card__desc">Pitch range</div></a>
+              <a class="hb-ref-card" href="midi.html#sync"><canvas class="led-matrix" data-scene="md_sync" width="640" height="320"></canvas><div class="hb-ref-card__name">SYNC</div><div class="hb-ref-card__desc">SNC1 / SNC2</div></a>
+              <a class="hb-ref-card" href="midi.html#ppqn"><canvas class="led-matrix" data-scene="md_ppqn" width="640" height="320"></canvas><div class="hb-ref-card__name">PPQN</div><div class="hb-ref-card__desc">Analog clock</div></a>
+              <a class="hb-ref-card" href="midi.html#side"><canvas class="led-matrix" data-scene="md_side" width="640" height="320"></canvas><div class="hb-ref-card__name">TRIG</div><div class="hb-ref-card__desc">Sidechain voice</div></a>
+              <a class="hb-ref-card" href="midi.html#cin"><canvas class="led-matrix" data-scene="md_cin" width="640" height="320"></canvas><div class="hb-ref-card__name">CIN</div><div class="hb-ref-card__desc">Analog clock in</div></a>
+              <a class="hb-ref-card" href="midi.html#wrte"><canvas class="led-matrix" data-scene="md_wrte" width="640" height="320"></canvas><div class="hb-ref-card__name">OVWR</div><div class="hb-ref-card__desc">Overwrite grid</div></a>
             </div>
           </section>
 
@@ -146,22 +148,22 @@
 
 
           <section class="hb-sub" id="etc"><h2>ETC submenu</h2><div class="hb-ref-grid">
-<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_info" width="16" height="16"></canvas><div class="hb-ref-card__name">INFO</div><div class="hb-ref-card__desc">Version</div></a>
-<a class="hb-ref-card" href="hardware.html#sd-tool"><canvas class="led-matrix" data-scene="et_sd" width="16" height="16"></canvas><div class="hb-ref-card__name">SD</div><div class="hb-ref-card__desc">Serial file server</div></a>
-<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_batt" width="16" height="16"></canvas><div class="hb-ref-card__name">BATT</div><div class="hb-ref-card__desc">Battery %</div></a>
+<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_info" width="640" height="320"></canvas><div class="hb-ref-card__name">INFO</div><div class="hb-ref-card__desc">Version</div></a>
+<a class="hb-ref-card" href="hardware.html#sd-tool"><canvas class="led-matrix" data-scene="et_sd" width="640" height="320"></canvas><div class="hb-ref-card__name">SD</div><div class="hb-ref-card__desc">Serial file server</div></a>
+<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_batt" width="640" height="320"></canvas><div class="hb-ref-card__name">BATT</div><div class="hb-ref-card__desc">Battery %</div></a>
 <a class="hb-ref-card" href="menus.html#adv"><canvas class="led-matrix" data-scene="et_adv" width="640" height="320"></canvas><div class="hb-ref-card__name">ADV</div><div class="hb-ref-card__desc">Display and diagnostics</div></a>
-<a class="hb-ref-card" href="troubleshooting.html#reset"><canvas class="led-matrix" data-scene="et_rset" width="16" height="16"></canvas><div class="hb-ref-card__name">RSET / SD</div><div class="hb-ref-card__desc">Rescan card</div></a>
-<a class="hb-ref-card" href="troubleshooting.html#reset"><canvas class="led-matrix" data-scene="et_rset_efx" width="16" height="16"></canvas><div class="hb-ref-card__name">RSET / EFX</div><div class="hb-ref-card__desc">Reset effects</div></a>
-<a class="hb-ref-card" href="troubleshooting.html#reset"><canvas class="led-matrix" data-scene="et_rset_full" width="16" height="16"></canvas><div class="hb-ref-card__name">RSET / FULL</div><div class="hb-ref-card__desc">Wipe RAM</div></a>
+<a class="hb-ref-card" href="troubleshooting.html#reset"><canvas class="led-matrix" data-scene="et_rset" width="640" height="320"></canvas><div class="hb-ref-card__name">RSET / SD</div><div class="hb-ref-card__desc">Rescan card</div></a>
+<a class="hb-ref-card" href="troubleshooting.html#reset"><canvas class="led-matrix" data-scene="et_rset_efx" width="640" height="320"></canvas><div class="hb-ref-card__name">RSET / EFX</div><div class="hb-ref-card__desc">Reset effects</div></a>
+<a class="hb-ref-card" href="troubleshooting.html#reset"><canvas class="led-matrix" data-scene="et_rset_full" width="640" height="320"></canvas><div class="hb-ref-card__name">RSET / FULL</div><div class="hb-ref-card__desc">Wipe RAM</div></a>
 </div></section>
 <section class="hb-sub" id="adv"><h2>ETC → ADV submenu</h2><div class="hb-ref-grid">
-<a class="hb-ref-card" href="play.html#crsr"><canvas class="led-matrix" data-scene="lk_crsr" width="16" height="16"></canvas><div class="hb-ref-card__name">CRSR</div><div class="hb-ref-card__desc">Cursor style</div></a>
-<a class="hb-ref-card" href="play.html#leds"><canvas class="led-matrix" data-scene="lk_leds" width="16" height="16"></canvas><div class="hb-ref-card__name">LEDS</div><div class="hb-ref-card__desc">Board layout</div></a>
-<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_ram" width="16" height="16"></canvas><div class="hb-ref-card__name">RAM</div><div class="hb-ref-card__desc">Audio memory</div></a>
-<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_lght" width="16" height="16"></canvas><div class="hb-ref-card__name">LGHT</div><div class="hb-ref-card__desc">Ring LED</div></a>
-<a class="hb-ref-card" href="hardware.html#palette"><canvas class="led-matrix" data-scene="et_colr" width="16" height="16"></canvas><div class="hb-ref-card__name">COLR</div><div class="hb-ref-card__desc">Palette</div></a>
-<a class="hb-ref-card" href="menus.html#eyes"><canvas class="led-matrix" data-scene="et_eyes" width="16" height="16"></canvas><div class="hb-ref-card__name">EYES</div><div class="hb-ref-card__desc">Idle screensaver</div></a>
-<a class="hb-ref-card" href="menus.html#fire"><canvas class="led-matrix" data-scene="et_fire" width="16" height="16"></canvas><div class="hb-ref-card__name">FIRE</div><div class="hb-ref-card__desc">Sideways embers</div></a>
+<a class="hb-ref-card" href="play.html#crsr"><canvas class="led-matrix" data-scene="lk_crsr" width="640" height="320"></canvas><div class="hb-ref-card__name">CRSR</div><div class="hb-ref-card__desc">Cursor style</div></a>
+<a class="hb-ref-card" href="play.html#leds"><canvas class="led-matrix" data-scene="lk_leds" width="640" height="320"></canvas><div class="hb-ref-card__name">LEDS</div><div class="hb-ref-card__desc">Board layout</div></a>
+<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_ram" width="640" height="320"></canvas><div class="hb-ref-card__name">RAM</div><div class="hb-ref-card__desc">Audio memory</div></a>
+<a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_lght" width="640" height="320"></canvas><div class="hb-ref-card__name">LGHT</div><div class="hb-ref-card__desc">Ring LED</div></a>
+<a class="hb-ref-card" href="hardware.html#palette"><canvas class="led-matrix" data-scene="et_colr" width="640" height="320"></canvas><div class="hb-ref-card__name">COLR</div><div class="hb-ref-card__desc">Palette</div></a>
+<a class="hb-ref-card" href="menus.html#eyes"><canvas class="led-matrix" data-scene="et_eyes" width="640" height="320"></canvas><div class="hb-ref-card__name">EYES</div><div class="hb-ref-card__desc">Idle screensaver</div></a>
+<a class="hb-ref-card" href="menus.html#fire"><canvas class="led-matrix" data-scene="et_fire" width="640" height="320"></canvas><div class="hb-ref-card__name">FIRE</div><div class="hb-ref-card__desc">Sideways embers</div></a>
 </div></section>
 
 
@@ -171,10 +173,10 @@
           <section class="hb-sub" id="bpm-states">
             <h2>BPM &amp; clock variants</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm" width="16" height="16"></canvas><div class="hb-ref-card__name">BPM (INT)</div><div class="hb-ref-card__desc">Master, cyan</div></a>
-              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm_ext_ok" width="16" height="16"></canvas><div class="hb-ref-card__name">BPM (MIDI EXT)</div><div class="hb-ref-card__desc">Locked, green</div></a>
-              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm_ext_warn" width="16" height="16"></canvas><div class="hb-ref-card__name">BPM (MIDI WARN)</div><div class="hb-ref-card__desc">Hunting, red</div></a>
-              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm_ext_analog" width="16" height="16"></canvas><div class="hb-ref-card__name">BPM (analog EXT)</div><div class="hb-ref-card__desc">CLK-IN, orange</div></a>
+              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm" width="640" height="320"></canvas><div class="hb-ref-card__name">BPM (INT)</div><div class="hb-ref-card__desc">Master, cyan</div></a>
+              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm_ext_ok" width="640" height="320"></canvas><div class="hb-ref-card__name">BPM (MIDI EXT)</div><div class="hb-ref-card__desc">Locked, green</div></a>
+              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm_ext_warn" width="640" height="320"></canvas><div class="hb-ref-card__name">BPM (MIDI WARN)</div><div class="hb-ref-card__desc">Hunting, red</div></a>
+              <a class="hb-ref-card" href="tempo-midi.html#bpm"><canvas class="led-matrix" data-scene="bpm_ext_analog" width="640" height="320"></canvas><div class="hb-ref-card__name">BPM (analog EXT)</div><div class="hb-ref-card__desc">CLK-IN, orange</div></a>
             </div>
           </section>
 
@@ -185,10 +187,10 @@
           <section class="hb-sub" id="filters">
             <h2>Filter / sound design pages</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p0" width="16" height="16"></canvas><div class="hb-ref-card__name">FILTER 0</div><div class="hb-ref-card__desc">HCUT · LCUT · RVRB · BITC</div></a>
-              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p1" width="16" height="16"></canvas><div class="hb-ref-card__name">FILTER 1</div><div class="hb-ref-card__desc">CUT · RES · FLT</div></a>
-              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p2" width="16" height="16"></canvas><div class="hb-ref-card__name">FILTER 2</div><div class="hb-ref-card__desc">WAVE · INST · CENT · SEMI</div></a>
-              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p3" width="16" height="16"></canvas><div class="hb-ref-card__name">FILTER 3</div><div class="hb-ref-card__desc">ADSR</div></a>
+              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p0" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER 0</div><div class="hb-ref-card__desc">HCUT · LCUT · RVRB · BITC</div></a>
+              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p1" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER 1</div><div class="hb-ref-card__desc">CUT · RES · FLT</div></a>
+              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p2" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER 2</div><div class="hb-ref-card__desc">WAVE · INST · CENT · SEMI</div></a>
+              <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p3" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER 3</div><div class="hb-ref-card__desc">ADSR</div></a>
             </div>
           </section>
 
@@ -199,12 +201,12 @@
           <section class="hb-sub" id="samples-screens">
             <h2>Sample browser screens</h2>
             <div class="hb-ref-grid">
-              <a class="hb-ref-card" href="samples.html#set-wav"><canvas class="led-matrix" data-scene="set_wav_trim" width="16" height="16"></canvas><div class="hb-ref-card__name">Sample browser (file)</div><div class="hb-ref-card__desc">Trim + peaks</div></a>
-              <a class="hb-ref-card" href="samples.html#set-wav"><canvas class="led-matrix" data-scene="set_wav_depth" width="16" height="16"></canvas><div class="hb-ref-card__name">Sample browser (folder)</div><div class="hb-ref-card__desc">Breadcrumb</div></a>
-              <a class="hb-ref-card" href="sample-packs.html#pack"><canvas class="led-matrix" data-scene="pack" width="16" height="16"></canvas><div class="hb-ref-card__name">KIT</div><div class="hb-ref-card__desc">Pack slots</div></a>
-              <a class="hb-ref-card" href="files.html#file"><canvas class="led-matrix" data-scene="loadsave" width="16" height="16"></canvas><div class="hb-ref-card__name">LOAD / SAVE</div><div class="hb-ref-card__desc">PATT slot</div></a>
-              <a class="hb-ref-card" href="files.html#new"><canvas class="led-matrix" data-scene="newfile" width="16" height="16"></canvas><div class="hb-ref-card__name">NEW</div><div class="hb-ref-card__desc">Generate pattern</div></a>
-              <a class="hb-ref-card" href="song.html#song"><canvas class="led-matrix" data-scene="song" width="16" height="16"></canvas><div class="hb-ref-card__name">SONG</div><div class="hb-ref-card__desc">Arranger</div></a>
+              <a class="hb-ref-card" href="samples.html#set-wav"><canvas class="led-matrix" data-scene="set_wav_trim" width="640" height="320"></canvas><div class="hb-ref-card__name">Sample browser (file)</div><div class="hb-ref-card__desc">Trim + peaks</div></a>
+              <a class="hb-ref-card" href="samples.html#set-wav"><canvas class="led-matrix" data-scene="set_wav_depth" width="640" height="320"></canvas><div class="hb-ref-card__name">Sample browser (folder)</div><div class="hb-ref-card__desc">Breadcrumb</div></a>
+              <a class="hb-ref-card" href="sample-packs.html#pack"><canvas class="led-matrix" data-scene="pack" width="640" height="320"></canvas><div class="hb-ref-card__name">KIT</div><div class="hb-ref-card__desc">Pack slots</div></a>
+              <a class="hb-ref-card" href="files.html#file"><canvas class="led-matrix" data-scene="loadsave" width="640" height="320"></canvas><div class="hb-ref-card__name">LOAD / SAVE</div><div class="hb-ref-card__desc">PATT slot</div></a>
+              <a class="hb-ref-card" href="files.html#new"><canvas class="led-matrix" data-scene="newfile" width="640" height="320"></canvas><div class="hb-ref-card__name">NEW</div><div class="hb-ref-card__desc">Generate pattern</div></a>
+              <a class="hb-ref-card" href="song.html#song"><canvas class="led-matrix" data-scene="song" width="640" height="320"></canvas><div class="hb-ref-card__name">SONG</div><div class="hb-ref-card__desc">Arranger</div></a>
             </div>
           </section>
         </section>
