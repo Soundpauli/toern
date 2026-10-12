@@ -1656,7 +1656,7 @@ const HELP = {
   vol: "Output levels. Encoder 4 selects a page; encoder 3 changes its value. On PREV, encoder 2 selects ON / PRSS / SYNC and encoder 3 changes preview volume.",
   recs: "Recording input. Encoder 4 picks a row, encoder 3 changes it.",
   midi: "MIDI. Encoder 4 picks a row, encoder 3 changes it.",
-  touchy: "TOUCHY: pads 1–5 play voices 1–5 (keyboard 1–5). Knobs 1–4 control the last played voice: pitch, velocity, reverb (voices 1, 2 and 5), highpass. Channel volume stays full. Click to choose voices 1–4 samples. Hold knob 1 to fast-record into the last played voice; release to stop. Hold knob 3 for the last played voice’s filter, or knob 4 for the main menu. Turn MODE → TCHY OFF to leave.",
+  touchy: "TOUCHY: pads 1–5 play voices 1–5 (keyboard 1–5). Knobs 1–4 control the last played voice: pitch, velocity, reverb (voices 1, 2 and 5), highpass. Channel volume stays full. Click to choose voices 1–4 samples. Hold knob 1 to fast-record into the last played voice; release to stop. Hold knob 3 for the last played voice’s filter, or knob 4 to switch TOUCHY OFF and open the main menu.",
   mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger. Esc leaves.",
   etc: "ETC: INFO, SD, BATT, ADV, RSET. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. Esc leaves.",
   adv: "ADV: CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE. Encoder 4 selects a page; encoder 3 changes its value. LEDS 1 / 1B select 16×16, 2 / 2B select 32×16. Esc leaves.",
@@ -1690,8 +1690,9 @@ function markVoice() {
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
-  document.querySelector("#touchy-extra-pads").hidden = mode !== "touchy";
-  document.querySelectorAll(".mobile-shortcuts [data-touch]").forEach(pad => { pad.hidden = mode !== "touchy"; });
+  document.querySelector("#touchy-extra-pads").hidden = false;
+  document.querySelector('#touchy-extra-pads [data-touch="4"]').hidden = mode !== "touchy";
+  document.querySelectorAll(".mobile-shortcuts [data-touch]").forEach(pad => { pad.hidden = mode !== "touchy" && pad.dataset.touch !== "5"; });
   document.querySelectorAll(".mobile-shortcuts [data-shortcut]").forEach(btn => {
     btn.hidden = mode === "touchy" && btn.dataset.shortcut !== "menu";
   });
@@ -1701,6 +1702,10 @@ function markVoice() {
     if (id <= 3) {
       pad.querySelector(".io-label").textContent = label;
       pad.setAttribute("aria-label", `Touch ${id}, ${label}`);
+    }
+    if (id >= 4) {
+      pad.textContent = touchy ? `Touch ${id} · voice ${id}` : id === 5 ? "Touch 5 · FN" : "Touch 4";
+      pad.setAttribute("aria-label", id === 5 && !touchy ? "Touch 5, hold FN and turn encoder 1 to set sample direction" : `Touch ${id}, voice ${id}`);
     }
     pad.style.outline = touchy ? `1px solid rgb(${TOUCHY_COLORS[id - 1].join(",")})` : "";
     pad.title = touchy ? `Touch ${id}: voice ${id}` : `Touch ${id}`;

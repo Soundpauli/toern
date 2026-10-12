@@ -12,6 +12,17 @@ import { listDir, packWavs, parsePattern, patternUrl, sampleWavs } from "./libra
 import { drawRandoms } from "./random.js";
 import { GENRES, generateGenre } from "./genres.js";
 
+// Physical button events remain 1/2/9; FN adds a separate event namespace.
+export function encoderButtonEvent(encoder, state, fn = false) {
+  const code = fn ? ({1:4,2:3,9:8}[state] ?? state) : state;
+  const buttons = [0,0,0,0];
+  buttons[encoder] = code;
+  return buttons;
+}
+export function encoderTurnEvent(encoder, delta, fn = false) {
+  return {encoder, delta, fn};
+}
+
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 const SUB_VALUES = {
@@ -20,12 +31,12 @@ const SUB_VALUES = {
     { opts: ["ON", "PRSS", "SYNC"], colors: [[0, 120, 0], [120, 120, 0], [0, 0, 120]], codes: ["G", "Y", "X"] },
     { opts: ["FULL", "EASY"], colors: [[0, 0, 120], [0, 120, 0]], codes: ["X", "G"] },
     { opts: ["OFF", "ON", "SONG", "NEXT"], colors: [[120, 0, 0], [0, 120, 0], [255, 255, 0], [0, 255, 255]], codes: ["R", "G", "Y", "N"] },
-    { opts: ["OFF", "1", "2", "3", "4", "5", "6", "7", "8"], colors: [[100, 100, 100]], codes: ["G"] },
+    { opts: ["OFF", "1", "2", "3", "4", "5", "6", "7", "8"], colors: [[0, 120, 120]], codes: ["N"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["PAGE", "VOL"], colors: [[0, 120, 0], [120, 60, 0]], codes: ["G", "O"] },
     { opts: ["1", "1B", "2", "2B"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["NORM", "CHNR", "BIG"], colors: [[150, 100, 0], [150, 200, 0], [150, 255, 0]], codes: ["G"] },
+    { opts: ["NORM", "CHNR", "BIG"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["L+R", "R"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["ALL"], colors: [[0, 120, 0]], codes: ["G"] },
   ],
@@ -51,11 +62,11 @@ const SUB_VALUES = {
   vol: [
     { opts: ["80"], colors: [[55, 10, 0]], codes: ["O"] },
     { opts: ["1.0"], colors: [[120, 120, 120]], codes: ["W"] },
-    { opts: ["10"], colors: [[50, 0, 50]], codes: ["P"] },
+    { opts: ["10"], colors: [[120, 0, 120]], codes: ["M"] },
     { opts: ["8"], colors: [[0, 120, 120]], codes: ["N"] },
-    { opts: ["OFF", "M+P", "L+R"], colors: [[120, 0, 0], [0, 120, 0], [0, 0, 120]], codes: ["R", "G", "X"] },
+    { opts: ["OFF", "M+P", "L+R"], colors: [[120, 0, 0], [0, 120, 0], [0, 120, 0]], codes: ["R", "G", "G"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["0"], colors: [[120, 120, 0]], codes: ["Y"] },
+    { opts: ["0"], colors: [[120, 0, 0]], codes: ["R"] },
   ],
   etc: [
     { opts: ["TOERN"], colors: [[120, 120, 120]], codes: ["W"] },
@@ -103,6 +114,7 @@ export function createDevice(matrix, statusEl, rings) {
 
   const s = {
     GLOB: { x: 1, y: 2, edit: 1, page: 1, currentChannel: 1, singleMode: false },
+    fnHeld: false, fnArrow: "", fnArrowAt: 0,
     touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(100), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
     menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK",
@@ -127,7 +139,7 @@ export function createDevice(matrix, statusEl, rings) {
     volBar: 0, volBarAt: 0, chVol,
     muteMask: 0x0006, muteSel: 1, fullMute: false, fullMuteSaved: null,
     ledBrightness: 64, chNr: 1, chNrAt: 0, pageNr: 1, pageNrAt: 0, infoAt: 0, knobAngle: [0, 0, 0, 0],
-    mainVol: 80, gain: 1, prevVol: 8, stereo: 0,
+    mainVol: 80, gain: 1, prevVol: 20, prevModeLabelUntil: 0, stereo: 0,
     micGain: 20, lineInLevel: 5,
     fastRecMode: 1, recChannelClear: 1, recInput: 0,
     fastRecActive: false,
@@ -213,9 +225,9 @@ export function createDevice(matrix, statusEl, rings) {
     const ch = s.GLOB.currentChannel;
     const ctx = engine.ensure();
     if (ctx.state === "suspended") ctx.resume();
-    engine.setBus({ main: s.mainVol, preview: s.prevVol, stereo: s.stereo });
+    engine.setBus({ main: s.mainVol, preview: s.prevVol * 16 / 50, stereo: s.stereo });
     const buffer = await engine.decodeUrl(item.url);
-    engine.preview({ index: wavOf[ch] || 0, seek: seekOf[ch], end: endOf[ch], inv: invOf[ch], velocity: Math.round(s.prevVol * 8), buffer, env: wavOpts(ch).env });
+    engine.preview({ index: wavOf[ch] || 0, seek: seekOf[ch], end: endOf[ch], inv: invOf[ch], velocity: Math.round(s.prevVol * 127 / 50), buffer, env: wavOpts(ch).env });
   }
   async function scanPeaks(item) {
     const token = ++peakToken;
@@ -516,7 +528,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function applyMix() {
     engine.ensure();
-    engine.setBus({ main: s.mainVol, preview: s.prevVol, stereo: s.stereo });
+    engine.setBus({ main: s.mainVol, preview: s.prevVol * 16 / 50, stereo: s.stereo });
     for (const ch of SOUND_CH) engine.apply(ch, filt[ch], chVol[ch], s.gain);
   }
   function liveMix() {
@@ -969,7 +981,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (Number.isFinite(data.fireColor)) s.fireColor = clamp(data.fireColor, 0, 8);
     if (Number.isFinite(data.mainVol)) s.mainVol = clamp(data.mainVol, 0, 100);
     if (Number.isFinite(data.gain)) s.gain = clamp(Math.round(data.gain * 10) / 10, 0, 2);
-    if (Number.isFinite(data.prevVol)) s.prevVol = clamp(data.prevVol, 0, 16);
+    if (Number.isFinite(data.prevVol)) s.prevVol = clamp(data.prevVol, 0, 50);
     if (Number.isFinite(data.micGain)) s.micGain = clamp(data.micGain, 0, 63);
     if (Number.isFinite(data.lineInLevel)) s.lineInLevel = clamp(data.lineInLevel, 0, 15);
     if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
@@ -1092,10 +1104,10 @@ export function createDevice(matrix, statusEl, rings) {
     return legacySubValue(slot.mode, slot.index);
   }
   function legacySubValue(mode, index) {
-    if (mode === "vol" && index === 0) return { text: String(s.mainVol), color: [55, 10, 0], code: "O" };
+    if (mode === "vol" && index === 0) return { text: String(s.mainVol), color: [120, 60, 0], code: "O" };
     if (mode === "vol" && index === 1) return { text: s.gain.toFixed(1), color: [120, 120, 120], code: "W" };
-    if (mode === "vol" && index === 3) return { text: String(s.prevVol), color: [0, 120, 120], code: "N" };
-    if (mode === "recs" && index === 1) return { text: String(s.micGain), color: [0, 120, 120], code: "N" };
+    if (mode === "vol" && index === 3) return { text: String(s.prevVol), color: [120, 60, 0], code: "O" };
+    if (mode === "recs" && index === 1) return { text: String(s.micGain), color: [120, 0, 0], code: "R" };
     if (mode === "recs" && index === 2) return { text: String(s.lineInLevel), color: [0, 0, 120], code: "X" };
     if (mode === "midi" && index === 7) {
       const v = s.sideVoice | 0;
@@ -1272,6 +1284,18 @@ export function createDevice(matrix, statusEl, rings) {
       applyFilt(ch);
       return;
     }
+    const turnEvent = encoderTurnEvent(enc, dir, s.fnHeld);
+    if (turnEvent.fn) {
+      s.knobAngle[enc] += dir * 15;
+      if (hold[enc]) hold[enc].turned = true;
+      const ch = s.GLOB.currentChannel;
+      if (turnEvent.encoder === 0 && !s.fastRecActive && !s.recOn && ch >= 1 && ch <= 8) {
+        invOf[ch] = turnEvent.delta < 0;
+        s.fnArrow = turnEvent.delta < 0 ? "<<" : ">>";
+        s.fnArrowAt = performance.now();
+      }
+      return;
+    }
     engine.click();
     s.knobAngle[enc] += dir * 15;
     if (hold[enc]) hold[enc].turned = true;
@@ -1424,9 +1448,15 @@ export function createDevice(matrix, statusEl, rings) {
       s.voiceMode = false;
       return;
     }
-    if (SUBS[s.mode] && enc === 3) s.subIndex = clamp(s.subIndex + dir, 0, SUBS[s.mode].length - 1);
+    if (SUBS[s.mode] && enc === 3) {
+      const previous=s.subIndex;
+      s.subIndex = clamp(s.subIndex + dir, 0, SUBS[s.mode].length - 1);
+      if(s.mode==="vol" && previous!==s.subIndex)s.prevModeLabelUntil=0;
+    }
     if (s.mode === "vol" && s.subIndex === 3 && enc === 1) {
-      subPick.look[1] = clamp(subPick.look[1] + dir, 0, 2);
+      const previous=subPick.look[1];
+      subPick.look[1] = clamp(previous + dir, 0, 2);
+      if (previous!==subPick.look[1]) s.prevModeLabelUntil=performance.now()+2500;
       applySub("look", 1);
       return;
     }
@@ -1437,13 +1467,14 @@ export function createDevice(matrix, statusEl, rings) {
         if (enabled) touchySavedVolume = chVol.slice();
         for (let ch=1;ch<=5;ch++) { chVol[ch] = enabled ? 16 : touchySavedVolume[ch]; applyFilt(ch); }
         s.touchyEnabled = enabled;
+        if (enabled) s.fnHeld = false;
       }
       return;
     }
     if (SUBS[s.mode] && enc === 2) {
       if (pageMode === "vol" && pageIndex === 0) s.mainVol = clamp(s.mainVol + dir, 0, 100);
       else if (pageMode === "vol" && pageIndex === 1) s.gain = clamp(Math.round((s.gain + dir * 0.1) * 10) / 10, 0, 2);
-      else if (pageMode === "vol" && pageIndex === 3) s.prevVol = clamp(s.prevVol + dir, 0, 16);
+      else if (pageMode === "vol" && pageIndex === 3) { s.prevVol = clamp(s.prevVol + dir, 0, 50); s.prevModeLabelUntil=0; }
       else if (pageMode === "recs" && pageIndex === 1) { s.micGain = clamp(s.micGain + dir, 0, 63); saveEeprom(); return; }
       else if (pageMode === "recs" && pageIndex === 2) { s.lineInLevel = clamp(s.lineInLevel + dir, 0, 15); saveEeprom(); return; }
       else if (pageMode === "midi" && (pageIndex === 5 || pageIndex === 6 || pageIndex === 8)) {
@@ -1517,6 +1548,14 @@ export function createDevice(matrix, statusEl, rings) {
     s.mode = "wav";
     previewWav();
   }
+  function exitTouchyToMenu() {
+    if (s.touchyEnabled) {
+      for (let ch=1;ch<=5;ch++) { chVol[ch] = touchySavedVolume[ch]; applyFilt(ch); }
+      s.touchyEnabled = false;
+    }
+    s.mode = "menu";
+    s.menuIndex = 8;
+  }
   function touchyLongPress(enc) {
     if (enc === 0) {
       s.GLOB.currentChannel = s.touchyLastVoice;
@@ -1529,7 +1568,7 @@ export function createDevice(matrix, statusEl, rings) {
       s.GLOB.currentChannel = s.touchyLastVoice;
       s.GLOB.y = s.touchyLastVoice + 1;
       enterFilter();
-    } else if (enc === 3) { s.mode = "menu"; s.menuIndex = 8; }
+    } else if (enc === 3) { exitTouchyToMenu(); }
   }
   const touchyTouchDown = Array(5).fill(false);
   const touchyTouchLatched = Array(5).fill(false);
@@ -1544,7 +1583,7 @@ export function createDevice(matrix, statusEl, rings) {
     touch.l = touch.m = touch.chord = touch.arm = false;
     touch.first = 0;
     const pad = id - 1, now = performance.now();
-    if (!touchyTouchDown[pad] && now - touchyReleasedAt[pad] >= 60) touchyTouchLatched[pad] = false;
+    if (!touchyTouchDown[pad] && now - touchyReleasedAt[pad] >= 30) touchyTouchLatched[pad] = false;
     if (!down && touchyTouchDown[pad]) touchyReleasedAt[pad] = now;
     if (down && !touchyTouchLatched[pad]) {
       touchyTouchLatched[pad] = true;
@@ -1560,7 +1599,12 @@ export function createDevice(matrix, statusEl, rings) {
     }
     touchyTouchDown[id - 1] = down;
   }
+  function dispatchButtonEvent(enc, state, fn = s.fnHeld) {
+    const events = encoderButtonEvent(enc, state, fn && s.mode !== "touchy");
+    return [3,4,8].includes(events[enc]); // FN button bindings are reserved.
+  }
   function shortPress(enc) {
+    if (dispatchButtonEvent(enc, 1)) return;
     if (s.mode === "touchy") { openTouchyBrowser(enc + 1); return; }
     noteActivity();
     if (s.mode === "shift") {
@@ -2154,7 +2198,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (!active) return;
     if (e.repeat && !turning) return;
     if (s.mode === "boot") return;
-    if (e.key === "Escape" && s.mode === "touchy") { s.mode = "menu"; s.menuIndex = 8; return; }
+    if (e.key === "Escape" && s.mode === "touchy") { exitTouchyToMenu(); return; }
     if (e.key === "Escape") {
       if (s.fastRecActive) stopFastRec();
       if (s.mode === "rec") closeMic();
@@ -2193,6 +2237,10 @@ export function createDevice(matrix, statusEl, rings) {
       const enc = isTab(e) ? 0 : isEncoder2Click(e) ? 1 : e.key === " " ? 2 : 3;
       hold[enc] = { at: performance.now(), turned: false, fired: false };
     }
+    else if (s.fnHeld && (isTab(e) || isEncoder2Click(e) || e.key === " " || e.key === "Enter")) {
+      const enc=isTab(e)?0:isEncoder2Click(e)?1:e.key===" "?2:3;
+      hold[enc]={at:performance.now(),turned:false,fired:false,fn:true};
+    }
     else if (isTab(e)) {
       if (s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
       else {
@@ -2215,6 +2263,12 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.GLOB.x !== beforeX || s.GLOB.y !== beforeY) announceState();
   }
   function keyup(e) {
+    const fnEncoder=isTab(e)?0:isEncoder2Click(e)?1:e.key===" "?2:e.key==="Enter"?3:-1;
+    if (fnEncoder>=0 && hold[fnEncoder]?.fn) {
+      const h=hold[fnEncoder];hold[fnEncoder]=null;
+      if (!h.turned) dispatchButtonEvent(fnEncoder,h.fired?9:1,true);
+      return;
+    }
     if (s.mode !== "touchy" && e.key >= "1" && e.key <= "5") releaseTouchyPad(Number(e.key) - 1);
     if (s.mode === "touchy" && e.key >= "1" && e.key <= "5") { touchyTouch(Number(e.key), false); return; }
     if (!deviceKeysActive()) return;
@@ -2250,21 +2304,27 @@ export function createDevice(matrix, statusEl, rings) {
         break;
       }
     }
-    if (s.mode === "single" && s.GLOB.y === 16 && hold[0] && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
+    for (let enc=0;enc<4;enc++) {
+      const h=hold[enc];
+      if (h?.fn && !h.fired && !h.turned && now-h.at>=LONG_MS) {
+        dispatchButtonEvent(enc,2,true); h.fired=true;
+      }
+    }
+    if (s.mode === "single" && s.GLOB.y === 16 && hold[0] && !hold[0].fn && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
       hold[0].fired = true;
       drawRandomPage();
     }
-    if ((s.mode === "draw" || s.mode === "single") && hold[3] && !hold[3].turned && !hold[3].fired && hold[3].had && now - hold[3].at >= LONG_MS) {
+    if ((s.mode === "draw" || s.mode === "single") && hold[3] && !hold[3].fn && !hold[3].turned && !hold[3].fired && hold[3].had && now - hold[3].at >= LONG_MS) {
       hold[3].fired = true; enterVelocity();
     }
-    if (s.mode === "filter" && hold[3] && !hold[3].turned && !hold[3].fired && now - hold[3].at >= LONG_MS) {
+    if (s.mode === "filter" && hold[3] && !hold[3].fn && !hold[3].turned && !hold[3].fired && now - hold[3].at >= LONG_MS) {
       hold[3].fired = true;
       resetVoiceFilters(s.GLOB.currentChannel);
     }
-    if ((s.mode === "draw" || s.mode === "single") && hold[2] && !hold[2].turned && !hold[2].fired && now - hold[2].at >= LONG_MS) {
+    if ((s.mode === "draw" || s.mode === "single") && hold[2] && !hold[2].fn && !hold[2].turned && !hold[2].fired && now - hold[2].at >= LONG_MS) {
       hold[2].fired = true; enterFilter();
     }
-    if (hold[1] && !hold[1].turned && !s.solo && now - hold[1].at >= LONG_MS && s.GLOB.y !== 16 && (s.mode === "draw" || s.mode === "single")) {
+    if (hold[1] && !hold[1].fn && !hold[1].turned && !s.solo && now - hold[1].at >= LONG_MS && s.GLOB.y !== 16 && (s.mode === "draw" || s.mode === "single")) {
       enterSolo();
     }
     const t = engine.now();
@@ -2425,6 +2485,7 @@ export function createDevice(matrix, statusEl, rings) {
     press(enc) { shortPress(enc); },
     knobDown(enc) {
       if (s.mode === "touchy") { hold[enc] = { at: performance.now(), turned: false, fired: false }; return; }
+      if (s.fnHeld) { hold[enc]={at:performance.now(),turned:false,fired:false,fn:true}; return; }
       const grid = s.mode === "draw" || s.mode === "single";
       if (enc === 0 && s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
       if (enc === 1 && grid && s.GLOB.y !== 16) hold[1] = { at: performance.now(), turned: false, fired: false };
@@ -2432,6 +2493,11 @@ export function createDevice(matrix, statusEl, rings) {
       if (enc === 3 && (grid || s.mode === "filter")) hold[3] = { at: performance.now(), turned: false, fired: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
     },
     knobUp(enc, turned) {
+      if (hold[enc]?.fn) {
+        const h=hold[enc]; hold[enc]=null;
+        if (!turned && !h.turned) dispatchButtonEvent(enc,h.fired ? 9 : 1,true);
+        return;
+      }
       if (enc === 0 && s.touchyRecHeld) { s.touchyRecHeld = false; s.touchyRecToken++; stopFastRec(); }
       if (enc === 0) {
         const h = hold[0];
@@ -2459,8 +2525,16 @@ export function createDevice(matrix, statusEl, rings) {
     },
     touch(id, down) {
       if (s.mode !== "touchy" && !down && id >= 1 && id <= 5) releaseTouchyPad(id - 1);
-      if (s.mode === "touchy") { touchyTouch(id, down); return; }
-      if (id === 4 || id === 5) return;
+      if (s.mode === "touchy") { s.fnHeld = false; touchyTouch(id, down); return; }
+      if (id === 5) {
+        s.fnHeld = down;
+        if (down) {
+          noteActivity();
+          for (const h of Object.values(hold)) if (h && !h.fired) h.fn = true;
+        }
+        return;
+      }
+      if (id === 4) return;
       if (id === 1) onTouchL(down);
       else if (id === 2) onMeta(down);
       else onTouch3(down);

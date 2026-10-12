@@ -37,7 +37,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       let color=x<x0+5 && row>=0 && row<6 ? TOUCHY_RAINBOW[row] : [0,0,0];
       const pixel=sprite[top-y]?.[x-x0];
       if(pixel && pixel!==" ")color=pixel==="E"?tint:TOUCHY_PALETTE[pixel];
-      light(x,y,color);
+      light(x,y,color.map(v=>Math.floor(v/2)));
     }
   }
 }
@@ -116,6 +116,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       this.cursorY = 0;
     }
     clear() {
+      this.menuColors = false;
       for (let i = 0; i < this.data.length; i += 4) {
         this.data[i] = 0;
         this.data[i + 1] = 0;
@@ -140,7 +141,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     }
     indL(enc, code) {
       const [x1, x2, x3] = getIndX(enc);
-      const c = indColor(code);
+      const c = this.menuColors ? (code === "O" ? [120, 60, 0] : menuValueColor(indColor(code))) : indColor(code);
       this.set(x1, 1, c[0], c[1], c[2]);
       this.set(x2, 1, c[0], c[1], c[2]);
       this.set(x3, 1, c[0], c[1], c[2]);
@@ -148,7 +149,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     }
     indM(enc, code) {
       const [, x2, x3] = getIndX(enc);
-      const c = indColor(code);
+      const c = this.menuColors ? (code === "O" ? [120, 60, 0] : menuValueColor(indColor(code))) : indColor(code);
       this.set(x2, 1, c[0], c[1], c[2]);
       this.set(x3, 1, c[0], c[1], c[2]);
       if (this.w === 32) this.set(x3 + 1, 1, ...c);
@@ -258,7 +259,13 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     }
   }
 
+  function menuValueColor(rgb) {
+    const peak = Math.max(...rgb);
+    return peak ? rgb.map(c => Math.floor(c * 120 / peak)) : rgb.slice();
+  }
+
   function drawText(m, str, startX, startY, r, g, b) {
+    if (m.menuColors && startY === 3) [r, g, b] = menuValueColor([r, g, b]);
     let xo = startX;
     for (let i = 0; i < str.length; i++) {
       const ch = str.charCodeAt(i);
@@ -309,6 +316,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   function rootMenuPage(m, pageIdx, titleColIdx, titleStr) {
     m.clear();
+    m.menuColors = true;
     m.indL(4, "G");
     drawMenuPageDots(m, pageIdx, 10, m.w);
     const tc = menuTextFromCol(titleColIdx);
@@ -319,6 +327,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     const slots = [[0,10,13], [3,7,5], [0,4,6], [1,10,13], [2,10,13], [3,10,13], [1,4,6], [1,7,14], [6,10,13], [0,7,14], [2,4,6], [3,4,6]];
     const [index, count, parent] = slots[pageIdx];
     m.clear();
+    m.menuColors = true;
     largeInd4Parent(m, parent);
     drawSubmenuDots16(m, index, count, parent);
     const tc = menuTextFromCol(parent);
@@ -329,6 +338,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   function volSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
     m.clear();
+    m.menuColors = true;
     largeInd4Parent(m, 5);
     drawSubmenuDots16(m, pageIdx, 7, 5);
     const tc = title === "ON" ? [0, 120, 0] : title === "OFF" ? [120, 0, 0] : menuTextFromCol(5);
@@ -340,6 +350,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   function recSubFrame(m, pageIdx, title, enc2, enc3) {
     m.clear();
+    m.menuColors = true;
     largeInd4Parent(m, 7);
     drawSubmenuDots16(m, pageIdx, 5, 7);
     const tc = menuTextFromCol(7);
@@ -350,6 +361,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   function midiSubFrame(m, pageIdx, title, enc1, enc2, enc3) {
     m.clear();
+    m.menuColors = true;
     largeInd4Parent(m, 8);
     drawSubmenuDots16(m, pageIdx, 10, 8);
     const tc = menuTextFromCol(8);
@@ -363,6 +375,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     const slots = [[0,5,14], [2,7,14], [1,5,14], [9,10,13], [3,7,14], [4,7,14], [2,5,14], [5,7,14], [4,10,13], [6,7,14], [5,10,13], [4,5,14]];
     const [index, count, parent] = slots[pageIdx];
     m.clear();
+    m.menuColors = true;
     largeInd4Parent(m, parent);
     drawSubmenuDots16(m, index, count, parent);
     const tc = menuTextFromCol(parent);
@@ -826,10 +839,10 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     vol_main(m) {
       volSubFrame(m, 0, "MAIN", "", "", "O");
-      drawText(m, "72", 2, 3, 200, 80, 0);
+      drawText(m, "72", 2, 3, 120, 60, 0);
     },
     vol_gain(m) {
-      volSubFrame(m, 1, "ALL", "X", "O", "G");
+      volSubFrame(m, 1, "ALL", "N", "O", "G");
       drawText(m, "1.0x", 2, 3, 0, 255, 0);
       const cols = [
         [0, 200, 200],
@@ -848,15 +861,15 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     vol_lout(m) {
       volSubFrame(m, 2, "LOUT", "", "", "M");
-      drawText(m, "12", 2, 3, 255, 180, 200);
+      drawText(m, "12", 2, 3, 120, 0, 120);
     },
     vol_prev(m) {
-      volSubFrame(m, 3, "ON", "", "Y", "G");
-      drawText(m, "35", 2, 3, 0, 160, 80);
+      volSubFrame(m, 3, "PREV", "", "G", "O");
+      drawText(m, "35", 2, 3, 120, 60, 0);
     },
     vol_2ch(m) {
-      volSubFrame(m, 4, "2-CH", "", "", "X");
-      drawText(m, "M+P", 6, 3, 0, 200, 0);
+      volSubFrame(m, 4, "2-CH", "", "", "G");
+      drawText(m, "M+P", 2, 3, 0, 120, 0);
     },
     vol_spkr(m) {
       volSubFrame(m, 5, "SPKR", "", "", "G");
@@ -864,23 +877,23 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     vol_hfc(m) {
       volSubFrame(m, 6, "HFC", "", "", "R");
-      drawText(m, "120", 2, 3, 200, 40, 40);
+      drawText(m, "0", 2, 3, 120, 0, 0);
     },
     lk_flw(m) {
       playSubFrame(m, 0, "FLOW", "", "G");
       drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     lk_prev(m) {
-      volSubFrame(m, 3, "PRSS", "", "Y", "G");
-      drawText(m, "35", 2, 3, 0, 160, 80);
+      volSubFrame(m, 3, "PREV", "", "R", "O");
+      drawText(m, "PRSS", 2, 3, 120, 0, 0);
     },
     lk_prev_on(m) {
-      volSubFrame(m, 3, "ON", "", "Y", "G");
-      drawText(m, "35", 2, 3, 0, 160, 80);
+      volSubFrame(m, 3, "PREV", "", "G", "O");
+      drawText(m, "35", 2, 3, 120, 60, 0);
     },
     lk_prev_sync(m) {
-      volSubFrame(m, 3, "SYNC", "", "Y", "G");
-      drawText(m, "35", 2, 3, 0, 160, 80);
+      volSubFrame(m, 3, "PREV", "", "Y", "O");
+      drawText(m, "SYNC", 2, 3, 120, 120, 0);
     },
     bpm_ext_ok(m) {
       drawBPMScreenLike(m, 124.0, "ext_ok");

@@ -1,6 +1,7 @@
 #include "src/toern_build_types.h"
+#include "toern_touch_input.h"
 
-#define VERSION "v3.01f-T2"
+#define VERSION "v3.01g"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -326,7 +327,7 @@ bool fullMuteIsActive();
 void savePageMutesToGlobal();
 void loadGlobalMutesToPage();
 void initPageMutes();
-void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false, bool setEncoderLed = true);
+void drawIndicator(char size, char colorCode, int encoderNum, bool highlight = false, bool setEncoderLed = true, uint8_t brightness = 255);
 void drawFullMuteBorder();
 void drawFullMuteIndicators();
 void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
@@ -625,12 +626,16 @@ const unsigned int SONG_LEN = MAX_STEPS;                 // Song length equals t
 static bool lastBothTouched = false;
 DMAMEM bool touchState[4] = { false };      // Current touch state (HIGH/LOW)
 DMAMEM bool lastTouchState[4] = { false };  // Previous touch state
+struct EncoderTurnEvent {
+  int encoder;
+  int delta;
+  bool fn;
+};
+
+static bool dispatchFnTurn(const EncoderTurnEvent &event);
+
 const int touchThreshold = 45; //45 for M1
-// Rec (SWITCH_3) is polled every tight-loop tick while FastRec is active.
-// Debounce in time at the same threshold as the other pads — a wide Schmitt
-// (OFF=28) never unlatched because idle FastTouch often sits at 30–44.
-static const unsigned long REC_TOUCH_PRESS_MS = 20;
-static const unsigned long REC_TOUCH_RELEASE_MS = 40;
+bool readDebouncedTouch(int index);
 static bool bypassModeSwitchDebounce = false;
 static bool touch1ModeTogglePending = false;
 static bool touch1ModeToggleToSingle = false;
@@ -643,35 +648,15 @@ static const bool exttouch = false;
 static const bool deviceHasFaders = exttouch;
 
 bool readTouch1Pressed() {
-  if (exttouch) return digitalReadFast(BUTTON_A) == LOW;
-  return fastTouchRead(SWITCH_1) > touchThreshold;
+  return readDebouncedTouch(0);
 }
 
 bool readTouch2Pressed() {
-  if (exttouch) return digitalReadFast(BUTTON_B) == LOW;
-  return fastTouchRead(SWITCH_2) > touchThreshold;
+  return readDebouncedTouch(1);
 }
 
 bool readRecTouchHeld() {
-  static bool latched = false;
-  static bool timing = false;
-  static unsigned long disagreeSince = 0;
-  const bool raw = fastTouchRead(SWITCH_3) > touchThreshold;
-  const unsigned long now = millis();
-  if (raw == latched) {
-    timing = false;
-    return latched;
-  }
-  if (!timing) {
-    timing = true;
-    disagreeSince = now;
-  }
-  const unsigned long need = latched ? REC_TOUCH_RELEASE_MS : REC_TOUCH_PRESS_MS;
-  if ((now - disagreeSince) >= need) {
-    latched = raw;
-    timing = false;
-  }
-  return latched;
+  return readDebouncedTouch(2);
 }
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
@@ -979,7 +964,7 @@ Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x00
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 0, 16, 5, 0 }, { 0, 8, 0, 0 }, { 0x00FF00, 0xFF00FF, 0xFFFF00, 0x0000FF } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
 bool touchyEnabled = false;
-Mode touchyMode = { "TCHY", { 0, 1, 0, 0 }, { 48, 127, 32, 32 }, { 24, 100, 0, 0 }, { 0xFF4040, 0xFFAA20, 0x40FF80, 0x4080FF } };
+Mode touchyMode = { "TCHY", { 0, 1, 0, 0 }, { 48, 127, 32, 32 }, { 24, 100, 0, 0 }, { 0x7F2020, 0x7F5510, 0x207F40, 0x20407F } };
 Mode songMode = { "SONGMODE", { 1, 1, 1, 1 }, { 1, 16, 1, 64 }, { 1, 1, 1, 1 }, { 0x000000, 0xFF00FF, 0x000000, 0xFFFF00 } };
 // Declare currentMode as a global variable (start in draw so boot limits are sane)
 Mode *currentMode = &draw;
@@ -996,6 +981,11 @@ int8_t soloRandomArrowDirection = 0;  // -1 / +1 while scrolling random playlist
 unsigned long soloRandomArrowUntil = 0;
 
 static void refreshSamplerChannel(uint8_t channel);
+static void updateFnState();
+static uint8_t fnButtonEvent(int index, uint8_t physicalState);
+static bool fnHeld = false;
+static bool fnButtonHeld[NUM_ENCODERS] = {};
+static bool handleFnEncoder(int index, int &rawValue, bool allowWrite);
 static void reverseChannelInMemory(uint8_t channel);
 static void applyChannelDirection(uint8_t channel, int8_t targetDir);
 
@@ -1761,7 +1751,7 @@ FLASHMEM void setVelocity() {
 }
 
 void staticButtonPushed(i2cEncoderLibV2 *obj) {
-  pressed[currentEncoderIndex] = true;
+  pressed[currentEncoderIndex] = !fnHeld || currentMode == &touchyMode;
   encoder_button_pushed(obj, currentEncoderIndex);
 }
 
@@ -1777,6 +1767,7 @@ void staticThresholds(i2cEncoderLibV2 *obj) {
 void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
 
+  fnButtonHeld[encoderIndex] = fnHeld;
   buttonPressStartTime[encoderIndex] = currentTime;
   isPressed[encoderIndex] = true;
 }
@@ -2080,7 +2071,9 @@ FLASHMEM void switchMode(Mode *newMode) {
 
     currentMode = newMode;
     if (currentMode == &touchyMode) {
+      extern void onTouchyModeEnter();
       extern void syncTouchyEncoders();
+      onTouchyModeEnter();
       syncTouchyEncoders();
     }
     if (currentMode == &subpatternMode && muteModeActive) {
@@ -2470,6 +2463,15 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   }
   extern bool consumeTouchyEntryHold(const uint8_t states[NUM_ENCODERS]);
   if (consumeTouchyEntryHold(currentButtonStates)) return;
+  // FN button events are a separate namespace; physical buttons[] stays 1/2/9.
+  // Future FN commands can match 3000, 0300, etc. here without changing the FSM.
+  uint8_t fnEvents[NUM_ENCODERS];
+  bool modifiedEvent = false;
+  for (int i = 0; i < NUM_ENCODERS; i++) {
+    fnEvents[i] = fnButtonEvent(i, currentButtonStates[i]);
+    if (fnEvents[i] == 3 || fnEvents[i] == 4 || fnEvents[i] == 8) modifiedEvent = true;
+  }
+  if (fnHeld || modifiedEvent) return; // FN cannot fall through to normal button actions.
   //checkFastRec();
 
   // In recordMode, allow encoder[2] press to stop recording (no auto-playback)
@@ -3271,18 +3273,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     preventPaintUnpaint = false;  // Reset flag after unpaint operation
   }
 
-  // Assuming '3' is a valid state that buttons[i] can take.
-  // If not, this block is dead code.
-  if (currentMode == &singleMode && match_buttons(currentButtonStates, 3, 0, 0, 0)) {  // "3000"
-    GLOB.currentChannel = GLOB.y - 1;                                                  // Set currentChannel based on Y position when exiting single mode
-    switchMode(&draw);
-  } else if (currentMode == &draw && match_buttons(currentButtonStates, 3, 0, 0, 0)
-             && canEnterSingleMode(GLOB.y, (int)GLOB.currentChannel)) {  // "3000"
-    GLOB.currentChannel = GLOB.currentChannel;
-    switchMode(&singleMode);
-    GLOB.singleMode = true;
-  }
-
   if (reset) {
     // Reset states after handling
     // `oldButtons` will be updated by `checkButtons` after this reset is reflected in `buttons`
@@ -3299,7 +3289,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
 }
 
 // MENU>VOL>HFC: 0 = off (DAP bypass); 10..250 step 10; 256 = MAX. Only SGTL5000 graphic-EQ treble band is cut.
-uint16_t codecHfCut = 110;
+uint16_t codecHfCut = 0;
 
 FLASHMEM void applySgtl5000CodecOutputPath() {
   // Codec I2C while the audio update IRQ is live wedges Wire (post-flash
@@ -4605,12 +4595,21 @@ FLASHMEM void checkEncoders() {
     applyDrawSingleYEncoderLimits();
   }
 
+  updateFnState();
+  if (fnHeld) {
+    for (int i = 0; i < NUM_ENCODERS; i++) {
+      pressed[i] = false; // Suppress legacy per-screen button handlers, too.
+      if (isPressed[i]) fnButtonHeld[i] = true;
+    }
+  }
+
   for (int i = 0; i < NUM_ENCODERS; i++) {
     currentEncoderIndex = i;  // Ensure this is set before calling encoder methods or callbacks that might use it implicitly
     Encoder[i].updateStatus();
     int rawValue = Encoder[i].readCounterInt();
+    const bool fnTurn = handleFnEncoder(i, rawValue, allowEncWrite);
     // Soft-clamp draw/single page+X: Duppa can report past writeMax under fast I2C turns.
-    if (currentMode == &draw || currentMode == &singleMode) {
+    if (!fnTurn && (currentMode == &draw || currentMode == &singleMode)) {
       if (i == 0) {
         int clampedY = rawValue;
         if (clampedY < 1) clampedY = 1;
@@ -4637,7 +4636,9 @@ FLASHMEM void checkEncoders() {
     }
     screensaverPrevEnc[i] = rawValue;
 
-    if (currentMode == &subpatternMode && muteModeActive && i == 0) {
+    if (fnTurn) {
+      // FN has already consumed this turn and restored the logical value.
+    } else if (currentMode == &subpatternMode && muteModeActive && i == 0) {
       if (rawValue != 0) {
         bool turnedRight = rawValue > 0;
         int8_t targetDir = turnedRight ? -1 : 1;  // Flipped for encoder 0
@@ -5525,9 +5526,8 @@ void checkTouchInputs() {
   // 1) read inputs (buttons A/B when exttouch; capacitive SWITCH_1/2/3/4)
   bool tv1 = readTouch1Pressed();
   bool tv2 = readTouch2Pressed();
-  int tv3 = fastTouchRead(SWITCH_3);
-  int tv4 = fastTouchRead(SWITCH_4);
-  const bool touch4Pressed = (tv4 > touchThreshold);
+  int tv3 = readRecTouchHeld() ? touchThreshold + 1 : 0;
+  const bool touch4Pressed = readDebouncedTouch(3);
 
   // Any touch held or tapped counts as user activity (exits / prevents screensaver)
   if (tv1 || tv2 || tv3 > touchThreshold || touch4Pressed) {
@@ -5537,11 +5537,7 @@ void checkTouchInputs() {
   // touch4: audition current voice (FX path). No grid write except SINGLE+playing
   // (base-pitch note on current beat). SINGLE while stopped uses cursor Y pitch.
   {
-    static unsigned long lastTouch4Time = 0;
-    const unsigned long TOUCH4_DEBOUNCE_MS = 30;
-    const unsigned long now4 = millis();
-    if (touch4Pressed && !lastTouchState[3] && (now4 - lastTouch4Time > TOUCH4_DEBOUNCE_MS)) {
-      lastTouch4Time = now4;
+    if (touch4Pressed && !lastTouchState[3]) {
       const int ch = (int)GLOB.currentChannel;
       int auditionRow = basePitchRowForChannel(ch);
       if (currentMode == &singleMode && !isNowPlaying && GLOB.y >= 1 && GLOB.y <= 15) {

@@ -30,7 +30,7 @@ globalThis.window = { addEventListener() {
 } };
 globalThis.document = { activeElement: null, addEventListener() {
 } };
-const { createDevice } = await import(pathToFileURL(bundlePath));
+const { createDevice, encoderButtonEvent, encoderTurnEvent } = await import(pathToFileURL(bundlePath));
 const textDraws = [];
 let litPixels = 0;
 const matrix = new Proxy({
@@ -54,6 +54,42 @@ function page(i) {
   while (d.subIndex() < i) d.rotate(3, 1);
   while (d.subIndex() > i) d.rotate(3, -1);
 }
+// PREV always keeps its parent-coloured title; mode labels time out to volume.
+for(const prevMode of [0,1,2]) {
+  const text=[], indicators=[], rings=[];
+  const previewMatrix={drawLargeCustom(){},light(){},drawText:(...a)=>text.push(a),drawIndicator:(...a)=>indicators.push(a),setRing:(...a)=>rings.push(a)};
+  const state={mode:"vol",subIndex:3,prevMode,prevVol:35,prevModeLabelUntil:2500};
+  drawSubmenu(previewMatrix,state,1000);
+  assert.equal(text[0][0],"PREV");
+  assert.equal(text[1][0],["ON","PRSS","SYNC"][prevMode]);
+  assert.deepEqual(text[1][3],[[0,120,0],[120,0,0],[120,120,0]][prevMode]);
+  assert.deepEqual(indicators,[["L",["G","R","Y"][prevMode],2],["L","O",3]]);
+  assert.deepEqual(rings.filter(r=>r[0]===3).at(-1),[3,[120,60,0],true]);
+  text.length=0; drawSubmenu(previewMatrix,state,3500);
+  assert.equal(text[0][0],"PREV"); assert.equal(text[1][0],"35"); assert.deepEqual(text[1][3],[120,60,0]);
+}
+// Value, matrix indicator and ring agree on hue and peak brightness.
+for (const color of [[55,10,0],[255,0,255],[20,20,0],[0,0,20],[0,255,0],[120,0,0]]) {
+  const text=[], custom=[], rings=[];
+  const m={drawLargeCustom:(...a)=>custom.push(a),light(){},drawText:(...a)=>text.push(a),drawIndicator(){},setRing:(...a)=>rings.push(a)};
+  drawSubmenu(m,{mode:"vol",subIndex:6,legacySubValue:()=>({text:"0",color,code:"R"})},0);
+  const value=text.find(a=>a[2]===3)[3];
+  assert.equal(Math.max(...value),120);
+  assert.deepEqual(custom.at(-1),[value,3]);
+  assert.deepEqual(rings.at(-1),[3,value,true]);
+}
+open(4); page(6); textDraws.length=0; frame(++now);
+assert(textDraws.some(c=>c[0]==="0"&&c[2]===3&&c[3][0]===120));
+open(4); page(3);
+d.rotate(1,1); now+=1; textDraws.length=0; frame(now);
+assert(textDraws.some(c=>c[0]==="PRSS"&&c[2]===3));
+now+=2501; textDraws.length=0; frame(now);
+assert(textDraws.some(c=>c[0]==="20"&&c[2]===3));
+for(let i=0;i<60;i++)d.rotate(2,1);
+textDraws.length=0; frame(now); assert(textDraws.some(c=>c[0]==="50"&&c[2]===3));
+for(let i=0;i<60;i++)d.rotate(2,-1);
+textDraws.length=0; frame(now); assert(textDraws.some(c=>c[0]==="0"&&c[2]===3));
+d.rotate(1,-1); for(let i=0;i<20;i++)d.rotate(2,1);
 open(5);
 assert.equal(d.menuSummary().detail, "VIEW: FULL");
 d.rotate(2, 1);
@@ -146,7 +182,7 @@ expectToggle("OFF", [120, 0, 0]);
 open(4);
 page(3);
 d.rotate(1, -1);
-expectToggle("ON", [0, 120, 0], 10);
+expectToggle("ON", [0, 120, 0]);
 // SONG is a plain submenu label; the MODE root retains its icon.
 textDraws.length = 0;
 litPixels = 0;
@@ -166,8 +202,42 @@ const infoState = { mode: "etc", subIndex: 0, infoAt: 0 };
 drawSubmenu(matrix, infoState, 6000);
 drawSubmenu(matrix, infoState, 7000);
 assert.equal(infoState.infoAt, 6000);
+// FN tags inputs instead of replacing the normal encoder configuration.
+assert.deepEqual(encoderButtonEvent(0,2,false),[2,0,0,0]);
+assert.deepEqual(encoderButtonEvent(0,2,true),[3,0,0,0]);
+assert.deepEqual(encoderButtonEvent(3,2,true),[0,0,0,3]);
+assert.deepEqual(encoderTurnEvent(0,-1,true),{encoder:0,delta:-1,fn:true});
+d.jump("draw"); d.selectVoice(1); d.touch(5,false);
+const normalY=d.cursor().y;
+d.rotate(0,1); assert.equal(d.cursor().y,normalY+1);
+d.rotate(0,-1); assert.equal(d.cursor().y,normalY);
+for(let enc=0;enc<4;enc++) {
+  d.touch(5,true); const before=d.mode();
+  d.knobDown(enc); now+=1000; frame(now);
+  d.touch(5,false); d.knobUp(enc,false);
+  assert.equal(d.mode(),before); // FN-long cannot fall through to normal long/short.
+}
 // TOUCHY shares the sample engine and preserves the pattern.
 d.start();
+d.jump("draw"); d.selectVoice(1);
+for(const mode of ["draw","single","filter","menu","wav","bpm"]) {
+  d.jump(mode); assert.equal(d.mode(),mode);
+  const beforeCursor=d.cursor(),beforeVoice=d.voice();
+  d.touch(5,true); d.rotate(0,-1); textDraws.length=0; frame(++now);
+  assert(textDraws.some(c=>c[0]==="<<"));
+  d.rotate(0,1); textDraws.length=0; frame(++now);
+  assert(textDraws.some(c=>c[0]===">>"));
+  assert.equal(d.voice(),beforeVoice); assert.deepEqual(d.cursor(),beforeCursor);
+  const beforeMenu=d.menuSummary(),beforeCells=JSON.stringify(d.exportPatternCells());
+  const audioBefore=audioCalls.length;
+  for(let enc=0;enc<4;enc++) { d.rotate(enc,1); d.rotate(enc,-1); }
+  assert.equal(d.voice(),beforeVoice); assert.deepEqual(d.cursor(),beforeCursor);
+  assert.deepEqual(d.menuSummary(),beforeMenu);
+  assert.equal(JSON.stringify(d.exportPatternCells()),beforeCells);
+  assert.equal(audioCalls.length,audioBefore);
+  d.touch(5,false); now+=351; textDraws.length=0; frame(now);
+  assert(!textDraws.some(c=>c[0]==="<<"||c[0]===">>"));
+}
 d.jump("draw"); d.press(2); assert.equal(d.playing(),true);
 open(8); page(8);
 assert.equal(d.menuSummary().detail, "TCHY: OFF");
@@ -241,7 +311,7 @@ assert.equal(d.mode(),"touchy");
 assert.deepEqual(audioCalls.find(c=>c[0]==="loadUrl"),["loadUrl",1,"/sd/samples/test.wav"]);
 holdTouchy(2); assert.equal(d.mode(),"filter"); assert.equal(d.voice(),2); d.touch(1,true); d.touch(1,false); assert.equal(d.mode(),"touchy");
 holdTouchy(3); assert.equal(d.mode(),"menu"); assert.equal(d.menuSummary().detail,"MODE");
-d.press(3); page(8); d.rotate(2,-1); d.touch(1,true); d.touch(1,false); assert.equal(d.mode(),"draw");
+d.press(3); page(8); assert.equal(d.menuSummary().detail,"TCHY: OFF"); d.touch(1,true); d.touch(1,false); assert.equal(d.mode(),"draw");
 // Both physical display sizes draw only the flying sprite and its fixed pad tint.
 for (const columns of [16,32]) {
   setLayout(columns);
@@ -250,7 +320,7 @@ for (const columns of [16,32]) {
     drawTouchy({light:(x,y,color)=>pixels.push({x,y,color}),setRing(){}},{touchyLastVoice:voice,touchyTintActive:true},0);
     assert(pixels.length>0);
     assert(pixels.every(p=>p.x>=1&&p.x<=columns&&p.y>=1&&p.y<=16));
-    assert(pixels.some(p=>JSON.stringify(p.color)===JSON.stringify(TOUCHY_COLORS[voice-1].map(v=>Math.floor(v*3/5)))));
+    assert(pixels.some(p=>JSON.stringify(p.color)===JSON.stringify(TOUCHY_COLORS[voice-1].map(v=>Math.floor(Math.floor(v*3/5)/2)))));
   }
 }
 assert.equal(TOUCHY_SPRITE.length,11);
@@ -275,7 +345,7 @@ assert(bootPixels.every(p=>Number.isInteger(p.y)&&p.y>=1&&p.y<=16));
 assert(bootPixels.filter(p=>p.x===1).length>=3);
 assert.equal(drawBoot({light(){}},5000,0),true);
 // Every animated LED stays an exact palette colour; no smoothing/blends.
-const exactCatColors = new Set([[0,0,0],...TOUCHY_RAINBOW,...Object.values(TOUCHY_PALETTE)].map(c=>JSON.stringify(c)));
+const exactCatColors = new Set([[0,0,0],...TOUCHY_RAINBOW,...Object.values(TOUCHY_PALETTE)].map(c=>JSON.stringify(c.map(v=>Math.floor(v/2)))));
 for(const columns of [16,32]) for(const time of [333,777,1501,4200,4380]) {
   drawTouchyCat((x,y,color)=>assert(exactCatColors.has(JSON.stringify(color))),columns,time);
 }

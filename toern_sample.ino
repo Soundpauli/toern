@@ -865,11 +865,9 @@ void showWave() {
   };
 
   // ---- Early exits / setup -------------------------------------------------
-  extern int fastTouchRead(int);
-  extern const int touchThreshold;
+  extern bool readRecTouchHeld();
   extern Mode recordMode;
-  int touchValue3 = fastTouchRead(SWITCH_3);
-  if (touchValue3 > touchThreshold) {
+  if (readRecTouchHeld()) {
     switchMode(&recordMode);
     return;
   }

@@ -8,6 +8,12 @@ static uint8_t touchyLastVoice = 1;
 static uint8_t touchyVelocity[6] = {100,100,100,100,100,100};
 static unsigned int touchySavedVolume[6];
 static bool touchyRecordHeld = false;
+static bool touchyPrevious[5] = {};
+
+void onTouchyModeEnter() {
+  // A held FN/exit pad must be released before it can play a TOUCHY voice.
+  for (int pad=0;pad<5;pad++) touchyPrevious[pad] = readDebouncedTouch(pad);
+}
 
 void syncTouchyEncoders() {
   const int ch = touchyLastVoice;
@@ -49,21 +55,9 @@ static void selectTouchyVoice(uint8_t voice) {
 }
 
 FLASHMEM void checkTouchyTouches() {
-  static bool latched[5] = {};
-  static bool releasing[5] = {};
-  static unsigned long releaseSince[5] = {};
-  const int raw[5] = {
-    exttouch ? (readTouch1Pressed() ? touchThreshold + 1 : 0) : fastTouchRead(SWITCH_1),
-    exttouch ? (readTouch2Pressed() ? touchThreshold + 1 : 0) : fastTouchRead(SWITCH_2),
-    fastTouchRead(SWITCH_3), fastTouchRead(SWITCH_4), fastTouchRead(SWITCH_5)
-  };
-  const unsigned long now = millis();
-  // Rearm at the normal untouched threshold; idle readings can stay above 70%.
-  const int releaseThreshold = touchThreshold;
   for (int i = 0; i < 5; i++) {
-    if (!latched[i] && raw[i] > touchThreshold) {
-      latched[i] = true;
-      releasing[i] = false;
+    const bool held = readDebouncedTouch(i);
+    if (held && !touchyPrevious[i]) {
       touchyLastVoice = i + 1;
       touchyTintActive = true;
       selectTouchyVoice(touchyLastVoice);
@@ -71,15 +65,9 @@ FLASHMEM void checkTouchyTouches() {
       SMP.channelVol[touchyLastVoice] = 16;
       applyVoiceAmpGainFromVol(touchyLastVoice, 16);
       triggerCurrentVoiceAudition(basePitchRowForChannel(touchyLastVoice), touchyVelocity[touchyLastVoice]);
-    } else if (latched[i]) {
-      if (raw[i] <= releaseThreshold) {
-        if (!releasing[i]) { releasing[i] = true; releaseSince[i] = now; }
-        if (now - releaseSince[i] >= 60) { latched[i] = false; releasing[i] = false; }
-      } else {
-        releasing[i] = false; // A noisy dip while held never rearms the pad.
-      }
     }
-    if (i < 4) touchState[i] = lastTouchState[i] = latched[i];
+    touchyPrevious[i] = held;
+    if (i < 4) touchState[i] = lastTouchState[i] = held;
   }
 }
 
@@ -98,6 +86,7 @@ FLASHMEM void handleTouchyButtons(const uint8_t states[NUM_ENCODERS]) {
       if (states[i] == 2 && (i == 2 || i == 3)) touchyEntryHeldEncoder = i;
       if (states[i] == 2 && i == 3) {
         extern void openTouchyMainMenu();
+        setTouchyEnabled(false);
         openTouchyMainMenu();
       } else if (states[i] == 2 && i == 0) {
         selectTouchyVoice(touchyLastVoice);
@@ -207,7 +196,7 @@ FLASHMEM void showTouchyMode() {
           case 'K': color = CRGB(200,195,170); break;
         }
       }
-      light(x, y, color);
+      light(x, y, CRGB(color.r / 2, color.g / 2, color.b / 2));
     }
   }
   FastLEDshow();

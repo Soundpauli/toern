@@ -48,6 +48,23 @@ static inline CRGB currentMenuParentTextColor();
 static inline void drawLargeIndicatorCustom(CRGB color, int encoderNum);
 static inline uint32_t hashEncoderPositions(const Mode *m);
 static inline void clearTextArea(int startX, int startY, int width);
+static inline CRGB menuValueColor(CRGB color) {
+  uint8_t peak = max(color.r, max(color.g, color.b));
+  if (!peak) return color;
+  return CRGB((uint16_t)color.r * 120u / peak,
+              (uint16_t)color.g * 120u / peak,
+              (uint16_t)color.b * 120u / peak);
+}
+
+static inline void drawMenuText(const char* label, int x, int y, CRGB color) {
+  drawText(label, x, y, y == 3 ? menuValueColor(color) : color);
+}
+
+static inline void drawMenuIndicator(char size, char code, int encoderNum,
+                                     bool highlight = false, bool setEncoderLed = true) {
+  drawIndicator(size, code, encoderNum, highlight, setEncoderLed, 120);
+}
+
 static inline void drawMenuValue(const char* label, int x, int y, CRGB color);
 
 // SETTINGS>MUTE & DRAW-R mask: user CH1..CH16 ↔ internal mute index 0..15 (same as draw: CH1=y2→internal 1; CH16=y1→internal 0).
@@ -302,7 +319,7 @@ FLASHMEM static void drawEtcRamPage() {
     }
   }
   drawMenuValue(line, 2, 3, valueColor);
-  drawIndicator('L', 'G', 3, false, false);
+  drawMenuIndicator('L', 'G', 3, false, false);
 }
 
 FLASHMEM static void drawEtcInfoPage() {
@@ -719,6 +736,16 @@ FLASHMEM void flushSettingsBackupNow() {
   }
 }
 
+// Store the 27 HFC positions in one byte; the adjacent byte is the format.
+FLASHMEM static uint8_t hfcEncodeStep(uint16_t cut) {
+  return cut >= 256u ? 26u : (uint8_t)(cut / 10u);
+}
+
+FLASHMEM static uint16_t hfcDecodeStep(uint8_t step) {
+  if (step > 26u) return 0u;
+  return step == 26u ? 256u : (uint16_t)step * 10u;
+}
+
 FLASHMEM static uint16_t hfcNormalize256(uint16_t h) {
   if (h >= 256u) return 256u;
   return (uint16_t)((h / 10u) * 10u);
@@ -803,8 +830,8 @@ FLASHMEM void loadMenuFromEEPROM() {
       // Transport delays: slot 29 SEND, slot 31 RCVE (1 byte each, 0-127)
       EEPROM.write(EEPROM_DATA_START + 29, 0);   // transportSendDelayMs default (0)
       EEPROM.write(EEPROM_DATA_START + 31, 0);   // transportRcveDelayMs default (0)
-      EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)256);  // codecHfCut default (256)
-      EEPROM.write(EEPROM_DATA_START + 33, 4);
+      EEPROM.write(EEPROM_DATA_START + 32, 0);  // codecHfCut default (0 = off)
+      EEPROM.write(EEPROM_DATA_START + 33, 5);
       EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // internal bits 1+2 = user CH1+CH2 (y=2,3)
       EEPROM.write(EEPROM_DATA_START + 36, 0);   // childLockEnabled default (OFF)
       EEPROM.write(EEPROM_DATA_START + 37, 1);   // MIDI pitch clamp default (ON)
@@ -877,7 +904,7 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
   
   previewVol   = (int8_t) EEPROM.read(EEPROM_DATA_START + 7);
-  if (previewVol < 1 || previewVol > 50) {
+  if (previewVol > 50) {  // 0 is a valid silent preview volume.
     previewVol = 20;  // Default to mid
     saveSingleModeToEEPROM(7, previewVol);
   }
@@ -1182,17 +1209,16 @@ FLASHMEM void loadMenuFromEEPROM() {
     uint8_t eqFmt = EEPROM.read(EEPROM_DATA_START + 33);
     uint16_t raw = 0;
     EEPROM.get(EEPROM_DATA_START + 32, raw);
-    uint16_t cut = 110;
+    uint16_t cut = 0;
 
-    if (eqFmt == 4) {
-      cut = raw;
-      if (cut > 256u) cut = 256u;
-      cut = hfcNormalize256(cut);
+    if (eqFmt == 5) {
+      cut = hfcDecodeStep(EEPROM.read(EEPROM_DATA_START + 32));
+    } else if (eqFmt == 4) {
+      // Old format overlapped the high byte with its format marker.
+      // Recover nonzero low-byte values; zero is ambiguous (old default MAX).
+      cut = (raw & 0xFFu) ? hfcNormalize256(raw & 0xFFu) : 256u;
     } else if (eqFmt == 3) {
       cut = hfcMigrate44200To256(raw);
-      EEPROM.put(EEPROM_DATA_START + 32, cut);
-      EEPROM.write(EEPROM_DATA_START + 33, 4);
-      markSettingsBackupDirty();
     } else if (eqFmt == 2) {
       uint16_t r = raw;
       if (r > 500u) r = 500u;
@@ -1200,17 +1226,11 @@ FLASHMEM void loadMenuFromEEPROM() {
       uint32_t m = (uint32_t)r * 256u + 250u;
       uint16_t h = (uint16_t)(m / 500u);
       cut = hfcNormalize256(h);
-      EEPROM.put(EEPROM_DATA_START + 32, cut);
-      EEPROM.write(EEPROM_DATA_START + 33, 4);
-      markSettingsBackupDirty();
     } else if (eqFmt == 1) {
       uint16_t oldv = raw;
       if (oldv > 22000u) oldv = 22000u;
       oldv = (uint16_t)((oldv / 100u) * 100u);
       cut = hfcMigrate22000To256(oldv);
-      EEPROM.put(EEPROM_DATA_START + 32, cut);
-      EEPROM.write(EEPROM_DATA_START + 33, 4);
-      markSettingsBackupDirty();
     } else {
       uint16_t oldv;
       if (raw >= 6000u && raw <= 20000u && (raw % 100u) == 0) {
@@ -1219,13 +1239,15 @@ FLASHMEM void loadMenuFromEEPROM() {
       } else if (raw > 0u && raw <= 22000u) {
         oldv = raw;
       } else {
-        oldv = 10000;
+        oldv = 0;
       }
       oldv = (uint16_t)((oldv / 100u) * 100u);
       if (oldv > 22000u) oldv = 22000u;
       cut = hfcMigrate22000To256(oldv);
-      EEPROM.put(EEPROM_DATA_START + 32, cut);
-      EEPROM.write(EEPROM_DATA_START + 33, 4);
+    }
+    if (eqFmt != 5) {
+      EEPROM.write(EEPROM_DATA_START + 32, hfcEncodeStep(cut));
+      EEPROM.write(EEPROM_DATA_START + 33, 5);
       markSettingsBackupDirty();
     }
     codecHfCut = cut;
@@ -1428,7 +1450,7 @@ static void saveTransportDelayToEEPROM(int slotBase, int8_t value) {
   saveSingleModeToEEPROM(slotBase, value);
 }
 
-// uint16 settings (HFC cut, draw mute mask). Format byte written separately when needed.
+// uint16 settings (draw mute mask). HFC uses a separate step byte and format byte.
 FLASHMEM static void saveSettingsU16ToEEPROM(int index, uint16_t value) {
   extern bool isNowPlaying;
   if (index < 0 || index + 1 >= (int)SETTINGS_EEPROM_BLOCK_LEN) return;
@@ -1509,7 +1531,7 @@ FLASHMEM void showMenu() {
   if (fullRedraw) {
     FastLEDclear();
     // New indicator system: menu: | | | L[G]
-    drawIndicator('L', 'G', 4);  // Encoder 4: menu navigation
+    drawMenuIndicator('L', 'G', 4);  // Encoder 4: menu navigation
 
     // Page indicator line at y=maxY
     int startX = (int)maxX - MENU_PAGES_COUNT + 1;
@@ -1884,6 +1906,10 @@ FLASHMEM void showMidiMenu() {
   }
 }
 
+static bool previewModeLabelVisible = false;
+static unsigned long previewModeLabelChangedAt = 0;
+static constexpr unsigned long PREVIEW_MODE_LABEL_MS = 2500;
+
 FLASHMEM void showVolMenu() {
   static uint32_t lastPosHash = 0;
   // Redraw only when page/setting changes (or a value changed).
@@ -1893,7 +1919,15 @@ FLASHMEM void showVolMenu() {
 
   static int lastRenderedVolPage = -1;
   static int lastRenderedVolSetting = -1;
-  const bool fullRedraw = takeMenuForceFullRedraw() || (pageIndex != lastRenderedVolPage) || (mainSetting != lastRenderedVolSetting);
+  bool fullRedraw = takeMenuForceFullRedraw() || (pageIndex != lastRenderedVolPage) || (mainSetting != lastRenderedVolSetting);
+  if (mainSetting == 29 && previewModeLabelVisible &&
+      millis() - previewModeLabelChangedAt >= PREVIEW_MODE_LABEL_MS) {
+    previewModeLabelVisible = false;
+    fullRedraw = true;
+  }
+  if (mainSetting != 29 || pageIndex != lastRenderedVolPage || mainSetting != lastRenderedVolSetting) {
+    previewModeLabelVisible = false;
+  }
 
   if (fullRedraw) {
     FastLEDclear();
@@ -2063,7 +2097,7 @@ FLASHMEM void showEtcMenu() {
       Encoder[enc].writeRGBCode(rgb);
     };
     if (mainSetting == 15) {
-      drawIndicator('L', 'G', 1, false, false);  // Encoder(0): Large Green (generate)
+      drawMenuIndicator('L', 'G', 1, false, false);  // Encoder(0): Large Green (generate)
       // Keep encoder(1)/(2) indicators from AI page itself (drawMainSettingStatus/drawAdditionalFeatures)
       setEtcRGB(0, 0x00FF00);
       CRGB y = getIndicatorColor('Y');
@@ -2237,7 +2271,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(1);
         showIcons(ICON_FOLDER_BIG, dimIconColorFromText(tc));
-        drawText("PATT", 2, 3, tc);
+        drawMenuText("PATT", 2, 3, tc);
       }
       break;
       
@@ -2246,7 +2280,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(2);
         showIcons(OLD_ICON_SAMPLEPACK, dimIconColorFromText(tc));
-        drawText("KIT", 2, 3, tc);
+        drawMenuText("KIT", 2, 3, tc);
       }
       break;
       
@@ -2256,17 +2290,17 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         const CRGB tc = menuTextColorFromCol(3);
         showIcons(ICON_SAMPLE_BIG, dimIconColorFromText(tc));
       if (GLOB.currentChannel > 0 && GLOB.currentChannel < 9) {
-        drawText("SMP", 2, 3, tc);
+        drawMenuText("SMP", 2, 3, tc);
       } else {
-        drawText("(-)", 2, 3, tc);
+        drawMenuText("(-)", 2, 3, tc);
       }
       }
       break;
       
     case 4: // REC - Recording Mode (menu/mic) - encoder 3: MIC/LINE
-      drawText("INPT", 2, 10, currentMenuParentTextColor());
+      drawMenuText("INPT", 2, 10, currentMenuParentTextColor());
       drawRecMode();
-      drawIndicator('L', recMode == 1 ? 'W' : 'X', 3);  // White=MIC, Blue=LINE
+      drawMenuIndicator('L', recMode == 1 ? 'W' : 'X', 3);  // White=MIC, Blue=LINE
       break;
       
     case 5: // BPM - BPM/Volume
@@ -2274,54 +2308,54 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(4);
         showIcons(ICON_CLOCK, dimIconColorFromText(tc));
-        drawText("BPM", 2, 3, tc);
+        drawMenuText("BPM", 2, 3, tc);
       }
       break;
       
     case 7: // CHN - MIDI Voice Select - encoder 3: YPOS/MIDI/KEYS
-      drawText("CH", 2, 10, currentMenuParentTextColor());
+      drawMenuText("CH", 2, 10, currentMenuParentTextColor());
       drawMidiVoiceSelect();
-      drawIndicator('L', voiceSelect == 1 ? 'X' : (voiceSelect == 2 ? 'M' : 'G'), 3);
+      drawMenuIndicator('L', voiceSelect == 1 ? 'X' : (voiceSelect == 2 ? 'M' : 'G'), 3);
       break;
       
     case 8: // TRN - MIDI Transport - encoder 3: OFF/GET/SEND
-      drawText("TRAN", 2, 10, currentMenuParentTextColor());
+      drawMenuText("TRAN", 2, 10, currentMenuParentTextColor());
       drawMidiTransport();
-      drawIndicator('L', transportMode == 0 ? 'R' : (transportMode == 1 ? 'G' : 'X'), 3);
+      drawMenuIndicator('L', transportMode == 0 ? 'R' : (transportMode == 1 ? 'G' : 'X'), 3);
       break;
       
     case 13: // SEND - MIDI Send (CLCK, NOTE, BOTH) - encoder 3
-      drawText("SEND", 2, 10, currentMenuParentTextColor());
+      drawMenuText("SEND", 2, 10, currentMenuParentTextColor());
       drawMidiSend();
       {
         extern int midiSendMode;
-        drawIndicator('L', midiSendMode == 0 ? 'Y' : (midiSendMode == 1 ? 'G' : 'X'), 3);
+        drawMenuIndicator('L', midiSendMode == 0 ? 'Y' : (midiSendMode == 1 ? 'G' : 'X'), 3);
       }
       break;
 
     case 44: // RCVE - MIDI Note Receive (OFF/NOTE) - encoder 3
       {
         extern bool MIDI_NOTE_RECEIVE;
-        drawText("RCVE", 2, 10, currentMenuParentTextColor());
+        drawMenuText("RCVE", 2, 10, currentMenuParentTextColor());
         drawMenuValue(MIDI_NOTE_RECEIVE ? "NOTE" : "OFF", 2, 3, MIDI_NOTE_RECEIVE ? UI_GREEN : UI_RED);
-        drawIndicator('L', MIDI_NOTE_RECEIVE ? 'G' : 'R', 3);
+        drawMenuIndicator('L', MIDI_NOTE_RECEIVE ? 'G' : 'R', 3);
       }
       break;
 
     case 60: { // WRTE - MIDI overwrite occupied grid cells
         extern bool MIDI_WRITE_OVERWRITE;
-        drawText("OVWR", 2, 10, currentMenuParentTextColor());
+        drawMenuText("OVWR", 2, 10, currentMenuParentTextColor());
         drawMenuValue(MIDI_WRITE_OVERWRITE ? "ON" : "OFF", 2, 3, MIDI_WRITE_OVERWRITE ? UI_GREEN : UI_RED);
-        drawIndicator('L', MIDI_WRITE_OVERWRITE ? 'G' : 'R', 3);
+        drawMenuIndicator('L', MIDI_WRITE_OVERWRITE ? 'G' : 'R', 3);
       }
       break;
 
     case 51: // CLMP - fold incoming pitch into the visible grid
       {
         extern bool MIDI_NOTE_CLAMP;
-        drawText("FOLD", 2, 10, currentMenuParentTextColor());
+        drawMenuText("FOLD", 2, 10, currentMenuParentTextColor());
         drawMenuValue(MIDI_NOTE_CLAMP ? "ON" : "OFF", 2, 3, MIDI_NOTE_CLAMP ? UI_GREEN : UI_RED);
-        drawIndicator('L', MIDI_NOTE_CLAMP ? 'G' : 'R', 3);
+        drawMenuIndicator('L', MIDI_NOTE_CLAMP ? 'G' : 'R', 3);
       }
       break;
 
@@ -2331,13 +2365,13 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         extern int8_t transportRcveDelayMs;
         const CRGB tc = currentMenuParentTextColor();
         int syncEdit = (currentMode->pos[1] == 0) ? 0 : 1;
-        drawText(syncEdit == 0 ? "SNC1" : "SNC2", 2, 10, tc);
+        drawMenuText(syncEdit == 0 ? "SNC1" : "SNC2", 2, 10, tc);
         int val = (syncEdit == 0) ? (int)transportSendDelayMs : (int)transportRcveDelayMs;
         char buf[10];
         snprintf(buf, sizeof(buf), "%d", val);
         drawMenuValue(buf, 2, 3, syncEdit == 0 ? UI_GREEN : UI_RED);
-        drawIndicator('L', 'Y', 1);
-        drawIndicator('L', 'W', 2);
+        drawMenuIndicator('L', 'Y', 1);
+        drawMenuIndicator('L', 'W', 2);
       }
       break;
 
@@ -2348,7 +2382,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern uint8_t getPulseClockPpqn();
       extern uint8_t getPulseClockWidthMs();
       const CRGB tc = currentMenuParentTextColor();
-      drawText("PPQN", 2, 10, tc);
+      drawMenuText("PPQN", 2, 10, tc);
       bool on = getPulseClockEnabled();
       bool polPos = getPulseClockPolarityPositive();
       bool stopPlay = getPulseClockStopWithPlay();
@@ -2365,9 +2399,9 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         snprintf(buf, sizeof(buf), "%c%u", polPos ? '+' : '-', (unsigned)getPulseClockPpqn());
         drawMenuValue(buf, 2, 3, polPos ? UI_GREEN : UI_RED);
       }
-      drawIndicator('L', 'W', 1);
-      drawIndicator('L', stopPlay ? 'R' : 'G', 2);
-      drawIndicator('L', polPos ? 'G' : 'R', 3);
+      drawMenuIndicator('L', 'W', 1);
+      drawMenuIndicator('L', stopPlay ? 'R' : 'G', 2);
+      drawMenuIndicator('L', polPos ? 'G' : 'R', 3);
       break;
     }
 
@@ -2375,15 +2409,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern uint8_t getSidechainVoice();
       extern CRGB col[];
       const uint8_t ch = getSidechainVoice();
-      drawText("TRIG", 2, 10, currentMenuParentTextColor());
+      drawMenuText("TRIG", 2, 10, currentMenuParentTextColor());
       if (!ch) {
         drawMenuValue("OFF", 2, 3, UI_RED);
-        drawIndicator('L', 'R', 3);
+        drawMenuIndicator('L', 'R', 3);
       } else {
         char buf[8];
         snprintf(buf, sizeof(buf), "%u", (unsigned)ch);
         drawMenuValue(buf, 2, 3, col[ch]);
-        drawIndicator('L', 'G', 3);
+        drawMenuIndicator('L', 'G', 3);
       }
       break;
     }
@@ -2394,59 +2428,60 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       const CRGB tc = currentMenuParentTextColor();
       char buf[8];
       if (g_cinFocus == 1) {
-        drawText("WID", 2, 10, tc);
+        drawMenuText("WID", 2, 10, tc);
         snprintf(buf, sizeof(buf), "%u", (unsigned)getAnalogInHoldMs());
         drawMenuValue(buf, 2, 3, UI_WHITE);
       } else {
-        drawText("CIN", 2, 10, tc);
+        drawMenuText("CIN", 2, 10, tc);
         snprintf(buf, sizeof(buf), "%u", (unsigned)getAnalogInPpqn());
         drawMenuValue(buf, 2, 3, UI_WHITE);
       }
-      drawIndicator('L', 'W', 1);
-      drawIndicator('L', 'W', 3);
+      drawMenuIndicator('L', 'W', 1);
+      drawMenuIndicator('L', 'W', 3);
       break;
     }
       
     case 9: // PMD - Pattern Mode - encoder 3
-      drawText("PMODE", 2, 10, currentMenuParentTextColor());
+      drawMenuText("PMODE", 2, 10, currentMenuParentTextColor());
       drawPatternMode();
-      drawIndicator('L', patternMode == -1 ? 'R' : (patternMode == 1 ? 'G' : (patternMode == 2 ? 'Y' : 'N')), 3);
+      drawMenuIndicator('L', patternMode == -1 ? 'R' : (patternMode == 1 ? 'G' : (patternMode == 2 ? 'Y' : 'N')), 3);
       break;
       
     case 10: // FLW - Flow Mode - encoder 3
-      drawText("FLOW", 2, 10, currentMenuParentTextColor());
+      drawMenuText("FLOW", 2, 10, currentMenuParentTextColor());
       drawFlowMode();
-      drawIndicator('L', flowMode == 1 ? 'G' : 'R', 3);
+      drawMenuIndicator('L', flowMode == 1 ? 'G' : 'R', 3);
       break;
       
     case 11: // OTR - Fast Rec Mode
-      drawText("TRIG", 2, 10, currentMenuParentTextColor());
+      drawMenuText("TRIG", 2, 10, currentMenuParentTextColor());
       drawFastRecMode();
+      drawMenuIndicator('L', fastRecMode == 0 ? 'R' : (fastRecMode == 1 ? 'G' : (fastRecMode == 2 ? 'Y' : 'X')), 3);
       break;
       
     case 12: // CLR - Rec Channel Clear - encoder 3
-      drawText("CLR", 2, 10, currentMenuParentTextColor());
+      drawMenuText("CLR", 2, 10, currentMenuParentTextColor());
       drawRecChannelClear();
-      drawIndicator('L', 'W', 3);
+      drawMenuIndicator('L', imageMode ? 'Y' : (recChannelClear == 0 ? 'R' : (recChannelClear == 1 ? 'G' : (recChannelClear == 2 ? 'Y' : (recChannelClear == 3 ? 'N' : 'M')))), 3);
       break;
       
     case 15: // AI - Song Generation
-      drawText("AUTO", 2, 10, currentMenuParentTextColor());
+      drawMenuText("AUTO", 2, 10, currentMenuParentTextColor());
       // AUTO generate: encoder(0) press triggers generation -> green indicator on encoder(0)
-      drawIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
-      drawIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow (base start)
-      drawIndicator('L', 'W', 3);  // Encoder 3: Large White (base end)
+      drawMenuIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
+      drawMenuIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow (base start)
+      drawMenuIndicator('L', 'W', 3);  // Encoder 3: Large White (base end)
       break;
       
     case 16: // RST - Reset
-      drawText("RSET", 2, 10, currentMenuParentTextColor());
+      drawMenuText("RSET", 2, 10, currentMenuParentTextColor());
       /*if (resetMenuOption == 0) {
-        drawText("EFX", 2, 3, CRGB(100, 0, 0));  // Dark Red
+        drawMenuText("EFX", 2, 3, CRGB(100, 0, 0));  // Dark Red
       } else {
-        drawText("FULL", 2, 3, CRGB(100, 0, 0));  // Dark Red
+        drawMenuText("FULL", 2, 3, CRGB(100, 0, 0));  // Dark Red
       }*/
-      drawIndicator('L', 'G', 2);  // Encoder 2: press applies the reset
-      drawIndicator('L', 'O', 3);  // Encoder 3: turn to pick SD/EFX/FULL/FILE/PACK/ASAV
+      drawMenuIndicator('L', 'G', 2);  // Encoder 2: press applies the reset
+      drawMenuIndicator('L', 'O', 3);  // Encoder 3: turn to pick SD/EFX/FULL/FILE/PACK/ASAV
       
       break;
 
@@ -2462,7 +2497,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         extern bool sdSerialServerClientConnected();
         const CRGB tc = currentMenuParentTextColor();
-        drawText("SD", 2, 10, tc);
+        drawMenuText("SD", 2, 10, tc);
         bool connected = sdSerialServerClientConnected();
         // WAIT (yellow) until host connects; OK (green) once client talks
         drawMenuValue(connected ? "OK" : "WAIT", 2, 3, connected ? UI_GREEN : UI_YELLOW);
@@ -2473,21 +2508,21 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         extern bool getLedStripEnabled();
         const CRGB tc = currentMenuParentTextColor();
-        drawText("LGHT", 2, 10, tc);
+        drawMenuText("LGHT", 2, 10, tc);
         bool enabled = getLedStripEnabled();
         drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? UI_GREEN : UI_RED);
-        drawIndicator('L', enabled ? 'G' : 'R', 3);
+        drawMenuIndicator('L', enabled ? 'G' : 'R', 3);
       }
       break;
       
     case 41: // COLR - Color scheme selection (0=default, 1, 2, 3=custom) - encoder 3
       {
         const CRGB tc = currentMenuParentTextColor();
-        drawText("COLR", 2, 10, tc);
+        drawMenuText("COLR", 2, 10, tc);
         char schemeText[2];
         snprintf(schemeText, sizeof(schemeText), "%d", currentColorScheme);
         drawMenuValue(schemeText, 2, 3, UI_GREEN);
-        drawIndicator('L', 'G', 3);
+        drawMenuIndicator('L', 'G', 3);
       }
       break;
 
@@ -2495,7 +2530,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         extern int getBatteryPercent();
         const CRGB tc = currentMenuParentTextColor();
-        drawText("BATT", 2, 10, tc);
+        drawMenuText("BATT", 2, 10, tc);
         
         int pct = getBatteryPercent();
         pct = constrain(pct, 0, 100);
@@ -2507,7 +2542,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         CRGB stateColor = (pct > 20) ? UI_GREEN
                                      : (pct > BATT_WARN_PCT) ? CRGB(255, 165, 0)
                                                              : UI_RED;
-        drawText(pctText, 2, 3, stateColor);
+        drawMenuText(pctText, 2, 3, stateColor);
       }
       break;
 
@@ -2515,33 +2550,33 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         extern bool getChildLockEnabled();
         const CRGB tc = currentMenuParentTextColor();
-        drawText("CHLD", 2, 10, tc);
+        drawMenuText("CHLD", 2, 10, tc);
         bool enabled = getChildLockEnabled();
         drawMenuValue(enabled ? "ON" : "OFF", 2, 3, enabled ? UI_GREEN : UI_RED);
-        drawIndicator('L', enabled ? 'G' : 'R', 3);
+        drawMenuIndicator('L', enabled ? 'G' : 'R', 3);
       }
       break;
 
     case 56: { // IMG - Image mode (OFF/ON)
       extern bool imageMode;
       const CRGB tc = currentMenuParentTextColor();
-      drawText("IMG", 2, 10, tc);
+      drawMenuText("IMG", 2, 10, tc);
       drawMenuValue(imageMode ? "ON" : "OFF", 2, 3, imageMode ? UI_GREEN : UI_RED);
-      drawIndicator('L', imageMode ? 'G' : 'R', 3);
+      drawMenuIndicator('L', imageMode ? 'G' : 'R', 3);
       break;
     }
 
     case 57: { // EYES - screensaver idle OFF / 1MIN / 5MIN / 15MIN
       extern uint8_t eyesMode;
       const CRGB tc = currentMenuParentTextColor();
-      drawText("EYES", 2, 10, tc);
+      drawMenuText("EYES", 2, 10, tc);
       const char *label = "OFF";
       CRGB vc = UI_RED;
       if (eyesMode == 1) { label = "1MIN"; vc = UI_GREEN; }
       else if (eyesMode == 2) { label = "5MIN"; vc = UI_GREEN; }
       else if (eyesMode == 3) { label = "15MIN"; vc = UI_GREEN; }
       drawMenuValue(label, 2, 3, vc);
-      drawIndicator('L', eyesMode == 0 ? 'R' : 'G', 3);
+      drawMenuIndicator('L', eyesMode == 0 ? 'R' : 'G', 3);
       break;
     }
 
@@ -2555,33 +2590,33 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         extern uint8_t fireFocus;
         extern CRGB col[];
         const CRGB tc = currentMenuParentTextColor();
-        drawText("FIRE", 2, 10, tc);
+        drawMenuText("FIRE", 2, 10, tc);
         clearTextArea(1, 3, (int)maxX);
         char num[4];
         snprintf(num, sizeof(num), "%u", fireSize);
-        drawText(num, 1, 3, CRGB(255, 140, 20));
+        drawMenuText(num, 1, 3, CRGB(255, 140, 20));
         snprintf(num, sizeof(num), "%u", fireLevel);
-        drawText(num, (int)maxX >= 24 ? 8 : 5, 3, CRGB(255, 180, 60));
+        drawMenuText(num, (int)maxX >= 24 ? 8 : 5, 3, CRGB(255, 180, 60));
         const bool wide = (int)maxX >= 24;
         int voiceX = wide ? 26 : 12;
         if (wide) {
           snprintf(num, sizeof(num), "%u", fireGravity);
-          drawText(num, 14, 3, fireFocus == 1 ? CRGB(220, 220, 220) : CRGB(70, 70, 70));
+          drawMenuText(num, 14, 3, fireFocus == 1 ? CRGB(220, 220, 220) : CRGB(70, 70, 70));
           snprintf(num, sizeof(num), "%u", fireColor);
-          drawText(num, 20, 3, fireFocus == 2 ? CRGB(255, 220, 120) : CRGB(80, 70, 30));
+          drawMenuText(num, 20, 3, fireFocus == 2 ? CRGB(255, 220, 120) : CRGB(80, 70, 30));
         }
         if (!wide && fireFocus != 0) {
           snprintf(num, sizeof(num), "%u", fireFocus == 1 ? fireGravity : fireColor);
-          drawText(num, 12, 3, fireFocus == 1 ? CRGB(220, 220, 220) : CRGB(255, 220, 120));
+          drawMenuText(num, 12, 3, fireFocus == 1 ? CRGB(220, 220, 220) : CRGB(255, 220, 120));
         } else if (!fireVoice) {
-          drawText(wide ? "OFF" : "-", voiceX, 3, UI_RED);
+          drawMenuText(wide ? "OFF" : "-", voiceX, 3, UI_RED);
         } else if (fireVoice == 15) {
-          drawText(wide ? "ALL" : "A", voiceX, 3, CRGB(255, 220, 120));
+          drawMenuText(wide ? "ALL" : "A", voiceX, 3, CRGB(255, 220, 120));
         } else {
           snprintf(num, sizeof(num), "%u", fireVoice);
           int vx = voiceX;
           if (!wide && fireVoice >= 10) vx = 10;
-          drawText(num, vx, 3, col[fireVoice]);
+          drawMenuText(num, vx, 3, col[fireVoice]);
         }
         int half = (int)maxX / 2;
         if (half < 1) half = 1;
@@ -2598,12 +2633,12 @@ FLASHMEM void drawMainSettingStatus(int setting) {
           }
           light(x, 8, bar);
         }
-        drawIndicator('L', 'O', 1);
-        drawIndicator('L', 'O', 2);
+        drawMenuIndicator('L', 'O', 1);
+        drawMenuIndicator('L', 'O', 2);
         char focusCode = fireVoice ? 'G' : 'R';
         if (fireFocus == 1) focusCode = 'W';
         else if (fireFocus == 2) focusCode = 'Y';
-        drawIndicator('L', focusCode, 3);
+        drawMenuIndicator('L', focusCode, 3);
       }
       break;
 
@@ -2612,7 +2647,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(6);
         showIcons(ICON_SETTINGS_BIG, dimIconColorFromText(tc));
-        drawText("SETT", 2, 3, tc);
+        drawMenuText("SETT", 2, 3, tc);
       }
       break;
       
@@ -2621,7 +2656,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(7);
         showIcons(ICON_RECORD, dimIconColorFromText(tc));
-        drawText("REC", 2, 3, tc);
+        drawMenuText("REC", 2, 3, tc);
       }
       break;
       
@@ -2630,54 +2665,54 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(8);
         showIcons(ICON_MIDISYNC, dimIconColorFromText(tc));
-        drawText("MIDI", 2, 3, tc);
+        drawMenuText("MIDI", 2, 3, tc);
       }
       break;
       
     case 22: // MODE > SONG: plain entry label
       {
         const CRGB tc = menuTextColorFromCol(13);
-        drawText("SONG", 2, 10, tc);
+        drawMenuText("SONG", 2, 10, tc);
       }
       break;
       
     case 17: // VIEW - Simple Notes View - encoder 3
-      drawText("VIEW", 2, 10, currentMenuParentTextColor());
+      drawMenuText("VIEW", 2, 10, currentMenuParentTextColor());
       drawSimpleNotesView();
-      drawIndicator('L', 'W', 3);
+      drawMenuIndicator('L', simpleNotesView == 1 ? 'G' : 'X', 3);
       break;
       
     case 18: // LOOP - Loop Length - encoder 3
-      drawText("LOOP", 2, 10, currentMenuParentTextColor());
+      drawMenuText("LOOP", 2, 10, currentMenuParentTextColor());
       drawLoopLength();
-      drawIndicator('L', 'G', 3);
+      drawMenuIndicator('L', loopLength == 0 ? 'R' : 'N', 3);
       break;
 
     case 54: { // VMOD - per-voice page loops (OFF/ON)
       extern bool voiceMode;
       extern bool imageMode;
       const CRGB tc = currentMenuParentTextColor();
-      drawText("VMOD", 2, 10, tc);
+      drawMenuText("VMOD", 2, 10, tc);
       // VMOD locked off while IMG is on.
       const bool on = voiceMode && !imageMode;
       drawMenuValue(on ? "ON" : "OFF", 2, 3, on ? UI_GREEN : UI_RED);
-      drawIndicator('L', on ? 'G' : 'R', 3);
+      drawMenuIndicator('L', on ? 'G' : 'R', 3);
       break;
     }
       
     case 23: // LEDS - LED mode (1, 1B, 2, 2B) - encoder 3
-      drawText("LEDS", 2, 10, currentMenuParentTextColor());
+      drawMenuText("LEDS", 2, 10, currentMenuParentTextColor());
       drawLedModules();
-      drawIndicator('L', 'G', 3);
+      drawMenuIndicator('L', 'G', 3);
       break;
 
     case 24: // PONG toggle
-      drawText("PONG", 2, 10, currentMenuParentTextColor());
+      drawMenuText("PONG", 2, 10, currentMenuParentTextColor());
       clearTextArea(2, 3, 8);
       clearTextArea(6, 3, 8);
       clearTextArea(10, 3, 8);
       if (pong) {
-        drawText("ON", 2, 3, UI_GREEN);
+        drawMenuText("ON", 2, 3, UI_GREEN);
       } else {
         drawMenuValue("OFF", 2, 3, UI_RED);
       }
@@ -2685,12 +2720,12 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         char speedText[6];
         int speedValue = pongIntervalToSpeed(pongUpdateInterval);
         snprintf(speedText, sizeof(speedText), "%02d", speedValue);
-        drawText(speedText, 10, 3, CRGB(0, 150, 255));
+        drawMenuText(speedText, 10, 3, CRGB(0, 150, 255));
         {
           CRGB indicatorColor = getIndicatorColor('B');
           Encoder[2].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
         }
-        drawIndicator('L', 'B', 3);
+        drawMenuIndicator('L', 'B', 3);
       } else {
         Encoder[2].writeRGBCode(0x000000);
       }
@@ -2698,20 +2733,20 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 63: {
       extern bool touchyEnabled;
-      drawText("TCHY", 2, 10, currentMenuParentTextColor());
+      drawMenuText("TCHY", 2, 10, currentMenuParentTextColor());
       drawMenuValue(touchyEnabled ? "ON" : "OFF", 2, 3, touchyEnabled ? UI_GREEN : UI_RED);
-      drawIndicator('L', touchyEnabled ? 'G' : 'R', 3);
+      drawMenuIndicator('L', touchyEnabled ? 'G' : 'R', 3);
       break;
     }
     case 61: { // MODE inherits the former SONG main-menu identity.
       const CRGB tc = menuTextColorFromCol(13);
       showIcons(ICON_SONG, dimIconColorFromText(tc));
-      drawText("MODE", 2, 3, tc);
+      drawMenuText("MODE", 2, 3, tc);
       break;
     }
     case 62: { // ETC > ADV
       const CRGB tc = currentMenuParentTextColor();
-      drawText("ADV", 2, 10, tc);
+      drawMenuText("ADV", 2, 10, tc);
       break;
     }
 
@@ -2719,18 +2754,19 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(14);
         showIcons(ICON_PATTERN, dimIconColorFromText(tc));
-        drawText("ETC", 2, 3, tc);
+        drawMenuText("ETC", 2, 3, tc);
       }
       break;
       
     case 38: // DRAW - Toggle between L+R and R modes
-      drawText("DRAW", 2, 10, currentMenuParentTextColor());
+      drawMenuText("DRAW", 2, 10, currentMenuParentTextColor());
       drawMenuValue(drawMode == 0 ? "L+R" : "R", 2, 3, UI_GREEN);
+      drawMenuIndicator('L', 'G', 3);
       break;
 
     case 47: { // MUTE — columns 1..16 = user CH1..CH16 (see userChToInternalDrawR); green=in mask, red=out; enc1=CH, enc2=toggle
       const CRGB tc = currentMenuParentTextColor();
-      drawText("MUTE", 2, 10, tc);
+      drawMenuText("MUTE", 2, 10, tc);
       int selUch = constrain((int)currentMode->pos[1], 1, 16);
       const int rowDots = 3;
       for (int uch = 1; uch <= 16; uch++) {
@@ -2744,16 +2780,16 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         }
         light(uch, rowDots, dot);
       }
-      drawIndicator('L', 'Y', 2);
-      drawIndicator('L', 'W', 3);
+      drawMenuIndicator('L', 'Y', 2);
+      drawMenuIndicator('L', 'W', 3);
       break;
     }
 
     case 25: { // CTRL - encoder behaviour
-      drawText("CTRL", 2, 10, currentMenuParentTextColor());
+      drawMenuText("CTRL", 2, 10, currentMenuParentTextColor());
       drawMenuValue(ctrlMode == 0 ? "PAGE" : "VOL", 2, 3, ctrlMode == 0 ? UI_GREEN : UI_ORANGE);
       // Enc3 edits PAGE/VOL — green for PAGE, orange for VOL (ring + row-1 indicator).
-      drawIndicator('L', ctrlMode == 0 ? 'G' : 'O', 3);
+      drawMenuIndicator('L', ctrlMode == 0 ? 'G' : 'O', 3);
       break;
     }
     
@@ -2762,12 +2798,12 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       {
         const CRGB tc = menuTextColorFromCol(5);
         showIcons(ICON_VOLUME_BIG, dimIconColorFromText(tc));
-        drawText("VOL", 2, 3, tc);
+        drawMenuText("VOL", 2, 3, tc);
       }
       break;
 
     case 27: { // MAIN - Headphone output volume - encoder 3
-      drawText("MAIN", 2, 10, currentMenuParentTextColor());
+      drawMenuText("MAIN", 2, 10, currentMenuParentTextColor());
       extern struct GlobalVars GLOB;
       
       // Display GLOB.vol directly as 0-100
@@ -2778,114 +2814,105 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       char volText[8];
       snprintf(volText, sizeof(volText), "%d", volDisplay);
-      drawText(volText, 2, 3, CRGB(55, 10, 0)); // Orange-red gradient
+      drawMenuText(volText, 2, 3, UI_ORANGE); // Match encoder 3 and its indicator.
       
-      // Dynamic gradient color based on volume level (use float for color calculation)
-      float vol = GLOB.vol / 10.0f;
-      int r = (int)(vol * 255.0f);
-      int g = (int)((1.0f - vol) * 100.0f);
-      int b = 0;
-      CRGB volColor = CRGB(r, g, b);
-      Encoder[2].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
-      drawIndicator('L', 'O', 3);
+      drawMenuIndicator('L', 'O', 3);
       break;
     }
     
     case 28: { // LOUT - Line output volume - encoder 3
-      drawText("LOUT", 2, 10, currentMenuParentTextColor());
+      drawMenuText("LOUT", 2, 10, currentMenuParentTextColor());
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
       // Display mapped range 1..19 (LINEOUT_MIN..LINEOUT_MAX) for user friendliness
       int displayVal = (lineOutLevelSetting - LINEOUT_MIN) + 1;  // 13->1, 31->19
       snprintf(levelText, sizeof(levelText), "%d", displayVal);
-      drawText(levelText, 2, 3, CRGB(255, 192, 203)); // Pink
+      drawMenuText(levelText, 2, 3, UI_MAGENTA); // Pink
       
-      // Pink color for encoder
-      CRGB pinkColor = CRGB(255, 192, 203);
+      // Match the magenta value and indicator.
+      CRGB pinkColor = UI_MAGENTA;
       Encoder[2].writeRGBCode(pinkColor.r << 16 | pinkColor.g << 8 | pinkColor.b);
-      drawIndicator('L', 'M', 3);
+      drawMenuIndicator('L', 'M', 3);
       break;
     }
     
-    case 29: { // PREV - Preview volume - encoder 3
+    case 29: { // PREV: encoder 2 selects policy, encoder 3 sets volume.
       const char* trigger = previewTriggerMode == PREVIEW_MODE_PRESS ? "PRSS" :
           (previewTriggerMode == PREVIEW_MODE_SYNC ? "SYNC" : "ON");
-      drawText(trigger, 2, 10, previewTriggerMode == PREVIEW_MODE_ON ? UI_GREEN : currentMenuParentTextColor());
-      drawIndicator('L', 'Y', 2);
-      Encoder[1].writeRGBCode(0xFFFF00);
-      extern unsigned int previewVol;
-      // Display as 0-50 instead of 0.00-0.50
+      const char code = previewTriggerMode == PREVIEW_MODE_PRESS ? 'R' :
+          (previewTriggerMode == PREVIEW_MODE_SYNC ? 'Y' : 'G');
+      const CRGB valueColor = previewTriggerMode == PREVIEW_MODE_PRESS ? UI_RED :
+          (previewTriggerMode == PREVIEW_MODE_SYNC ? UI_YELLOW : UI_GREEN);
+      drawMenuText("PREV", 2, 10, currentMenuParentTextColor());
       char volText[8];
-      snprintf(volText, sizeof(volText), "%d", previewVol);
-      drawText(volText, 2, 3, CRGB(0, 160, 80)); // Green
-      
-      // Green color for encoder
-      CRGB greenColor = CRGB(0, 160, 80);
-      Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
-      drawIndicator('L', 'G', 3);
+      snprintf(volText, sizeof(volText), "%u", previewVol);
+      drawMenuText(previewModeLabelVisible ? trigger : volText, 2, 3,
+               previewModeLabelVisible ? valueColor : UI_ORANGE);
+      drawMenuIndicator('L', code, 2);
+      drawMenuIndicator('L', 'O', 3);
+      Encoder[1].writeRGBCode(CRGBToUint32(valueColor));
+      Encoder[2].writeRGBCode(CRGBToUint32(UI_ORANGE));
       break;
     }
-    
+
     case 30: { // MIC - Microphone gain - encoder 3
-      drawText("MIC", 2, 10, currentMenuParentTextColor());
+      drawMenuText("MIC", 2, 10, currentMenuParentTextColor());
       extern unsigned int micGain;
       char gainText[8];
       snprintf(gainText, sizeof(gainText), "%d", micGain);
-      drawText(gainText, 2, 3, CRGB(55, 0, 0)); // Red
+      drawMenuText(gainText, 2, 3, UI_RED); // Red
       
       // Red color for encoder
-      CRGB redColor = CRGB(55, 0, 0);
+      CRGB redColor = UI_RED;
       Encoder[2].writeRGBCode(redColor.r << 16 | redColor.g << 8 | redColor.b);
-      drawIndicator('L', 'R', 3);
+      drawMenuIndicator('L', 'R', 3);
       break;
     }
     
     case 31: { // L-IN - Line input level - encoder 3
-      drawText("L-IN", 2, 10, currentMenuParentTextColor());
+      drawMenuText("L-IN", 2, 10, currentMenuParentTextColor());
       extern unsigned int lineInLevel;
       char levelText[8];
       snprintf(levelText, sizeof(levelText), "%d", lineInLevel);
-      drawText(levelText, 2, 3, CRGB(0, 0, 55)); // Blue
+      drawMenuText(levelText, 2, 3, UI_BLUE); // Blue
       
       // Blue color for encoder
-      CRGB blueColor = CRGB(0, 0, 55);
+      CRGB blueColor = UI_BLUE;
       Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
-      drawIndicator('L', 'X', 3);
+      drawMenuIndicator('L', 'X', 3);
       break;
     }
 
     case 36: { // 2-CH - Stereo routing (OFF, M+P, or L+R) - encoder 3
-      drawText("2-CH", 2, 10, currentMenuParentTextColor());
+      drawMenuText("2-CH", 2, 10, currentMenuParentTextColor());
       // Clear text area before drawing (3 chars max: "OFF", "M+P", "L+R")
       clearTextArea(6, 3, 8);
       extern int8_t stereoChannel;
       if (stereoChannel == 0) {
-        drawText("OFF", 2, 3, UI_RED);
+        drawMenuText("OFF", 2, 3, UI_RED);
       } else if (stereoChannel == 1) {
-        drawText("M+P", 6, 3, UI_GREEN);
+        drawMenuText("M+P", 2, 3, UI_GREEN);
       } else { // stereoChannel == 2
-        drawText("L+R", 6, 3, UI_GREEN);
+        drawMenuText("L+R", 2, 3, UI_GREEN);
       }
-      CRGB blueColor = getIndicatorColor('X');
-      Encoder[2].writeRGBCode(blueColor.r << 16 | blueColor.g << 8 | blueColor.b);
-      drawIndicator('L', 'X', 3);
+      drawMenuIndicator('L', stereoChannel == 0 ? 'R' : 'G', 3);
       break;
     }
 
     case 43: { // SPKR - Speaker toggle - encoder 3
       extern bool getSpkrEnabled();
       const CRGB tc = currentMenuParentTextColor();
-      drawText("SPKR", 2, 10, tc);
+      drawMenuText("SPKR", 2, 10, tc);
       // Display was inverted: the internal "enabled" flag actually corresponds to the speaker
       // being OFF, so present the real speaker state (ON when !enabled).
       bool speakerOn = !getSpkrEnabled();
       drawMenuValue(speakerOn ? "ON" : "OFF", 2, 3, speakerOn ? UI_GREEN : UI_RED);
-      drawIndicator('L', speakerOn ? 'G' : 'R', 3);
+      drawMenuIndicator('L', speakerOn ? 'G' : 'R', 3);
       break;
     }
 
-    case 46: { // HFC — 0, 10..250, 256 (encoder 2)
-      drawText("HFC", 2, 10, currentMenuParentTextColor());
+    case 46: { // HFC — 0, 10..250, 256 (encoder 3)
+      drawMenuText("HFC", 2, 10, currentMenuParentTextColor());
       extern uint16_t codecHfCut;
       char valText[8];
       unsigned disp = (unsigned)codecHfCut;
@@ -2893,10 +2920,10 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       if (disp != 256u) disp = (disp / 10u) * 10u;
       snprintf(valText, sizeof(valText), "%u", disp);
       clearTextArea(2, 3, 16);
-      drawText(valText, 2, 3, CRGB(200, 40, 40));
-      CRGB encCol = CRGB(200, 40, 40);
+      drawMenuText(valText, 2, 3, UI_RED);
+      CRGB encCol = UI_RED;
       Encoder[2].writeRGBCode(encCol.r << 16 | encCol.g << 8 | encCol.b);
-      drawIndicator('L', 'R', 3);
+      drawMenuIndicator('L', 'R', 3);
       break;
     }
 
@@ -2907,18 +2934,18 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern uint8_t mixGainMaster;
       const char* title = "ALL";
       uint8_t shown = mixGainMaster;
-      CRGB valCol = CRGB(0, 255, 0);
-      if (g_gainUiFocus == 0) { title = "1-4"; shown = mixGain14; valCol = CRGB(0, 200, 200); }
-      else if (g_gainUiFocus == 1) { title = "5-8"; shown = mixGain58; valCol = CRGB(200, 100, 0); }
-      else if (g_gainUiFocus == 2) { title = "SYN"; shown = mixGainSynth; valCol = CRGB(200, 40, 200); }
+      CRGB valCol = UI_GREEN;
+      if (g_gainUiFocus == 0) { title = "1-4"; shown = mixGain14; valCol = UI_CYAN; }
+      else if (g_gainUiFocus == 1) { title = "5-8"; shown = mixGain58; valCol = UI_ORANGE; }
+      else if (g_gainUiFocus == 2) { title = "SYN"; shown = mixGainSynth; valCol = UI_MAGENTA; }
       // Title length changes (ALL/1-4/SYN) — clear before draw (partial redraw path).
       clearTextArea(1, 10, (int)maxX);
-      drawText(title, 2, 10, currentMenuParentTextColor());
+      drawMenuText(title, 2, 10, currentMenuParentTextColor());
       char valText[8];
       snprintf(valText, sizeof(valText), "%u.%ux", (unsigned)(shown / 10u), (unsigned)(shown % 10u));
-      drawText(valText, 2, 3, valCol);
+      drawMenuText(valText, 2, 3, valCol);
       const uint8_t bars[4] = { mixGain14, mixGain58, mixGainSynth, mixGainMaster };
-      const CRGB barCol[4] = { CRGB(0, 200, 200), CRGB(200, 100, 0), CRGB(200, 40, 200), CRGB(0, 255, 0) };
+      const CRGB barCol[4] = { UI_CYAN, UI_ORANGE, UI_MAGENTA, UI_GREEN };
       for (int i = 0; i < 4; i++) {
         int filled = ((int)bars[i] * 4 + MIX_GAIN_MAX / 2) / MIX_GAIN_MAX;
         if (filled > 4) filled = 4;
@@ -2931,25 +2958,25 @@ FLASHMEM void drawMainSettingStatus(int setting) {
           light(x0 + k, 8, (k < filled) ? on : CRGB(0, 0, 0));
         }
       }
-      drawIndicator('L', 'X', 1);
-      drawIndicator('L', 'O', 2);
-      drawIndicator('L', g_gainEnc3IsAll ? 'G' : 'M', 3);
+      drawMenuIndicator('L', 'N', 1);
+      drawMenuIndicator('L', 'O', 2);
+      drawMenuIndicator('L', g_gainEnc3IsAll ? 'G' : 'M', 3);
       break;
     }
     
     case 32: { // CRSR - Cursor type - encoder 3
-      drawText("CRSR", 2, 10, currentMenuParentTextColor());
+      drawMenuText("CRSR", 2, 10, currentMenuParentTextColor());
       extern bool showChannelNr;
       const char* lbl = showChannelNr ? "CHNR" : "NORM";
-      CRGB col = showChannelNr ? CRGB(150, 200, 0) : CRGB(150, 100, 0);
+      CRGB col = UI_GREEN;
       drawMenuValue(lbl, 2, 3, col);
-      Encoder[2].writeRGBCode(CRGB(0, 255, 0).r << 16 | CRGB(0, 255, 0).g << 8 | CRGB(0, 255, 0).b);
-      drawIndicator('L', 'G', 3);
+      Encoder[2].writeRGBCode(UI_GREEN.r << 16 | UI_GREEN.g << 8 | UI_GREEN.b);
+      drawMenuIndicator('L', 'G', 3);
       break;
     }
 
     case 33: { // PREV - Preview trigger mode - encoder 3
-      drawText("PREV", 2, 10, currentMenuParentTextColor());
+      drawMenuText("PREV", 2, 10, currentMenuParentTextColor());
       const char* prevLbl = "ON";
       CRGB prevCol = UI_GREEN;
       if (previewTriggerMode == PREVIEW_MODE_PRESS) {
@@ -2962,7 +2989,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuValue(prevLbl, 2, 3, prevCol);
       CRGB greenColor = getIndicatorColor('G');
       Encoder[2].writeRGBCode(greenColor.r << 16 | greenColor.g << 8 | greenColor.b);
-      drawIndicator('L', 'B', 3);
+      drawMenuIndicator('L', 'B', 3);
       break;
     }
   }
@@ -3853,8 +3880,8 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         int encPos = constrain((int)currentMode->pos[2], 0, encMax);
         uint16_t newCut = (encPos >= encMax) ? 256u : (uint16_t)(encPos * 10);
         codecHfCut = newCut;
-        saveSettingsU16ToEEPROM(32, codecHfCut);
-        saveSingleModeToEEPROM(33, 4);
+        saveSingleModeToEEPROM(32, hfcEncodeStep(codecHfCut));
+        saveSingleModeToEEPROM(33, 5);
         applySgtl5000CodecOutputPath();
         Encoder[2].writeCounter((int32_t)encPos);
         currentMode->pos[2] = encPos;
@@ -4470,6 +4497,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       extern unsigned int previewVol;
       
       if (prevMenuFirstEnter) {
+        previewModeLabelVisible = false;
         const int trigger = constrain(previewTriggerMode, 0, 2);
         Encoder[1].writeMin((int32_t)0);
         Encoder[1].writeMax((int32_t)2);
@@ -4495,10 +4523,13 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lastPreviewTrigger = previewTriggerMode;
         currentMode->pos[1] = previewTriggerMode;
         saveSingleModeToEEPROM(20, (int8_t)previewTriggerMode);
+        previewModeLabelVisible = true;
+        previewModeLabelChangedAt = millis();
         redrawMain(setting);
       }
       if (currentMode->pos[2] != lastPvVol) {
         int encoderPos = constrain(currentMode->pos[2], 0, 50);
+        previewModeLabelVisible = false;
         previewVol = encoderPos;  // Store 0-50 (0.00-0.50)
         
         // Apply to hardware
@@ -5340,7 +5371,7 @@ FLASHMEM void drawLoopLength() {
     char buf[2];
     buf[0] = (char)('0' + constrain((int)loopLength, 1, 8));
     buf[1] = '\0';
-    drawMenuValue(buf, 2, 3, CRGB(0, 200, 255));
+    drawMenuValue(buf, 2, 3, UI_CYAN);
   }
 }
 
@@ -5387,12 +5418,12 @@ FLASHMEM void showNewFileMode() {
   // NEW controls: enc0=load (green M), enc1=length (pink L), enc2=template (yellow L),
   // enc3=back to FILE (blue L — same as FILE menu enc4). Matrix-only draw so a later
   // LED write cannot reshape the L pixels; no extra helper dots on row 1.
-  drawIndicator('M', 'G', 1, false, false);
+  drawMenuIndicator('M', 'G', 1, false, false);
   if (genreType != 0) {
-    drawIndicator('L', 'M', 2, false, false);
+    drawMenuIndicator('L', 'M', 2, false, false);
   }
-  drawIndicator('L', 'Y', 3, false, false);
-  drawIndicator('L', 'X', 4, false, false);
+  drawMenuIndicator('L', 'Y', 3, false, false);
+  drawMenuIndicator('L', 'X', 4, false, false);
 
   CRGB pinkColor = getIndicatorColor('M');
   CRGB yellowColor = getIndicatorColor('Y');
@@ -5585,7 +5616,7 @@ FLASHMEM void clearTextArea(int startX, int startY, int width) {
 // Use for ON/OFF, SENS, etc. style subitem toggles to reduce code duplication.
 static inline void drawMenuValue(const char* label, int x, int y, CRGB color) {
   clearTextArea(x, y, 16);
-  drawText(label, x, y, color);
+  drawText(label, x, y, menuValueColor(color));
 }
 
 FLASHMEM void drawRecChannelClear(){
@@ -5626,8 +5657,8 @@ FLASHMEM void drawMidiVoiceSelect() {
 
 FLASHMEM void drawFastRecMode() {
   switch (fastRecMode) {
-    case 3: drawMenuValue("+CON", 2, 3, UI_DIM_BLUE); break;
-    case 2: drawMenuValue("-CON", 2, 3, UI_DIM_YELLOW); break;
+    case 3: drawMenuValue("+CON", 2, 3, UI_BLUE); break;
+    case 2: drawMenuValue("-CON", 2, 3, UI_YELLOW); break;
     case 1: drawMenuValue("SENS", 2, 3, UI_GREEN); break;
     default: drawMenuValue("OFF", 2, 3, UI_RED); break;
   }

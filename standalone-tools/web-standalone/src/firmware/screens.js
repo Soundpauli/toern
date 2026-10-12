@@ -1,5 +1,5 @@
 import { COL, COL_BASE, COLS, ROWS, PAGES, SCHEMES, filterPagesFor } from "./const.js";
-import { blend, hsv, nscale } from "./matrix.js";
+import { blend, hsv, nscale, indicatorColor } from "./matrix.js";
 import { glyphWidth, textPixelWidth } from "./font.js";
 import { showIcon } from "./icons.js";
 import { GENRES } from "./genres.js";
@@ -616,7 +616,31 @@ export function drawNew(matrix, s) {
   matrix.drawIndicator("L", "X", 4);
 }
 
+// Menu values and their indicators share a 120 peak level; grid rendering is unchanged.
+function menuValueColor(rgb) {
+  const peak = Math.max(...rgb);
+  return peak ? rgb.map(c => Math.floor(c * 120 / peak)) : rgb.slice();
+}
+function menuMatrix(matrix) {
+  return new Proxy(matrix, { get(target, key) {
+    if (key === "drawText") return (text, x, y, color) => target.drawText(text, x, y, y === 3 ? menuValueColor(color) : color);
+    if (key === "setRing") return (n, color) => target.setRing?.(n, menuValueColor(color), true);
+    if (key === "drawLargeCustom") return (color, n) => {
+      const value = menuValueColor(color);
+      target.drawLargeCustom(value, n); target.setRing?.(n, value, true);
+    };
+    if (key === "drawIndicator") return (size, code, n) => {
+      const color = code === "O" ? UI_ORANGE : menuValueColor(indicatorColor(code));
+      target.drawIndicator(size, code, n);
+      if (size === "L") target.drawLargeCustom(color, n);
+      target.setRing?.(n, color, true);
+    };
+    return target[key];
+  } });
+}
+
 export function drawSubmenu(matrix, s, now = performance.now()) {
+  matrix = menuMatrix(matrix);
   const pages = SUBS[s.mode];
   const name = pages[s.subIndex];
   const visibleMode = s.mode, visibleIndex = s.subIndex;
@@ -643,10 +667,16 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     return;
   }
   if (pageMode === "vol" && pageIndex === 3) {
-    matrix.drawText(["ON", "PRSS", "SYNC"][s.prevMode] || "ON", 2, 10, s.prevMode === 0 ? UI_GREEN : parent);
-    matrix.drawText(String(s.prevVol), 2, 3, [0, 160, 80]);
-    matrix.drawIndicator("L", "Y", 2);
-    matrix.drawIndicator("L", "G", 3);
+    const code=["G","R","Y"][s.prevMode] || "G";
+    const color=[UI_GREEN,UI_RED,UI_YELLOW][s.prevMode] || UI_GREEN;
+    const orange=[120,60,0];
+    const showMode=now<(s.prevModeLabelUntil || 0);
+    matrix.drawText("PREV",2,10,parent);
+    matrix.drawText(showMode ? ["ON","PRSS","SYNC"][s.prevMode] : String(s.prevVol),2,3,showMode ? color : orange);
+    matrix.drawIndicator("L",code,2);
+    matrix.drawIndicator("L","O",3);
+    matrix.setRing?.(2,color);
+    matrix.setRing?.(3,orange);
     return;
   }
   matrix.drawText(name, 2, 10, parent);
@@ -735,8 +765,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     ? { text: s.touchyEnabled ? "ON" : "OFF", color: s.touchyEnabled ? UI_GREEN : UI_RED, code: s.touchyEnabled ? "G" : "R" }
     : s.legacySubValue(pageMode, pageIndex);
   matrix.drawText(value.text, 2, 3, value.color);
-  if (value.code) matrix.drawIndicator("L", value.code, 3);
-  else matrix.setRing?.(3, value.color);
+  matrix.drawLargeCustom(value.color, 3);
 }
 
 function clampUi(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -934,7 +963,7 @@ export function drawBoot(matrix, now, bootAt) {
   return t >= 5000;
 }
 
-const VERSION = "v3.01f-T2";
+const VERSION = "v3.01g";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
 function drawInfo(matrix, s, now, color) {
@@ -1109,7 +1138,7 @@ export function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       let color=x<x0+5 && row>=0 && row<6 ? TOUCHY_RAINBOW[row] : [0,0,0];
       const pixel=sprite[top-y]?.[x-x0];
       if(pixel && pixel!==" ")color=pixel==="E"?tint:TOUCHY_PALETTE[pixel];
-      light(x,y,color);
+      light(x,y,color.map(v=>Math.floor(v/2)));
     }
   }
 }
@@ -1117,7 +1146,7 @@ export function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 export function drawTouchy(matrix, s, now) {
   const tint = s.touchyTintActive ? TOUCHY_COLORS[(s.touchyLastVoice || 1)-1].map(v=>Math.floor(v*3/5)) : TOUCHY_PALETTE.E;
   drawTouchyCat((x,y,color)=>matrix.light(x,y,color),COLS,now,tint);
-  for(let i=0;i<4;i++)matrix.setRing?.(i+1,TOUCHY_COLORS[i]);
+  for(let i=0;i<4;i++)matrix.setRing?.(i+1,TOUCHY_COLORS[i].map(v=>Math.floor(v/2)),true);
 }
 
 export function renderFrame(matrix, s, now) {
@@ -1193,5 +1222,6 @@ export function renderFrame(matrix, s, now) {
   }
   else if (s.mode === "song") drawSong(matrix, s);
   else if (s.mode === "bpm") drawBpm(matrix, s);
+  if (s.mode !== "touchy" && s.fnArrow && now - s.fnArrowAt < 350) matrix.drawText(s.fnArrow, 7, 8, UI_WHITE);
   matrix.present();
 }

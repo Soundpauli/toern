@@ -1588,7 +1588,15 @@ FLASHMEM void FastLEDshow() {
     }
     // Don't change global brightness - matrix is dimmed in software (light_single)
     // Strip stays at full brightness (set in setup() and not modified)
-    FastLED.show();  // Shows both matrix (PIN 17) and strip (PIN 24)
+    if (currentMode != &touchyMode && fnDirection != 0 && (int32_t)(fnDirectionUntil - millis()) > 0) {
+      CRGB saved[NUM_LEDS];
+      memcpy(saved, leds, sizeof(saved));
+      drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
+      FastLED.show();
+      memcpy(leds, saved, sizeof(saved));
+    } else {
+      FastLED.show();  // Shows both matrix (PIN 17) and strip (PIN 24)
+    }
   }
 }
 
@@ -3846,8 +3854,8 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 28, 1);    // midiNoteReceive
   EEPROM.write(EEPROM_DATA_START + 29, 0);    // transportSendDelayMs
   EEPROM.write(EEPROM_DATA_START + 31, 0);    // transportRcveDelayMs
-  EEPROM.put(EEPROM_DATA_START + 32, (uint16_t)256);  // codecHfCut
-  EEPROM.write(EEPROM_DATA_START + 33, 4);    // HFC format
+  EEPROM.write(EEPROM_DATA_START + 32, 0);  // codecHfCut
+  EEPROM.write(EEPROM_DATA_START + 33, 5);    // HFC format
   EEPROM.put(EEPROM_DATA_START + 34, (uint16_t)0x0006);  // drawRFullMuteCustomUnmuteMask
   EEPROM.write(EEPROM_DATA_START + 36, 0);    // childLockEnabled (OFF)
   EEPROM.write(EEPROM_DATA_START + 37, 1);    // MIDI pitch clamp (ON)

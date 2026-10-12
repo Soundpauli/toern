@@ -23,6 +23,8 @@ struct {int channelVol[6]; float filter_settings[6][3];} SMP;
 struct EncoderMock {int count; void writeCounter(int value){count=value;}} Encoder[4];
 uint8_t touchyLastVoice=5,touchyVelocity[6]={100,100,100,100,100,100},oldButtons[4]={};
 unsigned int touchySavedVolume[6]={};
+bool touchyPrevious[5]={};
+bool readDebouncedTouch(int){return false;}
 bool touchyRecordHeld=false,touchyEnabled=false,isNowPlaying=false,pendingStartOnBar=false,waitForFourBars=false;
 bool isPressed[4]={},pendingStartFastRecord=false,fastRecordActive=false,fastRecWaitRelease=false,recordingBorderArmed=false;
 int touchyEntryHeldEncoder=-1,recordingStartBeat=99,recordingBeatCount=99,fxType=9,stops=0,menus=0,applied[6][3]={},gain[6]={};
@@ -62,7 +64,9 @@ int main(){
   assert(stops==1 && !touchyRecordHeld && !pendingStartFastRecord && !fastRecWaitRelease && currentMode==&touchyMode);
   states[0]=1; handleTouchyButtons(states); assert(currentMode==&set_Wav && GLOB.currentChannel==1 && touchyLastVoice==5);
   currentMode=&touchyMode; syncTouchyEncoders(); assert(GLOB.currentChannel==5 && touchyMode.pos[1]==65);
-  setTouchyEnabled(false);
+  currentMode=&touchyMode;
+  states[0]=0; states[3]=2; handleTouchyButtons(states);
+  assert(!touchyEnabled);
   for(int ch=1;ch<=5;ch++) assert(SMP.channelVol[ch]==ch && gain[ch]==ch);
 }
 '''

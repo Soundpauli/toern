@@ -173,7 +173,7 @@ void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3) {
 
 // Draw indicator with new format: SIZE[COLOR]
 // setEncoderLed: when false, only draws the matrix indicator (caller owns encoder RGB).
-void drawIndicator(char size, char colorCode, int encoderNum, bool highlight, bool setEncoderLed) {
+void drawIndicator(char size, char colorCode, int encoderNum, bool highlight, bool setEncoderLed, uint8_t brightness) {
   CRGB color = getIndicatorColor(colorCode);
   
   // Handle special case for CH (current channel color)
@@ -186,9 +186,18 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight, bo
     color = applyHighlight(color, true);
   }
 
+  if (brightness != 255) {
+    uint8_t peak = max(color.r, max(color.g, color.b));
+    if (peak) color = CRGB((uint16_t)color.r * brightness / peak,
+                           (uint16_t)color.g * brightness / peak,
+                           (uint16_t)color.b * brightness / peak);
+    // The shared menu orange matches UI_ORANGE exactly.
+    if (colorCode == 'O') color = CRGB(brightness, brightness / 2, 0);
+  }
+
   if (setEncoderLed && encoderNum >= 1 && encoderNum <= NUM_ENCODERS) {
     // Normalize color to maximum brightness while preserving hue/ratios
-    CRGB maxBrightnessColor = normalizeToMaxBrightness(color);
+    CRGB maxBrightnessColor = brightness == 255 ? normalizeToMaxBrightness(color) : color;
     uint32_t rgbCode = (uint32_t(maxBrightnessColor.r) << 16) | (uint32_t(maxBrightnessColor.g) << 8) | maxBrightnessColor.b;
     Encoder[encoderNum - 1].writeRGBCode(rgbCode);
   }
