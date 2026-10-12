@@ -1,6 +1,6 @@
-# TŒRN Code Docs
+# TŒRN code & hardware docs
 
-Developer documentation for the TŒRN firmware — how the code is structured and how the pieces talk to each other.
+Developer documentation for how the firmware and rev H hardware fit together.
 
 This is **not** the operator handbook (device usage). That lives in the repo-root [`handbook/`](../handbook/) tree and is published at [handbook.toern.live](https://handbook.toern.live/).
 
@@ -9,9 +9,9 @@ This is **not** the operator handbook (device usage). That lives in the repo-roo
 | Path | Role |
 |------|------|
 | `devdocs/` | This Docusaurus app (source of truth in the repo) |
-| `website/docs/` | Built static files served at `/docs/` (copied in manually for deploy) |
+| Public URL | **https://docs.toern.live/** |
 
-Sources live at the repo root. Publish by building here and copying the output into `website/docs/` before deploy.
+Publish by building here and rsyncing `build/` to the tyng.app host. The marketing Netlify site only links / redirects to docs.toern.live — it does not host a nested docs copy.
 
 ## Local preview
 
@@ -21,37 +21,15 @@ npm install
 npm start
 ```
 
-Open the URL from the terminal (routes are under `/docs/…`).  
-`baseUrl` is `/docs/` to match production: https://toern.live/docs/
+`url` / `baseUrl` match production: https://docs.toern.live/
 
-## Production build (then copy into website)
+## Production build
 
 ```bash
 cd devdocs
 npm install
 npm run build
-# copy build/ → website/docs/  (manual)
-```
-
-Or from the website package (if present locally):
-
-```bash
-cd website
-npm run build:docs   # uses scripts/sync-docs.js against ../devdocs
+rsync -avz --delete build/ root@tyng.app:/var/www/docs.toern.live/
 ```
 
 Details: [docs → Contributing → This docs site](./docs/contributing/docs-site.md).
-
-## Docs sections
-
-| Section | What it covers |
-|---------|----------------|
-| Architecture | Big picture, file map, main loop / ISR split |
-| Core concepts | Modes, note/pattern data, channel map |
-| Audio | Teensy Audio graph, samples, synths, FX |
-| Subsystems | UI/LEDs, MIDI/clock, menu, SD |
-| Tools | Sample converter, simulator, SD tool, firmware loader, color editor |
-| Hardware (rev H) | KiCad board map, connectors, power, fab exports |
-| Contributing | Firmware build, menu/EEPROM edit map, memory tips, this docs site |
-
-Edit Markdown under `docs/`. Sidebar order is in `sidebars.js`.

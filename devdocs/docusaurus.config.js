@@ -11,14 +11,14 @@ const config = {
     v4: true,
   },
 
-  // Served from the main site at https://toern.live/docs/
-  url: 'https://toern.live',
-  baseUrl: '/docs/',
+  // Standalone host: https://docs.toern.live/ (DNS already points here)
+  url: 'https://docs.toern.live',
+  baseUrl: '/',
 
   organizationName: 'Soundpauli',
   projectName: 'toern',
 
-  // Repo-root links (BUILD.md, PCB/, handbook) are intentional; they are not part of /docs/.
+  // Repo-root links (BUILD.md, PCB/, handbook) are intentional; they are not part of this site.
   onBrokenLinks: 'warn',
 
   i18n: {

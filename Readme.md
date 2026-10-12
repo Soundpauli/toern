@@ -161,7 +161,7 @@ Insert or eject the SD card only with the unit **off** — the firmware re-index
 | [`info.md`](./info.md) | Compile and flash (PlatformIO) |
 | `PCB/toern_revH/` | Current KiCad board, gerbers, JLCPCB BOM |
 | `handbook/` | Human-friendly operator’s guide (how to *use* the device) → [handbook.toern.live](https://handbook.toern.live/) |
-| `devdocs/` | [Docusaurus](./devdocs/) code and hardware (rev H) docs → published at `/docs/` |
+| `devdocs/` | [Docusaurus](./devdocs/) code and hardware (rev H) docs → [docs.toern.live](https://docs.toern.live/) |
 | `tools/` / `standalone-tools/` | Helpers; SD tool, sample converter, browser sim → tyng.app |
 | `standalone-tools/web-standalone/` | Browser simulator → [sim.tyng.app](https://sim.tyng.app/) |
 | `standalone-tools/teensyloader-standalone/` | Firmware flasher → [firmware.tyng.app](https://firmware.tyng.app/) (GPL-3.0) |

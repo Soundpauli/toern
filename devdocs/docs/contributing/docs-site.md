@@ -1,22 +1,22 @@
 ---
 sidebar_position: 4
 title: This docs site
-description: Where the Docusaurus app lives, how /docs is published, and how to edit it.
+description: Where the Docusaurus app lives, how docs.toern.live is published, and how to edit it.
 ---
 
 # This docs site
 
-These pages are a **Docusaurus** app. Source lives at the repo root; the built site is copied into `website/docs/` for deploy.
+These pages are a **Docusaurus** app in repo-root **`devdocs/`**. Production is **[docs.toern.live](https://docs.toern.live/)** on the tyng.app host (same pattern as handbook / sim / tools). The marketing Netlify site only **links / redirects** to it — it does not embed a docs build.
 
 ## Layout
 
 | Path | Role |
 |------|------|
 | [`devdocs/`](https://github.com/Soundpauli/toern/tree/main/devdocs) | Docusaurus source (Markdown, config, sidebar) |
-| `website/docs/` | **Built** static output copied in for deploy (not edited by hand) |
-| Public URL | **https://toern.live/docs/** (`baseUrl` = `/docs/`) |
+| Public URL | **https://docs.toern.live/** (`baseUrl` = `/`) |
+| Server path | `/var/www/docs.toern.live` (Apache; DNS `docs.toern.live` → `docs.tyng.app`) |
 
-`website/` is local/deploy-only (gitignored). Copy the built docs into `website/docs/` when publishing. The operator handbook is **not** copied into the website; it lives in repo [`handbook/`](https://github.com/Soundpauli/toern/tree/main/handbook) and is served at [handbook.toern.live](https://handbook.toern.live/).
+Do **not** copy a build into `website/` or deploy docs as part of the main Netlify site. The operator handbook is separate: repo [`handbook/`](https://github.com/Soundpauli/toern/tree/main/handbook) → [handbook.toern.live](https://handbook.toern.live/).
 
 ## Local preview
 
@@ -26,26 +26,23 @@ npm install
 npm start
 ```
 
-Open the URL printed in the terminal (paths are under `/docs/…`).
+Open the URL printed in the terminal (routes are at the site root, e.g. `/architecture/overview`).
 
-## Production build
+## Production build / deploy
 
 ```bash
 cd devdocs
 npm install
 npm run build
+rsync -avz --delete build/ root@tyng.app:/var/www/docs.toern.live/
 ```
-
-Then copy `devdocs/build/` → `website/docs/` (manual copy for deploy).
-
-If you use the local website package, `cd website && npm run build:docs` runs the same build/copy via `scripts/sync-docs.js` against `../devdocs`.
 
 ## Editing content
 
 1. Edit Markdown under `devdocs/docs/`
 2. Sidebar order: `devdocs/sidebars.js`
-3. Site config / `baseUrl`: `devdocs/docusaurus.config.js`
-4. Preview with `npm start`, then commit the **source** under `devdocs/` (not anything under `website/`)
+3. Site config / `url` / `baseUrl`: `devdocs/docusaurus.config.js`
+4. Preview with `npm start`, then commit the **source** under `devdocs/`
 
 ## Related
 

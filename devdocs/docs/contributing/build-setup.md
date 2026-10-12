@@ -63,14 +63,14 @@ npm start
 
 Node **≥ 20** required (see `package.json` engines).
 
-To produce the static files served under `/docs/`:
+To produce the static files for [docs.toern.live](https://docs.toern.live/):
 
 ```bash
 cd devdocs
 npm run build
-# then copy build/ → website/docs/ for deploy
+# rsync build/ → root@tyng.app:/var/www/docs.toern.live/
 ```
 
 ## Operator handbook
 
-End-user docs are static HTML under `handbook/`, served at [handbook.toern.live](https://handbook.toern.live/) — not copied into the Netlify website.
+End-user docs are static HTML under `handbook/`, served at [handbook.toern.live](https://handbook.toern.live/) — not part of the marketing site or docs.toern.live.

@@ -41,5 +41,5 @@ Arduino concatenates all `.ino` files in the sketch folder; headers and `src/` a
 
 ## Where this site lives
 
-Source: **`devdocs/`** in the repo. Published at **`/docs/`** on [toern.live](https://toern.live/docs/) (built output copied into `website/docs/` for deploy).
+Source: **`devdocs/`** in the repo. Published at **[docs.toern.live](https://docs.toern.live/)**.
 How to edit and preview: [This docs site](./contributing/docs-site).
