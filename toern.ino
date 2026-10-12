@@ -18,16 +18,9 @@ FLASHMEM void applyDrawSingleYEncoderLimits();
 //#define AUDIO_BLOCK_SAMPLES 128
 //#define AUDIO_SAMPLE_RATE_EXACT 44100
 
-//STILL FREE PINS: 24, 25, 22, 5, 15, 2, 4, 14, 9, 32, 33, 31
 // CLK-OUT J25 = 37, CLK-IN J26 = 38, SIDEC J27 = 28 (rev H 5V analog I/O)
 static const int FAST_DROP_BLOCKS = 5;  // ≈25ms @ 44100Hz with 128-sample blocks (reduced from 200ms to minimize trimming)
 static int fastDropRemaining = 0;
-volatile bool stepIsDue = false;
-volatile uint32_t missedSteps = 0;  // counts when loop() hasn't consumed the previous tick yet
-
-// Tiny timer ISR (definition is placed later in the file, after includes, to avoid Arduino
-// auto-prototype issues with other callback signatures).
-//void playTimerTick();
 
 // === ISR -> main loop deferrals (keep timer interrupt fast and deterministic) ===
 // NOTE: These are written from the timer ISR (playNote) and consumed in loop().
@@ -40,8 +33,6 @@ volatile uint16_t isrDbgPatternFinishedBeat = 0;
 volatile bool isrDbgLoopCountChanged = false;  // loopCount incremented
 volatile uint16_t isrDbgLoopCountValue = 0;
 
-
-//#include <Wire.h>x-
 
 #include <cstring>  // For memcmp
 #include "src/effect_freeverb_dmabuf.h"
@@ -237,7 +228,6 @@ extern void handleStart();
 #define EEPROM_MIX_GAIN_SYN 40
 #define EEPROM_MIX_GAIN_ALL 41
 
-
 #define NUM_ENCODERS 4
 #define defaultVelocity 100
 #define FOLDER_MAX 10
@@ -282,8 +272,6 @@ MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MidiSettings);
 static uint8_t midiTxExtra[128];
 static uint8_t midiRxExtra[512];
 
-unsigned long ganularStartTime = 0;  // Timestamp when the current beat started
-
 #define EXTERNAL_ONE_ENCODER_INDEX 2  // Encoder(2) -> third hardware knob
 static bool externalOneBlinkActive = false;
 static unsigned long externalOneBlinkUntil = 0;
@@ -312,7 +300,6 @@ const unsigned long debounceDelay = 500;  // 100ms debounce
 #define EEPROM_MAGIC_ADDR 42
 #define EEPROM_DATA_START 43        // 43..48 will be your six mode‐bytes
 const uint8_t EEPROM_MAGIC = 0x5A;  // anything nonzero
-
 
 // Add at file scope:
 
@@ -417,7 +404,6 @@ struct SliderMeta {
   uint8_t displayRange;    // NEW: number of distinct display values (e.g. 5, 3)
 };
 
-
 static const SliderMeta sliderMeta[4][4] = {
   // Page 0
   {
@@ -445,7 +431,6 @@ static const SliderMeta sliderMeta[4][4] = {
     { 32, DISPLAY_NUMERIC, nullptr, 32 } }
 };
 
-
 struct PendingNoteEvent {
   uint8_t channel;
   uint8_t pitch;
@@ -467,9 +452,6 @@ CachedSample previewCache;
 
 // Flag to disable threshold from external code
 bool disableThresholdFlag = false;
-
-// Number of samples in each delay line
-// Allocate the delay lines for left and right channels
 
 bool MIDI_CLOCK_SEND = true;
 bool MIDI_NOTE_SEND = true;    // Control whether MIDI notes are sent (independent from clock)
@@ -505,7 +487,6 @@ static bool spkrEnabled = true;  // SPKR toggle state (ON by default)
 static bool childLockEnabled = false;  // Child lock: requires touch2->touch1 sequence to enter menu
 static bool bootFullResetRequested = false;  // Touch1 held 10s at power-on (3s CLR + 7s more) → FULL reset late in setup()
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
-bool recMenuFirstEnter = true;   // Track first entry into REC menu
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
 bool SMP_LOAD_SETTINGS = true;  // Whether to load SMP settings when loading tracks
@@ -513,27 +494,7 @@ uint8_t lineOutLevelSetting = 30;
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
 
-
-
 bool drawNoSD_hasRun = false;
-
-
-struct PendingNote {
-  uint8_t pitch;
-  uint8_t velocity;
-  uint8_t channel;
-  uint8_t livenote;
-  uint16_t targetBeat;
-};
-
-// A small FIFO for upcoming grid-writes.
-// IMPORTANT: `playNote()` runs in an IntervalTimer ISR, so this queue must be ISR-safe.
-// Use a fixed-size single-producer (loop/MIDI) single-consumer (ISR/onBeatTick) ring buffer.
-static constexpr uint8_t MAX_PENDING_NOTES = 32;
-DMAMEM static PendingNote pendingNotesBuf[MAX_PENDING_NOTES];
-static volatile uint8_t pendingNotesHead = 0;   // next write index
-static volatile uint8_t pendingNotesTail = 0;   // next read index
-static volatile uint8_t pendingNotesCount = 0;  // number of queued items
 
 // If a live MIDI/touch4 write lands on the upcoming sequencer step, skip that
 // one trigger so the immediate preview is the only attack. The cell is already
@@ -541,42 +502,10 @@ static volatile uint8_t pendingNotesCount = 0;  // number of queued items
 volatile uint16_t liveRecordSkipBeat = 0;
 volatile uint16_t liveRecordSkipRows = 0;
 
-// Enqueue from main loop context (may be called from MIDI handlers in loop()).
-// Returns true on success, false if the queue is full (event dropped).
-bool enqueuePendingNote(uint8_t pitch, uint8_t velocity, uint8_t channel, uint8_t livenote) {
-  if (isChildVoiceDisabled((int)channel)) return false;
-  extern uint16_t quantizedMidiRecordBeat();
-  uint16_t targetBeat = quantizedMidiRecordBeat();
+// Reset immediate-recording skip marks when transport stops.
 
-  bool ok = false;
+void clearLiveRecordSkip() {
   noInterrupts();
-  if (pendingNotesCount < MAX_PENDING_NOTES) {
-    pendingNotesBuf[pendingNotesHead] = {
-      pitch, velocity, channel, livenote, targetBeat
-    };
-    pendingNotesHead = (uint8_t)((pendingNotesHead + 1) % MAX_PENDING_NOTES);
-    pendingNotesCount++;
-    ok = true;
-  }
-  interrupts();
-  return ok;
-}
-
-// Dequeue from ISR context (`onBeatTick()` runs inside `playNote()` ISR).
-// Returns true if an item was dequeued.
-bool dequeuePendingNote(PendingNote &out) {
-  if (pendingNotesCount == 0) return false;
-  out = pendingNotesBuf[pendingNotesTail];
-  pendingNotesTail = (uint8_t)((pendingNotesTail + 1) % MAX_PENDING_NOTES);
-  pendingNotesCount--;
-  return true;
-}
-
-void clearPendingMidiRecordNotes() {
-  noInterrupts();
-  pendingNotesHead = 0;
-  pendingNotesTail = 0;
-  pendingNotesCount = 0;
   liveRecordSkipBeat = 0;
   liveRecordSkipRows = 0;
   interrupts();
@@ -634,7 +563,6 @@ bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
   return true;
 }
 
-
 // ----- Intro Animation Timing (in ms) -----
 // Boot: 1s sine fade-in, 2.5s logo fade-in, 1.5s combined fade-out = 5s.
 const unsigned long phase1Duration = 1000;
@@ -652,35 +580,22 @@ uint8_t sequencerMidiOutCount = 0;
 
 float rateFactor = 44117.0 / 44100.0;
 
-
-unsigned int infoIndex = 0;
-
 // Sample paths for SP0 / SET_WAV are stored in SMP.samplePathRel[] (relative to samples/).
 bool freshPaint, tmpMute = false;
 bool preventPaintUnpaint = false;  // Flag to prevent paint/unpaint after certain operations
 unsigned long suppressDrawRMuteUntilMs = 0;  // Ignore R-mode mute events during velocity enter/exit
 
-
 bool firstcheck = false;
 bool nofile = false;
-char *currentParam = "DLAY";
-char *currentFilter = "TYPE";
-char *currentSynth = "BASS";
 unsigned int fxType = 0;
-
-unsigned int selectedFX = 0;
-
 
 unsigned long filterDrawEndTime = 0;
 bool filterDrawActive = false;
 int filterDrawValue = 0;
 CRGB filterDrawColor = CRGB::White;
 
-
 unsigned long patternChangeTime = 0;
 bool patternChangeActive = false;
-
-
 
 // Replaced String with hash for memory efficiency (~100-200 bytes saved)
 uint32_t oldPosHash = 0;
@@ -695,12 +610,9 @@ const int maxPeaks = 512;  // Adjust based on your needs
 DMAMEM float peakValues[maxPeaks];
 int peakIndex = 0;
 
-
 const int maxRecPeaks = 512;  // Adjust based on your needs
 DMAMEM float peakRecValues[maxRecPeaks];
 int peakRecIndex = 0;
-
-
 
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
@@ -763,10 +675,6 @@ bool readRecTouchHeld() {
 }
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
-
-const unsigned long CHECK_INTERVAL = 50;  // Interval to check buttons in ms
-unsigned long lastCheckTime = 0;          // Get the current time
-
 
 // Recording input mode:
 //   1  = MIC (SGTL5000 capture/mic path enabled)
@@ -851,22 +759,18 @@ File frec;
 EXTMEM int16_t recBuffer[BUFFER_SAMPLES];
 volatile size_t recWriteIndex = 0;
 
-
 // Which input on the audio shield will be used?
 // Default to LINEIN so the SGTL5000 MIC/capture path is not powered by default.
 unsigned int recInput = AUDIO_INPUT_LINEIN;
 
 /*timers*/
-unsigned int lastButtonPressTime = 0;
-bool resetTimerActive = false;
 
 // runtime
 //  variables for program logic
 float pulse = 1;
 int dir = 1;
-unsigned int MIDI_CH = 1;
 double playNoteInterval = 150000.0;
-// Display refresh timing: RefreshTime = 1000UL / TargetFPS (30 FPS = 33ms per frame)
+// Matrix refresh interval; TargetFPS defines the configured frame rate.
 // This is the single source of truth for display-related timing across the codebase
 unsigned int RefreshTime = 1000UL / TargetFPS;
 float marqueePos = maxX;
@@ -876,7 +780,6 @@ unsigned int lastUpdate = 0;
 unsigned int lastDrawUpdate = 0;  // UI redraw limiter (separate from LED show limiter)
 
 unsigned int totalInterval = 0;
-
 
 DMAMEM bool hasNotes[maxPages + 1];
 DMAMEM unsigned int startTime[maxY] = { 0 };    // Variable to store the start time
@@ -950,7 +853,6 @@ static inline bool canEnterSingleMode(unsigned int y, int channel) {
 
 void enforceImageModeConstraints();
 
-
 // Global sequencer position (1..maxlen)
 unsigned int beat = 1;
 volatile uint16_t sequencerRecordBeat = 1;
@@ -983,7 +885,6 @@ uint16_t quantizedMidiRecordBeat() {
 // Loop counter for condition feature (increments when beat resets to 1)
 uint16_t loopCount = 0;
 unsigned int samplePackID, fileID = 1;
-EXTMEM unsigned int lastPreviewedSample[FOLDER_MAX] = {};
 IntervalTimer playTimer;
 IntervalTimer midiClockTimer;
 IntervalTimer fillTimer;  // Timer for fill triggers (runs at 4x beat rate)
@@ -1016,9 +917,6 @@ EXTMEM Note tmp[maxlen + 1][maxY + 1] = {};
 EXTMEM Note original[maxlen + 1][maxY + 1] = {};
 EXTMEM Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1] = {};
 
-EXTMEM unsigned int sample_len[maxFiles];
-bool sampleLengthSet = false;
-
 bool isNowPlaying = false;  // global
 
 // Screensaver idle timer; delay from ETC→EYES (1/5/15 min). Reset on encoder / button / touch / menu.
@@ -1030,7 +928,6 @@ FLASHMEM void noteUserActivity() {
 int PrevSampleRate = 1;
 EXTMEM int SampleRate[maxFiles] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles)];
-static const uint32_t MAX_SAMPLES = sizeof(sampled[0]) / sizeof(sampled[0][0]);
 // Fastrec writes int16 into sampled[ch]. 12s @ 44.1 kHz (double the old ~6s BUFFER_SAMPLES
 // cap); never past the voice slot (~19.8s).
 static const size_t FASTREC_SLOT_SAMPLES = sizeof(sampled[0]) / sizeof(int16_t);
@@ -1040,13 +937,9 @@ static const size_t FASTREC_MAX_SAMPLES =
         ? ((size_t)44100 * FASTREC_MAX_SECONDS)
         : FASTREC_SLOT_SAMPLES;
 
-
-
-
 elapsedMillis msecs;
 elapsedMillis mRecsecs;
 elapsedMillis diagStatsTimer;
-
 
 DMAMEM CRGB leds[NUM_LEDS];
 
@@ -1058,7 +951,6 @@ enum ButtonState {
 
 const int ALL_CHANNELS[] = { 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14 };
 const int NUM_ALL_CHANNELS = sizeof(ALL_CHANNELS) / sizeof(ALL_CHANNELS[0]);
-
 
 struct Mode {
   String name;
@@ -1116,13 +1008,11 @@ int currentSongPosition = 0;  // Current position in song arrangement (0-63), -1
 // both page-selection encoders always target the page currently visible.
 unsigned int pendingPage = 0;  // 0 = visible page is already playing
 
-
 struct Sample {
   // Sample browser: fileID = 1-based index in current combined browse list; oldID unused (0)
   unsigned int oldID : 10;
   unsigned int fileID : 10;
 } __attribute__((packed));
-
 
 // Declare the device struct
 struct Device {
@@ -1177,12 +1067,7 @@ DMAMEM float channelOctave[9];  // Index 0 unused; 1-8 OCTV whole-semitone offse
 //#define GRANULAR_MEMORY_SIZE 95280  // enough for 800 ms at 44.1 kHz
 //DMAMEM int16_t granularMemory[GRANULAR_MEMORY_SIZE];
 
-
 // in the same file, before tmpMuteAll:
-
-
-
-
 
 //EXTMEM?
 EXTMEM Device SMP = {
@@ -1316,15 +1201,8 @@ FLASHMEM void applyDrawSingleYEncoderLimits() {
   Encoder[0].writeCounter((int32_t)y);
 }
 
-float myFreq = 80;
-float freqValue = 1000;
-float resValue = 0.1;
-float octValue = 2.0;
 int transpose = 0;
 int scale = 0;
-int menuIndex = 0;
-float gainValue = 2.0;
-
 
 #define NUM_PARAMS (sizeof(SMP.param_settings[0]) / sizeof(SMP.param_settings[0][0]))
 static_assert(FILTER_WAVEFORM == maxFilters, "Review legacy waveform slot mapping");
@@ -1444,25 +1322,18 @@ bool pendingStopFastRecord = false;      // Flag to defer stopFastRecord() from 
 bool pendingStartFastRecord = false;     // Start from main loop after the red border is shown
 bool fastRecWaitRelease = false;         // After auto-stop, don't re-arm until the trigger is released
 
-
 // State variables
 uint8_t filterPage[NUM_CHANNELS] = { 0 };
-uint8_t lastEncoder = 0;                                                                                       // last used encoder index (0-3)
 static int16_t lastEncVal[NUM_CHANNELS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };  // Track last encoder value per channel
 
 // Color scheme selection (0=default, 1=blue-ish, 2=whitish)
 uint8_t currentColorScheme = 0;
 volatile bool colorsUpdatedViaSerial = false;
 
-
-
 // Number of parameter slots (ATTACK..RELEASE indexes 0-5)
 constexpr int PARAM_COUNT = 6;
 
-
 FLASHMEM const float maxParamVal[12] = { 1000.0, 2000.0, 1000.0, 1000.0, 1.0, 1000.0 };
-
-
 
 FilterType defaultFilter[maxFiles] = { HCUT };
 
@@ -1477,7 +1348,6 @@ const unsigned long longPressDuration[NUM_ENCODERS] = { 200, 200, 200, 200 };  /
 ButtonState buttonState[NUM_ENCODERS] = { IDLE };
 bool isPressed[NUM_ENCODERS] = { false };
 bool pressed[NUM_ENCODERS] = { false };
-
 
 i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
   // exttouch: panel was soldered 4,3,2,1 — reverse I2C address order.
@@ -1655,7 +1525,6 @@ void setSampleTimeStretch(uint8_t channel, int value) {
   voices[channel]->setTimeStretchAmount(sampleTimeStretch[channel]);
 }
 
-
 AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, nullptr, &envelope13, &envelope14 };
 AudioAmplifier *amps[15] = { nullptr, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, nullptr, &amp13, &amp14 };
 AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, nullptr, &filter13, &filter14 };
@@ -1783,7 +1652,6 @@ static inline void applyExternalFastFilter(uint16_t value14) {
 
 AudioSynthWaveform *synths[15][2];
 
-
 //for FULL patch:
 
 AudioSynthWaveformDc *Sdc1[3] = { &Sdc1_0, &Sdc1_1, &Sdc1_2 };
@@ -1808,8 +1676,6 @@ void allOff() {
     envelope->noteOff();
   }
 }
-
-
 
 static uint8_t noteConditionFromStep(int step) {
   if (step < 1 || step > NOTE_CONDITION_STEP_COUNT) return 1;
@@ -1894,16 +1760,10 @@ FLASHMEM void setVelocity() {
   drawVelocity();
 }
 
-
-
-
 void staticButtonPushed(i2cEncoderLibV2 *obj) {
   pressed[currentEncoderIndex] = true;
   encoder_button_pushed(obj, currentEncoderIndex);
 }
-
-
-
 
 void staticButtonReleased(i2cEncoderLibV2 *obj) {
   encoder_button_released(obj, currentEncoderIndex);
@@ -1914,8 +1774,6 @@ void staticThresholds(i2cEncoderLibV2 *obj) {
   //  encoder_thresholds(obj, currentEncoderIndex);
 }
 
-
-
 void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
   unsigned long currentTime = millis();
 
@@ -1923,15 +1781,9 @@ void encoder_button_pushed(i2cEncoderLibV2 *obj, int encoderIndex) {
   isPressed[encoderIndex] = true;
 }
 
-
-
 void encoder_button_released(i2cEncoderLibV2 *obj, int encoderIndex) {
   buttonState[encoderIndex] = RELEASED;
 }
-
-
-
-
 
 const unsigned long BUTTON_STUCK_TIMEOUT_MS = 10000;  // 10 seconds - if button appears stuck, force reset
 void handle_button_state(i2cEncoderLibV2 *obj, int encoderIndex) {
@@ -2052,10 +1904,6 @@ uint32_t hashString(const String &str) {
   }
   return hash;
 }
-
-
-
-
 
 static void resetCtrlModeState() {
   ctrlLastChannel = -1;
@@ -2249,9 +2097,11 @@ FLASHMEM void switchMode(Mode *newMode) {
       int maxStepsRuntime = childLockEnabled ? (int)maxX : (int)MAX_STEPS;
       GLOB.x = constrain(GLOB.x, 1, maxStepsRuntime);
       currentMode->pos[3] = GLOB.x;
+      // SINGLE starts at the current cursor row, never its remembered mode position.
+      if (currentMode == &singleMode) {
+        currentMode->pos[0] = constrain(GLOB.y, 1u, (unsigned int)maxY);
+      }
     }
-
-
 
     for (int i = 0; i < NUM_ENCODERS; i++) {
       Encoder[i].writeRGBCode(currentMode->knobcolor[i]);
@@ -2472,7 +2322,6 @@ FLASHMEM void switchMode(Mode *newMode) {
   drawPlayButton();
 }
 
-
 void checkFastRec() {
   if (touchyEnabled) return; // Performance pads never arm the recorder.
   bool channelAllowed = (GLOB.currentChannel <= 8);
@@ -2622,7 +2471,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   extern bool consumeTouchyEntryHold(const uint8_t states[NUM_ENCODERS]);
   if (consumeTouchyEntryHold(currentButtonStates)) return;
   //checkFastRec();
-
 
   // In recordMode, allow encoder[2] press to stop recording (no auto-playback)
   if (isRecording && currentMode == &recordMode && pressed[2]) {
@@ -2889,7 +2737,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
 
     // TRIG (11), SETTINGS (9,10,17,18,23,24,25,32,33,38), REC (4,12), MIDI values, VOL (43), ETC (40,41) use encoder 2
     extern bool inLookSubmenu;
-    extern bool inRecsSubmenu;
     extern bool inMidiSubmenu;
     extern bool inVolSubmenu;
     extern bool inEtcSubmenu;
@@ -2984,9 +2831,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     extern bool sampleIsLoaded, firstcheck;
     extern CachedSample previewCache;
 
-    int fnr = (int)SMP.wav[GLOB.currentChannel].oldID;
-    int fileNum = (int)SMP.wav[GLOB.currentChannel].fileID;
-
     // Invalidate cache and reset flags
     previewCache.valid = false;
     sampleIsLoaded = false;
@@ -3029,7 +2873,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     preventPaintUnpaint = false;  // Reset flag when exiting noteShift mode
   }
 
-
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
     freshPaint = false;
     preventPaintUnpaint = false;  // Reset flag when freshPaint is cleared
@@ -3058,7 +2901,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   if (currentMode == &draw && match_buttons(currentButtonStates, 1, 1, 0, 0)) {  // "1100"
     //toggleCopyPaste();
   }
-
 
   // Velocity mode entry on encoder(3) long press - skip in R mode and IMG mode
   extern int drawMode;
@@ -3127,7 +2969,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     return;                      // Prevent other button actions from being processed
   }
 
-
   if (currentMode == &velocity && match_buttons(currentButtonStates, 0, 0, 0, 9)) {  // "0009"
     if (!GLOB.singleMode) {
       switchMode(&draw);
@@ -3137,12 +2978,9 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     }
   }
 
-
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0010"
     toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel], 3);
   }
-
-
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
     // Walk every filter page for this voice (RES / WAVE / LFO / ARP / INST included).
@@ -3153,8 +2991,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 2, 0, 0, 0) && was_buttons_0000(oldButtons)) {  // "2000" - reset current filter page only
     setCurrentFilterPageDefaultValues((unsigned int)GLOB.currentChannel);
   }
-
-
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 2, 0)) {  // "0010"
     if (!isNowPlaying) {
@@ -3168,12 +3004,9 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     return;
   }
 
-
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // "0010"
     toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel], 2);
   }
-
-
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     toggleDefaultFilterFromSlider(filterPage[GLOB.currentChannel], 1);
@@ -3465,13 +3298,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   }
 }
 
-
-
-
-
-
-
-
 // MENU>VOL>HFC: 0 = off (DAP bypass); 10..250 step 10; 256 = MAX. Only SGTL5000 graphic-EQ treble band is cut.
 uint16_t codecHfCut = 110;
 
@@ -3552,7 +3378,6 @@ FLASHMEM void initSoundChip() {
   applySgtl5000CodecOutputPath();
 }
 
-
 FLASHMEM void initSamples() {
   for (unsigned int vx = 1; vx < SONG_LEN + 1; vx++) {
     for (unsigned int vy = 1; vy < maxY + 1; vy++) {
@@ -3571,8 +3396,6 @@ FLASHMEM void initSamples() {
   _samplers[6].addVoice(sound6, mixer2, 1, envelope6);
   _samplers[7].addVoice(sound7, mixer2, 2, envelope7);
   _samplers[8].addVoice(sound8, mixer2, 3, envelope8);
-
-
 
   // Ch11 keeps substantial polyphonic headroom here, but 0.12 made it much
   // quieter than the sample voices. 0.20 restores about 4.4 dB while remaining
@@ -3606,9 +3429,7 @@ FLASHMEM void initSamples() {
   synthmixer14.gain(1, 0.10);
   synthmixer14.gain(3, 0.10);
 
-
   // mixer0.gain(0, ...) and mixer0.gain(1, ...) will be set by updatePreviewVolume() based on PREV volume
-
 
   // Gain staging:
   // Headroom at mixer1/mixer2; VOL→GAIN multiplies those buses plus the synth send.
@@ -3619,10 +3440,8 @@ FLASHMEM void initSamples() {
   applyMixBusGains();
   mixer_end.gain(3, 0.0f);  // No monitoring by default - ensure OFF on startup
 
-
   // Global loudness stage (final summing before i2s)
   applyStereoChannelRouting();
-
 
   // Initialize the array with nullptrs
   synths[11][0] = &waveform11_1;
@@ -3659,8 +3478,6 @@ FLASHMEM void initSamples() {
   amplitude[14][0] = 0.1125f;  // Reduced to half of current (0.225 * 0.5 = 0.1125)
   amplitude[14][1] = 0.1125f;
 
-
-
   // Initialize leftover mono synths for ch13/14. ch11 poly voices are separate
   // (Sosc/Senvelope); do not begin waveform11_* or they leak into freeverb.
   for (int pairIndex = 13; pairIndex <= 14; pairIndex++) {
@@ -3694,7 +3511,6 @@ FLASHMEM void initSamples() {
     }
   }
 
-
   initSliderDefTemplates();
   for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
     setSliderDefForChannel(ALL_CHANNELS[i]);
@@ -3710,7 +3526,6 @@ FLASHMEM void initSamples() {
  // }
  */
 }
-
 
 FLASHMEM void checkCrashReport() {
   // Log only. Never wipe EEPROM, delete autosaved.txt, or delay —
@@ -3762,8 +3577,6 @@ FLASHMEM void checkCrashReport() {
   }
   AudioInterrupts();
 }
-
-
 
 // Push FastLED CRGB[] to NeoSlider LEDs via seesaw (ATtiny LED data pin 14).
 FLASHMEM static void neoSliderShowLeds(int idx) {
@@ -4192,7 +4005,6 @@ FLASHMEM void initEncoders() {
     Encoder[i].onButtonPush = staticButtonPushed;
     Encoder[i].onButtonRelease = staticButtonReleased;
 
-
     Encoder[i].onMinMax = staticThresholds;
     Encoder[i].autoconfigInterrupt();
     //Encoder[i].writeRGBCode(0xFFFFFF);
@@ -4288,8 +4100,6 @@ FLASHMEM void setup() {
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
   
   // LED strip initialization (needed for FastLED.show() to work)
-
-
 
   extern CRGB stripLeds[];
   extern void initLedStrip();
@@ -4454,7 +4264,6 @@ FLASHMEM void setup() {
   }
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
 
-
   // Check if touch2 (menu button) is pressed during startup for INIT mode
   if (readTouch2Pressed()) {
     // INIT MODE: Show hourglass, version, write reset flag file, and enter endless loop
@@ -4484,8 +4293,6 @@ FLASHMEM void setup() {
       yield();
     }
   }
-
-
 
   runAnimation();
 
@@ -4563,7 +4370,6 @@ FLASHMEM void setup() {
     showNewFileScreen();
   }
 
-
   // Initialize probability and condition fields for all existing notes (default 100% probability, condition 1)
   for (unsigned int x = 0; x <= maxlen; x++) {
     for (unsigned int y = 0; y <= maxY; y++) {
@@ -4613,7 +4419,6 @@ FLASHMEM void setup() {
   MIDI.setHandleClock(handleMidiClock);  // dedicated callback for MIDI clock to reduce jitter
   MIDI.setHandleStart(handleStart);      // callback for Start so it fires immediately, not in loop()
   resetMidiClockState();
-
 
   // Turn on audio input amplifier after setup is complete
   audioInputAmp.gain(1.0);
@@ -4666,7 +4471,6 @@ FLASHMEM void setup() {
   // END SETUP
 }
 
-
 FLASHMEM void initGlobalVars() {
   GLOB.singleMode = false;
   GLOB.currentChannel = 1;
@@ -4695,10 +4499,6 @@ FLASHMEM void initGlobalVars() {
   for (int i = 0; i < maxFiles; ++i) {
     channelDirection[i] = 1;
   }
-}
-
-void setEncoderColor(int i) {
-  Encoder[i].writeRGBCode(0x00FF00);
 }
 
 // Battery: divider-corrected VBAT mapped through BATT_PCT_CURVE to 0..100%.
@@ -5240,7 +5040,6 @@ FLASHMEM void checkEncoders() {
         }
       }
 
-
       // Safety check: Only allow unpaintMode when actually in draw/singleMode
       if (unpaintMode && (currentMode == &draw || currentMode == &singleMode) && !preventPaintUnpaint) {
         if (GLOB.singleMode) {
@@ -5270,7 +5069,6 @@ FLASHMEM void checkEncoders() {
         }
       }
     }
-
 
     // Only allow encoder[1] page changes if NOT in song mode (song controls pages automatically)
     extern bool songModeActive;
@@ -5364,7 +5162,6 @@ FLASHMEM void checkEncoders() {
         clampGridCursor();
       }
     }
-
 
     if (ctrlMode == 1) {
       static int lastY = -1;
@@ -5599,7 +5396,6 @@ FLASHMEM void checkEncoders() {
   }
 }
 
-
 void filtercheck() {
   int ch = GLOB.currentChannel;
   if (ch < 0 || ch >= 15) return;
@@ -5663,8 +5459,6 @@ void checkButtons() {
     }
   }
 }
-
-
 
 void exitMenuFromTouchInput() {
   extern bool inLookSubmenu;
@@ -5885,14 +5679,12 @@ void checkTouchInputs() {
   newTouchState[1] = tv2;
   //touchState[2] = (tv3 > touchThreshold);
 
-
   // 3) detect "rising edge" of both‐pressed
   bool bothTouched = newTouchState[0] && newTouchState[1];
   bool newBoth = bothTouched && !lastBothTouched;
   lastBothTouched = bothTouched;
 
   // State machine to prevent conflicts when one touch is held and another is pressed
-  static bool touchConflict = false;
   static bool touch1Held = false;
   static bool touch2Held = false;
   static int firstTouchPressed = 0;  // 0=none, 1=left first, 2=right first
@@ -5906,16 +5698,9 @@ void checkTouchInputs() {
   }
 
   // Check for touch conflicts (one held, another pressed)
-  if (newTouchState[0] && !lastTouchState[0] && touch2Held) {
-    touchConflict = true;
-  }
-  if (newTouchState[1] && !lastTouchState[1] && touch1Held) {
-    touchConflict = true;
-  }
 
-  // Reset conflict when both touches are released
+  // Reset the first-touch ordering when both pads are released
   if (!newTouchState[0] && !newTouchState[1]) {
-    touchConflict = false;
     firstTouchPressed = 0;
   }
 
@@ -6010,7 +5795,7 @@ skip_individual_touch:
       childLockTouch2Pressed = false;
     }
 
-    // Child lock sequence: check BEFORE touchConflict to allow touch1 while touch2 is held
+    // Allow the child-lock sequence while touch2 is held
     if (childLockTouch2Pressed && touchState[0] && !lastTouchState[0] && (currentTime - lastTouchTime[0] > DEBOUNCE_TIME)) {
       if (currentMode == &draw || currentMode == &singleMode) {
         lastTouchTime[0] = currentTime;
@@ -6284,280 +6069,6 @@ static void scheduleTouch1ModeToggle(bool toSingle, unsigned long now) {
   touch1ModeToggleDueMs = now + TOUCH1_CHORD_GRACE_MS;
 }
 
-// Legacy name kept for call sites — no fill animation (was unreliable on 2/2B wide layouts).
-void animateSingle() {
-  enterSingleModeDirect();
-}
-
-void checkSingleTouch() {
-  touchState[0] = readTouch1Pressed();
-  // Check for a rising edge (LOW to HIGH transition)
-  if (touchState[0] && !lastTouchState[0]) {
-    // Toggle the mode only on a rising edge
-    if (currentMode == &draw) {
-      enterSingleModeDirect();
-    } else if (currentMode == &menu) {
-      extern bool inLookSubmenu;
-      extern bool inRecsSubmenu;
-      extern bool inMidiSubmenu;
-      extern bool inVolSubmenu;
-    extern bool inEtcSubmenu;
-    extern bool menuEnteredFromSingleMode;
-    extern int currentMenuPage;
-      // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
-      if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
-        int parentPage = 0;
-        if (inLookSubmenu) parentPage = 5;
-        else if (inRecsSubmenu) parentPage = 6;
-        else if (inMidiSubmenu) parentPage = 7;
-        else if (inVolSubmenu) parentPage = 4;
-        else if (inEtcSubmenu) { extern int systemMenuParentPage(); parentPage = systemMenuParentPage(); }
-        inLookSubmenu = false;
-        inRecsSubmenu = false;
-        inMidiSubmenu = false;
-        inVolSubmenu = false;
-        inEtcSubmenu = false;
-        currentMenuPage = parentPage;
-        menu.pos[3] = parentPage;
-        Encoder[3].writeCounter((int32_t)parentPage);
-        if (menuEnteredFromSingleMode) {
-          switchMode(&singleMode);
-          GLOB.singleMode = true;
-        } else {
-          switchMode(&draw);
-          GLOB.singleMode = false;
-        }
-        extern int drawMode;
-        if (drawMode == 0) {
-          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        } else {
-          Encoder[0].writeRGBCode(0x000000);
-        }
-        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        // On main menu, exit to draw or single based on state before entering menu
-        if (menuEnteredFromSingleMode) {
-          switchMode(&singleMode);
-          GLOB.singleMode = true;
-        } else {
-          switchMode(&draw);
-          GLOB.singleMode = false;
-        }
-        extern int drawMode;
-        if (drawMode == 0) {
-          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        } else {
-          Encoder[0].writeRGBCode(0x000000);
-        }
-        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      }
-    } else {
-      if (currentMode == &singleMode) {
-        GLOB.currentChannel = GLOB.y - 1;  // Set currentChannel based on Y position when exiting single mode
-      }
-      switchMode(&draw);
-      GLOB.singleMode = false;
-      // Update encoder colors to reflect the new currentChannel when switching to draw mode
-      extern int drawMode;
-      if (drawMode == 0) {
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        Encoder[0].writeRGBCode(0x000000);
-      }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    }
-  }
-  // Update the last touch state
-  lastTouchState[0] = touchState[0];
-}
-
-void _checkMenuTouch() {
-  touchState[1] = readTouch2Pressed();
-  // Check for a rising edge (LOW to HIGH transition)
-  if (touchState[1] && !lastTouchState[1]) {
-    // Toggle the mode only on a rising edge
-    if (currentMode == &draw || currentMode == &singleMode) {
-      extern bool menuEnteredFromSingleMode;
-      menuEnteredFromSingleMode = (currentMode == &singleMode);
-      switchMode(&menu);
-    } else if (currentMode == &loadSaveTrack) {
-      // Exit FILE (DAT) directly to draw/single, preserve menu page 0 for re-entry
-      extern bool menuEnteredFromSingleMode;
-      extern int currentMenuPage;
-      currentMenuPage = 0;
-      menu.pos[3] = 0;
-      Encoder[3].writeCounter((int32_t)0);
-      if (menuEnteredFromSingleMode) {
-        switchMode(&singleMode);
-        GLOB.singleMode = true;
-      } else {
-        switchMode(&draw);
-        GLOB.singleMode = false;
-      }
-      extern int drawMode;
-      if (drawMode == 0) {
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        Encoder[0].writeRGBCode(0x000000);
-      }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    } else if (currentMode == &set_SamplePack) {
-      // Exit PACK (KIT) directly to draw/single, preserve menu page 1 for re-entry
-      extern bool menuEnteredFromSingleMode;
-      extern int currentMenuPage;
-      currentMenuPage = 1;
-      menu.pos[3] = 1;
-      Encoder[3].writeCounter((int32_t)1);
-      if (menuEnteredFromSingleMode) {
-        switchMode(&singleMode);
-        GLOB.singleMode = true;
-      } else {
-        switchMode(&draw);
-        GLOB.singleMode = false;
-      }
-      extern int drawMode;
-      if (drawMode == 0) {
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        Encoder[0].writeRGBCode(0x000000);
-      }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    } else if (currentMode == &set_Wav) {
-      // Exit WAVE directly to draw/single, preserve menu page 2 for re-entry
-      extern bool menuEnteredFromSingleMode;
-      extern int currentMenuPage;
-      currentMenuPage = 2;
-      menu.pos[3] = 2;
-      Encoder[3].writeCounter((int32_t)2);
-      if (menuEnteredFromSingleMode) {
-        switchMode(&singleMode);
-        GLOB.singleMode = true;
-      } else {
-        switchMode(&draw);
-        GLOB.singleMode = false;
-      }
-      extern int drawMode;
-      if (drawMode == 0) {
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        Encoder[0].writeRGBCode(0x000000);
-      }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    } else if (currentMode == &volume_bpm) {
-      // Exit BPM directly to draw/single, preserve menu page 3 for re-entry
-      extern bool menuEnteredFromSingleMode;
-      extern int currentMenuPage;
-      currentMenuPage = 3;
-      menu.pos[3] = 3;
-      Encoder[3].writeCounter((int32_t)3);
-      if (menuEnteredFromSingleMode) {
-        switchMode(&singleMode);
-        GLOB.singleMode = true;
-      } else {
-        switchMode(&draw);
-        GLOB.singleMode = false;
-      }
-      extern int drawMode;
-      if (drawMode == 0) {
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        Encoder[0].writeRGBCode(0x000000);
-      }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    } else if (currentMode == &songMode) {
-      // Exit SONG directly to draw/single, preserve menu page 8 for re-entry
-      extern bool menuEnteredFromSingleMode;
-      extern int currentMenuPage;
-      currentMenuPage = 8;
-      menu.pos[3] = 8;
-      Encoder[3].writeCounter((int32_t)8);
-      if (menuEnteredFromSingleMode) {
-        switchMode(&singleMode);
-        GLOB.singleMode = true;
-      } else {
-        switchMode(&draw);
-        GLOB.singleMode = false;
-      }
-      extern int drawMode;
-      if (drawMode == 0) {
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        Encoder[0].writeRGBCode(0x000000);
-      }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    } else if (currentMode == &menu) {
-      extern bool inLookSubmenu;
-      extern bool inRecsSubmenu;
-      extern bool inMidiSubmenu;
-      extern bool inVolSubmenu;
-    extern bool inEtcSubmenu;
-    extern bool menuEnteredFromSingleMode;
-    extern int currentMenuPage;
-      // If in any submenu, exit directly to draw/single (not to parent), restoring previous mode
-      if (inLookSubmenu || inRecsSubmenu || inMidiSubmenu || inVolSubmenu || inEtcSubmenu) {
-        int parentPage = 0;
-        if (inLookSubmenu) parentPage = 5;
-        else if (inRecsSubmenu) parentPage = 6;
-        else if (inMidiSubmenu) parentPage = 7;
-        else if (inVolSubmenu) parentPage = 4;
-        else if (inEtcSubmenu) { extern int systemMenuParentPage(); parentPage = systemMenuParentPage(); }
-        inLookSubmenu = false;
-        inRecsSubmenu = false;
-        inMidiSubmenu = false;
-        inVolSubmenu = false;
-        inEtcSubmenu = false;
-        currentMenuPage = parentPage;
-        menu.pos[3] = parentPage;
-        Encoder[3].writeCounter((int32_t)parentPage);
-        if (menuEnteredFromSingleMode) {
-          switchMode(&singleMode);
-          GLOB.singleMode = true;
-        } else {
-          switchMode(&draw);
-          GLOB.singleMode = false;
-        }
-        extern int drawMode;
-        if (drawMode == 0) {
-          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        } else {
-          Encoder[0].writeRGBCode(0x000000);
-        }
-        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        // On main menu, exit to draw or single based on state before entering menu
-        if (menuEnteredFromSingleMode) {
-          switchMode(&singleMode);
-          GLOB.singleMode = true;
-        } else {
-          switchMode(&draw);
-          GLOB.singleMode = false;
-        }
-        extern int drawMode;
-        if (drawMode == 0) {
-          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-        } else {
-          Encoder[0].writeRGBCode(0x000000);
-        }
-        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      }
-    } else {
-      switchMode(&draw);
-      // Update encoder colors to reflect the current channel when exiting menu
-      extern int drawMode;
-      if (drawMode == 0) {
-        Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else {
-        Encoder[0].writeRGBCode(0x000000);
-      }
-      Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-    }
-  }
-  // Update the last touch state
-  lastTouchState[1] = touchState[1];
-}
-
-
-
 void checkPendingSampleNotes() {
   // return; // This function seems disabled, keeping it as is.
   unsigned long now = millis();
@@ -6608,7 +6119,6 @@ void showDoRecord() {
                      STATE_PLAYBACK };
   static RecordState state = STATE_NORMAL;
   static bool forcedLineMonitor = false;
-  static float lastLineMonitorGain = 0.0f;
 
   // Persistent state variables
   static bool thresholdActive = false;
@@ -6636,7 +6146,6 @@ void showDoRecord() {
     thresholdActive = false;
     playbackActive = false;
     forcedLineMonitor = false;
-    lastLineMonitorGain = 0.0f;
     extern bool sampleIsLoaded, firstcheck;
     extern CachedSample previewCache;
     sampleIsLoaded = false;
@@ -6661,7 +6170,6 @@ void showDoRecord() {
     mixer_end.gain(3, 0.0f);   // Disable input pass-through
     directPassThroughActive = false;
     forcedLineMonitor = false;  // Reset line monitor flag
-    lastLineMonitorGain = 0.0f;
   }
 
   // === INPUT MONITORING WHEN IN RECORD MODE ===
@@ -6688,13 +6196,11 @@ void showDoRecord() {
     }
 
     mixer_end.gain(3, monitorGain);
-    lastLineMonitorGain = monitorGain;
     forcedLineMonitor = true;
   } else if (forcedLineMonitor) {
     // Disable monitoring when direct pass-through becomes active
     mixer_end.gain(3, 0.0f);
     forcedLineMonitor = false;
-    lastLineMonitorGain = 0.0f;
   }
 
   // Check global flag to disable threshold
@@ -6754,8 +6260,7 @@ void showDoRecord() {
 
         // Encoder[2]: Start playback using playSdWav1
         if (pressed[2] && !lastPressed2) {
-          int fnr = (int)SMP.wav[GLOB.currentChannel].oldID;
-          int fileNum = (int)SMP.wav[GLOB.currentChannel].fileID;
+
           char path[160];
           buildSamplePath(0, 0, path, sizeof(path));
 
@@ -6946,7 +6451,6 @@ void checkSerialColors() {
             currentMode->pos[1] = brightnessPos;
             Encoder[1].writeCounter((int32_t)brightnessPos);
           }
-
 
           // Request menu redraw if in menu mode
           extern void menuRequestFullRedraw();
@@ -7351,7 +6855,6 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
   }
 
-
   checkEncoders();
   if (!fastRecordActive && deviceHasFaders) {
     updateNeoSliderVolume();
@@ -7639,8 +7142,6 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     showSongMode();
   }
 
-
-
   for (int ch = 13; ch <= 14; ch++) {
     unsigned long noteLen = getNoteDuration(ch);
     // Only auto-release if the note is not persistent (i.e. not from a live MIDI press)
@@ -7713,7 +7214,6 @@ float getNoteDuration(int channel) {
   if (gateMs < 5.0f) gateMs = 5.0f;
   return gateMs;
 }
-
 
 FLASHMEM void shiftNotes() {
   unsigned int patternLength = lastPage * maxX;
@@ -7922,7 +7422,6 @@ FLASHMEM void shiftNotes() {
     // Don't set shifted = true to avoid triggering the global shift logic
   }
 
-
   if (shifted) {
     // Step 3: Copy original notes of other channels back to the note array
     // And apply shifted notes for current channel
@@ -8076,7 +7575,6 @@ FLASHMEM void fullMuteToggleView(FullMuteView target) {
   fullMuteApplyView();
 }
 
-
 FLASHMEM void toggleMute() {
   if (childLockEnabled) return;
 
@@ -8090,8 +7588,6 @@ void deleteActiveCopy() {
 
   GLOB.activeCopy = false;
 }
-
-
 
 void play(bool fromStart) {
   if (touchyEnabled) return; // TOUCHY is played directly, including while editing its samples/filters.
@@ -8237,15 +7733,13 @@ void play(bool fromStart) {
   // If play(false) is ever called, MIDI.sendRealTime(midi::Continue) might be appropriate if MIDI_CLOCK_SEND.
 }
 
-
-
 void pause(bool skipSave) {
   // Send MIDI Stop FIRST (before any other operations) to advance it by ~5ms
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
     MIDI.sendRealTime(midi::Stop);  // Send as early as possible for better sync
   }
   MidiReleaseSequencerNotes();
-  clearPendingMidiRecordNotes();
+  clearLiveRecordSkip();
   sequencerRecordStepStartedUs = 0;
 
   // MIDI clock timer continues running in background - never stopped for precise timing
@@ -8289,7 +7783,6 @@ void pause(bool skipSave) {
   pendingPauseSkipSave = skipSave;
 }
 
-
 static void playSynthInternal(int ch, int b, int vel, bool persistant,
                               bool legato, int midiPitchOverride) {
   if (isChildVoiceDisabled(ch)) return;
@@ -8314,7 +7807,6 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
     frequency = notesArray[constrain(b - ch + 47, 36, 62)];
   }
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
-
 
   // A directly adjacent sequencer note reuses the open envelope. Frequency
   // changes become a legato slide; an equal pitch is a true hold.
@@ -8459,23 +7951,8 @@ void finishSequencedMonoSynthTick(uint32_t tick, bool had13, bool had14) {
   }
 }
 
-
 // Adjust beat offset when manually switching pages in pattern mode:
 // Place this logic in your encoder handler where GLOB.edit (page) changes:
-void handlePageSwitch(int newEdit) {
-  unsigned int oldEdit = GLOB.edit;
-  if (newEdit != oldEdit) {
-    if (SMP_PATTERN_MODE) {
-      unsigned int oldStart = (oldEdit - 1) * maxX + 1;
-      unsigned int newStart = (newEdit - 1) * maxX + 1;
-      unsigned int offset = beat - oldStart;
-      // Preserve relative position within page:
-      beat = newStart + offset;
-      GLOB.page = newEdit;
-    }
-    GLOB.edit = newEdit;
-  }
-}
 
 static inline bool noteHasMidiPitch(const Note &cell) {
   return cell.midiPitch <= 127;
@@ -8688,7 +8165,6 @@ void playNote() {
       }
 
       if (ch > 0 && !isChildVoiceDisabled(ch) && !getMuteState(ch)) {  // Use new per-page mute system when PMOD is enabled
-
 
         // Check condition - skip if not the right loop iteration
         // Condition 21 (F/F) always plays (handled separately for fill)
@@ -9073,7 +8549,6 @@ void checkPages() {
   GLOB.page = newPage;
 }
 
-
 unsigned int cursorNoteStep();
 
 void unpaint() {
@@ -9084,7 +8559,6 @@ void unpaint() {
   // unsigned int x_coord = (GLOB.edit - 1) * maxX + GLOB.x; // This is if GLOB.x was page-local
   unsigned int current_x = cursorNoteStep();  // Visible voice page while VMOD is playing
   unsigned int current_y = GLOB.y;  // Use the global cursor Y
-
 
   if ((current_y > 0 && current_y <= maxY)) {  // y is 1-based, 1 to 16.
                                                // Row 1 (GLOB.y==1) is often special (e.g. transport)
@@ -9351,7 +8825,6 @@ void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted) {
   }
 }
 
-
 void paint() {
   preventPaintUnpaint = false;  // Reset flag when paint function is called
 
@@ -9468,10 +8941,6 @@ void paint() {
   // Display update is handled by the main loop frame presenter (FastLEDshow()).
 }
 
-
-
-
-
 void toggleCopyPaste() {
   if (!GLOB.activeCopy) {
 
@@ -9546,8 +9015,6 @@ void toggleCopyPaste() {
   GLOB.activeCopy = !GLOB.activeCopy;  // Toggle the boolean value
 }
 
-
-
 void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, unsigned int channel_to_clear, bool singleModeActive) {
   // c is x-coordinate (1 to maxlen)
   // yStart, yEnd are 1-based y-coordinates
@@ -9577,10 +9044,6 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
   }
 }
 
-
-
-
-
 FLASHMEM void updatePreviewVolume() {
   unsigned int level = constrain(previewVol, 0u, 50u);
   // Map previewVol (0-50) to gain (0.0-0.5): vol = previewVol * 0.01f
@@ -9593,19 +9056,6 @@ FLASHMEM void updatePreviewVolume() {
   mixer0.gain(0, gain * 1.25f);  // RAM playback path - increased to match SD path loudness
   mixer0.gain(1, gain);          // SD file playback path
   ampPreview.gain(1.0f);         // Set ampPreview to unity gain (volume controlled by mixer0)
-}
-
-FLASHMEM void updateLineOutLevel() {
-  unsigned int newLevel = constrain(currentMode->pos[0], LINEOUT_MIN, LINEOUT_MAX);
-  if (newLevel != currentMode->pos[0]) {
-    currentMode->pos[0] = newLevel;
-    Encoder[0].writeCounter((int32_t)newLevel);
-  }
-  if (lineOutLevelSetting != newLevel) {
-    lineOutLevelSetting = newLevel;
-    saveSingleModeToEEPROM(15, (int8_t)lineOutLevelSetting);
-  }
-  sgtl5000_1.lineOutLevel(lineOutLevelSetting);
 }
 
 void updateBrightness() {
@@ -9848,15 +9298,6 @@ FLASHMEM void setVolume() {
   }
 }
 
-
-
-
-
-FLASHMEM void showExit(int index) {
-  //showIcons(HELPER_EXIT, UI_DIM_BLUE);
-  //Encoder[index].writeRGBCode(0x0000FF);
-}
-
 FLASHMEM void showLoadSave() {
 
   drawNoSD();
@@ -9996,13 +9437,11 @@ FLASHMEM void showSamplePack() {
   // SD.exists + full redraw + Duppa RGB every loop stalled play — only when pack changes.
   // Invalidate when re-entering this mode (gap = we weren't called last frames).
   static int lastPack = -2;
-  static int8_t lastExists = -1;
   static uint32_t lastPackRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
   static uint32_t lastCallMs = 0;
   uint32_t nowMs = millis();
   if (nowMs - lastCallMs > 50) {
     lastPack = -2;
-    lastExists = -1;
     for (int i = 0; i < 4; i++) lastPackRGB[i] = 0xFFFFFFFFu;
   }
   lastCallMs = nowMs;
@@ -10014,7 +9453,6 @@ FLASHMEM void showSamplePack() {
   if (packChanged) {
     wavExists = SD.exists(OUTPUTf);
     lastPack = (int)SMP.pack;
-    lastExists = wavExists ? 1 : 0;
   } else {
     return;
   }
@@ -10135,7 +9573,6 @@ FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0C
   // Reset paint/unpaint prevention flag after loadSamplePack operation
   preventPaintUnpaint = false;
 }
-
 
 void updateVoiceLengths() {
   uint8_t len[16] = {0};
@@ -10266,25 +9703,9 @@ unsigned int cursorNoteStep() {
   return src;
 }
 
-unsigned int voiceReadStep(unsigned int row, unsigned int globalBeat) {
-  extern bool songModeActive;
-  if (!voiceMode || songModeActive) return globalBeat;
-  if (globalBeat < 1 || maxX < 1) return 0;
-  unsigned int col = ((globalBeat - 1) % maxX) + 1;
-  unsigned int gPage = ((globalBeat - 1) / maxX) + 1;
-  return voiceOwnedStep(row, col, gPage);
-}
-
 bool voicePageFilled(int channel, int page) {
   if (channel < 1 || channel > 15 || page < 1 || page > 16) return false;
   return (voicePageMask[channel] & (uint16_t)(1u << (page - 1))) != 0;
-}
-
-int voiceFirstFilledPage(int channel) {
-  int pages = effectivePageCount();
-  if (pages > 16) pages = 16;
-  for (int p = 1; p <= pages; p++) if (voicePageFilled(channel, p)) return p;
-  return 0;
 }
 
 int voiceLastFilledPage(int channel) {
@@ -10295,43 +9716,7 @@ int voiceLastFilledPage(int channel) {
   return last;
 }
 
-int voiceFilledCount(int channel) {
-  int pages = effectivePageCount();
-  if (pages > 16) pages = 16;
-  int n = 0;
-  for (int p = 1; p <= pages; p++) if (voicePageFilled(channel, p)) n++;
-  return n;
-}
-
-int voiceNearestFilledPage(int channel, int page) {
-  if (voicePageFilled(channel, page)) return page;
-  int pages = effectivePageCount();
-  if (pages > 16) pages = 16;
-  int best = 0;
-  int bestDist = 99;
-  for (int p = 1; p <= pages; p++) {
-    if (!voicePageFilled(channel, p)) continue;
-    int d = page - p;
-    if (d < 0) d = -d;
-    if (d < bestDist) {
-      bestDist = d;
-      best = p;
-    }
-  }
-  return best;
-}
-
 // Next or previous page that contains this voice. 0 means there is none in that direction.
-int voiceStepFilledPage(int channel, int from, int dir) {
-  int pages = effectivePageCount();
-  if (pages > 16) pages = 16;
-  if (dir > 0) {
-    for (int p = from + 1; p <= pages; p++) if (voicePageFilled(channel, p)) return p;
-  } else if (dir < 0) {
-    for (int p = from - 1; p >= 1; p--) if (voicePageFilled(channel, p)) return p;
-  }
-  return 0;
-}
 
 void voiceLimitPageEncoder(int channel) {
   int last = voiceLastFilledPage(channel);
@@ -10553,9 +9938,9 @@ const uint8_t filterPageCount[NUM_CHANNELS] = { 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0,
 // ... existing code ...
 
 void setSliderDefForChannel(int channel) {
-  // Channel 1-3 (index 1-3):
-  if (channel >= 1 && channel <= 3) {
-    static const SliderDefEntry ch1_3Template[3][4] = {
+  // Sample voices share the same three filter pages.
+  if (channel >= 1 && channel <= 8) {
+    static const SliderDefEntry sampleVoiceTemplate[3][4] = {
       { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, LOWCUT, "LCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, REVERB, "RVRB", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -10564,7 +9949,6 @@ void setSliderDefForChannel(int channel) {
         { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, OCTAVE, "OCTV", 48, DISPLAY_NUMERIC, nullptr, 48 },
-        // No 4th slider (same as ch4–8) — hide SND
         { ARR_STRETCH, 0, "TIME", 22, DISPLAY_NUMERIC, nullptr, 23 },
       },
       { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -10575,45 +9959,20 @@ void setSliderDefForChannel(int channel) {
     // Clear all pages first to avoid stale data in unused slots
     for (int p = 0; p < 4; ++p) {
       for (int s = 0; s < 4; ++s) {
-        sliderDef[channel][p][s] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
+        sliderDef[channel][p][s] = channel <= 3
+            ? SliderDefEntry{ ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 }
+            : SliderDefEntry{};
       }
     }
-    memcpy(sliderDef[channel], ch1_3Template, sizeof(ch1_3Template));
-    return;
-  }
-  // Channel 4-8 (index 4-8):
-  if (channel >= 4 && channel <= 8) {
-    static const SliderDefEntry ch4_8Template[3][4] = {
-      { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, LOWCUT, "LCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, REVERB, "RVRB", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32 } },
-      { { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, OCTAVE, "OCTV", 48, DISPLAY_NUMERIC, nullptr, 48 },
-        { ARR_STRETCH, 0, "TIME", 22, DISPLAY_NUMERIC, nullptr, 23 } },
-      { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_PARAM, SUSTAIN, "SUST", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32 } }
-    };
-
-    // Clear all 4 pages first
-    memset(sliderDef[channel], 0, sizeof(sliderDef[channel]));
-    // Copy 3 pages
-    memcpy(sliderDef[channel][0], ch4_8Template[0], sizeof(ch4_8Template[0]));
-    memcpy(sliderDef[channel][1], ch4_8Template[1], sizeof(ch4_8Template[1]));
-    memcpy(sliderDef[channel][2], ch4_8Template[2], sizeof(ch4_8Template[2]));
-    // Set 4th page to ARR_NONE
-    for (int s = 0; s < 4; ++s) {
-      sliderDef[channel][3][s].arr = ARR_NONE;
-      sliderDef[channel][3][s].idx = 0;
+    memcpy(sliderDef[channel], sampleVoiceTemplate, sizeof(sampleVoiceTemplate));
+    // Preserve the existing inactive fourth-page representation for voices 4–8.
+    if (channel >= 4) for (int slot=0; slot<4; slot++) {
+      sliderDef[channel][3][slot].arr = ARR_NONE;
+      sliderDef[channel][3][slot].idx = 0;
     }
     return;
   }
-
-
-  // Channel 13 and 14: custom 3 pages
+// Channel 13 and 14: custom 3 pages
   if (channel == 13 || channel == 14) {
     static const SliderDefEntry ch13_14Template[4][4] = {
       { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -10813,17 +10172,5 @@ FLASHMEM void applyMutesAfterPMODSwitch() {
   for (int ch = 0; ch < maxY; ch++) {
     bool muteState = getMuteState(ch);
     SMP.mute[ch] = muteState;  // Apply to audio system
-  }
-}
-
-
-
-// === Timer tick ISR ===
-// Keep this extremely small: it only schedules work for the main loop.
-void playTimerTick() {
-  if (!stepIsDue) {
-    stepIsDue = true;
-  } else {
-    missedSteps++;
   }
 }

@@ -88,7 +88,6 @@ static inline void logMidiRxSongPosition(uint16_t beats) {
 }
 
 // move these to file-scope so everybody can reset them
-static unsigned long lastClockTime = 0;                  // legacy, no longer used for BPM
 static unsigned long lastBPMMeasureTime = 0;             // time of last BPM measurement window
 static uint32_t clocksSinceLastBPM = 0;                  // number of MIDI clocks since last BPM measurement
 static float smoothedBPM = 0.0f;                         // internal smoothed BPM estimate (Kalman filter state)
@@ -535,14 +534,8 @@ bool getPulseClockStopWithPlay() { return pulseClockStopWithPlay; }
 uint8_t getPulseClockWidthMs() { return pulseClockWidthMs; }
 uint8_t getPulseClockWidthMsMin() { return PULSE_WIDTH_MS_MIN; }
 uint8_t getPulseClockWidthMsMax() { return PULSE_WIDTH_MS_MAX; }
-uint8_t getPulseClockPpqnIndex() { return pulseClockPpqnIndex; }
 uint8_t getPulseClockPpqn() { return PULSE_PPQN_TABLE[pulseClockPpqnIndex]; }
-uint8_t getPulseClockPpqnCount() { return PULSE_PPQN_COUNT; }
 uint8_t getPulseClockRateSelCount() { return PULSE_RATE_SEL_COUNT; }
-uint8_t getPulseClockPpqnAt(uint8_t idx) {
-  if (idx >= PULSE_PPQN_COUNT) idx = PULSE_PPQN_COUNT - 1;
-  return PULSE_PPQN_TABLE[idx];
-}
 
 // Encoder 4 position: 0=OFF, 1..8 = PPQN table entries
 uint8_t getPulseClockRateSel() {
@@ -594,13 +587,6 @@ void setPulseClockWidthMs(uint8_t ms) {
   if (ms > PULSE_WIDTH_MS_MAX) ms = PULSE_WIDTH_MS_MAX;
   pulseClockWidthMs = ms;
   pulseClockSaveWidthToEEPROM();
-}
-
-void setPulseClockPpqnIndex(uint8_t idx) {
-  if (idx >= PULSE_PPQN_COUNT) idx = PULSE_PPQN_COUNT - 1;
-  pulseClockPpqnIndex = idx;
-  pulseClockPhase = 0;
-  pulseClockSaveToEEPROM();
 }
 
 void setPulseClockRateSel(uint8_t sel) {
@@ -819,9 +805,7 @@ void checkMidi() {
   }
 }
 
-
 // file-scope variables (ensure these are indeed at file scope)
-// static unsigned long lastClockTime = 0; // Already declared
 // static unsigned long intervalsBuf[CLOCK_BUFFER_SIZE]  = { 0 }; // Already declared
 // static int bufIndex = 0; // Already declared
 // static int bufCount = 0; // Already declared
@@ -830,7 +814,6 @@ void checkMidi() {
 constexpr uint8_t clocksPerStep = 24 / 4;
 
 void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
-  lastClockTime = 0;
   
   if (MIDI_CLOCK_SEND) {
     unsigned long now = micros();
@@ -891,7 +874,6 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
 // (0 to one full clock period) that scales with BPM, making any fixed-ms
 // SNC compensation inconsistent across tempos.
 void resetMidiClockForTransportStart() {
-  lastClockTime = 0;
 
   if (!MIDI_CLOCK_SEND) return;
 
@@ -1123,14 +1105,8 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
     clocksSinceLastBPM = 0;
   }
   
-  // NOTE: stepIsDue is now triggered by playTimer (internal), not by external clock
+  // Playback is driven by playTimer; external MIDI clock updates its interval.
 }
-
-
-
-
-
-
 
 void MidiSendNoteOn(int pitch, int channel, int velocity) {
   // Check if MIDI note sending is enabled
@@ -1175,7 +1151,6 @@ void MidiReleaseSequencerNotes() {
   }
 }
 
-
 void handleStop() {
   
   if (!isNowPlaying || !MIDI_TRANSPORT_RECEIVE) return;
@@ -1188,9 +1163,6 @@ void handleStop() {
     pause(true);
   }
 }
-
-
-
 
 // Map incoming MIDI (cable channel + pitch) to the same logical channel 1..16 as note routing.
 static int mapMidiToLogicalChannel(int midiChannel, uint8_t pitch) {
@@ -1336,21 +1308,6 @@ static bool midiRecordCellMatches(const Note &cell, uint8_t channel,
 }
 
 void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
-  PendingNote pn;
-  extern bool dequeuePendingNote(PendingNote &out);
-  while (dequeuePendingNote(pn)) {
-    if (isChildVoiceDisabled((int)pn.channel)) continue;
-    unsigned int targetBeat = pn.targetBeat;
-    if (targetBeat < 1 || targetBeat >= maxlen) continue;
-    extern bool MIDI_WRITE_OVERWRITE;
-    if (!MIDI_WRITE_OVERWRITE && note[targetBeat][pn.livenote].channel != 0) continue;
-    note[targetBeat][pn.livenote].channel = pn.channel;
-    note[targetBeat][pn.livenote].velocity = pn.velocity;
-    note[targetBeat][pn.livenote].probability = 100;
-    note[targetBeat][pn.livenote].condition = 1;
-    note[targetBeat][pn.livenote].midiPitch = pn.pitch;
-  }
-
   // While a synth key remains down, render adjacent continuation cells as
   // G/L. They are written after audio playback, so live MIDI remains the only
   // audible trigger during recording; later sequencer playback holds/slides.
@@ -1378,9 +1335,6 @@ void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
     }
   }
 }
-
-
-
 
 void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
   extern bool MIDI_NOTE_RECEIVE;
@@ -1467,7 +1421,6 @@ void handleStart() {
   unsigned long delayUs = effectiveTransportRecvDelayMs() * 1000UL;
   transportStartDelayUntil = micros() + delayUs;
 }
-
 
 void armMasterTransportStartDelay() {
   transportStartDelayUntil = micros() + effectiveTransportSendDelayMs() * 1000UL;

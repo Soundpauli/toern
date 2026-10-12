@@ -346,7 +346,6 @@ FLASHMEM static void drawEtcInfoPage() {
   }
 }
 
-
 int currentMenuPage = 0;
 int currentLookPage = 0;
 int currentRecsPage = 0;
@@ -1303,7 +1302,6 @@ FLASHMEM void loadMenuFromEEPROM() {
     saveSingleModeToEEPROM(14, ctrlMode);
   }
 
-
   // Set global flags
   SMP_PATTERN_MODE       = (patternMode   == 1 || patternMode == 2 || patternMode == 3);  // ON, SONG, or NEXT mode
   SMP_FLOW_MODE          = (flowMode      == 1);
@@ -1348,7 +1346,6 @@ FLASHMEM void loadMenuFromEEPROM() {
   // The initialization logic (loading values from EEPROM) is complete above.
   // Drawing during startup causes brief text flashes (e.g., "MIC" before "KIT:").
   // drawRecMode();
-  // drawClockMode();
   // drawMidiTransport();
   // drawPatternMode();
   // drawFlowMode();
@@ -1362,7 +1359,6 @@ FLASHMEM void applyAudioSettingsFromGlobals() {
   // GLOB, lineOutLevelSetting, previewVol, micGain, and lineInLevel are already in scope as globals
   extern struct GlobalVars GLOB;
   extern uint8_t lineOutLevelSetting;
-  extern unsigned int previewVol;
   extern unsigned int micGain;
   extern unsigned int lineInLevel;
   
@@ -1445,7 +1441,6 @@ FLASHMEM static void saveSettingsU16ToEEPROM(int index, uint16_t value) {
   EEPROM.put(EEPROM_DATA_START + index, value);
   markSettingsBackupDirty();
 }
-
 
 // Save samplepack 0 state to EEPROM (which voices are using sp0)
 FLASHMEM void saveSp0StateToEEPROM() {
@@ -2773,7 +2768,6 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 27: { // MAIN - Headphone output volume - encoder 3
       drawText("MAIN", 2, 10, currentMenuParentTextColor());
-      extern Mode *currentMode;
       extern struct GlobalVars GLOB;
       
       // Display GLOB.vol directly as 0-100
@@ -3048,7 +3042,6 @@ void cycleFireMenuFocus() {
 }
 
 FLASHMEM bool handleAdditionalFeatureControls(int setting) {
-  static bool recMenuFirstEnter = true;
   static bool aiMenuFirstEnter = true;
   static bool menuFirstEnter = true;
   static bool pongMenuFirstEnter = true;
@@ -3065,7 +3058,6 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   
   // Reset first enter flags when switching to a different setting
   if (setting != lastSetting) {
-    recMenuFirstEnter = true;
     aiMenuFirstEnter = true;
     menuFirstEnter = true;
     pongMenuFirstEnter = true;
@@ -3787,7 +3779,6 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     }
     case 56: { // IMG - Image mode (OFF/ON) via encoder 2
       extern bool imageMode;
-      extern bool voiceMode;
       extern void enforceImageModeConstraints();
       static int lastImgEnc = -1;
       int encVal = imageMode ? 1 : 0;
@@ -4721,7 +4712,6 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
 
          default:
        // Reset first enter flags when not on pages with additional features
-       recMenuFirstEnter = true;
        aiMenuFirstEnter = true;
        menuFirstEnter = true;
        pongMenuFirstEnter = true;
@@ -4769,7 +4759,6 @@ FLASHMEM void switchMenu(int menuPosition){
       case 5:
         switchMode(&volume_bpm);
         break;
-
 
       case 7:
         // Cycle through: -1 (YPOS) -> 1 (MIDI) -> 2 (KEYS) -> -1 (YPOS) ...
@@ -5329,38 +5318,6 @@ FLASHMEM void switchMenu(int menuPosition){
 }
 
 // New functions for menu page navigation
-FLASHMEM void nextMenuPage() {
-  currentMenuPage = (currentMenuPage + 1) % MENU_PAGES_COUNT;
-}
-
-FLASHMEM void previousMenuPage() {
-  currentMenuPage = (currentMenuPage - 1 + MENU_PAGES_COUNT) % MENU_PAGES_COUNT;
-}
-
-FLASHMEM void goToMenuPage(int page) {
-  if (page >= 0 && page < MENU_PAGES_COUNT) {
-    currentMenuPage = page;
-  }
-}
-
-// Function to reset menu state when leaving menu mode
-FLASHMEM void resetMenuState() {
-  currentMenuPage = 0;
-  inLookSubmenu = false;
-  inRecsSubmenu = false;
-  inMidiSubmenu = false;
-  inVolSubmenu = false;
-  inEtcSubmenu = false;
-  currentLookPage = 0;
-  currentRecsPage = 0;
-  currentMidiPage = 0;
-  currentVolPage = 0;
-  currentEtcPage = 0;
-  invalidateEnc3RangeCache();
-  extern Mode menu;
-  menu.pos[3] = 0;
-  menuExitMs = 0;
-}
 
 // Reset NEW mode state when exiting
 FLASHMEM void resetNewModeState() {
@@ -5657,49 +5614,6 @@ FLASHMEM void drawRecMode() {
   FastLEDshow();
 }
 
-FLASHMEM void drawClockMode() {
-  // Clear text area before drawing (3 chars max: "INT" or "EXT")
-  clearTextArea(2, 3, 16);
-  extern int midiSendMode;
-  extern bool MIDI_NOTE_SEND;
-  if (clockMode == 1) {
-    drawText("INT", 2, 3, UI_GREEN);
-    // Update MIDI_CLOCK_SEND based on midiSendMode
-    if (midiSendMode == 0) {
-      // CLCK only: clock enabled
-      MIDI_CLOCK_SEND = true;
-      MIDI_NOTE_SEND = false;
-    } else if (midiSendMode == 1) {
-      // NOTE only: clock disabled
-      MIDI_CLOCK_SEND = false;
-      MIDI_NOTE_SEND = true;
-    } else {
-      // BOTH: clock enabled
-      MIDI_CLOCK_SEND = true;
-      MIDI_NOTE_SEND = true;
-    }
-  }else{
-    drawText("EXT", 2, 3, UI_YELLOW);
-    // Update MIDI_CLOCK_SEND based on midiSendMode
-    if (midiSendMode == 0) {
-      // CLCK only: clock disabled (EXT mode)
-      MIDI_CLOCK_SEND = false;
-      MIDI_NOTE_SEND = false;
-    } else if (midiSendMode == 1) {
-      // NOTE only: clock disabled
-      MIDI_CLOCK_SEND = false;
-      MIDI_NOTE_SEND = true;
-    } else {
-      // BOTH: clock disabled (EXT mode)
-      MIDI_CLOCK_SEND = false;
-      MIDI_NOTE_SEND = true;
-    }
-  }
-
-  FastLEDshow();
-}
-
-
 FLASHMEM void drawMidiVoiceSelect() {
   switch (voiceSelect) {
     case 1: drawMenuValue("MIDI", 2, 3, UI_BLUE); break;
@@ -5707,21 +5621,6 @@ FLASHMEM void drawMidiVoiceSelect() {
     default: drawMenuValue("SEL", 2, 3, UI_GREEN); break;
   }
   MIDI_VOICE_SELECT = (voiceSelect == 1 || voiceSelect == 2);
-  FastLEDshow();
-}
-
-
-
-FLASHMEM void drawPreviewVol() {
-  int barLength = mapf(previewVol, 0, 50, 1, maxX);
-  for (int x = 1; x <= (int)maxX; x++) {
-    CRGB color = (x <= barLength) ? CRGB(0, 160, 80) : CRGB(0, 0, 0);
-    light(x, 6, color);
-    light(x, 7, color);
-  }
-  char label[8];
-  //snprintf(label, sizeof(label), "PV %d", previewVol);  // Display 0-5
-  //drawText(label, 2, 3, UI_CYAN);
   FastLEDshow();
 }
 
@@ -5735,7 +5634,6 @@ FLASHMEM void drawFastRecMode() {
   SMP_FAST_REC = fastRecMode;
   FastLEDshow();
 }
-
 
 FLASHMEM void drawPatternMode() {
   clearTextArea(10, 3, 8);
@@ -5765,7 +5663,6 @@ FLASHMEM void drawFlowMode() {
   SMP_FLOW_MODE = (flowMode == 1);
   FastLEDshow();
 }
-
 
 FLASHMEM void drawMidiTransport() {
   if (transportMode != -1 && transportMode != 1 && transportMode != 2) transportMode = -1;

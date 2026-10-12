@@ -53,7 +53,6 @@ void setParams(ParameterType paramType, int index) {
   }
 }
 
-
 // Handle waveform changes
 void handleWaveformChange(int index, unsigned int waveformType) {
   // Mono synth presets keep oscillator 2 as their contrasting layer.
@@ -76,86 +75,7 @@ void handleWaveformChange(int index, unsigned int waveformType) {
   }
 }
 
-// Set default filter values for a single channel
-void setFiltersDefaultValues(int ch) {
-  SMP.filter_settings[ch][HCUT] = 32;
-  SMP.filter_settings[ch][LOWCUT] = 0;
-  SMP.filter_settings[ch][REVERB] = 0;
-  SMP.filter_settings[ch][BITCRUSHER] = 0;
-  SMP.filter_settings[ch][DETUNE] = 16;
-  SMP.filter_settings[ch][OCTAVE] = (ch >= 1 && ch <= 8) ? 24 : 16;
-  // EFX setting: 0 = SAMPLE mode (default for all channels)
-  SMP.filter_settings[ch][EFX] = 0;
-
-  setFilters(HCUT, ch, true);
-  setFilters(LOWCUT, ch, true);
-  setFilters(REVERB, ch, true);
-  setFilters(BITCRUSHER, ch, true);
-  setFilters(DETUNE, ch, true);
-  setFilters(OCTAVE, ch, true);
-  // EFX parameter doesn't need setFilters call - it's just a control parameter
-  initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
-  updateSynthVoice(11);
-}
-
-
-// Unified ADSR slider defaults (0..maxfilterResolution): A=32, D=32, S=32, R=0
-static void applyDefaultAdsrSettings(int ch) {
-  SMP.param_settings[ch][ATTACK] = 32;
-  SMP.param_settings[ch][DECAY] = 32;
-  SMP.param_settings[ch][SUSTAIN] = 32;
-  SMP.param_settings[ch][RELEASE] = 0;
-  setParams(ATTACK, ch);
-  setParams(DECAY, ch);
-  setParams(SUSTAIN, ch);
-  setParams(RELEASE, ch);
-}
-
-// Set default envelope values for a single channel
-//ASDR
-void setEnvelopeDefaultValues(int ch) {
-  applyDefaultAdsrSettings(ch);
-  initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
-  updateSynthVoice(11);
-}
-
-
-// Set default synth values for a single channel
-//SYNTH
-void setSynthDefaultValues(int ch) {
-  SMP.synth_settings[ch][CUTOFF] = 16;
-  SMP.synth_settings[ch][RESONANCE] = 0;
-  SMP.synth_settings[ch][FILTER] = 0;
-  // Default pitch offsets:
-  // - ch13: 2 octaves down
-  // - ch14: 1 octave down
-  // - ch11 pitch is handled via octave[0] (see initGlobalVars / resetAllToDefaults)
-  if (ch == 13) {
-    SMP.synth_settings[ch][CENT] = 0;   // maps to -24 semitones
-  } else if (ch == 14) {
-    SMP.synth_settings[ch][CENT] = 8;   // maps to -12 semitones
-  } else {
-    SMP.synth_settings[ch][CENT] = 16;  // neutral
-  }
-  SMP.synth_settings[ch][SEMI] = 0;
-  SMP.synth_settings[ch][INSTRUMENT] = 0;
-  SMP.synth_settings[ch][FORM] = 0;
-  SMP.synth_settings[ch][LFO_RATE] = 0;
-  SMP.synth_settings[ch][LFO_DEPTH] = 0;
-  SMP.synth_settings[ch][LFO_PHASE] = 0; // spread index
-  SMP.synth_settings[ch][ARP_STEP] = 0;   // note count index
-
-  // Apply BASS-specific slider defaults (CUTOFF, RES, FILTER, CENT, FORM) so the
-  // ch11 synth starts with the correct octave/timbre for instrument 0 (BASS).
-  if (ch == 11) {
-    applySynthInstrumentPreset(ch, 0);
-  }
-
-   initSliders(filterPage[GLOB.currentChannel],GLOB.currentChannel);
-   // updateSynthVoice(11) is called at the end of resetAllToDefaults() instead
-}
-
-// Defaults for a single slider setting (mirrors setFilters/Envelope/SynthDefaultValues).
+// Defaults used by filter-page and full-voice resets.
 static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
   switch (arr) {
     case ARR_FILTER:
@@ -201,6 +121,18 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
     default:
       return 0;
   }
+}
+
+// Unified ADSR slider defaults (0..maxfilterResolution): A=32, D=32, S=32, R=0
+static void applyDefaultAdsrSettings(int ch) {
+  SMP.param_settings[ch][ATTACK] = defaultSettingValue(ch, ARR_PARAM, ATTACK);
+  SMP.param_settings[ch][DECAY] = defaultSettingValue(ch, ARR_PARAM, DECAY);
+  SMP.param_settings[ch][SUSTAIN] = defaultSettingValue(ch, ARR_PARAM, SUSTAIN);
+  SMP.param_settings[ch][RELEASE] = defaultSettingValue(ch, ARR_PARAM, RELEASE);
+  setParams(ATTACK, ch);
+  setParams(DECAY, ch);
+  setParams(SUSTAIN, ch);
+  setParams(RELEASE, ch);
 }
 
 // Reset sliders on one filter page for one channel (FILTERMODE touch3 / "2000").
@@ -262,7 +194,7 @@ void setCurrentFilterPageDefaultValues(int ch) {
 
 // Reset every filter page for one voice (FILTERMODE "0002").
 // Walks sliderDef so sample RES, ch11 INST/WAVE pages, and ch13/14 LFO/ARP are included —
-// the older hard-coded setFilters/Envelope/SynthDefaultValues missed those.
+// Includes every visible parameter through the channel slider definitions.
 void setAllFilterPagesDefaultValues(int ch) {
   if (ch < 0 || ch >= NUM_CHANNELS) return;
   extern uint8_t filterPage[NUM_CHANNELS];
@@ -371,10 +303,6 @@ void applySynthInstrumentPreset(int channel, int instrumentIdx) {
   SMP.param_settings[channel][SUSTAIN] = kSustainDefault[instrumentIdx];
   SMP.param_settings[channel][RELEASE] = kReleaseDefault[instrumentIdx];
 }
-
-
-
-
 
 // Reset ALL filters, envelopes, drums and synths to default values
 void resetAllToDefaults() {

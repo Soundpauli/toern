@@ -14,7 +14,6 @@ int8_t lastChangedEncoder = -1;
 DMAMEM unsigned long lastInteraction = millis();  // global timestamp
 const unsigned long FILTER_INTERACTION_TIMEOUT = 1000; // ms before reverting to initial view
 
-
 DMAMEM bool showSingleFilter[4] = { false, false, false, false };
 
 static inline bool isWideFilterView2B() {
@@ -43,13 +42,8 @@ static inline void getFilterSliderCols(uint8_t sliderIndex, uint8_t &x0, uint8_t
   if (x1 > maxX) x1 = maxX;
 }
 
-
 uint8_t scaleToDisplay(const SliderDefEntry& meta, uint8_t val) {
   return (meta.displayRange < meta.maxValue) ? constrain(mapf(val, 0, meta.maxValue, 0, meta.displayRange - 1), 0, meta.displayRange - 1) : val;
-}
-
-uint8_t scaleFromDisplay(const SliderDefEntry& meta, uint8_t val) {
-  return (meta.displayRange < meta.maxValue) ? constrain(mapf(val, 0, meta.displayRange - 1, 0, meta.maxValue), 0, meta.maxValue) : val;
 }
 
 // DTNE / CENT / SEMI: 0..32 center 16. Sample OCTV: 0..48 center 24 (1 step = 1 semi).
@@ -64,7 +58,6 @@ static inline int bipolarCenter(const SliderDefEntry& meta) {
   if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) return 24;
   return 16;
 }
-
 
 #define MAX_FILTER_RESOLUTION 32.0
 #define FILTER_BYPASS MAX_FILTER_RESOLUTION
@@ -89,7 +82,6 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
   }
   return raw;
 }
-
 
 // Full parameter name centered — 5px font at y=12 → rows 12–16 (top on y=16).
 void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
@@ -124,8 +116,6 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
   if (tx < 1) tx = 1;
   drawText(name, tx, 12, filtercol);
 }
-
-
 
 void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEntry& meta) {
   // Special case: Channel 11 WAVE slider (encoder 0) should be at x=6
@@ -213,8 +203,6 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   drawText(buf, x, y, textColor);
 }
 
-
-
 void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRGB baseColor, bool lowHighSlider = false, uint8_t sliderIndex = 0, uint8_t page = 0, bool switchtype = false) {
   const uint8_t displayResolution = 10;
   uint8_t displayVal;
@@ -278,7 +266,6 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
   }
 }
 
-
 void initSliders(uint8_t page, uint8_t chan) {
   page = filterPage[chan];
   showFilterNames(chan);
@@ -307,7 +294,6 @@ void initSliders(uint8_t page, uint8_t chan) {
 
   showFilterPages(chan);
 }
-
 
 void slider(uint8_t page) {
   unsigned long now = millis();
@@ -383,32 +369,6 @@ void slider(uint8_t page) {
   if (allFalse) {
     showFilterNames(GLOB.currentChannel);
   }
-}
-
-
-void setDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
-  auto& def = sliderDef[GLOB.currentChannel][page][encoder];
-  uint8_t chan = GLOB.currentChannel;
-
-  switch (def.arr) {
-    case ARR_FILTER:
-    case ARR_SYNTH:
-      defaultFastFilter[chan].arr = def.arr;
-      defaultFastFilter[chan].idx = def.idx;
-      break;
-
-    case ARR_PARAM:
-      if (def.idx < PARAM_COUNT) {
-        defaultFastFilter[chan].arr = def.arr;
-        defaultFastFilter[chan].idx = def.idx;
-      }
-      break;
-
-    default:
-      break;
-  }
-
-  updateFilterEncoderColors();
 }
 
 void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
@@ -502,10 +462,6 @@ void processAdjustments_new(uint8_t page) {
 
 }
 
-
-
-
-
 extern bool readTouch2Pressed(void);
 
 // Handle touch-triggered page switching and conditional update propagation
@@ -577,7 +533,6 @@ void setNewFilters() {
                      d.name,
                      filterColors[filterPage[chan]][i]);
 
-
       anyChanged = true;
       lastEncoderChange[i] = millis();  // store activity timestamp
       lastInteraction = millis();
@@ -620,9 +575,7 @@ void showFilterPages(uint8_t chan) {
 
   slider(filterPage[chan]);
 
-
   unsigned long now = millis();
-
 
   // ─── overlay corner values ───────────────────
   //for (uint8_t i = 0; i < 4; ++i) {
@@ -634,10 +587,6 @@ void showFilterPages(uint8_t chan) {
 
   FastLEDshow();
 }
-
-
-
-
 
 void showFilterNames(uint8_t chan) {
     // Clear the entire headline area (y=12) before drawing to prevent brightness accumulation

@@ -315,7 +315,6 @@ void setFilterDefaults(int channel) {
     }
   }
 
-  SMP.filter_settings[channel][OCTAVE] = 16;  // middle = 0
   SMP.filter_settings[channel][DETUNE] = 16;  // middle = 0
   // Sample OCTV uses 0..48 (center 24); synth OCTAVE path still uses 0..32.
   SMP.filter_settings[channel][OCTAVE] = (channel >= 1 && channel <= 8) ? 24 : 16;
@@ -335,12 +334,12 @@ void setFilterDefaults(int channel) {
   filters[channel]->resonance(0.0);           // default resonance off
   filters[channel]->frequency(10000);
 
-  if (freeverbs[channel] != 0 && freeverbs[channel] != nullptr) {
+  if (freeverbs[channel] != nullptr) {
     freeverbs[channel]->roomsize(0);
     freeverbs[channel]->damping(0);
   }
 
-  if (freeverbmixers[channel] != 0 && freeverbmixers[channel] != nullptr) {
+  if (freeverbmixers[channel] != nullptr) {
     freeverbmixers[channel]->gain(0, 0);
     freeverbmixers[channel]->gain(3, 1);
   }

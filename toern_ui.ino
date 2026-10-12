@@ -238,48 +238,7 @@ void drawIndicator(char size, char colorCode, int encoderNum, bool highlight, bo
   }
 }
 
-
-
 // Draws the above shape, with its top-left at (startX, startY).
-FLASHMEM void drawLowResCircle(int startX, int startY, CRGB color) {
-  // The pattern has 7 rows and 9 columns.
-  for (int row = 0; row < 7; row++) {
-    for (int col = 0; col < 9; col++) {
-      if (LOWRES_CIRCLE[row][col] == 'X') {
-        // Light only the positions marked 'X'.
-        light(startX + col, startY + row, color);
-      }
-    }
-  }
-}
- void drawPatternChange(int val){
-  // Compute text bounds exactly as rendered, so box and text always stay on the same panel.
-  char buffer[16];
-  snprintf(buffer, sizeof(buffer), "%d", val);
-
-  int textPixelWidth = 0;
-  for (int i = 0; buffer[i] != '\0'; i++) {
-    if (buffer[i] >= 32 && buffer[i] <= 126) {
-      textPixelWidth += alphabet[buffer[i] - 32][0] + 1;
-    }
-  }
-
-  int textStartX = (maxX + 1) - textPixelWidth;
-  if (textStartX < 1) textStartX = 1;
-
-  int boxStartX = max(1, textStartX - 1);
-  int boxEndX = min((int)maxX, textStartX + textPixelWidth);
-
-  // Draw black box background behind the value text only.
-  for (int x = boxStartX; x <= boxEndX; x++) {
-    for (int y = 7; y <= 13; y++) {
-      light(x, y, CRGB::Black);
-    }
-  }
-
-  // Draw the number.
-  drawText(buffer, textStartX, 8, CRGB(220, 220, 220));
- }
 
 void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
   // Map the value (0-maxfilterResolution) to 0-maxX LEDs lit
@@ -330,7 +289,6 @@ void drawFilterCheck(int mappedValue, FilterType fx, CRGB color) {
   drawText(buffer, textStartX, 8, color);
 }
 
-
 void drawPlayButton() {
   unsigned int timer = (beatForUI - 1) % maxX + 1;
   if (currentMode == &draw || currentMode == &singleMode) {
@@ -344,7 +302,6 @@ void drawPlayButton() {
     }
   }
 }
-
 
 void drawNoSD() {
   playSdWav1.stop();
@@ -436,8 +393,6 @@ void drawBase() {
    
 
   
-
-
 
   } else {
     // ---- SINGLE MODE ----
@@ -1101,7 +1056,6 @@ void drawStatus() {
   }
 }
 
-
 FLASHMEM void drawText(const char *text, int startX, int startY, CRGB color) {
   int xOffset = startX;
 
@@ -1110,8 +1064,6 @@ FLASHMEM void drawText(const char *text, int startX, int startY, CRGB color) {
     xOffset += alphabet[text[i] - 32][0] + 1;  // Advance by char width + 1 space
   }
 }
-
-
 
 FLASHMEM void drawChar(char c, int x, int y, CRGB color) {
   if (c < 32 || c > 126) return;  // Skip unsupported characters
@@ -1137,8 +1089,6 @@ FLASHMEM void drawChar(char c, int x, int y, CRGB color) {
     }
   }
 }
-
-
 
 FLASHMEM void drawNumber(float count, CRGB color, int topY) {
   char buffer[16];
@@ -1166,8 +1116,6 @@ FLASHMEM void drawNumber(float count, CRGB color, int topY) {
   drawText(buffer, startX, topY, color);
   FastLEDshow();
 }
-
-
 
 FLASHMEM void drawVelocity() {
   unsigned int vy = currentMode->pos[0];        // Velocity on encoder[0]
@@ -1447,13 +1395,6 @@ FLASHMEM void drawSampleLoadOverlay(uint8_t progressPercent) {
   drawText("LOAD", 1, 10, textColor);
 }
 
-
-
-
-
-
-
-
 void drawPages() {
   //GLOB.edit = 1;
   CRGB ledColor;
@@ -1543,7 +1484,6 @@ void drawPages() {
   // Show green bezier when song mode is active (similar to noteshift marquee) on y=1
   extern bool songModeActive;
   extern float marqueePos;
-  extern bool movingForward;
   if (songModeActive) {
     light(round(marqueePos), 1, CRGB(0, 80, 0));  // Darker green moving marquee on y=1
   }
@@ -1674,7 +1614,6 @@ FLASHMEM void drawTriggers() {
     }
   }
 }
-
 
 /************************************************
       TIMER
@@ -2020,33 +1959,8 @@ void drawCursor() {
     CRGB color = col[note[GLOB.x][GLOB.y].channel];  // aus deiner col[] Farbpalette
     light(cursorX, cursorY, color.nscale8_video(pulse));  // pulse = animierte Helligkeit
 
-
   }else{
     light(cursorX, cursorY, CHSV(hue, 255, 255)); // Full saturation and brightness
-  }
-}
-
-
-
-
-FLASHMEM void drawVolume(unsigned int vol) {
-  unsigned int maxXVolume = int(vol * 1.3) + 2;
-  for (unsigned int x = 0; x <= maxXVolume; x++) {
-    light(x + 1, 12, CRGB(vol * vol, 20 - vol, 0));
-    light(x + 1, 13, CRGB(vol * vol, 20 - vol, 0));
-  }
-}
-
-FLASHMEM void drawLineOutVolume(uint8_t level) {
-  level = constrain(level, LINEOUT_LEVEL_MIN, LINEOUT_LEVEL_MAX);
-  // Flip the mapping: higher level (31) = quieter = less bar, lower level (13) = louder = more bar
-  unsigned int filled = ::map(level, LINEOUT_LEVEL_MIN, LINEOUT_LEVEL_MAX, (int)maxX, 0);
-  // Ensure minimum bar width of 1
-  if (filled == 0) filled = 1;
-  for (unsigned int x = 1; x <= maxX; x++) {
-    CRGB color = (x <= filled) ? CRGB(50, 0, 50) : CRGB(0, 0, 0);  // Pink color
-    light(x, 3, color);
-    light(x, 4, color);
   }
 }
 
@@ -2071,8 +1985,6 @@ FLASHMEM void drawBrightness() {
     light(x, 16, color);
   }
 }
-
-
 
 static inline void drawIcon7x12_P(const uint8_t *data, int ox, int oy, CRGB color, int yOffset = 0) {
   for (uint8_t y = 0; y < ICON_H; y++) {
@@ -2197,8 +2109,6 @@ FLASHMEM void showIcons(IconType ico, CRGB colors) {
     drawIcon7x12_P(data, ox, oy, colors, yOffset);
   }
 }
-
-
 
 void processPeaks() {
   static float interpolatedValues[32];  // Cache interpolated values (max possible width)
@@ -2395,58 +2305,6 @@ void processPeaks() {
   }
 }
 
-
-
-void processRecPeaks() {
-  // Optimization #5: Use static instead of stack allocation to reduce stack pressure
-  // With maxX up to 32 (2 modules × 16), this saves 128 bytes per call from stack allocation
-  // Use fixed maximum size since maxX is a runtime variable
-  static float interpolatedRecValues[32];  // Max possible width (MATRIX_WIDTH * LED_MODULES = 16 * 2 = 32)
-
-  if (peakIndex > 0) {
-    // Distribute peak values over maxX positions
-    for (int i = 0; i < maxX; i++) {
-      float indexMapped = mapf(i, 0, maxX - 1, 0, peakIndex - 1);
-      int lowerIndex = floor(indexMapped);
-      int upperIndex = min(lowerIndex + 1, peakIndex - 1);
-
-      if (peakIndex > 1) {
-        float fraction = indexMapped - lowerIndex;
-        interpolatedRecValues[i] = peakRecValues[lowerIndex] * (1 - fraction) + peakRecValues[upperIndex] * fraction;
-      } else {
-        interpolatedRecValues[i] = peakRecValues[0];  // Duplicate if only one value exists
-      }
-    }
-  } else {
-    // No peaks, default to zero
-    for (int i = 0; i < maxX; i++) {
-      interpolatedRecValues[i] = 0;
-    }
-  }
-
-  // Light up LEDs
-  for (int i = 0; i < maxX; i++) {
-    int x = i + 1;  // Ensure x values go from 1 to maxX
-    int yPeak = mapf(interpolatedRecValues[i] * 100, 0, 100, 4, 11);
-    yPeak = constrain(yPeak, 4, 10);
-
-    for (int y = 4; y <= yPeak; y++) {
-      // **Color gradient based on Y (vertical) instead of X**
-
-      CRGB color;
-     
-
-        color = CRGB(((y - 4)*0) / 4, (255 - ((y - 4) * 135)) / 4, 0);  // Red to green gradient at 25% brightness
-    
-
-      // Light up from y = 4 to y = yPeak
-      light(x, y, color);
-    }
-  }
-}
-
-
-
 void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fontColor, bool intro) {
   int ypos = 4;
   int height = 2;
@@ -2481,7 +2339,6 @@ void drawLoadingBar(int minval, int maxval, int currentval, CRGB color, CRGB fon
     FastLEDshow();
   }
 }
-
 
 // Draw small arrow for MIDI INT/EXT indicator
 // direction: true = right arrow (INT/send), false = left arrow (EXT/receive)
@@ -2622,8 +2479,6 @@ void drawKnobColorDefault(){
   }
 }
 
-
-
 /************************************************
       SONG MODE
   *************************************************/
@@ -2717,7 +2572,6 @@ FLASHMEM void showSongMode() {
   
   // Draw song mode active indicator on y=1 (darker green bezier/marquee)
   extern float marqueePos;
-  extern bool movingForward;
   if (songModeActive) {
     light(round(marqueePos), 1, CRGB(0, 80, 0));  // Darker green moving marquee to show song mode is active
   }
@@ -2733,5 +2587,3 @@ FLASHMEM void showSongMode() {
     }
   }
 }
-
-

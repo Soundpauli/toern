@@ -14,18 +14,6 @@ struct HarmonicAnalysis {
   bool isMinor = false;
 };
 
-struct BasePagePattern {
-  bool hasNotes[16];
-  int noteRows[16];
-  int velocities[16];
-  int stepCount;
-  float density;
-  int mostCommonRow;
-  int rhythmPattern[16];
-  bool isRhythmic;
-  bool isMelodic;
-};
-
 enum class CompanionRole : uint8_t {
   Kick,
   Snare,

@@ -142,21 +142,3 @@ const uint8_t icon_engine[ICON_BYTES] PROGMEM       = { 0x28, 0xC0, 0x07, 0x36, 
 const uint8_t icon_midisync[ICON_BYTES] PROGMEM     = { 0x1C, 0xA0, 0x02, 0x41, 0x50, 0x05, 0x49, 0x20, 0x02, 0x1C, 0x00 }; // 7x7
 const uint8_t icon_song[ICON_BYTES] PROGMEM         = { 0x00, 0x00, 0x00, 0xBB, 0xB5, 0x5B, 0xBB, 0x05, 0x00, 0x00, 0x00 }; // 11x7
 const uint8_t icon_record[ICON_BYTES] PROGMEM       = { 0x63, 0x10, 0x04, 0x5D, 0xD0, 0x05, 0x5D, 0x10, 0x04, 0x63, 0x00 }; // 7x7
-
-// ------------------------------------------------------------
-// Misc patterns (kept as-is)
-// ------------------------------------------------------------
-static const char LOWRES_CIRCLE[7][10] = {
-  "000XXX000",
-  "00XXXXX00",
-  "0XXXXXXX0",
-  "0XXXXXXX0",
-  "0XXXXXXX0",
-  "00XXXXX00",
-  "000XXX000"
-};
-
-
-
-
-

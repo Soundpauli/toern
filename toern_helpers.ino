@@ -1,6 +1,4 @@
 
-// Global buffer for AI generation in external RAM (prevents stack overflow)
-EXTMEM BasePagePattern g_channelPatterns[16];
 
 void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
 void generateMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
@@ -8,8 +6,6 @@ void generateBassOrMelody(unsigned int start, unsigned int end, unsigned int cha
 void generateBassLine(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
 void generateMainMelody(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
 void generateBasicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony);
-void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset);
-void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset);
 int createHarmonicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony);
 int createMelodicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony);
 int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony);
@@ -422,10 +418,6 @@ FLASHMEM bool soloRandomRenewPlaylist() {
   return true;
 }
 
-FLASHMEM void soloRandomRefreshWavList() {
-  soloRandomRenewPlaylist();
-}
-
 bool soloRandomPickPath(char* outRel, size_t outRelSize) {
   if (g_soloRandomListDirty || g_soloRandomPlaylistCount == 0) {
     soloRandomRenewPlaylist();
@@ -468,14 +460,6 @@ bool soloRandomStepPlaylist(int delta) {
 
   soloRandomSetLastFromIndex();
   return g_soloRandomPlaylistCount > 0;
-}
-
-uint16_t soloRandomPlaylistCount() {
-  return g_soloRandomPlaylistCount;
-}
-
-int16_t soloRandomPlaylistIndex() {
-  return g_soloRandomPlaylistIndex;
 }
 
 const char* soloRandomGetLastPreviewPath() {
@@ -582,21 +566,6 @@ static void sampleBrowserGetLeafFolderName(int channel, char* out, size_t outSiz
 uint8_t sampleBrowserEntryTypeAt(int idx) {
   if (idx < 0 || idx >= (int)g_wavPickCount) return SAMPLE_BROWSER_ENTRY_FILE;
   return g_wavPickType[idx];
-}
-
-bool sampleBrowserSelectionIsDirectory(int channel) {
-  if (channel < 1 || channel >= maxFiles) return false;
-  if (g_browseListDirty) sampleBrowserRefreshList(channel);
-  int idx = (int)currentMode->pos[3] - 1;
-  uint8_t type = sampleBrowserEntryTypeAt(idx);
-  return type == SAMPLE_BROWSER_ENTRY_PARENT || type == SAMPLE_BROWSER_ENTRY_DIR;
-}
-
-bool sampleBrowserSelectionIsFile(int channel) {
-  if (channel < 1 || channel >= maxFiles) return false;
-  if (g_browseListDirty) sampleBrowserRefreshList(channel);
-  int idx = (int)currentMode->pos[3] - 1;
-  return sampleBrowserEntryTypeAt(idx) == SAMPLE_BROWSER_ENTRY_FILE;
 }
 
 // After ".." or entering a subfolder: rebuild lists, reset browse picker.
@@ -878,14 +847,6 @@ FLASHMEM void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outS
   }
 }
 
-FLASHMEM void EEPROMgetLastFiles() {
-  // Dynamic browser: nothing to preload from SD index files
-}
-
-
-
-
-
 // Wrapper: load all saved SMP settings (parameters, filters, synths)
 // for every channel.
 FLASHMEM void loadSMPSettings() {
@@ -944,8 +905,6 @@ FLASHMEM void loadSMPSettings() {
   //updateFiltersAndParameters();
 }
 
-
-
 void writeWavHeader(File &file, uint32_t sampleRate, uint8_t bitsPerSample, uint16_t numChannels) {
   uint32_t byteRate = sampleRate * numChannels * bitsPerSample / 8;
   uint8_t blockAlign = numChannels * bitsPerSample / 8;
@@ -993,7 +952,6 @@ void finalizeWavHeader(File &file, uint32_t dataSize) {
   file.write(dataBytes, sizeof(dataBytes));
   file.seek(44 + dataSize);
 }
-
 
 void startRecordingRAM() {
   if (isRecording) return;
@@ -1105,8 +1063,6 @@ void stopRecordingRAM(int fnr, int snr) {
   // Don't auto-play - user will press encoder[2] to play if desired
   // playSdWav1.play(path);
 }
-
-
 
 // --------------------
 void startFastRecord() {
@@ -1375,12 +1331,6 @@ void stopFastRecord() {
   //Serial.printf("◀ FASTREC ch%u, %u samples\n", ch, (unsigned)idx);
 
 }
-
-FLASHMEM void EEPROMsetLastFile() {
-  sampleBrowserInvalidate();
-}
-
-
 
 FLASHMEM void clearAllNotesOfChannel() {
   uint8_t channel = GLOB.currentChannel;
@@ -2438,8 +2388,6 @@ FLASHMEM void drawRandoms() {
 // Generate rhythmic patterns for channels 1-4
 FLASHMEM void generateRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony) {
   // Define 4/4 time signature patterns with more sophisticated rhythms
-  const int strongBeats[] = {1, 5, 9, 13};  // Beat 1, 2, 3, 4
-  const int weakBeats[] = {3, 7, 11, 15};   // Off-beats
   
   // Different rhythm patterns for different channels
   int patternType = (channel - 1) % 4;
@@ -2545,7 +2493,6 @@ FLASHMEM void generateMelodicPattern(unsigned int start, unsigned int end, unsig
   int voiceType = (channel - 5) % 4;
   int phraseLength = 4; // 4-beat phrases
   int currentNote = 0;
-  int lastDirection = 0; // Track melodic direction for smoother lines
   
   for(unsigned int c = start; c < end; c++) {
     int x_rel = c - start + 1;
@@ -2555,7 +2502,6 @@ FLASHMEM void generateMelodicPattern(unsigned int start, unsigned int end, unsig
     if(beatPosition % phraseLength == 1) {
       // Start of phrase - choose a strong note
       currentNote = random(0, scaleSize);
-      lastDirection = 0;
     } else {
       // Continue phrase with musical motion
       int direction = random(0, 5); // More options for musical variety
@@ -2788,104 +2734,8 @@ FLASHMEM void generateMainMelody(unsigned int start, unsigned int end, unsigned 
 }
 
 // Context-aware rhythmic pattern generation that preserves base page rhythm
-FLASHMEM void generateContextAwareRhythmicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
-  // Preserve the original rhythm structure with subtle variations
-  for(unsigned int c = start; c < end; c++) {
-    int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % maxX) + 1;
-    
-    // Use the base pattern rhythm as foundation
-    bool shouldPlay = basePattern->rhythmPattern[beatPosition - 1] == 1;
-    
-    // Add subtle variations based on page progression
-    if (shouldPlay) {
-      // Occasionally skip a note for variation (8% chance - subtle)
-      if (random(0, 100) < 8) {
-        shouldPlay = false;
-      }
-    } else {
-      // Occasionally add a note for variation (4% chance - subtle)
-      if (random(0, 100) < 4) {
-        shouldPlay = true;
-      }
-    }
-    
-    if (shouldPlay) {
-      // Use the base pattern's note row with harmonic progression
-      int baseNoteRow = basePattern->noteRows[beatPosition - 1];
-      int noteRow = baseNoteRow;
-      
-        // Apply harmonic progression based on page offset - create real musical progressions
-        if (pageOffset > 0) {
-          // For rhythm channels (1-4), use conservative pitch variations
-          if (channel >= 1 && channel <= 4) {
-            noteRow = createRhythmicProgression(baseNoteRow, pageOffset, harmony);
-          } else {
-            // For melodic channels, use full harmonic progressions
-            noteRow = createHarmonicProgression(baseNoteRow, pageOffset, harmony);
-          }
-        }
-      
-      // Use base pattern velocity with slight variation
-      int baseVelocity = basePattern->velocities[beatPosition - 1];
-      int velocity = baseVelocity + random(-10, 11);
-      if (velocity < 40) velocity = 40;
-      if (velocity > 127) velocity = 127;
-      
-      placeRandomNoteIfEmpty(c, noteRow, channel, velocity);
-    }
-  }
-}
 
 // Context-aware melodic pattern generation that preserves base page melody
-FLASHMEM void generateContextAwareMelodicPattern(unsigned int start, unsigned int end, unsigned int channel, HarmonicAnalysis harmony, BasePagePattern* basePattern, int pageOffset) {
-  // Preserve the original melodic structure with harmonic progressions
-  for(unsigned int c = start; c < end; c++) {
-    int x_rel = c - start + 1;
-    int beatPosition = ((x_rel - 1) % maxX) + 1;
-    
-    // Use the base pattern rhythm as foundation
-    bool shouldPlay = basePattern->rhythmPattern[beatPosition - 1] == 1;
-    
-    // Add subtle variations based on page progression
-    if (shouldPlay) {
-      // Occasionally skip a note for variation (6% chance - subtle)
-      if (random(0, 100) < 6) {
-        shouldPlay = false;
-      }
-    } else {
-      // Occasionally add a note for variation (3% chance - subtle)
-      if (random(0, 100) < 3) {
-        shouldPlay = true;
-      }
-    }
-    
-    if (shouldPlay) {
-      // Use the base pattern's note row with harmonic progression
-      int baseNoteRow = basePattern->noteRows[beatPosition - 1];
-      int noteRow = baseNoteRow;
-      
-      // Apply harmonic progression based on page offset - create real musical progressions
-      if (pageOffset > 0) {
-        // For rhythm channels (1-4), use conservative pitch variations
-        if (channel >= 1 && channel <= 4) {
-          noteRow = createRhythmicProgression(baseNoteRow, pageOffset, harmony);
-        } else {
-          // For melodic channels, use full melodic progressions
-          noteRow = createMelodicProgression(baseNoteRow, pageOffset, harmony);
-        }
-      }
-      
-      // Use base pattern velocity with slight variation
-      int baseVelocity = basePattern->velocities[beatPosition - 1];
-      int velocity = baseVelocity + random(-8, 9);
-      if (velocity < 40) velocity = 40;
-      if (velocity > 127) velocity = 127;
-      
-      placeRandomNoteIfEmpty(c, noteRow, channel, velocity);
-    }
-  }
-}
 
 // Create dynamic harmonic progressions with more variation
 FLASHMEM int createHarmonicProgression(int baseNote, int pageOffset, HarmonicAnalysis harmony) {
@@ -3821,11 +3671,6 @@ FLASHMEM void generateBasicPattern(unsigned int start, unsigned int end, unsigne
   }
 }
 
-
-
-
-
-
 FLASHMEM void clearPage() {
   extern bool voiceMode;
   extern bool songModeActive;
@@ -3865,21 +3710,6 @@ FLASHMEM void clearPage() {
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
 }
-
-FLASHMEM void clearPageX(int thatpage) {
-  //GLOB.edit = 1;
-
-  unsigned int start = ((thatpage - 1) * maxX) + 1;
-  unsigned int end = start + maxX;
-  unsigned int channel = GLOB.currentChannel;
-  bool singleMode = GLOB.singleMode;
-
-  for (unsigned int c = start; c < end; c++) {
-    clearNoteChannel(c, 1, maxY + 1, channel, singleMode);
-  }
-  updateLastPage();
-}
-
 
 // Reset all audio effects/filters to clean defaults
 FLASHMEM void resetAllAudioEffects() {
@@ -3928,7 +3758,6 @@ FLASHMEM void resetAllAudioEffects() {
   
 }
 
-
 // Complete reset for NEW start - clears everything and loads fresh defaults
 FLASHMEM void startNew() {
   // Declare all external variables at the beginning
@@ -3940,9 +3769,6 @@ FLASHMEM void startNew() {
   extern bool songModeActive;
   extern bool preventPaintUnpaint;
   extern int patternMode;
-  extern uint8_t filterPage[NUM_CHANNELS];
-  extern const int ALL_CHANNELS[];
-  extern const int NUM_ALL_CHANNELS;
   extern Mode draw;
   extern Mode volume_bpm;
   extern Mode *currentMode;
@@ -4192,7 +4018,6 @@ FLASHMEM void startNew() {
   
 }
 
-
 int getFolderNumber(int value) {
   int folder = floor(value / 100);
   if (folder > FOLDER_MAX) folder = FOLDER_MAX;
@@ -4200,69 +4025,11 @@ int getFolderNumber(int value) {
   return folder;
 }
 
-int getFileNumber(int value) {
-  // return the file number in the folder, so 113 = 13, 423 = 23
-  int folder = getFolderNumber(value);
-  int wavfile = value % 100;
-  if (wavfile <= 0) wavfile = 0;
-  return wavfile + folder * 100;
-}
-
-CRGB getCol(unsigned int g) {
-  return col[g] * 10;
-}
-
-
-void setNote(uint16_t step,  uint8_t pitch, uint8_t channel, uint8_t velocity) {
-  if (step < maxlen && channel < NUM_CHANNELS) {
-    note[step][pitch].channel = channel;
-    note[step][pitch].velocity = velocity;
-    note[step][pitch].probability = 100;
-    note[step][pitch].condition = 1;
-    note[step][pitch].midiPitch = NOTE_MIDI_PITCH_NONE;
-  }
-}
-
 // Function to get a note from a given step and channel
-Note getNote(uint16_t step, uint8_t channel) {
-  if (step < maxlen && channel < NUM_CHANNELS) {
-    return note[step][channel];
-  }
-  // Return a default Note if indices are out-of-range.
-  return {0, 0, 100, 1, NOTE_MIDI_PITCH_NONE};
-}
-
 
 /***************/
 /**** INTRO ****/
 /***************/
-
-
-
-
-
-// ----- Determine Color of Each LED Based on Time -----
-CRGB getPixelColor(uint8_t x, uint8_t y, unsigned long elapsed) {
-  if (elapsed < phase1Duration) {
-    // PHASE 1: Rainbow Logo (only phase - shown for 2 seconds)
-    if (logo16_on_P(logo_rows, x, y)) {
-      float timeFactor = (float)elapsed / phase1Duration;  // 0..1
-      return getLogoPixelColor(x, y, timeFactor);
-    } else {
-      return CRGB::Black;
-    }
-  } else {
-    // After animation, stay black
-    return CRGB::Black;
-  }
-}
-
-
-
-
-
-
-
 
 FLASHMEM static bool logoWaveTouches(unsigned int x, int wavePixelY, int logoStartX) {
   for (int dy = -1; dy <= 1; dy++) {
@@ -4474,276 +4241,7 @@ FLASHMEM void runInfoLogoAnimationLoop() {
   switchMode(&draw);
 }
 
-// Enhanced base page pattern analysis structure (moved to top of file)
-
-// Retained only as reference while the companion engine replaces the old,
-// separate AUTO implementation.
-#if 0
-FLASHMEM void generateSongLegacy() {
-  extern int aiTargetPage; // Access the target page from menu
-  extern int aiBaseStartPage; // Access the base start page from menu
-  extern int aiBaseEndPage;   // Access the base end page from menu
-  
-  int currentPage = GLOB.page;
-  int targetPage = aiTargetPage;
-  
-  // Validate target page - ensure it's higher than current page
-  if (targetPage <= currentPage) {
-    targetPage = currentPage + 1;
-  }
-  
-  // Don't exceed maxPages
-  if (targetPage > maxPages) {
-    targetPage = maxPages;
-  }
-  
-  // Validate base page range
-  if (aiBaseStartPage > aiBaseEndPage) {
-    return;
-  }
-  
-  // Check if base pages have content and analyze patterns
-  bool basePagesEmpty = true;
-  bool channelsUsed[16] = {false};
-  // STACK OVERFLOW FIX: Use global EXTMEM buffer to prevent stack overflow
-  BasePagePattern* channelPatterns = g_channelPatterns; // Use global EXTMEM buffer
-  
-  // Initialize pattern analysis
-  for (int ch = 0; ch < 16; ch++) {
-    channelPatterns[ch].stepCount = 0;
-    channelPatterns[ch].density = 0.0;
-    channelPatterns[ch].mostCommonRow = 1;
-    channelPatterns[ch].isRhythmic = false;
-    channelPatterns[ch].isMelodic = false;
-    for (int step = 0; step < 16; step++) {
-      channelPatterns[ch].hasNotes[step] = false;
-      channelPatterns[ch].noteRows[step] = 0;
-      channelPatterns[ch].velocities[step] = defaultVelocity;
-      channelPatterns[ch].rhythmPattern[step] = 0;
-    }
-  }
-  
-  // Analyze all base pages content with detailed pattern extraction
-  for (int basePage = aiBaseStartPage; basePage <= aiBaseEndPage; basePage++) {
-    unsigned int pageStartStep = (basePage - 1) * maxX + 1;
-    unsigned int pageEndStep = basePage * maxX;
-    
-    for (unsigned int c = pageStartStep; c <= pageEndStep; c++) {
-      for (unsigned int r = 1; r <= maxY; r++) {
-        if (note[c][r].channel != 0) {
-          basePagesEmpty = false;
-          int ch = note[c][r].channel;
-          channelsUsed[ch] = true;
-          
-          // Calculate relative step position within the 16-step pattern
-          int relativeStep = ((c - pageStartStep) % 16);
-          
-          // Record pattern information
-          channelPatterns[ch].hasNotes[relativeStep] = true;
-          channelPatterns[ch].noteRows[relativeStep] = r;
-          channelPatterns[ch].velocities[relativeStep] = note[c][r].velocity;
-          channelPatterns[ch].rhythmPattern[relativeStep] = 1;
-          channelPatterns[ch].stepCount++;
-        }
-      }
-    }
-  }
-  
-  // Analyze patterns for each used channel
-  for (int ch = 1; ch <= 15; ch++) {
-    if (channelsUsed[ch]) {
-      BasePagePattern* pattern = &channelPatterns[ch];
-      
-      // Calculate density
-      pattern->density = (float)pattern->stepCount / 16.0;
-      
-      // Find most common note row
-      int rowCounts[17] = {0}; // 1-16 for note rows
-      for (int step = 0; step < 16; step++) {
-        if (pattern->hasNotes[step]) {
-          rowCounts[pattern->noteRows[step]]++;
-        }
-      }
-      int maxCount = 0;
-      for (int row = 1; row <= 16; row++) {
-        if (rowCounts[row] > maxCount) {
-          maxCount = rowCounts[row];
-          pattern->mostCommonRow = row;
-        }
-      }
-      
-      // Determine if rhythmic or melodic based on pattern characteristics
-      if (ch >= 1 && ch <= 4) {
-        pattern->isRhythmic = true;
-        pattern->isMelodic = false;
-      } else if (ch >= 5 && ch <= 8) {
-        pattern->isRhythmic = false;
-        pattern->isMelodic = true;
-      } else if (ch == 11) {
-        // Channel 11 can be both - determine based on density and note variation
-        bool hasNoteVariation = false;
-        for (int i = 1; i < 16; i++) {
-          if (pattern->hasNotes[i] && pattern->noteRows[i] != pattern->mostCommonRow) {
-            hasNoteVariation = true;
-            break;
-          }
-        }
-        pattern->isMelodic = hasNoteVariation || pattern->density > 0.3;
-        pattern->isRhythmic = !pattern->isMelodic;
-      } else {
-        // Other channels - analyze based on density and variation
-        pattern->isMelodic = pattern->density > 0.2;
-        pattern->isRhythmic = !pattern->isMelodic;
-      }
-      
-    }
-  }
-  
-  // Debug: Show what musical elements are present in base pages
-  int rhythmChannels = 0, melodyChannels = 0, otherChannels = 0;
-  for (int ch = 1; ch <= 15; ch++) {
-    if (channelsUsed[ch]) {
-      if (channelPatterns[ch].isRhythmic) rhythmChannels++;
-      else if (channelPatterns[ch].isMelodic) melodyChannels++;
-      else otherChannels++;
-    }
-  }
-  
-  // Generate pages starting from after the base page range
-  int startPage = aiBaseEndPage + 1;
-  int endPage = startPage + aiTargetPage - 1;
-  
-  // Safety check: ensure we don't exceed maxPages
-  if (endPage > maxPages) {
-    endPage = maxPages;
-  }
-  
-  // Debug: Show what pages will be generated
-  
-  for (int page = startPage; page <= endPage; page++) {
-    
-    // Save current page context
-    int originalPage = GLOB.page;
-    
-    // Set the page context for generation
-    GLOB.page = page;
-    
-    // Always clear the page since we're generating new content
-    // Calculate the step range for this specific page
-    unsigned int pageStartStep = (page - 1) * maxX + 1;
-    unsigned int pageEndStep = page * maxX;
-    
-    for (unsigned int c = pageStartStep; c <= pageEndStep; c++) {
-      for (unsigned int r = 1; r <= maxY; r++) {
-        note[c][r].channel = 0;
-        note[c][r].velocity = defaultVelocity;
-        note[c][r].probability = 100;
-        note[c][r].condition = 1;
-        note[c][r].midiPitch = NOTE_MIDI_PITCH_NONE;
-      }
-    }
-    
-    // Generate pattern for this page
-    HarmonicAnalysis harmony;
-    
-    // Analyze existing harmony from base page for intelligent progression
-    harmony.hasRoot = false;
-    harmony.hasThird = false;
-    harmony.hasFifth = false;
-    harmony.hasSeventh = false;
-    harmony.rootNote = 1;
-    harmony.isMajor = false;
-    harmony.isMinor = false;
-    
-    // Analyze base pages harmony if they exist
-    if (!basePagesEmpty) {
-      // Find the most common root note across all base pages
-      int noteCounts[16] = {0};
-      for (int basePage = aiBaseStartPage; basePage <= aiBaseEndPage; basePage++) {
-        unsigned int pageStartStep = (basePage - 1) * maxX + 1;
-        unsigned int pageEndStep = basePage * maxX;
-        
-        for (unsigned int c = pageStartStep; c <= pageEndStep; c++) {
-          for (unsigned int r = 1; r <= maxY; r++) {
-            if (note[c][r].channel != 0) {
-              noteCounts[r]++;
-            }
-          }
-        }
-      }
-      
-      // Find the most prominent note as root
-      int maxCount = 0;
-      for (int i = 1; i <= 16; i++) {
-        if (noteCounts[i] > maxCount) {
-          maxCount = noteCounts[i];
-          harmony.rootNote = i;
-        }
-      }
-    }
-    
-    // Create harmonic progression based on page number relative to base pages
-    if (page > aiBaseEndPage) {
-      int pageOffset = page - aiBaseEndPage;
-      
-      // Common chord progressions: I, ii, iii, IV, V, vi, vii°
-      int progression[] = {1, 2, 3, 4, 5, 6, 7, 1}; // I-ii-iii-IV-V-vi-vii°-I
-      int progressionIndex = (pageOffset - 1) % 8;
-      int chordDegree = progression[progressionIndex];
-      
-      // Convert chord degree to root note (simplified)
-      harmony.rootNote = ((harmony.rootNote + chordDegree - 1) % 8) + 1;
-      
-      // Determine major/minor based on chord degree
-      if (chordDegree == 1 || chordDegree == 4 || chordDegree == 5) {
-        harmony.isMajor = true;
-        harmony.isMinor = false;
-      } else if (chordDegree == 2 || chordDegree == 3 || chordDegree == 6) {
-        harmony.isMajor = false;
-        harmony.isMinor = true;
-      } else {
-        // Diminished or other - use alternating pattern
-        harmony.isMajor = (page % 2 == 0);
-        harmony.isMinor = !harmony.isMajor;
-      }
-      
-    }
-    
-    // Generate patterns for used channels - only for this specific page
-    // Use analyzed base page patterns with intelligent variations
-    for (int ch = 1; ch <= 15; ch++) {
-      if (channelsUsed[ch]) {
-        BasePagePattern* basePattern = &channelPatterns[ch];
-        
-        // Add dynamic variation based on page position relative to base pages
-        int pageOffset = page - aiBaseEndPage;
-        float intensityMultiplier = 0.8 + (pageOffset * 0.1); // Gradually increase intensity
-        if (intensityMultiplier > 1.2) intensityMultiplier = 1.2;
-        
-        // Generate based on analyzed pattern type
-        if (basePattern->isRhythmic) {
-          generateContextAwareRhythmicPattern(pageStartStep, pageEndStep, ch, harmony, basePattern, pageOffset);
-        } else if (basePattern->isMelodic) {
-          generateContextAwareMelodicPattern(pageStartStep, pageEndStep, ch, harmony, basePattern, pageOffset);
-        } else {
-          // Fallback for other channels
-          generateBasicPattern(pageStartStep, pageEndStep, ch, harmony);
-        }
-      }
-    }
-    
-    // Restore original page context
-    GLOB.page = originalPage;
-  }
-  
-  // Auto-close menu and return to main interface
-  extern void switchMode(Mode *newMode);
-  extern Mode draw;
-  switchMode(&draw);
-}
-#endif
-
-// ETC > AUTO: extend the selected base range with the same role-aware engine
+// MODE > AUTO: extend the selected base range with the same role-aware engine
 // used by single-mode 2000. Empty bases create a coordinated starter ensemble.
 FLASHMEM void generateSong() {
   extern int aiTargetPage;

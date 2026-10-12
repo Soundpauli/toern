@@ -74,7 +74,6 @@ FLASHMEM void showPatternResult(bool success) {
 }
 
 FLASHMEM void savePattern(bool autosave) {
-  extern bool isNowPlaying;
   extern void stopSdPreviewIfPlaying();
   extern void sdIoYield();
   extern void sdIoBeginAudioSafe();
@@ -237,7 +236,6 @@ FLASHMEM void savePattern(bool autosave) {
   sdIoEndAudioSafe();
 }
 
-
 FLASHMEM void saveSamplePack(int pack) {
     extern void stopSdPreviewIfPlaying();
     extern size_t sdIoChunkSize();
@@ -392,7 +390,6 @@ FLASHMEM void saveSamplePack(int pack) {
    switchMode(&draw);
 }
 
-
 FLASHMEM void loadPattern(bool autoload) {
   extern bool isNowPlaying;
   extern void stopSdPreviewIfPlaying();
@@ -422,7 +419,6 @@ FLASHMEM void loadPattern(bool autoload) {
   snprintf(backupPath, sizeof(backupPath), "%s.bak", OUTPUTf);
   recoverPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
   if (!autoload) { drawText("LOAD", 1, 8, UI_GREEN); FastLEDshow(); }
-  const bool isAutosaveSlot = autoload || SMP.file == 0;
   bool loadedOk = false;
   const size_t expectedNotes = (size_t)(maxlen - 1) * (size_t)maxY;
 
@@ -550,8 +546,6 @@ FLASHMEM void loadPattern(bool autoload) {
   sdIoYield();
   if (!autoload) sdIoEndAudioSafe();
 }
-
-
 
 FLASHMEM void autoLoad() {
   // loadPattern recovers only autosaved.txt.tmp / .bak. The historical shared

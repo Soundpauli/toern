@@ -69,16 +69,6 @@ void initLedStrip() {
   smoothedAudioLevel = 0.0f;
 }
 
-// Set LED strip length (called from menu or settings)
-void setLedStripLength(int length) {
-  ledStripLength = constrain(length, 1, LED_STRIP_MAX_LENGTH);
-}
-
-// Get LED strip length
-int getLedStripLength() {
-  return ledStripLength;
-}
-
 // Enable/disable LED strip visualization
 void setLedStripEnabled(bool enabled) {
   ledStripEnabled = enabled;
@@ -172,7 +162,6 @@ void updateLedStrip() {
   // Optimization #3: Track previous state and only clear on state change
   static bool lastLedStripEnabled = ledStripEnabled;
   static bool lastIsNowPlaying = isNowPlaying;
-  static bool stripClearedOnStateChange = false;
   
   // Check for state changes
   bool stateChanged = (ledStripEnabled != lastLedStripEnabled) || (isNowPlaying != lastIsNowPlaying);
@@ -182,7 +171,6 @@ void updateLedStrip() {
       for (int i = 0; i < ledStripLength; i++) {
         stripLeds[i] = CRGB::Black;
       }
-      stripClearedOnStateChange = true;
     }
     lastLedStripEnabled = ledStripEnabled;
     lastIsNowPlaying = isNowPlaying;
@@ -194,7 +182,7 @@ void updateLedStrip() {
     return;
   }
   
-  // Optimization #8: Rate-limit to fixed FPS (30 Hz = 33ms, matching RefreshTime)
+  // Strip effects update at 30 FPS, independently of the matrix refresh rate.
   static unsigned long lastUpdateTime = 0;
   const unsigned long UPDATE_INTERVAL_MS = 33;  // 30 FPS
   unsigned long now = millis();
@@ -310,7 +298,6 @@ void updateLedStrip() {
     effectiveIntensity = constrain(effectiveIntensity, 0.0f, 1.0f);
     
     // Render ripple as expanding wave
-    int centerPos = (int)ripples[i].position;
     float width = ripples[i].intensity * 8.0f;  // Ripple width
     
     for (int j = 0; j < ledStripLength; j++) {
