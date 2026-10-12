@@ -67,6 +67,7 @@ const sidebars = {
         'hardware/power',
         'hardware/firmware-pins',
         'hardware/fabrication',
+        'hardware/housing',
       ],
     },
     {

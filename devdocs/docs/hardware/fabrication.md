@@ -8,6 +8,8 @@ description: Gerbers, JLCPCB BOM/CPL, and how to open the KiCad project.
 
 Maker steps (what to order, what is through-hole, first power) are in the repo-root [BUILD.md](https://github.com/Soundpauli/toern/blob/main/BUILD.md). This page is the file map.
 
+For the enclosure files, material, test piece, and cutting workflow, see [Housing — laser cutting](./housing).
+
 ## Open the design
 
 1. Install a recent **KiCad** (7+; project files are `.kicad_pro` / `.kicad_sch` / `.kicad_pcb`).

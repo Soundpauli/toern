@@ -65,3 +65,4 @@ Hardware design files are **[CC BY-NC 4.0](https://creativecommons.org/licenses/
 - [Power](./power) — USB, battery, rails, load switch
 - [Firmware pin map](./firmware-pins) — how `toern.ino` matches the board
 - [Fabrication](./fabrication) — ordering from Gerbers / JLCPCB exports
+- [Housing — laser cutting](./housing) — version DXFs, the Fusion project, 3 mm PLEXIGLAS, and kerf compensation
