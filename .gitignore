@@ -22,3 +22,6 @@ _audiofixes/
 
 # Large local archives (GitHub 100MB limit)
 tools/audio-converter-standalone/SD-CARD-CONTENT.zip
+
+# Local-only; do not track
+tools/cost-planner/

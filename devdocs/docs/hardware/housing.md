@@ -21,7 +21,11 @@ The housing is made from **3 mm PLEXIGLAS® LED, Black & White 9H04 SC**. Manufa
 
 For **one 16_16 housing**, import `16_16.dxf` and `COMMON.dxf`. For **one 32_16 housing**, import `32_16.dxf` and `COMMON.dxf`. Include the COMMON parts once per housing. The version files deliberately exclude those shared parts.
 
-The native project preserves the original sketches as well as **VERSIONS → COMMON / 16_16 / 32_16**. The archive above is the v75 export. When editing the design, regenerate the affected DXFs and update the native archive together.
+The native project preserves the original sketches as well as **VERSIONS → COMMON / 16_16 / 32_16**. The archive contains the latest saved design; the `.f3d` filename is retained for compatibility. When editing the design, regenerate the affected DXFs and update the native archive together.
+
+The DXFs separate manufacturing operations into two layers: **CUT** (red) for panel outlines, holes, and slots, and **ENGRAVE** (magenta) for lettering, logos, and all port icons. Assign ENGRAVE to an engraving operation in the laser software; the layer name alone does not configure the machine. Filled icons use closed vector contours; use fill engraving when a solid symbol is desired. Apply no cutting kerf offset to ENGRAVE.
+
+In Fusion, port-icon curves and text carry the custom attribute `toern.operation = ENGRAVE`. This records the intended operation without changing their size or position. A standard Fusion sketch DXF export does not preserve that classification as a layer, so retain the CUT/ENGRAVE separation when regenerating production files.
 
 ## Material
 
@@ -47,7 +51,7 @@ The specified **0.125 mm is the requested contour offset**, not a measurement of
 1. Import `TestStueck.dxf` in millimeters at **100% scale**. Use the same sheet, machine profile, and kerf compensation intended for the housing.
 2. Cut the test piece and check the finger-joint fit against the actual 3 mm material. Confirm the parts seat without forcing them. Adjust the machine settings or compensation based on this test before cutting the full set.
 3. Import **COMMON plus the chosen version**. Check scale against the native design: the largest rectangular panel is 246 mm wide in `16_16` and 166 mm wide in `32_16`.
-4. Put lettering and the logo on an **engraving** operation. Put panel outlines, holes, and slots on **cutting** operations. Construction guides and sketch points are excluded from the exports.
+4. Assign **ENGRAVE** (lettering, logos, and icons) to engraving, and **CUT** (panel outlines, holes, and slots) to cutting. Construction guides and sketch points are excluded from the exports.
 5. Check for duplicate paths, closed cutting contours, lettering orientation, and adequate spacing between panels. Nest parts by moving or rotating whole panels without scaling them.
 6. Engrave first, cut internal openings next, and cut external panel outlines last. Use a machine-specific profile for this material; speed and power values are not specified by these files.
 7. Dry-fit the panels and check connectors and the PCB before final assembly. Orient the satin face and labels consistently with the intended exterior.
