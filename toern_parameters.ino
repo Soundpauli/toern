@@ -102,7 +102,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
       }
     case ARR_SYNTH:
       switch (idx) {
-        case CUTOFF: return 16;
+        case CUTOFF: return (ch == 13 || ch == 14) ? 32 : 16;
         case RESONANCE: return 0;
         case FILTER: return 0;
         case CENT:
@@ -115,7 +115,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
         case LFO_RATE: return 0;
         case LFO_DEPTH: return 0;
         case LFO_PHASE: return 0;
-        case ARP_STEP: return 0;
+        case ARP_STEP: return 16;
         default: return 0;
       }
     default:
@@ -138,7 +138,7 @@ static void applyDefaultAdsrSettings(int ch) {
 // Reset sliders on one filter page for one channel (FILTERMODE touch3 / "2000").
 static void setFilterPageDefaultValues(int ch, uint8_t page) {
   if (ch < 0 || ch >= NUM_CHANNELS) return;
-  extern SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
+  extern SliderDefEntry sliderDef[NUM_CHANNELS][5][4];
 
   bool touchedSynth = false;
   bool touchedAdsr = false;
@@ -202,7 +202,7 @@ void setAllFilterPagesDefaultValues(int ch) {
 
   int pages = filterPageCount[ch];
   if (pages <= 0) pages = 4;
-  if (pages > 4) pages = 4;
+  if (pages > 5) pages = 5;
   for (int p = 0; p < pages; ++p) {
     setFilterPageDefaultValues(ch, (uint8_t)p);
   }

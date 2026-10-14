@@ -51,6 +51,7 @@ static inline bool isBipolarCenteredParam(const SliderDefEntry& meta) {
   if (meta.arr == ARR_FILTER && meta.idx == DETUNE && meta.maxValue == 32) return true;
   if (meta.arr == ARR_FILTER && meta.idx == OCTAVE && meta.maxValue == 48) return true;
   if (meta.arr == ARR_SYNTH && (meta.idx == CENT || meta.idx == SEMI) && meta.maxValue == 32) return true;
+  if (meta.arr == ARR_SYNTH && meta.idx == ARP_STEP && meta.maxValue == 32) return true;
   return false;
 }
 
@@ -163,6 +164,10 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
       snprintf(buf, sizeof(buf), "%d", cents);
     } else if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) {
       snprintf(buf, sizeof(buf), "%d", (int)val - bipolarCenter(meta));
+    } else if (meta.arr == ARR_SYNTH && meta.idx == ARP_STEP) {
+      int off = (int)val - 16;
+      if (off == 0) snprintf(buf, sizeof(buf), "OFF");
+      else snprintf(buf, sizeof(buf), "%+d", off);
     } else {
       snprintf(buf, sizeof(buf), "%d", (int)val - 16);  // CENT / SEMI
     }
@@ -441,6 +446,11 @@ void processAdjustments_new(uint8_t page) {
           applySynthInstrumentPreset(chan, (int)constrain(currentMode->pos[i], 0, 9));
           initSliders(filterPage[chan], chan);
         }
+        if ((chan == 13 || chan == 14) &&
+            (d.idx == CUTOFF || d.idx == RESONANCE || d.idx == FILTER)) {
+          extern void applyMonoSynthCrf(int ch);
+          applyMonoSynthCrf(chan);
+        }
         break;
 
       case ARR_PARAM:
@@ -614,7 +624,7 @@ void showFilterNames(uint8_t chan) {
     }
 }
 
-extern SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
+extern SliderDefEntry sliderDef[NUM_CHANNELS][5][4];
 extern uint8_t filterPage[NUM_CHANNELS];
 
 void updateFilterEncoderColors() {

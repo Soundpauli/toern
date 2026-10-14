@@ -137,6 +137,20 @@ static void markExternalOne() {
 static unsigned long lastClockSent = 0;
 // Track held notes per logical channel to avoid stuck counters on duplicate NoteOn events.
 static volatile bool midiHeldNote[17][128] = { false };
+static volatile uint8_t midiHeldVelocity[17][128] = { 0 };
+
+int collectHeldMidiNotes(int ch, uint8_t *pitches, uint8_t *vels, int maxN) {
+  int n = 0;
+  if (ch < 0 || ch > 16 || !pitches || !vels || maxN <= 0) return 0;
+  for (int p = 0; p < 128 && n < maxN; p++) {
+    if (!midiHeldNote[ch][p]) continue;
+    pitches[n] = (uint8_t)p;
+    uint8_t v = midiHeldVelocity[ch][p];
+    vels[n] = v > 0 ? v : 100;
+    n++;
+  }
+  return n;
+}
 
 // Analog clock / sidechain on rev H dedicated 2-pin JSTs (not the J11 expansion row).
 // CLK-OUT(5V) J25 ← pin 37 via 74AHCT1G125; CLK-IN(3–5V) J26 → pin 38 via 74LVC1G17;
@@ -1186,7 +1200,7 @@ static int mapMidiToLogicalChannel(int midiChannel, uint8_t pitch) {
 
 // Fold an incoming pitch into the editable single-mode rows without losing its
 // pitch class. Repeated wrapping handles the complete MIDI 0..127 range.
-static uint8_t midiPitchToGridRow(int channel, uint8_t pitch) {
+uint8_t midiPitchToGridRow(int channel, uint8_t pitch) {
   int anchorRow;
   if (channel == 11) {
     anchorRow = 12;            // ch11 calibrated manual anchor
@@ -1260,6 +1274,7 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   // Only count a NoteOn once per (logical channel, pitch) until a matching NoteOff arrives.
   if (pitch < 128 && !midiHeldNote[ch][pitch]) {
     midiHeldNote[ch][pitch] = true;
+    midiHeldVelocity[ch][pitch] = velocity;
   }
   // Keep pressedKeyCount in sync with the held-note bitmap (fixes stuck / missed releases).
   {
@@ -1277,6 +1292,14 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   const uint8_t livenote = midiPitchToGridRow(ch, pitch);
   const uint8_t storedPitch = preserveIncomingMidiPitch()
                                 ? pitch : NOTE_MIDI_PITCH_NONE;
+
+  extern bool synthMidiArpEnabled(int ch);
+  extern void midiArpOnHeldNote(int ch);
+  if (synthMidiArpEnabled(ch)) {
+    midiArpOnHeldNote(ch);
+    activeNotes[pitch] = true;
+    return;
+  }
 
   if (isNowPlaying) {
       if (GLOB.singleMode) {
@@ -1315,8 +1338,10 @@ void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
   if (previousBeat < 1 || previousBeat >= maxlen) return;
 
   const uint8_t synthChannels[] = { 11, 13, 14 };
+  extern bool synthMidiArpEnabled(int ch);
   for (uint8_t channel : synthChannels) {
     if (isChildVoiceDisabled(channel)) continue;
+    if (synthMidiArpEnabled(channel)) continue;
     for (int p = 0; p < 128; p++) {
       uint8_t pitch = (uint8_t)p;
       if (!midiHeldNote[channel][pitch]) continue;
@@ -1346,6 +1371,7 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
   if (channel >= 11 && channel <= 14) {
     if (pitch < 128) {
       midiHeldNote[channel][pitch] = false;
+      midiHeldVelocity[channel][pitch] = 0;
     }
     {
       int cnt = 0;
@@ -1357,18 +1383,24 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
 
     if (channel == 11) {
       // Ch11 uses the polyphonic voice system (Senvelope1/2/filter), not envelopes[11].
-      // Release the exact voice identity created by Note On. This remains
-      // correct even if CLMP is toggled while a key is held.
-      extern int16_t midiHeldCh11SoundNote[128];
-      int note = (int)midiHeldCh11SoundNote[pitch];
-      stopSound(note, 0);
+      // Arp owns the sounding voice while keys are down; don't kill it on each
+      // key-off. Non-arp: release the exact voice identity created by Note On.
+      extern bool synthMidiArpEnabled(int ch);
+      if (!synthMidiArpEnabled(11)) {
+        extern int16_t midiHeldCh11SoundNote[128];
+        int note = (int)midiHeldCh11SoundNote[pitch];
+        stopSound(note, 0);
+      }
       if (pressedKeyCount[11] == 0) {
         persistentNoteOn[11] = false;
         noteOnTriggered[11] = false;
+        extern void midiArpResetVoice(int ch);
+        midiArpResetVoice(11);
       }
     } else if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
       if (channel == 13 || channel == 14) {
-        stopSynthChannel(channel);
+        extern void midiArpResetVoice(int ch);
+        midiArpResetVoice(channel);
       } else if (envelopes[channel]) {
         envelopes[channel]->noteOff();
         persistentNoteOn[channel] = false;

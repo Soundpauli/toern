@@ -24,6 +24,7 @@ static const CRGB filterColors[5][4] = {
     CHSV(130, 255, 255)   // Blue-Green
   },
 
+  // ─── Page 3: ADSR — violet
   {
     CHSV(220, 255, 255),  // Indigo Violet
     CHSV(235, 255, 255),  // Purple
@@ -31,12 +32,12 @@ static const CRGB filterColors[5][4] = {
     CHSV(255, 255, 150)   // Fuchsia
   },
 
-  // ─── Page 4: WHITE for all sliders
+  // ─── Page 4: LFO R · LFO D · SPAN · ARP
   {
-    CRGB(255,255,255),
-    CRGB(255,255,255),
-    CRGB(255,255,255),
-    CRGB(255,255,255)
+    CHSV(42, 255, 255),   // Gold
+    CHSV(22, 255, 255),   // Amber
+    CHSV(96, 255, 255),   // Chartreuse
+    CHSV(224, 255, 255)   // Magenta
   }
 };
 

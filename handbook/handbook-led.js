@@ -531,7 +531,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
    * while you are turning the corresponding encoder. */
   const FILTER_PAGES = [
     { letters: ["H", "L", "R", "B"], vals: [18, 14, 22, 10], names: ["HCUT", "LCUT", "RVRB", "BITC"] },
-    { letters: ["C", "R", "F", "" ], vals: [16, 20, 12,  0], names: ["CHRS", "RESO", "FLNG", ""    ] },
+    { letters: ["C", "R", "F", "" ], vals: [16, 20, 12,  0], names: ["CUT", "RES", "FLT", ""    ] },
     { letters: ["W", "I", "C", "S"], vals: [10, 14, 18, 12], names: ["WAVE", "INST", "CTOF", "SHAP"] },
     { letters: ["A", "D", "S", "R"], vals: [20, 16, 14, 24], names: ["ATCK", "DECY", "SUST", "RELS"] }
   ];
@@ -910,7 +910,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     filter_p2(m) { drawFilterPageScene(m, 2); },
     filter_p3(m) { drawFilterPageScene(m, 3); },
     filter_p0_named(m) { drawFilterPageEditScene(m, 0, 1); /* LCUT */ },
-    filter_p1_named(m) { drawFilterPageEditScene(m, 1, 1); /* RESO */ },
+    filter_p1_named(m) { drawFilterPageEditScene(m, 1, 1); /* RES */ },
     filter_p1_sample_named(m) { drawFilterPageEditScene(m, 1, 3, FILTER_PAGE_SAMPLE_1); /* TIME */ },
     filter_p2_named(m) { drawFilterPageEditScene(m, 2, 1); /* INST */ },
     filter_p3_named(m) { drawFilterPageEditScene(m, 3, 2); /* SUST */ },

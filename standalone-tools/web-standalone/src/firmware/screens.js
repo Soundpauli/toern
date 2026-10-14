@@ -538,7 +538,7 @@ export function drawFilter(matrix, s, now) {
     let tx = Math.floor((COLS - width + 1) / 2);
     if (tx < 1) tx = 1;
     matrix.drawText(spec.name, tx, 12, pageColors[focus]);
-    const bipolarKeys = new Set(["detune", "oct", "cent", "semi"]);
+    const bipolarKeys = new Set(["detune", "oct", "cent", "semi", "arp"]);
     let label;
     if (spec.key === "wave") label = WAVE_NAMES[val] || String(val);
     else if (spec.key === "inst") label = INST_NAMES[val] || String(val);

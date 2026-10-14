@@ -118,7 +118,7 @@
               <div class="hb-tip"><strong>Pitch vs TIME:</strong> OCTV/DTNE change playback rate (pitch). TIME stretches duration around the current pitch. Leave TIME at 11 unless you want that smear.</div>
             </article>
 
-            <h3 class="hb-subsection-heading">Page 1 — synth voices: CHRS · RESO · FLNG</h3>
+            <h3 class="hb-subsection-heading">Page 1 — synth voices: CUT · RES · FLT</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -126,7 +126,7 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p1" width="640" height="320" role="img" aria-label="Filter page 1 synth — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Letters <strong>C · R · F</strong> — column 4 is empty on this page (poly / mono synth lanes).</p>
+                  <p class="viz-caption--below">Letters <strong>C · R · F</strong> — column 4 is empty. Same page on voices 11, 13, and 14.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
@@ -139,9 +139,9 @@
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>C</strong></td><td>CHRS</td><td>Chorus depth — adds a detuned doubled copy of the voice.</td><td>0–32</td></tr>
-                  <tr><td><strong>R</strong></td><td>RESO</td><td>Filter resonance peak around the cutoff frequency.</td><td>0.7 – 5.0 (numeric value in firmware)</td></tr>
-                  <tr><td><strong>F</strong></td><td>FLNG</td><td>Flanger amount — short modulated delay.</td><td>0–32</td></tr>
+                  <tr><td><strong>C</strong></td><td>CUT</td><td>Filter cutoff. Voice 11: poly ladder. Voices 13/14: the SVF (tied to HCUT).</td><td>0–32</td></tr>
+                  <tr><td><strong>R</strong></td><td>RES</td><td>Filter resonance around the cutoff.</td><td>0–32</td></tr>
+                  <tr><td><strong>F</strong></td><td>FLT</td><td>Filter amount. Voice 11: ladder filter-envelope depth. Voices 13/14: SVF octaveControl.</td><td>0–32</td></tr>
                 </tbody>
               </table>
             </article>
@@ -264,12 +264,13 @@
             <h3 class="hb-subsection-heading">Voice 11 — 3-voice polyphonic synth</h3>
             <p>Three oscillators per voice, three voices of polyphony, ten instrument presets in a single ROM-style table (<strong>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</strong>). Each preset bundles a waveshape recipe, envelope curve, and filter envelope amount. Independent ADSR per voice, independent filter envelope per voice, per-voice pan, gain, waveform, fine pitch (cents), and coarse pitch (semitones).</p>
             <p>Selecting an instrument loads its matching filter, register, waveform, and ADSR defaults. The presets deliberately cover different roles: PAD and WOW swell, ORG uses clean drawbar-style harmonics, FLT is breathy, LEAD is a square-forward pluck, ARP is a tight pulse stack, and BRSS uses a darker saw body with a slower filter bloom. You can edit the loaded values immediately; saved projects retain those edits.</p>
+            <p>A fifth filter page matches voices 13/14: <strong>LFO R · LFO D · SPAN · ARP</strong>. The LFO runs on the shared SVF and the poly ladders (cutoff + resonance). ARP is MIDI-hold only and does not transpose notes already on the grid.</p>
 
             <h3 class="hb-subsection-heading">Voices 13 &amp; 14 — 2-oscillator mono synths</h3>
             <p>Two oscillators each, full ADSR. Filter page&nbsp;0 swaps <strong>RVRB</strong> for <strong>CENT</strong> (coarse pitch) in the third column — there is no reverb send on these lanes. They add two performance modulators:</p>
             <ul>
-              <li><strong>LFO</strong> — rate 0–2 Hz, depth 0–100%, applied to filter frequency for that voice.</li>
-              <li><strong>Arpeggiator</strong> — step 0–12 semitones, span 2–16 steps, ping-pong pattern. Independent per channel.</li>
+              <li><strong>LFO</strong> — rate 0.25–10 Hz (0 = off), depth 0–100%. Sweep is wide (±6 octaves at full depth) on cutoff and resonance. Independent of SPAN/ARP.</li>
+              <li><strong>Arpeggiator</strong> — MIDI hold only. Encoder centre (16) is off. Above centre: 16th-note arp; below centre: 8th-note arp. Amount is the distance from centre (interval). Grid notes play as written. In SINGLE while playing, each arp hit is recorded at its sounded pitch.</li>
             </ul>
             <p>Waveforms include sine, sawtooth, square, and triangle. These channels are great for basslines and lead lines where polyphony is unnecessary.</p>
             <p>Normal sequencer notes retrigger their envelope. To connect adjacent notes on voices 11, 13, or 14, mark the <em>destination</em> note <strong>G/L</strong> in note detail: repeating the same pitch holds the existing envelope, while a different pitch retunes the active voice without restarting it. G/L without an adjacent source attacks normally; a gap ends the phrase. No separate R/T setting is needed because every non-G/L note already retriggers.</p>

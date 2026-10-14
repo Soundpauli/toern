@@ -254,14 +254,14 @@
         { id: "mr", l: "Smixer2", s: "R  pan×vol×0.33", k: "mix", c: 1, r: 2 },
         { id: "ld", l: "Sladder1/2", s: "filter env in1", k: "fx", c: 2, r: 1 },
         { id: "se", l: "Senvelope", s: "×3 voices", k: "env", c: 3, r: 1 },
-        { id: "lr", l: "SmixerL4 / R4", s: "in 0–2  gain 1.0", k: "mix", c: 4, r: 1 },
+        { id: "lr", l: "SmixerL4 / R4", s: "in 0–2  gain 0.55", k: "mix", c: 4, r: 1 },
         { id: "ch", l: "CHMixer11", s: "L 0.50  R 0.50", k: "mix", c: 5, r: 1 },
         { id: "mw", l: "mixer_waveform11", s: "in3=1  in0–2=0", k: "mix", c: 6, r: 1 },
         { id: "dead", l: "waveform11_1/2", s: "muted leftovers", k: "mute", c: 6, r: 0 },
         { id: "bc", l: "bitcrusher11", s: "then amp11", k: "fx", c: 7, r: 1 },
         { id: "svf", l: "filter11", s: "filtermixer11", k: "fx", c: 8, r: 1 },
         { id: "fv", l: "freeverb11", s: "wet send", k: "fx", c: 8, r: 0 },
-        { id: "sm", l: "synthmixer11", s: "in0 wet  in3 dry 0.20", k: "mix", c: 9, r: 1 },
+        { id: "sm", l: "synthmixer11", s: "in0 wet  in3 dry 0.72", k: "mix", c: 9, r: 1 },
         { id: "se2", l: "mixersynth_end", s: "in0 = 0.80", k: "bus", c: 10, r: 1 }
       ],
       edges: [
@@ -282,7 +282,7 @@
         { from: "bc", to: "svf" },
         { from: "svf", to: "fv", label: "wet" },
         { from: "fv", to: "sm", label: "in0 ×RVRB" },
-        { from: "svf", to: "sm", label: "in3 0.20" },
+        { from: "svf", to: "sm", label: "in3 0.72" },
         { from: "sm", to: "se2" }
       ]
     },

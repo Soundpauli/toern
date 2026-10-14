@@ -953,6 +953,16 @@ void finalizeWavHeader(File &file, uint32_t dataSize) {
   file.seek(44 + dataSize);
 }
 
+// REC input monitor into mixer_end in3. VOL>SPKR on → always 0 (speaker+mic/line feedback).
+float recInputMonitorGain() {
+  if (getSpkrEnabled()) return 0.0f;
+  const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;
+  if (recMode == 1) {
+    return mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
+  }
+  return mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
+}
+
 void startRecordingRAM() {
   if (isRecording) return;
 
@@ -974,27 +984,7 @@ void startRecordingRAM() {
   FastLEDshow();
   isRecording = true;
   
-  // Enable audio input monitoring using VOL menu input level settings
-  extern int recMode;
-  extern unsigned int lineInLevel;  // From VOL menu (0-15)
-  extern unsigned int micGain;      // From VOL menu (0-63)
-  extern AudioMixer4 mixer_end;
-  extern bool getSpkrEnabled();
-  
-  float monitorGain = 0.0f;
-  const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
-  if (recMode == 1) {
-    // Mic input: if SPKR is on, disable monitor path to avoid feedback while recording.
-    if (getSpkrEnabled()) {
-      monitorGain = 0.0f;
-    } else {
-      monitorGain = mapf(micGain, 0, 63, 0.0f, maxPlaybackGain);
-    }
-  } else {
-    // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain)
-    monitorGain = mapf(lineInLevel, 0, 15, 0.0f, maxPlaybackGain);
-  }
-  mixer_end.gain(3, monitorGain);
+  mixer_end.gain(3, recInputMonitorGain());
 }
 
 void flushAudioQueueToRAM2() {
@@ -1138,27 +1128,7 @@ void startFastRecord() {
   // Red border is armed + shown from main loop before this runs.
   // Do not FastLED.show() here — ON1 starts from the playNote ISR.
   
-  // Enable audio input monitoring using VOL menu input level settings
-  extern int recMode;
-  extern unsigned int lineInLevel;  // From VOL menu (0-15)
-  extern unsigned int micGain;      // From VOL menu (0-63)
-  extern AudioMixer4 mixer_end;
-  extern bool getSpkrEnabled();
-  
-  float monitorGain = 0.0;
-  const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
-  if (recMode == 1) {
-    // Mic input: if SPKR is on, disable monitor path to avoid feedback while recording.
-    if (getSpkrEnabled()) {
-      monitorGain = 0.0f;
-    } else {
-      monitorGain = mapf(micGain, 0, 63, 0.0, maxPlaybackGain);
-    }
-  } else {
-    // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
-    monitorGain = mapf(lineInLevel, 0, 15, 0.0, maxPlaybackGain);
-  }
-  mixer_end.gain(3, monitorGain);
+  mixer_end.gain(3, recInputMonitorGain());
 
   //Serial.printf("FAST RECORD ▶ ch%u (dropping %d blocks)\n", ch, FAST_DROP_BLOCKS);
 }
@@ -3917,7 +3887,7 @@ FLASHMEM void startNew() {
       SMP.synth_settings[ch][LFO_RATE] = 0;
       SMP.synth_settings[ch][LFO_DEPTH] = 0;
       SMP.synth_settings[ch][LFO_PHASE] = 0;
-      SMP.synth_settings[ch][ARP_STEP] = 0;
+      SMP.synth_settings[ch][ARP_STEP] = 16;
     }
   }
   

@@ -109,9 +109,10 @@ enum SynthTypes : uint8_t {
   FORM,
   LFO_RATE,
   LFO_DEPTH,
-  LFO_PHASE,  // repurposed as ARP_SPAN control for ch13/14
+  LFO_PHASE,  // UI: SPAN — arp range only, not LFO phase
   ARP_STEP,
 };  // Define synth types
+#define ARP_SPAN LFO_PHASE
 
 enum MidiSetTypes : uint8_t {
   MIDI_IN_BOOL,
@@ -139,6 +140,8 @@ struct SliderDefEntry {
   const char **enumNames;
   uint8_t displayRange;
 };
+
+#define FILTER_PAGE_CAP 5
 
 struct Note {
   uint8_t channel;      // 0 = no note; otherwise, channel / voice id
@@ -221,6 +224,13 @@ extern void handleStart();
 #define MIX_BUS_HEADROOM (1.0f / 3.0f)  // max ~3 simultaneous sample voices per bank (ch1-4 / ch5-8)
 #define MIX_END_SAMPLES_GAIN 0.50f      // mixer_end: mixer1 + mixer2 (each bus can hit 1.0)
 #define MIX_END_SYNTH_GAIN 0.60f    // mixer_end input gain for mixersynth_end
+// ch11 poly: SmixerL4/R4 default 1.0×3 voices wraps (clicks). 0.55 keeps chords under 1.0.
+// synthmixer11 0.20 made single notes much quieter than ch13/14; GAIN SYN then clipped the bus.
+#define CH11_POLY_SUM_GAIN 0.55f
+#define CH11_SYNTHMIX_GAIN 0.72f
+#define LFO_CUTOFF_OCTAVES 6.0f
+#define LFO_RES_SWEEP 4.2f
+#define ARP_CENTER 16
 // VOL→GAIN: stored 0..20 tenths (UI 0.0–2.0), 10 = current staging (1.0×). Bus × master, so 2.0×2.0 = 4×.
 #define MIX_GAIN_UNITY 10
 #define MIX_GAIN_MAX 20
@@ -346,8 +356,16 @@ void finishSequencedSoundTick(uint32_t tick, bool hadNotes);
 void resetSequencedSynthLegato();
 void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
                         bool allowLegato, int midiPitchOverride);
+void playSynthMidi(int ch, uint8_t midiPitch, int vel, bool persistant);
 void finishSequencedMonoSynthTick(uint32_t tick, bool had13, bool had14);
 void stopSynthChannel(int ch);
+void midiArpRestart(int ch);
+void midiArpOnHeldNote(int ch);
+void midiArpResetVoice(int ch);
+bool synthMidiArpEnabled(int ch);
+void serviceSynthLfo();
+void serviceMidiArp();
+void serviceMidiArpOnPlayhead(uint16_t playedBeat);
 static inline void resetMidiPressedKeyCount11to14();
 void drawCtrlVolumeOverlay(int volume);
 void initNeoSlider();
@@ -1465,7 +1483,7 @@ static void applyVoiceAmpGainFromVol(int ch, int vol);
 static const uint8_t sliderCols[4][2] = { { 2, 3 }, { 6, 7 }, { 10, 11 }, { 14, 15 } };
 
 // For each page and slot: {arrayType, settingIndex, name}
-DMAMEM static SliderDefEntry sliderDef[NUM_CHANNELS][4][4];
+DMAMEM static SliderDefEntry sliderDef[NUM_CHANNELS][FILTER_PAGE_CAP][4];
 
 FLASHMEM void initSliderDefTemplates() {
   static const SliderDefEntry sliderDefTemplate[4][4] = {
@@ -1487,9 +1505,10 @@ FLASHMEM void initSliderDefTemplates() {
       { ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32 } }
   };
   for (int ch = 0; ch < NUM_CHANNELS; ++ch) {
-    for (int p = 0; p < 4; ++p) {
+    for (int p = 0; p < FILTER_PAGE_CAP; ++p) {
       for (int s = 0; s < 4; ++s) {
-        sliderDef[ch][p][s] = sliderDefTemplate[p][s];
+        if (p < 4) sliderDef[ch][p][s] = sliderDefTemplate[p][s];
+        else sliderDef[ch][p][s] = SliderDefEntry{ ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
       }
     }
   }
@@ -3387,12 +3406,19 @@ FLASHMEM void initSamples() {
   _samplers[7].addVoice(sound7, mixer2, 2, envelope7);
   _samplers[8].addVoice(sound8, mixer2, 3, envelope8);
 
-  // Ch11 keeps substantial polyphonic headroom here, but 0.12 made it much
-  // quieter than the sample voices. 0.20 restores about 4.4 dB while remaining
-  // half of the old 0.4 level that could clip on dense three-note voicings.
-  synthmixer11.gain(0, 0.20);
-  synthmixer11.gain(1, 0.20);
-  synthmixer11.gain(3, 0.20);
+  synthmixer11.gain(0, CH11_SYNTHMIX_GAIN);
+  synthmixer11.gain(1, 0.0f);
+  synthmixer11.gain(3, CH11_SYNTHMIX_GAIN);
+
+  // Three poly voices into L/R summers; default 1.0×3 wraps when two+ keys are held.
+  SmixerL4.gain(0, CH11_POLY_SUM_GAIN);
+  SmixerL4.gain(1, CH11_POLY_SUM_GAIN);
+  SmixerL4.gain(2, CH11_POLY_SUM_GAIN);
+  SmixerL4.gain(3, 0.0f);
+  SmixerR4.gain(0, CH11_POLY_SUM_GAIN);
+  SmixerR4.gain(1, CH11_POLY_SUM_GAIN);
+  SmixerR4.gain(2, CH11_POLY_SUM_GAIN);
+  SmixerR4.gain(3, 0.0f);
 
   // CHMixer11 collapses SmixerL4 + SmixerR4 (both stereo buses) into the mono ch11 chain.
   // Without explicit gain, default 1.0+1.0 = up to 1.98 → hard clips when all 3 oscs play.
@@ -6154,7 +6180,7 @@ void showDoRecord() {
   extern AudioAmplifier audioInputAmp;
   static bool directPassThroughActive = false;
 
-  if (previewIsPlaying && GLOB.y == 1) {
+  if (previewIsPlaying && GLOB.y == 1 && !getSpkrEnabled()) {
     // Enable direct pass-through: input → output with no additional amplification
     // Only use the set mic/line input gain from codec (already applied via sgtl5000_1)
     audioInputAmp.gain(1.0f);  // Unity gain, no additional amplification
@@ -6172,26 +6198,7 @@ void showDoRecord() {
   // Only apply if direct pass-through is not active
   // Uses VOL menu input level settings (LVL for line, MIC for mic)
   if (!directPassThroughActive) {
-    extern int recMode;
-    extern unsigned int lineInLevel;  // From VOL menu (0-15)
-    extern unsigned int micGain;      // From VOL menu (0-63)
-    extern bool getSpkrEnabled();
-
-    float monitorGain = 0.0f;
-    const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
-    if (recMode == 1) {
-      // Mic input: if SPKR is on, disable monitor path to avoid feedback while recording.
-      if (getSpkrEnabled()) {
-        monitorGain = 0.0f;
-      } else {
-        monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
-      }
-    } else {
-      // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
-      monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
-    }
-
-    mixer_end.gain(3, monitorGain);
+    mixer_end.gain(3, recInputMonitorGain());
     forcedLineMonitor = true;
   } else if (forcedLineMonitor) {
     // Disable monitoring when direct pass-through becomes active
@@ -6544,6 +6551,8 @@ void loop() {
 
   updateExternalOneBlink();
   checkMidi();  // Process MIDI early in loop for lower latency
+  serviceSynthLfo();
+  serviceMidiArp();
   // Debounced SD backup of EEPROM settings (settings.txt)
   extern void serviceSettingsBackup();
   serviceSettingsBackup();
@@ -7779,6 +7788,224 @@ void pause(bool skipSave) {
   pendingPauseSkipSave = skipSave;
 }
 
+static int arpSigned(int ch) {
+  return (int)SMP.synth_settings[ch][ARP_STEP] - ARP_CENTER;
+}
+
+bool synthMidiArpEnabled(int ch) {
+  return (ch == 11 || ch == 13 || ch == 14) && arpSigned(ch) != 0;
+}
+
+static bool arpUsesEighths(int ch) {
+  return arpSigned(ch) < 0;
+}
+
+static int arpPingPongIndex(uint32_t step, int spanSteps) {
+  if (spanSteps < 2) spanSteps = 2;
+  int upPeak = spanSteps - 1;
+  int period = upPeak * 2;
+  int phasePos = (int)(step % (uint32_t)period);
+  return (phasePos > upPeak) ? (period - phasePos) : phasePos;
+}
+
+static int arpSpanSteps(int ch) {
+  int spanSteps = (int)lroundf(mapf(SMP.synth_settings[ch][ARP_SPAN], 0,
+                                    maxfilterResolution, 2.0f, 16.0f));
+  if (spanSteps < 2) spanSteps = 2;
+  return spanSteps;
+}
+
+static uint16_t midiArpLastBeat[15] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+                                        0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+                                        0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
+static unsigned long midiArpLastMs[15] = { 0 };
+static int16_t midiArpLastCh11Note = INT16_MIN;
+static bool midiArpKick[15] = { false };
+
+void midiArpResetVoice(int ch) {
+  if (ch < 0 || ch >= 15) return;
+  bool hadPhrase = (arpStepCounter[ch] != 0 || midiArpKick[ch] ||
+                    midiArpLastBeat[ch] != 0xFFFF ||
+                    (ch == 11 && midiArpLastCh11Note != INT16_MIN));
+  arpStepCounter[ch] = 0;
+  midiArpLastBeat[ch] = 0xFFFF;
+  midiArpLastMs[ch] = 0;
+  midiArpKick[ch] = false;
+  if (!hadPhrase) return;
+  if (ch == 11 && midiArpLastCh11Note != INT16_MIN) {
+    stopSound(midiArpLastCh11Note, 0);
+    midiArpLastCh11Note = INT16_MIN;
+  } else if (ch == 13 || ch == 14) {
+    stopSynthChannel(ch);
+  }
+}
+
+void midiArpRestart(int ch) {
+  if (ch < 0 || ch >= 15) return;
+  arpStepCounter[ch] = 0;
+  midiArpLastBeat[ch] = 0xFFFF;
+  midiArpLastMs[ch] = 0;
+  midiArpKick[ch] = true;
+}
+
+void midiArpOnHeldNote(int ch) {
+  if (ch < 0 || ch >= 15) return;
+  if (pressedKeyCount[ch] == 1 || arpStepCounter[ch] <= 1) midiArpRestart(ch);
+}
+
+static void midiArpFireChannel(int ch) {
+  extern int collectHeldMidiNotes(int ch, uint8_t *pitches, uint8_t *vels, int maxN);
+  extern uint8_t midiPitchToGridRow(int channel, uint8_t pitch);
+  extern bool MIDI_WRITE_OVERWRITE;
+
+  uint8_t pitches[16];
+  uint8_t vels[16];
+  int nHeld = collectHeldMidiNotes(ch, pitches, vels, 16);
+  if (nHeld <= 0) return;
+
+  // Held pitches are collected low→high. Step 0 is always the lowest tone.
+  int reflected = arpPingPongIndex(arpStepCounter[ch]++, arpSpanSteps(ch));
+  int midiPitch = pitches[0];
+  uint8_t vel = vels[0];
+  if (nHeld >= 2) {
+    int idx = reflected % nHeld;
+    midiPitch = (int)pitches[idx] + 12 * (reflected / nHeld);
+    vel = vels[idx];
+  } else {
+    int mag = abs(arpSigned(ch));
+    float arpSemis = mapf((float)mag, 1.0f, (float)ARP_CENTER, 1.0f, 12.0f);
+    midiPitch = (int)pitches[0] + (int)lroundf((float)reflected * arpSemis);
+  }
+  midiPitch = constrain(midiPitch, 0, 127);
+  if (ch == 11) {
+    extern bool MIDI_NOTE_CLAMP;
+    extern int voiceSelect;
+    const bool preservePitch = !MIDI_NOTE_CLAMP && voiceSelect != 2;
+    int noteValue = 12 * (int)octave[0] + transpose;
+    noteValue += preservePitch ? (midiPitch - 60)
+                               : ((int)midiPitchToGridRow(11, (uint8_t)midiPitch) - 1);
+    if (midiArpLastCh11Note != INT16_MIN) stopSound(midiArpLastCh11Note, 0);
+    playSound(noteValue, 0, vel);
+    midiArpLastCh11Note = (int16_t)noteValue;
+  } else {
+    playSynthMidi(ch, (uint8_t)midiPitch, vel, true);
+  }
+
+  if (isNowPlaying && GLOB.singleMode) {
+    uint8_t row = midiPitchToGridRow(ch, (uint8_t)midiPitch);
+    placeLiveGridNote((uint8_t)ch, row, vel, (uint8_t)midiPitch, false,
+                      !MIDI_WRITE_OVERWRITE);
+  }
+}
+
+void serviceSynthLfo() {
+  static bool lfoWasOn[15] = { false };
+  extern uint16_t cutoff[2][3];
+  extern float resonance[2][3];
+  for (int ch = 11; ch <= 14; ch++) {
+    if (ch == 12 || !filters[ch]) continue;
+    float rateHz = 0.0f;
+    if (SMP.synth_settings[ch][LFO_RATE] > 0) {
+      rateHz = mapf(SMP.synth_settings[ch][LFO_RATE], 1, maxfilterResolution,
+                    0.25f, 10.0f);
+    }
+    float depth = mapf(SMP.synth_settings[ch][LFO_DEPTH], 0, maxfilterResolution,
+                       0.0f, 1.0f);  // 1.0 = ±LFO_CUTOFF_OCTAVES around cutoff
+    bool on = (rateHz > 0.0f && depth > 0.0f);
+    float lcut = SMP.filter_settings[ch][LOWCUT];
+    float baseHz;
+    if (lcut > 0.0f) {
+      baseHz = mapf(constrain(lcut, 1.0f, (float)maxfilterResolution), 1.0f,
+                    (float)maxfilterResolution, 40.0f, 2500.0f);
+    } else {
+      baseHz = mapf(SMP.filter_settings[ch][HCUT], 0, maxfilterResolution,
+                    281.25f, 10000.0f);
+    }
+    float baseRes = mapf(SMP.filter_settings[ch][RES], 0, maxfilterResolution,
+                         0.7f, 5.0f);
+    if (!on) {
+      if (lfoWasOn[ch]) {
+        filters[ch]->frequency(baseHz);
+        filters[ch]->resonance(baseRes);
+        if (ch == 11) {
+          for (int i = 0; i < 3; i++) {
+            Sladder1[i]->frequency(cutoff[0][i]);
+            Sladder1[i]->resonance(resonance[0][i]);
+            Sladder2[i]->frequency(cutoff[0][i]);
+            Sladder2[i]->resonance(resonance[0][i]);
+          }
+        }
+        lfoWasOn[ch] = false;
+      }
+      continue;
+    }
+    float lfo = sinf((float)millis() * rateHz * 0.0062831853f);
+    float modHz = baseHz * powf(2.0f, lfo * depth * LFO_CUTOFF_OCTAVES);
+    filters[ch]->frequency(constrain(modHz, 10.0f, 12000.0f));
+    float modRes = baseRes + lfo * depth * LFO_RES_SWEEP;
+    filters[ch]->resonance(constrain(modRes, 0.7f, 5.0f));
+    if (ch == 11) {
+      for (int i = 0; i < 3; i++) {
+        float ladHz = (float)cutoff[0][i] * powf(2.0f, lfo * depth * LFO_CUTOFF_OCTAVES);
+        float ladRes = resonance[0][i] + lfo * depth * LFO_RES_SWEEP;
+        Sladder1[i]->frequency(constrain(ladHz, 10.0f, 12000.0f));
+        Sladder1[i]->resonance(constrain(ladRes, 0.0f, 5.0f));
+        Sladder2[i]->frequency(constrain(ladHz, 10.0f, 12000.0f));
+        Sladder2[i]->resonance(constrain(ladRes, 0.0f, 5.0f));
+      }
+    }
+    lfoWasOn[ch] = true;
+  }
+}
+
+void serviceMidiArpOnPlayhead(uint16_t playedBeat) {
+  for (int ch = 11; ch <= 14; ch++) {
+    if (ch == 12) continue;
+    if (!synthMidiArpEnabled(ch) || pressedKeyCount[ch] <= 0) {
+      midiArpResetVoice(ch);
+      continue;
+    }
+    const bool eighths = arpUsesEighths(ch);
+    if (eighths && (playedBeat % 2u) == 0 && !midiArpKick[ch]) continue;
+    uint16_t grid = eighths ? (uint16_t)((playedBeat + 1u) / 2u) : playedBeat;
+    if (grid == midiArpLastBeat[ch] && !midiArpKick[ch]) continue;
+    midiArpLastBeat[ch] = grid;
+    midiArpKick[ch] = false;
+    midiArpFireChannel(ch);
+  }
+}
+
+void serviceMidiArp() {
+  unsigned long now = millis();
+  float bpm = (SMP.bpm > 0.0f) ? SMP.bpm : 100.0f;
+
+  for (int ch = 11; ch <= 14; ch++) {
+    if (ch == 12) continue;
+    if (!synthMidiArpEnabled(ch) || pressedKeyCount[ch] <= 0) {
+      midiArpResetVoice(ch);
+      continue;
+    }
+
+    if (isNowPlaying) {
+      if (!midiArpKick[ch]) continue;
+      const bool eighths = arpUsesEighths(ch);
+      uint16_t b = sequencerRecordBeat;
+      midiArpLastBeat[ch] = eighths ? (uint16_t)((b + 1u) / 2u) : b;
+      midiArpKick[ch] = false;
+      midiArpFireChannel(ch);
+      continue;
+    }
+
+    const bool eighths = arpUsesEighths(ch);
+    unsigned long stepMs = (unsigned long)lroundf(60000.0f / (bpm * (eighths ? 2.0f : 4.0f)));
+    if (stepMs < 20) stepMs = 20;
+    if ((now - midiArpLastMs[ch]) < stepMs && !midiArpKick[ch]) continue;
+    midiArpKick[ch] = false;
+    midiArpLastMs[ch] = now;
+    midiArpFireChannel(ch);
+  }
+}
+
 static void playSynthInternal(int ch, int b, int vel, bool persistant,
                               bool legato, int midiPitchOverride) {
   if (isChildVoiceDisabled(ch)) return;
@@ -7812,19 +8039,6 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
   float centSemis = mapf(SMP.synth_settings[ch][CENT], 0, maxfilterResolution, -24.0f, 24.0f);
   float cent_ratio = pow(2.0, centSemis / 12.0);
 
-  // Simple LFO: rate (0..32 -> 0..2 Hz), depth (0..32 -> 0..100% modulation), phase fixed at 0 (PHSE repurposed for ARP span)
-  float lfoRateHz = mapf(SMP.synth_settings[ch][LFO_RATE], 0, maxfilterResolution, 0.0f, 2.0f);
-  float lfoDepthPct = mapf(SMP.synth_settings[ch][LFO_DEPTH], 0, maxfilterResolution, 0.0f, 1.0f);  // 0..1
-  float lfoPhase = 0.0f;
-  float lfo_ratio = 1.0f;  // neutral by default (bypass when depth==0 or rate==0)
-  if (lfoRateHz > 0.0f && lfoDepthPct > 0.0f) {
-    float t = (float)millis() * lfoRateHz * 0.0062831853f;  // 2*pi/1000
-    float lfo = sinf(lfoPhase + t);
-    // Convert depth to linear multiplier around 1.0 (e.g., 0.5 depth -> +/-50%)
-    lfo_ratio = 1.0f + (lfo * lfoDepthPct);
-    if (lfo_ratio < 0.1f) lfo_ratio = 0.1f;  // avoid negative/zero freq
-  }
-
   // Global cent shift for both oscillators (0..32 -> -24..+24 semitones)
   float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
   float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
@@ -7832,45 +8046,10 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
   // For example, an OCTAVE value of 1 multiplies frequency by 2, -1 divides by 2.
   int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
   float octave_ratio = pow(2.0, octave_shift);
-  // Apply adjustments to the base frequency (cent only; LFO goes to filter instead)
-  // Arp: map ARP_STEP (0..32) to up to 12 semitones, ping-pong pattern with span set by LFO_PHASE (repurposed)
-  float arpOffsetSemis = 0.0f;
-  if (SMP.synth_settings[ch][ARP_STEP] > 0) {
-    float arpSemis = mapf(SMP.synth_settings[ch][ARP_STEP], 0, maxfilterResolution, 0.0f, 12.0f);
-    int spanSteps = (int)round(mapf(SMP.synth_settings[ch][LFO_PHASE], 0, maxfilterResolution, 2.0f, 16.0f));  // 2..16 steps
-    if (spanSteps < 2) spanSteps = 2;
-    int upPeak = spanSteps - 1;
-    int period = (upPeak > 0) ? (upPeak * 2) : 1;
-    uint32_t step = arpStepCounter[ch]++;
-    int phasePos = (period > 0) ? (step % period) : 0;
-    int reflected = (phasePos > upPeak) ? (period - phasePos) : phasePos;
-    arpOffsetSemis = (float)reflected * arpSemis;
-  }
-  float arp_ratio = pow(2.0f, arpOffsetSemis / 12.0f);
 
-  float base = frequency * cent_ratio * arp_ratio;
+  float base = frequency * cent_ratio;
   synths[ch][0]->frequency(base);
   synths[ch][1]->frequency(base * octave_ratio * detune_ratio);
-
-  // Apply LFO to filter frequency instead of pitch (channels 13/14 only)
-  if (ch == 13 || ch == 14) {
-    if (filters[ch]) {
-      // SVF cutoff: LCUT>0 is highpass Hz, else HCUT lowpass Hz.
-      float lcut = SMP.filter_settings[ch][LOWCUT];
-      float baseFreqHz;
-      if (lcut > 0.0f) {
-        baseFreqHz = mapf(constrain(lcut, 1.0f, (float)maxfilterResolution), 1.0f, (float)maxfilterResolution, 40.0f, 2500.0f);
-      } else {
-        baseFreqHz = mapf(SMP.filter_settings[ch][HCUT], 0, maxfilterResolution, 281.25f, 10000.0f);
-      }
-      float modFreq = baseFreqHz;
-      if (lfo_ratio != 1.0f) {
-        modFreq = baseFreqHz * lfo_ratio;
-        modFreq = constrain(modFreq, 10.0f, 12000.0f);
-      }
-      filters[ch]->frequency(modFreq);
-    }
-  }
   synths[ch][0]->amplitude(WaveFormVelocity);
   synths[ch][1]->amplitude(WaveFormVelocity);
   if (!envelopes[ch]) return;
@@ -8035,6 +8214,7 @@ void playNote() {
         (uint32_t)max(1.0, playNoteInterval);
   }
   sequencerRecordStepStartedUs = recordStepNowUs;
+  serviceMidiArpOnPlayhead((uint16_t)beat);
 
   // Handle count-in pending: wait for next beat 1 (full bar) before starting count-in
   if (countInPending && isNowPlaying) {
@@ -9895,7 +10075,7 @@ FLASHMEM void loadWav() {
 
 // Helper: map (arr, idx) to (page, slot)
 bool findSliderDefPageSlot(int chan, SettingArray arr, int8_t idx, int &page, int &slot) {
-  for (int p = 0; p < 4; ++p) {
+  for (int p = 0; p < FILTER_PAGE_CAP; ++p) {
     for (int s = 0; s < 4; ++s) {
       if (sliderDef[chan][p][s].arr == arr && sliderDef[chan][p][s].idx == idx) {
         page = p;
@@ -9928,7 +10108,7 @@ void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int va
 }
 
 // Add an array to define how many filter pages to render for each channel
-const uint8_t filterPageCount[NUM_CHANNELS] = { 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 4, 0, 4, 4, 0 };  // ch13/14 have 4 pages (LFO/ARP page) (const = flash)
+const uint8_t filterPageCount[NUM_CHANNELS] = { 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 5, 0, 5, 5, 0 };  // ch11/13/14: CRF + LFO/ARP
 // ... existing code ...
 // (If you want to be explicit for all channels, you can do: {4,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4})
 // ... existing code ...
@@ -9953,7 +10133,7 @@ void setSliderDefForChannel(int channel) {
         { ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32 } }
     };
     // Clear all pages first to avoid stale data in unused slots
-    for (int p = 0; p < 4; ++p) {
+    for (int p = 0; p < FILTER_PAGE_CAP; ++p) {
       for (int s = 0; s < 4; ++s) {
         sliderDef[channel][p][s] = channel <= 3
             ? SliderDefEntry{ ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 }
@@ -9968,7 +10148,19 @@ void setSliderDefForChannel(int channel) {
     }
     return;
   }
-// Channel 13 and 14: custom 3 pages
+
+  static const SliderDefEntry lfoArpPage[4] = {
+    { ARR_SYNTH, LFO_RATE, "LFO R", 32, DISPLAY_NUMERIC, nullptr, 32 },
+    { ARR_SYNTH, LFO_DEPTH, "LFO D", 32, DISPLAY_NUMERIC, nullptr, 32 },
+    { ARR_SYNTH, LFO_PHASE, "SPAN", 32, DISPLAY_NUMERIC, nullptr, 32 },
+    { ARR_SYNTH, ARP_STEP, "ARP", 32, DISPLAY_NUMERIC, nullptr, 32 }
+  };
+
+  if (channel == 11) {
+    memcpy(sliderDef[channel][4], lfoArpPage, sizeof(lfoArpPage));
+    return;
+  }
+
   if (channel == 13 || channel == 14) {
     static const SliderDefEntry ch13_14Template[4][4] = {
       { { ARR_FILTER, HCUT, "HCUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -9976,26 +10168,25 @@ void setSliderDefForChannel(int channel) {
         // Use CENT (synth) instead of REVERB to shift oscillators up/down
         { ARR_SYNTH, CENT, "CENT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, BITCRUSHER, "BITC", 32, DISPLAY_NUMERIC, nullptr, 32 } },
-      { { ARR_FILTER, RES, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
+      { { ARR_SYNTH, CUTOFF, "CUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_SYNTH, RESONANCE, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_SYNTH, FILTER, "FLT", 32, DISPLAY_NUMERIC, nullptr, 32 },
+        { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 } },
+      { { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_FILTER, FILTER_WAVEFORM, "WAVE", 16, DISPLAY_ENUM, waveformNames, 4 } },
+        { ARR_FILTER, FILTER_WAVEFORM, "WAVE", 16, DISPLAY_ENUM, waveformNames, 4 },
+        { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 } },
       { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_PARAM, DECAY, "DCAY", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_PARAM, SUSTAIN, "SUST", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32 } },
-      { { ARR_SYNTH, LFO_RATE, "LFO R", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_SYNTH, LFO_DEPTH, "LFO D", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_SYNTH, LFO_PHASE, "SPAN", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_SYNTH, ARP_STEP, "ARP", 32, DISPLAY_NUMERIC, nullptr, 32 } }
+        { ARR_PARAM, RELEASE, "RLSE", 32, DISPLAY_NUMERIC, nullptr, 32 } }
     };
-    // Clear all 4 pages first
     memset(sliderDef[channel], 0, sizeof(sliderDef[channel]));
-    // Copy 4 pages
     memcpy(sliderDef[channel][0], ch13_14Template[0], sizeof(ch13_14Template[0]));
     memcpy(sliderDef[channel][1], ch13_14Template[1], sizeof(ch13_14Template[1]));
     memcpy(sliderDef[channel][2], ch13_14Template[2], sizeof(ch13_14Template[2]));
     memcpy(sliderDef[channel][3], ch13_14Template[3], sizeof(ch13_14Template[3]));
+    memcpy(sliderDef[channel][4], lfoArpPage, sizeof(lfoArpPage));
     return;
   }
 }

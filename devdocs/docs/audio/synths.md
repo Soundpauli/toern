@@ -14,11 +14,13 @@ Synth code lives mainly in [`toern_synths.ino`](https://github.com/Soundpauli/to
 - Multi-oscillator stacks per voice (`Swaveform*`, mixers, ladder filters, envelopes)
 - Instrument presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS
 - Preset application: `applySynthInstrumentPreset` / `*_synth(...)` helpers
+- Fifth filter page: LFO (cutoff/res on SVF + ladders) and MIDI arpeggiator (same rules as 13–14)
 
 ## Channels 13–14 — mono
 
 - Dual oscillators each (`waveform13_*`, `waveform14_*`)
-- ADSR, LFO, arpeggiator parameters in synth/filter setting tables
+- ADSR; LFO (rate/depth) continuously modulates cutoff and resonance
+- MIDI arpeggiator (ARP step + SPAN): holds while Note On is down; does not transpose sequencer/grid notes; SINGLE record writes the sounded pitches
 - Each has its own crush/filter path; neither mono synth has a reverb send
 
 ## Voice lifecycle

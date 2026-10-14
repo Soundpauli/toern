@@ -631,6 +631,9 @@ void updateVals(int ch) {
     return;  // Invalid channel, skip to prevent array out-of-bounds access
   }
 
+  static uint8_t begunType[POLY_VOICES][3] = {
+    { 255, 255, 255 }, { 255, 255, 255 }, { 255, 255, 255 }
+  };
   for (int i = 0; i < POLY_VOICES; i++) {
     // Update amplitude envelopes
     Senvelope1[i]->attack(attackAmp[ch][i]);
@@ -649,15 +652,17 @@ void updateVals(int ch) {
     SenvelopeFilter1[i]->sustain(sustainFilter[ch][i]);
     SenvelopeFilter1[i]->release(releaseFilter[ch][i]);
 
-    Swaveform1[i]->begin(synthWaveformBeginType(ch, 0));
+    uint8_t wf0 = synthWaveformBeginType(ch, 0);
+    uint8_t wf1 = synthWaveformBeginType(ch, 1);
+    uint8_t wf2 = synthWaveformBeginType(ch, 2);
+    // begin() resets phase — only when the waveform type actually changes.
+    if (begunType[i][0] != wf0) { Swaveform1[i]->begin(wf0); begunType[i][0] = wf0; }
+    if (begunType[i][1] != wf1) { Swaveform2[i]->begin(wf1); begunType[i][1] = wf1; }
+    if (begunType[i][2] != wf2) { Swaveform3[i]->begin(wf2); begunType[i][2] = wf2; }
     Swaveform1[i]->amplitude(1.0);
     Swaveform1[i]->pulseWidth(pulseWidth[ch][0]);
-
-    Swaveform2[i]->begin(synthWaveformBeginType(ch, 1));
     Swaveform2[i]->amplitude(1.0);
     Swaveform2[i]->pulseWidth(pulseWidth[ch][1]);
-
-    Swaveform3[i]->begin(synthWaveformBeginType(ch, 2));
     Swaveform3[i]->amplitude(1.0);
     Swaveform3[i]->pulseWidth(pulseWidth[ch][2]);
 
@@ -718,6 +723,12 @@ static void applySynthWaveformControl(int instrument, int ch,
   updateVals(ch);
 }
 
+static void releasePolyVoice(int voiceIdx) {
+  Senvelope1[voiceIdx]->noteOff();
+  Senvelope2[voiceIdx]->noteOff();
+  SenvelopeFilter1[voiceIdx]->noteOff();
+}
+
 // Modify playSound() so that when a note is played, you store its start time.
 void playSound(int note, int ch, int velocity) {
   // Bounds check: ch must be 0 or 1 (INSTRUMENT_CHANNELS = 2)
@@ -727,10 +738,36 @@ void playSound(int note, int ch, int velocity) {
   extern void sidechainOnVoice(uint8_t);
   sidechainOnVoice(11);
 
-  stopSound(note, ch);
-  // Use current slot first, then advance (was: increment before use → first notes skipped voice 0).
-  int voiceIdx = notePlaying[ch] % POLY_VOICES;
-  notePlaying[ch] = (notePlaying[ch] + 1) % POLY_VOICES;
+  int voiceIdx = -1;
+  for (int voice = 0; voice < POLY_VOICES; voice++) {
+    if (noteArray[ch][voice] == note) {
+      voiceIdx = voice;
+      break;
+    }
+  }
+  if (voiceIdx < 0) {
+    for (int voice = 0; voice < POLY_VOICES; voice++) {
+      if (noteArray[ch][voice] == NOTE_EMPTY) {
+        voiceIdx = voice;
+        break;
+      }
+    }
+  }
+  if (voiceIdx < 0) {
+    unsigned long oldest = 0xFFFFFFFFUL;
+    for (int voice = 0; voice < POLY_VOICES; voice++) {
+      if (voiceStartTime[ch][voice] <= oldest) {
+        oldest = voiceStartTime[ch][voice];
+        voiceIdx = voice;
+      }
+    }
+  }
+  if (voiceIdx < 0) voiceIdx = 0;
+  if (noteArray[ch][voiceIdx] != NOTE_EMPTY) {
+    releasePolyVoice(voiceIdx);
+    noteArray[ch][voiceIdx] = NOTE_EMPTY;
+  }
+  notePlaying[ch] = (voiceIdx + 1) % POLY_VOICES;
   setSoundVoice(note, ch, velocity, voiceIdx, true);
 }
 

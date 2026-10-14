@@ -116,6 +116,21 @@ void applyVoiceCuts(int index) {
   filters[index]->frequency(hz);
 }
 
+// ch13/14 CUT·RES·FLT (same letters as ch11). CUT/RES follow the SVF; FLT is
+// octaveControl amount. OCTV stays oscillator pitch only.
+void applyMonoSynthCrf(int ch) {
+  if (ch != 13 && ch != 14) return;
+  if (!filters[ch]) return;
+  uint8_t cut = (uint8_t)constrain((int)SMP.synth_settings[ch][CUTOFF], 0, (int)maxfilterResolution);
+  uint8_t reso = (uint8_t)constrain((int)SMP.synth_settings[ch][RESONANCE], 0, (int)maxfilterResolution);
+  uint8_t flt = (uint8_t)constrain((int)SMP.synth_settings[ch][FILTER], 0, (int)maxfilterResolution);
+  filterSetting(ch, HCUT) = cut;
+  filterSetting(ch, RES) = reso;
+  applyVoiceCuts(ch);
+  filters[ch]->resonance(mapf(reso, 0, maxfilterResolution, 0.7f, 5.0f));
+  filters[ch]->octaveControl(mapf(flt, 0, maxfilterResolution, 0.0f, 7.0f));
+}
+
 // Refactored: setFilters combines processFilterAdjustment and updateFilterValue
 void setFilters(FilterType filterType, int index, bool initial) {
   // Map encoder value to filter setting
@@ -146,12 +161,18 @@ void setFilters(FilterType filterType, int index, bool initial) {
     case LOWCUT:
       {
         applyVoiceCuts(index);
+        if ((index == 13 || index == 14) && filterType == HCUT) {
+          SMP.synth_settings[index][CUTOFF] = (unsigned int)filterSetting(index, HCUT);
+        }
         break;
       }
 
        case RES:
       {
         filters[index]->resonance(mappedValue);
+        if (index == 13 || index == 14) {
+          SMP.synth_settings[index][RESONANCE] = (unsigned int)filterSetting(index, RES);
+        }
         break;
       }
 
@@ -162,10 +183,8 @@ void setFilters(FilterType filterType, int index, bool initial) {
         if (index >= 1 && index <= 8) {
           int raw = constrain((int)lroundf(SMP.filter_settings[index][OCTAVE]), 0, 48);
           channelOctave[index] = (float)(raw - 24);
-        } else {
-          // For synth channels (13-14), use the original filter octave control
-          filters[index]->octaveControl(mappedValue);
         }
+        // ch13/14 OCTV is oscillator register only; FLT owns SVF octaveControl.
         break;
       }
 
@@ -223,8 +242,8 @@ void setFilters(FilterType filterType, int index, bool initial) {
             // ch11 has no freeverbmixer: wet is synthmixer11 input 0, dry is 3.
             // Scale the send with the slider; keep dry at the voice's
             // nominal gain (original never ducked ch11 dry).
-            synthmixer11.gain(0, 0.20f * verbAmount);
-            synthmixer11.gain(3, 0.20f);
+            synthmixer11.gain(0, CH11_SYNTHMIX_GAIN * verbAmount);
+            synthmixer11.gain(3, CH11_SYNTHMIX_GAIN);
           }
 
           if (wetGain > 0.01f) {

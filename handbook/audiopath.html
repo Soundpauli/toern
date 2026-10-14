@@ -38,6 +38,8 @@
                 <tr><td><span class="ap-code">MIX_END_SAMPLES_GAIN</span></td><td>0.50</td><td><span class="ap-code">mixer_end</span> in 0 and 1</td></tr>
                 <tr><td><span class="ap-code">MIX_END_SYNTH_GAIN</span></td><td>0.60 × GAIN SYN × ALL</td><td><span class="ap-code">mixer_end</span> in 2</td></tr>
                 <tr><td><span class="ap-code">GAIN_4</span></td><td>0.80</td><td><span class="ap-code">mixersynth_end</span> in 0, 2, 3</td></tr>
+                <tr><td><span class="ap-code">CH11_POLY_SUM_GAIN</span></td><td>0.55</td><td><span class="ap-code">SmixerL4/R4</span> in 0–2</td></tr>
+                <tr><td><span class="ap-code">CH11_SYNTHMIX_GAIN</span></td><td>0.72</td><td><span class="ap-code">synthmixer11</span> dry (wet × RVRB)</td></tr>
                 <tr><td><span class="ap-code">GAIN_1</span> / <span class="ap-code">GAIN_2</span> / <span class="ap-code">GAIN_3</span></td><td>0.4 / 0.8 / 0.4</td><td>Defined, unused</td></tr>
                 <tr><td>Default channel volume</td><td>16 / 16 → amp gain 1.0</td><td><span class="ap-code">amp1–8, 11, 13, 14</span></td></tr>
               </tbody>
@@ -84,8 +86,9 @@
               <tbody>
                 <tr><td>Oscillators</td><td>Always amplitude 1.0. Mix loudness is the 0.33 pan/volume law, not the leftover <span class="ap-code">waveform11_*</span> objects.</td></tr>
                 <tr><td>Preset osc volumes</td><td>Per-instrument <span class="ap-code">volume[osc]</span> 10–100 (BASS 100/65/35, etc.).</td></tr>
+                <tr><td>Poly sum</td><td><span class="ap-code">SmixerL4/R4</span> in 0–2 = 0.55 (not default 1.0) so two/three keys do not wrap.</td></tr>
                 <tr><td>Amp</td><td><span class="ap-code">amp11</span> = channelVol 0–16 → 0–1, same crush-comp as samples.</td></tr>
-                <tr><td>Reverb</td><td>No <span class="ap-code">freeverbmixer</span>. Wet is stacked on dry at <span class="ap-code">synthmixer11</span>. RVRB 0 zeros in0 and bypasses tanks.</td></tr>
+                <tr><td>Reverb</td><td>No <span class="ap-code">freeverbmixer</span>. Wet is stacked on dry at <span class="ap-code">synthmixer11</span> (0.72). RVRB 0 zeros in0 and bypasses tanks.</td></tr>
               </tbody>
             </table>
           </section>
@@ -152,7 +155,7 @@
               <thead><tr><th>Mode</th><th><span class="ap-code">mixer_end</span> in3</th><th>Notes</th></tr></thead>
               <tbody>
                 <tr><td>Idle play</td><td>0</td><td>Input not in the mix.</td></tr>
-                <tr><td>REC monitor</td><td>0 … (1/3 × 0.50) = 0 … 0.167</td><td>Mic: map MIC 0–63. Line: map L-IN 0–15. Mic + SPKR on → 0 (no feedback).</td></tr>
+                <tr><td>REC monitor</td><td>0 … (1/3 × 0.50) = 0 … 0.167</td><td>Mic: map MIC 0–63. Line: map L-IN 0–15. VOL→SPKR on → 0 (never monitor while recording — feedback).</td></tr>
                 <tr><td>Preview cursor on row 1</td><td>1.0</td><td>Direct pass-through; codec mic/line gain still applies.</td></tr>
               </tbody>
             </table>
@@ -198,7 +201,7 @@
               <li><span class="ap-code">envelope11</span> — patched into <span class="ap-code">mixer_waveform11</span> in2, but that input is held at 0. Poly envelopes are <span class="ap-code">Senvelope1/2</span>.</li>
               <li>USB audio output is enabled. The two output mixers also feed <span class="ap-code">usb1</span>; the computer receives the same two-channel routing as the headphone and line outputs.</li>
             </ul>
-            <div class="hb-tip"><strong>Clipping checklist:</strong> four sample hits on one bank; ch11 RVRB stacked on dry at 0.20 + 0.20; BITC + RVRB (crush before the tanks). Channel mute releases envelopes so tails do not sit in the pool.</div>
+            <div class="hb-tip"><strong>Clipping checklist:</strong> four sample hits on one bank; ch11 RVRB stacked on dry at 0.72 + 0.72; BITC + RVRB (crush before the tanks). Channel mute releases envelopes so tails do not sit in the pool.</div>
           </section>
         </section>
 

@@ -82,7 +82,7 @@ Open source as always: schematics, code, and design files are here for you to po
 **Channels 13–14 — mono synths**
 
 - 2 oscillators each  
-- ADSR, LFO (rate/depth), arpeggiator (step/span)  
+- ADSR, LFO on cutoff/resonance, MIDI arpeggiator (step/span; does not pitch-shift grid notes)  
 - Waveforms: sine, saw, square, triangle  
 
 ### Effects (all channels)
