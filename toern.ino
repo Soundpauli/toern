@@ -37,6 +37,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 
 #include <cstring>  // For memcmp
 #include "src/effect_freeverb_dmabuf.h"
+#include "src/effect_delay_ext.h"
 #define USE_WS2812SERIAL   // leds
 #include <WS2812Serial.h>  // leds
 
@@ -636,7 +637,7 @@ int peakRecIndex = 0;
 uint8_t ledBrightness = 83;
 bool drawBaseColorMode = true;  // true = channel colors, false = black
 bool pong = false;
-const long ram = 15728640;                               // 15MB EXTRAM for sounds (was 12582912/12MB); ~1707KB/slot ~19.8s/voice @ 44.1kHz mono 16-bit
+const long ram = 14461440;                               // 15MB−1.21MB for 11×~1.3 s delay lines; ~18.2s/voice @ 44.1kHz mono 16-bit
 const unsigned int MAX_STEPS = MATRIX_WIDTH * maxPages;  // Fixed total steps (16 pages * 16 cols = 256)
 const unsigned int maxlen = MAX_STEPS + 1;               // Note array width (1-based)
 const unsigned int SONG_LEN = MAX_STEPS;                 // Song length equals total steps
@@ -932,7 +933,7 @@ int PrevSampleRate = 1;
 EXTMEM int SampleRate[maxFiles] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 EXTMEM unsigned char sampled[maxFiles][ram / (maxFiles)];
 // Fastrec writes int16 into sampled[ch]. 12s @ 44.1 kHz (double the old ~6s BUFFER_SAMPLES
-// cap); never past the voice slot (~19.8s).
+// cap); never past the voice slot (~18.2s).
 static const size_t FASTREC_SLOT_SAMPLES = sizeof(sampled[0]) / sizeof(int16_t);
 static const size_t FASTREC_MAX_SECONDS = 12;
 static const size_t FASTREC_MAX_SAMPLES =
@@ -1494,7 +1495,7 @@ FLASHMEM void initSliderDefTemplates() {
     { { ARR_SYNTH, CUTOFF, "CUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
       { ARR_SYNTH, RESONANCE, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
       { ARR_SYNTH, FILTER, "FLT", 32, DISPLAY_NUMERIC, nullptr, 32 },
-      { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 } },
+      { ARR_PARAM, DELAY, "DLAY", 32, DISPLAY_NUMERIC, nullptr, 32 } },
     { { ARR_FILTER, FILTER_WAVEFORM, "WAVE", 16, DISPLAY_ENUM, waveformNames, 4 },
       { ARR_SYNTH, INSTRUMENT, "INST", 9, DISPLAY_ENUM, instTypeNames, 10 },
       { ARR_SYNTH, CENT, "CENT", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -3352,6 +3353,17 @@ FLASHMEM void initSoundChip() {
   // AudioInterrupts();
   // 96 blocks ≈ 24KB RAM2. Usage stays near ~6–10 blocks in normal play.
   AudioMemory(TOERN_AUDIO_MEMORY_BLOCKS);
+  for (int i = 0; i < VOICE_DELAY_COUNT; i++) {
+    voiceDelay[i].begin(voiceDelayStore[i], VOICE_DELAY_SAMPLES);
+    voiceDelayFb[i].gain(0, 1.0f);
+    voiceDelayFb[i].gain(1, 0.0f);
+    voiceDelayFb[i].gain(2, 0.0f);
+    voiceDelayFb[i].gain(3, 0.0f);
+    voiceDelayMix[i].gain(0, 0.0f);
+    voiceDelayMix[i].gain(1, 0.0f);
+    voiceDelayMix[i].gain(2, 0.0f);
+    voiceDelayMix[i].gain(3, 1.0f);
+  }
   // turn on the output
   sgtl5000_1.enable();
 
@@ -4471,6 +4483,7 @@ FLASHMEM void setup() {
     setFilters(BITCRUSHER,  ch, true);
     setFilters(DETUNE,      ch, true);
     setFilters(OCTAVE,      ch, true);
+    setParams(DELAY,    ch);
     setParams(ATTACK,   ch);
     setParams(HOLD,     ch);
     setParams(DECAY,    ch);
@@ -7197,7 +7210,10 @@ float getNoteDuration(int channel) {
   // Teensy AudioEffectEnvelope runs A→D→S while "on"; noteOff() starts R from the current level.
   // Release must not be included in the hold-open time — that would keep the voice in sustain
   // during what should be the release slope.
-  float delayMs = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
+  float delayMs = 0.0f;
+  if (!channelHasVoiceDelay(channel)) {
+    delayMs = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
+  }
   float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
   float holdMs = mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
   float decayMs = mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
@@ -7899,6 +7915,13 @@ static void midiArpFireChannel(int ch) {
 }
 
 void serviceSynthLfo() {
+  static float delayBpm = -1.0f;
+  float bpmNow = (SMP.bpm > 0.0f) ? SMP.bpm : 100.0f;
+  if (fabsf(bpmNow - delayBpm) > 0.05f) {
+    delayBpm = bpmNow;
+    extern void applyAllVoiceDelays();
+    applyAllVoiceDelays();
+  }
   static bool lfoWasOn[15] = { false };
   extern uint16_t cutoff[2][3];
   extern float resonance[2][3];
@@ -10108,7 +10131,7 @@ void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int va
 }
 
 // Add an array to define how many filter pages to render for each channel
-const uint8_t filterPageCount[NUM_CHANNELS] = { 0, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 5, 0, 5, 5, 0 };  // ch11/13/14: CRF + LFO/ARP
+const uint8_t filterPageCount[NUM_CHANNELS] = { 0, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 5, 0, 5, 5, 0 };  // 1–8: DLAY page; ch11/13/14: CRF DLAY + LFO/ARP
 // ... existing code ...
 // (If you want to be explicit for all channels, you can do: {4,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4})
 // ... existing code ...
@@ -10141,11 +10164,10 @@ void setSliderDefForChannel(int channel) {
       }
     }
     memcpy(sliderDef[channel], sampleVoiceTemplate, sizeof(sampleVoiceTemplate));
-    // Preserve the existing inactive fourth-page representation for voices 4–8.
-    if (channel >= 4) for (int slot=0; slot<4; slot++) {
-      sliderDef[channel][3][slot].arr = ARR_NONE;
-      sliderDef[channel][3][slot].idx = 0;
-    }
+    sliderDef[channel][3][0] = { ARR_PARAM, DELAY, "DLAY", 32, DISPLAY_NUMERIC, nullptr, 32 };
+    sliderDef[channel][3][1] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
+    sliderDef[channel][3][2] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
+    sliderDef[channel][3][3] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
     return;
   }
 
@@ -10158,6 +10180,7 @@ void setSliderDefForChannel(int channel) {
 
   if (channel == 11) {
     memcpy(sliderDef[channel][4], lfoArpPage, sizeof(lfoArpPage));
+    sliderDef[channel][1][3] = { ARR_PARAM, DELAY, "DLAY", 32, DISPLAY_NUMERIC, nullptr, 32 };
     return;
   }
 
@@ -10171,7 +10194,7 @@ void setSliderDefForChannel(int channel) {
       { { ARR_SYNTH, CUTOFF, "CUT", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_SYNTH, RESONANCE, "RES", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_SYNTH, FILTER, "FLT", 32, DISPLAY_NUMERIC, nullptr, 32 },
-        { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 } },
+        { ARR_PARAM, DELAY, "DLAY", 32, DISPLAY_NUMERIC, nullptr, 32 } },
       { { ARR_FILTER, DETUNE, "DTNE", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, OCTAVE, "OCTV", 32, DISPLAY_NUMERIC, nullptr, 32 },
         { ARR_FILTER, FILTER_WAVEFORM, "WAVE", 16, DISPLAY_ENUM, waveformNames, 4 },

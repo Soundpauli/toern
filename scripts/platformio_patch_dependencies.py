@@ -196,3 +196,13 @@ for source_dir in playback_src_dirs:
             "        void setTimeStretchAmount(uint8_t value) { reader->setTimeStretchAmount(value); }\n\n        void setPlaybackRate(float f) {",
             "WSOLA length forwarding")
     playresmp.write_text(text)
+
+# Stock AudioEffectDelayExternal talks SPI RAM (23LC1024). TŒRN uses a PSRAM
+# copy in src/effect_delay_ext.cpp — skip the library object to avoid dupes.
+def _skip_stock_delay_ext(node):
+    path = str(node)
+    if "effect_delay_ext.cpp" in path and "src/effect_delay_ext.cpp" not in path.replace("\\", "/"):
+        return None
+    return node
+
+env.AddBuildMiddleware(_skip_stock_delay_ext)

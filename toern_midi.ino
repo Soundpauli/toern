@@ -1397,10 +1397,15 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
         extern void midiArpResetVoice(int ch);
         midiArpResetVoice(11);
       }
-    } else if (pressedKeyCount[channel] == 0 && persistentNoteOn[channel]) {
+    } else if (pressedKeyCount[channel] == 0) {
       if (channel == 13 || channel == 14) {
+        // Arp reset only stops the voice if a phrase was running. MIDI hold
+        // (arp off) still needs a real envelope noteOff.
         extern void midiArpResetVoice(int ch);
         midiArpResetVoice(channel);
+        if (envelopes[channel]) envelopes[channel]->noteOff();
+        persistentNoteOn[channel] = false;
+        noteOnTriggered[channel] = false;
       } else if (envelopes[channel]) {
         envelopes[channel]->noteOff();
         persistentNoteOn[channel] = false;

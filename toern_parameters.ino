@@ -10,6 +10,12 @@ void setParams(ParameterType paramType, int index) {
 
   float mappedValue;
   switch (paramType) {
+    case DELAY:
+      if (channelHasVoiceDelay(index)) {
+        extern void applyVoiceDelay(int ch);
+        applyVoiceDelay(index);
+      }
+      break;
     case ATTACK:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
       if (index == 11) {
@@ -92,8 +98,9 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
         default: return 0;
       }
     case ARR_PARAM:
-      // Default ADSR for all channels: A=32, D=32, S=32, R=0
+      // Default ADSR for all channels: delay=0, A=32, D=32, S=32, R=0
       switch (idx) {
+        case DELAY: return 0;
         case ATTACK: return 32;
         case DECAY: return 32;
         case SUSTAIN: return 32;

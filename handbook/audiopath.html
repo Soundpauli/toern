@@ -67,6 +67,7 @@
                 <tr><td>Filter mixer</td><td><span class="ap-code">filtermixerN</span></td><td>Default in0=1, in1=0, in2=0 (LP). Smooth 32-step crossfade. LCUT uses in2=1.</td></tr>
                 <tr><td>Reverb send</td><td><span class="ap-code">freeverb1,2,5–8</span></td><td>Room 0–1 from RVRB; damping 0.01–0.42. RVRB 0 bypasses and clears delay tanks. <strong>No freeverb on 3 or 4.</strong></td></tr>
                 <tr><td>Wet / dry</td><td><span class="ap-code">freeverbmixerN</span></td><td>in0 wet 0 → 0.54; in3 dry 1.0 → 0.88 (send, not a hard crossfade). Off: wet 0, dry 1.</td></tr>
+                <tr><td>Delay</td><td><span class="ap-code">voiceDelay[]</span></td><td>One <span class="ap-code">AudioEffectDelayExternal</span> per sound voice (1–8, 11, 13, 14). ~1.3&nbsp;s PSRAM line. DLAY 0 = bypass; N = N/32 of a beat. Follows BPM.</td></tr>
                 <tr><td>Bank mix</td><td><span class="ap-code">mixer1</span> (ch1–4), <span class="ap-code">mixer2</span> (ch5–8)</td><td>Every input <span class="ap-code">MIX_BUS_HEADROOM</span> = 1/3 × <a href="menus.html#vol">VOL → GAIN</a> (1–4 or 5–8) × ALL. Sized for ~3 full-level hits per bank at 10/10.</td></tr>
               </tbody>
             </table>

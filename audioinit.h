@@ -1,4 +1,3 @@
-
 // Audio Processing Nodes
 AudioSynthWaveform              waveform11_1;   //xy=405,1269
 AudioSynthWaveform              waveform11_2;   //xy=405,1310
@@ -77,6 +76,21 @@ AudioEffectEnvelope             envelope6;      //xy=1923,942
 AudioEffectEnvelope             envelope7;      //xy=1924,1025
 AudioEffectEnvelope             envelope8;      //xy=1922,1102
 AudioEffectFreeverbDMAMEM             freeverb11;     //xy=1922,1384
+// DLAY 0 = off; N = N/32 of a beat (1,2,4,8,16,32 land on even divisions). Line ~1.3 s.
+#define VOICE_DELAY_SAMPLES 57600u
+#define VOICE_DELAY_COUNT 11
+EXTMEM int16_t voiceDelayStore[VOICE_DELAY_COUNT][VOICE_DELAY_SAMPLES];
+AudioEffectDelayExternal voiceDelay[VOICE_DELAY_COUNT];
+EXTMEM AudioMixer4 voiceDelayFb[VOICE_DELAY_COUNT];
+EXTMEM AudioMixer4 voiceDelayMix[VOICE_DELAY_COUNT];
+static inline int voiceDelayIndex(int ch) {
+  if (ch >= 1 && ch <= 8) return ch - 1;
+  if (ch == 11) return 8;
+  if (ch == 13) return 9;
+  if (ch == 14) return 10;
+  return -1;
+}
+static inline bool channelHasVoiceDelay(int ch) { return voiceDelayIndex(ch) >= 0; }
 
 EXTMEM AudioMixer4                     CHMixer11; //xy=1945,2340
 AudioEffectBitcrusher           bitcrusher4;    //xy=2098,793
@@ -255,9 +269,24 @@ EXTMEM AudioConnection        patchCord152(bitcrusher8, 0, amp8, 0);
 EXTMEM AudioConnection        patchCord153(bitcrusher1, 0, amp1, 0);
 EXTMEM AudioConnection        patchCord154(bitcrusher2, 0, amp2, 0);
 EXTMEM AudioConnection        patchCord155(bitcrusher3, 0, amp3, 0);
-EXTMEM AudioConnection        patchCord156(synthmixer11, 0, mixersynth_end, 0);
-EXTMEM AudioConnection        patchCord157(synthmixer13, 0, mixersynth_end, 2);
-EXTMEM AudioConnection        patchCord158(synthmixer14, 0, mixersynth_end, 3);
+EXTMEM AudioConnection        patchCord156a(synthmixer11, 0, voiceDelayFb[8], 0);
+EXTMEM AudioConnection        patchCord156fb(voiceDelay[8], 0, voiceDelayFb[8], 1);
+EXTMEM AudioConnection        patchCord156in(voiceDelayFb[8], 0, voiceDelay[8], 0);
+EXTMEM AudioConnection        patchCord156b(voiceDelay[8], 0, voiceDelayMix[8], 0);
+EXTMEM AudioConnection        patchCord156c(synthmixer11, 0, voiceDelayMix[8], 3);
+EXTMEM AudioConnection        patchCord156(voiceDelayMix[8], 0, mixersynth_end, 0);
+EXTMEM AudioConnection        patchCord157a(synthmixer13, 0, voiceDelayFb[9], 0);
+EXTMEM AudioConnection        patchCord157fb(voiceDelay[9], 0, voiceDelayFb[9], 1);
+EXTMEM AudioConnection        patchCord157in(voiceDelayFb[9], 0, voiceDelay[9], 0);
+EXTMEM AudioConnection        patchCord157b(voiceDelay[9], 0, voiceDelayMix[9], 0);
+EXTMEM AudioConnection        patchCord157c(synthmixer13, 0, voiceDelayMix[9], 3);
+EXTMEM AudioConnection        patchCord157(voiceDelayMix[9], 0, mixersynth_end, 2);
+EXTMEM AudioConnection        patchCord158a(synthmixer14, 0, voiceDelayFb[10], 0);
+EXTMEM AudioConnection        patchCord158fb(voiceDelay[10], 0, voiceDelayFb[10], 1);
+EXTMEM AudioConnection        patchCord158in(voiceDelayFb[10], 0, voiceDelay[10], 0);
+EXTMEM AudioConnection        patchCord158b(voiceDelay[10], 0, voiceDelayMix[10], 0);
+EXTMEM AudioConnection        patchCord158c(synthmixer14, 0, voiceDelayMix[10], 3);
+EXTMEM AudioConnection        patchCord158(voiceDelayMix[10], 0, mixersynth_end, 3);
 EXTMEM AudioConnection        patchCord159(sound0, 0, envelope0, 0);
 EXTMEM AudioConnection        patchCord160(amp1, 0, filter1, 0);
 EXTMEM AudioConnection        patchCord161(amp2, 0, filter2, 0);
@@ -300,8 +329,18 @@ EXTMEM AudioConnection        patchCord192(filtermixer1, 0, freeverb1, 0);
 EXTMEM AudioConnection        patchCord193(filtermixer1, 0, freeverbmixer1, 3);
 EXTMEM AudioConnection        patchCord194(filtermixer2, 0, freeverb2, 0);
 EXTMEM AudioConnection        patchCord195(filtermixer2, 0, freeverbmixer2, 3);
-EXTMEM AudioConnection        patchCord196(filtermixer3, 0, mixer1, 2);
-EXTMEM AudioConnection        patchCord197(filtermixer4, 0, mixer1, 3);
+EXTMEM AudioConnection        patchCord196a(filtermixer3, 0, voiceDelayFb[2], 0);
+EXTMEM AudioConnection        patchCord196fb(voiceDelay[2], 0, voiceDelayFb[2], 1);
+EXTMEM AudioConnection        patchCord196in(voiceDelayFb[2], 0, voiceDelay[2], 0);
+EXTMEM AudioConnection        patchCord196b(voiceDelay[2], 0, voiceDelayMix[2], 0);
+EXTMEM AudioConnection        patchCord196c(filtermixer3, 0, voiceDelayMix[2], 3);
+EXTMEM AudioConnection        patchCord196(voiceDelayMix[2], 0, mixer1, 2);
+EXTMEM AudioConnection        patchCord197a(filtermixer4, 0, voiceDelayFb[3], 0);
+EXTMEM AudioConnection        patchCord197fb(voiceDelay[3], 0, voiceDelayFb[3], 1);
+EXTMEM AudioConnection        patchCord197in(voiceDelayFb[3], 0, voiceDelay[3], 0);
+EXTMEM AudioConnection        patchCord197b(voiceDelay[3], 0, voiceDelayMix[3], 0);
+EXTMEM AudioConnection        patchCord197c(filtermixer4, 0, voiceDelayMix[3], 3);
+EXTMEM AudioConnection        patchCord197(voiceDelayMix[3], 0, mixer1, 3);
 EXTMEM AudioConnection        patchCord198(filtermixer5, 0, freeverb5, 0);
 EXTMEM AudioConnection        patchCord198b(filtermixer5, 0, freeverbmixer5, 3);
 EXTMEM AudioConnection        patchCord199(filtermixer6, 0, freeverb6, 0);
@@ -317,12 +356,42 @@ EXTMEM AudioConnection        patchCord205c(freeverb6, 0, freeverbmixer6, 0);
 EXTMEM AudioConnection        patchCord206(freeverb7, 0, freeverbmixer7, 0);
 EXTMEM AudioConnection        patchCord207(freeverb8, 0, freeverbmixer8, 0);
 EXTMEM AudioConnection        patchCord208(mixersynth_end, 0, mixer_end, 2);
-EXTMEM AudioConnection        patchCord209(freeverbmixer1, 0, mixer1, 0);
-EXTMEM AudioConnection        patchCord210(freeverbmixer2, 0, mixer1, 1);
-EXTMEM AudioConnection        patchCord210b(freeverbmixer5, 0, mixer2, 0);
-EXTMEM AudioConnection        patchCord210c(freeverbmixer6, 0, mixer2, 1);
-EXTMEM AudioConnection        patchCord211(freeverbmixer7, 0, mixer2, 2);
-EXTMEM AudioConnection        patchCord212(freeverbmixer8, 0, mixer2, 3);
+EXTMEM AudioConnection        patchCord209a(freeverbmixer1, 0, voiceDelayFb[0], 0);
+EXTMEM AudioConnection        patchCord209fb(voiceDelay[0], 0, voiceDelayFb[0], 1);
+EXTMEM AudioConnection        patchCord209in(voiceDelayFb[0], 0, voiceDelay[0], 0);
+EXTMEM AudioConnection        patchCord209b(voiceDelay[0], 0, voiceDelayMix[0], 0);
+EXTMEM AudioConnection        patchCord209c(freeverbmixer1, 0, voiceDelayMix[0], 3);
+EXTMEM AudioConnection        patchCord209(voiceDelayMix[0], 0, mixer1, 0);
+EXTMEM AudioConnection        patchCord210a(freeverbmixer2, 0, voiceDelayFb[1], 0);
+EXTMEM AudioConnection        patchCord210fb(voiceDelay[1], 0, voiceDelayFb[1], 1);
+EXTMEM AudioConnection        patchCord210in(voiceDelayFb[1], 0, voiceDelay[1], 0);
+EXTMEM AudioConnection        patchCord210b2(voiceDelay[1], 0, voiceDelayMix[1], 0);
+EXTMEM AudioConnection        patchCord210c2(freeverbmixer2, 0, voiceDelayMix[1], 3);
+EXTMEM AudioConnection        patchCord210(voiceDelayMix[1], 0, mixer1, 1);
+EXTMEM AudioConnection        patchCord210b(freeverbmixer5, 0, voiceDelayFb[4], 0);
+EXTMEM AudioConnection        patchCordDly5fb(voiceDelay[4], 0, voiceDelayFb[4], 1);
+EXTMEM AudioConnection        patchCordDly5in(voiceDelayFb[4], 0, voiceDelay[4], 0);
+EXTMEM AudioConnection        patchCordDly5w(voiceDelay[4], 0, voiceDelayMix[4], 0);
+EXTMEM AudioConnection        patchCordDly5d(freeverbmixer5, 0, voiceDelayMix[4], 3);
+EXTMEM AudioConnection        patchCordDly5o(voiceDelayMix[4], 0, mixer2, 0);
+EXTMEM AudioConnection        patchCord210c(freeverbmixer6, 0, voiceDelayFb[5], 0);
+EXTMEM AudioConnection        patchCordDly6fb(voiceDelay[5], 0, voiceDelayFb[5], 1);
+EXTMEM AudioConnection        patchCordDly6in(voiceDelayFb[5], 0, voiceDelay[5], 0);
+EXTMEM AudioConnection        patchCordDly6w(voiceDelay[5], 0, voiceDelayMix[5], 0);
+EXTMEM AudioConnection        patchCordDly6d(freeverbmixer6, 0, voiceDelayMix[5], 3);
+EXTMEM AudioConnection        patchCordDly6o(voiceDelayMix[5], 0, mixer2, 1);
+EXTMEM AudioConnection        patchCord211(freeverbmixer7, 0, voiceDelayFb[6], 0);
+EXTMEM AudioConnection        patchCordDly7fb(voiceDelay[6], 0, voiceDelayFb[6], 1);
+EXTMEM AudioConnection        patchCordDly7in(voiceDelayFb[6], 0, voiceDelay[6], 0);
+EXTMEM AudioConnection        patchCordDly7w(voiceDelay[6], 0, voiceDelayMix[6], 0);
+EXTMEM AudioConnection        patchCordDly7d(freeverbmixer7, 0, voiceDelayMix[6], 3);
+EXTMEM AudioConnection        patchCordDly7o(voiceDelayMix[6], 0, mixer2, 2);
+EXTMEM AudioConnection        patchCord212(freeverbmixer8, 0, voiceDelayFb[7], 0);
+EXTMEM AudioConnection        patchCordDly8fb(voiceDelay[7], 0, voiceDelayFb[7], 1);
+EXTMEM AudioConnection        patchCordDly8in(voiceDelayFb[7], 0, voiceDelay[7], 0);
+EXTMEM AudioConnection        patchCordDly8w(voiceDelay[7], 0, voiceDelayMix[7], 0);
+EXTMEM AudioConnection        patchCordDly8d(freeverbmixer8, 0, voiceDelayMix[7], 3);
+EXTMEM AudioConnection        patchCordDly8o(voiceDelayMix[7], 0, mixer2, 3);
 EXTMEM AudioConnection        patchCord213(mixer1, 0, mixer_end, 0);
 EXTMEM AudioConnection        patchCord214(mixer2, 0, mixer_end, 1);
 EXTMEM AudioConnection        patchCord215(envelope0, 0, mixer0, 0);

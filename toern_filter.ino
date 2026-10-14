@@ -118,6 +118,42 @@ void applyVoiceCuts(int index) {
 
 // ch13/14 CUT·RES·FLT (same letters as ch11). CUT/RES follow the SVF; FLT is
 // octaveControl amount. OCTV stays oscillator pitch only.
+static float voiceDelayMsForSlider(int slider) {
+  float bpm = (SMP.bpm > 0.0f) ? SMP.bpm : 100.0f;
+  float beatMs = 60000.0f / bpm;
+  float quantumMs = beatMs / 32.0f;  // fader 32 = 1 beat; 16 = 1/2; 8 = 1/4 …
+  if (quantumMs < 1.0f) quantumMs = 1.0f;
+  float bufMs = (float)(VOICE_DELAY_SAMPLES - AUDIO_BLOCK_SAMPLES) *
+                1000.0f / AUDIO_SAMPLE_RATE_EXACT;
+  int n = constrain(slider, 1, (int)maxfilterResolution);
+  int nMax = (int)floorf(bufMs / quantumMs);
+  if (nMax < 1) nMax = 1;
+  if (n > nMax) n = nMax;
+  return (float)n * quantumMs;
+}
+
+void applyVoiceDelay(int ch) {
+  const int idx = voiceDelayIndex(ch);
+  if (idx < 0) return;
+  const int slider = constrain((int)SMP.param_settings[ch][DELAY], 0, (int)maxfilterResolution);
+  if (slider <= 0) {
+    voiceDelay[idx].disable(0);
+    voiceDelayFb[idx].gain(1, 0.0f);
+    voiceDelayMix[idx].gain(0, 0.0f);
+    voiceDelayMix[idx].gain(3, 1.0f);
+    return;
+  }
+  voiceDelay[idx].delay(0, voiceDelayMsForSlider(slider));
+  voiceDelayFb[idx].gain(1, mapf((float)slider, 1.0f, (float)maxfilterResolution, 0.52f, 0.68f));
+  voiceDelayMix[idx].gain(0, 0.50f);
+  voiceDelayMix[idx].gain(3, 1.0f);
+}
+
+void applyAllVoiceDelays() {
+  const int chans[] = { 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14 };
+  for (int c : chans) applyVoiceDelay(c);
+}
+
 void applyMonoSynthCrf(int ch) {
   if (ch != 13 && ch != 14) return;
   if (!filters[ch]) return;

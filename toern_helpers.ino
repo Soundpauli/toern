@@ -874,7 +874,7 @@ FLASHMEM void loadSMPSettings() {
     }
     
     // Load Parameters - apply saved envelope settings to the live audio objects.
-    // DELAY is not a hardware envelope setter here; ATTACK..RELEASE are.
+    setParams(DELAY, ch);
     setParams(ATTACK, ch);
     setParams(HOLD, ch);
     setParams(DECAY, ch);
@@ -3720,6 +3720,7 @@ FLASHMEM void resetAllAudioEffects() {
     setFilters(OCTAVE, ch, true);
     
     // Apply parameters to hardware (setParams reads from SMP.param_settings and applies)
+    setParams(DELAY, ch);
     setParams(ATTACK, ch);
     setParams(DECAY, ch);
     setParams(SUSTAIN, ch);

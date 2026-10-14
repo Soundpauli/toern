@@ -118,7 +118,10 @@
               <div class="hb-tip"><strong>Pitch vs TIME:</strong> OCTV/DTNE change playback rate (pitch). TIME stretches duration around the current pitch. Leave TIME at 11 unless you want that smear.</div>
             </article>
 
-            <h3 class="hb-subsection-heading">Page 1 — synth voices: CUT · RES · FLT</h3>
+            <h3 class="hb-subsection-heading">Page 3 — sample voices: DLAY</h3>
+            <p>Voices 1–8 have a fourth filter page with a single <strong>DLAY</strong> slider. Real delay tap (<span class="ap-code">AudioEffectDelayExternal</span> in PSRAM), not reverb. 0 is off; each step is N/32 of a beat (1, 2, 4, 8, 16, 32 land on even divisions; 3, 5, 6… stay in between). 32 is one beat, not a fixed 1.2&nbsp;s. Follows BPM. Feedback recirculates the tap; dry stays up. Synth voices 11, 13, and 14 have the same control on CRF (encoder 4).</p>
+
+            <h3 class="hb-subsection-heading">Page 1 — synth voices: CUT · RES · FLT · DLAY</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -126,7 +129,7 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p1" width="640" height="320" role="img" aria-label="Filter page 1 synth — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Letters <strong>C · R · F</strong> — column 4 is empty. Same page on voices 11, 13, and 14.</p>
+                  <p class="viz-caption--below">Letters <strong>C · R · F · D</strong>. Same page on voices 11, 13, and 14.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
@@ -142,6 +145,7 @@
                   <tr><td><strong>C</strong></td><td>CUT</td><td>Filter cutoff. Voice 11: poly ladder. Voices 13/14: the SVF (tied to HCUT).</td><td>0–32</td></tr>
                   <tr><td><strong>R</strong></td><td>RES</td><td>Filter resonance around the cutoff.</td><td>0–32</td></tr>
                   <tr><td><strong>F</strong></td><td>FLT</td><td>Filter amount. Voice 11: ladder filter-envelope depth. Voices 13/14: SVF octaveControl.</td><td>0–32</td></tr>
+                  <tr><td><strong>D</strong></td><td>DLAY</td><td>Per-voice delay tap (same as sample page 3).</td><td>0 = off, N = N/32 beat (16 = ½, 32 = 1)</td></tr>
                 </tbody>
               </table>
             </article>

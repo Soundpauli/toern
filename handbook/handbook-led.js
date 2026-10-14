@@ -531,7 +531,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
    * while you are turning the corresponding encoder. */
   const FILTER_PAGES = [
     { letters: ["H", "L", "R", "B"], vals: [18, 14, 22, 10], names: ["HCUT", "LCUT", "RVRB", "BITC"] },
-    { letters: ["C", "R", "F", "" ], vals: [16, 20, 12,  0], names: ["CUT", "RES", "FLT", ""    ] },
+    { letters: ["C", "R", "F", "D"], vals: [16, 20, 12,  8], names: ["CUT", "RES", "FLT", "DLAY"] },
     { letters: ["W", "I", "C", "S"], vals: [10, 14, 18, 12], names: ["WAVE", "INST", "CTOF", "SHAP"] },
     { letters: ["A", "D", "S", "R"], vals: [20, 16, 14, 24], names: ["ATCK", "DECY", "SUST", "RELS"] }
   ];
