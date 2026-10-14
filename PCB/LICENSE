@@ -1,0 +1,9 @@
+TŒRN hardware in this tree (schematics, PCB, Gerbers, BOMs, related mechanical files) is
+Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+
+Commercial sale of TŒRN PCBs, kits, or assembled hardware — including boards sold
+without a Teensy — is reserved exclusively to Jan-Peter Kuntoff (toern.live).
+
+The Teensy 4.1 module is a PJRC product and is not licensed by these files.
+
+Full terms: repository root LICENSE.

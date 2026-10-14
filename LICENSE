@@ -28,7 +28,7 @@ SOFTWARE.
 ---
 
 Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)  
-(for all hardware files: schematics, PCB layouts, Gerbers, BOMs, etc. of the tœrn project)
+(for all hardware files: schematics, PCB layouts, Gerbers, BOMs, housings, etc. of the TŒRN project)
 
 You are free to:
 - Share — copy and redistribute the material in any medium or format
@@ -42,7 +42,13 @@ No additional restrictions — You may not apply legal terms or technological me
 
 Full license text: https://creativecommons.org/licenses/by-nc/4.0/legalcode
 
-For commercial use of the hardware files in the **tœrn** project, please contact the original author:
+Commercial sale of TŒRN hardware (bare PCB, assembled PCB, kit, or complete unit) is reserved exclusively to the copyright holder, Jan-Peter Kuntoff (toern.live). That includes selling the board without a Teensy. Nobody else may sell, offer, or otherwise commercially distribute TŒRN PCBs or hardware derived from these files.
+
+The Teensy 4.1 module is a PJRC product. It is not licensed here and is not sold as part of these design files. Buyers supply their own Teensy unless a specific shop listing says otherwise.
+
+Personal / non-commercial builds from the files are allowed under CC BY-NC 4.0.
+
+For any commercial hardware license, contact:
 
 Jan-Peter Kuntoff  
 jpkuntoff@gmail.com  

@@ -57,7 +57,7 @@ flowchart TB
 
 ## License
 
-Hardware design files are **[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)** — personal / non-commercial use and modification. Commercial hardware use needs written consent (see root README).
+Hardware design files are **[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)**. Personal / non-commercial use and modification are allowed. **Only Jan-Peter Kuntoff may sell TŒRN PCBs or hardware** (including boards without a Teensy). Teensy 4.1 is PJRC’s and is not licensed here. See the root README.
 
 ## Next
 

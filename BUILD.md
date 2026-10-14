@@ -4,7 +4,7 @@ A TŒRN ordered from [toern.live](https://toern.live/) is ready to play. Start a
 
 The SGTL5000 codec is on that board. Flash steps live in [`info.md`](info.md).
 
-Hardware files are [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Personal builds are fine. Selling boards needs written consent (see the [README](Readme.md)).
+Hardware files are [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Personal builds are fine. **Only Jan-Peter Kuntoff may sell TŒRN PCBs or kits** (with or without a Teensy). Teensy 4.1 is PJRC’s and is not part of that sale right. See the [README](Readme.md).
 
 ## Order the PCB
 

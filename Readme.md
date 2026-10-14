@@ -209,7 +209,7 @@ Firmware changes: [`info.md`](./info.md) to flash, [`devdocs/`](./devdocs/) for 
 
 - **Software / code**: [MIT](./LICENSE) — free for personal and commercial use.  
 - **Firmware loader** (`standalone-tools/teensyloader-standalone/` and `tools/teensyloader/`): [GPL-3.0](./standalone-tools/teensyloader-standalone/LICENSE), because that tool is Teensy Loader Javascript. GPL-3.0 applies only to those folders.  
-- **Hardware design files** (schematics, PCB layouts, Gerbers, etc.): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — personal / non-commercial use and modification. **Commercial hardware use needs written consent.**
+- **Hardware design files** (schematics, PCB layouts, Gerbers, housings, etc.): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — personal / non-commercial use and modification. **Jan-Peter Kuntoff is the only person authorized to sell TŒRN hardware** (bare PCB, assembled PCB, kit, or unit), including boards sold **without a Teensy**. Teensy 4.1 is PJRC’s; it is not licensed in this repo. Anyone else needs written consent to sell.
 
 Commercial hardware licensing: Jan aka **warft_ctrl** — jpkuntoff@gmail.com (Hamburg, Germany)
 
