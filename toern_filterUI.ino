@@ -46,17 +46,17 @@ uint8_t scaleToDisplay(const SliderDefEntry& meta, uint8_t val) {
   return (meta.displayRange < meta.maxValue) ? constrain(mapf(val, 0, meta.maxValue, 0, meta.displayRange - 1), 0, meta.displayRange - 1) : val;
 }
 
-// DTNE / CENT / SEMI: 0..32 center 16. Sample OCTV: 0..48 center 24 (1 step = 1 semi).
+// DTNE / CENT / SEMI / ARP: 0..32 center 16. Sample OCTV: 0..48 center 24 (ch13/14 OCTV: 0..32 center 16).
 static inline bool isBipolarCenteredParam(const SliderDefEntry& meta) {
   if (meta.arr == ARR_FILTER && meta.idx == DETUNE && meta.maxValue == 32) return true;
-  if (meta.arr == ARR_FILTER && meta.idx == OCTAVE && meta.maxValue == 48) return true;
+  if (meta.arr == ARR_FILTER && meta.idx == OCTAVE && (meta.maxValue == 48 || meta.maxValue == 32)) return true;
   if (meta.arr == ARR_SYNTH && (meta.idx == CENT || meta.idx == SEMI) && meta.maxValue == 32) return true;
   if (meta.arr == ARR_SYNTH && meta.idx == ARP_STEP && meta.maxValue == 32) return true;
   return false;
 }
 
 static inline int bipolarCenter(const SliderDefEntry& meta) {
-  if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) return 24;
+  if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) return (int)meta.maxValue / 2;
   return 16;
 }
 
@@ -202,7 +202,7 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
       if (semis == 0 || semis == 12 || semis == -12 || semis == 24 || semis == -24)
         textColor = CRGB::White;
     } else if ((int)val == bipolarCenter(meta)) {
-      textColor = CRGB(100, 100, 100);
+      textColor = CRGB::White;
     }
   }
   drawText(buf, x, y, textColor);
@@ -277,7 +277,13 @@ void initSliders(uint8_t page, uint8_t chan) {
 
   for (uint8_t i = 0; i < 4; ++i) {
     auto& d = sliderDef[chan][page][i];
-    if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip value change
+    if (d.arr == ARR_NONE && d.idx == -1) {
+      currentMode->pos[i] = 0;
+      Encoder[i].writeMin((int32_t)0);
+      Encoder[i].writeMax((int32_t)0);
+      Encoder[i].writeCounter((int32_t)0);
+      continue;
+    }
     const auto& meta = sliderDef[chan][page][i];
     uint8_t val = 0;
 
@@ -293,6 +299,7 @@ void initSliders(uint8_t page, uint8_t chan) {
 
     val = constrain(val, 0, meta.maxValue);
     currentMode->pos[i] = val;
+    Encoder[i].writeMin((int32_t)0);
     Encoder[i].writeMax((int32_t)(meta.maxValue));
     Encoder[i].writeCounter((int32_t)val);
   }

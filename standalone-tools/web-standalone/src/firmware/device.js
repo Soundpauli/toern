@@ -9,7 +9,7 @@ import {
 } from "./screens.js";
 import { foldRow } from "./midiImport.js";
 import { listDir, packWavs, parsePattern, patternUrl, sampleWavs } from "./library.js";
-import { drawRandoms } from "./random.js";
+import { drawRandoms, drawRandomsMultiPage } from "./random.js";
 import { GENRES, generateGenre } from "./genres.js";
 
 // Physical button events remain 1/2/9; FN adds a separate event namespace.
@@ -162,7 +162,7 @@ export function createDevice(matrix, statusEl, rings) {
   let clipCh = 0;
   let midiAccess = null;
   const hold = {};
-  const touch = { l: false, m: false, first: 0, chord: false };
+  const touch = { l: false, m: false, t4: false, first: 0, chord: false };
 
   function stepSec() { return 60 / s.bpm / 4; }
   function channelOfRow(y) { return y - 1; }
@@ -324,6 +324,13 @@ export function createDevice(matrix, statusEl, rings) {
   function drawRandomPage() {
     drawRandoms({
       note, filt, channel: s.GLOB.currentChannel, page: s.GLOB.edit,
+      loopLength: s.loopLength, bpm: s.bpm,
+    });
+    queueAutosave();
+  }
+  function drawRandomMultiVoicePage() {
+    drawRandomsMultiPage({
+      note, filt, page: s.GLOB.edit,
       loopLength: s.loopLength, bpm: s.bpm,
     });
     queueAutosave();
@@ -1493,7 +1500,7 @@ export function createDevice(matrix, statusEl, rings) {
       }
       applySub(pageMode, pageIndex);
     }
-    if (s.mode === "dat" && enc === 3) s.slot = clamp(s.slot + dir, 0, 99);
+    if (s.mode === "dat" && enc === 3) s.slot = clamp(s.slot + dir, -1, 99); // -1=NEW, 0=A, 1..99=PATT
     if (s.mode === "kit" && enc === 3) {
       s.packSlot = clamp(s.packSlot + dir, 0, 99);
       saveEeprom();
@@ -1645,12 +1652,13 @@ export function createDevice(matrix, statusEl, rings) {
       writeGenre(s.genre);
       return;
     }
-    if (s.mode === "new" && enc === 3) { s.mode = "dat"; return; }
+    if (s.mode === "new" && enc === 3) { s.slot = -1; s.mode = "dat"; return; }
     if (s.mode === "pat" && enc === 3) {
       writeGenre(s.subIndex + 1);
       return;
     }
     if (s.mode === "dat" && enc === 0) {
+      if (s.slot < 0) { s.mode = "new"; return; }
       if (s.slot !== 0 && !slotExists("toern-web-patterns", s.slot)) { s.mode = "new"; return; }
       const url = patternUrl(s.slot);
       const stored = loadStore("toern-web-patterns")[String(s.slot)];
@@ -1668,7 +1676,7 @@ export function createDevice(matrix, statusEl, rings) {
         finishLoad();
       }
     }
-    if (s.mode === "dat" && enc === 1 && s.slot !== 0) {
+    if (s.mode === "dat" && enc === 1 && s.slot > 0) {
       saveSlot("toern-web-patterns", s.slot, snapshot());
       s.okAt = performance.now();
       finishLoad();
@@ -2157,7 +2165,12 @@ export function createDevice(matrix, statusEl, rings) {
       const page = MENU_PAGES[s.menuIndex];
       return { title: "Menu", detail: page?.name || String(s.menuIndex + 1) };
     }
-    if (mode === "dat") return { title: "PATT", detail: s.slot === 0 ? "Autosave" : `Slot ${s.slot}` };
+    if (mode === "dat") {
+      return {
+        title: "PATT",
+        detail: s.slot < 0 ? "NEW" : (s.slot === 0 ? "Autosave" : `Slot ${s.slot}`),
+      };
+    }
     if (mode === "bpm") return { title: "BPM", detail: String(s.bpm) };
     if (mode === "wav") return { title: "SMP", detail: s.wavName || "" };
     if (mode === "filter") return { title: "Filter", detail: `Voice ${s.GLOB.currentChannel}` };
@@ -2309,6 +2322,10 @@ export function createDevice(matrix, statusEl, rings) {
       if (h?.fn && !h.fired && !h.turned && now-h.at>=LONG_MS) {
         dispatchButtonEvent(enc,2,true); h.fired=true;
       }
+    }
+    if (s.mode === "draw" && !s.GLOB.singleMode && touch.t4 && hold[0] && !hold[0].fn && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
+      hold[0].fired = true;
+      drawRandomMultiVoicePage();
     }
     if (s.mode === "single" && s.GLOB.y === 16 && hold[0] && !hold[0].fn && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
       hold[0].fired = true;
@@ -2534,7 +2551,7 @@ export function createDevice(matrix, statusEl, rings) {
         }
         return;
       }
-      if (id === 4) return;
+      if (id === 4) { touch.t4 = !!down; return; }
       if (id === 1) onTouchL(down);
       else if (id === 2) onMeta(down);
       else onTouch3(down);

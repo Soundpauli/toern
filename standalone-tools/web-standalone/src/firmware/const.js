@@ -92,6 +92,7 @@ const CH11_FILTER_PAGES = [
   [{ key: "cut", name: "CUT" }, { key: "res", name: "RES" }, { key: "flt", name: "FLT" }, { key: "dlay", name: "DLAY" }],
   [{ key: "wave", name: "WAVE", max: 3 }, { key: "inst", name: "INST", max: 9 }, { key: "cent", name: "CENT" }, { key: "semi", name: "SEMI" }],
   ADSR,
+  [{ key: "lfoR", name: "LFOR" }, { key: "lfoD", name: "LFOD" }, { key: "span", name: "SPAN" }, { key: "arp", name: "ARP" }],
 ];
 const KEYS_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "cent", name: "CENT" }, { key: "b", name: "BITC" }],
@@ -110,7 +111,7 @@ export function filterPagesFor(ch) {
 export function emptyFilt() {
   return {
     h: 32, l: 0, r: 0, b: 0, fast: 0, res: 0, detune: 16, oct: 24, att: 32, dec: 32, sus: 10, rel: 5,
-    cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 0, lfoR: 0, lfoD: 0, span: 0, arp: 16,
+    cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 16, lfoR: 0, lfoD: 0, span: 0, arp: 16,
   };
 }
 export const COND_LABEL = ["1/1", "1/2", "1/4", "1/8", "1/X", "2/1", "4/1", "8/1", "X/1", "F/F", "G/L"];

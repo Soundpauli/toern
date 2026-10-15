@@ -521,9 +521,13 @@ export function drawFilter(matrix, s, now) {
     const display = Math.max(1, Math.min(10, Math.round((val / max) * 9) + 1));
     const color = blend([0, 0, 0], pageColors[i], Math.round((val / max) * 255));
     const [x0, x1] = filterCols()[i];
+    const isBipolarMid =
+      (spec.key === "oct" && val === Math.floor(max / 2)) ||
+      ((spec.key === "detune" || spec.key === "cent" || spec.key === "semi" || spec.key === "arp") && val === 16);
     for (let y = 1; y <= 10; y++) {
       let c = [0, 0, 0];
       if (y === display) c = i === f.fast ? [255, 255, 0] : [255, 255, 255];
+      else if (isBipolarMid && y === 1) c = [0, 255, 0];
       else if (y < display) c = color;
       matrix.light(x0, y, c);
       matrix.light(x1, y, c);
@@ -557,7 +561,7 @@ export function drawFilter(matrix, s, now) {
       if (semis === 0 || semis === 12 || semis === -12 || semis === 24 || semis === -24)
         valueColor = [255, 255, 255];
     } else if (bipolarKeys.has(spec.key) && val === 16) {
-      valueColor = [100, 100, 100];
+      valueColor = [255, 255, 255];
     }
     matrix.drawText(label, focus < 2 ? x1 + 4 : Math.max(1, x0 - 10), 5, valueColor);
   }
@@ -771,10 +775,16 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
 function clampUi(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 export function drawLoadSave(matrix, s) {
-  const exists = s.slotExists("toern-web-patterns", s.slot);
-  showIcon(matrix, "folder", 2, 7, exists ? UI_GREEN : UI_DIM_RED);
+  const isNew = s.slot < 0;
+  const exists = isNew ? true : s.slotExists("toern-web-patterns", s.slot);
+  showIcon(matrix, "folder", 2, 7, isNew ? UI_BLUE : (exists ? UI_GREEN : UI_DIM_RED));
+  if (isNew) matrix.drawText("+", 4, 6, UI_WHITE);
   matrix.drawIndicator("L", "X", 4);
-  if (s.slot === 0) {
+  if (isNew) {
+    // Same indicators as Autosave when present: green load opens NEW, no save.
+    matrix.drawIndicator("M", "G", 1);
+    matrix.drawIndicator("M", "E", 2);
+  } else if (s.slot === 0) {
     matrix.drawIndicator("M", exists ? "G" : "E", 1);
     matrix.drawIndicator("M", "E", 2);
     matrix.drawText("A", 11, 11, exists ? UI_BRIGHT_GREEN : UI_BLUE);

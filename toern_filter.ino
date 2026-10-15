@@ -370,10 +370,30 @@ void setFilterDefaults(int channel) {
     }
   }
 
+  SMP.filter_settings[channel][HCUT] = 32;
+  SMP.filter_settings[channel][LOWCUT] = 0;
+  SMP.filter_settings[channel][REVERB] = 0;
+  SMP.filter_settings[channel][BITCRUSHER] = 0;
+  SMP.filter_settings[channel][RES] = 0;
   SMP.filter_settings[channel][DETUNE] = 16;  // middle = 0
   // Sample OCTV uses 0..48 (center 24); synth OCTAVE path still uses 0..32.
   SMP.filter_settings[channel][OCTAVE] = (channel >= 1 && channel <= 8) ? 24 : 16;
   filterSetting(channel, FILTER_WAVEFORM) = 8;  // SAW (value 2)
+
+  SMP.param_settings[channel][DELAY] = 0;
+  SMP.param_settings[channel][ATTACK] = 32;
+  SMP.param_settings[channel][DECAY] = 32;
+  SMP.param_settings[channel][SUSTAIN] = 32;
+  SMP.param_settings[channel][RELEASE] = 0;
+  if (channel == 11 || channel == 13 || channel == 14) {
+    SMP.synth_settings[channel][LFO_RATE] = 0;
+    SMP.synth_settings[channel][LFO_DEPTH] = 0;
+    SMP.synth_settings[channel][LFO_PHASE] = 0;
+    SMP.synth_settings[channel][ARP_STEP] = 16;
+  }
+  if (channelHasVoiceDelay(channel)) {
+    applyVoiceDelay(channel);
+  }
   
   // Initialize detune array for channels 1-12
   if (channel >= 1 && channel <= 12) {

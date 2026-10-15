@@ -116,7 +116,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
           if (ch == 13) return 0;
           if (ch == 14) return 8;
           return 16;
-        case SEMI: return 0;
+        case SEMI: return 16;
         case INSTRUMENT: return 0;
         case FORM: return 0;
         case LFO_RATE: return 0;
@@ -125,6 +125,8 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
         case ARP_STEP: return 16;
         default: return 0;
       }
+    case ARR_STRETCH:
+      return 11;
     default:
       return 0;
   }
@@ -176,7 +178,14 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
         if (ch == 11 && d.idx == INSTRUMENT) {
           applySynthInstrumentPreset(ch, val);
         }
+        if ((ch == 11 || ch == 13 || ch == 14) && d.idx == ARP_STEP) {
+          extern void midiArpResetVoice(int ch);
+          midiArpResetVoice(ch);
+        }
         touchedSynth = true;
+        break;
+      case ARR_STRETCH:
+        setSampleTimeStretch(ch, val);
         break;
       default:
         break;
@@ -188,7 +197,13 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
     applyDefaultAdsrSettings(ch);
   }
 
-  if (touchedSynth && ch == 11) updateSynthVoice(11);
+  if (touchedSynth) {
+    if (ch == 11) updateSynthVoice(11);
+    if (ch == 13 || ch == 14) {
+      extern void applyMonoSynthCrf(int ch);
+      applyMonoSynthCrf(ch);
+    }
+  }
 }
 
 void setCurrentFilterPageDefaultValues(int ch) {
@@ -216,11 +231,35 @@ void setAllFilterPagesDefaultValues(int ch) {
   // EFX is not on every voice's slider pages but still owns sample routing.
   SMP.filter_settings[ch][EFX] = 0;
 
+  // Explicitly ensure DELAY=0 and synth LFO/ARP defaults on all voices.
+  SMP.param_settings[ch][DELAY] = 0;
+  setParams(DELAY, ch);
+  if (ch >= 1 && ch <= 8) {
+    setSampleTimeStretch(ch, 11);
+  }
+  if (ch == 11) {
+    applySynthInstrumentPreset(11, 0);
+  }
+  if (ch == 11 || ch == 13 || ch == 14) {
+    SMP.synth_settings[ch][LFO_RATE] = 0;
+    SMP.synth_settings[ch][LFO_DEPTH] = 0;
+    SMP.synth_settings[ch][LFO_PHASE] = 0;
+    SMP.synth_settings[ch][ARP_STEP] = 16;
+    extern void midiArpResetVoice(int ch);
+    midiArpResetVoice(ch);
+  }
+
   // Always end on unified ADSR (INST preset must not leave stale A/D/S/R).
   applyDefaultAdsrSettings(ch);
 
-  initSliders(filterPage[ch], ch);
   if (ch == 11) updateSynthVoice(11);
+  if (ch == 13 || ch == 14) {
+    extern void applyMonoSynthCrf(int ch);
+    applyMonoSynthCrf(ch);
+  }
+  if (currentMode == &filterMode && ch == (int)GLOB.currentChannel) {
+    initSliders(filterPage[ch], ch);
+  }
 }
 
 static uint8_t synthInstrumentFormDefault(int instrumentIdx) {

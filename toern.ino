@@ -326,6 +326,7 @@ bool isChildVoiceDisabled(int channel);
 bool isChildVoiceMuted(int channel);
 void enforceChildModeRestrictions();
 void applyMutesAfterPMODSwitch();
+void copyPageMutes(int fromPage, int toPage);  // PMOD: copy per-page mute map (1-based pages)
 
 // DRAW-R fullMute: stay in draw/single; enc1 enter/exit; enc2/3/4 toggle views in-mode.
 enum class FullMuteView : uint8_t { AllMuted = 0, Ch12, Custom, UnmuteAll };
@@ -968,15 +969,15 @@ Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, max
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
 Mode volume_bpm = { "VOLUME_BPM", { 11, 0, 0, BPM_MIN }, { 30, 252, 1, BPM_MAX }, { 11, 0, 0, 100 }, { 0x000000, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
 //filtermode has 4 entries
-Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 1, 1, 1, 1 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
+Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 0, 0, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
 Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, NOTE_CONDITION_STEP_COUNT, maxY }, { maxY, 5, 1, 10 }, { 0xFF4400, 0x00FF88, 0x888888, 0x0044FF } };
 
 Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0xFFFFFF } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-// FILE slot 0 = autosaved.txt (load-only); slots 1..999 = normal pattern files
-Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+// FILE UI encoder 3: 0=NEW, 1=A (autosaved.txt), 2..1000 = 1.txt..999.txt
+Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 1000 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
 Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 // NEW: enc0=load (press), enc1=length, enc2=template, enc3=back to FILE (blue like FILE menu)
@@ -2270,12 +2271,12 @@ FLASHMEM void switchMode(Mode *newMode) {
         ch = 1;  // Fallback to channel 1
         GLOB.currentChannel = ch;
       }
-      initSliders(filterPage[ch], ch);
       Encoder[0].begin(
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
       applyLongCableI2cTiming();
+      initSliders(filterPage[ch], ch);
 
       // Set encoder colors dynamically based on current filter page and default fast filter
       updateFilterEncoderColors();
@@ -2306,8 +2307,15 @@ FLASHMEM void switchMode(Mode *newMode) {
     }
 
     if (currentMode == &loadSaveTrack) {
-      // Initialize encoder[2] to current SMP_LOAD_SETTINGS value
-      // Only allow settings loading if file exists (slot 0 = autosaved.txt)
+      // UI slot: 0=NEW, 1=A (autosave), 2..1000 = pattern 1..999
+      unsigned int fileUi = (SMP.file == 0) ? 1u : (SMP.file + 1u);
+      if (fileUi > 1000u) fileUi = 1000u;
+      currentMode->pos[3] = fileUi;
+      Encoder[3].writeMin((int32_t)0);
+      Encoder[3].writeMax((int32_t)1000);
+      Encoder[3].writeCounter((int32_t)fileUi);
+
+      // Settings toggle only when a real pattern/autosave file exists
       char OUTPUTf[50];
       if (SMP.file == 0) {
         sprintf(OUTPUTf, "autosaved.txt");
@@ -2320,8 +2328,6 @@ FLASHMEM void switchMode(Mode *newMode) {
         currentMode->pos[2] = 0;
       }
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
-      Encoder[3].writeMin((int32_t)0);
-      Encoder[3].writeMax((int32_t)999);
     }
 
     if (currentMode == &subpatternMode && muteModeActive) {
@@ -2780,9 +2786,10 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     generateGenreTrack();
     return;
   } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
-    // NEW mode: 4th encoder press goes back to FILE/pattern load
+    // NEW mode: 4th encoder press goes back to FILE — stay on the NEW slot (ui 0)
     extern void resetNewModeState();
     resetNewModeState();
+    loadSaveTrack.pos[3] = 0;
     switchMode(&loadSaveTrack);
     return;
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
@@ -2791,13 +2798,19 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     preventPaintUnpaint = false;  // Reset flag when exiting loadSaveTrack mode
     switchMode(&draw);
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
-    // Slot 0 = autosave: load-only, never write from FILE menu
-    if (SMP.file != 0) {
+    // NEW (ui 0) and Autosave (ui 1 / file 0): load-only, never write from FILE menu
+    if (currentMode->pos[3] != 0 && SMP.file != 0) {
       savePattern(false);
       preventPaintUnpaint = true;
     }
     return;
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+    if (currentMode->pos[3] == 0) {
+      // NEW slot → genre / blank template screen
+      extern void showNewFileScreen();
+      showNewFileScreen();
+      return;
+    }
     loadPattern(false);
     preventPaintUnpaint = true;                                                                     // Prevent paint/unpaint after load
     return;                                                                                         // Prevent other button actions from being processed
@@ -3258,6 +3271,15 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
     extern int drawMode;
+    // Draw mode + touch4 held + long-press enc1: wipe current page and generate a multi-voice
+    // ensemble across a subset of channels 1..14 using the companion generator.
+    if (currentMode == &draw && !GLOB.singleMode && (touchState[3] || readDebouncedTouch(3))) {
+      extern void drawRandomsMultiPage();
+      drawRandomsMultiPage();
+      deleteActiveCopy();
+      preventPaintUnpaint = true;
+      return;
+    }
     // R mode: long-press enc1 enters fullMute (velocity long-press is suppressed).
     if (!childLockEnabled && drawMode == 1 && GLOB.y < 16) {
       // If this long press targets velocity editing, suppress mute toggle.
@@ -3542,7 +3564,7 @@ FLASHMEM void initSamples() {
   initSliderDefTemplates();
   for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
     setSliderDefForChannel(ALL_CHANNELS[i]);
-    setFilterDefaults(i);
+    setFilterDefaults(ALL_CHANNELS[i]);
   }
 
   /*
@@ -5788,7 +5810,6 @@ void checkTouchInputs() {
         if (GLOB.currentChannel != 0 && GLOB.currentChannel != 9 && GLOB.currentChannel != 10 && GLOB.currentChannel != 12 && GLOB.currentChannel != 15) {
           // Reset filter page to 1 when entering filter mode via both touch inputs
           filterPage[GLOB.currentChannel] = 1;
-          initSliders(filterPage[GLOB.currentChannel], GLOB.currentChannel);
           bypassModeSwitchDebounce = true;
           switchMode(&filterMode);
           bypassModeSwitchDebounce = false;
@@ -7043,7 +7064,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       encoder0PressedOnEmptyNote = false;
     }
 
-    if ((currentMode == &draw || currentMode == &singleMode) && encoder0LongHeld && !imageMode) {
+    if ((currentMode == &draw || currentMode == &singleMode) && encoder0LongHeld && !imageMode
+        && !(currentMode == &draw && !GLOB.singleMode && (touchState[3] || readDebouncedTouch(3)))) {
       // Long press reached - enter velocity mode if not already in it
       // Only trigger if note has value AND encoder(0) was not pressed on empty note
       if (currentMode != &velocity && !encoder0PressedOnEmptyNote) {
@@ -9501,49 +9523,63 @@ FLASHMEM void showLoadSave() {
 
   drawNoSD();
 
-  if (currentMode->pos[3] != SMP.file) {
-    SMP.file = currentMode->pos[3];
+  // Encoder 3 UI: 0=NEW, 1=A (autosave file 0), 2..1000 = pattern files 1..999
+  unsigned int fileUi = currentMode->pos[3];
+  if (fileUi > 1000u) {
+    fileUi = 1000u;
+    currentMode->pos[3] = fileUi;
+    Encoder[3].writeCounter((int32_t)fileUi);
+  }
+  const bool isNewSlot = (fileUi == 0);
+  const bool isAutosaveSlot = (fileUi == 1);
+  if (!isNewSlot) {
+    unsigned int fid = isAutosaveSlot ? 0u : (fileUi - 1u);
+    if (SMP.file != fid) SMP.file = fid;
   }
 
-  // Slot 0 = autosaved.txt (load-only). Slots 1..999 = N.txt
-  const bool isAutosaveSlot = (SMP.file == 0);
   char OUTPUTf[50];
   if (isAutosaveSlot) {
     sprintf(OUTPUTf, "autosaved.txt");
-  } else {
+  } else if (!isNewSlot) {
     sprintf(OUTPUTf, "%u.txt", SMP.file);
+  } else {
+    OUTPUTf[0] = 0;
   }
 
   // SD.exists + full redraw + Duppa RGB every loop stalled play — only when slot/state changes.
   // Invalidate when re-entering this mode (gap = we weren't called last frames).
-  static int lastFile = -2;
+  static int lastUi = -2;
   static int8_t lastExists = -1;
   static int8_t lastLoadSettings = -1;
-  static bool lastAutosave = false;
   static uint32_t lastFileRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
   static uint32_t lastCallMs = 0;
   uint32_t nowMs = millis();
   if (nowMs - lastCallMs > 50) {
-    lastFile = -2;
+    lastUi = -2;
     lastExists = -1;
     lastLoadSettings = -1;
     for (int i = 0; i < 4; i++) lastFileRGB[i] = 0xFFFFFFFFu;
   }
   lastCallMs = nowMs;
 
-  bool fileChanged = ((int)SMP.file != lastFile);
+  bool fileChanged = ((int)fileUi != lastUi);
   bool txtExists;
-  if (fileChanged) {
+  if (isNewSlot) {
+    txtExists = true;  // always "available" — enc1 opens NEW menu
+    if (fileChanged) {
+      lastUi = (int)fileUi;
+      lastExists = 1;
+    }
+  } else if (fileChanged) {
     txtExists = SD.exists(OUTPUTf);
-    lastFile = (int)SMP.file;
+    lastUi = (int)fileUi;
     lastExists = txtExists ? 1 : 0;
-    lastAutosave = isAutosaveSlot;
   } else {
     txtExists = (lastExists == 1);
   }
 
-  // Settings toggle only when a file exists
-  if (txtExists) {
+  // Settings toggle only when a file exists (not on NEW)
+  if (txtExists && !isNewSlot) {
     if (currentMode->pos[2] == 1) {
       SMP_LOAD_SETTINGS = true;
     } else {
@@ -9558,20 +9594,22 @@ FLASHMEM void showLoadSave() {
   }
 
   const int8_t loadSettingsDrawn = SMP_LOAD_SETTINGS ? 1 : 0;
-  if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn
-      && lastAutosave == isAutosaveSlot) {
+  if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn) {
     return;
   }
   lastLoadSettings = loadSettingsDrawn;
-  lastAutosave = isAutosaveSlot;
   lastExists = txtExists ? 1 : 0;
 
   FastLEDclear();
 
-  CRGB fileIconColor = txtExists ? UI_GREEN : UI_DIM_RED;
+  CRGB fileIconColor = isNewSlot ? UI_BLUE : (txtExists ? UI_GREEN : UI_DIM_RED);
   showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
+  if (isNewSlot) {
+    // White "+" centered in the blue folder body (icon at ox=2, oy=7).
+    drawText("+", 4, 6, UI_WHITE);
+  }
 
-  // FILE: M[G] load | M[R] save (disabled on autosave slot) | C[W] settings | L[X]
+  // FILE: M[G] load | M[R] save (disabled on NEW/autosave) | C[W] settings | L[X]
   // Matrix indicators only — rings via cached writes (showLoadSave runs every loop).
   auto setFileRGB = [&](int enc, uint32_t rgb) {
     if (enc < 0 || enc > 3) return;
@@ -9589,7 +9627,12 @@ FLASHMEM void showLoadSave() {
 
   matrixInd('L', 'X', 4);
 
-  if (isAutosaveSlot) {
+  if (isNewSlot) {
+    // Same indicators as Autosave when present: green load (opens NEW), no save.
+    matrixInd('M', 'G', 1);
+    setFileRGB(1, 0x000000);
+    setFileRGB(2, 0x000000);
+  } else if (isAutosaveSlot) {
     // Load-only autosave slot: green load if present. Encoder 2 does nothing here.
     matrixInd('M', txtExists ? 'G' : 'E', 1);
     setFileRGB(1, 0x000000);
@@ -10158,9 +10201,7 @@ void setSliderDefForChannel(int channel) {
     // Clear all pages first to avoid stale data in unused slots
     for (int p = 0; p < FILTER_PAGE_CAP; ++p) {
       for (int s = 0; s < 4; ++s) {
-        sliderDef[channel][p][s] = channel <= 3
-            ? SliderDefEntry{ ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 }
-            : SliderDefEntry{};
+        sliderDef[channel][p][s] = SliderDefEntry{ ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
       }
     }
     memcpy(sliderDef[channel], sampleVoiceTemplate, sizeof(sampleVoiceTemplate));
@@ -10382,5 +10423,19 @@ FLASHMEM void applyMutesAfterPMODSwitch() {
   for (int ch = 0; ch < maxY; ch++) {
     bool muteState = getMuteState(ch);
     SMP.mute[ch] = muteState;  // Apply to audio system
+  }
+}
+
+// MODE > AUTO: when PMOD is on, each generated page inherits the source page's mute map
+// so muted voices stay silent across the continuation (pages are 1-indexed).
+FLASHMEM void copyPageMutes(int fromPage, int toPage) {
+  if (!SMP_PATTERN_MODE || childLockEnabled) return;
+  if (fromPage < 1 || toPage < 1) return;
+  if (fromPage > (int)maxPages || toPage > (int)maxPages) return;
+  if (fromPage == toPage) return;
+  for (int ch = 0; ch < maxY; ch++) {
+    bool muted = pageMutes[fromPage - 1][ch];
+    pageMutes[toPage - 1][ch] = muted;
+    SMP.pageMutes[toPage - 1][ch] = muted;
   }
 }

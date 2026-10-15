@@ -38,6 +38,16 @@ struct CompanionContext {
   uint16_t harmonicWeight[16] = {};
   uint16_t rowWeight[17] = {};
   uint16_t pitchClassWeight[12] = {};
+  uint16_t barPitchClassWeight[4][12] = {};
+  uint16_t barBassPcWeight[4][12] = {};
+  uint8_t channelHomeRow[16] = {};
+  uint8_t channelMeanVel[16] = {};
+  uint16_t channelHitCount[16] = {};
+  uint16_t kickMask16 = 0;
+  uint16_t snareMask16 = 0;
+  uint16_t bassMask16 = 0;
+  uint16_t harmonicMask16 = 0;
+  uint8_t syncopationScore = 0;  // 0..100 ratio of off-beat energy
   uint32_t totalWeight = 0;
   uint16_t sourcePages = 0;
   uint8_t rootRow = 1;
@@ -50,6 +60,8 @@ struct CompanionHarmony {
   uint8_t rootPc = 0;       // 0..11 pitch class
   bool isMinor = true;
   uint8_t degree[4] = {0, 5, 2, 6};  // one chord degree per harmonic slot
+  uint8_t chordRootPc[4] = {0, 0, 0, 0};  // actual or derived root pc per 4-step bar
+  bool barHasContext[4] = {false, false, false, false};
 };
 
 struct CompanionGroove {
