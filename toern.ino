@@ -736,11 +736,12 @@ bool getSpkrEnabled() {
   return spkrEnabled;
 }
 
+void applySpkrHardware();
+
 // Set SPKR enabled state and update pin 30
 void setSpkrEnabled(bool enabled) {
   spkrEnabled = enabled;
-  pinMode(30, OUTPUT);                     // Switch to OUTPUT mode to control the pin
-  digitalWrite(30, enabled ? LOW : HIGH);  // ON = LOW, OFF = HIGH
+  applySpkrHardware();
 }
 
 // Get child lock enabled state
@@ -1319,6 +1320,14 @@ FLASHMEM void enforceChildModeRestrictions() {
 EXTMEM static size_t fastRecWriteIndex[MAX_CHANNELS];
 bool fastRecordActive = false;
 uint8_t fastRecordChannel = 0;  // channel whose sample buffer is being overwritten
+
+// Pin 30 gates the speaker amp. Keep VOL>SPKR state, but force the amp off
+// while capturing so mic/line cannot loop through the speaker.
+void applySpkrHardware() {
+  pinMode(30, OUTPUT);
+  const bool hwOn = spkrEnabled && !isRecording && !fastRecordActive;
+  digitalWrite(30, hwOn ? LOW : HIGH);  // ON = LOW, OFF = HIGH
+}
 bool recordingBorderArmed = false;  // red border shown before/during armed capture
 bool countInActive = false;              // Count-in active for ON1 mode
 int countInBeat = 0;                     // Current count-in beat (0-4, where 0=waiting, 1-4=count, 5=start recording)
@@ -5307,20 +5316,12 @@ FLASHMEM void checkEncoders() {
               // Mic input
               micGain = (unsigned int)newGain;
               sgtl5000_1.micGain(micGain);
-              // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end)
-              extern AudioMixer4 mixer_end;
-              const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;
-              float monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
-              mixer_end.gain(3, monitorGain);
+              mixer_end.gain(3, recInputMonitorGain());
             } else {
               // Line input
               lineInLevel = (unsigned int)newGain;
               sgtl5000_1.lineInLevel(lineInLevel);
-              // Update monitoring gain (match loudest playback: amps×mixer1/2×mixer_end)
-              extern AudioMixer4 mixer_end;
-              const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;
-              float monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
-              mixer_end.gain(3, monitorGain);
+              mixer_end.gain(3, recInputMonitorGain());
             }
 
             lastInputGain = newGain;
@@ -6946,18 +6947,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
     // Enable input monitoring with current gain settings
     audioInputAmp.gain(1.0f);  // Unity gain, no additional amplification
-
-    float monitorGain = 0.0f;
-    const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;  // Match typical single-hit playback level
-    if (recMode == 1) {
-      // Mic input: map micGain (0-63) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
-      monitorGain = mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
-    } else {
-      // Line input: map lineInLevel (0-15) to mixer gain (0.0-maxPlaybackGain) to match loudest playback
-      monitorGain = mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
-    }
-
-    mixer_end.gain(3, monitorGain);
+    mixer_end.gain(3, recInputMonitorGain());
     drawModeInputMonitorActive = true;
   } else if (drawModeInputMonitorActive && currentMode->name != "RECORD_MODE") {
     // Disable monitoring when conditions are no longer met

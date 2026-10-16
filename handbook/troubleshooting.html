@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261012b" />
+  <link rel="stylesheet" href="handbook.css?v=20261016r" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,9 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261011j"></script>
+  <script src="handbook-layout.js?v=20261016r"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261012b"></script>
+  <script src="handbook-nav.js?v=20261016r"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -40,11 +40,11 @@
               </details>
               <details>
                 <summary>Samples don't show up in the browser.</summary>
-                <p>The firmware caches the browse list. Run <a href="#reset">ETC → RSET → SD</a>: it rescans the card without touching your patterns. If they still don't appear, confirm the files are 16-bit mono WAV at 44.1 kHz and that the card was prepared with the layout from <a href="hardware.html#card-layout">SD card setup</a>.</p>
+                <p>The firmware caches the browse list. Run <a href="#reset">ETC → RSET → SD</a>: it rescans the card without touching your patterns. If they still don't appear, confirm the files are 16-bit mono WAV at 44.1 kHz and that the card was prepared with the layout from the <a href="sd-card.html">SD card chapter</a>.</p>
               </details>
               <details>
                 <summary>SD tool cannot connect / no serial port.</summary>
-                <p>Use desktop <strong>Chrome or Edge</strong> at <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> — Android / Pixel usually cannot see the Teensy USB serial port. On the unit, stay on <a href="menus.html#sd">ETC → SD</a> (WAIT → OK). Opening the port can reboot the Teensy; if the screen leaves that page, open <strong>ETC → SD</strong> again after Connect. See <a href="hardware.html#sd-tool">Hardware → SD tool</a>.</p>
+                <p>Use desktop <strong>Chrome or Edge</strong> at <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> — Android / Pixel usually cannot see the Teensy USB serial port. On the unit, stay on <a href="menus.html#sd">ETC → SD</a> (WAIT → OK). Opening the port can reboot the Teensy; if the screen leaves that page, open <strong>ETC → SD</strong> again after Connect. See <a href="sd-card.html#sd-tool">SD card → SD tool</a>.</p>
               </details>
               <details>
                 <summary>External MIDI is in sync but kicks click off by a few ms.</summary>
@@ -55,8 +55,8 @@
                 <p>You are on EXT clock and the incoming MIDI clock is unstable or absent. Either fix the master (cable, source clock setting) or flip <a href="tempo-midi.html#bpm">BPM → encoder&nbsp;3</a> back to INT to use <span class="hb-brand">TŒRN's</span> own clock.</p>
               </details>
               <details>
-                <summary>I switched packs and now my pattern sounds wrong.</summary>
-                <p>Packs change what each voice row plays. The pattern still references the same rows, but they now contain different samples. Either reload the previous pack (encoder&nbsp;1 short on the KIT screen with the right number), or — for next time — save a PATT pattern <em>per pack</em> and record the matching kit number alongside it.</p>
+                <summary>I switched kits and now my pattern sounds wrong.</summary>
+                <p>Kits change what each voice row plays. The pattern still references the same rows, but they now contain different samples. Either reload the previous KIT (encoder&nbsp;1 short on the KIT screen with the right number), or — for next time — save a PATT pattern <em>per KIT</em> and record the matching KIT number alongside it.</p>
               </details>
               <details>
                 <summary>I cleared the wrong page.</summary>
@@ -113,12 +113,12 @@
               <table class="opt-table">
                 <thead><tr><th>Mode</th><th>What runs</th><th>What survives</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>SD</strong></td><td>Walks the whole card, writes <code>samples/toern_wavs.txt</code> (used by mute-mode random preview <code>?&gt;</code>), invalidates the sample browser cache, flashes SCAN then a green checkmark, returns to draw.</td><td>Everything except the stale browse/random index. Use after a card-reader swap or transfers via the <a href="hardware.html#sd-tool">SD tool</a>.</td></tr>
+                  <tr><td><strong>SD</strong></td><td>Walks the whole card, writes <code>samples/toern_wavs.txt</code> (used by mute-mode random preview <code>?&gt;</code>), invalidates the sample browser cache, flashes SCAN then a green checkmark, returns to draw.</td><td>Everything except the stale browse/random index. Use after a card-reader swap or transfers via the <a href="sd-card.html#sd-tool">SD tool</a>.</td></tr>
                   <tr><td><strong>EFX</strong></td><td>Resets every tone control — filters, envelopes, synth parameters, octave helpers, audio effects — back to factory values across all voices.</td><td>Patterns and sample assignments survive. Every tone control snaps back to factory.</td></tr>
                   <tr><td><strong>FULL</strong></td><td>Wipes the entire session: clears all notes, velocities, probabilities, sets BPM to 100, resets volumes and filter data, deletes then rewrites <code>autosaved.txt</code>, and rescans the SD card.</td><td><a href="play.html#leds">ETC → ADV → LEDS</a> (panel 1 / 1B / 2 / 2B). PATT-saved patterns. Almost nothing else in RAM.</td></tr>
                   <tr><td><strong>PATT</strong></td><td>Deletes pattern files <code>1–999.txt</code>.</td><td><code>autosaved.txt</code> and the current RAM session.</td></tr>
-                  <tr><td><strong>KIT</strong></td><td>Deletes sample-pack folders except pack&nbsp;1.</td><td>Patterns. Pack&nbsp;1.</td></tr>
-                  <tr><td><strong>ASAV</strong></td><td>Deletes <code>autosaved.txt</code> and its <code>.tmp</code> / <code>.bak</code> recovery files and clears the grid.</td><td>Settings, PATT slots, packs. Next boot is blank if you don't pause-autosave first — use FULL if the session itself is garbage.</td></tr>
+                  <tr><td><strong>KIT</strong></td><td>Deletes kit folders except KIT&nbsp;1.</td><td>Patterns. KIT&nbsp;1.</td></tr>
+                  <tr><td><strong>ASAV</strong></td><td>Deletes <code>autosaved.txt</code> and its <code>.tmp</code> / <code>.bak</code> recovery files and clears the grid.</td><td>Settings, PATT slots, kits. Next boot is blank if you don't pause-autosave first — use FULL if the session itself is garbage.</td></tr>
                 </tbody>
               </table>
               <div class="hb-warn"><strong>There is no undo beyond reloading saved pattern files.</strong> If you choose FULL with unsaved work in RAM, that work is gone.</div>
@@ -150,10 +150,8 @@
           </section>
         </section>
 
-        <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="reference.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Screen index</span></a>
-          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
-          <span class="hb-pager__spacer" aria-hidden="true"></span>
+        <nav class="hb-pager" aria-label="Next chapter">
+          <a class="hb-pager__link hb-pager__link--next" href="index.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Welcome</span></a>
         </nav>
       </div>
       <script src="handbook-led.js?v=20261011y" defer></script>

@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261012b" />
+  <link rel="stylesheet" href="handbook.css?v=20261016r" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,16 +16,16 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261011j"></script>
+  <script src="handbook-layout.js?v=20261016r"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261012b"></script>
+  <script src="handbook-nav.js?v=20261016r"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-hardware">
           <h2 class="handbook-page__title">The device</h2>
-          <p class="handbook-page__summary">Every port, button, and jack on a <span class="hb-brand">TŒRN</span> unit — what it does, when you use it, and what to watch out for. Includes <a href="#card-layout">SD card setup</a> (format, default content, SD tool).</p>
+          <p class="handbook-page__summary">Every port, button, and jack on a <span class="hb-brand">TŒRN</span> unit — what it does and when you use it.</p>
 
           <figure class="hb-figure hb-figure--full" id="device-map">
             <img src="annotated.png" alt="Annotated TŒRN overview: encoders, touch pads, matrix voice rows, and all ports labelled" width="2480" height="1392" loading="eager" />
@@ -33,12 +33,12 @@
 
           <section class="hb-sub" id="overview">
             <h2>Top-down overview</h2>
-            <p class="lede">The face of <span class="hb-brand">TŒRN</span> is dominated by the <strong>RGB LED grid</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix — the diagram places those callouts just outside the chassis. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge.</p>
+            <p class="lede">The face of <span class="hb-brand">TŒRN</span> is dominated by the <strong>RGB LED grid</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge.</p>
 
             <div class="hb-portmap" aria-label="Annotated device map">
               <figure class="hb-portmap__photo">
                 <img src="topview.jpg" alt="TŒRN top-down photo of the device" loading="lazy" />
-                <figcaption>The unit, photographed from above. Letters A–F mark the lower left and right edges in the schematic; G–J mark the bottom edge; K (touch&nbsp;3) is on the right bottom edge.</figcaption>
+                <figcaption>The unit, photographed from above. Letters mark the ports and controls shown in the schematic.</figcaption>
               </figure>
               <svg viewBox="-90 0 780 800" role="img" aria-label="Hardware port map" class="hb-portmap__svg">
                 <defs>
@@ -107,38 +107,38 @@
                 <!-- A–C: lower left edge; glyphs on chassis, labels outside (black text) -->
                 <g>
                   <rect x="62" y="516" width="16" height="14" fill="#202028" stroke="#3a3a4a"/>
-                  <text x="52" y="530" fill="#0e1622" font-size="11" font-weight="600" text-anchor="end">A · Line out</text>
+                  
                   <rect x="66" y="566" width="12" height="14" fill="#202028" stroke="#3a3a4a"/>
-                  <text x="52" y="580" fill="#0e1622" font-size="11" font-weight="600" text-anchor="end">B · USB-C</text>
+                  
                   <circle cx="70" cy="616" r="11" fill="#202028" stroke="#3a3a4a"/>
                   <circle cx="70" cy="616" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
-                  <text x="52" y="630" fill="#0e1622" font-size="11" font-weight="600" text-anchor="end">C · Headphone out</text>
+                  
                 </g>
 
                 <!-- D–F: lower right edge (F→E→D top to bottom); glyphs on chassis, labels outside -->
                 <g>
                   <rect x="518" y="516" width="18" height="12" fill="#202028" stroke="#3a3a4a"/>
-                  <text x="548" y="530" fill="#0e1622" font-size="11" font-weight="600" text-anchor="start">F · Power switch</text>
+                  
                   <circle cx="530" cy="568" r="11" fill="#202028" stroke="#3a3a4a"/>
                   <circle cx="530" cy="568" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
-                  <text x="548" y="580" fill="#0e1622" font-size="11" font-weight="600" text-anchor="start">E · MIDI out (TRS)</text>
+                  
                   <circle cx="530" cy="616" r="11" fill="#202028" stroke="#3a3a4a"/>
                   <circle cx="530" cy="616" r="4" fill="#0a0a0e" stroke="#3a3a4a"/>
-                  <text x="548" y="630" fill="#0e1622" font-size="11" font-weight="600" text-anchor="start">D · MIDI in (TRS)</text>
+                  
                 </g>
               </svg>
               <dl class="hb-portmap__legend">
-                <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level under <a href="menus.html#vol">VOL → LOUT</a>.</dd></div>
-                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Power, firmware updates, serial access for the SD tool and two-channel USB audio output to a computer. USB audio follows the output routing under VOL → 2-CH; if a LiPo is installed, USB also charges that cell.</dd></div>
-                <div><dt>C</dt><dd><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use any phones or in-ears; level under <a href="menus.html#vol">VOL → MAIN</a>.</dd></div>
-                <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device. See <a href="midi.html">MIDI</a> and <a href="tempo-midi.html">Tempo</a> (clock source).</dd></div>
-                <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock + notes; pick what to emit under <a href="midi.html#send">MIDI → SEND</a>.</dd></div>
-                <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Boots when slid on; save to PATT before switching off; the switch cuts power without saving.</dd></div>
-                <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the bottom edge for hands-free sampling. Pick it as the active source under <a href="menus.html#rec">REC → INPT</a>.</dd></div>
-                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge, up to 64&nbsp;GB. All samples, kits, patterns, songs and palettes live here. Push to seat, push again to eject. Only insert/eject with the unit <em>off</em> — the firmware re-indexes the card on boot. <span class="hb-brand">TŒRN</span> does not mount the card as USB mass storage: prepare the initial layout with a card reader, or transfer files while the card stays in the unit via <a href="#sd-tool">ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (see <a href="#card-layout">SD card setup</a> below).</dd></div>
-                <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain under <a href="menus.html#rec">REC → MIC</a>.</dd></div>
-                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the bottom edge. The current recording path uses the left input only and saves mono WAVs. Sample synths, drum machines or modular gear. Trim under <a href="menus.html#rec">REC → L-IN</a>.</dd></div>
-                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter <a href="record.html#record-mode">record mode</a> from the sample browser. See <a href="controls.html#touch">Controls → Touch pads</a>.</dd></div>
+                <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level.</dd></div>
+                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Power, firmware updates, serial access and USB audio output to a computer.</dd></div>
+                <div><dt>C</dt><dd><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use headphones or in-ears; level is adjustable.</dd></div>
+                <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device.</dd></div>
+                <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock and notes.</dd></div>
+                <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Turns the unit on and off.</dd></div>
+                <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the bottom edge.</dd></div>
+                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge. Holds samples, kits, patterns and songs. Push to seat, push again to eject. Only insert or eject with the unit <em>off</em>.</dd></div>
+                <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain is adjustable.</dd></div>
+                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the bottom edge. The current recording path uses the left input only and saves mono WAVs. Sample synths, drum machines or modular gear. </dd></div>
+                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter record mode from the sample browser. </dd></div>
               </dl>
             </div>
           </section>
@@ -165,13 +165,9 @@
           <section class="hb-sub" id="internals">
             <h2>Internals</h2>
             <ul>
-              <li><strong>Microcontroller:</strong> Teensy&nbsp;4.1 plus the Teensy Audio Shield.</li>
-              <li><strong>Memory:</strong> 16&nbsp;MB PSRAM (used for sample voices and the preview buffer) + up to 64&nbsp;GB Micro&nbsp;SD.</li>
-              <li><strong>Audio:</strong> 44.1&nbsp;kHz, 16-bit, stereo output. Mono input recording.</li>
-              <li><strong>Battery:</strong> optional internal LiPo (if installed). Estimated percentage shown under <a href="menus.html#etc">ETC → BATT</a> — accurate enough for "is this enough for the set?" decisions.</li>
-              <li><strong>Speaker:</strong> small internal driver; switchable under <a href="menus.html#vol">VOL → SPKR</a>.</li>
-              <li><strong>Internal mic + Mic-in jack:</strong> a built-in capsule for hands-free sampling, plus a dedicated 6.35&nbsp;mm Mic-in jack on the bottom edge for an external microphone. Pick which one is active under <a href="record.html#inpt">REC → INPT</a>; gain lives under <a href="record.html#mic">REC → MIC</a>.</li>
-              <li><strong>Analog clock / sidechain:</strong> JST&nbsp;PH 1×02 headers <strong>CLK-OUT(5V)</strong> (J25), <strong>CLK-IN(3–5V)</strong> (J26), <strong>SIDEC-5V</strong> (J27, voice&nbsp;1). See <a href="midi.html#ppqn">MIDI → PPQN</a>.</li>
+              <li><strong>Battery:</strong> internal LiPo battery.</li>
+              <li><strong>Speaker:</strong> small internal speaker.</li>
+              <li><strong>Internal mic + Mic-in jack:</strong> built-in microphone and a 6.35&nbsp;mm input for an external microphone.</li>
             </ul>
           </section>
 
@@ -179,62 +175,16 @@
           <hr />
 
 
-          <section class="hb-sub" id="card-layout">
-            <h2>SD card setup</h2>
-            <div class="hb-warn"><strong>Not USB storage:</strong> <span class="hb-brand">TŒRN</span> does <em>not</em> mount the microSD card as a disk drive. You cannot drag files onto it like a USB stick. Use a card reader for first-time setup, or the <a href="#sd-tool">SD tool</a> while the card stays in the unit.</div>
-            <p class="lede">Two ways to get files onto the card: prepare it once with a computer and card reader (below), or transfer while the card stays in <span class="hb-brand">TŒRN</span> via <a href="#sd-tool">Menu → ETC → SD</a> and <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a>.</p>
 
-            <h3 class="hb-subsection-heading" id="sd-tool">SD tool (card stays in the unit)</h3>
-            <p>Open <strong>Menu → ETC → SD</strong> on the device (the file server is only active while that page is open — the screen shows <strong>WAIT</strong>, then <strong>OK</strong> when a host connects). On a computer, open <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">https://sdtool.tyng.app</a> in <strong>Chrome or Edge</strong>, click <strong>Connect</strong>, and pick the Teensy serial port. Browse folders, upload WAVs (the site converts to 44.1&nbsp;kHz mono 16-bit), download, rename, or delete. You can drop multiple files, whole folders (subfolders kept), or a <code>.zip</code> (extracted in the browser into the current SD folder).</p>
-            <div class="hb-tip"><strong>Tips:</strong> stay on <strong>ETC → SD</strong> for the whole session. Opening the serial port can reboot the Teensy — if the screen leaves the SD page, open <strong>ETC → SD</strong> again after Connect. Desktop only: Android / Pixel Chrome usually cannot see the Teensy USB serial port. After big transfers, run <a href="menus.html#rset">ETC → RSET → SD</a> if the sample browser still looks stale.</div>
-
-            <h3 class="hb-subsection-heading">Download default content (card reader)</h3>
-            <p>The default folder layout, sample packs, and starter settings are available from the <a href="https://audioconvert.tyng.app/" rel="noopener" target="_blank"><span class="hb-brand">TŒRN</span> Sample converter</a> (<code>audioconvert.tyng.app</code>). Open the <strong>SD CARD</strong> section and download <strong>SD-CARD-CONTENT.zip</strong>. Extract the ZIP and copy all files and folders to the <strong>root</strong> of your microSD card (not inside a subfolder). Full instructions are on that page.</p>
-
-            <h3 class="hb-subsection-heading">Recommended card</h3>
-            <ul>
-              <li><strong>SanDisk Ultra</strong> microSD (grey label)</li>
-              <li><strong>Speed class:</strong> UHS-I (Class 10)</li>
-              <li><strong>Capacity:</strong> up to 64&nbsp;GB</li>
-              <li>Use a genuine card from a trusted retailer — counterfeits often cause read errors or missing samples.</li>
-            </ul>
-
-            <h3 class="hb-subsection-heading">How to format</h3>
-            <ol>
-              <li>Insert the microSD card into your computer with a card reader (not the <span class="hb-brand">TŒRN</span> unit).</li>
-              <li>Download and run the <a href="https://www.sdcard.org/downloads/formatter/" target="_blank" rel="noopener noreferrer">SD Memory Card Formatter</a> from the SD Association.</li>
-              <li>Select your card, leave <strong>Format type</strong> on <em>Quick format</em>, and click <strong>Format</strong>. Cards up to 32&nbsp;GB are formatted as FAT32; 64&nbsp;GB cards use exFAT — both work with <span class="hb-brand">TŒRN</span>.</li>
-              <li>Extract <strong>SD-CARD-CONTENT.zip</strong> and copy all files and folders to the <strong>root</strong> of the card (not inside a subfolder).</li>
-              <li>Eject the card safely, insert it into <span class="hb-brand">TŒRN</span>, and power on.</li>
-            </ol>
-            <div class="hb-tip">Avoid formatting through Windows Explorer or macOS Disk Utility if possible — the SD Association tool sets the correct partition layout for removable media.</div>
-            <p>If the sample browser does not reflect new card content after power-up or after using the SD tool, run <a href="menus.html#rset">ETC → RSET → SD</a> to rescan.</p>
-          </section>
 
 
           <hr />
 
 
-          <section class="hb-sub" id="palette">
-            <h2>Colour scheme</h2>
-            <p>Bright pixels follow the main voice colours below; idle / off pixels use a dim "base" tint of the same hue so empty rows stay readable but quiet. You can switch to alternate palettes (or a custom one from the card) under <a href="menus.html#etc">ETC → ADV → COLR</a>.</p>
-            <div class="swatch-row" aria-hidden="true">
-              <span class="swatch" style="background:#ff0000" title="Voice 1"></span>
-              <span class="swatch" style="background:#ff4500" title="Voice 2"></span>
-              <span class="swatch" style="background:#ffff00" title="Voice 3"></span>
-              <span class="swatch" style="background:#00c800" title="Voice 4"></span>
-              <span class="swatch" style="background:#00ffff" title="Voice 5"></span>
-              <span class="swatch" style="background:#0000ff" title="Voice 6"></span>
-              <span class="swatch" style="background:#ff00ff" title="Voice 7"></span>
-              <span class="swatch" style="background:#dc6464" title="Voice 8"></span>
-              <span class="swatch" style="background:#787878" title="Neutral / synth"></span>
-            </div>
-          </section>
+
         </section>
 
-        <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="first-beat.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">First beat in 1 min</span></a>
-          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+        <nav class="hb-pager" aria-label="Next chapter">
           <a class="hb-pager__link hb-pager__link--next" href="matrix.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">The matrix</span></a>
         </nav>
       </div>

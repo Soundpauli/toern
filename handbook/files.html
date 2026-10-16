@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261012b" />
+  <link rel="stylesheet" href="handbook.css?v=20261016r" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,16 +16,16 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261011j"></script>
+  <script src="handbook-layout.js?v=20261016r"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261012b"></script>
+  <script src="handbook-nav.js?v=20261016r"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-files">
           <h2 class="handbook-page__title">Files — load &amp; save</h2>
-          <p class="handbook-page__summary"><strong>PATT</strong> is the pattern slot screen — the place to save a numbered pattern. This chapter covers load/save, the <strong>NEW</strong> pattern generator (empty-slot load), stored settings, autosave, and how patterns relate to <a href="sample-packs.html">sample packs</a>.</p>
+          <p class="handbook-page__summary"><strong>PATT</strong> is the pattern slot screen — the place to save a numbered pattern. This chapter covers load/save, the <strong>NEW</strong> pattern generator (first PATT entry), stored settings, autosave, and how patterns relate to <a href="sample-packs.html">sample kits</a>.</p>
 
           <section class="hb-sub" id="file">
             <h2>PATT — pattern slots</h2>
@@ -46,7 +46,7 @@
                   <tr><th>Turn</th><td>Apply sound settings</td><td>Encoder 3 selects whether the loaded sound settings are applied to the audio objects. Settings are stored inside the pattern file; see below.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Slot number (0–999)</td><td>Slot 0 (A) loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
+                  <tr><th>Turn</th><td>Slot number (1–9999)</td><td>Slot 0 (A) loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
                   <tr><th>Short</th><td>Back to grid</td><td>Leaves PATT without acting on the highlighted slot.</td></tr>
                 </tbody></table></div>
               </div>
@@ -60,7 +60,7 @@
 
           <section class="hb-sub" id="new">
             <h2>NEW — generate a starting pattern</h2>
-            <p class="lede">Not a root-menu item — a child of PATT. Spin to an empty (dim blue) slot and press load (encoder&nbsp;1). Missing file → pattern generator. It does not <em>load</em> a store; it <em>invents</em> notes with the same scale-aware generator as single-mode randomize, then parks the result in RAM.</p>
+            <p class="lede">NEW is the first entry in PATT. Select it and press load (encoder&nbsp;1) to open the pattern generator. You can also reach it from an empty (dim blue) slot. It does not <em>load</em> a store; it <em>invents</em> notes with the same scale-aware generator as single-mode randomize, then parks the result in RAM.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="newfile" width="640" height="320" role="img" aria-label="NEW pattern"></canvas>
@@ -118,10 +118,8 @@
           </section>
         </section>
 
-        <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="note-detail.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Note detail</span></a>
-          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
-          <a class="hb-pager__link hb-pager__link--next" href="sample-packs.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sample packs</span></a>
+        <nav class="hb-pager" aria-label="Next chapter">
+          <a class="hb-pager__link hb-pager__link--next" href="sample-packs.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sample kits</span></a>
         </nav>
       </div>
       <script src="handbook-led.js?v=20261011y" defer></script>

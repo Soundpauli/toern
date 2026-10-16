@@ -953,7 +953,8 @@ void finalizeWavHeader(File &file, uint32_t dataSize) {
   file.seek(44 + dataSize);
 }
 
-// REC input monitor into mixer_end in3. VOL>SPKR on → always 0 (speaker+mic/line feedback).
+// REC input monitor into mixer_end in3. VOL>SPKR on → always 0 (electrical feedback).
+// Speaker amp is also forced off while capturing (see applySpkrHardware).
 float recInputMonitorGain() {
   if (getSpkrEnabled()) return 0.0f;
   const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;
@@ -983,7 +984,8 @@ void startRecordingRAM() {
   showIcons(ICON_RECORD, UI_DIM_RED);
   FastLEDshow();
   isRecording = true;
-  
+  applySpkrHardware();
+
   mixer_end.gain(3, recInputMonitorGain());
 }
 
@@ -1001,6 +1003,7 @@ void flushAudioQueueToRAM2() {
     //Serial.println("⚠️ Buffer full");
     queue1.end();
     isRecording = false;
+    applySpkrHardware();
   }
 }
 
@@ -1009,7 +1012,8 @@ void stopRecordingRAM(int fnr, int snr) {
   flushAudioQueueToRAM();
   queue1.end();
   isRecording = false;
-  
+  applySpkrHardware();
+
   // Disable audio input monitoring
   mixer_end.gain(3, 0.0);
 
@@ -1124,6 +1128,7 @@ void startFastRecord() {
   // 3) Restart recording queue
   queue1.begin();
   fastRecordActive = true;
+  applySpkrHardware();
 
   // Red border is armed + shown from main loop before this runs.
   // Do not FastLED.show() here — ON1 starts from the playNote ISR.
@@ -1210,6 +1215,7 @@ void stopFastRecord() {
   
   // Now safe to stop recording
   fastRecordActive = false;
+  applySpkrHardware();
   fastRecordChannel = 0;
   recordingBorderArmed = false;
   pendingStartFastRecord = false;

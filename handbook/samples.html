@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261012b" />
+  <link rel="stylesheet" href="handbook.css?v=20261016r" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,9 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261011j"></script>
+  <script src="handbook-layout.js?v=20261016r"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261012b"></script>
+  <script src="handbook-nav.js?v=20261016r"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -28,9 +28,9 @@
           <p class="handbook-page__summary">The sample browser — folders, trim, reverse, preview, and load for voices 1–8.</p>
 
           <section class="hb-sub" id="overview">
-            <h2>Pack vs wave</h2>
-            <p class="lede">A <strong>pack</strong> (<a href="sample-packs.html">Sample packs</a>) chooses which numbered folder fills the eight sample voices. The <strong>sample browser</strong> here picks one <code>.wav</code> under <code>samples/</code> for the current voice (channels 1–8), with trim, reverse, and load before the audio replaces what that voice plays.</p>
-            <p>Samples are mono 16-bit WAV at 44.1&nbsp;kHz, up to 12 seconds per voice. Prepare the card once via <a href="hardware.html#card-layout">Hardware → SD card setup</a>.</p>
+            <h2>KIT vs SMP / sample</h2>
+            <p class="lede">A <strong>KIT</strong> (<a href="sample-packs.html">Sample kits</a>) chooses a numbered kit for the eight sample voices. The <strong>SMP</strong> sample browser picks one sample from <code>samples/</code> for the current voice (channels 1–8), with trim, reverse, preview, and load.</p>
+            <p>Samples are mono 16-bit WAV at 44.1&nbsp;kHz, up to 12 seconds per voice. To change card contents, see <a href="sd-card.html">SD card</a>.</p>
           </section>
 
 
@@ -109,9 +109,7 @@
           </section>
         </section>
 
-        <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="advanced-sequencing.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Advanced Sequencing</span></a>
-          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+        <nav class="hb-pager" aria-label="Next chapter">
           <a class="hb-pager__link hb-pager__link--next" href="sound.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sound design</span></a>
         </nav>
       </div>
@@ -120,8 +118,8 @@
           var map = {
             "record-mode": "record.html#record-mode",
             "live-record": "record.html#live-record",
-            "card-layout": "hardware.html#card-layout",
-            "sd-tool": "hardware.html#sd-tool"
+            "card-layout": "sd-card.html",
+            "sd-tool": "sd-card.html#sd-tool"
           };
           var to = map[location.hash.slice(1)];
           if (to) location.replace(to);

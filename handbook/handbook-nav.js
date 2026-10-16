@@ -4,7 +4,7 @@
       group: "Get started",
       items: [
         { href: "index.html", title: "Welcome", desc: "First boot", icon: "welcome" },
-        { href: "first-beat.html", title: "First beat in 1 min", desc: "Seven quick steps", icon: "sequencing" },
+        { href: "first-beat.html", title: "Your first beat in 1 min", desc: "Seven quick steps", icon: "sequencing" },
         { href: "hardware.html", title: "Hardware", desc: "Ports & buttons", icon: "hardware" },
         { href: "matrix.html", title: "The matrix", desc: "Rows & voices", icon: "matrix" },
         { href: "controls.html", title: "Controls", desc: "Encoders & touch", icon: "controls" },
@@ -28,7 +28,8 @@
       group: "Operate",
       items: [
         { href: "files.html", title: "Files", desc: "Load, save, NEW", icon: "files" },
-        { href: "sample-packs.html", title: "Sample packs", desc: "Pack slots & folders", icon: "packs" },
+        { href: "sd-card.html", title: "SD card", desc: "Change card contents", icon: "files" },
+        { href: "sample-packs.html", title: "Sample kits", desc: "KIT slots & folders", icon: "packs" },
         { href: "tempo-midi.html", title: "Tempo", desc: "BPM & clock", icon: "tempo" },
         { href: "play.html", title: "Settings", desc: "Playing Attributes", icon: "play" },
         { href: "midi.html", title: "MIDI", desc: "Notes, sync, PPQN", icon: "midi" },
@@ -147,7 +148,7 @@
       html.push("</ul></div>");
     });
 
-    html.push("</nav>");
+    html.push("</nav>", '<div class="hb-sidebar__layout"></div>');
     sidebar.innerHTML = html.join("");
   }
 
@@ -288,6 +289,7 @@
     chromeReady = true;
     if (!sidebar) sidebar = document.getElementById("hb-sidebar");
     if (!sidebar) return;
+    if (window.HBLayout) window.HBLayout.mount(sidebar.querySelector(".hb-sidebar__layout"));
     ensureMobileBar();
     initMobileNav(sidebar);
     var currentSection = NAV.find(function (section) {
@@ -302,7 +304,6 @@
       meta.className = "hb-chapter-meta";
       meta.innerHTML = '<a href="index.html">TŒRN / Handbook</a><span>CHAPTER ' + String(index).padStart(2, "0") + ' / ' + String(items.length - 1).padStart(2, "0") + '</span>';
       wrap.insertBefore(meta, wrap.firstChild);
-      if (window.HBLayout) window.HBLayout.mount(meta);
     }
   }
 

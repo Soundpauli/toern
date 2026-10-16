@@ -36,6 +36,8 @@
         apply();
         window.dispatchEvent(new Event("hb-layout-change"));
       });
+      if (!parent) return;
+      choice.setAttribute("aria-label", "Matrix layout");
       parent.appendChild(choice);
       apply();
     }

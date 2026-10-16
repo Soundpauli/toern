@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261012b" />
+  <link rel="stylesheet" href="handbook.css?v=20261016r" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,9 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261011j"></script>
+  <script src="handbook-layout.js?v=20261016r"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261012b"></script>
+  <script src="handbook-nav.js?v=20261016r"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -88,21 +88,21 @@
 
                     <li id="file">
                       <a href="files.html#file"><span class="node">PATT</span></a>
-                      <span class="desc">Pattern vault. One slot = the whole session on the card: all <span data-hb-pages>8</span> pages, every voice, every per-step value, every tone knob — everything except which sample pack is loaded.</span>
+                      <span class="desc">Pattern vault. One slot = the whole session on the card: all <span data-hb-pages>8</span> pages, every voice, every per-step value, every tone knob — everything except which sample KIT is loaded.</span>
                       <span class="sub">
                         <ul class="sub-opts">
-                          <li><strong>Enc&nbsp;1 short</strong> — load</li>
+                          <li><strong>Enc&nbsp;1 short</strong> — load the selected entry</li>
                           <li><strong>Enc&nbsp;2 short</strong> — save (overwrites, no “are you sure?”)</li>
                           <li><strong>Enc&nbsp;3 turn</strong> — apply sound settings on/off (stored inside the pattern file)</li>
-                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>0–999</strong> (0/A = load-only recovery) (bright green = occupied, dim blue = empty)</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–9999</strong> (0/A = load-only recovery) (bright green = occupied, dim blue = empty)</li>
                           <li><strong>Enc&nbsp;4 short</strong> — back to the grid</li>
                         </ul>
                       </span>
-                      <span class="how">Try to load an empty (blue) slot and you do not get an error — you get <a href="files.html#new">NEW</a>, the pattern generator. That is intentional: empty file → invent something. Save first if the current RAM pattern still matters.</span>
+                      <span class="how">The first entry in PATT is <a href="files.html#new">NEW</a>, the pattern generator. Empty (blue) slots also open NEW when loaded. Save first if the current RAM pattern still matters.</span>
                       <ul>
                         <li id="new-menu">
                           <a href="files.html#new"><span class="node">NEW</span></a>
-                          <span class="desc">Genre pattern generator — not a root menu item. Reached only by loading an empty PATT slot. Seeds a fresh pattern into RAM, then drops you on the grid.</span>
+                          <span class="desc">Genre pattern generator — the first PATT entry, also available from an empty slot. Seeds a fresh pattern into RAM, then drops you on the grid.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>Enc&nbsp;1 short</strong> — abort back to PATT</li>
@@ -121,9 +121,9 @@
                       <span class="desc">Which numbered folder of WAVs fills sample voices 1–8. Synths 11 / 13 / 14 ignore this; rows 9, 10, 12 stay empty forever (by design, not by bug).</span>
                       <span class="sub">
                         <ul class="sub-opts">
-                          <li><strong>Enc&nbsp;1 short</strong> — load pack (replaces all eight voices)</li>
-                          <li><strong>Enc&nbsp;2 short</strong> — remember this pack across reboots</li>
-                          <li><strong>Enc&nbsp;4 turn</strong> — pack <strong>0–99</strong> (green = folder exists, blue = missing). Pack&nbsp;0 is the scratchpad for one-off browser loads</li>
+                          <li><strong>Enc&nbsp;1 short</strong> — load KIT (replaces all eight voices)</li>
+                          <li><strong>Enc&nbsp;2 short</strong> — remember this KIT across reboots</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — KIT <strong>1–999</strong> (green = folder exists, blue = missing). KIT&nbsp;0 is the scratchpad for custom samples</li>
                           <li><strong>Enc&nbsp;4 short</strong> — back</li>
                         </ul>
                       </span>
@@ -608,7 +608,7 @@
                           </span>
                         </li>
 <li id="sd">
-                          <a href="hardware.html#sd-tool"><span class="node">SD</span></a>
+                          <a href="sd-card.html#sd-tool"><span class="node">SD</span></a>
                           <span class="desc">USB serial file server — stay on this page while a computer talks to the card.</span>
                           <span class="sub">
                             <ul class="sub-opts">
@@ -616,7 +616,7 @@
                               <li><strong>OK</strong> — connected</li>
                               <li>Use <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (Chrome/Edge + Web Serial)</li>
                             </ul>
-                            <span class="how">Reopen after Connect if the unit reboots. Details: <a href="hardware.html#sd-tool">Hardware → SD tool</a>.</span>
+                            <span class="how">Reopen after Connect if the unit reboots. Details: <a href="sd-card.html#sd-tool">SD card → SD tool</a>.</span>
                           </span>
                         </li>
 <li>
@@ -730,7 +730,7 @@
                               <li><strong>EFX</strong> — factory-reset every tone control (patterns &amp; sample assignments survive)</li>
                               <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">ETC → ADV → LEDS</a>; only PATT-saved work comes back)</li>
                               <li><strong>PATT</strong> — wipe saved patterns <code>1–999.txt</code> (keeps autosave)</li>
-                              <li><strong>KIT</strong> — delete pack folders except pack&nbsp;1</li>
+                              <li><strong>KIT</strong> — delete kit folders except KIT&nbsp;1</li>
                               <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
                             </ul>
                             <span class="how">PATT and KIT are the “I meant it” buttons.</span>
@@ -746,9 +746,7 @@
           </section>
         </section>
 
-        <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="song.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Song</span></a>
-          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+        <nav class="hb-pager" aria-label="Next chapter">
           <a class="hb-pager__link hb-pager__link--next" href="reference.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Screen index</span></a>
         </nav>
       </div>

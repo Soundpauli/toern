@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261012b" />
+  <link rel="stylesheet" href="handbook.css?v=20261016r" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,9 +16,9 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261011j"></script>
+  <script src="handbook-layout.js?v=20261016r"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261012b"></script>
+  <script src="handbook-nav.js?v=20261016r"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -48,9 +48,6 @@
             <h2>Row 1 — beat guide</h2>
             <p>In default <a href="sequencing.html#draw">Draw</a> mode the lowest row is <strong>not</strong> a voice lane. It shows a quiet <strong>4/4 orientation bar</strong>: dim markers every fourth step, starting at step&nbsp;1, across the full grid width so you can spot beat&nbsp;one and each downbeat while you edit. <strong>No notes can be placed here</strong> — painting starts on row&nbsp;2.</p>
             <p>With the cursor on <strong>row&nbsp;16</strong>, row&nbsp;1 instead paints <strong>encoder-hint glyphs</strong> so you know which knob is armed for page-wide tools — see <a href="pages-more.html#page-row">Pages+More</a>.</p>
-            <div class="hb-further">
-              <p><strong>Further information.</strong> Move the cursor onto row&nbsp;1 and the strip becomes a control surface: encoder&nbsp;2 long press opens the <a href="advanced-sequencing.html#mutes">mute overlay</a> (see that chapter); when input monitoring is enabled, encoder&nbsp;1 rides live input gain and a short press cycles monitor level — the beat markers change tint to match.</p>
-            </div>
           </section>
 
 
@@ -58,18 +55,18 @@
 
 
           <section class="hb-sub" id="row16">
-            <h2>Row 16 — the page strip <em>and</em> the power-tool row</h2>
-            <p>The top row of the matrix carries the <strong>page strip</strong>: one LED per pattern page (a pattern holds up to <span data-hb-pages>8</span> pages). But row 16 has a second job that is just as important: <strong>it is where every "operate on the whole pattern" tool lives</strong>. The same gesture that paints a single note on a voice row turns into a page-wide action when your cursor sits on row 16.</p>
+            <h2>Row 16 — TOOL-LANE</h2>
+            <p>The top row combines the <strong>page strip</strong> (one LED per pattern page; up to <span data-hb-pages>8</span> pages) with the <strong>TOOL-LANE</strong>, where page-wide actions are available when the cursor is on row 16.</p>
 
-            <div class="hb-tip"><strong>Row 16 is where these features live — and nowhere else</strong> (cursor must be on the page strip, <code>y==16</code>):
+            <div class="hb-tip"><strong>TOOL-LANE actions</strong> (cursor on row 16):
               <ul>
-                <li><a href="pages-more.html#delete-page">Delete a page</a> by unpainting its strip LED (L+R)</li>
+                <li><a href="pages-more.html#delete-page">Delete a page</a> by unpainting its strip LED</li>
                 <li>Copy &amp; paste a page</li>
                 <li>Clear the current edit page (single mode)</li>
                 <li>Random / scale-aware fill for the focused voice (single mode)</li>
                 <li>Note-shift — moving a whole voice's notes in time / across rows (single mode)</li>
               </ul>
-              Step off row 16 onto any voice row and these gestures turn back into per-note editing. The cue that the power tools are live is the <strong>hint strip on row 1</strong>: its colours change the moment your cursor crosses onto row 16. See <a href="pages-more.html#page-row">Pages+More</a> for colours and every encoder action.
+              The hint strip on row 1 shows which tools are active. Step onto a voice row to return to per-note editing.
             </div>
 
             <article class="hb-device">
@@ -118,7 +115,6 @@
             </div>
 
             <p><strong>Sample slots 1–8</strong> read audio from the SD card (see <a href="samples.html">Samples</a>). <strong>Voices 9, 10, and 12 are intentionally empty</strong> — no sound engine is wired to those rows; you may still move the cursor there, but notes placed on them do nothing. Voice <strong>11</strong> is a three-voice polyphonic synth with ten instrument presets plus LFO/ARP; voices <strong>13</strong> and <strong>14</strong> are independent mono synths with the same LFO and arpeggiator page.</p>
-            <div class="hb-tip"><strong>Reverb send (RVRB):</strong> not available on voices <strong>3, 4, 13, or 14</strong>. On the mono synths, filter page&nbsp;0 uses <strong>CENT</strong> in the third column instead of RVRB. See <a href="sound.html#filter">Sound design → filter pages</a>.</div>
             <p>For the actual sound chain (oscillators → envelope → filter → effects), see <a href="sound.html">Sound design</a>. For every mixer gain and bus, see <a href="audiopath.html">Audio path</a>.</p>
           </section>
 
@@ -128,9 +124,9 @@
 
           <section class="hb-sub" id="cursor">
             <h2>The cursor &amp; the playhead</h2>
-            <p>Two things move on the grid during playback — don't confuse them:</p>
+            <p>The grid shows an edit cursor and a playhead during playback:</p>
             <ul>
-              <li>The <strong>edit cursor</strong> is where the next gesture will land. In draw mode it is at <code>(current_x, current_y)</code> set by encoders 4 (column) and 1 (row). You can disguise it (under <a href="play.html#crsr">ETC → ADV → CRSR</a>) as a thin cross, a channel-readout dot, or a big block.</li>
+              <li>The <strong>edit cursor</strong> is your working tool: it marks where the next gesture will land. Encoder&nbsp;4 moves it across columns; encoder&nbsp;1 moves it between rows. A row-number helper can be shown beside it to make its position easier to read.</li>
               <li>The <strong>playhead</strong> is a <strong>red vertical line</strong> that runs left to right across the visible page — the column the sequencer is currently sounding. Notes under it light brighter as they fire; muted lanes stay dark.</li>
             </ul>
             <p>When playback is stopped, only the cursor moves. When playback is running, the red playhead marches across the page while the cursor stays wherever you left it.</p>
@@ -142,19 +138,16 @@
 
           <section class="hb-sub" id="modes-preview">
             <h2>What a "mode" actually means</h2>
-            <p>The matrix swaps role completely between modes. The four core sequencing views are explained in <a href="sequencing.html">Sequencing</a>:</p>
+            <p>The matrix swaps role between modes. The two core sequencing views are explained in <a href="sequencing.html">Sequencing</a>:</p>
             <ul>
               <li><strong>Draw</strong> — full LED grid view, every voice visible at full intensity.</li>
               <li><strong>Single</strong> — focus on one voice at a time, other voices dimmed.</li>
-              <li><strong>Set / remove triggers</strong> — L+R (two-hand write/erase) or R (one-hand toggle + break mute); see <a href="sequencing.html#paint">Sequencing</a>.</li>
             </ul>
-            <p>Menu mode overlays the whole matrix with text and submenu dots; you are still "in" your music — just not drawing on it. The <a href="menus.html">Menu map</a> covers every screen.</p>
+            <p>In other modes, the matrix shows controls or information for that task. Menu mode overlays text and submenu dots; playback can continue while you navigate. The <a href="menus.html">Menu map</a> covers every screen.</p>
           </section>
         </section>
 
-        <nav class="hb-pager" aria-label="Adjacent chapters">
-          <a class="hb-pager__link hb-pager__link--prev" href="hardware.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Hardware</span></a>
-          <a class="hb-pager__link hb-pager__link--hub" href="index.html">All chapters</a>
+        <nav class="hb-pager" aria-label="Next chapter">
           <a class="hb-pager__link hb-pager__link--next" href="controls.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Controls</span></a>
         </nav>
       </div>
