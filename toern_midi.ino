@@ -1089,8 +1089,8 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
 
           // Auto-exit BPM menu when clock locks
           extern Mode *currentMode;
-          extern Mode volume_bpm;
-          if (currentMode == &volume_bpm) {
+          extern Mode bpmMode;
+          if (currentMode == &bpmMode) {
             extern void switchMode(Mode *);
             extern Mode draw;
             extern Mode singleMode;

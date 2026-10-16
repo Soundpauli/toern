@@ -98,13 +98,13 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
         default: return 0;
       }
     case ARR_PARAM:
-      // Default ADSR for all channels: delay=0, A=32, D=32, S=32, R=0
+      // Default ADSR: delay=0, A=32, D=32, S=32, R=16 on synths 11/13/14 else R=0
       switch (idx) {
         case DELAY: return 0;
         case ATTACK: return 32;
         case DECAY: return 32;
         case SUSTAIN: return 32;
-        case RELEASE: return 0;
+        case RELEASE: return (ch == 11 || ch == 13 || ch == 14) ? 16 : 0;
         default: return 0;
       }
     case ARR_SYNTH:
@@ -132,7 +132,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
   }
 }
 
-// Unified ADSR slider defaults (0..maxfilterResolution): A=32, D=32, S=32, R=0
+// Unified ADSR slider defaults (0..maxfilterResolution): A=32, D=32, S=32, R=16 on 11/13/14 else R=0
 static void applyDefaultAdsrSettings(int ch) {
   SMP.param_settings[ch][ATTACK] = defaultSettingValue(ch, ARR_PARAM, ATTACK);
   SMP.param_settings[ch][DECAY] = defaultSettingValue(ch, ARR_PARAM, DECAY);

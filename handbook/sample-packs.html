@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,21 +16,22 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-sample-packs">
-          <h2 class="handbook-page__title">Sample kits</h2>
-          <p class="handbook-page__summary">A KIT holds the samples assigned to the eight sample voices. This chapter explains the KIT screen, how kits interact with patterns, and the special status of kit&nbsp;0.</p>
+          <h2 class="handbook-page__title" data-hb-copy="sample-packs.001">Sample kits</h2>
+          <p class="handbook-page__summary" data-hb-copy="sample-packs.002">A KIT holds the samples assigned to the eight sample voices. This chapter explains the KIT screen, how kits interact with patterns, and the special status of kit&nbsp;0.</p>
 
           <section class="hb-sub" id="what-pack">
-            <h2>What a KIT contains</h2>
-            <p class="lede">The SD card holds up to <strong>999 kit folders</strong> numbered <strong>1–999</strong>. Each folder defines which audio file plays on each of the eight sample voices (channels&nbsp;1–8) when you trigger a step. Switching kits replaces all eight voices in one motion — your <em>pattern</em> stays exactly the same, but the <em>sound</em> changes completely.</p>
-            <p>Only sample voices <strong>1–8</strong> are filled from a KIT. Synth voices <strong>11, 13, and 14</strong> are generated, not played from files, so they stay the same across kits. Rows <strong>9, 10, and 12</strong> are empty — no voice is assigned there.</p>
+            <h2 data-hb-copy="sample-packs.003">What a KIT contains</h2>
+            <p class="lede" data-hb-copy="sample-packs.004">The SD card holds up to <strong>999 kit folders</strong> numbered <strong>1–999</strong>. Each folder defines which audio file plays on each of the eight sample voices (channels&nbsp;1–8) when you trigger a step. Switching kits replaces all eight voices in one motion — your <em>pattern</em> stays exactly the same, but the <em>sound</em> changes completely.</p>
+            <p data-hb-copy="sample-packs.005">Only sample voices <strong>1–8</strong> are filled from a KIT. Synth voices <strong>11, 13, and 14</strong> are generated, not played from files, so they stay the same across kits. Rows <strong>9, 10, and 12</strong> are empty — no voice is assigned there.</p>
           </section>
 
 
@@ -38,30 +39,30 @@
 
 
           <section class="hb-sub" id="pack">
-            <h2>KIT — sample kit slots</h2>
-            <p>Open <strong>KIT</strong> from the root menu. The screen is laid out like PATT: a number, a load icon, a save icon.</p>
+            <h2 data-hb-copy="sample-packs.006">KIT — sample kit slots</h2>
+            <p data-hb-copy="sample-packs.007">Open <strong>KIT</strong> from the root menu. The screen is laid out like PATT: a number, a load icon, a save icon.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="pack" width="640" height="320" role="img" aria-label="KIT screen"></canvas>
               </div>
-              <p class="viz-caption--below">KIT screen — same family as PATT.</p>
+              <p class="viz-caption--below" data-hb-copy="sample-packs.008">KIT screen — same family as PATT.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Load kit</td><td>Reads the eight WAV files from the highlighted kit folder into RAM, replacing whatever was on the sample voices. Brightness of the number reflects whether the folder is populated.</td></tr>
+                  <tr><th>Short</th><td>Load kit</td><td data-hb-copy="sample-packs.010">Reads the eight WAV files from the highlighted kit folder into RAM, replacing whatever was on the sample voices. Brightness of the number reflects whether the folder is populated.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Save current samples</td><td>Writes the current eight sample voices into the selected numbered kit folder, replacing its files. A green animated checkmark confirms completion; a red animated cross means the kit was not fully saved.</td></tr>
+                  <tr><th>Short</th><td>Save current samples</td><td data-hb-copy="sample-packs.012">Writes the current eight sample voices into the selected numbered kit folder, replacing its files. A green animated checkmark confirms completion; a red animated cross means the kit was not fully saved.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
                   <tr><th>—</th><td>Unused on this page</td><td>—</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Kit number (1–999)</td><td>Selects numbered kit folders. Kit 0 is the automatic scratchpad for custom samples. Existing kits are green; missing kits are blue.</td></tr>
+                  <tr><th>Turn</th><td>Kit number (1–999)</td><td data-hb-copy="sample-packs.016">Selects numbered kit folders. Kit 0 is the automatic scratchpad for custom samples. Existing kits are green; missing kits are blue.</td></tr>
                   <tr><th>Short</th><td>Back to grid</td><td>Leaves KIT without acting on the highlighted kit.</td></tr>
                 </tbody></table></div>
               </div>
             </article>
-            <div class="hb-warn"><strong>Switching kits replaces eight voices at once.</strong> Your pattern still references "voice rows", but the underlying audio files change. Save to <a href="files.html#file">PATT</a> first if you care about recall later — the kit change by itself is not a backup.</div>
+            <div class="hb-warn" data-hb-copy="sample-packs.019"><strong>Switching kits replaces eight voices at once.</strong> Your pattern still references "voice rows", but the underlying audio files change. Save to <a href="files.html#file">PATT</a> first if you care about recall later — the kit change by itself is not a backup.</div>
           </section>
 
 
@@ -69,9 +70,9 @@
 
 
           <section class="hb-sub" id="pack-0">
-            <h2>KIT 0 — the scratchpad</h2>
-            <p>KIT&nbsp;0 is special. Whenever you load a single sample into a voice through the <a href="samples.html#set-wav">sample browser</a>, the new mapping is written into KIT&nbsp;0 so it survives reboot even if you never explicitly save it. Treat KIT&nbsp;0 as your <strong>scratchpad</strong>: the place where one-off custom voice assignments accumulate.</p>
-            <p>If you build a sound you like in KIT&nbsp;0 and want to keep it long-term, select a numbered KIT slot and press encoder&nbsp;2 to save the current eight samples there.</p>
+            <h2 data-hb-copy="sample-packs.020">KIT 0 — the scratchpad</h2>
+            <p data-hb-copy="sample-packs.021">KIT&nbsp;0 is special. Whenever you load a single sample into a voice through the <a href="samples.html#set-wav">sample browser</a>, the new mapping is written into KIT&nbsp;0 so it survives reboot even if you never explicitly save it. Treat KIT&nbsp;0 as your <strong>scratchpad</strong>: the place where one-off custom voice assignments accumulate.</p>
+            <p data-hb-copy="sample-packs.022">If you build a sound you like in KIT&nbsp;0 and want to keep it long-term, select a numbered KIT slot and press encoder&nbsp;2 to save the current eight samples there.</p>
           </section>
 
 
@@ -79,15 +80,15 @@
 
 
           <section class="hb-sub" id="card-layout">
-            <h2>How kits live on the card</h2>
-            <p>Each kit number maps to a numbered folder on the microSD card. The starter layout from <a href="sd-card.html">SD card chapter</a> includes:</p>
+            <h2 data-hb-copy="sample-packs.023">How kits live on the card</h2>
+            <p data-hb-copy="sample-packs.024">Each kit number maps to a numbered folder on the microSD card. The starter layout from <a href="sd-card.html">SD card chapter</a> includes:</p>
             <ul>
-              <li><code>0/</code>, <code>1/</code> … <code>999/</code> — one folder per kit number. Each folder holds the WAV files for sample voices 1 through 8 plus optional extras.</li>
-              <li><code>1.txt</code>, <code>2.txt</code>, … in the card root — binary <a href="files.html#sidecar">pattern files with their settings</a>.</li>
+              <li data-hb-copy="sample-packs.025"><code>0/</code>, <code>1/</code> … <code>999/</code> — one folder per kit number. Each folder holds the WAV files for sample voices 1 through 8 plus optional extras.</li>
+              <li data-hb-copy="sample-packs.026"><code>1.txt</code>, <code>2.txt</code>, … in the card root — binary <a href="files.html#sidecar">pattern files with their settings</a>.</li>
               <li><code>scheme.txt</code> — colour palette state, written by the <a href="https://toern.io/tools/colorsheme/" rel="noopener" target="_blank">colour-scheme web tool</a>.</li>
             </ul>
-            <p>On boot the firmware indexes the card and your kits show up in KIT. If the list looks stale after swapping the card, refreshing its contents offline, or transferring via the <a href="sd-card.html#sd-tool">SD tool</a> (card stays in the unit), run <a href="menus.html#rset">ETC → RSET → SD</a>.</p>
-            <div class="hb-tip"><strong>Conventions:</strong> the starter card uses kit folder numbers loosely by genre — low numbers for acoustic drums, mid-range for house/techno, higher for synth-only kits. Stick to the same naming when building new ones and the KIT screen becomes a quick set-list browser.</div>
+            <p data-hb-copy="sample-packs.028">On boot the firmware indexes the card and your kits show up in KIT. If the list looks stale after swapping the card, refreshing its contents offline, or transferring via the <a href="sd-card.html#sd-tool">SD tool</a> (card stays in the unit), run <a href="menus.html#rset">ETC → RSET → SD</a>.</p>
+            <div class="hb-tip" data-hb-copy="sample-packs.029"><strong>Conventions:</strong> the starter card uses kit folder numbers loosely by genre — low numbers for acoustic drums, mid-range for house/techno, higher for synth-only kits. Stick to the same naming when building new ones and the KIT screen becomes a quick set-list browser.</div>
           </section>
         </section>
 

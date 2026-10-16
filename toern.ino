@@ -28,7 +28,10 @@ static int fastDropRemaining = 0;
 volatile bool isrPlayButtonTick = false;      // request drawPlayButton() from main loop (one per beat)
 bool pendingPauseUIUpdate = false;            // deferred encoder/LED update after pause (avoid I2C stall)
 bool pendingPauseSkipSave = false;            // whether the pending pause should skip autoSave
-bool pendingPauseAutoSave = false;            // run autosave on a later loop tick (after pause UI)
+bool pendingPauseAutoSave = false;            // run autosave after pause, once audio tails settle
+elapsedMillis pauseSdWaitMs;                  // time since last pause (SD wait timeout)
+static uint8_t pauseSdSettleGen = 0;
+bool sdIoAudioSettled();
 volatile bool isrDbgPatternFinished = false;  // song-mode: pattern finished
 volatile uint16_t isrDbgPatternFinishedBeat = 0;
 volatile bool isrDbgLoopCountChanged = false;  // loopCount incremented
@@ -386,6 +389,8 @@ void drawPageNrOverlay(int pageNum);
 void drawSampleLoadOverlay(uint8_t progressPercent);
 bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
 void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
+void requestDeferredSampleLoadAutosave();
+void servicePendingSamplePersist();
 void saveSp0StateToEEPROM();
 void saveSingleModeToEEPROM(int index, int8_t value);
 FLASHMEM void flushSettingsBackupNow();
@@ -486,7 +491,7 @@ int8_t transportSendDelayMs = 17;   // -127..+127 ms, MENU>MIDI>SYNC SNC1 (see t
 int8_t transportRcveDelayMs = 17; // -127..+127 ms SNC2: + = delay that path; − = delay the other path
 bool MIDI_VOICE_SELECT = false;
 bool SMP_PATTERN_MODE = false;
-bool SMP_FLOW_MODE = false;      // FLOW mode: follows timer position when playing
+bool SMP_FLOW_MODE = true;      // FLOW mode: follows timer position when playing
 bool voiceMode = false;          // VMOD: each channel loops its own pages
 bool imageMode = false;          // IMG: black matrix; paint cycles voice/color from voice1
 int imgBrushChannel = 1;         // IMG: selected brush voice/color (1–8); touch1 cycles
@@ -505,6 +510,8 @@ uint16_t voiceLoopCount[16] = {0};
 uint8_t voiceEditPage[16] = {0}; // per-voice edit page (2nd encoder), 0 = page 1
 int8_t voicePageOffset[16] = {0}; // added to the global page so the 2nd encoder can cue one voice
 static bool spkrEnabled = true;  // SPKR toggle state (ON by default)
+static bool adcHpfEnabled = true; // REC>HPF: library high-pass on capture (ON by default)
+static bool usbSmpPreview = false; // VOL>USBP: SMP voice0 also on USB (OFF by default)
 static bool childLockEnabled = false;  // Child lock: requires touch2->touch1 sequence to enter menu
 static bool bootFullResetRequested = false;  // Touch1 held 10s at power-on (3s CLR + 7s more) → FULL reset late in setup()
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
@@ -696,11 +703,11 @@ extern const int PREVIEW_MODE_ON = 0;
 extern const int PREVIEW_MODE_PRESS = 1;
 extern const int PREVIEW_MODE_SYNC = 2;
 int previewTriggerMode = PREVIEW_MODE_ON;
-int recChannelClear = 1;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1), 4=CLIC (touch3 adds trigger at current beat)
+int recChannelClear = 0;  // 0=OFF (add triggers), 1=ON (clear then add), 2=FIX (no manipulation), 3=ON1 (count-in then record on beat 1), 4=CLIC (touch3 adds trigger at current beat)
 int transportMode = 1;
 int midiSendMode = 2;  // 0=CLCK, 1=NOTE, 2=BOTH (default to BOTH)
 int patternMode = -1;
-int flowMode = -1;  // FLOW setting: -1 = OFF, 1 = ON
+int flowMode = 1;  // FLOW setting: -1 = OFF, 1 = ON
 int clockMode = 1;
 int voiceSelect = 1;
 int simpleNotesView = 1;               // Simple notes view: 1=EASY, 2=FULL
@@ -710,7 +717,7 @@ bool ledModulesRotated = false;        // LED panel orientation flag: false=norm
 unsigned int maxX = MATRIX_WIDTH * 1;  // Runtime variable: total display width (16 or 32)
 unsigned int micGain = 0;              // Microphone gain: 0-64, default 10
 unsigned int lineInLevel = 8;          // Line input level: 0-15, default 8
-int ctrlMode = 0;                      // 0=page, 1=volume control for encoder 1
+int ctrlMode = 1;                      // 0=page, 1=volume control for encoder 1
 static int ctrlLastChannel = -1;
 static int ctrlLastVolume = -1;
 static bool ctrlVolumeOverlayActive = false;
@@ -737,11 +744,24 @@ bool getSpkrEnabled() {
 }
 
 void applySpkrHardware();
+void applySgtl5000AdcHighPass();
+void applyStereoChannelRouting();
 
 // Set SPKR enabled state and update pin 30
 void setSpkrEnabled(bool enabled) {
   spkrEnabled = enabled;
   applySpkrHardware();
+}
+
+bool getAdcHpfEnabled() { return adcHpfEnabled; }
+void setAdcHpfEnabled(bool enabled) {
+  adcHpfEnabled = enabled;
+  applySgtl5000AdcHighPass();
+}
+bool getUsbSmpPreview() { return usbSmpPreview; }
+void setUsbSmpPreview(bool enabled) {
+  usbSmpPreview = enabled;
+  applyStereoChannelRouting();
 }
 
 // Get child lock enabled state
@@ -968,7 +988,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, maxY, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode volume_bpm = { "VOLUME_BPM", { 11, 0, 0, BPM_MIN }, { 30, 252, 1, BPM_MAX }, { 11, 0, 0, 100 }, { 0x000000, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
+Mode bpmMode = { "BPM", { 11, 0, 0, BPM_MIN }, { 30, 252, 1, BPM_MAX }, { 11, 0, 0, 100 }, { 0x000000, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 0, 0, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -1321,18 +1341,22 @@ EXTMEM static size_t fastRecWriteIndex[MAX_CHANNELS];
 bool fastRecordActive = false;
 uint8_t fastRecordChannel = 0;  // channel whose sample buffer is being overwritten
 
-// Pin 30 gates the speaker amp. Keep VOL>SPKR state, but force the amp off
-// while capturing so mic/line cannot loop through the speaker.
+// Pin 30 → PAM8403 ~SHDN (active-low shutdown). HIGH = amp on, LOW = amp off.
+// Keep VOL>SPKR state, but force the amp off while capturing so mic/line
+// cannot loop through the speaker.
 void applySpkrHardware() {
   pinMode(30, OUTPUT);
   const bool hwOn = spkrEnabled && !isRecording && !fastRecordActive;
-  digitalWrite(30, hwOn ? LOW : HIGH);  // ON = LOW, OFF = HIGH
+  digitalWrite(30, hwOn ? HIGH : LOW);
 }
 bool recordingBorderArmed = false;  // red border shown before/during armed capture
 bool countInActive = false;              // Count-in active for ON1 mode
 int countInBeat = 0;                     // Current count-in beat (0-4, where 0=waiting, 1-4=count, 5=start recording)
 bool countInComplete = false;            // Flag to track when count-in (1,2,3,4) is complete
 bool countInPending = false;             // Flag to track when waiting for next beat 1 to start count-in
+bool sensCountActive = false;            // REC>TRIG SENS: 3s hold countdown before capture
+int sensCountSec = 0;                    // Seconds remaining (3,2,1). 0 = not shown
+unsigned long sensCountStartMs = 0;
 unsigned long touch3PressStartTime = 0;  // When touch3 was first pressed
 bool touch3PressProcessed = false;       // Whether the >300ms press has been processed
 unsigned int recordingStartBeat = 0;     // Beat where recording started (to stop before reaching it again)
@@ -1564,38 +1588,46 @@ int8_t stereoChannel = 0;
 FLASHMEM void applyStereoChannelRouting() {
   // stereo mixer inputs:
   // - input 0: mixer_end (main)
-  // - input 1: mixer0 (preview)
+  // - input 1: mixer0 (preview / voice 0)
   // inputs 2/3 unused
+  // USB copies that map. In SMP, voice 0 reaches USB only when VOL>USBP is ON.
 
+  float mainL = 0, prevL = 0, busL = 0;
+  float mainR = 0, prevR = 0, busR = 0;
   if (stereoChannel == 0) {
-    // OFF: Normal routing - main and preview to both L+R
-    mixer_stereoL.gain(0, 1.0f);  // main -> L
-    mixer_stereoL.gain(1, 1.0f);  // preview -> L
-    mixer_stereoL.gain(2, 0.0f);  // mixer1 muted
-    mixer_stereoR.gain(0, 1.0f);  // main -> R
-    mixer_stereoR.gain(1, 1.0f);  // preview -> R
-    mixer_stereoR.gain(2, 0.0f);  // mixer2 muted
+    mainL = mainR = 1.0f;
+    prevL = prevR = 1.0f;
   } else if (stereoChannel == 1) {
-    // M+P: Main -> L, Preview -> R
-    mixer_stereoL.gain(0, 1.0f);  // main -> L
-    mixer_stereoL.gain(1, 0.0f);  // preview off on L
-    mixer_stereoL.gain(2, 0.0f);  // mixer1 muted
-    mixer_stereoR.gain(0, 0.0f);  // main off on R
-    mixer_stereoR.gain(1, 1.0f);  // preview -> R
-    mixer_stereoR.gain(2, 0.0f);  // mixer2 muted
-  } else {                        // stereoChannel == 2
-    // L+R: Channels 1-4 -> L, 5-8 -> R, preview muted
-    // Use direct connections: mixer1 (ch1-4) -> L, mixer2 (ch5-8) -> R
-    mixer_stereoL.gain(0, 0.0f);  // mixer_end muted on L
-    mixer_stereoL.gain(1, 0.0f);  // preview muted
-    mixer_stereoL.gain(2, 1.0f);  // mixer1 (ch1-4) -> L
-    mixer_stereoR.gain(0, 0.0f);  // mixer_end muted on R
-    mixer_stereoR.gain(1, 0.0f);  // preview muted
-    mixer_stereoR.gain(2, 1.0f);  // mixer2 (ch5-8) -> R
+    mainL = 1.0f;
+    prevR = 1.0f;
+  } else {
+    busL = busR = 1.0f;
   }
-  // Ensure unused inputs are muted
+
+  mixer_stereoL.gain(0, mainL);
+  mixer_stereoL.gain(1, prevL);
+  mixer_stereoL.gain(2, busL);
+  mixer_stereoR.gain(0, mainR);
+  mixer_stereoR.gain(1, prevR);
+  mixer_stereoR.gain(2, busR);
   mixer_stereoR.gain(3, 0.0f);
   mixer_stereoL.gain(3, 0.0f);
+
+  const bool inSmp = (currentMode == &set_Wav);
+  if (inSmp && !usbSmpPreview) {
+    prevL = 0.0f;
+    prevR = 0.0f;
+  } else if (inSmp && usbSmpPreview && prevL == 0.0f && prevR == 0.0f) {
+    prevL = prevR = 1.0f;
+  }
+  usbMixL.gain(0, mainL);
+  usbMixL.gain(1, prevL);
+  usbMixL.gain(2, busL);
+  usbMixL.gain(3, 0.0f);
+  usbMixR.gain(0, mainR);
+  usbMixR.gain(1, prevR);
+  usbMixR.gain(2, busR);
+  usbMixR.gain(3, 0.0f);
 }
 
 static inline uint8_t clampMixGain(uint8_t g) {
@@ -2087,7 +2119,7 @@ FLASHMEM void switchMode(Mode *newMode) {
     // so re-open within 5s restores last main page; after 5s → FILE.
     if ((newMode == &draw || newMode == &singleMode)
         && (oldMode == &menu || oldMode == &loadSaveTrack || oldMode == &set_SamplePack
-            || oldMode == &volume_bpm || oldMode == &songMode || oldMode == &newFileMode
+            || oldMode == &bpmMode || oldMode == &songMode || oldMode == &newFileMode
             || oldMode == &set_Wav)) {
       extern void noteMenuExit();
       noteMenuExit();
@@ -2100,6 +2132,7 @@ FLASHMEM void switchMode(Mode *newMode) {
     }
 
     currentMode = newMode;
+    if ((oldMode == &set_Wav) != (currentMode == &set_Wav)) applyStereoChannelRouting();
     if (currentMode == &touchyMode) {
       extern void onTouchyModeEnter();
       extern void syncTouchyEncoders();
@@ -2294,7 +2327,7 @@ FLASHMEM void switchMode(Mode *newMode) {
       //Encoder[3].writeCounter((int32_t)SMP.param_settings[GLOB.currentChannel].channel);
     }
 
-    if (currentMode == &volume_bpm) {
+    if (currentMode == &bpmMode) {
       // Set encoder 0 and 1 to black (no color)
       Encoder[0].writeRGBCode(0x000000);
       Encoder[1].writeRGBCode(0x000000);
@@ -2303,7 +2336,7 @@ FLASHMEM void switchMode(Mode *newMode) {
       // ledBrightness = pos[1] + 3, so pos[1] = ledBrightness - 3
       // Range: pos[1] from 0 to 252 gives ledBrightness from 3 to 255
       unsigned int brightnessPos = (ledBrightness >= 3) ? (ledBrightness - 3) : 0;
-      brightnessPos = constrain(brightnessPos, 0, 252);  // Valid range for volume_bpm mode (3-255 brightness)
+      brightnessPos = constrain(brightnessPos, 0, 252);  // Valid range for BPM mode (3-255 brightness)
       currentMode->pos[1] = brightnessPos;
       Encoder[1].writeCounter((int32_t)brightnessPos);
       Encoder[1].writeMax((int32_t)252);
@@ -2352,6 +2385,10 @@ FLASHMEM void switchMode(Mode *newMode) {
 
 void checkFastRec() {
   if (touchyEnabled) return; // Performance pads never arm the recorder.
+  if (SMP_FAST_REC != 2 && sensCountActive) {
+    sensCountActive = false;
+    sensCountSec = 0;
+  }
   bool channelAllowed = (GLOB.currentChannel <= 8);
 
   if (!channelAllowed && !fastRecordActive) return;
@@ -2371,16 +2408,16 @@ void checkFastRec() {
     pendingStartFastRecord = true;
   };
 
-  if ((currentMode == &draw || currentMode == &singleMode) && SMP_FAST_REC == 2 || SMP_FAST_REC == 3) {
+  if ((currentMode == &draw || currentMode == &singleMode) && (SMP_FAST_REC == 3 || SMP_FAST_REC == 4)) {
     bool pinsConnected = (digitalRead(2) == LOW);
-    if (SMP_FAST_REC == 2 && !pinsConnected) fastRecWaitRelease = false;
-    if (SMP_FAST_REC == 3 && pinsConnected) fastRecWaitRelease = false;
+    if (SMP_FAST_REC == 3 && !pinsConnected) fastRecWaitRelease = false;
+    if (SMP_FAST_REC == 4 && pinsConnected) fastRecWaitRelease = false;
 
     if (pinsConnected != lastPinsConnected && millis() - lastChangeTime > debounceDelay) {
       lastChangeTime = millis();  // Update timestamp
       lastPinsConnected = pinsConnected;
 
-      if (SMP_FAST_REC == 2) {
+      if (SMP_FAST_REC == 3) {
         if (pinsConnected && !fastRecordActive) {
           if (!allowStart) return;
           requestFastRecord();
@@ -2390,7 +2427,7 @@ void checkFastRec() {
         }
       }
 
-      if (SMP_FAST_REC == 3) {
+      if (SMP_FAST_REC == 4) {
         if (!pinsConnected && !fastRecordActive) {
           if (!allowStart) return;
           requestFastRecord();
@@ -2425,7 +2462,47 @@ void checkFastRec() {
       return;
     }
 
-    if (SMP_FAST_REC == 1) {
+    if (SMP_FAST_REC == 2) {
+      // SENS: hold 3s with dotted red border + second countdown, then record until release.
+      // Release before 0 cancels — no capture.
+      if (!fastRecordActive) {
+        if (currentTouchState) {
+          if (!sensCountActive) {
+            if (!allowStart) return;
+            sensCountActive = true;
+            sensCountStartMs = millis();
+            sensCountSec = 3;
+            lastDrawUpdate = 0;
+          }
+          const unsigned long elapsed = millis() - sensCountStartMs;
+          if (elapsed >= 3000UL) {
+            sensCountActive = false;
+            sensCountSec = 0;
+            recordingStartBeat = beat;
+            recordingBeatCount = 0;
+            requestFastRecord();
+          } else {
+            const int remaining = 3 - (int)(elapsed / 1000UL);
+            if (remaining != sensCountSec) {
+              sensCountSec = remaining;
+              lastDrawUpdate = 0;
+            }
+          }
+        } else if (sensCountActive) {
+          sensCountActive = false;
+          sensCountSec = 0;
+          lastDrawUpdate = 0;
+        }
+        if (!currentTouchState) fastRecWaitRelease = false;
+      } else if (!currentTouchState && fastRecordActive) {
+        stopFastRecord();
+        if (!currentTouchState) fastRecWaitRelease = false;
+      }
+    } else if (SMP_FAST_REC == 1) {
+      if (sensCountActive) {
+        sensCountActive = false;
+        sensCountSec = 0;
+      }
       // ON1 mode: requires >300ms press, count-in, then auto-start/stop at beat boundaries
       if (recChannelClear == 3) {
         if (!fastRecordActive && !countInActive) {
@@ -2837,7 +2914,12 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         millis() >= g_setWavIgnoreLoadUntilMs &&
         sampleBrowserIsLoadableSelection(GLOB.currentChannel)) {
       loadWav();
-      autoSave();
+      if (isNowPlaying) {
+        extern void requestDeferredSampleLoadAutosave();
+        requestDeferredSampleLoadAutosave();
+      } else {
+        autoSave();
+      }
     }
     return;
   } else if ((currentMode == &set_Wav) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - encoder 0: preview selected wav (never directory up)
@@ -2923,7 +3005,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 2, 2, 0)) {  // "0220"
-    switchMode(&volume_bpm);
+    switchMode(&bpmMode);
   }
 
   if (!childLockEnabled && (currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 2, 0) && was_buttons_0000(oldButtons)) {  // "0020" - must be 0000 before
@@ -3102,7 +3184,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     }
   }
 
-  if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // encoder 3 click
+  if (currentMode == &bpmMode && match_buttons(currentButtonStates, 0, 0, 1, 0)) {  // encoder 3 click
     // EXT source: red < = MIDI clock in, orange < = analog CLK-IN (J26).
     extern void toggleAnalogExtClock();
     extern void resetMidiClockState();
@@ -3125,11 +3207,11 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     return;
   }
 
-  if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
+  if (currentMode == &bpmMode && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     drawBaseColorMode = !drawBaseColorMode;                                            // Toggle drawBASE color mode
   }
 
-  if (currentMode == &volume_bpm && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
+  if (currentMode == &bpmMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
     switchMode(&draw);
   }
 
@@ -3371,9 +3453,18 @@ FLASHMEM void applySgtl5000CodecOutputPath() {
   if (audioWasEnabled) NVIC_ENABLE_IRQ(IRQ_SOFTWARE);
 }
 
-// ADC high-pass cuts mic DC / rumble on the capture path.
+// REC>HPF. The codec ADC high-pass is left off: its implementation adds self-noise
+// (https://openaudio.blogspot.com/2017/03/teensy-audio-board-self-noise.html).
+// DC is removed with a library biquad on the capture path when the menu is ON.
 FLASHMEM void applySgtl5000AdcHighPass() {
-  sgtl5000_1.adcHighPassFilterEnable();
+  sgtl5000_1.adcHighPassFilterDisable();
+  recInputHpf.setHighpass(0, 20.0f, 0.707f);
+  const float dry = adcHpfEnabled ? 0.0f : 1.0f;
+  const float hp = adcHpfEnabled ? 1.0f : 0.0f;
+  recInputHpfMix.gain(0, dry);
+  recInputHpfMix.gain(1, hp);
+  recInputHpfMix.gain(2, 0.0f);
+  recInputHpfMix.gain(3, 0.0f);
 }
 
 #ifndef TOERN_AUDIO_MEMORY_BLOCKS
@@ -5620,7 +5711,7 @@ void checkTouchInputs() {
   }
 
   // Tap tempo for BPM menu using touch3
-  if (currentMode == &volume_bpm) {
+  if (currentMode == &bpmMode) {
     static bool lastTouch3State = false;
     static unsigned long tapTimes[4] = { 0, 0, 0, 0 };  // Store last 4 tap times
     static uint8_t tapIndex = 0;
@@ -6015,7 +6106,7 @@ end_switch1:
           Encoder[0].writeRGBCode(0x000000);
         }
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
-      } else if (currentMode == &volume_bpm) {
+      } else if (currentMode == &bpmMode) {
         // Exit BPM directly to draw/single, preserve menu page 3 for re-entry
         extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
@@ -6478,10 +6569,10 @@ void checkSerialColors() {
           // Save brightness to EEPROM (stored at EEPROM_DATA_START + 26)
           saveSingleModeToEEPROM(26, (int8_t)ledBrightness);
 
-          // Update encoder position if in volume_bpm mode
+          // Update encoder position if in BPM mode
           extern Mode *currentMode;
-          extern Mode volume_bpm;
-          if (currentMode == &volume_bpm) {
+          extern Mode bpmMode;
+          if (currentMode == &bpmMode) {
             // Update encoder[1] position to match new brightness
             // ledBrightness = pos[1] + 3, so pos[1] = ledBrightness - 3
             unsigned int brightnessPos = (brightness >= 3) ? (brightness - 3) : 0;
@@ -6591,6 +6682,7 @@ void loop() {
   // Debounced SD backup of EEPROM settings (settings.txt)
   extern void serviceSettingsBackup();
   serviceSettingsBackup();
+  servicePendingSamplePersist();
 
   yield();  // Yield early to maintain responsiveness during file operations
 
@@ -6630,8 +6722,8 @@ void loop() {
     drawPlayButton();
   }
 
-  // Deferred pause UI (I2C) on one loop tick; autosave on a *later* tick so SD
-  // I/O doesn't pile onto the same frame (avoids audio glitches while voices decay).
+  // Deferred pause UI (I2C) on one loop tick; autosave only after envelopes /
+  // sample readers / a short reverb-delay pad have gone quiet (or 2.5s timeout).
   // Always schedule autosave after a normal pause — only skipSave (MIDI/SD) opts out.
   // The only other skip is autoSave()'s 5s cooldown.
   if (pendingPauseUIUpdate) {
@@ -6648,12 +6740,16 @@ void loop() {
     }
     Encoder[2].writeRGBCode(0x00FF00);
     if (!pendingPauseSkipSave) {
-      pendingPauseAutoSave = true;  // next loop iteration
+      pendingPauseAutoSave = true;  // wait for audio settle, then save
     }
     pendingPauseSkipSave = false;
   } else if (pendingPauseAutoSave) {
-    pendingPauseAutoSave = false;
-    autoSave();
+    if (isNowPlaying) {
+      pendingPauseAutoSave = false;
+    } else if (sdIoAudioSettled() || pauseSdWaitMs > 2500) {
+      pendingPauseAutoSave = false;
+      autoSave();
+    }
   }
 
   if (isrDbgPatternFinished) {
@@ -6770,10 +6866,17 @@ void loop() {
       if (countInActive) {
         drawCountIn();
       }
+      extern void drawSensCountIn();
+      if (sensCountActive) {
+        drawSensCountIn();
+      }
 
       // Red border while armed / count-in (before capture). During capture the
       // framebuffer is frozen so this overlay is not redrawn.
-      if (recordingBorderArmed || countInActive || countInPending) {
+      if (sensCountActive) {
+        extern void drawRecordingBorderDotted();
+        drawRecordingBorderDotted();
+      } else if (recordingBorderArmed || countInActive || countInPending) {
         extern void drawRecordingBorder();
         drawRecordingBorder();
       }
@@ -7117,8 +7220,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 
     setNewFilters();
 
-  } else if (currentMode->name == "VOLUME_BPM") {
-    setVolume();
+  } else if (currentMode->name == "BPM") {
+    setBPM();
   } else if (currentMode->name == "VELOCITY") {
     setVelocity();
   } else if (currentMode->name == "LOADSAVE_TRACK") {
@@ -7624,6 +7727,7 @@ void deleteActiveCopy() {
 
 void play(bool fromStart) {
   if (touchyEnabled) return; // TOUCHY is played directly, including while editing its samples/filters.
+  pendingPauseAutoSave = false; // don't drop an SD burst onto a fresh start
   // MIDI Start is now sent by resetMidiClockForTransportStart() below,
   // after all setup, so the clock timer phase and Start are aligned.
 
@@ -7814,6 +7918,43 @@ void pause(bool skipSave) {
   // MIDI clock callback isn't starved by blocking bus transactions.
   pendingPauseUIUpdate = true;
   pendingPauseSkipSave = skipSave;
+  pauseSdWaitMs = 0;
+  pauseSdSettleGen++;
+}
+
+bool sdIoAudioSettled() {
+  if (isNowPlaying) return false;
+
+  for (int ch = 0; ch < 15; ch++) {
+    if (envelopes[ch] && envelopes[ch]->isActive()) return false;
+  }
+  for (int v = 0; v < 3; v++) {
+    if (Senvelope1[v] && Senvelope1[v]->isActive()) return false;
+    if (Senvelope2[v] && Senvelope2[v]->isActive()) return false;
+    if (SenvelopeFilter1[v] && SenvelopeFilter1[v]->isActive()) return false;
+  }
+  if (playSdWav1.isPlaying()) return false;
+
+  // After pause only: envelope is closed, so stop sample readers before the SD burst.
+  if (pendingPauseAutoSave) {
+    for (int ch = 0; ch <= 8; ch++) {
+      if (voices[ch] && voices[ch]->isPlaying()) {
+        toern_audio::StateGuard guard;
+        voices[ch]->stop();
+      }
+    }
+  }
+
+  static uint8_t quietGen = 255;
+  static elapsedMillis quietMs;
+  if (quietGen != pauseSdSettleGen) {
+    quietGen = pauseSdSettleGen;
+    quietMs = 0;
+    return false;
+  }
+  // Freeverb / delay still occupy EXTMEM after the envelope finishes.
+  if (quietMs < 120) return false;
+  return true;
 }
 
 static int arpSigned(int ch) {
@@ -9270,10 +9411,10 @@ FLASHMEM void updatePreviewVolume() {
 }
 
 void updateBrightness() {
-  // Only apply encoder pos[1] when we're actually in volume_bpm mode.
+  // Only apply encoder pos[1] when we're actually in BPM mode.
   // In other modes (draw, set_SamplePack, loadSaveTrack, etc.) pos[1] means something
   // else (edit page, pack index, etc.) - using it would corrupt brightness/EEPROM.
-  if (currentMode != &volume_bpm) return;
+  if (currentMode != &bpmMode) return;
 
   // New formula: ledBrightness = pos[1] + 3
   // Range: pos[1] from 0 to 252 gives ledBrightness from 3 to 255
@@ -9427,7 +9568,7 @@ FLASHMEM void updateBPM() {
   drawBPMScreen();  // Assumed to exist for visual feedback
 }
 
-FLASHMEM void setVolume() {
+FLASHMEM void setBPM() {
   //showExit(0);
   drawBPMScreen();  // Assumed to exist
 
@@ -9438,7 +9579,7 @@ FLASHMEM void setVolume() {
 
   extern int clockMode;
 
-  // Reset tracking when switching to volume_bpm mode
+  // Reset tracking when switching to BPM mode
   if (lastMode != currentMode) {
     lastPos1 = 0;
     lastPos2 = -1;
@@ -10086,27 +10227,33 @@ FLASHMEM void loadWav() {
   preventPaintUnpaint = true;
   freshPaint = false;
 
-  drawSampleLoadOverlay(0);
-  FastLEDshow();
+  sdIoBeginAudioSafe();
+  const bool showProg = !isNowPlaying;
+  if (showProg) {
+    drawSampleLoadOverlay(0);
+    FastLEDshow();
+  }
 
   stopSdPreviewIfPlaying();
 
   // Load the preview sample (which may be reversed/edited) to the target channel
   // This copies from sampled[0] (preview) to sampled[targetChannel]
-  if (!loadPreviewToChannel(GLOB.currentChannel, true)) {
+  if (!loadPreviewToChannel(GLOB.currentChannel, showProg)) {
     // Stay in SET_WAV so the user can retry (empty path / SD open fail).
+    sdIoEndAudioSafe();
     preventPaintUnpaint = false;
     return;
   }
 
-  // Auto-save to samplepack 0 after loading individual sample
-  copySampleToSamplepack0(GLOB.currentChannel, true);
-  saveSp0StateToEEPROM();
-  // SP0 flags mark settings backup dirty. While playing, leave it deferred so loop()
-  // does not add another heavy SD write on top of the load (serviceSettingsBackup waits).
-  drawSampleLoadOverlay(99);
-  FastLEDshow();
+  // Auto-save to samplepack 0 after loading individual sample.
+  // While playing this is deferred so SD/FastLED cannot underrun other voices.
+  copySampleToSamplepack0(GLOB.currentChannel, showProg);
   if (!isNowPlaying) {
+    saveSp0StateToEEPROM();
+    if (showProg) {
+      drawSampleLoadOverlay(99);
+      FastLEDshow();
+    }
     flushSettingsBackupNow();
   }
 
@@ -10123,6 +10270,8 @@ FLASHMEM void loadWav() {
     currentMode->pos[1] = savedEditPage;
     Encoder[1].writeCounter((int32_t)savedEditPage);
   }
+
+  sdIoEndAudioSafe();
 
   // Keep preventPaintUnpaint true for this frame to prevent immediate paint detection
   // It will be reset on the next encoder button press or in the next frame

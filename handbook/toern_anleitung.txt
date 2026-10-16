@@ -115,10 +115,12 @@ Main Menu:
 
 	*LOAD/SAVE only works if a sampleslot is selected with the ypos of the cursor (1-8), otherwise it shows "(-)"
 
-5: SET BPM+VOLUME+BRIGHTNESS ("BPM")
+5: TEMPO, CLOCK SOURCE + BRIGHTNESS ("BPM")
 	E2:Turn: Selects brightness
-	E3:turn: Selects volume
-	E4:turn: Selects bpm
+	E3:turn: Selects INT / EXT clock
+	E3:Press in EXT: Selects MIDI / analog CLK-IN
+	E4:turn: Selects bpm in INT
+	Audio output level: VOL > MAIN
 	Touch Right or Left: EXIT
 
 6: Midi Clock ("clck")
@@ -146,10 +148,11 @@ Main Menu:
 	* Flowmode ON always shows the active page while playing ("What you see is what you get")
 
 11: Recording Button ("rec")
-	E4: Press: Toggles between OFF / SENS / -CON / +CON
+	E4: Press: Toggles between OFF / INST / SENS / -CON / +CON
 	Touch Right or Left: EXIT
 
-	* SENS uses the touch sensor in front panel (defaultsetting)
+	* INST uses the touch sensor in front panel — record while held
+	* SENS (default): hold 3 seconds (dotted red frame + 3-2-1), then record until release
 	* -CON/+CON uses a connected footswitch ()
 
 12: Clear ("clr") notes when recording

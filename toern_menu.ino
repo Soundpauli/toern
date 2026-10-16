@@ -1,12 +1,12 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 4
-#define RECS_PAGES_COUNT 5
+#define RECS_PAGES_COUNT 6
 #define MIDI_PAGES_COUNT 10
-#define VOL_PAGES_COUNT 7
+#define VOL_PAGES_COUNT 5
 #define ETC_PAGES_COUNT 5
 #define MODE_PAGES_COUNT 10
-#define ADV_PAGES_COUNT 7
+#define ADV_PAGES_COUNT 10
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
@@ -91,8 +91,8 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"PATT", 1, false, nullptr},           // Load/Save
   {"KIT", 2, false, nullptr},           // Sample Pack
   {"SMP", 3, false, nullptr},           // Wave Selection
-  {"BPM", 5, false, nullptr},           // BPM/Volume
-  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, GAIN, LOUT, PREV, 2-CH)
+  {"BPM", 5, false, nullptr},           // Tempo / clock / brightness
+  {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, GAIN, LOUT, PREV, SPKR)
   {"SETT", 19, false, nullptr},         // SETT submenu (VIEW, CTRL, DRAW, MUTE)
   {"REC", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
@@ -122,6 +122,7 @@ static inline int pongIntervalToSpeed(uint16_t interval) {
 MenuPage recsPages[RECS_PAGES_COUNT] = {
   {"INPT", 4, true, "GAIN"},            // Recording Mode (MIC/LINE)
   {"MIC", 30, false, nullptr},          // Microphone gain
+  {"HPF", 64, false, nullptr},          // library high-pass on the record path
   {"L-IN", 31, false, nullptr},         // Line input level
   {"TRIG", 11, false, nullptr},         // Fast Rec Mode (On-The-fly Recording)
   {"CLR", 12, false, nullptr}           // Rec Channel Clear
@@ -147,9 +148,7 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"GAIN", 53, false, nullptr},         // Mix bus / synth / master trim (0.0x–2.0x, 1.0x = unity)
   {"LOUT", 28, false, nullptr},         // Line output volume
   {"PREV", 29, false, nullptr},         // Preview volume
-  {"2-CH", 36, false, nullptr},         // Stereo routing: OFF, M+P, or L+R
-  {"SPKR", 43, false, nullptr},         // Speaker toggle (ON/OFF)
-  {"HFC", 46, false, nullptr}           // HF cut 0..256 (step 10, MAX=256) → GEQ treble band only
+  {"SPKR", 43, false, nullptr}           // Speaker toggle (ON/OFF)
 };
 
 // ETC submenu pages
@@ -179,7 +178,10 @@ MenuPage advancedPages[ADV_PAGES_COUNT] = {
   {"LGHT", 40, false, nullptr},
   {"COLR", 41, false, nullptr},
   {"EYES", 57, false, nullptr},
-  {"FIRE", 55, false, nullptr}
+  {"FIRE", 55, false, nullptr},
+  {"2-CH", 36, false, nullptr},         // Stereo routing: OFF, M+P, or L+R
+  {"USBP", 65, false, nullptr},         // SMP audition (voice 0) also on USB
+  {"HFC", 46, false, nullptr}           // HF cut 0..256 (step 10, MAX=256) → GEQ treble band only
 };
 
 // These groups share the existing setting renderer/control handlers. IDs and
@@ -451,7 +453,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 55; // [54]=MIDI WRTE; [53]=CIN PPQN idx + hold-off; [52]=EXT analog CLK-IN; [51]=SIDE …
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 59; // [58]=TRIG SENS-default migrate; [57]=USB SMP preview; [56]=REC HPF; [55]=SPKR polarity marker; [54]=MIDI WRTE
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -671,6 +673,11 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
     }
     // CLMP absent in short backups
     if (blkCopy <= 37) outBlock[37] = 1;
+    // Short backups predate the SPKR polarity marker. Do not re-invert a saved byte 27.
+    if (blkCopy <= 55) outBlock[55] = 0xA5;
+    // REC>HPF absent → library high-pass ON. VOL>USBP absent → OFF.
+    if (blkCopy <= 56) outBlock[56] = 1;
+    if (blkCopy <= 57) outBlock[57] = 0;
     // VOL→GAIN (38–41): absent, virgin 0xFF, or zero-padded old backups → 1.0×
     {
       const bool gainAbsentOrBlank =
@@ -690,11 +697,13 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
 FLASHMEM void serviceSettingsBackup() {
   // Persist anything deferred while the sequencer was running.
   extern bool isNowPlaying;
+  extern bool sdIoAudioSettled();
+  const bool audioQuiet = !isNowPlaying && sdIoAudioSettled();
   extern uint8_t mixGain14;
   extern uint8_t mixGain58;
   extern uint8_t mixGainSynth;
   extern uint8_t mixGainMaster;
-  if (!isNowPlaying) {
+  if (audioQuiet) {
     if (g_pendingMixGainMask) {
       if (g_pendingMixGainMask & 0x01) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_14, mixGain14);
       if (g_pendingMixGainMask & 0x02) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_58, mixGain58);
@@ -715,8 +724,8 @@ FLASHMEM void serviceSettingsBackup() {
   }
 
   if (!settingsBackupDirty) return;
-  // Defer SD write while sequencer is playing — keep dirty and retry when stopped.
-  if (isNowPlaying) return;
+  // Defer SD write while sequencer is playing or pause tails are still audible.
+  if (isNowPlaying || !audioQuiet) return;
   if ((uint32_t)(millis() - settingsBackupDirtyMs) < SETTINGS_BACKUP_DEBOUNCE_MS) return;
   // Best effort: if SD write fails, keep dirty flag and try later.
   if (writeSettingsBackupToSD()) {
@@ -799,12 +808,13 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 0,  1);   // recMode default (MIC)
       EEPROM.write(EEPROM_DATA_START + 1,  1);   // clockMode default (INT)
       EEPROM.write(EEPROM_DATA_START + 2,  2);   // transportMode default (SEND)
-      EEPROM.write(EEPROM_DATA_START + 3,  1);   // patternMode default (ON)
+      EEPROM.write(EEPROM_DATA_START + 3,  (uint8_t)-1);   // patternMode default (OFF)
       EEPROM.write(EEPROM_DATA_START + 4, -1);   // voiceSelect default (OFF)
-      EEPROM.write(EEPROM_DATA_START + 5,  1);   // fastRecMode default
-      EEPROM.write(EEPROM_DATA_START + 6,  1);   // recChannelClear default
+      EEPROM.write(EEPROM_DATA_START + 5,  2);   // fastRecMode default (SENS)
+      EEPROM.write(EEPROM_DATA_START + 58, 0xA5); // TRIG default already SENS
+      EEPROM.write(EEPROM_DATA_START + 6,  0);   // recChannelClear default (OFF)
       EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol default (0-50 range, middle = 20)
-      EEPROM.write(EEPROM_DATA_START + 8, -1);   // flowMode default (OFF)
+      EEPROM.write(EEPROM_DATA_START + 8, 1);   // flowMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
       // slot 10: PPQN packed (bit0=on, bit1=polarity-, bits2-4=ppqn idx, bit5=STOP); default OFF / + / 24 / CONT
       EEPROM.write(EEPROM_DATA_START + 10, (uint8_t)(6 << 2));
@@ -812,7 +822,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
       EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
       EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledMode default (1 = one panel, normal orientation)
-      EEPROM.write(EEPROM_DATA_START + 14, 0);   // ctrlMode default (0 = PAGE)
+      EEPROM.write(EEPROM_DATA_START + 14, 1);   // ctrlMode default (1 = VOL)
       EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
       EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
       EEPROM.write(EEPROM_DATA_START + 17, 100);  // GLOB.vol default (100, maps to 1.0 volume, 0-100 range)
@@ -826,6 +836,9 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 25, 0);   // ledStripEnabled default (0 = OFF)
       EEPROM.write(EEPROM_DATA_START + 26, 64);  // ledBrightness default (64, range 3-255)
       EEPROM.write(EEPROM_DATA_START + 27, 1);   // spkrEnabled default (1 = ON)
+      EEPROM.write(EEPROM_DATA_START + 55, 0xA5); // SPKR polarity migrate done
+      EEPROM.write(EEPROM_DATA_START + 56, 1);   // REC HPF default (library high-pass ON)
+      EEPROM.write(EEPROM_DATA_START + 57, 0);   // VOL USB preview default (OFF)
       EEPROM.write(EEPROM_DATA_START + 28, 1);   // midiNoteReceive default (1 = NOTE/on)
       // Transport delays: slot 29 SEND, slot 31 RCVE (1 byte each, 0-127)
       EEPROM.write(EEPROM_DATA_START + 29, 0);   // transportSendDelayMs default (0)
@@ -881,7 +894,7 @@ FLASHMEM void loadMenuFromEEPROM() {
   
   patternMode   = (int8_t) EEPROM.read(EEPROM_DATA_START + 3);
   if (patternMode != -1 && patternMode != 1 && patternMode != 2 && patternMode != 3) {
-    patternMode = 1;  // Default to ON
+    patternMode = -1;  // Default to OFF
     saveSingleModeToEEPROM(3, patternMode);
   }
   
@@ -892,14 +905,25 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
   
   fastRecMode   = (int8_t) EEPROM.read(EEPROM_DATA_START + 5);
-  if (fastRecMode < -1 || fastRecMode > 1) {
-    fastRecMode = 1;  // Default to ON
-    saveSingleModeToEEPROM(5, fastRecMode);
+  {
+    const uint8_t FASTREC_SENS_DEFAULT_MIGRATE = 0xA5;
+    uint8_t trigMig = EEPROM.read(EEPROM_DATA_START + 58);
+    if (trigMig != FASTREC_SENS_DEFAULT_MIGRATE) {
+      if (fastRecMode == 1) {
+        fastRecMode = 2;  // old product default INST → SENS
+        saveSingleModeToEEPROM(5, 2);
+      }
+      EEPROM.write(EEPROM_DATA_START + 58, FASTREC_SENS_DEFAULT_MIGRATE);
+    }
+    if (fastRecMode > 4) {
+      fastRecMode = 2;  // Default SENS
+      saveSingleModeToEEPROM(5, fastRecMode);
+    }
   }
   
   recChannelClear   = (int8_t) EEPROM.read(EEPROM_DATA_START + 6);
   if (recChannelClear < 0 || recChannelClear > 4) {
-    recChannelClear = 1;  // Default to ON
+    recChannelClear = 0;  // Default to OFF
     saveSingleModeToEEPROM(6, recChannelClear);
   }
   
@@ -911,7 +935,7 @@ FLASHMEM void loadMenuFromEEPROM() {
   
   flowMode     = (int8_t) EEPROM.read(EEPROM_DATA_START + 8);
   if (flowMode != -1 && flowMode != 1) {
-    flowMode = -1;  // Default to OFF
+    flowMode = 1;  // Default to ON
     saveSingleModeToEEPROM(8, flowMode);
   }
 
@@ -1029,7 +1053,7 @@ FLASHMEM void loadMenuFromEEPROM() {
   
   ctrlMode = (int8_t) EEPROM.read(EEPROM_DATA_START + 14);
   if (ctrlMode != 0 && ctrlMode != 1) {
-    ctrlMode = 0;  // Default to PAGE
+    ctrlMode = 1;  // Default to VOL
     saveSingleModeToEEPROM(14, ctrlMode);
   }
   
@@ -1094,17 +1118,44 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
   setLedStripEnabled(ledStripEnabled);
 
-  // Load spkrEnabled from EEPROM (stored at EEPROM_DATA_START + 27)
+  // Load spkrEnabled from EEPROM (stored at EEPROM_DATA_START + 27).
+  // Offset 55 marks the PAM8403 polarity fix: before that, 1 meant UI/physical OFF.
   extern bool getSpkrEnabled();
   extern void setSpkrEnabled(bool enabled);
+  const uint8_t SPKR_POLARITY_MIGRATE = 0xA5;
   uint8_t spkrValue = EEPROM.read(EEPROM_DATA_START + 27);
-  bool spkrEnabled = (spkrValue != 0);
-  if (spkrValue > 1) {
-    // Invalid value, default to ON
-    spkrEnabled = true;
-    saveSingleModeToEEPROM(27, 1);
+  uint8_t spkrMig = EEPROM.read(EEPROM_DATA_START + 55);
+  bool spkrOn;
+  if (spkrMig != SPKR_POLARITY_MIGRATE) {
+    if (spkrValue > 1) spkrOn = true;
+    else spkrOn = (spkrValue == 0);  // invert legacy sense once
+    EEPROM.write(EEPROM_DATA_START + 55, SPKR_POLARITY_MIGRATE);
+    saveSingleModeToEEPROM(27, spkrOn ? 1 : 0);
+  } else {
+    spkrOn = (spkrValue != 0);
+    if (spkrValue > 1) {
+      spkrOn = true;
+      saveSingleModeToEEPROM(27, 1);
+    }
   }
-  setSpkrEnabled(spkrEnabled);
+  setSpkrEnabled(spkrOn);
+
+  // REC>HPF (56): library high-pass on the capture path. Absent/invalid → ON.
+  // VOL>USBP (57): SMP voice 0 also on USB. Absent/invalid → OFF.
+  extern void setAdcHpfEnabled(bool enabled);
+  extern void setUsbSmpPreview(bool enabled);
+  uint8_t hpfValue = EEPROM.read(EEPROM_DATA_START + 56);
+  if (hpfValue > 1) {
+    hpfValue = 1;
+    saveSingleModeToEEPROM(56, 1);
+  }
+  setAdcHpfEnabled(hpfValue != 0);
+  uint8_t usbPrevValue = EEPROM.read(EEPROM_DATA_START + 57);
+  if (usbPrevValue > 1) {
+    usbPrevValue = 0;
+    saveSingleModeToEEPROM(57, 0);
+  }
+  setUsbSmpPreview(usbPrevValue != 0);
 
   // Load childLockEnabled from EEPROM (stored at EEPROM_DATA_START + 36)
   extern bool getChildLockEnabled();
@@ -1272,13 +1323,13 @@ FLASHMEM void loadMenuFromEEPROM() {
   maxX = MATRIX_WIDTH * ledModules;
   
   if (recChannelClear < 0 || recChannelClear > 4) {
-    recChannelClear = 1;  // Default to ON if invalid
+    recChannelClear = 0;  // Default to OFF if invalid
     saveSingleModeToEEPROM(6, recChannelClear);
   }
   
   // Ensure flowMode is valid (-1 or 1)
   if (flowMode != -1 && flowMode != 1) {
-    flowMode = -1;  // Default to OFF if invalid value
+    flowMode = 1;  // Default to ON if invalid value
     saveSingleModeToEEPROM(8, flowMode);
   }
   
@@ -1320,7 +1371,7 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
 
   if (ctrlMode != 0 && ctrlMode != 1) {
-    ctrlMode = 0;
+    ctrlMode = 1;
     saveSingleModeToEEPROM(14, ctrlMode);
   }
 
@@ -1719,7 +1770,7 @@ FLASHMEM void showRecsMenu() {
   // (mainSetting already computed above)
   
   // Set encoder colors based on main setting
-  if (mainSetting == 11 || mainSetting == 4 || mainSetting == 12) {
+  if (mainSetting == 11 || mainSetting == 4 || mainSetting == 12 || mainSetting == 64) {
     // TRIG, INPT, CLR: encoder 2 = value, encoder 3 = page nav
     CRGB indicatorColor = currentMenuParentTextColor();
     Encoder[0].writeRGBCode(0x000000);
@@ -1952,10 +2003,10 @@ FLASHMEM void showVolMenu() {
   // Handle the main setting for this page
   // (mainSetting already computed above)
   
-  // VOL: encoder 3 = value on SPKR/HFC; GAIN uses enc1–3
+  // VOL: encoder 3 = value on SPKR; GAIN uses enc1–3
   CRGB indicatorColor = currentMenuParentTextColor();
   const bool volGainPage = (mainSetting == 53);
-  const bool volValuePage = (mainSetting == 43 || mainSetting == 46);
+  const bool volValuePage = (mainSetting == 43);
   Encoder[0].writeRGBCode(volGainPage ? 0x00C8C8 : 0x000000); // 1-4 cyan
   Encoder[1].writeRGBCode(volGainPage ? 0xC86400 : 0x000000); // 5-8 orange
   if (volGainPage) {
@@ -2116,9 +2167,9 @@ FLASHMEM void showEtcMenu() {
       CRGB indicatorColor = currentMenuParentTextColor();
       const bool etcValuePage =
           (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 ||
-           mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 63 || mainSetting == 16 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
+           mainSetting == 24 || mainSetting == 32 || mainSetting == 36 || mainSetting == 46 || mainSetting == 54 || mainSetting == 63 || mainSetting == 16 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 ||
            mainSetting == 52 || mainSetting == 55 || mainSetting == 56 ||
-           mainSetting == 57);
+           mainSetting == 57 || mainSetting == 65);
       // Matrix chrome without I2C; rings via cache
       {
         extern void getIndicatorXPositions(int encoderNum, int &x1, int &x2, int &x3);
@@ -2303,7 +2354,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuIndicator('L', recMode == 1 ? 'W' : 'X', 3);  // White=MIC, Blue=LINE
       break;
       
-    case 5: // BPM - BPM/Volume
+    case 5: // BPM - tempo / clock / brightness
       // BPM = Clock
       {
         const CRGB tc = menuTextColorFromCol(4);
@@ -2456,7 +2507,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     case 11: // OTR - Fast Rec Mode
       drawMenuText("TRIG", 2, 10, currentMenuParentTextColor());
       drawFastRecMode();
-      drawMenuIndicator('L', fastRecMode == 0 ? 'R' : (fastRecMode == 1 ? 'G' : (fastRecMode == 2 ? 'Y' : 'X')), 3);
+      drawMenuIndicator('L', fastRecMode == 0 ? 'R' : (fastRecMode == 1 ? 'G' : (fastRecMode == 2 ? 'N' : (fastRecMode == 3 ? 'Y' : 'X'))), 3);
       break;
       
     case 12: // CLR - Rec Channel Clear - encoder 3
@@ -2903,11 +2954,29 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern bool getSpkrEnabled();
       const CRGB tc = currentMenuParentTextColor();
       drawMenuText("SPKR", 2, 10, tc);
-      // Display was inverted: the internal "enabled" flag actually corresponds to the speaker
-      // being OFF, so present the real speaker state (ON when !enabled).
-      bool speakerOn = !getSpkrEnabled();
+      bool speakerOn = getSpkrEnabled();
       drawMenuValue(speakerOn ? "ON" : "OFF", 2, 3, speakerOn ? UI_GREEN : UI_RED);
       drawMenuIndicator('L', speakerOn ? 'G' : 'R', 3);
+      break;
+    }
+
+    case 64: { // HPF - library high-pass on the record path
+      extern bool getAdcHpfEnabled();
+      const CRGB tc = currentMenuParentTextColor();
+      drawMenuText("HPF", 2, 10, tc);
+      bool on = getAdcHpfEnabled();
+      drawMenuValue(on ? "ON" : "OFF", 2, 3, on ? UI_GREEN : UI_RED);
+      drawMenuIndicator('L', on ? 'G' : 'R', 3);
+      break;
+    }
+
+    case 65: { // USBP - SMP voice 0 also on USB
+      extern bool getUsbSmpPreview();
+      const CRGB tc = currentMenuParentTextColor();
+      drawMenuText("USBP", 2, 10, tc);
+      bool on = getUsbSmpPreview();
+      drawMenuValue(on ? "ON" : "OFF", 2, 3, on ? UI_GREEN : UI_RED);
+      drawMenuIndicator('L', on ? 'G' : 'R', 3);
       break;
     }
 
@@ -3643,11 +3712,11 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 43: { // SPKR - Speaker (OFF/ON) via encoder 2 rotation
+    case 43: { // SPKR - Speaker (OFF/ON): encoder UP = ON, DOWN = OFF
       static int lastSpkrEnc = -1;
       extern bool getSpkrEnabled();
       extern void setSpkrEnabled(bool);
-      int encVal = getSpkrEnabled() ? 1 : 0;  // Display: enabled=ON
+      int encVal = getSpkrEnabled() ? 1 : 0;
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)encVal);
         Encoder[2].writeMax((int32_t)1);
@@ -3663,6 +3732,58 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = encVal;
         lastSpkrEnc = encVal;
         saveSingleModeToEEPROM(27, (int8_t)(encVal ? 1 : 0));
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 64: { // HPF: encoder UP = ON, DOWN = OFF
+      static int lastHpfEnc = -1;
+      extern bool getAdcHpfEnabled();
+      extern void setAdcHpfEnabled(bool);
+      int encVal = getAdcHpfEnabled() ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastHpfEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastHpfEnc) {
+        setAdcHpfEnabled(currentMode->pos[2] == 1);
+        encVal = getAdcHpfEnabled() ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastHpfEnc = encVal;
+        saveSingleModeToEEPROM(56, (int8_t)(encVal ? 1 : 0));
+        menuRequestFullRedraw();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 65: { // USBP: encoder UP = ON, DOWN = OFF
+      static int lastUsbPrevEnc = -1;
+      extern bool getUsbSmpPreview();
+      extern void setUsbSmpPreview(bool);
+      int encVal = getUsbSmpPreview() ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastUsbPrevEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastUsbPrevEnc) {
+        setUsbSmpPreview(currentMode->pos[2] == 1);
+        encVal = getUsbSmpPreview() ? 1 : 0;
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastUsbPrevEnc = encVal;
+        saveSingleModeToEEPROM(57, (int8_t)(encVal ? 1 : 0));
         menuRequestFullRedraw();
         redrawMain(setting);
       }
@@ -4219,18 +4340,18 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 11: { // TRIG - Fast Rec Mode (OFF/SENS/-CON/+CON) via encoder 2 rotation
+    case 11: { // TRIG - Fast Rec Mode (OFF/INST/SENS/-CON/+CON) via encoder 2 rotation
       static int lastFastRecMode = -1;
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)fastRecMode);
-        Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeMax((int32_t)4);
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = fastRecMode;
         lastFastRecMode = fastRecMode;
         menuFirstEnter = false;
       }
       if (currentMode->pos[2] != lastFastRecMode) {
-        fastRecMode = constrain((int)currentMode->pos[2], 0, 3);
+        fastRecMode = constrain((int)currentMode->pos[2], 0, 4);
         Encoder[2].writeCounter((int32_t)fastRecMode);
         currentMode->pos[2] = fastRecMode;
         lastFastRecMode = fastRecMode;
@@ -4788,7 +4909,7 @@ FLASHMEM void switchMenu(int menuPosition){
         break;
 
       case 5:
-        switchMode(&volume_bpm);
+        switchMode(&bpmMode);
         break;
 
       case 7:
@@ -4908,7 +5029,7 @@ FLASHMEM void switchMenu(int menuPosition){
       case 11:
         fastRecMode = fastRecMode + 1;
                             
-        if (fastRecMode>3) fastRecMode=0;
+        if (fastRecMode>4) fastRecMode=0;
         saveSingleModeToEEPROM(5, fastRecMode);
         drawMainSettingStatus(menuPosition);
         break;
@@ -5266,6 +5387,26 @@ FLASHMEM void switchMenu(int menuPosition){
         setSpkrEnabled(newState);
         saveSingleModeToEEPROM(27, (int8_t)(newState ? 1 : 0));
         menuRequestFullRedraw();  // Force VOL submenu to redraw with new state
+        break;
+      }
+
+      case 64: {
+        extern bool getAdcHpfEnabled();
+        extern void setAdcHpfEnabled(bool);
+        bool next = !getAdcHpfEnabled();
+        setAdcHpfEnabled(next);
+        saveSingleModeToEEPROM(56, (int8_t)(next ? 1 : 0));
+        menuRequestFullRedraw();
+        break;
+      }
+
+      case 65: {
+        extern bool getUsbSmpPreview();
+        extern void setUsbSmpPreview(bool);
+        bool next = !getUsbSmpPreview();
+        setUsbSmpPreview(next);
+        saveSingleModeToEEPROM(57, (int8_t)(next ? 1 : 0));
+        menuRequestFullRedraw();
         break;
       }
 
@@ -5657,9 +5798,10 @@ FLASHMEM void drawMidiVoiceSelect() {
 
 FLASHMEM void drawFastRecMode() {
   switch (fastRecMode) {
-    case 3: drawMenuValue("+CON", 2, 3, UI_BLUE); break;
-    case 2: drawMenuValue("-CON", 2, 3, UI_YELLOW); break;
-    case 1: drawMenuValue("SENS", 2, 3, UI_GREEN); break;
+    case 4: drawMenuValue("+CON", 2, 3, UI_BLUE); break;
+    case 3: drawMenuValue("-CON", 2, 3, UI_YELLOW); break;
+    case 2: drawMenuValue("SENS", 2, 3, UI_CYAN); break;
+    case 1: drawMenuValue("INST", 2, 3, UI_GREEN); break;
     default: drawMenuValue("OFF", 2, 3, UI_RED); break;
   }
   SMP_FAST_REC = fastRecMode;

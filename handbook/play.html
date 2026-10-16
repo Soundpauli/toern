@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,44 +16,45 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-play">
-          <h2 class="handbook-page__title">Settings</h2>
-          <p class="handbook-page__summary">Grid controls live in <strong>SETT</strong>, playback and performance options in <strong>MODE</strong>, and display settings in <strong>ETC → ADV</strong>. Preview mode and volume share <strong>VOL → PREV</strong>. Encoder&nbsp;4 turns through each submenu.</p>
+          <h2 class="handbook-page__title" data-hb-copy="play.001">Settings</h2>
+          <p class="handbook-page__summary" data-hb-copy="play.002">Grid controls live in <strong>SETT</strong>, playback and performance options in <strong>MODE</strong>, and display settings in <strong>ETC → ADV</strong>. Preview mode and volume share <strong>VOL → PREV</strong>. Encoder&nbsp;4 turns through each submenu.</p>
 
           <section class="hb-sub" id="play-root">
-            <h2>Entering SETT</h2>
-            <p class="lede">From the root menu, highlight <strong>SETT</strong> and short-press encoder&nbsp;4. Row&nbsp;16 re-colours to the SETT family tint so you always know you are inside this world. Encoder&nbsp;4 turn flips siblings; tap touch&nbsp;2 to return to the grid. Reopening the menu restores the parent family.</p>
+            <h2 data-hb-copy="play.003">Entering SETT</h2>
+            <p class="lede" data-hb-copy="play.004">From the root menu, highlight <strong>SETT</strong> and short-press encoder&nbsp;4. Row&nbsp;16 re-colours to the SETT family tint so you always know you are inside this world. Encoder&nbsp;4 turn flips siblings; tap touch&nbsp;2 to return to the grid. Reopening the menu restores the parent family.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="mr_play" width="640" height="320" role="img" aria-label="SETT root"></canvas>
               </div>
-              <p class="viz-caption--below">SETT family entry on the root menu.</p>
+              <p class="viz-caption--below" data-hb-copy="play.005">SETT family entry on the root menu.</p>
             </article>
           </section>
-          <section class="hb-sub" id="mode-root"><h2>MODE and advanced settings</h2><p>MODE: <strong>FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO</strong>. Open MODE with encoder&nbsp;4; select SONG and press it to enter the arranger. ETC contains <strong>INFO, SD, BATT, ADV, RSET</strong>. Select ADV and press encoder&nbsp;4 for <strong>CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE</strong>.</p></section>
+          <section class="hb-sub" id="mode-root"><h2 data-hb-copy="play.006">MODE and advanced settings</h2><p data-hb-copy="play.007">MODE: <strong>FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO</strong>. Open MODE with encoder&nbsp;4; select SONG and press it to enter the arranger. ETC contains <strong>INFO, SD, BATT, ADV, RSET</strong>. Select ADV and press encoder&nbsp;4 for <strong>CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE</strong>.</p></section>
           <section class="hb-sub" id="touchy">
-            <h2>MODE → TCHY — TOUCHY</h2>
-            <p>Turn encoder&nbsp;3 to ON in MODE → TCHY, then leave the menu with touch&nbsp;1. TOUCHY stops the sequencer and turns the five touch pads into an instrument: touch&nbsp;1 plays voice&nbsp;1, through touch&nbsp;5 playing voice&nbsp;5. Each touch plays once; release the pad before the next hit. Hits play the loaded samples through their existing voice filters and effects; they do not write notes into the pattern.</p>
+            <h2 data-hb-copy="play.008">MODE → TCHY — TOUCHY</h2>
+            <p data-hb-copy="play.009">Turn encoder&nbsp;3 to ON in MODE → TCHY, then leave the menu with touch&nbsp;1. TOUCHY stops the sequencer and turns the five touch pads into an instrument: touch&nbsp;1 plays voice&nbsp;1, through touch&nbsp;5 playing voice&nbsp;5. Each touch plays once; release the pad before the next hit. Hits play the loaded samples through their existing voice filters and effects; they do not write notes into the pattern.</p>
             <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="touchy" width="16" height="16" role="img" aria-label="TOUCHY flying pixel cat"></canvas></div>
-            <p>A flying Nyan Cat replaces the grid. Each pad gives the frosting its fixed colour: 1 red, 2 orange, 3 green, 4 blue, 5 purple.</p>
+            <p data-hb-copy="play.010">A flying Nyan Cat replaces the grid. Each pad gives the frosting its fixed colour: 1 red, 2 orange, 3 green, 4 blue, 5 purple.</p>
             <table class="opt-table"><thead><tr><th>Control</th><th>Action</th></tr></thead><tbody>
               <tr><td>Turn encoder 1</td><td>Pitch of the last voice played: −24 to +24 semitones.</td></tr>
               <tr><td>Turn encoder 2</td><td>Hit velocity of that voice: 1–127. Channel volume stays full in TOUCHY.</td></tr>
               <tr><td>Turn encoder 3</td><td>Reverb of that voice, where available (voices 1, 2 and 5).</td></tr>
               <tr><td>Turn encoder 4</td><td>Highpass (LCUT) of that voice.</td></tr>
               <tr><td>Short press encoders 1–4</td><td>Open the existing SMP browser for the corresponding voice.</td></tr>
-              <tr><td>Long press encoder 1</td><td>Fast-record into the last voice played. Keep holding to record; release to stop. This replaces the sample without changing pattern notes.</td></tr>
+              <tr><td>Long press encoder 1</td><td data-hb-copy="play.022">Fast-record into the last voice played. Keep holding to record; release to stop. This replaces the sample without changing pattern notes.</td></tr>
               <tr><td>Long press encoder 3</td><td>Open FILTER for the last voice played with a pad.</td></tr>
-              <tr><td>Long press encoder 4</td><td>Switch TOUCHY OFF, restore the original channel volumes and open the main menu at MODE. Leave the menu to return to the grid.</td></tr>
+              <tr><td>Long press encoder 4</td><td data-hb-copy="play.026">Switch TOUCHY OFF, restore the original channel volumes and open the main menu at MODE. Leave the menu to return to the grid.</td></tr>
             </tbody></table>
-            <p>Sample loading and filter editing work as described in <a href="samples.html">Samples</a> and <a href="sound.html">Sound</a>. Returning from either screen brings you back to TOUCHY. Pitch, reverb and highpass reuse the voice’s existing filter settings; velocity is remembered per voice during the session. Original channel volumes are restored when TOUCHY is switched OFF. TOUCHY is a temporary performance setting and starts OFF after reboot; leaving it does not restart playback automatically.</p>
+            <p data-hb-copy="play.027">Sample loading and filter editing work as described in <a href="samples.html">Samples</a> and <a href="sound.html">Sound</a>. Returning from either screen brings you back to TOUCHY. Pitch, reverb and highpass reuse the voice’s existing filter settings; velocity is remembered per voice during the session. Original channel volumes are restored when TOUCHY is switched OFF. TOUCHY is a temporary performance setting and starts OFF after reboot; leaving it does not restart playback automatically.</p>
           </section>
 
 
@@ -63,8 +64,8 @@
 
 
           <section class="hb-sub" id="flw">
-            <h2>MODE → FLOW — follow lighting</h2>
-            <p class="lede">A soft whole-grid wash that pulses with the beat — performance glow vs clean editor.</p>
+            <h2 data-hb-copy="play.028">MODE → FLOW — follow lighting</h2>
+            <p class="lede" data-hb-copy="play.029">A soft whole-grid wash that pulses with the beat — performance glow vs clean editor.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_flw" width="640" height="320" role="img" aria-label="FLOW"></canvas>
@@ -73,7 +74,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>ON</strong> / <strong>OFF</strong></td><td>ON = soft tint washes the grid in time. OFF = only the playhead column lights (cleaner for editing).</td></tr>
+                  <tr><th>Turn</th><td><strong>ON</strong> / <strong>OFF</strong></td><td data-hb-copy="play.031">ON = soft tint washes the grid in time. OFF = only the playhead column lights (cleaner for editing).</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Next MODE sibling</td><td>Walks FLOW → PMOD → LOOP → …</td></tr>
@@ -87,29 +88,29 @@
 
 
           <section class="hb-sub" id="prev">
-            <h2>VOL → PREV — sample preview policy</h2>
-            <p class="lede">How the <a href="samples.html#set-wav">sample browser</a> auditions files while you hunt. Open <a href="menus.html#vol">VOL → PREV</a>: encoder&nbsp;2 selects the mode; encoder&nbsp;3 changes preview volume (0–50). PREV stays at the top in the VOL colour. The lower row normally shows volume in orange; changing encoder&nbsp;2 shows ON, PRSS or SYNC for 2.5 seconds, then returns to volume. Encoder&nbsp;2 and its indicator are green for ON, red for PRSS and yellow for SYNC; encoder&nbsp;3 and its indicator are orange.</p>
+            <h2 data-hb-copy="play.034">VOL → PREV — sample preview policy</h2>
+            <p class="lede" data-hb-copy="play.035">How the <a href="samples.html#set-wav">sample browser</a> auditions files while you hunt. Open <a href="menus.html#vol">VOL → PREV</a>: encoder&nbsp;2 selects the mode; encoder&nbsp;3 changes preview volume (0–50). PREV stays at the top in the VOL colour. The lower row normally shows volume in orange; changing encoder&nbsp;2 shows ON, PRSS or SYNC for 2.5 seconds, then returns to volume. Encoder&nbsp;2 and its indicator are green for ON, red for PRSS and yellow for SYNC; encoder&nbsp;3 and its indicator are orange.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_prev_on" width="640" height="320" role="img" aria-label="PREV ON"></canvas>
               </div>
-              <p class="viz-caption--below">PREV = ON — every file under the cursor auto-plays.</p>
+              <p class="viz-caption--below" data-hb-copy="play.036">PREV = ON — every file under the cursor auto-plays.</p>
             </article>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_prev" width="640" height="320" role="img" aria-label="PREV PRSS"></canvas>
               </div>
-              <p class="viz-caption--below">PREV = PRSS — press encoder&nbsp;1 on a selected wav to preview. Never goes up a folder.</p>
+              <p class="viz-caption--below" data-hb-copy="play.037">PREV = PRSS — press encoder&nbsp;1 on a selected wav to preview. Never goes up a folder.</p>
             </article>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_prev_sync" width="640" height="320" role="img" aria-label="PREV SYNC"></canvas>
               </div>
-              <p class="viz-caption--below">PREV = SYNC — while playing, pattern notes on this voice audition the highlighted file. While stopped, encoder&nbsp;4 auto-plays like ON.</p>
+              <p class="viz-caption--below" data-hb-copy="play.038">PREV = SYNC — while playing, pattern notes on this voice audition the highlighted file. While stopped, encoder&nbsp;4 auto-plays like ON.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>ON</strong> / <strong>PRSS</strong> / <strong>SYNC</strong></td><td>ON = auto-audition while spinning files. PRSS = encoder&nbsp;1 press on a wav. SYNC = auto-audition while stopped; while playing, the browse file fires on that voice's pattern hits (real voice is not muted, its triggers are skipped).</td></tr>
+                  <tr><th>Turn</th><td><strong>ON</strong> / <strong>PRSS</strong> / <strong>SYNC</strong></td><td data-hb-copy="play.040">ON = auto-audition while spinning files. PRSS = encoder&nbsp;1 press on a wav. SYNC = auto-audition while stopped; while playing, the browse file fires on that voice's pattern hits (real voice is not muted, its triggers are skipped).</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody><tr><th>Turn</th><td><strong>0–50</strong></td><td>Preview volume, independent of MAIN and LOUT.</td></tr></tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -122,8 +123,8 @@
 
 
           <section class="hb-sub" id="view">
-            <h2>SETT → VIEW — note density on the grid</h2>
-            <p class="lede">How much of the pattern you see while editing one page.</p>
+            <h2 data-hb-copy="play.043">SETT → VIEW — note density on the grid</h2>
+            <p class="lede" data-hb-copy="play.044">How much of the pattern you see while editing one page.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_view" width="640" height="320" role="img" aria-label="VIEW"></canvas>
@@ -132,7 +133,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>EASY</strong> / <strong>FULL</strong></td><td>EASY = current page only. FULL = current page bright, neighbour pages ghosted underneath for context.</td></tr>
+                  <tr><th>Turn</th><td><strong>EASY</strong> / <strong>FULL</strong></td><td data-hb-copy="play.046">EASY = current page only. FULL = current page bright, neighbour pages ghosted underneath for context.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -144,8 +145,8 @@
 
 
           <section class="hb-sub" id="pmd">
-            <h2>MODE → PMOD — pattern mode</h2>
-            <p class="lede">What happens when a page finishes playing. This is the bridge between a single loop and the <a href="song.html#song">SONG</a> arranger.</p>
+            <h2 data-hb-copy="play.047">MODE → PMOD — pattern mode</h2>
+            <p class="lede" data-hb-copy="play.048">What happens when a page finishes playing. This is the bridge between a single loop and the <a href="song.html#song">SONG</a> arranger.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_pmd" width="640" height="320" role="img" aria-label="PMOD"></canvas>
@@ -156,7 +157,7 @@
                   <tr><td><strong>OFF</strong></td><td>Advances through the pattern pages</td><td>A→B→C sequences</td></tr>
                   <tr><td><strong>ON</strong></td><td>Loops the selected edit page</td><td>Locked loops and live tweaking</td></tr>
                   <tr><td><strong>SONG</strong></td><td>Follows the SONG arranger chain</td><td>Non-linear set lists, repeats, bridges</td></tr>
-                  <tr><td><strong>NEXT</strong></td><td>Starts the visible page, finishes it even if you browse away, then starts whichever page is visible at the boundary</td><td>Live transitions on a cue</td></tr>
+                  <tr><td><strong>NEXT</strong></td><td data-hb-copy="play.059">Starts the visible page, finishes it even if you browse away, then starts whichever page is visible at the boundary</td><td>Live transitions on a cue</td></tr>
                 </tbody>
               </table>
               <div class="hb-enc-grid">
@@ -168,7 +169,7 @@
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
-            <div class="hb-tip"><strong>Related:</strong> page strip colours and NEXT cueing are covered in <a href="song.html#pages">Song → pages &amp; PMOD</a>.</div>
+            <div class="hb-tip" data-hb-copy="play.063"><strong>Related:</strong> page strip colours and NEXT cueing are covered in <a href="song.html#pages">Song → pages &amp; PMOD</a>.</div>
           </section>
 
 
@@ -176,8 +177,8 @@
 
 
           <section class="hb-sub" id="loop">
-            <h2>MODE → LOOP — page length cap</h2>
-            <p class="lede">Set the number of pattern pages played before the loop wraps. OFF follows the populated pattern length.</p>
+            <h2 data-hb-copy="play.064">MODE → LOOP — page length cap</h2>
+            <p class="lede" data-hb-copy="play.065">Set the number of pattern pages played before the loop wraps. OFF follows the populated pattern length.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_loop" width="640" height="320" role="img" aria-label="LOOP"></canvas>
@@ -186,7 +187,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>OFF</strong> or <strong>1–8 pages</strong></td><td>OFF follows the populated pattern length; a number forces that many pages before playback wraps.</td></tr>
+                  <tr><th>Turn</th><td><strong>OFF</strong> or <strong>1–8 pages</strong></td><td data-hb-copy="play.067">OFF follows the populated pattern length; a number forces that many pages before playback wraps.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -198,8 +199,8 @@
 
 
           <section class="hb-sub" id="vmod">
-            <h2>MODE → VMOD — voice loops</h2>
-            <p class="lede">Each voice loops on its own pages. Pitches of that voice, on any row, stay with it.</p>
+            <h2 data-hb-copy="play.068">MODE → VMOD — voice loops</h2>
+            <p class="lede" data-hb-copy="play.069">Each voice loops on its own pages. Pitches of that voice, on any row, stay with it.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_vmod" width="640" height="320" role="img" aria-label="VMOD"></canvas>
@@ -213,11 +214,11 @@
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
-            <p>A voice’s length is the highest page that holds any of its notes. Empty voices do not stretch the cycle. The pattern runs as long as the longest voice. On each pass, a voice plays its own page in the same column, then wraps. Repeats such as 1/2 and 1/4 count that voice’s wraps.</p>
-            <p>While VMOD is on, FLOW, LOOP, and pattern-mode page lock leave playback and the page dots alone. Song mode is unchanged.</p>
-            <p>On the grid, encoder&nbsp;2 (CTRL&nbsp;= PAGE) steps only the pages that contain the current voice. A voice with no notes still uses the full page range, so the first notes can be painted. Changing voice jumps to that voice’s page. Encoder&nbsp;4 does not change pages while voice mode is playing.</p>
-            <p>Page dots: white marks pages that contain the voice under encoder&nbsp;1. Green and yellow follow that voice’s loop page and the page you are editing.</p>
-            <div class="hb-tip"><strong>IMG lock:</strong> while <a href="#img">MODE → IMG</a> is on, VMOD is forced off and the MODE → VMOD control snaps back to OFF.</div>
+            <p data-hb-copy="play.072">A voice’s length is the highest page that holds any of its notes. Empty voices do not stretch the cycle. The pattern runs as long as the longest voice. On each pass, a voice plays its own page in the same column, then wraps. Repeats such as 1/2 and 1/4 count that voice’s wraps.</p>
+            <p data-hb-copy="play.073">While VMOD is on, FLOW, LOOP, and pattern-mode page lock leave playback and the page dots alone. Song mode is unchanged.</p>
+            <p data-hb-copy="play.074">On the grid, encoder&nbsp;2 (CTRL&nbsp;= PAGE) steps only the pages that contain the current voice. A voice with no notes still uses the full page range, so the first notes can be painted. Changing voice jumps to that voice’s page. Encoder&nbsp;4 does not change pages while voice mode is playing.</p>
+            <p data-hb-copy="play.075">Page dots: white marks pages that contain the voice under encoder&nbsp;1. Green and yellow follow that voice’s loop page and the page you are editing.</p>
+            <div class="hb-tip" data-hb-copy="play.076"><strong>IMG lock:</strong> while <a href="#img">MODE → IMG</a> is on, VMOD is forced off and the MODE → VMOD control snaps back to OFF.</div>
           </section>
 
 
@@ -225,8 +226,8 @@
 
 
           <section class="hb-sub" id="img">
-            <h2>MODE → IMG — image paint mode</h2>
-            <p class="lede">Black matrix, colour-cycle paint — sketch with voices 1–8 instead of the usual row-lane drawing rules.</p>
+            <h2 data-hb-copy="play.077">MODE → IMG — image paint mode</h2>
+            <p class="lede" data-hb-copy="play.078">Black matrix, colour-cycle paint — sketch with voices 1–8 instead of the usual row-lane drawing rules.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="et_img" width="640" height="320" role="img" aria-label="MODE IMG"></canvas>
@@ -240,8 +241,8 @@
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
-            <p>When IMG is on, draw-mode base colours disappear (black canvas). Painting a cell cycles through sample voices <strong>1–8</strong> (and their colours). <strong>Touch&nbsp;1</strong> cycles the brush voice without painting. Stay in DRAW — single mode is not used here.</p>
-            <p><a href="#vmod">VMOD</a> is forced off. REC → CLR is forced to <strong>FIX</strong> so page clears do not wipe the sketch unexpectedly.</p>
+            <p data-hb-copy="play.081">When IMG is on, draw-mode base colours disappear (black canvas). Painting a cell cycles through sample voices <strong>1–8</strong> (and their colours). <strong>Touch&nbsp;1</strong> cycles the brush voice without painting. Stay in DRAW — single mode is not used here.</p>
+            <p data-hb-copy="play.082"><a href="#vmod">VMOD</a> is forced off. REC → CLR is forced to <strong>FIX</strong> so page clears do not wipe the sketch unexpectedly.</p>
           </section>
 
 
@@ -249,8 +250,8 @@
 
 
           <section class="hb-sub" id="ctrl">
-            <h2>SETT → CTRL — encoder&nbsp;2 on the grid</h2>
-            <p class="lede">What encoder&nbsp;2 does in draw / single mode when you are not in a special overlay.</p>
+            <h2 data-hb-copy="play.083">SETT → CTRL — encoder&nbsp;2 on the grid</h2>
+            <p class="lede" data-hb-copy="play.084">What encoder&nbsp;2 does in draw / single mode when you are not in a special overlay.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_ctrl" width="640" height="320" role="img" aria-label="CTRL"></canvas>
@@ -259,7 +260,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>PAGE</strong> / <strong>VOL</strong></td><td>PAGE = flip pattern pages 1–16. VOL = per-row volume for the cursor’s lane (live mix fader).</td></tr>
+                  <tr><th>Turn</th><td><strong>PAGE</strong> / <strong>VOL</strong></td><td data-hb-copy="play.086">PAGE = flip pattern pages 1–16. VOL = per-row volume for the cursor’s lane (live mix fader).</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -272,8 +273,8 @@
 
 
           <section class="hb-sub" id="leds">
-            <h2>ETC → ADV → LEDS — panel hardware</h2>
-            <p class="lede">Tell the firmware which LED panel(s) are actually bolted on. Wrong setting = pixels off the visible area.</p>
+            <h2 data-hb-copy="play.088">ETC → ADV → LEDS — panel hardware</h2>
+            <p class="lede" data-hb-copy="play.089">Tell the firmware which LED panel(s) are actually bolted on. Wrong setting = pixels off the visible area.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_leds" width="640" height="320" role="img" aria-label="LEDS"></canvas>
@@ -303,13 +304,13 @@
 
 
           <section class="hb-sub" id="pong">
-            <h2>MODE → PONG — bouncing retriggers</h2>
-            <p class="lede">A ball bounces across the grid in <strong>draw</strong> mode. It only hits and fires notes on <strong>muted</strong> voices, so unmuted playback stays untouched.</p>
+            <h2 data-hb-copy="play.100">MODE → PONG — bouncing retriggers</h2>
+            <p class="lede" data-hb-copy="play.101">A ball bounces across the grid in <strong>draw</strong> mode. It only hits and fires notes on <strong>muted</strong> voices, so unmuted playback stays untouched.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_pong" width="640" height="320" role="img" aria-label="PONG"></canvas>
               </div>
-              <p class="viz-caption--below">PONG on: speed readout left, ON right, ball on the middle rows.</p>
+              <p class="viz-caption--below" data-hb-copy="play.102">PONG on: speed readout left, ON right, ball on the middle rows.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
@@ -319,7 +320,7 @@
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
-            <div class="hb-tip"><strong>Not the idle “eyes”.</strong> Cartoon eyes after long inactivity (when not playing) are a separate screensaver. PONG only runs while you are in draw mode with PONG&nbsp;= ON.</div>
+            <div class="hb-tip" data-hb-copy="play.105"><strong>Not the idle “eyes”.</strong> Cartoon eyes after long inactivity (when not playing) are a separate screensaver. PONG only runs while you are in draw mode with PONG&nbsp;= ON.</div>
           </section>
 
 
@@ -327,8 +328,8 @@
 
 
           <section class="hb-sub" id="crsr">
-            <h2>ETC → ADV → CRSR — cursor style</h2>
-            <p class="lede">How the edit cursor draws on the grid.</p>
+            <h2 data-hb-copy="play.106">ETC → ADV → CRSR — cursor style</h2>
+            <p class="lede" data-hb-copy="play.107">How the edit cursor draws on the grid.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_crsr" width="640" height="320" role="img" aria-label="CRSR"></canvas>
@@ -337,7 +338,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>NORM</strong> / <strong>CHNR</strong> / <strong>BIG</strong></td><td>NORM = thin white ring. CHNR = only on the focused voice in single mode. BIG = chunky 3×3 halo for distance reading. With CHNR and CTRL&nbsp;= PAGE, turning encoder&nbsp;2 flashes the page number on the right edge, one row below the top, with no underline.</td></tr>
+                  <tr><th>Turn</th><td><strong>NORM</strong> / <strong>CHNR</strong> / <strong>BIG</strong></td><td data-hb-copy="play.109">NORM = thin white ring. CHNR = only on the focused voice in single mode. BIG = chunky 3×3 halo for distance reading. With CHNR and CTRL&nbsp;= PAGE, turning encoder&nbsp;2 flashes the page number on the right edge, one row below the top, with no underline.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -349,8 +350,8 @@
 
 
           <section class="hb-sub" id="draw">
-            <h2>SETT → DRAW — paint handedness</h2>
-            <p class="lede">Two-hand careful editing vs one-hand set/remove. Full gesture detail: <a href="sequencing.html#paint">Sequencing → Set &amp; remove triggers</a>.</p>
+            <h2 data-hb-copy="play.110">SETT → DRAW — paint handedness</h2>
+            <p class="lede" data-hb-copy="play.111">Two-hand careful editing vs one-hand set/remove. Full gesture detail: <a href="sequencing.html#paint">Sequencing → Set &amp; remove triggers</a>.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_draw" width="640" height="320" role="img" aria-label="DRAW"></canvas>
@@ -359,7 +360,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>L+R</strong> / <strong>R</strong></td><td>L+R = enc&nbsp;1 row/erase, enc&nbsp;4 place. R = enc&nbsp;4 toggles alone; enc&nbsp;1 = temporary full mute.</td></tr>
+                  <tr><th>Turn</th><td><strong>L+R</strong> / <strong>R</strong></td><td data-hb-copy="play.113">L+R = enc&nbsp;1 row/erase, enc&nbsp;4 place. R = enc&nbsp;4 toggles alone; enc&nbsp;1 = temporary full mute.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -371,13 +372,13 @@
 
 
           <section class="hb-sub" id="mute">
-            <h2>SETT → MUTE — R-mode unmute mask</h2>
-            <p class="lede">Custom set of channels that come back unmuted when you leave R-mode’s temporary full mute (encoder&nbsp;3). Not a paint gate.</p>
+            <h2 data-hb-copy="play.114">SETT → MUTE — R-mode unmute mask</h2>
+            <p class="lede" data-hb-copy="play.115">Custom set of channels that come back unmuted when you leave R-mode’s temporary full mute (encoder&nbsp;3). Not a paint gate.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="lk_mute" width="640" height="320" role="img" aria-label="MUTE"></canvas>
               </div>
-              <p class="viz-caption--below">Sixteen dots = channels 1–16. Green = in the unmute mask; red = stays muted.</p>
+              <p class="viz-caption--below" data-hb-copy="play.116">Sixteen dots = channels 1–16. Green = in the unmute mask; red = stays muted.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
@@ -389,7 +390,7 @@
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
-            <div class="hb-tip">Build a “kick + snare only” return so a break drops back to just those lanes. See <a href="sequencing.html#r-mode">Sequencing → R mode</a>.</div>
+            <div class="hb-tip" data-hb-copy="play.121">Build a “kick + snare only” return so a break drops back to just those lanes. See <a href="sequencing.html#r-mode">Sequencing → R mode</a>.</div>
           </section>
         </section>
 

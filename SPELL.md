@@ -117,7 +117,7 @@ Touch1+2 opens the existing menu **shell**, but only these top-level pages:
 
 | Page | Role |
 |------|------|
-| **BPM** | Tempo + **INT / EXT** clock + brightness (same idea as today’s VOLUME_BPM screen) |
+| **BPM** | Tempo + **INT / EXT** clock + brightness (BPM screen; output level remains under VOL) |
 | **VOL** | MAIN, GAIN (1–4 bus + master; drop 5–8/SYN if unused), LOUT, PREV, 2-CH, SPKR, HFC |
 | **MIDI** | Keep clock send mode / transport / PPQN as needed so BPM send & receive stay real |
 | **SD** | USB Serial SD file server (LIST/PUT/GET/…) so a host can push WAVs into `songs/` |

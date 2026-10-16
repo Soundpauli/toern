@@ -1,6 +1,6 @@
 (function () {
-  var INDEX_KEY = "hb-search-index-v1";
-  var INDEX_VER = "20261012a";
+  var INDEX_KEY = "hb-search-index-v2-" + (window.HBLanguage ? window.HBLanguage.id : "en");
+  var INDEX_VER = "20261016w";
 
   function pages() {
     return (window.HBHandbook && window.HBHandbook.pages) || [];
@@ -33,6 +33,7 @@
 
   function extractDoc(html, meta) {
     var doc = new DOMParser().parseFromString(html, "text/html");
+    if (window.HBLanguage) window.HBLanguage.translate(doc, meta.href);
     var root = doc.querySelector("#hb-content .wrap") || doc.querySelector(".wrap") || doc.body;
     if (!root) return null;
 
@@ -275,7 +276,7 @@
     html.push('<ol class="hb-search-list">');
     results.forEach(function (r) {
       html.push('<li class="hb-search-hit">');
-      html.push('<a class="hb-search-hit__link" href="' + escapeHtml(r.href) + '">');
+      html.push('<a class="hb-search-hit__link" href="' + escapeHtml(window.HBLanguage ? window.HBLanguage.url(r.href) : r.href) + '">');
       if (r.group) html.push('<span class="hb-search-hit__group">' + escapeHtml(r.group) + "</span>");
       html.push('<span class="hb-search-hit__title">' + highlight(r.title, terms) + "</span>");
       if (r.section) html.push('<span class="hb-search-hit__section">' + highlight(r.section, terms) + "</span>");
@@ -323,7 +324,8 @@
     }
 
     renderResults(host, query, [], "loading");
-    ensureIndex()
+    (window.HBLanguage ? window.HBLanguage.ready : Promise.resolve())
+      .then(ensureIndex)
       .then(function (docs) {
         renderResults(host, query, searchDocs(docs, query), "ready");
       })

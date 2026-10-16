@@ -52,7 +52,7 @@ extern Device SMP;
 extern GlobalVars GLOB;
 extern Mode* currentMode;
 extern i2cEncoderLibV2 Encoder[];
-extern Mode volume_bpm;
+extern Mode bpmMode;
 extern IntervalTimer playTimer;
 extern double playNoteInterval;
 extern float detune[13]; // Global detune array for channels 1-12
@@ -953,10 +953,10 @@ void finalizeWavHeader(File &file, uint32_t dataSize) {
   file.seek(44 + dataSize);
 }
 
-// REC input monitor into mixer_end in3. VOL>SPKR on → always 0 (electrical feedback).
+// REC input monitor into mixer_end in3. Mute while VOL>SPKR is ON (electrical feedback).
 // Speaker amp is also forced off while capturing (see applySpkrHardware).
 float recInputMonitorGain() {
-  if (getSpkrEnabled()) return 0.0f;
+  if (getSpkrEnabled()) return 0.0f;  // spkrEnabled == speaker ON
   const float maxPlaybackGain = MIX_BUS_HEADROOM * MIX_END_SAMPLES_GAIN;
   if (recMode == 1) {
     return mapf((float)micGain, 0.0f, 63.0f, 0.0f, maxPlaybackGain);
@@ -1576,14 +1576,31 @@ FLASHMEM void FastLEDshow() {
   }
 }
 
+static void presentGridThenRecordingOverlay(bool dotted) {
+  lastUserActivityMs = millis();
+  if (currentMode == &draw || currentMode == &singleMode) {
+    extern void drawBase();
+    extern void drawTriggers();
+    extern void drawTimer();
+    drawBase();
+    drawTriggers();
+    if (isNowPlaying) drawTimer();
+  }
+  if (dotted) {
+    extern void drawRecordingBorderDotted();
+    drawRecordingBorderDotted();
+  } else {
+    extern void drawRecordingBorder();
+    drawRecordingBorder();
+  }
+  lastUpdate = 0;
+  FastLEDshow();
+}
+
 // One-shot present: bypass FPS throttle so the red border is actually on the LEDs
 // before capture starts (throttled FastLEDshow() was the missing-border case).
 void presentRecordingBorder() {
-  lastUserActivityMs = millis();
-  extern void drawRecordingBorder();
-  drawRecordingBorder();
-  lastUpdate = 0;
-  FastLEDshow();
+  presentGridThenRecordingOverlay(false);
 }
 
 int getPage(int x) {
@@ -3277,14 +3294,14 @@ FLASHMEM void setGenreBPM() {
       break;
   }
   
-  // Set the BPM directly in SMP.bpm and update the volume_bpm mode
+  // Set the BPM directly in SMP.bpm and update the BPM mode
   SMP.bpm = targetBPM;
   
-  // Update the volume_bpm mode position
-  volume_bpm.pos[3] = targetBPM;
+  // Update the BPM mode position
+  bpmMode.pos[3] = targetBPM;
   
-  // If currently in volume_bpm mode, update the encoder
-  if (currentMode == &volume_bpm) {
+  // If currently in BPM mode, update the encoder
+  if (currentMode == &bpmMode) {
     Encoder[3].writeCounter((int32_t)targetBPM);
   }
   
@@ -3987,7 +4004,7 @@ FLASHMEM void startNew() {
   extern bool preventPaintUnpaint;
   extern int patternMode;
   extern Mode draw;
-  extern Mode volume_bpm;
+  extern Mode bpmMode;
   extern Mode *currentMode;
   extern i2cEncoderLibV2 Encoder[NUM_ENCODERS];
   extern CRGB col[];
@@ -4034,19 +4051,20 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 0,  1);    // recMode (MIC)
   EEPROM.write(EEPROM_DATA_START + 1,  1);    // clockMode (INT)
   EEPROM.write(EEPROM_DATA_START + 2,  2);    // transportMode (SEND)
-  EEPROM.write(EEPROM_DATA_START + 3,  1);    // patternMode (ON)
+  EEPROM.write(EEPROM_DATA_START + 3,  (uint8_t)-1);  // patternMode (OFF)
   EEPROM.write(EEPROM_DATA_START + 4, (uint8_t)-1);  // voiceSelect (OFF)
-  EEPROM.write(EEPROM_DATA_START + 5,  1);    // fastRecMode
-  EEPROM.write(EEPROM_DATA_START + 6,  1);    // recChannelClear
+  EEPROM.write(EEPROM_DATA_START + 5,  2);    // fastRecMode (SENS)
+  EEPROM.write(EEPROM_DATA_START + 58, 0xA5); // TRIG default already SENS
+  EEPROM.write(EEPROM_DATA_START + 6,  0);    // recChannelClear (OFF)
   EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol
-  EEPROM.write(EEPROM_DATA_START + 8, (uint8_t)-1);  // flowMode (OFF)
+  EEPROM.write(EEPROM_DATA_START + 8,  1);    // flowMode (ON)
   EEPROM.write(EEPROM_DATA_START + 9,  10);   // micGain
   EEPROM.write(EEPROM_DATA_START + 10, (6 << 2)); // PPQN pulse: OFF, +, 24, CONT
   EEPROM.write(EEPROM_DATA_START + 30, 12);   // PPQN pulse width ms
   EEPROM.write(EEPROM_DATA_START + 11, 1);    // simpleNotesView (EASY)
   EEPROM.write(EEPROM_DATA_START + 12, 0);    // loopLength (OFF)
   EEPROM.write(EEPROM_DATA_START + 13, preserveLedMode);  // ledMode: keep SETT>LEDS
-  EEPROM.write(EEPROM_DATA_START + 14, 0);    // ctrlMode (PAGE)
+  EEPROM.write(EEPROM_DATA_START + 14, 1);    // ctrlMode (VOL)
   EEPROM.write(EEPROM_DATA_START + 15, 30);   // lineOutLevelSetting
   EEPROM.write(EEPROM_DATA_START + 16, 8);    // lineInLevel
   EEPROM.write(EEPROM_DATA_START + 17, 100);  // GLOB.vol
@@ -4060,6 +4078,9 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 25, 0);    // ledStripEnabled (OFF)
   EEPROM.write(EEPROM_DATA_START + 26, 64);   // ledBrightness
   EEPROM.write(EEPROM_DATA_START + 27, 1);    // spkrEnabled (ON)
+  EEPROM.write(EEPROM_DATA_START + 55, 0xA5); // SPKR polarity migrate done
+  EEPROM.write(EEPROM_DATA_START + 56, 1);   // REC HPF default (library high-pass ON)
+  EEPROM.write(EEPROM_DATA_START + 57, 0);   // VOL USB preview default (OFF)
   EEPROM.write(EEPROM_DATA_START + 28, 1);    // midiNoteReceive
   EEPROM.write(EEPROM_DATA_START + 29, 0);    // transportSendDelayMs
   EEPROM.write(EEPROM_DATA_START + 31, 0);    // transportRcveDelayMs
@@ -4109,12 +4130,12 @@ FLASHMEM void startNew() {
     SMP.filter_settings[ch][EFX] = 0;  // Sample mode
     
     // Reset parameter data (no hardware calls)
-    // Default ADSR for all channels: delay=0, A=32, D=32, S=32, R=0
+    // Default ADSR: delay=0, A=32, D=32, S=32, R=16 on synths 11/13/14 else R=0
     SMP.param_settings[ch][DELAY] = 0;
     SMP.param_settings[ch][ATTACK] = 32;
     SMP.param_settings[ch][DECAY] = 32;
     SMP.param_settings[ch][SUSTAIN] = 32;
-    SMP.param_settings[ch][RELEASE] = 0;
+    SMP.param_settings[ch][RELEASE] = (ch == 11 || ch == 13 || ch == 14) ? 16 : 0;
 
     if (ch >= 1 && ch <= 8) {
       setSampleTimeStretch(ch, 11);
@@ -4168,11 +4189,10 @@ FLASHMEM void startNew() {
   loadSamplePack(1, false, false);
   
   // 8. UPDATE BPM AND TIMER
-  Mode *bpm_vol = &volume_bpm;
-  bpm_vol->pos[3] = SMP.bpm;
+  bpmMode.pos[3] = SMP.bpm;
   playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
   playTimer.update((uint32_t)round(playNoteInterval));
-  bpm_vol->pos[2] = GLOB.vol;
+  bpmMode.pos[2] = (clockMode == 1) ? 1 : 0;
   
   // 9. RESET WAVE FILE IDS to defaults
   for (int i = 1; i < maxFiles; i++) {
@@ -4185,8 +4205,8 @@ FLASHMEM void startNew() {
   
   // 11. RESET PATTERN MODE FLAGS (before switching mode)
   songModeActive = false;
-  SMP_PATTERN_MODE = true;   // patternMode=1 means ON
-  patternMode = 1;  // ON (matches EEPROM default)
+  SMP_PATTERN_MODE = false;  // patternMode=-1 means OFF
+  patternMode = -1;  // OFF (matches EEPROM default)
   
   // Reset paint/unpaint prevention flag
   preventPaintUnpaint = false;

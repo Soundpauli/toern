@@ -384,7 +384,7 @@ void setFilterDefaults(int channel) {
   SMP.param_settings[channel][ATTACK] = 32;
   SMP.param_settings[channel][DECAY] = 32;
   SMP.param_settings[channel][SUSTAIN] = 32;
-  SMP.param_settings[channel][RELEASE] = 0;
+  SMP.param_settings[channel][RELEASE] = (channel == 11 || channel == 13 || channel == 14) ? 16 : 0;
   if (channel == 11 || channel == 13 || channel == 14) {
     SMP.synth_settings[channel][LFO_RATE] = 0;
     SMP.synth_settings[channel][LFO_DEPTH] = 0;

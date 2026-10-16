@@ -41,7 +41,7 @@ When `switchMode(newMode)` runs, it stores `oldMode`, updates `currentMode`, and
 | `menu` | `MENU` | Top-level menu shell |
 | `songMode` | `SONGMODE` | Song arrangement |
 | `subpatternMode` | `SUBPATTERN` | Subpattern / mute-related UI |
-| `volume_bpm` | `VOLUME_BPM` | BPM / related transport UI |
+| `bpmMode` | `BPM` | Tempo / clock source / brightness |
 | `newFileMode` | `NEW_FILE` | Genre generator after loading an empty numbered slot |
 
 ## How input finds the right handler
@@ -63,7 +63,7 @@ Pointer comparison against the global mode objects is the canonical check — do
 
 ## Operator labels and gestures
 
-Menu labels are **PATT, KIT, SMP, BPM, VOL, SETT, REC, MIDI, MODE, ETC**. Internal mode names remain unchanged. Tap touch 1 to toggle DRAW/SINGLE on a sound voice; tap touch 2 to open the menu. The short touch-1 chord grace period lets the second pad join a sample-browser/filter gesture; it is not a hold requirement. Note detail maps encoders 1–4 to velocity, probability, condition/ratchet and whole-voice volume.
+Menu labels are **PATT, KIT, SMP, BPM, VOL, SETT, REC, MIDI, MODE, ETC**. The BPM screen uses internal mode `bpmMode` with the name `BPM`; output volume is handled separately by VOL. Tap touch 1 to toggle DRAW/SINGLE on a sound voice; tap touch 2 to open the menu. The short touch-1 chord grace period lets the second pad join a sample-browser/filter gesture; it is not a hold requirement. Note detail maps encoders 1–4 to velocity, probability, condition/ratchet and whole-voice volume.
 
 See the [handbook controls](https://handbook.toern.live/controls.html) and [note detail](https://handbook.toern.live/note-detail.html) for complete gestures.
 

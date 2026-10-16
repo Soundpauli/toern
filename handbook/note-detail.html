@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,33 +16,34 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-note-detail">
-          <h2 class="handbook-page__title">Note detail</h2>
-          <p class="handbook-page__summary">Velocity, per-step probability and conditions, and whole-voice volume — opened by a long press on encoder&nbsp;4 on top of an existing note.</p>
+          <h2 class="handbook-page__title" data-hb-copy="note-detail.001">Note detail</h2>
+          <p class="handbook-page__summary" data-hb-copy="note-detail.002">Velocity, per-step probability and conditions, and whole-voice volume — opened by a long press on encoder&nbsp;4 on top of an existing note.</p>
 
           <section class="hb-sub" id="how-to-open">
-            <h2>Opening the editor</h2>
-            <p class="lede">Place a note in draw or single mode, then <strong>long-press encoder&nbsp;4</strong> on top of it. The matrix swaps from the grid to a dedicated layout: four vertical "value bars" with a small text label between them. The note keeps playing whenever the playhead reaches it — you can hear changes live.</p>
+            <h2 data-hb-copy="note-detail.003">Opening the editor</h2>
+            <p class="lede" data-hb-copy="note-detail.004">Place a note in draw or single mode, then <strong>long-press encoder&nbsp;4</strong> on top of it. The matrix swaps from the grid to a dedicated layout: four vertical "value bars" with a small text label between them. The note keeps playing whenever the playhead reaches it — you can hear changes live.</p>
 
             <div class="hb-triplet">
               <div class="hb-triplet__cell hb-triplet__cell--see">
                 <h6>What you see</h6>
-                <p>A red-orange ramp on the left, a five-stop probability ladder, a small fraction (e.g. "1/2"), and a blue-cyan voice-volume ramp on the right.</p>
+                <p data-hb-copy="note-detail.005">A red-orange ramp on the left, a five-stop probability ladder, a small fraction (e.g. "1/2"), and a blue-cyan voice-volume ramp on the right.</p>
               </div>
               <div class="hb-triplet__cell hb-triplet__cell--do">
                 <h6>What to do</h6>
-                <p>Turn each encoder to slide its corresponding value. Long-press encoder&nbsp;1 to exit back to the grid; the changes are already active in RAM; use PATT to save them.</p>
+                <p data-hb-copy="note-detail.006">Turn each encoder to slide its corresponding value. Long-press encoder&nbsp;1 to exit back to the grid; the changes are already active in RAM; use PATT to save them.</p>
               </div>
               <div class="hb-triplet__cell hb-triplet__cell--get">
                 <h6>What changes</h6>
-                <p>In SINGLE mode, velocity changes just the selected note. In DRAW mode, it changes every note assigned to that voice across all pages. Probability and condition affect only the selected note; voice volume affects the whole voice.</p>
+                <p data-hb-copy="note-detail.007">In SINGLE mode, velocity changes just the selected note. In DRAW mode, it changes every note assigned to that voice across all pages. Probability and condition affect only the selected note; voice volume affects the whole voice.</p>
               </div>
             </div>
           </section>
@@ -52,19 +53,19 @@
 
 
           <section class="hb-sub" id="layout">
-            <h2>The four columns</h2>
+            <h2 data-hb-copy="note-detail.008">The four columns</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="velocity" width="640" height="320" role="img" aria-label="Velocity screen"></canvas>
               </div>
-              <p class="viz-caption--below">Example layout: medium velocity, mid chance, "1/2" conditional fraction, high voice volume.</p>
+              <p class="viz-caption--below" data-hb-copy="note-detail.009">Example layout: medium velocity, mid chance, "1/2" conditional fraction, high voice volume.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Hit velocity / impact</td><td>Maps to MIDI 1–127. In SINGLE it changes this cell; in DRAW it changes all notes assigned to this cell’s voice across all pages.</td></tr>
+                  <tr><th>Turn</th><td>Hit velocity / impact</td><td data-hb-copy="note-detail.011">Maps to MIDI 1–127. In SINGLE it changes this cell; in DRAW it changes all notes assigned to this cell’s voice across all pages.</td></tr>
                   <tr><th>Long press</th><td>Exit to grid</td><td>Returns to the previous draw or single view.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Probability ladder</td><td>Five stops: <strong>0%</strong> · <strong>25%</strong> · <strong>50%</strong> · <strong>75%</strong> · <strong>100%</strong>. Lower values randomly skip the step during playback to thin busy patterns.</td></tr>
+                  <tr><th>Turn</th><td>Probability ladder</td><td data-hb-copy="note-detail.015">Five stops: <strong>0%</strong> · <strong>25%</strong> · <strong>50%</strong> · <strong>75%</strong> · <strong>100%</strong>. Lower values randomly skip the step during playback to thin busy patterns.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Condition / ratchet</td><td>Sets this cell’s pass condition, ratchet, fill or glide.</td></tr>
@@ -81,8 +82,8 @@
 
 
           <section class="hb-sub" id="conditions">
-            <h2>Condition triggers explained</h2>
-            <p>The condition column is the most powerful and least obvious feature on the screen. Each setting is a fraction the firmware reads as "this step fires every <em>n</em>-th time the pattern reaches it":</p>
+            <h2 data-hb-copy="note-detail.020">Condition triggers explained</h2>
+            <p data-hb-copy="note-detail.021">The condition column is the most powerful and least obvious feature on the screen. Each setting is a fraction the firmware reads as "this step fires every <em>n</em>-th time the pattern reaches it":</p>
             <table class="opt-table">
               <thead><tr><th>Fraction</th><th>Effect</th><th>Use it for</th></tr></thead>
               <tbody>
@@ -92,10 +93,10 @@
                 <tr><td><strong>2/1</strong>, <strong>4/1</strong>, <strong>8/1</strong></td><td><em>Ratchets</em>: 2 / 4 / 8 quick repeats inside one step</td><td>Drum rolls, glitches, machine-gun hats.</td></tr>
                 <tr><td><strong>X/1</strong></td><td>Random ratchet count</td><td>Lo-fi humanisation.</td></tr>
                 <tr><td><strong>F/F</strong></td><td>Starts the fill trigger</td><td>Fast repeating fills controlled by the fill engine.</td></tr>
-                <tr><td><strong>G/L</strong></td><td>Glide / legato into this destination note on synth voices 11, 13, and 14</td><td>Same pitch holds; a different pitch slides without restarting the envelope. Without an adjacent source note it attacks normally. Sample voices treat G/L like 1/1.</td></tr>
+                <tr><td><strong>G/L</strong></td><td data-hb-copy="note-detail.041">Glide / legato into this destination note on synth voices 11, 13, and 14</td><td data-hb-copy="note-detail.042">Same pitch holds; a different pitch slides without restarting the envelope. Without an adjacent source note it attacks normally. Sample voices treat G/L like 1/1.</td></tr>
               </tbody>
             </table>
-            <p>Conditions combine with probability: a step set to 50% with a 1/4 condition fires only when both checks succeed — extremely rare, used sparingly.</p>
+            <p data-hb-copy="note-detail.043">Conditions combine with probability: a step set to 50% with a 1/4 condition fires only when both checks succeed — extremely rare, used sparingly.</p>
           </section>
 
 
@@ -103,12 +104,12 @@
 
 
           <section class="hb-sub" id="tips">
-            <h2>Practical tips</h2>
+            <h2 data-hb-copy="note-detail.044">Practical tips</h2>
             <ul>
-              <li><strong>Velocity follows envelope shape.</strong> If your sound has a long attack, low velocity may not "land" before the next step. Pair velocity with the attack stage in <a href="sound.html#adsr">Sound → ADSR</a>.</li>
-              <li><strong>Probability is also a thinning tool.</strong> Set every hi-hat step to 75% and the loop instantly stops sounding like a machine.</li>
-              <li><strong>Ratchets are loud.</strong> A 4/1 condition plays the same sample four times inside one step — drop velocity or lane volume to compensate.</li>
-              <li>The screen only edits <em>one</em> step. If you want every step on a row to share a velocity, use the velocity encoder live during playback (in single mode + <a href="play.html#ctrl">SETT → CTRL = VOL</a>) instead.</li>
+              <li data-hb-copy="note-detail.045"><strong>Velocity follows envelope shape.</strong> If your sound has a long attack, low velocity may not "land" before the next step. Pair velocity with the attack stage in <a href="sound.html#adsr">Sound → ADSR</a>.</li>
+              <li data-hb-copy="note-detail.046"><strong>Probability is also a thinning tool.</strong> Set every hi-hat step to 75% and the loop instantly stops sounding like a machine.</li>
+              <li data-hb-copy="note-detail.047"><strong>Ratchets are loud.</strong> A 4/1 condition plays the same sample four times inside one step — drop velocity or lane volume to compensate.</li>
+              <li data-hb-copy="note-detail.048">The screen only edits <em>one</em> step. If you want every step on a row to share a velocity, use the velocity encoder live during playback (in single mode + <a href="play.html#ctrl">SETT → CTRL = VOL</a>) instead.</li>
             </ul>
           </section>
         </section>

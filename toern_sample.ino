@@ -1237,8 +1237,20 @@ void showWave() {
   yield(); // Yield at end of function to maintain responsiveness
 }
 
+static uint16_t g_pendingSp0CopyMask = 0;
+static bool g_pendingSampleLoadAutosave = false;
+
+static bool sampleLoadProgressAllowed() {
+  return !isNowPlaying;
+}
+
+static void requestDeferredSp0Copy(unsigned int channel) {
+  if (channel < 1 || channel > 8) return;
+  g_pendingSp0CopyMask |= (uint16_t)(1u << channel);
+}
+
 static void sampleLoadUiThrottled(uint8_t percent, bool enable, uint8_t &lastDrawn) {
-  if (!enable) return;
+  if (!enable || !sampleLoadProgressAllowed()) return;
   extern void drawSampleLoadOverlay(uint8_t progressPercent);
   extern void FastLEDshow();
   if (percent > 100) percent = 100;
@@ -1250,9 +1262,42 @@ static void sampleLoadUiThrottled(uint8_t percent, bool enable, uint8_t &lastDra
   }
 }
 
+void requestDeferredSampleLoadAutosave() {
+  g_pendingSampleLoadAutosave = true;
+}
+
+FLASHMEM void servicePendingSamplePersist() {
+  if (isNowPlaying) return;
+  extern bool sdIoAudioSettled();
+  if (!sdIoAudioSettled()) return;
+  if (g_pendingSp0CopyMask) {
+    sdIoBeginAudioSafe();
+    for (unsigned int ch = 1; ch <= 8; ch++) {
+      if (g_pendingSp0CopyMask & (uint16_t)(1u << ch)) {
+        g_pendingSp0CopyMask &= (uint16_t)~(1u << ch);
+        copySampleToSamplepack0(ch, false);
+        saveSp0StateToEEPROM();
+      }
+    }
+    sdIoEndAudioSafe();
+  }
+  if (g_pendingSampleLoadAutosave) {
+    g_pendingSampleLoadAutosave = false;
+    extern void autoSave();
+    autoSave();
+  }
+}
+
 // Copy currently loaded sample to samplepack 0
 FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress) {
-  stopSdPreviewIfPlaying();
+  if (channel < 1 || channel >= maxFiles) return;
+  if (isNowPlaying) {
+    // SD write of a full voice WAV will underrun other voices. RAM is already live.
+    requestDeferredSp0Copy(channel);
+    SMP.sp0Active[channel] = true;
+    return;
+  }
+  stopSdPreviewAndWait();
   
   // Ensure samplepack 0 directory exists
   if (!SD.exists("0")) {
@@ -1390,9 +1435,10 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     return false;
   }
 
-  stopSdPreviewIfPlaying();
+  stopSdPreviewAndWait();
 
   uint8_t loadProgLast = 255;
+  const bool showProg = showLoadProgress && sampleLoadProgressAllowed();
 
   extern CachedSample previewCache;
 
@@ -1420,7 +1466,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
       return false;
     }
 
-    if (showLoadProgress) {
+    if (showProg) {
       drawSampleLoadOverlay(4);
       FastLEDshow();
     }
@@ -1449,12 +1495,12 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
       plen += (int)bytesRead;
       sdIoYield();
       chunkCount++;
-      if (showLoadProgress && maxToRead > 0 && (chunkCount % 2) == 0) {
+      if (showProg && maxToRead > 0 && (chunkCount % 2) == 0) {
         uint8_t pct = (uint8_t)(4u + (uint32_t)plen * 62u / (uint32_t)maxToRead);
         sampleLoadUiThrottled(pct, true, loadProgLast);
       }
     }
-    if (showLoadProgress && maxToRead > 0) {
+    if (showProg && maxToRead > 0) {
       sampleLoadUiThrottled(66, true, loadProgLast);
     }
     previewFile.close();
@@ -1472,7 +1518,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
       previewCache.valid = false;
       return false;
     }
-  } else if (showLoadProgress) {
+  } else if (showProg) {
     drawSampleLoadOverlay(50);
     FastLEDshow();
   }
@@ -1507,10 +1553,14 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   if (samplesRead < 0) samplesRead = 0;
   if (samplesRead > bufferSamples) samplesRead = bufferSamples;
 
-  for (int i = 0; i < samplesRead; i++) {
-    targetBuffer[i] = previewBuffer[startSample + i];
-    // Yield occasionally during large copies while playing
-    if ((i & 0xFFF) == 0) sdIoYield();
+  const int copyBurst = (isNowPlaying || sdIoKeepAudioFed) ? 256 : 4096;
+  int copied = 0;
+  while (copied < samplesRead) {
+    int n = samplesRead - copied;
+    if (n > copyBurst) n = copyBurst;
+    memcpy(targetBuffer + copied, previewBuffer + startSample + copied, (size_t)n * sizeof(int16_t));
+    copied += n;
+    sdIoYield();
   }
   
   loadedSampleRate[targetChannel] = previewCache.rate;
@@ -1530,7 +1580,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   channelDirection[targetChannel] = 1;
   endChannelSampleReload(targetChannel);
 
-  if (showLoadProgress) {
+  if (showProg) {
     sampleLoadUiThrottled(78, true, loadProgLast);
   }
 
@@ -1595,11 +1645,11 @@ void soloRandomLoadLastPreview() {
 
   preventPaintUnpaint = true;
   sdIoBeginAudioSafe();
-  bool loaded = loadPreviewToChannel((unsigned int)ch, true);
+  bool loaded = loadPreviewToChannel((unsigned int)ch, !isNowPlaying);
   if (loaded) {
-    copySampleToSamplepack0((unsigned int)ch, true);
-    saveSp0StateToEEPROM();
+    copySampleToSamplepack0((unsigned int)ch, !isNowPlaying);
     if (!isNowPlaying) {
+      saveSp0StateToEEPROM();
       flushSettingsBackupNow();
     }
   }

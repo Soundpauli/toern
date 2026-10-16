@@ -44,7 +44,7 @@ const SUB_VALUES = {
     { opts: ["LINE", "MIC"], colors: [[0, 0, 120], [120, 120, 120]], codes: ["X", "W"] },
     { opts: ["0"], colors: [[0, 120, 120]], codes: ["N"] },
     { opts: ["0"], colors: [[0, 0, 120]], codes: ["X"] },
-    { opts: ["OFF", "SENS", "-CON", "+CON"], colors: [[120, 0, 0], [0, 120, 0], [20, 20, 0], [0, 0, 20]], codes: ["R", "G", "Y", "X"] },
+    { opts: ["OFF", "INST", "SENS", "-CON", "+CON"], colors: [[120, 0, 0], [0, 120, 0], [0, 120, 120], [20, 20, 0], [0, 0, 20]], codes: ["R", "G", "N", "Y", "X"] },
     { opts: ["OFF", "ON", "FIX", "ON1", "CLIC"], colors: [[120, 0, 0], [0, 120, 0], [120, 120, 0], [0, 120, 120], [120, 0, 120]], codes: ["R", "G", "Y", "N", "M"] },
   ],
   midi: [
@@ -67,6 +67,7 @@ const SUB_VALUES = {
     { opts: ["OFF", "M+P", "L+R"], colors: [[120, 0, 0], [0, 120, 0], [0, 120, 0]], codes: ["R", "G", "G"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["0"], colors: [[120, 0, 0]], codes: ["R"] },
+    { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
   ],
   etc: [
     { opts: ["TOERN"], colors: [[120, 120, 120]], codes: ["W"] },
@@ -102,11 +103,12 @@ export function createDevice(matrix, statusEl, rings) {
   const invOf = Array(16).fill(false);
   const mute = Array(16).fill(false);
   const song = Array(64).fill(0);
-  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(10).fill(0), vol: Array(7).fill(0), etc: Array(12).fill(0) };
-  // Firmware EEPROM defaults: TRIG=SENS, CLR=ON, FLOW=ON, EYES=1MIN
+  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(10).fill(0), vol: Array(8).fill(0), etc: Array(12).fill(0) };
+  // Firmware EEPROM defaults: TRIG=SENS, CLR=OFF, FLOW=ON, CTRL=VOL, EYES=1MIN
   subPick.recs[3] = 1;
-  subPick.recs[4] = 1;
+  subPick.recs[4] = 0;
   subPick.look[0] = 1;
+  subPick.look[6] = 1;
   subPick.look[7] = 2;
   subPick.etc[ETC_EYES_INDEX] = 1;
   subPick.midi[3] = 1; // RCVE NOTE
@@ -134,15 +136,18 @@ export function createDevice(matrix, statusEl, rings) {
     imageMode: false, imgBrushChannel: 1,
     flow: true, voiceMode: false, fireVoice: 0, fireLevel: 8, fireSize: 1, fireGravity: 0, fireColor: 8, fireFocus: 0, voiceLen: Array(16).fill(0), voiceMask: Array(16).fill(0), voicePages: 1,
     voiceLoop: Array(16).fill(1), voiceOffset: Array(16).fill(0), voiceEdit: Array(16).fill(0),
-    pmode: 0, ctrlVol: false, prevMode: 0, drawR: false, cursorType: 0,
+    pmode: 0, ctrlVol: true, prevMode: 0, drawR: false, cursorType: 0,
     scheme: 0, childLock: false, copyArmed: false, solo: false, soloSaved: null, soloArrow: "", soloArrowAt: 0,
     volBar: 0, volBarAt: 0, chVol,
     muteMask: 0x0006, muteSel: 1, fullMute: false, fullMuteSaved: null,
     ledBrightness: 64, chNr: 1, chNrAt: 0, pageNr: 1, pageNrAt: 0, infoAt: 0, knobAngle: [0, 0, 0, 0],
     mainVol: 80, gain: 1, prevVol: 20, prevModeLabelUntil: 0, stereo: 0,
     micGain: 20, lineInLevel: 5,
-    fastRecMode: 1, recChannelClear: 1, recInput: 0,
+    fastRecMode: 2, recChannelClear: 1, recInput: 0,
     fastRecActive: false,
+    sensCountActive: false,
+    sensCountAt: 0,
+    sensCountSec: 0,
     songPos: 1, songPattern: 1, bpm: 120, bootAt: 0,
     hasPageNotes, slotExists, subValue, legacySubValue,
     deviceFocus: true,
@@ -1943,13 +1948,29 @@ export function createDevice(matrix, statusEl, rings) {
       togglePlay();
       return;
     }
-    // TRIG=SENS: hold T3 to record directly into current sample voice
+    // TRIG=INST: hold T3 to record directly into current sample voice
     if (trig === 1 && clr !== 3) {
       if (down) {
         if (s.GLOB.y <= 1 || ch < 1 || ch > 8) return;
         startFastRec();
       } else if (s.fastRecActive) {
         stopFastRec();
+      }
+    }
+    // TRIG=SENS: 3s countdown while held, then record until release
+    if (trig === 2) {
+      if (down) {
+        if (s.fastRecActive || s.GLOB.y <= 1 || ch < 1 || ch > 8) return;
+        s.sensCountActive = true;
+        s.sensCountAt = performance.now();
+        s.sensCountSec = 3;
+      } else {
+        if (s.sensCountActive) {
+          s.sensCountActive = false;
+          s.sensCountSec = 0;
+        } else if (s.fastRecActive) {
+          stopFastRec();
+        }
       }
     }
   }
@@ -2379,6 +2400,16 @@ export function createDevice(matrix, statusEl, rings) {
     s.beatPos = s.playing && s.pulseStep
       ? (((s.pulseStep - 1) % 4) + (audioNow - s.pulseAt) / stepSec()) / 4
       : 0;
+    if (s.sensCountActive) {
+      const elapsed = now - s.sensCountAt;
+      if (elapsed >= 3000) {
+        s.sensCountActive = false;
+        s.sensCountSec = 0;
+        startFastRec();
+      } else {
+        s.sensCountSec = Math.max(1, 3 - Math.floor(elapsed / 1000));
+      }
+    }
     renderFrame(matrix, s, now);
     const label = s.mode === "draw" && s.GLOB.singleMode ? "single" : s.mode;
     const status = `${label}  ·  page ${s.GLOB.edit}  ·  ${s.playing ? "play" : "stop"}`;

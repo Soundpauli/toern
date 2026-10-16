@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,27 +16,28 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-matrix">
-          <h2 class="handbook-page__title">The matrix</h2>
-          <p class="handbook-page__summary"><span class="hb-brand">TŒRN</span> has no screen besides the RGB LED grid — the same surface you tap notes onto is also the display. This chapter teaches you to read every row, lane, and helper before you place a single note.</p>
+          <h2 class="handbook-page__title" data-hb-copy="matrix.001">The matrix</h2>
+          <p class="handbook-page__summary" data-hb-copy="matrix.002"><span class="hb-brand">TŒRN</span> has no screen besides the RGB LED grid — the same surface you tap notes onto is also the display. This chapter teaches you to read every row, lane, and helper before you place a single note.</p>
 
           <section class="hb-sub" id="axes">
-            <h2>Time goes sideways, voices stack upward</h2>
-            <p class="lede">The grid is a two-dimensional score. The <strong>X axis (columns 1…<span data-hb-steps>32</span>)</strong> is musical <em>time</em>: column 1 sounds first, column <span data-hb-steps>32</span> last. The <strong>Y axis (rows 1…16)</strong> is <em>voices</em> stacked from bottom to top — row 2 is voice 1, row 3 is voice 2, and so on. Two rows are reserved as helper strips: <strong>row 1</strong> at the very bottom and <strong>row 16</strong> at the very top.</p>
-            <div class="hb-tip"><strong>Read direction:</strong> firmware numbers pixels with <code>(x, y)</code> using 1-based coordinates and y=1 at the bottom. Wherever this handbook says "row&nbsp;1" it means the lowest visible row of LEDs, and "row&nbsp;16" the highest.</div>
+            <h2 data-hb-copy="matrix.003">Time goes sideways, voices stack upward</h2>
+            <p class="lede" data-hb-copy="matrix.004">The grid is a two-dimensional score. The <strong>X axis (columns 1…<span data-hb-steps>32</span>)</strong> is musical <em>time</em>: column 1 sounds first, column <span data-hb-steps>32</span> last. The <strong>Y axis (rows 1…16)</strong> is <em>voices</em> stacked from bottom to top — row 2 is voice 1, row 3 is voice 2, and so on. Two rows are reserved as helper strips: <strong>row 1</strong> at the very bottom and <strong>row 16</strong> at the very top.</p>
+            <div class="hb-tip" data-hb-copy="matrix.005"><strong>Read direction:</strong> firmware numbers pixels with <code>(x, y)</code> using 1-based coordinates and y=1 at the bottom. Wherever this handbook says "row&nbsp;1" it means the lowest visible row of LEDs, and "row&nbsp;16" the highest.</div>
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="matrix_anatomy" width="640" height="320" role="img" aria-label="Matrix anatomy"></canvas>
               </div>
-              <p class="viz-caption--below">Anatomy: tinted voice bands fill rows 2–15; row&nbsp;1 (bottom) is the 4/4 beat guide; row&nbsp;16 (top) is the page strip.</p>
+              <p class="viz-caption--below" data-hb-copy="matrix.006">Anatomy: tinted voice bands fill rows 2–15; row&nbsp;1 (bottom) is the 4/4 beat guide; row&nbsp;16 (top) is the page strip.</p>
             </article>
           </section>
 
@@ -45,9 +46,9 @@
 
 
           <section class="hb-sub" id="row1">
-            <h2>Row 1 — beat guide</h2>
-            <p>In default <a href="sequencing.html#draw">Draw</a> mode the lowest row is <strong>not</strong> a voice lane. It shows a quiet <strong>4/4 orientation bar</strong>: dim markers every fourth step, starting at step&nbsp;1, across the full grid width so you can spot beat&nbsp;one and each downbeat while you edit. <strong>No notes can be placed here</strong> — painting starts on row&nbsp;2.</p>
-            <p>With the cursor on <strong>row&nbsp;16</strong>, row&nbsp;1 instead paints <strong>encoder-hint glyphs</strong> so you know which knob is armed for page-wide tools — see <a href="pages-more.html#page-row">Pages+More</a>.</p>
+            <h2 data-hb-copy="matrix.007">Row 1 — beat guide</h2>
+            <p data-hb-copy="matrix.008">In default <a href="sequencing.html#draw">Draw</a> mode the lowest row is <strong>not</strong> a voice lane. It shows a quiet <strong>4/4 orientation bar</strong>: dim markers every fourth step, starting at step&nbsp;1, across the full grid width so you can spot beat&nbsp;one and each downbeat while you edit. <strong>No notes can be placed here</strong> — painting starts on row&nbsp;2.</p>
+            <p data-hb-copy="matrix.009">With the cursor on <strong>row&nbsp;16</strong>, row&nbsp;1 instead paints <strong>encoder-hint glyphs</strong> so you know which knob is armed for page-wide tools — see <a href="pages-more.html#page-row">Pages+More</a>.</p>
           </section>
 
 
@@ -55,10 +56,10 @@
 
 
           <section class="hb-sub" id="row16">
-            <h2>Row 16 — TOOL-LANE</h2>
-            <p>The top row combines the <strong>page strip</strong> (one LED per pattern page; up to <span data-hb-pages>8</span> pages) with the <strong>TOOL-LANE</strong>, where page-wide actions are available when the cursor is on row 16.</p>
+            <h2 data-hb-copy="matrix.010">Row 16 — TOOL-LANE</h2>
+            <p data-hb-copy="matrix.011">The top row combines the <strong>page strip</strong> (one LED per pattern page; up to <span data-hb-pages>8</span> pages) with the <strong>TOOL-LANE</strong>, where page-wide actions are available when the cursor is on row 16.</p>
 
-            <div class="hb-tip"><strong>TOOL-LANE actions</strong> (cursor on row 16):
+            <div class="hb-tip" data-hb-copy="matrix.012"><strong>TOOL-LANE actions</strong> (cursor on row 16):
               <ul>
                 <li><a href="pages-more.html#delete-page">Delete a page</a> by unpainting its strip LED</li>
                 <li>Copy &amp; paste a page</li>
@@ -73,16 +74,16 @@
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="page_slots" width="640" height="320" role="img" aria-label="Page strip"></canvas>
               </div>
-              <p class="viz-caption--below">Page strip colours, summarised.</p>
+              <p class="viz-caption--below" data-hb-copy="matrix.013">Page strip colours, summarised.</p>
               <table class="opt-table">
                 <thead><tr><th>Colour</th><th>Meaning</th></tr></thead>
                 <tbody>
-                  <tr><td>Bright yellow-white</td><td>Audible <em>and</em> edit page (you are watching what's playing).</td></tr>
-                  <tr><td>Green</td><td>Audible page; you are editing a different one.</td></tr>
-                  <tr><td>Yellow</td><td>Edit page only (playback is elsewhere or stopped).</td></tr>
-                  <tr><td>Dark blue</td><td>Other page that already contains notes.</td></tr>
-                  <tr><td>Very dark red</td><td>Empty page (no notes recorded yet).</td></tr>
-                  <tr><td>Dim red (full strip)</td><td>Loop mode active and that slot is beyond the loop end.</td></tr>
+                  <tr><td>Bright yellow-white</td><td data-hb-copy="matrix.015">Audible <em>and</em> edit page (you are watching what's playing).</td></tr>
+                  <tr><td>Green</td><td data-hb-copy="matrix.017">Audible page; you are editing a different one.</td></tr>
+                  <tr><td>Yellow</td><td data-hb-copy="matrix.019">Edit page only (playback is elsewhere or stopped).</td></tr>
+                  <tr><td>Dark blue</td><td data-hb-copy="matrix.021">Other page that already contains notes.</td></tr>
+                  <tr><td>Very dark red</td><td data-hb-copy="matrix.023">Empty page (no notes recorded yet).</td></tr>
+                  <tr><td>Dim red (full strip)</td><td data-hb-copy="matrix.025">Loop mode active and that slot is beyond the loop end.</td></tr>
                 </tbody>
               </table>
             </article>
@@ -93,9 +94,9 @@
 
 
           <section class="hb-sub" id="voice-rows">
-            <h2>Rows 2–15 — the voice lanes</h2>
-            <p class="lede">Rows 2–15 show voice lanes. Voices 1–8 are samples, 11 is the three-voice poly synth, and 13–14 are mono synths. Voices 9, 10 and 12 are unassigned; the hint and page strips are navigation, not additional sound voices. In DRAW, a voice appears one row above its channel number; in SINGLE, rows represent pitches of the selected voice.</p>
-            <p>Each voice has its own permanent <strong>colour</strong>; you will recognise rows by hue at a glance. The mapping below is the firmware default (palette&nbsp;0):</p>
+            <h2 data-hb-copy="matrix.026">Rows 2–15 — the voice lanes</h2>
+            <p class="lede" data-hb-copy="matrix.027">Rows 2–15 show voice lanes. Voices 1–8 are samples, 11 is the three-voice poly synth, and 13–14 are mono synths. Voices 9, 10 and 12 are unassigned; the hint and page strips are navigation, not additional sound voices. In DRAW, a voice appears one row above its channel number; in SINGLE, rows represent pitches of the selected voice.</p>
+            <p data-hb-copy="matrix.028">Each voice has its own permanent <strong>colour</strong>; you will recognise rows by hue at a glance. The mapping below is the firmware default (palette&nbsp;0):</p>
 
             <div class="hb-voices" role="list">
               <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#ff0000"></span><span class="hb-voice__num">1</span><span><strong>Sample slot</strong></span></div>
@@ -114,8 +115,8 @@
               <div class="hb-voice" role="listitem"><span class="hb-voice__dot" style="background:#ff3232"></span><span class="hb-voice__num">14</span><span><strong>Mono synth B</strong><br><span class="hb-voice__desc">2-osc, LFO, arp</span></div>
             </div>
 
-            <p><strong>Sample slots 1–8</strong> read audio from the SD card (see <a href="samples.html">Samples</a>). <strong>Voices 9, 10, and 12 are intentionally empty</strong> — no sound engine is wired to those rows; you may still move the cursor there, but notes placed on them do nothing. Voice <strong>11</strong> is a three-voice polyphonic synth with ten instrument presets plus LFO/ARP; voices <strong>13</strong> and <strong>14</strong> are independent mono synths with the same LFO and arpeggiator page.</p>
-            <p>For the actual sound chain (oscillators → envelope → filter → effects), see <a href="sound.html">Sound design</a>. For every mixer gain and bus, see <a href="audiopath.html">Audio path</a>.</p>
+            <p data-hb-copy="matrix.029"><strong>Sample slots 1–8</strong> read audio from the SD card (see <a href="samples.html">Samples</a>). <strong>Voices 9, 10, and 12 are intentionally empty</strong> — no sound engine is wired to those rows; you may still move the cursor there, but notes placed on them do nothing. Voice <strong>11</strong> is a three-voice polyphonic synth with ten instrument presets plus LFO/ARP; voices <strong>13</strong> and <strong>14</strong> are independent mono synths with the same LFO and arpeggiator page.</p>
+            <p data-hb-copy="matrix.030">For the actual sound chain (oscillators → envelope → filter → effects), see <a href="sound.html">Sound design</a>. For every mixer gain and bus, see <a href="audiopath.html">Audio path</a>.</p>
           </section>
 
 
@@ -123,13 +124,13 @@
 
 
           <section class="hb-sub" id="cursor">
-            <h2>The cursor &amp; the playhead</h2>
-            <p>The grid shows an edit cursor and a playhead during playback:</p>
+            <h2 data-hb-copy="matrix.031">The cursor &amp; the playhead</h2>
+            <p data-hb-copy="matrix.032">The grid shows an edit cursor and a playhead during playback:</p>
             <ul>
-              <li>The <strong>edit cursor</strong> is your working tool: it marks where the next gesture will land. Encoder&nbsp;4 moves it across columns; encoder&nbsp;1 moves it between rows. A row-number helper can be shown beside it to make its position easier to read.</li>
-              <li>The <strong>playhead</strong> is a <strong>red vertical line</strong> that runs left to right across the visible page — the column the sequencer is currently sounding. Notes under it light brighter as they fire; muted lanes stay dark.</li>
+              <li data-hb-copy="matrix.033">The <strong>edit cursor</strong> is your working tool: it marks where the next gesture will land. Encoder&nbsp;4 moves it across columns; encoder&nbsp;1 moves it between rows. A row-number helper can be shown beside it to make its position easier to read.</li>
+              <li data-hb-copy="matrix.034">The <strong>playhead</strong> is a <strong>red vertical line</strong> that runs left to right across the visible page — the column the sequencer is currently sounding. Notes under it light brighter as they fire; muted lanes stay dark.</li>
             </ul>
-            <p>When playback is stopped, only the cursor moves. When playback is running, the red playhead marches across the page while the cursor stays wherever you left it.</p>
+            <p data-hb-copy="matrix.035">When playback is stopped, only the cursor moves. When playback is running, the red playhead marches across the page while the cursor stays wherever you left it.</p>
           </section>
 
 
@@ -137,13 +138,13 @@
 
 
           <section class="hb-sub" id="modes-preview">
-            <h2>What a "mode" actually means</h2>
-            <p>The matrix swaps role between modes. The two core sequencing views are explained in <a href="sequencing.html">Sequencing</a>:</p>
+            <h2 data-hb-copy="matrix.036">What a "mode" actually means</h2>
+            <p data-hb-copy="matrix.037">The matrix swaps role between modes. The two core sequencing views are explained in <a href="sequencing.html">Sequencing</a>:</p>
             <ul>
-              <li><strong>Draw</strong> — full LED grid view, every voice visible at full intensity.</li>
-              <li><strong>Single</strong> — focus on one voice at a time, other voices dimmed.</li>
+              <li data-hb-copy="matrix.038"><strong>Draw</strong> — full LED grid view, every voice visible at full intensity.</li>
+              <li data-hb-copy="matrix.039"><strong>Single</strong> — focus on one voice at a time, other voices dimmed.</li>
             </ul>
-            <p>In other modes, the matrix shows controls or information for that task. Menu mode overlays text and submenu dots; playback can continue while you navigate. The <a href="menus.html">Menu map</a> covers every screen.</p>
+            <p data-hb-copy="matrix.040">In other modes, the matrix shows controls or information for that task. Menu mode overlays text and submenu dots; playback can continue while you navigate. The <a href="menus.html">Menu map</a> covers every screen.</p>
           </section>
         </section>
 

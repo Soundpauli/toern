@@ -2733,3 +2733,10 @@ html[data-matrix-width="32"] canvas.led-matrix { max-width: 100%; }
   .hb-cover__guide { max-width: 100%; }
   .hb-cover__matrix { flex: 0 1 40%; width: 40%; min-width: 0; height: auto; aspect-ratio: var(--matrix-ratio, 2); margin-left: 0; }
 }
+
+/* Language editions share the chapter URLs and all device illustrations. */
+.hb-language { padding: 0 1.5rem 1rem; }
+.hb-language label { display: block; margin-bottom: .4rem; font: 500 .62rem/1.4 var(--font-tech); letter-spacing: .08em; text-transform: uppercase; color: var(--sidebar-muted); }
+.hb-language select { width: 100%; min-height: 36px; padding: .4rem .5rem; border: 1px solid var(--sidebar-line); background: var(--paper, #fff); color: var(--text); font: inherit; font-size: .8rem; }
+.hb-language select:focus-visible { outline: 2px solid var(--section-signal); outline-offset: 3px; }
+.hb-language__note { margin: .5rem 0 0; color: var(--sidebar-muted); font-size: .72rem; line-height: 1.5; }

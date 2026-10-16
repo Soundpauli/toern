@@ -36,7 +36,7 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 2 | transportMode |
 | 3 | patternMode |
 | 4 | voiceSelect |
-| 5 | fastRecMode |
+| 5 | fastRecMode (0=OFF, 1=INST, 2=SENS 3s countdown, 3=−CON, 4=+CON). Default 2 |
 | 6 | recChannelClear |
 | 7 | previewVol |
 | 8 | flowMode |
@@ -84,5 +84,9 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 52 | analogExtClock (BPM encoder-3 click in EXT), 0 = MIDI clock in, 1 = analog CLK-IN (J26) |
 | 53 | MIDI → CIN. Bits 0–2: PPQN index 0..7 = 1/2/4/8/12/16/24/32. Bits 3–7: hold-off ms − 1 (1–32 ms). Default 2 (4 PPQN, 1 ms) |
 | 54 | MIDI → OVWR, 0 = OFF (do not overwrite occupied cells), 1 = ON. Absent or >1 loads as 0 |
+| 55 | SPKR polarity migrate marker (`0xA5`). Absent → invert legacy offset 27 once (old 1 = OFF) |
+| 56 | REC>HPF. `1` = library biquad high-pass on the capture path (default). Codec ADC high-pass stays disabled |
+| 57 | VOL>USBP. `1` = SMP voice 0 / preview also on USB. Default `0` |
+| 58 | TRIG default-to-SENS migrate (`0xA5`). Absent and offset 5 == 1 → write 2 |
 
 Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offsets 42 through 49 are raw bytes at `EEPROM_DATA_START + offset`.

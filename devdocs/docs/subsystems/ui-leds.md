@@ -8,6 +8,8 @@ description: Matrix drawing, encoder RGB, and optional strip ripples.
 
 The 16×16 (optionally dual-module) matrix is both display and note grid. Drawing primitives live in `toern_ui.ino`; optional external strip effects in `toern_leds.ino`.
 
+**Y axis:** row 1 (`y == 1`) is lower than row 16. Down = toward row 1 (decrease `y`). Up = toward row 16 (increase `y`).
+
 ## Matrix primitives
 
 | Function | Role |

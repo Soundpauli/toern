@@ -21,6 +21,7 @@
   }
 
   window.HBLayout = {
+    refresh: apply,
     get width() { return width; },
     mount: function (parent) {
       var choice = document.createElement("div");

@@ -42,17 +42,18 @@ export const SUBS = {
   look: ["VIEW", "CTRL", "DRAW", "MUTE"],
   recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PPQN", "TRIG", "CIN", "OVWR"],
-  vol: ["MAIN", "GAIN", "LOUT", "PREV", "2-CH", "SPKR", "HFC"],
+  vol: ["MAIN", "GAIN", "LOUT", "PREV", "SPKR"],
   mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO"],
   etc: ["INFO", "SD", "BATT", "ADV", "RSET"],
-  adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE"],
+  adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE", "2-CH", "USBP", "HFC"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
 const SUB_SLOTS = {
   look: [["look", 2], ["look", 6], ["look", 10], ["look", 11]],
+  vol: [["vol", 0], ["vol", 1], ["vol", 2], ["vol", 3], ["vol", 5]],
   mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["touchy", 0], ["etc", 3]],
   etc: [["etc", 0], ["etc", 2], ["etc", 6], ["adv", 0], ["etc", 11]],
-  adv: [["look", 9], ["look", 7], ["etc", 1], ["etc", 4], ["etc", 5], ["etc", 7], ["etc", 9]],
+  adv: [["look", 9], ["look", 7], ["etc", 1], ["etc", 4], ["etc", 5], ["etc", 7], ["etc", 9], ["vol", 4], ["vol", 7], ["vol", 6]],
 };
 export function resolveSubPage(mode, index) {
   const slot = SUB_SLOTS[mode]?.[index];
@@ -119,6 +120,12 @@ export function drawBase(matrix, s) {
   for (let x = 1; x <= COLS - 3; x += 4) matrix.light(x, 1, helper);
   drawStatus(matrix, s);
   drawPages(matrix, s);
+  if (s.GLOB.singleMode && s.mute[s.GLOB.currentChannel]) {
+    const on = ((performance.now() / 300) & 1) === 0;
+    const bar = on ? [255, 255, 0] : [0, 0, 0];
+    const x0 = COLS > 16 ? 16 : 8;
+    for (let x = x0; x <= COLS; x++) matrix.light(x, 16, bar);
+  }
 }
 
 function drawStatus(matrix, s) {
@@ -596,7 +603,7 @@ export function isSoon(mode, index) {
 const SOON = {
   look: new Set([7]),
   midi: new Set(),
-  vol: new Set([2, 5, 6]),
+  vol: new Set([2]),
   etc: new Set([1, 2, 3, 4, 6]), // RAM SD AUTO LGHT BATT stay stubbed
 };
 
@@ -1100,15 +1107,19 @@ function drawOk(matrix, t) {
   for (let i = 0; i < reveal; i++) matrix.light(16 + pts[i][0], 8 + pts[i][1], [0, bri, 0]);
 }
 
-function drawRecordingBorder(matrix) {
+function drawRecordingBorder(matrix, dotted = false) {
   const red = [255, 0, 0];
   for (let x = 1; x <= COLS; x++) {
-    matrix.light(x, 1, red);
-    matrix.light(x, ROWS, red);
+    if (!dotted || (x & 1)) {
+      matrix.light(x, 1, red);
+      matrix.light(x, ROWS, red);
+    }
   }
   for (let y = 2; y < ROWS; y++) {
-    matrix.light(1, y, red);
-    matrix.light(COLS, y, red);
+    if (!dotted || (y & 1)) {
+      matrix.light(1, y, red);
+      matrix.light(COLS, y, red);
+    }
   }
 }
 
@@ -1216,7 +1227,16 @@ export function renderFrame(matrix, s, now) {
     if (s.pageNrAt && now - s.pageNrAt < 800 && (s.mode === "draw" || s.mode === "single")) drawPageNr(matrix, s);
     if (s.solo && now - s.soloArrowAt < 250 && s.soloArrow) matrix.drawText(s.soloArrow, 7, 8, [255, 255, 255]);
     if (s.mode === "shift") matrix.drawText("SHFT", 2, 11, [120, 120, 0]);
-    if (s.fastRecActive) drawRecordingBorder(matrix);
+    if (s.sensCountActive) {
+      const n = s.sensCountSec || 3;
+      const col = n === 1 ? [255, 255, 255] : n === 2 ? [0, 255, 0] : [255, 255, 0];
+      const rec = "REC";
+      const recW = rec.length * 4 - 1;
+      const recX = Math.floor((COLS - recW) / 2) + 1;
+      matrix.drawText(String(n), Math.floor(COLS / 2) - 1, 3, col);
+      matrix.drawText(rec, recX, 9, [255, 0, 0]);
+      drawRecordingBorder(matrix, true);
+    } else if (s.fastRecActive) drawRecordingBorder(matrix);
   } else if (s.mode === "velocity") drawVelocity(matrix, s);
   else if (s.mode === "filter") drawFilter(matrix, s, now);
   else if (s.mode === "menu") drawMenu(matrix, s);

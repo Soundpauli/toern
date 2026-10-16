@@ -641,7 +641,7 @@ static bool sdPatApply() {
   memcpy(&bpm, sdPatBuf + SD_PAT_NOTE_BYTES + 2, sizeof(bpm));
   if (bpm >= 40.0f && bpm <= 300.0f) {
     SMP.bpm = bpm;
-    volume_bpm.pos[3] = (unsigned int)bpm;
+    bpmMode.pos[3] = (unsigned int)bpm;
     playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
     playTimer.update((uint32_t)round(playNoteInterval));
   }

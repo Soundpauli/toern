@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,41 +16,42 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-controls">
-          <h2 class="handbook-page__title">Controls</h2>
-          <p class="handbook-page__summary">Every gesture you can make on the device. Read this once and you will recognise every encoder card later in the book.</p>
+          <h2 class="handbook-page__title" data-hb-copy="controls.001">Controls</h2>
+          <p class="handbook-page__summary" data-hb-copy="controls.002">Every gesture you can make on the device. Read this once and you will recognise every encoder card later in the book.</p>
 
           <section class="hb-sub" id="encoders">
-            <h2>The four encoders</h2>
-            <p class="lede">Each rotary encoder has three primitive actions: <strong>turn</strong>, <strong>short press</strong>, and <strong>long press</strong>. A few destructive actions also need <em>two encoders held together</em> (see below). Their function changes per screen, but their <em>position on the panel</em> never moves, so it is worth memorising:</p>
+            <h2 data-hb-copy="controls.003">The four encoders</h2>
+            <p class="lede" data-hb-copy="controls.004">Each rotary encoder has three primitive actions: <strong>turn</strong>, <strong>short press</strong>, and <strong>long press</strong>. A few destructive actions also need <em>two encoders held together</em> (see below). Their function changes per screen, but their <em>position on the panel</em> never moves, so it is worth memorising:</p>
 
             <div class="hb-triplet hb-triplet--quad">
               <div class="hb-triplet__cell hb-triplet__cell--see">
                 <h6>Encoder 1 · leftmost</h6>
-                <p>"<strong>Where</strong>" — the row / voice / lane selector in most contexts. Short press erases the note under the cursor in L+R draw; long press pairs with encoder&nbsp;4 for clear-page.</p>
+                <p data-hb-copy="controls.005">"<strong>Where</strong>" — the row / voice / lane selector in most contexts. Short press erases the note under the cursor in L+R draw; long press pairs with encoder&nbsp;4 for clear-page.</p>
               </div>
               <div class="hb-triplet__cell hb-triplet__cell--do">
                 <h6>Encoder 2</h6>
-                <p>"<strong>Layer</strong>" — secondary navigation. Page flips, per-row volume rides, mute overlay, value entry on menu pages.</p>
+                <p data-hb-copy="controls.006">"<strong>Layer</strong>" — secondary navigation. Page flips, per-row volume rides, mute overlay, value entry on menu pages.</p>
               </div>
               <div class="hb-triplet__cell hb-triplet__cell--get">
                 <h6>Encoder 3</h6>
-                <p>"<strong>Sound</strong>" — the fast-filter macro from the grid; transport (play/pause) on short press; alternate values on menu pages.</p>
+                <p data-hb-copy="controls.007">"<strong>Sound</strong>" — the fast-filter macro from the grid; transport (play/pause) on short press; alternate values on menu pages.</p>
               </div>
               <div class="hb-triplet__cell hb-triplet__cell--see">
                 <h6>Encoder 4 · rightmost</h6>
-                <p>"<strong>When</strong>" — the column / time selector and the primary menu navigator. Short press toggles notes on the grid or enters a menu page; long press opens the per-step note editor.</p>
+                <p data-hb-copy="controls.008">"<strong>When</strong>" — the column / time selector and the primary menu navigator. Short press toggles notes on the grid or enters a menu page; long press opens the per-step note editor.</p>
               </div>
             </div>
 
-            <p>Each encoder has a <strong>full-colour RGB ring</strong> — it isn't tied to a fixed colour. Instead the ring re-tints itself to mirror what is currently under your finger: the voice colour when you are on a voice lane, the page tint inside filters, white for binary toggles, off when the encoder isn't used by the current screen. The <strong>row&nbsp;1 hint strip</strong> on the matrix mirrors the same colour above each encoder, so you can glance between panel and grid without losing your place.</p>
+            <p data-hb-copy="controls.009">Each encoder has a <strong>full-colour RGB ring</strong> — it isn't tied to a fixed colour. Instead the ring re-tints itself to mirror what is currently under your finger: the voice colour when you are on a voice lane, the page tint inside filters, white for binary toggles, off when the encoder isn't used by the current screen. The <strong>row&nbsp;1 hint strip</strong> on the matrix mirrors the same colour above each encoder, so you can glance between panel and grid without losing your place.</p>
           </section>
 
 
@@ -58,25 +59,25 @@
 
 
           <section class="hb-sub" id="touch">
-            <h2>Touch pads</h2>
-            <p>Five touch pads are wired to the firmware. <strong>Touch&nbsp;1 (L)</strong> and <strong>touch&nbsp;2 (R)</strong> sit in the thin strip between the matrix and the encoders, one under each half of the grid. <strong>Touch&nbsp;3</strong> lives on the right bottom edge of the chassis and is dedicated to recording. Touch&nbsp;4 auditions the current voice; touch&nbsp;5 is the momentary <strong>FN</strong> key outside TOUCHY:</p>
+            <h2 data-hb-copy="controls.010">Touch pads</h2>
+            <p data-hb-copy="controls.011">Five touch pads are wired to the firmware. <strong>Touch&nbsp;1 (L)</strong> and <strong>touch&nbsp;2 (R)</strong> sit in the thin strip between the matrix and the encoders, one under each half of the grid. <strong>Touch&nbsp;3</strong> lives on the right bottom edge of the chassis and is dedicated to recording. Touch&nbsp;4 auditions the current voice; touch&nbsp;5 is the momentary <strong>FN</strong> key outside TOUCHY:</p>
 
             <table class="opt-table">
               <thead><tr><th>Gesture</th><th>Action</th><th>Where it applies</th></tr></thead>
               <tbody>
-                <tr><td><strong>Tap L from the grid</strong></td><td>Toggles <a href="sequencing.html#single">single mode</a></td><td>Enter on voice 1–8, 11, 13, or 14; row 16 and empty voice rows cannot enter. Exit from anywhere in single.</td></tr>
-                <tr><td><strong>Tap R from the grid</strong></td><td>Opens the menu</td><td>Anywhere in draw, single, paint, unpaint.</td></tr>
-                <tr><td><strong>Tap left-first, both pads together</strong></td><td>Opens the <a href="samples.html#set-wav">sample browser</a> on sample voices 1–8</td><td>Sample channels only.</td></tr>
-                <tr><td><strong>Tap right-first, both pads together</strong></td><td>Opens <a href="sound.html#filter">filters</a> on FX-capable channels</td><td>Both sample and synth voices.</td></tr>
-                <tr><td><strong>Touch&nbsp;2 tap inside filters</strong></td><td>Flips to the next filter page</td><td>Inside any filter page.</td></tr>
-                <tr><td><strong>Hold touch&nbsp;5 (FN) + turn encoder&nbsp;1</strong></td><td>Left selects backward sample playback (<strong>&lt;&lt;</strong>); right selects forward playback (<strong>&gt;&gt;</strong>). The normal encoder value stays unchanged.</td><td>All screens outside TOUCHY, on sample voices 1–8. Unavailable during sample capture. In TOUCHY, touch&nbsp;5 plays voice&nbsp;5.</td></tr>
-                <tr><td><strong>Touch&nbsp;3</strong> (hold / press)</td><td>Recording — hold in the sample browser to enter <a href="record.html#record-mode">record mode</a>; press/hold on the grid for live/fast-rec (see <a href="record.html#live-record">Record → Live recording</a>)</td><td>Sample browser and grid.</td></tr>
+                <tr><td><strong>Tap L from the grid</strong></td><td data-hb-copy="controls.013">Toggles <a href="sequencing.html#single">single mode</a></td><td data-hb-copy="controls.014">Enter on voice 1–8, 11, 13, or 14; row 16 and empty voice rows cannot enter. Exit from anywhere in single.</td></tr>
+                <tr><td><strong>Tap R from the grid</strong></td><td data-hb-copy="controls.016">Opens the menu</td><td data-hb-copy="controls.017">Anywhere in draw, single, paint, unpaint.</td></tr>
+                <tr><td><strong>Tap left-first, both pads together</strong></td><td data-hb-copy="controls.019">Opens the <a href="samples.html#set-wav">sample browser</a> on sample voices 1–8</td><td data-hb-copy="controls.020">Sample channels only.</td></tr>
+                <tr><td><strong>Tap right-first, both pads together</strong></td><td data-hb-copy="controls.022">Opens <a href="sound.html#filter">filters</a> on FX-capable channels</td><td data-hb-copy="controls.023">Both sample and synth voices.</td></tr>
+                <tr><td><strong>Touch&nbsp;2 tap inside filters</strong></td><td data-hb-copy="controls.025">Flips to the next filter page</td><td data-hb-copy="controls.026">Inside any filter page.</td></tr>
+                <tr><td><strong>Hold touch&nbsp;5 (FN) + turn encoder&nbsp;1</strong></td><td data-hb-copy="controls.028">Left selects backward sample playback (<strong>&lt;&lt;</strong>); right selects forward playback (<strong>&gt;&gt;</strong>). The normal encoder value stays unchanged.</td><td data-hb-copy="controls.029">All screens outside TOUCHY, on sample voices 1–8. Unavailable during sample capture. In TOUCHY, touch&nbsp;5 plays voice&nbsp;5.</td></tr>
+                <tr><td><strong>Touch&nbsp;3</strong> (hold / press)</td><td data-hb-copy="controls.031">Recording — hold in the sample browser to enter <a href="record.html#record-mode">record mode</a>; press/hold on the grid for live/fast-rec (see <a href="record.html#live-record">Record → Live recording</a>)</td><td data-hb-copy="controls.032">Sample browser and grid.</td></tr>
               </tbody>
             </table>
 
-            <p>FN is a modifier for encoder input. Ordinary rotations, clicks and long presses keep their existing controls when FN is released. FN + long press uses a separate command; no actions are assigned to those long-press combinations yet.</p>
+            <p data-hb-copy="controls.033">FN is a modifier for encoder input. Ordinary rotations, clicks and long presses keep their existing controls when FN is released. FN + long press uses a separate command; no actions are assigned to those long-press combinations yet.</p>
 
-            <div class="hb-warn"><strong>Touch sensitivity:</strong> the pads detect skin contact, not pressure. A loose grip on the chassis can register a phantom touch — keep your palms off them while turning encoders.</div>
+            <div class="hb-warn" data-hb-copy="controls.034"><strong>Touch sensitivity:</strong> the pads detect skin contact, not pressure. A loose grip on the chassis can register a phantom touch — keep your palms off them while turning encoders.</div>
           </section>
 
 
@@ -84,10 +85,10 @@
 
 
           <section class="hb-sub" id="transport">
-            <h2>Transport (play / pause)</h2>
-            <p>There is no dedicated play button. The sequencer transport lives on <strong>encoder&nbsp;3 short press</strong> from the grid. Inside <a href="sound.html#filter">filter mode</a>, use <strong>encoder&nbsp;3 long press</strong> instead so you can audition without leaving the editor. Pressing again stops; the matrix stops moving and the playhead disappears.</p>
+            <h2 data-hb-copy="controls.035">Transport (play / pause)</h2>
+            <p data-hb-copy="controls.036">There is no dedicated play button. The sequencer transport lives on <strong>encoder&nbsp;3 short press</strong> from the grid. Inside <a href="sound.html#filter">filter mode</a>, use <strong>encoder&nbsp;3 long press</strong> instead so you can audition without leaving the editor. Pressing again stops; the matrix stops moving and the playhead disappears.</p>
 
-            <p>Transport state is global: when you open the menu while playing, your loop keeps running underneath the menu overlay so you can adjust BPM, send/receive MIDI, or load a new pattern on the fly.</p>
+            <p data-hb-copy="controls.037">Transport state is global: when you open the menu while playing, your loop keeps running underneath the menu overlay so you can adjust BPM, send/receive MIDI, or load a new pattern on the fly.</p>
           </section>
 
 
@@ -95,25 +96,25 @@
 
 
           <section class="hb-sub" id="chords">
-            <h2>Key grid presses</h2>
-            <p>Most grid actions are a single encoder press. A couple of destructive or jump-out actions need <strong>two encoders held at once</strong> so they are harder to fire by accident. Everything below is from draw / single on the grid:</p>
-            <div class="hb-tip"><strong>Page-row tools only fire when the cursor is on row&nbsp;16 (<code>y==16</code>).</strong> The "Where" column below spells this out. If a gesture seems to do nothing, check first whether your cursor is on a voice row or on the page row — delete page, copy/paste, randomize, single-mode clear, and note-shift are locked to the page strip.</div>
+            <h2 data-hb-copy="controls.038">Key grid presses</h2>
+            <p data-hb-copy="controls.039">Most grid actions are a single encoder press. A couple of destructive or jump-out actions need <strong>two encoders held at once</strong> so they are harder to fire by accident. Everything below is from draw / single on the grid:</p>
+            <div class="hb-tip" data-hb-copy="controls.040"><strong>Page-row tools only fire when the cursor is on row&nbsp;16 (<code>y==16</code>).</strong> The "Where" column below spells this out. If a gesture seems to do nothing, check first whether your cursor is on a voice row or on the page row — delete page, copy/paste, randomize, single-mode clear, and note-shift are locked to the page strip.</div>
             <table class="opt-table">
               <thead><tr><th>Gesture</th><th>What it does</th><th>Where</th></tr></thead>
               <tbody>
-                <tr><td><strong>Encoder 1 press</strong> (cursor on page row, L+R draw)</td><td><a href="pages-more.html#delete-page">Delete page</a> under the cursor (unpaint → clear that page’s notes)</td><td>Draw mode, page row, <a href="play.html#draw">DRAW = L+R</a>.</td></tr>
-                <tr><td><strong>Encoder 1 short</strong> (cursor on page row, single mode)</td><td>Clear <em>current edit page</em> on the focused voice</td><td>Single mode, page row (y==16) only.</td></tr>
-                <tr><td><strong>Encoder 1 long</strong> (cursor on page row, single mode)</td><td>Randomize / scale-aware fill for the focused voice</td><td>Single mode, page row (y==16) only.</td></tr>
-                <tr><td><strong>Encoder 2 short</strong> (cursor on page row, single mode)</td><td>Enter <a href="advanced-sequencing.html#note-shift">note-shift</a></td><td>Single mode, page row (y==16) only.</td></tr>
-                <tr><td><strong>Encoder 2 long</strong></td><td>Mute / solo overlay (release to return). While held: enc&nbsp;3 = fast filter, enc&nbsp;4 = random sample</td><td>Voice row, any grid mode. Detail: <a href="advanced-sequencing.html#mutes">Advanced → Mutes</a>.</td></tr>
-                <tr><td><strong>Encoder 3 long</strong></td><td>Open filters for the focused voice</td><td>Draw / single (FX-capable channels).</td></tr>
-                <tr><td><strong>Encoder 4 short</strong></td><td>Toggle note at the cursor</td><td>Draw / single grid.</td></tr>
-                <tr><td><strong>Encoder 4 long</strong></td><td>Open the per-step note editor</td><td>On top of an existing note.</td></tr>
-                <tr><td><strong>Encoder 1 + Encoder 4 both long</strong></td><td>Clear page — every voice in draw, just the focused voice in single</td><td>Anywhere on the grid.</td></tr>
-                <tr><td><strong>Encoder 2 + Encoder 3 both long</strong></td><td>Jump to the volume / BPM screen</td><td>Draw / single.</td></tr>
+                <tr><td><strong>Encoder 1 press</strong> (cursor on page row, L+R draw)</td><td data-hb-copy="controls.042"><a href="pages-more.html#delete-page">Delete page</a> under the cursor (unpaint → clear that page’s notes)</td><td>Draw mode, page row, <a href="play.html#draw">DRAW = L+R</a>.</td></tr>
+                <tr><td><strong>Encoder 1 short</strong> (cursor on page row, single mode)</td><td data-hb-copy="controls.045">Clear <em>current edit page</em> on the focused voice</td><td>Single mode, page row (y==16) only.</td></tr>
+                <tr><td><strong>Encoder 1 long</strong> (cursor on page row, single mode)</td><td data-hb-copy="controls.048">Randomize / scale-aware fill for the focused voice</td><td>Single mode, page row (y==16) only.</td></tr>
+                <tr><td><strong>Encoder 2 short</strong> (cursor on page row, single mode)</td><td data-hb-copy="controls.051">Enter <a href="advanced-sequencing.html#note-shift">note-shift</a></td><td>Single mode, page row (y==16) only.</td></tr>
+                <tr><td><strong>Encoder 2 long</strong></td><td data-hb-copy="controls.054">Mute / solo overlay (release to return). While held: enc&nbsp;3 = fast filter, enc&nbsp;4 = random sample</td><td>Voice row, any grid mode. Detail: <a href="advanced-sequencing.html#mutes">Advanced → Mutes</a>.</td></tr>
+                <tr><td><strong>Encoder 3 long</strong></td><td data-hb-copy="controls.057">Open filters for the focused voice</td><td>Draw / single (FX-capable channels).</td></tr>
+                <tr><td><strong>Encoder 4 short</strong></td><td data-hb-copy="controls.060">Toggle note at the cursor</td><td>Draw / single grid.</td></tr>
+                <tr><td><strong>Encoder 4 long</strong></td><td data-hb-copy="controls.063">Open the per-step note editor</td><td>On top of an existing note.</td></tr>
+                <tr><td><strong>Encoder 1 + Encoder 4 both long</strong></td><td data-hb-copy="controls.066">Clear page — every voice in draw, just the focused voice in single</td><td>Anywhere on the grid.</td></tr>
+                <tr><td><strong>Encoder 2 + Encoder 3 both long</strong></td><td data-hb-copy="controls.069">Jump to the BPM screen</td><td>Draw / single.</td></tr>
               </tbody>
             </table>
-            <div class="hb-tip">When a gesture needs two encoders at once, take your time — release order doesn't matter, but both must be pressed in the long-press window. Chapters that introduce a two-encoder action spell it out in words ("press encoder&nbsp;1 long <em>together with</em> encoder&nbsp;4 long").</div>
+            <div class="hb-tip" data-hb-copy="controls.071">When a gesture needs two encoders at once, take your time — release order doesn't matter, but both must be pressed in the long-press window. Chapters that introduce a two-encoder action spell it out in words ("press encoder&nbsp;1 long <em>together with</em> encoder&nbsp;4 long").</div>
           </section>
         </section>
 

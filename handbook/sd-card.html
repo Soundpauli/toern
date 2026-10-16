@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,26 +16,27 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
   <div class="hb-main"><div id="hb-content" class="hb-main__scroll" tabindex="-1"><div class="wrap">
     <section class="handbook-page" id="page-sd-card">
-      <h2 class="handbook-page__title">SD card</h2>
-      <p class="handbook-page__summary">The card that comes with <span class="hb-brand">TŒRN</span> is ready to use. This chapter explains how to change its contents and restore the defaults.</p>
+      <h2 class="handbook-page__title" data-hb-copy="sd-card.001">SD card</h2>
+      <p class="handbook-page__summary" data-hb-copy="sd-card.002">The card that comes with <span class="hb-brand">TŒRN</span> is ready to use. This chapter explains how to change its contents and restore the defaults.</p>
           <section class="hb-sub" id="contents">
-            <h2>Changing SD card contents</h2>
+            <h2 data-hb-copy="sd-card.003">Changing SD card contents</h2>
             
-            <p class="lede">The SD card that comes with <span class="hb-brand">TŒRN</span> is already prepared. To change its contents, use the SD tool while the card stays in the unit, or connect it to a computer with a card reader.</p>
+            <p class="lede" data-hb-copy="sd-card.004">The SD card that comes with <span class="hb-brand">TŒRN</span> is already prepared. To change its contents, use the SD tool while the card stays in the unit, or connect it to a computer with a card reader.</p>
 
-            <h3 class="hb-subsection-heading" id="sd-tool">SD tool (card stays in the unit)</h3>
-            <p>Open <strong>Menu → ETC → SD</strong> on the device (the file server is only active while that page is open — the screen shows <strong>WAIT</strong>, then <strong>OK</strong> when a host connects). On a computer, open <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">https://sdtool.tyng.app</a> in <strong>Chrome or Edge</strong>, click <strong>Connect</strong>, and pick the Teensy serial port. Browse folders, upload WAVs (the site converts to 44.1&nbsp;kHz mono 16-bit), download, rename, or delete. You can drop multiple files, whole folders (subfolders kept), or a <code>.zip</code> (extracted in the browser into the current SD folder).</p>
-            <div class="hb-tip"><strong>Tips:</strong> stay on <strong>ETC → SD</strong> for the whole session. Opening the serial port can reboot the Teensy — if the screen leaves the SD page, open <strong>ETC → SD</strong> again after Connect. Desktop only: Android / Pixel Chrome usually cannot see the Teensy USB serial port. After big transfers, run <a href="menus.html#rset">ETC → RSET → SD</a> if the sample browser still looks stale.</div>
+            <h3 class="hb-subsection-heading" id="sd-tool" data-hb-copy="sd-card.005">SD tool (card stays in the unit)</h3>
+            <p data-hb-copy="sd-card.006">Open <strong>Menu → ETC → SD</strong> on the device (the file server is only active while that page is open — the screen shows <strong>WAIT</strong>, then <strong>OK</strong> when a host connects). On a computer, open <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">https://sdtool.tyng.app</a> in <strong>Chrome or Edge</strong>, click <strong>Connect</strong>, and pick the Teensy serial port. Browse folders, upload WAVs (the site converts to 44.1&nbsp;kHz mono 16-bit), download, rename, or delete. You can drop multiple files, whole folders (subfolders kept), or a <code>.zip</code> (extracted in the browser into the current SD folder).</p>
+            <div class="hb-tip" data-hb-copy="sd-card.007"><strong>Tips:</strong> stay on <strong>ETC → SD</strong> for the whole session. Opening the serial port can reboot the Teensy — if the screen leaves the SD page, open <strong>ETC → SD</strong> again after Connect. Desktop only: Android / Pixel Chrome usually cannot see the Teensy USB serial port. After big transfers, run <a href="menus.html#rset">ETC → RSET → SD</a> if the sample browser still looks stale.</div>
 
-            <h3 class="hb-subsection-heading">Restore the default contents</h3>
-            <p>If you need to restore the card, the default folder layout, sample kits, and starter settings are available from the <a href="https://audioconvert.tyng.app/" rel="noopener" target="_blank"><span class="hb-brand">TŒRN</span> Sample converter</a> (<code>audioconvert.tyng.app</code>). Open the <strong>SD CARD</strong> section and download <strong>SD-CARD-CONTENT.zip</strong>. Extract the ZIP and copy all files and folders to the <strong>root</strong> of your microSD card (not inside a subfolder). Full instructions are on that page.</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="sd-card.008">Restore the default contents</h3>
+            <p data-hb-copy="sd-card.009">If you need to restore the card, the default folder layout, sample kits, and starter settings are available from the <a href="https://audioconvert.tyng.app/" rel="noopener" target="_blank"><span class="hb-brand">TŒRN</span> Sample converter</a> (<code>audioconvert.tyng.app</code>). Open the <strong>SD CARD</strong> section and download <strong>SD-CARD-CONTENT.zip</strong>. Extract the ZIP and copy all files and folders to the <strong>root</strong> of your microSD card (not inside a subfolder). Full instructions are on that page.</p>
 
-            <p>If the sample browser does not reflect new card content after power-up or after using the SD tool, run <a href="menus.html#rset">ETC → RSET → SD</a> to rescan.</p>
+            <p data-hb-copy="sd-card.010">If the sample browser does not reflect new card content after power-up or after using the SD tool, run <a href="menus.html#rset">ETC → RSET → SD</a> to rescan.</p>
           </section>
     </section>
     <nav class="hb-pager" aria-label="Next chapter">

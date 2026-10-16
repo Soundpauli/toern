@@ -81,8 +81,8 @@ AudioEffectFreeverbDMAMEM             freeverb11;     //xy=1922,1384
 #define VOICE_DELAY_COUNT 11
 EXTMEM int16_t voiceDelayStore[VOICE_DELAY_COUNT][VOICE_DELAY_SAMPLES];
 AudioEffectDelayExternal voiceDelay[VOICE_DELAY_COUNT];
-EXTMEM AudioMixer4 voiceDelayFb[VOICE_DELAY_COUNT];
-EXTMEM AudioMixer4 voiceDelayMix[VOICE_DELAY_COUNT];
+EXTMEM AudioMixer4Ramp voiceDelayFb[VOICE_DELAY_COUNT];
+EXTMEM AudioMixer4Ramp voiceDelayMix[VOICE_DELAY_COUNT];
 static inline int voiceDelayIndex(int ch) {
   if (ch >= 1 && ch <= 8) return ch - 1;
   if (ch == 11) return 8;
@@ -149,6 +149,8 @@ AudioPlaySdWav                  playSdWav1;     //xy=3524,474
 EXTMEM AudioMixer4                     mixer_end;      //xy=3518,1059
 AudioInputI2S                   audioInput;     //xy=3556,1189
 AudioAmplifier                  audioInputAmp;  //xy=3650,1189
+AudioFilterBiquad               recInputHpf;    // library DC block; codec ADC HPF stays off
+AudioMixer4                     recInputHpfMix; // in0 dry, in1 high-pass
 EXTMEM AudioMixer4                     mixer0;         //xy=3722,478
 AudioAnalyzePeak                peak1;          //xy=3727,541
 // mixerPlay removed: mixer_end now feeds mixer_stereoR/L directly
@@ -401,8 +403,11 @@ EXTMEM AudioConnection        patchCord216b(ampPreview, 0, mixer0, 1);
 EXTMEM AudioConnection        patchCord217(playSdWav1, 0, peak1, 0);
 // patchCord218/219 removed (mixer_end -> mixerPlay)
 EXTMEM AudioConnection        patchCord220(audioInput, 0, audioInputAmp, 0);
-EXTMEM AudioConnection        patchCord221(audioInputAmp, 0, queue1, 0);
-EXTMEM AudioConnection        patchCord222(audioInputAmp, 0, peakRec, 0);
+EXTMEM AudioConnection        patchRecHpfIn(audioInputAmp, 0, recInputHpf, 0);
+EXTMEM AudioConnection        patchRecHpfDry(audioInputAmp, 0, recInputHpfMix, 0);
+EXTMEM AudioConnection        patchRecHpfHp(recInputHpf, 0, recInputHpfMix, 1);
+EXTMEM AudioConnection        patchCord221(recInputHpfMix, 0, queue1, 0);
+EXTMEM AudioConnection        patchCord222(recInputHpfMix, 0, peakRec, 0);
 EXTMEM AudioConnection        patchCord222b(mixer_end, 0, peakOutput, 0);  // LED strip audio level
 EXTMEM AudioConnection        patchCord223(mixer0, 0, mixer_stereoR, 1);
 EXTMEM AudioConnection        patchCord224(mixer0, 0, mixer_stereoL, 1);
@@ -413,10 +418,18 @@ EXTMEM AudioConnection        patchCord230(mixer1, 0, mixer_stereoL, 2);  // ch1
 EXTMEM AudioConnection        patchCord231(mixer2, 0, mixer_stereoR, 2);  // ch5-8 -> R
 EXTMEM AudioConnection        patchCord227(mixer_stereoR, 0, i2s1, 0);
 EXTMEM AudioConnection        patchCord228(mixer_stereoL, 0, i2s1, 1);
-// USB out mirrors I2S channel mapping so host hears the same L/R as headphones/line.
-EXTMEM AudioConnection        patchCordUsb0(mixer_stereoR, 0, usb1, 0);
-EXTMEM AudioConnection        patchCordUsb1(mixer_stereoL, 0, usb1, 1);
-EXTMEM AudioConnection        patchCord229(audioInputAmp, 0, mixer_end, 3);
+// USB mix copies the headphone buses, with preview (mixer0 / voice 0) gated.
+EXTMEM AudioMixer4            usbMixR;
+EXTMEM AudioMixer4            usbMixL;
+EXTMEM AudioConnection        patchUsbMainR(mixer_end, 0, usbMixR, 0);
+EXTMEM AudioConnection        patchUsbPrevR(mixer0, 0, usbMixR, 1);
+EXTMEM AudioConnection        patchUsbBusR(mixer2, 0, usbMixR, 2);
+EXTMEM AudioConnection        patchUsbMainL(mixer_end, 0, usbMixL, 0);
+EXTMEM AudioConnection        patchUsbPrevL(mixer0, 0, usbMixL, 1);
+EXTMEM AudioConnection        patchUsbBusL(mixer1, 0, usbMixL, 2);
+EXTMEM AudioConnection        patchCordUsb0(usbMixR, 0, usb1, 0);
+EXTMEM AudioConnection        patchCordUsb1(usbMixL, 0, usb1, 1);
+EXTMEM AudioConnection        patchCord229(recInputHpfMix, 0, mixer_end, 3);
 
 
 

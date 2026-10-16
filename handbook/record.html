@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,26 +16,27 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-record">
-          <h2 class="handbook-page__title">Record</h2>
-          <p class="handbook-page__summary">Capture audio onto sample voices — the record-mode dialog, live/fast-rec on the grid, and every leaf under menu <strong>REC</strong> (input, gains, trigger, clear policy).</p>
+          <h2 class="handbook-page__title" data-hb-copy="record.001">Record</h2>
+          <p class="handbook-page__summary" data-hb-copy="record.002">Capture audio onto sample voices — the record-mode dialog, live/fast-rec on the grid, and every leaf under menu <strong>REC</strong> (input, gains, trigger, clear policy).</p>
 
           <section class="hb-sub" id="record-mode">
-            <h2>Record mode dialog</h2>
-            <p class="lede">From the <a href="samples.html#set-wav">sample browser</a>, <strong>hold touch&nbsp;3</strong> to enter record mode for the current sample voice. Recordings are written as numbered files such as <code>rec_01.wav</code> inside the <em>current browse folder</em>.</p>
-            <div class="hb-tip"><strong>Record to a computer via USB:</strong> connect USB-C with a data cable, select TŒRN’s USB audio device as the input in your DAW or recorder, and record its two channels. USB audio follows <a href="menus.html#vol">VOL → 2-CH</a>, just like the headphone and line outputs. This captures the output directly; it does not create a sample on the SD card.</div>
+            <h2 data-hb-copy="record.003">Record mode dialog</h2>
+            <p class="lede" data-hb-copy="record.004">From the <a href="samples.html#set-wav">sample browser</a>, <strong>hold touch&nbsp;3</strong> to enter record mode for the current sample voice. Recordings are written as numbered files such as <code>rec_01.wav</code> inside the <em>current browse folder</em>.</p>
+            <div class="hb-tip" data-hb-copy="record.005"><strong>Record to a computer via USB:</strong> connect USB-C with a data cable, select TŒRN’s USB audio device as the input in your DAW or recorder, and record its two channels. USB audio follows <a href="menus.html#adv">ETC → ADV → 2-CH</a>, just like the headphone and line outputs. This captures the output directly; it does not create a sample on the SD card.</div>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="record_mode" width="640" height="320" role="img" aria-label="Record mode idle"></canvas>
               </div>
-              <p class="viz-caption--below">Idle: threshold column, live level column, RDY text, Y/R/G/X hints.</p>
+              <p class="viz-caption--below" data-hb-copy="record.006">Idle: threshold column, live level column, RDY text, Y/R/G/X hints.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Threshold</td><td>0–100; column on x=1 visualises the bar.</td></tr>
@@ -52,7 +53,7 @@
                 </tbody></table></div>
               </div>
             </article>
-            <p>Threshold-armed recordings auto-stop after ~1&nbsp;s if the input falls under half the threshold. Maximum take length is 12 seconds per voice. Input source, gains, and clear policy are set in the <a href="#rec-menu">REC submenu</a> below.</p>
+            <p data-hb-copy="record.017">Threshold-armed recordings auto-stop after ~1&nbsp;s if the input falls under half the threshold. Maximum take length is 12 seconds per voice. Input source, gains, and clear policy are set in the <a href="#rec-menu">REC submenu</a> below.</p>
           </section>
 
 
@@ -60,9 +61,9 @@
 
 
           <section class="hb-sub" id="live-record">
-            <h2>Live recording on a voice</h2>
-            <p class="lede">Beyond the formal dialog, the firmware supports an 8-channel live-loop style flow: touch-hold during playback can capture audio onto a voice for up to 12 seconds, and “one-shot” recordings can drop a take onto a single channel.</p>
-            <p>Behaviour depends on <a href="#clr">REC → CLR</a> (clear/merge policy) and <a href="#trig">REC → TRIG</a> (trigger style). Treat this as the performance front-end for the same recording engine. Touch&nbsp;3 on the grid is the usual entry — see <a href="controls.html#touch">Controls → Touch pads</a>.</p>
+            <h2 data-hb-copy="record.018">Live recording on a voice</h2>
+            <p class="lede" data-hb-copy="record.019">Beyond the formal dialog, the firmware supports an 8-channel live-loop style flow: touch-hold during playback can capture audio onto a voice for up to 12 seconds, and “one-shot” recordings can drop a take onto a single channel.</p>
+            <p data-hb-copy="record.020">Behaviour depends on <a href="#clr">REC → CLR</a> (clear/merge policy) and <a href="#trig">REC → TRIG</a> (trigger style). Treat this as the performance front-end for the same recording engine. Touch&nbsp;3 on the grid is the usual entry — see <a href="controls.html#touch">Controls → Touch pads</a>.</p>
           </section>
 
 
@@ -70,13 +71,13 @@
 
 
           <section class="hb-sub" id="rec-menu">
-            <h2>REC submenu</h2>
-            <p class="lede">Root menu <strong>REC</strong> — five leaves for which jack, how hot, when capture starts, and what happens to notes after a re-record. Encoder&nbsp;4 walks siblings.</p>
+            <h2 data-hb-copy="record.021">REC submenu</h2>
+            <p class="lede" data-hb-copy="record.022">Root menu <strong>REC</strong> — five leaves for which jack, how hot, when capture starts, and what happens to notes after a re-record. Encoder&nbsp;4 walks siblings.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="mr_rec" width="640" height="320" role="img" aria-label="REC root"></canvas>
               </div>
-              <p class="viz-caption--below">REC family entry on the root menu.</p>
+              <p class="viz-caption--below" data-hb-copy="record.023">REC family entry on the root menu.</p>
             </article>
           </section>
 
@@ -85,7 +86,7 @@
 
 
           <section class="hb-sub" id="inpt">
-            <h2>INPT — input source</h2>
+            <h2 data-hb-copy="record.024">INPT — input source</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="rc_inpt" width="640" height="320" role="img" aria-label="REC INPT"></canvas>
@@ -94,10 +95,10 @@
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
                 <tbody>
                   <tr><td><strong>MIC</strong></td><td>Mic path — built-in capsule or Mic-in jack (see <a href="hardware.html">Hardware</a>).</td></tr>
-                  <tr><td><strong>LINE</strong></td><td>Stereo TRS line-in jack — synths, drum machines, modular. Recording uses the left input and saves mono WAVs.</td></tr>
+                  <tr><td><strong>LINE</strong></td><td data-hb-copy="record.028">Stereo TRS line-in jack — synths, drum machines, modular. Recording uses the left input and saves mono WAVs.</td></tr>
                 </tbody>
               </table>
-              <p class="hb-device__intro">Flips which gain page (<a href="#mic">MIC</a> vs <a href="#lin">L-IN</a>) actually matters.</p>
+              <p class="hb-device__intro" data-hb-copy="record.029">Flips which gain page (<a href="#mic">MIC</a> vs <a href="#lin">L-IN</a>) actually matters.</p>
             </article>
           </section>
 
@@ -106,7 +107,7 @@
 
 
           <section class="hb-sub" id="mic">
-            <h2>MIC — mic preamp gain</h2>
+            <h2 data-hb-copy="record.030">MIC — mic preamp gain</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="rc_mic" width="640" height="320" role="img" aria-label="REC MIC"></canvas>
@@ -127,7 +128,7 @@
 
 
           <section class="hb-sub" id="lin">
-            <h2>L-IN — line input trim</h2>
+            <h2 data-hb-copy="record.033">L-IN — line input trim</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="rc_lin" width="640" height="320" role="img" aria-label="REC L-IN"></canvas>
@@ -136,7 +137,7 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td><strong>0–15</strong></td><td>Coarser than MIC — line gear is already loud. Synths often happy around 6–10.</td></tr>
+                  <tr><th>Turn</th><td><strong>0–15</strong></td><td data-hb-copy="record.035">Coarser than MIC — line gear is already loud. Synths often happy around 6–10.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
@@ -148,7 +149,7 @@
 
 
           <section class="hb-sub" id="trig">
-            <h2>TRIG — when capture starts</h2>
+            <h2 data-hb-copy="record.036">TRIG — when capture starts</h2>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="rc_trig" width="640" height="320" role="img" aria-label="REC TRIG"></canvas>
@@ -157,8 +158,9 @@
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
                 <tbody>
                   <tr><td><strong>OFF</strong></td><td>Manual — you start the take.</td></tr>
-                  <tr><td><strong>SENS</strong></td><td>Threshold — arms when the input crosses the level set on the record screen.</td></tr>
-                  <tr><td><strong>−CON</strong> / <strong>+CON</strong></td><td>Count-in flavours before rolling.</td></tr>
+                  <tr><td><strong>INST</strong></td><td data-hb-copy="record.040">Hold Touch&nbsp;3 to record immediately into the current voice; release to stop.</td></tr>
+                  <tr><td><strong>SENS</strong></td><td data-hb-copy="record.042">Hold Touch&nbsp;3 for a 3-second countdown (dotted red frame, 3–2–1). Recording starts at 0 and runs until you release. Release before 0 cancels. Default.</td></tr>
+                  <tr><td><strong>−CON</strong> / <strong>+CON</strong></td><td>Jack contact: start when the contact closes (−CON) or opens (+CON).</td></tr>
                 </tbody>
               </table>
             </article>
@@ -169,8 +171,8 @@
 
 
           <section class="hb-sub" id="clr">
-            <h2>CLR — note clear policy</h2>
-            <p class="lede">What happens to notes on the voice you just re-recorded into.</p>
+            <h2 data-hb-copy="record.045">CLR — note clear policy</h2>
+            <p class="lede" data-hb-copy="record.046">What happens to notes on the voice you just re-recorded into.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="rc_clr" width="640" height="320" role="img" aria-label="REC CLR"></canvas>
@@ -182,7 +184,7 @@
                   <tr><td><strong>ON</strong></td><td>Wipe every note on the voice.</td></tr>
                   <tr><td><strong>FIX</strong></td><td>Wipe notes but keep velocity / probability / lane volume.</td></tr>
                   <tr><td><strong>ON1</strong></td><td>Wipe the current page only.</td></tr>
-                  <tr><td><strong>CLIC</strong></td><td>Wipe and plant a click on step&nbsp;1 so you can hear the sample on the grid.</td></tr>
+                  <tr><td><strong>CLIC</strong></td><td data-hb-copy="record.056">Wipe and plant a click on step&nbsp;1 so you can hear the sample on the grid.</td></tr>
                 </tbody>
               </table>
             </article>

@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,29 +16,30 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-hardware">
-          <h2 class="handbook-page__title">The device</h2>
-          <p class="handbook-page__summary">Every port, button, and jack on a <span class="hb-brand">TŒRN</span> unit — what it does and when you use it.</p>
+          <h2 class="handbook-page__title" data-hb-copy="hardware.001">The device</h2>
+          <p class="handbook-page__summary" data-hb-copy="hardware.002">Every port, button, and jack on a <span class="hb-brand">TŒRN</span> unit — what it does and when you use it.</p>
 
           <figure class="hb-figure hb-figure--full" id="device-map">
             <img src="annotated.png" alt="Annotated TŒRN overview: encoders, touch pads, matrix voice rows, and all ports labelled" width="2480" height="1392" loading="eager" />
           </figure>
 
           <section class="hb-sub" id="overview">
-            <h2>Top-down overview</h2>
-            <p class="lede">The face of <span class="hb-brand">TŒRN</span> is dominated by the <strong>RGB LED grid</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge.</p>
+            <h2 data-hb-copy="hardware.003">Top-down overview</h2>
+            <p class="lede" data-hb-copy="hardware.004">The face of <span class="hb-brand">TŒRN</span> is dominated by the <strong>RGB LED grid</strong>. Four <strong>RGB-lit rotary encoders</strong> are <strong>evenly spaced</strong> across the width of the front strip below the matrix. <strong>Touch&nbsp;1</strong> (left) and <strong>touch&nbsp;2</strong> (right) are <strong>circular</strong> capacitive pads in the narrow band between the matrix and the encoders; <strong>touch&nbsp;3</strong> is another circular pad on the right bottom edge. <strong>Line out, USB-C, and headphone</strong> (A–C) and <strong>MIDI in, MIDI out, and power</strong> (D–F) sit on the <em>lower</em> left and right edges below the matrix. Audio and recording jacks (G–J) run along the bottom edge; touch&nbsp;3 (K) sits at the right end of that edge.</p>
 
             <div class="hb-portmap" aria-label="Annotated device map">
               <figure class="hb-portmap__photo">
                 <img src="topview.jpg" alt="TŒRN top-down photo of the device" loading="lazy" />
-                <figcaption>The unit, photographed from above. Letters mark the ports and controls shown in the schematic.</figcaption>
+                <figcaption data-hb-copy="hardware.005">The unit, photographed from above. Letters mark the ports and controls shown in the schematic.</figcaption>
               </figure>
               <svg viewBox="-90 0 780 800" role="img" aria-label="Hardware port map" class="hb-portmap__svg">
                 <defs>
@@ -128,17 +129,17 @@
                 </g>
               </svg>
               <dl class="hb-portmap__legend">
-                <div><dt>A</dt><dd><strong>Line out</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level.</dd></div>
-                <div><dt>B</dt><dd><strong>USB-C</strong> — lower left edge. Power, firmware updates, serial access and USB audio output to a computer.</dd></div>
-                <div><dt>C</dt><dd><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use headphones or in-ears; level is adjustable.</dd></div>
-                <div><dt>D</dt><dd><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device.</dd></div>
-                <div><dt>E</dt><dd><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock and notes.</dd></div>
-                <div><dt>F</dt><dd><strong>Power switch</strong> — physical slide on the lower right edge. Turns the unit on and off.</dd></div>
-                <div><dt>G</dt><dd><strong>Internal mic</strong> — capsule on the bottom edge.</dd></div>
-                <div><dt>H</dt><dd><strong>Micro&nbsp;SD slot</strong> — bottom edge. Holds samples, kits, patterns and songs. Push to seat, push again to eject. Only insert or eject with the unit <em>off</em>.</dd></div>
-                <div><dt>I</dt><dd><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain is adjustable.</dd></div>
-                <div><dt>J</dt><dd><strong>Line in</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the bottom edge. The current recording path uses the left input only and saves mono WAVs. Sample synths, drum machines or modular gear. </dd></div>
-                <div><dt>K</dt><dd><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter record mode from the sample browser. </dd></div>
+                <div><dt>A</dt><dd data-hb-copy="hardware.006"><strong>Line out</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the <em>lower left</em> edge (below the matrix). Send to a mixer or interface. Independent level.</dd></div>
+                <div><dt>B</dt><dd data-hb-copy="hardware.007"><strong>USB-C</strong> — lower left edge. Power, firmware updates, serial access and USB audio output to a computer.</dd></div>
+                <div><dt>C</dt><dd data-hb-copy="hardware.008"><strong>Headphone out</strong> — 6.35&nbsp;mm (¼″) stereo TRS on the lower left edge. Use headphones or in-ears; level is adjustable.</dd></div>
+                <div><dt>D</dt><dd data-hb-copy="hardware.009"><strong>MIDI in (TRS)</strong> — lower right edge, Type-A TRS. Standard MIDI from another device.</dd></div>
+                <div><dt>E</dt><dd data-hb-copy="hardware.010"><strong>MIDI out (TRS)</strong> — lower right edge, Type-A TRS. Clock and notes.</dd></div>
+                <div><dt>F</dt><dd data-hb-copy="hardware.011"><strong>Power switch</strong> — physical slide on the lower right edge. Turns the unit on and off.</dd></div>
+                <div><dt>G</dt><dd data-hb-copy="hardware.012"><strong>Internal mic</strong> — capsule on the bottom edge.</dd></div>
+                <div><dt>H</dt><dd data-hb-copy="hardware.013"><strong>Micro&nbsp;SD slot</strong> — bottom edge. Holds samples, kits, patterns and songs. Push to seat, push again to eject. Only insert or eject with the unit <em>off</em>.</dd></div>
+                <div><dt>I</dt><dd data-hb-copy="hardware.014"><strong>Mic in (6.35&nbsp;mm)</strong> — external microphone jack on the bottom edge, between the SD slot and the line-in. Sits next to the line-in so you can keep a vocal mic and a synth cable plugged in at the same time. Gain is adjustable.</dd></div>
+                <div><dt>J</dt><dd data-hb-copy="hardware.015"><strong>Line in</strong> — 6.35&nbsp;mm stereo TRS (tip left, ring right) on the bottom edge. The current recording path uses the left input only and saves mono WAVs. Sample synths, drum machines or modular gear. </dd></div>
+                <div><dt>K</dt><dd data-hb-copy="hardware.016"><strong>Touch&nbsp;3</strong> — third capacitive pad on the right bottom edge. Recording control: live/fast-rec from the grid and hold-to-enter record mode from the sample browser. </dd></div>
               </dl>
             </div>
           </section>
@@ -148,14 +149,14 @@
 
 
           <section class="hb-sub" id="controls">
-            <h2>Controls at a glance</h2>
-            <p>Three input families are wired to the firmware:</p>
+            <h2 data-hb-copy="hardware.017">Controls at a glance</h2>
+            <p data-hb-copy="hardware.018">Three input families are wired to the firmware:</p>
             <ul>
-              <li><strong>Four RGB-lit rotary encoders</strong> (1–4, left to right) on the front edge — each one turns, short-presses, and long-presses. Their function changes per screen. Row&nbsp;1 of the matrix paints additional small hints just above the encoders.</li>
-              <li><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the right bottom edge. Touch&nbsp;1 toggles single mode; touch&nbsp;2 opens the menu; both pads together open filters or the sample browser; touch&nbsp;3 is for recording. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
-              <li><strong>Right-side power switch</strong> — physical on/off.</li>
+              <li data-hb-copy="hardware.019"><strong>Four RGB-lit rotary encoders</strong> (1–4, left to right) on the front edge — each one turns, short-presses, and long-presses. Their function changes per screen. Row&nbsp;1 of the matrix paints additional small hints just above the encoders.</li>
+              <li data-hb-copy="hardware.020"><strong>Three touch-sensitive pads</strong> — circular capacitive buttons: <em>touch&nbsp;1</em> (left) and <em>touch&nbsp;2</em> (right) in the strip between the matrix and the encoders, plus <em>touch&nbsp;3</em> on the right bottom edge. Touch&nbsp;1 toggles single mode; touch&nbsp;2 opens the menu; both pads together open filters or the sample browser; touch&nbsp;3 is for recording. See <a href="controls.html#touch">Controls → Touch pads</a>.</li>
+              <li data-hb-copy="hardware.021"><strong>Right-side power switch</strong> — physical on/off.</li>
             </ul>
-            <p>There are no menu buttons or screens beyond the matrix itself. Everything the firmware needs to communicate appears as lit pixels in known regions of the LED grid, explained in <a href="matrix.html">The matrix</a>.</p>
+            <p data-hb-copy="hardware.022">There are no menu buttons or screens beyond the matrix itself. Everything the firmware needs to communicate appears as lit pixels in known regions of the LED grid, explained in <a href="matrix.html">The matrix</a>.</p>
           </section>
 
 
@@ -163,11 +164,11 @@
 
 
           <section class="hb-sub" id="internals">
-            <h2>Internals</h2>
+            <h2 data-hb-copy="hardware.023">Internals</h2>
             <ul>
-              <li><strong>Battery:</strong> internal LiPo battery.</li>
-              <li><strong>Speaker:</strong> small internal speaker.</li>
-              <li><strong>Internal mic + Mic-in jack:</strong> built-in microphone and a 6.35&nbsp;mm input for an external microphone.</li>
+              <li data-hb-copy="hardware.024"><strong>Battery:</strong> internal LiPo battery.</li>
+              <li data-hb-copy="hardware.025"><strong>Speaker:</strong> small internal speaker.</li>
+              <li data-hb-copy="hardware.026"><strong>Internal mic + Mic-in jack:</strong> built-in microphone and a 6.35&nbsp;mm input for an external microphone.</li>
             </ul>
           </section>
 

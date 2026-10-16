@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,20 +16,21 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-sound">
-          <h2 class="handbook-page__title">Sound design</h2>
-          <p class="handbook-page__summary">Voices have different signal paths. Samples and synths have envelopes, filtering, delay and effects, with reverb available only on selected voices. This chapter walks each stage and the four filter pages where you control them.</p>
+          <h2 class="handbook-page__title" data-hb-copy="sound.001">Sound design</h2>
+          <p class="handbook-page__summary" data-hb-copy="sound.002">Voices have different signal paths. Samples and synths have envelopes, filtering, delay and effects, with reverb available only on selected voices. This chapter walks each stage and the four filter pages where you control them.</p>
 
           <section class="hb-sub" id="signal-chain">
-            <h2>The signal chain</h2>
-            <p class="lede">A sample voice broadly follows this path. Reverb is available on voices 1, 2 and 5–8 and the poly synth; voices 3, 4, 13 and 14 do not have a reverb send.</p>
+            <h2 data-hb-copy="sound.003">The signal chain</h2>
+            <p class="lede" data-hb-copy="sound.004">A sample voice broadly follows this path. Reverb is available on voices 1, 2 and 5–8 and the poly synth; voices 3, 4, 13 and 14 do not have a reverb send.</p>
             <div class="hb-chain" role="list">
               <span class="hb-chain__node">Source</span>
               <span class="hb-chain__arrow">→</span>
@@ -45,7 +46,7 @@
               <span class="hb-chain__arrow">→</span>
               <span class="hb-chain__node">Output</span>
             </div>
-            <p>The chain above is the musical idea. The actual Teensy graph (every mixer gain, amp, and bus) is on <a href="audiopath.html">Audio path</a> — including that bitcrush sits <em>before</em> the SVF, not after.</p>
+            <p data-hb-copy="sound.005">The chain above is the musical idea. The actual Teensy graph (every mixer gain, amp, and bus) is on <a href="audiopath.html">Audio path</a> — including that bitcrush sits <em>before</em> the SVF, not after.</p>
           </section>
 
 
@@ -53,12 +54,12 @@
 
 
           <section class="hb-sub" id="filter">
-            <h2>The four filter pages</h2>
-            <p class="lede">Enter from the grid with the <strong>both-touch</strong> gesture, <strong>right pad first</strong>. (Left-first on sample voices opens the <a href="samples.html#set-wav">sample browser</a> instead.) Each filter page is a vertical mixer strip split into four encoder columns. Turn an encoder to edit; short-press to assign that parameter as the <strong>fast-filter</strong> default (encoder&nbsp;3 from draw mode will recall it). Encoder&nbsp;2 long press is play/pause so you can audition without leaving the editor. Pages cycle with a tap on touch&nbsp;2.</p>
+            <h2 data-hb-copy="sound.006">The four filter pages</h2>
+            <p class="lede" data-hb-copy="sound.007">Enter from the grid with the <strong>both-touch</strong> gesture, <strong>right pad first</strong>. (Left-first on sample voices opens the <a href="samples.html#set-wav">sample browser</a> instead.) Each filter page is a vertical mixer strip split into four encoder columns. Turn an encoder to edit; short-press to assign that parameter as the <strong>fast-filter</strong> default (encoder&nbsp;3 from draw mode will recall it). Encoder&nbsp;2 long press is play/pause so you can audition without leaving the editor. Pages cycle with a tap on touch&nbsp;2.</p>
 
-            <div class="hb-tip"><strong>How each filter page is drawn:</strong> at rest the matrix shows four narrow vertical sliders with a <strong>single letter</strong> printed next to each one — that is all the space the grid has. The moment you start turning an encoder, the device replaces those tiny letters with the parameter's <strong>full 4-letter name</strong> spelled out across the lower rows, in the colour of the parameter you are changing. Release the encoder and it falls back to the resting letters.</div>
+            <div class="hb-tip" data-hb-copy="sound.008"><strong>How each filter page is drawn:</strong> at rest the matrix shows four narrow vertical sliders with a <strong>single letter</strong> printed next to each one — that is all the space the grid has. The moment you start turning an encoder, the device replaces those tiny letters with the parameter's <strong>full 4-letter name</strong> spelled out across the lower rows, in the colour of the parameter you are changing. Release the encoder and it falls back to the resting letters.</div>
 
-            <h3 class="hb-subsection-heading">Page 0 — sample lane: HCUT · LCUT · RVRB · BITC</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.009">Page 0 — sample lane: HCUT · LCUT · RVRB · BITC</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -66,29 +67,29 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p0" width="640" height="320" role="img" aria-label="Filter page 0 — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Sliders + single-letter tags: <strong>H · L · R · B</strong>.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.011">Sliders + single-letter tags: <strong>H · L · R · B</strong>.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p0_named" width="640" height="320" role="img" aria-label="Filter page 0 — editing LCUT"></canvas>
                   </div>
-                  <p class="viz-caption--below">Full name printed: here <strong>LCUT</strong> is being changed.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.013">Full name printed: here <strong>LCUT</strong> is being changed.</p>
                 </div>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
                   <tr><td><strong>H</strong></td><td>HCUT</td><td>High cut — SVF lowpass. Full 0–32 fader (no LP/HP split).</td><td>0–32 ≈ 280 Hz – 10 kHz (32 = open)</td></tr>
-                  <tr><td><strong>L</strong></td><td>LCUT</td><td>Low cut — SVF highpass. 0 uses HCUT (lowpass); 1–32 switches the mixer to highpass.</td><td>0 = off, 1–32 ≈ 40 Hz – 2.5 kHz</td></tr>
+                  <tr><td><strong>L</strong></td><td>LCUT</td><td data-hb-copy="sound.020">Low cut — SVF highpass. 0 uses HCUT (lowpass); 1–32 switches the mixer to highpass.</td><td>0 = off, 1–32 ≈ 40 Hz – 2.5 kHz</td></tr>
                   <tr><td><strong>R</strong></td><td>RVRB</td><td>Send level into the shared reverb bus.</td><td>0–32 (0 = dry). <em>Not on voices 3, 4, 13, or 14.</em></td></tr>
                   <tr><td><strong>B</strong></td><td>BITC</td><td>Bitcrusher depth + sample-rate reduction (combined macro).</td><td>0 = bypass, 1–32 increases crush</td></tr>
                 </tbody>
               </table>
-              <div class="hb-tip"><strong>RVRB availability:</strong> the reverb send appears on sample voices <strong>1, 2, 5–8</strong> and synth voice <strong>11</strong>. Voices <strong>3</strong> and <strong>4</strong> show a dim, inactive slider — no send path. Voices <strong>13</strong> and <strong>14</strong> use <strong>CENT</strong> (coarse pitch) in the third column on page&nbsp;0 instead of RVRB.</div>
+              <div class="hb-tip" data-hb-copy="sound.030"><strong>RVRB availability:</strong> the reverb send appears on sample voices <strong>1, 2, 5–8</strong> and synth voice <strong>11</strong>. Voices <strong>3</strong> and <strong>4</strong> show a dim, inactive slider — no send path. Voices <strong>13</strong> and <strong>14</strong> use <strong>CENT</strong> (coarse pitch) in the third column on page&nbsp;0 instead of RVRB.</div>
             </article>
 
-            <h3 class="hb-subsection-heading">Page 1 — sample lane: RES · DTNE · OCTV · TIME</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.031">Page 1 — sample lane: RES · DTNE · OCTV · TIME</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -96,14 +97,14 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p1_sample" width="640" height="320" role="img" aria-label="Filter page 1 sample — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Letters <strong>R · D · O · T</strong> on voices 1–8.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.033">Letters <strong>R · D · O · T</strong> on voices 1–8.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p1_sample_named" width="640" height="320" role="img" aria-label="Filter page 1 sample — editing TIME"></canvas>
                   </div>
-                  <p class="viz-caption--below">Full name <strong>TIME</strong> while encoder 4 is being moved.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.035">Full name <strong>TIME</strong> while encoder 4 is being moved.</p>
                 </div>
               </div>
               <table class="opt-table">
@@ -112,16 +113,16 @@
                   <tr><td><strong>R</strong></td><td>RES</td><td>Filter resonance around the cutoff.</td><td>0–32</td></tr>
                   <tr><td><strong>D</strong></td><td>DTNE</td><td>Fine pitch — fractional semitone detune after OCTV.</td><td>0–32 (centre = in tune)</td></tr>
                   <tr><td><strong>O</strong></td><td>OCTV</td><td>Coarse pitch in whole semitones.</td><td>−24…+24 semis (encoder scale 0–48, centre = 0)</td></tr>
-                  <tr><td><strong>T</strong></td><td>TIME</td><td>Independent time-stretch (WSOLA). Lengthens or shortens without changing pitch the same way OCTV does.</td><td>0–22; <strong>11 = OFF</strong> (default). Below 11 shortens (~−10%…0%); above 11 lengthens (~0%…+10%).</td></tr>
+                  <tr><td><strong>T</strong></td><td>TIME</td><td data-hb-copy="sound.050">Independent time-stretch (WSOLA). Lengthens or shortens without changing pitch the same way OCTV does.</td><td data-hb-copy="sound.051">0–22; <strong>11 = OFF</strong> (default). Below 11 shortens (~−10%…0%); above 11 lengthens (~0%…+10%).</td></tr>
                 </tbody>
               </table>
-              <div class="hb-tip"><strong>Pitch vs TIME:</strong> OCTV/DTNE change playback rate (pitch). TIME stretches duration around the current pitch. Leave TIME at 11 unless you want that smear.</div>
+              <div class="hb-tip" data-hb-copy="sound.052"><strong>Pitch vs TIME:</strong> OCTV/DTNE change playback rate (pitch). TIME stretches duration around the current pitch. Leave TIME at 11 unless you want that smear.</div>
             </article>
 
-            <h3 class="hb-subsection-heading">Page 3 — sample voices: DLAY</h3>
-            <p>Voices 1–8 have a fourth filter page with a single <strong>DLAY</strong> slider. Real delay tap (<span class="ap-code">AudioEffectDelayExternal</span> in PSRAM), not reverb. 0 is off; each step is N/32 of a beat (1, 2, 4, 8, 16, 32 land on even divisions; 3, 5, 6… stay in between). 32 is one beat, not a fixed 1.2&nbsp;s. Follows BPM. Feedback recirculates the tap; dry stays up. Synth voices 11, 13, and 14 have the same control on CRF (encoder 4).</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.053">Page 3 — sample voices: DLAY</h3>
+            <p data-hb-copy="sound.054">Voices 1–8 have a fourth filter page with a single <strong>DLAY</strong> slider. Real delay tap (<span class="ap-code">AudioEffectDelayExternal</span> in PSRAM), not reverb. 0 is off; each step is N/32 of a beat (1, 2, 4, 8, 16, 32 land on even divisions; 3, 5, 6… stay in between). 32 is one beat, not a fixed 1.2&nbsp;s. Follows BPM. Feedback recirculates the tap; dry stays up. Synth voices 11, 13, and 14 have the same control on CRF (encoder 4).</p>
 
-            <h3 class="hb-subsection-heading">Page 1 — synth voices: CUT · RES · FLT · DLAY</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.055">Page 1 — synth voices: CUT · RES · FLT · DLAY</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -129,20 +130,20 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p1" width="640" height="320" role="img" aria-label="Filter page 1 synth — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Letters <strong>C · R · F · D</strong>. Same page on voices 11, 13, and 14.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.057">Letters <strong>C · R · F · D</strong>. Same page on voices 11, 13, and 14.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p1_named" width="640" height="320" role="img" aria-label="Filter page 1 synth — editing RESO"></canvas>
                   </div>
-                  <p class="viz-caption--below">Full name <strong>RESO</strong> while encoder 2 is being moved.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.059">Full name <strong>RESO</strong> while encoder 2 is being moved.</p>
                 </div>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>C</strong></td><td>CUT</td><td>Filter cutoff. Voice 11: poly ladder. Voices 13/14: the SVF (tied to HCUT).</td><td>0–32</td></tr>
+                  <tr><td><strong>C</strong></td><td>CUT</td><td data-hb-copy="sound.062">Filter cutoff. Voice 11: poly ladder. Voices 13/14: the SVF (tied to HCUT).</td><td>0–32</td></tr>
                   <tr><td><strong>R</strong></td><td>RES</td><td>Filter resonance around the cutoff.</td><td>0–32</td></tr>
                   <tr><td><strong>F</strong></td><td>FLT</td><td>Filter amount. Voice 11: ladder filter-envelope depth. Voices 13/14: SVF octaveControl.</td><td>0–32</td></tr>
                   <tr><td><strong>D</strong></td><td>DLAY</td><td>Per-voice delay tap (same as sample page 3).</td><td>0 = off, N = N/32 beat (16 = ½, 32 = 1)</td></tr>
@@ -150,7 +151,7 @@
               </table>
             </article>
 
-            <h3 class="hb-subsection-heading">Page 2 — WAVE · INST · CENT · SEMI</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.076">Page 2 — WAVE · INST · CENT · SEMI</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -158,20 +159,20 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p2" width="640" height="320" role="img" aria-label="Filter page 2 — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Letters <strong>W · I · C · S</strong>.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.078">Letters <strong>W · I · C · S</strong>.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p2_named" width="640" height="320" role="img" aria-label="Filter page 2 — editing INST"></canvas>
                   </div>
-                  <p class="viz-caption--below">Full name <strong>INST</strong> while encoder 2 is being moved.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.080">Full name <strong>INST</strong> while encoder 2 is being moved.</p>
                 </div>
               </div>
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>W</strong></td><td>WAVE</td><td>Changes oscillator 1; uniform three-oscillator presets change all three together. Selecting INST restores and displays that preset's waveform default.</td><td>Sine · Square/Pulse · Sawtooth · Triangle</td></tr>
+                  <tr><td><strong>W</strong></td><td>WAVE</td><td data-hb-copy="sound.083">Changes oscillator 1; uniform three-oscillator presets change all three together. Selecting INST restores and displays that preset's waveform default.</td><td>Sine · Square/Pulse · Sawtooth · Triangle</td></tr>
                   <tr><td><strong>I</strong></td><td>INST</td><td>Instrument archetype for synth voice 11.</td><td>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</td></tr>
                   <tr><td><strong>C</strong></td><td>CENT</td><td>Coarse register control.</td><td>0–32</td></tr>
                   <tr><td><strong>S</strong></td><td>SEMI</td><td>Fine and semitone pitch offset.</td><td>0–32, centred at 16</td></tr>
@@ -179,7 +180,7 @@
               </table>
             </article>
 
-            <h3 class="hb-subsection-heading">Page 3 — ADSR: ATCK · DECY · SUST · RELS</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.097">Page 3 — ADSR: ATCK · DECY · SUST · RELS</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -187,14 +188,14 @@
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p3" width="640" height="320" role="img" aria-label="Filter page 3 — resting"></canvas>
                   </div>
-                  <p class="viz-caption--below">Letters <strong>A · D · S · R</strong> — attack, decay, sustain, release.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.099">Letters <strong>A · D · S · R</strong> — attack, decay, sustain, release.</p>
                 </div>
                 <div>
                   <p class="hb-led-label">Encoder turning</p>
                   <div class="hb-led-wrap hb-display-image">
                     <canvas class="led-matrix" data-scene="filter_p3_named" width="640" height="320" role="img" aria-label="Filter page 3 — editing SUST"></canvas>
                   </div>
-                  <p class="viz-caption--below">Full name <strong>SUST</strong> while encoder 3 is being moved.</p>
+                  <p class="viz-caption--below" data-hb-copy="sound.101">Full name <strong>SUST</strong> while encoder 3 is being moved.</p>
                 </div>
               </div>
               <div class="hb-adsr" aria-label="ADSR envelope shape">
@@ -210,8 +211,8 @@
                   <text x="220" y="50" font-size="9" fill="#2563eb">sustain level</text>
                 </svg>
               </div>
-              <p class="hb-device__intro"><strong>Attack</strong> — time from trigger to peak. <strong>Decay</strong> — time from peak to the sustain plateau. <strong>Sustain</strong> — held level while the note remains on. <strong>Release</strong> — fall after note-off. Each parameter is 0–32 on the encoder; the firmware maps it to milliseconds (A / D / R) or 0–1.0 (S).</p>
-              <div class="hb-tip"><strong>Tip:</strong> tweak release last. Long release smears notes into the next step; pair short release with high sustain for staccato drums.</div>
+              <p class="hb-device__intro" data-hb-copy="sound.102"><strong>Attack</strong> — time from trigger to peak. <strong>Decay</strong> — time from peak to the sustain plateau. <strong>Sustain</strong> — held level while the note remains on. <strong>Release</strong> — fall after note-off. Each parameter is 0–32 on the encoder; the firmware maps it to milliseconds (A / D / R) or 0–1.0 (S).</p>
+              <div class="hb-tip" data-hb-copy="sound.103"><strong>Tip:</strong> tweak release last. Long release smears notes into the next step; pair short release with high sustain for staccato drums.</div>
             </article>
           </section>
 
@@ -220,12 +221,12 @@
 
 
           <section class="hb-sub" id="adsr">
-            <h2>ADSR in detail</h2>
-            <p>All voices share the same envelope generator. Channel&nbsp;11 (poly synth) additionally has a <strong>filter envelope</strong> with its own A/D/S/R that modulates the filter cutoff — same encoder layout, different page nest. Reach it through filter page 1 on voice 11 (the third filter row swaps in for filter-ADSR when applicable).</p>
+            <h2 data-hb-copy="sound.104">ADSR in detail</h2>
+            <p data-hb-copy="sound.105">All voices share the same envelope generator. Channel&nbsp;11 (poly synth) additionally has a <strong>filter envelope</strong> with its own A/D/S/R that modulates the filter cutoff — same encoder layout, different page nest. Reach it through filter page 1 on voice 11 (the third filter row swaps in for filter-ADSR when applicable).</p>
             <ul>
               <li><strong>Attack 0</strong> = instant click. Use for percussive material.</li>
               <li><strong>Decay 0 + Sustain max</strong> = organ-style hold. Use for pads.</li>
-              <li><strong>Release 0</strong> = note shuts immediately at the next step. Use to tighten busy grooves.</li>
+              <li data-hb-copy="sound.108"><strong>Release 0</strong> = note shuts immediately at the next step. Use to tighten busy grooves.</li>
             </ul>
           </section>
 
@@ -234,7 +235,7 @@
 
 
           <section class="hb-sub" id="effects">
-            <h2>Per-voice effects</h2>
+            <h2 data-hb-copy="sound.109">Per-voice effects</h2>
             <p>Three blocks live after the filter:</p>
             <table class="opt-table">
               <thead><tr><th>Block</th><th>Controls</th><th>Range</th></tr></thead>
@@ -244,7 +245,7 @@
                 <tr><td><strong>Filter (multimode)</strong></td><td>LP / HP / BP with cutoff and resonance.</td><td>0–10 kHz; Q 0.7–5.0</td></tr>
               </tbody>
             </table>
-            <p>The reverb is a global shared bus. Only voices with an active <strong>RVRB</strong> control can send into it (see filter page&nbsp;0 above). Balance wet against dry by mixing send amounts on the lanes that support it.</p>
+            <p data-hb-copy="sound.120">The reverb is a global shared bus. Only voices with an active <strong>RVRB</strong> control can send into it (see filter page&nbsp;0 above). Balance wet against dry by mixing send amounts on the lanes that support it.</p>
           </section>
 
 
@@ -252,10 +253,10 @@
 
 
           <section class="hb-sub" id="fast-filter">
-            <h2>Fast filter (encoder 3 from the grid)</h2>
-            <p class="lede">From draw or single mode, <strong>turning encoder&nbsp;3</strong> twists the parameter chosen as the fast-filter default for the current channel. That choice is set in the filter editor: <strong>short-press a column</strong> to mark it as that voice's macro. The next time you spin encoder&nbsp;3 from the grid, you are sweeping <em>that</em> control.</p>
-            <p>The same encoder&nbsp;3 fast filter stays available while you <strong>hold encoder&nbsp;2</strong> for the <a href="advanced-sequencing.html#mutes">mute / solo overlay</a> (green ring). Random sample pick moves to encoder&nbsp;4 for that hold.</p>
-            <p>Most players assign HCUT as the default for sample lanes and CUT for synth lanes. Lanes can each have their own choice — the firmware remembers per channel.</p>
+            <h2 data-hb-copy="sound.121">Fast filter (encoder 3 from the grid)</h2>
+            <p class="lede" data-hb-copy="sound.122">From draw or single mode, <strong>turning encoder&nbsp;3</strong> twists the parameter chosen as the fast-filter default for the current channel. That choice is set in the filter editor: <strong>short-press a column</strong> to mark it as that voice's macro. The next time you spin encoder&nbsp;3 from the grid, you are sweeping <em>that</em> control.</p>
+            <p data-hb-copy="sound.123">The same encoder&nbsp;3 fast filter stays available while you <strong>hold encoder&nbsp;2</strong> for the <a href="advanced-sequencing.html#mutes">mute / solo overlay</a> (green ring). Random sample pick moves to encoder&nbsp;4 for that hold.</p>
+            <p data-hb-copy="sound.124">Most players assign HCUT as the default for sample lanes and CUT for synth lanes. Lanes can each have their own choice — the firmware remembers per channel.</p>
           </section>
 
 
@@ -263,24 +264,24 @@
 
 
           <section class="hb-sub" id="synths">
-            <h2>The synth voices in detail</h2>
+            <h2 data-hb-copy="sound.125">The synth voices in detail</h2>
 
-            <h3 class="hb-subsection-heading">Voice 11 — 3-voice polyphonic synth</h3>
-            <p>Three oscillators per voice, three voices of polyphony, ten instrument presets in a single ROM-style table (<strong>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</strong>). Each preset bundles a waveshape recipe, envelope curve, and filter envelope amount. Independent ADSR per voice, independent filter envelope per voice, per-voice pan, gain, waveform, fine pitch (cents), and coarse pitch (semitones).</p>
-            <p>Selecting an instrument loads its matching filter, register, waveform, and ADSR defaults. The presets deliberately cover different roles: PAD and WOW swell, ORG uses clean drawbar-style harmonics, FLT is breathy, LEAD is a square-forward pluck, ARP is a tight pulse stack, and BRSS uses a darker saw body with a slower filter bloom. You can edit the loaded values immediately; saved projects retain those edits.</p>
-            <p>A fifth filter page matches voices 13/14: <strong>LFO R · LFO D · SPAN · ARP</strong>. The LFO runs on the shared SVF and the poly ladders (cutoff + resonance). ARP is MIDI-hold only and does not transpose notes already on the grid.</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.126">Voice 11 — 3-voice polyphonic synth</h3>
+            <p data-hb-copy="sound.127">Three oscillators per voice, three voices of polyphony, ten instrument presets in a single ROM-style table (<strong>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</strong>). Each preset bundles a waveshape recipe, envelope curve, and filter envelope amount. Independent ADSR per voice, independent filter envelope per voice, per-voice pan, gain, waveform, fine pitch (cents), and coarse pitch (semitones).</p>
+            <p data-hb-copy="sound.128">Selecting an instrument loads its matching filter, register, waveform, and ADSR defaults. The presets deliberately cover different roles: PAD and WOW swell, ORG uses clean drawbar-style harmonics, FLT is breathy, LEAD is a square-forward pluck, ARP is a tight pulse stack, and BRSS uses a darker saw body with a slower filter bloom. You can edit the loaded values immediately; saved projects retain those edits.</p>
+            <p data-hb-copy="sound.129">A fifth filter page matches voices 13/14: <strong>LFO R · LFO D · SPAN · ARP</strong>. The LFO runs on the shared SVF and the poly ladders (cutoff + resonance). ARP is MIDI-hold only and does not transpose notes already on the grid.</p>
 
-            <h3 class="hb-subsection-heading">Voices 13 &amp; 14 — 2-oscillator mono synths</h3>
-            <p>Two oscillators each, full ADSR. Filter page&nbsp;0 swaps <strong>RVRB</strong> for <strong>CENT</strong> (coarse pitch) in the third column — there is no reverb send on these lanes. They add two performance modulators:</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.130">Voices 13 &amp; 14 — 2-oscillator mono synths</h3>
+            <p data-hb-copy="sound.131">Two oscillators each, full ADSR. Filter page&nbsp;0 swaps <strong>RVRB</strong> for <strong>CENT</strong> (coarse pitch) in the third column — there is no reverb send on these lanes. They add two performance modulators:</p>
             <ul>
-              <li><strong>LFO</strong> — rate 0.25–10 Hz (0 = off), depth 0–100%. Sweep is wide (±6 octaves at full depth) on cutoff and resonance. Independent of SPAN/ARP.</li>
-              <li><strong>Arpeggiator</strong> — MIDI hold only. Encoder centre (16) is off. Above centre: 16th-note arp; below centre: 8th-note arp. Amount is the distance from centre (interval). Grid notes play as written. In SINGLE while playing, each arp hit is recorded at its sounded pitch.</li>
+              <li data-hb-copy="sound.132"><strong>LFO</strong> — rate 0.25–10 Hz (0 = off), depth 0–100%. Sweep is wide (±6 octaves at full depth) on cutoff and resonance. Independent of SPAN/ARP.</li>
+              <li data-hb-copy="sound.133"><strong>Arpeggiator</strong> — MIDI hold only. Encoder centre (16) is off. Above centre: 16th-note arp; below centre: 8th-note arp. Amount is the distance from centre (interval). Grid notes play as written. In SINGLE while playing, each arp hit is recorded at its sounded pitch.</li>
             </ul>
-            <p>Waveforms include sine, sawtooth, square, and triangle. These channels are great for basslines and lead lines where polyphony is unnecessary.</p>
-            <p>Normal sequencer notes retrigger their envelope. To connect adjacent notes on voices 11, 13, or 14, mark the <em>destination</em> note <strong>G/L</strong> in note detail: repeating the same pitch holds the existing envelope, while a different pitch retunes the active voice without restarting it. G/L without an adjacent source attacks normally; a gap ends the phrase. No separate R/T setting is needed because every non-G/L note already retriggers.</p>
+            <p data-hb-copy="sound.134">Waveforms include sine, sawtooth, square, and triangle. These channels are great for basslines and lead lines where polyphony is unnecessary.</p>
+            <p data-hb-copy="sound.135">Normal sequencer notes retrigger their envelope. To connect adjacent notes on voices 11, 13, or 14, mark the <em>destination</em> note <strong>G/L</strong> in note detail: repeating the same pitch holds the existing envelope, while a different pitch retunes the active voice without restarting it. G/L without an adjacent source attacks normally; a gap ends the phrase. No separate R/T setting is needed because every non-G/L note already retriggers.</p>
 
-            <h3 class="hb-subsection-heading">Voices 9, 10, 12 — empty rows</h3>
-            <p>These matrix rows are reserved but <strong>intentionally carry no voice</strong>. The cursor can visit them, but placing notes or opening filters has no effect — there is no audio path. See <a href="matrix.html#voice-rows">The matrix → voice lanes</a>.</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.136">Voices 9, 10, 12 — empty rows</h3>
+            <p data-hb-copy="sound.137">These matrix rows are reserved but <strong>intentionally carry no voice</strong>. The cursor can visit them, but placing notes or opening filters has no effect — there is no audio path. See <a href="matrix.html#voice-rows">The matrix → voice lanes</a>.</p>
           </section>
 
 
@@ -288,15 +289,15 @@
 
 
           <section class="hb-sub" id="tuning">
-            <h2>Per-voice tuning</h2>
+            <h2 data-hb-copy="sound.138">Per-voice tuning</h2>
             <ul>
-              <li><strong>Global transpose</strong> — semitone offset added to the synth pitch path. Currently a code-level hook (initialised to 0); no menu page exposes it.</li>
+              <li data-hb-copy="sound.139"><strong>Global transpose</strong> — semitone offset added to the synth pitch path. Currently a code-level hook (initialised to 0); no menu page exposes it.</li>
               <li><strong>Channel detune</strong> — −12 to +12 semitones, per channel.</li>
               <li><strong>Channel octave</strong> — −3 to +3 octaves, per channel.</li>
               <li><strong>Synth-11 fine tune</strong> — −50 to +50 cents per voice.</li>
               <li><strong>Synth-11 semitone offset</strong> — −2 to +2 per voice.</li>
             </ul>
-            <p>These add together. Big-picture tuning lives in detune + octave; subtle character lives in cents + semitone offset.</p>
+            <p data-hb-copy="sound.144">These add together. Big-picture tuning lives in detune + octave; subtle character lives in cents + semitone offset.</p>
           </section>
 
 
@@ -304,9 +305,9 @@
 
 
           <section class="hb-sub" id="reset-defaults">
-            <h2>Resetting a voice</h2>
-            <p>From the filter editor of any channel, <strong>encoder&nbsp;4 long press</strong> resets envelopes, filters, and synth data for that channel only. Note data in the grid stays intact — only the tone snaps back to factory curves. To reset the whole project's sound layer (every voice), use <a href="menus.html#rset">ETC → RSET → EFX</a>; that one is destructive across the board.</p>
-            <div class="hb-warn"><strong>EFX reset is global.</strong> Patterns and sample assignments survive, but every filter, envelope, synth, and octave helper goes to defaults across all 16 channels.</div>
+            <h2 data-hb-copy="sound.145">Resetting a voice</h2>
+            <p data-hb-copy="sound.146">From the filter editor of any channel, <strong>encoder&nbsp;4 long press</strong> resets envelopes, filters, and synth data for that channel only. Note data in the grid stays intact — only the tone snaps back to factory curves. To reset the whole project's sound layer (every voice), use <a href="menus.html#rset">ETC → RSET → EFX</a>; that one is destructive across the board.</p>
+            <div class="hb-warn" data-hb-copy="sound.147"><strong>EFX reset is global.</strong> Patterns and sample assignments survive, but every filter, envelope, synth, and octave helper goes to defaults across all 16 channels.</div>
           </section>
         </section>
 

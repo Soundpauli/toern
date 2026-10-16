@@ -494,6 +494,17 @@ void drawBase() {
   drawStatus();
 
   drawPages();
+
+  // Single-mode + muted voice: yellow blink on the right half of the top row.
+  if (GLOB.singleMode && GLOB.currentChannel < maxY && muteCache[GLOB.currentChannel]) {
+    extern int ledModules;
+    const bool blinkOn = ((millis() / 300) & 0x1) == 0;
+    const CRGB bar = blinkOn ? CRGB(255, 255, 0) : CRGB(0, 0, 0);
+    const unsigned int x0 = (ledModules == 2) ? 16u : 8u;
+    for (unsigned int x = x0; x <= maxX; x++) {
+      light(x, 16, bar);
+    }
+  }
 }
 
 static bool pongBallInitialized = false;
@@ -821,6 +832,22 @@ FLASHMEM void drawRecordingBorder() {
   for (unsigned int y = 2; y < maxY; y++) {
     light(1, y, redColor);
     light(maxX, y, redColor);
+  }
+}
+
+FLASHMEM void drawRecordingBorderDotted() {
+  CRGB redColor = CRGB(255, 0, 0);
+  for (unsigned int x = 1; x <= maxX; x++) {
+    if ((x & 1u) != 0) {
+      light(x, 1, redColor);
+      light(x, maxY, redColor);
+    }
+  }
+  for (unsigned int y = 2; y < maxY; y++) {
+    if ((y & 1u) != 0) {
+      light(1, y, redColor);
+      light(maxX, y, redColor);
+    }
   }
 }
 
@@ -1897,46 +1924,67 @@ void drawTimer() {
     }
 }
 
+FLASHMEM static int countLabelWidth(const char *text) {
+  int w = 0;
+  for (int i = 0; text[i] != '\0'; i++) {
+    if (text[i] >= 32 && text[i] <= 126) w += alphabet[text[i] - 32][0] + 1;
+  }
+  if (w > 0) w -= 1;
+  return w;
+}
+
+FLASHMEM static int countLabelX(const char *text) {
+  int x = (((int)maxX - countLabelWidth(text)) / 2) + 1;
+  if (x < 1) x = 1;
+  return x;
+}
+
+FLASHMEM static void drawCountDigit(int n) {
+  if (n < 1 || n > 4) return;
+  char countText[4];
+  snprintf(countText, sizeof(countText), "%d", n);
+  const char *recLabel = "REC";
+  const int countY = 3;
+  const int recY = 9;     // 1 empty row under the digit (digit ends at 7)
+  const int recX = countLabelX(recLabel);
+  const int countX = countLabelX(countText);
+  int bgStartX = min(recX, countX);
+  int recW = countLabelWidth(recLabel);
+  int countW = countLabelWidth(countText);
+  int bgEndX = max(recX + recW - 1, countX + countW - 1);
+  bgStartX = max(1, bgStartX);
+  bgEndX = min((int)maxX, bgEndX);
+  const int bgStartY = min(recY, countY);
+  const int bgEndY = max(recY, countY) + 4;
+  for (int x = bgStartX; x <= bgEndX; x++) {
+    for (int y = bgStartY; y <= bgEndY; y++) {
+      if (x >= 1 && x <= (int)maxX && y >= 1 && y <= (int)maxY) {
+        light(x, y, CRGB(0, 0, 0));
+      }
+    }
+  }
+  CRGB countColor;
+  if (n == 1) countColor = CRGB(255, 255, 255);
+  else if (n == 2) countColor = CRGB(0, 255, 0);
+  else if (n == 3) countColor = CRGB(255, 255, 0);
+  else countColor = CRGB(255, 0, 0);
+  drawText(recLabel, recX, recY, CRGB(255, 0, 0));
+  drawText(countText, countX, countY, countColor);
+}
+
 FLASHMEM void drawCountIn() {
   extern bool countInActive;
   extern int countInBeat;
-  
   if (countInActive && countInBeat > 0 && countInBeat <= 4) {
-    // Display count-in number (1,2,3,4) on the bar at y=1
-    char countText[4];
-    snprintf(countText, sizeof(countText), "%d", countInBeat);
-    // Display centered on the bar - position based on maxX
-    int textX = (maxX / 2) - 1;  // Center the count text
-    
-    // Draw black background behind the number
-    // Estimate text width (single digit = ~2-3 pixels wide)
-    int bgWidth = 3;  // Background width to cover the number
-    int bgStartX = max(1, textX - 1);
-    int bgEndX = min((int)maxX, textX + bgWidth);
-    
-    // Draw black background rectangle
-    for (int x = bgStartX; x <= bgEndX; x++) {
-      for (int y = 1; y <= 7; y++) {  // Cover y=1 to y=3 for text height
-        if (x >= 1 && x <= (int)maxX && y >= 1 && y <= (int)maxY) {
-          light(x, y, CRGB(0, 0, 0));  // Black background
-        }
-      }
-    }
-    
-    // Draw the count-in number on top with different colors
-    CRGB countColor;
-    if (countInBeat == 1) {
-      countColor = CRGB(255, 255, 255);  // White for 1
-    } else if (countInBeat == 2) {
-      countColor = CRGB(0, 255, 0);      // Green for 2
-    } else if (countInBeat == 3) {
-      countColor = CRGB(255, 255, 0);    // Yellow for 3
-    } else if (countInBeat == 4) {
-      countColor = CRGB(255, 0, 0);      // Red for 4
-    } else {
-      countColor = CRGB(0, 255, 255);    // Cyan fallback
-    }
-    drawText(countText, textX, 2, countColor);
+    drawCountDigit(countInBeat);
+  }
+}
+
+FLASHMEM void drawSensCountIn() {
+  extern bool sensCountActive;
+  extern int sensCountSec;
+  if (sensCountActive && sensCountSec >= 1 && sensCountSec <= 3) {
+    drawCountDigit(sensCountSec);
   }
 }
 
@@ -2410,21 +2458,21 @@ FLASHMEM void drawBPMScreen() {
   // - Encoder 2: white
   // - Encoder 3: green
   // - Encoder 4: turquoise
-  // Matrix only — rings cached below (setVolume calls this every loop).
+  // Matrix only — rings cached below (setBPM calls this every loop).
   drawIndicator('L', 'W', 2, false, false);
   drawIndicator('L', 'G', 3, false, false);
   drawIndicator('L', 'N', 4, false, false);
   
   // Draw MIDI INT/EXT arrow indicator using encoder[2] position
   extern Mode *currentMode;
-  extern Mode volume_bpm;
+  extern Mode bpmMode;
   extern int clockMode;
   bool isInt = false;
-  if (currentMode == &volume_bpm) {
+  if (currentMode == &bpmMode) {
     // Get clockMode from encoder[2] position (0=EXT, 1=INT)
     isInt = (currentMode->pos[2] == 1);
   } else {
-    // Fallback: use clockMode directly if not in volume_bpm mode
+    // Fallback: use clockMode directly if not in BPM mode
     isInt = (clockMode == 1);
   }
   
@@ -2458,7 +2506,7 @@ FLASHMEM void drawBPMScreen() {
   drawMidiArrow(isInt, maxX - 1, 8, shouldBlink);
   
   // Add indicator to encoder[2]: L size, color matching arrow, encoder 3
-  if (currentMode == &volume_bpm) {
+  if (currentMode == &bpmMode) {
     // Green INT, red MIDI-in, orange analog PPQN-in
     char arrowColor = isInt ? 'G' : (analogExt ? 'O' : 'R');
     drawIndicator('L', arrowColor, 3, false, false);

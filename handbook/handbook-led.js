@@ -340,7 +340,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     m.clear();
     m.menuColors = true;
     largeInd4Parent(m, 5);
-    drawSubmenuDots16(m, pageIdx, 7, 5);
+    drawSubmenuDots16(m, pageIdx, 5, 5);
     const tc = title === "ON" ? [0, 120, 0] : title === "OFF" ? [120, 0, 0] : menuTextFromCol(5);
     drawText(m, title, 2, 10, tc[0], tc[1], tc[2]);
     if (enc1) m.indL(1, enc1);
@@ -868,16 +868,38 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawText(m, "35", 2, 3, 120, 60, 0);
     },
     vol_2ch(m) {
-      volSubFrame(m, 4, "2-CH", "", "", "G");
+      m.clear();
+      m.menuColors = true;
+      largeInd4Parent(m, 14);
+      drawSubmenuDots16(m, 7, 10, 14);
+      const tc = menuTextFromCol(14);
+      drawText(m, "2-CH", 2, 10, tc[0], tc[1], tc[2]);
       drawText(m, "M+P", 2, 3, 0, 120, 0);
+      m.indL(3, "G");
     },
     vol_spkr(m) {
-      volSubFrame(m, 5, "SPKR", "", "", "G");
+      volSubFrame(m, 4, "SPKR", "", "", "G");
       drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     vol_hfc(m) {
-      volSubFrame(m, 6, "HFC", "", "", "R");
+      m.clear();
+      m.menuColors = true;
+      largeInd4Parent(m, 14);
+      drawSubmenuDots16(m, 9, 10, 14);
+      const tc = menuTextFromCol(14);
+      drawText(m, "HFC", 2, 10, tc[0], tc[1], tc[2]);
       drawText(m, "0", 2, 3, 120, 0, 0);
+      m.indL(3, "R");
+    },
+    adv_usbp(m) {
+      m.clear();
+      m.menuColors = true;
+      largeInd4Parent(m, 14);
+      drawSubmenuDots16(m, 8, 10, 14);
+      const tc = menuTextFromCol(14);
+      drawText(m, "USBP", 2, 10, tc[0], tc[1], tc[2]);
+      drawText(m, "OFF", 2, 3, 120, 0, 0);
+      m.indL(3, "R");
     },
     lk_flw(m) {
       playSubFrame(m, 0, "FLOW", "", "G");
@@ -990,7 +1012,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     rc_trig(m) {
       recSubFrame(m, 3, "TRIG", "W", "W");
-      drawText(m, "SENS", 2, 3, 0, 255, 0);
+      drawText(m, "SENS", 2, 3, 0, 255, 255);
     },
     rc_clr(m) {
       recSubFrame(m, 4, "CLR", "", "W");

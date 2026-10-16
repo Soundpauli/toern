@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016r" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -16,21 +16,22 @@
   <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
-  <script src="handbook-layout.js?v=20261016r"></script>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016r"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-samples">
-          <h2 class="handbook-page__title">Samples</h2>
-          <p class="handbook-page__summary">The sample browser — folders, trim, reverse, preview, and load for voices 1–8.</p>
+          <h2 class="handbook-page__title" data-hb-copy="samples.001">Samples</h2>
+          <p class="handbook-page__summary" data-hb-copy="samples.002">The sample browser — folders, trim, reverse, preview, and load for voices 1–8.</p>
 
           <section class="hb-sub" id="overview">
-            <h2>KIT vs SMP / sample</h2>
-            <p class="lede">A <strong>KIT</strong> (<a href="sample-packs.html">Sample kits</a>) chooses a numbered kit for the eight sample voices. The <strong>SMP</strong> sample browser picks one sample from <code>samples/</code> for the current voice (channels 1–8), with trim, reverse, preview, and load.</p>
-            <p>Samples are mono 16-bit WAV at 44.1&nbsp;kHz, up to 12 seconds per voice. To change card contents, see <a href="sd-card.html">SD card</a>.</p>
+            <h2 data-hb-copy="samples.003">KIT vs SMP / sample</h2>
+            <p class="lede" data-hb-copy="samples.004">A <strong>KIT</strong> (<a href="sample-packs.html">Sample kits</a>) chooses a numbered kit for the eight sample voices. The <strong>SMP</strong> sample browser picks one sample from <code>samples/</code> for the current voice (channels 1–8), with trim, reverse, preview, and load.</p>
+            <p data-hb-copy="samples.005">Samples are mono 16-bit WAV at 44.1&nbsp;kHz, up to 12 seconds per voice. To change card contents, see <a href="sd-card.html">SD card</a>.</p>
           </section>
 
 
@@ -38,59 +39,59 @@
 
 
           <section class="hb-sub" id="set-wav">
-            <h2>Sample browser</h2>
-            <p class="lede">Open from the menu (<strong>SMP</strong>) for sample voices 1–8, or with a <strong>both-touch left-first</strong> gesture from draw / single / menu when the current channel is a sample voice. The screen shows four large hint glyphs on row 1 — <strong>P</strong> (magenta) preview, <strong>Y</strong> trim end, <strong>G</strong> load, <strong>W</strong> browser — plus a waveform display.</p>
+            <h2 data-hb-copy="samples.006">Sample browser</h2>
+            <p class="lede" data-hb-copy="samples.007">Open from the menu (<strong>SMP</strong>) for sample voices 1–8, or with a <strong>both-touch left-first</strong> gesture from draw / single / menu when the current channel is a sample voice. The screen shows four large hint glyphs on row 1 — <strong>P</strong> (magenta) preview, <strong>Y</strong> trim end, <strong>G</strong> load, <strong>W</strong> browser — plus a waveform display.</p>
 
-            <h3 class="hb-subsection-heading">Browsing</h3>
-            <p>Encoder&nbsp;4 turns through a <em>single combined list</em>: parent link <code>[../]</code>, subfolders, then <code>.wav</code> files in the current directory under <code>samples/</code>. The matrix changes display per row type:</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="samples.008">Browsing</h3>
+            <p data-hb-copy="samples.009">Encoder&nbsp;4 turns through a <em>single combined list</em>: parent link <code>[../]</code>, subfolders, then <code>.wav</code> files in the current directory under <code>samples/</code>. The matrix changes display per row type:</p>
             <ul>
-              <li>On a <strong>.wav</strong>: peak / waveform view between the trim start and trim end.</li>
-              <li>On a <strong>directory</strong> or <code>[../]</code>: breadcrumb path on row 6 (green dot for root, yellow chevrons, then one letter per folder segment).</li>
+              <li data-hb-copy="samples.010">On a <strong>.wav</strong>: peak / waveform view between the trim start and trim end.</li>
+              <li data-hb-copy="samples.011">On a <strong>directory</strong> or <code>[../]</code>: breadcrumb path on row 6 (green dot for root, yellow chevrons, then one letter per folder segment).</li>
             </ul>
 
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="set_wav_trim" width="640" height="320" role="img" aria-label="Sample browser — trim view"></canvas>
               </div>
-              <p class="viz-caption--below">File row selected: peaks + trim bar on y=3.</p>
+              <p class="viz-caption--below" data-hb-copy="samples.012">File row selected: peaks + trim bar on y=3.</p>
               <div class="hb-led-wrap hb-display-image" style="margin-top:1rem">
                 <canvas class="led-matrix" data-scene="set_wav_depth" width="640" height="320" role="img" aria-label="Sample browser — folder view"></canvas>
               </div>
-              <p class="viz-caption--below">Folder row selected: breadcrumb path replaces the peaks.</p>
+              <p class="viz-caption--below" data-hb-copy="samples.013">Folder row selected: breadcrumb path replaces the peaks.</p>
             </article>
 
-            <h3 class="hb-subsection-heading">Folder navigation</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="samples.014">Folder navigation</h3>
             <p><strong>Encoder&nbsp;4 short</strong> behaves contextually:</p>
             <ul>
               <li>On <code>[../]</code> or a folder → enter that folder.</li>
-              <li>On a file → go up one directory (deliberate no-op at the samples root, so you can't accidentally exit).</li>
+              <li data-hb-copy="samples.017">On a file → go up one directory (deliberate no-op at the samples root, so you can't accidentally exit).</li>
             </ul>
 
-            <h3 class="hb-subsection-heading">Trim window</h3>
-            <p>Trim is expressed as 0–100% of the file's decoded length.</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="samples.018">Trim window</h3>
+            <p data-hb-copy="samples.019">Trim is expressed as 0–100% of the file's decoded length.</p>
             <ul>
-              <li><strong>Encoder&nbsp;1 turn</strong> — moves the <strong>trim start</strong>. Stops just before the trim end.</li>
-              <li><strong>Encoder&nbsp;2 turn</strong> — moves the <strong>trim end</strong>. Stops just after the trim start.</li>
-              <li>Row&nbsp;3 of the matrix shows a dim blue baseline; columns left of the trim start tint green (pre-roll), columns right of the trim end tint red (post-roll). The lit window in between is your active slice.</li>
+              <li data-hb-copy="samples.020"><strong>Encoder&nbsp;1 turn</strong> — moves the <strong>trim start</strong>. Stops just before the trim end.</li>
+              <li data-hb-copy="samples.021"><strong>Encoder&nbsp;2 turn</strong> — moves the <strong>trim end</strong>. Stops just after the trim start.</li>
+              <li data-hb-copy="samples.022">Row&nbsp;3 of the matrix shows a dim blue baseline; columns left of the trim start tint green (pre-roll), columns right of the trim end tint red (post-roll). The lit window in between is your active slice.</li>
             </ul>
 
-            <h3 class="hb-subsection-heading">Preview &amp; reverse</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="samples.023">Preview &amp; reverse</h3>
             <ul>
-              <li><strong>Encoder&nbsp;1 short or long</strong> → previews the highlighted wav (PREV = ON or PRSS, or SYNC while stopped). Does not go up a directory. In SYNC while the sequencer is running this press does not play.</li>
-              <li><strong>Encoder&nbsp;2 short</strong> — reverses the highlighted sample. The waveform on screen flips end-for-end and the preview re-triggers from the start so you can hear the reversed take. Hit it again to flip back.</li>
-              <li>Auto-preview policy is set under <a href="play.html#prev">VOL → PREV</a>: <strong>ON</strong> auditions every selection automatically, <strong>PRSS</strong> waits for encoder&nbsp;1 on a selected wav, <strong>SYNC</strong> auto-plays while stopped and, while playing, fires the highlighted file on that voice's pattern triggers instead of the loaded sample.</li>
+              <li data-hb-copy="samples.024"><strong>Encoder&nbsp;1 short or long</strong> → previews the highlighted wav (PREV = ON or PRSS, or SYNC while stopped). Does not go up a directory. In SYNC while the sequencer is running this press does not play.</li>
+              <li data-hb-copy="samples.025"><strong>Encoder&nbsp;2 short</strong> — reverses the highlighted sample. The waveform on screen flips end-for-end and the preview re-triggers from the start so you can hear the reversed take. Hit it again to flip back.</li>
+              <li data-hb-copy="samples.026">Auto-preview policy is set under <a href="play.html#prev">VOL → PREV</a>: <strong>ON</strong> auditions every selection automatically, <strong>PRSS</strong> waits for encoder&nbsp;1 on a selected wav, <strong>SYNC</strong> auto-plays while stopped and, while playing, fires the highlighted file on that voice's pattern triggers instead of the loaded sample.</li>
             </ul>
 
-            <h3 class="hb-subsection-heading">Loading</h3>
-            <p>A <strong>short press on encoder&nbsp;3</strong> loads the highlighted file into the voice and immediately autosaves the pattern: the current trim window plus reverse state become the voice's permanent sample until you load another one. Encoder&nbsp;3 turn is intentionally unused in the sample browser.</p>
-            <p>To capture a fresh take instead of loading a file, <strong>hold touch&nbsp;3</strong> — that opens <a href="record.html#record-mode">Record</a>.</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="samples.027">Loading</h3>
+            <p data-hb-copy="samples.028">A <strong>short press on encoder&nbsp;3</strong> loads the highlighted file into the voice and immediately autosaves the pattern: the current trim window plus reverse state become the voice's permanent sample until you load another one. Encoder&nbsp;3 turn is intentionally unused in the sample browser.</p>
+            <p data-hb-copy="samples.029">To capture a fresh take instead of loading a file, <strong>hold touch&nbsp;3</strong> — that opens <a href="record.html#record-mode">Record</a>.</p>
 
             <article class="hb-device">
-              <h4 class="hb-device__title">Sample browser — encoder map</h4>
+              <h4 class="hb-device__title" data-hb-copy="samples.030">Sample browser — encoder map</h4>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Trim start (%)</td><td>Restarts auto preview when on.</td></tr>
-                  <tr><th>Short / long</th><td>Manual preview</td><td>Audition the highlighted wav (ON / PRSS, or SYNC while stopped). Does not leave the folder.</td></tr>
+                  <tr><th>Short / long</th><td>Manual preview</td><td data-hb-copy="samples.034">Audition the highlighted wav (ON / PRSS, or SYNC while stopped). Does not leave the folder.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Trim end (%)</td><td>Stops just after the trim start.</td></tr>

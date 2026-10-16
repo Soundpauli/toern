@@ -113,6 +113,7 @@
       "</button>",
       "</div>",
       "</form>",
+      '<div class="hb-language"></div>',
       '<nav class="hb-sidebar__nav">'
     );
 
@@ -290,6 +291,7 @@
     if (!sidebar) sidebar = document.getElementById("hb-sidebar");
     if (!sidebar) return;
     if (window.HBLayout) window.HBLayout.mount(sidebar.querySelector(".hb-sidebar__layout"));
+    if (window.HBLanguage) window.HBLanguage.mount(sidebar.querySelector(".hb-language"));
     ensureMobileBar();
     initMobileNav(sidebar);
     var currentSection = NAV.find(function (section) {
@@ -305,6 +307,7 @@
       meta.innerHTML = '<a href="index.html">TŒRN / Handbook</a><span>CHAPTER ' + String(index).padStart(2, "0") + ' / ' + String(items.length - 1).padStart(2, "0") + '</span>';
       wrap.insertBefore(meta, wrap.firstChild);
     }
+    if (window.HBLanguage) window.HBLanguage.refreshLinks();
   }
 
   window.HBHandbook = {
