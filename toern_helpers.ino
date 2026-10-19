@@ -1321,14 +1321,54 @@ void stopFastRecord() {
   recordingBeatCount = 0;
   
   loadedSampleLen[ch] = idx;
+  loadedSampleRate[ch] = 3;
+
+  // Also publish under samples/recs/ so SET_WAV (SMP) can browse/trim/edit the take,
+  // matching stopRecordingRAM(). SP0 copy below keeps the live pack slot in sync.
+  if (ch >= 1 && ch < maxFiles && idx >= 128) {
+    extern size_t sdIoChunkSize();
+    extern void sdIoYield();
+    extern void sdIoBeginAudioSafe();
+    extern void sdIoEndAudioSafe();
+    char path[160];
+    char tmpName[65];
+    generateNextNumericName(0, tmpName, sizeof(tmpName));
+    if (!SD.exists("samples")) SD.mkdir("samples");
+    if (!SD.exists("samples/recs")) SD.mkdir("samples/recs");
+    snprintf(path, sizeof(path), "samples/recs/%s", tmpName);
+    if (SD.exists(path)) SD.remove(path);
+    sdIoBeginAudioSafe();
+    File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+    if (f) {
+      writeWavHeader(f, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
+      const size_t CHUNK = sdIoChunkSize();
+      uint8_t *dataPtr = reinterpret_cast<uint8_t *>(sampled[ch]);
+      uint32_t dataBytes = (uint32_t)idx * sizeof(int16_t);
+      for (uint32_t offset = 0; offset < dataBytes; offset += CHUNK) {
+        size_t n = min(CHUNK, (size_t)(dataBytes - offset));
+        f.write(dataPtr + offset, n);
+        sdIoYield();
+      }
+      finalizeWavHeader(f, dataBytes);
+      f.close();
+      sampleBrowserInvalidate();
+      snprintf(SMP.samplePathRel[ch], 128, "recs/%s", tmpName);
+      SMP.samplePathRel[ch][127] = 0;
+      GLOB.seek = 0;
+      GLOB.seekEnd = 100;
+      extern void invalidateShowWaveBrowserSync();
+      invalidateShowWaveBrowserSync();
+      extern CachedSample previewCache;
+      previewCache.valid = false;
+      extern bool sampleIsLoaded;
+      extern bool firstcheck;
+      sampleIsLoaded = false;
+      firstcheck = true;
+    }
+    sdIoEndAudioSafe();
+  }
   
-  // Defer sampler loading and heavy operations to avoid blocking audio
-  // These will happen after the critical stop sequence
-  
-  // Auto-save recorded sample to samplepack 0
-  
-  // Do heavy save operations (SD write, EEPROM) - these might cause brief hang
-  // but we've already stopped recording, so audio playback should continue
+  // Auto-save recorded sample to samplepack 0 (deferred while sequencer is playing)
   copySampleToSamplepack0(ch);
   saveSp0StateToEEPROM();
   

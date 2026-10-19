@@ -1694,7 +1694,13 @@ static inline void applyExternalFastFilter(uint16_t value14) {
       setFilters(dft.idx, GLOB.currentChannel, false);
       break;
     case ARR_SYNTH:
-      if (GLOB.currentChannel == 11) updateSynthVoice(11);
+      if (GLOB.currentChannel == 11) {
+        updateSynthVoice(11);
+      } else if ((GLOB.currentChannel == 13 || GLOB.currentChannel == 14) &&
+                 (dft.idx == CUTOFF || dft.idx == RESONANCE || dft.idx == FILTER)) {
+        extern void applyMonoSynthCrf(int ch);
+        applyMonoSynthCrf(GLOB.currentChannel);
+      }
       break;
     case ARR_PARAM:
       setParams(dft.idx, GLOB.currentChannel);
@@ -5569,7 +5575,13 @@ FLASHMEM void checkEncoders() {
               setFilters(dft.idx, GLOB.currentChannel, false);
               break;
             case ARR_SYNTH:
-              if (GLOB.currentChannel == 11) updateSynthVoice(11);
+              if (GLOB.currentChannel == 11) {
+                updateSynthVoice(11);
+              } else if ((GLOB.currentChannel == 13 || GLOB.currentChannel == 14) &&
+                         (dft.idx == CUTOFF || dft.idx == RESONANCE || dft.idx == FILTER)) {
+                extern void applyMonoSynthCrf(int ch);
+                applyMonoSynthCrf(GLOB.currentChannel);
+              }
               break;
             case ARR_PARAM:
               setParams(dft.idx, GLOB.currentChannel);
