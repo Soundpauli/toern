@@ -1,7 +1,7 @@
 #include "src/toern_build_types.h"
 #include "toern_touch_input.h"
 
-#define VERSION "v3.01g"
+#define VERSION "v3.01h"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
