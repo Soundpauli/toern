@@ -847,6 +847,11 @@ static void drawSampleBrowserDepthVisual(int ch) {
   }
 }
 
+static int g_lastChannelInShowWave = -1;
+void invalidateShowWaveBrowserSync() {
+  g_lastChannelInShowWave = -1;
+}
+
 void showWave() {
   // ---- Helpers -------------------------------------------------------------
   auto resetSeekRange = []() {
@@ -874,12 +879,9 @@ void showWave() {
   
   yield(); // Allow other tasks to run, especially important during file operations
   
-  // Track last channel to detect channel changes
-  static int lastChannelInShowWave = -1;
-  
   int ch = constrain((int)GLOB.currentChannel, 1, 8);
-  if (lastChannelInShowWave != GLOB.currentChannel) {
-    lastChannelInShowWave = GLOB.currentChannel;
+  if (g_lastChannelInShowWave != GLOB.currentChannel) {
+    g_lastChannelInShowWave = GLOB.currentChannel;
     ch = constrain((int)GLOB.currentChannel, 1, 8);
     sampleBrowserRefreshList(ch);
     sampleBrowserSyncBrowseFromStoredPath(ch);

@@ -3,14 +3,14 @@ static int8_t fnDirection = 0;
 static unsigned long fnDirectionUntil = 0;
 
 static void updateFnState() {
-  fnHeld = currentMode != &touchyMode && readDebouncedTouch(4);
+  fnHeld = currentMode != &touchyMode && currentMode != &recordMode && readDebouncedTouch(4);
   if (fnHeld) noteUserActivity();
 }
 
 // Keep the physical button FSM unchanged. Modified events have their own codes:
 // 1=short, 2=long, 9=release; FN: 4=short, 3=long, 8=release.
 static uint8_t fnButtonEvent(int index, uint8_t physicalState) {
-  if (currentMode == &touchyMode) return physicalState;
+  if (currentMode == &touchyMode || currentMode == &recordMode) return physicalState;
   if (physicalState == 2 && fnHeld) fnButtonHeld[index] = true;
   const bool modified = fnButtonHeld[index] || fnHeld;
   uint8_t event = physicalState;
@@ -36,7 +36,7 @@ static bool dispatchFnTurn(const EncoderTurnEvent &event) {
 static bool handleFnEncoder(int index, int &rawValue, bool allowWrite) {
   static Mode *pendingRestore[NUM_ENCODERS] = {};
   if (pendingRestore[index] && pendingRestore[index] != currentMode) pendingRestore[index] = nullptr;
-  if (currentMode == &touchyMode || (!fnHeld && !pendingRestore[index])) return false;
+  if (currentMode == &touchyMode || currentMode == &recordMode || (!fnHeld && !pendingRestore[index])) return false;
   const int previous = (currentMode == &subpatternMode && muteModeActive && index == 0)
       ? 0 : (int)currentMode->pos[index];
   if (fnHeld) {

@@ -2080,7 +2080,7 @@ FLASHMEM void switchMode(Mode *newMode) {
   }
 
   /// OLD ACTIONS
-  if (currentMode == &set_Wav || currentMode == &filterMode) {
+  if (currentMode == &set_Wav || currentMode == &filterMode || currentMode == &recordMode) {
     //RESET left encoder
     Encoder[0].begin(
       i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
@@ -2270,6 +2270,19 @@ FLASHMEM void switchMode(Mode *newMode) {
       enforceChildModeRestrictions();
     } else {
       resetCtrlModeState();
+    }
+
+    if (currentMode == &recordMode) {
+      Encoder[0].begin(
+        i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
+        | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
+        | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
+      applyLongCableI2cTiming();
+      int thr = constrain((int)currentMode->pos[0], 0, 100);
+      currentMode->pos[0] = thr;
+      Encoder[0].writeMin((int32_t)0);
+      Encoder[0].writeMax((int32_t)100);
+      Encoder[0].writeCounter((int32_t)thr);
     }
 
     if (currentMode == &set_Wav) {
@@ -2589,15 +2602,30 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   //checkFastRec();
 
   // In recordMode, allow encoder[2] press to stop recording (no auto-playback)
-  if (isRecording && currentMode == &recordMode && pressed[2]) {
-    stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
-
-    // Turn off threshold trigger when stopping
-    extern bool disableThresholdFlag;
-    disableThresholdFlag = true;
-
-    // Don't auto-play - user will press encoder[2] again to play
-    return;
+  // Encoder[3] ("0001") exits recordMode even while recording.
+  if (isRecording && currentMode == &recordMode) {
+    if (match_buttons(currentButtonStates, 0, 0, 0, 1)) {
+      stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
+      extern bool disableThresholdFlag;
+      disableThresholdFlag = true;
+      extern AudioPlaySdWav playSdWav1;
+      if (playSdWav1.isPlaying()) playSdWav1.stop();
+      extern bool sampleIsLoaded, firstcheck;
+      extern CachedSample previewCache;
+      previewCache.valid = false;
+      sampleIsLoaded = false;
+      firstcheck = true;
+      extern void invalidateShowWaveBrowserSync();
+      invalidateShowWaveBrowserSync();
+      switchMode(&set_Wav);
+      return;
+    }
+    if (pressed[2]) {
+      stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
+      extern bool disableThresholdFlag;
+      disableThresholdFlag = true;
+      return;
+    }
   }
 
   if (isRecording) return;
@@ -2963,9 +2991,10 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     previewCache.valid = false;
     sampleIsLoaded = false;
     firstcheck = true;
+    extern void invalidateShowWaveBrowserSync();
+    invalidateShowWaveBrowserSync();
 
-    switchMode(&set_Wav);  // showWave scans the file, then previews
-    sampleIsLoaded = true;
+    switchMode(&set_Wav);  // showWave syncs to recs/rec_XX.wav, scans peaks, and previews
   } else if (currentMode == &songMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" - Encoder 0 pressed - remove assignment
     int songPosition = songMode.pos[3];                                                     // 1-64
     SMP.songArrangement[songPosition - 1] = 0;                                              // Clear assignment
@@ -5694,8 +5723,9 @@ void checkTouchInputs() {
 
   // touch4: audition current voice (FX path). No grid write except SINGLE+playing
   // (base-pitch note on current beat). SINGLE while stopped uses cursor Y pitch.
+  // Skip in recordMode where touch4 arms/unarms the recording threshold.
   {
-    if (touch4Pressed && !lastTouchState[3]) {
+    if (currentMode != &recordMode && touch4Pressed && !lastTouchState[3]) {
       const int ch = (int)GLOB.currentChannel;
       int auditionRow = basePitchRowForChannel(ch);
       if (currentMode == &singleMode && !isNowPlaying && GLOB.y >= 1 && GLOB.y <= 15) {
@@ -6276,10 +6306,15 @@ void showDoRecord() {
   // Persistent state variables
   static bool thresholdActive = false;
   static bool lastPressed0 = false, lastPressed2 = false;
+  static bool lastRecTouch4 = false, lastRecTouch5 = false;
   static unsigned long recordingStartTime = 0;
   static bool playbackActive = false;
   static unsigned long playbackStartTime = 0;
-  static uint32_t lastModeNameHash = 0;  // Replaced String with hash for memory efficiency
+  static uint32_t lastModeNameHash = 0;
+  static uint32_t lastRecRgb[4] = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
+  static uint32_t lastRecRgbMs = 0;
+  static float peakHoldLevel = 0.0f;
+  static unsigned long peakHoldDecayMs = 0;
 
   // Externs
   extern bool disableThresholdFlag;
@@ -6291,6 +6326,18 @@ void showDoRecord() {
   extern float peakRecValues[];
   extern elapsedMillis mRecsecs;
 
+  unsigned long nowMs = millis();
+  if (nowMs - lastRecRgbMs > 80) {
+    for (int i = 0; i < 4; i++) lastRecRgb[i] = 0xFFFFFFFF;
+  }
+  lastRecRgbMs = nowMs;
+  auto setRecEncoderRGB = [&](uint8_t idx, uint32_t rgb) {
+    if (idx < 4 && lastRecRgb[idx] != rgb) {
+      lastRecRgb[idx] = rgb;
+      Encoder[idx].writeRGBCode(rgb);
+    }
+  };
+
   // === MODE ENTRY INITIALIZATION ===
   uint32_t currentModeNameHash = hashString(currentMode->name);
   if (currentModeNameHash != lastModeNameHash) {
@@ -6299,6 +6346,12 @@ void showDoRecord() {
     thresholdActive = false;
     playbackActive = false;
     forcedLineMonitor = false;
+    peakHoldLevel = 0.0f;
+    lastPressed0 = pressed[0];
+    lastPressed2 = pressed[2];
+    lastRecTouch4 = readDebouncedTouch(3);
+    lastRecTouch5 = readDebouncedTouch(4);
+    for (int i = 0; i < 4; i++) lastRecRgb[i] = 0xFFFFFFFF;
     extern bool sampleIsLoaded, firstcheck;
     extern CachedSample previewCache;
     sampleIsLoaded = false;
@@ -6312,27 +6365,21 @@ void showDoRecord() {
   static bool directPassThroughActive = false;
 
   if (previewIsPlaying && GLOB.y == 1 && !getSpkrEnabled()) {
-    // Enable direct pass-through: input → output with no additional amplification
-    // Only use the set mic/line input gain from codec (already applied via sgtl5000_1)
-    audioInputAmp.gain(1.0f);  // Unity gain, no additional amplification
-    mixer_end.gain(3, 1.0f);   // Full pass-through of input (other sources continue playing)
+    audioInputAmp.gain(1.0f);
+    mixer_end.gain(3, 1.0f);
     directPassThroughActive = true;
   } else if (directPassThroughActive) {
-    // Restore normal routing when conditions no longer met
-    audioInputAmp.gain(1.0f);  // Keep at unity gain
-    mixer_end.gain(3, 0.0f);   // Disable input pass-through
+    audioInputAmp.gain(1.0f);
+    mixer_end.gain(3, 0.0f);
     directPassThroughActive = false;
-    forcedLineMonitor = false;  // Reset line monitor flag
+    forcedLineMonitor = false;
   }
 
   // === INPUT MONITORING WHEN IN RECORD MODE ===
-  // Only apply if direct pass-through is not active
-  // Uses VOL menu input level settings (LVL for line, MIC for mic)
   if (!directPassThroughActive) {
     mixer_end.gain(3, recInputMonitorGain());
     forcedLineMonitor = true;
   } else if (forcedLineMonitor) {
-    // Disable monitoring when direct pass-through becomes active
     mixer_end.gain(3, 0.0f);
     forcedLineMonitor = false;
   }
@@ -6346,25 +6393,44 @@ void showDoRecord() {
   // === READ INPUT LEVEL (always) ===
   static uint16_t inputLevelSamples[8] = { 0 };  // Store as 0-10000 (0-100.00%)
   static int sampleIndex = 0;
-  float currentInputLevel = 0.0f;
+  static float currentInputLevel = 0.0f;
 
   if (peakRec.available()) {
-    inputLevelSamples[sampleIndex] = (uint16_t)(peakRec.read() * 10000.0f);
+    float rawPeak = peakRec.read();
+    inputLevelSamples[sampleIndex] = (uint16_t)(rawPeak * 10000.0f);
     sampleIndex = (sampleIndex + 1) % 8;
     uint32_t sum = 0;
     for (int i = 0; i < 8; i++) sum += inputLevelSamples[i];
     currentInputLevel = sum / 80.0f;  // Divide by 80 = (8 samples × 100 scale)
+
+    // Collect live waveform peak history while recording
+    if (isRecording && mRecsecs > 22 && peakRecIndex < maxRecPeaks) {
+      mRecsecs = 0;
+      peakRecValues[peakRecIndex++] = rawPeak;
+    }
   }
 
-  int triggerThreshold = currentMode->pos[0];
+  if (currentInputLevel >= peakHoldLevel) {
+    peakHoldLevel = currentInputLevel;
+    peakHoldDecayMs = nowMs;
+  } else if (nowMs - peakHoldDecayMs > 45) {
+    peakHoldDecayMs = nowMs;
+    peakHoldLevel = max(0.0f, peakHoldLevel - 2.5f);
+  }
+
+  int triggerThreshold = constrain((int)currentMode->pos[0], 0, 100);
+
+  // Read Touch 4 (arm/unarm threshold) and Touch 5 (start/stop recording)
+  bool touch4Now = readDebouncedTouch(3);
+  bool touch5Now = readDebouncedTouch(4);
+  bool touch4Edge = (touch4Now && !lastRecTouch4);
+  bool touch5Edge = (touch5Now && !lastRecTouch5);
+  lastRecTouch4 = touch4Now;
+  lastRecTouch5 = touch5Now;
 
   // === DETERMINE STATE ===
-  // Update state based on recording and playback flags
   if (isRecording) {
     flushAudioQueueToRAM2();
-    checkEncoders();  // Optional: allow user interaction
-    checkMode(buttons, true);
-
     state = STATE_RECORDING;
   } else if (playbackActive) {
     state = STATE_PLAYBACK;
@@ -6372,152 +6438,284 @@ void showDoRecord() {
     state = STATE_NORMAL;
   }
 
+  // Present a single static "REC" frame on the matrix & encoder LEDs BEFORE starting ADC capture,
+  // matching fastRecordActive's presentRecordingBorder() pattern. While isRecording is true,
+  // FastLED.show() is frozen so 512-LED WS2812B 4MHz data bursts + simultaneous PWM latch transients
+  // on +5V/GND do not couple into the SGTL5000 analog front-end.
+  auto presentStaticRecFrame = [&]() {
+    FastLEDclear();
+    if (thresholdActive) {
+      setRecEncoderRGB(0, 0x00FF00);
+      drawIndicator('L', 'G', 1, true, false);
+    } else {
+      setRecEncoderRGB(0, 0xFFFF00);
+      drawIndicator('L', 'Y', 1, false, false);
+    }
+    setRecEncoderRGB(1, 0x000000);
+    setRecEncoderRGB(2, 0xFF0000);
+    drawIndicator('L', 'R', 3, true, false);
+    setRecEncoderRGB(3, 0x0000FF);
+    drawIndicator('L', 'X', 4, false, false);
+
+    const int touch4X = 9;
+    const int touch5X = ((int)maxX >= 24) ? 24 : 12;
+    CRGB touch4Col = thresholdActive ? CRGB(0, 255, 60) : CRGB(180, 140, 0);
+    light(touch4X, 1, touch4Col);
+    light(touch4X, 2, touch4Col);
+    light(touch5X, 1, CRGB(255, 0, 0));
+    light(touch5X, 2, CRGB(255, 0, 0));
+
+    int thresholdHeight = (int)roundf(mapf((float)triggerThreshold, 0.0f, 100.0f, 0.0f, (float)maxY));
+    for (int y = 1; y <= thresholdHeight && y <= (int)maxY; y++) {
+      CRGB tCol = thresholdActive
+          ? (y == thresholdHeight ? CRGB(120, 255, 140) : CRGB(0, 180, 40))
+          : (y == thresholdHeight ? CRGB(255, 255, 120) : CRGB(160, 130, 0));
+      light(1, y, tCol);
+    }
+
+    drawText("REC", ((int)maxX >= 28) ? 8 : 2, 9, CRGB(255, 0, 0));
+    lastUpdate = 0;
+    extern void FastLEDshow();
+    FastLEDshow();
+  };
+
   // === STATE MACHINE LOGIC ===
   switch (state) {
     case STATE_NORMAL:
       {
-        // Toggle threshold with encoder[0]
-        if (pressed[0] && !lastPressed0) thresholdActive = !thresholdActive;
+        // Arm/unarm threshold via Touch 4 (or Encoder 1 press)
+        if (touch4Edge || (pressed[0] && !lastPressed0)) {
+          thresholdActive = !thresholdActive;
+          if (thresholdActive && triggerThreshold == 0) {
+            triggerThreshold = 25;
+            currentMode->pos[0] = 25;
+            Encoder[0].writeCounter((int32_t)25);
+          }
+        }
         lastPressed0 = pressed[0];
 
-        // Start recording on encoder[1] press or audio trigger
-        bool manualTrigger = pressed[1];
+        // Start recording on Touch 5 rising edge or armed audio threshold trigger
+        bool manualTrigger = touch5Edge;
         bool audioTrigger = (thresholdActive && triggerThreshold > 0 && currentInputLevel > triggerThreshold);
 
         if (manualTrigger || audioTrigger) {
-          // Disable threshold to prevent accidental re-trigger
-          thresholdActive = false;
-          FastLEDclear();  // Clear LEDs before starting recording
+          presentStaticRecFrame();
           startRecordingRAM();
-          recordingStartTime = millis();
+          recordingStartTime = nowMs;
+          state = STATE_RECORDING;
+          lastPressed2 = pressed[2];
+          return;
         }
 
-        // Encoder[2]: Start playback using playSdWav1
+        // Encoder[2] (Green): Start playback of recorded/current sample
         if (pressed[2] && !lastPressed2) {
-
           char path[160];
           buildSamplePath(0, 0, path, sizeof(path));
-
-          if (playSdWav1.isPlaying()) playSdWav1.stop();
-          playSdWav1.play(path);
-
-          previewIsPlaying = true;
-          playbackActive = true;
-          playbackStartTime = millis();
+          if (path[0]) {
+            if (playSdWav1.isPlaying()) playSdWav1.stop();
+            playSdWav1.play(path);
+            previewIsPlaying = true;
+            playbackActive = true;
+            playbackStartTime = nowMs;
+            state = STATE_PLAYBACK;
+          }
         }
         lastPressed2 = pressed[2];
-        // Note: Encoder[3] exit handled by checkMode() via "0001" button pattern
         break;
       }
 
     case STATE_RECORDING:
       {
-        // Allow toggling threshold off during recording (encoder[0] press)
-        if (pressed[0] && !lastPressed0) {
-          thresholdActive = false;  // Can only turn OFF during recording, not back ON
+        // Touch 4 (or Encoder 1 press) disarms auto-stop threshold during recording
+        if (touch4Edge || (pressed[0] && !lastPressed0)) {
+          thresholdActive = false;
         }
         lastPressed0 = pressed[0];
 
-        // Auto-stop on audio trigger (with 1 second debounce)
-        if (millis() - recordingStartTime > 1000) {
-          if (thresholdActive && triggerThreshold > 0 && currentInputLevel < (triggerThreshold * 0.5f)) {
-            stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
-            // Disable threshold to prevent accidental re-trigger from loud stop click
-            thresholdActive = false;
-          }
+        // Stop recording on Touch 5 rising edge
+        if (touch5Edge) {
+          stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
+          thresholdActive = false;
+          state = STATE_NORMAL;
+          lastPressed2 = pressed[2];
+          break;
         }
 
-        // Collect peak data
-        if (mRecsecs > 5 && peakRecIndex < maxRecPeaks && peakRec.available()) {
-          mRecsecs = 0;
-          peakRecValues[peakRecIndex++] = peakRec.read();
+        // Auto-stop on audio threshold drop (after 1s minimum recording time)
+        if (nowMs - recordingStartTime > 1000) {
+          if (thresholdActive && triggerThreshold > 0 && currentInputLevel < (triggerThreshold * 0.5f)) {
+            stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
+            thresholdActive = false;
+            state = STATE_NORMAL;
+          }
         }
-        // Note: isRecording flag is checked externally, encoder[2] stop handled in checkMode()
+        lastPressed2 = pressed[2];
         break;
       }
 
     case STATE_PLAYBACK:
       {
+        // Touch 5 starts a new recording immediately even during playback
+        if (touch5Edge) {
+          playSdWav1.stop();
+          previewIsPlaying = false;
+          playbackActive = false;
+          thresholdActive = false;
+          presentStaticRecFrame();
+          startRecordingRAM();
+          recordingStartTime = nowMs;
+          state = STATE_RECORDING;
+          lastPressed2 = pressed[2];
+          return;
+        }
+
+        // Touch 4 arms threshold and returns to normal standby
+        if (touch4Edge) {
+          playSdWav1.stop();
+          previewIsPlaying = false;
+          playbackActive = false;
+          thresholdActive = !thresholdActive;
+          state = STATE_NORMAL;
+          break;
+        }
+
         // Encoder[2]: Stop playback
         if (pressed[2] && !lastPressed2) {
           playSdWav1.stop();
           previewIsPlaying = false;
           playbackActive = false;
+          state = STATE_NORMAL;
         }
         lastPressed2 = pressed[2];
-        // Note: Encoder[3] exit handled by checkMode() via "0001" button pattern
 
         // Auto-return to normal when playback finishes (check after 300ms grace period)
-        if (millis() - playbackStartTime > 300) {
+        if (nowMs - playbackStartTime > 300) {
           if (!playSdWav1.isPlaying()) {
             previewIsPlaying = false;
             playbackActive = false;
+            state = STATE_NORMAL;
           }
         }
         break;
       }
   }
 
-  // === DRAW UI (common for all states) ===
+  // Freeze framebuffer updates while capturing audio so FastLED.show() does not inject
+  // WS2812B 5V/GND PWM reset transients into the SGTL5000 ADC.
+  if (isRecording) return;
+
+  // === DRAW UI ===
   FastLEDclear();
 
-  // Encoder colors and indicators
-  Encoder[0].writeRGBCode(0xFFFF00);  // Yellow
-  drawIndicator('L', 'Y', 1);
-
-  if (state == STATE_RECORDING) {
-    Encoder[1].writeRGBCode(0x000000);  // Black during recording
+  // 1) Bottom encoder indicators & cached encoder ring LEDs (no per-frame I2C spam)
+  if (thresholdActive) {
+    setRecEncoderRGB(0, 0x00FF00);
+    drawIndicator('L', 'G', 1, true, false);
   } else {
-    Encoder[1].writeRGBCode(0xFF0000);  // Red
-    drawIndicator('L', 'R', 2);
+    setRecEncoderRGB(0, 0xFFFF00);
+    drawIndicator('L', 'Y', 1, false, false);
   }
 
-  Encoder[2].writeRGBCode(0x00FF00);  // Green
-  drawIndicator('L', 'G', 3);
+  setRecEncoderRGB(1, 0x000000);
 
-  Encoder[3].writeRGBCode(0x0000FF);  // Blue
-  drawIndicator('L', 'X', 4);
-
-  // Draw threshold and input level bars
-  int thresholdHeight = mapf(triggerThreshold, 0, 100, 0, maxY);
-  int inputHeight = mapf(currentInputLevel, 0, 100, 0, maxY);
-
-  // x=1: Threshold bar with live signal overlay
-  for (int y = 1; y <= thresholdHeight && y <= maxY; y++) {
-    CRGB color = thresholdActive ? CRGB(0, 255, 0) : CRGB(255, 255, 0);
-    light(1, y, color);
-  }
-  for (int y = 1; y <= inputHeight && y <= maxY; y++) {
-    if (y <= thresholdHeight && thresholdActive) {
-      light(1, y, CRGB(100, 255, 100));
-    } else if (y <= thresholdHeight) {
-      light(1, y, CRGB(255, 200, 0));
-    } else {
-      light(1, y, CRGB(255, 0, 0));
-    }
-  }
-
-  // x=2: Live input level bar
-  for (int y = 1; y <= inputHeight && y <= maxY; y++) {
-    CRGB barColor = CRGB(255, 0, 0);
-    light(2, y, barColor);
-  }
-
-  // State-specific text display (position 3,5 to match main recording timer)
   if (state == STATE_RECORDING) {
-    // Recording timer at (3, 5) - matches main loop recording display
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%4.1f", recTime / 1000.0f);  // Right-aligned, 1 decimal
-    drawText(buf, 3, 5, UI_ORANGE);
+    setRecEncoderRGB(2, 0xFF0000);
+    drawIndicator('L', 'R', 3, true, false);
   } else if (state == STATE_PLAYBACK) {
-    // Playback timer at (3, 5) - EXACTLY same position as recording timer
-    char buf[8];
-    unsigned long playbackTime = millis() - playbackStartTime;
-    snprintf(buf, sizeof(buf), "%4.1f", playbackTime / 1000.0f);  // Right-aligned, 1 decimal
-    drawText(buf, 3, 5, CRGB(0, 255, 0));                         // Green playback timer
+    setRecEncoderRGB(2, 0x00FF00);
+    drawIndicator('L', 'G', 3, true, false);
   } else {
-    // STATE_NORMAL: Only draw RDY when NOT recording and NOT playing
-    drawText("RDY", 5, 5, CRGB(255, 100, 0));  // Orange ready text
+    setRecEncoderRGB(2, 0x00FF00);
+    drawIndicator('L', 'G', 3, false, false);
+  }
+
+  setRecEncoderRGB(3, 0x0000FF);
+  drawIndicator('L', 'X', 4, false, false);
+
+  // 2) Touch 4 & Touch 5 indicators: 2 vertical dots at x=9 (ARM color) and x=24 (RED), y=1..2
+  bool pulseFast = ((nowMs / 180) % 2) == 0;
+  const int touch4X = 9;
+  const int touch5X = ((int)maxX >= 24) ? 24 : 12;
+  CRGB touch4Col = thresholdActive
+      ? (pulseFast ? CRGB(0, 255, 60) : CRGB(0, 140, 30))
+      : CRGB(180, 140, 0);
+  CRGB touch5Col = (state == STATE_RECORDING)
+      ? (pulseFast ? CRGB(255, 0, 0) : CRGB(100, 0, 0))
+      : CRGB(255, 0, 0);
+  light(touch4X, 1, touch4Col);
+  light(touch4X, 2, touch4Col);
+  light(touch5X, 1, touch5Col);
+  light(touch5X, 2, touch5Col);
+
+  // 3) Left VU & Threshold Meters (x=1: Threshold bar, x=2: Live Input VU + Peak Hold)
+  int thresholdHeight = (int)roundf(mapf((float)triggerThreshold, 0.0f, 100.0f, 0.0f, (float)maxY));
+  int inputHeight     = (int)roundf(mapf(currentInputLevel, 0.0f, 100.0f, 0.0f, (float)maxY));
+  int peakHoldY       = (int)roundf(mapf(peakHoldLevel, 0.0f, 100.0f, 0.0f, (float)maxY));
+
+  for (int y = 1; y <= thresholdHeight && y <= (int)maxY; y++) {
+    CRGB tCol = thresholdActive
+        ? (y == thresholdHeight ? CRGB(120, 255, 140) : CRGB(0, 180, 40))
+        : (y == thresholdHeight ? CRGB(255, 255, 120) : CRGB(160, 130, 0));
+    light(1, y, tCol);
+  }
+
+  for (int y = 1; y <= inputHeight && y <= (int)maxY; y++) {
+    CRGB vuCol;
+    if (y >= 14) {
+      vuCol = CRGB(255, 0, 30);       // Clip / hot zone
+    } else if (y >= 10) {
+      vuCol = CRGB(255, 140, 0);      // Warm mid-high
+    } else {
+      vuCol = CRGB(0, 220, 90);       // Clean signal
+    }
+    light(2, y, vuCol);
+  }
+  if (peakHoldY >= 1 && peakHoldY <= (int)maxY) {
+    light(2, peakHoldY, (peakHoldY >= 14) ? CRGB(255, 60, 60) : CRGB(200, 220, 255));
+  }
+
+  // 4) Foreground Status & Timer Display (no waveform spikes, no input source text)
+  const bool wide = ((int)maxX >= 28);
+  if (state == STATE_RECORDING) {
+    int secs = (int)(recTime / 1000);
+    int tenths = (int)((recTime % 1000) / 100);
+    char buf[12];
+    if (wide) {
+      drawText("REC", 5, 9, CRGB(255, 0, 0));
+      snprintf(buf, sizeof(buf), "%d.%d", secs, tenths);
+      drawText(buf, 18, 9, UI_ORANGE);
+    } else {
+      snprintf(buf, sizeof(buf), "%d.%d", secs, tenths);
+      drawText(buf, 4, 9, CRGB(255, 0, 0));
+    }
+  } else if (state == STATE_PLAYBACK) {
+    unsigned long playbackTime = nowMs - playbackStartTime;
+    int secs = (int)(playbackTime / 1000);
+    int tenths = (int)((playbackTime % 1000) / 100);
+    char buf[12];
+    if (wide) {
+      drawText("PLAY", 5, 9, CRGB(0, 255, 80));
+      snprintf(buf, sizeof(buf), "%d.%d", secs, tenths);
+      drawText(buf, 21, 9, UI_ORANGE);
+    } else {
+      snprintf(buf, sizeof(buf), "%d.%d", secs, tenths);
+      drawText(buf, 4, 9, CRGB(0, 255, 80));
+    }
+  } else {
+    if (thresholdActive) {
+      CRGB armCol = pulseFast ? CRGB(0, 255, 60) : CRGB(0, 170, 40);
+      drawText("ARM", 5, 9, armCol);
+      if (wide) {
+        char thrBuf[8];
+        snprintf(thrBuf, sizeof(thrBuf), "%d", triggerThreshold);
+        drawText(thrBuf, 18, 9, armCol);
+      }
+    } else {
+      drawText("RDY", 5, 9, UI_ORANGE);
+      if (wide && peakRecIndex > 0) {
+        drawText("OK", 19, 9, CRGB(0, 220, 80));
+      }
+    }
   }
 }
 
@@ -6799,6 +6997,26 @@ void loop() {
       } else checkFastRec();
     }
     flushAudioQueueToRAM();
+    yield();
+    return;
+  }
+
+  // Same clean-capture discipline for SMP RECORD_MODE (isRecording):
+  // Drain queue1 continuously, freeze FastLED.show() & strip updates, skip I2C fader
+  // polling, and throttle touch/encoder polling to 8ms so fastTouchRead() (noInterrupts())
+  // and I2C traffic on SGTL5000 CTRL_CLK/CTRL_DATA (pins 18/19) don't inject noise.
+  if (isRecording && currentMode == &recordMode) {
+    flushAudioQueueToRAM2();
+    static elapsedMillis smpRecPoll;
+    if (smpRecPoll >= 8) {
+      smpRecPoll = 0;
+      checkEncoders();
+      checkButtons();
+      if (currentMode == &recordMode) {
+        showDoRecord();
+      }
+    }
+    flushAudioQueueToRAM2();
     yield();
     return;
   }
@@ -7472,97 +7690,45 @@ FLASHMEM void shiftNotes() {
     unsigned int pageStartX = ((GLOB.edit - 1) * maxX) + 1;
     unsigned int pageEndX = GLOB.edit * maxX;
 
-    // pageTmp is a file-scope EXTMEM array — clear it before use.
-    memset(pageTmp, 0, sizeof(pageTmp));
-
-    // Step 1: Copy current page notes to pageTmp
-    for (unsigned int nx = pageStartX; nx <= pageEndX; nx++) {
+    // Step 1: Clear the tmp array
+    for (unsigned int nx = 1; nx <= patternLength; nx++) {
       for (unsigned int ny = 1; ny <= maxY; ny++) {
-        pageTmp[nx - pageStartX + 1][ny] = note[nx][ny];
+        tmp[nx][ny].channel = 0;
+        tmp[nx][ny].velocity = defaultVelocity;
+        tmp[nx][ny].probability = 100;
+        tmp[nx][ny].condition = 1;
+        tmp[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
     }
 
-    // Step 2: Shift notes of the current channel on the current page
-    // Process in the correct order to avoid overwriting unprocessed notes
-    if (shiftDirectionY1 > 0) {
-      // Shifting down: process from bottom to top
-      for (unsigned int nx = 1; nx <= maxX; nx++) {
-        for (int ny = 15; ny >= 1; ny--) {
-          if (pageTmp[nx][ny].channel == GLOB.currentChannel) {
-            int newposY = ny + shiftDirectionY1;
-            // Handle wrapping around the edges
+    // Step 2: Shift notes of the current channel on the current page into tmp,
+    // and keep current-channel notes on other pages unchanged in tmp.
+    for (unsigned int nx = 1; nx <= patternLength; nx++) {
+      const bool onCurrentPage = (nx >= pageStartX && nx <= pageEndX);
+      for (unsigned int ny = 1; ny <= 15; ny++) {
+        if (note[nx][ny].channel == GLOB.currentChannel) {
+          int newposY = ny;
+          uint8_t newMidiPitch = note[nx][ny].midiPitch;
+          if (onCurrentPage) {
+            newposY = (int)ny + shiftDirectionY1;
             if (newposY < 1) {
               newposY = 15;
             } else if (newposY > 15) {
               newposY = 1;
             }
-            // Store the note data before clearing
-            int originalVelocity = pageTmp[nx][ny].velocity;
-            uint8_t originalProbability = pageTmp[nx][ny].probability;
-            uint8_t originalCondition = pageTmp[nx][ny].condition;
-            uint8_t originalMidiPitch = pageTmp[nx][ny].midiPitch;
-            // Clear the old position
-            pageTmp[nx][ny].channel = 0;
-            pageTmp[nx][ny].velocity = defaultVelocity;
-            pageTmp[nx][ny].probability = 100;  // Default probability
-            pageTmp[nx][ny].condition = 1;      // Default condition
-            pageTmp[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
-            // Set the new position
-            pageTmp[nx][newposY].channel = GLOB.currentChannel;
-            pageTmp[nx][newposY].velocity = originalVelocity;
-            pageTmp[nx][newposY].probability = originalProbability;
-            pageTmp[nx][newposY].condition = originalCondition;
-            pageTmp[nx][newposY].midiPitch =
-                originalMidiPitch <= 127
-                  ? (uint8_t)constrain((int)originalMidiPitch + shiftDirectionY1, 0, 127)
-                  : NOTE_MIDI_PITCH_NONE;
-          }
-        }
-      }
-    } else {
-      // Shifting up: process from top to bottom
-      for (unsigned int nx = 1; nx <= maxX; nx++) {
-        for (unsigned int ny = 1; ny <= 15; ny++) {
-          if (pageTmp[nx][ny].channel == GLOB.currentChannel) {
-            int newposY = ny + shiftDirectionY1;
-            // Handle wrapping around the edges
-            if (newposY < 1) {
-              newposY = 15;
-            } else if (newposY > 15) {
-              newposY = 1;
+            if (newMidiPitch <= 127) {
+              newMidiPitch = (uint8_t)constrain((int)newMidiPitch + shiftDirectionY1, 0, 127);
             }
-            // Store the note data before clearing
-            int originalVelocity = pageTmp[nx][ny].velocity;
-            uint8_t originalProbability = pageTmp[nx][ny].probability;
-            uint8_t originalCondition = pageTmp[nx][ny].condition;
-            uint8_t originalMidiPitch = pageTmp[nx][ny].midiPitch;
-            // Clear the old position
-            pageTmp[nx][ny].channel = 0;
-            pageTmp[nx][ny].velocity = defaultVelocity;
-            pageTmp[nx][ny].probability = 100;  // Default probability
-            pageTmp[nx][ny].condition = 1;      // Default condition
-            pageTmp[nx][ny].midiPitch = NOTE_MIDI_PITCH_NONE;
-            // Set the new position
-            pageTmp[nx][newposY].channel = GLOB.currentChannel;
-            pageTmp[nx][newposY].velocity = originalVelocity;
-            pageTmp[nx][newposY].probability = originalProbability;
-            pageTmp[nx][newposY].condition = originalCondition;
-            pageTmp[nx][newposY].midiPitch =
-                originalMidiPitch <= 127
-                  ? (uint8_t)constrain((int)originalMidiPitch + shiftDirectionY1, 0, 127)
-                  : NOTE_MIDI_PITCH_NONE;
           }
+          tmp[nx][newposY].channel = GLOB.currentChannel;
+          tmp[nx][newposY].velocity = note[nx][ny].velocity;
+          tmp[nx][newposY].probability = note[nx][ny].probability;
+          tmp[nx][newposY].condition = note[nx][ny].condition;
+          tmp[nx][newposY].midiPitch = newMidiPitch;
         }
       }
     }
-
-    // Step 3: Apply the shifted notes back to the note array for the current page only
-    for (unsigned int nx = pageStartX; nx <= pageEndX; nx++) {
-      for (unsigned int ny = 1; ny <= maxY; ny++) {
-        note[nx][ny] = pageTmp[nx - pageStartX + 1][ny];
-      }
-    }
-    // Don't set shifted = true to avoid triggering the global shift logic
+    shifted = true;
   }
 
   if (shifted) {

@@ -977,25 +977,29 @@ float recInputMonitorGain() {
   return mapf((float)lineInLevel, 0.0f, 15.0f, 0.0f, maxPlaybackGain);
 }
 
+static int recRamDropRemaining = 0;
+
 void startRecordingRAM() {
   if (isRecording) return;
 
   if (playSdWav1.isPlaying()) playSdWav1.stop();
-  Encoder[0].writeRGBCode(0x000000);
-  Encoder[1].writeRGBCode(0xFF0000);
-  Encoder[2].writeRGBCode(0x000000);
-  Encoder[3].writeRGBCode(0x000000);
+  // Drain any stale blocks from queue1 before starting fresh capture
+  queue1.end();
+  while (queue1.available()) {
+    queue1.readBuffer();
+    queue1.freeBuffer();
+  }
   recTime = 0;
   recWriteIndex = 0;
+  // Drop initial ~25ms (5 blocks) while the one-shot WS2812Serial DMA transfer (~15.4ms)
+  // finishes and the +5V/+3.3VA rails settle, matching startFastRecord().
+  recRamDropRemaining = FAST_DROP_BLOCKS;
   
   // Reset peak recording index for fresh waveform display
   extern int peakRecIndex;
   peakRecIndex = 0;
   
   queue1.begin();  // start filling 128‑sample blocks
-  // REC = record
-  showIcons(ICON_RECORD, UI_DIM_RED);
-  FastLEDshow();
   isRecording = true;
   applySpkrHardware();
 
@@ -1007,28 +1011,45 @@ void flushAudioQueueToRAM2() {
   // each AudioRecordQueue block is 128 samples
   while (queue1.available() && recWriteIndex + 128 <= BUFFER_SAMPLES) {
     auto block = (int16_t *)queue1.readBuffer();
+    if (recRamDropRemaining > 0) {
+      recRamDropRemaining--;
+      queue1.freeBuffer();
+      continue;
+    }
     memcpy(recBuffer + recWriteIndex, block, 128 * sizeof(int16_t));
     recWriteIndex += 128;
     queue1.freeBuffer();
   }
-  // if we ever hit the end of the buffer, stop automatically:
+  // if we ever hit the end of the buffer, stop automatically and save:
   if (recWriteIndex >= BUFFER_SAMPLES) {
-    //Serial.println("⚠️ Buffer full");
-    queue1.end();
-    isRecording = false;
-    applySpkrHardware();
+    stopRecordingRAM(0, 0);
   }
 }
 
 void stopRecordingRAM(int fnr, int snr) {
   if (!isRecording) return;
-  flushAudioQueueToRAM();
+  flushAudioQueueToRAM2();
   queue1.end();
+  while (queue1.available()) {
+    if (recRamDropRemaining > 0) {
+      recRamDropRemaining--;
+      queue1.readBuffer();
+    } else if (recWriteIndex + 128 <= BUFFER_SAMPLES) {
+      auto block = (int16_t *)queue1.readBuffer();
+      memcpy(recBuffer + recWriteIndex, block, 128 * sizeof(int16_t));
+      recWriteIndex += 128;
+    } else {
+      queue1.readBuffer();
+    }
+    queue1.freeBuffer();
+  }
   isRecording = false;
   applySpkrHardware();
 
   // Disable audio input monitoring
   mixer_end.gain(3, 0.0);
+
+  if (recWriteIndex < 128) return;
 
   // open WAV on SD (next free rec_XX.wav in the dedicated samples/recs folder)
   (void)fnr;
@@ -1045,30 +1066,50 @@ void stopRecordingRAM(int fnr, int snr) {
   if (SD.exists(path)) SD.remove(path);
   File f = SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
   if (!f) { return; }
-  // write 44‑byte WAV header for 16‑bit/mono/22 050 Hz
+  // write 44‑byte WAV header for 16‑bit/mono/44 100 Hz
   writeWavHeader(f, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
   // write all your samples in one chunk
   f.write((uint8_t *)recBuffer, recWriteIndex * sizeof(int16_t));
   finalizeWavHeader(f, recWriteIndex * sizeof(int16_t));
 
   f.close();
-  //Serial.print("💾 Saved ");
-  //Serial.println(path);
 
   sampleBrowserInvalidate();
   snprintf(SMP.samplePathRel[ch], 128, "recs/%s", tmpName);
+  extern void invalidateShowWaveBrowserSync();
+  invalidateShowWaveBrowserSync();
   
-  // Reload the sample metadata after recording
+  // Reload the sample metadata after recording and copy directly into the voice's RAM slot
   extern bool sampleIsLoaded;
   extern bool firstcheck;
   extern CachedSample previewCache;
+  extern void beginChannelSampleReload(unsigned int ch);
+  extern void endChannelSampleReload(unsigned int ch);
+  extern float rateFactor;
   
   sampleIsLoaded = false;  // Force reload of new recording
   firstcheck = true;       // Reset check flag
   previewCache.valid = false;  // Invalidate cache so new recording is loaded
-  
-  // Don't auto-play - user will press encoder[2] to play if desired
-  // playSdWav1.play(path);
+
+  // Also load the newly recorded buffer directly into sampled[ch] so the voice plays it immediately
+  beginChannelSampleReload((unsigned int)ch);
+  int16_t *targetBuffer = (int16_t *)sampled[ch];
+  int bufferSamples = (int)(sizeof(sampled[ch]) / 2);
+  int samplesToCopy = (int)min((size_t)bufferSamples, recWriteIndex);
+  if (samplesToCopy > 0) {
+    memcpy(targetBuffer, recBuffer, (size_t)samplesToCopy * sizeof(int16_t));
+    const int END_PAD_SAMPLES = 1024;
+    int pad = min(END_PAD_SAMPLES, bufferSamples - samplesToCopy);
+    if (pad > 0) {
+      memset(targetBuffer + samplesToCopy, 0, (size_t)pad * sizeof(int16_t));
+    }
+    int playLen = samplesToCopy + pad;
+    loadedSampleRate[ch] = 3;
+    loadedSampleLen[ch] = playLen;
+    samplerAddSample(ch, 36, targetBuffer, playLen, rateFactor);
+    channelDirection[ch] = 1;
+  }
+  endChannelSampleReload((unsigned int)ch);
 }
 
 // --------------------
@@ -1540,6 +1581,8 @@ FLASHMEM static void drawScreensaverMatrix() {
 }
 
 FLASHMEM void FastLEDshow() {
+  // Never push WS2812B frames while actively capturing audio in RAM (same as fastRecordActive).
+  if (isRecording || fastRecordActive) return;
   if (millis() - lastUpdate > RefreshTime) {
     lastUpdate = millis();
     extern bool sdSerialServerClientConnected();
