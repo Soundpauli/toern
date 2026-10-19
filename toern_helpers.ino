@@ -881,15 +881,28 @@ FLASHMEM void loadSMPSettings() {
     setParams(SUSTAIN, ch);
     setParams(RELEASE, ch);
 
-    // Load Synths - apply synth settings (only for channel 11)
+    // Load Synths - apply synth settings
     if (ch == 11) {
-      // FORM is an internal preset identity rather than an exposed user control.
-      // Refresh it for older projects, but preserve their saved filter, pitch,
-      // and ADSR controls.
+      extern void applySynthInstrumentPreset(int channel, int instrumentIdx);
       extern void applySynthInstrumentFormDefault(int channel, int instrumentIdx);
-      applySynthInstrumentFormDefault(
-          11, (int)SMP.synth_settings[11][INSTRUMENT]);
+      // Migrate stale generic startup state (INST=0 with clobbered D=32/S=32/R=16 or CUT=16/RES=0/FLT=0)
+      // to the new DXBS (12) default preset.
+      if (SMP.synth_settings[11][INSTRUMENT] > 12 ||
+          (SMP.synth_settings[11][INSTRUMENT] == 0 &&
+           SMP.param_settings[11][DECAY] == 32 &&
+           SMP.param_settings[11][SUSTAIN] == 32)) {
+        applySynthInstrumentPreset(11, 12);
+      } else {
+        // FORM is an internal preset identity rather than an exposed user control.
+        // Refresh it for older projects, but preserve their saved filter, pitch,
+        // and ADSR controls.
+        applySynthInstrumentFormDefault(
+            11, (int)SMP.synth_settings[11][INSTRUMENT]);
+      }
       updateSynthVoice(11);
+    } else if (ch == 13 || ch == 14) {
+      extern void applyMonoSynthCrf(int ch);
+      applyMonoSynthCrf(ch);
     }
   }
 
@@ -4120,21 +4133,21 @@ FLASHMEM void startNew() {
     int ch = channels[i];
     
     // Reset filter data (no hardware calls)
-    SMP.filter_settings[ch][HCUT] = 32;
+    SMP.filter_settings[ch][HCUT] = (ch == 14) ? 14 : 32;
     SMP.filter_settings[ch][LOWCUT] = 0;
     SMP.filter_settings[ch][REVERB] = 0;
     SMP.filter_settings[ch][BITCRUSHER] = 0;
-    SMP.filter_settings[ch][RES] = 0;
+    SMP.filter_settings[ch][RES] = (ch == 14) ? 5 : 0;
     SMP.filter_settings[ch][DETUNE] = 16;
     SMP.filter_settings[ch][OCTAVE] = (ch >= 1 && ch <= 8) ? 24 : 16;
     SMP.filter_settings[ch][EFX] = 0;  // Sample mode
     
     // Reset parameter data (no hardware calls)
-    // Default ADSR: delay=0, A=32, D=32, S=32, R=16 on synths 11/13/14 else R=0
+    // Default ADSR: delay=0, A=32, D=32, S=32, R=16 on synths 11/13 (ch14 303: D=10, S=0, R=6)
     SMP.param_settings[ch][DELAY] = 0;
     SMP.param_settings[ch][ATTACK] = 32;
-    SMP.param_settings[ch][DECAY] = 32;
-    SMP.param_settings[ch][SUSTAIN] = 32;
+    SMP.param_settings[ch][DECAY] = (ch == 14) ? 20 : 32;
+    SMP.param_settings[ch][SUSTAIN] = (ch == 14) ? 20 : 32;
     SMP.param_settings[ch][RELEASE] = (ch == 11 || ch == 13 || ch == 14) ? 16 : 0;
 
     if (ch >= 1 && ch <= 8) {
@@ -4142,11 +4155,18 @@ FLASHMEM void startNew() {
     }
     
     // Reset synth data (only for channels 11, 13-14)
-    if (ch == 11 || ch == 13 || ch == 14) {
-      SMP.synth_settings[ch][CUTOFF] = (ch == 13 || ch == 14) ? 32 : 16;
-      SMP.synth_settings[ch][RESONANCE] = 0;
-      SMP.synth_settings[ch][FILTER] = 0;
-      SMP.synth_settings[ch][CENT] = (ch == 13) ? 0 : ((ch == 14) ? 8 : 16);
+    if (ch == 11) {
+      extern void applySynthInstrumentPreset(int channel, int instrumentIdx);
+      applySynthInstrumentPreset(11, 12);  // Default ch11 to DXBS (12)
+      SMP.synth_settings[11][LFO_RATE] = 0;
+      SMP.synth_settings[11][LFO_DEPTH] = 0;
+      SMP.synth_settings[11][LFO_PHASE] = 0;
+      SMP.synth_settings[11][ARP_STEP] = 16;
+    } else if (ch == 13 || ch == 14) {
+      SMP.synth_settings[ch][CUTOFF] = (ch == 13) ? 32 : 14;
+      SMP.synth_settings[ch][RESONANCE] = (ch == 14) ? 5 : 0;
+      SMP.synth_settings[ch][FILTER] = (ch == 14) ? 8 : 0;
+      SMP.synth_settings[ch][CENT] = (ch == 13) ? 0 : 8;
       SMP.synth_settings[ch][SEMI] = 16;
       SMP.synth_settings[ch][INSTRUMENT] = 0;
       SMP.synth_settings[ch][FORM] = 0;

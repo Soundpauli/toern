@@ -3,6 +3,7 @@ extern uint16_t attackAmp[2][3];
 extern uint16_t decayAmp[2][3];
 extern float    sustainAmp[2][3];
 extern uint16_t releaseAmp[2][3];
+extern uint16_t releaseFilter[2][3];
 extern void     updateVals(int ch);
 
 // Refactored: setParams combines processParameterAdjustment and updateParameterValue
@@ -50,7 +51,12 @@ void setParams(ParameterType paramType, int index) {
     case RELEASE:
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[RELEASE]);
       if (index == 11) {
-        for (int v = 0; v < 3; v++) releaseAmp[0][v] = (uint16_t)mappedValue;
+        uint16_t relMs = (uint16_t)mappedValue;
+        uint16_t fltRelMs = relMs < 180 ? 180 : relMs;
+        for (int v = 0; v < 3; v++) {
+          releaseAmp[0][v] = relMs;
+          releaseFilter[0][v] = fltRelMs;
+        }
         updateVals(0);
       } else {
         envelopes[index]->release(mappedValue);
@@ -81,44 +87,115 @@ void handleWaveformChange(int index, unsigned int waveformType) {
   }
 }
 
+#define DEFAULT_CH11_INSTRUMENT 12  // 12 = DXBS (DX7 FM E-Bass)
+
+static const uint8_t kCh11Control1Default[13] = {
+  8, 20, 12, 18, 5, 24, 20, 22, 26, 9,
+  14, 20, 14,   // 303, DXEP, DXBS — open, present CUT default
+};
+static const uint8_t kCh11Control2Default[13] = {
+  5, 4, 2, 10, 24, 1, 22, 14, 6, 10,
+  12, 6, 10,    // musical RES defaults (maxResonance is capped < 0.88 so 0..32 never self-oscillates)
+};
+static const uint8_t kCh11Control3Default[13] = {
+  12, 8, 2, 3, 20, 2, 2, 14, 4, 18,
+  12, 10, 12,   // balanced FLT envelope sweep (maxFilterAmount is capped at 2.2..3.2 octaves)
+};
+static const uint8_t kCh11AttackDefault[13] = {
+  32, 32, 32, 8, 26, 32, 28, 32, 32, 30,
+  32, 32, 32,
+};
+static const uint8_t kCh11DecayDefault[13] = {
+  6, 14, 1, 32, 32, 2, 0, 5, 0, 28,
+  18, 28, 16,   // 303=560ms, DXEP=875ms, DXBS=500ms
+};
+static const uint8_t kCh11SustainDefault[13] = {
+  0, 2, 28, 20, 26, 28, 31, 0, 31, 26,
+  18, 20, 16,   // 303=56%, DXEP=62.5% Rhodes body, DXBS=50% solid bass body
+};
+static const uint8_t kCh11ReleaseDefault[13] = {
+  2, 6, 2, 24, 20, 3, 10, 5, 1, 10,
+  12, 16, 12,   // 303=375ms, DXEP=500ms damper ring, DXBS=375ms natural bass release
+};
+static const uint8_t kCh11CentSliderDefault[13] = {
+  5,   // 0 BASS   — octave 2
+  14,  // 1 KEYS   — octave 4
+  14,  // 2 CHIPTUNE
+  14,  // 3 PAD
+  14,  // 4 WOW
+  18,  // 5 ORGAN  — octave 5
+  18,  // 6 FLUTE  — octave 5
+  14,  // 7 LEAD
+  18,  // 8 ARP    — octave 5
+  14,  // 9 BRASS
+  5,   // 10 303   — octave 2
+  14,  // 11 DXEP  — octave 4
+  5,   // 12 DXBS  — octave 2
+};
+static const uint8_t kCh11FormDefault[13] = {
+  0, 8, 4, 16, 12, 16, 12, 8, 4, 0,
+  0, 12, 4,
+};
+static const uint8_t kCh11WaveDefault[13] = {
+  8, 4, 4, 0, 12, 0, 12, 4, 4, 8,
+  8, 12, 4,
+};
+
 // Defaults used by filter-page and full-voice resets.
 static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
+  int ch11Inst = constrain((int)SMP.synth_settings[11][INSTRUMENT], 0, 12);
   switch (arr) {
     case ARR_FILTER:
       switch (idx) {
-        case HCUT: return 32;
+        case HCUT: return (ch == 14) ? 14 : 32;
         case LOWCUT: return 0;
         case REVERB: return 0;
         case BITCRUSHER: return 0;
         case DETUNE: return 16;
         case OCTAVE: return (ch >= 1 && ch <= 8) ? 24 : 16;
-        case RES: return 0;
+        case RES: return (ch == 14) ? 5 : 0;
         case EFX: return 0;
-        case FILTER_WAVEFORM: return 8;
+        case FILTER_WAVEFORM:
+          return (ch == 11) ? kCh11WaveDefault[ch11Inst] : 8;
         default: return 0;
       }
     case ARR_PARAM:
-      // Default ADSR: delay=0, A=32, D=32, S=32, R=16 on synths 11/13/14 else R=0
+      // Default ADSR: ch11 uses active instrument preset; ch14 303 uses D=20, S=20, R=16; others A=32, D=32, S=32
       switch (idx) {
         case DELAY: return 0;
-        case ATTACK: return 32;
-        case DECAY: return 32;
-        case SUSTAIN: return 32;
-        case RELEASE: return (ch == 11 || ch == 13 || ch == 14) ? 16 : 0;
+        case ATTACK:
+          return (ch == 11) ? kCh11AttackDefault[ch11Inst] : 32;
+        case DECAY:
+          if (ch == 11) return kCh11DecayDefault[ch11Inst];
+          return (ch == 14) ? 20 : 32;
+        case SUSTAIN:
+          if (ch == 11) return kCh11SustainDefault[ch11Inst];
+          return (ch == 14) ? 20 : 32;
+        case RELEASE:
+          if (ch == 11) return kCh11ReleaseDefault[ch11Inst];
+          return (ch == 13 || ch == 14) ? 16 : 0;
         default: return 0;
       }
     case ARR_SYNTH:
       switch (idx) {
-        case CUTOFF: return (ch == 13 || ch == 14) ? 32 : 16;
-        case RESONANCE: return 0;
-        case FILTER: return 0;
+        case CUTOFF:
+          if (ch == 11) return kCh11Control1Default[ch11Inst];
+          return (ch == 13) ? 32 : ((ch == 14) ? 14 : 16);
+        case RESONANCE:
+          if (ch == 11) return kCh11Control2Default[ch11Inst];
+          return (ch == 14) ? 5 : 0;
+        case FILTER:
+          if (ch == 11) return kCh11Control3Default[ch11Inst];
+          return (ch == 14) ? 8 : 0;
         case CENT:
+          if (ch == 11) return kCh11CentSliderDefault[ch11Inst];
           if (ch == 13) return 0;
           if (ch == 14) return 8;
           return 16;
         case SEMI: return 16;
-        case INSTRUMENT: return 0;
-        case FORM: return 0;
+        case INSTRUMENT: return DEFAULT_CH11_INSTRUMENT;
+        case FORM:
+          return (ch == 11) ? kCh11FormDefault[ch11Inst] : 0;
         case LFO_RATE: return 0;
         case LFO_DEPTH: return 0;
         case LFO_PHASE: return 0;
@@ -238,7 +315,8 @@ void setAllFilterPagesDefaultValues(int ch) {
     setSampleTimeStretch(ch, 11);
   }
   if (ch == 11) {
-    applySynthInstrumentPreset(11, 0);
+    SMP.synth_settings[11][INSTRUMENT] = DEFAULT_CH11_INSTRUMENT;
+    applySynthInstrumentPreset(11, DEFAULT_CH11_INSTRUMENT);
   }
   if (ch == 11 || ch == 13 || ch == 14) {
     SMP.synth_settings[ch][LFO_RATE] = 0;
@@ -249,7 +327,7 @@ void setAllFilterPagesDefaultValues(int ch) {
     midiArpResetVoice(ch);
   }
 
-  // Always end on unified ADSR (INST preset must not leave stale A/D/S/R).
+  // Always end on default ADSR (for ch11 this matches the active instrument preset).
   applyDefaultAdsrSettings(ch);
 
   if (ch == 11) updateSynthVoice(11);
@@ -263,21 +341,11 @@ void setAllFilterPagesDefaultValues(int ch) {
 }
 
 static uint8_t synthInstrumentFormDefault(int instrumentIdx) {
-  // p6 chooses osc1's waveform column: saw, pulse, square, triangle, sine.
-  static const uint8_t kFormDefault[10] = {
-    0, 8, 4, 16, 12, 16, 12, 8, 4, 0,
-  };
-  return kFormDefault[constrain(instrumentIdx, 0, 9)];
+  return kCh11FormDefault[constrain(instrumentIdx, 0, 12)];
 }
 
 uint8_t synthInstrumentWaveDefault(int instrumentIdx) {
-  // Raw WAVE slider values: SIN=0, SQR=4, SAW=8, TRI=12.
-  // Pulse-based presets use SQR as their displayed waveform family; returning
-  // to that value restores their original pulse recipe.
-  static const uint8_t kWaveDefault[10] = {
-    8, 4, 4, 0, 12, 0, 12, 4, 4, 8,
-  };
-  return kWaveDefault[constrain(instrumentIdx, 0, 9)];
+  return kCh11WaveDefault[constrain(instrumentIdx, 0, 12)];
 }
 
 void applySynthInstrumentFormDefault(int channel, int instrumentIdx) {
@@ -291,63 +359,21 @@ void applySynthInstrumentFormDefault(int channel, int instrumentIdx) {
 // authoritative until the user explicitly chooses a different instrument.
 void applySynthInstrumentPreset(int channel, int instrumentIdx) {
   if (channel != 11) return;
-  instrumentIdx = constrain(instrumentIdx, 0, 9);
+  instrumentIdx = constrain(instrumentIdx, 0, 12);
 
-  // The three synth controls have a few preset-specific meanings (for example,
-  // PAD uses control 1 for decay and controls 2/3 for cutoff/resonance).
-  static const uint8_t kControl1Default[10] = {
-    8, 20, 12, 18, 5, 24, 20, 22, 26, 9,
-  };
-  static const uint8_t kControl2Default[10] = {
-    5, 4, 2, 10, 24, 1, 22, 14, 6, 10,
-  };
-  static const uint8_t kControl3Default[10] = {
-    12, 8, 2, 3, 20, 2, 2, 14, 4, 18,
-  };
-
-  // Slider values: attack runs backwards (32 = instant); decay/release run
-  // forwards; sustain is 0..32. These preserve each preset's articulation
-  // when updateSynthVoice() reapplies the editable ADSR controls.
-  static const uint8_t kAttackDefault[10] = {
-    32, 32, 32, 8, 26, 32, 28, 32, 32, 30,
-  };
-  static const uint8_t kDecayDefault[10] = {
-    6, 14, 1, 32, 32, 2, 0, 5, 0, 28,
-  };
-  static const uint8_t kSustainDefault[10] = {
-    0, 2, 28, 20, 26, 28, 31, 0, 31, 26,
-  };
-  static const uint8_t kReleaseDefault[10] = {
-    2, 6, 2, 24, 20, 3, 10, 5, 1, 10,
-  };
-
-  // Base octave at start of each preset (before p5 override). Maps to CENT
-  // slider via the 1..8 octave formula.
-  static const uint8_t kCentSliderDefault[10] = {
-    5,   // 0 BASS   — octave 2
-    14,  // 1 KEYS   — octave 4
-    14,  // 2 CHIPTUNE
-    14,  // 3 PAD
-    14,  // 4 WOW
-    18,  // 5 ORGAN  — octave 5
-    18,  // 6 FLUTE  — octave 5
-    14,  // 7 LEAD
-    18,  // 8 ARP    — octave 5
-    14,  // 9 BRASS
-  };
-
-  SMP.synth_settings[channel][CUTOFF] = kControl1Default[instrumentIdx];
-  SMP.synth_settings[channel][RESONANCE] = kControl2Default[instrumentIdx];
-  SMP.synth_settings[channel][FILTER] = kControl3Default[instrumentIdx];
+  SMP.synth_settings[channel][INSTRUMENT] = instrumentIdx;
+  SMP.synth_settings[channel][CUTOFF] = kCh11Control1Default[instrumentIdx];
+  SMP.synth_settings[channel][RESONANCE] = kCh11Control2Default[instrumentIdx];
+  SMP.synth_settings[channel][FILTER] = kCh11Control3Default[instrumentIdx];
   SMP.synth_settings[channel][SEMI] = 16;  // mid → zero extra cent/semi offset from p4 mapping
-  SMP.synth_settings[channel][CENT] = kCentSliderDefault[instrumentIdx];
+  SMP.synth_settings[channel][CENT] = kCh11CentSliderDefault[instrumentIdx];
   filterSetting(channel, FILTER_WAVEFORM) =
       synthInstrumentWaveDefault(instrumentIdx);
   applySynthInstrumentFormDefault(channel, instrumentIdx);
-  SMP.param_settings[channel][ATTACK] = kAttackDefault[instrumentIdx];
-  SMP.param_settings[channel][DECAY] = kDecayDefault[instrumentIdx];
-  SMP.param_settings[channel][SUSTAIN] = kSustainDefault[instrumentIdx];
-  SMP.param_settings[channel][RELEASE] = kReleaseDefault[instrumentIdx];
+  SMP.param_settings[channel][ATTACK] = kCh11AttackDefault[instrumentIdx];
+  SMP.param_settings[channel][DECAY] = kCh11DecayDefault[instrumentIdx];
+  SMP.param_settings[channel][SUSTAIN] = kCh11SustainDefault[instrumentIdx];
+  SMP.param_settings[channel][RELEASE] = kCh11ReleaseDefault[instrumentIdx];
 }
 
 // Reset ALL filters, envelopes, drums and synths to default values

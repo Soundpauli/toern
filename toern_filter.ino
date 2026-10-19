@@ -370,11 +370,11 @@ void setFilterDefaults(int channel) {
     }
   }
 
-  SMP.filter_settings[channel][HCUT] = 32;
+  SMP.filter_settings[channel][HCUT] = (channel == 14) ? 14 : 32;
   SMP.filter_settings[channel][LOWCUT] = 0;
   SMP.filter_settings[channel][REVERB] = 0;
   SMP.filter_settings[channel][BITCRUSHER] = 0;
-  SMP.filter_settings[channel][RES] = 0;
+  SMP.filter_settings[channel][RES] = (channel == 14) ? 5 : 0;
   SMP.filter_settings[channel][DETUNE] = 16;  // middle = 0
   // Sample OCTV uses 0..48 (center 24); synth OCTAVE path still uses 0..32.
   SMP.filter_settings[channel][OCTAVE] = (channel >= 1 && channel <= 8) ? 24 : 16;
@@ -382,10 +382,24 @@ void setFilterDefaults(int channel) {
 
   SMP.param_settings[channel][DELAY] = 0;
   SMP.param_settings[channel][ATTACK] = 32;
-  SMP.param_settings[channel][DECAY] = 32;
-  SMP.param_settings[channel][SUSTAIN] = 32;
+  SMP.param_settings[channel][DECAY] = (channel == 14) ? 20 : 32;
+  SMP.param_settings[channel][SUSTAIN] = (channel == 14) ? 20 : 32;
   SMP.param_settings[channel][RELEASE] = (channel == 11 || channel == 13 || channel == 14) ? 16 : 0;
-  if (channel == 11 || channel == 13 || channel == 14) {
+  if (channel == 11) {
+    extern void applySynthInstrumentPreset(int channel, int instrumentIdx);
+    extern void updateSynthVoice(int channel);
+    applySynthInstrumentPreset(11, 12);  // Default ch11 to DXBS (12)
+    SMP.synth_settings[11][LFO_RATE] = 0;
+    SMP.synth_settings[11][LFO_DEPTH] = 0;
+    SMP.synth_settings[11][LFO_PHASE] = 0;
+    SMP.synth_settings[11][ARP_STEP] = 16;
+    updateSynthVoice(11);
+  } else if (channel == 13 || channel == 14) {
+    SMP.synth_settings[channel][CUTOFF] = (channel == 13) ? 32 : 14;
+    SMP.synth_settings[channel][RESONANCE] = (channel == 14) ? 5 : 0;
+    SMP.synth_settings[channel][FILTER] = (channel == 14) ? 8 : 0;
+    SMP.synth_settings[channel][CENT] = (channel == 13) ? 0 : 8;
+    SMP.synth_settings[channel][SEMI] = 16;
     SMP.synth_settings[channel][LFO_RATE] = 0;
     SMP.synth_settings[channel][LFO_DEPTH] = 0;
     SMP.synth_settings[channel][LFO_PHASE] = 0;
@@ -406,8 +420,16 @@ void setFilterDefaults(int channel) {
   }
   // EFX setting: 0 = SAMPLE mode (default for all channels)
   SMP.filter_settings[channel][EFX] = 0;
-  filters[channel]->resonance(0.0);           // default resonance off
-  filters[channel]->frequency(10000);
+  if (channel == 13 || channel == 14) {
+    applyMonoSynthCrf(channel);
+    setParams(ATTACK, channel);
+    setParams(DECAY, channel);
+    setParams(SUSTAIN, channel);
+    setParams(RELEASE, channel);
+  } else {
+    filters[channel]->resonance(0.0);           // default resonance off
+    filters[channel]->frequency(10000);
+  }
 
   if (freeverbs[channel] != nullptr) {
     freeverbs[channel]->roomsize(0);

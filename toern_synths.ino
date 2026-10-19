@@ -132,6 +132,12 @@ static void setSoundVoice(int note, int ch, int velocity, int voiceIdx,
   Swaveform2[voiceIdx]->amplitude(amp);
   Swaveform3[voiceIdx]->amplitude(amp);
   if (triggerEnvelope) {
+    if (ch == 0 && SMP.synth_settings[11][INSTRUMENT] == 10) {
+      // TB-303 velocity accent: higher velocity drives the filter envelope wider
+      Sdc1[voiceIdx]->amplitude(0.60f + 0.40f * amp);
+    } else {
+      Sdc1[voiceIdx]->amplitude(1.0f);
+    }
     Senvelope1[voiceIdx]->noteOn();
     Senvelope2[voiceIdx]->noteOn();
     SenvelopeFilter1[voiceIdx]->noteOn();
@@ -617,6 +623,155 @@ void chiptune_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
 }
 
 
+// acid303_synth preset (INST 10: Roland TB-303 Acid Bassline)
+void acid303_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
+  octave[ch] = 2.0;
+  cents[ch][0] = 0;   cents[ch][1] = 2;   cents[ch][2] = 0;
+  semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = -12;
+  pan[ch][0] = 0;     pan[ch][1] = 0;     pan[ch][2] = 0;
+  // Hotter mix — 303 was too quiet vs BASS/KEYS
+  volume[ch][0] = 100; volume[ch][1] = 75; volume[ch][2] = 60;
+  pulseWidth[ch][0] = 0.50f; pulseWidth[ch][1] = 0.50f; pulseWidth[ch][2] = 0.50f;
+
+  attackAmp[ch][0] = 0;    attackAmp[ch][1] = 0;    attackAmp[ch][2] = 0;
+  decayAmp[ch][0] = 560;   decayAmp[ch][1] = 560;   decayAmp[ch][2] = 560;
+  sustainAmp[ch][0] = 0.56; sustainAmp[ch][1] = 0.56; sustainAmp[ch][2] = 0.56;
+  releaseAmp[ch][0] = 375; releaseAmp[ch][1] = 375; releaseAmp[ch][2] = 375;
+
+  // Classic 303 diode-ladder filter envelope: snappy decay into a warm sustain floor,
+  // with releaseFilter matching amp release so note-off never slams shut with a chirp.
+  uint16_t fltDecay = (uint16_t)(210.0f + (p3 / MAXSLIDER) * 240.0f);
+  attackFilter[ch][0] = 0;        attackFilter[ch][1] = 0;        attackFilter[ch][2] = 0;
+  decayFilter[ch][0] = fltDecay;  decayFilter[ch][1] = fltDecay;  decayFilter[ch][2] = fltDecay;
+  sustainFilter[ch][0] = 0.25;    sustainFilter[ch][1] = 0.25;    sustainFilter[ch][2] = 0.25;
+  releaseFilter[ch][0] = 375;     releaseFilter[ch][1] = 375;     releaseFilter[ch][2] = 375;
+
+  // Keep ladder resonance below self-oscillation (1.0 in AudioFilterLadder) so
+  // sweeping FLT + RES gives warm acid squelch instead of a bird-like whistle.
+  float minCutoff = 320.0,    maxCutoff = 4200.0;
+  float minResonance = 0.12,  maxResonance = 0.88;
+  float minFilterAmount = 0.4, maxFilterAmount = 3.2;
+  float mappedCutoff       = minCutoff + (p1 / MAXSLIDER) * (maxCutoff - minCutoff);
+  float mappedResonance    = minResonance + (p2 / MAXSLIDER) * (maxResonance - minResonance);
+  float mappedFilterAmount = minFilterAmount + (p3 / MAXSLIDER) * (maxFilterAmount - minFilterAmount);
+  cutoff[ch][0] = cutoff[ch][1] = cutoff[ch][2] = mappedCutoff;
+  resonance[ch][0] = resonance[ch][1] = resonance[ch][2] = mappedResonance;
+  filterAmount[ch][0] = filterAmount[ch][1] = filterAmount[ch][2] = mappedFilterAmount;
+
+  // Sawtooth core + hollow square overtone + sub saw (WAVE switches Saw <-> Square)
+  waveforms[ch][0] = 0; waveforms[ch][1] = 1; waveforms[ch][2] = 0;
+
+  float offsetCents = -50.0 + (p4 / MAXSLIDER) * 100.0;
+  int offsetSemitones = (int)round(-2.0 + (p4 / MAXSLIDER) * 4.0);
+  for (int i = 0; i < 3; i++) {
+    cents[ch][i] += offsetCents;
+    semitones[ch][i] += offsetSemitones;
+  }
+  octave[ch] = 1.0 + (p5 / MAXSLIDER) * 7.0;
+  int newWaveform = (int)floor((p6 / MAXSLIDER) * 8);
+  waveforms[ch][0] = newWaveform;
+
+  updateVals(ch);
+}
+
+
+// dx7_epiano_synth preset (INST 11: Yamaha DX7 E.Piano 1 — FM Rhodes + tine bell)
+void dx7_epiano_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
+  octave[ch] = 4.0;
+  // Stereo-chorused warm carrier pair + +19 semitone (3:1 harmonic) FM tine bell
+  cents[ch][0] = -6;  cents[ch][1] = 6;   cents[ch][2] = 2;
+  semitones[ch][0] = 0; semitones[ch][1] = 0; semitones[ch][2] = 19;
+  pan[ch][0] = -50;   pan[ch][1] = 50;    pan[ch][2] = 0;
+  // Triangle/sine are quieter than saw — push mix hot
+  volume[ch][0] = 100; volume[ch][1] = 100; volume[ch][2] = 85;
+
+  attackAmp[ch][0] = 0;     attackAmp[ch][1] = 0;     attackAmp[ch][2] = 0;
+  decayAmp[ch][0] = 875;    decayAmp[ch][1] = 875;    decayAmp[ch][2] = 875;
+  sustainAmp[ch][0] = 0.625; sustainAmp[ch][1] = 0.625; sustainAmp[ch][2] = 0.625;
+  releaseAmp[ch][0] = 500;  releaseAmp[ch][1] = 500;  releaseAmp[ch][2] = 500;
+
+  // Soft tine strike settling into a warm open Rhodes sustain + 500ms damper release
+  attackFilter[ch][0] = 0;    attackFilter[ch][1] = 0;    attackFilter[ch][2] = 0;
+  decayFilter[ch][0] = 350;   decayFilter[ch][1] = 350;   decayFilter[ch][2] = 350;
+  sustainFilter[ch][0] = 0.45; sustainFilter[ch][1] = 0.45; sustainFilter[ch][2] = 0.45;
+  releaseFilter[ch][0] = 500; releaseFilter[ch][1] = 500; releaseFilter[ch][2] = 500;
+
+  float minCutoff = 1100.0,   maxCutoff = 6800.0;
+  float minResonance = 0.05,  maxResonance = 0.72;
+  float minFilterAmount = 0.2, maxFilterAmount = 2.2;
+  float mappedCutoff       = minCutoff + (p1 / MAXSLIDER) * (maxCutoff - minCutoff);
+  float mappedResonance    = minResonance + (p2 / MAXSLIDER) * (maxResonance - minResonance);
+  float mappedFilterAmount = minFilterAmount + (p3 / MAXSLIDER) * (maxFilterAmount - minFilterAmount);
+  cutoff[ch][0] = cutoff[ch][1] = cutoff[ch][2] = mappedCutoff;
+  resonance[ch][0] = resonance[ch][1] = resonance[ch][2] = mappedResonance;
+  filterAmount[ch][0] = filterAmount[ch][1] = filterAmount[ch][2] = mappedFilterAmount;
+
+  // Triangle + Sine carrier warmth + Triangle tine harmonic
+  waveforms[ch][0] = 3; waveforms[ch][1] = 4; waveforms[ch][2] = 3;
+
+  float offsetCents = -50.0 + (p4 / MAXSLIDER) * 100.0;
+  int offsetSemitones = (int)round(-2.0 + (p4 / MAXSLIDER) * 4.0);
+  for (int i = 0; i < 3; i++) {
+    cents[ch][i] += offsetCents;
+    semitones[ch][i] += offsetSemitones;
+  }
+  octave[ch] = 1.0 + (p5 / MAXSLIDER) * 7.0;
+  int newWaveform = (int)floor((p6 / MAXSLIDER) * 8);
+  waveforms[ch][0] = newWaveform;
+
+  updateVals(ch);
+}
+
+
+// dx7_bass_synth preset (INST 12: Yamaha DX7 Bass 1 / Solid FM E-Bass)
+void dx7_bass_synth(int ch, int p1, int p2, int p3, int p4, int p5, int p6) {
+  octave[ch] = 2.0;
+  // Phase-tight fundamental + +12 semitone (2:1 FM ratio) metallic slap harmonic + Triangle sub body
+  cents[ch][0] = 0;   cents[ch][1] = 3;   cents[ch][2] = -2;
+  semitones[ch][0] = 0; semitones[ch][1] = 12; semitones[ch][2] = 0;
+  pan[ch][0] = 0;     pan[ch][1] = 0;     pan[ch][2] = 0;
+  volume[ch][0] = 100; volume[ch][1] = 90; volume[ch][2] = 100;
+  // 16% narrow pulse creates the nasal/metallic DX7 FM slap bass harmonic spectrum
+  pulseWidth[ch][0] = 0.16f; pulseWidth[ch][1] = 0.25f; pulseWidth[ch][2] = 0.50f;
+
+  attackAmp[ch][0] = 0;    attackAmp[ch][1] = 0;    attackAmp[ch][2] = 0;
+  decayAmp[ch][0] = 500;   decayAmp[ch][1] = 500;   decayAmp[ch][2] = 500;
+  sustainAmp[ch][0] = 0.50; sustainAmp[ch][1] = 0.50; sustainAmp[ch][2] = 0.50;
+  releaseAmp[ch][0] = 375; releaseAmp[ch][1] = 375; releaseAmp[ch][2] = 375;
+
+  // Snappy FM slap pluck settling into a warm fundamental sustain + smooth release
+  attackFilter[ch][0] = 0;    attackFilter[ch][1] = 0;    attackFilter[ch][2] = 0;
+  decayFilter[ch][0] = 180;   decayFilter[ch][1] = 180;   decayFilter[ch][2] = 180;
+  sustainFilter[ch][0] = 0.30; sustainFilter[ch][1] = 0.30; sustainFilter[ch][2] = 0.30;
+  releaseFilter[ch][0] = 375; releaseFilter[ch][1] = 375; releaseFilter[ch][2] = 375;
+
+  float minCutoff = 480.0,    maxCutoff = 5200.0;
+  float minResonance = 0.10,  maxResonance = 0.82;
+  float minFilterAmount = 0.3, maxFilterAmount = 2.6;
+  float mappedCutoff       = minCutoff + (p1 / MAXSLIDER) * (maxCutoff - minCutoff);
+  float mappedResonance    = minResonance + (p2 / MAXSLIDER) * (maxResonance - minResonance);
+  float mappedFilterAmount = minFilterAmount + (p3 / MAXSLIDER) * (maxFilterAmount - minFilterAmount);
+  cutoff[ch][0] = cutoff[ch][1] = cutoff[ch][2] = mappedCutoff;
+  resonance[ch][0] = resonance[ch][1] = resonance[ch][2] = mappedResonance;
+  filterAmount[ch][0] = filterAmount[ch][1] = filterAmount[ch][2] = mappedFilterAmount;
+
+  // Narrow Pulse + +12 Sawtooth + Fundamental Triangle
+  waveforms[ch][0] = 1; waveforms[ch][1] = 0; waveforms[ch][2] = 3;
+
+  float offsetCents = -50.0 + (p4 / MAXSLIDER) * 100.0;
+  int offsetSemitones = (int)round(-2.0 + (p4 / MAXSLIDER) * 4.0);
+  for (int i = 0; i < 3; i++) {
+    cents[ch][i] += offsetCents;
+    semitones[ch][i] += offsetSemitones;
+  }
+  octave[ch] = 1.0 + (p5 / MAXSLIDER) * 7.0;
+  int newWaveform = (int)floor((p6 / MAXSLIDER) * 8);
+  waveforms[ch][0] = newWaveform;
+
+  updateVals(ch);
+}
+
+
 
 // waveforms[ch][osc] selects column 0–4 in waveformsArray (saw/pulse/square/tri/sine).
 static inline uint8_t synthWaveformBeginType(int ch, int oscIdx) {
@@ -679,7 +834,13 @@ void updateVals(int ch) {
 
     // Update mixer gains (using pan[ch] and volume[ch] to calculate gain)
     // Note: ch is already bounds-checked to be 0-1 (INSTRUMENT_CHANNELS)
+    // 303 / DXEP / DXBS sit quieter than saw-heavy recipes (esp. triangle EP) —
+    // give them a hotter mix so they match BASS/KEYS perceived level.
     float gainMultiplier = 0.33f;
+    {
+      int inst = constrain((int)SMP.synth_settings[11][INSTRUMENT], 0, 12);
+      if (inst >= 10) gainMultiplier = 0.52f;
+    }
     Smixer1[i]->gain(0, max(0, (-pan[ch][0] + 100.0) * 0.005) * (volume[ch][0] / 100.0) * gainMultiplier);
     Smixer1[i]->gain(1, max(0, (-pan[ch][1] + 100.0) * 0.005) * (volume[ch][1] / 100.0) * gainMultiplier);
     Smixer1[i]->gain(2, max(0, (-pan[ch][2] + 100.0) * 0.005) * (volume[ch][2] / 100.0) * gainMultiplier);
@@ -909,7 +1070,7 @@ void resetSequencedSynthLegato() {
 // Grid preview often doesn't send note-off; we fake it after a per-instrument timeout.
 // Presets with sustainAmp>0 would otherwise ring until AUTO_OFF (felt "infinite" at ~2s).
 static unsigned synthAutoOffMsForInstrument(int inst) {
-  static const uint16_t kMs[10] = {
+  static const uint16_t kMs[13] = {
     450,   // BASS   — pluck, short
     520,   // KEYS
     260,   // CHIPTUNE — chirp / staccato
@@ -920,8 +1081,11 @@ static unsigned synthAutoOffMsForInstrument(int inst) {
     460,   // LEAD
     480,   // ARP (sustain 1.0)
     700,   // BRASS
+    480,   // 303    — acid bassline pluck + body
+    850,   // DXEP   — DX7 E.Piano bell + singing body
+    520,   // DXBS   — DX7 FM slap/solid bass
   };
-  inst = constrain(inst, 0, 9);
+  inst = constrain(inst, 0, 12);
   return kMs[inst];
 }
 
@@ -930,7 +1094,7 @@ void autoOffActiveNotes() {
   ////Serial.println(persistentNoteOn[11]);
 if (pressedKeyCount[11]>=1) return;
   unsigned long currentTime = millis();
-  int inst = constrain((int)SMP.synth_settings[11][INSTRUMENT], 0, 9);
+  int inst = constrain((int)SMP.synth_settings[11][INSTRUMENT], 0, 12);
   unsigned long offMs = synthAutoOffMsForInstrument(inst);
   for (int ch = 0; ch < 2; ch++) {
     // Sequencer ch11 voices stay open until the next step decides whether to
@@ -992,6 +1156,11 @@ void updateSynthVoice(int channel){
 
 
 void switchSynthVoice(int typeValue, int ch, int p1,int p2, int p3, int p4, int p5, int p6) {
+    if (ch >= 0 && ch < INSTRUMENT_CHANNELS) {
+        pulseWidth[ch][0] = 0.25f;
+        pulseWidth[ch][1] = 0.25f;
+        pulseWidth[ch][2] = 0.25f;
+    }
     switch(typeValue) {
         case 0: bass_synth(ch,p1,p2,p3,p4,p5,p6);
             break;
@@ -1012,6 +1181,12 @@ void switchSynthVoice(int typeValue, int ch, int p1,int p2, int p3, int p4, int 
         case 8: arp_synth(ch,p1,p2,p3,p4,p5,p6);
             break;
         case 9: brass_synth(ch,p1,p2,p3,p4,p5,p6);
+            break;
+        case 10: acid303_synth(ch,p1,p2,p3,p4,p5,p6);
+            break;
+        case 11: dx7_epiano_synth(ch,p1,p2,p3,p4,p5,p6);
+            break;
+        case 12: dx7_bass_synth(ch,p1,p2,p3,p4,p5,p6);
             break;
     }
 }

@@ -450,7 +450,7 @@ void processAdjustments_new(uint8_t page) {
       case ARR_SYNTH:
         SMP.synth_settings[chan][d.idx] = currentMode->pos[i];
         if (chan == 11 && d.idx == INSTRUMENT) {
-          applySynthInstrumentPreset(chan, (int)constrain(currentMode->pos[i], 0, 9));
+          applySynthInstrumentPreset(chan, (int)constrain(currentMode->pos[i], 0, 12));
           initSliders(filterPage[chan], chan);
         }
         if ((chan == 13 || chan == 14) &&

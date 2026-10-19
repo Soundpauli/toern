@@ -417,7 +417,7 @@ const char* soloRandomGetLastPreviewPath();
 void soloRandomLoadLastPreview();
 static int16_t lastDefaultFastFilterValue[NUM_CHANNELS] = { 0 };  // Changed from int to int16_t (32 bytes saved)
 
-const char *const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS" };
+const char *const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS", "303", "DXEP", "DXBS" };
 #define INST_ENUM_COUNT (sizeof(instTypeNames) / sizeof(instTypeNames[0]))
 
 // Add at file scope, after instTypeNames[]
@@ -447,7 +447,7 @@ static const SliderMeta sliderMeta[4][4] = {
   // Page 2
   {
     { 16, DISPLAY_NUMERIC, nullptr, 5 },     // Shown as 0–4
-    { 9, DISPLAY_ENUM, instTypeNames, 10 },  // Mapped from 0–9
+    { 12, DISPLAY_ENUM, instTypeNames, 13 }, // Mapped from 0–12
     { 32, DISPLAY_NUMERIC, nullptr, 32 },
     { 32, DISPLAY_NUMERIC, nullptr, 32 } },
   // Page 3
@@ -1532,7 +1532,7 @@ FLASHMEM void initSliderDefTemplates() {
       { ARR_SYNTH, FILTER, "FLT", 32, DISPLAY_NUMERIC, nullptr, 32 },
       { ARR_PARAM, DELAY, "DLAY", 32, DISPLAY_NUMERIC, nullptr, 32 } },
     { { ARR_FILTER, FILTER_WAVEFORM, "WAVE", 16, DISPLAY_ENUM, waveformNames, 4 },
-      { ARR_SYNTH, INSTRUMENT, "INST", 9, DISPLAY_ENUM, instTypeNames, 10 },
+      { ARR_SYNTH, INSTRUMENT, "INST", 12, DISPLAY_ENUM, instTypeNames, 13 },
       { ARR_SYNTH, CENT, "CENT", 32, DISPLAY_NUMERIC, nullptr, 32 },
       { ARR_SYNTH, SEMI, "SEMI", 32, DISPLAY_NUMERIC, nullptr, 32 } },
     { { ARR_PARAM, ATTACK, "ATTC", 32, DISPLAY_NUMERIC, nullptr, 32 },
@@ -3614,8 +3614,8 @@ FLASHMEM void initSamples() {
   waveformType[13][0] = WAVEFORM_PULSE;
   waveformType[13][1] = WAVEFORM_SAWTOOTH;
 
-  waveformType[14][0] = WAVEFORM_PULSE;
-  waveformType[14][1] = WAVEFORM_SAWTOOTH;
+  waveformType[14][0] = WAVEFORM_SAWTOOTH;
+  waveformType[14][1] = WAVEFORM_PULSE;
 
   float amplitude[15][2] = { { 0.0f } };
 
@@ -8084,6 +8084,59 @@ static void midiArpFireChannel(int ch) {
   }
 }
 
+static float monoSynthCurrFreq0[2] = { 0.0f, 0.0f };
+static float monoSynthCurrFreq1[2] = { 0.0f, 0.0f };
+static float monoSynthTargetFreq0[2] = { 0.0f, 0.0f };
+static float monoSynthTargetFreq1[2] = { 0.0f, 0.0f };
+static bool monoSynthGliding[2] = { false, false };
+static unsigned long monoSynthGlideLastMs[2] = { 0, 0 };
+static unsigned long monoSynthEnvStartMs[2] = { 0, 0 };
+static uint8_t monoSynthLastVel[2] = { 100, 100 };
+static bool monoSynthEnvActive[2] = { false, false };
+
+static void computeMonoSynthFilterEnv(int ch, unsigned long nowMs, float baseHz,
+                                      float baseRes, float &outHz,
+                                      float &outRes, bool &outActive) {
+  outHz = baseHz;
+  outRes = baseRes;
+  outActive = false;
+  if (ch != 13 && ch != 14) return;
+  int mIdx = ch - 13;
+  uint8_t flt = (uint8_t)constrain((int)SMP.synth_settings[ch][FILTER], 0,
+                                   (int)maxfilterResolution);
+  if (flt == 0 || !monoSynthEnvActive[mIdx]) return;
+
+  float dtMs = (float)(nowMs - monoSynthEnvStartMs[mIdx]);
+  if (dtMs < 0.0f) dtMs = 0.0f;
+  float decaySlider = (float)constrain((int)SMP.param_settings[ch][DECAY], 0,
+                                       (int)maxfilterResolution);
+  float fltDecayMs = (ch == 14)
+      ? mapf(decaySlider, 0.0f, (float)maxfilterResolution, 110.0f, 480.0f)
+      : mapf(decaySlider, 0.0f, (float)maxfilterResolution, 140.0f, 700.0f);
+
+  float velNorm = (float)monoSynthLastVel[mIdx] / 127.0f;
+  // TB-303 accent on high-velocity steps: tighter capacitor discharge + wider cutoff/resonance peak
+  float accent = (ch == 14 && monoSynthLastVel[mIdx] >= 100)
+      ? mapf((float)monoSynthLastVel[mIdx], 100.0f, 127.0f, 0.15f, 1.0f)
+      : 0.0f;
+  if (accent > 0.0f && fltDecayMs > 210.0f) {
+    fltDecayMs = 210.0f;
+  }
+
+  float env = expf(-dtMs / fltDecayMs);
+  if (env < 0.003f) {
+    monoSynthEnvActive[mIdx] = false;
+    return;
+  }
+
+  float envOctaves =
+      mapf((float)flt, 0.0f, (float)maxfilterResolution, 0.0f, 2.2f) *
+      (0.70f + 0.30f * velNorm + 0.25f * accent);
+  outHz = constrain(baseHz * powf(2.0f, env * envOctaves), 20.0f, 9000.0f);
+  outRes = constrain(baseRes + accent * env * 0.35f, 0.7f, 2.6f);
+  outActive = true;
+}
+
 void serviceSynthLfo() {
   static float delayBpm = -1.0f;
   float bpmNow = (SMP.bpm > 0.0f) ? SMP.bpm : 100.0f;
@@ -8092,6 +8145,30 @@ void serviceSynthLfo() {
     extern void applyAllVoiceDelays();
     applyAllVoiceDelays();
   }
+  unsigned long nowMs = millis();
+  // Service 303-style legato portamento glide on mono synths (ch 13 & 14)
+  for (int ch = 13; ch <= 14; ch++) {
+    int mIdx = ch - 13;
+    if (!monoSynthGliding[mIdx] || !synths[ch][0] || !synths[ch][1]) continue;
+    float dt = (float)(nowMs - monoSynthGlideLastMs[mIdx]);
+    if (dt < 2.0f) continue;
+    monoSynthGlideLastMs[mIdx] = nowMs;
+    const float tauMs = 55.0f;  // TB-303 RC slide time constant
+    float alpha = 1.0f - expf(-dt / tauMs);
+    monoSynthCurrFreq0[mIdx] +=
+        (monoSynthTargetFreq0[mIdx] - monoSynthCurrFreq0[mIdx]) * alpha;
+    monoSynthCurrFreq1[mIdx] +=
+        (monoSynthTargetFreq1[mIdx] - monoSynthCurrFreq1[mIdx]) * alpha;
+    if (fabsf(monoSynthTargetFreq0[mIdx] - monoSynthCurrFreq0[mIdx]) < 0.15f) {
+      monoSynthCurrFreq0[mIdx] = monoSynthTargetFreq0[mIdx];
+      monoSynthCurrFreq1[mIdx] = monoSynthTargetFreq1[mIdx];
+      monoSynthGliding[mIdx] = false;
+    }
+    toern_audio::StateGuard guard;
+    synths[ch][0]->frequency(monoSynthCurrFreq0[mIdx]);
+    synths[ch][1]->frequency(monoSynthCurrFreq1[mIdx]);
+  }
+
   static bool lfoWasOn[15] = { false };
   extern uint16_t cutoff[2][3];
   extern float resonance[2][3];
@@ -8116,7 +8193,16 @@ void serviceSynthLfo() {
     }
     float baseRes = mapf(SMP.filter_settings[ch][RES], 0, maxfilterResolution,
                          0.7f, 5.0f);
-    if (!on) {
+
+    float envHz = baseHz;
+    float envRes = baseRes;
+    bool envActive = false;
+    if (ch == 13 || ch == 14) {
+      computeMonoSynthFilterEnv(ch, nowMs, baseHz, baseRes, envHz, envRes,
+                                envActive);
+    }
+
+    if (!on && !envActive) {
       if (lfoWasOn[ch]) {
         filters[ch]->frequency(baseHz);
         filters[ch]->resonance(baseRes);
@@ -8132,10 +8218,16 @@ void serviceSynthLfo() {
       }
       continue;
     }
-    float lfo = sinf((float)millis() * rateHz * 0.0062831853f);
-    float modHz = baseHz * powf(2.0f, lfo * depth * LFO_CUTOFF_OCTAVES);
+    if (!on && envActive) {
+      filters[ch]->frequency(envHz);
+      filters[ch]->resonance(envRes);
+      lfoWasOn[ch] = true;
+      continue;
+    }
+    float lfo = sinf((float)nowMs * rateHz * 0.0062831853f);
+    float modHz = envHz * powf(2.0f, lfo * depth * LFO_CUTOFF_OCTAVES);
     filters[ch]->frequency(constrain(modHz, 10.0f, 12000.0f));
-    float modRes = baseRes + lfo * depth * LFO_RES_SWEEP;
+    float modRes = envRes + lfo * depth * LFO_RES_SWEEP;
     filters[ch]->resonance(constrain(modRes, 0.7f, 5.0f));
     if (ch == 11) {
       for (int i = 0; i < 3; i++) {
@@ -8243,22 +8335,63 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
     mappedSustain = mapf(SMP.param_settings[ch][SUSTAIN], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]);
   }
 
+  unsigned long nowMs = millis();
+  bool doSlide = false;
+  if (ch == 13 || ch == 14) {
+    int mIdx = ch - 13;
+    uint8_t velClamped = (uint8_t)constrain(vel > 0 ? vel : defaultVelocity, 1, 127);
+    monoSynthLastVel[mIdx] = velClamped;
+    doSlide = legato && monoSynthCurrFreq0[mIdx] > 1.0f;
+    if (doSlide) {
+      monoSynthTargetFreq0[mIdx] = base;
+      monoSynthTargetFreq1[mIdx] = freq1;
+      monoSynthGliding[mIdx] = true;
+      monoSynthGlideLastMs[mIdx] = nowMs;
+    } else {
+      monoSynthCurrFreq0[mIdx] = monoSynthTargetFreq0[mIdx] = base;
+      monoSynthCurrFreq1[mIdx] = monoSynthTargetFreq1[mIdx] = freq1;
+      monoSynthGliding[mIdx] = false;
+      monoSynthEnvStartMs[mIdx] = nowMs;
+      monoSynthEnvActive[mIdx] = (SMP.synth_settings[ch][FILTER] > 0);
+    }
+  }
+
   {
     toern_audio::StateGuard guard;
     // A directly adjacent sequencer note reuses the open envelope. Frequency
     // changes become a legato slide; an equal pitch is a true hold.
     if (!legato) stopSynthChannel(ch);
 
-    synths[ch][0]->frequency(base);
-    synths[ch][1]->frequency(freq1);
+    if (!doSlide) {
+      synths[ch][0]->frequency(base);
+      synths[ch][1]->frequency(freq1);
+    }
     synths[ch][0]->amplitude(WaveFormVelocity);
-    synths[ch][1]->amplitude(WaveFormVelocity);
+    synths[ch][1]->amplitude(ch == 14 ? (WaveFormVelocity * 0.80f) : WaveFormVelocity);
+    if ((ch == 13 || ch == 14) && !legato && filters[ch] &&
+        SMP.synth_settings[ch][FILTER] > 0) {
+      float lcut = SMP.filter_settings[ch][LOWCUT];
+      float baseHz = (lcut > 0.0f)
+          ? mapf(constrain(lcut, 1.0f, (float)maxfilterResolution), 1.0f,
+                 (float)maxfilterResolution, 40.0f, 2500.0f)
+          : mapf(SMP.filter_settings[ch][HCUT], 0, maxfilterResolution,
+                 281.25f, 10000.0f);
+      float baseRes = mapf(SMP.filter_settings[ch][RES], 0, maxfilterResolution,
+                           0.7f, 5.0f);
+      float envHz = baseHz, envRes = baseRes;
+      bool envAct = false;
+      computeMonoSynthFilterEnv(ch, nowMs, baseHz, baseRes, envHz, envRes, envAct);
+      if (envAct) {
+        filters[ch]->frequency(envHz);
+        filters[ch]->resonance(envRes);
+      }
+    }
     if (!envelopes[ch]) return;
 
     // External live MIDI on synth channels should stay audible while key is held.
     // Grid/preview (persistant=false) keep the configured ADSR behavior.
     if (persistant && (ch == 13 || ch == 14)) {
-      envelopes[ch]->sustain(maxParamVal[SUSTAIN]);
+      envelopes[ch]->sustain(ch == 14 ? max(0.35f, mappedSustain) : maxParamVal[SUSTAIN]);
     } else if (ch == 13 || ch == 14) {
       envelopes[ch]->sustain(mappedSustain);
     }
@@ -8272,7 +8405,7 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
       persistentNoteOn[ch] = false;
     }
 
-    startTime[ch] = millis();
+    startTime[ch] = nowMs;
     noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
   }
 }
@@ -8284,7 +8417,9 @@ void playSynth(int ch, int b, int vel, bool persistant) {
 
 void playSynthMidi(int ch, uint8_t midiPitch, int vel, bool persistant) {
   if (ch == 13 || ch == 14) sequencedMonoSynthActive[ch] = false;
-  playSynthInternal(ch, 0, vel, persistant, false, (int)midiPitch);
+  bool midiLegato = persistant && (ch == 13 || ch == 14) &&
+                    pressedKeyCount[ch] > 1 && persistentNoteOn[ch];
+  playSynthInternal(ch, 0, vel, persistant, midiLegato, (int)midiPitch);
 }
 
 void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
