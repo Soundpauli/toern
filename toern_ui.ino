@@ -2237,7 +2237,7 @@ void processPeaks() {
   static float cachedGainFactor = 1.0f;
   
   if (needsRecalc) {
-    // Find max peak value
+    // Find max peak value in the visible (cut) window
     float maxPeak = 0.0f;
     for (int i = 0; i < maxX; i++) {
       if (interpolatedValues[i] > maxPeak) {
@@ -2245,10 +2245,10 @@ void processPeaks() {
       }
     }
     
-    // Calculate gain factor (with minimum threshold to avoid over-amplifying noise)
-    if (maxPeak > 0.05f) {  // Only normalize if there's meaningful signal (> 5%)
-      cachedGainFactor = 1.0f / maxPeak;  // Scale so max peak reaches 1.0
-      cachedGainFactor = constrain(cachedGainFactor, 1.0f, 10.0f);  // Limit gain to 10x max
+    // Normalize quiet cuts too — old 5%/10x left soft material invisible.
+    if (maxPeak > 0.001f) {
+      cachedGainFactor = 1.0f / maxPeak;
+      cachedGainFactor = constrain(cachedGainFactor, 1.0f, 32.0f);
     } else {
       cachedGainFactor = 1.0f;
     }
