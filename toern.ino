@@ -2970,22 +2970,16 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   } else if ((currentMode == &loadSavePreset) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100" save
     int ch = (int)GLOB.currentChannel;
     uint16_t slot = (uint16_t)constrain((int)currentMode->pos[3], 1, 99);
-    const bool ok = saveVoicePreset(ch, slot);
-    FastLEDclear();
-    drawText(ok ? "OK" : "NO", 5, 9, ok ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
-    FastLEDshow();
-    delay(450);
+    extern void showPatternResult(bool success);
+    showPatternResult(saveVoicePreset(ch, slot));
     preventPaintUnpaint = false;
     switchMode(GLOB.singleMode ? &singleMode : &draw);
     return;
   } else if ((currentMode == &loadSavePreset) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" load
     int ch = (int)GLOB.currentChannel;
     uint16_t slot = (uint16_t)constrain((int)currentMode->pos[3], 1, 99);
-    const bool ok = loadVoicePreset(ch, slot);
-    FastLEDclear();
-    drawText(ok ? "OK" : "NO", 5, 9, ok ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
-    FastLEDshow();
-    delay(450);
+    extern void showPatternResult(bool success);
+    showPatternResult(loadVoicePreset(ch, slot));
     preventPaintUnpaint = false;
     switchMode(GLOB.singleMode ? &singleMode : &draw);
     return;
