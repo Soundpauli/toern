@@ -572,3 +572,273 @@ FLASHMEM void autoSave() {
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
 }
+
+// ---- Voice filter-page presets (PSET) for ch11 / 13 / 14 ----
+// SD layout: presets/<ch>/<nnn>.pset  (nnn = 001..099)
+
+static bool isVoicePresetChannel(int ch) {
+  return ch == 11 || ch == 13 || ch == 14;
+}
+
+static uint16_t g_presetSlotByChannel[16] = {
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+};
+static bool g_presetUiDirty = false;
+
+void invalidateVoicePresetUi() { g_presetUiDirty = true; }
+bool takeVoicePresetUiDirty() {
+  if (!g_presetUiDirty) return false;
+  g_presetUiDirty = false;
+  return true;
+}
+
+uint16_t getVoicePresetSlot(int ch) {
+  if (!isVoicePresetChannel(ch)) return 1;
+  uint16_t s = g_presetSlotByChannel[ch];
+  if (s < 1) s = 1;
+  if (s > 99) s = 99;
+  return s;
+}
+
+void setVoicePresetSlot(int ch, uint16_t slot) {
+  if (!isVoicePresetChannel(ch)) return;
+  if (slot < 1) slot = 1;
+  if (slot > 99) slot = 99;
+  g_presetSlotByChannel[ch] = slot;
+}
+
+static bool buildVoicePresetPath(int ch, uint16_t slot, char *out, size_t outSize) {
+  if (!out || outSize < 24 || !isVoicePresetChannel(ch)) return false;
+  if (slot < 1) slot = 1;
+  if (slot > 99) slot = 99;
+  snprintf(out, outSize, "presets/%d/%03u.pset", ch, (unsigned)slot);
+  return true;
+}
+
+static bool ensureVoicePresetDirs(int ch) {
+  if (!SD.exists("presets")) {
+    if (!SD.mkdir("presets")) return false;
+  }
+  char dir[24];
+  snprintf(dir, sizeof(dir), "presets/%d", ch);
+  if (!SD.exists(dir)) {
+    if (!SD.mkdir(dir)) return false;
+  }
+  return true;
+}
+
+static uint8_t readPresetSettingValue(int ch, SettingArray arr, int idx) {
+  switch (arr) {
+    case ARR_FILTER:
+      return (uint8_t)constrain((int)lroundf(filterSetting(ch, idx)), 0, 255);
+    case ARR_SYNTH:
+      if (idx < 0 || idx >= 11) return 0;
+      return (uint8_t)constrain((int)lroundf(SMP.synth_settings[ch][idx]), 0, 255);
+    case ARR_PARAM:
+      if (idx < 0 || idx >= PARAM_COUNT) return 0;
+      return (uint8_t)constrain((int)lroundf(SMP.param_settings[ch][idx]), 0, 255);
+    default:
+      return 0;
+  }
+}
+
+static void writePresetSettingValue(int ch, SettingArray arr, int idx, uint8_t value) {
+  switch (arr) {
+    case ARR_FILTER:
+      filterSetting(ch, idx) = value;
+      break;
+    case ARR_SYNTH:
+      if (idx >= 0 && idx < 11) SMP.synth_settings[ch][idx] = value;
+      break;
+    case ARR_PARAM:
+      if (idx >= 0 && idx < PARAM_COUNT) SMP.param_settings[ch][idx] = value;
+      break;
+    default:
+      break;
+  }
+}
+
+static bool voicePresetFileValid(const char *path, bool /*allowTmp*/) {
+  if (!path || !path[0] || !SD.exists(path)) return false;
+  File f = SD.open(path, FILE_READ);
+  if (!f) return false;
+  uint8_t hdr[4];
+  bool ok = (f.read(hdr, 4) == 4) &&
+            hdr[0] == 'T' && hdr[1] == 'P' && hdr[2] == 'S' && hdr[3] == 'T';
+  f.close();
+  return ok;
+}
+
+bool voicePresetExists(int ch, uint16_t slot) {
+  char path[40];
+  if (!buildVoicePresetPath(ch, slot, path, sizeof(path))) return false;
+  return voicePresetFileValid(path, false);
+}
+
+FLASHMEM bool saveVoicePreset(int ch, uint16_t slot) {
+  if (!isVoicePresetChannel(ch)) return false;
+  if (!ensureVoicePresetDirs(ch)) return false;
+
+  extern const uint8_t filterPageCount[NUM_CHANNELS];
+  extern void sdIoBeginAudioSafe();
+  extern void sdIoEndAudioSafe();
+  extern void sdIoYield();
+
+  char path[40];
+  char tmpPath[48];
+  char bakPath[48];
+  if (!buildVoicePresetPath(ch, slot, path, sizeof(path))) return false;
+  snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", path);
+  snprintf(bakPath, sizeof(bakPath), "%s.bak", path);
+
+  struct Entry {
+    uint8_t arr;
+    uint8_t idx;
+    uint8_t value;
+  };
+  Entry entries[48];
+  uint8_t count = 0;
+
+  auto pushEntry = [&](SettingArray arr, int idx) {
+    if (count >= 48) return;
+    if (arr == ARR_NONE || idx < 0) return;
+    if (arr == ARR_PARAM && idx >= PARAM_COUNT) return;
+    if (arr == ARR_SYNTH && idx >= 11) return;
+    for (uint8_t i = 0; i < count; i++) {
+      if (entries[i].arr == (uint8_t)arr && entries[i].idx == (uint8_t)idx) {
+        entries[i].value = readPresetSettingValue(ch, arr, idx);
+        return;
+      }
+    }
+    entries[count].arr = (uint8_t)arr;
+    entries[count].idx = (uint8_t)idx;
+    entries[count].value = readPresetSettingValue(ch, arr, idx);
+    count++;
+  };
+
+  int pages = filterPageCount[ch];
+  if (pages <= 0) pages = 4;
+  if (pages > FILTER_PAGE_CAP) pages = FILTER_PAGE_CAP;
+  for (int p = 0; p < pages; p++) {
+    for (int s = 0; s < 4; s++) {
+      const SliderDefEntry &d = sliderDef[ch][p][s];
+      pushEntry(d.arr, d.idx);
+    }
+  }
+  if (ch == 11) pushEntry(ARR_SYNTH, FORM);
+
+  sdIoBeginAudioSafe();
+  if (SD.exists(tmpPath)) SD.remove(tmpPath);
+  File f = SD.open(tmpPath, O_WRITE | O_CREAT | O_TRUNC);
+  if (!f) {
+    sdIoEndAudioSafe();
+    return false;
+  }
+
+  const uint8_t magic[4] = { 'T', 'P', 'S', 'T' };
+  const uint8_t version = 1;
+  const uint8_t channelByte = (uint8_t)ch;
+  bool ok = (f.write(magic, 4) == 4) &&
+            (f.write(&version, 1) == 1) &&
+            (f.write(&channelByte, 1) == 1) &&
+            (f.write(&count, 1) == 1);
+  for (uint8_t i = 0; ok && i < count; i++) {
+    ok = (f.write(&entries[i].arr, 1) == 1) &&
+         (f.write(&entries[i].idx, 1) == 1) &&
+         (f.write(&entries[i].value, 1) == 1);
+    if ((i & 7) == 0) sdIoYield();
+  }
+  f.close();
+  if (!ok) {
+    SD.remove(tmpPath);
+    sdIoEndAudioSafe();
+    return false;
+  }
+
+  ok = commitPatternTransaction(SD, path, tmpPath, bakPath, voicePresetFileValid);
+  sdIoEndAudioSafe();
+  if (ok) {
+    setVoicePresetSlot(ch, slot);
+    invalidateVoicePresetUi();
+  }
+  return ok;
+}
+
+FLASHMEM bool loadVoicePreset(int ch, uint16_t slot) {
+  if (!isVoicePresetChannel(ch)) return false;
+
+  char path[40];
+  if (!buildVoicePresetPath(ch, slot, path, sizeof(path))) return false;
+  if (!voicePresetFileValid(path, false)) return false;
+
+  extern void sdIoBeginAudioSafe();
+  extern void sdIoEndAudioSafe();
+  extern void sdIoYield();
+  extern void applyMonoSynthCrf(int ch);
+  extern void updateSynthVoice(int channel);
+  extern void midiArpResetVoice(int ch);
+
+  sdIoBeginAudioSafe();
+  File f = SD.open(path, FILE_READ);
+  if (!f) {
+    sdIoEndAudioSafe();
+    return false;
+  }
+
+  uint8_t magic[4];
+  uint8_t version = 0;
+  uint8_t fileCh = 0;
+  uint8_t count = 0;
+  bool ok = (f.read(magic, 4) == 4) &&
+            magic[0] == 'T' && magic[1] == 'P' && magic[2] == 'S' && magic[3] == 'T' &&
+            (f.read(&version, 1) == 1) && version == 1 &&
+            (f.read(&fileCh, 1) == 1) &&
+            (f.read(&count, 1) == 1) &&
+            count <= 48;
+  // Allow loading a preset saved on a sibling synth voice onto the current one.
+  if (ok && fileCh != 11 && fileCh != 13 && fileCh != 14) ok = false;
+
+  for (uint8_t i = 0; ok && i < count; i++) {
+    uint8_t arr = 0, idx = 0, value = 0;
+    ok = (f.read(&arr, 1) == 1) && (f.read(&idx, 1) == 1) && (f.read(&value, 1) == 1);
+    if (!ok) break;
+    writePresetSettingValue(ch, (SettingArray)arr, (int)idx, value);
+    if ((i & 7) == 0) sdIoYield();
+  }
+  f.close();
+  sdIoEndAudioSafe();
+  if (!ok) return false;
+
+  // Push stored values into audio hardware (same chain as filter-page edits).
+  extern const uint8_t filterPageCount[NUM_CHANNELS];
+  int pages = filterPageCount[ch];
+  if (pages <= 0) pages = 4;
+  if (pages > FILTER_PAGE_CAP) pages = FILTER_PAGE_CAP;
+  for (int p = 0; p < pages; p++) {
+    for (int s = 0; s < 4; s++) {
+      const SliderDefEntry &d = sliderDef[ch][p][s];
+      if (d.arr == ARR_NONE || d.idx < 0) continue;
+      if (d.arr == ARR_FILTER) {
+        setFilters((FilterType)d.idx, ch, false);
+      } else if (d.arr == ARR_PARAM && d.idx < PARAM_COUNT) {
+        setParams((ParameterType)d.idx, ch);
+      }
+    }
+  }
+  if (ch == 11) {
+    updateSynthVoice(11);
+  } else {
+    applyMonoSynthCrf(ch);
+  }
+  midiArpResetVoice(ch);
+
+  if (currentMode == &filterMode && (int)GLOB.currentChannel == ch) {
+    extern uint8_t filterPage[NUM_CHANNELS];
+    extern void initSliders(uint8_t page, uint8_t chan);
+    initSliders(filterPage[ch], (uint8_t)ch);
+  }
+
+  setVoicePresetSlot(ch, slot);
+  invalidateVoicePresetUi();
+  return true;
+}

@@ -393,6 +393,13 @@ void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false
 void requestDeferredSampleLoadAutosave();
 void servicePendingSamplePersist();
 void saveSp0StateToEEPROM();
+bool voicePresetExists(int ch, uint16_t slot);
+bool saveVoicePreset(int ch, uint16_t slot);
+bool loadVoicePreset(int ch, uint16_t slot);
+uint16_t getVoicePresetSlot(int ch);
+void setVoicePresetSlot(int ch, uint16_t slot);
+bool takeVoicePresetUiDirty();
+FLASHMEM void showPresetLoadSave();
 void saveSingleModeToEEPROM(int index, int8_t value);
 FLASHMEM void flushSettingsBackupNow();
 void stopAllSetWavPreviewAudio();
@@ -1000,6 +1007,8 @@ Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // FILE UI encoder 3: 0=NEW, 1=A (autosaved.txt), 2..1000 = 1.txt..999.txt
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 1000 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+// PSET: filter-page presets for ch11/13/14. Enc4=slot 1..99, Enc1=load, Enc2=save (PATT-like).
+Mode loadSavePreset = { "LOADSAVE_PRESET", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
 Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 // NEW: enc0=load (press), enc1=length, enc2=template, enc3=back to FILE (blue like FILE menu)
@@ -1519,7 +1528,7 @@ static void applyVoiceAmpGainFromVol(int ch, int vol);
 static const uint8_t sliderCols[4][2] = { { 2, 3 }, { 6, 7 }, { 10, 11 }, { 14, 15 } };
 
 // For each page and slot: {arrayType, settingIndex, name}
-DMAMEM static SliderDefEntry sliderDef[NUM_CHANNELS][FILTER_PAGE_CAP][4];
+DMAMEM SliderDefEntry sliderDef[NUM_CHANNELS][FILTER_PAGE_CAP][4];
 
 FLASHMEM void initSliderDefTemplates() {
   static const SliderDefEntry sliderDefTemplate[4][4] = {
@@ -2126,7 +2135,8 @@ FLASHMEM void switchMode(Mode *newMode) {
     // Stamp menu-exit time when returning to draw/single from menu or menu child screens,
     // so re-open within 5s restores last main page; after 5s → FILE.
     if ((newMode == &draw || newMode == &singleMode)
-        && (oldMode == &menu || oldMode == &loadSaveTrack || oldMode == &set_SamplePack
+        && (oldMode == &menu || oldMode == &loadSaveTrack || oldMode == &loadSavePreset
+            || oldMode == &set_SamplePack
             || oldMode == &bpmMode || oldMode == &songMode || oldMode == &newFileMode
             || oldMode == &set_Wav)) {
       extern void noteMenuExit();
@@ -2391,6 +2401,24 @@ FLASHMEM void switchMode(Mode *newMode) {
         currentMode->pos[2] = 0;
       }
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+    }
+
+    if (currentMode == &loadSavePreset) {
+      int ch = (int)GLOB.currentChannel;
+      uint16_t slot = getVoicePresetSlot(ch);
+      currentMode->pos[3] = slot;
+      Encoder[3].writeMin((int32_t)1);
+      Encoder[3].writeMax((int32_t)99);
+      Encoder[3].writeCounter((int32_t)slot);
+      currentMode->pos[0] = 1;
+      currentMode->pos[1] = 1;
+      currentMode->pos[2] = 1;
+      Encoder[0].writeMin((int32_t)1);
+      Encoder[0].writeMax((int32_t)1);
+      Encoder[1].writeMin((int32_t)1);
+      Encoder[1].writeMax((int32_t)1);
+      Encoder[2].writeMin((int32_t)1);
+      Encoder[2].writeMax((int32_t)1);
     }
 
     if (currentMode == &subpatternMode && muteModeActive) {
@@ -2936,6 +2964,31 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     loadPattern(false);
     preventPaintUnpaint = true;                                                                     // Prevent paint/unpaint after load
     return;                                                                                         // Prevent other button actions from being processed
+  } else if ((currentMode == &loadSavePreset) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" exit
+    preventPaintUnpaint = false;
+    switchMode(GLOB.singleMode ? &singleMode : &draw);
+  } else if ((currentMode == &loadSavePreset) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100" save
+    int ch = (int)GLOB.currentChannel;
+    uint16_t slot = (uint16_t)constrain((int)currentMode->pos[3], 1, 99);
+    const bool ok = saveVoicePreset(ch, slot);
+    FastLEDclear();
+    drawText(ok ? "OK" : "NO", 5, 9, ok ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+    FastLEDshow();
+    delay(450);
+    preventPaintUnpaint = false;
+    switchMode(GLOB.singleMode ? &singleMode : &draw);
+    return;
+  } else if ((currentMode == &loadSavePreset) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000" load
+    int ch = (int)GLOB.currentChannel;
+    uint16_t slot = (uint16_t)constrain((int)currentMode->pos[3], 1, 99);
+    const bool ok = loadVoicePreset(ch, slot);
+    FastLEDclear();
+    drawText(ok ? "OK" : "NO", 5, 9, ok ? CRGB(0, 255, 0) : CRGB(255, 0, 0));
+    FastLEDshow();
+    delay(450);
+    preventPaintUnpaint = false;
+    switchMode(GLOB.singleMode ? &singleMode : &draw);
+    return;
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     saveSamplePack(SMP.pack);
     return;                                                                                         // Prevent other button actions from being processed
@@ -5956,8 +6009,7 @@ void checkTouchInputs() {
         }
         // If channel doesn't support filters, do nothing (don't crash)
       } else {
-        // Left pressed first (1) OR simultaneous (0) -> go to set_Wav
-        // Only go to set_Wav if channel supports samples (1-8)
+        // Left pressed first (1) OR simultaneous (0) -> SMP (1-8) or PSET (11/13/14)
         if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
           if (currentMode == &singleMode) {
             GLOB.singleMode = false;
@@ -5966,8 +6018,12 @@ void checkTouchInputs() {
           switchMode(&set_Wav);
           bypassModeSwitchDebounce = false;
           lastBothTouchHandledTime = now;
+        } else if (GLOB.currentChannel == 11 || GLOB.currentChannel == 13 || GLOB.currentChannel == 14) {
+          bypassModeSwitchDebounce = true;
+          switchMode(&loadSavePreset);
+          bypassModeSwitchDebounce = false;
+          lastBothTouchHandledTime = now;
         }
-        // If channel doesn't support samples, do nothing (don't crash)
       }
     }
 skip_individual_touch:
@@ -6117,6 +6173,28 @@ end_switch1:
         currentMenuPage = 1;
         menu.pos[3] = 1;
         Encoder[3].writeCounter((int32_t)1);
+        if (menuEnteredFromSingleMode) {
+          switchMode(&singleMode);
+          GLOB.singleMode = true;
+        } else {
+          switchMode(&draw);
+          GLOB.singleMode = false;
+        }
+        extern int drawMode;
+        if (drawMode == 0) {
+          Encoder[0].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+        } else {
+          Encoder[0].writeRGBCode(0x000000);
+        }
+        Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
+      } else if (currentMode == &loadSavePreset) {
+        // Exit PSET to draw/single, keep menu on SMP/PSET page (index 2)
+        extern bool menuEnteredFromSingleMode;
+        extern int currentMenuPage;
+        extern Mode menu;
+        currentMenuPage = 2;
+        menu.pos[3] = 2;
+        Encoder[3].writeCounter((int32_t)2);
         if (menuEnteredFromSingleMode) {
           switchMode(&singleMode);
           GLOB.singleMode = true;
@@ -7244,7 +7322,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   // drawn on the idle frames stays on top of those screens.
   if (!fastRecordActive && currentMode != &velocity && currentMode != &filterMode && currentMode != &menu
       && currentMode != &set_Wav && currentMode != &recordMode && currentMode != &touchyMode
-      && currentMode != &loadSaveTrack && currentMode != &set_SamplePack) {
+      && currentMode != &loadSaveTrack && currentMode != &loadSavePreset && currentMode != &set_SamplePack) {
     drawCursor();
   }
   checkButtons();
@@ -7463,6 +7541,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     setVelocity();
   } else if (currentMode->name == "LOADSAVE_TRACK") {
     showLoadSave();
+  } else if (currentMode->name == "LOADSAVE_PRESET") {
+    showPresetLoadSave();
   } else if (currentMode->name == "MENU") {
     extern bool inLookSubmenu;
     extern bool inRecsSubmenu;
@@ -10125,6 +10205,81 @@ FLASHMEM void showLoadSave() {
     setFileRGB(2, 0x000000);
     drawNumber(SMP.file, UI_BLUE, 11);
   }
+  FastLEDshow();
+}
+
+FLASHMEM void showPresetLoadSave() {
+  drawNoSD();
+
+  int ch = (int)GLOB.currentChannel;
+  if (ch != 11 && ch != 13 && ch != 14) {
+    switchMode(GLOB.singleMode ? &singleMode : &draw);
+    return;
+  }
+
+  uint16_t slot = (uint16_t)constrain((int)currentMode->pos[3], 1, 99);
+  if ((unsigned int)slot != currentMode->pos[3]) {
+    currentMode->pos[3] = slot;
+    Encoder[3].writeCounter((int32_t)slot);
+  }
+  setVoicePresetSlot(ch, slot);
+
+  static int lastUiCh = -1;
+  static int lastUiSlot = -2;
+  static int8_t lastExists = -1;
+  static uint32_t lastPsetRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+  static uint32_t lastCallMs = 0;
+  uint32_t nowMs = millis();
+  if (nowMs - lastCallMs > 50) {
+    lastUiCh = -1;
+    lastUiSlot = -2;
+    lastExists = -1;
+    for (int i = 0; i < 4; i++) lastPsetRGB[i] = 0xFFFFFFFFu;
+  }
+  lastCallMs = nowMs;
+
+  if (takeVoicePresetUiDirty()) lastUiSlot = -2;
+  bool slotChanged = (ch != lastUiCh) || ((int)slot != lastUiSlot);
+  bool exists;
+  if (slotChanged) {
+    exists = voicePresetExists(ch, slot);
+    lastUiCh = ch;
+    lastUiSlot = (int)slot;
+    lastExists = exists ? 1 : 0;
+  } else {
+    exists = (lastExists == 1);
+    return;
+  }
+
+  FastLEDclear();
+
+  CRGB fileIconColor = exists ? UI_GREEN : UI_DIM_RED;
+  showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
+
+  auto setPsetRGB = [&](int enc, uint32_t rgb) {
+    if (enc < 0 || enc > 3) return;
+    if (lastPsetRGB[enc] == rgb) return;
+    lastPsetRGB[enc] = rgb;
+    Encoder[enc].writeRGBCode(rgb);
+  };
+  auto matrixInd = [&](char size, char colorCode, int encoderNum) {
+    drawIndicator(size, colorCode, encoderNum, false, false);
+    CRGB c = getIndicatorColor(colorCode);
+    CRGB maxB = normalizeToMaxBrightness(c);
+    setPsetRGB(encoderNum - 1, (uint32_t)maxB.r << 16 | (uint32_t)maxB.g << 8 | maxB.b);
+  };
+
+  matrixInd('L', 'X', 4);
+  if (exists) {
+    matrixInd('M', 'G', 1);  // Enc1 load
+    matrixInd('M', 'D', 2);  // Enc2 save
+    drawNumber(slot, UI_BRIGHT_GREEN, 11);
+  } else {
+    matrixInd('M', 'E', 1);
+    matrixInd('M', 'R', 2);
+    drawNumber(slot, UI_BLUE, 11);
+  }
+  setPsetRGB(2, 0x000000);
   FastLEDshow();
 }
 

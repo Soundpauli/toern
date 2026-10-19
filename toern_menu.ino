@@ -90,7 +90,7 @@ struct MenuPage {
 MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"PATT", 1, false, nullptr},           // Load/Save
   {"KIT", 2, false, nullptr},           // Sample Pack
-  {"SMP", 3, false, nullptr},           // Wave Selection
+  {"SMP", 3, false, nullptr},           // Wave (ch1–8) / PSET presets (ch11/13/14)
   {"BPM", 5, false, nullptr},           // Tempo / clock / brightness
   {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, GAIN, LOUT, PREV, SPKR)
   {"SETT", 19, false, nullptr},         // SETT submenu (VIEW, CTRL, DRAW, MUTE)
@@ -2335,16 +2335,19 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
       
-    case 3: // WAV - Wave Selection
-      // wave = sample
+    case 3: // WAV / PSET — samples on ch1–8, filter presets on ch11/13/14
       {
         const CRGB tc = menuTextColorFromCol(3);
-        showIcons(ICON_SAMPLE_BIG, dimIconColorFromText(tc));
-      if (GLOB.currentChannel > 0 && GLOB.currentChannel < 9) {
-        drawMenuText("SMP", 2, 3, tc);
-      } else {
-        drawMenuText("(-)", 2, 3, tc);
-      }
+        if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
+          showIcons(ICON_SAMPLE_BIG, dimIconColorFromText(tc));
+          drawMenuText("SMP", 2, 3, tc);
+        } else if (GLOB.currentChannel == 11 || GLOB.currentChannel == 13 || GLOB.currentChannel == 14) {
+          showIcons(ICON_FOLDER_BIG, dimIconColorFromText(tc));
+          drawMenuText("PSET", 2, 3, tc);
+        } else {
+          showIcons(ICON_SAMPLE_BIG, dimIconColorFromText(tc));
+          drawMenuText("(-)", 2, 3, tc);
+        }
       }
       break;
       
@@ -4885,8 +4888,12 @@ FLASHMEM void switchMenu(int menuPosition){
         break;
 
       case 3:
-        if (GLOB.currentChannel < 1 || GLOB.currentChannel > 8) return;
-        switchMode(&set_Wav);
+        if (GLOB.currentChannel >= 1 && GLOB.currentChannel <= 8) {
+          switchMode(&set_Wav);
+        } else if (GLOB.currentChannel == 11 || GLOB.currentChannel == 13 || GLOB.currentChannel == 14) {
+          extern Mode loadSavePreset;
+          switchMode(&loadSavePreset);
+        }
         break;
 
       case 4:
