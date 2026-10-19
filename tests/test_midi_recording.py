@@ -30,12 +30,15 @@ struct {int currentChannel=13; bool singleMode=true;} GLOB;
 bool MIDI_NOTE_RECEIVE=true,MIDI_NOTE_CLAMP=true,MIDI_VOICE_SELECT=false,MIDI_WRITE_OVERWRITE=false,isNowPlaying=true;
 int voiceSelect=0,auditions=0,releases=0; unsigned int beat=3;
 bool activeNotes[128]={},midiHeldNote[17][128]={},persistentNoteOn[17]={},childDisabled=false;
+uint8_t midiHeldVelocity[17][128]={};
 int16_t pressedKeyCount[17]={};
+bool synthMidiArpEnabled(int){return false;}
+void midiArpOnHeldNote(int){}
 volatile uint16_t liveRecordSkipBeat=0,liveRecordSkipRows=0;
 void noInterrupts(){} void interrupts(){}
 bool isChildVoiceDisabled(int){return childDisabled;}
 uint16_t quantizedMidiRecordBeat(){return beat;}
-void extendLastPageForLiveNote(unsigned int){}
+void extendLastPageForLiveNote(uint8_t, uint8_t, unsigned int){}
 void logMidiRxNoteOn(uint8_t,uint8_t,uint8_t){}
 void playIncomingMidiNote(int,uint8_t,uint8_t,uint8_t){auditions++;}
 void handleNoteOff(uint8_t,uint8_t pitch,uint8_t){releases++;midiHeldNote[GLOB.currentChannel][pitch]=false;}

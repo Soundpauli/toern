@@ -27,7 +27,7 @@
   var failed = false;
   var page = location.pathname.split("/").pop() || "index.html";
   var ready = selected.file
-    ? fetch(selected.file + "?v=20261016w", { credentials: "same-origin" })
+    ? fetch(selected.file + "?v=20261016x", { credentials: "same-origin" })
       .then(function (response) {
         if (!response.ok) throw new Error("Language unavailable");
         return response.json();

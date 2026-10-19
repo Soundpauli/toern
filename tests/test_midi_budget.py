@@ -30,9 +30,13 @@ void handleSongPosition(int){events.push_back(midi::SongPosition);}
 void handleTimeCodeQuarterFrame(int){events.push_back(midi::TimeCodeQuarterFrame);}
 void pump() { LOOP }
 int main(){
- MIDI.messages={midi::Clock,midi::NoteOn,midi::NoteOff,midi::PitchBend,midi::SongPosition,
- midi::TimeCodeQuarterFrame,midi::NoteOff,midi::Stop,midi::Clock,midi::NoteOn,midi::NoteOff};
- pump(); assert(MIDI.at==6); assert(events.size()==6);
+ MIDI.messages={midi::Clock,midi::NoteOn,midi::NoteOff,
+ midi::PitchBend,midi::SongPosition,midi::TimeCodeQuarterFrame,midi::Stop,
+ midi::PitchBend,midi::SongPosition,midi::TimeCodeQuarterFrame,midi::Stop,
+ midi::PitchBend,midi::SongPosition,midi::TimeCodeQuarterFrame,midi::Stop,
+ midi::PitchBend,midi::SongPosition,midi::TimeCodeQuarterFrame,midi::Stop,
+ midi::NoteOff,midi::Stop,midi::Clock,midi::NoteOn,midi::NoteOff};
+ pump(); assert(MIDI.at==19); assert(events.size()==19);
  while(MIDI.at<MIDI.messages.size()) pump();
  assert(events==MIDI.messages);
  std::cout<<"MIDI burst preserves Note Off, Stop, clock and callback messages\n";

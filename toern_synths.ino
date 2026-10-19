@@ -115,17 +115,19 @@ static void setSoundVoice(int note, int ch, int velocity, int voiceIdx,
   int noteIdx1 = note + semitones[ch][1];
   int noteIdx2 = note + semitones[ch][2];
 
-  noteArray[ch][voiceIdx] = note;
-  voiceStartTime[ch][voiceIdx] = millis();
-  Swaveform1[voiceIdx]->frequency(
-    synthNoteFrequency(noteIdx0) * pow(2, cents[ch][0] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  Swaveform2[voiceIdx]->frequency(
-    synthNoteFrequency(noteIdx1) * pow(2, cents[ch][1] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
-  Swaveform3[voiceIdx]->frequency(
-    synthNoteFrequency(noteIdx2) * pow(2, cents[ch][2] / 1200.0) * pow(2, random(-2, 3) / 1200.0));
+  float f0 = synthNoteFrequency(noteIdx0) * powf(2.0f, (cents[ch][0] + (float)random(-2, 3)) / 1200.0f);
+  float f1 = synthNoteFrequency(noteIdx1) * powf(2.0f, (cents[ch][1] + (float)random(-2, 3)) / 1200.0f);
+  float f2 = synthNoteFrequency(noteIdx2) * powf(2.0f, (cents[ch][2] + (float)random(-2, 3)) / 1200.0f);
 
   int velMidi = constrain(velocity > 0 ? velocity : defaultVelocity, 1, 127);
   float amp = mapf((float)velMidi, 1.0f, 127.0f, 0.0f, 1.0f);
+
+  toern_audio::StateGuard guard;
+  noteArray[ch][voiceIdx] = note;
+  voiceStartTime[ch][voiceIdx] = millis();
+  Swaveform1[voiceIdx]->frequency(f0);
+  Swaveform2[voiceIdx]->frequency(f1);
+  Swaveform3[voiceIdx]->frequency(f2);
   Swaveform1[voiceIdx]->amplitude(amp);
   Swaveform2[voiceIdx]->amplitude(amp);
   Swaveform3[voiceIdx]->amplitude(amp);
@@ -738,6 +740,7 @@ void playSound(int note, int ch, int velocity) {
   extern void sidechainOnVoice(uint8_t);
   sidechainOnVoice(11);
 
+  toern_audio::StateGuard guard;
   int voiceIdx = -1;
   for (int voice = 0; voice < POLY_VOICES; voice++) {
     if (noteArray[ch][voice] == note) {
@@ -945,6 +948,7 @@ if (pressedKeyCount[11]>=1) return;
 
 // Example stopSound() function (assuming noteArray[] holds the note numbers for active voices)
 void stopSound(int note, int ch) {
+  toern_audio::StateGuard guard;
   for (int num = 0; num < POLY_VOICES; num++) {
     if (noteArray[ch][num] == note) {
       Senvelope1[num]->noteOff();

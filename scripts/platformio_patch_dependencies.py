@@ -116,10 +116,37 @@ for source_dir in playback_src_dirs:
             if (reader == nullptr || !reader->isPlaying()) ampMult = m;
         }
 
+        void snapAmplitude(float n) {
+            if (n < 0.0f) n = 0.0f;
+            else if (n > 1.0f) n = 1.0f;
+            int32_t m = (int32_t)(n * 65536.0f + 0.5f);
+            ampTarget = m;
+            ampMult = m;
+        }
+
         void update()
         {
             int _numChannels = reader->getNumChannels();""",
             "setAmplitude method",
+        )
+    elif "void snapAmplitude(float n)" not in text:
+        text = replace_once(
+            text,
+            """        void update()
+        {
+            int _numChannels = reader->getNumChannels();""",
+            """        void snapAmplitude(float n) {
+            if (n < 0.0f) n = 0.0f;
+            else if (n > 1.0f) n = 1.0f;
+            int32_t m = (int32_t)(n * 65536.0f + 0.5f);
+            ampTarget = m;
+            ampMult = m;
+        }
+
+        void update()
+        {
+            int _numChannels = reader->getNumChannels();""",
+            "snapAmplitude method",
         )
         text = replace_once(
             text,

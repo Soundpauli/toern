@@ -762,7 +762,7 @@ void checkMidi() {
   // Solution: Check message type FIRST, process Clock immediately with timestamp capture
   // before ANY other processing (including MIDI.getChannel() or MIDI.getData() calls)
 
-  static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 4;
+  static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 16;
   uint8_t processedMessages = 0;
   while (processedMessages < MAX_MIDI_MESSAGES_PER_LOOP && MIDI.read()) {
     uint8_t miditype = MIDI.getType();
@@ -770,18 +770,19 @@ void checkMidi() {
     if (miditype == midi::Clock) continue;
     if (miditype == midi::NoteOn) continue;  // handled by callback
 
+    if (miditype == midi::NoteOff) {
+      uint8_t pitch = MIDI.getData1();
+      uint8_t velocity = MIDI.getData2();
+      logMidiRxNoteOff(MIDI.getChannel(), pitch, velocity);
+      // Same logical channel as handleNoteOn (cable channel + voice mode), not raw 1..16 only.
+      handleNoteOff(MIDI.getChannel(), pitch, velocity);
+      continue;
+    }
+
     // Stop reading at the budget: unread messages remain queued for next loop.
     processedMessages++;
 
     switch (miditype) {
-      case midi::NoteOff: {
-        uint8_t pitch = MIDI.getData1();
-        uint8_t velocity = MIDI.getData2();
-        logMidiRxNoteOff(MIDI.getChannel(), pitch, velocity);
-        // Same logical channel as handleNoteOn (cable channel + voice mode), not raw 1..16 only.
-        handleNoteOff(MIDI.getChannel(), pitch, velocity);
-        break;
-      }
       case midi::Stop:
         logMidiRxSimple("Stop");
         handleStop();
@@ -1403,9 +1404,7 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
         // (arp off) still needs a real envelope noteOff.
         extern void midiArpResetVoice(int ch);
         midiArpResetVoice(channel);
-        if (envelopes[channel]) envelopes[channel]->noteOff();
-        persistentNoteOn[channel] = false;
-        noteOnTriggered[channel] = false;
+        stopSynthChannel(channel);
       } else if (envelopes[channel]) {
         envelopes[channel]->noteOff();
         persistentNoteOn[channel] = false;

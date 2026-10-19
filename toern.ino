@@ -281,6 +281,7 @@ extern uint16_t g_folderPickCount;
 struct MidiSettings : public midi ::DefaultSettings {
   static const long BaudRate = 31250;
   static const unsigned SysExMaxSize = 16;
+  static const bool Use1ByteParsing = false;
 };
 
 MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MidiSettings);
@@ -377,7 +378,7 @@ void initNeoSlider();
 void updateNeoSliderVolume();
 void reapplyAllSampleChannelGains();
 void resetAllChannelVolumesToDefault();
-void extendLastPageForLiveNote(uint16_t targetBeat);
+void extendLastPageForLiveNote(uint8_t channel, uint8_t row, uint16_t targetBeat);
 void updateLastPage();
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger);
 uint8_t scaledNoteVelocity(int ch, int vel);
@@ -587,7 +588,7 @@ bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
   // Do not full-scan EXTMEM here: updateLastPage() briefly publishes lastPage=0
   // (and understated mid-scan values) that the playNote ISR can treat as a wrap
   // to beat 1 when many MIDI notes land while playing.
-  extendLastPageForLiveNote(targetBeat);
+  extendLastPageForLiveNote(channel, row, targetBeat);
   return true;
 }
 
@@ -1660,6 +1661,7 @@ FLASHMEM void applyMixBusGains() {
 // Stop synth channels (13/14) immediately (also used from MIDI note-off).
 void stopSynthChannel(int ch) {
   if (ch < 13 || ch > 14) return;
+  toern_audio::StateGuard guard;
   if (envelopes[ch]) envelopes[ch]->noteOff();
   noteOnTriggered[ch] = false;
   persistentNoteOn[ch] = false;
@@ -1675,7 +1677,7 @@ static inline void resetMidiPressedKeyCount11to14() {
 }
 
 // Arp step per channel (used for synth channels)
-static uint32_t arpStepCounter[15] = { 0 };
+static volatile uint32_t arpStepCounter[15] = { 0 };
 // Map external 14-bit input (e.g. pitchbend) to current channel fast filter
 static inline void applyExternalFastFilter(uint16_t value14) {
   FilterTarget dft = defaultFastFilter[GLOB.currentChannel];
@@ -3934,13 +3936,15 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
   extern void sidechainOnVoice(uint8_t);
   sidechainOnVoice((uint8_t)ch);
   toern_audio::StateGuard guard;  // amplitude, reader reset/rate and envelope are one transaction
-  applyPlayAmplitude(ch, amp);
   if (isNeoSliderControlledChannel(ch)) {
     neoSliderLastVelNorm[ch - 1] = noteN;
   }
   uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
   const uint8_t midiPitch = (uint8_t)constrain(pitch, 0, 127);
   samplerNoteEvent(ch, midiPitch, sv, true, retrigger);
+  if (voices[ch] != nullptr) {
+    voices[ch]->snapAmplitude(amp);
+  }
   // DTNE fine tune (±1 semitone) for sample voices — rate multiply after integer note.
   if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
     const float fine = detune[ch];
@@ -4240,7 +4244,7 @@ FLASHMEM void setup() {
   //Wire.setClock(10000); // Set to 400 kHz (standard speed)
   NVIC_SET_PRIORITY(IRQ_SOFTWARE, toern_audio::kAudioPriority);
   // Teensy 4.1 Serial8 is LPUART5 (not LPUART8). UART must preempt PIT.
-  NVIC_SET_PRIORITY(IRQ_LPUART5, 64);
+  NVIC_SET_PRIORITY(IRQ_LPUART5, 32);
   //NVIC_SET_PRIORITY(IRQ_USB1, 128);  // USB1 for Teensy 4.x
 
   // Avoid allocations / fragmentation when scheduling sample triggers
@@ -4565,6 +4569,7 @@ FLASHMEM void setup() {
   Serial8.addMemoryForRead(midiRxExtra, sizeof(midiRxExtra));
   Serial8.begin(31250);
   MIDI.begin(MIDI_CHANNEL_OMNI);
+  MIDI.turnThruOff();
   MIDI.setHandleNoteOn(handleNoteOn);    // optional MIDI library hook
   MIDI.setHandleClock(handleMidiClock);  // dedicated callback for MIDI clock to reduce jitter
   MIDI.setHandleStart(handleStart);      // callback for Start so it fires immediately, not in loop()
@@ -6949,6 +6954,7 @@ void loop() {
       yield();
       // Present the frame (throttled inside FastLEDshow()).
       FastLEDshow();
+      checkMidi();
     }
   }
 
@@ -7013,6 +7019,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   }
   checkButtons();
   checkTouchInputs();
+  checkMidi();
 
   // While capturing: drain queue again, then skip paint / SD / mixer slew work.
   if (fastRecordActive) {
@@ -7984,15 +7991,16 @@ static int arpSpanSteps(int ch) {
   return spanSteps;
 }
 
-static uint16_t midiArpLastBeat[15] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-                                        0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-                                        0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
-static unsigned long midiArpLastMs[15] = { 0 };
-static int16_t midiArpLastCh11Note = INT16_MIN;
-static bool midiArpKick[15] = { false };
+static volatile uint16_t midiArpLastBeat[15] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+                                                 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+                                                 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
+static volatile unsigned long midiArpLastMs[15] = { 0 };
+static volatile int16_t midiArpLastCh11Note = INT16_MIN;
+static volatile bool midiArpKick[15] = { false };
 
 void midiArpResetVoice(int ch) {
   if (ch < 0 || ch >= 15) return;
+  toern_audio::StateGuard guard;
   bool hadPhrase = (arpStepCounter[ch] != 0 || midiArpKick[ch] ||
                     midiArpLastBeat[ch] != 0xFFFF ||
                     (ch == 11 && midiArpLastCh11Note != INT16_MIN));
@@ -8009,17 +8017,26 @@ void midiArpResetVoice(int ch) {
   }
 }
 
+static void midiArpFireChannel(int ch);
+
 void midiArpRestart(int ch) {
   if (ch < 0 || ch >= 15) return;
+  toern_audio::StateGuard guard;
   arpStepCounter[ch] = 0;
   midiArpLastBeat[ch] = 0xFFFF;
-  midiArpLastMs[ch] = 0;
-  midiArpKick[ch] = true;
+  midiArpLastMs[ch] = millis();
+  midiArpKick[ch] = false;
+  if (isNowPlaying) {
+    const bool eighths = arpUsesEighths(ch);
+    uint16_t b = quantizedMidiRecordBeat();
+    midiArpLastBeat[ch] = eighths ? (uint16_t)((b + 1u) / 2u) : b;
+  }
+  midiArpFireChannel(ch);
 }
 
 void midiArpOnHeldNote(int ch) {
   if (ch < 0 || ch >= 15) return;
-  if (pressedKeyCount[ch] == 1 || arpStepCounter[ch] <= 1) midiArpRestart(ch);
+  if (pressedKeyCount[ch] == 1) midiArpRestart(ch);
 }
 
 static void midiArpFireChannel(int ch) {
@@ -8207,50 +8224,57 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
   }
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
-  // A directly adjacent sequencer note reuses the open envelope. Frequency
-  // changes become a legato slide; an equal pitch is a true hold.
-  if (!legato) stopSynthChannel(ch);
-
   // Global cent shift for both oscillators (0..32 -> -24..+24 semitones)
   float centSemis = mapf(SMP.synth_settings[ch][CENT], 0, maxfilterResolution, -24.0f, 24.0f);
-  float cent_ratio = pow(2.0, centSemis / 12.0);
+  float cent_ratio = powf(2.0f, centSemis / 12.0f);
 
   // Global cent shift for both oscillators (0..32 -> -24..+24 semitones)
-  float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0 / 12.0, 1.0 / 12.0);
-  float detune_ratio = pow(2.0, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
+  float detune_amount = mapf(SMP.filter_settings[ch][DETUNE], 0, maxfilterResolution, -1.0f / 12.0f, 1.0f / 12.0f);
+  float detune_ratio = powf(2.0f, detune_amount);  // e.g., 2^(1/12) ~ 1.05946 (one semitone up)
   // Octave shift: assume OCTAVE parameter is an integer (or can be cast to one)
   // For example, an OCTAVE value of 1 multiplies frequency by 2, -1 divides by 2.
   int octave_shift = mapf(SMP.filter_settings[ch][OCTAVE], 0, maxfilterResolution, -3, +3);
-  float octave_ratio = pow(2.0, octave_shift);
+  float octave_ratio = powf(2.0f, (float)octave_shift);
 
   float base = frequency * cent_ratio;
-  synths[ch][0]->frequency(base);
-  synths[ch][1]->frequency(base * octave_ratio * detune_ratio);
-  synths[ch][0]->amplitude(WaveFormVelocity);
-  synths[ch][1]->amplitude(WaveFormVelocity);
-  if (!envelopes[ch]) return;
-
-  // External live MIDI on synth channels should stay audible while key is held.
-  // Grid/preview (persistant=false) keep the configured ADSR behavior.
-  if (persistant && (ch == 13 || ch == 14)) {
-    envelopes[ch]->sustain(maxParamVal[SUSTAIN]);
-  } else if (ch == 13 || ch == 14) {
-    float mappedSustain = mapf(SMP.param_settings[ch][SUSTAIN], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]);
-    envelopes[ch]->sustain(mappedSustain);
+  float freq1 = base * octave_ratio * detune_ratio;
+  float mappedSustain = 0.0f;
+  if (!persistant && (ch == 13 || ch == 14)) {
+    mappedSustain = mapf(SMP.param_settings[ch][SUSTAIN], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]);
   }
 
-  if (!legato) envelopes[ch]->noteOn();
+  {
+    toern_audio::StateGuard guard;
+    // A directly adjacent sequencer note reuses the open envelope. Frequency
+    // changes become a legato slide; an equal pitch is a true hold.
+    if (!legato) stopSynthChannel(ch);
 
-  if (persistant) {
-    persistentNoteOn[ch] = true;
-  } else if (pressedKeyCount[ch] == 0) {
-    // Only clear MIDI-hold flag when no keys are down (avoid grid/seq clearing live MIDI state).
-    persistentNoteOn[ch] = false;
+    synths[ch][0]->frequency(base);
+    synths[ch][1]->frequency(freq1);
+    synths[ch][0]->amplitude(WaveFormVelocity);
+    synths[ch][1]->amplitude(WaveFormVelocity);
+    if (!envelopes[ch]) return;
+
+    // External live MIDI on synth channels should stay audible while key is held.
+    // Grid/preview (persistant=false) keep the configured ADSR behavior.
+    if (persistant && (ch == 13 || ch == 14)) {
+      envelopes[ch]->sustain(maxParamVal[SUSTAIN]);
+    } else if (ch == 13 || ch == 14) {
+      envelopes[ch]->sustain(mappedSustain);
+    }
+
+    if (!legato) envelopes[ch]->noteOn();
+
+    if (persistant) {
+      persistentNoteOn[ch] = true;
+    } else if (pressedKeyCount[ch] == 0) {
+      // Only clear MIDI-hold flag when no keys are down (avoid grid/seq clearing live MIDI state).
+      persistentNoteOn[ch] = false;
+    }
+
+    startTime[ch] = millis();
+    noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
   }
-
-  //unsigned long delay_ms = mapf(SMP.param_settings[ch][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
-  startTime[ch] = millis();    // + delay_ms;    // Record the start time
-  noteOnTriggered[ch] = true;  // Set the flag so we don't trigger noteOn again
 }
 
 void playSynth(int ch, int b, int vel, bool persistant) {
@@ -10143,7 +10167,7 @@ void voiceApplyEditPage(int channel) {
 
 // Live MIDI/touch paint: extend the pattern ceiling without a full EXTMEM scan.
 // Adding a note can only raise (or keep) lastPage; deletions still use updateLastPage().
-void extendLastPageForLiveNote(uint16_t targetBeat) {
+void extendLastPageForLiveNote(uint8_t channel, uint8_t row, uint16_t targetBeat) {
   if (targetBeat < 1 || maxX < 1) return;
   unsigned int notePage = (targetBeat - 1) / maxX + 1;
   int effectiveMaxPages = effectivePageCount();
@@ -10154,8 +10178,19 @@ void extendLastPageForLiveNote(uint16_t targetBeat) {
 
   extern int loopLength;
   if (voiceMode) {
-    // VMOD lengths need a recount; voiceModePages is published once at the end.
-    updateVoiceLengths();
+    // Update VMOD masks incrementally (publish length last so ISR never sees empty mask).
+    if (channel >= 1 && channel <= 15 && notePage <= 16) {
+      if (row >= 1 && row <= 16) {
+        voiceRowMask[channel] |= (uint16_t)(1u << (row - 1));
+      }
+      voicePageMask[channel] |= (uint16_t)(1u << (notePage - 1));
+      if ((uint8_t)notePage > voicePageLen[channel]) {
+        voicePageLen[channel] = (uint8_t)notePage;
+      }
+      if ((uint8_t)notePage > voiceModePages) {
+        voiceModePages = (uint8_t)notePage;
+      }
+    }
     return;
   }
   // PMOD: lastPage stays tied to loopLength via updateLastPage / play start.
