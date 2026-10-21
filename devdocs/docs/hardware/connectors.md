@@ -31,7 +31,7 @@ Exact silk labels on a built unit may use friendly names (LINE OUT, MIDI IN, …
 |-----|------|------------|
 | **J16** | JST-PH 1×02 | `1` GND · `2` VBAT — LiPo |
 | **J10** | JST-PH 1×02 | Speaker outputs from PAM8403 (`U13`) |
-| **J9** | JST-PH 1×03 | Matrix / strip: pin 1 = Teensy **17** through **R20** (220 Ω), pin 2 = GND, pin 3 = switched 5 V from **TPS22918** `U8` (enable is Teensy **36**) |
+| **J9** | JST-PH 1×03 | Matrix: pin 1 = Teensy **17** through **R20** (220 Ω), pin 2 = GND, pin 3 = switched 5 V from **TPS22918** `U8` (enable is Teensy **36**) |
 | **S1** | EG2219 slide switch | Main power path between charger system rail and +5V distribution |
 
 ## Encoder sockets (I2C RGB encoders)
@@ -47,6 +47,46 @@ Several **1×05 pin sockets** share the same bus (examples: `J2`, `J18`–`J24`)
 | 5 | `27` — encoder interrupt (`INT_PIN` in firmware) |
 
 These match Duppa / i2cEncoderLibV2-style modules used in firmware.
+
+## Remote panel firmware
+
+The single selector `exttouch` in `toern_hardware.h` controls the entire panel:
+`false` selects capacitive pads without faders; `true` selects external buttons,
+faders, remote encoder address order, and panel I²C timing. There is no separate
+fader flag. With `exttouch=true`, grounded active-low buttons A/B/C/D use Teensy pins
+5/22/15/24 respectively. D auditions the selected voice through its normal
+filters/effects. In stopped SINGLE it uses the cursor pitch; in playing SINGLE
+it also writes a base-pitch note. In REC it controls the recording threshold.
+The LED strip uses Teensy pin 14 (J14 pin 1), leaving pin 24 for D.
+This replaces the previous LED-strip assignment on pin 24. Move the separate
+strip data wire to **J14-1**; leave button D on **J11-1**. The matrix stays on
+pin 17 / J9-1. Strip operation remains available with external buttons enabled. The same `exttouch` flag enables the four NeoSliders at 0x30–0x33.
+
+The codec, encoders and faders share primary `Wire`. Remote-panel builds apply
+approximately 35 kHz timing (previously about 26 kHz); the standard panel stays
+at 100 kHz. Timing is applied once per primary `Wire.begin()` by the wrapper,
+without additional reapplications after encoder or fader operations. The explicit `Wire.begin()` call in setup remains
+commented out; codec initialization and each seesaw probe call it internally,
+restoring 100 kHz. The canonical PlatformIO build wraps
+`TwoWire::begin()` via `toern_i2c.cpp` and the linker flag in `platformio.ini`,
+restoring slow timing before any subsequent transaction. A periodic timer or
+restoring timing after seesaw initialization leaves its first probe exposed.
+The same wrapper rejects primary-bus transfers until that internal initialization
+completes, so early kit/mode encoder writes cannot access an uninitialized
+peripheral. `initEncoders()` writes its configuration afterward. Other build
+systems must include that source and all three linker flags too.
+
+A matrix stuck showing kit `no.1` does not identify the failing operation:
+that frame can remain visible during subsequent initialization. USB serial
+(`pio device monitor`, 115200) reports `BOOT` stages for samples, autoload,
+codec, encoders and each fader probe. `BOOT codec enabled` only confirms the
+library's `enable()` call returned; volume/input/HPF/output setup follows it.
+`BOOT codec configured` confirms those remaining calls returned. Codec substep
+markers and `audio settings` / `voice settings` markers locate failures before
+`BOOT encoders`. Missing faders are skipped after bounded
+library retries. Long-cable electrical reliability still requires testing on
+the assembled unit; firmware timing alone does not establish the cause of
+an intermittent hardware failure.
 
 ## Analog clock / sidechain (JST-PH 1×02)
 

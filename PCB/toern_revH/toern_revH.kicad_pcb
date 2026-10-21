@@ -3455,7 +3455,7 @@
 		(at 63 81.6)
 		(descr "JST PH series connector, B5B-PH-K (http://www.jst-mfg.com/product/pdf/eng/ePH.pdf), generated with kicad-footprint-generator")
 		(tags "connector JST PH side entry")
-		(property "Reference" "J11.5"
+		(property "Reference" "J11-5V"
 			(at 3.5 -3.1 0)
 			(layer "F.SilkS")
 			(uuid "f5888ce5-0479-41da-a5f1-e633a87e39a8")
@@ -4117,7 +4117,7 @@
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "capacitor")
 		(property "Reference" "C16"
-			(at 0.5 1.5 180)
+			(at -2.8 -0.65 180)
 			(layer "F.SilkS")
 			(uuid "41212223-c51b-4473-b1cb-87e25316e636")
 			(effects
@@ -4622,7 +4622,7 @@
 		(at 63 90)
 		(descr "JST PH series connector, B5B-PH-K (http://www.jst-mfg.com/product/pdf/eng/ePH.pdf), generated with kicad-footprint-generator")
 		(tags "connector JST PH side entry")
-		(property "Reference" "J11"
+		(property "Reference" "J11-3.3V"
 			(at 4 -3 0)
 			(layer "F.SilkS")
 			(uuid "4aecade3-fb12-400a-a7ab-1ffe0df082fc")
@@ -6839,7 +6839,7 @@
 		(at 61 38)
 		(descr "JST PH series connector, B5B-PH-K (http://www.jst-mfg.com/product/pdf/eng/ePH.pdf), generated with kicad-footprint-generator")
 		(tags "connector JST PH side entry")
-		(property "Reference" "J12"
+		(property "Reference" "J12 - BUTTON_A-C"
 			(at 4 4 0)
 			(layer "F.SilkS")
 			(uuid "94b89a8a-2045-4242-b82c-87fdb52276ff")
@@ -22240,7 +22240,7 @@
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "capacitor")
 		(property "Reference" "C17"
-			(at 0.5 -1.5 180)
+			(at -2.7 -0.75 180)
 			(layer "F.SilkS")
 			(uuid "f742ef63-0ef7-4675-b439-7f1ce8841953")
 			(effects
@@ -29178,7 +29178,7 @@
 		(at 74.5 38)
 		(descr "JST PH series connector, B5B-PH-K (http://www.jst-mfg.com/product/pdf/eng/ePH.pdf), generated with kicad-footprint-generator")
 		(tags "connector JST PH side entry")
-		(property "Reference" "J13"
+		(property "Reference" "J13 - TOUCHYTOUCH"
 			(at 4 4 0)
 			(layer "F.SilkS")
 			(uuid "8373f18f-126f-4dd4-8886-2a6c66a026a3")
@@ -38451,7 +38451,7 @@
 		(at 61 30)
 		(descr "JST PH series connector, B5B-PH-K (http://www.jst-mfg.com/product/pdf/eng/ePH.pdf), generated with kicad-footprint-generator")
 		(tags "connector JST PH side entry")
-		(property "Reference" "J14"
+		(property "Reference" "J14 + BUTTON_C"
 			(at 4 -3 0)
 			(layer "F.SilkS")
 			(uuid "7f3b2ceb-e6a1-41db-aeae-ef664189bc08")

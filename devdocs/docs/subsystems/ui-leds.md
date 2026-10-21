@@ -36,6 +36,8 @@ Colors come from `colors.h` and mode `knobcolor[]` values.
 
 `toern_leds.ino` maintains an optional WS2812 strip: length/enable settings, `triggerLedStripRipple(channel)` on note triggers, `updateLedStrip()` from the main loop.
 
+The strip controller uses **Teensy pin 14 / J14 pin 1**, configured by `LED_STRIP_PIN` in `toern.ino`. It uses WS2812Serial independently of the matrix on pin 17. The previous strip pin, 24, is now reserved for external button D; enabling external buttons does not disable the strip. `ETC → LGHT` continues to control strip enablement.
+
 ## Current display contract
 
 PATT shows the slot number and load/save indicators. Occupied slots use green numbers; empty slots use blue. There is no USED/NEW text. `showSaveSuccessAnimation` draws a green checkmark; `showSaveFailureAnimation` draws a red cross. Both yield during animation to keep audio service running.

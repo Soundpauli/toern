@@ -1,4 +1,5 @@
 #include "src/toern_build_types.h"
+#include "toern_hardware.h"
 #include "toern_touch_input.h"
 
 #define VERSION "v3.01h"
@@ -46,6 +47,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 
 #include <FastLED.h>  // leds
 
+#include <Wire.h>
 #include <i2cEncoderLibV2.h>
 #include <MIDI.h>
 #include <Audio.h>
@@ -175,12 +177,15 @@ extern void handleMidiClock();
 extern void handleStart();
 #define NUM_LEDS (256 * LED_MODULES)  // 256 LEDs per matrix
 #define DATA_PIN 17                   // PIN FOR LEDS
+#define LED_STRIP_PIN 14              // Separate LED strip data: J14 pin 1
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
 
 #define SWITCH_1 2 // ALT: 16   // Capacitive input 1 >> SINGLE
 #define SWITCH_2 3 // ALT: 3    // Capacitive input 2 >> MENU
-#define BUTTON_A 5  // External SINGLE button, active LOW
-#define BUTTON_B 22 // External MENU button, active LOW
+#define BUTTON_A 5  // External SINGLE button (J12 pin 2), active LOW
+#define BUTTON_B 22 // External MENU button (J12 pin 1), active LOW
+#define BUTTON_C 15 // External REC / touch3 (J12 pin 3), active LOW
+#define BUTTON_D 24 // External touch4 (J11 pin 1), active LOW
 #define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6   // Capacitive touch4 >> current-voice audition (+ base-pitch note in SINGLE while playing)
 #define SWITCH_5 39
@@ -676,11 +681,6 @@ static bool touch1ModeTogglePending = false;
 static bool touch1ModeToggleToSingle = false;
 static unsigned long touch1ModeToggleDueMs = 0;
 static const unsigned long TOUCH1_CHORD_GRACE_MS = 140;
-
-/** true: use grounded buttons A/B; false: use capacitive SWITCH_1/2. */
-static const bool exttouch = false;
-/** When false, skip all NeoSlider I2C (init/ADC/LEDs/slew). This unit has faders. */
-static const bool deviceHasFaders = exttouch;
 
 bool readTouch1Pressed() {
   return readDebouncedTouch(0);
@@ -1403,11 +1403,12 @@ bool isPressed[NUM_ENCODERS] = { false };
 bool pressed[NUM_ENCODERS] = { false };
 
 i2cEncoderLibV2 Encoder[NUM_ENCODERS] = {
-  // exttouch: panel was soldered 4,3,2,1 — reverse I2C address order.
-  i2cEncoderLibV2(exttouch ? 0x61 : 0x01),
-  i2cEncoderLibV2(exttouch ? 0x20 : 0x41),
-  i2cEncoderLibV2(exttouch ? 0x41 : 0x20),
-  i2cEncoderLibV2(exttouch ? 0x01 : 0x61),
+  // Same Duppa address order on the main unit and the remote panel:
+  // A0, A0+A6, A5, A0+A5+A6.
+  i2cEncoderLibV2(0x01),
+  i2cEncoderLibV2(0x41),
+  i2cEncoderLibV2(0x20),
+  i2cEncoderLibV2(0x61),
 };
 // Global variable to track current encoder index for callbacks
 int currentEncoderIndex = 0;
@@ -1477,16 +1478,15 @@ static int neoSliderLedVolWanted[NEOSLIDER_COUNT];          // desired bar; SHOW
 static elapsedMillis g_faderMovedAgo = 1000;
 
 bool encoderI2cWritesAllowed() {
-  if (!deviceHasFaders || !neoSliderAnyPresent) return true;
+  if (!exttouch || !neoSliderAnyPresent) return true;
   // SET_WAV skips fader I2C; allow one-shot encoder range/RGB writes (not every frame).
   if (currentMode == &set_Wav || currentMode == &menu) return true;
   return g_faderMovedAgo >= 80;
 }
 
-static void applyLongCableI2cTiming();
 
 static inline bool isNeoSliderControlledChannel(int ch) {
-  return deviceHasFaders && ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
+  return exttouch && ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
 }
 
 // 10-bit travel: bottom/top 5% are mute / full stops (plus ~24-count hysteresis).
@@ -2101,7 +2101,6 @@ FLASHMEM void switchMode(Mode *newMode) {
       i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
       | i2cEncoderLibV2::DIRE_LEFT | i2cEncoderLibV2::IPUP_ENABLE
       | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
-    applyLongCableI2cTiming();
   }
   /// NEW ACTIONS
   // Synchronize oldButtons with current buttons state
@@ -2293,7 +2292,6 @@ FLASHMEM void switchMode(Mode *newMode) {
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
-      applyLongCableI2cTiming();
       int thr = constrain((int)currentMode->pos[0], 0, 100);
       currentMode->pos[0] = thr;
       Encoder[0].writeMin((int32_t)0);
@@ -2306,7 +2304,6 @@ FLASHMEM void switchMode(Mode *newMode) {
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
-      applyLongCableI2cTiming();
 
       // SET_WAV: Enc[1]=seekEnd, Enc[2]=load selected file, Enc[3]=browse folders+files
       int ch = constrain((int)GLOB.currentChannel, 1, 8);
@@ -2348,7 +2345,6 @@ FLASHMEM void switchMode(Mode *newMode) {
         i2cEncoderLibV2::INT_DATA | i2cEncoderLibV2::WRAP_DISABLE
         | i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE
         | i2cEncoderLibV2::RMOD_X1 | i2cEncoderLibV2::RGB_ENCODER);
-      applyLongCableI2cTiming();
       initSliders(filterPage[ch], ch);
 
       // Set encoder colors dynamically based on current filter page and default fast filter
@@ -3570,8 +3566,10 @@ FLASHMEM void initSoundChip() {
     voiceDelayMix[i].gain(2, 0.0f);
     voiceDelayMix[i].gain(3, 1.0f);
   }
-  // turn on the output
+  // The Wire.begin() linker wrapper restores cable timing before enable()
+  // can issue its first codec transaction.
   sgtl5000_1.enable();
+  if (exttouch) delay(50);
 
   // Load audio settings from globals (they should be loaded from EEPROM before this is called)
   // GLOB, micGain, lineInLevel, and lineOutLevelSetting are already in scope as globals
@@ -3829,7 +3827,6 @@ FLASHMEM static void neoSliderShowLeds(int idx) {
   }
   neoSliderSS[idx].writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_BUF, writeBuf, sizeof(writeBuf));
   neoSliderSS[idx].writeReg(SS_NEOPIXEL_BASE, SS_NEOPIXEL_SHOW, nullptr, 0);
-  applyLongCableI2cTiming();
 }
 
 // Red plastic over NeoPixels eats green/blue: orange→red, yellow→orange.
@@ -3911,7 +3908,10 @@ static void neoSliderFlushPendingLeds() {
 
 FLASHMEM void initNeoSlider() {
   neoSliderAnyPresent = false;
-  if (!deviceHasFaders) return;
+  if (!exttouch) return;
+  // Fader probes share the encoder cable. Keep audio updates paused during
+  // the startup probe/reset sequence.
+  AudioNoInterrupts();
 
   for (int i = 0; i < NEOSLIDER_COUNT; i++) {
     neoSliderPresent[i] = false;
@@ -3926,9 +3926,13 @@ FLASHMEM void initNeoSlider() {
     neoSliderLedVolWanted[i] = -1;
     fill_solid(neoSliderLeds[i], NEOSLIDER_NUM_LEDS, CRGB::Black);
 
+    // The Wire.begin() wrapper keeps even the initial address probe slow.
     if (!neoSliderSS[i].begin(neoSliderAddrs[i])) {
+      delay(40);
       continue;
     }
+    // begin() resets the seesaw. Give it time to come back before the next probe.
+    delay(40);
 
     uint16_t pid = 0;
     uint8_t year = 0, mon = 0, day = 0;
@@ -3947,6 +3951,7 @@ FLASHMEM void initNeoSlider() {
     neoSliderAnyPresent = true;
     // Leave LEDs off until the first real volume change (no boot SHOW).
   }
+  delay(40);
 }
 
 static void applyVoiceAmpGainFromVol(int ch, int vol) {
@@ -4146,7 +4151,7 @@ static void processOneNeoSlider(int i, uint16_t *lastRaw) {
 }
 
 void updateNeoSliderVolume() {
-  if (!deviceHasFaders || !neoSliderAnyPresent) return;
+  if (!exttouch || !neoSliderAnyPresent) return;
   // Menu and SET_WAV hammer encoder I2C every frame — don't touch faders on the same bus.
   if (currentMode == &menu || currentMode == &set_Wav) return;
 
@@ -4175,16 +4180,18 @@ void updateNeoSliderVolume() {
   neoSliderFlushPendingLeds();
 }
 
-// Teensy 4 Wire::setClock() only has 100 kHz / 400 kHz / 1 MHz. A ~3.5 m I2C
-// cable cannot run 100 kHz (rise time / NACKs / SCL stretch → audio DMA bus fault).
-// Program LPI2C1 directly for ~26 kHz after encoder/seesaw begin() (they reset to 100 kHz).
-static void applyLongCableI2cTiming() {
+// Called synchronously by the primary Wire.begin() wrapper. This is the only
+// place that applies panel timing; codec/seesaw begin() calls are covered too.
+// Teensy 4 Wire::setClock() clamps requests below 400 kHz to 100 kHz, so the
+// remote panel uses direct timing: 24 MHz / 8 / (40 + 44 + 2) ≈ 35 kHz.
+void toernApplyI2cTimingAfterBegin() {
+  return;
   if (!exttouch) return;
   IMXRT_LPI2C_t *port = &IMXRT_LPI2C1;
   port->MCR = 0;
-  port->MCCR0 = LPI2C_MCCR0_CLKHI(55) | LPI2C_MCCR0_CLKLO(59) |
-                LPI2C_MCCR0_DATAVD(25) | LPI2C_MCCR0_SETHOLD(40);
-  port->MCFGR1 = LPI2C_MCFGR1_PRESCALE(3);  // 24 MHz / 8 → ~26 kHz
+  port->MCCR0 = LPI2C_MCCR0_CLKHI(40) | LPI2C_MCCR0_CLKLO(44) |
+                LPI2C_MCCR0_DATAVD(18) | LPI2C_MCCR0_SETHOLD(30);
+  port->MCFGR1 = LPI2C_MCFGR1_PRESCALE(3);
   port->MCFGR2 = LPI2C_MCFGR2_FILTSDA(15) | LPI2C_MCFGR2_FILTSCL(15) |
                  LPI2C_MCFGR2_BUSIDLE(4095);
   port->MCFGR3 = LPI2C_MCFGR3_PINLOW(4095);
@@ -4245,10 +4252,9 @@ FLASHMEM void initEncoders() {
     Encoder[i].autoconfigInterrupt();
     //Encoder[i].writeRGBCode(0xFFFFFF);
     Encoder[i].writeFadeRGB(0);
-    delay(50);
+    delay(exttouch ? 100 : 50);
     Encoder[i].updateStatus();
   }
-  AudioInterrupts();
 }
 
 FLASHMEM void loadColorSchemeAndBrightness() {
@@ -4315,6 +4321,8 @@ FLASHMEM void setup() {
   if (exttouch) {
     pinMode(BUTTON_A, INPUT_PULLUP);
     pinMode(BUTTON_B, INPUT_PULLUP);
+    pinMode(BUTTON_C, INPUT_PULLUP);
+    pinMode(BUTTON_D, INPUT_PULLUP);
   }
 
   //delay the LED-Matrix-Power on
@@ -4323,7 +4331,6 @@ FLASHMEM void setup() {
   delay(500);                   // Teensy is booted, supply stable
   digitalWrite(36, HIGH);  // LEDs now always on
   //Wire.begin();
-  //Wire.setClock(10000); // Set to 400 kHz (standard speed)
   NVIC_SET_PRIORITY(IRQ_SOFTWARE, toern_audio::kAudioPriority);
   // Teensy 4.1 Serial8 is LPUART5 (not LPUART8). UART must preempt PIT.
   NVIC_SET_PRIORITY(IRQ_LPUART5, 32);
@@ -4335,11 +4342,10 @@ FLASHMEM void setup() {
   // Initialize LEDs early for boot-hold visual feedback (touch1 FULL reset countdown)
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
   
-  // LED strip initialization (needed for FastLED.show() to work)
-
+  // Separate strip output on J14-1; pin 24 remains available for BUTTON_D.
   extern CRGB stripLeds[];
   extern void initLedStrip();
-  FastLED.addLeds<WS2812SERIAL, 24, BRG>(stripLeds, 256);
+  FastLED.addLeds<WS2812SERIAL, LED_STRIP_PIN, BRG>(stripLeds, 256);
   //FastLED.setMaxPowerInVoltsAndMilliamps(5, 1000); // Limit to 5V, 1 Amp
 
   // Load LED mode (count + rotation) before any startup visuals.
@@ -4584,20 +4590,28 @@ FLASHMEM void setup() {
 
   autoLoad();
 
+  // Kit "no.1" is still on the matrix. Let SD DMA finish, then bring up the
+  // codec, encoders and faders with the audio update IRQ still off.
+  if (exttouch) delay(100);
   initSoundChip();
   // Codec is enabled now; this is the first safe time to push EQ / levels.
   {
     extern void applyAudioSettingsFromGlobals();
     applyAudioSettingsFromGlobals();
   }
-  AudioInterrupts();
+  if (exttouch) delay(50);
   // autoLoad() restores SMP before the audio graph is fully initialized.
   // Re-apply the loaded filter/envelope state now so ch13/14 are correct at boot.
   loadSMPSettings();
   //mixer0.gain(1, 0.05);  //PREV Sound
-  initEncoders();  // Moved initEncoders here, ensures Serial is up for its prints
-  if (deviceHasFaders) initNeoSlider();  // NeoSliders @0x30..0x33 → voices 1..4 volume
-  applyLongCableI2cTiming();
+  if (exttouch) delay(80);
+  initEncoders();
+  if (exttouch) {
+    delay(50);
+    initNeoSlider();  // NeoSliders @0x30..0x33 → voices 1..4 volume
+    delay(80);
+  }
+  AudioInterrupts();
 
   extern bool g_enterNewFileAfterCorruptAutoload;
   if (g_enterNewFileAfterCorruptAutoload) {
@@ -5769,7 +5783,7 @@ void checkTouchInputs() {
   // remember last time both were held
   // static bool lastBothTouched = false; // Already global
 
-  // 1) read inputs (buttons A/B when exttouch; capacitive SWITCH_1/2/3/4)
+  // 1) read inputs (buttons A–D when exttouch; otherwise capacitive pads)
   bool tv1 = readTouch1Pressed();
   bool tv2 = readTouch2Pressed();
   int tv3 = readRecTouchHeld() ? touchThreshold + 1 : 0;
@@ -7307,7 +7321,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   }
 
   checkEncoders();
-  if (!fastRecordActive && deviceHasFaders) {
+  if (!fastRecordActive && exttouch) {
     updateNeoSliderVolume();
   }
   // Never draw the cursor while in MENU (or its submenus).
