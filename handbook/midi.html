@@ -184,12 +184,36 @@
           <hr />
 
 
+          <section class="hb-sub" id="cin">
+            <h2 data-hb-copy="midi.068">PQ-I — analog clock in</h2>
+            <p class="lede" data-hb-copy="midi.069">Config for <strong>CLK-IN (J26)</strong>. With <strong>orange &lt;</strong> EXT on the BPM screen, incoming pulses advance the sequencer. At 4&nbsp;PPQN each pulse is one step, at 24&nbsp;PPQN every sixth pulse is.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="md_cin" width="640" height="320" role="img" aria-label="MIDI PQ-I"></canvas>
+              </div>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Hold-off 1–32&nbsp;ms</td><td data-hb-copy="midi.071">Hold-off in ms: edges sooner than this after a counted pulse are ignored. Keep it below the pulse spacing.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>OFF, then 1 / 2 / 4 / 8 / 12 / 16 / 24 / 32</td><td data-hb-copy="midi.073">Pulses per quarter note of the incoming clock. Default 4 (one pulse per 16th, Volca).</td></tr>
+                  <tr><th>Click</th><td>Polarity + / −</td><td>Green + counts rising edges. Red − counts falling edges.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
+              </div>
+              <p class="hb-device__intro" data-hb-copy="midi.074">Display follows the last encoder you turned. OFF disables input. Rate shows ±PPQN in green/red; hold-off shows white without changing the PQ-I header. The pin-38 interrupt is armed only in orange EXT with PQ-I enabled; INT and MIDI-EXT ignore CLK-IN. Press Play and the sequence starts on the next pulse. At 1 and 2&nbsp;PPQN a pulse covers 4 or 2 steps: the first plays on the pulse, the rest are spaced by the last pulse interval.</p>
+            </article>
+          </section>
+
+          <hr />
+
           <section class="hb-sub" id="ppqn">
-            <h2 data-hb-copy="midi.052">PPQN — analog clock pulse</h2>
+            <h2 data-hb-copy="midi.052">PQ-O — analog clock out</h2>
             <p class="lede" data-hb-copy="midi.053">Analog clock on the dedicated 2-pin headers — independent of TRS MIDI. <strong>CLK-OUT (J25)</strong> is 5&nbsp;V. <strong>CLK-IN (J26)</strong> is 3–5&nbsp;V: on the BPM screen, click encoder&nbsp;3 for an <strong>orange &lt;</strong> (analog in) instead of the <strong>red &lt;</strong> (MIDI in). Pulse width 1–50&nbsp;ms (default 12).</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_ppqn" width="640" height="320" role="img" aria-label="MIDI PPQN"></canvas>
+                <canvas class="led-matrix" data-scene="md_ppqn" width="640" height="320" role="img" aria-label="MIDI PQ-O"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
@@ -204,8 +228,8 @@
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
-              <p class="hb-device__intro" data-hb-copy="midi.062">Rate <strong>1</strong> = one pulse per beat; <strong>24</strong> ≈ classic Sync24 density; <strong>32</strong> denser than MIDI’s native 24&nbsp;PPQN. Display follows the last encoder you turned: width, STOP/CONT, or ±rate. This page is <em>output</em> on J25. Incoming analog rate is <a href="#cin">CIN</a>.</p>
-              <div class="hb-tip" data-hb-copy="midi.063"><strong>Jacks (rev&nbsp;H silk):</strong> <strong>CLK-OUT(5V)</strong> = J25, <strong>CLK-IN(3–5V)</strong> = J26, <strong>SIDEC-5V</strong> = J27 (see <a href="#side">TRIG</a>). Pin 1 = signal, pin 2 = GND. Incoming analog clock is read on <a href="#cin">CIN</a>, not here. Not MIDI DIN and not line-level audio.</div>
+              <p class="hb-device__intro" data-hb-copy="midi.062">Rate <strong>1</strong> = one pulse per beat; <strong>24</strong> ≈ classic Sync24 density; <strong>32</strong> denser than MIDI’s native 24&nbsp;PPQN. Display follows the last encoder you turned: width, STOP/CONT, or ±rate. This page is <em>output</em> on J25. Incoming analog rate is <a href="#cin">PQ-I</a>.</p>
+              <div class="hb-tip" data-hb-copy="midi.063"><strong>Jacks (rev&nbsp;H silk):</strong> <strong>CLK-OUT(5V)</strong> = J25, <strong>CLK-IN(3–5V)</strong> = J26, <strong>SIDEC-5V</strong> = J27 (see <a href="#side">TRIG</a>). Pin 1 = signal, pin 2 = GND. Incoming analog clock is read on <a href="#cin">PQ-I</a>, not here. Not MIDI DIN and not line-level audio.</div>
             </article>
           </section>
 
@@ -215,7 +239,7 @@
 
           <section class="hb-sub" id="side">
             <h2 data-hb-copy="midi.064">TRIG — selected-voice trigger output</h2>
-            <p class="lede" data-hb-copy="midi.065">5&nbsp;V trigger on <strong>SIDEC-5V (J27)</strong> whenever the selected voice actually sounds. This is a trigger signal for external equipment, not built-in sidechain compression. Pulse width and polarity follow <a href="#ppqn">PPQN</a>.</p>
+            <p class="lede" data-hb-copy="midi.065">5&nbsp;V trigger on <strong>SIDEC-5V (J27)</strong> when the selected voice is triggered by the sequencer or a fill. Painting, auditioning and live MIDI do not pulse J27. This is a trigger signal for external equipment, not built-in sidechain compression. Pulse width follows <a href="#ppqn">PQ-O</a>; J27 always uses positive polarity (idle low).</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="md_side" width="640" height="320" role="img" aria-label="MIDI TRIG"></canvas>
@@ -224,35 +248,10 @@
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>OFF, then voices 1–8, 11, 13, 14</td><td>Which notes pulse J27. Default 1 (kick).</td></tr>
+                  <tr><th>Turn</th><td>OFF, then voices 1–8, 11, 13, 14</td><td>Which sequenced voice pulses J27. Default 1 (kick).</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
-            </article>
-          </section>
-
-
-          <hr />
-
-
-          <section class="hb-sub" id="cin">
-            <h2 data-hb-copy="midi.068">CIN — analog clock in</h2>
-            <p class="lede" data-hb-copy="midi.069">Config for <strong>CLK-IN (J26)</strong>. With <strong>orange &lt;</strong> EXT on the BPM screen, incoming pulses advance the sequencer. At 4&nbsp;PPQN each pulse is one step, at 24&nbsp;PPQN every sixth pulse is.</p>
-            <article class="hb-device">
-              <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="md_cin" width="640" height="320" role="img" aria-label="MIDI CIN"></canvas>
-              </div>
-              <div class="hb-enc-grid">
-                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>WID 1–32</td><td data-hb-copy="midi.071">Hold-off in ms: rises sooner than this after a counted pulse are ignored. Keep it below the pulse spacing.</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
-                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>PPQN 1 / 2 / 4 / 8 / 12 / 16 / 24 / 32</td><td data-hb-copy="midi.073">Pulses per quarter note of the incoming clock. Default 4 (one pulse per 16th, Volca).</td></tr>
-                </tbody></table></div>
-                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
-              </div>
-              <p class="hb-device__intro" data-hb-copy="midi.074">Display follows the last encoder you turned. The pin-38 interrupt is armed only in orange EXT; INT and MIDI-EXT ignore CLK-IN. Press Play and the sequence starts on the next pulse. At 1 and 2&nbsp;PPQN a pulse covers 4 or 2 steps: the first plays on the pulse, the rest are spaced by the last pulse interval.</p>
             </article>
           </section>
 

@@ -414,7 +414,19 @@
                           </span>
                         </li>
                         <li>
-                          <a href="midi.html#ppqn"><span class="node">PPQN</span></a>
+                          <a href="midi.html#cin"><span class="node">PQ-I</span></a>
+                          <span class="desc" data-hb-copy="menus.057">CLK-IN (J26) rate and hold-off. In orange EXT each pulse drives play.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 turn</strong> — hold-off 1–32&nbsp;ms</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong>, then 1 / 2 / 4 / 8 / 12 / 16 / 24 / 32 PPQN</li>
+                              <li><strong>Enc&nbsp;3 click</strong> — input polarity <strong>+</strong> / <strong>−</strong></li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.058">Same layout as PQ-O. Headers: see <a href="midi.html#cin">MIDI → PQ-I</a>.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#ppqn"><span class="node">PQ-O</span></a>
                           <span class="desc" data-hb-copy="menus.053">Analog clock on CLK-OUT J25 (5&nbsp;V) / CLK-IN J26 (3–5&nbsp;V), independent of TRS MIDI.</span>
                           <span class="sub">
                             <ul class="sub-opts">
@@ -423,7 +435,7 @@
                               <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong> or <strong>1, 2, 4, 8, 12, 16, 24, 32</strong> PPQN</li>
                               <li><strong>Enc&nbsp;3 click</strong> — polarity <strong>+</strong> / <strong>−</strong></li>
                             </ul>
-                            <span class="how" data-hb-copy="menus.054">Follows INT BPM or EXT MIDI/analog clock. Headers: see <a href="midi.html#ppqn">MIDI → PPQN</a>.</span>
+                            <span class="how" data-hb-copy="menus.054">Follows INT BPM or EXT MIDI/analog clock. Headers: see <a href="midi.html#ppqn">MIDI → PQ-O</a>.</span>
                           </span>
                         </li>
                         <li>
@@ -433,18 +445,7 @@
                             <ul class="sub-opts">
                               <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong> or voices <strong>1–8, 11, 13, 14</strong> (default 1)</li>
                             </ul>
-                            <span class="how" data-hb-copy="menus.056">Width and +/− polarity follow PPQN. 5&nbsp;V trigger, not audio.</span>
-                          </span>
-                        </li>
-                        <li>
-                          <a href="midi.html#cin"><span class="node">CIN</span></a>
-                          <span class="desc" data-hb-copy="menus.057">CLK-IN (J26) rate and hold-off. In orange EXT each pulse drives play.</span>
-                          <span class="sub">
-                            <ul class="sub-opts">
-                              <li><strong>Enc&nbsp;1 turn</strong> — <strong>WID</strong> hold-off 1–32&nbsp;ms</li>
-                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>PPQN</strong> 1 / 2 / 4 / 8 / 12 / 16 / 24 / 32</li>
-                            </ul>
-                            <span class="how" data-hb-copy="menus.058">Same layout as PPQN. Headers: see <a href="midi.html#cin">MIDI → CIN</a>.</span>
+                            <span class="how" data-hb-copy="menus.056">Width follows PQ-O; polarity is always positive (idle low). 5&nbsp;V trigger, not audio.</span>
                           </span>
                         </li>
                         <li>

@@ -24,6 +24,8 @@ description: MIDI I/O, master/slave clock, and transport handling.
 
 `checkMidi()` is called early in `loop()` for lower latency.
 
+MIDI → **PQ-I** (J26 input) immediately precedes **PQ-O** (J25 output). Both show a fixed header, white timing value, red OFF, and a signed green/red PPQN rate. On PQ-I, encoder 1 sets hold-off (1–32 ms), encoder 3 selects OFF/rate and clicks toggle input polarity (+ rising / − falling). OFF detaches the input interrupt and cancels pending 1/2-PPQN substeps. PQ-O retains pulse width, STOP/CONT, output OFF/rate and output polarity. Input settings remain separate from output settings.
+
 ## Notes ↔ engine
 
 - Incoming notes → `handleNoteOn` / `handleNoteOff` → sample or synth triggers (respecting mutes / child lock)
@@ -39,4 +41,4 @@ The USB build exposes MIDI, Audio and Serial interfaces, but musical note/clock/
 
 `checkMidi()` stops reading after four non-callback messages per loop. Clock and Note On run through callbacks and do not consume that count. Unread messages remain queued for the next call instead of being discarded. This bounds ordinary message work; it does not guarantee that the hardware UART buffer cannot overflow under excessive input.
 
-MIDI → **TRIG** selects the voice that pulses J27. It is a digital trigger output, not onboard sidechain compression. MIDI → **FOLD** folds incoming pitch into the visible grid; **OVWR** chooses whether incoming MIDI may overwrite occupied cells; voice-select **SEL** follows the selected voice.
+MIDI → **TRIG** selects the voice that pulses J27. J27 emits only for sequencer/fill hits while playing; paint, grid audition, sample previews and live MIDI do not emit pulses. Sampler callers explicitly opt in, and the shared pulse function rejects stopped transport. J27 emits a positive pulse (idle LOW), independently of J25 clock polarity; its width follows MIDI → PQ-O. Clock and sidechain pulse expiry share one PIT timer with independent deadlines, leaving the other three channels for sequencer, fills and MIDI clock. It is a digital trigger output, not onboard sidechain compression. MIDI → **FOLD** folds incoming pitch into the visible grid; **OVWR** chooses whether incoming MIDI may overwrite occupied cells; voice-select **SEL** follows the selected voice.

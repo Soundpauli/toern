@@ -1043,16 +1043,16 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawText(m, "-12", 2, 3, 0, 255, 0);
     },
     md_ppqn(m) {
-      midiSubFrame(m, 6, "PPQN", "W", "G", "G");
+      midiSubFrame(m, 7, "PQ-O", "W", "G", "G");
       drawText(m, "+24", 2, 3, 0, 255, 0);
     },
     md_side(m) {
-      midiSubFrame(m, 7, "TRIG", "", "", "G");
+      midiSubFrame(m, 8, "TRIG", "", "", "G");
       drawText(m, "1", 2, 3, 255, 0, 0);
     },
     md_cin(m) {
-      midiSubFrame(m, 8, "CIN", "W", "", "W");
-      drawText(m, "0", 2, 3, 0, 255, 0);
+      midiSubFrame(m, 6, "PQ-I", "W", "", "G");
+      drawText(m, "+4", 2, 3, 0, 255, 0);
     },
     md_wrte(m) {
       midiSubFrame(m, 9, "OVWR", "", "", "R");

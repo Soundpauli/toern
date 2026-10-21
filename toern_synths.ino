@@ -898,9 +898,6 @@ void playSound(int note, int ch, int velocity) {
   if (ch < 0 || ch >= INSTRUMENT_CHANNELS) {
     return;  // Invalid channel, skip
   }
-  extern void sidechainOnVoice(uint8_t);
-  sidechainOnVoice(11);
-
   toern_audio::StateGuard guard;
   int voiceIdx = -1;
   for (int voice = 0; voice < POLY_VOICES; voice++) {

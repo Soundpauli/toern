@@ -385,7 +385,7 @@ void reapplyAllSampleChannelGains();
 void resetAllChannelVolumesToDefault();
 void extendLastPageForLiveNote(uint8_t channel, uint8_t row, uint16_t targetBeat);
 void updateLastPage();
-void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger);
+void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSidechain = false);
 uint8_t scaledNoteVelocity(int ch, int vel);
 void updateAllMixerGains();
 void forceAllMixerGainsToTarget();
@@ -3235,6 +3235,11 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       togglePulseClockPolarityFromMenu();
       return;
     }
+    if (inMidiSubmenu && mainSetting == 59) {
+      extern void toggleAnalogInPolarityFromMenu();
+      toggleAnalogInPolarityFromMenu();
+      return;
+    }
     if (inVolSubmenu && mainSetting == 53) {
       toggleMixGainEnc3Target();
       return;
@@ -4012,7 +4017,7 @@ void samplerAddSample(int ch, uint8_t root, int16_t *data, uint32_t frames, uint
   _samplers[ch].addSample(root, data, frames, channels);
 }
 
-void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
+void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSidechain) {
   if (ch < 0 || ch > 8) return;
   // Don't re-arm a reader into the buffer currently being recorded.
   if (fastRecordActive && (uint8_t)ch == fastRecordChannel) return;
@@ -4020,8 +4025,9 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger) {
   const float scale = isNeoSliderControlledChannel(ch) ? neoSliderVelScale[ch - 1] : 1.0f;
   const float amp = noteN * scale;
   if (amp <= 0.0f) return;
+  // Only sequencer/fill callers opt in; paint, audition and MIDI preview do not.
   extern void sidechainOnVoice(uint8_t);
-  sidechainOnVoice((uint8_t)ch);
+  if (sendSidechain) sidechainOnVoice((uint8_t)ch);
   toern_audio::StateGuard guard;  // amplitude, reader reset/rate and envelope are one transaction
   if (isNeoSliderControlledChannel(ch)) {
     neoSliderLastVelNorm[ch - 1] = noteN;
@@ -8569,9 +8575,6 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
     return;
   }
 
-  extern void sidechainOnVoice(uint8_t);
-  sidechainOnVoice((uint8_t)ch);
-
   float frequency;
   if (midiPitchOverride >= 0 && midiPitchOverride <= 127) {
     // MIDI 60 is C. Keep the mono synths one whole octave below the standard
@@ -8707,6 +8710,8 @@ void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
     return;
   }
   playSynthInternal(ch, b, vel, false, legato, midiPitchOverride);
+  extern void sidechainOnVoice(uint8_t);
+  sidechainOnVoice((uint8_t)ch);
   sequencedMonoSynthLastTick[ch] = tick;
   sequencedMonoSynthLastPitch[ch] = (int16_t)pitchKey;
   sequencedMonoSynthActive[ch] = true;
@@ -9038,7 +9043,7 @@ void playNote() {
           int pitch = samplePitchForNote(note[srcBeat][b], ch, b);
           // OCTV whole semis; DTNE fine tune applied inside triggerSamplerVoice.
           pitch += sampleVoiceOctaveSemis(ch);
-          triggerSamplerVoice(ch, pitch, vel, true);
+          triggerSamplerVoice(ch, pitch, vel, true, true);
         } else if (ch == 11) {  // Assuming ch 11 is a specific synth
           // `octave[0]` and `transpose` affect pitch. `b` is grid row (1-16).
           // playSound expects MIDI note number (0-indexed pitch offset from row)
@@ -9418,15 +9423,19 @@ FLASHMEM static void triggerActiveFillHit() {
     if (isChannelSampleReloadBusy((unsigned int)ch)) return;
     int pitch = samplePitchForNote(fillCell, ch, (int)row);
     pitch += sampleVoiceOctaveSemis(ch);
-    triggerSamplerVoice(ch, pitch, vel, true);
+    triggerSamplerVoice(ch, pitch, vel, true, true);
   } else if (ch == 11) {
     playSound(ch11PitchForNote(fillCell, (int)row), 0, vel);
+    extern void sidechainOnVoice(uint8_t);
+    sidechainOnVoice(11);
   } else if (ch >= 13 && ch < 15) {
     if (noteHasMidiPitch(fillCell)) {
       playSynthMidi(ch, fillCell.midiPitch, vel, false);
     } else {
       playSynth(ch, (int)row, vel, false);
     }
+    extern void sidechainOnVoice(uint8_t);
+    sidechainOnVoice((uint8_t)ch);
   }
 }
 
@@ -10035,8 +10044,8 @@ FLASHMEM void setBPM() {
       Encoder[2].writeCounter((int32_t)newPos2);
     }
 
-    // Update clockMode: 0 = EXT (-1), 1 = INT (1)
-    clockMode = (newPos2 == 1) ? 1 : -1;
+    // Use the EEPROM representation consistently: 0=EXT, 1=INT.
+    clockMode = (newPos2 == 1) ? 1 : 0;
 
     // Save to EEPROM
     extern void saveSingleModeToEEPROM(int index, int8_t value);

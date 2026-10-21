@@ -10,7 +10,7 @@
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
 static uint8_t g_ppqnUiFocus = 0;
-static uint8_t g_cinFocus = 0;  // MIDI → CIN last turned: 0 PPQN (enc3), 1 width (enc1)
+static uint8_t g_cinFocus = 0;  // MIDI → PQ-I last turned: 0 rate/OFF (enc3), 2 hold-off (enc1)
 // VOL→GAIN: encoder 3 edits ALL (1) or SYN (0). Click toggles.
 static uint8_t g_gainEnc3IsAll = 1;
 static uint8_t g_gainUiFocus = 3; // 0=1-4, 1=5-8, 2=SYN, 3=ALL
@@ -136,9 +136,9 @@ MenuPage midiPages[MIDI_PAGES_COUNT] = {
   {"RCVE", 44, false, nullptr},         // MIDI Note Receive (OFF/NOTE)
   {"FOLD", 51, false, nullptr},         // Fold incoming pitch into the visible grid (ON/OFF)
   {"SYNC", 45, false, nullptr},         // Transport delay: SNC1/SNC2 −127..+127 ms (+ = this path, − = other path)
-  {"PPQN", 50, false, nullptr},         // Analog clock: enc1 width, enc2 STOP/CONT, enc3 rate + click POL
+  {"PQ-I", 59, false, nullptr},         // CLK-IN: enc1 hold-off, enc3 OFF/rate + click polarity
+  {"PQ-O", 50, false, nullptr},         // CLK-OUT: enc1 width, enc2 STOP/CONT, enc3 OFF/rate + click polarity
   {"TRIG", 58, false, nullptr},         // Sidechain out: which voice pulses J27
-  {"CIN", 59, false, nullptr},          // Analog CLK-IN (J26): hold-off + input PPQN
   {"OVWR", 60, false, nullptr},         // MIDI grid write: overwrite occupied cells
 };
 
@@ -217,6 +217,13 @@ FLASHMEM void togglePulseClockPolarityFromMenu() {
   extern void togglePulseClockPolarity();
   togglePulseClockPolarity();
   g_ppqnUiFocus = 0;
+  menuRequestFullRedraw();
+}
+
+FLASHMEM void toggleAnalogInPolarityFromMenu() {
+  extern void toggleAnalogInPolarity();
+  toggleAnalogInPolarity();
+  g_cinFocus = 0;
   menuRequestFullRedraw();
 }
 
@@ -453,7 +460,7 @@ int drawMode = 0;
 static const char *SETTINGS_BACKUP_PATH = "settings.txt";
 static const char *SETTINGS_BACKUP_TMP_PATH = "settings.tmp";
 static const char *SETTINGS_BACKUP_HEADER = "TOERN_SETTINGS_V1";
-static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 59; // [58]=TRIG SENS-default migrate; [57]=USB SMP preview; [56]=REC HPF; [55]=SPKR polarity marker; [54]=MIDI WRTE
+static const uint16_t SETTINGS_EEPROM_BLOCK_LEN = 60; // [59]=PQ-I OFF/polarity; [58]=TRIG SENS-default migrate; [57]=USB SMP preview; [56]=REC HPF; [55]=SPKR polarity marker; [54]=MIDI WRTE
 static const uint16_t EEPROM_SAMPLEPACK_ADDR = 0;
 static const uint16_t EEPROM_SP0_STATE_ADDR = 200;
 static const uint8_t EEPROM_SP0_STATE_COUNT = 8;
@@ -678,6 +685,7 @@ FLASHMEM static bool readSettingsBackupFromSD(unsigned int &outSamplePackID, uin
     // REC>HPF absent → library high-pass ON. VOL>USBP absent → OFF.
     if (blkCopy <= 56) outBlock[56] = 1;
     if (blkCopy <= 57) outBlock[57] = 0;
+    if (blkCopy <= 59) outBlock[59] = 0;  // PQ-I enabled, positive edge
     // VOL→GAIN (38–41): absent, virgin 0xFF, or zero-padded old backups → 1.0×
     {
       const bool gainAbsentOrBlank =
@@ -862,7 +870,8 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 49, 1);   // eyesMode default (1 min)
       EEPROM.write(EEPROM_DATA_START + 51, 1);   // SIDE voice default (CH1)
       EEPROM.write(EEPROM_DATA_START + 52, 0);   // EXT clock source: 0=MIDI, 1=analog PPQN
-      EEPROM.write(EEPROM_DATA_START + 53, 2);   // CIN: 4 PPQN, 1 ms hold-off
+      EEPROM.write(EEPROM_DATA_START + 59, 0);   // PQ-I enabled, positive edge
+      EEPROM.write(EEPROM_DATA_START + 53, 2);   // PQ-I: 4 PPQN, 1 ms hold-off
       EEPROM.write(EEPROM_DATA_START + 54, 0);   // MIDI WRTE default (0 = OFF, keep existing notes)
       for (uint8_t i = 0; i < EEPROM_SP0_STATE_COUNT; i++) {
         EEPROM.write(EEPROM_SP0_STATE_ADDR + 1 + i, 0);
@@ -881,6 +890,11 @@ FLASHMEM void loadMenuFromEEPROM() {
   }
   
   clockMode     = (int8_t) EEPROM.read(EEPROM_DATA_START + 1);
+  // Older BPM encoder code saved EXT as -1; keep that selection on reboot.
+  if (clockMode == -1) {
+    clockMode = 0;
+    saveSingleModeToEEPROM(1, clockMode);
+  }
   if (clockMode != 0 && clockMode != 1) {
     clockMode = 1;  // Default to INT (internal clock)
     saveSingleModeToEEPROM(1, clockMode);
@@ -1891,9 +1905,10 @@ FLASHMEM void showMidiMenu() {
     Encoder[2].writeRGBCode(polPos ? 0x00FF00 : 0xFF0000);
     Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
   } else if (mainSetting == 59) {
+    extern bool getAnalogInPolarityPositive();
     Encoder[0].writeRGBCode(0xFFFFFF);
     Encoder[1].writeRGBCode(0x000000);
-    Encoder[2].writeRGBCode(0xFFFFFF);
+    Encoder[2].writeRGBCode(getAnalogInPolarityPositive() ? 0x00FF00 : 0xFF0000);
     Encoder[3].writeRGBCode(indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b);
   } else {
     Encoder[1].writeRGBCode(mainSetting == 45 ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -2436,7 +2451,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern uint8_t getPulseClockPpqn();
       extern uint8_t getPulseClockWidthMs();
       const CRGB tc = currentMenuParentTextColor();
-      drawMenuText("PPQN", 2, 10, tc);
+      drawMenuText("PQ-O", 2, 10, tc);
       bool on = getPulseClockEnabled();
       bool polPos = getPulseClockPolarityPositive();
       bool stopPlay = getPulseClockStopWithPlay();
@@ -2476,25 +2491,28 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       break;
     }
 
-    case 59: { // CIN - enc1 width (hold-off ms), enc3 PPQN
+    case 59: { // PQ-I - same rate/width presentation as PQ-O
+      extern bool getAnalogInEnabled();
+      extern bool getAnalogInPolarityPositive();
       extern uint8_t getAnalogInPpqn();
       extern uint8_t getAnalogInHoldMs();
-      const CRGB tc = currentMenuParentTextColor();
+      drawMenuText("PQ-I", 2, 10, currentMenuParentTextColor());
+      const bool positive = getAnalogInPolarityPositive();
       char buf[8];
-      if (g_cinFocus == 1) {
-        drawMenuText("WID", 2, 10, tc);
+      if (g_cinFocus == 2) {
         snprintf(buf, sizeof(buf), "%u", (unsigned)getAnalogInHoldMs());
         drawMenuValue(buf, 2, 3, UI_WHITE);
+      } else if (!getAnalogInEnabled()) {
+        drawMenuValue("OFF", 2, 3, UI_RED);
       } else {
-        drawMenuText("CIN", 2, 10, tc);
-        snprintf(buf, sizeof(buf), "%u", (unsigned)getAnalogInPpqn());
-        drawMenuValue(buf, 2, 3, UI_WHITE);
+        snprintf(buf, sizeof(buf), "%c%u", positive ? '+' : '-', (unsigned)getAnalogInPpqn());
+        drawMenuValue(buf, 2, 3, positive ? UI_GREEN : UI_RED);
       }
       drawMenuIndicator('L', 'W', 1);
-      drawMenuIndicator('L', 'W', 3);
+      drawMenuIndicator('L', positive ? 'G' : 'R', 3);
       break;
     }
-      
+
     case 9: // PMD - Pattern Mode - encoder 3
       drawMenuText("PMODE", 2, 10, currentMenuParentTextColor());
       drawPatternMode();
@@ -3575,26 +3593,26 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 59: { // CIN - enc1 width (hold-off ms), enc3 PPQN
+    case 59: { // PQ-I - enc1 hold-off, enc3 OFF/rate (click polarity)
       extern uint8_t getAnalogInHoldMs();
       extern void setAnalogInHoldMs(uint8_t);
-      extern uint8_t getAnalogInPpqnIndex();
-      extern uint8_t getAnalogInPpqnCount();
-      extern void setAnalogInPpqnIndex(uint8_t);
+      extern uint8_t getAnalogInRateSel();
+      extern uint8_t getAnalogInRateSelCount();
+      extern void setAnalogInRateSel(uint8_t);
       static const int kCinHoldMin = 1;
       static const int kCinHoldMax = 32;
       static int lastCinHold = -1;
       static int lastCinRate = -1;
-      const int rateMax = (int)getAnalogInPpqnCount() - 1;
+      const int rateMax = (int)getAnalogInRateSelCount() - 1;
       if (menuFirstEnter) {
         Encoder[0].writeMin((int32_t)kCinHoldMin);
         Encoder[0].writeMax((int32_t)kCinHoldMax);
         Encoder[0].writeCounter((int32_t)getAnalogInHoldMs());
         Encoder[2].writeMin((int32_t)0);
         Encoder[2].writeMax((int32_t)rateMax);
-        Encoder[2].writeCounter((int32_t)getAnalogInPpqnIndex());
+        Encoder[2].writeCounter((int32_t)getAnalogInRateSel());
         currentMode->pos[0] = (unsigned int)getAnalogInHoldMs();
-        currentMode->pos[2] = (unsigned int)getAnalogInPpqnIndex();
+        currentMode->pos[2] = (unsigned int)getAnalogInRateSel();
         lastCinHold = (int)currentMode->pos[0];
         lastCinRate = (int)currentMode->pos[2];
         g_cinFocus = 0;
@@ -3605,13 +3623,13 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lastCinHold = (int)getAnalogInHoldMs();
         Encoder[0].writeCounter((int32_t)lastCinHold);
         currentMode->pos[0] = (unsigned int)lastCinHold;
-        g_cinFocus = 1;
+        g_cinFocus = 2;
         menuRequestFullRedraw();
         redrawMain(setting);
       }
       if ((int)currentMode->pos[2] != lastCinRate) {
-        setAnalogInPpqnIndex((uint8_t)constrain((int)currentMode->pos[2], 0, rateMax));
-        lastCinRate = (int)getAnalogInPpqnIndex();
+        setAnalogInRateSel((uint8_t)constrain((int)currentMode->pos[2], 0, rateMax));
+        lastCinRate = (int)getAnalogInRateSel();
         Encoder[2].writeCounter((int32_t)lastCinRate);
         currentMode->pos[2] = (unsigned int)lastCinRate;
         g_cinFocus = 0;

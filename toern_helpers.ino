@@ -4199,7 +4199,8 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 49, 1);     // eyesMode (1 min)
   EEPROM.write(EEPROM_DATA_START + 51, 1);     // SIDE voice (CH1)
   EEPROM.write(EEPROM_DATA_START + 52, 0);     // EXT clock source MIDI (not analog)
-  EEPROM.write(EEPROM_DATA_START + 53, 2);     // CIN: 4 PPQN, 1 ms hold-off
+  EEPROM.write(EEPROM_DATA_START + 59, 0);     // PQ-I enabled, positive edge
+  EEPROM.write(EEPROM_DATA_START + 53, 2);     // PQ-I: 4 PPQN, 1 ms hold-off
   EEPROM.write(EEPROM_DATA_START + 54, 0);     // MIDI WRTE (OFF)
   
   // Reload settings from EEPROM and apply to hardware
