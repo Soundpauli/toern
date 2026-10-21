@@ -36,7 +36,42 @@ Colors come from `colors.h` and mode `knobcolor[]` values.
 
 `toern_leds.ino` maintains an optional WS2812 strip: length/enable settings, `triggerLedStripRipple(channel)` on note triggers, `updateLedStrip()` from the main loop.
 
-The strip controller uses **Teensy pin 14 / J14 pin 1**, configured by `LED_STRIP_PIN` in `toern.ino`. It uses WS2812Serial independently of the matrix on pin 17. The previous strip pin, 24, is now reserved for external button D; enabling external buttons does not disable the strip. `ETC → LGHT` continues to control strip enablement.
+The strip controller uses **Teensy pin 24 / J11.5 pin 1**, configured by `LED_STRIP_PIN` in `toern.ino`. It uses WS2812Serial independently of the matrix on pin 17. External button D uses pin **14 / J14-1**, so enabling external buttons does not disable the strip. `ETC → LGHT` continues to control strip enablement.
+
+## Fader I²C diagnostics
+
+Fader ADC reads retain the upstream seesaw conversion wait of 500 µs. LED
+feedback sends at most one slider update every 20 ms across the panel; failed
+buffer/SHOW writes remain pending instead of marking the bar as displayed.
+Set `TOERN_FADER_LEDS=0` in `toern_hardware.h` for a comparison build that keeps
+ADC/volume control active but skips NeoPixel setup and updates.
+For further isolation, `TOERN_FADER_DIAGNOSTIC_MODE` is 0=normal, 1=no runtime
+fader polling, 2=ADC reads only (no mute, amplitude, overlay or LED targets).
+Modes 1/2 still initialize the faders, retain unity velocity scales, and leave
+external buttons active. Use `TOERN_FADER_LEDS=0` with these comparison builds.
+Panel speed
+remains approximately 35 kHz in either build.
+
+A Teensy fault report survives startup and is printed once when a serial monitor
+is attached in `loop()`, without writing to SD. Breadcrumb 1 is `0xFAD0iiSS`:
+`ii` is the zero-based fader index; `SS` is 0=idle, 1=ADC, 2=LED buffer,
+3=SHOW, 4=amplitude update, 5=mute handling. This records main-loop context;
+the report's fault address and program counter identify where the fault occurred.
+
+The ramp mixers additionally validate pointers and block headers against the
+configured AudioMemory pool before sample access or release. An invalid block
+is discarded without dereferencing/releasing it, and the first incident is
+reported on USB serial as `AUDIO BLOCK FAULT` with mixer type, delay index,
+input and phase. The header diagnostic also prints the pool base, expected
+block index, stored block index, reference count and a `reason` bit mask:
+1=outside pool, 2=misaligned, 4=index mismatch, 8=zero reference count.
+Header values are only read for an aligned pointer inside the pool; otherwise
+index/reference fields use sentinel values 65535/255. Phase 1 is receipt from the input queue, 2 is rechecking after
+output allocation, 3 is an invalid allocator result (input 255). Breadcrumbs
+2/3/4 record bad pointer, mixer address, and `(phase << 8) | input` if a later
+processor fault occurs. This contains a detected invalid pointer; it does not
+repair or establish the source of memory corruption. Do not interpret these
+fields using older diagnostic builds, which only wrote breadcrumb 1.
 
 ## Current display contract
 

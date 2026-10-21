@@ -114,7 +114,7 @@ Open source as always: schematics, code, and design files are here for you to po
 | **Audio** | 44.1 kHz, 16-bit mono WAV |
 | **Controls** | 4× RGB illuminated I2C rotary-push encoders, 3 touch switches |
 | **Display** | 16×16 RGB LED matrix (FastLED); up to 2 modules → 32×16 |
-| **LED strip** | Optional 5 V WS2812 strip; data on **pin 14 / J14-1** (configurable length) |
+| **LED strip** | Optional 5 V WS2812 strip; data on **pin 24 / J11.5-1** (configurable length) |
 | **I/O** | 6.35 mm headphones, line in/out, mic in; built-in mic; TRS MIDI in/out |
 | **Power** | USB-C or optional LiPo + charging |
 

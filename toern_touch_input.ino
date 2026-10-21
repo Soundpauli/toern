@@ -4,7 +4,7 @@ bool readDebouncedTouch(int index) {
   if (index < 0 || index >= 5) return false;
   static const int pins[5] = {SWITCH_1, SWITCH_2, SWITCH_3, SWITCH_4, SWITCH_5};
   bool raw;
-  // Remote panel: grounded buttons on J12/J11. Cap pads false-trigger under EMI.
+  // Remote panel: grounded buttons on J12/J14. Cap pads false-trigger under EMI.
   if (exttouch) {
     if (index == 0) raw = digitalReadFast(BUTTON_A) == LOW;       // SINGLE
     else if (index == 1) raw = digitalReadFast(BUTTON_B) == LOW;  // MENU

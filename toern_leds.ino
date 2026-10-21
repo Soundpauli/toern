@@ -1,13 +1,13 @@
 // LED Strip Visualization Module
 // Ripple effects based on triggered notes/channels with audio reactivity
 //
-// Uses PIN 14 (J14-1) as a separate data line for the LED strip (independent from matrix on PIN 17).
+// Uses PIN 24 (J11.5-1) as a separate data line for the LED strip (independent from matrix on PIN 17).
 // The strip can be connected externally via the onboard connector.
 
 #include <FastLED.h>
 
 // Configuration
-// LED_STRIP_PIN is defined once in toern.ino (14 / J14-1).
+// LED_STRIP_PIN is defined once in toern.ino (24 / J11.5-1).
 #define LED_STRIP_DEFAULT_LENGTH 256
 #define LED_STRIP_MAX_LENGTH 256
 #define MAX_RIPPLES 16
@@ -16,7 +16,7 @@
 #define AUDIO_SENSITIVITY 0.3f
 #define AUDIO_MIN_THRESHOLD 0.01f
 
-// Separate LED array for the strip (on PIN 14 / J14-1)
+// Separate LED array for the strip (on PIN 24 / J11.5-1)
 DMAMEM CRGB stripLeds[LED_STRIP_MAX_LENGTH];
 
 // LED strip state

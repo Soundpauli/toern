@@ -177,7 +177,7 @@ extern void handleMidiClock();
 extern void handleStart();
 #define NUM_LEDS (256 * LED_MODULES)  // 256 LEDs per matrix
 #define DATA_PIN 17                   // PIN FOR LEDS
-#define LED_STRIP_PIN 14              // Separate LED strip data: J14 pin 1
+#define LED_STRIP_PIN 24              // Separate LED strip data: J11.5 pin 1
 #define INT_PIN 27                    // PIN FOR ENOCDER INTERRUPS
 
 #define SWITCH_1 2 // ALT: 16   // Capacitive input 1 >> SINGLE
@@ -185,7 +185,7 @@ extern void handleStart();
 #define BUTTON_A 5  // External SINGLE button (J12 pin 2), active LOW
 #define BUTTON_B 22 // External MENU button (J12 pin 1), active LOW
 #define BUTTON_C 15 // External REC / touch3 (J12 pin 3), active LOW
-#define BUTTON_D 24 // External touch4 (J11 pin 1), active LOW
+#define BUTTON_D 14 // External touch4 (J14 pin 1), active LOW
 #define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6   // Capacitive touch4 >> current-voice audition (+ base-pitch note in SINGLE while playing)
 #define SWITCH_5 39
@@ -4342,7 +4342,7 @@ FLASHMEM void setup() {
   // Initialize LEDs early for boot-hold visual feedback (touch1 FULL reset countdown)
   FastLED.addLeds<WS2812SERIAL, DATA_PIN, BRG>(leds, NUM_LEDS);
   
-  // Separate strip output on J14-1; pin 24 remains available for BUTTON_D.
+  // Separate strip output on J11.5-1; pin 14 remains available for BUTTON_D.
   extern CRGB stripLeds[];
   extern void initLedStrip();
   FastLED.addLeds<WS2812SERIAL, LED_STRIP_PIN, BRG>(stripLeds, 256);

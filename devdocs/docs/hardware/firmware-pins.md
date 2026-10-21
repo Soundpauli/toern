@@ -18,7 +18,7 @@ I²C. There is no independent fader setting. The standard panel uses 100 kHz.
 | Firmware | Teensy pin | Board use |
 |----------|------------|-----------|
 | `DATA_PIN` | **17** | WS2812 data. Series **R20** (220 Ω) then **J9 pin 1** |
-| `LED_STRIP_PIN` | **14** | Optional WS2812 strip data on **J14 pin 1** (WS2812Serial / Serial3 TX) |
+| `LED_STRIP_PIN` | **24** | Optional WS2812 strip data on **J11.5 pin 1** (WS2812Serial / Serial6 TX) |
 | `INT_PIN` | **27** | Shared encoder interrupt (pad 5 on encoder sockets) |
 | `INT_SD` | **10** | microSD chip-select |
 | `SWITCH_1` | **2** | Touch / TTP223 — single mode |
@@ -28,7 +28,7 @@ I²C. There is no independent fader setting. The standard panel uses 100 kHz.
 | `SWITCH_5` | **39** | Extra switch net (board-dependent) |
 | `BATT_ADC_PIN` | **A16** (40) | VBAT divider |
 
-The separate LED strip uses pin **14**, replacing the previous pin **24** assignment. Pin **24** remains `BUTTON_D` (J11 pin 1) when `exttouch=true`; the strip can operate in either input configuration. `LED_STRIP_PIN` is defined once in `toern.ino` and used by its FastLED controller registration.
+The separate LED strip uses pin **24** / **J11.5 pin 1**. With `exttouch=true`, `BUTTON_D` is pin **14** / **J14 pin 1**, so strip and button D do not share a pad. `LED_STRIP_PIN` is defined once in `toern.ino` and used by its FastLED controller registration.
 
 MIDI on **Serial8** uses pins **34/35** (`RX8`/`TX8`) with enlarged buffers — TRS jacks go through the opto / buffer stage (`TLP2361` `U4`, Schmitt `74LVC2G14` `U5`).
 

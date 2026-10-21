@@ -52,18 +52,17 @@ These match Duppa / i2cEncoderLibV2-style modules used in firmware.
 
 The single selector `exttouch` in `toern_hardware.h` controls the entire panel:
 `false` selects capacitive pads without faders; `true` selects external buttons,
-faders, remote encoder address order, and panel I²C timing. There is no separate
+faders, and panel I²C timing. There is no separate
 fader flag. With `exttouch=true`, grounded active-low buttons A/B/C/D use Teensy pins
-5/22/15/24 respectively. D auditions the selected voice through its normal
+5/22/15/14 respectively. D auditions the selected voice through its normal
 filters/effects. In stopped SINGLE it uses the cursor pitch; in playing SINGLE
 it also writes a base-pitch note. In REC it controls the recording threshold.
-The LED strip uses Teensy pin 14 (J14 pin 1), leaving pin 24 for D.
-This replaces the previous LED-strip assignment on pin 24. Move the separate
-strip data wire to **J14-1**; leave button D on **J11-1**. The matrix stays on
-pin 17 / J9-1. Strip operation remains available with external buttons enabled. The same `exttouch` flag enables the four NeoSliders at 0x30–0x33.
+Button D is on **J14-1** (pin 14). The LED strip uses **J11.5-1** (pin 24).
+The matrix stays on pin 17 / J9-1. Strip operation remains available with
+external buttons enabled. The same `exttouch` flag enables the four NeoSliders at 0x30–0x33.
 
 The codec, encoders and faders share primary `Wire`. Remote-panel builds apply
-approximately 35 kHz timing (previously about 26 kHz); the standard panel stays
+approximately 35 kHz timing; the standard panel stays
 at 100 kHz. Timing is applied once per primary `Wire.begin()` by the wrapper,
 without additional reapplications after encoder or fader operations. The explicit `Wire.begin()` call in setup remains
 commented out; codec initialization and each seesaw probe call it internally,
