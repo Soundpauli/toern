@@ -48,6 +48,7 @@ uint8_t scaleToDisplay(const SliderDefEntry& meta, uint8_t val) {
 
 // DTNE / CENT / SEMI / ARP: 0..32 center 16. Sample OCTV: 0..48 center 24 (ch13/14 OCTV: 0..32 center 16).
 static inline bool isBipolarCenteredParam(const SliderDefEntry& meta) {
+  if (meta.arr == ARR_GAIN) return true;
   if (meta.arr == ARR_FILTER && meta.idx == DETUNE && meta.maxValue == 32) return true;
   if (meta.arr == ARR_FILTER && meta.idx == OCTAVE && (meta.maxValue == 48 || meta.maxValue == 32)) return true;
   if (meta.arr == ARR_SYNTH && (meta.idx == CENT || meta.idx == SEMI) && meta.maxValue == 32) return true;
@@ -79,6 +80,7 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
     case ARR_SYNTH: raw = constrain(SMP.synth_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_PARAM: raw = constrain(SMP.param_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
     case ARR_STRETCH: raw = chan >= 1 && chan <= 8 ? sampleTimeStretch[chan] : 0; break;
+    case ARR_GAIN: raw = sampleVoiceGainSlider(chan); break;
     default: return 0;
   }
   return raw;
@@ -159,7 +161,11 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
     snprintf(buf, sizeof(buf), "%s", meta.enumNames[shownVal]);
   } else if (bipolar) {
     // Sample DTNE: cents. Sample OCTV: whole semis (val − 24). CENT/SEMI: val − 16.
-    if (meta.arr == ARR_FILTER && meta.idx == DETUNE) {
+    if (meta.arr == ARR_GAIN) {
+      const int gain = (int)val - 16;
+      if (gain == 0) snprintf(buf, sizeof(buf), "0");
+      else snprintf(buf, sizeof(buf), "%+d", gain);
+    } else if (meta.arr == ARR_FILTER && meta.idx == DETUNE) {
       int cents = (int)lroundf(mapf((float)val, 0.0f, 32.0f, -100.0f, 100.0f));
       snprintf(buf, sizeof(buf), "%d", cents);
     } else if (meta.arr == ARR_FILTER && meta.idx == OCTAVE) {
@@ -183,7 +189,8 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   // RES / BITC: 0 = green (safe/off), 32 = red (max). Others keep red→green with value.
   const bool dangerHighFlip =
       (meta.arr == ARR_FILTER && (meta.idx == RES || meta.idx == BITCRUSHER))
-      || (meta.arr == ARR_SYNTH && meta.idx == RESONANCE);
+      || (meta.arr == ARR_SYNTH && meta.idx == RESONANCE)
+      || meta.arr == ARR_GAIN;
   CRGB textColor = dangerHighFlip ? blend(CRGB::Green, CRGB::Red, blendVal)
                                   : blend(CRGB::Red, CRGB::Green, blendVal);
 
@@ -398,6 +405,7 @@ void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
   } else {
     // Set as new default fast filter
     switch (def.arr) {
+      case ARR_GAIN:
       case ARR_FILTER:
         defaultFastFilter[chan].arr = def.arr;
         defaultFastFilter[chan].idx = def.idx;
@@ -467,6 +475,9 @@ void processAdjustments_new(uint8_t page) {
 
       case ARR_STRETCH:
         setSampleTimeStretch(chan, currentMode->pos[i]);
+        break;
+      case ARR_GAIN:
+        setSampleVoiceGain(chan, currentMode->pos[i]);
         break;
 
       default:

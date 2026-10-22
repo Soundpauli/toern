@@ -159,6 +159,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
           return (ch == 11) ? kCh11WaveDefault[ch11Inst] : 8;
         default: return 0;
       }
+    case ARR_GAIN: return 16;
     case ARR_PARAM:
       // Default ADSR: ch11 uses active instrument preset; ch14 303 uses D=20, S=20, R=16; others A=32, D=32, S=32
       switch (idx) {
@@ -263,6 +264,9 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
         break;
       case ARR_STRETCH:
         setSampleTimeStretch(ch, val);
+        break;
+      case ARR_GAIN:
+        setSampleVoiceGain(ch, val);
         break;
       default:
         break;

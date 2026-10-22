@@ -32,7 +32,12 @@ bool pendingPauseSkipSave = false;            // whether the pending pause shoul
 bool pendingPauseAutoSave = false;            // run autosave after pause, once audio tails settle
 elapsedMillis pauseSdWaitMs;                  // time since last pause (SD wait timeout)
 static uint8_t pauseSdSettleGen = 0;
+
 bool sdIoAudioSettled();
+static volatile bool pendingPauseAudioCleanup = false;
+static elapsedMillis pauseEffectsQuietMs;
+void servicePauseAudioCleanup();
+void releaseAllPolySynthVoices();
 volatile bool isrDbgPatternFinished = false;  // song-mode: pattern finished
 volatile uint16_t isrDbgPatternFinishedBeat = 0;
 volatile bool isrDbgLoopCountChanged = false;  // loopCount incremented
@@ -135,7 +140,8 @@ enum SettingArray : uint8_t { ARR_FILTER,
                               ARR_SYNTH,
                               ARR_PARAM,
                               ARR_NONE,
-                              ARR_STRETCH };
+                              ARR_STRETCH,
+                              ARR_GAIN };
 
 // Define named struct for sliderDef
 struct SliderDefEntry {
@@ -380,6 +386,10 @@ void serviceMidiArp();
 void serviceMidiArpOnPlayhead(uint16_t playedBeat);
 static inline void resetMidiPressedKeyCount11to14();
 void drawCtrlVolumeOverlay(int volume);
+bool neoSliderOverlayVisible();
+void drawNeoSliderOverlay();
+bool fillRequestOverlayVisible();
+void drawFillRequestOverlay();
 void initNeoSlider();
 void updateNeoSliderVolume();
 void reapplyAllSampleChannelGains();
@@ -676,6 +686,8 @@ struct EncoderTurnEvent {
 static bool dispatchFnTurn(const EncoderTurnEvent &event);
 
 const int touchThreshold = 45; //45 for M1
+static bool touchFillChordConsumed = false;
+static bool handleTouchFillChord(bool touch3, bool touch4);
 bool readDebouncedTouch(int index);
 static bool bypassModeSwitchDebounce = false;
 static bool touch1ModeTogglePending = false;
@@ -692,7 +704,7 @@ bool readTouch2Pressed() {
 }
 
 bool readRecTouchHeld() {
-  return readDebouncedTouch(2);
+  return readDebouncedTouch(2) && !touchFillChordConsumed;
 }
 
 const unsigned int totalPulsesToWait = pulsesPerBar * 2;
@@ -936,6 +948,35 @@ volatile uint32_t fillSubTick = 0;
 //   demotes the F/F trigger note to 1/1 and clears lockout so re-setting F/F re-arms.
 volatile bool fillRunning = false;
 volatile bool fillHasTriggered = false;
+volatile uint32_t fillStepsRemaining = 0;
+// Touch 3+4 / buttons C+D queues a one-shot fill on the next playing page downbeat.
+volatile uint16_t touchFillPendingMask = 0;
+struct TouchFillState {
+  volatile bool running = false;
+  volatile uint32_t startSubTick = 0;
+  volatile uint32_t stepsRemaining = 0;
+};
+static TouchFillState touchFills[15];
+struct FillDropState {
+  volatile bool pending = false;
+  volatile uint8_t row = 0;
+  volatile uint8_t midiPitch = NOTE_MIDI_PITCH_NONE;
+};
+static FillDropState fillDrops[15];
+
+static void resetTouchFills() {
+  toern_audio::StateGuard guard;
+  touchFillPendingMask = 0;
+  fillStepsRemaining = 0;
+  for (int ch = 0; ch < 15; ++ch) {
+    touchFills[ch].running = false;
+    touchFills[ch].startSubTick = 0;
+    touchFills[ch].stepsRemaining = 0;
+    fillDrops[ch].pending = false;
+  }
+}
+static int fillRequestOverlayChannel = -1;
+static uint32_t fillRequestOverlayUntil = 0;
 volatile uint32_t fillStartSubTick = 0;  // sub-tick when fill started
 // Grid cell that armed the current/last fill (1-based step + row).
 volatile unsigned int fillTriggerStep = 0;
@@ -1272,6 +1313,31 @@ bool fullMuteIsActive() {
   return fullMuteActive;
 }
 
+// Reserve an unused parameter slot without changing the Device file layout.
+// Tagged 0..32 values distinguish new gain settings from legacy spare bytes.
+static constexpr int SAMPLE_VOICE_GAIN_SLOT = 14;
+static constexpr float SAMPLE_VOICE_GAIN_TAG = 1048576.0f;
+static_assert(SAMPLE_VOICE_GAIN_SLOT < maxFilters, "Voice gain must retain the Device layout");
+
+int sampleVoiceGainSlider(int ch) {
+  if (ch < 1 || ch > 8) return 16;
+  const float stored = SMP.param_settings[ch][SAMPLE_VOICE_GAIN_SLOT];
+  if (!isfinite(stored) || stored < SAMPLE_VOICE_GAIN_TAG
+      || stored > SAMPLE_VOICE_GAIN_TAG + 32.0f || floorf(stored) != stored) return 16;
+  return (int)(stored - SAMPLE_VOICE_GAIN_TAG);
+}
+
+void applySampleVoiceGain(int ch) {
+  if (ch < 1 || ch > 8) return;
+  sampleFilterGain[ch - 1].gain((float)sampleVoiceGainSlider(ch) / 16.0f);
+}
+
+void setSampleVoiceGain(int ch, int slider) {
+  if (ch < 1 || ch > 8) return;
+  SMP.param_settings[ch][SAMPLE_VOICE_GAIN_SLOT] = SAMPLE_VOICE_GAIN_TAG + constrain(slider, 0, 32);
+  applySampleVoiceGain(ch);
+}
+
 // Per-page mute system for PMOD (pattern mode)
 DMAMEM static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
 DMAMEM static bool globalMutes[maxY];          // stores global mute state when PMOD is off
@@ -1477,10 +1543,14 @@ static elapsedMillis neoSliderActiveUntil[NEOSLIDER_COUNT];  // faster ADC while
 static int neoSliderLedVolShown[NEOSLIDER_COUNT];           // last volume pushed to NeoPixels
 static int neoSliderLedVolWanted[NEOSLIDER_COUNT];          // desired bar; SHOW is retried separately
 static elapsedMillis g_faderMovedAgo = 1000;
+static bool neoSliderOverlayActive[NEOSLIDER_COUNT] = {};
+static elapsedMillis neoSliderOverlayAge[NEOSLIDER_COUNT];
+static float neoSliderOverlayLevel[NEOSLIDER_COUNT] = {};
+static unsigned long neoSliderOverlayFrame = 0;
 
 bool encoderI2cWritesAllowed() {
   if (!exttouch || !neoSliderAnyPresent) return true;
-  // SET_WAV skips fader I2C; allow one-shot encoder range/RGB writes (not every frame).
+  // Menu/sample screens must still apply their encoder ranges and navigation writes.
   if (currentMode == &set_Wav || currentMode == &menu) return true;
   return g_faderMovedAgo >= 80;
 }
@@ -1488,6 +1558,17 @@ bool encoderI2cWritesAllowed() {
 
 static inline bool isNeoSliderControlledChannel(int ch) {
   return exttouch && ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
+}
+
+// Temporary mute/solo snapshots are older than the physical controls. Once a
+// fader has a valid reading, its bottom stop owns mute on restoration, even if
+// it stopped moving before the button was released. Missing/unread faders keep
+// the saved state. Explicit mute/solo actions still work while the mode is held.
+static bool restoredMuteWithFaderPriority(int ch, bool savedMute) {
+  if (isNeoSliderControlledChannel(ch) && neoSliderLastVol[ch - 1] >= 0) {
+    return neoSliderInMuteDz[ch - 1];
+  }
+  return savedMute;
 }
 
 // 10-bit travel: bottom/top 5% are mute / full stops (plus ~24-count hysteresis).
@@ -2430,6 +2511,7 @@ FLASHMEM void switchMode(Mode *newMode) {
 }
 
 void checkFastRec() {
+  if (touchFillChordConsumed && !fastRecordActive) return;
   if (touchyEnabled) return; // Performance pads never arm the recorder.
   if (SMP_FAST_REC != 2 && sensCountActive) {
     sensCountActive = false;
@@ -3892,8 +3974,6 @@ FLASHMEM static void neoSliderUpdateLeds(int idx, int vol) {
 static void neoSliderFlushPendingLeds() {
   if (digitalRead(INT_PIN) == LOW) return;
   if (playSdWav1.isPlaying()) return;
-  if (currentMode == &menu || currentMode == &set_Wav) return;
-
   static uint8_t next = 0;
   for (int n = 0; n < NEOSLIDER_COUNT; n++) {
     int i = (int)((next + n) % NEOSLIDER_COUNT);
@@ -4026,6 +4106,7 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
   const float scale = isNeoSliderControlledChannel(ch) ? neoSliderVelScale[ch - 1] : 1.0f;
   const float amp = noteN * scale;
   if (amp <= 0.0f) return;
+  pendingPauseAudioCleanup = false; // a fresh live note owns its effect tail
   // Only sequencer/fill callers opt in; paint, audition and MIDI preview do not.
   extern void sidechainOnVoice(uint8_t);
   if (sendSidechain) sidechainOnVoice((uint8_t)ch);
@@ -4119,7 +4200,8 @@ static void processOneNeoSlider(int i, uint16_t *lastRaw) {
   if (neoSliderLastVol[i] >= 0 && vol != neoSliderLastVol[i] && !first) {
     int stepDelta = vol - neoSliderLastVol[i];
     if (stepDelta < 0) stepDelta = -stepDelta;
-    if (stepDelta == 1 && rawDelta < (int)FADER_RAW_HYST) {
+    if (stepDelta == 1 && rawDelta < (int)FADER_RAW_HYST
+        && !muteDzChanged && !fullDzChanged) {
       vol = neoSliderLastVol[i];
     }
   }
@@ -4127,7 +4209,9 @@ static void processOneNeoSlider(int i, uint16_t *lastRaw) {
   const bool rawMoved = first || (rawDelta >= (int)FADER_RAW_HYST);
   if (rawMoved) neoSliderActiveUntil[i] = 0;
 
-  lastRaw[i] = slideVal;
+  // Compare with the last accepted position, not the previous ADC sample.
+  // Small steps must accumulate, otherwise slow moves never reach hysteresis.
+  if (rawMoved || muteDzChanged || fullDzChanged) lastRaw[i] = slideVal;
 
   const int ch = neoSliderVoiceCh[i];
   if (ch < 0 || ch >= (int)maxY) return;
@@ -4149,25 +4233,32 @@ static void processOneNeoSlider(int i, uint16_t *lastRaw) {
     applyPlayAmplitude(ch, neoSliderLastVelNorm[i] * neoSliderVelScale[i]);
   }
 
-  if (rawMoved) g_faderMovedAgo = 0;
+  if (!first && (rawMoved || muteDzChanged || fullDzChanged)) {
+    g_faderMovedAgo = 0;
+    noteUserActivity();
+    if (!neoSliderOverlayActive[i] || neoSliderOverlayAge[i] >= 850) {
+      neoSliderOverlayLevel[i] = neoSliderVelScale[i] * 16.0f;
+    }
+    neoSliderOverlayActive[i] = true;
+    neoSliderOverlayAge[i] = 0;
+  }
   neoSliderLedVolWanted[i] = vol;
   if (vol == neoSliderLastVol[i]) return;
   neoSliderLastVol[i] = vol;
   g_faderMovedAgo = 0;
 
-  // Matrix fader bar: RAM flags only, no I2C. Never writeCounter from faders.
-  showCtrlVolumeChange(vol);
+  // Each fader owns its matrix feedback; simultaneous moves never overwrite it.
+  // Never write encoder counters from faders.
 }
 
 void updateNeoSliderVolume() {
   if (!exttouch || !neoSliderAnyPresent) return;
-  // Menu and SET_WAV hammer encoder I2C every frame — don't touch faders on the same bus.
-  if (currentMode == &menu || currentMode == &set_Wav) return;
+  // Preview DMA and capture retain their existing transport/noise guards.
+  if (fastRecordActive || isRecording || playSdWav1.isPlaying()) return;
 
-  // Encoders share the I2C bus: skip while an encoder INT is pending.
-  if (digitalRead(INT_PIN) == LOW) return;
-  // SD preview uses eDMA; fader I2C during that is the AudioInputI2S TCD bus fault (0x400E80B0).
-  if (playSdWav1.isPlaying()) return;
+  // Encoder transactions are synchronous and checkEncoders() ran before us.
+  // A pending INT is another event, not a busy bus: do not let continuous
+  // encoder activity starve ADC reads in mute/solo/menu modes.
 
   bool moving = false;
   for (int n = 0; n < NEOSLIDER_COUNT; n++) {
@@ -4177,14 +4268,19 @@ void updateNeoSliderVolume() {
     }
   }
   static elapsedMillis neoSliderPoll;
-  if (neoSliderPoll < (moving ? 4 : 8)) return;
+  if (neoSliderPoll < (moving ? 2 : 4)) return;
   neoSliderPoll = 0;
 
   static uint16_t lastRaw[NEOSLIDER_COUNT] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
-  for (int i = 0; i < NEOSLIDER_COUNT; i++) {
+  // One ADC transaction per tick, round-robin even when a device read fails.
+  // All four moving faders are sampled within 8 ms of polling time.
+  static uint8_t next = 0;
+  for (int n = 0; n < NEOSLIDER_COUNT; n++) {
+    int i = next;
+    next = (uint8_t)((next + 1) % NEOSLIDER_COUNT);
     if (!neoSliderPresent[i]) continue;
-    if (digitalRead(INT_PIN) == LOW) return;
     processOneNeoSlider(i, lastRaw);
+    break;
   }
   neoSliderFlushPendingLeds();
 }
@@ -5696,6 +5792,8 @@ void filtercheck() {
 void checkButtons() {
   // `buttons` array is populated by `checkEncoders()` -> `handle_button_state()`
   bool changed = (memcmp(buttons, oldButtons, sizeof(buttons)) != 0);
+  // Resolve the performance chord before REC can arm from touch3/button C.
+  handleTouchFillChord(readDebouncedTouch(2), readDebouncedTouch(3));
   checkFastRec();
 
   if (changed) {
@@ -5784,8 +5882,40 @@ void enterSingleModeDirect();
 void exitDrawFromSingleDirect();
 static void triggerCurrentVoiceAudition(int pitchRow, int auditionVelocity = -1);
 
+// Consume touch 3+4 / C+D once, including the remaining held pad on release.
+static bool handleTouchFillChord(bool touch3, bool touch4) {
+  static bool wasBoth = false;
+  if (!touch3 && !touch4) touchFillChordConsumed = false;
+  const bool both = touch3 && touch4;
+  const bool rising = both && !wasBoth;
+  wasBoth = both;
+  if (!isNowPlaying || currentMode == &recordMode || currentMode == &touchyMode
+      || isRecording || fastRecordActive) return false;
+  if (rising) {
+    touchFillChordConsumed = true;
+    // Cancel touch3 arming if the debounced pads settled on adjacent polls.
+    sensCountActive = false;
+    sensCountSec = 0;
+    touch3PressStartTime = 0;
+    touch3PressProcessed = false;
+    pendingStartFastRecord = false;
+    recordingBorderArmed = false;
+    countInPending = countInActive = countInComplete = false;
+    countInBeat = 0;
+    const int ch = (int)GLOB.currentChannel;
+    if (isSingleModeChannelAllowed(ch) && !isChildVoiceDisabled(ch)) {
+      toern_audio::StateGuard guard;
+      touchFillPendingMask |= (uint16_t)(1u << ch);
+      fillRequestOverlayChannel = ch;
+      fillRequestOverlayUntil = (uint32_t)millis() + 1000u;
+    }
+  }
+  return touchFillChordConsumed;
+}
+
 void checkTouchInputs() {
   if (currentMode == &touchyMode) {
+    handleTouchFillChord(false, false);
     extern void checkTouchyTouches();
     checkTouchyTouches();
     return;
@@ -5796,11 +5926,13 @@ void checkTouchInputs() {
   // 1) read inputs (buttons A–D when exttouch; otherwise capacitive pads)
   bool tv1 = readTouch1Pressed();
   bool tv2 = readTouch2Pressed();
-  int tv3 = readRecTouchHeld() ? touchThreshold + 1 : 0;
+  const bool touch3Pressed = readDebouncedTouch(2);
   const bool touch4Pressed = readDebouncedTouch(3);
+  const bool fillChord = handleTouchFillChord(touch3Pressed, touch4Pressed);
+  int tv3 = touch3Pressed && !fillChord ? touchThreshold + 1 : 0;
 
   // Any touch held or tapped counts as user activity (exits / prevents screensaver)
-  if (tv1 || tv2 || tv3 > touchThreshold || touch4Pressed) {
+  if (tv1 || tv2 || touch3Pressed || touch4Pressed) {
     noteUserActivity();
   }
 
@@ -5808,7 +5940,7 @@ void checkTouchInputs() {
   // (base-pitch note on current beat). SINGLE while stopped uses cursor Y pitch.
   // Skip in recordMode where touch4 arms/unarms the recording threshold.
   {
-    if (currentMode != &recordMode && touch4Pressed && !lastTouchState[3]) {
+    if (currentMode != &recordMode && !fillChord && touch4Pressed && !lastTouchState[3]) {
       const int ch = (int)GLOB.currentChannel;
       int auditionRow = basePitchRowForChannel(ch);
       if (currentMode == &singleMode && !isNowPlaying && GLOB.y >= 1 && GLOB.y <= 15) {
@@ -7033,6 +7165,8 @@ void loop() {
     drawPlayButton();
   }
 
+  servicePauseAudioCleanup();
+
   // Deferred pause UI (I2C) on one loop tick; autosave only after envelopes /
   // sample readers / a short reverb-delay pad have gone quiet (or 2.5s timeout).
   // Always schedule autosave after a normal pause — only skipSave (MIDI/SD) opts out.
@@ -7877,11 +8011,11 @@ void tmpMuteAll(bool pressed) {
     // only on the *transition* into pressed do we save & mute
     if (!tmpMuteActive) {
       // save current mutes
-      for (unsigned i = 1; i <= maxY; i++) {  // Use maxY to include all channels (1-16)
+      for (unsigned i = 1; i < maxY; i++) {  // Mute arrays are indexed 0..maxY-1.
         prevMuteState[i] = getMuteState(i);
       }
       // mute all except the current channel
-      for (unsigned i = 1; i <= maxY; i++) {
+      for (unsigned i = 1; i < maxY; i++) {
         setMuteState(i, (i == GLOB.currentChannel) ? false : true);
       }
       tmpMuteActive = true;
@@ -7889,8 +8023,8 @@ void tmpMuteAll(bool pressed) {
   } else {
     // only on the *transition* into released do we restore
     if (tmpMuteActive) {
-      for (unsigned i = 1; i <= maxY; i++) {
-        setMuteState(i, prevMuteState[i]);
+      for (unsigned i = 1; i < maxY; i++) {
+        setMuteState(i, restoredMuteWithFaderPriority(i, prevMuteState[i]));
       }
       tmpMuteActive = false;
     }
@@ -7979,8 +8113,12 @@ FLASHMEM void fullMuteExitRestore() {
 
   fullMuteActive = false;
   fullMuteView = FullMuteView::AllMuted;
-  memcpy(globalMutes, fullMuteSavedGlobal, sizeof(globalMutes));
-  memcpy(pageMutes, fullMuteSavedPages, sizeof(pageMutes));
+  for (int ch = 0; ch < maxY; ++ch) {
+    globalMutes[ch] = restoredMuteWithFaderPriority(ch, fullMuteSavedGlobal[ch]);
+    for (int page = 0; page < maxPages; ++page) {
+      pageMutes[page][ch] = restoredMuteWithFaderPriority(ch, fullMuteSavedPages[page][ch]);
+    }
+  }
   syncMuteArraysToSmp();
   applyMutesAfterPMODSwitch();
 }
@@ -8011,6 +8149,8 @@ void deleteActiveCopy() {
 
 void play(bool fromStart) {
   if (touchyEnabled) return; // TOUCHY is played directly, including while editing its samples/filters.
+  pendingPauseAudioCleanup = false;
+  resetTouchFills();
   pendingPauseAutoSave = false; // don't drop an SD burst onto a fresh start
   // MIDI Start is now sent by resetMidiClockForTransportStart() below,
   // after all setup, so the clock timer phase and Start are aligned.
@@ -8175,18 +8315,25 @@ void pause(bool skipSave) {
   deleteActiveCopy();
 
   // Stop audio voices immediately (time-critical, no I2C)
-  envelope0.noteOff();
+  for (int ch = 0; ch < 15; ++ch) {
+    if (envelopes[ch]) envelopes[ch]->noteOff();
+  }
+  releaseAllPolySynthVoices();
   stopSynthChannel(13);
   stopSynthChannel(14);
   resetMidiPressedKeyCount11to14();
   sequencerSynthTick = 0;
   resetSequencedSynthLegato();
+  noteOnTriggered[11] = persistentNoteOn[11] = false;
+  pauseEffectsQuietMs = 0;
+  pendingPauseAudioCleanup = true;
 
   // Reset playback state immediately
   beat = 1;
   beatForUI = beat;
   GLOB.page = 1;
   loopCount = 0;
+  resetTouchFills();
   fillHasTriggered = false;
   fillRunning = false;
   fillSubTick = 0;
@@ -8205,6 +8352,39 @@ void pause(bool skipSave) {
   pauseSdWaitMs = 0;
   pauseSdSettleGen++;
 }
+
+// This runs independently of autosave, including MIDI Stop / pause(true).
+// Stop readers only after their envelopes have closed. Delay feedback and
+// reverb tanks keep running until they decay naturally; envelope silence does
+// not mean the downstream effects have finished.
+void servicePauseAudioCleanup() {
+  if (!pendingPauseAudioCleanup) return;
+  toern_audio::StateGuard guard;
+  if (isNowPlaying || isRecording || fastRecordActive) {
+    pendingPauseAudioCleanup = false;
+    return;
+  }
+  for (int ch = 0; ch < 15; ++ch) {
+    if (envelopes[ch] && envelopes[ch]->isActive()) {
+      pauseEffectsQuietMs = 0;
+      return;
+    }
+  }
+  for (int voice = 0; voice < 3; ++voice) {
+    if (Senvelope1[voice]->isActive() || Senvelope2[voice]->isActive()
+        || SenvelopeFilter1[voice]->isActive()) {
+      pauseEffectsQuietMs = 0;
+      return;
+    }
+  }
+  // Let the closed envelopes propagate before reclaiming sample readers.
+  if (pauseEffectsQuietMs < 20) return;
+  for (int ch = 0; ch <= 8; ++ch) {
+    if (voices[ch]) voices[ch]->stop();
+  }
+  pendingPauseAudioCleanup = false;
+}
+
 
 bool sdIoAudioSettled() {
   if (isNowPlaying) return false;
@@ -8583,6 +8763,8 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
     return;
   }
 
+  pendingPauseAudioCleanup = false; // preserve effects for fresh live notes
+
   float frequency;
   if (midiPitchOverride >= 0 && midiPitchOverride <= 127) {
     // Preserved MIDI uses the standard pitch reference: note 69 = 440 Hz.
@@ -8771,6 +8953,83 @@ static inline int ch11PitchForNote(const Note &cell, int row) {
 
 FLASHMEM static void triggerActiveFillHit();
 
+FLASHMEM static void triggerFillHit(int ch, int velocity, unsigned int row, uint8_t midiPitch);
+
+// A simultaneous fill timer callback may arrive just before or after playNote.
+// Round up so sub-tick 3 and sub-tick 4 both anchor this downbeat at 4.
+static uint32_t currentFillStepStart() {
+  return (fillSubTick + 3u) & ~3u;
+}
+
+
+static void queueFillDrop(int ch, unsigned int row, uint8_t midiPitch) {
+  if (ch <= 0 || ch >= 15 || fillDrops[ch].pending) return;
+  fillDrops[ch].row = row;
+  fillDrops[ch].midiPitch = midiPitch;
+  fillDrops[ch].pending = true;
+}
+
+// Count actual sequencer steps, not fill timer interrupts. The two clocks may
+// run on either side of a downbeat (internal, MIDI, or analog clock input).
+static void serviceFillStepBoundaries() {
+  if (!isNowPlaying) return;
+  for (int ch = 1; ch < 15; ++ch) {
+    if (!touchFills[ch].running || touchFills[ch].stepsRemaining == 0) continue;
+    if (--touchFills[ch].stepsRemaining == 0) {
+      touchFills[ch].running = false;
+      queueFillDrop(ch, basePitchRowForChannel(ch), NOTE_MIDI_PITCH_NONE);
+    }
+  }
+  if (!fillRunning || fillStepsRemaining == 0 || --fillStepsRemaining != 0) return;
+  bool valid = true;
+  if (fillTriggerStep >= 1 && fillTriggerStep <= maxlen
+      && fillTriggerRow >= 1 && fillTriggerRow <= maxY) {
+    Note &cell = note[fillTriggerStep][fillTriggerRow];
+    valid = cell.channel != 0 && cell.condition == NOTE_CONDITION_FILL;
+    if (valid) cell.condition = 1;
+  }
+  const int ch = fillActiveChannel;
+  if (valid && ch > 0 && ch < 15 && !touchFills[ch].running) {
+    queueFillDrop(ch, fillActiveRow, fillActiveMidiPitch);
+  }
+  fillRunning = fillHasTriggered = false;
+  fillTriggerStep = fillTriggerRow = 0;
+}
+
+// Present the drop after grid notes and synth gap/release handling, so a quiet
+// note on this step cannot overwrite its full-velocity attack.
+static void triggerPendingFillDrops() {
+  if (!isNowPlaying) return;
+  for (int ch = 1; ch < 15; ++ch) {
+    if (!fillDrops[ch].pending) continue;
+    const unsigned int row = fillDrops[ch].row;
+    const uint8_t midiPitch = fillDrops[ch].midiPitch;
+    fillDrops[ch].pending = false;
+    triggerFillHit(ch, 127, row, midiPitch);
+  }
+}
+
+// Start all requests from the preceding page together, after PMOD adjustment.
+// Each voice has its own clock; no grid cell is altered by a requested fill.
+static void servicePendingTouchFill(unsigned int step) {
+  if (!isNowPlaying || touchFillPendingMask == 0 || step < 1 || maxX == 0) return;
+  if ((step - 1) % maxX != 0) return;
+  const uint16_t pending = touchFillPendingMask;
+  touchFillPendingMask = 0;
+  for (int ch = 1; ch < 15; ++ch) {
+    if (!(pending & (uint16_t)(1u << ch))) continue;
+    if (!isSingleModeChannelAllowed(ch) || isChildVoiceDisabled(ch)) continue;
+    const int row = basePitchRowForChannel(ch);
+    if (row < 1) continue;
+    touchFills[ch].startSubTick = currentFillStepStart();
+    touchFills[ch].running = true;
+    touchFills[ch].stepsRemaining = 2u * (uint32_t)maxX;
+    // A coincident previous drop supplies this downbeat's first hit too.
+    if (!fillDrops[ch].pending) triggerFillHit(ch, defaultVelocity, row, NOTE_MIDI_PITCH_NONE);
+  }
+}
+
+
 void playNote() {
 
   // Remember which beat is actually being played for UI highlighting
@@ -8811,6 +9070,8 @@ void playNote() {
     }
   }
   beatForUI = beat;
+  serviceFillStepBoundaries();
+  servicePendingTouchFill(beat);
   sequencerPreviousRecordBeat =
       sequencerRecordStepStartedUs == 0 ? (uint16_t)beat
                                         : sequencerRecordBeat;
@@ -9013,10 +9274,11 @@ void playNote() {
           }
           if (!fillHasTriggered && !fillRunning) {
             fillRunning = true;
+            fillStepsRemaining = 2u * (uint32_t)maxX;
             // Align fill clock to this sequencer step's beat (not +1 subtick).
             // Old start=fillSubTick+1 waited for the *next* fillSubBeat==0 ≈ 1 beat late,
             // and F/F skips the normal playNote hit — so the first sound was late.
-            fillStartSubTick = fillSubTick & ~3u;
+            fillStartSubTick = currentFillStepStart();
             fillTriggerStep = srcBeat;
             fillTriggerRow = b;
             fillActiveChannel = ch;
@@ -9079,6 +9341,7 @@ void playNote() {
   finishSequencedSoundTick(sequencerSynthTick, sequencedCh11HadNotes);
   finishSequencedMonoSynthTick(sequencerSynthTick, sequencedCh13HadNotes,
                                sequencedCh14HadNotes);
+  triggerPendingFillDrops();
   // Commit quantized MIDI recording after this step has sounded. This prevents
   // the just-recorded grid cell from racing the immediate MIDI preview.
   onBeatTick(beat, sequencerPreviousRecordBeat);
@@ -9406,20 +9669,18 @@ void unpaint() {
 }
 
 // Sound one hit using the armed fill voice params (shared by arm + fill ISR).
-FLASHMEM static void triggerActiveFillHit() {
-  const int ch = fillActiveChannel;
+FLASHMEM static void triggerFillHit(int ch, int velocity, unsigned int row, uint8_t midiPitch) {
   if (ch <= 0) return;
   if (isChildVoiceDisabled(ch)) return;
   if (getMuteState(ch)) return;
 
-  const int vel = (fillActiveVelocity == 0) ? defaultVelocity : fillActiveVelocity;
-  const unsigned int row = fillActiveRow;
+  const int vel = (velocity == 0) ? defaultVelocity : velocity;
   Note fillCell = {};
   fillCell.channel = (uint8_t)ch;
   fillCell.velocity = (uint8_t)vel;
   fillCell.probability = 100;
   fillCell.condition = NOTE_CONDITION_FILL;
-  fillCell.midiPitch = fillActiveMidiPitch;
+  fillCell.midiPitch = midiPitch;
 
   if (shouldSkipVoiceTriggerForSyncPreview(ch)) {
     triggerSetWavSyncPreview((uint8_t)vel);
@@ -9446,9 +9707,52 @@ FLASHMEM static void triggerActiveFillHit() {
   }
 }
 
+// A requested fill owns its voice while active; a grid F/F on that voice
+// still advances/completes, but must not double-trigger the same audio voice.
+FLASHMEM static void triggerActiveFillHit() {
+  const int ch = fillActiveChannel;
+  if (ch > 0 && ch < 15 && touchFills[ch].running) return;
+  triggerFillHit(ch, fillActiveVelocity, fillActiveRow, fillActiveMidiPitch);
+}
+
+// Shared F/F buildup timing for grid fills and every requested voice.
+static bool fillHitDue(uint32_t elapsedSub, uint32_t fillLengthBeats) {
+  if (elapsedSub < 4u && fillSubBeat == 0) return false;
+  const uint32_t position = elapsedSub / 4u + 1u;
+  const uint32_t sectionSize = (fillLengthBeats + 4u) / 5u;
+  uint32_t section = (position - 1u) / sectionSize;
+  if (section > 4u) section = 4u;
+  switch (section) {
+    case 0: return fillSubBeat == 0 && (position - 1u) % 8u == 0;
+    case 1: return fillSubBeat == 0 && (position - 1u) % 4u == 0;
+    case 2: return fillSubBeat == 0 && (position - 1u) % 2u == 0;
+    case 3: return fillSubBeat == 0;
+    default: return fillSubBeat == 0 || fillSubBeat == 2;
+  }
+}
+
+static void advanceTouchFills() {
+  const uint32_t length = 2u * (uint32_t)maxX;
+  for (int ch = 1; ch < 15; ++ch) {
+    if (!touchFills[ch].running) continue;
+    const uint32_t elapsed = fillSubTick - touchFills[ch].startSubTick;
+    // End the buildup here; the sequencer owns the exact drop downbeat.
+    if (elapsed / 4u >= length) continue;
+    if (getMuteState(ch) || isChildVoiceDisabled(ch)) continue;
+    if (fillHitDue(elapsed, length)) {
+      triggerFillHit(ch, defaultVelocity, basePitchRowForChannel(ch), NOTE_MIDI_PITCH_NONE);
+    }
+  }
+}
+
 // Fill timer ISR - runs at 4x the beat rate to handle fill triggers
 void playFillNote() {
   if (!isNowPlaying) return;
+
+  // Advance monotonic fill clock (independent of pattern looping).
+  fillSubTick++;
+  fillSubBeat = (unsigned int)(fillSubTick & 0x3U);  // 0..3
+  advanceTouchFills();
 
   // After completion, stay locked out only while the original F/F trigger remains.
   // Remove/change that note (then set F/F again) to re-arm without pause/stop.
@@ -9467,10 +9771,6 @@ void playFillNote() {
       return;
     }
   }
-
-  // Advance monotonic fill clock (independent of pattern looping).
-  fillSubTick++;
-  fillSubBeat = (unsigned int)(fillSubTick & 0x3U);  // 0..3
 
   // No active fill -> nothing to do.
   if (!fillRunning) return;
@@ -9500,51 +9800,10 @@ void playFillNote() {
   const uint32_t elapsedSub = (fillSubTick >= fillStartSubTick) ? (fillSubTick - fillStartSubTick) : 0U;
   const uint32_t positionInFill = (elapsedSub / 4U) + 1U;  // starts at 1
 
-  if (positionInFill > fillLengthBeats) {
-    // Fill completed: demote trigger F/F → 1/1 (one-shot). Re-set F/F to fire again;
-    // pause/stop not required.
-    if (fillTriggerStep >= 1 && fillTriggerStep <= maxlen &&
-        fillTriggerRow >= 1 && fillTriggerRow <= maxY) {
-      Note &trig = note[fillTriggerStep][fillTriggerRow];
-      if (trig.channel != 0 && trig.condition == NOTE_CONDITION_FILL) {
-        trig.condition = 1;
-      }
-    }
-    fillRunning = false;
-    fillHasTriggered = false;
-    fillTriggerStep = 0;
-    fillTriggerRow = 0;
-    return;
-  }
+  // No timer-based completion/drop: wait for the exact sequencer downbeat.
+  if (positionInFill > fillLengthBeats) return;
 
-  // Skip the arm beat's downbeat — already sounded via triggerActiveFillHit() in playNote.
-  if (elapsedSub < 4u && fillSubBeat == 0) return;
-
-  // 5-section buildup: 1/8 → 1/4 → 1/2 → 1 → 2 (no 4x machine-gun climax).
-  const uint32_t sectionSize = (fillLengthBeats + 4U) / 5U;
-  uint32_t section = (positionInFill - 1U) / sectionSize;
-  if (section > 4U) section = 4U;
-
-  bool shouldTrigger = false;
-  switch (section) {
-    case 0:  // 1/8: one hit every 8 beats
-      shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 8U == 0U));
-      break;
-    case 1:  // 1/4: one hit every 4 beats
-      shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 4U == 0U));
-      break;
-    case 2:  // 1/2: one hit every 2 beats
-      shouldTrigger = (fillSubBeat == 0 && ((positionInFill - 1U) % 2U == 0U));
-      break;
-    case 3:  // 1: one hit every beat
-      shouldTrigger = (fillSubBeat == 0);
-      break;
-    case 4:  // 2: two hits per beat (peak — was 4 before)
-      shouldTrigger = (fillSubBeat == 0 || fillSubBeat == 2);
-      break;
-  }
-
-  if (!shouldTrigger) return;
+  if (!fillHitDue(elapsedSub, fillLengthBeats)) return;
   triggerActiveFillHit();
 }
 
@@ -10826,6 +11085,7 @@ int getDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx) {
     case ARR_SYNTH: return SMP.synth_settings[channel][idx];
     case ARR_PARAM: return SMP.param_settings[channel][idx];
     case ARR_STRETCH: return channel >= 1 && channel <= 8 ? sampleTimeStretch[channel] : 0;
+    case ARR_GAIN: return sampleVoiceGainSlider(channel);
     default: return 0;
   }
 }
@@ -10835,6 +11095,7 @@ void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int va
     case ARR_SYNTH: SMP.synth_settings[channel][idx] = value; break;
     case ARR_PARAM: SMP.param_settings[channel][idx] = value; break;
     case ARR_STRETCH: setSampleTimeStretch(channel, value); break;
+    case ARR_GAIN: setSampleVoiceGain(channel, value); break;
     default: break;
   }
 }
@@ -10872,7 +11133,7 @@ void setSliderDefForChannel(int channel) {
     }
     memcpy(sliderDef[channel], sampleVoiceTemplate, sizeof(sampleVoiceTemplate));
     sliderDef[channel][3][0] = { ARR_PARAM, DELAY, "DLAY", 32, DISPLAY_NUMERIC, nullptr, 32 };
-    sliderDef[channel][3][1] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
+    sliderDef[channel][3][1] = { ARR_GAIN, 0, "VOL", 32, DISPLAY_NUMERIC, nullptr, 32 };
     sliderDef[channel][3][2] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
     sliderDef[channel][3][3] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
     return;

@@ -119,8 +119,10 @@
               <div class="hb-tip" data-hb-copy="sound.052"><strong>Pitch vs TIME:</strong> OCTV/DTNE change playback rate (pitch). TIME stretches duration around the current pitch. Leave TIME at 11 unless you want that smear.</div>
             </article>
 
-            <h3 class="hb-subsection-heading" data-hb-copy="sound.053">Page 3 — sample voices: DLAY</h3>
-            <p data-hb-copy="sound.054">Voices 1–8 have a fourth filter page with a single <strong>DLAY</strong> slider. Real delay tap (<span class="ap-code">AudioEffectDelayExternal</span> in PSRAM), not reverb. 0 is off; each step is N/32 of a beat (1, 2, 4, 8, 16, 32 land on even divisions; 3, 5, 6… stay in between). 32 is one beat, not a fixed 1.2&nbsp;s. Follows BPM. Feedback recirculates the tap; dry stays up. Synth voices 11, 13, and 14 have the same control on CRF (encoder 4).</p>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.053">Page 3 — sample voices: DLAY · VOLUME</h3>
+            <p data-hb-copy="sound.054">Voices 1–8 have a fourth filter page with <strong>DLAY</strong> and <strong>VOLUME</strong> sliders. Real delay tap (<span class="ap-code">AudioEffectDelayExternal</span> in PSRAM), not reverb. 0 is off; each step is N/32 of a beat (1, 2, 4, 8, 16, 32 land on even divisions; 3, 5, 6… stay in between). 32 is one beat, not a fixed 1.2&nbsp;s. Follows BPM. Feedback recirculates the tap; dry stays up. Synth voices 11, 13, and 14 have the same control on CRF (encoder 4).</p>
+
+            <p><strong>V — VOLUME</strong> is available only on sample voices 1–8, beside D on encoder 2. Its center value <strong>0</strong> is normal gain (1×); <strong>−16</strong> is fully silent (0×), and <strong>+16</strong> doubles gain (2×). It scales that voice’s complete effects output independently of fader velocity and channel volume. Resetting this page returns V to 0. The setting is saved with the pattern; older patterns open at neutral gain.</p>
 
             <h3 class="hb-subsection-heading" data-hb-copy="sound.055">Page 1 — synth voices: CUT · RES · FLT · DLAY</h3>
             <article class="hb-device">

@@ -59,7 +59,7 @@ void pulseClockSaveToEEPROM(){}
 SHARED
 TRIGGER
 POLARITY
-bool fastRecordActive=false;uint8_t fastRecordChannel=1;
+bool fastRecordActive=false,pendingPauseAudioCleanup=true;uint8_t fastRecordChannel=1;
 bool sliderControlled=false;
 float neoSliderVelScale[4]={1,1,1,1},neoSliderLastVelNorm[4]={},detune[9]={};
 int noteOns=0,noteOffs=0;
@@ -84,7 +84,7 @@ void reset(){pulseEndTimer.end();IntervalTimer::used=3;nowUs=0;mask=0;
 int main(){
  // Painting/audition stays audible, but never pulses J27, even during playback.
  reset();isNowPlaying=false;triggerSamplerVoice(1,60,100,true);
- assert(noteOns==1&&edges.empty());
+ assert(noteOns==1&&edges.empty()&&!pendingPauseAudioCleanup);
  isNowPlaying=true;triggerSamplerVoice(1,60,100,true);
  assert(noteOns==2&&edges.empty());
  // Only an explicit sequencer/fill hit emits; a later Note Off adds no edge.

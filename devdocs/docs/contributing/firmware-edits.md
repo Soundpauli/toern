@@ -91,3 +91,9 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 59 | PQ-I flags: bit 0 disables input, bit 1 selects negative (falling-edge) polarity. `0` = enabled/positive; absent or >3 defaults to `0`. Added at the end of the settings block; offset 53 remains unchanged |
 
 Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offsets 42 through 49 are raw bytes at `EEPROM_DATA_START + offset`.
+
+## Sample voice gain
+
+Voices 1–8 expose VOLUME beside DLAY on filter page 3 (encoder 2). `ARR_GAIN` uses a 0–32 slider, displayed as −16…+16; factor = slider / 16. `sampleFilterGain[0..7]` sits after each voice’s delay/effects output and before mixer1/2, independently of channel volume and fader velocity.
+
+Pattern persistence reserves `SMP.param_settings[ch][14]` without changing `Device`. Values are encoded as `1048576.0f + slider`; untagged, fractional, non-finite, or out-of-range data reads as slider 16 (unity). Legacy files have nonzero spare values here, so do not interpret this slot as a plain slider. Use `setSampleVoiceGain`, `sampleVoiceGainSlider`, and `applySampleVoiceGain` for writes, reads, and hardware application. Page/all-filter/NEW resets return to unity; `loadSMPSettings` reapplies saved gain. Synth voices 11/13/14 have no V control.

@@ -465,6 +465,7 @@ static void analogDirectPulse() {
     }
     fillHasTriggered = false;
     fillRunning = false;
+    resetTouchFills();
     fillSubTick = 0;
     fillStartSubTick = 0;
     fillTriggerStep = 0;
@@ -822,6 +823,7 @@ void checkMidi() {
     }
     fillHasTriggered = false;
     fillRunning = false;
+    resetTouchFills();
     fillSubTick = 0;
     fillStartSubTick = 0;
     fillTriggerStep = 0;

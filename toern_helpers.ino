@@ -867,6 +867,7 @@ FLASHMEM void loadSMPSettings() {
 
   for (int i = 0; i < numValidChannels; i++) {
     int ch = validChannels[i];
+    applySampleVoiceGain(ch);
     
     // Load Filters - apply all filter settings for this channel
     for (int f = 0; f < NUM_FILTERS; f++) {
@@ -1660,10 +1661,14 @@ FLASHMEM void FastLEDshow() {
     }
     // Don't change global brightness - matrix is dimmed in software (light_single)
     // Strip stays at full brightness (set in setup() and not modified)
-    if (currentMode != &touchyMode && fnDirection != 0 && (int32_t)(fnDirectionUntil - millis()) > 0) {
+    const bool showFn = currentMode != &touchyMode && fnDirection != 0
+      && (int32_t)(fnDirectionUntil - millis()) > 0;
+    if (showFn || neoSliderOverlayVisible() || fillRequestOverlayVisible()) {
       CRGB saved[NUM_LEDS];
       memcpy(saved, leds, sizeof(saved));
-      drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
+      drawNeoSliderOverlay();
+      if (showFn) drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
+      drawFillRequestOverlay();
       FastLED.show();
       memcpy(leds, saved, sizeof(saved));
     } else {
@@ -4061,6 +4066,7 @@ FLASHMEM void resetAllAudioEffects() {
   
   for (int i = 0; i < numChannels; i++) {
     int ch = channels[i];
+    applySampleVoiceGain(ch);
     
     // Apply filters to hardware (setFilters reads from SMP.filter_settings and applies)
     setFilters(HCUT, ch, true);
@@ -4236,6 +4242,7 @@ FLASHMEM void startNew() {
 
     if (ch >= 1 && ch <= 8) {
       setSampleTimeStretch(ch, 11);
+      setSampleVoiceGain(ch, 16);
     }
     
     // Reset synth data (only for channels 11, 13-14)

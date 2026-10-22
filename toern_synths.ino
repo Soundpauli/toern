@@ -123,6 +123,7 @@ static void setSoundVoice(int note, int ch, int velocity, int voiceIdx,
   float amp = mapf((float)velMidi, 1.0f, 127.0f, 0.0f, 1.0f);
 
   toern_audio::StateGuard guard;
+  pendingPauseAudioCleanup = false; // a fresh poly synth note owns its tail
   noteArray[ch][voiceIdx] = note;
   voiceStartTime[ch][voiceIdx] = millis();
   Swaveform1[voiceIdx]->frequency(f0);
@@ -890,6 +891,15 @@ static void releasePolyVoice(int voiceIdx) {
   Senvelope1[voiceIdx]->noteOff();
   Senvelope2[voiceIdx]->noteOff();
   SenvelopeFilter1[voiceIdx]->noteOff();
+}
+
+// Pause also releases live/arp voices, including any slot outside sequencer legato.
+void releaseAllPolySynthVoices() {
+  toern_audio::StateGuard guard;
+  for (int voice = 0; voice < POLY_VOICES; ++voice) {
+    releasePolyVoice(voice);
+    for (int ch = 0; ch < INSTRUMENT_CHANNELS; ++ch) noteArray[ch][voice] = NOTE_EMPTY;
+  }
 }
 
 // Modify playSound() so that when a note is played, you store its start time.

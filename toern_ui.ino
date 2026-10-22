@@ -1265,6 +1265,44 @@ FLASHMEM void drawVelocity() {
   }
 }
 
+// Compose at presentation time so menu/mute/solo screens get the same feedback.
+// FastLEDshow restores the underlying framebuffer after presenting these bars.
+bool neoSliderOverlayVisible() {
+  for (int i = 0; i < NEOSLIDER_COUNT; ++i) {
+    if (neoSliderOverlayActive[i] && neoSliderOverlayAge[i] < 850) return true;
+  }
+  return false;
+}
+
+FLASHMEM void drawNeoSliderOverlay() {
+  const unsigned long now = millis();
+  const unsigned long dt = min(now - neoSliderOverlayFrame, 100UL);
+  neoSliderOverlayFrame = now;
+  const float ease = (float)dt / (45.0f + (float)dt);
+  for (int i = 0; i < NEOSLIDER_COUNT; ++i) {
+    if (!neoSliderOverlayActive[i]) continue;
+    const unsigned long age = neoSliderOverlayAge[i];
+    if (age >= 850) {
+      neoSliderOverlayActive[i] = false;
+      continue;
+    }
+    float &level = neoSliderOverlayLevel[i];
+    level += (neoSliderVelScale[i] * 16.0f - level) * ease;
+    const uint8_t fade = age <= 500 ? 255 : (uint8_t)((850 - age) * 255 / 350);
+    CRGB base = col[neoSliderVoiceCh[i]];
+    for (int y = 1; y <= 16; ++y) {
+      // Fractional top pixel gives smooth travel between the sixteen rows.
+      const float fill = constrain(level - (float)(y - 1), 0.0f, 1.0f);
+      CRGB color = base;
+      color.nscale8((uint8_t)(18 + fill * 150.0f));
+      if (fill > 0.0f && fill < 1.0f) color = blend(color, CRGB::White, (uint8_t)(fill * 180));
+      if (y == 1 && neoSliderVelScale[i] == 0.0f) color = CRGB(180, 0, 0);
+      color.nscale8(fade);
+      for (int x = sliderCols[i][0]; x <= sliderCols[i][1]; ++x) light(x, y, color);
+    }
+  }
+}
+
 FLASHMEM void drawCtrlVolumeOverlay(int volume) {
   int x1, x2, x3;
   getIndicatorXPositions(2, x1, x2, x3);
@@ -1340,10 +1378,12 @@ FLASHMEM void drawChannelNrOverlay(int channelNum, int channelIdx) {
   // Samples sit on rows 2–9 → overlay at top. Synths 11/13/14 are on upper
   // rows → overlay at bottom so the flash does not cover the cursor.
   const bool topPlacement = (channelNum >= 1 && channelNum <= 8);
-  const int textY = topPlacement ? 12 : 2;
-  const int borderY = topPlacement ? 10 : 7;
-  const int bgY0 = topPlacement ? 11 : 1;
-  const int bgY1 = topPlacement ? 16 : 6;
+  // Synth helper: one blank row above the digits, then shift the whole
+  // helper one row up (higher Y). Sample helpers keep their top placement.
+  const int textY = topPlacement ? 12 : 3;
+  const int borderY = topPlacement ? 10 : 9;
+  const int bgY0 = topPlacement ? 11 : 2;
+  const int bgY1 = topPlacement ? 16 : 8;
   const int overlayEndX = constrain(numberX + textPixelWidth, 1, (int)maxX);
 
   for (int x = 1; x <= overlayEndX; x++) {
@@ -1940,6 +1980,25 @@ FLASHMEM static int countLabelX(const char *text) {
   int x = (((int)maxX - countLabelWidth(text)) / 2) + 1;
   if (x < 1) x = 1;
   return x;
+}
+
+bool fillRequestOverlayVisible() {
+  return fillRequestOverlayChannel >= 0
+      && (int32_t)(fillRequestOverlayUntil - (uint32_t)millis()) > 0;
+}
+
+FLASHMEM void drawFillRequestOverlay() {
+  if (!fillRequestOverlayVisible()) return;
+  const char *label = "FILL";
+  const int x = countLabelX(label);
+  const int y = ((int)maxY - 5) / 2 + 1;
+  const int endX = min((int)maxX, x + countLabelWidth(label));
+  for (int xx = max(1, x - 1); xx <= endX; ++xx) {
+    for (int yy = max(1, y - 1); yy <= min((int)maxY, y + 5); ++yy) {
+      light(xx, yy, CRGB::Black);
+    }
+  }
+  drawText(label, x, y, col[fillRequestOverlayChannel]);
 }
 
 FLASHMEM static void drawCountDigit(int n) {
