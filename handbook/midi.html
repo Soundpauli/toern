@@ -147,8 +147,8 @@
               <table class="opt-table">
                 <thead><tr><th>Option</th><th>Effect</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>ON</strong></td><td data-hb-copy="midi.041">Fold incoming SEL/MIDI notes by octaves into rows 1–15; preview and playback use the visible row pitch.</td></tr>
-                  <tr><td><strong>OFF</strong></td><td data-hb-copy="midi.043">Keep the original MIDI pitch for preview, recording, playback, and MIDI out. The note is still folded into a visible editable row; moving it vertically transposes the stored pitch.</td></tr>
+                  <tr><td><strong>ON</strong></td><td data-hb-copy="midi.041">Fold incoming SEL/MIDI notes by octaves into the voice’s playable grid rows; preview and playback use the visible row pitch.</td></tr>
+                  <tr><td><strong>OFF</strong></td><td data-hb-copy="midi.043">Keep the original MIDI pitch for preview, recording, playback, and MIDI out. Synths use standard MIDI pitch (note 69 = 440 Hz before patch tuning); sample voices use note 60 for the original/root hit. The note is still folded into a visible editable row; moving it vertically transposes the stored pitch.</td></tr>
                 </tbody>
               </table>
               <p class="hb-device__intro" data-hb-copy="midi.044">FOLD does not alter the legacy KEYS trigger mapping. The setting defaults to ON and survives reboot.</p>

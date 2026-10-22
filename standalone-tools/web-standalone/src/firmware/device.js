@@ -1352,8 +1352,10 @@ export function createDevice(matrix, statusEl, rings) {
         s.GLOB.y = clamp(s.GLOB.y + dir, 1, ROWS);
         syncChannel();
         if (s.GLOB.y !== prevY) applyVoiceEdit(s.GLOB.currentChannel);
-        if (s.GLOB.y !== prevY && s.cursorType === 1 && s.mode === "draw" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
-          s.chNr = s.GLOB.currentChannel;
+        const ch = s.GLOB.currentChannel;
+        const chNrOk = (ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14;
+        if (s.GLOB.y !== prevY && s.cursorType === 1 && s.mode === "draw" && chNrOk) {
+          s.chNr = ch;
           s.chNrAt = performance.now();
           s.pageNrAt = 0;
         }
@@ -2437,8 +2439,10 @@ export function createDevice(matrix, statusEl, rings) {
     s.GLOB.y = row;
     s.GLOB.x = (s.GLOB.edit - 1) * COLS + col;
     syncChannel();
-    if (s.GLOB.y !== prevY && s.cursorType === 1 && s.mode === "draw" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
-      s.chNr = s.GLOB.currentChannel;
+    const ch = s.GLOB.currentChannel;
+    const chNrOk = (ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14;
+    if (s.GLOB.y !== prevY && s.cursorType === 1 && s.mode === "draw" && chNrOk) {
+      s.chNr = ch;
       s.chNrAt = performance.now();
     }
   }

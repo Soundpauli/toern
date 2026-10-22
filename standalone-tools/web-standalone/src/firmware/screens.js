@@ -440,9 +440,17 @@ export function drawCursor(matrix, s, now = performance.now()) {
 function drawChannelNr(matrix, s) {
   const ch = s.chNr;
   const color = pal(s).col[ch] || UI_WHITE;
-  for (let x = 1; x <= 5; x++) for (let y = 11; y <= 16; y++) matrix.light(x, y, [0, 0, 0]);
-  for (let x = 1; x <= 5; x++) matrix.light(x, 10, color);
-  matrix.drawText(String(ch), 2, 12, color);
+  const text = String(ch);
+  const width = textPixelWidth(text);
+  const endX = Math.min(COLS, 2 + width);
+  const top = ch >= 1 && ch <= 8;
+  const textY = top ? 12 : 2;
+  const borderY = top ? 10 : 7;
+  const bgY0 = top ? 11 : 1;
+  const bgY1 = top ? 16 : 6;
+  for (let x = 1; x <= endX; x++) for (let y = bgY0; y <= bgY1; y++) matrix.light(x, y, [0, 0, 0]);
+  for (let x = 1; x <= endX; x++) matrix.light(x, borderY, color);
+  matrix.drawText(text, 2, textY, color);
 }
 
 function drawPageNr(matrix, s) {
@@ -980,7 +988,7 @@ export function drawBoot(matrix, now, bootAt) {
   return t >= 5000;
 }
 
-const VERSION = "v3.01g";
+const VERSION = "v3.02";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
 function drawInfo(matrix, s, now, color) {

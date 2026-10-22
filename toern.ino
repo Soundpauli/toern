@@ -2,7 +2,7 @@
 #include "toern_hardware.h"
 #include "toern_touch_input.h"
 
-#define VERSION "v3.01h"
+#define VERSION "v3.02"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -53,6 +53,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include <Audio.h>
 #include "src/toern_audio_runtime.h"
 #include "src/toern_pcm_interpolation.h"
+#include "src/toern_midi_pitch.h"
 #include "src/toern_legacy_filter.h"
 #include <EEPROM.h>
 #include <FastTouch.h>
@@ -4041,9 +4042,11 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
   // DTNE fine tune (±1 semitone) for sample voices — rate multiply after integer note.
   if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
     const float fine = detune[ch];
-    if (fine != 0.0f) {
-      // Samples are registered at MIDI root 36 (see load paths / samplerAddSample).
-      voices[ch]->setPlaybackRate(powf(2.0f, ((float)midiPitch + fine - 36.0f) / 12.0f));
+    if (fine != 0.0f || pitch != (int)midiPitch) {
+      // The sampler event key is a MIDI byte, but low incoming pitches may
+      // need a rate below key 0 after conversion to the sample's local root.
+      // Samples are registered at root 36 (see samplerAddSample).
+      voices[ch]->setPlaybackRate(powf(2.0f, ((float)pitch + fine - 36.0f) / 12.0f));
     }
   }
 }
@@ -5070,7 +5073,8 @@ FLASHMEM void checkEncoders() {
         if (showChannelNr && (yChanged || GLOB.currentChannel != lastOverlayCh)) {
           lastOverlayCh = (int)GLOB.currentChannel;
           int channelNum = GLOB.currentChannel;
-          if (channelNum >= 1 && channelNum <= 8) {
+          // Sample 1–8 and synths 11 / 13 / 14 (same set as single-mode voices).
+          if (isSingleModeChannelAllowed(channelNum)) {
             channelNrOverlayChannel = channelNum;
             channelNrOverlayActive = true;
             channelNrOverlayUntil = millis() + 800;
@@ -7254,8 +7258,9 @@ void loop() {
 
       // Draw channel number overlay when in draw mode
       if (channelNrOverlayActive && currentMode == &draw && showChannelNr) {
-        if (millis() <= channelNrOverlayUntil && GLOB.y <= 9) {
-          drawChannelNrOverlay(channelNrOverlayChannel, GLOB.currentChannel);
+        if (millis() <= channelNrOverlayUntil
+            && isSingleModeChannelAllowed(channelNrOverlayChannel)) {
+          drawChannelNrOverlay(channelNrOverlayChannel, channelNrOverlayChannel);
         } else {
           channelNrOverlayActive = false;
         }
@@ -8335,23 +8340,26 @@ static void midiArpFireChannel(int ch) {
     midiPitch = (int)pitches[0] + (int)lroundf((float)reflected * arpSemis);
   }
   midiPitch = constrain(midiPitch, 0, 127);
+  extern bool MIDI_NOTE_CLAMP;
+  extern int voiceSelect;
+  const bool preservePitch = !MIDI_NOTE_CLAMP && voiceSelect != 2;
   if (ch == 11) {
-    extern bool MIDI_NOTE_CLAMP;
-    extern int voiceSelect;
-    const bool preservePitch = !MIDI_NOTE_CLAMP && voiceSelect != 2;
-    int noteValue = 12 * (int)octave[0] + transpose;
-    noteValue += preservePitch ? (midiPitch - 60)
-                               : ((int)midiPitchToGridRow(11, (uint8_t)midiPitch) - 1);
+    int noteValue = preservePitch
+        ? toern_midi_pitch::polyNote(midiPitch, transpose, (int)octave[0])
+        : 12 * (int)octave[0] + transpose + (int)midiPitchToGridRow(11, (uint8_t)midiPitch) - 1;
     if (midiArpLastCh11Note != INT16_MIN) stopSound(midiArpLastCh11Note, 0);
     playSound(noteValue, 0, vel);
     midiArpLastCh11Note = (int16_t)noteValue;
-  } else {
+  } else if (preservePitch) {
     playSynthMidi(ch, (uint8_t)midiPitch, vel, true);
+  } else {
+    playSynth(ch, midiPitchToGridRow(ch, (uint8_t)midiPitch), vel, true);
   }
 
   if (isNowPlaying && GLOB.singleMode) {
     uint8_t row = midiPitchToGridRow(ch, (uint8_t)midiPitch);
-    placeLiveGridNote((uint8_t)ch, row, vel, (uint8_t)midiPitch, false,
+    placeLiveGridNote((uint8_t)ch, row, vel,
+                      preservePitch ? (uint8_t)midiPitch : NOTE_MIDI_PITCH_NONE, false,
                       !MIDI_WRITE_OVERWRITE);
   }
 }
@@ -8577,9 +8585,8 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
 
   float frequency;
   if (midiPitchOverride >= 0 && midiPitchOverride <= 127) {
-    // MIDI 60 is C. Keep the mono synths one whole octave below the standard
-    // MIDI register, without any additional semitone calibration.
-    frequency = 440.0f * powf(2.0f, ((float)midiPitchOverride - 81.0f) / 12.0f);
+    // Preserved MIDI uses the standard pitch reference: note 69 = 440 Hz.
+    frequency = toern_midi_pitch::midiFrequency(midiPitchOverride);
   } else {
     frequency = notesArray[constrain(b - ch + 47, 36, 62)];
   }
@@ -8740,7 +8747,8 @@ static inline bool noteHasMidiPitch(const Note &cell) {
 }
 
 static inline int midiPitchForOutput(const Note &cell, int row) {
-  return noteHasMidiPitch(cell) ? (int)cell.midiPitch : 48 + row - 1;
+  return noteHasMidiPitch(cell) ? (int)cell.midiPitch
+      : toern_midi_pitch::gridMidi(cell.channel, row, (int)octave[0], transpose);
 }
 
 // OCTV for sample voices: channelOctave[] holds whole-semitone offsets (−24..+24).
@@ -8751,15 +8759,14 @@ static inline int sampleVoiceOctaveSemis(int ch) {
 
 static inline int samplePitchForNote(const Note &cell, int channel, int row) {
   if (noteHasMidiPitch(cell)) {
-    return (12 * SampleRate[channel]) + (int)cell.midiPitch - 72;
+    return toern_midi_pitch::sampleNote(12 * SampleRate[channel], cell.midiPitch);
   }
   return (12 * SampleRate[channel]) + row - (channel + 1);
 }
 
 static inline int ch11PitchForNote(const Note &cell, int row) {
-  int pitch = 12 * (int)octave[0] + transpose;
-  pitch += noteHasMidiPitch(cell) ? ((int)cell.midiPitch - 60) : (row - 1);
-  return pitch;
+  if (noteHasMidiPitch(cell)) return toern_midi_pitch::polyNote(cell.midiPitch, transpose, (int)octave[0]);
+  return 12 * (int)octave[0] + transpose + row - 1;
 }
 
 FLASHMEM static void triggerActiveFillHit();

@@ -66,7 +66,7 @@ int noteOns=0,noteOffs=0;
 int effectiveNoteVelocity(int n){return n;}
 bool isNeoSliderControlledChannel(int ch){return sliderControlled&&ch>=1&&ch<=4;}
 void samplerNoteEvent(int,uint8_t,uint8_t,bool on,bool){if(on)++noteOns;else ++noteOffs;}
-struct Voice {void snapAmplitude(float){} void setPlaybackRate(float){}};
+struct Voice {float rate=1;void snapAmplitude(float){} void setPlaybackRate(float r){rate=r;}};
 Voice *voices[9]={};
 #define constrain(x,lo,hi) std::clamp((x),(lo),(hi))
 void triggerSamplerVoice(int ch,int pitch,int vel,bool retrigger,bool sendSidechain=false);
@@ -120,6 +120,14 @@ int main(){
  reset();IntervalTimer::used=4;sidechainOnVoice(1);
  assert(levels[28]==LOW&&!sidechainPinActive&&!pulseEndTimer.active);
  reset();mask=1;sidechainOnVoice(1);assert(mask==1);advance(12000);assert(mask==1);
+ // Full-range MIDI/sample conversion may request a pitch outside the event byte.
+ reset();Voice voice;voices[1]=&voice;
+ for(int pitch: {-48,-24,130}){
+  triggerSamplerVoice(1,pitch,100,true);
+  float expected=powf(2.0f,(pitch-36.0f)/12.0f);
+  assert(std::fabs(voice.rate-expected)<expected*0.0001f);
+ }
+ assert(edges.empty());
 }
 '''.replace('SHARED',shared).replace('TRIGGER',trigger).replace('POLARITY',polarity).replace('SAMPLER',sampler)
 with tempfile.TemporaryDirectory(prefix='toern-sidechain-') as tmp:

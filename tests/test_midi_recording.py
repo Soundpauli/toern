@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import sys
 
 root = Path(__file__).resolve().parents[1]
 def function(file, name):
@@ -19,13 +20,14 @@ def function(file, name):
         end += 1
     return source[match.start():end]
 
-harness = r'''
+harness = '#include "toern_midi_pitch.h"\n' + r'''
 using uint8_t=unsigned char; using uint16_t=unsigned short; using int16_t=short;
 #define assert(x) do {if(!(x))__builtin_trap();} while(false)
 const int maxY=16,maxlen=257,defaultVelocity=100;
 const uint8_t NOTE_MIDI_PITCH_NONE=255,NOTE_CONDITION_GLIDE=22;
 struct Note {uint8_t channel=0,velocity=100,probability=100,condition=1,midiPitch=255;};
 Note note[maxlen][maxY+1];
+float octave[2]={4,0};int transpose=0;
 struct {int currentChannel=13; bool singleMode=true;} GLOB;
 bool MIDI_NOTE_RECEIVE=true,MIDI_NOTE_CLAMP=true,MIDI_VOICE_SELECT=false,MIDI_WRITE_OVERWRITE=false,isNowPlaying=true;
 int voiceSelect=0,auditions=0,releases=0; unsigned int beat=3;
@@ -50,24 +52,25 @@ for name in ['mapMidiToLogicalChannel','midiPitchToGridRow','preserveIncomingMid
 harness += r'''
 int main(){
   handleNoteOn(1,60,88);
-  assert(note[3][2].channel==13 && note[3][2].velocity==88 && note[3][2].midiPitch==255 && auditions==1);
-  assert(consumeLiveRecordSkip(3,2) && !consumeLiveRecordSkip(3,2));
-  onBeatTick(4,3); assert(note[4][2].condition==NOTE_CONDITION_GLIDE && note[4][2].velocity==88);
-  note[5][2].channel=2; onBeatTick(5,4); assert(note[5][2].channel==2);
-  MIDI_WRITE_OVERWRITE=true; onBeatTick(5,4); assert(note[5][2].channel==13 && note[5][2].condition==NOTE_CONDITION_GLIDE);
+  assert(note[3][14].channel==13 && note[3][14].velocity==88 && note[3][14].midiPitch==255 && auditions==1);
+  assert(consumeLiveRecordSkip(3,14) && !consumeLiveRecordSkip(3,14));
+  onBeatTick(4,3); assert(note[4][14].condition==NOTE_CONDITION_GLIDE && note[4][14].velocity==88);
+  note[5][14].channel=2; onBeatTick(5,4); assert(note[5][14].channel==2);
+  MIDI_WRITE_OVERWRITE=true; onBeatTick(5,4); assert(note[5][14].channel==13 && note[5][14].condition==NOTE_CONDITION_GLIDE);
   handleNoteOn(1,60,0); assert(releases==1 && auditions==1);
-  onBeatTick(6,5); assert(note[6][2].channel==0);
+  onBeatTick(6,5); assert(note[6][14].channel==0);
   MIDI_NOTE_CLAMP=false; beat=7; handleNoteOn(1,72,99);
   assert(note[7][14].midiPitch==72 && note[7][14].velocity==99);
   clearLiveRecordSkip(); assert(liveRecordSkipBeat==0 && liveRecordSkipRows==0);
-  childDisabled=true; beat=8; handleNoteOn(1,60,99); assert(note[8][2].channel==0 && auditions==2);
-  childDisabled=false; GLOB.singleMode=false; handleNoteOn(1,60,99); assert(note[8][2].channel==0 && auditions==3);
-  GLOB.singleMode=true; isNowPlaying=false; handleNoteOn(1,60,99); assert(note[8][2].channel==0 && auditions==4);
+  childDisabled=true; beat=8; handleNoteOn(1,60,99); assert(note[8][14].channel==0 && auditions==2);
+  childDisabled=false; GLOB.singleMode=false; handleNoteOn(1,60,99); assert(note[8][14].channel==0 && auditions==3);
+  GLOB.singleMode=true; isNowPlaying=false; handleNoteOn(1,60,99); assert(note[8][14].channel==0 && auditions==4);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='toern-midi-recording-') as directory:
     cpp=Path(directory)/'recording.cpp'; binary=Path(directory)/'recording'
     cpp.write_text(harness)
-    subprocess.run(['c++','-std=c++17',str(cpp),'-o',str(binary)],check=True)
+    flags=['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform=='darwin' else []
+    subprocess.run(['c++','-std=c++17',*flags,'-I',str(root/'src'),str(cpp),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
 print('PASS: live MIDI recording, preserved pitch, OVWR, held synth continuation and duplicate-hit skip marks.')

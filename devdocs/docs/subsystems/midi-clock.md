@@ -31,6 +31,17 @@ MIDI → **PQ-I** (J26 input) immediately precedes **PQ-O** (J25 output). Both s
 - Incoming notes → `handleNoteOn` / `handleNoteOff` → sample or synth triggers (respecting mutes / child lock)
 - Outgoing notes → `MidiSendNoteOn` and related send helpers when MIDI out is enabled
 
+Pitch conversion is shared in `src/toern_midi_pitch.h`. With FOLD off, synth input
+uses standard MIDI pitch (69 = 440 Hz before patch tuning), live and recorded
+playback use the same conversion, and preserved note numbers are sent unchanged.
+Sample voices use MIDI 60 as their original/root hit; sample tuning OCTV/DTNE
+still applies. Native grid output inverts each voice's existing pitch mapping:
+samples use their voice-relative row, ch11 uses its current grid octave/transpose,
+and ch13/14 use their note-table index plus 12. Native patterns keep their local
+sound. FOLD wraps by octaves into that voice's playable grid rows, preserving
+pitch class; the mono synths avoid their duplicated low-C rows. Arpeggiator
+preview and recording follow the same FOLD policy. KEYS routing is unchanged.
+
 ## Editing safely
 
 Clock math and ISR interplay are easy to break. Prefer small, well-tested changes; there are local planning notes (`_internal-docs/MIDI_CLOCK_RELIABILITY_PLAN.md`) describing past reliability work if you have that folder checked out.

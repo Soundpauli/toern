@@ -1322,39 +1322,42 @@ FLASHMEM void drawInputGainOverlay(int gain, int maxGain) {
 }
 
 FLASHMEM void drawChannelNrOverlay(int channelNum, int channelIdx) {
-  // channelNum: 1-indexed channel number to display (1-8)
-  // channelIdx: 0-indexed channel index for color lookup (0-7 for channels 1-8)
+  // channelNum / channelIdx: voice id (1–8, 11, 13, 14). col[] is indexed by voice.
   if (channelIdx < 0 || channelIdx >= NUM_CHANNELS) return;
-  
+
   CRGB channelColor = col[channelIdx];
-  const int overlayY = 13; // Fixed Y position for overlay
-  const int numberX = 2;   // X position for the number
-  const int borderY = 10;  // Border-bottom position (moved 1px down from 12)
-  const int overlayEndX = 5; // Overlay ends at x=6
-  
-  // Draw black background column from x=1, y=16 to x=6, y=11
-  for (int x = 1; x <= overlayEndX && x <= (int)maxX; x++) {
-    for (int y = 11; y <= 16 && y <= (int)maxY; y++) {
-      light(x, y, CRGB(0, 0, 0)); // Black background
-    }
-  }
-  
-  // Draw colored border-bottom (at y=10, across x=1 to x=6)
-  for (int x = 1; x <= overlayEndX && x <= (int)maxX; x++) {
-    if (x >= 1 && x <= (int)maxX && borderY >= 1 && borderY <= (int)maxY) {
-      light(x, borderY, channelColor); // Bottom border in channel color
-    }
-  }
-  
-  
-  // Draw channel number at x=2, moved 3 positions higher
   char numStr[4];
-  sprintf(numStr, "%d", channelNum);
-  
-  // Characters are 5 pixels tall, originally at y=9 (overlayY - 2)
-  // Move 3 positions higher: y=9 - 3 = y=6
-  int textY = overlayY - 1; // Position text 3 positions higher
-  
+  snprintf(numStr, sizeof(numStr), "%d", channelNum);
+
+  int textPixelWidth = 0;
+  for (int i = 0; numStr[i] != '\0'; i++) {
+    if (numStr[i] >= 32 && numStr[i] <= 126) {
+      textPixelWidth += alphabet[numStr[i] - 32][0] + 1;
+    }
+  }
+
+  const int numberX = 2;
+  // Samples sit on rows 2–9 → overlay at top. Synths 11/13/14 are on upper
+  // rows → overlay at bottom so the flash does not cover the cursor.
+  const bool topPlacement = (channelNum >= 1 && channelNum <= 8);
+  const int textY = topPlacement ? 12 : 2;
+  const int borderY = topPlacement ? 10 : 7;
+  const int bgY0 = topPlacement ? 11 : 1;
+  const int bgY1 = topPlacement ? 16 : 6;
+  const int overlayEndX = constrain(numberX + textPixelWidth, 1, (int)maxX);
+
+  for (int x = 1; x <= overlayEndX; x++) {
+    for (int y = bgY0; y <= bgY1 && y <= (int)maxY; y++) {
+      light(x, y, CRGB(0, 0, 0));
+    }
+  }
+
+  if (borderY >= 1 && borderY <= (int)maxY) {
+    for (int x = 1; x <= overlayEndX; x++) {
+      light(x, borderY, channelColor);
+    }
+  }
+
   drawText(numStr, numberX, textY, channelColor);
 }
 

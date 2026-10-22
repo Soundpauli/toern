@@ -18,7 +18,7 @@ The simulator provides a browser version of the grid, four encoders, touch gestu
 - Panel layout selects **16×16** or **32×16**; this is not a firmware-version selector.
 - Menu labels match the device: **PATT, KIT, SMP, REC, SEL, FOLD, OVWR, TRIG**.
 - PATT occupancy uses colour without USED/NEW text.
-- The INFO version string in `src/firmware/screens.js` should match `VERSION` in the repository’s `toern.ino`; currently **v3.01f-T2**.
+- The INFO version string in `src/firmware/screens.js` should match `VERSION` in the repository’s `toern.ino`; currently **v3.02**.
 
 ## Transfer boundaries
 

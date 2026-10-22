@@ -1276,18 +1276,7 @@ static int mapMidiToLogicalChannel(int midiChannel, uint8_t pitch) {
 // Fold an incoming pitch into the editable single-mode rows without losing its
 // pitch class. Repeated wrapping handles the complete MIDI 0..127 range.
 uint8_t midiPitchToGridRow(int channel, uint8_t pitch) {
-  int anchorRow;
-  if (channel == 11) {
-    anchorRow = 12;            // ch11 calibrated manual anchor
-  } else if (channel == 13 || channel == 14) {
-    anchorRow = channel - 11;  // ch13 row2 / ch14 row3 = manual C3 base
-  } else {
-    anchorRow = channel + 1;   // sample voice's normal DRAW row
-  }
-  int row = anchorRow + (int)pitch - 60;
-  while (row < 1) row += 12;
-  while (row > 15) row -= 12;
-  return (uint8_t)row;
+  return toern_midi_pitch::gridRow(channel, pitch, (int)octave[0]);
 }
 
 static bool preserveIncomingMidiPitch() {
@@ -1307,7 +1296,7 @@ static void playIncomingMidiNote(int ch, uint8_t pitch, uint8_t row,
       // KEYS remains a pitch-class-to-sample-voice trigger mode.
       samplePitch = SampleRate[ch] * 12;
     } else if (preservePitch) {
-      samplePitch = (SampleRate[ch] * 12) + (int)pitch - 72;
+      samplePitch = toern_midi_pitch::sampleNote(SampleRate[ch] * 12, pitch);
     } else {
       samplePitch = (SampleRate[ch] * 12) + (int)row - (ch + 1);
     }
@@ -1315,8 +1304,9 @@ static void playIncomingMidiNote(int ch, uint8_t pitch, uint8_t row,
     if (ch >= 1 && ch <= 8) samplePitch += (int)lroundf(channelOctave[ch]);
     triggerSamplerVoice(ch, samplePitch, velocity, false);
   } else if (ch == 11) {
-    int noteValue = 12 * (int)octave[0] + transpose;
-    noteValue += preservePitch ? ((int)pitch - 60) : ((int)row - 1);
+    int noteValue = preservePitch
+        ? toern_midi_pitch::polyNote(pitch, transpose, (int)octave[0])
+        : 12 * (int)octave[0] + transpose + (int)row - 1;
     extern int16_t midiHeldCh11SoundNote[128];
     midiHeldCh11SoundNote[pitch] = (int16_t)noteValue;
     playSound(noteValue, 0, velocity);
