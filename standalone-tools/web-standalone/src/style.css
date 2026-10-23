@@ -2242,7 +2242,10 @@ html.mobile-ui .assist {
 .sim-faders label { display: flex; flex-direction: column; align-items: center; gap: .3rem; font-size: .75rem; }
 .sim-faders input { writing-mode: vertical-lr; direction: rtl; width: 28px; height: 90px; touch-action: none; }
 .fader-panel summary { cursor: pointer; }
-.pad[data-touch="4"], .pad[data-touch="5"] { z-index: 5; }
+.pad[data-touch="4"], .pad[data-touch="5"] {
+  z-index: 5;
+  box-shadow: 0 0 0 0.35cqw #36363d, 0 0.25cqw 0.5cqw rgba(0, 0, 0, 0.7);
+}
 .pad > span:first-child { opacity: .7; }
 html.mobile-ui .pad[data-touch] {
   width: clamp(26px, 7cqw, 34px);

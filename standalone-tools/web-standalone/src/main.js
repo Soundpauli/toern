@@ -144,8 +144,8 @@ app.innerHTML = `
         </div>
         <button type="button" class="pad" data-touch="1" style="left:${px(60)};top:${py(266)}" aria-label="Touch 1, Single mode and Exit" title="Touch 1"><span>T1</span><span class="io-label pad-hint pad-hint--r">Singlemode + Exit</span></button>
         <button type="button" class="pad" data-touch="2" style="left:${px(420)};top:${py(266)}" aria-label="Touch 2, Menu" title="Touch 2"><span>T2</span><span class="io-label pad-hint pad-hint--l">Menu</span></button>
-        <button type="button" class="pad pad--aux" data-touch="4" style="left:${px(180)};top:${py(266)}" aria-label="Touch 4, audition current voice"><span>T4</span><span class="io-label pad-hint pad-hint--r">Audition</span></button>
-        <button type="button" class="pad pad--aux" data-touch="5" style="left:${px(300)};top:${py(266)}" aria-label="Touch 5, FN modifier"><span>T5</span><span class="io-label pad-hint pad-hint--r">FN</span></button>
+        <button type="button" class="pad pad--aux" data-touch="4" style="left:${px(130)};top:${py(302.6)}" aria-label="Touch 4, audition current voice"><span>T4</span><span class="io-label pad-hint pad-hint--r">Audition</span></button>
+        <button type="button" class="pad pad--aux" data-touch="5" style="left:${px(350)};top:${py(302.6)}" aria-label="Touch 5, FN modifier"><span>T5</span><span class="io-label pad-hint pad-hint--r">FN</span></button>
         ${encoders}
         <button type="button" class="pad pad--front" data-touch="3" style="left:${px(420)}" aria-label="Touch 3, hold to record into voice" title="Touch 3 (hold to record)"><span>T3</span><span class="io-label">Hold to record</span></button>
         ${io("l", "jack", 310, "6.35mm stereo TRS line-out")}
@@ -1852,10 +1852,7 @@ function markVoice() {
     const t3Y = Math.min(totalH - padVis - 2, deckTop + plan.t3Yu * scale);
     t1.style.left = `${t1x}px`;
     t2.style.left = `${t2x}px`;
-    t4.style.left = `${t1x}px`;
-    t5.style.left = `${(t1x + t2x) / 2}px`;
     t3.style.left = `${t2x}px`;
-    t4.style.top = t5.style.top = `${t3Y}px`;
     t1.style.top = `${tY}px`;
     t2.style.top = `${tY}px`;
     t3.style.top = `${t3Y}px`;
@@ -1865,8 +1862,13 @@ function markVoice() {
     shelf.style.height = `${Math.max(0, split - deckTop)}px`;
     const encLeft = Math.max(encVis + 2, t1x + padVis + encVis + chassisW * 0.02);
     const encRight = Math.min(chassisW - encVis - 2, t2x - padVis - encVis - chassisW * 0.02);
+    const encoderSpan = Math.max(encRight - encLeft, 0);
+    t4.style.left = `${encLeft + encoderSpan / 6}px`;
+    t5.style.left = `${encLeft + encoderSpan * 5 / 6}px`;
+    const auxPadRadius = Math.max(26, Math.min(chassisW * 0.07, 34)) / 2;
+    t4.style.top = t5.style.top = `${(deckTop + encYpx - encVis) / 2 + auxPadRadius * 1.5}px`;
     document.querySelectorAll(".encoder").forEach((el, i) => {
-      const span = Math.max(encRight - encLeft, 0);
+      const span = encoderSpan;
       el.style.left = `${encLeft + (span * i) / 3}px`;
       el.style.top = `${encYpx}px`;
     });
@@ -1877,12 +1879,12 @@ function markVoice() {
     const logo = document.querySelector(".quicknav-logo");
     logo.style.top = `${encYpx}px`;
     const shortcuts = document.querySelector(".mobile-shortcuts");
-    const bandInset = Math.max(padVis + 28, chassisW * 0.1);
-    const bandLeft = t1x + bandInset;
-    const bandWidth = Math.max(0, t2x - bandInset - bandLeft);
+    // Keep shortcut buttons below the encoders, leaving the upper deck for pads.
+    const bandLeft = Math.max(8, chassisW * 0.025);
+    const bandWidth = Math.max(0, t2x - 30 - bandLeft);
     const shelfH = Math.max(0, split - deckTop);
     const bandH = Math.min(28, Math.max(20, shelfH - 6));
-    const bandTop = Math.max(deckTop + 2, Math.min(tY - bandH / 2, split - bandH - 2));
+    const bandTop = Math.min(totalH - bandH - 2, t3Y - bandH / 2);
     shortcuts.hidden = false;
     shortcuts.style.left = `${bandLeft}px`;
     shortcuts.style.width = `${bandWidth}px`;
@@ -1921,9 +1923,10 @@ function markVoice() {
     t2.style.left = px(t2x);
     t3.style.left = px(t3x);
     t3.style.top = "";
-    t4.style.left = px(t1x + (t2x - t1x) / 3);
-    t5.style.left = px(t1x + (t2x - t1x) * 2 / 3);
-    t4.style.top = t5.style.top = pyNow(padY);
+    t4.style.left = px((encX[0] + encX[1]) / 2);
+    t5.style.left = px((encX[2] + encX[3]) / 2);
+    const encoderRimTop = encY - 480 * 0.06417;
+    t4.style.top = t5.style.top = pyNow((boxTop + encoderRimTop) / 2 + 480 * 0.025 * 1.5);
     document.querySelectorAll(".io--l, .io--r").forEach((el) => {
       const base = Number(el.dataset.y);
       el.style.top = pyNow(base + shift);
