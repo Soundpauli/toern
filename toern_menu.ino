@@ -42,6 +42,16 @@ extern uint8_t currentColorScheme;
 extern void applyColorScheme(uint8_t scheme);
 extern uint16_t drawRFullMuteCustomUnmuteMask;
 
+// Match the start paths in play(), handleStart(), and analogDirectPulse().
+// Negative offsets contribute to the opposite path, so test the selected value.
+static bool syncDelayHasEffect(int syncEdit, int value, bool sendsClock,
+                               bool receivesTransport, bool analogExt) {
+  const bool sendPath = sendsClock;
+  const bool receivePath = sendsClock ? receivesTransport : !analogExt;
+  const bool targetsSend = (syncEdit == 0) != (value < 0);
+  return targetsSend ? sendPath : receivePath;
+}
+
 static inline CRGB dimIconColorFromText(CRGB textColor);
 static inline CRGB menuTextColorFromCol(uint8_t colIndex);
 static inline CRGB currentMenuParentTextColor();
@@ -2434,11 +2444,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         extern int8_t transportRcveDelayMs;
         const CRGB tc = currentMenuParentTextColor();
         int syncEdit = (currentMode->pos[1] == 0) ? 0 : 1;
-        drawMenuText(syncEdit == 0 ? "SNC1" : "SNC2", 2, 10, tc);
+        drawMenuText(syncEdit == 0 ? "SYC>" : "SYC<", 2, 10, tc);
         int val = (syncEdit == 0) ? (int)transportSendDelayMs : (int)transportRcveDelayMs;
         char buf[10];
-        snprintf(buf, sizeof(buf), "%d", val);
-        drawMenuValue(buf, 2, 3, syncEdit == 0 ? UI_GREEN : UI_RED);
+        extern bool getAnalogExtClock();
+        const bool active = syncDelayHasEffect(syncEdit, val, MIDI_CLOCK_SEND,
+                                              MIDI_TRANSPORT_RECEIVE, getAnalogExtClock());
+        if (active) snprintf(buf, sizeof(buf), "%d", val);
+        else snprintf(buf, sizeof(buf), "--");
+        drawMenuValue(buf, 2, 3, active ? (syncEdit == 0 ? UI_GREEN : UI_RED) : UI_RED);
         drawMenuIndicator('L', 'Y', 1);
         drawMenuIndicator('L', 'W', 2);
       }

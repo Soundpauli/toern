@@ -26,7 +26,7 @@
       <div class="wrap">
         <section class="handbook-page" id="page-sound">
           <h2 class="handbook-page__title" data-hb-copy="sound.001">Sound design</h2>
-          <p class="handbook-page__summary" data-hb-copy="sound.002">Voices have different signal paths. Samples and synths have envelopes, filtering, delay and effects, with reverb available only on selected voices. This chapter walks each stage and the four filter pages where you control them.</p>
+          <p class="handbook-page__summary" data-hb-copy="sound.002">Voices have different signal paths. Samples and synths have envelopes, filtering, delay and effects, with reverb available only on selected voices. This chapter walks each stage and the voice-specific filter pages where you control them.</p>
 
           <section class="hb-sub" id="signal-chain">
             <h2 data-hb-copy="sound.003">The signal chain</h2>
@@ -53,9 +53,15 @@
           <hr />
 
 
+          <section class="hb-sub" id="presets">
+            <h2>PSET — synth voice presets</h2>
+            <p>On voices <strong>11, 13 and 14</strong>, the main menu’s SMP item becomes <strong>PSET</strong>. Encoder 4 selects slot <strong>1–99</strong>; encoder 1 loads, encoder 2 saves, and encoder 4 short press exits. Each synth has its own slots. Occupied slots appear green; empty slots appear blue. Success shows a green check; failure shows a red cross.</p>
+            <p>A preset stores that synth’s filter, synth and envelope parameters. It does not replace the pattern grid or sample kit. On hardware the files live in <code>presets/11/001.pset</code>, <code>presets/13/001.pset</code> or <code>presets/14/001.pset</code>. Simulator presets are stored separately in the browser.</p>
+          </section>
+
           <section class="hb-sub" id="filter">
-            <h2 data-hb-copy="sound.006">The four filter pages</h2>
-            <p class="lede" data-hb-copy="sound.007">Enter from the grid with the <strong>both-touch</strong> gesture, <strong>right pad first</strong>. (Left-first on sample voices opens the <a href="samples.html#set-wav">sample browser</a> instead.) Each filter page is a vertical mixer strip split into four encoder columns. Turn an encoder to edit; short-press to assign that parameter as the <strong>fast-filter</strong> default (encoder&nbsp;3 from draw mode will recall it). Encoder&nbsp;2 long press is play/pause so you can audition without leaving the editor. Pages cycle with a tap on touch&nbsp;2.</p>
+            <h2 data-hb-copy="sound.006">The filter pages</h2>
+            <p class="lede" data-hb-copy="sound.007">Enter from the grid with the <strong>both-touch</strong> gesture, <strong>right pad first</strong>. (Left-first on sample voices opens the <a href="samples.html#set-wav">sample browser</a> instead.) Each filter page is a vertical mixer strip split into four encoder columns. Turn an encoder to edit; short-press to assign that parameter as the <strong>fast-filter</strong> default (encoder&nbsp;3 from draw mode will recall it). Encoder&nbsp;3 long press is play/pause so you can audition without leaving the editor. Pages cycle with a tap on touch&nbsp;2.</p>
 
             <div class="hb-tip" data-hb-copy="sound.008"><strong>How each filter page is drawn:</strong> at rest the matrix shows four narrow vertical sliders with a <strong>single letter</strong> printed next to each one — that is all the space the grid has. The moment you start turning an encoder, the device replaces those tiny letters with the parameter's <strong>full 4-letter name</strong> spelled out across the lower rows, in the colour of the parameter you are changing. Release the encoder and it falls back to the resting letters.</div>
 
@@ -122,6 +128,7 @@
             <h3 class="hb-subsection-heading" data-hb-copy="sound.053">Page 3 — sample voices: DLAY · VOLUME</h3>
             <p data-hb-copy="sound.054">Voices 1–8 have a fourth filter page with <strong>DLAY</strong> and <strong>VOLUME</strong> sliders. Real delay tap (<span class="ap-code">AudioEffectDelayExternal</span> in PSRAM), not reverb. 0 is off; each step is N/32 of a beat (1, 2, 4, 8, 16, 32 land on even divisions; 3, 5, 6… stay in between). 32 is one beat, not a fixed 1.2&nbsp;s. Follows BPM. Feedback recirculates the tap; dry stays up. Synth voices 11, 13, and 14 have the same control on CRF (encoder 4).</p>
 
+            <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="filter_sample_dv" width="640" height="320" role="img" aria-label="Sample filter page 3: D delay and V volume at neutral gain"></canvas></div>
             <p><strong>V — VOLUME</strong> is available only on sample voices 1–8, beside D on encoder 2. Its center value <strong>0</strong> is normal gain (1×); <strong>−16</strong> is fully silent (0×), and <strong>+16</strong> doubles gain (2×). It scales that voice’s complete effects output independently of fader velocity and channel volume. Resetting this page returns V to 0. The setting is saved with the pattern; older patterns open at neutral gain.</p>
 
             <h3 class="hb-subsection-heading" data-hb-copy="sound.055">Page 1 — synth voices: CUT · RES · FLT · DLAY</h3>
@@ -269,7 +276,7 @@
             <h2 data-hb-copy="sound.125">The synth voices in detail</h2>
 
             <h3 class="hb-subsection-heading" data-hb-copy="sound.126">Voice 11 — 3-voice polyphonic synth</h3>
-            <p data-hb-copy="sound.127">Three oscillators per voice, three voices of polyphony, ten instrument presets in a single ROM-style table (<strong>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS</strong>). Each preset bundles a waveshape recipe, envelope curve, and filter envelope amount. Independent ADSR per voice, independent filter envelope per voice, per-voice pan, gain, waveform, fine pitch (cents), and coarse pitch (semitones).</p>
+            <p data-hb-copy="sound.127">Three oscillators per voice, three voices of polyphony, thirteen instrument presets in a single ROM-style table (<strong>BASS · KEYS · CHPT · PAD · WOW · ORG · FLT · LEAD · ARP · BRSS · 303 · DXEP · DXBS</strong>). Each preset bundles a waveshape recipe, envelope curve, and filter envelope amount. The default instrument is <strong>DXBS</strong>. 303 provides acid bass, DXEP a bell-like electric piano, and DXBS an FM-style bass. Independent ADSR per voice, independent filter envelope per voice, per-voice pan, gain, waveform, fine pitch (cents), and coarse pitch (semitones).</p>
             <p data-hb-copy="sound.128">Selecting an instrument loads its matching filter, register, waveform, and ADSR defaults. The presets deliberately cover different roles: PAD and WOW swell, ORG uses clean drawbar-style harmonics, FLT is breathy, LEAD is a square-forward pluck, ARP is a tight pulse stack, and BRSS uses a darker saw body with a slower filter bloom. You can edit the loaded values immediately; saved projects retain those edits.</p>
             <p data-hb-copy="sound.129">A fifth filter page matches voices 13/14: <strong>LFO R · LFO D · SPAN · ARP</strong>. The LFO runs on the shared SVF and the poly ladders (cutoff + resonance). ARP is MIDI-hold only and does not transpose notes already on the grid.</p>
 

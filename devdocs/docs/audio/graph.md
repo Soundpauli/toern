@@ -14,13 +14,15 @@ The Teensy Audio design lives in [`audioinit.h`](https://github.com/Soundpauli/t
 flowchart LR
   S[Samples 1-8] --> ENV[Envelopes] --> BIT[Bitcrushers] --> FIL[Filters]
   FIL -->|1, 2, 5-8| VERB[Freeverb sends]
-  FIL -->|3, 4 dry| BANK[Sample buses]
-  VERB --> BANK
+  FIL -->|dry| DLY[Per-voice delay mix]
+  VERB --> DLY
+  DLY --> V[Sample V gain: 0x to 2x]
+  V --> BANK[Sample buses]
   POLY[Poly 11: oscillators / ladders / envelopes] --> PFX[Shared crush / filter / reverb]
   MONO[Mono 13-14: oscillators / envelopes] --> MFX[Crush / filter: no reverb]
   BANK --> END[Final mix]
-  PFX --> END
-  MFX --> END
+  PFX --> PD[Poly delay] --> END
+  MFX --> MD[Mono delays] --> END
   END --> ROUTE[Output routing: VOL 2-CH]
   BANK -->|Split-bank mode| ROUTE
   PREV[Sample preview] --> ROUTE

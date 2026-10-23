@@ -49,7 +49,7 @@
               </details>
               <details>
                 <summary data-hb-copy="troubleshooting.012">External MIDI is in sync but kicks click off by a few ms.</summary>
-                <p data-hb-copy="troubleshooting.013">Use <a href="midi.html#sync">MIDI → SYNC</a>. SNC1 delays your outgoing path; SNC2 delays your incoming path. Loopback a metronome and adjust in ±2 ms steps until both kicks land as one. Save by leaving the page — settings persist.</p>
+                <p data-hb-copy="troubleshooting.013">Use <a href="midi.html#sync">MIDI → SYNC</a>. SYC&gt; delays TOERN’s playback when it sends Play; SYC&lt; delays its playback when it receives Play. Negative values add delay to the opposite path. Adjust in 1 ms steps and restart to hear the correction. A red -- means the selected value has no effect in the current mode. Settings persist.</p>
               </details>
               <details>
                 <summary data-hb-copy="troubleshooting.014">BPM number is red and won't settle.</summary>

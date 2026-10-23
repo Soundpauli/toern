@@ -97,3 +97,9 @@ Named constants for 38–41 are `EEPROM_MIX_GAIN_*` in `toern.ino`. Offsets 42 t
 Voices 1–8 expose VOLUME beside DLAY on filter page 3 (encoder 2). `ARR_GAIN` uses a 0–32 slider, displayed as −16…+16; factor = slider / 16. `sampleFilterGain[0..7]` sits after each voice’s delay/effects output and before mixer1/2, independently of channel volume and fader velocity.
 
 Pattern persistence reserves `SMP.param_settings[ch][14]` without changing `Device`. Values are encoded as `1048576.0f + slider`; untagged, fractional, non-finite, or out-of-range data reads as slider 16 (unity). Legacy files have nonzero spare values here, so do not interpret this slot as a plain slider. Use `setSampleVoiceGain`, `sampleVoiceGainSlider`, and `applySampleVoiceGain` for writes, reads, and hardware application. Page/all-filter/NEW resets return to unity; `loadSMPSettings` reapplies saved gain. Synth voices 11/13/14 have no V control.
+
+## Cross-surface verification
+
+When changing controls, update the simulator, operator handbook and developer contract together. `tests/test_touch_fill.py`, `test_fader_controls.py`, `test_pause_effects.py`, `test_voice_gain.py` and `test_sync_menu.py` exercise extracted firmware logic. `node tests/test_sim_performance.mjs` checks fill/SYNC rules and filter metadata; `node tests/test_sim_audio.mjs` checks the Web Audio graph and source release; `node tests/test_menu_navigation.mjs` checks real simulator inputs with mocked audio/browser boundaries. Navigation tests must bound page-seeking loops and fail if a moved page is unreachable instead of growing the audio-call log indefinitely.
+
+Both matrix widths and both hardware input configurations need coverage: capacitive T4+T5 and external C+D are deliberately different. A successful browser build does not validate electrical input, DSP identity or Teensy timing. Retain the current `toern_hardware.h` selection when checking alternate build configurations.

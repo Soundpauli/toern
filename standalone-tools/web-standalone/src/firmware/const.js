@@ -65,7 +65,7 @@ export const PAINT_ROWS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 12, 14, 15]);
 export const SOUND_CH = new Set([1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]);
 export const FILTER_CH = new Set([1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]);
 
-export const MENU = ["PATT", "KIT", "SMP", "BPM", "VOL", "SETT", "REC", "MIDI", "SONG", "ETC"];
+export const MENU = ["PATT", "KIT", "SMP", "BPM", "VOL", "SETT", "REC", "MIDI", "MODE", "ETC"];
 export const WAVS = ["KICK", "SNARE", "HAT", "CLAP", "TOM", "RIDE", "PERC", "BASS", "SHKR", "CRSH"];
 export const DUMMY_PACKS = {
   1: { name: "DRUM", wavs: [0, 1, 2, 3, 4, 5, 6, 7] },
@@ -83,14 +83,14 @@ const ADSR = [
 ];
 const SAMPLE_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "r", name: "RVRB" }, { key: "b", name: "BITC" }],
-  [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV", max: 48 }, null],
+  [{ key: "res", name: "RES" }, { key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV", max: 48 }, { key: "stretch", name: "TIME", max: 22 }],
   ADSR,
-  [{ key: "dlay", name: "DLAY" }, null, null, null],
+  [{ key: "dlay", name: "DLAY" }, { key: "voiceGain", name: "VOL" }, null, null],
 ];
 const CH11_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "r", name: "RVRB" }, { key: "b", name: "BITC" }],
   [{ key: "cut", name: "CUT" }, { key: "res", name: "RES" }, { key: "flt", name: "FLT" }, { key: "dlay", name: "DLAY" }],
-  [{ key: "wave", name: "WAVE", max: 3 }, { key: "inst", name: "INST", max: 9 }, { key: "cent", name: "CENT" }, { key: "semi", name: "SEMI" }],
+  [{ key: "wave", name: "WAVE", max: 3 }, { key: "inst", name: "INST", max: 12 }, { key: "cent", name: "CENT" }, { key: "semi", name: "SEMI" }],
   ADSR,
   [{ key: "lfoR", name: "LFOR" }, { key: "lfoD", name: "LFOD" }, { key: "span", name: "SPAN" }, { key: "arp", name: "ARP" }],
 ];
@@ -110,8 +110,8 @@ export function filterPagesFor(ch) {
 
 export function emptyFilt() {
   return {
-    h: 32, l: 0, r: 0, b: 0, fast: 0, res: 0, detune: 16, oct: 24, att: 32, dec: 32, sus: 10, rel: 5,
-    cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 16, lfoR: 0, lfoD: 0, span: 0, arp: 16,
+    h: 32, l: 0, r: 0, b: 0, fast: 0, fastPage: 0, res: 0, detune: 16, oct: 24, att: 32, dec: 32, sus: 10, rel: 5,
+    voiceGain: 16, stretch: 11, cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 16, lfoR: 0, lfoD: 0, span: 0, arp: 16,
   };
 }
 export const COND_LABEL = ["1/1", "1/2", "1/4", "1/8", "1/X", "2/1", "4/1", "8/1", "X/1", "F/F", "G/L"];

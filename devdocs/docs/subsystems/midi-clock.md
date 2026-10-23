@@ -53,3 +53,16 @@ The USB build exposes MIDI, Audio and Serial interfaces, but musical note/clock/
 `checkMidi()` stops reading after four non-callback messages per loop. Clock and Note On run through callbacks and do not consume that count. Unread messages remain queued for the next call instead of being discarded. This bounds ordinary message work; it does not guarantee that the hardware UART buffer cannot overflow under excessive input.
 
 MIDI → **TRIG** selects the voice that pulses J27. J27 emits only for sequencer/fill hits while playing; paint, grid audition, sample previews and live MIDI do not emit pulses. Sampler callers explicitly opt in, and the shared pulse function rejects stopped transport. J27 emits a positive pulse (idle LOW), independently of J25 clock polarity; its width follows MIDI → PQ-O. Clock and sidechain pulse expiry share one PIT timer with independent deadlines, leaving the other three channels for sequencer, fills and MIDI clock. It is a digital trigger output, not onboard sidechain compression. MIDI → **FOLD** folds incoming pitch into the visible grid; **OVWR** chooses whether incoming MIDI may overwrite occupied cells; voice-select **SEL** follows the selected voice.
+
+## SYNC — `SYC>` / `SYC<`
+
+`SYC>` (`transportSendDelayMs`, EEPROM offset 29) and `SYC<` (`transportRcveDelayMs`, offset 31) are signed −127…+127 ms start offsets. Encoder 2 selects the path; encoder 3 edits in 1 ms steps. These are the former SNC1/SNC2 fields; storage and transport math are unchanged.
+
+```text
+send delay = max(SYC>, 0) + max(-SYC<, 0)
+receive delay = max(SYC<, 0) + max(-SYC>, 0)
+```
+
+The master sends MIDI Start and its first Clock immediately, then defers TOERN's own first sequencer step. Incoming MIDI Start uses the receive delay. Local Play in MIDI EXT arms for the next page downbeat before the receive delay. Orange analog EXT starts from pulses and bypasses both offsets. These settings do not delay Stop or MIDI notes and do not re-phase running playback when edited.
+
+`syncDelayHasEffect()` determines whether the selected signed value contributes to an available path. In master mode the send path is active; the receive path also exists if transport GET is enabled. In MIDI EXT the receive path exists even with transport GET off, because local Play can arm on clock. In analog EXT neither path exists. A negative value tests the opposite path. Inactive values render **red `--`** while retaining their stored value and editability.

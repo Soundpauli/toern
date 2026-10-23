@@ -68,3 +68,17 @@ Menu labels are **PATT, KIT, SMP, BPM, VOL, SETT, REC, MIDI, MODE, ETC**. The BP
 See the [handbook controls](https://handbook.toern.live/controls.html) and [note detail](https://handbook.toern.live/note-detail.html) for complete gestures.
 
 TOUCHY is enabled with MODE → TCHY, is OFF after reboot, and stops sequencer playback. Touch 1–5 trigger voices 1–5 without writing notes. Encoders 1–4 edit the last pad-triggered voice’s pitch, velocity, reverb (where available), and highpass. Channel volumes stay full while enabled and are restored on disable. Short presses open SMP for voices 1–4. Hold encoder 1 to fast-record into the last pad-triggered voice and release to stop; recording does not change pattern notes. Hold encoder 3 for the last pad-triggered voice’s FILTER, and encoder 4 for the main menu. Existing browser/filter exits return to TOUCHY until its MODE toggle is OFF.
+
+## Performance-fill arbitration
+
+`pollTouchFillChord()` selects capacitive **touch 4+5** when `exttouch=false`, or external **C+D** when `exttouch=true`. It runs before REC/button handling and FN dispatch. `handleTouchFillChord()` accepts only during playback, outside TOUCHY and sample capture. It consumes the remaining held input until both release, preventing FN/audition or REC fallthrough. Requests capture the selected voice, not the future cursor selection.
+
+`touchFillPendingMask` accumulates voices. `servicePendingTouchFill()` starts them together on the next page downbeat. `touchFills[ch]` owns independent timing, so re-requesting a voice does not reset others. Duration is `2 * maxX` sequencer steps, with the five-section `fillHitDue()` cadence. `currentFillStepStart()` rounds forward to the step boundary to avoid callback-order offsets.
+
+`serviceFillStepBoundaries()` owns completion; the fill subtick timer must not clear the state early. At the exact following downbeat it queues one velocity-127 drop per voice. `triggerPendingFillDrops()` runs after normal grid/synth finishing work so a lower-velocity grid hit cannot replace the drop. Grid F/F demotes its trigger condition to normal on completion; requested fills never write the grid. Pause/start calls `resetTouchFills()` to cancel queued fills and drops.
+
+The centered FILL overlay stores the requesting voice and expires after 1000 ms. `FastLEDshow()` composes it at presentation time; it must not alter the retained menu/grid framebuffer.
+
+## Synth preset mode
+
+`loadSavePreset` / `LOADSAVE_PRESET` is reached through SMP on ch11/13/14, displayed as **PSET**. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Sample voices still enter `set_Wav`. Presets are scoped to each synth voice; see [SD storage](../subsystems/sd-storage).

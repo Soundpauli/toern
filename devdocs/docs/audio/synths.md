@@ -12,7 +12,8 @@ Synth code lives mainly in [`toern_synths.ino`](https://github.com/Soundpauli/to
 
 - Up to `POLY_VOICES` (3) simultaneous voices
 - Multi-oscillator stacks per voice (`Swaveform*`, mixers, ladder filters, envelopes)
-- Instrument presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS
+- Instrument presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS, 303, DXEP, DXBS
+- Default ch11 instrument: DXBS (index 12); selecting INST loads matching CUT/RES/FLT, register, waveform and ADSR defaults. Saved user values remain authoritative until INST is selected again.
 - Preset application: `applySynthInstrumentPreset` / `*_synth(...)` helpers
 - Fifth filter page: LFO (cutoff/res on SVF + ladders) and MIDI arpeggiator (same rules as 13–14)
 
@@ -38,3 +39,5 @@ Voice timing/state arrays (`voiceStartTime`, sustain levels, resonance, …) sit
 ## Interaction with FX
 
 Channel 11 feeds its shared bitcrusher/filter/reverb chain after the poly voice mix. Channels 13–14 have bitcrusher and filter stages but no freeverb connection. Their first filter page uses CENT instead of RVRB. `setFilters` and parameter helpers apply the voice-specific mappings.
+
+Synth PSET slots store custom filter-page settings independently for ch11, ch13 and ch14. See [SD storage](../subsystems/sd-storage#synth-filter-presets). Pause releases all poly slots and mono envelopes while effects decay naturally.

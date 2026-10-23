@@ -1,3 +1,5 @@
+import { INSTRUMENT_NAMES } from "./instruments.js";
+import { syncHasEffect } from "./performance.js";
 import { COL, COL_BASE, COLS, ROWS, PAGES, SCHEMES, filterPagesFor } from "./const.js";
 import { blend, hsv, nscale, indicatorColor } from "./matrix.js";
 import { glyphWidth, textPixelWidth } from "./font.js";
@@ -40,8 +42,8 @@ export const MENU_PAGES = [
 // Navigation is separate from the persisted legacy setting slots.
 export const SUBS = {
   look: ["VIEW", "CTRL", "DRAW", "MUTE"],
-  recs: ["INPT", "MIC", "L-IN", "TRIG", "CLR"],
-  midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PPQN", "TRIG", "CIN", "OVWR"],
+  recs: ["INPT", "MIC", "HPF", "L-IN", "TRIG", "CLR"],
+  midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PQ-I", "PQ-O", "TRIG", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "SPKR"],
   mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO"],
   etc: ["INFO", "SD", "BATT", "ADV", "RSET"],
@@ -49,6 +51,8 @@ export const SUBS = {
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
 const SUB_SLOTS = {
+  recs: [["recs", 0], ["recs", 1], ["recs", 5], ["recs", 2], ["recs", 3], ["recs", 4]],
+  midi: [["midi", 0], ["midi", 1], ["midi", 2], ["midi", 3], ["midi", 4], ["midi", 5], ["midi", 8], ["midi", 6], ["midi", 7], ["midi", 9]],
   look: [["look", 2], ["look", 6], ["look", 10], ["look", 11]],
   vol: [["vol", 0], ["vol", 1], ["vol", 2], ["vol", 3], ["vol", 5]],
   mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["touchy", 0], ["etc", 3]],
@@ -444,10 +448,10 @@ function drawChannelNr(matrix, s) {
   const width = textPixelWidth(text);
   const endX = Math.min(COLS, 2 + width);
   const top = ch >= 1 && ch <= 8;
-  const textY = top ? 12 : 2;
-  const borderY = top ? 10 : 7;
-  const bgY0 = top ? 11 : 1;
-  const bgY1 = top ? 16 : 6;
+  const textY = top ? 12 : 3;
+  const borderY = top ? 10 : 9;
+  const bgY0 = top ? 11 : 2;
+  const bgY1 = top ? 16 : 8;
   for (let x = 1; x <= endX; x++) for (let y = bgY0; y <= bgY1; y++) matrix.light(x, y, [0, 0, 0]);
   for (let x = 1; x <= endX; x++) matrix.light(x, borderY, color);
   matrix.drawText(text, 2, textY, color);
@@ -516,7 +520,7 @@ const FILTER_PAGES_COLORS = [
   [[255, 0, 180], [255, 80, 160], [180, 80, 255], [80, 180, 255]],
 ];
 const WAVE_NAMES = ["SIN", "SQR", "SAW", "TRI"];
-const INST_NAMES = ["BASS", "KEYS", "CHPT", "PAD", "WOW", "ORG", "FLT", "LEAD", "ARP", "BRSS"];
+const INST_NAMES = INSTRUMENT_NAMES;
 
 export function drawFilter(matrix, s, now) {
   const f = s.filt[s.GLOB.currentChannel];
@@ -538,7 +542,7 @@ export function drawFilter(matrix, s, now) {
     const [x0, x1] = filterCols()[i];
     const isBipolarMid =
       (spec.key === "oct" && val === Math.floor(max / 2)) ||
-      ((spec.key === "detune" || spec.key === "cent" || spec.key === "semi" || spec.key === "arp") && val === 16);
+      ((spec.key === "detune" || spec.key === "cent" || spec.key === "semi" || spec.key === "arp" || spec.key === "voiceGain") && val === 16);
     for (let y = 1; y <= 10; y++) {
       let c = [0, 0, 0];
       if (y === display) c = i === f.fast ? [255, 255, 0] : [255, 255, 255];
@@ -557,9 +561,11 @@ export function drawFilter(matrix, s, now) {
     let tx = Math.floor((COLS - width + 1) / 2);
     if (tx < 1) tx = 1;
     matrix.drawText(spec.name, tx, 12, pageColors[focus]);
-    const bipolarKeys = new Set(["detune", "oct", "cent", "semi", "arp"]);
+    const bipolarKeys = new Set(["detune", "oct", "cent", "semi", "arp", "voiceGain"]);
     let label;
-    if (spec.key === "wave") label = WAVE_NAMES[val] || String(val);
+    if (spec.key === "voiceGain") label = (val > 16 ? "+" : "") + String(val - 16);
+    else if (spec.key === "stretch") label = val === 11 ? "OFF" : String(val - 11);
+    else if (spec.key === "wave") label = WAVE_NAMES[val] || String(val);
     else if (spec.key === "inst") label = INST_NAMES[val] || String(val);
     else if (spec.key === "detune" && (spec.max ?? 32) === 32) {
       label = String(Math.round((val / 32) * 200 - 100)); // cents
@@ -568,7 +574,7 @@ export function drawFilter(matrix, s, now) {
     } else if (bipolarKeys.has(spec.key) && (spec.max ?? 32) === 32) label = String(val - 16);
     else label = String(val);
     const t = Math.round((val / (spec.max ?? 32)) * 255);
-    let valueColor = (spec.key === "res" || spec.key === "b")
+    let valueColor = (spec.key === "res" || spec.key === "b" || spec.key === "voiceGain")
       ? blend([0, 255, 0], [255, 0, 0], t)
       : blend([255, 0, 0], [0, 255, 0], t);
     if (spec.key === "oct" && (spec.max ?? 48) === 48) {
@@ -599,7 +605,7 @@ export function drawMenu(matrix, s) {
   matrix.drawIndicator("L", "G", 4);
   pageDots(matrix, MENU_PAGES.length, s.menuIndex, UI_RED, UI_BLUE);
   showIcon(matrix, page.icon, 2, 1, scaleTo(tc, 20));
-  const label = page.name === "SMP" && (s.GLOB.currentChannel < 1 || s.GLOB.currentChannel > 8) ? "(-)" : page.label;
+  const label = page.name === "SMP" && [11,13,14].includes(s.GLOB.currentChannel) ? "PSET" : page.name === "SMP" && (s.GLOB.currentChannel < 1 || s.GLOB.currentChannel > 8) ? "(-)" : page.label;
   matrix.drawText(label, 2, 3, tc);
 }
 
@@ -746,9 +752,9 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     // SYNC SNC1/SNC2
     const edit = s.syncEdit | 0;
     const ms = edit === 0 ? (s.syncSendMs | 0) : (s.syncRcveMs | 0);
-    matrix.drawText(edit === 0 ? "SNC1" : "SNC2", 2, 10, parent);
-    const label = (ms >= 0 ? "+" : "") + String(ms);
-    matrix.drawText(label, 2, 3, UI_WHITE);
+    matrix.drawText(edit === 0 ? "SYC>" : "SYC<", 2, 10, parent);
+    const active = syncHasEffect(s, edit, ms);
+    matrix.drawText(active ? String(ms) : "--", 2, 3, !active || edit === 1 ? UI_RED : UI_GREEN);
     matrix.drawIndicator("L", "Y", 2);
     matrix.drawIndicator("L", "W", 3);
     return;
@@ -774,8 +780,8 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     const focus = s.cinFocus | 0;
     const hold = clampUi(s.cinHoldMs || 1, 1, 32);
     const ppqn = CIN_PPQN_TABLE[s.cinPpqnIndex | 0] || 4;
-    const shown = focus === 1 ? String(hold) : String(ppqn);
-    matrix.drawText(shown, 2, 3, UI_WHITE);
+    const shown = focus === 1 ? String(hold) : s.cinEnabled === false ? "OFF" : (s.cinPolarityPos === false ? "-" : "+") + ppqn;
+    matrix.drawText(shown, 2, 3, focus === 1 ? UI_WHITE : s.cinEnabled === false || s.cinPolarityPos === false ? UI_RED : UI_GREEN);
     matrix.drawIndicator("L", focus === 1 ? "W" : "G", 1);
     matrix.drawIndicator("L", focus === 1 ? "G" : "W", 3);
     return;
@@ -1183,7 +1189,7 @@ export function renderFrame(matrix, s, now) {
   matrix.setBrightness(s.ledBrightness);
   matrix.setCursor(0, 0);
   if (s.mode !== "etc") s.infoAt = 0;
-  if (s.okAt && now - s.okAt < 1000) {
+  if (s.okAt && now - s.okAt < 1000 && !(s.fillOverlayUntil > now)) {
     drawOk(matrix, now - s.okAt);
     matrix.present();
     return;
@@ -1221,7 +1227,8 @@ export function renderFrame(matrix, s, now) {
     if (s.playing) drawTimer(matrix, s);
     if (now - s.filterFlashAt < 800 && s.filterFlash) {
       const i = FILTER_NAMES.indexOf(s.filterFlash);
-      drawFilterCheck(matrix, s.filt[s.GLOB.currentChannel][["h", "l", "r", "b"][i]], FILTER_COLORS[i] || UI_WHITE);
+      const spec = (filterPagesFor(s.GLOB.currentChannel)[s.filt[s.GLOB.currentChannel].fastPage || 0] || filterPagesFor(s.GLOB.currentChannel)[0])[i];
+      if (spec) drawFilterCheck(matrix, s.filt[s.GLOB.currentChannel][spec.key] * 32 / (spec.max || 32), FILTER_COLORS[i] || UI_WHITE);
     }
     if (s.volBarAt && now - s.volBarAt < 600) {
       const vol = s.volBar || 0;
@@ -1231,7 +1238,7 @@ export function renderFrame(matrix, s, now) {
       }
     }
     drawCursor(matrix, s, now);
-    if (s.chNrAt && now - s.chNrAt < 800 && s.mode === "draw" && s.GLOB.y <= 9) drawChannelNr(matrix, s);
+    if (s.chNrAt && now - s.chNrAt < 800 && s.mode === "draw" && ([1,2,3,4,5,6,7,8,11,13,14].includes(s.chNr))) drawChannelNr(matrix, s);
     if (s.pageNrAt && now - s.pageNrAt < 800 && (s.mode === "draw" || s.mode === "single")) drawPageNr(matrix, s);
     if (s.solo && now - s.soloArrowAt < 250 && s.soloArrow) matrix.drawText(s.soloArrow, 7, 8, [255, 255, 255]);
     if (s.mode === "shift") matrix.drawText("SHFT", 2, 11, [120, 120, 0]);
@@ -1250,6 +1257,11 @@ export function renderFrame(matrix, s, now) {
   else if (s.mode === "menu") drawMenu(matrix, s);
   else if (s.mode === "touchy") drawTouchy(matrix, s, now);
   else if (SUBS[s.mode]) drawSubmenu(matrix, s, now);
+  else if (s.mode === "pset") {
+    matrix.drawText("PSET", 2, 10, UI_WHITE);
+    matrix.drawText(String(s.presetSlot), 2, 3, s.presetExists() ? UI_GREEN : UI_BLUE);
+    matrix.drawIndicator("L", "G", 1); matrix.drawIndicator("L", "R", 2); matrix.drawIndicator("L", "X", 4);
+  }
   else if (s.mode === "dat") drawLoadSave(matrix, s);
   else if (s.mode === "new") drawNew(matrix, s);
   else if (s.mode === "kit") drawPack(matrix, s);
@@ -1261,5 +1273,22 @@ export function renderFrame(matrix, s, now) {
   else if (s.mode === "song") drawSong(matrix, s);
   else if (s.mode === "bpm") drawBpm(matrix, s);
   if (s.mode !== "touchy" && s.fnArrow && now - s.fnArrowAt < 350) matrix.drawText(s.fnArrow, 7, 8, UI_WHITE);
+  for (let ch = 1; ch <= 8; ch++) {
+    if (!s.faderAt?.[ch] || now - s.faderAt[ch] >= 800) continue;
+    const height = s.faderPositions[ch] || 0;
+    const x = Math.floor((ch - 1) * COLS / 8) + 1;
+    const color = pal(s).col[ch];
+    for (let y = 1; y <= height; y++) {
+      matrix.light(x, y, y === height ? UI_WHITE : nscale(color, 150));
+      if (x < COLS) matrix.light(x + 1, y, nscale(color, 90));
+    }
+    if (!height) matrix.light(x, 1, UI_RED);
+  }
+  if (s.fillOverlayUntil > now) {
+    const text = "FILL", width = textPixelWidth(text);
+    const x = Math.max(1, Math.floor((COLS - width) / 2) + 1);
+    for (let xx = x - 1; xx <= x + width; xx++) for (let y = 5; y <= 11; y++) matrix.light(xx, y, [0,0,0]);
+    matrix.drawText(text, x, 6, pal(s).col[s.fillOverlayCh] || UI_WHITE);
+  }
   matrix.present();
 }

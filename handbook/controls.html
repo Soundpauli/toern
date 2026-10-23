@@ -71,7 +71,7 @@
                 <tr><td><strong>Tap right-first, both pads together</strong></td><td data-hb-copy="controls.022">Opens <a href="sound.html#filter">filters</a> on FX-capable channels</td><td data-hb-copy="controls.023">Both sample and synth voices.</td></tr>
                 <tr><td><strong>Touch&nbsp;2 tap inside filters</strong></td><td data-hb-copy="controls.025">Flips to the next filter page</td><td data-hb-copy="controls.026">Inside any filter page.</td></tr>
                 <tr><td><strong>Hold touch&nbsp;5 (FN) + turn encoder&nbsp;1</strong></td><td data-hb-copy="controls.028">Left selects backward sample playback (<strong>&lt;&lt;</strong>); right selects forward playback (<strong>&gt;&gt;</strong>). The normal encoder value stays unchanged.</td><td data-hb-copy="controls.029">All screens outside TOUCHY, on sample voices 1–8. Unavailable during sample capture. In TOUCHY, touch&nbsp;5 plays voice&nbsp;5.</td></tr>
-                <tr><td><strong>Touch&nbsp;3 + 4 / buttons C + D together</strong></td><td>Queues an F/F fill for the current voice, starting on the next page’s first beat. Requests for different voices accumulate and start together; each voice runs its own fill, finishing with a full-velocity hit on the downbeat after two fill pages. Release both inputs before requesting another fill. Does not write a grid note.</td><td>During playback, outside TOUCHY and recording. The combination consumes the individual record/audition actions.</td></tr>
+                <tr><td><strong>Touch&nbsp;4 + 5 / buttons C + D together</strong></td><td>Queues an F/F fill for the current voice, starting on the next page’s first beat. Requests for different voices accumulate and start together; each voice runs its own fill, finishing with a full-velocity hit on the downbeat after two fill pages. A centered <strong>FILL</strong> appears for one second in the requested voice’s color. Release both inputs before requesting another fill. Does not write a grid note.</td><td>During playback, outside TOUCHY and recording. The combination consumes the individual audition/FN actions (record/audition on external buttons).</td></tr>
                 <tr><td><strong>Touch&nbsp;3</strong> (hold / press)</td><td data-hb-copy="controls.031">Recording — hold in the sample browser to enter <a href="record.html#record-mode">record mode</a>; press/hold on the grid for live/fast-rec (see <a href="record.html#live-record">Record → Live recording</a>)</td><td data-hb-copy="controls.032">Sample browser and grid.</td></tr>
               </tbody>
             </table>
@@ -90,11 +90,17 @@
             <p data-hb-copy="controls.036">There is no dedicated play button. The sequencer transport lives on <strong>encoder&nbsp;3 short press</strong> from the grid. Inside <a href="sound.html#filter">filter mode</a>, use <strong>encoder&nbsp;3 long press</strong> instead so you can audition without leaving the editor. Pressing again stops; the matrix stops moving and the playhead disappears.</p>
 
             <p data-hb-copy="controls.037">Transport state is global: when you open the menu while playing, your loop keeps running underneath the menu overlay so you can adjust BPM, send/receive MIDI, or load a new pattern on the fly.</p>
+            <p>Pause releases the sample and synth voices, including every poly voice on channel 11 and mono voices 13/14. Delay and reverb continue decaying naturally. Pause does not clear their buffers or reset your effects settings.</p>
           </section>
 
+          <section class="hb-sub" id="external-faders">
+            <h2>External buttons and faders</h2>
+            <p>The external panel uses buttons A–D in place of touch pads 1–4. <strong>C + D</strong> requests a fill; the capacitive panel uses <strong>touch 4 + 5</strong>. The external panel has no fifth/FN button.</p>
+            <p>All eight faders remain active in menus, mute and solo, including when several move together. Bottom is mute; raising or moving a fader above bottom unmutes its voice. On leaving solo or a temporary mute view, the physical fader position takes priority over the saved mute state. Faders scale note amplitude independently of channel volume and the V gain filter. Each moved fader gets its own short matrix level animation.</p>
+            <p>In the <a href="https://sim.tyng.app/">browser simulator</a>, all five pads are on the panel and use F1–F5. Hold F4 + F5 while playing for a fill. Open <strong>Faders · voices 1–8</strong> for simulated faders; browser sound and timing approximate the hardware.</p>
+          </section>
 
           <hr />
-
 
           <section class="hb-sub" id="chords">
             <h2 data-hb-copy="controls.038">Key grid presses</h2>

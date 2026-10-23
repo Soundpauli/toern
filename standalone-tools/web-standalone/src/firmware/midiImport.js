@@ -1,3 +1,5 @@
+import { foldRow } from "./pitch.js";
+export { foldRow } from "./pitch.js";
 import { Midi } from "@tonejs/midi";
 
 const TRACK_COLORS = [
@@ -34,15 +36,6 @@ export async function parseMidiFile(file) {
 }
 
 /** Fold a MIDI pitch into grid rows 1–15 for a given voice (like firmware MIDI-in). */
-export function foldRow(midiNote, channel) {
-  // Voice 1 row 1 = MIDI 47 (B2), row 2 = MIDI 48 (C3). row = midi - 47 + channel.
-  const BASE = 47;
-  let pitch = midiNote;
-  let row = pitch - BASE + channel;
-  while (row > 15) { pitch -= 12; row = pitch - BASE + channel; }
-  while (row < 1) { pitch += 12; row = pitch - BASE + channel; }
-  return { pitch, row };
-}
 
 /** Map MIDI notes onto the TŒRN grid (16 steps per page, rows 1–15).
  *  Transpose on (default): octave-fold into range and play from the grid row.
@@ -62,8 +55,6 @@ export function mapNotesToGrid(notes, bpm = 120, subdivision = 16, timeOffset = 
     const page = Math.floor(absolute / 16);
     const x = absolute % 16;
     const channel = note.track + 1;
-    const natural = note.note - 47 + channel;
-    const inRange = natural >= 1 && natural <= 15;
     const folded = foldRow(note.note, channel);
     if (folded.row < 1 || folded.row > 15) continue;
 

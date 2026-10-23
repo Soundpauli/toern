@@ -49,6 +49,8 @@ bool getMuteState(int ch){return muted[ch];}
 const int SWITCH_1=0,SWITCH_2=1,SWITCH_3=2,SWITCH_4=3,SWITCH_5=4;
 const int BUTTON_A=10,BUTTON_B=11,BUTTON_C=12,BUTTON_D=13,LOW=0,touchThreshold=45;
 bool exttouch=false,rawCap[5]={},rawButton[4]={};
+bool fnHeld=false;
+void noteUserActivity() {}
 unsigned clockMs=0;
 unsigned millis(){return clockMs;}
 int fastTouchRead(int pin){return rawCap[pin]?100:0;}
@@ -66,7 +68,8 @@ void triggerFillHit(int ch,int velocity,unsigned int row,uint8_t midiPitch){
  'static void resetTouchFills() {',
  'static inline bool isSingleModeChannelAllowed(',
  'static inline int basePitchRowForChannel(',
- 'static bool handleTouchFillChord(bool touch3, bool touch4) {',
+ 'static bool handleTouchFillChord(bool first, bool second) {',
+ 'static bool pollTouchFillChord() {',
  'static uint32_t currentFillStepStart() {',
  'static void queueFillDrop(',
  'static void serviceFillStepBoundaries() {',
@@ -76,7 +79,7 @@ void triggerFillHit(int ch,int velocity,unsigned int row,uint8_t midiPitch){
  'static bool fillHitDue(',
  'static void advanceTouchFills() {',
  'void playFillNote() {',
-])+'\n'+function('bool fillRequestOverlayVisible() {',(root/'toern_ui.ino').read_text())+r'''
+])+'\n'+function('static void updateFnState() {',(root/'toern_fn.ino').read_text())+'\n'+function('bool fillRequestOverlayVisible() {',(root/'toern_ui.ino').read_text())+r'''
 void release(){handleTouchFillChord(false,false);}
 void step(){
  for(int i=0;i<4;i++)playFillNote();
@@ -195,22 +198,31 @@ int main(){
  currentMode=&draw;
  fastRecordActive=true;assert(!handleTouchFillChord(true,true));release();fastRecordActive=false;
  isRecording=true;assert(!handleTouchFillChord(true,true));release();isRecording=false;
- // Capacitive 3+4 and external buttons C+D enter the same debounced chord.
+ // Capacitive 4+5 and external buttons C+D enter the hardware-specific chord.
  for(bool external:{false,true}){
    resetFill();release();exttouch=external;
-   rawCap[2]=rawCap[3]=true;rawButton[2]=rawButton[3]=true;
-   handleTouchFillChord(readDebouncedTouch(2),readDebouncedTouch(3));
+   rawCap[3]=rawCap[4]=true;rawButton[2]=rawButton[3]=true;
+   pollTouchFillChord();
    clockMs+=10;
-   assert(handleTouchFillChord(readDebouncedTouch(2),readDebouncedTouch(3)));
+   assert(pollTouchFillChord());
    assert(touchFillPendingMask==(1u<<1)&&!readRecTouchHeld());
-   rawCap[3]=false;rawButton[3]=false;
-   handleTouchFillChord(readDebouncedTouch(2),readDebouncedTouch(3));clockMs+=30;
-   assert(handleTouchFillChord(readDebouncedTouch(2),readDebouncedTouch(3)));
+   updateFnState();assert(!fnHeld);
+   rawCap[4]=false;rawButton[3]=false;
+   pollTouchFillChord();clockMs+=30;
+   assert(pollTouchFillChord());
    assert(!readRecTouchHeld());
-   rawCap[2]=false;rawButton[2]=false;
-   handleTouchFillChord(readDebouncedTouch(2),readDebouncedTouch(3));clockMs+=30;
-   assert(!handleTouchFillChord(readDebouncedTouch(2),readDebouncedTouch(3)));
+   rawCap[3]=false;rawButton[2]=false;
+   pollTouchFillChord();clockMs+=30;
+   assert(!pollTouchFillChord());
  }
+ // Old capacitive 3+4 must no longer queue a fill; touch5 alone remains FN.
+ exttouch=false;resetFill();release();
+ rawCap[2]=rawCap[3]=true;pollTouchFillChord();clockMs+=10;
+ assert(!pollTouchFillChord()&&touchFillPendingMask==0);
+ rawCap[2]=rawCap[3]=false;pollTouchFillChord();clockMs+=30;pollTouchFillChord();
+ rawCap[4]=true;updateFnState();clockMs+=10;updateFnState();assert(fnHeld);
+ assert(touchFillPendingMask==0);
+ rawCap[4]=false;updateFnState();clockMs+=30;updateFnState();assert(!fnHeld);
  resetFill();
  // Pending fills cannot fire while transport is stopped.
  touchFillPendingMask=(1u<<1);isNowPlaying=false;servicePendingTouchFill(1);assert(hits.empty());
@@ -223,4 +235,4 @@ with tempfile.TemporaryDirectory(prefix='toern-touch-fill-') as tmp:
     if sdk.exists():cmd+=['-isystem',str(sdk)]
     subprocess.run(cmd+[str(cpp),'-o',str(exe)],check=True)
     subprocess.run([str(exe)],check=True)
-print('PASS: playback-only touch 3+4/C+D queues multiple voices together on the next page, preserves independent timing/re-arm, consumes REC/audition, matches F/F cadence and strikes a single velocity-127 drop on the exact next downbeat in either timer order.')
+print('PASS: playback-only touch 4+5/C+D queues multiple voices together on the next page, preserves independent timing/re-arm, consumes REC/audition, matches F/F cadence and strikes a single velocity-127 drop on the exact next downbeat in either timer order.')

@@ -78,3 +78,11 @@ fields using older diagnostic builds, which only wrote breadcrumb 1.
 PATT shows the slot number and load/save indicators. Occupied slots use green numbers; empty slots use blue. There is no USED/NEW text. `showSaveSuccessAnimation` draws a green checkmark; `showSaveFailureAnimation` draws a red cross. Both yield during animation to keep audio service running.
 
 In note detail, the condition fraction belongs under encoder 3 and voice volume under encoder 4 in both panel layouts. The matrix is a display controlled by the encoders and touch pads, not a matrix of physical playable buttons.
+
+## Fader authority and transient overlays
+
+The external panel services all eight sliders round-robin, one ADC transaction per 2 ms moving / 4 ms idle tick. Menu, SMP browse, mute/solo and multiple moving sliders must not suppress polling; sample capture/active SD-preview bus guards still apply. Slow changes accumulate against the last accepted raw position; entering/leaving either stop bypasses quantization hysteresis. Failed ADC reads retain the previous position.
+
+Faders set per-note amplitude/velocity scaling and mute at the bottom stop; they do not overwrite `SMP.channelVol`. `restoredMuteWithFaderPriority()` overrides stale temporary solo/full-mute snapshots with the initialized, present slider position. Unavailable or unread sliders retain the snapshot behavior. Separate matrix lanes animate concurrently and are composited temporarily in `FastLEDshow()`; the saved framebuffer is restored after presentation. The FILL confirmation is composed last and uses the captured request voice color.
+
+CHNR includes sample voices 1–8 and synths 11/13/14. Sample helpers retain their upper position. Synth text uses y=3, border y=9 and background y=2…8. The page helper remains on the right.

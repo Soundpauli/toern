@@ -2236,3 +2236,27 @@ html.mobile-ui .assist {
   .encoder.pressed .ring { transform: none !important; }
   .rotate-icon svg { animation: none; transform: rotate(-90deg); }
 }
+
+/* All five physical pads are available in both panel layouts. */
+.sim-faders { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin: .8rem 0; }
+.sim-faders label { display: flex; flex-direction: column; align-items: center; gap: .3rem; font-size: .75rem; }
+.sim-faders input { writing-mode: vertical-lr; direction: rtl; width: 28px; height: 90px; touch-action: none; }
+.fader-panel summary { cursor: pointer; }
+.pad[data-touch="4"], .pad[data-touch="5"] { z-index: 5; }
+.pad > span:first-child { opacity: .7; }
+html.mobile-ui .pad[data-touch] {
+  width: clamp(26px, 7cqw, 34px);
+  height: clamp(26px, 7cqw, 34px);
+  transform: translate(-50%, -50%);
+}
+html.mobile-ui .pad[data-touch] > span:first-child {
+  display: block;
+  font-size: 10px;
+  opacity: .9;
+}
+/* Expanding faders must not move the instrument below the viewport. */
+html:not(.mobile-ui) .jump {
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+}

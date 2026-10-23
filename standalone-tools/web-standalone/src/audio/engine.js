@@ -107,13 +107,20 @@ export function createEngine() {
       hp.connect(lp);
       lp.connect(dry);
       dry.connect(pan);
-      pan.connect(master);
+      const delay = ctx.createDelay(4);
+      const feedback = ctx.createGain();
+      const delayWet = ctx.createGain();
+      const voiceGain = ctx.createGain();
+      feedback.gain.value = delayWet.gain.value = 0;
+      lp.connect(delay); delay.connect(feedback); feedback.connect(delay);
+      delay.connect(delayWet); delayWet.connect(pan);
+      pan.connect(voiceGain); voiceGain.connect(master);
       if (send) {
         send.gain.value = 0;
         lp.connect(send);
         send.connect(verb.input);
       }
-      chains[ch] = { input, shaper, amp, hp, lp, dry, pan, send, room: 0 };
+      chains[ch] = { input, shaper, amp, hp, lp, dry, pan, send, delay, feedback, delayWet, voiceGain, room: 0 };
     }
     chains.verb = verb;
     return ctx;
@@ -125,14 +132,16 @@ export function createEngine() {
     return ch % 2 ? -0.75 : 0.75;
   }
 
-  function setBus({ main = 80, preview = 8, stereo = 0 } = {}) {
+  let tempo = 120;
+  function setBus({ main = 80, preview = 8, stereo = 0, bpm = tempo } = {}) {
+    tempo = bpm;
     if (!ctx) return;
     master.gain.setTargetAtTime((main / 100) * 0.75, ctx.currentTime, 0.02);
     ctx.__preview.gain.setTargetAtTime(preview / 16, ctx.currentTime, 0.02);
     for (const ch of [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]) chains[ch].pan.pan.setTargetAtTime(mix(ch, stereo), ctx.currentTime, 0.02);
   }
 
-  function apply(ch, filt, vol, gain = 1) {
+  function apply(ch, filt, vol, gain = 1, fader = 1) {
     if (!ctx || !chains[ch]) return;
     const c = chains[ch];
     const now = ctx.currentTime;
@@ -159,14 +168,19 @@ export function createEngine() {
       c.shaper.curve = bitCurve(bits);
       amp = mapf(mv, 1, 16, Math.max(channelvolume, 0.1), 0.6);
     }
-    c.amp.gain.setTargetAtTime(amp * gain, now, 0.02);
+    c.amp.gain.setTargetAtTime(amp * gain * fader, now, 0.02);
+    const voiceGain = ch >= 1 && ch <= 8 ? (filt.voiceGain ?? 16) / 16 : 1;
+    c.voiceGain.gain.setTargetAtTime(voiceGain, now, 0.02);
+    c.delay.delayTime.setTargetAtTime(Math.max(0.001, (60 / tempo) * (filt.dlay || 1) / 32), now, 0.02);
+    c.feedback.gain.setTargetAtTime(filt.dlay > 0 ? mapf(filt.dlay, 1, 32, 0.52, 0.68) : 0, now, 0.02);
+    c.delayWet.gain.setTargetAtTime(filt.dlay > 0 ? 0.5 : 0, now, 0.02);
     const hasVerb = !!c.send;
     const verbAmount = hasVerb ? Math.max(0, Math.min(1, mapf(mapf(filt.r || 0, 0, 32, 0, 0.79), 0, 0.79, 0, 1))) : 0;
     const wet = mapf(verbAmount, 0, 1, 0, 0.54);
     const dry = hasVerb ? mapf(verbAmount, 0, 1, 1, 0.88) : 1;
     c.dry.gain.setTargetAtTime(dry, now, 0.02);
     c.room = verbAmount;
-    if (c.send) c.send.gain.setTargetAtTime(wet, now, 0.02);
+    if (c.send) c.send.gain.setTargetAtTime(wet * voiceGain, now, 0.02);
     if (ch === 11) {
       const base = mapf(filt.cut ?? 16, 0, 32, 220, 7000);
       const open = mapf(filt.h ?? 32, 0, 32, 0.2, 1);
@@ -212,22 +226,49 @@ export function createEngine() {
     custom[ch] = buffer;
   }
 
+  const stretched = new WeakMap();
+  function stretchBuffer(buffer, slider) {
+    if (slider === 11 || !buffer || buffer.length < 2048) return buffer;
+    let cache = stretched.get(buffer);
+    if (!cache) stretched.set(buffer, cache = new Map());
+    if (cache.has(slider)) return cache.get(slider);
+    const ratio = 1 + (slider - 11) / 110;
+    const result = ctx.createBuffer(buffer.numberOfChannels, Math.ceil(buffer.length * ratio), buffer.sampleRate);
+    const grain = Math.round(buffer.sampleRate * 0.03), hop = Math.floor(grain / 2);
+    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+      const input = buffer.getChannelData(channel), output = result.getChannelData(channel);
+      const weights = new Float32Array(output.length);
+      for (let out = -hop; out < output.length; out += hop) {
+        const src = Math.round(out / ratio);
+        for (let i = 0; i < grain; i++) {
+          const x = out + i, from = src + i;
+          if (x < 0 || x >= output.length || from < 0 || from >= input.length) continue;
+          const weight = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / grain);
+          output[x] += input[from] * weight; weights[x] += weight;
+        }
+      }
+      for (let i = 0; i < output.length; i++) if (weights[i]) output[i] /= weights[i];
+    }
+    cache.set(slider, result);
+    return result;
+  }
   const reversed = new WeakMap();
   const live = new Set();
+  const releasing = new Set();
   const sampleLive = {};
   const MAX_VOICES = 40;
   const att = (env) => Math.max(0.001, ((32 - env.att) / 32) * 2);
   function stopVoice(voice, when) {
-    if (!voice || !live.has(voice)) return;
-    live.delete(voice);
+    if (!voice || (!live.has(voice) && !releasing.has(voice))) return;
+    live.delete(voice); releasing.add(voice);
     try {
       voice.g.gain.cancelScheduledValues(when);
       voice.g.gain.setTargetAtTime(0.0001, when, 0.008);
       voice.src.stop(when + 0.04);
     } catch { /* already stopped */ }
   }
-  function play(kind, velocity, when, seek, end, invert, dest, rate = 1, env = null, buffer = null, stealCh = 0) {
-    const srcBuf = buffer || buffers[kind] || buffers.kick;
+  function play(kind, velocity, when, seek, end, invert, dest, rate = 1, env = null, buffer = null, stealCh = 0, stretch = 11) {
+    const srcBuf = stretchBuffer(buffer || buffers[kind] || buffers.kick, stretch);
     let buf = srcBuf;
     if (invert) {
       buf = reversed.get(srcBuf);
@@ -270,14 +311,14 @@ export function createEngine() {
     live.add(voice);
     if (stealCh) sampleLive[stealCh] = voice;
     src.onended = () => {
-      live.delete(voice);
+      live.delete(voice); releasing.delete(voice);
       if (stealCh && sampleLive[stealCh] === voice) delete sampleLive[stealCh];
       src.disconnect();
       g.disconnect();
     };
     if (live.size > MAX_VOICES) {
       const oldest = live.values().next().value;
-      live.delete(oldest);
+      live.delete(oldest); releasing.add(oldest);
       if (oldest.ch && sampleLive[oldest.ch] === oldest) delete sampleLive[oldest.ch];
       const t = ctx.currentTime;
       oldest.g.gain.cancelScheduledValues(t);
@@ -287,6 +328,7 @@ export function createEngine() {
   }
 
   const mono = {};
+  const synthLive = new Set();
   const arpAt = {};
   const lfos = {};
   const INST = [
@@ -320,13 +362,20 @@ export function createEngine() {
     lfos[ch].g.gain.setTargetAtTime(rate > 0 && depth > 0 ? (depth / 32) * 1800 : 0, now, 0.03);
   }
   function synth(ch, velocity, when, row, wav = {}) {
-    let midi = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127
-      ? wav.midiPitch
-      : (ch === 11 ? 36 + (row - 1) : 48 + (row - 1));
-    midi += ((wav.cent ?? 16) - 16) / 16 * 24;
-    midi += (wav.semi || 0) / 32 * 12;
-    midi += wav.detune || 0;
-    midi += wav.oct || 0;
+    const absolute = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127;
+    const register = Math.floor(1 + (wav.cent ?? 16) * 7 / 32);
+    let midi = absolute ? wav.midiPitch : ch === 11
+      ? 12 * register + row - 1 + 12
+      : Math.min(62, Math.max(36, row - ch + 47)) + 12;
+    if (ch === 11) {
+      if (absolute) midi += 12 * (register - 4);
+      midi += Math.round(-2 + (wav.semi ?? 16) / 8) + (-.5 + (wav.semi ?? 16) / 32);
+    } else {
+      midi += ((wav.cent ?? 16) - 16) / 16 * 24;
+      midi += ((wav.semi ?? 16) - 16) * 12 / 16;
+      midi += wav.detune || 0;
+      midi += (wav.oct || 0) * 12;
+    }
     if (ch !== 11 && wav.arp > 0) {
       const semis = (wav.arp / 32) * 12;
       const span = Math.max(2, Math.round(2 + ((wav.span || 0) / 32) * 14));
@@ -339,13 +388,13 @@ export function createEngine() {
     const freq = 440 * 2 ** ((midi - 69) / 12);
     const preset = INST[Math.max(0, Math.min(9, wav.inst || 0))];
     const osc = ctx.createOscillator();
-    osc.type = ch === 11 ? (wav.wave ? WAVES[wav.wave] : preset.type) : (WAVES[wav.wave | 0] || "triangle");
+    osc.type = ch === 11 ? (wav.wave ? WAVES[wav.wave] : ["sawtooth","triangle","square"][(wav.inst || 0) - 10] || preset.type) : (WAVES[wav.wave | 0] || "triangle");
     osc.frequency.setValueAtTime(Math.max(20, freq), when);
     const env = wav.env || {};
-    const a = ch === 11 ? preset.a : Math.max(0.005, (env.att ?? 8) / 32 * 0.4);
-    const d = ch === 11 ? preset.d : Math.max(0.02, (env.dec ?? 16) / 32 * 0.5);
-    const s = ch === 11 ? preset.s : Math.max(0.05, (env.sus ?? 16) / 32);
-    const rel = ch === 11 ? preset.r : Math.max(0.02, (env.rel ?? 8) / 32 * 0.6);
+    const a = Math.max(0.005, (32 - (env.att ?? 32)) / 32 * 2);
+    const d = Math.max(0.02, (env.dec ?? 16) / 32);
+    const s = Math.max(0.0001, (env.sus ?? 16) / 32);
+    const rel = Math.max(0.02, (env.rel ?? 8) / 32);
     const g = ctx.createGain();
     const peak = Math.max(0.02, (velocity / 127) * (ch === 11 ? 0.22 : 0.28));
     g.gain.setValueAtTime(0.0001, when);
@@ -360,6 +409,9 @@ export function createEngine() {
       mono[ch].osc.stop(when + 0.04);
     }
     if (ch !== 11) mono[ch] = { osc, g };
+    const voice = { osc, g };
+    synthLive.add(voice);
+    osc.onended = () => { synthLive.delete(voice); osc.disconnect(); g.disconnect(); };
     osc.start(when);
     osc.stop(when + a + d + rel + 0.02);
   }
@@ -372,13 +424,13 @@ export function createEngine() {
     }
     const home = ch + 1;
     const r = row ?? home;
-    // Firmware: midiPitch uses absolute MIDI (root C5=72); else row relative to voice home.
+    // Firmware: midiPitch uses absolute MIDI (root MIDI 60); else row relative to voice home.
     const semis = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127
-      ? (wav.midiPitch - 72)
+      ? (wav.midiPitch - 60)
       : (r - home);
     // wav.detune = fine semis (±1); wav.oct = octave shift (±2) from device.js wavOpts.
     const rate = 2 ** ((semis + (wav.detune || 0) + (wav.oct || 0) * 12) / 12);
-    play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch], ch);
+    play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch], ch, wav.stretch ?? 11);
   }
 
   function preview(wav) {
@@ -409,5 +461,16 @@ export function createEngine() {
     src.start();
   }
 
-  return { ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
+  function releaseAll() {
+    if (!ctx) return;
+    const when = ctx.currentTime;
+    for (const voice of new Set([...live, ...releasing])) stopVoice(voice, when);
+    for (const voice of synthLive) {
+      voice.g.gain.cancelScheduledValues(when);
+      voice.g.gain.setTargetAtTime(0.0001, when, 0.008);
+      try { voice.osc.stop(when + 0.04); } catch { /* ended */ }
+    }
+    // Delay/reverb nodes keep running until their existing tails decay.
+  }
+  return { releaseAll, ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
 }

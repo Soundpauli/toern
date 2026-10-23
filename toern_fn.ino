@@ -3,7 +3,8 @@ static int8_t fnDirection = 0;
 static unsigned long fnDirectionUntil = 0;
 
 static void updateFnState() {
-  fnHeld = currentMode != &touchyMode && currentMode != &recordMode && readDebouncedTouch(4);
+  const bool fillChord = pollTouchFillChord();
+  fnHeld = !fillChord && currentMode != &touchyMode && currentMode != &recordMode && readDebouncedTouch(4);
   if (fnHeld) noteUserActivity();
 }
 

@@ -83,7 +83,8 @@ app.innerHTML = `
     <h1 class="jump-title">Browser shortcuts</h1>
     <p>Press Space to play / pause. Click the grid first to activate browser audio. Turn the onscreen knobs with your mouse or use the keys below.</p>
     <ul class="key-legend-list">
-      <li><kbd>1</kbd>–<kbd>8</kbd> voice</li>
+      <li><kbd>1</kbd>–<kbd>8</kbd> voice; <kbd>F1</kbd>–<kbd>F5</kbd> touch pads</li>
+      <li><kbd>F4</kbd> + <kbd>F5</kbd> fill (while playing)</li>
       <li><kbd>S</kbd> single mode</li>
       <li><kbd>F</kbd> filter</li>
       <li><kbd>L</kbd> load sample</li>
@@ -143,6 +144,8 @@ app.innerHTML = `
         </div>
         <button type="button" class="pad" data-touch="1" style="left:${px(60)};top:${py(266)}" aria-label="Touch 1, Single mode and Exit" title="Touch 1"><span>T1</span><span class="io-label pad-hint pad-hint--r">Singlemode + Exit</span></button>
         <button type="button" class="pad" data-touch="2" style="left:${px(420)};top:${py(266)}" aria-label="Touch 2, Menu" title="Touch 2"><span>T2</span><span class="io-label pad-hint pad-hint--l">Menu</span></button>
+        <button type="button" class="pad pad--aux" data-touch="4" style="left:${px(180)};top:${py(266)}" aria-label="Touch 4, audition current voice"><span>T4</span><span class="io-label pad-hint pad-hint--r">Audition</span></button>
+        <button type="button" class="pad pad--aux" data-touch="5" style="left:${px(300)};top:${py(266)}" aria-label="Touch 5, FN modifier"><span>T5</span><span class="io-label pad-hint pad-hint--r">FN</span></button>
         ${encoders}
         <button type="button" class="pad pad--front" data-touch="3" style="left:${px(420)}" aria-label="Touch 3, hold to record into voice" title="Touch 3 (hold to record)"><span>T3</span><span class="io-label">Hold to record</span></button>
         ${io("l", "jack", 310, "6.35mm stereo TRS line-out")}
@@ -156,8 +159,6 @@ app.innerHTML = `
         ${io("front", "jack", 215, "6.35mm mic-input")}
         ${io("front", "jack", 295, "6.35mm stereo TRS line-in (left channel recorded)")}
         <nav class="mobile-shortcuts" hidden aria-label="Shortcuts">
-          <button type="button" data-touch="4" hidden>Voice 4</button>
-          <button type="button" data-touch="5" hidden>Voice 5</button>
           <button type="button" data-shortcut="single">Single</button>
           <button type="button" data-shortcut="wav">Sample</button>
           <button type="button" data-shortcut="filter">Filter</button>
@@ -179,7 +180,11 @@ app.innerHTML = `
     <button type="button" data-jump="filter">Sound controls</button>
     <button type="button" data-jump="wav">Sample browser</button>
     <button type="button" data-jump="bpm">BPM</button>
-    <div id="touchy-extra-pads" hidden><button type="button" data-touch="4">Touch 4 · voice 4</button><button type="button" data-touch="5">Touch 5 · voice 5</button></div>
+    <p>Touch pads: <kbd>F1</kbd>–<kbd>F5</kbd>. Hold F4 + F5 while playing to request a fill.</p>
+    <details class="fader-panel"><summary>Faders · voices 1–8</summary>
+      <p>Position overrides restored mute/solo state. Bottom is mute. Faders work in every screen.</p>
+      <div class="sim-faders">${Array.from({length:8},(_,i)=>`<label>CH${i+1}<input type="range" min="0" max="16" value="16" data-fader="${i+1}" aria-label="Voice ${i+1} fader"><output>16</output></label>`).join("")}</div>
+    </details>
     <button type="button" id="load-track">Load demo pattern</button>
     <div class="jump-sub" id="load-track-sub" hidden>
       <button type="button" data-track="1">Techno</button>
@@ -547,6 +552,12 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener("pointerup", () => { endPress(true); drag = null; });
 canvas.addEventListener("pointercancel", () => { endPress(false); drag = null; });
 
+document.querySelectorAll("[data-fader]").forEach(input => {
+  input.addEventListener("input", () => {
+    device.setFader(Number(input.dataset.fader), Number(input.value));
+    input.nextElementSibling.value = input.value;
+  });
+});
 document.querySelectorAll(".pad").forEach((pad) => {
   const id = Number(pad.dataset.touch);
   const pressPad = () => {
@@ -564,6 +575,7 @@ document.querySelectorAll(".pad").forEach((pad) => {
   });
   pad.addEventListener("pointerup", releasePad);
   pad.addEventListener("pointercancel", releasePad);
+  pad.addEventListener("lostpointercapture", releasePad);
   // Keyboard / SR activate via click
   pad.addEventListener("keydown", (e) => {
     if (e.key === " " || e.key === "Enter") {
@@ -785,6 +797,7 @@ function pressKey(e) {
   return -1;
 }
 function touchKey(e) {
+  if (/^F[1-5]$/.test(e.key)) return Number(e.key.slice(1));
   if (e.key === "ß" || e.key === "ẞ" || e.key === "-" || e.code === "Minus") return 1;
   if (e.key === "´" || e.code === "Equal") return 2;
   return 0;
@@ -1641,7 +1654,7 @@ const HELP = {
   draw: "Draw is the grid. Move with the encoders, Enter paints a note, Space plays. Hold T3 to record into the current voice when REC→TRIG is INST. SENS waits 3 seconds first. D clears this page. T1 enters single mode on the current row. T2 opens the main menu.",
   empty: "New empty pattern clears all notes and effects (ETC → RSET → FULL), then returns to Draw.",
   single: "Single mode is one voice, and each row is a pitch. Enter paints that voice. On the bottom row, hold Tab to generate a pattern. D clears only this voice. T1 returns to draw.",
-  filter: "Filter shapes the current voice. The four encoders are the controls on this page. T2 moves to the next filter page. T1 leaves. T3 resets this page.",
+  filter: "Samples have TIME and DLAY/VOL; VOL is -16 silence, 0 unity, +16 double gain. Filter shapes the current voice. The four encoders are the controls on this page. T2 moves to the next filter page. T1 leaves. T3 resets this page.",
   menu: "Main menu. Encoder 4 moves through the pages, Enter opens the one you are on. T2 or Esc leaves.",
   wav: "Load a sample onto this voice. Encoder 4 moves through folders and files, Enter opens a folder or loads the file. Q/W and R/T trim the sample, Tab previews it. T3 records from the mic.",
   rec: "Mic record. Encoder 2 starts the take, encoder 3 stops it or plays it back, encoder 4 leaves. The recording replaces this voice.",
@@ -1654,8 +1667,9 @@ const HELP = {
   song: "Song arranges patterns in order. Encoder 4 moves through the song, encoder 2 picks the pattern. Encoder 3 starts the song.",
   look: "SETT: VIEW, CTRL, DRAW, MUTE. Encoder 4 selects a page; encoder 3 changes its value. On MUTE, encoder 2 selects a voice. Esc leaves.",
   vol: "Output levels. Encoder 4 selects a page; encoder 3 changes its value. On PREV, encoder 2 selects ON / PRSS / SYNC and encoder 3 changes preview volume.",
-  recs: "Recording input. Encoder 4 picks a row, encoder 3 changes it.",
-  midi: "MIDI. Encoder 4 picks a row, encoder 3 changes it.",
+  recs: "REC: INPT, MIC, HPF, L-IN, TRIG, CLR. Encoder 4 picks a row, encoder 3 changes it.",
+  midi: "MIDI: CH, TRAN, SEND, RCVE, FOLD, SYNC, PQ-I, PQ-O, TRIG, OVWR. SYNC uses SYC> / SYC<; red -- means the selected value has no effect in this mode. Encoder 4 selects pages.",
+  pset: "PSET stores this synth voice’s filters. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Slots are separate for voices 11, 13 and 14.",
   touchy: "TOUCHY: pads 1–5 play voices 1–5 (keyboard 1–5). Knobs 1–4 control the last played voice: pitch, velocity, reverb (voices 1, 2 and 5), highpass. Channel volume stays full. Click to choose voices 1–4 samples. Hold knob 1 to fast-record into the last played voice; release to stop. Hold knob 3 for the last played voice’s filter, or knob 4 to switch TOUCHY OFF and open the main menu.",
   mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger. Esc leaves.",
   etc: "ETC: INFO, SD, BATT, ADV, RSET. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. Esc leaves.",
@@ -1690,25 +1704,16 @@ function markVoice() {
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
-  document.querySelector("#touchy-extra-pads").hidden = false;
-  document.querySelector('#touchy-extra-pads [data-touch="4"]').hidden = mode !== "touchy";
-  document.querySelectorAll(".mobile-shortcuts [data-touch]").forEach(pad => { pad.hidden = mode !== "touchy" && pad.dataset.touch !== "5"; });
   document.querySelectorAll(".mobile-shortcuts [data-shortcut]").forEach(btn => {
     btn.hidden = mode === "touchy" && btn.dataset.shortcut !== "menu";
   });
-  document.querySelectorAll("[data-touch]").forEach(pad => {
+  document.querySelectorAll(".pad[data-touch]").forEach(pad => {
     const id = Number(pad.dataset.touch), touchy = mode === "touchy";
-    const label = touchy ? `Voice ${id}` : ["", "Singlemode + Exit", "Menu", "Hold to record"][id];
-    if (id <= 3) {
-      pad.querySelector(".io-label").textContent = label;
-      pad.setAttribute("aria-label", `Touch ${id}, ${label}`);
-    }
-    if (id >= 4) {
-      pad.textContent = touchy ? `Touch ${id} · voice ${id}` : id === 5 ? "Touch 5 · FN" : "Touch 4";
-      pad.setAttribute("aria-label", id === 5 && !touchy ? "Touch 5, hold FN and turn encoder 1 to set sample direction" : `Touch ${id}, voice ${id}`);
-    }
+    const label = touchy ? `Voice ${id}` : ["", "Singlemode + Exit", "Menu", "Hold to record", "Audition", "FN"][id];
+    pad.querySelector(".io-label").textContent = label;
+    pad.setAttribute("aria-label", `Touch ${id}, ${label}`);
     pad.style.outline = touchy ? `1px solid rgb(${TOUCHY_COLORS[id - 1].join(",")})` : "";
-    pad.title = touchy ? `Touch ${id}: voice ${id}` : `Touch ${id}`;
+    pad.title = `Touch ${id} (F${id}): ${label}`;
   });
   if (mode !== helpMode) {
     helpMode = mode;
@@ -1735,6 +1740,8 @@ function markVoice() {
   const t1 = document.querySelector('.pad[data-touch="1"]');
   const t2 = document.querySelector('.pad[data-touch="2"]');
   const t3 = document.querySelector('.pad[data-touch="3"]');
+  const t4 = document.querySelector('.pad[data-touch="4"]');
+  const t5 = document.querySelector('.pad[data-touch="5"]');
   if (compact) {
     const wrapEl = chassis.closest(".chassis-wrap");
     const fit = (width) => {
@@ -1845,7 +1852,10 @@ function markVoice() {
     const t3Y = Math.min(totalH - padVis - 2, deckTop + plan.t3Yu * scale);
     t1.style.left = `${t1x}px`;
     t2.style.left = `${t2x}px`;
-    t3.style.left = `${(t1x + t2x) / 2}px`;
+    t4.style.left = `${t1x}px`;
+    t5.style.left = `${(t1x + t2x) / 2}px`;
+    t3.style.left = `${t2x}px`;
+    t4.style.top = t5.style.top = `${t3Y}px`;
     t1.style.top = `${tY}px`;
     t2.style.top = `${tY}px`;
     t3.style.top = `${t3Y}px`;
@@ -1911,6 +1921,9 @@ function markVoice() {
     t2.style.left = px(t2x);
     t3.style.left = px(t3x);
     t3.style.top = "";
+    t4.style.left = px(t1x + (t2x - t1x) / 3);
+    t5.style.left = px(t1x + (t2x - t1x) * 2 / 3);
+    t4.style.top = t5.style.top = pyNow(padY);
     document.querySelectorAll(".io--l, .io--r").forEach((el) => {
       const base = Number(el.dataset.y);
       el.style.top = pyNow(base + shift);
@@ -1937,6 +1950,8 @@ function markVoice() {
 
 device.start();
 function pauseIfInactive() {
+  device.releaseInputs();
+  document.querySelectorAll(".pad.on").forEach(p => p.classList.remove("on"));
   if (device.playing()) device.pause();
 }
 document.addEventListener("visibilitychange", () => {

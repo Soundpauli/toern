@@ -160,8 +160,8 @@
 
 
           <section class="hb-sub" id="sync">
-            <h2 data-hb-copy="midi.045">SYNC — SNC1 / SNC2 offsets</h2>
-            <p class="lede" data-hb-copy="midi.046">Millisecond latency makeup when two clocked devices flam.</p>
+            <h2 data-hb-copy="midi.045">SYNC — SYC&gt; / SYC&lt; offsets</h2>
+            <p class="lede" data-hb-copy="midi.046">Millisecond start offsets when two clocked devices flam. Positive values delay the selected path; negative values delay the opposite path. A red <strong>--</strong> means the selected value has no effect in the current clock/transport mode; its saved value is retained. Analog EXT bypasses these offsets.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="md_sync" width="640" height="320" role="img" aria-label="MIDI SYNC"></canvas>
@@ -169,15 +169,22 @@
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>SNC1 / SNC2</td><td>SNC1 = send path; SNC2 = receive path.</td></tr>
+                  <tr><th>Turn</th><td>SYC&gt; / SYC&lt;</td><td>SYC&gt; = send path; SYC&lt; = receive path.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Offset −127…+127&nbsp;ms</td><td>Nudge in ±2&nbsp;ms steps until downbeats click as one.</td></tr>
+                  <tr><th>Turn</th><td>Offset −127…+127&nbsp;ms</td><td>Each encoder step is 1&nbsp;ms. Tune at transport start; changing an offset does not shift a running sequence.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
-            <div class="hb-tip" data-hb-copy="midi.051"><strong>Tuning:</strong> two devices on the same downbeat; adjust SNC2 until the kicks land together. Apply the matching negative on the other device’s send path if available.</div>
+            <table class="hb-table"><thead><tr><th>Value (other setting at 0)</th><th>Sending Play</th><th>Receiving Play</th></tr></thead><tbody>
+              <tr><td>SYC&gt; +20</td><td>TOERN plays 20 ms later</td><td>No added delay</td></tr>
+              <tr><td>SYC&gt; −20</td><td>No added delay</td><td>TOERN plays 20 ms later</td></tr>
+              <tr><td>SYC&lt; +20</td><td>No added delay</td><td>TOERN plays 20 ms later</td></tr>
+              <tr><td>SYC&lt; −20</td><td>TOERN plays 20 ms later</td><td>No added delay</td></tr>
+              <tr><td>Both 0</td><td>No added delay</td><td>No added delay</td></tr>
+            </tbody></table>
+            <p>Contributions to the same path add together. MIDI Start is sent immediately; the delay holds back TOERN’s own first sequencer step. Local Play in MIDI EXT waits for the next page downbeat, then applies the receive delay. Stop and incoming MIDI notes are not delayed by SYNC. Orange analog EXT starts from incoming pulses and bypasses these offsets.</p>
           </section>
 
 

@@ -28,6 +28,13 @@
           <h2 class="handbook-page__title" data-hb-copy="advanced-sequencing.001">Advanced Sequencing</h2>
           <p class="handbook-page__summary" data-hb-copy="advanced-sequencing.002">Mutes, note-shift, copy &amp; paste, and random / auto-fill. Page-row layout and hint colours live in <a href="pages-more.html">Pages+More</a>; core draw modes in <a href="sequencing.html">Sequencing</a>.</p>
 
+          <section class="hb-sub" id="performance-fill">
+            <h2>Performance fills</h2>
+            <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="fill_requested" width="640" height="320" role="img" aria-label="FILL request confirmation in the voice color"></canvas></div>
+            <p>While playing, select a voice and press <strong>touch 4 + 5</strong> together (external panel: <strong>C + D</strong>). <strong>FILL</strong> flashes in that voice’s color for one second. The fill starts on the <em>next</em> page’s first beat, builds for two pages, and finishes with one velocity-127 hit on the following downbeat.</p>
+            <p>Release both inputs, select another voice, and repeat before the page ends to queue several voices together. They keep independent timing; re-requesting one voice restarts that voice next page. The normal mute, fader and V gain controls still apply, so full note velocity does not override a muted or silent voice. Requested fills leave grid notes unchanged; grid F/F conditions use the same buildup and final-hit timing.</p>
+          </section>
+
           <section class="hb-sub" id="overview">
             <h2 data-hb-copy="advanced-sequencing.003">Where these tools live</h2>
             <p class="lede" data-hb-copy="advanced-sequencing.004">These gestures need the cursor on the <strong>page row</strong> (row&nbsp;16, <code>y==16</code>) — usually in <a href="sequencing.html#single">single mode</a> — or a <strong>voice row</strong> for mutes. If the cursor is not on row&nbsp;16, page-row edits do not run. Hint colours on row&nbsp;1 tell you which encoder is armed — see <a href="pages-more.html#page-row">Pages+More</a> for the colour key.</p>

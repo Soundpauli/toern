@@ -1,3 +1,5 @@
+import { instrumentDefaults } from "./instruments.js";
+import { createFillScheduler, baseRow, syncDelays } from "./performance.js";
 import {
   COLS, COND_VALUE, DUMMY_PACKS, FILTER_CH, LONG_MS, PAGES, PAINT_ROWS, PROB, ROWS, SOUND_CH, STEPS, WAVS, emptyFilt, emptyNote, filterPagesFor, setLayout,
 } from "./const.js";
@@ -7,7 +9,7 @@ import {
   CIN_PPQN_TABLE, PPQN_RATE_LABELS, SIDE_VOICE_CHOICES,
   ETC_FIRE_INDEX, ETC_IMG_INDEX, ETC_RSET_INDEX, ETC_EYES_INDEX, ETC_CHLD_INDEX,
 } from "./screens.js";
-import { foldRow } from "./midiImport.js";
+import { foldRow } from "./pitch.js";
 import { listDir, packWavs, parsePattern, patternUrl, sampleWavs } from "./library.js";
 import { drawRandoms, drawRandomsMultiPage } from "./random.js";
 import { GENRES, generateGenre } from "./genres.js";
@@ -46,6 +48,7 @@ const SUB_VALUES = {
     { opts: ["0"], colors: [[0, 0, 120]], codes: ["X"] },
     { opts: ["OFF", "INST", "SENS", "-CON", "+CON"], colors: [[120, 0, 0], [0, 120, 0], [0, 120, 120], [20, 20, 0], [0, 0, 20]], codes: ["R", "G", "N", "Y", "X"] },
     { opts: ["OFF", "ON", "FIX", "ON1", "CLIC"], colors: [[120, 0, 0], [0, 120, 0], [120, 120, 0], [0, 120, 120], [120, 0, 120]], codes: ["R", "G", "Y", "N", "M"] },
+    { opts: ["OFF", "ON"], colors: [[120,0,0],[0,120,0]], codes: ["R","G"] },
   ],
   midi: [
     { opts: ["SEL", "MIDI", "KEYS"], colors: [[0, 120, 0], [0, 0, 120], [120, 0, 120]], codes: ["G", "X", "M"] },
@@ -92,21 +95,27 @@ export function createDevice(matrix, statusEl, rings) {
   const engine = createEngine();
   const note = Array.from({ length: STEPS + 1 }, () => Array.from({ length: ROWS + 1 }, emptyNote));
   const filt = Array.from({ length: 16 }, emptyFilt);
+  Object.assign(filt[11], instrumentDefaults(12));
   const chVol = Array(16).fill(16);
   const shownRing = [];
   const shownAngle = [0, 0, 0, 0];
   let shownStatus = "";
   const fired = [];
+  const fills = createFillScheduler();
+  const padDown = Array(6).fill(false);
+  let fillChordConsumed = false;
+  let pendingAudition = null;
   const wavOf = Array.from({ length: 16 }, (_, ch) => (ch >= 1 && ch <= 8 ? ch - 1 : 0));
   const seekOf = Array(16).fill(0);
   const endOf = Array(16).fill(100);
   const invOf = Array(16).fill(false);
   const mute = Array(16).fill(false);
   const song = Array(64).fill(0);
-  const subPick = { look: Array(12).fill(0), recs: Array(5).fill(0), midi: Array(10).fill(0), vol: Array(8).fill(0), etc: Array(12).fill(0) };
+  const subPick = { look: Array(12).fill(0), recs: Array(6).fill(0), midi: Array(10).fill(0), vol: Array(8).fill(0), etc: Array(12).fill(0) };
   // Firmware EEPROM defaults: TRIG=SENS, CLR=OFF, FLOW=ON, CTRL=VOL, EYES=1MIN
-  subPick.recs[3] = 1;
+  subPick.recs[3] = 2;
   subPick.recs[4] = 0;
+  subPick.recs[5] = 1;
   subPick.look[0] = 1;
   subPick.look[6] = 1;
   subPick.look[7] = 2;
@@ -116,6 +125,9 @@ export function createDevice(matrix, statusEl, rings) {
 
   const s = {
     GLOB: { x: 1, y: 2, edit: 1, page: 1, currentChannel: 1, singleMode: false },
+    fillOverlayCh: 0, fillOverlayUntil: 0,
+    faderPositions: Array(9).fill(null), faderAt: Array(9).fill(0),
+    presetSlot: 1, presetSlots: Array(16).fill(1),
     fnHeld: false, fnArrow: "", fnArrowAt: 0,
     touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(100), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
@@ -127,7 +139,7 @@ export function createDevice(matrix, statusEl, rings) {
     filterTouch: 0, filterTouchAt: 0, filterFlash: "", filterFlashAt: 0, filterPage: 0,
     drawBaseColorMode: true, monitor: 0, loopLength: 0, simpleNotes: false, clockInt: true,
     analogExtClock: false, analogPulseAt: 0,
-    cinHoldMs: 2, cinPpqnIndex: 2, cinFocus: 0,
+    cinHoldMs: 1, cinPpqnIndex: 2, cinFocus: 0, cinEnabled: true, cinPolarityPos: true, recHpf: true,
     syncEdit: 0, syncSendMs: 17, syncRcveMs: 17,
     ppqnWidthMs: 10, ppqnStopWithPlay: true, ppqnRateSel: 0, ppqnFocus: 0, ppqnPolarityPos: true,
     sideVoice: 0, sidePulseAt: 0, clkOutPulseAt: 0,
@@ -143,13 +155,14 @@ export function createDevice(matrix, statusEl, rings) {
     ledBrightness: 64, chNr: 1, chNrAt: 0, pageNr: 1, pageNrAt: 0, infoAt: 0, knobAngle: [0, 0, 0, 0],
     mainVol: 80, gain: 1, prevVol: 20, prevModeLabelUntil: 0, stereo: 0,
     micGain: 20, lineInLevel: 5,
-    fastRecMode: 2, recChannelClear: 1, recInput: 0,
+    fastRecMode: 2, recChannelClear: 0, recInput: 0,
     fastRecActive: false,
     sensCountActive: false,
     sensCountAt: 0,
     sensCountSec: 0,
     songPos: 1, songPattern: 1, bpm: 120, bootAt: 0,
     hasPageNotes, slotExists, subValue, legacySubValue,
+    presetExists: () => !!loadStore(`toern-web-presets-${s.GLOB.currentChannel}`)[s.presetSlot],
     deviceFocus: true,
     assistKeyGate: false,
     onAnnounce: null,
@@ -169,6 +182,7 @@ export function createDevice(matrix, statusEl, rings) {
   const hold = {};
   const touch = { l: false, m: false, t4: false, first: 0, chord: false };
 
+  function sendsMidiClock() { return s.clockInt && s.midiSend !== 1; }
   function stepSec() { return 60 / s.bpm / 4; }
   function channelOfRow(y) { return y - 1; }
   function localX(globalX) { return ((globalX - 1) % COLS) + 1; }
@@ -201,6 +215,7 @@ export function createDevice(matrix, statusEl, rings) {
       // Sample voices: DTNE ±1 semi (fine), OCTV whole semis ±24 (±2 oct).
       // wav.oct is in octaves for engine (semis/12); raw slider is 0..48 center 24.
       detune: ((f.detune ?? 16) / 32) * 2 - 1, oct: ((f.oct ?? 24) - 24) / 12,
+      stretch: f.stretch ?? 11,
       env: { att: f.att, dec: f.dec, sus: f.sus, rel: f.rel },
       wave: f.wave || 0, inst: f.inst || 0, cent: f.cent ?? 16, semi: f.semi || 0,
       lfoR: f.lfoR || 0, lfoD: f.lfoD || 0, span: f.span || 0, arp: f.arp || 0,
@@ -230,7 +245,7 @@ export function createDevice(matrix, statusEl, rings) {
     const ch = s.GLOB.currentChannel;
     const ctx = engine.ensure();
     if (ctx.state === "suspended") ctx.resume();
-    engine.setBus({ main: s.mainVol, preview: s.prevVol * 16 / 50, stereo: s.stereo });
+    engine.setBus({ main: s.mainVol, preview: s.prevVol * 16 / 50, stereo: s.stereo, bpm: s.bpm });
     const buffer = await engine.decodeUrl(item.url);
     engine.preview({ index: wavOf[ch] || 0, seek: seekOf[ch], end: endOf[ch], inv: invOf[ch], velocity: Math.round(s.prevVol * 127 / 50), buffer, env: wavOpts(ch).env });
   }
@@ -528,7 +543,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (cond === 4) return step % 4 === 0;
     if (cond === 8) return step % 8 === 0;
     if (cond === 16) return step % 16 === 0;
-    if (cond === 21) return (step % 16) >= 12;
+    if (cond === 21) return true;
     if (cond === 17) return true;
     if (cond === 18) return step % 2 === 0;
     if (cond === 19) return step % 4 === 0;
@@ -538,20 +553,22 @@ export function createDevice(matrix, statusEl, rings) {
   function channelHeard(ch) {
     return !s.mute[ch];
   }
+  let appliedBpm = 0;
   function applyMix() {
+    appliedBpm = s.bpm;
     engine.ensure();
-    engine.setBus({ main: s.mainVol, preview: s.prevVol * 16 / 50, stereo: s.stereo });
-    for (const ch of SOUND_CH) engine.apply(ch, filt[ch], chVol[ch], s.gain);
+    engine.setBus({ main: s.mainVol, preview: s.prevVol * 16 / 50, stereo: s.stereo, bpm: s.bpm });
+    for (const ch of SOUND_CH) engine.apply(ch, filt[ch], chVol[ch], s.gain, (s.faderPositions[ch] ?? 16) / 16);
   }
   function liveMix() {
-    for (const ch of SOUND_CH) engine.apply(ch, filt[ch], channelHeard(ch) ? chVol[ch] : 0, s.gain);
+    for (const ch of SOUND_CH) engine.apply(ch, filt[ch], channelHeard(ch) ? chVol[ch] : 0, s.gain, (s.faderPositions[ch] ?? 16) / 16);
   }
-  function applyFilt(ch) { if (SOUND_CH.has(ch)) engine.apply(ch, filt[ch], chVol[ch], s.gain); }
+  function applyFilt(ch) { if (SOUND_CH.has(ch)) engine.apply(ch, filt[ch], chVol[ch], s.gain, (s.faderPositions[ch] ?? 16) / 16); }
   function clearNotes() {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
   }
   function resetEffects() {
-    for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt());
+    for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(), ch === 11 ? instrumentDefaults(12) : {});
     chVol.fill(16);
     s.vel.vol = 16;
     applyMix();
@@ -580,7 +597,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function heard(ch) {
-    if (s.mute[ch]) return false;
+    if (s.mute[ch] || (s.childLock && ch >= 9 && ch <= 14)) return false;
     if (s.fullMute) return false;
     return true;
   }
@@ -691,6 +708,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.voiceMode) refreshVoiceLens();
     // Sample voices 1–8 are monophonic (one sampler per channel, like firmware
     // retrigger). If several notes share a step+voice, keep the highest row only.
+    const fillHits = fills.step(step, COLS);
     const samplePick = new Map();
     const otherHits = [];
     for (let y = 1; y <= ROWS; y++) {
@@ -703,6 +721,10 @@ export function createDevice(matrix, statusEl, rings) {
         ? condOkVoice(n.condition, s.voiceLoop[n.channel] || 1)
         : condOk(n.condition, step);
       if (!ok) continue;
+      if (n.condition === 21) {
+        if (fills.grid(n.channel, COLS, n, y)) fillHits.push({ ch: n.channel, row: y, velocity: n.velocity, midiPitch: n.midiPitch, sub: 0 });
+        continue;
+      }
       if (n.channel >= 1 && n.channel <= 8) {
         const prev = samplePick.get(n.channel);
         if (!prev || y > prev.y) samplePick.set(n.channel, { n, y });
@@ -718,6 +740,12 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.sideVoice && n.channel === s.sideVoice) {
         s.sidePulseAt = performance.now();
       }
+    }
+    // Drop hits follow the normal grid triggers so velocity 127 wins that step.
+    for (const h of fillHits) if (heard(h.ch)) {
+      engine.trigger(h.ch, h.velocity, when + h.sub * stepSec() / 4,
+                     { ...wavOpts(h.ch), midiPitch: h.midiPitch }, h.row);
+      if (s.sideVoice === h.ch) s.sidePulseAt = performance.now();
     }
   }
   function advanceOneStep(when) {
@@ -771,6 +799,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   /** Soft CLK-IN pulse (orange EXT). Advances sequencer for 4/ppqn steps-per-pulse. */
   function analogClockPulse(when = engine.now(), { catchFirst = false } = {}) {
+    if (!s.cinEnabled) return;
     s.analogPulseAt = performance.now();
     const ppqn = cinPpqn();
     if (catchFirst) {
@@ -797,12 +826,20 @@ export function createDevice(matrix, statusEl, rings) {
       advanceOneStep(when);
     }
   }
-  function togglePlay() {
+  let midiClockCount = 0, midiClockAt = 0, midiClockWindow = 0;
+  let waitingMidiBar = false;
+  function togglePlay(received = false) {
     if (s.touchyEnabled) return;
+    if (!received && !s.playing && !sendsMidiClock() && !s.analogExtClock) {
+      waitingMidiBar = !waitingMidiBar; noteActivity(); return;
+    }
+    waitingMidiBar = false;
     const ctx = engine.ensure();
     if (ctx.state === "suspended") ctx.resume();
     applyMix();
     s.playing = !s.playing;
+    fills.reset(); fired.length = 0; pendingAudition = null;
+    engine.releaseAll();
     noteActivity();
     if (!s.playing) {
       queueAutosave();
@@ -822,13 +859,15 @@ export function createDevice(matrix, statusEl, rings) {
       s.GLOB.page = 1;
     }
     const t = engine.now();
-    nextAt = t + stepSec();
+    const delayMs = received ? effectiveRcveDelayMs() : s.clockInt && s.midiSend !== 1 ? effectiveSendDelayMs() : 0;
+    const startAt = t + delayMs / 1000;
+    nextAt = startAt + stepSec();
     analogNextPulseAt = t + ((60 / Math.max(40, s.bpm)) / cinPpqn());
     analogPulsePhase = 0;
     ppqnNextPulseAt = t;
     ppqnPhase = 0;
-    if (s.clockInt) {
-      fire(s.beat, t);
+    if (s.clockInt || !s.analogExtClock) {
+      fire(s.beat, startAt);
     } else if (s.analogExtClock) {
       // Orange EXT: catch in-progress pulse immediately (firmware analogClockCatchIfHigh)
       analogClockPulse(t, { catchFirst: true });
@@ -875,7 +914,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (!FILTER_CH.has(ch)) return;
     const f = filt[ch];
     const pages = filterPagesFor(ch);
-    const spec = (pages[filterPages[ch]] || pages[0])[f.fast];
+    const spec = (pages[f.fastPage || 0] || pages[0])[f.fast];
     if (!spec) return;
     f[spec.key] = clamp(f[spec.key] + dir, 0, spec.max ?? 32);
     applyFilt(ch);
@@ -932,7 +971,7 @@ export function createDevice(matrix, statusEl, rings) {
       fireLevel: s.fireLevel, fireSize: s.fireSize, fireGravity: s.fireGravity, fireColor: s.fireColor,
       micGain: s.micGain, lineInLevel: s.lineInLevel,
       bpm: s.bpm, clockInt: s.clockInt, analogExtClock: s.analogExtClock,
-      cinHoldMs: s.cinHoldMs, cinPpqnIndex: s.cinPpqnIndex,
+      cinHoldMs: s.cinHoldMs, cinPpqnIndex: s.cinPpqnIndex, cinEnabled: s.cinEnabled, cinPolarityPos: s.cinPolarityPos,
       syncSendMs: s.syncSendMs, syncRcveMs: s.syncRcveMs,
       ppqnWidthMs: s.ppqnWidthMs, ppqnStopWithPlay: s.ppqnStopWithPlay, ppqnRateSel: s.ppqnRateSel,
       ppqnPolarityPos: s.ppqnPolarityPos, sideVoice: s.sideVoice,
@@ -999,6 +1038,8 @@ export function createDevice(matrix, statusEl, rings) {
     if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
     if (typeof data.clockInt === "boolean") s.clockInt = data.clockInt;
     if (typeof data.analogExtClock === "boolean") s.analogExtClock = data.analogExtClock;
+    if (typeof data.cinEnabled === "boolean") s.cinEnabled = data.cinEnabled;
+    if (typeof data.cinPolarityPos === "boolean") s.cinPolarityPos = data.cinPolarityPos;
     if (Number.isFinite(data.cinHoldMs)) s.cinHoldMs = clamp(data.cinHoldMs, 1, 32);
     if (Number.isFinite(data.cinPpqnIndex)) s.cinPpqnIndex = clamp(data.cinPpqnIndex, 0, CIN_PPQN_TABLE.length - 1);
     if (Number.isFinite(data.syncSendMs)) s.syncSendMs = clamp(data.syncSendMs, -127, 127);
@@ -1094,10 +1135,16 @@ export function createDevice(matrix, statusEl, rings) {
         ? [n.channel, n.velocity, n.probability, n.condition, n.midiPitch <= 127 ? n.midiPitch : 255]
         : 0);
     }
-    return out;
+    return { version: 2, notes: out, filt: filt.map(f => ({...f})), chVol: chVol.slice(), bpm: s.bpm };
   }
   function restore(data) {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
+    if (data && !Array.isArray(data)) {
+      for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(), data.filt?.[ch] || {});
+      if (Array.isArray(data.chVol)) for (const ch of SOUND_CH) chVol[ch] = clamp(data.chVol[ch] ?? 16, 0, 16);
+      if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
+      data = data.notes;
+    }
     if (!Array.isArray(data)) return;
     let i = 0;
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) {
@@ -1188,6 +1235,8 @@ export function createDevice(matrix, statusEl, rings) {
       applyMix();
     }
     if (mode === "recs") {
+      s.recHpf = !!subPick.recs[5];
+      if (s.recHp) s.recHp.type = s.recHpf ? "highpass" : "allpass";
       s.recInput = subPick.recs[0] || 0;
       s.fastRecMode = subPick.recs[3] || 0;
       if (s.imageMode) {
@@ -1235,7 +1284,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function exitSolo() {
     if (!s.solo) return;
-    if (s.soloSaved) s.soloSaved.forEach((v, i) => { s.mute[i] = v; });
+    if (s.soloSaved) s.soloSaved.forEach((v, i) => { s.mute[i] = faderMute(i, v); });
     s.solo = false;
     s.soloSaved = null;
     s.soloArrow = "";
@@ -1268,7 +1317,8 @@ export function createDevice(matrix, statusEl, rings) {
       refreshBrowse();
       s.mode = "wav";
       previewWav();
-    } else if (name === "BPM") s.mode = "bpm";
+    } else if (name === "SMP" && [11,13,14].includes(s.GLOB.currentChannel)) { s.mode = "pset"; s.presetSlot = s.presetSlots[s.GLOB.currentChannel]; }
+    else if (name === "BPM") s.mode = "bpm";
     else if (name === "VOL") { s.subIndex = 0; s.mode = "vol"; }
     else if (name === "SETT") { s.subIndex = 0; s.mode = "look"; }
     else if (name === "REC") { s.subIndex = 0; s.mode = "recs"; }
@@ -1311,6 +1361,10 @@ export function createDevice(matrix, statusEl, rings) {
     engine.click();
     s.knobAngle[enc] += dir * 15;
     if (hold[enc]) hold[enc].turned = true;
+    if (s.mode === "pset") {
+      if (enc === 3) s.presetSlots[s.GLOB.currentChannel] = s.presetSlot = clamp(s.presetSlot + dir, 1, 99);
+      return;
+    }
     if (s.mode === "velocity") {
       if (enc === 0) s.vel.v = clamp(s.vel.v + dir, 1, 16);
       else if (enc === 1) s.vel.p = clamp(s.vel.p + dir, 1, 5);
@@ -1324,6 +1378,7 @@ export function createDevice(matrix, statusEl, rings) {
       const spec = page[enc];
       if (!spec) return;
       filt[s.GLOB.currentChannel][spec.key] = clamp(filt[s.GLOB.currentChannel][spec.key] + dir, 0, spec.max ?? 32);
+      if (s.GLOB.currentChannel === 11 && spec.key === "inst") Object.assign(filt[11], instrumentDefaults(filt[11].inst));
       s.filterTouch = enc;
       s.filterTouchAt = performance.now();
       applyFilt(s.GLOB.currentChannel);
@@ -1450,7 +1505,9 @@ export function createDevice(matrix, statusEl, rings) {
     if (pageMode === "midi" && pageIndex === 8) {
       if (enc === 0) { s.cinHoldMs = clamp(s.cinHoldMs + dir, 1, 32); s.cinFocus = 1; saveEeprom(); return; }
       if (enc === 2) {
-        s.cinPpqnIndex = clamp(s.cinPpqnIndex + dir, 0, CIN_PPQN_TABLE.length - 1);
+        const selection = clamp((s.cinEnabled ? s.cinPpqnIndex + 1 : 0) + dir, 0, CIN_PPQN_TABLE.length);
+        s.cinEnabled = selection > 0;
+        if (selection) s.cinPpqnIndex = selection - 1;
         s.cinFocus = 0;
         saveEeprom();
         return;
@@ -1548,7 +1605,7 @@ export function createDevice(matrix, statusEl, rings) {
   function exitFullMute(enc) {
     s.fullMute = false;
     for (let ch = 0; ch < s.mute.length; ch++) {
-      if (enc === 0) s.mute[ch] = !!s.fullMuteSaved?.[ch];
+      if (enc === 0) s.mute[ch] = faderMute(ch, !!s.fullMuteSaved?.[ch]);
       else if (enc === 1) s.mute[ch] = ch !== 1 && ch !== 2;
       else if (enc === 2) s.mute[ch] = !(s.muteMask & (1 << ch));
       else s.mute[ch] = false;
@@ -1654,7 +1711,17 @@ export function createDevice(matrix, statusEl, rings) {
       }
       return;
     }
-    if (s.mode === "filter" && enc <= 3) { filt[s.GLOB.currentChannel].fast = enc; return; }
+    if (s.mode === "filter" && enc <= 3) { const f=filt[s.GLOB.currentChannel]; f.fast = enc; f.fastPage=filterPages[s.GLOB.currentChannel]; return; }
+    if (s.mode === "pset") {
+      const ch = s.GLOB.currentChannel, key = `toern-web-presets-${ch}`;
+      if (enc === 1) { saveSlot(key, s.presetSlot, {...filt[ch]}); s.okAt=performance.now(); }
+      if (enc === 0) {
+        const preset = loadStore(key)[s.presetSlot];
+        if (preset) { Object.assign(filt[ch], emptyFilt(), preset);applyFilt(ch);s.okAt=performance.now(); }
+      }
+      if (enc === 3) backToGrid();
+      return;
+    }
     if (s.mode === "new" && enc === 0) {
       writeGenre(s.genre);
       return;
@@ -1669,7 +1736,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.slot !== 0 && !slotExists("toern-web-patterns", s.slot)) { s.mode = "new"; return; }
       const url = patternUrl(s.slot);
       const stored = loadStore("toern-web-patterns")[String(s.slot)];
-      if (s.slot === 0 && Array.isArray(stored)) {
+      if (stored) {
         restore(stored);
         finishLoad();
       } else if (url) {
@@ -1745,10 +1812,13 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "mode" && s.subIndex === 7 && enc === 3) { s.mode = "song"; return; }
     if (slot.mode === "etc" && slot.index === ETC_FIRE_INDEX && enc === 2) { s.fireFocus = ((s.fireFocus | 0) + 1) % 3; return; }
     if (slot.mode === "etc" && slot.index === ETC_RSET_INDEX && enc === 1) { runReset(); return; }
-    if (s.mode === "midi" && s.subIndex === 6 && enc === 3) {
+    if (slot.mode === "midi" && slot.index === 6 && enc === 2) {
       s.ppqnPolarityPos = !s.ppqnPolarityPos;
       saveEeprom();
       return;
+    }
+    if (slot.mode === "midi" && slot.index === 8 && enc === 2) {
+      s.cinPolarityPos = !s.cinPolarityPos;saveEeprom();return;
     }
     if (s.mode === "bpm" && (enc === 2 || enc === 3) && !s.clockInt) {
       // Toggle MIDI EXT ↔ orange analog EXT
@@ -1772,7 +1842,8 @@ export function createDevice(matrix, statusEl, rings) {
     applyFilt(ch);
   }
   function resetVoiceFilters(ch) {
-    Object.assign(filt[ch], emptyFilt());
+    const inst = filt[ch].inst;
+    Object.assign(filt[ch], emptyFilt(), ch === 11 ? instrumentDefaults(inst) : {});
     applyFilt(ch);
   }
   function tapTempo() {
@@ -1808,7 +1879,12 @@ export function createDevice(matrix, statusEl, rings) {
       s.recLevel = peak;
       if (s.recOn) recChunks.push(new Float32Array(data));
     };
-    src.connect(recProc);
+    if (ctx.createBiquadFilter) {
+      s.recHp = ctx.createBiquadFilter();
+      s.recHp.type = s.recHpf ? "highpass" : "allpass";
+      s.recHp.frequency.value = 80;
+      src.connect(s.recHp); s.recHp.connect(recProc);
+    } else src.connect(recProc);
     recProc.connect(sink);
     sink.connect(ctx.destination);
     return recStream;
@@ -2012,6 +2088,63 @@ export function createDevice(matrix, statusEl, rings) {
       s.mode = "single";
     }
   }
+  function faderMute(ch, fallback) {
+    const position = s.faderPositions[ch];
+    return position == null ? fallback : position === 0;
+  }
+  function setFader(ch, position) {
+    if (ch < 1 || ch > 8 || !Number.isFinite(position)) return;
+    position = clamp(Math.round(position), 0, 16);
+    s.faderPositions[ch] = position;
+    s.faderAt[ch] = performance.now();
+    s.mute[ch] = position === 0;
+    engine.ensure(); applyFilt(ch); noteActivity(); announceState();
+  }
+  function playPadAudition(ch, row) {
+    if (!SOUND_CH.has(ch) || s.mode === "rec") return;
+    engine.ensure(); applyFilt(ch);
+    engine.trigger(ch, 100, engine.now(), wavOpts(ch), row);
+    if (s.mode === "single" && s.playing) placeLiveGridNote(s.beat, baseRow(ch), ch, 100, 255);
+  }
+  function handleTouch(id, down) {
+    if (id < 1 || id > 5) return;
+    down = !!down;
+    if (padDown[id] === down) return;
+    padDown[id] = down;
+    if (s.mode !== "touchy" && !down) releaseTouchyPad(id - 1);
+    if (s.mode === "touchy") { s.fnHeld = false; touchyTouch(id, down); return; }
+    if (!padDown[4] && !padDown[5]) fillChordConsumed = false;
+    const eligible = s.playing && s.mode !== "rec" && !s.fastRecActive;
+    if (eligible && padDown[4] && padDown[5] && !fillChordConsumed) {
+      fillChordConsumed = true; pendingAudition = null;
+      s.sensCountActive = false;
+      const ch = s.GLOB.currentChannel;
+      if (SOUND_CH.has(ch) && !(s.childLock && ch >= 9 && ch <= 14)) {
+        fills.request(ch);
+        s.fillOverlayCh = ch; s.fillOverlayUntil = performance.now() + 1000;
+      }
+    }
+    s.fnHeld = padDown[5] && !fillChordConsumed && s.mode !== "rec";
+    if (id === 4 || id === 5) {
+      touch.t4 = padDown[4] && !fillChordConsumed;
+      if (down) noteActivity();
+      if (id === 4 && down && !fillChordConsumed && s.mode !== "rec") {
+        const ch = s.GLOB.currentChannel;
+        const row = s.mode === "single" && !s.playing ? s.GLOB.y : baseRow(ch);
+        // Allow the second pointer/key to join before SINGLE writes a note.
+        if (s.playing) pendingAudition = { ch, row, at: performance.now() + 40 };
+        else playPadAudition(ch, row);
+      }
+      if (id === 4 && !down && pendingAudition) {
+        playPadAudition(pendingAudition.ch, pendingAudition.row); pendingAudition = null;
+      }
+      if (id === 5 && s.fnHeld) for (const h of Object.values(hold)) if (h && !h.fired) h.fn = true;
+      return;
+    }
+    if (id === 1) onTouchL(down);
+    else if (id === 2) onMeta(down);
+    else onTouch3(down);
+  }
   function onTouchL(down) {
     if (s.mode === "touchy") { touchyTouch(1, down); return; }
     touch.l = down;
@@ -2068,38 +2201,45 @@ export function createDevice(matrix, statusEl, rings) {
     const [status, data1, data2] = ev.data || [];
     if (status == null) return;
     const type = status & 0xf0;
+    if (status === 0xf8) {
+      if (sendsMidiClock() || s.analogExtClock) return;
+      const at = performance.now();
+      if (!midiClockAt) midiClockWindow = at;
+      midiClockAt = at;
+      midiClockCount++;
+      if (midiClockCount % 96 === 0) {
+        const elapsed = at - midiClockWindow;
+        if (elapsed > 0) s.bpm = clamp(240000 / elapsed, 40, 240);
+        midiClockWindow = at;
+      }
+      if (waitingMidiBar && midiClockCount % (COLS * 6) === 0) togglePlay(true);
+      return;
+    }
     if (type === 0x90 && data2 > 0) {
       if (!s.midiReceive) return;
-      const ch = s.GLOB.currentChannel || 1;
-      const folded = foldRow(data1, ch);
+      const ch = s.midiChMode === 1 ? (status & 15) + 1 : s.midiChMode === 2 ? clamp(((data1 - 60) % 12 + 12) % 12 + 1, 1, 8) : s.GLOB.currentChannel || 1;
+      if (!SOUND_CH.has(ch) || !heard(ch)) return;
+      const folded = foldRow(data1, ch, Math.floor(1 + filt[11].cent * 7 / 32));
       const row = folded.row;
       const step = s.playing ? s.beat : s.GLOB.x;
+      engine.ensure(); applyFilt(ch);
+      engine.trigger(ch, data2, engine.now(), {...wavOpts(ch), midiPitch: s.midiClamp ? 255 : data1}, row);
       if (s.mode === "single" || s.GLOB.singleMode) {
         placeLiveGridNote(step, row, ch, data2, s.midiClamp ? 255 : data1);
       }
       noteActivity();
     } else if (status === 0xfa || status === 0xfb) {
       // MIDI Start/Continue — honor transport GET/SEND loosely
-      if ((s.midiTransport === 1 || s.midiTransport === 0) && !s.playing && !s.clockInt && !s.analogExtClock) {
-        const delay = Math.max(0, effectiveRcveDelayMs());
-        setTimeout(() => { if (!s.playing) togglePlay(); }, delay);
+      if (s.midiTransport === 1 && !s.playing && (!s.analogExtClock || sendsMidiClock())) {
+        midiClockCount = 0;
+        togglePlay(true);
       }
     } else if (status === 0xfc) {
-      if (s.playing && !s.clockInt && !s.analogExtClock) togglePlay();
+      if (s.midiTransport === 1 && s.playing) togglePlay();
     }
   }
-  function effectiveSendDelayMs() {
-    const a = s.syncSendMs | 0;
-    const b = s.syncRcveMs | 0;
-    if (a >= 0) return a;
-    return Math.abs(b < 0 ? 0 : a); // negative send → delay other path; simplify to |a| on receive elsewhere
-  }
-  function effectiveRcveDelayMs() {
-    const a = s.syncSendMs | 0;
-    const b = s.syncRcveMs | 0;
-    if (b >= 0) return b;
-    return Math.abs(b);
-  }
+  function effectiveSendDelayMs() { return syncDelays(s.syncSendMs, s.syncRcveMs).send; }
+  function effectiveRcveDelayMs() { return syncDelays(s.syncSendMs, s.syncRcveMs).receive; }
   function bindWebMidi() {
     if (!navigator.requestMIDIAccess || midiAccess) return;
     navigator.requestMIDIAccess({ sysex: false }).then((access) => {
@@ -2124,6 +2264,8 @@ export function createDevice(matrix, statusEl, rings) {
 
   /** True when hardware-sim keys should capture Tab/Space/Enter/arrows. */
   function deviceKeysActive() {
+    const input = document.activeElement;
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(input?.tagName) || input?.isContentEditable) return false;
     // Global capture unless assistive mode gates keys to the focused device.
     if (!s.assistKeyGate) return true;
     const ae = document.activeElement;
@@ -2223,6 +2365,8 @@ export function createDevice(matrix, statusEl, rings) {
   }
 
   function keydown(e) {
+    const padKey = /^F[1-5]$/.test(e.key) ? Number(e.key.slice(1)) : 0;
+    if (padKey && deviceKeysActive()) { e.preventDefault(); if (!e.repeat) handleTouch(padKey, true); return; }
     const active = deviceKeysActive();
     const ue = e.code === "BracketLeft" || e.key === "ü" || e.key === "Ü" || e.key === "[";
     const turning = ["KeyQ", "KeyW", "KeyR", "KeyT", "KeyU", "KeyI", "KeyP", "BracketLeft", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.code) || ue;
@@ -2299,6 +2443,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.GLOB.x !== beforeX || s.GLOB.y !== beforeY) announceState();
   }
   function keyup(e) {
+    if (/^F[1-5]$/.test(e.key)) { e.preventDefault(); handleTouch(Number(e.key.slice(1)), false); return; }
     const fnEncoder=isTab(e)?0:isEncoder2Click(e)?1:e.key===" "?2:e.key==="Enter"?3:-1;
     if (fnEncoder>=0 && hold[fnEncoder]?.fn) {
       const h=hold[fnEncoder];hold[fnEncoder]=null;
@@ -2332,6 +2477,8 @@ export function createDevice(matrix, statusEl, rings) {
     else if (isTouch2Key(e)) onMeta(false);
   }
   function tick(now) {
+    if (s.playing && appliedBpm !== s.bpm) applyMix();
+    if (pendingAudition && now >= pendingAudition.at) { playPadAudition(pendingAudition.ch, pendingAudition.row); pendingAudition = null; }
     if (!s.bootAt) s.bootAt = now;
     if (s.mode === "touchy") {
       for (let i=0;i<4;i++) if (hold[i] && !hold[i].turned && !hold[i].fired && now - hold[i].at >= LONG_MS) {
@@ -2372,13 +2519,14 @@ export function createDevice(matrix, statusEl, rings) {
     if (ppqnOutEnabled() && (s.playing || !s.ppqnStopWithPlay) && s.clockInt) {
       const outPpqn = ppqnOutPpqn();
       const pulseSec = (60 / Math.max(40, s.bpm)) / outPpqn;
+      if (ppqnNextPulseAt < t - 1) ppqnNextPulseAt = t;
       while (ppqnNextPulseAt <= t + 0.05) {
         s.clkOutPulseAt = performance.now();
         ppqnPhase += 1;
         ppqnNextPulseAt += pulseSec;
       }
     }
-    if (s.playing && s.clockInt) {
+    if (s.playing && (s.clockInt || !s.analogExtClock)) {
       while (nextAt <= t + 0.05) {
         if (!advanceOneStep(Math.max(nextAt, t))) break;
         nextAt += stepSec();
@@ -2471,7 +2619,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function toggleSong() {
     if (s.playing) {
-      s.playing = false;
+      s.playing = false; fills.reset(); engine.releaseAll();
       queueAutosave();
       subPick.look[3] = 0;
       applySub("look", 3);
@@ -2485,6 +2633,7 @@ export function createDevice(matrix, statusEl, rings) {
     s.GLOB.edit = page;
     s.beat = (page - 1) * COLS + 1;
     applyMix();
+    fills.reset();
     s.playing = true;
     const t = engine.now();
     nextAt = t + stepSec();
@@ -2575,22 +2724,9 @@ export function createDevice(matrix, statusEl, rings) {
       }
       if (!turned) shortPress(enc);
     },
-    touch(id, down) {
-      if (s.mode !== "touchy" && !down && id >= 1 && id <= 5) releaseTouchyPad(id - 1);
-      if (s.mode === "touchy") { s.fnHeld = false; touchyTouch(id, down); return; }
-      if (id === 5) {
-        s.fnHeld = down;
-        if (down) {
-          noteActivity();
-          for (const h of Object.values(hold)) if (h && !h.fired) h.fn = true;
-        }
-        return;
-      }
-      if (id === 4) { touch.t4 = !!down; return; }
-      if (id === 1) onTouchL(down);
-      else if (id === 2) onMeta(down);
-      else onTouch3(down);
-    },
+    touch: handleTouch,
+    releaseInputs() { for (let id=1;id<=5;id++) handleTouch(id,false); for (const enc of Object.keys(hold)) delete hold[enc]; },
+    setFader,
     rotate(enc, dir) { turn(enc, dir); },
     hover, cellTaken, velocity: enterVelocity,
     voice() { return s.GLOB.currentChannel; },
@@ -2740,6 +2876,7 @@ export function createDevice(matrix, statusEl, rings) {
       }
       if (name === "filter") { enterFilter(); return; }
       if (name === "menu") { s.menuIndex = 0; s.mode = "menu"; return; }
+      if (name === "wav" && [11,13,14].includes(s.GLOB.currentChannel)) { s.mode="pset"; s.presetSlot=s.presetSlots[s.GLOB.currentChannel]; return; }
       if (name === "wav") {
         if (s.GLOB.currentChannel < 1 || s.GLOB.currentChannel > 8) return;
         refreshBrowse();

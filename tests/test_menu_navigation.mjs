@@ -13,7 +13,7 @@ const devicePath = fileURLToPath(new URL("../standalone-tools/web-standalone/src
 await build({ entryPoints: [devicePath], outfile: bundlePath, bundle: true, format: "esm", platform: "node", plugins: [{ name: "test-boundaries", setup(b) {
   b.onResolve({ filter: /virtual:sd/ }, () => ({ path: "sd", namespace: "stub" }));
   b.onResolve({ filter: /audio\/engine\.js/ }, () => ({ path: "engine", namespace: "stub" }));
-  b.onLoad({ filter: /.*/, namespace: "stub" }, ({ path }) => ({ contents: path === "sd" ? 'export default ["samples/test.wav"]'  : 'export function createEngine(){return new Proxy({}, {get:(_,key)=>key==="now"?()=>0:key==="ensure"?()=>globalThis.testAudioContext||({state:"running"}):key==="decodeUrl"?async()=>({getChannelData:()=>new Float32Array(32)}):key==="loadUrl"?async(...args)=>{globalThis.audioCalls.push([key,...args])}:(...args)=>globalThis.audioCalls.push([key,...args])})}' }));
+  b.onLoad({ filter: /.*/, namespace: "stub" }, ({ path }) => ({ contents: path === "sd" ? 'export default ["samples/test.wav"]'  : 'export function createEngine(){return new Proxy({}, {get:(_,key)=>key==="now"?()=>globalThis.audioTime||0:key==="ensure"?()=>globalThis.testAudioContext||({state:"running"}):key==="decodeUrl"?async()=>({getChannelData:()=>new Float32Array(32)}):key==="loadUrl"?async(...args)=>{globalThis.audioCalls.push([key,...args])}:(...args)=>globalThis.audioCalls.push([key,...args])})}' }));
 } }] });
 globalThis.audioCalls = [];
 let now = 1, frame;
@@ -51,8 +51,8 @@ function open(root) {
   d.press(3);
 }
 function page(i) {
-  while (d.subIndex() < i) d.rotate(3, 1);
-  while (d.subIndex() > i) d.rotate(3, -1);
+  for (let tries=0; d.subIndex() !== i && tries<20; tries++) d.rotate(3, d.subIndex()<i?1:-1);
+  assert.equal(d.subIndex(),i,`page ${i} is reachable in ${d.mode()}`);
 }
 // PREV always keeps its parent-coloured title; mode labels time out to volume.
 for(const prevMode of [0,1,2]) {
@@ -78,7 +78,7 @@ for (const color of [[55,10,0],[255,0,255],[20,20,0],[0,0,20],[0,255,0],[120,0,0
   assert.deepEqual(custom.at(-1),[value,3]);
   assert.deepEqual(rings.at(-1),[3,value,true]);
 }
-open(4); page(6); textDraws.length=0; frame(++now);
+open(9); page(3); d.press(3); page(9); textDraws.length=0; frame(++now);
 assert(textDraws.some(c=>c[0]==="0"&&c[2]===3&&c[3][0]===120));
 open(4); page(3);
 d.rotate(1,1); now+=1; textDraws.length=0; frame(now);
@@ -358,5 +358,41 @@ for(const time of [0,1000,2000,3000,4000,5000,6000]) {
 }
 assert.equal(32-20+20,32);
 setLayout(32);
+// Five-pad performance, fader priority, V gain, PSET and pause use real device controls.
+stored.clear();audioCalls.length=0;globalThis.audioTime=0;
+const perf=createDevice(matrix,{},[]);
+perf.start();frame(1);now=6001;frame(now);perf.jump("empty");perf.setDevice(1);
+perf.selectVoice(1);perf.touch(4,true);perf.touch(4,false);
+assert(audioCalls.some(c=>c[0]==="trigger"&&c[1]===1&&c[5]===2),"T4 auditions base pitch");
+perf.togglePlay();
+function requestFill(ch){perf.selectVoice(ch);perf.touch(5,true);perf.touch(4,true);perf.touch(4,false);perf.touch(5,false);}
+perf.jump("single");
+const beforeFillGrid=JSON.stringify(perf.exportPatternCells());
+perf.touch(4,true);perf.touch(5,true);perf.touch(4,false);perf.touch(5,false);
+assert.equal(JSON.stringify(perf.exportPatternCells()),beforeFillGrid,"T4-first chord must not write a SINGLE audition note");
+perf.jump("draw");requestFill(1);requestFill(2);
+textDraws.length=0;frame(now);assert(textDraws.some(c=>c[0]==="FILL"));
+audioCalls.length=0;globalThis.audioTime=2.017;now+=2000;frame(now);
+assert.deepEqual(audioCalls.filter(c=>c[0]==="trigger").map(c=>c[1]),[1,2]);
+for(let step=1;step<=32;step++){globalThis.audioTime=2.017+step*.125;now+=125;frame(now);}
+const drops=audioCalls.filter(c=>c[0]==="trigger"&&c[2]===127);
+assert.deepEqual(drops.map(c=>c[1]),[1,2]);
+assert(drops.every(c=>Math.abs(c[3]-6.017)<1e-8));
+perf.pause();assert(audioCalls.some(c=>c[0]==="releaseAll"));
+perf.jump("draw");perf.selectVoice(1);perf.toggleMute(2);perf.soloHold(1);
+perf.setFader(1,0);perf.setFader(2,16);perf.soloRelease();
+assert(perf.muted(1));assert(!perf.muted(2));
+perf.jump("menu");perf.setFader(3,6);perf.setFader(4,9);
+assert(!perf.muted(3));assert(!perf.muted(4));
+perf.selectVoice(3);perf.jump("filter");
+for(let i=0;i<3;i++){perf.touch(2,true);perf.touch(2,false);}
+perf.rotate(1,1);
+assert(audioCalls.some(c=>c[0]==="apply"&&c[1]===3&&c[2].voiceGain===17));
+perf.selectVoice(11);perf.jump("menu");perf.rotate(3,1);perf.rotate(3,1);perf.press(3);
+assert.equal(perf.mode(),"pset");perf.press(1);
+assert(JSON.parse(stored.get("toern-web-presets-11"))[1]);
+perf.press(3);perf.jump("filter");perf.rotate(0,-1);perf.jump("menu");perf.rotate(3,1);perf.rotate(3,1);perf.press(3);perf.press(0);
+assert.equal(perf.mode(),"pset");
+console.log("PASS: five-pad audition/fill, queued voices and final drop through transport, menu faders, solo priority, V gain, synth presets and pause release.");
 console.log("PASS: SETT, MODE \u2192 SONG, ETC \u2192 ADV, moved controls, IMG lock, merged PREV, TOUCHY pads/pitch/velocity/effects/Fastrec/browser/filter/exit, and legacy settings reload.");
 await rm(testDir, { recursive: true, force: true });

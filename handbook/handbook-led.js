@@ -931,6 +931,9 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     filter_p1_sample(m) { drawFilterPageScene(m, 1, FILTER_PAGE_SAMPLE_1); },
     filter_p2(m) { drawFilterPageScene(m, 2); },
     filter_p3(m) { drawFilterPageScene(m, 3); },
+    filter_sample_dv(m) { drawFilterPageScene(m, 3, {letters:["D","V","",""],vals:[8,16,0,0],names:["DLAY","VOL","",""]}); },
+    fill_requested(m) { m.clear(); drawText(m,"FILL",Math.max(1,Math.floor((m.w-14)/2)),6,255,69,0); },
+    md_sync_inactive(m) { midiSubFrame(m,5,"SYC<","Y","W",""); drawText(m,"--",2,3,120,0,0); },
     filter_p0_named(m) { drawFilterPageEditScene(m, 0, 1); /* LCUT */ },
     filter_p1_named(m) { drawFilterPageEditScene(m, 1, 1); /* RES */ },
     filter_p1_sample_named(m) { drawFilterPageEditScene(m, 1, 3, FILTER_PAGE_SAMPLE_1); /* TIME */ },
@@ -1039,8 +1042,8 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawText(m, "ON", 2, 3, 0, 120, 0);
     },
     md_sync(m) {
-      midiSubFrame(m, 5, "SNC1", "Y", "W", "");
-      drawText(m, "-12", 2, 3, 0, 255, 0);
+      midiSubFrame(m, 5, "SYC>", "Y", "W", "");
+      drawText(m, "20", 2, 3, 0, 255, 0);
     },
     md_ppqn(m) {
       midiSubFrame(m, 7, "PQ-O", "W", "G", "G");
