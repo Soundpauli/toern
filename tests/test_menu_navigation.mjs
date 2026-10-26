@@ -628,14 +628,16 @@ const incoming=structuredClone(live);
 incoming.filt[1].reverb=31;incoming.chVol[1]=5;incoming.bpm=147;
 incoming.notes[0]=[14,127,100,1,57];
 stored.set('toern-web-patterns',JSON.stringify({1:live,2:incoming}));
-pattOpen(2);pattDevice.press(0);
+pattOpen(2);pattDevice.rotate(2,-1);pattDevice.press(0);
 let saved=pattSave(3);
-assert.deepEqual(saved.filt,live.filt,'OFF preserves editable sound settings');
-assert.deepEqual(saved.chVol,live.chVol,'OFF preserves voice volumes');
+assert.deepEqual(saved.filt,live.filt,'X preserves editable sound settings');
+assert.deepEqual(saved.chVol,live.chVol,'X preserves voice volumes');
 assert.deepEqual(saved.notes[0],incoming.notes[0]);assert.equal(saved.bpm,147);
-pattOpen(2);pattDevice.rotate(2,1);pattDevice.press(0);
+// Selecting without effects must not carry into the next browser visit.
+pattOpen(2);pattDevice.rotate(2,-1);
+pattDevice.jump('menu');pattOpen(2);pattDevice.press(0);
 saved=pattSave(4);
-assert.deepEqual(saved.filt,incoming.filt,'clockwise enables stored sound settings');
+assert.deepEqual(saved.filt,incoming.filt,'reopening restores saved-effects default');
 assert.deepEqual(saved.chVol,incoming.chVol);
 pattOpen(5);pattDevice.rotate(2,-1);pattDevice.press(1);
 saved=JSON.parse(stored.get('toern-web-patterns'))[5];
@@ -649,7 +651,7 @@ for(const width of [16,32])for(const loadSoundSettings of [false,true]) {
  const x=width===16?9:19;
  assert.deepEqual(red,loadSoundSettings?[]:[[x,3],[x+2,3],[x+1,4],[x,5],[x+2,5]]);
 }
-console.log('PASS: default notes load preserves sounds; E3 enables settings, saving is unconditional, and the red X has five pixels starting at y=3 on both layouts.');
+console.log('PASS: default load restores saved effects; X preserves current sounds, reopening resets to saved effects, saving is unconditional, and the red X has five pixels starting at y=3 on both layouts.');
 // Long encoder 4 press in FILTER must actually present the reset overlay.
 pattDevice.jump('filter');
 const oldLight=matrix.light,resetPixels=new Map();

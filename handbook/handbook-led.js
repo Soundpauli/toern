@@ -603,12 +603,12 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     m.indL(4, "N");
   }
 
-  function drawLoadSaveLike(m, fileNum, txtExists) {
+  function drawLoadSaveLike(m, fileNum, txtExists, loadSoundSettings = true) {
     m.clear();
     m.indM(1, txtExists ? "G" : "E");
     m.indM(2, txtExists ? "D" : "R");
     m.indL(4, "X");
-    if (txtExists) {
+    if (txtExists && !loadSoundSettings) {
       const [x1, x2, x3] = getIndX(3);
       for (const [x,y] of [[x1,3],[x3,3],[x2,4],[x1,5],[x3,5]]) m.set(x,y,255,0,0);
     }

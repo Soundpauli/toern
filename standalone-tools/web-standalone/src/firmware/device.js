@@ -132,7 +132,7 @@ export function createDevice(matrix, statusEl, rings) {
     fnHeld: false, fnArrow: "", fnArrowAt: 0,
     touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(127), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
-    menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: false,
+    menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: true,
     genre: 0, genreLength: 8,
     seekOf, endOf, invOf, browse: 0, browseDir: "samples", browseItems: listDir("samples", { parent: false }),
     wavFile: false, peaks: null, shownWav: "", sampleUrl: Array(16).fill(null),
@@ -1342,7 +1342,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function openMenuPage() {
     const name = MENU_PAGES[s.menuIndex].name;
-    if (name === "PATT") s.mode = "dat";
+    if (name === "PATT") { s.loadSoundSettings = true; s.mode = "dat"; }
     else if (name === "KIT") s.mode = "kit";
     else if (name === "SMP" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
       refreshBrowse();
@@ -1777,7 +1777,7 @@ export function createDevice(matrix, statusEl, rings) {
       writeGenre(s.genre);
       return;
     }
-    if (s.mode === "new" && enc === 3) { s.slot = -1; s.mode = "dat"; return; }
+    if (s.mode === "new" && enc === 3) { s.slot = -1; s.loadSoundSettings = true; s.mode = "dat"; return; }
     if (s.mode === "pat" && enc === 3) {
       writeGenre(s.subIndex + 1);
       return;

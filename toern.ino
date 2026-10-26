@@ -538,7 +538,7 @@ static bool bootFullResetRequested = false;  // Touch1 held 3s at power-on → F
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
-bool SMP_LOAD_SETTINGS = false;  // Manual pattern loads keep current sound settings by default.
+bool SMP_LOAD_SETTINGS = true;  // Pattern browser defaults to saved sound settings.
 uint8_t lineOutLevelSetting = 30;
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
@@ -1062,7 +1062,7 @@ Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0,
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // FILE UI encoder 3: 0=NEW, 1=A (autosaved.txt), 2..1000 = 1.txt..999.txt
-Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 1000 }, { 1, 1, 0, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 1000 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // PSET: filter-page presets for ch11/13/14. Enc4=slot 1..99, Enc1=load, Enc2=save (PATT-like).
 Mode loadSavePreset = { "LOADSAVE_PRESET", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
@@ -2502,18 +2502,10 @@ FLASHMEM void switchMode(Mode *newMode) {
       Encoder[3].writeMax((int32_t)1000);
       Encoder[3].writeCounter((int32_t)fileUi);
 
-      // Settings toggle only when a real pattern/autosave file exists
-      char OUTPUTf[50];
-      if (SMP.file == 0) {
-        sprintf(OUTPUTf, "autosaved.txt");
-      } else {
-        sprintf(OUTPUTf, "%u.txt", SMP.file);
-      }
-      if (SD.exists(OUTPUTf)) {
-        currentMode->pos[2] = SMP_LOAD_SETTINGS ? 1 : 0;
-      } else {
-        currentMode->pos[2] = 0;
-      }
+      // Every browser entry starts with saved sound settings, regardless of
+      // the selection made during the previous visit.
+      SMP_LOAD_SETTINGS = true;
+      currentMode->pos[2] = 1;
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
     }
 
