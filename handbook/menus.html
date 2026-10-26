@@ -737,15 +737,16 @@
 </ul></li>
 <li id="rset">
                           <a href="troubleshooting.html#reset"><span class="node">RSET</span></a>
-                          <span class="desc" data-hb-copy="menus.097">Six rungs of increasingly spicy recovery. Pick with encoder&nbsp;3, confirm with encoder&nbsp;2 — then wait for the green checkmark.</span>
+                          <span class="desc" data-hb-copy="menus.097">Seven rungs of increasingly spicy recovery. Pick with encoder&nbsp;3, confirm with encoder&nbsp;2. Most finish with a green checkmark. RAM shows RAM / OK and restarts.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>SD</strong> — rescan the whole card into <code>samples/toern_wavs.txt</code> (mute-mode <code>?&gt;</code> random + sample browser cache)</li>
                               <li><strong>EFX</strong> — factory-reset every tone control (patterns &amp; sample assignments survive)</li>
-                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">ETC → ADV → LEDS</a>; only PATT-saved work comes back)</li>
+                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">ETC → ADV → LEDS</a>; only PATT-saved work comes back). This does not zero the EEPROM.</li>
                               <li><strong>PATT</strong> — wipe saved patterns <code>1–999.txt</code> (keeps autosave)</li>
                               <li><strong>KIT</strong> — delete kit folders except KIT&nbsp;1</li>
                               <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
+                              <li><strong>RAM</strong> — zero every EEPROM byte, delete <code>settings.txt</code>, show RAM / OK, then restart. Next boot is a first run: factory settings, one panel, kit&nbsp;1. Saved patterns stay; the autosave still loads.</li>
                             </ul>
                             <span class="how" data-hb-copy="menus.098">PATT and KIT are the “I meant it” buttons.</span>
                           </span>

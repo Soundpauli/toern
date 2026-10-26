@@ -542,7 +542,7 @@ static bool spkrEnabled = true;  // SPKR toggle state (ON by default)
 static bool adcHpfEnabled = true; // REC>HPF: library high-pass on capture (ON by default)
 static bool usbSmpPreview = false; // VOL>USBP: SMP voice0 also on USB (OFF by default)
 static bool childLockEnabled = false;  // Child lock: requires touch2->touch1 sequence to enter menu
-static bool bootFullResetRequested = false;  // Touch1 held 10s at power-on (3s CLR + 7s more) → FULL reset late in setup()
+static bool bootFullResetRequested = false;  // Touch1 held 3s at power-on → FULL reset late in setup()
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
@@ -707,6 +707,18 @@ bool readTouch1Pressed() {
 
 bool readTouch2Pressed() {
   return readDebouncedTouch(1);
+}
+
+// A new press is reported only after TOUCH_PRESS_MS of agreement, so one
+// read at boot is always false even when the pad is already held.
+static bool bootPadHeld(bool (*readPressed)()) {
+  const uint32_t start = millis();
+  while ((uint32_t)(millis() - start) < 80) {
+    if (readPressed()) return true;
+    delay(2);
+    yield();
+  }
+  return readPressed();
 }
 
 bool readRecTouchHeld() {
@@ -4466,71 +4478,86 @@ FLASHMEM void setup() {
   // Load LED mode (count + rotation) before any startup visuals.
   loadLedModeEarlyFromEEPROM();
   
-  // Touch1 held at power-on (two stages):
-  //   hold 3s  → wipe entire EEPROM to 0 (CLR RAM), then continue boot
-  //   hold +7s → also arm FULL reset (ETC>RSET>FULL), applied late in setup()
-  // Release before 3s cancels; release after CLR but before FULL keeps EEPROM wipe only.
-  if (readTouch1Pressed()) {
+  pinMode(SWITCH_1, INPUT_PULLDOWN);
+  pinMode(SWITCH_2, INPUT_PULLDOWN);
+  pinMode(SWITCH_3, INPUT_PULLDOWN);
+  pinMode(SWITCH_5, INPUT_PULLDOWN);
+  pinMode(SWITCH_4, INPUT_PULLDOWN);
+
+  // Touch1 held at power-on:
+  //   release before 3s → normal boot
+  //   3s → arm ETC>RSET>FULL (startNew + sample scan later), show FULL/OK
+  //   keep holding to 10s → wipe EEPROM, show RAM/OK
+  //   release during the RAM countdown → skip the wipe and continue boot
+  if (bootPadHeld(readTouch1Pressed)) {
     extern void FastLEDclear();
     extern void drawText(const char *text, int startX, int startY, CRGB color);
     extern void FastLEDshow();
 
-    const unsigned long CLR_MS = 3000UL;
-    const unsigned long FULL_MS = 10000UL;  // 3s CLR + another 7s
+    const unsigned long FULL_MS = 3000UL;
+    const unsigned long RAM_MS = 10000UL;
     const unsigned long startMs = millis();
-    bool eepromCleared = false;
+    bool fullArmed = false;
     int lastSecShown = -1;
-    int lastStage = -1;  // 0=CLR countdown, 1=FULL countdown
+    int lastStage = -1;  // 0=FULL countdown, 1=RAM countdown
 
     while (readTouch1Pressed()) {
       unsigned long held = millis() - startMs;
 
-      if (!eepromCleared && held >= CLR_MS) {
-        eepromCleared = true;
-        FastLEDclear();
-        drawText("CLR", 3, 3, CRGB(255, 255, 0));
-        drawText("RAM", 3, 10, CRGB(255, 255, 0));
-        FastLEDshow();
-        for (unsigned int i = 0; i < EEPROM.length(); i++) {
-          EEPROM.write(i, 0);
-        }
-        lastSecShown = -1;  // force FULL countdown redraw
-        delay(400);
-        continue;
-      }
-
-      if (eepromCleared && held >= FULL_MS) {
+      if (!fullArmed && held >= FULL_MS) {
+        fullArmed = true;
         bootFullResetRequested = true;
         FastLEDclear();
         drawText("FULL", 2, 3, CRGB(0, 255, 0));
         drawText("OK", 5, 10, CRGB(0, 255, 0));
         FastLEDshow();
+        const unsigned long pauseUntil = millis() + 700;
+        while ((long)(pauseUntil - millis()) > 0) {
+          if (!readTouch1Pressed()) break;
+          delay(20);
+          yield();
+        }
+        lastSecShown = -1;
+        continue;
+      }
+
+      if (fullArmed && held >= RAM_MS) {
+        FastLEDclear();
+        drawText("RAM", 3, 3, CRGB(255, 255, 0));
+        FastLEDshow();
+        for (unsigned int i = 0; i < EEPROM.length(); i++) {
+          EEPROM.write(i, 0);
+        }
+        FastLEDclear();
+        drawText("RAM", 3, 3, CRGB(255, 255, 0));
+        drawText("OK", 5, 10, CRGB(255, 255, 0));
+        FastLEDshow();
         delay(1000);
         break;
       }
 
-      if (!eepromCleared) {
-        int secLeft = (int)((CLR_MS - held + 999UL) / 1000UL);
+      if (!fullArmed) {
+        int secLeft = (int)((FULL_MS - held + 999UL) / 1000UL);
         if (secLeft < 1) secLeft = 1;
         if (lastStage != 0 || secLeft != lastSecShown) {
           lastStage = 0;
           lastSecShown = secLeft;
           FastLEDclear();
-          drawText("CLR", 3, 3, CRGB(255, 255, 0));
-          char buf[4];
+          drawText("FULL", 2, 3, CRGB(255, 255, 0));
+          char buf[8];
           snprintf(buf, sizeof(buf), "%d", secLeft);
           drawText(buf, 6, 10, CRGB(255, 255, 0));
           FastLEDshow();
         }
       } else {
-        int secLeft = (int)((FULL_MS - held + 999UL) / 1000UL);
+        int secLeft = (int)((RAM_MS - held + 999UL) / 1000UL);
         if (secLeft < 1) secLeft = 1;
         if (lastStage != 1 || secLeft != lastSecShown) {
           lastStage = 1;
           lastSecShown = secLeft;
           FastLEDclear();
-          drawText("FULL", 2, 3, CRGB(255, 255, 0));
-          char buf[4];
+          drawText("RAM", 3, 3, CRGB(255, 255, 0));
+          char buf[8];
           snprintf(buf, sizeof(buf), "%d", secLeft);
           drawText(buf, 6, 10, CRGB(255, 255, 0));
           FastLEDshow();
@@ -4540,7 +4567,7 @@ FLASHMEM void setup() {
       yield();
     }
   }
-  
+
   EEPROM.get(0, samplePackID);
   if (samplePackID == 0 || samplePackID > 999) {
     samplePackID = 1;  // Default to pack 1 if invalid or empty
@@ -4620,36 +4647,6 @@ FLASHMEM void setup() {
     recMode = 1;  // default: MIC
   }
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
-
-  // Check if touch2 (menu button) is pressed during startup for INIT mode
-  if (readTouch2Pressed()) {
-    // INIT MODE: Show hourglass, version, write reset flag file, and enter endless loop
-    FastLEDclear();
-    showIcons(ICON_HOURGLASS, CRGB(100, 100, 0));  // Yellow hourglass
-    drawText(VERSION, 3, 1, CRGB(0, 100, 100));    // Cyan version at (1,1)
-    FastLEDshow();
-
-    // Ensure SD is mounted before writing reset flag
-    while (!SD.begin(INT_SD)) {
-      FastLEDclear();
-      drawText("SD?", 3, 8, CRGB(100, 0, 0));
-      FastLEDshow();
-      delay(1000);
-      yield();
-      noteUserActivity();  // keep screensaver from covering SD? while waiting
-    }
-
-    File resetFile = SD.open("reset.dat", FILE_WRITE);
-    if (resetFile) {
-      resetFile.println("RESET");
-      resetFile.close();
-    }
-
-    while (true) {
-      delay(500);
-      yield();
-    }
-  }
 
   runAnimation();
 
@@ -4752,24 +4749,18 @@ FLASHMEM void setup() {
   }
   // Note probabilities and conditions initialized (debug removed)
 
-  // Factory / FULL reset: reset.dat (touch2 INIT reboot) or touch1 held >10s at power-on
-  if (SD.exists("reset.dat") || bootFullResetRequested) {
-    if (SD.exists("reset.dat")) {
-      SD.remove("reset.dat");
-    }
+  // Touch1 held 3s at power-on: same work as ETC>RSET>FULL.
+  if (bootFullResetRequested) {
     startNew();
-    if (bootFullResetRequested) {
-      // Match ETC>RSET>FULL: rescan sample browser, then the green check.
-      FastLEDclear();
-      drawText("SCAN", 2, 3, CRGB(0, 255, 0));
-      FastLEDshow();
-      extern bool scanAndWriteManifest();
-      extern void sampleBrowserInvalidate();
-      scanAndWriteManifest();
-      sampleBrowserInvalidate();
-      showSaveSuccessAnimation(false);
-      bootFullResetRequested = false;
-    }
+    FastLEDclear();
+    drawText("SCAN", 2, 3, CRGB(0, 255, 0));
+    FastLEDshow();
+    extern bool scanAndWriteManifest();
+    extern void sampleBrowserInvalidate();
+    scanAndWriteManifest();
+    sampleBrowserInvalidate();
+    showSaveSuccessAnimation(false);
+    bootFullResetRequested = false;
   }
 
   updateSynthVoice(11);

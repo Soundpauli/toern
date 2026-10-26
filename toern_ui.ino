@@ -1009,7 +1009,7 @@ void drawStatus() {
     CRGB yellowColor = getIndicatorColor('Y'); // Yellow
     
     setEncoderRGBIfChanged(0, redColor.r << 16 | redColor.g << 8 | redColor.b);
-    setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
+    if (!fnHeld) setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
     setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
     setEncoderRGBIfChanged(3, yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
   }
@@ -1028,12 +1028,25 @@ void drawStatus() {
     CRGB yellowColor = getIndicatorColor('Y'); // Yellow
     
     setEncoderRGBIfChanged(0, redColor.r << 16 | redColor.g << 8 | redColor.b);
-    setEncoderRGBIfChanged(1, whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
+    if (!fnHeld) setEncoderRGBIfChanged(1, whiteColor.r << 16 | whiteColor.g << 8 | whiteColor.b);
     setEncoderRGBIfChanged(2, 0x000000); // Black (no indicator)
     setEncoderRGBIfChanged(3, yellowColor.r << 16 | yellowColor.g << 8 | yellowColor.b);
-  } else if (GLOB.singleMode && GLOB.y != 16) {
+  } else if (GLOB.singleMode && GLOB.y != 16 && !fnHeld) {
     // Reset encoder[1] to black when not at y=16 in single mode (only write when changed)
     setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
+  }
+
+  // FN: encoder 2 is the long-press pattern action. Show it only while FN is held.
+  static bool fnEnc2Lit = false;
+  if ((currentMode == &draw || currentMode == &singleMode) && fnHeld) {
+    drawIndicator('M', 'M', 2, false, false);
+    CRGB pink = getIndicatorColor('M');
+    setEncoderRGBIfChanged(1, (uint32_t)pink.r << 16 | (uint32_t)pink.g << 8 | pink.b);
+    fnEnc2Lit = true;
+  } else if (fnEnc2Lit) {
+    fnEnc2Lit = false;
+    const bool pageRow = (currentMode == &draw || GLOB.singleMode) && GLOB.y == 16;
+    if (!pageRow) setEncoderRGBIfChanged(1, 0x000000);
   }
 
   if (currentMode == &noteShift) {

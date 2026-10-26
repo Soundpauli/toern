@@ -100,6 +100,7 @@ app.innerHTML = `
       <li class="key-legend-note">Focus the grid for device keys. Tab in the menu moves between controls.</li>
       <li><kbd>Q</kbd>/<kbd>↑</kbd>, <kbd>W</kbd>/<kbd>↓</kbd> [<kbd>Tab</kbd>] encoder 1</li>
       <li><kbd>R</kbd>, <kbd>T</kbd> [<kbd>⌥</kbd>/<kbd>⇧</kbd>] encoder 2</li>
+      <li><kbd>U</kbd> + <kbd>⌥</kbd>/<kbd>⇧</kbd> hold, page row: full pattern</li>
       <li><kbd>U</kbd>, <kbd>I</kbd> [<kbd>Space</kbd>] encoder 3</li>
       <li><kbd>P</kbd>/<kbd>←</kbd>, <kbd>Ü</kbd>/<kbd>→</kbd> [<kbd>Enter</kbd>] encoder 4</li>
     </ul>

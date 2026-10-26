@@ -459,7 +459,7 @@ int genreLength = 8; // Default length for genre generation
 // NEW mode state management
 bool newScreenFirstEnter = true;
 
-// Reset menu option: 0 = SD, 1 = EFX, 2 = FULL, 3 = FILE, 4 = PACK, 5 = ASAV (wipe autosaved.txt)
+// Reset menu option: 0 = SD, 1 = EFX, 2 = FULL, 3 = FILE, 4 = PACK, 5 = ASAV, 6 = RAM (zero EEPROM)
 int resetMenuOption = 0;
 
 // DRAW mode: 0 = L+R (default), 1 = R (right-hand only)
@@ -3130,7 +3130,7 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       break;
     }
 
-    case 16: { // RST page - show current mode (SD, EFX, FULL, FILE, PACK, ASAV)
+    case 16: { // RST page - show current mode (SD, EFX, FULL, PATT, KIT, ASAV, RAM)
       const char* modeText;
       if (resetMenuOption == 0) {
         modeText = "SD";
@@ -3142,8 +3142,10 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
         modeText = "PATT";
       } else if (resetMenuOption == 4) {
         modeText = "KIT";
-      } else {
+      } else if (resetMenuOption == 5) {
         modeText = "ASAV";
+      } else {
+        modeText = "RAM";
       }
       drawMenuValue(modeText, 2, 3, UI_ORANGE);
       break;
@@ -4465,12 +4467,12 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 16: { // RST page - Choose between SD, EFX, FULL, FILE, PACK, ASAV
+    case 16: { // RST page - Choose between SD, EFX, FULL, PATT, KIT, ASAV, RAM
       static int lastResetOption = -1;
 
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        Encoder[2].writeMax((int32_t)5);  // 0=SD, 1=EFX, 2=FULL, 3=FILE, 4=PACK, 5=ASAV
+        Encoder[2].writeMax((int32_t)6);  // 0=SD, 1=EFX, 2=FULL, 3=PATT, 4=KIT, 5=ASAV, 6=RAM
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = (unsigned int)resetMenuOption;
         lastResetOption = resetMenuOption;
@@ -4478,7 +4480,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       }
 
       if ((int)currentMode->pos[2] != lastResetOption) {
-        resetMenuOption = constrain((int)currentMode->pos[2], 0, 5);
+        resetMenuOption = constrain((int)currentMode->pos[2], 0, 6);
         currentMode->pos[2] = (unsigned int)resetMenuOption;
         Encoder[2].writeCounter((int32_t)resetMenuOption);
         // Option label is in drawAdditionalFeatures (drawMenuValue clears the row).
@@ -5191,6 +5193,27 @@ FLASHMEM void switchMenu(int menuPosition){
           clearPatternNotes();
 
           showSaveSuccessAnimation();
+        } else if (resetMenuOption == 6) {
+          // RAM: zero every EEPROM byte, same as touch1 held to 10s.
+          // Drop the SD backup first so the next boot cannot copy the old block back.
+          FastLEDclear();
+          drawText("RAM", 3, 3, CRGB(255, 255, 0));
+          FastLEDshow();
+
+          AudioNoInterrupts();
+          if (SD.exists(SETTINGS_BACKUP_PATH)) SD.remove(SETTINGS_BACKUP_PATH);
+          if (SD.exists(SETTINGS_BACKUP_TMP_PATH)) SD.remove(SETTINGS_BACKUP_TMP_PATH);
+          for (unsigned int i = 0; i < EEPROM.length(); i++) {
+            EEPROM.write(i, 0);
+          }
+
+          FastLEDclear();
+          drawText("RAM", 3, 3, CRGB(255, 255, 0));
+          drawText("OK", 5, 10, CRGB(255, 255, 0));
+          FastLEDshow();
+          delay(1000);
+          SCB_AIRCR = 0x05FA0004;
+          while (true) { yield(); }
         }
         break;
         

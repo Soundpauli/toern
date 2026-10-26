@@ -84,7 +84,7 @@ const SUB_VALUES = {
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["OFF", "ALL", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [255, 220, 120], [255, 80, 20]], codes: ["R", "Y", "O"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["SD", "EFX", "FULL", "PATT", "KIT", "ASAV"], colors: [[120, 60, 0]], codes: ["O"] },
+    { opts: ["SD", "EFX", "FULL", "PATT", "KIT", "ASAV", "RAM"], colors: [[120, 60, 0]], codes: ["O"] },
   ],
 };
 
@@ -586,6 +586,10 @@ export function createDevice(matrix, statusEl, rings) {
       clearNotes();
       patternDirty = true;
       saveSlot("toern-web-patterns", 0, snapshot());
+    } else if (opt === 6) {
+      localStorage.removeItem(EEPROM_KEY);
+      location.reload();
+      return;
     }
     s.okAt = performance.now();
     finishLoad();
@@ -2470,7 +2474,7 @@ export function createDevice(matrix, statusEl, rings) {
         shortPress(0);
       }
     } else if (isEncoder2Click(e)) {
-      if ((s.mode === "draw" || s.mode === "single") && s.GLOB.y !== 16) hold[1] = { at: performance.now(), turned: false, fired: false };
+      if (s.mode === "draw" || s.mode === "single") hold[1] = { at: performance.now(), turned: false, fired: false, fn: false };
       else shortPress(1);
     } else if (e.key === " ") {
       if (s.mode === "filter") togglePlay();
@@ -2531,8 +2535,9 @@ export function createDevice(matrix, statusEl, rings) {
     }
     for (let enc=0;enc<4;enc++) {
       const h=hold[enc];
-      if (h?.fn && !h.fired && !h.turned && now-h.at>=LONG_MS) {
+      if (h && !h.fired && !h.turned && now-h.at>=LONG_MS && (h.fn || s.fnHeld)) {
         if (enc === 1 && s.GLOB.y === 16 && (s.mode === "draw" || s.mode === "single")) {
+          h.fn = true;
           h.fired = true;
           if (s.mode === "single") drawRandomPage();
           else drawRandomMultiVoicePage();
@@ -2736,7 +2741,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.fnHeld) { hold[enc]={at:performance.now(),turned:false,fired:false,fn:true}; return; }
       const grid = s.mode === "draw" || s.mode === "single";
       if (enc === 0 && grid && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
-      if (enc === 1 && grid && s.GLOB.y !== 16) hold[1] = { at: performance.now(), turned: false, fired: false };
+      if (enc === 1 && grid) hold[1] = { at: performance.now(), turned: false, fired: false, fn: false };
       if (enc === 2 && grid) hold[2] = { at: performance.now(), turned: false, fired: false };
       if (enc === 3 && (grid || s.mode === "filter")) hold[3] = { at: performance.now(), turned: false, fired: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
     },

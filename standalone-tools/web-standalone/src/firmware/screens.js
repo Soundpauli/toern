@@ -150,6 +150,9 @@ function drawStatus(matrix, s) {
     matrix.drawIndicator("M", "W", 2);
     matrix.drawIndicator("M", "Y", 4);
   }
+  if (s.fnHeld && (s.mode === "draw" || s.mode === "single")) {
+    matrix.drawIndicator("M", "M", 2);
+  }
 }
 
 function voiceGlobalPage(s) {

@@ -104,7 +104,7 @@
 
           <section class="hb-sub" id="reset">
             <h2 data-hb-copy="troubleshooting.036">The reset ladder (ETC → RSET)</h2>
-            <p class="lede" data-hb-copy="troubleshooting.037">Six rungs live behind one encoder dial. Encoder&nbsp;3 rotates the mode; encoder&nbsp;4 confirms. <strong>Read each row before confirming.</strong></p>
+            <p class="lede" data-hb-copy="troubleshooting.037">Seven rungs live behind one encoder dial. Encoder&nbsp;3 rotates the mode; encoder&nbsp;2 confirms. <strong>Read each row before confirming.</strong></p>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div><p class="hb-led-label">SD</p><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="et_rset" width="640" height="320" role="img" aria-label="RSET SD"></canvas></div></div>
@@ -120,8 +120,11 @@
                   <tr><td><strong>PATT</strong></td><td data-hb-copy="troubleshooting.051">Deletes pattern files <code>1–999.txt</code>.</td><td data-hb-copy="troubleshooting.052"><code>autosaved.txt</code> and the current RAM session.</td></tr>
                   <tr><td><strong>KIT</strong></td><td data-hb-copy="troubleshooting.054">Deletes kit folders except KIT&nbsp;1.</td><td data-hb-copy="troubleshooting.055">Patterns. KIT&nbsp;1.</td></tr>
                   <tr><td><strong>ASAV</strong></td><td data-hb-copy="troubleshooting.057">Deletes <code>autosaved.txt</code> and its <code>.tmp</code> / <code>.bak</code> recovery files and clears the grid.</td><td data-hb-copy="troubleshooting.058">Settings, PATT slots, kits. Next boot is blank if you don't pause-autosave first — use FULL if the session itself is garbage.</td></tr>
+                  <tr><td><strong>RAM</strong></td><td data-hb-copy="troubleshooting.068">Zeros every EEPROM byte, deletes <code>settings.txt</code>, shows <strong>RAM / OK</strong>, then restarts. The next boot writes factory settings.</td><td data-hb-copy="troubleshooting.069">PATT files and kits on the card. The autosave still loads, so the current grid comes back. The panel layout returns to one panel. Saved settings do not survive.</td></tr>
                 </tbody>
               </table>
+              <h3 class="hb-subsection-heading" data-hb-copy="troubleshooting.070">Power-on hold (touch&nbsp;1)</h3>
+              <p data-hb-copy="troubleshooting.071">Hold <strong>touch&nbsp;1</strong> while switching on. Let go before 3 seconds and the boot continues. At 3 seconds the matrix shows <strong>FULL / OK</strong>: the boot then runs ETC → RSET → FULL, including the sample-card scan, and keeps the LED panel setting. Keep holding and a <strong>RAM</strong> countdown runs. At 10 seconds every EEPROM byte is cleared and the matrix shows <strong>RAM / OK</strong>; FULL still runs, so the panel layout returns to one panel. Let go during that countdown and the wipe is skipped. FULL still runs.</p>
               <div class="hb-warn" data-hb-copy="troubleshooting.059"><strong>There is no undo beyond reloading saved pattern files.</strong> If you choose FULL with unsaved work in RAM, that work is gone.</div>
             </article>
           </section>
