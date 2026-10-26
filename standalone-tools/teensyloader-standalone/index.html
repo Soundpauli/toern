@@ -137,11 +137,18 @@
     .teensy-beta-warning.is-visible {
       display: block;
     }
+    .teensy-loaded {
+      font-family: var(--font-tech);
+      font-size: 0.85rem;
+      color: var(--text-p);
+      margin: 0 0 0.75rem;
+      min-height: 1.2em;
+    }
     .teensy-buttons {
       display: flex;
       flex-wrap: wrap;
       gap: 0.75rem;
-      margin: 1rem 0;
+      margin: 0 0 1rem;
     }
     .teensy-btn {
       background: var(--accent);
@@ -268,6 +275,40 @@
       padding: 1.25rem 1.5rem;
       border-top: 1px solid var(--grid-line);
     }
+    .teensy-guide h3 {
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-topline);
+      margin: 1.15rem 0 0.45rem;
+    }
+    .teensy-guide .teensy-serial-content > h3:first-child {
+      margin-top: 0;
+    }
+    .teensy-guide p,
+    .teensy-guide li {
+      font-family: var(--font-body);
+      color: var(--text-p);
+      font-size: 0.95rem;
+      line-height: 1.55;
+    }
+    .teensy-guide p {
+      margin-bottom: 0.75rem;
+      opacity: 0.9;
+    }
+    .teensy-guide ol,
+    .teensy-guide ul {
+      margin: 0 0 0.85rem 1.2rem;
+      padding: 0;
+    }
+    .teensy-guide li {
+      margin-bottom: 0.45rem;
+      opacity: 0.9;
+    }
+    .teensy-guide li::marker {
+      color: var(--accent);
+    }
   </style>
   <link rel="stylesheet" href="tool-theme.css?v=20261011g">
 </head>
@@ -288,16 +329,19 @@
         <details class="teensy-serial-toggle teensy-guide">
           <summary>Before you flash</summary>
           <div class="teensy-serial-content">
-          <p>Load firmware to your Teensy from Chrome or Edge. The program button is only a fallback.</p>
+          <h3>Normal update</h3>
           <ol>
-            <li>Connect TŒRN (or the Teensy) by USB so it is powered on and a sketch is running.</li>
-            <li>Choose v3.0 or Beta.</li>
-            <li>Press <strong>Upload Firmware</strong>. The page reboots the Teensy into programming mode. The small LED blinks red, then the upload starts.</li>
-            <li>The first time, the browser asks for the serial port and then for the Teensy device. If the device list appears only after the red blink, click <strong>Select Teensy Device</strong> and choose it.</li>
-            <li>After a successful flash, TŒRN reboots on its own.</li>
+            <li>Connect TŒRN by USB and leave it running.</li>
+            <li>Under Firmware, pick the build.</li>
+            <li>Press <strong>Upload Firmware</strong> and choose the Teensy serial port in the browser dialog.</li>
+            <li>Wait until the small LED blinks red.</li>
+            <li>If <strong>Choose blinking Teensy</strong> appears, press it, pick the blinking board, then press <strong>Upload Firmware</strong> again.</li>
+            <li>The bar fills. When the status says the flash is complete, TŒRN restarts on the new firmware by itself.</li>
           </ol>
-          <img src="./public/reset.jpeg" alt="Teensy programming button (marked red)" class="teensy-reset-img">
-          <p>If no sketch is running, press the programming button (marked red) so the LED blinks, then <strong>Select Teensy Device</strong> and <strong>Upload Firmware</strong>.</p>
+          <p>If the LED never blinks, something else still holds the serial port. Close it and press <strong>Upload Firmware</strong> again.</p>
+          <h3>No sketch running</h3>
+          <p>Press the programming button so the LED blinks red. Then <strong>Choose blinking Teensy</strong>, then <strong>Upload Firmware</strong>.</p>
+          <img src="./public/reset.jpeg" alt="Teensy programming button, marked in red" class="teensy-reset-img">
         </div>
         </details>
 
@@ -323,10 +367,11 @@
         <!-- Device Selection & Flashing -->
         <div class="teensy-section">
           <h2>2. Device & Flash</h2>
-          <p>Upload reboots a running TŒRN into programming mode. Use Select only when the red LED is already blinking.</p>
+          <p>Press Upload Firmware. The full sequence, and what each button does, is under Before you flash.</p>
+          <p id="firmwareLoaded" class="teensy-loaded"></p>
           <div class="teensy-buttons">
-            <button type="button" class="teensy-btn" id="selectDeviceBtn">Select Teensy Device</button>
             <button type="button" class="teensy-btn" id="uploadFirmwareBtn">Upload Firmware</button>
+            <button type="button" class="teensy-btn" id="selectDeviceBtn" hidden>Choose blinking Teensy</button>
           </div>
           <progress id="flashProgress" value="0" max="1"></progress>
         </div>

@@ -1,6 +1,6 @@
 # Teensy Loader Javascript for Chromium Browsers
 
-This folder is **GPL-3.0** (see `LICENSE`). It is the upstream Teensy Loader Javascript tree. The TŒRN-hosted copy, with the project hex files, is `standalone-tools/teensyloader-standalone/` and is under the same license. The rest of the TŒRN repository is MIT.
+This folder is the TŒRN firmware flasher, **GPL-3.0** (see `LICENSE`). It is the only copy. The rest of the TŒRN repository is MIT. Live site: [firmware.toern.live](https://firmware.toern.live/).
 
 This repository hosts a minimal web page and JavaScript library for flashing Teensy firmware via WebHID and opening a Serial connection.
 

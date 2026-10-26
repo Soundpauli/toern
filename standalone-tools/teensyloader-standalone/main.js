@@ -22,6 +22,10 @@ const serialManager = new SerialPortManager();
  * If message is empty or null, hides the status box.
  * @param {string} message
  */
+function setLoaded(message) {
+  document.getElementById('firmwareLoaded').textContent = message || '';
+}
+
 function setStatus(message) {
   const statusElem = document.getElementById('status');
   if (!message) {
@@ -46,15 +50,15 @@ async function loadFirmware() {
   const url = isBeta ? FIRMWARE_URLS.beta : FIRMWARE_URLS.stable;
   const name = isBeta ? 'toern_firmware_beta.ino.hex' : 'toern_firmware_3.0.ino.hex';
   try {
-    setStatus('Loading firmware...');
+    setLoaded('Loading firmware...');
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf = await res.arrayBuffer();
     firmwareData = new Uint8Array(buf);
     firmwareName = name;
-    setStatus(`Firmware loaded: ${name}`);
+    setLoaded(`Firmware loaded: ${name}`);
   } catch (err) {
-    setStatus(`Failed to load firmware: ${err.message}`);
+    setLoaded(`Failed to load firmware: ${err.message}`);
     firmwareData = null;
     firmwareName = null;
   }
@@ -91,16 +95,19 @@ async function permittedBootloader() {
   )) || null;
 }
 
+let awaitingHid = false;
+const selectBtn = document.getElementById('selectDeviceBtn');
+
+function showHidChoice(message) {
+  awaitingHid = true;
+  selectBtn.hidden = false;
+  setStatus(message);
+}
+
 async function chooseRunningPort() {
-  const ports = await navigator.serial.getPorts();
-  const infoOf = (port) => port.getInfo?.() || {};
-  const exact = ports.find((port) => {
-    const info = infoOf(port);
-    return info.usbVendorId === 0x16c0 && info.usbProductId === 0x048a;
-  });
-  if (exact) return exact;
-  const teensy = ports.find((port) => infoOf(port).usbVendorId === 0x16c0);
-  if (teensy) return teensy;
+  // Always ask. A stored port can be a stale bootloader session, and the HID
+  // list cannot see a sketch that is still running.
+  setStatus('Choose the running Teensy serial port.');
   return navigator.serial.requestPort({ filters: [{ usbVendorId: 0x16c0 }] });
 }
 
@@ -126,9 +133,14 @@ async function rebootIntoBootloader() {
   if (port.readable || port.writable) {
     try { await port.close(); } catch (_) {}
   }
+  setStatus('Rebooting into programming mode…');
   await port.open({ baudRate: REBOOT_BAUD });
-  await waitForDisconnect(port, 2500);
+  const gone = await waitForDisconnect(port, 4000);
   try { await port.close(); } catch (_) {}
+  if (!gone) {
+    throw new Error('The Teensy stayed on its serial port. Close any other serial program and try Upload again.');
+  }
+  await sleep(800);
 }
 
 async function waitForPermittedBootloader(ms) {
@@ -141,36 +153,38 @@ async function waitForPermittedBootloader(ms) {
   return null;
 }
 
-// A running sketch reboots when the serial port opens at 134 baud. The red LED
-// then blinks and the board reappears as the HID bootloader. No program button.
+// Serial open at 134 baud reboots a running sketch. The HID bootloader exists
+// only after that serial port disconnects and the red LED is blinking.
 async function ensureBootloader() {
   const already = await permittedBootloader();
   if (already) return already;
+  if (awaitingHid) return null;
 
-  setStatus('Rebooting into programming mode…');
-  try {
-    await rebootIntoBootloader();
-  } catch (err) {
-    if (!(err && (err.name === 'NotFoundError' || err.name === 'AbortError'))) throw err;
+  await rebootIntoBootloader();
+  const appeared = await waitForPermittedBootloader(2500);
+  if (appeared) {
+    awaitingHid = false;
+    selectBtn.hidden = true;
+    return appeared;
   }
-
-  const appeared = await waitForPermittedBootloader(4000);
-  if (appeared) return appeared;
-
-  setStatus('Red LED blinking — choose the Teensy in the list.');
-  const devices = await navigator.hid.requestDevice({ filters: TEENSY_DEVICE_FILTERS });
-  return devices && devices[0] ? devices[0] : null;
+  showHidChoice('Red LED is blinking. Click Choose blinking Teensy.');
+  return null;
 }
 
-document.getElementById('selectDeviceBtn').addEventListener('click', async () => {
+selectBtn.addEventListener('click', async () => {
+  if (!awaitingHid && !(await permittedBootloader())) {
+    setStatus('Press Upload Firmware first. The HID list cannot see the Teensy until the red LED blinks.');
+    return;
+  }
   try {
     const devices = await navigator.hid.requestDevice({ filters: TEENSY_DEVICE_FILTERS });
     if (devices && devices.length > 0) {
       selectedDevice = devices[0];
-      setStatus(`Device selected: ${selectedDevice.productName || 'Unknown Teensy'}. Red LED should be blinking.`);
+      awaitingHid = false;
+      selectBtn.hidden = true;
+      setStatus(`Teensy ready: ${selectedDevice.productName || 'bootloader'}. Press Upload Firmware.`);
     } else {
-      selectedDevice = null;
-      setStatus('No device selected.');
+      setStatus('No device selected. The red LED must still be blinking.');
     }
   } catch (error) {
     setStatus(`Device selection error: ${error}`);
@@ -192,7 +206,7 @@ document.getElementById('uploadFirmwareBtn').addEventListener('click', async () 
   try {
     const device = selectedDevice || await ensureBootloader();
     if (!device) {
-      setStatus('No Teensy in programming mode. If the red LED is blinking, click Select Teensy Device.');
+      showHidChoice('Red LED is blinking. Click Choose blinking Teensy, then Upload Firmware.');
       return;
     }
     selectedDevice = null;
@@ -212,7 +226,7 @@ document.getElementById('uploadFirmwareBtn').addEventListener('click', async () 
     selectedDevice = null;
     const blocked = err && (err.name === 'SecurityError' || err.name === 'NotAllowedError');
     setStatus(blocked
-      ? 'The red LED should be blinking. Click Select Teensy Device, then Upload Firmware.'
+      ? 'Red LED is blinking. Click Choose blinking Teensy, then Upload Firmware.'
       : `Flashing error: ${err}`);
     console.error('Flashing error:', err);
   } finally {
