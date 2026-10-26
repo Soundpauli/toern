@@ -2269,13 +2269,15 @@ html.mobile-ui .pad[data-touch] > span:first-child {
   font-size: 10px;
   opacity: .9;
 }
-/* Scroll each sidebar independently of the instrument. */
+/* Let desktop content grow so the whole SIM page can scroll. */
 html:not(.mobile-ui) .key-legend,
 html:not(.mobile-ui) .jump {
-  height: 100dvh;
-  min-height: 0;
-  overflow-y: auto;
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
 }
+
+html:not(.mobile-ui) .jump-layer-body { overflow: visible; }
 
 /* Current-pattern transfer stays beside the simulator. */
 .device-transfer {

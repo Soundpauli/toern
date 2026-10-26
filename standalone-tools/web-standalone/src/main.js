@@ -260,7 +260,7 @@ app.innerHTML = `
           <input type="checkbox" id="import-transpose"> Transpose out-of-range notes
         </label>
         <label class="jump-panel-check">
-          <input type="checkbox" id="import-overlap" checked> Filter overlapping notes on CH13
+          <input type="checkbox" id="import-overlap"> Filter overlapping notes on CH13
         </label>
         <details class="import-mapping-help"><summary>How instruments are mapped</summary>
           <p class="jump-panel-meta muted">Auto-map uses TŒRN roles: 1–5 drums, 11 instruments/lead, 13 keys, 14 bass, 8 vocals/pad; 6 bass and 7 keys are sample fallbacks. Drum tracks split by instrument; cymbals share the hat voice, other percussion shares tom. Unassigned parts need a manual choice. Uses the current kit and synth settings without retuning them. USB sends notes and tempo only; use the same kit and presets on the device.</p>
@@ -1145,6 +1145,14 @@ function currentImportParams() {
 
 function applyImportNow() {
   if (!midiDraft) return;
+  // A file selected during the startup animation must not silently disappear.
+  if (device.mode() === "boot") {
+    importSend.disabled = true;
+    clearTimeout(importTimer);
+    importTimer = setTimeout(applyImportNow, 100);
+    return;
+  }
+  importSend.disabled = sdBusy;
   const { bpm, sub, offset, transpose, overlap } = currentImportParams();
   syncBpmReadout();
   let grid = mapNotesToGrid(midiDraft.notes, bpm, sub, offset, transpose);
@@ -1189,7 +1197,7 @@ function resetImportToMidi() {
   importOffset.value = "0";
   importStartPage.value = "1";
   importTranspose.checked = false;
-  importOverlap.checked = true;
+  importOverlap.checked = false;
   midiDraft.tracks = midiDraft.originalTracks.map((t) => ({ ...t }));
   midiDraft.slots = defaultSlots(midiDraft.tracks);
   renderImportTracks();
@@ -1220,7 +1228,7 @@ async function loadMidiFile(file) {
     importOffset.value = "0";
     importStartPage.value = "1";
     importTranspose.checked = false;
-    importOverlap.checked = true;
+    importOverlap.checked = false;
     importSettings.hidden = false;
     syncBpmReadout();
     syncOffsetReadout();

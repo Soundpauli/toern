@@ -104,6 +104,11 @@ export function suggestMidiSlots(tracks) {
   const slots = Object.fromEntries(Object.keys(MIDI_VOICE_LABELS).map(ch => [ch, null]));
   for (const t of tracks.filter(t => t.percussion)) slots[DRUM_ROLES[t.role].channel] = t.id;
   const melodic = tracks.filter(t => !t.percussion).sort((a,b) => b.noteCount - a.noteCount || a.id - b.id);
+  // A single keys part gets the polyphonic synth before the mono keys voice.
+  if (tracks.length === 1 && melodic.length === 1 && melodic[0].role === "keys") {
+    slots[11] = melodic[0].id;
+    return slots;
+  }
   // Reserve instrument/keys/bass synths before using compatible sample voices.
   const preferences = { bass: [14,6], keys: [13,7,11], pad: [8,7,11], lead: [11,7] };
   const assigned = new Set();
@@ -174,11 +179,11 @@ export function mapNotesToGrid(notes, bpm = 120, subdivision = 16, timeOffset = 
 /** One note per assigned sample voice/step; CH13 filtering is optional.
  * Without an assignment map, retain the legacy per-track filtering helper.
  */
-export function filterOverlappingNotes(notes, priority = "highest", channelMap = null, filterCh13 = true) {
+export function filterOverlappingNotes(notes, priority = "highest", channelMap = null, filterCh13 = false) {
   const shouldFilter = note => {
     if (!channelMap) return true;
     const ch = channelMap.get(note.track);
-    return (ch >= 1 && ch <= 8) || (ch === 13 && filterCh13);
+    return (ch >= 1 && ch <= 8) || ch === 14 || (ch === 13 && filterCh13);
   };
   const keyFor = note => `${note.page}-${note.x}-${channelMap ? channelMap.get(note.track) : note.track}`;
   const pitch = note => note.original ?? note.note ?? note.y;
@@ -189,7 +194,7 @@ export function filterOverlappingNotes(notes, priority = "highest", channelMap =
     if (!prev || (priority === "highest" ? pitch(note) > pitch(prev) : pitch(note) < pitch(prev)) ||
         (pitch(note) === pitch(prev) && note.velocity > prev.velocity)) byStep.set(key,note);
   }
-  // Keep CH11/14 polyphonic note data and unassigned tracks intact. Shared grid
+  // Keep CH11 polyphonic note data and unassigned tracks intact. Shared grid
   // cells are resolved later, after channel assignment.
   return notes.filter(note => !shouldFilter(note) || byStep.get(keyFor(note)) === note);
 }

@@ -60,6 +60,10 @@ try {
   assert.equal(imported.length,9, 'five simultaneous drum roles and four melodic parts survive mapping');
   assert.equal(new Set(imported.map(n=>`${n.step}:${n.row}`)).size,imported.length);
   assert(imported.filter(n=>n.channel<=5).every(n=>n.row===n.channel+1&&n.midiPitch===255), 'drum keys select sounds without detuning samples');
+  const singleKeys={id:0,name:'Piano',role:'keys',percussion:false,noteCount:100};
+  const singleSlots=suggestMidiSlots([singleKeys]);
+  assert.equal(singleSlots[11],0);assert.equal(singleSlots[13],null);
+  assert.equal(suggestMidiSlots([singleKeys,{id:1,role:'kick',percussion:true}])[13],0);
   const channelMap=new Map();
   const simultaneous=[];
   for (const ch of [1,2,3,4,5,6,7,8,11,13,14]) {
@@ -74,7 +78,7 @@ try {
     const count=ch=>filtered.filter(n=>channelMap.get(n.track)===ch).length;
     for(let ch=1;ch<=8;ch++)assert.equal(count(ch),1,`CH${ch} must always filter`);
     assert.equal(count(13),checked?1:2);
-    assert.equal(count(11),2);assert.equal(count(14),2);
+    assert.equal(count(11),2);assert.equal(count(14),1);
     assert.equal(filtered.find(n=>channelMap.get(n.track)===7).original,80);
   }
   const octaves=mapNotesToGrid([{track:0,note:60,time:0,duration:.1,velocity:.8},{track:0,note:72,time:0,duration:.1,velocity:.8}],120,16,0,false);
