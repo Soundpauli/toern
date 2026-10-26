@@ -218,8 +218,10 @@ int systemMenuParentPage() {
 // SWAP uses playable voice IDs; the existing tmp copy/paste buffer is reused.
 static const uint8_t swapVoices[] = {1,2,3,4,5,6,7,8,11,13,14};
 static uint8_t swapFromChoice = 0, swapToChoice = 8;
+static int8_t swapOctaves[2] = {0, 0};
+static bool swapHeld[2] = {false, false};
 static unsigned long swapLastAt = 0;
-extern void swapChannelNotes(uint8_t from, uint8_t to);
+extern void swapChannelNotes(uint8_t from, uint8_t to, int8_t fromOctave, int8_t toOctave);
 
 // --- INFO page animation state ---
 static bool infoPageFirstEnter = true;
@@ -2830,18 +2832,20 @@ FLASHMEM void drawMainSettingStatus(int setting) {
     }
     case 67: {
       const uint8_t from = swapVoices[swapFromChoice], to = swapVoices[swapToChoice];
-      drawMenuText(swapLastAt ? "OK" : "SWAP", 2, 10, currentMenuParentTextColor());
+      drawMenuText(swapHeld[0] || swapHeld[1] ? "OCT" : swapLastAt ? "OK" : "SWAP", 2, 10, currentMenuParentTextColor());
       drawMenuValue("", 1, 3, UI_WHITE);
       char value[4];
-      snprintf(value, sizeof(value), "%u", from);
+      if (swapHeld[0]) snprintf(value, sizeof(value), "%+d", swapOctaves[0]);
+      else snprintf(value, sizeof(value), "%u", from);
       drawMenuText(value, 1, 3, col[from]);
-      snprintf(value, sizeof(value), "%u", to);
+      if (swapHeld[1]) snprintf(value, sizeof(value), "%+d", swapOctaves[1]);
+      else snprintf(value, sizeof(value), "%u", to);
       drawMenuText(value, maxX >= 24 ? 24 : 10, 3, col[to]);
       if (maxX >= 24) drawMenuText("<>", 12, 3, UI_WHITE);
       else { light(8, 4, UI_WHITE); light(9, 4, UI_WHITE); }
-      drawLargeIndicatorCustom(col[from], 1);
-      drawLargeIndicatorCustom(col[to], 2);
-      drawMenuIndicator('L', from == to ? 'R' : 'G', 3);
+      drawLargeIndicatorCustom(col[from], 2);
+      drawLargeIndicatorCustom(col[to], 3);
+      drawMenuIndicator('L', from == to ? 'R' : 'G', 4);
       break;
     }
     case 66: {
@@ -3228,7 +3232,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     lastStereoCh = -1;
     infoPageFirstEnter = true;
     lastPongSpeed = -1;
-    if (lastSetting == 50 || lastSetting == 53 || lastSetting == 55 || lastSetting == 67) {
+    if (lastSetting == 50 || lastSetting == 53 || lastSetting == 55) {
       extern uint8_t fireFocus;
       if (lastSetting == 55) fireFocus = 0;
       Encoder[0].writeMin((int32_t)1);
@@ -3239,6 +3243,13 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       Encoder[1].writeMax((int32_t)1);
       Encoder[1].writeCounter((int32_t)1);
       currentMode->pos[1] = 1;
+    }
+    if (lastSetting == 67) {
+      for (int enc = 1; enc <= 2; ++enc) {
+        Encoder[enc].writeMin((int32_t)1); Encoder[enc].writeMax((int32_t)1);
+        Encoder[enc].writeCounter((int32_t)1); currentMode->pos[enc] = 1;
+      }
+      swapHeld[0] = swapHeld[1] = false;
     }
     lastSetting = setting;
   }
@@ -3258,20 +3269,29 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
 
   switch (setting) {
     case 67: {
-      if (menuFirstEnter) {
-        Encoder[0].writeMin((int32_t)0); Encoder[0].writeMax((int32_t)10);
-        Encoder[1].writeMin((int32_t)0); Encoder[1].writeMax((int32_t)10);
-        Encoder[0].writeCounter((int32_t)swapFromChoice);
-        Encoder[1].writeCounter((int32_t)swapToChoice);
-        currentMode->pos[0] = swapFromChoice; currentMode->pos[1] = swapToChoice;
-        swapLastAt = 0; menuFirstEnter = false;
+      bool changed = false;
+      for (int side = 0; side < 2; ++side) {
+        const int enc = side + 1;
+        const bool held = pressed[enc];
+        uint8_t &choice = side == 0 ? swapFromChoice : swapToChoice;
+        if (menuFirstEnter || held != swapHeld[side]) {
+          swapHeld[side] = held;
+          Encoder[enc].writeMin((int32_t)0);
+          Encoder[enc].writeMax((int32_t)(held ? 16 : 10));
+          const int value = held ? swapOctaves[side] + 8 : choice;
+          Encoder[enc].writeCounter((int32_t)value); currentMode->pos[enc] = value;
+          changed = true;
+        }
+        if (held) {
+          const int8_t value = constrain((int)currentMode->pos[enc], 0, 16) - 8;
+          if (swapOctaves[side] != value) { swapOctaves[side] = value; changed = true; }
+        } else {
+          const uint8_t value = constrain((int)currentMode->pos[enc], 0, 10);
+          if (choice != value) { choice = value; changed = true; }
+        }
       }
-      const uint8_t from = constrain((int)currentMode->pos[0], 0, 10);
-      const uint8_t to = constrain((int)currentMode->pos[1], 0, 10);
-      if (from != swapFromChoice || to != swapToChoice) {
-        swapFromChoice = from; swapToChoice = to; swapLastAt = 0;
-        redrawMain(setting);
-      } else if (swapLastAt && millis() - swapLastAt >= 600) {
+      menuFirstEnter = false;
+      if (changed || (swapLastAt && millis() - swapLastAt >= 600)) {
         swapLastAt = 0; redrawMain(setting);
       }
       break;
@@ -4957,7 +4977,7 @@ FLASHMEM void switchMenu(int menuPosition){
    switch (menuPosition) {
       case 67:
         if (swapFromChoice != swapToChoice) {
-          swapChannelNotes(swapVoices[swapFromChoice], swapVoices[swapToChoice]);
+          swapChannelNotes(swapVoices[swapFromChoice], swapVoices[swapToChoice], swapOctaves[0], swapOctaves[1]);
           swapLastAt = millis();
           menuRequestFullRedraw();
         }

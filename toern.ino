@@ -2994,11 +2994,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     }
   }
 
-  if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 1, 0)) {
-    extern int getCurrentMenuMainSetting();
-    if (getCurrentMenuMainSetting() == 67) { switchMenu(67); return; }
-  }
-
   if (currentMode == &menu && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     extern bool inEtcSubmenu;
     extern int getCurrentMenuMainSetting();
@@ -10009,7 +10004,7 @@ void paint() {
 }
 
 // Swap channel ownership across the whole pattern through the existing clipboard.
-FLASHMEM void swapChannelNotes(uint8_t from, uint8_t to) {
+FLASHMEM void swapChannelNotes(uint8_t from, uint8_t to, int8_t fromOctave, int8_t toOctave) {
   const bool validFrom = (from >= 1 && from <= 8) || from == 11 || from == 13 || from == 14;
   const bool validTo = (to >= 1 && to <= 8) || to == 11 || to == 13 || to == 14;
   if (!validFrom || !validTo || from == to) return;
@@ -10023,6 +10018,14 @@ FLASHMEM void swapChannelNotes(uint8_t from, uint8_t to) {
         if (ch != from && ch != to) continue;
         note[x][y] = tmp[x][y];
         note[x][y].channel = ch == from ? to : from;
+        const int shift = constrain((int)(ch == from ? fromOctave : toOctave), -8, 8);
+        if (shift) {
+          // Native grid pitches become absolute only when a shift is requested.
+          // Register 4 is neutral; the destination patch still applies its tuning.
+          const int pitch = tmp[x][y].midiPitch <= 127 ? tmp[x][y].midiPitch
+              : toern_midi_pitch::gridMidi(note[x][y].channel, y, 4, 0);
+          note[x][y].midiPitch = (uint8_t)constrain(pitch + shift * 12, 0, 127);
+        }
       }
     }
     GLOB.activeCopy = false;

@@ -692,14 +692,14 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     return;
   }
   if (s.mode === "etc" && name === "SWAP") {
-    matrix.drawText(s.swapAt && now-s.swapAt<600 ? "OK" : "SWAP", 2, 10, parent);
-    matrix.drawText(String(s.swapFrom), 1, 3, COL[s.swapFrom]);
-    matrix.drawText(String(s.swapTo), COLS >= 24 ? 24 : 10, 3, COL[s.swapTo]);
+    matrix.drawText(s.swapHeld?.some(Boolean) ? "OCT" : s.swapAt && now-s.swapAt<600 ? "OK" : "SWAP", 2, 10, parent);
+    matrix.drawText(s.swapHeld?.[0] ? `${s.swapOctaves[0]>=0?"+":""}${s.swapOctaves[0]}` : String(s.swapFrom), 1, 3, COL[s.swapFrom]);
+    matrix.drawText(s.swapHeld?.[1] ? `${s.swapOctaves[1]>=0?"+":""}${s.swapOctaves[1]}` : String(s.swapTo), COLS >= 24 ? 24 : 10, 3, COL[s.swapTo]);
     if (COLS >= 24) matrix.drawText("<>",12,3,UI_WHITE);
     else { matrix.light(8,4,UI_WHITE); matrix.light(9,4,UI_WHITE); }
-    matrix.drawLargeCustom(COL[s.swapFrom],1);
-    matrix.drawLargeCustom(COL[s.swapTo],2);
-    matrix.drawIndicator("L",s.swapFrom===s.swapTo?"R":"G",3);
+    matrix.drawLargeCustom(COL[s.swapFrom],2);
+    matrix.drawLargeCustom(COL[s.swapTo],3);
+    matrix.drawIndicator("L",s.swapFrom===s.swapTo?"R":"G",4);
     return;
   }
   const { mode: pageMode, index: pageIndex } = resolveSubPage(s.mode, s.subIndex);

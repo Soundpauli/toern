@@ -10,7 +10,7 @@ import {
   CIN_PPQN_TABLE, PPQN_RATE_LABELS, SIDE_VOICE_CHOICES,
   ETC_FIRE_INDEX, ETC_IMG_INDEX, ETC_RSET_INDEX, ETC_EYES_INDEX, ETC_CHLD_INDEX,
 } from "./screens.js";
-import { foldRow } from "./pitch.js";
+import { foldRow, neutralGridMidi } from "./pitch.js";
 import { listDir, packWavs, parsePattern, patternUrl, sampleWavs } from "./library.js";
 import { drawRandoms, drawRandomsMultiPage } from "./random.js";
 import { GENRES, generateGenre } from "./genres.js";
@@ -149,7 +149,7 @@ export function createDevice(matrix, statusEl, rings) {
     flow: true, voiceMode: false, fireVoice: 0, fireLevel: 8, fireSize: 1, fireGravity: 0, fireColor: 8, fireFocus: 0, voiceLen: Array(16).fill(0), voiceMask: Array(16).fill(0), voicePages: 1,
     voiceLoop: Array(16).fill(1), voiceOffset: Array(16).fill(0), voiceEdit: Array(16).fill(0),
     pmode: 0, ctrlVol: true, prevMode: 0, drawR: false, cursorType: 0,
-    swapFrom: 1, swapTo: 11, swapAt: 0,
+    swapFrom: 1, swapTo: 11, swapAt: 0, swapOctaves: [0, 0], swapHeld: [false, false],
     scheme: 0, childLock: false, copyArmed: false, solo: false, soloSaved: null, soloArrow: "", soloArrowAt: 0,
     volBar: 0, volBarAt: 0, chVol,
     muteMask: 0x0006, muteSel: 1, fullMute: false, fullMuteSaved: null,
@@ -472,7 +472,12 @@ export function createDevice(matrix, statusEl, rings) {
     let i=0;
     for (let x=1;x<=STEPS;x++) for(let y=1;y<=ROWS;y++) {
       const src=clip[i++];
-      if (src.channel===from || src.channel===to) Object.assign(note[x][y],src,{channel:src.channel===from?to:from});
+      if (src.channel===from || src.channel===to) {
+        const channel=src.channel===from?to:from;
+        const shift=s.swapOctaves[src.channel===from?0:1];
+        const midiPitch=shift ? clamp((src.midiPitch<=127?src.midiPitch:neutralGridMidi(channel,y))+12*shift,0,127) : src.midiPitch;
+        Object.assign(note[x][y],src,{channel,midiPitch});
+      }
     }
     s.copyArmed=false; clipCh=0; s.swapAt=performance.now();
     refreshVoiceLens(); queueAutosave();
@@ -1491,9 +1496,13 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (s.mode === "menu" && enc === 3) s.menuIndex = clamp(s.menuIndex + dir, 0, MENU_PAGES.length - 1);
     if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && enc !== 3) {
-      if (enc===0 || enc===1) {
-        const choices=[...SOUND_CH], key=enc===0?"swapFrom":"swapTo";
-        s[key]=choices[clamp(choices.indexOf(s[key])+dir,0,choices.length-1)];
+      if (enc===1 || enc===2) {
+        const side=enc-1;
+        if (hold[enc]) s.swapOctaves[side]=clamp(s.swapOctaves[side]+dir,-8,8);
+        else {
+          const choices=[...SOUND_CH], key=enc===1?"swapFrom":"swapTo";
+          s[key]=choices[clamp(choices.indexOf(s[key])+dir,0,choices.length-1)];
+        }
         s.swapAt=0;
       }
       return;
@@ -1854,8 +1863,10 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "song" && enc === 0) song[s.songPos - 1] = 0;
     if (s.mode === "song" && (enc === 1 || enc === 3)) song[s.songPos - 1] = s.songPattern;
     if (s.mode === "song" && enc === 2) toggleSong();
-    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (enc===2 || enc===3)) {
-      swapChannels(s.swapFrom,s.swapTo); return;
+    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP") {
+      if (enc===3) swapChannels(s.swapFrom,s.swapTo);
+      else if (enc===0) backToGrid();
+      return;
     }
     const slot = resolveSubPage(s.mode, s.subIndex);
     if (s.mode === "etc" && s.subIndex === 3 && enc === 3) { s.mode = "adv"; s.subIndex = 0; return; }
@@ -2519,6 +2530,10 @@ export function createDevice(matrix, statusEl, rings) {
       const enc = isTab(e) ? 0 : isEncoder2Click(e) ? 1 : e.key === " " ? 2 : 3;
       hold[enc] = { at: performance.now(), turned: false, fired: false };
     }
+    else if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (isEncoder2Click(e) || e.key === " ")) {
+      const enc=isEncoder2Click(e)?1:2;
+      hold[enc]={at:performance.now(),turned:false,fired:false}; s.swapHeld[enc-1]=true;
+    }
     else if (s.fnHeld && (isTab(e) || isEncoder2Click(e) || e.key === " " || e.key === "Enter")) {
       const enc=isTab(e)?0:isEncoder2Click(e)?1:e.key===" "?2:3;
       hold[enc]={at:performance.now(),turned:false,fired:false,fn:true};
@@ -2544,6 +2559,8 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.GLOB.x !== beforeX || s.GLOB.y !== beforeY) announceState();
   }
   function keyup(e) {
+    if (isEncoder2Click(e)) s.swapHeld[0]=false;
+    if (e.key === " ") s.swapHeld[1]=false;
     if (demoExitHeld && (isTouch1Key(e) || e.code === "KeyA" || e.key.toLowerCase() === "a")) { onTouchL(false); return; }
     const padKey = touchPadKey(e);
     if (padKey) { e.preventDefault(); handleTouch(padKey, false); return; }
@@ -2797,6 +2814,9 @@ export function createDevice(matrix, statusEl, rings) {
     soloRelease() { exitSolo(); liveMix(); announceState(); },
     press(enc) { shortPress(enc); },
     knobDown(enc) {
+      if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (enc===1 || enc===2)) {
+        hold[enc]={at:performance.now(),turned:false,fired:false}; s.swapHeld[enc-1]=true; return;
+      }
       if (s.mode === "touchy") { hold[enc] = { at: performance.now(), turned: false, fired: false }; return; }
       if (s.fnHeld) { hold[enc]={at:performance.now(),turned:false,fired:false,fn:true}; return; }
       const grid = s.mode === "draw" || s.mode === "single";
@@ -2806,6 +2826,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (enc === 3 && (grid || s.mode === "filter")) hold[3] = { at: performance.now(), turned: false, fired: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
     },
     knobUp(enc, turned) {
+      if (enc===1 || enc===2) s.swapHeld[enc-1]=false;
       if (hold[enc]?.fn) {
         const h=hold[enc]; hold[enc]=null;
         if (!turned && !h.turned) dispatchButtonEvent(enc,h.fired ? 9 : 1,true);
@@ -2837,7 +2858,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (!turned) shortPress(enc);
     },
     touch: handleTouch,
-    releaseInputs() { for (let id=1;id<=5;id++) handleTouch(id,false); for (const enc of Object.keys(hold)) delete hold[enc]; },
+    releaseInputs() { s.swapHeld.fill(false); for (let id=1;id<=5;id++) handleTouch(id,false); for (const enc of Object.keys(hold)) delete hold[enc]; },
     setFader,
     rotate(enc, dir) { turn(enc, dir); },
     hover, cellTaken, velocity: enterVelocity,

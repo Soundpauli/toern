@@ -528,18 +528,40 @@ const original=swapDevice.exportPatternCells();
 swapDevice.jump('menu');for(let i=0;i<9;i++)swapDevice.rotate(3,1);
 swapDevice.press(3);for(let i=0;i<5;i++)swapDevice.rotate(3,1);
 assert.equal(swapDevice.menuSummary().detail,'SWAP: 1<>11');
-swapDevice.press(2);
+swapDevice.knobDown(3);swapDevice.knobUp(3,false);
+assert.equal(swapDevice.mode(),'etc','confirmation stays on SWAP');
 assert.deepEqual(swapDevice.exportPatternCells(),original.map(n=>({...n,channel:n.channel===1?11:n.channel===11?1:n.channel})));
 swapDevice.press(3);assert.deepEqual(swapDevice.exportPatternCells(),original,'a second swap restores every note and metadata');
-for(let i=0;i<9;i++)swapDevice.rotate(0,1); // A=13
-swapDevice.rotate(1,1);swapDevice.rotate(1,1); // B=14
+for(let i=0;i<9;i++)swapDevice.rotate(1,1); // A=13
+swapDevice.rotate(2,1);swapDevice.rotate(2,1); // B=14
 assert.equal(swapDevice.menuSummary().detail,'SWAP: 13<>14');
 swapDevice.press(3);
 assert.deepEqual(swapDevice.exportPatternCells(),original.map(n=>({...n,channel:n.channel===13?14:n.channel===14?13:n.channel})));
 const afterSwap=swapDevice.exportPatternCells();
-swapDevice.rotate(0,1);swapDevice.press(2);
+swapDevice.rotate(1,1);swapDevice.press(3);
 assert.deepEqual(swapDevice.exportPatternCells(),afterSwap,'equal channels do nothing');
-swapDevice.rotate(3,-1);assert.equal(swapDevice.subIndex(),4,'encoder 4 leaves SWAP');
+// Pressing either chooser must not apply a swap.
+for(const enc of [1,2])swapDevice.press(enc);
+assert.deepEqual(swapDevice.exportPatternCells(),afterSwap);
+swapDevice.rotate(1,-1); // restore A=13, B=14
+swapDevice.knobDown(1);for(let i=0;i<20;i++)swapDevice.rotate(1,1);
+textDraws.length=0;frame(++now);
+assert(textDraws.some(a=>a[0]==='OCT'));assert(textDraws.some(a=>a[0]==='+8'));
+assert.equal(swapDevice.menuSummary().detail,'SWAP: 13<>14','held rotation must not change the channel');
+swapDevice.knobUp(1,true);
+textDraws.length=0;frame(++now);assert(!textDraws.some(a=>a[0]==='+8'||a[0]==='OCT'));
+swapDevice.knobDown(2);for(let i=0;i<20;i++)swapDevice.rotate(2,-1);swapDevice.knobUp(2,true);
+const beforeShift=swapDevice.exportPatternCells();swapDevice.press(3);
+const neutral=(ch,row)=>ch<=8?60+row-ch-1:ch===11?59+row:Math.max(36,Math.min(62,row-ch+47))+12;
+assert.deepEqual(swapDevice.exportPatternCells(),beforeShift.map((n,i)=>{
+ if(n.channel!==13&&n.channel!==14)return n;
+ const channel=n.channel===13?14:13,shift=n.channel===13?96:-96;
+ return {...n,channel,midiPitch:Math.max(0,Math.min(127,(n.midiPitch<=127?n.midiPitch:neutral(channel,i%16+1))+shift))};
+}));
+swapDevice.rotate(3,-1);assert.equal(swapDevice.subIndex(),4,'encoder 4 rotation leaves SWAP');
+swapDevice.rotate(3,1);const beforeExit=swapDevice.exportPatternCells();swapDevice.press(0);
+assert.equal(swapDevice.mode(),'draw','encoder 1 exits without confirming');
+assert.deepEqual(swapDevice.exportPatternCells(),beforeExit);
 for(const width of [16,32]) {
  setLayout(width);const text=[];
  drawSubmenu({light(){},drawLargeCustom(){},drawIndicator(){},drawText:(...a)=>text.push(a)},{mode:'etc',subIndex:5,swapFrom:13,swapTo:14,swapAt:0},now);
