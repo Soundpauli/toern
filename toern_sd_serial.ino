@@ -1,5 +1,6 @@
-// SD card file server over USB Serial (Menu → ETC → SD).
-// Active only while that menu page is open; polled from loop().
+// SD card file server over USB Serial.
+// Polled from loop() on every screen once a host program has opened the port.
+// Menu → ETC → SD only displays SCON / WAIT / OK. It does not enable the server.
 // Companion client: tools/sd-tool-standalone/toern_sd.py
 //
 // Line commands (UTF-8, terminated by '\n'):
@@ -28,7 +29,9 @@
 
 #if defined(ARDUINO)
 
-static const size_t SD_SER_CHUNK = 4096;
+// Buffer the whole host flow-control block before SD I/O. The host may still
+// be transmitting its second half when only 4096 bytes have arrived.
+static const size_t SD_SER_CHUNK = 8192;
 static const size_t SD_SER_PUT_BLOCK = 8192;  // host waits for ACK after each block (USB flow control)
 static const size_t SD_SER_GET_BLOCK = 512;   // host ACKs each block (USB flow control)
 static const uint32_t SD_SER_IO_TIMEOUT_MS = 60000;
@@ -39,6 +42,7 @@ static uint32_t sdSerLastClientMs = 0;
 static const uint32_t SD_SER_CLIENT_TIMEOUT_MS = 15000;
 static char sdSerLineBuf[192];
 static size_t sdSerLineLen = 0;
+static bool sdSerPutTrace = false;
 
 static void sdSerDrainRx() {
   uint32_t start = millis();
@@ -50,9 +54,8 @@ static void sdSerDrainRx() {
 }
 
 static void sdSerAudioStopForSd() {
-  // Stop anything that might touch the SD card. Prefer this over holding
-  // AudioNoInterrupts() across Serial I/O — on Teensy 4 that is __disable_irq()
-  // and USB TX deadlocks once the CDC buffer fills.
+  // Stop playback and previews before any host-side SD mutations. USB
+  // interrupts remain enabled; AudioNoInterrupts masks only the audio IRQ.
   extern bool isNowPlaying;
   extern void pause(bool skipSave);
   extern void allOff();
@@ -103,15 +106,48 @@ static void sdSerReplyFlush(const char *msg) {
   Serial.flush();
 }
 
+// Optional diagnostics for a host explicitly issuing PUTTRACE. Normal PUT
+// framing stays READY / ACK / OK, with no extra traffic.
+static void sdSerPutCheckpoint(const char *stage, uint32_t offset) {
+  if (!sdSerPutTrace) return;
+  sdSerReplyf("TRACE %s %lu", stage, (unsigned long)offset);
+  Serial.flush();
+}
+
+static void sdSerCmdInfo() {
+  sdSerReplyf("OK SDINFO cpu=%lu tempCenti=%d error=%u data=%lu",
+              (unsigned long)F_CPU_ACTUAL, (int)(tempmonGetTemp() * 100.0f),
+              (unsigned)SD.sdfs.card()->errorCode(),
+              (unsigned long)SD.sdfs.card()->errorData());
+}
+
 static bool sdSerReadExact(uint8_t *dst, size_t len, uint32_t timeoutMs) {
   size_t got = 0;
   uint32_t start = millis();
+  uint32_t traced = start;
   while (got < len) {
+    if (sdSerPutTrace && millis() - traced >= 1000) {
+      sdSerReplyf("TRACE WAIT got=%lu len=%lu avail=%d", (unsigned long)got, (unsigned long)len, Serial.available());
+      Serial.flush();
+      traced = millis();
+    }
     int avail = Serial.available();
     if (avail > 0) {
       size_t take = (size_t)avail;
       if (take > len - got) take = len - got;
-      int n = Serial.readBytes(dst + got, take);
+      if (sdSerPutTrace) sdSerReplyf("TRACE RX %lu %lu", (unsigned long)got, (unsigned long)take);
+      // The Teensy core's bulk reader re-enables USB IRQ when it requeues
+      // each consumed packet, then keeps updating the receive ring without
+      // exclusion. Its queue scheduler also enables global IRQs, defeating
+      // an outer interrupt guard. Consume one byte per core call instead:
+      // each call finishes its accounting before requeueing a packet.
+      int n = 0;
+      while ((size_t)n < take) {
+        const int b = Serial.read();
+        if (b < 0) break;
+        dst[got + (size_t)n++] = (uint8_t)b;
+      }
+      if (sdSerPutTrace) sdSerReplyf("TRACE RXDONE %d", n);
       if (n <= 0) {
         if ((millis() - start) > timeoutMs) return false;
         yield();
@@ -140,24 +176,17 @@ static bool sdSerNormalizePath(const char *in, char *out, size_t outLen) {
   }
 
   size_t o = 0;
-  while (*in && o + 1 < outLen) {
-    if (*in == '/' || *in == '\\') {
-      if (o == 0 || out[o - 1] != '/') out[o++] = '/';
-      in++;
-      continue;
+  while (*in) {
+    while (*in == '/' || *in == '\\') ++in;
+    const char *seg = in;
+    while (*in && *in != '/' && *in != '\\') {
+      if ((uint8_t)*in < 32 || (uint8_t)*in == 127) return false;
+      ++in;
     }
-
-    char seg[64];
-    size_t s = 0;
-    while (*in && *in != '/' && *in != '\\' && s + 1 < sizeof(seg)) {
-      seg[s++] = *in++;
-    }
-    seg[s] = '\0';
-    if (s == 0) continue;
-    if (strcmp(seg, ".") == 0) continue;
-    if (strcmp(seg, "..") == 0) return false;
-
-    if (o > 0 && out[o - 1] != '/') {
+    const size_t s = in - seg;
+    if (!s || (s == 1 && seg[0] == '.')) continue;
+    if (s == 2 && seg[0] == '.' && seg[1] == '.') return false;
+    if (o > 0) {
       if (o + 1 >= outLen) return false;
       out[o++] = '/';
     }
@@ -179,7 +208,7 @@ static const char *sdSerFsPath(const char *normalized) {
 }
 
 static void sdSerCmdPing() {
-  sdSerReplyf("OK TOERN SD %s", VERSION);
+  sdSerReplyf("OK TOERN SD %s PUT_SPACES PUT_TRACE", VERSION);
 }
 
 static void sdSerCmdList(const char *pathArg) {
@@ -312,10 +341,9 @@ static void sdSerCmdMkdir(const char *pathArg) {
 }
 
 static void sdSerCmdPut(char *args) {
-  char *pathTok = strtok(args, " \t");
-  char *sizeTok = strtok(NULL, " \t");
-  char *crcTok = strtok(NULL, " \t");
-  if (!pathTok || !sizeTok || !crcTok) {
+  char *pathTok = nullptr;
+  uint32_t size = 0, expectCrc = 0;
+  if (!toern_sd::parsePutArgs(args, pathTok, size, expectCrc)) {
     sdSerReply("ERR USAGE");
     return;
   }
@@ -326,13 +354,13 @@ static void sdSerCmdPut(char *args) {
     return;
   }
 
-  uint32_t size = (uint32_t)strtoul(sizeTok, NULL, 10);
-  uint32_t expectCrc = (uint32_t)strtoul(crcTok, NULL, 16);
   if (size > (512ul * 1024ul * 1024ul)) {
     sdSerReply("ERR TOO_LARGE");
     return;
   }
 
+  sdSerAudioStopForSd();
+  sdSerPutCheckpoint("OPEN", 0);
   if (SD.exists(path)) {
     File existing = SD.open(path);
     if (existing && existing.isDirectory()) {
@@ -384,9 +412,8 @@ static void sdSerCmdPut(char *args) {
   uint32_t crc = 0;
   bool ok = true;
 
-  // Pause audio up front; only hold __disable_irq around SD writes — never
-  // across Serial.read/ACK (USB needs IRQs).
-  sdSerAudioStopForSd();
+  // Audio is stopped before opening/truncating the file. Keep USB interrupts
+  // active during the serial handshake and while waiting for the next block.
   while (remaining > 0) {
     // One flow-control block: host must wait for ACK before sending more.
     // USB CDC ignores baud rate and will otherwise overrun RX during SD writes.
@@ -394,10 +421,12 @@ static void sdSerCmdPut(char *args) {
     size_t got = 0;
     while (got < block) {
       size_t n = (block - got) > SD_SER_CHUNK ? SD_SER_CHUNK : (block - got);
+      sdSerPutCheckpoint("READ", size - remaining);
       if (!sdSerReadExact(chunk, n, SD_SER_IO_TIMEOUT_MS)) {
         ok = false;
         break;
       }
+      sdSerPutCheckpoint("WRITE", size - remaining);
       AudioNoInterrupts();
       size_t written = out.write(chunk, n);
       AudioInterrupts();
@@ -411,11 +440,14 @@ static void sdSerCmdPut(char *args) {
       sdSerLastClientMs = millis();
     }
     if (!ok) break;
+    sdSerPutCheckpoint("FLUSH", size - remaining);
     AudioNoInterrupts();
     out.flush();
     AudioInterrupts();
+    sdSerPutCheckpoint("ACK", size - remaining);
     sdSerReplyFlush("ACK");
   }
+  sdSerPutCheckpoint("CLOSE", size - remaining);
   AudioNoInterrupts();
   out.close();
   AudioInterrupts();
@@ -490,8 +522,7 @@ static void sdSerCmdGet(const char *pathArg) {
     return;
   }
 
-  // Pause audio (may use SD). Do not use AudioNoInterrupts here — on Teensy 4 that is
-  // __disable_irq() and breaks USB CDC for larger transfers.
+  // Stop SD audio readers before opening the host download stream.
   sdSerAudioStopForSd();
 
   File in = SD.open(path, FILE_READ);
@@ -641,9 +672,10 @@ static bool sdPatApply() {
   memcpy(&bpm, sdPatBuf + SD_PAT_NOTE_BYTES + 2, sizeof(bpm));
   if (bpm >= 40.0f && bpm <= 300.0f) {
     SMP.bpm = bpm;
-    bpmMode.pos[3] = (unsigned int)bpm;
+    syncBpmEncoderPositions();
     playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
-    playTimer.update((uint32_t)round(playNoteInterval));
+    playTimer.update(playNoteInterval);
+    fillTimer.update(playNoteInterval / 4.0);
   }
 
   size_t p = pitchAt + sizeof(SD_PAT_PITCH_HDR);
@@ -780,6 +812,8 @@ static void sdSerHandleLine(char *line) {
 
   if (strcasecmp(cmd, "PING") == 0) {
     sdSerCmdPing  ();
+  } else if (strcasecmp(cmd, "SDINFO") == 0) {
+    sdSerCmdInfo();
   } else if (strcasecmp(cmd, "LIST") == 0) {
     sdSerCmdList(args && *args ? args : "/");
   } else if (strcasecmp(cmd, "RM") == 0) {
@@ -789,9 +823,11 @@ static void sdSerHandleLine(char *line) {
   } else if (strcasecmp(cmd, "MV") == 0 || strcasecmp(cmd, "REN") == 0) {
     if (args && *args) sdSerCmdMv(args);
     else sdSerReply("ERR USAGE");
-  } else if (strcasecmp(cmd, "PUT") == 0) {
+  } else if (strcasecmp(cmd, "PUT") == 0 || strcasecmp(cmd, "PUTTRACE") == 0) {
+    sdSerPutTrace = strcasecmp(cmd, "PUTTRACE") == 0;
     if (args && *args) sdSerCmdPut(args);
     else sdSerReply("ERR USAGE");
+    sdSerPutTrace = false;
   } else if (strcasecmp(cmd, "GET") == 0) {
     sdSerCmdGet(args);
   } else if (strcasecmp(cmd, "GETPAT") == 0) {
@@ -824,7 +860,7 @@ void sdSerialServerSetActive(bool on) {
     sdSerDrainRx();
     sdSerExpireClient();
     sdSerActive = true;
-    sdSerReplyf("OK TOERN SD %s", VERSION);
+    sdSerReplyf("OK TOERN SD %s PUT_SPACES PUT_TRACE", VERSION);
   } else {
     sdSerActive = false;
     sdSerDrainRx();
@@ -875,7 +911,13 @@ static void sdSerHandleOffPage(char *line) {
 
   if (strcasecmp(cmd, "PING") == 0) {
     sdSerNoteHostPresent();
-    sdSerReplyf("OK TOERN SD %s", VERSION);
+    sdSerReplyf("OK TOERN SD %s PUT_SPACES PUT_TRACE", VERSION);
+    return;
+  }
+
+  if (strcasecmp(cmd, "SDINFO") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdInfo();
     return;
   }
 
@@ -894,10 +936,12 @@ static void sdSerHandleOffPage(char *line) {
     sdSerNoteHostPresent();
     if (args && *args) sdSerCmdMv(args);
     else sdSerReply("ERR USAGE");
-  } else if (strcasecmp(cmd, "PUT") == 0) {
+  } else if (strcasecmp(cmd, "PUT") == 0 || strcasecmp(cmd, "PUTTRACE") == 0) {
     sdSerNoteHostPresent();
+    sdSerPutTrace = strcasecmp(cmd, "PUTTRACE") == 0;
     if (args && *args) sdSerCmdPut(args);
     else sdSerReply("ERR USAGE");
+    sdSerPutTrace = false;
   } else if (strcasecmp(cmd, "GET") == 0) {
     sdSerNoteHostPresent();
     sdSerCmdGet(args);
@@ -908,12 +952,13 @@ static void sdSerHandleOffPage(char *line) {
     sdSerNoteHostPresent();
     sdSerCmdPutPat(args);
   } else {
-    sdSerReply("ERR NEED_SD");
+    sdSerReply("ERR UNKNOWN");
   }
 }
 
 void sdSerialServerPollNeedSdHint() {
-  if (sdSerActive) return;
+  // Cable only: no program has the port open. Do not read or wait.
+  if (!Serial) return;
   sdSerExpireClient();
 
   // Only defer to the color protocol while Menu → ETC → COLR is open.

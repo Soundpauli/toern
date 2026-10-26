@@ -1,4 +1,4 @@
-/** Web Serial client for TŒRN Menu → ETC → SD (same protocol as sd-tool-standalone). */
+/** Web Serial client for the TŒRN card server (same protocol as sd-tool-standalone). */
 
 export const BAUD = 115200;
 export const TEENSY_FILTERS = [{ usbVendorId: 0x16c0 }];
@@ -219,12 +219,11 @@ export class ToernSdSerial {
       const text = new TextDecoder("utf-8", { fatal: false }).decode(this._rxBuf.subarray(0, Math.min(120, this._rxLen)));
       sdLog("openPort: RX during settle (" + this._rxLen + "B): " + JSON.stringify(text));
     } else {
-      sdLog("openPort: no RX during settle — open Menu → ETC → SD if needed");
+      sdLog("openPort: no RX during settle — host will PING");
     }
   }
 
-  // Wait for SD banner or a successful PING. Opening the port can reboot the Teensy
-  // and drop out of Menu → ETC → SD; keep pinging so the user can re-enter.
+  // Wait for a banner or a successful PING. Opening the port can reboot the Teensy.
   async _handshakeSd(onStatus, onNeedSd) {
     const deadline = performance.now() + HANDSHAKE_MS;
     let n = 0;
@@ -263,7 +262,7 @@ export class ToernSdSerial {
       n += 1;
       const leftSec = Math.max(1, Math.ceil((deadline - performance.now()) / 1000));
       const hint = sawNeedSd
-        ? `Opening Menu → ETC → SD (${leftSec}s)`
+        ? `Device refused the command (${leftSec}s)`
         : `Connecting… (${leftSec}s)`;
       if (onStatus) onStatus(hint);
       sdLog(`handshake PING #${n}`);
@@ -280,14 +279,14 @@ export class ToernSdSerial {
       }
       if (line && /NEED_SD/i.test(line)) {
         markNeedSd();
-        sdLog("device says NEED_SD — re-enter Menu → ETC → SD", "err");
+        sdLog("device says NEED_SD — older firmware only", "err");
       }
       await this._sleep(350);
     }
     throw new Error(
       sawNeedSd
-        ? "Device is online but not on SD page — open Menu → ETC → SD (WAIT), then Connect again if needed."
-        : "No serial reply — reflash firmware with SD serial, then Menu → ETC → SD. Opening USB can reboot Teensy; re-enter SD after Connect.",
+        ? "Device replied NEED_SD. This build answers from any screen; that reply is from older firmware."
+        : "No serial reply. Opening USB can reboot the Teensy — wait for it to come back, then Connect again.",
     );
   }
 
@@ -330,7 +329,7 @@ export class ToernSdSerial {
           if (!port) throw new Error("serial port not available after disconnect");
         }
         await this._openPort(port);
-        if (onStatus) onStatus("Waiting for Menu → ETC → SD…");
+        if (onStatus) onStatus("Waiting for the Teensy…");
         const msg = await this._handshakeSd(onStatus, onNeedSd);
         sdLog("connect: ready → " + msg, "ok");
         if (onNeedSd) onNeedSd(false);

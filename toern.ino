@@ -1,5 +1,6 @@
 #include "src/toern_build_types.h"
 #include "toern_hardware.h"
+#include "src/toern_demo.h"
 #include "toern_touch_input.h"
 
 #define VERSION "v3.02"
@@ -55,6 +56,9 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include <Wire.h>
 #include <i2cEncoderLibV2.h>
 #include <MIDI.h>
+#include "src/toern_midi_clock.h"
+#include "src/toern_midi_serial.h"
+#include "src/toern_sd_protocol.h"
 #include <Audio.h>
 #include "src/toern_audio_runtime.h"
 #include "src/toern_pcm_interpolation.h"
@@ -296,7 +300,8 @@ struct MidiSettings : public midi ::DefaultSettings {
   static const bool Use1ByteParsing = false;
 };
 
-MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial8, MIDI, MidiSettings);
+toern_midi::TimestampedSerial midiInputSerial;
+MIDI_CREATE_CUSTOM_INSTANCE(toern_midi::TimestampedSerial, midiInputSerial, MIDI, MidiSettings);
 static uint8_t midiTxExtra[128];
 static uint8_t midiRxExtra[512];
 
@@ -1039,7 +1044,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, maxY, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode bpmMode = { "BPM", { 11, 0, 0, BPM_MIN }, { 30, 252, 1, BPM_MAX }, { 11, 0, 0, 100 }, { 0x000000, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
+Mode bpmMode = { "BPM", { 0, 0, 0, BPM_MIN }, { 9, 252, 1, BPM_MAX }, { 0, 0, 0, 100 }, { 0x00FFFF, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 0, 0, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -1492,6 +1497,11 @@ int currentEncoderIndex = 0;
 static const uint8_t neoSliderAddrs[NEOSLIDER_COUNT] = { 0x30, 0x31, 0x32, 0x33 };
 static const uint8_t neoSliderVoiceCh[NEOSLIDER_COUNT] = { 1, 2, 3, 4 };
 
+static inline bool isNeoSliderEnabled(int index) {
+  return index >= 0 && index < NEOSLIDER_COUNT &&
+         (neoSliderDisabledMask & (1u << index)) == 0;
+}
+
 // Channels that have a real volume/amp path (CTRL=VOL); NeoSliders always drive voices 1-4 on every Y.
 static inline bool isVolumeVoiceChannel(int ch) {
   return (ch >= 1 && ch <= 8) || ch == 11 || ch == 13 || ch == 14;
@@ -1558,7 +1568,7 @@ bool encoderI2cWritesAllowed() {
 
 
 static inline bool isNeoSliderControlledChannel(int ch) {
-  return exttouch && ch >= 1 && ch <= NEOSLIDER_COUNT && neoSliderPresent[ch - 1];
+  return exttouch && isNeoSliderEnabled(ch - 1) && neoSliderPresent[ch - 1];
 }
 
 // Temporary mute/solo snapshots are older than the physical controls. Once a
@@ -2438,8 +2448,11 @@ FLASHMEM void switchMode(Mode *newMode) {
     }
 
     if (currentMode == &bpmMode) {
-      // Set encoder 0 and 1 to black (no color)
-      Encoder[0].writeRGBCode(0x000000);
+      syncBpmEncoderPositions();
+      Encoder[0].writeCounter((int32_t)currentMode->pos[0]);
+      Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+      // Encoder 1 edits hundredths; encoder 4 edits whole BPM.
+      Encoder[0].writeRGBCode(0x00FFFF);
       Encoder[1].writeRGBCode(0x000000);
 
       // Set encoder 1 position to match current brightness
@@ -2711,6 +2724,18 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   for (int i = 0; i < NUM_ENCODERS; i++) {
     fnEvents[i] = fnButtonEvent(i, currentButtonStates[i]);
     if (fnEvents[i] == 3 || fnEvents[i] == 4 || fnEvents[i] == 8) modifiedEvent = true;
+  }
+  // Page row: FN + encoder 2 long (0200) is the only random / aware generate.
+  if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 16 && fnEvents[1] == 3) {
+    if (GLOB.singleMode) {
+      drawRandoms();
+    } else {
+      extern void drawRandomsMultiPage();
+      drawRandomsMultiPage();
+    }
+    deleteActiveCopy();
+    preventPaintUnpaint = true;
+    return;
   }
   if (fnHeld || modifiedEvent) return; // FN cannot fall through to normal button actions.
   //checkFastRec();
@@ -3520,26 +3545,11 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       }
       return;
     }
-    // In single mode, trigger clear page function ONLY when y=16
-    if (GLOB.singleMode && GLOB.y == 16) {
-      clearPage();
-      preventPaintUnpaint = true;  // Prevent paint/unpaint after deleteall
-      return;                      // Prevent other button actions from being processed
-    }
-    // In draw mode, no action (or could add different functionality if needed)
+    // Page row short press does nothing (delete is 2000). Copy cancel above still runs.
   }
 
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 2, 0, 0, 0)) {  // "2000"
     extern int drawMode;
-    // Draw mode + touch4 held + long-press enc1: wipe current page and generate a multi-voice
-    // ensemble across a subset of channels 1..14 using the companion generator.
-    if (currentMode == &draw && !GLOB.singleMode && (touchState[3] || readDebouncedTouch(3))) {
-      extern void drawRandomsMultiPage();
-      drawRandomsMultiPage();
-      deleteActiveCopy();
-      preventPaintUnpaint = true;
-      return;
-    }
     // R mode: long-press enc1 enters fullMute (velocity long-press is suppressed).
     if (!childLockEnabled && drawMode == 1 && GLOB.y < 16) {
       // If this long press targets velocity editing, suppress mute toggle.
@@ -3555,14 +3565,9 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       }
       return;
     }
-    // In single mode, trigger random function ONLY when y=16
-    if (GLOB.singleMode && GLOB.y == 16) {
-      drawRandoms();
-      preventPaintUnpaint = true;  // Prevent paint/unpaint after random
-      return;                      // Prevent other button actions from being processed
-    }
-    // Draw + page row: long-press enc1 clears the current edit page (all voices)
-    if (currentMode == &draw && GLOB.y == 16) {
+    // Page row: long-press enc1 deletes the current edit page
+    // (all voices in draw, focused voice in single).
+    if (GLOB.y == 16) {
       clearPage();
       deleteActiveCopy();
       preventPaintUnpaint = true;
@@ -3901,7 +3906,7 @@ FLASHMEM void checkCrashReport() {
 
 // Push FastLED CRGB[] to NeoSlider LEDs via seesaw (ATtiny LED data pin 14).
 FLASHMEM static void neoSliderShowLeds(int idx) {
-  if (idx < 0 || idx >= NEOSLIDER_COUNT || !neoSliderPresent[idx]) return;
+  if (!isNeoSliderEnabled(idx) || !neoSliderPresent[idx]) return;
   // Seesaw LED buffer: 2-byte offset + GRB bytes
   uint8_t writeBuf[2 + NEOSLIDER_NUM_LEDS * 3];
   writeBuf[0] = 0;
@@ -3947,7 +3952,7 @@ FLASHMEM static CRGB neoSliderPlasticCompensated(CRGB c) {
 FLASHMEM static void neoSliderUpdateLeds(int idx, int vol) {
   // Volume bar: 0 = all off, 16 = all 4 full, 8 (50%) = lowest 2 full, etc.
   // Color = that voice's channel color (col[1]..col[4]), plastic-compensated.
-  if (idx < 0 || idx >= NEOSLIDER_COUNT) return;
+  if (!isNeoSliderEnabled(idx)) return;
   vol = constrain(vol, 0, 16);
   int lit = (vol <= 0) ? 0 : ((vol * NEOSLIDER_NUM_LEDS + 15) / 16);
   if (lit > NEOSLIDER_NUM_LEDS) lit = NEOSLIDER_NUM_LEDS;
@@ -3978,7 +3983,7 @@ static void neoSliderFlushPendingLeds() {
   static uint8_t next = 0;
   for (int n = 0; n < NEOSLIDER_COUNT; n++) {
     int i = (int)((next + n) % NEOSLIDER_COUNT);
-    if (!neoSliderPresent[i]) continue;
+    if (!isNeoSliderEnabled(i) || !neoSliderPresent[i]) continue;
     int want = neoSliderLedVolWanted[i];
     if (want < 0) continue;
     want = constrain(want, 0, 16);
@@ -4012,6 +4017,9 @@ FLASHMEM void initNeoSlider() {
     neoSliderLedVolShown[i] = -1;
     neoSliderLedVolWanted[i] = -1;
     fill_solid(neoSliderLeds[i], NEOSLIDER_NUM_LEDS, CRGB::Black);
+
+    neoSliderOverlayActive[i] = false;
+    if (!isNeoSliderEnabled(i)) continue;
 
     // The Wire.begin() wrapper keeps even the initial address probe slow.
     if (!neoSliderSS[i].begin(neoSliderAddrs[i])) {
@@ -4164,6 +4172,7 @@ FLASHMEM void resetAllChannelVolumesToDefault() {
 
 // One seesaw ADC + mute / per-note velocity scale. Does not touch AMP.
 static void processOneNeoSlider(int i, uint16_t *lastRaw) {
+  if (!isNeoSliderEnabled(i) || !neoSliderPresent[i]) return;
   uint16_t raw = 0;
   if (!neoSliderSS[i].analogReadFast(SS_NEOSLIDER_ADC_CH, raw)) {
     return;  // keep last; never treat fail as 0 (invert would look like 100%)
@@ -4263,7 +4272,7 @@ void updateNeoSliderVolume() {
 
   bool moving = false;
   for (int n = 0; n < NEOSLIDER_COUNT; n++) {
-    if (neoSliderPresent[n] && neoSliderActiveUntil[n] < 250) {
+    if (isNeoSliderEnabled(n) && neoSliderPresent[n] && neoSliderActiveUntil[n] < 250) {
       moving = true;
       break;
     }
@@ -4279,7 +4288,7 @@ void updateNeoSliderVolume() {
   for (int n = 0; n < NEOSLIDER_COUNT; n++) {
     int i = next;
     next = (uint8_t)((next + 1) % NEOSLIDER_COUNT);
-    if (!neoSliderPresent[i]) continue;
+    if (!isNeoSliderEnabled(i) || !neoSliderPresent[i]) continue;
     processOneNeoSlider(i, lastRaw);
     break;
   }
@@ -5969,7 +5978,7 @@ void checkTouchInputs() {
   }
 
   // Tap tempo for BPM menu using touch3
-  if (currentMode == &bpmMode) {
+  if (currentMode == &bpmMode && clockMode == 1) {
     static bool lastTouch3State = false;
     static unsigned long tapTimes[4] = { 0, 0, 0, 0 };  // Store last 4 tap times
     static uint8_t tapIndex = 0;
@@ -6051,12 +6060,13 @@ void checkTouchInputs() {
 
           // Update BPM
           SMP.bpm = calculatedBPM;
-          currentMode->pos[3] = (unsigned int)calculatedBPM;
-          Encoder[3].writeCounter((int32_t)calculatedBPM);
+          syncBpmEncoderPositions();
+          Encoder[0].writeCounter((int32_t)currentMode->pos[0]);
+          Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
 
           // Apply BPM immediately
-          extern void applyBPMDirectly(int bpm);
-          applyBPMDirectly((int)calculatedBPM);
+          extern void applyBPMDirectly(float bpm);
+          applyBPMDirectly(calculatedBPM);
 
           // Update display
           extern void drawBPMScreen();
@@ -6266,7 +6276,9 @@ end_switch1:
 
     if (currentMode != &filterMode && touchState[1] && !lastTouchState[1] && (currentTime - lastTouchTime[1] > DEBOUNCE_TIME) && !touchState[0]) {
       lastTouchTime[1] = currentTime;
-      if (currentMode == &draw || currentMode == &singleMode) {
+      if ((currentMode == &draw || currentMode == &singleMode) && fnHeld) {
+        toggleCopyPaste();
+      } else if (currentMode == &draw || currentMode == &singleMode) {
         extern bool getChildLockEnabled();
         if (getChildLockEnabled()) {
           // Child lock enabled: set flag, wait for touch1, and act like touch1 (toggle single mode)
@@ -6971,6 +6983,8 @@ void checkSerialColors() {
   extern bool inEtcSubmenu;
   extern int getCurrentMenuMainSetting();
   if (!inEtcSubmenu || getCurrentMenuMainSetting() != 41) return;
+  // No host program has opened the port. Do not read or wait.
+  if (!Serial) return;
 
   if (Serial.available() >= 4) {
     if (Serial.peek() == 'C') {
@@ -7106,24 +7120,15 @@ void checkSerialColors() {
 }
 
 void loop() {
+  if (serviceDemoAnimation()) { checkMidi(); yield(); return; }
   checkSerialColors();
 
-  // Menu → ETC → SD: enable serial file server while that page is open
+  // USB serial commands from any screen. `Serial` is true only after a program
+  // opens the port and DTR has stayed up for 15 ms. A cable with no tool
+  // dialog leaves this false: no read and no wait.
   {
-    extern bool inEtcSubmenu;
-    extern int getCurrentMenuMainSetting();
-    extern void sdSerialServerSetActive(bool on);
-    extern void sdSerialServerPoll();
     extern void sdSerialServerPollNeedSdHint();
-    extern bool sdSerialServerIsActive();
-    const bool wantSd = inEtcSubmenu && (getCurrentMenuMainSetting() == 49);
-    if (wantSd != sdSerialServerIsActive()) {
-      sdSerialServerSetActive(wantSd);
-      extern void menuRequestFullRedraw();
-      menuRequestFullRedraw();
-    }
-    if (wantSd) sdSerialServerPoll();
-    else sdSerialServerPollNeedSdHint();
+    if (Serial) sdSerialServerPollNeedSdHint();
   }
 
   updateExternalOneBlink();
@@ -7332,6 +7337,10 @@ void loop() {
       lastDrawUpdate = now;
       drawBase();
       drawTriggers();
+      if (GLOB.activeCopy) {
+        extern void drawCopyArmedLabel();
+        drawCopyArmedLabel();
+      }
       if (isNowPlaying) drawTimer();
 
       // Draw count-in for ON1 mode
@@ -8172,6 +8181,7 @@ void play(bool fromStart) {
   resetSequencedSynthLegato();
 
   if (fromStart) {
+    cancelMidiTransportStart();
     updateLastPage();
 
     // Update encoder 1 limit if pattern mode is ON
@@ -8252,7 +8262,7 @@ void play(bool fromStart) {
     }
 
     Encoder[2].writeRGBCode(0xFFFF00);
-    if (MIDI_CLOCK_SEND) {
+    if (clockMode == 1) {
       // Master mode: defer play until effective send-side delay elapses (SNC1 + cross from negative SNC2).
       extern unsigned long effectiveTransportSendDelayMs();
       extern void armMasterTransportStartDelay();
@@ -8264,7 +8274,7 @@ void play(bool fromStart) {
         extern void pulseClockOnTransportStart();
         pulseClockOnTransportStart();
         if (SMP.bpm > 0.0f) {
-          unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+          double currentPlayNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
           playTimer.end();
           playNote();
           playTimer.begin(playNote, currentPlayNoteInterval);
@@ -8303,6 +8313,7 @@ void play(bool fromStart) {
 }
 
 void pause(bool skipSave) {
+  cancelMidiTransportStart();
   // Send MIDI Stop FIRST (before any other operations) to advance it by ~5ms
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
     MIDI.sendRealTime(midi::Stop);  // Send as early as possible for better sync
@@ -10255,20 +10266,32 @@ static void applyChannelDirection(uint8_t channel, int8_t targetDir) {
   refreshSamplerChannel(channel);
 }
 
+// Encoder positions are whole BPM + tenths. Storage remains float BPM.
+void syncBpmEncoderPositions() {
+  const unsigned int tenths = (unsigned int)lroundf(SMP.bpm * 10.0f);
+  bpmMode.pos[3] = tenths / 10u;
+  bpmMode.pos[0] = tenths % 10u;
+}
+
 FLASHMEM void updateBPM() {
   extern int clockMode;
   if (clockMode == 1) {  // INT mode: allow BPM adjustment (don't use MIDI_CLOCK_SEND which depends on midiSendMode)
-    SMP.bpm = currentMode->pos[3];                                    // BPM from encoder
+    const unsigned int requestedFine = currentMode->pos[0];
+    SMP.bpm = constrain(currentMode->pos[3] + currentMode->pos[0] * 0.1f,
+                        (float)BPM_MIN, (float)BPM_MAX);
+    syncBpmEncoderPositions();
+    if (requestedFine != currentMode->pos[0])
+      Encoder[0].writeCounter((int32_t)currentMode->pos[0]);
     if (SMP.bpm > 0) {                                                // Avoid division by zero
       playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
-      playTimer.update((uint32_t)round(playNoteInterval));
+      playTimer.update(playNoteInterval);
       // Update fill timer to match new beat rate (4x speed)
       if (playNoteInterval >= 4) {
         fillTimer.update(playNoteInterval / 4);
       }
       //midiTimer.update(playNoteInterval);  // If midiTimer exists and shares interval
 
-      // Update MIDI clock output immediately with exact rounded BPM value
+      // Update MIDI clock output with the same fractional tempo
       extern void updateMidiClockOutput();
       updateMidiClockOutput();
     }
@@ -10321,6 +10344,12 @@ FLASHMEM void setBPM() {
     // Use the EEPROM representation consistently: 0=EXT, 1=INT.
     clockMode = (newPos2 == 1) ? 1 : 0;
 
+    if (clockMode == 1) {
+      syncBpmEncoderPositions();
+      Encoder[0].writeCounter((int32_t)currentMode->pos[0]);
+      Encoder[3].writeCounter((int32_t)currentMode->pos[3]);
+    }
+
     // Save to EEPROM
     extern void saveSingleModeToEEPROM(int index, int8_t value);
     saveSingleModeToEEPROM(1, clockMode);
@@ -10353,7 +10382,8 @@ FLASHMEM void setBPM() {
     lastPos2 = newPos2;
   }
 
-  if (currentMode->pos[3] != (unsigned int)SMP.bpm) {  // Cast SMP.bpm for comparison
+  if (clockMode == 1 && (currentMode->pos[3] * 10u + currentMode->pos[0]) !=
+      (unsigned int)lroundf(SMP.bpm * 10.0f)) {
     updateBPM();
   }
 }

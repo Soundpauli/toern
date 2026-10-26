@@ -11,6 +11,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
-    "@tonejs/midi": "^2.0.28"
+    "@tonejs/midi": "^2.0.28",
+    "jszip": "^3.10.2"
   }
 }

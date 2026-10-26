@@ -126,4 +126,4 @@ If upload cannot see the board, press **PROGRAM** on the Teensy.
 
 ## After flashing
 
-USB enumerates as **Serial + MIDI**. Keep **Menu → ETC → SD** open if you use the SD serial tool. Insert or eject the Micro SD only with the unit **off**.
+USB enumerates as **Serial + MIDI**. The SD serial tool answers from any screen. Insert or eject the Micro SD only with the unit **off**.

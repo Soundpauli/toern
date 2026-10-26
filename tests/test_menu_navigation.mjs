@@ -187,7 +187,7 @@ expectToggle("ON", [0, 120, 0]);
 textDraws.length = 0;
 litPixels = 0;
 drawSubmenu(matrix, { mode: "mode", subIndex: 7 }, now);
-assert.equal(litPixels, 10); // Only the ten submenu navigation dots.
+assert.equal(litPixels, 11); // Eleven MODE submenu navigation dots.
 assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["SONG", 2, 10]]);
 textDraws.length = 0;
 litPixels = 0;
@@ -396,3 +396,67 @@ assert.equal(perf.mode(),"pset");
 console.log("PASS: five-pad audition/fill, queued voices and final drop through transport, menu faders, solo priority, V gain, synth presets and pause release.");
 console.log("PASS: SETT, MODE \u2192 SONG, ETC \u2192 ADV, moved controls, IMG lock, merged PREV, TOUCHY pads/pitch/velocity/effects/Fastrec/browser/filter/exit, and legacy settings reload.");
 await rm(testDir, { recursive: true, force: true });
+// DEMO: exact ten-second intro, three complete traversals, then repeat without a logo.
+const { demoPhase, drawDemo, drawBpm, DEMO_TEXT, DEMO_TEXT_WIDTH } = await import('../standalone-tools/web-standalone/src/firmware/screens.js');
+const { textPixelWidth } = await import('../standalone-tools/web-standalone/src/firmware/font.js');
+for (const cols of [16,32]) {
+  setLayout(cols);
+  const scroll=(cols+DEMO_TEXT_WIDTH+1)*65;
+  assert.equal(demoPhase(9999,cols).name,'nyan');
+  for (const [i,name] of ['red','white','rainbow'].entries()) {
+    const start=10000+i*scroll;
+    assert.equal(demoPhase(start,cols).name,name);
+    assert.equal(demoPhase(start,cols).x,cols+1);
+    assert(demoPhase(start+scroll-1,cols).x <= -DEMO_TEXT_WIDTH+1);
+  }
+  assert.equal(demoPhase(10000+3*scroll,cols).name,'nyan');
+  const cycle=10000+3*scroll;
+  assert.equal(demoPhase(cycle-1,cols).name,'rainbow');
+  assert.deepEqual(demoPhase(cycle,cols),{name:'nyan',elapsed:0});
+  assert.deepEqual(demoPhase(cycle*123+1234,cols),demoPhase(1234,cols));
+  const ink=[],letters=[];
+  const m={light:(...a)=>ink.push(a),drawText:(...a)=>letters.push(a),drawIndicator(){}};
+  for(const bpm of [40,99.9,120.3,239.9,300]) {
+    letters.length=0;ink.length=0;
+    drawBpm(m,{bpm,ledBrightness:64,clockInt:true});
+    assert.equal(letters.map(a=>a[0]).join('.'),bpm.toFixed(1));
+    assert(letters.every(a=>a[2]===6));
+    for(const [text,x] of letters)assert(x>=1&&x+textPixelWidth(text)-2<=cols);
+  }
+  letters.length=0;ink.length=0;
+  drawDemo(m,10000+15*65);
+  const textInk=ink.filter(a=>a[2][0]===255&&a[2][1]===0&&a[2][2]===0);
+  assert(textInk.length>0 && textInk.every(a=>a[1]>=4&&a[1]<=13));
+  assert(ink.some(a=>a[2][2]>a[2][0]),"blue sine behind the text");
+  for(let i=0;i<textInk.length;i+=4) {
+    const block=textInk.slice(i,i+4);
+    assert.equal(new Set(block.map(a=>a[0])).size,2);
+    assert.equal(new Set(block.map(a=>a[1])).size,2);
+  }
+  ink.length=0;
+  drawDemo(m,10000+cols*65);
+  const mRows=["#...#","##.##","#.#.#","#...#","#...#"];
+  for(let row=0;row<5;row++)for(let col=0;col<5;col++)for(let dx=0;dx<2;dx++)for(let dy=0;dy<2;dy++) {
+    const x=1+col*2+dx,y=4+(4-row)*2+dy;
+    const red=ink.some(a=>a[0]===x&&a[1]===y&&a[2][0]===255&&a[2][1]===0);
+    assert.equal(red,mRows[row][col]==='#',`wide M at ${col},${row}`);
+  }
+  letters.length=0;
+  drawDemo(m,10000+3*scroll+2000);
+  assert(!letters.some(a=>a[0]==='&'));
+}
+setLayout(32);
+open(8);page(10);assert.equal(d.menuSummary().detail,'DEMO: GO');
+d.press(3);assert.equal(d.mode(),'demo');
+const total=10000+3*(32+DEMO_TEXT_WIDTH+1)*65;
+d.start();now+=total*3;frame(now);assert.equal(d.mode(),'demo');
+d.press(3);assert.equal(d.mode(),'demo');
+d.touch(2,true);d.touch(2,false);assert.equal(d.mode(),'demo');
+d.touch(1,true);assert.equal(d.mode(),'mode');assert.equal(d.subIndex(),10);
+d.touch(1,false);assert.equal(d.mode(),'mode');
+d.press(3);assert.equal(d.mode(),'demo');
+d.keydown({key:'a',code:'KeyA',preventDefault(){},stopPropagation(){}});
+assert.equal(d.mode(),'mode');
+d.keyup({key:'a',code:'KeyA'});assert.equal(d.mode(),'mode');
+d.jump('bpm');const oldBpm=d.bpm();d.rotate(0,1);assert.equal(d.bpm(),Math.round((oldBpm+.1)*10)/10);
+console.log('PASS: DEMO order/timing/full off-grid scrolls/exit and one-row fractional BPM on both matrix widths.');

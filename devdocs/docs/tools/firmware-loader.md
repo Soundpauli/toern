@@ -15,8 +15,7 @@ Based on **Teensy Loader Javascript** (WebHID flash + optional serial). The curr
 
 1. Open the tool in a Chromium desktop browser
 2. Choose stable v3.0 or Beta
-3. Put the Teensy in programming mode with its physical button, then select it via WebHID
-4. Upload / flash
+3. Upload. A running sketch is rebooted into the bootloader by opening its serial port at 134 baud. The red LED blinks, then WebHID flashes it. The physical program button is the fallback when no sketch is running.
 
 ## Code / licensing
 

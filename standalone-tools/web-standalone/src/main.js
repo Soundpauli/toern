@@ -3,8 +3,14 @@ import { COL } from "./firmware/const.js";
 import { createMatrix } from "./firmware/matrix.js";
 import { createDevice } from "./firmware/device.js";
 import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildImportCells } from "./firmware/midiImport.js";
+import {
+  parseSequencerOneZip,
+  patternToImportCells,
+  patternToFlatCells,
+} from "./firmware/sequencerOneImport.js";
 import { ToernSdSerial, joinSdPath } from "./firmware/sdSerial.js";
-import { encodePatternRam, decodePatternFile } from "./firmware/patternFile.js";
+import { encodePatternRam, encodePatternFile, decodePatternFile } from "./firmware/patternFile.js";
+import JSZip from "jszip";
 
 const W = 480;
 const H = 440;
@@ -21,7 +27,7 @@ const voiceButtons = [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14].map((ch) => {
 }).join("");
 
 const ENCODERS = [75, 185, 295, 405];
-const ENC_KEYS = [[" Q   W ", "TAB"], [" R   T ", "⌥/⇧"], [" U   I ", "SPACE"], [" P   Ü ", "ENTER"]];
+const ENC_KEYS = [[" W ", "TAB"], [" T ", "⌥/⇧"], [" I ", "SPACE"], [" Ü ", "ENTER"]];
 const encoders = ENCODERS.map((e, i) => `
   <div class="encoder" style="left:${px(e)};top:${py(352)}">
     <div class="ring">
@@ -83,8 +89,9 @@ app.innerHTML = `
     <h1 class="jump-title">Browser shortcuts</h1>
     <p>Press Space to play / pause. Click the grid first to activate browser audio. Turn the onscreen knobs with your mouse or use the keys below.</p>
     <ul class="key-legend-list">
-      <li><kbd>1</kbd>–<kbd>8</kbd> voice; <kbd>F1</kbd>–<kbd>F5</kbd> touch pads</li>
-      <li><kbd>F4</kbd> + <kbd>F5</kbd> fill (while playing)</li>
+      <li><kbd>1</kbd>–<kbd>8</kbd> voice</li>
+      <li><kbd>Q</kbd> <kbd>P</kbd> <kbd>M</kbd> <kbd>R</kbd> <kbd>U</kbd> touch pads 1–5</li>
+      <li><kbd>R</kbd> + <kbd>U</kbd> fill (while playing)</li>
       <li><kbd>S</kbd> single mode</li>
       <li><kbd>F</kbd> filter</li>
       <li><kbd>L</kbd> load sample</li>
@@ -142,12 +149,12 @@ app.innerHTML = `
         <div class="matrix-bed" style="left:${px(MATRIX.x)};top:${py(MATRIX.y)};width:${px(MATRIX.w)};height:${py(MATRIX.h)}">
           <canvas id="matrix" tabindex="0" role="application" aria-label="TŒRN grid. Focus here for device keys. Arrow keys move, Enter paints, Space plays."></canvas>
         </div>
-        <button type="button" class="pad" data-touch="1" style="left:${px(60)};top:${py(266)}" aria-label="Touch 1, Single mode and Exit" title="Touch 1"><span>T1</span><span class="io-label pad-hint pad-hint--r">Singlemode + Exit</span></button>
-        <button type="button" class="pad" data-touch="2" style="left:${px(420)};top:${py(266)}" aria-label="Touch 2, Menu" title="Touch 2"><span>T2</span><span class="io-label pad-hint pad-hint--l">Menu</span></button>
-        <button type="button" class="pad pad--aux" data-touch="4" style="left:${px(130)};top:${py(302.6)}" aria-label="Touch 4, audition current voice"><span>T4</span><span class="io-label pad-hint pad-hint--r">Audition</span></button>
-        <button type="button" class="pad pad--aux" data-touch="5" style="left:${px(350)};top:${py(302.6)}" aria-label="Touch 5, FN modifier"><span>T5</span><span class="io-label pad-hint pad-hint--r">FN</span></button>
+        <button type="button" class="pad" data-touch="1" style="left:${px(60)};top:${py(266)}" aria-label="Touch 1, key Q, Single mode and Exit" title="Touch 1 (Q)"><span>Q</span><span class="io-label pad-hint pad-hint--r">Singlemode + Exit</span></button>
+        <button type="button" class="pad" data-touch="2" style="left:${px(420)};top:${py(266)}" aria-label="Touch 2, key P, Menu" title="Touch 2 (P)"><span>P</span><span class="io-label pad-hint pad-hint--l">Menu</span></button>
+        <button type="button" class="pad pad--aux" data-touch="4" style="left:${px(130)};top:${py(302.6)}" aria-label="Touch 4, key R, audition current voice"><span>R</span><span class="io-label pad-hint pad-hint--r">Audition</span></button>
+        <button type="button" class="pad pad--aux" data-touch="5" style="left:${px(350)};top:${py(302.6)}" aria-label="Touch 5, key U, FN modifier"><span>U</span><span class="io-label pad-hint pad-hint--r">FN</span></button>
         ${encoders}
-        <button type="button" class="pad pad--front" data-touch="3" style="left:${px(420)}" aria-label="Touch 3, hold to record into voice" title="Touch 3 (hold to record)"><span>T3</span><span class="io-label">Hold to record</span></button>
+        <button type="button" class="pad pad--front" data-touch="3" style="left:${px(420)}" aria-label="Touch 3, key M, hold to record into voice" title="Touch 3 (M, hold to record)"><span>M</span><span class="io-label">Hold to record</span></button>
         ${io("l", "jack", 310, "6.35mm stereo TRS line-out")}
         ${io("l", "usb", 362, "USB-C port")}
         ${io("l", "jack", 414, "6.35mm headphone-out")}
@@ -180,7 +187,8 @@ app.innerHTML = `
     <button type="button" data-jump="filter">Sound controls</button>
     <button type="button" data-jump="wav">Sample browser</button>
     <button type="button" data-jump="bpm">BPM</button>
-    <p>Touch pads: <kbd>F1</kbd>–<kbd>F5</kbd>. Hold F4 + F5 while playing to request a fill.</p>
+    <button type="button" data-jump="demo">DEMO</button>
+    <p>Touch pads: <kbd>Q</kbd> <kbd>P</kbd> <kbd>M</kbd> <kbd>R</kbd> <kbd>U</kbd>. Hold R + U while playing to request a fill.</p>
     <details class="fader-panel"><summary>Faders · voices 1–8</summary>
       <p>Position overrides restored mute/solo state. Bottom is mute. Faders work in every screen.</p>
       <div class="sim-faders">${Array.from({length:8},(_,i)=>`<label>CH${i+1}<input type="range" min="0" max="16" value="16" data-fader="${i+1}" aria-label="Voice ${i+1} fader"><output>16</output></label>`).join("")}</div>
@@ -195,6 +203,7 @@ app.innerHTML = `
     </div>
     <hr>
     <button type="button" id="import-midi">Import MIDI File</button>
+    <button type="button" id="import-seq1">Import Sequencer One</button>
     <button type="button" id="transfer-open">Transfer patterns</button>
     <hr>
     <p class="status" id="status" role="status"></p>
@@ -253,6 +262,43 @@ app.innerHTML = `
         <button type="button" class="jump-panel-reset" id="import-reset">Reset to MIDI</button>
       </div>
       <p class="jump-panel-err" id="import-err" role="alert" hidden></p>
+    </div>
+    <div class="jump-layer" id="seq1-layer" hidden>
+      <div class="jump-layer-head">
+        <button type="button" id="seq1-back">← Menu</button>
+        <h2 class="jump-title">Sequencer One</h2>
+      </div>
+      <label class="jump-drop" id="seq1-drop">
+        <input type="file" id="seq1-file" accept=".zip,application/zip" hidden>
+        <span id="seq1-drop-label">Drop Sequencer One .zip or browse</span>
+      </label>
+      <div class="jump-layer-body" id="seq1-settings" hidden>
+        <p class="jump-panel-meta" id="seq1-meta"></p>
+        <div class="jump-panel-row">
+          <label>Voice
+            <select id="seq1-ch">
+              <option value="11" selected>CH11</option>
+              <option value="13">CH13</option>
+              <option value="14">CH14</option>
+              <option value="1">CH1</option>
+              <option value="2">CH2</option>
+              <option value="3">CH3</option>
+              <option value="4">CH4</option>
+              <option value="5">CH5</option>
+              <option value="6">CH6</option>
+              <option value="7">CH7</option>
+              <option value="8">CH8</option>
+            </select>
+          </label>
+        </div>
+        <p class="jump-panel-meta muted">Gate + pitch → pattern. Click a bank slot to show it; Save downloads TŒRN .txt files.</p>
+        <ul class="jump-tracks seq1-list" id="seq1-list"></ul>
+        <div class="sd-actions">
+          <button type="button" id="seq1-save" disabled>Save selected</button>
+          <button type="button" id="seq1-save-all" disabled>Save all</button>
+        </div>
+      </div>
+      <p class="jump-panel-err" id="seq1-err" role="alert" hidden></p>
     </div>
     <div class="jump-layer" id="sd-layer" hidden>
       <div class="jump-layer-head">
@@ -796,8 +842,9 @@ function pressKey(e) {
   if (e.key === "Enter") return 3;
   return -1;
 }
+const TOUCH_PAD_CODES = { KeyQ: 1, KeyP: 2, KeyM: 3, KeyR: 4, KeyU: 5 };
 function touchKey(e) {
-  if (/^F[1-5]$/.test(e.key)) return Number(e.key.slice(1));
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && TOUCH_PAD_CODES[e.code]) return TOUCH_PAD_CODES[e.code];
   if (e.key === "ß" || e.key === "ẞ" || e.key === "-" || e.code === "Minus") return 1;
   if (e.key === "´" || e.code === "Equal") return 2;
   return 0;
@@ -892,15 +939,16 @@ function clearChannel(channel) {
 
 function closeImport() {
   importLayer.hidden = true;
-  jumpHome.hidden = !sdLayer?.hidden;
   importMidiBtn.classList.remove("on");
   midiAssign.hidden = true;
   midiAssign.classList.remove("on");
+  if (seq1Layer?.hidden && sdLayer?.hidden) jumpHome.hidden = false;
 }
 
 function openImport() {
   closeLoadTrack();
   closeSdPanel();
+  closeSeq1();
   jumpHome.hidden = true;
   importLayer.hidden = false;
   importMidiBtn.classList.add("on");
@@ -1183,6 +1231,7 @@ async function loadMidiFile(file) {
 
 loadTrack.addEventListener("click", () => {
   closeImport();
+  closeSeq1();
   loadTrackSub.hidden = !loadTrackSub.hidden;
   loadTrack.classList.toggle("on", !loadTrackSub.hidden);
 });
@@ -1221,6 +1270,170 @@ importOffset.addEventListener("input", () => { syncOffsetReadout(); scheduleImpo
 importTranspose.addEventListener("change", scheduleImportApply);
 importOverlap.addEventListener("change", scheduleImportApply);
 importReset.addEventListener("click", resetImportToMidi);
+
+// --- Sequencer One backup ZIP (gate + pitch → patterns) ---------------
+const importSeq1Btn = document.querySelector("#import-seq1");
+const seq1Layer = document.querySelector("#seq1-layer");
+const seq1Back = document.querySelector("#seq1-back");
+const seq1Drop = document.querySelector("#seq1-drop");
+const seq1File = document.querySelector("#seq1-file");
+const seq1DropLabel = document.querySelector("#seq1-drop-label");
+const seq1Settings = document.querySelector("#seq1-settings");
+const seq1Meta = document.querySelector("#seq1-meta");
+const seq1List = document.querySelector("#seq1-list");
+const seq1Ch = document.querySelector("#seq1-ch");
+const seq1Save = document.querySelector("#seq1-save");
+const seq1SaveAll = document.querySelector("#seq1-save-all");
+const seq1Err = document.querySelector("#seq1-err");
+
+let seq1Draft = null;
+let seq1Selected = -1;
+
+function setSeq1Err(msg) {
+  seq1Err.hidden = !msg;
+  seq1Err.textContent = msg || "";
+}
+
+function closeSeq1() {
+  seq1Layer.hidden = true;
+  importSeq1Btn.classList.remove("on");
+  if (importLayer.hidden && sdLayer?.hidden) jumpHome.hidden = false;
+}
+
+function openSeq1() {
+  closeLoadTrack();
+  closeImport();
+  closeSdPanel();
+  jumpHome.hidden = true;
+  seq1Layer.hidden = false;
+  importSeq1Btn.classList.add("on");
+  seq1Back.focus();
+}
+
+function seq1Channel() {
+  return Number(seq1Ch.value) || 11;
+}
+
+function applySeq1Pattern(index) {
+  if (!seq1Draft) return;
+  const pattern = seq1Draft.patterns[index];
+  if (!pattern) return;
+  seq1Selected = index;
+  const { cells, pages } = patternToImportCells(pattern, { channel: seq1Channel() });
+  device.importMidi(cells, seq1Draft.bpm);
+  const pageTxt = !pages.length ? "no pages" : pages.length === 1 ? `page ${pages[0]}` : `pages ${pages[0]}–${pages[pages.length - 1]}`;
+  seq1Meta.textContent = `${seq1Draft.name} · ${pattern.id} · ${pattern.noteCount}/${pattern.length} steps · ${pageTxt} · ${seq1Draft.bpm} BPM`;
+  renderSeq1List();
+  setSeq1Err("");
+}
+
+function renderSeq1List() {
+  if (!seq1Draft) return;
+  seq1List.innerHTML = seq1Draft.patterns.map((p, i) => {
+    const dim = p.noteCount ? "" : "dim";
+    const on = i === seq1Selected ? "selected" : "";
+    return `<li data-i="${i}" class="${dim} ${on}" role="button" tabindex="0">
+      <span class="name">${p.id}</span>
+      <span class="count">${p.noteCount}/${p.length}</span>
+    </li>`;
+  }).join("");
+  seq1List.querySelectorAll("li").forEach((li) => {
+    const i = Number(li.dataset.i);
+    const go = () => applySeq1Pattern(i);
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); }
+    });
+  });
+  seq1Save.disabled = seq1Selected < 0;
+  seq1SaveAll.disabled = !seq1Draft.patterns.length;
+}
+
+function downloadBlob(filename, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function seq1PatternFilename(id) {
+  return `${id}.txt`;
+}
+
+async function loadSeq1Zip(file) {
+  if (!file) return;
+  setSeq1Err("");
+  try {
+    const draft = await parseSequencerOneZip(file);
+    if (!draft.patterns.length) throw new Error("No patterns in this backup.");
+    seq1Draft = draft;
+    seq1Selected = -1;
+    seq1DropLabel.textContent = file.name;
+    seq1Settings.hidden = false;
+    const withNotes = draft.patterns.filter((p) => p.noteCount).length;
+    seq1Meta.textContent = `${draft.name} · ${withNotes}/${draft.patterns.length} patterns · ${draft.bpm} BPM`;
+    renderSeq1List();
+    const first = draft.patterns.findIndex((p) => p.noteCount);
+    if (first >= 0) applySeq1Pattern(first);
+  } catch (err) {
+    seq1Draft = null;
+    seq1Selected = -1;
+    seq1Settings.hidden = true;
+    seq1Save.disabled = true;
+    seq1SaveAll.disabled = true;
+    setSeq1Err(err?.message || "Could not read that Sequencer One ZIP.");
+  }
+}
+
+importSeq1Btn.addEventListener("click", () => openSeq1());
+seq1Back.addEventListener("click", () => closeSeq1());
+seq1Drop.addEventListener("click", () => seq1File.click());
+seq1File.addEventListener("change", () => {
+  const file = seq1File.files?.[0];
+  if (file) loadSeq1Zip(file);
+  seq1File.value = "";
+});
+["dragenter", "dragover"].forEach((type) => {
+  seq1Drop.addEventListener(type, (e) => {
+    e.preventDefault();
+    seq1Drop.classList.add("on");
+  });
+});
+["dragleave", "drop"].forEach((type) => {
+  seq1Drop.addEventListener(type, (e) => {
+    e.preventDefault();
+    seq1Drop.classList.remove("on");
+  });
+});
+seq1Drop.addEventListener("drop", (e) => {
+  const file = [...(e.dataTransfer?.files || [])].find((f) => /\.zip$/i.test(f.name));
+  if (file) loadSeq1Zip(file);
+  else setSeq1Err("Drop a Sequencer One .zip backup.");
+});
+seq1Ch.addEventListener("change", () => {
+  if (seq1Selected >= 0) applySeq1Pattern(seq1Selected);
+});
+seq1Save.addEventListener("click", () => {
+  if (!seq1Draft || seq1Selected < 0) return;
+  const pattern = seq1Draft.patterns[seq1Selected];
+  const flat = patternToFlatCells(pattern, { channel: seq1Channel() });
+  const bytes = encodePatternFile(flat, { bpm: seq1Draft.bpm });
+  downloadBlob(seq1PatternFilename(pattern.id), new Blob([bytes], { type: "application/octet-stream" }));
+});
+seq1SaveAll.addEventListener("click", async () => {
+  if (!seq1Draft?.patterns.length) return;
+  const zip = new JSZip();
+  const ch = seq1Channel();
+  for (const pattern of seq1Draft.patterns) {
+    if (!pattern.noteCount) continue;
+    const flat = patternToFlatCells(pattern, { channel: ch });
+    zip.file(seq1PatternFilename(pattern.id), encodePatternFile(flat, { bpm: seq1Draft.bpm }));
+  }
+  const blob = await zip.generateAsync({ type: "blob" });
+  const base = (seq1Draft.name || "seq1").replace(/\.zip$/i, "");
+  downloadBlob(`${base}-toern-patterns.zip`, blob);
+});
 
 // --- Transfer SIM<>DEVICE (sidebar: pattern RAM + SD files) ------------
 const TEENSY_VID = 0x16c0;
@@ -1409,6 +1622,7 @@ async function disconnectSd() {
 
 function openSdPanel() {
   closeImport();
+  closeSeq1();
   closeLoadTrack();
   jumpHome.hidden = true;
   sdLayer.hidden = false;
@@ -1423,7 +1637,7 @@ function openSdPanel() {
 function closeSdPanel() {
   sdLayer.hidden = true;
   transferOpen.classList.remove("on");
-  if (importLayer.hidden) jumpHome.hidden = false;
+  if (importLayer.hidden && seq1Layer?.hidden) jumpHome.hidden = false;
 }
 
 function showDraw() {
@@ -1671,8 +1885,9 @@ const HELP = {
   midi: "MIDI: CH, TRAN, SEND, RCVE, FOLD, SYNC, PQ-I, PQ-O, TRIG, OVWR. SYNC uses SYC> / SYC<; red -- means the selected value has no effect in this mode. Encoder 4 selects pages.",
   pset: "PSET stores this synth voice’s filters. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Slots are separate for voices 11, 13 and 14.",
   touchy: "TOUCHY: pads 1–5 play voices 1–5 (keyboard 1–5). Knobs 1–4 control the last played voice: pitch, velocity, reverb (voices 1, 2 and 5), highpass. Channel volume stays full. Click to choose voices 1–4 samples. Hold knob 1 to fast-record into the last played voice; release to stop. Hold knob 3 for the last played voice’s filter, or knob 4 to switch TOUCHY OFF and open the main menu.",
-  mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger. Esc leaves.",
-  etc: "ETC: INFO, SD, BATT, ADV, RSET. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. Esc leaves.",
+  demo: "NyanCat for 10 seconds, MATZE SAMPLER in red, bright white and rainbow with sine curves. Repeats until Touch 1 / Q or button A (A key) is pressed.",
+  mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO, DEMO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger or DEMO to run the animation. Esc leaves.",
+  etc: "ETC: INFO, SCON, BATT, ADV, RSET. SCON shows WAIT in yellow until a computer is talking, then OK in green. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. Esc leaves.",
   adv: "ADV: CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE. Encoder 4 selects a page; encoder 3 changes its value. LEDS 1 / 1B select 16×16, 2 / 2B select 32×16. Esc leaves.",
   shift: "Shift moves the current voice. Encoder 4 moves it in time, encoder 1 moves it in pitch, encoder 2 moves only this page. Esc leaves.",
   boot: "The device is starting.",
@@ -1709,11 +1924,12 @@ function markVoice() {
   });
   document.querySelectorAll(".pad[data-touch]").forEach(pad => {
     const id = Number(pad.dataset.touch), touchy = mode === "touchy";
+    const key = ["", "Q", "P", "M", "R", "U"][id];
     const label = touchy ? `Voice ${id}` : ["", "Singlemode + Exit", "Menu", "Hold to record", "Audition", "FN"][id];
     pad.querySelector(".io-label").textContent = label;
-    pad.setAttribute("aria-label", `Touch ${id}, ${label}`);
+    pad.setAttribute("aria-label", `Touch ${id}, key ${key}, ${label}`);
     pad.style.outline = touchy ? `1px solid rgb(${TOUCHY_COLORS[id - 1].join(",")})` : "";
-    pad.title = `Touch ${id} (F${id}): ${label}`;
+    pad.title = `Touch ${id} (${key}): ${label}`;
   });
   if (mode !== helpMode) {
     helpMode = mode;

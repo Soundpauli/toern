@@ -306,6 +306,20 @@ body {
   flex: 0 0 auto;
 }
 
+.seq1-list {
+  max-height: 280px;
+  cursor: default;
+}
+
+.seq1-list li {
+  cursor: pointer;
+}
+
+.seq1-list li.selected {
+  border-color: #ff3b30;
+  background: #fff5f4;
+}
+
 .jump-panel-meta.muted { color: var(--muted); }
 
 .sd-toolbar {

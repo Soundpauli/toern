@@ -120,18 +120,17 @@ Open source as always: schematics, code, and design files are here for you to po
 
 ---
 
-## SD card over USB (Menu → ETC → SD)
+## SD card over USB
 
-TŒRN does **not** mount the Micro SD as USB mass storage. That would be too easy, and also fight the audio engine. Instead:
+TŒRN does **not** mount the Micro SD as USB mass storage. That would be too easy, and also fight the audio engine. Instead, browse and transfer files over **USB Serial** from any screen.
 
-While **Menu → ETC → SD** is open (screen: WAIT → OK), you can browse and transfer files over **USB Serial**.
+**Menu → ETC → SD** shows **SCON**: **WAIT** in yellow until a host program is talking, then **OK** in green. A USB cable with no tool open stays on WAIT and does not stall the instrument.
 
 ### Primary — browser tool
 
-1. On the device: open **Menu → ETC → SD**  
-2. On a computer: open **[https://sdtool.tyng.app](https://sdtool.tyng.app)** in desktop **Chrome or Edge**  
-3. Click **Connect**, pick the Teensy serial port  
-4. Stay on ETC → SD for the whole session  
+1. On a computer: open **[https://sdtool.tyng.app](https://sdtool.tyng.app)** in desktop **Chrome or Edge**  
+2. Click **Connect**, pick the Teensy serial port  
+3. Leave the unit on the screen you are using  
 
 WAV uploads are converted in the browser to **44.1 kHz mono 16-bit**. Drag folders, multi-file drops, and zip archives are supported.
 

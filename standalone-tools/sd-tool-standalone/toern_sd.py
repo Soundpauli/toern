@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """TŒRN SD card helper over USB Serial.
 
-On the device open Menu → ETC → SD (file server is active while that page is open).
+The file server answers from any screen once this port is open. Menu → ETC → SD shows SCON: WAIT (yellow) or OK (green).
 Use with USB Type Serial + MIDI (or any Serial type).
 
 CLI:
@@ -718,7 +718,7 @@ def cmd_web(host: str, port: int, open_browser: bool) -> None:
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{host}:{port}/"
     print(f"TŒRN SD explorer at {url}")
-    print("Web Serial: Connect in Chrome/Edge (device: Menu → ETC → SD). Ctrl+C to stop.")
+    print("Web Serial: Connect in Chrome/Edge. The device answers from any screen. Ctrl+C to stop.")
     if open_browser:
         try:
             webbrowser.open(url)
@@ -734,12 +734,12 @@ def cmd_web(host: str, port: int, open_browser: bool) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="TŒRN SD card access via Menu → ETC → SD serial protocol")
+    ap = argparse.ArgumentParser(description="TŒRN SD card access via USB serial")
     ap.add_argument("-p", "--port", help="serial port (e.g. /dev/cu.usbmodemXXXX)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("ports", help="list serial ports")
-    sub.add_parser("ping", help="check device SD file server (ETC → SD)")
+    sub.add_parser("ping", help="check the device serial file server")
 
     p_list = sub.add_parser("list", help="list directory on SD")
     p_list.add_argument("path", nargs="?", default="/")

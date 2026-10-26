@@ -517,9 +517,10 @@ FLASHMEM void loadPattern(bool autoload) {
     SMP.bpm = 100.0f;
   }
   
-  bpmMode.pos[3] = SMP.bpm;
+  syncBpmEncoderPositions();
   playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
-  playTimer.update((uint32_t)round(playNoteInterval));
+  playTimer.update(playNoteInterval);
+  fillTimer.update(playNoteInterval / 4.0);
   bpmMode.pos[2] = (clockMode == 1) ? 1 : 0;
 
   // Reset paint/unpaint prevention flag after loadPattern operation

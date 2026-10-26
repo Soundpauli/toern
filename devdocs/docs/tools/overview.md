@@ -33,7 +33,7 @@ flowchart LR
   CONV --> SD[microSD layout]
   MID[MIDI file] --> SIM[Simulator]
   HOST[Browser / CLI] --> SDTOOL[SD tool]
-  SDTOOL -->|ETC → SD serial| TEENSY[Teensy]
+  SDTOOL -->|USB serial| TEENSY[Teensy]
   HEX[.hex firmware] --> LOADER[Firmware tool]
   LOADER -->|WebHID| TEENSY
 ```

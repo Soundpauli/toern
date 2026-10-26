@@ -344,7 +344,7 @@
         <div class="sd-section" id="connectBar">
           <h2>1. Device</h2>
           <div class="sd-row">
-            <p class="sd-help" id="serialHelp">Chrome / Edge · Connect, then Menu → ETC → SD (WAIT→OK). Opening USB may reboot Teensy — re-open SD after Connect.</p>
+            <p class="sd-help" id="serialHelp">Chrome / Edge · Connect. The card server answers from any screen. ETC → SD shows SCON: WAIT yellow, OK green.</p>
             <button type="button" class="sd-btn primary" id="btnConnect">Connect</button>
             <button type="button" class="sd-btn" id="btnDisconnect" disabled>Disconnect</button>
           </div>
@@ -379,7 +379,7 @@
             <span></span>
           </div>
           <ul class="list" id="list" tabindex="0">
-            <li class="empty">On device: Menu → ETC → SD, then connect here</li>
+            <li class="empty">Connect to the Teensy. Any screen is fine.</li>
           </ul>
         </div>
 
@@ -418,10 +418,10 @@
 </dialog>
 
 <dialog id="needSdDlg" class="need-sd-dlg" aria-labelledby="needSdTitle">
-  <h2 id="needSdTitle">Open SD menu</h2>
-  <p>Device is online but not on the SD page.</p>
-  <p class="need-sd-path">Re-enter Menu → ETC → SD</p>
-  <p class="need-sd-hint">Stay on that page (WAIT → OK). This message closes automatically when the menu is entered.</p>
+  <h2 id="needSdTitle">Older firmware</h2>
+  <p>This unit answered NEED_SD. Current firmware serves the card from any screen.</p>
+  <p class="need-sd-path">Older firmware only — this build answers from any screen</p>
+  <p class="need-sd-hint">Reflash, or on that older build open Menu → ETC → SD (SCON, WAIT → OK).</p>
 </dialog>
 
 <audio id="audio" preload="none"></audio>
@@ -540,6 +540,7 @@ class ToernSdSerial {
     this._readGen = 0;
     this._disconnectBound = null;
     this.onDisconnect = null;
+    this._putSpaces = null;
   }
 
   get connected() {
@@ -682,12 +683,11 @@ class ToernSdSerial {
       const text = new TextDecoder("utf-8", { fatal: false }).decode(this._rxBuf.subarray(0, Math.min(120, this._rxLen)));
       dbg("openPort: RX during settle (" + this._rxLen + "B): " + JSON.stringify(text));
     } else {
-      dbg("openPort: no RX during settle — open Menu → ETC → SD if needed");
+      dbg("openPort: no RX during settle — host will PING");
     }
   }
 
-  // Wait for SD banner or a successful PING. Opening the port can reboot the Teensy
-  // and drop out of Menu → ETC → SD; keep pinging so the user can re-enter.
+  // Wait for a banner or a successful PING. Opening the port can reboot the Teensy.
   async _handshakeSd(onStatus, onNeedSd) {
     const deadline = performance.now() + HANDSHAKE_MS;
     let n = 0;
@@ -726,8 +726,8 @@ class ToernSdSerial {
       n += 1;
       const leftSec = Math.max(1, Math.ceil((deadline - performance.now()) / 1000));
       const hint = sawNeedSd
-        ? `Device alive — open Menu → ETC → SD (${leftSec}s)`
-        : `Menu → ETC → SD · PING ${n} (${leftSec}s)`;
+        ? `Device replied NEED_SD (${leftSec}s)`
+        : `Connecting… PING ${n} (${leftSec}s)`;
       if (onStatus) onStatus(hint);
       dbg(`handshake PING #${n}`);
       try {
@@ -743,14 +743,14 @@ class ToernSdSerial {
       }
       if (line && /NEED_SD/i.test(line)) {
         markNeedSd();
-        dbg("device says NEED_SD — re-enter Menu → ETC → SD", "err");
+        dbg("device says NEED_SD — older firmware only", "err");
       }
       await this._sleep(350);
     }
     throw new Error(
       sawNeedSd
-        ? "Device is online but not on SD page — open Menu → ETC → SD (WAIT), then Connect again if needed."
-        : "No serial reply — reflash firmware with SD serial, then Menu → ETC → SD. Opening USB can reboot Teensy; re-enter SD after Connect.",
+        ? "Device replied NEED_SD. This build answers from any screen; that reply is from older firmware."
+        : "No serial reply. Opening USB can reboot the Teensy — wait for it to come back, then Connect again.",
     );
   }
 
@@ -761,6 +761,7 @@ class ToernSdSerial {
     await this.close();
     this._closed = false;
     this._connecting = true;
+    this._putSpaces = null;
     this._clearRx();
     this._chain = Promise.resolve();
 
@@ -793,8 +794,9 @@ class ToernSdSerial {
           if (!port) throw new Error("serial port not available after disconnect");
         }
         await this._openPort(port);
-        if (onStatus) onStatus("Waiting for Menu → ETC → SD…");
+        if (onStatus) onStatus("Waiting for the Teensy…");
         const msg = await this._handshakeSd(onStatus, onNeedSd);
+        this._putSpaces = /\bPUT_SPACES\b/.test(msg);
         dbg("connect: ready → " + msg, "ok");
         if (onNeedSd) onNeedSd(false);
         this._connecting = false;
@@ -999,7 +1001,9 @@ class ToernSdSerial {
     dbg("keepalive started");
     let fails = 0;
     this._keepaliveTimer = setInterval(() => {
-      if (!this.connected || this._opBusy > 0 || state.busy) return;
+      // UI busy includes local WAV decoding/folder enumeration. Keep the
+      // device alive during that work; _opBusy protects serial transactions.
+      if (!this.connected || this._opBusy > 0) return;
       this.ping().then(() => {
         fails = 0;
       }).catch(async (err) => {
@@ -1100,11 +1104,20 @@ class ToernSdSerial {
   async _write(data) {
     if (!this.writer || this._closed) throw new Error("not connected");
     const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
+    let timer;
     try {
-      await this.writer.write(bytes);
+      await Promise.race([
+        this.writer.write(bytes),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("timeout writing to device")), IO_TIMEOUT_MS);
+        }),
+      ]);
     } catch (err) {
       dbg("write failed: " + (err && err.message || err), "err");
+      this._handleLost("USB write stalled or failed — reconnect before retrying");
       throw err;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -1121,7 +1134,9 @@ class ToernSdSerial {
         this._clearRx();
       }
       await this._write("PING\n");
-      return this._expectOk(await this._readLine(8000));
+      const reply = this._expectOk(await this._readLine(8000));
+      this._putSpaces = /\bPUT_SPACES\b/.test(reply);
+      return reply;
     });
   }
 
@@ -1219,25 +1234,55 @@ class ToernSdSerial {
 
   putBytes(remote, data, onProgress) {
     return this._enqueue(async () => {
+      validateUploadPath(remote);
+      if (/ /.test(remote) && this._putSpaces !== true) {
+        throw new Error("Uploading folders or files with spaces requires updated TŒRN firmware. Reflash the latest firmware, then reconnect.");
+      }
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
       const csum = crc32Hex(bytes);
-      await this._write(`PUT ${remote} ${bytes.length} ${csum}\n`);
-      const ready = await this._readLine();
-      if (ready !== "READY") {
-        throw new Error(ready.startsWith("ERR") ? ready : "expected READY, got: " + ready);
-      }
-      // USB CDC ignores baud rate — must wait for ACK or Teensy RX overruns and hard-faults.
-      const block = 8192;
-      for (let i = 0; i < bytes.length; i += block) {
-        const end = Math.min(i + block, bytes.length);
-        await this._write(bytes.subarray(i, end));
-        const ack = await this._readLine(IO_TIMEOUT_MS);
-        if (ack !== "ACK") {
-          throw new Error(ack.startsWith("ERR") ? ack : "expected ACK, got: " + ack);
+      let acknowledged = 0;
+      let phase = "waiting for READY";
+      let terminalReply = false;
+      dbg(`PUT → ${remote} (${bytes.length} bytes, CRC ${csum})`);
+      try {
+        await this._write(`PUT ${remote} ${bytes.length} ${csum}\n`);
+        const ready = await this._readLine();
+        dbg("PUT ready ← " + JSON.stringify(ready));
+        if (ready !== "READY") {
+          terminalReply = ready.startsWith("ERR");
+          throw new Error(terminalReply ? ready : "expected READY, got: " + ready);
         }
-        if (onProgress) onProgress(end, bytes.length);
+        // A matching ACK commits each block before the host sends the next one.
+        const block = 8192;
+        for (let i = 0; i < bytes.length; i += block) {
+          const end = Math.min(i + block, bytes.length);
+          phase = `sending block ${i}–${end}`;
+          await this._write(bytes.subarray(i, end));
+          phase = `waiting for ACK for ${end} bytes`;
+          const ack = await this._readLine(IO_TIMEOUT_MS);
+          if (ack !== "ACK") {
+            terminalReply = ack.startsWith("ERR");
+            throw new Error(terminalReply ? ack : "expected ACK, got: " + ack);
+          }
+          acknowledged = end;
+          if (end === bytes.length || i === 0 || (end % (256 * 1024)) === 0) {
+            dbg(`PUT progress ${remote}: ${end}/${bytes.length} bytes acknowledged`);
+          }
+          if (onProgress) onProgress(end, bytes.length);
+        }
+        phase = "waiting for final OK";
+        const reply = await this._readLine(IO_TIMEOUT_MS);
+        terminalReply = reply === "OK" || reply.startsWith("ERR");
+        this._expectOk(reply);
+        dbg(`PUT ok: ${remote} (${bytes.length} bytes)`, "ok");
+      } catch (err) {
+        const message = `Upload failed: ${remote} — ${phase}; ${acknowledged}/${bytes.length} bytes acknowledged — ${err && err.message || err}`;
+        dbg(message, "err");
+        // A timed-out PUT may still be consuming binary payload on the device.
+        // Never inject PING/ACK/text into that stream after abandoning it.
+        if (!terminalReply) this._handleLost("Upload interrupted — reconnect before retrying");
+        throw new Error(message);
       }
-      this._expectOk(await this._readLine(IO_TIMEOUT_MS));
     });
   }
 
@@ -1411,7 +1456,7 @@ function setConnected(connected, portLabel, message) {
     state.entries = [];
     playCache.clear();
     stopPlayback();
-    listEl.innerHTML = `<li class="empty">On device: Menu → ETC → SD, then connect here</li>`;
+    listEl.innerHTML = `<li class="empty">Connect to the Teensy. Any screen is fine.</li>`;
   }
 }
 
@@ -1573,20 +1618,45 @@ function normalizeRelPath(rel) {
     .replace(/^\/+/, "")
     .split("/")
     .filter((p) => p && p !== ".");
-  if (!parts.length || parts.some((p) => p === "..")) return null;
-  if (parts[0] === "__MACOSX") return null;
-  const base = parts[parts.length - 1];
-  if (!base || base.startsWith(".")) return null;
+  if (!parts.length || parts.some((p) => p === ".." || /[\x00-\x1f\x7f]/.test(p))) return null;
+  if (parts.some((p) => p === "__MACOSX" || p.startsWith("."))) return null;
   return parts.join("/");
 }
 
+function validateUploadPath(path) {
+  if (/[\x00-\x1f\x7f]/.test(path)) throw new Error("Invalid characters in upload path");
+  if (new TextEncoder().encode(path).length >= 128) {
+    throw new Error("Path too long for device: " + path);
+  }
+}
+
+// FileList, Array<File> and recursively collected items share one input shape.
+// Include ancestor directories so empty folders and picker/drop paths agree.
 function fileListToUploadItems(fileList) {
-  return Array.from(fileList || [])
-    .map((file) => {
-      const rel = normalizeRelPath(file.webkitRelativePath || file.name);
-      return rel ? { file, relativePath: rel } : null;
-    })
-    .filter(Boolean);
+  const files = new Map();
+  const dirs = new Set();
+  for (const item of Array.from(fileList || [])) {
+    if (!item) continue;
+    const directory = item.type === "directory";
+    const file = directory ? null : (item.file || item);
+    if (!directory && (typeof file.name !== "string" || typeof file.arrayBuffer !== "function")) {
+      throw new Error("Could not read an upload file. Choose or drop the files again.");
+    }
+    const rel = normalizeRelPath(item.relativePath || (file && (file.webkitRelativePath || file.name)));
+    if (!rel) continue;
+    const parts = rel.split("/");
+    for (let n = 1; n < parts.length; n++) dirs.add(parts.slice(0, n).join("/"));
+    if (directory) dirs.add(rel);
+    else files.set(rel, { type: "file", file, relativePath: rel });
+  }
+  for (const path of dirs) {
+    if (files.has(path)) throw new Error("Both a file and a folder are named " + path);
+  }
+  return [
+    ...Array.from(dirs).sort((a, b) => a.split("/").length - b.split("/").length)
+      .map((relativePath) => ({ type: "directory", relativePath })),
+    ...files.values(),
+  ];
 }
 
 function readDirEntriesBatch(reader) {
@@ -1605,41 +1675,53 @@ async function readAllDirEntries(dirReader) {
 
 async function walkFsEntry(entry, prefix, out) {
   if (!entry) return;
+  const rel = normalizeRelPath(prefix ? prefix + "/" + entry.name : entry.name);
+  if (!rel) return;
   if (entry.isFile) {
     const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
-    const rel = normalizeRelPath(prefix ? prefix + "/" + entry.name : entry.name);
-    if (rel) out.push({ file, relativePath: rel });
-    return;
-  }
-  if (entry.isDirectory) {
-    const next = prefix ? prefix + "/" + entry.name : entry.name;
+    out.push({ file, relativePath: rel });
+  } else if (entry.isDirectory) {
+    out.push({ type: "directory", relativePath: rel });
     const children = await readAllDirEntries(entry.createReader());
-    for (const child of children) await walkFsEntry(child, next, out);
+    for (const child of children) await walkFsEntry(child, rel, out);
+  }
+}
+
+async function walkFileSystemHandle(handle, prefix, out) {
+  const rel = normalizeRelPath(prefix ? prefix + "/" + handle.name : handle.name);
+  if (!rel) return;
+  if (handle.kind === "file") {
+    out.push({ file: await handle.getFile(), relativePath: rel });
+  } else if (handle.kind === "directory") {
+    out.push({ type: "directory", relativePath: rel });
+    for await (const child of handle.values()) await walkFileSystemHandle(child, rel, out);
   }
 }
 
 async function collectDroppedUploadItems(dataTransfer) {
-  const out = [];
-  const items = dataTransfer && dataTransfer.items;
-  if (items && items.length) {
-    const entries = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind !== "file") continue;
+  // Capture every entry/handle in the drop event, before the first await:
+  // browsers protect DataTransfer as soon as the event handler yields.
+  const files = Array.from(dataTransfer && dataTransfer.files || []);
+  const sources = Array.from(dataTransfer && dataTransfer.items || [])
+    .filter((item) => item && item.kind === "file")
+    .map((item) => {
       const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-      if (entry) entries.push(entry);
-      else {
-        const file = item.getAsFile && item.getAsFile();
-        if (file) {
-          const rel = normalizeRelPath(file.name);
-          if (rel) out.push({ file, relativePath: rel });
-        }
-      }
-    }
-    for (const entry of entries) await walkFsEntry(entry, "", out);
-    if (out.length) return out;
+      const handle = !entry && item.getAsFileSystemHandle
+        ? item.getAsFileSystemHandle().then((value) => ({ value }), (error) => ({ error }))
+        : null;
+      return { entry, handle, file: item.getAsFile && item.getAsFile() };
+    });
+  const out = [];
+  for (const source of sources) {
+    if (source.entry) await walkFsEntry(source.entry, "", out);
+    else if (source.handle) {
+      const result = await source.handle;
+      if (result.error) throw result.error;
+      if (result.value) await walkFileSystemHandle(result.value, "", out);
+      else if (source.file) out.push(source.file);
+    } else if (source.file) out.push(source.file);
   }
-  return fileListToUploadItems(dataTransfer && dataTransfer.files);
+  return fileListToUploadItems(sources.length ? out : files);
 }
 
 async function inflateRawDeflate(comp) {
@@ -1651,50 +1733,81 @@ async function inflateRawDeflate(comp) {
 }
 
 async function unzipToUploadItems(file, onProgress) {
-  const ab = await file.arrayBuffer();
-  const buf = new Uint8Array(ab);
-  const view = new DataView(ab);
+  // Read only the end record and central directory. Retaining an ArrayBuffer
+  // for the entire ZIP plus every inflated file made large batches expensive.
+  const tailStart = Math.max(0, file.size - 65557);
+  const tail = await file.slice(tailStart).arrayBuffer();
+  const tailView = new DataView(tail);
   let eocd = -1;
-  const minScan = Math.max(0, buf.length - 65557);
-  for (let i = buf.length - 22; i >= minScan; i--) {
-    if (view.getUint32(i, true) === 0x06054b50) {
+  for (let i = tail.byteLength - 22; i >= 0; i--) {
+    if (tailView.getUint32(i, true) === 0x06054b50 &&
+        i + 22 + tailView.getUint16(i + 20, true) === tail.byteLength) {
       eocd = i;
       break;
     }
   }
   if (eocd < 0) throw new Error("Not a valid zip: " + file.name);
-
-  const cdCount = view.getUint16(eocd + 10, true);
-  let off = view.getUint32(eocd + 16, true);
+  const cdCount = tailView.getUint16(eocd + 10, true);
+  const cdSize = tailView.getUint32(eocd + 12, true);
+  const cdStart = tailView.getUint32(eocd + 16, true);
+  if (tailView.getUint16(eocd + 4, true) || tailView.getUint16(eocd + 6, true) ||
+      cdCount === 0xffff || cdSize === 0xffffffff || cdStart === 0xffffffff) {
+    throw new Error("ZIP64 or multi-part zip is not supported: " + file.name);
+  }
+  if (cdStart + cdSize > tailStart + eocd) throw new Error("Bad zip directory in " + file.name);
+  const directory = await file.slice(cdStart, cdStart + cdSize).arrayBuffer();
+  const view = new DataView(directory);
+  const buf = new Uint8Array(directory);
+  let off = 0;
   const out = [];
   for (let n = 0; n < cdCount; n++) {
     if (off + 46 > buf.length || view.getUint32(off, true) !== 0x02014b50) {
       throw new Error("Bad zip directory in " + file.name);
     }
+    const flags = view.getUint16(off + 8, true);
     const method = view.getUint16(off + 10, true);
+    const expectedCrc = view.getUint32(off + 16, true);
     const compSize = view.getUint32(off + 20, true);
+    const size = view.getUint32(off + 24, true);
     const nameLen = view.getUint16(off + 28, true);
     const extraLen = view.getUint16(off + 30, true);
     const commentLen = view.getUint16(off + 32, true);
     const localOff = view.getUint32(off + 42, true);
+    const next = off + 46 + nameLen + extraLen + commentLen;
+    if (next > buf.length) throw new Error("Bad zip directory in " + file.name);
     const name = new TextDecoder().decode(buf.subarray(off + 46, off + 46 + nameLen));
-    off += 46 + nameLen + extraLen + commentLen;
-    if (name.endsWith("/")) continue;
+    off = next;
     const rel = normalizeRelPath(name);
     if (!rel) continue;
-    if (localOff + 30 > buf.length || view.getUint32(localOff, true) !== 0x04034b50) {
-      throw new Error("Bad zip entry: " + rel);
+    if (name.endsWith("/")) {
+      out.push({ type: "directory", relativePath: rel });
+      continue;
     }
-    const locNameLen = view.getUint16(localOff + 26, true);
-    const locExtraLen = view.getUint16(localOff + 28, true);
-    const dataStart = localOff + 30 + locNameLen + locExtraLen;
-    const comp = buf.subarray(dataStart, dataStart + compSize);
-    let data;
-    if (method === 0) data = comp;
-    else if (method === 8) data = await inflateRawDeflate(comp);
-    else throw new Error("Unsupported zip compression: " + rel);
-    const base = rel.split("/").pop();
-    out.push({ file: new File([data], base), relativePath: rel });
+    if (flags & 1) throw new Error("Encrypted zip entry: " + rel);
+    if (method !== 0 && method !== 8) throw new Error("Unsupported zip compression: " + rel);
+    if (size > 512 * 1024 * 1024) throw new Error("Zip entry too large for device: " + rel);
+    // A file-like object reads/decompresses just this entry when its upload
+    // begins. No cache retains decompressed data after moving to the next file.
+    const entry = {
+      name: rel.split("/").pop(), size,
+      async arrayBuffer() {
+        const header = await file.slice(localOff, localOff + 30).arrayBuffer();
+        const local = new DataView(header);
+        if (header.byteLength !== 30 || local.getUint32(0, true) !== 0x04034b50) {
+          throw new Error("Bad zip entry: " + rel);
+        }
+        const dataStart = localOff + 30 + local.getUint16(26, true) + local.getUint16(28, true);
+        if (dataStart + compSize > cdStart) throw new Error("Truncated zip entry: " + rel);
+        const comp = new Uint8Array(await file.slice(dataStart, dataStart + compSize).arrayBuffer());
+        const data = method === 0 ? comp : await inflateRawDeflate(comp);
+        const crc = expectedCrc.toString(16).toUpperCase().padStart(8, "0");
+        if (data.byteLength !== size || crc32Hex(data) !== crc) {
+          throw new Error("Zip entry is damaged: " + rel);
+        }
+        return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      },
+    };
+    out.push({ file: entry, relativePath: rel });
     if (onProgress) onProgress(n + 1, cdCount);
   }
   return out;
@@ -1705,17 +1818,17 @@ async function expandUploadItems(items, onProgress) {
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const isZip =
-      /\.zip$/i.test(item.file.name) &&
+      item.type !== "directory" && /\.zip$/i.test(item.file.name) &&
       !item.relativePath.includes("/");
     if (!isZip) {
       out.push(item);
       continue;
     }
-    if (onProgress) onProgress("Extracting " + item.file.name, null, `${i + 1}/${items.length}`);
+    if (onProgress) onProgress("Reading archive " + item.file.name, null, `${i + 1}/${items.length}`);
     const inner = await unzipToUploadItems(item.file, (done, total) => {
       if (onProgress) {
         onProgress(
-          "Extracting " + item.file.name,
+          "Reading archive " + item.file.name,
           total ? done / total : null,
           `${done}/${total}`,
         );
@@ -1728,51 +1841,66 @@ async function expandUploadItems(items, onProgress) {
 }
 
 async function uploadFiles(fileListOrItems) {
-  let items = Array.isArray(fileListOrItems)
-    ? fileListOrItems.slice()
-    : fileListToUploadItems(fileListOrItems);
-  if (!items.length || !state.connected) return;
+  if (!state.connected || state.busy) return;
+  const destination = state.path;
   setBusy(true);
   try {
     const client = requireSd();
-    items = await expandUploadItems(items, (label, ratio, detail) => {
+    let items = fileListOrItems && fileListOrItems.items
+      ? await collectDroppedUploadItems(fileListOrItems)
+      : fileListToUploadItems(fileListOrItems);
+    if (!items.length) {
+      showBanner("No supported files or folders to upload", false);
+      return;
+    }
+    items = fileListToUploadItems(await expandUploadItems(items, (label, ratio, detail) => {
       showProgress(label, ratio, detail || "");
-    });
-    let n = 0;
-    for (let fi = 0; fi < items.length; fi++) {
-      const { file, relativePath } = items[fi];
+    }));
+    // Check the entire selection before creating directories or writing files.
+    for (const item of items) validateUploadPath(joinPath(destination, item.relativePath));
+    if (items.some((item) => / /.test(joinPath(destination, item.relativePath))) && client._putSpaces !== true) {
+      throw new Error("Uploading folders or files with spaces requires updated TŒRN firmware. Reflash the latest firmware, then reconnect.");
+    }
+    let n = 0, createdDirs = 0;
+    const fileCount = items.filter((item) => item.type !== "directory").length;
+    for (const item of items) {
+      const remote = joinPath(destination, item.relativePath);
+      if (item.type === "directory") {
+        showProgress("Creating " + item.relativePath, null);
+        try {
+          await client.mkdir(remote);
+          createdDirs++;
+        } catch (err) {
+          if (!/^ERR EXISTS$/.test(String(err && err.message || err))) throw err;
+          // EXISTS may also be a file; never silently accept that as a folder.
+          await client.listDir(remote);
+        }
+        continue;
+      }
+      const { file, relativePath } = item;
+      dbg(`Preparing upload: ${relativePath} (${file.size} source bytes)`);
       const prepared = await prepareUploadFile(file, (label, ratio) => {
-        showProgress(
-          label,
-          ratio,
-          items.length > 1 ? `File ${fi + 1}/${items.length}` : "",
-        );
+        showProgress(label, ratio, fileCount > 1 ? `File ${n + 1}/${fileCount}` : "");
       });
       if (!prepared) continue;
       const dir = relativePath.includes("/")
-        ? relativePath.slice(0, relativePath.lastIndexOf("/"))
-        : "";
-      const remoteRel = dir ? joinPath(dir, prepared.name).replace(/^\//, "") : prepared.name;
-      const remote = joinPath(state.path, remoteRel);
-      if (remote.length >= 128) {
-        throw new Error("Path too long for device: " + remote);
-      }
+        ? relativePath.slice(0, relativePath.lastIndexOf("/")) : "";
+      const remoteRel = dir ? dir + "/" + prepared.name : prepared.name;
+      const remoteFile = joinPath(destination, remoteRel);
+      validateUploadPath(remoteFile);
       const bytes = new Uint8Array(await prepared.arrayBuffer());
-      await client.putBytes(remote, bytes, (sent, total) => {
-        showProgress(
-          "Uploading " + remoteRel,
-          total ? sent / total : null,
+      await client.putBytes(remoteFile, bytes, (sent, total) => {
+        showProgress("Uploading " + remoteRel, total ? sent / total : null,
           fmtXferBytes(sent) + " / " + fmtXferBytes(total) +
-            (items.length > 1 ? ` · ${fi + 1}/${items.length}` : ""),
-        );
+          (fileCount > 1 ? ` · ${n + 1}/${fileCount}` : ""));
       });
       n++;
     }
-    showBanner(n ? `Uploaded ${n} file(s)` : "No files uploaded", !!n);
+    showBanner(`Uploaded ${n} file(s), created ${createdDirs} folder(s)`, true);
     playCache.clear();
     await refresh();
   } catch (err) {
-    showBanner(String(err.message || err), false);
+    showBanner(String(err && err.message || err), false);
   } finally {
     setBusy(false);
   }
@@ -1792,7 +1920,7 @@ function hideNeedSdModal() {
   dlg.close();
 }
 
-// Stay up until Menu → ETC → SD is entered (OK) — block Escape / backdrop dismiss.
+// Older-firmware NEED_SD notice. Block Escape / backdrop dismiss.
 $("needSdDlg").addEventListener("cancel", (ev) => {
   ev.preventDefault();
 });
@@ -1803,7 +1931,7 @@ async function connectSerial(existingPort) {
     return false;
   }
   setBusy(true);
-  showProgress("Connecting…", null, "Waiting for Teensy USB (Menu → ETC → SD)");
+  showProgress("Connecting…", null, "Waiting for the Teensy");
   dbg("UI: connect start");
   try {
     const client = new ToernSdSerial();
@@ -1853,7 +1981,7 @@ async function connectSerial(existingPort) {
     if (err && err.name === "NotFoundError") {
       showBanner("No port selected", false);
     } else if (err && (err.name === "NetworkError" || /device has been lost/i.test(String(err.message || err)))) {
-      showBanner("USB lost while opening — try Connect again (keep Menu → ETC → SD)", false);
+      showBanner("USB lost while opening — try Connect again", false);
     } else {
       showBanner(String(err.message || err), false);
     }
@@ -2267,9 +2395,7 @@ panelEl.addEventListener("dragleave", (ev) => {
 panelEl.addEventListener("drop", async (ev) => {
   ev.preventDefault();
   panelEl.classList.remove("dragover");
-  if (!state.connected) return;
-  const items = await collectDroppedUploadItems(ev.dataTransfer);
-  await uploadFiles(items);
+  await uploadFiles(ev.dataTransfer);
 });
 
 document.addEventListener("keydown", (ev) => {
@@ -2332,14 +2458,14 @@ document.addEventListener("keydown", (ev) => {
   try {
     const ports = await navigator.serial.getPorts();
     if (ports.length === 1) {
-      $("serialHelp").textContent = "Paired port ready · Connect (no picker) · Menu → ETC → SD";
+      $("serialHelp").textContent = "Paired port ready · Connect (no picker)";
     } else if (ports.length > 1) {
-      $("serialHelp").textContent = ports.length + " paired ports · Connect to choose · Menu → ETC → SD";
+      $("serialHelp").textContent = ports.length + " paired ports · Connect to choose";
     } else {
-      $("serialHelp").textContent = "Chrome / Edge · Connect picks the Teensy · Menu → ETC → SD";
+      $("serialHelp").textContent = "Chrome / Edge · Connect picks the Teensy";
     }
   } catch (_) {
-    $("serialHelp").textContent = "Chrome / Edge · device on Menu → ETC → SD · USB Serial";
+    $("serialHelp").textContent = "Chrome / Edge · USB Serial · any screen";
   }
 })();
 </script>

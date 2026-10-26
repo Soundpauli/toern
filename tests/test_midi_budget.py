@@ -5,7 +5,7 @@ import tempfile
 import sys
 source = Path('toern_midi.ino').read_text()
 a = source.index('  static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP')
-b = source.index('  // If this device is sending MIDI Clock', a)
+b = source.index('  serviceMidiTransportStart();', a)
 loop = source[a:b]
 harness = r'''
 #include <cstdint>

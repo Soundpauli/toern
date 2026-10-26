@@ -22,7 +22,7 @@ MODE, ETC and ETC → ADV share `inEtcSubmenu` and `currentEtcPage`; `currentSys
 
 ## Notable ETC behavior
 
-**Menu → ETC → SD** toggles the USB serial SD server (`toern_sd_serial.ino`). `loop()` watches `inEtcSubmenu` + the active menu setting id and calls `sdSerialServerSetActive` / `sdSerialServerPoll`.
+**Menu → ETC → SD** shows **SCON** / **WAIT** / **OK**. The USB serial server (`toern_sd_serial.ino`) is polled from `loop()` on every screen, and only after a host program has opened the port.
 
 ## Menu hierarchy
 

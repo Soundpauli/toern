@@ -1269,7 +1269,7 @@ FLASHMEM void drawVelocity() {
 // FastLEDshow restores the underlying framebuffer after presenting these bars.
 bool neoSliderOverlayVisible() {
   for (int i = 0; i < NEOSLIDER_COUNT; ++i) {
-    if (neoSliderOverlayActive[i] && neoSliderOverlayAge[i] < 850) return true;
+    if (isNeoSliderEnabled(i) && neoSliderOverlayActive[i] && neoSliderOverlayAge[i] < 850) return true;
   }
   return false;
 }
@@ -1280,7 +1280,7 @@ FLASHMEM void drawNeoSliderOverlay() {
   neoSliderOverlayFrame = now;
   const float ease = (float)dt / (45.0f + (float)dt);
   for (int i = 0; i < NEOSLIDER_COUNT; ++i) {
-    if (!neoSliderOverlayActive[i]) continue;
+    if (!isNeoSliderEnabled(i) || !neoSliderOverlayActive[i]) continue;
     const unsigned long age = neoSliderOverlayAge[i];
     if (age >= 850) {
       neoSliderOverlayActive[i] = false;
@@ -1987,6 +1987,21 @@ bool fillRequestOverlayVisible() {
       && (int32_t)(fillRequestOverlayUntil - (uint32_t)millis()) > 0;
 }
 
+FLASHMEM void drawCopyArmedLabel() {
+  if (!GLOB.activeCopy) return;
+  if (currentMode != &draw && currentMode != &singleMode) return;
+  const char *label = "C+P";
+  const int x = countLabelX(label);
+  const int y = ((int)maxY - 5) / 2 + 1;
+  const int endX = min((int)maxX, x + countLabelWidth(label));
+  for (int xx = max(1, x - 1); xx <= endX; ++xx) {
+    for (int yy = max(1, y - 1); yy <= min((int)maxY, y + 5); ++yy) {
+      light(xx, yy, CRGB::Black);
+    }
+  }
+  drawText(label, x, y, CRGB(255, 255, 0));
+}
+
 FLASHMEM void drawFillRequestOverlay() {
   if (!fillRequestOverlayVisible()) return;
   const char *label = "FILL";
@@ -2495,17 +2510,17 @@ FLASHMEM void drawMidiArrow(bool direction, int x, int y, bool blink = false) {
   }
 }
 
-// Draw BPM number starting at x=3 with reserved 3-digit space (right-aligned with leading spaces)
+// Tight decimal spacing fits 300.0 on a single 16-column row.
 FLASHMEM void drawBPMWithReservedSpace(float bpm, CRGB color, int topY) {
-  char buffer[16];
-  
-  // Format as integer with leading spaces to always use 3 characters
-  // "123" for 3 digits, " 21" for 2 digits, "  2" for 1 digit
-  int bpmInt = (int)round(bpm);
-  sprintf(buffer, "%3d", bpmInt);  // %3d = right-aligned with leading spaces
-  
-  // Start at x=3 (left-aligned position, but number is right-aligned within 3-digit space)
-  drawText(buffer, 2, topY, color);
+  const unsigned int value = (unsigned int)lroundf(bpm * 10.0f);
+  char whole[8];
+  snprintf(whole, sizeof(whole), "%u", value / 10u);
+  int width = 0;
+  for (const char *c = whole; *c; ++c) width += alphabet[*c - 32][0] + 1;
+  const int startX = max(1, ((int)maxX - (width + 4)) / 2 + 1);
+  drawText(whole, startX, topY, color);
+  light(startX + width, topY, color);
+  drawChar('0' + value % 10u, startX + width + 1, topY, color);
 }
 
 FLASHMEM void drawBPMScreen() {
@@ -2521,6 +2536,7 @@ FLASHMEM void drawBPMScreen() {
   // - Encoder 3: green
   // - Encoder 4: turquoise
   // Matrix only — rings cached below (setBPM calls this every loop).
+  drawIndicator('L', 'N', 1, false, false);
   drawIndicator('L', 'W', 2, false, false);
   drawIndicator('L', 'G', 3, false, false);
   drawIndicator('L', 'N', 4, false, false);
@@ -2565,7 +2581,7 @@ FLASHMEM void drawBPMScreen() {
       shouldBlink = ((clockTicks % 12) < 6);
     }
   }
-  drawMidiArrow(isInt, maxX - 1, 8, shouldBlink);
+  drawMidiArrow(isInt, maxX - 1, 12, shouldBlink);
   
   // Add indicator to encoder[2]: L size, color matching arrow, encoder 3
   if (currentMode == &bpmMode) {
@@ -2586,6 +2602,7 @@ FLASHMEM void drawBPMScreen() {
     CRGB wM = normalizeToMaxBrightness(w);
     CRGB nM = normalizeToMaxBrightness(n);
     CRGB aM = normalizeToMaxBrightness(arrow);
+    setBpmRGB(0, (uint32_t)nM.r << 16 | (uint32_t)nM.g << 8 | nM.b);
     setBpmRGB(1, (uint32_t)wM.r << 16 | (uint32_t)wM.g << 8 | wM.b);
     setBpmRGB(2, (uint32_t)aM.r << 16 | (uint32_t)aM.g << 8 | aM.b);
     setBpmRGB(3, (uint32_t)nM.r << 16 | (uint32_t)nM.g << 8 | nM.b);

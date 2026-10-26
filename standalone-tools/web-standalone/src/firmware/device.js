@@ -180,7 +180,7 @@ export function createDevice(matrix, statusEl, rings) {
   let clipCh = 0;
   let midiAccess = null;
   const hold = {};
-  const touch = { l: false, m: false, t4: false, first: 0, chord: false };
+  const touch = { l: false, m: false, t4: false, first: 0, chord: false, fnCopy: false };
 
   function sendsMidiClock() { return s.clockInt && s.midiSend !== 1; }
   function stepSec() { return 60 / s.bpm / 4; }
@@ -1158,6 +1158,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function subValue(mode, index) {
+    if (mode === "mode" && SUBS.mode[index] === "DEMO") return { text: "GO" };
     if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
     return legacySubValue(slot.mode, slot.index);
@@ -1309,6 +1310,15 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
     finishLoad();
   }
+  let demoExitHeld = false;
+  function startDemo() {
+    demoExitHeld = false;
+    if (s.playing) togglePlay();
+    noteActivity();
+    s.okAt = 0;
+    s.demoAt = performance.now();
+    s.mode = "demo";
+  }
   function openMenuPage() {
     const name = MENU_PAGES[s.menuIndex].name;
     if (name === "PATT") s.mode = "dat";
@@ -1328,6 +1338,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
 
   function turn(enc, dir) {
+    if (s.mode === "demo") return;
     if (s.mode === "boot") return;
     noteActivity();
     if (s.mode === "touchy") {
@@ -1542,6 +1553,7 @@ export function createDevice(matrix, statusEl, rings) {
       }
       return;
     }
+    if (s.mode === "mode" && SUBS.mode[s.subIndex] === "DEMO") return;
     if (SUBS[s.mode] && enc === 2) {
       if (pageMode === "vol" && pageIndex === 0) s.mainVol = clamp(s.mainVol + dir, 0, 100);
       else if (pageMode === "vol" && pageIndex === 1) s.gain = clamp(Math.round((s.gain + dir * 0.1) * 10) / 10, 0, 2);
@@ -1597,7 +1609,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.clockInt) s.analogExtClock = false;
       saveEeprom();
     }
-    if (s.mode === "bpm" && enc === 3) { s.bpm = clamp(s.bpm + dir, 40, 240); saveEeprom(); }
+    if (s.mode === "bpm" && (enc === 0 || enc === 3) && s.clockInt) { s.bpm = clamp(Math.round((s.bpm + dir * (enc === 0 ? 0.1 : 1)) * 10) / 10, 40, 240); saveEeprom(); }
     if (s.mode === "song" && enc === 1) s.songPattern = clamp(s.songPattern + dir, 1, 16);
     if (s.mode === "song" && enc === 3) s.songPos = clamp(s.songPos + dir, 1, 64);
   }
@@ -1676,6 +1688,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function shortPress(enc) {
     if (dispatchButtonEvent(enc, 1)) return;
+    if (s.mode === "demo") return;
     if (s.mode === "touchy") { openTouchyBrowser(enc + 1); return; }
     noteActivity();
     if (s.mode === "shift") {
@@ -1699,7 +1712,11 @@ export function createDevice(matrix, statusEl, rings) {
         s.fullMute = true;
         return;
       }
-      if (enc === 0) eraseCell(s.GLOB.x, s.GLOB.y);
+      if (enc === 0) {
+        if (s.copyArmed) { s.copyArmed = false; return; }
+        if (s.GLOB.y === 16) return;
+        eraseCell(s.GLOB.x, s.GLOB.y);
+      }
       if (enc === 1) {
         if (s.mode === "single" && s.GLOB.y === 16) s.mode = "shift";
         else s.mute[s.GLOB.currentChannel] = !s.mute[s.GLOB.currentChannel];
@@ -1809,6 +1826,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "song" && enc === 2) toggleSong();
     const slot = resolveSubPage(s.mode, s.subIndex);
     if (s.mode === "etc" && s.subIndex === 3 && enc === 3) { s.mode = "adv"; s.subIndex = 0; return; }
+    if (s.mode === "mode" && SUBS.mode[s.subIndex] === "DEMO" && enc === 3) { startDemo(); return; }
     if (s.mode === "mode" && s.subIndex === 7 && enc === 3) { s.mode = "song"; return; }
     if (slot.mode === "etc" && slot.index === ETC_FIRE_INDEX && enc === 2) { s.fireFocus = ((s.fireFocus | 0) + 1) % 3; return; }
     if (slot.mode === "etc" && slot.index === ETC_RSET_INDEX && enc === 1) { runReset(); return; }
@@ -2054,6 +2072,12 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function onMeta(down) {
     if (s.mode === "touchy") { touchyTouch(2, down); return; }
+    if (down && s.fnHeld && (s.mode === "draw" || s.mode === "single")) {
+      toggleCopy();
+      touch.fnCopy = true;
+      return;
+    }
+    if (!down && touch.fnCopy) { touch.fnCopy = false; return; }
     touch.m = down;
     if (down && s.mode === "filter") { cycleFilter(); return; }
     if (down) {
@@ -2111,6 +2135,7 @@ export function createDevice(matrix, statusEl, rings) {
     down = !!down;
     if (padDown[id] === down) return;
     padDown[id] = down;
+    if (s.mode === "demo") { if (id === 1) onTouchL(down); return; }
     if (s.mode !== "touchy" && !down) releaseTouchyPad(id - 1);
     if (s.mode === "touchy") { s.fnHeld = false; touchyTouch(id, down); return; }
     if (!padDown[4] && !padDown[5]) fillChordConsumed = false;
@@ -2146,6 +2171,17 @@ export function createDevice(matrix, statusEl, rings) {
     else onTouch3(down);
   }
   function onTouchL(down) {
+    if (s.mode === "demo") {
+      if (down) {
+        demoExitHeld = true;
+        noteActivity();
+        s.mode = "mode";
+        s.subIndex = SUBS.mode.indexOf("DEMO");
+      }
+      return;
+    }
+    if (demoExitHeld) { if (!down) demoExitHeld = false; return; }
+
     if (s.mode === "touchy") { touchyTouch(1, down); return; }
     touch.l = down;
     noteActivity();
@@ -2364,12 +2400,16 @@ export function createDevice(matrix, statusEl, rings) {
     s.onAnnounce(parts.filter(Boolean).join(". "));
   }
 
+  function touchPadKey(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return 0;
+    return { KeyQ: 1, KeyP: 2, KeyM: 3, KeyR: 4, KeyU: 5 }[e.code] || 0;
+  }
   function keydown(e) {
-    const padKey = /^F[1-5]$/.test(e.key) ? Number(e.key.slice(1)) : 0;
+    const padKey = touchPadKey(e);
     if (padKey && deviceKeysActive()) { e.preventDefault(); if (!e.repeat) handleTouch(padKey, true); return; }
     const active = deviceKeysActive();
     const ue = e.code === "BracketLeft" || e.key === "ü" || e.key === "Ü" || e.key === "[";
-    const turning = ["KeyQ", "KeyW", "KeyR", "KeyT", "KeyU", "KeyI", "KeyP", "BracketLeft", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.code) || ue;
+    const turning = ["KeyW", "KeyT", "KeyI", "BracketLeft", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.code) || ue;
     const steal = isTab(e) || isEncoder2Click(e) || isTouch1Key(e) || isTouch2Key(e) || e.key === " " || e.key === "Enter" || e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown";
     if (steal && active) {
       e.preventDefault();
@@ -2378,6 +2418,11 @@ export function createDevice(matrix, statusEl, rings) {
     if (!active) return;
     if (e.repeat && !turning) return;
     if (s.mode === "boot") return;
+    if (s.mode === "demo") {
+      e.preventDefault();
+      if (isTouch1Key(e) || e.code === "KeyA" || e.key.toLowerCase() === "a") onTouchL(true);
+      return;
+    }
     if (e.key === "Escape" && s.mode === "touchy") { exitTouchyToMenu(); return; }
     if (e.key === "Escape") {
       if (s.fastRecActive) stopFastRec();
@@ -2403,15 +2448,12 @@ export function createDevice(matrix, statusEl, rings) {
     if (e.code === "KeyD" && (s.mode === "draw" || s.mode === "single")) { clearPage(); announceState(); return; }
     const beforeX = s.GLOB.x;
     const beforeY = s.GLOB.y;
-    if (e.code === "KeyQ") turn(0, 1);
-    else if (e.code === "KeyW") turn(0, -1);
+    if (e.code === "KeyW") turn(0, -1);
     else if (e.key === "ArrowDown") turn(0, -1);
     else if (e.key === "ArrowUp") turn(0, 1);
-    else if (e.code === "KeyR") turn(1, -1);
     else if (e.code === "KeyT") turn(1, 1);
-    else if (e.code === "KeyU") turn(2, -1);
     else if (e.code === "KeyI") turn(2, 1);
-    else if (e.key === "ArrowLeft" || e.code === "KeyP") turn(3, -1);
+    else if (e.key === "ArrowLeft") turn(3, -1);
     else if (e.key === "ArrowRight" || ue) turn(3, 1);
     else if (s.mode === "touchy" && (isTab(e) || isEncoder2Click(e) || e.key === " " || e.key === "Enter")) {
       const enc = isTab(e) ? 0 : isEncoder2Click(e) ? 1 : e.key === " " ? 2 : 3;
@@ -2422,7 +2464,7 @@ export function createDevice(matrix, statusEl, rings) {
       hold[enc]={at:performance.now(),turned:false,fired:false,fn:true};
     }
     else if (isTab(e)) {
-      if (s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
+      if ((s.mode === "draw" || s.mode === "single") && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
       else {
         hold[0] = { at: performance.now(), turned: false, fired: true };
         shortPress(0);
@@ -2437,13 +2479,14 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.mode === "velocity") { backToGrid(); announceState(); return; }
       if (s.mode === "draw" || s.mode === "single" || s.mode === "filter") hold[3] = { at: performance.now(), turned: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
       else shortPress(3);
-    } else if (e.key === "m" || e.key === "M") onMeta(true);
-    else if (isTouch1Key(e)) onTouchL(true);
+    } else if (isTouch1Key(e)) onTouchL(true);
     else if (isTouch2Key(e)) onMeta(true);
     if (s.GLOB.x !== beforeX || s.GLOB.y !== beforeY) announceState();
   }
   function keyup(e) {
-    if (/^F[1-5]$/.test(e.key)) { e.preventDefault(); handleTouch(Number(e.key.slice(1)), false); return; }
+    if (demoExitHeld && (isTouch1Key(e) || e.code === "KeyA" || e.key.toLowerCase() === "a")) { onTouchL(false); return; }
+    const padKey = touchPadKey(e);
+    if (padKey) { e.preventDefault(); handleTouch(padKey, false); return; }
     const fnEncoder=isTab(e)?0:isEncoder2Click(e)?1:e.key===" "?2:e.key==="Enter"?3:-1;
     if (fnEncoder>=0 && hold[fnEncoder]?.fn) {
       const h=hold[fnEncoder];hold[fnEncoder]=null;
@@ -2472,8 +2515,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (h.fired) return;
       if (!h.turned) shortPress(3);
       announceState();
-    } else if (e.key === "m" || e.key === "M") onMeta(false);
-    else if (isTouch1Key(e)) onTouchL(false);
+    } else if (isTouch1Key(e)) onTouchL(false);
     else if (isTouch2Key(e)) onMeta(false);
   }
   function tick(now) {
@@ -2490,16 +2532,20 @@ export function createDevice(matrix, statusEl, rings) {
     for (let enc=0;enc<4;enc++) {
       const h=hold[enc];
       if (h?.fn && !h.fired && !h.turned && now-h.at>=LONG_MS) {
+        if (enc === 1 && s.GLOB.y === 16 && (s.mode === "draw" || s.mode === "single")) {
+          h.fired = true;
+          if (s.mode === "single") drawRandomPage();
+          else drawRandomMultiVoicePage();
+          s.copyArmed = false;
+          continue;
+        }
         dispatchButtonEvent(enc,2,true); h.fired=true;
       }
     }
-    if (s.mode === "draw" && !s.GLOB.singleMode && touch.t4 && hold[0] && !hold[0].fn && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
+    if ((s.mode === "draw" || s.mode === "single") && s.GLOB.y === 16 && hold[0] && !hold[0].fn && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
       hold[0].fired = true;
-      drawRandomMultiVoicePage();
-    }
-    if (s.mode === "single" && s.GLOB.y === 16 && hold[0] && !hold[0].fn && !hold[0].turned && !hold[0].fired && now - hold[0].at >= LONG_MS) {
-      hold[0].fired = true;
-      drawRandomPage();
+      clearPage();
+      s.copyArmed = false;
     }
     if ((s.mode === "draw" || s.mode === "single") && hold[3] && !hold[3].fn && !hold[3].turned && !hold[3].fired && hold[3].had && now - hold[3].at >= LONG_MS) {
       hold[3].fired = true; enterVelocity();
@@ -2650,6 +2696,7 @@ export function createDevice(matrix, statusEl, rings) {
   s.lastActivityAt = performance.now();
   return {
     start() { requestAnimationFrame(tick); },
+    startDemo,
     placeLiveGridNote,
     analogClockPulse,
     keydown, keyup,
@@ -2688,7 +2735,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.mode === "touchy") { hold[enc] = { at: performance.now(), turned: false, fired: false }; return; }
       if (s.fnHeld) { hold[enc]={at:performance.now(),turned:false,fired:false,fn:true}; return; }
       const grid = s.mode === "draw" || s.mode === "single";
-      if (enc === 0 && s.mode === "single" && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
+      if (enc === 0 && grid && s.GLOB.y === 16) hold[0] = { at: performance.now(), turned: false, fired: false };
       if (enc === 1 && grid && s.GLOB.y !== 16) hold[1] = { at: performance.now(), turned: false, fired: false };
       if (enc === 2 && grid) hold[2] = { at: performance.now(), turned: false, fired: false };
       if (enc === 3 && (grid || s.mode === "filter")) hold[3] = { at: performance.now(), turned: false, fired: false, had: !!note[s.GLOB.x][s.GLOB.y].channel };
@@ -2885,6 +2932,7 @@ export function createDevice(matrix, statusEl, rings) {
         return;
       }
       if (name === "velocity") { enterVelocity(); return; }
+      if (name === "demo") { startDemo(); return; }
       if (name === "bpm") { s.mode = "bpm"; return; }
       if (name === "song") { s.mode = "song"; return; }
       if (name === "play") togglePlay();

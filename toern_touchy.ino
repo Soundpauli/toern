@@ -134,14 +134,20 @@ FLASHMEM void showTouchyMode() {
   frame = 0;
   FastLEDclear();
   const unsigned long now = millis();
-  const int phase = (now / 250) % 4;
-  const int x0 = (int)lroundf((int)maxX - 20 - ((int)maxX / 5) * (1.0f - cosf(now * PI / 3000.0f)) * .5f);
-  const int top = (int)lroundf(14.0f + .65f * sinf(now * PI / 1800.0f));
   CRGB tint(170,62,105);
   if (touchyTintActive) {
     const CRGB pad = touchyPadColors[touchyLastVoice - 1];
     tint = CRGB(pad.r * 3 / 5, pad.g * 3 / 5, pad.b * 3 / 5);
   }
+  drawTouchyCatFrame(now, tint);
+  FastLEDshow();
+}
+
+// Pure cat frame shared by TOUCHY and DEMO; no instrument controls or LED flush.
+FLASHMEM void drawTouchyCatFrame(unsigned long now, CRGB tint) {
+  const int phase = (now / 250) % 4;
+  const int x0 = (int)lroundf((int)maxX - 20 - ((int)maxX / 5) * (1.0f - cosf(now * PI / 3000.0f)) * .5f);
+  const int top = (int)lroundf(14.0f + .65f * sinf(now * PI / 1800.0f));
   // Reference sprite, mirrored to face right: 21 wide by 11 high.
   static const char *sprite[11] = {
     "     BBBBBBBBBBBB    ",
@@ -199,5 +205,4 @@ FLASHMEM void showTouchyMode() {
       light(x, y, CRGB(color.r / 2, color.g / 2, color.b / 2));
     }
   }
-  FastLEDshow();
 }

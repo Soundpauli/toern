@@ -88,27 +88,16 @@ static inline void logMidiRxSongPosition(uint16_t beats) {
 }
 
 // move these to file-scope so everybody can reset them
-static unsigned long lastBPMMeasureTime = 0;             // time of last BPM measurement window
-static uint32_t clocksSinceLastBPM = 0;                  // number of MIDI clocks since last BPM measurement
-static float smoothedBPM = 0.0f;                         // internal smoothed BPM estimate (Kalman filter state)
-static float bpmEstimate = 0.0f;                         // Kalman filter: current BPM estimate
-static float bpmEstimateError = 1.0f;                    // Kalman filter: estimate error covariance
-static const float BPM_PROCESS_NOISE = 0.8f;             // Kalman filter: process noise (how much BPM can change) - LOWER = harder filtering
-static const float BPM_MEASUREMENT_NOISE = 0.5f;         // Kalman filter: measurement noise (BPM measurement uncertainty) - HIGHER = harder filtering (reduced from 0.8 for faster sync)
-static const uint32_t CLOCKS_PER_BPM_WINDOW = 24 * 4;    // 4/4: 24 clocks/beat * 4 beats/bar = 96 clocks (calculate BPM every 1 bar for faster sync)
-static const unsigned long NO_CLOCK_TIMEOUT_US = 2000000; // 2 seconds: if no clock received, reset Kalman state
-static unsigned long lastClockReceivedTime = 0;          // Timestamp of last received clock (MIDI or analog)
-static unsigned long lastMidiClockUs = 0;                // MIDI F8 only — analog in yields while this is fresh
-static int lastStableBPM = 0;                            // Last BPM value for stability tracking
-static int stableBPMCount = 0;                           // Count of consecutive same BPM values
-static bool isBPMStable = false;                         // True if BPM has been stable (>2 consecutive same values)
-static uint8_t midiClockTicks = 0;  // Resets every step (for step tracking)
-static uint16_t midiClockTickCounter = 0;  // Continuous counter for blinking (never resets, wraps at 65535)
-static bool initialBpmSyncDone = false;  // Track if initial background BPM sync is complete
+static const unsigned long NO_CLOCK_TIMEOUT_US = 2000000;
+static toern_midi::ClockFollower midiFollower;
+static unsigned long lastMidiClockUs = 0;
+static uint8_t midiClockTicks = 0;
+static uint16_t midiClockTickCounter = 0;
+static bool midiStartOnClock = false;
+static bool midiFollowerLockNotified = false;
 
-// Function to check if external BPM is stable (for UI display)
 bool getBPMStable() {
-  return isBPMStable;
+  return midiFollower.stable(micros());
 }
 
 // Function to get current MIDI clock tick count (for arrow blinking)
@@ -119,7 +108,7 @@ uint16_t getMidiClockTicks() {
 static uint8_t externalStepWithinPage = 0;  // Tracks external clock-derived step (1..maxX)
 static unsigned long transportStartDelayUntil = 0;
 static float midiClockSendBPM = 0.0f;
-static unsigned long midiClockIntervalUs = 0;
+static double midiClockIntervalUs = 0;
 static unsigned long midiNextClockMicros = 0;
 
 static void markExternalOne() {
@@ -751,19 +740,11 @@ void midiClockTick() {
 }
 
 static inline void configureMidiClockSend(float bpm, unsigned long nowMicros) {
-  // Use exact rounded BPM value for precise MIDI clock output
-  int roundedBPM = (int)round(bpm);
-  if (roundedBPM < 1) roundedBPM = 1;
-  if (roundedBPM > BPM_MAX) roundedBPM = BPM_MAX;
-  
-  // Calculate interval with high precision using floating point, then round to nearest microsecond.
-  // Formula: 60,000,000 microseconds per minute / (BPM * 24 clocks per quarter note)
-  // Using a fixed period timer avoids per-tick timer reprogramming jitter.
-  double intervalUsDouble = 60000000.0 / ((double)roundedBPM * 24.0);
-  midiClockIntervalUs = (unsigned long)round(intervalUsDouble);
-  if (midiClockIntervalUs == 0) midiClockIntervalUs = 1;
-  
-  midiClockSendBPM = (float)roundedBPM;
+  if (!isfinite(bpm)) return;
+  bpm = constrain(bpm, 1.0f, (float)BPM_MAX);
+  // IntervalTimer accepts fractional microseconds (quantized to PIT ticks).
+  midiClockIntervalUs = 60000000.0 / ((double)bpm * 24.0);
+  midiClockSendBPM = bpm;
   midiNextClockMicros = nowMicros;
   
   // Configure dedicated IntervalTimer for MIDI clock output (separate from MIDI input/output)
@@ -780,24 +761,20 @@ void updateMidiClockOutput() {
   extern int clockMode;
   if (MIDI_CLOCK_SEND || (pulseClockEnabled && clockMode == 1)) {
     unsigned long now = micros();
-    // Use exact rounded BPM value from SMP.bpm
-    int roundedBPM = (int)round(SMP.bpm);
-    if (roundedBPM < 1) roundedBPM = 1;
-    if (roundedBPM > BPM_MAX) roundedBPM = BPM_MAX;
-    configureMidiClockSend((float)roundedBPM, now);
+    configureMidiClockSend(SMP.bpm, now);
   }
 }
 
 // MIDI library callback for realtime Clock messages
 void handleMidiClock() {
-  // Process clock with precise timestamp
-  myClock(micros());
+  // Use the UART receive timestamp, not the delayed parser execution time.
+  myClock(toern_midi::parsedByteUs);
 }
 
-void checkMidi() {
+static void serviceMidiTransportStart() {
   if (touchyEnabled) transportStartDelayUntil = 0;
   // Fire deferred transport start once the non-blocking delay has elapsed
-  if (transportStartDelayUntil && micros() >= transportStartDelayUntil) {
+  if (transportStartDelayUntil && (int32_t)(micros() - transportStartDelayUntil) >= 0) {
     transportStartDelayUntil = 0;
     extern int patternMode;
     if (SMP_PATTERN_MODE && patternMode == 3) {
@@ -811,7 +788,8 @@ void checkMidi() {
     playStartTime = millis();
     pulseClockOnTransportStart();
     if (SMP.bpm > 0) {
-      unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+      double currentPlayNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
+      playNoteInterval = currentPlayNoteInterval;
       playTimer.end();
       playNote();
       playTimer.begin(playNote, currentPlayNoteInterval);
@@ -832,12 +810,18 @@ void checkMidi() {
     fillActiveVelocity = 0;
     fillActiveRow = 0;
   }
+}
 
-  // CRITICAL: Process Clock messages with ABSOLUTE PRIORITY and minimal overhead
-  // When Note messages are in the buffer, they can delay Clock processing, causing timing jitter
-  // Solution: Check message type FIRST, process Clock immediately with timestamp capture
-  // before ANY other processing (including MIDI.getChannel() or MIDI.getData() calls)
+void checkMidi() {
+  static uint32_t seenOverruns = 0;
+  if (seenOverruns != toern_midi::rxOverruns) {
+    seenOverruns = toern_midi::rxOverruns;
+    midiFollower.reset();
+    midiFollowerLockNotified = false;
+  }
 
+  // UART timestamps preserve clock timing while callbacks execute in loop().
+  // Bound ordinary message work; leave unread messages queued for next call.
   static const uint8_t MAX_MIDI_MESSAGES_PER_LOOP = 16;
   uint8_t processedMessages = 0;
   while (processedMessages < MAX_MIDI_MESSAGES_PER_LOOP && MIDI.read()) {
@@ -884,44 +868,32 @@ void checkMidi() {
     }
   }
 
+  serviceMidiTransportStart();
+
   // If this device is sending MIDI Clock (master) or analog PPQN pulse is on in INT mode, keep timer in sync.
   extern int clockMode;
   if (MIDI_CLOCK_SEND || (pulseClockEnabled && clockMode == 1)) {
-    int currentRoundedBPM = (int)round(SMP.bpm);
-    int lastRoundedBPM = (int)round(midiClockSendBPM);
-    if (currentRoundedBPM != lastRoundedBPM && currentRoundedBPM > 0) {
-      unsigned long now = micros();
-      configureMidiClockSend((float)currentRoundedBPM, now);
+    if (fabsf(SMP.bpm - midiClockSendBPM) > 0.0001f && SMP.bpm > 0) {
+      configureMidiClockSend(SMP.bpm, micros());
     }
   }
 }
 
-// file-scope variables (ensure these are indeed at file scope)
-// static unsigned long intervalsBuf[CLOCK_BUFFER_SIZE]  = { 0 }; // Already declared
-// static int bufIndex = 0; // Already declared
-// static int bufCount = 0; // Already declared
-// static float smoothedBPM = 0.0f; // Already declared
-// static uint8_t midiClockTicks = 0; // Already declared
 constexpr uint8_t clocksPerStep = 24 / 4;
 
 void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
   
-  if (MIDI_CLOCK_SEND) {
+  extern int clockMode;
+  if (clockMode == 1) {
     unsigned long now = micros();
-    // Use exact rounded BPM value for precise clock output
-    int roundedBPM = (int)round(SMP.bpm);
-    if (roundedBPM < 1) roundedBPM = 1;
-    // IMPORTANT: Don't restart/re-phase the MIDI clock timer unless BPM actually changed.
-    // Restarting the IntervalTimer on transport events can cause short-window BPM displays
-    // on external gear to "dip/jiggle" even when paused.
-    int lastRoundedBPM = (int)round(midiClockSendBPM);
-    if (midiClockIntervalUs == 0 || roundedBPM != lastRoundedBPM) {
-      configureMidiClockSend((float)roundedBPM, now);
+    // Preserve clock phase unless the actual fractional tempo changed.
+    if (midiClockIntervalUs == 0 || fabsf(SMP.bpm - midiClockSendBPM) > 0.0001f) {
+      configureMidiClockSend(SMP.bpm, now);
     }
     lastClockSent = now;
     // Ensure playTimer is configured if master
     if (SMP.bpm > 0.0f) {
-        unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+        double currentPlayNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
         playTimer.begin(playNote, currentPlayNoteInterval);
     } else {
         playTimer.end();
@@ -929,28 +901,18 @@ void resetMidiClockState() { // MODIFIED to reset BPM averaging state for slave
   } else { // SLAVE MODE - run internal timer, sync with external clock
     // Don't stop MIDI clock timer - it should always run in background
     // Timer will just not send clock messages when MIDI_CLOCK_SEND is false
-    // Reset BPM averaging state for slave
-    clocksSinceLastBPM = 0;
-    lastBPMMeasureTime = 0;
-    // Reset Kalman filter state when switching to slave mode
-    bpmEstimate = 0.0f;
-    bpmEstimateError = 1.0f;
-    
-    // Reset stability tracking when switching to slave mode
-    lastStableBPM = 0;
-    stableBPMCount = 0;
-    isBPMStable = false;
-    lastClockReceivedTime = 0;  // Reset clock timeout tracking
-    midiClockTickCounter = 0;   // Reset clock tick counter for blinking
-    initialBpmSyncDone = false; // Reset initial sync flag - will sync again in background
-    
+    midiFollower.reset();
+    midiFollowerLockNotified = false;
+    midiStartOnClock = false;
+    midiClockTickCounter = 0;
+
     // Orange EXT plays from PQ-I pulses only; red EXT runs the timer and syncs it to MIDI clock.
     if (analogExtClock) {
       analogSubstepsLeft = 0;
       playTimer.end();
       fillTimer.end();
     } else if (SMP.bpm > 0.0f) {
-      unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+      double currentPlayNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
       playTimer.begin(playNote, currentPlayNoteInterval);
     } else {
       playTimer.end();
@@ -969,16 +931,12 @@ void resetMidiClockForTransportStart() {
   if (!MIDI_CLOCK_SEND) return;
 
   unsigned long now = micros();
-  int roundedBPM = (int)round(SMP.bpm);
-  if (roundedBPM < 1) roundedBPM = 1;
-  if (roundedBPM > BPM_MAX) roundedBPM = BPM_MAX;
-
   // Force re-phase regardless of whether BPM changed.
-  configureMidiClockSend((float)roundedBPM, now);
+  configureMidiClockSend(SMP.bpm, now);
   lastClockSent = now;
 
   if (SMP.bpm > 0.0f) {
-    unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)SMP.bpm * 4.0));
+    double currentPlayNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
     playTimer.begin(playNote, currentPlayNoteInterval);
   } else {
     playTimer.end();
@@ -998,50 +956,38 @@ void resetMidiClockForTransportStart() {
 void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
   // SAFETY: This function should ONLY be called for MIDI Clock messages (0xF8)
   // Do NOT call this for Note messages, Active Sensing (0xFE), or any other message type!
-  // DO NOT calculate BPM here - just count clocks for later calculation
+  // Estimate timing from receive timestamps; keep audio on the PIT timers.
   
-  if (MIDI_CLOCK_SEND) { // Safeguard: Should only run in slave mode (EXT mode)
+  extern int clockMode;
+  if (clockMode == 1) { // Follow only in EXT, including NOTE-only output mode.
     return;
   }
   if (analogExtClock) return;  // EXT analog: ignore MIDI F8 for tempo
 
+  if (lastMidiClockUs && uint32_t(now_captured - lastMidiClockUs) > NO_CLOCK_TIMEOUT_US)
+    midiFollowerLockNotified = false;
   lastMidiClockUs = now_captured;
 
   // Analog pulse out follows incoming MIDI clock in EXT mode
   pulseClockMidiTick();
 
-  // Check if we've been without clock for too long - reset Kalman state if so
-  // (check BEFORE updating lastClockReceivedTime)
-  if (lastClockReceivedTime > 0 && (now_captured - lastClockReceivedTime) > NO_CLOCK_TIMEOUT_US) {
-    // No clock received for >2 seconds: reset Kalman filter to prevent stale state
-    bpmEstimate = 0.0f;
-    bpmEstimateError = 1.0f;
-    lastBPMMeasureTime = 0;
-    clocksSinceLastBPM = 0;
-    lastStableBPM = 0;
-    stableBPMCount = 0;
-    isBPMStable = false;
-  }
+  const bool tempoUpdated = midiFollower.tick(now_captured);
+  if (tempoUpdated) SMP.bpm = midiFollower.bpm();
 
-  // Update last clock received time
-  lastClockReceivedTime = now_captured;
-
-  // --- Count Clock messages only (NO BPM calculation during clock reception) ---
-  // Count ONLY MIDI Clock messages (0xF8) - will use this count later for BPM calculation
-  // Ignore all other messages (Notes, Active Sensing, etc.)
-  clocksSinceLastBPM++;
-
-  if (lastBPMMeasureTime == 0) {
-    // First tick after reset: just remember the time
-    lastBPMMeasureTime = now_captured;
-    return; // Don't calculate yet - need more clocks
+  // MIDI Start defines pulse zero. Start playback on the first subsequent F8,
+  // preserving its receive timestamp and the configured receive-side offset.
+  const bool firstClockAfterStart = midiStartOnClock;
+  if (midiStartOnClock) {
+    midiStartOnClock = false;
+    transportStartDelayUntil = now_captured + effectiveTransportRecvDelayMs() * 1000UL;
+    if (!transportStartDelayUntil) transportStartDelayUntil = 1;
   }
 
   // --- Handle Start command sync and step tracking FIRST (always needed) ---
   // Keep pulseCount for transport sync, but don't trigger steps
   pulseCount = (pulseCount + 1) % (24 * 4); // 96 pulses = one full 4/4 bar
   // Track external steps from MIDI clock (1..maxX) for debugging
-  midiClockTicks++;
+  if (!firstClockAfterStart) midiClockTicks++;
   midiClockTickCounter++;  // Increment continuous counter for blinking (wraps at 65535)
   if (midiClockTicks >= clocksPerStep) {
     midiClockTicks = 0;
@@ -1071,131 +1017,44 @@ void myClock(unsigned long now_captured) { // Renamed 'now' for clarity
 
           // Defer first step by effective receive-side delay (SNC2 + cross from negative SNC1).
           unsigned long delayUs = effectiveTransportRecvDelayMs() * 1000UL;
-          transportStartDelayUntil = micros() + delayUs;
+          transportStartDelayUntil = now_captured + delayUs;
+          if (!transportStartDelayUntil) transportStartDelayUntil = 1;
         }
       }
     }
   }
 
-  // Always calculate BPM in EXT mode whenever a full window of clocks has arrived.
-  // This keeps SMP.bpm and isBPMStable current regardless of which screen is active.
-  if (clocksSinceLastBPM >= CLOCKS_PER_BPM_WINDOW) {
-    // Measure BPM over the window and update SMP.bpm directly in EXT mode
-    unsigned long deltaTotal = now_captured - lastBPMMeasureTime;
-
-    // Expected delta per MIDI clock at BPM_MIN/BPM_MAX
-    const unsigned long ABSOLUTE_MIN_DELTA = 7000;   // ~350 BPM upper bound
-    const unsigned long ABSOLUTE_MAX_DELTA = 75000;  // ~32 BPM lower bound
-
-    float intervalPerClock = (float)deltaTotal / (float)clocksSinceLastBPM;
-
-    if (intervalPerClock >= ABSOLUTE_MIN_DELTA * 0.8f &&
-        intervalPerClock <= ABSOLUTE_MAX_DELTA * 1.2f) {
-
-      // Calculate raw BPM from clock data
-      float rawBPM = 60000000.0f / (intervalPerClock * 24.0f);
-
-      // Clamp to valid range before filtering
-      float clampedRawBPM = rawBPM;
-      if (rawBPM < BPM_MIN) clampedRawBPM = BPM_MIN;
-      if (rawBPM > BPM_MAX) clampedRawBPM = BPM_MAX;
-
-      // Kalman filter for BPM smoothing
-      float filteredBPM;
-      float kalmanGain;
-      
-      // Initialize filter if this is the first measurement
-      if (bpmEstimate == 0.0f) {
-        filteredBPM = clampedRawBPM;
-        bpmEstimateError = BPM_MEASUREMENT_NOISE;
-        kalmanGain = 1.0f;  // Full trust in first measurement
-      } else {
-        // Prediction step: predict next state (BPM stays mostly the same)
-        float predictedBPM = bpmEstimate;  // Assuming BPM doesn't change much between measurements
-        float predictedError = bpmEstimateError + BPM_PROCESS_NOISE;
-        
-        // Update step: combine prediction with measurement
-        kalmanGain = predictedError / (predictedError + BPM_MEASUREMENT_NOISE);
-        filteredBPM = predictedBPM + kalmanGain * (clampedRawBPM - predictedBPM);
-        bpmEstimateError = (1.0f - kalmanGain) * predictedError;
-      }
-      
-      // Update filter state
-      bpmEstimate = filteredBPM;
-      smoothedBPM = filteredBPM;
-
-      // Round filtered BPM to nearest integer
-      int newBPM = round(filteredBPM);
-      
-      // Clamp final BPM to valid range
-      if (newBPM < BPM_MIN) newBPM = BPM_MIN;
-      if (newBPM > BPM_MAX) newBPM = BPM_MAX;
-
-      // Track stability: count consecutive same BPM values
-      if (lastStableBPM == 0) {
-        // First measurement: initialize
-        lastStableBPM = newBPM;
-        stableBPMCount = 1;
-        isBPMStable = false;
-      } else if (newBPM == lastStableBPM) {
-        // Same BPM value: increment counter
-        stableBPMCount++;
-        // BPM is stable if we've seen the same value more than 2 times
-        bool wasStable = isBPMStable;
-        isBPMStable = (stableBPMCount > 2);
-        
-        // If BPM just became stable, sync playTimer and auto-exit BPM menu if open
-        if (isBPMStable && !wasStable) {
-          extern IntervalTimer playTimer;
-          extern void playNote();
-          if (newBPM > 0) {
-            unsigned long currentPlayNoteInterval = (unsigned long)lround(60000000.0 / ((double)newBPM * 4.0));
-            // Only re-phase (begin) if idle - avoids sync jumps during playback
-            // or while waiting for bar-1 (pendingStartOnBar). In those states just
-            // update the period so the phase that was already locked stays intact.
-            if (!isNowPlaying && !pendingStartOnBar) {
-              playTimer.begin(playNote, currentPlayNoteInterval);
-            } else {
-              playTimer.update(currentPlayNoteInterval);
-            }
-          }
-
-          if (!initialBpmSyncDone) {
-            initialBpmSyncDone = true;
-          }
-
-          // Auto-exit BPM menu when clock locks
-          extern Mode *currentMode;
-          extern Mode bpmMode;
-          if (currentMode == &bpmMode) {
-            extern void switchMode(Mode *);
-            extern Mode draw;
-            extern Mode singleMode;
-            extern bool menuEnteredFromSingleMode;
-            extern int currentMenuPage;
-            currentMenuPage = 3;
-            switchMode(menuEnteredFromSingleMode ? &singleMode : &draw);
-          }
-        }
-      } else {
-        // BPM changed, reset stability counter
-        stableBPMCount = 1;
-        lastStableBPM = newBPM;
-        isBPMStable = false;
-      }
-
-      // UPDATE SMP.bpm from filtered value (but DON'T sync sequencer timer)
-      // Just update the BPM value - sequencer continues using its own internal timer
-      // This allows the BPM display to match external clock while sequencer runs independently
-      SMP.bpm = (float)newBPM;
-    } else {
+  if (midiFollower.ready() && (tempoUpdated || midiClockTicks == 0)) {
+    const double baseStepUs = midiFollower.stepUs();
+    double timerStepUs = baseStepUs;
+    extern volatile uint32_t sequencerRecordStepStartedUs;
+    const uint32_t playedAt = sequencerRecordStepStartedUs;
+    if (isNowPlaying && playedAt) {
+      const uint32_t boundaryUs = now_captured -
+          (uint32_t)lround(baseStepUs * midiClockTicks / 6.0);
+      timerStepUs = midiFollower.correctedStepUs(
+          boundaryUs, playedAt, effectiveTransportRecvDelayMs() * 1000UL);
     }
-
-    // Reset window for next measurement
-    lastBPMMeasureTime = now_captured;
-    clocksSinceLastBPM = 0;
+    playNoteInterval = baseStepUs;
+    playTimer.update(timerStepUs);
+    fillTimer.update(timerStepUs / 4.0);
   }
-  
+
+  // Lock is based on interval consistency, never equality of rounded BPM.
+  // Retain the existing auto-exit once per acquisition.
+  if (midiFollower.stable(now_captured) && !midiFollowerLockNotified) {
+    midiFollowerLockNotified = true;
+    extern Mode *currentMode;
+    extern Mode bpmMode;
+    if (currentMode == &bpmMode) {
+      extern Mode draw, singleMode;
+      extern bool menuEnteredFromSingleMode;
+      extern int currentMenuPage;
+      currentMenuPage = 3;
+      switchMode(menuEnteredFromSingleMode ? &singleMode : &draw);
+    }
+  }
+
   // Playback is driven by playTimer; external MIDI clock updates its interval.
 }
 
@@ -1242,17 +1101,17 @@ void MidiReleaseSequencerNotes() {
   }
 }
 
-void handleStop() {
-  
-  if (!isNowPlaying || !MIDI_TRANSPORT_RECEIVE) return;
+void cancelMidiTransportStart() {
+  midiStartOnClock = false;
+  transportStartDelayUntil = 0;
+  pendingStartOnBar = false;
+}
 
-  // Called when a MIDI STOP message is received.
-  // skipSave=true: avoid blocking SD write while external clock is still ticking.
-  // The local pause() button path will save normally.
-  unsigned long currentTime = millis();
-  if (currentTime - playStartTime > 500) {
-    pause(true);
-  }
+void handleStop() {
+  if (!MIDI_TRANSPORT_RECEIVE) return;
+  cancelMidiTransportStart();
+  // External Stop must also work immediately after Start, without debounce.
+  if (isNowPlaying) pause(true);
 }
 
 // Map incoming MIDI (cable channel + pitch) to the same logical channel 1..16 as note routing.
@@ -1491,6 +1350,8 @@ void handleStart() {
   // only act if we’re supposed to follow external transport
   if (!MIDI_TRANSPORT_RECEIVE) return;
 
+  cancelMidiTransportStart();
+  extern int clockMode;
   markExternalOne(); // define "ONE" on incoming Play signal
 
   //Serial.println("MIDI Start Received");
@@ -1511,14 +1372,21 @@ void handleStart() {
     MIDI.sendRealTime(midi::Start);
   }
 
-  if (!MIDI_CLOCK_SEND && analogExtClock) {
+  if (clockMode != 1 && analogExtClock) {
     pendingStartOnBar = true;
     analogClockCatchIfHigh();
     return;
   }
 
-  // Start after effective receive-side delay.
   pendingStartOnBar = false;
+  if (clockMode != 1) {
+    isNowPlaying = false;
+    transportStartDelayUntil = 0;
+    midiStartOnClock = true;
+    return;
+  }
+
+  // INT transport receive retains the configured start delay.
 
   unsigned long delayUs = effectiveTransportRecvDelayMs() * 1000UL;
   transportStartDelayUntil = micros() + delayUs;

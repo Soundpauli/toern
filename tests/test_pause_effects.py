@@ -117,6 +117,7 @@ void releasePolyVoice(int i){Senvelope1[i]->noteOff();Senvelope2[i]->noteOff();S
 bool MIDI_CLOCK_SEND=false,MIDI_TRANSPORT_SEND=false;
 namespace midi{const int Stop=0;}
 struct {void sendRealTime(int){}} MIDI;
+void cancelMidiTransportStart(){}
 void MidiReleaseSequencerNotes(){} void clearLiveRecordSkip(){} void deleteActiveCopy(){}
 void stopSynthChannel(int){} void resetMidiPressedKeyCount11to14(){} void resetSequencedSynthLegato(){}
 struct {void end(){}} fillTimer;

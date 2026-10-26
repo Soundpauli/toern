@@ -10,7 +10,7 @@ sketch = (root / 'toern.ino').read_text()
 midi = (root / 'toern_midi.ino').read_text()
 load = menu[menu.index('  clockMode     ='):menu.index('  transportMode =', menu.index('  clockMode     ='))]
 a = sketch.index('  if (currentMode->pos[2] != lastPos2)', sketch.index('FLASHMEM void setBPM()'))
-select = sketch[a:sketch.index('  if (currentMode->pos[3]', a)]
+select = sketch[a:sketch.index('  if (clockMode == 1 && (currentMode->pos[3]', a)]
 a = midi.index('static void analogClockSyncListen() {')
 listen = midi[a:midi.index('// If Play is armed', a)]
 harness = r'''
@@ -45,6 +45,7 @@ void setPriority(int irq,int p){assert(irq==IRQ_GPIO6789);priority=p;}
 #define constrain(x,lo,hi) ((x)<(lo)?(lo):((x)>(hi)?(hi):(x)))
 LISTEN
 void resetMidiClockState(){analogClockSyncListen();}
+void syncBpmEncoderPositions(){}
 void drawBPMScreen(){}
 void load(){LOAD}
 void select(){SELECT}

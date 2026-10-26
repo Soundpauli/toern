@@ -12,7 +12,7 @@ int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAnalysis har
 void generateSong();
 void generateGenreTrack();
 void setGenreBPM();
-void applyBPMDirectly(int bpm);
+void applyBPMDirectly(float bpm);
 void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int page);
 void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int page);
 void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page);
@@ -3399,11 +3399,12 @@ FLASHMEM void setGenreBPM() {
   SMP.bpm = targetBPM;
   
   // Update the BPM mode position
-  bpmMode.pos[3] = targetBPM;
+  syncBpmEncoderPositions();
   
   // If currently in BPM mode, update the encoder
   if (currentMode == &bpmMode) {
-    Encoder[3].writeCounter((int32_t)targetBPM);
+    Encoder[0].writeCounter((int32_t)bpmMode.pos[0]);
+    Encoder[3].writeCounter((int32_t)bpmMode.pos[3]);
   }
   
   // Apply the BPM immediately by updating the playback timer
@@ -3411,10 +3412,11 @@ FLASHMEM void setGenreBPM() {
 }
 
 // Apply BPM directly without relying on MIDI clock condition
-void applyBPMDirectly(int bpm) {
+void applyBPMDirectly(float bpm) {
   if (bpm > 0) { // Avoid division by zero
     playNoteInterval = 60000000.0 / ((double)bpm * 4.0);
-    playTimer.update((uint32_t)round(playNoteInterval));
+    playTimer.update(playNoteInterval);
+    fillTimer.update(playNoteInterval / 4.0);
   }
 }
 
@@ -4300,9 +4302,10 @@ FLASHMEM void startNew() {
   loadSamplePack(1, false, false);
   
   // 8. UPDATE BPM AND TIMER
-  bpmMode.pos[3] = SMP.bpm;
+  syncBpmEncoderPositions();
   playNoteInterval = 60000000.0 / ((double)SMP.bpm * 4.0);
-  playTimer.update((uint32_t)round(playNoteInterval));
+  playTimer.update(playNoteInterval);
+  fillTimer.update(playNoteInterval / 4.0);
   bpmMode.pos[2] = (clockMode == 1) ? 1 : 0;
   
   // 9. RESET WAVE FILE IDS to defaults
@@ -4426,13 +4429,13 @@ FLASHMEM static void drawLogoWavePixel(unsigned int x, float waveY, CRGB baseCol
 
 // Shared logo+sine frame. holdNoFadeOut keeps full brightness after fade-in
 // (INFO loop); boot mode still fades everything out at the end.
-FLASHMEM static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNoFadeOut) {
+FLASHMEM static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNoFadeOut, bool wavesOnly) {
   extern void light(unsigned int x, unsigned int y, CRGB color);
 
   const unsigned long fadeOutStart = phase1Duration + phase2Duration;
   const float sineFade = constrain(
       (float)elapsedMs / (float)phase1Duration, 0.0f, 1.0f);
-  const float logoFade = constrain(
+  const float logoFade = wavesOnly ? 0.0f : constrain(
       ((float)elapsedMs - (float)phase1Duration) /
           (float)phase2Duration,
       0.0f, 1.0f);
@@ -4481,6 +4484,8 @@ FLASHMEM static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNo
         logoStartX, logoFade, sineFade, fadeOut);
   }
 
+  if (wavesOnly) return;
+
   const uint8_t logoBrightness = (uint8_t)constrain(
       (int)roundf(255.0f * logoFade * fadeOut), 0, 255);
   for (uint8_t y = 0; y < maxY; y++) {
@@ -4494,6 +4499,82 @@ FLASHMEM static void drawLogoAnimationFrame(unsigned long elapsedMs, bool holdNo
       }
     }
   }
+}
+
+static bool demoAnimationActive = false;
+static bool demoAnimationExiting = false;
+static uint32_t demoAnimationStarted = 0;
+static uint32_t demoAnimationLastFrame = 0;
+static uint32_t demoAnimationLastTouch = 0;
+static const char demoAnimationText[] = "MATZE SAMPLER";
+static const int demoTextScale = 2;
+
+FLASHMEM void startDemoAnimation() {
+  if (isNowPlaying) pause(true);
+  allOff();
+  stopAllSetWavPreviewAudio();
+  // Consume the menu launch edge; DEMO accepts only Touch 1 / button A.
+  buttons[3] = 0;
+  pressed[3] = false;
+  isPressed[3] = false;
+  buttonState[3] = IDLE;
+  demoAnimationStarted = millis();
+  demoAnimationLastFrame = demoAnimationStarted - 33u;
+  demoAnimationLastTouch = demoAnimationStarted - 5u;
+  demoAnimationExiting = false;
+  demoAnimationActive = true;
+}
+
+FLASHMEM bool serviceDemoAnimation() {
+  if (!demoAnimationActive) return false;
+  const uint32_t now = millis();
+  if (now - demoAnimationLastTouch >= 5u) {
+    demoAnimationLastTouch = now;
+    const bool down = readTouch1Pressed(); // external panel maps this to BUTTON_A
+    if (down) demoAnimationExiting = true;
+    if (demoAnimationExiting && !down) {
+      // Consume the release here so it cannot also toggle SINGLE / leave MODE.
+      demoAnimationActive = false;
+      FastLEDclear();
+      FastLEDshow();
+      menuRequestFullRedraw();
+      noteUserActivity();
+      return true;
+    }
+  }
+  if (demoAnimationExiting || now - demoAnimationLastFrame < 33u) return true;
+  demoAnimationLastFrame = now;
+  int width = 0;
+  for (const char *c = demoAnimationText; *c; ++c) width += (toern_demo::glyphWidth(*c, alphabet[*c - 32][0]) + 1) * demoTextScale;
+  const auto frame = toern_demo::frame(now - demoAnimationStarted, maxX, width);
+  FastLEDclear();
+  if (frame.phase == toern_demo::Phase::Nyan) {
+    drawTouchyCatFrame(frame.elapsed, CRGB(170,62,105));
+
+  } else {
+    drawLogoAnimationFrame(now - demoAnimationStarted, true, true);
+    int x = frame.x;
+    for (const char *c = demoAnimationText; *c; ++c) {
+      CRGB color = CRGB::Red;
+      if (frame.phase == toern_demo::Phase::White) color = CRGB::White;
+      if (frame.phase == toern_demo::Phase::Rainbow)
+        color = CHSV((uint8_t)(x * 12 + (now - demoAnimationStarted) / 25u), 255, 255);
+      const auto &glyph = alphabet[*c - 32];
+      const int glyphWidth = toern_demo::glyphWidth(*c, glyph[0]);
+      for (int col = 0; col < glyphWidth; ++col) {
+        const uint8_t bits = *c == 'M' ? toern_demo::mColumns[col] : glyph[col + 1];
+        for (int row = 0; row < 5; ++row) {
+          if (!(bits & (1u << row))) continue;
+          for (int dx = 0; dx < demoTextScale; ++dx)
+            for (int dy = 0; dy < demoTextScale; ++dy)
+              light(x + col * demoTextScale + dx, 4 + (4 - row) * demoTextScale + dy, color);
+        }
+      }
+      x += (glyphWidth + 1) * demoTextScale;
+    }
+  }
+  FastLEDshow();
+  return true;
 }
 
 // ----- Run the Animation Once (Called in setup) -----
@@ -4523,7 +4604,7 @@ FLASHMEM void runAnimation() {
     for (uint16_t i = 0; i < NUM_LEDS; i++) {
       leds[i] = CRGB::Black;
     }
-    drawLogoAnimationFrame(elapsed, false);
+    drawLogoAnimationFrame(elapsed, false, false);
     FastLEDshow();
 
     if (elapsed >= totalAnimationTime) {
@@ -4580,7 +4661,7 @@ FLASHMEM void runInfoLogoAnimationLoop() {
     for (uint16_t i = 0; i < NUM_LEDS; i++) {
       leds[i] = CRGB::Black;
     }
-    drawLogoAnimationFrame(currentTime - startTime, true);
+    drawLogoAnimationFrame(currentTime - startTime, true, false);
     FastLEDshow();
   }
 

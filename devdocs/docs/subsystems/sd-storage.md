@@ -22,7 +22,7 @@ The Micro SD card holds samples, patterns, and settings. Firmware never exposes 
 - Browser: [sdtool.tyng.app](https://sdtool.tyng.app) (Web Serial)
 - CLI and local browser server: `standalone-tools/sd-tool-standalone/toern_sd.py`
 
-Protocol details belong with those tools; the device side is `sdSerialServerPoll()` while Menu → ETC → SD is active.
+Protocol details belong with those tools; the device side is `sdSerialServerPollNeedSdHint()` whenever a host program has the port open.
 
 ## Rules of thumb
 

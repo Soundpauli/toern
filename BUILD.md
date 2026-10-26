@@ -81,7 +81,7 @@ Do this before you trust a battery or a full LED matrix.
 
 The firmware does not mount the card as a USB disk. Format with the SD Association formatter (FAT32 up to 32 GB, exFAT for 64 GB). Copy a starter layout to the **root** of the card.
 
-The handbook points at [audioconvert.tyng.app](https://audioconvert.tyng.app/) → **SD CARD** → `SD-CARD-CONTENT.zip`. That zip is not in git. If the site is down, put 44.1 kHz mono 16-bit WAVs on the card with the CLI in [`standalone-tools/sd-tool-standalone`](standalone-tools/sd-tool-standalone) while Menu → ETC → SD is open, or with a card reader. Insert and eject only with the unit off.
+The handbook points at [audioconvert.tyng.app](https://audioconvert.tyng.app/) → **SD CARD** → `SD-CARD-CONTENT.zip`. That zip is not in git. If the site is down, put 44.1 kHz mono 16-bit WAVs on the card with the CLI in [`standalone-tools/sd-tool-standalone`](standalone-tools/sd-tool-standalone) or with a card reader. The card server answers from any screen. Insert and eject only with the unit off.
 
 ## Change the firmware
 

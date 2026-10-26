@@ -36,6 +36,7 @@ struct elapsedMillis {
   elapsedMillis& operator=(unsigned long value){start=now-value;return *this;}
 };
 const int NEOSLIDER_COUNT=4, maxY=16, maxPages=3, SS_NEOSLIDER_ADC_CH=18;
+unsigned int neoSliderDisabledMask=0;
 bool exttouch=true, neoSliderAnyPresent=true, fastRecordActive=false, isRecording=false;
 struct Mode {} draw,menu,subpatternMode,set_Wav;
 Mode *currentMode=&draw;
@@ -89,7 +90,7 @@ const uint8_t sliderCols[4][2]={{2,3},{6,7},{10,11},{14,15}};
 unsigned long neoSliderOverlayFrame=0;
 int pixels[17]={};
 void light(int x,int y,CRGB){assert(x>=1&&x<=16&&y>=1&&y<=16);pixels[x]++;}
-''' + constants+'\n'+function('static inline bool isNeoSliderControlledChannel(')+'\n'+function('static bool restoredMuteWithFaderPriority(')+'\n'+function('static void syncMuteArraysToSmp() {')+'\n'+function('FLASHMEM void fullMuteExitRestore() {')+'\n'+function('void tmpMuteAll(bool pressed) {')+'\n'+function('static void processOneNeoSlider(')+'\n'+function('void updateNeoSliderVolume() {')+'\n'+function('bool neoSliderOverlayVisible() {',ui_source)+'\n'+function('FLASHMEM void drawNeoSliderOverlay() {',ui_source)+r'''
+''' + constants+'\n'+function('static inline bool isNeoSliderEnabled(')+'\n'+function('static inline bool isNeoSliderControlledChannel(')+'\n'+function('static bool restoredMuteWithFaderPriority(')+'\n'+function('static void syncMuteArraysToSmp() {')+'\n'+function('FLASHMEM void fullMuteExitRestore() {')+'\n'+function('void tmpMuteAll(bool pressed) {')+'\n'+function('static void processOneNeoSlider(')+'\n'+function('void updateNeoSliderVolume() {')+'\n'+function('bool neoSliderOverlayVisible() {',ui_source)+'\n'+function('FLASHMEM void drawNeoSliderOverlay() {',ui_source)+r'''
 void tick(){now+=4;updateNeoSliderVolume();}
 void scan(){for(int i=0;i<4;i++)tick();}
 int main(){
@@ -213,6 +214,24 @@ int main(){
  assert(pixels[2]==0 && pixels[10]==16);
  now+=851;assert(!neoSliderOverlayVisible());
  drawNeoSliderOverlay();assert(!neoSliderOverlayActive[2]);
+ // Broken fader 2 is ignored even if a stale present flag says it exists.
+ neoSliderDisabledMask=1u<<1;neoSliderPresent[1]=true;
+ assert(!isNeoSliderControlledChannel(2)&&isNeoSliderControlledChannel(1));
+ for(int &r:reads)r=0;
+ const float previousScale=neoSliderVelScale[1];
+ const bool previousMute=muted[2];
+ for(int v:{0,1023,0,1023}){adc[1]=v;processOneNeoSlider(1,raw);}
+ assert(reads[1]==0&&neoSliderVelScale[1]==previousScale&&muted[2]==previousMute);
+ for(int i=0;i<12;i++)tick();
+ assert(reads[1]==0&&reads[0]>0&&reads[2]>0&&reads[3]>0);
+ neoSliderInMuteDz[1]=true;muted[2]=false;
+ tmpMuteAll(true);tmpMuteAll(false);assert(!muted[2]);
+ for(int i=0;i<4;i++)neoSliderOverlayActive[i]=false;
+ neoSliderOverlayActive[1]=true;neoSliderOverlayAge[1]=0;
+ assert(!neoSliderOverlayVisible());
+ for(int &n:pixels)n=0;drawNeoSliderOverlay();
+ for(int n:pixels)assert(n==0);
+
 }
 '''
 with tempfile.TemporaryDirectory(prefix='toern-faders-') as tmp:

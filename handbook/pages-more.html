@@ -40,7 +40,7 @@
             <ul>
               <li data-hb-copy="pages-more.008"><strong><a href="#delete-page">Delete a page</a></strong> — unpaint on the page strip (clears that page’s notes)</li>
               <li data-hb-copy="pages-more.009"><strong><a href="advanced-sequencing.html#copy-paste">Copy &amp; paste</a></strong> a page (draw = all voices; single = focused voice only)</li>
-              <li data-hb-copy="pages-more.010"><strong>Clear page</strong> for the focused voice — single mode, encoder&nbsp;1 short (current edit page)</li>
+              <li data-hb-copy="pages-more.010"><strong>Clear page</strong> — encoder&nbsp;1 long on the page row (all voices in draw, focused voice in single)</li>
               <li><strong><a href="advanced-sequencing.html#auto-extend">Random fill</a></strong> for the focused voice — single mode only</li>
               <li data-hb-copy="pages-more.012"><strong><a href="advanced-sequencing.html#note-shift">Note-shift</a></strong> — slide the focused voice in time / across rows — single mode only</li>
             </ul>
@@ -71,7 +71,7 @@
             <p data-hb-copy="pages-more.029">When the page is fully empty, its strip LED drops to <strong>very dark red</strong>. Playback range (<code>lastPage</code>) updates so trailing empty pages fall out of the walk.</p>
             <div class="hb-tip" data-hb-copy="pages-more.030"><strong>R mode:</strong> encoder&nbsp;4 on the page strip is <a href="advanced-sequencing.html#copy-paste">copy / paste</a>, not erase. Flip to L+R (or use the clear-page gestures below) when you want to wipe a page from the strip.</div>
             <div class="hb-warn" data-hb-copy="pages-more.031"><strong>No undo.</strong> Unpainting a page strip slot is immediate. Save to <a href="files.html#file">PATT</a> first if you might want that page back.</div>
-            <div class="hb-tip" data-hb-copy="pages-more.032"><strong>Two different “clears”:</strong> unpaint on the strip (cursor <code>y==16</code>) targets the <em>page LED under the cursor</em>. Encoder&nbsp;1 short in <em>single</em> mode on the page row clears the <em>current edit page</em> for the focused voice only — handy mid-edit, different target. The enc&nbsp;1 + enc&nbsp;4 long chord clears the current edit page too and works from <em>any</em> row (all voices in draw; focused voice in single).</div>
+            <div class="hb-tip" data-hb-copy="pages-more.032"><strong>Page-row short press does nothing.</strong> Encoder&nbsp;1 long (<code>2000</code>) on row&nbsp;16 deletes the current edit page: all voices in draw, the focused voice in single. Random / aware fill is only <strong>FN + encoder&nbsp;2 long</strong> (<code>0200</code>) on that same row.</div>
 
             <h3 class="hb-subsection-heading" data-hb-copy="pages-more.033">Hint colours — read the strip</h3>
             <p data-hb-copy="pages-more.034">Row&nbsp;1 of the matrix carries four small colour cues, one above each encoder. The encoder rings mirror the same colours. Memorise these states:</p>
@@ -95,12 +95,14 @@
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · red</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Stay on / leave page row</td><td>Turn down onto a voice row to leave the power tools.</td></tr>
-                  <tr><th>Short / press</th><td><a href="#delete-page">Delete page</a></td><td data-hb-copy="pages-more.061">L+R unpaint: clears the <em>page under the cursor</em> (all voices). Strip LED goes dark-red when empty.</td></tr>
-                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear edit page</td><td data-hb-copy="pages-more.063">Wipes <strong>every voice</strong> on the <em>current edit page</em> (not necessarily the LED under the cursor). No undo.</td></tr>
+                  <tr><th>Short</th><td>—</td><td data-hb-copy="pages-more.061">Does nothing on the page row. While a copy is armed, this short press cancels it.</td></tr>
+                  <tr><th>Long</th><td>Delete page</td><td data-hb-copy="pages-more.063">Wipes <strong>every voice</strong> on the current edit page. No undo.</td></tr>
+                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear edit page</td><td>Same wipe, and it also works from a voice row.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2 · off</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Page or volume</td><td>Same as elsewhere: <a href="play.html#ctrl">SETT → CTRL</a> = PAGE or VOL.</td></tr>
-                  <tr><th>Short / Long</th><td>—</td><td>Mute overlay needs a <em>voice</em> row (y≠16). Note-shift needs single mode.</td></tr>
+                  <tr><th>Short</th><td>—</td><td>Mute overlay needs a <em>voice</em> row (y≠16). Note-shift needs single mode.</td></tr>
+                  <tr><th>Long + FN</th><td>Random page</td><td>Hold <strong>FN</strong> (touch&nbsp;5) and long-press: writes a multi-voice page. Single mode rewrites only the focused voice.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3 · off</h5><table class="enc-act"><tbody>
                   <tr><th>Short</th><td>Play / pause</td><td>Transport still works from the page row.</td></tr>
@@ -114,7 +116,7 @@
             </article>
 
             <h3 class="hb-subsection-heading" data-hb-copy="pages-more.076">Copy armed</h3>
-            <p data-hb-copy="pages-more.077">After the first encoder&nbsp;4 tap, the page strip goes dark and the hints jump to <strong>large blue</strong> (enc&nbsp;1) and <strong>large yellow</strong> (enc&nbsp;4). Full copy / paste flow: <a href="advanced-sequencing.html#copy-paste">Advanced Sequencing → Copy &amp; paste</a>.</p>
+            <p data-hb-copy="pages-more.077">After the first encoder&nbsp;4 tap, encoder&nbsp;1 stays <strong>blue</strong> (cancel) and encoder&nbsp;4 turns <strong>green</strong> (paste). <strong>C+P</strong> shows in yellow at the centre. Full flow: <a href="advanced-sequencing.html#copy-paste">Advanced Sequencing → Copy &amp; paste</a>. <strong>FN + touch&nbsp;2</strong> copies and pastes the same way.</p>
 
             <h3 class="hb-subsection-heading" data-hb-copy="pages-more.078">Single mode on the page row</h3>
             <p data-hb-copy="pages-more.079">Hints: <strong>red</strong> (enc&nbsp;1), <strong>white</strong> (enc&nbsp;2), <strong>yellow</strong> (enc&nbsp;4). Same copy/paste idea, but it only grabs the <em>focused</em> voice — so you can copy a hi-hat lane and paste it onto another voice after you change focus.</p>
@@ -125,13 +127,13 @@
               <p class="viz-caption--below" data-hb-copy="pages-more.080">Single + page row: red / white / yellow cues.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1 · red</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Clear page</td><td data-hb-copy="pages-more.082">Deletes every note of the <strong>focused voice</strong> on the current edit page. No undo.</td></tr>
-                  <tr><th>Long</th><td>Randomize</td><td data-hb-copy="pages-more.084">Writes a fresh scale-aware pattern for the focused voice on this page. Detail: <a href="advanced-sequencing.html#auto-extend">Advanced → Random</a>.</td></tr>
-                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear page</td><td>Same clear as short here (focused voice only).</td></tr>
+                  <tr><th>Short</th><td>—</td><td data-hb-copy="pages-more.082">Does nothing on the page row. While a copy is armed, this short press cancels it.</td></tr>
+                  <tr><th>Long</th><td>Delete page</td><td data-hb-copy="pages-more.084">Deletes every note of the <strong>focused voice</strong> on the current edit page. No undo. Randomize is <strong>FN + encoder&nbsp;2 long</strong>.</td></tr>
+                  <tr><th>Long + enc&nbsp;4 long</th><td>Clear page</td><td>Same focused-voice clear, and it also works from a voice row.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2 · white</h5><table class="enc-act"><tbody>
                   <tr><th>Short</th><td>Enter note-shift</td><td>Opens <a href="advanced-sequencing.html#note-shift">note-shift</a> for the focused voice. Only on the page row.</td></tr>
-                  <tr><th>Long</th><td>—</td><td>Mute overlay needs a voice row — see <a href="advanced-sequencing.html#mutes">Advanced → Mutes</a>.</td></tr>
+                  <tr><th>Long + FN</th><td>Randomize voice</td><td>Hold <strong>FN</strong> and long-press to rewrite the focused voice on this page. Without FN, mute overlay needs a voice row — see <a href="advanced-sequencing.html#mutes">Advanced → Mutes</a>.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3 · off</h5><table class="enc-act"><tbody>
                   <tr><th>Short</th><td>Play / pause</td><td>Transport.</td></tr>

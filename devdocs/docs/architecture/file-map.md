@@ -24,7 +24,7 @@ Arduino builds every `.ino` in the sketch root as one program. Treat the filenam
 | [`toern_filterUI.ino`](https://github.com/Soundpauli/toern/blob/main/toern_filterUI.ino) | Filter-mode sliders on the matrix, encoder color cues |
 | [`toern_parameters.ino`](https://github.com/Soundpauli/toern/blob/main/toern_parameters.ino) | Defaults and parameter setters (`setParams`, envelopes, synth presets) |
 | [`toern_fileoperations.ino`](https://github.com/Soundpauli/toern/blob/main/toern_fileoperations.ino) | Pattern/project save & load on SD |
-| [`toern_sd_serial.ino`](https://github.com/Soundpauli/toern/blob/main/toern_sd_serial.ino) | USB-serial SD file server (Menu → ETC → SD) |
+| [`toern_sd_serial.ino`](https://github.com/Soundpauli/toern/blob/main/toern_sd_serial.ino) | USB-serial SD file server (any screen; ETC → SD shows SCON) |
 | [`toern_leds.ino`](https://github.com/Soundpauli/toern/blob/main/toern_leds.ino) | Optional external WS2812 strip ripples synced to notes |
 
 ## Headers

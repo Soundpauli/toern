@@ -1095,7 +1095,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawText(m, "A42", 2, 3, 0, 255, 0);
     },
     et_sd(m) {
-      etcSubFrame(m, 2, "SD", "", "", "");
+      etcSubFrame(m, 2, "SCON", "", "", "");
       drawText(m, "WAIT", 2, 3, 255, 220, 0);
     },
     et_auto(m) {
@@ -1257,8 +1257,9 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawDrawGrid(m, notes, 9);
       for (let p = 1; p <= m.w; p++) m.set(p, 16, 0, 0, 0);
       m.cursor(10, 9);
-      m.indL(1, "X");
-      m.indL(4, "Y");
+      m.indM(1, "X");
+      m.indM(4, "G");
+      drawText(m, "C+P", Math.max(1, Math.floor((m.w - 11) / 2) + 1), 6, 255, 255, 0);
     },
     note_shift(m) {
       const cur = 3;

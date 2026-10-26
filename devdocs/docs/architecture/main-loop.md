@@ -24,7 +24,7 @@ Declared in `toern.ino`:
 
 Rough order of concerns (see `void loop()` in `toern.ino`):
 
-1. Optional SD serial server poll when Menu → ETC → SD is open
+1. USB serial command poll when a host program has the port open
 2. MIDI input (`checkMidi`) early for latency
 3. Deferred settings backup / pause UI / autosave flags
 4. Encoder + button + touch handling (`checkEncoders`, `checkButtons`, `checkTouchInputs`, …)

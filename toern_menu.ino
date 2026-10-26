@@ -5,7 +5,7 @@
 #define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 5
 #define ETC_PAGES_COUNT 5
-#define MODE_PAGES_COUNT 10
+#define MODE_PAGES_COUNT 11
 #define ADV_PAGES_COUNT 10
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
@@ -179,7 +179,8 @@ MenuPage modePages[MODE_PAGES_COUNT] = {
   {"PONG", 24, false, nullptr},
   {"SONG", 22, false, nullptr},
   {"TCHY", 63, false, nullptr},
-  {"AUTO", 15, true, "PAGES"}
+  {"AUTO", 15, true, "PAGES"},
+  {"DEMO", 66, false, nullptr}
 };
 MenuPage advancedPages[ADV_PAGES_COUNT] = {
   {"CRSR", 32, false, nullptr},
@@ -2119,15 +2120,11 @@ FLASHMEM void showEtcMenu() {
     }
   }
   if (mainSetting == 49) {
-    // SD page: refresh when wait/connected state changes
-    extern bool sdSerialServerIsActive();
+    // SCON: refresh when the host link flips between WAIT and OK
     extern bool sdSerialServerClientConnected();
-    static bool lastSdActive = false;
     static bool lastSdClient = false;
-    bool nowActive = sdSerialServerIsActive();
     bool nowClient = sdSerialServerClientConnected();
-    if (nowActive != lastSdActive || nowClient != lastSdClient) {
-      lastSdActive = nowActive;
+    if (nowClient != lastSdClient) {
       lastSdClient = nowClient;
       fullRedraw = true;
     }
@@ -2579,13 +2576,13 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawEtcRamPage();
       break;
 
-    case 49: // SD - USB Serial file server (active while this page is open)
+    case 49: // SCON — serial-connection status. The server runs on every screen.
       {
         extern bool sdSerialServerClientConnected();
         const CRGB tc = currentMenuParentTextColor();
-        drawMenuText("SD", 2, 10, tc);
+        drawMenuText("SCON", 2, 10, tc);
         bool connected = sdSerialServerClientConnected();
-        // WAIT (yellow) until host connects; OK (green) once client talks
+        // WAIT (yellow) until a host talks; OK (green) while that link is recent
         drawMenuValue(connected ? "OK" : "WAIT", 2, 3, connected ? UI_GREEN : UI_YELLOW);
       }
       break;
@@ -2822,6 +2819,11 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuText("TCHY", 2, 10, currentMenuParentTextColor());
       drawMenuValue(touchyEnabled ? "ON" : "OFF", 2, 3, touchyEnabled ? UI_GREEN : UI_RED);
       drawMenuIndicator('L', touchyEnabled ? 'G' : 'R', 3);
+      break;
+    }
+    case 66: {
+      drawMenuText("DEMO", 2, 10, currentMenuParentTextColor());
+      drawMenuValue("GO", 2, 3, UI_GREEN);
       break;
     }
     case 61: { // MODE inherits the former SONG main-menu identity.
@@ -4909,6 +4911,9 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
 
 FLASHMEM void switchMenu(int menuPosition){
    switch (menuPosition) {
+      case 66:
+        startDemoAnimation();
+        break;
       case 1:
         switchMode(&loadSaveTrack);
         break;
@@ -5721,46 +5726,6 @@ FLASHMEM void showNewFileMode() {
       lastGenreLength = genreLength;
     }
   }
-}
-
-// Host PING while USB serial is up: land on Menu → ETC → SD so the session can go online.
-FLASHMEM void enterEtcSdFromHost() {
-  extern Mode menu;
-  extern Mode *currentMode;
-  extern void switchMode(Mode *newMode);
-
-  if (currentMode != &menu) {
-    switchMode(&menu);
-  }
-  if (currentMode != &menu) return;
-
-  int sdPage = 0;
-  for (int i = 0; i < ETC_PAGES_COUNT; i++) {
-    if (etcPages[i].mainSetting == 49) {
-      sdPage = i;
-      break;
-    }
-  }
-  int etcParent = 0;
-  for (int i = 0; i < MENU_PAGES_COUNT; i++) {
-    if (menuPages[i].mainSetting == 34) {
-      etcParent = i;
-      break;
-    }
-  }
-
-  inLookSubmenu = false;
-  inRecsSubmenu = false;
-  inMidiSubmenu = false;
-  inVolSubmenu = false;
-  inEtcSubmenu = true;
-  currentSystemMenuGroup = SystemMenuGroup::Etc;
-  currentMenuPage = etcParent;
-  currentEtcPage = sdPage;
-  currentMode->pos[3] = sdPage;
-  ensureEnc3Range(0, (int)(ETC_PAGES_COUNT - 1));
-  Encoder[3].writeCounter((int32_t)sdPage);
-  menuRequestFullRedraw();
 }
 
 FLASHMEM int getCurrentMenuMainSetting() {
