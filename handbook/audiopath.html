@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -61,7 +61,7 @@
               <thead><tr><th>Stage</th><th>Object</th><th>Gain / range</th></tr></thead>
               <tbody>
                 <tr><td>Player</td><td><span class="ap-code">sound1–8</span> (<span class="ap-code">AudioPlayArrayResmp</span>)</td><td><span class="ap-code">setAmplitude(vel/127 × neo-slider)</span> 0–1. Velocity is also sent into the sampler note event.</td></tr>
-                <tr><td>Envelope</td><td><span class="ap-code">envelope1–8</span></td><td>ADSR from PARAM sliders (0–32). Mute / note-off calls <span class="ap-code">noteOff()</span>.</td></tr>
+                <tr><td>Envelope</td><td><span class="ap-code">envelope1–8</span></td><td>Sample envelopes fit A/D/R to the played audio length, keep neutral playback transparent, and use sustain 1–32. Mute / note-off calls <span class="ap-code">noteOff()</span>.</td></tr>
                 <tr><td>Bitcrush</td><td><span class="ap-code">bitcrusher1–8</span></td><td>Slider 0 = bypass (16-bit @ sample rate). Slider 32 = 80% of old max ≈ <strong>4-bit / ~9.6 kHz</strong> (not 1-bit / 1 kHz).</td></tr>
                 <tr><td>Channel amp</td><td><span class="ap-code">amp1–8</span></td><td><span class="ap-code">map(channelVol, 0..16, 0..1)</span>. At BITC &gt; 0 the amp is ducked toward 0.6 as crush rises (<span class="ap-code">crushCompGain</span>).</td></tr>
                 <tr><td>Filter</td><td><span class="ap-code">filter1–8</span> SVF</td><td>HCUT=32 / LCUT=0: true dry bypass. HCUT 0–31: LP path, freq 281 Hz–9.7 kHz. LCUT &gt; 0: switch mixer to HP, freq 40 Hz–2.5 kHz. RES 0.7–5.0.</td></tr>

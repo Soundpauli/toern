@@ -13,13 +13,13 @@ code=r'''
 using toern_audio::SampleEnvelopeState;
 int main(int argc,char **argv){
  SampleEnvelopeState e;
- e.attack(0);e.decay(1000);e.sustain(1);e.release(0);e.noteOn();
+ e.attack(0);e.decay(1000);e.sustain(1);e.release(0);e.noteOn(true);
  for(int i=-32768;i<=32767;++i)assert(e.render(i)==i);
  // Natural silence leaves no stale attack/forced-release on the next hit.
- for(int n=0;n<30;++n){e.noteOn();for(int i=-32768;i<=32767;i+=251)assert(e.render(i)==i);}
+ for(int n=0;n<30;++n){e.noteOn(true);for(int i=-32768;i<=32767;i+=251)assert(e.render(i)==i);}
  if(argc>1){
   std::ifstream f(argv[1],std::ios::binary);int16_t sample;
-  for(int n=0;n<12;++n){f.clear();f.seekg(0);e.captureTail(nullptr,0);e.noteOn();while(f.read((char*)&sample,2))assert(e.render(sample)==sample);}
+  for(int n=0;n<12;++n){f.clear();f.seekg(0);e.captureTail(nullptr,0);e.noteOn(true);while(f.read((char*)&sample,2))assert(e.render(sample)==sample);}
  }
  e.noteOff();assert(!e.isActive());assert(e.render(32767)==0);
  // Old reader decays independently; new attack is already at full level.
@@ -55,6 +55,53 @@ int main(int argc,char **argv){
  // Note Off during attack releases from its current level, not full scale.
  shaped.noteOn();for(int i=0;i<5;++i)shaped.render(10000);shaped.noteOff();assert(shaped.render(10000)==5000);
  for(int i=1;i<100;++i)shaped.render(0);assert(!shaped.isActive());
+ // Grid/audition: R alone must work even with default D=1000 and S=1.
+ for(int releaseMs:{50,200}) {
+   SampleEnvelopeState hit(1000);hit.decay(1000);hit.sustain(1);hit.release(releaseMs);hit.noteOn(true);
+   for(int i=0;i<5;++i)assert(hit.render(10000)==10000);
+   for(int i=0;i<releaseMs;++i)assert(std::abs(hit.render(10000)-(10000-i*10000/releaseMs))<=2);
+   assert(!hit.isActive());assert(hit.render(10000)==0);
+   // Held MIDI stays open until its real key release instead.
+   hit.noteOn(false);for(int i=0;i<2000;++i)assert(hit.render(10000)==10000);
+   hit.noteOff();for(int i=0;i<releaseMs;++i)hit.render(10000);assert(!hit.isActive());
+ }
+ // Shaped one-shot completes A + H + D before entering the configured R.
+ SampleEnvelopeState hit(1000);hit.attack(10);hit.hold(5);hit.decay(20);hit.sustain(.5);hit.release(100);hit.noteOn(true);
+ for(int i=0;i<36;++i)hit.render(10000);
+ assert(hit.render(10000)==5000);
+ for(int i=1;i<100;++i)hit.render(10000);assert(!hit.isActive());
+ // Retrigger cancels the previous auto-release countdown.
+ hit.noteOn(true);for(int i=0;i<34;++i)hit.render(10000);hit.noteOn(true);
+ assert(hit.render(10000)==0);for(int i=1;i<36;++i)hit.render(10000);assert(hit.render(10000)==5000);
+ // Short samples: all shaped stages fit, peak is reached, and R finishes
+ // before the PCM ends, even with the longest A/D/R requested together.
+ for(unsigned frames:{20u,100u,1000u}) {
+   SampleEnvelopeState fit(1000);fit.attack(2000);fit.decay(1000);fit.sustain(.5);fit.release(1000);fit.noteOn(true,frames);
+   int peak=0;unsigned atPeak=0;
+   for(unsigned i=0;i<frames;++i){int value=fit.render(10000);if(value>peak){peak=value;atPeak=i;}}
+   assert(peak>=9000&&atPeak<frames-1);assert(!fit.isActive());assert(fit.render(10000)==0);
+ }
+ // A short high-pitched/trimmed hit fits; a subsequent long hit must still
+ // use its unchanged configured timing, rather than the previous fitted A.
+ SampleEnvelopeState fit(1000);fit.attack(100);fit.decay(100);fit.sustain(.5);fit.release(100);
+ fit.noteOn(true,30);for(int i=0;i<30;++i)fit.render(10000);assert(!fit.isActive());
+ fit.noteOn(true,1000);for(int i=0;i<50;++i)fit.render(10000);assert(fit.render(10000)==5000);
+ // Neutral fitting is a true bypass, even for a one-frame sample.
+ SampleEnvelopeState dry;dry.decay(1000);dry.noteOn(true,1);assert(dry.render(12345)==12345);
+ // A late MIDI release can only use the audio still available.
+ SampleEnvelopeState held(1000);held.release(50);held.noteOn(false,100);
+ for(int i=0;i<90;++i)held.render(10000);held.noteOff();for(int i=0;i<10;++i)held.render(10000);assert(!held.isActive());
+ // R must extend the tail from the SAME A/D gate when the stages fit.
+ // Sample length alone cannot move the gate or pin the release end.
+ for(unsigned frames:{2000u,4000u})for(int releaseMs:{0,250,500,1000}) {
+   SampleEnvelopeState hit(1000);hit.attack(10);hit.decay(20);hit.sustain(.5);hit.release(releaseMs);hit.noteOn(true,frames);
+   for(int i=0;i<31;++i)hit.render(10000);
+   for(int i=0;i<releaseMs;++i) {
+     assert(hit.isActive());
+     assert(std::abs(hit.render(10000)-(5000-i*5000/releaseMs))<=2);
+   }
+   assert(!hit.isActive());assert(hit.render(10000)==0);
+ }
 }
 '''
 with tempfile.TemporaryDirectory(prefix='toern-envelope-') as directory:

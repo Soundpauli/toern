@@ -1052,7 +1052,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, maxY, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode bpmMode = { "BPM", { 0, 0, 0, BPM_MIN }, { 9, 252, 1, BPM_MAX }, { 0, 0, 0, 100 }, { 0x00FFFF, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
+Mode bpmMode = { "BPM", { 0, 0, 0, BPM_MIN }, { 9, 252, 1, BPM_MAX }, { 0, 0, 0, 100 }, { 0x9400D3, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 0, 0, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -4101,7 +4101,7 @@ static float playAmpForVoice(int ch) {
   return 1.0f;
 }
 
-void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool retrigger) {
+void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool retrigger, float pitchCorrection = 0.0f) {
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
   if (ch >= 1 && sampleEnvelopes[ch]) {
@@ -4109,10 +4109,17 @@ void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool ret
       int16_t tail[toern_audio::SampleEnvelopeState::tailSamples] = {};
       const unsigned n = sampleReaders[ch] ? sampleReaders[ch]->snapshotTail(tail, toern_audio::SampleEnvelopeState::tailSamples) : 0;
       sampleEnvelopes[ch]->captureTail(tail, n);
-      sampleEnvelopes[ch]->noteOn();
     } else sampleEnvelopes[ch]->noteOff();
   }
   _samplers[ch].noteEvent(pitch, velocity, on, retrigger);
+  if (on && velocity && ch >= 1 && sampleEnvelopes[ch]) {
+    if (pitchCorrection != 0.0f && voices[ch]) {
+      voices[ch]->setPlaybackRate(powf(2.0f, ((float)pitch + pitchCorrection - 36.0f) / 12.0f));
+    }
+    // The reader has now started at its final pitch, so fit against its
+    // actual output length. Held MIDI still waits for a real Note Off.
+    sampleEnvelopes[ch]->noteOn(retrigger, sampleReaders[ch] ? sampleReaders[ch]->playbackFramesRemaining() : 0);
+  }
 }
 
 void samplerRemoveSamples(int ch) {
@@ -4145,19 +4152,10 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
   }
   uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
   const uint8_t midiPitch = (uint8_t)constrain(pitch, 0, 127);
-  samplerNoteEvent(ch, midiPitch, sv, true, retrigger);
+  const float pitchCorrection = ch >= 1 ? detune[ch] + (float)pitch - midiPitch : 0.0f;
+  samplerNoteEvent(ch, midiPitch, sv, true, retrigger, pitchCorrection);
   if (voices[ch] != nullptr) {
     voices[ch]->snapAmplitude(amp);
-  }
-  // DTNE fine tune (±1 semitone) for sample voices — rate multiply after integer note.
-  if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
-    const float fine = detune[ch];
-    if (fine != 0.0f || pitch != (int)midiPitch) {
-      // The sampler event key is a MIDI byte, but low incoming pitches may
-      // need a rate below key 0 after conversion to the sample's local root.
-      // Samples are registered at root 36 (see samplerAddSample).
-      voices[ch]->setPlaybackRate(powf(2.0f, ((float)pitch + fine - 36.0f) / 12.0f));
-    }
   }
 }
 
@@ -7427,11 +7425,6 @@ void loop() {
         }
       }
 
-      if (currentMode == &filterMode
-          && (int32_t)(filterResetOverlayUntil - millis()) > 0) {
-        drawFilterResetOverlay();
-      }
-
       // Yield once per frame after all drawing operations complete (replaces per-pixel yields)
       // This gives the system a chance to process other tasks without causing jitter
       yield();
@@ -7709,6 +7702,15 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     //setFilters();
 
     setNewFilters();
+    // Filter frames are presented here, outside the DRAW/SINGLE renderer.
+    static bool resetOverlayWasVisible = false;
+    const bool resetOverlayVisible = (int32_t)(filterResetOverlayUntil - millis()) > 0;
+    if (resetOverlayVisible) {
+      drawFilterResetOverlay();
+    } else if (resetOverlayWasVisible) {
+      showFilterPages((uint8_t)GLOB.currentChannel);
+    }
+    resetOverlayWasVisible = resetOverlayVisible;
 
   } else if (currentMode->name == "BPM") {
     setBPM();

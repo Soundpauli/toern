@@ -5,6 +5,7 @@
 // Capture only the old note's short continuation before a retrigger rewinds it.
 class AudioSampleReader : public AudioPlayArrayResmp {
 public:
+  uint32_t playbackFramesRemaining() { return reader ? reader->playbackFramesRemaining() : 0; }
   unsigned snapshotTail(int16_t *mono, unsigned count) {
     if (!reader || !reader->isPlaying() || !reader->available() || count > 64) return 0;
     const int channels = reader->getNumChannels();

@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
   <div class="hb-main"><div id="hb-content" class="hb-main__scroll" tabindex="-1"><div class="wrap">
@@ -30,7 +30,7 @@
             <p class="lede" data-hb-copy="sd-card.004">The SD card that comes with <span class="hb-brand">TŒRN</span> is already prepared. To change its contents, use the SD tool while the card stays in the unit, or connect it to a computer with a card reader.</p>
 
             <h3 class="hb-subsection-heading" id="sd-tool" data-hb-copy="sd-card.005">SD tool (card stays in the unit)</h3>
-            <p data-hb-copy="sd-card.006">On a computer, open <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">https://sdtool.tyng.app</a> in <strong>Chrome or Edge</strong>, click <strong>Connect</strong>, and pick the Teensy serial port. The card server answers from any screen. <strong>Menu → ETC → SD</strong> shows <strong>SCON</strong>, then <strong>WAIT</strong> in yellow until a host is talking and <strong>OK</strong> in green after that. Browse folders, upload WAVs (the site converts to 44.1&nbsp;kHz mono 16-bit), download, rename, or delete. You can drop multiple files, whole folders (subfolders kept), or a <code>.zip</code> (extracted in the browser into the current SD folder).</p>
+            <p data-hb-copy="sd-card.006">On a computer, open <a href="https://sdtool.toern.live/" rel="noopener" target="_blank">https://sdtool.toern.live</a> in <strong>Chrome or Edge</strong>, click <strong>Connect</strong>, and pick the Teensy serial port. The card server answers from any screen. <strong>Menu → ETC → SD</strong> shows <strong>SCON</strong>, then <strong>WAIT</strong> in yellow until a host is talking and <strong>OK</strong> in green after that. Browse folders, upload WAVs (the site converts to 44.1&nbsp;kHz mono 16-bit), download, rename, or delete. You can drop multiple files, whole folders (subfolders kept), or a <code>.zip</code> (extracted in the browser into the current SD folder).</p>
             <div class="hb-tip" data-hb-copy="sd-card.007"><strong>Tips:</strong> leave the unit on whatever screen you are playing. Opening the serial port can reboot the Teensy; connect again after it comes back. Desktop only: Android / Pixel Chrome usually cannot see the Teensy USB serial port. After big transfers, run <a href="menus.html#rset">ETC → RSET → SD</a> if the sample browser still looks stale.</div>
 
             <h3 class="hb-subsection-heading" data-hb-copy="sd-card.008">Restore the default contents</h3>
@@ -42,6 +42,6 @@
     <nav class="hb-pager" aria-label="Next chapter">
           <a class="hb-pager__link hb-pager__link--next" href="samples.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Samples</span></a>
         </nav>
-  </div><script src="handbook-led.js?v=20261011y" defer></script></div></div>
+  </div><script src="handbook-led.js?v=20261026-new-controls" defer></script></div></div>
 </body>
 </html>

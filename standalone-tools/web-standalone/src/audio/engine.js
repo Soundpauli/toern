@@ -272,6 +272,7 @@ export function createEngine() {
   const att = (env) => Math.max(0, ((32 - env.att) / 32) * 2);
   function stopVoice(voice, when, seconds = voice?.release ?? 0) {
     if (!voice || !live.has(voice)) return;
+    seconds = Math.min(seconds, Math.max(0, voice.naturalEnd - when));
     live.delete(voice); releasing.add(voice);
     try {
       voice.g.gain.cancelScheduledValues(when);
@@ -281,7 +282,7 @@ export function createEngine() {
       voice.src.stop(when + seconds + 1 / ctx.sampleRate);
     } catch { /* already stopped */ }
   }
-  function play(kind, velocity, when, seek, end, invert, dest, rate = 1, env = null, buffer = null, stealCh = 0, stretch = 11, inputPitch = null) {
+  function play(kind, velocity, when, seek = 0, end = 100, invert = false, dest, rate = 1, env = null, buffer = null, stealCh = 0, stretch = 11, inputPitch = null) {
     const srcBuf = stretchBuffer(buffer || buffers[kind] || buffers.kick, stretch);
     let buf = srcBuf;
     if (invert) {
@@ -300,15 +301,25 @@ export function createEngine() {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.setValueAtTime(rate, when);
-    const span = Math.max(0.01, ((Math.min(100, end) - Math.max(0, seek)) / 100) * buf.duration);
+    const span = Math.max(1 / buf.sampleRate, ((Math.min(100, end) - Math.max(0, seek)) / 100) * buf.duration);
     const offset = (invert ? (100 - Math.min(100, end)) : Math.max(0, seek)) / 100 * buf.duration;
     const g = ctx.createGain();
     const peak = velocity / 127;
-    const a = env ? att(env) : 0;
-    const dec = env ? Math.max(0, env.dec / 32) : 0;
-    const sus = env ? Math.max(0, Math.min(1, env.sus / 32)) * peak : peak;
-    const rel = env ? Math.max(0, env.rel / 32) : 0;
-    // Standard sample ADSR: sustain until Note Off or natural sample end.
+    let a = env ? att(env) : 0;
+    let dec = env ? Math.max(0, env.dec / 32) : 0;
+    const sus = env ? Math.max(1/32, Math.min(1, env.sus / 32)) * peak : peak;
+    let rel = env ? Math.max(0, env.rel / 32) : 0;
+    const duration = Math.max(0, Math.min(span, buf.duration - offset)) / Math.max(.000001, Math.abs(rate));
+    const shaped = a > 0 || sus !== peak || rel > 0;
+    let gate = Math.max(.005, a + (sus !== peak ? dec : 0) + 1 / ctx.sampleRate);
+    const budget = Math.max(1 / ctx.sampleRate, duration - 1 / ctx.sampleRate);
+    if (shaped && gate + rel > budget) {
+      const scale = budget / (gate + rel);
+      a *= scale; dec *= scale; gate *= scale;
+      rel = rel > 0 ? budget - gate : 0;
+    }
+    // Held MIDI sustains until Note Off. Shaped one-shots release after A/D;
+    // neutral one-shots play unchanged through the natural sample end.
     // Neutral A=0/S=1 is unity from the very first PCM sample.
     g.gain.setValueAtTime(a > 0 ? 0 : peak, when);
     if (a > 0) g.gain.linearRampToValueAtTime(peak, when + a);
@@ -319,8 +330,12 @@ export function createEngine() {
     src.connect(g);
     g.connect(dest);
     src.start(when, offset, span);
-    const voice = { src, g, ch: stealCh || 0, pitch: inputPitch, release: rel,
+    const autoReleaseAt = inputPitch == null && shaped ? when + gate : null;
+    const voice = { src, g, ch: stealCh || 0, pitch: inputPitch, release: rel, naturalEnd: when + duration,
       levelAt(time) {
+        if (autoReleaseAt != null && time >= autoReleaseAt) {
+          return rel > 0 ? sus * Math.max(0, 1 - (time - autoReleaseAt) / rel) : 0;
+        }
         const elapsed = time - when;
         if (elapsed < 0) return 0;
         if (a > 0 && elapsed < a) return peak * elapsed / a;
@@ -330,6 +345,13 @@ export function createEngine() {
     };
     live.add(voice);
     if (stealCh) sampleLive[stealCh] = voice;
+    if (autoReleaseAt != null) {
+      const releaseAt = autoReleaseAt;
+      g.gain.setValueAtTime(voice.levelAt(releaseAt), releaseAt);
+      if (rel > 0) g.gain.linearRampToValueAtTime(0, releaseAt + rel);
+      else g.gain.setValueAtTime(0, releaseAt);
+      src.stop(releaseAt + rel + 1 / ctx.sampleRate);
+    }
     src.onended = () => {
       live.delete(voice); releasing.delete(voice);
       if (stealCh && sampleLive[stealCh] === voice) delete sampleLive[stealCh];
@@ -389,7 +411,7 @@ export function createEngine() {
     const env = wav.env || {};
     const a = Math.max(0.005, (32 - (env.att ?? 32)) / 32 * 2);
     const d = Math.max(0.02, (env.dec ?? 16) / 32);
-    const s = Math.max(0.0001, (env.sus ?? 16) / 32);
+    const s = Math.max(1/32, (env.sus ?? 16) / 32);
     const rel = Math.max(0.02, (env.rel ?? 8) / 32);
     const g = ctx.createGain();
     const peak = Math.max(0.02, (velocity / 127) * (ch === 11 ? 0.22 : 0.28));

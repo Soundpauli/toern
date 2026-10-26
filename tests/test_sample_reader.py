@@ -12,6 +12,7 @@ struct Reader {
  bool playing=true,hasData=true;int channels=1,position=0,rate=1;
  bool isPlaying(){return playing;}bool available(){return hasData;}
  int getNumChannels(){return channels;}
+ uint32_t playbackFramesRemaining(){return playing&&hasData?128:0;}
  unsigned read(void **out,unsigned count){for(int ch=0;ch<channels;++ch)for(unsigned i=0;i<count;++i)((int16_t*)out[ch])[i]=(ch?12000:1000)*rate;position+=count;return count;}
 };
 class AudioPlayArrayResmp {

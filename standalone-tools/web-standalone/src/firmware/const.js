@@ -80,7 +80,7 @@ export const FILTERS = [
 ];
 
 const ADSR = [
-  { key: "att", name: "ATTC" }, { key: "dec", name: "DCAY" }, { key: "sus", name: "SUST" }, { key: "rel", name: "RLSE" },
+  { key: "att", name: "ATTC" }, { key: "dec", name: "DCAY" }, { key: "sus", name: "SUST", min: 1 }, { key: "rel", name: "RLSE" },
 ];
 const SAMPLE_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "r", name: "RVRB" }, { key: "b", name: "BITC" }],
@@ -115,6 +115,7 @@ export function emptyFilt(ch = 1, inst = 12) {
     voiceGain: 16, stretch: 11, cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 16, lfoR: 0, lfoD: 0, span: 0, arp: 16,
   };
   if (ch === 11) Object.assign(defaults, { oct: 16 }, instrumentDefaults(inst));
+  defaults.sus = Math.max(1, defaults.sus);
   if (ch === 13 || ch === 14) Object.assign(defaults, {
     oct: 16, cent: 16, wave: 1,
     h: ch === 14 ? 14 : 32, cut: ch === 14 ? 14 : 32,

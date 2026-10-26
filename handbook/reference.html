@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -31,6 +31,8 @@
           <section class="hb-sub" id="grid-modes">
             <h2 data-hb-copy="reference.003">Grid &amp; performance modes</h2>
             <div class="hb-ref-grid">
+              <a class="hb-ref-card" href="advanced-sequencing.html#swap"><canvas class="led-matrix" data-scene="swap" width="640" height="320"></canvas><div class="hb-ref-card__name">SWAP</div><div class="hb-ref-card__desc">Exchange voices · optional octaves</div></a>
+              <a class="hb-ref-card" href="play.html#demo"><canvas class="led-matrix" data-scene="demo_menu" width="640" height="320"></canvas><div class="hb-ref-card__name">DEMO</div><div class="hb-ref-card__desc">Looping display animation</div></a>
               <a class="hb-ref-card" href="sequencing.html#draw"><canvas class="led-matrix" data-scene="draw" width="640" height="320"></canvas><div class="hb-ref-card__name">DRAW</div><div class="hb-ref-card__desc" data-hb-copy="reference.004">Full grid view</div></a>
               <a class="hb-ref-card" href="sequencing.html#single"><canvas class="led-matrix" data-scene="single" width="640" height="320"></canvas><div class="hb-ref-card__name">SINGLE</div><div class="hb-ref-card__desc" data-hb-copy="reference.005">One voice focus</div></a>
               <a class="hb-ref-card" href="sequencing.html#paint"><canvas class="led-matrix" data-scene="paint" width="640" height="320"></canvas><div class="hb-ref-card__name">SET TRIGGERS</div><div class="hb-ref-card__desc" data-hb-copy="reference.006">Paint (L+R / R)</div></a>
@@ -160,7 +162,7 @@
 <a class="hb-ref-card" href="play.html#leds"><canvas class="led-matrix" data-scene="lk_leds" width="640" height="320"></canvas><div class="hb-ref-card__name">LEDS</div><div class="hb-ref-card__desc" data-hb-copy="reference.080">Board layout</div></a>
 <a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_ram" width="640" height="320"></canvas><div class="hb-ref-card__name">RAM</div><div class="hb-ref-card__desc" data-hb-copy="reference.081">Audio memory</div></a>
 <a class="hb-ref-card" href="menus.html#etc"><canvas class="led-matrix" data-scene="et_lght" width="640" height="320"></canvas><div class="hb-ref-card__name">LGHT</div><div class="hb-ref-card__desc" data-hb-copy="reference.082">Ring LED</div></a>
-<a class="hb-ref-card" href="hardware.html#palette"><canvas class="led-matrix" data-scene="et_colr" width="640" height="320"></canvas><div class="hb-ref-card__name">COLR</div><div class="hb-ref-card__desc" data-hb-copy="reference.083">Palette</div></a>
+<a class="hb-ref-card" href="menus.html#colr"><canvas class="led-matrix" data-scene="et_colr" width="640" height="320"></canvas><div class="hb-ref-card__name">COLR</div><div class="hb-ref-card__desc" data-hb-copy="reference.083">Palette</div></a>
 <a class="hb-ref-card" href="menus.html#eyes"><canvas class="led-matrix" data-scene="et_eyes" width="640" height="320"></canvas><div class="hb-ref-card__name">EYES</div><div class="hb-ref-card__desc" data-hb-copy="reference.084">Idle screensaver</div></a>
 <a class="hb-ref-card" href="menus.html#fire"><canvas class="led-matrix" data-scene="et_fire" width="640" height="320"></canvas><div class="hb-ref-card__name">FIRE</div><div class="hb-ref-card__desc" data-hb-copy="reference.085">Sideways embers</div></a>
 <a class="hb-ref-card" href="menus.html#adv"><canvas class="led-matrix" data-scene="vol_2ch" width="640" height="320"></canvas><div class="hb-ref-card__name">2-CH</div><div class="hb-ref-card__desc" data-hb-copy="reference.030">Stereo routing</div></a>
@@ -189,6 +191,7 @@
           <section class="hb-sub" id="filters">
             <h2 data-hb-copy="reference.091">Filter / sound design pages</h2>
             <div class="hb-ref-grid">
+              <a class="hb-ref-card" href="sound.html#reset-defaults"><canvas class="led-matrix" data-scene="filter_reset" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER RESET</div><div class="hb-ref-card__desc">0002 · blue confirmation</div></a>
               <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p0" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER 0</div><div class="hb-ref-card__desc" data-hb-copy="reference.092">HCUT · LCUT · RVRB · BITC</div></a>
               <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p1" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER 1</div><div class="hb-ref-card__desc" data-hb-copy="reference.093">CUT · RES · FLT · DLAY</div></a>
               <a class="hb-ref-card" href="sound.html#filter"><canvas class="led-matrix" data-scene="filter_p2" width="640" height="320"></canvas><div class="hb-ref-card__name">FILTER 2</div><div class="hb-ref-card__desc" data-hb-copy="reference.094">WAVE · INST · CENT · SEMI</div></a>
@@ -217,7 +220,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="troubleshooting.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Troubleshoot</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
     </div>
   </div>
 </div>

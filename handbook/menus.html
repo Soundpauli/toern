@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -94,8 +94,8 @@
                         <ul class="sub-opts">
                           <li><strong>Enc&nbsp;1 short</strong> — load the selected entry</li>
                           <li><strong>Enc&nbsp;2 short</strong> — save (overwrites, no “are you sure?”)</li>
-                          <li><strong>Enc&nbsp;3 turn</strong> — apply sound settings on/off (stored inside the pattern file)</li>
-                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–9999</strong> (0/A = load-only recovery) (bright green = occupied, dim blue = empty)</li>
+                          <li><strong>Enc&nbsp;3 turn</strong> — load sound settings on/off; default OFF keeps current effects. Red five-pixel X above encoder&nbsp;3 = OFF; saving always includes current settings</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–999</strong> (0/A = load-only recovery) (bright green = occupied, dim blue = empty)</li>
                           <li><strong>Enc&nbsp;4 short</strong> — back to the grid</li>
                         </ul>
                       </span>
@@ -152,6 +152,7 @@
                       <span class="desc" data-hb-copy="menus.016">Tempo + who owns the clock. Cyan digits + green <strong>&gt;</strong> = INT master; green digits + red <strong>&lt;</strong> = MIDI EXT locked; red digits + red <strong>&lt;</strong> = MIDI still hunting; <strong>orange</strong> digits + orange <strong>&lt;</strong> = analog CLK-IN (J26) driving play.</span>
                       <span class="sub">
                         <ul class="sub-opts">
+                          <li><strong>Enc&nbsp;1 turn</strong> — BPM tenths (.0–.9), violet encoder and indicator; white decimal point</li>
                           <li><strong>Enc&nbsp;2 turn</strong> — matrix brightness <strong>3–255</strong> (pretty, not loud)</li>
                           <li><strong>Enc&nbsp;2 short</strong> — toggle idle tint</li>
                           <li><strong>Enc&nbsp;3 turn</strong> — <strong>INT ↔ EXT</strong> (survives reboot)</li>
@@ -164,11 +165,11 @@
 
                     <li id="vol">
                       <a href="reference.html#vol"><span class="node">VOL</span></a>
-                      <span class="desc" data-hb-copy="menus.017">Where sound leaves the box. Seven leaves. Encoder&nbsp;4 walks siblings; encoder&nbsp;3 usually turns the value (watch the lit cue). GAIN uses encoders&nbsp;1–3.</span>
+                      <span class="desc" data-hb-copy="menus.017">Output controls: MAIN, GAIN, LOUT, PREV and SPKR. Encoder&nbsp;4 selects pages; encoder&nbsp;3 usually edits the value. GAIN uses encoders&nbsp;1–3.</span>
                       <ul>
                         <li>
                           <span class="node">MAIN</span>
-                          <span class="desc" data-hb-copy="menus.018">Headphone level on the 6.35&nbsp;mm jack.</span>
+                          <span class="desc" data-hb-copy="menus.018">Headphone level, 0–100. The factory/reset default is 80; an existing saved level is kept.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>Enc&nbsp;3 turn</strong> — <strong>0–100</strong></li>
@@ -178,7 +179,7 @@
                         </li>
                         <li>
                           <span class="node">GAIN</span>
-                          <span class="desc" data-hb-copy="menus.019">Mix-bus trim on top of the fixed headroom. 1.0x is the old default; 2.0x is double. ALL multiplies the other three, so 2.0x×2.0x is 4× on that bus.</span>
+                          <span class="desc" data-hb-copy="menus.019">Mix-bus trims, 0.0×–2.0×; 1.0× is normal. ALL multiplies the sample and synth trims. Output limiters control overloaded sums when several voices play together; neutral gain no longer adds the former fixed sample attenuation.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>Enc&nbsp;1</strong> — voices <strong>1–4</strong> (<span class="ap-code">mixer1</span>). Rotation is reversed vs the other two knobs</li>
@@ -571,11 +572,12 @@
                             <span class="how" data-hb-copy="menus.077">Uses the same role-aware engine as single-mode page-row randomize. An empty base creates a varied 4/4 starter ensemble; every run is different.</span>
                           </span>
                         </li>
+<li><a href="play.html#demo"><span class="node">DEMO</span></a><span class="desc">Press encoder&nbsp;4 to start the looping Nyan Cat / MATZE SAMPLER display. Touch&nbsp;1 or button A exits.</span></li>
 </ul></li>
 
                     <li id="etc">
                       <a href="reference.html#etc"><span class="node">ETC</span></a>
-                      <span class="desc" data-hb-copy="menus.078">Credits, SD file server, generated fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
+                      <span class="desc" data-hb-copy="menus.078">ETC contains INFO, SD, BATT, ADV, RSET and SWAP. ADV holds display and diagnostic settings. SWAP exchanges notes between two voices.</span>
                       <ul>
 <li>
                           <span class="node">INFO</span>
@@ -596,7 +598,7 @@
                               <li><strong>SCON</strong> — serial connection</li>
                               <li><strong>WAIT</strong> — yellow, until a host program is talking</li>
                               <li><strong>OK</strong> — green, while that link is recent</li>
-                              <li>Use <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (Chrome/Edge + Web Serial)</li>
+                              <li>Use <a href="https://sdtool.toern.live/" rel="noopener" target="_blank">sdtool.toern.live</a> (Chrome/Edge + Web Serial)</li>
                             </ul>
                             <span class="how" data-hb-copy="menus.082">A USB cable alone leaves <strong>WAIT</strong>. <strong>OK</strong> appears after a host opens the port and talks. Details: <a href="sd-card.html#sd-tool">SD card → SD tool</a>.</span>
                           </span>
@@ -663,7 +665,7 @@
                             </ul>
                           </span>
                         </li>
-<li>
+<li id="colr">
                           <span class="node">COLR</span>
                           <span class="desc" data-hb-copy="menus.092">Voice palette / scheme.</span>
                           <span class="sub">
@@ -751,6 +753,7 @@
                             <span class="how" data-hb-copy="menus.098">PATT and KIT are the “I meant it” buttons.</span>
                           </span>
                         </li>
+<li id="swap-menu"><a href="advanced-sequencing.html#swap"><span class="node">SWAP</span></a><span class="desc">Exchange voice notes across the whole pattern. Encoders&nbsp;2/3 choose voices; hold and turn either for that side’s octave shift (−8…+8). Encoder&nbsp;4 applies; encoder&nbsp;1 exits. Sound settings stay with their voices.</span></li>
 </ul>
                     </li>
                   </ul>
@@ -765,7 +768,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="reference.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Screen index</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
     </div>
   </div>
 </div>

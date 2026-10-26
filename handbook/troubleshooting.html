@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -27,6 +27,11 @@
         <section class="handbook-page" id="page-troubleshoot">
           <h2 class="handbook-page__title" data-hb-copy="troubleshooting.001">Troubleshooting</h2>
           <p class="handbook-page__summary" data-hb-copy="troubleshooting.002">Quick fixes for the surprises new owners hit most often, plus a careful walkthrough of the destructive reset ladder.</p>
+
+          <section class="hb-sub" id="after-flashing">
+            <h2>After flashing firmware</h2>
+            <p>Power-cycle the device after flashing before testing audio, touch controls or the SD tool. On external-touch hardware, use a firmware build configured for that panel. After restart, reconnect the SD tool if needed.</p>
+          </section>
 
           <section class="hb-sub" id="faq">
             <h2 data-hb-copy="troubleshooting.003">"I expected X but got Y"</h2>
@@ -45,7 +50,7 @@
               </details>
               <details>
                 <summary data-hb-copy="troubleshooting.010">SD tool cannot connect / no serial port.</summary>
-                <p data-hb-copy="troubleshooting.011">Use desktop <strong>Chrome or Edge</strong> at <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> — Android / Pixel usually cannot see the Teensy USB serial port. The card server answers from any screen. <a href="menus.html#sd">ETC → SD</a> shows <strong>SCON</strong>: <strong>WAIT</strong> in yellow, then <strong>OK</strong> in green while a host is talking. Opening the port can reboot the Teensy; connect again after it comes back. See <a href="sd-card.html#sd-tool">SD card → SD tool</a>.</p>
+                <p data-hb-copy="troubleshooting.011">Use desktop <strong>Chrome or Edge</strong> at <a href="https://sdtool.toern.live/" rel="noopener" target="_blank">sdtool.toern.live</a> — Android / Pixel usually cannot see the Teensy USB serial port. The card server answers from any screen. <a href="menus.html#sd">ETC → SD</a> shows <strong>SCON</strong>: <strong>WAIT</strong> in yellow, then <strong>OK</strong> in green while a host is talking. Opening the port can reboot the Teensy; connect again after it comes back. See <a href="sd-card.html#sd-tool">SD card → SD tool</a>.</p>
               </details>
               <details>
                 <summary data-hb-copy="troubleshooting.012">External MIDI is in sync but kicks click off by a few ms.</summary>
@@ -158,7 +163,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="index.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Welcome</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
     </div>
   </div>
 </div>

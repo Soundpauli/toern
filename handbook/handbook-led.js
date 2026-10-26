@@ -79,6 +79,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       case "X": return [0, 0, 255];
       case "W": return [255, 255, 255];
       case "N": return [0, 255, 255];
+      case "V": return [148, 0, 211];
       case "M": return [255, 0, 255];
       case "D": return [100, 0, 0];
       case "E": return [0, 100, 0];
@@ -481,10 +482,11 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   function drawBPMScreenLike(m, bpm, mode) {
     m.clear();
+    m.indL(1, "V");
     m.indL(2, "W");
     m.indL(4, "N");
-    const n = Math.max(0, Math.min(999, Math.round(bpm))) | 0;
-    const buf = ("   " + n).slice(-3);
+    const n = Math.round(Math.max(40, Math.min(300, bpm)) * 10);
+    const whole = String(Math.floor(n / 10));
     let textR, textG, textB, arrowR, arrowG, arrowB;
     if (mode === "int") {
       textR = 0; textG = 255; textB = 255;
@@ -506,17 +508,22 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       arrowR = 255; arrowG = 30; arrowB = 30;
       m.indL(3, "R");
     }
-    drawText(m, buf, 2, 6, textR, textG, textB);
+    let width = 0;
+    for (const c of whole) width += ALPH[c.charCodeAt(0) - 32][0] + 1;
+    const x = Math.max(1, Math.floor((m.w - width - 4) / 2) + 1);
+    drawText(m, whole, x, 4, textR, textG, textB);
+    m.set(x + width, 4, 255, 255, 255);
+    drawText(m, String(n % 10), x + width + 1, 4, 148, 0, 211);
 
     // Tiny chevron on the right side of the screen: three lit cells forming
     // either ">" (INT — clock going out) or "<" (EXT — clock coming in).
     // Centred on row 8 in columns 14–15.
-    const cy = 8;
+    const cy = 12;
     if (mode === "int") {
       // ">"  three pixels: (14, cy-1), (15, cy), (14, cy+1)
-      m.set(m.w - 2, cy - 1, arrowR, arrowG, arrowB);
-      m.set(m.w - 1, cy,     arrowR, arrowG, arrowB);
-      m.set(m.w - 2, cy + 1, arrowR, arrowG, arrowB);
+      m.set(m.w - 1, cy - 1, arrowR, arrowG, arrowB);
+      m.set(m.w, cy,     arrowR, arrowG, arrowB);
+      m.set(m.w - 1, cy + 1, arrowR, arrowG, arrowB);
     } else {
       // "<"  three pixels: (15, cy-1), (14, cy), (15, cy+1)
       m.set(m.w - 1, cy - 1, arrowR, arrowG, arrowB);
@@ -533,7 +540,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     { letters: ["H", "L", "R", "B"], vals: [18, 14, 22, 10], names: ["HCUT", "LCUT", "RVRB", "BITC"] },
     { letters: ["C", "R", "F", "D"], vals: [16, 20, 12,  8], names: ["CUT", "RES", "FLT", "DLAY"] },
     { letters: ["W", "I", "C", "S"], vals: [10, 14, 18, 12], names: ["WAVE", "INST", "CTOF", "SHAP"] },
-    { letters: ["A", "D", "S", "R"], vals: [20, 16, 14, 24], names: ["ATCK", "DECY", "SUST", "RELS"] }
+    { letters: ["A", "D", "S", "R"], vals: [20, 16, 14, 24], names: ["ATTC", "DCAY", "SUST", "RLSE"] }
   ];
   /* Sample voices page 1 (firmware RES · DTNE · OCTV · TIME). */
   const FILTER_PAGE_SAMPLE_1 = {
@@ -677,7 +684,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     // display is "unicolored" because you are looking at one voice only.
     m.clear();
     const baseTint = COLB0[curCh] || [0, 0, 0];
-    const liteTint = COL0[curCh]  || [40, 40, 40];
+    const liteTint = UI.BRIGHT_WHITE;
     for (let y = 2; y <= 15; y++) {
       for (let x = 1; x <= m.w; x++) m.set(x, y, baseTint[0], baseTint[1], baseTint[2]);
     }
@@ -741,6 +748,31 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   }
 
   const scenes = {
+    swap(m) {
+      m.clear();
+      drawText(m, "SWAP", 2, 10, ...menuTextFromCol(14));
+      drawText(m, "1", 1, 3, ...COL0[1]);
+      drawText(m, "11", m.w >= 24 ? 24 : 10, 3, ...COL0[11]);
+      if (m.w >= 24) drawText(m, "<>", 12, 3, 255, 255, 255);
+      else { m.set(8, 4, 255, 255, 255); m.set(9, 4, 255, 255, 255); }
+      m.indL(2, "R"); m.indL(3, "W"); m.indL(4, "G");
+    },
+    demo_menu(m) {
+      m.clear();
+      drawText(m, "DEMO", 2, 10, ...menuTextFromCol(13));
+      drawText(m, "GO", 2, 3, 0, 120, 0);
+      m.indL(4, "G");
+    },
+    shadowed(m) {
+      drawSingleGridBody(m, 1, [{x:5,y:3},{x:5,y:9}], 0);
+      m.set(5, 3, 30, 30, 30); m.set(5, 9, 150, 150, 150);
+    },
+    filter_reset(m) {
+      drawFilterPageScene(m, 3, {...FILTER_PAGES[3], vals:[32,32,32,0]});
+      const cx = Math.floor((m.w + 1) / 2), cy = 8;
+      for (let x = cx-4; x <= cx+5; x++) for (let y=4; y<=11; y++) m.set(x,y,0,0,0);
+      for (const [dx,dy] of [[-3,-1],[-2,-2],[-1,-3],[0,-2],[1,-1],[2,0],[3,1],[4,2]]) m.set(cx+dx,cy+dy,0,0,255);
+    },
     boot_cover: drawStartup,
     draw(m) {
       drawDrawGrid(
@@ -843,7 +875,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     vol_main(m) {
       volSubFrame(m, 0, "MAIN", "", "", "O");
-      drawText(m, "72", 2, 3, 120, 60, 0);
+      drawText(m, "80", 2, 3, 120, 60, 0);
     },
     vol_gain(m) {
       volSubFrame(m, 1, "ALL", "N", "O", "G");
@@ -1164,7 +1196,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawVelocityLike(m, 9, 3, 10, 2);
     },
     bpm(m) {
-      drawBPMScreenLike(m, 128, "int");
+      drawBPMScreenLike(m, 120.3, "int");
     },
     song(m) {
       drawSongLike(m, 7, 23);
@@ -1263,7 +1295,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       m.cursor(10, 9);
       m.indM(1, "X");
       m.indM(4, "G");
-      drawText(m, "C+P", Math.max(1, Math.floor((m.w - 11) / 2) + 1), 6, 255, 255, 0);
+      drawText(m, "c+p", Math.max(1, Math.floor((m.w - 11) / 2) + 1), 6, 255, 255, 0);
     },
     note_shift(m) {
       const cur = 3;

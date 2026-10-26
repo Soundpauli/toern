@@ -2556,8 +2556,8 @@ FLASHMEM void drawBPMWithReservedSpace(float bpm, CRGB color, int topY) {
   for (const char *c = whole; *c; ++c) width += alphabet[*c - 32][0] + 1;
   const int startX = max(1, ((int)maxX - (width + 4)) / 2 + 1);
   drawText(whole, startX, topY, color);
-  light(startX + width, topY, color);
-  drawChar('0' + value % 10u, startX + width + 1, topY, color);
+  light(startX + width, topY, CRGB(255, 255, 255));
+  drawChar('0' + value % 10u, startX + width + 1, topY, getIndicatorColor('V'));
 }
 
 FLASHMEM void drawBPMScreen() {
@@ -2573,7 +2573,7 @@ FLASHMEM void drawBPMScreen() {
   // - Encoder 3: green
   // - Encoder 4: turquoise
   // Matrix only — rings cached below (setBPM calls this every loop).
-  drawIndicator('L', 'N', 1, false, false);
+  drawIndicator('L', 'V', 1, false, false);
   drawIndicator('L', 'W', 2, false, false);
   drawIndicator('L', 'G', 3, false, false);
   drawIndicator('L', 'N', 4, false, false);
@@ -2598,13 +2598,13 @@ FLASHMEM void drawBPMScreen() {
   extern bool getAnalogExtClock();
   const bool analogExt = !isInt && getAnalogExtClock();
   if (isInt) {
-    drawBPMWithReservedSpace(SMP.bpm, UI_CYAN, 6);
+    drawBPMWithReservedSpace(SMP.bpm, UI_CYAN, 4);
   } else if (analogExt) {
-    drawBPMWithReservedSpace(SMP.bpm, CRGB(255, 165, 0), 6);
+    drawBPMWithReservedSpace(SMP.bpm, CRGB(255, 165, 0), 4);
   } else {
     bool isStable = getBPMStable();
     CRGB extColor = isStable ? CRGB(0, 255, 0) : CRGB(255, 0, 0);
-    drawBPMWithReservedSpace(SMP.bpm, extColor, 6);
+    drawBPMWithReservedSpace(SMP.bpm, extColor, 4);
   }
 
   bool shouldBlink = false;
@@ -2638,8 +2638,9 @@ FLASHMEM void drawBPMScreen() {
     CRGB arrow = getIndicatorColor(arrowColor);
     CRGB wM = normalizeToMaxBrightness(w);
     CRGB nM = normalizeToMaxBrightness(n);
+    CRGB vM = normalizeToMaxBrightness(getIndicatorColor('V'));
     CRGB aM = normalizeToMaxBrightness(arrow);
-    setBpmRGB(0, (uint32_t)nM.r << 16 | (uint32_t)nM.g << 8 | nM.b);
+    setBpmRGB(0, (uint32_t)vM.r << 16 | (uint32_t)vM.g << 8 | vM.b);
     setBpmRGB(1, (uint32_t)wM.r << 16 | (uint32_t)wM.g << 8 | wM.b);
     setBpmRGB(2, (uint32_t)aM.r << 16 | (uint32_t)aM.g << 8 | aM.b);
     setBpmRGB(3, (uint32_t)nM.r << 16 | (uint32_t)nM.g << 8 | nM.b);

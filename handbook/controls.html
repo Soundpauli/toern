@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -94,11 +94,18 @@
             <p>Pause releases the sample and synth voices, including every poly voice on channel 11 and mono voices 13/14. Delay and reverb continue decaying naturally. Pause does not clear their buffers or reset your effects settings.</p>
           </section>
 
+          <section class="hb-sub" id="simulator">
+            <h2>Simulator patterns and MIDI import</h2>
+            <p>Use the red <strong>SEND TO DEVICE &gt;</strong> button on the right of the simulator to send the current pattern; the green <strong>&lt; GET FROM DEVICE</strong> retrieves one. The sidebar’s pattern-file control handles files. The overwrite option refers to the <strong>real device</strong>.</p>
+            <p>For a MIDI song, use <strong>Song start page</strong> to select the 256-step window placed on the grid. Moving the slider updates the imported notes. The MIDI panel also has its own <strong>SEND TO DEVICE &gt;</strong> button.</p>
+            <p>Automatic mapping separates percussion from melody and uses TŒRN’s voice roles: voice&nbsp;11 for lead/instrument parts, 13 for keys and 14 for bass. A single keys part prefers polyphonic voice&nbsp;11. Review the assignments against your loaded kit. <strong>Transpose out-of-range notes</strong> starts OFF, preserving absolute MIDI pitches. Overlap filtering always applies to voices 1–8 and 14; the optional checkbox applies to <strong>CH11</strong> and starts OFF. CH13 data is preserved. VMOD starts OFF in the simulator.</p>
+          </section>
+
           <section class="hb-sub" id="external-faders">
             <h2>External buttons and faders</h2>
             <p>The external panel uses buttons A–D in place of touch pads 1–4. <strong>C + D</strong> requests a fill; the capacitive panel uses <strong>touch 4 + 5</strong>. The external panel has no fifth/FN button.</p>
-            <p>All eight faders remain active in menus, mute and solo, including when several move together. Bottom is mute; raising or moving a fader above bottom unmutes its voice. On leaving solo or a temporary mute view, the physical fader position takes priority over the saved mute state. Faders scale note amplitude independently of channel volume and the V gain filter. Each moved fader gets its own short matrix level animation.</p>
-            <p>In the <a href="https://sim.tyng.app/">browser simulator</a>, all five pads are on the panel and use F1–F5. Hold F4 + F5 while playing for a fill. Open <strong>Faders · voices 1–8</strong> for simulated faders; browser sound and timing approximate the hardware.</p>
+            <p>The optional NeoSlider inputs control voices 1–4. In this firmware, <strong>fader&nbsp;2 is disabled</strong> because its hardware is faulty; voice&nbsp;2 remains usable through notes and menu controls. Enabled faders stay active in menus, mute and solo, including when several move together. Bottom is mute; raising or moving a fader above bottom unmutes its voice. On leaving solo or a temporary mute view, the physical fader position takes priority over the saved mute state. Faders scale note amplitude independently of channel volume and the V gain filter. Each moved fader gets its own short matrix level animation.</p>
+            <p>In the <a href="https://sim.toern.live/">browser simulator</a>, touch&nbsp;1–5 use <strong>E, P, . (period), X and M</strong>. Hold X + M while playing to request a fill. Q/W remain encoder controls. The MENU shortcut opens SETT; there is no separate DEMO or faders sidebar entry.</p>
           </section>
 
           <hr />
@@ -130,7 +137,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="sequencing.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sequencing</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
     </div>
   </div>
 </div>

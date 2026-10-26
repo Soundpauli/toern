@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -86,7 +86,7 @@
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>H</strong></td><td>HCUT</td><td>High cut — SVF lowpass. Full 0–32 fader (no LP/HP split).</td><td>0–32 ≈ 280 Hz – 10 kHz (32 = open)</td></tr>
+                  <tr><td><strong>H</strong></td><td>HCUT</td><td>High cut — SVF lowpass. On sample voices, HCUT 32 with LCUT 0 bypasses the cutoff filters completely.</td><td>0–31 = lowpass; 32 with LCUT 0 = dry bypass</td></tr>
                   <tr><td><strong>L</strong></td><td>LCUT</td><td data-hb-copy="sound.020">Low cut — SVF highpass. 0 uses HCUT (lowpass); 1–32 switches the mixer to highpass.</td><td>0 = off, 1–32 ≈ 40 Hz – 2.5 kHz</td></tr>
                   <tr><td><strong>R</strong></td><td>RVRB</td><td>Send level into the shared reverb bus.</td><td>0–32 (0 = dry). <em>Not on voices 3, 4, 13, or 14.</em></td></tr>
                   <tr><td><strong>B</strong></td><td>BITC</td><td>Bitcrusher depth + sample-rate reduction (combined macro).</td><td>0 = bypass, 1–32 increases crush</td></tr>
@@ -126,6 +126,7 @@
             </article>
 
             <h3 class="hb-subsection-heading" data-hb-copy="sound.053">Page 3 — sample voices: DLAY · VOLUME</h3>
+            <p>Delay and reverb tails continue naturally after pause, then decay to silence. DLAY 32 no longer leaves a persistent quiet feedback residue.</p>
             <p data-hb-copy="sound.054">Voices 1–8 have a fourth filter page with <strong>DLAY</strong> and <strong>VOLUME</strong> sliders. Real delay tap (<span class="ap-code">AudioEffectDelayExternal</span> in PSRAM), not reverb. 0 is off; each step is N/32 of a beat (1, 2, 4, 8, 16, 32 land on even divisions; 3, 5, 6… stay in between). 32 is one beat, not a fixed 1.2&nbsp;s. Follows BPM. Feedback recirculates the tap; dry stays up. Synth voices 11, 13, and 14 have the same control on CRF (encoder 4).</p>
 
             <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="filter_sample_dv" width="640" height="320" role="img" aria-label="Sample filter page 3: D delay and V volume at neutral gain"></canvas></div>
@@ -189,7 +190,7 @@
               </table>
             </article>
 
-            <h3 class="hb-subsection-heading" data-hb-copy="sound.097">Page 3 — ADSR: ATCK · DECY · SUST · RELS</h3>
+            <h3 class="hb-subsection-heading" data-hb-copy="sound.097">Page 3 — ADSR: ATTC · DCAY · SUST · RLSE</h3>
             <article class="hb-device">
               <div class="hb-led-row">
                 <div>
@@ -220,8 +221,8 @@
                   <text x="220" y="50" font-size="9" fill="#2563eb">sustain level</text>
                 </svg>
               </div>
-              <p class="hb-device__intro" data-hb-copy="sound.102"><strong>Attack</strong> — time from trigger to peak. <strong>Decay</strong> — time from peak to the sustain plateau. <strong>Sustain</strong> — held level while the note remains on. <strong>Release</strong> — fall after note-off. Each parameter is 0–32 on the encoder; the firmware maps it to milliseconds (A / D / R) or 0–1.0 (S).</p>
-              <div class="hb-tip" data-hb-copy="sound.103"><strong>Tip:</strong> tweak release last. Long release smears notes into the next step; pair short release with high sustain for staccato drums.</div>
+              <p class="hb-device__intro" data-hb-copy="sound.102"><strong>Attack</strong> rises to the peak; <strong>Decay</strong> falls to the sustain level; <strong>Release</strong> fades from that level after Note Off. A, D and R use 0–32; S uses 1–32. Shaped sample grid hits automatically start Release after attack/decay (minimum gate 5 ms). Increasing R lengthens that fade when enough audio remains: 16 requests 500 ms and 32 requests 1,000 ms. Release is no longer positioned backward from the sample end. If A/D/R exceed the played region, they shorten proportionally for that hit; stored settings stay unchanged. Neutral one-shots play the original sample unchanged. Held MIDI notes sustain until Note Off, and release is limited by the remaining sample audio.</p>
+              <div class="hb-tip" data-hb-copy="sound.103"><strong>Sample release:</strong> set attack and decay first, then raise R for a longer fade from the sustain level. Keep enough sample audio after A/D for the release to be audible. Neutral ATTC 32 / SUST 32 / RLSE 0 is an original-sample bypass, so R 0 there still plays the complete natural tail. Release cannot create audio beyond the sample end, and a retrigger replaces the old sample with a short smoothing tail.</div>
             </article>
           </section>
 
@@ -231,11 +232,12 @@
 
           <section class="hb-sub" id="adsr">
             <h2 data-hb-copy="sound.104">ADSR in detail</h2>
-            <p data-hb-copy="sound.105">All voices share the same envelope generator. Channel&nbsp;11 (poly synth) additionally has a <strong>filter envelope</strong> with its own A/D/S/R that modulates the filter cutoff — same encoder layout, different page nest. Reach it through filter page 1 on voice 11 (the third filter row swaps in for filter-ADSR when applicable).</p>
+            <p><strong>Neutral sample ADSR:</strong> ATTC 32, DCAY 32, SUST 32, RLSE 0. These settings preserve the original sample, including its first transient. On retrigger, only the old sound gets a short smoothing fade; the new sample starts with its own attack.</p>
+            <p data-hb-copy="sound.105">Sample voices 1–8 use an envelope that keeps neutral playback transparent and fits shaped hits to the available audio. Synth voices use their own envelope implementations; voice&nbsp;11 also has a filter envelope as part of its instrument. The ADSR controls described here edit amplitude.</p>
             <ul>
-              <li><strong>Attack 0</strong> = instant click. Use for percussive material.</li>
+              <li><strong>Attack 32</strong> = immediate onset. Attack 0 requests the longest rise; short samples shorten the envelope stages to fit.</li>
               <li><strong>Decay 0 + Sustain max</strong> = organ-style hold. Use for pads.</li>
-              <li data-hb-copy="sound.108"><strong>Release 0</strong> = note shuts immediately at the next step. Use to tighten busy grooves.</li>
+              <li data-hb-copy="sound.108"><strong>Release 0</strong> adds no fade after Note Off. A sample one-shot can still play to its natural end; a held MIDI note stops immediately when released.</li>
             </ul>
           </section>
 
@@ -315,8 +317,9 @@
 
           <section class="hb-sub" id="reset-defaults">
             <h2 data-hb-copy="sound.145">Resetting a voice</h2>
-            <p data-hb-copy="sound.146">From the filter editor of any channel, <strong>encoder&nbsp;4 long press</strong> resets envelopes, filters, and synth data for that channel only. Note data in the grid stays intact — only the tone snaps back to factory curves. To reset the whole project's sound layer (every voice), use <a href="menus.html#rset">ETC → RSET → EFX</a>; that one is destructive across the board.</p>
-            <div class="hb-warn" data-hb-copy="sound.147"><strong>EFX reset is global.</strong> Patterns and sample assignments survive, but every filter, envelope, synth, and octave helper goes to defaults across all 16 channels.</div>
+            <p data-hb-copy="sound.146">In the filter editor, <strong>encoder&nbsp;4 long press (0002)</strong> resets every filter page, ADSR, TIME and synth controls for the current voice. A <strong>blue checkmark</strong> confirms the reset for 0.8 seconds, then the filter display returns. <strong>Touch&nbsp;3</strong> or encoder&nbsp;1 long press resets only the open page. Grid notes remain intact. To reset sound settings for all playable voices, use <a href="menus.html#rset">ETC → RSET → EFX</a>.</p>
+            <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="filter_reset" width="640" height="320" role="img" aria-label="Blue checkmark after resetting every filter page on the voice"></canvas></div>
+            <div class="hb-warn" data-hb-copy="sound.147"><strong>EFX reset affects all playable voices.</strong> Grid notes and sample assignments survive; filters, envelopes, synth controls, voice gains and octave helpers return to their defaults.</div>
           </section>
         </section>
 
@@ -324,7 +327,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="audiopath.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Audio path</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
     </div>
   </div>
 </div>

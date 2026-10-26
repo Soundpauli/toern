@@ -425,7 +425,7 @@ for (const cols of [16,32]) {
     letters.length=0;ink.length=0;
     drawBpm(m,{bpm,ledBrightness:64,clockInt:true});
     assert.equal(letters.map(a=>a[0]).join('.'),bpm.toFixed(1));
-    assert(letters.every(a=>a[2]===6));
+    assert(letters.every(a=>a[2]===4));
     for(const [text,x] of letters)assert(x>=1&&x+textPixelWidth(text)-2<=cols);
   }
   letters.length=0;ink.length=0;
@@ -650,4 +650,20 @@ for(const width of [16,32])for(const loadSoundSettings of [false,true]) {
  assert.deepEqual(red,loadSoundSettings?[]:[[x,3],[x+2,3],[x+1,4],[x,5],[x+2,5]]);
 }
 console.log('PASS: default notes load preserves sounds; E3 enables settings, saving is unconditional, and the red X has five pixels starting at y=3 on both layouts.');
+// Long encoder 4 press in FILTER must actually present the reset overlay.
+pattDevice.jump('filter');
+const oldLight=matrix.light,resetPixels=new Map();
+matrix.light=(x,y,c)=>resetPixels.set(`${x},${y}`,c.slice());
+pattDevice.knobDown(3);now+=1000;frame(now);
+const resetX=Math.floor((pattDevice.cols()+1)/2);
+assert.deepEqual(resetPixels.get(`${resetX-3},7`),[0,0,255]);
+pattDevice.knobUp(3,false);now+=801;resetPixels.clear();frame(now);
+assert.notDeepEqual(resetPixels.get(`${resetX-3},7`),[0,0,255],'filter page returns after feedback');
+matrix.light=oldLight;
+console.log('PASS: FILTER long encoder 4 reset shows a blue checkmark, then restores the page.');
+pattDevice.selectVoice(1);pattDevice.jump('filter');
+for(let i=0;i<2;i++){pattDevice.touch(2,true);pattDevice.touch(2,false);}
+pattDevice.rotate(2,-1000);
+assert.equal(pattSave(6).filt[1].sus,1,'SUST cannot be turned below 1');
+console.log('PASS: ADSR SUST encoder stops at 1.');
 }

@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -54,7 +54,7 @@
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Move column (time)</td><td data-hb-copy="sequencing.025">Slides the cursor across steps 1…<span data-hb-steps>32</span>.</td></tr>
-                  <tr><th>Short</th><td>Place note</td><td data-hb-copy="sequencing.027">Writes a note at the cursor if the cell is empty.</td></tr>
+                  <tr><th>Short</th><td>Place note</td><td data-hb-copy="sequencing.027">Places a note in an empty cell. It can also replace an inaudible lower note already covered by a higher note of the same monophonic voice at that step.</td></tr>
                   <tr><th>Long</th><td>Paint trail <em>or</em> <a href="note-detail.html">note detail</a></td><td data-hb-copy="sequencing.029">On an empty cell: latch paint and turn to draw a trail. On an existing note: open the per-step editor.</td></tr>
                 </tbody></table></div>
               </div>
@@ -72,7 +72,7 @@
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="single" width="640" height="320" role="img" aria-label="Single mode"></canvas>
               </div>
-              <p class="viz-caption--below" data-hb-copy="sequencing.032">Single mode: focus voice is bright white, neighbouring voices show as dim base colours.</p>
+              <p class="viz-caption--below" data-hb-copy="sequencing.032">Single mode: the focused voice is bright white and other voices use dim base colours. Shadowed, inaudible notes use 20% of their normal brightness.</p>
               <p class="hb-device__intro" data-hb-copy="sequencing.033">Enter single mode with <strong>tap L (touch&nbsp;1)</strong> from draw while the cursor selects voice 1–8, 11, 13, or 14 (tap again to return). Entry is blocked on the page strip (row&nbsp;16) and empty voice rows 9, 10, and 12. Once inside single mode, row&nbsp;16 remains available for page tools. All gestures from draw apply, but: <a href="advanced-sequencing.html#copy-paste">copy/paste</a> only grabs the focused channel; the clear-page chord (encoder&nbsp;1 + encoder&nbsp;4 both long) only clears the focused channel; <a href="advanced-sequencing.html#auto-extend">randomize</a> from the page row affects only the focused channel.</p>
             </article>
           </section>
@@ -80,6 +80,14 @@
 
           <hr />
 
+
+          <section class="hb-sub" id="shadowed-notes">
+            <h2>Higher notes and inaudible lower notes</h2>
+            <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="shadowed" width="640" height="320" role="img" aria-label="Dim lower note covered by a brighter higher note at the same step"></canvas></div>
+            <p>Sample voices 1–8 and mono synths 13/14 play one note per step. A higher grid note on the same voice can cover a lower one. A lower note that is guaranteed to be covered appears at <strong>20% brightness</strong> in both DRAW and SINGLE, and stays dim under the playhead.</p>
+            <p>You can paint another voice over that inaudible lower note. Audible notes stay protected. A higher note with probability below 100% or a condition that does not cover the lower note does not make the cell replaceable. Polyphonic voice&nbsp;11 keeps its overlapping notes.</p>
+            <p>New notes and normal auditions use <strong>velocity 127</strong>. Existing notes and imported MIDI retain their own velocities.</p>
+          </section>
 
           <section class="hb-sub" id="paint">
             <h2 data-hb-copy="sequencing.034">Set triggers &amp; remove triggers</h2>
@@ -168,7 +176,7 @@
           if (to) location.replace(to);
         })();
       </script>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
     </div>
   </div>
 </div>

@@ -677,6 +677,26 @@ public:
         return ((uint64_t)current_frame_rel * 1000) / AUDIO_SAMPLE_RATE_EXACT;
     }
 
+    // Output-frame budget at the current head, including trim, direction,
+    // pitch and the same WSOLA eligibility/length rules used by read().
+    uint32_t playbackFramesRemaining() {
+        if (!_playing || _numChannels <= 0 || _loopType != looptype_none) return 0;
+        const float pitch = fabsf((float)_playbackRate);
+        if (!(pitch > 0.0f) || !isfinite(pitch)) return 0;
+        const int32_t start = _play_start == play_start::play_start_sample ? _header_offset : _loop_start;
+        const int32_t frames = _playbackRate >= 0
+            ? (_loop_finish - _bufferPosition1) / _numChannels
+            : (_bufferPosition1 - start) / _numChannels + 1;
+        if (frames <= 0) return 0;
+        const uint8_t setting = _timeStretchSetting;
+        if (setting != 11 && _numChannels == 1 && !_useDualPlaybackHead && pitch >= .5f && pitch <= 2.0f) {
+            if (_stretchActive) return (uint32_t)max(0, _stretchOutputLimit - _stretchOutput);
+            const int percent = setting < 11 ? 90 + setting : 100 + setting - 12;
+            return (uint32_t)(((int64_t)frames * percent + 50) / 100);
+        }
+        return (uint32_t)ceilf(frames / pitch);
+    }
+
     uint32_t lengthMillis() {
         if (_numChannels <= 0 || _file_size <= 0 || _loop_finish <= _header_offset || AUDIO_SAMPLE_RATE_EXACT == 0) return 0;
         int32_t total_data_samples = _loop_finish - _header_offset; // Total int16_t samples in data section

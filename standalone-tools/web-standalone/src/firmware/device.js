@@ -569,7 +569,11 @@ export function createDevice(matrix, statusEl, rings) {
   function liveMix() {
     for (const ch of SOUND_CH) engine.apply(ch, filt[ch], channelHeard(ch) ? chVol[ch] : 0, s.gain, (s.faderPositions[ch] ?? 16) / 16);
   }
-  function applyFilt(ch) { if (SOUND_CH.has(ch)) engine.apply(ch, filt[ch], chVol[ch], s.gain, (s.faderPositions[ch] ?? 16) / 16); }
+  function applyFilt(ch) {
+    if (!SOUND_CH.has(ch)) return;
+    filt[ch].sus = clamp(filt[ch].sus, 1, 32);
+    engine.apply(ch, filt[ch], chVol[ch], s.gain, (s.faderPositions[ch] ?? 16) / 16);
+  }
   function clearNotes() {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
   }
@@ -929,7 +933,7 @@ export function createDevice(matrix, statusEl, rings) {
     const pages = filterPagesFor(ch);
     const spec = (pages[f.fastPage || 0] || pages[0])[f.fast];
     if (!spec) return;
-    f[spec.key] = clamp(f[spec.key] + dir, 0, spec.max ?? 32);
+    f[spec.key] = clamp(f[spec.key] + dir, spec.min ?? 0, spec.max ?? 32);
     applyFilt(ch);
     s.filterFlash = spec.name;
     s.filterFlashAt = performance.now();
@@ -1155,6 +1159,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (data && !Array.isArray(data)) {
       if (loadSound) {
         for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch), data.filt?.[ch] || {});
+        for (const ch of SOUND_CH) filt[ch].sus = clamp(filt[ch].sus, 1, 32);
         if (Array.isArray(data.chVol)) for (const ch of SOUND_CH) chVol[ch] = clamp(data.chVol[ch] ?? 16, 0, 16);
       }
       if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
@@ -1404,7 +1409,7 @@ export function createDevice(matrix, statusEl, rings) {
       const page = filterPagesFor(s.GLOB.currentChannel)[filterPages[s.GLOB.currentChannel]] || filterPagesFor(s.GLOB.currentChannel)[0];
       const spec = page[enc];
       if (!spec) return;
-      filt[s.GLOB.currentChannel][spec.key] = clamp(filt[s.GLOB.currentChannel][spec.key] + dir, 0, spec.max ?? 32);
+      filt[s.GLOB.currentChannel][spec.key] = clamp(filt[s.GLOB.currentChannel][spec.key] + dir, spec.min ?? 0, spec.max ?? 32);
       if (s.GLOB.currentChannel === 11 && spec.key === "inst") Object.assign(filt[11], instrumentDefaults(filt[11].inst));
       s.filterTouch = enc;
       s.filterTouchAt = performance.now();
