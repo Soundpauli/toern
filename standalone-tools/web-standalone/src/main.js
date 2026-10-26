@@ -260,7 +260,7 @@ app.innerHTML = `
           <input type="checkbox" id="import-transpose"> Transpose out-of-range notes
         </label>
         <label class="jump-panel-check">
-          <input type="checkbox" id="import-overlap"> Filter overlapping notes on CH13
+          <input type="checkbox" id="import-overlap"> Filter overlapping notes on CH11
         </label>
         <details class="import-mapping-help"><summary>How instruments are mapped</summary>
           <p class="jump-panel-meta muted">Auto-map uses TŒRN roles: 1–5 drums, 11 instruments/lead, 13 keys, 14 bass, 8 vocals/pad; 6 bass and 7 keys are sample fallbacks. Drum tracks split by instrument; cymbals share the hat voice, other percussion shares tom. Unassigned parts need a manual choice. Uses the current kit and synth settings without retuning them. USB sends notes and tempo only; use the same kit and presets on the device.</p>

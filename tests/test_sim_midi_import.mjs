@@ -77,13 +77,13 @@ try {
     const filtered=filterOverlappingNotes(simultaneous,'highest',channelMap,checked);
     const count=ch=>filtered.filter(n=>channelMap.get(n.track)===ch).length;
     for(let ch=1;ch<=8;ch++)assert.equal(count(ch),1,`CH${ch} must always filter`);
-    assert.equal(count(13),checked?1:2);
-    assert.equal(count(11),2);assert.equal(count(14),1);
+    assert.equal(count(11),checked?1:2);
+    assert.equal(count(13),2);assert.equal(count(14),1);
     assert.equal(filtered.find(n=>channelMap.get(n.track)===7).original,80);
   }
   const octaves=mapNotesToGrid([{track:0,note:60,time:0,duration:.1,velocity:.8},{track:0,note:72,time:0,duration:.1,velocity:.8}],120,16,0,false);
   assert.equal(octaves.length,2,'absolute-pitch octaves must survive sharing a folded row');
-  assert.equal(buildImportCells(filterOverlappingNotes(octaves,'highest',new Map([[0,11]]),true),new Map([[0,11]])).cells.length,2);
+  assert.equal(buildImportCells(filterOverlappingNotes(octaves,'highest',new Map([[0,11]]),false),new Map([[0,11]])).cells.length,2);
   const songGrid=mapNotesToGrid(Array.from({length:600},(_,i)=>({track:0,note:60,velocity:.8,time:i*.125,duration:.1})),120);
   for (const cols of [16,32]) {
     const selected=selectMidiPageWindow(songGrid,3,cols);

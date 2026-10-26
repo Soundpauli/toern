@@ -176,14 +176,14 @@ export function mapNotesToGrid(notes, bpm = 120, subdivision = 16, timeOffset = 
   return out;
 }
 
-/** One note per assigned sample voice/step; CH13 filtering is optional.
+/** One note per assigned sample voice/step; CH11 filtering is optional.
  * Without an assignment map, retain the legacy per-track filtering helper.
  */
-export function filterOverlappingNotes(notes, priority = "highest", channelMap = null, filterCh13 = false) {
+export function filterOverlappingNotes(notes, priority = "highest", channelMap = null, filterCh11 = false) {
   const shouldFilter = note => {
     if (!channelMap) return true;
     const ch = channelMap.get(note.track);
-    return (ch >= 1 && ch <= 8) || ch === 14 || (ch === 13 && filterCh13);
+    return (ch >= 1 && ch <= 8) || ch === 14 || (ch === 11 && filterCh11);
   };
   const keyFor = note => `${note.page}-${note.x}-${channelMap ? channelMap.get(note.track) : note.track}`;
   const pitch = note => note.original ?? note.note ?? note.y;
@@ -194,7 +194,7 @@ export function filterOverlappingNotes(notes, priority = "highest", channelMap =
     if (!prev || (priority === "highest" ? pitch(note) > pitch(prev) : pitch(note) < pitch(prev)) ||
         (pitch(note) === pitch(prev) && note.velocity > prev.velocity)) byStep.set(key,note);
   }
-  // Keep CH11 polyphonic note data and unassigned tracks intact. Shared grid
+  // Keep CH13 note data and unassigned tracks intact. Shared grid
   // cells are resolved later, after channel assignment.
   return notes.filter(note => !shouldFilter(note) || byStep.get(keyFor(note)) === note);
 }
