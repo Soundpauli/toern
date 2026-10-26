@@ -23,7 +23,7 @@ const voiceButtons = [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14].map((ch) => {
   const [r, g, b] = COL[ch];
   const y = ch + 1;
   const top = MATRIX.y + (16 - y + 0.5) * (MATRIX.h / 16);
-  return `<button type="button" class="voice" data-ch="${ch}" aria-label="Voice ${ch}" aria-pressed="false" style="--c:rgb(${r},${g},${b});top:${py(top)}">${ch}<span class="voice-mute" aria-hidden="true"></span></button>`;
+  return `<button type="button" class="voice" data-ch="${ch}" aria-label="Voice ${ch}" aria-pressed="false" style="--c:rgb(${r},${g},${b});top:${py(top)}"><span class="voice-active" aria-hidden="true">--&gt;</span>${ch}<span class="voice-mute" aria-hidden="true"></span></button>`;
 }).join("");
 
 const ENCODERS = [75, 185, 295, 405];
@@ -84,14 +84,16 @@ app.innerHTML = `
     <div class="key-brand">
       <p class="key-brand-logo">TŒRN</p>
       <p class="key-brand-sub">Simulator 1.0</p>
-      <button type="button" class="key-brand-what" id="welcome-open">What's this?</button>
     </div>
+    <p class="status" id="status" role="status"></p>
+    <p class="jump-help" id="jump-help"></p>
+    <hr>
     <h1 class="jump-title">Browser shortcuts</h1>
     <p>Press Space to play / pause. Click the grid first to activate browser audio. Turn the onscreen knobs with your mouse or use the keys below.</p>
     <ul class="key-legend-list">
       <li><kbd>1</kbd>–<kbd>8</kbd> voice</li>
-      <li><kbd>Q</kbd> <kbd>P</kbd> <kbd>M</kbd> <kbd>R</kbd> <kbd>U</kbd> touch pads 1–5</li>
-      <li><kbd>R</kbd> + <kbd>U</kbd> fill (while playing)</li>
+      <li><kbd>E</kbd> <kbd>P</kbd> <kbd>.</kbd> <kbd>X</kbd> <kbd>M</kbd> touch pads 1–5</li>
+      <li><kbd>X</kbd> + <kbd>M</kbd> fill (while playing)</li>
       <li><kbd>S</kbd> single mode</li>
       <li><kbd>F</kbd> filter</li>
       <li><kbd>L</kbd> load sample</li>
@@ -102,7 +104,7 @@ app.innerHTML = `
       <li><kbd>R</kbd>, <kbd>T</kbd> [<kbd>⌥</kbd>/<kbd>⇧</kbd>] encoder 2</li>
       <li><kbd>U</kbd> + <kbd>⌥</kbd>/<kbd>⇧</kbd> hold, page row: full pattern</li>
       <li><kbd>U</kbd>, <kbd>I</kbd> [<kbd>Space</kbd>] encoder 3</li>
-      <li><kbd>P</kbd>/<kbd>←</kbd>, <kbd>Ü</kbd>/<kbd>→</kbd> [<kbd>Enter</kbd>] encoder 4</li>
+      <li><kbd>←</kbd>, <kbd>Ü</kbd>/<kbd>→</kbd> [<kbd>Enter</kbd>] encoder 4</li>
     </ul>
     <hr>
     <div class="assist" id="assist-panel" hidden>
@@ -123,6 +125,18 @@ app.innerHTML = `
       <ul class="assist-notes" id="assist-notes"></ul>
       <label class="jump-led"><span>LED simulation</span><input type="checkbox" id="led-style" checked></label>
       <label class="jump-led"><span>High contrast</span><input type="checkbox" id="a11y-contrast"></label>
+    </div>
+    <div class="jump-footer">
+      <label class="jump-led">
+        <span id="build-version-label">Panel layout · 32×16</span>
+        <input type="checkbox" id="build-version" role="switch" aria-labelledby="build-version-label" checked>
+      </label>
+      <label class="jump-led jump-led--inline">
+        <span id="assist-toggle-label">Assistive controls</span>
+        <input type="checkbox" id="assist-toggle" role="switch" aria-labelledby="assist-toggle-label" aria-controls="assist-panel" aria-describedby="assist-toggle-hint">
+      </label>
+      <p class="jump-panel-meta muted" id="assist-toggle-hint">Screen reader announcements, transport buttons, and a text list of notes on the page. Open with <code>#assist</code> in the URL.</p>
+      <a class="jump-mobile-link" id="mobile-link" href="#mobile">Mobile / iPad</a>
     </div>
   </aside>
   <main class="device" id="device">
@@ -150,12 +164,12 @@ app.innerHTML = `
         <div class="matrix-bed" style="left:${px(MATRIX.x)};top:${py(MATRIX.y)};width:${px(MATRIX.w)};height:${py(MATRIX.h)}">
           <canvas id="matrix" tabindex="0" role="application" aria-label="TŒRN grid. Focus here for device keys. Arrow keys move, Enter paints, Space plays."></canvas>
         </div>
-        <button type="button" class="pad" data-touch="1" style="left:${px(60)};top:${py(266)}" aria-label="Touch 1, key Q, Single mode and Exit" title="Touch 1 (Q)"><span>Q</span><span class="io-label pad-hint pad-hint--r">Singlemode + Exit</span></button>
+        <button type="button" class="pad" data-touch="1" style="left:${px(60)};top:${py(266)}" aria-label="Touch 1, key E, Single mode and Exit" title="Touch 1 (E)"><span>E</span><span class="io-label pad-hint pad-hint--r">Singlemode + Exit</span></button>
         <button type="button" class="pad" data-touch="2" style="left:${px(420)};top:${py(266)}" aria-label="Touch 2, key P, Menu" title="Touch 2 (P)"><span>P</span><span class="io-label pad-hint pad-hint--l">Menu</span></button>
-        <button type="button" class="pad pad--aux" data-touch="4" style="left:${px(130)};top:${py(302.6)}" aria-label="Touch 4, key R, audition current voice"><span>R</span><span class="io-label pad-hint pad-hint--r">Audition</span></button>
-        <button type="button" class="pad pad--aux" data-touch="5" style="left:${px(350)};top:${py(302.6)}" aria-label="Touch 5, key U, FN modifier"><span>U</span><span class="io-label pad-hint pad-hint--r">FN</span></button>
+        <button type="button" class="pad pad--aux" data-touch="4" style="left:${px(130)};top:${py(302.6)}" aria-label="Touch 4, key X, audition current voice"><span>X</span><span class="io-label pad-hint pad-hint--r">Audition</span></button>
+        <button type="button" class="pad pad--aux" data-touch="5" style="left:${px(350)};top:${py(302.6)}" aria-label="Touch 5, key M, FN modifier"><span>M</span><span class="io-label pad-hint pad-hint--r">FN</span></button>
         ${encoders}
-        <button type="button" class="pad pad--front" data-touch="3" style="left:${px(420)}" aria-label="Touch 3, key M, hold to record into voice" title="Touch 3 (M, hold to record)"><span>M</span><span class="io-label">Hold to record</span></button>
+        <button type="button" class="pad pad--front" data-touch="3" style="left:${px(420)}" aria-label="Touch 3, key ., hold to record into voice" title="Touch 3 (., hold to record)"><span>.</span><span class="io-label">Hold to record</span></button>
         ${io("l", "jack", 310, "6.35mm stereo TRS line-out")}
         ${io("l", "usb", 362, "USB-C port")}
         ${io("l", "jack", 414, "6.35mm headphone-out")}
@@ -181,19 +195,6 @@ app.innerHTML = `
     <div id="jump-home">
     <h1 class="jump-title">Menu</h1>
     <button type="button" data-jump="empty">New empty pattern</button>
-    <hr>
-    <button type="button" data-jump="draw">Draw</button>
-    <button type="button" data-jump="single">Single mode</button>
-    <button type="button" data-jump="menu">Main menu</button>
-    <button type="button" data-jump="filter">Sound controls</button>
-    <button type="button" data-jump="wav">Sample browser</button>
-    <button type="button" data-jump="bpm">BPM</button>
-    <button type="button" data-jump="demo">DEMO</button>
-    <p>Touch pads: <kbd>Q</kbd> <kbd>P</kbd> <kbd>M</kbd> <kbd>R</kbd> <kbd>U</kbd>. Hold R + U while playing to request a fill.</p>
-    <details class="fader-panel"><summary>Faders · voices 1–8</summary>
-      <p>Position overrides restored mute/solo state. Bottom is mute. Faders work in every screen.</p>
-      <div class="sim-faders">${Array.from({length:8},(_,i)=>`<label>CH${i+1}<input type="range" min="0" max="16" value="16" data-fader="${i+1}" aria-label="Voice ${i+1} fader"><output>16</output></label>`).join("")}</div>
-    </details>
     <button type="button" id="load-track">Load demo pattern</button>
     <div class="jump-sub" id="load-track-sub" hidden>
       <button type="button" data-track="1">Techno</button>
@@ -203,23 +204,20 @@ app.innerHTML = `
       <button type="button" data-track="5">Ambient</button>
     </div>
     <hr>
+    <button type="button" data-jump="draw">Draw</button>
+    <button type="button" data-jump="single">Single mode</button>
+    <button type="button" data-jump="filter">Sound controls</button>
+    <button type="button" data-jump="wav">Sample browser</button>
+    <button type="button" data-jump="bpm">BPM</button>
+    <button type="button" data-jump="settings-menu">Menu</button>
+    <hr>
     <button type="button" id="import-midi">Import MIDI File</button>
     <button type="button" id="import-seq1">Import Sequencer One</button>
     <button type="button" id="transfer-open">Transfer patterns</button>
-    <hr>
-    <p class="status" id="status" role="status"></p>
-    <p class="jump-help" id="jump-help"></p>
-    <div class="jump-footer">
-      <label class="jump-led">
-        <span id="build-version-label">Panel layout · 32×16</span>
-        <input type="checkbox" id="build-version" role="switch" aria-labelledby="build-version-label" checked>
-      </label>
-      <label class="jump-led jump-led--inline">
-        <span id="assist-toggle-label">Assistive controls</span>
-        <input type="checkbox" id="assist-toggle" role="switch" aria-labelledby="assist-toggle-label" aria-controls="assist-panel" aria-describedby="assist-toggle-hint">
-      </label>
-      <p class="jump-panel-meta muted" id="assist-toggle-hint">Screen reader announcements, transport buttons, and a text list of notes on the page. Open with <code>#assist</code> in the URL.</p>
-      <a class="jump-mobile-link" id="mobile-link" href="#mobile">Mobile / iPad</a>
+    <div class="device-transfer" aria-label="Current pattern transfer">
+      <button type="button" class="device-transfer-send" id="sd-push">SEND TO DEVICE &gt;</button>
+      <button type="button" class="device-transfer-get" id="sd-pull-slot">&lt; GET FROM DEVICE</button>
+      <p class="jump-panel-meta muted">Current pattern · notes and tempo</p>
     </div>
     </div>
     <div class="jump-layer" id="import-layer" hidden>
@@ -310,18 +308,8 @@ app.innerHTML = `
         <span class="jump-readout" id="sd-status" role="status">offline</span>
         <button type="button" class="jump-panel-reset" id="sd-disconnect" disabled>Disconnect</button>
       </div>
-      <div class="sd-tabs" role="tablist" aria-label="Transfer">
-        <button type="button" class="sd-tab" role="tab" id="sd-tab-pattern" aria-selected="true" aria-controls="sd-panel-pattern">Current pattern</button>
-        <button type="button" class="sd-tab" role="tab" id="sd-tab-file" aria-selected="false" aria-controls="sd-panel-file">Pattern file</button>
-      </div>
-      <div id="sd-panel-pattern" role="tabpanel" aria-labelledby="sd-tab-pattern">
-        <p class="jump-panel-meta muted">Transfers grid notes and tempo, not a complete kit or sound setup. Replaces the current pattern in RAM; nothing is written to a file.</p>
-        <div class="sd-actions">
-          <button type="button" class="jump-panel-reset" id="sd-push">SIM &gt; DEVICE</button>
-          <button type="button" class="jump-panel-reset" id="sd-pull-slot">DEVICE &gt; SIM</button>
-        </div>
-      </div>
-      <div id="sd-panel-file" role="tabpanel" aria-labelledby="sd-tab-file" hidden>
+      <h3 class="jump-title">Pattern file</h3>
+      <div id="sd-panel-file">
         <p class="jump-panel-meta muted">Browse and replace pattern files on the SD card. Simulator editing transfers notes and tempo; samples and complete sound recall require the device and matching kit.</p>
         <div class="sd-crumbs" id="sd-crumbs"></div>
         <div class="sd-list" id="sd-list" role="listbox" aria-label="SD card files"></div>
@@ -330,12 +318,12 @@ app.innerHTML = `
         </div>
         <label class="jump-drop" id="sd-upload">
           <input type="file" id="sd-upload-file" multiple hidden>
-          <span>Replace same name in this folder</span>
+          <span>Replace same name on real device</span>
         </label>
       </div>
       <p class="jump-panel-err" id="sd-err" role="alert" hidden></p>
-      <p class="jump-panel-meta" id="sd-xfer" role="status"></p>
     </div>
+    <p class="jump-panel-meta" id="sd-xfer" role="status"></p>
   </aside>
   <div class="xfer-modal" id="xfer-modal" hidden>
     <div class="xfer-modal-card" role="dialog" aria-modal="true" aria-labelledby="xfer-modal-text">
@@ -599,12 +587,6 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener("pointerup", () => { endPress(true); drag = null; });
 canvas.addEventListener("pointercancel", () => { endPress(false); drag = null; });
 
-document.querySelectorAll("[data-fader]").forEach(input => {
-  input.addEventListener("input", () => {
-    device.setFader(Number(input.dataset.fader), Number(input.value));
-    input.nextElementSibling.value = input.value;
-  });
-});
 document.querySelectorAll(".pad").forEach((pad) => {
   const id = Number(pad.dataset.touch);
   const pressPad = () => {
@@ -843,7 +825,7 @@ function pressKey(e) {
   if (e.key === "Enter") return 3;
   return -1;
 }
-const TOUCH_PAD_CODES = { KeyQ: 1, KeyP: 2, KeyM: 3, KeyR: 4, KeyU: 5 };
+const TOUCH_PAD_CODES = { KeyE: 1, KeyP: 2, Period: 3, KeyX: 4, KeyM: 5 };
 function touchKey(e) {
   if (!e.metaKey && !e.ctrlKey && !e.altKey && TOUCH_PAD_CODES[e.code]) return TOUCH_PAD_CODES[e.code];
   if (e.key === "ß" || e.key === "ẞ" || e.key === "-" || e.code === "Minus") return 1;
@@ -1453,10 +1435,6 @@ const sdUpload = document.querySelector("#sd-upload");
 const sdUploadFile = document.querySelector("#sd-upload-file");
 const sdErr = document.querySelector("#sd-err");
 const sdXfer = document.querySelector("#sd-xfer");
-const sdTabPattern = document.querySelector("#sd-tab-pattern");
-const sdTabFile = document.querySelector("#sd-tab-file");
-const sdPanelPattern = document.querySelector("#sd-panel-pattern");
-const sdPanelFile = document.querySelector("#sd-panel-file");
 const xferModal = document.querySelector("#xfer-modal");
 const xferText = document.querySelector("#xfer-modal-text");
 const xferOk = document.querySelector("#xfer-ok");
@@ -1494,16 +1472,6 @@ function setSdBusy(on) {
   sdDisconnect.disabled = on || !live;
   sdUpload.classList.toggle("dim", on);
   refreshSdStatus();
-}
-
-function showSdTab(which) {
-  const pattern = which === "pattern";
-  sdTabPattern.setAttribute("aria-selected", pattern ? "true" : "false");
-  sdTabFile.setAttribute("aria-selected", pattern ? "false" : "true");
-  sdTabPattern.classList.toggle("on", pattern);
-  sdTabFile.classList.toggle("on", !pattern);
-  sdPanelPattern.hidden = !pattern;
-  sdPanelFile.hidden = pattern;
 }
 
 function askModal(message, okLabel) {
@@ -1628,11 +1596,11 @@ function openSdPanel() {
   jumpHome.hidden = true;
   sdLayer.hidden = false;
   transferOpen.classList.add("on");
-  showSdTab("pattern");
   setSdErr("");
   sdXfer.textContent = "";
   refreshSdStatus();
   sdBack.focus();
+  sdBrowse(sdPath || "/");
 }
 
 function closeSdPanel() {
@@ -1856,13 +1824,7 @@ sdUploadFile.addEventListener("change", () => {
   sdUploadFile.value = "";
   if (files.length) uploadSdFiles(files);
 });
-sdTabPattern.addEventListener("click", () => showSdTab("pattern"));
-sdTabFile.addEventListener("click", async () => {
-  showSdTab("file");
-  await sdBrowse(sdPath || "/");
-});
 renderSdList();
-showSdTab("pattern");
 setSdBusy(false);
 
 const HELP = {
@@ -1886,7 +1848,7 @@ const HELP = {
   midi: "MIDI: CH, TRAN, SEND, RCVE, FOLD, SYNC, PQ-I, PQ-O, TRIG, OVWR. SYNC uses SYC> / SYC<; red -- means the selected value has no effect in this mode. Encoder 4 selects pages.",
   pset: "PSET stores this synth voice’s filters. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Slots are separate for voices 11, 13 and 14.",
   touchy: "TOUCHY: pads 1–5 play voices 1–5 (keyboard 1–5). Knobs 1–4 control the last played voice: pitch, velocity, reverb (voices 1, 2 and 5), highpass. Channel volume stays full. Click to choose voices 1–4 samples. Hold knob 1 to fast-record into the last played voice; release to stop. Hold knob 3 for the last played voice’s filter, or knob 4 to switch TOUCHY OFF and open the main menu.",
-  demo: "NyanCat for 10 seconds, MATZE SAMPLER in red, bright white and rainbow with sine curves. Repeats until Touch 1 / Q or button A (A key) is pressed.",
+  demo: "NyanCat for 10 seconds, MATZE SAMPLER in red, bright white and rainbow with sine curves. Repeats until Touch 1 / E or button A (A key) is pressed.",
   mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO, DEMO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger or DEMO to run the animation. Esc leaves.",
   etc: "ETC: INFO, SCON, BATT, ADV, RSET. SCON shows WAIT in yellow until a computer is talking, then OK in green. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. Esc leaves.",
   adv: "ADV: CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE. Encoder 4 selects a page; encoder 3 changes its value. LEDS 1 / 1B select 16×16, 2 / 2B select 32×16. Esc leaves.",
@@ -1916,7 +1878,7 @@ function markVoice() {
   document.querySelector(".voices").classList.toggle("on", mode === "draw" || mode === "single" || mode === "filter");
   refreshAssistive(false);
   document.querySelectorAll(".jump button[data-jump]").forEach((btn) => {
-    const on = btn.dataset.jump === mode;
+    const on = btn.dataset.jump === mode || (btn.dataset.jump === "settings-menu" && mode === "menu");
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
@@ -1925,7 +1887,7 @@ function markVoice() {
   });
   document.querySelectorAll(".pad[data-touch]").forEach(pad => {
     const id = Number(pad.dataset.touch), touchy = mode === "touchy";
-    const key = ["", "Q", "P", "M", "R", "U"][id];
+    const key = ["", "E", "P", ".", "X", "M"][id];
     const label = touchy ? `Voice ${id}` : ["", "Singlemode + Exit", "Menu", "Hold to record", "Audition", "FN"][id];
     pad.querySelector(".io-label").textContent = label;
     pad.setAttribute("aria-label", `Touch ${id}, key ${key}, ${label}`);
@@ -2187,7 +2149,6 @@ const WELCOME_KEY = "toern-web-welcome-hide";
 const welcomeModal = document.querySelector("#welcome-modal");
 const welcomeDismiss = document.querySelector("#welcome-dismiss");
 const welcomeHide = document.querySelector("#welcome-hide");
-const welcomeOpen = document.querySelector("#welcome-open");
 let welcomePrevFocus = null;
 
 function openWelcome() {
@@ -2203,7 +2164,6 @@ function closeWelcome() {
 }
 
 welcomeDismiss?.addEventListener("click", closeWelcome);
-welcomeOpen?.addEventListener("click", openWelcome);
 welcomeModal?.addEventListener("click", (e) => {
   if (e.target === welcomeModal) closeWelcome();
 });

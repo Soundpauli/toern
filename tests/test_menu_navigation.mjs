@@ -45,6 +45,11 @@ frame(now);
 now = 6e3;
 frame(now);
 assert.equal(d.mode(), "draw");
+d.jump("settings-menu");
+assert.equal(d.mode(), "menu");
+assert.equal(d.menuSummary().detail, "SETT");
+d.jump("menu");
+assert.equal(d.menuSummary().detail, "PATT");
 function open(root) {
   d.jump("menu");
   for (let i = 0; i < root; i++) d.rotate(3, 1);
@@ -460,3 +465,22 @@ assert.equal(d.mode(),'mode');
 d.keyup({key:'a',code:'KeyA'});assert.equal(d.mode(),'mode');
 d.jump('bpm');const oldBpm=d.bpm();d.rotate(0,1);assert.equal(d.bpm(),Math.round((oldBpm+.1)*10)/10);
 console.log('PASS: DEMO order/timing/full off-grid scrolls/exit and one-row fractional BPM on both matrix widths.');
+
+// Touch shortcuts must leave the encoder keys available.
+function tapKey(key, code) {
+  now+=500;
+  const e={key,code,preventDefault(){},stopPropagation(){}};
+  d.keydown(e);d.keyup(e);
+}
+d.setDeviceFocus(true);
+d.jump('bpm');
+const keyboardBpm=d.bpm();
+tapKey('q','KeyQ');assert.equal(d.bpm(),Math.round((keyboardBpm+.1)*10)/10);
+tapKey('w','KeyW');assert.equal(d.bpm(),keyboardBpm);
+d.jump('draw');tapKey('e','KeyE');assert.equal(d.mode(),'single');
+tapKey('e','KeyE');assert.equal(d.mode(),'draw');
+d.jump('bpm');tapKey('p','KeyP');assert.equal(d.mode(),'draw');
+d.jump('bpm');tapKey('.','Period');assert.equal(d.mode(),'bpm');
+d.jump('draw');tapKey('x','KeyX');assert.equal(d.mode(),'draw');
+tapKey('m','KeyM');assert.equal(d.mode(),'draw');
+console.log('PASS: remapped touch keys and restored encoder Q/W controls.');

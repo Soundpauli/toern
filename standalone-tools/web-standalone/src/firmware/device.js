@@ -2406,14 +2406,14 @@ export function createDevice(matrix, statusEl, rings) {
 
   function touchPadKey(e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return 0;
-    return { KeyQ: 1, KeyP: 2, KeyM: 3, KeyR: 4, KeyU: 5 }[e.code] || 0;
+    return { KeyE: 1, KeyP: 2, Period: 3, KeyX: 4, KeyM: 5 }[e.code] || 0;
   }
   function keydown(e) {
     const padKey = touchPadKey(e);
     if (padKey && deviceKeysActive()) { e.preventDefault(); if (!e.repeat) handleTouch(padKey, true); return; }
     const active = deviceKeysActive();
     const ue = e.code === "BracketLeft" || e.key === "ü" || e.key === "Ü" || e.key === "[";
-    const turning = ["KeyW", "KeyT", "KeyI", "BracketLeft", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.code) || ue;
+    const turning = ["KeyQ", "KeyW", "KeyR", "KeyT", "KeyU", "KeyI", "BracketLeft", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.code) || ue;
     const steal = isTab(e) || isEncoder2Click(e) || isTouch1Key(e) || isTouch2Key(e) || e.key === " " || e.key === "Enter" || e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown";
     if (steal && active) {
       e.preventDefault();
@@ -2452,10 +2452,13 @@ export function createDevice(matrix, statusEl, rings) {
     if (e.code === "KeyD" && (s.mode === "draw" || s.mode === "single")) { clearPage(); announceState(); return; }
     const beforeX = s.GLOB.x;
     const beforeY = s.GLOB.y;
-    if (e.code === "KeyW") turn(0, -1);
+    if (e.code === "KeyQ") turn(0, 1);
+    else if (e.code === "KeyW") turn(0, -1);
     else if (e.key === "ArrowDown") turn(0, -1);
     else if (e.key === "ArrowUp") turn(0, 1);
+    else if (e.code === "KeyR") turn(1, -1);
     else if (e.code === "KeyT") turn(1, 1);
+    else if (e.code === "KeyU") turn(2, -1);
     else if (e.code === "KeyI") turn(2, 1);
     else if (e.key === "ArrowLeft") turn(3, -1);
     else if (e.key === "ArrowRight" || ue) turn(3, 1);
@@ -2927,6 +2930,7 @@ export function createDevice(matrix, statusEl, rings) {
         return;
       }
       if (name === "filter") { enterFilter(); return; }
+      if (name === "settings-menu") { s.menuIndex = MENU_PAGES.findIndex(page => page.name === "SETT"); s.mode = "menu"; return; }
       if (name === "menu") { s.menuIndex = 0; s.mode = "menu"; return; }
       if (name === "wav" && [11,13,14].includes(s.GLOB.currentChannel)) { s.mode="pset"; s.presetSlot=s.presetSlots[s.GLOB.currentChannel]; return; }
       if (name === "wav") {
