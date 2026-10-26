@@ -49,20 +49,9 @@ for library_dir in libdeps_dir.glob("TeensyAudioSampler*"):
         text,
         flags=re.MULTILINE,
     )
-    if "audio_voice->_audioenvelop->release(2);" not in text:
-        text = replace_once(
-            text,
-            "audio_voice->_audioenvelop->noteOff();",
-            "audio_voice->_audioenvelop->release(2);\n                    audio_voice->_audioenvelop->noteOff();",
-            "voice one envelope release",
-        )
-    if "audio_voice->_audioenvelop2->release(2);" not in text:
-        text = replace_once(
-            text,
-            "audio_voice->_audioenvelop2->noteOff();",
-            "audio_voice->_audioenvelop2->release(2);\n                    audio_voice->_audioenvelop2->noteOff();",
-            "voice two envelope release",
-        )
+    # Respect release configured by TŒRN; do not replace it with a fixed 2 ms.
+    text = text.replace("audio_voice->_audioenvelop->release(2);", "")
+    text = text.replace("audio_voice->_audioenvelop2->release(2);", "")
     sampler.write_text(text)
 
     polyphonic_sampler = library_dir / "src" / "polyphonicsampler.h"

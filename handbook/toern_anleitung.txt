@@ -86,7 +86,7 @@ Main Menu:
 	Touch Right or Left: EXIT
 
 	* loading a NEW file (blue numbers) auto resets all Filters, as well as BPM, as long the option ("+") isnt selected with E3.e
-	* loading an exisiting file, also loads all saved Filters
+	* E3 controls loading saved sound settings: default OFF (red 5-pixel X above E3, bottom pixels y=3) keeps current effects, envelopes, synths and voice volumes. Turn clockwise to load saved settings; saving always includes the current settings.
 	* saving a file also saves all filters
 	* saving a file does NOT save samples (yet), they have to be loaded / saved from SAMPLEPACK menu.
 

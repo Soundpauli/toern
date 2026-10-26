@@ -5,7 +5,7 @@ static const CRGB touchyPadColors[5] = {
   CRGB(64, 128, 255), CRGB(220, 64, 255)
 };
 static uint8_t touchyLastVoice = 1;
-static uint8_t touchyVelocity[6] = {100,100,100,100,100,100};
+static uint8_t touchyVelocity[6] = {defaultVelocity,defaultVelocity,defaultVelocity,defaultVelocity,defaultVelocity,defaultVelocity};
 static unsigned int touchySavedVolume[6];
 static bool touchyRecordHeld = false;
 static bool touchyPrevious[5] = {};

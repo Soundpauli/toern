@@ -7,7 +7,7 @@ extern uint8_t waveformsArray[2][5]; // Lives in DTCM (see toern_synths.ino); mu
 void handleWaveformChange(int index, unsigned int waveformType);
 
 // --- Smooth Gain Transition State ---
-#define NUM_MIXER_CHANNELS 3
+#define NUM_MIXER_CHANNELS 4
 
 struct GainTransition {
   float currentGain[NUM_MIXER_CHANNELS];
@@ -64,16 +64,21 @@ void setMixerGainSmooth(int index, int channel, float target, int steps = 8) {
 void initFilterTransition(int index) {
   if (filtermixers[index] == nullptr) return;
 
-  // Initialize with default values (channel 0 = 1.0, others = 0.0)
-  filterMixerTransitions[index].currentGain[0] = 1.0;
+  // Sample HCUT=32 / LCUT=0 is a true dry path (input 3).
+  const bool bypass = index >= 1 && index <= 8 && SMP.filter_settings[index][HCUT] >= maxfilterResolution && SMP.filter_settings[index][LOWCUT] <= 0;
+  // Initialize with the same routing used by applyVoiceCuts.
+  filterMixerTransitions[index].currentGain[0] = bypass ? 0.0f : 1.0f;
   filterMixerTransitions[index].currentGain[1] = 0.0;
   filterMixerTransitions[index].currentGain[2] = 0.0;
 
-  filterMixerTransitions[index].targetGain[0] = 1.0;
+  filterMixerTransitions[index].targetGain[0] = bypass ? 0.0f : 1.0f;
   filterMixerTransitions[index].targetGain[1] = 0.0;
   filterMixerTransitions[index].targetGain[2] = 0.0;
 
+  filterMixerTransitions[index].currentGain[3] = bypass ? 1.0f : 0.0f;
+  filterMixerTransitions[index].targetGain[3] = bypass ? 1.0f : 0.0f;
   for (int ch = 0; ch < NUM_MIXER_CHANNELS; ++ch) {
+    filtermixers[index]->gain(ch, filterMixerTransitions[index].currentGain[ch]);
     filterMixerTransitions[index].step[ch] = 0.0;
     filterMixerTransitions[index].active[ch] = false;
   }
@@ -99,6 +104,8 @@ void applyVoiceCuts(int index) {
   if (index < 0 || index >= 15 || filters[index] == nullptr) return;
   float hcut = SMP.filter_settings[index][HCUT];
   float lcut = SMP.filter_settings[index][LOWCUT];
+  const bool bypass = index >= 1 && index <= 8 && hcut >= maxfilterResolution && lcut <= 0.0f;
+  setMixerGainSmooth(index, 3, bypass ? 1.0f : 0.0f, 32);
   float hz;
   if (lcut > 0.0f) {
     // SVF highpass — LCUT owns routing; 0 is off so HCUT lowpass can run.
@@ -109,7 +116,7 @@ void applyVoiceCuts(int index) {
     setMixerGainSmooth(index, 2, 1.0, 32);
   } else {
     hz = mapf(constrain(hcut, 0.0f, (float)maxfilterResolution), 0.0f, (float)maxfilterResolution, 281.25f, 10000.0f);
-    setMixerGainSmooth(index, 0, 1.0, 32);
+    setMixerGainSmooth(index, 0, bypass ? 0.0f : 1.0f, 32);
     setMixerGainSmooth(index, 1, 0.0, 32);
     setMixerGainSmooth(index, 2, 0.0, 32);
   }

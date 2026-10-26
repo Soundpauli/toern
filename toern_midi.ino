@@ -1293,6 +1293,18 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
 
   int channel = mapMidiToLogicalChannel((int)midiChannel, pitch);
 
+  // Sample ADSR release follows MIDI Note Off too. Keep the held-note counter
+  // so releasing one key cannot cut a different key held on this mono voice.
+  if (channel >= 1 && channel <= 8) {
+    midiHeldNote[channel][pitch] = false;
+    midiHeldVelocity[channel][pitch] = 0;
+    int held = 0;
+    for (int p = 0; p < 128; ++p) if (midiHeldNote[channel][p]) ++held;
+    pressedKeyCount[channel] = held;
+    if (!held && envelopes[channel]) envelopes[channel]->noteOff();
+    return;
+  }
+
   // For persistent channels (11-14) use the counter (must match handleNoteOn indexing).
   if (channel >= 11 && channel <= 14) {
     if (pitch < 128) {

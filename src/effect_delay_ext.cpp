@@ -136,7 +136,10 @@ void AudioMixer4Ramp::update(void) {
       }
       if (output && inputs[channel]) {
         const int32_t gain = current_gain[channel] >> 8;
-        sum += ((int32_t)inputs[channel]->data[i] * gain) >> 16;
+        // Arithmetic right shift floors negative values: -1 fed back
+        // through a gain <1 can remain -1 forever. Truncate toward zero
+        // symmetrically so both polarities decay to exact silence.
+        sum += ((int32_t)inputs[channel]->data[i] * gain) / 65536;
       }
     }
     if (output) {

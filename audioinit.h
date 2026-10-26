@@ -1,3 +1,6 @@
+#include "src/sample_reader.h"
+#include "src/sample_envelope.h"
+#include "src/mixer_limited.h"
 // Audio Processing Nodes
 AudioSynthWaveform              waveform11_1;   //xy=405,1269
 AudioSynthWaveform              waveform11_2;   //xy=405,1310
@@ -24,7 +27,7 @@ EXTMEM AudioMixer4                     mixer_waveform14; //xy=658,1781
 AudioEffectEnvelope             SenvelopeFilter1_0; //xy=675,2560
 AudioEffectEnvelope             SenvelopeFilter1_1; //xy=680,2620
 AudioEffectEnvelope             SenvelopeFilter1_2; //xy=685,2670
-AudioPlayArrayResmp             sound8;         //xy=990,745
+AudioSampleReader             sound8;         //xy=990,745
 AudioEffectEnvelope             envelope13;     //xy=1073,1610
 AudioEffectEnvelope             envelope14;     //xy=1082,1784
 EXTMEM AudioMixer4                     Smixer1_0; //xy=1130,2055
@@ -45,9 +48,9 @@ EXTMEM AudioFilterLadder               Sladder2_2; //xy=1365,2580
 AudioAmplifier                  amp11;          //xy=1421,1295
 AudioAmplifier                  amp13;          //xy=1409,1612
 AudioAmplifier                  amp14;          //xy=1439,1783
-AudioPlayArrayResmp             sound1;         //xy=1560,395
-AudioPlayArrayResmp             sound2;         //xy=1570,560
-AudioPlayArrayResmp             sound3;         //xy=1555,685
+AudioSampleReader             sound1;         //xy=1560,395
+AudioSampleReader             sound2;         //xy=1570,560
+AudioSampleReader             sound3;         //xy=1555,685
 AudioFilterStateVariable        filter11;       //xy=1581,1302
 AudioFilterStateVariable        filter13;       //xy=1562,1616
 AudioFilterStateVariable        filter14;       //xy=1584,1790
@@ -57,24 +60,24 @@ EXTMEM AudioEffectEnvelope             Senvelope1_2; //xy=1560,2240
 EXTMEM AudioEffectEnvelope             Senvelope2_0; //xy=1545,2460
 EXTMEM AudioEffectEnvelope             Senvelope2_1; //xy=1545,2525
 EXTMEM AudioEffectEnvelope             Senvelope2_2; //xy=1555,2585
-AudioPlayArrayResmp             sound4;         //xy=1715,795
-AudioPlayArrayResmp             sound5;         //xy=1720,865
-AudioPlayArrayResmp             sound6;         //xy=1720,935
-AudioPlayArrayResmp             sound7;         //xy=1750,1005
+AudioSampleReader             sound4;         //xy=1715,795
+AudioSampleReader             sound5;         //xy=1720,865
+AudioSampleReader             sound6;         //xy=1720,935
+AudioSampleReader             sound7;         //xy=1750,1005
 EXTMEM AudioMixer4                     filtermixer11;  //xy=1750,1309
 EXTMEM AudioMixer4                     filtermixer13;  //xy=1736,1622
 EXTMEM AudioMixer4                     filtermixer14;  //xy=1746,1796
 EXTMEM AudioMixer4                     SmixerL4; //xy=1785,2195
 
 EXTMEM AudioMixer4                     SmixerR4; //xy=1815,2530
-AudioEffectEnvelope             envelope1;      //xy=1927,516
-AudioEffectEnvelope             envelope2;      //xy=1928,626
-AudioEffectEnvelope             envelope3;      //xy=1926,717
-AudioEffectEnvelope             envelope4;      //xy=1927,794
-AudioEffectEnvelope             envelope5;      //xy=1926,864
-AudioEffectEnvelope             envelope6;      //xy=1923,942
-AudioEffectEnvelope             envelope7;      //xy=1924,1025
-AudioEffectEnvelope             envelope8;      //xy=1922,1102
+AudioSampleEnvelope             envelope1;      //xy=1927,516
+AudioSampleEnvelope             envelope2;      //xy=1928,626
+AudioSampleEnvelope             envelope3;      //xy=1926,717
+AudioSampleEnvelope             envelope4;      //xy=1927,794
+AudioSampleEnvelope             envelope5;      //xy=1926,864
+AudioSampleEnvelope             envelope6;      //xy=1923,942
+AudioSampleEnvelope             envelope7;      //xy=1924,1025
+AudioSampleEnvelope             envelope8;      //xy=1922,1102
 AudioEffectFreeverbDMAMEM             freeverb11;     //xy=1922,1384
 // DLAY 0 = off; N = N/32 of a beat (1,2,4,8,16,32 land on even divisions). Line ~1.3 s.
 #define VOICE_DELAY_SAMPLES 57600u
@@ -137,18 +140,18 @@ AudioEffectFreeverbDMAMEM             freeverb5;      //xy=2759,998
 AudioEffectFreeverbDMAMEM             freeverb6;      //xy=2765,108
 AudioEffectFreeverbDMAMEM             freeverb7;      //xy=2759,998
 AudioEffectFreeverbDMAMEM             freeverb8;      //xy=2765,1083
-EXTMEM AudioMixer4                     mixersynth_end; //xy=2889,1562
+EXTMEM AudioMixer4Limited                     mixersynth_end; //xy=2889,1562
 EXTMEM AudioMixer4                     freeverbmixer1; //xy=2964,513
 EXTMEM AudioMixer4                     freeverbmixer2; //xy=2978,657
 EXTMEM AudioMixer4                     freeverbmixer5; //xy=2970,912
 EXTMEM AudioMixer4                     freeverbmixer6; //xy=2970,1004
 EXTMEM AudioMixer4                     freeverbmixer7; //xy=2970,1016
 EXTMEM AudioMixer4                     freeverbmixer8; //xy=2970,1108
-EXTMEM AudioMixer4                     mixer1;         //xy=3200,763
-EXTMEM AudioMixer4                     mixer2;         //xy=3200,948
+EXTMEM AudioMixer4Limited                     mixer1;         //xy=3200,763
+EXTMEM AudioMixer4Limited                     mixer2;         //xy=3200,948
 AudioEffectEnvelope             envelope0;      //xy=3524,426
 AudioPlaySdWav                  playSdWav1;     //xy=3524,474
-EXTMEM AudioMixer4                     mixer_end;      //xy=3518,1059
+EXTMEM AudioMixer4Limited                     mixer_end;      //xy=3518,1059
 AudioInputI2S                   audioInput;     //xy=3556,1189
 AudioAmplifier                  audioInputAmp;  //xy=3650,1189
 AudioFilterBiquad               recInputHpf;    // library DC block; codec ADC HPF stays off
@@ -159,8 +162,8 @@ AudioAnalyzePeak                peak1;          //xy=3727,541
 AudioRecordQueue                queue1;         //xy=3778,1164
 AudioAnalyzePeak                peakRec;        //xy=3788,1215
 AudioAnalyzePeak                peakOutput;     //xy=3788,1300  // For LED strip visualization
-EXTMEM AudioMixer4                     mixer_stereoR;  //xy=3932,748
-EXTMEM AudioMixer4                     mixer_stereoL;  //xy=3931,848
+EXTMEM AudioMixer4Limited                     mixer_stereoR;  //xy=3932,748
+EXTMEM AudioMixer4Limited                     mixer_stereoL;  //xy=3931,848
 AudioOutputI2S                  i2s1;           //xy=4154,795
 AudioOutputUSB                  usb1;           // host USB audio (same mix as headphones)
 
@@ -300,6 +303,14 @@ EXTMEM AudioConnection        patchCord164(amp5, 0, filter5, 0);
 EXTMEM AudioConnection        patchCord165(amp6, 0, filter6, 0);
 EXTMEM AudioConnection        patchCord166(amp7, 0, filter7, 0);
 EXTMEM AudioConnection        patchCord167(amp8, 0, filter8, 0);
+EXTMEM AudioConnection patchSampleDry1(amp1, 0, filtermixer1, 3);
+EXTMEM AudioConnection patchSampleDry2(amp2, 0, filtermixer2, 3);
+EXTMEM AudioConnection patchSampleDry3(amp3, 0, filtermixer3, 3);
+EXTMEM AudioConnection patchSampleDry4(amp4, 0, filtermixer4, 3);
+EXTMEM AudioConnection patchSampleDry5(amp5, 0, filtermixer5, 3);
+EXTMEM AudioConnection patchSampleDry6(amp6, 0, filtermixer6, 3);
+EXTMEM AudioConnection patchSampleDry7(amp7, 0, filtermixer7, 3);
+EXTMEM AudioConnection patchSampleDry8(amp8, 0, filtermixer8, 3);
 //test granular
 //AudioEffectGranular      granular1;      //xy=504,155
 //EXTMEM AudioConnection        patchCord167a(amp8, 0, granular1, 0);
@@ -429,8 +440,8 @@ EXTMEM AudioConnection        patchCord231(mixer2, 0, mixer_stereoR, 2);  // ch5
 EXTMEM AudioConnection        patchCord227(mixer_stereoR, 0, i2s1, 0);
 EXTMEM AudioConnection        patchCord228(mixer_stereoL, 0, i2s1, 1);
 // USB mix copies the headphone buses, with preview (mixer0 / voice 0) gated.
-EXTMEM AudioMixer4            usbMixR;
-EXTMEM AudioMixer4            usbMixL;
+EXTMEM AudioMixer4Limited            usbMixR;
+EXTMEM AudioMixer4Limited            usbMixL;
 EXTMEM AudioConnection        patchUsbMainR(mixer_end, 0, usbMixR, 0);
 EXTMEM AudioConnection        patchUsbPrevR(mixer0, 0, usbMixR, 1);
 EXTMEM AudioConnection        patchUsbBusR(mixer2, 0, usbMixR, 2);

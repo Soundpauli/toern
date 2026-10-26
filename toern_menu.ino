@@ -853,7 +853,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 14, 1);   // ctrlMode default (1 = VOL)
       EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
       EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
-      EEPROM.write(EEPROM_DATA_START + 17, 100);  // GLOB.vol default (100, maps to 1.0 volume, 0-100 range)
+      EEPROM.write(EEPROM_DATA_START + 17, 80);  // GLOB.vol default (80, maps to 0.8 volume, 0-100 range)
       EEPROM.write(EEPROM_DATA_START + 18, 0);   // cursorType default (0 = NORM)
       EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)

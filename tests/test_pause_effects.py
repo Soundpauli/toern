@@ -39,6 +39,7 @@ public:
  AudioStream(unsigned n,audio_block_t **q):queue(q),count(n){for(unsigned i=0;i<n;i++)queue[i]=nullptr;}
  virtual void update()=0;
  void feed(int value,unsigned channel=0){assert(channel<count&&!queue[channel]);auto b=new audio_block_t{};for(auto &v:b->data)v=value;queue[channel]=b;}
+ void feedSamples(const int16_t *data,unsigned channel=0){assert(channel<count&&!queue[channel]);auto b=new audio_block_t{};memcpy(b->data,data,sizeof(b->data));queue[channel]=b;}
  audio_block_t *receiveReadOnly(unsigned ch=0){auto b=queue[ch];queue[ch]=nullptr;return b;}
  audio_block_t *allocate(){return new audio_block_t{};}
  void release(audio_block_t *b){delete b;}
@@ -68,7 +69,23 @@ void delayTest(int length){
  for(int i=0;i<200;i++){d.feed(8000);d.update();}
  assert(audible(d));
 }
+void feedbackTest(int sign){
+ std::vector<int16_t> storage(57600);AudioEffectDelayExternal delay;delay.begin(storage.data(),storage.size());delay.delay(0,600.0f);
+ AudioMixer4Ramp fb,wet;fb.gain(0,1);fb.gain(1,.68f);fb.gain(2,0);fb.gain(3,0);
+ wet.gain(0,.5f);wet.gain(1,0);wet.gain(2,0);wet.gain(3,0);
+ int16_t previous[128]={};bool echoes=false;
+ for(int n=0;n<20000;++n){
+  fb.feed(n<2?sign*24000:0,0);fb.feedSamples(previous,1);fb.update();
+  delay.feedSamples(fb.output.back().data);delay.update();
+  memset(previous,0,sizeof(previous));if(!delay.output.empty())memcpy(previous,delay.output.back().data,sizeof(previous));
+  wet.feedSamples(previous);wet.update();if(n>300&&audible(wet))echoes=true;
+  if(n>19500){for(auto v:previous)assert(v==0);assert(!audible(wet));}
+  fb.output.clear();delay.output.clear();wet.output.clear();
+ }
+ assert(echoes);
+}
 int main(){
+ feedbackTest(-1);feedbackTest(1);
  delayTest(16384);delayTest(16387);
  AudioEffectFreeverbDMAMEM verb;verb.roomsize(1.0f);verb.damping(0.4f);
  for(int i=0;i<60;i++){verb.feed(i<8?10000:0);verb.update();}

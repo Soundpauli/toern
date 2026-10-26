@@ -470,7 +470,22 @@ FLASHMEM void loadPattern(bool autoload) {
             ? pitch : NOTE_MIDI_PITCH_NONE;
         }
       }
+      // OFF keeps both the live audio and its editable/savable settings intact.
+      // Startup recovery always restores the complete session.
+      static EXTMEM Device previousSound;
+      const bool loadSound = autoload || SMP_LOAD_SETTINGS;
+      if (!loadSound) memcpy(&previousSound, &SMP, sizeof(SMP));
       memcpy(&SMP, payload + expectedNotes * 4u + 2u, sizeof(SMP));
+      if (!loadSound) {
+        SMP.pack = previousSound.pack;
+        memcpy(SMP.wav, previousSound.wav, sizeof(SMP.wav));
+        memcpy(SMP.samplePathRel, previousSound.samplePathRel, sizeof(SMP.samplePathRel));
+        memcpy(SMP.sp0Active, previousSound.sp0Active, sizeof(SMP.sp0Active));
+        memcpy(SMP.param_settings, previousSound.param_settings, sizeof(SMP.param_settings));
+        memcpy(SMP.filter_settings, previousSound.filter_settings, sizeof(SMP.filter_settings));
+        memcpy(SMP.synth_settings, previousSound.synth_settings, sizeof(SMP.synth_settings));
+        memcpy(SMP.channelVol, previousSound.channelVol, sizeof(SMP.channelVol));
+      }
       if (!isfinite(SMP.bpm) || SMP.bpm < 40.0f || SMP.bpm > 300.0f) SMP.bpm = 100.0f;
       if (SMP.file > 999) SMP.file = 1;
       if (SMP.pack > 999) SMP.pack = 1;
@@ -533,7 +548,7 @@ FLASHMEM void loadPattern(bool autoload) {
   if (!autoload && !isNowPlaying) {
     delay(500);
   }
-  loadSMPSettings();
+  if (autoload || SMP_LOAD_SETTINGS) loadSMPSettings();
   
   if (!autoload) {
     if (!isNowPlaying) {

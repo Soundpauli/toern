@@ -274,7 +274,7 @@ assert.equal(controls.at(-1)[2].r,1);
 assert.equal(controls.at(-1)[2].l,1);
 now+=61; d.touch(5,true); d.touch(5,false);
 const hit5=audioCalls.filter(c=>c[0]==="trigger").at(-1);
-assert.equal(hit5[2],99);
+assert.equal(hit5[2],126);
 assert.equal(hit5[4].oct,-1/12);
 // Moving to another pad changes the target, preserves each voice's velocity,
 // and suppresses unsupported reverb on voices 3/4.
@@ -283,7 +283,7 @@ d.rotate(2,1); assert.equal(audioCalls.length,0);
 d.rotate(0,1); d.rotate(3,1);
 assert(audioCalls.every(c=>c[1]===3 && c[3]===16));
 now+=61; d.touch(5,true); d.touch(5,false);
-assert.equal(audioCalls.filter(c=>c[0]==="trigger").at(-1)[2],99);
+assert.equal(audioCalls.filter(c=>c[0]==="trigger").at(-1)[2],126);
 for(let enc=0;enc<4;enc++) {
   d.press(enc); assert.equal(d.mode(),"wav"); assert.equal(d.voice(),enc+1); d.jump("draw");
 }
@@ -570,3 +570,84 @@ for(const width of [16,32]) {
 }
 setLayout(32);
 console.log('PASS: SWAP controls, 256-step exchange, metadata preservation, synth channels, no-op and navigation.');
+
+// Paint only replaces a foreign note whose mono voice already has a higher hit.
+stored.clear();
+const paintDevice=createDevice(matrix,{},[]);
+paintDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+function paintFixture(blocked=1,upper=blocked,probability=100,condition=1) {
+ const cells=Array.from({length:256*16},()=>({channel:0}));
+ cells[2]={channel:blocked,velocity:23,probability:60,condition:18,midiPitch:72};
+ if(upper)cells[8]={channel:upper,velocity:93,probability,condition,midiPitch:84};
+ paintDevice.importPatternCells(cells,120);
+}
+for(const mode of ['draw','single'])for(const gesture of ['click','drag','encoder']){
+ paintFixture();paintDevice.selectVoice(11);paintDevice.jump(mode);
+ const brush=mode==='single'?11:2;
+ const upperBefore=paintDevice.exportPatternCells()[8];
+ assert.equal(paintDevice.canReplaceAt(1,3),true);
+ if(gesture==='encoder'){paintDevice.moveCursor(1,3);paintDevice.press(3);}
+ else paintDevice.pointer(1,3,false,gesture==='click');
+ const painted=paintDevice.exportPatternCells();
+ assert.deepEqual(painted[2],{channel:brush,velocity:127,probability:100,condition:1,midiPitch:255},`${mode} ${gesture}`);
+ assert.deepEqual(painted[8],upperBefore,'the audible higher hit is unchanged');
+}
+for(const [blocked,upper,probability,condition] of [[1,0,100,1],[11,11,100,1],[13,13,99,1],[14,14,100,2]]) {
+ paintFixture(blocked,upper,probability,condition);paintDevice.selectVoice(2);paintDevice.jump('single');
+ const before=paintDevice.exportPatternCells();assert.equal(paintDevice.canReplaceAt(1,3),false);
+ paintDevice.pointer(1,3,false,false);assert.deepEqual(paintDevice.exportPatternCells(),before);
+}
+console.log('PASS: shadowed-note replacement via click, drag and encoder in DRAW/SINGLE, fresh metadata and audible-note protection.');
+// Right-hand mode must paint a shadowed blocker rather than toggle it off.
+stored.clear();const rightLook=Array(12).fill(0);rightLook[10]=1;
+stored.set('toern-web-eeprom',JSON.stringify({subPick:{look:rightLook}}));
+const rightPaint=createDevice(matrix,{},[]);
+rightPaint.start();now+=6000;frame(now);now+=6000;frame(now);
+const rightCells=Array.from({length:256*16},()=>({channel:0}));
+rightCells[2]={channel:1,velocity:100,probability:100,condition:1,midiPitch:255};
+rightCells[8]={...rightCells[2]};rightPaint.importPatternCells(rightCells,120);
+rightPaint.selectVoice(2);rightPaint.jump('single');rightPaint.moveCursor(1,3);rightPaint.press(3);
+assert.equal(rightPaint.exportPatternCells()[2].channel,2);
+assert.equal(rightPaint.exportPatternCells()[8].channel,1);
+console.log('PASS: right-hand encoder painting replaces a shadowed blocker without erasing.');
+
+// Pattern settings are opt-in; saving always captures the current sound state.
+{
+stored.clear();
+const pattDevice=createDevice(matrix,{},[]);
+pattDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+let pattSlot=1;
+function pattOpen(slot){
+ pattDevice.jump('menu');pattDevice.press(3);
+ assert.equal(pattDevice.mode(),'dat');
+ pattDevice.rotate(3,slot-pattSlot);pattSlot=slot;
+}
+function pattSave(slot){pattOpen(slot);pattDevice.press(1);return JSON.parse(stored.get('toern-web-patterns'))[slot];}
+const live=pattSave(1);
+const incoming=structuredClone(live);
+incoming.filt[1].reverb=31;incoming.chVol[1]=5;incoming.bpm=147;
+incoming.notes[0]=[14,127,100,1,57];
+stored.set('toern-web-patterns',JSON.stringify({1:live,2:incoming}));
+pattOpen(2);pattDevice.press(0);
+let saved=pattSave(3);
+assert.deepEqual(saved.filt,live.filt,'OFF preserves editable sound settings');
+assert.deepEqual(saved.chVol,live.chVol,'OFF preserves voice volumes');
+assert.deepEqual(saved.notes[0],incoming.notes[0]);assert.equal(saved.bpm,147);
+pattOpen(2);pattDevice.rotate(2,1);pattDevice.press(0);
+saved=pattSave(4);
+assert.deepEqual(saved.filt,incoming.filt,'clockwise enables stored sound settings');
+assert.deepEqual(saved.chVol,incoming.chVol);
+pattOpen(5);pattDevice.rotate(2,-1);pattDevice.press(1);
+saved=JSON.parse(stored.get('toern-web-patterns'))[5];
+assert.deepEqual(saved.filt,incoming.filt,'saving includes settings even with loading OFF');
+assert.deepEqual(saved.chVol,incoming.chVol);
+const {drawLoadSave}=await import('../standalone-tools/web-standalone/src/firmware/screens.js');
+for(const width of [16,32])for(const loadSoundSettings of [false,true]) {
+ setLayout(width);const red=[];
+ const m={light(x,y,c){if(c[0]===255&&c[1]===0&&c[2]===0)red.push([x,y]);},drawIndicator(){},setRing(){},drawNumber(){},drawText(){}};
+ drawLoadSave(m,{slot:1,slotExists:()=>true,loadSoundSettings});
+ const x=width===16?9:19;
+ assert.deepEqual(red,loadSoundSettings?[]:[[x,3],[x+2,3],[x+1,4],[x,5],[x+2,5]]);
+}
+console.log('PASS: default notes load preserves sounds; E3 enables settings, saving is unconditional, and the red X has five pixels starting at y=3 on both layouts.');
+}

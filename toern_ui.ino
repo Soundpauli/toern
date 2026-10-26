@@ -1631,13 +1631,23 @@ FLASHMEM void drawTriggers() {
       Note &cell = note[globalX][iy];
       int thisNote = cell.channel;
       if (thisNote <= 0) continue;
+      const bool shadowed = canPaintOverShadowed(globalX, iy, 0);
+      auto drawNoteColor = [&](CRGB color) {
+        if (shadowed) {
+          color.r = (unsigned int)color.r / 5u;
+          color.g = (unsigned int)color.g / 5u;
+          color.b = (unsigned int)color.b / 5u;
+        }
+        light(ix, iy, color);
+      };
+
 
       // Simple Notes View: draw notes at their voice Y position and clear original position.
       // Do it in one pass to avoid a second full scan of the grid.
       if (isSimpleNotes && !voiceGrid) {
         int voiceY = thisNote + 1;
         if (voiceY >= 1 && voiceY <= (int)maxY) {
-          light(ix, iy, CRGB(0, 0, 0));
+          drawNoteColor(CRGB(0, 0, 0));
           if (muteCache[thisNote]) {
             light(ix, voiceY, col_base[thisNote]);
           } else {
@@ -1687,20 +1697,20 @@ FLASHMEM void drawTriggers() {
             }
           }
 
-          light(ix, iy, noteColor);
+          drawNoteColor(noteColor);
         } else {
-          light(ix, iy, col[thisNote]);
+          drawNoteColor(col[thisNote]);
         }
 
         if (thisNote != (int)GLOB.currentChannel && currentMode == &singleMode) {
-          light(ix, iy, col_base[thisNote]);
+          drawNoteColor(col_base[thisNote]);
         }
       } else {
         // Muted: use dark white in single mode, otherwise use base color
         if (isSingle) {
-          light(ix, iy, UI_DIM_WHITE);  // Dark white for muted triggers in single mode
+          drawNoteColor(UI_DIM_WHITE);  // Dark white for muted triggers in single mode
         } else {
-          light(ix, iy, col_base[thisNote]);
+          drawNoteColor(col_base[thisNote]);
         }
       }
     }
@@ -1951,6 +1961,8 @@ void drawTimer() {
           srcStep = (notePage - 1) * maxX + timer;
         }
         int ch = note[srcStep][y].channel;
+        // Keep inaudible hits dim instead of flashing them with the playhead.
+        if (ch > 0 && canPaintOverShadowed(srcStep, y, 0)) continue;
         light(timer, y, CRGB(10, 0, 0));
 
         if (ch> 0) {
@@ -1995,6 +2007,18 @@ FLASHMEM static int countLabelX(const char *text) {
   return x;
 }
 
+FLASHMEM void drawFilterResetOverlay() {
+  const int cx = (int)((maxX + 1) / 2);
+  const int cy = (int)((maxY + 1) / 2);
+  for (int x = cx - 4; x <= cx + 5; ++x) {
+    for (int y = cy - 4; y <= cy + 3; ++y) light(x, y, CRGB::Black);
+  }
+  static const int8_t points[][2] = {
+    {-3,-1}, {-2,-2}, {-1,-3}, {0,-2}, {1,-1}, {2,0}, {3,1}, {4,2}
+  };
+  for (const auto &point : points) light(cx + point[0], cy + point[1], CRGB(0, 0, 255));
+}
+
 bool fillRequestOverlayVisible() {
   return fillRequestOverlayChannel >= 0
       && (int32_t)(fillRequestOverlayUntil - (uint32_t)millis()) > 0;
@@ -2003,7 +2027,7 @@ bool fillRequestOverlayVisible() {
 FLASHMEM void drawCopyArmedLabel() {
   if (!GLOB.activeCopy) return;
   if (currentMode != &draw && currentMode != &singleMode) return;
-  const char *label = "C+P";
+  const char *label = "c+p";
   const int x = countLabelX(label);
   const int y = ((int)maxY - 5) / 2 + 1;
   const int endX = min((int)maxX, x + countLabelWidth(label));

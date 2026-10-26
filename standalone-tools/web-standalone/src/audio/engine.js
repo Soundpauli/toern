@@ -104,24 +104,31 @@ export function createEngine() {
       const send = ch === 3 || ch === 4 ? null : ctx.createGain();
       input.connect(shaper);
       shaper.connect(amp);
-      amp.connect(hp);
-      hp.connect(lp);
-      lp.connect(dry);
+      const cutOutput = ctx.createGain();
+      const cutDry = ctx.createGain(), cutLP = ctx.createGain(), cutHP = ctx.createGain();
+      const neutral = ch >= 1 && ch <= 8;
+      cutDry.gain.value = neutral ? 1 : 0;
+      cutLP.gain.value = neutral ? 0 : 1;
+      cutHP.gain.value = 0;
+      amp.connect(cutDry); cutDry.connect(cutOutput);
+      amp.connect(lp); lp.connect(cutLP); cutLP.connect(cutOutput);
+      amp.connect(hp); hp.connect(cutHP); cutHP.connect(cutOutput);
+      cutOutput.connect(dry);
       dry.connect(pan);
       const delay = ctx.createDelay(4);
       const feedback = ctx.createGain();
       const delayWet = ctx.createGain();
       const voiceGain = ctx.createGain();
       feedback.gain.value = delayWet.gain.value = 0;
-      lp.connect(delay); delay.connect(feedback); feedback.connect(delay);
+      cutOutput.connect(delay); delay.connect(feedback); feedback.connect(delay);
       delay.connect(delayWet); delayWet.connect(pan);
       pan.connect(voiceGain); voiceGain.connect(master);
       if (send) {
         send.gain.value = 0;
-        lp.connect(send);
+        cutOutput.connect(send);
         send.connect(verb.input);
       }
-      chains[ch] = { input, shaper, amp, hp, lp, dry, pan, send, delay, feedback, delayWet, voiceGain, room: 0 };
+      chains[ch] = { input, shaper, amp, hp, lp, cutDry, cutLP, cutHP, dry, pan, send, delay, feedback, delayWet, voiceGain, room: 0 };
     }
     chains.verb = verb;
     return ctx;
@@ -147,6 +154,10 @@ export function createEngine() {
     const c = chains[ch];
     const now = ctx.currentTime;
     const q = mapf(filt.res || 0, 0, 32, 0.7, 5);
+    const bypass = ch >= 1 && ch <= 8 && filt.h >= 32 && !(filt.l > 0);
+    c.cutDry.gain.setTargetAtTime(bypass ? 1 : 0, now, 0.02);
+    c.cutLP.gain.setTargetAtTime(!bypass && !(filt.l > 0) ? 1 : 0, now, 0.02);
+    c.cutHP.gain.setTargetAtTime(filt.l > 0 ? 1 : 0, now, 0.02);
     if (filt.l > 0) {
       c.hp.frequency.setTargetAtTime(mapf(Math.max(1, filt.l), 1, 32, 40, 2500), now, 0.02);
       c.hp.Q.setTargetAtTime(q, now, 0.02);
@@ -258,17 +269,19 @@ export function createEngine() {
   const releasing = new Set();
   const sampleLive = {};
   const MAX_VOICES = 40;
-  const att = (env) => Math.max(0.001, ((32 - env.att) / 32) * 2);
-  function stopVoice(voice, when) {
-    if (!voice || (!live.has(voice) && !releasing.has(voice))) return;
+  const att = (env) => Math.max(0, ((32 - env.att) / 32) * 2);
+  function stopVoice(voice, when, seconds = voice?.release ?? 0) {
+    if (!voice || !live.has(voice)) return;
     live.delete(voice); releasing.add(voice);
     try {
       voice.g.gain.cancelScheduledValues(when);
-      voice.g.gain.setTargetAtTime(0.0001, when, 0.008);
-      voice.src.stop(when + 0.04);
+      voice.g.gain.setValueAtTime(voice.levelAt(when), when);
+      if (seconds > 0) voice.g.gain.linearRampToValueAtTime(0, when + seconds);
+      else voice.g.gain.setValueAtTime(0, when);
+      voice.src.stop(when + seconds + 1 / ctx.sampleRate);
     } catch { /* already stopped */ }
   }
-  function play(kind, velocity, when, seek, end, invert, dest, rate = 1, env = null, buffer = null, stealCh = 0, stretch = 11) {
+  function play(kind, velocity, when, seek, end, invert, dest, rate = 1, env = null, buffer = null, stealCh = 0, stretch = 11, inputPitch = null) {
     const srcBuf = stretchBuffer(buffer || buffers[kind] || buffers.kick, stretch);
     let buf = srcBuf;
     if (invert) {
@@ -283,7 +296,7 @@ export function createEngine() {
         reversed.set(srcBuf, buf);
       }
     }
-    if (stealCh) stopVoice(sampleLive[stealCh], when);
+    if (stealCh) stopVoice(sampleLive[stealCh], when, 64 / 44100);
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.setValueAtTime(rate, when);
@@ -291,24 +304,30 @@ export function createEngine() {
     const offset = (invert ? (100 - Math.min(100, end)) : Math.max(0, seek)) / 100 * buf.duration;
     const g = ctx.createGain();
     const peak = velocity / 127;
-    if (!env) g.gain.value = peak;
-    else {
-      const a = att(env);
-      const dec = env.dec / 32;
-      const sus = Math.max(0.0001, (env.sus / 32) * peak);
-      const rel = Math.max(0.005, env.rel / 32);
-      const gate = Math.max(a + dec, a + 0.005);
-      g.gain.setValueAtTime(0.0001, when);
-      g.gain.linearRampToValueAtTime(peak, when + a);
-      g.gain.linearRampToValueAtTime(sus, when + a + dec);
-      if (gate > a + dec + 0.0005) g.gain.setValueAtTime(sus, when + gate);
-      g.gain.linearRampToValueAtTime(0.0001, when + gate + rel);
+    const a = env ? att(env) : 0;
+    const dec = env ? Math.max(0, env.dec / 32) : 0;
+    const sus = env ? Math.max(0, Math.min(1, env.sus / 32)) * peak : peak;
+    const rel = env ? Math.max(0, env.rel / 32) : 0;
+    // Standard sample ADSR: sustain until Note Off or natural sample end.
+    // Neutral A=0/S=1 is unity from the very first PCM sample.
+    g.gain.setValueAtTime(a > 0 ? 0 : peak, when);
+    if (a > 0) g.gain.linearRampToValueAtTime(peak, when + a);
+    if (sus !== peak) {
+      if (dec > 0) g.gain.linearRampToValueAtTime(sus, when + a + dec);
+      else g.gain.setValueAtTime(sus, when + a);
     }
     src.connect(g);
     g.connect(dest);
-    src.start(when, offset, span / rate);
-    if (env) src.stop(when + Math.max(att(env) + env.dec / 32, att(env) + 0.005) + Math.max(0.005, env.rel / 32) + 0.02);
-    const voice = { src, g, ch: stealCh || 0 };
+    src.start(when, offset, span);
+    const voice = { src, g, ch: stealCh || 0, pitch: inputPitch, release: rel,
+      levelAt(time) {
+        const elapsed = time - when;
+        if (elapsed < 0) return 0;
+        if (a > 0 && elapsed < a) return peak * elapsed / a;
+        if (dec > 0 && elapsed < a + dec) return peak + (sus - peak) * (elapsed - a) / dec;
+        return sus;
+      },
+    };
     live.add(voice);
     if (stealCh) sampleLive[stealCh] = voice;
     src.onended = () => {
@@ -419,13 +438,13 @@ export function createEngine() {
       : (r - home);
     // wav.detune = fine semis (±1); wav.oct = octave shift (±2) from device.js wavOpts.
     const rate = 2 ** ((semis + (wav.detune || 0) + (wav.oct || 0) * 12) / 12);
-    play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch], ch, wav.stretch ?? 11);
+    play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch], ch, wav.stretch ?? 11, wav.inputPitch ?? null);
   }
 
   function preview(wav) {
     ensure();
     if (ctx.state === "suspended") ctx.resume();
-    play(KINDS[wav.index] || "kick", wav.velocity ?? 100, ctx.currentTime, wav.seek, wav.end, wav.inv, ctx.__preview, 1, wav.env, wav.buffer || null);
+    play(KINDS[wav.index] || "kick", wav.velocity ?? 127, ctx.currentTime, wav.seek, wav.end, wav.inv, ctx.__preview, 1, wav.env, wav.buffer || null);
   }
 
   let clickBuf = null;
@@ -453,6 +472,7 @@ export function createEngine() {
   function releaseChannel(ch, pitch) {
     if (!ctx) return;
     const when = ctx.currentTime;
+    for (const voice of [...live]) if (voice.ch === ch && (pitch == null || voice.pitch === pitch)) stopVoice(voice,when);
     for (const voice of synthLive) if (voice.ch === ch && (pitch == null || voice.pitch === pitch)) {
       voice.g.gain.cancelScheduledValues(when);
       voice.g.gain.setTargetAtTime(0.0001, when, 0.008);

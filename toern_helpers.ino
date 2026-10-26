@@ -850,11 +850,6 @@ FLASHMEM void buildSamplePath(int folderIdx, int fileIdx, char* out, size_t outS
 // Wrapper: load all saved SMP settings (parameters, filters, synths)
 // for every channel.
 FLASHMEM void loadSMPSettings() {
-  // Don't load settings if SMP_LOAD_SETTINGS is false
-  if (!SMP_LOAD_SETTINGS) {
-    return;
-  }
-  
   // CRITICAL FIX: Ensure channels 4-8 are always in sample mode (EFX=0)
   for (int ch = 4; ch <= 8; ch++) {
     SMP.filter_settings[ch][EFX] = 0;
@@ -1159,7 +1154,7 @@ void startFastRecord() {
   if (ch >= 0 && ch <= 8 && voices[ch] != nullptr) {
     voices[ch]->stop();  // stop reader before we overwrite sampled[ch]
   }
-  extern AudioEffectEnvelope *envelopes[];
+  extern EnvelopeControl *envelopes[];
   if (ch >= 0 && ch < 15 && envelopes[ch] != nullptr) {
     envelopes[ch]->noteOff();
   }
@@ -4138,7 +4133,7 @@ FLASHMEM void startNew() {
   
   // 2. RESET GLOBAL VARIABLES FIRST (before using GLOB.currentChannel)
   SMP.bpm = 100.0;
-  GLOB.vol = 100;  // 0-100 range, default to max
+  GLOB.vol = 80;  // 0-100 range, default MAIN volume
   GLOB.velocity = 10;
   GLOB.currentChannel = 1;  // Set this FIRST before using it
   GLOB.page = 1;
@@ -4171,7 +4166,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 14, 1);    // ctrlMode (VOL)
   EEPROM.write(EEPROM_DATA_START + 15, 30);   // lineOutLevelSetting
   EEPROM.write(EEPROM_DATA_START + 16, 8);    // lineInLevel
-  EEPROM.write(EEPROM_DATA_START + 17, 100);  // GLOB.vol
+  EEPROM.write(EEPROM_DATA_START + 17, 80);   // GLOB.vol
   EEPROM.write(EEPROM_DATA_START + 18, 0);    // cursorType
   EEPROM.write(EEPROM_DATA_START + 19, 0);    // showChannelNr
   EEPROM.write(EEPROM_DATA_START + 20, 0);    // previewTriggerMode

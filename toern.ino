@@ -1,6 +1,7 @@
 #include "src/toern_build_types.h"
 #include "toern_hardware.h"
 #include "src/toern_demo.h"
+#include "src/toern_grid_paint.h"
 #include "toern_touch_input.h"
 
 #define VERSION "v3.02"
@@ -228,22 +229,12 @@ extern void handleStart();
 #define GAIN_3 0.4  //0.25
 #define GAIN_4 0.8  //0.2; (increased to 0.8 for 64% total gain)
 
-// ---- Mix headroom (samples ch1-8) ----
-// These stages are where hard clipping/crackling happens if too hot:
-// - mixer1 sums ch1-4
-// - mixer2 sums ch5-8
-// - mixer_end sums mixer1 + mixer2 (+ synth + monitoring)
-//
-// Hard limit per bus: N * MIX_BUS_HEADROOM <= 1.0 (N simultaneous voices on that bank, each at
-// full internal level in phase — the theoretical "block" + max velocity case).
-// Eight voices total does NOT relax N: e.g. six voices can still be 4+2, so N is still 4 on one bus.
-//
-// We target typical use: at most 3 sample voices on ch1-4 at once AND at most 3 on ch5-8 (e.g. 3+3=6).
-// Then MIX_BUS_HEADROOM = 1/3 keeps each bus <= 1.0; mixer_end still needs 2 * MIX_END <= 1.0.
-// If you ever fire 4 samples on one bank at full level together, lower MIX_BUS_HEADROOM to 0.25f.
-#define MIX_BUS_HEADROOM (1.0f / 3.0f)  // max ~3 simultaneous sample voices per bank (ch1-4 / ch5-8)
-#define MIX_END_SAMPLES_GAIN 0.50f      // mixer_end: mixer1 + mixer2 (each bus can hit 1.0)
-#define MIX_END_SYNTH_GAIN 0.60f    // mixer_end input gain for mixersynth_end
+// Sample banks, synth bus, final sum and output routing use wide summing +
+// 16-sample peak limiting. Unity no longer includes fixed bank/master cuts.
+// Multiple voices are limited only when their actual combined peak exceeds 0 dBFS.
+#define MIX_BUS_HEADROOM 1.0f
+#define MIX_END_SAMPLES_GAIN 1.0f
+#define MIX_END_SYNTH_GAIN 3.60f  // same +15.56 dB lift as samples, retaining their relative balance
 // ch11 poly: SmixerL4/R4 default 1.0×3 voices wraps (clicks). 0.55 keeps chords under 1.0.
 // synthmixer11 0.20 made single notes much quieter than ch13/14; GAIN SYN then clipped the bus.
 #define CH11_POLY_SUM_GAIN 0.55f
@@ -260,7 +251,7 @@ extern void handleStart();
 #define EEPROM_MIX_GAIN_ALL 41
 
 #define NUM_ENCODERS 4
-#define defaultVelocity 100
+#define defaultVelocity 127
 #define FOLDER_MAX 10
 
 #define maxPages 16
@@ -409,6 +400,7 @@ void drawInputGainOverlay(int gain, int maxGain);
 void drawChannelNrOverlay(int channelNum, int channelIdx);
 void drawPageNrOverlay(int pageNum);
 void drawSampleLoadOverlay(uint8_t progressPercent);
+void drawFilterResetOverlay();
 bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress = false);
 void copySampleToSamplepack0(unsigned int channel, bool showLoadProgress = false);
 void requestDeferredSampleLoadAutosave();
@@ -546,7 +538,7 @@ static bool bootFullResetRequested = false;  // Touch1 held 3s at power-on → F
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
-bool SMP_LOAD_SETTINGS = true;  // Whether to load SMP settings when loading tracks
+bool SMP_LOAD_SETTINGS = false;  // Manual pattern loads keep current sound settings by default.
 uint8_t lineOutLevelSetting = 30;
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
@@ -774,6 +766,7 @@ static unsigned long channelNrOverlayUntil = 0;
 static int channelNrOverlayChannel = 0;
 static bool pageNrOverlayActive = false;
 static unsigned long pageNrOverlayUntil = 0;
+static unsigned long filterResetOverlayUntil = 0;
 static int pageNrOverlayPage = 0;
 static const int DEFAULT_CHANNEL_VOLUME = 16;  // 100% of CTRL=VOL (0–16)
 
@@ -1007,6 +1000,9 @@ volatile uint8_t fillActiveMidiPitch = NOTE_MIDI_PITCH_NONE;
 unsigned int lastPage = 1;
 int editpage = 1;
 EXTMEM Note note[maxlen + 1][maxY + 1] = {};
+static bool canPaintOverShadowed(unsigned int step, unsigned int row, unsigned int brush) {
+  return toern_grid_paint::canReplaceShadowed(note, step, row, brush, MAX_STEPS, maxY);
+}
 EXTMEM Note tmp[maxlen + 1][maxY + 1] = {};
 EXTMEM Note original[maxlen + 1][maxY + 1] = {};
 EXTMEM Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1] = {};
@@ -1066,7 +1062,7 @@ Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0,
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // FILE UI encoder 3: 0=NEW, 1=A (autosaved.txt), 2..1000 = 1.txt..999.txt
-Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 1000 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
+Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 1000 }, { 1, 1, 0, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // PSET: filter-page presets for ch11/13/14. Enc4=slot 1..99, Enc1=load, Enc2=save (PATT-like).
 Mode loadSavePreset = { "LOADSAVE_PRESET", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
@@ -1684,7 +1680,10 @@ void setSampleTimeStretch(uint8_t channel, int value) {
   voices[channel]->setTimeStretchAmount(sampleTimeStretch[channel]);
 }
 
-AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, nullptr, &envelope13, &envelope14 };
+EnvelopeControl envelopeControls[15] = {envelope0,envelope1,envelope2,envelope3,envelope4,envelope5,envelope6,envelope7,envelope8,{}, {},envelope11,{},envelope13,envelope14};
+EnvelopeControl *envelopes[15] = {&envelopeControls[0],&envelopeControls[1],&envelopeControls[2],&envelopeControls[3],&envelopeControls[4],&envelopeControls[5],&envelopeControls[6],&envelopeControls[7],&envelopeControls[8],nullptr,nullptr,&envelopeControls[11],nullptr,&envelopeControls[13],&envelopeControls[14]};
+AudioSampleReader *sampleReaders[9] = {nullptr,&sound1,&sound2,&sound3,&sound4,&sound5,&sound6,&sound7,&sound8};
+AudioSampleEnvelope *sampleEnvelopes[9] = {nullptr,&envelope1,&envelope2,&envelope3,&envelope4,&envelope5,&envelope6,&envelope7,&envelope8};
 AudioAmplifier *amps[15] = { nullptr, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, &amp7, &amp8, nullptr, nullptr, &amp11, nullptr, &amp13, &amp14 };
 AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, nullptr, &filter13, &filter14 };
 AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, nullptr, &filtermixer13, &filtermixer14 };
@@ -1845,7 +1844,7 @@ AudioMixer4 *Smixer2[3] = { &Smixer2_0, &Smixer2_1, &Smixer2_2 };
 /**/
 
 void allOff() {
-  for (AudioEffectEnvelope *envelope : envelopes) {
+  for (EnvelopeControl *envelope : envelopes) {
     if (!envelope) continue;
     envelope->noteOff();
   }
@@ -2195,7 +2194,7 @@ FLASHMEM void switchMode(Mode *newMode) {
   }
 
   if (currentMode == &recordMode && newMode != &recordMode) {
-    extern AudioMixer4 mixer_end;
+    extern AudioMixer4Limited mixer_end;
     mixer_end.gain(3, 0.0f);
   }
 
@@ -3313,6 +3312,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     // Walk every filter page for this voice (RES / WAVE / LFO / ARP / INST included).
     extern void setAllFilterPagesDefaultValues(int ch);
     setAllFilterPagesDefaultValues((int)GLOB.currentChannel);
+    filterResetOverlayUntil = millis() + 800;
   }
 
   if (currentMode == &filterMode && match_buttons(currentButtonStates, 2, 0, 0, 0) && was_buttons_0000(oldButtons)) {  // "2000" - reset current filter page only
@@ -3504,7 +3504,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   if ((currentMode == &draw || currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 1) && !preventPaintUnpaint) {  // "0001"
     if (drawMode == 1 || imageMode) {
       const unsigned int step = cursorNoteStep();
-      if (note[step][GLOB.y].channel == 0 || imageMode) {
+      if (note[step][GLOB.y].channel == 0 || imageMode || canPaintOverShadowed(step, GLOB.y, GLOB.currentChannel)) {
         // Empty → paint; IMG occupied → cycle voice/color
         freshPaint = true;
         paint();
@@ -3526,7 +3526,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         preventPaintUnpaint = false;  // Reset flag when paintMode is activated
       } else {
         // R mode: activate paintMode or unpaintMode based on the note on screen
-        if (note[cursorNoteStep()][GLOB.y].channel == 0 || imageMode) {
+        if (note[cursorNoteStep()][GLOB.y].channel == 0 || imageMode || canPaintOverShadowed(cursorNoteStep(), GLOB.y, GLOB.currentChannel)) {
           // Empty, or IMG (cycle/paint; erase via unpaint elsewhere / L+R enc0)
           paintMode = true;
           unpaintMode = false;
@@ -3681,7 +3681,7 @@ FLASHMEM void initSoundChip() {
   // GLOB, micGain, lineInLevel, and lineOutLevelSetting are already in scope as globals
 
   // Apply initial volume (will be fully applied later via applyAudioSettingsFromGlobals)
-  float vol = GLOB.vol / 10.0f;
+  float vol = GLOB.vol <= 10 ? GLOB.vol / 10.0f : GLOB.vol / 100.0f;
   vol = constrain(vol, 0.0f, 1.0f);
   sgtl5000_1.volume(vol);
 
@@ -3718,15 +3718,15 @@ FLASHMEM void initSamples() {
   //preview
   _samplers[0].addVoice(sound0, mixer0, 1, envelope0);
   //voice 1-
-  _samplers[1].addVoice(sound1, mixer1, 0, envelope1);
-  _samplers[2].addVoice(sound2, mixer1, 1, envelope2);
-  _samplers[3].addVoice(sound3, mixer1, 2, envelope3);
-  _samplers[4].addVoice(sound4, mixer1, 3, envelope4);
+  _samplers[1].addVoice(sound1);
+  _samplers[2].addVoice(sound2);
+  _samplers[3].addVoice(sound3);
+  _samplers[4].addVoice(sound4);
 
-  _samplers[5].addVoice(sound5, mixer2, 0, envelope5);
-  _samplers[6].addVoice(sound6, mixer2, 1, envelope6);
-  _samplers[7].addVoice(sound7, mixer2, 2, envelope7);
-  _samplers[8].addVoice(sound8, mixer2, 3, envelope8);
+  _samplers[5].addVoice(sound5);
+  _samplers[6].addVoice(sound6);
+  _samplers[7].addVoice(sound7);
+  _samplers[8].addVoice(sound8);
 
   synthmixer11.gain(0, CH11_SYNTHMIX_GAIN);
   synthmixer11.gain(1, 0.0f);
@@ -4104,6 +4104,14 @@ static float playAmpForVoice(int ch) {
 void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool retrigger) {
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
+  if (ch >= 1 && sampleEnvelopes[ch]) {
+    if (on && velocity) {
+      int16_t tail[toern_audio::SampleEnvelopeState::tailSamples] = {};
+      const unsigned n = sampleReaders[ch] ? sampleReaders[ch]->snapshotTail(tail, toern_audio::SampleEnvelopeState::tailSamples) : 0;
+      sampleEnvelopes[ch]->captureTail(tail, n);
+      sampleEnvelopes[ch]->noteOn();
+    } else sampleEnvelopes[ch]->noteOff();
+  }
   _samplers[ch].noteEvent(pitch, velocity, on, retrigger);
 }
 
@@ -4603,7 +4611,7 @@ FLASHMEM void setup() {
   // Support both legacy (0-10) and new (0-100) ranges
   GLOB.vol = (int8_t)EEPROM.read(EEPROM_DATA_START + 17);
   if (GLOB.vol <= 0 || GLOB.vol > 100) {
-    GLOB.vol = 100;  // Default to 100 if invalid or zero
+    GLOB.vol = 80;  // Default MAIN volume if invalid or zero
   } else if (GLOB.vol > 10 && GLOB.vol <= 100) {
     // New range value (11-100): use as-is
   } else {
@@ -4832,7 +4840,7 @@ FLASHMEM void setup() {
 FLASHMEM void initGlobalVars() {
   GLOB.singleMode = false;
   GLOB.currentChannel = 1;
-  GLOB.vol = 10;
+  GLOB.vol = 80;
   GLOB.velocity = 10;
   GLOB.copyChannel = 0;
   GLOB.page = 1;
@@ -5340,9 +5348,10 @@ FLASHMEM void checkEncoders() {
                 if (voiceMode) updateLastPage();
               }
             }
-          } else if (!isChildVoiceDisabled((int)GLOB.currentChannel)) {
-            // Only set probability to 100% if slot was empty (preserve existing probability)
-            if (existingCh == 0) {
+          } else if (!isChildVoiceDisabled((int)GLOB.currentChannel) &&
+                     (existingCh == 0 || existingCh == GLOB.currentChannel || canPaintOverShadowed(paintStep, GLOB.y, GLOB.currentChannel))) {
+            // A replacement is a new note; keep metadata only for the same voice.
+            if (existingCh != GLOB.currentChannel) {
               note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
               note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
               note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
@@ -5397,9 +5406,9 @@ FLASHMEM void checkEncoders() {
             }
           }
         } else if (!isChildVoiceDisabled((int)GLOB.currentChannel) &&
-                   (existingCh == 0 || existingCh == GLOB.currentChannel)) {
-          // Never overwrite notes belonging to other voices (same rule as single-tap paint).
-          if (existingCh == 0) {
+                   (existingCh == 0 || existingCh == GLOB.currentChannel || canPaintOverShadowed(paintStep, GLOB.y, GLOB.currentChannel))) {
+          // Protect audible blockers, matching single-tap paint.
+          if (existingCh != GLOB.currentChannel) {
             note[paintStep][GLOB.y].probability = 100;  // Default 100% probability for new notes
             note[paintStep][GLOB.y].condition = 1;      // Default condition: 1 (every loop)
             note[paintStep][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
@@ -6611,7 +6620,7 @@ void showDoRecord() {
   }
 
   // === DIRECT INPUT PASS-THROUGH WHEN PREVIEW IS PLAYING AND CURSOR AT Y==1 ===
-  extern AudioMixer4 mixer_end;
+  extern AudioMixer4Limited mixer_end;
   extern AudioAmplifier audioInputAmp;
   static bool directPassThroughActive = false;
 
@@ -7418,6 +7427,11 @@ void loop() {
         }
       }
 
+      if (currentMode == &filterMode
+          && (int32_t)(filterResetOverlayUntil - millis()) > 0) {
+        drawFilterResetOverlay();
+      }
+
       // Yield once per frame after all drawing operations complete (replaces per-pixel yields)
       // This gives the system a chance to process other tasks without causing jitter
       yield();
@@ -7520,7 +7534,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   }
 
   if (shouldMonitor) {
-    extern AudioMixer4 mixer_end;
+    extern AudioMixer4Limited mixer_end;
     extern AudioAmplifier audioInputAmp;
     extern int recMode;
 
@@ -7530,7 +7544,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     drawModeInputMonitorActive = true;
   } else if (drawModeInputMonitorActive && currentMode->name != "RECORD_MODE") {
     // Disable monitoring when conditions are no longer met
-    extern AudioMixer4 mixer_end;
+    extern AudioMixer4Limited mixer_end;
     mixer_end.gain(3, 0.0f);
     drawModeInputMonitorActive = false;
   }
@@ -7581,7 +7595,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   if (drawMode == 0) {
     // L+R mode: encoder(3) paints, encoder(0) unpaints.
     // IMG short-press paint/cycle is handled in checkMode via "0001" (avoid double-fire here).
-    if (!imageMode && note[cursorNoteStep()][GLOB.y].channel == 0
+    if (!imageMode && (note[cursorNoteStep()][GLOB.y].channel == 0 || canPaintOverShadowed(cursorNoteStep(), GLOB.y, GLOB.currentChannel))
         && (currentMode == &draw || currentMode == &singleMode) && pressed[3] == true && !preventPaintUnpaint) {
       paintMode = false;
       freshPaint = true;
@@ -9910,7 +9924,7 @@ void paint() {
           note[current_x][current_y].velocity = defaultVelocity;
           GLOB.currentChannel = ch;
         }
-      } else if (!channelBlocked && existingCh == 0) {  // Only paint if empty
+      } else if (!channelBlocked && (existingCh == 0 || canPaintOverShadowed(current_x, current_y, GLOB.currentChannel))) {  // Empty or inaudible blocker
         note[current_x][current_y].channel = GLOB.currentChannel;
         note[current_x][current_y].velocity = defaultVelocity;
         note[current_x][current_y].probability = 100;
@@ -9935,7 +9949,7 @@ void paint() {
           note[current_x][current_y].velocity = defaultVelocity;
           GLOB.currentChannel = ch;
         }
-      } else if (!channelBlocked && (existingCh == 0 || existingCh == GLOB.currentChannel)) {
+      } else if (!channelBlocked && (existingCh == 0 || existingCh == GLOB.currentChannel || canPaintOverShadowed(current_x, current_y, GLOB.currentChannel))) {
         note[current_x][current_y].channel = GLOB.currentChannel;
         note[current_x][current_y].velocity = defaultVelocity;
         note[current_x][current_y].probability = 100;
@@ -10500,7 +10514,7 @@ FLASHMEM void showLoadSave() {
     drawText("+", 4, 6, UI_WHITE);
   }
 
-  // FILE: M[G] load | M[R] save (disabled on NEW/autosave) | C[W] settings | L[X]
+  // FILE: load | save | red X = keep current sound settings | exit.
   // Matrix indicators only — rings via cached writes (showLoadSave runs every loop).
   auto setFileRGB = [&](int enc, uint32_t rgb) {
     if (enc < 0 || enc > 3) return;
@@ -10515,6 +10529,15 @@ FLASHMEM void showLoadSave() {
     CRGB maxB = normalizeToMaxBrightness(c);
     setFileRGB(encoderNum - 1, (uint32_t)maxB.r << 16 | (uint32_t)maxB.g << 8 | maxB.b);
   };
+  auto soundSettingsInd = [&]() {
+    setFileRGB(2, SMP_LOAD_SETTINGS ? 0x000000 : 0xFF0000);
+    if (SMP_LOAD_SETTINGS) return;
+    int x1, x2, x3;
+    getIndicatorXPositions(3, x1, x2, x3);
+    light(x1, 3, UI_RED); light(x3, 3, UI_RED);
+    light(x2, 4, UI_RED);
+    light(x1, 5, UI_RED); light(x3, 5, UI_RED);
+  };
 
   matrixInd('L', 'X', 4);
 
@@ -10527,20 +10550,13 @@ FLASHMEM void showLoadSave() {
     // Load-only autosave slot: green load if present. Encoder 2 does nothing here.
     matrixInd('M', txtExists ? 'G' : 'E', 1);
     setFileRGB(1, 0x000000);
-    if (SMP_LOAD_SETTINGS && txtExists) {
-      matrixInd('C', 'W', 3);
-    } else {
-      setFileRGB(2, 0x000000);
-    }
+    if (txtExists) soundSettingsInd();
+    else setFileRGB(2, 0x000000);
     drawText("A", 11, 11, txtExists ? UI_BRIGHT_GREEN : UI_BLUE);
   } else if (txtExists) {
     matrixInd('M', 'G', 1);
     matrixInd('M', 'D', 2);
-    if (SMP_LOAD_SETTINGS) {
-      matrixInd('C', 'W', 3);
-    } else {
-      setFileRGB(2, 0x000000);
-    }
+    soundSettingsInd();
     drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
   } else {
     matrixInd('M', 'E', 1);
