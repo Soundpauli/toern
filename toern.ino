@@ -2994,6 +2994,11 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     }
   }
 
+  if (currentMode == &menu && match_buttons(currentButtonStates, 0, 0, 1, 0)) {
+    extern int getCurrentMenuMainSetting();
+    if (getCurrentMenuMainSetting() == 67) { switchMenu(67); return; }
+  }
+
   if (currentMode == &menu && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     extern bool inEtcSubmenu;
     extern int getCurrentMenuMainSetting();
@@ -10001,6 +10006,29 @@ void paint() {
   }
 
   // Display update is handled by the main loop frame presenter (FastLEDshow()).
+}
+
+// Swap channel ownership across the whole pattern through the existing clipboard.
+FLASHMEM void swapChannelNotes(uint8_t from, uint8_t to) {
+  const bool validFrom = (from >= 1 && from <= 8) || from == 11 || from == 13 || from == 14;
+  const bool validTo = (to >= 1 && to <= 8) || to == 11 || to == 13 || to == 14;
+  if (!validFrom || !validTo || from == to) return;
+  {
+    toern_audio::StateGuard guard;
+    for (unsigned int x = 1; x <= MAX_STEPS; ++x)
+      for (unsigned int y = 1; y <= maxY; ++y) tmp[x][y] = note[x][y];
+    for (unsigned int x = 1; x <= MAX_STEPS; ++x) {
+      for (unsigned int y = 1; y <= maxY; ++y) {
+        const uint8_t ch = tmp[x][y].channel;
+        if (ch != from && ch != to) continue;
+        note[x][y] = tmp[x][y];
+        note[x][y].channel = ch == from ? to : from;
+      }
+    }
+    GLOB.activeCopy = false;
+    GLOB.copyChannel = 0;
+  }
+  updateLastPage();
 }
 
 void toggleCopyPaste() {

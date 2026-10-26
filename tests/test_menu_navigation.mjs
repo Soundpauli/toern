@@ -197,7 +197,7 @@ assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["SONG", 2, 10]]);
 textDraws.length = 0;
 litPixels = 0;
 drawSubmenu(matrix, { mode: "etc", subIndex: 3 }, now);
-assert.equal(litPixels, 5); // ADV has only the five ETC navigation dots.
+assert.equal(litPixels, 6); // ETC includes SWAP.
 assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["ADV", 2, 10]]);
 litPixels = 0;
 drawMenu(matrix, { menuIndex: 8 });
@@ -517,3 +517,34 @@ assert.equal(normalModeDevice.menuSummary().detail,'VMOD: OFF');
 normalModeDevice.rotate(2,1);
 assert.equal(normalModeDevice.menuSummary().detail,'VMOD: ON','VMOD can still be enabled explicitly');
 console.log('PASS: VMOD starts off after saved ON and remains editable.');
+
+// SWAP uses the same controls and whole-pattern clipboard semantics as firmware.
+stored.clear();
+const swapDevice=createDevice(matrix,{},[]);
+swapDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+const swapCells=Array.from({length:256*16},(_,i)=>({channel:[1,11,13,14,2,0][i%6],velocity:1+i%127,probability:i%101,condition:1+i%22,midiPitch:[0,60,127,255][i%4]}));
+swapDevice.importPatternCells(swapCells,120);
+const original=swapDevice.exportPatternCells();
+swapDevice.jump('menu');for(let i=0;i<9;i++)swapDevice.rotate(3,1);
+swapDevice.press(3);for(let i=0;i<5;i++)swapDevice.rotate(3,1);
+assert.equal(swapDevice.menuSummary().detail,'SWAP: 1<>11');
+swapDevice.press(2);
+assert.deepEqual(swapDevice.exportPatternCells(),original.map(n=>({...n,channel:n.channel===1?11:n.channel===11?1:n.channel})));
+swapDevice.press(3);assert.deepEqual(swapDevice.exportPatternCells(),original,'a second swap restores every note and metadata');
+for(let i=0;i<9;i++)swapDevice.rotate(0,1); // A=13
+swapDevice.rotate(1,1);swapDevice.rotate(1,1); // B=14
+assert.equal(swapDevice.menuSummary().detail,'SWAP: 13<>14');
+swapDevice.press(3);
+assert.deepEqual(swapDevice.exportPatternCells(),original.map(n=>({...n,channel:n.channel===13?14:n.channel===14?13:n.channel})));
+const afterSwap=swapDevice.exportPatternCells();
+swapDevice.rotate(0,1);swapDevice.press(2);
+assert.deepEqual(swapDevice.exportPatternCells(),afterSwap,'equal channels do nothing');
+swapDevice.rotate(3,-1);assert.equal(swapDevice.subIndex(),4,'encoder 4 leaves SWAP');
+for(const width of [16,32]) {
+ setLayout(width);const text=[];
+ drawSubmenu({light(){},drawLargeCustom(){},drawIndicator(){},drawText:(...a)=>text.push(a)},{mode:'etc',subIndex:5,swapFrom:13,swapTo:14,swapAt:0},now);
+ assert.deepEqual(text.slice(0,3).map(a=>a[0]),['SWAP','13','14']);
+ assert.equal(text[2][1],width===32?24:10);
+}
+setLayout(32);
+console.log('PASS: SWAP controls, 256-step exchange, metadata preservation, synth channels, no-op and navigation.');

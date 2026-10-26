@@ -149,6 +149,7 @@ export function createDevice(matrix, statusEl, rings) {
     flow: true, voiceMode: false, fireVoice: 0, fireLevel: 8, fireSize: 1, fireGravity: 0, fireColor: 8, fireFocus: 0, voiceLen: Array(16).fill(0), voiceMask: Array(16).fill(0), voicePages: 1,
     voiceLoop: Array(16).fill(1), voiceOffset: Array(16).fill(0), voiceEdit: Array(16).fill(0),
     pmode: 0, ctrlVol: true, prevMode: 0, drawR: false, cursorType: 0,
+    swapFrom: 1, swapTo: 11, swapAt: 0,
     scheme: 0, childLock: false, copyArmed: false, solo: false, soloSaved: null, soloArrow: "", soloArrowAt: 0,
     volBar: 0, volBarAt: 0, chVol,
     muteMask: 0x0006, muteSel: 1, fullMute: false, fullMuteSaved: null,
@@ -462,6 +463,19 @@ export function createDevice(matrix, statusEl, rings) {
       note[x][y].channel = 0;
     }
     queueAutosave();
+  }
+  function swapChannels(from, to) {
+    if (from === to || !SOUND_CH.has(from) || !SOUND_CH.has(to)) return;
+    // Reuse copy/paste storage; snapshot first so both directions see originals.
+    clip = [];
+    for (let x=1;x<=STEPS;x++) for(let y=1;y<=ROWS;y++) clip.push({...note[x][y]});
+    let i=0;
+    for (let x=1;x<=STEPS;x++) for(let y=1;y<=ROWS;y++) {
+      const src=clip[i++];
+      if (src.channel===from || src.channel===to) Object.assign(note[x][y],src,{channel:src.channel===from?to:from});
+    }
+    s.copyArmed=false; clipCh=0; s.swapAt=performance.now();
+    refreshVoiceLens(); queueAutosave();
   }
   function toggleCopy() {
     const base = (s.GLOB.edit - 1) * COLS;
@@ -1165,6 +1179,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function subValue(mode, index) {
+    if (mode === "etc" && SUBS.etc[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
     if (mode === "mode" && SUBS.mode[index] === "DEMO") return { text: "GO" };
     if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
@@ -1475,6 +1490,14 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "menu" && enc === 3) s.menuIndex = clamp(s.menuIndex + dir, 0, MENU_PAGES.length - 1);
+    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && enc !== 3) {
+      if (enc===0 || enc===1) {
+        const choices=[...SOUND_CH], key=enc===0?"swapFrom":"swapTo";
+        s[key]=choices[clamp(choices.indexOf(s[key])+dir,0,choices.length-1)];
+        s.swapAt=0;
+      }
+      return;
+    }
     const { mode: pageMode, index: pageIndex } = resolveSubPage(s.mode, s.subIndex);
     if (pageMode === "look" && pageIndex === 11 && enc === 1) {
       s.muteSel = clamp(s.muteSel + dir, 1, 16);
@@ -1831,6 +1854,9 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "song" && enc === 0) song[s.songPos - 1] = 0;
     if (s.mode === "song" && (enc === 1 || enc === 3)) song[s.songPos - 1] = s.songPattern;
     if (s.mode === "song" && enc === 2) toggleSong();
+    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (enc===2 || enc===3)) {
+      swapChannels(s.swapFrom,s.swapTo); return;
+    }
     const slot = resolveSubPage(s.mode, s.subIndex);
     if (s.mode === "etc" && s.subIndex === 3 && enc === 3) { s.mode = "adv"; s.subIndex = 0; return; }
     if (s.mode === "mode" && SUBS.mode[s.subIndex] === "DEMO" && enc === 3) { startDemo(); return; }

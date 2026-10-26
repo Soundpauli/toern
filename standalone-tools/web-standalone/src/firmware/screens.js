@@ -46,7 +46,7 @@ export const SUBS = {
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PQ-I", "PQ-O", "TRIG", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "SPKR"],
   mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO", "DEMO"],
-  etc: ["INFO", "SCON", "BATT", "ADV", "RSET"],
+  etc: ["INFO", "SCON", "BATT", "ADV", "RSET", "SWAP"],
   adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE", "2-CH", "USBP", "HFC"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
@@ -689,6 +689,17 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     drawLength(matrix, s, 8, true);
     matrix.drawLargeCustom(genre.color, 3);
     matrix.drawIndicator("L", "V", 4);
+    return;
+  }
+  if (s.mode === "etc" && name === "SWAP") {
+    matrix.drawText(s.swapAt && now-s.swapAt<600 ? "OK" : "SWAP", 2, 10, parent);
+    matrix.drawText(String(s.swapFrom), 1, 3, COL[s.swapFrom]);
+    matrix.drawText(String(s.swapTo), COLS >= 24 ? 24 : 10, 3, COL[s.swapTo]);
+    if (COLS >= 24) matrix.drawText("<>",12,3,UI_WHITE);
+    else { matrix.light(8,4,UI_WHITE); matrix.light(9,4,UI_WHITE); }
+    matrix.drawLargeCustom(COL[s.swapFrom],1);
+    matrix.drawLargeCustom(COL[s.swapTo],2);
+    matrix.drawIndicator("L",s.swapFrom===s.swapTo?"R":"G",3);
     return;
   }
   const { mode: pageMode, index: pageIndex } = resolveSubPage(s.mode, s.subIndex);

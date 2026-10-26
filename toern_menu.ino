@@ -4,7 +4,7 @@
 #define RECS_PAGES_COUNT 6
 #define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 5
-#define ETC_PAGES_COUNT 5
+#define ETC_PAGES_COUNT 6
 #define MODE_PAGES_COUNT 11
 #define ADV_PAGES_COUNT 10
 
@@ -167,7 +167,8 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"SD", 49, false, nullptr},
   {"BATT", 42, false, nullptr},
   {"ADV", 62, false, nullptr},
-  {"RSET", 16, true, "MODE"}
+  {"RSET", 16, true, "MODE"},
+  {"SWAP", 67, false, nullptr}
 };
 MenuPage modePages[MODE_PAGES_COUNT] = {
   {"FLOW", 10, false, nullptr},
@@ -213,6 +214,12 @@ static int activeSystemPageCount() {
 int systemMenuParentPage() {
   return currentSystemMenuGroup == SystemMenuGroup::Mode ? 8 : 9;
 }
+
+// SWAP uses playable voice IDs; the existing tmp copy/paste buffer is reused.
+static const uint8_t swapVoices[] = {1,2,3,4,5,6,7,8,11,13,14};
+static uint8_t swapFromChoice = 0, swapToChoice = 8;
+static unsigned long swapLastAt = 0;
+extern void swapChannelNotes(uint8_t from, uint8_t to);
 
 // --- INFO page animation state ---
 static bool infoPageFirstEnter = true;
@@ -2821,6 +2828,22 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuIndicator('L', touchyEnabled ? 'G' : 'R', 3);
       break;
     }
+    case 67: {
+      const uint8_t from = swapVoices[swapFromChoice], to = swapVoices[swapToChoice];
+      drawMenuText(swapLastAt ? "OK" : "SWAP", 2, 10, currentMenuParentTextColor());
+      drawMenuValue("", 1, 3, UI_WHITE);
+      char value[4];
+      snprintf(value, sizeof(value), "%u", from);
+      drawMenuText(value, 1, 3, col[from]);
+      snprintf(value, sizeof(value), "%u", to);
+      drawMenuText(value, maxX >= 24 ? 24 : 10, 3, col[to]);
+      if (maxX >= 24) drawMenuText("<>", 12, 3, UI_WHITE);
+      else { light(8, 4, UI_WHITE); light(9, 4, UI_WHITE); }
+      drawLargeIndicatorCustom(col[from], 1);
+      drawLargeIndicatorCustom(col[to], 2);
+      drawMenuIndicator('L', from == to ? 'R' : 'G', 3);
+      break;
+    }
     case 66: {
       drawMenuText("DEMO", 2, 10, currentMenuParentTextColor());
       drawMenuValue("GO", 2, 3, UI_GREEN);
@@ -3205,7 +3228,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     lastStereoCh = -1;
     infoPageFirstEnter = true;
     lastPongSpeed = -1;
-    if (lastSetting == 50 || lastSetting == 53 || lastSetting == 55) {
+    if (lastSetting == 50 || lastSetting == 53 || lastSetting == 55 || lastSetting == 67) {
       extern uint8_t fireFocus;
       if (lastSetting == 55) fireFocus = 0;
       Encoder[0].writeMin((int32_t)1);
@@ -3234,6 +3257,25 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   };
 
   switch (setting) {
+    case 67: {
+      if (menuFirstEnter) {
+        Encoder[0].writeMin((int32_t)0); Encoder[0].writeMax((int32_t)10);
+        Encoder[1].writeMin((int32_t)0); Encoder[1].writeMax((int32_t)10);
+        Encoder[0].writeCounter((int32_t)swapFromChoice);
+        Encoder[1].writeCounter((int32_t)swapToChoice);
+        currentMode->pos[0] = swapFromChoice; currentMode->pos[1] = swapToChoice;
+        swapLastAt = 0; menuFirstEnter = false;
+      }
+      const uint8_t from = constrain((int)currentMode->pos[0], 0, 10);
+      const uint8_t to = constrain((int)currentMode->pos[1], 0, 10);
+      if (from != swapFromChoice || to != swapToChoice) {
+        swapFromChoice = from; swapToChoice = to; swapLastAt = 0;
+        redrawMain(setting);
+      } else if (swapLastAt && millis() - swapLastAt >= 600) {
+        swapLastAt = 0; redrawMain(setting);
+      }
+      break;
+    }
     case 4: { // INPT - MIC/LINE via encoder 2 rotation
       static int lastRecModeEnc = -1;
       int encVal = (recMode == 1) ? 0 : 1;  // 0=MIC, 1=LINE
@@ -4913,6 +4955,13 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
 
 FLASHMEM void switchMenu(int menuPosition){
    switch (menuPosition) {
+      case 67:
+        if (swapFromChoice != swapToChoice) {
+          swapChannelNotes(swapVoices[swapFromChoice], swapVoices[swapToChoice]);
+          swapLastAt = millis();
+          menuRequestFullRedraw();
+        }
+        break;
       case 66:
         startDemoAnimation();
         break;
