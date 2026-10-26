@@ -2,7 +2,7 @@ import { TOUCHY_COLORS } from "./firmware/screens.js";
 import { COL } from "./firmware/const.js";
 import { createMatrix } from "./firmware/matrix.js";
 import { createDevice } from "./firmware/device.js";
-import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildImportCells } from "./firmware/midiImport.js";
+import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildImportCells, suggestMidiSlots, MIDI_VOICE_LABELS, selectMidiPageWindow } from "./firmware/midiImport.js";
 import {
   parseSequencerOneZip,
   patternToImportCells,
@@ -27,12 +27,12 @@ const voiceButtons = [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14].map((ch) => {
 }).join("");
 
 const ENCODERS = [75, 185, 295, 405];
-const ENC_KEYS = [[" W ", "TAB"], [" T ", "⌥/⇧"], [" I ", "SPACE"], [" Ü ", "ENTER"]];
+const ENC_KEYS = [["Q / W", "TAB"], ["R / T", "⌥ / ⇧"], ["U / I", "SPACE"], ["← / → / Ü", "ENTER"]];
 const encoders = ENCODERS.map((e, i) => `
   <div class="encoder" style="left:${px(e)};top:${py(352)}">
     <div class="ring">
       <div class="cap"></div>
-      <span class="enc-keys"><span>&lt;${ENC_KEYS[i][0]}&gt;</span><span class="enc-break"></span><span>↵ ${ENC_KEYS[i][1]}</span></span>
+      <span class="enc-keys"><span>${ENC_KEYS[i][0]}</span><span class="enc-break"></span><span>Press ${ENC_KEYS[i][1]}</span></span>
     </div>
   </div>`).join("");
 
@@ -231,7 +231,13 @@ app.innerHTML = `
       </label>
       <div class="jump-layer-body" id="import-settings" hidden>
         <p class="jump-panel-meta" id="import-meta"></p>
-        <p class="jump-panel-meta" id="import-pages"></p>
+        <label class="jump-field">Song start page
+          <input type="range" id="import-start-page" min="1" max="1" step="1" value="1" aria-describedby="import-pages">
+        </label>
+        <p class="jump-panel-meta" id="import-pages" role="status"></p>
+        <div class="device-transfer midi-transfer">
+          <button type="button" class="device-transfer-send" id="import-send">SEND TO DEVICE &gt;</button>
+        </div>
         <div class="jump-panel-row">
           <label>BPM
             <input type="number" id="import-bpm" min="30" max="300" step="0.0001">
@@ -251,14 +257,18 @@ app.innerHTML = `
           <span class="jump-readout" id="import-offset-readout">0.00</span>
         </label>
         <label class="jump-panel-check">
-          <input type="checkbox" id="import-transpose" checked> Transpose out-of-range notes
+          <input type="checkbox" id="import-transpose"> Transpose out-of-range notes
         </label>
         <label class="jump-panel-check">
-          <input type="checkbox" id="import-overlap" checked> Filter overlapping notes
+          <input type="checkbox" id="import-overlap" checked> Filter overlapping notes on CH13
         </label>
-        <p class="jump-panel-meta muted">Drag a track onto a voice slot, or use Assign below (CH1–8, 11, 13, 14).</p>
+        <details class="import-mapping-help"><summary>How instruments are mapped</summary>
+          <p class="jump-panel-meta muted">Auto-map uses TŒRN roles: 1–5 drums, 11 instruments/lead, 13 keys, 14 bass, 8 vocals/pad; 6 bass and 7 keys are sample fallbacks. Drum tracks split by instrument; cymbals share the hat voice, other percussion shares tom. Unassigned parts need a manual choice. Uses the current kit and synth settings without retuning them. USB sends notes and tempo only; use the same kit and presets on the device.</p>
+        </details>
+        <p class="jump-panel-meta" id="import-mapping" role="status"></p>
         <ul class="jump-tracks" id="import-tracks"></ul>
         <button type="button" class="jump-panel-reset" id="import-reset">Reset to MIDI</button>
+        <button type="button" class="jump-panel-reset" id="import-reset-sounds">Reset sound controls</button>
       </div>
       <p class="jump-panel-err" id="import-err" role="alert" hidden></p>
     </div>
@@ -867,6 +877,9 @@ const importFile = document.querySelector("#import-file");
 const importDropLabel = document.querySelector("#import-drop-label");
 const importSettings = document.querySelector("#import-settings");
 const importMeta = document.querySelector("#import-meta");
+const importStartPage = document.querySelector("#import-start-page");
+const importSend = document.querySelector("#import-send");
+let importPageCols = 0;
 const importPages = document.querySelector("#import-pages");
 const importBpm = document.querySelector("#import-bpm");
 const importBpmReadout = document.querySelector("#import-bpm-readout");
@@ -874,6 +887,7 @@ const importSub = document.querySelector("#import-sub");
 const importOffset = document.querySelector("#import-offset");
 const importOffsetReadout = document.querySelector("#import-offset-readout");
 const importTranspose = document.querySelector("#import-transpose");
+const importMapping = document.querySelector("#import-mapping");
 const importOverlap = document.querySelector("#import-overlap");
 const importTracks = document.querySelector("#import-tracks");
 const importReset = document.querySelector("#import-reset");
@@ -886,12 +900,10 @@ let importDragTrack = null;
 
 const MIDI_ASSIGN_CHS = [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14];
 
-function defaultSlots(tracks) {
-  const slots = {};
-  for (const ch of MIDI_ASSIGN_CHS) slots[ch] = null;
-  // Auto-fill sample voices first; synth slots stay empty until assigned.
-  for (let i = 0; i < 8; i++) slots[i + 1] = tracks[i]?.id ?? null;
-  return slots;
+const defaultSlots = suggestMidiSlots;
+function midiVoiceLabel(ch) { return `CH${ch} · ${MIDI_VOICE_LABELS[ch]}`; }
+function htmlText(value) {
+  return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"}[c]));
 }
 
 function trackToChannelMap() {
@@ -985,9 +997,9 @@ function renderMidiAssign() {
     const [r, g, b] = COL[ch];
     const tid = midiDraft.slots[ch];
     const track = tid != null ? byId.get(tid) : null;
-    const label = track ? track.name : `CH${ch}`;
+    const label = track ? htmlText(track.name) : htmlText(midiVoiceLabel(ch));
     const filled = track ? "filled" : "empty";
-    return `<button type="button" class="midi-slot ${filled}" data-ch="${ch}" style="--c:rgb(${r},${g},${b})" aria-label="${track ? `${track.name} on channel ${ch}. Click to clear.` : `Channel ${ch}, drop or assign a track`}">
+    return `<button type="button" class="midi-slot ${filled}" data-ch="${ch}" style="--c:rgb(${r},${g},${b})" aria-label="${track ? `${htmlText(track.name)} on ${htmlText(midiVoiceLabel(ch))}. Click to clear.` : `${htmlText(midiVoiceLabel(ch))}, drop or assign a track`}">
       <span class="midi-slot-ch" aria-hidden="true">${ch}</span>
       <span class="midi-slot-name">${label}</span>
     </button>`;
@@ -1070,13 +1082,13 @@ function renderImportTracks() {
     return `<li data-id="${t.id}" draggable="true" class="${voice ? "" : "dim"}">
       <span class="grip" aria-hidden="true"></span>
       <span class="swatch" style="background:${t.color}" aria-hidden="true"></span>
-      <span class="name" id="track-name-${t.id}">${t.name}</span>
+      <div class="track-description"><span class="name" id="track-name-${t.id}">${htmlText(t.name)}</span><span class="track-instrument">${htmlText(t.percussion ? "Drums" : t.instrument || t.role)}</span></div>
       ${badge}
       <label class="track-assign">
-        <span class="sr-only">Assign ${t.name}</span>
+        <span class="sr-only">Assign ${htmlText(t.name)}</span>
         <select data-assign="${t.id}" aria-labelledby="track-name-${t.id}">
           <option value="">Unassigned</option>
-          ${MIDI_ASSIGN_CHS.map((ch) => `<option value="${ch}" ${voice === ch ? "selected" : ""}>CH${ch}</option>`).join("")}
+          ${MIDI_ASSIGN_CHS.map((ch) => `<option value="${ch}" ${voice === ch ? "selected" : ""}>${htmlText(midiVoiceLabel(ch))}</option>`).join("")}
         </select>
       </label>
       <span class="count">${t.noteCount}</span>
@@ -1136,16 +1148,26 @@ function applyImportNow() {
   const { bpm, sub, offset, transpose, overlap } = currentImportParams();
   syncBpmReadout();
   let grid = mapNotesToGrid(midiDraft.notes, bpm, sub, offset, transpose);
-  if (overlap) grid = filterOverlappingNotes(grid);
   const toCh = trackToChannelMap();
+  grid = filterOverlappingNotes(grid, "highest", toCh, overlap);
   const enabled = [...toCh.keys()];
-  const rawCount = grid.filter((n) => toCh.has(n.track)).length;
-  const { cells, pages } = buildImportCells(grid, toCh, transpose);
+  importPageCols = device.cols();
+  const window = selectMidiPageWindow(grid, importStartPage.value, importPageCols);
+  importStartPage.max = String(window.maxStartPage);
+  importStartPage.value = String(window.startPage);
+  importStartPage.disabled = window.maxStartPage === 1;
+  const rawCount = window.notes.filter((n) => toCh.has(n.track)).length;
+  const { cells } = buildImportCells(window.notes, toCh, transpose);
+  const unassigned = midiDraft.tracks.filter(t => !toCh.has(t.id));
+  const manualDrums = midiDraft.tracks.filter(t => !t.percussion && toCh.get(t.id) <= 5);
+  importMapping.textContent = [
+    unassigned.length ? `Unassigned: ${unassigned.map(t => t.name).join(", ")}.` : "All parts assigned.",
+    manualDrums.length ? `Check melodic parts on drum voices: ${manualDrums.map(t => t.name).join(", ")}.` : "",
+  ].filter(Boolean).join(" ");
   const voices = toCh.size;
   importMeta.textContent = `${midiDraft.name} · ${cells.length}/${rawCount} notes · ${voices} voices`;
-  if (!pages.length) importPages.textContent = "Pages taken: none";
-  else if (pages.length === 1) importPages.textContent = `Pages taken: ${pages[0]}`;
-  else importPages.textContent = `Pages taken: ${pages[0]}–${pages[pages.length - 1]} (${pages.length} pages)`;
+  const simPages = Math.min(window.windowPages, window.endPage - window.startPage + 1);
+  importPages.textContent = `Song pages ${window.startPage}–${window.endPage} of ${window.totalPages} → SIM pages 1–${simPages} (${importPageCols} steps/page)`;
   midiDraft.grid = grid;
   if (!enabled.length) {
     setImportErr("Drop at least one track onto a voice slot.");
@@ -1165,7 +1187,8 @@ function resetImportToMidi() {
   importBpm.value = midiDraft.bpm;
   importSub.value = "16";
   importOffset.value = "0";
-  importTranspose.checked = true;
+  importStartPage.value = "1";
+  importTranspose.checked = false;
   importOverlap.checked = true;
   midiDraft.tracks = midiDraft.originalTracks.map((t) => ({ ...t }));
   midiDraft.slots = defaultSlots(midiDraft.tracks);
@@ -1182,7 +1205,7 @@ async function loadMidiFile(file) {
   try {
     const { notes, tracks, bpm } = await parseMidiFile(file);
     if (!tracks.length) throw new Error("No note tracks in this file.");
-    midiDraft = {
+      midiDraft = {
       name: file.name,
       notes,
       tracks: tracks.map((t) => ({ ...t })),
@@ -1195,7 +1218,8 @@ async function loadMidiFile(file) {
     importBpm.value = bpm;
     importSub.value = "16";
     importOffset.value = "0";
-    importTranspose.checked = true;
+    importStartPage.value = "1";
+    importTranspose.checked = false;
     importOverlap.checked = true;
     importSettings.hidden = false;
     syncBpmReadout();
@@ -1249,10 +1273,12 @@ importDrop.addEventListener("drop", (e) => {
 });
 importBpm.addEventListener("input", () => { syncBpmReadout(); scheduleImportApply(); });
 importSub.addEventListener("change", scheduleImportApply);
+importStartPage.addEventListener("input", scheduleImportApply);
 importOffset.addEventListener("input", () => { syncOffsetReadout(); scheduleImportApply(); });
 importTranspose.addEventListener("change", scheduleImportApply);
 importOverlap.addEventListener("change", scheduleImportApply);
 importReset.addEventListener("click", resetImportToMidi);
+document.querySelector("#import-reset-sounds").addEventListener("click", () => device.resetSoundDefaults());
 
 // --- Sequencer One backup ZIP (gate + pitch → patterns) ---------------
 const importSeq1Btn = document.querySelector("#import-seq1");
@@ -1467,6 +1493,7 @@ function setSdBusy(on) {
   sdBusy = on;
   const live = !!(sd && sd.connected);
   sdPush.disabled = on;
+  importSend.disabled = on;
   sdPullSlot.disabled = on;
   sdPull.disabled = on || !sdSelected || sdSelected.type !== "file";
   sdDisconnect.disabled = on || !live;
@@ -1810,6 +1837,11 @@ transferOpen.addEventListener("click", () => openSdPanel());
 sdBack.addEventListener("click", () => closeSdPanel());
 sdDisconnect.addEventListener("click", () => disconnectSd());
 sdPush.addEventListener("click", () => pushPatternRam());
+importSend.addEventListener("click", () => {
+  clearTimeout(importTimer);
+  applyImportNow();
+  pushPatternRam();
+});
 sdPullSlot.addEventListener("click", () => pullPatternRam());
 sdPull.addEventListener("click", () => {
   if (!sdSelected || sdSelected.type !== "file") return;
@@ -1861,6 +1893,7 @@ let helpMode = "";
 let ledLookGen = 0;
 const crosshair = document.querySelector(".crosshair");
 function markVoice() {
+  if (midiDraft && importPageCols !== device.cols()) applyImportNow();
   const ch = device.voice();
   document.querySelectorAll(".voice").forEach((btn) => {
     const n = Number(btn.dataset.ch);

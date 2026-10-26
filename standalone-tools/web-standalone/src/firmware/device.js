@@ -1,3 +1,4 @@
+import { createSynthArp } from "./synthArp.js";
 import { instrumentDefaults } from "./instruments.js";
 import { createFillScheduler, baseRow, syncDelays } from "./performance.js";
 import {
@@ -94,8 +95,7 @@ const FIRE_VOICE_CHOICES = [0, 15, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14];
 export function createDevice(matrix, statusEl, rings) {
   const engine = createEngine();
   const note = Array.from({ length: STEPS + 1 }, () => Array.from({ length: ROWS + 1 }, emptyNote));
-  const filt = Array.from({ length: 16 }, emptyFilt);
-  Object.assign(filt[11], instrumentDefaults(12));
+  const filt = Array.from({ length: 16 }, (_, ch) => emptyFilt(ch));
   const chVol = Array(16).fill(16);
   const shownRing = [];
   const shownAngle = [0, 0, 0, 0];
@@ -214,7 +214,7 @@ export function createDevice(matrix, statusEl, rings) {
       index: wavOf[ch] || 0, seek: seekOf[ch], end: endOf[ch], inv: invOf[ch],
       // Sample voices: DTNE ±1 semi (fine), OCTV whole semis ±24 (±2 oct).
       // wav.oct is in octaves for engine (semis/12); raw slider is 0..48 center 24.
-      detune: ((f.detune ?? 16) / 32) * 2 - 1, oct: ((f.oct ?? 24) - 24) / 12,
+      detune: ((f.detune ?? 16) / 32) * 2 - 1, oct: ((f.oct ?? 24) - 24) / 12, octaveRaw: f.oct,
       stretch: f.stretch ?? 11,
       env: { att: f.att, dec: f.dec, sus: f.sus, rel: f.rel },
       wave: f.wave || 0, inst: f.inst || 0, cent: f.cent ?? 16, semi: f.semi || 0,
@@ -568,7 +568,7 @@ export function createDevice(matrix, statusEl, rings) {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
   }
   function resetEffects() {
-    for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(), ch === 11 ? instrumentDefaults(12) : {});
+    for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch));
     chVol.fill(16);
     s.vel.vol = 16;
     applyMix();
@@ -707,6 +707,7 @@ export function createDevice(matrix, statusEl, rings) {
     return n % x === 1;
   }
   function fire(step, when) {
+    midiArp.playhead(midiArpClock(when, step));
     fired.push({ step, when });
     if (fired.length > 8) fired.shift();
     if (s.voiceMode) refreshVoiceLens();
@@ -720,6 +721,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (!src) continue;
       const n = note[src][y];
       if (!n.channel || !SOUND_CH.has(n.channel) || !heard(n.channel)) continue;
+      if ([13,14].includes(n.channel) && midiArp.hasHeld(n.channel)) continue;
       if (Math.random() * 100 >= n.probability) continue;
       const ok = s.voiceMode && s.pmode !== 2
         ? condOkVoice(n.condition, s.voiceLoop[n.channel] || 1)
@@ -843,6 +845,7 @@ export function createDevice(matrix, statusEl, rings) {
     applyMix();
     s.playing = !s.playing;
     fills.reset(); fired.length = 0; pendingAudition = null;
+    midiArp.reset();
     engine.releaseAll();
     noteActivity();
     if (!s.playing) {
@@ -1144,7 +1147,7 @@ export function createDevice(matrix, statusEl, rings) {
   function restore(data) {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
     if (data && !Array.isArray(data)) {
-      for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(), data.filt?.[ch] || {});
+      for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch), data.filt?.[ch] || {});
       if (Array.isArray(data.chVol)) for (const ch of SOUND_CH) chVol[ch] = clamp(data.chVol[ch] ?? 16, 0, 16);
       if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
       data = data.notes;
@@ -1738,7 +1741,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (enc === 1) { saveSlot(key, s.presetSlot, {...filt[ch]}); s.okAt=performance.now(); }
       if (enc === 0) {
         const preset = loadStore(key)[s.presetSlot];
-        if (preset) { Object.assign(filt[ch], emptyFilt(), preset);applyFilt(ch);s.okAt=performance.now(); }
+        if (preset) { Object.assign(filt[ch], emptyFilt(ch), preset);applyFilt(ch);s.okAt=performance.now(); }
       }
       if (enc === 3) backToGrid();
       return;
@@ -1859,13 +1862,13 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function resetFilterPage(ch) {
     const page = filterPagesFor(ch)[filterPages[ch]] || filterPagesFor(ch)[0];
-    const defaults = emptyFilt();
+    const defaults = emptyFilt(ch, filt[ch].inst);
     for (const spec of page) if (spec) filt[ch][spec.key] = defaults[spec.key];
     applyFilt(ch);
   }
   function resetVoiceFilters(ch) {
     const inst = filt[ch].inst;
-    Object.assign(filt[ch], emptyFilt(), ch === 11 ? instrumentDefaults(inst) : {});
+    Object.assign(filt[ch], emptyFilt(ch, inst));
     applyFilt(ch);
   }
   function tapTempo() {
@@ -2237,6 +2240,22 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (!touch.m) { touch.first = 0; touch.chord = false; }
   }
+  function midiArpClock(when = engine.now(), beat = s.beat) {
+    return { now: performance.now(), playing: s.playing, bpm: s.bpm, beat, when };
+  }
+  const midiArp = createSynthArp({
+    params: ch => filt[ch],
+    release: (ch, pitch) => engine.releaseChannel(ch, pitch),
+    play(ch, pitch, velocity, when, held) {
+      if (!s.midiReceive || !heard(ch)) return;
+      const row = foldRow(pitch, ch, Math.floor(1 + filt[11].cent * 7 / 32)).row;
+      applyFilt(ch);
+      engine.trigger(ch, velocity, when, { ...wavOpts(ch), midiPitch: s.midiClamp ? 255 : pitch, held, inputPitch: pitch }, row);
+      if (s.mode === "single" || s.GLOB.singleMode) {
+        placeLiveGridNote(s.playing ? s.beat : s.GLOB.x, row, ch, velocity, s.midiClamp ? 255 : pitch);
+      }
+    },
+  });
   function onMidiMessage(ev) {
     const [status, data1, data2] = ev.data || [];
     if (status == null) return;
@@ -2255,6 +2274,9 @@ export function createDevice(matrix, statusEl, rings) {
       if (waitingMidiBar && midiClockCount % (COLS * 6) === 0) togglePlay(true);
       return;
     }
+    const inputKey = `${ev.target?.id || "midi"}:${status & 15}:${data1}`;
+    if (type === 0x80 || (type === 0x90 && !data2)) { midiArp.noteOff(inputKey); return; }
+    if (status === 0xff || (type === 0xb0 && [120,123].includes(data1))) { midiArp.reset(); return; }
     if (type === 0x90 && data2 > 0) {
       if (!s.midiReceive) return;
       const ch = s.midiChMode === 1 ? (status & 15) + 1 : s.midiChMode === 2 ? clamp(((data1 - 60) % 12 + 12) % 12 + 1, 1, 8) : s.GLOB.currentChannel || 1;
@@ -2263,6 +2285,11 @@ export function createDevice(matrix, statusEl, rings) {
       const row = folded.row;
       const step = s.playing ? s.beat : s.GLOB.x;
       engine.ensure(); applyFilt(ch);
+      if ([11,13,14].includes(ch)) {
+        midiArp.noteOn(ch, inputKey, data1, data2, midiArpClock());
+        noteActivity();
+        return;
+      }
       engine.trigger(ch, data2, engine.now(), {...wavOpts(ch), midiPitch: s.midiClamp ? 255 : data1}, row);
       if (s.mode === "single" || s.GLOB.singleMode) {
         placeLiveGridNote(step, row, ch, data2, s.midiClamp ? 255 : data1);
@@ -2595,6 +2622,7 @@ export function createDevice(matrix, statusEl, rings) {
         analogNextPulseAt += pulseSec;
       }
     }
+    midiArp.service(midiArpClock());
     const audioNow = engine.now();
     while (fired.length && fired[0].when <= audioNow) {
       const f = fired.shift();
@@ -2673,7 +2701,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function toggleSong() {
     if (s.playing) {
-      s.playing = false; fills.reset(); engine.releaseAll();
+      s.playing = false; fills.reset(); midiArp.reset(); engine.releaseAll();
       queueAutosave();
       subPick.look[3] = 0;
       applySub("look", 3);
@@ -2694,6 +2722,9 @@ export function createDevice(matrix, statusEl, rings) {
     fire(s.beat, t);
   }
   loadEeprom();
+  // Start the SIM in ordinary pattern mode, even after a saved VMOD session.
+  subPick.look[5] = 0;
+  applySub("look", 5);
   autoload();
   persist = true;
   window.addEventListener("pagehide", () => {
@@ -2884,6 +2915,15 @@ export function createDevice(matrix, statusEl, rings) {
     loadGenre(type) {
       if (s.mode === "boot") return;
       writeGenre(type);
+    },
+    resetSoundDefaults() {
+      midiArp.reset();
+      engine.releaseAll();
+      for (const ch of SOUND_CH) {
+        Object.assign(filt[ch], emptyFilt(ch));
+        applyFilt(ch);
+      }
+      queueAutosave();
     },
     importMidi(cells, bpm) {
       if (s.mode === "boot") return;

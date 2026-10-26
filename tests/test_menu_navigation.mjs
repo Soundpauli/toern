@@ -484,3 +484,36 @@ d.jump('bpm');tapKey('.','Period');assert.equal(d.mode(),'bpm');
 d.jump('draw');tapKey('x','KeyX');assert.equal(d.mode(),'draw');
 tapKey('m','KeyM');assert.equal(d.mode(),'draw');
 console.log('PASS: remapped touch keys and restored encoder Q/W controls.');
+
+// Exercise the real Web MIDI wiring, including Note Off after changing voice.
+stored.clear();
+const synthMidiInput={id:'synth-test'};
+navigator.requestMIDIAccess=async()=>({inputs:new Map([['synth-test',synthMidiInput]])});
+const midiDevice=createDevice(matrix,{},[]);
+await Promise.resolve();await Promise.resolve();
+midiDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+midiDevice.selectVoice(13);
+audioCalls.length=0;
+synthMidiInput.onmidimessage({data:[0x90,60,100],target:synthMidiInput});
+const midiTrigger=audioCalls.find(call=>call[0]==='trigger');
+assert(midiTrigger && midiTrigger[1]===13 && midiTrigger[4].held===true);
+assert.equal(midiTrigger[4].arp,16);
+now+=1000;frame(now);
+assert.equal(audioCalls.filter(call=>call[0]==='trigger').length,1,'neutral ARP must not repeat a held note');
+midiDevice.selectVoice(14);
+synthMidiInput.onmidimessage({data:[0x80,60,0],target:synthMidiInput});
+assert(audioCalls.some(call=>call[0]==='releaseChannel'&&call[1]===13),'Note Off releases the original voice');
+console.log('PASS: Web MIDI held-note routing, neutral ARP and Note Off after voice selection changes.');
+
+// VMOD is a session choice; a saved ON value must not enable it at SIM startup.
+stored.clear();
+const oldLook=Array(12).fill(0);oldLook[5]=1;oldLook[7]=2;
+stored.set('toern-web-eeprom',JSON.stringify({subPick:{look:oldLook}}));
+const normalModeDevice=createDevice(matrix,{},[]);
+normalModeDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+normalModeDevice.jump('menu');for(let i=0;i<8;i++)normalModeDevice.rotate(3,1);
+normalModeDevice.press(3);for(let i=0;i<3;i++)normalModeDevice.rotate(3,1);
+assert.equal(normalModeDevice.menuSummary().detail,'VMOD: OFF');
+normalModeDevice.rotate(2,1);
+assert.equal(normalModeDevice.menuSummary().detail,'VMOD: ON','VMOD can still be enabled explicitly');
+console.log('PASS: VMOD starts off after saved ON and remains editable.');

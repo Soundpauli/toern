@@ -44,7 +44,11 @@ export function patternUrl(slot) {
 export function packWavs(slot) {
   const urls = [];
   for (let voice = 1; voice <= 8; voice++) {
-    urls.push(files.find((file) => file.rel === `${slot}/${voice}.wav`)?.url || null);
+    const kit1Sample = { 7: 506, 8: 507 }[voice];
+    const rel = Number(slot) === 1 && kit1Sample
+      ? `samples/BASE/BASS/${kit1Sample}.wav`
+      : `${slot}/${voice}.wav`;
+    urls.push(files.find((file) => file.rel === rel)?.url || null);
   }
   return urls;
 }

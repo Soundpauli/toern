@@ -1482,6 +1482,7 @@ canvas {
 .encoder:focus-within .enc-keys,
 .encoder.pressed .enc-keys { opacity: 1; }
 
+.enc-keys > span { white-space: nowrap; }
 .enc-break { height: 1.05em; }
 
 .cap::before, .cap::after {
@@ -2315,3 +2316,19 @@ html.mobile-ui .voice.on .voice-active { color: #fff; }
 html.mobile-ui .voice.on.muted .voice-mute {
   right: calc(100% + var(--mute-gap, 4px) + 28px);
 }
+
+.track-instrument { color: #666; font-size: 10px; overflow-wrap: anywhere; }
+
+#import-tracks li { display: grid; grid-template-columns: 8px 8px minmax(0,1fr) auto auto; }
+#import-tracks .track-description { min-width: 0; }
+#import-tracks .name, #import-tracks .track-instrument { display: block; }
+#import-tracks .track-assign { grid-column: 3 / -1; grid-row: 2; }
+#import-tracks .track-assign select { width: 100%; max-width: 100%; }
+#import-tracks .count { grid-column: 5; grid-row: 1; }
+
+.import-mapping-help { font-size: 11px; }
+.import-mapping-help summary { cursor: pointer; }
+.midi-slot { height: 14px; padding: 0 4px; gap: 4px; font-size: 9px; }
+.midi-slot-ch { height: 12px; min-width: 12px; font-size: 8px; padding: 0 2px; }
+
+.midi-transfer { margin-top: 0; padding-top: 0; }

@@ -1,3 +1,4 @@
+import { synthFrequencies } from "../firmware/synthPitch.js";
 import { SOUND_CH } from "../firmware/const.js";
 
 const KINDS = ["kick", "snare", "hat", "clap", "tom", "ride", "perc", "bass", "shaker", "crash"];
@@ -329,7 +330,6 @@ export function createEngine() {
 
   const mono = {};
   const synthLive = new Set();
-  const arpAt = {};
   const lfos = {};
   const INST = [
     { type: "sawtooth", a: 0.005, d: 0.12, s: 0.15, r: 0.12 },
@@ -362,34 +362,11 @@ export function createEngine() {
     lfos[ch].g.gain.setTargetAtTime(rate > 0 && depth > 0 ? (depth / 32) * 1800 : 0, now, 0.03);
   }
   function synth(ch, velocity, when, row, wav = {}) {
-    const absolute = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127;
-    const register = Math.floor(1 + (wav.cent ?? 16) * 7 / 32);
-    let midi = absolute ? wav.midiPitch : ch === 11
-      ? 12 * register + row - 1 + 12
-      : Math.min(62, Math.max(36, row - ch + 47)) + 12;
-    if (ch === 11) {
-      if (absolute) midi += 12 * (register - 4);
-      midi += Math.round(-2 + (wav.semi ?? 16) / 8) + (-.5 + (wav.semi ?? 16) / 32);
-    } else {
-      midi += ((wav.cent ?? 16) - 16) / 16 * 24;
-      midi += ((wav.semi ?? 16) - 16) * 12 / 16;
-      midi += wav.detune || 0;
-      midi += (wav.oct || 0) * 12;
-    }
-    if (ch !== 11 && wav.arp > 0) {
-      const semis = (wav.arp / 32) * 12;
-      const span = Math.max(2, Math.round(2 + ((wav.span || 0) / 32) * 14));
-      const up = span - 1;
-      const period = up * 2;
-      const step = arpAt[ch] = ((arpAt[ch] || 0) + 1) % period;
-      const reflected = step > up ? period - step : step;
-      midi += (reflected / up) * semis;
-    }
-    const freq = 440 * 2 ** ((midi - 69) / 12);
+    const frequencies = synthFrequencies(ch, row, wav);
     const preset = INST[Math.max(0, Math.min(9, wav.inst || 0))];
     const osc = ctx.createOscillator();
     osc.type = ch === 11 ? (wav.wave ? WAVES[wav.wave] : ["sawtooth","triangle","square"][(wav.inst || 0) - 10] || preset.type) : (WAVES[wav.wave | 0] || "triangle");
-    osc.frequency.setValueAtTime(Math.max(20, freq), when);
+    osc.frequency.setValueAtTime(frequencies[0], when);
     const env = wav.env || {};
     const a = Math.max(0.005, (32 - (env.att ?? 32)) / 32 * 2);
     const d = Math.max(0.02, (env.dec ?? 16) / 32);
@@ -400,20 +377,32 @@ export function createEngine() {
     g.gain.setValueAtTime(0.0001, when);
     g.gain.linearRampToValueAtTime(peak, when + a);
     g.gain.linearRampToValueAtTime(peak * s, when + a + d);
-    g.gain.exponentialRampToValueAtTime(0.0001, when + a + d + rel);
+    if (!wav.held) g.gain.exponentialRampToValueAtTime(0.0001, when + a + d + rel);
+    const oscs = [osc];
+    if (ch === 13 || ch === 14) {
+      const second = ctx.createOscillator();
+      second.type = ch === 13 ? "sawtooth" : "square";
+      second.frequency.setValueAtTime(frequencies[1], when);
+      const layer = ctx.createGain();
+      layer.gain.value = ch === 14 ? .8 : 1;
+      second.connect(layer); layer.connect(g);
+      oscs.push(second);
+    }
     osc.connect(g);
     g.connect(chains[ch].input);
     if (ch !== 11 && mono[ch]) {
       mono[ch].g.gain.cancelScheduledValues(when);
       mono[ch].g.gain.setTargetAtTime(0.0001, when, 0.008);
-      mono[ch].osc.stop(when + 0.04);
+      for (const previous of mono[ch].oscs) previous.stop(when + 0.04);
     }
-    if (ch !== 11) mono[ch] = { osc, g };
-    const voice = { osc, g };
+    if (ch !== 11) mono[ch] = { oscs, g };
+    const voice = { ch, pitch: wav.inputPitch, oscs, g };
     synthLive.add(voice);
-    osc.onended = () => { synthLive.delete(voice); osc.disconnect(); g.disconnect(); };
-    osc.start(when);
-    osc.stop(when + a + d + rel + 0.02);
+    osc.onended = () => { synthLive.delete(voice); for (const node of oscs) node.disconnect(); g.disconnect(); };
+    for (const node of oscs) {
+      node.start(when);
+      if (!wav.held) node.stop(when + a + d + rel + 0.02);
+    }
   }
 
   function trigger(ch, velocity, when, wav, row) {
@@ -461,6 +450,17 @@ export function createEngine() {
     src.start();
   }
 
+  function releaseChannel(ch, pitch) {
+    if (!ctx) return;
+    const when = ctx.currentTime;
+    for (const voice of synthLive) if (voice.ch === ch && (pitch == null || voice.pitch === pitch)) {
+      voice.g.gain.cancelScheduledValues(when);
+      voice.g.gain.setTargetAtTime(0.0001, when, 0.008);
+      try { for (const node of voice.oscs) node.stop(when + 0.04); } catch { /* ended */ }
+    }
+    if (pitch == null) delete mono[ch];
+  }
+
   function releaseAll() {
     if (!ctx) return;
     const when = ctx.currentTime;
@@ -468,9 +468,9 @@ export function createEngine() {
     for (const voice of synthLive) {
       voice.g.gain.cancelScheduledValues(when);
       voice.g.gain.setTargetAtTime(0.0001, when, 0.008);
-      try { voice.osc.stop(when + 0.04); } catch { /* ended */ }
+      try { for (const node of voice.oscs) node.stop(when + 0.04); } catch { /* ended */ }
     }
     // Delay/reverb nodes keep running until their existing tails decay.
   }
-  return { releaseAll, ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
+  return { releaseAll, releaseChannel, ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
 }

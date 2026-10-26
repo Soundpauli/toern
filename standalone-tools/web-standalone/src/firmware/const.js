@@ -1,3 +1,4 @@
+import { instrumentDefaults } from "./instruments.js";
 export let COLS = 32;
 export const ROWS = 16;
 export const STEPS = 256;
@@ -25,7 +26,7 @@ export const COL = [
   [0, 0, 0],
   [120, 120, 120],
   [0, 0, 0],
-  [0, 255, 70],
+  [0, 255, 0], // CH13: pure green, distinct from CH5 cyan.
   [255, 50, 50],
   [40, 40, 40],
 ];
@@ -45,7 +46,7 @@ export const COL_BASE = [
   [0, 0, 0],
   [6, 6, 6],
   [0, 0, 0],
-  [0, 10, 4],
+  [0, 10, 0], // Match the SIM CH13 green.
   [18, 4, 4],
 ];
 
@@ -97,7 +98,7 @@ const CH11_FILTER_PAGES = [
 const KEYS_FILTER_PAGES = [
   [{ key: "h", name: "HCUT" }, { key: "l", name: "LCUT" }, { key: "cent", name: "CENT" }, { key: "b", name: "BITC" }],
   [{ key: "cut", name: "CUT" }, { key: "res", name: "RES" }, { key: "flt", name: "FLT" }, { key: "dlay", name: "DLAY" }],
-  [{ key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV", max: 48 }, { key: "wave", name: "WAVE", max: 3 }, null],
+  [{ key: "detune", name: "DTNE" }, { key: "oct", name: "OCTV", max: 32 }, { key: "wave", name: "WAVE", max: 3 }, null],
   ADSR,
   [{ key: "lfoR", name: "LFOR" }, { key: "lfoD", name: "LFOD" }, { key: "span", name: "SPAN" }, { key: "arp", name: "ARP" }],
 ];
@@ -108,11 +109,19 @@ export function filterPagesFor(ch) {
   return SAMPLE_FILTER_PAGES;
 }
 
-export function emptyFilt() {
-  return {
-    h: 32, l: 0, r: 0, b: 0, fast: 0, fastPage: 0, res: 0, detune: 16, oct: 24, att: 32, dec: 32, sus: 10, rel: 5,
+export function emptyFilt(ch = 1, inst = 12) {
+  const defaults = {
+    h: 32, l: 0, r: 0, b: 0, fast: 0, fastPage: 0, res: 0, detune: 16, oct: 24, att: 32, dec: 32, sus: 32, rel: 0,
     voiceGain: 16, stretch: 11, cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 16, lfoR: 0, lfoD: 0, span: 0, arp: 16,
   };
+  if (ch === 11) Object.assign(defaults, { oct: 16 }, instrumentDefaults(inst));
+  if (ch === 13 || ch === 14) Object.assign(defaults, {
+    oct: 16, cent: 16, wave: 1,
+    h: ch === 14 ? 14 : 32, cut: ch === 14 ? 14 : 32,
+    res: ch === 14 ? 5 : 0, flt: ch === 14 ? 8 : 0,
+    dec: ch === 14 ? 20 : 32, sus: ch === 14 ? 20 : 32, rel: 16,
+  });
+  return defaults;
 }
 export const COND_LABEL = ["1/1", "1/2", "1/4", "1/8", "1/X", "2/1", "4/1", "8/1", "X/1", "F/F", "G/L"];
 export const COND_VALUE = [1, 2, 4, 8, 16, 17, 18, 19, 20, 21, 22];
