@@ -1091,6 +1091,7 @@ static void refreshSamplerChannel(uint8_t channel);
 static void updateFnState();
 static uint8_t fnButtonEvent(int index, uint8_t physicalState);
 static bool fnHeld = false;
+static unsigned long sampleGateOverlayUntil = 0;
 static bool fnButtonHeld[NUM_ENCODERS] = {};
 static bool handleFnEncoder(int index, int &rawValue, bool allowWrite);
 static void reverseChannelInMemory(uint8_t channel);
@@ -1350,6 +1351,16 @@ void setSampleVoiceGain(int ch, int slider) {
   if (ch < 1 || ch > 8) return;
   SMP.param_settings[ch][SAMPLE_VOICE_GAIN_SLOT] = SAMPLE_VOICE_GAIN_TAG + constrain(slider, 0, 32);
   applySampleVoiceGain(ch);
+}
+
+// Tagged spare slot keeps old pattern layouts and defaults compatible.
+static constexpr int SAMPLE_GATE_SLOT = 13;
+static constexpr float SAMPLE_GATE_TAG = 2097152.0f;
+bool sampleGateEnabled(int ch) {
+  return ch >= 1 && ch <= 8 && SMP.param_settings[ch][SAMPLE_GATE_SLOT] == SAMPLE_GATE_TAG + 1;
+}
+void setSampleGate(int ch, bool enabled) {
+  if (ch >= 1 && ch <= 8) SMP.param_settings[ch][SAMPLE_GATE_SLOT] = SAMPLE_GATE_TAG + (enabled ? 1 : 0);
 }
 
 // Per-page mute system for PMOD (pattern mode)
@@ -4118,7 +4129,8 @@ void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool ret
     }
     // The reader has now started at its final pitch, so fit against its
     // actual output length. Held MIDI still waits for a real Note Off.
-    sampleEnvelopes[ch]->noteOn(retrigger, sampleReaders[ch] ? sampleReaders[ch]->playbackFramesRemaining() : 0);
+    sampleEnvelopes[ch]->noteOn(retrigger, sampleReaders[ch] ? sampleReaders[ch]->playbackFramesRemaining() : 0,
+      sampleGateEnabled(ch) ? 60000.0f / (fmaxf(1.0f, SMP.bpm) * 4.0f) : 0);
   }
 }
 

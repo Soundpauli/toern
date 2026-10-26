@@ -17,6 +17,8 @@ sample=source[source.index('struct Sample {'):source.index('// Declare the devic
 device=source[source.index('struct Device {'):source.index('// Global variables struct')]
 harness=r'''
 #include <cassert>
+#include <algorithm>
+using std::max;
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -39,6 +41,8 @@ using std::isfinite;
 '''+types+sample+device+r'''
 Device SMP={};
 struct Amp {float value=1;void gain(float v){value=v;}} sampleFilterGain[8];
+constexpr int SAMPLE_GATE_SLOT=13;
+constexpr float SAMPLE_GATE_TAG=2097152.0f;
 constexpr int SAMPLE_VOICE_GAIN_SLOT=14;
 constexpr float SAMPLE_VOICE_GAIN_TAG=1048576.0f;
 SliderDefEntry sliderDef[NUM_CHANNELS][FILTER_PAGE_CAP][4];
@@ -51,6 +55,8 @@ void applySynthInstrumentPreset(int,int){}void midiArpResetVoice(int){}
 void updateSynthVoice(int){}void applyMonoSynthCrf(int){}void applyDefaultAdsrSettings(int){}
 void setSampleTimeStretch(int,int){}
 '''+ '\n'.join([
+function(source,'bool sampleGateEnabled('),
+function(source,'void setSampleGate('),
 function(source,'float& filterSetting('),
 function(source,'int sampleVoiceGainSlider('),
 function(source,'void applySampleVoiceGain('),
@@ -66,6 +72,14 @@ function(params,'static void setFilterPageDefaultValues('),
 ])+r'''
 int main(int argc,char **argv){
  static_assert(sizeof(Device)==4292,"Keep the saved Device layout unchanged");
+ for(int ch=1;ch<=8;++ch){
+   assert(!sampleGateEnabled(ch));setSampleGate(ch,true);assert(sampleGateEnabled(ch));
+ }
+ Device gateCopy=SMP;std::memset(&SMP,0,sizeof SMP);SMP=gateCopy;
+ for(int ch=1;ch<=8;++ch){assert(sampleGateEnabled(ch));setSampleGate(ch,false);assert(!sampleGateEnabled(ch));}
+ for(float legacy:{0.0f,1.0f,32.0f,-1.0f,std::numeric_limits<float>::quiet_NaN()}){
+   SMP.param_settings[1][13]=legacy;assert(!sampleGateEnabled(1));
+ }
  initSliderDefTemplates();
  for(int ch:{1,2,3,4,5,6,7,8,11,13,14})setSliderDefForChannel(ch);
  for(int ch=1;ch<=8;ch++){

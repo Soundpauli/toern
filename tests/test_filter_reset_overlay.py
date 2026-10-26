@@ -59,6 +59,10 @@ struct {int maxValue=32;} sliderDef[16][5][4];
 struct {int pos[4];} fakeMode;
 template<class T> T constrain(T x,int lo,int hi){return std::max((T)lo,std::min(x,(T)hi));}
 void drawCornerValueCustom(int,int,...){ }
+bool fnHeld=false;unsigned long sampleGateOverlayUntil=0;
+bool sampleGateEnabled(int){return false;}
+void drawText(const char*,int,int,CRGB){}
+using std::max;
 DRAW
 PAGE
 // Force the competing early presentation on every frame, as while editing.

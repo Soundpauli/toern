@@ -616,6 +616,13 @@ void showFilterPages(uint8_t chan) {
     drawCornerValueCustom(lastChangedEncoder, val, sliderDef[chan][filterPage[chan]][lastChangedEncoder]);
   }
 
+  if (chan >= 1 && chan <= 8 && filterPage[chan] == 2
+      && (fnHeld || (int32_t)(sampleGateOverlayUntil - now) > 0)) {
+    FastLEDclear();
+    const bool gated = sampleGateEnabled(chan);
+    drawText(gated ? "GATE" : "ONE", max(1, ((int)maxX - (gated ? 15 : 11)) / 2 + 1), 6,
+             gated ? CRGB(255, 160, 0) : CRGB(0, 200, 120));
+  }
   // This renderer can present before loop()'s final show. Include feedback
   // here too, otherwise the display rate limiter may only send the base page.
   if (currentMode == &filterMode && (int32_t)(filterResetOverlayUntil - millis()) > 0) {

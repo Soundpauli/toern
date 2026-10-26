@@ -213,6 +213,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
 
 // Unified ADSR slider defaults (0..maxfilterResolution): A=32, D=32, S=32, R=16 on 11/13/14 else R=0
 static void applyDefaultAdsrSettings(int ch) {
+  setSampleGate(ch, false);
   SMP.param_settings[ch][ATTACK] = defaultSettingValue(ch, ARR_PARAM, ATTACK);
   SMP.param_settings[ch][DECAY] = defaultSettingValue(ch, ARR_PARAM, DECAY);
   SMP.param_settings[ch][SUSTAIN] = defaultSettingValue(ch, ARR_PARAM, SUSTAIN);

@@ -112,7 +112,7 @@ export function filterPagesFor(ch) {
 export function emptyFilt(ch = 1, inst = 12) {
   const defaults = {
     h: 32, l: 0, r: 0, b: 0, fast: 0, fastPage: 0, res: 0, detune: 16, oct: 24, att: 32, dec: 32, sus: 32, rel: 0,
-    voiceGain: 16, stretch: 11, cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 16, lfoR: 0, lfoD: 0, span: 0, arp: 16,
+    gated: false, voiceGain: 16, stretch: 11, cut: 16, flt: 0, dlay: 0, wave: 0, inst: 0, cent: 16, semi: 16, lfoR: 0, lfoD: 0, span: 0, arp: 16,
   };
   if (ch === 11) Object.assign(defaults, { oct: 16 }, instrumentDefaults(inst));
   defaults.sus = Math.max(1, defaults.sus);

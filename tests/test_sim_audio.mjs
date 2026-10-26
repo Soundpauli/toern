@@ -69,35 +69,28 @@ assert(first.stops.some(t=>Math.abs(t-(1+64/44100+1/8000))<1e-8),'only old sampl
 assert.equal(second.started[2],first.started[2],'playback rate does not truncate the buffer duration twice');
 engine.releaseChannel(2,72);
 assert(second.stops.some(t=>Math.abs(t-1.500125)<1e-8),'RLSE 16 gives 500ms after Note Off');
-// The real grid-trigger path has no MIDI input pitch and must start Release itself.
+// One-shot edits must not generate a short gate.
 engine.trigger(3,127,1,{midiPitch:60,env:neutral},4);
 assert.equal(nodes.filter(n=>n.kind==='sample').at(-1).stops.length,0,'neutral grid hit remains transparent');
-for(const rel of [8,16,24,32]) {
- engine.trigger(3,127,1,{midiPitch:60,env:{...neutral,rel}},4);
- const sample=nodes.filter(n=>n.kind==='sample').at(-1),gain=sample.connections[0].gain;
- assert(gain.calls.some(c=>c[0]==='value'&&c[1]===1&&Math.abs(c[2]-1.005)<1e-8),'R-only hits start release at the same gate');
- assert(sample.stops.some(t=>Math.abs(t-(1.005+rel/32+1/8000))<1e-8),'higher R ends later, not at a fixed PCM end');
+for (const att of [32,31]) for(const rel of [0,1,16,32]) {
+ engine.trigger(3,127,1,{midiPitch:60,env:{...neutral,att,rel}},4);
+ assert.equal(nodes.filter(n=>n.kind==='sample').at(-1).stops.length,0,'one-shot edits preserve natural sample length');
 }
-// Retrigger during auto-release uses the old note's decayed level.
-ctx.currentTime=1.255;
-engine.trigger(4,127,1,{midiPitch:60,env:{...neutral,rel:16}},5);
-const fading=nodes.filter(n=>n.kind==='sample').at(-1),fadingGain=fading.connections[0].gain;
-engine.trigger(4,127,ctx.currentTime,{midiPitch:60,env:neutral},5);
-assert(fadingGain.calls.some(c=>c[0]==='value'&&Math.abs(c[1]-.5)<1e-8&&c[2]===ctx.currentTime));
-engine.trigger(5,127,2,{midiPitch:60,env:{...neutral,att:31,dec:8,sus:16,rel:16}},6);
-const shaped=nodes.filter(n=>n.kind==='sample').at(-1);
-assert(shaped.stops.some(t=>Math.abs(t-(2+.0625+.25+.5+2/8000))<1e-8),'A/D complete before the configured release');
-console.log('PASS: SIM transparent neutral hits, automatic grid Release, held MIDI Note Off, ADSR timing and retrigger levels during Release.');
+for(const att of [32,31,0]) for(const rel of [0,1,16,32]) {
+ engine.trigger(3,127,1,{midiPitch:60,env:{...neutral,att,rel,gated:true}},4);
+ const sample=nodes.filter(n=>n.kind==='sample').at(-1);
+ assert(sample.stops.some(t=>Math.abs(t-(1.125+rel/32+1/8000))<1e-8),'fixed one-step gate independent of A/R');
+}
 engine.trigger(6,127,3,{midiPitch:60,env:{...neutral,dec:0,sus:0,rel:16}},7);
 const minimumSustain=nodes.filter(n=>n.kind==='sample').at(-1).connections[0].gain;
-assert(minimumSustain.calls.some(c=>c[0]==='value'&&c[1]===1/32),'legacy SUST 0 is audible at the minimum 1/32 level');
+assert(minimumSustain.calls.some(c=>c[0]==='value'&&c[1]===1/32),'legacy SUST 0 remains audible');
 // Trim + pitch leave just 20ms. Even maximum A/D/R must fit that region.
 engine.loadBuffer(7,ctx.createBuffer(1,800,8000));
 for(const trimEnd of [21,60])for(const inv of [false,true]) {
  engine.trigger(7,127,4,{midiPitch:72,seek:20,end:trimEnd,inv,env:{att:0,dec:32,sus:16,rel:32}},8);
  const sample=nodes.filter(n=>n.kind==='sample').at(-1),gain=sample.connections[0].gain;
  const end=4+(trimEnd-20)/100*.1/2;
- assert(sample.stops.some(t=>t<=end+1e-8),'trimmed/pitched release completes before natural end');
+ assert.equal(sample.stops.length,0,'short one-shot plays to natural end');
  assert(gain.calls.some(c=>c[0]==='linear'&&c[1]===1&&c[2]>4&&c[2]<end),'attack reaches peak within the short sample');
  assert(gain.calls.every(c=>c.length<3||c[2]<=end+1e-8),'ADSR does not run beyond audio');
 }

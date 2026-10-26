@@ -12,7 +12,7 @@ public:
   void decay(float ms) { toern_audio::StateGuard guard; core_.decay(ms); }
   void sustain(float value) { toern_audio::StateGuard guard; core_.sustain(value); }
   void release(float ms) { toern_audio::StateGuard guard; core_.release(ms); }
-  void noteOn(bool oneShot = false, uint32_t availableFrames = 0) { toern_audio::StateGuard guard; core_.noteOn(oneShot, availableFrames); }
+  void noteOn(bool sequenced = false, uint32_t availableFrames = 0, float gateMs = 0) { toern_audio::StateGuard guard; core_.noteOn(sequenced, availableFrames, gateMs); }
   void noteOff() { toern_audio::StateGuard guard; core_.noteOff(); }
   bool isActive() const { toern_audio::StateGuard guard; return core_.isActive(); }
   void captureTail(const int16_t *data, unsigned n) { toern_audio::StateGuard guard; core_.captureTail(data,n); }

@@ -310,17 +310,11 @@ export function createEngine() {
     const sus = env ? Math.max(1/32, Math.min(1, env.sus / 32)) * peak : peak;
     let rel = env ? Math.max(0, env.rel / 32) : 0;
     const duration = Math.max(0, Math.min(span, buf.duration - offset)) / Math.max(.000001, Math.abs(rate));
-    const shaped = a > 0 || sus !== peak || rel > 0;
-    let gate = Math.max(.005, a + (sus !== peak ? dec : 0) + 1 / ctx.sampleRate);
-    const budget = Math.max(1 / ctx.sampleRate, duration - 1 / ctx.sampleRate);
-    if (shaped && gate + rel > budget) {
-      const scale = budget / (gate + rel);
-      a *= scale; dec *= scale; gate *= scale;
-      rel = rel > 0 ? budget - gate : 0;
-    }
-    // Held MIDI sustains until Note Off. Shaped one-shots release after A/D;
-    // neutral one-shots play unchanged through the natural sample end.
-    // Neutral A=0/S=1 is unity from the very first PCM sample.
+    const gate = inputPitch == null && env?.gated === true ? 60 / Math.max(1, tempo) / 4 : null;
+    const budget = Math.max(1 / ctx.sampleRate, Math.min(duration - 1 / ctx.sampleRate, gate ?? Infinity));
+    const stages = a + (sus !== peak ? dec : 0);
+    if (stages > budget) { const scale = budget / stages; a *= scale; dec *= scale; }
+    // One-shots sustain to EOF; gated hits use an independent tempo step.
     g.gain.setValueAtTime(a > 0 ? 0 : peak, when);
     if (a > 0) g.gain.linearRampToValueAtTime(peak, when + a);
     if (sus !== peak) {
@@ -330,7 +324,8 @@ export function createEngine() {
     src.connect(g);
     g.connect(dest);
     src.start(when, offset, span);
-    const autoReleaseAt = inputPitch == null && shaped ? when + gate : null;
+    const autoReleaseAt = gate != null && gate < duration ? when + gate : null;
+    if (autoReleaseAt != null) rel = Math.min(rel, Math.max(0, duration - gate));
     const voice = { src, g, ch: stealCh || 0, pitch: inputPitch, release: rel, naturalEnd: when + duration,
       levelAt(time) {
         if (autoReleaseAt != null && time >= autoReleaseAt) {

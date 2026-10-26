@@ -666,4 +666,27 @@ for(let i=0;i<2;i++){pattDevice.touch(2,true);pattDevice.touch(2,false);}
 pattDevice.rotate(2,-1000);
 assert.equal(pattSave(6).filt[1].sus,1,'SUST cannot be turned below 1');
 console.log('PASS: ADSR SUST encoder stops at 1.');
+
+// FN on sample ADSR toggles once per press and persists in pattern sounds.
+assert.equal(pattSave(6).filt[1].gated,false);
+now+=1100;frame(now);
+pattDevice.jump('filter');
+pattDevice.touch(5,true);pattDevice.touch(5,true);pattDevice.touch(5,false);
+textDraws.length=0;now+=100;frame(now);
+assert(textDraws.some(args=>args[0]==='GATE' && args[2]===6),'mode overlay is vertically centered');
+textDraws.length=0;now+=801;frame(now);
+assert(!textDraws.some(args=>args[0]==='GATE'||args[0]==='ONE'),'mode overlay expires');
+for(const label of ['A','D','S','R']) assert(textDraws.some(args=>args[0]===label),'ADSR labels restored');
+assert.equal(pattSave(6).filt[1].gated,true,'one toggle despite duplicate down and release');
+now+=1100;frame(now);
+pattDevice.jump('filter');pattDevice.touch(5,true);
+textDraws.length=0;now+=1000;frame(now);
+assert(textDraws.some(args=>args[0]==='ONE'&&args[2]===6),'ONE overlay stays centered while FN is held');
+pattDevice.touch(5,false);
+assert.equal(pattSave(6).filt[1].gated,false);
+now+=1100;frame(now);
+pattDevice.jump('filter');pattDevice.touch(5,true);pattDevice.touch(5,false);
+pattDevice.touch(3,true);pattDevice.touch(3,false);
+assert.equal(pattSave(6).filt[1].gated,false,'ADSR reset restores ONE');
+console.log('PASS: sample ADSR FN mode toggle, hold/release, saved mode, visible label and reset.');
 }

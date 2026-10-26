@@ -4229,6 +4229,7 @@ FLASHMEM void startNew() {
     SMP.filter_settings[ch][OCTAVE] = (ch >= 1 && ch <= 8) ? 24 : 16;
     SMP.filter_settings[ch][EFX] = 0;  // Sample mode
     
+    setSampleGate(ch, false);
     // Reset parameter data (no hardware calls)
     // Default ADSR: delay=0, A=32, D=32, S=32, R=16 on synths 11/13 (ch14 303: D=10, S=0, R=6)
     SMP.param_settings[ch][DELAY] = 0;

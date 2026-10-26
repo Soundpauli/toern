@@ -3,8 +3,16 @@ static int8_t fnDirection = 0;
 static unsigned long fnDirectionUntil = 0;
 
 static void updateFnState() {
+  const bool wasHeld = fnHeld;
   const bool fillChord = pollTouchFillChord();
   fnHeld = !fillChord && currentMode != &touchyMode && currentMode != &recordMode && readDebouncedTouch(4);
+  if (fnHeld && !wasHeld && currentMode == &filterMode && GLOB.currentChannel >= 1
+      && GLOB.currentChannel <= 8 && filterPage[GLOB.currentChannel] == 2) {
+    setSampleGate(GLOB.currentChannel, !sampleGateEnabled(GLOB.currentChannel));
+    sampleGateOverlayUntil = millis() + 800;
+    lastChangedEncoder = -1;
+    showFilterPages(GLOB.currentChannel);
+  }
   if (fnHeld) noteUserActivity();
 }
 

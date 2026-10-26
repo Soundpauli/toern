@@ -548,6 +548,12 @@ export function drawFilter(matrix, s, now) {
   const pages = filterPagesFor(s.GLOB.currentChannel);
   const page = pages[s.filterPage || 0] || pages[0];
   const pageColors = FILTER_PAGES_COLORS[s.filterPage || 0] || FILTER_PAGES_COLORS[0];
+  if (s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8 && page[0]?.key === "att"
+      && (s.fnHeld || now < s.sampleGateOverlayUntil)) {
+    const label = f.gated ? "GATE" : "ONE";
+    matrix.drawText(label, Math.max(1, Math.floor((COLS - textPixelWidth(label)) / 2) + 1), 6, f.gated ? [255,160,0] : [0,200,120]);
+    return;
+  }
   pageColors.forEach((c, i) => matrix.setRing(i + 1, c));
   for (let p = 0; p < pages.length; p++) matrix.light(COLS - pages.length + 1 + p, ROWS, p === (s.filterPage || 0) ? [255, 255, 255] : [30, 30, 30]);
   const focus = s.filterTouch;

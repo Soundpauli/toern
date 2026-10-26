@@ -20,29 +20,20 @@ public:
     }
   }
   void release(float ms) { r_ = count(ms); runR_ = r_; }
-  void noteOn(bool oneShot = false, uint32_t availableFrames = 0) {
-    // Neutral hits play the complete sample. Shaped one-shots must generate
-    // their own Note Off; grid/audition triggers have no key-release event.
+  void noteOn(bool sequenced = false, uint32_t availableFrames = 0, float gateMs = 0) {
     runA_ = a_; runH_ = h_; runD_ = sustain_ != 1.0f ? d_ : 0; runR_ = r_;
     framesLeft_ = availableFrames; bounded_ = availableFrames != 0;
-    const bool shaped = a_ || h_ || sustain_ != 1.0f || r_;
-    uint32_t gate = (uint32_t)fmaxf((float)(runA_ + runH_ + runD_ + 1), (float)count(5.0f));
-    const uint32_t requested = gate + runR_;
-    // Reserve the last PCM frame for zero. Keep stage ratios and configured
-    // controls; only this note's effective times shrink to fit the reader.
-    const uint32_t budget = availableFrames > 1 ? availableFrames - 1 : 1;
-    if (shaped && bounded_ && requested > budget) {
-      const float scale = (float)budget / requested;
+    // Gate is independent of ADSR. Zero means natural one-shot playback.
+    autoOff_ = sequenced ? count(gateMs) : 0;
+    uint32_t budget = availableFrames > 1 ? availableFrames - 1 : 1;
+    if (autoOff_ && (!bounded_ || autoOff_ < budget)) budget = autoOff_;
+    const uint32_t stages = runA_ + runH_ + runD_;
+    if ((bounded_ || autoOff_) && stages > budget) {
+      const float scale = (float)budget / stages;
       runA_ = (uint32_t)(runA_ * scale);
       runH_ = (uint32_t)(runH_ * scale);
       runD_ = (uint32_t)(runD_ * scale);
-      gate = (uint32_t)fmaxf(1.0f, floorf(gate * scale));
-      runR_ = r_ ? budget - gate : 0;
     }
-    // A shaped one-shot releases from the level reached after A/H/D.
-    // Do not anchor its end to EOF: more R must lengthen the fade rather
-    // than bring its onset forward when the requested stages already fit.
-    autoOff_ = oneShot && shaped ? gate : 0;
     level_ = runA_ ? 0.0f : 1.0f;
     if (runA_) segment(Attack, runA_, 1.0f);
     else beginHold();

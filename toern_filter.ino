@@ -387,6 +387,7 @@ void setFilterDefaults(int channel) {
   SMP.filter_settings[channel][OCTAVE] = (channel >= 1 && channel <= 8) ? 24 : 16;
   filterSetting(channel, FILTER_WAVEFORM) = 8;  // SAW (value 2)
 
+  setSampleGate(channel, false);
   SMP.param_settings[channel][DELAY] = 0;
   SMP.param_settings[channel][ATTACK] = 32;
   SMP.param_settings[channel][DECAY] = (channel == 14) ? 20 : 32;

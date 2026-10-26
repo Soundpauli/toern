@@ -221,8 +221,8 @@
                   <text x="220" y="50" font-size="9" fill="#2563eb">sustain level</text>
                 </svg>
               </div>
-              <p class="hb-device__intro" data-hb-copy="sound.102"><strong>Attack</strong> rises to the peak; <strong>Decay</strong> falls to the sustain level; <strong>Release</strong> fades from that level after Note Off. A, D and R use 0–32; S uses 1–32. Shaped sample grid hits automatically start Release after attack/decay (minimum gate 5 ms). Increasing R lengthens that fade when enough audio remains: 16 requests 500 ms and 32 requests 1,000 ms. Release is no longer positioned backward from the sample end. If A/D/R exceed the played region, they shorten proportionally for that hit; stored settings stay unchanged. Neutral one-shots play the original sample unchanged. Held MIDI notes sustain until Note Off, and release is limited by the remaining sample audio.</p>
-              <div class="hb-tip" data-hb-copy="sound.103"><strong>Sample release:</strong> set attack and decay first, then raise R for a longer fade from the sustain level. Keep enough sample audio after A/D for the release to be audible. Neutral ATTC 32 / SUST 32 / RLSE 0 is an original-sample bypass, so R 0 there still plays the complete natural tail. Release cannot create audio beyond the sample end, and a retrigger replaces the old sample with a short smoothing tail.</div>
+              <p class="hb-device__intro" data-hb-copy="sound.102"><strong>Attack</strong> rises to the peak; <strong>Decay</strong> falls to Sustain; <strong>Release</strong> fades after Note Off. A, D and R use 0–32; S uses 1–32. On the sample ADSR page, press <strong>FN (touch 5)</strong> to toggle <strong>ONE</strong> (green, default) and <strong>GATE</strong> (amber), independently for voices 1–8. The selected mode appears as a centered overlay while FN is held and for at least 800 ms after pressing; the normal ADSR labels return afterward. ONE plays to the natural sample end. GATE generates Note Off after one sequencer step at the current tempo. A/D/R edits never move that gate. The mode is saved with the pattern; resetting ADSR restores ONE. Live MIDI uses key release in either mode.</p>
+              <div class="hb-tip" data-hb-copy="sound.103"><strong>Sample release:</strong> ONE lets you soften the attack without shortening the recording. R acts on MIDI Note Off and pause. Use GATE for an automatic ending: at 120 BPM the gate is 125 ms, then R 16 requests a 500 ms fade and R 32 a 1,000 ms fade. Release is capped by the audio remaining; it cannot extend the recording. New settings take effect on the next hit.</div>
             </article>
           </section>
 
@@ -239,6 +239,37 @@
               <li><strong>Decay 0 + Sustain max</strong> = organ-style hold. Use for pads.</li>
               <li data-hb-copy="sound.108"><strong>Release 0</strong> adds no fade after Note Off. A sample one-shot can still play to its natural end; a held MIDI note stops immediately when released.</li>
             </ul>
+            <p>For the exact timing, fitting and retrigger rules, see <a href="#adsr-technical">Sample ADSR — technical details</a>.</p>
+          </section>
+
+          <section class="hb-sub" id="adsr-technical">
+            <h2>Sample ADSR — technical details</h2>
+            <p>These rules describe sample voices <strong>1–8</strong>. Synth voices have their own envelope generators, presets and note-length rules. A sample envelope changes the amplitude of the audio that is playing; it cannot generate or extend sample audio.</p>
+
+            <h3>Control values and requested times</h3>
+            <table class="opt-table">
+              <thead><tr><th>Control</th><th>Mapping before sample-length fitting</th><th>Examples</th></tr></thead>
+              <tbody>
+                <tr><td><strong>ATTC</strong> · 0–32</td><td><code>A = 2000 × (32 − ATTC) / 32</code> ms</td><td>32 = immediate; 30 = 125 ms; 16 = 1 s; 0 = 2 s.</td></tr>
+                <tr><td><strong>DCAY</strong> · 0–32</td><td><code>D = 1000 × DCAY / 32</code> ms</td><td>0 = immediate; 8 = 250 ms; 32 = 1 s. Skipped when SUST is 32.</td></tr>
+                <tr><td><strong>SUST</strong> · 1–32</td><td><code>S = SUST / 32</code>, relative to the envelope peak</td><td>32 = unity; 16 = half amplitude; 1 = 3.125% (about −30 dB). It is a level, not a duration.</td></tr>
+                <tr><td><strong>RLSE</strong> · 0–32</td><td><code>R = 1000 × RLSE / 32</code> ms</td><td>0 = immediate at Note Off; 16 = 500 ms; 32 = 1 s.</td></tr>
+              </tbody>
+            </table>
+            <p><strong>Only Attack runs in the opposite direction:</strong> higher ATTC means a shorter rise. Higher DCAY or RLSE means a longer requested time. The sample envelope uses linear amplitude ramps, calculated for each output sample, rather than exponential loudness curves. Velocity, voice volume, faders and output gain also affect the resulting loudness.</p>
+
+            <h3>What starts Release?</h3>
+            <p>FN (touch 5) on the sample ADSR page toggles ONE and GATE for the current sample voice. ONE is the default, including older patterns. It holds Sustain through the natural sample end; changing Attack or Release does not activate an early cutoff. GATE sends Note Off one sixteenth-note step after the trigger: <code>60000 / (BPM × 4)</code> milliseconds. This duration is captured at the trigger and is independent of A/D/S/R. At 120 BPM it is 125 ms.</p>
+            <p>A 150 ms kick already ends during a long release. A two-second “h-e-l-l-o-o” recording can fade after the gate: R 0 cuts at 125 ms, R 16 fades for 500 ms, and R 32 fades for 1 s, provided that much audio remains. ONE plays the complete recording, with A/D/S shaping its level.</p>
+            <p>Live MIDI waits until the last held key on the sample voice is released in either mode. Note Off during attack or decay releases from the current level; repeated Note Off does not restart Release. Pause also sends Note Off. Retrigger replaces the old note with the short residual fade described below. The FN toggle does not alter synth envelopes.</p>
+
+            <h3>How a short sample constrains the stages</h3>
+            <p>The reader reports the output frames remaining after final pitch/detune, trim, direction and active TIME/WSOLA rules. Requested times are rounded up to output frames. In ONE, attack/hold/effective decay fit within the available audio minus one frame. In GATE, they fit within the smaller of that budget and the gate. If necessary, these stages shrink proportionally for this hit, without rewriting the stored controls. Decay is skipped at SUST 32. Release does not participate in this fitting, so changing R cannot change Attack or gate timing.</p>
+            <p>At Note Off, the requested release is capped to the audio still remaining. No sample mode can create audio beyond the reader’s end. Looping firmware samples have no finite reader budget but still obey the selected gate or explicit Note Off.</p>
+
+            <h3>Neutral playback and retriggers</h3>
+            <p><strong>ATTC 32 / SUST 32 / RLSE 0</strong>, with no internal hold, leaves the original one-shot untouched. DCAY is irrelevant at unity sustain. In ONE there is no automatic gate, including when ADSR is changed: RLSE 0 here preserves the sample’s entire natural tail, rather than making a zero-length note. Zero attack starts at unity on the first PCM sample.</p>
+            <p>On retrigger, the firmware snapshots <strong>64 output samples</strong> of the old reader at its old playback rate and velocity. Its existing envelope shapes that continuation, which fades over about <strong>1.45 ms</strong> at 44.1 kHz. The new sample starts immediately with its own attack; it does not inherit that fade. If the two exceed the per-voice 16-bit range, only the old residual gives up headroom. These are monophonic sample voices, so a retrigger replaces the previous note instead of keeping its full configured release running underneath.</p>
           </section>
 
 

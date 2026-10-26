@@ -137,7 +137,7 @@ export function createDevice(matrix, statusEl, rings) {
     seekOf, endOf, invOf, browse: 0, browseDir: "samples", browseItems: listDir("samples", { parent: false }),
     wavFile: false, peaks: null, shownWav: "", sampleUrl: Array(16).fill(null),
     vel: { v: 8, p: 5, c: 1, vol: 16, backSingle: false }, okAt: 0,
-    filterTouch: 0, filterTouchAt: 0, filterFlash: "", filterFlashAt: 0, filterPage: 0,
+    sampleGateOverlayUntil: 0, filterTouch: 0, filterTouchAt: 0, filterFlash: "", filterFlashAt: 0, filterPage: 0,
     drawBaseColorMode: true, monitor: 0, loopLength: 0, simpleNotes: false, clockInt: true,
     analogExtClock: false, analogPulseAt: 0,
     cinHoldMs: 1, cinPpqnIndex: 2, cinFocus: 0, cinEnabled: true, cinPolarityPos: true, recHpf: true,
@@ -218,7 +218,7 @@ export function createDevice(matrix, statusEl, rings) {
       // wav.oct is in octaves for engine (semis/12); raw slider is 0..48 center 24.
       detune: ((f.detune ?? 16) / 32) * 2 - 1, oct: ((f.oct ?? 24) - 24) / 12, octaveRaw: f.oct,
       stretch: f.stretch ?? 11,
-      env: { att: f.att, dec: f.dec, sus: f.sus, rel: f.rel },
+      env: { att: f.att, dec: f.dec, sus: f.sus, rel: f.rel, gated: f.gated === true },
       wave: f.wave || 0, inst: f.inst || 0, cent: f.cent ?? 16, semi: f.semi || 0,
       lfoR: f.lfoR || 0, lfoD: f.lfoD || 0, span: f.span || 0, arp: f.arp || 0,
     };
@@ -1897,6 +1897,7 @@ export function createDevice(matrix, statusEl, rings) {
     const page = filterPagesFor(ch)[filterPages[ch]] || filterPagesFor(ch)[0];
     const defaults = emptyFilt(ch, filt[ch].inst);
     for (const spec of page) if (spec) filt[ch][spec.key] = defaults[spec.key];
+    if (ch >= 1 && ch <= 8 && page[0]?.key === "att") filt[ch].gated = false;
     applyFilt(ch);
   }
   function resetVoiceFilters(ch) {
@@ -2190,6 +2191,10 @@ export function createDevice(matrix, statusEl, rings) {
       }
     }
     s.fnHeld = padDown[5] && !fillChordConsumed && s.mode !== "rec";
+    if (id === 5 && down && s.fnHeld && s.mode === "filter" && s.GLOB.currentChannel >= 1
+        && s.GLOB.currentChannel <= 8 && filterPages[s.GLOB.currentChannel] === 2) {
+      const f = filt[s.GLOB.currentChannel]; f.gated = !f.gated; s.sampleGateOverlayUntil = performance.now() + 800; s.filterTouchAt = -Infinity; queueAutosave();
+    }
     if (id === 4 || id === 5) {
       touch.t4 = padDown[4] && !fillChordConsumed;
       if (down) noteActivity();

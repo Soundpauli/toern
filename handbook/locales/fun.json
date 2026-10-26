@@ -930,5 +930,7 @@
       "reference.101": "A new pattern is being invented.",
       "reference.102": "The order in which pages return."
     }
-  }
+  },
+  "sound.102": "<strong>Attack</strong> rises to the peak; <strong>Decay</strong> falls to Sustain; <strong>Release</strong> fades after Note Off. A, D and R use 0–32; S uses 1–32. On the sample ADSR page, press <strong>FN (touch 5)</strong> to toggle <strong>ONE</strong> (green, default) and <strong>GATE</strong> (amber), independently for voices 1–8. The selected mode appears as a centered overlay while FN is held and for at least 800 ms after pressing; the normal ADSR labels return afterward. ONE plays to the natural sample end. GATE generates Note Off after one sequencer step at the current tempo. A/D/R edits never move that gate. The mode is saved with the pattern; resetting ADSR restores ONE. Live MIDI uses key release in either mode.",
+  "sound.103": "<strong>Sample release:</strong> ONE lets you soften the attack without shortening the recording. R acts on MIDI Note Off and pause. Use GATE for an automatic ending: at 120 BPM the gate is 125 ms, then R 16 requests a 500 ms fade and R 32 a 1,000 ms fade. Release is capped by the audio remaining; it cannot extend the recording. New settings take effect on the next hit."
 }
