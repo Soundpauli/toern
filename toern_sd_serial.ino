@@ -29,6 +29,9 @@
 
 #if defined(ARDUINO)
 
+// Command/transfer work runs on demand from the main loop; keep it out of ITCM.
+// The per-loop polling and connection bookkeeping remain in fast RAM.
+
 // Buffer the whole host flow-control block before SD I/O. The host may still
 // be transmitting its second half when only 4096 bytes have arrived.
 static const size_t SD_SER_CHUNK = 8192;
@@ -44,7 +47,7 @@ static char sdSerLineBuf[192];
 static size_t sdSerLineLen = 0;
 static bool sdSerPutTrace = false;
 
-static void sdSerDrainRx() {
+FLASHMEM static void sdSerDrainRx() {
   uint32_t start = millis();
   do {
     while (Serial.available()) (void)Serial.read();
@@ -53,7 +56,7 @@ static void sdSerDrainRx() {
   sdSerLineLen = 0;
 }
 
-static void sdSerAudioStopForSd() {
+FLASHMEM static void sdSerAudioStopForSd() {
   // Stop playback and previews before any host-side SD mutations. USB
   // interrupts remain enabled; AudioNoInterrupts masks only the audio IRQ.
   extern bool isNowPlaying;
@@ -65,18 +68,18 @@ static void sdSerAudioStopForSd() {
   stopAllSetWavPreviewAudio();
 }
 
-static void sdSerSdLock() {
+FLASHMEM static void sdSerSdLock() {
   sdSerAudioStopForSd();
   AudioNoInterrupts();
 }
 
-static void sdSerSdUnlock() {
+FLASHMEM static void sdSerSdUnlock() {
   AudioInterrupts();
 }
 
-static void sdSerTouchClient();
+FLASHMEM static void sdSerTouchClient();
 
-static uint32_t sdSerCrc32Update(uint32_t crc, const uint8_t *data, size_t len) {
+FLASHMEM static uint32_t sdSerCrc32Update(uint32_t crc, const uint8_t *data, size_t len) {
   crc = ~crc;
   while (len--) {
     crc ^= *data++;
@@ -88,11 +91,11 @@ static uint32_t sdSerCrc32Update(uint32_t crc, const uint8_t *data, size_t len) 
   return ~crc;
 }
 
-static void sdSerReply(const char *msg) {
+FLASHMEM static void sdSerReply(const char *msg) {
   Serial.println(msg);
 }
 
-static void sdSerReplyf(const char *fmt, ...) {
+FLASHMEM static void sdSerReplyf(const char *fmt, ...) {
   char buf[160];
   va_list ap;
   va_start(ap, fmt);
@@ -101,27 +104,27 @@ static void sdSerReplyf(const char *fmt, ...) {
   Serial.println(buf);
 }
 
-static void sdSerReplyFlush(const char *msg) {
+FLASHMEM static void sdSerReplyFlush(const char *msg) {
   Serial.println(msg);
   Serial.flush();
 }
 
 // Optional diagnostics for a host explicitly issuing PUTTRACE. Normal PUT
 // framing stays READY / ACK / OK, with no extra traffic.
-static void sdSerPutCheckpoint(const char *stage, uint32_t offset) {
+FLASHMEM static void sdSerPutCheckpoint(const char *stage, uint32_t offset) {
   if (!sdSerPutTrace) return;
   sdSerReplyf("TRACE %s %lu", stage, (unsigned long)offset);
   Serial.flush();
 }
 
-static void sdSerCmdInfo() {
+FLASHMEM static void sdSerCmdInfo() {
   sdSerReplyf("OK SDINFO cpu=%lu tempCenti=%d error=%u data=%lu",
               (unsigned long)F_CPU_ACTUAL, (int)(tempmonGetTemp() * 100.0f),
               (unsigned)SD.sdfs.card()->errorCode(),
               (unsigned long)SD.sdfs.card()->errorData());
 }
 
-static bool sdSerReadExact(uint8_t *dst, size_t len, uint32_t timeoutMs) {
+FLASHMEM static bool sdSerReadExact(uint8_t *dst, size_t len, uint32_t timeoutMs) {
   size_t got = 0;
   uint32_t start = millis();
   uint32_t traced = start;
@@ -164,7 +167,7 @@ static bool sdSerReadExact(uint8_t *dst, size_t len, uint32_t timeoutMs) {
 }
 
 // Reject empty, absolute-escape, and ".." path segments.
-static bool sdSerNormalizePath(const char *in, char *out, size_t outLen) {
+FLASHMEM static bool sdSerNormalizePath(const char *in, char *out, size_t outLen) {
   if (!in || !out || outLen < 2) return false;
 
   while (*in == '/' || *in == '\\') in++;
@@ -202,16 +205,16 @@ static bool sdSerNormalizePath(const char *in, char *out, size_t outLen) {
   return true;
 }
 
-static const char *sdSerFsPath(const char *normalized) {
+FLASHMEM static const char *sdSerFsPath(const char *normalized) {
   if (!normalized || normalized[0] == '\0') return "/";
   return normalized;
 }
 
-static void sdSerCmdPing() {
+FLASHMEM static void sdSerCmdPing() {
   sdSerReplyf("OK TOERN SD %s PUT_SPACES PUT_TRACE", VERSION);
 }
 
-static void sdSerCmdList(const char *pathArg) {
+FLASHMEM static void sdSerCmdList(const char *pathArg) {
   char path[128];
   if (!sdSerNormalizePath(pathArg ? pathArg : "/", path, sizeof(path))) {
     sdSerReply("ERR BAD_PATH");
@@ -252,7 +255,7 @@ static void sdSerCmdList(const char *pathArg) {
   sdSerReply("OK");
 }
 
-static void sdSerCmdMv(char *args) {
+FLASHMEM static void sdSerCmdMv(char *args) {
   char *fromTok = strtok(args, " \t");
   char *toTok = strtok(NULL, " \t");
   if (!fromTok || !toTok) {
@@ -285,7 +288,7 @@ static void sdSerCmdMv(char *args) {
   sdSerReply("OK");
 }
 
-static void sdSerCmdRm(const char *pathArg) {
+FLASHMEM static void sdSerCmdRm(const char *pathArg) {
   char path[128];
   if (!pathArg || !sdSerNormalizePath(pathArg, path, sizeof(path)) || strcmp(path, "/") == 0) {
     sdSerReply("ERR BAD_PATH");
@@ -319,7 +322,7 @@ static void sdSerCmdRm(const char *pathArg) {
   sdSerReply("OK");
 }
 
-static void sdSerCmdMkdir(const char *pathArg) {
+FLASHMEM static void sdSerCmdMkdir(const char *pathArg) {
   char path[128];
   if (!pathArg || !sdSerNormalizePath(pathArg, path, sizeof(path)) || strcmp(path, "/") == 0) {
     sdSerReply("ERR BAD_PATH");
@@ -340,7 +343,7 @@ static void sdSerCmdMkdir(const char *pathArg) {
   sdSerReply("OK");
 }
 
-static void sdSerCmdPut(char *args) {
+FLASHMEM static void sdSerCmdPut(char *args) {
   char *pathTok = nullptr;
   uint32_t size = 0, expectCrc = 0;
   if (!toern_sd::parsePutArgs(args, pathTok, size, expectCrc)) {
@@ -407,7 +410,8 @@ static void sdSerCmdPut(char *args) {
 
   sdSerReplyFlush("READY");
 
-  static uint8_t chunk[SD_SER_CHUNK];
+  // Full USB flow-control block; only used during host-to-SD uploads.
+  DMAMEM static uint8_t chunk[SD_SER_CHUNK] __attribute__((aligned(32)));
   uint32_t remaining = size;
   uint32_t crc = 0;
   bool ok = true;
@@ -469,7 +473,7 @@ static void sdSerCmdPut(char *args) {
   sdSerReplyFlush("OK");
 }
 
-static bool sdSerWriteAll(const uint8_t *data, size_t len) {
+FLASHMEM static bool sdSerWriteAll(const uint8_t *data, size_t len) {
   size_t off = 0;
   uint32_t start = millis();
   while (off < len) {
@@ -489,7 +493,7 @@ static bool sdSerWriteAll(const uint8_t *data, size_t len) {
   return true;
 }
 
-static bool sdSerWaitAck(uint32_t timeoutMs) {
+FLASHMEM static bool sdSerWaitAck(uint32_t timeoutMs) {
   char buf[16];
   size_t len = 0;
   uint32_t start = millis();
@@ -511,7 +515,7 @@ static bool sdSerWaitAck(uint32_t timeoutMs) {
   return false;
 }
 
-static void sdSerCmdGet(const char *pathArg) {
+FLASHMEM static void sdSerCmdGet(const char *pathArg) {
   char path[128];
   if (!pathArg || !sdSerNormalizePath(pathArg, path, sizeof(path)) || strcmp(path, "/") == 0) {
     sdSerReply("ERR BAD_PATH");
@@ -606,7 +610,7 @@ static void sdSerExpireClient() {
   }
 }
 
-static void sdSerTouchClient() {
+FLASHMEM static void sdSerTouchClient() {
   const bool was = sdSerClientConnected;
   sdSerNoteHostPresent();
   if (was) return;
@@ -616,7 +620,7 @@ static void sdSerTouchClient() {
   menuRequestFullRedraw();
 }
 
-static char *sdSerSkipSpaces(char *s) {
+FLASHMEM static char *sdSerSkipSpaces(char *s) {
   while (s && (*s == ' ' || *s == '\t')) s++;
   return s;
 }
@@ -628,7 +632,7 @@ static const size_t SD_PAT_BYTES = SD_PAT_NOTE_BYTES + 2u + 4u + 8u + SD_PAT_NOT
 static const uint8_t SD_PAT_PITCH_HDR[8] = { 'T', 'P', 'I', 'T', 1, 0x10, 0x00, 0 };
 static EXTMEM uint8_t sdPatBuf[SD_PAT_BYTES];
 
-static void sdPatPack() {
+FLASHMEM static void sdPatPack() {
   size_t i = 0;
   for (unsigned int x = 1; x <= 256; x++) {
     for (unsigned int y = 1; y <= 16; y++) {
@@ -652,7 +656,7 @@ static void sdPatPack() {
   }
 }
 
-static bool sdPatApply() {
+FLASHMEM static bool sdPatApply() {
   if (sdPatBuf[SD_PAT_NOTE_BYTES] != 0xFF || sdPatBuf[SD_PAT_NOTE_BYTES + 1] != 0xFE) return false;
   const size_t pitchAt = SD_PAT_NOTE_BYTES + 2u + 4u;
   if (memcmp(sdPatBuf + pitchAt, SD_PAT_PITCH_HDR, sizeof(SD_PAT_PITCH_HDR)) != 0) return false;
@@ -689,7 +693,7 @@ static bool sdPatApply() {
   return true;
 }
 
-static void sdSerCmdGetPat() {
+FLASHMEM static void sdSerCmdGetPat() {
   sdPatPack();
   sdSerAudioStopForSd();
   sdSerReplyf("OK %lu", (unsigned long)SD_PAT_BYTES);
@@ -735,7 +739,7 @@ static void sdSerCmdGetPat() {
   showDrawAfterPatternTransfer();
 }
 
-static void sdSerCmdPutPat(char *args) {
+FLASHMEM static void sdSerCmdPutPat(char *args) {
   char *sizeTok = strtok(args ? args : (char *)"", " \t");
   char *crcTok = strtok(NULL, " \t");
   if (!sizeTok || !crcTok) {
@@ -795,7 +799,7 @@ static void sdSerCmdPutPat(char *args) {
   showDrawAfterPatternTransfer();
 }
 
-static void sdSerHandleLine(char *line) {
+FLASHMEM static void sdSerHandleLine(char *line) {
   line = sdSerSkipSpaces(line);
   if (*line == '\0') return;
 
@@ -896,7 +900,7 @@ void sdSerialServerPoll() {
 }
 
 // Pattern + file exchange works from any screen. PING does not open the SD page.
-static void sdSerHandleOffPage(char *line) {
+FLASHMEM static void sdSerHandleOffPage(char *line) {
   line = sdSerSkipSpaces(line);
   if (line[0] == '\0') return;
 

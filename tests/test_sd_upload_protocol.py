@@ -8,7 +8,7 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 source = (root / 'toern_sd_serial.ino').read_text()
 def function(name):
-    m = re.search(r'^static (?:bool|void|uint32_t) ' + name + r'\([^\n]*\) \{', source, re.M)
+    m = re.search(r'^(?:FLASHMEM )?static (?:bool|void|uint32_t) ' + name + r'\([^\n]*\) \{', source, re.M)
     assert m, name
     end = source.index('{', m.start()) + 1
     depth = 1
@@ -18,6 +18,8 @@ def function(name):
     return source[m.start():end]
 
 harness = r'''
+#define FLASHMEM
+#define DMAMEM
 #include "src/toern_sd_protocol.h"
 #include <cassert>
 #include <algorithm>

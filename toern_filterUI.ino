@@ -86,8 +86,9 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
   return raw;
 }
 
+// Filter-screen rendering and setup run in the main loop, outside audio processing.
 // Full parameter name centered — 5px font at y=12 → rows 12–16 (top on y=16).
-void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
+FLASHMEM void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
   /*int len = strlen(name);
   const uint8_t charW = 3;
   int totalW = charW * len;
@@ -120,7 +121,7 @@ void drawSliderName(uint8_t x0, uint8_t x1, const char* name, CRGB filtercol) {
   drawText(name, tx, 12, filtercol);
 }
 
-void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEntry& meta) {
+FLASHMEM void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEntry& meta) {
   // Special case: Channel 11 WAVE slider (encoder 0) should be at x=6
   uint8_t chan = GLOB.currentChannel;
   uint8_t x;
@@ -215,7 +216,7 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   drawText(buf, x, y, textColor);
 }
 
-void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRGB baseColor, bool lowHighSlider = false, uint8_t sliderIndex = 0, uint8_t page = 0, bool switchtype = false) {
+FLASHMEM void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRGB baseColor, bool lowHighSlider = false, uint8_t sliderIndex = 0, uint8_t page = 0, bool switchtype = false) {
   const uint8_t displayResolution = 10;
   uint8_t displayVal;
   if (switchtype) {
@@ -278,7 +279,7 @@ void drawVerticalSlider(uint8_t x0, uint8_t x1, uint8_t val, uint8_t maxVal, CRG
   }
 }
 
-void initSliders(uint8_t page, uint8_t chan) {
+FLASHMEM void initSliders(uint8_t page, uint8_t chan) {
   page = filterPage[chan];
   showFilterNames(chan);
 

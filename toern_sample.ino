@@ -852,7 +852,8 @@ void invalidateShowWaveBrowserSync() {
   g_lastChannelInShowWave = -1;
 }
 
-void showWave() {
+// Sample-browser UI runs in the main loop, outside the audio interrupt.
+FLASHMEM void showWave() {
   // ---- Helpers -------------------------------------------------------------
   auto resetSeekRange = []() {
     currentMode->pos[0] = 0;
@@ -1432,7 +1433,7 @@ void reversePreviewSample() {
 }
 
 // Copy the preview sample (channel 0) to the target channel
-bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
+FLASHMEM bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   if (targetChannel < 1 || targetChannel >= maxFiles) {
     return false;
   }
