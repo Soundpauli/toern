@@ -7,7 +7,13 @@ import {
 
 const FIRMWARE_URLS = {
   stable: new URL('./public/toern_firmware_3.0.ino.hex', import.meta.url).href,
-  beta: new URL('./public/toern_firmware_beta.ino.hex', import.meta.url).href
+  beta: new URL('./public/toern_firmware_beta.ino.hex', import.meta.url).href,
+  'beta-eurorck': new URL('./public/toern_firmware_beta_eurorck.ino.hex', import.meta.url).href
+};
+const FIRMWARE_NAMES = {
+  stable: 'toern_firmware_3.0.ino.hex',
+  beta: 'toern_firmware_beta.ino.hex',
+  'beta-eurorck': 'toern_firmware_beta_eurorck.ino.hex'
 };
 
 let selectedDevice = null;
@@ -46,9 +52,9 @@ serialManager.onData = (line) => {
 
 /** Load firmware from URL and set firmwareData/firmwareName */
 async function loadFirmware() {
-  const isBeta = document.getElementById('firmwareBeta').checked;
-  const url = isBeta ? FIRMWARE_URLS.beta : FIRMWARE_URLS.stable;
-  const name = isBeta ? 'toern_firmware_beta.ino.hex' : 'toern_firmware_3.0.ino.hex';
+  const selected = document.querySelector('input[name="firmware"]:checked')?.value || 'stable';
+  const url = FIRMWARE_URLS[selected] || FIRMWARE_URLS.stable;
+  const name = FIRMWARE_NAMES[selected] || FIRMWARE_NAMES.stable;
   try {
     setLoaded('Loading firmware...');
     const res = await fetch(url);
@@ -70,6 +76,11 @@ document.getElementById('firmwareStable').addEventListener('change', () => {
 });
 
 document.getElementById('firmwareBeta').addEventListener('change', () => {
+  document.getElementById('betaWarning').classList.add('is-visible');
+  loadFirmware();
+});
+
+document.getElementById('firmwareBetaEurorck').addEventListener('change', () => {
   document.getElementById('betaWarning').classList.add('is-visible');
   loadFirmware();
 });

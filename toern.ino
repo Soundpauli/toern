@@ -3,6 +3,7 @@
 #include "src/toern_demo.h"
 #include "src/toern_grid_paint.h"
 #include "toern_touch_input.h"
+#include "src/toern_pattern_slots.h"
 
 #define VERSION "v3.02"
 extern "C" char *sbrk(int incr);
@@ -1091,9 +1092,39 @@ static void refreshSamplerChannel(uint8_t channel);
 static void updateFnState();
 static uint8_t fnButtonEvent(int index, uint8_t physicalState);
 static bool fnHeld = false;
+// File subpatterns are separate from the existing page/mute SUBPATTERN mode.
+bool subpatternsEnabled = false;
+static unsigned subpatternFile = 0;
+static uint8_t subpatternSlot = 0, subpatternSelected = 0, subpatternPendingSlot = 0;
+static bool subpatternLettered = false, subpatternSelector = false;
+static bool subpatternQuietSave = false, subpatternSaveNew = false;
+static bool subpatternSavingPrevious = false, subpatternOldSavePending = false;
+static uint8_t subpatternPreviousSlot = 0;
+static DMAMEM Note subpatternGrid[maxlen + 1][maxY + 1];
+static uint32_t subpatternAvailable = 0;
+static volatile bool subpatternReady = false, subpatternBoundary = false, subpatternApplied = false;
+static bool subpatternCommitAtStepStart();
+static bool subpatternFnRelease();
+static void subpatternFailure();
+static bool subpatternTurn(int delta);
+static bool subpatternPageTurn(int delta);
+static void subpatternCancelPreview();
+Note *subpatternViewedNote(unsigned ix, unsigned iy);
+bool subpatternShowingOtherSlot();
+static void serviceSubpatterns();
+static bool subpatternOverlayVisible();
+static void drawSubpatternOverlay();
+static void patternDestination(char *out, size_t size, unsigned file);
+static void resetFileSubpattern();
+void subpatternNotePagesLoaded();
+bool subpatternBrowsePageMask(uint16_t *mask);
+void drawCenteredOverlayLabel(const char *label, CRGB color);
+
 static unsigned long sampleGateOverlayUntil = 0;
 static bool fnButtonHeld[NUM_ENCODERS] = {};
 static bool handleFnEncoder(int index, int &rawValue, bool allowWrite);
+static bool finishFnSubpatternRelease(bool allowWrite);
+static bool fnEncoder2Held();
 static void reverseChannelInMemory(uint8_t channel);
 static void applyChannelDirection(uint8_t channel, int8_t targetDir);
 
@@ -3040,7 +3071,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     const bool encoder2ValuePage = (mainSetting == 11 || mainSetting == 4 || mainSetting == 12 ||
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
-        mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
+        mainSetting == 32 || mainSetting == 33 || mainSetting == 38 || mainSetting == 68)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
         (inEtcSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 63 || mainSetting == 56 || mainSetting == 57 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
@@ -3062,6 +3093,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     switchMode(&loadSaveTrack);
     return;
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001"
+    if (subpatternFile >= 1 && subpatternFile <= 999) SMP.file = subpatternFile;
     paintMode = false;
     unpaintMode = false;
     preventPaintUnpaint = false;  // Reset flag when exiting loadSaveTrack mode
@@ -4776,6 +4808,7 @@ FLASHMEM void setup() {
   updateSynthVoice(11);
   switchMode(&draw);
   applyDrawSingleYEncoderLimits();
+  refreshCtrlEncoderConfig();
 
   Serial8.addMemoryForWrite(midiTxExtra, sizeof(midiTxExtra));
   Serial8.addMemoryForRead(midiRxExtra, sizeof(midiRxExtra));
@@ -5089,6 +5122,22 @@ FLASHMEM void checkEncoders() {
     }
 
     handle_button_state(&Encoder[i], i);  // This updates buttons[i] based on new physical state
+  }
+  // Rewind encoder 2 before the slot swap, then again after SD work, so a
+  // detent that landed as FN released cannot become a page or volume change.
+  // Snapshot before release clears the latch and the selector. Encoder 2's
+  // normal CTRL page/volume path must not see this gesture.
+  const bool holdEncoder2 = fnEncoder2Held();
+  const bool subpatternSwitched = finishFnSubpatternRelease(allowEncWrite);
+  if (subpatternSwitched && (currentMode == &draw || currentMode == &singleMode)) {
+    unsigned int targetPage = GLOB.edit >= 1 ? GLOB.edit : 1u;
+    currentMode->pos[3] = GLOB.x;
+    if (allowEncWrite) Encoder[3].writeCounter((int32_t)GLOB.x);
+    if (ctrlMode == 0) {
+      currentMode->pos[1] = targetPage;
+      editpage = (int)targetPage;
+      if (allowEncWrite) Encoder[1].writeCounter((int32_t)targetPage);
+    }
   }
   screensaverEncBaselineDone = true;
 
@@ -5463,6 +5512,12 @@ FLASHMEM void checkEncoders() {
         currentMode->pos[1] = 1;
         Encoder[1].writeCounter((int32_t)1);
       }
+    } else if (holdEncoder2 && ctrlMode == 0) {
+      int page = editpage < 1 ? 1 : editpage;
+      if ((int)currentMode->pos[1] != page) {
+        currentMode->pos[1] = (unsigned)page;
+        if (allowEncWrite) Encoder[1].writeCounter((int32_t)page);
+      }
     } else if (ctrlMode == 0 && currentMode->pos[1] != (unsigned int)editpage && !songModeActive) {
       updateLastPage();
       int pmax = encoderPageMax();
@@ -5493,8 +5548,8 @@ FLASHMEM void checkEncoders() {
         int xval = rel + (editpage - 1) * (int)maxX;
         xval = constrain(xval, 1, (int)MAX_STEPS);
 
-        // CTRL=PAGE + CRSR=CHNR: flash page number like the channel readout.
-        if (showChannelNr && (currentMode == &draw || currentMode == &singleMode)) {
+        // CTRL=PAGE: always flash page number overlay when changing pages via encoder 2.
+        if (currentMode == &draw || currentMode == &singleMode) {
           pageNrOverlayPage = editpage;
           pageNrOverlayActive = true;
           pageNrOverlayUntil = millis() + 800;
@@ -5544,7 +5599,18 @@ FLASHMEM void checkEncoders() {
       }
     }
 
-    if (ctrlMode == 1) {
+    if (ctrlMode == 1 && holdEncoder2) {
+      // FN+encoder 2 selects a subpattern. Put the counter back on the real
+      // CTRL value and do not draw or apply VOL / input gain.
+      extern int recMode;
+      int held = (currentMode == &draw && GLOB.y == 1)
+          ? ((recMode == 1) ? (int)micGain : (int)lineInLevel)
+          : constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+      if ((int)currentMode->pos[1] != held) {
+        currentMode->pos[1] = (unsigned)held;
+        if (allowEncWrite) Encoder[1].writeCounter((int32_t)held);
+      }
+    } else if (ctrlMode == 1) {
       static int lastY = -1;
 
       bool yChanged = (GLOB.y != lastY);
@@ -6317,6 +6383,7 @@ end_switch1:
         Encoder[3].writeRGBCode(CRGBToUint32(col[GLOB.currentChannel]));
       } else if (currentMode == &loadSaveTrack) {
         // Exit FILE (DAT) directly to draw/single, preserve menu page 0 for re-entry
+        if (subpatternFile >= 1 && subpatternFile <= 999) SMP.file = subpatternFile;
         extern bool menuEnteredFromSingleMode;
         extern int currentMenuPage;
         extern Mode menu;
@@ -7419,9 +7486,8 @@ void loop() {
         }
       }
 
-      // CTRL=PAGE page number (same gate as CRSR=CHNR)
-      if (pageNrOverlayActive && showChannelNr
-          && (currentMode == &draw || currentMode == &singleMode)) {
+      // CTRL=PAGE page number overlay
+      if (pageNrOverlayActive && (currentMode == &draw || currentMode == &singleMode)) {
         if (millis() <= pageNrOverlayUntil) {
           drawPageNrOverlay(pageNrOverlayPage);
         } else {
@@ -7443,6 +7509,7 @@ void loop() {
   if (!fastRecordActive && getLedStripEnabled()) {
     updateLedStrip();
   }
+  serviceSubpatterns();
 
   //granular on ch=8
   /*
@@ -9076,6 +9143,8 @@ void playNote() {
   // This prevents double-trigger of first note when pages change during playback
   // Track last edit page to detect page changes (static persists across function calls)
   static unsigned int lastEdit = GLOB.edit;
+  if (subpatternCommitAtStepStart()) lastEdit = GLOB.edit;
+  subpatternBoundary = false;
 
   if (childLockEnabled) {
     GLOB.edit = 1;
@@ -9538,6 +9607,9 @@ void playNote() {
       isrDbgLoopCountChanged = true;
     }
   }
+  // The final note has sounded; publish the boundary for the NEXT timer tick.
+  subpatternBoundary = toern_pattern_slots::atBoundary(
+      (voiceMode && !songModeActive) || !SMP_PATTERN_MODE, beat, maxX);
   for (int ch = 13; ch <= 14; ch++) {  // Only for synth channels 13, 14
     if (noteOnTriggered[ch] && !persistentNoteOn[ch] &&
         !sequencedMonoSynthActive[ch]) {
@@ -10451,8 +10523,6 @@ FLASHMEM void showLoadSave() {
   char OUTPUTf[50];
   if (isAutosaveSlot) {
     sprintf(OUTPUTf, "autosaved.txt");
-  } else if (!isNewSlot) {
-    sprintf(OUTPUTf, "%u.txt", SMP.file);
   } else {
     OUTPUTf[0] = 0;
   }
@@ -10482,6 +10552,7 @@ FLASHMEM void showLoadSave() {
       lastExists = 1;
     }
   } else if (fileChanged) {
+    if (!isAutosaveSlot) patternDestination(OUTPUTf, sizeof(OUTPUTf), SMP.file);
     txtExists = SD.exists(OUTPUTf);
     lastUi = (int)fileUi;
     lastExists = txtExists ? 1 : 0;

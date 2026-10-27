@@ -19,14 +19,14 @@
   <script src="handbook-layout.js?v=20261016s"></script>
   <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016s"></script>
+  <script src="handbook-nav.js?v=20261027-subp"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
       <div class="wrap">
         <section class="handbook-page" id="page-play">
           <h2 class="handbook-page__title" data-hb-copy="play.001">Settings</h2>
-          <p class="handbook-page__summary" data-hb-copy="play.002">Grid controls live in <strong>SETT</strong>, playback and performance options in <strong>MODE</strong>, and display settings in <strong>ETC → ADV</strong>. Preview mode and volume share <strong>VOL → PREV</strong>. Encoder&nbsp;4 turns through each submenu.</p>
+          <p class="handbook-page__summary">Grid controls live in <strong>SETT</strong> (including <a href="subpatterns.html">SUBP</a>), playback and performance options in <strong>MODE</strong>, and display settings in <strong>ETC → ADV</strong>. Preview mode and volume share <strong>VOL → PREV</strong>. Encoder&nbsp;4 turns through each submenu.</p>
 
           <section class="hb-sub" id="play-root">
             <h2 data-hb-copy="play.003">Entering SETT</h2>
@@ -270,7 +270,7 @@
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
-            <div class="hb-tip">Survives reboot. See also <a href="sequencing.html#draw">Sequencing → draw</a>.</div>
+            <div class="hb-tip">Survives reboot. Turning encoder&nbsp;2 in PAGE always flashes the page number overlay. See also <a href="sequencing.html#draw">Sequencing → draw</a> and <a href="subpatterns.html">Subpatterns</a>.</div>
           </section>
 
 
@@ -397,13 +397,35 @@
             </article>
             <div class="hb-tip" data-hb-copy="play.121">Build a “kick + snare only” return so a break drops back to just those lanes. See <a href="sequencing.html#r-mode">Sequencing → R mode</a>.</div>
           </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="subp">
+            <h2>SETT → SUBP — file subpatterns</h2>
+            <p class="lede">Five lettered note slots behind the current PATT number. Default <strong>OFF</strong>. Full gestures: <a href="subpatterns.html">Subpatterns</a>.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="lk_subp" width="640" height="320" role="img" aria-label="SUBP"></canvas>
+              </div>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn / short</th><td><strong>OFF</strong> / <strong>ON</strong></td><td>When ON, hold FN and turn encoder&nbsp;2 on the grid to pick A–E.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3 hb-enc-card--empty"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
+              </div>
+            </article>
+          </section>
         </section>
 
         <nav class="hb-pager" aria-label="Next chapter">
           <a class="hb-pager__link hb-pager__link--next" href="midi.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">MIDI</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
+      <script src="handbook-led.js?v=20261027-subp" defer></script>
     </div>
   </div>
 </div>

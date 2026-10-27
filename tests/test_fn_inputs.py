@@ -9,7 +9,7 @@ harness=r'''
 using uint8_t=unsigned char;using int8_t=signed char;using int32_t=int;
 const int NUM_ENCODERS=4;
 struct Mode {int pos[4];};
-Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={};
+Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},filterMode={},recordMode={};
 Mode *currentMode=&draw;
 struct EncoderTurnEvent {int encoder;int delta;bool fn;};
 struct {int currentChannel=1;} GLOB;
@@ -22,10 +22,17 @@ struct Enc {
 } Encoder[4];
 const int SWITCH_5=39,touchThreshold=45;
 int touched=0,activity=0,calls=0,lastDir=0;
-bool fastRecordActive=false,isRecording=false,muteModeActive=false,fnHeld=false;
+bool fastRecordActive=false,isRecording=false,muteModeActive=false,fnHeld=false,subpatternSelector=false;
 bool fnButtonHeld[NUM_ENCODERS]={};
 unsigned int loadedSampleLen[16]={0,256,256};
-unsigned long clockMs=100;
+unsigned long clockMs=100,sampleGateOverlayUntil=0;
+int filterPage[16]={},lastChangedEncoder=0,slotCalls=0,releases=0;
+bool pollTouchFillChord(){return false;}
+bool sampleGateEnabled(int){return false;}
+void setSampleGate(int,bool){}void showFilterPages(int){}
+bool subpatternTurn(int){slotCalls++;return true;}
+bool subpatternPageTurn(int){return true;}
+bool subpatternFnRelease(){releases++;return false;}
 int fastTouchRead(int){return touched;}
 bool readDebouncedTouch(int){return touched>touchThreshold;}
 void noteUserActivity(){activity++;}
@@ -47,6 +54,7 @@ int main(){
  Encoder[0].status=i2cEncoderLibV2::RINC;value=3;assert(handleFnEncoder(0,value,true));assert(lastDir==1&&value==2);
  // Even at the existing limit a rotation status can dispatch FN direction.
  Encoder[0].status=i2cEncoderLibV2::RDEC;value=2;assert(handleFnEncoder(0,value,true));assert(lastDir==-1);
+ Encoder[1].status=i2cEncoderLibV2::RINC;value=6;assert(handleFnEncoder(1,value,true));assert(slotCalls==1&&value==5);
  assert(Encoder[0].lo==1&&Encoder[0].hi==16&&Encoder[0].step==1);
  for(int enc=1;enc<4;enc++){value=42;assert(handleFnEncoder(enc,value,true));assert(value==draw.pos[enc]&&Encoder[enc].counter==draw.pos[enc]);}
  // All four buttons get FN-long=3; releasing FN during the hold never produces 2.
@@ -74,6 +82,14 @@ int main(){
    assert(handleFnEncoder(enc,value,true));assert(value==mode->pos[enc]);
   }
  }
+ currentMode=&draw;touched=100;updateFnState();assert(fnHeld);
+ Encoder[1].counter=9;Encoder[1].status=0;draw.pos[1]=5;
+ touched=0;updateFnState();
+ int leaked=9;
+ assert(!fnHeld&&handleFnEncoder(1,leaked,true));
+ assert(leaked==5&&Encoder[1].counter==5);
+ assert(!finishFnSubpatternRelease(true)&&Encoder[1].counter==5);
+ leaked=8;assert(!handleFnEncoder(1,leaked,true)&&leaked==8);
  currentMode=&touchyMode;updateFnState();value=25;
  assert(!fnHeld&&!handleFnEncoder(0,value,true)&&fnButtonEvent(0,2)==2);
 }

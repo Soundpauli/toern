@@ -17,6 +17,7 @@
         { href: "sequencing.html", title: "Sequencing", desc: "Draw, triggers, single", icon: "sequencing" },
         { href: "pages-more.html", title: "Pages+More", desc: "Page row, delete pages", icon: "pages" },
         { href: "advanced-sequencing.html", title: "Advanced Sequencing", desc: "Mutes, shift, copy", icon: "advanced" },
+        { href: "subpatterns.html", title: "Subpatterns", desc: "A–E file slots, SUBP", icon: "pages" },
         { href: "samples.html", title: "Samples", desc: "Sample browser", icon: "samples" },
         { href: "sound.html", title: "Sound design", desc: "Filters & ADSR", icon: "sound" },
         { href: "audiopath.html", title: "Audio path", desc: "Gains & mixers", icon: "sound" },

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Subpatterns</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261026-new-controls"></script>
+  <script src="handbook-icons.js"></script>
+  <script src="handbook-nav.js?v=20261027-subp"></script>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <section class="handbook-page" id="page-subpatterns">
+          <h2 class="handbook-page__title">Subpatterns</h2>
+          <p class="handbook-page__summary">Five lettered slots <strong>A–E</strong> behind one PATT number. Turn them on in <strong>SETT → SUBP</strong>, then hold <strong>FN</strong> and turn encoder&nbsp;2. Sounds stay put; only the notes change. This is not <a href="song.html">SONG</a> chaining and not the <a href="advanced-sequencing.html#mutes">mute overlay</a>.</p>
+
+          <section class="hb-sub" id="subp">
+            <h2>SETT → SUBP — enable file subpatterns</h2>
+            <p class="lede"><strong>SUBP</strong> starts <strong>OFF</strong> and survives reboot. While it is off, FN + encoder&nbsp;2 does not open the letter selector.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="lk_subp" width="640" height="320" role="img" aria-label="SUBP"></canvas>
+              </div>
+              <p class="viz-caption--below">SETT → SUBP. Green <strong>ON</strong>, red <strong>OFF</strong>.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn / short</th><td><strong>OFF</strong> / <strong>ON</strong></td><td>Flip the switch. Stored in EEPROM.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3 hb-enc-card--empty"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Next SETT sibling</td><td>VIEW → CTRL → DRAW → MUTE → SWAP → SUBP.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="select">
+            <h2>FN + encoder 2 — pick A–E</h2>
+            <p class="lede">On the draw or single grid, with SUBP&nbsp;ON, <strong>hold touch&nbsp;5 (FN)</strong> and turn <strong>encoder&nbsp;2</strong>. The grid keeps rendering. A centered overlay shows the letter and page, like FILL: <strong>A1</strong>, <strong>B3</strong>, and so on.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="subp_select" width="640" height="320" role="img" aria-label="Subpattern overlay A1"></canvas>
+              </div>
+              <p class="viz-caption--below">Selector overlay: green letter+page means that slot already has a file; blue means empty.</p>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2 · FN</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>A → B → C → D → E</td><td>Preview that slot’s visible page. This turn never changes <a href="play.html#ctrl">CTRL:VOL</a> or the page.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3 · FN</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Pages with notes</td><td>Steps only through pages that already have notes in the highlighted letter.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
+              </div>
+            </article>
+            <p>While another letter is on screen, the playhead column is <strong>yellow</strong> instead of red — you are looking ahead; the current slot is still sounding.</p>
+            <p>Release FN to arm the chosen letter. Playback keeps the old slot until the same page boundary <a href="play.html#pmd">PMOD → NEXT</a> uses, then swaps. Stopped playback installs it immediately. If the new slot has notes on the page you were looking at, that page stays; otherwise the first page that has notes opens. The X cursor stays in its column.</p>
+            <p>An empty letter becomes a blank grid with the current sounds. Picking the letter you are already on leaves the notes unchanged (it can still jump to a page you previewed). Recording, child lock and image mode do not open the selector. An unreadable target leaves the current grid in place.</p>
+            <div class="hb-tip"><strong>No FN, no letters.</strong> The external button panel has no fifth pad, so SUBP selection is capacitive FN (touch&nbsp;5) only. In the <a href="https://sim.toern.live/">simulator</a>, hold <strong>M</strong> and turn encoder&nbsp;2.</div>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="save">
+            <h2>When a switch is written</h2>
+            <p>Switching letters <strong>while playing never writes</strong> the SD card. Pause, then switch, to save the slot you are leaving (including a newly created blank). A numbered pattern stays <code>N.txt</code> until a lettered slot is saved; the first paused switch promotes it to <code>N-A.txt</code>. After that the family is <code>N-A.txt</code> … <code>N-E.txt</code>.</p>
+            <p><a href="files.html#file">PATT</a> load and save talk to the letter you have selected. A manual empty PATT Save deletes that letter. Automatic paused-switch saves keep a blank grid as a real file. <a href="files.html#new">NEW</a> and a load of a pattern that has no <code>N-A.txt</code> stay a single file — leftover B–E files from an old family are not reused.</p>
+            <p><a href="menus.html#rset">ETC → RSET → PATT</a> removes numbered patterns and their lettered companions.</p>
+            <div class="hb-warn"><strong>Save keepers while paused.</strong> Live A–E flipping is for performance. If you need the outgoing slot on the card, stop first, then change letter.</div>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="not-song">
+            <h2>What SUBP is not</h2>
+            <ul>
+              <li>It does not walk letters automatically. SONG still arranges <em>pages</em> of the current slot.</li>
+              <li>It is not the long-press encoder&nbsp;2 mute / solo overlay on a voice row.</li>
+              <li>FN + encoder&nbsp;2 <em>long</em> on the <a href="pages-more.html#page-row">page row</a> still writes a page. The letter selector is the <em>turn</em> while FN is held.</li>
+            </ul>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Next chapter">
+          <a class="hb-pager__link hb-pager__link--next" href="samples.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Samples</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js?v=20261027-subp" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

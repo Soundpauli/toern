@@ -19,7 +19,7 @@
   <script src="handbook-layout.js?v=20261016s"></script>
   <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016s"></script>
+  <script src="handbook-nav.js?v=20261027-subp"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -231,7 +231,7 @@
 
                     <li id="play">
                       <a href="play.html"><span class="node">SETT</span></a>
-                      <span class="desc" data-hb-copy="menus.028">Grid view, encoder control, drawing and mute selection.</span>
+                      <span class="desc">Grid view, encoder control, drawing, mute, SWAP and SUBP.</span>
                       <ul>
 <li>
                           <span class="node">VIEW</span>
@@ -279,6 +279,7 @@
                           </span>
                         </li>
 <li id="swap-menu"><a href="advanced-sequencing.html#swap"><span class="node">SWAP</span></a><span class="desc">Exchange voice notes across the whole pattern. Encoders&nbsp;2/3 choose voices; hold and turn either for that side’s octave shift (−8…+8). Encoder&nbsp;4 applies; encoder&nbsp;1 exits. Sound settings stay with their voices.</span></li>
+<li id="subp-menu"><a href="subpatterns.html#subp"><span class="node">SUBP</span></a><span class="desc">File subpatterns A–E. Encoder&nbsp;2 sets <strong>OFF</strong> / <strong>ON</strong> (default OFF). When ON, FN + encoder&nbsp;2 on the grid selects the letter. Survives reboot.</span></li>
 </ul>
                     </li>
 
@@ -578,7 +579,7 @@
 
                     <li id="etc">
                       <a href="reference.html#etc"><span class="node">ETC</span></a>
-                      <span class="desc" data-hb-copy="menus.078">ETC contains INFO, SD, BATT, ADV and RSET. ADV holds display and diagnostic settings. SETT → SWAP exchanges notes between two voices.</span>
+                      <span class="desc">ETC contains INFO, SD, BATT, ADV and RSET. ADV holds display and diagnostic settings. SETT → SWAP exchanges notes between two voices. SETT → SUBP turns file subpatterns on.</span>
                       <ul>
 <li>
                           <span class="node">INFO</span>
@@ -746,7 +747,7 @@
                               <li><strong>SD</strong> — rescan the whole card into <code>samples/toern_wavs.txt</code> (mute-mode <code>?&gt;</code> random + sample browser cache)</li>
                               <li><strong>EFX</strong> — factory-reset every tone control (patterns &amp; sample assignments survive)</li>
                               <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">ETC → ADV → LEDS</a>; only PATT-saved work comes back). This does not zero the EEPROM.</li>
-                              <li><strong>PATT</strong> — wipe saved patterns <code>1–999.txt</code> (keeps autosave)</li>
+                              <li><strong>PATT</strong> — wipe saved patterns <code>1–999.txt</code> and lettered <code>N-A</code>…<code>N-E</code> companions (keeps autosave)</li>
                               <li><strong>KIT</strong> — delete kit folders except KIT&nbsp;1</li>
                               <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
                               <li><strong>RAM</strong> — zero every EEPROM byte, delete <code>settings.txt</code>, show RAM / OK, then restart. Next boot is a first run: factory settings, one panel, kit&nbsp;1. Saved patterns stay; the autosave still loads.</li>
@@ -770,7 +771,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="reference.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Screen index</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
+      <script src="handbook-led.js?v=20261027-subp" defer></script>
     </div>
   </div>
 </div>

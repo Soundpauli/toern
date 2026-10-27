@@ -19,7 +19,7 @@
   <script src="handbook-layout.js?v=20261016s"></script>
   <script src="handbook-language.js?v=20261026-new-controls"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261016s"></script>
+  <script src="handbook-nav.js?v=20261027-subp"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -30,7 +30,7 @@
 
           <section class="hb-sub" id="file">
             <h2 data-hb-copy="files.003">PATT — pattern slots</h2>
-            <p class="lede" data-hb-copy="files.004">Open <strong>PATT</strong> from the root menu. Each slot is one numbered file on the SD card holding <em>all pages, all voice lanes, every per-step value and every tone setting</em> — effectively the whole session except the sample audio.</p>
+            <p class="lede" data-hb-copy="files.004">Open <strong>PATT</strong> from the root menu. Each slot is one numbered file on the SD card holding <em>all pages, all voice lanes, every per-step value and every tone setting</em> — effectively the whole session except the sample audio. If that number has a lettered family, PATT load and save use the <a href="subpatterns.html">subpattern</a> you last selected (A–E).</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="loadsave" width="640" height="320" role="img" aria-label="PATT screen"></canvas>
@@ -91,7 +91,7 @@
 
           <section class="hb-sub" id="sidecar">
             <h2 data-hb-copy="files.030">Settings inside the pattern file</h2>
-            <p data-hb-copy="files.031">A numbered pattern is a binary file in the SD card root, such as <code>42.txt</code>. Despite the extension, it is not editable text. It contains all pages, per-step values, sound settings, mutes and the 64-slot page arrangement. There is no separate <code>.dat</code> file or sidecar.</p>
+            <p data-hb-copy="files.031">A numbered pattern is a binary file in the SD card root, such as <code>42.txt</code>. Despite the extension, it is not editable text. It contains all pages, per-step values, sound settings, mutes and the 64-slot page arrangement. There is no separate <code>.dat</code> file or sidecar. With <a href="subpatterns.html">SUBP</a> in use, lettered companions <code>42-A.txt</code> … <code>42-E.txt</code> hold the A–E note slots for that number.</p>
             <p data-hb-copy="files.032">Every time the pattern browser opens, encoder&nbsp;3 starts ON: saved sound settings load and no X is shown. Turn counterclockwise to load without effects: the red X means the current filters, effects, envelopes, synth settings and voice volumes stay as they are, both in memory and in the audio engine. They are not reset to defaults. Turn clockwise to load the stored sound settings instead; turn counterclockwise to keep the current settings. Notes, BPM, mutes and arrangement still load. This switch only affects loading: saving always includes the current sound settings. Startup autosave recovery restores the complete saved session.</p>
             <p data-hb-copy="files.033">The pattern does not contain sample audio. Keep the matching kit and any custom samples on the card.</p>
           </section>
@@ -123,7 +123,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="sample-packs.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sample kits</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261026-new-controls" defer></script>
+      <script src="handbook-led.js?v=20261027-subp" defer></script>
     </div>
   </div>
 </div>

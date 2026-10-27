@@ -80,6 +80,9 @@ FLASHMEM void savePattern(bool autosave) {
   extern void sdIoEndAudioSafe();
 
   lastPatternSaveOk = false;
+  if (!autosave && !subpatternQuietSave
+      && (subpatternReady || subpatternOldSavePending || subpatternSaveNew)) return;
+  const auto *savedNotes = subpatternSavingPrevious ? subpatternGrid : note;
   // PATT slot 0 is autosaved.txt — load-only from the FILE menu.
   if (!autosave && SMP.file == 0) {
     return;
@@ -92,7 +95,7 @@ FLASHMEM void savePattern(bool autosave) {
   stopSdPreviewIfPlaying();
   
   // Only clear display for manual saves, not autosaves
-  if (!autosave) {
+  if (!autosave && !subpatternQuietSave) {
     FastLEDclear();
   }
   
@@ -101,7 +104,7 @@ FLASHMEM void savePattern(bool autosave) {
   if (autosave) {
     sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
   } else {
-    sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
+    patternDestination(OUTPUTf, sizeof(OUTPUTf), SMP.file);
   }
 
   char tmpPath[64], backupPath[64];
@@ -110,13 +113,24 @@ FLASHMEM void savePattern(bool autosave) {
   bool empty = true;
   for (unsigned int x = 1; x < maxlen && empty; x++) {
     for (unsigned int y = 1; y <= maxY; y++) {
-      if (note[x][y].channel != 0) { empty = false; break; }
+      if (savedNotes[x][y].channel != 0) { empty = false; break; }
     }
   }
-  // Preserve the intentional gesture: saving an empty grid clears this slot.
+  // Preserve the intentional gesture: saving an empty grid clears this slot
+  // and its lettered B-E subpatterns if saving slot A / base pattern.
   // Autosave still retains the empty session, rather than reviving old notes.
-  if (!autosave && empty) {
+  if (!autosave && !subpatternQuietSave && empty) {
     lastPatternSaveOk = deletePatternTransaction(SD, OUTPUTf, tmpPath, backupPath);
+    if (subpatternFile != SMP.file || subpatternSlot == 0) {
+      for (uint8_t s = 0; s < toern_pattern_slots::count; ++s) {
+        char sp[24], st[32], sb[32];
+        if (!toern_pattern_slots::path(sp, sizeof(sp), SMP.file, s, true)) continue;
+        snprintf(st, sizeof(st), "%s.tmp", sp);
+        snprintf(sb, sizeof(sb), "%s.bak", sp);
+        deletePatternTransaction(SD, sp, st, sb);
+      }
+      resetFileSubpattern();
+    }
     sdIoEndAudioSafe();
     showPatternResult(lastPatternSaveOk);
     switchMode(&draw);
@@ -126,10 +140,10 @@ FLASHMEM void savePattern(bool autosave) {
   // Do not discard the only recoverable generation after failed recovery.
   if (!validPatternFile(OUTPUTf, false) && (validPatternFile(tmpPath, true) || validPatternFile(backupPath, false))) {
     sdIoEndAudioSafe();
-    if (!autosave) { showPatternResult(false); switchMode(&draw); }
+    if (!autosave && !subpatternQuietSave) { showPatternResult(false); switchMode(&draw); }
     return;
   }
-  if (!autosave) { drawText("SAVE", 1, 8, UI_GREEN); FastLEDshow(); }
+  if (!autosave && !subpatternQuietSave) { drawText("SAVE", 1, 8, UI_GREEN); FastLEDshow(); }
   File saveFile = SD.open(tmpPath, O_WRITE | O_CREAT | O_TRUNC);
   bool wroteOk = false;
   if (saveFile) {
@@ -147,10 +161,10 @@ FLASHMEM void savePattern(bool autosave) {
           }
           bufLen = 0;
         }
-        buf[bufLen++] = note[sdx][sdy].channel;
-        buf[bufLen++] = note[sdx][sdy].velocity;
-        buf[bufLen++] = note[sdx][sdy].probability;
-        buf[bufLen++] = note[sdx][sdy].condition;
+        buf[bufLen++] = savedNotes[sdx][sdy].channel;
+        buf[bufLen++] = savedNotes[sdx][sdy].velocity;
+        buf[bufLen++] = savedNotes[sdx][sdy].probability;
+        buf[bufLen++] = savedNotes[sdx][sdy].condition;
         if ((++rowCount & 0x1Fu) == 0u) {
           sdIoYield();
         }
@@ -196,7 +210,7 @@ FLASHMEM void savePattern(bool autosave) {
       size_t pitchLen = 0;
       for (unsigned int sdx = 1; sdx < maxlen && wroteOk; sdx++) {
         for (unsigned int sdy = 1; sdy <= maxY; sdy++) {
-          buf[pitchLen++] = note[sdx][sdy].midiPitch;
+          buf[pitchLen++] = savedNotes[sdx][sdy].midiPitch;
           if (pitchLen == sizeof(buf)) {
             wroteOk = patternWriteAll(saveFile, buf, pitchLen);
             pitchLen = 0;
@@ -208,6 +222,13 @@ FLASHMEM void savePattern(bool autosave) {
         wroteOk = patternWriteAll(saveFile, buf, pitchLen);
       }
     }
+    // Optional session identity tail: old firmware safely ignores it.
+    if (wroteOk) {
+      const uint8_t identity[8] = {'T','S','U','B',1,
+        (uint8_t)(subpatternFile == SMP.file ? (subpatternSavingPrevious ? subpatternPreviousSlot : subpatternSlot) : 0),
+        (uint8_t)(subpatternFile == SMP.file && subpatternLettered),0};
+      wroteOk = patternWriteAll(saveFile, identity, sizeof(identity));
+    }
     saveFile.close();
   }
 
@@ -218,7 +239,33 @@ FLASHMEM void savePattern(bool autosave) {
     SD.remove(tmpPath);
   }
   lastPatternSaveOk = wroteOk;
-  if (!autosave) {
+  if (wroteOk && !autosave && !subpatternQuietSave && empty) {
+    deletePatternTransaction(SD, OUTPUTf, tmpPath, backupPath);
+  }
+  if (wroteOk && !autosave && subpatternFile == SMP.file
+      && subpatternLettered && (subpatternSavingPrevious ? subpatternPreviousSlot : subpatternSlot) == 0) {
+    char legacy[24], legacyTmp[32], legacyBackup[32];
+    toern_pattern_slots::path(legacy, sizeof(legacy), SMP.file, 0, false);
+    snprintf(legacyTmp, sizeof(legacyTmp), "%s.tmp", legacy);
+    snprintf(legacyBackup, sizeof(legacyBackup), "%s.bak", legacy);
+    deletePatternTransaction(SD, legacy, legacyTmp, legacyBackup);
+  }
+  if (wroteOk && !autosave && subpatternFile != SMP.file) {
+    subpatternFile = SMP.file; subpatternSlot = 0;
+    char lettered[24]; toern_pattern_slots::path(lettered, sizeof(lettered), SMP.file, 0, true);
+    subpatternLettered = SD.exists(lettered);
+    if (!subpatternLettered) {
+      for (uint8_t s = 1; s < toern_pattern_slots::count; ++s) {
+        char sp[24], st[32], sb[32];
+        if (!toern_pattern_slots::path(sp, sizeof(sp), SMP.file, s, true)) continue;
+        snprintf(st, sizeof(st), "%s.tmp", sp);
+        snprintf(sb, sizeof(sb), "%s.bak", sp);
+        deletePatternTransaction(SD, sp, st, sb);
+      }
+    }
+    subpatternNotePagesLoaded();
+  }
+  if (!autosave && !subpatternQuietSave) {
     if (wroteOk) {
       showPatternResult(true);
       switchMode(&draw);
@@ -391,12 +438,18 @@ FLASHMEM void saveSamplePack(int pack) {
 }
 
 FLASHMEM void loadPattern(bool autoload) {
+  if (!autoload && (subpatternOldSavePending || (subpatternSaveNew && !subpatternReady))) { subpatternFailure(); return; }
   extern bool isNowPlaying;
   extern void stopSdPreviewIfPlaying();
   extern void sdIoYield();
   extern void sdIoBeginAudioSafe();
   extern void sdIoEndAudioSafe();
 
+  subpatternReady = false; subpatternApplied = false; subpatternSelector = false; subpatternSaveNew = false;
+  subpatternCancelPreview();
+  const unsigned requestedFile = SMP.file;
+  const uint8_t requestedSlot = (subpatternFile == requestedFile) ? subpatternSlot : 0;
+  uint8_t identity[8] = {};
   drawNoSD();
   stopSdPreviewIfPlaying();
   // Menu load runs with I2S DMA + encoder/fader I2C already live. Byte-at-a-time
@@ -411,7 +464,9 @@ FLASHMEM void loadPattern(bool autoload) {
   if (autoload || SMP.file == 0) {
     sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
   } else {
-    sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
+    patternDestination(OUTPUTf, sizeof(OUTPUTf), SMP.file);
+    if (subpatternFile == SMP.file && subpatternLettered && subpatternSlot == 0 && !SD.exists(OUTPUTf))
+      toern_pattern_slots::path(OUTPUTf, sizeof(OUTPUTf), SMP.file, 0, false);
   }
 
   char tmpPath[64], backupPath[64];
@@ -453,6 +508,8 @@ FLASHMEM void loadPattern(bool autoload) {
         sdIoYield();
       }
     }
+    if (readOk && pitchPresent && loadFile.available() >= 8)
+      loadFile.read(identity, sizeof(identity));
     loadFile.close();
     if (readOk) {
       clearPatternNotes();
@@ -495,6 +552,17 @@ FLASHMEM void loadPattern(bool autoload) {
       }
       unmuteAllChannels();
       applyMutesAfterPMODSwitch();
+      subpatternFile = autoload || requestedFile == 0 ? SMP.file : requestedFile;
+      char lettered[24]; toern_pattern_slots::path(lettered, sizeof(lettered), subpatternFile, 0, true);
+      const bool hasLetterA = SD.exists(lettered);
+      // Only treat the file as a lettered family when N-A.txt actually exists
+      // (or autoload is restoring a paused/in-memory lettered session).
+      subpatternLettered = hasLetterA || (autoload && memcmp(identity, "TSUB", 4) == 0 && identity[6] == 1);
+      subpatternSlot = !subpatternLettered ? 0
+          : (autoload || requestedFile == 0
+              ? (memcmp(identity, "TSUB", 4) == 0 && identity[4] == 1 && identity[5] < toern_pattern_slots::count ? identity[5] : 0)
+              : requestedSlot);
+      SMP.file = subpatternFile;
       loadedOk = true;
     }
     sdIoYield();
@@ -516,6 +584,7 @@ FLASHMEM void loadPattern(bool autoload) {
         switchMode(&draw);
       }
     } else if (!autoload && SMP.file != 0) {
+      resetFileSubpattern();
       extern void showNewFileScreen();
       showNewFileScreen();
     }
@@ -543,6 +612,7 @@ FLASHMEM void loadPattern(bool autoload) {
   preventPaintUnpaint = false;
 
   updateLastPage();
+  subpatternNotePagesLoaded();
   
   // Load SMP settings
   if (!autoload && !isNowPlaying) {
@@ -556,6 +626,7 @@ FLASHMEM void loadPattern(bool autoload) {
     }
     switchMode(&draw);
     applyDrawSingleYEncoderLimits();
+    refreshCtrlEncoderConfig();
   }
   
   sdIoYield();

@@ -82,3 +82,15 @@ The centered FILL overlay stores the requesting voice and expires after 1000 ms.
 ## Synth preset mode
 
 `loadSavePreset` / `LOADSAVE_PRESET` is reached through SMP on ch11/13/14, displayed as **PSET**. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Sample voices still enter `set_Wav`. Presets are scoped to each synth voice; see [SD storage](../subsystems/sd-storage).
+
+## A–E file subpatterns
+
+Enable file subpatterns in `MENU → SETT → SUBP` (`OFF` by default, `ON` to enable). When `SUBP` is `OFF`, holding FN and turning encoder 2 does not open the subpattern selector or show the overlay/indicator.
+
+When `SUBP` is `ON` in DRAW, hold FN and turn encoder 2 to select A–E. The overlay shows both the subpattern letter and page number (`A1`, `B1`, …) in the center of the grid, like FILL, and the rest of the grid keeps rendering. While the selector is open, turning encoder 3 steps the target page through the pages that have notes in that subpattern (`hasNotes`). Turning encoder 2 in normal `CTRL: PAGE` mode also always flashes the page number overlay. Green means that letter's file opened with data, blue means empty. While another slot is shown over the playing pattern, the playhead column is yellow instead of red. No other letter, temporary file, or backup is checked.
+
+Release FN to arm the slot. Playback keeps sounding the previous slot until the same boundary PMOD:NEXT uses, then switches to the new slot. If the new slot has notes on the selected/current page, that page is kept; otherwise it starts at the first page with notes in that subpattern. Stopped playback installs it immediately. An empty slot becomes a blank grid with the current sounds. `hasNotes` updates when the slot is installed, and the X cursor stays in its column. Loading or saving a pattern does not scan the other letters. Selecting the current slot leaves it unchanged.
+
+Encoder 2's FN turn is consumed before it can change the page or the channel volume, including detents that arrive on the release itself. The volume path is skipped for the whole gesture, so CTRL:VOL does not move or redraw. Switching subpatterns while playing never writes to the SD card; switching while paused saves the outgoing slot (and a newly created blank slot) after the grid is showing. An unreadable target leaves the current grid in place. Recording, child lock and image mode do not open the selector. This is manual A–E selection; it does not add automatic song chaining.
+
+These file slots are separate from the existing `subpatternMode` page/mute screen. See [SD storage](../subsystems/sd-storage) for filenames and recovery.

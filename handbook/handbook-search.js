@@ -1,6 +1,6 @@
 (function () {
   var INDEX_KEY = "hb-search-index-v2-" + (window.HBLanguage ? window.HBLanguage.id : "en");
-  var INDEX_VER = "20261026a";
+  var INDEX_VER = "20261027-subp";
 
   function pages() {
     return (window.HBHandbook && window.HBHandbook.pages) || [];

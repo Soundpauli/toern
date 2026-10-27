@@ -33,6 +33,7 @@ Protocol details belong with those tools; the device side is `sdSerialServerPoll
 ## Card layout and save semantics
 
 - Root `1.txt` … `999.txt`: binary patterns (notes + sound settings + mutes + page arrangement).
+- Root `1-A.txt` … `999-E.txt`: optional A–E subpattern families, each a complete compatible pattern file.
 - Root `autosaved.txt`: session recovery, independent of the last numbered slot.
 - `0/`: scratch/custom samples; `1/` … `999/`: kits, each with `1.wav` … `8.wav`.
 - `samples/`: browser library; it is not embedded in a pattern.
@@ -43,6 +44,14 @@ Pattern saves validate `<destination>.tmp`, keep the previous generation as `<de
 Saving an empty grid manually clears its numbered PATT slot and recovery companions. Autosave preserves an empty session. The five-second cooldown is updated only after a successful autosave. The power switch simply cuts power; it does not trigger saving.
 
 KIT writes check copied bytes and WAV headers and report success/failure. They are **not atomic across all eight files**. PATT save does not save sample audio, and PATT load does not reload the matching KIT.
+
+## File subpattern persistence
+
+A pattern remains `N.txt` until a lettered slot is saved. Switching subpatterns while playing never writes to the SD card; switching while paused saves the outgoing slot as `N-<slot>.txt` (and promotes `N.txt` to `N-A.txt`). While playing, slot A falls back to reading `N.txt` until `N-A.txt` is saved. Other slots use `N-B.txt` … `N-E.txt`. While FN is held, only the on-screen page of the chosen letter is read, straight from that one file. The rest of the file is read after the letter settles, still without checking siblings, temps, or backups. Playback swaps at the PMOD:NEXT boundary; stopped playback swaps on release. PATT resolves the selected slot for the current family, or A when opening another family. PATT Save writes the selected slot. A manual empty PATT Save deletes that slot; automatic paused-switch saves preserve blank grids as real files. ETC → RSET → FILE removes lettered slots and their transaction companions as well as legacy files.
+
+The unchanged note blob, `Device` payload and optional TPIT pitch extension are followed by an optional eight-byte `TSUB` session-identity tail: magic (4), version 1, slot index 0–4, lettered-family flag, reserved byte. No `Device` fields were added or moved. Older files default to A; a stored slot past E is read as A. Older readers may ignore the tail. Autosave records the current slot identity so startup recovery resumes it.
+
+Subpattern changes use a 21,930-byte RAM2 staging grid (including border cells), plus a one-page preview buffer, leaving PSRAM usage unchanged. `tests/test_file_subpatterns.py` compiles the actual firmware writer, loader, validator and slot code with a mock SD card under address/undefined-behavior sanitizers. It covers A–E families, no-save switches, deferred playback, the pre-release visible page, hasNotes, pitch/length metadata, SD failure, FILE re-entry and autosave identity. `tests/test_pattern_slots.cpp` checks filename/selection bounds and loop-boundary rules.
 
 ## Synth filter presets
 

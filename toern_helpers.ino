@@ -1658,12 +1658,13 @@ FLASHMEM void FastLEDshow() {
     // Strip stays at full brightness (set in setup() and not modified)
     const bool showFn = currentMode != &touchyMode && fnDirection != 0
       && (int32_t)(fnDirectionUntil - millis()) > 0;
-    if (showFn || neoSliderOverlayVisible() || fillRequestOverlayVisible()) {
+    if (showFn || neoSliderOverlayVisible() || fillRequestOverlayVisible() || subpatternOverlayVisible()) {
       CRGB saved[NUM_LEDS];
       memcpy(saved, leds, sizeof(saved));
       drawNeoSliderOverlay();
       if (showFn) drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
       drawFillRequestOverlay();
+      if (subpatternOverlayVisible()) drawSubpatternOverlay();
       FastLED.show();
       memcpy(leds, saved, sizeof(saved));
     } else {
@@ -3309,6 +3310,7 @@ FLASHMEM int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAna
 
 // Generate genre-based track from page 1 to selected length
 FLASHMEM void generateGenreTrack() {
+  resetFileSubpattern();
   // Clear ALL pages first (complete reset)
   for (unsigned int page = 1; page <= maxPages; page++) {
     unsigned int start = (page - 1) * 16 + 1;
@@ -3360,6 +3362,8 @@ FLASHMEM void generateGenreTrack() {
 
   extern void resetAllChannelVolumesToDefault();
   resetAllChannelVolumesToDefault();
+  updateLastPage();
+  subpatternNotePagesLoaded();
   
   // Auto close menu after generation
   switchMode(&draw);
@@ -4093,6 +4097,9 @@ FLASHMEM void resetAllAudioEffects() {
 
 // Complete reset for NEW start - clears everything and loads fresh defaults
 FLASHMEM void startNew() {
+  extern bool subpatternsEnabled;
+  subpatternsEnabled = false;
+  resetFileSubpattern();
   // Declare all external variables at the beginning
   extern unsigned int samplePackID;
   extern double playNoteInterval;

@@ -325,7 +325,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   }
 
   function playSubFrame(m, pageIdx, title, enc2, enc3) {
-    const slots = [[0,10,13], [3,7,5], [0,4,6], [1,10,13], [2,10,13], [3,10,13], [1,4,6], [1,7,14], [6,10,13], [0,7,14], [2,4,6], [3,4,6]];
+    const slots = [[0,10,13], [3,7,5], [0,4,6], [1,10,13], [2,10,13], [3,10,13], [1,4,6], [1,7,14], [6,10,13], [0,7,14], [2,4,6], [3,4,6], [5,6,6]];
     const [index, count, parent] = slots[pageIdx];
     m.clear();
     m.menuColors = true;
@@ -969,6 +969,20 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     filter_p3(m) { drawFilterPageScene(m, 3); },
     filter_sample_dv(m) { drawFilterPageScene(m, 3, {letters:["D","V","",""],vals:[8,16,0,0],names:["DLAY","VOL","",""]}); },
     fill_requested(m) { m.clear(); drawText(m,"FILL",Math.max(1,Math.floor((m.w-14)/2)),6,255,69,0); },
+    subp_select(m) {
+      m.clear();
+      const notes = [[2, 3], [6, 5], [10, 3], [14, 8]];
+      notes.forEach(function (xy) {
+        m.set(xy[0], xy[1], 180, 40, 20);
+        m.set(xy[0], xy[1] + 1, 80, 20, 10);
+      });
+      for (let y = 2; y <= 12; y++) m.set(5, y, 220, 200, 20);
+      drawText(m, "A1", Math.max(1, Math.floor((m.w - 7) / 2)), 6, 0, 255, 0);
+    },
+    lk_subp(m) {
+      playSubFrame(m, 12, "SUBP", "G", "");
+      drawText(m, "ON", 2, 3, 0, 120, 0);
+    },
     md_sync_inactive(m) { midiSubFrame(m,5,"SYC<","Y","W",""); drawText(m,"--",2,3,120,0,0); },
     filter_p0_named(m) { drawFilterPageEditScene(m, 0, 1); /* LCUT */ },
     filter_p1_named(m) { drawFilterPageEditScene(m, 1, 1); /* RES */ },

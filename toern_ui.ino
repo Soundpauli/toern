@@ -1036,9 +1036,10 @@ void drawStatus() {
     setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
   }
 
-  // FN: encoder 2 is the long-press pattern action. Show it only while FN is held.
+  // FN: encoder 2 is the subpattern action when SUBP is ON. Show it only while FN is held.
   static bool fnEnc2Lit = false;
-  if ((currentMode == &draw || currentMode == &singleMode) && fnHeld) {
+  extern bool subpatternsEnabled;
+  if ((currentMode == &draw || currentMode == &singleMode) && fnHeld && subpatternsEnabled) {
     drawIndicator('M', 'M', 2, false, false);
     CRGB pink = getIndicatorColor('M');
     setEncoderRGBIfChanged(1, (uint32_t)pink.r << 16 | (uint32_t)pink.g << 8 | pink.b);
@@ -1561,7 +1562,12 @@ void drawPages() {
           //ledColor = GLOB.page == p ? CRGB(50, 50, 50) : CRGB(20, 20, 20);
           ledColor = CRGB(255, 255, 0);  // Editing
         } else {
-          ledColor = hasNotes[p] ? CRGB(0, 0, 35) : CRGB(1, 0, 0);  // Has notes / empty
+          uint16_t subpatternMask = 0;
+          const bool subpatternPages = subpatternBrowsePageMask(&subpatternMask);
+          const bool pageFilled = subpatternPages
+              ? (subpatternMask & (uint16_t)(1u << (p - 1))) != 0
+              : hasNotes[p];
+          ledColor = pageFilled ? CRGB(0, 0, 35) : CRGB(1, 0, 0);  // Has notes / empty
         }
       }
     }
@@ -1628,7 +1634,8 @@ FLASHMEM void drawTriggers() {
         unsigned int rowPage = GLOB.edit > 0 ? GLOB.edit : 1;
         globalX = (rowPage - 1) * maxX + ix;
       }
-      Note &cell = note[globalX][iy];
+      Note *viewed = voiceGrid ? nullptr : subpatternViewedNote(ix, iy);
+      Note &cell = viewed ? *viewed : note[globalX][iy];
       int thisNote = cell.channel;
       if (thisNote <= 0) continue;
       const bool shadowed = canPaintOverShadowed(globalX, iy, 0);
@@ -1944,6 +1951,7 @@ void drawTimer() {
       }
       unsigned int voiceSrc[16];
       bool voiceSrcReady = false;
+      const CRGB playheadColor = subpatternShowingOtherSlot() ? CRGB(10, 10, 0) : CRGB(10, 0, 0);
       for (unsigned int y = 1; y < maxY; y++) {
         unsigned int srcStep;
         if (voiceGrid) {
@@ -1953,7 +1961,7 @@ void drawTimer() {
           }
           srcStep = voicePickStep(voiceSrc, y);
           if (srcStep == 0) {
-            light(timer, y, CRGB(10, 0, 0));
+            light(timer, y, playheadColor);
             continue;
           }
         } else {
@@ -1963,7 +1971,7 @@ void drawTimer() {
         int ch = note[srcStep][y].channel;
         // Keep inaudible hits dim instead of flashing them with the playhead.
         if (ch > 0 && canPaintOverShadowed(srcStep, y, 0)) continue;
-        light(timer, y, CRGB(10, 0, 0));
+        light(timer, y, playheadColor);
 
         if (ch> 0) {
           if (getMuteState(ch) == false) {
@@ -2039,9 +2047,7 @@ FLASHMEM void drawCopyArmedLabel() {
   drawText(label, x, y, CRGB(255, 255, 0));
 }
 
-FLASHMEM void drawFillRequestOverlay() {
-  if (!fillRequestOverlayVisible()) return;
-  const char *label = "FILL";
+void drawCenteredOverlayLabel(const char *label, CRGB color) {
   const int x = countLabelX(label);
   const int y = ((int)maxY - 5) / 2 + 1;
   const int endX = min((int)maxX, x + countLabelWidth(label));
@@ -2050,7 +2056,12 @@ FLASHMEM void drawFillRequestOverlay() {
       light(xx, yy, CRGB::Black);
     }
   }
-  drawText(label, x, y, col[fillRequestOverlayChannel]);
+  drawText(label, x, y, color);
+}
+
+FLASHMEM void drawFillRequestOverlay() {
+  if (!fillRequestOverlayVisible()) return;
+  drawCenteredOverlayLabel("FILL", col[fillRequestOverlayChannel]);
 }
 
 FLASHMEM static void drawCountDigit(int n) {
