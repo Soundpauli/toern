@@ -2939,8 +2939,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuText("LOUT", 2, 10, currentMenuParentTextColor());
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
-      // Display mapped range 1..19 (LINEOUT_MIN..LINEOUT_MAX) for user friendliness
-      int displayVal = (lineOutLevelSetting - LINEOUT_MIN) + 1;  // 13->1, 31->19
+      // Codec values decrease as volume rises: UI 1=quietest, 19=loudest.
+      int displayVal = LINEOUT_MAX - lineOutLevelSetting + 1;  // 31->1, 13->19
       snprintf(levelText, sizeof(levelText), "%d", displayVal);
       drawMenuText(levelText, 2, 3, UI_MAGENTA); // Pink
       
@@ -4686,7 +4686,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       extern uint8_t lineOutLevelSetting;
       
       if (lineMenuFirstEnter) {
-        int displayVal = constrain((int)(lineOutLevelSetting - LINEOUT_MIN + 1), 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
+        int displayVal = constrain((int)(LINEOUT_MAX - lineOutLevelSetting + 1), 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
         Encoder[2].writeCounter((int32_t)displayVal);
         Encoder[2].writeMax((int32_t)(LINEOUT_MAX - LINEOUT_MIN + 1)); // 19
         Encoder[2].writeMin((int32_t)1);
@@ -4695,15 +4695,15 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lineMenuFirstEnter = false;
         
         // Apply to hardware
-        sgtl5000_1.lineOutLevel(32-lineOutLevelSetting);
+        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
       }
       
       if (currentMode->pos[2] != lastLoVol) {
         int encoderPos = constrain(currentMode->pos[2], 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
-        lineOutLevelSetting = (uint8_t)(LINEOUT_MIN + encoderPos - 1);
+        lineOutLevelSetting = (uint8_t)(LINEOUT_MAX - encoderPos + 1);
         
         // Apply to hardware
-        sgtl5000_1.lineOutLevel(32-lineOutLevelSetting);
+        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
         
         // Save to EEPROM
         saveSingleModeToEEPROM(15, (int8_t)lineOutLevelSetting);

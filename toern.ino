@@ -47,7 +47,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 
 
 #include <cstring>  // For memcmp
-#include "src/effect_freeverb_dmabuf.h"
+#include "src/effect_treeverb.h"
 #include "src/effect_delay_ext.h"
 #define USE_WS2812SERIAL   // leds
 #include <WS2812Serial.h>  // leds
@@ -1699,7 +1699,7 @@ AudioAmplifier *amps[15] = { nullptr, &amp1, &amp2, &amp3, &amp4, &amp5, &amp6, 
 AudioFilterStateVariable *filters[15] = { nullptr, &filter1, &filter2, &filter3, &filter4, &filter5, &filter6, &filter7, &filter8, nullptr, nullptr, &filter11, nullptr, &filter13, &filter14 };
 AudioMixer4 *filtermixers[15] = { nullptr, &filtermixer1, &filtermixer2, &filtermixer3, &filtermixer4, &filtermixer5, &filtermixer6, &filtermixer7, &filtermixer8, nullptr, nullptr, &filtermixer11, nullptr, &filtermixer13, &filtermixer14 };
 AudioEffectBitcrusher *bitcrushers[15] = { nullptr, &bitcrusher1, &bitcrusher2, &bitcrusher3, &bitcrusher4, &bitcrusher5, &bitcrusher6, &bitcrusher7, &bitcrusher8, nullptr, nullptr, &bitcrusher11, nullptr, &bitcrusher13, &bitcrusher14 };
-AudioEffectFreeverbDMAMEM *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, &freeverb5, &freeverb6, &freeverb7, &freeverb8, 0, 0, &freeverb11, nullptr, nullptr, nullptr };
+AudioEffectTreeverb *freeverbs[15] = { nullptr, &freeverb1, &freeverb2, nullptr, nullptr, &freeverb5, &freeverb6, &freeverb7, &freeverb8, 0, 0, &freeverb11, nullptr, nullptr, nullptr };
 AudioMixer4 *freeverbmixers[15] = { nullptr, &freeverbmixer1, &freeverbmixer2, nullptr, nullptr, &freeverbmixer5, &freeverbmixer6, &freeverbmixer7, &freeverbmixer8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 AudioMixer4 *waveformmixers[15] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &mixer_waveform11, nullptr, &mixer_waveform13, &mixer_waveform14 };
 

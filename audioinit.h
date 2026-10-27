@@ -78,7 +78,7 @@ AudioSampleEnvelope             envelope5;      //xy=1926,864
 AudioSampleEnvelope             envelope6;      //xy=1923,942
 AudioSampleEnvelope             envelope7;      //xy=1924,1025
 AudioSampleEnvelope             envelope8;      //xy=1922,1102
-AudioEffectFreeverbDMAMEM             freeverb11;     //xy=1922,1384
+AudioEffectTreeverb             freeverb11;     //xy=1922,1384
 // DLAY 0 = off; N = N/32 of a beat (1,2,4,8,16,32 land on even divisions). Line ~1.3 s.
 #define VOICE_DELAY_SAMPLES 57600u
 #define VOICE_DELAY_COUNT 11
@@ -134,12 +134,12 @@ EXTMEM AudioMixer4                     filtermixer5;   //xy=2609,883
 EXTMEM AudioMixer4                     filtermixer6;   //xy=2608,958
 EXTMEM AudioMixer4                     filtermixer7;   //xy=2601,1034
 EXTMEM AudioMixer4                     filtermixer8;   //xy=2603,1111
-AudioEffectFreeverbDMAMEM             freeverb1;      //xy=2750,488
-AudioEffectFreeverbDMAMEM             freeverb2;      //xy=2761,627
-AudioEffectFreeverbDMAMEM             freeverb5;      //xy=2759,998
-AudioEffectFreeverbDMAMEM             freeverb6;      //xy=2765,108
-AudioEffectFreeverbDMAMEM             freeverb7;      //xy=2759,998
-AudioEffectFreeverbDMAMEM             freeverb8;      //xy=2765,1083
+AudioEffectTreeverb             freeverb1;      //xy=2750,488
+AudioEffectTreeverb             freeverb2;      //xy=2761,627
+AudioEffectTreeverb             freeverb5;      //xy=2759,998
+AudioEffectTreeverb             freeverb6;      //xy=2765,108
+AudioEffectTreeverb             freeverb7;      //xy=2759,998
+AudioEffectTreeverb             freeverb8;      //xy=2765,1083
 EXTMEM AudioMixer4Limited                     mixersynth_end; //xy=2889,1562
 EXTMEM AudioMixer4                     freeverbmixer1; //xy=2964,513
 EXTMEM AudioMixer4                     freeverbmixer2; //xy=2978,657

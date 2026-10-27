@@ -35,6 +35,16 @@ The matrix usually shows **0–32** (or enums as text). Mapping functions conver
 3. Add a slider definition for filter UI (`SliderDefEntry` / name index tables).
 4. Keep display enums in sync with `enumNames` pointers.
 
+## Treeverb
+
+The seven independent reverb paths use `AudioEffectTreeverb` (`src/effect_treeverb.h/.cpp`). The default light network processes four parallel comb filters and two diffusion stages per voice, down from eight and four. It keeps the full audio sample rate and existing room/damping controls. Comb lengths are 1116, 1277, 1422 and 1617 samples; diffusion lengths are 556 and 225. This halves the number of delay stages, with a less dense, differently colored tail. Wet gain is normalized against the preceding network's impulse-response energy; it does not guarantee identical perceived loudness for every source.
+
+Each delay line processes a complete block with local state. Constant-shift rounding is inlined, ARM saturation uses `SSAT`, and proven in-range intermediate values avoid redundant clipping. There are no generic `sat16()` calls in the per-sample loops. Set `TOERN_TREEVERB_LIGHT=0` in `platformio.ini` to rebuild the preceding eight-comb/four-diffuser Treeverb for comparison.
+
+`roomsize(0)` bypasses the wet object and clears its history on the next update. Nonzero settings retain natural tails, including after Pause; they do not reduce the number of delay lines processed. `ETC → RSET → RVRB` continues to bypass all reverb/bitcrusher paths. Buffers remain in RAM1; there is no half-rate processing or change to channel delay routing. The light network reduces each object's target allocation from 25,252 to 12,484 bytes, saving 89,376 bytes across seven objects. RAM1 headroom in the current build is 187,200 bytes, versus 97,824 before this reduction.
+
+`tests/test_treeverb.py` checks light-mode impulse onset, tail decay, wet energy relative to the preceding network (within about ±1 dB across 16 room/damping combinations), and overload stability. The full mode is compared sample-for-sample against the original implementation. Both modes exercise live parameter edits, missing input, allocation failure, bypass reset and IRQ state restoration under address/undefined-behavior sanitizers. Zero damping correctly represents Q15 unity as unsigned 32768; the old signed coefficient could wrap negative. `tests/test_pause_effects.py` verifies natural long-tail decay with Treeverb. CPU savings must be measured on Teensy with the same active voices/settings; half as many stages does not imply half the total device CPU usage.
+
 ## Sample page 1 — TIME
 
 On sample channels, filter UI page 1 includes **TIME** (`ARR_STRETCH`): independent WSOLA time-stretch, separate from OCTV/DTNE pitch. Default **11 = off**. Implementation and player wiring are covered under [Samples](./samples#time--independent-stretch-wsola).

@@ -52,9 +52,9 @@ Large Audio objects and mixers are annotated `EXTMEM` so their state lives in PS
 |-----------|----------------|
 | `resamplerReader.h` | Variable-rate / interpolated playback; TIME stretch control into WSOLA |
 | `toern_wsola.h` | RAM-source WSOLA for independent time-stretch (filter page 1 TIME) |
-| `effect_freeverb_dmabuf` | Freeverb buffers placed in DMAMEM for Teensy 4.1 |
+| `effect_treeverb` | Full-rate block-wise reverb with inline rounding and ARM saturation; tanks in RAM1 |
 
-`toern.ino` includes `src/effect_freeverb_dmabuf.h` and sets `FASTLED_ALLOW_INTERRUPTS 0` so LED updates don’t fight the audio ISR world.
+`toern.ino` includes `src/effect_treeverb.h` and sets `FASTLED_ALLOW_INTERRUPTS 0` so LED updates don’t fight the audio ISR world.
 
 ## Changing the graph
 

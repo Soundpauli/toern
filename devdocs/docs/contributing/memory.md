@@ -22,7 +22,7 @@ Teensy 4.1 memory is easy to exhaust in **RAM1 (DTCM)** even when PSRAM is free.
 - `EXTMEM Device SMP` — project/session bag
 - `EXTMEM` on many Audio mixers/oscillators in `audioinit.h`
 - `DMAMEM` for some float tables (`detune`, `channelOctave`, …)
-- Freeverb DMA buffers via `effect_freeverb_dmabuf`
+- Treeverb tanks currently remain in RAM1; the legacy `effect_freeverb_dmabuf` name did not place inline buffers in RAM2
 
 ## Anti-patterns
 
