@@ -26,9 +26,9 @@ MODE, ETC and ETC → ADV share `inEtcSubmenu` and `currentEtcPage`; `currentSys
 
 ## Menu hierarchy
 
-- **SETT:** VIEW, CTRL, DRAW, MUTE.
+- **SETT:** VIEW, CTRL, DRAW, MUTE, SWAP.
 - **MODE:** FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO. MODE occupies the former SONG root slot and retains its icon and colour. Press encoder 4 on SONG to open the existing arranger.
-- **ETC:** INFO, SD, BATT, ADV, RSET.
+- **ETC:** INFO, SD, BATT, ADV, RSET. RSET → RVRB sets reverb and bitcrusher controls to zero/bypass on all voices, preserving the other sound settings and notes. Turn encoder 3 to select RVRB, then press encoder 2 to apply.
 - **ETC → ADV:** CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE. Press encoder 4 on ADV to enter.
 - **VOL → PREV:** encoder 2 selects ON / PRSS / SYNC; encoder 3 retains preview volume (0–50). The former SETT → PREV leaf is removed.
 

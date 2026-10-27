@@ -353,6 +353,17 @@ void setFilters(FilterType filterType, int index, bool initial) {
 
 
 
+// ETC > RSET > RVRB: bypass only these two effects, preserving the patch.
+FLASHMEM void bypassAllReverbAndBitcrushers() {
+  for (int i = 0; i < NUM_ALL_CHANNELS; ++i) {
+    const int ch = ALL_CHANNELS[i];
+    SMP.filter_settings[ch][REVERB] = 0;
+    SMP.filter_settings[ch][BITCRUSHER] = 0;
+    setFilters(REVERB, ch, true);
+    setFilters(BITCRUSHER, ch, true);
+  }
+}
+
 void setFilterDefaults(int channel) {
   // Set gain values depending on channel
   AudioMixer4* mixer = nullptr;

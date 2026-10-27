@@ -197,7 +197,7 @@ assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["SONG", 2, 10]]);
 textDraws.length = 0;
 litPixels = 0;
 drawSubmenu(matrix, { mode: "etc", subIndex: 3 }, now);
-assert.equal(litPixels, 6); // ETC includes SWAP.
+assert.equal(litPixels, 5); // SWAP lives in SETT after MUTE.
 assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["ADV", 2, 10]]);
 litPixels = 0;
 drawMenu(matrix, { menuIndex: 8 });
@@ -525,11 +525,11 @@ swapDevice.start();now+=6000;frame(now);now+=6000;frame(now);
 const swapCells=Array.from({length:256*16},(_,i)=>({channel:[1,11,13,14,2,0][i%6],velocity:1+i%127,probability:i%101,condition:1+i%22,midiPitch:[0,60,127,255][i%4]}));
 swapDevice.importPatternCells(swapCells,120);
 const original=swapDevice.exportPatternCells();
-swapDevice.jump('menu');for(let i=0;i<9;i++)swapDevice.rotate(3,1);
-swapDevice.press(3);for(let i=0;i<5;i++)swapDevice.rotate(3,1);
+swapDevice.jump('menu');for(let i=0;i<5;i++)swapDevice.rotate(3,1);
+swapDevice.press(3);for(let i=0;i<4;i++)swapDevice.rotate(3,1);
 assert.equal(swapDevice.menuSummary().detail,'SWAP: 1<>11');
 swapDevice.knobDown(3);swapDevice.knobUp(3,false);
-assert.equal(swapDevice.mode(),'etc','confirmation stays on SWAP');
+assert.equal(swapDevice.mode(),'look','confirmation stays on SWAP');
 assert.deepEqual(swapDevice.exportPatternCells(),original.map(n=>({...n,channel:n.channel===1?11:n.channel===11?1:n.channel})));
 swapDevice.press(3);assert.deepEqual(swapDevice.exportPatternCells(),original,'a second swap restores every note and metadata');
 for(let i=0;i<9;i++)swapDevice.rotate(1,1); // A=13
@@ -558,18 +558,44 @@ assert.deepEqual(swapDevice.exportPatternCells(),beforeShift.map((n,i)=>{
  const channel=n.channel===13?14:13,shift=n.channel===13?96:-96;
  return {...n,channel,midiPitch:Math.max(0,Math.min(127,(n.midiPitch<=127?n.midiPitch:neutral(channel,i%16+1))+shift))};
 }));
-swapDevice.rotate(3,-1);assert.equal(swapDevice.subIndex(),4,'encoder 4 rotation leaves SWAP');
+swapDevice.rotate(3,-1);assert.equal(swapDevice.subIndex(),3,'encoder 4 rotation leaves SWAP');
 swapDevice.rotate(3,1);const beforeExit=swapDevice.exportPatternCells();swapDevice.press(0);
 assert.equal(swapDevice.mode(),'draw','encoder 1 exits without confirming');
 assert.deepEqual(swapDevice.exportPatternCells(),beforeExit);
 for(const width of [16,32]) {
  setLayout(width);const text=[];
- drawSubmenu({light(){},drawLargeCustom(){},drawIndicator(){},drawText:(...a)=>text.push(a)},{mode:'etc',subIndex:5,swapFrom:13,swapTo:14,swapAt:0},now);
+ drawSubmenu({light(){},drawLargeCustom(){},drawIndicator(){},drawText:(...a)=>text.push(a)},{mode:'look',subIndex:4,swapFrom:13,swapTo:14,swapAt:0},now);
  assert.deepEqual(text.slice(0,3).map(a=>a[0]),['SWAP','13','14']);
  assert.equal(text[2][1],width===32?24:10);
 }
 setLayout(32);
 console.log('PASS: SWAP controls, 256-step exchange, metadata preservation, synth channels, no-op and navigation.');
+
+// ETC > RSET > RVRB bypasses just reverb/crush, preserving patch and pattern.
+const bypassDevice=createDevice(matrix,{},[]);
+bypassDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+bypassDevice.importPatternCells(swapCells,123);
+const bypassNotes=bypassDevice.exportPatternCells(),beforeBypass=new Map();
+for(const ch of [1,2,3,4,5,6,7,8,11,13,14]) {
+ bypassDevice.selectVoice(ch);bypassDevice.jump('filter');
+ bypassDevice.rotate(0,-5);bypassDevice.rotate(3,9);
+ if(ch!==13&&ch!==14)bypassDevice.rotate(2,8);
+ const call=audioCalls.filter(c=>c[0]==='apply'&&c[1]===ch).at(-1);
+ beforeBypass.set(ch,JSON.parse(JSON.stringify(call.slice(2))));
+}
+bypassDevice.jump('menu');for(let i=0;i<9;i++)bypassDevice.rotate(3,1);
+bypassDevice.press(3);for(let i=0;i<4;i++)bypassDevice.rotate(3,1);
+for(let i=0;i<7;i++)bypassDevice.rotate(2,1);
+assert.equal(bypassDevice.menuSummary().detail,'RSET: RVRB');
+audioCalls.length=0;bypassDevice.press(1);
+for(const [ch,args] of beforeBypass) {
+ const call=audioCalls.filter(c=>c[0]==='apply'&&c[1]===ch).at(-1);
+ const expected=JSON.parse(JSON.stringify(args));expected[0].r=0;expected[0].b=0;
+ assert.deepEqual(call.slice(2),expected,`RVRB preserves other sound settings on ${ch}`);
+}
+assert.deepEqual(bypassDevice.exportPatternCells(),bypassNotes);
+console.log('PASS: RSET > RVRB bypasses reverb/crush on every voice without resetting the patch or pattern.');
+
 
 // Paint only replaces a foreign note whose mono voice already has a higher hit.
 stored.clear();

@@ -86,7 +86,7 @@ const SUB_VALUES = {
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["OFF", "ALL", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [255, 220, 120], [255, 80, 20]], codes: ["R", "Y", "O"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["SD", "EFX", "FULL", "PATT", "KIT", "ASAV", "RAM"], colors: [[120, 60, 0]], codes: ["O"] },
+    { opts: ["SD", "EFX", "FULL", "PATT", "KIT", "ASAV", "RAM", "RVRB"], colors: [[120, 60, 0]], codes: ["O"] },
   ],
 };
 
@@ -588,6 +588,14 @@ export function createDevice(matrix, statusEl, rings) {
     if (opt === 0) refreshBrowse();
     else if (opt === 1) resetEffects();
     else if (opt === 2) resetFull();
+    else if (opt === 7) {
+      for (const ch of SOUND_CH) {
+        filt[ch].r = 0;
+        filt[ch].b = 0;
+        applyFilt(ch);
+      }
+      queueAutosave();
+    }
     else if (opt === 3) {
       const all = loadStore("toern-web-patterns");
       for (let i = 1; i <= 99; i++) delete all[String(i)];
@@ -1178,7 +1186,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function subValue(mode, index) {
-    if (mode === "etc" && SUBS.etc[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
+    if (mode === "look" && SUBS.look[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
     if (mode === "mode" && SUBS.mode[index] === "DEMO") return { text: "GO" };
     if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
@@ -1489,7 +1497,7 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "menu" && enc === 3) s.menuIndex = clamp(s.menuIndex + dir, 0, MENU_PAGES.length - 1);
-    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && enc !== 3) {
+    if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP" && enc !== 3) {
       if (enc===1 || enc===2) {
         const side=enc-1;
         if (hold[enc]) s.swapOctaves[side]=clamp(s.swapOctaves[side]+dir,-8,8);
@@ -1859,7 +1867,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "song" && enc === 0) song[s.songPos - 1] = 0;
     if (s.mode === "song" && (enc === 1 || enc === 3)) song[s.songPos - 1] = s.songPattern;
     if (s.mode === "song" && enc === 2) toggleSong();
-    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP") {
+    if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP") {
       if (enc===3) swapChannels(s.swapFrom,s.swapTo);
       else if (enc===0) backToGrid();
       return;
@@ -2539,7 +2547,7 @@ export function createDevice(matrix, statusEl, rings) {
       const enc = isTab(e) ? 0 : isEncoder2Click(e) ? 1 : e.key === " " ? 2 : 3;
       hold[enc] = { at: performance.now(), turned: false, fired: false };
     }
-    else if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (isEncoder2Click(e) || e.key === " ")) {
+    else if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP" && (isEncoder2Click(e) || e.key === " ")) {
       const enc=isEncoder2Click(e)?1:2;
       hold[enc]={at:performance.now(),turned:false,fired:false}; s.swapHeld[enc-1]=true;
     }
@@ -2828,7 +2836,7 @@ export function createDevice(matrix, statusEl, rings) {
     soloRelease() { exitSolo(); liveMix(); announceState(); },
     press(enc) { shortPress(enc); },
     knobDown(enc) {
-      if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (enc===1 || enc===2)) {
+      if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP" && (enc===1 || enc===2)) {
         hold[enc]={at:performance.now(),turned:false,fired:false}; s.swapHeld[enc-1]=true; return;
       }
       if (s.mode === "touchy") { hold[enc] = { at: performance.now(), turned: false, fired: false }; return; }
