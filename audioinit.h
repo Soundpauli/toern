@@ -1,3 +1,4 @@
+#include "src/mixer_limited.h"
 // Audio Processing Nodes
 AudioSynthWaveform              waveform11_1;   //xy=405,1269
 AudioSynthWaveform              waveform11_2;   //xy=405,1310
@@ -137,18 +138,18 @@ AudioEffectFreeverbDMAMEM             freeverb5;      //xy=2759,998
 AudioEffectFreeverbDMAMEM             freeverb6;      //xy=2765,108
 AudioEffectFreeverbDMAMEM             freeverb7;      //xy=2759,998
 AudioEffectFreeverbDMAMEM             freeverb8;      //xy=2765,1083
-EXTMEM AudioMixer4                     mixersynth_end; //xy=2889,1562
+EXTMEM AudioMixer4Limited                     mixersynth_end; //xy=2889,1562
 EXTMEM AudioMixer4                     freeverbmixer1; //xy=2964,513
 EXTMEM AudioMixer4                     freeverbmixer2; //xy=2978,657
 EXTMEM AudioMixer4                     freeverbmixer5; //xy=2970,912
 EXTMEM AudioMixer4                     freeverbmixer6; //xy=2970,1004
 EXTMEM AudioMixer4                     freeverbmixer7; //xy=2970,1016
 EXTMEM AudioMixer4                     freeverbmixer8; //xy=2970,1108
-EXTMEM AudioMixer4                     mixer1;         //xy=3200,763
-EXTMEM AudioMixer4                     mixer2;         //xy=3200,948
+EXTMEM AudioMixer4Limited                     mixer1;         //xy=3200,763
+EXTMEM AudioMixer4Limited                     mixer2;         //xy=3200,948
 AudioEffectEnvelope             envelope0;      //xy=3524,426
 AudioPlaySdWav                  playSdWav1;     //xy=3524,474
-EXTMEM AudioMixer4                     mixer_end;      //xy=3518,1059
+EXTMEM AudioMixer4Limited                     mixer_end;      //xy=3518,1059
 AudioInputI2S                   audioInput;     //xy=3556,1189
 AudioAmplifier                  audioInputAmp;  //xy=3650,1189
 AudioFilterBiquad               recInputHpf;    // library DC block; codec ADC HPF stays off
@@ -159,8 +160,8 @@ AudioAnalyzePeak                peak1;          //xy=3727,541
 AudioRecordQueue                queue1;         //xy=3778,1164
 AudioAnalyzePeak                peakRec;        //xy=3788,1215
 AudioAnalyzePeak                peakOutput;     //xy=3788,1300  // For LED strip visualization
-EXTMEM AudioMixer4                     mixer_stereoR;  //xy=3932,748
-EXTMEM AudioMixer4                     mixer_stereoL;  //xy=3931,848
+EXTMEM AudioMixer4Limited                     mixer_stereoR;  //xy=3932,748
+EXTMEM AudioMixer4Limited                     mixer_stereoL;  //xy=3931,848
 AudioOutputI2S                  i2s1;           //xy=4154,795
 AudioOutputUSB                  usb1;           // host USB audio (same mix as headphones)
 
@@ -437,8 +438,8 @@ EXTMEM AudioConnection        patchCord231(mixer2, 0, mixer_stereoR, 2);  // ch5
 EXTMEM AudioConnection        patchCord227(mixer_stereoR, 0, i2s1, 0);
 EXTMEM AudioConnection        patchCord228(mixer_stereoL, 0, i2s1, 1);
 // USB mix copies the headphone buses, with preview (mixer0 / voice 0) gated.
-EXTMEM AudioMixer4            usbMixR;
-EXTMEM AudioMixer4            usbMixL;
+EXTMEM AudioMixer4Limited            usbMixR;
+EXTMEM AudioMixer4Limited            usbMixL;
 EXTMEM AudioConnection        patchUsbMainR(mixer_end, 0, usbMixR, 0);
 EXTMEM AudioConnection        patchUsbPrevR(mixer0, 0, usbMixR, 1);
 EXTMEM AudioConnection        patchUsbBusR(mixer2, 0, usbMixR, 2);

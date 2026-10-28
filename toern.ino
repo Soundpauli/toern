@@ -229,22 +229,12 @@ extern void handleStart();
 #define GAIN_3 0.4  //0.25
 #define GAIN_4 0.8  //0.2; (increased to 0.8 for 64% total gain)
 
-// ---- Mix headroom (samples ch1-8) ----
-// These stages are where hard clipping/crackling happens if too hot:
-// - mixer1 sums ch1-4
-// - mixer2 sums ch5-8
-// - mixer_end sums mixer1 + mixer2 (+ synth + monitoring)
-//
-// Hard limit per bus: N * MIX_BUS_HEADROOM <= 1.0 (N simultaneous voices on that bank, each at
-// full internal level in phase — the theoretical "block" + max velocity case).
-// Eight voices total does NOT relax N: e.g. six voices can still be 4+2, so N is still 4 on one bus.
-//
-// We target typical use: at most 3 sample voices on ch1-4 at once AND at most 3 on ch5-8 (e.g. 3+3=6).
-// Then MIX_BUS_HEADROOM = 1/3 keeps each bus <= 1.0; mixer_end still needs 2 * MIX_END <= 1.0.
-// If you ever fire 4 samples on one bank at full level together, lower MIX_BUS_HEADROOM to 0.25f.
-#define MIX_BUS_HEADROOM (1.0f / 3.0f)  // max ~3 simultaneous sample voices per bank (ch1-4 / ch5-8)
-#define MIX_END_SAMPLES_GAIN 0.50f      // mixer_end: mixer1 + mixer2 (each bus can hit 1.0)
-#define MIX_END_SYNTH_GAIN 0.60f    // mixer_end input gain for mixersynth_end
+// Sample banks, synth bus, final sum and output routing use wide summing +
+// 16-sample peak limiting. Unity no longer includes fixed bank/master cuts.
+// Multiple voices are limited only when their actual combined peak exceeds 0 dBFS.
+#define MIX_BUS_HEADROOM 1.0f
+#define MIX_END_SAMPLES_GAIN 1.0f
+#define MIX_END_SYNTH_GAIN 3.60f  // same +15.56 dB lift as samples, retaining their relative balance
 // ch11 poly: SmixerL4/R4 default 1.0×3 voices wraps (clicks). 0.55 keeps chords under 1.0.
 // synthmixer11 0.20 made single notes much quieter than ch13/14; GAIN SYN then clipped the bus.
 #define CH11_POLY_SUM_GAIN 0.55f
@@ -2201,7 +2191,7 @@ FLASHMEM void switchMode(Mode *newMode) {
   }
 
   if (currentMode == &recordMode && newMode != &recordMode) {
-    extern AudioMixer4 mixer_end;
+    extern AudioMixer4Limited mixer_end;
     mixer_end.gain(3, 0.0f);
   }
 
@@ -3725,15 +3715,15 @@ FLASHMEM void initSamples() {
   //preview
   _samplers[0].addVoice(sound0, mixer0, 1, envelope0);
   //voice 1-
-  _samplers[1].addVoice(sound1, mixer1, 0, envelope1);
-  _samplers[2].addVoice(sound2, mixer1, 1, envelope2);
-  _samplers[3].addVoice(sound3, mixer1, 2, envelope3);
-  _samplers[4].addVoice(sound4, mixer1, 3, envelope4);
+  _samplers[1].addVoice(sound1, envelope1);
+  _samplers[2].addVoice(sound2, envelope2);
+  _samplers[3].addVoice(sound3, envelope3);
+  _samplers[4].addVoice(sound4, envelope4);
 
-  _samplers[5].addVoice(sound5, mixer2, 0, envelope5);
-  _samplers[6].addVoice(sound6, mixer2, 1, envelope6);
-  _samplers[7].addVoice(sound7, mixer2, 2, envelope7);
-  _samplers[8].addVoice(sound8, mixer2, 3, envelope8);
+  _samplers[5].addVoice(sound5, envelope5);
+  _samplers[6].addVoice(sound6, envelope6);
+  _samplers[7].addVoice(sound7, envelope7);
+  _samplers[8].addVoice(sound8, envelope8);
 
   synthmixer11.gain(0, CH11_SYNTHMIX_GAIN);
   synthmixer11.gain(1, 0.0f);
@@ -6619,7 +6609,7 @@ void showDoRecord() {
   }
 
   // === DIRECT INPUT PASS-THROUGH WHEN PREVIEW IS PLAYING AND CURSOR AT Y==1 ===
-  extern AudioMixer4 mixer_end;
+  extern AudioMixer4Limited mixer_end;
   extern AudioAmplifier audioInputAmp;
   static bool directPassThroughActive = false;
 
@@ -7528,7 +7518,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   }
 
   if (shouldMonitor) {
-    extern AudioMixer4 mixer_end;
+    extern AudioMixer4Limited mixer_end;
     extern AudioAmplifier audioInputAmp;
     extern int recMode;
 
@@ -7538,7 +7528,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     drawModeInputMonitorActive = true;
   } else if (drawModeInputMonitorActive && currentMode->name != "RECORD_MODE") {
     // Disable monitoring when conditions are no longer met
-    extern AudioMixer4 mixer_end;
+    extern AudioMixer4Limited mixer_end;
     mixer_end.gain(3, 0.0f);
     drawModeInputMonitorActive = false;
   }

@@ -196,20 +196,20 @@
     overview: {
       title: "System mix",
       nodes: [
-        { id: "s14", l: "ch 1–4", s: "mixer1  ·  1/3", k: "bus", c: 0, r: 0 },
-        { id: "s58", l: "ch 5–8", s: "mixer2  ·  1/3", k: "bus", c: 0, r: 1 },
+        { id: "s14", l: "ch 1–4", s: "mixer1 · unity + limiter", k: "bus", c: 0, r: 0 },
+        { id: "s58", l: "ch 5–8", s: "mixer2 · unity + limiter", k: "bus", c: 0, r: 1 },
         { id: "syn", l: "ch 11 / 13 / 14", s: "mixersynth_end  ·  0.80", k: "bus", c: 0, r: 2 },
         { id: "prev", l: "preview", s: "mixer0", k: "source", c: 0, r: 3 },
         { id: "inp", l: "I2S in", s: "audioInputAmp 1.0", k: "source", c: 0, r: 4 },
-        { id: "end", l: "mixer_end", s: "0.50 / 0.50 / SYN / mon", k: "mix", c: 1, r: 1, h: 2 },
+        { id: "end", l: "mixer_end", s: "1.0 / 1.0 / SYN / mon · limiter", k: "mix", c: 1, r: 1, h: 2 },
         { id: "st", l: "mixer_stereo L/R", s: "ETC → ADV → 2-CH", k: "mix", c: 2, r: 1, h: 2 },
         { id: "dac", l: "i2s1", s: "R=0  L=1", k: "out", c: 3, r: 1 },
         { id: "cod", l: "SGTL5000", s: "phones + line", k: "out", c: 4, r: 1 }
       ],
       edges: [
-        { from: "s14", to: "end", label: "in0  0.50" },
-        { from: "s58", to: "end", label: "in1  0.50" },
-        { from: "syn", to: "end", label: "in2  0.60" },
+        { from: "s14", to: "end", label: "in0  1.0" },
+        { from: "s58", to: "end", label: "in1  1.0" },
+        { from: "syn", to: "end", label: "in2  3.60" },
         { from: "inp", to: "end", label: "in3  mon" },
         { from: "end", to: "st", label: "in0" },
         { from: "prev", to: "st", label: "in1" },
@@ -228,7 +228,7 @@
         { id: "fm", l: "filtermixerN", s: "in0 LP · in2 HP · in3 dry", k: "mix", c: 5, r: 1 },
         { id: "fv", l: "freeverbN", s: "ch 1,2,5–8", k: "fx", c: 6, r: 0 },
         { id: "fvm", l: "freeverbmixerN", s: "wet 0–0.54  dry 1–0.88", k: "mix", c: 7, r: 0 },
-        { id: "m12", l: "mixer1 / mixer2", s: "every in = 1/3", k: "bus", c: 8, r: 1 },
+        { id: "m12", l: "mixer1 / mixer2", s: "unity + peak limiter", k: "bus", c: 8, r: 1 },
         { id: "m34", l: "mixer1 in2/3", s: "ch 3, 4  no verb", k: "bus", c: 7, r: 2 }
       ],
       edges: [

@@ -64,3 +64,9 @@ New notes and default auditions use velocity 127 in firmware and simulator, incl
 A lower monophonic note overridden by a guaranteed higher note at the same step is rendered at 20% of its normal RGB brightness. The playhead does not flash that overridden note. Probabilistic or nonmatching conditional higher notes do not dim an audible lower note; CH11 polyphonic notes remain unchanged. Copy-armed feedback uses the lowercase `c+p` label.
 
 Resetting all filter pages shows a blue checkmark for 800 ms. The filter renderer includes the overlay before early rate-limited presentations and restores the page when feedback expires.
+
+## Peak-limited buses
+
+Sample banks, the synth bus, final mix and headphone/USB routing use `AudioMixer4Limited`. It sums signed inputs in float before limiting, with 16 samples of lookahead per stage and 50 ms gain recovery. Default sample bank and final sample gains are unity; the final synth gain is 3.6 to retain the prior relative balance. The bank → final → route path adds 48 samples (about 1.09 ms). Earlier clipping inside a voice or effect cannot be repaired by the bus limiter.
+
+Sample readers and standard Teensy envelopes are unchanged. Sampler registration uses the reader-plus-envelope overload, preserving Note On and configured Note Off behavior while the bus controls its own gain. `tests/test_audio_gain.py` covers overload, cancellation, lookahead and recovery through the real mixer code.
