@@ -28,3 +28,7 @@ tools/cost-planner/
 
 # PlatformIO regenerates this Arduino translation unit from the sketch tabs.
 /toern.ino.cpp
+
+# Python bytecode
+__pycache__/
+*.py[cod]

@@ -3,6 +3,7 @@
 #include "src/toern_demo.h"
 #include "src/toern_grid_paint.h"
 #include "toern_touch_input.h"
+#include "src/toern_pattern_slots.h"
 
 #define VERSION "v3.02"
 extern "C" char *sbrk(int incr);
@@ -589,7 +590,7 @@ static bool consumeLiveRecordSkip(uint16_t srcBeat, unsigned int row) {
 bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
                        uint8_t midiPitch, bool protectOtherVoices,
                        bool protectOccupied) {
-  extern Note note[][maxY + 1];
+  extern Note (*note)[maxY + 1];
   if (channel < 1 || row < 1 || row > 15) return false;
   if (isChildVoiceDisabled((int)channel)) return false;
   extern uint16_t quantizedMidiRecordBeat();
@@ -1000,7 +1001,9 @@ volatile unsigned int fillActiveRow = 0;
 volatile uint8_t fillActiveMidiPitch = NOTE_MIDI_PITCH_NONE;
 unsigned int lastPage = 1;
 int editpage = 1;
-EXTMEM Note note[maxlen + 1][maxY + 1] = {};
+// Six RAM2 banks: five resident letters and one unpublished I/O bank.
+DMAMEM Note noteBanks[6][maxlen + 1][maxY + 1];
+Note (*note)[maxY + 1] = noteBanks[0];
 static bool canPaintOverShadowed(unsigned int step, unsigned int row, unsigned int brush) {
   return toern_grid_paint::canReplaceShadowed(note, step, row, brush, MAX_STEPS, maxY);
 }
@@ -1062,7 +1065,7 @@ Mode velocity = { "VELOCITY", { 1, 1, 1, 0 }, { maxY, 5, NOTE_CONDITION_STEP_COU
 Mode set_Wav = { "SET_WAV", { 1, 0, 1, 1 }, { 9999, 999, 9999, 999 }, { 0, 0, 0, 1 }, { 0x000000, 0x000000, 0x00FF00, 0xFFFFFF } };  // pos[3]=combined browser selection
 Mode recordMode = { "RECORD_MODE", { 0, 1, 1, 1 }, { 100, FOLDER_MAX, 9999, 999 }, { 0, 0, 0, 1 }, { 0xFF0000, 0x00FF00, 0x0000FF, 0x000000 } };
 Mode set_SamplePack = { "SET_SAMPLEPACK", { 1, 1, 1, 0 }, { 1, 1, 99, 999 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
-// FILE UI encoder 3: 0=NEW, 1=A (autosaved.txt), 2..1000 = 1.txt..999.txt
+// FILE UI encoder 3: 0=NEW, 1=AUTOSAVE (autosaved.txt), 2..1000 = 1.txt..999.txt
 Mode loadSaveTrack = { "LOADSAVE_TRACK", { 1, 1, 0, 0 }, { 1, 1, 1, 1000 }, { 1, 1, 0, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
 // PSET: filter-page presets for ch11/13/14. Enc4=slot 1..99, Enc1=load, Enc2=save (PATT-like).
 Mode loadSavePreset = { "LOADSAVE_PRESET", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1, 1, 1, 1 }, { 0x00FF00, 0xFF0000, 0x000000, 0x0000FF } };
@@ -1093,33 +1096,78 @@ static void refreshSamplerChannel(uint8_t channel);
 static void updateFnState();
 static uint8_t fnButtonEvent(int index, uint8_t physicalState);
 static bool fnHeld = false;
-static unsigned loadedPatternFileNumber = 0;
+// File subpatterns are separate from the existing page/mute SUBPATTERN mode.
+bool subpatternsEnabled = false;
+static unsigned subpatternFile = 0;
 static unsigned pendingNewPatternFile = 0;
-static uint32_t patternBrowserRevision = 0;
 static uint32_t patternStorageRevision = 0;
-FLASHMEM void savePatternTo(bool autosave, unsigned targetFile);
-FLASHMEM void loadPatternFrom(bool autoload, unsigned requestedFile);
-
+static uint32_t patternBrowserRevision = 0;
+static uint32_t subpatternIndexPaintRevision = 0;
+static bool patternFamilyBusy();
+static void servicePatternFamilyJob();
+static void beginPatternFamilySave(unsigned target, bool overwrite);
+static void queuePatternFamilySave(unsigned target);
+static void beginPatternFamilyDelete(unsigned target);
+static uint8_t deletedSubpatternSlots = 0;
 static bool patternConfirmDelete = false;
 static unsigned patternConfirmTarget = 0;
 static uint32_t patternConfirmRevision = 0;
 static Mode *patternConfirmReturnMode = nullptr;
 static unsigned patternConfirmReturnPos[4] = {};
-static uint8_t patternConfirmResource = 0; // 0=PATT, 1=SMP, 2=KIT
+static uint8_t patternConfirmResource = 0; // 0=PATT, 1=sample, 2=KIT
 static char confirmedSampleDeletePath[160] = {};
+static uint8_t subpatternSlot = 0, subpatternSelected = 0, subpatternPendingSlot = 0;
+static bool subpatternSelector = false;
+static bool subpatternQuietSave = false, subpatternSaveNew = false;
+static bool subpatternSavingPrevious = false, subpatternOldSavePending = false;
+static uint8_t subpatternPreviousSlot = 0;
+static Note (*subpatternGrid)[maxY + 1] = noteBanks[5];
+static const Note (*subpatternOutgoingGrid)[maxY + 1] = nullptr;
+static uint32_t subpatternAvailable = 0;
+static volatile bool subpatternReady = false, subpatternBoundary = false, subpatternApplied = false;
+static bool subpatternCommitAtStepStart();
+static bool subpatternFnRelease();
+static void subpatternFailure();
+static bool subpatternTurn(int delta);
+static bool subpatternPageTurn(int delta);
+static void subpatternCancelPreview();
+Note *subpatternViewedNote(unsigned ix, unsigned iy);
+bool subpatternShowingOtherSlot();
+bool subpatternPreviewVisible();
+bool subpatternViewedShadowed(unsigned ix, unsigned iy);
+static void serviceSubpatterns();
+static bool subpatternOverlayVisible();
+static void drawSubpatternOverlay();
+static void patternDestination(char *out, size_t size, unsigned file);
+static void resetFileSubpattern();
+static unsigned loadedPatternFile();
+FLASHMEM void deleteSelectedPatternFamily(unsigned target);
+FLASHMEM void saveSelectedPatternFamily(unsigned target, bool overwrite = false);
 FLASHMEM void requestPatternSave(unsigned target);
 FLASHMEM void requestKitSave(unsigned target);
 FLASHMEM void requestBrowserDelete();
+static void drawBrowserDeleteCross(int encoder);
+void restoreSampleBrowserSelection(unsigned selection);
+FLASHMEM bool deleteConfirmedBrowserResource();
+bool captureSelectedSampleForDelete(char *out, size_t outSize);
 FLASHMEM void openPatternConfirmation(unsigned target, bool deleting);
 FLASHMEM void finishPatternConfirmation(bool accept);
 FLASHMEM void showPatternConfirmation();
-FLASHMEM bool deleteConfirmedBrowserResource();
-void restoreSampleBrowserSelection(unsigned selection);
-bool captureSelectedSampleForDelete(char *out, size_t outSize);
-FLASHMEM void drawBrowserDeleteCross(int encoder);
+FLASHMEM void savePattern(bool autosave);
+FLASHMEM void loadPattern(bool autoload, unsigned targetFile = 1000);
+static void beginNewPattern();
+static uint8_t savedSubpatternMask(unsigned file);
+static uint8_t subpatternContentMask(unsigned file);
+static void drawPatternSlotDots(uint8_t mask, CRGB color);
+void subpatternNotePagesLoaded();
+bool subpatternBrowsePageMask(uint16_t *mask);
+void drawCenteredOverlayLabel(const char *label, CRGB color);
 
+// End file subpattern declarations.
 static bool fnButtonHeld[NUM_ENCODERS] = {};
 static bool handleFnEncoder(int index, int &rawValue, bool allowWrite);
+static bool finishFnSubpatternRelease(bool allowWrite);
+static bool fnEncoder2Held();
 static void reverseChannelInMemory(uint8_t channel);
 static void applyChannelDirection(uint8_t channel, int8_t targetDir);
 
@@ -1142,7 +1190,7 @@ struct Sample {
 struct Device {
   // File/Pattern specific variables
   float bpm;             // bpm
-  unsigned int file;     // current selected save/load id
+  unsigned int file;     // loaded pattern number; PATT browsing uses Mode::pos instead
   unsigned int pack;     // current selected samplepack id
   Sample wav[maxFiles];  // current selected sample (oldID/fileID = UI list state)
   char samplePathRel[maxFiles][128];  // path under samples/ incl. .wav (empty = use pack slot)
@@ -2508,19 +2556,19 @@ FLASHMEM void switchMode(Mode *newMode) {
 
     if (currentMode == &loadSaveTrack) {
       ++patternBrowserRevision;
-      pendingNewPatternFile = 0;
-      // UI slot: 0=NEW, 1=A (autosave), 2..1000 = pattern 1..999
-      unsigned int fileUi = (SMP.file == 0) ? 1u : (SMP.file + 1u);
+      // UI slot: 0=NEW, 1=AUTOSAVE (autosave), 2..1000 = pattern 1..999
+      unsigned int fileUi = (loadedPatternFile() == 0) ? 1u : (loadedPatternFile() + 1u);
       if (fileUi > 1000u) fileUi = 1000u;
       currentMode->pos[3] = fileUi;
       Encoder[3].writeMin((int32_t)0);
       Encoder[3].writeMax((int32_t)1000);
       Encoder[3].writeCounter((int32_t)fileUi);
 
-      // Sideload is opt-in for each browser visit and selected file.
+      // Every browser entry starts with saved sound settings, regardless of
+      // the selection made during the previous visit.
       SMP_LOAD_SETTINGS = true;
-      currentMode->pos[2] = 0;
-      Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+      currentMode->pos[2] = 0; // Sideload OFF means load saved filters/settings.
+      Encoder[2].writeCounter((int32_t)0);
     }
 
     if (currentMode == &loadSavePreset) {
@@ -2753,6 +2801,17 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     fnEvents[i] = fnButtonEvent(i, currentButtonStates[i]);
     if (fnEvents[i] == 3 || fnEvents[i] == 4 || fnEvents[i] == 8) modifiedEvent = true;
   }
+  if (currentMode == &loadSaveTrack && currentMode->pos[3] > 1 && fnEvents[1] == 4) {
+    openPatternConfirmation(currentMode->pos[3] - 1u, true);
+    preventPaintUnpaint = true;
+    return;
+  }
+  if ((currentMode == &set_Wav && fnEvents[2] == 4)
+      || (currentMode == &set_SamplePack && fnEvents[1] == 4)) {
+    requestBrowserDelete();
+    preventPaintUnpaint = true;
+    return;
+  }
   // Page row: FN + encoder 2 long (0200) is the only random / aware generate.
   if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 16 && fnEvents[1] == 3) {
     if (GLOB.singleMode) {
@@ -2762,17 +2821,6 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       drawRandomsMultiPage();
     }
     deleteActiveCopy();
-    preventPaintUnpaint = true;
-    return;
-  }
-  if (currentMode == &loadSaveTrack && currentMode->pos[3] > 1 && fnEvents[1] == 4) {
-    openPatternConfirmation(currentMode->pos[3] - 1u, true);
-    preventPaintUnpaint = true;
-    return;
-  }
-  if ((currentMode == &set_Wav && fnEvents[2] == 4)
-      || (currentMode == &set_SamplePack && fnEvents[1] == 4)) {
-    requestBrowserDelete();
     preventPaintUnpaint = true;
     return;
   }
@@ -3070,7 +3118,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     const bool encoder2ValuePage = (mainSetting == 11 || mainSetting == 4 || mainSetting == 12 ||
         (inLookSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
         mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
-        mainSetting == 32 || mainSetting == 33 || mainSetting == 38)) ||
+        mainSetting == 32 || mainSetting == 33 || mainSetting == 38 || mainSetting == 68)) ||
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
         (inEtcSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 63 || mainSetting == 56 || mainSetting == 57 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
@@ -3088,6 +3136,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     // NEW mode: 4th encoder press goes back to FILE — stay on the NEW slot (ui 0)
     extern void resetNewModeState();
     resetNewModeState();
+    pendingNewPatternFile = 0;
     loadSaveTrack.pos[3] = 0;
     switchMode(&loadSaveTrack);
     return;
@@ -3105,13 +3154,14 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     return;
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
     if (currentMode->pos[3] == 0) {
+      pendingNewPatternFile = loadedPatternFile();
       // NEW slot → genre / blank template screen
       extern void showNewFileScreen();
       showNewFileScreen();
       return;
     }
     SMP_LOAD_SETTINGS = currentMode->pos[2] == 0;
-    loadPatternFrom(false, currentMode->pos[3] - 1u);
+    loadPattern(false, currentMode->pos[3] - 1u);
     preventPaintUnpaint = true;                                                                     // Prevent paint/unpaint after load
     return;                                                                                         // Prevent other button actions from being processed
   } else if ((currentMode == &loadSavePreset) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" exit
@@ -4800,6 +4850,7 @@ FLASHMEM void setup() {
   updateSynthVoice(11);
   switchMode(&draw);
   applyDrawSingleYEncoderLimits();
+  refreshCtrlEncoderConfig();
 
   Serial8.addMemoryForWrite(midiTxExtra, sizeof(midiTxExtra));
   Serial8.addMemoryForRead(midiRxExtra, sizeof(midiRxExtra));
@@ -5118,6 +5169,22 @@ FLASHMEM void checkEncoders() {
     }
 
     handle_button_state(&Encoder[i], i);  // This updates buttons[i] based on new physical state
+  }
+  // Rewind encoder 2 before the slot swap, then again after SD work, so a
+  // detent that landed as FN released cannot become a page or volume change.
+  // Snapshot before release clears the latch and the selector. Encoder 2's
+  // normal CTRL page/volume path must not see this gesture.
+  const bool holdEncoder2 = fnEncoder2Held();
+  const bool subpatternSwitched = finishFnSubpatternRelease(allowEncWrite);
+  if (subpatternSwitched && (currentMode == &draw || currentMode == &singleMode)) {
+    unsigned int targetPage = GLOB.edit >= 1 ? GLOB.edit : 1u;
+    currentMode->pos[3] = GLOB.x;
+    if (allowEncWrite) Encoder[3].writeCounter((int32_t)GLOB.x);
+    if (ctrlMode == 0) {
+      currentMode->pos[1] = targetPage;
+      editpage = (int)targetPage;
+      if (allowEncWrite) Encoder[1].writeCounter((int32_t)targetPage);
+    }
   }
   screensaverEncBaselineDone = true;
 
@@ -5492,6 +5559,12 @@ FLASHMEM void checkEncoders() {
         currentMode->pos[1] = 1;
         Encoder[1].writeCounter((int32_t)1);
       }
+    } else if (holdEncoder2 && ctrlMode == 0) {
+      int page = editpage < 1 ? 1 : editpage;
+      if ((int)currentMode->pos[1] != page) {
+        currentMode->pos[1] = (unsigned)page;
+        if (allowEncWrite) Encoder[1].writeCounter((int32_t)page);
+      }
     } else if (ctrlMode == 0 && currentMode->pos[1] != (unsigned int)editpage && !songModeActive) {
       updateLastPage();
       int pmax = encoderPageMax();
@@ -5573,7 +5646,18 @@ FLASHMEM void checkEncoders() {
       }
     }
 
-    if (ctrlMode == 1) {
+    if (ctrlMode == 1 && holdEncoder2) {
+      // FN+encoder 2 selects a subpattern. Put the counter back on the real
+      // CTRL value and do not draw or apply VOL / input gain.
+      extern int recMode;
+      int held = (currentMode == &draw && GLOB.y == 1)
+          ? ((recMode == 1) ? (int)micGain : (int)lineInLevel)
+          : constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+      if ((int)currentMode->pos[1] != held) {
+        currentMode->pos[1] = (unsigned)held;
+        if (allowEncWrite) Encoder[1].writeCounter((int32_t)held);
+      }
+    } else if (ctrlMode == 1) {
       static int lastY = -1;
 
       bool yChanged = (GLOB.y != lastY);
@@ -6335,6 +6419,7 @@ end_switch1:
         finishPatternConfirmation(false);
       } else if (currentMode == &newFileMode) {
         // Exit NEW mode without generating
+        pendingNewPatternFile = 0;
         extern void resetNewModeState();
         resetNewModeState();
         switchMode(&draw);
@@ -7474,6 +7559,7 @@ void loop() {
   if (!fastRecordActive && getLedStripEnabled()) {
     updateLedStrip();
   }
+  serviceSubpatterns();
 
   //granular on ch=8
   /*
@@ -9109,6 +9195,8 @@ void playNote() {
   // This prevents double-trigger of first note when pages change during playback
   // Track last edit page to detect page changes (static persists across function calls)
   static unsigned int lastEdit = GLOB.edit;
+  if (subpatternCommitAtStepStart()) lastEdit = GLOB.edit;
+  subpatternBoundary = false;
 
   if (childLockEnabled) {
     GLOB.edit = 1;
@@ -9571,6 +9659,9 @@ void playNote() {
       isrDbgLoopCountChanged = true;
     }
   }
+  // The final note has sounded; publish the boundary for the NEXT timer tick.
+  subpatternBoundary = toern_pattern_slots::atBoundary(
+      (voiceMode && !songModeActive) || !SMP_PATTERN_MODE, beat, maxX);
   for (int ch = 13; ch <= 14; ch++) {  // Only for synth channels 13, 14
     if (noteOnTriggered[ch] && !persistentNoteOn[ch] &&
         !sequencedMonoSynthActive[ch]) {
@@ -10467,7 +10558,7 @@ FLASHMEM void showLoadSave() {
 
   drawNoSD();
 
-  // Encoder 3 UI: 0=NEW, 1=A (autosave file 0), 2..1000 = pattern files 1..999
+  // Encoder 3 UI: 0=NEW, 1=AUTOSAVE (autosave file 0), 2..1000 = pattern files 1..999
   unsigned int fileUi = currentMode->pos[3];
   if (fileUi > 1000u) {
     fileUi = 1000u;
@@ -10476,23 +10567,46 @@ FLASHMEM void showLoadSave() {
   }
   const bool isNewSlot = (fileUi == 0);
   const bool isAutosaveSlot = (fileUi == 1);
-  const unsigned selectedFile = isNewSlot ? 0u : fileUi - 1u;
+  const unsigned fileId = isAutosaveSlot ? 0u : (isNewSlot ? 0u : fileUi - 1u);
+  const unsigned loadedFile = loadedPatternFile();
 
-  // Slow SD I/O must not be mistaken for browser re-entry.
-  static int lastUi = -2;
+  char OUTPUTf[50];
+  if (isAutosaveSlot) {
+    sprintf(OUTPUTf, "autosaved.txt");
+  } else {
+    OUTPUTf[0] = 0;
+  }
+
+  // Browser entry invalidates the display explicitly. A slow SD lookup must
+  // never look like re-entry and restart the same work on the next frame.
+  static int lastUi = -2, lastSideloadUi = -2;
+  static unsigned lastLoadedFile = 1000;
+  static uint8_t lastContentMask=255,lastSourceContentMask=255;
+  static uint8_t lastLoadedSlot = 255, savedLetters = 0, selectedLetters = 0;
+  static uint32_t lastStorageRevision = 0, lastBrowserRevision = 0, lastIndexPaint = ~0u;
   static int8_t lastExists = -1;
   static int8_t lastLoadSettings = -1;
-  static bool lastFn = false;
+  static bool lastFnHeld = false;
   static uint32_t lastFileRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
-  static uint32_t lastBrowserRevision = ~0u, lastStorageRevision = ~0u;
   const bool entered = lastBrowserRevision != patternBrowserRevision;
-  const bool storageChanged = lastStorageRevision != patternStorageRevision;
+  const uint8_t contentMask=subpatternContentMask(fileId);
+  const uint8_t sourceContentMask=fileId==loadedFile?contentMask:subpatternContentMask(loadedFile);
+  const bool contentChanged=contentMask!=lastContentMask||sourceContentMask!=lastSourceContentMask;
+  lastContentMask=contentMask;lastSourceContentMask=sourceContentMask;
+  const bool familyChanged = contentChanged || lastLoadedFile != loadedFile
+      || lastStorageRevision != patternStorageRevision || lastIndexPaint != subpatternIndexPaintRevision;
+  const bool slotChanged = lastLoadedSlot != subpatternSlot;
   if (entered) {
     lastBrowserRevision = patternBrowserRevision;
-    for (int i = 0; i < 4; i++) lastFileRGB[i] = 0xFFFFFFFFu;
+    for (int i = 0; i < 4; ++i) lastFileRGB[i] = 0xFFFFFFFFu;
   }
+  // Loaded family supplies the red Save-As preview; selected family supplies green dots.
+  if (entered || familyChanged) savedLetters = savedSubpatternMask(loadedFile);
+  const bool fileChanged = entered || familyChanged || slotChanged || (int)fileUi != lastUi;
+  lastLoadedFile = loadedFile;
+  lastLoadedSlot = subpatternSlot;
   lastStorageRevision = patternStorageRevision;
-  const bool fileChanged = entered || storageChanged || (int)fileUi != lastUi;
+  lastIndexPaint = subpatternIndexPaintRevision;
   bool txtExists;
   if (isNewSlot) {
     txtExists = true;  // always "available" — enc1 opens NEW menu
@@ -10501,40 +10615,57 @@ FLASHMEM void showLoadSave() {
       lastExists = 1;
     }
   } else if (fileChanged) {
-    txtExists = savedPatternExists(selectedFile);
+    if (isAutosaveSlot) txtExists = SD.exists(OUTPUTf);
+    else {
+      selectedLetters = savedSubpatternMask(fileId);
+      txtExists = selectedLetters != 0;
+    }
     lastUi = (int)fileUi;
     lastExists = txtExists ? 1 : 0;
   } else {
     txtExists = (lastExists == 1);
   }
 
-  // Rendering-cache invalidation must not discard this selection's sideload choice.
-  static int lastSideloadUi = -2;
+  // Sideload is opt-in for each selected number. OFF loads the file's settings;
+  // ON keeps the current sounds. A redraw or storage change is not a new slot.
   if (entered || (int)fileUi != lastSideloadUi) {
     currentMode->pos[2] = 0;
     Encoder[2].writeCounter((int32_t)0);
   }
   lastSideloadUi = (int)fileUi;
+  if (!txtExists || isNewSlot) {
+    if (currentMode->pos[2] != 0) Encoder[2].writeCounter((int32_t)0);
+    currentMode->pos[2] = 0;
+  }
   SMP_LOAD_SETTINGS = currentMode->pos[2] == 0;
 
   const int8_t loadSettingsDrawn = SMP_LOAD_SETTINGS ? 1 : 0;
-  if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn && lastFn == fnHeld) {
+  if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn && lastFnHeld == fnHeld) {
     return;
   }
   lastLoadSettings = loadSettingsDrawn;
-  lastFn = fnHeld;
+  lastFnHeld = fnHeld;
   lastExists = txtExists ? 1 : 0;
 
   FastLEDclear();
 
   CRGB fileIconColor = isNewSlot ? UI_BLUE : (txtExists ? UI_GREEN : UI_DIM_RED);
-  showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
+  if (isNewSlot || maxX >= 32) {
+    showIconsAt(ICON_FOLDER_BIG, fileIconColor, 2, 7);
+  } else if (!isAutosaveSlot) {
+    // Compact folder leaves room for five dots and the action icons on 16 columns.
+    light(1, 8, fileIconColor); light(2, 8, fileIconColor);
+    for (int x = 1; x <= 3; ++x) {
+      light(x, 7, fileIconColor); light(x, 5, fileIconColor);
+    }
+    light(1, 6, fileIconColor); light(3, 6, fileIconColor);
+  }
   if (isNewSlot) {
     // White "+" centered in the blue folder body (icon at ox=2, oy=7).
     drawText("+", 4, 6, UI_WHITE);
   }
 
-  // FILE: load | save | red triangle = keep current sound settings | exit.
+  // FILE: load | save (FN: cross only) | red sideload triangle = keep current sounds | exit.
   // Matrix indicators only — rings via cached writes (showLoadSave runs every loop).
   auto setFileRGB = [&](int enc, uint32_t rgb) {
     if (enc < 0 || enc > 3) return;
@@ -10549,12 +10680,21 @@ FLASHMEM void showLoadSave() {
     CRGB maxB = normalizeToMaxBrightness(c);
     setFileRGB(encoderNum - 1, (uint32_t)maxB.r << 16 | (uint32_t)maxB.g << 8 | maxB.b);
   };
+  auto deleteInd = [&]() {
+    setFileRGB(1, 0xFF0000);
+    drawBrowserDeleteCross(2);
+  };
+  auto saveInd = [&]() {
+    if (fnHeld) deleteInd();
+    else matrixInd('M', (savedLetters & (1u << subpatternSlot)) ? 'D' : 'R', 2);
+  };
   auto soundSettingsInd = [&]() {
     setFileRGB(2, SMP_LOAD_SETTINGS ? 0x000000 : 0xFF0000);
     if (SMP_LOAD_SETTINGS) return;
-    int x1, x2, x3;
-    getIndicatorXPositions(3, x1, x2, x3);
-    const int center = x2 + (maxX < 32 ? 1 : 0);
+    int x1, center, x3;
+    getIndicatorXPositions(3, x1, center, x3);
+    if (maxX < 32) ++center; // Keep the shifted delete X clear of the triangle.
+    // Red 5-3-1 triangle; the intervening rows stay empty.
     for (int x = center - 2; x <= center + 2; ++x) light(x, 6, UI_RED);
     for (int x = center - 1; x <= center + 1; ++x) light(x, 4, UI_RED);
     light(center, 2, UI_RED);
@@ -10574,20 +10714,25 @@ FLASHMEM void showLoadSave() {
     if (txtExists) soundSettingsInd();
     else setFileRGB(2, 0x000000);
     const CRGB labelColor = txtExists ? UI_BRIGHT_GREEN : UI_BLUE;
-    if (maxX >= 32) drawText("AUTOSAVE", 1, 11, labelColor);
-    else { drawText("AUTO", 1, 12, labelColor); drawText("SAVE", 1, 7, labelColor); }
+    if (maxX >= 32) {
+      drawText("AUTOSAVE", 1, 11, labelColor);
+    } else {
+      // Two lines keep the full label readable above the action icons.
+      drawText("AUTO", 1, 12, labelColor);
+      drawText("SAVE", 1, 7, labelColor);
+    }
   } else if (txtExists) {
     matrixInd('M', 'G', 1);
-    if (fnHeld) { drawBrowserDeleteCross(2); setFileRGB(1, 0xFF0000); }
-    else matrixInd('M', 'D', 2);
+    saveInd();
     soundSettingsInd();
-    drawNumber(selectedFile, UI_BRIGHT_GREEN, 11);
+    drawPatternSlotDots(contentMask, UI_GREEN);
+    drawNumber(fileId, UI_BRIGHT_GREEN, 11);
   } else {
     matrixInd('M', 'E', 1);
-    if (fnHeld) { drawBrowserDeleteCross(2); setFileRGB(1, 0xFF0000); }
-    else matrixInd('M', 'R', 2);
+    saveInd();
     setFileRGB(2, 0x000000);
-    drawNumber(selectedFile, UI_BLUE, 11);
+    drawPatternSlotDots(sourceContentMask, UI_RED);
+    drawNumber(fileId, UI_BLUE, 11);
   }
   FastLEDshow();
 }

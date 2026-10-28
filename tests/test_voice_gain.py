@@ -17,6 +17,8 @@ sample=source[source.index('struct Sample {'):source.index('// Declare the devic
 device=source[source.index('struct Device {'):source.index('// Global variables struct')]
 harness=r'''
 #include <cassert>
+#include <algorithm>
+using std::max;
 #include <cmath>
 #include <cstdint>
 #include <cstring>

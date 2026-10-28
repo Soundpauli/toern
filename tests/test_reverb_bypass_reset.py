@@ -35,7 +35,7 @@ int main(){
 }
 """.replace('FUNCTION',source[a:b])
 menu=(root/'toern_menu.ino').read_text()
-assert '#define LOOK_PAGES_COUNT 5' in menu and '#define ETC_PAGES_COUNT 5' in menu
+assert '#define LOOK_PAGES_COUNT 6' in menu and '#define ETC_PAGES_COUNT 5' in menu
 look=menu[menu.index('MenuPage lookPages'):menu.index('static inline uint16_t pongSpeedToInterval')]
 etc=menu[menu.index('MenuPage etcPages'):menu.index('MenuPage modePages')]
 assert look.index('"MUTE"')<look.index('"SWAP"') and '"SWAP"' not in etc

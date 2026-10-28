@@ -11,6 +11,9 @@ def function(signature, source=source):
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
 harness=r'''
+bool subpatternSelector=false,subpatternReady=false,fnReleaseLatch=false,fnReleaseWork=false;
+void subpatternCancelPreview(){}
+
 #define FLASHMEM
 #include <cassert>
 #include <cstdint>

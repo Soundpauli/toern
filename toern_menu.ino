@@ -1,6 +1,6 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 5
+#define LOOK_PAGES_COUNT 6
 #define RECS_PAGES_COUNT 6
 #define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 5
@@ -116,7 +116,8 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"CTRL", 25, false, nullptr},
   {"DRAW", 38, false, nullptr},
   {"MUTE", 47, false, nullptr},
-  {"SWAP", 67, false, nullptr}
+  {"SWAP", 67, false, nullptr},
+  {"SUBP", 68, false, nullptr}
 };
 
 static inline uint16_t pongSpeedToInterval(int speed) {
@@ -854,7 +855,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
       EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
       EEPROM.write(EEPROM_DATA_START + 17, 80);  // GLOB.vol default (80, maps to 0.8 volume, 0-100 range)
-      EEPROM.write(EEPROM_DATA_START + 18, 0);   // cursorType default (0 = NORM)
+      EEPROM.write(EEPROM_DATA_START + 18, 0);   // subpatternsEnabled default (0 = OFF)
       EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 21, 0);   // drawMode default (0 = L+R)
@@ -1099,10 +1100,14 @@ FLASHMEM void loadMenuFromEEPROM() {
     saveSingleModeToEEPROM(16, lineInLevel);
   }
   
-  // Slot 18 used to store BIG cursor. That mode is gone; keep the byte at 0.
-  if (EEPROM.read(EEPROM_DATA_START + 18) != 0) {
+  // Load subpatternsEnabled from EEPROM (stored at EEPROM_DATA_START + 18; default OFF)
+  extern bool subpatternsEnabled;
+  uint8_t subpValue = EEPROM.read(EEPROM_DATA_START + 18);
+  if (subpValue > 1) {
+    subpValue = 0;
     saveSingleModeToEEPROM(18, 0);
   }
+  subpatternsEnabled = (subpValue == 1);
   
   // Load showChannelNr from EEPROM (stored at EEPROM_DATA_START + 19)
   extern bool showChannelNr;
@@ -1702,7 +1707,7 @@ FLASHMEM void showLookMenu() {
   const bool playValuePage = (mainSetting == 9 || mainSetting == 10 || mainSetting == 17 ||
       mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 25 ||
       mainSetting == 32 || mainSetting == 33 || mainSetting == 38 || mainSetting == 47 ||
-      mainSetting == 54);
+      mainSetting == 54 || mainSetting == 68);
   Encoder[0].writeRGBCode(0x000000);
   Encoder[1].writeRGBCode(0x000000);
   Encoder[2].writeRGBCode(playValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
@@ -2873,6 +2878,14 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
       
+    case 68: { // SUBP - File subpatterns (OFF/ON)
+      extern bool subpatternsEnabled;
+      drawMenuText("SUBP", 2, 10, currentMenuParentTextColor());
+      drawMenuValue(subpatternsEnabled ? "ON" : "OFF", 2, 3, subpatternsEnabled ? UI_GREEN : UI_RED);
+      drawMenuIndicator('L', subpatternsEnabled ? 'G' : 'R', 3);
+      break;
+    }
+
     case 38: // DRAW - Toggle between L+R and R modes
       drawMenuText("DRAW", 2, 10, currentMenuParentTextColor());
       drawMenuValue(drawMode == 0 ? "L+R" : "R", 2, 3, UI_GREEN);
@@ -4335,7 +4348,6 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       if (currentMode->pos[2] != lastCursorMode) {
         cursorMode = constrain((int)currentMode->pos[2], 0, 1);
         showChannelNr = (cursorMode == 1);
-        saveSingleModeToEEPROM(18, 0);
         saveSingleModeToEEPROM(19, (int8_t)(showChannelNr ? 1 : 0));
         Encoder[2].writeCounter((int32_t)cursorMode);
         currentMode->pos[2] = cursorMode;
@@ -4363,6 +4375,30 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = encVal;
         lastPrevEnc = encVal;
         saveSingleModeToEEPROM(20, (int8_t)previewTriggerMode);
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 68: { // SUBP - File subpatterns (OFF/ON) via encoder 2 rotation
+      extern bool subpatternsEnabled;
+      static int lastSubpEnc = -1;
+      int encVal = subpatternsEnabled ? 1 : 0;
+      if (menuFirstEnter) {
+        Encoder[2].writeCounter((int32_t)encVal);
+        Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encVal;
+        lastSubpEnc = encVal;
+        menuFirstEnter = false;
+      }
+      if ((int)currentMode->pos[2] != lastSubpEnc) {
+        encVal = constrain((int)currentMode->pos[2], 0, 1);
+        subpatternsEnabled = (encVal == 1);
+        Encoder[2].writeCounter((int32_t)encVal);
+        currentMode->pos[2] = encVal;
+        lastSubpEnc = encVal;
+        saveSingleModeToEEPROM(18, (int8_t)encVal);
         redrawMain(setting);
       }
       break;
@@ -5205,7 +5241,8 @@ FLASHMEM void switchMenu(int menuPosition){
           sampleBrowserInvalidate();
           showSaveSuccessAnimation();
         } else if (resetMenuOption == 3) {
-          // FILE: Wipe all saved files (1-999.txt) but keep autosaved.txt
+          // FILE: Wipe numbered patterns and A-E slots; keep autosaved.txt.
+          resetFileSubpattern();
           FastLEDclear();
           drawText("WIPE", 2, 10, UI_ORANGE);
           drawText("PATT", 2, 3, UI_ORANGE);
@@ -5213,6 +5250,7 @@ FLASHMEM void switchMenu(int menuPosition){
           
           char filename[24];
           int deletedCount = 0;
+          sdIoBeginAudioSafe();
           for (int i = 1; i <= 999; i++) {
             sprintf(filename, "%d.txt", i);
             if (SD.exists(filename)) {
@@ -5221,7 +5259,16 @@ FLASHMEM void switchMenu(int menuPosition){
             }
             sprintf(filename, "%d.txt.tmp", i); SD.remove(filename);
             sprintf(filename, "%d.txt.bak", i); SD.remove(filename);
+            for (uint8_t slot = 0; slot < toern_pattern_slots::count; ++slot) {
+              char base[24], sidecar[32];
+              toern_pattern_slots::path(base, sizeof(base), i, slot);
+              SD.remove(base);
+              snprintf(sidecar, sizeof(sidecar), "%s.tmp", base); SD.remove(sidecar);
+              snprintf(sidecar, sizeof(sidecar), "%s.bak", base); SD.remove(sidecar);
+              sdIoYield();
+            }
           }
+          sdIoEndAudioSafe();
           
           showSaveSuccessAnimation();
         } else if (resetMenuOption == 4) {
@@ -5454,6 +5501,14 @@ FLASHMEM void switchMenu(int menuPosition){
 
       case 24: {
         pong = !pong;
+        drawMainSettingStatus(menuPosition);
+        break;
+      }
+
+      case 68: {
+        extern bool subpatternsEnabled;
+        subpatternsEnabled = !subpatternsEnabled;
+        saveSingleModeToEEPROM(18, (int8_t)(subpatternsEnabled ? 1 : 0));
         drawMainSettingStatus(menuPosition);
         break;
       }
