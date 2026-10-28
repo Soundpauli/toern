@@ -54,7 +54,7 @@ std::vector<uint8_t> input;
 size_t consumed=0;
 const size_t SD_SER_CHUNK=CHUNK_VALUE,SD_SER_PUT_BLOCK=8192;
 const uint32_t SD_SER_IO_TIMEOUT_MS=60000;
-uint32_t sdSerLastClientMs=0;
+uint32_t sdSerLastClientMs=0,patternStorageRevision=0;
 uint32_t clockMs=1000;
 uint32_t millis(){return clockMs++;}
 void yield(){}

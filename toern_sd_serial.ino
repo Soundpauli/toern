@@ -71,6 +71,7 @@ static void sdSerSdLock() {
 }
 
 static void sdSerSdUnlock() {
+  ++patternStorageRevision;
   AudioInterrupts();
 }
 
@@ -359,6 +360,7 @@ static void sdSerCmdPut(char *args) {
     return;
   }
 
+  ++patternStorageRevision;
   sdSerAudioStopForSd();
   sdSerPutCheckpoint("OPEN", 0);
   if (SD.exists(path)) {

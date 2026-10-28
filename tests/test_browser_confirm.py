@@ -33,7 +33,7 @@ struct Mode {unsigned pos[4]{};} draw,loadSaveTrack,set_SamplePack,set_Wav,patte
 Mode *currentMode=&loadSaveTrack,*patternConfirmReturnMode=nullptr;
 unsigned patternConfirmReturnPos[4]{},patternConfirmTarget=0,loadedPatternFileNumber=2;
 uint8_t patternConfirmResource=0;
-uint32_t patternConfirmRevision=0;
+uint32_t patternConfirmRevision=0,patternStorageRevision=0;
 bool patternConfirmDelete=false,bypassModeSwitchDebounce=false,SMP_LOAD_SETTINGS=true;
 bool pressed[4]{},preventPaintUnpaint=false,lastPatternSaveOk=false,fastRecordActive=false,isRecording=false;
 char confirmedSampleDeletePath[160]{};
@@ -52,7 +52,7 @@ void sdIoBeginAudioSafe(){}void sdIoEndAudioSafe(){}void sdIoYield(){}void stopS
 namespace toern_audio {struct StateGuard{};}
 void clearPatternNotes(){++clears;}void updateLastPage(){}
 void switchMode(Mode *m){currentMode=m;for(auto &p:m->pos)p=0;}
-void savePattern(bool){++saves;lastPatternSaveOk=true;loadedPatternFileNumber=SMP.file;currentMode=&draw;}
+void savePatternTo(bool,unsigned target){++saves;lastPatternSaveOk=true;SMP.file=target;loadedPatternFileNumber=target;currentMode=&draw;}
 void saveSamplePack(unsigned target){++kits;assert(target<=999);currentMode=&draw;}
 void showCanceledAnimation(bool){++cancels;}void showPatternResult(bool ok){lastResult=ok;}
 void sampleBrowserInvalidate(){++invalidations;}

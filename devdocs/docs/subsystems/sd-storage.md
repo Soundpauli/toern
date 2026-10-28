@@ -52,10 +52,24 @@ Sample V gain remains part of the existing binary pattern layout; its tagged spa
 
 ### Sound settings and sideload
 
-PATT entry and each file-selection change default to loading saved sound settings (`SMP_LOAD_SETTINGS=true`, sideload encoder position 0). Turning encoder 3 clockwise enables sideload for that selection (position 1, red X), retaining current samples, effects, envelopes, synth settings and volumes in RAM and live audio. Counterclockwise disables sideload. Saving always captures current sound settings. Renderer-cache invalidation does not itself clear sideload.
+PATT entry and each file-selection change default to loading saved sound settings (`SMP_LOAD_SETTINGS=true`, sideload encoder position 0). Turning encoder 3 clockwise enables sideload for that selection (position 1, red triangle), retaining current samples, effects, envelopes, synth settings and volumes in RAM and live audio. Counterclockwise disables sideload. Saving always captures current sound settings. Renderer-cache invalidation does not itself clear sideload.
 
 ### Browser confirmations
 
 `toern_storage_confirm.ino` implements PATT/KIT overwrite and PATT/KIT/SMP delete confirmations independently of subpatterns. NO is the initial choice; only encoder 4 accepts. Touch 2 cancels with a blue neutral-face animation. The action snapshots the destination and browser positions before the confirmation encoder is reused. SMP captures a bounded WAV path and rejects directories or traversal; KIT checks all eight WAV slots for occupancy. PATT deletion removes the numbered file and its `.tmp`/`.bak` generations, clearing live notes only if that number was loaded. Browser selection and SMP Seek End are restored after cancellation/deletion. The sample browser's physical encoder 2 maps to logical slot 2 when FN counters are restored.
 
 AUTOSAVE is shown in full (AUTO/SAVE on 16 columns) and remains load-only in PATT. Recording and fast capture block confirmation actions. The simulator models deletion of bundled read-only assets for its current session; it does not modify the packaged files.
+
+### Loaded file and browser selection
+
+PATT selection lives in `loadSaveTrack.pos[3]`; browsing never changes `SMP.file`.
+Load and Save As receive explicit destinations. Successful numbered loads use the
+selected number even if the file contains an older embedded identity. Save As
+serializes the destination identity and adopts it only after the transaction
+commits; failed writes leave the live identity unchanged. Autosave retains the
+live identity. Selecting an empty destination defers its identity until NEW is
+actually generated.
+
+The PATT browser indexes numbered `.txt` files and `autosaved.txt` once per visit
+or storage revision. Slot turns and slow SD/display frames reuse that index.
+Saves, deletes and host SD mutations invalidate it; elapsed time does not.

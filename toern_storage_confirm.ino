@@ -9,10 +9,11 @@ FLASHMEM void requestPatternSave(unsigned target) {
   const bool occupied = SD.exists(path) || SD.exists(tmp) || SD.exists(backup);
   sdIoEndAudioSafe();
   if (occupied) openPatternConfirmation(target, false);
-  else { SMP.file = target; savePattern(false); }
+  else savePatternTo(false, target);
 }
 
 FLASHMEM bool deleteSelectedPattern(unsigned target) {
+  ++patternStorageRevision;
   if (target < 1 || target > 999 || fastRecordActive || isRecording) return false;
   char path[24], tmp[32], backup[32];
   snprintf(path, sizeof(path), "%u.txt", target);
@@ -161,7 +162,7 @@ FLASHMEM void finishPatternConfirmation(bool accept) {
     showPatternResult(patternConfirmResource == 0
       ? deleteSelectedPattern(patternConfirmTarget) : deleteConfirmedBrowserResource());
   } else if (patternConfirmResource == 2) saveSamplePack(patternConfirmTarget);
-  else { SMP.file = patternConfirmTarget; savePattern(false); }
+  else savePatternTo(false, patternConfirmTarget);
 
   const bool returnToBrowser = patternConfirmDelete || !accept
     || (patternConfirmResource == 0 && !lastPatternSaveOk);

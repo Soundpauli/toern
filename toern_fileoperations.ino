@@ -74,6 +74,10 @@ FLASHMEM void showPatternResult(bool success) {
 }
 
 FLASHMEM void savePattern(bool autosave) {
+  savePatternTo(autosave, SMP.file);
+}
+
+FLASHMEM void savePatternTo(bool autosave, unsigned targetFile) {
   extern void stopSdPreviewIfPlaying();
   extern void sdIoYield();
   extern void sdIoBeginAudioSafe();
@@ -81,10 +85,11 @@ FLASHMEM void savePattern(bool autosave) {
 
   lastPatternSaveOk = false;
   // PATT slot 0 is autosaved.txt — load-only from the FILE menu.
-  if (!autosave && SMP.file == 0) {
+  if (!autosave && (targetFile == 0 || targetFile > 999)) {
     return;
   }
 
+  ++patternStorageRevision;
   drawNoSD();
   // Keep Audio library fed for the whole SD burst — manual saves while playing
   // and pause-autosaves both starve the pool if chunks run too large.
@@ -101,7 +106,7 @@ FLASHMEM void savePattern(bool autosave) {
   if (autosave) {
     sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
   } else {
-    sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
+    sprintf(OUTPUTf, "%u.txt", targetFile);
   }
 
   char tmpPath[64], backupPath[64];
@@ -159,7 +164,11 @@ FLASHMEM void savePattern(bool autosave) {
     }
 
     if (wroteOk) {
-      const uint8_t *smpBytes = (const uint8_t *)&SMP;
+      // Serialize the destination identity without changing the live session on failure.
+      static EXTMEM Device savedSettings;
+      memcpy(&savedSettings, &SMP, sizeof(SMP));
+      if (!autosave) savedSettings.file = targetFile;
+      const uint8_t *smpBytes = (const uint8_t *)&savedSettings;
       size_t smpLeft = sizeof(SMP);
       size_t smpOff = 0;
       const size_t smpChunk = 256;
@@ -203,7 +212,11 @@ FLASHMEM void savePattern(bool autosave) {
     SD.remove(tmpPath);
   }
   lastPatternSaveOk = wroteOk;
-  if (wroteOk && !autosave) loadedPatternFileNumber = SMP.file;
+  if (wroteOk && !autosave) {
+    SMP.file = targetFile;
+    loadedPatternFileNumber = targetFile;
+    pendingNewPatternFile = 0;
+  }
   if (!autosave) {
     if (wroteOk) {
       showPatternResult(true);
@@ -377,7 +390,12 @@ FLASHMEM void saveSamplePack(int pack) {
 }
 
 FLASHMEM void loadPattern(bool autoload) {
-  const unsigned requestedFile = SMP.file;
+  loadPatternFrom(autoload, autoload ? 0u : SMP.file);
+}
+
+FLASHMEM void loadPatternFrom(bool autoload, unsigned requestedFile) {
+  // Boot recovery always targets autosaved.txt; PSRAM identity is not valid yet.
+  if (!autoload && requestedFile > 999) return;
   extern bool isNowPlaying;
   extern void stopSdPreviewIfPlaying();
   extern void sdIoYield();
@@ -395,17 +413,17 @@ FLASHMEM void loadPattern(bool autoload) {
   FastLEDclear();
   char OUTPUTf[50];
   // autoload, or FILE menu slot 0 → autosaved.txt
-  if (autoload || SMP.file == 0) {
+  if (autoload || requestedFile == 0) {
     sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
   } else {
-    sprintf(OUTPUTf, "%d.txt", (int)SMP.file);
+    sprintf(OUTPUTf, "%u.txt", requestedFile);
   }
 
   char tmpPath[64], backupPath[64];
   snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", OUTPUTf);
   snprintf(backupPath, sizeof(backupPath), "%s.bak", OUTPUTf);
   recoverPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
-  if (!autoload) { drawText("LOAD", 1, 8, UI_GREEN); FastLEDshow(); }
+  if (!autoload) { drawText("LOAD", 2, 8, UI_GREEN); FastLEDshow(); }
   bool loadedOk = false;
   const size_t expectedNotes = (size_t)(maxlen - 1) * (size_t)maxY;
 
@@ -482,7 +500,9 @@ FLASHMEM void loadPattern(bool autoload) {
       }
       unmuteAllChannels();
       applyMutesAfterPMODSwitch();
-      loadedPatternFileNumber = autoload || requestedFile == 0 ? SMP.file : requestedFile;
+      SMP.file = autoload || requestedFile == 0 ? SMP.file : requestedFile;
+      loadedPatternFileNumber = SMP.file;
+      pendingNewPatternFile = 0;
       loadedOk = true;
     }
     sdIoYield();
@@ -490,7 +510,12 @@ FLASHMEM void loadPattern(bool autoload) {
 
   if (!loadedOk) {
     // EXTMEM/PSRAM is not a blank canvas after reset — always zero the grid.
-    if (autoload) clearPatternNotes();
+    if (autoload) {
+      clearPatternNotes();
+      SMP.file = 1;
+      loadedPatternFileNumber = 0;
+      pendingNewPatternFile = 0;
+    }
     const bool fileWasPresent = SD.exists(OUTPUTf);
     if (!autoload) sdIoEndAudioSafe();
     if (fileWasPresent) {
@@ -503,7 +528,8 @@ FLASHMEM void loadPattern(bool autoload) {
       } else {
         switchMode(&draw);
       }
-    } else if (!autoload && SMP.file != 0) {
+    } else if (!autoload && requestedFile != 0) {
+      pendingNewPatternFile = requestedFile;
       extern void showNewFileScreen();
       showNewFileScreen();
     }
@@ -845,4 +871,41 @@ FLASHMEM bool loadVoicePreset(int ch, uint16_t slot) {
   setVoicePresetSlot(ch, slot);
   invalidateVoicePresetUi();
   return true;
+}
+
+// Cache the root directory once per PATT visit or storage mutation. Slot turns
+// and slow display frames never restart the directory scan.
+FLASHMEM bool savedPatternExists(unsigned file) {
+  static uint8_t slots[125];
+  static bool valid = false;
+  static uint32_t browserRevision = 0, storageRevision = 0;
+  if (!valid || browserRevision != patternBrowserRevision || storageRevision != patternStorageRevision) {
+    memset(slots, 0, sizeof(slots));
+    sdIoBeginAudioSafe();
+    File root = SD.open("/");
+    if (!root) { sdIoEndAudioSafe(); valid = false; return false; }
+    for (;;) {
+      File entry = root.openNextFile();
+      if (!entry) break;
+      if (!entry.isDirectory()) {
+        const char *name = entry.name();
+        unsigned number = 0;
+        const char *end = name;
+        while (*end >= '0' && *end <= '9' && number <= 999) {
+          number = number * 10 + (*end++ - '0');
+        }
+        if (strcmp(name, "autosaved.txt") == 0) slots[0] |= 1u;
+        else if (end != name && number >= 1 && number <= 999 && strcmp(end, ".txt") == 0)
+          slots[number / 8] |= (uint8_t)(1u << (number % 8));
+      }
+      entry.close();
+      sdIoYield();
+    }
+    root.close();
+    sdIoEndAudioSafe();
+    browserRevision = patternBrowserRevision;
+    storageRevision = patternStorageRevision;
+    valid = true;
+  }
+  return file <= 999 && (slots[file / 8] & (1u << (file % 8))) != 0;
 }

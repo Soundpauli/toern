@@ -1094,6 +1094,12 @@ static void updateFnState();
 static uint8_t fnButtonEvent(int index, uint8_t physicalState);
 static bool fnHeld = false;
 static unsigned loadedPatternFileNumber = 0;
+static unsigned pendingNewPatternFile = 0;
+static uint32_t patternBrowserRevision = 0;
+static uint32_t patternStorageRevision = 0;
+FLASHMEM void savePatternTo(bool autosave, unsigned targetFile);
+FLASHMEM void loadPatternFrom(bool autoload, unsigned requestedFile);
+
 static bool patternConfirmDelete = false;
 static unsigned patternConfirmTarget = 0;
 static uint32_t patternConfirmRevision = 0;
@@ -2501,6 +2507,8 @@ FLASHMEM void switchMode(Mode *newMode) {
     }
 
     if (currentMode == &loadSaveTrack) {
+      ++patternBrowserRevision;
+      pendingNewPatternFile = 0;
       // UI slot: 0=NEW, 1=A (autosave), 2..1000 = pattern 1..999
       unsigned int fileUi = (SMP.file == 0) ? 1u : (SMP.file + 1u);
       if (fileUi > 1000u) fileUi = 1000u;
@@ -3090,7 +3098,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     switchMode(&draw);
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     // NEW (ui 0) and Autosave (ui 1 / file 0): load-only, never write from FILE menu
-    if (currentMode->pos[3] != 0 && SMP.file != 0) {
+    if (currentMode->pos[3] > 1) {
       requestPatternSave(currentMode->pos[3] - 1u);
       preventPaintUnpaint = true;
     }
@@ -3103,7 +3111,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       return;
     }
     SMP_LOAD_SETTINGS = currentMode->pos[2] == 0;
-    loadPattern(false);
+    loadPatternFrom(false, currentMode->pos[3] - 1u);
     preventPaintUnpaint = true;                                                                     // Prevent paint/unpaint after load
     return;                                                                                         // Prevent other button actions from being processed
   } else if ((currentMode == &loadSavePreset) && match_buttons(currentButtonStates, 0, 0, 0, 1)) {  // "0001" exit
@@ -10468,38 +10476,23 @@ FLASHMEM void showLoadSave() {
   }
   const bool isNewSlot = (fileUi == 0);
   const bool isAutosaveSlot = (fileUi == 1);
-  if (!isNewSlot) {
-    unsigned int fid = isAutosaveSlot ? 0u : (fileUi - 1u);
-    if (SMP.file != fid) SMP.file = fid;
-  }
+  const unsigned selectedFile = isNewSlot ? 0u : fileUi - 1u;
 
-  char OUTPUTf[50];
-  if (isAutosaveSlot) {
-    sprintf(OUTPUTf, "autosaved.txt");
-  } else if (!isNewSlot) {
-    sprintf(OUTPUTf, "%u.txt", SMP.file);
-  } else {
-    OUTPUTf[0] = 0;
-  }
-
-  // SD.exists + full redraw + Duppa RGB every loop stalled play — only when slot/state changes.
-  // Invalidate when re-entering this mode (gap = we weren't called last frames).
+  // Slow SD I/O must not be mistaken for browser re-entry.
   static int lastUi = -2;
   static int8_t lastExists = -1;
   static int8_t lastLoadSettings = -1;
   static bool lastFn = false;
   static uint32_t lastFileRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
-  static uint32_t lastCallMs = 0;
-  uint32_t nowMs = millis();
-  if (nowMs - lastCallMs > 50) {
-    lastUi = -2;
-    lastExists = -1;
-    lastLoadSettings = -1;
+  static uint32_t lastBrowserRevision = ~0u, lastStorageRevision = ~0u;
+  const bool entered = lastBrowserRevision != patternBrowserRevision;
+  const bool storageChanged = lastStorageRevision != patternStorageRevision;
+  if (entered) {
+    lastBrowserRevision = patternBrowserRevision;
     for (int i = 0; i < 4; i++) lastFileRGB[i] = 0xFFFFFFFFu;
   }
-  lastCallMs = nowMs;
-
-  bool fileChanged = ((int)fileUi != lastUi);
+  lastStorageRevision = patternStorageRevision;
+  const bool fileChanged = entered || storageChanged || (int)fileUi != lastUi;
   bool txtExists;
   if (isNewSlot) {
     txtExists = true;  // always "available" — enc1 opens NEW menu
@@ -10508,7 +10501,7 @@ FLASHMEM void showLoadSave() {
       lastExists = 1;
     }
   } else if (fileChanged) {
-    txtExists = SD.exists(OUTPUTf);
+    txtExists = savedPatternExists(selectedFile);
     lastUi = (int)fileUi;
     lastExists = txtExists ? 1 : 0;
   } else {
@@ -10517,7 +10510,7 @@ FLASHMEM void showLoadSave() {
 
   // Rendering-cache invalidation must not discard this selection's sideload choice.
   static int lastSideloadUi = -2;
-  if ((int)fileUi != lastSideloadUi) {
+  if (entered || (int)fileUi != lastSideloadUi) {
     currentMode->pos[2] = 0;
     Encoder[2].writeCounter((int32_t)0);
   }
@@ -10541,7 +10534,7 @@ FLASHMEM void showLoadSave() {
     drawText("+", 4, 6, UI_WHITE);
   }
 
-  // FILE: load | save | red X = keep current sound settings | exit.
+  // FILE: load | save | red triangle = keep current sound settings | exit.
   // Matrix indicators only — rings via cached writes (showLoadSave runs every loop).
   auto setFileRGB = [&](int enc, uint32_t rgb) {
     if (enc < 0 || enc > 3) return;
@@ -10561,9 +10554,10 @@ FLASHMEM void showLoadSave() {
     if (SMP_LOAD_SETTINGS) return;
     int x1, x2, x3;
     getIndicatorXPositions(3, x1, x2, x3);
-    light(x1, 3, UI_RED); light(x3, 3, UI_RED);
-    light(x2, 4, UI_RED);
-    light(x1, 5, UI_RED); light(x3, 5, UI_RED);
+    const int center = x2 + (maxX < 32 ? 1 : 0);
+    for (int x = center - 2; x <= center + 2; ++x) light(x, 6, UI_RED);
+    for (int x = center - 1; x <= center + 1; ++x) light(x, 4, UI_RED);
+    light(center, 2, UI_RED);
   };
 
   matrixInd('L', 'X', 4);
@@ -10587,12 +10581,13 @@ FLASHMEM void showLoadSave() {
     if (fnHeld) { drawBrowserDeleteCross(2); setFileRGB(1, 0xFF0000); }
     else matrixInd('M', 'D', 2);
     soundSettingsInd();
-    drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
+    drawNumber(selectedFile, UI_BRIGHT_GREEN, 11);
   } else {
     matrixInd('M', 'E', 1);
-    matrixInd('M', 'R', 2);
+    if (fnHeld) { drawBrowserDeleteCross(2); setFileRGB(1, 0xFF0000); }
+    else matrixInd('M', 'R', 2);
     setFileRGB(2, 0x000000);
-    drawNumber(SMP.file, UI_BLUE, 11);
+    drawNumber(selectedFile, UI_BLUE, 11);
   }
   FastLEDshow();
 }
@@ -10750,7 +10745,8 @@ FLASHMEM void showSamplePack() {
     drawNumber(SMP.pack, UI_BRIGHT_GREEN, 11);
   } else {
     matrixInd('M', 'E', 1);
-    matrixInd('M', 'R', 2);
+    if (fnHeld) { drawBrowserDeleteCross(2); setPackRGB(1, 0xFF0000); }
+    else matrixInd('M', 'R', 2);
     drawNumber(SMP.pack, UI_BLUE, 11);
   }
   setPackRGB(2, 0x000000);

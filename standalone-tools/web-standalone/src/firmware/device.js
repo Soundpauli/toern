@@ -132,7 +132,7 @@ export function createDevice(matrix, statusEl, rings) {
     fnHeld: false, fnArrow: "", fnArrowAt: 0,
     touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(127), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
-    menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: true,
+    menuIndex: 0, subIndex: 0, slot: 1, loadedPatternFile: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: true,
     genre: 0, genreLength: 8,
     seekOf, endOf, invOf, browse: 0, browseDir: "samples", browseItems: listDir("samples", { parent: false }),
     wavFile: false, peaks: null, shownWav: "", sampleUrl: Array(16).fill(null),
@@ -1153,7 +1153,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (!s.playing) s.GLOB.page = s.GLOB.edit;
     if (s.GLOB.page > PAGES) s.GLOB.page = PAGES;
   }
-  function snapshot() {
+  function snapshot(patternFile = s.loadedPatternFile) {
     const out = [];
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) {
       const n = note[x][y];
@@ -1161,11 +1161,13 @@ export function createDevice(matrix, statusEl, rings) {
         ? [n.channel, n.velocity, n.probability, n.condition, n.midiPitch <= 127 ? n.midiPitch : 255]
         : 0);
     }
-    return { version: 2, notes: out, filt: filt.map(f => ({...f})), chVol: chVol.slice(), bpm: s.bpm };
+    return { version: 2, patternFile, notes: out, filt: filt.map(f => ({...f})), chVol: chVol.slice(), bpm: s.bpm };
   }
   function restore(data, loadSound = true) {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
     if (data && !Array.isArray(data)) {
+      if (Number.isInteger(data.patternFile) && data.patternFile >= 0 && data.patternFile <= 999)
+        s.loadedPatternFile = data.patternFile;
       if (loadSound) {
         for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch), data.filt?.[ch] || {});
         for (const ch of SOUND_CH) filt[ch].sus = clamp(filt[ch].sus, 1, 32);
@@ -1351,7 +1353,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function openMenuPage() {
     const name = MENU_PAGES[s.menuIndex].name;
-    if (name === "PATT") { s.loadSoundSettings = true; s.mode = "dat"; }
+    if (name === "PATT") { s.slot = s.loadedPatternFile; s.loadSoundSettings = true; s.mode = "dat"; }
     else if (name === "KIT") s.mode = "kit";
     else if (name === "SMP" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
       refreshBrowse();
@@ -1735,7 +1737,6 @@ export function createDevice(matrix, statusEl, rings) {
     return [3,4,8].includes(events[enc]); // FN button bindings are reserved.
   }
   const deletedBrowserResources = new Set();
-  let loadedPatternSlot = 0;
   function openBrowserConfirmation(resource, target, deleting, run) {
     if (s.recOn || s.fastRecActive) return;
     s.confirmation = {resource, target, deleting, run, returnMode:s.mode,
@@ -1769,14 +1770,14 @@ export function createDevice(matrix, statusEl, rings) {
         const key=resource==="dat"?"toern-web-patterns":"toern-web-packs";
         const all=loadStore(key); delete all[String(target)]; localStorage.setItem(key,JSON.stringify(all));
         deletedBrowserResources.add(`${key}:${target}`);
-        if (resource==="dat" && loadedPatternSlot===target) { clearNotes();loadedPatternSlot=0; }
+        if (resource==="dat" && s.loadedPatternFile===target) { clearNotes();s.loadedPatternFile=0; }
       }
       s.okAt=performance.now();
     });
   }
   function commitPatternSave() {
     deletedBrowserResources.delete(`toern-web-patterns:${s.slot}`);
-    saveSlot("toern-web-patterns",s.slot,snapshot());loadedPatternSlot=s.slot;
+    saveSlot("toern-web-patterns",s.slot,snapshot(s.slot));s.loadedPatternFile=s.slot;
     s.okAt=performance.now();finishLoad();
   }
   function commitKitSave() {
@@ -1853,19 +1854,22 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.slot !== 0 && !slotExists("toern-web-patterns", s.slot)) { s.mode = "new"; return; }
       const url = patternUrl(s.slot);
       const loadSound = !!s.loadSoundSettings;
-      loadedPatternSlot=s.slot;
+      const requestedFile = s.slot;
       const stored = loadStore("toern-web-patterns")[String(s.slot)];
       if (stored) {
         restore(stored, loadSound);
+        if (requestedFile > 0) s.loadedPatternFile = requestedFile;
         finishLoad();
       } else if (url) {
         parsePattern(url).then((data) => {
           if (!data) return;
           restore(data, loadSound);
+          if (requestedFile > 0) s.loadedPatternFile = requestedFile;
           finishLoad();
         });
       } else {
-        restore(stored != null ? stored : demoPattern(s.slot), loadSound);
+        restore(stored != null ? stored : demoPattern(requestedFile), loadSound);
+        if (requestedFile > 0) s.loadedPatternFile = requestedFile;
         finishLoad();
       }
     }

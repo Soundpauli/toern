@@ -1505,7 +1505,7 @@ FLASHMEM void drawSampleLoadOverlay(uint8_t progressPercent) {
     light(x, 5, c);
   }
 
-  drawText("LOAD", 1, 10, textColor);
+  drawText("LOAD", 2, 10, textColor);
 }
 
 void drawPages() {

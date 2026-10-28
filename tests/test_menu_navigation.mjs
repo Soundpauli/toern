@@ -658,14 +658,14 @@ console.log('PASS: right-hand encoder painting replaces a shadowed blocker witho
 stored.clear();
 const pattDevice=createDevice(matrix,{},[]);
 pattDevice.start();now+=6000;frame(now);now+=6000;frame(now);
-let pattSlot=1;
 function pattOpen(slot){
  pattDevice.jump('menu');pattDevice.press(3);
  assert.equal(pattDevice.mode(),'dat');
- pattDevice.rotate(3,slot-pattSlot);pattSlot=slot;
+ pattDevice.rotate(3,-1000);pattDevice.rotate(3,slot+1);
 }
 function pattSave(slot){pattOpen(slot);pattDevice.press(1);if(pattDevice.mode()==='confirm'){pattDevice.rotate(3,1);pattDevice.press(3);}return JSON.parse(stored.get('toern-web-patterns'))[slot];}
 const live=pattSave(1);
+assert.equal(live.patternFile,1);
 const incoming=structuredClone(live);
 incoming.filt[1].r=31;incoming.chVol[1]=5;incoming.bpm=147;
 incoming.notes[0]=[14,127,100,1,57];
@@ -687,6 +687,9 @@ assert.deepEqual(saved.notes[0],incoming.notes[0]);
 pattOpen(2);pattDevice.rotate(2,1);pattDevice.rotate(3,-1);pattDevice.rotate(3,1);pattDevice.press(0);
 saved=pattSave(5);
 assert.deepEqual(saved.filt,incoming.filt,'file changes reset sideload');
+// Browsing and canceling never changes the live identity or the next entry selection.
+pattOpen(9);pattDevice.jump('draw');pattDevice.jump('menu');pattDevice.press(3);
+assert.equal(pattDevice.menuSummary().detail,'Slot 5');
 // Re-entering the same selection clears sideload too.
 pattOpen(1);pattDevice.rotate(2,1);pattDevice.jump('draw');pattOpen(1);pattDevice.press(0);
 saved=pattSave(6);assert.deepEqual(saved.filt,live.filt,'browser re-entry defaults to saved sounds');
@@ -705,10 +708,21 @@ for(const width of [16,32])for(const loadSoundSettings of [false,true]) {
  setLayout(width);const red=[];
  const m={light(x,y,c){if(c[0]===255&&c[1]===0&&c[2]===0)red.push([x,y]);},drawIndicator(){},setRing(){},drawNumber(){},drawText(){}};
  drawLoadSave(m,{slot:1,slotExists:()=>true,loadSoundSettings});
- const x=width===16?9:19;
- assert.deepEqual(red,loadSoundSettings?[]:[[x,3],[x+2,3],[x+1,4],[x,5],[x+2,5]]);
+ const x=width===16?11:20;
+ assert.deepEqual(red,loadSoundSettings?[]:[[x-2,6],[x-1,6],[x,6],[x+1,6],[x+2,6],[x-1,4],[x,4],[x+1,4],[x,2]]);
 }
-console.log('PASS: saved sounds default ON, sideload resets per file/visit, saving preserves sounds, and sustain stops at 1.');
+for (const width of [16,32]) {
+ setLayout(width);
+ const expectedCenter=width===16?7:13;
+ for (const exists of [false,true]) for (const browser of ['patt','kit']) {
+  const lights=[];
+  const m={light(x,y,c){lights.push([x,y,c]);},drawIndicator(){},setRing(){},drawNumber(){},drawText(){}};
+  if(browser==='patt')drawLoadSave(m,{slot:9,slotExists:()=>exists,loadSoundSettings:true,fnHeld:true});
+  else (await import('../standalone-tools/web-standalone/src/firmware/screens.js')).drawPack(m,{packSlot:9,slotExists:()=>exists,fnHeld:true});
+  assert(lights.some(([x,y])=>x===expectedCenter&&y===4),`${browser} FN delete cross on ${exists?'occupied':'empty'} slot`);
+ }
+}
+console.log('PASS: loaded identity survives browsing, saved sounds default ON, sideload resets per file/visit, triangle/delete indicators, and sustain stops at 1.');
 }
 
 // CTRL=PAGE shows page feedback with the default NORM cursor setting.
@@ -724,8 +738,7 @@ console.log('PASS: page-number overlay appears in NORM cursor mode.');
 // Browser confirmation controls: no writes before YES, exact target, cancel restores selection.
 stored.clear();const confirmDevice=createDevice(matrix,{},[]);
 confirmDevice.start();now+=6000;frame(now);now+=6000;frame(now);
-let confirmSlot=1;
-function openConfirmPattern(slot){confirmDevice.jump('menu');confirmDevice.press(3);confirmDevice.rotate(3,slot-confirmSlot);confirmSlot=slot;}
+function openConfirmPattern(slot){confirmDevice.jump('menu');confirmDevice.press(3);confirmDevice.rotate(3,-1000);confirmDevice.rotate(3,slot+1);}
 confirmDevice.importPatternCells([{channel:1,velocity:42,probability:100,condition:1,midiPitch:60}],123);
 openConfirmPattern(3);confirmDevice.press(1);
 const savedBefore=stored.get('toern-web-patterns');

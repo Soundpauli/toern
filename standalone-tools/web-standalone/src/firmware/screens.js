@@ -837,6 +837,12 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
 
 function clampUi(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+function drawBrowserDeleteCross(matrix) {
+  const center = COLS <= 16 ? 7 : 13;
+  for (const [dx,y] of [[-1,3],[1,3],[0,4],[-1,5],[1,5]]) matrix.light(center+dx,y,[255,0,0]);
+  matrix.setRing(2,[255,0,0]);
+}
+
 export function drawLoadSave(matrix, s) {
   const isNew = s.slot < 0;
   const exists = isNew ? true : s.slotExists("toern-web-patterns", s.slot);
@@ -845,8 +851,10 @@ export function drawLoadSave(matrix, s) {
   matrix.drawIndicator("L", "X", 4);
   matrix.setRing(3, [0, 0, 0]);
   if (!isNew && exists && !s.loadSoundSettings) {
-    const x = COLS <= 16 ? 9 : 19;
-    for (const [dx,y] of [[0,3],[2,3],[1,4],[0,5],[2,5]]) matrix.light(x+dx,y,[255,0,0]);
+    const center = COLS <= 16 ? 11 : 20;
+    for (let dx=-2;dx<=2;dx++) matrix.light(center+dx,6,[255,0,0]);
+    for (let dx=-1;dx<=1;dx++) matrix.light(center+dx,4,[255,0,0]);
+    matrix.light(center,2,[255,0,0]);
     matrix.setRing(3, [255, 0, 0]);
   }
   if (isNew) {
@@ -868,6 +876,7 @@ export function drawLoadSave(matrix, s) {
     matrix.drawIndicator("M", "R", 2);
     matrix.drawNumber(s.slot, UI_BLUE, 11);
   }
+  if (s.slot > 0 && s.fnHeld) drawBrowserDeleteCross(matrix);
 }
 
 export function drawPack(matrix, s) {
@@ -877,6 +886,7 @@ export function drawPack(matrix, s) {
   matrix.drawIndicator("M", exists ? "D" : "R", 2);
   matrix.drawIndicator("L", "X", 4);
   matrix.drawNumber(s.packSlot, exists ? UI_BRIGHT_GREEN : UI_BLUE, 11);
+  if (s.fnHeld) drawBrowserDeleteCross(matrix);
 }
 
 function fileSizeColor(bytes) {
