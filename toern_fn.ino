@@ -6,6 +6,16 @@ static unsigned long fnDirectionUntil = 0;
 static bool fnReleaseLatch = false;
 static bool fnReleaseWork = false;
 
+// SMP maps physical encoder 2 to pos[2] (Seek End), and encoder 3 to pos[1].
+// FN restores physical counters, so it must use the same mapping as normal polling.
+static int fnEncoderPosition(int index) {
+  if (currentMode == &set_Wav) {
+    if (index == 1) index = 2;
+    else if (index == 2) index = 1;
+  }
+  return (int)currentMode->pos[index];
+}
+
 static void updateFnState() {
   const bool wasHeld = fnHeld;
   const bool fillChord = pollTouchFillChord();
@@ -35,16 +45,16 @@ static bool fnEncoder2Held() {
 static bool finishFnSubpatternRelease(bool allowWrite) {
   bool switched = false;
   if (fnReleaseLatch && allowWrite && currentMode) {
-    Encoder[1].writeCounter((int32_t)currentMode->pos[1]);
-    Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+    Encoder[1].writeCounter((int32_t)fnEncoderPosition(1));
+    Encoder[2].writeCounter((int32_t)fnEncoderPosition(2));
   }
   if (fnReleaseWork) {
     switched = subpatternFnRelease();
     fnReleaseWork = false;
   }
   if (fnReleaseLatch && allowWrite && currentMode) {
-    Encoder[1].writeCounter((int32_t)currentMode->pos[1]);
-    Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
+    Encoder[1].writeCounter((int32_t)fnEncoderPosition(1));
+    Encoder[2].writeCounter((int32_t)fnEncoderPosition(2));
   }
   if (allowWrite) fnReleaseLatch = false;
   return switched;
@@ -85,7 +95,7 @@ static bool handleFnEncoder(int index, int &rawValue, bool allowWrite) {
   const bool consumeFn = fnHeld || fnReleaseLatch;
   if (currentMode == &touchyMode || currentMode == &recordMode || (!consumeFn && !pendingRestore[index])) return false;
   const int previous = (currentMode == &subpatternMode && muteModeActive && index == 0)
-      ? 0 : (int)currentMode->pos[index];
+      ? 0 : fnEncoderPosition(index);
   if (fnHeld) {
     const uint8_t status = Encoder[index].readStatus();
     const uint8_t rotationBits = i2cEncoderLibV2::RINC | i2cEncoderLibV2::RDEC |
@@ -113,6 +123,6 @@ static bool handleFnEncoder(int index, int &rawValue, bool allowWrite) {
       pendingRestore[index] = nullptr;
     } else pendingRestore[index] = currentMode;
   } else pendingRestore[index] = nullptr;
-  rawValue = currentMode->pos[index];
+  rawValue = fnEncoderPosition(index);
   return true;
 }

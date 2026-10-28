@@ -1,9 +1,16 @@
 (function () {
   var INDEX_KEY = "hb-search-index-v2-" + (window.HBLanguage ? window.HBLanguage.id : "en");
-  var INDEX_VER = "20261027-subp";
+  var INDEX_VER = "20261028-search-partials";
 
   function pages() {
     return (window.HBHandbook && window.HBHandbook.pages) || [];
+  }
+
+  // A newly added/renamed chapter must invalidate an existing tab's index too.
+  function pageSignature() {
+    return JSON.stringify(pages().map(function (p) {
+      return [p.href, p.title, p.desc, p.group];
+    }));
   }
 
   function escapeHtml(s) {
@@ -69,6 +76,7 @@
       title: (title || meta.title || "").trim(),
       desc: (summary || meta.desc || "").trim(),
       group: meta.group,
+      keywords: normalize((meta.title || "") + " " + (meta.desc || "")),
       body: body,
       sections: sections
     };
@@ -79,7 +87,7 @@
       var raw = sessionStorage.getItem(INDEX_KEY);
       if (!raw) return null;
       var data = JSON.parse(raw);
-      if (!data || data.ver !== INDEX_VER || !Array.isArray(data.docs)) return null;
+      if (!data || data.ver !== INDEX_VER || data.pages !== pageSignature() || !Array.isArray(data.docs)) return null;
       return data.docs;
     } catch (e) {
       return null;
@@ -88,7 +96,7 @@
 
   function saveCached(docs) {
     try {
-      sessionStorage.setItem(INDEX_KEY, JSON.stringify({ ver: INDEX_VER, docs: docs }));
+      sessionStorage.setItem(INDEX_KEY, JSON.stringify({ ver: INDEX_VER, pages: pageSignature(), docs: docs }));
     } catch (e) {}
   }
 
@@ -96,6 +104,7 @@
     var list = pages().filter(function (p) {
       return p.href && p.href !== "search.html";
     });
+    var incomplete = false;
     return Promise.all(
       list.map(function (meta) {
         return fetch(meta.href, { credentials: "same-origin" })
@@ -107,6 +116,7 @@
             return extractDoc(html, meta);
           })
           .catch(function () {
+            incomplete = true;
             return {
               href: meta.href,
               title: meta.title,
@@ -119,7 +129,8 @@
       })
     ).then(function (docs) {
       docs = docs.filter(Boolean);
-      saveCached(docs);
+      // A failed fetch may be temporary. Retry full chapter text on the next search.
+      if (!incomplete) saveCached(docs);
       return docs;
     });
   }
@@ -206,6 +217,7 @@
         var titleN = normalize(doc.title);
         var descN = normalize(doc.desc);
         var bodyN = doc.body || "";
+        var keywordsN = doc.keywords || "";
         var score = 0;
         var matchedAll = true;
 
@@ -213,7 +225,9 @@
           var inTitle = titleN.indexOf(t) !== -1;
           var inDesc = descN.indexOf(t) !== -1;
           var inBody = bodyN.indexOf(t) !== -1;
-          if (!inTitle && !inDesc && !inBody) matchedAll = false;
+          var inKeywords = keywordsN.indexOf(t) !== -1;
+          if (!inTitle && !inDesc && !inBody && !inKeywords) matchedAll = false;
+          if (inKeywords) score += 40;
           if (inTitle) score += 40 + countMatches(titleN, t) * 10;
           if (inDesc) score += 12 + countMatches(descN, t) * 3;
           if (inBody) score += 2 + Math.min(20, countMatches(bodyN, t));

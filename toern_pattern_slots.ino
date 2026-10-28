@@ -10,7 +10,6 @@ static uint8_t subpatternLongestVoice = 1;
 static unsigned long subpatternErrorUntil = 0;
 static uint16_t subpatternSlotPages[toern_pattern_slots::count];
 static uint32_t subpatternSlotKnown = 0;
-static bool subpatternDeleteLegacy = false;
 static bool subpatternSwitchArmed = false;
 static bool subpatternStagedNew = false;
 static bool subpatternGridReady = false;
@@ -59,47 +58,77 @@ FLASHMEM static void resetFileSubpattern() {
   subpatternApplied = false;
   subpatternSelector = false;
   subpatternFile = 0;
+  pendingNewPatternFile = 0;
+  deletedSubpatternSlots = 0;
   subpatternSlot = 0;
-  subpatternLettered = false;
   subpatternSaveNew = false;
   subpatternOldSavePending = false;
-  subpatternDeleteLegacy = false;
   subpatternSlotKnown = 0;
   subpatternTurnGen = subpatternLoadGen = 0;
   memset(subpatternSlotPages, 0, sizeof(subpatternSlotPages));
   subpatternCancelPreview();
 }
 
+// Browsing never changes the identity of the notes currently in RAM.
+FLASHMEM static unsigned loadedPatternFile() {
+  return subpatternFile >= 1 && subpatternFile <= 999 ? subpatternFile : SMP.file;
+}
+
+FLASHMEM static void beginNewPattern() {
+  const unsigned target = pendingNewPatternFile ? pendingNewPatternFile : loadedPatternFile();
+  resetFileSubpattern();
+  pendingNewPatternFile = 0;
+  SMP.file = target;
+  subpatternFile = target;
+}
+
+// Index the root once per browser entry/storage change. Number turns then do
+// no SD lookups, even though each selected family now needs an A-E count.
+FLASHMEM static uint8_t savedSubpatternMask(unsigned file) {
+  static DMAMEM uint8_t masks[1000];
+  static uint32_t storageRevision = 0, browserRevision = 0;
+  static bool valid = false;
+  if (!valid || storageRevision != patternStorageRevision || browserRevision != patternBrowserRevision) {
+    memset(masks, 0, sizeof(masks));
+    sdIoBeginAudioSafe();
+    File root = SD.open("/");
+    if (!root) { sdIoEndAudioSafe(); return 0; }
+    for (;;) {
+      File entry = root.openNextFile();
+      if (!entry) break;
+      unsigned number; uint8_t slot;
+      if (!entry.isDirectory() && toern_pattern_slots::parse(entry.name(), number, slot))
+        masks[number] |= 1u << slot;
+      entry.close();
+      sdIoYield();
+    }
+    root.close();
+    sdIoEndAudioSafe();
+    storageRevision = patternStorageRevision;
+    browserRevision = patternBrowserRevision;
+    valid = true;
+  }
+  return file >= 1 && file <= 999 ? masks[file] : 0;
+}
+
+FLASHMEM static void drawPatternSlotDots(uint8_t mask, CRGB color) {
+  const unsigned count = toern_pattern_slots::countSlots(mask);
+  const int startX = maxX >= 32 ? 10 : 5;
+  for (unsigned i = 0; i < count; ++i) light(startX + 2 * i, 7, color);
+}
+
 FLASHMEM static void patternDestination(char *out, size_t size, unsigned file) {
   const bool active = file == subpatternFile;
   const uint8_t slot = active ? (subpatternSavingPrevious ? subpatternPreviousSlot : subpatternSlot) : 0;
-  // The open pattern already knows if it is a lettered family. Another file
-  // checks only its A name — never B-E, temps, or backups.
-  bool lettered = active && subpatternLettered;
-  if (!active) {
-    char a[24];
-    lettered = toern_pattern_slots::path(a, sizeof(a), file, 0, true) && SD.exists(a);
-  }
-  if (!toern_pattern_slots::path(out, size, file, slot, lettered)) out[0] = 0;
+  if (!toern_pattern_slots::path(out, size, file, slot)) out[0] = 0;
 }
 
-// Open only when this pattern actually has a lettered family (N-A.txt exists)
-// or the user is reading slot A from legacy N.txt. An unpromoted pattern's B-E
-// never open old leftover N-B..N-E files on the card.
+// Each letter belongs directly to its numbered pattern. No A-marker gate,
+// sibling scan, family promotion, or deletion is needed to open B-E.
 FLASHMEM static File openSubpatternFile(unsigned file, uint8_t slot) {
   if (file < 1 || file > 999 || slot >= toern_pattern_slots::count) return File();
   char path[24];
-  if (slot == 0) {
-    if (subpatternLettered && toern_pattern_slots::path(path, sizeof(path), file, 0, true)) {
-      File f = SD.open(path, FILE_READ);
-      if (f) return f;
-    }
-    if (toern_pattern_slots::path(path, sizeof(path), file, 0, false))
-      return SD.open(path, FILE_READ);
-    return File();
-  }
-  if (!subpatternLettered) return File();
-  if (!toern_pattern_slots::path(path, sizeof(path), file, slot, true)) return File();
+  toern_pattern_slots::path(path, sizeof(path), file, slot);
   return SD.open(path, FILE_READ);
 }
 
@@ -225,14 +254,12 @@ FLASHMEM static bool subpatternTurn(int delta) {
   extern bool subpatternsEnabled;
   if (!subpatternsEnabled || fastRecordActive || isRecording || childLockEnabled || imageMode
       || subpatternReady || subpatternApplied || subpatternOldSavePending || subpatternSaveNew
-      || subpatternSwitchArmed || SMP.file < 1 || SMP.file > 999) return true;
+      || subpatternSwitchArmed || loadedPatternFile() < 1 || loadedPatternFile() > 999) return true;
   if (!subpatternSelector) {
     subpatternErrorUntil = 0;
-    if (subpatternFile != SMP.file) {
-      subpatternFile = SMP.file;
+    if (subpatternFile == 0) {
+      subpatternFile = loadedPatternFile();
       subpatternSlot = 0;
-      char a[24];
-      subpatternLettered = toern_pattern_slots::path(a, sizeof(a), subpatternFile, 0, true) && SD.exists(a);
       subpatternNotePagesLoaded();
     }
     subpatternSelected = subpatternSlot;
@@ -307,12 +334,9 @@ FLASHMEM static void subpatternFailure() {
 }
 
 FLASHMEM static bool saveCurrentSubpattern() {
-  const unsigned selectedFile = SMP.file;
-  SMP.file = subpatternFile;
   subpatternQuietSave = true;
   savePattern(false);
   subpatternQuietSave = false;
-  SMP.file = selectedFile;
   return lastPatternSaveOk;
 }
 
@@ -445,19 +469,6 @@ FLASHMEM static bool subpatternFnRelease() {
     subpatternCancelPreview();
     return false;
   }
-  // When creating a lettered family from a legacy/blank pattern while paused,
-  // wipe any stale N-B..N-E leftovers before reading or saving the target slot.
-  if (!isNowPlaying && !subpatternLettered && subpatternFile >= 1 && subpatternFile <= 999) {
-    sdIoBeginAudioSafe();
-    for (uint8_t s = 1; s < toern_pattern_slots::count; ++s) {
-      char sp[24], st[32], sb[32];
-      if (!toern_pattern_slots::path(sp, sizeof(sp), subpatternFile, s, true)) continue;
-      snprintf(st, sizeof(st), "%s.tmp", sp);
-      snprintf(sb, sizeof(sb), "%s.bak", sp);
-      deletePatternTransaction(SD, sp, st, sb);
-    }
-    sdIoEndAudioSafe();
-  }
   // Playback keeps the previous slot until its boundary. Stopped playback
   // installs now, matching NEXT with the transport stopped.
   subpatternPendingSlot = subpatternSelected;
@@ -487,8 +498,6 @@ static bool subpatternCommitAtStepStart() {
     subpatternPreviousSlot = subpatternSlot;
     subpatternOldSavePending = true;
     rememberGridPages(subpatternPreviousSlot, subpatternGrid);
-    if (subpatternSlot == 0 && !subpatternLettered) subpatternDeleteLegacy = true;
-    subpatternLettered = true;
     subpatternSaveNew = subpatternStagedNew;
   } else {
     subpatternPreviousSlot = subpatternSlot;
@@ -588,8 +597,10 @@ bool subpatternShowingOtherSlot() {
 }
 
 FLASHMEM static void stageSelectedSubpattern() {
-  if (subpatternReady || subpatternApplied || subpatternOldSavePending || fastRecordActive || isRecording)
-    return;
+  // A deferred save owns the retained grid (or the new blank destination).
+  // Do not stage another slot until that save succeeds after playback stops.
+  if (subpatternReady || subpatternApplied || subpatternOldSavePending || subpatternSaveNew
+      || fastRecordActive || isRecording) return;
   const uint8_t viewSlot = subpatternSelector ? subpatternSelected
       : (subpatternSwitchArmed ? subpatternPendingSlot : subpatternViewSlot);
   const unsigned page = subpatternSelectedPage >= 1 ? subpatternSelectedPage : (GLOB.edit < 1 ? 1u : GLOB.edit);
@@ -664,9 +675,8 @@ FLASHMEM static void serviceSubpatterns() {
     }
   }
   if (isNowPlaying) {
-    subpatternOldSavePending = false;
-    subpatternSaveNew = false;
-    subpatternDeleteLegacy = false;
+    // Pause writes may still be pending when transport restarts. Retain their
+    // flags and outgoing snapshot; staging is blocked until the paused retry.
     stageSelectedSubpattern();
     return;
   }
@@ -683,17 +693,8 @@ FLASHMEM static void serviceSubpatterns() {
     }
     subpatternOldSavePending = false;
     retryAt = 0;
-    if (subpatternDeleteLegacy) {
-      char legacy[24], legacyTmp[32], legacyBackup[32];
-      toern_pattern_slots::path(legacy, sizeof(legacy), subpatternFile, 0, false);
-      snprintf(legacyTmp, sizeof(legacyTmp), "%s.tmp", legacy);
-      snprintf(legacyBackup, sizeof(legacyBackup), "%s.bak", legacy);
-      sdIoBeginAudioSafe();
-      if (deletePatternTransaction(SD, legacy, legacyTmp, legacyBackup))
-        subpatternDeleteLegacy = false;
-      sdIoEndAudioSafe();
-    }
   }
+
   // Persist a newly created blank slot too when paused.
   if (subpatternSaveNew) {
     if (saveCurrentSubpattern()) {
@@ -705,4 +706,82 @@ FLASHMEM static void serviceSubpatterns() {
     }
   }
   stageSelectedSubpattern();
+}
+
+FLASHMEM static void drawBrowserDeleteCross(int encoder) {
+  int x1, center, x3;
+  getIndicatorXPositions(encoder, x1, center, x3);
+  ++x1; ++center; ++x3;
+  light(x1, 3, UI_RED); light(x3, 3, UI_RED);
+  light(center, 4, UI_RED);
+  light(x1, 5, UI_RED); light(x3, 5, UI_RED);
+}
+
+FLASHMEM void openPatternConfirmation(unsigned target, bool deleting) {
+  if (target < 1 || target > 999) return;
+  patternConfirmReturnMode = currentMode;
+  memcpy(patternConfirmReturnPos, currentMode->pos, sizeof(patternConfirmReturnPos));
+  ++patternConfirmRevision;
+  patternConfirmResource = 0;
+  patternConfirmTarget = target;
+  patternConfirmDelete = deleting;
+  patternConfirmMode.pos[3] = 0; // NO is always the safe initial choice.
+  const bool wasBypassed = bypassModeSwitchDebounce;
+  bypassModeSwitchDebounce = true; switchMode(&patternConfirmMode);
+  bypassModeSwitchDebounce = wasBypassed;
+}
+
+FLASHMEM void showPatternConfirmation() {
+  FastLEDclear();
+  const bool accept = patternConfirmMode.pos[3] == 1;
+  const char *title = patternConfirmDelete ? "DEL?" : "SAVE?";
+  if (maxX < 32 && !patternConfirmDelete) {
+    // Compact S/E/? glyphs fit SAVE? starting at x=2 on a narrow panel.
+    static const uint8_t glyphs[3][5] = {{3,2,3,1,3}, {3,2,3,2,3}, {3,1,1,0,1}};
+    static const uint8_t starts[3] = {2,13,15};
+    for (unsigned glyph = 0; glyph < 3; ++glyph)
+      for (unsigned row = 0; row < 5; ++row)
+        for (unsigned col = 0; col < 2; ++col)
+          if (glyphs[glyph][row] & (2u >> col)) light(starts[glyph] + col, 15 - row, UI_RED);
+    drawText("A", 5, 11, UI_RED); drawText("V", 9, 11, UI_RED);
+  } else drawText(title, 2, 11, UI_RED);
+  drawText(accept ? "YES" : "NO", 2, 5, accept ? UI_GREEN : UI_BLUE);
+  drawIndicator('M', accept ? 'G' : 'X', 4, false, false);
+  static int8_t lastChoice = -1;
+  static uint32_t lastEntry = 0;
+  const int8_t choice = accept ? 1 : 0;
+  if (lastChoice != choice || lastEntry != patternConfirmRevision) {
+    const uint32_t rgb = accept ? 0x00FF00 : 0x0000FF;
+    Encoder[1].writeRGBCode(0x000000); Encoder[3].writeRGBCode(rgb);
+    lastChoice = choice; lastEntry = patternConfirmRevision;
+  }
+  if (maxX >= 32 && patternConfirmResource != 1) drawNumber(patternConfirmTarget, UI_RED, 11);
+  FastLEDshow();
+}
+
+FLASHMEM void finishPatternConfirmation(bool accept) {
+  if (currentMode != &patternConfirmMode) return;
+  for (int i = 0; i < NUM_ENCODERS; ++i) pressed[i] = false;
+  if (!accept) showCanceledAnimation(false);
+  else {
+    if (patternConfirmDelete && patternConfirmResource != 0) showPatternResult(deleteConfirmedBrowserResource());
+    else if (patternConfirmDelete) deleteSelectedPatternFamily(patternConfirmTarget);
+    else if (patternConfirmResource == 2) saveSamplePack(patternConfirmTarget);
+    else saveSelectedPatternFamily(patternConfirmTarget, true);
+  }
+  const bool returnToBrowser = patternConfirmDelete || !accept || (patternConfirmResource == 0 && !lastPatternSaveOk);
+  if (returnToBrowser && patternConfirmReturnMode) {
+    Mode *browser = patternConfirmReturnMode;
+    const bool wasBypassed = bypassModeSwitchDebounce;
+    bypassModeSwitchDebounce = true; switchMode(browser);
+    bypassModeSwitchDebounce = wasBypassed;
+    memcpy(browser->pos, patternConfirmReturnPos, sizeof(patternConfirmReturnPos));
+    if (browser == &loadSaveTrack) {
+      browser->pos[2] = 0; SMP_LOAD_SETTINGS = true;
+    }
+    if (browser == &set_Wav) restoreSampleBrowserSelection(browser->pos[3]);
+    else for (int i = 0; i < NUM_ENCODERS; ++i) Encoder[i].writeCounter((int32_t)browser->pos[i]);
+  } else if (currentMode != &draw) switchMode(&draw);
+  for (int i = 0; i < NUM_ENCODERS; ++i) pressed[i] = false;
+  preventPaintUnpaint = true;
 }

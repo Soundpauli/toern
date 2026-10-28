@@ -63,7 +63,7 @@ int main(){
  buttonReadings[BUTTON_A]=0;checkTouchyTouches();clockMs+=30;checkTouchyTouches();
  buttonReadings[BUTTON_C]=100;checkTouchyTouches();clockMs+=10;checkTouchyTouches();assert(triggers[3]==23);
  buttonReadings[BUTTON_C]=0;checkTouchyTouches();clockMs+=30;checkTouchyTouches();
- buttonReadings[BUTTON_D]=100;checkTouchyTouches();clockMs+=10;checkTouchyTouches();assert(triggers[4]==23);
+ buttonReadings[BUTTON_D]=100;checkTouchyTouches();clockMs+=10;checkTouchyTouches();assert(triggers[5]==23);
  buttonReadings[BUTTON_D]=0;checkTouchyTouches();clockMs+=30;checkTouchyTouches();
 }
 '''

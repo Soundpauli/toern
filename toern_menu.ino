@@ -5261,7 +5261,7 @@ FLASHMEM void switchMenu(int menuPosition){
             sprintf(filename, "%d.txt.bak", i); SD.remove(filename);
             for (uint8_t slot = 0; slot < toern_pattern_slots::count; ++slot) {
               char base[24], sidecar[32];
-              toern_pattern_slots::path(base, sizeof(base), i, slot, true);
+              toern_pattern_slots::path(base, sizeof(base), i, slot);
               SD.remove(base);
               snprintf(sidecar, sizeof(sidecar), "%s.tmp", base); SD.remove(sidecar);
               snprintf(sidecar, sizeof(sidecar), "%s.bak", base); SD.remove(sidecar);

@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+  <link rel="stylesheet" href="handbook.css?v=20261028-subpatterns-prose" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,9 +17,9 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261026-new-controls"></script>
+  <script src="handbook-language.js?v=20261028-subpatterns-prose"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261027-subp"></script>
+  <script src="handbook-nav.js?v=20261028-search-partials"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -30,34 +30,45 @@
 
           <section class="hb-sub" id="file">
             <h2 data-hb-copy="files.003">PATT — pattern slots</h2>
-            <p class="lede" data-hb-copy="files.004">Open <strong>PATT</strong> from the root menu. Each slot is one numbered file on the SD card holding <em>all pages, all voice lanes, every per-step value and every tone setting</em> — effectively the whole session except the sample audio. If that number has a lettered family, PATT load and save use the <a href="subpatterns.html">subpattern</a> you last selected (A–E).</p>
+            <p class="lede" data-hb-copy="files.004">Open <strong>PATT</strong> from the root menu. The big number selects a load target. A green folder means that numbered family exists; its green dots count saved A–E files, including A. A red folder means the selected number is empty; red dots preview the loaded family that Save will copy there. There are at most five dots, beside the folder.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="loadsave" width="640" height="320" role="img" aria-label="PATT screen"></canvas>
               </div>
-              <p class="viz-caption--below" data-hb-copy="files.005">Existing slot: large green file number and a confident green load icon on row 1.</p>
+              <p class="viz-caption--below" data-hb-copy="files.005">Green folder and dots: the selected load target has five saved subpatterns. A counts as one dot. The folder is compact on a 16-column matrix.</p>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
                   <tr><th>Short</th><td>Load</td><td data-hb-copy="files.007">Reads the file into RAM and immediately becomes the live pattern. The big number turns bright green while it loads; brightness reflects whether the file actually exists. On an empty (dim blue) slot, load opens <a href="#new">NEW</a> instead.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Save</td><td data-hb-copy="files.009">Writes the live pattern into the chosen slot, <em>overwriting</em> any existing file at that number. No second confirmation — be sure of the slot before pressing.</td></tr>
+                  <tr><th>Short</th><td>Save</td><td data-hb-copy="files.009">Save copies the loaded family to the selected number: saved A–E siblings plus the active letter’s latest RAM notes. Empty targets save immediately. Occupied targets open a <strong>SAVE? / NO</strong> confirmation before overwriting the selected family; target-only letters are removed. Hold <strong>FN + press encoder 2</strong> for <strong>DEL? / NO</strong>, which deletes the selected whole A–E family after confirmation. NEW and session recovery remain load-only.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Load sound settings</td><td data-hb-copy="files.011">Encoder 3 controls loading the pattern’s stored sound settings. Default: OFF, keeping the current effects. A red five-pixel X above encoder 3 (lowest pixels on row 3) means these settings will not be loaded. Turn clockwise to enable loading them; the X goes out.</td></tr>
+                  <tr><th>Turn</th><td>Sideload: keep current sounds</td><td data-hb-copy="files.011"><strong>Sideload starts OFF on every selected slot.</strong> With no red triangle, loading restores that pattern’s saved filters and sound settings. Turn encoder 3 clockwise to enable the red triangle and keep your current sounds instead. Choosing another slot resets the triangle OFF, including when you return to a previously selected number.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Slot number (1–999)</td><td data-hb-copy="files.013">Slot 0 (A) loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
+                  <tr><th>Turn</th><td>Slot number (1–999)</td><td data-hb-copy="files.013">Browse NEW, session recovery (AUTOSAVE), then numbered targets 1–999. Green folder/dots describe the selected family to load. Red folder/dots preview the loaded family for Save As into that empty number. Browsing itself does not change the loaded family.</td></tr>
                   <tr><th>Short</th><td>Back to grid</td><td>Leaves PATT without acting on the highlighted slot.</td></tr>
                 </tbody></table></div>
               </div>
             </article>
+            <article class="hb-device"><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="loadsave_delete" width="640" height="320" role="img" aria-label="PATT with FN held: red delete X above encoder 2 and no save indicator below the cross"></canvas></div><p class="viz-caption--below" data-hb-copy="files.042">Hold FN: the red X above encoder 2 means Delete. Press encoder 2 to open DEL? / NO for the selected whole A–E family. The triangle is normally off: saved filters/settings load. Turn it on manually to keep current sounds for that slot.</p></article>
+            <article class="hb-device"><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="loadsave_empty" width="640" height="320" role="img" aria-label="Empty selected pattern 42: red folder and two red dots preview the loaded family to copy"></canvas></div><p class="viz-caption--below" data-hb-copy="files.043">Red folder: the selected number is empty. Save copies the loaded family here; two red dots preview two subpatterns.</p></article>
             <div class="hb-tip" data-hb-copy="files.016"><strong>Read brightness as a status light:</strong> Green identifies an occupied slot; blue identifies an empty slot. A green animated checkmark confirms a successful save; a red animated cross signals a failed operation.</div>
           </section>
 
 
           <hr />
 
+
+          <section class="hb-sub" id="confirm">
+            <h2 data-hb-copy="files.044">DEL? / SAVE? — choose before replacing files</h2>
+            <p data-hb-copy="files.045">FN + encoder 2 in PATT opens <strong>DEL? / NO</strong> for the selected numbered family. Save on an occupied selected number opens <strong>SAVE? / NO</strong> to overwrite it with the loaded family. The target number stays fixed while you choose.</p>
+            <div class="hb-warn" data-hb-copy="files.046"><strong>Blue NO cancels; green YES confirms.</strong> Both screens start at blue NO. DEL?/SAVE? stays red; the choice text, encoder 4 ring and indicator are blue for NO and green for YES. Turn encoder 4 clockwise for YES, or counterclockwise for NO. Press <strong>encoder 4</strong> to execute that choice. Only encoder 4 press executes the selected choice; encoder 2 does nothing on this screen. Touch 2 also cancels.</div>
+            <article class="hb-device"><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="pattern_del_question" width="640" height="320" role="img" aria-label="Red DEL? / NO confirmation for pattern 42, NO selected by default"></canvas></div><p class="viz-caption--below" data-hb-copy="files.047">DEL? / NO is the initial choice. Press encoder 4 here to cancel without deleting files.</p></article>
+            <article class="hb-device"><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="pattern_save_confirm" width="640" height="320" role="img" aria-label="Red SAVE? / YES confirmation for pattern 42, ready to overwrite"></canvas></div><p class="viz-caption--below" data-hb-copy="files.048">SAVE? / YES means overwrite the selected family when encoder 4 is pressed. Letters present only in the old destination are removed.</p></article>
+            <article class="hb-device"><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="canceled" width="640" height="320" role="img" aria-label="Blue neutral face with a straight mouth, cancellation feedback"></canvas></div><p class="viz-caption--below" data-hb-copy="files.049">Cancel returns to the originating browser with a blue neutral face that reveals and fades, like the green success check and red failure cross.</p></article>
+          </section>
 
           <section class="hb-sub" id="new">
             <h2 data-hb-copy="files.017">NEW — generate a starting pattern</h2>
@@ -91,8 +102,9 @@
 
           <section class="hb-sub" id="sidecar">
             <h2 data-hb-copy="files.030">Settings inside the pattern file</h2>
-            <p data-hb-copy="files.031">A numbered pattern is a binary file in the SD card root, such as <code>42.txt</code>. Despite the extension, it is not editable text. It contains all pages, per-step values, sound settings, mutes and the 64-slot page arrangement. There is no separate <code>.dat</code> file or sidecar. With <a href="subpatterns.html">SUBP</a> in use, lettered companions <code>42-A.txt</code> … <code>42-E.txt</code> hold the A–E note slots for that number.</p>
-            <p data-hb-copy="files.032">Every time the pattern browser opens, encoder&nbsp;3 starts ON: saved sound settings load and no X is shown. Turn counterclockwise to load without effects: the red X means the current filters, effects, envelopes, synth settings and voice volumes stay as they are, both in memory and in the audio engine. They are not reset to defaults. Turn clockwise to load the stored sound settings instead; turn counterclockwise to keep the current settings. Notes, BPM, mutes and arrangement still load. This switch only affects loading: saving always includes the current sound settings. Startup autosave recovery restores the complete saved session.</p>
+            <p data-hb-copy="files.031">A numbered pattern is a binary file in the SD card root, such as <code>42.txt</code>. Despite the extension, it is not editable text. It contains all pages, per-step values, sound settings, mutes and the 64-slot page arrangement. There is no separate <code>.dat</code> file or sidecar. With <a href="subpatterns.html">SUBP</a> in use, A stays in <code>42.txt</code>; companions <code>42-B.txt</code> … <code>42-E.txt</code> each store a complete pattern for that number. No <code>42-A.txt</code> is created. FN switching changes only notes; PATT loading can also restore saved sound settings.</p>
+            <p data-hb-copy="files.032">The sideload triangle means <strong>keep current filters/settings</strong>. It is OFF by default on every PATT slot, so a normal load restores the saved filters, effects, envelopes, synth settings and voice volumes. Turn encoder&nbsp;3 on by hand for the selected slot to keep your current sounds. Moving to another slot resets it OFF. Notes, BPM, mutes and arrangement still load. Saving always includes the current settings; startup recovery restores the complete saved session.</p>
+            <div class="hb-warn"><strong>Empty saves keep subpatterns.</strong> Saving blank notes never deletes a file. FN + Save asks DEL? / NO before deleting all A–E files of the selected number. If that is the loaded family, its live notes are cleared too; deleting another number leaves your live notes intact.</div>
             <p data-hb-copy="files.033">The pattern does not contain sample audio. Keep the matching kit and any custom samples on the card.</p>
           </section>
 
@@ -104,7 +116,7 @@
             <h2 data-hb-copy="files.034">Autosave — session recovery</h2>
             <p data-hb-copy="files.035">Pausing playback and successful sample loads request a save to <code>autosaved.txt</code>. Successful autosaves have a five-second cooldown, so closely spaced actions may not create another checkpoint. Autosave does not overwrite the numbered PATT slot.</p>
             <p data-hb-copy="files.036">At boot, the firmware loads that recovery file. Saves use a temporary file for their destination (<code>autosaved.txt.tmp</code> or <code>42.txt.tmp</code>) and retain the previous generation as <code>.bak</code>. A valid destination takes priority; if it is missing or unreadable, a complete temporary file or backup can be recovered for that same destination. The old shared <code>pattern.tmp</code> is not automatically loaded because it does not identify its target slot.</p>
-            <p data-hb-copy="files.037"><a href="menus.html#rset">ETC → RSET → ASAV</a> removes the recovery file and its transaction files. FULL resets the session and writes an empty recovery file. Saving an empty grid to a numbered PATT slot intentionally clears that slot, including its temporary file and backup. Autosave still preserves an empty session.</p>
+            <p data-hb-copy="files.037"><a href="menus.html#rset">ETC → RSET → ASAV</a> removes the recovery file and its transaction files. FULL resets the session and writes an empty recovery file. Empty saves preserve blank grids. FN + Save opens DEL? / NO for the selected numbered family, including A–E and their recovery files. Turn encoder 4 to choose NO (cancel) or YES (confirm), then press encoder 4. Cancel returns to the originating browser with an animated blue face with a straight mouth.</p>
             <div class="hb-warn" data-hb-copy="files.038"><strong>Save, then switch off.</strong> The physical power switch does not perform an automatic shutdown save. Save important work to a numbered PATT slot; a power loss after the latest checkpoint loses later edits.</div>
           </section>
 
@@ -115,7 +127,7 @@
           <section class="hb-sub" id="kit-link">
             <h2 data-hb-copy="files.039">How patterns relate to kits</h2>
             <p data-hb-copy="files.040">PATT saves notes and sound settings; KIT saves the sample audio used by voices 1–8. Save both when you have replaced or recorded samples and want to recreate the session. Loading a pattern does not reload its samples.</p>
-            <p data-hb-copy="files.041">To recall an idea, load its matching KIT, then its PATT and enable applying sound settings. To remix it, load another kit before loading the pattern. Keep a note of which kit belongs to each numbered pattern.</p>
+            <p data-hb-copy="files.041">To recall an idea, load its matching KIT, then its PATT with the sideload triangle OFF. To remix it, load another kit before loading the pattern. Keep a note of which kit belongs to each numbered pattern.</p>
           </section>
         </section>
 
@@ -123,7 +135,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="sample-packs.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sample kits</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261027-subp" defer></script>
+      <script src="handbook-led.js?v=20261028-subpatterns-prose" defer></script>
     </div>
   </div>
 </div>

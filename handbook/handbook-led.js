@@ -325,7 +325,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
   }
 
   function playSubFrame(m, pageIdx, title, enc2, enc3) {
-    const slots = [[0,10,13], [3,7,5], [0,4,6], [1,10,13], [2,10,13], [3,10,13], [1,4,6], [1,7,14], [6,10,13], [0,7,14], [2,4,6], [3,4,6], [5,6,6]];
+    const slots = [[0,10,13], [3,7,5], [0,6,6], [1,10,13], [2,10,13], [3,10,13], [1,6,6], [1,7,14], [6,10,13], [0,7,14], [2,6,6], [3,6,6], [5,6,6], [4,6,6]];
     const [index, count, parent] = slots[pageIdx];
     m.clear();
     m.menuColors = true;
@@ -603,14 +603,31 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     m.indL(4, "N");
   }
 
-  function drawLoadSaveLike(m, fileNum, txtExists, loadSoundSettings = true) {
+  function drawLoadSaveLike(m, fileNum, txtExists, keepCurrentSettings = false, letters = "ABCDE", deleteHeld = false) {
     m.clear();
+    const folderColor = txtExists ? UI.GREEN : [40, 0, 0];
+    if (m.w >= 32) {
+      const folder = ["####...", "#..####", "#.....#", "#.....#", "#.....#", "#######"];
+      for (let y = 0; y < folder.length; ++y)
+        for (let x = 0; x < folder[y].length; ++x)
+          if (folder[y][x] === '#') m.set(2+x, 8-y, ...folderColor);
+    } else {
+      for (const [x,y] of [[1,8],[2,8],[1,7],[2,7],[3,7],[1,6],[3,6],[1,5],[2,5],[3,5]])
+        m.set(x,y,...folderColor);
+    }
     m.indM(1, txtExists ? "G" : "E");
-    m.indM(2, txtExists ? "D" : "R");
+    if (!deleteHeld) m.indM(2, txtExists ? "D" : "R");
     m.indL(4, "X");
-    if (txtExists && !loadSoundSettings) {
-      const [x1, x2, x3] = getIndX(3);
-      for (const [x,y] of [[x1,3],[x3,3],[x2,4],[x1,5],[x3,5]]) m.set(x,y,255,0,0);
+    if (deleteHeld) {
+      const [x1, center, x3] = getIndX(2);
+      for (const [x,y] of [[x1+1,3],[x3+1,3],[center+1,4],[x1+1,5],[x3+1,5]]) m.set(x,y,255,0,0);
+    }
+    if (txtExists && keepCurrentSettings) {
+      const [, indicatorCenter] = getIndX(3);
+      const center = indicatorCenter + (m.w < 32 ? 1 : 0);
+      for (let x = center-2; x <= center+2; ++x) m.set(x,6,...UI.RED);
+      for (let x = center-1; x <= center+1; ++x) m.set(x,4,...UI.RED);
+      m.set(center,2,...UI.RED);
     }
     const numC = txtExists ? UI.BRIGHT_GREEN : UI.BLUE;
     const s = String(fileNum);
@@ -618,7 +635,35 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     for (let i = 0; i < s.length; i++) tw += (ALPH[s.charCodeAt(i) - 32][0] + 1);
     let startX = m.w + 1 - tw;
     if (startX < 1) startX = 1;
+    const dotColor = txtExists ? UI.GREEN : UI.RED;
+    const dotStart = m.w >= 32 ? 10 : 5;
+    for (let i = 0; i < Math.min(5, letters.length); ++i) m.set(dotStart+2*i,7,...dotColor);
     drawText(m, s, startX, 11, numC[0], numC[1], numC[2]);
+  }
+
+  function drawPatternConfirmLike(m, command, accept, number) {
+    m.clear();
+    const title = command === "SAV" ? "SAVE?" : "DEL?";
+    if (m.w < 32 && command === "SAV") {
+      const glyphs=[[3,2,3,1,3],[3,2,3,2,3],[3,1,1,0,1]],starts=[2,13,15];
+      for(let g=0;g<3;g++)for(let row=0;row<5;row++)for(let col=0;col<2;col++)
+        if(glyphs[g][row]&(2>>col))m.set(starts[g]+col,15-row,120,0,0);
+      drawText(m,"A",5,11,120,0,0);drawText(m,"V",9,11,120,0,0);
+    } else drawText(m,title,2,11,120,0,0);
+    const choiceColor=accept ? UI.GREEN : UI.BLUE;
+    drawText(m, accept ? "YES" : "NO", 2, 5, ...choiceColor);
+    const text = String(number);
+    if(m.w>=32)drawText(m,text,m.w-(4*text.length-1)+1,11,120,0,0);
+    m.indM(4,accept?"G":"X");
+  }
+
+  function drawCanceledFace(m) {
+    m.clear();
+    const cx=Math.floor((m.w+1)/2),cy=8;
+    for(let y=-3;y<=3;++y)for(let x=-3;x<=3;++x){
+      const outline=(Math.abs(x)===3&&Math.abs(y)<=2)||(Math.abs(y)===3&&Math.abs(x)<=2);
+      if(outline||(y===1&&Math.abs(x)===1)||(y===-1&&Math.abs(x)<=1))m.set(cx+x,cy+y,0,0,220);
+    }
   }
 
   function drawDrawGrid(m, notes, playX) {
@@ -645,6 +690,31 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
         m.set(playX, y, w[0], w[1], w[2]);
       }
     }
+  }
+
+  // Match firmware countLabelX()/drawCenteredOverlayLabel(): real glyph
+  // widths, 1-based centering, and a one-pixel cleared margin over the grid.
+  function drawCenteredGridLabel(m, text, color) {
+    const width = [...text].reduce((sum, ch) => sum + ALPH[ch.charCodeAt(0) - 32][0] + 1, -1);
+    const x = Math.max(1, Math.floor((m.w - width) / 2) + 1);
+    const y = Math.floor((m.h - 5) / 2) + 1;
+    for (let xx = Math.max(1, x - 1); xx <= Math.min(m.w, x + width); xx++)
+      for (let yy = y - 1; yy <= y + 5; yy++) m.set(xx, yy, 0, 0, 0);
+    drawText(m, text, x, y, ...color);
+  }
+
+  function drawSubpatternPreview(m, empty) {
+    const notes = empty ? [] : [
+      {x: 2, y: 3, ch: 2}, {x: 6, y: 5, ch: 4},
+      {x: 10, y: 3, ch: 2}, {x: 14, y: 8, ch: 7}
+    ];
+    drawDrawGrid(m, notes, 3);
+    const filled = [];
+    if (!empty) filled[1] = filled[3] = true;
+    drawPageSlotsRow16(m, 1, 1, filled);
+    // The live slot still plays. The other slot's preview uses a yellow timer.
+    for (let y = 1; y <= 15; y++) m.set(3, y, 10, 10, 0);
+    drawCenteredGridLabel(m, empty ? "C1" : "B3", empty ? UI.BLUE : UI.GREEN);
   }
 
   /** Top row (y=16): eight page slots on a wide panel, sixteen on a single panel. */
@@ -749,8 +819,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   const scenes = {
     swap(m) {
-      m.clear();
-      drawText(m, "SWAP", 2, 10, ...menuTextFromCol(14));
+      playSubFrame(m, 13, "SWAP", "", "");
       drawText(m, "1", 1, 3, ...COL0[1]);
       drawText(m, "11", m.w >= 24 ? 24 : 10, 3, ...COL0[11]);
       if (m.w >= 24) drawText(m, "<>", 12, 3, 255, 255, 255);
@@ -969,19 +1038,15 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     filter_p3(m) { drawFilterPageScene(m, 3); },
     filter_sample_dv(m) { drawFilterPageScene(m, 3, {letters:["D","V","",""],vals:[8,16,0,0],names:["DLAY","VOL","",""]}); },
     fill_requested(m) { m.clear(); drawText(m,"FILL",Math.max(1,Math.floor((m.w-14)/2)),6,255,69,0); },
-    subp_select(m) {
-      m.clear();
-      const notes = [[2, 3], [6, 5], [10, 3], [14, 8]];
-      notes.forEach(function (xy) {
-        m.set(xy[0], xy[1], 180, 40, 20);
-        m.set(xy[0], xy[1] + 1, 80, 20, 10);
-      });
-      for (let y = 2; y <= 12; y++) m.set(5, y, 220, 200, 20);
-      drawText(m, "A1", Math.max(1, Math.floor((m.w - 7) / 2)), 6, 0, 255, 0);
-    },
+    subp_select(m) { drawSubpatternPreview(m, false); },
+    subp_empty(m) { drawSubpatternPreview(m, true); },
     lk_subp(m) {
-      playSubFrame(m, 12, "SUBP", "G", "");
-      drawText(m, "ON", 2, 3, 0, 120, 0);
+      playSubFrame(m, 12, "SUBP", "", "G");
+      drawText(m, "ON", 2, 3, ...UI.GREEN);
+    },
+    lk_subp_off(m) {
+      playSubFrame(m, 12, "SUBP", "", "R");
+      drawText(m, "OFF", 2, 3, ...UI.RED);
     },
     md_sync_inactive(m) { midiSubFrame(m,5,"SYC<","Y","W",""); drawText(m,"--",2,3,120,0,0); },
     filter_p0_named(m) { drawFilterPageEditScene(m, 0, 1); /* LCUT */ },
@@ -1214,6 +1279,17 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     },
     song(m) {
       drawSongLike(m, 7, 23);
+    },
+    pattern_del_question(m) { drawPatternConfirmLike(m,"DEL",false,42); },
+    pattern_del_confirm(m) { drawPatternConfirmLike(m,"DEL",true,42); },
+    pattern_save_question(m) { drawPatternConfirmLike(m,"SAV",false,42); },
+    pattern_save_confirm(m) { drawPatternConfirmLike(m,"SAV",true,42); },
+    canceled(m) { drawCanceledFace(m); },
+    loadsave_empty(m) {
+      drawLoadSaveLike(m, 42, false, false, "AB");
+    },
+    loadsave_delete(m) {
+      drawLoadSaveLike(m, 3, true, false, "ABCDE", true);
     },
     loadsave(m) {
       drawLoadSaveLike(m, 3, true);

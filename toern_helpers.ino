@@ -3310,7 +3310,7 @@ FLASHMEM int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAna
 
 // Generate genre-based track from page 1 to selected length
 FLASHMEM void generateGenreTrack() {
-  resetFileSubpattern();
+  beginNewPattern();
   // Clear ALL pages first (complete reset)
   for (unsigned int page = 1; page <= maxPages; page++) {
     unsigned int start = (page - 1) * 16 + 1;

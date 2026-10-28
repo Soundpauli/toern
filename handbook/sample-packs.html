@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+  <link rel="stylesheet" href="handbook.css?v=20261028-subpatterns-prose" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,9 +17,9 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261026-new-controls"></script>
+  <script src="handbook-language.js?v=20261028-subpatterns-prose"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261027-subp"></script>
+  <script src="handbook-nav.js?v=20261028-search-partials"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -51,8 +51,8 @@
                   <tr><th>Short</th><td>Load kit</td><td data-hb-copy="sample-packs.010">Reads the eight WAV files from the highlighted kit folder into RAM, replacing whatever was on the sample voices. Brightness of the number reflects whether the folder is populated.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Save current samples</td><td data-hb-copy="sample-packs.012">Writes the current eight sample voices into the selected numbered kit folder, replacing its files. A green animated checkmark confirms completion; a red animated cross means the kit was not fully saved.</td></tr>
-                </tbody></table></div>
+                  <tr><th>Short</th><td>Save current samples</td><td data-hb-copy="sample-packs.012">Writes the current eight sample voices into the selected numbered kit folder. If any voice file already exists, SAVE? opens with blue NO selected. Turn encoder 4 to green YES and press encoder 4 to overwrite; NO returns to KIT without writing and shows the blue neutral face. Empty slots save immediately. A green animated checkmark confirms completion; a red animated cross means the kit was not fully saved.</td></tr>
+                <tr><th>FN + short</th><td>Delete selected kit</td><td data-hb-copy="sample-packs.030">Holding FN shows the red delete cross above encoder 2, replacing its save indicator. Click encoder 2 to open DEL? / NO for the selected kit number. Encoder 4 chooses NO or YES; press encoder 4 to execute. YES removes 1.wav–8.wav and the empty kit folder. Cancel returns to the originating browser with the blue neutral face.</td></tr></tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
                   <tr><th>—</th><td>Unused on this page</td><td>—</td></tr>
                 </tbody></table></div>
@@ -96,7 +96,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="tempo-midi.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Tempo</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261027-subp" defer></script>
+      <script src="handbook-led.js?v=20261028-subpatterns-prose" defer></script>
     </div>
   </div>
 </div>

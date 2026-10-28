@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+  <link rel="stylesheet" href="handbook.css?v=20261028-subpatterns-prose" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,9 +17,9 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261026-new-controls"></script>
+  <script src="handbook-language.js?v=20261028-subpatterns-prose"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261027-subp"></script>
+  <script src="handbook-nav.js?v=20261028-search-partials"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -100,7 +100,7 @@
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
                   <tr><th>Short</th><td>Load</td><td>Commit the trimmed sample to the voice and autosave.</td></tr>
                   <tr><th>Turn</th><td>—</td><td>Unused.</td></tr>
-                </tbody></table></div>
+                <tr><th>FN + short</th><td>Delete selected WAV</td><td data-hb-copy="samples.050">Holding FN turns encoder 3 red for a file row. Click encoder 3 to open DEL? / NO. Encoder 4 chooses NO (blue) or YES (green); press encoder 4 to execute. Folder rows are not deletion targets. Cancel returns to the originating browser with the blue neutral face.</td></tr></tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Browse list</td><td>Combined parent / folder / file list.</td></tr>
                   <tr><th>Short</th><td>Folder logic</td><td>Enter folder OR go up; no-op at samples root.</td></tr>
@@ -126,7 +126,7 @@
           if (to) location.replace(to);
         })();
       </script>
-      <script src="handbook-led.js?v=20261027-subp" defer></script>
+      <script src="handbook-led.js?v=20261028-subpatterns-prose" defer></script>
     </div>
   </div>
 </div>

@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+  <link rel="stylesheet" href="handbook.css?v=20261028-subpatterns-prose" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,9 +17,9 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261026-new-controls"></script>
+  <script src="handbook-language.js?v=20261028-subpatterns-prose"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261027-subp"></script>
+  <script src="handbook-nav.js?v=20261028-search-partials"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -71,7 +71,7 @@
                 <tr><td><strong>Tap right-first, both pads together</strong></td><td data-hb-copy="controls.022">Opens <a href="sound.html#filter">filters</a> on FX-capable channels</td><td data-hb-copy="controls.023">Both sample and synth voices.</td></tr>
                 <tr><td><strong>Touch&nbsp;2 tap inside filters</strong></td><td data-hb-copy="controls.025">Flips to the next filter page</td><td data-hb-copy="controls.026">Inside any filter page.</td></tr>
                 <tr><td><strong>Hold touch&nbsp;5 (FN) + turn encoder&nbsp;1</strong></td><td data-hb-copy="controls.028">Left selects backward sample playback (<strong>&lt;&lt;</strong>); right selects forward playback (<strong>&gt;&gt;</strong>). The normal encoder value stays unchanged.</td><td data-hb-copy="controls.029">All screens outside TOUCHY, on sample voices 1–8. Unavailable during sample capture. In TOUCHY, touch&nbsp;5 plays voice&nbsp;5.</td></tr>
-                <tr><td><strong>Hold touch&nbsp;5 (FN) + turn encoder&nbsp;2</strong></td><td>With <a href="subpatterns.html">SETT → SUBP</a> ON, opens A–E file subpatterns. Overlay shows the letter and page (<strong>A1</strong>…). Release FN to arm the slot; playback swaps at the PMOD:NEXT boundary. This turn does not change page or CTRL:VOL.</td><td>Draw / single, SUBP ON, outside recording, child lock and image mode. Needs capacitive FN (touch&nbsp;5).</td></tr>
+                <tr><td><strong>Hold touch&nbsp;5 (FN) + turn encoder&nbsp;2</strong></td><td>With <a href="subpatterns.html">SETT → SUBP</a> ON, previews A–E file subpatterns. Live switching does not save outgoing edits. Overlay shows the letter and page (<strong>A1</strong>…). Release FN to queue the slot; playback swaps at the next loop boundary. This turn does not change page or CTRL:VOL.</td><td>DRAW, SUBP ON, outside recording, child lock and image mode. Needs capacitive FN (touch&nbsp;5).</td></tr>
                 <tr><td><strong>Hold FN + turn encoder&nbsp;3</strong> (subpattern selector open)</td><td>Steps the preview through pages that have notes in the highlighted letter.</td><td>Only while the A–E overlay is open.</td></tr>
                 <tr><td><strong>Touch&nbsp;4 + 5 / buttons C + D together</strong></td><td>Queues an F/F fill for the current voice, starting on the next page’s first beat. Requests for different voices accumulate and start together; each voice runs its own fill, finishing with a full-velocity hit on the downbeat after two fill pages. A centered <strong>FILL</strong> appears for one second in the requested voice’s color. Release both inputs before requesting another fill. Does not write a grid note.</td><td>During playback, outside TOUCHY and recording. The combination consumes the individual audition/FN actions (record/audition on external buttons).</td></tr>
                 <tr><td><strong>Touch&nbsp;3</strong> (hold / press)</td><td data-hb-copy="controls.031">Recording — hold in the sample browser to enter <a href="record.html#record-mode">record mode</a>; press/hold on the grid for live/fast-rec (see <a href="record.html#live-record">Record → Live recording</a>)</td><td data-hb-copy="controls.032">Sample browser and grid.</td></tr>
@@ -139,7 +139,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="sequencing.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sequencing</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261027-subp" defer></script>
+      <script src="handbook-led.js?v=20261028-subpatterns-prose" defer></script>
     </div>
   </div>
 </div>

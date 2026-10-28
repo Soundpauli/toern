@@ -2740,3 +2740,16 @@ html[data-matrix-width="32"] canvas.led-matrix { max-width: 100%; }
 .hb-language select { width: 100%; min-height: 36px; padding: .4rem .5rem; border: 1px solid var(--sidebar-line); background: var(--paper, #fff); color: var(--text); font: inherit; font-size: .8rem; }
 .hb-language select:focus-visible { outline: 2px solid var(--section-signal); outline-offset: 3px; }
 .hb-language__note { margin: .5rem 0 0; color: var(--sidebar-muted); font-size: .72rem; line-height: 1.5; }
+
+/* Keep each subpattern example and its caption together at both panel widths. */
+.hb-led-row.hb-subpattern-examples {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+.hb-subpattern-examples > div { min-width: 0; }
+.hb-subpattern-examples .hb-led-wrap { width: 100%; max-width: 22rem; margin: 0 auto; }
+.hb-subpattern-examples > div > .viz-caption--below { max-width: 22rem; margin: .75rem auto 0; }
+@media (max-width: 720px) {
+  .hb-led-row.hb-subpattern-examples { grid-template-columns: minmax(0, 1fr); }
+}

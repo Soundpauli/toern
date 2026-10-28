@@ -9,8 +9,8 @@ bool readDebouncedTouch(int index) {
     if (index == 0) raw = digitalReadFast(BUTTON_A) == LOW;       // SINGLE
     else if (index == 1) raw = digitalReadFast(BUTTON_B) == LOW;  // MENU
     else if (index == 2) raw = digitalReadFast(BUTTON_C) == LOW;  // REC / touch3
-    else if (index == 3) raw = digitalReadFast(BUTTON_D) == LOW;  // touch4
-    else raw = false;  // touch5 / FN — no external button
+    else if (index == 4) raw = digitalReadFast(BUTTON_D) == LOW;  // touch5 / FN (swapped with touch4)
+    else raw = false;  // touch4 — no external button on this panel
   } else {
     raw = fastTouchRead(pins[index]) > touchThreshold;
   }

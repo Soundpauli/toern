@@ -54,9 +54,9 @@ The single selector `exttouch` in `toern_hardware.h` controls the entire panel:
 `false` selects capacitive pads without faders; `true` selects external buttons,
 faders, and panel I²C timing. There is no separate
 fader flag. With `exttouch=true`, grounded active-low buttons A/B/C/D use Teensy pins
-5/22/15/14 respectively. D auditions the selected voice through its normal
-filters/effects. In stopped SINGLE it uses the cursor pitch; in playing SINGLE
-it also writes a base-pitch note. In REC it controls the recording threshold.
+5/22/15/14 respectively. D is touch5 / FN (swapped with touch4). Fill is C+D.
+Touch4 / audition has no external button. In REC, D is the touch5 trigger, not
+the threshold pad.
 Button D is on **J14-1** (pin 14). The LED strip uses **J11.5-1** (pin 24).
 The matrix stays on pin 17 / J9-1. Strip operation remains available with
 external buttons enabled. The same `exttouch` flag enables the four NeoSliders at 0x30–0x33.

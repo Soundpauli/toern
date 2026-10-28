@@ -8,7 +8,7 @@
   <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
-  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+  <link rel="stylesheet" href="handbook.css?v=20261028-subpatterns-prose" />
 </head>
 <body class="hb-body">
 <a class="hb-skip" href="#hb-content">Skip to content</a>
@@ -17,9 +17,9 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261026-new-controls"></script>
+  <script src="handbook-language.js?v=20261028-subpatterns-prose"></script>
   <script src="handbook-icons.js"></script>
-  <script src="handbook-nav.js?v=20261027-subp"></script>
+  <script src="handbook-nav.js?v=20261028-search-partials"></script>
 
   <div class="hb-main">
     <div id="hb-content" class="hb-main__scroll" tabindex="-1">
@@ -404,20 +404,21 @@
 
           <section class="hb-sub" id="subp">
             <h2>SETT → SUBP — file subpatterns</h2>
-            <p class="lede">Five lettered note slots behind the current PATT number. Default <strong>OFF</strong>. Full gestures: <a href="subpatterns.html">Subpatterns</a>.</p>
+            <p class="lede">Five variations, A–E, under one PATT number. Off by default; the setting is remembered. Setup and save rules: <a href="subpatterns.html">Subpatterns</a>.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
-                <canvas class="led-matrix" data-scene="lk_subp" width="640" height="320" role="img" aria-label="SUBP"></canvas>
+                <canvas class="led-matrix" data-scene="lk_subp" width="640" height="320" role="img" aria-label="SUBP enabled, with green ON and the encoder 3 indicator"></canvas>
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1 hb-enc-card--empty"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody></tbody></table></div>
-                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn / short</th><td><strong>OFF</strong> / <strong>ON</strong></td><td>When ON, hold FN and turn encoder&nbsp;2 on the grid to pick A–E.</td></tr>
+                <div class="hb-enc-card hb-enc--2 hb-enc-card--empty"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody></tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn / short press</th><td><strong>OFF</strong> / <strong>ON</strong></td><td>Enable the selector. In DRAW, hold FN and turn encoder&nbsp;2 to choose A–E; release FN to switch.</td></tr>
                 </tbody></table></div>
-                <div class="hb-enc-card hb-enc--3 hb-enc-card--empty"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody></tbody></table></div>
                 <div class="hb-enc-card hb-enc--4 hb-enc-card--empty"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody></tbody></table></div>
               </div>
             </article>
+            <p>Live switches wait for a loop boundary and do not save outgoing edits. Prepare and save your variations while stopped.</p>
           </section>
         </section>
 
@@ -425,7 +426,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="midi.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">MIDI</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261027-subp" defer></script>
+      <script src="handbook-led.js?v=20261028-subpatterns-prose" defer></script>
     </div>
   </div>
 </div>

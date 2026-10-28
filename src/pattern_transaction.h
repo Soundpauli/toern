@@ -1,6 +1,6 @@
 #pragma once
 
-// An explicit empty manual save clears its slot, including recovery files.
+// Explicit slot deletion removes its recovery files too. Empty saves keep files.
 // Remove the destination last so a failed cleanup keeps the current pattern.
 template <class FS>
 bool deletePatternTransaction(FS &fs, const char *dest, const char *tmp,

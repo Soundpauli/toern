@@ -9,7 +9,7 @@ harness=r'''
 using uint8_t=unsigned char;using int8_t=signed char;using int32_t=int;
 const int NUM_ENCODERS=4;
 struct Mode {int pos[4];};
-Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},filterMode={},recordMode={};
+Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},filterMode={},recordMode={},set_Wav={{10,0,80,3}};
 Mode *currentMode=&draw;
 struct EncoderTurnEvent {int encoder;int delta;bool fn;};
 struct {int currentChannel=1;} GLOB;
@@ -90,6 +90,23 @@ int main(){
  assert(leaked==5&&Encoder[1].counter==5);
  assert(!finishFnSubpatternRelease(true)&&Encoder[1].counter==5);
  leaked=8;assert(!handleFnEncoder(1,leaked,true)&&leaked==8);
+ // Holding FN in SMP must not swap Seek End with the unused physical counter.
+ currentMode=&set_Wav;fnHeld=true;
+ const int physicalValues[4]={10,80,0,3};
+ for(int enc=0;enc<4;enc++) {
+  Encoder[enc].counter=physicalValues[enc];Encoder[enc].status=0;
+  const int writes=Encoder[enc].writes;value=physicalValues[enc];
+  assert(handleFnEncoder(enc,value,true));
+  assert(value==physicalValues[enc]&&Encoder[enc].counter==physicalValues[enc]&&Encoder[enc].writes==writes);
+ }
+ // A blocked seek-end turn restores the actual trim value, including deferred writes.
+ value=81;assert(handleFnEncoder(1,value,false)&&value==80);
+ fnHeld=false;value=81;assert(handleFnEncoder(1,value,true));
+ assert(value==80&&Encoder[1].counter==80&&set_Wav.pos[2]==80&&set_Wav.pos[1]==0);
+ value=81;assert(!handleFnEncoder(1,value,true)&&value==81);
+ // Any outstanding DRAW release latch must also restore SMP's physical mapping.
+ fnReleaseLatch=true;assert(!finishFnSubpatternRelease(true));
+ assert(Encoder[1].counter==80&&Encoder[2].counter==0);
  currentMode=&touchyMode;updateFnState();value=25;
  assert(!fnHeld&&!handleFnEncoder(0,value,true)&&fnButtonEvent(0,2)==2);
 }
