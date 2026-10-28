@@ -24,6 +24,13 @@ using std::min;
 constexpr int AUDIO_BLOCK_SAMPLES=128;
 constexpr float AUDIO_SAMPLE_RATE_EXACT=44100;
 inline void __disable_irq(){} inline void __enable_irq(){}
+#define FLASHMEM
+constexpr int IRQ_SOFTWARE=0,IRQ_PIT=1;
+inline bool irqEnabled[2]={true,true};
+#define NVIC_IS_ENABLED(n) irqEnabled[n]
+#define NVIC_DISABLE_IRQ(n) (irqEnabled[n]=false)
+#define NVIC_ENABLE_IRQ(n) (irqEnabled[n]=true)
+inline void __DSB(){} inline void __ISB(){}
 '''
 audio = r'''
 #pragma once
@@ -48,7 +55,7 @@ public:
 '''
 dsp = r'''
 #include "effect_delay_ext.h"
-#include "effect_freeverb_dmabuf.h"
+#include "effect_treeverb.h"
 #include <cassert>
 bool audible(AudioStream &s){for(auto &b:s.output)for(auto v:b.data)if(v!=0)return true;return false;}
 void delayTest(int length){
@@ -87,7 +94,7 @@ void feedbackTest(int sign){
 int main(){
  feedbackTest(-1);feedbackTest(1);
  delayTest(16384);delayTest(16387);
- AudioEffectFreeverbDMAMEM verb;verb.roomsize(1.0f);verb.damping(0.4f);
+ AudioEffectTreeverb verb;verb.roomsize(1.0f);verb.damping(0.4f);
  for(int i=0;i<60;i++){verb.feed(i<8?10000:0);verb.update();}
  assert(audible(verb));verb.output.clear();
  // High-room-size reverb remains audible well beyond the old cleanup window.
@@ -185,12 +192,13 @@ with tempfile.TemporaryDirectory(prefix='toern-pause-effects-') as tmp:
     (tmp/'AudioStream.h').write_text(audio)
     (tmp/'utility').mkdir()
     (tmp/'utility/dspinst.h').write_text('')
+    (tmp/'arm_math.h').write_text('')
     flags = ['c++','-std=c++17','-O2','-D__ARM_ARCH_7EM__','-I',str(tmp),'-I',str(root/'src')]
     sdk = Path('/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1')
     if sdk.exists():
         flags += ['-isystem',str(sdk)]
     for name, code, sources in [
-        ('dsp',dsp,[root/'src/effect_delay_ext.cpp',root/'src/effect_freeverb_dmabuf.cpp']),
+        ('dsp',dsp,[root/'src/effect_delay_ext.cpp',root/'src/effect_treeverb.cpp']),
         ('cleanup',cleanup,[]),
     ]:
         cpp=tmp/f'{name}.cpp';exe=tmp/name;cpp.write_text(code)

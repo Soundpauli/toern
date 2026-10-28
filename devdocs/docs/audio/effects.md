@@ -20,7 +20,7 @@ Per-channel FX and synth parameters are stored in `SMP` tables and applied by de
 
 For a typical sample channel:
 
-**envelope → bitcrusher → filter → freeverb → mixers → output**
+**envelope → bitcrusher → filter → Treeverb → mixers → output**
 
 This reverb path exists on sample voices 1, 2 and 5–8. Samples 3 and 4 bypass reverb. Poly voice 11 has a shared bitcrusher/filter/reverb chain after its oscillator/ladder stages; mono voices 13 and 14 have bitcrusher/filter stages without reverb.
 
@@ -36,6 +36,29 @@ The matrix usually shows **0–32** (or enums as text). Mapping functions conver
 2. Teach `setFilters` / `setParams` the mapping.
 3. Add a slider definition for filter UI (`SliderDefEntry` / name index tables).
 4. Keep display enums in sync with `enumNames` pointers.
+
+## Treeverb
+
+Seven independent `AudioEffectTreeverb` objects serve sample voices 1, 2, 5–8
+and synth voice 11. The default light network uses four parallel comb filters
+and two diffusion stages at the full audio sample rate, replacing eight combs
+and four diffusers. Room, damping, wet/dry routing, delay routing, and saved
+settings retain their existing controls. The lighter tail has a different
+color and density; wet gain is normalized against the reference network's
+impulse-response energy rather than guaranteed to sound identical.
+
+`roomsize(0)` bypasses wet processing and clears history on the next update.
+Nonzero settings keep natural tails after Pause. `ETC → RSET → RVRB` still
+bypasses reverb and bitcrusher across voices. Buffers remain in RAM1. This build frees 89,376 bytes there, increasing
+local-variable headroom from 59,040 to 148,416 bytes.
+
+`platformio.ini` compiles `src/effect_treeverb.cpp` with
+`TOERN_TREEVERB_LIGHT=1`. Set the flag to `0` for the heavier Treeverb reference.
+The old Freeverb source remains available for host comparison tests, outside
+the firmware build. `tests/test_treeverb.py` checks both modes under address
+and undefined-behavior sanitizers, including tail energy, overload, live
+parameter changes, bypass/reset, allocation failure, and IRQ restoration.
+`tests/test_pause_effects.py` checks natural tail decay through Pause.
 
 ## Sample page 1 — TIME
 
@@ -53,7 +76,7 @@ Only samples 1–8 expose **V** / VOLUME (`ARR_GAIN`) beside DLAY, encoder 2. Th
 
 ## Pause and effects tails
 
-Pause releases every sample envelope, all three poly slots via `releaseAllPolySynthVoices()`, and mono voices 13/14. It does not clear delay/freeverb buffers or reset their settings. `pendingPauseAudioCleanup` is serviced independently of SD autosave by `servicePauseAudioCleanup()`: sample readers stop only after their envelopes become inactive and the quiet guard has elapsed. Existing effect buffers continue decaying naturally. Fresh Play/audition cancels pending cleanup.
+Pause releases every sample envelope, all three poly slots via `releaseAllPolySynthVoices()`, and mono voices 13/14. It does not clear delay/reverb buffers or reset their settings. `pendingPauseAudioCleanup` is serviced independently of SD autosave by `servicePauseAudioCleanup()`: sample readers stop only after their envelopes become inactive and the quiet guard has elapsed. Existing effect buffers continue decaying naturally. Fresh Play/audition cancels pending cleanup.
 
 Do not add a fixed tail timeout or clear effects in the autosave path. A quiet envelope is not proof that a long feedback/reverb tail has finished. `tests/test_pause_effects.py` exercises release behavior and actual DSP-tail decay.
 
