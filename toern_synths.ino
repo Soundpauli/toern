@@ -817,11 +817,13 @@ void updateVals(int ch) {
     if (begunType[i][0] != wf0) { Swaveform1[i]->begin(wf0); begunType[i][0] = wf0; }
     if (begunType[i][1] != wf1) { Swaveform2[i]->begin(wf1); begunType[i][1] = wf1; }
     if (begunType[i][2] != wf2) { Swaveform3[i]->begin(wf2); begunType[i][2] = wf2; }
-    Swaveform1[i]->amplitude(1.0);
+    // Preset edits must not restart oscillators whose output envelopes closed.
+    const float oscillatorAmp = (Senvelope1[i]->isActive() || Senvelope2[i]->isActive()) ? 1.0f : 0.0f;
+    Swaveform1[i]->amplitude(oscillatorAmp);
     Swaveform1[i]->pulseWidth(pulseWidth[ch][0]);
-    Swaveform2[i]->amplitude(1.0);
+    Swaveform2[i]->amplitude(oscillatorAmp);
     Swaveform2[i]->pulseWidth(pulseWidth[ch][1]);
-    Swaveform3[i]->amplitude(1.0);
+    Swaveform3[i]->amplitude(oscillatorAmp);
     Swaveform3[i]->pulseWidth(pulseWidth[ch][2]);
 
     // Update filter settings for both ladders
@@ -1073,6 +1075,23 @@ void resetSequencedSynthLegato() {
 }
 
 
+
+// The output envelopes sit after the six ladder filters. Once BOTH sides of a
+// voice finish, stop its three oscillators so they no longer feed those filters.
+// setSoundVoice restores amplitude on every new trigger/retune; effect tails
+// downstream are left alone.
+void serviceIdlePolySynthVoices() {
+  static elapsedMillis poll;
+  if (poll < 4) return;
+  poll = 0;
+  toern_audio::StateGuard guard;
+  for (int voice = 0; voice < POLY_VOICES; ++voice) {
+    if (Senvelope1[voice]->isActive() || Senvelope2[voice]->isActive()) continue;
+    Swaveform1[voice]->amplitude(0.0f);
+    Swaveform2[voice]->amplitude(0.0f);
+    Swaveform3[voice]->amplitude(0.0f);
+  }
+}
 
 // Grid preview often doesn't send note-off; we fake it after a per-instrument timeout.
 // Presets with sustainAmp>0 would otherwise ring until AUTO_OFF (felt "infinite" at ~2s).

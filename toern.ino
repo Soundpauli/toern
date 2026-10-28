@@ -7251,6 +7251,7 @@ void loop() {
 
   updateExternalOneBlink();
   checkMidi();  // Process MIDI early in loop for lower latency
+  serviceIdlePolySynthVoices();
   serviceSynthLfo();
   serviceMidiArp();
   // Debounced SD backup of EEPROM settings (settings.txt)
