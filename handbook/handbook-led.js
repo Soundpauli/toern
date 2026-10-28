@@ -481,10 +481,11 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
 
   function drawBPMScreenLike(m, bpm, mode) {
     m.clear();
+    m.indL(1, "V");
     m.indL(2, "W");
     m.indL(4, "N");
-    const n = Math.max(0, Math.min(999, Math.round(bpm))) | 0;
-    const buf = ("   " + n).slice(-3);
+    const value = Math.round(bpm * 10);
+    const whole = String(Math.floor(value / 10));
     let textR, textG, textB, arrowR, arrowG, arrowB;
     if (mode === "int") {
       textR = 0; textG = 255; textB = 255;
@@ -506,7 +507,11 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       arrowR = 255; arrowG = 30; arrowB = 30;
       m.indL(3, "R");
     }
-    drawText(m, buf, 2, 6, textR, textG, textB);
+    const width = [...whole].reduce((sum, ch) => sum + ALPH[ch.charCodeAt(0)-32][0] + 1, 0);
+    const x = Math.max(1, Math.floor((m.w - (width + 4)) / 2) + 1);
+    drawText(m, whole, x, 4, textR, textG, textB);
+    m.set(x + width, 4, 255, 255, 255);
+    drawText(m, String(value % 10), x + width + 1, 4, 148, 0, 211);
 
     // Tiny chevron on the right side of the screen: three lit cells forming
     // either ">" (INT — clock going out) or "<" (EXT — clock coming in).
@@ -601,10 +606,6 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     m.indM(1, txtExists ? "G" : "E");
     m.indM(2, txtExists ? "D" : "R");
     m.indL(4, "X");
-    if (txtExists) {
-      const [x1, x2, x3] = getIndX(3);
-      for (const [x,y] of [[x1,3],[x3,3],[x2,4],[x1,5],[x3,5]]) m.set(x,y,255,0,0);
-    }
     const numC = txtExists ? UI.BRIGHT_GREEN : UI.BLUE;
     const s = String(fileNum);
     let tw = 0;

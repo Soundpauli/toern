@@ -538,7 +538,7 @@ static bool bootFullResetRequested = false;  // Touch1 held 3s at power-on → F
 unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
-bool SMP_LOAD_SETTINGS = false;  // Manual pattern loads keep current sound settings by default.
+bool SMP_LOAD_SETTINGS = true;  // Pattern browser defaults to saved sound settings.
 uint8_t lineOutLevelSetting = 30;
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
@@ -1052,7 +1052,7 @@ struct Mode {
 
 Mode draw = { "DRAW", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, maxY, maxfilterResolution, 1 }, { 0x110011, 0x000000, 0x00FF00, 0x110011 } };
 Mode singleMode = { "SINGLE", { 1, 1, 0, 1 }, { maxY, maxPages, maxfilterResolution, maxlen - 1 }, { 1, 2, maxfilterResolution, 1 }, { 0x000000, 0x000000, 0x00FF00, 0x000000 } };
-Mode bpmMode = { "BPM", { 0, 0, 0, BPM_MIN }, { 9, 252, 1, BPM_MAX }, { 0, 0, 0, 100 }, { 0x00FFFF, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
+Mode bpmMode = { "BPM", { 0, 0, 0, BPM_MIN }, { 9, 252, 1, BPM_MAX }, { 0, 0, 0, 100 }, { 0x9400D3, 0x000000, 0xFF4400, 0x00FFFF } };  // BPM only - volume controls removed, encoder[2] for INT/EXT, encoder[1] for brightness (0-252 = 3-255)
 //filtermode has 4 entries
 Mode filterMode = { "FILTERMODE", { 0, 0, 0, 0 }, { maxfilterResolution, maxfilterResolution, maxfilterResolution, maxfilterResolution }, { 0, 0, 0, 0 }, { 0x00FFFF, 0xFF00FF, 0xFFFF00, 0x00FF00 } };
 Mode noteShift = { "NOTE_SHIFT", { 7, 7, 0, 7 }, { 9, 9, maxfilterResolution, 9 }, { 8, 8, maxfilterResolution, 8 }, { 0xFFFF00, 0xFFFF00, 0x000000, 0xFFFFFF } };
@@ -2488,18 +2488,9 @@ FLASHMEM void switchMode(Mode *newMode) {
       Encoder[3].writeMax((int32_t)1000);
       Encoder[3].writeCounter((int32_t)fileUi);
 
-      // Settings toggle only when a real pattern/autosave file exists
-      char OUTPUTf[50];
-      if (SMP.file == 0) {
-        sprintf(OUTPUTf, "autosaved.txt");
-      } else {
-        sprintf(OUTPUTf, "%u.txt", SMP.file);
-      }
-      if (SD.exists(OUTPUTf)) {
-        currentMode->pos[2] = SMP_LOAD_SETTINGS ? 1 : 0;
-      } else {
-        currentMode->pos[2] = 0;
-      }
+      // Sideload is opt-in for each browser visit and selected file.
+      SMP_LOAD_SETTINGS = true;
+      currentMode->pos[2] = 0;
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
     }
 
@@ -3074,6 +3065,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       showNewFileScreen();
       return;
     }
+    SMP_LOAD_SETTINGS = currentMode->pos[2] == 0;
     loadPattern(false);
     preventPaintUnpaint = true;                                                                     // Prevent paint/unpaint after load
     return;                                                                                         // Prevent other button actions from being processed
@@ -5053,6 +5045,11 @@ FLASHMEM void checkEncoders() {
         currentMode->pos[i] = rawValue;
       }
     } else {
+      if (currentMode == &loadSaveTrack && i == 3 && rawValue != (int)currentMode->pos[3]) {
+        currentMode->pos[2] = 0;
+        SMP_LOAD_SETTINGS = true;
+        if (allowEncWrite) Encoder[2].writeCounter((int32_t)0);
+      }
       currentMode->pos[i] = rawValue;
     }
 
@@ -5480,8 +5477,8 @@ FLASHMEM void checkEncoders() {
         int xval = rel + (editpage - 1) * (int)maxX;
         xval = constrain(xval, 1, (int)MAX_STEPS);
 
-        // CTRL=PAGE + CRSR=CHNR: flash page number like the channel readout.
-        if (showChannelNr && (currentMode == &draw || currentMode == &singleMode)) {
+        // CTRL=PAGE: always flash the page number when encoder 2 changes pages.
+        if (currentMode == &draw || currentMode == &singleMode) {
           pageNrOverlayPage = editpage;
           pageNrOverlayActive = true;
           pageNrOverlayUntil = millis() + 800;
@@ -7406,8 +7403,8 @@ void loop() {
         }
       }
 
-      // CTRL=PAGE page number (same gate as CRSR=CHNR)
-      if (pageNrOverlayActive && showChannelNr
+      // CTRL=PAGE page-number feedback is independent of CHNR.
+      if (pageNrOverlayActive
           && (currentMode == &draw || currentMode == &singleMode)) {
         if (millis() <= pageNrOverlayUntil) {
           drawPageNrOverlay(pageNrOverlayPage);
@@ -10475,20 +10472,14 @@ FLASHMEM void showLoadSave() {
     txtExists = (lastExists == 1);
   }
 
-  // Settings toggle only when a file exists (not on NEW)
-  if (txtExists && !isNewSlot) {
-    if (currentMode->pos[2] == 1) {
-      SMP_LOAD_SETTINGS = true;
-    } else {
-      SMP_LOAD_SETTINGS = false;
-    }
-  } else {
-    SMP_LOAD_SETTINGS = false;
-    if (currentMode->pos[2] != 0) {
-      currentMode->pos[2] = 0;
-      Encoder[2].writeCounter((int32_t)0);
-    }
+  // Rendering-cache invalidation must not discard this selection's sideload choice.
+  static int lastSideloadUi = -2;
+  if ((int)fileUi != lastSideloadUi) {
+    currentMode->pos[2] = 0;
+    Encoder[2].writeCounter((int32_t)0);
   }
+  lastSideloadUi = (int)fileUi;
+  SMP_LOAD_SETTINGS = currentMode->pos[2] == 0;
 
   const int8_t loadSettingsDrawn = SMP_LOAD_SETTINGS ? 1 : 0;
   if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn) {

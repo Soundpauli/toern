@@ -86,7 +86,7 @@ const SUB_VALUES = {
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
     { opts: ["OFF", "ALL", "1", "2", "3", "4", "5", "6", "7", "8", "11", "13", "14"], colors: [[120, 0, 0], [255, 220, 120], [255, 80, 20]], codes: ["R", "Y", "O"] },
     { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
-    { opts: ["SD", "EFX", "FULL", "PATT", "KIT", "ASAV", "RAM"], colors: [[120, 60, 0]], codes: ["O"] },
+    { opts: ["SD", "EFX", "FULL", "PATT", "KIT", "ASAV", "RAM", "RVRB"], colors: [[120, 60, 0]], codes: ["O"] },
   ],
 };
 
@@ -132,7 +132,7 @@ export function createDevice(matrix, statusEl, rings) {
     fnHeld: false, fnArrow: "", fnArrowAt: 0,
     touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(127), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
-    menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: false,
+    menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: true,
     genre: 0, genreLength: 8,
     seekOf, endOf, invOf, browse: 0, browseDir: "samples", browseItems: listDir("samples", { parent: false }),
     wavFile: false, peaks: null, shownWav: "", sampleUrl: Array(16).fill(null),
@@ -569,7 +569,11 @@ export function createDevice(matrix, statusEl, rings) {
   function liveMix() {
     for (const ch of SOUND_CH) engine.apply(ch, filt[ch], channelHeard(ch) ? chVol[ch] : 0, s.gain, (s.faderPositions[ch] ?? 16) / 16);
   }
-  function applyFilt(ch) { if (SOUND_CH.has(ch)) engine.apply(ch, filt[ch], chVol[ch], s.gain, (s.faderPositions[ch] ?? 16) / 16); }
+  function applyFilt(ch) {
+    if (!SOUND_CH.has(ch)) return;
+    filt[ch].sus = clamp(filt[ch].sus, 1, 32);
+    engine.apply(ch, filt[ch], chVol[ch], s.gain, (s.faderPositions[ch] ?? 16) / 16);
+  }
   function clearNotes() {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
   }
@@ -584,6 +588,14 @@ export function createDevice(matrix, statusEl, rings) {
     if (opt === 0) refreshBrowse();
     else if (opt === 1) resetEffects();
     else if (opt === 2) resetFull();
+    else if (opt === 7) {
+      for (const ch of SOUND_CH) {
+        filt[ch].r = 0;
+        filt[ch].b = 0;
+        applyFilt(ch);
+      }
+      queueAutosave();
+    }
     else if (opt === 3) {
       const all = loadStore("toern-web-patterns");
       for (let i = 1; i <= 99; i++) delete all[String(i)];
@@ -929,7 +941,7 @@ export function createDevice(matrix, statusEl, rings) {
     const pages = filterPagesFor(ch);
     const spec = (pages[f.fastPage || 0] || pages[0])[f.fast];
     if (!spec) return;
-    f[spec.key] = clamp(f[spec.key] + dir, 0, spec.max ?? 32);
+    f[spec.key] = clamp(f[spec.key] + dir, spec.min ?? 0, spec.max ?? 32);
     applyFilt(ch);
     s.filterFlash = spec.name;
     s.filterFlashAt = performance.now();
@@ -1155,6 +1167,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (data && !Array.isArray(data)) {
       if (loadSound) {
         for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch), data.filt?.[ch] || {});
+        for (const ch of SOUND_CH) filt[ch].sus = clamp(filt[ch].sus, 1, 32);
         if (Array.isArray(data.chVol)) for (const ch of SOUND_CH) chVol[ch] = clamp(data.chVol[ch] ?? 16, 0, 16);
       }
       if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
@@ -1173,7 +1186,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function subValue(mode, index) {
-    if (mode === "etc" && SUBS.etc[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
+    if (mode === "look" && SUBS.look[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
     if (mode === "mode" && SUBS.mode[index] === "DEMO") return { text: "GO" };
     if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
@@ -1337,7 +1350,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function openMenuPage() {
     const name = MENU_PAGES[s.menuIndex].name;
-    if (name === "PATT") s.mode = "dat";
+    if (name === "PATT") { s.loadSoundSettings = true; s.mode = "dat"; }
     else if (name === "KIT") s.mode = "kit";
     else if (name === "SMP" && s.GLOB.currentChannel >= 1 && s.GLOB.currentChannel <= 8) {
       refreshBrowse();
@@ -1404,7 +1417,7 @@ export function createDevice(matrix, statusEl, rings) {
       const page = filterPagesFor(s.GLOB.currentChannel)[filterPages[s.GLOB.currentChannel]] || filterPagesFor(s.GLOB.currentChannel)[0];
       const spec = page[enc];
       if (!spec) return;
-      filt[s.GLOB.currentChannel][spec.key] = clamp(filt[s.GLOB.currentChannel][spec.key] + dir, 0, spec.max ?? 32);
+      filt[s.GLOB.currentChannel][spec.key] = clamp(filt[s.GLOB.currentChannel][spec.key] + dir, spec.min ?? 0, spec.max ?? 32);
       if (s.GLOB.currentChannel === 11 && spec.key === "inst") Object.assign(filt[11], instrumentDefaults(filt[11].inst));
       s.filterTouch = enc;
       s.filterTouchAt = performance.now();
@@ -1462,7 +1475,7 @@ export function createDevice(matrix, statusEl, rings) {
             s.voiceEdit[ch] = s.GLOB.edit;
             cueVoice(ch, s.GLOB.edit);
           } else viewPage(s.GLOB.edit + dir);
-          if (s.GLOB.edit !== prev && s.cursorType === 1) {
+          if (s.GLOB.edit !== prev) {
             s.pageNr = s.GLOB.edit;
             s.pageNrAt = performance.now();
             s.chNrAt = 0;
@@ -1484,7 +1497,7 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "menu" && enc === 3) s.menuIndex = clamp(s.menuIndex + dir, 0, MENU_PAGES.length - 1);
-    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && enc !== 3) {
+    if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP" && enc !== 3) {
       if (enc===1 || enc===2) {
         const side=enc-1;
         if (hold[enc]) s.swapOctaves[side]=clamp(s.swapOctaves[side]+dir,-8,8);
@@ -1604,8 +1617,12 @@ export function createDevice(matrix, statusEl, rings) {
       }
       applySub(pageMode, pageIndex);
     }
-    if (s.mode === "dat" && enc === 3) s.slot = clamp(s.slot + dir, -1, 99); // -1=NEW, 0=A, 1..99=PATT
-    if (s.mode === "dat" && enc === 2) s.loadSoundSettings = dir > 0;
+    if (s.mode === "dat" && enc === 3) {
+      const selected = clamp(s.slot + dir, -1, 99);
+      if (selected !== s.slot) s.loadSoundSettings = true;
+      s.slot = selected;
+    } // -1=NEW, 0=A, 1..99=PATT
+    if (s.mode === "dat" && enc === 2) s.loadSoundSettings = dir < 0;
     if (s.mode === "kit" && enc === 3) {
       s.packSlot = clamp(s.packSlot + dir, 0, 99);
       saveEeprom();
@@ -1772,7 +1789,7 @@ export function createDevice(matrix, statusEl, rings) {
       writeGenre(s.genre);
       return;
     }
-    if (s.mode === "new" && enc === 3) { s.slot = -1; s.mode = "dat"; return; }
+    if (s.mode === "new" && enc === 3) { s.slot = -1; s.loadSoundSettings = true; s.mode = "dat"; return; }
     if (s.mode === "pat" && enc === 3) {
       writeGenre(s.subIndex + 1);
       return;
@@ -1854,7 +1871,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "song" && enc === 0) song[s.songPos - 1] = 0;
     if (s.mode === "song" && (enc === 1 || enc === 3)) song[s.songPos - 1] = s.songPattern;
     if (s.mode === "song" && enc === 2) toggleSong();
-    if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP") {
+    if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP") {
       if (enc===3) swapChannels(s.swapFrom,s.swapTo);
       else if (enc===0) backToGrid();
       return;
@@ -2535,7 +2552,7 @@ export function createDevice(matrix, statusEl, rings) {
       const enc = isTab(e) ? 0 : isEncoder2Click(e) ? 1 : e.key === " " ? 2 : 3;
       hold[enc] = { at: performance.now(), turned: false, fired: false };
     }
-    else if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (isEncoder2Click(e) || e.key === " ")) {
+    else if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP" && (isEncoder2Click(e) || e.key === " ")) {
       const enc=isEncoder2Click(e)?1:2;
       hold[enc]={at:performance.now(),turned:false,fired:false}; s.swapHeld[enc-1]=true;
     }
@@ -2824,7 +2841,7 @@ export function createDevice(matrix, statusEl, rings) {
     soloRelease() { exitSolo(); liveMix(); announceState(); },
     press(enc) { shortPress(enc); },
     knobDown(enc) {
-      if (s.mode === "etc" && SUBS.etc[s.subIndex] === "SWAP" && (enc===1 || enc===2)) {
+      if (s.mode === "look" && SUBS.look[s.subIndex] === "SWAP" && (enc===1 || enc===2)) {
         hold[enc]={at:performance.now(),turned:false,fired:false}; s.swapHeld[enc-1]=true; return;
       }
       if (s.mode === "touchy") { hold[enc] = { at: performance.now(), turned: false, fired: false }; return; }

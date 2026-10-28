@@ -1,10 +1,10 @@
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
-#define LOOK_PAGES_COUNT 4
+#define LOOK_PAGES_COUNT 5
 #define RECS_PAGES_COUNT 6
 #define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 5
-#define ETC_PAGES_COUNT 6
+#define ETC_PAGES_COUNT 5
 #define MODE_PAGES_COUNT 11
 #define ADV_PAGES_COUNT 10
 
@@ -103,7 +103,7 @@ MenuPage menuPages[MENU_PAGES_COUNT] = {
   {"SMP", 3, false, nullptr},           // Wave (ch1–8) / PSET presets (ch11/13/14)
   {"BPM", 5, false, nullptr},           // Tempo / clock / brightness
   {"VOL", 26, false, nullptr},          // VOL submenu (MAIN, GAIN, LOUT, PREV, SPKR)
-  {"SETT", 19, false, nullptr},         // SETT submenu (VIEW, CTRL, DRAW, MUTE)
+  {"SETT", 19, false, nullptr},         // SETT submenu (VIEW, CTRL, DRAW, MUTE, SWAP)
   {"REC", 20, false, nullptr},         // RECS submenu (INPT, MIC, L-IN, TRIG, CLR)
   {"MIDI", 21, false, nullptr},         // MIDI submenu (CHN, TRANSP)
   {"MODE", 61, false, nullptr},         // Performance modes; inherits SONG icon/color
@@ -115,7 +115,8 @@ MenuPage lookPages[LOOK_PAGES_COUNT] = {
   {"VIEW", 17, false, nullptr},
   {"CTRL", 25, false, nullptr},
   {"DRAW", 38, false, nullptr},
-  {"MUTE", 47, false, nullptr}
+  {"MUTE", 47, false, nullptr},
+  {"SWAP", 67, false, nullptr}
 };
 
 static inline uint16_t pongSpeedToInterval(int speed) {
@@ -167,8 +168,7 @@ MenuPage etcPages[ETC_PAGES_COUNT] = {
   {"SD", 49, false, nullptr},
   {"BATT", 42, false, nullptr},
   {"ADV", 62, false, nullptr},
-  {"RSET", 16, true, "MODE"},
-  {"SWAP", 67, false, nullptr}
+  {"RSET", 16, true, "MODE"}
 };
 MenuPage modePages[MODE_PAGES_COUNT] = {
   {"FLOW", 10, false, nullptr},
@@ -2573,7 +2573,7 @@ FLASHMEM void drawMainSettingStatus(int setting) {
         drawMenuText("FULL", 2, 3, CRGB(100, 0, 0));  // Dark Red
       }*/
       drawMenuIndicator('L', 'G', 2);  // Encoder 2: press applies the reset
-      drawMenuIndicator('L', 'O', 3);  // Encoder 3: turn to pick SD/EFX/FULL/FILE/PACK/ASAV
+      drawMenuIndicator('L', 'O', 3);  // Encoder 3: turn to pick SD/EFX/FULL/PATT/KIT/ASAV/RAM/RVRB
       
       break;
 
@@ -2939,8 +2939,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuText("LOUT", 2, 10, currentMenuParentTextColor());
       extern uint8_t lineOutLevelSetting;
       char levelText[8];
-      // Display mapped range 1..19 (LINEOUT_MIN..LINEOUT_MAX) for user friendliness
-      int displayVal = (lineOutLevelSetting - LINEOUT_MIN) + 1;  // 13->1, 31->19
+      // Codec values decrease as volume rises: UI 1=quietest, 19=loudest.
+      int displayVal = LINEOUT_MAX - lineOutLevelSetting + 1;  // 31->1, 13->19
       snprintf(levelText, sizeof(levelText), "%d", displayVal);
       drawMenuText(levelText, 2, 3, UI_MAGENTA); // Pink
       
@@ -3157,7 +3157,7 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
       break;
     }
 
-    case 16: { // RST page - show current mode (SD, EFX, FULL, PATT, KIT, ASAV, RAM)
+    case 16: { // RST page - show current mode (SD, EFX, FULL, PATT, KIT, ASAV, RAM, RVRB)
       const char* modeText;
       if (resetMenuOption == 0) {
         modeText = "SD";
@@ -3171,8 +3171,10 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
         modeText = "KIT";
       } else if (resetMenuOption == 5) {
         modeText = "ASAV";
-      } else {
+      } else if (resetMenuOption == 6) {
         modeText = "RAM";
+      } else {
+        modeText = "RVRB";
       }
       drawMenuValue(modeText, 2, 3, UI_ORANGE);
       break;
@@ -4529,12 +4531,12 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 16: { // RST page - Choose between SD, EFX, FULL, PATT, KIT, ASAV, RAM
+    case 16: { // RST page - Choose between SD, EFX, FULL, PATT, KIT, ASAV, RAM, RVRB
       static int lastResetOption = -1;
 
       if (menuFirstEnter) {
         Encoder[2].writeCounter((int32_t)resetMenuOption);
-        Encoder[2].writeMax((int32_t)6);  // 0=SD, 1=EFX, 2=FULL, 3=PATT, 4=KIT, 5=ASAV, 6=RAM
+        Encoder[2].writeMax((int32_t)7);  // 0=SD, 1=EFX, 2=FULL, 3=PATT, 4=KIT, 5=ASAV, 6=RAM, 7=RVRB
         Encoder[2].writeMin((int32_t)0);
         currentMode->pos[2] = (unsigned int)resetMenuOption;
         lastResetOption = resetMenuOption;
@@ -4542,7 +4544,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       }
 
       if ((int)currentMode->pos[2] != lastResetOption) {
-        resetMenuOption = constrain((int)currentMode->pos[2], 0, 6);
+        resetMenuOption = constrain((int)currentMode->pos[2], 0, 7);
         currentMode->pos[2] = (unsigned int)resetMenuOption;
         Encoder[2].writeCounter((int32_t)resetMenuOption);
         // Option label is in drawAdditionalFeatures (drawMenuValue clears the row).
@@ -4684,7 +4686,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       extern uint8_t lineOutLevelSetting;
       
       if (lineMenuFirstEnter) {
-        int displayVal = constrain((int)(lineOutLevelSetting - LINEOUT_MIN + 1), 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
+        int displayVal = constrain((int)(LINEOUT_MAX - lineOutLevelSetting + 1), 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
         Encoder[2].writeCounter((int32_t)displayVal);
         Encoder[2].writeMax((int32_t)(LINEOUT_MAX - LINEOUT_MIN + 1)); // 19
         Encoder[2].writeMin((int32_t)1);
@@ -4693,15 +4695,15 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lineMenuFirstEnter = false;
         
         // Apply to hardware
-        sgtl5000_1.lineOutLevel(32-lineOutLevelSetting);
+        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
       }
       
       if (currentMode->pos[2] != lastLoVol) {
         int encoderPos = constrain(currentMode->pos[2], 1, (LINEOUT_MAX - LINEOUT_MIN + 1)); // 1..19
-        lineOutLevelSetting = (uint8_t)(LINEOUT_MIN + encoderPos - 1);
+        lineOutLevelSetting = (uint8_t)(LINEOUT_MAX - encoderPos + 1);
         
         // Apply to hardware
-        sgtl5000_1.lineOutLevel(32-lineOutLevelSetting);
+        sgtl5000_1.lineOutLevel(lineOutLevelSetting);
         
         // Save to EEPROM
         saveSingleModeToEEPROM(15, (int8_t)lineOutLevelSetting);
@@ -5168,7 +5170,11 @@ FLASHMEM void switchMenu(int menuPosition){
         break;
 
         case 16:
-        if (resetMenuOption == 0) {
+        if (resetMenuOption == 7) {
+          extern void bypassAllReverbAndBitcrushers();
+          bypassAllReverbAndBitcrushers();
+          showSaveSuccessAnimation();
+        } else if (resetMenuOption == 0) {
           // SD rescan: invalidate dynamic sample browser cache
           FastLEDclear();
           drawText("SCAN", 2, 3, UI_GREEN);

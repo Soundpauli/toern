@@ -49,3 +49,7 @@ KIT writes check copied bytes and WAV headers and report success/failure. They a
 `toern_fileoperations.ino` owns PSET files: `presets/<ch>/<nnn>.pset`, ch=11/13/14 and nnn=001…099. `saveVoicePreset()` and `loadVoicePreset()` handle that voice's filter/synth/parameter settings. Saving uses the pattern transaction helper with temporary/backup files and validation. Presets are separate from numbered patterns, sample kits and global preferences. Keep each voice's selected slot independent.
 
 Sample V gain remains part of the existing binary pattern layout; its tagged spare-slot representation does not change `sizeof(Device)`. See [firmware edits](../contributing/firmware-edits#sample-voice-gain).
+
+### Sound settings and sideload
+
+PATT entry and each file-selection change default to loading saved sound settings (`SMP_LOAD_SETTINGS=true`, sideload encoder position 0). Turning encoder 3 clockwise enables sideload for that selection (position 1, red X), retaining current samples, effects, envelopes, synth settings and volumes in RAM and live audio. Counterclockwise disables sideload. Saving always captures current sound settings. Renderer-cache invalidation does not itself clear sideload.

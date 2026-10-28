@@ -94,7 +94,7 @@
                         <ul class="sub-opts">
                           <li><strong>Enc&nbsp;1 short</strong> — load the selected entry</li>
                           <li><strong>Enc&nbsp;2 short</strong> — save (overwrites, no “are you sure?”)</li>
-                          <li><strong>Enc&nbsp;3 turn</strong> — apply sound settings on/off (stored inside the pattern file)</li>
+                          <li><strong>Enc&nbsp;3 turn</strong> — sideload on/off; OFF loads saved sounds, ON keeps current sounds</li>
                           <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–9999</strong> (0/A = load-only recovery) (bright green = occupied, dim blue = empty)</li>
                           <li><strong>Enc&nbsp;4 short</strong> — back to the grid</li>
                         </ul>
@@ -277,6 +277,7 @@
                             <span class="how" data-hb-copy="menus.035">Build a “kick+snare only” return set. Does not gate which rows you can paint.</span>
                           </span>
                         </li>
+<li id="swap-menu"><a href="advanced-sequencing.html#swap"><span class="node">SWAP</span></a><span class="desc">Exchange voice notes across the whole pattern. Encoders&nbsp;2/3 select voices; hold and turn either for an octave shift (−8…+8). Encoder&nbsp;4 applies; encoder&nbsp;1 exits. Sound settings stay with their voices.</span></li>
 </ul>
                     </li>
 
@@ -737,7 +738,7 @@
 </ul></li>
 <li id="rset">
                           <a href="troubleshooting.html#reset"><span class="node">RSET</span></a>
-                          <span class="desc" data-hb-copy="menus.097">Seven rungs of increasingly spicy recovery. Pick with encoder&nbsp;3, confirm with encoder&nbsp;2. Most finish with a green checkmark. RAM shows RAM / OK and restarts.</span>
+                          <span class="desc" data-hb-copy="menus.097">Eight reset choices. Pick with encoder&nbsp;3, confirm with encoder&nbsp;2. Most finish with a green checkmark. RAM shows RAM / OK and restarts.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>SD</strong> — rescan the whole card into <code>samples/toern_wavs.txt</code> (mute-mode <code>?&gt;</code> random + sample browser cache)</li>
@@ -747,6 +748,7 @@
                               <li><strong>KIT</strong> — delete kit folders except KIT&nbsp;1</li>
                               <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
                               <li><strong>RAM</strong> — zero every EEPROM byte, delete <code>settings.txt</code>, show RAM / OK, then restart. Next boot is a first run: factory settings, one panel, kit&nbsp;1. Saved patterns stay; the autosave still loads.</li>
+                              <li><strong>RVRB</strong> — bypass reverb and bitcrusher on all voices, retaining other sound settings and notes</li>
                             </ul>
                             <span class="how" data-hb-copy="menus.098">PATT and KIT are the “I meant it” buttons.</span>
                           </span>

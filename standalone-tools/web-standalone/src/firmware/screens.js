@@ -42,12 +42,12 @@ export const MENU_PAGES = [
 
 // Navigation is separate from the persisted legacy setting slots.
 export const SUBS = {
-  look: ["VIEW", "CTRL", "DRAW", "MUTE"],
+  look: ["VIEW", "CTRL", "DRAW", "MUTE", "SWAP"],
   recs: ["INPT", "MIC", "HPF", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PQ-I", "PQ-O", "TRIG", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "SPKR"],
   mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO", "DEMO"],
-  etc: ["INFO", "SCON", "BATT", "ADV", "RSET", "SWAP"],
+  etc: ["INFO", "SCON", "BATT", "ADV", "RSET"],
   adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE", "2-CH", "USBP", "HFC"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
@@ -702,7 +702,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawIndicator("L", "V", 4);
     return;
   }
-  if (s.mode === "etc" && name === "SWAP") {
+  if (s.mode === "look" && name === "SWAP") {
     matrix.drawText(s.swapHeld?.some(Boolean) ? "OCT" : s.swapAt && now-s.swapAt<600 ? "OK" : "SWAP", 2, 10, parent);
     matrix.drawText(s.swapHeld?.[0] ? `${s.swapOctaves[0]>=0?"+":""}${s.swapOctaves[0]}` : String(s.swapFrom), 1, 3, COL[s.swapFrom]);
     matrix.drawText(s.swapHeld?.[1] ? `${s.swapOctaves[1]>=0?"+":""}${s.swapOctaves[1]}` : String(s.swapTo), COLS >= 24 ? 24 : 10, 3, COL[s.swapTo]);
@@ -1069,6 +1069,7 @@ export function drawBpm(matrix, s) {
   }
   const analogExt = !s.clockInt && s.analogExtClock;
   const arrowCode = s.clockInt ? "G" : analogExt ? "O" : "R";
+  matrix.drawIndicator("L", "V", 1);
   matrix.drawIndicator("L", "W", 2);
   matrix.drawIndicator("L", arrowCode, 3);
   matrix.drawIndicator("L", "N", 4);
@@ -1077,10 +1078,10 @@ export function drawBpm(matrix, s) {
   const whole = String(Math.floor(value / 10));
   const width = textPixelWidth(whole) + 4;
   const start = Math.max(1, Math.floor((COLS - width) / 2) + 1);
-  matrix.drawText(whole, start, 6, digitColor);
+  matrix.drawText(whole, start, 4, digitColor);
   const dot = start + textPixelWidth(whole);
-  matrix.light(dot, 6, digitColor);
-  matrix.drawText(String(value % 10), dot + 1, 6, digitColor);
+  matrix.light(dot, 4, [255, 255, 255]);
+  matrix.drawText(String(value % 10), dot + 1, 4, [148, 0, 211]);
   const x = COLS - 1;
   const now = performance.now();
   const pulseFresh = analogExt && s.analogPulseAt && (now - s.analogPulseAt) < 80;

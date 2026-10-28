@@ -44,7 +44,7 @@
                   <tr><th>Short</th><td>Save</td><td data-hb-copy="files.009">Writes the live pattern into the chosen slot, <em>overwriting</em> any existing file at that number. No second confirmation — be sure of the slot before pressing.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Load sound settings</td><td data-hb-copy="files.011">Encoder 3 controls loading the pattern’s stored sound settings. Default: OFF, keeping the current effects. A red five-pixel X above encoder 3 (lowest pixels on row 3) means these settings will not be loaded. Turn clockwise to enable loading them; the X goes out.</td></tr>
+                  <tr><th>Turn</th><td>Load sound settings</td><td data-hb-copy="files.011">Saved sound settings load by default. Turn clockwise to enable sideload and keep the current sounds; a red X appears. Turn counterclockwise to load saved sounds again. Sideload resets whenever you select another file or re-enter PATT.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Slot number (1–9999)</td><td data-hb-copy="files.013">Slot 0 (A) loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
@@ -92,7 +92,7 @@
           <section class="hb-sub" id="sidecar">
             <h2 data-hb-copy="files.030">Settings inside the pattern file</h2>
             <p data-hb-copy="files.031">A numbered pattern is a binary file in the SD card root, such as <code>42.txt</code>. Despite the extension, it is not editable text. It contains all pages, per-step values, sound settings, mutes and the 64-slot page arrangement. There is no separate <code>.dat</code> file or sidecar.</p>
-            <p data-hb-copy="files.032">Encoder&nbsp;3 starts OFF: the red X means the current filters, effects, envelopes, synth settings and voice volumes stay as they are, both in memory and in the audio engine. They are not reset to defaults. Turn clockwise to load the stored sound settings instead; turn counterclockwise to keep the current settings. Notes, BPM, mutes and arrangement still load. This switch only affects loading: saving always includes the current sound settings. Startup autosave recovery restores the complete saved session.</p>
+            <p data-hb-copy="files.032">By default, loading a pattern restores its samples, effects, envelope and synth settings, and voice volumes. Sideload keeps the current sounds in memory and in the audio engine instead; notes, BPM, mutes and arrangement still load. Turn encoder&nbsp;3 clockwise to enable sideload (red X), or counterclockwise to disable it. Each selected file and browser visit starts with sideload OFF. Saving always includes current sound settings; startup recovery restores the complete saved session.</p>
             <p data-hb-copy="files.033">The pattern does not contain sample audio. Keep the matching kit and any custom samples on the card.</p>
           </section>
 

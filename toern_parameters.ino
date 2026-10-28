@@ -40,6 +40,7 @@ void setParams(ParameterType paramType, int index) {
       envelopes[index]->hold(mappedValue);
       break;*/
     case SUSTAIN:
+      SMP.param_settings[index][SUSTAIN] = constrain(SMP.param_settings[index][SUSTAIN], 1.0f, (float)maxfilterResolution);
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]);
       if (index == 11) {
         for (int v = 0; v < 3; v++) sustainAmp[0][v] = mappedValue;
@@ -170,7 +171,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
           if (ch == 11) return kCh11DecayDefault[ch11Inst];
           return (ch == 14) ? 20 : 32;
         case SUSTAIN:
-          if (ch == 11) return kCh11SustainDefault[ch11Inst];
+          if (ch == 11) return max(1, (int)kCh11SustainDefault[ch11Inst]);
           return (ch == 14) ? 20 : 32;
         case RELEASE:
           if (ch == 11) return kCh11ReleaseDefault[ch11Inst];
@@ -376,7 +377,7 @@ void applySynthInstrumentPreset(int channel, int instrumentIdx) {
   applySynthInstrumentFormDefault(channel, instrumentIdx);
   SMP.param_settings[channel][ATTACK] = kCh11AttackDefault[instrumentIdx];
   SMP.param_settings[channel][DECAY] = kCh11DecayDefault[instrumentIdx];
-  SMP.param_settings[channel][SUSTAIN] = kCh11SustainDefault[instrumentIdx];
+  SMP.param_settings[channel][SUSTAIN] = max(1, (int)kCh11SustainDefault[instrumentIdx]);
   SMP.param_settings[channel][RELEASE] = kCh11ReleaseDefault[instrumentIdx];
 }
 

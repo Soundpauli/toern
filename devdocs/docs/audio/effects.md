@@ -70,3 +70,9 @@ Resetting all filter pages shows a blue checkmark for 800 ms. The filter rendere
 Sample banks, the synth bus, final mix and headphone/USB routing use `AudioMixer4Limited`. It sums signed inputs in float before limiting, with 16 samples of lookahead per stage and 50 ms gain recovery. Default sample bank and final sample gains are unity; the final synth gain is 3.6 to retain the prior relative balance. The bank → final → route path adds 48 samples (about 1.09 ms). Earlier clipping inside a voice or effect cannot be repaired by the bus limiter.
 
 Sample readers and standard Teensy envelopes are unchanged. Sampler registration uses the reader-plus-envelope overload, preserving Note On and configured Note Off behavior while the bus controls its own gain. `tests/test_audio_gain.py` covers overload, cancellation, lookahead and recovery through the real mixer code.
+
+## Sustain, line output and effect reset
+
+Sustain is clamped to 1–32 in parameter application and slider editing, including CH11 preset/reset defaults. Other ADSR minima are unchanged. LOUT displays 1–19 from quietest to loudest; codec values run in reverse from 31 to 13 and are passed directly to the codec at boot and during menu editing.
+
+`ETC → RSET → RVRB` zeros only reverb and bitcrusher on all playable voices, immediately applying those two settings. Other patch parameters and note data remain intact. SWAP is under SETT after MUTE. BPM places its decimal row at y=4 with a white point and violet fraction/encoder-1 indicator; CTRL=PAGE feedback no longer depends on CHNR.

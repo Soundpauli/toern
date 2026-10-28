@@ -197,7 +197,7 @@ assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["SONG", 2, 10]]);
 textDraws.length = 0;
 litPixels = 0;
 drawSubmenu(matrix, { mode: "etc", subIndex: 3 }, now);
-assert.equal(litPixels, 6); // ETC includes SWAP.
+assert.equal(litPixels, 5); // SWAP lives in SETT.
 assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["ADV", 2, 10]]);
 litPixels = 0;
 drawMenu(matrix, { menuIndex: 8 });
@@ -426,7 +426,9 @@ for (const cols of [16,32]) {
     letters.length=0;ink.length=0;
     drawBpm(m,{bpm,ledBrightness:64,clockInt:true});
     assert.equal(letters.map(a=>a[0]).join('.'),bpm.toFixed(1));
-    assert(letters.every(a=>a[2]===6));
+    assert(letters.every(a=>a[2]===4));
+    assert.deepEqual(letters.at(-1)[3],[148,0,211]);
+    assert(ink.some(c=>c[1]===4&&c[2][0]===255&&c[2][1]===255&&c[2][2]===255),'white BPM decimal point');
     for(const [text,x] of letters)assert(x>=1&&x+textPixelWidth(text)-2<=cols);
   }
   letters.length=0;ink.length=0;
@@ -539,11 +541,11 @@ swapDevice.start();now+=6000;frame(now);now+=6000;frame(now);
 const swapCells=Array.from({length:256*16},(_,i)=>({channel:[1,11,13,14,2,0][i%6],velocity:1+i%127,probability:i%101,condition:1+i%22,midiPitch:[0,60,127,255][i%4]}));
 swapDevice.importPatternCells(swapCells,120);
 const original=swapDevice.exportPatternCells();
-swapDevice.jump('menu');for(let i=0;i<9;i++)swapDevice.rotate(3,1);
-swapDevice.press(3);for(let i=0;i<5;i++)swapDevice.rotate(3,1);
+swapDevice.jump('menu');for(let i=0;i<5;i++)swapDevice.rotate(3,1);
+swapDevice.press(3);for(let i=0;i<4;i++)swapDevice.rotate(3,1);
 assert.equal(swapDevice.menuSummary().detail,'SWAP: 1<>11');
 swapDevice.knobDown(3);swapDevice.knobUp(3,false);
-assert.equal(swapDevice.mode(),'etc','confirmation stays on SWAP');
+assert.equal(swapDevice.mode(),'look','confirmation stays on SWAP');
 assert.deepEqual(swapDevice.exportPatternCells(),original.map(n=>({...n,channel:n.channel===1?11:n.channel===11?1:n.channel})));
 swapDevice.press(3);assert.deepEqual(swapDevice.exportPatternCells(),original,'a second swap restores every note and metadata');
 for(let i=0;i<9;i++)swapDevice.rotate(1,1); // A=13
@@ -572,18 +574,44 @@ assert.deepEqual(swapDevice.exportPatternCells(),beforeShift.map((n,i)=>{
  const channel=n.channel===13?14:13,shift=n.channel===13?96:-96;
  return {...n,channel,midiPitch:Math.max(0,Math.min(127,(n.midiPitch<=127?n.midiPitch:neutral(channel,i%16+1))+shift))};
 }));
-swapDevice.rotate(3,-1);assert.equal(swapDevice.subIndex(),4,'encoder 4 rotation leaves SWAP');
+swapDevice.rotate(3,-1);assert.equal(swapDevice.subIndex(),3,'encoder 4 rotation leaves SWAP');
 swapDevice.rotate(3,1);const beforeExit=swapDevice.exportPatternCells();swapDevice.press(0);
 assert.equal(swapDevice.mode(),'draw','encoder 1 exits without confirming');
 assert.deepEqual(swapDevice.exportPatternCells(),beforeExit);
 for(const width of [16,32]) {
  setLayout(width);const text=[];
- drawSubmenu({light(){},drawLargeCustom(){},drawIndicator(){},drawText:(...a)=>text.push(a)},{mode:'etc',subIndex:5,swapFrom:13,swapTo:14,swapAt:0},now);
+ drawSubmenu({light(){},drawLargeCustom(){},drawIndicator(){},drawText:(...a)=>text.push(a)},{mode:'look',subIndex:4,swapFrom:13,swapTo:14,swapAt:0},now);
  assert.deepEqual(text.slice(0,3).map(a=>a[0]),['SWAP','13','14']);
  assert.equal(text[2][1],width===32?24:10);
 }
 setLayout(32);
 console.log('PASS: SWAP controls, 256-step exchange, metadata preservation, synth channels, no-op and navigation.');
+
+// ETC > RSET > RVRB bypasses just reverb/crush, preserving patch and pattern.
+const bypassDevice=createDevice(matrix,{},[]);
+bypassDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+bypassDevice.importPatternCells(swapCells,123);
+const bypassNotes=bypassDevice.exportPatternCells(),beforeBypass=new Map();
+for(const ch of [1,2,3,4,5,6,7,8,11,13,14]) {
+ bypassDevice.selectVoice(ch);bypassDevice.jump('filter');
+ bypassDevice.rotate(0,-5);bypassDevice.rotate(3,9);
+ if(ch!==13&&ch!==14)bypassDevice.rotate(2,8);
+ const call=audioCalls.filter(c=>c[0]==='apply'&&c[1]===ch).at(-1);
+ beforeBypass.set(ch,JSON.parse(JSON.stringify(call.slice(2))));
+}
+bypassDevice.jump('menu');for(let i=0;i<9;i++)bypassDevice.rotate(3,1);
+bypassDevice.press(3);for(let i=0;i<4;i++)bypassDevice.rotate(3,1);
+for(let i=0;i<7;i++)bypassDevice.rotate(2,1);
+assert.equal(bypassDevice.menuSummary().detail,'RSET: RVRB');
+audioCalls.length=0;bypassDevice.press(1);
+for(const [ch,args] of beforeBypass) {
+ const call=audioCalls.filter(c=>c[0]==='apply'&&c[1]===ch).at(-1);
+ const expected=JSON.parse(JSON.stringify(args));expected[0].r=0;expected[0].b=0;
+ assert.deepEqual(call.slice(2),expected,`RVRB preserves other sound settings on ${ch}`);
+}
+assert.deepEqual(bypassDevice.exportPatternCells(),bypassNotes);
+console.log('PASS: RSET > RVRB bypasses reverb/crush on every voice without resetting the patch or pattern.');
+
 
 // Paint only replaces a foreign note whose mono voice already has a higher hit.
 stored.clear();
@@ -625,7 +653,7 @@ assert.equal(rightPaint.exportPatternCells()[2].channel,2);
 assert.equal(rightPaint.exportPatternCells()[8].channel,1);
 console.log('PASS: right-hand encoder painting replaces a shadowed blocker without erasing.');
 
-// Pattern settings are opt-in; saving always captures the current sound state.
+// Saved sounds are the default; sideload is scoped to a single selected file.
 {
 stored.clear();
 const pattDevice=createDevice(matrix,{},[]);
@@ -639,22 +667,39 @@ function pattOpen(slot){
 function pattSave(slot){pattOpen(slot);pattDevice.press(1);return JSON.parse(stored.get('toern-web-patterns'))[slot];}
 const live=pattSave(1);
 const incoming=structuredClone(live);
-incoming.filt[1].reverb=31;incoming.chVol[1]=5;incoming.bpm=147;
+incoming.filt[1].r=31;incoming.chVol[1]=5;incoming.bpm=147;
 incoming.notes[0]=[14,127,100,1,57];
 stored.set('toern-web-patterns',JSON.stringify({1:live,2:incoming}));
+// Saved settings load by default.
 pattOpen(2);pattDevice.press(0);
 let saved=pattSave(3);
-assert.deepEqual(saved.filt,live.filt,'OFF preserves editable sound settings');
-assert.deepEqual(saved.chVol,live.chVol,'OFF preserves voice volumes');
+assert.deepEqual(saved.filt,incoming.filt);
+assert.deepEqual(saved.chVol,incoming.chVol);
 assert.deepEqual(saved.notes[0],incoming.notes[0]);assert.equal(saved.bpm,147);
+// Clockwise enables sideload for this selected file only.
+pattOpen(1);pattDevice.press(0);
 pattOpen(2);pattDevice.rotate(2,1);pattDevice.press(0);
 saved=pattSave(4);
-assert.deepEqual(saved.filt,incoming.filt,'clockwise enables stored sound settings');
-assert.deepEqual(saved.chVol,incoming.chVol);
-pattOpen(5);pattDevice.rotate(2,-1);pattDevice.press(1);
-saved=JSON.parse(stored.get('toern-web-patterns'))[5];
-assert.deepEqual(saved.filt,incoming.filt,'saving includes settings even with loading OFF');
-assert.deepEqual(saved.chVol,incoming.chVol);
+assert.deepEqual(saved.filt,live.filt,'sideload preserves current editable sounds');
+assert.deepEqual(saved.chVol,live.chVol);
+assert.deepEqual(saved.notes[0],incoming.notes[0]);
+// Moving away and back clears sideload, even within one browser visit.
+pattOpen(2);pattDevice.rotate(2,1);pattDevice.rotate(3,-1);pattDevice.rotate(3,1);pattDevice.press(0);
+saved=pattSave(5);
+assert.deepEqual(saved.filt,incoming.filt,'file changes reset sideload');
+// Re-entering the same selection clears sideload too.
+pattOpen(1);pattDevice.rotate(2,1);pattDevice.jump('draw');pattOpen(1);pattDevice.press(0);
+saved=pattSave(6);assert.deepEqual(saved.filt,live.filt,'browser re-entry defaults to saved sounds');
+pattOpen(7);pattDevice.rotate(2,1);pattDevice.press(1);
+saved=JSON.parse(stored.get('toern-web-patterns'))[7];
+assert.deepEqual(saved.filt,live.filt,'saving always includes current sounds');
+// Sustain cannot be lowered below 1 on sample or synth ADSR pages.
+for (const ch of [1,11,13,14]) {
+ pattDevice.selectVoice(ch);pattDevice.jump('filter');
+ for(let i=0;i<(ch===1?2:3);i++){pattDevice.touch(2,true);pattDevice.touch(2,false);}
+ pattDevice.rotate(2,-1000);
+ assert.equal(pattSave(8).filt[ch].sus,1,`minimum sustain on voice ${ch}`);
+}
 const {drawLoadSave}=await import('../standalone-tools/web-standalone/src/firmware/screens.js');
 for(const width of [16,32])for(const loadSoundSettings of [false,true]) {
  setLayout(width);const red=[];
@@ -663,5 +708,15 @@ for(const width of [16,32])for(const loadSoundSettings of [false,true]) {
  const x=width===16?9:19;
  assert.deepEqual(red,loadSoundSettings?[]:[[x,3],[x+2,3],[x+1,4],[x,5],[x+2,5]]);
 }
-console.log('PASS: default notes load preserves sounds; E3 enables settings, saving is unconditional, and the red X has five pixels starting at y=3 on both layouts.');
+console.log('PASS: saved sounds default ON, sideload resets per file/visit, saving preserves sounds, and sustain stops at 1.');
 }
+
+// CTRL=PAGE shows page feedback with the default NORM cursor setting.
+stored.clear();const pageDevice=createDevice(matrix,{},[]);
+pageDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+pageDevice.jump('menu');for(let i=0;i<5;i++)pageDevice.rotate(3,1);
+pageDevice.press(3);pageDevice.rotate(3,1);pageDevice.rotate(2,-1);
+pageDevice.jump('draw');textDraws.length=0;
+pageDevice.rotate(1,1);now+=16;frame(now);
+assert(textDraws.some(c=>c[0]==='2'&&c[2]===11),'page overlay is independent of CHNR');
+console.log('PASS: page-number overlay appears in NORM cursor mode.');
