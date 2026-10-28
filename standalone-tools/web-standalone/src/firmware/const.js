@@ -128,5 +128,5 @@ export const COND_VALUE = [1, 2, 4, 8, 16, 17, 18, 19, 20, 21, 22];
 export const PROB = [0, 25, 50, 75, 100];
 
 export function emptyNote() {
-  return { channel: 0, velocity: 100, probability: 100, condition: 1, midiPitch: 255 };
+  return { channel: 0, velocity: 127, probability: 100, condition: 1, midiPitch: 255 };
 }

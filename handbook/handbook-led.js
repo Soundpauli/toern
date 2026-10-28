@@ -601,6 +601,10 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
     m.indM(1, txtExists ? "G" : "E");
     m.indM(2, txtExists ? "D" : "R");
     m.indL(4, "X");
+    if (txtExists) {
+      const [x1, x2, x3] = getIndX(3);
+      for (const [x,y] of [[x1,3],[x3,3],[x2,4],[x1,5],[x3,5]]) m.set(x,y,255,0,0);
+    }
     const numC = txtExists ? UI.BRIGHT_GREEN : UI.BLUE;
     const s = String(fileNum);
     let tw = 0;
@@ -1259,7 +1263,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       m.cursor(10, 9);
       m.indM(1, "X");
       m.indM(4, "G");
-      drawText(m, "C+P", Math.max(1, Math.floor((m.w - 11) / 2) + 1), 6, 255, 255, 0);
+      drawText(m, "c+p", Math.max(1, Math.floor((m.w - 11) / 2) + 1), 6, 255, 255, 0);
     },
     note_shift(m) {
       const cur = 3;

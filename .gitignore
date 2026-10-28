@@ -25,3 +25,6 @@ tools/audio-converter-standalone/SD-CARD-CONTENT.zip
 
 # Local-only; do not track
 tools/cost-planner/
+
+# PlatformIO regenerates this Arduino translation unit from the sketch tabs.
+/toern.ino.cpp

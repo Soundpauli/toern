@@ -28,6 +28,7 @@
           <h2 class="handbook-page__title" data-hb-copy="sound.001">Sound design</h2>
           <p class="handbook-page__summary" data-hb-copy="sound.002">Voices have different signal paths. Samples and synths have envelopes, filtering, delay and effects, with reverb available only on selected voices. This chapter walks each stage and the voice-specific filter pages where you control them.</p>
 
+          <p>New notes, default auditions and initial TOUCHY hits use velocity 127. Existing patterns and incoming MIDI keep their own velocities. Resetting all sound pages shows a blue checkmark for 800 ms, then returns to the filter page.</p>
           <section class="hb-sub" id="signal-chain">
             <h2 data-hb-copy="sound.003">The signal chain</h2>
             <p class="lede" data-hb-copy="sound.004">A sample voice broadly follows this path. Reverb is available on voices 1, 2 and 5–8 and the poly synth; voices 3, 4, 13 and 14 do not have a reverb send.</p>
@@ -86,8 +87,8 @@
               <table class="opt-table">
                 <thead><tr><th>Letter</th><th>Full name</th><th>What it does</th><th>Range</th></tr></thead>
                 <tbody>
-                  <tr><td><strong>H</strong></td><td>HCUT</td><td>High cut — SVF lowpass. Full 0–32 fader (no LP/HP split).</td><td>0–32 ≈ 280 Hz – 10 kHz (32 = open)</td></tr>
-                  <tr><td><strong>L</strong></td><td>LCUT</td><td data-hb-copy="sound.020">Low cut — SVF highpass. 0 uses HCUT (lowpass); 1–32 switches the mixer to highpass.</td><td>0 = off, 1–32 ≈ 40 Hz – 2.5 kHz</td></tr>
+                  <tr><td><strong>H</strong></td><td>HCUT</td><td>High cut — SVF lowpass. At 32 with LCUT off, samples use a true dry bypass.</td><td>0–31 ≈ 280 Hz – 9.7 kHz; 32 = dry when LCUT is off</td></tr>
+                  <tr><td><strong>L</strong></td><td>LCUT</td><td data-hb-copy="sound.020">Low cut — SVF highpass. 0 uses HCUT (lowpass or dry bypass); 1–32 switches the mixer to highpass.</td><td>0 = off, 1–32 ≈ 40 Hz – 2.5 kHz</td></tr>
                   <tr><td><strong>R</strong></td><td>RVRB</td><td>Send level into the shared reverb bus.</td><td>0–32 (0 = dry). <em>Not on voices 3, 4, 13, or 14.</em></td></tr>
                   <tr><td><strong>B</strong></td><td>BITC</td><td>Bitcrusher depth + sample-rate reduction (combined macro).</td><td>0 = bypass, 1–32 increases crush</td></tr>
                 </tbody>

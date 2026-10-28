@@ -436,7 +436,7 @@ export function createEngine() {
   function preview(wav) {
     ensure();
     if (ctx.state === "suspended") ctx.resume();
-    play(KINDS[wav.index] || "kick", wav.velocity ?? 100, ctx.currentTime, wav.seek, wav.end, wav.inv, ctx.__preview, 1, wav.env, wav.buffer || null);
+    play(KINDS[wav.index] || "kick", wav.velocity ?? 127, ctx.currentTime, wav.seek, wav.end, wav.inv, ctx.__preview, 1, wav.env, wav.buffer || null);
   }
 
   let clickBuf = null;

@@ -130,7 +130,7 @@ export function createDevice(matrix, statusEl, rings) {
     faderPositions: Array(9).fill(null), faderAt: Array(9).fill(0),
     presetSlot: 1, presetSlots: Array(16).fill(1),
     fnHeld: false, fnArrow: "", fnArrowAt: 0,
-    touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(100), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
+    touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(127), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
     menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: false,
     genre: 0, genreLength: 8,
@@ -376,7 +376,7 @@ export function createDevice(matrix, statusEl, rings) {
       const n = note[x][y];
       if (!n.channel) {
         n.channel = s.imgBrushChannel || 1;
-        n.velocity = 100;
+        n.velocity = 127;
         n.probability = 100;
         n.condition = 1;
         n.midiPitch = 255;
@@ -395,7 +395,7 @@ export function createDevice(matrix, statusEl, rings) {
     const channel = s.GLOB.singleMode ? s.GLOB.currentChannel : channelOfRow(y);
     const replace = canReplaceShadowed(note,x,y,channel);
     if (n.channel && n.channel !== channel && !replace) return false;
-    if (!n.channel || replace) Object.assign(n,emptyNote(),{channel,velocity:100,probability:100,condition:1});
+    if (!n.channel || replace) Object.assign(n,emptyNote(),{channel,velocity:127,probability:100,condition:1});
     queueAutosave();
     return true;
   }
@@ -405,7 +405,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (paintCell(x, y)) playCell(x, y);
   }
   /** MIDI live grid write in SINGLE; WRTE OFF skips occupied cells. */
-  function placeLiveGridNote(step, row, channel, velocity = 100, midiPitch = 255) {
+  function placeLiveGridNote(step, row, channel, velocity = 127, midiPitch = 255) {
     if (!s.midiReceive) return false;
     if (row < 1 || row > 15 || step < 1 || step > STEPS) return false;
     const n = note[step][row];
@@ -1978,7 +1978,7 @@ export function createDevice(matrix, statusEl, rings) {
   function playMicRec() {
     if (!recTake) return;
     const ch = s.GLOB.currentChannel;
-    engine.preview({ index: 0, seek: 0, end: 100, inv: false, velocity: 100, buffer: recTake, env: wavOpts(ch).env });
+    engine.preview({ index: 0, seek: 0, end: 100, inv: false, velocity: 127, buffer: recTake, env: wavOpts(ch).env });
     s.recPlay = true;
     s.recPlayAt = performance.now();
   }
@@ -2004,7 +2004,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (x < 1 || x > STEPS || y < 1 || y > 15) return;
     Object.assign(note[x][y], emptyNote(), {
       channel: ch,
-      velocity: 100,
+      velocity: 127,
       probability: 100,
       condition: 1,
     });
@@ -2069,7 +2069,7 @@ export function createDevice(matrix, statusEl, rings) {
       const y = s.GLOB.y;
       if (y >= 1 && y <= 15 && ch >= 1 && ch <= 8) {
         Object.assign(note[s.beat][y], emptyNote(), {
-          channel: ch, velocity: 100, probability: 100, condition: 1,
+          channel: ch, velocity: 127, probability: 100, condition: 1,
         });
         queueAutosave();
       }
@@ -2952,7 +2952,7 @@ export function createDevice(matrix, statusEl, rings) {
           if (!c || !c.channel) continue;
           Object.assign(note[x][y], {
             channel: c.channel,
-            velocity: c.velocity || 100,
+            velocity: c.velocity || 127,
             probability: c.probability != null ? c.probability : 100,
             condition: c.condition != null ? c.condition : 1,
             midiPitch: c.midiPitch <= 127 ? c.midiPitch : 255,

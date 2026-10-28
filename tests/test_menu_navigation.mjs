@@ -258,6 +258,7 @@ for (let id=1; id<=5; id++) {
   assert.equal(d.voice(),id);
 }
 assert.deepEqual(audioCalls.filter(c=>c[0]==="trigger").map(c=>c[1]),[1,2,3,4,5]);
+assert(audioCalls.filter(c=>c[0]==="trigger").every(c=>c[2]===127),"all TOUCHY pads start at full velocity");
 // Holding and brief release chatter cannot retrigger; a stable release rearms.
 const hits=()=>audioCalls.filter(c=>c[0]==="trigger").length;
 for(let i=0;i<8;i++){ d.touch(5,true); now+=10; d.touch(5,false); }
@@ -274,7 +275,7 @@ assert.equal(controls.at(-1)[2].r,1);
 assert.equal(controls.at(-1)[2].l,1);
 now+=61; d.touch(5,true); d.touch(5,false);
 const hit5=audioCalls.filter(c=>c[0]==="trigger").at(-1);
-assert.equal(hit5[2],99);
+assert.equal(hit5[2],126);
 assert.equal(hit5[4].oct,-1/12);
 // Moving to another pad changes the target, preserves each voice's velocity,
 // and suppresses unsupported reverb on voices 3/4.
@@ -283,7 +284,7 @@ d.rotate(2,1); assert.equal(audioCalls.length,0);
 d.rotate(0,1); d.rotate(3,1);
 assert(audioCalls.every(c=>c[1]===3 && c[3]===16));
 now+=61; d.touch(5,true); d.touch(5,false);
-assert.equal(audioCalls.filter(c=>c[0]==="trigger").at(-1)[2],99);
+assert.equal(audioCalls.filter(c=>c[0]==="trigger").at(-1)[2],126);
 for(let enc=0;enc<4;enc++) {
   d.press(enc); assert.equal(d.mode(),"wav"); assert.equal(d.voice(),enc+1); d.jump("draw");
 }
@@ -602,7 +603,7 @@ for(const mode of ['draw','single'])for(const gesture of ['click','drag','encode
  if(gesture==='encoder'){paintDevice.moveCursor(1,3);paintDevice.press(3);}
  else paintDevice.pointer(1,3,false,gesture==='click');
  const painted=paintDevice.exportPatternCells();
- assert.deepEqual(painted[2],{channel:brush,velocity:100,probability:100,condition:1,midiPitch:255},`${mode} ${gesture}`);
+ assert.deepEqual(painted[2],{channel:brush,velocity:127,probability:100,condition:1,midiPitch:255},`${mode} ${gesture}`);
  assert.deepEqual(painted[8],upperBefore,'the audible higher hit is unchanged');
 }
 for(const [blocked,upper,probability,condition] of [[1,0,100,1],[11,11,100,1],[13,13,99,1],[14,14,100,2]]) {

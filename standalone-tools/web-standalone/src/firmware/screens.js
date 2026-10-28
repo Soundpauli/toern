@@ -1,3 +1,4 @@
+import { canReplaceShadowed } from "./paint.js";
 import { INSTRUMENT_NAMES } from "./instruments.js";
 import { syncHasEffect } from "./performance.js";
 import { COL, COL_BASE, COLS, ROWS, PAGES, SCHEMES, filterPagesFor } from "./const.js";
@@ -204,34 +205,39 @@ export function drawTriggers(matrix, s, now) {
   const baseCol = pal(s).base;
   for (let ix = 1; ix <= COLS; ix++) {
     for (let iy = 1; iy <= ROWS; iy++) {
-      let cell;
+      let cell, step;
       if (voiceGrid && s.voiceOwnedStep) {
         const src = s.voiceOwnedStep(iy, ix, voiceGlobalPage(s));
         if (!src) continue;
-        cell = s.note[src][iy];
+        step = src;
+        cell = s.note[step][iy];
       } else {
-        cell = s.note[(s.GLOB.edit - 1) * COLS + ix][iy];
+        step = (s.GLOB.edit - 1) * COLS + ix;
+        cell = s.note[step][iy];
       }
       const ch = cell.channel;
       if (!ch) continue;
+      const shadowed = canReplaceShadowed(s.note,step,iy,0);
+      const drawNoteColor = color => matrix.light(ix,iy,shadowed ? color.map(c=>Math.floor(c/5)) : color);
+
       if (easy && !voiceGrid) {
         const voiceY = ch + 1;
-        matrix.light(ix, iy, [0, 0, 0]);
+        drawNoteColor([0, 0, 0]);
         if (voiceY >= 1 && voiceY <= ROWS) {
           matrix.light(ix, voiceY, s.mute[ch] ? baseCol[ch] : col[ch]);
         }
         continue;
       }
       if (s.mute[ch]) {
-        matrix.light(ix, iy, s.GLOB.singleMode ? [20, 20, 20] : (baseCol[ch] || [0, 0, 0]));
+        drawNoteColor(s.GLOB.singleMode ? [20, 20, 20] : (baseCol[ch] || [0, 0, 0]));
         continue;
       }
       if (s.GLOB.singleMode && ch !== s.GLOB.currentChannel) {
-        matrix.light(ix, iy, baseCol[ch] || [0, 0, 0]);
+        drawNoteColor(baseCol[ch] || [0, 0, 0]);
         continue;
       }
       if (s.fullMute) {
-        matrix.light(ix, iy, baseCol[ch] || [0, 0, 0]);
+        drawNoteColor(baseCol[ch] || [0, 0, 0]);
         continue;
       }
       if (s.GLOB.singleMode && ch === s.GLOB.currentChannel) {
@@ -242,11 +248,11 @@ export function drawTriggers(matrix, s, now) {
           const red = Math.round(255 - (cell.probability / 100) * 175);
           color = [red, 0, 0];
         }
-        matrix.light(ix, iy, color);
+        drawNoteColor(color);
       } else if (s.GLOB.singleMode) {
-        matrix.light(ix, iy, baseCol[ch] || [0, 0, 0]);
+        drawNoteColor(baseCol[ch] || [0, 0, 0]);
       } else {
-        matrix.light(ix, iy, col[ch] || [255, 255, 255]);
+        drawNoteColor(col[ch] || [255, 255, 255]);
       }
     }
   }
@@ -401,10 +407,15 @@ export function drawTimer(matrix, s) {
   }
   for (let y = 1; y < ROWS; y++) {
     let ch = 0;
+    let step;
     if (voiceGrid && s.voiceOwnedStep) {
-      const src = s.voiceOwnedStep(y, x, voiceGlobalPage(s));
-      ch = src ? s.note[src][y].channel : 0;
-    } else ch = s.note[(s.GLOB.edit - 1) * COLS + x][y].channel;
+      step = s.voiceOwnedStep(y, x, voiceGlobalPage(s));
+      ch = step ? s.note[step][y].channel : 0;
+    } else {
+      step = (s.GLOB.edit - 1) * COLS + x;
+      ch = s.note[step][y].channel;
+    }
+    if (ch > 0 && canReplaceShadowed(s.note,step,y,0)) continue;
     matrix.light(x, y, [28, 0, 0]);
     if (ch > 0 && !s.mute[ch]) {
       const lit = !s.GLOB.singleMode || s.GLOB.currentChannel === ch;
@@ -1391,7 +1402,7 @@ export function renderFrame(matrix, s, now) {
     if (s.chNrAt && now - s.chNrAt < 800 && s.mode === "draw" && ([1,2,3,4,5,6,7,8,11,13,14].includes(s.chNr))) drawChannelNr(matrix, s);
     if (s.pageNrAt && now - s.pageNrAt < 800 && (s.mode === "draw" || s.mode === "single")) drawPageNr(matrix, s);
     if (s.copyArmed) {
-      const text = "C+P";
+      const text = "c+p";
       const width = textPixelWidth(text) - 1;
       const x = Math.max(1, Math.floor((COLS - width) / 2) + 1);
       const y = Math.floor((ROWS - 5) / 2) + 1;

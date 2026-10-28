@@ -61,3 +61,8 @@ for (let ch=1; ch<=8; ch++) {
   assert.equal(sample.stops.at(-1),ctx.currentTime+.5+.02,'configured release is used');
 }
 console.log('PASS: all sample channels bypass cuts smoothly, feed effects from the sum, and honor held MIDI release.');
+
+engine.preview({index:0,seek:0,end:100});
+assert.equal(nodes.filter(n=>n.kind==='sample').at(-1).connections[0].gain.value,1,'default audition uses velocity 127');
+engine.preview({index:0,seek:0,end:100,velocity:23});
+assert.equal(nodes.filter(n=>n.kind==='sample').at(-1).connections[0].gain.value,23/127,'explicit audition velocity is retained');

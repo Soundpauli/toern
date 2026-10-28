@@ -52,5 +52,26 @@ for(const [name,ch,upper,y,step,prob,cond,lowercond,brush,expected] of cases){
  assert.equal(canReplaceShadowed(grid,1,3,brush),expected,name);
 }
 '''.replace('CASES',json.dumps(cases))
+js += r"""
+import {drawTriggers,drawTimer} from './standalone-tools/web-standalone/src/firmware/screens.js';
+for(const ch of [1,11,13,14])for(const singleMode of [false,true])for(const selected of [ch,2])for(const muted of [false,true])for(const probability of [99,100]) {
+ const note=Array.from({length:257},()=>Array.from({length:17},()=>({channel:0,probability:100,condition:1})));
+ note[1][3]={channel:ch,probability:100,condition:1};
+ const s={note,GLOB:{singleMode,currentChannel:selected,edit:1},mute:{[ch]:muted}};
+ let color;
+ const matrix={light(x,y,c){if(x===1&&y===3)color=c.slice();}};
+ drawTriggers(matrix,s,301);const baseline=color;
+ note[1][9]={channel:ch,probability,condition:1};
+ drawTriggers(matrix,s,301);
+ const expected=ch!==11&&probability===100?baseline.map(c=>Math.floor(c/5)):baseline;
+ assert.deepEqual(color,expected,`dim ch${ch} single=${singleMode} selected=${selected} muted=${muted} probability=${probability}`);
+ if(ch!==11&&probability===100) {
+   Object.assign(s,{beat:1,page:1,playing:true});
+   drawTimer(matrix,s);
+   assert.deepEqual(color,expected,'playhead must preserve the dim shadowed note');
+ }
+}
+console.log('PASS: SINGLE and DRAW shadowed notes use 20% brightness; audible and polyphonic notes are unchanged.');
+"""
 subprocess.run(['node','--input-type=module','-e',js],cwd=root,check=True)
-print(f'PASS: {len(cases)} firmware/SIM shadow-paint cases.')
+print(f'PASS: {len(cases)} firmware/SIM shadow-paint cases, including polyphony, probability, conditions and fills.')

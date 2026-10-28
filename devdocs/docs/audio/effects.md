@@ -56,3 +56,11 @@ Only samples 1–8 expose **V** / VOLUME (`ARR_GAIN`) beside DLAY, encoder 2. Th
 Pause releases every sample envelope, all three poly slots via `releaseAllPolySynthVoices()`, and mono voices 13/14. It does not clear delay/freeverb buffers or reset their settings. `pendingPauseAudioCleanup` is serviced independently of SD autosave by `servicePauseAudioCleanup()`: sample readers stop only after their envelopes become inactive and the quiet guard has elapsed. Existing effect buffers continue decaying naturally. Fresh Play/audition cancels pending cleanup.
 
 Do not add a fixed tail timeout or clear effects in the autosave path. A quiet envelope is not proof that a long feedback/reverb tail has finished. `tests/test_pause_effects.py` exercises release behavior and actual DSP-tail decay.
+
+## Velocity and display feedback
+
+New notes and default auditions use velocity 127 in firmware and simulator, including the initial TOUCHY pad velocities. Existing saved note velocities and incoming MIDI velocities retain their values.
+
+A lower monophonic note overridden by a guaranteed higher note at the same step is rendered at 20% of its normal RGB brightness. The playhead does not flash that overridden note. Probabilistic or nonmatching conditional higher notes do not dim an audible lower note; CH11 polyphonic notes remain unchanged. Copy-armed feedback uses the lowercase `c+p` label.
+
+Resetting all filter pages shows a blue checkmark for 800 ms. The filter renderer includes the overlay before early rate-limited presentations and restores the page when feedback expires.

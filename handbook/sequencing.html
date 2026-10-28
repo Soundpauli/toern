@@ -30,7 +30,7 @@
 
           <section class="hb-sub" id="draw">
             <h2 data-hb-copy="sequencing.003">Draw mode (the default view)</h2>
-            <p class="lede" data-hb-copy="sequencing.004">Draw mode is what greets you on power-up. Every voice is visible at full intensity; the red playhead line runs across all rows at once; the cursor is the focus point.</p>
+            <p class="lede" data-hb-copy="sequencing.004">Draw mode is what greets you on power-up. Audible notes are visible at full intensity; overridden mono notes use 20% brightness; the red playhead line runs across all rows at once; the cursor is the focus point.</p>
             <article class="hb-device">
               <div class="hb-led-wrap hb-display-image">
                 <canvas class="led-matrix" data-scene="draw" width="640" height="320" role="img" aria-label="Draw grid"></canvas>
@@ -59,6 +59,7 @@
                 </tbody></table></div>
               </div>
             </article>
+          <p>New notes use velocity 127. A monophonic note that is guaranteed to be overridden by a higher note at the same step is shown at 20% brightness and does not flash with the playhead. Painting can replace that shadowed note; audible notes and CH11 chords remain protected.</p>
           </section>
 
 

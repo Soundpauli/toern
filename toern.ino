@@ -261,7 +261,7 @@ extern void handleStart();
 #define EEPROM_MIX_GAIN_ALL 41
 
 #define NUM_ENCODERS 4
-#define defaultVelocity 100
+#define defaultVelocity 127
 #define FOLDER_MAX 10
 
 #define maxPages 16
