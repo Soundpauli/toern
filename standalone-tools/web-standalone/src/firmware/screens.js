@@ -856,10 +856,12 @@ export function drawLoadSave(matrix, s) {
   } else if (s.slot === 0) {
     matrix.drawIndicator("M", exists ? "G" : "E", 1);
     matrix.drawIndicator("M", "E", 2);
-    matrix.drawText("A", 11, 11, exists ? UI_BRIGHT_GREEN : UI_BLUE);
+    const labelColor=exists?UI_BRIGHT_GREEN:UI_BLUE;
+    if(COLS>=32)matrix.drawText("AUTOSAVE",1,11,labelColor);
+    else {matrix.drawText("AUTO",1,12,labelColor);matrix.drawText("SAVE",1,7,labelColor);}
   } else if (exists) {
     matrix.drawIndicator("M", "G", 1);
-    matrix.drawIndicator("M", "D", 2);
+    matrix.drawIndicator("M", s.fnHeld?"R":"D", 2);
     matrix.drawNumber(s.slot, UI_BRIGHT_GREEN, 11);
   } else {
     matrix.drawIndicator("M", "E", 1);
@@ -1344,6 +1346,26 @@ export function drawDemo(matrix, elapsed) {
   }
 }
 
+export function drawBrowserConfirmation(matrix,s) {
+  const deleting=s.confirmation.deleting,yes=s.confirmChoice===1;
+  if(COLS<32&&!deleting){
+    const glyphs=[[3,2,3,1,3],[3,2,3,2,3],[3,1,1,0,1]],starts=[2,13,15];
+    for(let g=0;g<3;g++)for(let r=0;r<5;r++)for(let c=0;c<2;c++)if(glyphs[g][r]&(2>>c))matrix.light(starts[g]+c,15-r,UI_RED);
+    matrix.drawText("A",5,11,UI_RED);matrix.drawText("V",9,11,UI_RED);
+  }else matrix.drawText(deleting?"DEL?":"SAVE?",2,11,UI_RED);
+  matrix.drawText(yes?"YES":"NO",2,5,yes?UI_GREEN:UI_BLUE);
+  matrix.drawIndicator("M",yes?"G":"X",4);
+}
+function drawCanceled(matrix,elapsed) {
+  const cx=Math.floor((COLS+1)/2),cy=Math.floor((ROWS+1)/2);
+  const reveal=Math.min(7,Math.floor(elapsed/50)+1),brightness=elapsed>780?Math.round(220-(elapsed-780)*200/220):220;
+  for(let y=-3;y<=3;y++)for(let x=-3;x<=3;x++){
+    if(y<4-reveal)continue;
+    const outline=(Math.abs(x)===3&&Math.abs(y)<=2)||(Math.abs(y)===3&&Math.abs(x)<=2);
+    if(outline||(y===1&&Math.abs(x)===1)||(y===-1&&Math.abs(x)<=1))matrix.light(cx+x,cy+y,[0,0,brightness]);
+  }
+}
+
 export function renderFrame(matrix, s, now) {
   matrix.clear();
   matrix.setBrightness(s.ledBrightness);
@@ -1354,6 +1376,8 @@ export function renderFrame(matrix, s, now) {
     matrix.present();
     return;
   }
+  if(s.canceledAt&&now-s.canceledAt<1000){drawCanceled(matrix,now-s.canceledAt);matrix.present();return;}
+  if(s.mode==="confirm"){drawBrowserConfirmation(matrix,s);matrix.present();return;}
   const eyesIdle = s.eyesIdleMs || 0;
   if (eyesIdle > 0 && s.lastActivityAt && (now - s.lastActivityAt) >= eyesIdle
       && (s.mode === "draw" || s.mode === "single") && !s.playing) {

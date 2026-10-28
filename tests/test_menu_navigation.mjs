@@ -664,7 +664,7 @@ function pattOpen(slot){
  assert.equal(pattDevice.mode(),'dat');
  pattDevice.rotate(3,slot-pattSlot);pattSlot=slot;
 }
-function pattSave(slot){pattOpen(slot);pattDevice.press(1);return JSON.parse(stored.get('toern-web-patterns'))[slot];}
+function pattSave(slot){pattOpen(slot);pattDevice.press(1);if(pattDevice.mode()==='confirm'){pattDevice.rotate(3,1);pattDevice.press(3);}return JSON.parse(stored.get('toern-web-patterns'))[slot];}
 const live=pattSave(1);
 const incoming=structuredClone(live);
 incoming.filt[1].r=31;incoming.chVol[1]=5;incoming.bpm=147;
@@ -720,3 +720,47 @@ pageDevice.jump('draw');textDraws.length=0;
 pageDevice.rotate(1,1);now+=16;frame(now);
 assert(textDraws.some(c=>c[0]==='2'&&c[2]===11),'page overlay is independent of CHNR');
 console.log('PASS: page-number overlay appears in NORM cursor mode.');
+
+// Browser confirmation controls: no writes before YES, exact target, cancel restores selection.
+stored.clear();const confirmDevice=createDevice(matrix,{},[]);
+confirmDevice.start();now+=6000;frame(now);now+=6000;frame(now);
+let confirmSlot=1;
+function openConfirmPattern(slot){confirmDevice.jump('menu');confirmDevice.press(3);confirmDevice.rotate(3,slot-confirmSlot);confirmSlot=slot;}
+confirmDevice.importPatternCells([{channel:1,velocity:42,probability:100,condition:1,midiPitch:60}],123);
+openConfirmPattern(3);confirmDevice.press(1);
+const savedBefore=stored.get('toern-web-patterns');
+confirmDevice.importPatternCells([{channel:2,velocity:75,probability:100,condition:1,midiPitch:65}],124);
+openConfirmPattern(3);confirmDevice.press(1);assert.equal(confirmDevice.mode(),'confirm');
+confirmDevice.press(1);assert.equal(stored.get('toern-web-patterns'),savedBefore,'save encoder does not confirm');
+confirmDevice.press(3);assert.equal(confirmDevice.mode(),'dat');assert.equal(stored.get('toern-web-patterns'),savedBefore,'NO leaves stored data intact');
+confirmDevice.press(1);confirmDevice.rotate(3,1);confirmDevice.touch(2,true);confirmDevice.touch(2,false);
+assert.equal(confirmDevice.mode(),'dat');assert.equal(confirmDevice.menuSummary().detail,'Slot 3');
+assert.equal(stored.get('toern-web-patterns'),savedBefore,'touch 2 cancels YES selection');
+confirmDevice.press(1);confirmDevice.rotate(3,1);confirmDevice.press(3);
+assert.notEqual(stored.get('toern-web-patterns'),savedBefore,'YES commits overwrite');
+openConfirmPattern(3);confirmDevice.touch(5,true);confirmDevice.press(1);confirmDevice.touch(5,false);
+assert.equal(confirmDevice.mode(),'confirm');confirmDevice.rotate(3,1);confirmDevice.press(3);
+assert.equal(confirmDevice.mode(),'dat');assert(!JSON.parse(stored.get('toern-web-patterns'))[3]);
+assert(confirmDevice.exportPatternCells().every(c=>!c.channel),'deleting loaded pattern clears live notes');
+// KIT overwrite cancellation preserves the selected kit and stored data.
+confirmDevice.jump('menu');confirmDevice.rotate(3,1);confirmDevice.press(3);confirmDevice.press(1);
+assert.equal(confirmDevice.mode(),'confirm');confirmDevice.press(3);assert.equal(confirmDevice.mode(),'kit');
+confirmDevice.touch(5,true);confirmDevice.press(1);confirmDevice.touch(5,false);
+assert.equal(confirmDevice.mode(),'confirm');confirmDevice.rotate(3,1);confirmDevice.press(3);assert.equal(confirmDevice.mode(),'kit');
+// SMP deletes only the selected file and returns to a clamped browser selection.
+confirmDevice.selectVoice(1);confirmDevice.jump('wav');
+confirmDevice.touch(5,true);confirmDevice.press(2);confirmDevice.touch(5,false);
+assert.equal(confirmDevice.mode(),'confirm');confirmDevice.press(3);assert.equal(confirmDevice.mode(),'wav');
+confirmDevice.touch(5,true);confirmDevice.press(2);confirmDevice.touch(5,false);
+assert.equal(confirmDevice.mode(),'confirm');confirmDevice.rotate(3,1);confirmDevice.press(3);assert.equal(confirmDevice.mode(),'wav');
+confirmDevice.touch(5,true);confirmDevice.press(2);confirmDevice.touch(5,false);assert.equal(confirmDevice.mode(),'wav','deleted WAV cannot be selected again');
+const {drawBrowserConfirmation,drawLoadSave:drawAutosave}=await import('../standalone-tools/web-standalone/src/firmware/screens.js');
+for(const width of [16,32]){
+ setLayout(width);const labels=[];
+ const screen={light(x,y){assert(x>=1&&x<=width&&y>=1&&y<=16);},drawText:(...a)=>labels.push(a),drawIndicator(){},drawNumber(){},setRing(){}};
+ drawBrowserConfirmation(screen,{confirmation:{deleting:false},confirmChoice:0});assert(labels.some(c=>c[0]==='NO'));
+ labels.length=0;drawAutosave(screen,{slot:0,slotExists:()=>true,loadSoundSettings:true});
+ assert.deepEqual(labels.map(c=>c[0]),width===32?['AUTOSAVE']:['AUTO','SAVE']);
+}
+setLayout(32);
+console.log('PASS: PATT/KIT/SMP confirmation, NO/YES/touch cancellation, loaded-pattern deletion, WAV selection and AUTOSAVE labels.');

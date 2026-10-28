@@ -197,7 +197,7 @@ extern void handleStart();
 #define BUTTON_A 5  // External SINGLE button (J12 pin 2), active LOW
 #define BUTTON_B 22 // External MENU button (J12 pin 1), active LOW
 #define BUTTON_C 15 // External REC / touch3 (J12 pin 3), active LOW
-#define BUTTON_D 14 // External touch4 (J14 pin 1), active LOW
+#define BUTTON_D 14 // External FN / touch5 (J14 pin 1), active LOW
 #define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6   // Capacitive touch4 >> current-voice audition (+ base-pitch note in SINGLE while playing)
 #define SWITCH_5 39
@@ -360,6 +360,7 @@ void drawPongBall();
 void resetPongGame();
 void showSaveSuccessAnimation(bool returnToDraw = true);
 void showSaveFailureAnimation(bool returnToDraw = true);
+void showCanceledAnimation(bool returnToDraw = true);
 void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted = false);
 int mapXtoPageOffset(int x);
 void stopSound(int note, int ch);
@@ -1068,6 +1069,7 @@ Mode loadSavePreset = { "LOADSAVE_PRESET", { 1, 1, 1, 1 }, { 1, 1, 1, 99 }, { 1,
 // pos[2] max 255: MIDI SYNC (45) stores transport delay as 0..254 = −127..+127 via offset 127
 Mode menu = { "MENU", { 1, 1, 0, 0 }, { 1, 1, 255, 16 }, { 1, 1, 10, 1 }, { 0x000000, 0x000000, 0x000000, 0x00FF00 } };
 // NEW: enc0=load (press), enc1=length, enc2=template, enc3=back to FILE (blue like FILE menu)
+Mode patternConfirmMode = { "PATTERN_CONFIRM", { 0, 0, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 }, { 0x000000, 0x000000, 0x000000, 0x0000FF } };
 Mode newFileMode = { "NEW_FILE", { 0, 1, 0, 0 }, { 0, 16, 5, 0 }, { 0, 8, 0, 0 }, { 0x00FF00, 0xFF00FF, 0xFFFF00, 0x0000FF } };
 Mode subpatternMode = { "SUBPATTERN", { 1, 0, 0, 1 }, { 1, 7, maxfilterResolution, 1 }, { 1, 1, maxfilterResolution, 1 }, { 0xFF00FF, 0x00FFFF, 0x000000, 0xFF00FF } };
 bool touchyEnabled = false;
@@ -1091,6 +1093,25 @@ static void refreshSamplerChannel(uint8_t channel);
 static void updateFnState();
 static uint8_t fnButtonEvent(int index, uint8_t physicalState);
 static bool fnHeld = false;
+static unsigned loadedPatternFileNumber = 0;
+static bool patternConfirmDelete = false;
+static unsigned patternConfirmTarget = 0;
+static uint32_t patternConfirmRevision = 0;
+static Mode *patternConfirmReturnMode = nullptr;
+static unsigned patternConfirmReturnPos[4] = {};
+static uint8_t patternConfirmResource = 0; // 0=PATT, 1=SMP, 2=KIT
+static char confirmedSampleDeletePath[160] = {};
+FLASHMEM void requestPatternSave(unsigned target);
+FLASHMEM void requestKitSave(unsigned target);
+FLASHMEM void requestBrowserDelete();
+FLASHMEM void openPatternConfirmation(unsigned target, bool deleting);
+FLASHMEM void finishPatternConfirmation(bool accept);
+FLASHMEM void showPatternConfirmation();
+FLASHMEM bool deleteConfirmedBrowserResource();
+void restoreSampleBrowserSelection(unsigned selection);
+bool captureSelectedSampleForDelete(char *out, size_t outSize);
+FLASHMEM void drawBrowserDeleteCross(int encoder);
+
 static bool fnButtonHeld[NUM_ENCODERS] = {};
 static bool handleFnEncoder(int index, int &rawValue, bool allowWrite);
 static void reverseChannelInMemory(uint8_t channel);
@@ -2237,7 +2258,7 @@ FLASHMEM void switchMode(Mode *newMode) {
     if ((newMode == &draw || newMode == &singleMode)
         && (oldMode == &menu || oldMode == &loadSaveTrack || oldMode == &loadSavePreset
             || oldMode == &set_SamplePack
-            || oldMode == &bpmMode || oldMode == &songMode || oldMode == &newFileMode
+            || oldMode == &bpmMode || oldMode == &songMode || oldMode == &newFileMode || oldMode == &patternConfirmMode
             || oldMode == &set_Wav)) {
       extern void noteMenuExit();
       noteMenuExit();
@@ -2736,7 +2757,23 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     preventPaintUnpaint = true;
     return;
   }
+  if (currentMode == &loadSaveTrack && currentMode->pos[3] > 1 && fnEvents[1] == 4) {
+    openPatternConfirmation(currentMode->pos[3] - 1u, true);
+    preventPaintUnpaint = true;
+    return;
+  }
+  if ((currentMode == &set_Wav && fnEvents[2] == 4)
+      || (currentMode == &set_SamplePack && fnEvents[1] == 4)) {
+    requestBrowserDelete();
+    preventPaintUnpaint = true;
+    return;
+  }
   if (fnHeld || modifiedEvent) return; // FN cannot fall through to normal button actions.
+  if (currentMode == &patternConfirmMode) {
+    if (match_buttons(currentButtonStates, 0, 0, 0, 1))
+      finishPatternConfirmation(patternConfirmMode.pos[3] == 1);
+    return;
+  }
   //checkFastRec();
 
   // In recordMode, allow encoder[2] press to stop recording (no auto-playback)
@@ -3054,7 +3091,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
   } else if ((currentMode == &loadSaveTrack) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
     // NEW (ui 0) and Autosave (ui 1 / file 0): load-only, never write from FILE menu
     if (currentMode->pos[3] != 0 && SMP.file != 0) {
-      savePattern(false);
+      requestPatternSave(currentMode->pos[3] - 1u);
       preventPaintUnpaint = true;
     }
     return;
@@ -3089,7 +3126,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     switchMode(GLOB.singleMode ? &singleMode : &draw);
     return;
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 0, 1, 0, 0)) {  // "0100"
-    saveSamplePack(SMP.pack);
+    requestKitSave(currentMode->pos[3]);
     return;                                                                                         // Prevent other button actions from being processed
   } else if ((currentMode == &set_SamplePack) && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
     // User-initiated samplepack load: overwrite any SP0 custom samples
@@ -5881,7 +5918,7 @@ static void triggerCurrentVoiceAudition(int pitchRow, int auditionVelocity = -1)
 // Capacitive pads use 4+5; the external panel uses buttons C+D.
 static bool pollTouchFillChord() {
   const bool first = readDebouncedTouch(exttouch ? 2 : 3);
-  const bool second = readDebouncedTouch(exttouch ? 3 : 4);
+  const bool second = readDebouncedTouch(4);
   return handleTouchFillChord(first, second);
 }
 
@@ -6286,6 +6323,8 @@ end_switch1:
           menuEnteredFromSingleMode = (currentMode == &singleMode);
           switchMode(&menu);
         }
+      } else if (currentMode == &patternConfirmMode) {
+        finishPatternConfirmation(false);
       } else if (currentMode == &newFileMode) {
         // Exit NEW mode without generating
         extern void resetNewModeState();
@@ -7478,7 +7517,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   // drawn on the idle frames stays on top of those screens.
   if (!fastRecordActive && currentMode != &velocity && currentMode != &filterMode && currentMode != &menu
       && currentMode != &set_Wav && currentMode != &recordMode && currentMode != &touchyMode
-      && currentMode != &loadSaveTrack && currentMode != &loadSavePreset && currentMode != &set_SamplePack) {
+      && currentMode != &loadSaveTrack && currentMode != &loadSavePreset && currentMode != &set_SamplePack
+      && currentMode != &patternConfirmMode) {
     drawCursor();
   }
   checkButtons();
@@ -7703,6 +7743,8 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     setBPM();
   } else if (currentMode->name == "VELOCITY") {
     setVelocity();
+  } else if (currentMode == &patternConfirmMode) {
+    showPatternConfirmation();
   } else if (currentMode->name == "LOADSAVE_TRACK") {
     showLoadSave();
   } else if (currentMode->name == "LOADSAVE_PRESET") {
@@ -10445,6 +10487,7 @@ FLASHMEM void showLoadSave() {
   static int lastUi = -2;
   static int8_t lastExists = -1;
   static int8_t lastLoadSettings = -1;
+  static bool lastFn = false;
   static uint32_t lastFileRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
   static uint32_t lastCallMs = 0;
   uint32_t nowMs = millis();
@@ -10482,10 +10525,11 @@ FLASHMEM void showLoadSave() {
   SMP_LOAD_SETTINGS = currentMode->pos[2] == 0;
 
   const int8_t loadSettingsDrawn = SMP_LOAD_SETTINGS ? 1 : 0;
-  if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn) {
+  if (!fileChanged && lastExists == (txtExists ? 1 : 0) && lastLoadSettings == loadSettingsDrawn && lastFn == fnHeld) {
     return;
   }
   lastLoadSettings = loadSettingsDrawn;
+  lastFn = fnHeld;
   lastExists = txtExists ? 1 : 0;
 
   FastLEDclear();
@@ -10535,10 +10579,13 @@ FLASHMEM void showLoadSave() {
     setFileRGB(1, 0x000000);
     if (txtExists) soundSettingsInd();
     else setFileRGB(2, 0x000000);
-    drawText("A", 11, 11, txtExists ? UI_BRIGHT_GREEN : UI_BLUE);
+    const CRGB labelColor = txtExists ? UI_BRIGHT_GREEN : UI_BLUE;
+    if (maxX >= 32) drawText("AUTOSAVE", 1, 11, labelColor);
+    else { drawText("AUTO", 1, 12, labelColor); drawText("SAVE", 1, 7, labelColor); }
   } else if (txtExists) {
     matrixInd('M', 'G', 1);
-    matrixInd('M', 'D', 2);
+    if (fnHeld) { drawBrowserDeleteCross(2); setFileRGB(1, 0xFF0000); }
+    else matrixInd('M', 'D', 2);
     soundSettingsInd();
     drawNumber(SMP.file, UI_BRIGHT_GREEN, 11);
   } else {
@@ -10644,6 +10691,8 @@ FLASHMEM void showSamplePack() {
   // SD.exists + full redraw + Duppa RGB every loop stalled play — only when pack changes.
   // Invalidate when re-entering this mode (gap = we weren't called last frames).
   static int lastPack = -2;
+  static bool lastFn = false;
+  static bool lastPackExists = false;
   static uint32_t lastPackRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
   static uint32_t lastCallMs = 0;
   uint32_t nowMs = millis();
@@ -10658,12 +10707,19 @@ FLASHMEM void showSamplePack() {
   bool packChanged = ((int)SMP.pack != lastPack);
   bool wavExists;
   if (packChanged) {
-    wavExists = SD.exists(OUTPUTf);
+    wavExists = false;
+    for (unsigned voice = 1; voice <= 8 && !wavExists; ++voice) {
+      snprintf(OUTPUTf, sizeof(OUTPUTf), "%u/%u.wav", SMP.pack, voice);
+      wavExists = SD.exists(OUTPUTf);
+    }
+    lastPackExists = wavExists;
     lastPack = (int)SMP.pack;
   } else {
-    return;
+    if (lastFn == fnHeld) return;
+    wavExists = lastPackExists;
   }
 
+  lastFn = fnHeld;
   FastLEDclear();
 
   // Samplepack icon: green if loading is possible (pack exists), dim red otherwise.
@@ -10689,7 +10745,8 @@ FLASHMEM void showSamplePack() {
 
   if (wavExists) {
     matrixInd('M', 'G', 1);
-    matrixInd('M', 'D', 2);
+    if (fnHeld) { drawBrowserDeleteCross(2); setPackRGB(1, 0xFF0000); }
+    else matrixInd('M', 'D', 2);
     drawNumber(SMP.pack, UI_BRIGHT_GREEN, 11);
   } else {
     matrixInd('M', 'E', 1);

@@ -818,6 +818,27 @@ FLASHMEM void showSaveFailureAnimation(bool returnToDraw) {
   if (returnToDraw) switchMode(&draw);
 }
 
+FLASHMEM void showCanceledAnimation(bool returnToDraw) {
+  const int cx = (int)((maxX + 1) / 2), cy = (int)((maxY + 1) / 2);
+  const uint32_t started = millis(), duration = 1000;
+  while (millis() - started < duration) {
+    const uint32_t elapsed = millis() - started;
+    const int reveal = min(7, (int)(elapsed / 50) + 1);
+    const uint8_t brightness = elapsed > 780
+      ? (uint8_t)map((long)elapsed, 780, (long)duration, 220, 20) : 220;
+    FastLEDclear();
+    for (int y = 3; y >= -3; --y) for (int x = -3; x <= 3; ++x) {
+      if (y < 4 - reveal) continue;
+      const bool outline = (abs(x) == 3 && abs(y) <= 2) || (abs(y) == 3 && abs(x) <= 2);
+      const bool eyes = y == 1 && abs(x) == 1;
+      const bool mouth = y == -1 && abs(x) <= 1;
+      if (outline || eyes || mouth) light(cx + x, cy + y, CRGB(0, 0, brightness));
+    }
+    FastLEDshow(); sdIoYield(); delay(16);
+  }
+  if (returnToDraw) switchMode(&draw);
+}
+
 FLASHMEM void drawRecordingBorder() {
   // Draw red border around entire screen
   CRGB redColor = CRGB(255, 0, 0);

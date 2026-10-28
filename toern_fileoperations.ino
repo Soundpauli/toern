@@ -107,21 +107,6 @@ FLASHMEM void savePattern(bool autosave) {
   char tmpPath[64], backupPath[64];
   snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", OUTPUTf);
   snprintf(backupPath, sizeof(backupPath), "%s.bak", OUTPUTf);
-  bool empty = true;
-  for (unsigned int x = 1; x < maxlen && empty; x++) {
-    for (unsigned int y = 1; y <= maxY; y++) {
-      if (note[x][y].channel != 0) { empty = false; break; }
-    }
-  }
-  // Preserve the intentional gesture: saving an empty grid clears this slot.
-  // Autosave still retains the empty session, rather than reviving old notes.
-  if (!autosave && empty) {
-    lastPatternSaveOk = deletePatternTransaction(SD, OUTPUTf, tmpPath, backupPath);
-    sdIoEndAudioSafe();
-    showPatternResult(lastPatternSaveOk);
-    switchMode(&draw);
-    return;
-  }
   recoverPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
   // Do not discard the only recoverable generation after failed recovery.
   if (!validPatternFile(OUTPUTf, false) && (validPatternFile(tmpPath, true) || validPatternFile(backupPath, false))) {
@@ -218,6 +203,7 @@ FLASHMEM void savePattern(bool autosave) {
     SD.remove(tmpPath);
   }
   lastPatternSaveOk = wroteOk;
+  if (wroteOk && !autosave) loadedPatternFileNumber = SMP.file;
   if (!autosave) {
     if (wroteOk) {
       showPatternResult(true);
@@ -391,6 +377,7 @@ FLASHMEM void saveSamplePack(int pack) {
 }
 
 FLASHMEM void loadPattern(bool autoload) {
+  const unsigned requestedFile = SMP.file;
   extern bool isNowPlaying;
   extern void stopSdPreviewIfPlaying();
   extern void sdIoYield();
@@ -495,6 +482,7 @@ FLASHMEM void loadPattern(bool autoload) {
       }
       unmuteAllChannels();
       applyMutesAfterPMODSwitch();
+      loadedPatternFileNumber = autoload || requestedFile == 0 ? SMP.file : requestedFile;
       loadedOk = true;
     }
     sdIoYield();

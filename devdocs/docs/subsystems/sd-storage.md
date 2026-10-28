@@ -40,7 +40,7 @@ Protocol details belong with those tools; the device side is `sdSerialServerPoll
 
 Pattern saves validate `<destination>.tmp`, keep the previous generation as `<destination>.bak`, then install the new file. Recovery prefers a valid destination, otherwise a valid destination-specific temporary file or backup. The old shared `pattern.tmp` is not promoted because it has no slot identity. Loading stages the complete payload before changing notes/settings.
 
-Saving an empty grid manually clears its numbered PATT slot and recovery companions. Autosave preserves an empty session. The five-second cooldown is updated only after a successful autosave. The power switch simply cuts power; it does not trigger saving.
+Saving an empty grid manually writes a valid empty numbered pattern; deletion is an explicit confirmed action. Autosave preserves an empty session. The five-second cooldown is updated only after a successful autosave. The power switch simply cuts power; it does not trigger saving.
 
 KIT writes check copied bytes and WAV headers and report success/failure. They are **not atomic across all eight files**. PATT save does not save sample audio, and PATT load does not reload the matching KIT.
 
@@ -53,3 +53,9 @@ Sample V gain remains part of the existing binary pattern layout; its tagged spa
 ### Sound settings and sideload
 
 PATT entry and each file-selection change default to loading saved sound settings (`SMP_LOAD_SETTINGS=true`, sideload encoder position 0). Turning encoder 3 clockwise enables sideload for that selection (position 1, red X), retaining current samples, effects, envelopes, synth settings and volumes in RAM and live audio. Counterclockwise disables sideload. Saving always captures current sound settings. Renderer-cache invalidation does not itself clear sideload.
+
+### Browser confirmations
+
+`toern_storage_confirm.ino` implements PATT/KIT overwrite and PATT/KIT/SMP delete confirmations independently of subpatterns. NO is the initial choice; only encoder 4 accepts. Touch 2 cancels with a blue neutral-face animation. The action snapshots the destination and browser positions before the confirmation encoder is reused. SMP captures a bounded WAV path and rejects directories or traversal; KIT checks all eight WAV slots for occupancy. PATT deletion removes the numbered file and its `.tmp`/`.bak` generations, clearing live notes only if that number was loaded. Browser selection and SMP Seek End are restored after cancellation/deletion. The sample browser's physical encoder 2 maps to logical slot 2 when FN counters are restored.
+
+AUTOSAVE is shown in full (AUTO/SAVE on 16 columns) and remains load-only in PATT. Recording and fast capture block confirmation actions. The simulator models deletion of bundled read-only assets for its current session; it does not modify the packaged files.

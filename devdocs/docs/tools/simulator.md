@@ -22,7 +22,7 @@ All five pads remain visible on desktop and mobile. Pointer capture supports hol
 | T4 / X | Audition selected voice; SINGLE+playing records a base-pitch hit | Voice 4 |
 | T5 / M | Hold FN; encoder 1 sets backward/forward sample direction | Voice 5 |
 
-While playing, hold **T4+T5** to request a fill for the current voice. It starts on the next page downbeat, builds for two pages, and ends with one velocity-127 hit on the following downbeat. The centered FILL confirmation lasts one second in the request voice's color. Release both pads before another request. Different voices queue together and keep independent timing; re-arming one does not restart others. Pause cancels pending fills and drops. Grid F/F uses the same cadence and final downbeat; its trigger condition returns to normal on completion. The physical external panel instead uses **C+D** and has no fifth/FN button; the simulator models five capacitive pads.
+While playing, hold **T4+T5** to request a fill for the current voice. It starts on the next page downbeat, builds for two pages, and ends with one velocity-127 hit on the following downbeat. The centered FILL confirmation lasts one second in the request voice's color. Release both pads before another request. Different voices queue together and keep independent timing; re-arming one does not restart others. Pause cancels pending fills and drops. Grid F/F uses the same cadence and final downbeat; its trigger condition returns to normal on completion. The physical external panel instead uses **C+D** with D mapped to FN; the simulator models five capacitive pads.
 
 ## Filters and presets
 

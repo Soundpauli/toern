@@ -50,4 +50,4 @@ MIDI on **Serial8** uses pins **34/35** (`RX8`/`TX8`) with enlarged buffers — 
 
 ## Performance input mapping
 
-Capacitive `exttouch=false` exposes all five pads: T1 SINGLE/exit, T2 menu, T3 REC, T4 audition, T5 FN. Playback-only fill is **T4+T5**. External `exttouch=true` exposes A–D plus eight faders: A/B replace T1/T2, C is REC, D auditions; fill is **C+D**. Index 4 is explicitly disabled in external mode; there is no external FN button. TOUCHY continues to use the five capacitive pad identities when available. See [mode arbitration](../core/modes#performance-fill-arbitration).
+Capacitive `exttouch=false` exposes all five pads: T1 SINGLE/exit, T2 menu, T3 REC, T4 audition, T5 FN. Playback-only fill is **T4+T5**. External `exttouch=true` exposes A–D plus eight faders: A/B replace T1/T2, C is REC, D is T5/FN; fill remains **C+D**. Index 3 (T4 audition) has no external button. TOUCHY uses the pad identities: external D plays pad 5. See [mode arbitration](../core/modes#performance-fill-arbitration).

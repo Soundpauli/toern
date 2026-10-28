@@ -3309,6 +3309,7 @@ FLASHMEM int createRhythmicProgression(int baseNote, int pageOffset, HarmonicAna
 
 // Generate genre-based track from page 1 to selected length
 FLASHMEM void generateGenreTrack() {
+  loadedPatternFileNumber = 0;
   // Clear ALL pages first (complete reset)
   for (unsigned int page = 1; page <= maxPages; page++) {
     unsigned int start = (page - 1) * 16 + 1;
@@ -4093,6 +4094,7 @@ FLASHMEM void resetAllAudioEffects() {
 
 // Complete reset for NEW start - clears everything and loads fresh defaults
 FLASHMEM void startNew() {
+  loadedPatternFileNumber = 0;
   // Declare all external variables at the beginning
   extern unsigned int samplePackID;
   extern double playNoteInterval;

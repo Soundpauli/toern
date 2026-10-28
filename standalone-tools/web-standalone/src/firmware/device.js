@@ -272,7 +272,7 @@ export function createDevice(matrix, statusEl, rings) {
   function refreshBrowse() {
     const ch = clamp(s.GLOB.currentChannel, 1, 8);
     s.browseDir = browseDirOf[ch] || SAMPLE_ROOT;
-    s.browseItems = listDir(s.browseDir, { parent: s.browseDir !== SAMPLE_ROOT });
+    s.browseItems = listDir(s.browseDir, { parent: s.browseDir !== SAMPLE_ROOT }).filter(item=>!deletedBrowserResources.has(item.rel));
     s.browse = clamp(browseIdxOf[ch] || 0, 0, Math.max(0, s.browseItems.length - 1));
     browseIdxOf[ch] = s.browse;
     const item = currentFile();
@@ -970,6 +970,7 @@ export function createDevice(matrix, statusEl, rings) {
     return data;
   }
   function slotExists(key, id) {
+    if (deletedBrowserResources.has(`${key}:${id}`)) return false;
     if (key === "toern-web-packs" && DUMMY_PACKS[id]) return true;
     if (key === "toern-web-patterns" && id === 0 && patternUrl(0)) return true;
     if (key === "toern-web-patterns" && demoPattern(id)) return true;
@@ -1367,6 +1368,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
 
   function turn(enc, dir) {
+    if (s.mode === "confirm") { if(enc===3)s.confirmChoice=clamp(s.confirmChoice+dir,0,1);return; }
     if (s.mode === "demo") return;
     if (s.mode === "boot") return;
     noteActivity();
@@ -1732,7 +1734,59 @@ export function createDevice(matrix, statusEl, rings) {
     const events = encoderButtonEvent(enc, state, fn && s.mode !== "touchy");
     return [3,4,8].includes(events[enc]); // FN button bindings are reserved.
   }
+  const deletedBrowserResources = new Set();
+  let loadedPatternSlot = 0;
+  function openBrowserConfirmation(resource, target, deleting, run) {
+    if (s.recOn || s.fastRecActive) return;
+    s.confirmation = {resource, target, deleting, run, returnMode:s.mode,
+      slot:s.slot, pack:s.packSlot, browse:s.browse, browseDir:s.browseDir};
+    s.confirmChoice = 0;
+    s.okAt=0;s.canceledAt=0;
+    s.mode = "confirm";
+  }
+  function finishBrowserConfirmation(accept) {
+    const pending = s.confirmation;
+    if (s.mode !== "confirm" || !pending) return;
+    s.confirmation = null;
+    s.mode = pending.returnMode;
+    s.slot = pending.slot; s.packSlot = pending.pack;
+    s.browse = pending.browse; s.browseDir = pending.browseDir;
+    if (s.mode === "dat") s.loadSoundSettings = true;
+    if (accept) pending.run();
+    else s.canceledAt = performance.now();
+    if (pending.deleting) {
+      s.mode = pending.returnMode;
+      if (s.mode === "wav") { refreshBrowse(); s.browse = clamp(pending.browse,0,Math.max(0,s.browseItems.length-1)); }
+    }
+  }
+  function requestBrowserDeletion() {
+    const resource=s.mode, target=resource==="dat"?s.slot:resource==="kit"?s.packSlot:s.browseItems[s.browse]?.rel;
+    if ((resource==="dat" && target<=0) || (resource==="wav" && !/^samples\/.+\.wav$/i.test(target || ""))) return;
+    if (!["dat","kit","wav"].includes(resource)) return;
+    openBrowserConfirmation(resource,target,true,()=>{
+      if (resource === "wav") { deletedBrowserResources.add(target); refreshBrowse(); }
+      else {
+        const key=resource==="dat"?"toern-web-patterns":"toern-web-packs";
+        const all=loadStore(key); delete all[String(target)]; localStorage.setItem(key,JSON.stringify(all));
+        deletedBrowserResources.add(`${key}:${target}`);
+        if (resource==="dat" && loadedPatternSlot===target) { clearNotes();loadedPatternSlot=0; }
+      }
+      s.okAt=performance.now();
+    });
+  }
+  function commitPatternSave() {
+    deletedBrowserResources.delete(`toern-web-patterns:${s.slot}`);
+    saveSlot("toern-web-patterns",s.slot,snapshot());loadedPatternSlot=s.slot;
+    s.okAt=performance.now();finishLoad();
+  }
+  function commitKitSave() {
+    deletedBrowserResources.delete(`toern-web-packs:${s.packSlot}`);
+    saveSlot("toern-web-packs",s.packSlot,{name:DUMMY_PACKS[s.packSlot]?.name || "KIT",wavs:[1,2,3,4,5,6,7,8].map(ch=>wavOf[ch] || 0)});
+    s.okAt=performance.now();finishLoad();
+  }
   function shortPress(enc) {
+    if (s.mode === "confirm") { if (enc===3 && !s.fnHeld) finishBrowserConfirmation(s.confirmChoice===1); return; }
+    if (s.fnHeld && ((s.mode==="dat"&&enc===1)||(s.mode==="kit"&&enc===1)||(s.mode==="wav"&&enc===2))) { requestBrowserDeletion();return; }
     if (dispatchButtonEvent(enc, 1)) return;
     if (s.mode === "demo") return;
     if (s.mode === "touchy") { openTouchyBrowser(enc + 1); return; }
@@ -1799,6 +1853,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.slot !== 0 && !slotExists("toern-web-patterns", s.slot)) { s.mode = "new"; return; }
       const url = patternUrl(s.slot);
       const loadSound = !!s.loadSoundSettings;
+      loadedPatternSlot=s.slot;
       const stored = loadStore("toern-web-patterns")[String(s.slot)];
       if (stored) {
         restore(stored, loadSound);
@@ -1815,9 +1870,8 @@ export function createDevice(matrix, statusEl, rings) {
       }
     }
     if (s.mode === "dat" && enc === 1 && s.slot > 0) {
-      saveSlot("toern-web-patterns", s.slot, snapshot());
-      s.okAt = performance.now();
-      finishLoad();
+      if (slotExists("toern-web-patterns",s.slot)) openBrowserConfirmation("dat",s.slot,false,commitPatternSave);
+      else commitPatternSave();
       return;
     }
     if (s.mode === "kit" && enc === 0) {
@@ -1833,12 +1887,8 @@ export function createDevice(matrix, statusEl, rings) {
       saveEeprom();
     }
     if (s.mode === "kit" && enc === 1) {
-      saveSlot("toern-web-packs", s.packSlot, {
-        name: DUMMY_PACKS[s.packSlot]?.name || "KIT",
-        wavs: [1, 2, 3, 4, 5, 6, 7, 8].map((ch) => wavOf[ch] || 0),
-      });
-      s.okAt = performance.now();
-      finishLoad();
+      if (slotExists("toern-web-packs",s.packSlot)) openBrowserConfirmation("kit",s.packSlot,false,commitKitSave);
+      else commitKitSave();
       return;
     }
     if (s.mode === "wav" && enc === 1 && s.wavFile) {
@@ -2187,6 +2237,7 @@ export function createDevice(matrix, statusEl, rings) {
     down = !!down;
     if (padDown[id] === down) return;
     padDown[id] = down;
+    if (s.mode === "confirm") { if(id===5)s.fnHeld=down;if(id===2&&down)finishBrowserConfirmation(false);return; }
     if (s.mode === "demo") { if (id === 1) onTouchL(down); return; }
     if (s.mode !== "touchy" && !down) releaseTouchyPad(id - 1);
     if (s.mode === "touchy") { s.fnHeld = false; touchyTouch(id, down); return; }
@@ -2513,6 +2564,7 @@ export function createDevice(matrix, statusEl, rings) {
       if (isTouch1Key(e) || e.code === "KeyA" || e.key.toLowerCase() === "a") onTouchL(true);
       return;
     }
+    if (e.key === "Escape" && s.mode === "confirm") { finishBrowserConfirmation(false); return; }
     if (e.key === "Escape" && s.mode === "touchy") { exitTouchyToMenu(); return; }
     if (e.key === "Escape") {
       if (s.fastRecActive) stopFastRec();

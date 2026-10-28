@@ -9,7 +9,7 @@ harness=r'''
 using uint8_t=unsigned char;using int8_t=signed char;using int32_t=int;
 const int NUM_ENCODERS=4;
 struct Mode {int pos[4];};
-Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},recordMode={};
+Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},recordMode={},set_Wav={{10,0,80,3}};
 Mode *currentMode=&draw;
 struct EncoderTurnEvent {int encoder;int delta;bool fn;};
 struct {int currentChannel=1;} GLOB;
@@ -75,6 +75,12 @@ int main(){
    assert(handleFnEncoder(enc,value,true));assert(value==mode->pos[enc]);
   }
  }
+ // SMP physical encoder 2 must restore Seek End (logical slot 2), including deferred release.
+ currentMode=&set_Wav;fnHeld=true;Encoder[1].status=0;value=81;
+ assert(handleFnEncoder(1,value,false)&&value==80);
+ fnHeld=false;value=81;assert(handleFnEncoder(1,value,true)&&value==80&&Encoder[1].counter==80);
+ assert(set_Wav.pos[2]==80&&set_Wav.pos[1]==0);
+ fnHeld=true;value=1;assert(handleFnEncoder(2,value,true)&&value==0&&Encoder[2].counter==0);
  currentMode=&touchyMode;updateFnState();value=25;
  assert(!fnHeld&&!handleFnEncoder(0,value,true)&&fnButtonEvent(0,2)==2);
 }

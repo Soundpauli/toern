@@ -41,13 +41,13 @@
                   <tr><th>Short</th><td>Load</td><td data-hb-copy="files.007">Reads the file into RAM and immediately becomes the live pattern. The big number turns bright green while it loads; brightness reflects whether the file actually exists. On an empty (dim blue) slot, load opens <a href="#new">NEW</a> instead.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Save</td><td data-hb-copy="files.009">Writes the live pattern into the chosen slot, <em>overwriting</em> any existing file at that number. No second confirmation — be sure of the slot before pressing.</td></tr>
+                  <tr><th>Short</th><td>Save</td><td data-hb-copy="files.009">Writes the live pattern into the chosen slot. An occupied destination opens SAVE? / NO; choose YES with encoder 4 and press encoder 4 to overwrite. Empty destinations save immediately.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Load sound settings</td><td data-hb-copy="files.011">Saved sound settings load by default. Turn clockwise to enable sideload and keep the current sounds; a red X appears. Turn counterclockwise to load saved sounds again. Sideload resets whenever you select another file or re-enter PATT.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Slot number (1–9999)</td><td data-hb-copy="files.013">Slot 0 (A) loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
+                  <tr><th>Turn</th><td>Slot number (1–9999)</td><td data-hb-copy="files.013">AUTOSAVE loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
                   <tr><th>Short</th><td>Back to grid</td><td>Leaves PATT without acting on the highlighted slot.</td></tr>
                 </tbody></table></div>
               </div>
@@ -89,6 +89,12 @@
           <hr />
 
 
+          <section class="hb-sub" id="confirm">
+            <h2>Overwrite, delete and cancel</h2>
+            <p>Saving over an existing PATT or KIT opens <strong>SAVE? / NO</strong>. In PATT or KIT, <strong>FN + encoder 2</strong> opens <strong>DEL? / NO</strong> for the selected number. In SMP, <strong>FN + encoder 3</strong> deletes the selected WAV; folders cannot be deleted here.</p>
+            <p>Turn <strong>encoder 4</strong> to choose blue NO or green YES, then press encoder 4. Encoder 2 does not confirm. NO or <strong>touch 2</strong> cancels, shows a blue neutral face, and restores the browser selection. On the external panel, button D is FN and button B cancels. Deleting another pattern leaves live notes alone; deleting the loaded pattern clears its notes.</p>
+            <p>AUTOSAVE is load-only in PATT. It is printed in full, on two lines on a narrow panel. Saving an empty grid keeps a valid empty pattern file.</p>
+          </section><hr />
           <section class="hb-sub" id="sidecar">
             <h2 data-hb-copy="files.030">Settings inside the pattern file</h2>
             <p data-hb-copy="files.031">A numbered pattern is a binary file in the SD card root, such as <code>42.txt</code>. Despite the extension, it is not editable text. It contains all pages, per-step values, sound settings, mutes and the 64-slot page arrangement. There is no separate <code>.dat</code> file or sidecar.</p>
@@ -104,7 +110,7 @@
             <h2 data-hb-copy="files.034">Autosave — session recovery</h2>
             <p data-hb-copy="files.035">Pausing playback and successful sample loads request a save to <code>autosaved.txt</code>. Successful autosaves have a five-second cooldown, so closely spaced actions may not create another checkpoint. Autosave does not overwrite the numbered PATT slot.</p>
             <p data-hb-copy="files.036">At boot, the firmware loads that recovery file. Saves use a temporary file for their destination (<code>autosaved.txt.tmp</code> or <code>42.txt.tmp</code>) and retain the previous generation as <code>.bak</code>. A valid destination takes priority; if it is missing or unreadable, a complete temporary file or backup can be recovered for that same destination. The old shared <code>pattern.tmp</code> is not automatically loaded because it does not identify its target slot.</p>
-            <p data-hb-copy="files.037"><a href="menus.html#rset">ETC → RSET → ASAV</a> removes the recovery file and its transaction files. FULL resets the session and writes an empty recovery file. Saving an empty grid to a numbered PATT slot intentionally clears that slot, including its temporary file and backup. Autosave still preserves an empty session.</p>
+            <p data-hb-copy="files.037"><a href="menus.html#rset">ETC → RSET → ASAV</a> removes the recovery file and its transaction files. FULL resets the session and writes an empty recovery file. Saving an empty grid writes an empty pattern file. To delete a numbered pattern and its recovery files, select it, hold FN and press encoder 2, then confirm DEL? with encoder 4. Autosave still preserves an empty session.</p>
             <div class="hb-warn" data-hb-copy="files.038"><strong>Save, then switch off.</strong> The physical power switch does not perform an automatic shutdown save. Save important work to a numbered PATT slot; a power loss after the latest checkpoint loses later edits.</div>
           </section>
 

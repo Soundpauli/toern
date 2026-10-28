@@ -106,9 +106,27 @@ static bool buildCurrentBrowseSamplePath(char *out, size_t outSize) {
   int idx = (int)currentMode->pos[3] - 1;
   if (idx < 0 || idx >= (int)g_wavPickCount) return false;
   if (sampleBrowserEntryTypeAt(idx) != 2) return false;
-  if (g_browseDir[ch][0]) snprintf(out, outSize, "samples/%s/%s", g_browseDir[ch], g_wavPickName[idx]);
-  else snprintf(out, outSize, "samples/%s", g_wavPickName[idx]);
-  return true;
+  const int length = g_browseDir[ch][0]
+      ? snprintf(out, outSize, "samples/%s/%s", g_browseDir[ch], g_wavPickName[idx])
+      : snprintf(out, outSize, "samples/%s", g_wavPickName[idx]);
+  return length > 0 && (size_t)length < outSize;
+}
+
+bool captureSelectedSampleForDelete(char *out, size_t outSize) {
+  if (currentMode != &set_Wav || fastRecordActive || isRecording) return false;
+  if (g_browseListDirty) sampleBrowserRefreshList((int)GLOB.currentChannel);
+  return buildCurrentBrowseSamplePath(out, outSize);
+}
+
+void restoreSampleBrowserSelection(unsigned selection) {
+  const int ch = constrain((int)GLOB.currentChannel, 1, 8);
+  set_Wav.pos[3] = selection;
+  sampleBrowserClampBrowseIndex(ch);
+  SMP.wav[ch].fileID = set_Wav.pos[3];
+  Encoder[0].writeCounter((int32_t)set_Wav.pos[0]);
+  Encoder[1].writeCounter((int32_t)set_Wav.pos[2]); // SET_WAV maps seek-end to physical encoder 2.
+  Encoder[2].writeCounter((int32_t)0);
+  Encoder[3].writeCounter((int32_t)set_Wav.pos[3]);
 }
 
 // PREV=SYNC while playing (and PRESS without manual preview) skip previewSample(),
@@ -921,7 +939,7 @@ void showWave() {
   drawIndicator('L', 'P', 1, false, false);
   if (selectedIsFile) {
     drawIndicator('L', 'Y', 2, false, false);  // Encoder 1: trim/seekEnd
-    drawIndicator('L', 'G', 3, false, false);  // Encoder 2: load selected file
+    drawIndicator('L', fnHeld ? 'R' : 'G', 3, false, false);  // FN: delete selected WAV
   }
   drawIndicator('L', 'W', 4, false, false);  // Encoder 3: combined browser
 
@@ -967,7 +985,7 @@ void showWave() {
   setShowWaveRGB(0, 0xFF00FF); // Magenta (seek start)
   if (selectedIsFile) {
     setShowWaveRGB(1, 0xFFFF00); // Yellow (seekEnd)
-    setShowWaveRGB(2, 0x00FF00); // Green (load) — matches L[G]
+    setShowWaveRGB(2, fnHeld ? 0xFF0000 : 0x00FF00); // FN: red delete action
   } else {
     setShowWaveRGB(1, 0x000000);
     setShowWaveRGB(2, 0x000000);

@@ -2,6 +2,15 @@
 static int8_t fnDirection = 0;
 static unsigned long fnDirectionUntil = 0;
 
+// SMP's physical encoders 2/3 map to logical Seek End/browser slots 2/1.
+static int fnEncoderPosition(int index) {
+  if (currentMode == &set_Wav) {
+    if (index == 1) index = 2;
+    else if (index == 2) index = 1;
+  }
+  return (int)currentMode->pos[index];
+}
+
 static void updateFnState() {
   const bool fillChord = pollTouchFillChord();
   fnHeld = !fillChord && currentMode != &touchyMode && currentMode != &recordMode && readDebouncedTouch(4);
@@ -39,7 +48,7 @@ static bool handleFnEncoder(int index, int &rawValue, bool allowWrite) {
   if (pendingRestore[index] && pendingRestore[index] != currentMode) pendingRestore[index] = nullptr;
   if (currentMode == &touchyMode || currentMode == &recordMode || (!fnHeld && !pendingRestore[index])) return false;
   const int previous = (currentMode == &subpatternMode && muteModeActive && index == 0)
-      ? 0 : (int)currentMode->pos[index];
+      ? 0 : fnEncoderPosition(index);
   if (fnHeld) {
     const uint8_t status = Encoder[index].readStatus();
     const uint8_t rotationBits = i2cEncoderLibV2::RINC | i2cEncoderLibV2::RDEC |
@@ -63,6 +72,6 @@ static bool handleFnEncoder(int index, int &rawValue, bool allowWrite) {
       pendingRestore[index] = nullptr;
     } else pendingRestore[index] = currentMode;
   } else pendingRestore[index] = nullptr;
-  rawValue = currentMode->pos[index];
+  rawValue = fnEncoderPosition(index);
   return true;
 }
