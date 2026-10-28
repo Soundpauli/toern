@@ -1,3 +1,4 @@
+import { canReplaceShadowed } from "./paint.js";
 import { createSynthArp } from "./synthArp.js";
 import { instrumentDefaults } from "./instruments.js";
 import { createFillScheduler, baseRow, syncDelays } from "./performance.js";
@@ -131,7 +132,7 @@ export function createDevice(matrix, statusEl, rings) {
     fnHeld: false, fnArrow: "", fnArrowAt: 0,
     touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(100), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
-    menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK",
+    menuIndex: 0, subIndex: 0, slot: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: false,
     genre: 0, genreLength: 8,
     seekOf, endOf, invOf, browse: 0, browseDir: "samples", browseItems: listDir("samples", { parent: false }),
     wavFile: false, peaks: null, shownWav: "", sampleUrl: Array(16).fill(null),
@@ -391,30 +392,16 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (!s.GLOB.singleMode && !PAINT_ROWS.has(y)) return false;
     const n = note[x][y];
-    if (s.GLOB.singleMode) {
-      // Never overwrite notes belonging to other voices (matches firmware paint/paintMode)
-      if (n.channel && n.channel !== s.GLOB.currentChannel) return false;
-      if (!n.channel) {
-        n.velocity = 100;
-        n.probability = 100;
-        n.condition = 1;
-      }
-      n.channel = s.GLOB.currentChannel;
-      queueAutosave();
-      return true;
-    }
-    if (!n.channel) {
-      n.channel = channelOfRow(y);
-      n.velocity = 100;
-      n.probability = 100;
-      n.condition = 1;
-    }
+    const channel = s.GLOB.singleMode ? s.GLOB.currentChannel : channelOfRow(y);
+    const replace = canReplaceShadowed(note,x,y,channel);
+    if (n.channel && n.channel !== channel && !replace) return false;
+    if (!n.channel || replace) Object.assign(n,emptyNote(),{channel,velocity:100,probability:100,condition:1});
     queueAutosave();
     return true;
   }
   function paintPress(x, y) {
     if (y === 16) { toggleCopy(); return; }
-    if (s.drawR && note[x][y].channel) { eraseCell(x, y); return; }
+    if (s.drawR && note[x][y].channel && !canReplaceShadowed(note,x,y,s.GLOB.singleMode?s.GLOB.currentChannel:channelOfRow(y))) { eraseCell(x, y); return; }
     if (paintCell(x, y)) playCell(x, y);
   }
   /** MIDI live grid write in SINGLE; WRTE OFF skips occupied cells. */
@@ -1163,11 +1150,13 @@ export function createDevice(matrix, statusEl, rings) {
     }
     return { version: 2, notes: out, filt: filt.map(f => ({...f})), chVol: chVol.slice(), bpm: s.bpm };
   }
-  function restore(data) {
+  function restore(data, loadSound = true) {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
     if (data && !Array.isArray(data)) {
-      for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch), data.filt?.[ch] || {});
-      if (Array.isArray(data.chVol)) for (const ch of SOUND_CH) chVol[ch] = clamp(data.chVol[ch] ?? 16, 0, 16);
+      if (loadSound) {
+        for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch), data.filt?.[ch] || {});
+        if (Array.isArray(data.chVol)) for (const ch of SOUND_CH) chVol[ch] = clamp(data.chVol[ch] ?? 16, 0, 16);
+      }
       if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
       data = data.notes;
     }
@@ -1616,6 +1605,7 @@ export function createDevice(matrix, statusEl, rings) {
       applySub(pageMode, pageIndex);
     }
     if (s.mode === "dat" && enc === 3) s.slot = clamp(s.slot + dir, -1, 99); // -1=NEW, 0=A, 1..99=PATT
+    if (s.mode === "dat" && enc === 2) s.loadSoundSettings = dir > 0;
     if (s.mode === "kit" && enc === 3) {
       s.packSlot = clamp(s.packSlot + dir, 0, 99);
       saveEeprom();
@@ -1791,18 +1781,19 @@ export function createDevice(matrix, statusEl, rings) {
       if (s.slot < 0) { s.mode = "new"; return; }
       if (s.slot !== 0 && !slotExists("toern-web-patterns", s.slot)) { s.mode = "new"; return; }
       const url = patternUrl(s.slot);
+      const loadSound = !!s.loadSoundSettings;
       const stored = loadStore("toern-web-patterns")[String(s.slot)];
       if (stored) {
-        restore(stored);
+        restore(stored, loadSound);
         finishLoad();
       } else if (url) {
         parsePattern(url).then((data) => {
           if (!data) return;
-          restore(data);
+          restore(data, loadSound);
           finishLoad();
         });
       } else {
-        restore(stored != null ? stored : demoPattern(s.slot));
+        restore(stored != null ? stored : demoPattern(s.slot), loadSound);
         finishLoad();
       }
     }
@@ -2293,6 +2284,7 @@ export function createDevice(matrix, statusEl, rings) {
       }
     },
   });
+  const sampleMidiInputs = new Map();
   function onMidiMessage(ev) {
     const [status, data1, data2] = ev.data || [];
     if (status == null) return;
@@ -2312,8 +2304,20 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     const inputKey = `${ev.target?.id || "midi"}:${status & 15}:${data1}`;
-    if (type === 0x80 || (type === 0x90 && !data2)) { midiArp.noteOff(inputKey); return; }
-    if (status === 0xff || (type === 0xb0 && [120,123].includes(data1))) { midiArp.reset(); return; }
+    if (type === 0x80 || (type === 0x90 && !data2)) {
+      if (!s.midiReceive) return;
+      midiArp.noteOff(inputKey);
+      const channel = sampleMidiInputs.get(inputKey);
+      sampleMidiInputs.delete(inputKey);
+      if (channel && ![...sampleMidiInputs.values()].includes(channel)) engine.releaseChannel(channel);
+      return;
+    }
+    if (status === 0xff || (type === 0xb0 && [120,123].includes(data1))) {
+      midiArp.reset();
+      for (const channel of new Set(sampleMidiInputs.values())) engine.releaseChannel(channel);
+      sampleMidiInputs.clear();
+      return;
+    }
     if (type === 0x90 && data2 > 0) {
       if (!s.midiReceive) return;
       const ch = s.midiChMode === 1 ? (status & 15) + 1 : s.midiChMode === 2 ? clamp(((data1 - 60) % 12 + 12) % 12 + 1, 1, 8) : s.GLOB.currentChannel || 1;
@@ -2327,7 +2331,8 @@ export function createDevice(matrix, statusEl, rings) {
         noteActivity();
         return;
       }
-      engine.trigger(ch, data2, engine.now(), {...wavOpts(ch), midiPitch: s.midiClamp ? 255 : data1}, row);
+      sampleMidiInputs.set(inputKey, ch);
+      engine.trigger(ch, data2, engine.now(), {...wavOpts(ch), midiPitch: s.midiClamp ? 255 : data1, held: true}, row);
       if (s.mode === "single" || s.GLOB.singleMode) {
         placeLiveGridNote(step, row, ch, data2, s.midiClamp ? 255 : data1);
       }
@@ -2631,6 +2636,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "filter" && hold[3] && !hold[3].fn && !hold[3].turned && !hold[3].fired && now - hold[3].at >= LONG_MS) {
       hold[3].fired = true;
       resetVoiceFilters(s.GLOB.currentChannel);
+      s.filterResetUntil = now + 800;
     }
     if ((s.mode === "draw" || s.mode === "single") && hold[2] && !hold[2].fn && !hold[2].turned && !hold[2].fired && now - hold[2].at >= LONG_MS) {
       hold[2].fired = true; enterFilter();
@@ -2780,6 +2786,10 @@ export function createDevice(matrix, statusEl, rings) {
     start() { requestAnimationFrame(tick); },
     startDemo,
     placeLiveGridNote,
+    canReplaceAt(col,row) {
+      if (col<1 || col>COLS || row<1 || row>15 || (!s.GLOB.singleMode && !PAINT_ROWS.has(row))) return false;
+      return canReplaceShadowed(note,(s.GLOB.edit-1)*COLS+col,row,s.GLOB.singleMode?s.GLOB.currentChannel:channelOfRow(row));
+    },
     analogClockPulse,
     keydown, keyup,
     pointer(col, row, erase, audition) {

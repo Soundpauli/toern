@@ -39,3 +39,25 @@ assert(nodes.filter(n=>n.kind==='osc').every(n=>n.stops.includes(1.04)),'Pause r
 assert(nodes.filter(n=>n.kind==='sample').every(n=>n.stops.includes(1.04)),'Pause releases scheduled sample sources');
 for(const {n,delay,freq} of effects){assert(!n.disconnected);assert.equal(n.delayTime.value,delay);assert.equal(n.frequency.value,freq);}
 console.log('PASS: real simulator graph maps V gain/delay and releases all sources while preserving effect nodes/settings.');
+
+// Sample bypass routes the complete signal, including effect sends, around both cuts.
+for (let ch=1; ch<=8; ch++) {
+  engine.trigger(ch,100,ctx.currentTime,{index:0,seek:0,end:100,held:true,env:{att:32,dec:0,sus:32,rel:16}},ch+1);
+  const sample=nodes.filter(n=>n.kind==='sample').at(-1);
+  assert.equal(sample.stops.length,0,'held sample waits for MIDI release');
+  const amp=sample.connections[0].connections[0].connections[0].connections[0];
+  const hp=amp.connections.find(n=>n.kind==='filter');
+  const bypass=amp.connections.find(n=>n.kind==='gain');
+  const filtered=hp.connections[0].connections[0];
+  const output=bypass.connections[0];
+  assert(filtered.connections.includes(output));
+  assert(output.connections.some(n=>n.kind==='delay'),'delay receives the bypass sum');
+  for (const [h,l,dry] of [[32,0,true],[31,0,false],[32,1,false],[32,0,true]]) {
+    engine.apply(ch,{...emptyFilt(),h,l},16);
+    assert.equal(bypass.gain.value,dry?1:0);
+    assert.equal(filtered.gain.value,dry?0:1);
+  }
+  engine.releaseChannel(ch);
+  assert.equal(sample.stops.at(-1),ctx.currentTime+.5+.02,'configured release is used');
+}
+console.log('PASS: all sample channels bypass cuts smoothly, feed effects from the sum, and honor held MIDI release.');

@@ -572,7 +572,7 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   if (e.button !== 0) return;
   const { col, row } = cellFromEvent(e);
-  const had = device.cellTaken(col, row);
+  const had = device.cellTaken(col, row) && !device.canReplaceAt(col, row);
   press = { col, row, had, moved: false, long: false, timer: 0 };
   drag = false;
   canvas.setPointerCapture(e.pointerId);

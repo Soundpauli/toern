@@ -832,6 +832,12 @@ export function drawLoadSave(matrix, s) {
   showIcon(matrix, "folder", 2, 7, isNew ? UI_BLUE : (exists ? UI_GREEN : UI_DIM_RED));
   if (isNew) matrix.drawText("+", 4, 6, UI_WHITE);
   matrix.drawIndicator("L", "X", 4);
+  matrix.setRing(3, [0, 0, 0]);
+  if (!isNew && exists && !s.loadSoundSettings) {
+    const x = COLS <= 16 ? 9 : 19;
+    for (const [dx,y] of [[0,3],[2,3],[1,4],[0,5],[2,5]]) matrix.light(x+dx,y,[255,0,0]);
+    matrix.setRing(3, [255, 0, 0]);
+  }
   if (isNew) {
     // Same indicators as Autosave when present: green load opens NEW, no save.
     matrix.drawIndicator("M", "G", 1);
@@ -1445,6 +1451,12 @@ export function renderFrame(matrix, s, now) {
     const x = Math.max(1, Math.floor((COLS - width) / 2) + 1);
     for (let xx = x - 1; xx <= x + width; xx++) for (let y = 5; y <= 11; y++) matrix.light(xx, y, [0,0,0]);
     matrix.drawText(text, x, 6, pal(s).col[s.fillOverlayCh] || UI_WHITE);
+  }
+  if (s.mode === "filter" && s.filterResetUntil > now) {
+    const cx = Math.floor((COLS + 1) / 2), cy = Math.floor((ROWS + 1) / 2);
+    for (let x = cx-4; x <= cx+5; x++) for (let y = cy-4; y <= cy+3; y++) matrix.light(x, y, [0, 0, 0]);
+    const points = [[-3,-1],[-2,-2],[-1,-3],[0,-2],[1,-1],[2,0],[3,1],[4,2]];
+    for (const [x,y] of points) matrix.light(cx+x,cy+y,[0,0,255]);
   }
   matrix.present();
 }

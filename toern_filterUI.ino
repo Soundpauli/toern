@@ -613,6 +613,10 @@ void showFilterPages(uint8_t chan) {
     drawCornerValueCustom(lastChangedEncoder, val, sliderDef[chan][filterPage[chan]][lastChangedEncoder]);
   }
 
+  // Include reset feedback before this renderer's early presentation.
+  if (currentMode == &filterMode && (int32_t)(filterResetOverlayUntil - millis()) > 0) {
+    drawFilterResetOverlay();
+  }
   FastLEDshow();
 }
 

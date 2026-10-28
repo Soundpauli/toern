@@ -300,6 +300,14 @@ EXTMEM AudioConnection        patchCord164(amp5, 0, filter5, 0);
 EXTMEM AudioConnection        patchCord165(amp6, 0, filter6, 0);
 EXTMEM AudioConnection        patchCord166(amp7, 0, filter7, 0);
 EXTMEM AudioConnection        patchCord167(amp8, 0, filter8, 0);
+EXTMEM AudioConnection patchSampleDry1(amp1, 0, filtermixer1, 3);
+EXTMEM AudioConnection patchSampleDry2(amp2, 0, filtermixer2, 3);
+EXTMEM AudioConnection patchSampleDry3(amp3, 0, filtermixer3, 3);
+EXTMEM AudioConnection patchSampleDry4(amp4, 0, filtermixer4, 3);
+EXTMEM AudioConnection patchSampleDry5(amp5, 0, filtermixer5, 3);
+EXTMEM AudioConnection patchSampleDry6(amp6, 0, filtermixer6, 3);
+EXTMEM AudioConnection patchSampleDry7(amp7, 0, filtermixer7, 3);
+EXTMEM AudioConnection patchSampleDry8(amp8, 0, filtermixer8, 3);
 //test granular
 //AudioEffectGranular      granular1;      //xy=504,155
 //EXTMEM AudioConnection        patchCord167a(amp8, 0, granular1, 0);

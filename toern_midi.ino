@@ -1184,7 +1184,7 @@ static void playIncomingMidiNote(int ch, uint8_t pitch, uint8_t row,
 void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   logMidiRxNoteOn((uint8_t)ch, pitch, velocity);
   extern bool MIDI_NOTE_RECEIVE;
-  if (!MIDI_NOTE_RECEIVE) return;
+  if (!MIDI_NOTE_RECEIVE || pitch >= 128) return;
 
   // Many controllers use Note On velocity 0 as release; treat like Note Off.
   if (velocity == 0) {
@@ -1289,9 +1289,21 @@ void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
 
 void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
   extern bool MIDI_NOTE_RECEIVE;
-  if (!MIDI_NOTE_RECEIVE) return;
+  if (!MIDI_NOTE_RECEIVE || pitch >= 128) return;
 
   int channel = mapMidiToLogicalChannel((int)midiChannel, pitch);
+
+  // Sample ADSR release follows MIDI Note Off too. Keep the held-note counter
+  // so releasing one key cannot cut a different key held on this mono voice.
+  if (channel >= 1 && channel <= 8) {
+    midiHeldNote[channel][pitch] = false;
+    midiHeldVelocity[channel][pitch] = 0;
+    int held = 0;
+    for (int p = 0; p < 128; ++p) if (midiHeldNote[channel][p]) ++held;
+    pressedKeyCount[channel] = held;
+    if (!held && envelopes[channel]) envelopes[channel]->noteOff();
+    return;
+  }
 
   // For persistent channels (11-14) use the counter (must match handleNoteOn indexing).
   if (channel >= 11 && channel <= 14) {

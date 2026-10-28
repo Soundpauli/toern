@@ -9,7 +9,7 @@ harness=r'''
 using uint8_t=unsigned char;using int8_t=signed char;using int32_t=int;
 const int NUM_ENCODERS=4;
 struct Mode {int pos[4];};
-Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={};
+Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},recordMode={};
 Mode *currentMode=&draw;
 struct EncoderTurnEvent {int encoder;int delta;bool fn;};
 struct {int currentChannel=1;} GLOB;
@@ -28,6 +28,7 @@ unsigned int loadedSampleLen[16]={0,256,256};
 unsigned long clockMs=100;
 int fastTouchRead(int){return touched;}
 bool readDebouncedTouch(int){return touched>touchThreshold;}
+bool pollTouchFillChord(){return false;}
 void noteUserActivity(){activity++;}
 unsigned long millis(){return clockMs;}
 void applyChannelDirection(uint8_t ch,int8_t dir){assert(ch==GLOB.currentChannel);calls++;lastDir=dir;}

@@ -100,28 +100,36 @@ export function createEngine() {
       lp.type = "lowpass";
       lp.frequency.value = 10000;
       const dry = ctx.createGain();
+      const filterGain = ctx.createGain();
+      const bypassGain = ctx.createGain();
+      const filterOut = ctx.createGain();
+      bypassGain.gain.value = 0;
       const pan = ctx.createStereoPanner();
       const send = ch === 3 || ch === 4 ? null : ctx.createGain();
       input.connect(shaper);
       shaper.connect(amp);
       amp.connect(hp);
       hp.connect(lp);
-      lp.connect(dry);
+      lp.connect(filterGain);
+      filterGain.connect(filterOut);
+      amp.connect(bypassGain);
+      bypassGain.connect(filterOut);
+      filterOut.connect(dry);
       dry.connect(pan);
       const delay = ctx.createDelay(4);
       const feedback = ctx.createGain();
       const delayWet = ctx.createGain();
       const voiceGain = ctx.createGain();
       feedback.gain.value = delayWet.gain.value = 0;
-      lp.connect(delay); delay.connect(feedback); feedback.connect(delay);
+      filterOut.connect(delay); delay.connect(feedback); feedback.connect(delay);
       delay.connect(delayWet); delayWet.connect(pan);
       pan.connect(voiceGain); voiceGain.connect(master);
       if (send) {
         send.gain.value = 0;
-        lp.connect(send);
+        filterOut.connect(send);
         send.connect(verb.input);
       }
-      chains[ch] = { input, shaper, amp, hp, lp, dry, pan, send, delay, feedback, delayWet, voiceGain, room: 0 };
+      chains[ch] = { input, shaper, amp, hp, lp, filterGain, bypassGain, dry, pan, send, delay, feedback, delayWet, voiceGain, room: 0 };
     }
     chains.verb = verb;
     return ctx;
@@ -146,6 +154,9 @@ export function createEngine() {
     if (!ctx || !chains[ch]) return;
     const c = chains[ch];
     const now = ctx.currentTime;
+    const bypass = ch >= 1 && ch <= 8 && (filt.h ?? 32) >= 32 && (filt.l ?? 0) <= 0;
+    c.filterGain.gain.setTargetAtTime(bypass ? 0 : 1, now, 0.02);
+    c.bypassGain.gain.setTargetAtTime(bypass ? 1 : 0, now, 0.02);
     const q = mapf(filt.res || 0, 0, 32, 0.7, 5);
     if (filt.l > 0) {
       c.hp.frequency.setTargetAtTime(mapf(Math.max(1, filt.l), 1, 32, 40, 2500), now, 0.02);
@@ -268,7 +279,7 @@ export function createEngine() {
       voice.src.stop(when + 0.04);
     } catch { /* already stopped */ }
   }
-  function play(kind, velocity, when, seek, end, invert, dest, rate = 1, env = null, buffer = null, stealCh = 0, stretch = 11) {
+  function play(kind, velocity, when, seek, end, invert, dest, rate = 1, env = null, buffer = null, stealCh = 0, stretch = 11, held = false) {
     const srcBuf = stretchBuffer(buffer || buffers[kind] || buffers.kick, stretch);
     let buf = srcBuf;
     if (invert) {
@@ -302,13 +313,13 @@ export function createEngine() {
       g.gain.linearRampToValueAtTime(peak, when + a);
       g.gain.linearRampToValueAtTime(sus, when + a + dec);
       if (gate > a + dec + 0.0005) g.gain.setValueAtTime(sus, when + gate);
-      g.gain.linearRampToValueAtTime(0.0001, when + gate + rel);
+      if (!held) g.gain.linearRampToValueAtTime(0.0001, when + gate + rel);
     }
     src.connect(g);
     g.connect(dest);
     src.start(when, offset, span / rate);
-    if (env) src.stop(when + Math.max(att(env) + env.dec / 32, att(env) + 0.005) + Math.max(0.005, env.rel / 32) + 0.02);
-    const voice = { src, g, ch: stealCh || 0 };
+    if (env && !held) src.stop(when + Math.max(att(env) + env.dec / 32, att(env) + 0.005) + Math.max(0.005, env.rel / 32) + 0.02);
+    const voice = { src, g, ch: stealCh || 0, held, release: env ? Math.max(0.005, env.rel / 32) : 0.005 };
     live.add(voice);
     if (stealCh) sampleLive[stealCh] = voice;
     src.onended = () => {
@@ -419,7 +430,7 @@ export function createEngine() {
       : (r - home);
     // wav.detune = fine semis (±1); wav.oct = octave shift (±2) from device.js wavOpts.
     const rate = 2 ** ((semis + (wav.detune || 0) + (wav.oct || 0) * 12) / 12);
-    play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch], ch, wav.stretch ?? 11);
+    play(KINDS[wav.index] || "kick", velocity, when, wav.seek, wav.end, wav.inv, chains[ch].input, rate, wav.env, custom[ch], ch, wav.stretch ?? 11, !!wav.held);
   }
 
   function preview(wav) {
@@ -453,6 +464,13 @@ export function createEngine() {
   function releaseChannel(ch, pitch) {
     if (!ctx) return;
     const when = ctx.currentTime;
+    const sample = sampleLive[ch];
+    if (sample?.held && pitch == null && live.has(sample)) {
+      live.delete(sample); releasing.add(sample);
+      sample.g.gain.cancelScheduledValues(when);
+      sample.g.gain.setTargetAtTime(0.0001, when, sample.release / 5);
+      try { sample.src.stop(when + sample.release + 0.02); } catch { /* ended */ }
+    }
     for (const voice of synthLive) if (voice.ch === ch && (pitch == null || voice.pitch === pitch)) {
       voice.g.gain.cancelScheduledValues(when);
       voice.g.gain.setTargetAtTime(0.0001, when, 0.008);

@@ -1995,6 +1995,18 @@ FLASHMEM static int countLabelX(const char *text) {
   return x;
 }
 
+FLASHMEM void drawFilterResetOverlay() {
+  const int cx = (int)((maxX + 1) / 2);
+  const int cy = (int)((maxY + 1) / 2);
+  for (int x = cx - 4; x <= cx + 5; ++x) {
+    for (int y = cy - 4; y <= cy + 3; ++y) light(x, y, CRGB::Black);
+  }
+  static const int8_t points[][2] = {
+    {-3,-1}, {-2,-2}, {-1,-3}, {0,-2}, {1,-1}, {2,0}, {3,1}, {4,2}
+  };
+  for (const auto &point : points) light(cx + point[0], cy + point[1], CRGB(0, 0, 255));
+}
+
 bool fillRequestOverlayVisible() {
   return fillRequestOverlayChannel >= 0
       && (int32_t)(fillRequestOverlayUntil - (uint32_t)millis()) > 0;
