@@ -154,6 +154,16 @@ void stopSdPreviewIfPlaying() {
   extern AudioPlaySdWav playSdWav1;
   extern AudioEffectEnvelope envelope0;
   if (playSdWav1.isPlaying()) {
+    // SD preview bypasses envelope0. Fade its own route before closing the
+    // reader, otherwise pressing LOAD cuts an arbitrary PCM sample to zero.
+    sdPreviewFade.fadeOut(3);
+    if (NVIC_IS_ENABLED(IRQ_SOFTWARE)) {
+      elapsedMicros waited;
+      while (waited < 8000) {
+        yield();
+        delayMicroseconds(100);
+      }
+    }
     playSdWav1.stop();
   }
   envelope0.noteOff();
@@ -183,6 +193,7 @@ static void startSdPreviewNow(const char *path) {
   updatePreviewVolume();
   previewIsPlaying = true;
   sampleIsLoaded = true;
+  sdPreviewFade.fadeIn(0);
   playSdWav1.play(path);
 }
 
@@ -230,22 +241,47 @@ bool isChannelSampleReloadBusy(unsigned int ch) {
 
 void beginChannelSampleReload(unsigned int ch) {
   if (ch >= maxFiles) return;
-  toern_audio::StateGuard guard;
-  channelSampleReloadBusy[ch] = true;
+  bool fade = false;
+  {
+    toern_audio::StateGuard guard;
+    channelSampleReloadBusy[ch] = true;
+    if (voices[ch] && voices[ch]->isPlaying()) {
+      voices[ch]->setAmplitude(0.0f);
+      fade = true;
+    }
+  }
+  // The reader ramps per audio block. Let it reach silence BEFORE stopping or
+  // rewriting PCM; keep audio/PIT interrupts enabled throughout the wait.
+  if (fade && NVIC_IS_ENABLED(IRQ_SOFTWARE)) {
+    elapsedMicros waited;
+    while (waited < 8000) {
+      yield();
+      delayMicroseconds(100);
+    }
+  }
   // noteOff alone leaves a releasing player reading the buffer being rewritten.
-  if (voices[ch]) voices[ch]->stop();
-  // Stop any ringing notes on this voice before the buffer is rewritten.
-  for (int note = 36; note <= 96; note++) {
+  {
+    toern_audio::StateGuard guard;
+    if (voices[ch]) voices[ch]->stop();
+  }
+  // Clear allocator state for the entire MIDI range, yielding IRQ ownership
+  // between events instead of masking audio around the complete sweep.
+  for (int note = 0; note < 128; note++) {
     samplerNoteEvent(ch, note, 0, false, false);
   }
-  if (ch < 15 && envelopes[ch] != nullptr) {
-    envelopes[ch]->noteOff();
+  {
+    toern_audio::StateGuard guard;
+    if (ch < 15 && envelopes[ch] != nullptr) envelopes[ch]->noteOff();
   }
   samplerRemoveSamples(ch);
 }
 
 void endChannelSampleReload(unsigned int ch) {
   if (ch >= maxFiles) return;
+  toern_audio::StateGuard guard;
+  // The reader is stopped; restore its level for the next note (including RAM
+  // preview, whose trigger does not go through triggerSamplerVoice).
+  if (voices[ch]) voices[ch]->setAmplitude(playAmpForVoice(ch));
   channelSampleReloadBusy[ch] = false;
 }
 
@@ -509,6 +545,7 @@ FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
     if (!previewFile) {
       return;
     }
+    beginChannelSampleReload(0);
 
     int fileSize = previewFile.size();
     uint32_t dataStart = 44, dataSize = 0;
@@ -560,6 +597,7 @@ FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
       sdIoYield();
     }
     previewFile.close();
+    endChannelSampleReload(0);
 
     strncpy(previewCache.pathRel, rel, sizeof(previewCache.pathRel) - 1);
     previewCache.pathRel[sizeof(previewCache.pathRel) - 1] = 0;
@@ -614,13 +652,14 @@ FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
   size_t    frameCount = byteCount / 2;
 
   // Finally hand off only valid data to the sampler
-  samplerRemoveSamples(0);
+  beginChannelSampleReload(0);
   samplerAddSample(0,
     36,              // midi note root
     samplePtr,       // pointer to your aligned data
     frameCount,      // number of 16-bit samples
     rateFactor
   );
+  endChannelSampleReload(0);
   sampleIsLoaded = true;
 
   if (playAudio) {
@@ -1485,6 +1524,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     if (!previewFile) {
       return false;
     }
+    beginChannelSampleReload(0);
 
     if (showProg) {
       drawSampleLoadOverlay(4);
@@ -1509,7 +1549,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
     int chunkCount = 0;
     int maxToRead = (int)min((uint32_t)sizeof(sampled[0]), dataSize);
     while (plen < maxToRead) {
-      size_t toRead = min(LPREVIEW_CHUNK, (size_t)(sizeof(sampled[0]) - (size_t)plen));
+      size_t toRead = min(LPREVIEW_CHUNK, (size_t)(maxToRead - plen));
       size_t bytesRead = previewFile.read(&sampled[0][plen], toRead);
       if (bytesRead == 0) break;
       plen += (int)bytesRead;
@@ -1524,6 +1564,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
       sampleLoadUiThrottled(66, true, loadProgLast);
     }
     previewFile.close();
+    endChannelSampleReload(0);
     
     // Update cache
     if (SMP.samplePathRel[GLOB.currentChannel][0]) {

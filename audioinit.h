@@ -417,7 +417,9 @@ EXTMEM AudioConnection        patchCord213(mixer1, 0, mixer_end, 0);
 EXTMEM AudioConnection        patchCord214(mixer2, 0, mixer_end, 1);
 EXTMEM AudioConnection        patchCord215(envelope0, 0, mixer0, 0);
 EXTMEM AudioAmplifier         ampPreview;
-EXTMEM AudioConnection        patchCord216(playSdWav1, 0, ampPreview, 0);
+AudioEffectFade              sdPreviewFade;
+EXTMEM AudioConnection        patchCord216(playSdWav1, 0, sdPreviewFade, 0);
+EXTMEM AudioConnection        patchCord216fade(sdPreviewFade, 0, ampPreview, 0);
 EXTMEM AudioConnection        patchCord216b(ampPreview, 0, mixer0, 1);
 EXTMEM AudioConnection        patchCord217(playSdWav1, 0, peak1, 0);
 // patchCord218/219 removed (mixer_end -> mixerPlay)

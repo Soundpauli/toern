@@ -4188,6 +4188,7 @@ static float playAmpForVoice(int ch) {
 void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool retrigger) {
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
+  if (on && velocity && isChannelSampleReloadBusy((unsigned int)ch)) return;
   _samplers[ch].noteEvent(pitch, velocity, on, retrigger);
 }
 
@@ -4205,6 +4206,7 @@ void samplerAddSample(int ch, uint8_t root, int16_t *data, uint32_t frames, uint
 
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSidechain) {
   if (ch < 0 || ch > 8) return;
+  if (isChannelSampleReloadBusy((unsigned int)ch)) return;
   // Don't re-arm a reader into the buffer currently being recorded.
   if (fastRecordActive && (uint8_t)ch == fastRecordChannel) return;
   const float noteN = (float)effectiveNoteVelocity(vel) / 127.0f;
@@ -6890,7 +6892,8 @@ void showDoRecord() {
           char path[160];
           buildSamplePath(0, 0, path, sizeof(path));
           if (path[0]) {
-            if (playSdWav1.isPlaying()) playSdWav1.stop();
+            stopSdPreviewIfPlaying();
+            sdPreviewFade.fadeIn(0);
             playSdWav1.play(path);
             previewIsPlaying = true;
             playbackActive = true;
