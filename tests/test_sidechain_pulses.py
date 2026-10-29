@@ -62,6 +62,7 @@ POLARITY
 bool fastRecordActive=false,pendingPauseAudioCleanup=true;uint8_t fastRecordChannel=1;
 bool sliderControlled=false;
 bool sampleReloadBusy=false;
+bool noteOnTriggered[17]{};
 bool isChannelSampleReloadBusy(unsigned){return sampleReloadBusy;}
 float neoSliderVelScale[4]={1,1,1,1},neoSliderLastVelNorm[4]={},detune[9]={};
 int noteOns=0,noteOffs=0;

@@ -26,7 +26,7 @@ This reverb path exists on sample voices 1, 2 and 5–8. Samples 3 and 4 bypass 
 
 Samples 1–8 bypass the filter when HCUT is 32 and LCUT is 0. A connection from each sample amplifier to filter-mixer input 3 carries the dry signal; four-channel gain smoothing crossfades between dry, lowpass, and highpass. Effects downstream still receive the complete voice. Synth filter routing is unchanged.
 
-Incoming sample MIDI notes track held keys per voice. Note Off clears that key and starts the configured envelope release only after the last key is released. A velocity-zero Note On follows the same release path. The dependency patch preserves the configured release rather than forcing 2 ms.
+Sample voices 1–8 are one-shots when SUSTAIN is above 0: a grid hit or MIDI Note On opens the envelope and leaves it in sustain so the file can play to the end. SUSTAIN 0 is allowed on samples (synths still floor at 1). With SUSTAIN 0 and RELEASE 0 the hit dies through decay — it ends before the file, but the quiet end of the decay still sounds. MIDI Note Off does not start release (RELEASE 0 would otherwise chop). Pause, mute, and reload still send noteOff. The dependency patch preserves the configured release rather than forcing 2 ms.
 
 ## UI value vs audio value
 
@@ -73,6 +73,10 @@ During play, encoder #3 can adjust a per-channel “default fast filter” targe
 DLAY is a per-voice PSRAM delay on all sound voices; it follows BPM. Slider N selects N/32 of one quarter-note beat, 0 disables the tap, dry remains unity and the tap mix is 0.5. Feedback varies from 0.52 to 0.68. Synths expose DLAY on CRF, samples on page 3.
 
 Only samples 1–8 expose **V** / VOLUME (`ARR_GAIN`) beside DLAY, encoder 2. The raw 0–32 value displays −16…+16: raw 0 = silence, raw 16 = unity, raw 32 = 2×. `sampleFilterGain[ch-1]` scales the complete voice output after effects/delay and before the sample bus. It is independent of channel volume, bitcrusher compensation and fader amplitude. Page reset and full reset restore raw 16. See [storage encoding](../contributing/firmware-edits#sample-voice-gain).
+
+## ATTACK response
+
+ATTACK keeps the 0–32 stored and displayed range, with time `500 × ((32 − value) / 32)²` ms for samples and synths. Values 32/31/30/28/24/16/0 correspond to approximately 0/0.49/1.95/7.81/31.25/125/500 ms. This gives finer control near the immediate attack and caps the slowest setting at 500 ms. Note-duration calculations use the same curve. Existing preset slider values are retained, so non-neutral preset attacks become faster; CH11's envelope parameter array quantizes times to whole milliseconds. The simulator uses the same curve.
 
 ## Pause and effects tails
 

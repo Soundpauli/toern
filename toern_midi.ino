@@ -33,6 +33,8 @@ extern IntervalTimer midiClockTimer;
 void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity);
 void stopSynthChannel(int ch);
 bool isChildVoiceDisabled(int channel);
+extern bool persistentNoteOn[];
+extern bool noteOnTriggered[];
 
 // Reduce Serial spam in clock/BPM code paths (can stall Serial and hurt responsiveness).
 #ifndef DEBUG_MIDI_CLOCK_SERIAL
@@ -1167,7 +1169,7 @@ static void playIncomingMidiNote(int ch, uint8_t pitch, uint8_t row,
   } else if (ch == 11) {
     int noteValue = preservePitch
         ? toern_midi_pitch::polyNote(pitch, transpose, (int)octave[0])
-        : 12 * (int)octave[0] + transpose + (int)row - 1;
+        : 12 * (int)octave[0] + transpose + (int)row - (11 + 1);
     extern int16_t midiHeldCh11SoundNote[128];
     midiHeldCh11SoundNote[pitch] = (int16_t)noteValue;
     playSound(noteValue, 0, velocity);
@@ -1301,7 +1303,12 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
     int held = 0;
     for (int p = 0; p < 128; ++p) if (midiHeldNote[channel][p]) ++held;
     pressedKeyCount[channel] = held;
-    if (!held && envelopes[channel]) envelopes[channel]->noteOff();
+    if (!held) {
+      persistentNoteOn[channel] = false;
+      // Grid hits are one-shots (sustain until the sample ends). Don't start
+      // release on key-up; default RELEASE is 0 and would chop the file.
+      if (envelopes[channel] && !noteOnTriggered[channel]) envelopes[channel]->noteOff();
+    }
     return;
   }
 

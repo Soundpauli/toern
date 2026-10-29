@@ -28,6 +28,7 @@ harness = r'''
 #include <cassert>
 #include <cstdint>
 #include <cmath>
+#include "src/toern_envelope_curve.h"
 #include <algorithm>
 using std::max;
 #define constrain(x,a,b) ((x)<(a)?(a):((x)>(b)?(b):(x)))
@@ -37,7 +38,7 @@ enum SettingArray {ARR_PARAM,ARR_NONE};
 struct {float param_settings[15][8]{};} SMP;
 float maxParamVal[12]{},sustainAmp[2][3]{};
 uint16_t attackAmp[2][3]{},decayAmp[2][3]{},releaseAmp[2][3]{},releaseFilter[2][3]{};
-struct Env {float level;void attack(float){}void decay(float){}void release(float){}void sustain(float v){level=v;}} env[15];
+struct Env {float level,attackMs;void attack(float v){attackMs=v;}void decay(float){}void release(float){}void sustain(float v){level=v;}} env[15];
 Env *envelopes[15]{};
 void updateVals(int){}bool channelHasVoiceDelay(int){return false;}void applyVoiceDelay(int){}
 float mapf(float x,float a,float b,float c,float d){return c+(x-a)*(d-c)/(b-a);}
@@ -61,16 +62,23 @@ void saveSingleModeToEEPROM(int slot,int8_t v){assert(slot==15);savedCodec=v;}
 void redrawMain(int){}
 void lineMenu(){int setting=28;switch(setting){LINE_CASE}}
 int main(){
+ for(int ch:{1,8,11,13,14})for(int raw=0;raw<=32;++raw){
+  envelopes[ch]=&env[ch];SMP.param_settings[ch][ATTACK]=raw;setParams(ATTACK,ch);
+  const float expected=500.f*(32-raw)*(32-raw)/1024.f;
+  if(ch==11)assert(attackAmp[0][0]==(uint16_t)expected);
+  else assert(std::abs(env[ch].attackMs-expected)<.00001f);
+ }
  maxParamVal[SUSTAIN]=1;
  for(int ch:{1,8,11,13,14})for(int raw:{0,1,16,32,40}){
   envelopes[ch]=&env[ch];SMP.param_settings[ch][SUSTAIN]=raw;
-  setParams(SUSTAIN,ch);const int expected=constrain(raw,1,32);
+  setParams(SUSTAIN,ch);const int expected=constrain(raw,toern_audio::sustainSliderMin(ch),32);
   assert(SMP.param_settings[ch][SUSTAIN]==expected);
   assert(std::abs((ch==11?sustainAmp[0][0]:env[ch].level)-expected/32.f)<.00001);
   sliderDef[ch][0][0]={ARR_PARAM,SUSTAIN,32};
   sliderDef[ch][0][1]={ARR_PARAM,ATTACK,32};
   SMP.param_settings[ch][SUSTAIN]=0;initSliders(0,ch);
-  assert(Encoder[0].lo==1&&Encoder[0].value==1&&mode.minValues[0]==1);
+  const int sMin=toern_audio::sustainSliderMin(ch);
+  assert(Encoder[0].lo==sMin&&Encoder[0].value==sMin&&mode.minValues[0]==sMin);
   assert(Encoder[1].lo==0&&mode.minValues[1]==0);
  }
  for(int instrument=0;instrument<13;++instrument){preset(11,instrument);assert(SMP.param_settings[11][SUSTAIN]>=1);}
@@ -93,6 +101,6 @@ with tempfile.TemporaryDirectory(prefix='toern-sustain-lout-') as directory:
     path = Path(directory)
     (path / 'test.cpp').write_text(harness)
     flags = ['-isystem', '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform == 'darwin' else []
-    subprocess.run(['c++', '-std=c++17', *flags, str(path / 'test.cpp'), '-o', str(path / 'test')], check=True)
+    subprocess.run(['c++', '-std=c++17','-I',str(root), *flags, str(path / 'test.cpp'), '-o', str(path / 'test')], check=True)
     subprocess.run([str(path / 'test')], check=True)
 print('PASS: sustain parameter/preset/encoder bounds; all 19 LOUT levels round-trip to the correct codec value.')

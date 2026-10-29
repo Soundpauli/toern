@@ -78,7 +78,8 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
       break;
     }
     case ARR_SYNTH: raw = constrain(SMP.synth_settings[chan][idx], 0, MAX_FILTER_RESOLUTION); break;
-    case ARR_PARAM: raw = constrain(SMP.param_settings[chan][idx], idx == SUSTAIN ? 1 : 0, MAX_FILTER_RESOLUTION); break;
+    case ARR_PARAM: raw = constrain(SMP.param_settings[chan][idx],
+        idx == SUSTAIN ? toern_audio::sustainSliderMin(chan) : 0, MAX_FILTER_RESOLUTION); break;
     case ARR_STRETCH: raw = chan >= 1 && chan <= 8 ? sampleTimeStretch[chan] : 0; break;
     case ARR_GAIN: raw = sampleVoiceGainSlider(chan); break;
     default: return 0;
@@ -304,7 +305,8 @@ void initSliders(uint8_t page, uint8_t chan) {
       
     }
 
-    const int minValue = d.arr == ARR_PARAM && d.idx == SUSTAIN ? 1 : 0;
+    const int minValue = d.arr == ARR_PARAM && d.idx == SUSTAIN
+        ? toern_audio::sustainSliderMin(chan) : 0;
     val = constrain(val, minValue, meta.maxValue);
     currentMode->pos[i] = val;
     currentMode->minValues[i] = minValue;
@@ -445,7 +447,9 @@ void processAdjustments_new(uint8_t page) {
     }
 
     const auto& meta = sliderDef[chan][page][i];
-    uint8_t rawVal = constrain(currentMode->pos[i], d.arr == ARR_PARAM && d.idx == SUSTAIN ? 1 : 0, meta.maxValue);
+    uint8_t rawVal = constrain(currentMode->pos[i],
+        d.arr == ARR_PARAM && d.idx == SUSTAIN ? toern_audio::sustainSliderMin(chan) : 0,
+        meta.maxValue);
     currentMode->pos[i] = rawVal;
     uint8_t val = scaleToDisplay(meta, rawVal);
     uint8_t prev = readSetting(d.arr, d.idx, chan);
@@ -545,7 +549,9 @@ void setNewFilters() {
     auto& d = sliderDef[chan][filterPage[chan]][i];
     if (d.arr == ARR_NONE && d.idx == -1) continue; // Skip if ARR_NONE
     if (d.arr == ARR_PARAM && d.idx >= PARAM_COUNT) continue;
-    uint8_t val = constrain(currentMode->pos[i], d.arr == ARR_PARAM && d.idx == SUSTAIN ? 1 : 0, d.maxValue);
+    uint8_t val = constrain(currentMode->pos[i],
+        d.arr == ARR_PARAM && d.idx == SUSTAIN ? toern_audio::sustainSliderMin(chan) : 0,
+        d.maxValue);
     uint8_t prev = readSetting(d.arr, d.idx, chan);
     
     // Check if encoder position changed (for redraw detection)

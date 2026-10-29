@@ -63,6 +63,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include "src/toern_sd_protocol.h"
 #include <Audio.h>
 #include "src/toern_audio_runtime.h"
+#include "src/toern_envelope_curve.h"
 #include "src/toern_pcm_interpolation.h"
 #include "src/toern_midi_pitch.h"
 #include "src/toern_legacy_filter.h"
@@ -872,10 +873,10 @@ static inline bool isSingleModeChannelAllowed(int channel) {
 }
 
 // Row used as the voice's "natural" / base pitch (DRAW home row / MIDI anchor).
+// Matrix home is always channel+1; that row sounds C4 on every voice.
 static inline int basePitchRowForChannel(int channel) {
-  if (channel >= 1 && channel <= 8) return channel + 1;
-  if (channel == 11) return 12;
-  if (channel == 13 || channel == 14) return channel - 11;  // ch13→2, ch14→3
+  if ((channel >= 1 && channel <= 8) || channel == 11 || channel == 13 || channel == 14)
+    return channel + 1;
   return -1;
 }
 
@@ -1542,7 +1543,7 @@ volatile bool colorsUpdatedViaSerial = false;
 // Number of parameter slots (ATTACK..RELEASE indexes 0-5)
 constexpr int PARAM_COUNT = 6;
 
-FLASHMEM const float maxParamVal[12] = { 1000.0, 2000.0, 1000.0, 1000.0, 1.0, 1000.0 };
+FLASHMEM const float maxParamVal[12] = { 1000.0, toern_audio::kAttackMaxMs, 1000.0, 1000.0, 1.0, 1000.0 };
 
 FilterType defaultFilter[maxFiles] = { HCUT };
 
@@ -2812,7 +2813,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     preventPaintUnpaint = true;
     return;
   }
-  // Page row: FN + encoder 2 long (0200) is the only random / aware generate.
+  // Page row: FN + encoder 2 long (0200) generates; FN + encoder 2 short (0100) undoes it.
   if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 16 && fnEvents[1] == 3) {
     if (GLOB.singleMode) {
       drawRandoms();
@@ -2822,6 +2823,14 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     }
     deleteActiveCopy();
     preventPaintUnpaint = true;
+    return;
+  }
+  if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 16 && fnEvents[1] == 4) {
+    extern bool undoLastGeneration();
+    if (undoLastGeneration()) {
+      deleteActiveCopy();
+      preventPaintUnpaint = true;
+    }
     return;
   }
   if (fnHeld || modifiedEvent) return; // FN cannot fall through to normal button actions.
@@ -4224,6 +4233,11 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
   uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
   const uint8_t midiPitch = (uint8_t)constrain(pitch, 0, 127);
   samplerNoteEvent(ch, midiPitch, sv, true, retrigger);
+  if (ch >= 1 && ch <= 8) {
+    // One-shot: keep the envelope in sustain so the file can finish.
+    // MIDI Note Off must not start release (default R is 0 and would chop).
+    noteOnTriggered[ch] = true;
+  }
   if (voices[ch] != nullptr) {
     voices[ch]->snapAmplitude(amp);
   }
@@ -7950,7 +7964,7 @@ float getNoteDuration(int channel) {
   if (!channelHasVoiceDelay(channel)) {
     delayMs = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
   }
-  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
+  float attackMs = toern_audio::attackMilliseconds(SMP.param_settings[channel][ATTACK]);
   float holdMs = mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
   float decayMs = mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
 
@@ -8679,7 +8693,7 @@ static void midiArpFireChannel(int ch) {
   if (ch == 11) {
     int noteValue = preservePitch
         ? toern_midi_pitch::polyNote(midiPitch, transpose, (int)octave[0])
-        : 12 * (int)octave[0] + transpose + (int)midiPitchToGridRow(11, (uint8_t)midiPitch) - 1;
+        : 12 * (int)octave[0] + transpose + (int)midiPitchToGridRow(11, (uint8_t)midiPitch) - (11 + 1);
     if (midiArpLastCh11Note != INT16_MIN) stopSound(midiArpLastCh11Note, 0);
     playSound(noteValue, 0, vel);
     midiArpLastCh11Note = (int16_t)noteValue;
@@ -8923,7 +8937,7 @@ static void playSynthInternal(int ch, int b, int vel, bool persistant,
     // Preserved MIDI uses the standard pitch reference: note 69 = 440 Hz.
     frequency = toern_midi_pitch::midiFrequency(midiPitchOverride);
   } else {
-    frequency = notesArray[constrain(b - ch + 47, 36, 62)];
+    frequency = notesArray[constrain(48 + b - (ch + 1), 36, 62)];
   }
   float WaveFormVelocity = mapf(vel, 1, 127, 0.0, 1.0);
 
@@ -9101,7 +9115,7 @@ static inline int samplePitchForNote(const Note &cell, int channel, int row) {
 
 static inline int ch11PitchForNote(const Note &cell, int row) {
   if (noteHasMidiPitch(cell)) return toern_midi_pitch::polyNote(cell.midiPitch, transpose, (int)octave[0]);
-  return 12 * (int)octave[0] + transpose + row - 1;
+  return 12 * (int)octave[0] + transpose + row - (11 + 1);
 }
 
 FLASHMEM static void triggerActiveFillHit();

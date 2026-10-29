@@ -269,7 +269,7 @@ export function createEngine() {
   const releasing = new Set();
   const sampleLive = {};
   const MAX_VOICES = 40;
-  const att = (env) => Math.max(0.001, ((32 - env.att) / 32) * 2);
+  const att = (env) => 0.5 * ((32 - Math.max(0, Math.min(32, env.att ?? 32))) / 32) ** 2;
   function stopVoice(voice, when) {
     if (!voice || (!live.has(voice) && !releasing.has(voice))) return;
     live.delete(voice); releasing.add(voice);
@@ -379,7 +379,7 @@ export function createEngine() {
     osc.type = ch === 11 ? (wav.wave ? WAVES[wav.wave] : ["sawtooth","triangle","square"][(wav.inst || 0) - 10] || preset.type) : (WAVES[wav.wave | 0] || "triangle");
     osc.frequency.setValueAtTime(frequencies[0], when);
     const env = wav.env || {};
-    const a = Math.max(0.005, (32 - (env.att ?? 32)) / 32 * 2);
+    const a = att(env);
     const d = Math.max(0.02, (env.dec ?? 16) / 32);
     const s = Math.max(0.0001, (env.sus ?? 16) / 32);
     const rel = Math.max(0.02, (env.rel ?? 8) / 32);

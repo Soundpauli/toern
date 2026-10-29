@@ -18,7 +18,7 @@ void setParams(ParameterType paramType, int index) {
       }
       break;
     case ATTACK:
-      mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
+      mappedValue = toern_audio::attackMilliseconds(SMP.param_settings[index][paramType]);
       if (index == 11) {
         for (int v = 0; v < 3; v++) attackAmp[0][v] = (uint16_t)mappedValue;
         updateVals(0);
@@ -40,7 +40,10 @@ void setParams(ParameterType paramType, int index) {
       envelopes[index]->hold(mappedValue);
       break;*/
     case SUSTAIN:
-      SMP.param_settings[index][SUSTAIN] = constrain(SMP.param_settings[index][SUSTAIN], 1.0f, (float)maxfilterResolution);
+      SMP.param_settings[index][SUSTAIN] = constrain(
+          SMP.param_settings[index][SUSTAIN],
+          (float)toern_audio::sustainSliderMin(index),
+          (float)maxfilterResolution);
       mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, 0, maxParamVal[SUSTAIN]);
       if (index == 11) {
         for (int v = 0; v < 3; v++) sustainAmp[0][v] = mappedValue;

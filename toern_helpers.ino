@@ -1771,9 +1771,9 @@ FLASHMEM static int companionPitchClassForRow(uint8_t channel, int row) {
     noteValue = 12 * SampleRate[channel] + row - (channel + 1);
     noteValue += (int)lroundf(detune[channel]) + (int)lroundf(channelOctave[channel]);
   } else if (channel == 11) {
-    noteValue = 12 * (int)octave[0] + transpose + row - 1;
+    noteValue = 12 * (int)octave[0] + transpose + row - (11 + 1);
   } else if (channel == 13 || channel == 14) {
-    noteValue = row - channel + 47;
+    noteValue = 48 + row - (channel + 1);
   }
   noteValue %= 12;
   return noteValue < 0 ? noteValue + 12 : noteValue;
@@ -2629,6 +2629,44 @@ FLASHMEM static void generateCompanionChannelPage(int page, uint8_t channel,
   }
 }
 
+// One-level undo for FN+encoder 2 generation (page-row FN+0100 restores this).
+static bool generationUndoValid = false;
+static unsigned generationUndoPage = 0;
+static unsigned generationUndoWidth = 0;
+
+FLASHMEM static void captureGenerationUndo(int page) {
+  extern Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1];
+  const unsigned start = (unsigned)(page - 1) * maxX + 1;
+  const unsigned end = min((unsigned)MAX_STEPS + 1u, start + maxX);
+  const unsigned cols = end - start;
+  for (unsigned i = 0; i < cols; ++i) {
+    for (unsigned row = 1; row <= 16; ++row) {
+      pageTmp[i + 1][row] = note[start + i][row];
+    }
+  }
+  generationUndoPage = (unsigned)page;
+  generationUndoWidth = cols;
+  generationUndoValid = true;
+}
+
+FLASHMEM bool undoLastGeneration() {
+  if (!generationUndoValid) return false;
+  extern Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1];
+  const unsigned page = generationUndoPage;
+  const unsigned cols = generationUndoWidth;
+  const unsigned start = (page - 1) * maxX + 1;
+  for (unsigned i = 0; i < cols; ++i) {
+    const unsigned step = start + i;
+    if (step > MAX_STEPS) break;
+    for (unsigned row = 1; row <= 16; ++row) {
+      note[step][row] = pageTmp[i + 1][row];
+    }
+  }
+  generationUndoValid = false;
+  updateLastPage();
+  return true;
+}
+
 FLASHMEM void drawRandoms() {
   uint8_t channel = (uint8_t)GLOB.currentChannel;
   if (!companionChannelSupported(channel)) return;
@@ -2640,13 +2678,14 @@ FLASHMEM void drawRandoms() {
   CompanionHarmony harm = companionMakeHarmony(context, seed);
   CompanionGroove groove = companionMakeGroove(context, page, seed);
 
+  captureGenerationUndo(page);
   clearCompanionChannelPage(page, channel);
   generateCompanionChannelPage(page, channel, context, harm, groove, seed);
   updateLastPage();
 }
 
-// Draw mode + touch4 held + long-press enc1 ("2000"): wipe the current edit page and
-// generate a curated multi-voice subset of channels 1..14 (not all voices at once)
+// DRAW + FN + long-press encoder 2: preserve populated channels on this page
+// and add a curated subset of complementary voices (not all voices at once)
 // using the same context-aware companion engine so each generated voice locks to the previous ones.
 FLASHMEM void drawRandomsMultiPage() {
   extern bool isChildVoiceDisabled(int channel);
@@ -2696,18 +2735,28 @@ FLASHMEM void drawRandomsMultiPage() {
     pick[8] = true;              // Occasional pad glue
   }
 
-  // Clear all notes on the current edit page first
-  clearCompanionPage(page);
+  // Protect whole populated channels, including velocities, conditions and MIDI
+  // pitches. Existing notes also remain available to the harmonic/groove analysis.
+  uint16_t populated = 0;
+  const unsigned start = (unsigned)(page - 1) * maxX + 1;
+  const unsigned end = min((unsigned)MAX_STEPS + 1u, start + maxX);
+  for (unsigned step = start; step < end; ++step) {
+    for (unsigned row = 1; row <= 16; ++row) {
+      const unsigned channel = note[step][row].channel;
+      if (channel > 0 && channel < 16) populated |= (uint16_t)(1u << channel);
+    }
+  }
 
-  // Analyze other pages (if any) so key/root and home rows stay consistent with the rest of the track
-  CompanionContext baseCtx = analyzeCompanionContext(1, activePages, page, 0);
+  captureGenerationUndo(page);
+
+  CompanionContext baseCtx = analyzeCompanionContext(1, max(activePages, page), page, 0);
   CompanionHarmony pageHarm = companionMakeHarmony(baseCtx, seed);
   CompanionGroove pageGroove = companionMakeGroove(baseCtx, page, seed);
 
   // Generate in musical role order so each voice reacts to the voices already placed on this page
   static const uint8_t generationOrder[] = {1, 2, 4, 3, 5, 6, 11, 13, 14, 7, 8};
   for (uint8_t ch : generationOrder) {
-    if (!pick[ch] || isChildVoiceDisabled(ch)) continue;
+    if (!pick[ch] || (populated & (1u << ch)) || isChildVoiceDisabled(ch)) continue;
     CompanionContext ctx = analyzeCompanionContext(1, max(activePages, page), page, ch);
     generateCompanionChannelPage(page, ch, ctx, pageHarm, pageGroove, seed);
   }

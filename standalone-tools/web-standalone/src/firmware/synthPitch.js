@@ -8,13 +8,14 @@ export function synthFrequencies(ch, row, wav = {}) {
   const absolute = Number.isFinite(wav.midiPitch) && wav.midiPitch >= 0 && wav.midiPitch <= 127;
   if (ch === 11) {
     const register = Math.trunc(1 + (wav.cent ?? 5) * 7 / 32);
-    const midi = absolute ? wav.midiPitch + 12 * (register - 4) : 12 * register + row - 1 + 12;
+    // polyNote: concert index + register + one octave so MIDI C4 matches painted home C.
+    const midi = absolute ? wav.midiPitch + 12 * (register - 4) : 60 + 12 * (register - 4) + row - (ch + 1);
     const semi = wav.semi ?? 16;
     const semitones = roundAway(-2 + semi * 4 / 32);
     const cents = (presetCents[wav.inst ?? 12] ?? 0) + (-50 + semi * 100 / 32);
     return [tableFrequency(midi - 12 + semitones) * 2 ** (cents / 1200)];
   }
-  const midi = absolute ? wav.midiPitch : Math.min(62, Math.max(36, row - ch + 47)) + 12;
+  const midi = absolute ? wav.midiPitch : Math.min(62, Math.max(36, 48 + row - (ch + 1))) + 12;
   const cent = wav.cent ?? 16;
   const frequency = absolute ? midiFrequency(midi) : tableFrequency(midi - 12);
   const base = frequency * 2 ** ((cent * 48 / 32 - 24) / 12);

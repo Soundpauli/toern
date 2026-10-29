@@ -33,9 +33,13 @@ int main(){
   // A duplicate or unrelated Note Off cannot cut the remaining held key.
   handleNoteOff(ch,60,0);handleNoteOff(ch,72,0);
   assert(pressedKeyCount[ch]==1&&env[ch].releases==0);
-  handleNoteOff(ch,64,0);
-  assert(pressedKeyCount[ch]==0&&env[ch].releases==1);
+  noteOnTriggered[ch]=true;  handleNoteOff(ch,64,0);
+  assert(pressedKeyCount[ch]==0&&env[ch].releases==0&&!persistentNoteOn[ch]);
   assert(!midiHeldNote[ch][64]&&midiHeldVelocity[ch][64]==0);
+  // Without an in-flight ADSR gate, the last key starts release immediately.
+  midiHeldNote[ch][72]=true;pressedKeyCount[ch]=1;noteOnTriggered[ch]=false;persistentNoteOn[ch]=true;
+  handleNoteOff(ch,72,0);
+  assert(pressedKeyCount[ch]==0&&env[ch].releases==1);
  }
  midiHeldNote[1][60]=true;pressedKeyCount[1]=1;
  const int before=env[1].releases;
@@ -53,4 +57,4 @@ with tempfile.TemporaryDirectory(prefix='toern-midi-release-') as directory:
     flags = ['-isystem', '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform == 'darwin' else []
     subprocess.run(['c++', '-std=c++17', *flags, str(path / 'test.cpp'), '-o', str(path / 'test')], check=True)
     subprocess.run([str(path / 'test')], check=True)
-print('PASS: all eight sample voices release only after the final held key; duplicate/disabled/invalid releases are safe.')
+print('PASS: all eight sample voices stay open after the final held key; duplicate/disabled/invalid releases are safe.')

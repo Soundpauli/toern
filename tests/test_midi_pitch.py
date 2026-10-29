@@ -74,22 +74,32 @@ int main(){
   assert(std::fabs(monoFrequency(ch,row,-1)-monoFrequency(ch,0,sent))<0.1f);
  }
  assert(std::fabs(monoFrequency(13,0,69)-440.0f)<0.001f);
+ // Home row is channel+1 and sounds C4 on every voice (CH11 table index 48).
+ for(int ch:{1,2,8,11,13,14}){
+  const int home=ch+1;Note cell;cell.channel=ch;octave[0]=4;transpose=0;
+  assert(midiPitchForOutput(cell,home)==60);
+  if(ch==11)assert(ch11PitchForNote(cell,home)==48);
+ }
+ octave[0]=4;transpose=0;MIDI_NOTE_CLAMP=false;
+ playIncomingMidiNote(11,60,midiPitchToGridRow(11,60),100);
+ assert(polyPlayed==48&&midiHeldCh11SoundNote[60]==48);
  for(int oct=1;oct<=7;++oct)for(int trans:{-12,0,12})for(int row=1;row<=15;++row){
   octave[0]=oct;transpose=trans;Note cell;cell.channel=11;
   int native=ch11PitchForNote(cell,row),sent=midiPitchForOutput(cell,row);
   assert(sent==native+12);
-  transpose=0;octave[0]=4;playIncomingMidiNote(11,sent,midiPitchToGridRow(11,sent),100);
+  transpose=0;octave[0]=4;MIDI_NOTE_CLAMP=false;
+  playIncomingMidiNote(11,sent,midiPitchToGridRow(11,sent),100);
   assert(polyPlayed==native);transpose=trans;
  }
- octave[0]=4;transpose=0;
+ octave[0]=4;transpose=0;MIDI_NOTE_CLAMP=false;
  playIncomingMidiNote(11,69,midiPitchToGridRow(11,69),100);
  assert(polyPlayed==57&&midiHeldCh11SoundNote[69]==57);
  assert(std::fabs(synthNoteFrequency(polyPlayed)-440.0f)<0.001f);
- // Ch11 octave/transpose remain usable as patch tuning for preserved MIDI.
+ // Octave/transpose remain patch tuning for preserved MIDI.
  octave[0]=3;transpose=2;playIncomingMidiNote(11,69,1,100);assert(polyPlayed==47);
  octave[0]=4;transpose=2;
  MIDI_NOTE_CLAMP=true;playIncomingMidiNote(11,69,midiPitchToGridRow(11,69),100);
- assert(polyPlayed==59); // FOLD does not cancel intentional transpose.
+ assert(polyPlayed==47); // FOLD plays the folded grid pitch + transpose
  MIDI_NOTE_CLAMP=false;octave[0]=4;transpose=0;
  // FOLD is octave-only; every supported voice retains incoming pitch class.
  for(int ch:{1,2,8,11,13,14})for(int p=0;p<128;++p){

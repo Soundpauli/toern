@@ -57,9 +57,9 @@ function pitchClass(filt, channel, row) {
   if (channel >= 1 && channel <= 8) {
     noteValue = 12 + row - (channel + 1) + Math.round(adj.detune) + adj.oct;
   } else if (channel === 11) {
-    noteValue = 12 * -1 + row - 1;
+    noteValue = 12 * -1 + row - (11 + 1);
   } else if (channel === 13 || channel === 14) {
-    noteValue = row - channel + 47;
+    noteValue = 48 + row - (channel + 1);
   }
   noteValue %= 12;
   return noteValue < 0 ? noteValue + 12 : noteValue;
