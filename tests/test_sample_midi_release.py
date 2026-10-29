@@ -11,7 +11,7 @@ end = source.index('\nvoid handleStart()', start)
 harness = r'''
 #include <cassert>
 #include <cstdint>
-bool MIDI_NOTE_RECEIVE=true;
+bool MIDI_NOTE_RECEIVE=true,MIDI_VOICE_SELECT=true;
 bool midiHeldNote[17][128]{},persistentNoteOn[17]{},noteOnTriggered[17]{};
 uint8_t midiHeldVelocity[17][128]{};
 int16_t pressedKeyCount[17]{},midiHeldCh11SoundNote[128]{};

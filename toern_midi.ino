@@ -1291,77 +1291,82 @@ void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
 
 void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
   extern bool MIDI_NOTE_RECEIVE;
+  extern bool MIDI_VOICE_SELECT;
   if (!MIDI_NOTE_RECEIVE || pitch >= 128) return;
 
-  int channel = mapMidiToLogicalChannel((int)midiChannel, pitch);
+  // YPOS maps Note On to the selected voice. If that selection changes while a
+  // key is down, Note Off must still find CH11/13/14 (and samples) by the held
+  // bitmap — otherwise the voice rings until Pause.
+  const bool ypos = !MIDI_VOICE_SELECT;
+  const int mapped = mapMidiToLogicalChannel((int)midiChannel, pitch);
+  const int first = ypos ? 1 : mapped;
+  const int last = ypos ? 16 : mapped;
 
-  // Sample ADSR release follows MIDI Note Off too. Keep the held-note counter
-  // so releasing one key cannot cut a different key held on this mono voice.
-  if (channel >= 1 && channel <= 8) {
-    midiHeldNote[channel][pitch] = false;
-    midiHeldVelocity[channel][pitch] = 0;
-    int held = 0;
-    for (int p = 0; p < 128; ++p) if (midiHeldNote[channel][p]) ++held;
-    pressedKeyCount[channel] = held;
-    if (!held) {
-      persistentNoteOn[channel] = false;
-      // Grid hits are one-shots (sustain until the sample ends). Don't start
-      // release on key-up; default RELEASE is 0 and would chop the file.
-      if (envelopes[channel] && !noteOnTriggered[channel]) envelopes[channel]->noteOff();
-    }
-    return;
-  }
+  for (int channel = first; channel <= last; ++channel) {
+    if (channel < 1 || channel > 16) continue;
+    if (ypos && !midiHeldNote[channel][pitch]) continue;
 
-  // For persistent channels (11-14) use the counter (must match handleNoteOn indexing).
-  if (channel >= 11 && channel <= 14) {
-    if (pitch < 128) {
+    // Sample ADSR release follows MIDI Note Off too. Keep the held-note counter
+    // so releasing one key cannot cut a different key held on this mono voice.
+    if (channel >= 1 && channel <= 8) {
       midiHeldNote[channel][pitch] = false;
       midiHeldVelocity[channel][pitch] = 0;
+      int held = 0;
+      for (int p = 0; p < 128; ++p) if (midiHeldNote[channel][p]) ++held;
+      pressedKeyCount[channel] = held;
+      if (!held) {
+        persistentNoteOn[channel] = false;
+        // Grid hits are one-shots (sustain until the sample ends). Don't start
+        // release on key-up; default RELEASE is 0 and would chop the file.
+        if (envelopes[channel] && !noteOnTriggered[channel]) envelopes[channel]->noteOff();
+      }
+      continue;
     }
-    {
+
+    // Persistent synths (11-14) must match handleNoteOn indexing.
+    if (channel >= 11 && channel <= 14) {
+      midiHeldNote[channel][pitch] = false;
+      midiHeldVelocity[channel][pitch] = 0;
       int cnt = 0;
       for (int p = 0; p < 128; p++) {
         if (midiHeldNote[channel][p]) cnt++;
       }
       pressedKeyCount[channel] = (int16_t)cnt;
-    }
 
-    if (channel == 11) {
-      // Ch11 uses the polyphonic voice system (Senvelope1/2/filter), not envelopes[11].
-      // Arp owns the sounding voice while keys are down; don't kill it on each
-      // key-off. Non-arp: release the exact voice identity created by Note On.
-      extern bool synthMidiArpEnabled(int ch);
-      if (!synthMidiArpEnabled(11)) {
-        extern int16_t midiHeldCh11SoundNote[128];
-        int note = (int)midiHeldCh11SoundNote[pitch];
-        stopSound(note, 0);
-      }
-      if (pressedKeyCount[11] == 0) {
-        persistentNoteOn[11] = false;
-        noteOnTriggered[11] = false;
-        extern void midiArpResetVoice(int ch);
-        midiArpResetVoice(11);
-      }
-    } else if (pressedKeyCount[channel] == 0) {
-      if (channel == 13 || channel == 14) {
-        // Arp reset only stops the voice if a phrase was running. MIDI hold
-        // (arp off) still needs a real envelope noteOff.
-        extern void midiArpResetVoice(int ch);
-        midiArpResetVoice(channel);
-        stopSynthChannel(channel);
-      } else if (envelopes[channel]) {
-        envelopes[channel]->noteOff();
-        persistentNoteOn[channel] = false;
-        noteOnTriggered[channel] = false;
-      } else {
-        persistentNoteOn[channel] = false;
-        noteOnTriggered[channel] = false;
+      if (channel == 11) {
+        // Ch11 uses the polyphonic voice system (Senvelope1/2/filter), not envelopes[11].
+        // Arp owns the sounding voice while keys are down; don't kill it on each
+        // key-off. Non-arp: release the exact voice identity created by Note On.
+        extern bool synthMidiArpEnabled(int ch);
+        if (!synthMidiArpEnabled(11)) {
+          extern int16_t midiHeldCh11SoundNote[128];
+          int note = (int)midiHeldCh11SoundNote[pitch];
+          stopSound(note, 0);
+        }
+        if (pressedKeyCount[11] == 0) {
+          persistentNoteOn[11] = false;
+          noteOnTriggered[11] = false;
+          extern void midiArpResetVoice(int ch);
+          midiArpResetVoice(11);
+        }
+      } else if (pressedKeyCount[channel] == 0) {
+        if (channel == 13 || channel == 14) {
+          // Arp reset only stops the voice if a phrase was running. MIDI hold
+          // (arp off) still needs a real envelope noteOff.
+          extern void midiArpResetVoice(int ch);
+          midiArpResetVoice(channel);
+          stopSynthChannel(channel);
+        } else if (envelopes[channel]) {
+          envelopes[channel]->noteOff();
+          persistentNoteOn[channel] = false;
+          noteOnTriggered[channel] = false;
+        } else {
+          persistentNoteOn[channel] = false;
+          noteOnTriggered[channel] = false;
+        }
       }
     }
-    return;
   }
-
-  // Existing logic for non-persistent channels goes here...
 }
 void handleStart() {
   if (touchyEnabled) return;

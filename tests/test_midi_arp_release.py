@@ -48,7 +48,10 @@ uint8_t midiPitchToGridRow(int ch,uint8_t pitch){return toern_midi_pitch::gridRo
 bool preserveIncomingMidiPitch(){return !MIDI_NOTE_CLAMP;}
 bool isChildVoiceDisabled(int){return false;}
 void logMidiRxNoteOn(uint8_t,uint8_t,uint8_t){}
-void playIncomingMidiNote(int ch,uint8_t pitch,uint8_t,uint8_t){notes[ch]=pitch;fires[ch]++;}
+void playIncomingMidiNote(int ch,uint8_t pitch,uint8_t,uint8_t){
+ notes[ch]=pitch;fires[ch]++;
+ if(ch==11)midiHeldCh11SoundNote[pitch]=(int16_t)pitch;
+}
 bool placeLiveGridNote(uint8_t,uint8_t,uint8_t,uint8_t,bool,bool){return true;}
 void handleNoteOff(uint8_t,uint8_t,uint8_t);
 static void midiArpFireChannel(int);
@@ -77,6 +80,13 @@ int main(){
   assert(fires[ch]==count);
   handleNoteOn(1,60,100);handleNoteOn(1,60,0);assert(pressedKeyCount[ch]==0&&notes[ch]==-1);
  }
+ // YPOS Note Off must follow the voice that took Note On, not the new selection.
+ MIDI_VOICE_SELECT=false;
+ for(int ch:{11,13,14}){
+  GLOB.currentChannel=ch;arp[ch]=0;handleNoteOn(1,60,100);
+  GLOB.currentChannel=1;handleNoteOff(1,60,0);
+  assert(pressedKeyCount[ch]==0&&notes[ch]==-1);
+ }
  // MIDI Note Off is serviced while a cooperative SD read is still in progress.
  ioBytes[256*16*4]=0xFF;ioBytes[256*16*4+1]=0xFE;
  toern_pattern_io::Reader<IoFile,IoNote,IoSettings,256,16> job;
@@ -100,4 +110,4 @@ with tempfile.TemporaryDirectory(prefix='toern-midi-arp-release-') as tmp:
  flags=['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform=='darwin' else []
  subprocess.run(['c++','-std=c++17','-fsanitize=address,undefined',*flags,'-I',str(root/'src'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
  subprocess.run([str(p/'test')],check=True)
-print('PASS: MIDI arp key release on CH11/13/14, stopped/playing, both directions, overlapping keys and velocity-zero release.')
+print('PASS: MIDI arp key release on CH11/13/14, YPOS channel change, stopped/playing, both directions, overlapping keys and velocity-zero release.')
