@@ -136,6 +136,7 @@ export function createDevice(matrix, statusEl, rings) {
     genre: 0, genreLength: 8,
     seekOf, endOf, invOf, browse: 0, browseDir: "samples", browseItems: listDir("samples", { parent: false }),
     wavFile: false, peaks: null, shownWav: "", sampleUrl: Array(16).fill(null),
+    loadedSampleUrl: Array(16).fill(null),
     vel: { v: 8, p: 5, c: 1, vol: 16, backSingle: false }, okAt: 0,
     filterTouch: 0, filterTouchAt: 0, filterFlash: "", filterFlashAt: 0, filterPage: 0,
     drawBaseColorMode: true, monitor: 0, loopLength: 0, simpleNotes: false, clockInt: true,
@@ -1116,7 +1117,12 @@ export function createDevice(matrix, statusEl, rings) {
     s.packSlot = slot;
     const urls = packWavs(slot);
     if (!urls.some(Boolean)) return;
-    urls.forEach((url, i) => { if (url) engine.loadUrl(i + 1, url); });
+    urls.forEach((url, i) => {
+      if (url) engine.loadUrl(i + 1, url);
+      // Kit pack replaces the voice — drop samples/-browser loaded marks.
+      s.loadedSampleUrl[i + 1] = null;
+      s.sampleUrl[i + 1] = null;
+    });
     s.wavName = `PACK ${slot}`;
   }
   function patternHasNotes(data) {
@@ -1161,7 +1167,10 @@ export function createDevice(matrix, statusEl, rings) {
         ? [n.channel, n.velocity, n.probability, n.condition, n.midiPitch <= 127 ? n.midiPitch : 255]
         : 0);
     }
-    return { version: 2, patternFile, notes: out, filt: filt.map(f => ({...f})), chVol: chVol.slice(), bpm: s.bpm };
+    return {
+      version: 2, patternFile, notes: out, filt: filt.map(f => ({...f})), chVol: chVol.slice(), bpm: s.bpm,
+      loadedSampleUrl: s.loadedSampleUrl.slice(), sampleUrl: s.sampleUrl.slice(),
+    };
   }
   function restore(data, loadSound = true) {
     for (let x = 1; x <= STEPS; x++) for (let y = 1; y <= ROWS; y++) Object.assign(note[x][y], emptyNote());
@@ -1172,6 +1181,12 @@ export function createDevice(matrix, statusEl, rings) {
         for (const ch of SOUND_CH) Object.assign(filt[ch], emptyFilt(ch), data.filt?.[ch] || {});
         for (const ch of SOUND_CH) filt[ch].sus = clamp(filt[ch].sus, 1, 32);
         if (Array.isArray(data.chVol)) for (const ch of SOUND_CH) chVol[ch] = clamp(data.chVol[ch] ?? 16, 0, 16);
+        if (Array.isArray(data.loadedSampleUrl)) {
+          for (let i = 0; i < s.loadedSampleUrl.length; i++) s.loadedSampleUrl[i] = data.loadedSampleUrl[i] || null;
+        }
+        if (Array.isArray(data.sampleUrl)) {
+          for (let i = 0; i < s.sampleUrl.length; i++) s.sampleUrl[i] = data.sampleUrl[i] || null;
+        }
       }
       if (Number.isFinite(data.bpm)) s.bpm = clamp(data.bpm, 40, 240);
       data = data.notes;
@@ -1887,11 +1902,16 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "kit" && enc === 0) {
       const urls = packWavs(s.packSlot);
       if (urls.some(Boolean)) {
-        urls.forEach((url, i) => { if (url) engine.loadUrl(i + 1, url); });
+        urls.forEach((url, i) => {
+          if (url) engine.loadUrl(i + 1, url);
+          s.loadedSampleUrl[i + 1] = null;
+          s.sampleUrl[i + 1] = null;
+        });
         s.wavName = `PACK ${s.packSlot}`;
       } else {
         const stored = loadStore("toern-web-packs")[String(s.packSlot)];
         applyPack(stored && stored.wavs ? stored : DUMMY_PACKS[s.packSlot]);
+        for (let i = 1; i <= 8; i++) { s.loadedSampleUrl[i] = null; s.sampleUrl[i] = null; }
       }
       finishLoad();
       saveEeprom();
@@ -1924,6 +1944,7 @@ export function createDevice(matrix, statusEl, rings) {
         const ch = s.GLOB.currentChannel;
         engine.loadUrl(ch, item.url);
         s.sampleUrl[ch] = item.url;
+        s.loadedSampleUrl[ch] = item.url;
         s.wavName = item.name.replace(/\.wav$/i, "").slice(0, 8);
         finishLoad();
       }

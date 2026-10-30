@@ -913,19 +913,20 @@ function spectral(y) {
   return rgb.map((c) => Math.round(c * 0.4));
 }
 
-function drawMarquee(matrix, text, color, now, file) {
-  if (!matrix.__marquee || matrix.__marquee.text !== text) {
-    matrix.__marquee = { text, offset: 0, dir: 1, next: now + 300 };
+function drawMarquee(matrix, text, color, now, file, reserveLoadedMark = false) {
+  if (!matrix.__marquee || matrix.__marquee.text !== text || matrix.__marquee.reserve !== reserveLoadedMark) {
+    matrix.__marquee = { text, offset: 0, dir: 1, next: now + 300, reserve: reserveLoadedMark };
   }
   const mark = matrix.__marquee;
   const width = textPixelWidth(text);
   const initial = file && text.length > 4 ? 4 : 1;
+  const viewEnd = reserveLoadedMark ? Math.max(1, COLS - 4) : 14;
   if (text.length === 1) {
-    matrix.drawText(text, 14, 12, color);
+    matrix.drawText(text, reserveLoadedMark ? Math.max(1, viewEnd - 2) : 14, 12, color);
     return;
   }
-  const offsetMax = Math.max(0, initial + width - 15);
-  if (text.length > 4 && width > 14 && now >= mark.next) {
+  const offsetMax = Math.max(0, initial + width - (viewEnd + 1));
+  if (text.length > 4 && width > viewEnd - initial + 1 && now >= mark.next) {
     if (mark.dir > 0) {
       mark.offset += 1;
       if (mark.offset >= offsetMax) { mark.offset = offsetMax; mark.dir = -1; mark.next = now + 500; }
@@ -995,7 +996,11 @@ export function drawWave(matrix, s, now) {
     }
   } else drawDepth(matrix, s.browseDir || "samples");
   const color = file ? fileSizeColor(item?.size || 0) : [255, 255, 0];
-  drawMarquee(matrix, s.wavName || "-", color, now || 0, file);
+  const ch = s.GLOB.currentChannel;
+  // Compare against the last encoder-2 load, not browse/preview sampleUrl.
+  const selectionIsLoaded = file && !!item?.url && item.url === s.loadedSampleUrl?.[ch];
+  drawMarquee(matrix, s.wavName || "-", color, now || 0, file, selectionIsLoaded);
+  if (selectionIsLoaded) matrix.drawText(">", Math.max(1, COLS - 2), 12, [120, 120, 120]);
 }
 
 export function drawSong(matrix, s) {
@@ -1054,7 +1059,7 @@ export function drawBoot(matrix, now, bootAt, wavesOnly = false) {
   return !wavesOnly && t >= 5000;
 }
 
-const VERSION = "v3.02";
+const VERSION = "v3.03a";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
 function drawInfo(matrix, s, now, color) {

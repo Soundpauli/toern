@@ -5,7 +5,7 @@
 #include "toern_touch_input.h"
 #include "src/toern_pattern_slots.h"
 
-#define VERSION "v3.03"
+#define VERSION "v3.03a"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -11018,6 +11018,10 @@ FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0C
   GLOB.seekEnd = savedSeekEnd;
   // char OUTPUTf[50]; // This seems unused here
   // sprintf(OUTPUTf, "%u/%u.wav", pack_id, 1);
+  // Menu kit load: drop ">" marks for overwritten voices. Boot preserve-SP0
+  // runs before autoLoad restores samplePathRel — sync again after autoLoad.
+  extern void syncVoiceLoadedPathsFromStored();
+  syncVoiceLoadedPathsFromStored();
   switchMode(&draw);  // Switch back to draw mode after loading
   applyDrawSingleYEncoderLimits();
 

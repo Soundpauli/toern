@@ -30,6 +30,32 @@ extern bool isNowPlaying;
 // Track last sample selection in showWave() across calls
 static int lastEncoder3Value_forShowWave = -1;
 
+// Path actually in the voice buffer. samplePathRel also tracks the browse/preview
+// row (so encoder-2 load works), so the SMP ">" mark must not use that field.
+static char voiceLoadedPathRel[maxFiles][128] = {};
+
+static void setVoiceLoadedPathRel(int ch, const char *rel) {
+  if (ch < 1 || ch >= maxFiles) return;
+  if (!rel || !rel[0]) {
+    voiceLoadedPathRel[ch][0] = '\0';
+    return;
+  }
+  strncpy(voiceLoadedPathRel[ch], rel, 127);
+  voiceLoadedPathRel[ch][127] = '\0';
+}
+
+// Boot loads the kit before autoLoad restores samplePathRel/sp0Active. Call this
+// after pattern restore (and after kit load) so SMP ">" matches SP0 source paths.
+void syncVoiceLoadedPathsFromStored() {
+  for (int ch = 1; ch <= 8; ch++) {
+    if (SMP.sp0Active[ch] && SMP.samplePathRel[ch][0]) {
+      setVoiceLoadedPathRel(ch, SMP.samplePathRel[ch]);
+    } else {
+      setVoiceLoadedPathRel(ch, nullptr);
+    }
+  }
+}
+
 // SD preview must never overlap AudioPlaySdWav's ISR reads (eDMA bus fault 0x400E80B0).
 static char g_queuedSdPreviewPath[160];
 static bool g_queuedSdPreview = false;
@@ -699,6 +725,7 @@ static void loadEmptySampleToChannel(unsigned int sampleID) {
   samplerAddSample(sampleID, 36, (int16_t *)sampled[sampleID], samplerLen, rateFactor);
   channelDirection[sampleID] = 1;
   endChannelSampleReload(sampleID);
+  setVoiceLoadedPathRel((int)sampleID, nullptr);
 }
 
 FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
@@ -832,6 +859,14 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     samplerAddSample(sampleID, 36, (int16_t *)sampled[sampleID], playLen, rateFactor);
     channelDirection[sampleID] = 1;
     endChannelSampleReload(sampleID);
+    // SP0 keeps the samples/ source path for the ">" mark. Kit pack slots drop
+    // any stale browse identity so SMP does not pretend a samples/ file is loaded.
+    if (loadingFromSp0) {
+      setVoiceLoadedPathRel((int)sampleID, SMP.samplePathRel[sampleID]);
+    } else {
+      if (sampleID < maxFiles) SMP.samplePathRel[sampleID][0] = '\0';
+      setVoiceLoadedPathRel((int)sampleID, nullptr);
+    }
   }
   sdIoYield();
 }
@@ -940,6 +975,10 @@ void showWave() {
   if (g_lastChannelInShowWave != GLOB.currentChannel) {
     g_lastChannelInShowWave = GLOB.currentChannel;
     ch = constrain((int)GLOB.currentChannel, 1, 8);
+    // Cover boot: kit load ran before autoLoad restored samplePathRel.
+    if (!voiceLoadedPathRel[ch][0] && SMP.sp0Active[ch] && SMP.samplePathRel[ch][0]) {
+      setVoiceLoadedPathRel(ch, SMP.samplePathRel[ch]);
+    }
     sampleBrowserRefreshList(ch);
     sampleBrowserSyncBrowseFromStoredPath(ch);
     SMP.wav[ch].fileID = (unsigned int)currentMode->pos[3];
@@ -1176,16 +1215,18 @@ void showWave() {
     return w;
   };
 
-  auto renderLine = [&](const char* text, int y, CRGB color, int& offset, int& dir, unsigned long& nextStepMs, bool isFilename = false) {
+  auto renderLine = [&](const char* text, int y, CRGB color, int& offset, int& dir, unsigned long& nextStepMs, bool isFilename = false, bool reserveLoadedMark = false) {
     int viewStart = 1;
-    int viewEnd = 14;
+    // Leave columns for a right-side ">" when the browse row is the loaded sample.
+    int viewEnd = reserveLoadedMark ? max(1, (int)maxX - 4) : 14;
     int viewWidth = viewEnd - viewStart + 1;
     int width = textPixelWidth(text);
     int fullStrLen = strlen(text);  // Full string length, not displayed part
+    const int singleCharX = reserveLoadedMark ? max(1, viewEnd - 2) : 14;
 
-    // x=14 only if WHOLE string length is exactly 1
+    // Single-glyph names sit on the right of the text field (not under the L).
     if (fullStrLen == 1) {
-      drawText(text, 14, y, color);
+      drawText(text, singleCharX, y, color);
       offset = 0;
       dir = 1;
       return;
@@ -1205,12 +1246,12 @@ void showWave() {
       return;
     }
 
-    // Scroll ping-pong: animate until last char is at x=14, wait, animate back until first char is at initialStartX, wait, repeat
+    // Scroll ping-pong: animate until last char is at viewEnd, wait, animate back until first char is at initialStartX, wait, repeat
     // offset represents pixels scrolled: when offset=0, startX=initialStartX
-    // To get last char to x=14: startX + width - 1 = 14, so startX = 15 - width
-    // Since startX = initialStartX - offset, we have: initialStartX - offset = 15 - width
-    // So: offset = initialStartX + width - 15
-    int offsetMax = max(0, initialStartX + width - 15);
+    // To get last char to viewEnd: startX + width - 1 = viewEnd, so startX = viewEnd + 1 - width
+    // Since startX = initialStartX - offset, we have: initialStartX - offset = viewEnd + 1 - width
+    // So: offset = initialStartX + width - (viewEnd + 1)
+    int offsetMax = max(0, initialStartX + width - (viewEnd + 1));
     unsigned long now = millis();
     
     if (now >= nextStepMs) {
@@ -1290,7 +1331,23 @@ void showWave() {
     CRGB selectionColor = selectionIsFileEntry
         ? fileSizeToColor(g_wavPickSize[ei])
         : CRGB(255, 255, 0);
-    renderLine(selectionLabel, 12, selectionColor, scrollSelectionOffset, selectionDir, nextSelectionStepMs, selectionIsFileEntry);
+    // Loaded mark: browse row matches the path last written into the voice buffer
+    // (not samplePathRel — that follows browse/preview).
+    bool selectionIsLoaded = false;
+    if (selectionIsFileEntry && voiceLoadedPathRel[ch][0] && ei >= 0 && ei < (int)g_wavPickCount) {
+      char browseRel[128];
+      if (g_browseDir[ch][0]) {
+        snprintf(browseRel, sizeof(browseRel), "%s/%s", g_browseDir[ch], g_wavPickName[ei]);
+      } else {
+        snprintf(browseRel, sizeof(browseRel), "%s", g_wavPickName[ei]);
+      }
+      selectionIsLoaded = (strcasecmp(browseRel, voiceLoadedPathRel[ch]) == 0);
+    }
+    renderLine(selectionLabel, 12, selectionColor, scrollSelectionOffset, selectionDir, nextSelectionStepMs, selectionIsFileEntry, selectionIsLoaded);
+    if (selectionIsLoaded) {
+      // 3px ">" flush-right on the filename row (x=maxX-2 .. maxX).
+      drawText(">", max(1, (int)maxX - 2), 12, UI_WHITE);
+    }
   }
   
   yield(); // Yield at end of function to maintain responsiveness
@@ -1649,6 +1706,7 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
   SMP.wav[targetChannel].fileID = SMP.wav[GLOB.currentChannel].fileID;
   strncpy(SMP.samplePathRel[targetChannel], SMP.samplePathRel[GLOB.currentChannel], 127);
   SMP.samplePathRel[targetChannel][127] = 0;
+  setVoiceLoadedPathRel((int)targetChannel, SMP.samplePathRel[targetChannel]);
   return true;
 }
 

@@ -679,6 +679,9 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
     delay(500);
   }
   if (autoload || SMP_LOAD_SETTINGS) loadSMPSettings();
+  // samplePathRel/sp0Active are valid now (kit load on boot ran earlier with empty paths).
+  extern void syncVoiceLoadedPathsFromStored();
+  syncVoiceLoadedPathsFromStored();
   
   if (!autoload) {
     if (!isNowPlaying) {
