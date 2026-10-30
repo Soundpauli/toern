@@ -18,7 +18,7 @@ void setParams(ParameterType paramType, int index) {
       }
       break;
     case ATTACK:
-      mappedValue = toern_audio::attackMilliseconds(SMP.param_settings[index][paramType]);
+      mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
       if (index == 11) {
         for (int v = 0; v < 3; v++) attackAmp[0][v] = (uint16_t)mappedValue;
         updateVals(0);

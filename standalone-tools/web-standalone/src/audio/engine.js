@@ -269,7 +269,7 @@ export function createEngine() {
   const releasing = new Set();
   const sampleLive = {};
   const MAX_VOICES = 40;
-  const att = (env) => 0.5 * ((32 - Math.max(0, Math.min(32, env.att ?? 32))) / 32) ** 2;
+  const att = (env) => Math.max(0.001, ((32 - env.att) / 32) * 2);
   function stopVoice(voice, when) {
     if (!voice || (!live.has(voice) && !releasing.has(voice))) return;
     live.delete(voice); releasing.add(voice);

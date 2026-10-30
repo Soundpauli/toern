@@ -76,7 +76,7 @@ Only samples 1–8 expose **V** / VOLUME (`ARR_GAIN`) beside DLAY, encoder 2. Th
 
 ## ATTACK response
 
-ATTACK keeps the 0–32 stored and displayed range, with time `500 × ((32 − value) / 32)²` ms for samples and synths. Values 32/31/30/28/24/16/0 correspond to approximately 0/0.49/1.95/7.81/31.25/125/500 ms. This gives finer control near the immediate attack and caps the slowest setting at 500 ms. Note-duration calculations use the same curve. Existing preset slider values are retained, so non-neutral preset attacks become faster; CH11's envelope parameter array quantizes times to whole milliseconds. The simulator uses the same curve.
+ATTACK is the stock Teensy envelope mapping: slider 32 is 0 ms, slider 0 is 2000 ms, linear in between. Decay, sustain and release are unchanged (0–1000 ms / 0–1 / 0–1000 ms). Sample voices 1–8 do not use ONE/GATE modes or length-fitted stages.
 
 ## Pause and effects tails
 

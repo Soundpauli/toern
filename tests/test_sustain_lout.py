@@ -62,9 +62,10 @@ void saveSingleModeToEEPROM(int slot,int8_t v){assert(slot==15);savedCodec=v;}
 void redrawMain(int){}
 void lineMenu(){int setting=28;switch(setting){LINE_CASE}}
 int main(){
+ maxParamVal[ATTACK]=2000;
  for(int ch:{1,8,11,13,14})for(int raw=0;raw<=32;++raw){
   envelopes[ch]=&env[ch];SMP.param_settings[ch][ATTACK]=raw;setParams(ATTACK,ch);
-  const float expected=500.f*(32-raw)*(32-raw)/1024.f;
+  const float expected=2000.f*(32-raw)/32.f;
   if(ch==11)assert(attackAmp[0][0]==(uint16_t)expected);
   else assert(std::abs(env[ch].attackMs-expected)<.00001f);
  }

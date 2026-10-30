@@ -1543,7 +1543,7 @@ volatile bool colorsUpdatedViaSerial = false;
 // Number of parameter slots (ATTACK..RELEASE indexes 0-5)
 constexpr int PARAM_COUNT = 6;
 
-FLASHMEM const float maxParamVal[12] = { 1000.0, toern_audio::kAttackMaxMs, 1000.0, 1000.0, 1.0, 1000.0 };
+FLASHMEM const float maxParamVal[12] = { 1000.0, 2000.0, 1000.0, 1000.0, 1.0, 1000.0 };
 
 FilterType defaultFilter[maxFiles] = { HCUT };
 
@@ -7965,7 +7965,7 @@ float getNoteDuration(int channel) {
   if (!channelHasVoiceDelay(channel)) {
     delayMs = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
   }
-  float attackMs = toern_audio::attackMilliseconds(SMP.param_settings[channel][ATTACK]);
+  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
   float holdMs = mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
   float decayMs = mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
 
