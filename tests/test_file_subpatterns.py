@@ -12,7 +12,7 @@ ops=(root/'toern_fileoperations.ino').read_text()
 slots=(root/'toern_pattern_slots.ino').read_text()
 loader=ops[ops.index('FLASHMEM void loadPattern'):ops.index('FLASHMEM void autoLoad')]
 confirm_buttons=main[main.index('  if (currentMode == &patternConfirmMode) {',main.index('FLASHMEM void checkMode')):main.index('  //checkFastRec();')]
-fn_delete=main[main.index('  if (currentMode == &loadSaveTrack && currentMode->pos[3] > 1 && fnEvents[1] == 4)'):main.index('  // Page row: FN + encoder 2 long')]
+fn_delete=main[main.index('  if (currentMode == &loadSaveTrack && currentMode->pos[3] > 1 && fnEvents[1] == 4)'):main.index('  // FN + encoder 2 long')]
 renderer=main[main.index('FLASHMEM void showLoadSave()'):main.index('FLASHMEM void showPresetLoadSave() {')]
 sample=main[main.index('struct Sample {'):main.index('// Declare the device struct')]
 device=main[main.index('struct Device {'):main.index('// Global variables struct')]

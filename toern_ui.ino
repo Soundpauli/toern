@@ -1058,10 +1058,9 @@ void drawStatus() {
     setEncoderRGBIfChanged(1, 0x000000); // Black (no indicator)
   }
 
-  // FN: encoder 2 is the subpattern action when SUBP is ON. Show it only while FN is held.
+  // FN + encoder 2 generates (and selects A–E when SUBP is ON). Show it while FN is held.
   static bool fnEnc2Lit = false;
-  extern bool subpatternsEnabled;
-  if ((currentMode == &draw || currentMode == &singleMode) && fnHeld && subpatternsEnabled) {
+  if ((currentMode == &draw || currentMode == &singleMode) && fnHeld) {
     drawIndicator('M', 'M', 2, false, false);
     CRGB pink = getIndicatorColor('M');
     setEncoderRGBIfChanged(1, (uint32_t)pink.r << 16 | (uint32_t)pink.g << 8 | pink.b);

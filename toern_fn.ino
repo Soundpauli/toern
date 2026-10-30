@@ -71,7 +71,9 @@ static uint8_t fnButtonEvent(int index, uint8_t physicalState) {
 
 static bool dispatchFnTurn(const EncoderTurnEvent &event) {
   if (!event.fn || event.delta == 0) return false;
-  if (event.encoder == 1 && currentMode == &draw) return subpatternTurn(event.delta);
+  extern bool subpatternsEnabled;
+  if (event.encoder == 1 && currentMode == &draw && subpatternsEnabled)
+    return subpatternTurn(event.delta);
   if (event.encoder == 2 && currentMode == &draw && subpatternSelector) return subpatternPageTurn(event.delta);
   if (event.encoder != 0) return false;
   const uint8_t channel = GLOB.currentChannel;

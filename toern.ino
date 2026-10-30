@@ -2813,8 +2813,9 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     preventPaintUnpaint = true;
     return;
   }
-  // Page row: FN + encoder 2 long (0200) generates; FN + encoder 2 short (0100) undoes it.
-  if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 16 && fnEvents[1] == 3) {
+  // FN + encoder 2 long (0200) generates; FN + encoder 2 short (0100) undoes it.
+  // Not tied to SUBP or the old subpattern page row.
+  if ((currentMode == &draw || currentMode == &singleMode) && fnEvents[1] == 3) {
     if (GLOB.singleMode) {
       drawRandoms();
     } else {
@@ -2825,7 +2826,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     preventPaintUnpaint = true;
     return;
   }
-  if ((currentMode == &draw || currentMode == &singleMode) && GLOB.y == 16 && fnEvents[1] == 4) {
+  if ((currentMode == &draw || currentMode == &singleMode) && fnEvents[1] == 4) {
     extern bool undoLastGeneration();
     if (undoLastGeneration()) {
       deleteActiveCopy();

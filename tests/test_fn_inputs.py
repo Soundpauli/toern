@@ -22,7 +22,7 @@ struct Enc {
 } Encoder[4];
 const int SWITCH_5=39,touchThreshold=45;
 int touched=0,activity=0,calls=0,lastDir=0;
-bool fastRecordActive=false,isRecording=false,muteModeActive=false,fnHeld=false,subpatternSelector=false;
+bool fastRecordActive=false,isRecording=false,muteModeActive=false,fnHeld=false,subpatternSelector=false,subpatternsEnabled=true;
 bool subpatternReady=false;
 void subpatternCancelPreview(){}
 bool fnButtonHeld[NUM_ENCODERS]={};
@@ -57,6 +57,8 @@ int main(){
  // Even at the existing limit a rotation status can dispatch FN direction.
  Encoder[0].status=i2cEncoderLibV2::RDEC;value=2;assert(handleFnEncoder(0,value,true));assert(lastDir==-1);
  Encoder[1].status=i2cEncoderLibV2::RINC;value=6;assert(handleFnEncoder(1,value,true));assert(slotCalls==1&&value==5);
+ subpatternsEnabled=false;Encoder[1].status=i2cEncoderLibV2::RINC;value=6;assert(handleFnEncoder(1,value,true));assert(slotCalls==1&&value==5);
+ subpatternsEnabled=true;
  assert(Encoder[0].lo==1&&Encoder[0].hi==16&&Encoder[0].step==1);
  for(int enc=1;enc<4;enc++){value=42;assert(handleFnEncoder(enc,value,true));assert(value==draw.pos[enc]&&Encoder[enc].counter==draw.pos[enc]);}
  // All four buttons get FN-long=3; releasing FN during the hold never produces 2.
