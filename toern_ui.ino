@@ -437,25 +437,22 @@ void drawBase() {
         continue;
       }
 
-      // Determine color once per row
+      // Determine color once per row. Home row is one extra white blend, then
+      // scaled once — doing that inside the column loop compounded per LED.
       CRGB color = (y == currentChannel + 1) ? cachedHighlightColor : cachedSingleModeColor;
-      
+
       // Dim base color by 50% when muted (reduce brightness only, preserve hue/saturation)
       if (isMuted) {
         CHSV hsv = rgb2hsv_approximate(color);
         hsv.v = (hsv.v * 128) / 255;  // Reduce brightness by 50% (128/255 ≈ 0.5)
         hsv2rgb_rainbow(hsv, color);
       }
-      
+      if (y == currentChannel + 1) {
+        color = blend(color, CRGB::White, 5);
+        color.nscale8(190);
+      }
+
       for (unsigned int x = 1; x < maxX + 1; x++) {
-
-        // Grundton (z. B. C3) pro Kanal etwas heller darstellen
-        if (y == currentChannel + 1 ) {
-         color = blend(color, CRGB::White, 5);
-         // Make default (C4) row 1/2 less bright
-         color.nscale8(190);  // Scale to 50% brightness (190/255 ≈ 0.7)
-        }        
-
         light(x, y, color);
       }
     }

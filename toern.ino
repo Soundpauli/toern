@@ -10,7 +10,8 @@ extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
 // Real additional buffers are attached in setup(), including Arduino IDE builds.
-#define TargetFPS 60
+#define TargetFPS 30
+#define IntroFPS 60
 
 // Playback diagnostics / debug (keep OFF for reliability)
 #define DEBUG_PLAYBACK_SERIAL 0  // set to 1 to enable extra playback Serial prints
@@ -831,9 +832,8 @@ unsigned int recInput = AUDIO_INPUT_LINEIN;
 float pulse = 1;
 int dir = 1;
 double playNoteInterval = 150000.0;
-// Matrix refresh interval; TargetFPS defines the configured frame rate.
-// This is the single source of truth for display-related timing across the codebase
-unsigned int RefreshTime = 1000UL / TargetFPS;
+// Boot logo runs at IntroFPS. setup() switches to TargetFPS when runAnimation() returns.
+unsigned int RefreshTime = 1000UL / IntroFPS;
 float marqueePos = maxX;
 bool shifted = false;
 bool movingForward = true;  // Variable to track the direction of movement
@@ -4155,13 +4155,26 @@ FLASHMEM void initNeoSlider() {
   delay(40);
 }
 
+// Note level from the last trigger (velocity × fader), before channel volume.
+static float sampleTriggerAmp[9] = { 0, 1, 1, 1, 1, 1, 1, 1, 1 };
+// Once encoder 2 has moved a sample, its 0..16 level lives on the ramped reader
+// (same as a NeoSlider). The channel amplifier stays at unity so the two don't stack.
+static bool sampleVolOnReader[9] = {};
+
 static void applyVoiceAmpGainFromVol(int ch, int vol) {
   vol = constrain(vol, 0, 16);
   if (vol <= 0) return;  // never AMP=0 — silence via play amplitude / mute
+  if (ch >= 1 && ch <= 8 && sampleVolOnReader[ch]) vol = 16;
   if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
     float channelvolume = mapf((float)vol, 0, maxY, 0.0f, 1.0f);
     amps[ch]->gain(channelvolume);
   }
+}
+
+static float sampleChannelVolScale(int ch) {
+  if (ch < 1 || ch > 8 || !sampleVolOnReader[ch]) return 1.0f;
+  int vol = constrain((int)SMP.channelVol[ch], 0, 16);
+  return (float)vol / 16.0f;
 }
 
 static inline uint8_t effectiveNoteVelocity(int vel) {
@@ -4239,8 +4252,9 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
     // MIDI Note Off must not start release (default R is 0 and would chop).
     noteOnTriggered[ch] = true;
   }
+  if (ch >= 1 && ch <= 8) sampleTriggerAmp[ch] = amp;
   if (voices[ch] != nullptr) {
-    voices[ch]->snapAmplitude(amp);
+    voices[ch]->snapAmplitude(ch >= 1 && ch <= 8 ? amp * sampleChannelVolScale(ch) : amp);
   }
   // DTNE fine tune (±1 semitone) for sample voices — rate multiply after integer note.
   if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
@@ -4262,8 +4276,7 @@ FLASHMEM void reapplyAllSampleChannelGains() {
     if (amps[ch] == nullptr) continue;
     int vol = constrain((int)SMP.channelVol[ch], 0, 16);
     if (vol <= 0) continue;
-    float channelvolume = mapf((float)vol, 0, maxY, 0.0f, 1.0f);
-    amps[ch]->gain(channelvolume);
+    applyVoiceAmpGainFromVol(ch, vol);
   }
   for (int ch = 11; ch <= 14; ch++) {
     if (ch == 12 || amps[ch] == nullptr) continue;
@@ -4750,6 +4763,7 @@ FLASHMEM void setup() {
   recInput = (recMode == 1) ? AUDIO_INPUT_MIC : AUDIO_INPUT_LINEIN;
 
   runAnimation();
+  RefreshTime = 1000UL / TargetFPS;
 
   // I2S DMA is already running (global AudioInputI2S / AudioOutputI2S).
   // SD on this same bus deadlocks the first boot after a flash: that boot is
@@ -5824,20 +5838,33 @@ FLASHMEM void checkEncoders() {
           if (!protectedChannel) {
             int ch = GLOB.currentChannel;
             if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
-              // Track last non-zero volume so unmute can restore it later
+              // Track last non-zero volume so unmute can restore it later.
+              // Only this voice's amp moves. Snapping every mixer and forcing
+              // the playing sample back to full level on each detent crackles.
               if (requestedVol > 0 && ch < (int)maxY) {
                 lastChannelVolBeforeMute[ch] = (uint8_t)requestedVol;
                 SMP.channelVol[ch] = requestedVol;
-                applyVoiceAmpGainFromVol(ch, requestedVol);
-                applyPlayAmplitude(ch, playAmpForVoice(ch));
+                // Samples follow the NeoSlider: ramp the reader on every detent,
+                // including the note that is already playing. The amplifier is
+                // parked at unity so a later hit does not snap back to full.
+                if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
+                  if (!sampleVolOnReader[ch]) {
+                    applyVoiceAmpGainFromVol(ch, 16);
+                    sampleVolOnReader[ch] = true;
+                  }
+                  float base = sampleTriggerAmp[ch] > 0.0f ? sampleTriggerAmp[ch] : 1.0f;
+                  applyPlayAmplitude(ch, base * ((float)requestedVol / 16.0f));
+                } else {
+                  applyVoiceAmpGainFromVol(ch, requestedVol);
+                  if (prevVolume <= 0) applyPlayAmplitude(ch, playAmpForVoice(ch));
+                }
               } else {
-                // Encoder 0: mute + play-amp 0. AMP / channelVol stay at last non-zero.
+                // Encoder at 0: mute via play-amp, same as a fader at the bottom stop.
+                // AMP / channelVol stay at last non-zero.
                 applyPlayAmplitude(ch, 0.0f);
               }
             }
             showCtrlVolumeChange(requestedVol);
-            // Neighbor voices were going silent under heavy I2C without mute/UI change.
-            reapplyAllSampleChannelGains();
           } else {
             showCtrlVolumeChange(actualVol);
           }

@@ -63,6 +63,8 @@ bool fastRecordActive=false,pendingPauseAudioCleanup=true;uint8_t fastRecordChan
 bool sliderControlled=false;
 bool sampleReloadBusy=false;
 bool noteOnTriggered[17]{};
+float sampleTriggerAmp[9]={};
+float sampleChannelVolScale(int){return 1.f;}
 bool isChannelSampleReloadBusy(unsigned){return sampleReloadBusy;}
 float neoSliderVelScale[4]={1,1,1,1},neoSliderLastVelNorm[4]={},detune[9]={};
 int noteOns=0,noteOffs=0;
