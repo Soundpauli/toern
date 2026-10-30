@@ -723,6 +723,14 @@ for (const width of [16,32]) {
  }
 }
 console.log('PASS: loaded identity survives browsing, saved sounds default ON, sideload resets per file/visit, triangle/delete indicators, and sustain stops at 1.');
+// NEW/BLNK must clear inherited mutes.
+pattDevice.toggleMute(1);pattDevice.toggleMute(3);pattDevice.toggleMute(11);
+assert(pattDevice.muted(1)&&pattDevice.muted(3)&&pattDevice.muted(11));
+pattOpen(-1);pattDevice.press(0);
+assert.equal(pattDevice.mode(),'new');
+pattDevice.press(0); // BLNK default → load
+assert.equal(pattDevice.mode(),'draw');
+for(const ch of [1,2,3,4,5,6,7,8,11,13,14])assert(!pattDevice.muted(ch),`NEW/BLNK leaves ch${ch} unmuted`);
 }
 
 // CTRL=PAGE shows page feedback with the default NORM cursor setting.

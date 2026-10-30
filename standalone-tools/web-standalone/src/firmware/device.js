@@ -1334,6 +1334,12 @@ export function createDevice(matrix, statusEl, rings) {
     generateGenre(note, type, pages, COLS, STEPS);
     const drift = type === 0 ? 0 : Math.floor(Math.random() * 9) - 4;
     s.bpm = clamp((GENRES[type]?.bpm || 100) + drift, 40, 240);
+    // Fresh NEW/BLNK (and every genre template) must not inherit prior mutes.
+    for (let i = 0; i < s.mute.length; i++) s.mute[i] = false;
+    s.solo = false;
+    s.soloSaved = null;
+    s.fullMute = false;
+    s.fullMuteSaved = null;
     s.GLOB.edit = 1;
     s.GLOB.page = 1;
     s.GLOB.x = 1;

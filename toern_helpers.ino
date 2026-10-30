@@ -3412,6 +3412,19 @@ FLASHMEM void generateGenreTrack() {
 
   extern void resetAllChannelVolumesToDefault();
   resetAllChannelVolumesToDefault();
+  // Fresh NEW/BLNK (and every genre template) must not inherit prior mutes.
+  extern bool globalMutes[maxY];
+  extern bool pageMutes[maxPages][maxY];
+  for (int ch = 0; ch < maxY; ch++) {
+    globalMutes[ch] = false;
+    SMP.globalMutes[ch] = false;
+    for (int page = 0; page < maxPages; page++) {
+      pageMutes[page][ch] = false;
+      SMP.pageMutes[page][ch] = false;
+    }
+    SMP.mute[ch] = 0;
+  }
+  unmuteAllChannels();
   updateLastPage();
   subpatternNotePagesLoaded();
   
