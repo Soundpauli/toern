@@ -181,7 +181,7 @@ MenuPage modePages[MODE_PAGES_COUNT] = {
   {"PONG", 24, false, nullptr},
   {"SONG", 22, false, nullptr},
   {"TCHY", 63, false, nullptr},
-  {"AUTO", 15, true, "PAGES"},
+  {"AGEN", 15, true, "PAGES"},
   {"DEMO", 66, false, nullptr}
 };
 MenuPage advancedPages[ADV_PAGES_COUNT] = {
@@ -2205,7 +2205,7 @@ FLASHMEM void showEtcMenu() {
       setEtcRGB(2, (uint32_t)w.r << 16 | (uint32_t)w.g << 8 | w.b);
       // Page-nav indicator (encoder 4) should always match ETC text color (e.g. "RSET")
       {
-        CRGB c = currentMenuParentTextColor();
+        CRGB c = autogenActive()?UI_GREEN:currentMenuParentTextColor();
         drawLargeIndicatorCustom(c, 4);
         // drawLargeIndicatorCustom writes RGB — re-cache so later frames skip
         lastEtcRGB[3] = (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b;
@@ -2574,8 +2574,8 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuIndicator('L', imageMode ? 'Y' : (recChannelClear == 0 ? 'R' : (recChannelClear == 1 ? 'G' : (recChannelClear == 2 ? 'Y' : (recChannelClear == 3 ? 'N' : 'M')))), 3);
       break;
       
-    case 15: // AI - Song Generation
-      drawMenuText("AUTO", 2, 10, currentMenuParentTextColor());
+    case 15: // AGEN - Song Generation
+      drawMenuText("AGEN", 2, 10, currentMenuParentTextColor());
       // AUTO generate: encoder(0) press triggers generation -> green indicator on encoder(0)
       drawMenuIndicator('L', 'G', 1);  // Encoder(0): Large Green (generate)
       drawMenuIndicator('L', 'Y', 2);  // Encoder 2: Large Yellow (base start)
@@ -3167,7 +3167,13 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
     }
       
     
-    case 15: { // AI page - Base Page Range + Additional Pages Count (all on one line)
+    case 15: { // AGEN: one-shot range or autonomous ON/OFF
+      if(autogenActive()){
+        drawMenuValue("ON",2,3,UI_GREEN);
+        for(int x=1;x<=(int)maxX;++x)light(x,8,x==(int)autogenPage()?UI_GREEN:CRGB::Black);
+        break;
+      }
+      drawMenuValue("OFF",2,3,UI_DIM_RED);
       // Draw everything on y=8: Orange base range + Green additional pages count
       for (int x = 1; x <= 16; x++) {
         if (x >= aiBaseStartPage && x <= aiBaseEndPage) {
@@ -5213,6 +5219,7 @@ FLASHMEM void switchMenu(int menuPosition){
         }
 
         case 15:
+        stopAutogen();
         // AI Song Generation - generate song from current page to target page
         generateSong();
         break;

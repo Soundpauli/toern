@@ -8,6 +8,7 @@ static const uint8_t PITCH_EXTENSION_HEADER[8] = {
 bool g_enterNewFileAfterCorruptAutoload = false;
 
 FLASHMEM void clearPatternNotes() {
+  stopAutogen();
   for (unsigned int x = 0; x <= maxlen; x++) {
     for (unsigned int y = 0; y <= maxY; y++) {
       note[x][y].channel = 0;
@@ -79,6 +80,7 @@ FLASHMEM void deleteSelectedPatternFamily(unsigned target) {
 }
 
 FLASHMEM void savePattern(bool autosave) {
+  stopAutogen();
   extern void stopSdPreviewIfPlaying();
   extern void sdIoYield();
   extern void sdIoBeginAudioSafe();
@@ -420,6 +422,7 @@ FLASHMEM void saveSamplePack(int pack) {
 }
 
 FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
+  stopAutogen();
   if (!autoload && targetFile > 1000) return;
   if (!autoload && (patternFamilyBusy() || subpatternOldSavePending || (subpatternSaveNew && !subpatternReady))) { subpatternFailure(); return; }
   extern bool isNowPlaying;

@@ -3,7 +3,7 @@
 
 // Passive timing only: no I/O, allocation or interrupt masking. Read via PERF.
 struct ToernLoopTiming {
-  enum Stage {Serial, Background, Render, Storage, Inputs, Other, Count};
+  enum Stage {Serial, Background, Render, Storage, Inputs, Faders, Buttons, Touch, Other, Count};
   static constexpr uint32_t stallThresholdUs=50000;
   uint32_t maximum[Count]={},loopMaximum=0,stalls=0,lastStallUs=0;
   Stage stage=Serial,lastStallStage=Serial;
@@ -18,6 +18,6 @@ struct ToernLoopTiming {
   void end(uint32_t now){mark(Other,now);const uint32_t duration=now-started;if(duration>loopMaximum)loopMaximum=duration;}
   static const char *name(Stage stage){
     switch(stage){case Serial:return "serial";case Background:return "background";
-      case Render:return "render";case Storage:return "storage";case Inputs:return "inputs";default:return "other";}
+      case Render:return "render";case Storage:return "storage";case Inputs:return "inputs";case Faders:return "faders";case Buttons:return "buttons";case Touch:return "touch";default:return "other";}
   }
 };

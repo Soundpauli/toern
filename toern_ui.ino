@@ -1509,7 +1509,27 @@ FLASHMEM void drawSampleLoadOverlay(uint8_t progressPercent) {
   drawText("LOAD", 2, 10, textColor);
 }
 
+bool autogenStatusVisible(){return autogenActive()&&(currentMode==&draw||currentMode==&singleMode);}
+FLASHMEM static void drawAutogenPageState(unsigned playing,unsigned other,bool ready){
+  for(unsigned x=1;x<=maxX;++x)light(x,maxY,CRGB::Black);
+  light(playing,maxY,CRGB(220,220,220));
+  light(other,maxY,ready?CRGB(220,180,0):CRGB(200,0,0));
+}
+FLASHMEM void drawAutogenPages(){
+  unsigned playing,other,remaining;bool ready;
+  autogenUiSnapshot(playing,other,ready,remaining);
+  drawAutogenPageState(playing,other,ready);
+}
+FLASHMEM void drawAutogenStatus(){
+  if(!autogenStatusVisible())return;
+  unsigned playing,other,remaining;bool ready;
+  autogenUiSnapshot(playing,other,ready,remaining);
+  drawAutogenPageState(playing,other,ready);
+  drawPageNrOverlay(remaining);
+}
+
 void drawPages() {
+  if(autogenActive()){drawAutogenPages();return;}
   //GLOB.edit = 1;
   CRGB ledColor;
   extern int loopLength;
@@ -1517,8 +1537,8 @@ void drawPages() {
   const unsigned int effectiveMaxPages = maxPages / numModules;  // 1 module:16 pages, 2 modules:8 pages
   extern bool voiceMode;
   extern bool songModeActive;
-  const bool voiceDots = voiceMode && !songModeActive;
-  const unsigned int effectiveLoopLength = (!voiceDots && loopLength > 0) ? min((unsigned int)loopLength, effectiveMaxPages) : 0;
+  const bool voiceDots = !autogenActive() && voiceMode && !songModeActive;
+  const unsigned int effectiveLoopLength = (!autogenActive() && !voiceDots && loopLength > 0) ? min((unsigned int)loopLength, effectiveMaxPages) : 0;
 
   // First, clear the entire top row across all matrices
   for (unsigned int x = 1; x <= maxX; x++) {
@@ -1620,7 +1640,7 @@ FLASHMEM void drawTriggers() {
   extern void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]);
   extern unsigned int voicePickStep(const unsigned int src[16], unsigned int row);
   extern unsigned int beatForUI;
-  const bool voiceGrid = voiceMode && isNowPlaying && !songModeActive && !subpatternPreviewVisible();
+  const bool voiceGrid = !autogenActive() && voiceMode && isNowPlaying && !songModeActive && !subpatternPreviewVisible();
   unsigned int voiceGlobalPage = 1;
   if (voiceGrid && beatForUI > 0 && maxX > 0) voiceGlobalPage = ((beatForUI - 1) / maxX) + 1;
   const bool isSingle = GLOB.singleMode;
@@ -1928,7 +1948,7 @@ void drawTimer() {
   extern bool songModeActive;
   extern void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]);
   extern unsigned int voicePickStep(const unsigned int src[16], unsigned int row);
-  const bool voiceGrid = voiceMode && isNowPlaying && !songModeActive && !subpatternPreviewVisible();
+  const bool voiceGrid = !autogenActive() && voiceMode && isNowPlaying && !songModeActive && !subpatternPreviewVisible();
   if (voiceGrid) {
     // The grid is one composite voice page, so the shared column is always visible.
     shouldShowTimer = true;

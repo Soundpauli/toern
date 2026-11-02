@@ -253,3 +253,16 @@ Made with too many late nights and exactly the right number of RGB LEDs.
 
 **Jan aka warft_ctrl** (formerly soundpauli)  
 Hamburg, 2026
+
+### AGEN self-playing mode
+
+**MODE → AGEN → click encoder 4** toggles temporary autonomous evolution of the
+current page. A second page is prepared in the background, then the two alternate
+at page boundaries. Phrases repeat a randomized 1, 4 or 8 times, favoring longer
+4/8-pass sections. AGEN keeps the starting key/register, builds diatonic chords,
+and develops the drums through breaks, builds, fills and drops. The top row shows
+the two working pages (white playing, red preparing, yellow ready); the number
+at the right counts remaining repeats. Note probabilities vary the details.
+Working buffers are allocated only while enabled; musical tables stay in flash.
+Click again or pause to restore the original pattern; temporary notes are not
+autosaved. Encoder 1 retains one-shot song generation. Runs entirely on device.

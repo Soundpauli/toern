@@ -25,6 +25,32 @@ for encoder_dir in libdeps_dir.glob("DuPPa Library*"):
         text = replace_once(text, old, new, "DuPPa 32-bit step readback")
         encoder_source.write_text(text)
 
+    # Never dispatch 0xFF as every encoder event after a failed status read.
+    # Decode counters only after a complete register read; short reads must not
+    # turn Wire.read() == -1 into a new knob position.
+    replacements = {
+        "uint8_t i2cEncoderLibV2::readEncoderByte(uint8_t reg)": r"""uint8_t i2cEncoderLibV2::readEncoderByte(uint8_t reg) {
+  const uint8_t failure=(reg==REG_ESTATUS||reg==REG_I2STATUS)?0:0xFF;
+  Wire.beginTransmission(_add);Wire.write(reg);
+  if(Wire.endTransmission()!=0)return failure;
+  if(Wire.requestFrom(_add,(uint8_t)1)!=1||Wire.available()<1)return failure;
+  return (uint8_t)Wire.read();
+}""",
+        "int16_t i2cEncoderLibV2::readEncoderInt(uint8_t reg)": r"""int16_t i2cEncoderLibV2::readEncoderInt(uint8_t reg) {
+  Wire.beginTransmission(_add);Wire.write(reg);
+  if(Wire.endTransmission()!=0)return (int16_t)_tem_data.val;
+  if(Wire.requestFrom(_add,(uint8_t)2)!=2||Wire.available()<2)return (int16_t)_tem_data.val;
+  _tem_data.bval[1]=Wire.read();_tem_data.bval[0]=Wire.read();
+  return (int16_t)_tem_data.val;
+}""",
+    }
+    for signature, replacement in replacements.items():
+        start=text.index(signature);end=text.index("{",start)+1;depth=1
+        while depth:
+            depth+=(text[end]=="{")-(text[end]=="}");end+=1
+        text=text[:start]+replacement+text[end:]
+    encoder_source.write_text(text)
+
 
 for library_dir in libdeps_dir.glob("TeensyAudioSampler*"):
     for controller in (library_dir / "src").glob("**/sampleplaymidicontroller.h"):

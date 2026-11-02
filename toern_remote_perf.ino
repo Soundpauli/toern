@@ -7,6 +7,7 @@ FLASHMEM static unsigned remoteCpuBasisPoints(float percent) {
 
 FLASHMEM void remoteReplyPerformance(unsigned long id) {
   remoteReplyStart(id);
+  Serial.printf("\"i2c_errors\":%lu,\"i2c_max_us\":%lu,\"i2c_skipped\":%lu,",(unsigned long)toernI2cErrors(),(unsigned long)toernI2cMaxUs(),(unsigned long)toernI2cSkipped());
   Serial.printf("\"temp_centi\":%d,\"loop_max_us\":%lu,\"loop_stalls\":%lu,\"last_stall_us\":%lu,\"last_stall_stage\":\"%s\",\"stage_max_us\":{",
       (int)(tempmonGetTemp()*100.0f),(unsigned long)loopTiming.loopMaximum,
       (unsigned long)loopTiming.stalls,(unsigned long)loopTiming.lastStallUs,ToernLoopTiming::name(loopTiming.lastStallStage));

@@ -1659,9 +1659,10 @@ FLASHMEM void FastLEDshow() {
     // Strip stays at full brightness (set in setup() and not modified)
     const bool showFn = currentMode != &touchyMode && fnDirection != 0
       && (int32_t)(fnDirectionUntil - millis()) > 0;
-    if (showFn || neoSliderOverlayVisible() || fillRequestOverlayVisible() || subpatternOverlayVisible() || storageTransferVisible()) {
+    if (autogenStatusVisible() || showFn || neoSliderOverlayVisible() || fillRequestOverlayVisible() || subpatternOverlayVisible() || storageTransferVisible()) {
       CRGB saved[NUM_LEDS];
       memcpy(saved, leds, sizeof(saved));
+      drawAutogenStatus();
       drawNeoSliderOverlay();
       if (showFn) drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
       drawFillRequestOverlay();
@@ -1924,9 +1925,9 @@ FLASHMEM static CompanionContext analyzeCompanionContext(int firstPage, int last
   }
 
   // Score tonic/mode candidates using Krumhansl-style tonal weights + bass root evidence.
-  static const int8_t majorScale[] = {0, 2, 4, 5, 7, 9, 11};
-  static const int8_t minorScale[] = {0, 2, 3, 5, 7, 8, 10};
-  static const int8_t degreeWeights[7] = {6, 2, 4, 3, 5, 3, 2};
+  static const int8_t majorScale[] PROGMEM = {0, 2, 4, 5, 7, 9, 11};
+  static const int8_t minorScale[] PROGMEM = {0, 2, 3, 5, 7, 8, 10};
+  static const int8_t degreeWeights[7] PROGMEM = {6, 2, 4, 3, 5, 3, 2};
   int bestScore = -32768;
   int bestRootPc = (ctx.rootRow - 1) % 12;
   bool bestMinor = false;
@@ -1993,8 +1994,8 @@ FLASHMEM static void clearCompanionPage(int page) {
 FLASHMEM static int companionFreeRow(unsigned int step, int preferred);
 
 FLASHMEM static int companionScaleRow(const CompanionContext &ctx, bool lowRegister, int motion) {
-  static const int8_t majorIntervals[] = {0, 2, 4, 5, 7, 9, 11};
-  static const int8_t minorIntervals[] = {0, 2, 3, 5, 7, 8, 10};
+  static const int8_t majorIntervals[] PROGMEM = {0, 2, 4, 5, 7, 9, 11};
+  static const int8_t minorIntervals[] PROGMEM = {0, 2, 3, 5, 7, 8, 10};
   const int8_t *scale = ctx.isMinor ? minorIntervals : majorIntervals;
   int root = ctx.empty ? random(1, 6) : (int)ctx.rootRow;
   int degree = motion % 7;
@@ -2011,8 +2012,8 @@ FLASHMEM static int companionScaleRow(const CompanionContext &ctx, bool lowRegis
 }
 
 FLASHMEM static void companionFillScalePcs(const CompanionHarmony &harm, int8_t out[7]) {
-  static const int8_t majorIntervals[] = {0, 2, 4, 5, 7, 9, 11};
-  static const int8_t minorIntervals[] = {0, 2, 3, 5, 7, 8, 10};
+  static const int8_t majorIntervals[] PROGMEM = {0, 2, 4, 5, 7, 9, 11};
+  static const int8_t minorIntervals[] PROGMEM = {0, 2, 3, 5, 7, 8, 10};
   const int8_t *intervals = harm.isMinor ? minorIntervals : majorIntervals;
   for (int i = 0; i < 7; i++) {
     out[i] = (int8_t)((harm.rootPc + intervals[i]) % 12);
@@ -2029,13 +2030,13 @@ FLASHMEM static CompanionHarmony companionMakeHarmony(const CompanionContext &ct
   harm.isMinor = noTonalContext ? (((variation / 2) & 1) == 0) : ctx.isMinor;
 
   // Common diatonic loops (scale degrees 0..6). Minor defaults to i–VI–III–VII.
-  static const uint8_t majorProg[][4] = {
+  static const uint8_t majorProg[][4] PROGMEM = {
       {0, 4, 5, 3},  // I V vi IV
       {0, 3, 4, 0},  // I IV V I
       {0, 5, 3, 4},  // I vi IV V
       {5, 3, 0, 4},  // vi IV I V
   };
-  static const uint8_t minorProg[][4] = {
+  static const uint8_t minorProg[][4] PROGMEM = {
       {0, 5, 2, 6},  // i VI III VII
       {0, 3, 5, 4},  // i iv VI V
       {0, 5, 3, 4},  // i VI iv V
@@ -2253,7 +2254,7 @@ FLASHMEM static int companionPercussionRow(uint8_t channel, CompanionRole role, 
 
   if (role == CompanionRole::Tom) {
     // Toms can step across 3 adjacent pitch rows (high-mid-low turnaround)
-    static const int8_t tomContour[4] = {1, 0, 0, -1};
+    static const int8_t tomContour[4] PROGMEM = {1, 0, 0, -1};
     int delta = (phase >= 12) ? tomContour[phase - 12] : ((phase & 4) ? 0 : 1);
     return constrain(home + delta, 1, 16);
   }
@@ -2341,7 +2342,7 @@ FLASHMEM static void generateCompanionChannelPage(int page, uint8_t channel,
 
   // Build an 8-step rhythmic + melodic motif cell so the second half of the bar
   // repeats the rhythmic hook with a musical cadence/answer instead of random noise.
-  static const int8_t motifContours[8][8] = {
+  static const int8_t motifContours[8][8] PROGMEM = {
       {0, 0, 2, 1, 0, 4, 2, 1},
       {0, 2, 4, 2, 0, -1, 1, 2},
       {0, 4, 2, 0, 2, 1, 0, -1},
@@ -2762,7 +2763,7 @@ FLASHMEM void drawRandomsMultiPage() {
   CompanionGroove pageGroove = companionMakeGroove(baseCtx, page, seed);
 
   // Generate in musical role order so each voice reacts to the voices already placed on this page
-  static const uint8_t generationOrder[] = {1, 2, 4, 3, 5, 6, 11, 13, 14, 7, 8};
+  static const uint8_t generationOrder[] PROGMEM = {1, 2, 4, 3, 5, 6, 11, 13, 14, 7, 8};
   for (uint8_t ch : generationOrder) {
     if (!pick[ch] || (populated & (1u << ch)) || isChildVoiceDisabled(ch)) continue;
     CompanionContext ctx = analyzeCompanionContext(1, max(activePages, page), page, ch);
@@ -5044,7 +5045,7 @@ FLASHMEM void generateSong() {
     return;
   }
 
-  static const uint8_t generationOrder[] = {1, 2, 3, 4, 5, 6, 11, 13, 14, 7, 8};
+  static const uint8_t generationOrder[] PROGMEM = {1, 2, 3, 4, 5, 6, 11, 13, 14, 7, 8};
   bool channelsUsed[16] = {};
   bool channelOnPage[17][16] = {};
   bool baseEmpty = true;
@@ -5138,4 +5139,233 @@ FLASHMEM void generateSong() {
   extern void switchMode(Mode *newMode);
   extern Mode draw;
   switchMode(&draw);
+}
+
+// AGEN: RAM-only alternating performance pages. The original bank stays intact.
+#include "src/toern_autogen.h"
+#include "src/toern_autogen_music.h"
+#include <new>
+struct AutogenWorkspace {
+  Note notes[maxlen+1][maxY+1];
+  Note (*original)[maxY+1]=nullptr;
+  unsigned savedEdit=1,savedPage=1,savedX=1;
+  bool mutes[16]={},building=false,chordPair=false;
+  unsigned voice=0,seed=0,source=1,target=2,anchor=1;
+  uint16_t channels=0;
+  CompanionContext context,foundation;
+  int registers[16]={};
+  toern_autogen_music::Section section=toern_autogen_music::Section::Groove;
+  CompanionHarmony harmony;
+  CompanionGroove groove;
+};
+static_assert(sizeof(AutogenWorkspace)<=24*1024,"AGEN workspace must stay bounded and allocated only on entry");
+static ToernAutogen agen;
+static AutogenWorkspace *agenWork=nullptr;
+static bool agenRestoreUI=false;
+static const uint8_t agenOrder[] PROGMEM={1,2,4,3,5,6,11,13,14,7,8};
+
+bool autogenActive(){return agen.active;}
+unsigned autogenPage(){return agen.source();}
+unsigned autogenOtherPage(){return agen.target();}
+bool autogenNextReady(){return agen.ready;}
+unsigned autogenRepeatsLeft(){return max(1u,(unsigned)agen.repeatsLeft);}
+void autogenUiSnapshot(unsigned &playing,unsigned &other,bool &ready,unsigned &remaining){
+  toern_audio::StateGuard guard;
+  playing=agen.source();other=agen.target();ready=agen.ready;remaining=max(1u,(unsigned)agen.repeatsLeft);
+}
+FLASHMEM static void applyAutogenProbabilities(Note (*grid)[maxY+1],unsigned page,unsigned channel,uint32_t seed){
+  const unsigned start=(page-1)*maxX+1;
+  for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row){
+    Note &cell=grid[start+col][row];
+    if(cell.channel==channel)cell.probability=min(cell.probability,ToernAutogen::noteChance(channel,col,seed));
+  }
+}
+bool autogenMuted(int channel){return channel>=0&&channel<16?agenWork->mutes[channel]:false;}
+void autogenSetMute(int channel,bool muted){if(channel>=0&&channel<16)agenWork->mutes[channel]=muted;}
+void autogenPrepareStep(){
+  const unsigned start=agen.firstStep();
+  if(beat<start||beat>=start+agen.width)beat=start;
+  GLOB.page=agen.source();
+}
+void autogenAdvanceStep(){
+  const unsigned before=agen.source();beat=agen.advance(beat);GLOB.page=agen.source();
+  if(before!=agen.source())loopCount=1;
+  else if(beat==agen.firstStep()){if(++loopCount>256)loopCount=1;}
+}
+FLASHMEM static int autogenReferenceMidi(const Note &cell,unsigned ch,unsigned row){
+  if(cell.midiPitch<=127)return cell.midiPitch;
+  int reference=ch==11?12*(int)octave[0]+transpose+(int)row-12:
+      ch==13||ch==14?48+(int)row-(int)ch-1:
+      12*SampleRate[ch]+(int)row-(int)ch-1+(int)lroundf(detune[ch])+(int)lroundf(channelOctave[ch]);
+  return constrain(reference,24,108);
+}
+FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned phrase){
+  using namespace toern_autogen_music;
+  const unsigned start=(page-1)*maxX+1;
+  const bool tonal=ch==6||ch==7||ch==8||ch==11||ch==13||ch==14;
+  for(unsigned col=0;col<maxX;++col){
+    Note events[16];unsigned rows[16],count=0;
+    for(unsigned row=1;row<=maxY;++row)if(note[start+col][row].channel==ch){
+      events[count]=note[start+col][row];rows[count++]=row;note[start+col][row].channel=0;
+    }
+    if(!tonal){
+      const int action=drum(agenWork->section,ch,col,maxX,agenWork->seed);
+      if(action==0)continue;
+      if(action>0){
+        const int row=count?rows[0]:agenWork->foundation.channelHomeRow[ch];
+        const uint8_t probability=count?events[0].probability:100;
+        companionPlaceCellLimited(start+col,row,ch,action,probability,1,NOTE_MIDI_PITCH_NONE);
+      }else for(unsigned i=0;i<count;++i)companionPlaceCellLimited(start+col,rows[i],ch,events[i].velocity,
+          events[i].probability,events[i].condition,events[i].midiPitch);
+      continue;
+    }
+    if(agenWork->chordPair&&(ch==13||ch==14)){
+      if(col%8==0){
+        int pitch=nearestPc(60,chordPc(agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,ch==13?1:2));
+        companionPlaceCellLimited(start+col,ch,ch,86,100,1,pitch);
+      }
+      continue;
+    }
+    const bool bass=ch==6||ch==14||(ch==11&&agenWork->registers[ch]<48);
+    if(bass&&!bassAllowed(agenWork->section,col,maxX))continue;
+    // Three diatonic voices in the starting register, rather than parallel chromatic shifts.
+    if(ch==11&&!bass&&col%8==0){
+      for(unsigned tone=0;tone<3;++tone){
+        int pitch=nearestPc(agenWork->registers[ch],chordPc(agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,tone));
+        companionPlaceCellLimited(start+col,constrain((int)agenWork->foundation.channelHomeRow[ch]+(int)tone,1,16),ch,
+            count?events[0].velocity:88,count?events[0].probability:100,1,pitch);
+      }
+      continue;
+    }
+    for(unsigned i=0;i<count;++i){
+      const int reference=autogenReferenceMidi(events[i],ch,rows[i]);
+      const int pitch=fitPitch(reference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,bass?14:ch,col);
+      if(ch>=11)companionPlaceCellLimited(start+col,rows[i],ch,events[i].velocity,
+          events[i].probability,events[i].condition,pitch);
+      else {
+        // Sample playback follows rows: find a free, correctly tuned row, never shift a collision off key.
+        int best=0,distance=999;
+        for(int row=1;row<=16;++row)if(note[start+col][row].channel==0&&companionPitchClassForRow(ch,row)==pitch%12){
+          int d=abs(row-(int)rows[i]);if(d<distance){best=row;distance=d;}
+        }
+        if(best){note[start+col][best]=events[i];note[start+col][best].midiPitch=pitch;}
+      }
+    }
+  }
+}
+FLASHMEM void stopAutogen(){
+  if(!agen.active)return;
+  {
+    toern_audio::StateGuard guard;
+    agen.stop();note=agenWork->original;agenWork->original=nullptr;agenWork->building=false;
+    const unsigned phase=beat>0?(beat-1)%agen.width:0;
+    GLOB.edit=constrain((int)agenWork->savedEdit,1,companionEffectivePages());editpage=GLOB.edit;
+    GLOB.page=constrain((int)agenWork->savedPage,1,companionEffectivePages());GLOB.x=agenWork->savedX;
+    beat=(GLOB.page-1)*maxX+(phase%maxX)+1;beatForUI=beat;
+    generationUndoValid=false;agenRestoreUI=true;
+  }
+  agenWork->~AutogenWorkspace();extmem_free(agenWork);agenWork=nullptr;
+  updateLastPage();menuRequestFullRedraw();
+}
+FLASHMEM bool toggleAutogen(){
+  if(agen.active){stopAutogen();return false;}
+  if(childLockEnabled||imageMode||touchyEnabled||fastRecordActive||isRecording||!autogenStorageReady()){
+    showSaveFailureAnimation(false);return false;
+  }
+  void *memory=extmem_malloc(sizeof(AutogenWorkspace));
+  if(!memory){showSaveFailureAnimation(false);return false;}
+  agenWork=new(memory) AutogenWorkspace{};
+  const unsigned base=constrain((int)GLOB.edit,1,companionEffectivePages());
+  agenWork->savedEdit=GLOB.edit;agenWork->savedPage=GLOB.page;agenWork->savedX=GLOB.x;
+  for(int ch=0;ch<16;++ch)agenWork->mutes[ch]=getMuteStateForUI(ch);
+  agenWork->original=note;
+  memcpy(agenWork->notes,note,sizeof(agenWork->notes)); // interrupts stay enabled
+  agenWork->foundation=analyzeCompanionContext(base,base,base,0);
+  agenWork->harmony=companionMakeHarmony(agenWork->foundation,0); // one key for the entire performance
+  uint32_t tonalWeight=0;for(unsigned pc=0;pc<12;++pc)tonalWeight+=agenWork->foundation.pitchClassWeight[pc];
+  if(!tonalWeight){agenWork->harmony.rootPc=0;agenWork->harmony.isMinor=true;}
+  agenWork->anchor=1;const unsigned other=base<(unsigned)companionEffectivePages()?base+1:1;
+  while(agenWork->anchor==base||agenWork->anchor==other)++agenWork->anchor;
+  memcpy(agenWork->notes+(agenWork->anchor-1)*maxX+1,agenWork->notes+(base-1)*maxX+1,maxX*sizeof(agenWork->notes[0]));
+  for(unsigned ch=1;ch<15;++ch){
+    unsigned sum=0,count=0;
+    for(unsigned col=(base-1)*maxX+1;col<=base*maxX;++col)for(unsigned row=1;row<=maxY;++row)
+      if(note[col][row].channel==ch){sum+=autogenReferenceMidi(note[col][row],ch,row);++count;}
+    agenWork->registers[ch]=count?sum/count:ch==6||ch==14?36:60;
+  }
+  const unsigned phase=isNowPlaying&&beat>0?(beat-1)%maxX:0;
+  const unsigned repeats=ToernAutogen::phraseRepeats(random(6));
+  const uint32_t probabilitySeed=random(1,256);
+  for(uint8_t ch:agenOrder)applyAutogenProbabilities(agenWork->notes,base,ch,probabilitySeed);
+  if(!isNowPlaying)play(true);
+  {
+    toern_audio::StateGuard guard;
+    note=agenWork->notes;agen.start(base,maxX,MAX_STEPS,repeats);agenWork->building=false;agenRestoreUI=false;
+    generationUndoValid=false;beat=(base-1)*maxX+phase+1;beatForUI=beat;GLOB.page=base;loopCount=1;
+  }
+  noteUserActivity();menuRequestFullRedraw();return true;
+}
+FLASHMEM void serviceAutogen(){
+  if(!agen.active){
+    if(agenRestoreUI){
+      agenRestoreUI=false;
+      if(currentMode==&draw||currentMode==&singleMode){
+        currentMode->pos[3]=GLOB.x;Encoder[3].writeCounter((int32_t)GLOB.x);
+        if(ctrlMode==0){currentMode->pos[1]=GLOB.edit;Encoder[1].writeCounter((int32_t)GLOB.edit);}
+      }
+    }
+    return;
+  }
+  if(!isNowPlaying||maxX!=agen.width||childLockEnabled||imageMode||touchyEnabled||fastRecordActive||isRecording){stopAutogen();return;}
+  if(GLOB.edit!=agen.source()){
+    const unsigned col=GLOB.x>0?(GLOB.x-1)%maxX+1:1;
+    GLOB.edit=agen.source();editpage=GLOB.edit;GLOB.x=(GLOB.edit-1)*maxX+col;
+    if(currentMode==&draw||currentMode==&singleMode){
+      currentMode->pos[3]=GLOB.x;Encoder[3].writeCounter((int32_t)GLOB.x);
+      if(ctrlMode==0){currentMode->pos[1]=GLOB.edit;Encoder[1].writeCounter((int32_t)GLOB.edit);}
+    }
+    menuRequestFullRedraw();
+  }
+  if(!agen.needsBuild)return;
+  if(!agenWork->building){
+    agenWork->source=agenWork->anchor;agenWork->target=agen.target();agenWork->voice=0;agenWork->seed=random(1,256)+agen.generation*37;
+    agenWork->section=toern_autogen_music::section(agen.generation+1);
+    agenWork->channels=0;
+    const unsigned start=(agenWork->source-1)*maxX+1;
+    for(unsigned x=start;x<start+maxX;++x)for(unsigned y=1;y<=maxY;++y){
+      const unsigned ch=note[x][y].channel;
+      if(ch<16&&companionChannelSupported(ch))agenWork->channels|=1u<<ch;
+    }
+    // Empty pages get a restrained starter using the existing companion engine.
+    if(!agenWork->channels)agenWork->channels=(1u<<1)|(1u<<2)|(1u<<3)|(1u<<11)|(1u<<13);
+    // Introduce at most one companion during development; keep the voice count bounded.
+    unsigned count=0;for(unsigned ch=1;ch<15;++ch)if(agenWork->channels&(1u<<ch))++count;
+    agenWork->chordPair=agenWork->registers[11]<48&&(agenWork->channels&(1u<<11))
+        &&!(agenWork->channels&((1u<<13)|(1u<<14)))&&count<=5;
+    if(agenWork->chordPair){agenWork->channels|=(1u<<13)|(1u<<14);count+=2;}
+    for(unsigned candidate:{2u,3u,11u}){
+      const bool needed=candidate==11||(candidate==2&&(agenWork->section==toern_autogen_music::Section::Build||agenWork->section==toern_autogen_music::Section::Fill))||candidate==3;
+      if(needed&&count<7&&!(agenWork->channels&(1u<<candidate))&&!isChildVoiceDisabled(candidate)){agenWork->channels|=1u<<candidate;++count;}
+    }
+    agenWork->context=analyzeCompanionContext(agenWork->source,agenWork->source,agenWork->source,0);
+    agenWork->groove=companionMakeGroove(agenWork->context,agenWork->target,agenWork->seed);
+    clearCompanionPage(agenWork->target);agenWork->building=true;return;
+  }
+  // At most one voice per main-loop pass; no generator or I/O runs in the ISR.
+  if(agenWork->voice<sizeof(agenOrder)){
+    const uint8_t ch=agenOrder[agenWork->voice++];
+    if(!(agenWork->channels&(1u<<ch))||isChildVoiceDisabled(ch))return;
+    CompanionContext ctx=analyzeCompanionContext(agenWork->source,agenWork->source,agenWork->source,ch);
+    const unsigned arc=agenWork->section==toern_autogen_music::Section::Fill?3:agenWork->section==toern_autogen_music::Section::Build?2:agenWork->section==toern_autogen_music::Section::Variation?1:0;
+    if(ctx.channelHitCount[ch])evolveCompanionChannelFromBase(agenWork->source,agenWork->target,ch,arc,
+        agenWork->section==toern_autogen_music::Section::Fill,ctx,agenWork->harmony,agenWork->seed);
+    else generateCompanionChannelPage(agenWork->target,ch,ctx,agenWork->harmony,agenWork->groove,agenWork->seed);
+    arrangeAutogenChannel(agenWork->target,ch,agen.generation+1);
+    applyAutogenProbabilities(note,agenWork->target,ch,agenWork->seed);
+    return;
+  }
+  // Publish only after every cell is complete; timer commits on a page boundary.
+  const unsigned repeats=toern_autogen_music::repeats(agenWork->section,random(6));
+  hasNotes[agenWork->target]=true;lastPage=max(lastPage,agenWork->target);
+  {toern_audio::StateGuard guard;agen.publish(repeats);agenWork->building=false;}
 }

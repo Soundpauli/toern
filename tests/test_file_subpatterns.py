@@ -89,6 +89,7 @@ void switchMode(Mode *mode){currentMode=mode;}void sdIoYield(){}void sdIoBeginAu
 std::string capturedSample;
 bool captureSelectedSampleForDelete(char *out,size_t size){if(capturedSample.empty())return false;snprintf(out,size,"%s",capturedSample.c_str());return true;}
 void sampleBrowserInvalidate(){}
+bool autogenActive(){return false;}void stopAutogen(){}
 int savedKit=-1,kitSaveCalls=0;void saveSamplePack(int pack){savedKit=pack;++kitSaveCalls;switchMode(&draw);}
 void restoreSampleBrowserSelection(unsigned selection){set_Wav.pos[3]=selection;}
 void stopSdPreviewIfPlaying(){}void applyDrawSingleYEncoderLimits(){}void refreshCtrlEncoderConfig(){}

@@ -385,6 +385,27 @@ void midiArpRestart(int ch);
 void midiArpOnHeldNote(int ch);
 void midiArpResetVoice(int ch);
 bool synthMidiArpEnabled(int ch);
+void toernI2cRuntimeBegin();
+bool toernI2cReady();
+uint32_t toernI2cErrors();
+uint32_t toernI2cMaxUs();
+uint32_t toernI2cSkipped();
+bool autogenActive();
+unsigned autogenPage();
+unsigned autogenOtherPage();
+bool autogenNextReady();
+unsigned autogenRepeatsLeft();
+void autogenUiSnapshot(unsigned &playing,unsigned &other,bool &ready,unsigned &remaining);
+bool autogenStatusVisible();
+void drawAutogenStatus();
+bool autogenMuted(int channel);
+void autogenSetMute(int channel,bool muted);
+void autogenPrepareStep();
+void autogenAdvanceStep();
+void stopAutogen();
+bool toggleAutogen();
+void serviceAutogen();
+bool autogenStorageReady();
 void serviceSynthLfo();
 void serviceMidiArp();
 void serviceMidiArpOnPlayhead(uint16_t playedBeat);
@@ -2246,6 +2267,8 @@ void showDrawAfterPatternTransfer() {
 }
 
 FLASHMEM void switchMode(Mode *newMode) {
+  if(autogenActive()&&(newMode==&loadSaveTrack||newMode==&newFileMode||newMode==&songMode||newMode==&touchyMode))stopAutogen();
+
   if (childLockEnabled && !touchyEnabled && (newMode == &filterMode || newMode == &velocity || newMode == &subpatternMode)) {
     newMode = GLOB.singleMode ? &singleMode : &draw;
   }
@@ -3142,7 +3165,8 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
         (inEtcSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 63 || mainSetting == 56 || mainSetting == 57 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
-    if (mainSetting != 15 && !encoder2ValuePage) {
+    if(mainSetting==15){toggleAutogen();menuRequestFullRedraw();return;}
+    if (!encoder2ValuePage) {
       switchMenu(mainSetting);
     }
   } else if (currentMode == &newFileMode && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
@@ -5108,8 +5132,11 @@ FLASHMEM void checkEncoders() {
 
   for (int i = 0; i < NUM_ENCODERS; i++) {
     currentEncoderIndex = i;  // Ensure this is set before calling encoder methods or callbacks that might use it implicitly
+    if(!toernI2cReady()){handle_button_state(&Encoder[i],i);continue;}
+    const uint32_t ioErrors=toernI2cErrors();
     Encoder[i].updateStatus();
     int rawValue = Encoder[i].readCounterInt();
+    if(ioErrors!=toernI2cErrors()||!toernI2cReady()){handle_button_state(&Encoder[i],i);continue;}
     const bool fnTurn = handleFnEncoder(i, rawValue, allowEncWrite);
 #if TOERN_REMOTE_CONTROL
     remoteApplyEncoderTurn(i, rawValue, allowEncWrite, fnTurn);
@@ -7316,6 +7343,7 @@ struct LoopTimingScope {
 #endif
 
 void loop() {
+  toernI2cRuntimeBegin();
 #if TOERN_REMOTE_CONTROL
   LoopTimingScope timingScope;
   remoteService();
@@ -7341,6 +7369,7 @@ void loop() {
   checkMidi();  // Process MIDI early in loop for lower latency
   serviceIdlePolySynthVoices();
   serviceSynthLfo();
+  serviceAutogen();
   serviceMidiArp();
   // Debounced SD backup of EEPROM settings (settings.txt)
   extern void serviceSettingsBackup();
@@ -7703,6 +7732,9 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   loopTiming.mark(ToernLoopTiming::Inputs,micros());
 #endif
   checkEncoders();
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Faders,micros());
+#endif
   if (!fastRecordActive && exttouch) {
     updateNeoSliderVolume();
   }
@@ -7716,7 +7748,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       && currentMode != &patternConfirmMode) {
     drawCursor();
   }
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Buttons,micros());
+#endif
   checkButtons();
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Touch,micros());
+#endif
   checkTouchInputs();
   checkMidi();
 
@@ -8547,6 +8585,7 @@ void play(bool fromStart) {
 }
 
 void pause(bool skipSave) {
+  stopAutogen();
   cancelMidiTransportStart();
   // Send MIDI Stop FIRST (before any other operations) to advance it by ~5ms
   if (MIDI_CLOCK_SEND && MIDI_TRANSPORT_SEND) {
@@ -9302,10 +9341,11 @@ void playNote() {
   // This prevents double-trigger of first note when pages change during playback
   // Track last edit page to detect page changes (static persists across function calls)
   static unsigned int lastEdit = GLOB.edit;
-  if (subpatternCommitAtStepStart()) lastEdit = GLOB.edit;
+  if (!autogenActive()&&subpatternCommitAtStepStart()) lastEdit = GLOB.edit;
   subpatternBoundary = false;
 
-  if (childLockEnabled) {
+  if(autogenActive()){autogenPrepareStep();lastEdit=GLOB.edit;}
+  else if (childLockEnabled) {
     GLOB.edit = 1;
     GLOB.page = 1;
     pendingPage = 0;
@@ -9454,7 +9494,7 @@ void playNote() {
   extern void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]);
   extern unsigned int voicePickStep(const unsigned int src[16], unsigned int row);
   unsigned int voiceSrc[16];
-  const bool useVoiceRead = voiceMode && !songModeActive && beat >= 1 && maxX >= 1;
+  const bool useVoiceRead = !autogenActive() && voiceMode && !songModeActive && beat >= 1 && maxX >= 1;
   if (useVoiceRead) {
     voiceFillColumn(((beat - 1) % maxX) + 1, ((beat - 1) / maxX) + 1, voiceSrc);
   }
@@ -9479,7 +9519,7 @@ void playNote() {
         if (cond > 1 && cond <= 20) {
           bool shouldPlay = false;
           uint16_t condLoop = loopCount;
-          if (voiceMode && ch > 0 && ch < 16) {
+          if (!autogenActive() && voiceMode && ch > 0 && ch < 16) {
             extern bool songModeActive;
             if (!songModeActive) condLoop = voiceLoopCount[ch];
           }
@@ -9636,7 +9676,8 @@ void playNote() {
   }
 
   extern bool songModeActive;
-  if (voiceMode && !songModeActive && !childLockEnabled) {
+  if(autogenActive()){autogenAdvanceStep();}
+  else if (voiceMode && !songModeActive && !childLockEnabled) {
     unsigned int prevBeat = beat;
     unsigned int pages = voiceModePages < 1 ? 1 : voiceModePages;
     unsigned int cycleEnd = pages * maxX;
@@ -11563,6 +11604,7 @@ FLASHMEM void initPageMutes() {
 // Get mute state for a channel, considering PMOD setting
 // For PLAYBACK: uses playing page in NEXT mode, edit page otherwise
 bool getMuteState(int channel) {
+  if(autogenActive())return autogenMuted(channel);
   if (childLockEnabled) {
     return isChildVoiceMuted(channel);
   }
@@ -11583,6 +11625,7 @@ bool getMuteState(int channel) {
 
 // Get mute state for UI display - always uses edit page (what you're viewing)
 FLASHMEM bool getMuteStateForUI(int channel) {
+  if(autogenActive())return autogenMuted(channel);
   if (childLockEnabled) {
     return isChildVoiceMuted(channel);
   }
@@ -11623,6 +11666,7 @@ static void stopMutedVoiceAudio(int ch) {
 
 // Set mute state for a channel, considering PMOD setting
 FLASHMEM void setMuteState(int channel, bool muted) {
+  if(autogenActive()){autogenSetMute(channel,muted);if(muted&&channel>=0&&channel<16)stopMutedVoiceAudio(channel);return;}
   if (channel < 0 || channel >= (int)maxY) return;
 
   if (childLockEnabled) {

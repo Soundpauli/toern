@@ -41,6 +41,7 @@ FLASHMEM static void subpatternCancelPreview() {
   subpatternGridReady=false;subpatternGridSlot=255;subpatternSelectedPage=0;
 }
 FLASHMEM static void resetFileSubpattern() {
+  stopAutogen();
   subpatternWriteJob.abandon(SD);subpatternWritingSlot=255;
   subpatternReady=false;subpatternApplied=false;subpatternSelector=false;
   subpatternFile=0;pendingNewPatternFile=0;deletedSubpatternSlots=0;subpatternSlot=0;
@@ -237,6 +238,7 @@ FLASHMEM static void subpatternShowVisible(uint8_t slot) {
   subpatternSelectedPage=page;subpatternViewPage=page;subpatternViewSlot=slot;subpatternViewOn=true;subpatternViewDirty=false;
 }
 FLASHMEM static bool subpatternTurn(int delta) {
+  stopAutogen();
   if(!subpatternsEnabled||fastRecordActive||isRecording||childLockEnabled||imageMode||subpatternReady
       ||subpatternApplied||patternFamilyBusy()||subpatternFile>999||loadedPatternFile()<1)return true;
   if(!subpatternSelector){
@@ -390,7 +392,11 @@ FLASHMEM static void stageSelectedSubpattern() {
   subpatternPendingSlot=target;__DMB();subpatternReady=true;
   if(!isNowPlaying)subpatternCommitAtStepStart();
 }
+bool autogenStorageReady(){
+  return !patternFamilyBusy()&&!subpatternWriteJob.busy()&&!subpatternWriteJob.incompleteTemporary()&&!subpatternSelector&&!subpatternSwitchArmed&&!subpatternReady;
+}
 FLASHMEM static void serviceSubpatterns() {
+  if(autogenActive())return;
   if(currentMode!=&loadSaveTrack&&subpatternContentReading){cancelSubpatternContentRead();return;}
   if(patternFamilyBusy()){servicePatternFamilyJob();return;}
   if(subpatternSelector&&currentMode!=&draw){subpatternSelector=false;subpatternCancelPreview();}

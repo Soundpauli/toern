@@ -15,6 +15,7 @@ code=r'''
 #include <algorithm>
 using std::min;using std::max;
 #define FLASHMEM
+#define PROGMEM
 #define constrain(v,a,b) std::clamp((v),(a),(b))
 constexpr unsigned maxX=16,MAX_STEPS=64;
 constexpr uint8_t NOTE_MIDI_PITCH_NONE=255;

@@ -6,7 +6,7 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="toern-i2c-startup-") as tmp:
     tmp = Path(tmp)
-    (tmp / "Arduino.h").write_text("#pragma once\n#include <stdint.h>\n")
+    (tmp / "Arduino.h").write_text("#pragma once\n#include <stdint.h>\nuint32_t millis();uint32_t micros();\n")
     (tmp / "Wire.h").write_text(
         "#pragma once\nstruct TwoWire {};\nextern TwoWire Wire;\n"
     )
@@ -15,11 +15,13 @@ with tempfile.TemporaryDirectory(prefix="toern-i2c-startup-") as tmp:
 #include <Wire.h>
 #include <stdint.h>
 TwoWire Wire, other;
-int begins=0, timing=0, writes=0, reads=0;
+int begins=0, timing=0, writes=0, reads=0;uint8_t result=0;uint32_t nowUs=0;
+uint32_t millis(){return nowUs/1000;}uint32_t micros(){return nowUs;}
+void toernI2cRuntimeBegin();bool toernI2cReady();uint32_t toernI2cErrors();uint32_t toernI2cMaxUs();uint32_t toernI2cSkipped();
 extern "C" void __real__ZN7TwoWire5beginEv(TwoWire*) { begins++; }
 void toernApplyI2cTimingAfterBegin() { assert(begins>0); timing++; }
 extern "C" uint8_t __real__ZN7TwoWire15endTransmissionEh(TwoWire*, uint8_t stop) {
-  assert(stop==1); writes++; return 0;
+  assert(stop==1); writes++;if(result==4)nowUs+=51000;return result;
 }
 extern "C" uint8_t __real__ZN7TwoWire11requestFromEhhh(TwoWire*,uint8_t addr,uint8_t len,uint8_t stop) {
   assert(addr==0x30 && len==2 && stop==1); reads++; return len;
@@ -47,6 +49,14 @@ int main() {
   // A later seesaw begin must restore cable timing again.
   __wrap__ZN7TwoWire5beginEv(&Wire);
   assert(timing==2);
+  result=2;assert(__wrap__ZN7TwoWire15endTransmissionEh(&Wire,1)==2);assert(toernI2cReady());
+  result=0;toernI2cRuntimeBegin();assert(toernI2cReady());
+  result=4;assert(__wrap__ZN7TwoWire15endTransmissionEh(&Wire,1)==4);
+  assert(toernI2cErrors()==2&&toernI2cMaxUs()==51000&&!toernI2cReady());
+  const auto before=reads;
+  assert(__wrap__ZN7TwoWire11requestFromEhhh(&Wire,0x30,2,1)==0&&reads==before&&toernI2cSkipped()==1);
+  nowUs+=100000;result=0;assert(toernI2cReady());
+  assert(__wrap__ZN7TwoWire15endTransmissionEh(&Wire,1)==0);
 }
 '''
     cpp = tmp / "startup.cpp"

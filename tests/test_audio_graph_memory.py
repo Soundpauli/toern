@@ -43,3 +43,26 @@ assert 0x20000000<=address<address+size<=0x20080000,('KIT state/File handles mus
 address,size=kit_symbols['kitSaveSector']
 assert 0x20200000<=address<address+size<=0x20280000 and size==2048 and address%32==0,('KIT DMA sector',hex(address),size)
 print('PASS: KIT writer/File state in initialized DTCM; only its aligned 2 KB sector lives in DMA RAM')
+
+# AGEN is rarely enabled: its note/context workspace must not reserve static RAM.
+agen_symbols={}
+for line in demangled.splitlines():
+    fields=line.split(maxsplit=3)
+    if len(fields)==4:
+        try:agen_symbols[fields[3]]=(int(fields[0],16),int(fields[1],16))
+        except ValueError:pass
+assert 'agenWork' in agen_symbols,'Build current AGEN firmware first'
+assert agen_symbols['agenWork'][1]==4,'Only a workspace pointer should stay resident'
+for name in ['agenNotes','agenContext','agenFoundation','agenHarmony','agenGroove','agenRegister']:
+    assert name not in agen_symbols,('AGEN buffers must be allocated on entry',name)
+knowledge=[(name,location) for name,location in agen_symbols.items()
+    if name.startswith('toern_autogen_music::') and '::' in name and name.endswith(('::form','::lengths','::major','::naturalMinor','::harmonicSlots'))]
+assert len(knowledge)>=6,'AGEN theory/arrangement tables missing from compiled image'
+for name,(address,size) in knowledge:
+    assert 0x60000000<=address<address+size<=0x70000000,('AGEN theory belongs in flash',name,hex(address))
+shared=[(name,location) for name,location in agen_symbols.items()
+    if name.endswith(('::majorScale','::minorScale','::majorIntervals','::minorIntervals','::degreeWeights','::majorProg','::minorProg','::motifContours'))]
+assert len(shared)>=8,'Shared generation knowledge tables missing from compiled image'
+for name,(address,size) in shared:
+    assert 0x60000000<=address<address+size<=0x70000000,('Shared musical knowledge belongs in flash',name,hex(address))
+print('PASS: AGEN keeps only its workspace pointer resident; AGEN/shared scale, chord and motif tables live in flash')
