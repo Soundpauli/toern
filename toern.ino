@@ -2514,13 +2514,7 @@ FLASHMEM void switchMode(Mode *newMode) {
       Encoder[3].writeMax((int32_t)encMax);
       Encoder[3].writeCounter((int32_t)fileIdx);
 
-      Encoder[1].writeMin((int32_t)0);
-      Encoder[1].writeMax((int32_t)100);
-      int seekEnd = (int)GLOB.seekEnd;
-      if (seekEnd <= 0) seekEnd = 100;
-      seekEnd = constrain(seekEnd, 0, 100);
-      currentMode->pos[2] = seekEnd;
-      Encoder[1].writeCounter((int32_t)seekEnd);
+      configureSampleTrimEncoders(true);
     }
 
     if (currentMode == &filterMode) {

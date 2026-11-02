@@ -924,6 +924,27 @@ void invalidateShowWaveBrowserSync() {
   g_lastChannelInShowWave = -1;
 }
 
+FLASHMEM void configureSampleTrimEncoders(bool syncCounters) {
+  if (currentMode != &set_Wav) return;
+  // Own both physical ranges after changing encoder configuration. In
+  // particular, do not inherit DRAW's minimum of 1 for the seek-start knob.
+  Encoder[0].writeMin((int32_t)0);
+  Encoder[0].writeMax((int32_t)99);
+  Encoder[0].writeStep((int32_t)1);
+  Encoder[1].writeMin((int32_t)1);
+  Encoder[1].writeMax((int32_t)100);
+  Encoder[1].writeStep((int32_t)1);
+  // Reasserting ranges after a slow preview must not rewind a turn that the
+  // encoder poll has already delivered but showWave has not processed yet.
+  if (!syncCounters) return;
+  const int end = GLOB.seekEnd == 0 ? 100 : constrain((int)GLOB.seekEnd, 1, 100);
+  const int start = constrain((int)GLOB.seek, 0, end - 1);
+  GLOB.seek = currentMode->pos[0] = start;
+  GLOB.seekEnd = currentMode->pos[2] = end;
+  Encoder[0].writeCounter((int32_t)start);
+  Encoder[1].writeCounter((int32_t)end);
+}
+
 void showWave() {
   // ---- Helpers -------------------------------------------------------------
   auto resetSeekRange = []() {
@@ -1035,8 +1056,7 @@ void showWave() {
     Encoder[2].writeMin((int32_t)0);
     Encoder[2].writeMax((int32_t)0);
     Encoder[2].writeCounter((int32_t)0);
-    Encoder[1].writeMin((int32_t)0);
-    Encoder[1].writeMax((int32_t)100);
+    configureSampleTrimEncoders(false);
     encRangeSynced = true;
   }
 
@@ -1068,7 +1088,11 @@ void showWave() {
 
   // ---- Encoder 0/1: Seek start/end (skip while we force 0/100 onto a new wav)
   if (!sampleChanged && !seekHwResetPending) {
-    int newSeek = constrain(currentMode->pos[0], 0, GLOB.seekEnd - 1);
+    int newSeek = constrain((int)currentMode->pos[0], 0, (int)GLOB.seekEnd - 1);
+    if (newSeek != (int)currentMode->pos[0]) {
+      currentMode->pos[0] = (unsigned int)newSeek;
+      if (allowEncWrite) Encoder[0].writeCounter((int32_t)newSeek);
+    }
     if (newSeek != GLOB.seek) {
       GLOB.seek = newSeek;
       currentMode->pos[0] = newSeek;
@@ -1078,7 +1102,7 @@ void showWave() {
       }
     }
 
-    int newSeekEnd = constrain((int)currentMode->pos[2], GLOB.seek + 1, 100);
+    int newSeekEnd = constrain((int)currentMode->pos[2], (int)GLOB.seek + 1, 100);
     if (newSeekEnd != (int)currentMode->pos[2] && allowEncWrite) {
       Encoder[1].writeCounter((int32_t)newSeekEnd);
       currentMode->pos[2] = (unsigned int)newSeekEnd;
