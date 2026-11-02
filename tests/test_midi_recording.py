@@ -22,6 +22,7 @@ def function(file, name):
 
 harness = '#include "toern_midi_pitch.h"\n' + r'''
 using uint8_t=unsigned char; using uint16_t=unsigned short; using int16_t=short;
+namespace toern_audio {struct StateGuard{};}
 #define assert(x) do {if(!(x))__builtin_trap();} while(false)
 const int maxY=16,maxlen=257,defaultVelocity=100;
 const uint8_t NOTE_MIDI_PITCH_NONE=255,NOTE_CONDITION_GLIDE=22;

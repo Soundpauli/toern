@@ -17,6 +17,18 @@ Synth code lives mainly in [`toern_synths.ino`](https://github.com/Soundpauli/to
 - Preset application: `applySynthInstrumentPreset` / `*_synth(...)` helpers
 - Fifth filter page: LFO (cutoff/res on SVF + ladders) and MIDI arpeggiator (same rules as 13–14)
 
+Keyboard and grid velocity use the same per-slot output gain after the ladder
+filters and amplitude envelopes (`velocity / 127`). Oscillator drive stays at
+full level so soft notes retain the patch's filter character; velocity 1 gets
+nonzero gain, and editing a patch does not reset a sounding note's velocity gain.
+The 303 preset retains its explicit velocity-dependent filter accent.
+
+Live MIDI and arp notes prefer a completely idle poly slot over one whose
+amplitude or filter envelope is still releasing. If all slots are busy, they
+reclaim the oldest released slot before stealing a held note. This avoids the
+envelope's forced retrigger fade when an unused slot is available.
+`tests/test_ch11_articulation.py` covers both trigger paths and voice allocation.
+
 ## Channels 13–14 — mono
 
 - Dual oscillators each (`waveform13_*`, `waveform14_*`)
@@ -25,6 +37,17 @@ Synth code lives mainly in [`toern_synths.ino`](https://github.com/Soundpauli/to
 - Each has its own crush/filter path; neither mono synth has a reverb send
 
 ## Voice lifecycle
+
+MIDI arp phrase starts collect the opening Note On burst for **12 ms** before
+selecting step zero from the held pitches sorted low to high. This makes a
+simultaneously played chord start on its lowest note regardless of keyboard
+scan / MIDI delivery order. Subsequent arp timing is unchanged. Duplicate Note
+Ons do not restart the collection window; releasing every key before it expires
+cancels the pending start. Non-arp playing remains immediate.
+
+`tests/test_midi_arp_release.py` checks all six three-note arrival orders on
+CH11/13/14, both timing rates and stopped/playing transport, plus duplicate and
+release behavior.
 
 | Function | Role |
 |----------|------|

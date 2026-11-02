@@ -8675,6 +8675,9 @@ static volatile uint16_t midiArpLastBeat[15] = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 static volatile unsigned long midiArpLastMs[15] = { 0 };
 static volatile int16_t midiArpLastCh11Note = INT16_MIN;
 static volatile bool midiArpKick[15] = { false };
+// DIN chords arrive as separate Note Ons. Collect the opening burst before
+// choosing step zero, so keyboard scan order cannot pick the first arp note.
+static constexpr uint32_t MIDI_ARP_CHORD_SETTLE_MS = 12;
 
 void midiArpResetVoice(int ch) {
   if (ch < 0 || ch >= 15) return;
@@ -8703,13 +8706,7 @@ void midiArpRestart(int ch) {
   arpStepCounter[ch] = 0;
   midiArpLastBeat[ch] = 0xFFFF;
   midiArpLastMs[ch] = millis();
-  midiArpKick[ch] = false;
-  if (isNowPlaying) {
-    const bool eighths = arpUsesEighths(ch);
-    uint16_t b = quantizedMidiRecordBeat();
-    midiArpLastBeat[ch] = eighths ? (uint16_t)((b + 1u) / 2u) : b;
-  }
-  midiArpFireChannel(ch);
+  midiArpKick[ch] = true;
 }
 
 void midiArpOnHeldNote(int ch) {
@@ -8931,6 +8928,7 @@ void serviceMidiArpOnPlayhead(uint16_t playedBeat) {
       midiArpResetVoice(ch);
       continue;
     }
+    if (midiArpKick[ch] && (uint32_t)(millis() - midiArpLastMs[ch]) < MIDI_ARP_CHORD_SETTLE_MS) continue;
     const bool eighths = arpUsesEighths(ch);
     if (eighths && (playedBeat % 2u) == 0 && !midiArpKick[ch]) continue;
     uint16_t grid = eighths ? (uint16_t)((playedBeat + 1u) / 2u) : playedBeat;
@@ -8952,10 +8950,15 @@ void serviceMidiArp() {
       continue;
     }
 
+    if (midiArpKick[ch] && (uint32_t)(now - midiArpLastMs[ch]) < MIDI_ARP_CHORD_SETTLE_MS) continue;
+
     if (isNowPlaying) {
       if (!midiArpKick[ch]) continue;
       const bool eighths = arpUsesEighths(ch);
-      uint16_t b = sequencerRecordBeat;
+      // Claim the nearest grid step just as the old immediate restart did.
+      // Otherwise a tick just after chord collection can rush straight to
+      // index one, making the correctly selected root nearly inaudible.
+      uint16_t b = quantizedMidiRecordBeat();
       midiArpLastBeat[ch] = eighths ? (uint16_t)((b + 1u) / 2u) : b;
       midiArpKick[ch] = false;
       midiArpFireChannel(ch);

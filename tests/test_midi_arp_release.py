@@ -13,6 +13,7 @@ code=r'''
 #include <cstdint>
 #include <climits>
 #include <cmath>
+#include <cstdio>
 #include <algorithm>
 #include <vector>
 #include "toern_midi_pitch.h"
@@ -34,16 +35,16 @@ uint16_t midiArpLastBeat[15];unsigned long midiArpLastMs[15]{};
 int16_t midiArpLastCh11Note=INT16_MIN;bool midiArpKick[15]{};
 int arp[15]{};unsigned long now=0;
 struct Env{int off=0;void noteOff(){off++;}}env[17];Env *envelopes[17];
-int notes[15],fires[15]{},releases[15]{};
+int notes[15],fires[15]{},releases[15]{},lastVelocity[15]{};
 void stopSound(int pitch,int){if(notes[11]==pitch){notes[11]=-1;releases[11]++;}}
-void playSound(int pitch,int,int){notes[11]=pitch;fires[11]++;}
+void playSound(int pitch,int,int vel){notes[11]=pitch;fires[11]++;lastVelocity[11]=vel;}
 void stopSynthChannel(int ch){notes[ch]=-1;releases[ch]++;persistentNoteOn[ch]=false;}
-void playSynthMidi(int ch,uint8_t pitch,int,bool){notes[ch]=pitch;fires[ch]++;}
-void playSynth(int ch,int pitch,int,bool){notes[ch]=pitch;fires[ch]++;}
+void playSynthMidi(int ch,uint8_t pitch,int vel,bool){notes[ch]=pitch;fires[ch]++;lastVelocity[ch]=vel;}
+void playSynth(int ch,int pitch,int vel,bool){notes[ch]=pitch;fires[ch]++;lastVelocity[ch]=vel;}
 int arpSigned(int ch){return arp[ch];}bool arpUsesEighths(int ch){return arp[ch]<0;}
 int arpSpanSteps(int){return 4;}int arpPingPongIndex(uint32_t step,int span){int p=step%(2*(span-1));return p>=span?2*(span-1)-p:p;}
 float mapf(float x,float a,float b,float c,float d){return c+(x-a)*(d-c)/(b-a);}
-unsigned long millis(){return now;}uint16_t quantizedMidiRecordBeat(){return sequencerRecordBeat;}
+unsigned long millis(){return now;}int quantizedOffset=0;uint16_t quantizedMidiRecordBeat(){return sequencerRecordBeat+quantizedOffset;}
 uint8_t midiPitchToGridRow(int ch,uint8_t pitch){return toern_midi_pitch::gridRow(ch,pitch,4);}
 bool preserveIncomingMidiPitch(){return !MIDI_NOTE_CLAMP;}
 bool isChildVoiceDisabled(int){return false;}
@@ -69,9 +70,58 @@ struct IoFile{
 struct IoFS{IoFile open(const char*){return {0,true};}}ioFs;
 int main(){
  for(int i=0;i<15;i++){midiArpLastBeat[i]=0xFFFF;notes[i]=-1;envelopes[i]=&env[i];}
+ // Simultaneous chords are serialized by MIDI. Every arrival order must
+ // start at the lowest held pitch, even with ticks between the Note Ons.
+ for(bool playing:{false,true})for(int ch:{11,13,14})for(int setting:{-16,-1,1,16}){
+  uint8_t order[]={60,64,67};
+  do{
+   isNowPlaying=playing;GLOB.currentChannel=ch;arp[ch]=setting;
+   const int before=fires[ch];const unsigned long started=now;
+   for(uint8_t pitch:order){
+    handleNoteOn(1,pitch,pitch==60?37:110);
+    serviceMidiArp();if(playing)serviceMidiArpOnPlayhead(++sequencerRecordBeat);
+    assert(fires[ch]==before);now+=3;
+   }
+   now=started+MIDI_ARP_CHORD_SETTLE_MS;
+   serviceMidiArp();if(playing)serviceMidiArpOnPlayhead(sequencerRecordBeat);
+   const int root=ch==11?toern_midi_pitch::polyNote(60,0,4):60;
+   if(!(fires[ch]==before+1&&notes[ch]==root&&lastVelocity[ch]==37))
+    fprintf(stderr,"start: playing=%d ch=%d arp=%d order=%d,%d,%d fires=%d pitch=%d expected=%d vel=%d counter=%u kick=%d\n",playing,ch,setting,order[0],order[1],order[2],fires[ch]-before,notes[ch],root,lastVelocity[ch],arpStepCounter[ch],midiArpKick[ch]);
+   assert(fires[ch]==before+1&&notes[ch]==root&&lastVelocity[ch]==37);
+   if(playing){
+    do{++sequencerRecordBeat;}while(setting<0&&(sequencerRecordBeat%2)==0);
+    serviceMidiArpOnPlayhead(sequencerRecordBeat);
+   }else{now+=500;serviceMidiArp();}
+   assert(fires[ch]==before+2);
+   assert(notes[ch]==(ch==11?toern_midi_pitch::polyNote(64,0,4):64));
+   for(uint8_t pitch:order)handleNoteOff(1,pitch,0);
+   assert(notes[ch]==-1&&pressedKeyCount[ch]==0);
+  }while(std::next_permutation(order,order+3));
+ }
+ for(int ch:{11,13,14}){
+  isNowPlaying=false;GLOB.currentChannel=ch;arp[ch]=16;const int before=fires[ch];
+  handleNoteOn(1,60,90);now+=5;handleNoteOn(1,60,90);now+=7;serviceMidiArp();
+  assert(fires[ch]==before+1); // Duplicate cannot push the deadline back.
+  handleNoteOff(1,60,0);
+  handleNoteOn(1,60,90);handleNoteOff(1,60,0);now+=50;serviceMidiArp();
+  assert(fires[ch]==before+1&&notes[ch]==-1); // Cancel before the opening fires.
+ }
+ // Near a playing clock edge, keep the opening root through its claimed
+ // quantized step instead of replacing it almost immediately with index one.
+ for(int ch:{11,13,14}){
+  isNowPlaying=true;GLOB.currentChannel=ch;arp[ch]=16;quantizedOffset=1;
+  handleNoteOn(1,67,90);handleNoteOn(1,60,90);handleNoteOn(1,64,90);
+  now+=MIDI_ARP_CHORD_SETTLE_MS;const int before=fires[ch];serviceMidiArp();
+  assert(fires[ch]==before+1);
+  serviceMidiArpOnPlayhead(++sequencerRecordBeat);assert(fires[ch]==before+1);
+  serviceMidiArpOnPlayhead(++sequencerRecordBeat);assert(fires[ch]==before+2);
+  for(int pitch:{60,64,67})handleNoteOff(1,pitch,0);
+  quantizedOffset=0;
+ }
  for(bool playing:{false,true})for(int ch:{11,13,14})for(int setting:{-16,-1,1,16}){
   isNowPlaying=playing;GLOB.currentChannel=ch;arp[ch]=setting;
-  handleNoteOn(1,60,90);assert(pressedKeyCount[ch]==1&&notes[ch]>=0);
+  handleNoteOn(1,60,90);assert(pressedKeyCount[ch]==1);
+  now+=MIDI_ARP_CHORD_SETTLE_MS;serviceMidiArp();assert(notes[ch]>=0);
   for(int i=0;i<4;i++){now+=500;sequencerRecordBeat++;serviceMidiArp();serviceMidiArpOnPlayhead(sequencerRecordBeat);}
   handleNoteOn(1,64,110);assert(pressedKeyCount[ch]==2);
   handleNoteOff(1,60,0);assert(pressedKeyCount[ch]==1);
@@ -100,7 +150,8 @@ int main(){
  assert(polls>12&&job.result()==toern_pattern_io::Result::Valid);
 }
 '''
-funcs=function('toern_midi.ino','collectHeldMidiNotes')+function('toern_midi.ino','mapMidiToLogicalChannel')
+settle=re.search(r'static constexpr uint32_t MIDI_ARP_CHORD_SETTLE_MS = \d+;', (root/'toern.ino').read_text())[0]
+funcs=settle+'\n'+function('toern_midi.ino','collectHeldMidiNotes')+function('toern_midi.ino','mapMidiToLogicalChannel')
 for name in ['synthMidiArpEnabled','midiArpResetVoice','midiArpRestart','midiArpOnHeldNote','midiArpFireChannel','serviceMidiArpOnPlayhead','serviceMidiArp']:
  funcs+=function('toern.ino',name)+'\n'
 funcs+=function('toern_midi.ino','handleNoteOn')+function('toern_midi.ino','handleNoteOff')
@@ -110,4 +161,4 @@ with tempfile.TemporaryDirectory(prefix='toern-midi-arp-release-') as tmp:
  flags=['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform=='darwin' else []
  subprocess.run(['c++','-std=c++17','-fsanitize=address,undefined',*flags,'-I',str(root/'src'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
  subprocess.run([str(p/'test')],check=True)
-print('PASS: MIDI arp key release on CH11/13/14, YPOS channel change, stopped/playing, both directions, overlapping keys and velocity-zero release.')
+print('PASS: all six chord arrival orders on CH11/13/14, lowest first, both rates/transports, duplicate Note Ons, start cancellation, key release and recording/SD coexistence.')

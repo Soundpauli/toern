@@ -1199,32 +1199,33 @@ void handleNoteOn(int ch, uint8_t pitch, uint8_t velocity) {
   if (ch < 1 || ch > 16) return;
   if (isChildVoiceDisabled(ch)) return;
 
-  // Only count a NoteOn once per (logical channel, pitch) until a matching NoteOff arrives.
-  if (pitch < 128 && !midiHeldNote[ch][pitch]) {
-    midiHeldNote[ch][pitch] = true;
-    midiHeldVelocity[ch][pitch] = velocity;
-  }
-  // Keep pressedKeyCount in sync with the held-note bitmap (fixes stuck / missed releases).
+  extern bool synthMidiArpEnabled(int ch);
+  extern void midiArpOnHeldNote(int ch);
+  const bool arpEnabled = synthMidiArpEnabled(ch);
+  // Publish the opening chord and its pending start together: the playhead
+  // must not fire in between seeing the first held key and arming its window.
   {
+    toern_audio::StateGuard guard;
+    const bool newlyHeld = !midiHeldNote[ch][pitch];
+    if (newlyHeld) {
+      midiHeldNote[ch][pitch] = true;
+      midiHeldVelocity[ch][pitch] = velocity;
+    }
     int cnt = 0;
     for (int p = 0; p < 128; p++) {
       if (midiHeldNote[ch][p]) cnt++;
     }
     pressedKeyCount[ch] = (int16_t)cnt;
-  }
-
-  if (pressedKeyCount[ch] > 0) {
-    persistentNoteOn[ch] = true;
+    if (cnt > 0) persistentNoteOn[ch] = true;
+    // Duplicate Note Ons must not postpone/restart the opening chord.
+    if (arpEnabled && newlyHeld) midiArpOnHeldNote(ch);
   }
 
   const uint8_t livenote = midiPitchToGridRow(ch, pitch);
   const uint8_t storedPitch = preserveIncomingMidiPitch()
                                 ? pitch : NOTE_MIDI_PITCH_NONE;
 
-  extern bool synthMidiArpEnabled(int ch);
-  extern void midiArpOnHeldNote(int ch);
-  if (synthMidiArpEnabled(ch)) {
-    midiArpOnHeldNote(ch);
+  if (arpEnabled) {
     activeNotes[pitch] = true;
     return;
   }

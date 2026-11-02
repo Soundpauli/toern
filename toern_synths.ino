@@ -120,7 +120,7 @@ static void setSoundVoice(int note, int ch, int velocity, int voiceIdx,
   float f2 = synthNoteFrequency(noteIdx2) * powf(2.0f, (cents[ch][2] + (float)random(-2, 3)) / 1200.0f);
 
   int velMidi = constrain(velocity > 0 ? velocity : defaultVelocity, 1, 127);
-  float amp = mapf((float)velMidi, 1.0f, 127.0f, 0.0f, 1.0f);
+  const float velocityGain = (float)velMidi / 127.0f;
 
   toern_audio::StateGuard guard;
   pendingPauseAudioCleanup = false; // a fresh poly synth note owns its tail
@@ -129,13 +129,18 @@ static void setSoundVoice(int note, int ch, int velocity, int voiceIdx,
   Swaveform1[voiceIdx]->frequency(f0);
   Swaveform2[voiceIdx]->frequency(f1);
   Swaveform3[voiceIdx]->frequency(f2);
-  Swaveform1[voiceIdx]->amplitude(amp);
-  Swaveform2[voiceIdx]->amplitude(amp);
-  Swaveform3[voiceIdx]->amplitude(amp);
+  // Keep the ladder's input drive/timbre independent of keyboard velocity.
+  // Existing per-slot sum inputs are after both the ladders and amp envelopes,
+  // so velocity acts as an output VCA without adding nodes or audio buffers.
+  Swaveform1[voiceIdx]->amplitude(1.0f);
+  Swaveform2[voiceIdx]->amplitude(1.0f);
+  Swaveform3[voiceIdx]->amplitude(1.0f);
+  SmixerL4.gain(voiceIdx, CH11_POLY_SUM_GAIN * velocityGain);
+  SmixerR4.gain(voiceIdx, CH11_POLY_SUM_GAIN * velocityGain);
   if (triggerEnvelope) {
     if (ch == 0 && SMP.synth_settings[11][INSTRUMENT] == 10) {
       // TB-303 velocity accent: higher velocity drives the filter envelope wider
-      Sdc1[voiceIdx]->amplitude(0.60f + 0.40f * amp);
+      Sdc1[voiceIdx]->amplitude(0.60f + 0.40f * velocityGain);
     } else {
       Sdc1[voiceIdx]->amplitude(1.0f);
     }
@@ -920,9 +925,23 @@ void playSound(int note, int ch, int velocity) {
   }
   if (voiceIdx < 0) {
     for (int voice = 0; voice < POLY_VOICES; voice++) {
-      if (noteArray[ch][voice] == NOTE_EMPTY) {
+      // A Note Off frees the identity immediately, but the amp/filter release
+      // can still be sounding. Use a truly idle slot first, avoiding a forced
+      // fade/restart on each keyboard note or MIDI arp step.
+      if (noteArray[ch][voice] == NOTE_EMPTY &&
+          !Senvelope1[voice]->isActive() && !Senvelope2[voice]->isActive() &&
+          !SenvelopeFilter1[voice]->isActive()) {
         voiceIdx = voice;
         break;
+      }
+    }
+  }
+  if (voiceIdx < 0) {
+    unsigned long oldest = 0xFFFFFFFFUL;
+    for (int voice = 0; voice < POLY_VOICES; voice++) {
+      if (noteArray[ch][voice] == NOTE_EMPTY && voiceStartTime[ch][voice] <= oldest) {
+        oldest = voiceStartTime[ch][voice];
+        voiceIdx = voice;
       }
     }
   }

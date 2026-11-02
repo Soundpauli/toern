@@ -28,6 +28,7 @@ struct elapsedMillis {
 };
 namespace toern_audio {struct StateGuard {};}
 constexpr int POLY_VOICES=3, INSTRUMENT=0, defaultVelocity=127;
+constexpr float CH11_POLY_SUM_GAIN=.55f;
 bool pendingPauseAudioCleanup=true;
 int semitones[2][3]={}, cents[2][3]={}, noteArray[2][8]={};
 unsigned voiceStartTime[2][3]={};
@@ -38,6 +39,7 @@ int constrain(int x,int low,int high){return std::clamp(x,low,high);}
 float mapf(float x,float a,float b,float c,float d){return c+(x-a)*(d-c)/(b-a);}
 struct Osc {float amp=1;void amplitude(float a){amp=a;}void frequency(float){}};
 struct Env {bool active=false;bool isActive(){return active;}void noteOn(){active=true;}};
+struct Mixer {float gains[4]={};void gain(int slot,float level){gains[slot]=level;}} SmixerL4,SmixerR4;
 Osc oscillators[3][3], dc[3];
 Osc *Swaveform1[]={&oscillators[0][0],&oscillators[0][1],&oscillators[0][2]};
 Osc *Swaveform2[]={&oscillators[1][0],&oscillators[1][1],&oscillators[1][2]};
@@ -62,14 +64,18 @@ int main(){
  serviceIdlePolySynthVoices(); // Initialize throttle.
  poll();for(int i=0;i<3;++i)check(i,0); // Cold idle.
  setSoundVoice(60,0,100,0,true);
- // Firmware velocity mapping is (velocity-1)/126.
- float amplitude=99.f/126.f;check(0,amplitude);assert(!pendingPauseAudioCleanup);
+ // Velocity is post-filter; oscillator drive is preserved even at soft levels.
+ float amplitude=1.f;check(0,amplitude);assert(!pendingPauseAudioCleanup);
+ assert(std::abs(SmixerL4.gains[0]-.55f*100.f/127.f)<.00001f);
  poll();check(0,amplitude); // Sustained note.
  env[0][0].active=false;poll();check(0,amplitude); // Right release still active.
  env[1][0].active=false;poll();check(0,0); // Both releases finished.
  presetAmplitude(0);check(0,0); // Editing a silent preset cannot wake it.
  setSoundVoice(64,0,127,0,true);poll();check(0,1); // Retrigger wakes it.
- setSoundVoice(67,0,80,0,false);poll();check(0,79.f/126.f); // Legato retune.
+ setSoundVoice(67,0,80,0,false);poll();check(0,1); // Legato retune.
+ assert(std::abs(SmixerL4.gains[0]-.55f*80.f/127.f)<.00001f);
+ presetAmplitude(0);check(0,1);
+ assert(std::abs(SmixerL4.gains[0]-.55f*80.f/127.f)<.00001f); // Editing retains velocity.
  setSoundVoice(72,0,127,1,true);poll();check(1,1); // Independent voice.
  env[0][0].active=env[1][0].active=false;poll();check(0,0);check(1,1);
  env[0][1].active=env[1][1].active=false;poll();check(1,0);
