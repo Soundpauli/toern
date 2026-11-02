@@ -493,6 +493,13 @@ static const uint32_t SETTINGS_BACKUP_DEBOUNCE_MS = 1500;
 // the audio eDMA → CrashReport / HalfKay 7-blink reboot after ~8s).
 static uint8_t g_pendingMixGainMask = 0;
 static bool g_pendingSp0Eeprom = false;
+static bool g_pendingKitEeprom = false;
+
+void queueKitIdentityPersist() {
+  g_pendingKitEeprom = true;
+  g_pendingSp0Eeprom = true;
+  markSettingsBackupDirty();
+}
 // All other settings-block bytes deferred the same way while isNowPlaying.
 static uint8_t g_pendingEepromBytes[SETTINGS_EEPROM_BLOCK_LEN];
 static uint8_t g_pendingEepromMask[(SETTINGS_EEPROM_BLOCK_LEN + 7) / 8];
@@ -733,6 +740,11 @@ FLASHMEM void serviceSettingsBackup() {
   extern uint8_t mixGainSynth;
   extern uint8_t mixGainMaster;
   if (audioQuiet) {
+    if (g_pendingKitEeprom) {
+      g_pendingKitEeprom = false;
+      EEPROM.put(EEPROM_SAMPLEPACK_ADDR, samplePackID);
+      markSettingsBackupDirty();
+    }
     if (g_pendingMixGainMask) {
       if (g_pendingMixGainMask & 0x01) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_14, mixGain14);
       if (g_pendingMixGainMask & 0x02) EEPROM.write(EEPROM_DATA_START + EEPROM_MIX_GAIN_58, mixGain58);

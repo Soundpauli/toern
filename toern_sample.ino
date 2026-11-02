@@ -267,6 +267,8 @@ bool isChannelSampleReloadBusy(unsigned int ch) {
 
 void beginChannelSampleReload(unsigned int ch) {
   if (ch >= maxFiles) return;
+  extern void cancelKitSaveForSampleChange(unsigned ch);
+  cancelKitSaveForSampleChange(ch);
   bool fade = false;
   {
     toern_audio::StateGuard guard;
@@ -762,6 +764,7 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
 
   File loadSample = SD.open(OUTPUTf);
   if (!loadSample) {
+    if(storageTransferIs(true,false))storageTransferFailure();
     loadEmptySampleToChannel(sampleID);
     sdIoYield();
     return;
@@ -810,8 +813,10 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
       size_t bytesRead = loadSample.read(&sampled[sampleID][i], toRead);
       if (bytesRead == 0) break;
       i += (unsigned int)bytesRead;
+      storageTransferBytes(i,bytesToRead);
       sdIoYield();
     }
+    if(i<bytesToRead&&storageTransferIs(true,false))storageTransferFailure();
     loadSample.close();
 
     // i is bytes read; convert to 16-bit samples

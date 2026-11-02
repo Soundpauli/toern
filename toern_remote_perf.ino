@@ -7,6 +7,11 @@ FLASHMEM static unsigned remoteCpuBasisPoints(float percent) {
 
 FLASHMEM void remoteReplyPerformance(unsigned long id) {
   remoteReplyStart(id);
+  Serial.printf("\"temp_centi\":%d,\"loop_max_us\":%lu,\"loop_stalls\":%lu,\"last_stall_us\":%lu,\"last_stall_stage\":\"%s\",\"stage_max_us\":{",
+      (int)(tempmonGetTemp()*100.0f),(unsigned long)loopTiming.loopMaximum,
+      (unsigned long)loopTiming.stalls,(unsigned long)loopTiming.lastStallUs,ToernLoopTiming::name(loopTiming.lastStallStage));
+  for(unsigned i=0;i<ToernLoopTiming::Count;++i)Serial.printf("%s\"%s\":%lu",i?",":"",ToernLoopTiming::name((ToernLoopTiming::Stage)i),(unsigned long)loopTiming.maximum[i]);
+  Serial.print("},");
   Serial.printf("\"ok\":true,\"reverb_quality\":%u,\"ch11_internal_ram\":%s,\"input_recoveries\":%lu,\"cpu_bp\":%u,\"cpu_max_bp\":%u,\"audio_blocks\":%u,\"audio_blocks_max\":%u,\"cpu_hz\":%lu,\"playing\":%s,\"ch11_muted\":%s,\"ch11_active\":[",
       (unsigned)TOERN_TREEVERB_QUALITY,
       ((uintptr_t)Sladder1[0] >= 0x20000000u && (uintptr_t)Sladder1[0] < 0x20200000u) ? "true" : "false",

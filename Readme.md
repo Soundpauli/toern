@@ -134,6 +134,21 @@ TŒRN does **not** mount the Micro SD as USB mass storage. That would be too eas
 
 WAV uploads are converted in the browser to **44.1 kHz mono 16-bit**. Drag folders, multi-file drops, and zip archives are supported.
 
+KIT saving runs in the background while playback and controls continue. The
+PATT and KIT load/save screens (including KIT loading at boot) share menu icons,
+an animated green load/red save arrow, a percentage and progress bar. A green
+animated check confirms success; a red X indicates failure. Pausing shows a white
+animated check after autosave completes. Both 32×16 (`led == 2`) and 16×16
+(`led == 1`) screens have adapted layouts. Recording or loading replacement
+samples cancels an unfinished KIT save. EEPROM updates wait until audio has settled.
+
+The simulator's MIDI importer splits longer songs across subpatterns **A–E**:
+up to **1,280 steps** (40 pages at 32 steps/page). Preview each letter, then use
+the MIDI import panel's **SEND TO DEVICE** with `SETT → SUBP` enabled and current
+firmware. Multi-letter transfers replace A–E in the loaded family and clear
+unused letters; A is selected afterwards. Switch letters with **FN + encoder 2**.
+Use the song start-page slider to select later sections of still longer files.
+
 ### Secondary — local CLI / scripting
 
 Any USB Type that includes Serial (e.g. **Serial + MIDI**):

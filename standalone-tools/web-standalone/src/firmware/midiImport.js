@@ -199,10 +199,13 @@ export function filterOverlappingNotes(notes, priority = "highest", channelMap =
   return notes.filter(note => !shouldFilter(note) || byStep.get(keyFor(note)) === note);
 }
 
-/** Select a 256-step window in the active SIM panel's page units, rebased to step 1. */
-export function selectMidiPageWindow(gridNotes, startPage = 1, pageSteps = 32) {
+export const MIDI_SUBPATTERN_STEPS = 256;
+export const MIDI_SUBPATTERN_COUNT = 5;
+
+/** Select a bounded song window in panel page units, rebased to step 1. */
+export function selectMidiPageWindow(gridNotes, startPage = 1, pageSteps = 32, capacity = MIDI_SUBPATTERN_STEPS) {
   pageSteps = pageSteps <= 16 ? 16 : 32;
-  const windowPages = 256 / pageSteps;
+  const windowPages = capacity / pageSteps;
   const totalSteps = gridNotes.reduce((max,n) => Math.max(max, n.page * 16 + n.x + 1), 0);
   const totalPages = Math.max(1, Math.ceil(totalSteps / pageSteps));
   const maxStartPage = Math.max(1, totalPages - windowPages + 1);
@@ -210,7 +213,7 @@ export function selectMidiPageWindow(gridNotes, startPage = 1, pageSteps = 32) {
   const first = (startPage - 1) * pageSteps;
   const notes = gridNotes.flatMap(n => {
     const step = n.page * 16 + n.x - first;
-    return step < 0 || step >= 256 ? [] : [{ ...n, page: Math.floor(step / 16), x: step % 16 }];
+    return step < 0 || step >= capacity ? [] : [{ ...n, page: Math.floor(step / 16), x: step % 16 }];
   });
   return { notes, startPage, endPage: Math.min(totalPages, startPage + windowPages - 1),
     totalPages, maxStartPage, windowPages };
@@ -220,7 +223,7 @@ export function selectMidiPageWindow(gridNotes, startPage = 1, pageSteps = 32) {
  *  Folding + pitch policy are decided here for the *assigned* voice so remapping
  *  a track does not drop absolute pitches when transpose is off.
  */
-export function buildImportCells(gridNotes, trackToChannel, transpose = false) {
+export function buildImportCells(gridNotes, trackToChannel, transpose = false, maxSteps = MIDI_SUBPATTERN_STEPS) {
   const toCh = trackToChannel instanceof Map
     ? trackToChannel
     : new Map(Object.entries(trackToChannel || {}).map(([id, ch]) => [Number(id), Number(ch)]));
@@ -238,7 +241,7 @@ export function buildImportCells(gridNotes, trackToChannel, transpose = false) {
     const wantTranspose = n.transpose != null ? !!n.transpose : !!transpose;
     const folded = foldRow(src, ch);
     let row = n.percussion ? ch + 1 : folded.row;
-    if (step < 1 || step > 256 || row < 1 || row > 15) continue;
+    if (step < 1 || step > maxSteps || row < 1 || row > 15) continue;
     if (occupied.has(`${step}:${row}`) && !n.percussion && !wantTranspose) {
       row = Array.from({length:15}, (_,i) => i+1)
         .sort((a,b) => Math.abs(a-folded.row)-Math.abs(b-folded.row))
@@ -258,4 +261,18 @@ export function buildImportCells(gridNotes, trackToChannel, transpose = false) {
     });
   }
   return { cells, pages: [...pages].sort((a, b) => a - b) };
+}
+
+/** Split the selected song into A–E, keeping internal silent sections in place. */
+export function buildMidiSubpatterns(gridNotes, trackToChannel, transpose = false) {
+  const capacity = MIDI_SUBPATTERN_STEPS * MIDI_SUBPATTERN_COUNT;
+  const { cells } = buildImportCells(gridNotes, trackToChannel, transpose, capacity);
+  const lastStep = cells.reduce((last, cell) => Math.max(last, cell.step), 1);
+  const banks = Array.from({ length: Math.ceil(lastStep / MIDI_SUBPATTERN_STEPS) }, () => []);
+  for (const cell of cells) {
+    banks[Math.floor((cell.step - 1) / MIDI_SUBPATTERN_STEPS)].push({
+      ...cell, step: (cell.step - 1) % MIDI_SUBPATTERN_STEPS + 1,
+    });
+  }
+  return banks;
 }

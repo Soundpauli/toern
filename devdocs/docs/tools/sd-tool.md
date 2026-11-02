@@ -45,6 +45,16 @@ Requires a USB type that includes **Serial**.
 
 Firmware side: `toern_sd_serial.ino`, polled from `loop()` only while the host serial port is open.
 
+The simulator also uses `GETPAT` / `PUTPAT <size> <crc32>` for current-pattern
+RAM exchange. `PUTSUB <A-E> <size> <crc32>` accepts the same 20,494-byte notes,
+BPM and pitch image into a named resident subpattern of the loaded family.
+It requires `SETT → SUBP` and a valid family, stops playback, validates the
+complete image before changing banks, rebuilds page metadata, and marks the
+bank for the normal cooperative stopped-state writer. `OK` acknowledges RAM
+installation; SD persistence finishes in the main loop. Legacy PUTPAT framing
+and its current-bank destination remain unchanged. Older firmware rejects
+PUTSUB before the browser sends binary data.
+
 ## Local browser and visual theme
 
 `index.html` is the hosted Web Serial client. `explorer.html` is the local Python-server client. Both retain the same controls and use the shared TŒRN theme; the Python server must serve `/tool-theme.css` alongside its existing CSS/favicon assets. Theme source/sync is documented in [Tools overview](./overview).

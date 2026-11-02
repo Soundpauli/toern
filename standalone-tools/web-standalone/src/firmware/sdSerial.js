@@ -920,11 +920,21 @@ export class ToernSdSerial {
 
   /** Replace the current pattern in device RAM. Does not write a file. */
   putPatternRam(data, onProgress) {
+    return this._putPatternImage("PUTPAT", data, onProgress);
+  }
+
+  /** Replace/select A–E in the loaded family; firmware saves through its bank writer. */
+  putSubpatternRam(letter, data, onProgress) {
+    if (!/^[A-E]$/.test(letter)) return Promise.reject(new Error("Invalid subpattern letter"));
+    return this._putPatternImage(`PUTSUB ${letter}`, data, onProgress);
+  }
+
+  _putPatternImage(command, data, onProgress) {
     return this._enqueue(async () => {
       if (this._rxLen) this._clearRx();
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
       const csum = crc32Hex(bytes);
-      await this._write(`PUTPAT ${bytes.length} ${csum}\n`);
+      await this._write(`${command} ${bytes.length} ${csum}\n`);
       await this._readExpectReady();
       const block = 8192;
       for (let i = 0; i < bytes.length; i += block) {

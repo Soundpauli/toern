@@ -2,7 +2,8 @@ import { TOUCHY_COLORS } from "./firmware/screens.js";
 import { COL } from "./firmware/const.js";
 import { createMatrix } from "./firmware/matrix.js";
 import { createDevice } from "./firmware/device.js";
-import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildImportCells, suggestMidiSlots, MIDI_VOICE_LABELS, selectMidiPageWindow } from "./firmware/midiImport.js";
+import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildMidiSubpatterns, suggestMidiSlots, MIDI_VOICE_LABELS, selectMidiPageWindow, MIDI_SUBPATTERN_STEPS, MIDI_SUBPATTERN_COUNT } from "./firmware/midiImport.js";
+import { transferMidiSubpatterns } from "./firmware/midiSongTransfer.js";
 import {
   parseSequencerOneZip,
   patternToImportCells,
@@ -235,9 +236,13 @@ app.innerHTML = `
           <input type="range" id="import-start-page" min="1" max="1" step="1" value="1" aria-describedby="import-pages">
         </label>
         <p class="jump-panel-meta" id="import-pages" role="status"></p>
+        <label class="jump-field">Preview subpattern
+          <select id="import-subpattern" aria-label="Preview subpattern"><option value="0">A</option></select>
+        </label>
         <div class="device-transfer midi-transfer">
           <button type="button" class="device-transfer-send" id="import-send">SEND TO DEVICE &gt;</button>
         </div>
+        <p class="jump-panel-meta" id="import-transfer-status" role="status"></p>
         <div class="jump-panel-row">
           <label>BPM
             <input type="number" id="import-bpm" min="30" max="300" step="0.0001">
@@ -878,6 +883,8 @@ const importDropLabel = document.querySelector("#import-drop-label");
 const importSettings = document.querySelector("#import-settings");
 const importMeta = document.querySelector("#import-meta");
 const importStartPage = document.querySelector("#import-start-page");
+const importSubpattern = document.querySelector("#import-subpattern");
+const importTransferStatus = document.querySelector("#import-transfer-status");
 const importSend = document.querySelector("#import-send");
 let importPageCols = 0;
 const importPages = document.querySelector("#import-pages");
@@ -1144,13 +1151,13 @@ function currentImportParams() {
 }
 
 function applyImportNow() {
-  if (!midiDraft) return;
+  if (!midiDraft || sdBusy) return false;
   // A file selected during the startup animation must not silently disappear.
   if (device.mode() === "boot") {
     importSend.disabled = true;
     clearTimeout(importTimer);
     importTimer = setTimeout(applyImportNow, 100);
-    return;
+    return false;
   }
   importSend.disabled = sdBusy;
   const { bpm, sub, offset, transpose, overlap } = currentImportParams();
@@ -1160,12 +1167,18 @@ function applyImportNow() {
   grid = filterOverlappingNotes(grid, "highest", toCh, overlap);
   const enabled = [...toCh.keys()];
   importPageCols = device.cols();
-  const window = selectMidiPageWindow(grid, importStartPage.value, importPageCols);
+  const window = selectMidiPageWindow(grid, importStartPage.value, importPageCols, MIDI_SUBPATTERN_STEPS * MIDI_SUBPATTERN_COUNT);
   importStartPage.max = String(window.maxStartPage);
   importStartPage.value = String(window.startPage);
   importStartPage.disabled = window.maxStartPage === 1;
   const rawCount = window.notes.filter((n) => toCh.has(n.track)).length;
-  const { cells } = buildImportCells(window.notes, toCh, transpose);
+  const banks = buildMidiSubpatterns(window.notes, toCh, transpose);
+  const count = banks.reduce((sum, cells) => sum + cells.length, 0);
+  const preview = Math.min(Number(importSubpattern.value) || 0, banks.length - 1);
+  importSubpattern.innerHTML = banks.map((_, i) => `<option value="${i}">${String.fromCharCode(65 + i)}</option>`).join("");
+  importSubpattern.value = String(preview);
+  importSubpattern.disabled = banks.length === 1;
+  midiDraft.subpatterns = banks;
   const unassigned = midiDraft.tracks.filter(t => !toCh.has(t.id));
   const manualDrums = midiDraft.tracks.filter(t => !t.percussion && toCh.get(t.id) <= 5);
   importMapping.textContent = [
@@ -1173,16 +1186,18 @@ function applyImportNow() {
     manualDrums.length ? `Check melodic parts on drum voices: ${manualDrums.map(t => t.name).join(", ")}.` : "",
   ].filter(Boolean).join(" ");
   const voices = toCh.size;
-  importMeta.textContent = `${midiDraft.name} · ${cells.length}/${rawCount} notes · ${voices} voices`;
-  const simPages = Math.min(window.windowPages, window.endPage - window.startPage + 1);
-  importPages.textContent = `Song pages ${window.startPage}–${window.endPage} of ${window.totalPages} → SIM pages 1–${simPages} (${importPageCols} steps/page)`;
+  importMeta.textContent = `${midiDraft.name} · ${count}/${rawCount} notes · ${voices} voices`;
+  const pagesPerBank = MIDI_SUBPATTERN_STEPS / importPageCols;
+  importPages.textContent = `Song pages ${window.startPage}–${window.endPage} of ${window.totalPages} → ${banks.length === 1 ? "A" : `A–${String.fromCharCode(64 + banks.length)}`} · ${pagesPerBank} pages per subpattern (${importPageCols} steps/page).${banks.length > 1 ? " Sending replaces A–E in the loaded family; enable SETT → SUBP on the device. Switch letters with FN + encoder 2." : ""}`;
   midiDraft.grid = grid;
   if (!enabled.length) {
     setImportErr("Drop at least one track onto a voice slot.");
-    return;
+    importSend.disabled = true;
+    return false;
   }
   setImportErr("");
-  device.importMidi(cells, bpm);
+  device.importMidi(banks[preview], bpm);
+  return true;
 }
 
 function scheduleImportApply() {
@@ -1196,6 +1211,8 @@ function resetImportToMidi() {
   importSub.value = "16";
   importOffset.value = "0";
   importStartPage.value = "1";
+  importSubpattern.value = "0";
+  importTransferStatus.textContent = "";
   importTranspose.checked = false;
   importOverlap.checked = false;
   midiDraft.tracks = midiDraft.originalTracks.map((t) => ({ ...t }));
@@ -1227,6 +1244,8 @@ async function loadMidiFile(file) {
     importSub.value = "16";
     importOffset.value = "0";
     importStartPage.value = "1";
+    importSubpattern.value = "0";
+    importTransferStatus.textContent = "";
     importTranspose.checked = false;
     importOverlap.checked = false;
     importSettings.hidden = false;
@@ -1282,6 +1301,7 @@ importDrop.addEventListener("drop", (e) => {
 importBpm.addEventListener("input", () => { syncBpmReadout(); scheduleImportApply(); });
 importSub.addEventListener("change", scheduleImportApply);
 importStartPage.addEventListener("input", scheduleImportApply);
+importSubpattern.addEventListener("change", applyImportNow);
 importOffset.addEventListener("input", () => { syncOffsetReadout(); scheduleImportApply(); });
 importTranspose.addEventListener("change", scheduleImportApply);
 importOverlap.addEventListener("change", scheduleImportApply);
@@ -1763,6 +1783,37 @@ async function pushPatternRam() {
   }
 }
 
+async function pushMidiSong() {
+  if (!applyImportNow()) return;
+  const banks = midiDraft.subpatterns;
+  if (banks.length === 1) return pushPatternRam();
+  const bpm = currentImportParams().bpm;
+  const last = String.fromCharCode(64 + banks.length);
+  const ok = await askModal(`Send this song across subpatterns A–${last}? This replaces A–E in the device's loaded pattern family, clears unused letters, and stops playback. The device saves the letters while stopped. SETT → SUBP must be ON.`, "Send song");
+  if (!ok || sdBusy) return;
+  setSdBusy(true);
+  setImportErr("");
+  importTransferStatus.textContent = "Connecting…";
+  try {
+    await ensureTeensy();
+    await transferMidiSubpatterns(sd, banks, bpm, (letter, fraction) => {
+      importTransferStatus.textContent = `Sending ${letter}… ${Math.round(fraction * 100)}%`;
+    });
+    importTransferStatus.textContent = `Sent A–${last}; unused letters cleared. A is selected. Switch letters with FN + encoder 2.`;
+    setSdStatus("online");
+  } catch (err) {
+    const hint = /SUBP_OFF/.test(err?.message) ? "Enable SETT → SUBP on the device, then send again."
+      : /ERR UNKNOWN/.test(err?.message) ? "Update device firmware to support MIDI imports across subpatterns."
+      : err?.message || String(err);
+    const completed = err?.completedSubpatterns || [];
+    setImportErr(`${hint}${completed.length ? ` Already replaced: ${completed.join(", ")}. Send again to finish the whole song.` : ""}`);
+    importTransferStatus.textContent = "Song transfer did not finish.";
+    await dropDeadSession(err);
+  } finally {
+    setSdBusy(false);
+  }
+}
+
 async function pullPatternRam() {
   if (sdBusy) return;
   const ok = await askModal("Replace the current pattern in sim RAM with the device pattern?", "Replace");
@@ -1847,8 +1898,7 @@ sdDisconnect.addEventListener("click", () => disconnectSd());
 sdPush.addEventListener("click", () => pushPatternRam());
 importSend.addEventListener("click", () => {
   clearTimeout(importTimer);
-  applyImportNow();
-  pushPatternRam();
+  pushMidiSong();
 });
 sdPullSlot.addEventListener("click", () => pullPatternRam());
 sdPull.addEventListener("click", () => {

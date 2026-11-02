@@ -26,6 +26,7 @@ public:
   Result result() const { return result_; }
   bool busy() const { return result_ == Result::Running; }
   bool hasNotes()const{return hasNotes_;}
+  unsigned progress()const{return result_==Result::Valid?100u:(unsigned)std::min((size_t)99,offset_*100u/pitchEnd);}
   template<class FS> Result tick(FS &fs) {
     if (!busy()) return result_;
     if (state_ == Open) {
@@ -101,6 +102,11 @@ public:
     return !incompleteTemporary();
   }
   bool busy()const{return result_==Result::Running;}
+  unsigned progress()const{
+    if(result_==Result::Valid)return 100;
+    const unsigned written=(unsigned)(offset_*80u/totalBytes);
+    return std::min(99u,written+(offset_==totalBytes?reader_.progress()*19u/100u:0u));
+  }
   Result result()const{return result_;}
   template<class FS> Result tick(FS &fs) {
     if(!busy())return result_;

@@ -743,76 +743,79 @@ FLASHMEM void drawPongBall() {
   light(pongBallX, pongBallY, CRGB(255, 255, 255));
 }
 
+#include "src/toern_storage_visual.h"
+struct StorageVisualCanvas {
+  void clear(){FastLEDclear();}
+  void pixel(int x,int y,toern_storage_visual::Color color){
+    if(x>=1&&x<=(int)maxX&&y>=1&&y<=(int)maxY)light(x,y,CRGB(color.r,color.g,color.b));
+  }
+  void icon(bool kit,int x,int top,unsigned phase) {
+    const uint8_t *data=kit?OLD_icon_samplepack:icon_folder_big;
+    for(unsigned row=0;row<7;++row)for(unsigned col=0;col<7;++col)
+      if(icon7x12_on_P(data,col,row))pixel(x+col,top-row,row==phase?
+          toern_storage_visual::Color{140,165,190}:toern_storage_visual::Color{50,65,85});
+  }
+  int textWidth(const char *label){int width=0;for(unsigned i=0;label[i];++i)width+=alphabet[label[i]-32][0]+1;return width?width-1:0;}
+  void text(const char *label,int x,int y,toern_storage_visual::Color color){drawText(label,x,y,CRGB(color.r,color.g,color.b));}
+};
+static bool storageVisualActive=false,storageVisualKit=false,storageVisualSaving=false;
+static bool storageVisualResult=false,storageVisualSuccess=false,storageVisualWhite=false;
+static bool storageVisualHadProgress=false;
+static bool storageVisualFailed=false;
+static unsigned storageVisualPercent=0,storageVisualPart=0,storageVisualParts=1;
+static uint32_t storageVisualResultAt=0,storageVisualLastPresent=0;
+
+bool storageTransferIs(bool kit,bool saving){return storageVisualActive&&storageVisualKit==kit&&storageVisualSaving==saving;}
+bool storageResultVisible(){return storageVisualResult&&millis()-storageVisualResultAt<toern_storage_visual::resultDuration+(storageVisualHadProgress?100u:0u);}
+bool storageProgressVisible(){return storageVisualActive&&(!storageVisualKit||!storageVisualSaving||currentMode==&set_SamplePack);}
+bool storageTransferVisible(){return storageProgressVisible()||storageResultVisible();}
+void drawStorageResultFrame(bool success,bool white,uint32_t elapsed){StorageVisualCanvas canvas;toern_storage_visual::result(canvas,maxX,success,white,elapsed);}
+void drawStorageTransferOverlay(){
+  StorageVisualCanvas canvas;
+  if(storageResultVisible()) {
+    uint32_t elapsed=millis()-storageVisualResultAt;
+    if(storageVisualHadProgress&&elapsed<100)toern_storage_visual::progress(canvas,maxX,storageVisualKit,storageVisualSaving,100,millis());
+    else toern_storage_visual::result(canvas,maxX,storageVisualSuccess,storageVisualWhite,elapsed-(storageVisualHadProgress?100u:0u));
+  } else if(storageVisualActive)toern_storage_visual::progress(canvas,maxX,storageVisualKit,storageVisualSaving,storageVisualPercent,millis());
+}
+void storageTransferBegin(bool kit,bool saving){
+  storageVisualActive=true;storageVisualResult=false;storageVisualKit=kit;storageVisualSaving=saving;
+  storageVisualFailed=false;
+  storageVisualPercent=0;storageVisualPart=0;storageVisualParts=1;storageVisualLastPresent=0;
+  noteUserActivity();FastLEDshow();
+}
+void storageTransferProgress(unsigned percent){
+  if(!storageVisualActive)return;
+  storageVisualPercent=std::max(storageVisualPercent,std::min(percent,100u));
+  if(millis()-storageVisualLastPresent>=40){storageVisualLastPresent=millis();FastLEDshow();}
+}
+void storageTransferPart(unsigned part,unsigned parts){
+  storageVisualPart=part;storageVisualParts=std::max(parts,1u);
+  storageTransferProgress(std::min(100u,part*100/storageVisualParts));
+}
+void storageTransferBytes(size_t done,size_t total){
+  if(storageVisualActive&&storageVisualKit&&!storageVisualSaving&&total)
+    storageTransferProgress((storageVisualPart*100u+(unsigned)((uint64_t)done*100u/total))/storageVisualParts);
+}
+void storageTransferFinish(bool success,bool white){
+  success=success&&(!storageVisualActive||!storageVisualFailed);
+  storageVisualFailed=false;
+  storageVisualHadProgress=storageVisualActive&&success&&!white;
+  if(!white)storageVisualActive=false;
+  storageVisualResult=true;storageVisualSuccess=success;storageVisualWhite=white;
+  storageVisualResultAt=millis();noteUserActivity();FastLEDshow();
+}
+void storageTransferFailure(){if(storageVisualActive)storageVisualFailed=true;}
+void storageTransferDismiss(){storageVisualActive=false;storageVisualResult=false;}
+
 FLASHMEM void showSaveSuccessAnimation(bool returnToDraw) {
-  extern void FastLEDclear();
-  extern void FastLEDshow();
-  extern void sdIoYield();
-  extern Mode draw;
-  extern void switchMode(Mode *newMode);
-
-  const int cx = (int)((maxX + 1) / 2);
-  const int cy = (int)((maxY + 1) / 2);
-  // Panel Y grows upward (y=1 is the bottom row). Check: down, then up-right.
-  static const int8_t pts[][2] = {
-    { -3, -1 }, { -2, -2 }, { -1, -3 }, { 0, -2 },
-    { 1, -1 }, { 2, 0 }, { 3, 1 }, { 4, 2 }
-  };
-  const int npts = 8;
-  const uint32_t t0 = millis();
-  const uint32_t dur = 1000;
-
-  while ((millis() - t0) < dur) {
-    const uint32_t t = millis() - t0;
-    FastLEDclear();
-
-    int reveal = (int)((t * npts) / 420);
-    if (reveal > npts) reveal = npts;
-
-    uint8_t bri = 220;
-    if (t < 120) {
-      bri = (uint8_t)map((long)t, 0, 120, 40, 220);
-    } else if (t > 780) {
-      bri = (uint8_t)map((long)t, 780, (long)dur, 220, 20);
-    }
-    const CRGB col = CRGB(0, bri, 0);
-
-    for (int i = 0; i < reveal; i++) {
-      const int x = cx + pts[i][0];
-      const int y = cy + pts[i][1];
-      if (x >= 1 && x <= (int)maxX && y >= 1 && y <= (int)maxY) {
-        light((unsigned int)x, (unsigned int)y, col);
-      }
-    }
-    FastLEDshow();
-    sdIoYield();
-    delay(16);
-  }
-
-  if (returnToDraw) {
-    switchMode(&draw);
-  }
+  storageTransferFinish(true,false);
+  if(returnToDraw)switchMode(&draw);
 }
 
 FLASHMEM void showSaveFailureAnimation(bool returnToDraw) {
-  const int cx = (int)((maxX + 1) / 2);
-  const int cy = (int)((maxY + 1) / 2);
-  const uint32_t started = millis();
-  const uint32_t duration = 1000;
-  while (millis() - started < duration) {
-    const uint32_t elapsed = millis() - started;
-    const int radius = min(3, (int)(elapsed / 70));
-    uint8_t brightness = elapsed > 780
-      ? (uint8_t)map((long)elapsed, 780, (long)duration, 220, 20) : 220;
-    FastLEDclear();
-    for (int offset = -radius; offset <= radius; offset++) {
-      light(cx + offset, cy + offset, CRGB(brightness, 0, 0));
-      light(cx + offset, cy - offset, CRGB(brightness, 0, 0));
-    }
-    FastLEDshow();
-    sdIoYield();
-    delay(16);
-  }
-  if (returnToDraw) switchMode(&draw);
+  storageTransferFinish(false,false);
+  if(returnToDraw)switchMode(&draw);
 }
 
 // General cancellation feedback: a blue neutral face, revealed then faded like save results.

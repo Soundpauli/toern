@@ -78,6 +78,10 @@ void drawText(const char *s,int x,int y,CRGB c){textCalls.push_back({s,x,y,(int)
 char overlayBuf[16]={};
 void drawCenteredOverlayLabel(const char *s,int){snprintf(overlayBuf,sizeof(overlayBuf),"%s",s);}
 int successReports=0,failureReports=0;
+void storageTransferBegin(bool,bool){}void storageTransferProgress(unsigned){}
+void storageTransferFinish(bool success,bool){if(success)successReports++;else failureReports++;}
+bool storageTransferIs(bool,bool){return false;}
+void storageTransferDismiss(){}void drawStorageResultFrame(bool,bool,uint32_t){}
 void showSaveSuccessAnimation(bool){successReports++;}
 void showSaveFailureAnimation(bool){failureReports++;}
 int cancellations=0;void showCanceledAnimation(bool back){cancellations++;if(back)currentMode=&draw;}
@@ -90,6 +94,9 @@ void restoreSampleBrowserSelection(unsigned selection){set_Wav.pos[3]=selection;
 void stopSdPreviewIfPlaying(){}void applyDrawSingleYEncoderLimits(){}void refreshCtrlEncoderConfig(){}
 int effectivePageCount(){return 16;}int encoderPageMax(){return 16;}
 bool SMP_LOAD_SETTINGS=false;
+unsigned samplePackID=1,loadedSampleLen[9]={};uint8_t sampled[9][8]={};
+uint32_t micros(){return now*1000;}
+void queueKitIdentityPersist(){}
 int clockMode=1,soundLoads=0;double playNoteInterval=0;Mode bpmMode;
 struct Timer {void update(double){}} playTimer,fillTimer;
 using std::isfinite;
@@ -101,6 +108,7 @@ void updateLastPage(){
   if(note[x][y].channel)hasNotes[(x-1)/maxX+1]=true;
 }
 void loadSMPSettings(){soundLoads++;}
+void syncVoiceLoadedPathsFromStored(){}
 STATE
 const int O_WRITE=1,O_CREAT=2,O_TRUNC=4,FILE_READ=0,FILE_WRITE_BEGIN=2;
 extern bool enforceBudget;extern unsigned stepReads,stepWrites,stepEntries,maxRead,maxWrite;
@@ -125,6 +133,7 @@ struct FS {
  std::set<std::string> dirs;
  unsigned existsCalls=0,rootScans=0;
  bool exists(const char *p){existsCalls++;return files.count(p)||dirs.count(p);}
+ bool mkdir(const char *p){dirs.insert(p);return true;}
  bool remove(const char *p){if(failRemove==p)return false;return files.erase(p)>0;}
  bool rmdir(const char *p){std::string prefix=std::string(p)+"/";for(auto &v:files)if(v.first.find(prefix)==0)return false;return dirs.erase(p)>0;}
  bool rename(const char*a,const char*b){if(failRenameOnceTo==b){failRenameOnceTo.clear();return false;}if(!exists(a)||exists(b))return false;files[b]=files[a];files.erase(a);return true;}
@@ -263,9 +272,11 @@ int main(){
  capturedSample="samples/b.wav";patternConfirmMode.pos[3]=1;finishPatternConfirmation(true);
  assert(!SD.exists("samples/a.wav")&&SD.exists("samples/b.wav")&&set_Wav.pos[3]==7);
  SD.files["8/7.wav"]=std::make_shared<std::vector<uint8_t>>(8,3);currentMode=&set_SamplePack;set_SamplePack.pos[3]=8;
- requestKitSave(8);assert(currentMode==&patternConfirmMode&&kitSaveCalls==0);finishPatternConfirmation(false);
+ requestKitSave(8);for(unsigned i=0;i<20&&kitSavePending();++i){now++;serviceKitSave();}
+ assert(currentMode==&patternConfirmMode&&kitSaveCalls==0);finishPatternConfirmation(false);
  assert(currentMode==&set_SamplePack&&set_SamplePack.pos[3]==8&&kitSaveCalls==0);
- requestKitSave(8);patternConfirmMode.pos[3]=1;finishPatternConfirmation(true);assert(savedKit==8&&kitSaveCalls==1);
+ requestKitSave(8);for(unsigned i=0;i<20&&kitSavePending();++i){now++;serviceKitSave();}
+ patternConfirmMode.pos[3]=1;finishPatternConfirmation(true);assert(savedKit==8&&kitSaveCalls==1);
  // Uncached siblings copy in bounded blocks as part of Save As.
  SD.files["1-E.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1.txt"]);
  reload(1);saveSelectedPatternFamily(4,false);family();assert(lastPatternSaveOk&&SMP.file==4);
@@ -316,7 +327,49 @@ int main(){
  assert(!(latestMask&16)&&toern_pattern_slots::displayCount(latestMask)==2);
  // Rendering only consults RAM/cache; it never reads pattern files for counting.
  stepReads=stepWrites=0;enforceBudget=true;showLoadSave();enforceBudget=false;assert(!stepReads&&!stepWrites);
- puts("PASS: bounded 512-byte jobs, cooperative previews/index/save/delete/recovery, cached VMOD grids, constant-time bank switches, retained live edits, transactional rollback, retries and autosave identity.");
+ // USB song transfers retain five separate resident banks and use normal persistence.
+ resetFileSubpattern();subpatternsEnabled=true;SMP.file=22;subpatternFile=22;isNowPlaying=false;
+ const auto soundBefore=SMP;
+ for(unsigned slot: {1u,2u,3u,4u,0u}) {
+  assert(!subpatternTransferError()&&beginTransferredSubpattern(slot));
+  memset(note,0,sizeof(noteBanks[0]));
+  note[slot==4?256:1][2]={(uint8_t)(slot+1),89,100,1,(uint8_t)(60+slot)};
+  finishTransferredSubpattern();
+  assert(subpatternSlot==slot&&subpatternCache[slot]==note&&beat==1&&GLOB.edit==1);
+  // Starting another transfer preempts an in-progress bank writer safely.
+  tick();
+ }
+ for(unsigned slot=0;slot<5;++slot) {
+  const auto bank=subpatternCache[slot];assert(bank);
+  assert(bank[slot==4?256:1][2].midiPitch==60+slot);
+  for(unsigned other=slot+1;other<5;++other)assert(bank!=subpatternCache[other]);
+ }
+ assert(subpatternMetadata[4].last==16&&memcmp(&soundBefore,&SMP,sizeof(soundBefore))==0);
+ flush();reload(22);for(int i=0;i<4;++i)choose(1);assert(note[256][2].channel==5&&note[256][2].midiPitch==64);
+ assert(beginTransferredSubpattern(4));memset(note,0,sizeof(noteBanks[0]));finishTransferredSubpattern();flush();
+ reload(22);for(int i=0;i<4;++i)choose(1);assert(!subpatternRamHasNotes(note)); // Clearing a trailing letter persists.
+ maxX=32;assert(beginTransferredSubpattern(4));note[256][2]={11,100,100,1,72};finishTransferredSubpattern();
+ assert(subpatternMetadata[4].last==8&&subpatternMetadata[4].mask==128);
+ auto bankBefore=note;subpatternsEnabled=false;
+ assert(!strcmp(subpatternTransferError(),"ERR SUBP_OFF")&&!beginTransferredSubpattern(0)&&note==bankBefore);
+ subpatternsEnabled=true;isNowPlaying=true;assert(!beginTransferredSubpattern(0)&&note==bankBefore);
+ isNowPlaying=false;assert(!beginTransferredSubpattern(5)&&note==bankBefore);
+ // PATT marks only the loaded numbered family, always blue, on both layouts.
+ currentMode=&loadSaveTrack;const unsigned loaded=loadedPatternFile();
+ for(unsigned width:{16u,32u}) {
+  maxX=width;loadSaveTrack.pos[3]=loaded+1;++patternBrowserRevision;textCalls.clear();showLoadSave();
+  bool blueMark=false;
+  for(const auto &call:textCalls)if(call.text==">"){assert(call.color==UI_BLUE&&call.x==1&&call.y==11);blueMark=true;}
+  assert(blueMark);
+  note[1][1]={11,73,100,1,60};++patternBrowserRevision;textCalls.clear();showLoadSave();
+  blueMark=false;for(const auto &call:textCalls)if(call.text==">"){assert(call.color==UI_BLUE);blueMark=true;}
+  assert(blueMark); // Edits do not change the marker's color.
+  for(unsigned ui:{0u,1u,loaded+2}) {
+   loadSaveTrack.pos[3]=ui;++patternBrowserRevision;textCalls.clear();showLoadSave();
+   for(const auto &call:textCalls)assert(call.text!=">");
+  }
+ }
+ puts("PASS: bounded jobs, subpattern transfers, storage/recovery, confirmation, live edits and a blue loaded-PATT marker on both layouts.");
 }
 '''.replace('SAMPLE',sample).replace('DEVICE',device).replace('STATE',state).replace('HELPERS',helpers).replace('VALIDATOR',validator).replace('SLOTS',slots).replace('LOADER',loader).replace('RENDERER',renderer).replace('FNDELETE',fn_delete).replace('CONFIRMBUTTONS',confirm_buttons)
 with tempfile.TemporaryDirectory(prefix='toern-subpatterns-') as tmp:

@@ -785,3 +785,37 @@ for(const width of [16,32]){
 }
 setLayout(32);
 console.log('PASS: PATT/KIT/SMP confirmation, NO/YES/touch cancellation, loaded-pattern deletion, WAV selection and AUTOSAVE labels.');
+
+// SETT → SUBP follows SWAP, defaults OFF, toggles by turn/click and persists.
+function bootSubpDevice() {
+  const dev=createDevice(matrix,{},[]);dev.start();now+=6000;frame(now);now+=6000;frame(now);
+  dev.jump('settings-menu');dev.press(3);
+  for(let i=0;i<5;i++)dev.rotate(3,1);
+  assert.equal(dev.subIndex(),5);return dev;
+}
+for(const width of [16,32]) {
+  stored.clear();const dev=bootSubpDevice();dev.setDevice(width===16?1:2);
+  assert.equal(dev.menuSummary().detail,'SUBP: OFF');
+  textDraws.length=0;frame(++now);
+  assert(textDraws.some(c=>c[0]==='SUBP'));
+  assert(textDraws.some(c=>c[0]==='OFF'&&c[3][0]===120&&c[3][1]===0));
+  dev.rotate(2,1);assert.equal(dev.menuSummary().detail,'SUBP: ON');
+  dev.rotate(2,1);assert.equal(dev.menuSummary().detail,'SUBP: ON','rotation clamps at ON');
+  textDraws.length=0;frame(++now);
+  assert(textDraws.some(c=>c[0]==='ON'&&c[3][1]===120&&c[3][0]===0));
+  assert.equal(JSON.parse(stored.get('toern-web-eeprom')).subPick.look[12],1);
+  const restored=bootSubpDevice();assert.equal(restored.menuSummary().detail,'SUBP: ON');
+  restored.press(2);assert.equal(restored.menuSummary().detail,'SUBP: OFF');
+  restored.press(2);assert.equal(restored.menuSummary().detail,'SUBP: ON');
+  restored.rotate(2,-1);assert.equal(restored.menuSummary().detail,'SUBP: OFF');
+  assert.equal(bootSubpDevice().menuSummary().detail,'SUBP: OFF');
+}
+// Appending SUBP must retain both legacy settings layouts without shifting controls.
+for(const length of [11,12]) {
+  stored.clear();const legacy=Array(length).fill(0);legacy[length===11?5:6]=1;
+  stored.set('toern-web-eeprom',JSON.stringify({subPick:{look:legacy}}));
+  const dev=bootSubpDevice();assert.equal(dev.menuSummary().detail,'SUBP: OFF');
+  for(let i=0;i<4;i++)dev.rotate(3,-1);
+  assert.equal(dev.menuSummary().detail,'CTRL: VOL');
+}
+console.log('PASS: SUBP OFF/ON, turn/click, red/green rendering on both layouts, persistence and 11/12-slot migration.');

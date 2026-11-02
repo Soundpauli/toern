@@ -23,6 +23,9 @@
 //   GETPAT / PUTPAT <size> <crc32>
 //     Same framing as GET / PUT, but the bytes are the current pattern in RAM
 //     (notes, BPM, MIDI pitches). Nothing is written to the SD card.
+//   PUTSUB <A-E> <size> <crc32>
+//     Same image/framing as PUTPAT; select and replace a resident subpattern.
+//     Requires SETT SUBP ON. The normal stopped-state writer saves the bank.
 //
 // LIST file lines: F <size> <duration_ms> <name>  (duration_ms = -1 if unknown/non-WAV)
 // Binary transfers follow PUT/GET handshake; CRC32 is IEEE (zlib/binascii compatible).
@@ -658,10 +661,19 @@ static void sdPatPack() {
   }
 }
 
-static bool sdPatApply() {
+static bool sdPatApply(int slot) {
   if (sdPatBuf[SD_PAT_NOTE_BYTES] != 0xFF || sdPatBuf[SD_PAT_NOTE_BYTES + 1] != 0xFE) return false;
   const size_t pitchAt = SD_PAT_NOTE_BYTES + 2u + 4u;
   if (memcmp(sdPatBuf + pitchAt, SD_PAT_PITCH_HDR, sizeof(SD_PAT_PITCH_HDR)) != 0) return false;
+  if (slot >= 0) {
+    // Reject malformed song data before selecting or modifying any bank.
+    for (size_t cell = 0; cell < SD_PAT_NOTES; ++cell) {
+      const size_t at = cell * 4u;
+      if (sdPatBuf[at] > 16 || sdPatBuf[at + 1] > 127 || sdPatBuf[at + 2] > 100) return false;
+    }
+    extern bool beginTransferredSubpattern(uint8_t slot);
+    if (!beginTransferredSubpattern((uint8_t)slot)) return false;
+  }
 
   size_t i = 0;
   for (unsigned int x = 1; x <= 256; x++) {
@@ -691,6 +703,10 @@ static bool sdPatApply() {
       note[x][y].midiPitch =
           (stored <= 127 || stored == NOTE_MIDI_PITCH_NONE) ? stored : NOTE_MIDI_PITCH_NONE;
     }
+  }
+  if (slot >= 0) {
+    extern void finishTransferredSubpattern();
+    finishTransferredSubpattern();
   }
   return true;
 }
@@ -741,15 +757,15 @@ static void sdSerCmdGetPat() {
   showDrawAfterPatternTransfer();
 }
 
-static void sdSerCmdPutPat(char *args) {
+static void sdSerCmdPutPat(char *args, int slot) {
   char *sizeTok = strtok(args ? args : (char *)"", " \t");
   char *crcTok = strtok(NULL, " \t");
-  if (!sizeTok || !crcTok) {
+  uint32_t size = 0, expectCrc = 0;
+  if (!sizeTok || !crcTok || strtok(NULL, " \t") || strlen(crcTok) > 8 ||
+      !toern_sd::parseUnsigned(sizeTok, 10, size) || !toern_sd::parseUnsigned(crcTok, 16, expectCrc)) {
     sdSerReply("ERR USAGE");
     return;
   }
-  uint32_t size = (uint32_t)strtoul(sizeTok, NULL, 10);
-  uint32_t expectCrc = (uint32_t)strtoul(crcTok, NULL, 16);
   if (size != (uint32_t)SD_PAT_BYTES) {
     sdSerReply("ERR SIZE");
     return;
@@ -792,13 +808,27 @@ static void sdSerCmdPutPat(char *args) {
     sdSerReplyFlush(err);
     return;
   }
-  if (!sdPatApply()) {
+  if (!sdPatApply(slot)) {
     sdSerReplyFlush("ERR PATTERN");
     return;
   }
   sdSerReplyFlush("OK");
   extern void showDrawAfterPatternTransfer();
   showDrawAfterPatternTransfer();
+}
+
+static void sdSerCmdPutSub(char *args) {
+  if (!args || args[0] < 'A' || args[0] > 'E' || (args[1] != ' ' && args[1] != '\t')) {
+    sdSerReply("ERR USAGE");
+    return;
+  }
+  extern const char *subpatternTransferError();
+  if (const char *error = subpatternTransferError()) {
+    sdSerReply(error);
+    return;
+  }
+  const int slot = args[0] - 'A';
+  sdSerCmdPutPat(sdSerSkipSpaces(args + 1), slot);
 }
 
 static void sdSerHandleLine(char *line) {
@@ -841,7 +871,9 @@ static void sdSerHandleLine(char *line) {
   } else if (strcasecmp(cmd, "GETPAT") == 0) {
     sdSerCmdGetPat();
   } else if (strcasecmp(cmd, "PUTPAT") == 0) {
-    sdSerCmdPutPat(args);
+    sdSerCmdPutPat(args, -1);
+  } else if (strcasecmp(cmd, "PUTSUB") == 0) {
+    sdSerCmdPutSub(args);
   } else {
     sdSerReply("ERR UNKNOWN");
   }
@@ -964,7 +996,10 @@ static void sdSerHandleOffPage(char *line) {
     sdSerCmdGetPat();
   } else if (strcasecmp(cmd, "PUTPAT") == 0) {
     sdSerNoteHostPresent();
-    sdSerCmdPutPat(args);
+    sdSerCmdPutPat(args, -1);
+  } else if (strcasecmp(cmd, "PUTSUB") == 0) {
+    sdSerNoteHostPresent();
+    sdSerCmdPutSub(args);
   } else {
     sdSerReply("ERR UNKNOWN");
   }

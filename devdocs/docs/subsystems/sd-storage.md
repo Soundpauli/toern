@@ -42,7 +42,50 @@ Pattern saves validate `<destination>.tmp`, keep the previous generation as `<de
 
 Saving an empty grid manually writes a valid empty numbered pattern; deletion is an explicit confirmed action. Autosave preserves an empty session. The five-second cooldown is updated only after a successful autosave. The power switch simply cuts power; it does not trigger saving.
 
-KIT writes check copied bytes and WAV headers and report success/failure. They are **not atomic across all eight files**. PATT save does not save sample audio, and PATT load does not reload the matching KIT.
+KIT saving runs cooperatively **during playback**. Overwrite discovery, file
+open/close/rename and data transfer happen in separate loop passes. Each transfer
+is at most **2 KB**, using an internal-RAM transfer buffer with interrupts enabled.
+RAM copying and its corresponding write share a pass; there is no artificial
+inter-operation delay. MIDI and
+controls run between passes. PATT and KIT transfers share the renderer in
+`src/toern_storage_visual.h`, including KIT loading at boot. It shows the menu
+icon, a green outward load arrow or red inward save arrow, percentage and progress
+bar. Completion reveals a green check or red X without text or blocking delays.
+Pause-triggered autosave reveals a white check only after an actual successful
+write; cooldown skips show no check. The 32×16 (`led == 2`) and 16×16 (`led == 1`)
+layouts have separate spacing. Background KIT progress leaves DRAW usable, and
+resumes after any pause-autosave acknowledgement.
+`tests/test_storage_visual.py` checks real icon/font pixels, bounds and animation
+colors on both sizes; `tests/test_storage_feedback.py` checks progress and
+autosave feedback timing.
+Only the raw aligned transfer buffer is `DMAMEM`; the writer state and `File`
+objects live in normally initialized RAM. Teensy's DMA section is `NOLOAD` and
+cannot hold a statically initialized writer object. The compiled placement is
+checked by `tests/test_audio_graph_memory.py`.
+
+The writer stages all eight WAVs as `<voice>.wav.kit-tmp` and checks their full
+read-back CRC before installing any of them. It exports current loaded PCM,
+including custom samples whose deferred SP0 copy is still pending; KIT 0 cannot
+delete its own input. Existing primaries move to `.kit-bak` during installation.
+Write/validation failures leave the old kit intact; failed installs and
+cancellation attempt rollback. Navigation and sound-control edits can continue;
+recording or replacing a sample cancels an in-progress save. A committed save
+does not relabel newly loaded samples. Kit-ID/SP0 EEPROM persistence waits for
+stopped, settled audio; disk saving itself continues during play.
+
+A card operation can still take longer than its usual latency; a sector budget
+is not a hard real-time guarantee. Power loss across the eight renames is **not
+atomic**. A subsequent save can recover a missing primary from its `.kit-bak`;
+ordinary kit loading does not perform a whole-kit transaction recovery.
+Regression: `python3 tests/test_kit_save_audio.py`. PATT save does not save sample
+audio, and PATT load does not reload the matching KIT.
+
+Hardware validation of the 2 KB writer saved KIT 500 twice while the current
+339-note pattern continued playing: approximately 11.5 seconds to the OK display
+and 12.7 seconds including that display on the repeat. Both USB recordings had
+no capture errors; peak measured audio CPU was about 32%. These timings depend
+on sample lengths and the SD card, and do not establish identical load/save
+speed or an exhaustive audio-quality result.
 
 ## Synth filter presets
 
@@ -117,13 +160,17 @@ RAM letters (including live edits), copies uncached siblings with recovery,
 and stages/validates all incoming files before installation. A failed rename
 rolls back installed primaries. The target identity is adopted only after
 successful installation/cleanup. Recovery-only destinations still require NO/YES
-overwrite confirmation. The UI shows nonblocking WAIT/OK/ERR feedback. Deleted blank letters
+overwrite confirmation. Save As uses the shared progress and animated result
+screen; deletion retains its wait indicator and animated result. Deleted blank letters
 stay deleted until explicitly saved or edited. Autosave appends the eight-byte
 `TSUB` identity extension after the pitch extension, preserving the family,
 active letter, and deleted-letter mask without changing `sizeof(Device)`.
 Legacy autosaves without that extension restore A.
 
 PATT dots extend through the last letter containing notes, with a minimum of A.
+The loaded numbered family has a blue `>` beside its number, independent of
+edits. Other destinations, NEW and AUTOSAVE have no marker; no dirty comparison
+or additional storage reads run for this indicator.
 For A/C with notes and B/D/E empty, the display shows three dots. Trailing empty
 letters do not extend the count; internal empty letters remain included. Empty
 files stay available for editing, loading, overwrite protection, and deletion.
@@ -133,3 +180,18 @@ validated and cached in bounded read jobs, separate from the file-presence index
 An empty destination shows the loaded family's content extent in red.
 The compact 16-column folder leaves room for all five dots. These file
 subpatterns are independent of the existing page/mute SUBPATTERN mode.
+
+KIT browsing updates the selected number immediately. `src/toern_kit_browser.h`
+waits 35 ms after the last turn, then probes at most one voice WAV per loop.
+Availability (including empty slots and kits without voice 1) is cached for the
+browser visit. Mode entry and save feedback invalidate the cache explicitly;
+slow frames do not. `tests/test_kit_browser.py` covers this behavior.
+
+With MCP compiled in, passive main-loop timing remains available through `PERF`
+even after an idle run without a connected client. `loop_stalls` counts sections
+over 50 ms; `last_stall_stage`, `last_stall_us`, `loop_max_us`, `stage_max_us` and
+`temp_centi` help distinguish serial, background, render, storage and input work
+from audio DSP usage. Explicit transfers and flashing/restoration can also
+produce long sections: compare the counters before and after an idle test.
+The counters perform no serial output, allocation or interrupt masking; replies
+are sent only on request. They are omitted in the no-MCP build.

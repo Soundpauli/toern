@@ -7,8 +7,9 @@
 #include <errno.h>
 #include "toern_touch_input.h"
 #include "src/toern_pattern_slots.h"
+#include "src/toern_kit_browser.h"
 
-#define VERSION "v3.03a"
+#define VERSION "v3.03b"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -1106,6 +1107,7 @@ static unsigned subpatternFile = 0;
 static unsigned pendingNewPatternFile = 0;
 static uint32_t patternStorageRevision = 0;
 static uint32_t patternBrowserRevision = 0;
+static uint32_t kitBrowserRevision = 0;
 static uint32_t subpatternIndexPaintRevision = 0;
 static bool patternFamilyBusy();
 static void servicePatternFamilyJob();
@@ -2560,6 +2562,8 @@ FLASHMEM void switchMode(Mode *newMode) {
       currentMode->pos[2] = (clockMode == 1) ? 1 : 0;
       Encoder[2].writeCounter((int32_t)currentMode->pos[2]);
     }
+
+    if (currentMode == &set_SamplePack) ++kitBrowserRevision;
 
     if (currentMode == &loadSaveTrack) {
       ++patternBrowserRevision;
@@ -7302,8 +7306,18 @@ void checkSerialColors() {
   }
 }
 
+#if TOERN_REMOTE_CONTROL
+#include "src/toern_loop_timing.h"
+static ToernLoopTiming loopTiming;
+struct LoopTimingScope {
+  LoopTimingScope(){loopTiming.begin(micros());}
+  ~LoopTimingScope(){loopTiming.end(micros());}
+};
+#endif
+
 void loop() {
 #if TOERN_REMOTE_CONTROL
+  LoopTimingScope timingScope;
   remoteService();
 #endif
   checkSerialColors();
@@ -7320,6 +7334,9 @@ void loop() {
   // so its normal Touch 1 exit is also reachable from MCP.
   if (serviceDemoAnimation()) { checkMidi(); yield(); return; }
 
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Background,micros());
+#endif
   updateExternalOneBlink();
   checkMidi();  // Process MIDI early in loop for lower latency
   serviceIdlePolySynthVoices();
@@ -7396,7 +7413,8 @@ void loop() {
       pendingPauseAutoSave = false;
     } else if (sdIoAudioSettled() || pauseSdWaitMs > 2500) {
       pendingPauseAutoSave = false;
-      autoSave();
+      extern void autoSaveWithFeedback();
+      autoSaveWithFeedback();
     }
   }
 
@@ -7466,6 +7484,9 @@ void loop() {
     return;
   }
 
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Render,micros());
+#endif
   // FLOW mode: SAME playback behavior as normal play.
   // ONLY difference: the visible page follows the beat being played (beatForUI).
   // Do page-follow work in the main loop to avoid mid-frame flicker.
@@ -7631,7 +7652,12 @@ void loop() {
   if (!fastRecordActive && getLedStripEnabled()) {
     updateLedStrip();
   }
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Storage,micros());
+#endif
   serviceSubpatterns();
+  extern void serviceKitSave();
+  serviceKitSave();
 
   //granular on ch=8
   /*
@@ -7673,6 +7699,9 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
   }
 
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Inputs,micros());
+#endif
   checkEncoders();
   if (!fastRecordActive && exttouch) {
     updateNeoSliderVolume();
@@ -7698,6 +7727,9 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     return;
   }
 
+#if TOERN_REMOTE_CONTROL
+  loopTiming.mark(ToernLoopTiming::Other,micros());
+#endif
   checkPendingSampleNotes();
   serviceSetWavSyncPreview();
   serviceSdPreviewRequests();
@@ -10809,6 +10841,7 @@ FLASHMEM void showLoadSave() {
     drawPatternSlotDots(sourceContentMask, UI_RED);
     drawNumber(fileId, UI_BLUE, 11);
   }
+  if (!isNewSlot && !isAutosaveSlot && fileId == loadedFile) drawText(">", 1, 11, UI_BLUE);
   FastLEDshow();
 }
 
@@ -10889,6 +10922,14 @@ FLASHMEM void showPresetLoadSave() {
 
 FLASHMEM void showSamplePack() {
   drawNoSD();
+  extern unsigned kitSaveFeedback();
+  extern unsigned kitSaveProgress();
+  if (unsigned feedback=kitSaveFeedback()) {
+    ++kitBrowserRevision; // Recheck availability after a save, including failures.
+    if(storageTransferIs(true,true))storageTransferProgress(kitSaveProgress());
+    FastLEDshow();
+    return;
+  }
 
   if (currentMode->pos[3] != SMP.pack) {
     SMP.pack = currentMode->pos[3];
@@ -10903,23 +10944,23 @@ FLASHMEM void showSamplePack() {
     markSettingsBackupDirty();
   }
 
-  // SD.exists + full redraw + Duppa RGB every loop stalled play — only when pack changes.
-  // Invalidate when re-entering this mode (gap = we weren't called last frames).
-  static int lastPack = -2;
-  static bool lastFn = false;
-  static bool lastPackExists = false;
-  static uint8_t lastLoadedMark = 255;
-  static uint32_t lastPackRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
-  static uint32_t lastCallMs = 0;
-  uint32_t nowMs = millis();
-  if (nowMs - lastCallMs > 50) {
-    lastPack = -2;
-    for (int i = 0; i < 4; i++) lastPackRGB[i] = 0xFFFFFFFFu;
+  // Re-entry is explicit: a slow frame must not restart SD discovery and I2C.
+  static ToernKitBrowser browser;
+  static uint32_t lastBrowserRevision=~0u;
+  static bool lastFn=false;
+  static uint8_t lastLoadedMark=255;
+  static uint32_t lastPackRGB[4]={0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu};
+  const bool entered=lastBrowserRevision!=kitBrowserRevision;
+  if(entered){
+    lastBrowserRevision=kitBrowserRevision;browser.reset();
+    for(int i=0;i<4;++i)lastPackRGB[i]=0xFFFFFFFFu;
   }
-  lastCallMs = nowMs;
-
-  char OUTPUTf[50];
-  sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);
+  const uint32_t now=millis();
+  const bool selectionChanged=browser.select(SMP.pack,now);
+  const bool availabilityChanged=browser.tick(now,[](unsigned pack,unsigned voice){
+    char path[24];snprintf(path,sizeof(path),"%u/%u.wav",pack,voice);return SD.exists(path);
+  });
+  const bool wavExists=browser.available();
   // SMP.pack follows browsing; samplePackID follows the last loaded/saved kit.
   // SP0 overrides describe custom voice samples, not preview or sound settings.
   bool samplesModified = false;
@@ -10929,20 +10970,7 @@ FLASHMEM void showSamplePack() {
   }
   const uint8_t loadedMark = SMP.pack == samplePackID
       ? (samplesModified ? 2 : 1) : 0;
-  bool packChanged = ((int)SMP.pack != lastPack);
-  bool wavExists;
-  if (packChanged) {
-    wavExists = false;
-    for (unsigned voice = 1; voice <= 8 && !wavExists; ++voice) {
-      snprintf(OUTPUTf, sizeof(OUTPUTf), "%u/%u.wav", SMP.pack, voice);
-      wavExists = SD.exists(OUTPUTf);
-    }
-    lastPackExists = wavExists;
-    lastPack = (int)SMP.pack;
-  } else {
-    if (lastFn == fnHeld && loadedMark == lastLoadedMark) return;
-    wavExists = lastPackExists;
-  }
+  if(!entered&&!selectionChanged&&!availabilityChanged&&lastFn==fnHeld&&loadedMark==lastLoadedMark)return;
 
   lastFn = fnHeld;
   lastLoadedMark = loadedMark;
@@ -11010,54 +11038,22 @@ FLASHMEM void loadSamplePack(unsigned int pack_id, bool intro, bool preserveSp0C
   GLOB.seek = 0;
   GLOB.seekEnd = 100;
 
+  storageTransferBegin(true,false);
+  unsigned completedVoices=0;
+  auto loadKitVoice=[&](unsigned source,unsigned voice) {
+    storageTransferPart(completedVoices,8);
+    loadSample(source,voice);
+    storageTransferPart(++completedVoices,8);
+  };
   if (!preserveSp0Custom) {
-    // Manual/intentional load: reset SP0 overrides so the chosen pack overwrites everything.
-    for (unsigned int z = 1; z < maxFiles; z++) {
-      SMP.sp0Active[z] = false;
-    }
+    for(unsigned z=1;z<maxFiles;++z)SMP.sp0Active[z]=false;
     saveSp0StateToEEPROM();
-
-    for (unsigned int z = 1; z < maxFiles; z++) {
-      if (!intro) {
-        // wave = sample
-        showIcons(ICON_SAMPLE_BIG, UI_BG_DIM);
-      } else {
-        drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
-      }
-      drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
-      loadSample(pack_id, z);
-    }
+    for(unsigned z=1;z<maxFiles;++z)loadKitVoice(pack_id,z);
   } else {
-    // Startup load: preserve SP0 custom voices, then load the pack for the rest.
-    for (unsigned int z = 1; z < maxFiles; z++) {
-      if (SMP.sp0Active[z]) {
-
-        if (!intro) {
-          // wave = sample
-          showIcons(ICON_SAMPLE_BIG, UI_BG_DIM);
-        } else {
-          drawText("SP0", 2, 11, col[(maxFiles + 1) - z]);
-        }
-        drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
-        loadSample(0, z);  // Load from samplepack 0
-      }
-    }
-
-    for (unsigned int z = 1; z < maxFiles; z++) {
-      if (!SMP.sp0Active[z]) {  // Only load if NOT using samplepack 0
-
-        if (!intro) {
-          // wave = sample
-          showIcons(ICON_SAMPLE_BIG, UI_BG_DIM);
-        } else {
-          drawText("LOAD", 2, 11, col[(maxFiles + 1) - z]);
-        }
-        drawLoadingBar(1, maxFiles, z, col_base[(maxFiles + 1) - z], UI_DIM_WHITE, intro);
-        loadSample(pack_id, z);
-      } else {
-      }
-    }
+    for(unsigned z=1;z<maxFiles;++z)if(SMP.sp0Active[z])loadKitVoice(0,z);
+    for(unsigned z=1;z<maxFiles;++z)if(!SMP.sp0Active[z])loadKitVoice(pack_id,z);
   }
+  storageTransferFinish(true,false);
   GLOB.seek = savedSeek;
   GLOB.seekEnd = savedSeekEnd;
   // char OUTPUTf[50]; // This seems unused here

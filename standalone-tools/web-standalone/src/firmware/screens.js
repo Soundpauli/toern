@@ -42,7 +42,7 @@ export const MENU_PAGES = [
 
 // Navigation is separate from the persisted legacy setting slots.
 export const SUBS = {
-  look: ["VIEW", "CTRL", "DRAW", "MUTE", "SWAP"],
+  look: ["VIEW", "CTRL", "DRAW", "MUTE", "SWAP", "SUBP"],
   recs: ["INPT", "MIC", "HPF", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PQ-I", "PQ-O", "TRIG", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "SPKR"],
@@ -54,7 +54,7 @@ export const SUBS = {
 const SUB_SLOTS = {
   recs: [["recs", 0], ["recs", 1], ["recs", 5], ["recs", 2], ["recs", 3], ["recs", 4]],
   midi: [["midi", 0], ["midi", 1], ["midi", 2], ["midi", 3], ["midi", 4], ["midi", 5], ["midi", 8], ["midi", 6], ["midi", 7], ["midi", 9]],
-  look: [["look", 2], ["look", 6], ["look", 10], ["look", 11]],
+  look: [["look", 2], ["look", 6], ["look", 10], ["look", 11], null, ["look", 12]],
   vol: [["vol", 0], ["vol", 1], ["vol", 2], ["vol", 3], ["vol", 5]],
   mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["touchy", 0], ["etc", 3]],
   etc: [["etc", 0], ["etc", 2], ["etc", 6], ["adv", 0], ["etc", 11]],
@@ -1059,7 +1059,7 @@ export function drawBoot(matrix, now, bootAt, wavesOnly = false) {
   return !wavesOnly && t >= 5000;
 }
 
-const VERSION = "v3.03a";
+const VERSION = "v3.03b";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
 function drawInfo(matrix, s, now, color) {

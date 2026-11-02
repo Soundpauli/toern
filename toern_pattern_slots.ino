@@ -265,8 +265,8 @@ FLASHMEM static bool subpatternOverlayVisible() {
 }
 FLASHMEM static void drawSubpatternOverlay() {
   if(patternFamilyBusy()){drawCenteredOverlayLabel("WAIT",UI_BLUE);return;}
-  if((int32_t)(subpatternSuccessUntil-millis())>0){drawCenteredOverlayLabel("OK",UI_GREEN);return;}
-  if((int32_t)(subpatternErrorUntil-millis())>0){drawCenteredOverlayLabel("ERR",UI_RED);return;}
+  if((int32_t)(subpatternSuccessUntil-millis())>0){drawStorageResultFrame(true,false,700u-(subpatternSuccessUntil-millis()));return;}
+  if((int32_t)(subpatternErrorUntil-millis())>0){drawStorageResultFrame(false,false,std::min(600u,1200u-(unsigned)(subpatternErrorUntil-millis())));return;}
   char text[6];const unsigned page=std::min(std::max(subpatternSelectedPage,1u),(unsigned)maxPages);
   snprintf(text,sizeof(text),"%c%u",'A'+subpatternSelected,page);
   drawCenteredOverlayLabel(text,subpatternCache[subpatternSelected]&&!(subpatternEmptyMask&(1u<<subpatternSelected))?UI_GREEN:UI_BLUE);
@@ -317,6 +317,43 @@ void subpatternNotePagesLoaded() {
   meta.longest=voiceModePages;meta.last=lastPage;
   for(unsigned p=1;p<=maxPages;++p)if(hasNotes[p])meta.mask|=1u<<(p-1);
   subpatternAvailable|=1u<<subpatternSlot;
+}
+
+// USB song import uses the resident A–E banks and the normal cooperative writer.
+// Called only after the complete RAM image has passed its framing/CRC checks.
+const char *subpatternTransferError() {
+  if(!subpatternsEnabled)return "ERR SUBP_OFF";
+  if(loadedPatternFile()<1||loadedPatternFile()>999)return "ERR NO_FAMILY";
+  if(patternFamilyBusy()||fastRecordActive||isRecording||childLockEnabled||imageMode)return "ERR BUSY";
+  return nullptr;
+}
+bool beginTransferredSubpattern(uint8_t slot) {
+  if(slot>=5||subpatternTransferError()||isNowPlaying)return false;
+  // Finish/abandon any writer before changing a bank that it might reference.
+  if(!subpatternWriteJob.abandon(SD))return false;
+  subpatternWritingSlot=255;subpatternOldSavePending=false;subpatternSaveNew=false;
+  subpatternCancelPreview();subpatternReady=false;subpatternApplied=false;subpatternSelector=false;
+  subpatternFile=loadedPatternFile();
+  subpatternCache[subpatternSlot]=note;
+  auto bank=subpatternCache[slot];
+  if(!bank)bank=subpatternFreeBank();
+  if(!bank)return false;
+  if(slot!=subpatternSlot)subpatternDirtyMask|=1u<<subpatternSlot;
+  note=bank;subpatternCache[slot]=bank;subpatternSlot=subpatternSelected=slot;
+  return true;
+}
+void finishTransferredSubpattern() {
+  updateLastPage();
+  auto &meta=subpatternMetadata[subpatternSlot];meta=SubpatternMetadata{};
+  for(unsigned cell=0;cell<MAX_STEPS*maxY;++cell)
+    subpatternAddMetadata(meta,cell,note[cell/maxY+1][cell%maxY+1]);
+  subpatternDirtyMask|=1u<<subpatternSlot;
+  subpatternEmptyMask&=~(1u<<subpatternSlot);deletedSubpatternSlots&=~(1u<<subpatternSlot);
+  subpatternAvailable|=1u<<subpatternSlot;
+  GLOB.page=GLOB.edit=GLOB.x=1;editpage=1;beat=beatForUI=1;
+  loopCount=1;pendingPage=0;subpatternBoundary=false;
+  for(int ch=0;ch<16;++ch)voiceLoopCount[ch]=1;
+  ++patternStorageRevision;
 }
 bool subpatternBrowsePageMask(uint16_t *mask) {
   const uint8_t slot=subpatternSelector?subpatternSelected:subpatternViewSlot;
@@ -467,7 +504,9 @@ FLASHMEM void finishPatternConfirmation(bool accept) {
     else if (patternConfirmResource == 2) saveSamplePack(patternConfirmTarget);
     else saveSelectedPatternFamily(patternConfirmTarget, true);
   }
-  const bool returnToBrowser = patternConfirmDelete || !accept || (patternConfirmResource == 0 && !lastPatternSaveOk);
+  extern bool kitSavePending();
+  const bool returnToBrowser = patternConfirmDelete || !accept || (patternConfirmResource == 0 && !lastPatternSaveOk)
+      || (patternConfirmResource == 2 && kitSavePending());
   if (returnToBrowser && patternConfirmReturnMode) {
     Mode *browser = patternConfirmReturnMode;
     const bool wasBypassed = bypassModeSwitchDebounce;
@@ -503,9 +542,10 @@ static bool patternFamilyOverwrite=false,patternFamilySingle=false,patternFamily
 static SubpatternReader patternFamilyReader;
 static SubpatternWriter patternFamilyWriter;
 static Device patternFamilySettings;
+static bool patternFamilySaveVisual=false;
 static File patternFamilyIn,patternFamilyOut;
 static uint8_t patternFamilyBuffer[512];
-static size_t patternFamilyLeft=0,patternFamilyCount=0,patternFamilyWritten=0;
+static size_t patternFamilyLeft=0,patternFamilyCount=0,patternFamilyWritten=0,patternFamilyCopyTotal=0;
 static unsigned patternFamilyClearCell=0;
 static Note (*patternFamilyBlank)[maxY+1]=nullptr;
 
@@ -518,6 +558,8 @@ FLASHMEM static void patternFamilyFinish(bool ok) {
   patternFamilyReader.cancel();patternFamilyWriter.cancel();
   if(patternFamilyIn)patternFamilyIn.close();if(patternFamilyOut)patternFamilyOut.close();
   patternFamilyPhase=FamilyIdle;lastPatternSaveOk=ok;++patternStorageRevision;
+  if(patternFamilySaveVisual&&storageTransferIs(false,true))storageTransferFinish(ok,false);
+  patternFamilySaveVisual=false;
   if(ok){subpatternErrorUntil=0;subpatternSuccessUntil=millis()+700;}else subpatternFailure();
   preventPaintUnpaint=false;
 }
@@ -541,6 +583,7 @@ FLASHMEM static void beginPatternFamilySave(unsigned target,bool overwrite) {
   patternFamilySourceMask=1u<<subpatternSlot;patternFamilyOldMask=0;patternFamilyStaged=0;
   patternFamilyMoved=patternFamilyInstalled=0;patternFamilySlot=0;patternFamilyPart=0;patternFamilyFailed=false;
   patternFamilySingle=target==patternFamilySource;subpatternCancelPreview();
+  patternFamilySaveVisual=true;storageTransferBegin(false,true);
   if(patternFamilySingle) {
     char path[24];toern_pattern_slots::path(path,sizeof(path),target,subpatternSlot);
     patternFamilySlot=subpatternSlot;
@@ -551,10 +594,26 @@ FLASHMEM static void beginPatternFamilySave(unsigned target,bool overwrite) {
 FLASHMEM static void beginPatternFamilyDelete(unsigned target) {
   if(patternFamilyBusy()||subpatternWriteJob.busy()||subpatternWriteJob.incompleteTemporary()||subpatternReady||target<1||target>999||fastRecordActive||isRecording){subpatternFailure();return;}
   cancelSubpatternContentRead();subpatternCancelPreview();patternFamilyTarget=target;patternFamilySlot=1;patternFamilyPart=1;patternFamilyFailed=false;
+  patternFamilySaveVisual=false;
   patternFamilyPhase=FamilyDeleteCheck;
 }
 FLASHMEM static void servicePatternFamilyJob() {
   if(!patternFamilyBusy()||fastRecordActive||isRecording)return;
+  if(patternFamilySaveVisual&&storageTransferIs(false,true)) {
+    unsigned percent=0;
+    if(patternFamilySingle)percent=patternFamilyWriter.progress()*95u/100u;
+    else if(patternFamilyPhase>=FamilyCleanupCheck&&patternFamilyPhase<=FamilyCleanupRemove)
+      percent=90u+std::min(5u,(unsigned)patternFamilySlot)*2u;
+    else if(patternFamilyPhase>=FamilyInstall&&patternFamilyPhase<=FamilyMoveNew)
+      percent=80u+std::min(5u,(unsigned)patternFamilySlot)*2u;
+    else if(patternFamilyPhase>=FamilyStage&&patternFamilyPhase<=FamilyCopyValidate) {
+      percent=10u+std::min(5u,(unsigned)patternFamilySlot)*14u;
+      if(patternFamilyPhase==FamilyStageRam)percent+=patternFamilyWriter.progress()*14u/100u;
+      else if(patternFamilyPhase>=FamilyCopyRead&&patternFamilyPhase<=FamilyCopyValidate&&patternFamilyCopyTotal)
+        percent+=(unsigned)((uint64_t)(patternFamilyCopyTotal-patternFamilyLeft)*14u/patternFamilyCopyTotal);
+    }
+    storageTransferProgress(std::min(percent,99u));
+  }
   char path[40],other[40];
   const auto result=SubpatternIoResult::Running;
   (void)result;
@@ -637,7 +696,7 @@ FLASHMEM static void servicePatternFamilyJob() {
     }
     case FamilyCopyOpenIn:
       patternFamilyPath(path,sizeof(path),patternFamilySource,patternFamilySlot,patternFamilyCandidate);patternFamilyIn=SD.open(path);
-      if(!patternFamilyIn){patternFamilyAbort();return;}patternFamilyLeft=patternFamilyIn.size();patternFamilyPhase=FamilyCopyOpenOut;return;
+      if(!patternFamilyIn){patternFamilyAbort();return;}patternFamilyCopyTotal=patternFamilyLeft=patternFamilyIn.size();patternFamilyPhase=FamilyCopyOpenOut;return;
     case FamilyCopyOpenOut:
       patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot,1);patternFamilyOut=SD.open(path,FILE_WRITE_BEGIN);
       if(!patternFamilyOut){patternFamilyAbort();return;}patternFamilyPhase=FamilyCopyTruncate;return;

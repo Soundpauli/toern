@@ -22,6 +22,8 @@ constexpr int IRQ_SOFTWARE=0;
 namespace toern_audio {struct StateGuard {StateGuard(){++guardDepth;}~StateGuard(){--guardDepth;}};}
 struct elapsedMicros {unsigned start=now;operator unsigned()const{return now-start;}};
 volatile bool channelSampleReloadBusy[maxFiles]={};
+unsigned kitSaveCancellations=0;
+void cancelKitSaveForSampleChange(unsigned ch){assert(guardDepth==0&&ch<maxFiles);++kitSaveCancellations;}
 struct Voice {
  bool playing=true;float amp=1,target=1;unsigned fadeStart=0;int stops=0;
  bool isPlaying(){return playing;}
@@ -81,6 +83,7 @@ int main(){
   _samplers[ch].keys={0,35,60,97,127};
   const unsigned start=now;
   beginChannelSampleReload(ch);
+  assert(kitSaveCancellations==ch*2+1);
   assert(now-start==8000&&channelSampleReloadBusy[ch]);
   assert(voice[ch].stops==1&&!voice[ch].playing);
   assert(_samplers[ch].keys.empty()&&_samplers[ch].offs==128&&_samplers[ch].ons==0);

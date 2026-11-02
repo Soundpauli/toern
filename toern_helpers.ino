@@ -1642,6 +1642,7 @@ FLASHMEM void FastLEDshow() {
     // blocked the screensaver after any mode change.
     const uint32_t eyesIdleMs = eyesScreensaverIdleMs();
     bool screensaverActive = currentMode != &touchyMode && !playingGridFocus
+      && !storageTransferVisible()
       && !recordingBorderArmed
       && !fastRecordActive
       && eyesScreensaverEnabled()
@@ -1658,13 +1659,14 @@ FLASHMEM void FastLEDshow() {
     // Strip stays at full brightness (set in setup() and not modified)
     const bool showFn = currentMode != &touchyMode && fnDirection != 0
       && (int32_t)(fnDirectionUntil - millis()) > 0;
-    if (showFn || neoSliderOverlayVisible() || fillRequestOverlayVisible() || subpatternOverlayVisible()) {
+    if (showFn || neoSliderOverlayVisible() || fillRequestOverlayVisible() || subpatternOverlayVisible() || storageTransferVisible()) {
       CRGB saved[NUM_LEDS];
       memcpy(saved, leds, sizeof(saved));
       drawNeoSliderOverlay();
       if (showFn) drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
       drawFillRequestOverlay();
       if (subpatternOverlayVisible()) drawSubpatternOverlay();
+      if (storageTransferVisible()) drawStorageTransferOverlay();
 #if TOERN_REMOTE_CONTROL
       remoteCaptureDisplay();
 #endif

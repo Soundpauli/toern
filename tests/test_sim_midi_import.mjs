@@ -11,7 +11,7 @@ const dir = await mkdtemp(join(tmpdir(), "toern-midi-import-"));
 try {
   const bundle = join(dir, "midi-import.mjs");
   await build({ entryPoints: [fileURLToPath(new URL("../standalone-tools/web-standalone/src/firmware/midiImport.js", import.meta.url))], outfile: bundle, bundle: true, platform: "node", format: "esm" });
-  const { parseMidiFile, mapNotesToGrid, buildImportCells, filterOverlappingNotes, suggestMidiSlots, selectMidiPageWindow } = await import(pathToFileURL(bundle));
+  const { parseMidiFile, mapNotesToGrid, buildImportCells, buildMidiSubpatterns, filterOverlappingNotes, suggestMidiSlots, selectMidiPageWindow } = await import(pathToFileURL(bundle));
   const midi = new Midi();
   midi.header.setTempo(120);
   const track = midi.addTrack();
@@ -99,6 +99,32 @@ try {
     assert.equal(selectMidiPageWindow(songGrid,-1,cols).startPage,1);
   }
   assert.equal(selectMidiPageWindow([]).maxStartPage,1);
+  // A real long MIDI crosses all four bank boundaries without losing pitch/velocity.
+  const song = new Midi(); song.header.setTempo(120);
+  const melody = song.addTrack(); melody.name = 'Lead';
+  for (let step=0;step<1500;step++) melody.addNote({midi:60+step%12,time:step*.125,duration:.1,velocity:.7});
+  const songBytes=song.toArray();
+  const longParsed=await parseMidiFile({arrayBuffer:async()=>songBytes.buffer.slice(songBytes.byteOffset,songBytes.byteOffset+songBytes.byteLength)});
+  const longGrid=mapNotesToGrid(longParsed.notes,120);
+  for (const cols of [16,32]) {
+    const window=selectMidiPageWindow(longGrid,1,cols,1280);
+    assert.equal(window.windowPages,1280/cols);
+    const banks=buildMidiSubpatterns(window.notes,new Map([[0,11]]));
+    assert.equal(banks.length,5);
+    banks.forEach((bank,slot)=>{
+      assert.equal(bank.length,256);assert.equal(bank[0].step,1);assert.equal(bank.at(-1).step,256);
+      assert.equal(bank[0].midiPitch,60+(slot*256)%12);
+      assert(bank.every(c=>c.channel===11&&c.velocity===Math.round(longParsed.notes[0].velocity*127)));
+    });
+    const tail=selectMidiPageWindow(longGrid,99999,cols,1280);
+    assert.equal(tail.notes.at(-1).time,1499*.125);
+    assert.equal(buildMidiSubpatterns(tail.notes,new Map([[0,11]])).flat().length,tail.notes.length);
+  }
+  const sparse=mapNotesToGrid([0,512,1279,1280].map(step=>({track:0,note:72,velocity:1,time:step*.125,duration:.1})),120);
+  const sparseBanks=buildMidiSubpatterns(sparse,new Map([[0,11]]));
+  assert.deepEqual(sparseBanks.map(bank=>bank.length),[1,0,1,0,1]);
+  assert.equal(sparseBanks[4][0].step,256,'last legal song step survives, overflow is excluded');
+  assert.equal(buildMidiSubpatterns([],new Map()).length,1);
   assert.deepEqual(mapNotesToGrid([]), []);
   console.log("PASS: real MIDI file parses, quantizes and imports low/high pitches with transpose on/off.");
 } finally {

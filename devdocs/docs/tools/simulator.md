@@ -38,6 +38,10 @@ The left sidebar holds the current mode/status and help, panel layout, assistive
 
 Root menus: PATT, KIT, SMP/PSET, BPM, VOL, SETT, REC, MIDI, MODE, ETC. REC includes HPF. MIDI order is CH, TRAN, SEND, RCVE, FOLD, SYNC, PQ-I, PQ-O, TRIG, OVWR. Display-to-storage mappings in `screens.js` preserve legacy preference slots when menu order changes.
 
+SETT ends with **SUBP**, after SWAP. It defaults OFF (red); rotate or press
+encoder 3 to select ON (green). The SIM saves this preference across reloads
+without shifting older settings. Physical-device preferences remain separate.
+
 SETT → SWAP exchanges two channels’ notes across the entire 256-step pattern in SIM and firmware. Encoders 2 and 3 select channels (1–8, 11, 13, 14); press encoder 4 / Enter to swap immediately (encoder 1 exits the menu). Hold either chooser while rotating to set the octave shift for notes leaving that channel (−8…+8, initially 0); its signed octave value appears only while held. Shifts apply on OK and clamp pitches to MIDI 0–127. Native grid notes acquire an absolute MIDI pitch only for a nonzero shift. Note positions, velocity, probability and conditions are preserved; zero shift preserves stored MIDI pitch; sound settings stay with their channels. SWAP reuses the copy/paste buffer and clears an armed copy. Selecting the same channel twice does nothing.
 
 SYNC uses **`SYC>` / `SYC<`**, signed −127…+127 ms. Positive delays the selected start path; negative contributes to the opposite path. `performance.js` shares this math with the renderer. A red `--` marks an unavailable path, including analog EXT; values remain stored/editable. Offsets apply at start, not to MIDI notes or an already running sequence. Browser Web MIDI input and synthetic analog pulses approximate hardware timing; PQ-I/PQ-O and TRIG indicators do not drive physical GPIO, and this simulator does not send a hardware-equivalent MIDI Clock stream.
@@ -64,7 +68,33 @@ Transpose out-of-range notes defaults off, including after Reset to MIDI. Origin
 
 Programs and track names guide melodic parts to CH11 instruments/lead, CH13 keys, CH14 bass, and CH8 vocals/pad. These dedicated voices are filled first; extra compatible parts use sample fallbacks CH6 bass / CH7 keys, with CH11 available for extra keys/pads if no lead claims it. Fallback priority follows descending note count. A single keys-only MIDI part goes to CH11 before CH13. Other parts stay visibly unassigned for manual selection. Channels 9, 10 and 12 are not playable SIM voices. This is a role approximation, not a General MIDI soundfont. MIDI import keeps the current kit and synth parameters; it does not apply SIM-only preset changes or force neutral tuning. The Reset sound controls button resets SIM voice controls using the CH11 preset tables and mono neutral CENT defaults without replacing kit samples. USB current-pattern transfer sends notes and tempo, so the real device needs a matching kit/settings.
 
-Overlap filtering always keeps one pitch per assigned voice/step for sample voices 1–8 and mono voice CH14. The checkbox controls only CH11 and defaults OFF on initial load and reset; CH13 note data stays intact regardless of its value. Reassigning a track reapplies this policy using its destination voice. Cross-track collisions are resolved after voice assignment; with transpose off, melody notes can move to another free display row while retaining their absolute pitch. The start-page slider selects a 256-step window from the entire song and updates the SIM immediately. Page units follow the panel layout: 16 pages at 16 steps or 8 pages at 32 steps. The displayed song range is rebased to SIM page 1; changing tempo, subdivision, offset or panel layout recomputes and clamps it. The MIDI sidebar SEND TO DEVICE button sends the currently selected window. VMOD starts OFF on every SIM startup, including when the saved session had it ON; it can still be enabled in MODE. The pattern remains limited to 256 steps and 15 simultaneous grid cells. MIDI parsing/mapping regression: `node tests/test_sim_midi_import.mjs`.
+Overlap filtering always keeps one pitch per assigned voice/step for sample voices 1–8 and mono voice CH14. The checkbox controls only CH11 and defaults OFF on initial load and reset; CH13 note data stays intact regardless of its value. Reassigning a track reapplies this policy using its destination voice. Cross-track collisions are resolved after voice assignment; with transpose off, melody notes can move to another free display row while retaining their absolute pitch.
+
+The start-page slider selects up to **1,280 steps** from the song, split into
+five 256-step subpatterns A–E. At 32 steps/page this covers 40 song pages
+(8 per letter); at 16 steps/page it covers 80 (16 per letter). The preview
+selector loads one letter into the SIM grid. Internal silent letters retain
+their positions. Longer files remain accessible through the start-page slider;
+the displayed range is rebased to A, step 1. Tempo, subdivision, offset and panel
+layout changes recompute the mapping.
+
+For a single letter, SEND TO DEVICE retains the ordinary current-pattern RAM
+transfer. For multiple letters, it replaces **A–E in the loaded device family**,
+including clearing unused trailing letters. Enable `SETT → SUBP` first and use
+firmware with `PUTSUB` support. Images are sent B, C, D, E, then A, leaving A
+selected and playback stopped. Each bank is accepted only after full transfer,
+CRC and image validation; the normal cooperative bank writer saves it while
+stopped. An interrupted transfer can leave some letters replaced; the browser
+reports which letters were acknowledged and does not retry automatically.
+This uses the existing manual subpattern switching (`FN + encoder 2`); it does
+not add automatic A–E song chaining. Kit, effects and synth settings stay live.
+The generic SEND button beside the SIM still sends only its visible pattern.
+
+VMOD starts OFF on every SIM startup, including when the saved session had it
+ON; it can still be enabled in MODE. Each subpattern remains limited to 256 steps
+and 15 simultaneous grid cells. Regressions: `node tests/test_sim_midi_import.mjs`,
+`node tests/test_midi_song_transfer.mjs`, `python3 tests/test_sd_subpattern_transfer.py`
+and `python3 tests/test_file_subpatterns.py`.
 
 ## Storage and transfer
 

@@ -70,8 +70,7 @@ FLASHMEM bool validPatternFile(const char *path, bool requirePitch) {
 }
 
 FLASHMEM void showPatternResult(bool success) {
-  if (success) showSaveSuccessAnimation(false);
-  else showSaveFailureAnimation(false);
+  storageTransferFinish(success,false);
 }
 
 // FN+Save targets the selected numbered family, independently of the live slot.
@@ -135,7 +134,9 @@ FLASHMEM void savePattern(bool autosave) {
     if (!autosave && !subpatternQuietSave) { showPatternResult(false); switchMode(&draw); }
     return;
   }
-  if (!autosave && !subpatternQuietSave) { drawText("SAVE", 2, 8, UI_GREEN); FastLEDshow(); }
+  const bool showProgress=!autosave&&!subpatternQuietSave;
+  const size_t visualTotal=(maxlen-1)*maxY*5u+2u+sizeof(SMP)+16u;
+  if(showProgress)storageTransferBegin(false,true);
   File saveFile = SD.open(tmpPath, FILE_WRITE_BEGIN);
   if (saveFile && !saveFile.truncate(0)) saveFile.close();
   bool wroteOk = false;
@@ -152,6 +153,7 @@ FLASHMEM void savePattern(bool autosave) {
             wroteOk = false;
             break;
           }
+          if(showProgress)storageTransferProgress((unsigned)((uint64_t)rowCount*4u*90u/visualTotal));
           bufLen = 0;
         }
         buf[bufLen++] = savedNotes[sdx][sdy].channel;
@@ -190,6 +192,7 @@ FLASHMEM void savePattern(bool autosave) {
         wroteOk = patternWriteAll(saveFile, smpBytes + smpOff, n);
         smpOff += n;
         smpLeft -= n;
+        if(showProgress)storageTransferProgress((unsigned)(((uint64_t)(maxlen-1)*maxY*4u+2u+smpOff)*90u/visualTotal));
       }
     }
 
@@ -207,6 +210,7 @@ FLASHMEM void savePattern(bool autosave) {
           if (pitchLen == sizeof(buf)) {
             wroteOk = patternWriteAll(saveFile, buf, pitchLen);
             pitchLen = 0;
+            if(showProgress)storageTransferProgress((unsigned)(((uint64_t)(maxlen-1)*maxY*4u+2u+sizeof(SMP)+8u+(sdx-1)*maxY+sdy)*90u/visualTotal));
             sdIoYield();
           }
         }
@@ -226,6 +230,7 @@ FLASHMEM void savePattern(bool autosave) {
   }
 
   if (wroteOk) {
+    if(showProgress)storageTransferProgress(95);
     wroteOk = patternStageOnly ? validPatternFile(tmpPath, true)
         : commitPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
   } else {
@@ -268,17 +273,88 @@ FLASHMEM void requestPatternSave(unsigned target) {
   queuePatternFamilySave(target);
 }
 
-// Check every voice so a partially populated kit also requires confirmation.
-FLASHMEM void requestKitSave(unsigned target) {
-  if (currentMode != &set_SamplePack || target > 999 || fastRecordActive || isRecording) return;
-  bool occupied = false;
-  sdIoBeginAudioSafe();
-  for (unsigned voice = 1; voice <= 8 && !occupied; ++voice) {
-    char path[24]; snprintf(path, sizeof(path), "%u/%u.wav", target, voice);
-    occupied = SD.exists(path);
+#include "src/toern_kit_writer.h"
+static DMAMEM uint8_t kitSaveSector[toern_kit_io::transferBytes];
+static toern_kit_io::Writer<File> kitSaveJob(kitSaveSector);
+static unsigned kitSaveTarget=0,kitSaveSourcePack=0;
+static uint32_t kitSaveFeedbackUntil=0;
+static bool kitSaveFeedbackOk=false,kitSaveChecking=false,kitSaveSourceChanged=false;
+static unsigned kitSaveCheckVoice=1,kitSaveCheckPart=0;
+static void confirmKitSave(unsigned target);
+bool kitSavePending(){return kitSaveChecking||kitSaveJob.busy();}
+unsigned kitSaveProgress(){return kitSaveChecking?0:kitSaveJob.busy()?kitSaveJob.progress():100;}
+unsigned kitSaveFeedback(){
+  if(kitSavePending())return 1;
+  return kitSaveFeedbackUntil&&(int32_t)(millis()-kitSaveFeedbackUntil)<0?(kitSaveFeedbackOk?2:3):0;
+}
+void cancelKitSaveForSampleChange(unsigned ch) {
+  if(ch<1||ch>8)return;
+  kitSaveChecking=false;kitSaveSourceChanged=true;kitSaveJob.cancel();
+}
+
+// Begin only captures pointers/lengths. Disk work runs one operation per loop,
+// with interrupts enabled and no stop/pause or EEPROM writes at completion.
+void beginKitSave(int pack) {
+  if(pack<0||pack>999||kitSaveJob.busy()||fastRecordActive||isRecording)return;
+  toern_kit_io::Source sources[8];
+  // Save what is actually loaded, including a live custom sample whose deferred
+  // SP0 disk copy has not run yet. Never read that stale scratch file instead.
+  for(unsigned ch=1;ch<=8;++ch)sources[ch-1]={reinterpret_cast<const int16_t*>(sampled[ch]),loadedSampleLen[ch]};
+  if(!kitSaveJob.begin((unsigned)pack,sources,FILE_WRITE_BEGIN))return;
+  storageTransferBegin(true,true);
+  kitSaveChecking=false;kitSaveSourceChanged=false;kitSaveTarget=(unsigned)pack;kitSaveSourcePack=samplePackID;
+  kitSaveFeedbackUntil=0;
+}
+
+void serviceKitSave() {
+  if(kitSaveChecking) {
+    if(currentMode!=&set_SamplePack||currentMode->pos[3]!=kitSaveTarget||samplePackID!=kitSaveSourcePack
+        ||fastRecordActive||isRecording){kitSaveChecking=false;return;}
+    char path[40];snprintf(path,sizeof(path),"%u/%u.wav%s",kitSaveTarget,kitSaveCheckVoice,kitSaveCheckPart?".kit-bak":"");
+    const bool occupied=SD.exists(path);
+    if(occupied){kitSaveChecking=false;confirmKitSave(kitSaveTarget);}
+    else if(++kitSaveCheckPart==2) {
+      kitSaveCheckPart=0;
+      if(++kitSaveCheckVoice==9){kitSaveChecking=false;saveSamplePack((int)kitSaveTarget);}
+    }
+    return;
   }
-  sdIoEndAudioSafe();
-  if (!occupied) { saveSamplePack(target); return; }
+  if(!kitSaveJob.busy()) {
+    if(kitSaveFeedbackUntil&&(int32_t)(millis()-kitSaveFeedbackUntil)>=0) {
+      kitSaveFeedbackUntil=0;
+      if(currentMode==&set_SamplePack&&currentMode->pos[3]==kitSaveTarget)switchMode(&draw);
+    }
+    return;
+  }
+  if(samplePackID!=kitSaveSourcePack||fastRecordActive||isRecording||kitSaveSourceChanged)kitSaveJob.cancel();
+  const auto result=kitSaveJob.tick(SD);
+  if(storageTransferIs(true,true))storageTransferProgress(kitSaveJob.progress());
+  // One bounded operation, then back to normal MIDI/encoder/audio housekeeping.
+  if(kitSaveJob.busy())return;
+  preventPaintUnpaint=false;
+  if(result==toern_kit_io::Result::Cancelled){if(storageTransferIs(true,true))storageTransferFinish(false,false);return;}
+  kitSaveFeedbackOk=result==toern_kit_io::Result::Saved;
+  kitSaveFeedbackUntil=millis()+700;
+  if(storageTransferIs(true,true))storageTransferFinish(kitSaveFeedbackOk,false);
+  if(kitSaveFeedbackOk&&samplePackID==kitSaveSourcePack
+      &&!fastRecordActive&&!isRecording&&!kitSaveSourceChanged) {
+    for(unsigned ch=1;ch<=8;++ch)SMP.sp0Active[ch]=false;
+    samplePackID=kitSaveTarget;
+    if(currentMode!=&set_SamplePack||currentMode->pos[3]==kitSaveTarget)SMP.pack=kitSaveTarget;
+    extern void queueKitIdentityPersist();
+    queueKitIdentityPersist();
+  }
+}
+
+// Scan both primaries and recovery generations cooperatively, before showing
+// the existing overwrite prompt. No SD calls run in the button handler.
+FLASHMEM void requestKitSave(unsigned target) {
+  if(currentMode!=&set_SamplePack||target>999||fastRecordActive||isRecording||kitSavePending())return;
+  kitSaveTarget=target;kitSaveSourcePack=samplePackID;kitSaveCheckVoice=1;kitSaveCheckPart=0;
+  kitSaveChecking=true;kitSaveFeedbackUntil=0;
+}
+
+static void confirmKitSave(unsigned target) {
   patternConfirmReturnMode = currentMode;
   memcpy(patternConfirmReturnPos, currentMode->pos, sizeof(patternConfirmReturnPos));
   patternConfirmTarget = target;
@@ -340,164 +416,7 @@ FLASHMEM bool deleteConfirmedBrowserResource() {
 }
 
 FLASHMEM void saveSamplePack(int pack) {
-    extern void stopSdPreviewIfPlaying();
-    extern size_t sdIoChunkSize();
-    extern void sdIoYield();
-    extern void sdIoBeginAudioSafe();
-    extern void sdIoEndAudioSafe();
-
-    sdIoBeginAudioSafe();
-    stopSdPreviewIfPlaying();
-    
-    bool packSaved = true;
-    char filename[64];
-    char sourcePath[64];
-
-    char dirPath[64];
-    // Ensure the directory exists
-    snprintf(dirPath, sizeof(dirPath), "%d", pack);
-    if (!SD.exists(dirPath)) {
-        packSaved = SD.mkdir(dirPath);
-    }
-
-    // Iterate over each sample channel (1..8)
-    for (uint8_t ch = 1; ch <= 8 && packSaved; ch++) {
-        // Use the same progress bar UI as samplepack load
-        drawLoadingBar(1, maxFiles, ch, col_base[(maxFiles + 1) - ch], UI_DIM_WHITE, false);
-        // Pack = samplepack icon
-        showIcons(OLD_ICON_SAMPLEPACK, UI_BG_DIM);
-        // Don't change FastLED global brightness - matrix is dimmed in software (light_single)
-        FastLEDshow();
-
-        // Check if this voice has a custom sample in samplepack 0
-        snprintf(sourcePath, sizeof(sourcePath), "0/%d.wav", ch);
-        snprintf(filename, sizeof(filename), "%d/%d.wav", pack, ch);
-        
-        bool useSp0Override = SMP.sp0Active[ch] && SD.exists(sourcePath);
-
-        if (useSp0Override) {
-            // Copy from samplepack 0
-            // Remove existing file if it exists
-            if (SD.exists(filename)) {
-                if (!SD.remove(filename)) { packSaved = false; break; }
-            }
-            
-            // Open source file for reading
-            File sourceFile = SD.open(sourcePath, FILE_READ);
-            if (!sourceFile) {
-                packSaved = false;
-                break;
-            }
-            
-            // Open destination file for writing
-            File destFile = SD.open(filename, FILE_WRITE);
-            if (!destFile) {
-                sourceFile.close();
-                packSaved = false;
-                break;
-            }
-            
-            // Reuse EXTMEM scratch; read/write in sdIoChunkSize() slices while playing.
-            static EXTMEM uint8_t packCopyBuf[65536];
-            const size_t chunk = sdIoChunkSize();
-            const size_t sourceSize = sourceFile.size();
-            size_t copied = 0;
-            int bytesRead;
-            while ((bytesRead = sourceFile.read(packCopyBuf, chunk)) > 0) {
-                if (!patternWriteAll(destFile, packCopyBuf, (size_t)bytesRead)) { packSaved = false; break; }
-                copied += (size_t)bytesRead;
-                sdIoYield();
-            }
-            
-            packSaved = packSaved && copied == sourceSize;
-            sourceFile.close();
-            destFile.close();
-        } else if (loadedSampleLen[ch] > 0) {
-            // Save from RAM (current loaded sample)
-            // Remove any existing file at this path
-            if (SD.exists(filename)) {
-                if (!SD.remove(filename)) { packSaved = false; break; }
-            }
-            
-            // Open a new file for writing
-            File outFile = SD.open(filename, FILE_WRITE);
-            if (!outFile) {
-                packSaved = false;
-                break;
-            }
-            
-            // Write standard 44-byte WAV header (mono, 16-bit, AUDIO_SAMPLE_RATE_EXACT)
-            writeWavHeader(outFile, AUDIO_SAMPLE_RATE_EXACT, 16, 1);
-            
-            // Determine how many samples were recorded for this channel
-            uint32_t sampleCount = loadedSampleLen[ch];  // number of int16_t samples
-            
-            // Write the raw PCM data from the sampled buffer in audio-safe chunks
-            uint32_t totalBytes = sampleCount * sizeof(int16_t);
-            uint8_t* dataPtr = reinterpret_cast<uint8_t*>(sampled[ch]);
-            const size_t CHUNK_SIZE = sdIoChunkSize();
-
-            for (uint32_t offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
-              size_t chunkSize = min(CHUNK_SIZE, (size_t)(totalBytes - offset));
-              if (!patternWriteAll(outFile, dataPtr + offset, chunkSize)) { packSaved = false; break; }
-              sdIoYield();
-            }
-
-            finalizeWavHeader(outFile, totalBytes);
-            
-            packSaved = packSaved && outFile.size() == totalBytes + 44u;
-            outFile.close();
-            // Header finalisation also writes to the card. Size alone cannot
-            // detect a failed RIFF/data-length update, so verify after close.
-            if (packSaved) {
-                File verifyFile = SD.open(filename, FILE_READ);
-                uint8_t header[44] = {};
-                packSaved = verifyFile && verifyFile.size() == totalBytes + 44u
-                    && verifyFile.read(header, sizeof(header)) == (int)sizeof(header);
-                uint32_t riffBytes = 0, pcmBytes = 0;
-                memcpy(&riffBytes, header + 4, 4);
-                memcpy(&pcmBytes, header + 40, 4);
-                packSaved = packSaved && memcmp(header, "RIFF", 4) == 0
-                    && memcmp(header + 8, "WAVE", 4) == 0
-                    && riffBytes == totalBytes + 36u && pcmBytes == totalBytes;
-                verifyFile.close();
-            }
-        } else {
-            // Voices without a sample get a zero-byte placeholder file so banks
-            // still contain all 8 slots and load back as silence instead of mute.
-            if (SD.exists(filename)) {
-                if (!SD.remove(filename)) { packSaved = false; break; }
-            }
-
-            File emptyFile = SD.open(filename, O_WRITE | O_CREAT | O_TRUNC);
-            if (emptyFile) {
-                emptyFile.close();
-            } else { packSaved = false; }
-        }
-        sdIoYield();
-    }
-    
-    // Clear sp0Active flags when saving a samplepack (all samples now part of this pack)
-    for (uint8_t ch = 1; packSaved && ch < maxFiles; ch++) {
-        SMP.sp0Active[ch] = false;
-    }
-    if (packSaved) {
-        // The current samples now belong to this kit, including Save As.
-        samplePackID = (unsigned int)pack;
-        SMP.pack = (unsigned int)pack;
-        EEPROM.put(0, samplePackID);
-        markSettingsBackupDirty();
-        saveSp0StateToEEPROM();
-    }
-    
-    // Reset paint/unpaint prevention flag after saveSamplePack operation
-    extern bool preventPaintUnpaint;
-    preventPaintUnpaint = false;
-    
-   sdIoYield();
-   sdIoEndAudioSafe();
-   showPatternResult(packSaved);
-   switchMode(&draw);
+  beginKitSave(pack);
 }
 
 FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
@@ -536,7 +455,7 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
   snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", OUTPUTf);
   snprintf(backupPath, sizeof(backupPath), "%s.bak", OUTPUTf);
   recoverPatternTransaction(SD, OUTPUTf, tmpPath, backupPath, validPatternFile);
-  if (!autoload) { drawText("LOAD", 2, 8, UI_GREEN); FastLEDshow(); }
+  if (!autoload) storageTransferBegin(false,false);
   bool loadedOk = false;
   const size_t expectedNotes = (size_t)(maxlen - 1) * (size_t)maxY;
 
@@ -554,6 +473,7 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
       const size_t count = min((size_t)512, baseBytes - offset);
       readOk = loadFile.read(payload + offset, count) == (int)count;
       offset += count;
+      if(!autoload)storageTransferProgress((unsigned)((uint64_t)offset*90u/std::max(baseBytes,(size_t)loadFile.size())));
       sdIoYield();
     }
     readOk = readOk && payload[expectedNotes * 4u] == 0xFF
@@ -568,6 +488,7 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
         pitchPresent = loadFile.read(payload + baseBytes + sizeof(PITCH_EXTENSION_HEADER)
                                      + pitchOffset, count) == (int)count;
         pitchOffset += count;
+        if(!autoload)storageTransferProgress((unsigned)((uint64_t)(baseBytes+sizeof(PITCH_EXTENSION_HEADER)+pitchOffset)*90u/std::max(baseBytes,(size_t)loadFile.size())));
         sdIoYield();
       }
     }
@@ -651,9 +572,12 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
         switchMode(&draw);
       }
     } else if (!autoload && requestedFile != 0) {
+      storageTransferDismiss();
       pendingNewPatternFile = requestedFile;
       extern void showNewFileScreen();
       showNewFileScreen();
+    } else if(!autoload) {
+      storageTransferDismiss();
     }
     extern bool preventPaintUnpaint;
     preventPaintUnpaint = false;
@@ -682,18 +606,13 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
   subpatternNotePagesLoaded();
   
   // Load SMP settings
-  if (!autoload && !isNowPlaying) {
-    delay(500);
-  }
   if (autoload || SMP_LOAD_SETTINGS) loadSMPSettings();
   // samplePathRel/sp0Active are valid now (kit load on boot ran earlier with empty paths).
   extern void syncVoiceLoadedPathsFromStored();
   syncVoiceLoadedPathsFromStored();
   
   if (!autoload) {
-    if (!isNowPlaying) {
-      delay(500);
-    }
+    storageTransferFinish(true,false);
     switchMode(&draw);
     applyDrawSingleYEncoderLimits();
     refreshCtrlEncoderConfig();
@@ -713,6 +632,7 @@ FLASHMEM void autoLoad() {
   preventPaintUnpaint = false;
 }
 
+static unsigned autoSaveWriteSerial=0;
 FLASHMEM void autoSave() {
   // Only skip if we already saved within the last 5 seconds.
   static unsigned long lastAutoSaveTime = 0;
@@ -724,10 +644,17 @@ FLASHMEM void autoSave() {
   }
 
   savePattern(true);
+  ++autoSaveWriteSerial;
   if (lastPatternSaveOk) lastAutoSaveTime = currentTime;
 
   extern bool preventPaintUnpaint;
   preventPaintUnpaint = false;
+}
+
+void autoSaveWithFeedback() {
+  const unsigned before=autoSaveWriteSerial;
+  autoSave();
+  if(autoSaveWriteSerial!=before)storageTransferFinish(lastPatternSaveOk,true);
 }
 
 // ---- Voice filter-page presets (PSET) for ch11 / 13 / 14 ----

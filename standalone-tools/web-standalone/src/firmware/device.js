@@ -43,6 +43,7 @@ const SUB_VALUES = {
     { opts: ["NORM", "CHNR", "BIG"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["L+R", "R"], colors: [[0, 120, 0]], codes: ["G"] },
     { opts: ["ALL"], colors: [[0, 120, 0]], codes: ["G"] },
+    { opts: ["OFF", "ON"], colors: [[120, 0, 0], [0, 120, 0]], codes: ["R", "G"] },
   ],
   recs: [
     { opts: ["LINE", "MIC"], colors: [[0, 0, 120], [120, 120, 120]], codes: ["X", "W"] },
@@ -112,7 +113,7 @@ export function createDevice(matrix, statusEl, rings) {
   const invOf = Array(16).fill(false);
   const mute = Array(16).fill(false);
   const song = Array(64).fill(0);
-  const subPick = { look: Array(12).fill(0), recs: Array(6).fill(0), midi: Array(10).fill(0), vol: Array(8).fill(0), etc: Array(12).fill(0) };
+  const subPick = { look: Array(13).fill(0), recs: Array(6).fill(0), midi: Array(10).fill(0), vol: Array(8).fill(0), etc: Array(12).fill(0) };
   // Firmware EEPROM defaults: TRIG=SENS, CLR=OFF, FLOW=ON, CTRL=VOL, EYES=1MIN
   subPick.recs[3] = 2;
   subPick.recs[4] = 0;
@@ -129,7 +130,7 @@ export function createDevice(matrix, statusEl, rings) {
     fillOverlayCh: 0, fillOverlayUntil: 0,
     faderPositions: Array(9).fill(null), faderAt: Array(9).fill(0),
     presetSlot: 1, presetSlots: Array(16).fill(1),
-    fnHeld: false, fnArrow: "", fnArrowAt: 0,
+    fnHeld: false, fnArrow: "", fnArrowAt: 0, subpatternsEnabled: false,
     touchyEnabled: false, touchyLastVoice: 1, touchyTintActive: false, touchyVelocity: Array(6).fill(127), touchyRecHeld: false, touchyRecToken: 0, fastRecChannel: 0,
     mode: "boot", note, filt, mute, song, playing: false, beat: 1, pulse: 40, pulseDir: 1,
     menuIndex: 0, subIndex: 0, slot: 1, loadedPatternFile: 1, packSlot: 1, wavName: "KICK", loadSoundSettings: true,
@@ -1019,7 +1020,7 @@ export function createDevice(matrix, statusEl, rings) {
       loadPack(1);
       return;
     }
-    if (Array.isArray(data.subPick?.look) && data.subPick.look.length === 11 && subPick.look.length === 12) {
+    if (Array.isArray(data.subPick?.look) && data.subPick.look.length === 11) {
       data.subPick.look = data.subPick.look.slice();
       data.subPick.look.splice(5, 0, 0);
     }
@@ -1249,6 +1250,7 @@ export function createDevice(matrix, statusEl, rings) {
       s.ctrlVol = subPick.look[6] === 1;
       s.cursorType = subPick.look[9];
       s.drawR = subPick.look[10] === 1;
+      s.subpatternsEnabled = subPick.look[12] === 1;
       if (index === 6) deviceChosen = true;
       applyLedLayout();
       if (!s.drawR && s.fullMute) exitFullMute(0);
@@ -1958,6 +1960,11 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     const slot = resolveSubPage(s.mode, s.subIndex);
+    if (s.mode === "look" && slot.index === 12 && enc === 2) {
+      subPick.look[12] = subPick.look[12] ? 0 : 1;
+      applySub("look", 12);
+      return;
+    }
     if (s.mode === "etc" && s.subIndex === 3 && enc === 3) { s.mode = "adv"; s.subIndex = 0; return; }
     if (s.mode === "mode" && SUBS.mode[s.subIndex] === "DEMO" && enc === 3) { startDemo(); return; }
     if (s.mode === "mode" && s.subIndex === 7 && enc === 3) { s.mode = "song"; return; }
