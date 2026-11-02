@@ -264,5 +264,7 @@ and develops the drums through breaks, builds, fills and drops. The top row show
 the two working pages (white playing, red preparing, yellow ready); the number
 at the right counts remaining repeats. Note probabilities vary the details.
 Working buffers are allocated only while enabled; musical tables stay in flash.
+AGEN moves per-voice volume for breaks/builds/drops and can use the existing FILL
+engine on percussion. Encoder 2 still works manually; starting volumes return on exit.
 Click again or pause to restore the original pattern; temporary notes are not
 autosaved. Encoder 1 retains one-shot song generation. Runs entirely on device.

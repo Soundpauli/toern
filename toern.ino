@@ -390,6 +390,11 @@ bool toernI2cReady();
 uint32_t toernI2cErrors();
 uint32_t toernI2cMaxUs();
 uint32_t toernI2cSkipped();
+void applyChannelControlVolume(int ch,int requestedVol,int prevVolume);
+unsigned autogenControlVolume(int ch);
+void autogenManualVolume(int ch,unsigned volume);
+bool queueAutogenFill(int ch);
+void cancelAutogenFills();
 bool autogenActive();
 unsigned autogenPage();
 unsigned autogenOtherPage();
@@ -992,9 +997,12 @@ volatile uint32_t fillStepsRemaining = 0;
 volatile uint16_t touchFillPendingMask = 0;
 struct TouchFillState {
   volatile bool running = false;
+  volatile uint8_t pages=2,pendingPages=2;
+  volatile bool autoOwned=false;
   volatile uint32_t startSubTick = 0;
   volatile uint32_t stepsRemaining = 0;
 };
+static_assert(sizeof(TouchFillState)==12,"Fill duration/ownership must fit existing padding");
 static TouchFillState touchFills[15];
 struct FillDropState {
   volatile bool pending = false;
@@ -1009,6 +1017,7 @@ static void resetTouchFills() {
   fillStepsRemaining = 0;
   for (int ch = 0; ch < 15; ++ch) {
     touchFills[ch].running = false;
+    touchFills[ch].pages=touchFills[ch].pendingPages=2;touchFills[ch].autoOwned=false;
     touchFills[ch].startSubTick = 0;
     touchFills[ch].stepsRemaining = 0;
     fillDrops[ch].pending = false;
@@ -4242,6 +4251,25 @@ static float playAmpForVoice(int ch) {
   return 1.0f;
 }
 
+// Shared DSP path for the physical CTRL=VOL knob and AGEN. No UI/I2C or storage.
+FLASHMEM void applyChannelControlVolume(int ch,int requestedVol,int prevVolume){
+  if(ch<0||ch>=15||amps[ch]==nullptr)return;
+  requestedVol=constrain(requestedVol,0,16);
+  toern_audio::StateGuard guard;
+  if(requestedVol>0){
+    lastChannelVolBeforeMute[ch]=(uint8_t)requestedVol;
+    SMP.channelVol[ch]=requestedVol;
+    if(ch>=1&&ch<=8&&voices[ch]!=nullptr){
+      if(!sampleVolOnReader[ch]){applyVoiceAmpGainFromVol(ch,16);sampleVolOnReader[ch]=true;}
+      const float base=isNeoSliderControlledChannel(ch)?playAmpForVoice(ch):(sampleTriggerAmp[ch]>0.0f?sampleTriggerAmp[ch]:1.0f);
+      applyPlayAmplitude(ch,base*((float)requestedVol/16.0f));
+    }else{
+      applyVoiceAmpGainFromVol(ch,requestedVol);
+      if(prevVolume<=0)applyPlayAmplitude(ch,playAmpForVoice(ch));
+    }
+  }else applyPlayAmplitude(ch,0.0f);
+}
+
 void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool retrigger) {
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
@@ -5853,14 +5881,21 @@ FLASHMEM void checkEncoders() {
         bool channelJustChanged = (ctrlLastChannel != (int)GLOB.currentChannel);
         if (channelJustChanged) {
           ctrlLastChannel = GLOB.currentChannel;
-          int channelVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+          int channelVol = (autogenActive()?(int)autogenControlVolume(GLOB.currentChannel):constrain((int)SMP.channelVol[GLOB.currentChannel],0,16));
           currentMode->pos[1] = channelVol;
           Encoder[1].writeCounter((int32_t)channelVol);
           ctrlLastVolume = channelVol;
         }
 
         int requestedVol = constrain((int)currentMode->pos[1], 0, 16);
-        int actualVol = constrain((int)SMP.channelVol[GLOB.currentChannel], 0, 16);
+        int actualVol = (autogenActive()?(int)autogenControlVolume(GLOB.currentChannel):constrain((int)SMP.channelVol[GLOB.currentChannel],0,16));
+        const bool manualVolumeTurn=Encoder[1].readStatus(i2cEncoderLibV2::RINC)||Encoder[1].readStatus(i2cEncoderLibV2::RDEC);
+        bool automatedVolumeSync=false;
+        if(autogenActive()&&!manualVolumeTurn&&actualVol!=ctrlLastVolume&&requestedVol==ctrlLastVolume){
+          automatedVolumeSync=true;
+          requestedVol=actualVol;currentMode->pos[1]=actualVol;
+          if(allowEncWrite)Encoder[1].writeCounter((int32_t)actualVol);
+        }
         // Volume only for voices 1-8, 11, 13, 14 (not y==1/16 / empty lanes)
         bool protectedChannel = !isVolumeVoiceChannel((int)GLOB.currentChannel);
         int prevVolume = ctrlLastVolume;
@@ -5884,40 +5919,17 @@ FLASHMEM void checkEncoders() {
 
         if (volumeChanged) {
           ctrlLastVolume = requestedVol;
-          if (!protectedChannel) {
+          if (!protectedChannel&&!automatedVolumeSync) {
             int ch = GLOB.currentChannel;
-            if (ch >= 0 && ch < 15 && amps[ch] != nullptr) {
-              // Track last non-zero volume so unmute can restore it later.
-              // Only this voice's amp moves. Snapping every mixer and forcing
-              // the playing sample back to full level on each detent crackles.
-              if (requestedVol > 0 && ch < (int)maxY) {
-                lastChannelVolBeforeMute[ch] = (uint8_t)requestedVol;
-                SMP.channelVol[ch] = requestedVol;
-                // Samples follow the NeoSlider: ramp the reader on every detent,
-                // including the note that is already playing. The amplifier is
-                // parked at unity so a later hit does not snap back to full.
-                if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
-                  if (!sampleVolOnReader[ch]) {
-                    applyVoiceAmpGainFromVol(ch, 16);
-                    sampleVolOnReader[ch] = true;
-                  }
-                  float base = sampleTriggerAmp[ch] > 0.0f ? sampleTriggerAmp[ch] : 1.0f;
-                  applyPlayAmplitude(ch, base * ((float)requestedVol / 16.0f));
-                } else {
-                  applyVoiceAmpGainFromVol(ch, requestedVol);
-                  if (prevVolume <= 0) applyPlayAmplitude(ch, playAmpForVoice(ch));
-                }
-              } else {
-                // Encoder at 0: mute via play-amp, same as a fader at the bottom stop.
-                // AMP / channelVol stay at last non-zero.
-                applyPlayAmplitude(ch, 0.0f);
-              }
-            }
+            applyChannelControlVolume(ch,requestedVol,prevVolume);
             showCtrlVolumeChange(requestedVol);
-          } else {
+          } else if(!automatedVolumeSync) {
             showCtrlVolumeChange(actualVol);
           }
         }
+
+        if(autogenActive()&&!protectedChannel&&manualVolumeTurn)
+          autogenManualVolume(GLOB.currentChannel,requestedVol);
 
         // At max volume while the user keeps turning up: the encoder counter is clamped at 16,
         // so no value change is detected and the overlay would confusingly time out mid-turn.
@@ -5932,11 +5944,11 @@ FLASHMEM void checkEncoders() {
           Encoder[1].writeRGBCode(volColor.r << 16 | volColor.g << 8 | volColor.b);
         }
 
-        if (!childLockEnabled && volumeChanged && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
+        if (!childLockEnabled && volumeChanged && !automatedVolumeSync && GLOB.currentChannel >= 0 && GLOB.currentChannel < maxY) {
           int effectiveVol = protectedChannel ? actualVol : requestedVol;
           bool shouldMute = (effectiveVol == 0);
           setMuteState(GLOB.currentChannel, shouldMute);
-          SMP.mute[GLOB.currentChannel] = shouldMute;
+          if(!autogenActive())SMP.mute[GLOB.currentChannel] = shouldMute;
         }
       }
     }
@@ -6130,6 +6142,7 @@ static bool handleTouchFillChord(bool first, bool second) {
     const int ch = (int)GLOB.currentChannel;
     if (isSingleModeChannelAllowed(ch) && !isChildVoiceDisabled(ch)) {
       toern_audio::StateGuard guard;
+      touchFills[ch].pendingPages=2;touchFills[ch].autoOwned=false;
       touchFillPendingMask |= (uint16_t)(1u << ch);
       fillRequestOverlayChannel = ch;
       fillRequestOverlayUntil = (uint32_t)millis() + 1000u;
@@ -9304,6 +9317,23 @@ static void triggerPendingFillDrops() {
   }
 }
 
+// AGEN requests the normal fill engine with a one-page duration; manual fills stay two pages.
+FLASHMEM bool queueAutogenFill(int ch){
+  if(!isNowPlaying||ch<2||ch>5||getMuteState(ch)||isChildVoiceDisabled(ch))return false;
+  toern_audio::StateGuard guard;
+  if(touchFills[ch].running||(touchFillPendingMask&(1u<<ch)))return false;
+  touchFills[ch].pendingPages=1;touchFills[ch].autoOwned=true;
+  touchFillPendingMask|=1u<<ch;return true;
+}
+FLASHMEM void cancelAutogenFills(){
+  toern_audio::StateGuard guard;
+  for(int ch=1;ch<15;++ch)if(touchFills[ch].autoOwned){
+    touchFillPendingMask&=~(1u<<ch);touchFills[ch].running=false;touchFills[ch].stepsRemaining=0;
+    fillDrops[ch].pending=false;touchFills[ch].autoOwned=false;
+    touchFills[ch].pages=touchFills[ch].pendingPages=2;
+  }
+}
+
 // Start all requests from the preceding page together, after PMOD adjustment.
 // Each voice has its own clock; no grid cell is altered by a requested fill.
 static void servicePendingTouchFill(unsigned int step) {
@@ -9318,7 +9348,8 @@ static void servicePendingTouchFill(unsigned int step) {
     if (row < 1) continue;
     touchFills[ch].startSubTick = currentFillStepStart();
     touchFills[ch].running = true;
-    touchFills[ch].stepsRemaining = 2u * (uint32_t)maxX;
+    touchFills[ch].pages=touchFills[ch].pendingPages;
+    touchFills[ch].stepsRemaining = (uint32_t)touchFills[ch].pages * maxX;
     // A coincident previous drop supplies this downbeat's first hit too.
     if (!fillDrops[ch].pending) triggerFillHit(ch, defaultVelocity, row, NOTE_MIDI_PITCH_NONE);
   }
@@ -10034,9 +10065,9 @@ static bool fillHitDue(uint32_t elapsedSub, uint32_t fillLengthBeats) {
 }
 
 static void advanceTouchFills() {
-  const uint32_t length = 2u * (uint32_t)maxX;
   for (int ch = 1; ch < 15; ++ch) {
     if (!touchFills[ch].running) continue;
+    const uint32_t length=(uint32_t)touchFills[ch].pages*maxX;
     const uint32_t elapsed = fillSubTick - touchFills[ch].startSubTick;
     // End the buildup here; the sequencer owns the exact drop downbeat.
     if (elapsed / 4u >= length) continue;

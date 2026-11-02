@@ -98,6 +98,28 @@ font/placement as the normal page-number helper on 16×16 and 32×16 panels.
 An empty source gets a restrained starter. Companion additions are bounded to
 seven active voices unless the original already contains more.
 
+AGEN also performs per-voice volume moves through `applyChannelControlVolume`,
+the same DSP path used by physical encoder 2 in CTRL=VOL. It fades kick/bass out
+for breaks, lifts levels through builds, varies supporting voices, and restores
+the starting kick/bass level for drops. Moves stay at or below each voice's user
+ceiling and advance in small steps; muted starting voices remain muted. A manual
+encoder-2 turn updates that voice's ceiling and holds automation for two seconds.
+External moves synchronize the selected volume counter without being mistaken
+for another manual turn or repeating DSP/feedback work. Sample readers retain
+their existing amplitude-ramp path; physical fader gain/bottom stops stay effective.
+Starting channel volumes, last-nonzero values, mute bytes and sample-reader gain
+ownership are restored on exit before autosave. Automation state lives inside
+the on-demand workspace.
+
+At an eligible fill-section boundary, AGEN can queue one audible percussion
+voice (snare, tom, clap or hat) through the existing touch/F/F fill engine. Its
+one-page request ends with the engine's velocity-127 drop on the following
+page downbeat. Late requests are skipped. Manual fills keep their two-page
+length; AGEN exit cancels only fills it owns. Duration/ownership fields occupy
+existing `TouchFillState` padding, preserving the 12-byte per-voice state.
+`tests/test_touch_fill.py` checks both durations, ownership and exact downbeats;
+AGEN state/music tests check ceilings, manual hold, restoration and volume curves.
+
 Toggle OFF or pause to restore the original pattern and selected page. Opening
 PATT, NEW, SONG or TOUCHY, changing display width, starting recording, or selecting
 a file subpattern also ends AGEN. Pattern saving/loading restores the original

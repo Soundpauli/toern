@@ -5154,6 +5154,10 @@ struct AutogenWorkspace {
   uint16_t channels=0;
   CompanionContext context,foundation;
   int registers[16]={};
+  uint8_t savedVolume[16]={},savedLastVolume[16]={},savedMute[16]={},volumeBase[16]={},volumeNow[16]={};
+  bool savedReader[9]={};
+  uint32_t manualUntil[16]={},motionAt=0;
+  unsigned motionGeneration=~0u,motionRepeats=1,fillGeneration=~0u;
   toern_autogen_music::Section section=toern_autogen_music::Section::Groove;
   CompanionHarmony harmony;
   CompanionGroove groove;
@@ -5191,6 +5195,48 @@ void autogenAdvanceStep(){
   const unsigned before=agen.source();beat=agen.advance(beat);GLOB.page=agen.source();
   if(before!=agen.source())loopCount=1;
   else if(beat==agen.firstStep()){if(++loopCount>256)loopCount=1;}
+}
+unsigned autogenControlVolume(int ch){return ch>=0&&ch<16?agenWork->volumeNow[ch]:0;}
+void autogenManualVolume(int ch,unsigned volume){
+  if(!agen.active||ch<1||ch>=15)return;
+  volume=min(volume,16u);agenWork->volumeBase[ch]=agenWork->volumeNow[ch]=volume;
+  agenWork->manualUntil[ch]=millis()+2000u;
+}
+FLASHMEM static void serviceAutogenPerformance(){
+  using namespace toern_autogen_music;
+  const unsigned generation=agen.generation;
+  const Section form=section(generation);
+  const bool changed=agenWork->motionGeneration!=generation;
+  if(changed){agenWork->motionGeneration=generation;agenWork->motionRepeats=max(1u,(unsigned)agen.repeatsLeft);}
+  if(form==Section::Fill&&agenWork->fillGeneration!=generation){
+    agenWork->fillGeneration=generation;
+    // Queue before the new page's downbeat. A late loop skips instead of filling the drop.
+    if(beat>0&&(beat-1)%maxX==0){
+      static const uint8_t candidates[] PROGMEM={2,5,4,3};
+      for(unsigned i=0;i<4;++i){const unsigned ch=candidates[(i+generation)%4];
+        if((agenWork->channels&(1u<<ch))&&!autogenMuted(ch)&&queueAutogenFill(ch))break;}
+    }
+  }
+  const uint32_t now=millis();
+  if(!changed&&uint32_t(now-agenWork->motionAt)<30)return;
+  agenWork->motionAt=now;
+  const unsigned total=agenWork->motionRepeats;
+  const unsigned left=min(total,(unsigned)agen.repeatsLeft);
+  const unsigned position=(total-left)*maxX+(beat>0?(beat-1)%maxX:0);
+  const unsigned progress=min(255u,position*255/max(1u,total*maxX-1));
+  for(uint8_t ch:agenOrder){
+    if(agenWork->manualUntil[ch]&&int32_t(now-agenWork->manualUntil[ch])<0)continue;
+    const bool bass=ch==6||(ch==14&&!agenWork->chordPair)||(ch==11&&agenWork->registers[ch]<48);
+    const unsigned target=agenWork->volumeBase[ch]*volumeScale(form,ch,bass,progress)/16;
+    const unsigned previous=agenWork->volumeNow[ch];
+    unsigned next=previous;
+    if(changed&&form==Section::Drop&&(ch==1||bass))next=target;
+    else if(target>previous)++next;else if(target<previous)--next;
+    if(next==previous)continue;
+    applyChannelControlVolume(ch,next,previous);agenWork->volumeNow[ch]=next;
+    const bool muted=next==0||(isNeoSliderControlledChannel(ch)&&neoSliderInMuteDz[ch-1]);
+    if(agenWork->mutes[ch]!=muted)setMuteState(ch,muted);
+  }
 }
 FLASHMEM static int autogenReferenceMidi(const Note &cell,unsigned ch,unsigned row){
   if(cell.midiPitch<=127)return cell.midiPitch;
@@ -5264,6 +5310,15 @@ FLASHMEM void stopAutogen(){
     beat=(GLOB.page-1)*maxX+(phase%maxX)+1;beatForUI=beat;
     generationUndoValid=false;agenRestoreUI=true;
   }
+  cancelAutogenFills();
+  for(uint8_t ch:agenOrder){
+    SMP.channelVol[ch]=agenWork->savedVolume[ch];SMP.mute[ch]=agenWork->savedMute[ch];
+    lastChannelVolBeforeMute[ch]=agenWork->savedLastVolume[ch];
+    if(ch<=8)sampleVolOnReader[ch]=agenWork->savedReader[ch];
+    applyVoiceAmpGainFromVol(ch,(int)SMP.channelVol[ch]);
+    if(ch<=8)applyPlayAmplitude(ch,(isNeoSliderControlledChannel(ch)?playAmpForVoice(ch):sampleTriggerAmp[ch])*sampleChannelVolScale(ch));
+    if(getMuteState(ch))stopMutedVoiceAudio(ch);
+  }
   agenWork->~AutogenWorkspace();extmem_free(agenWork);agenWork=nullptr;
   updateLastPage();menuRequestFullRedraw();
 }
@@ -5277,7 +5332,13 @@ FLASHMEM bool toggleAutogen(){
   agenWork=new(memory) AutogenWorkspace{};
   const unsigned base=constrain((int)GLOB.edit,1,companionEffectivePages());
   agenWork->savedEdit=GLOB.edit;agenWork->savedPage=GLOB.page;agenWork->savedX=GLOB.x;
-  for(int ch=0;ch<16;++ch)agenWork->mutes[ch]=getMuteStateForUI(ch);
+  for(int ch=0;ch<16;++ch){
+    agenWork->mutes[ch]=getMuteStateForUI(ch);
+    agenWork->savedVolume[ch]=min(16u,SMP.channelVol[ch]);
+    agenWork->savedMute[ch]=SMP.mute[ch];agenWork->savedLastVolume[ch]=lastChannelVolBeforeMute[ch];
+    agenWork->volumeBase[ch]=agenWork->volumeNow[ch]=agenWork->mutes[ch]?0:agenWork->savedVolume[ch];
+    if(ch<=8)agenWork->savedReader[ch]=sampleVolOnReader[ch];
+  }
   agenWork->original=note;
   memcpy(agenWork->notes,note,sizeof(agenWork->notes)); // interrupts stay enabled
   agenWork->foundation=analyzeCompanionContext(base,base,base,0);
@@ -5317,6 +5378,7 @@ FLASHMEM void serviceAutogen(){
     return;
   }
   if(!isNowPlaying||maxX!=agen.width||childLockEnabled||imageMode||touchyEnabled||fastRecordActive||isRecording){stopAutogen();return;}
+  serviceAutogenPerformance();
   if(GLOB.edit!=agen.source()){
     const unsigned col=GLOB.x>0?(GLOB.x-1)%maxX+1:1;
     GLOB.edit=agen.source();editpage=GLOB.edit;GLOB.x=(GLOB.edit-1)*maxX+col;

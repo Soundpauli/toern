@@ -8,6 +8,13 @@ def function(signature):
  while depth:
   depth+=(helpers[end]=='{')-(helpers[end]=='}');end+=1
  return helpers[start:end]
+control_source=(root/'toern.ino').read_text()
+def control_function(signature):
+ start=control_source.index(signature);end=control_source.index('{',start)+1;depth=1
+ while depth:
+  depth+=(control_source[end]=='{')-(control_source[end]=='}');end+=1
+ return control_source[start:end]
+volume_control=control_function('FLASHMEM void applyChannelControlVolume(')
 placement='\n'.join(function(s) for s in ['static inline uint8_t clampVel(', 'static inline void placeGenNote(', 'FLASHMEM static int companionFreeRow(unsigned int step, int preferred) {', 'FLASHMEM static int companionChannelStepLimit(', 'FLASHMEM static bool companionPlaceCellLimited('])
 implementation=helpers[helpers.index('// AGEN: RAM-only alternating performance pages.'):]
 code=r'''
@@ -40,6 +47,24 @@ struct EncoderStub {void writeCounter(int32_t){}} Encoder[4];
 bool childLockEnabled=false,imageMode=false,touchyEnabled=false,fastRecordActive=false,isRecording=false,isNowPlaying=true;
 bool generationUndoValid=true,storageReady=true;int failures=0,generations=0,guardDepth=0;
 namespace toern_audio {struct StateGuard {StateGuard(){++guardDepth;}~StateGuard(){--guardDepth;}};}
+unsigned clockMs=100;unsigned millis(){return clockMs;}
+struct {unsigned channelVol[16]={},mute[16]={};} SMP;
+uint8_t lastChannelVolBeforeMute[16]={};bool sampleVolOnReader[9]={},neoSliderInMuteDz[8]={};
+float sampleTriggerAmp[9]={1,1,1,1,1,1,1,1,1},ampLevel[16]={},readerLevel[9]={};
+struct Amp {} testAmps[15];Amp *amps[15]={};
+struct Voice {} testVoices[9];Voice *voices[9]={};
+bool autogenActive();bool autogenMuted(int);void autogenSetMute(int,bool);
+bool getMuteState(int ch){return autogenActive()?autogenMuted(ch):ch==2;}
+void setMuteState(int ch,bool muted){autogenSetMute(ch,muted);}
+void stopMutedVoiceAudio(int){}
+bool isNeoSliderControlledChannel(int){return false;}
+float playAmpForVoice(int){return 1.0f;}
+float sampleChannelVolScale(int ch){return sampleVolOnReader[ch]?SMP.channelVol[ch]/16.0f:1.0f;}
+void applyVoiceAmpGainFromVol(int ch,int vol){ampLevel[ch]=ch<=8&&sampleVolOnReader[ch]?1.0f:vol/16.0f;}
+void applyPlayAmplitude(int ch,float level){if(ch<=8)readerLevel[ch]=level;}
+unsigned requestedFills=0;bool queueAutogenFill(int ch){assert(ch>=2&&ch<=5);++requestedFills;return true;}
+void cancelAutogenFills(){}
+VOLUME_CONTROL
 void showSaveFailureAnimation(bool){++failures;}
 void menuRequestFullRedraw(){}void noteUserActivity(){}
 void play(bool){isNowPlaying=true;}
@@ -75,6 +100,7 @@ IMPLEMENTATION
 int main(){
  for(unsigned width:{16u,32u}){
   maxX=width;
+  for(unsigned ch=0;ch<16;++ch){SMP.channelVol[ch]=12;SMP.mute[ch]=ch==2;lastChannelVolBeforeMute[ch]=12;if(ch<15)amps[ch]=&testAmps[ch];if(ch<=8)voices[ch]=&testVoices[ch];}
   allocationAllowed=false;assert(!toggleAutogen()&&allocations==0&&note==original);allocationAllowed=true;
   for(unsigned ch:{1u,2u,3u,4u,5u,6u,11u,13u,14u})for(unsigned col=0;col<width;++col)for(unsigned seed=0;seed<12;++seed){
    const auto chance=ToernAutogen::noteChance(ch,col,seed);assert(chance>=60&&chance<=100);
@@ -105,6 +131,7 @@ int main(){
   for(unsigned i=0;i<width*160;++i){
    const unsigned start=(agen.source()-1)*width+1;
    Note playing[33][17];memcpy(playing,note+start,width*sizeof(note[0]));
+   clockMs+=50;
    const auto count=generations;serviceAutogen();assert(generations-count<=1);
    assert(memcmp(playing,note+start,width*sizeof(note[0]))==0);
    assert(memcmp(saved,original,sizeof(saved))==0);
@@ -125,7 +152,12 @@ int main(){
    if(agen.generation!=generation)repeats.insert((unsigned)agen.repeatsLeft);
   }
   assert(agen.generation>10&&repeats==std::set<unsigned>({1,4,8}));
+  assert(requestedFills>0);
+  for(uint8_t ch:agenOrder)assert(autogenControlVolume(ch)<=agenWork->volumeBase[ch]&&SMP.channelVol[ch]<=12);
+  applyChannelControlVolume(1,5,autogenControlVolume(1));
+  autogenManualVolume(1,5);assert(SMP.channelVol[1]==5);const auto manual=autogenControlVolume(1);clockMs+=100;serviceAutogen();assert(autogenControlVolume(1)==manual);
   assert(!toggleAutogen()&&!autogenActive()&&note==original&&allocations==0&&agenWork==nullptr);
+  for(unsigned ch:{1u,2u,3u,4u,5u,6u,7u,8u,11u,13u,14u})assert(SMP.channelVol[ch]==12&&lastChannelVolBeforeMute[ch]==12&&!sampleVolOnReader[ch<=8?ch:0]);
   assert(GLOB.edit==base&&memcmp(saved,original,sizeof(saved))==0);
   serviceAutogen();assert(currentMode->pos[3]==GLOB.x&&currentMode->pos[1]==GLOB.edit);
   // A paused / incompatible / recording performance restores its original bank.
@@ -150,7 +182,7 @@ int main(){
  }
  puts("PASS: AGEN 16/32-step boundaries, random 1/4/8 repeats, late-builder safety, one-voice jobs, untouched live/source grids, exact restoration, empty starters and incompatible-mode guards");
 }
-'''.replace('IMPLEMENTATION',implementation).replace('PLACEMENT',placement)
+'''.replace('IMPLEMENTATION',implementation).replace('PLACEMENT',placement).replace('VOLUME_CONTROL',volume_control)
 with tempfile.TemporaryDirectory(prefix='toern-autogen-') as tmp:
  cpp,exe=Path(tmp)/'test.cpp',Path(tmp)/'test';cpp.write_text(code)
  flags=['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform=='darwin' else []

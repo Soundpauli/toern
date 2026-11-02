@@ -76,6 +76,13 @@ int main(int argc,char **argv){assert(argc==2);
   }
   assert(late>early&&drop==width/4);
  }
+ for(unsigned p=0;p<256;++p){
+  assert(volumeScale(Section::Break,1,false,p)==0&&volumeScale(Section::Break,14,true,p)==0);
+  assert(volumeScale(Section::Drop,1,false,p)==16&&volumeScale(Section::Drop,14,true,p)==16);
+  for(unsigned ch:{1u,2u,3u,5u,6u,7u,8u,11u,13u,14u})for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop})
+   assert(volumeScale(s,ch,ch==6||ch==14,p)<=16);
+  if(p)assert(volumeScale(Section::Build,2,false,p)>=volumeScale(Section::Build,2,false,p-1));
+ }
  for(unsigned choice=0;choice<100;++choice){assert(repeats(Section::Fill,choice)==1);assert(repeats(Section::Drop,choice)>=4);}
  assert(section(3)==Section::Break&&section(4)==Section::Build&&section(5)==Section::Fill&&section(6)==Section::Drop);
  puts("PASS: two AGEN indicators and right countdown on 16/32 columns; all 12 major/minor keys; chord tones, bass roots, bounded registers, breaks/build/fill/drop dynamics");

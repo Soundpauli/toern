@@ -57,6 +57,28 @@ AGEN_MUSIC_CODE static bool bassAllowed(Section s,unsigned step,unsigned width){
   if(s==Section::Build)return step==0||step==width/2;
   return true;
 }
+// 0..16 relative to the user's starting level; never boost beyond that ceiling.
+AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsigned progress){
+  if(progress>255)progress=255;
+  if(s==Section::Break){if(ch==1||bass)return 0;return ch<=5?7:12;}
+  if(s==Section::Build){
+    if(ch==1||bass)return progress*12/255;
+    if(ch==2)return 5+progress*11/255;
+    if(ch<=5)return 6+progress*9/255;
+    return 10+progress*6/255;
+  }
+  if(s==Section::Fill){
+    if(ch==1)return progress>=192?0:10;
+    if(bass)return 8;
+    return ch==2||ch==5?12+progress*4/255:12;
+  }
+  if(s==Section::Drop)return 16;
+  const unsigned triangle=progress<128?progress*2:(255-progress)*2;
+  if(ch==3||ch==5)return 11+triangle*5/255;
+  if(ch==7||ch==8||(!bass&&(ch==11||ch==13||ch==14)))return 12+triangle*4/255;
+  return 16;
+}
+
 // Return -1 to keep the existing hit, 0 to clear, or a velocity for a new/accented hit.
 AGEN_MUSIC_CODE static int drum(Section s,unsigned channel,unsigned step,unsigned width,uint32_t seed){
   const unsigned phase=step%16;const bool tail=step>=width*3/4;

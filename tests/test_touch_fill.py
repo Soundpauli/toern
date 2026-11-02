@@ -38,7 +38,7 @@ unsigned fillSubBeat=0,fillSubTick=0,fillStartSubTick=0,fillTriggerStep=0,fillTr
 int fillActiveChannel=0,fillActiveVelocity=0;
 uint16_t touchFillPendingMask=0;
 uint32_t fillStepsRemaining=0;
-struct TouchFillState {bool running=false;uint32_t startSubTick=0,stepsRemaining=0;};
+struct TouchFillState {bool running=false;uint8_t pages=2,pendingPages=2;bool autoOwned=false;uint32_t startSubTick=0,stepsRemaining=0;};
 struct FillDropState {bool pending=false;uint8_t row=0,midiPitch=255;};
 FillDropState fillDrops[15];
 TouchFillState touchFills[15];
@@ -69,6 +69,8 @@ void triggerFillHit(int ch,int velocity,unsigned int row,uint8_t midiPitch){
 }
 '''+(root/'toern_touch_input.ino').read_text()+'\n'+function('bool readRecTouchHeld() {')+'\n'+'\n'.join(function(sig) for sig in [
  'static void resetTouchFills() {',
+ 'FLASHMEM bool queueAutogenFill(',
+ 'FLASHMEM void cancelAutogenFills(',
  'static inline bool isSingleModeChannelAllowed(',
  'static inline int basePitchRowForChannel(',
  'static bool handleTouchFillChord(bool first, bool second) {',
@@ -90,6 +92,19 @@ void step(){
 }
 void resetFill(){fillRunning=fillHasTriggered=false;fillTriggerStep=fillTriggerRow=0;resetTouchFills();fillSubTick=100;hits.clear();hitChannels.clear();hitVelocities.clear();hitPitches.clear();hitSteps.clear();sequencerStep=0;}
 int main(){
+ static_assert(sizeof(TouchFillState)==12);
+ for(unsigned width:{16u,32u}){
+  maxX=width;isNowPlaying=true;resetFill();
+  assert(queueAutogenFill(2)&&!queueAutogenFill(2)&&!queueAutogenFill(1)&&!queueAutogenFill(11));
+  assert(touchFills[2].pendingPages==1&&touchFills[2].autoOwned);
+  servicePendingTouchFill(1);
+  for(unsigned stepIndex=0;stepIndex<width;++stepIndex)step();
+  assert(!touchFills[2].running&&hitSteps.back()==width&&hitVelocities.back()==127);
+  resetFill();assert(queueAutogenFill(3));
+  GLOB.currentChannel=14;handleTouchFillChord(true,true);release();
+  cancelAutogenFills();assert(touchFillPendingMask==(1u<<14)&&!touchFills[14].autoOwned);
+ }
+ maxX=16;isNowPlaying=false;resetFill();release();GLOB.currentChannel=1;
  // Playback-only; holding across Play cannot turn an old press into a new fill.
  assert(!handleTouchFillChord(true,true)&&touchFillPendingMask==0);
  isNowPlaying=true;assert(!handleTouchFillChord(true,true)&&touchFillPendingMask==0);
