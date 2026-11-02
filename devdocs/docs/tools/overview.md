@@ -24,6 +24,7 @@ Besides the firmware and PCB, the repo ships **browser and CLI tools** for sampl
 | Tool | Path | Role |
 |------|------|------|
 | SD CLI | `standalone-tools/sd-tool-standalone/toern_sd.py` | Scripted list/put/get over USB serial |
+| [MCP remote](./mcp-remote) | `standalone-tools/toern-mcp/` | Serial panel control, JSON state/menus/filters, matrix capture and performance telemetry |
 
 ## How they relate to the device
 
@@ -44,6 +45,7 @@ Operator-facing how-to stays in the **handbook**; these pages describe **what ea
 
 - [Sample converter](./sample-converter)
 - [SD tool](./sd-tool)
+- [MCP remote](./mcp-remote)
 - [Firmware loader](./firmware-loader)
 - [Color scheme editor](./color-scheme)
 

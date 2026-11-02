@@ -93,7 +93,7 @@ def get_matrix() -> dict:
     Black pixels are omitted. Each lit pixel has x, y and a #rrggbb color. This
     is a read-only alternative to get_display's PNG.
     """
-    frame = remote.request("DISPLAY")
+    frame = remote.get_display_frame()
     rgb = bytes.fromhex(frame["rgb"])
     w, h = frame["width"], frame["height"]
     if len(rgb) != w*h*3:
@@ -109,7 +109,7 @@ def get_matrix() -> dict:
 @mcp.tool()
 def get_display() -> Image:
     """Read the rendered matrix as an enlarged PNG, top row first. Does not redraw."""
-    return Image(data=display_png(remote.request("DISPLAY")), format="png")
+    return Image(data=display_png(remote.get_display_frame()), format="png")
 
 
 @mcp.tool()

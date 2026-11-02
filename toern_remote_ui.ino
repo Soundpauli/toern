@@ -1,3 +1,4 @@
+#if TOERN_REMOTE_CONTROL
 // Semantic readback uses the same menu/slider definitions as the panel.
 // It is read-only: no encoder polling, screen changes, or parameter writes.
 FLASHMEM void remotePrintUiState() {
@@ -56,3 +57,5 @@ FLASHMEM void remoteReplyMenus(unsigned long id) {
       i ? "," : "", i, pages[i].name, pages[i].mainSetting);
   Serial.println("]}");
 }
+
+#endif

@@ -53,6 +53,7 @@ const sidebars = {
         'tools/sample-converter',
         'tools/simulator',
         'tools/sd-tool',
+        'tools/mcp-remote',
         'tools/firmware-loader',
         'tools/color-scheme',
       ],

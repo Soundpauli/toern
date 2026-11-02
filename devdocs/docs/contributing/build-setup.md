@@ -43,6 +43,19 @@ script applies the project's sampler, amplitude-ramping, and resampler changes
 to the pinned upstream audio libraries, so no manually edited Arduino libraries
 are needed.
 
+### Optional build without MCP
+
+The default `teensy41` environment includes MCP remote control with automatic session gating: remote input reconciliation and display frame copies stay inactive until the bridge connects with `HELLO`. Disconnect, USB serial closure or a three-second keepalive timeout ends the session and releases remote controls. SD serial connections do not activate MCP.
+
+To remove MCP input, matrix capture, semantic menu/filter readback and performance telemetry entirely:
+
+```bash
+pio run -e teensy41-no-mcp
+# Output: .pio/build/teensy41-no-mcp/firmware.hex
+```
+
+This environment sets `TOERN_REMOTE_CONTROL=0`; Arduino builds can supply the same compiler define. SD transfer and USB MIDI/audio remain available, and the audio DSP optimizations remain enabled. Runtime inactivity saves processing work; only compile-time exclusion frees the MCP code and state memory. See [MCP remote](../tools/mcp-remote) for the protocol, memory figures and validation.
+
 ## Open the sketch
 
 Open `toern.ino` from the repo root (the folder containing all `toern_*.ino` files). Arduino treats that folder as one sketch.

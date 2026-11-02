@@ -1665,11 +1665,15 @@ FLASHMEM void FastLEDshow() {
       if (showFn) drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
       drawFillRequestOverlay();
       if (subpatternOverlayVisible()) drawSubpatternOverlay();
+#if TOERN_REMOTE_CONTROL
       remoteCaptureDisplay();
+#endif
       FastLED.show();
       memcpy(leds, saved, sizeof(saved));
     } else {
+#if TOERN_REMOTE_CONTROL
       remoteCaptureDisplay();
+#endif
       FastLED.show();  // Shows both matrix (PIN 17) and strip (PIN 24)
     }
   }

@@ -150,6 +150,22 @@ Insert or eject the SD card only with the unit **off** — the firmware re-index
 
 ---
 
+## MCP remote control
+
+The local [MCP bridge](./standalone-tools/toern-mcp/README.md) controls a USB-connected TŒRN through serial: encoders, buttons, touch pads, painting, menus and filter pages/resets. It provides JSON state, menu/filter readback and matrix pixels, plus optional PNG screenshots and performance telemetry.
+
+MCP is **inactive after boot**. Connecting the bridge starts a session with `HELLO`; disconnecting sends `BYE`. USB disconnect or three seconds without keepalives also ends the session and releases remote controls. While inactive, the firmware skips remote input reconciliation and display frame copies. Opening serial for the SD tool does not activate MCP.
+
+The default build includes this automatic gating. To exclude MCP entirely:
+
+```bash
+pio run -e teensy41-no-mcp
+```
+
+This sets `TOERN_REMOTE_CONTROL=0`, removing remote input state, display capture and diagnostics while retaining SD serial, USB MIDI/audio and the audio optimizations. On the current build it frees 1,056 bytes in RAM1, 1,536 bytes in RAM2 and 5,120 bytes in flash. Automatic inactivity saves processing work; the disabled build also saves memory.
+
+See [developer documentation](./devdocs/docs/tools/mcp-remote.md) for session behavior and implementation details.
+
 ## Repo map (where stuff lives)
 
 | Path | What’s there |

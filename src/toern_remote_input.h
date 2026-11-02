@@ -1,6 +1,11 @@
 #pragma once
 #include <stdint.h>
 
+// Set to 0 to omit remote input, display capture, menus and telemetry.
+#ifndef TOERN_REMOTE_CONTROL
+#define TOERN_REMOTE_CONTROL 1
+#endif
+
 // Transport-independent remote state. Physical holds are never cleared by a
 // remote release or lease expiry. No allocation and bounded work per poll.
 struct ToernRemoteInput {

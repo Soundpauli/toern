@@ -33,7 +33,7 @@ class FakeSerial:
         op = words[2]
         if op in ('BUTTON', 'TOUCH'):
             (self.buttons if op == 'BUTTON' else self.touches)[int(words[3])-1] = bool(int(words[4]))
-        if op == 'RELEASE':
+        if op in ('RELEASE', 'BYE'):
             self.buttons[:] = [False]*4
             self.touches[:] = [False]*5
             self.pending = False
@@ -130,10 +130,29 @@ class ClientTests(unittest.TestCase):
             self.client.gesture([2], [], 80)
         self.assertTrue(self.wire.buttons[0])
 
+    def test_display_waits_for_first_presented_frame(self):
+        from unittest.mock import patch, call
+        frame = {'width': 1, 'height': 1, 'rgb': '123456'}
+        with patch.object(self.client, 'request', side_effect=[DeviceRejected('NO_FRAME'), frame]) as request:
+            self.assertEqual(self.client.get_display_frame(), frame)
+            self.assertEqual(request.call_args_list, [call('DISPLAY'), call('DISPLAY')])
+        with patch.object(self.client, 'request', side_effect=DeviceRejected('NO_SESSION')) as request:
+            with self.assertRaisesRegex(DeviceRejected, 'NO_SESSION'):
+                self.client.get_display_frame()
+            request.assert_called_once_with('DISPLAY')
+
+    def test_disabled_build_connect_reports_error_and_closes(self):
+        self.client.disconnect()
+        self.wire.reject = 'DISABLED'
+        with self.assertRaisesRegex(DeviceRejected, 'DISABLED'):
+            self.client.connect('fake')
+        self.assertTrue(self.wire.closed)
+        self.assertIsNone(self.client.serial)
+
     def test_disconnect_releases(self):
         self.client.set_control('touch', 5, True)
         self.client.disconnect()
-        self.assertEqual(self.wire.commands[-1], ['RELEASE'])
+        self.assertEqual(self.wire.commands[-1], ['BYE'])
         self.assertTrue(self.wire.closed)
 
     def test_connect_timeout_preserves_original_error(self):

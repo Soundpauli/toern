@@ -1,3 +1,4 @@
+#if TOERN_REMOTE_CONTROL
 // On-demand telemetry: AudioStream keeps these cycle counters already. Reading
 // them does not walk/mutate the graph, redraw the UI, or pause playback.
 FLASHMEM static unsigned remoteCpuBasisPoints(float percent) {
@@ -25,3 +26,5 @@ FLASHMEM void remoteReplyPerformance(unsigned long id) {
       remoteCpuBasisPoints(freeverb11.processorUsage()), remoteCpuBasisPoints(voiceDelay[8].processorUsage()),
       remoteCpuBasisPoints(filter11.processorUsage()), remoteCpuBasisPoints(bitcrusher11.processorUsage()));
 }
+
+#endif

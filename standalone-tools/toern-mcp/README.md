@@ -10,6 +10,33 @@ touch pads, timed gestures, semantic menu/filter JSON and filter resets. These f
 so menu navigation and paint/erase use the same mode-dependent controls as the
 panel. Direct grid/parameter editing tools and a browser remote are later work.
 
+## Automatic on/off and builds
+
+MCP is inactive after boot. Only `REMOTE <id> HELLO` activates a session;
+opening USB serial for SD transfers does not. While inactive the firmware skips
+matrix frame copies and remote input reconciliation. The bridge sends keepalives
+every 750 ms. Disconnect sends `BYE`, immediately cancels remote controls and
+stops capture. USB disconnect or a 3-second lease timeout does the same. Physical
+controls continue working. `RELEASE` cancels remote holds/turns without ending
+the session; commands after expiry require a new `HELLO` (`connect` in MCP).
+
+Capture starts with the next presented frame after `HELLO`. Until then `DISPLAY`
+returns `NO_FRAME`; matrix/PNG tools retry this read-only request briefly.
+
+The default `pio run` build includes these automatically gated capabilities.
+To omit MCP input, display capture, menu/filter readback and performance telemetry:
+
+```sh
+pio run -e teensy41-no-mcp
+```
+
+This sets `TOERN_REMOTE_CONTROL=0`; Arduino builds can set the same compiler
+define. Disabled builds report `DISABLED` to remote requests. SD transfer, USB
+MIDI/audio and the audio performance improvements remain available. Runtime
+inactivity saves work; only the disabled build removes MCP code/state/frame RAM.
+On this build, exclusion frees 1,056 bytes in RAM1, 1,536 bytes in RAM2 and
+5,120 bytes in flash; the RAM1 instruction-bank allocation stays the same.
+
 ## Install and run
 
 Use Python 3.10 or newer. From this directory:
@@ -104,6 +131,7 @@ REMOTE 7 TOUCH 5 1
 REMOTE 8 TOUCH 5 0
 REMOTE 9 KEEPALIVE
 REMOTE 10 RELEASE
+REMOTE 11 BYE
 ```
 
 - IDs: integers `1..2147483647`; the bridge increments them and matches replies.
@@ -112,7 +140,8 @@ REMOTE 10 RELEASE
   are consumed once in the normal encoder poll. No unbounded event queue.
 - BUTTON: encoder `1..4`, state `0/1`.
 - TOUCH: pad `1..5`, state `0/1`, routed through normal touch debounce.
-- RELEASE: clear remote holds and pending turns. Physical holds survive.
+- RELEASE: clear remote holds and pending turns, keeping the session alive. Physical holds survive.
+- BYE: release remote controls and end the session; replies with a minimal acknowledgement.
 - HELLO and STATE return JSON state; KEEPALIVE returns a minimal acknowledgement.
 - PERF returns audio CPU/memory and per-node CH11 costs without stopping play.
 - MENUS returns the active group/item and its sibling list from the real menu tables.

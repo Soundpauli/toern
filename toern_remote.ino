@@ -1,3 +1,4 @@
+#if TOERN_REMOTE_CONTROL
 // REMOTE v1: ASCII requests, prefixed JSON replies. All work stays in loop().
 static ToernRemoteInput remoteInput;
 static bool remoteTurnFault = false;
@@ -7,6 +8,7 @@ static bool remoteDisplayValid = false;
 static bool remoteDisplayRotated = false;
 
 void remoteCaptureDisplay() {
+  if (!remoteInput.live) return;
   memcpy(remoteDisplayFrame, leds, sizeof(remoteDisplayFrame));
   remoteDisplayRotated = ledModulesRotated;
   remoteDisplayValid = true;
@@ -49,10 +51,17 @@ void remoteReleaseInputs() {
     remoteButtonTransition(i, before);
   }
   for (int i = 0; i < 5; ++i) remoteInput.touches[i] = false;
+}
+
+void remoteEndSession() {
+  remoteReleaseInputs();
   remoteInput.live = false;
+  remoteDisplayValid = false;
 }
 
 void remoteService() {
+  if (!remoteInput.live) return;
+  if (!Serial || remoteInput.expired(millis())) { remoteEndSession(); return; }
   // The existing button FSM can recover/reset after a lost I2C release or a
   // stuck hold. Retire its stale physical shadow too; otherwise managed MCP
   // gestures stay blocked and the next push is incorrectly deduplicated.
@@ -62,7 +71,6 @@ void remoteService() {
       ++remoteInputRecoveries;
     }
   }
-  if (!Serial || remoteInput.expired(millis())) remoteReleaseInputs();
 }
 
 void remoteApplyEncoderTurn(int index, int &raw, bool allowWrite, bool fnConsumed) {
@@ -163,6 +171,26 @@ FLASHMEM void remoteHandleCommand(char *args) {
   if (values[0] < 1 || values[0] > 2147483647L) { remoteReplyError(0, "ID"); return; }
   const unsigned long id = (unsigned long)values[0];
   const char *op = tokens[1];
+  // HELLO is the only operation that starts a session. An open USB serial
+  // connection (for SD transfer, MIDI tools, etc.) never activates MCP work.
+  remoteService();
+  if (count == 2 && !strcmp(op, "HELLO")) {
+    if (!remoteInput.live) {
+      for (int i = 0; i < 4; ++i) remoteInput.physical[i] = isPressed[i];
+      remoteDisplayValid = false;
+      remoteTurnFault = false;
+    }
+    remoteInput.renew(millis());
+    remoteReplyState(id);
+    return;
+  }
+  if (!remoteInput.live) { remoteReplyError(id, "NO_SESSION"); return; }
+  if (count == 2 && !strcmp(op, "BYE")) {
+    remoteEndSession();
+    remoteReplyStart(id);
+    Serial.println("\"ok\":true}");
+    return;
+  }
   if (count == 2 && !strcmp(op, "PERF")) {
     remoteInput.renew(millis());
     remoteReplyPerformance(id);
@@ -180,7 +208,7 @@ FLASHMEM void remoteHandleCommand(char *args) {
     remoteReplyFilters(id, (int)voice);
     return;
   }
-  if (count == 2 && (!strcmp(op, "HELLO") || !strcmp(op, "STATE") || !strcmp(op, "KEEPALIVE"))) {
+  if (count == 2 && (!strcmp(op, "STATE") || !strcmp(op, "KEEPALIVE"))) {
     remoteInput.renew(millis());
     if (!strcmp(op, "KEEPALIVE")) {
       remoteReplyStart(id);
@@ -191,6 +219,7 @@ FLASHMEM void remoteHandleCommand(char *args) {
     remoteReplyDisplay(id);
   } else if (count == 2 && !strcmp(op, "RELEASE")) {
     remoteReleaseInputs();
+    remoteInput.renew(millis());
     remoteReplyState(id);
   } else if (count == 4 && !strcmp(op, "TURN")) {
     if (values[1] < 1 || values[1] > 4 || !values[2] || values[2] < -64 || values[2] > 64) {
@@ -218,3 +247,12 @@ FLASHMEM void remoteHandleCommand(char *args) {
     remoteReplyState(id);
   } else remoteReplyError(id, "USAGE");
 }
+
+#else
+// Keep a small explicit handshake error so a host can identify a disabled build.
+// The SD serial dispatcher and its commands remain available.
+FLASHMEM void remoteHandleCommand(char *args) {
+  const unsigned long id = strtoul(args, nullptr, 10);
+  Serial.printf("REMOTE {\"id\":%lu,\"ok\":false,\"error\":\"DISABLED\"}\n", id);
+}
+#endif

@@ -62,7 +62,7 @@ class ToernRemote:
             self._stop.set()
             if self.serial is not None:
                 try:
-                    self.request("RELEASE")
+                    self.request("BYE")
                 except Exception:
                     pass  # Firmware lease also releases remote controls after loss.
                 finally:
@@ -86,7 +86,7 @@ class ToernRemote:
         with self.lock:
             if self.serial is None:
                 raise RemoteError("Not connected; call connect first")
-            if operation not in {"HELLO", "STATE", "DISPLAY", "KEEPALIVE", "RELEASE", "TURN", "BUTTON", "TOUCH", "FILTERS", "MENUS", "PERF"}:
+            if operation not in {"HELLO", "BYE", "STATE", "DISPLAY", "KEEPALIVE", "RELEASE", "TURN", "BUTTON", "TOUCH", "FILTERS", "MENUS", "PERF"}:
                 raise ValueError("Unknown remote operation")
             if any(type(arg) is not int for arg in args):
                 raise ValueError("Protocol arguments must be integers")
@@ -155,6 +155,18 @@ class ToernRemote:
                     return self.get_state()
             self.request("RELEASE")
             raise TimeoutError("Encoder input was not consumed; queued input cancelled")
+
+    def get_display_frame(self) -> dict[str, Any]:
+        # HELLO starts capture on the next presented frame. Retry only this
+        # read-only request; never replay input gestures after a session loss.
+        deadline = time.monotonic() + self.timeout
+        while True:
+            try:
+                return self.request("DISPLAY")
+            except DeviceRejected as error:
+                if str(error) != "NO_FRAME" or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.04)
 
     def set_control(self, kind: str, index: int, down: bool):
         if kind not in ("button", "touch"):

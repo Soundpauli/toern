@@ -2010,11 +2010,21 @@ FLASHMEM void setVelocity() {
 }
 
 void staticButtonPushed(i2cEncoderLibV2 *obj) {
+#if TOERN_REMOTE_CONTROL
   remotePhysicalButton(currentEncoderIndex, true);
+#else
+  pressed[currentEncoderIndex] = !fnHeld || currentMode == &touchyMode;
+  encoder_button_pushed(obj, currentEncoderIndex);
+#endif
 }
 
 void staticButtonReleased(i2cEncoderLibV2 *obj) {
+#if TOERN_REMOTE_CONTROL
   remotePhysicalButton(currentEncoderIndex, false);
+#else
+  encoder_button_released(obj, currentEncoderIndex);
+  pressed[currentEncoderIndex] = false;
+#endif
 }
 
 void staticThresholds(i2cEncoderLibV2 *obj) {
@@ -5093,7 +5103,9 @@ FLASHMEM void checkEncoders() {
     Encoder[i].updateStatus();
     int rawValue = Encoder[i].readCounterInt();
     const bool fnTurn = handleFnEncoder(i, rawValue, allowEncWrite);
+#if TOERN_REMOTE_CONTROL
     remoteApplyEncoderTurn(i, rawValue, allowEncWrite, fnTurn);
+#endif
     // Soft-clamp draw/single page+X: Duppa can report past writeMax under fast I2C turns.
     if (!fnTurn && (currentMode == &draw || currentMode == &singleMode)) {
       if (i == 0) {
@@ -7287,7 +7299,9 @@ void checkSerialColors() {
 }
 
 void loop() {
+#if TOERN_REMOTE_CONTROL
   remoteService();
+#endif
   checkSerialColors();
 
   // USB serial commands from any screen. `Serial` is true only after a program

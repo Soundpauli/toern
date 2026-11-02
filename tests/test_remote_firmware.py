@@ -78,6 +78,11 @@ std::string cmd(const char *text){char b[192];strcpy(b,text);Serial.out.clear();
 void good(const char *s){assert(cmd(s).find("\"ok\":true")!=std::string::npos);}
 void bad(const char *s){assert(cmd(s).find("\"ok\":false")!=std::string::npos);}
 int main(){
+ // Inactive at boot: serial activity cannot enable capture or remote controls.
+ leds[0]={9,8,7};remoteCaptureDisplay();assert(!remoteDisplayValid&&remoteDisplayFrame[0].r==0);
+ bad("40 STATE");bad("41 TURN 1 1");assert(!remoteInput.live&&!remoteInput.pending());
+ Serial.input="PING\n";sdSerialServerPollNeedSdHint();assert(!remoteInput.live);
+ good("42 HELLO");bad("43 DISPLAY");
  // Real off-page poller: fragmented REMOTE while COLR is open, bounded work,
  // overflow tail cannot become a second command, and old PING still dispatches.
  menuSetting=41;inEtcSubmenu=true;
@@ -101,11 +106,13 @@ int main(){
  fnHeld=true;good("13 TURN 1 -2");remoteApplyEncoderTurn(0,raw,true,true);assert(raw==1&&fnDelta==-2);fnHeld=false;
  good("14 BUTTON 1 1");good("15 BUTTON 1 1");assert(pushes[0]==1);
  remotePhysicalButton(0,true);good("16 BUTTON 1 0");assert(releases[0]==0);
- good("17 RELEASE");assert(remoteInput.held(0));remotePhysicalButton(0,false);assert(releases[0]==1);
+ good("17 RELEASE");assert(remoteInput.live);assert(remoteInput.held(0));remotePhysicalButton(0,false);assert(releases[0]==1);
  good("18 TOUCH 5 1");assert(remoteTouchHeld(4));
  clockMs+=3000;remoteService();assert(!remoteTouchHeld(4));
- clockMs=0xfffffff0u;good("19 BUTTON 2 1");clockMs=uint32_t(clockMs+3000);remoteService();assert(!remoteInput.held(1));
- good("20 BUTTON 3 1");Serial.connected=false;remoteService();assert(!remoteInput.held(2));Serial.connected=true;
+ assert(!remoteInput.live&&!remoteDisplayValid);bad("44 KEEPALIVE");
+ good("45 HELLO");clockMs=0xfffffff0u;remoteInput.renew(clockMs);good("19 BUTTON 2 1");clockMs=uint32_t(clockMs+3000);remoteService();assert(!remoteInput.held(1));
+ good("46 HELLO");good("20 BUTTON 3 1");Serial.connected=false;remoteService();assert(!remoteInput.held(2));Serial.connected=true;
+ good("47 HELLO");
  // An existing FSM recovery must also release the physical shadow, so
  // the next real push and managed remote gestures are not suppressed.
  remotePhysicalButton(3,true);const int firstPush=pushes[3];
@@ -121,6 +128,16 @@ int main(){
  std::cout<<cmd("22 DISPLAY");
  ledModulesRotated=true;leds[15]={1,2,3};remoteCaptureDisplay();std::cout<<cmd("23 DISPLAY");
  std::cout<<cmd("24 STATE");
+ good("48 TOUCH 5 1");good("49 TURN 1 3");remotePhysicalButton(0,true);
+ good("50 BYE");assert(!remoteInput.live&&!remoteInput.pending()&&!remoteTouchHeld(4));
+ assert(remoteInput.held(0)&&!remoteDisplayValid);bad("51 STATE");
+ leds[0]={99,99,99};const auto old=remoteDisplayFrame[0];remoteCaptureDisplay();
+ assert(remoteDisplayFrame[0].r==old.r); // No copy while disconnected.
+ good("52 HELLO");assert(remoteInput.held(0));bad("53 DISPLAY");
+ remotePhysicalButton(0,false);
+ good("54 TOUCH 5 1");clockMs+=3000;
+ bad("55 TOUCH 5 1");assert(!remoteInput.live&&!remoteTouchHeld(4)); // Timeout enforced at dispatch too.
+
 }
 '''
 # Include the actual line-framing poller, not a reimplementation.
@@ -139,6 +156,17 @@ with tempfile.TemporaryDirectory() as directory:
         flags += ['-isystem', str(sdk)]
     subprocess.run(flags + [str(source), '-o', str(binary)], check=True)
     output = subprocess.check_output([str(binary)], text=True)
+    disabled_main = r'''int main(){
+      assert(cmd("60 HELLO").find("DISABLED")!=std::string::npos);
+      Serial.input="REMOTE 61 HELLO\nPING\n";
+      sdSerialServerPollNeedSdHint();sdSerialServerPollNeedSdHint();
+      assert(Serial.out.find("OK TOERN SD")!=std::string::npos);
+    }'''
+    disabled = harness[:harness.index('int main(){')] + disabled_main
+    source.write_text(disabled)
+    subprocess.run(flags + ['-DTOERN_REMOTE_CONTROL=0', str(source), '-o', str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
+
     frames = [json.loads(line.removeprefix('REMOTE ')) for line in output.splitlines()]
     assert len(bytes.fromhex(frames[0]['rgb'])) == 16*16*3
     # Row-major image is top first: device pixel (1,1) is bottom left.
