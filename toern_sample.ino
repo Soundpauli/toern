@@ -597,14 +597,9 @@ FLASHMEM void previewSample(bool setMaxSampleLength, bool playAudio) {
     int bytesToReadAll = (int)dataSize;
     if (loadPartial) {
       // Compute requested window in bytes based on seek/seekEnd (after smplen computed)
-      int startOffset = (GLOB.smplen * GLOB.seek) / 100;
-      int endOffset = (GLOB.smplen * GLOB.seekEnd) / 100;
-      endOffset = min(endOffset, GLOB.smplen);
-      // Use original calculation: offset * PrevSampleRate * 2
-      int startOffsetBytes = startOffset * PrevSampleRate * 2;
-      int endOffsetBytes = endOffset * PrevSampleRate * 2;
-      startOffsetBytes &= ~1;
-      endOffsetBytes &= ~1;
+      const auto window = toern_sample::window(dataSize / 2, GLOB.seek, GLOB.seekEnd);
+      int startOffsetBytes = (int)(window.first * 2);
+      int endOffsetBytes = (int)(window.end * 2);
       if (endOffsetBytes <= startOffsetBytes) {
         startOffsetBytes = 0;
         endOffsetBytes = min((int)dataSize, (int)sizeof(sampled[0]));
@@ -795,26 +790,11 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     // Original calculation: dataSize / (SampleRate * 2) = dataSize / 6 for 44.1kHz
     GLOB.smplen = (int)(dataSize / (uint32_t)(SampleRate[sampleID] * 2));
 
-    // Convert percentage positions to actual offsets
-    // Use original calculation: offset * SampleRate * 2
-    unsigned int startOffset = (GLOB.seek * GLOB.smplen) / 100;
-    unsigned int startOffsetBytes = startOffset * SampleRate[sampleID] * 2;
-
-    // Empirical end-click guard:
-    // Users report the end-click disappears when moving seekEnd by 1 step.
-    // So we always trim by 1 seekEnd step for playback (i.e. use seekEnd-1%),
-    // while keeping the UI/setting unchanged.
-    unsigned int seekEndPct = GLOB.seekEnd;
-    if (seekEndPct == 0) seekEndPct = 100;               // 0 means full length in UI
-    if (seekEndPct > 0) seekEndPct = seekEndPct - 1;     // trim one encoder step
-    // Ensure end stays > start
-    if (seekEndPct <= GLOB.seek) seekEndPct = min((unsigned int)100, (unsigned int)(GLOB.seek + 1));
-
-    unsigned int endOffset = (seekEndPct * GLOB.smplen) / 100;
-    if (endOffset > GLOB.smplen) endOffset = GLOB.smplen;
-    // Use original calculation: offset * SampleRate * 2
-    unsigned int endOffsetBytes = endOffset * SampleRate[sampleID] * 2;
-    endOffsetBytes = min(endOffsetBytes, (unsigned int)dataSize);
+    // Work directly in PCM frames: the legacy display unit (frames/3) loses
+    // remainder frames and must not define playback length. No hidden 1% trim.
+    const auto window = toern_sample::window(dataSize / 2, GLOB.seek, GLOB.seekEnd);
+    unsigned int startOffsetBytes = window.first * 2;
+    unsigned int endOffsetBytes = window.end * 2;
 
     // Mute this voice before overwriting its live RAM buffer.
     beginChannelSampleReload(sampleID);
@@ -1647,17 +1627,9 @@ bool loadPreviewToChannel(unsigned int targetChannel, bool showLoadProgress) {
 
   // Calculate the trimmed portion based on seek/seekEnd
   int numSamples = previewCache.lengthBytes / 2;  // Total samples in preview
-  int startSample = (numSamples * GLOB.seek) / 100;
-  // Same end-click guard as loadSample(): trim by 1 seekEnd step for playback.
-  int seekEndPct = (GLOB.seekEnd == 0) ? 100 : (int)GLOB.seekEnd;
-  if (seekEndPct > 0) seekEndPct -= 1;
-  if (seekEndPct <= (int)GLOB.seek) seekEndPct = min(100, (int)GLOB.seek + 1);
-
-  int endSample = (numSamples * seekEndPct) / 100;
-  
-  if (endSample <= startSample) {
-    endSample = numSamples;
-  }
+  const auto window = toern_sample::window(numSamples, GLOB.seek, GLOB.seekEnd);
+  int startSample = (int)window.first;
+  int endSample = (int)window.end;
   
   int trimmedSamples = endSample - startSample;
   

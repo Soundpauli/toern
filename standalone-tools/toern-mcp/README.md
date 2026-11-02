@@ -34,7 +34,7 @@ This sets `TOERN_REMOTE_CONTROL=0`; Arduino builds can set the same compiler
 define. Disabled builds report `DISABLED` to remote requests. SD transfer, USB
 MIDI/audio and the audio performance improvements remain available. Runtime
 inactivity saves work; only the disabled build removes MCP code/state/frame RAM.
-On this build, exclusion frees 1,056 bytes in RAM1, 1,536 bytes in RAM2 and
+On this build, exclusion frees 1,088 bytes in RAM1, 1,536 bytes in RAM2 and
 5,120 bytes in flash; the RAM1 instruction-bank allocation stays the same.
 
 ## Install and run
@@ -226,3 +226,26 @@ sampler controllers live in internal DTCM; large samples, delay lines and the
 only `Audio/filter_ladder.cpp` uses `-O2` so the per-sample helpers inline. The
 fourfold oversampling and FIR interpolation are retained. See
 [the measured performance investigation](PERFORMANCE.md).
+
+The default reverb uses `TOERN_TREEVERB_QUALITY=1`: six combs and four diffusion
+stages. `0` selects the preceding light 4/2 network; `2` is the full 8/4 reference
+with very little RAM1 headroom. `get_performance()` includes `reverb_quality`,
+and the USB audio runner records it in its report. See [reverb measurements](../../devdocs/docs/audio/effects.md#treeverb).
+
+## USB audio quality tests
+
+The hardware playback runner uses actual USB recordings and source WAV comparisons:
+
+```sh
+.venv/bin/pip install -r requirements-audio-test.txt
+.venv/bin/python audio_quality.py --port /dev/cu.usbmodemXXXX \
+  --full-reset --channels 1,2 --reverb --output /tmp/toern-audio-quality
+```
+
+`--full-reset` executes **RSET → FULL**, clearing the current pattern/settings first. Omit it to preserve the entry state. The test temporarily adjusts filters and runs a test sequence, restores filters and the RAM pattern, and uses a non-saving pause for the temporary sequence. It leaves WAV captures and `report.json` in the output directory and exits nonzero for failed checks. It makes no pattern backup file.
+
+Checks cover repeated dry playback, original-WAV fidelity, clipping-related distortion, added clicks, missing blocks, silence, source-aware attack/decay/sustain, explicit release and real sequencer timing. `--reverb` additionally checks maximum-room tails, persistent noise and bypass recovery. Capture status and measured CPU load accompany the cases. The recorder selects the Teensy USB input, not the computer microphone.
+
+References normally come from the loaded kit. After loading a custom voice, use `--reference '1=/absolute/path/to/07 Kick 8.wav'` to compare it against that local source; the test also verifies every frame of its saved SP0 PCM. Custom references cannot be combined with FULL, which would reload kit 1. The reference runner supports sample voices 1–8; CH1/CH2 are the hardware test targets. It does not certify the separate synth paths or analog outputs.
+
+Default sample playback preserves the entire source tail; trim and ADSR changes are explicit. The stock envelope's eight-sample zero-attack ramp and output limiter remain modeled, and the report separately includes SNR against the unmodified WAV. See [sample playback developer notes](../../devdocs/docs/audio/samples.md) for the restart fix, exact frame windows and validation details.

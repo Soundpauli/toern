@@ -12,17 +12,26 @@ Teensy 4.1 memory is easy to exhaust in **RAM1 (DTCM)** even when PSRAM is free.
 
 | Region | Keyword | Use for |
 |--------|---------|---------|
-| RAM1 / DTCM | (default) | Hot code, small frequently touched state |
+| RAM1 / DTCM | (default) | Hot DSP state, mixers, envelopes and reverb tanks; instruction-bank allocation reduces available data/stack space |
 | RAM2 | `DMAMEM` | DMA-friendly buffers, some audio/FX state |
-| PSRAM | `EXTMEM` | Large grids, `Device SMP`, bulky Audio objects |
+| PSRAM | `EXTMEM` | Large grids, `Device SMP`, sample PCM and delay storage |
 
 ## Patterns already used
 
 - `EXTMEM Note note[...]` — pattern grid
 - `EXTMEM Device SMP` — project/session bag
-- `EXTMEM` on many Audio mixers/oscillators in `audioinit.h`
+- Internal DTCM for hot oscillators/ladder state, small mixers, routing and sampler controllers in `audioinit.h` / `toern.ino`
 - `DMAMEM` for some float tables (`detune`, `channelOctave`, …)
-- Freeverb DMA buffers via `effect_freeverb_dmabuf`
+- Seven Treeverb tank allocations in RAM1; the default balanced profile has six combs and four diffusers per instance
+
+The balanced reverb build leaves **43,360 bytes** of RAM1 free for locals with
+MCP included, or **44,448 bytes** with MCP excluded. RAM2 free for heap is
+**325,664 / 327,200 bytes** respectively. These are linked build figures, not
+runtime stack high-water measurements. The preceding light reverb left about
+91.9 KB of RAM1 free; full 8/4 diffusion would leave only a few KB in this layout.
+See [reverb profiles and validation](../audio/effects#treeverb). Runtime MCP session
+gating skips work but retains its compiled state/frame buffer; only the disabled
+build removes those allocations.
 
 ## Anti-patterns
 

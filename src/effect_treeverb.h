@@ -30,9 +30,14 @@
 #include <Arduino.h>
 #include <AudioStream.h>
 
-// Set 0 to rebuild the preceding 8-comb/4-diffuser version for A/B tests.
-#ifndef TOERN_TREEVERB_LIGHT
-#define TOERN_TREEVERB_LIGHT 1
+// 0: light 4/2, 1: balanced 6/4, 2: original full 8/4 network.
+// Keep legacy A/B builds working when they explicitly set LIGHT.
+#ifndef TOERN_TREEVERB_QUALITY
+#ifdef TOERN_TREEVERB_LIGHT
+#define TOERN_TREEVERB_QUALITY (TOERN_TREEVERB_LIGHT ? 0 : 2)
+#else
+#define TOERN_TREEVERB_QUALITY 1
+#endif
 #endif
 
 class AudioEffectTreeverb : public AudioStream {
@@ -44,12 +49,17 @@ public:
 private:
     FLASHMEM void clearTanks();
     audio_block_t *inputQueue_[1];
-#if TOERN_TREEVERB_LIGHT
+#if TOERN_TREEVERB_QUALITY == 0
     static constexpr unsigned combCount = 4, allpassCount = 2;
     static constexpr unsigned tankSamples = 1116 + 1277 + 1422 + 1617 + 556 + 225;
-#else
+#elif TOERN_TREEVERB_QUALITY == 1
+    static constexpr unsigned combCount = 6, allpassCount = 4;
+    static constexpr unsigned tankSamples = 1116 + 1188 + 1277 + 1422 + 1491 + 1617 + 556 + 441 + 341 + 225;
+#elif TOERN_TREEVERB_QUALITY == 2
     static constexpr unsigned combCount = 8, allpassCount = 4;
     static constexpr unsigned tankSamples = 12587;
+#else
+#error Unsupported TOERN_TREEVERB_QUALITY
 #endif
     int16_t tanks_[tankSamples];
     uint16_t positions_[combCount + allpassCount] = {};

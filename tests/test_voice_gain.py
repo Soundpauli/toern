@@ -26,6 +26,7 @@ using std::max;
 #include <fstream>
 #include <vector>
 #include "src/toern_legacy_filter.h"
+#include "src/toern_envelope_curve.h"
 using std::isfinite;
 #define FLASHMEM
 #define DMAMEM

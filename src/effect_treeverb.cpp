@@ -29,11 +29,16 @@
 #include "toern_audio_runtime.h"
 
 namespace {
-#if TOERN_TREEVERB_LIGHT
+#if TOERN_TREEVERB_QUALITY == 0
 // Spread the four combs across the original 25–37 ms range. The two
 // diffusers retain the longest/shortest stages; tail density will differ.
 constexpr uint16_t combLengths[] = {1116, 1277, 1422, 1617};
 constexpr uint16_t allpassLengths[] = {556, 225};
+#elif TOERN_TREEVERB_QUALITY == 1
+// More independent reflection paths and all four diffusion stages, retaining
+// enough DTCM stack headroom for the seven per-voice instances.
+constexpr uint16_t combLengths[] = {1116, 1188, 1277, 1422, 1491, 1617};
+constexpr uint16_t allpassLengths[] = {556, 441, 341, 225};
 #else
 constexpr uint16_t combLengths[] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
 constexpr uint16_t allpassLengths[] = {556, 441, 341, 225};
@@ -92,6 +97,8 @@ void allpassBlock(int16_t *tank, unsigned length, uint16_t &position, int16_t *d
 } // namespace
 
 FLASHMEM AudioEffectTreeverb::AudioEffectTreeverb() : AudioStream(1, inputQueue_) {
+    static_assert(sizeof(combLengths)/sizeof(combLengths[0]) == combCount, "Comb storage mismatch");
+    static_assert(sizeof(allpassLengths)/sizeof(allpassLengths[0]) == allpassCount, "Diffuser storage mismatch");
     clearTanks();
 }
 
@@ -151,11 +158,15 @@ void AudioEffectTreeverb::update() {
         offset += combLengths[line];
     }
     for (unsigned i = 0; i < AUDIO_BLOCK_SAMPLES; ++i) {
-#if TOERN_TREEVERB_LIGHT
+#if TOERN_TREEVERB_QUALITY == 0
         // Normalize the reduced network against the full version: removing
         // two scaled diffusers also removes their attenuation. Impulse tests
         // cover the resulting wet energy across room/damping settings.
         output->data[i] = saturate16(truncateShift<14>((sum[i] >> 2) * 12135));
+#elif TOERN_TREEVERB_QUALITY == 1
+        // Same wet energy target as the full network, compensating for six
+        // decorrelated combs instead of eight. Preserve int32 headroom.
+        output->data[i] = saturate16(truncateShift<14>((sum[i] >> 2) * 18161));
 #else
         output->data[i] = saturate16(truncateShift<14>((sum[i] >> 3) * 31457));
 #endif

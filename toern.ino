@@ -3,6 +3,7 @@
 #include "src/toern_demo.h"
 #include "src/toern_grid_paint.h"
 #include "src/toern_remote_input.h"
+#include "src/toern_sample_window.h"
 #include <errno.h>
 #include "toern_touch_input.h"
 #include "src/toern_pattern_slots.h"
@@ -4223,6 +4224,15 @@ void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool ret
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
   if (on && velocity && isChannelSampleReloadBusy((unsigned int)ch)) return;
+  if (on && velocity && ch >= 1 && envelopes[ch] && voices[ch]) {
+    // At EOF the reader stops sending blocks, so its envelope can remain in
+    // SUSTAIN. A forced release here would fade the NEW sample's first 5ms,
+    // then abruptly restart its attack. Idle readers need a fresh attack;
+    // Readers walking a silent WAV tail also need a fresh attack. Nonzero
+    // output in the last two blocks retains the normal retrigger de-click.
+    const bool active = voices[ch]->isPlaying() && voices[ch]->hasRecentOutput();
+    envelopes[ch]->releaseNoteOn(active ? 5.0f : 0.0f);
+  }
   _samplers[ch].noteEvent(pitch, velocity, on, retrigger);
 }
 

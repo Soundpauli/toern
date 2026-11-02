@@ -7,7 +7,8 @@ FLASHMEM static unsigned remoteCpuBasisPoints(float percent) {
 
 FLASHMEM void remoteReplyPerformance(unsigned long id) {
   remoteReplyStart(id);
-  Serial.printf("\"ok\":true,\"ch11_internal_ram\":%s,\"input_recoveries\":%lu,\"cpu_bp\":%u,\"cpu_max_bp\":%u,\"audio_blocks\":%u,\"audio_blocks_max\":%u,\"cpu_hz\":%lu,\"playing\":%s,\"ch11_muted\":%s,\"ch11_active\":[",
+  Serial.printf("\"ok\":true,\"reverb_quality\":%u,\"ch11_internal_ram\":%s,\"input_recoveries\":%lu,\"cpu_bp\":%u,\"cpu_max_bp\":%u,\"audio_blocks\":%u,\"audio_blocks_max\":%u,\"cpu_hz\":%lu,\"playing\":%s,\"ch11_muted\":%s,\"ch11_active\":[",
+      (unsigned)TOERN_TREEVERB_QUALITY,
       ((uintptr_t)Sladder1[0] >= 0x20000000u && (uintptr_t)Sladder1[0] < 0x20200000u) ? "true" : "false",
       (unsigned long)remoteInputRecoveries,
       remoteCpuBasisPoints(AudioProcessorUsage()), remoteCpuBasisPoints(AudioProcessorUsageMax()),

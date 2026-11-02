@@ -40,25 +40,57 @@ The matrix usually shows **0–32** (or enums as text). Mapping functions conver
 ## Treeverb
 
 Seven independent `AudioEffectTreeverb` objects serve sample voices 1, 2, 5–8
-and synth voice 11. The default light network uses four parallel comb filters
-and two diffusion stages at the full audio sample rate, replacing eight combs
-and four diffusers. Room, damping, wet/dry routing, delay routing, and saved
-settings retain their existing controls. The lighter tail has a different
-color and density; wet gain is normalized against the reference network's
-impulse-response energy rather than guaranteed to sound identical.
+and synth voice 11. The default balanced network uses **six parallel comb filters
+and four diffusion stages** at the full audio sample rate. This restores all four
+diffusion stages and adds two reflection paths over the preceding light network.
+Room, damping, wet/dry routing, delay routing, dry playback and saved settings
+retain their existing controls. Wet gain is normalized against the full reference
+network's impulse-response energy; this is a change in reflection density, not
+an intentional volume boost.
 
 `roomsize(0)` bypasses wet processing and clears history on the next update.
 Nonzero settings keep natural tails after Pause. `ETC → RSET → RVRB` still
-bypasses reverb and bitcrusher across voices. Buffers remain in RAM1. This build frees 89,376 bytes there, increasing
-local-variable headroom from 59,040 to 148,416 bytes.
+bypasses reverb and bitcrusher across voices. Buffers remain in RAM1. The balanced
+build leaves **43,360 bytes** free for local variables; the preceding light build
+left about 91.9 KB. RAM2 allocation is unchanged. Restoring the full eight-comb
+network would leave only a few KB of RAM1, so it remains a reference option.
 
 `platformio.ini` compiles `src/effect_treeverb.cpp` with
-`TOERN_TREEVERB_LIGHT=1`. Set the flag to `0` for the heavier Treeverb reference.
+`TOERN_TREEVERB_QUALITY=1`. Available profiles are:
+
+| Value | Profile | Combs / diffusers |
+|-------|---------|-------------------|
+| `0` | Light | 4 / 2 |
+| `1` | Balanced (default) | 6 / 4 |
+| `2` | Full reference | 8 / 4 |
+
+Explicit legacy `TOERN_TREEVERB_LIGHT=1/0` builds still map to light/full when
+`TOERN_TREEVERB_QUALITY` is not supplied. MCP `get_performance` reports
+`reverb_quality` using the values above.
+
 The old Freeverb source remains available for host comparison tests, outside
-the firmware build. `tests/test_treeverb.py` checks both modes under address
+the firmware build. `tests/test_treeverb.py` checks all three profiles under address
 and undefined-behavior sanitizers, including tail energy, overload, live
 parameter changes, bypass/reset, allocation failure, and IRQ restoration.
 `tests/test_pause_effects.py` checks natural tail decay through Pause.
+
+### Balanced-profile validation, 2026-11-02
+
+For a fixed impulse at room 0.75/damping 0.25, nonzero reflection coverage in the
+25–150 ms window increased from **11.8%** (light) to **59.5%** (balanced); full
+reference is **60.4%**. Balanced integrated wet energy was **1.05×** full reference
+(about +0.21 dB), and all sixteen room/damping combinations stayed within the
+existing approximately ±1 dB energy bounds. Coverage is a signal-density metric,
+not a subjective sound-quality score.
+
+On the device, all **22** USB playback/ADSR/reverb cases passed with the supplied
+CH1 `07 Kick 8.wav` and kit 1 CH2 snare. Dry output matched the preceding firmware's
+measurements, both maximum-room tails decayed to digital silence, and capture
+reported no overflows or clipping failures. Maximum reverb added about **2.25 CPU
+percentage points** over bypass per tested voice, versus approximately 1.74–1.83
+in the preceding recordings: an estimated **0.42–0.51 point** increase. These are
+per-case differences against each recording's own bypass; other background patch
+settings differed between sessions. They do not certify dense CH11 chord headroom.
 
 ## Sample page 1 — TIME
 

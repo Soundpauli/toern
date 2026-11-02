@@ -90,7 +90,7 @@ Open source as always: schematics, code, and design files are here for you to po
 - **ADSR** — attack / decay / sustain / release (0–32 range)  
 - **Bitcrusher** — bit depth 1–16 (0 = bypass), sample-rate reduction down to glorious crunch  
 - **Filter** — LP / HP / BP, 0–10 kHz, resonance 0.7–5.0, smooth transitions  
-- **Reverb** — room size, damping, wet/dry  
+- **Reverb** — room size, damping, wet/dry; denser six-comb/four-diffuser network on reverb-equipped voices
 - Fast filter access on encoder #3 during runtime (assignable default per channel)  
 
 ### MIDI, clock & extras
@@ -162,7 +162,7 @@ The default build includes this automatic gating. To exclude MCP entirely:
 pio run -e teensy41-no-mcp
 ```
 
-This sets `TOERN_REMOTE_CONTROL=0`, removing remote input state, display capture and diagnostics while retaining SD serial, USB MIDI/audio and the audio optimizations. On the current build it frees 1,056 bytes in RAM1, 1,536 bytes in RAM2 and 5,120 bytes in flash. Automatic inactivity saves processing work; the disabled build also saves memory.
+This sets `TOERN_REMOTE_CONTROL=0`, removing remote input state, display capture and diagnostics while retaining SD serial, USB MIDI/audio and the audio optimizations. On the current build it frees 1,088 bytes in RAM1, 1,536 bytes in RAM2 and 5,120 bytes in flash. Automatic inactivity saves processing work; the disabled build also saves memory.
 
 See [developer documentation](./devdocs/docs/tools/mcp-remote.md) for session behavior and implementation details.
 
@@ -193,8 +193,8 @@ This project leans on several libraries. Some are stock; some got lovingly (and 
 - **ResamplingReader.h** (`teensy-variable-playback`)  
   Variable rates, interpolation, multi-channel, loop types (repeat / ping-pong), crossfading — in `src/resamplerReader.h`
 
-- **Freeverb** (`effect_freeverb_dmabuf`)  
-  DMAMEM-friendly reverb for Teensy 4.1 — `src/effect_freeverb_dmabuf.*`
+- **Treeverb** (`effect_treeverb`)
+  Full-rate reverb with balanced 6/4 diffusion in RAM1 — `src/effect_treeverb.*`; the older `effect_freeverb_dmabuf` remains a host-test reference.
 
 - **FastLED**  
   `FASTLED_ALLOW_INTERRUPTS 0` so LEDs and audio don’t argue mid-beat; custom `FastLEDshow()` / `FastLEDclear()` wrappers

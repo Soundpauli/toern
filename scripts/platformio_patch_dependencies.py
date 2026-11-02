@@ -85,6 +85,9 @@ if plain_playback_src.is_dir() and not playback_src_dirs:
     playback_src_dirs.append(plain_playback_src)
 
 for source_dir in playback_src_dirs:
+    (source_dir / "toern_pcm_activity.h").write_text(
+        (project_dir / "src" / "toern_pcm_activity.h").read_text()
+    )
     (source_dir / "toern_pcm_interpolation.h").write_text(
         (project_dir / "src" / "toern_pcm_interpolation.h").read_text()
     )
@@ -205,7 +208,7 @@ for source_dir in playback_src_dirs:
             "amplitude members",
         )
 
-    if "reader->close();\n                ampMult = ampTarget;" not in text:
+    if not re.search(r"reader->close\(\);\s+(?:pcmActivity\.clear\(\);\s+)?ampMult = ampTarget;", text):
         text = replace_once(
             text,
             """            } else {
@@ -225,6 +228,25 @@ for source_dir in playback_src_dirs:
         text = replace_once(text, "        void setPlaybackRate(float f) {",
             "        void setTimeStretchAmount(uint8_t value) { reader->setTimeStretchAmount(value); }\n\n        void setPlaybackRate(float f) {",
             "WSOLA length forwarding")
+    if "bool hasRecentOutput()" not in text:
+        text = replace_once(text, '#include "loop_type.h"',
+            '#include "loop_type.h"\n#include "toern_pcm_activity.h"', 'PCM activity include')
+        text = replace_once(text, '        void stop() {\n            reader->stop();',
+            '        bool hasRecentOutput() const { return pcmActivity.active(); }\n\n'
+            '        void stop() {\n            pcmActivity.clear();\n            reader->stop();',
+            'PCM activity accessor/stop')
+        text = replace_once(text, '            if (!reader->isPlaying()) {\n                ampMult = ampTarget;',
+            '            if (!reader->isPlaying()) {\n                pcmActivity.clear();\n                ampMult = ampTarget;',
+            'PCM activity idle')
+        text = replace_once(text, '                ampMult = cur;\n                for (int channel=0;',
+            '                ampMult = cur;\n                pcmActivity.observe(data, _numChannels, n);\n                for (int channel=0;',
+            'PCM activity rendered blocks')
+        text = replace_once(text, '                reader->close();\n                ampMult = ampTarget;',
+            '                reader->close();\n                pcmActivity.clear();\n                ampMult = ampTarget;',
+            'PCM activity EOF')
+        text = replace_once(text, '        volatile int32_t ampTarget;',
+            '        volatile int32_t ampTarget;\n        ToernPcmActivity pcmActivity;',
+            'PCM activity member')
     playresmp.write_text(text)
 
 # Stock AudioEffectDelayExternal talks SPI RAM (23LC1024). TŒRN uses a PSRAM

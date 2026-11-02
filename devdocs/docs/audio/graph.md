@@ -44,7 +44,7 @@ Each limited mixer adds 16 samples (0.36 ms at 44.1 kHz). The normal bank → ma
 
 ## Why some objects are `EXTMEM`
 
-Large Audio objects and mixers are annotated `EXTMEM` so their state lives in PSRAM. That is a deliberate RAM1 conservation strategy — see [Memory](../contributing/memory).
+Large sample PCM, delay storage, the note grid and `SMP` remain in PSRAM. Hot DSP state, small mixers, routing objects, sampler controllers and reverb tanks use internal memory to avoid per-sample PSRAM latency. The balanced reverb's denser tanks consume additional RAM1 — see [Memory](../contributing/memory).
 
 ## Custom nodes in `src/`
 
@@ -52,7 +52,7 @@ Large Audio objects and mixers are annotated `EXTMEM` so their state lives in PS
 |-----------|----------------|
 | `resamplerReader.h` | Variable-rate / interpolated playback; TIME stretch control into WSOLA |
 | `toern_wsola.h` | RAM-source WSOLA for independent time-stretch (filter page 1 TIME) |
-| `effect_treeverb` | Full-rate light reverb: four combs and two diffusers per object, buffers in RAM1 |
+| `effect_treeverb` | Full-rate balanced reverb: six combs and four diffusers per object, buffers in RAM1 |
 
 `toern.ino` includes `src/effect_treeverb.h` and sets `FASTLED_ALLOW_INTERRUPTS 0` so LED updates don’t fight the audio ISR world.
 

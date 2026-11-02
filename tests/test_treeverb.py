@@ -1,6 +1,7 @@
-"""Check light Treeverb signal behavior and the full-mode reference/lifecycle."""
+"""Check all three Treeverb profiles, reflection density and reference/lifecycle."""
 from pathlib import Path
 import ast
+import array
 import subprocess
 import sys
 import tempfile
@@ -23,7 +24,7 @@ code = r"""
 #include <limits>
 uint32_t rng=1;
 int16_t randomSample(){rng=rng*1664525u+1013904223u;return (int16_t)(rng>>16);}
-#if !TOERN_TREEVERB_LIGHT
+#if TOERN_TREEVERB_QUALITY == 2
 void compare(float room,float damp){
  AudioEffectTreeverb tree;AudioEffectFreeverbDMAMEM old;
  tree.roomsize(room);old.roomsize(room);tree.damping(damp);old.damping(damp);
@@ -42,9 +43,9 @@ void compare(float room,float damp){
  }
 }
 #else
-void checkLight(float room,float damp){
+void checkReduced(float room,float damp){
  AudioEffectTreeverb tree;AudioEffectFreeverbDMAMEM old;
- static_assert(sizeof(tree)<15000,"Light mode must use the smaller tank allocation");
+ static_assert(sizeof(tree)<21000,"Reduced modes must fit the smaller tank allocation");
  tree.roomsize(room);old.roomsize(room);tree.damping(damp);old.damping(damp);
  int16_t pcm[128]={};
  double energy=0,reference=0,early=0,late=0;int first=-1;bool laterTail=false;
@@ -66,7 +67,7 @@ void checkLight(float room,float damp){
  const double ratio=energy/reference;
  assert(ratio>.8&&ratio<1.25); // keep integrated wet energy within about +/-1 dB
  if(room==1.f)assert(laterTail); // high room must not become a gated short echo
- printf("light room=%.3f damp=%.2f tail energy/reference=%.3f\n",room,damp,ratio);
+ printf("quality=%d room=%.3f damp=%.2f tail energy/reference=%.3f\n",TOERN_TREEVERB_QUALITY,room,damp,ratio);
  // Bounded arithmetic at both full-scale polarities and with changing controls.
  for(int block=0;block<600;++block){
   if(block==300){tree.roomsize(.31f);tree.damping(.18f);}
@@ -75,10 +76,20 @@ void checkLight(float room,float damp){
  }
 }
 #endif
-int main(){
+int main(int argc,char **argv){
+ if(argc==2){
+  AudioEffectTreeverb tree;tree.roomsize(.75f);tree.damping(.25f);
+  for(int block=0;block<1500;++block){
+   int16_t pcm[128]={};if(block==0)pcm[0]=24000;
+   if(block<100)tree.feedSamples(pcm);
+   tree.update();for(auto &b:tree.output)fwrite(b.data,2,128,stdout);
+   tree.output.clear();
+  }
+  return 0;
+ }
  for(float room:{1.f/32,.25f,.72f,1.f})for(float damp:{.01f,.25f,.4f,1.f}){
-#if TOERN_TREEVERB_LIGHT
-  checkLight(room,damp);
+#if TOERN_TREEVERB_QUALITY != 2
+  checkReduced(room,damp);
 #else
   compare(room,damp);
 #endif
@@ -104,7 +115,7 @@ int main(){
  tree.roomsize(std::numeric_limits<float>::quiet_NaN());tree.update();assert(tree.output.empty());
  irqEnabled[0]=false;irqEnabled[1]=false;tree.roomsize(.2f);tree.damping(.2f);
  assert(!irqEnabled[0]&&!irqEnabled[1]);
- printf("PASS: mode %d, 16 room/damping combinations, noise, overload, silence/tails, live controls, bypass reset, pool exhaustion and IRQ restoration.\n",TOERN_TREEVERB_LIGHT);
+ printf("PASS: quality %d, 16 room/damping combinations, noise, overload, silence/tails, live controls, bypass reset, pool exhaustion and IRQ restoration.\n",TOERN_TREEVERB_QUALITY);
 }
 """
 with tempfile.TemporaryDirectory(prefix='toern-treeverb-') as tmp:
@@ -113,10 +124,24 @@ with tempfile.TemporaryDirectory(prefix='toern-treeverb-') as tmp:
  (tmp/'test.cpp').write_text(code)
  flags=['c++','-std=c++17','-O2','-fsanitize=address,undefined','-D__ARM_ARCH_7EM__','-I',str(tmp),'-I',str(root/'src')]
  if sys.platform=='darwin':flags+=['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1']
- for light in (0,1):
-  exe=tmp/f'test{light}'
-  subprocess.run(flags+[f'-DTOERN_TREEVERB_LIGHT={light}',str(tmp/'test.cpp'),str(root/'src/effect_treeverb.cpp'),str(root/'src/effect_freeverb_dmabuf.cpp'),'-o',str(exe)],check=True)
+ traces = {}
+ for quality in (0,1,2):
+  exe=tmp/f'test{quality}'
+  subprocess.run(flags+[f'-DTOERN_TREEVERB_QUALITY={quality}',str(tmp/'test.cpp'),str(root/'src/effect_treeverb.cpp'),str(root/'src/effect_freeverb_dmabuf.cpp'),'-o',str(exe)],check=True)
   subprocess.run([str(exe)],check=True)
+  pcm = array.array('h')
+  pcm.frombytes(subprocess.check_output([str(exe),'--impulse']))
+  traces[quality] = pcm
+ # Measure reflection coverage before late feedback fills the gaps. More
+ # diffusion must improve density without simply making the wet signal louder.
+ coverage = {q:sum(v!=0 for v in pcm[int(.025*44100):int(.15*44100)])/len(pcm[int(.025*44100):int(.15*44100)])
+             for q,pcm in traces.items()}
+ energy = {q:sum(v*v for v in pcm) for q,pcm in traces.items()}
+ assert coverage[1] > coverage[0]*2
+ assert coverage[1] > coverage[2]*.9
+ assert .8 < energy[1]/energy[2] < 1.25
+ print('PASS: balanced early reflection coverage', {q:round(v*100,2) for q,v in coverage.items()},
+       'percent; wet energy/full =', round(energy[1]/energy[2],3))
 
 # Integration: all seven existing send/return paths use Treeverb, without
 # changing sample readers/envelopes or accidentally compiling the old DSP.
@@ -131,5 +156,5 @@ assert '#include "src/effect_treeverb.h"' in sketch
 assert 'AudioEffectFreeverbDMAMEM' not in graph+sketch
 assert '+<src/effect_treeverb.cpp>' in config
 assert '+<src/effect_freeverb_dmabuf.cpp>' not in config
-assert '-D TOERN_TREEVERB_LIGHT=1' in config
-print('PASS: seven Treeverb paths, voice lookup, DSP source selection and default light build flag.')
+assert '-D TOERN_TREEVERB_QUALITY=1' in config
+print('PASS: seven Treeverb paths, voice lookup, DSP source selection and balanced build flag.')

@@ -45,7 +45,7 @@ Measured build sizes for the current 816 MHz, smallest-code configuration:
 
 | Resource | MCP included | MCP excluded | Freed by exclusion |
 |----------|--------------|--------------|--------------------|
-| RAM1 free for locals | 91,936 bytes | 92,992 bytes | 1,056 bytes |
+| RAM1 free for locals | 43,360 bytes | 44,448 bytes | 1,088 bytes |
 | RAM2 free for heap | 325,664 bytes | 327,200 bytes | 1,536 bytes |
 | Flash free for files | 7,737,348 bytes | 7,742,468 bytes | 5,120 bytes |
 

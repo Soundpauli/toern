@@ -25,11 +25,17 @@ volatile bool channelSampleReloadBusy[maxFiles]={};
 struct Voice {
  bool playing=true;float amp=1,target=1;unsigned fadeStart=0;int stops=0;
  bool isPlaying(){return playing;}
+ bool hasRecentOutput(){return recent;}
+ bool recent=true;
  void setAmplitude(float v){target=v;fadeStart=now;if(!playing)amp=v;}
  void stop(){assert(guardDepth>0);if(irq&&playing)assert(amp==0);playing=false;++stops;}
 } voice[9];
 Voice *voices[9]={};
-struct Env {void noteOff(){assert(guardDepth>0);}} env[15];
+struct Env {
+ float forcedRelease=-1;
+ void noteOff(){assert(guardDepth>0);}
+ void releaseNoteOn(float ms){assert(guardDepth>0);forcedRelease=ms;}
+} env[15];
 Env *envelopes[15]={};
 struct Sampler {
  int ons=0,offs=0;std::set<int> keys;
@@ -83,6 +89,14 @@ int main(){
   endChannelSampleReload(ch);
   assert(!channelSampleReloadBusy[ch]&&voice[ch].amp==.5f);
   samplerNoteEvent(ch,60,127,true,true);assert(_samplers[ch].ons==1);
+  if(ch>=1)assert(env[ch].forcedRelease==0); // Finished reader: fresh attack.
+  voice[ch].playing=true;
+  samplerNoteEvent(ch,60,127,true,true);
+  if(ch>=1)assert(env[ch].forcedRelease==5); // Still playing: preserve de-click.
+  voice[ch].recent=false;samplerNoteEvent(ch,60,127,true,true);
+  if(ch>=1)assert(env[ch].forcedRelease==0); // Silent WAV tail: fresh attack.
+  voice[ch].recent=true;
+  voice[ch].playing=false;
   const unsigned idleStart=now;beginChannelSampleReload(ch);assert(now==idleStart);
   endChannelSampleReload(ch);
  }

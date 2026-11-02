@@ -56,6 +56,12 @@ pio run -e teensy41-no-mcp
 
 This environment sets `TOERN_REMOTE_CONTROL=0`; Arduino builds can supply the same compiler define. SD transfer and USB MIDI/audio remain available, and the audio DSP optimizations remain enabled. Runtime inactivity saves processing work; only compile-time exclusion frees the MCP code and state memory. See [MCP remote](../tools/mcp-remote) for the protocol, memory figures and validation.
 
+### Reverb profile
+
+The default reverb profile is `TOERN_TREEVERB_QUALITY=1` (six combs/four diffusers).
+Change that definition to `0` for the preceding light profile; `2` is the full
+reference with very little RAM1 margin. See [Treeverb profiles and measurements](../audio/effects#treeverb).
+
 ## Open the sketch
 
 Open `toern.ino` from the repo root (the folder containing all `toern_*.ino` files). Arduino treats that folder as one sketch.
