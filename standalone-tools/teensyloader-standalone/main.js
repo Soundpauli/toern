@@ -8,12 +8,12 @@ import {
 const FIRMWARE_URLS = {
   stable: new URL('./public/toern_firmware_3.0.ino.hex', import.meta.url).href,
   beta: new URL('./public/toern_firmware_beta.ino.hex', import.meta.url).href,
-  'beta-eurorck': new URL('./public/toern_firmware_beta_eurorck.ino.hex', import.meta.url).href
+  'beta-modulr': new URL('./public/toern_firmware_beta_modulr.ino.hex', import.meta.url).href
 };
 const FIRMWARE_NAMES = {
   stable: 'toern_firmware_3.0.ino.hex',
   beta: 'toern_firmware_beta.ino.hex',
-  'beta-eurorck': 'toern_firmware_beta_eurorck.ino.hex'
+  'beta-modulr': 'toern_firmware_beta_modulr.ino.hex'
 };
 
 let selectedDevice = null;
@@ -80,7 +80,7 @@ document.getElementById('firmwareBeta').addEventListener('change', () => {
   loadFirmware();
 });
 
-document.getElementById('firmwareBetaEurorck').addEventListener('change', () => {
+document.getElementById('firmwareBetaModulr').addEventListener('change', () => {
   document.getElementById('betaWarning').classList.add('is-visible');
   loadFirmware();
 });
