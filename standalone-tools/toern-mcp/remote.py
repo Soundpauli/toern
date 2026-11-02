@@ -86,7 +86,7 @@ class ToernRemote:
         with self.lock:
             if self.serial is None:
                 raise RemoteError("Not connected; call connect first")
-            if operation not in {"HELLO", "STATE", "DISPLAY", "KEEPALIVE", "RELEASE", "TURN", "BUTTON", "TOUCH", "FILTERS", "MENUS"}:
+            if operation not in {"HELLO", "STATE", "DISPLAY", "KEEPALIVE", "RELEASE", "TURN", "BUTTON", "TOUCH", "FILTERS", "MENUS", "PERF"}:
                 raise ValueError("Unknown remote operation")
             if any(type(arg) is not int for arg in args):
                 raise ValueError("Protocol arguments must be integers")

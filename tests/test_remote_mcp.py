@@ -12,7 +12,7 @@ async def main():
             await client.initialize()
             tools = await client.list_tools()
             names = {t.name for t in tools.tools}
-            assert names == {'list_devices','connect','disconnect','get_state','get_display','turn_encoder','set_control','press_control','perform_gesture','release_controls','get_menu','get_filters','reset_filters','get_matrix'}, names
+            assert names == {'list_devices','connect','disconnect','get_state','get_display','turn_encoder','set_control','press_control','perform_gesture','release_controls','get_menu','get_filters','reset_filters','get_matrix','get_performance'}, names
             result = await client.call_tool('get_state', {})
             assert result.isError
             result = await client.call_tool('disconnect', {})

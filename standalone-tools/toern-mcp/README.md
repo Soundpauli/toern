@@ -49,6 +49,9 @@ with a `<2` dependency bound to keep the FastMCP interface consistent.
    voice, playback, BPM, loaded kit, browsed kit, mode encoder positions, and
    input state. `positions` are the firmware's logical mode positions, **not**
    necessarily physical encoder order (SMP swaps two positions).
+   `get_performance()` reads existing audio CPU counters, CH11 ladder/oscillator
+   costs, memory use and active poly voices without pausing playback. CPU fields
+   ending in `_bp` use basis points: 100 bp = 1% CPU.
 4. `get_display()` returns an enlarged PNG with logical top row first. Pixels
    preserve the rendered matrix's RGB values and software dimming. It represents
    the last presented frame; recording freezes the display just as on hardware.
@@ -111,6 +114,7 @@ REMOTE 10 RELEASE
 - TOUCH: pad `1..5`, state `0/1`, routed through normal touch debounce.
 - RELEASE: clear remote holds and pending turns. Physical holds survive.
 - HELLO and STATE return JSON state; KEEPALIVE returns a minimal acknowledgement.
+- PERF returns audio CPU/memory and per-node CH11 costs without stopping play.
 - MENUS returns the active group/item and its sibling list from the real menu tables.
 - FILTERS [voice] returns slider names, values, maxima and defaults from the real
   slider definitions. Omit voice for the selected voice. These are read-only.
@@ -183,3 +187,13 @@ it rewrites mute masks. Use `--section menus` for navigation-only coverage;
 
 The audit reads fresh slider values after each INST change: restoring an instrument
 reapplies its preset to sibling controls, so an earlier page snapshot is stale.
+
+
+## CH11 performance
+
+The polyphonic CH11 DSP objects, small mixers, audio routing connections and
+sampler controllers live in internal DTCM; large samples, delay lines and the
+`SMP` settings structure remain in PSRAM. The canonical build still uses smallest-code globally;
+only `Audio/filter_ladder.cpp` uses `-O2` so the per-sample helpers inline. The
+fourfold oversampling and FIR interpolation are retained. See
+[the measured performance investigation](PERFORMANCE.md).

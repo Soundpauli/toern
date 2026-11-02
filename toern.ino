@@ -1749,7 +1749,8 @@ struct FilterTarget {
 };
 DMAMEM FilterTarget defaultFastFilter[NUM_CHANNELS];  // one per channel
 
-EXTMEM arraysampler _samplers[9];
+// Small note/voice controllers are hot on triggers; sample PCM stays in PSRAM.
+arraysampler _samplers[9];
 AudioPlayArrayResmp *voices[9] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8 };
 static uint8_t sampleTimeStretch[9] = {11,11,11,11,11,11,11,11,11};
 void setSampleTimeStretch(uint8_t channel, int value) {

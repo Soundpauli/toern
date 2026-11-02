@@ -1,6 +1,7 @@
 // REMOTE v1: ASCII requests, prefixed JSON replies. All work stays in loop().
 static ToernRemoteInput remoteInput;
 static bool remoteTurnFault = false;
+static uint32_t remoteInputRecoveries = 0;
 static DMAMEM CRGB remoteDisplayFrame[NUM_LEDS];
 static bool remoteDisplayValid = false;
 static bool remoteDisplayRotated = false;
@@ -25,8 +26,15 @@ static void remoteButtonTransition(int index, bool before) {
 
 void remotePhysicalButton(int index, bool down) {
   const bool before = remoteInput.held(index);
+  const bool previousPhysical = remoteInput.physical[index];
   remoteInput.physical[index] = down;
-  remoteButtonTransition(index, before);
+  // Hardware callbacks are edges, not repeated level samples. A new push must
+  // recover a missed physical release just as the original callback did; only
+  // an actual remote hold should suppress retriggering the combined button.
+  if (down && previousPhysical && !remoteInput.remote[index]) {
+    pressed[index] = !fnHeld || currentMode == &touchyMode;
+    encoder_button_pushed(&Encoder[index], index);
+  } else remoteButtonTransition(index, before);
 }
 
 bool remoteTouchHeld(int index) {
@@ -45,6 +53,15 @@ void remoteReleaseInputs() {
 }
 
 void remoteService() {
+  // The existing button FSM can recover/reset after a lost I2C release or a
+  // stuck hold. Retire its stale physical shadow too; otherwise managed MCP
+  // gestures stay blocked and the next push is incorrectly deduplicated.
+  for (int i = 0; i < 4; ++i) {
+    if (remoteInput.physical[i] && !remoteInput.remote[i] && !isPressed[i] && buttonState[i] == IDLE) {
+      remoteInput.physical[i] = false;
+      ++remoteInputRecoveries;
+    }
+  }
   if (!Serial || remoteInput.expired(millis())) remoteReleaseInputs();
 }
 
@@ -146,6 +163,11 @@ FLASHMEM void remoteHandleCommand(char *args) {
   if (values[0] < 1 || values[0] > 2147483647L) { remoteReplyError(0, "ID"); return; }
   const unsigned long id = (unsigned long)values[0];
   const char *op = tokens[1];
+  if (count == 2 && !strcmp(op, "PERF")) {
+    remoteInput.renew(millis());
+    remoteReplyPerformance(id);
+    return;
+  }
   if (count == 2 && !strcmp(op, "MENUS")) {
     remoteInput.renew(millis());
     remoteReplyMenus(id);

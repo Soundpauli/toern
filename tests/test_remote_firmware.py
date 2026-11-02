@@ -45,14 +45,16 @@ struct {unsigned x=1,y=2,page=1,currentChannel=1;} GLOB;
 struct {float bpm=100;unsigned pack=1;} SMP;
 unsigned samplePackID=1;
 bool fnHeld=false,isNowPlaying=false,fastRecordActive=false,isRecording=false,pressed[4]={};
+bool isPressed[4]={};
+enum {IDLE,RELEASED};int buttonState[4]={};
 int pushes[4]={},releases[4]={},activities=0,fnDelta=0;
 struct EncoderStub {
  int value=0,lo=1,hi=16,step=1;
  int readMin(){return lo;} int readMax(){return hi;} int readStep(){return step;}
  void writeCounter(int x){value=x;}
 } Encoder[4];
-void encoder_button_pushed(EncoderStub*,int i){++pushes[i];}
-void encoder_button_released(EncoderStub*,int i){++releases[i];}
+void encoder_button_pushed(EncoderStub*,int i){++pushes[i];isPressed[i]=true;}
+void encoder_button_released(EncoderStub*,int i){++releases[i];isPressed[i]=false;buttonState[i]=IDLE;}
 void noteUserActivity(){++activities;}
 int menuSetting=2;int getCurrentMenuMainSetting(){return menuSetting;}
 struct EncoderTurnEvent {int encoder,delta;bool fn;};
@@ -60,6 +62,7 @@ bool dispatchFnTurn(const EncoderTurnEvent &event){fnDelta+=event.delta;return t
 void remotePrintUiState(){Serial.print("\"test_ui\":null");}
 void remoteReplyFilters(unsigned long,int){}
 void remoteReplyMenus(unsigned long){}
+void remoteReplyPerformance(unsigned long){}
 #include "toern_remote.ino"
 static char sdSerLineBuf[192];static size_t sdSerLineLen=0;static bool sdSerLineOverflow=false;
 bool sdSerialLineInProgress(){return sdSerLineLen || sdSerLineOverflow;}
@@ -103,6 +106,15 @@ int main(){
  clockMs+=3000;remoteService();assert(!remoteTouchHeld(4));
  clockMs=0xfffffff0u;good("19 BUTTON 2 1");clockMs=uint32_t(clockMs+3000);remoteService();assert(!remoteInput.held(1));
  good("20 BUTTON 3 1");Serial.connected=false;remoteService();assert(!remoteInput.held(2));Serial.connected=true;
+ // An existing FSM recovery must also release the physical shadow, so
+ // the next real push and managed remote gestures are not suppressed.
+ remotePhysicalButton(3,true);const int firstPush=pushes[3];
+ remotePhysicalButton(3,true);assert(pushes[3]==firstPush+1); // Lost hardware release.
+ const int beforeRecovery=pushes[3];
+ isPressed[3]=false;buttonState[3]=IDLE;remoteService();
+ assert(!remoteInput.held(3)&&remoteInputRecoveries==1);
+ remotePhysicalButton(3,true);assert(pushes[3]==beforeRecovery+1);
+ remotePhysicalButton(3,false);
  isRecording=true;bad("21 TURN 1 1");isRecording=false;
  // Capture includes temporary overlays and survives subsequent drawing.
  leds[0]={255,16,32};remoteCaptureDisplay();leds[0]={};

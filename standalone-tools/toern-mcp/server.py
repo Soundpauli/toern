@@ -39,6 +39,16 @@ def get_state() -> dict:
 
 
 @mcp.tool()
+def get_performance() -> dict:
+    """Read audio CPU, memory use and CH11 per-node costs without stopping playback.
+
+    CPU values ending in _bp use basis points: 100 bp = 1% CPU. Ladder/oscillator
+    entries are grouped per poly voice. Active envelopes include release tails.
+    """
+    return remote.request("PERF")
+
+
+@mcp.tool()
 def get_menu() -> dict:
     """Read active menu group, item and its sibling list as JSON. Does not navigate."""
     return remote.request("MENUS")
