@@ -14,6 +14,18 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
+# DuPPa stores ISTEP as a big-endian 32-bit integer. The pinned library's
+# readStep reads only its high 16 bits, reporting zero for the configured step 1.
+for encoder_dir in libdeps_dir.glob("DuPPa Library*"):
+    encoder_source = encoder_dir / "src" / "i2cEncoderLibV2.cpp"
+    text = encoder_source.read_text()
+    old = "return (readEncoderInt(REG_ISTEPB4));"
+    new = "return (readEncoderLong(REG_ISTEPB4));"
+    if new not in text:
+        text = replace_once(text, old, new, "DuPPa 32-bit step readback")
+        encoder_source.write_text(text)
+
+
 for library_dir in libdeps_dir.glob("TeensyAudioSampler*"):
     for controller in (library_dir / "src").glob("**/sampleplaymidicontroller.h"):
         text = controller.read_text()

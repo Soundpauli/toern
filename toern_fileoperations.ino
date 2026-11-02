@@ -481,7 +481,14 @@ FLASHMEM void saveSamplePack(int pack) {
     for (uint8_t ch = 1; packSaved && ch < maxFiles; ch++) {
         SMP.sp0Active[ch] = false;
     }
-    if (packSaved) saveSp0StateToEEPROM();
+    if (packSaved) {
+        // The current samples now belong to this kit, including Save As.
+        samplePackID = (unsigned int)pack;
+        SMP.pack = (unsigned int)pack;
+        EEPROM.put(0, samplePackID);
+        markSettingsBackupDirty();
+        saveSp0StateToEEPROM();
+    }
     
     // Reset paint/unpaint prevention flag after saveSamplePack operation
     extern bool preventPaintUnpaint;

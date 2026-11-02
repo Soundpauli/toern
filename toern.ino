@@ -2,6 +2,8 @@
 #include "toern_hardware.h"
 #include "src/toern_demo.h"
 #include "src/toern_grid_paint.h"
+#include "src/toern_remote_input.h"
+#include <errno.h>
 #include "toern_touch_input.h"
 #include "src/toern_pattern_slots.h"
 
@@ -2007,13 +2009,11 @@ FLASHMEM void setVelocity() {
 }
 
 void staticButtonPushed(i2cEncoderLibV2 *obj) {
-  pressed[currentEncoderIndex] = !fnHeld || currentMode == &touchyMode;
-  encoder_button_pushed(obj, currentEncoderIndex);
+  remotePhysicalButton(currentEncoderIndex, true);
 }
 
 void staticButtonReleased(i2cEncoderLibV2 *obj) {
-  encoder_button_released(obj, currentEncoderIndex);
-  pressed[currentEncoderIndex] = false;
+  remotePhysicalButton(currentEncoderIndex, false);
 }
 
 void staticThresholds(i2cEncoderLibV2 *obj) {
@@ -5092,6 +5092,7 @@ FLASHMEM void checkEncoders() {
     Encoder[i].updateStatus();
     int rawValue = Encoder[i].readCounterInt();
     const bool fnTurn = handleFnEncoder(i, rawValue, allowEncWrite);
+    remoteApplyEncoderTurn(i, rawValue, allowEncWrite, fnTurn);
     // Soft-clamp draw/single page+X: Duppa can report past writeMax under fast I2C turns.
     if (!fnTurn && (currentMode == &draw || currentMode == &singleMode)) {
       if (i == 0) {
@@ -7148,6 +7149,8 @@ void checkSerialColors() {
   if (!inEtcSubmenu || getCurrentMenuMainSetting() != 41) return;
   // No host program has opened the port. Do not read or wait.
   if (!Serial) return;
+  // Leave REMOTE lines to the shared line dispatcher, including on COLR.
+  if (Serial.peek() == 'R' || sdSerialLineInProgress()) return;
 
   if (Serial.available() >= 4) {
     if (Serial.peek() == 'C') {
@@ -7283,7 +7286,7 @@ void checkSerialColors() {
 }
 
 void loop() {
-  if (serviceDemoAnimation()) { checkMidi(); yield(); return; }
+  remoteService();
   checkSerialColors();
 
   // USB serial commands from any screen. `Serial` is true only after a program
@@ -7293,6 +7296,10 @@ void loop() {
     extern void sdSerialServerPollNeedSdHint();
     if (Serial) sdSerialServerPollNeedSdHint();
   }
+
+  // DEMO owns drawing/input polling, but the remote transport must stay live
+  // so its normal Touch 1 exit is also reachable from MCP.
+  if (serviceDemoAnimation()) { checkMidi(); yield(); return; }
 
   updateExternalOneBlink();
   checkMidi();  // Process MIDI early in loop for lower latency
@@ -10879,6 +10886,7 @@ FLASHMEM void showSamplePack() {
   static int lastPack = -2;
   static bool lastFn = false;
   static bool lastPackExists = false;
+  static uint8_t lastLoadedMark = 255;
   static uint32_t lastPackRGB[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
   static uint32_t lastCallMs = 0;
   uint32_t nowMs = millis();
@@ -10890,6 +10898,15 @@ FLASHMEM void showSamplePack() {
 
   char OUTPUTf[50];
   sprintf(OUTPUTf, "%u/%u.wav", SMP.pack, 1);
+  // SMP.pack follows browsing; samplePackID follows the last loaded/saved kit.
+  // SP0 overrides describe custom voice samples, not preview or sound settings.
+  bool samplesModified = false;
+  for (unsigned voice = 1; voice <= 8; ++voice) {
+    // Kit 0 is the scratchpad itself; its SP0 voices are not overrides.
+    if (samplePackID != 0 && SMP.sp0Active[voice]) samplesModified = true;
+  }
+  const uint8_t loadedMark = SMP.pack == samplePackID
+      ? (samplesModified ? 2 : 1) : 0;
   bool packChanged = ((int)SMP.pack != lastPack);
   bool wavExists;
   if (packChanged) {
@@ -10901,11 +10918,12 @@ FLASHMEM void showSamplePack() {
     lastPackExists = wavExists;
     lastPack = (int)SMP.pack;
   } else {
-    if (lastFn == fnHeld) return;
+    if (lastFn == fnHeld && loadedMark == lastLoadedMark) return;
     wavExists = lastPackExists;
   }
 
   lastFn = fnHeld;
+  lastLoadedMark = loadedMark;
   FastLEDclear();
 
   // Samplepack icon: green if loading is possible (pack exists), dim red otherwise.
@@ -10941,6 +10959,10 @@ FLASHMEM void showSamplePack() {
     drawNumber(SMP.pack, UI_BLUE, 11);
   }
   setPackRGB(2, 0x000000);
+  if (loadedMark) {
+    // Number is right-aligned; the 3px mark fits to its left even for kit 999.
+    drawText(">", 1, 11, loadedMark == 2 ? UI_RED : UI_WHITE);
+  }
 
   // Don't change FastLED global brightness - matrix is dimmed in software (light_single)
   FastLEDshow();

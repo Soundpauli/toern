@@ -1665,9 +1665,11 @@ FLASHMEM void FastLEDshow() {
       if (showFn) drawText(fnDirection < 0 ? "<<" : ">>", 7, 8, UI_WHITE);
       drawFillRequestOverlay();
       if (subpatternOverlayVisible()) drawSubpatternOverlay();
+      remoteCaptureDisplay();
       FastLED.show();
       memcpy(leds, saved, sizeof(saved));
     } else {
+      remoteCaptureDisplay();
       FastLED.show();  // Shows both matrix (PIN 17) and strip (PIN 24)
     }
   }

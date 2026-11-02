@@ -42,6 +42,9 @@ static uint32_t sdSerLastClientMs = 0;
 static const uint32_t SD_SER_CLIENT_TIMEOUT_MS = 15000;
 static char sdSerLineBuf[192];
 static size_t sdSerLineLen = 0;
+static bool sdSerLineOverflow = false;
+
+bool sdSerialLineInProgress() { return sdSerLineLen != 0 || sdSerLineOverflow; }
 static bool sdSerPutTrace = false;
 
 static void sdSerDrainRx() {
@@ -51,6 +54,7 @@ static void sdSerDrainRx() {
     yield();
   } while ((millis() - start) < 30u);
   sdSerLineLen = 0;
+  sdSerLineOverflow = false;
 }
 
 static void sdSerAudioStopForSd() {
@@ -801,6 +805,8 @@ static void sdSerHandleLine(char *line) {
   line = sdSerSkipSpaces(line);
   if (*line == '\0') return;
 
+  // Remote control must not invoke SD-menu connection logic (which pauses audio).
+  if (!strncmp(line, "REMOTE ", 7)) { remoteHandleCommand(line + 7); return; }
   sdSerTouchClient();
 
   char cmd[16];
@@ -878,6 +884,10 @@ void sdSerialServerPoll() {
     int b = Serial.read();
     if (b < 0) break;
     char c = (char)b;
+    if (sdSerLineOverflow) {
+      if (c == '\n') { sdSerLineOverflow = false; sdSerLineLen = 0; }
+      continue;
+    }
     if (c == '\n') {
       sdSerLineBuf[sdSerLineLen] = '\0';
       if (sdSerLineLen > 0 && sdSerLineBuf[sdSerLineLen - 1] == '\r') {
@@ -885,12 +895,13 @@ void sdSerialServerPoll() {
       }
       sdSerHandleLine(sdSerLineBuf);
       sdSerLineLen = 0;
-      if (!sdSerActive) return;
+      return;  // At most one command per loop, including expensive snapshots.
     } else if (c != '\r') {
       if (sdSerLineLen + 1 < sizeof(sdSerLineBuf)) {
         sdSerLineBuf[sdSerLineLen++] = c;
       } else {
-        sdSerLineLen = 0;  // overflow — reset
+        sdSerLineOverflow = true;
+        sdSerLineLen = 0;  // discard through newline
         sdSerReply("ERR LINE");
       }
     }
@@ -901,6 +912,7 @@ void sdSerialServerPoll() {
 static void sdSerHandleOffPage(char *line) {
   line = sdSerSkipSpaces(line);
   if (line[0] == '\0') return;
+  if (!strncmp(line, "REMOTE ", 7)) { remoteHandleCommand(line + 7); return; }
 
   char cmd[16];
   size_t i = 0;
@@ -972,11 +984,15 @@ void sdSerialServerPollNeedSdHint() {
   while (Serial.available()) {
     int peek = Serial.peek();
     if (peek < 0) break;
-    if (onColr && (peek == 'C' || peek == 'B' || peek == 'S')) return;
+    if (onColr && !sdSerialLineInProgress() && (peek == 'C' || peek == 'B' || peek == 'S')) return;
 
     int b = Serial.read();
     if (b < 0) break;
     char c = (char)b;
+    if (sdSerLineOverflow) {
+      if (c == '\n') { sdSerLineOverflow = false; sdSerLineLen = 0; }
+      continue;
+    }
     if (c == '\n') {
       sdSerLineBuf[sdSerLineLen] = '\0';
       if (sdSerLineLen > 0 && sdSerLineBuf[sdSerLineLen - 1] == '\r') {
@@ -984,11 +1000,14 @@ void sdSerialServerPollNeedSdHint() {
       }
       sdSerHandleOffPage(sdSerLineBuf);
       sdSerLineLen = 0;
+      return;  // Bound remote work per main-loop iteration.
     } else if (c != '\r') {
       if (sdSerLineLen + 1 < sizeof(sdSerLineBuf)) {
         sdSerLineBuf[sdSerLineLen++] = c;
       } else {
+        sdSerLineOverflow = true;
         sdSerLineLen = 0;
+        sdSerReply("ERR LINE");
       }
     }
   }

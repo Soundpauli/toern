@@ -14,5 +14,5 @@ bool readDebouncedTouch(int index) {
   } else {
     raw = fastTouchRead(pins[index]) > touchThreshold;
   }
-  return pads[index].update(raw, (uint32_t)millis());
+  return pads[index].update(raw || remoteTouchHeld(index), (uint32_t)millis());
 }
