@@ -1,0 +1,44 @@
+{
+  "base_closed_cut_regions": 27,
+  "cover_closed_cut_regions": 5,
+  "small_jack_columns_mm": [
+    54,
+    67,
+    80
+  ],
+  "small_jack_pitch_mm": 13,
+  "small_jack_rows_mm": [
+    28,
+    13
+  ],
+  "audio_columns_mm": [
+    101,
+    119,
+    137
+  ],
+  "audio_row_y_mm": 18,
+  "audio_label_y_mm": 28.5,
+  "slot_center_mm": [
+    154.5,
+    18
+  ],
+  "slot_width_height_mm": [
+    11,
+    12
+  ],
+  "slot_vertical": true,
+  "logo_height_mm": 26,
+  "logo_rotation_degrees": 90,
+  "all_text_horizontal": true,
+  "PCB_mount_holes_count": 5,
+  "PCB_flat_underside_toward_panel": true,
+  "clearance_guides_checked": true,
+  "rack_head_flange_clearance_checked": true,
+  "font": "Space Grotesk Bold",
+  "text_sizes_mm": [
+    2.4,
+    3
+  ],
+  "depths_verified": false,
+  "native_text_glyph_centers_verified": true
+}

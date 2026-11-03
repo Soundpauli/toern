@@ -1,0 +1,156 @@
+Determining PCB data.
+Build STEP data.
+Adding component R19.
+Adding component MK1.
+Adding component R28.
+Adding component J2.
+Adding component J27.
+Adding component C8.
+Adding component C35.
+Adding component C25.
+Adding component R12.
+Adding component J15.
+Adding component J11-5V.
+Adding component C16.
+Adding component R7.
+Adding component J11-3.3V.
+Adding component C18.
+Could not add 3D model for J4.
+File not found: ${KICAD8_3DMODEL_DIR}/Connector_USB.3dshapes/USB_C_Receptacle_HRO_TYPE-C-31-M-12.wrl
+Adding component IC1.
+Adding component R4.
+Adding component J12 - BUTTON_A-C.
+Adding component R13.
+Adding component J30.
+Adding component J3.
+Adding component C21.
+Adding component C1.
+Adding component U5.
+Adding component J28.
+Adding component C12.
+Adding component U1.
+Adding component C19.
+Adding component C22.
+Adding component C26.
+Adding component D5.
+Adding component R2.
+Adding component C5.
+Could not add 3D model for U4.
+File not found: ${KIPRJMOD}/TLP2361_V4_E/STEP/5pin SO6.step
+Adding component R1.
+Adding component J9.
+Adding component C13.
+Adding component C36.
+Adding component J21.
+Could not add 3D model for J7.
+File not found: ${KICAD8_3DMODEL_DIR}/Connector_Audio.3dshapes/Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal.wrl
+Adding component C14.
+Adding component R24.
+Adding component D2.
+Adding component R18.
+Adding component R10.
+Adding component R31.
+Adding component R22.
+Adding component J18.
+Adding component U7.
+Adding component R8.
+Adding component CN1.
+Adding component R9.
+Adding component J20.
+Adding component C6.
+Adding component C20.
+Adding component CN2.
+Adding component C31.
+Could not add 3D model for J5.
+File not found: ${KICAD8_3DMODEL_DIR}/Connector_Audio.3dshapes/Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal.wrl
+Adding component C4.
+Adding component C30.
+Adding component U14.
+Adding component J10.
+Adding component J29.
+Adding component C17.
+Adding component J26.
+Adding component R16.
+Adding component R27.
+Adding component D4.
+Adding component J25.
+Adding component R26.
+Adding component C15.
+Adding component U13.
+Adding component R30.
+Adding component J16.
+Adding component R5.
+Adding component U2.
+Adding component C37.
+Adding component R3.
+Adding component R29.
+Adding component U16.
+Adding component J31.
+Adding component D1.
+Adding component R17.
+Adding component J13 - TOUCHYTOUCH.
+Adding component J19.
+Adding component C28.
+Adding component S1.
+Adding component R23.
+Adding component C27.
+Adding component C24.
+Adding component C3.
+Adding component J17.
+Could not add 3D model for U3.
+File not found: ${KICAD8_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm.wrl
+Could not add 3D model for J8.
+File not found: ${KICAD8_3DMODEL_DIR}/Connector_Card.3dshapes/microSD_HC_Hirose_DM3BT-DSF-PEJS.wrl
+Adding component C11.
+Adding component J22.
+Adding component U15.
+Adding component R21.
+Adding component C10.
+Could not add 3D model for J6.
+File not found: ${KICAD8_3DMODEL_DIR}/Connector_Audio.3dshapes/Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal.wrl
+Adding component C29.
+Adding component C33.
+Adding component J24.
+Adding component C39.
+Adding component R25.
+Adding component C2.
+Adding component R32.
+Adding component C34.
+Adding component J14 + BUTTON_C.
+Adding component C32.
+Adding component C23.
+Adding component R15.
+Adding component C7.
+Adding component R20.
+Adding component C38.
+Could not add 3D model for U6.
+File not found: ${KICAD_USER_DIR}/teensy.pretty/Teensy_4.1_Assembly.STEP
+Could not add 3D model for U6.
+File not found: D:/PCBs/myKicadLib/teensy.pretty-master/teensy.pretty-master/Teensy_4.1_Assembly.STEP
+Adding component R6.
+Adding component C9.
+Adding component R14.
+Could not add 3D model for J1.
+File not found: ${KICAD8_3DMODEL_DIR}/Connector_Audio.3dshapes/Jack_6.35mm_Neutrik_NMJ6HCD2_Horizontal.wrl
+Adding component J23.
+Create PCB solid model.
+Board outline: found 4 initial points.
+Build board outlines (1 outlines) with 4 points.
+Build board cutouts and holes (639 hole(s)).
+Subtracting holes for shapes
+Subtracting holes for pads
+Subtracting holes for vias
+Generate board full shape.
+Writing STEP file.
+
+*******************************************************************
+******        Statistics on Transfer (Write)                 ******
+
+*******************************************************************
+******        Transfer Mode = 0  I.E.  As Is       ******
+******        Transferring Shape, ShapeType = 0                      ******
+** WorkSession : Sending all data
+ Step File Name : $tempfile$.step(77242 ents)  Write  Done
+STEP file '/Users/jank/git/toern/housing/exports/ModularPanel/PCB_current.step' created.
+
+Export time 1.786 s

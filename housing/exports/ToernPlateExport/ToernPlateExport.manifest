@@ -1,0 +1,1 @@
+{"autodeskProduct":"Fusion360","type":"script","author":"","description":{"":"Export current COMMON and 32_16 geometry with fixed flags"},"version":"1.0.0","runOnStartup":false,"supportedOS":"mac|windows"}
