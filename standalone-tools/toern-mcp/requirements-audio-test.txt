@@ -1,5 +1,0 @@
--r requirements.txt
-numpy>=1.26,<3
-scipy>=1.12,<2
-sounddevice>=0.5,<1
-soundfile>=0.12,<1

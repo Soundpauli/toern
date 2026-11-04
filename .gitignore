@@ -1,34 +1,33 @@
-# Large WAV libraries (~600MB). Small demo slots in SD-CARD-CONTENT/0, 1, and 2 stay tracked.
-samples/
-standalone-tools/web-standalone/SD-CARD-CONTENT/samples/
-standalone-tools/audio-converter-standalone/SD-CARD-CONTENT/samples/
-standalone-tools/web-standalone/dist/sd/samples/
-.cursor/
+# Local/deployed site and business data
+/website/
+/_private/*
+!/_private/helpers/
+/_private/helpers/*
+!/_private/helpers/annotate/
+/_debug/audiofixes/
+/netlify.toml
+.netlify/
+.env
+.env.*
+!.env.example
+# Dependencies, generated builds and caches
+node_modules/
 .pio/
 .cache/
-compile_commands.json
-# Website is local/deploy-only; docs are copied in manually. Handbook is not copied here.
-website/
-
-BOM_KOSTEN.xlsx
 .history/
-_shooting/
-_internal-docs/
-_old-code/
-_audiofixes/
-/netlify.toml
-# Local Netlify folder
-.netlify
-
-# Large local archives (GitHub 100MB limit)
-tools/audio-converter-standalone/SD-CARD-CONTENT.zip
-
-# Local-only; do not track
-tools/cost-planner/
-
-# PlatformIO regenerates this Arduino translation unit from the sketch tabs.
-/toern.ino.cpp
-
-# Python bytecode
+.cursor/
+.DS_Store
 __pycache__/
 *.py[cod]
+compile_commands.json
+/platformio/toern.ino.cpp
+# Local large audio libraries; small SD demos stay tracked
+samples/
+/tools/sim/dist/
+/tools/firmware/dist/
+/tools/audioconvert/SD-CARD-CONTENT.zip
+BOM_KOSTEN.xlsx
+_shooting/
+_old-code/
+
+/_debug/*-results.json

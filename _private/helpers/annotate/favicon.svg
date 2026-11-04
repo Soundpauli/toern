@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TŒRN favicon">
+  <style>
+    :root { --bg-dark: #111111; }
+  </style>
+  <rect x="8" y="2" width="48" height="60" rx="3" fill="var(--bg-dark)"/>
+  <text x="32" y="26" text-anchor="middle" dominant-baseline="middle" font-family="'Bebas Neue', 'Arial Narrow', Arial, sans-serif" font-size="48" fill="#ffffff">Œ</text>
+  <circle cx="17" cy="54" r="4" fill="#ff3b30"/>
+  <circle cx="27" cy="54" r="4" fill="#ffcc00"/>
+  <circle cx="37" cy="54" r="4" fill="#2eb9ff"/>
+  <circle cx="47" cy="54" r="4" fill="#34c759"/>
+  <circle cx="17" cy="54" r="3.08" fill="#111111"/>
+  <circle cx="27" cy="54" r="3.08" fill="#111111"/>
+  <circle cx="37" cy="54" r="3.08" fill="#111111"/>
+  <circle cx="47" cy="54" r="3.08" fill="#111111"/>
+</svg>

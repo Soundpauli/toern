@@ -1,0 +1,15 @@
+{
+  "name": "teensyloader",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "predev": "node sync-beta-version.mjs",
+    "dev": "vite",
+    "prebuild": "node sync-beta-version.mjs",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

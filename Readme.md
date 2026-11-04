@@ -23,7 +23,7 @@ You get:
 
 No laptop required once it’s built. Samples live on the SD card. Patterns autosave. You twist, tap, and suddenly it’s 2 a.m.
 
-For the friendly guided tour (first beat in about a minute), open the **[handbook](./handbook/index.html)** in this repo.
+For the friendly guided tour (first beat in about a minute), open the **[handbook](docs/handbook/index.html)** in this repo.
 
 ---
 
@@ -33,16 +33,16 @@ TŒRN builds on the legacy of the **NI404**, with more features, fewer cables da
 
 Meet the glow-up:
 
-- **RGB-I2C rotary encoders** — smoother, prettier, and they light up like they mean it  
-- **Custom PCB** — codec, charging, and jacks on one board  
-- **USB-C** — because micro-USB was a character-building experience we no longer need  
-- **LiPo charging port** — optional battery for true “make beats on a train” energy (battery not included; we trust you with electricity)  
-- **Proper audio I/O** — 6.35 mm headphone out, line in/out, mic in, *plus* a built-in mic for “sample the room right now” moments  
-- **TRS MIDI in/out** — play nice with the rest of your setup  
-- **On/off switch** — underrated luxury  
-- **Touch buttons** — for the things knobs shouldn’t monopolize  
-- **Laser-cut acrylic case** — files included; looks finished, not “breadboard cosplay”  
-- **JST connectors** — expansion leads plug in  
+- **RGB-I2C rotary encoders** — smoother, prettier, and they light up like they mean it
+- **Custom PCB** — codec, charging, and jacks on one board
+- **USB-C** — because micro-USB was a character-building experience we no longer need
+- **LiPo charging port** — optional battery for true “make beats on a train” energy (battery not included; we trust you with electricity)
+- **Proper audio I/O** — 6.35 mm headphone out, line in/out, mic in, *plus* a built-in mic for “sample the room right now” moments
+- **TRS MIDI in/out** — play nice with the rest of your setup
+- **On/off switch** — underrated luxury
+- **Touch buttons** — for the things knobs shouldn’t monopolize
+- **Laser-cut acrylic case** — files included; looks finished, not “breadboard cosplay”
+- **JST connectors** — expansion leads plug in
 
 Open source as always: schematics, code, and design files are here for you to poke, fork, and improve.
 
@@ -52,56 +52,56 @@ Open source as always: schematics, code, and design files are here for you to po
 
 ### Sequencer
 
-- **16 channels** in spirit: 8 sample voices (1–8), one 3-voice poly synth (11), two mono synths (13–14)  
+- **16 channels** in spirit: 8 sample voices (1–8), one 3-voice poly synth (11), two mono synths (13–14)
 - **16 steps per page × 16 pages** → 256 steps per pattern
-- **Voice mode**: each voice keeps its own pattern length. It loops the pages that hold its notes, pitches included, while the other voices keep looping on their own  
-- **FIRE** (ETC menu): optional playhead sparks when a chosen voice’s notes light white  
-- Store up to **999 patterns**, **999 samples**, **100 samplepacks**  
-- **Autosave / autoload** so your 3 a.m. genius doesn’t vanish at boot  
-- **Switch patterns live** without stopping playback  
+- **Voice mode**: each voice keeps its own pattern length. It loops the pages that hold its notes, pitches included, while the other voices keep looping on their own
+- **FIRE** (ETC menu): optional playhead sparks when a chosen voice’s notes light white
+- Store up to **999 patterns**, **999 samples**, **100 samplepacks**
+- **Autosave / autoload** so your 3 a.m. genius doesn’t vanish at boot
+- **Switch patterns live** without stopping playback
 - **Song mode**: chain up to **64** page assignments from the current pattern
-- Pattern ops: copy/paste, transpose page/channel (±1 octave), smart random notes (major/minor + rhythm ideas), clear page/channel  
+- Pattern ops: copy/paste, transpose page/channel (±1 octave), smart random notes (major/minor + rhythm ideas), clear page/channel
 
 ### Sample voices (channels 1–8)
 
-- Up to **~12 seconds** per voice at 44.1 kHz  
-- Browse and load samples **while playing** (yes, really)  
-- Per-voice start/end trim, forward/reverse  
-- Samplepacks (including pack 0 = custom per-voice assignment)  
-- Record from **built-in mic / line-in / mic-in** straight in the sample browser  
-- Save or merge used samples back to the SD card as a pack  
+- Up to **~12 seconds** per voice at 44.1 kHz
+- Browse and load samples **while playing** (yes, really)
+- Per-voice start/end trim, forward/reverse
+- Samplepacks (including pack 0 = custom per-voice assignment)
+- Record from **built-in mic / line-in / mic-in** straight in the sample browser
+- Save or merge used samples back to the SD card as a pack
 
 ### Synth voices
 
 **Channel 11 — poly synth**
 
-- 3 oscillators per voice × 3 voices  
-- Presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS  
-- Per-voice ADSR, filter envelope, pan, volume, pitch (cents & semitones), waveform  
+- 3 oscillators per voice × 3 voices
+- Presets: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS
+- Per-voice ADSR, filter envelope, pan, volume, pitch (cents & semitones), waveform
 
 **Channels 13–14 — mono synths**
 
-- 2 oscillators each  
-- ADSR, LFO on cutoff/resonance, MIDI arpeggiator (step/span; does not pitch-shift grid notes)  
-- Waveforms: sine, saw, square, triangle  
+- 2 oscillators each
+- ADSR, LFO on cutoff/resonance, MIDI arpeggiator (step/span; does not pitch-shift grid notes)
+- Waveforms: sine, saw, square, triangle
 
 ### Effects (all channels)
 
-- **ADSR** — attack / decay / sustain / release (0–32 range)  
-- **Bitcrusher** — bit depth 1–16 (0 = bypass), sample-rate reduction down to glorious crunch  
-- **Filter** — LP / HP / BP, 0–10 kHz, resonance 0.7–5.0, smooth transitions  
+- **ADSR** — attack / decay / sustain / release (0–32 range)
+- **Bitcrusher** — bit depth 1–16 (0 = bypass), sample-rate reduction down to glorious crunch
+- **Filter** — LP / HP / BP, 0–10 kHz, resonance 0.7–5.0, smooth transitions
 - **Reverb** — room size, damping, wet/dry; denser six-comb/four-diffuser network on reverb-equipped voices
-- Fast filter access on encoder #3 during runtime (assignable default per channel)  
+- Fast filter access on encoder #3 during runtime (assignable default per channel)
 
 ### MIDI, clock & extras
 
-- TRS MIDI in/out, clock send/receive, notes, transport  
-- BPM **40–300**, internal clock, external MIDI clock, tap tempo via touch  
-- Live recording / looping (touch-hold), up to ~12 s per voice  
-- Note probability, velocity, condition triggers (those “only every other bar” tricks)  
-- Global transpose, per-channel detune & octave, fine cents on the poly synth  
-- Mute / solo, pattern modes (OFF, ON, SONG, NEXT)  
-- Stereo routing options, optional external WS2812 strip for ripple eye-candy synced to the music  
+- TRS MIDI in/out, clock send/receive, notes, transport
+- BPM **40–300**, internal clock, external MIDI clock, tap tempo via touch
+- Live recording / looping (touch-hold), up to ~12 s per voice
+- Note probability, velocity, condition triggers (those “only every other bar” tricks)
+- Global transpose, per-channel detune & octave, fine cents on the poly synth
+- Mute / solo, pattern modes (OFF, ON, SONG, NEXT)
+- Stereo routing options, optional external WS2812 strip for ripple eye-candy synced to the music
 
 ---
 
@@ -128,9 +128,9 @@ TŒRN does **not** mount the Micro SD as USB mass storage. That would be too eas
 
 ### Primary — browser tool
 
-1. On a computer: open **[https://sdtool.tyng.app](https://sdtool.tyng.app)** in desktop **Chrome or Edge**  
-2. Click **Connect**, pick the Teensy serial port  
-3. Leave the unit on the screen you are using  
+1. On a computer: open **[https://sdtool.tyng.app](https://sdtool.tyng.app)** in desktop **Chrome or Edge**
+2. Click **Connect**, pick the Teensy serial port
+3. Leave the unit on the screen you are using
 
 WAV uploads are converted in the browser to **44.1 kHz mono 16-bit**. Drag folders, multi-file drops, and zip archives are supported.
 
@@ -154,7 +154,7 @@ Use the song start-page slider to select later sections of still longer files.
 Any USB Type that includes Serial (e.g. **Serial + MIDI**):
 
 ```bash
-cd standalone-tools/sd-tool-standalone
+cd tools/sdtool
 pip install pyserial
 python3 toern_sd.py -p /dev/cu.usbmodemXXXX list /
 # also: put / rm / mkdir / get
@@ -167,35 +167,43 @@ Insert or eject the SD card only with the unit **off** — the firmware re-index
 
 ## MCP remote control
 
-The local [MCP bridge](./standalone-tools/toern-mcp/README.md) controls a USB-connected TŒRN through serial: encoders, buttons, touch pads, painting, menus and filter pages/resets. It provides JSON state, menu/filter readback and matrix pixels, plus optional PNG screenshots and performance telemetry.
+The local [MCP bridge](tools/toern-mcp/README.md) controls a USB-connected TŒRN through serial: encoders, buttons, touch pads, painting, menus and filter pages/resets. It provides JSON state, menu/filter readback and matrix pixels, plus optional PNG screenshots and performance telemetry.
 
 MCP is **inactive after boot**. Connecting the bridge starts a session with `HELLO`; disconnecting sends `BYE`. USB disconnect or three seconds without keepalives also ends the session and releases remote controls. While inactive, the firmware skips remote input reconciliation and display frame copies. Opening serial for the SD tool does not activate MCP.
 
 The default build includes this automatic gating. To exclude MCP entirely:
 
 ```bash
-pio run -e teensy41-no-mcp
+pio run -d platformio -e teensy41-no-mcp
 ```
 
 This sets `TOERN_REMOTE_CONTROL=0`, removing remote input state, display capture and diagnostics while retaining SD serial, USB MIDI/audio and the audio optimizations. On the current build it frees 1,088 bytes in RAM1, 1,536 bytes in RAM2 and 5,120 bytes in flash. Automatic inactivity saves processing work; the disabled build also saves memory.
 
-See [developer documentation](./devdocs/docs/tools/mcp-remote.md) for session behavior and implementation details.
+See [developer documentation](docs/devdocs/docs/tools/mcp-remote.md) for session behavior and implementation details.
 
 ## Repo map (where stuff lives)
 
-| Path | What’s there |
-|------|----------------|
-| `toern.ino` + `toern_*.ino` | Firmware (the fun / terrifying part) |
-| `src/` | Modified audio bits (resampler, freeverb DMA) |
-| [`BUILD.md`](./BUILD.md) | Order the rev H board, what to solder, first power-up |
-| [`info.md`](./info.md) | Compile and flash (PlatformIO) |
-| `PCB/toern_revH/` | Current KiCad board, gerbers, JLCPCB BOM |
-| `handbook/` | Human-friendly operator’s guide (how to *use* the device) → [handbook.toern.live](https://handbook.toern.live/) |
-| `devdocs/` | [Docusaurus](./devdocs/) code and hardware (rev H) docs → [docs.toern.live](https://docs.toern.live/) |
-| `tools/` / `standalone-tools/` | Helpers; SD tool, sample converter, browser sim → tyng.app |
-| `standalone-tools/web-standalone/` | Browser simulator → [sim.tyng.app](https://sim.tyng.app/) |
-| `standalone-tools/teensyloader-standalone/` | Firmware flasher → [firmware.tyng.app](https://firmware.tyng.app/) (GPL-3.0) |
-| `website/` | Project site (local/deploy-only; docs copied in manually). Handbook is **not** deployed with it. |
+| Path | Contents |
+|------|----------|
+| `platformio/` | Arduino sketch tabs, headers, custom audio in `src/`, build scripts and `platformio.ini` |
+| `hardware/PCB/` | KiCad boards, schematics and manufacturing files |
+| `hardware/housing/` | Fusion archives, laser DXFs and panel previews |
+| `docs/devdocs/` | Developer documentation → [docs.toern.live](https://docs.toern.live/) |
+| `docs/handbook/` | Operator handbook → [handbook.toern.live](https://handbook.toern.live/) |
+| `docs/BUILD.md`, `docs/info.md` | Hardware assembly and firmware build instructions |
+| `tools/firmware/` | Browser firmware flasher (GPL-3.0) |
+| `tools/sdtool/` | Browser SD tool and Python CLI |
+| `tools/sim/` | Browser simulator |
+| `tools/audioconvert/` | Standalone sample converter |
+| `tools/case/` | Standalone case generator; `case.toern.live` planned, not deployed |
+| `tools/colorsheme/`, `tools/toern-mcp/`, `tools/_shared/` | Color editor, remote bridge and shared tool assets |
+| `_debug/` | Host tests, analysis scripts and local diagnostic captures |
+| `_private/` | Local business data/helpers; annotation tool in `_private/helpers/annotate/` |
+| `website/` | Public project website only; local/deploy-only |
+
+See [the complete directory map](docs/REPOSITORY_LAYOUT.md) for local-only items marked `***`.
+
+Build from the repository root with `pio run -d platformio`, or `cd platformio` first.
 
 ---
 
@@ -205,22 +213,22 @@ This project leans on several libraries. Some are stock; some got lovingly (and 
 
 ### Modified
 
-- **ResamplingReader.h** (`teensy-variable-playback`)  
-  Variable rates, interpolation, multi-channel, loop types (repeat / ping-pong), crossfading — in `src/resamplerReader.h`
+- **ResamplingReader.h** (`teensy-variable-playback`)
+  Variable rates, interpolation, multi-channel, loop types (repeat / ping-pong), crossfading — in `platformio/src/resamplerReader.h`
 
 - **Treeverb** (`effect_treeverb`)
-  Full-rate reverb with balanced 6/4 diffusion in RAM1 — `src/effect_treeverb.*`; the older `effect_freeverb_dmabuf` remains a host-test reference.
+  Full-rate reverb with balanced 6/4 diffusion in RAM1 — `platformio/src/effect_treeverb.*`; the older `effect_freeverb_dmabuf` remains a host-test reference.
 
-- **FastLED**  
+- **FastLED**
   `FASTLED_ALLOW_INTERRUPTS 0` so LEDs and audio don’t argue mid-beat; custom `FastLEDshow()` / `FastLEDclear()` wrappers
 
-- **MIDI**  
+- **MIDI**
   Bigger Serial8 buffers for dense clock traffic (`RX 2048`, `TX 128`) and custom TRS MIDI settings
 
 ### Standard / upstream
 
-- **TeensyPolyphony** by Nic Newdigate — polyphonic heart of the thing  
-- **Audio Library** (PJRC)  
+- **TeensyPolyphony** by Nic Newdigate — polyphonic heart of the thing
+- **Audio Library** (PJRC)
 - **WS2812Serial**, **i2cEncoderLibV2**, **FastTouch**
 
 ---
@@ -229,16 +237,16 @@ This project leans on several libraries. Some are stock; some got lovingly (and 
 
 Order a TŒRN at **[toern.live](https://toern.live/)**. Questions go to **info@toern.live**.
 
-When it arrives, open the **[handbook](./handbook/index.html)** and start at First beat. Power is USB-C. A battery and a microSD card are not in the parcel; the buy page and the handbook hardware chapter name what to get.
+When it arrives, open the **[handbook](docs/handbook/index.html)** and start at First beat. Power is USB-C. A battery and a microSD card are not in the parcel; the buy page and the handbook hardware chapter name what to get.
 
-Firmware changes: [`info.md`](./info.md) to flash, [`devdocs/`](./devdocs/) for how the code is shaped, [`firmware-edits`](./devdocs/docs/contributing/firmware-edits.md) for a new menu page. Fabricating a board from the design files is [`BUILD.md`](./BUILD.md) — that is not how a TŒRN is ordered.
+Firmware changes: [`info.md`](docs/info.md) to flash, [`docs/devdocs/`](docs/devdocs) for how the code is shaped, [`firmware-edits`](docs/devdocs/docs/contributing/firmware-edits.md) for a new menu page. Fabricating a board from the design files is [`BUILD.md`](docs/BUILD.md) — that is not how a TŒRN is ordered.
 
 ---
 
 ## License
 
-- **Software / code**: [MIT](./LICENSE) — free for personal and commercial use.  
-- **Firmware loader** (`standalone-tools/teensyloader-standalone/`): [GPL-3.0](./standalone-tools/teensyloader-standalone/LICENSE), because that tool is Teensy Loader Javascript. GPL-3.0 applies only to that folder.  
+- **Software / code**: [MIT](LICENSE) — free for personal and commercial use.
+- **Firmware loader** (`tools/firmware/`): [GPL-3.0](tools/firmware/LICENSE), because that tool is Teensy Loader Javascript. GPL-3.0 applies only to that folder.
 - **Hardware design files** (schematics, PCB layouts, Gerbers, housings, etc.): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — personal / non-commercial use and modification. **Jan-Peter Kuntoff is the only person authorized to sell TŒRN hardware** (bare PCB, assembled PCB, kit, or unit), including boards sold **without a Teensy**. Teensy 4.1 is PJRC’s; it is not licensed in this repo. Anyone else needs written consent to sell.
 
 Commercial hardware licensing: Jan aka **warft_ctrl** — jpkuntoff@gmail.com (Hamburg, Germany)
@@ -251,7 +259,7 @@ Huge thanks to **Paul Stoffregen** and the PJRC crew for Teensy, to the wider op
 
 Made with too many late nights and exactly the right number of RGB LEDs.
 
-**Jan aka warft_ctrl** (formerly soundpauli)  
+**Jan aka warft_ctrl** (formerly soundpauli)
 Hamburg, 2026
 
 ### AGEN self-playing mode

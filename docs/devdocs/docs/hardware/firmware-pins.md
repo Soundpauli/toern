@@ -1,0 +1,53 @@
+---
+sidebar_position: 4
+title: Firmware pin map
+description: How toern.ino pin defines line up with toern_revH nets.
+---
+
+# Firmware ↔ rev H pin map
+
+Defines live in [`toern.ino`](https://github.com/Soundpauli/toern/blob/main/platformio/toern.ino). Net names below match the rev H netlist (`hardware/PCB/toern_revH/toern_revH.net`). The [schematic PDF](https://github.com/Soundpauli/toern/blob/main/PCB/toern_revH/schematic.pdf) wins if a silk label disagrees.
+
+Hardware selection lives in `toern_hardware.h`: `exttouch=false` selects the
+capacitive panel without faders; `exttouch=true` selects buttons A–D and faders
+together, including the remote encoder address order and approximately 35 kHz
+I²C. There is no independent fader setting. The standard panel uses 100 kHz.
+
+## Core defines
+
+| Firmware | Teensy pin | Board use |
+|----------|------------|-----------|
+| `DATA_PIN` | **17** | WS2812 data. Series **R20** (220 Ω) then **J9 pin 1** |
+| `LED_STRIP_PIN` | **24** | Optional WS2812 strip data on **J11.5 pin 1** (WS2812Serial / Serial6 TX) |
+| `INT_PIN` | **27** | Shared encoder interrupt (pad 5 on encoder sockets) |
+| `INT_SD` | **10** | microSD chip-select |
+| `SWITCH_1` | **2** | Touch / TTP223 — single mode |
+| `SWITCH_2` | **3** | Touch — menu |
+| `SWITCH_3` | **4** | Touch — record |
+| `SWITCH_4` | **6** | Extra switch net (board-dependent) |
+| `SWITCH_5` | **39** | Extra switch net (board-dependent) |
+| `BATT_ADC_PIN` | **A16** (40) | VBAT divider |
+
+The separate LED strip uses pin **24** / **J11.5 pin 1**. With `exttouch=true`, `BUTTON_D` is pin **14** / **J14 pin 1**, so strip and button D do not share a pad. `LED_STRIP_PIN` is defined once in `toern.ino` and used by its FastLED controller registration.
+
+MIDI on **Serial8** uses pins **34/35** (`RX8`/`TX8`) with enlarged buffers — TRS jacks go through the opto / buffer stage (`TLP2361` `U4`, Schmitt `74LVC2G14` `U5`).
+
+## Buses (by convention)
+
+| Bus | Pins | Devices |
+|-----|------|---------|
+| I²C0 | 18 / 19 | Encoders + SGTL5000 control |
+| SPI (SD) | 10–13 | microSD `J8` |
+| I²S (codec) | (Audio library defaults on Teensy 4 + SGTL wiring) | `U3` data/clocks — see schematic |
+| USB | D+/D− pads on `U6` | USB-C `J4` via pogo pins **CN1** (D−) and **CN2** (D+) |
+
+## When changing pins
+
+1. Update the PCB net / jumper **and** the `#define`s.
+2. Re-check encoder INT (must be common open-drain style as wired).
+3. Re-check SD CS vs any other SPI CS uses.
+4. Battery divider in firmware must match the assembled resistors. On rev H that is **R15** 1 MΩ (VBAT → A16) and **R19** 1.5 MΩ (A16 → GND).
+
+## Performance input mapping
+
+Capacitive `exttouch=false` exposes all five pads: T1 SINGLE/exit, T2 menu, T3 REC, T4 audition, T5 FN. Playback-only fill is **T4+T5**. External `exttouch=true` exposes A–D plus eight faders: A/B replace T1/T2, C is REC, D is T5/FN; fill remains **C+D**. Index 3 (T4 audition) has no external button. TOUCHY uses the pad identities: external D plays pad 5. See [mode arbitration](../core/modes#performance-fill-arbitration).

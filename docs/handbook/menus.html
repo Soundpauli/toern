@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — Menu map</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-icons.js"></script>
+  <script src="handbook-nav.js?v=20261016s"></script>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+        <section class="handbook-page" id="page-menus">
+          <h2 class="handbook-page__title" data-hb-copy="menus.001">Menu map</h2>
+          <p class="handbook-page__summary" data-hb-copy="menus.002">The whole settings tree at a glance — every leaf checked against firmware. Blue rows are root families; red rows are nested leaves. This is the navigation map; per-screen previews live in the <a href="reference.html">screen index</a>.</p>
+
+          <section class="hb-sub" id="root-nav">
+            <h2 data-hb-copy="menus.003">Root menu — how navigation works</h2>
+            <p class="lede" data-hb-copy="menus.004">Open the menu by tapping touch&nbsp;2 (the right pad) from the grid. The root list uses red and blue dots on <strong>row 16</strong>; the encoder 4 hint strip is green to signal "this knob navigates". Submenu families re-colour the same row with the parent menu colour, so you always know which world of settings you are inside.</p>
+            <article class="hb-device">
+              <div class="hb-led-wrap hb-display-image">
+                <canvas class="led-matrix" data-scene="menu" width="640" height="320" role="img" aria-label="Root menu"></canvas>
+              </div>
+              <div class="hb-enc-grid">
+                <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
+                  <tr><th>Short</th><td>Exit submenu / back to grid</td><td>Exception: <strong>AUTO</strong> uses short press to run generation.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Value adjust on subpages</td><td>Volumes, enums, spans.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Encoder 3</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Alternate value rows</td><td>Input selects, reset modes, etc.</td></tr>
+                </tbody></table></div>
+                <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
+                  <tr><th>Turn</th><td>Move between siblings</td><td>Watch dots on row 16.</td></tr>
+                  <tr><th>Short</th><td>Enter highlighted page</td><td>Loads mode or opens nested submenu.</td></tr>
+                </tbody></table></div>
+              </div>
+            </article>
+          </section>
+
+
+          <hr />
+
+
+          <section class="hb-sub" id="tree">
+            <h2 data-hb-copy="menus.005">The full tree</h2>
+            <p class="lede" data-hb-copy="menus.006">Ten root families. Short labels are exactly what the matrix prints. Indentation is how deep you have dived. Every leaf below was checked against the firmware — if the device can do it, it is here; if it cannot, it is not.</p>
+
+            <div class="tree-legend" aria-label="How to read the colour coding">
+              <p class="tree-legend__title" data-hb-copy="menus.007">Why blue vs red?</p>
+              <div class="tree-legend__row">
+                <span class="node" style="background:#c9241b">MENU</span>
+                <span>Root of the map (this page’s “you are here”).</span>
+              </div>
+              <div class="tree-legend__row">
+                <span class="tree-legend__swatch tree-legend__swatch--blue" aria-hidden="true"></span>
+                <span class="node" style="background:#1f2937">PATT</span>
+                <span><strong>Blue tint</strong> = depth&nbsp;1 — a root-menu family you enter with encoder&nbsp;4. On the device these are the coloured dots on row&nbsp;16.</span>
+              </div>
+              <div class="tree-legend__row">
+                <span class="tree-legend__swatch tree-legend__swatch--red" aria-hidden="true"></span>
+                <span class="node" style="background:#1d4ed8">MAIN</span>
+                <span><strong>Red tint</strong> = depth&nbsp;2 — a leaf inside a family (VOL, SETT, REC, MIDI, MODE, ETC). Blue badge, warmer row: you are one click deeper.</span>
+              </div>
+              <p class="how" style="margin:0.35rem 0 0" data-hb-copy="menus.008">The colours are a handbook nesting cue — not the device’s voice palette. On hardware, submenu text re-colours to match its parent family so you always know which world you are inside.</p>
+            </div>
+
+            <div class="menu-tree-wrap" role="tree" aria-label="Menu structure">
+              <ul class="menu-tree">
+                <li>
+                  <span class="node">MENU</span>
+                  <span class="desc" data-hb-copy="menus.009">Tap touch&nbsp;2 (the right pad) from the grid. Playback keeps running — the menu is a translucent overlay, not a pause button. Encoder&nbsp;4 spins the ten family dots on row&nbsp;16; short-press enters. Tap touch&nbsp;2 to return to the grid. Re-open within five seconds and you land on the last family; wait longer and you start on PATT again (the firmware’s polite “where were we?”).</span>
+                  <ul>
+
+                    <li id="file">
+                      <a href="files.html#file"><span class="node">PATT</span></a>
+                      <span class="desc" data-hb-copy="menus.010">Pattern vault. One slot = the whole session on the card: all <span data-hb-pages>8</span> pages, every voice, every per-step value, every tone knob — everything except which sample KIT is loaded.</span>
+                      <span class="sub">
+                        <ul class="sub-opts">
+                          <li><strong>Enc&nbsp;1 short</strong> — load the selected entry</li>
+                          <li><strong>Enc&nbsp;2 short</strong> — save (overwrites, no “are you sure?”)</li>
+                          <li><strong>Enc&nbsp;3 turn</strong> — sideload on/off; OFF loads saved sounds, ON keeps current sounds</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–9999</strong> (0/A = load-only recovery) (bright green = occupied, dim blue = empty)</li>
+                          <li><strong>Enc&nbsp;4 short</strong> — back to the grid</li>
+                        </ul>
+                      </span>
+                      <span class="how" data-hb-copy="menus.011">The first entry in PATT is <a href="files.html#new">NEW</a>, the pattern generator. Empty (blue) slots also open NEW when loaded. Save first if the current RAM pattern still matters.</span>
+                      <ul>
+                        <li id="new-menu">
+                          <a href="files.html#new"><span class="node">NEW</span></a>
+                          <span class="desc" data-hb-copy="menus.012">Genre pattern generator — the first PATT entry, also available from an empty slot. Seeds a fresh pattern into RAM, then drops you on the grid.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 short</strong> — abort back to PATT</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — length <strong>1–16</strong> pages (disabled for BLNK — blank is blank)</li>
+                              <li><strong>Enc&nbsp;4 turn</strong> — genre: <strong>BLNK</strong> (wipe clean), <strong>TECH</strong>, <strong>HIPH</strong>, <strong>DNB</strong>, <strong>HOUS</strong>, <strong>AMBT</strong></li>
+                              <li><strong>Enc&nbsp;4 short</strong> — generate &amp; load</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.013">Same settings → different roll every time; the dice have feelings.</span>
+                          </span>
+                        </li>
+                      </ul>
+                    </li>
+
+                    <li id="pack">
+                      <a href="sample-packs.html#pack"><span class="node">KIT</span></a>
+                      <span class="desc" data-hb-copy="menus.014">Which numbered folder of WAVs fills sample voices 1–8. Synths 11 / 13 / 14 ignore this; rows 9, 10, 12 stay empty forever (by design, not by bug).</span>
+                      <span class="sub">
+                        <ul class="sub-opts">
+                          <li><strong>Enc&nbsp;1 short</strong> — load KIT (replaces all eight voices)</li>
+                          <li><strong>Enc&nbsp;2 short</strong> — remember this KIT across reboots</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — KIT <strong>1–999</strong> (green = folder exists, blue = missing). KIT&nbsp;0 is the scratchpad for custom samples</li>
+                          <li><strong>Enc&nbsp;4 short</strong> — back</li>
+                        </ul>
+                      </span>
+                    </li>
+
+                    <li id="wave">
+                      <a href="samples.html#set-wav"><span class="node">SMP</span></a>
+                      <span class="desc" data-hb-copy="menus.015">Sample browser for voices 1–8. Also opens with a both-touch (left-first) from the grid on a sample row. On a synth / empty row the root entry shows <strong>(−)</strong> and refuses to open — no WAV for a voice that has no sample engine.</span>
+                      <span class="sub">
+                        <ul class="sub-opts">
+                          <li><strong>Enc&nbsp;1 turn</strong> — trim start 0–100&nbsp;%</li>
+                          <li><strong>Enc&nbsp;1 short</strong> — directory up</li>
+                          <li><strong>Enc&nbsp;2 turn</strong> — trim end (always above start)</li>
+                          <li><strong>Enc&nbsp;2 short</strong> — reverse preview</li>
+                          <li><strong>Enc&nbsp;3 short</strong> — load trimmed file + autosave</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — browse files</li>
+                          <li><strong>Enc&nbsp;4 short</strong> — enter / leave folder</li>
+                          <li><strong>Touch&nbsp;3 long</strong> — jump into record</li>
+                        </ul>
+                      </span>
+                    </li>
+
+                    <li id="bpm">
+                      <a href="tempo-midi.html#bpm"><span class="node">BPM</span></a>
+                      <span class="desc" data-hb-copy="menus.016">Tempo + who owns the clock. Cyan digits + green <strong>&gt;</strong> = INT master; green digits + red <strong>&lt;</strong> = MIDI EXT locked; red digits + red <strong>&lt;</strong> = MIDI still hunting; <strong>orange</strong> digits + orange <strong>&lt;</strong> = analog CLK-IN (J26) driving play.</span>
+                      <span class="sub">
+                        <ul class="sub-opts">
+                          <li><strong>Enc&nbsp;2 turn</strong> — matrix brightness <strong>3–255</strong> (pretty, not loud)</li>
+                          <li><strong>Enc&nbsp;2 short</strong> — toggle idle tint</li>
+                          <li><strong>Enc&nbsp;3 turn</strong> — <strong>INT ↔ EXT</strong> (survives reboot)</li>
+                          <li><strong>Enc&nbsp;3 click</strong> — when EXT: toggle <strong>MIDI in</strong> (red <strong>&lt;</strong>) ↔ <strong>analog CLK-IN</strong> (orange <strong>&lt;</strong>)</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — BPM <strong>40–300</strong> in INT; in EXT only nudges a stored offset</li>
+                          <li><strong>Touch pads</strong> — tap-tempo on this screen (INT)</li>
+                        </ul>
+                      </span>
+                    </li>
+
+                    <li id="vol">
+                      <a href="reference.html#vol"><span class="node">VOL</span></a>
+                      <span class="desc" data-hb-copy="menus.017">Where sound leaves the box. Seven leaves. Encoder&nbsp;4 walks siblings; encoder&nbsp;3 usually turns the value (watch the lit cue). GAIN uses encoders&nbsp;1–3.</span>
+                      <ul>
+                        <li>
+                          <span class="node">MAIN</span>
+                          <span class="desc" data-hb-copy="menus.018">Headphone level on the 6.35&nbsp;mm jack.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>0–100</strong></li>
+                              <li>Quiet rehearsal → couch hero → neighbour complaint. Orange-ish digits climb with the level</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">GAIN</span>
+                          <span class="desc" data-hb-copy="menus.019">Mix-bus trim on top of the fixed headroom. 1.0x is the old default; 2.0x is double. ALL multiplies the other three, so 2.0x×2.0x is 4× on that bus.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1</strong> — voices <strong>1–4</strong> (<span class="ap-code">mixer1</span>). Rotation is reversed vs the other two knobs</li>
+                              <li><strong>Enc&nbsp;2</strong> — voices <strong>5–8</strong> (<span class="ap-code">mixer2</span>)</li>
+                              <li><strong>Enc&nbsp;3</strong> — <strong>ALL</strong> (master) or <strong>SYN</strong> (ch11/13/14). Click encoder&nbsp;3 to switch</li>
+                              <li>Range <strong>0.0x–2.0x</strong>. Survives reboot. Preview and input monitor stay on their own knobs</li>
+                              <li>Hot stacks can clip — if it cracks, ease ALL or the busy bank before blaming the kick</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.020">Applied at <span class="ap-code">mixer1</span>/<span class="ap-code">mixer2</span> inputs and <span class="ap-code">mixer_end</span> synth send, so <a href="audiopath.html#output">ETC → ADV → 2-CH L+R</a> still hears 1–4 / 5–8 / ALL. Synths drop out of L+R as before.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">LOUT</span>
+                          <span class="desc" data-hb-copy="menus.021">Line-out trim, independent of MAIN — phones loud, mixer calm.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;3 turn</strong> — display <strong>1–19</strong> (maps to the codec’s 13–31 under the hood)</li>
+                              <li>If the desk is clipping, lower this before you blame the kick</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">PREV</span>
+                          <span class="desc" data-hb-copy="menus.022">Sample-browser preview mode and loudness.</span>
+                          <span class="sub">
+                            <ul class="sub-opts"><li><strong>Enc&nbsp;2 turn</strong> — choose ON, PRSS or SYNC</li>
+                              <li><strong>ON</strong> — auto-audition while you spin files</li>
+                              <li><strong>PRSS</strong> — only when you press encoder&nbsp;1 on a highlighted wav (so a clumsy turn does not scream into the PA)</li>
+                              <li><strong>SYNC</strong> — no instant preview; the highlighted wav plays on that voice's pattern triggers instead of the loaded sample (voice stays unmuted)</li>
+
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>0–50</strong></li>
+                              <li>Zero = silent browsing (blessed on stage). Independent of MAIN/LOUT</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">SPKR</span>
+                          <span class="desc" data-hb-copy="menus.025">Built-in speaker.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>ON</strong> — hear through the built-in driver</li>
+                              <li><strong>OFF</strong> — mute the speaker (line out stays live)</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.026">Mute the speaker for dark stages, not the gig.</span>
+                          </span>
+                        </li>
+                      </ul>
+                    </li>
+
+                    <li id="play">
+                      <a href="play.html"><span class="node">SETT</span></a>
+                      <span class="desc" data-hb-copy="menus.028">Grid view, encoder control, drawing and mute selection.</span>
+                      <ul>
+<li>
+                          <span class="node">VIEW</span>
+                          <span class="desc" data-hb-copy="menus.029">How densely notes paint on the grid.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>EASY</strong> — current page only</li>
+                              <li><strong>FULL</strong> — current page bright, neighbours ghosted underneath for context</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <a href="play.html#ctrl"><span class="node">CTRL</span></a>
+                          <span class="desc" data-hb-copy="menus.030">What encoder&nbsp;2 does on the draw/single grid when you are not in a special mode.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>PAGE</strong> — flip pages 1–<span data-hb-pages>8</span></li>
+                              <li><strong>VOL</strong> — per-row volume for the cursor’s lane (live mix fader)</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.031">Survives reboot.</span>
+                          </span>
+                        </li>
+<li>
+                          <a href="play.html#draw"><span class="node">DRAW</span></a>
+                          <span class="desc" data-hb-copy="menus.032">Paint-handedness.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>L+R</strong> — set with enc&nbsp;4, remove with enc&nbsp;1</li>
+                              <li><strong>R</strong> — enc&nbsp;4 toggles set/remove; enc&nbsp;1 = break mute</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.033">Careful two-hand edit vs one-hand set/remove. Detail: <a href="sequencing.html#paint">Sequencing → triggers</a>.</span>
+                          </span>
+                        </li>
+<li>
+                          <a href="play.html#mute"><span class="node">MUTE</span></a>
+                          <span class="desc" data-hb-copy="menus.034">Custom unmute mask for leaving R-mode’s temporary full mute (enc&nbsp;3).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 turn</strong> — select channel 1–16</li>
+                              <li><strong>Enc&nbsp;2 turn</strong> — toggle that channel in / out of the unmute mask</li>
+                              <li><strong>Green</strong> — comes back unmuted</li>
+                              <li><strong>Red</strong> — stays muted</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.035">Build a “kick+snare only” return set. Does not gate which rows you can paint.</span>
+                          </span>
+                        </li>
+<li id="swap-menu"><a href="advanced-sequencing.html#swap"><span class="node">SWAP</span></a><span class="desc">Exchange voice notes across the whole pattern. Encoders&nbsp;2/3 select voices; hold and turn either for an octave shift (−8…+8). Encoder&nbsp;4 applies; encoder&nbsp;1 exits. Sound settings stay with their voices.</span></li>
+</ul>
+                    </li>
+
+                    <li id="rec">
+                      <a href="record.html"><span class="node">REC</span></a>
+                      <span class="desc" data-hb-copy="menus.036">Capture path: which jack, how hot, when it rolls, and what happens to notes after a re-record.</span>
+                      <ul>
+                        <li>
+                          <a href="record.html#inpt"><span class="node">INPT</span></a>
+                          <span class="desc" data-hb-copy="menus.037">Recorder input.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>MIC</strong> — mic path</li>
+                              <li><strong>LINE</strong> — top-edge line in</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.038">Flips which gain page (MIC vs L-IN) actually matters.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="record.html#mic"><span class="node">MIC</span></a>
+                          <span class="desc" data-hb-copy="menus.039">Mic preamp gain.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>0–63</strong></li>
+                              <li>Watch the record meter; red peaks mean “back off, hero.”</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="record.html#lin"><span class="node">L-IN</span></a>
+                          <span class="desc" data-hb-copy="menus.040">Line-in trim (coarser — line gear is already loud).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>0–15</strong></li>
+                              <li>Synths often happy around 6–10</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="record.html#trig"><span class="node">TRIG</span></a>
+                          <span class="desc" data-hb-copy="menus.041">When capture actually starts.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — manual</li>
+                              <li><strong>INST</strong> — hold Touch&nbsp;3, record immediately</li>
+                              <li><strong>SENS</strong> — 3-second hold countdown, then record until release</li>
+                              <li><strong>−CON</strong> / <strong>+CON</strong> — jack contact close / open</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="record.html#clr"><span class="node">CLR</span></a>
+                          <span class="desc" data-hb-copy="menus.042">What happens to notes on the voice you just re-recorded into.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — keep notes (new sound under old arrangement)</li>
+                              <li><strong>ON</strong> — wipe the voice</li>
+                              <li><strong>FIX</strong> — wipe notes but keep vel / prob / lane vol</li>
+                              <li><strong>ON1</strong> — wipe current page only</li>
+                              <li><strong>CLIC</strong> — wipe and plant a click on step&nbsp;1 so you can hear the sample on the grid</li>
+                            </ul>
+                          </span>
+                        </li>
+                      </ul>
+                    </li>
+
+                    <li id="midi">
+                      <a href="midi.html"><span class="node">MIDI</span></a>
+                      <span class="desc" data-hb-copy="menus.043">TRS MIDI in/out plus analog PPQN clock, analog clock-in, and a selected-voice trigger.</span>
+                      <ul>
+                        <li>
+                          <span class="node">CH</span>
+                          <span class="desc" data-hb-copy="menus.044">How incoming notes map onto voices.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>SEL</strong> — notes hit the voice selected by the grid’s Y position</li>
+                              <li><strong>MIDI</strong> — MIDI ch&nbsp;N → voice&nbsp;N</li>
+                              <li><strong>KEYS</strong> — legacy pitch-class selector for sample voices 1–8 at base pitch</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">TRAN</span>
+                          <span class="desc" data-hb-copy="menus.045">Start / stop / continue.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — ignore &amp; never send</li>
+                              <li><strong>GET</strong> — follow an external sequencer</li>
+                              <li><strong>SEND</strong> — make others follow you</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.046">Pair with BPM’s INT/EXT for full master/slave.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">SEND</span>
+                          <span class="desc" data-hb-copy="menus.047">What leaves the MIDI out jack.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>CLCK</strong> — clock only</li>
+                              <li><strong>NOTE</strong> — notes only</li>
+                              <li><strong>BOTH</strong> — clock + notes</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.048">No separate OFF here — mute notes via RCVE / stop sending clock via BPM EXT as needed.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">RCVE</span>
+                          <span class="desc" data-hb-copy="menus.049">Do incoming notes poke the internal engines?</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>NOTE</strong> — yes, per CH mapping</li>
+                              <li><strong>OFF</strong> — ignore notes (pure sequencer/recorder mode)</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#clmp"><span class="node">FOLD</span></a>
+                          <span class="desc" data-hb-copy="menus.050">Choose whether incoming SEL/MIDI pitches are folded into the visible register.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>ON</strong> — visible row is also the played pitch</li>
+                              <li><strong>OFF</strong> — preserve the original pitch while storing the note on rows 1–15</li>
+                            </ul>
+                          </span>
+                        </li>
+                        <li>
+                          <span class="node">SYNC</span>
+                          <span class="desc" data-hb-copy="menus.051">Latency makeup. Two lines: <strong>SYC&gt;</strong> send path, <strong>SYC&lt;</strong> receive path.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;2 turn</strong> — pick SYC&gt; / SYC&lt;</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — offset <strong>−127…+127&nbsp;ms</strong></li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.052">Positive delays the selected start path; negative delays the opposite path. A red -- means the value has no effect in the current mode.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#cin"><span class="node">PQ-I</span></a>
+                          <span class="desc" data-hb-copy="menus.057">CLK-IN (J26) rate and hold-off. In orange EXT each pulse drives play.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 turn</strong> — hold-off 1–32&nbsp;ms</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong>, then 1 / 2 / 4 / 8 / 12 / 16 / 24 / 32 PPQN</li>
+                              <li><strong>Enc&nbsp;3 click</strong> — input polarity <strong>+</strong> / <strong>−</strong></li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.058">Same layout as PQ-O. Headers: see <a href="midi.html#cin">MIDI → PQ-I</a>.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#ppqn"><span class="node">PQ-O</span></a>
+                          <span class="desc" data-hb-copy="menus.053">Analog clock on CLK-OUT J25 (5&nbsp;V) / CLK-IN J26 (3–5&nbsp;V), independent of TRS MIDI.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 turn</strong> — pulse width <strong>1–50&nbsp;ms</strong> (default 12)</li>
+                              <li><strong>Enc&nbsp;2 turn</strong> — <strong>STOP</strong> (gate while paused) / <strong>CONT</strong> (always)</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong> or <strong>1, 2, 4, 8, 12, 16, 24, 32</strong> PPQN</li>
+                              <li><strong>Enc&nbsp;3 click</strong> — polarity <strong>+</strong> / <strong>−</strong></li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.054">Follows INT BPM or EXT MIDI/analog clock. Headers: see <a href="midi.html#ppqn">MIDI → PQ-O</a>.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#side"><span class="node">TRIG</span></a>
+                          <span class="desc" data-hb-copy="menus.055">Which voice pulses SIDEC-5V (J27).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>OFF</strong> or voices <strong>1–8, 11, 13, 14</strong> (default 1)</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.056">Width follows PQ-O; polarity is always positive (idle low). 5&nbsp;V trigger, not audio.</span>
+                          </span>
+                        </li>
+                        <li>
+                          <a href="midi.html#wrte"><span class="node">OVWR</span></a>
+                          <span class="desc" data-hb-copy="menus.059">Whether incoming MIDI may replace notes already on the grid.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> (default) — skip occupied cells (same or other voice)</li>
+                              <li><strong>ON</strong> — overwrite whatever is in the cell</li>
+                            </ul>
+                          </span>
+                        </li>
+                      </ul>
+                    </li>
+
+                    <li id="mode"><a href="play.html#mode-root"><span class="node">MODE</span></a><span class="desc" data-hb-copy="menus.060">Playback and performance modes. Press encoder&nbsp;4 to open.</span><ul>
+<li>
+                          <span class="node">FLOW</span>
+                          <span class="desc" data-hb-copy="menus.061">Follow — whole-grid pulse on the beat.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>ON</strong> — soft wash in time (club-dark friendly)</li>
+                              <li><strong>OFF</strong> — only the playhead column (editor-clean)</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <a href="play.html#pmd"><span class="node">PMOD</span></a>
+                          <span class="desc" data-hb-copy="menus.062">Pattern mode — what happens when a page finishes.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — advance through the pattern pages</li>
+                              <li><strong>ON</strong> — loop the selected edit page</li>
+                              <li><strong>SONG</strong> — follow the <a href="song.html#song">SONG</a> chain</li>
+                              <li><strong>NEXT</strong> — play the visible page; while it plays, browse to a target page and it takes over exactly when the current page ends</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <a href="play.html#loop"><span class="node">LOOP</span></a>
+                          <span class="desc" data-hb-copy="menus.063">Set the number of pattern pages played before the loop wraps. OFF follows the populated pattern length.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — follow the populated pattern length</li>
+                              <li><strong>1–8</strong> — force that many pages</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.064">Each page contains <span data-hb-steps>32</span> steps in the selected layout.</span>
+                          </span>
+                        </li>
+<li>
+                          <a href="play.html#vmod"><span class="node">VMOD</span></a>
+                          <span class="desc" data-hb-copy="menus.065">Each voice loops on its own pages. Pitches stay with that voice.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> / <strong>ON</strong></li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.066">While on, FLOW, LOOP, and pattern-mode page lock leave playback alone. Encoder&nbsp;2 steps that voice’s filled pages. Encoder&nbsp;4 does not change pages during play. Song mode is unchanged. Locked <strong>OFF</strong> while <a href="play.html#img">MODE → IMG</a> is on.</span>
+                          </span>
+                        </li>
+<li id="chld">
+                          <span class="node">CHLD</span>
+                          <span class="desc" data-hb-copy="menus.067">Child lock — simplified play mode for small hands (or reckless bandmates).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> / <strong>ON</strong></li>
+                              <li>When on: menu opens only via <strong>touch&nbsp;2 then touch&nbsp;1</strong> within two seconds</li>
+                              <li>Editing stays on page&nbsp;1</li>
+                              <li>Synth voices are muted</li>
+                              <li>Filter / velocity / subpattern screens are blocked</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.068">Training wheels with opinions.</span>
+                          </span>
+                        </li>
+<li id="img">
+                          <a href="play.html#img"><span class="node">IMG</span></a>
+                          <span class="desc" data-hb-copy="menus.069">Image mode — black matrix; paint cycles voice colours like a pixel sketchpad.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> / <strong>ON</strong> — survives reboot</li>
+                              <li>Base row colours hide; the grid stays black until you paint</li>
+                              <li>Paint on rows 1–15 cycles voices <strong>1–8</strong>; touch&nbsp;1 cycles the brush voice</li>
+                              <li><a href="play.html#vmod">VMOD</a> is forced off and locked while IMG is on</li>
+                              <li>REC → CLR is forced to <strong>FIX</strong> while IMG is on</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.070">Single mode is not used in IMG — stay in DRAW and paint.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">PONG</span>
+                          <span class="desc" data-hb-copy="menus.071">A ball bounces the grid in draw mode; it only hits and fires notes on muted voices, so unmuted play is unaffected.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> / <strong>ON</strong></li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — speed <strong>1–99</strong> when on (higher = faster)</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.072">Not the idle “eyes” screensaver — that is a separate boredom animation.</span>
+                          </span>
+                        </li>
+<li id="song-menu">
+                      <a href="song.html#song"><span class="node">SONG</span></a>
+                      <span class="desc" data-hb-copy="menus.073">64-slot arranger. Each slot points at one of the <span data-hb-pages>8</span> pages. With PMOD&nbsp;= SONG, playback walks the chain and wraps.</span>
+                      <span class="sub">
+                        <ul class="sub-opts">
+                          <li><strong>Enc&nbsp;2 turn</strong> — page <strong>1–<span data-hb-pages>8</span></strong> (or empty)</li>
+                          <li><strong>Enc&nbsp;2 short</strong> — clear slot</li>
+                          <li><strong>Enc&nbsp;4 turn</strong> — slot <strong>1–64</strong></li>
+                          <li><strong>Enc&nbsp;4 short</strong> — insert empty slot</li>
+                        </ul>
+                        <span class="how" data-hb-copy="menus.074">Empty slots are skipped. Playing: page strip on row&nbsp;16 + green song-slot dot on row&nbsp;1.</span>
+                      </span>
+                    </li>
+<li><a href="play.html#touchy"><span class="node">TCHY</span></a><span class="desc" data-hb-copy="menus.075">Five-pad sample instrument. Encoder 3: OFF / ON; touch 1 leaves the menu.</span></li>
+<li>
+                          <a href="advanced-sequencing.html#auto-extend"><span class="node">AUTO</span></a>
+                          <span class="desc" data-hb-copy="menus.076">Companion fill: analyse voices, accents, velocities, harmony and BPM across a base-page range, then write coordinated variations after it. Orange strip = source pages; green strip = pages about to be written.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;1 turn</strong> — how many extra pages to generate (<strong>1–16</strong>)</li>
+                              <li><strong>Enc&nbsp;1 short</strong> — run generation (green cue — the rare “press 1 to create” exception)</li>
+                              <li><strong>Enc&nbsp;2 turn</strong> — base start page</li>
+                              <li><strong>Enc&nbsp;3 turn</strong> — base end page</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.077">Uses the same role-aware engine as single-mode page-row randomize. An empty base creates a varied 4/4 starter ensemble; every run is different.</span>
+                          </span>
+                        </li>
+</ul></li>
+
+                    <li id="etc">
+                      <a href="reference.html#etc"><span class="node">ETC</span></a>
+                      <span class="desc" data-hb-copy="menus.078">Credits, SD file server, generated fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
+                      <ul>
+<li>
+                          <span class="node">INFO</span>
+                          <span class="desc" data-hb-copy="menus.079">Firmware version, then a scrolling thank-you.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li>Version holds in yellow for two seconds, then the credits crawl</li>
+                              <li><strong>Enc&nbsp;4 short</strong> — play the logo animation (fade in, then hold); press again to stop and return to draw mode</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.080">Confirm the build before filing a bug report.</span>
+                          </span>
+                        </li>
+<li id="sd">
+                          <a href="sd-card.html#sd-tool"><span class="node">SD</span></a>
+                          <span class="desc" data-hb-copy="menus.081">Serial connection status. The screen shows <strong>SCON</strong>. The card server answers from any screen; this page does not have to stay open.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>SCON</strong> — serial connection</li>
+                              <li><strong>WAIT</strong> — yellow, until a host program is talking</li>
+                              <li><strong>OK</strong> — green, while that link is recent</li>
+                              <li>Use <a href="https://sdtool.tyng.app/" rel="noopener" target="_blank">sdtool.tyng.app</a> (Chrome/Edge + Web Serial)</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.082">A USB cable alone leaves <strong>WAIT</strong>. <strong>OK</strong> appears after a host opens the port and talks. Details: <a href="sd-card.html#sd-tool">SD card → SD tool</a>.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">BATT</span>
+                          <span class="desc" data-hb-copy="menus.083">State of charge.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li>Read-only %</li>
+                              <li><strong>Green</strong> — &gt;&nbsp;30&nbsp;%</li>
+                              <li><strong>Orange</strong> — 15–30&nbsp;%</li>
+                              <li><strong>Red</strong> — &lt;&nbsp;15&nbsp;%</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.084">Plug USB-C before the red argument starts.</span>
+                          </span>
+                        </li>
+<li id="adv"><span class="node">ADV</span><span class="desc" data-hb-copy="menus.085">Display and diagnostic settings. Press encoder&nbsp;4 to open.</span><ul>
+<li>
+                          <span class="node">CRSR</span>
+                          <span class="desc" data-hb-copy="menus.086">Cursor cosmetics.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>NORM</strong> — thin white ring</li>
+                              <li><strong>CHNR</strong> — only on the focused voice in single mode. With CTRL&nbsp;= PAGE, encoder&nbsp;2 flashes the page number on the right, one row below the top, with no underline.</li>
+                              <li><strong>BIG</strong> — chunky 3×3 halo for balcony viewers</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">LEDS</span>
+                          <span class="desc" data-hb-copy="menus.087">Which LED panel hardware is bolted on.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>1</strong> — one panel</li>
+                              <li><strong>1B</strong> — one mirrored</li>
+                              <li><strong>2</strong> — two stacked (16×32)</li>
+                              <li><strong>2B</strong> — two mirrored</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.088">Wrong setting = pixels vacationing off-screen.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">RAM</span>
+                          <span class="desc" data-hb-copy="menus.089">Live audio-memory dashboard (pool is 96 blocks).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>A##</strong> — audio memory used % (peak if higher)</li>
+                              <li><strong>R##</strong> — average freeverb send %</li>
+                              <li><strong>F###</strong> — free audio blocks</li>
+                              <li><strong>C##</strong> — audio CPU %</li>
+                              <li><strong>Enc&nbsp;3</strong> — switch metric; press resets peak counters</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.090">If A climbs near 100 after a long session, distortion/clicks on mute/save are likely block exhaustion.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">LGHT</span>
+                          <span class="desc" data-hb-copy="menus.091">Optional chassis ring-LED strip.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>ON</strong> — mirrors the matrix accent</li>
+                              <li><strong>OFF</strong> — saves juice / keeps the stage dark</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">COLR</span>
+                          <span class="desc" data-hb-copy="menus.092">Voice palette / scheme.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>0</strong> — factory rainbow</li>
+                              <li><strong>1</strong> — blue-ish</li>
+                              <li><strong>2</strong> — high-contrast red/violet</li>
+                              <li>Custom fourth slot appears when you drop a <code>scheme.txt</code> from the <a href="../../tools/colorsheme/index.html">colour-scheme tool</a></li>
+                            </ul>
+                          </span>
+                        </li>
+<li id="eyes">
+                          <span class="node">EYES</span>
+                          <span class="desc" data-hb-copy="menus.093">Idle screensaver (sleeping eyes on the matrix).</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — never</li>
+                              <li><strong>1MIN</strong> — eyes after one minute idle (default)</li>
+                              <li><strong>5MIN</strong> — five minutes</li>
+                              <li><strong>15MIN</strong> — fifteen minutes</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.094">Runs only when stopped on the grid. Any encoder / touch wakes the unit.</span>
+                          </span>
+                        </li>
+<li id="fire">
+                          <span class="node">FIRE</span>
+                          <span class="desc" data-hb-copy="menus.095">Sideways embers on the playhead. When a chosen voice’s note lights white, sparks drift sideways off the cell, spread up and down, and fade. Gravity pulls them back toward the playhead.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Size 1–4</strong> — encoder&nbsp;1. 1 is a single cell. Higher adds a wider glow</li>
+                              <li><strong>Count 1–25</strong> — encoder&nbsp;2. How many embers are alive at once</li>
+                              <li><strong>Voice</strong> — encoder&nbsp;3. <strong>OFF</strong>, <strong>ALL</strong>, or <strong>1–8</strong>, <strong>11</strong>, <strong>13</strong>, <strong>14</strong></li>
+                              <li><strong>Gravity 0–8</strong> — click encoder&nbsp;3 once, then turn it. 0 keeps drifting sideways. Higher pulls the embers back toward the playhead</li>
+                              <li><strong>Colour 0–8</strong> — click encoder&nbsp;3 again, then turn it. 0 is white. 8 is the voice colour</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.096">The bar under the title is gravity on the left and colour on the right. Another click on encoder&nbsp;3 returns to the voice.</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">2-CH</span>
+                          <span class="desc" data-hb-copy="menus.023">Stereo personality of the eight sample voices.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — mono centre</li>
+                              <li><strong>M+P</strong> — mono plus a stereo “perception” pad</li>
+                              <li><strong>L+R</strong> — real width via per-voice pan</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.024">Firmware routing is on <a href="audiopath.html#output">Audio path → stereo out</a>: OFF = main+preview both sides; M+P = main L / preview R; L+R = voices 1–4 L, 5–8 R (synths drop out).</span>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">USBP</span>
+                          <span class="desc">SMP audition (voice 0) also on USB audio.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>OFF</strong> — USB follows the main mix only</li>
+                              <li><strong>ON</strong> — sample-browser preview also reaches USB</li>
+                            </ul>
+                          </span>
+                        </li>
+<li>
+                          <span class="node">HFC</span>
+                          <span class="desc" data-hb-copy="menus.027">Global high-frequency cut (GEQ treble band) for bright cans or long sessions.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>Enc&nbsp;3 turn</strong> — <strong>0</strong>, then <strong>10…250</strong> in tens, then <strong>256</strong> (maximum cut)</li>
+                              <li>Default: 0 (off / flat). Higher values soften the top end. Applies to the codec outputs.</li>
+                            </ul>
+                          </span>
+                        </li>
+</ul></li>
+<li id="rset">
+                          <a href="troubleshooting.html#reset"><span class="node">RSET</span></a>
+                          <span class="desc" data-hb-copy="menus.097">Eight reset choices. Pick with encoder&nbsp;3, confirm with encoder&nbsp;2. Most finish with a green checkmark. RAM shows RAM / OK and restarts.</span>
+                          <span class="sub">
+                            <ul class="sub-opts">
+                              <li><strong>SD</strong> — rescan the whole card into <code>samples/toern_wavs.txt</code> (mute-mode <code>?&gt;</code> random + sample browser cache)</li>
+                              <li><strong>EFX</strong> — factory-reset every tone control (patterns &amp; sample assignments survive)</li>
+                              <li><strong>FULL</strong> — blank slate + SD rescan (BPM→100; keeps <a href="play.html#leds">ETC → ADV → LEDS</a>; only PATT-saved work comes back). This does not zero the EEPROM.</li>
+                              <li><strong>PATT</strong> — wipe saved patterns <code>1–999.txt</code> (keeps autosave)</li>
+                              <li><strong>KIT</strong> — delete kit folders except KIT&nbsp;1</li>
+                              <li><strong>ASAV</strong> — delete <code>autosaved.txt</code> and empty the grid (next boot is a blank canvas)</li>
+                              <li><strong>RAM</strong> — zero every EEPROM byte, delete <code>settings.txt</code>, show RAM / OK, then restart. Next boot is a first run: factory settings, one panel, kit&nbsp;1. Saved patterns stay; the autosave still loads.</li>
+                              <li><strong>RVRB</strong> — bypass reverb and bitcrusher on all voices, retaining other sound settings and notes</li>
+                            </ul>
+                            <span class="how" data-hb-copy="menus.098">PATT and KIT are the “I meant it” buttons.</span>
+                          </span>
+                        </li>
+</ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <p data-hb-copy="menus.099">For every screen’s actual LED layout — and a flat searchable thumbnail grid — open the <a href="reference.html">Screen index</a>.</p>
+          </section>
+        </section>
+
+        <nav class="hb-pager" aria-label="Next chapter">
+          <a class="hb-pager__link hb-pager__link--next" href="reference.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Screen index</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js?v=20261011y" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

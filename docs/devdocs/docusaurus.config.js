@@ -1,0 +1,134 @@
+// @ts-check
+import {themes as prismThemes} from 'prism-react-renderer';
+
+/** @type {import('@docusaurus/types').Config} */
+const config = {
+  title: 'TŒRN Code Docs',
+  tagline: 'How the firmware fits together',
+  favicon: 'img/favicon.svg',
+
+  future: {
+    v4: true,
+  },
+
+  // Standalone host: https://docs.toern.live/ (DNS already points here)
+  url: 'https://docs.toern.live',
+  baseUrl: '/',
+
+  organizationName: 'Soundpauli',
+  projectName: 'toern',
+
+  // Repo-root links (BUILD.md, hardware/PCB/, handbook) are intentional; they are not part of this site.
+  onBrokenLinks: 'warn',
+
+  i18n: {
+    defaultLocale: 'en',
+    locales: ['en'],
+  },
+
+  presets: [
+    [
+      'classic',
+      /** @type {import('@docusaurus/preset-classic').Options} */
+      ({
+        docs: {
+          routeBasePath: '/',
+          sidebarPath: './sidebars.js',
+          editUrl: 'https://github.com/Soundpauli/toern/tree/main/docs/devdocs/',
+        },
+        blog: false,
+        theme: {
+          customCss: './src/css/custom.css',
+        },
+      }),
+    ],
+  ],
+
+  themeConfig:
+    /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
+    ({
+      image: 'img/docusaurus-social-card.jpg',
+      colorMode: {
+        defaultMode: 'dark',
+        respectPrefersColorScheme: true,
+      },
+      navbar: {
+        title: 'TŒRN Code',
+        logo: {
+          alt: 'TŒRN',
+          src: 'img/favicon.svg',
+        },
+        items: [
+          {
+            type: 'docSidebar',
+            sidebarId: 'docsSidebar',
+            position: 'left',
+            label: 'Docs',
+          },
+          {
+            href: 'https://github.com/Soundpauli/toern',
+            label: 'GitHub',
+            position: 'right',
+          },
+        ],
+      },
+      footer: {
+        style: 'dark',
+        links: [
+          {
+            title: 'Code docs',
+            items: [
+              {label: 'Architecture', to: '/architecture/overview'},
+              {label: 'File map', to: '/architecture/file-map'},
+              {label: 'This docs site', to: '/contributing/docs-site'},
+            ],
+          },
+          {
+            title: 'Tools',
+            items: [
+              {label: 'Overview', to: '/tools/overview'},
+              {label: 'Sample converter', to: '/tools/sample-converter'},
+              {label: 'SD tool', to: '/tools/sd-tool'},
+            ],
+          },
+          {
+            title: 'Hardware',
+            items: [
+              {label: 'rev H overview', to: '/hardware/overview'},
+              {label: 'Connectors', to: '/hardware/connectors'},
+              {label: 'Fabrication', to: '/hardware/fabrication'},
+            ],
+          },
+          {
+            title: 'Elsewhere',
+            items: [
+              {
+                label: 'Operator handbook',
+                href: 'https://handbook.toern.live/',
+              },
+              {
+                label: 'Main site',
+                href: 'https://toern.live/',
+              },
+              {
+                label: 'PCB sources',
+                href: 'https://github.com/Soundpauli/toern/tree/platformio/hardware/PCB/toern_revH',
+              },
+              {
+                label: 'Source repo',
+                href: 'https://github.com/Soundpauli/toern',
+              },
+            ],
+          },
+        ],
+        copyright: `TŒRN code & hardware docs · MIT software · CC BY-NC hardware · Built with Docusaurus`,
+      },
+      prism: {
+        theme: prismThemes.github,
+        darkTheme: prismThemes.dracula,
+        additionalLanguages: ['cpp', 'bash', 'json'],
+      },
+    }),
+};
+
+export default config;
