@@ -6,6 +6,15 @@ extern uint16_t releaseAmp[2][3];
 extern uint16_t releaseFilter[2][3];
 extern void     updateVals(int ch);
 
+float getAttackDuration(int channel) {
+  // Sample voices span the loaded PCM duration at its root playback rate.
+  // Synth voices retain their fixed maximum because they have no sample.
+  const float maximumMs = (channel >= 1 && channel <= 8)
+      ? (float)loadedSampleLen[channel] * 1000.0f / AUDIO_SAMPLE_RATE_EXACT
+      : maxParamVal[ATTACK];
+  return mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maximumMs, 0);
+}
+
 // Refactored: setParams combines processParameterAdjustment and updateParameterValue
 void setParams(ParameterType paramType, int index) {
 
@@ -18,7 +27,7 @@ void setParams(ParameterType paramType, int index) {
       }
       break;
     case ATTACK:
-      mappedValue = mapf(SMP.param_settings[index][paramType], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
+      mappedValue = getAttackDuration(index);
       if (index == 11) {
         for (int v = 0; v < 3; v++) attackAmp[0][v] = (uint16_t)mappedValue;
         updateVals(0);

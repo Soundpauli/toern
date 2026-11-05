@@ -4296,6 +4296,7 @@ void samplerAddSample(int ch, uint8_t root, int16_t *data, uint32_t frames, uint
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
   _samplers[ch].addSample(root, data, frames, channels);
+  if (ch >= 1 && envelopes[ch]) setParams(ATTACK, ch);
 }
 
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSidechain) {
@@ -8101,7 +8102,7 @@ float getNoteDuration(int channel) {
   if (!channelHasVoiceDelay(channel)) {
     delayMs = mapf(SMP.param_settings[channel][DELAY], 0, maxfilterResolution, 0, maxParamVal[DELAY]);
   }
-  float attackMs = mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maxParamVal[ATTACK], 0);
+  float attackMs = getAttackDuration(channel);
   float holdMs = mapf(SMP.param_settings[channel][HOLD], 0, maxfilterResolution, 0, maxParamVal[HOLD]);
   float decayMs = mapf(SMP.param_settings[channel][DECAY], 0, maxfilterResolution, 0, maxParamVal[DECAY]);
 

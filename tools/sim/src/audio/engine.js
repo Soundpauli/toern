@@ -269,7 +269,7 @@ export function createEngine() {
   const releasing = new Set();
   const sampleLive = {};
   const MAX_VOICES = 40;
-  const att = (env) => Math.max(0.001, ((32 - env.att) / 32) * 2);
+  const att = (env, duration = 2) => Math.max(0.001, ((32 - env.att) / 32) * duration);
   function stopVoice(voice, when) {
     if (!voice || (!live.has(voice) && !releasing.has(voice))) return;
     live.delete(voice); releasing.add(voice);
@@ -304,7 +304,7 @@ export function createEngine() {
     const peak = velocity / 127;
     if (!env) g.gain.value = peak;
     else {
-      const a = att(env);
+      const a = att(env, span);
       const dec = env.dec / 32;
       const sus = Math.max(0.0001, (env.sus / 32) * peak);
       const rel = Math.max(0.005, env.rel / 32);
@@ -318,7 +318,7 @@ export function createEngine() {
     src.connect(g);
     g.connect(dest);
     src.start(when, offset, span / rate);
-    if (env && !held) src.stop(when + Math.max(att(env) + env.dec / 32, att(env) + 0.005) + Math.max(0.005, env.rel / 32) + 0.02);
+    if (env && !held) src.stop(when + Math.max(att(env, span) + env.dec / 32, att(env, span) + 0.005) + Math.max(0.005, env.rel / 32) + 0.02);
     const voice = { src, g, ch: stealCh || 0, held, release: env ? Math.max(0.005, env.rel / 32) : 0.005 };
     live.add(voice);
     if (stealCh) sampleLive[stealCh] = voice;
