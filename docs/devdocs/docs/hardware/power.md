@@ -38,7 +38,7 @@ Bridging both ends shorts USB 5 V to the charger output.
 
 Keep digital and analog returns as in the layout — don’t casually short `+3.3V` and `+3.3VA` plane strategy when editing copper.
 
-## Load switch (accessory / strip)
+## Matrix power switch
 
 **TPS22918 (`U8`)**:
 
@@ -46,7 +46,7 @@ Keep digital and analog returns as in the layout — don’t casually short `+3.
 - Enable from Teensy pin **`36`**
 - Switched output feeds **`J9`** (with GND)
 
-Firmware can gate power to an external WS2812 strip / accessory so it isn’t drawing when disabled.
+Firmware can gate power to the LED matrix through U8.
 
 ## Battery sense (firmware)
 

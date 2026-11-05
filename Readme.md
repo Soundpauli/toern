@@ -103,7 +103,7 @@ Open source as always: schematics, code, and design files are here for you to po
 - Note probability, velocity, condition triggers (those “only every other bar” tricks)
 - Global transpose, per-channel detune & octave, fine cents on the poly synth
 - Mute / solo, pattern modes (OFF, ON, SONG, NEXT)
-- Stereo routing options, optional external WS2812 strip for ripple eye-candy synced to the music
+- Stereo routing options
 - USB **Audio + Serial**: send the mix to a computer while using the SD tool; musical MIDI uses the TRS ports
 - Analog clock **out (J25)**, clock **in (J26)** and voice-triggered **sidechain out (J27)**
 - **TOUCHY** performance pads, live fills, and per-voice audition
@@ -119,9 +119,8 @@ Open source as always: schematics, code, and design files are here for you to po
 | **Brain** | Teensy 4.1, PSRAM fitted. Audio codec is the SGTL5000 on the carrier |
 | **Memory** | 16 MB PSRAM target; Micro SD (handbook suggests up to 64 GB, SanDisk Ultra) |
 | **Audio** | 44.1 kHz, 16-bit mono WAV |
-| **Controls** | 4× RGB illuminated I2C rotary-push encoders, 3 touch switches |
+| **Controls** | 4× RGB illuminated I2C rotary-push encoders, 5 capacitive touch buttons |
 | **Display** | Standard [32×16 RGB LED panel](https://de.aliexpress.com/item/1005010071864259.html), 512 LEDs (FastLED); 16×16 optional |
-| **LED strip** | Optional 5 V WS2812 strip; data on **pin 24 / J11.5-1** (configurable length) |
 | **I/O** | 6.35 mm headphones, line in/out, mic in; built-in mic; TRS MIDI in/out |
 | **Power** | USB-C or optional LiPo + charging |
 

@@ -55,7 +55,7 @@ The single selector `exttouch` in `toern_hardware.h` controls the entire panel:
 faders, and panel I²C timing. There is no separate
 fader flag. With `exttouch=true`, grounded active-low buttons A/B/C/D use Teensy pins
 5/22/15/14 respectively. A/B/C map to T1/T2/T3; D maps to T5/FN. C+D retains the playback fill chord. There is no separate external T4 audition input. In TOUCHY, D plays pad 5.
-Button D is on **J14-1** (pin 14) and maps to touch 5 / FN. C+D still requests fill during playback. The LED strip uses **J11.5-1** (pin 24).
+Button D is on **J14-1** (pin 14) and maps to touch 5 / FN. C+D still requests fill during playback.
 The matrix stays on pin 17 / J9-1. Strip operation remains available with
 external buttons enabled. The same `exttouch` flag enables the four NeoSliders at 0x30–0x33.
 

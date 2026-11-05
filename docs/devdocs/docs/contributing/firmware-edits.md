@@ -56,7 +56,7 @@ Offsets 32–33 and 34–35 are `uint16` values (`EEPROM.put`). Offset 33 is als
 | 22 | colorScheme |
 | 23 | stereoChannel |
 | 24 | midiSendMode |
-| 25 | ledStripEnabled |
+| 25 | Retained firmware setting; do not reuse |
 | 26 | ledBrightness |
 | 27 | spkrEnabled |
 | 28 | midiNoteReceive |

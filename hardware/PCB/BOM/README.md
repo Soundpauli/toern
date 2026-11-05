@@ -61,12 +61,25 @@ Check their alignment/contact when installing the Teensy.
   then plug into J10. Pin 1 is ROUT− and pin 2 is ROUT+; neither goes to GND.
   The PCB-side J10 header is already assembled.
 
+## JST cables
+
+Buy **one 5-pin, four 2-pin and one 3-pin** JST-PH 2.00 mm mating lead:
+
+| Qty | Cable | Connection | Source |
+|---|---|---|---|
+| 1 | JST-PH 5-pin, 2.00 mm | Five touchpads on J13 | [Amazon B0CBWZVNXS](https://www.amazon.de/dp/B0CBWZVNXS) |
+| 4 | JST-PH 2-pin, 2.00 mm | Speaker J10 + clock/sidechain jacks J25/J26/J27 | [Amazon B0CBX13ZS2](https://www.amazon.de/dp/B0CBX13ZS2) |
+| 1 | JST-PH 3-pin, 2.00 mm | LED panel on J9 | [Amazon B0CBWZ5KGJ](https://www.amazon.de/dp/B0CBWZ5KGJ) |
+
+The four 2-pin cables cover the speaker and all three panel jacks. They are
+counted together once in `additional-purchased-parts.csv`.
+
 ## Standard panel and touchpads
 
 | Qty | Part | Source / assembly |
 |---|---|---|
 | 1 | 32×16 addressable RGB panel | [AliExpress](https://de.aliexpress.com/item/1005010071864259.html); standard display, connects to J9 |
-| 3 | Touchpads | [Amazon B0BVQR1PJR](https://www.amazon.de/dp/B0BVQR1PJR); single, menu and record |
+| 5 | Touchpads | [Amazon B0BVQR1PJR](https://www.amazon.de/dp/B0BVQR1PJR); single, menu, record, audition and FN |
 | 1 set | Touchpad inlay | [Amazon B0C744NTGN](https://www.amazon.de/dp/B0C744NTGN); fit pieces between the touchpad screws |
 
 The smaller 16×16 build remains optional. For the standard panel, firmware LED

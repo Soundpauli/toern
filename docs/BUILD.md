@@ -74,8 +74,7 @@ These are not on the JLCPCB BOM.
 | 1 | Teensy 4.1 with PSRAM soldered on | Pattern data and the audio objects live in `EXTMEM`. A 4.1 with no PSRAM chip will not run this firmware. The README targets **16 MB** (two PSRAM chips). PJRC’s common add-on is one 8 MB chip; fit what you ordered and run PJRC’s PSRAM memory test before fitting the module |
 | 4 | [Duppa I2C Encoder V2.1](https://www.duppa.net/shop/i2cencoder-v2-1/) plus their illuminated RGB encoder | The bare board does not include the knob. Schematic footprint name is `DuppaI2CEncoderV2.1`. With `exttouch` left `false` in `toern_hardware.h`, encoder indexes 0–3 use addresses **0x01, 0x41, 0x20, 0x61**. The Duppa sheet shows the solder jumpers. Each module has a 5-pin header on both sides; the board’s eight 1×05 sockets are those headers |
 | 1 | **32×16 RGB LED panel — standard** | [AliExpress panel](https://de.aliexpress.com/item/1005010071864259.html). Connect **J9.1 → DIN, J9.2 → GND, J9.3 → switched +5 V**. Firmware LED mode **2** addresses all 512 LEDs on this one panel. A 16×16 panel is the smaller optional build |
-| Optional | Separate 5 V WS2812 LED strip | Data = **Teensy pin 24 / J11.5 pin 1**, GND = **J11.5 pin 5**. Supply the strip from 5 V; J11.5 pin 4 is **+5 V**. External button D uses **J14 pin 1** (Teensy pin 14) |
-| 3 | [Touchpads](https://www.amazon.de/dp/B0BVQR1PJR) | Single, menu and record; connect to J13 as listed below |
+| 5 | [Touchpads](https://www.amazon.de/dp/B0BVQR1PJR) | Single, menu, record, audition and FN; connect all five to J13 as listed below |
 | 1 set | [Touchpad inlay](https://www.amazon.de/dp/B0C744NTGN) | Add/inlay pieces between the touchpad screws |
 | 1 | Single-cell LiPo, JST-PH 2-pin | **J16 pin 1 = GND, pin 2 = VBAT** into the BQ24075. Reversed polarity is the expensive mistake. Leave the battery off until the rails look right |
 | 1 | Small speaker, 4 Ω or 8 Ω | Optional. **Solder the speaker to a JST-PH 2.00 mm 2-pin mating lead** and plug into **J10** (pin 1 ROUT−, pin 2 ROUT+) |
@@ -85,8 +84,8 @@ These are not on the JLCPCB BOM.
 
 The standard touchpads use [B0BVQR1PJR](https://www.amazon.de/dp/B0BVQR1PJR)
 with [B0C744NTGN inlay](https://www.amazon.de/dp/B0C744NTGN) added between the
-screws. Fit the inlay before final tightening and connect the three pads to the
-single/menu/record inputs shown below.
+screws. Fit the inlay before final tightening and connect the five pads to the
+single/menu/record/audition/FN inputs shown below.
 
 ## Prepare and solder the Teensy
 
@@ -108,6 +107,16 @@ single/menu/record inputs shown below.
    solder jumper with the Teensy VIN/VUSB isolation pads.
 
 ## Wire the controls and audio
+
+The standard build needs **six JST-PH mating cables**:
+
+| Qty | Cable | Connection | Source |
+|---|---|---|---|
+| 1 | JST-PH 5-pin, 2.00 mm | Five touchpads on J13 | [Amazon B0CBWZVNXS](https://www.amazon.de/dp/B0CBWZVNXS) |
+| 4 | JST-PH 2-pin, 2.00 mm | Speaker J10 + clock/sidechain jacks J25/J26/J27 | [Amazon B0CBX13ZS2](https://www.amazon.de/dp/B0CBX13ZS2) |
+| 1 | JST-PH 3-pin, 2.00 mm | LED panel on J9 | [Amazon B0CBWZ5KGJ](https://www.amazon.de/dp/B0CBWZ5KGJ) |
+
+Solder the speaker and panel-jack terminals to the 2-pin cable leads.
 
 Build cables with **JST-PH 2.00 mm mating housings and crimp contacts**. Connector
 pin numbers refer to the PCB footprint, not the wire colour or a view into the plug.

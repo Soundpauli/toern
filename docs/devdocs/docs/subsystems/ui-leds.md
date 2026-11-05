@@ -1,12 +1,12 @@
 ---
 sidebar_position: 1
 title: UI & LEDs
-description: Matrix drawing, encoder RGB, and optional strip ripples.
+description: Matrix drawing and encoder RGB.
 ---
 
 # UI & LEDs
 
-The 16×16 (optionally dual-module) matrix is both display and note grid. Drawing primitives live in `toern_ui.ino`; optional external strip effects in `toern_leds.ino`.
+The standard 32×16 matrix (16×16 optional) is both display and note grid. Drawing primitives live in `toern_ui.ino`.
 
 **Y axis:** row 1 (`y == 1`) is lower than row 16. Down = toward row 1 (decrease `y`). Up = toward row 16 (increase `y`).
 
@@ -31,12 +31,6 @@ Colors come from `colors.h` and mode `knobcolor[]` values.
 ## Encoder RGB
 
 `i2cEncoderLibV2` LEDs mirror mode colors and status (e.g. blink helpers `triggerExternalOneBlink`). I2C writes belong in `loop()`, not in the playback ISR.
-
-## External strip
-
-`toern_leds.ino` maintains an optional WS2812 strip: length/enable settings, `triggerLedStripRipple(channel)` on note triggers, `updateLedStrip()` from the main loop.
-
-The strip controller uses **Teensy pin 24 / J11.5 pin 1**, configured by `LED_STRIP_PIN` in `toern.ino`. It uses WS2812Serial independently of the matrix on pin 17. External button D uses pin **14 / J14-1**, so enabling external buttons does not disable the strip. `ETC → LGHT` continues to control strip enablement.
 
 ## Fader I²C diagnostics
 

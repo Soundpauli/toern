@@ -25,7 +25,6 @@ Arduino builds every `.ino` in `platformio/` as one program. Treat the filenames
 | [`toern_parameters.ino`](https://github.com/Soundpauli/toern/blob/main/platformio/toern_parameters.ino) | Defaults and parameter setters (`setParams`, envelopes, synth presets) |
 | [`toern_fileoperations.ino`](https://github.com/Soundpauli/toern/blob/main/platformio/toern_fileoperations.ino) | Pattern/project save & load on SD |
 | [`toern_sd_serial.ino`](https://github.com/Soundpauli/toern/blob/main/platformio/toern_sd_serial.ino) | USB-serial SD file server (any screen; ETC → SD shows SCON) |
-| [`toern_leds.ino`](https://github.com/Soundpauli/toern/blob/main/platformio/toern_leds.ino) | Optional external WS2812 strip ripples synced to notes |
 
 ## Headers
 
