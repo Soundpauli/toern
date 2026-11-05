@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261105a"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -37,7 +37,7 @@
               </div>
               <div class="hb-enc-grid">
                 <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Encoder 1</h5><table class="enc-act"><tbody>
-                  <tr><th>Short</th><td>Exit submenu / back to grid</td><td>Exception: <strong>AUTO</strong> uses short press to run generation.</td></tr>
+                  <tr><th>Short</th><td>Exit submenu / back to grid</td><td>Exception: <strong>AGEN</strong> uses encoder 1 short to run one-shot generation.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Encoder 2</h5><table class="enc-act"><tbody>
                   <tr><th>Turn</th><td>Value adjust on subpages</td><td>Volumes, enums, spans.</td></tr>
@@ -278,6 +278,7 @@
                           </span>
                         </li>
 <li id="swap-menu"><a href="advanced-sequencing.html#swap"><span class="node">SWAP</span></a><span class="desc">Exchange voice notes across the whole pattern. Encoders&nbsp;2/3 select voices; hold and turn either for an octave shift (−8…+8). Encoder&nbsp;4 applies; encoder&nbsp;1 exits. Sound settings stay with their voices.</span></li>
+<li id="subp-menu"><a href="files.html#subpatterns"><span class="node">SUBP</span></a><span class="desc">Enable A–E pattern letters (encoder 3, OFF by default). In DRAW, FN + encoder 2 turn selects a letter; FN + encoder 3 previews its pages. Release FN to switch. Works from any cursor row.</span></li>
 </ul>
                     </li>
 
@@ -560,23 +561,24 @@
                     </li>
 <li><a href="play.html#touchy"><span class="node">TCHY</span></a><span class="desc" data-hb-copy="menus.075">Five-pad sample instrument. Encoder 3: OFF / ON; touch 1 leaves the menu.</span></li>
 <li>
-                          <a href="advanced-sequencing.html#auto-extend"><span class="node">AUTO</span></a>
-                          <span class="desc" data-hb-copy="menus.076">Companion fill: analyse voices, accents, velocities, harmony and BPM across a base-page range, then write coordinated variations after it. Orange strip = source pages; green strip = pages about to be written.</span>
+                          <a id="agen-menu" href="advanced-sequencing.html#agen"><span class="node">AGEN</span></a>
+                          <span class="desc" data-hb-copy="menus.076">One-shot companion generation and temporary evolving arrangements. Orange shows the base-page range; green shows pages the one-shot action will write. Encoder 4 toggles autonomous ON/OFF.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>Enc&nbsp;1 turn</strong> — how many extra pages to generate (<strong>1–16</strong>)</li>
                               <li><strong>Enc&nbsp;1 short</strong> — run generation (green cue — the rare “press 1 to create” exception)</li>
                               <li><strong>Enc&nbsp;2 turn</strong> — base start page</li>
                               <li><strong>Enc&nbsp;3 turn</strong> — base end page</li>
+                              <li><strong>Enc&nbsp;4 short</strong> — autonomous AGEN ON / OFF</li>
                             </ul>
-                            <span class="how" data-hb-copy="menus.077">Uses the same role-aware engine as single-mode page-row randomize. An empty base creates a varied 4/4 starter ensemble; every run is different.</span>
+                            <span class="how" data-hb-copy="menus.077">Encoder 1 short writes permanent variations while AGEN is off. Encoder 4 short toggles temporary evolution with breaks, builds, fills, drops and volume moves; exit restores the original pattern. See <a href="advanced-sequencing.html#agen">AGEN</a>.</span>
                           </span>
                         </li>
 </ul></li>
 
                     <li id="etc">
                       <a href="reference.html#etc"><span class="node">ETC</span></a>
-                      <span class="desc" data-hb-copy="menus.078">Credits, SD file server, generated fill, ring light, palette, battery, idle eyes, child lock, FIRE embers, IMG paint mode, and nuclear resets — in that order.</span>
+                      <span class="desc" data-hb-copy="menus.078">INFO, SD connection status, battery, ADV display settings and RSET. ADV contains cursor, LED/RAM diagnostics, ring light, palette, idle eyes and FIRE controls.</span>
                       <ul>
 <li>
                           <span class="node">INFO</span>
@@ -646,7 +648,7 @@
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>A##</strong> — audio memory used % (peak if higher)</li>
-                              <li><strong>R##</strong> — average freeverb send %</li>
+                              <li><strong>R##</strong> — average reverb send %</li>
                               <li><strong>F###</strong> — free audio blocks</li>
                               <li><strong>C##</strong> — audio CPU %</li>
                               <li><strong>Enc&nbsp;3</strong> — switch metric; press resets peak counters</li>
@@ -665,14 +667,14 @@
                           </span>
                         </li>
 <li>
-                          <span class="node">COLR</span>
+                          <span id="colr-menu" class="node">COLR</span>
                           <span class="desc" data-hb-copy="menus.092">Voice palette / scheme.</span>
                           <span class="sub">
                             <ul class="sub-opts">
                               <li><strong>0</strong> — factory rainbow</li>
                               <li><strong>1</strong> — blue-ish</li>
                               <li><strong>2</strong> — high-contrast red/violet</li>
-                              <li>Custom fourth slot appears when you drop a <code>scheme.txt</code> from the <a href="../../tools/colorsheme/index.html">colour-scheme tool</a></li>
+                              <li>Custom fourth slot appears when you drop a <code>scheme.txt</code> from the <a href="https://toern.live/tools/colorsheme/">colour-scheme tool</a></li>
                             </ul>
                           </span>
                         </li>
@@ -767,7 +769,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="reference.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Screen index</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261105a" defer></script>
     </div>
   </div>
 </div>

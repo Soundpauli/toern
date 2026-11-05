@@ -8,7 +8,7 @@ description: Five-pad controls, fills, faders, effects, presets and browser boun
 
 **Hosted build:** [sim.tyng.app](https://sim.tyng.app/). **Source:** [`tools/sim/`](https://github.com/Soundpauli/toern/tree/main/tools/sim).
 
-This is a JavaScript model of the instrument, with Web Audio synthesis and scheduling. It does not execute the Teensy firmware. Both **16×16** and **32×16** panel layouts use the current control vocabulary; the selector changes matrix geometry, not firmware version. The INFO version follows `VERSION` in `toern.ino` (currently v3.02). Local changes reach the hosted site only after a separate deployment.
+This is a JavaScript model of the instrument, with Web Audio synthesis and scheduling. It does not execute the Teensy firmware. Both **16×16** and **32×16** panel layouts use the current control vocabulary; the selector changes matrix geometry, not firmware version. The INFO version follows `VERSION` in `platformio/toern.ino` (currently v3.03b). Local changes reach the hosted site only after a separate deployment.
 
 ## Five touch pads
 
@@ -26,7 +26,7 @@ While playing, hold **T4+T5** to request a fill for the current voice. It starts
 
 ## Filters and presets
 
-Sample filter pages contain HCUT/LCUT/RVRB/BITC, RES/DTNE/OCTV/TIME, ADSR, and DLAY/VOLUME. **V** is sample-only: −16 = silence, 0 = unity, +16 = 2×. **TIME** defaults to 11/OFF and uses a granular overlap-add browser approximation of the hardware's WSOLA. DLAY follows N/32 of a beat with feedback. Pause releases sources but keeps delay/reverb nodes alive for natural tails. The shared browser reverb and oscillator recipes remain approximations of the per-voice Teensy graph.
+Sample filter pages contain HCUT/LCUT/RVRB/BITC, RES/DTNE/OCTV/TIME, ADSR, and DLAY/VOLUME. **V** is sample-only: −16 = silence, 0 = unity, +16 = 2×. **TIME** defaults to 11/OFF and uses a granular overlap-add browser approximation of the hardware's WSOLA. DLAY follows N/32 of a beat with feedback. Pause releases sources but keeps delay/reverb nodes alive for natural tails. Sample ATTC scales linearly from immediate at 32 to the selected buffer span at 0 (half at 16), with a 1 ms browser minimum; synth attack retains 0–2000 ms. The shared browser reverb and oscillator recipes remain approximations of the per-voice Teensy graph.
 
 All 13 ch11 instrument selections are present: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS, 303, DXEP, DXBS. The ch11 default is DXBS. `instruments.js` mirrors the firmware's filter/register/ADSR tables; browser oscillator timbres do not reproduce the hardware's three-oscillator/FM-style recipes exactly.
 
@@ -113,4 +113,4 @@ node _debug/tests/test_sim_audio.mjs
 node _debug/tests/test_menu_navigation.mjs
 ```
 
-`platformio/src/firmware/device.js` owns state/input, `screens.js` renders the matrix, `performance.js` owns fill/SYNC rules, `instruments.js` mirrors ch11 control defaults, `pitch.js` mirrors grid-fold roots, and `platformio/src/audio/engine.js` owns browser DSP. `main.js` binds the five pads, pointer/keyboard controls and simulated faders. Prefer deterministic transport tests to wall-clock sleeps; always check both matrix widths and mobile layout. Deploy `dist/` only after validation and an explicit deployment request.
+`tools/sim/src/firmware/device.js` owns state/input, `screens.js` renders the matrix, `performance.js` owns fill/SYNC rules, `instruments.js` mirrors ch11 control defaults, `pitch.js` mirrors grid-fold roots, and `tools/sim/src/audio/engine.js` owns browser DSP. `main.js` binds the five pads, pointer/keyboard controls and simulated faders. Prefer deterministic transport tests to wall-clock sleeps; always check both matrix widths and mobile layout. Deploy `dist/` only after validation and an explicit deployment request.

@@ -77,7 +77,7 @@ Match `platformio.ini`: **MIDI + Audio + Serial**. The SD server needs Serial; `
 Sources live in repo-root **`docs/devdocs/`** (same pattern as `docs/handbook/`). Publish details: [This docs site](./docs-site).
 
 ```bash
-cd devdocs
+cd docs/devdocs
 npm install
 npm start
 ```
@@ -87,7 +87,7 @@ Node **≥ 20** required (see `package.json` engines).
 To produce the static files for [docs.toern.live](https://docs.toern.live/):
 
 ```bash
-cd devdocs
+cd docs/devdocs
 npm run build
 # rsync build/ → root@tyng.app:/var/www/docs.toern.live/
 ```

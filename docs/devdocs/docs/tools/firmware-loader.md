@@ -9,19 +9,19 @@ description: Browser Teensy flasher (WebHID) at firmware.tyng.app. GPL-3.0.
 **Live:** [https://firmware.tyng.app/](https://firmware.tyng.app/)
 **Source:** [`tools/firmware/`](https://github.com/Soundpauli/toern/tree/main/tools/firmware)
 
-Based on **Teensy Loader Javascript** (WebHID flash + optional serial). The current UI flashes its bundled stable **v3.0** or **Beta** HEX preset onto a Teensy 4.1 from Chrome/Edge desktop. It does not expose a custom HEX/BIN file picker. The library supports firmware-file parsing, but the UI deliberately uses those two presets.
+Based on **Teensy Loader Javascript** (WebHID flash + optional serial). The current UI flashes its bundled stable **v3.0**, **Beta** or **BETA-MODULR** HEX preset onto a Teensy 4.1 from Chrome/Edge desktop. It does not expose a custom HEX/BIN file picker. The library supports firmware-file parsing, but the UI deliberately uses these bundled presets.
 
 ## Typical flow
 
 1. Open the tool in a Chromium desktop browser
-2. Choose stable v3.0 or Beta
+2. Choose stable v3.0, Beta (capacitive panel) or BETA-MODULR (external buttons/faders)
 3. Upload. A running sketch is rebooted into the bootloader by opening its serial port at 134 baud. The red LED blinks, then WebHID flashes it. The physical program button is the fallback when no sketch is running.
 
 ## Code / licensing
 
 `Teensy-Loader.js` is from [coelacant1/Teensy-Loader-Javascript](https://github.com/coelacant1/Teensy-Loader-Javascript) and is **GPL-3.0**. That license covers `tools/firmware/`. Other software in this repository is MIT; the hardware design has the separate license described in [Hardware overview](../hardware/overview). See `tools/firmware/LICENSE`.
 
-`public/toern_firmware_3.0.ino.hex` is the frozen 3.0 build. The Beta selector loads `public/toern_firmware_beta.ino.hex`. Merely building the device sketch does not update this asset; copy a tested build explicitly. Do not relabel the frozen stable image as the latest source version.
+`public/toern_firmware_3.0.ino.hex` is the frozen 3.0 build. The Beta selector loads `public/toern_firmware_beta.ino.hex`; BETA-MODULR loads `public/toern_firmware_beta_modulr.ino.hex`. Beta version labels come from `public/beta-version.json`, synchronized from the sketch version by `sync-beta-version.mjs`. Merely building the device sketch does not update this asset; copy a tested build explicitly. Do not relabel the frozen stable image as the latest source version.
 
 ## Local run
 

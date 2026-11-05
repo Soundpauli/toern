@@ -1221,37 +1221,24 @@ void showWave() {
       if (c < 32 || c > 126) continue;
       w += alphabet[c - 32][0] + 1;
     }
-    return w;
+    return max(0, w - 1);  // No trailing spacer is drawn after the last glyph.
   };
 
-  auto renderLine = [&](const char* text, int y, CRGB color, int& offset, int& dir, unsigned long& nextStepMs, bool isFilename = false, bool reserveLoadedMark = false) {
+  auto renderLine = [&](const char* text, int y, CRGB color, int& offset, int& dir, unsigned long& nextStepMs, bool reserveLoadedMark = false) {
     int viewStart = 1;
     // Leave columns for a right-side ">" when the browse row is the loaded sample.
-    int viewEnd = reserveLoadedMark ? max(1, (int)maxX - 4) : 14;
+    int viewEnd = reserveLoadedMark ? max(1, (int)maxX - 4) : (int)maxX;
     int viewWidth = viewEnd - viewStart + 1;
     int width = textPixelWidth(text);
-    int fullStrLen = strlen(text);  // Full string length, not displayed part
-    const int singleCharX = reserveLoadedMark ? max(1, viewEnd - 2) : 14;
+    const int initialStartX = viewStart;
 
-    // Single-glyph names sit on the right of the text field (not under the L).
-    if (fullStrLen == 1) {
-      drawText(text, singleCharX, y, color);
-      offset = 0;
-      dir = 1;
-      return;
-    }
-
-    // For filenames longer than 4 chars, start marquee at x=4 instead of x=1
-    int initialStartX = 1;
-    if (isFilename && fullStrLen > 4) {
-      initialStartX = 4;
-    }
-
-    // If short (<=4 chars) or fits in view, show immediately at initialStartX (no scroll)
-    if (fullStrLen <= 4 || width <= viewWidth) {
+    // Measure the actual pixels against this panel's available columns.
+    // Short strings can overflow too; long strings can fit on a wide panel.
+    if (width <= viewWidth) {
       drawText(text, initialStartX, y, color);
       offset = 0;
       dir = 1;
+      nextStepMs = millis() + 300;
       return;
     }
 
@@ -1265,7 +1252,7 @@ void showWave() {
     
     if (now >= nextStepMs) {
       if (dir > 0) {
-        // Scrolling forward: move right until last char hits x=14
+        // Scroll left until the last glyph reaches the text field edge
         offset++;
         if (offset >= offsetMax) {
           offset = offsetMax;
@@ -1275,7 +1262,7 @@ void showWave() {
           nextStepMs = now + 50;  // scroll speed (2x)
         }
       } else {
-        // Scrolling backward: move left until first char is at initialStartX
+        // Scroll right until the first glyph returns to initialStartX
         offset--;
         if (offset <= 0) {
           offset = 0;
@@ -1352,7 +1339,7 @@ void showWave() {
       }
       selectionIsLoaded = (strcasecmp(browseRel, voiceLoadedPathRel[ch]) == 0);
     }
-    renderLine(selectionLabel, 12, selectionColor, scrollSelectionOffset, selectionDir, nextSelectionStepMs, selectionIsFileEntry, selectionIsLoaded);
+    renderLine(selectionLabel, 12, selectionColor, scrollSelectionOffset, selectionDir, nextSelectionStepMs, selectionIsLoaded);
     if (selectionIsLoaded) {
       // 3px ">" flush-right on the filename row (x=maxX-2 .. maxX).
       drawText(">", max(1, (int)maxX - 2), 12, UI_WHITE);

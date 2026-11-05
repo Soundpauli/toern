@@ -41,8 +41,9 @@ Arduino builds every `.ino` in `platformio/` as one program. Treat the filenames
 
 | File | Responsibility |
 |------|----------------|
-| [`platformio/src/resamplerReader.h`](https://github.com/Soundpauli/toern/blob/main/src/resamplerReader.h) | Modified variable-rate sample playback (from teensy-variable-playback lineage) |
-| [`platformio/src/effect_freeverb_dmabuf.*`](https://github.com/Soundpauli/toern/blob/main/src/effect_freeverb_dmabuf.h) | Freeverb variant that keeps large buffers in DMAMEM |
+| [`platformio/src/resamplerReader.h`](https://github.com/Soundpauli/toern/blob/main/platformio/src/resamplerReader.h) | Modified variable-rate sample playback (from teensy-variable-playback lineage) |
+| [`platformio/src/effect_treeverb.*`](https://github.com/Soundpauli/toern/blob/main/platformio/src/effect_treeverb.h) | Active per-voice reverb; balanced six-comb/four-diffuser default |
+| [`platformio/src/effect_freeverb_dmabuf.*`](https://github.com/Soundpauli/toern/blob/main/platformio/src/effect_freeverb_dmabuf.h) | Legacy Freeverb reference for host comparison tests; excluded from the firmware build |
 
 ## Other trees (not the firmware sketch)
 

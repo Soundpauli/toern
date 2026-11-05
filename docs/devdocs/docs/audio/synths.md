@@ -61,6 +61,6 @@ Voice timing/state arrays (`voiceStartTime`, sustain levels, resonance, …) sit
 
 ## Interaction with FX
 
-Channel 11 feeds its shared bitcrusher/filter/reverb chain after the poly voice mix. Channels 13–14 have bitcrusher and filter stages but no freeverb connection. Their first filter page uses CENT instead of RVRB. `setFilters` and parameter helpers apply the voice-specific mappings.
+Channel 11 feeds its shared bitcrusher/filter/reverb chain after the poly voice mix. Channels 13–14 have bitcrusher and filter stages but no reverb connection. Their first filter page uses CENT instead of RVRB. `setFilters` and parameter helpers apply the voice-specific mappings.
 
 Synth PSET slots store custom filter-page settings independently for ch11, ch13 and ch14. See [SD storage](../subsystems/sd-storage#synth-filter-presets). Pause releases all poly slots and mono envelopes while effects decay naturally.

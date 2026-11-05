@@ -12,16 +12,16 @@ These pages are a **Docusaurus** app in repo-root **`docs/devdocs/`**. Productio
 
 | Path | Role |
 |------|------|
-| [`docs/devdocs/`](https://github.com/Soundpauli/toern/tree/main/devdocs) | Docusaurus source (Markdown, config, sidebar) |
+| [`docs/devdocs/`](https://github.com/Soundpauli/toern/tree/main/docs/devdocs) | Docusaurus source (Markdown, config, sidebar) |
 | Public URL | **https://docs.toern.live/** (`baseUrl` = `/`) |
 | Server path | `/var/www/docs.toern.live` (Apache; DNS `docs.toern.live` → `docs.tyng.app`) |
 
-Do **not** copy a build into `website/` or deploy docs as part of the main Netlify site. The operator handbook is separate: repo [`docs/handbook/`](https://github.com/Soundpauli/toern/tree/main/handbook) → [handbook.toern.live](https://handbook.toern.live/).
+Do **not** copy a build into `website/` or deploy docs as part of the main Netlify site. The operator handbook is separate: repo [`docs/handbook/`](https://github.com/Soundpauli/toern/tree/main/docs/handbook) → [handbook.toern.live](https://handbook.toern.live/).
 
 ## Local preview
 
 ```bash
-cd devdocs
+cd docs/devdocs
 npm install
 npm start
 ```
@@ -31,7 +31,7 @@ Open the URL printed in the terminal (routes are at the site root, e.g. `/archit
 ## Production build / deploy
 
 ```bash
-cd devdocs
+cd docs/devdocs
 npm install
 npm run build
 rsync -avz --delete build/ root@tyng.app:/var/www/docs.toern.live/

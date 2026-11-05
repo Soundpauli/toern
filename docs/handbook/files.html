@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261105a"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -47,7 +47,7 @@
                   <tr><th>Turn</th><td>Load sound settings</td><td data-hb-copy="files.011">Saved sound settings load by default. Turn clockwise to enable sideload and keep the current sounds; a red triangle appears. Turn counterclockwise to load saved sounds again. Sideload resets whenever you select another file or re-enter PATT.</td></tr>
                 </tbody></table></div>
                 <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Encoder 4</h5><table class="enc-act"><tbody>
-                  <tr><th>Turn</th><td>Slot number (1–9999)</td><td data-hb-copy="files.013">AUTOSAVE loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
+                  <tr><th>Turn</th><td>Slot number (1–999)</td><td data-hb-copy="files.013">AUTOSAVE loads session recovery and cannot be saved manually. Slots 1–999 hold numbered patterns. The slot colour indicates whether a file exists.</td></tr>
                   <tr><th>Short</th><td>Back to grid</td><td>Leaves PATT without acting on the highlighted slot.</td></tr>
                 </tbody></table></div>
               </div>
@@ -58,6 +58,13 @@
 
           <hr />
 
+
+          <section class="hb-sub" id="subpatterns">
+            <h2>A–E subpatterns</h2>
+            <p>Enable <strong>SETT → SUBP</strong> with encoder 3 (OFF by default), then load a numbered pattern. In <strong>DRAW</strong>, hold <strong>FN</strong> (touch 5 / external button D) and <strong>turn encoder 2</strong> to select A–E. While holding FN, turn <strong>encoder 3</strong> to preview populated pages of that letter. <strong>The cursor can be on any row; y==16 is not required.</strong></p>
+            <p>Release FN to request the switch. Stopped playback changes after preparation; during playback it waits for the NEXT page boundary. The letter/page overlay stays visible while pending. Green marks existing data; blue marks an empty letter. A preview of another letter has a yellow playhead. Sounds remain live and edits stay in memory when changing letters.</p>
+            <p>Each letter holds up to 256 steps. PATT saves and deletes the numbered A–E family; its dots extend through the last letter containing notes, including any gaps. A blue <strong>&gt;</strong> marks the loaded family independently of the number being browsed. Autosave remembers the family and active letter. On the card, A is <code>N.txt</code>; B–E use <code>N-B.txt</code> through <code>N-E.txt</code>.</p>
+          </section>
 
           <section class="hb-sub" id="new">
             <h2 data-hb-copy="files.017">NEW — generate a starting pattern</h2>
@@ -89,6 +96,7 @@
           <hr />
 
 
+          <p>PATT and KIT operations show an animated load/save arrow, percentage and progress bar. A green animated check confirms success; a red X means failure. Pausing shows a white check after autosave completes.</p>
           <section class="hb-sub" id="confirm">
             <h2>Overwrite, delete and cancel</h2>
             <p>Saving over an existing PATT or KIT opens <strong>SAVE? / NO</strong>. In PATT or KIT, <strong>FN + encoder 2</strong> opens <strong>DEL? / NO</strong> for the selected number. In SMP, <strong>FN + encoder 3</strong> deletes the selected WAV; folders cannot be deleted here.</p>
@@ -129,7 +137,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="sample-packs.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Sample kits</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261105a" defer></script>
     </div>
   </div>
 </div>

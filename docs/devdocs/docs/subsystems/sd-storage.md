@@ -119,7 +119,7 @@ Saves, deletes and host SD mutations invalidate it; elapsed time does not.
 
 ### A–E file subpatterns
 
-Enable `SETT → SUBP` (persistent, OFF by default). In DRAW, FN + encoder 2
+Enable `SETT → SUBP` with encoder 3 (persistent, OFF by default) and load a numbered family. FN is capacitive T5 or external button D. Selection is independent of cursor row (`y == 16` is not required). In DRAW, FN + encoder 2
 selects A–E without wrapping; FN + encoder 3 previews the populated pages of
 the selected letter. Sounds and settings stay live. The centered letter/page
 label is green for existing data and blue for an empty slot; another slot's

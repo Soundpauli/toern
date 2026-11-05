@@ -1104,7 +1104,7 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawText(m, "WAIT", 2, 3, 255, 220, 0);
     },
     et_auto(m) {
-      etcSubFrame(m, 3, "AUTO", "G", "Y", "W");
+      etcSubFrame(m, 3, "AGEN", "G", "Y", "W");
       for (let x = 1; x <= m.w; x++) {
         if (x >= Math.round(m.w * 3 / 16) && x <= m.w / 2) m.set(x, 8, 255, 165, 0);
         else if (x > m.w / 2 && x <= m.w * .75) m.set(x, 8, 0, 255, 0);

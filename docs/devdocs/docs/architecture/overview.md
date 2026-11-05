@@ -73,7 +73,7 @@ See [Data model](../core/data-model).
 
 ### 4. Audio graph
 
-Declared in `audioinit.h`: sample players, synth oscillators, envelopes, bitcrushers, filters, freeverb, mixers → SGTL5000 and USB audio output. Parameters are applied from filter/synth setting arrays. See [Audio graph](../audio/graph).
+Declared in `audioinit.h`: sample players, synth oscillators, envelopes, bitcrushers, filters, Treeverb, mixers → SGTL5000 and USB audio output. Parameters are applied from filter/synth setting arrays. See [Audio graph](../audio/graph).
 
 ## Channel map (quick)
 

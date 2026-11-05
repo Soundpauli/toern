@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261105a"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -30,9 +30,9 @@
 
           <section class="hb-sub" id="page-row">
             <h2 data-hb-copy="pages-more.003">The page row</h2>
-            <p class="lede" data-hb-copy="pages-more.004">Turn encoder&nbsp;1 until the cursor sits on the <strong>top strip</strong> of the matrix — that is the <strong>page row</strong> (row&nbsp;16, <code>y==16</code>). It shows your <span data-hb-pages>8</span> pattern pages as a row of dots, <em>and</em> it is the only place the page-wide tools fire.</p>
+            <p class="lede" data-hb-copy="pages-more.004">The <strong>top strip</strong> is the <strong>page row</strong> (row&nbsp;16, <code>y==16</code>). It shows your <span data-hb-pages>8</span> pattern pages and provides page copy/paste, deletion and single-mode note-shift. FN generation and A–E subpattern selection also work from voice rows.</p>
 
-            <div class="hb-warn" data-hb-copy="pages-more.005"><strong>Cursor lock:</strong> every page-row edit below — delete page, copy/paste, clear page, random fill, note-shift — runs <em>only</em> when the cursor is on row&nbsp;16. On a voice row (<code>y&nbsp;≠&nbsp;16</code>) the same presses paint, erase, mute, or do nothing. No exception.</div>
+            <div class="hb-warn" data-hb-copy="pages-more.005"><strong>Cursor scope:</strong> copy/paste, encoder&nbsp;1 page deletion and single-mode note-shift below use row&nbsp;16. <strong>FN + encoder&nbsp;2 long</strong> generates and <strong>FN + encoder&nbsp;2 short</strong> undoes from any DRAW/SINGLE row. The encoder&nbsp;1 + 4 long clear chord also works from a voice row.</div>
 
             <div class="hb-tip" data-hb-copy="pages-more.006"><strong>You are on the page row when the hint strip on row&nbsp;1 changes colour</strong> and the matching encoder rings light up. That colour change is the cue that power tools are armed — if the hints look like normal draw/single, you are still on a voice row.</div>
 
@@ -41,7 +41,7 @@
               <li data-hb-copy="pages-more.008"><strong><a href="#delete-page">Delete a page</a></strong> — unpaint on the page strip (clears that page’s notes)</li>
               <li data-hb-copy="pages-more.009"><strong><a href="advanced-sequencing.html#copy-paste">Copy &amp; paste</a></strong> a page (draw = all voices; single = focused voice only)</li>
               <li data-hb-copy="pages-more.010"><strong>Clear page</strong> — encoder&nbsp;1 long on the page row (all voices in draw, focused voice in single)</li>
-              <li><strong><a href="advanced-sequencing.html#auto-extend">Random fill</a></strong> for the focused voice — single mode only</li>
+              <li><strong><a href="advanced-sequencing.html#auto-extend">Companion generation</a></strong> — FN + encoder&nbsp;2 long from any DRAW/SINGLE row</li>
               <li data-hb-copy="pages-more.012"><strong><a href="advanced-sequencing.html#note-shift">Note-shift</a></strong> — slide the focused voice in time / across rows — single mode only</li>
             </ul>
 
@@ -71,7 +71,7 @@
             <p data-hb-copy="pages-more.029">When the page is fully empty, its strip LED drops to <strong>very dark red</strong>. Playback range (<code>lastPage</code>) updates so trailing empty pages fall out of the walk.</p>
             <div class="hb-tip" data-hb-copy="pages-more.030"><strong>R mode:</strong> encoder&nbsp;4 on the page strip is <a href="advanced-sequencing.html#copy-paste">copy / paste</a>, not erase. Flip to L+R (or use the clear-page gestures below) when you want to wipe a page from the strip.</div>
             <div class="hb-warn" data-hb-copy="pages-more.031"><strong>No undo.</strong> Unpainting a page strip slot is immediate. Save to <a href="files.html#file">PATT</a> first if you might want that page back.</div>
-            <div class="hb-tip" data-hb-copy="pages-more.032"><strong>Page-row short press does nothing.</strong> Encoder&nbsp;1 long (<code>2000</code>) on row&nbsp;16 deletes the current edit page: all voices in draw, the focused voice in single. Random / aware fill is only <strong>FN + encoder&nbsp;2 long</strong> (<code>0200</code>) on that same row.</div>
+            <div class="hb-tip" data-hb-copy="pages-more.032"><strong>Encoder&nbsp;1 short on the page row does nothing</strong>, except cancel an armed copy. Encoder&nbsp;1 long (<code>2000</code>) deletes the edit page: all voices in DRAW, the focused voice in SINGLE. Generate with <strong>FN + encoder&nbsp;2 long</strong> and undo with <strong>FN + encoder&nbsp;2 short</strong>; both work from any cursor row, with SUBP on or off.</div>
 
             <h3 class="hb-subsection-heading" data-hb-copy="pages-more.033">Hint colours — read the strip</h3>
             <p data-hb-copy="pages-more.034">Row&nbsp;1 of the matrix carries four small colour cues, one above each encoder. The encoder rings mirror the same colours. Memorise these states:</p>
@@ -145,7 +145,7 @@
               </div>
             </article>
 
-            <div class="hb-warn" data-hb-copy="pages-more.095"><strong>Clear and randomize have no undo.</strong> If you wipe the wrong page, recover from whatever you last saved under <a href="files.html#file">PATT</a>.</div>
+            <div class="hb-warn" data-hb-copy="pages-more.095"><strong>FN generation has one-level undo:</strong> short-press encoder&nbsp;2 while holding FN to restore the last pre-generation page. Clearing or deleting a page has no undo; save important work under <a href="files.html#file">PATT</a> first.</div>
           </section>
         </section>
 
@@ -153,7 +153,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="advanced-sequencing.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Advanced Sequencing</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261105a" defer></script>
     </div>
   </div>
 </div>

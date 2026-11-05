@@ -108,7 +108,16 @@ Only samples 1–8 expose **V** / VOLUME (`ARR_GAIN`) beside DLAY, encoder 2. Th
 
 ## ATTACK response
 
-ATTACK is the stock Teensy envelope mapping: slider 32 is 0 ms, slider 0 is 2000 ms, linear in between. Decay, sustain and release are unchanged (0–1000 ms / 0–1 / 0–1000 ms). Sample voices 1–8 do not use ONE/GATE modes or length-fitted stages.
+`getAttackDuration(channel)` in `platformio/toern_parameters.ino` supplies both `setParams(ATTACK, channel)` and `getNoteDuration()`. For sample voices 1–8:
+
+```text
+maximumMs = loadedSampleLen[channel] * 1000 / AUDIO_SAMPLE_RATE_EXACT
+attackMs = (32 - ATTC) / 32 * maximumMs
+```
+
+ATTC 32 requests 0 ms, 16 requests half the loaded PCM duration and 0 requests its full duration. This uses the loaded buffer (including its zero-tail pad) at root playback rate; pitch and TIME do not rescale the envelope per note. `samplerAddSample()` reapplies ATTACK after registering a replacement, covering file loads, trims and recordings. An empty sample has a zero-duration maximum. The stock envelope still implements `attack(0)` with its native minimum ramp.
+
+Synth voices retain the linear 0–2000 ms range. Decay and release remain 0–1000 ms. Sample sustain allows 0–32; synth sustain floors at 1. `_debug/tests/test_attack_curve.py` covers all 33 settings, multiple sample lengths, replacement, note gates and simulator timing. The browser uses the selected buffer span for sample attack, retains its 1 ms scheduling floor and the fixed synth range.
 
 ## Pause and effects tails
 
@@ -132,6 +141,6 @@ Sample readers and standard Teensy envelopes are unchanged. Sampler registration
 
 ## Sustain, line output and effect reset
 
-Sustain is clamped to 1–32 in parameter application and slider editing, including CH11 preset/reset defaults. Other ADSR minima are unchanged. LOUT displays 1–19 from quietest to loudest; codec values run in reverse from 31 to 13 and are passed directly to the codec at boot and during menu editing.
+Sustain is clamped to 0–32 for sample voices 1–8 and 1–32 for synth voices in parameter application and slider editing, including CH11 preset/reset defaults. `toern_audio::sustainSliderMin()` centralizes the lower bound. Other ADSR minima are unchanged. LOUT displays 1–19 from quietest to loudest; codec values run in reverse from 31 to 13 and are passed directly to the codec at boot and during menu editing.
 
 `ETC → RSET → RVRB` zeros only reverb and bitcrusher on all playable voices, immediately applying those two settings. Other patch parameters and note data remain intact. SWAP is under SETT after MUTE. BPM places its decimal row at y=4 with a white point and violet fraction/encoder-1 indicator; CTRL=PAGE feedback no longer depends on CHNR.

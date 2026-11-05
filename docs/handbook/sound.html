@@ -17,7 +17,7 @@
   <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
   <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
   <script src="handbook-layout.js?v=20261016s"></script>
-  <script src="handbook-language.js?v=20261016w"></script>
+  <script src="handbook-language.js?v=20261105a"></script>
   <script src="handbook-icons.js"></script>
   <script src="handbook-nav.js?v=20261016s"></script>
 
@@ -221,9 +221,9 @@
                   <text x="220" y="50" font-size="9" fill="#2563eb">sustain level</text>
                 </svg>
               </div>
-              <p class="hb-device__intro" data-hb-copy="sound.102"><strong>Attack</strong> — time from trigger to peak. <strong>Decay</strong> — time from peak to the sustain plateau. <strong>Sustain</strong> — held level while the note remains on. <strong>Release</strong> — fall after note-off. Each parameter is 0–32 on the encoder; the firmware maps it to milliseconds (A / D / R) or 0–1.0 (S).</p>
-              <p>Sustain ranges from 1 to 32 on every voice. Zero values in older patterns and synth presets are raised to 1 when applied or edited; attack, decay and release can still reach their original minimums.</p>
-              <div class="hb-tip" data-hb-copy="sound.103"><strong>Tip:</strong> tweak release last. Long release smears notes into the next step; pair short release with high sustain for staccato drums.</div>
+              <p class="hb-device__intro" data-hb-copy="sound.102"><strong>Attack</strong> is the time from trigger to peak; <strong>decay</strong> falls to the <strong>sustain</strong> level, and <strong>release</strong> follows note-off. ATTC runs backwards: <strong>32 = immediate</strong>. On sample voices 1–8, <strong>16 = half the loaded sample duration</strong> and <strong>0 = its full duration</strong>, at root playback pitch. Loading or recording a replacement updates the timing automatically. Synth attack retains a linear 0–2000&nbsp;ms range. Decay and release span 0–1000&nbsp;ms.</p>
+              <p>Sample sustain ranges from 0 to 32; synth sustain ranges from 1 to 32. Samples normally play as one-shots through their tails. With sample sustain and release both at 0, decay can close the hit before the sample ends. MIDI Note Off does not cut a sample one-shot. Pause, mute and sample replacement release it. Synth note-offs use the configured release.</p>
+              <div class="hb-tip" data-hb-copy="sound.103"><strong>Tip:</strong> to shorten a sample hit with its envelope, set sustain and release to 0, then adjust decay. For a softer onset, turn ATTC down from 32. A half-length fade on a short hat and on a long pad now follows each sample’s own duration.</div>
             </article>
           </section>
 
@@ -326,7 +326,7 @@
           <a class="hb-pager__link hb-pager__link--next" href="audiopath.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Audio path</span></a>
         </nav>
       </div>
-      <script src="handbook-led.js?v=20261011y" defer></script>
+      <script src="handbook-led.js?v=20261105a" defer></script>
     </div>
   </div>
 </div>

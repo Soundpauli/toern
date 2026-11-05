@@ -100,3 +100,7 @@ Drawing for waveforms/peaks lives with UI helpers (`showWave`, peak scan functio
 Browser samples and kit slots use **44.1 kHz, mono, 16-bit PCM WAV**. The handbook specifies up to **12 seconds per sample voice**. The line-input connector is stereo TRS on rev H, but `patchCord220` connects only input channel 0 to `audioInputAmp` and `queue1`; recordings are mono. USB audio is an output to a computer, not a sampler input.
 
 KIT saves the current eight sample buffers; PATT saves the note/settings data separately. A failed KIT save does not clear the custom-sample flags or claim success. KIT writes are checked but are not a whole-kit transaction.
+
+## Filename marquee
+
+`showWave()` in `platformio/toern_sample.ino` measures glyph widths plus internal spacing, excluding the final spacer. Its filename field uses all `maxX` columns, or `maxX - 4` when reserving the loaded-sample marker. Names that fit stay at x=1 with the scroll offset reset; only pixel overflow starts ping-pong scrolling. There is no character-count threshold. The simulator mirrors this rule in `drawMarquee()`; `_debug/tests/test_filename_marquee.py` checks exact fits, narrow glyphs, short overflowing names and both panel widths with/without the marker.

@@ -913,20 +913,23 @@ function spectral(y) {
   return rgb.map((c) => Math.round(c * 0.4));
 }
 
-function drawMarquee(matrix, text, color, now, file, reserveLoadedMark = false) {
-  if (!matrix.__marquee || matrix.__marquee.text !== text || matrix.__marquee.reserve !== reserveLoadedMark) {
-    matrix.__marquee = { text, offset: 0, dir: 1, next: now + 300, reserve: reserveLoadedMark };
+function drawMarquee(matrix, text, color, now, reserveLoadedMark = false) {
+  if (!matrix.__marquee || matrix.__marquee.text !== text || matrix.__marquee.reserve !== reserveLoadedMark || matrix.__marquee.cols !== COLS) {
+    matrix.__marquee = { text, offset: 0, dir: 1, next: now + 300, reserve: reserveLoadedMark, cols: COLS };
   }
   const mark = matrix.__marquee;
-  const width = textPixelWidth(text);
-  const initial = file && text.length > 4 ? 4 : 1;
-  const viewEnd = reserveLoadedMark ? Math.max(1, COLS - 4) : 14;
-  if (text.length === 1) {
-    matrix.drawText(text, reserveLoadedMark ? Math.max(1, viewEnd - 2) : 14, 12, color);
+  const width = Math.max(0, textPixelWidth(text) - 1);
+  const initial = 1;
+  const viewEnd = reserveLoadedMark ? Math.max(1, COLS - 4) : COLS;
+  if (width <= viewEnd) {
+    mark.offset = 0;
+    mark.dir = 1;
+    mark.next = now + 300;
+    matrix.drawText(text, initial, 12, color);
     return;
   }
   const offsetMax = Math.max(0, initial + width - (viewEnd + 1));
-  if (text.length > 4 && width > viewEnd - initial + 1 && now >= mark.next) {
+  if (now >= mark.next) {
     if (mark.dir > 0) {
       mark.offset += 1;
       if (mark.offset >= offsetMax) { mark.offset = offsetMax; mark.dir = -1; mark.next = now + 500; }
@@ -999,7 +1002,7 @@ export function drawWave(matrix, s, now) {
   const ch = s.GLOB.currentChannel;
   // Compare against the last encoder-2 load, not browse/preview sampleUrl.
   const selectionIsLoaded = file && !!item?.url && item.url === s.loadedSampleUrl?.[ch];
-  drawMarquee(matrix, s.wavName || "-", color, now || 0, file, selectionIsLoaded);
+  drawMarquee(matrix, s.wavName || "-", color, now || 0, selectionIsLoaded);
   if (selectionIsLoaded) matrix.drawText(">", Math.max(1, COLS - 2), 12, [120, 120, 120]);
 }
 
