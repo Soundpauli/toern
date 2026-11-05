@@ -5,7 +5,7 @@
 #define MIDI_PAGES_COUNT 10
 #define VOL_PAGES_COUNT 5
 #define ETC_PAGES_COUNT 5
-#define MODE_PAGES_COUNT 11
+#define MODE_PAGES_COUNT 10
 #define ADV_PAGES_COUNT 10
 
 // PPQN page value readout: 0=rate/OFF, 1=STOP/CONT, 2=pulse width
@@ -181,8 +181,7 @@ MenuPage modePages[MODE_PAGES_COUNT] = {
   {"PONG", 24, false, nullptr},
   {"SONG", 22, false, nullptr},
   {"TCHY", 63, false, nullptr},
-  {"AGEN", 15, true, "PAGES"},
-  {"DEMO", 66, false, nullptr}
+  {"AGEN", 15, true, "PAGES"}
 };
 MenuPage advancedPages[ADV_PAGES_COUNT] = {
   {"CRSR", 32, false, nullptr},
@@ -862,7 +861,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 30, 12);  // PPQN pulse width ms
       EEPROM.write(EEPROM_DATA_START + 11, 1);   // simpleNotesView default (1 = EASY)
       EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
-      EEPROM.write(EEPROM_DATA_START + 13, 1);   // ledMode default (1 = one panel, normal orientation)
+      EEPROM.write(EEPROM_DATA_START + 13, DEFAULT_LED_MODE); // 32x16, normal orientation
       EEPROM.write(EEPROM_DATA_START + 14, 1);   // ctrlMode default (1 = VOL)
       EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
       EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
@@ -1092,8 +1091,8 @@ FLASHMEM void loadMenuFromEEPROM() {
   uint8_t ledMode = EEPROM.read(EEPROM_DATA_START + 13);
   extern bool ledModulesRotated;
   if (ledMode < 1 || ledMode > 4) {
-    ledMode = 1;
-    saveSingleModeToEEPROM(13, 1);
+    ledMode = DEFAULT_LED_MODE;
+    saveSingleModeToEEPROM(13, DEFAULT_LED_MODE);
   }
   ledModules = (ledMode == 1 || ledMode == 3) ? 1 : 2;
   ledModulesRotated = (ledMode >= 3);
@@ -1415,10 +1414,10 @@ FLASHMEM void loadMenuFromEEPROM() {
   
   // Ensure led mode is valid (1,2,3,4 => 1,2,1B,2B)
   if (ledMode < 1 || ledMode > 4) {
-    ledMode = 1;     // Default to 1 if invalid value
-    ledModules = 1;
+    ledMode = DEFAULT_LED_MODE; // Standard 32x16 if invalid
+    ledModules = DEFAULT_LED_MODE;
     ledModulesRotated = false;
-    saveSingleModeToEEPROM(13, 1);
+    saveSingleModeToEEPROM(13, DEFAULT_LED_MODE);
   }
 
   if (ctrlMode != 0 && ctrlMode != 1) {
@@ -2863,11 +2862,6 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawLargeIndicatorCustom(col[from], 2);
       drawLargeIndicatorCustom(col[to], 3);
       drawMenuIndicator('L', from == to ? 'R' : 'G', 4);
-      break;
-    }
-    case 66: {
-      drawMenuText("DEMO", 2, 10, currentMenuParentTextColor());
-      drawMenuValue("GO", 2, 3, UI_GREEN);
       break;
     }
     case 61: { // MODE inherits the former SONG main-menu identity.
@@ -5037,9 +5031,6 @@ FLASHMEM void switchMenu(int menuPosition){
           swapLastAt = millis();
           menuRequestFullRedraw();
         }
-        break;
-      case 66:
-        startDemoAnimation();
         break;
       case 1:
         switchMode(&loadSaveTrack);

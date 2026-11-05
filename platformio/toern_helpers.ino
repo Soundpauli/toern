@@ -4588,7 +4588,7 @@ FLASHMEM void startDemoAnimation() {
   if (isNowPlaying) pause(true);
   allOff();
   stopAllSetWavPreviewAudio();
-  // Consume the menu launch edge; DEMO accepts only Touch 1 / button A.
+  // Clear encoder action state; DEMO launches from INFO via touch3 / button C.
   buttons[3] = 0;
   pressed[3] = false;
   isPressed[3] = false;
@@ -4608,7 +4608,7 @@ FLASHMEM bool serviceDemoAnimation() {
     const bool down = readTouch1Pressed(); // external panel maps this to BUTTON_A
     if (down) demoAnimationExiting = true;
     if (demoAnimationExiting && !down) {
-      // Consume the release here so it cannot also toggle SINGLE / leave MODE.
+      // Consume the release here so it cannot also toggle SINGLE / leave INFO.
       demoAnimationActive = false;
       FastLEDclear();
       FastLEDshow();

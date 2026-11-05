@@ -46,7 +46,7 @@ export const SUBS = {
   recs: ["INPT", "MIC", "HPF", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PQ-I", "PQ-O", "TRIG", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "SPKR"],
-  mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO", "DEMO"],
+  mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO"],
   etc: ["INFO", "SCON", "BATT", "ADV", "RSET"],
   adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE", "2-CH", "USBP", "HFC"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
@@ -714,11 +714,6 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     return;
   }
   const { mode: pageMode, index: pageIndex } = resolveSubPage(s.mode, s.subIndex);
-  if (visibleMode === "mode" && name === "DEMO") {
-    matrix.drawText("DEMO", 2, 10, parent);
-    matrix.drawText("GO", 2, 3, UI_GREEN);
-    return;
-  }
   if (visibleMode === "etc" && visibleIndex === 1) {
     matrix.drawText("SCON", 2, 10, parent);
     matrix.drawText("WAIT", 2, 3, UI_YELLOW);

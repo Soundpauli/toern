@@ -4,7 +4,7 @@
 
 > Say it like *turn*. As in: turn the knobs. Turn a doodle into a beat. Turn “I can’t play piano” into “wait, that slap though.”
 
-TŒRN is a sequenced musical device for beginners, makers, and anyone who likes blinking lights more than plugin menus. Think **Etch-A-Sketch™ energy**, but instead of drawing a wobbly staircase you draw drums, synths, and happy accidents — on a vivid **16×16 RGB LED matrix** that is both the screen *and* the keyboard.
+TŒRN is a sequenced musical device for beginners, makers, and anyone who likes blinking lights more than plugin menus. Think **Etch-A-Sketch™ energy**, but instead of drawing a wobbly staircase you draw drums, synths, and happy accidents — on a vivid **32×16 RGB LED panel** (standard; 16×16 optional) that is both the screen *and* the keyboard.
 
 It sits on a Teensy 4.1, runs from a Micro SD card full of your WAVs, and is happy on a desk, in a backpack, or on battery at the park where strangers will ask “what *is* that?”
 
@@ -19,7 +19,7 @@ You get:
 - **8 sample voices** for drums, one-shots, loops, and “that weird recording from the metro”
 - **1 three-voice polyphonic synth** with presets (bass, keys, chiptune, pads… the usual suspects)
 - **2 monophonic synths** with LFO and arpeggiator for leads that refuse to sit still
-- A **16-step × 16-page** sequencer (256 steps of room to overthink), page chaining into songs, MIDI in/out, filters, bitcrush, reverb, and enough real-time knobs to keep your hands busy and your laptop jealous
+- A **32-step × 8-page** sequencer (256 steps of room to overthink; 16×16 mode uses 16 steps × 16 pages), page chaining into songs, MIDI in/out, filters, bitcrush, reverb, and enough real-time knobs to keep your hands busy and your laptop jealous
 
 No laptop required once it’s built. Samples live on the SD card. Patterns autosave. You twist, tap, and suddenly it’s 2 a.m.
 
@@ -48,25 +48,27 @@ Open source as always: schematics, code, and design files are here for you to po
 
 ---
 
-## Features (the longer version)
+## Feature list
 
 ### Sequencer
 
-- **16 channels** in spirit: 8 sample voices (1–8), one 3-voice poly synth (11), two mono synths (13–14)
-- **16 steps per page × 16 pages** → 256 steps per pattern
+- **11 instrument voices** on a 16-row grid: 8 sample voices (1–8), one 3-voice poly synth (11), two mono synths (13–14)
+- Standard **32 steps per page × 8 pages** → 256 steps per pattern; optional 16×16 mode uses 16 steps × 16 pages
 - **Voice mode**: each voice keeps its own pattern length. It loops the pages that hold its notes, pitches included, while the other voices keep looping on their own
-- **FIRE** (ETC menu): optional playhead sparks when a chosen voice’s notes light white
-- Store up to **999 patterns**, **999 samples**, **100 samplepacks**
+- **FIRE** (ETC → ADV menu): optional playhead sparks when a chosen voice’s notes light white
+- Store up to **999 patterns**, **999 samples**, **999 samplepacks**
 - **Autosave / autoload** so your 3 a.m. genius doesn’t vanish at boot
 - **Switch patterns live** without stopping playback
 - **Song mode**: chain up to **64** page assignments from the current pattern
 - Pattern ops: copy/paste, transpose page/channel (±1 octave), smart random notes (major/minor + rhythm ideas), clear page/channel
+- **SWAP** exchanges notes between voices, with octave offsets; optional **SUBP** file subpatterns extend arrangements
 
 ### Sample voices (channels 1–8)
 
 - Up to **~12 seconds** per voice at 44.1 kHz
 - Browse and load samples **while playing** (yes, really)
 - Per-voice start/end trim, forward/reverse
+- **TIME** stretches or shortens samples independently of pitch
 - Samplepacks (including pack 0 = custom per-voice assignment)
 - Record from **built-in mic / line-in / mic-in** straight in the sample browser
 - Save or merge used samples back to the SD card as a pack
@@ -102,6 +104,11 @@ Open source as always: schematics, code, and design files are here for you to po
 - Global transpose, per-channel detune & octave, fine cents on the poly synth
 - Mute / solo, pattern modes (OFF, ON, SONG, NEXT)
 - Stereo routing options, optional external WS2812 strip for ripple eye-candy synced to the music
+- USB **Audio + Serial**: send the mix to a computer while using the SD tool; musical MIDI uses the TRS ports
+- Analog clock **out (J25)**, clock **in (J26)** and voice-triggered **sidechain out (J27)**
+- **TOUCHY** performance pads, live fills, and per-voice audition
+- Browser tools for firmware flashing, SD transfers, sample conversion and the simulator
+- **Demo animation:** open **ETC → INFO**, press **touch3 / BUTTON_C**; press and release **Touch 1 / BUTTON_A** to return to INFO
 
 ---
 
@@ -113,90 +120,29 @@ Open source as always: schematics, code, and design files are here for you to po
 | **Memory** | 16 MB PSRAM target; Micro SD (handbook suggests up to 64 GB, SanDisk Ultra) |
 | **Audio** | 44.1 kHz, 16-bit mono WAV |
 | **Controls** | 4× RGB illuminated I2C rotary-push encoders, 3 touch switches |
-| **Display** | 16×16 RGB LED matrix (FastLED); up to 2 modules → 32×16 |
+| **Display** | Standard [32×16 RGB LED panel](https://de.aliexpress.com/item/1005010071864259.html), 512 LEDs (FastLED); 16×16 optional |
 | **LED strip** | Optional 5 V WS2812 strip; data on **pin 24 / J11.5-1** (configurable length) |
 | **I/O** | 6.35 mm headphones, line in/out, mic in; built-in mic; TRS MIDI in/out |
 | **Power** | USB-C or optional LiPo + charging |
 
 ---
 
-## SD card over USB
-
-TŒRN does **not** mount the Micro SD as USB mass storage. That would be too easy, and also fight the audio engine. Instead, browse and transfer files over **USB Serial** from any screen.
-
-**Menu → ETC → SD** shows **SCON**: **WAIT** in yellow until a host program is talking, then **OK** in green. A USB cable with no tool open stays on WAIT and does not stall the instrument.
-
-### Primary — browser tool
-
-1. On a computer: open **[https://sdtool.tyng.app](https://sdtool.tyng.app)** in desktop **Chrome or Edge**
-2. Click **Connect**, pick the Teensy serial port
-3. Leave the unit on the screen you are using
-
-WAV uploads are converted in the browser to **44.1 kHz mono 16-bit**. Drag folders, multi-file drops, and zip archives are supported.
-
-KIT saving runs in the background while playback and controls continue. The
-PATT and KIT load/save screens (including KIT loading at boot) share menu icons,
-an animated green load/red save arrow, a percentage and progress bar. A green
-animated check confirms success; a red X indicates failure. Pausing shows a white
-animated check after autosave completes. Both 32×16 (`led == 2`) and 16×16
-(`led == 1`) screens have adapted layouts. Recording or loading replacement
-samples cancels an unfinished KIT save. EEPROM updates wait until audio has settled.
-
-The simulator's MIDI importer splits longer songs across subpatterns **A–E**:
-up to **1,280 steps** (40 pages at 32 steps/page). Preview each letter, then use
-the MIDI import panel's **SEND TO DEVICE** with `SETT → SUBP` enabled and current
-firmware. Multi-letter transfers replace A–E in the loaded family and clear
-unused letters; A is selected afterwards. Switch letters with **FN + encoder 2**.
-Use the song start-page slider to select later sections of still longer files.
-
-### Secondary — local CLI / scripting
-
-Any USB Type that includes Serial (e.g. **Serial + MIDI**):
-
-```bash
-cd tools/sdtool
-pip install pyserial
-python3 toern_sd.py -p /dev/cu.usbmodemXXXX list /
-# also: put / rm / mkdir / get
-python3 toern_sd.py web       # optional local UI at http://127.0.0.1:8787
-```
-
-Insert or eject the SD card only with the unit **off** — the firmware re-indexes on boot.
-
----
-
-## MCP remote control
-
-The local [MCP bridge](tools/toern-mcp/README.md) controls a USB-connected TŒRN through serial: encoders, buttons, touch pads, painting, menus and filter pages/resets. It provides JSON state, menu/filter readback and matrix pixels, plus optional PNG screenshots and performance telemetry.
-
-MCP is **inactive after boot**. Connecting the bridge starts a session with `HELLO`; disconnecting sends `BYE`. USB disconnect or three seconds without keepalives also ends the session and releases remote controls. While inactive, the firmware skips remote input reconciliation and display frame copies. Opening serial for the SD tool does not activate MCP.
-
-The default build includes this automatic gating. To exclude MCP entirely:
-
-```bash
-pio run -d platformio -e teensy41-no-mcp
-```
-
-This sets `TOERN_REMOTE_CONTROL=0`, removing remote input state, display capture and diagnostics while retaining SD serial, USB MIDI/audio and the audio optimizations. On the current build it frees 1,088 bytes in RAM1, 1,536 bytes in RAM2 and 5,120 bytes in flash. Automatic inactivity saves processing work; the disabled build also saves memory.
-
-See [developer documentation](docs/devdocs/docs/tools/mcp-remote.md) for session behavior and implementation details.
-
 ## Repo map (where stuff lives)
 
 | Path | Contents |
 |------|----------|
 | `platformio/` | Arduino sketch tabs, headers, custom audio in `src/`, build scripts and `platformio.ini` |
-| `hardware/PCB/` | KiCad boards, schematics and manufacturing files |
+| `hardware/PCB/` | KiCad boards, schematics, manufacturing files and [purchasing BOMs](hardware/PCB/BOM/README.md) |
 | `hardware/housing/` | Fusion archives, laser DXFs and panel previews |
 | `docs/devdocs/` | Developer documentation → [docs.toern.live](https://docs.toern.live/) |
 | `docs/handbook/` | Operator handbook → [handbook.toern.live](https://handbook.toern.live/) |
 | `docs/BUILD.md`, `docs/info.md` | Hardware assembly and firmware build instructions |
 | `tools/firmware/` | Browser firmware flasher (GPL-3.0) |
-| `tools/sdtool/` | Browser SD tool and Python CLI |
+| `tools/sdtool/` | Browser SD tool |
 | `tools/sim/` | Browser simulator |
 | `tools/audioconvert/` | Standalone sample converter |
 | `tools/case/` | Standalone case generator; `case.toern.live` planned, not deployed |
-| `tools/colorsheme/`, `tools/toern-mcp/`, `tools/_shared/` | Color editor, remote bridge and shared tool assets |
+| `tools/colorsheme/`, `tools/_shared/` | Color editor and shared tool assets |
 | `_debug/` | Host tests, analysis scripts and local diagnostic captures |
 | `_private/` | Local business data/helpers; annotation tool in `_private/helpers/annotate/` |
 | `website/` | Public project website only; local/deploy-only |
@@ -204,6 +150,13 @@ See [developer documentation](docs/devdocs/docs/tools/mcp-remote.md) for session
 See [the complete directory map](docs/REPOSITORY_LAYOUT.md) for local-only items marked `***`.
 
 Build from the repository root with `pio run -d platformio`, or `cd platformio` first.
+
+For a personal hardware build, follow the [assembly and laser-cutting guide](docs/BUILD.md).
+Start with the [BOM directory](hardware/PCB/BOM/README.md): check assembly-part stock
+before ordering the PCB. The [pre-order list](hardware/PCB/BOM/preorder-parts.csv)
+lists parts to secure for JLCPCB assembly. Then buy the
+Teensy, PSRAM, encoders, matrix, cables and
+case hardware separately. The website’s **Build** chapter covers the same assembly order.
 
 ---
 
@@ -261,18 +214,3 @@ Made with too many late nights and exactly the right number of RGB LEDs.
 
 **Jan aka warft_ctrl** (formerly soundpauli)
 Hamburg, 2026
-
-### AGEN self-playing mode
-
-**MODE → AGEN → click encoder 4** toggles temporary autonomous evolution of the
-current page. A second page is prepared in the background, then the two alternate
-at page boundaries. Phrases repeat a randomized 1, 4 or 8 times, favoring longer
-4/8-pass sections. AGEN keeps the starting key/register, builds diatonic chords,
-and develops the drums through breaks, builds, fills and drops. The top row shows
-the two working pages (white playing, red preparing, yellow ready); the number
-at the right counts remaining repeats. Note probabilities vary the details.
-Working buffers are allocated only while enabled; musical tables stay in flash.
-AGEN moves per-voice volume for breaks/builds/drops and can use the existing FILL
-engine on percussion. Encoder 2 still works manually; starting volumes return on exit.
-Click again or pause to restore the original pattern; temporary notes are not
-autosaved. Encoder 1 retains one-shot song generation. Runs entirely on device.

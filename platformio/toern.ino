@@ -777,9 +777,10 @@ int clockMode = 1;
 int voiceSelect = 1;
 int simpleNotesView = 1;               // Simple notes view: 1=EASY, 2=FULL
 int loopLength = 0;                    // Loop length: 0=OFF, 1-8=force pattern length
-int ledModules = 1;                    // Number of LED modules: 1 or 2
+static constexpr uint8_t DEFAULT_LED_MODE = 2;  // Standard 32x16 panel (512 LEDs)
+int ledModules = DEFAULT_LED_MODE;     // Logical 16x16 sections: 1 or 2
 bool ledModulesRotated = false;        // LED panel orientation flag: false=normal, true=rotated compensation
-unsigned int maxX = MATRIX_WIDTH * 1;  // Runtime variable: total display width (16 or 32)
+unsigned int maxX = MATRIX_WIDTH * DEFAULT_LED_MODE;  // Runtime variable: total display width (16 or 32)
 unsigned int micGain = 0;              // Microphone gain: 0-64, default 10
 unsigned int lineInLevel = 8;          // Line input level: 0-15, default 8
 int ctrlMode = 1;                      // 0=page, 1=volume control for encoder 1
@@ -4619,8 +4620,8 @@ FLASHMEM void loadColorSchemeAndBrightness() {
 FLASHMEM void loadLedModeEarlyFromEEPROM() {
   uint8_t ledMode = EEPROM.read(EEPROM_DATA_START + 13);  // 1=1, 2=2, 3=1B, 4=2B
   if (ledMode < 1 || ledMode > 4) {
-    ledMode = 1;
-    EEPROM.write(EEPROM_DATA_START + 13, 1);
+    ledMode = DEFAULT_LED_MODE;
+    EEPROM.write(EEPROM_DATA_START + 13, DEFAULT_LED_MODE);
     markSettingsBackupDirty();
   }
 
@@ -6173,6 +6174,19 @@ void checkTouchInputs() {
   // Any touch held or tapped counts as user activity (exits / prevents screensaver)
   if (tv1 || tv2 || touch3Pressed || touch4Pressed) {
     noteUserActivity();
+  }
+
+  // INFO shortcut shares the debounced REC input: touch3 or external BUTTON_C.
+  // Track it on every screen so entering INFO with REC held cannot launch DEMO.
+  static bool lastInfoDemoTouch3 = false;
+  const bool demoPress = touch3Pressed && !lastInfoDemoTouch3;
+  lastInfoDemoTouch3 = touch3Pressed;
+  extern bool inEtcSubmenu;
+  extern int getCurrentMenuMainSetting();
+  if (currentMode == &menu && inEtcSubmenu && getCurrentMenuMainSetting() == 39
+      && demoPress && !fillChord) {
+    startDemoAnimation();
+    return;
   }
 
   // touch4: audition current voice (FX path). No grid write except SINGLE+playing

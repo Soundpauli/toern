@@ -1206,7 +1206,6 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function subValue(mode, index) {
     if (mode === "look" && SUBS.look[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
-    if (mode === "mode" && SUBS.mode[index] === "DEMO") return { text: "GO" };
     if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
     return legacySubValue(slot.mode, slot.index);
@@ -1621,7 +1620,6 @@ export function createDevice(matrix, statusEl, rings) {
       }
       return;
     }
-    if (s.mode === "mode" && SUBS.mode[s.subIndex] === "DEMO") return;
     if (SUBS[s.mode] && enc === 2) {
       if (pageMode === "vol" && pageIndex === 0) s.mainVol = clamp(s.mainVol + dir, 0, 100);
       else if (pageMode === "vol" && pageIndex === 1) s.gain = clamp(Math.round((s.gain + dir * 0.1) * 10) / 10, 0, 2);
@@ -1966,7 +1964,6 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "etc" && s.subIndex === 3 && enc === 3) { s.mode = "adv"; s.subIndex = 0; return; }
-    if (s.mode === "mode" && SUBS.mode[s.subIndex] === "DEMO" && enc === 3) { startDemo(); return; }
     if (s.mode === "mode" && s.subIndex === 7 && enc === 3) { s.mode = "song"; return; }
     if (slot.mode === "etc" && slot.index === ETC_FIRE_INDEX && enc === 2) { s.fireFocus = ((s.fireFocus | 0) + 1) % 3; return; }
     if (slot.mode === "etc" && slot.index === ETC_RSET_INDEX && enc === 1) { runReset(); return; }
@@ -2146,6 +2143,10 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function onTouch3(down) {
+    if (s.mode === "etc" && s.subIndex === 0) {
+      if (down) startDemo();
+      return;
+    }
     if (s.mode === "touchy") { touchyTouch(3, down); return; }
     if (s.mode === "filter") {
       if (down) resetFilterPage(s.GLOB.currentChannel);
@@ -2316,8 +2317,8 @@ export function createDevice(matrix, statusEl, rings) {
       if (down) {
         demoExitHeld = true;
         noteActivity();
-        s.mode = "mode";
-        s.subIndex = SUBS.mode.indexOf("DEMO");
+        s.mode = "etc";
+        s.subIndex = 0;
       }
       return;
     }

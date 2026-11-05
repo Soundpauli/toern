@@ -192,7 +192,7 @@ expectToggle("ON", [0, 120, 0]);
 textDraws.length = 0;
 litPixels = 0;
 drawSubmenu(matrix, { mode: "mode", subIndex: 7 }, now);
-assert.equal(litPixels, 11); // Eleven MODE submenu navigation dots.
+assert.equal(litPixels, 10); // Ten MODE submenu navigation dots.
 assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["SONG", 2, 10]]);
 textDraws.length = 0;
 litPixels = 0;
@@ -454,18 +454,21 @@ for (const cols of [16,32]) {
   assert(!letters.some(a=>a[0]==='&'));
 }
 setLayout(32);
-open(8);page(10);assert.equal(d.menuSummary().detail,'DEMO: GO');
-d.press(3);assert.equal(d.mode(),'demo');
+open(8); page(9); d.rotate(3,1); assert.equal(d.subIndex(),9);
+d.press(3); assert.notEqual(d.mode(),'demo');
+open(9); page(1); d.touch(3,true); d.touch(3,false); assert.equal(d.mode(),'etc');
+page(0); d.press(3); assert.notEqual(d.mode(),'demo');
+open(9); page(0); d.touch(3,true); d.touch(3,false); assert.equal(d.mode(),'demo');
 const total=10000+3*(32+DEMO_TEXT_WIDTH+1)*65;
 d.start();now+=total*3;frame(now);assert.equal(d.mode(),'demo');
 d.press(3);assert.equal(d.mode(),'demo');
 d.touch(2,true);d.touch(2,false);assert.equal(d.mode(),'demo');
-d.touch(1,true);assert.equal(d.mode(),'mode');assert.equal(d.subIndex(),10);
-d.touch(1,false);assert.equal(d.mode(),'mode');
-d.press(3);assert.equal(d.mode(),'demo');
+d.touch(1,true);assert.equal(d.mode(),'etc');assert.equal(d.subIndex(),0);
+d.touch(1,false);assert.equal(d.mode(),'etc');
+d.touch(3,true);d.touch(3,false);assert.equal(d.mode(),'demo');
 d.keydown({key:'a',code:'KeyA',preventDefault(){},stopPropagation(){}});
-assert.equal(d.mode(),'mode');
-d.keyup({key:'a',code:'KeyA'});assert.equal(d.mode(),'mode');
+assert.equal(d.mode(),'etc');
+d.keyup({key:'a',code:'KeyA'});assert.equal(d.mode(),'etc');
 d.jump('bpm');const oldBpm=d.bpm();d.rotate(0,1);assert.equal(d.bpm(),Math.round((oldBpm+.1)*10)/10);
 console.log('PASS: DEMO order/timing/full off-grid scrolls/exit and one-row fractional BPM on both matrix widths.');
 

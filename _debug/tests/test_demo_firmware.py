@@ -6,6 +6,9 @@ import sys
 root = (Path(__file__).resolve().parents[2] / 'platformio')
 source = (root / 'toern_helpers.ino').read_text()
 section = source[source.index('static bool demoAnimationActive'):source.index('// ----- Run the Animation Once')]
+touch_source = (root / 'toern.ino').read_text()
+shortcut = touch_source[touch_source.index('  // INFO shortcut shares'):touch_source.index('  // touch4: audition current voice (FX path).', touch_source.index('  // INFO shortcut shares'))]
+assert '"DEMO"' not in (root / 'toern_menu.ino').read_text()
 harness = r'''
 #include <cassert>
 #include <cstdint>
@@ -30,6 +33,14 @@ void drawLogoAnimationFrame(unsigned long t,bool hold,bool wavesOnly){if(wavesOn
 bool mPixels[5][5]={};
 void light(int x,int y,CRGB c){assert(y>=4&&y<=13);++letters;if(x>=17&&x<27&&c.r==255)mPixels[4-(y-4)/2][(x-17)/2]=true;}
 SECTION
+struct Mode {} menu, other;
+Mode *currentMode = &other;
+bool inEtcSubmenu = false;
+int setting = 39;
+int getCurrentMenuMainSetting(){ return setting; }
+void pollShortcut(bool touch3Pressed, bool fillChord = false){
+SHORTCUT
+}
 int main(){
  for(auto &g:alphabet){g[0]=3;g[1]=g[2]=g[3]=31;}
  alphabet[0][1]=alphabet[0][2]=alphabet[0][3]=0;
@@ -66,12 +77,22 @@ int main(){
  int displayed=flushed;now+=100;serviceDemoAnimation();assert(flushed==displayed);
  touchDown=false;now+=5;assert(serviceDemoAnimation());
  assert(!demoAnimationActive&&redraws==1&&!serviceDemoAnimation());
+ // Only a fresh REC edge on INFO launches. Held entry and other menus do not.
+ pollShortcut(true); assert(!demoAnimationActive);
+ currentMode=&menu; inEtcSubmenu=true;
+ pollShortcut(true); assert(!demoAnimationActive);
+ pollShortcut(false); setting=42; pollShortcut(true); assert(!demoAnimationActive);
+ pollShortcut(false); setting=39; pollShortcut(true,true); assert(!demoAnimationActive);
+ pollShortcut(false); pollShortcut(true); assert(demoAnimationActive);
+ uint32_t launched=demoAnimationStarted; now+=100;
+ pollShortcut(true); assert(demoAnimationStarted==launched);
+
 }
-'''.replace('SECTION', section)
+'''.replace('SECTION', section).replace('SHORTCUT', shortcut)
 with tempfile.TemporaryDirectory(prefix='toern-demo-') as tmp:
     tmp = Path(tmp)
     (tmp/'demo.cpp').write_text(harness)
     flags = ['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform == 'darwin' else []
     subprocess.run(['c++','-std=c++17',*flags,'-include','initializer_list','-I',str(root),str(tmp/'demo.cpp'),'-o',str(tmp/'demo')],check=True)
     subprocess.run([str(tmp/'demo')],check=True)
-print('PASS: firmware DEMO phases, off-grid passes, repeated cycles, shared renderers and Touch 1 press/release exit.')
+print('PASS: firmware DEMO timeline, INFO-only REC edge, held-input protection and Touch 1 press/release exit.')
