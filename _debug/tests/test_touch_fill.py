@@ -21,6 +21,7 @@ void subpatternCancelPreview(){}
 #include <initializer_list>
 namespace toern_audio {struct StateGuard {};}
 struct Mode {} draw,singleMode,menu,recordMode,touchyMode;
+bool agenViewTap=false;bool autogenActive(){return false;}void autogenToggleView(){}
 Mode *currentMode=&draw;
 struct {int currentChannel=1;} GLOB;
 bool isNowPlaying=false,isRecording=false,fastRecordActive=false,touchFillChordConsumed=false;

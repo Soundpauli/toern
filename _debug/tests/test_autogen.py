@@ -43,8 +43,9 @@ struct Note {uint8_t channel=0,velocity=127,probability=100,condition=1,midiPitc
 Note original[maxlen+1][maxY+1];Note (*note)[maxY+1]=original;
 struct {unsigned edit=1,page=1,x=1;} GLOB;
 struct Mode {unsigned pos[4]={};} draw,singleMode,menu;Mode *currentMode=&draw;
-struct EncoderStub {void writeCounter(int32_t){}} Encoder[4];
+struct EncoderStub {unsigned writes=0;void writeCounter(int32_t){++writes;}} Encoder[4];
 bool childLockEnabled=false,imageMode=false,touchyEnabled=false,fastRecordActive=false,isRecording=false,isNowPlaying=true;
+bool paintMode=false,unpaintMode=false;
 bool generationUndoValid=true,storageReady=true;int failures=0,generations=0,guardDepth=0;
 namespace toern_audio {struct StateGuard {StateGuard(){++guardDepth;}~StateGuard(){--guardDepth;}};}
 unsigned clockMs=100;unsigned millis(){return clockMs;}
@@ -89,10 +90,12 @@ CompanionContext analyzeCompanionContext(int first,int last,int page,int){
 CompanionHarmony companionMakeHarmony(const CompanionContext&,int){return {};}
 CompanionGroove companionMakeGroove(const CompanionContext&,int,int){return {};}
 void clearCompanionPage(int page){assert(!guardDepth);for(unsigned x=(page-1)*maxX+1;x<=page*maxX;++x)for(auto &n:note[x])n=Note{};}
+Note observedSource[16][33][17];unsigned sourceCalls[16]={};
 void evolveCompanionChannelFromBase(int src,int target,uint8_t ch,int,bool,const CompanionContext&,const CompanionHarmony&,int){
- assert(!guardDepth&&src!=target);++generations;
+ assert(!guardDepth&&src!=target);++generations;++sourceCalls[ch];
+ for(auto &col:observedSource[ch])for(auto &n:col)n=Note{};
  for(unsigned col=0;col<maxX;++col)for(unsigned y=1;y<=maxY;++y)if(note[(src-1)*maxX+1+col][y].channel==ch){
-  auto n=note[(src-1)*maxX+1+col][y];n.velocity=40+(n.velocity+1)%80;note[(target-1)*maxX+1+col][y]=n;
+  auto n=note[(src-1)*maxX+1+col][y];observedSource[ch][col][y]=n;n.velocity=40+(n.velocity+1)%80;note[(target-1)*maxX+1+col][y]=n;
  }
 }
 void generateCompanionChannelPage(int target,uint8_t ch,const CompanionContext&,const CompanionHarmony&,const CompanionGroove&,int){
@@ -127,23 +130,36 @@ int main(){
   original[1][7]={7,99,100,1,71};
   Note saved[maxlen+1][maxY+1];memcpy(saved,original,sizeof(saved));
   GLOB.edit=GLOB.page=base;GLOB.x=beat=(base-1)*width+5;
-  assert(toggleAutogen()&&allocations==1&&autogenActive()&&note!=original&&beat==(base-1)*width+5);
-  assert(agen.source()==base&&agen.target()==1&&autogenMuted(2));
+  assert(toggleAutogen()&&allocations==1&&autogenActive()&&note!=original&&beat==5);
+  assert(agen.source()==1&&agen.target()==2&&autogenMotifPage()==base&&autogenMuted(2));
+  {
+   auto editable=note;
+   ToernNoteScope<decltype(note)> builder(note,agenWork->performance);
+   {ToernNoteScope<decltype(note)> timer(note,autogenPlaybackGrid());assert(note==agenWork->performance);}
+   assert(note==agenWork->performance);assert(autogenEditableGrid()==editable);
+  }
+  assert(note==agenWork->notes);
+  {unsigned writes=0;for(auto &enc:Encoder)writes+=enc.writes;
+   const auto x=GLOB.x,edit=GLOB.edit;
+   for(unsigned i=0;i<20;++i)autogenToggleView();
+   unsigned after=0;for(auto &enc:Encoder)after+=enc.writes;
+   assert(after==writes&&GLOB.x==x&&GLOB.edit==edit);
+  }
   Note anchor[33][17];memcpy(anchor,note+(agenWork->anchor-1)*width+1,width*sizeof(note[0]));
   const auto tonic=agenWork->harmony.rootPc;const bool minor=agenWork->harmony.isMinor;
   autogenSetMute(2,false);assert(!autogenMuted(2));
   // Starve generation for more than a phrase: never switch to unfinished data.
-  for(unsigned i=0;i<width*10;++i){autogenPrepareStep();autogenAdvanceStep();assert(agen.source()==base);}
+  for(unsigned i=0;i<width*10;++i){autogenPrepareStep();autogenAdvanceStep();assert(agen.source()==1);}
   std::set<unsigned> repeats,playedPages;
   for(unsigned i=0;i<width*160;++i){
    playedPages.insert(agen.source());
    const unsigned start=(agen.source()-1)*width+1;
-   Note playing[33][17];memcpy(playing,note+start,width*sizeof(note[0]));
+   Note playing[33][17];memcpy(playing,agenWork->performance+start,width*sizeof(note[0]));
    clockMs+=50;
    const auto count=generations;serviceAutogen();assert(generations-count<=1);
    if(toern_autogen_music::section(agen.generation)==toern_autogen_music::Section::Drop)
     for(uint8_t ch:agenOrder)assert(agenWork->volumeNow[ch]==agenWork->volumeBase[ch]);
-   assert(memcmp(playing,note+start,width*sizeof(note[0]))==0);
+   assert(memcmp(playing,agenWork->performance+start,width*sizeof(note[0]))==0);
    assert(memcmp(saved,original,sizeof(saved))==0);
    assert(memcmp(patch.filter_settings,SMP.filter_settings,sizeof(patch.filter_settings))==0);
    assert(memcmp(patch.attack,SMP.attack,sizeof(patch.attack))==0);
@@ -152,7 +168,7 @@ int main(){
    if(agen.ready){
     const unsigned dst=(agen.target()-1)*width+1;
     for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=maxY;++row){
-     const Note &n=note[dst+col][row];
+     const Note &n=agenWork->performance[dst+col][row];
      if(n.channel==11||n.channel==13||n.channel==14){
       assert(n.midiPitch<=127);bool inKey=false;
       for(unsigned degree=0;degree<7;++degree)inKey|=n.midiPitch%12==toern_autogen_music::scalePc(tonic,minor,degree);
@@ -164,7 +180,7 @@ int main(){
    if(agen.generation!=generation)repeats.insert((unsigned)agen.repeatsLeft);
   }
   assert(agen.generation>16&&repeats==(width==16?std::set<unsigned>({1,2,4}):std::set<unsigned>({1,2})));
-  assert(playedPages==std::set<unsigned>({base,1}));
+  assert(playedPages==std::set<unsigned>({1,2}));
   assert(requestedFills==0); // generated fill must not stack a live-fill overlay
   for(uint8_t ch:agenOrder)assert(autogenControlVolume(ch)<=agenWork->volumeBase[ch]&&SMP.channelVol[ch]<=12);
   applyChannelControlVolume(1,5,autogenControlVolume(1));
@@ -173,6 +189,11 @@ int main(){
   for(unsigned ch:{1u,2u,3u,4u,5u,6u,7u,8u,11u,13u,14u})assert(SMP.channelVol[ch]==12&&lastChannelVolBeforeMute[ch]==12&&!sampleVolOnReader[ch<=8?ch:0]);
   assert(GLOB.edit==base&&memcmp(saved,original,sizeof(saved))==0);
   serviceAutogen();assert(currentMode->pos[3]==GLOB.x&&currentMode->pos[1]==GLOB.edit);
+  // A middle motif page requires non-contiguous work buffers; neither may be the motif.
+  GLOB.edit=GLOB.page=2;GLOB.x=width+3;assert(toggleAutogen());
+  assert(agen.source()==1&&agen.target()==2&&autogenMotifPage()==2&&autogenMotifSlot()==2);
+  unsigned slot,otherSlot,arc;bool prepared;autogenUiSnapshot(slot,otherSlot,prepared,arc);
+  assert(slot==10&&otherSlot==11);stopAutogen();
   // A paused / incompatible / recording performance restores its original bank.
   isNowPlaying=false;assert(toggleAutogen()&&isNowPlaying);isNowPlaying=false;serviceAutogen();assert(note==original&&!autogenActive());
   isNowPlaying=true;assert(toggleAutogen());maxX=width==16?32:16;serviceAutogen();assert(note==original&&!autogenActive());maxX=width;
@@ -184,21 +205,21 @@ int main(){
   assert(toggleAutogen());for(unsigned i=0;i<15;++i)serviceAutogen();
   assert(agenWork->chordPair&&agen.ready);
   const unsigned chordStep=(agen.target()-1)*width+1;bool third=false,fifth=false;
-  for(unsigned row=1;row<=maxY;++row){third|=note[chordStep][row].channel==13;fifth|=note[chordStep][row].channel==14;}
+  for(unsigned row=1;row<=maxY;++row){third|=agenWork->performance[chordStep][row].channel==13;fifth|=agenWork->performance[chordStep][row].channel==14;}
   assert(third&&fifth);stopAutogen();assert(original[1][11].midiPitch==36);
-  // Low-register source chords stay polyphonic; compensate the patch once.
+  // Keep raw motif pitches; playback applies the same patch to motif and generated notes.
   for(auto &col:original)for(auto &n:col)n=Note{};
   original[1][11]={11,90,100,1,36};original[1][12]={11,90,100,1,40};original[1][13]={11,90,100,1,43};
   original[1][14]={13,90,100,1,60};original[1][15]={14,90,100,1,36};
   octave[0]=2;SMP.synth_settings[13][CENT]=0;SMP.synth_settings[14][CENT]=8;
   GLOB.edit=GLOB.page=1;assert(toggleAutogen());
-  assert(!agenWork->ch11Bass&&agenWork->registerShift[11]==-24&&agenWork->registerShift[13]==-24&&agenWork->registerShift[14]==-12);
+  assert(!agenWork->ch11Bass&&agenWork->registerShift[11]==0&&agenWork->registerShift[13]==0&&agenWork->registerShift[14]==0);
   for(unsigned i=0;i<15;++i)serviceAutogen();assert(agen.ready);
   std::set<int> chord;
   const unsigned onset=(agen.target()-1)*width+1;
-  for(unsigned row=1;row<=16;++row){const auto &n=note[onset][row];
-   if(n.channel==11){const int sounding=n.midiPitch+agenWork->registerShift[11];assert(sounding>=48&&sounding<=84);chord.insert(sounding);}
-   if(n.channel==13)assert(n.midiPitch+agenWork->registerShift[13]>=55);
+  for(unsigned row=1;row<=16;++row){const auto &n=agenWork->performance[onset][row];
+   if(n.channel==11){const int sounding=n.midiPitch+agenWork->registerShift[11];assert(sounding>=24&&sounding<=60);chord.insert(sounding);}
+   if(n.channel==13)assert(n.midiPitch+agenWork->registerShift[13]>=48);
    if(n.channel==14)assert(n.midiPitch+agenWork->registerShift[14]>=36);
   }
   assert(chord.size()==3&&*chord.rbegin()-*chord.begin()<=12);
@@ -213,7 +234,7 @@ int main(){
    assert(agenWork->foundationVoice==0);
    if(agen.ready){assert(agenWork->section!=toern_autogen_music::Section::Build&&agenWork->section!=toern_autogen_music::Section::Fill);
     const unsigned dst=(agen.target()-1)*width+1;
-    for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(!note[dst+col][row].channel||note[dst+col][row].channel==3);
+    for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(!agenWork->performance[dst+col][row].channel||agenWork->performance[dst+col][row].channel==3);
    }
    autogenPrepareStep();autogenAdvanceStep();
   }
@@ -229,20 +250,117 @@ int main(){
    if(buildTicks&&form==toern_autogen_music::Section::Drop){assert(buildTicks==2*width);sawDrop=true;break;}
    if(agen.ready&&agenWork->section==toern_autogen_music::Section::Build){bool bassHit=false;
     const unsigned dst=(agen.target()-1)*width+1;
-    for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)bassHit|=note[dst+col][row].channel==6;
+    for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)bassHit|=agenWork->performance[dst+col][row].channel==6;
     assert(bassHit);
    }
    autogenPrepareStep();autogenAdvanceStep();
   }
   assert(sawDrop);stopAutogen();
+  // Pink motif edits must replace a prebuilt next page without touching playback.
+  for(auto &col:original)for(auto &n:col)n=Note{};
+  for(unsigned ch=0;ch<16;++ch)testMutes[ch]=false;
+  original[1][2]={1,90,100,1,255};original[1][14]={13,90,100,1,60};original[1][4]={3,90,100,1,255};
+  GLOB.edit=GLOB.page=1;GLOB.x=1;assert(toggleAutogen());
+  assert(autogenViewingPerformance());autogenToggleView();assert(!autogenViewingPerformance());
+  assert(autogenMotifPage()==1&&agen.source()==1&&agen.target()==2);
+  assert(autogenRecordStep(agen.firstStep()+4)==5);
+  for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);
+  Note live[33][17];memcpy(live,agenWork->performance+agen.firstStep(),width*sizeof(note[0]));
+  note[1][14]=Note{};note[3][14]={13,79,83,3,67};
+  serviceAutogen();assert(!agen.ready&&agenWork->motifRevision==1);
+  assert(memcmp(live,agenWork->performance+agen.firstStep(),width*sizeof(note[0]))==0);
+  for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);
+  std::set<uint32_t> developed;unsigned editedRolls[2]={},editedBuilds=0,editedDropRoll=0;bool editedDrop=false;
+  for(unsigned response=0;response<10;++response){
+    const unsigned target=(agen.target()-1)*width+1;
+    const Note &input=agenWork->performance[2*width+3][14];
+    assert(sourceCalls[13]==0&&input.channel==13&&input.midiPitch==67&&input.velocity==79&&input.probability==83&&input.condition==3);
+    assert(agenWork->performance[2*width+1][14].channel!=13); // no fallback to the old onset/pitch
+    uint32_t hash=2166136261u;
+    for(unsigned col=0;col<width;++col)for(const auto &n:agenWork->performance[target+col])
+      for(unsigned v:{(unsigned)n.channel,(unsigned)n.velocity,(unsigned)n.midiPitch})hash=(hash^v)*16777619u;
+    developed.insert(hash);
+    unsigned snare=0;for(unsigned col=0;col<width;++col){bool hit=false;for(const auto &n:agenWork->performance[target+col])hit|=n.channel==2;snare+=hit;}
+    if(agenWork->section==toern_autogen_music::Section::Build){assert(editedBuilds<2);editedRolls[editedBuilds++]=snare;}
+    if(agenWork->section==toern_autogen_music::Section::Drop){editedDrop=true;editedDropRoll=snare;}
+
+    assert(agenWork->pageRevision[agen.playing^1u]==1);
+    agen.repeatsLeft=1;beat=agen.firstStep()+width-1;autogenAdvanceStep();
+    for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);
+    assert(GLOB.edit==1&&note[3][14].midiPitch==67);
+  }
+  assert(editedBuilds==2&&editedRolls[1]>editedRolls[0]&&editedRolls[0]>0&&editedDrop&&editedDropRoll<editedRolls[1]);
+  assert(developed.size()>=3); // edited input must still pass through development
+  note[width+5][14]={13,88,100,1,72};
+  GLOB.edit=2;GLOB.x=width+5;autogenFocusMotif();
+  for(unsigned i=0;i<20;++i)serviceAutogen();
+  assert(autogenMotifPage()==2&&GLOB.edit==2&&GLOB.x==width+5);
+  assert(agenWork->performance[2*width+5][14].midiPitch==72);
+  assert(!(agenWork->removedVoices&(1u<<11))&&(agenWork->channels&(1u<<11))); // absent companions remain eligible after navigation
+  GLOB.edit=1;GLOB.x=3;autogenFocusMotif();
+  for(unsigned i=0;i<20;++i)serviceAutogen();
+  assert(note[3][14].midiPitch==67);
+  // Muting withdraws a stale ready page; unmuting restores initially silent levels.
+  autogenSetMute(13,true);assert(!agen.ready);
+  for(unsigned i=0;i<20;++i)serviceAutogen();
+  unsigned target=(agen.target()-1)*width+1;
+  for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(agenWork->performance[target+col][row].channel!=13);
+  agenWork->volumeBase[13]=0;autogenSetMute(13,false);assert(agenWork->volumeBase[13]>0&&!agen.ready);
+  for(unsigned i=0;i<20;++i)serviceAutogen();
+  target=(agen.target()-1)*width+1;bool revived=false;
+  for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)revived|=agenWork->performance[target+col][row].channel==13;
+  assert(revived);
+  // Explicitly deleting the hat prevents AGEN's companion injection from re-adding it.
+  note[1][4]=Note{};for(unsigned i=0;i<20;++i)serviceAutogen();
+  assert(agenWork->removedVoices&(1u<<3));target=(agen.target()-1)*width+1;
+  for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(agenWork->performance[target+col][row].channel!=3);
+  // Clearing the motif stays silent; it must not be mistaken for an initial empty starter.
+  for(unsigned col=1;col<=width;++col)for(auto &n:note[col])n=Note{};
+  for(unsigned i=0;i<20;++i)serviceAutogen();target=(agen.target()-1)*width+1;
+  for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(!agenWork->performance[target+col][row].channel);
+  assert(original[1][14].midiPitch==60&&original[1][4].channel==3);
+  stopAutogen();assert(note==original&&note[1][14].midiPitch==60);
+  for(unsigned ch=0;ch<16;++ch)testMutes[ch]=ch==2;
+  // CH11 must never expand a single note or dyad into a mandatory triad.
+  for(unsigned poly:{1u,2u,3u}){
+    for(auto &col:original)for(auto &n:col)n=Note{};
+    for(unsigned i=0;i<poly;++i)original[1][11+i]={11,90,100,1,(uint8_t)(60+i*4)};
+    original[1][2]={1,90,100,1,255};GLOB.edit=GLOB.page=1;GLOB.x=1;
+    assert(toggleAutogen());
+    for(unsigned tick=0;tick<width*40;++tick){serviceAutogen();
+      const unsigned start=agen.firstStep();
+      for(unsigned col=0;col<width;++col){unsigned count=0;
+        for(unsigned row=1;row<=16;++row)count+=agenWork->performance[start+col][row].channel==11;
+        assert(count<=poly);
+      }
+      autogenPrepareStep();autogenAdvanceStep();
+    }
+    stopAutogen();
+  }
+  // Widely spaced CH6 motif notes keep their individual source octaves.
+  for(auto &col:original)for(auto &n:col)n=Note{};
+  original[1][7]={6,90,100,1,48};original[width/2+1][7]={6,90,100,1,72};
+  GLOB.edit=GLOB.page=1;GLOB.x=1;assert(toggleAutogen());
+  for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);
+  for(unsigned col:{0u,width/2}){bool found=false;
+    for(unsigned row=1;row<=16;++row){const auto &cell=agenWork->performance[(agen.target()-1)*width+1+col][row];
+      if(cell.channel==6){found=true;assert(abs((int)cell.midiPitch-(col?72:48))<=6);}
+    }
+    assert(found);
+  }
+  stopAutogen();
   // Empty input starts a small, coherent set rather than all voices at once.
   for(auto &col:original)for(auto &n:col)n=Note{};
   GLOB.edit=GLOB.page=1;assert(toggleAutogen());
   for(unsigned i=0;i<15;++i)serviceAutogen();
   assert(agen.ready);unsigned channels=0;for(unsigned ch=1;ch<15;++ch)if(agenWork->channels&(1u<<ch))channels++;
-  assert(channels==5); // selected set includes CH2, but its muted notes are never builtstopAutogen();for(auto &col:original)for(auto &n:col)assert(n.channel==0);
+  assert(channels==5); // selected set includes CH2, but its muted notes are never built
+  autogenClearMotif(0);for(unsigned i=0;i<20;++i)serviceAutogen();
+  const unsigned silent=(agen.target()-1)*width+1;
+  for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(!agenWork->performance[silent+col][row].channel);
+  stopAutogen();for(auto &col:original)for(auto &n:col)assert(n.channel==0);
  }
- puts("PASS: AGEN 16/32-step boundaries, tempo/page-aware repeats, late-builder safety, one-voice jobs, untouched live/source grids, exact restoration, empty starters and incompatible-mode guards");
+ puts("PASS: AGEN 16/32-step boundaries, tempo/page-aware repeats, late-builder safety, one-voice jobs, untouched live/source grids, editable motif, pending-page invalidation, developed edited sources, mute/unmute, removed voices, exact restoration, empty starters and incompatible-mode guards");
 }
 '''.replace('IMPLEMENTATION',implementation).replace('PLACEMENT',placement).replace('VOLUME_CONTROL',volume_control)
 with tempfile.TemporaryDirectory(prefix='toern-autogen-') as tmp:

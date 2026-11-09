@@ -356,7 +356,7 @@ void drawBase() {
     lastFrame = currentFrame;
   }
   
-  if (!GLOB.singleMode) {
+  if (!GLOB.singleMode || autogenViewingPerformance()) {
     // Cache colors to avoid recalculating every frame
     static CRGB cachedColors[maxY];
     static bool colorsCached = false;
@@ -1512,6 +1512,8 @@ FLASHMEM void drawSampleLoadOverlay(uint8_t progressPercent) {
 bool autogenStatusVisible(){return autogenActive()&&(currentMode==&draw||currentMode==&singleMode);}
 FLASHMEM static void drawAutogenPageState(unsigned playing,unsigned other,bool ready){
   for(unsigned x=1;x<=maxX;++x)light(x,maxY,CRGB::Black);
+  for(unsigned page=1;page<=8;++page)light(page,maxY,CRGB(0,0,12));
+  light(autogenMotifSlot(),maxY,CRGB(210,30,130));
   light(playing,maxY,CRGB(220,220,220));
   light(other,maxY,ready?CRGB(220,180,0):CRGB(200,0,0));
 }
@@ -1521,9 +1523,13 @@ FLASHMEM void drawAutogenPages(){
   drawAutogenPageState(playing,other,ready);
 }
 FLASHMEM static void drawAutogenActivity(unsigned progress,bool ready,uint32_t now){
-  const CRGB ink[]={CRGB::Black,CRGB(4,24,30),CRGB(40,160,190),CRGB(210,120,20),CRGB(30,190,90)};
-  for(unsigned x=0;x<5;++x)for(unsigned y=0;y<5;++y)
-    light(maxX-4+x,16-y,ink[ToernAutogen::statusInk(x,y,progress,ready,now)]);
+  const bool performance=autogenViewingPerformance();
+  const CRGB ink[]={CRGB::Black,performance?CRGB(4,12,30):CRGB(30,4,18),performance?CRGB(40,100,230):CRGB(230,30,150),CRGB(210,120,20),CRGB(30,190,90)};
+  for(unsigned x=0;x<5;++x)for(unsigned y=0;y<5;++y){
+    unsigned code=ToernAutogen::statusInk(x,y,progress,ready,now);
+    if(code==3&&(x==0||x==4||y==0||y==4))code=2;
+    light(maxX-4+x,16-y,ink[code]);
+  }
 }
 FLASHMEM void drawAutogenStatus(){
   if(!autogenStatusVisible())return;
@@ -1531,7 +1537,7 @@ FLASHMEM void drawAutogenStatus(){
   autogenUiSnapshot(playing,other,ready,progress);
   drawAutogenPageState(playing,other,ready);
   drawAutogenActivity(progress,ready,millis());
-  // Keep actual page dots readable if a 16-column panel shares the icon's top row.
+  // Keep the two virtual performance slots visible on both layouts.
   light(playing,maxY,CRGB(220,220,220));
   light(other,maxY,ready?CRGB(220,180,0):CRGB(200,0,0));
 }
@@ -1640,6 +1646,9 @@ void drawPages() {
       DRAW SAMPLES
   *************************************************/
 FLASHMEM void drawTriggers() {
+  const bool performance=autogenViewingPerformance();
+  ToernNoteScope<decltype(note)> displayScope(note,performance?autogenPlaybackGrid():note);
+  const unsigned displayPage=performance?autogenPage():GLOB.edit;
   // why?
   //GLOB.edit = 1;
   extern bool voiceMode;
@@ -1651,8 +1660,8 @@ FLASHMEM void drawTriggers() {
   const bool voiceGrid = !autogenActive() && voiceMode && isNowPlaying && !songModeActive && !subpatternPreviewVisible();
   unsigned int voiceGlobalPage = 1;
   if (voiceGrid && beatForUI > 0 && maxX > 0) voiceGlobalPage = ((beatForUI - 1) / maxX) + 1;
-  const bool isSingle = GLOB.singleMode;
-  const bool isSimpleNotes = (simpleNotesView == 1 && !isSingle);
+  const bool isSingle = GLOB.singleMode&&!performance;
+  const bool isSimpleNotes = (simpleNotesView == 1 && !isSingle&&!performance);
 
   // Cache mute states for this frame (channels are small; avoid repeated getMuteState() calls).
   // Use getMuteStateForUI() to show mutes for the edit page (what you're viewing)
@@ -1680,10 +1689,10 @@ FLASHMEM void drawTriggers() {
         globalX = voicePickStep(voiceSrc, iy);
         if (globalX == 0) continue;
       } else {
-        unsigned int rowPage = GLOB.edit > 0 ? GLOB.edit : 1;
+        unsigned int rowPage = displayPage > 0 ? displayPage : 1;
         globalX = (rowPage - 1) * maxX + ix;
       }
-      Note *viewed = voiceGrid ? nullptr : subpatternViewedNote(ix, iy);
+      Note *viewed = (voiceGrid||performance) ? nullptr : subpatternViewedNote(ix, iy);
       Note &cell = viewed ? *viewed : note[globalX][iy];
       int thisNote = cell.channel;
       if (thisNote <= 0) continue;
@@ -1758,7 +1767,7 @@ FLASHMEM void drawTriggers() {
           drawNoteColor(col[thisNote]);
         }
 
-        if (thisNote != (int)GLOB.currentChannel && currentMode == &singleMode) {
+        if (thisNote != (int)GLOB.currentChannel && currentMode == &singleMode&&!performance) {
           drawNoteColor(col_base[thisNote]);
         }
       } else {
@@ -1940,6 +1949,8 @@ FLASHMEM static void fireDraw(int playX) {
 }
 
 void drawTimer() {
+  const bool performance=autogenViewingPerformance();
+  ToernNoteScope<decltype(note)> displayScope(note,performance?autogenPlaybackGrid():note);
  
   unsigned int timer = ((beatForUI - 1) % maxX + 1);
   
@@ -1957,7 +1968,9 @@ void drawTimer() {
   extern void voiceFillColumn(unsigned int col, unsigned int globalPage, unsigned int srcOut[16]);
   extern unsigned int voicePickStep(const unsigned int src[16], unsigned int row);
   const bool voiceGrid = !autogenActive() && voiceMode && isNowPlaying && !songModeActive && !subpatternPreviewVisible();
-  if (voiceGrid) {
+  if (autogenActive()) {
+    shouldShowTimer=true;
+  } else if (voiceGrid) {
     // The grid is one composite voice page, so the shared column is always visible.
     shouldShowTimer = true;
   } else if (SMP_FLOW_MODE) {
@@ -2000,7 +2013,7 @@ void drawTimer() {
       }
       unsigned int voiceSrc[16];
       bool voiceSrcReady = false;
-      const CRGB playheadColor = subpatternShowingOtherSlot() ? CRGB(10, 10, 0) : CRGB(10, 0, 0);
+      const CRGB playheadColor = performance?CRGB(0,20,0):subpatternShowingOtherSlot() ? CRGB(10, 10, 0) : CRGB(10, 0, 0);
       for (unsigned int y = 1; y < maxY; y++) {
         unsigned int srcStep;
         if (voiceGrid) {
@@ -2014,7 +2027,7 @@ void drawTimer() {
             continue;
           }
         } else {
-          unsigned int notePage = GLOB.edit > 0 ? GLOB.edit : 1;
+          unsigned int notePage = performance?autogenPage():(GLOB.edit > 0 ? GLOB.edit : 1);
           srcStep = (notePage - 1) * maxX + timer;
         }
         int ch = note[srcStep][y].channel;
@@ -2024,7 +2037,7 @@ void drawTimer() {
 
         if (ch> 0) {
           if (getMuteState(ch) == false) {
-            const bool lit = !GLOB.singleMode || (GLOB.currentChannel == ch);
+            const bool lit = performance || !GLOB.singleMode || (GLOB.currentChannel == ch);
             if (lit) {
               light(timer, y, UI_BRIGHT_WHITE);
               if (fireOn && freshCol && fireHits < 15 &&
@@ -2170,6 +2183,7 @@ int mapXtoPageOffset(int x) {
       USER CURSOR
   *************************************************/
 void drawCursor() {
+  if(autogenViewingPerformance())return;
   if (dir == 1)
     pulse += 8;
   if (dir == -1)

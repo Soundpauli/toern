@@ -29,6 +29,7 @@ const uint8_t NOTE_MIDI_PITCH_NONE=255,NOTE_CONDITION_GLIDE=22;
 struct Note {uint8_t channel=0,velocity=100,probability=100,condition=1,midiPitch=255;};
 Note noteStorage[maxlen][maxY+1];
 Note (*note)[maxY+1]=noteStorage;
+Note (*autogenEditableGrid())[maxY+1]{return noteStorage;}
 float octave[2]={4,0};int transpose=0;
 struct {int currentChannel=13; bool singleMode=true;} GLOB;
 bool MIDI_NOTE_RECEIVE=true,MIDI_NOTE_CLAMP=true,MIDI_VOICE_SELECT=false,MIDI_WRITE_OVERWRITE=false,isNowPlaying=true;
@@ -41,6 +42,8 @@ void midiArpOnHeldNote(int){}
 volatile uint16_t liveRecordSkipBeat=0,liveRecordSkipRows=0;
 void noInterrupts(){} void interrupts(){}
 bool isChildVoiceDisabled(int){return childDisabled;}
+bool agenRecordEnabled=false;
+unsigned autogenRecordStep(unsigned step){return agenRecordEnabled&&step?32+(step-1)%16+1:step;}
 uint16_t quantizedMidiRecordBeat(){return beat;}
 void extendLastPageForLiveNote(uint8_t, uint8_t, unsigned int){}
 void logMidiRxNoteOn(uint8_t,uint8_t,uint8_t){}
@@ -66,7 +69,12 @@ int main(){
   clearLiveRecordSkip(); assert(liveRecordSkipBeat==0 && liveRecordSkipRows==0);
   childDisabled=true; beat=8; handleNoteOn(1,60,99); assert(note[8][14].channel==0 && auditions==2);
   childDisabled=false; GLOB.singleMode=false; handleNoteOn(1,60,99); assert(note[8][14].channel==0 && auditions==3);
-  GLOB.singleMode=true; isNowPlaying=false; handleNoteOn(1,60,99); assert(note[8][14].channel==0 && auditions==4);
+  GLOB.singleMode=true;agenRecordEnabled=true;beat=19;MIDI_NOTE_CLAMP=false;
+  handleNoteOn(1,72,91);assert(note[35][14].channel==13&&note[35][14].midiPitch==72);
+  assert(note[19][14].channel==0&&consumeLiveRecordSkip(19,14));
+  onBeatTick(20,19);assert(note[36][14].condition==NOTE_CONDITION_GLIDE&&note[20][14].channel==0);
+  handleNoteOn(1,72,0);agenRecordEnabled=false;
+  isNowPlaying=false; handleNoteOn(1,60,99); assert(note[8][14].channel==0 && auditions==5);
 }
 '''
 with tempfile.TemporaryDirectory(prefix='toern-midi-recording-') as directory:

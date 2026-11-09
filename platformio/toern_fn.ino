@@ -5,6 +5,7 @@ static unsigned long fnDirectionUntil = 0;
 // through into the page (CTRL page) or volume (CTRL vol) handler.
 static bool fnReleaseLatch = false;
 static bool fnReleaseWork = false;
+static bool agenViewTap = false;
 
 // SMP maps physical encoder 2 to pos[2] (Seek End), and encoder 3 to pos[1].
 // FN restores physical counters, so it must use the same mapping as normal polling.
@@ -20,8 +21,16 @@ static void updateFnState() {
   const bool wasHeld = fnHeld;
   const bool fillChord = pollTouchFillChord();
   fnHeld = !fillChord && currentMode != &touchyMode && currentMode != &recordMode && readDebouncedTouch(4);
+  if(fnHeld&&!wasHeld)agenViewTap=autogenActive()&&(currentMode==&draw||currentMode==&singleMode);
+  if(fillChord)agenViewTap=false;
+  const bool viewTap=wasHeld&&!fnHeld&&agenViewTap&&autogenActive()&&(currentMode==&draw||currentMode==&singleMode);
+  if(wasHeld&&!fnHeld){
+    if(viewTap)autogenToggleView();
+    agenViewTap=false;
+  }
+  if(viewTap){fnReleaseLatch=false;fnReleaseWork=false;}
   if (fillChord) { subpatternSelector = false; subpatternReady = false; subpatternCancelPreview(); }
-  if (wasHeld && !fnHeld && currentMode == &draw) {
+  if (wasHeld && !fnHeld && currentMode == &draw && !viewTap) {
     fnReleaseLatch = true;
     fnReleaseWork = true;
   } else if (currentMode == &touchyMode || currentMode == &recordMode) {
@@ -59,6 +68,7 @@ static uint8_t fnButtonEvent(int index, uint8_t physicalState) {
   if (currentMode == &touchyMode || currentMode == &recordMode) return physicalState;
   if (physicalState == 2 && fnHeld) fnButtonHeld[index] = true;
   const bool modified = fnButtonHeld[index] || fnHeld;
+  if(modified&&physicalState)agenViewTap=false;
   uint8_t event = physicalState;
   if (modified) {
     if (physicalState == 1) event = 4;
@@ -71,6 +81,7 @@ static uint8_t fnButtonEvent(int index, uint8_t physicalState) {
 
 static bool dispatchFnTurn(const EncoderTurnEvent &event) {
   if (!event.fn || event.delta == 0) return false;
+  agenViewTap=false;
   extern bool subpatternsEnabled;
   if (event.encoder == 1 && currentMode == &draw && subpatternsEnabled)
     return subpatternTurn(event.delta);

@@ -4080,6 +4080,7 @@ FLASHMEM void generateBasicPattern(unsigned int start, unsigned int end, unsigne
 }
 
 FLASHMEM void clearPage() {
+  if(autogenViewingPerformance())return;
   extern bool voiceMode;
   extern bool songModeActive;
   extern bool isNowPlaying;
@@ -4088,12 +4089,12 @@ FLASHMEM void clearPage() {
   extern unsigned int voicePageFor(int channel, unsigned int globalPage);
 
   // VMOD draw is a composite of per-voice pages — a global page wipe is meaningless.
-  if (voiceMode && !songModeActive && !GLOB.singleMode) {
+  if (!autogenActive() && voiceMode && !songModeActive && !GLOB.singleMode) {
     return;
   }
 
   unsigned int page = GLOB.edit < 1 ? 1 : GLOB.edit;
-  if (voiceMode && !songModeActive && GLOB.singleMode) {
+  if (!autogenActive() && voiceMode && !songModeActive && GLOB.singleMode) {
     int ch = (int)GLOB.currentChannel;
     if (isNowPlaying && beatForUI > 0 && maxX > 0) {
       unsigned int gPage = ((beatForUI - 1) / maxX) + 1;
@@ -4112,6 +4113,7 @@ FLASHMEM void clearPage() {
   for (unsigned int c = start; c < end; c++) {
     clearNoteChannel(c, 1, maxY + 1, channel, singleMode);
   }
+  if(autogenActive())autogenClearMotif(singleMode?channel:0);
   updateLastPage();
   
   // Reset paint/unpaint prevention flag after clearPage operation
@@ -5143,11 +5145,14 @@ FLASHMEM void generateSong() {
 }
 
 // AGEN: RAM-only alternating performance pages. The original bank stays intact.
+#include "src/toern_note_scope.h"
 #include "src/toern_autogen.h"
 #include "src/toern_autogen_music.h"
+#include "src/toern_autogen_register.h"
 #include <new>
 struct AutogenWorkspace {
   Note notes[maxlen+1][maxY+1];
+  Note performance[3*32+1][maxY+1];
   Note (*original)[maxY+1]=nullptr;
   unsigned savedEdit=1,savedPage=1,savedX=1;
   bool mutes[16]={},userMuted[16]={},building=false,chordPair=false,ch11Bass=false;
@@ -5155,7 +5160,12 @@ struct AutogenWorkspace {
   uint16_t channels=0;
   CompanionContext context,foundation;
   int registers[16]={},registerShift[16]={};
-  unsigned foundationVoice=0;
+  unsigned foundationVoice=0,ch11MaxPolyphony=1;
+  uint32_t motifFingerprint[16]={};
+  uint16_t removedVoices=0;
+  unsigned motifRevision=0,pageRevision[2]={};
+  uint16_t removedByPage[16]={};
+  bool motifEdited=false,performanceView=true,motifSourceChanged=false;
   uint8_t savedVolume[16]={},savedLastVolume[16]={},savedMute[16]={},volumeBase[16]={},volumeNow[16]={};
   bool savedReader[9]={};
   uint32_t manualUntil[16]={},motionAt=0;
@@ -5164,22 +5174,56 @@ struct AutogenWorkspace {
   CompanionHarmony harmony;
   CompanionGroove groove;
 };
-static_assert(sizeof(AutogenWorkspace)<=24*1024,"AGEN workspace must stay bounded and allocated only on entry");
+static_assert(sizeof(AutogenWorkspace)<=32*1024,"AGEN workspace must stay bounded and allocated only on entry");
 static ToernAutogen agen;
 static AutogenWorkspace *agenWork=nullptr;
 static bool agenRestoreUI=false;
 static const uint8_t agenOrder[] PROGMEM={1,2,4,3,5,6,11,13,14,7,8};
 
 bool autogenActive(){return agen.active;}
+bool autogenViewingPerformance(){return agen.active&&agenWork->performanceView;}
+void autogenToggleView(){
+  if(!agen.active)return;
+  agenWork->performanceView=!agenWork->performanceView;
+  paintMode=false;unpaintMode=false;
+  menuRequestFullRedraw();noteUserActivity();
+}
+Note (*autogenPlaybackGrid())[maxY+1]{return agen.active?agenWork->performance:note;}
+Note (*autogenEditableGrid())[maxY+1]{return agen.active?agenWork->notes:note;}
 unsigned autogenPage(){return agen.source();}
+unsigned autogenMotifPage(){return agen.active?agenWork->anchor:GLOB.edit;}
+unsigned autogenRecordStep(unsigned step){return agen.active&&step?(agenWork->anchor-1)*maxX+(step-1)%maxX+1:step;}
+unsigned autogenMotifSlot(){const unsigned page=autogenMotifPage();return page<=8?page:9;}
+void autogenFocusMotif(){
+  // Navigation belongs to the editor; playback owns only GLOB.page/beat.
+  if(!agen.active||autogenViewingPerformance())return;
+  const unsigned page=constrain((int)GLOB.edit,1,companionEffectivePages());
+  if(page==agenWork->anchor)return;
+  agenWork->removedByPage[agenWork->anchor-1]=agenWork->removedVoices;
+  agenWork->anchor=page;
+  agenWork->removedVoices=agenWork->removedByPage[page-1];
+  agenWork->motifSourceChanged=true;
+}
+FLASHMEM static void invalidateAutogenPage(){
+  if(!agen.active)return;
+  {toern_audio::StateGuard guard;agen.ready=false;agen.needsBuild=true;}
+  agenWork->building=false;++agenWork->motifRevision;
+}
+void autogenClearMotif(unsigned channel){
+  if(!agen.active)return;
+  if(channel>0&&channel<15)agenWork->removedVoices|=1u<<channel;
+  else {agenWork->motifEdited=true;agenWork->removedVoices=0x7ffeu;}
+  invalidateAutogenPage();
+}
 unsigned autogenOtherPage(){return agen.target();}
 bool autogenNextReady(){return agen.ready;}
 unsigned autogenRepeatsLeft(){return max(1u,(unsigned)agen.repeatsLeft);}
 void autogenUiSnapshot(unsigned &playing,unsigned &other,bool &ready,unsigned &progress){
   toern_audio::StateGuard guard;
-  playing=agen.source();other=agen.target();ready=agen.ready;progress=agen.statusProgress(beat);
+  playing=10+agen.playing;other=10+(agen.playing^1u);ready=agen.ready;progress=agen.statusProgress(beat);
 }
 #if TOERN_REMOTE_CONTROL
+FLASHMEM static int autogenReferenceMidi(const Note &cell,unsigned ch,unsigned row);
 // Read-only diagnostics for validating real section boundaries over MCP.
 FLASHMEM void remotePrintAutogenState(){
   if(!agen.active||!agenWork){Serial.print("{\"active\":false}");return;}
@@ -5187,11 +5231,32 @@ FLASHMEM void remotePrintAutogenState(){
   const char *name=form==toern_autogen_music::Section::Groove?"Groove":form==toern_autogen_music::Section::Variation?"Variation":form==toern_autogen_music::Section::Break?"Break":form==toern_autogen_music::Section::Build?"Build":form==toern_autogen_music::Section::Fill?"Fill":"Drop";
   Serial.printf("{\"active\":true,\"generation\":%u,\"section\":\"%s\",\"foundation_voice\":%u,\"remaining\":%u,\"register_shifts\":[%d,%d,%d],\"ch11_pitches\":[",
       (unsigned)agen.generation,name,agenWork->foundationVoice,(unsigned)agen.repeatsLeft,agenWork->registerShift[11],agenWork->registerShift[13],agenWork->registerShift[14]);
+  ToernNoteScope<decltype(note)> performanceScope(note,agenWork->performance);
   bool comma=false;const unsigned start=agen.firstStep();
   for(unsigned row=1;row<=maxY;++row)if(note[start][row].channel==11&&note[start][row].midiPitch<=127){
-    Serial.printf("%s%d",comma?",":"",(int)note[start][row].midiPitch+agenWork->registerShift[11]);comma=true;
+    Serial.printf("%s%d",comma?",":"",(int)note[start][row].midiPitch+12*((int)octave[0]-4)+transpose);comma=true;
   }
-  Serial.print("]}");
+  uint32_t hash=2166136261u,ch2Steps=0;unsigned count=0;
+  for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row){
+    const Note &cell=note[start+col][row];if(!cell.channel)continue;++count;
+    if(cell.channel==2)ch2Steps|=1u<<col;
+    for(unsigned value:{col,row,(unsigned)cell.channel,(unsigned)cell.velocity,(unsigned)cell.probability,(unsigned)cell.condition,(unsigned)cell.midiPitch})hash=(hash^value)*16777619u;
+  }
+  Serial.print("],\"pitch_ranges\":[");
+  bool rangeComma=false;
+  for(unsigned ch:{6u,11u,13u,14u}){
+    int srcMin=128,srcMax=-1,outMin=128,outMax=-1;
+    const unsigned src=(agenWork->anchor-1)*maxX+1;
+    for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row){
+      const Note &source=agenWork->notes[src+col][row],&output=note[start+col][row];
+      if(source.channel==ch){int p=autogenReferenceMidi(source,ch,row);srcMin=min(srcMin,p);srcMax=max(srcMax,p);}
+      if(output.channel==ch){int p=autogenReferenceMidi(output,ch,row);outMin=min(outMin,p);outMax=max(outMax,p);}
+    }
+    Serial.printf("%s[%u,%d,%d,%d,%d]",rangeComma?",":"",ch,srcMax<0?-1:srcMin,srcMax,outMax<0?-1:outMin,outMax);rangeComma=true;
+  }
+  Serial.printf("],\"playing_hash\":%lu,\"playing_notes\":%u,\"ch2_steps\":%lu,\"performance_view\":%s,\"motif_page\":%u,\"motif_slot\":%u,\"playing_slot\":%u,\"motif_revision\":%u,\"playing_revision\":%u,\"ready_revision\":%u}",
+      (unsigned long)hash,count,(unsigned long)ch2Steps,agenWork->performanceView?"true":"false",agenWork->anchor,autogenMotifSlot(),10+(unsigned)agen.playing,agenWork->motifRevision,
+      agenWork->pageRevision[agen.playing],agenWork->pageRevision[agen.playing^1u]);
 }
 #endif
 FLASHMEM static void applyAutogenProbabilities(Note (*grid)[maxY+1],unsigned page,unsigned channel,uint32_t seed){
@@ -5203,7 +5268,19 @@ FLASHMEM static void applyAutogenProbabilities(Note (*grid)[maxY+1],unsigned pag
 }
 bool autogenMuted(int channel){return channel>=0&&channel<16?agenWork->mutes[channel]:false;}
 void autogenSetMute(int channel,bool muted){
-  if(channel>=0&&channel<16){agenWork->mutes[channel]=muted;agenWork->userMuted[channel]=muted;}
+  if(!agen.active||channel<1||channel>=15)return;
+  const bool changed=agenWork->mutes[channel]!=muted||agenWork->userMuted[channel]!=muted;
+  agenWork->mutes[channel]=muted;agenWork->userMuted[channel]=muted;
+  if(!muted){
+    unsigned level=agenWork->volumeBase[channel];
+    if(!level)level=agenWork->savedVolume[channel]?agenWork->savedVolume[channel]:agenWork->savedLastVolume[channel];
+    level=min(16u,level?level:12u);
+    const unsigned previous=agenWork->volumeNow[channel];
+    agenWork->volumeBase[channel]=agenWork->volumeNow[channel]=level;
+    agenWork->manualUntil[channel]=millis()+2000u;
+    applyChannelControlVolume(channel,level,previous);
+  }
+  if(changed)invalidateAutogenPage();
 }
 void autogenPrepareStep(){
   const unsigned start=agen.firstStep();
@@ -5220,6 +5297,9 @@ void autogenManualVolume(int ch,unsigned volume){
   if(!agen.active||ch<1||ch>=15)return;
   volume=min(volume,16u);agenWork->volumeBase[ch]=agenWork->volumeNow[ch]=volume;
   agenWork->manualUntil[ch]=millis()+2000u;
+  const bool muted=volume==0,changed=agenWork->userMuted[ch]!=muted;
+  agenWork->userMuted[ch]=agenWork->mutes[ch]=muted;
+  if(changed)invalidateAutogenPage();
 }
 FLASHMEM static void serviceAutogenPerformance(){
   using namespace toern_autogen_music;
@@ -5257,8 +5337,70 @@ FLASHMEM static int autogenReferenceMidi(const Note &cell,unsigned ch,unsigned r
   if(cell.midiPitch<=127)return cell.midiPitch;
   int reference=ch==11?60+(int)row-12:
       ch==13||ch==14?constrain(48+(int)row-(int)ch-1,36,62)+12:
-      12*SampleRate[ch]+(int)row-(int)ch-1+(int)lroundf(detune[ch])+(int)lroundf(channelOctave[ch]);
+      toern_autogen_register::sampleMidi(ch,row);
   return constrain(reference,24,108);
+}
+FLASHMEM static void autogenMotifFingerprint(uint32_t out[16]){
+  for(unsigned ch=0;ch<16;++ch)out[ch]=2166136261u;
+  const unsigned start=(agenWork->anchor-1)*maxX+1;
+  for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row){
+    const Note &cell=note[start+col][row];const unsigned ch=cell.channel;
+    if(!ch||ch>=16)continue;
+    uint32_t h=out[ch];
+    for(unsigned value:{col,row,(unsigned)cell.velocity,(unsigned)cell.probability,(unsigned)cell.condition,(unsigned)cell.midiPitch})h=(h^value)*16777619u;
+    out[ch]=h;
+  }
+}
+FLASHMEM static void refreshAutogenMotif(unsigned changed,bool adopting){
+  const unsigned start=(agenWork->anchor-1)*maxX+1;
+  agenWork->foundation=analyzeCompanionContext(agenWork->anchor,agenWork->anchor,agenWork->anchor,0);
+  for(unsigned ch=1;ch<15;++ch)if(changed&(1u<<ch)){
+    unsigned sum=0,count=0,maxPoly=0;
+    for(unsigned col=0;col<maxX;++col){unsigned poly=0;
+      for(unsigned row=1;row<=maxY;++row)if(note[start+col][row].channel==ch){sum+=autogenReferenceMidi(note[start+col][row],ch,row);++count;++poly;}
+      maxPoly=max(maxPoly,poly);
+    }
+    if(count)agenWork->removedVoices&=~(1u<<ch);else if(!adopting)agenWork->removedVoices|=1u<<ch;
+    const int reference=count?sum/count:ch==6||ch==14?36:60;
+    if(ch==11){agenWork->ch11Bass=count&&reference<48&&maxPoly<=1;agenWork->ch11MaxPolyphony=max(1u,min(maxPoly,3u));}
+    const bool bass=ch==6||ch==14||(ch==11&&agenWork->ch11Bass);
+    agenWork->registers[ch]=reference;
+  }
+}
+FLASHMEM static void serviceAutogenMotif(){
+  uint32_t fingerprint[16];autogenMotifFingerprint(fingerprint);unsigned changed=0;
+  if(agenWork->motifSourceChanged){
+    agenWork->motifSourceChanged=false;
+    invalidateAutogenPage();agenWork->motifEdited=true;
+    memcpy(agenWork->motifFingerprint,fingerprint,sizeof(fingerprint));
+    refreshAutogenMotif(0x7ffeu,true);return;
+  }
+  for(unsigned ch=1;ch<15;++ch)if(fingerprint[ch]!=agenWork->motifFingerprint[ch])changed|=1u<<ch;
+  if(!changed)return;
+  // Withdraw any stale ready page before doing analysis with interrupts enabled.
+  invalidateAutogenPage();agenWork->motifEdited=true;
+  memcpy(agenWork->motifFingerprint,fingerprint,sizeof(fingerprint));
+  refreshAutogenMotif(changed,false);
+  agenWork->removedByPage[agenWork->anchor-1]=agenWork->removedVoices;
+}
+FLASHMEM static bool autogenVoicePresent(unsigned page,unsigned ch){
+  const unsigned start=(page-1)*maxX+1;
+  for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row)if(note[start+col][row].channel==ch)return true;
+  return false;
+}
+FLASHMEM static void copyAutogenVoice(unsigned source,unsigned target,unsigned ch){
+  const unsigned src=(source-1)*maxX+1,dst=(target-1)*maxX+1;
+  for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row){
+    const Note &cell=note[src+col][row];if(cell.channel!=ch)continue;
+    companionPlaceCellLimited(dst+col,row,ch,cell.velocity,cell.probability,cell.condition,
+        cell.midiPitch<=127?cell.midiPitch:autogenReferenceMidi(cell,ch,row));
+  }
+}
+FLASHMEM static int autogenSourceRegister(unsigned ch,unsigned col,int fallback){
+  const unsigned step=(agenWork->source-1)*maxX+1+col;
+  unsigned sum=0,count=0;
+  for(unsigned row=1;row<=maxY;++row)if(note[step][row].channel==ch){sum+=autogenReferenceMidi(note[step][row],ch,row);++count;}
+  return count?(int)(sum/count):fallback;
 }
 FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned phrase){
   using namespace toern_autogen_music;
@@ -5269,6 +5411,7 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
     for(unsigned row=1;row<=maxY;++row)if(note[start+col][row].channel==ch){
       events[count]=note[start+col][row];rows[count++]=row;note[start+col][row].channel=0;
     }
+    if(ch==11)count=min(count,agenWork->ch11MaxPolyphony);
     if(!tonal){
       const bool support=ch==agenWork->foundationVoice&&(agenWork->section==Section::Build||agenWork->section==Section::Break||agenWork->section==Section::Fill);
       const int action=support?-1:drum(agenWork->section,ch,col,maxX,agenWork->seed,phrase%2==1);
@@ -5283,8 +5426,9 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
     }
     if(agenWork->chordPair&&(ch==13||ch==14)){
       if(col%8==0||((agenWork->section==Section::Variation||agenWork->section==Section::Build||agenWork->section==Section::Fill)&&col%8==6)){
-        int pitch=col%8==6?melodyPitch(60,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,13,col,agenWork->seed+ch*17):
-            nearestPc(60,chordPc(agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,ch==13?1:2));
+        const int pairReference=min(60,agenWork->registers[11]+12);
+        int pitch=col%8==6?toern_autogen_register::monoPitch(pairReference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,13,col,agenWork->seed+ch*17):
+            nearestPc(pairReference,chordPc(agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,ch==13?1:2));
         companionPlaceCellLimited(start+col,ch,ch,86,100,1,encodePitch(pitch,agenWork->registerShift[ch]));
       }
       continue;
@@ -5292,17 +5436,18 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
     const bool bass=ch==6||ch==14||(ch==11&&agenWork->ch11Bass);
     if(bass&&ch!=agenWork->foundationVoice&&!bassAllowed(agenWork->section,col,maxX,phrase%2==1))continue;
     // Three diatonic voices in the starting register, rather than parallel chromatic shifts.
-    if(ch==11&&!bass&&(count>1||col%8==0||(agenWork->section==Section::Variation&&col%8==6))){
-      for(unsigned tone=0;tone<3;++tone){
-        int pitch=voicingPitch(agenWork->registers[ch],agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,tone,agenWork->seed);
+    if(ch==11&&!bass&&count>1){
+      for(unsigned tone=0;tone<min(count,3u);++tone){
+        int pitch=voicingPitch(autogenSourceRegister(ch,col,agenWork->registers[ch]),agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,tone,agenWork->seed);
         companionPlaceCellLimited(start+col,constrain((int)agenWork->foundation.channelHomeRow[ch]+(int)tone,1,16),ch,
             count?events[0].velocity:88,count?events[0].probability:100,1,encodePitch(pitch,agenWork->registerShift[ch]));
       }
       continue;
     }
     for(unsigned i=0;i<count;++i){
-      const int reference=ch>=11?constrain(autogenReferenceMidi(events[i],ch,rows[i]),bass?36:55,bass?55:79):autogenReferenceMidi(events[i],ch,rows[i]);
-      const int pitch=melodyPitch(reference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,bass?14:ch,col,agenWork->seed);
+      const int reference=autogenReferenceMidi(events[i],ch,rows[i]);
+      const int pitch=(ch==13||ch==14)?toern_autogen_register::monoPitch(reference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,ch,col,agenWork->seed):
+          toern_autogen_register::nearSource(melodyPitch(reference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,bass?14:ch,col,agenWork->seed),autogenSourceRegister(ch,col,agenWork->registers[ch]));
       if(ch>=11)companionPlaceCellLimited(start+col,rows[i],ch,events[i].velocity,
           events[i].probability,events[i].condition,encodePitch(pitch,agenWork->registerShift[ch]));
       else {
@@ -5362,37 +5507,32 @@ FLASHMEM bool toggleAutogen(){
   agenWork->harmony=companionMakeHarmony(agenWork->foundation,0); // one key for the entire performance
   uint32_t tonalWeight=0;for(unsigned pc=0;pc<12;++pc)tonalWeight+=agenWork->foundation.pitchClassWeight[pc];
   if(!tonalWeight){agenWork->harmony.rootPc=0;agenWork->harmony.isMinor=true;}
-  agenWork->anchor=1;
-  while(true){
-    bool working=false;
-    for(unsigned i=0;i<2;++i)working|=agenWork->anchor==(base-1+i)%companionEffectivePages()+1;
-    if(!working)break;
-    ++agenWork->anchor;
-  }
-  memcpy(agenWork->notes+(agenWork->anchor-1)*maxX+1,agenWork->notes+(base-1)*maxX+1,maxX*sizeof(agenWork->notes[0]));
+  agenWork->anchor=base;
+  const unsigned working[2]={1,2};
+  memcpy(agenWork->performance+1,agenWork->notes+(base-1)*maxX+1,maxX*sizeof(agenWork->notes[0]));
   for(unsigned ch=1;ch<15;++ch){
     unsigned sum=0,count=0,maxPoly=0;
     for(unsigned col=(base-1)*maxX+1;col<=base*maxX;++col)for(unsigned row=1;row<=maxY;++row)
       if(note[col][row].channel==ch){sum+=autogenReferenceMidi(note[col][row],ch,row);++count;}
     for(unsigned col=(base-1)*maxX+1;col<=base*maxX;++col){unsigned n=0;for(unsigned row=1;row<=maxY;++row)n+=note[col][row].channel==ch;maxPoly=max(maxPoly,n);}
     const int reference=count?sum/count:ch==6||ch==14?36:60;
-    if(ch==11)agenWork->ch11Bass=reference<48&&maxPoly<=1;
+    if(ch==11){agenWork->ch11Bass=reference<48&&maxPoly<=1;agenWork->ch11MaxPolyphony=max(1u,min(maxPoly,3u));}
     const bool bass=ch==6||ch==14||(ch==11&&agenWork->ch11Bass);
-    agenWork->registers[ch]=ch>=11?constrain(reference,bass?36:55,bass?55:79):reference;
-    if(ch==11)agenWork->registerShift[ch]=12*((int)octave[0]-4);
-    if(ch==13||ch==14)agenWork->registerShift[ch]=12*(int)lroundf(((float)SMP.synth_settings[ch][CENT]*1.5f-24.0f)/12.0f);
+    agenWork->registers[ch]=reference;
   }
   const unsigned phase=isNowPlaying&&beat>0?(beat-1)%maxX:0;
   const uint32_t probabilitySeed=random(1,256);agenWork->seed=probabilitySeed;
   const unsigned repeats=toern_autogen_music::repeats(toern_autogen_music::Section::Groove,probabilitySeed%6,maxX,(unsigned)SMP.bpm);
-  for(uint8_t ch:agenOrder)applyAutogenProbabilities(agenWork->notes,base,ch,probabilitySeed);
+  for(uint8_t ch:agenOrder)applyAutogenProbabilities(agenWork->performance,working[0],ch,probabilitySeed);
   if(!isNowPlaying)play(true);
   {
     toern_audio::StateGuard guard;
-    note=agenWork->notes;agen.start(base,maxX,MAX_STEPS,repeats);agenWork->building=false;agenRestoreUI=false;
-    generationUndoValid=false;beat=(base-1)*maxX+phase+1;beatForUI=beat;GLOB.page=base;loopCount=1;
+    note=agenWork->notes;agen.start(working[0],maxX,MAX_STEPS,repeats);agen.pages[0]=working[0];agen.pages[1]=working[1];
+    agenWork->building=false;agenRestoreUI=false;
+    generationUndoValid=false;beat=(working[0]-1)*maxX+phase+1;beatForUI=beat;GLOB.page=working[0];loopCount=1;
   }
-  noteUserActivity();menuRequestFullRedraw();return true;
+  autogenMotifFingerprint(agenWork->motifFingerprint);
+  autogenFocusMotif();noteUserActivity();menuRequestFullRedraw();return true;
 }
 FLASHMEM void serviceAutogen(){
   if(!agen.active){
@@ -5406,19 +5546,14 @@ FLASHMEM void serviceAutogen(){
     return;
   }
   if(!isNowPlaying||maxX!=agen.width||childLockEnabled||imageMode||touchyEnabled||fastRecordActive||isRecording){stopAutogen();return;}
+  autogenFocusMotif();
+  serviceAutogenMotif();
   serviceAutogenPerformance();
-  if(GLOB.edit!=agen.source()){
-    const unsigned col=GLOB.x>0?(GLOB.x-1)%maxX+1:1;
-    GLOB.edit=agen.source();editpage=GLOB.edit;GLOB.x=(GLOB.edit-1)*maxX+col;
-    if(currentMode==&draw||currentMode==&singleMode){
-      currentMode->pos[3]=GLOB.x;Encoder[3].writeCounter((int32_t)GLOB.x);
-      if(ctrlMode==0){currentMode->pos[1]=GLOB.edit;Encoder[1].writeCounter((int32_t)GLOB.edit);}
-    }
-    menuRequestFullRedraw();
-  }
   if(!agen.needsBuild)return;
+  ToernNoteScope<decltype(note)> performanceScope(note,agenWork->performance);
   if(!agenWork->building){
-    agenWork->source=agenWork->anchor;agenWork->target=agen.target();agenWork->voice=0;
+    memcpy(agenWork->performance+2*maxX+1,agenWork->notes+(agenWork->anchor-1)*maxX+1,maxX*sizeof(note[0]));
+    agenWork->source=3;agenWork->target=agen.target();agenWork->voice=0;
     if((agen.generation+1)%2==0)agenWork->seed=random(1,256)+(agen.generation+1)/2*37;
     agenWork->section=toern_autogen_music::section(agen.generation+1);
     agenWork->channels=0;
@@ -5431,15 +5566,16 @@ FLASHMEM void serviceAutogen(){
     for(unsigned candidate:{6u,14u,11u,13u,7u,8u,1u})if((agenWork->channels&(1u<<candidate))&&!agenWork->userMuted[candidate]&&agenWork->volumeBase[candidate]>0){agenWork->foundationVoice=candidate;break;}
     agenWork->section=toern_autogen_music::supportedSection(agenWork->section,agenWork->foundationVoice);
     // Empty pages get a restrained starter using the existing companion engine.
-    if(!agenWork->channels)agenWork->channels=(1u<<1)|(1u<<2)|(1u<<3)|(1u<<11)|(1u<<13);
+    if(!agenWork->channels&&!agenWork->motifEdited)agenWork->channels=(1u<<1)|(1u<<2)|(1u<<3)|(1u<<11)|(1u<<13);
+    agenWork->channels&=~agenWork->removedVoices;
     // Introduce at most one companion during development; keep the voice count bounded.
     unsigned count=0;for(unsigned ch=1;ch<15;++ch)if(agenWork->channels&(1u<<ch))++count;
     agenWork->chordPair=agenWork->ch11Bass&&(agenWork->channels&(1u<<11))
-        &&!(agenWork->channels&((1u<<13)|(1u<<14)))&&count<=5&&!agenWork->userMuted[13]&&!agenWork->userMuted[14]&&agenWork->volumeBase[13]>0&&agenWork->volumeBase[14]>0;
+        &&!(agenWork->channels&((1u<<13)|(1u<<14)))&&!(agenWork->removedVoices&((1u<<13)|(1u<<14)))&&count<=5&&!agenWork->userMuted[13]&&!agenWork->userMuted[14]&&agenWork->volumeBase[13]>0&&agenWork->volumeBase[14]>0;
     if(agenWork->chordPair){agenWork->channels|=(1u<<13)|(1u<<14);count+=2;}
     for(unsigned candidate:{2u,3u,11u}){
       const bool needed=candidate==11||(candidate==2&&(agenWork->section==toern_autogen_music::Section::Build||agenWork->section==toern_autogen_music::Section::Fill))||candidate==3;
-      if(needed&&count<7&&!(agenWork->channels&(1u<<candidate))&&!agenWork->userMuted[candidate]&&agenWork->volumeBase[candidate]>0&&!isChildVoiceDisabled(candidate)){agenWork->channels|=1u<<candidate;++count;}
+      if(needed&&agenWork->channels&&count<7&&!(agenWork->removedVoices&(1u<<candidate))&&!(agenWork->channels&(1u<<candidate))&&!agenWork->userMuted[candidate]&&agenWork->volumeBase[candidate]>0&&!isChildVoiceDisabled(candidate)){agenWork->channels|=1u<<candidate;++count;}
     }
     agenWork->context=analyzeCompanionContext(agenWork->source,agenWork->source,agenWork->source,0);
     agenWork->groove=companionMakeGroove(agenWork->context,agenWork->target,agenWork->seed);
@@ -5449,9 +5585,17 @@ FLASHMEM void serviceAutogen(){
   if(agenWork->voice<sizeof(agenOrder)){
     const uint8_t ch=agenOrder[agenWork->voice++];
     if(!(agenWork->channels&(1u<<ch))||agenWork->userMuted[ch]||isChildVoiceDisabled(ch))return;
+    const bool mono=ch==13||ch==14;
+    const unsigned next=agen.generation+1;
+    if(mono&&autogenVoicePresent(agen.source(),ch)&&next%toern_autogen_register::phrasePages(maxX)!=0&&
+        agenWork->pageRevision[agen.playing]==agenWork->motifRevision&&
+        toern_autogen_music::supportedSection(toern_autogen_music::section(agen.generation),agenWork->foundationVoice)==agenWork->section){
+      copyAutogenVoice(agen.source(),agenWork->target,ch);return;
+    }
     CompanionContext ctx=analyzeCompanionContext(agenWork->source,agenWork->source,agenWork->source,ch);
     const unsigned arc=agenWork->section==toern_autogen_music::Section::Fill?3:agenWork->section==toern_autogen_music::Section::Build?2:agenWork->section==toern_autogen_music::Section::Variation?1:0;
-    if(ctx.channelHitCount[ch])evolveCompanionChannelFromBase(agenWork->source,agenWork->target,ch,arc,
+    if(mono&&ctx.channelHitCount[ch])copyAutogenVoice(agenWork->source,agenWork->target,ch);
+    else if(ctx.channelHitCount[ch])evolveCompanionChannelFromBase(agenWork->source,agenWork->target,ch,arc,
         agenWork->section==toern_autogen_music::Section::Fill,ctx,agenWork->harmony,agenWork->seed);
     else generateCompanionChannelPage(agenWork->target,ch,ctx,agenWork->harmony,agenWork->groove,agenWork->seed);
     arrangeAutogenChannel(agenWork->target,ch,agen.generation+1);
@@ -5460,6 +5604,5 @@ FLASHMEM void serviceAutogen(){
   }
   // Publish only after every cell is complete; timer commits on a page boundary.
   const unsigned repeats=toern_autogen_music::repeats(agenWork->section,agenWork->seed%6,maxX,(unsigned)SMP.bpm);
-  hasNotes[agenWork->target]=true;lastPage=max(lastPage,agenWork->target);
-  {toern_audio::StateGuard guard;agen.publish(repeats);agenWork->building=false;}
+  {toern_audio::StateGuard guard;agenWork->pageRevision[agen.playing^1u]=agenWork->motifRevision;agen.publish(repeats);agenWork->building=false;}
 }

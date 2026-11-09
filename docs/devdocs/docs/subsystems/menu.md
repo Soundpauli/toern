@@ -77,10 +77,10 @@ chord/progression and arrangement tables use flash (`PROGMEM`); heavy musical
 helpers execute from flash. Larger optional theory/motion libraries could be
 loaded from SD on entry, but no such library or live SD traffic is required.
 
-Two pages alternate while the original bank stays untouched. A third, invisible
-workspace page holds an immutable copy of the starting motif. At the last
-physical page the second performance page wraps to page 1. The key, mode and
-source registers are captured once: every variation refers to that foundation,
+Two workspace pages alternate while the original bank stays untouched. The
+selected source page holds the editable pink motif; two independent buffers
+supply playback, displayed as virtual positions 10/11. The starting key and mode
+stay fixed; edited voices refresh their source registers. Every variation refers to that motif,
 rather than re-inferring a key from the preceding mutation. Strong melodic beats
 fit diatonic chord tones; passing notes stay in the scale. Bass beats land on the
 chord root. Harmony holds through transitions and resolves to the tonic on the
@@ -101,11 +101,12 @@ The chord progression reaches its fourth degree choice before returning to
 the tonic at the drop. Call/answer inversions change without replacing correct
 chord tones by independent random melodic notes. Every source chord onset is
 revoiced as a chord, including onsets outside the fixed eight-step points.
-Generated CH11/13 melodies/chords use an audible upper register; CH11/14 bass
-parts retain a bass register. Grid-to-MIDI conversion includes the mono note
-array's octave offset. Generated synth notes compensate the patch's whole-octave
-register once, keeping CENT, OCTV, instrument and envelope controls unchanged.
-Fine tuning remains manual. The original note bank stays intact.
+Tonal voices retain the motif's raw MIDI register. The same patch tuning is
+applied once to both motif and generated notes. Sample MIDI is relative to 60,
+not a sampler table index. CH11 preserves the source's maximum chord size;
+it does not force triads or periodic extra chord attacks. CH13/14 use small
+passing-note movement and repeat phrases across 64 steps, except on source
+edits and section transitions. The original note bank stays intact.
 Nonstructural notes use role-dependent probabilities (roughly 60–95%); structural
 anchors stay reliable unless the source explicitly specified a lower probability.
 One voice is prepared per main-loop pass. The sequencer only publishes complete
@@ -114,11 +115,11 @@ pages at boundaries; late jobs repeat the playing page.
 On DRAW/SINGLE, y=16 shows the two performance-page indicators: white for
 playing, red for the unfinished next page, yellow for a complete waiting page.
 A 5×5 clock icon at the top right (x=maxX−4…maxX, y=12…16) replaces the
-numeric countdown. Its twelve-segment cyan arc measures elapsed steps across
+numeric countdown. Its twelve-segment arc (blue in playback view, pink on the motif) measures elapsed steps across
 all scheduled passes of the current page. The rim stays visible: no digit or
 full-icon blink. An amber three-pixel spinner moves every 240 ms while preparing;
 a steady green check indicates a ready page. A late builder holds the full ring
-in amber until a complete page can switch at a boundary. Timing is derived from
+in its blue/pink view color with the amber spinner until a complete page can switch at a boundary. Timing is derived from
 sequencer steps and `passesTotal`, so tempo changes and repeated pages remain
 honest; this is musical progress, not an estimated generation duration.
 An empty source gets a restrained starter. Companion additions are bounded to
@@ -156,7 +157,7 @@ as an enabled preference across reboot.
 `platformio/src/toern_autogen.h` owns boundary/repeat scheduling; `toern_helpers.ino` owns the
 background builder and temporary-bank lifecycle. `_debug/tests/test_autogen.py` tests
 both 16- and 32-step pages, late jobs, randomized phrase lengths, source safety,
-empty starters, allocation failure/release, immutable harmony/motif and restoration.
+empty starters, allocation failure/release, stable key, editable motif and restoration.
 `_debug/tests/test_autogen_visual_music.py` renders both layouts and checks all 12 major/
 minor keys, chord/bass constraints, register bounds and arrangement contrasts.
 The normal generation regression remains `_debug/tests/test_generation_preserves_notes.py`.
@@ -181,3 +182,49 @@ Error counts may include startup probes; compare changes over the test interval.
 Native tests inject NACKs and short reads into the actual patched driver
 (`_debug/tests/test_encoder_failures.py`) and exercise wrapper cooldown/recovery
 (`_debug/tests/test_i2c_startup.py`).
+
+### Live AGEN motif editing
+
+The selected source page is the editable motif, highlighted pink. Normal cursor
+and CTRL=PAGE navigation select a different motif without moving playback.
+A full editable session copy retains edits on every source page. A separate
+three-page grid contains playback buffers 1/2 (displayed as 10/11) and a private
+source snapshot on page 3. Main-loop generation and timer playback use scoped
+grid pointers; nested timer callbacks restore the interrupted pointer. MIDI
+recording explicitly targets the editable grid. Performance buffers never occupy
+editable source slots. A source above page 8 uses display dot 9 on 16-column panels.
+
+Per-voice fingerprints detect motif notes, velocities, probabilities, conditions
+and pitches. A change withdraws the ready flag before main-loop analysis and
+rebuilds the pending page. Mute/unmute also invalidates it; unmute can restore a
+voice whose starting automated ceiling was zero because it was muted. The
+sequencer still commits only complete pages at the existing boundary. It never
+writes generated data into the motif, and its ISR gains no generation work.
+
+Edited voices update the source snapshot and continue through the original
+9671a48 evolution and arrangement path. Selecting another source adopts its notes
+without disabling variation or marking its absent companion voices as deletions. Explicitly emptied voices are excluded from companion
+injection until notes return. Clearing an edited motif does not trigger the
+initial empty-page starter. The editable bank, three-page performance grid, fingerprints and per-page deletion
+masks fit inside a 32 KiB on-demand workspace bound. Stop/pause restores the original bank and
+starting mutes/levels, including after temporary motif edits.
+
+
+AGEN opens in the generated playback view. A plain FN (touch 5) tap toggles it
+with the editable motif; encoder modifiers and touch 4+5 fills consume the tap.
+Playback view follows the currently playing buffer, shows every generated voice
+at its actual grid position even from SINGLE/simple-note mode, hides the edit
+cursor and uses a green timebar. Generated notes are read-only. The clock ring
+is blue in playback view and pink in motif view, including late preparation;
+the centre retains its amber preparation spinner/green ready check. Selecting
+and editing source pages is done in motif view. Viewing never moves playback.
+
+
+AGEN pitch follows the motif's raw MIDI register. Synth patch OCTV/CENT and
+transpose are applied once by playback; no automatic inverse octave correction
+is added. Sample voices map grid rows relative to MIDI 60, independent of their
+sampler root index. CH11 no longer inflates single notes/dyads into triads.
+CH13/14 develop more gently and repeat their phrase over 64 steps, with early
+refresh for a source edit or section transition. Drum/form timing stays active.
+Plain FN view taps perform no encoder-counter writes or subpattern-release
+rewinds; they update only view state and redraw flags.

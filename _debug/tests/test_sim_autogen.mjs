@@ -21,10 +21,10 @@ for (const columns of [16,32]) {
     const state=controller.state();sections.push(state.section);
     assert.equal(state.generation,generation);
     const offset=(state.page-1)*columns;
-    if(state.section==='Build'){assert(note.slice(offset+1,offset+columns+1).flat().every(n=>n.channel!==1));assert(note.slice(offset+1,offset+columns+1).flat().some(n=>n.channel===11),'bass foundation survives the build');assert.equal(state.remaining,1);}
+    if(state.section==='Build'){assert(controller.performance.slice(offset+1,offset+columns+1).flat().every(n=>n.channel!==1));assert(controller.performance.slice(offset+1,offset+columns+1).flat().some(n=>n.channel===11),'bass foundation survives the build');assert.equal(state.remaining,1);}
     if(state.section==='Fill' && generation%2===1) {
-      assert(note[offset+columns].every(n=>!n.channel||n.channel>5));
-      for(const x of [columns-1,columns]) assert(note[offset+x].every(n=>n.channel!==11));
+      assert(controller.performance[offset+columns].every(n=>!n.channel||n.channel>5));
+      for(const x of [columns-1,columns]) assert(controller.performance[offset+x].every(n=>n.channel!==11));
     }
     const passes=state.remaining;
     for(let i=0;i<passes*columns;i++) {
@@ -33,7 +33,7 @@ for (const columns of [16,32]) {
       if(i<passes*columns-1)assert.equal(controller.state().generation,generation,'section changes only after final full page');
     }
     assert.equal(controller.state().generation,generation+1);
-    assert.equal(controller.state().page,state.page%2+1);
+    assert.equal(controller.state().page,state.page===1?2:1);
   }
   assert.deepEqual(sections, [...SECTIONS,...SECTIONS]);
   controller.stop(glob);assert.deepEqual(note,original);assert.equal(controller.state().active,false);
@@ -50,8 +50,8 @@ for (const columns of [16,32]) {
     const matrix={light:(x,y,c)=>{assert(x>=1&&x<=columns&&y>=1&&y<=16);pixels.set(`${x},${y}`,c);},drawText:()=>text++};
     drawAutogenStatus(matrix,{agen:{page:1,progress,ready}},now);
     assert.equal(text,0,'AGEN uses an icon, never a numeral');
-    for(let x=0;x<5;x++)for(let y=0;y<5;y++)assert.deepEqual(pixels.get(`${columns-4+x},${16-y}`),AGEN_STATUS_COLORS[statusInk(x,y,progress,ready,now)]);
-    assert.deepEqual(pixels.get('2,16'),ready?[220,180,0]:[200,0,0]);
+    for(let x=0;x<5;x++)for(let y=0;y<5;y++)assert.deepEqual(pixels.get(`${columns-4+x},${16-y}`),AGEN_STATUS_COLORS[statusInk(x,y,progress,ready,now)===3&&(x===0||x===4||y===0||y===4)?2:statusInk(x,y,progress,ready,now)]);
+    assert.deepEqual(pixels.get('11,16'),ready?[220,180,0]:[200,0,0]);
   }
 }
 for(const ready of [false,true])for(let progress=0;progress<=12;progress++) {
@@ -93,8 +93,8 @@ for(const width of [16,32]) {
  const original=structuredClone(note),glob={page:1,edit:1,x:1,y:12};
  const c=createAutogen({note,columns:()=>width,steps:()=>256,rows:16,emptyNote,bpm:()=>110,params:ch=>({cent:ch===11?5:ch===13?0:8})});
  c.start(glob);
- const chord=note[1].filter(n=>n.channel===11).map(n=>n.midiPitch-24);
- assert.equal(chord.length,3);assert.equal(new Set(chord).size,3);assert(chord.every(n=>n>=48&&n<=84));
+ const chord=c.performance[(c.state().page-1)*width+1].filter(n=>n.channel===11).map(n=>n.midiPitch);
+ assert.equal(chord.length,3);assert.equal(new Set(chord).size,3);assert(chord.every(n=>n>=24&&n<=60));
  c.stop(glob);assert.deepEqual(note,original);
  // Hats alone, or a muted bass, cannot create a roll or unsupported break.
  for(const mutedBass of [false,true]){
@@ -105,9 +105,51 @@ for(const width of [16,32]) {
   for(let i=0;i<width*80;i++){
    assert(!['Build','Fill','Break'].includes(sparse.state().section));
    const off=(sparse.state().page-1)*width;
-   assert(note.slice(off+1,off+width+1).flat().every(n=>!n.channel||n.channel===3));sparse.advance();
+   assert(sparse.performance.slice(off+1,off+width+1).flat().every(n=>!n.channel||n.channel===3));sparse.advance();
   }
   sparse.stop(glob);
  }
 }
 console.log('PASS: three-tone chord variation, sounding registers, untouched source and sparse/muted buildup protection.');
+
+// AGEN plays separate workspace pages while the pink motif remains editable.
+for(const width of [16,32]) {
+ const note=Array.from({length:257},()=>Array.from({length:17},emptyNote)),muted=Array(16).fill(false);
+ Object.assign(note[1][2],{channel:1});Object.assign(note[1][14],{channel:13,midiPitch:60});
+ const original=structuredClone(note),glob={page:1,edit:1,x:1,y:14};
+ const controller=createAutogen({note,columns:()=>width,steps:()=>256,rows:16,emptyNote,bpm:()=>120,isMuted:ch=>muted[ch]});
+ controller.start(glob);assert.equal(controller.state().motifPage,1);assert.equal(controller.state().playingSlot,10);
+ assert.deepEqual(note.slice(1,width+1),original.slice(1,width+1),'generation never edits the pink motif');
+ const playing=structuredClone(controller.performance.slice(1,width+1));
+ Object.assign(note[1][14],emptyNote());Object.assign(note[3][14],emptyNote(),{channel:13,midiPitch:67,velocity:79,probability:83,condition:3});
+ assert(controller.poll());assert.equal(controller.state().revision,1);
+ assert.deepEqual(controller.performance.slice(1,width+1),playing,'an edit never rewrites the playing page');
+ function boundary(){const generation=controller.state().generation;while(controller.state().generation===generation)controller.advance();}
+ const variations=new Set(),editedRolls=[];let editedDrop=false;
+ for(let response=0;response<12;response++){
+  boundary();const offset=(controller.state().page-1)*width;
+  variations.add(JSON.stringify(controller.performance.slice(offset+1,offset+width+1)));
+  if(controller.state().section==='Build')editedRolls.push(controller.performance.slice(offset+1,offset+width+1).filter(col=>col.some(n=>n.channel===2)).length);
+  if(controller.state().section==='Drop')editedDrop=true;
+  assert.equal(note[3][14].midiPitch,67,'edited source remains authoritative while output develops');
+  assert.equal(note[1][14].channel,0,'deleted source onset stays deleted');
+ }
+ assert.equal(editedRolls.length,2);assert(editedRolls[1]>editedRolls[0]&&editedRolls[0]>0&&editedDrop,'buildup accelerates then drops after editing');
+ assert(variations.size>=3,'edited sources develop while mono phrases repeat more calmly');
+ controller.toggleView();
+ Object.assign(note[width+5][14],emptyNote(),{channel:13,midiPitch:72});
+ controller.selectMotif(2);boundary();
+ assert.equal(controller.state().motifPage,2);
+ assert.equal(note[width+5][14].midiPitch,72);
+ assert.notEqual(controller.performance[(controller.state().page-1)*width+5][14].midiPitch,255);
+ controller.selectMotif(1);boundary();assert.equal(note[3][14].midiPitch,67);
+ muted[13]=true;controller.poll();boundary();
+ let offset=(controller.state().page-1)*width;assert(!controller.performance.slice(offset+1,offset+width+1).flat().some(n=>n.channel===13));
+ muted[13]=false;controller.poll();boundary();offset=(controller.state().page-1)*width;
+ assert(controller.performance.slice(offset+1,offset+width+1).flat().some(n=>n.channel===13));
+ for(let col=1;col<=width;col++)for(const n of note[col])Object.assign(n,emptyNote());
+ controller.poll();boundary();offset=(controller.state().page-1)*width;
+ assert(controller.performance.slice(offset+1,offset+width+1).flat().every(n=>!n.channel),'cleared motif stays silent');
+ controller.stop(glob);assert.deepEqual(note,original);
+}
+console.log('PASS: pink editable motif, virtual 10/11, continued development after source edits, mute/unmute, silence and original restoration.');

@@ -9,7 +9,7 @@ harness=r'''
 using uint8_t=unsigned char;using int8_t=signed char;using int32_t=int;
 const int NUM_ENCODERS=4;
 struct Mode {int pos[4];};
-Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},filterMode={},recordMode={},set_Wav={{10,0,80,3}};
+Mode draw={{2,5,6,7}},menu={{12,13,14,15}},touchyMode={{24,100,0,0}},subpatternMode={},singleMode={},filterMode={},recordMode={},set_Wav={{10,0,80,3}};
 Mode *currentMode=&draw;
 struct EncoderTurnEvent {int encoder;int delta;bool fn;};
 struct {int currentChannel=1;} GLOB;
@@ -29,6 +29,9 @@ bool fnButtonHeld[NUM_ENCODERS]={};
 unsigned int loadedSampleLen[16]={0,256,256};
 unsigned long clockMs=100,sampleGateOverlayUntil=0;
 int filterPage[16]={},lastChangedEncoder=0,slotCalls=0,releases=0;
+bool agenActive=false;int viewToggles=0;
+bool autogenActive(){return agenActive;}
+void autogenToggleView(){viewToggles++;}
 bool pollTouchFillChord(){return false;}
 bool sampleGateEnabled(int){return false;}
 void setSampleGate(int,bool){}void showFilterPages(int){}
@@ -42,6 +45,14 @@ unsigned long millis(){return clockMs;}
 void applyChannelDirection(uint8_t ch,int8_t dir){assert(ch==GLOB.currentChannel);calls++;lastDir=dir;}
 '''+source+r'''
 int main(){
+ agenActive=true;currentMode=&draw;touched=100;updateFnState();assert(viewToggles==0);
+ touched=0;updateFnState();assert(viewToggles==1);assert(!fnReleaseLatch&&!fnReleaseWork);finishFnSubpatternRelease(true);
+ for(auto &e:Encoder)assert(e.writes==0);
+ updateFnState();assert(viewToggles==1);
+ touched=100;updateFnState();dispatchFnTurn({0,1,true});touched=0;updateFnState();assert(viewToggles==1);
+ touched=100;updateFnState();fnButtonEvent(0,2);touched=0;updateFnState();assert(viewToggles==1);
+ agenActive=false;fnReleaseLatch=false;fnReleaseWork=false;fnButtonHeld[0]=false;calls=0;
+
  // With FN released every raw counter and button event is untouched, in any mode.
  for(auto mode:{&draw,&menu,&subpatternMode}) {
   currentMode=mode; touched=0;updateFnState();

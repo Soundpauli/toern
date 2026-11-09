@@ -1260,6 +1260,7 @@ static bool midiRecordCellMatches(const Note &cell, uint8_t channel,
 }
 
 void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
+  currentBeat=autogenRecordStep(currentBeat);previousBeat=autogenRecordStep(previousBeat);
   // While a synth key remains down, render adjacent continuation cells as
   // G/L. They are written after audio playback, so live MIDI remains the only
   // audible trigger during recording; later sequencer playback holds/slides.
@@ -1275,9 +1276,9 @@ void onBeatTick(unsigned int currentBeat, unsigned int previousBeat) {
       uint8_t pitch = (uint8_t)p;
       if (!midiHeldNote[channel][pitch]) continue;
       uint8_t row = midiPitchToGridRow(channel, pitch);
-      Note &current = note[currentBeat][row];
+      Note &current = autogenEditableGrid()[currentBeat][row];
       if (midiRecordCellMatches(current, channel, pitch)) continue;
-      Note &previous = note[previousBeat][row];
+      Note &previous = autogenEditableGrid()[previousBeat][row];
       if (!midiRecordCellMatches(previous, channel, pitch)) continue;
       extern bool MIDI_WRITE_OVERWRITE;
       if (!MIDI_WRITE_OVERWRITE && current.channel != 0) continue;

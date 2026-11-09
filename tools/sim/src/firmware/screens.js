@@ -1,4 +1,4 @@
-import { statusInk, AGEN_STATUS_COLORS } from "./autogen.js";
+import { statusInk, AGEN_STATUS_COLORS, AGEN_MOTIF_COLORS } from "./autogen.js";
 import { canReplaceShadowed } from "./paint.js";
 import { INSTRUMENT_NAMES } from "./instruments.js";
 import { syncHasEffect } from "./performance.js";
@@ -100,6 +100,7 @@ function sx(x16) {
 }
 
 export function drawBase(matrix, s) {
+  s=autogenGridState(s);
   if (s.imageMode) {
     for (let y = 1; y < ROWS; y++) {
       for (let x = 1; x <= COLS; x++) matrix.light(x, y, [0, 0, 0]);
@@ -198,7 +199,12 @@ const COND_BLINK = {
   17: [0, 150, 255], 18: [150, 0, 255], 19: [255, 150, 0], 20: [0, 255, 200], 22: [0, 255, 120],
 };
 
+function autogenGridState(s) {
+  if(!s.agen?.active||!s.agen.performanceView)return s;
+  return {...s,note:s.agenPerformance,GLOB:{...s.GLOB,edit:s.agen.page,singleMode:false},voiceMode:false,simpleNotes:false,mode:"draw"};
+}
 export function drawTriggers(matrix, s, now) {
+  s=autogenGridState(s);
   const blink = ((now / 300) | 0) & 1;
   const easy = s.simpleNotes && !s.GLOB.singleMode;
   const voiceGrid = s.voiceMode && s.playing && s.pmode !== 2;
@@ -388,9 +394,10 @@ function fireDraw(matrix, s, playX) {
 }
 
 export function drawTimer(matrix, s) {
+  s=autogenGridState(s);
   const page = Math.floor((s.beat - 1) / COLS) + 1;
   const voiceGrid = s.voiceMode && s.playing && s.pmode !== 2;
-  if (!voiceGrid && page !== s.GLOB.edit) {
+  if (!s.agen?.active && !voiceGrid && page !== s.GLOB.edit) {
     fireClear();
     return;
   }
@@ -417,7 +424,7 @@ export function drawTimer(matrix, s) {
       ch = s.note[step][y].channel;
     }
     if (ch > 0 && canReplaceShadowed(s.note,step,y,0)) continue;
-    matrix.light(x, y, [28, 0, 0]);
+    matrix.light(x, y, s.agen?.active&&s.agen.performanceView?[0,50,0]:[28,0,0]);
     if (ch > 0 && !s.mute[ch]) {
       const lit = !s.GLOB.singleMode || s.GLOB.currentChannel === ch;
       if (lit) {
@@ -438,6 +445,7 @@ export function drawTimer(matrix, s) {
 }
 
 export function drawCursor(matrix, s, now = performance.now()) {
+  if(s.agen?.active&&s.agen.performanceView)return;
   s.pulse += s.pulseDir * 8;
   if (s.pulse > 230) s.pulseDir = -1;
   if (s.pulse < 1) s.pulseDir = 1;
@@ -1551,10 +1559,15 @@ export function renderFrame(matrix, s, now) {
 }
 
 export function drawAutogenStatus(matrix, s, now) {
-  const { page, ready=true, progress=0 } = s.agen;
+  const { playingSlot=10, otherSlot=11, motifSlot=1, ready=true, progress=0 } = s.agen;
   for(let x=1;x<=COLS;x++) matrix.light(x,16,[0,0,0]);
-  for(let i=1;i<=2;i++)matrix.light(i,16,i===page?[220,220,220]:ready?[220,180,0]:[200,0,0]);
-  for(let x=0;x<5;x++)for(let y=0;y<5;y++)
-    matrix.light(COLS-4+x,16-y,AGEN_STATUS_COLORS[statusInk(x,y,progress,ready,now)]);
-  for(let i=1;i<=2;i++)matrix.light(i,16,i===page?[220,220,220]:ready?[220,180,0]:[200,0,0]);
+  for(let page=1;page<=8;page++)matrix.light(page,16,[0,0,12]);
+  matrix.light(motifSlot,16,[210,30,130]);
+  matrix.light(playingSlot,16,[220,220,220]);matrix.light(otherSlot,16,ready?[220,180,0]:[200,0,0]);
+  const colors=s.agen.performanceView===false?AGEN_MOTIF_COLORS:AGEN_STATUS_COLORS;
+  for(let x=0;x<5;x++)for(let y=0;y<5;y++){
+    let code=statusInk(x,y,progress,ready,now);
+    if(code===3&&(x===0||x===4||y===0||y===4))code=2;
+    matrix.light(COLS-4+x,16-y,colors[code]);
+  }
 }

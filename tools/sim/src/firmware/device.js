@@ -106,7 +106,7 @@ export function createDevice(matrix, statusEl, rings) {
   const fired = [];
   const fills = createFillScheduler();
   const padDown = Array(6).fill(false);
-  let fillChordConsumed = false;
+  let fillChordConsumed = false,agenViewTap=false;
   let pendingAudition = null;
   const wavOf = Array.from({ length: 16 }, (_, ch) => (ch >= 1 && ch <= 8 ? ch - 1 : 0));
   const seekOf = Array(16).fill(0);
@@ -200,11 +200,11 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.agen.active) { stopAutogen(); return; }
     if (s.voiceMode || s.pmode !== 0 || s.imageMode || s.touchyEnabled || s.fastRecActive) return;
     patternDirty = true;
-    s.agen = agen.start(s.GLOB);
-    s.GLOB.page = s.GLOB.edit = 1;
-    s.beat = 1;
-    fills.reset();
     if (!s.playing) togglePlay(true);
+    s.agen = agen.start(s.GLOB);s.agenPerformance=agen.performance;
+    s.GLOB.page = s.agen.page;
+    s.beat = (s.agen.page-1)*COLS+1;
+    fills.reset();
   }
   function startDemo() {
     stopAutogen();
@@ -231,11 +231,13 @@ export function createDevice(matrix, statusEl, rings) {
   function channelOfRow(y) { return y - 1; }
   function localX(globalX) { return ((globalX - 1) % COLS) + 1; }
   function viewPage(page, local) {
+    if(s.agen.active&&s.agen.performanceView)return;
     page = clamp(page, 1, PAGES);
     const column = local ?? localX(s.GLOB.x);
     const changed = page !== s.GLOB.edit;
     s.GLOB.edit = page;
     s.GLOB.x = (page - 1) * COLS + column;
+    if(s.agen.active){agen.selectMotif(page);s.agen=agen.state();return;}
     if (!changed) return;
     if (!s.playing) {
       s.GLOB.page = page;
@@ -401,6 +403,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function clearPage() {
+    if(s.agen.active&&s.agen.performanceView)return;
     const base = (s.GLOB.edit - 1) * COLS;
     const only = s.mode === "single" ? s.GLOB.currentChannel : 0;
     for (let x = 1; x <= COLS; x++) {
@@ -413,6 +416,7 @@ export function createDevice(matrix, statusEl, rings) {
     queueAutosave();
   }
   function paintCell(x, y) {
+    if(s.agen.active&&s.agen.performanceView)return;
     if (y < 1 || y > 15) return false;
     if (s.imageMode) {
       // IMG: paint cycles voice/color on any row 1..15
@@ -443,12 +447,14 @@ export function createDevice(matrix, statusEl, rings) {
     return true;
   }
   function paintPress(x, y) {
+    if(s.agen.active&&s.agen.performanceView)return;
     if (y === 16) { toggleCopy(); return; }
     if (s.drawR && note[x][y].channel && !canReplaceShadowed(note,x,y,s.GLOB.singleMode?s.GLOB.currentChannel:channelOfRow(y))) { eraseCell(x, y); return; }
     if (paintCell(x, y)) playCell(x, y);
   }
   /** MIDI live grid write in SINGLE; WRTE OFF skips occupied cells. */
   function placeLiveGridNote(step, row, channel, velocity = 127, midiPitch = 255) {
+    if(s.agen.active&&step>0)step=(s.agen.motifPage-1)*COLS+(step-1)%COLS+1;
     if (!s.midiReceive) return false;
     if (row < 1 || row > 15 || step < 1 || step > STEPS) return false;
     const n = note[step][row];
@@ -480,6 +486,7 @@ export function createDevice(matrix, statusEl, rings) {
     return EYES_IDLE_MS[clamp(mode | 0, 0, 3)] || 0;
   }
   function eraseCell(x, y) {
+    if(s.agen.active&&s.agen.performanceView)return;
     if (y === 16) { clearColumn(x); return; }
     const n = note[x][y];
     if (!n) return;
@@ -786,7 +793,7 @@ export function createDevice(matrix, statusEl, rings) {
     for (let y = 1; y <= ROWS; y++) {
       const src = s.voiceMode && s.pmode !== 2 ? voiceStep(y, step) : step;
       if (!src) continue;
-      const n = note[src][y];
+      const n = (s.agen.active?agen.performance:note)[src][y];
       if (!n.channel || !SOUND_CH.has(n.channel) || !heard(n.channel)) continue;
       if ([13,14].includes(n.channel) && midiArp.hasHeld(n.channel)) continue;
       if (Math.random() * 100 >= n.probability) continue;
@@ -825,7 +832,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.agen.active) {
       s.beat = agen.advance();
       s.agen = agen.state();
-      s.GLOB.page = s.GLOB.edit = s.agen.page;
+      s.GLOB.page = s.agen.page;
       fire(s.beat, when);
       return true;
     }
@@ -965,6 +972,7 @@ export function createDevice(matrix, statusEl, rings) {
     s.mode = "filter";
   }
   function enterVelocity() {
+    if(s.agen.active&&s.agen.performanceView)return;
     if(s.drawR||s.childLock||s.imageMode)return;
     const n = note[s.GLOB.x][s.GLOB.y];
     if (!n.channel) return;
@@ -1458,6 +1466,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
 
   function turn(enc, dir) {
+    if(s.fnHeld)agenViewTap=false;
     if(s.demoActive)return;
     if (s.mode === "confirm") { if(enc===3)s.confirmChoice=clamp(s.confirmChoice+dir,0,1);return; }
     if (s.mode === "boot") return;
@@ -1889,6 +1898,7 @@ export function createDevice(matrix, statusEl, rings) {
     s.okAt=performance.now();finishLoad();
   }
   function shortPress(enc) {
+    if(s.fnHeld)agenViewTap=false;
     if(s.demoActive)return;
     if (s.mode === "confirm") { if (enc===3 && !s.fnHeld) finishBrowserConfirmation(s.confirmChoice===1); return; }
     if (s.fnHeld && ((s.mode==="dat"&&enc===1)||(s.mode==="kit"&&enc===1)||(s.mode==="wav"&&enc===2))) { requestBrowserDeletion();return; }
@@ -2381,10 +2391,18 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "confirm") { if(id===5)s.fnHeld=down;if(id===2&&down)finishBrowserConfirmation(false);return; }
     if (s.mode !== "touchy" && !down) releaseTouchyPad(id - 1);
     if (s.mode === "touchy") { s.fnHeld = false; touchyTouch(id, down); return; }
+    if(id===5&&down)agenViewTap=s.agen.active&&["draw","single"].includes(s.mode);
+    if(id===5&&!down){
+      if(agenViewTap&&!fillChordConsumed&&s.agen.active&&["draw","single"].includes(s.mode)){
+        s.agen=agen.toggleView();s.pageNrAt=0;s.chNrAt=0;
+        s.GLOB.edit=s.agen.motifPage;s.GLOB.x=(s.GLOB.edit-1)*COLS+localX(s.GLOB.x);
+      }
+      agenViewTap=false;
+    }
     if (!padDown[4] && !padDown[5]) fillChordConsumed = false;
     const eligible = s.playing && s.mode !== "rec" && !s.fastRecActive;
     if (eligible && padDown[4] && padDown[5] && !fillChordConsumed) {
-      fillChordConsumed = true; pendingAudition = null;
+      agenViewTap=false;fillChordConsumed = true; pendingAudition = null;
       s.sensCountActive = false;
       const ch = s.GLOB.currentChannel;
       if (SOUND_CH.has(ch) && !(s.childLock && ch >= 9 && ch <= 14)) {
@@ -2794,6 +2812,7 @@ export function createDevice(matrix, statusEl, rings) {
   }
   function tick(now) {
     if (s.agen.active && (s.touchyEnabled || s.fastRecActive || s.mode === "rec")) stopAutogen();
+    if(s.agen.active){agen.poll();s.agen=agen.state();}
     if (s.agen.active && now-agenVolumeAt >= 30) { agenVolumeAt=now; liveMix(); }
     if (s.playing && appliedBpm !== s.bpm) applyMix();
     if (pendingAudition && now >= pendingAudition.at) { playPadAudition(pendingAudition.ch, pendingAudition.row); pendingAudition = null; }
@@ -2887,7 +2906,7 @@ export function createDevice(matrix, statusEl, rings) {
     }
     renderFrame(matrix, s, now);
     const label = s.mode === "draw" && s.GLOB.singleMode ? "single" : s.mode;
-    const status = `${label}  ·  page ${s.GLOB.edit}  ·  ${s.playing ? "play" : "stop"}${s.agen.active ? `  ·  AGEN ${s.agen.section} ${s.agen.remaining}` : ""}`;
+    const status = `${label}  ·  page ${s.GLOB.edit}  ·  ${s.playing ? "play" : "stop"}${s.agen.active ? `  ·  AGEN ${s.agen.section} · motif ${s.agen.motifPage} · play ${s.agen.playingSlot}` : ""}`;
     if (status !== shownStatus) statusEl.textContent = shownStatus = status;
     rings.forEach((el, i) => {
       const [r, g, b] = matrix.rings[i];

@@ -1,3 +1,4 @@
+#include "src/toern_note_scope.h"
 #include "src/toern_build_types.h"
 #include "toern_hardware.h"
 #include "src/toern_demo.h"
@@ -396,7 +397,16 @@ void autogenManualVolume(int ch,unsigned volume);
 bool queueAutogenFill(int ch);
 void cancelAutogenFills();
 bool autogenActive();
+bool autogenViewingPerformance();
+void autogenToggleView();
 unsigned autogenPage();
+unsigned autogenMotifPage();
+Note (*autogenPlaybackGrid())[maxY+1];
+Note (*autogenEditableGrid())[maxY+1];
+unsigned autogenRecordStep(unsigned step);
+unsigned autogenMotifSlot();
+void autogenFocusMotif();
+void autogenClearMotif(unsigned channel);
 unsigned autogenOtherPage();
 bool autogenNextReady();
 unsigned autogenRepeatsLeft();
@@ -626,14 +636,15 @@ bool placeLiveGridNote(uint8_t channel, uint8_t row, uint8_t velocity,
   if (channel < 1 || row < 1 || row > 15) return false;
   if (isChildVoiceDisabled((int)channel)) return false;
   extern uint16_t quantizedMidiRecordBeat();
-  uint16_t targetBeat = quantizedMidiRecordBeat();
+  const uint16_t playbackBeat = quantizedMidiRecordBeat();
+  uint16_t targetBeat = autogenRecordStep(playbackBeat);
   if (targetBeat < 1) return false;
-  Note &cell = note[targetBeat][row];
+  Note &cell = autogenEditableGrid()[targetBeat][row];
   if (protectOccupied && cell.channel != 0) return false;
   if (protectOtherVoices && cell.channel != 0 && cell.channel != channel) {
     return false;
   }
-  markLiveRecordSkip(targetBeat, row);
+  markLiveRecordSkip(playbackBeat, row);
   cell.velocity = velocity > 0 ? velocity : (uint8_t)defaultVelocity;
   cell.probability = 100;
   cell.condition = 1;
@@ -1379,7 +1390,7 @@ static inline int encoderPageMax() {
   int maxPg = effectivePageCount();
   // NEXT is a live page cue: like PMOD OFF, every page must remain reachable,
   // including empty pages beyond the last page that currently contains notes.
-  if (patternMode == 3) return maxPg;
+  if (autogenActive() || patternMode == 3) return maxPg;
   if (SMP_PATTERN_MODE && (int)lastPage >= 1 && (int)lastPage < maxPg) return (int)lastPage;
   return maxPg;
 }
@@ -2277,6 +2288,7 @@ void showDrawAfterPatternTransfer() {
 }
 
 FLASHMEM void switchMode(Mode *newMode) {
+  if(autogenViewingPerformance()&&newMode==&velocity)return;
   if(autogenActive()&&(newMode==&loadSaveTrack||newMode==&newFileMode||newMode==&songMode||newMode==&touchyMode))stopAutogen();
 
   if (childLockEnabled && !touchyEnabled && (newMode == &filterMode || newMode == &velocity || newMode == &subpatternMode)) {
@@ -2709,11 +2721,12 @@ void checkFastRec() {
     if (recChannelClear == 4 && isNowPlaying && currentTouchState && !lastTouchState[2]) {
       bool validRow = (currentMode == &draw && isPaintableDrawRow(GLOB.y)) || (currentMode == &singleMode && GLOB.y >= 1 && GLOB.y <= 15);
       if (beat >= 1 && beat <= maxlen && GLOB.y >= 1 && GLOB.y <= (int)maxY && GLOB.currentChannel >= 0 && GLOB.currentChannel <= 15 && validRow && !isChildVoiceDisabled((int)GLOB.currentChannel)) {
-        note[beat][GLOB.y].channel = GLOB.currentChannel;
-        note[beat][GLOB.y].velocity = defaultVelocity;
-        note[beat][GLOB.y].probability = 100;
-        note[beat][GLOB.y].condition = 1;
-        note[beat][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
+        const unsigned recordBeat=autogenRecordStep(beat);
+        note[recordBeat][GLOB.y].channel = GLOB.currentChannel;
+        note[recordBeat][GLOB.y].velocity = defaultVelocity;
+        note[recordBeat][GLOB.y].probability = 100;
+        note[recordBeat][GLOB.y].condition = 1;
+        note[recordBeat][GLOB.y].midiPitch = NOTE_MIDI_PITCH_NONE;
       }
       return;
     }
@@ -3368,7 +3381,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
 
   // Velocity mode entry on encoder(3) long press - skip in R mode and IMG mode
   extern int drawMode;
-  if (drawMode == 0 && !childLockEnabled && !imageMode) {
+  if (!autogenViewingPerformance() && drawMode == 0 && !childLockEnabled && !imageMode) {
     // L+R mode: allow velocity mode entry on encoder(3) long press
     if (!freshPaint && note[GLOB.x][GLOB.y].channel != 0 && (currentMode == &singleMode) && match_buttons(currentButtonStates, 0, 0, 0, 2) && was_buttons_0000(oldButtons)) {  // "0002" - must be 0000 before
       unsigned int velo = round(mapf(note[GLOB.x][GLOB.y].velocity, 1, 127, 1, maxY));
@@ -5424,7 +5437,11 @@ FLASHMEM void checkEncoders() {
       // its visible page must remain independently selectable.
       extern bool songModeActive;
       extern int patternMode;
-      if (voiceMode && isNowPlaying && !songModeActive && !childLockEnabled) {
+      if (autogenActive()) {
+        GLOB.edit=getPage(GLOB.x);editpage=GLOB.edit;
+        if(ctrlMode==0){currentMode->pos[1]=GLOB.edit;if(allowEncWrite)Encoder[1].writeCounter((int32_t)GLOB.edit);}
+        autogenFocusMotif();
+      } else if (voiceMode && isNowPlaying && !songModeActive && !childLockEnabled) {
         // Last encoder must not change pages while a voice pattern is playing.
         unsigned int page = GLOB.edit < 1 ? 1 : GLOB.edit;
         unsigned int pageStart = (page - 1) * maxX + 1;
@@ -5472,7 +5489,7 @@ FLASHMEM void checkEncoders() {
           GLOB.edit = newEditPage;
         }
       }
-      if (currentMode == &draw && yChanged && voiceMode && !songModeActive && !childLockEnabled) {
+      if (!autogenActive() && currentMode == &draw && yChanged && voiceMode && !songModeActive && !childLockEnabled) {
         voiceApplyEditPage((int)GLOB.currentChannel);
       }
     }
@@ -5511,7 +5528,7 @@ FLASHMEM void checkEncoders() {
 
     if ((GLOB.y >= 1 && GLOB.y <= 15)) {  // Paint/unpaint rows 1-15; draw-mode row 1 is filtered below
       const unsigned int paintStep = cursorNoteStep();
-      if (paintMode && !preventPaintUnpaint) {
+      if (!autogenViewingPerformance() && paintMode && !preventPaintUnpaint) {
         // Continuous paint in draw mode only
         if (currentMode == &draw && isPaintableDrawRow(GLOB.y)) {
           uint8_t existingCh = note[paintStep][GLOB.y].channel;
@@ -5571,7 +5588,7 @@ FLASHMEM void checkEncoders() {
         }
       }
       // Safety check: Only allow paintMode when actually in singleMode
-      if (paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
+      if (!autogenViewingPerformance() && paintMode && currentMode == &singleMode && !preventPaintUnpaint) {
         // Single mode: allow painting on all y rows 1-15 (no reserved rows).
         uint8_t existingCh = note[paintStep][GLOB.y].channel;
         if (imageMode) {
@@ -5628,7 +5645,7 @@ FLASHMEM void checkEncoders() {
       }
 
       // Safety check: Only allow unpaintMode when actually in draw/singleMode
-      if (unpaintMode && (currentMode == &draw || currentMode == &singleMode) && !preventPaintUnpaint) {
+      if (!autogenViewingPerformance() && unpaintMode && (currentMode == &draw || currentMode == &singleMode) && !preventPaintUnpaint) {
         if (GLOB.singleMode) {
           if (note[paintStep][GLOB.y].channel == GLOB.currentChannel) {
             note[paintStep][GLOB.y].channel = 0;
@@ -5660,7 +5677,15 @@ FLASHMEM void checkEncoders() {
     // Only allow encoder[1] page changes if NOT in song mode (song controls pages automatically)
     extern bool songModeActive;
     extern int patternMode;
-    if (childLockEnabled && ctrlMode == 0) {
+    if (autogenActive() && ctrlMode == 0) {
+      const unsigned page=constrain((int)currentMode->pos[1],1,effectivePageCount());
+      if(page!=GLOB.edit){
+        GLOB.x=(page-1)*maxX+(GLOB.x-1)%maxX+1;
+        GLOB.edit=page;editpage=page;currentMode->pos[3]=GLOB.x;
+        if(allowEncWrite)Encoder[3].writeCounter((int32_t)GLOB.x);
+        autogenFocusMotif();menuRequestFullRedraw();
+      }
+    } else if (childLockEnabled && ctrlMode == 0) {
       if (editpage != 1 || currentMode->pos[1] != 1) {
         editpage = 1;
         GLOB.edit = 1;
@@ -7549,7 +7574,7 @@ void loop() {
   // Do page-follow work in the main loop to avoid mid-frame flicker.
   // Do NOT touch encoder 1 when CTRL-VOL is active (ctrlMode==1).
   extern bool songModeActive;
-  if (!fastRecordActive && !childLockEnabled && SMP_FLOW_MODE && !(voiceMode && !songModeActive) && patternMode != 3 &&
+  if (!autogenActive() && !fastRecordActive && !childLockEnabled && SMP_FLOW_MODE && !(voiceMode && !songModeActive) && patternMode != 3 &&
       isNowPlaying &&
       (currentMode == &draw || currentMode == &singleMode)) {
     static uint16_t lastAppliedFlowPage = 0;
@@ -7932,7 +7957,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
       encoder0PressedOnEmptyNote = false;
     }
 
-    if ((currentMode == &draw || currentMode == &singleMode) && encoder0LongHeld && !imageMode
+    if (!autogenViewingPerformance() && (currentMode == &draw || currentMode == &singleMode) && encoder0LongHeld && !imageMode
         && !(currentMode == &draw && !GLOB.singleMode && (touchState[3] || readDebouncedTouch(3)))) {
       // Long press reached - enter velocity mode if not already in it
       // Only trigger if note has value AND encoder(0) was not pressed on empty note
@@ -9372,6 +9397,7 @@ static void servicePendingTouchFill(unsigned int step) {
 
 
 void playNote() {
+  ToernNoteScope<decltype(note)> playbackScope(note,autogenPlaybackGrid());
 
   // Remember which beat is actually being played for UI highlighting
   beatForUI = beat;
@@ -9952,6 +9978,7 @@ void checkPages() {
 unsigned int cursorNoteStep();
 
 void unpaint() {
+  if(autogenViewingPerformance())return;
   paintMode = false;
   preventPaintUnpaint = false;  // Reset flag when unpaint function is called
   // GLOB.x is already global X (1 to maxlen-1), GLOB.y is global Y (1 to maxY)
@@ -10226,6 +10253,7 @@ void triggerGridNote(unsigned int globalX, unsigned int y, bool allowMuted) {
 }
 
 void paint() {
+  if(autogenViewingPerformance())return;
   preventPaintUnpaint = false;  // Reset flag when paint function is called
 
   unsigned int current_x = cursorNoteStep();  // Visible voice page while VMOD is playing
@@ -11271,7 +11299,7 @@ unsigned int cursorNoteStep() {
   extern bool isNowPlaying;
   extern bool songModeActive;
   extern unsigned int beatForUI;
-  if (!voiceMode || !isNowPlaying || songModeActive || childLockEnabled) return GLOB.x;
+  if (autogenActive() || !voiceMode || !isNowPlaying || songModeActive || childLockEnabled) return GLOB.x;
   if (maxX < 1 || GLOB.x < 1 || GLOB.y < 1) return GLOB.x;
   unsigned int col = ((GLOB.x - 1) % maxX) + 1;
   unsigned int gPage = (beatForUI > 0) ? ((beatForUI - 1) / maxX) + 1 : 1;
@@ -11320,7 +11348,7 @@ void voiceLimitPageEncoder(int channel) {
 void voiceApplyEditPage(int channel) {
   extern bool songModeActive;
   extern int ctrlMode;
-  if (!voiceMode || songModeActive || ctrlMode != 0 || childLockEnabled) return;
+  if (autogenActive() || !voiceMode || songModeActive || ctrlMode != 0 || childLockEnabled) return;
   if (channel < 0) channel = 0;
   if (channel > 15) channel = 15;
   updateLastPage();

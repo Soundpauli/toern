@@ -160,11 +160,39 @@ AGEN now uses one buildup call/answer pair, then drops immediately: two bars on
 An audible bass/harmonic/kick foundation is retained; hats-only or muted-body
 sources skip unsupported buildups and breaks. Three-tone CH11 chords change
 voicing while retaining valid diatonic tones, including off-grid source onsets.
-Generation compensates synth octave registers without editing patch controls.
+Generation retains motif registers and applies the same patch tuning once.
 Run `python3 _debug/tests/test_autogen.py`,
 `python3 _debug/tests/test_autogen_visual_music.py`, and
 `node _debug/tests/test_sim_autogen.mjs` for those regressions.
 
-AGEN displays a persistent 5×5 clock at the top right: cyan playback-progress
+AGEN displays a persistent 5×5 clock at the top right: blue/pink playback-progress
 arc, amber preparation spinner, and a steady green ready check. The former
 blinking pass count is removed. Device and simulator share the pixel policy.
+
+AGEN keeps the selected source page editable and pink. Playback uses separate
+workspace pages displayed as virtual slots 10/11. Motif changes automatically
+update the source for subsequent variations. All voices continue through the
+normal melodic/drum/section development; no edited voice is frozen. Deleted
+voices and an explicitly cleared motif remain silent; stopping restores the
+original bank. Normal cursor navigation and CTRL=PAGE select another source motif without
+redirecting playback. Source edits survive navigation for the session.
+
+
+AGEN opens in the generated playback view. A plain FN (touch 5) tap toggles it
+with the editable motif; encoder modifiers and touch 4+5 fills consume the tap.
+Playback view follows the currently playing buffer, shows every generated voice
+at its actual grid position even from SINGLE/simple-note mode, hides the edit
+cursor and uses a green timebar. Generated notes are read-only. The clock ring
+is blue in playback view and pink in motif view, including late preparation;
+the centre retains its amber preparation spinner/green ready check. Selecting
+and editing source pages is done in motif view. Viewing never moves playback.
+
+
+AGEN pitch follows the motif's raw MIDI register. Synth patch OCTV/CENT and
+transpose are applied once by playback; no automatic inverse octave correction
+is added. Sample voices map grid rows relative to MIDI 60, independent of their
+sampler root index. CH11 no longer inflates single notes/dyads into triads.
+CH13/14 develop more gently and repeat their phrase over 64 steps, with early
+refresh for a source edit or section transition. Drum/form timing stays active.
+Plain FN view taps perform no encoder-counter writes or subpattern-release
+rewinds; they update only view state and redraw flags.

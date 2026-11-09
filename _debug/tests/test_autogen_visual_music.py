@@ -23,10 +23,12 @@ code=r'''
 using std::min;using std::max;
 struct CRGB {uint8_t r,g,b;CRGB(int r=0,int g=0,int b=0):r(r),g(g),b(b){}static const CRGB Black;};
 const CRGB CRGB::Black{0,0,0};
-unsigned maxX=16,maxY=16,source=1,other=2,remaining=4,progress=0;bool active=true,ready=false;
+unsigned maxX=16,maxY=16,source=1,other=2,remaining=4,progress=0,motifSlot=1;bool active=true,ready=false;
 struct Mode {} draw,singleMode,menu;Mode *currentMode=&draw;
 CRGB pixels[16][32];std::string label;int labelX=0,labelY=0;CRGB labelColor;
 uint32_t clockMs=0;uint32_t millis(){return clockMs;}
+unsigned autogenMotifSlot(){return motifSlot;}
+bool autogenViewingPerformance(){return true;}
 bool autogenActive(){return active;}unsigned autogenPage(){return source;}unsigned autogenOtherPage(){return other;}
 bool autogenNextReady(){return ready;}unsigned autogenRepeatsLeft(){return remaining;}
 void autogenUiSnapshot(unsigned &p,unsigned &o,bool &r,unsigned &n){p=source;o=other;r=ready;n=progress;}
@@ -42,26 +44,28 @@ void save(const char *directory){
  for(unsigned y=0;y<16;++y)for(unsigned x=0;x<maxX;++x){auto c=pixels[y][x];fputc(c.r,f);fputc(c.g,f);fputc(c.b,f);}fclose(f);
 }
 int main(int argc,char **argv){assert(argc==2);
- for(unsigned width:{16u,32u})for(unsigned page:{1u,256u/width})for(bool done:{false,true})for(unsigned fraction=0;fraction<=12;++fraction){
-  maxX=width;source=page;other=page==256/width?1:page+1;ready=done;progress=fraction;
+ for(unsigned width:{16u,32u})for(unsigned page:{10u,11u})for(bool done:{false,true})for(unsigned fraction=0;fraction<=12;++fraction){
+  maxX=width;source=page;other=page==10?11:10;motifSlot=width==16?9:1;ready=done;progress=fraction;
   for(auto &row:pixels)for(auto &c:row)c=CRGB(20,20,20);
   label.clear();clockMs=0;drawAutogenStatus();unsigned lit=0;
   for(unsigned x=1;x<=width;++x){auto c=pixels[0][x-1];if(c.r||c.g||c.b)++lit;
    if(x==source)assert(c.r==220&&c.g==220&&c.b==220);
    else if(x==other)assert(c.r>0&&c.b==0&&(done?c.g>0:c.g==0));
+   else if(x==motifSlot)assert(c.r==210&&c.g==30&&c.b==130);
+   else if(x<=8)assert(c.r==0&&c.g==0&&c.b==12);
    else if(x<width-4)assert(!c.r&&!c.g&&!c.b);
   }
-  assert(lit>=2&&lit<=5&&label.empty()); // the overlay never paints a numeral
+  assert(lit>=10&&label.empty()); // the overlay never paints a numeral
   unsigned rim=0,check=0,busy=0;
   for(unsigned y=0;y<5;++y)for(unsigned x=0;x<5;++x){
    const unsigned ink=ToernAutogen::statusInk(x,y,fraction,done,0);
    const auto c=pixels[y][width-5+x];
    if(ink==1||ink==2)++rim;
    if(ink==4){++check;assert(c.g==190&&c.b==90);}
-   if(ink==3){++busy;assert(c.r==210&&c.g==120);}
+   if(ink==3){if(x==0||x==4||y==0||y==4){assert(c.b==230&&c.g==100);}else{++busy;assert(c.r==210&&c.g==120);}}
   }
-  assert(done?check==4&&rim==12:check==0&&busy==(fraction==12?15u:3u));
-  if(page==1&&done&&fraction==8)save(argv[1]);
+  assert(done?check==4&&rim==12:check==0&&busy==3u);
+  if(page==10&&done&&fraction==8)save(argv[1]);
   for(unsigned now:{240u,720u,1800u,4000u}){
    clockMs=now;drawAutogenStatus();unsigned visible=0;
    for(unsigned y=0;y<5;++y)for(unsigned x=0;x<5;++x){auto c=pixels[y][width-5+x];visible+=c.r||c.g||c.b;}
