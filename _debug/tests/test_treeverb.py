@@ -172,7 +172,7 @@ sketch=(root/'toern.ino').read_text()
 graph=(root/'audioinit.h').read_text()
 config=(root/'platformio.ini').read_text()
 assert set(re.findall(r'AudioEffectTreeverb\s+(freeverb\d+);',graph)) == {
- 'freeverb1','freeverb2','freeverb5','freeverb6','freeverb7','freeverb8','freeverb11'}
+ 'freeverb1','freeverb2','freeverb4','freeverb6','freeverb7','freeverb8','freeverb11'}
 assert 'AudioEffectTreeverb *freeverbs[15]' in sketch
 assert '#include "src/effect_treeverb.h"' in sketch
 assert 'AudioEffectFreeverbDMAMEM' not in graph+sketch

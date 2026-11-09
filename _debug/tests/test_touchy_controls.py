@@ -51,10 +51,12 @@ int main(){
   syncTouchyEncoders(); assert(GLOB.currentChannel==5 && Encoder[0].count==30 && Encoder[1].count==100 && Encoder[2].count==7 && Encoder[3].count==9);
   touchyMode.pos[0]=31; touchyMode.pos[1]=65; touchyMode.pos[2]=8; touchyMode.pos[3]=10;
   showTouchyMode();
-  assert(SMP.filter_settings[5][OCTAVE]==31 && touchyVelocity[5]==65 && SMP.filter_settings[5][REVERB]==8 && SMP.filter_settings[5][LOWCUT]==10);
-  assert(applied[5][OCTAVE]==1 && applied[5][REVERB]==1 && applied[5][LOWCUT]==1);
+  assert(SMP.filter_settings[5][OCTAVE]==31 && touchyVelocity[5]==65 && SMP.filter_settings[5][REVERB]==7 && SMP.filter_settings[5][LOWCUT]==10);
+  assert(applied[5][OCTAVE]==1 && applied[5][REVERB]==0 && applied[5][LOWCUT]==1);
   touchyLastVoice=3; syncTouchyEncoders(); touchyMode.pos[2]=12; showTouchyMode();
   assert(SMP.filter_settings[3][REVERB]==0 && applied[3][REVERB]==0 && touchyVelocity[3]==100);
+  touchyLastVoice=4; syncTouchyEncoders(); touchyMode.pos[2]=12; showTouchyMode();
+  assert(SMP.filter_settings[4][REVERB]==12 && applied[4][REVERB]==1 && touchyVelocity[4]==100);
   touchyLastVoice=5; syncTouchyEncoders();
   uint8_t states[4]={2,0,0,0}; isPressed[0]=true; handleTouchyButtons(states);
   assert(touchyRecordHeld && pendingStartFastRecord && GLOB.currentChannel==5 && recordingStartBeat==0);

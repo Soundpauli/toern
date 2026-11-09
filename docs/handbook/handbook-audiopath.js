@@ -226,7 +226,7 @@
         { id: "amp", l: "ampN", s: "vol 0–16 → 0–1", k: "amp", c: 3, r: 1 },
         { id: "svf", l: "filterN", s: "SVF LP/BP/HP", k: "fx", c: 4, r: 1 },
         { id: "fm", l: "filtermixerN", s: "in0 LP · in2 HP · in3 dry", k: "mix", c: 5, r: 1 },
-        { id: "fv", l: "freeverbN", s: "ch 1,2,5–8", k: "fx", c: 6, r: 0 },
+        { id: "fv", l: "freeverbN", s: "ch 1,2,4,6–8", k: "fx", c: 6, r: 0 },
         { id: "fvm", l: "freeverbmixerN", s: "wet 0–0.54  dry 1–0.88", k: "mix", c: 7, r: 0 },
         { id: "m12", l: "mixer1 / mixer2", s: "unity + peak limiter", k: "bus", c: 8, r: 1 },
         { id: "m34", l: "mixer1 in2/3", s: "ch 3, 4  no verb", k: "bus", c: 7, r: 2 }

@@ -559,7 +559,7 @@ export function drawFilter(matrix, s, now) {
   const page = pages[s.filterPage || 0] || pages[0];
   const pageColors = FILTER_PAGES_COLORS[s.filterPage || 0] || FILTER_PAGES_COLORS[0];
   const fast = i => i === f.fast && (f.fastPage || 0) === (s.filterPage || 0);
-  const disabled = i => page[i]?.key === "r" && [3, 4].includes(s.GLOB.currentChannel);
+  const disabled = i => page[i]?.key === "r" && [3, 5].includes(s.GLOB.currentChannel);
   pageColors.forEach((c, i) => matrix.setRing(i + 1, disabled(i) ? fast(i) ? [16,16,0] : [8,8,8] : fast(i) ? [255,255,0] : c, true));
   const focus = s.filterTouch;
   const active = now - s.filterTouchAt < 1000 && focus >= 0 && focus < 4 && page[focus];

@@ -139,14 +139,14 @@ AudioMixer4                     filtermixer7;   //xy=2601,1034
 AudioMixer4                     filtermixer8;   //xy=2603,1111
 AudioEffectTreeverb             freeverb1;      //xy=2750,488
 AudioEffectTreeverb             freeverb2;      //xy=2761,627
-AudioEffectTreeverb             freeverb5;      //xy=2759,998
+AudioEffectTreeverb             freeverb4;      //xy=2759,998
 AudioEffectTreeverb             freeverb6;      //xy=2765,108
 AudioEffectTreeverb             freeverb7;      //xy=2759,998
 AudioEffectTreeverb             freeverb8;      //xy=2765,1083
 AudioMixer4Limited                     mixersynth_end; //xy=2889,1562
 AudioMixer4                     freeverbmixer1; //xy=2964,513
 AudioMixer4                     freeverbmixer2; //xy=2978,657
-AudioMixer4                     freeverbmixer5; //xy=2970,912
+AudioMixer4                     freeverbmixer4; //xy=2970,912
 AudioMixer4                     freeverbmixer6; //xy=2970,1004
 AudioMixer4                     freeverbmixer7; //xy=2970,1016
 AudioMixer4                     freeverbmixer8; //xy=2970,1108
@@ -354,15 +354,15 @@ AudioConnection        patchCord196b(voiceDelay[2], 0, voiceDelayMix[2], 0);
 AudioConnection        patchCord196c(filtermixer3, 0, voiceDelayMix[2], 3);
 AudioConnection        patchCord196(voiceDelayMix[2], 0, sampleFilterGain[2], 0);
 AudioConnection        patchCord196Gain(sampleFilterGain[2], 0, mixer1, 2);
-AudioConnection        patchCord197a(filtermixer4, 0, voiceDelayFb[3], 0);
+AudioConnection        patchCord197a(freeverbmixer4, 0, voiceDelayFb[3], 0);
 AudioConnection        patchCord197fb(voiceDelay[3], 0, voiceDelayFb[3], 1);
 AudioConnection        patchCord197in(voiceDelayFb[3], 0, voiceDelay[3], 0);
 AudioConnection        patchCord197b(voiceDelay[3], 0, voiceDelayMix[3], 0);
-AudioConnection        patchCord197c(filtermixer4, 0, voiceDelayMix[3], 3);
+AudioConnection        patchCord197c(freeverbmixer4, 0, voiceDelayMix[3], 3);
 AudioConnection        patchCord197(voiceDelayMix[3], 0, sampleFilterGain[3], 0);
 AudioConnection        patchCord197Gain(sampleFilterGain[3], 0, mixer1, 3);
-AudioConnection        patchCord198(filtermixer5, 0, freeverb5, 0);
-AudioConnection        patchCord198b(filtermixer5, 0, freeverbmixer5, 3);
+AudioConnection        patchCord198(filtermixer4, 0, freeverb4, 0);
+AudioConnection        patchCord198b(filtermixer4, 0, freeverbmixer4, 3);
 AudioConnection        patchCord199(filtermixer6, 0, freeverb6, 0);
 AudioConnection        patchCord199b(filtermixer6, 0, freeverbmixer6, 3);
 AudioConnection        patchCord200(filtermixer7, 0, freeverb7, 0);
@@ -371,7 +371,7 @@ AudioConnection        patchCord202(filtermixer8, 0, freeverb8, 0);
 AudioConnection        patchCord203(filtermixer8, 0, freeverbmixer8, 3);
 AudioConnection        patchCord204(freeverb1, 0, freeverbmixer1, 0);
 AudioConnection        patchCord205(freeverb2, 0, freeverbmixer2, 0);
-AudioConnection        patchCord205b(freeverb5, 0, freeverbmixer5, 0);
+AudioConnection        patchCord205b(freeverb4, 0, freeverbmixer4, 0);
 AudioConnection        patchCord205c(freeverb6, 0, freeverbmixer6, 0);
 AudioConnection        patchCord206(freeverb7, 0, freeverbmixer7, 0);
 AudioConnection        patchCord207(freeverb8, 0, freeverbmixer8, 0);
@@ -390,11 +390,11 @@ AudioConnection        patchCord210b2(voiceDelay[1], 0, voiceDelayMix[1], 0);
 AudioConnection        patchCord210c2(freeverbmixer2, 0, voiceDelayMix[1], 3);
 AudioConnection        patchCord210(voiceDelayMix[1], 0, sampleFilterGain[1], 0);
 AudioConnection        patchCord210Gain(sampleFilterGain[1], 0, mixer1, 1);
-AudioConnection        patchCord210b(freeverbmixer5, 0, voiceDelayFb[4], 0);
+AudioConnection        patchCord210b(filtermixer5, 0, voiceDelayFb[4], 0);
 AudioConnection        patchCordDly5fb(voiceDelay[4], 0, voiceDelayFb[4], 1);
 AudioConnection        patchCordDly5in(voiceDelayFb[4], 0, voiceDelay[4], 0);
 AudioConnection        patchCordDly5w(voiceDelay[4], 0, voiceDelayMix[4], 0);
-AudioConnection        patchCordDly5d(freeverbmixer5, 0, voiceDelayMix[4], 3);
+AudioConnection        patchCordDly5d(filtermixer5, 0, voiceDelayMix[4], 3);
 AudioConnection        patchCordDly5o(voiceDelayMix[4], 0, sampleFilterGain[4], 0);
 AudioConnection        patchCordDly5oGain(sampleFilterGain[4], 0, mixer2, 0);
 AudioConnection        patchCord210c(freeverbmixer6, 0, voiceDelayFb[5], 0);

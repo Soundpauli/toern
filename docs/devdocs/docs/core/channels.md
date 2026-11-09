@@ -12,7 +12,7 @@ The sequencer speaks in **channel numbers** that map to audio engines. Grid note
 
 | Channel | Kind | Audio entry points |
 |---------|------|--------------------|
-| **1–8** | Sample voices | `sound1`…`sound8` (`AudioPlayArrayResmp`) + per-voice envelope → bitcrush → filter path; reverb on 1, 2, 5–8 |
+| **1–8** | Sample voices | `sound1`…`sound8` (`AudioPlayArrayResmp`) + per-voice envelope → bitcrush → filter path; reverb on 1, 2, 4, 6–8 |
 | **11** | Poly synth (3 voices) | Oscillator banks `Swaveform*` / mixers / ladder filters in `audioinit.h`; voice logic in `toern_synths.ino` |
 | **13–14** | Mono synths | `waveform13_*` / `waveform14_*` chains with LFO/arp support |
 
@@ -46,4 +46,4 @@ Sample channels 1–4 and 5–8 sum through separate buses before the end mixer.
 
 There are **11 sound voices**: samples 1–8, poly 11 and mono 13/14. Voices 9, 10 and 12 have no sound engine. In DRAW, a voice is displayed one row above its channel number; row 1 is the hint strip and row 16 provides page tools. In SINGLE, rows represent pitches of the selected voice, not separate instruments.
 
-Reverb is connected only for voices **1, 2, 5–8 and 11**. It is unavailable on **3, 4, 13 and 14**.
+Reverb is connected only for voices **1, 2, 4, 6–8 and 11**. It is unavailable on **3, 5, 13 and 14**.

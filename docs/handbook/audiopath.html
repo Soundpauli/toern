@@ -55,7 +55,7 @@
 
           <section class="hb-sub" id="samples">
             <h2 data-hb-copy="audiopath.035">Sample voices 1–8</h2>
-            <p class="lede" data-hb-copy="audiopath.036">One lane per channel. Bitcrush is <em>before</em> the state-variable filter. Voices <strong>3 and 4</strong> have no reverb object — they jump from the filter mixer into <span class="ap-code">mixer1</span>.</p>
+            <p class="lede" data-hb-copy="audiopath.036">One lane per channel. Bitcrush is <em>before</em> the state-variable filter. Voices <strong>3 and 5</strong> have no reverb object — they jump from the filter mixer into <span class="ap-code">mixer1</span> / <span class="ap-code">mixer2</span>.</p>
             <div class="ap-graph" data-ap-graph="samples"></div>
             <table class="opt-table">
               <thead><tr><th>Stage</th><th>Object</th><th>Gain / range</th></tr></thead>
@@ -66,13 +66,13 @@
                 <tr><td>Channel amp</td><td><span class="ap-code">amp1–8</span></td><td><span class="ap-code">map(channelVol, 0..16, 0..1)</span>. At BITC &gt; 0 the amp is ducked toward 0.6 as crush rises (<span class="ap-code">crushCompGain</span>).</td></tr>
                 <tr><td>Filter</td><td><span class="ap-code">filter1–8</span> SVF</td><td>HCUT=32 / LCUT=0: true dry bypass. HCUT 0–31: LP path, freq 281 Hz–9.7 kHz. LCUT &gt; 0: switch mixer to HP, freq 40 Hz–2.5 kHz. RES 0.7–5.0.</td></tr>
                 <tr><td>Filter mixer</td><td><span class="ap-code">filtermixerN</span></td><td>Open cuts: in3=1 (dry), other inputs=0. HCUT uses in0 (LP); LCUT uses in2 (HP). Smooth 32-step crossfade.</td></tr>
-                <tr><td>Reverb send</td><td><span class="ap-code">freeverb1,2,5–8</span></td><td>Room 0–1 from RVRB; damping 0.01–0.42. RVRB 0 bypasses and clears delay tanks. <strong>No freeverb on 3 or 4.</strong></td></tr>
+                <tr><td>Reverb send</td><td><span class="ap-code">freeverb1,2,4,6–8</span></td><td>Room 0–1 from RVRB; damping 0.01–0.42. RVRB 0 bypasses and clears delay tanks. <strong>No freeverb on 3 or 5.</strong></td></tr>
                 <tr><td>Wet / dry</td><td><span class="ap-code">freeverbmixerN</span></td><td>in0 wet 0 → 0.54; in3 dry 1.0 → 0.88 (send, not a hard crossfade). Off: wet 0, dry 1.</td></tr>
                 <tr><td>Delay</td><td><span class="ap-code">voiceDelay[]</span></td><td>One <span class="ap-code">AudioEffectDelayExternal</span> per sound voice (1–8, 11, 13, 14). ~1.3&nbsp;s PSRAM line. DLAY 0 = bypass; N = N/32 of a beat. Follows BPM.</td></tr>
                 <tr><td>Bank mix</td><td><span class="ap-code">mixer1</span> (ch1–4), <span class="ap-code">mixer2</span> (ch5–8)</td><td>Every input <span class="ap-code">MIX_BUS_HEADROOM</span> = 1.0 × <a href="menus.html#vol">VOL → GAIN</a> (1–4 or 5–8) × ALL. Float summing and lookahead peak limiting protect all four inputs per bank.</td></tr>
               </tbody>
             </table>
-            <p data-hb-copy="audiopath.067"><span class="ap-code">mixer1</span> inputs: 0 = ch1 verb mix, 1 = ch2 verb mix, 2 = ch3 dry filter, 3 = ch4 dry filter. <span class="ap-code">mixer2</span>: 0–3 = ch5–8 verb mixes.</p>
+            <p data-hb-copy="audiopath.067"><span class="ap-code">mixer1</span> inputs: 0 = ch1 verb mix, 1 = ch2 verb mix, 2 = ch3 dry filter, 3 = ch4 verb mix. <span class="ap-code">mixer2</span>: 0 = ch5 dry filter, 1–3 = ch6–8 verb mixes.</p>
           </section>
 
 
@@ -117,8 +117,8 @@
                 <tr><td rowspan="4"><span class="ap-code">mixer1</span></td><td>0</td><td>ch1 verb mix</td><td>1.0 × GAIN 1–4 × ALL</td></tr>
                 <tr><td>1</td><td>ch2 verb mix</td><td>1.0 × GAIN 1–4 × ALL</td></tr>
                 <tr><td>2</td><td>ch3 filter (no verb)</td><td>1.0 × GAIN 1–4 × ALL</td></tr>
-                <tr><td>3</td><td>ch4 filter (no verb)</td><td>1.0 × GAIN 1–4 × ALL</td></tr>
-                <tr><td rowspan="4"><span class="ap-code">mixer2</span></td><td>0</td><td>ch5 verb mix</td><td>1.0 × GAIN 5–8 × ALL</td></tr>
+                <tr><td>3</td><td>ch4 verb mix</td><td>1.0 × GAIN 1–4 × ALL</td></tr>
+                <tr><td rowspan="4"><span class="ap-code">mixer2</span></td><td>0</td><td>ch5 filter (no verb)</td><td>1.0 × GAIN 5–8 × ALL</td></tr>
                 <tr><td>1</td><td>ch6 verb mix</td><td>1.0 × GAIN 5–8 × ALL</td></tr>
                 <tr><td>2</td><td>ch7 verb mix</td><td>1.0 × GAIN 5–8 × ALL</td></tr>
                 <tr><td>3</td><td>ch8 verb mix</td><td>1.0 × GAIN 5–8 × ALL</td></tr>
@@ -198,7 +198,7 @@
             <h2 data-hb-copy="audiopath.183">What is not in the graph</h2>
             <ul>
               <li>Rows <strong>9, 10, 12</strong> — no voice objects.</li>
-              <li>Channels <strong>3, 4, 13, 14</strong> — no freeverb.</li>
+              <li>Channels <strong>3, 5, 13, 14</strong> — no freeverb.</li>
               <li data-hb-copy="audiopath.186"><span class="ap-code">envelope11</span> — patched into <span class="ap-code">mixer_waveform11</span> in2, but that input is held at 0. Poly envelopes are <span class="ap-code">Senvelope1/2</span>.</li>
               <li data-hb-copy="audiopath.187">USB audio output is enabled. The two output mixers also feed <span class="ap-code">usb1</span>; the computer receives the same two-channel routing as the headphone and line outputs.</li>
             </ul>

@@ -5,7 +5,7 @@ extern uint8_t filterPage[NUM_CHANNELS];
 void applySynthInstrumentPreset(int channel, int instrumentIdx);
 
 static bool channelHasFreeverb(uint8_t chan) {
-  return !(chan == 3 || chan == 4);
+  return !(chan == 3 || chan == 5);
 }
 
 DMAMEM unsigned long lastEncoderChange[4] = { 0, 0, 0, 0 };

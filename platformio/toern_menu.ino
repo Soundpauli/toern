@@ -284,7 +284,7 @@ static int lastEtcRamEnc = -1;
 
 static int computeReverbUsagePercent() {
   // Freeverb-equipped voices: average REVERB send vs slider max.
-  static const uint8_t kFreeverbChannels[] = { 1, 2, 5, 6, 7, 8, 11 };
+  static const uint8_t kFreeverbChannels[] = { 1, 2, 4, 6, 7, 8, 11 };
   int sum = 0;
   int n = 0;
   for (uint8_t ch : kFreeverbChannels) {

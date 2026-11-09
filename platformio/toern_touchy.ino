@@ -123,7 +123,7 @@ FLASHMEM void showTouchyMode() {
   for (int i=0; i<4; i++) {
     const int value = constrain((int)touchyMode.pos[i], (int)touchyMode.minValues[i], (int)touchyMode.maxValues[i]);
     if (i == 1) { touchyVelocity[ch] = value; continue; }
-    if (i == 2 && (ch == 3 || ch == 4)) continue;
+    if (i == 2 && (ch == 3 || ch == 5)) continue;
     if (SMP.filter_settings[ch][types[i]] != value) {
       SMP.filter_settings[ch][types[i]] = value;
       setFilters(types[i], ch, false);

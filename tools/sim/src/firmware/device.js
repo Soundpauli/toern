@@ -1480,7 +1480,7 @@ export function createDevice(matrix, statusEl, rings) {
       chVol[ch] = 16;
       if (enc === 1) s.touchyVelocity[ch] = clamp(s.touchyVelocity[ch] + dir, 1, 127);
       else {
-        if (enc === 2 && (ch === 3 || ch === 4)) return;
+        if (enc === 2 && (ch === 3 || ch === 5)) return;
         const key = ["oct", null, "r", "l"][enc];
         filt[ch][key] = clamp(filt[ch][key] + dir, 0, enc === 0 ? 48 : 32);
       }

@@ -108,7 +108,7 @@ export function createEngine() {
       const filterOut = ctx.createGain();
       bypassGain.gain.value = 0;
       const pan = ctx.createStereoPanner();
-      const send = ch === 3 || ch === 4 ? null : ctx.createGain();
+      const send = ch === 3 || ch === 5 ? null : ctx.createGain();
       input.connect(shaper);
       shaper.connect(amp);
       amp.connect(hp);

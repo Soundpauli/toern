@@ -22,7 +22,7 @@ For a typical sample channel:
 
 **envelope → bitcrusher → filter → Treeverb → mixers → output**
 
-This reverb path exists on sample voices 1, 2 and 5–8. Samples 3 and 4 bypass reverb. Poly voice 11 has a shared bitcrusher/filter/reverb chain after its oscillator/ladder stages; mono voices 13 and 14 have bitcrusher/filter stages without reverb.
+This reverb path exists on sample voices 1, 2, 4 and 6–8. Samples 3 and 5 bypass reverb. Poly voice 11 has a shared bitcrusher/filter/reverb chain after its oscillator/ladder stages; mono voices 13 and 14 have bitcrusher/filter stages without reverb.
 
 Samples 1–8 bypass the filter when HCUT is 32 and LCUT is 0. A connection from each sample amplifier to filter-mixer input 3 carries the dry signal; four-channel gain smoothing crossfades between dry, lowpass, and highpass. Effects downstream still receive the complete voice. Synth filter routing is unchanged.
 
@@ -39,7 +39,7 @@ The matrix usually shows **0–32** (or enums as text). Mapping functions conver
 
 ## Treeverb
 
-Seven independent `AudioEffectTreeverb` objects serve sample voices 1, 2, 5–8
+Seven independent `AudioEffectTreeverb` objects serve sample voices 1, 2, 4, 6–8
 and synth voice 11. The default balanced network uses **six parallel comb filters
 and four diffusion stages** at the full audio sample rate. This restores all four
 diffusion stages and adds two reflection paths over the preceding light network.

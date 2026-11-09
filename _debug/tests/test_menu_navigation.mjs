@@ -275,14 +275,14 @@ d.rotate(0,-1); d.rotate(1,-1); d.rotate(2,1); d.rotate(3,1);
 const controls = audioCalls.filter(c=>c[0]==="apply");
 assert(controls.every(c=>c[1]===5 && c[3]===16));
 assert.equal(controls.at(-1)[2].oct,23);
-assert.equal(controls.at(-1)[2].r,1);
+assert.equal(controls.at(-1)[2].r,0); // voice 5 has no reverb send
 assert.equal(controls.at(-1)[2].l,1);
 now+=61; d.touch(5,true); d.touch(5,false);
 const hit5=audioCalls.filter(c=>c[0]==="trigger").at(-1);
 assert.equal(hit5[2],126);
 assert.equal(hit5[4].oct,-1/12);
 // Moving to another pad changes the target, preserves each voice's velocity,
-// and suppresses unsupported reverb on voices 3/4.
+// and suppresses unsupported reverb on voices 3/5.
 now+=61; d.touch(3,true); d.touch(3,false); audioCalls.length=0;
 d.rotate(2,1); assert.equal(audioCalls.length,0);
 d.rotate(0,1); d.rotate(3,1);
