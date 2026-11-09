@@ -7395,6 +7395,8 @@ struct LoopTimingScope {
 };
 #endif
 
+static volatile uint32_t detailMax[8]={};
+struct StallDetail {unsigned slot;uint32_t started;StallDetail(unsigned n):slot(n),started(micros()){}~StallDetail(){uint32_t dt=micros()-started;if(dt>detailMax[slot])detailMax[slot]=dt;}};
 void loop() {
   toernI2cRuntimeBegin();
 #if TOERN_REMOTE_CONTROL
@@ -7821,13 +7823,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 #if TOERN_REMOTE_CONTROL
   loopTiming.mark(ToernLoopTiming::Other,micros());
 #endif
-  checkPendingSampleNotes();
-  serviceSetWavSyncPreview();
-  serviceSdPreviewRequests();
+  {StallDetail t(0);checkPendingSampleNotes();}
+  {StallDetail t(1);serviceSetWavSyncPreview();}
+  {StallDetail t(2);serviceSdPreviewRequests();}
 
   // Periodic system stats to Serial removed (requested): keep runtime silent by default.
 
-  yield();  // Yield periodically to prevent unresponsiveness, especially during file operations
+  {StallDetail t(7);yield();}  // Yield periodically to prevent unresponsiveness, especially during file operations
 
   // === INPUT MONITORING WHEN IN DRAW MODE ===
   // Enable if monitoring toggle is ON (y==1 only) or ALL (always on), and not in record mode
@@ -7862,7 +7864,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   // Advance ALL active filter-mixer crossfades (not only the selected channel).
   // Updating only currentChannel froze mid-PASS transitions on neighbors → silent
   // until a filter/EFX reset snapped gains (matches "fixed once after filter reset").
-  updateAllMixerGains();
+  {StallDetail t(3);updateAllMixerGains();}
 
   // Recovery mechanism: Detect and reset stuck pressed[] states
   // If pressed[] is true but no button event is active, it might be stuck
@@ -8100,13 +8102,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
   }
 
-  autoOffActiveNotes();
+  {StallDetail t(4);autoOffActiveNotes();}
 
   filterfreshsetted = false;
 
-  FastLEDshow();
+  {StallDetail t(5);FastLEDshow();}
 
-  yield();
+  {StallDetail t(6);yield();}
 }
 
 FLASHMEM void triggerExternalOneBlink() {
@@ -9396,7 +9398,24 @@ static void servicePendingTouchFill(unsigned int step) {
 }
 
 
+static volatile uint32_t playbackCalls=0, playbackMaxUs=0, playbackGapUs=0, playbackLate=0;
+static uint32_t playbackLastUs=0;
+struct PlaybackTimingScope {
+  uint32_t started;
+  PlaybackTimingScope():started(micros()) {
+    if (!isNowPlaying) {playbackLastUs=0;return;}
+    ++playbackCalls;
+    if(playbackLastUs) {
+      const uint32_t gap=started-playbackLastUs;
+      if(gap>playbackGapUs)playbackGapUs=gap;
+      if(gap>(uint32_t)playNoteInterval+20000)++playbackLate;
+    }
+    playbackLastUs=started;
+  }
+  ~PlaybackTimingScope(){const uint32_t duration=micros()-started;if(duration>playbackMaxUs)playbackMaxUs=duration;}
+};
 void playNote() {
+  PlaybackTimingScope timing;
   ToernNoteScope<decltype(note)> playbackScope(note,autogenPlaybackGrid());
 
   // Remember which beat is actually being played for UI highlighting

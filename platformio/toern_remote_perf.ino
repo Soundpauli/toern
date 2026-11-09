@@ -11,6 +11,10 @@ FLASHMEM static unsigned remoteCpuBasisPoints(float percent) {
 
 FLASHMEM void remoteReplyPerformance(unsigned long id) {
   remoteReplyStart(id);
+  extern volatile uint32_t toern_audio_peak_cycles,toern_audio_peak_node_cycles,toern_audio_peak_node,toern_audio_peak_vtable;
+  Serial.printf("\"audio_raw_cycles\":[%lu,%lu,%lu,%lu],",(unsigned long)toern_audio_peak_cycles,(unsigned long)toern_audio_peak_node_cycles,(unsigned long)toern_audio_peak_node,(unsigned long)toern_audio_peak_vtable);
+  Serial.print("\"detail_us\":[");for(unsigned i=0;i<8;++i)Serial.printf("%s%lu",i?",":"",(unsigned long)detailMax[i]);Serial.print("],");
+  Serial.printf("\"playback_calls\":%lu,\"playback_max_us\":%lu,\"playback_gap_us\":%lu,\"playback_late\":%lu,\"guard_max_us\":%lu,",(unsigned long)playbackCalls,(unsigned long)playbackMaxUs,(unsigned long)playbackGapUs,(unsigned long)playbackLate,(unsigned long)toern_audio::guardMaxUs);
   if (&toern_usb_tx_discarded_frames && &toern_usb_tx_overruns &&
       &toern_usb_tx_silent_frames && &toern_usb_tx_underruns) {
     Serial.printf("\"usb_tx\":{\"discarded_frames\":%lu,\"overruns\":%lu,\"silent_frames\":%lu,\"underruns\":%lu},",

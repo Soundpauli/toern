@@ -14,6 +14,14 @@ _usb_patched = _usb_patch(_usb_source)
 if _usb_patched != _usb_source:
     _usb_path.write_text(_usb_patched)
 
+# Temporary stall diagnostics; keep the flashed diagnostic build reproducible.
+_audio_patch = runpy.run_path(str(project_dir / "scripts" / "patch_audio_timing.py"))["patch_audio_timing"]
+_audio_path = _usb_path.with_name("AudioStream.cpp")
+_audio_source = _audio_path.read_text()
+_audio_patched = _audio_patch(_audio_source)
+if _audio_patched != _audio_source:
+    _audio_path.write_text(_audio_patched)
+
 libdeps_dir = Path(env.subst("$PROJECT_LIBDEPS_DIR")) / env.subst("$PIOENV")
 
 
