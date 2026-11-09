@@ -33,9 +33,21 @@ static int lastEncoder3Value_forShowWave = -1;
 // Path actually in the voice buffer. samplePathRel also tracks the browse/preview
 // row (so encoder-2 load works), so the SMP ">" mark must not use that field.
 static char voiceLoadedPathRel[maxFiles][128] = {};
+static bool voiceSourceFromKit[maxFiles] = {};
+const char *getVoiceLoadedPathRel(unsigned ch) {
+  return ch>=1&&ch<=8?voiceLoadedPathRel[ch]:"";
+}
+void restoreVoiceSourceBrowsePath(unsigned ch) {
+  const char *path=getVoiceLoadedPathRel(ch);
+  if(path[0]) {
+    strncpy(SMP.samplePathRel[ch],path,127);
+    SMP.samplePathRel[ch][127]=0;
+  }
+}
 
 static void setVoiceLoadedPathRel(int ch, const char *rel) {
   if (ch < 1 || ch >= maxFiles) return;
+  voiceSourceFromKit[ch]=false;
   if (!rel || !rel[0]) {
     voiceLoadedPathRel[ch][0] = '\0';
     return;
@@ -45,13 +57,17 @@ static void setVoiceLoadedPathRel(int ch, const char *rel) {
 }
 
 // Boot loads the kit before autoLoad restores samplePathRel/sp0Active. Call this
-// after pattern restore (and after kit load) so SMP ">" matches SP0 source paths.
+// after pattern restore (and after kit load). KIT origins come from their WAVs;
+// browsing/previewing another file must not replace the loaded sample identity.
 void syncVoiceLoadedPathsFromStored() {
   for (int ch = 1; ch <= 8; ch++) {
-    if (SMP.sp0Active[ch] && SMP.samplePathRel[ch][0]) {
+    if (SMP.sp0Active[ch] && SMP.samplePathRel[ch][0] && !voiceSourceFromKit[ch]) {
       setVoiceLoadedPathRel(ch, SMP.samplePathRel[ch]);
+    } else if(voiceLoadedPathRel[ch][0]) {
+      strncpy(SMP.samplePathRel[ch],voiceLoadedPathRel[ch],127);
+      SMP.samplePathRel[ch][127]=0;
     } else {
-      setVoiceLoadedPathRel(ch, nullptr);
+      SMP.samplePathRel[ch][0]=0;
     }
   }
 }
@@ -723,8 +739,10 @@ static void loadEmptySampleToChannel(unsigned int sampleID) {
   channelDirection[sampleID] = 1;
   endChannelSampleReload(sampleID);
   setVoiceLoadedPathRel((int)sampleID, nullptr);
+  SMP.samplePathRel[sampleID][0]=0;
 }
 
+#include "src/toern_kit_source.h"
 FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   if (sampleID >= maxFiles) return;
   drawNoSD();
@@ -769,6 +787,8 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     sdIoYield();
     return;
   }
+  char kitOrigin[toern_kit_io::sourcePathBytes]={};
+  toern_kit_io::readSourcePath(loadSample,kitOrigin);
 
   {
     int fileSize = loadSample.size();
@@ -844,9 +864,14 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     samplerAddSample(sampleID, 36, (int16_t *)sampled[sampleID], playLen, rateFactor);
     channelDirection[sampleID] = 1;
     endChannelSampleReload(sampleID);
-    // SP0 keeps the samples/ source path for the ">" mark. Kit pack slots drop
-    // any stale browse identity so SMP does not pretend a samples/ file is loaded.
-    if (loadingFromSp0) {
+    // Optional KIT metadata restores the original samples/ location, even
+    // though playback uses this KIT's self-contained PCM copy.
+    if(kitOrigin[0]) {
+      strncpy(SMP.samplePathRel[sampleID],kitOrigin,127);
+      SMP.samplePathRel[sampleID][127]=0;
+      setVoiceLoadedPathRel((int)sampleID,kitOrigin);
+      voiceSourceFromKit[sampleID]=true;
+    } else if (loadingFromSp0) {
       setVoiceLoadedPathRel((int)sampleID, SMP.samplePathRel[sampleID]);
     } else {
       if (sampleID < maxFiles) SMP.samplePathRel[sampleID][0] = '\0';
@@ -985,6 +1010,7 @@ void showWave() {
     if (!voiceLoadedPathRel[ch][0] && SMP.sp0Active[ch] && SMP.samplePathRel[ch][0]) {
       setVoiceLoadedPathRel(ch, SMP.samplePathRel[ch]);
     }
+    restoreVoiceSourceBrowsePath((unsigned)ch);
     sampleBrowserRefreshList(ch);
     sampleBrowserSyncBrowseFromStoredPath(ch);
     SMP.wav[ch].fileID = (unsigned int)currentMode->pos[3];

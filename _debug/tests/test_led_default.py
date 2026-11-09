@@ -34,12 +34,12 @@ void markSettingsBackupDirty() { ++dirty; }
 GLOBALS
 LOADER
 int main() {
-  assert(ledModules == 2 && maxX == 32 && !ledModulesRotated);
+  assert(ledModules == 2 && maxX == 32 && ledModulesRotated);
   for (int saved = 0; saved < 256; ++saved) {
     EEPROM.value = saved; EEPROM.writes = 0; dirty = 0;
     loadLedModeEarlyFromEEPROM();
     const bool valid = saved >= 1 && saved <= 4;
-    const int expected = valid ? saved : 2;
+    const int expected = valid ? saved : 4;
     assert(EEPROM.value == expected);
     assert(EEPROM.writes == !valid && dirty == !valid);
     assert(ledModules == ((expected == 1 || expected == 3) ? 1 : 2));
@@ -58,4 +58,4 @@ with tempfile.TemporaryDirectory(prefix='toern-led-default-') as tmp:
         cmd += ['-isystem', str(sdk)]
     subprocess.run(cmd + [str(cpp), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
-print('PASS: 32x16 startup default, all invalid EEPROM bytes, and preserved saved 16x16/32x16 orientations.')
+print('PASS: 2B (32x16 rotated) startup default, all invalid EEPROM bytes, and preserved saved 16x16/32x16 orientations.')

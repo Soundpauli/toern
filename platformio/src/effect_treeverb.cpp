@@ -129,6 +129,13 @@ FLASHMEM void AudioEffectTreeverb::damping(float amount) {
     damp2_ = 32768 - damp;
 }
 
+FLASHMEM void AudioEffectTreeverb::inputGain(float amount) {
+    if (!(amount > 0.0f)) amount = 0.0f;
+    else if (amount > 1.5f) amount = 1.5f;
+    toern_audio::StateGuard guard;
+    inputGainTarget_ = (uint16_t)(amount * 32768.0f);
+}
+
 void AudioEffectTreeverb::update() {
     if (pendingClear_) {
         clearTanks();
@@ -147,8 +154,18 @@ void AudioEffectTreeverb::update() {
 
     int16_t scaled[AUDIO_BLOCK_SAMPLES];
     int32_t sum[AUDIO_BLOCK_SAMPLES] = {};
-    for (unsigned i = 0; i < AUDIO_BLOCK_SAMPLES; ++i)
-        scaled[i] = input ? (int16_t)truncateShift<17>((int32_t)input->data[i] * 8738) : 0;
+    const int32_t startGain = inputGain_;
+    int32_t delta = (int32_t)inputGainTarget_ - startGain;
+    if (delta > 2048) delta = 2048;
+    else if (delta < -2048) delta = -2048;
+    // A short per-sample ramp avoids block-edge send clicks. Unity retains the
+    // original integer arithmetic exactly; feedback continues at zero input.
+    for (unsigned i = 0; i < AUDIO_BLOCK_SAMPLES; ++i) {
+        const int32_t gain = startGain + delta * (int32_t)i / AUDIO_BLOCK_SAMPLES;
+        const int32_t scale = (8738 * gain) >> 15;
+        scaled[i] = input ? (int16_t)truncateShift<17>((int32_t)input->data[i] * scale) : 0;
+    }
+    inputGain_ = (uint16_t)(startGain + delta);
     if (input) release(input);
 
     unsigned offset = 0;

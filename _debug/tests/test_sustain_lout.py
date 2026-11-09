@@ -42,6 +42,8 @@ struct Env {float level,attackMs;void attack(float v){attackMs=v;}void decay(flo
 Env *envelopes[15]{};
 void updateVals(int){}bool channelHasVoiceDelay(int){return false;}void applyVoiceDelay(int){}
 float mapf(float x,float a,float b,float c,float d){return c+(x-a)*(d-c)/(b-a);}
+Env *Senvelope1[3]={&env[11],&env[11],&env[11]},*Senvelope2[3]={&env[11],&env[11],&env[11]};
+float getAttackDuration(int ch){return mapf(SMP.param_settings[ch][ATTACK],0,32,maxParamVal[ATTACK],0);}
 PARAMS
 struct Mode {int pos[4]{},minValues[4]{};} mode;
 Mode *currentMode=&mode;

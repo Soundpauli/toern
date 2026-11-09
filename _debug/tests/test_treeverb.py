@@ -104,6 +104,28 @@ int main(int argc,char **argv){
  tree.roomsize(0);tree.update();assert(tree.output.empty());
  tree.roomsize(1);
  for(int i=0;i<100;++i){tree.update();for(auto &b:tree.output)for(auto v:b.data)assert(v==0);tree.output.clear();}
+ // Closing only the input must leave the exact existing tail intact.
+ AudioEffectTreeverb tailA,tailB;
+ tailA.roomsize(.8f);tailB.roomsize(.8f);tailA.damping(.25f);tailB.damping(.25f);
+ int16_t impulse[128]={};impulse[0]=24000;
+ tailA.feedSamples(impulse);tailB.feedSamples(impulse);tailA.update();tailB.update();
+ tailA.output.clear();tailB.output.clear();tailA.inputGain(0);
+ bool naturalTail=false;
+ for(int i=0;i<900;++i){
+  tailA.update();tailB.update();assert(tailA.output.size()==1&&tailB.output.size()==1);
+  for(int n=0;n<128;++n){assert(tailA.output[0].data[n]==tailB.output[0].data[n]);naturalTail|=tailA.output[0].data[n]!=0;}
+  tailA.output.clear();tailB.output.clear();
+ }
+ assert(naturalTail);
+ AudioEffectTreeverb mutedInput;mutedInput.roomsize(.7f);mutedInput.inputGain(0);
+ for(int i=0;i<40;++i){mutedInput.update();mutedInput.output.clear();}
+ for(int i=0;i<100;++i){mutedInput.feed(16000);mutedInput.update();for(auto &b:mutedInput.output)for(auto v:b.data)assert(v==0);mutedInput.output.clear();}
+ mutedInput.inputGain(1);bool resumed=false;
+ for(int i=0;i<100;++i){mutedInput.feed(16000);mutedInput.update();for(auto &b:mutedInput.output)for(auto v:b.data)resumed|=v!=0;mutedInput.output.clear();}
+ assert(resumed);
+ for(float gain:{-100.f,1.5f,100.f,std::numeric_limits<float>::quiet_NaN()}){
+  mutedInput.inputGain(gain);mutedInput.feed(32767);mutedInput.update();mutedInput.output.clear();
+ }
  // Queue consumption during pool exhaustion, followed by a clean recovery.
  AudioStream::failAllocation=true;tree.feed(1000);tree.update();assert(tree.output.empty());
  AudioStream::failAllocation=false;tree.feed(0);tree.update();assert(tree.output.size()==1);tree.output.clear();

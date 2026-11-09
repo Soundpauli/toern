@@ -3,11 +3,11 @@ from pathlib import Path
 import subprocess,tempfile
 root=(Path(__file__).resolve().parents[2] / 'platformio')
 source=(root/'toern_helpers.ino').read_text()
-def function(signature):
-    start=source.index(signature);end=source.index('{',start)+1;depth=1
+def function(signature, text=source):
+    start=text.index(signature);end=text.index('{',start)+1;depth=1
     while depth:
-        depth+=(source[end]=='{')-(source[end]=='}');end+=1
-    return source[start:end]
+        depth+=(text[end]=='{')-(text[end]=='}');end+=1
+    return text[start:end]
 code=r'''
 #include <cassert>
 #include <cstdint>
@@ -24,7 +24,11 @@ struct Note {uint8_t channel=0,velocity=127,probability=100,condition=1,midiPitc
 #define maxY 16
 Note note[65][17];
 Note pageTmp[(MATRIX_WIDTH * 2) + 1][maxY + 1];
-struct {int edit=2;} GLOB;
+struct {int edit=2,page=1;} GLOB;
+bool SMP_PATTERN_MODE=false,childLockEnabled=false;
+bool globalMutes[16]={},pageMutes[4][16]={};
+bool autogenActive(){return false;}bool autogenMuted(int){return false;}
+bool isChildVoiceMuted(int ch){return ch==14;}
 uint32_t seed=1;
 int random(int high){seed=1664525u*seed+1013904223u;return (seed>>1)%high;}
 int random(int low,int high){return low+random(high-low);}
@@ -43,6 +47,7 @@ CompanionHarmony companionMakeHarmony(const CompanionContext&,int){return {};}
 CompanionGroove companionMakeGroove(const CompanionContext&,int,int){return {};}
 bool generationUndoValid=false;unsigned generationUndoPage=0;unsigned generationUndoWidth=0;
 '''
+code+=function('FLASHMEM bool getMuteStateForUI(', (root/'toern.ino').read_text())+'\n'
 for signature in ['static inline uint8_t clampVel(', 'static inline void placeGenNote(',
                   'FLASHMEM static int companionFreeRow(unsigned int step, int preferred) {',
                   'FLASHMEM static int companionChannelStepLimit(', 'FLASHMEM static bool companionPlaceLimited(',
@@ -82,6 +87,29 @@ int main(){
  assert(memcmp(before,note,sizeof(note))==0);
  assert(undoLastGeneration());
  assert(memcmp(before,note,sizeof(note))==0);
+ // Each voice can be the sole unmuted candidate. Edited page differs from playback.
+ const int channels[]={1,2,3,4,5,6,7,8,11,13,14};
+ unsigned coverage=0;
+ for(int mode=0;mode<2;++mode)for(int allowed:channels)for(int trial=1;trial<=80;++trial){
+  for(auto &step:note)for(auto &cell:step)cell=Note{};
+  for(int ch=0;ch<16;++ch){globalMutes[ch]=ch!=allowed;pageMutes[1][ch]=ch!=allowed;pageMutes[0][ch]=ch==allowed;}
+  SMP_PATTERN_MODE=mode;seed=trial;
+  drawRandomsMultiPage();
+  for(unsigned step=17;step<=32;++step)for(unsigned row=1;row<=16;++row){
+   const int ch=note[step][row].channel;
+   if(ch){assert(ch==allowed&&ch!=14);coverage|=1u<<ch;}
+  }
+ }
+ assert(coverage==((1u<<1)|(1u<<2)|(1u<<3)|(1u<<4)|(1u<<5)|(1u<<6)|(1u<<7)|(1u<<8)|(1u<<11)|(1u<<13)));
+ // All muted: existing muted notes and every empty slot remain unchanged.
+ for(auto &step:note)for(auto &cell:step)cell=Note{};
+ note[17][6]={6,91,35,7,42};
+ for(int ch=0;ch<16;++ch)globalMutes[ch]=true;
+ SMP_PATTERN_MODE=false;
+ memcpy(before,note,sizeof(note));drawRandomsMultiPage();
+ assert(memcmp(before,note,sizeof(note))==0);
+ assert(undoLastGeneration());assert(memcmp(before,note,sizeof(note))==0);
+
 }
 '''
 with tempfile.TemporaryDirectory() as directory:
@@ -91,4 +119,4 @@ with tempfile.TemporaryDirectory() as directory:
     if sdk.exists():flags+=['-isystem',str(sdk)]
     subprocess.run(flags+[str(path/'generate.cpp'),'-o',str(path/'generate')],check=True)
     subprocess.run([str(path/'generate')],check=True)
-print('PASS: generation preserves complete existing channels/metadata, uses their context, respects other pages and never overwrites full steps')
+print('PASS: global/edit-page mutes, sole-unmuted voices, all-muted no-op and undo; generation preserves complete existing channels/metadata, uses their context, respects other pages and never overwrites full steps')

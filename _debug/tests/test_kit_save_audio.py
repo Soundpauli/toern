@@ -29,6 +29,8 @@ constexpr int FILE_WRITE_BEGIN=2;
 bool isNowPlaying=true,fastRecordActive=false,isRecording=false,preventPaintUnpaint=true;
 struct Mode {unsigned pos[4]={};} draw,set_SamplePack;Mode *currentMode=&set_SamplePack;
 struct {unsigned pack=1;bool sp0Active[9]={};} SMP;
+char sourcePaths[9][128]={};
+const char *getVoiceLoadedPathRel(unsigned ch){return sourcePaths[ch];}
 unsigned samplePackID=1,loadedSampleLen[9]={};uint8_t sampled[9][5000]={};
 uint32_t clockUs=100000;uint32_t micros(){return clockUs;}uint32_t millis(){return clockUs/1000;}
 void switchMode(Mode *m){currentMode=m;}
@@ -48,9 +50,10 @@ struct File {
  std::shared_ptr<Node> node;size_t pos=0;std::string path;
  explicit operator bool()const{return bool(node);}
  size_t size()const{return node?node->bytes.size():0;}
+ bool seek(size_t offset){if(offset>size())return false;pos=offset;return true;}
  bool truncate(size_t n){operations++;node->bytes.resize(n);return true;}
  int read(uint8_t *out,size_t count){operations++;assert(count<=2048);maxTransfer=std::max(maxTransfer,(unsigned)count);
-  count=std::min(count,size()-pos);memcpy(out,node->bytes.data()+pos,count);pos+=count;
+  count=std::min(count,size()-pos);if(count)memcpy(out,node->bytes.data()+pos,count);pos+=count;
   if(corruptRead&&path.find(".kit-tmp")!=std::string::npos&&count){out[0]^=1;corruptRead=false;}return count;}
  size_t write(const uint8_t *in,size_t count){operations++;assert(count<=2048);maxTransfer=std::max(maxTransfer,(unsigned)count);
   if(failWrite)return 0;if(pos+count>size())node->bytes.resize(pos+count);memcpy(node->bytes.data()+pos,in,count);pos+=count;return count;}
@@ -113,6 +116,31 @@ int main(){
  sampled[1][0]^=1; // SP0 still holds the previous sample until its deferred copy runs.
  start(5);run();assert(kitSaveFeedback()==2&&SD.files.at("5/1.wav")->bytes[44]==sampled[1][0]);
  assert(SD.files.at("5/1.wav")->bytes!=custom);
+ // Source identity is snapshotted independently from later browser/preview paths.
+ strcpy(sourcePaths[1],"Drums/808/Kick Long.wav");
+ start(6);strcpy(sourcePaths[1],"preview/other.wav");run();
+ const auto &withSource=SD.files.at("6/1.wav")->bytes;
+ const size_t pcm=loadedSampleLen[1]*2;
+ assert(withSource.size()==44+pcm+toern_kit_io::sourceChunkBytes);
+ assert(!memcmp(withSource.data()+44,sampled[1],pcm));
+ assert(toern_kit_io::sourceLE32(withSource.data()+4)==withSource.size()-8);
+ assert(toern_kit_io::sourceLE32(withSource.data()+40)==pcm);
+ char restored[128];auto sourceFile=SD.open("6/1.wav");
+ assert(toern_kit_io::readSourcePath(sourceFile,restored)&&!strcmp(restored,"Drums/808/Kick Long.wav"));
+ strcpy(sourcePaths[1],restored);start(7);run();sourceFile=SD.open("7/1.wav");
+ assert(toern_kit_io::readSourcePath(sourceFile,restored)&&!strcmp(restored,"Drums/808/Kick Long.wav"));
+ auto legacy=SD.open("4/1.wav");assert(!toern_kit_io::readSourcePath(legacy,restored)&&!restored[0]);
+ auto empty=SD.open("4/8.wav");assert(!toern_kit_io::readSourcePath(empty,restored)&&!restored[0]);
+ auto malformed=withSource;
+ malformed[44+pcm+4]=127;SD.files["bad.wav"]=std::make_shared<Node>();SD.files["bad.wav"]->bytes=malformed;
+ auto bad=SD.open("bad.wav");assert(!toern_kit_io::readSourcePath(bad,restored)&&!restored[0]);
+ malformed=withSource;memset(malformed.data()+44+pcm+8,'x',128);SD.files["bad.wav"]->bytes=malformed;
+ bad=SD.open("bad.wav");assert(!toern_kit_io::readSourcePath(bad,restored)&&!restored[0]);
+ assert(!toern_kit_io::validSourcePath("../outside.wav"));
+ assert(!toern_kit_io::validSourcePath("Drums/../outside.wav"));
+ assert(!toern_kit_io::validSourcePath("/absolute.wav"));
+ assert(!toern_kit_io::validSourcePath("*0/1.wav"));
+ sourcePaths[1][0]=0;
  const auto original=primary(4);const auto oldKit=samplePackID;
  // Changing sample buffers aborts staging, while preview channel 0 is harmless.
  start(4);poll();cancelKitSaveForSampleChange(0);assert(!kitSaveSourceChanged);

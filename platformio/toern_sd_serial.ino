@@ -837,6 +837,7 @@ static void sdSerHandleLine(char *line) {
 
   // Remote control must not invoke SD-menu connection logic (which pauses audio).
   if (!strncmp(line, "REMOTE ", 7)) { remoteHandleCommand(line + 7); return; }
+  if (!strncmp(line, "CONFIG ", 7)) { handleSettingsConfigCommand(line + 7); return; }
   sdSerTouchClient();
 
   char cmd[16];
@@ -945,6 +946,7 @@ static void sdSerHandleOffPage(char *line) {
   line = sdSerSkipSpaces(line);
   if (line[0] == '\0') return;
   if (!strncmp(line, "REMOTE ", 7)) { remoteHandleCommand(line + 7); return; }
+  if (!strncmp(line, "CONFIG ", 7)) { handleSettingsConfigCommand(line + 7); return; }
 
   char cmd[16];
   size_t i = 0;

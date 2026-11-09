@@ -46,6 +46,8 @@ public:
     void update() override;
     FLASHMEM void roomsize(float amount);
     FLASHMEM void damping(float amount);
+    // New input only: does not alter feedback, bypass or the existing tail.
+    FLASHMEM void inputGain(float amount);
 private:
     FLASHMEM void clearTanks();
     audio_block_t *inputQueue_[1];
@@ -67,5 +69,6 @@ private:
     // Unity Q15 is 32768, which must not wrap into a negative int16_t.
     uint16_t damp1_ = 6553, damp2_ = 26215;
     int16_t feedback_ = 27524;
+    uint16_t inputGain_ = 32768, inputGainTarget_ = 32768; // Q15, 0..1.5
     bool bypassed_ = true, pendingClear_ = false;
 };

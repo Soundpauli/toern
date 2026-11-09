@@ -51,8 +51,9 @@ controls run between passes. PATT and KIT transfers share the renderer in
 `platformio/src/toern_storage_visual.h`, including KIT loading at boot. It shows the menu
 icon, a green outward load arrow or red inward save arrow, percentage and progress
 bar. Completion reveals a green check or red X without text or blocking delays.
-Pause-triggered autosave reveals a white check only after an actual successful
-write; cooldown skips show no check. The 32×16 (`led == 2`) and 16×16 (`led == 1`)
+Pause-triggered autosave reveals a white check over the current screen only after
+an actual successful write; its result does not clear the frame or paint a black
+background. Cooldown skips show no check. The 32×16 (`led == 2`) and 16×16 (`led == 1`)
 layouts have separate spacing. Background KIT progress leaves DRAW usable, and
 resumes after any pause-autosave acknowledgement.
 `_debug/tests/test_storage_visual.py` checks real icon/font pixels, bounds and animation
@@ -72,6 +73,19 @@ cancellation attempt rollback. Navigation and sound-control edits can continue;
 recording or replacing a sample cancels an in-progress save. A committed save
 does not relabel newly loaded samples. Kit-ID/SP0 EEPROM persistence waits for
 stopped, settled audio; disk saving itself continues during play.
+
+Each newly saved non-empty KIT WAV can include an optional `tsrc` RIFF chunk
+after its PCM data: a 128-byte, null-terminated path relative to `samples/`.
+The writer snapshots the loaded voice's source, not the browser/preview row.
+Metadata is staged, CRC-verified and rolled back with the audio in the same WAV;
+there is no separate source-map file that could get out of sync. PCM stays at
+offset 44, and the data-chunk size excludes metadata. KIT loading restores that
+path and its loaded identity; entering SMP selects the original directory/file
+when available, with the white `>` mark. Returning after previewing a neighbour
+selects the loaded source again. Missing sources fall back to ordinary browsing;
+the KIT's own PCM remains playable. Legacy KITs without metadata cannot reveal
+their original source filenames; load the original WAVs and resave the KIT to
+add that information. Recorded/unknown sources are left without a browser origin.
 
 A card operation can still take longer than its usual latency; a sector budget
 is not a hard real-time guarantee. Power loss across the eight renames is **not

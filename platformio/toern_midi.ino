@@ -258,6 +258,7 @@ static void pulseClockForceIdle() {
 
 static void pulseClockEmit() {
   PulseOutputGuard guard;
+  if (!pulseClockEnabled) return;
   uint32_t us = (uint32_t)pulseClockWidthMs * 1000u;
   if (us < 1000u) us = 1000u;
   pulseClockEndUs = micros() + us;
@@ -689,7 +690,10 @@ void setPulseClockRateSel(uint8_t sel) {
 }
 
 void setPulseClockEnabled(bool enabled) {
-  if (enabled == pulseClockEnabled) return;
+  if (enabled == pulseClockEnabled) {
+    if (!enabled) pulseClockForceIdle();
+    return;
+  }
 
   if (enabled) {
     pulseClockEnabled = true;
@@ -699,8 +703,9 @@ void setPulseClockEnabled(bool enabled) {
     extern void updateMidiClockOutput();
     updateMidiClockOutput();
   } else {
-    pulseClockForceIdle();
+    PulseOutputGuard guard;
     pulseClockEnabled = false;
+    pulseClockForceIdle();
     pulseClockApplyIdle();
   }
   pulseClockSaveToEEPROM();

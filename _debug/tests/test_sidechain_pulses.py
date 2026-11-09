@@ -13,6 +13,9 @@ a=source.index('void sidechainOnVoice(uint8_t ch) {')
 trigger=source[a:source.index('static uint8_t analogClockInPpqn()',a)]
 a=source.index('void setPulseClockPolarityPositive(bool positive) {')
 polarity=source[a:source.index('void togglePulseClockPolarity()',a)]
+control=source[source.index('void pulseClockMidiTick()'):source.index('bool getPulseClockEnabled()')]
+control+=source[source.index('void setPulseClockRateSel('):source.index('void loadPulseClockFromEEPROM()')]
+control+=source[source.index('void midiClockTick()'):source.index('static inline void configureMidiClockSend(')]
 sketch=(root/'toern.ino').read_text()
 a=sketch.index('void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSidechain) {')
 sampler=sketch[a:sketch.index('// Restore amp gains',a)]
@@ -51,7 +54,15 @@ struct IntervalTimer {
  void end(){if(active){active=false;--used;}}
 };
 IntervalTimer pulseEndTimer;
-bool pulseClockPolarityPositive=true,isNowPlaying=true;
+bool pulseClockPolarityPositive=true,isNowPlaying=true,pulseClockEnabled=true,pulseClockStopWithPlay=false;
+uint16_t pulseClockPhase=0;uint8_t pulseClockPpqnIndex=6;
+const uint8_t PULSE_PPQN_TABLE[]={1,2,4,8,12,16,24,32};
+constexpr uint8_t PULSE_RATE_SEL_COUNT=9,PULSE_PPQN_COUNT=8;
+int clockMode=1;bool MIDI_CLOCK_SEND=true;
+struct {unsigned writes=0;void write(uint8_t b){assert(b==0xF8);++writes;}} Serial8;
+void updateMidiClockOutput(){}
+void setPulseClockEnabled(bool);
+void noInterrupts(){__disable_irq();}void interrupts(){__enable_irq();}
 uint8_t pulseClockWidthMs=12,sidechainVoice=1;
 volatile bool pulseClockPinActive=false,sidechainPinActive=false;
 volatile uint32_t pulseClockEndUs=0,sidechainEndUs=0;
@@ -59,6 +70,7 @@ void pulseClockSaveToEEPROM(){}
 SHARED
 TRIGGER
 POLARITY
+CONTROL
 bool fastRecordActive=false,pendingPauseAudioCleanup=true;uint8_t fastRecordChannel=1;
 bool sliderControlled=false;
 bool sampleReloadBusy=false;
@@ -85,6 +97,7 @@ void advance(uint32_t us){
 int rises(int pin){int n=0;for(auto e:edges)if(e.pin==pin&&e.level==HIGH)++n;return n;}
 void reset(){pulseEndTimer.end();IntervalTimer::used=3;nowUs=0;mask=0;
  pulseClockPinActive=sidechainPinActive=false;pulseClockPolarityPositive=true;sidechainVoice=1;
+ pulseClockEnabled=true;pulseClockStopWithPlay=false;pulseClockPhase=0;
  for(auto &v:levels)v=0;edges.clear();pulseClockWidthMs=12;}
 int main(){
  sampleReloadBusy=true;triggerSamplerVoice(1,60,127,true,true);
@@ -127,6 +140,24 @@ int main(){
  reset();IntervalTimer::used=4;sidechainOnVoice(1);
  assert(levels[28]==LOW&&!sidechainPinActive&&!pulseEndTimer.active);
  reset();mask=1;sidechainOnVoice(1);assert(mask==1);advance(12000);assert(mask==1);
+ // PQ-O OFF ends an active pulse and never permits a fresh CLK-OUT edge,
+ // regardless of transport start, MIDI clock callbacks or sidechain triggers.
+ reset();isNowPlaying=true;pulseClockEmit();advance(1000);sidechainOnVoice(1);
+ setPulseClockRateSel(0);assert(!pulseClockEnabled&&!pulseClockPinActive&&levels[37]==LOW&&levels[28]==HIGH);
+ const int before=rises(37);
+ for(int mode:{-1,1})for(bool send:{false,true}) {
+  clockMode=mode;MIDI_CLOCK_SEND=send;
+  for(unsigned i=0;i<100;++i){pulseClockMidiTick();midiClockTick();pulseClockOnTransportStart();pulseClockEmit();advance(1000);}
+ }
+ assert(rises(37)==before&&!pulseClockPinActive&&levels[37]==LOW&&levels[28]==LOW);
+ // Repeated OFF and inverted polarity hold the idle level, not an active pulse.
+ setPulseClockRateSel(0);setPulseClockPolarityPositive(false);
+ const auto idleEdges=edges.size();
+ for(int i=0;i<20;++i){pulseClockMidiTick();pulseClockOnTransportStart();pulseClockEmit();advance(10000);}
+ assert(edges.size()==idleEdges&&levels[37]==HIGH&&!pulseClockPinActive);
+ // Enabling restores the existing divider, width, and shared timer behavior.
+ setPulseClockRateSel(7);assert(pulseClockEnabled);pulseClockOnTransportStart();
+ assert(pulseClockPinActive&&levels[37]==LOW);advance(12000);assert(levels[37]==HIGH);
  // Full-range MIDI/sample conversion may request a pitch outside the event byte.
  reset();Voice voice;voices[1]=&voice;
  for(int pitch: {-48,-24,130}){
@@ -136,7 +167,7 @@ int main(){
  }
  assert(edges.empty());
 }
-'''.replace('SHARED',shared).replace('TRIGGER',trigger).replace('POLARITY',polarity).replace('SAMPLER',sampler)
+'''.replace('SHARED',shared).replace('TRIGGER',trigger).replace('POLARITY',polarity).replace('CONTROL',control).replace('SAMPLER',sampler)
 with tempfile.TemporaryDirectory(prefix='toern-sidechain-') as tmp:
     p=Path(tmp);(p/'pulses.cpp').write_text(harness)
     flags=['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform=='darwin' else []

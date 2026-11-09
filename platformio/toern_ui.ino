@@ -1524,12 +1524,11 @@ FLASHMEM void drawAutogenPages(){
 }
 FLASHMEM static void drawAutogenActivity(unsigned progress,bool ready,uint32_t now){
   const bool performance=autogenViewingPerformance();
-  const CRGB ink[]={CRGB::Black,performance?CRGB(4,12,30):CRGB(30,4,18),performance?CRGB(40,100,230):CRGB(230,30,150),CRGB(210,120,20),CRGB(30,190,90)};
-  for(unsigned x=0;x<5;++x)for(unsigned y=0;y<5;++y){
-    unsigned code=ToernAutogen::statusInk(x,y,progress,ready,now);
-    if(code==3&&(x==0||x==4||y==0||y==4))code=2;
-    light(maxX-4+x,16-y,ink[code]);
-  }
+  const CRGB dim=performance?CRGB(4,12,30):CRGB(30,4,18);
+  const CRGB filled=performance?CRGB(40,100,230):CRGB(230,30,150);
+  const unsigned first=maxX>=32?16:maxX-4;
+  for(unsigned x=first;x<=maxX;++x)
+    light(x,16,x-first<progress?filled:dim);
 }
 FLASHMEM void drawAutogenStatus(){
   if(!autogenStatusVisible())return;

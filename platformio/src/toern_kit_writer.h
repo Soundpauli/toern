@@ -3,13 +3,14 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "toern_kit_source.h"
 
 // Cooperative KIT export. Each tick performs at most one filesystem operation
 // or one bounded 2 KB read/write. Audio/MIDI IRQs are never masked here.
 namespace toern_kit_io {
 constexpr size_t transferBytes=2048;
 enum class Result : uint8_t { Idle, Running, Saved, Failed, Cancelled };
-struct Source { const int16_t *pcm=nullptr; uint32_t samples=0; };
+struct Source { const int16_t *pcm=nullptr; uint32_t samples=0; const char *pathRel=nullptr; };
 
 template<class File> class Writer {
 public:
@@ -20,6 +21,11 @@ public:
     if(busy()||target>999)return false;
     target_=target;memcpy(sources_,sources,sizeof(sources_));flags_=writeFlags;progress_=0;
     for(const auto &source:sources)if(source.samples&&!source.pcm)return false;
+    for(unsigned i=0;i<8;++i) {
+      sourcePaths_[i][0]=0;
+      if(sources[i].samples&&validSourcePath(sources[i].pathRel))
+        memcpy(sourcePaths_[i],sources[i].pathRel,strlen(sources[i].pathRel)+1);
+    }
     slot_=0;staged_=installed_=backed_=0;cancel_=committed_=rollbackFailed_=false;
     result_=Result::Running;state_=DirExists;return true;
   }
@@ -41,20 +47,29 @@ public:
       case OutOpen: out_=fs.open(tmp,flags_);if(!out_)return fail();staged_|=1u<<slot_;state_=Truncate;break;
       case Truncate:
         if(!out_.truncate(0))return fail();
-        if(sources_[slot_].samples>0x7FFFFFD9u)return fail();
-        total_=sources_[slot_].samples?44u+sources_[slot_].samples*2u:0;
+        if(sources_[slot_].samples>0x7FFFFF95u)return fail();
+        audioEnd_=sources_[slot_].samples?44u+sources_[slot_].samples*2u:0;
+        total_=audioEnd_+(sourcePaths_[slot_][0]?sourceChunkBytes:0);
         state_=total_?Header:CloseIn;break;
       case Header:
-        header(buffer_,total_-44u);
+        header(buffer_,audioEnd_-44u,total_-audioEnd_);
         if(out_.write(buffer_,44)!=44)return fail();
-        crc_=crc(crc_,buffer_,44);offset_=44;state_=offset_==total_?CloseIn:Write;break;
+        crc_=crc(crc_,buffer_,44);offset_=44;state_=offset_==audioEnd_?SourceChunk:Write;break;
       case Write:
-        count_=std::min((uint32_t)transferBytes,total_-offset_);
+        count_=std::min((uint32_t)transferBytes,audioEnd_-offset_);
         memcpy(buffer_,reinterpret_cast<const uint8_t*>(sources_[slot_].pcm)+(offset_-44u),count_);
         if(out_.write(buffer_,count_)!=count_)return fail();
         crc_=crc(crc_,buffer_,count_);offset_+=count_;
         progress_=slot_*11u+(unsigned)((uint64_t)offset_*5u/total_);
-        state_=offset_==total_?CloseIn:Write;break;
+        state_=offset_==audioEnd_?SourceChunk:Write;break;
+      case SourceChunk:
+        if(sourcePaths_[slot_][0]) {
+          memset(buffer_,0,sourceChunkBytes);memcpy(buffer_,"tsrc",4);buffer_[4]=sourcePathBytes;
+          memcpy(buffer_+8,sourcePaths_[slot_],strlen(sourcePaths_[slot_])+1);
+          if(out_.write(buffer_,sourceChunkBytes)!=sourceChunkBytes)return fail();
+          crc_=crc(crc_,buffer_,sourceChunkBytes);offset_+=sourceChunkBytes;
+        }
+        state_=CloseIn;break;
       case CloseIn: if(in_)in_.close();state_=CloseOut;break;
       case CloseOut: out_.close();state_=VerifyOpen;break;
       case VerifyOpen:
@@ -115,19 +130,20 @@ private:
     while(size--){value^=*data++;for(unsigned bit=0;bit<8;++bit)value=(value>>1)^((value&1)?0xEDB88320u:0);}
     return ~value;
   }
-  static void header(uint8_t *out,uint32_t bytes) {
+  static void header(uint8_t *out,uint32_t bytes,uint32_t extra) {
     static const uint8_t base[44]={'R','I','F','F',0,0,0,0,'W','A','V','E','f','m','t',' ',16,0,0,0,
       1,0,1,0,0x44,0xAC,0,0,0x88,0x58,1,0,2,0,16,0,'d','a','t','a',0,0,0,0};
-    memcpy(out,base,44);const uint32_t riff=bytes+36;memcpy(out+4,&riff,4);memcpy(out+40,&bytes,4);
+    memcpy(out,base,44);const uint32_t riff=bytes+36+extra;memcpy(out+4,&riff,4);memcpy(out+40,&bytes,4);
   }
   enum State {Idle,DirExists,DirMake,Start,TempExists,TempRemove,OutOpen,Truncate,
-    Header,Write,CloseIn,CloseOut,VerifyOpen,VerifyRead,VerifyClose,BackupExists,PrimaryRecoveryCheck,
+    Header,Write,SourceChunk,CloseIn,CloseOut,VerifyOpen,VerifyRead,VerifyClose,BackupExists,PrimaryRecoveryCheck,
     Recover,BackupRemove,PrimaryExists,BackupMove,Install,CleanupBackup,
     CloseAbortIn,CloseAbortOut,RollbackRemove,RollbackRestore,RollbackTemp} state_=Idle;
   Source sources_[8]{};File in_,out_;
+  char sourcePaths_[8][sourcePathBytes]{};
   uint8_t *const buffer_;
   unsigned target_=0,slot_=0,progress_=0;int flags_=0;
-  uint32_t total_=0,offset_=0,count_=0,crc_=0,verifyCrc_=0;
+  uint32_t total_=0,audioEnd_=0,offset_=0,count_=0,crc_=0,verifyCrc_=0;
   uint8_t staged_=0,installed_=0,backed_=0;
   bool cancel_=false,committed_=false,rollbackFailed_=false;
   Result result_=Result::Idle,failure_=Result::Failed;

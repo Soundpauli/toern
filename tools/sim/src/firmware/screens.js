@@ -1565,9 +1565,6 @@ export function drawAutogenStatus(matrix, s, now) {
   matrix.light(motifSlot,16,[210,30,130]);
   matrix.light(playingSlot,16,[220,220,220]);matrix.light(otherSlot,16,ready?[220,180,0]:[200,0,0]);
   const colors=s.agen.performanceView===false?AGEN_MOTIF_COLORS:AGEN_STATUS_COLORS;
-  for(let x=0;x<5;x++)for(let y=0;y<5;y++){
-    let code=statusInk(x,y,progress,ready,now);
-    if(code===3&&(x===0||x===4||y===0||y===4))code=2;
-    matrix.light(COLS-4+x,16-y,colors[code]);
-  }
+  const first=COLS>=32?16:COLS-4;
+  for(let x=first;x<=COLS;x++)matrix.light(x,16,colors[x-first<progress?2:1]);
 }

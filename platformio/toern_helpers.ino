@@ -4229,7 +4229,7 @@ FLASHMEM void startNew() {
   // Write defaults to EEPROM - globals will be reloaded on next boot
   // SETT>LEDS (panel count / rotation) stays — full reset should not undress the hardware.
   uint8_t preserveLedMode = EEPROM.read(EEPROM_DATA_START + 13);
-  if (preserveLedMode < 1 || preserveLedMode > 4) preserveLedMode = 1;
+  if (preserveLedMode < 1 || preserveLedMode > 4) preserveLedMode = DEFAULT_LED_MODE;
   EEPROM.write(EEPROM_DATA_START + 0,  1);    // recMode (MIC)
   EEPROM.write(EEPROM_DATA_START + 1,  1);    // clockMode (INT)
   EEPROM.write(EEPROM_DATA_START + 2,  2);    // transportMode (SEND)
@@ -5220,7 +5220,7 @@ bool autogenNextReady(){return agen.ready;}
 unsigned autogenRepeatsLeft(){return max(1u,(unsigned)agen.repeatsLeft);}
 void autogenUiSnapshot(unsigned &playing,unsigned &other,bool &ready,unsigned &progress){
   toern_audio::StateGuard guard;
-  playing=10+agen.playing;other=10+(agen.playing^1u);ready=agen.ready;progress=agen.statusProgress(beat);
+  playing=10+agen.playing;other=10+(agen.playing^1u);ready=agen.ready;progress=agen.statusProgress(beat,maxX>=32?17:5);
 }
 #if TOERN_REMOTE_CONTROL
 FLASHMEM static int autogenReferenceMidi(const Note &cell,unsigned ch,unsigned row);
@@ -5328,13 +5328,13 @@ FLASHMEM static void serviceAutogenPerformance(){
   for(uint8_t ch:agenOrder){
     const bool bass=ch==6||(ch==14&&!agenWork->chordPair)||(ch==11&&agenWork->ch11Bass);
     if(agenWork->manualUntil[ch]&&int32_t(now-agenWork->manualUntil[ch])<0)continue;
-    unsigned scale=volumeScale(form,ch,bass,progress);
+    unsigned scale=agenWork->performanceView?volumeScale(form,ch,bass,progress):16;
     if(ch==agenWork->foundationVoice&&(form==Section::Build||form==Section::Break||form==Section::Fill))scale=max(12u,scale);
     if(agenWork->userMuted[ch])scale=0;
     const unsigned target=agenWork->volumeBase[ch]*scale/16;
     const unsigned previous=agenWork->volumeNow[ch];
     unsigned next=previous;
-    if(changed&&form==Section::Drop)next=target;
+    if(!agenWork->performanceView||(changed&&form==Section::Drop))next=target;
     else if(target>previous)++next;else if(target<previous)--next;
     if(next==previous)continue;
     applyChannelControlVolume(ch,next,previous);agenWork->volumeNow[ch]=next;

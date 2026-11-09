@@ -9,15 +9,15 @@ struct ToernAutogen {
   unsigned pages[2]={1,2},width=16,nextRepeats=4;
   volatile unsigned passesTotal=4;
   // Musical progress to the next page boundary, including every scheduled pass.
-  // A late builder holds the full ring while the current page safely repeats.
-  unsigned statusProgress(unsigned step)const{
-    if(!repeatsLeft)return 12;
+  // A late builder holds the full progress line while the current page safely repeats.
+  unsigned statusProgress(unsigned step,unsigned pixels=12)const{
+    if(!repeatsLeft)return pixels;
     const unsigned total=passesTotal?passesTotal:1;
     const unsigned left=repeatsLeft>total?total:(unsigned)repeatsLeft;
     const unsigned elapsed=(total-left)*width+(step?(step-1)%width:0);
     const unsigned span=total*width>1?total*width-1:1;
-    const unsigned progress=elapsed*12/span;
-    return progress>12?12:progress;
+    const unsigned progress=elapsed*pixels/span;
+    return progress>pixels?pixels:progress;
   }
   // 5x5 clock: persistent rim + playback arc; amber preparation spinner or green check.
   // Ink: 0 black, 1 dim rim, 2 elapsed cyan, 3 busy/late amber, 4 ready green.

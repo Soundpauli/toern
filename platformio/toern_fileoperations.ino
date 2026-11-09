@@ -301,7 +301,8 @@ void beginKitSave(int pack) {
   toern_kit_io::Source sources[8];
   // Save what is actually loaded, including a live custom sample whose deferred
   // SP0 disk copy has not run yet. Never read that stale scratch file instead.
-  for(unsigned ch=1;ch<=8;++ch)sources[ch-1]={reinterpret_cast<const int16_t*>(sampled[ch]),loadedSampleLen[ch]};
+  extern const char *getVoiceLoadedPathRel(unsigned ch);
+  for(unsigned ch=1;ch<=8;++ch)sources[ch-1]={reinterpret_cast<const int16_t*>(sampled[ch]),loadedSampleLen[ch],getVoiceLoadedPathRel(ch)};
   if(!kitSaveJob.begin((unsigned)pack,sources,FILE_WRITE_BEGIN))return;
   storageTransferBegin(true,true);
   kitSaveChecking=false;kitSaveSourceChanged=false;kitSaveTarget=(unsigned)pack;kitSaveSourcePack=samplePackID;

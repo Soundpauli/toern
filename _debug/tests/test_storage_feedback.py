@@ -46,7 +46,8 @@ int main(){
  // then its progress resumes, including when the autosave itself fails.
  storageTransferBegin(true,true);storageTransferProgress(60);now+=5000;
  autoSaveWithFeedback();assert(writes==2&&storageTransferIs(true,true)&&storageVisualWhite);
- drawStorageTransferOverlay();assert(StorageVisualCanvas::labels.empty());
+ StorageVisualCanvas::labels={"CURRENT SCREEN"};
+ drawStorageTransferOverlay();assert(StorageVisualCanvas::labels==std::vector<std::string>{"CURRENT SCREEN"});
  now+=721;drawStorageTransferOverlay();assert(StorageVisualCanvas::labels==std::vector<std::string>{"60%"});
  saveOk=false;now+=5000;autoSaveWithFeedback();assert(writes==3&&!storageVisualSuccess&&storageTransferIs(true,true));
  now+=721;drawStorageTransferOverlay();assert(StorageVisualCanvas::labels==std::vector<std::string>{"60%"});
