@@ -2182,7 +2182,6 @@ int mapXtoPageOffset(int x) {
       USER CURSOR
   *************************************************/
 void drawCursor() {
-  if(autogenViewingPerformance())return;
   if (dir == 1)
     pulse += 8;
   if (dir == -1)
@@ -2198,9 +2197,13 @@ void drawCursor() {
   int cursorY = GLOB.y;
 
   uint8_t hue = pulse; // Directly use pulse as hue for smooth cycling
-  if (note[GLOB.x][GLOB.y].channel) {
+  // The AGEN performance view shows the playing page; the cursor is read-only there.
+  const Note &cell = autogenViewingPerformance() && cursorX >= 1 && cursorX <= (int)maxX
+      ? autogenPlaybackGrid()[(autogenPage() - 1) * maxX + cursorX][cursorY]
+      : note[GLOB.x][GLOB.y];
+  if (cell.channel) {
     
-    CRGB color = col[note[GLOB.x][GLOB.y].channel];  // aus deiner col[] Farbpalette
+    CRGB color = col[cell.channel];  // aus deiner col[] Farbpalette
     light(cursorX, cursorY, color.nscale8_video(pulse));  // pulse = animierte Helligkeit
 
   }else{

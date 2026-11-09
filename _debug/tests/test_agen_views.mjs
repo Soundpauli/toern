@@ -11,7 +11,7 @@ for(const width of [16,32]){
  const s={note,agenPerformance:performance,agen:{active:true,performanceView:true,page:1,progress:6,ready:true},
   GLOB:{edit:5,x:4*width+7,y:14,singleMode:true,currentChannel:13},mode:'single',simpleNotes:true,
   mute:Array(16).fill(false),playing:true,beat:4,voiceMode:false,fireVoice:0};
- const saved=structuredClone(s.GLOB),pixels=new Map(),matrix={light:(x,y,c)=>pixels.set(`${x},${y}`,c)};
+ const saved=structuredClone(s.GLOB),pixels=new Map(),matrix={light:(x,y,c)=>pixels.set(`${x},${y}`,c),setCursor:(x,y)=>pixels.set(`${x},${y}`,'cursor')};
  drawTriggers(matrix,s,0);
  assert(pixels.has('2,3')&&pixels.has('5,7'),'AGEN shows all voices at their generated grid positions');
  assert(!pixels.has('7,14'),'the motif does not leak into the performance view');
@@ -19,7 +19,9 @@ for(const width of [16,32]){
  pixels.clear();s.agen.page=2;s.beat=width+4;drawTriggers(matrix,s,0);
  assert(pixels.has('9,11')&&!pixels.has('2,3'),'AGEN follows the newly playing buffer');
  drawTimer(matrix,s);assert.deepEqual(pixels.get('4,2'),[0,50,0],'performance timebar is green');
- pixels.clear();drawCursor(matrix,s,0);assert.equal(pixels.size,0,'no edit cursor on generated notes');
+ pixels.clear();s.pulse=100;s.pulseDir=1;drawCursor(matrix,s,0);
+ assert(pixels.has('7,14')&&pixels.size>=1,'the cursor stays visible on the performance view');
+ assert.deepEqual(s.GLOB,saved,'the cursor never edits or redirects in the performance view');
  s.agen.performanceView=false;drawTriggers(matrix,s,0);
  assert(pixels.has('7,14')&&!pixels.has('9,11'),'FN motif view restores the editable source grid');
  drawTimer(matrix,s);assert.deepEqual(pixels.get('4,2'),[28,0,0],'motif keeps its red timebar');

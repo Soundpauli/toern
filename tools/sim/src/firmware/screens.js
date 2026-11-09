@@ -445,13 +445,14 @@ export function drawTimer(matrix, s) {
 }
 
 export function drawCursor(matrix, s, now = performance.now()) {
-  if(s.agen?.active&&s.agen.performanceView)return;
   s.pulse += s.pulseDir * 8;
   if (s.pulse > 230) s.pulseDir = -1;
   if (s.pulse < 1) s.pulseDir = 1;
   const x = ((s.GLOB.x - 1) % COLS) + 1;
   const y = s.GLOB.y;
-  const ch = s.note[s.GLOB.x][y].channel;
+  // The AGEN performance view shows the playing page; the cursor is read-only there.
+  const performanceView = s.agen?.active && s.agen.performanceView && s.agenPerformance;
+  const ch = performanceView ? s.agenPerformance[(s.agen.page - 1) * COLS + x][y].channel : s.note[s.GLOB.x][y].channel;
   const col = pal(s).col;
   if (s.cursorType === 2) {
     const bpm = s.bpm >= 40 ? s.bpm : 120;
