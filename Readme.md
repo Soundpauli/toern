@@ -1,6 +1,6 @@
 # TŒRN `[tɜːn]`
 
-**Open-source sequencer and sampler** — by [warft_ctrl](mailto:jpkuntoff@gmail.com)
+**Open-source sequencer and sampler** — by [warft_ctrl](mailto:info@toern.live)
 
 > Say it like *turn*. As in: turn the knobs. Turn a doodle into a beat. Turn “I can’t play piano” into “wait, that slap though.”
 
@@ -201,7 +201,7 @@ Firmware changes: [`info.md`](docs/info.md) to flash, [`docs/devdocs/`](docs/dev
 - **Firmware loader** (`tools/firmware/`): [GPL-3.0](tools/firmware/LICENSE), because that tool is Teensy Loader Javascript. GPL-3.0 applies only to that folder.
 - **Hardware design files** (schematics, PCB layouts, Gerbers, housings, etc.): [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — personal / non-commercial use and modification. **Jan-Peter Kuntoff is the only person authorized to sell TŒRN hardware** (bare PCB, assembled PCB, kit, or unit), including boards sold **without a Teensy**. Teensy 4.1 is PJRC’s; it is not licensed in this repo. Anyone else needs written consent to sell.
 
-Commercial hardware licensing: Jan aka **warft_ctrl** — jpkuntoff@gmail.com (Hamburg, Germany)
+Commercial hardware licensing: Jan aka **warft_ctrl** — info@toern.live (Hamburg, Germany)
 
 ---
 

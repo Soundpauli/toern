@@ -76,6 +76,10 @@ with a `<2` dependency bound to keep the FastMCP interface consistent.
    voice, playback, BPM, loaded kit, browsed kit, mode encoder positions, and
    input state. `positions` are the firmware's logical mode positions, **not**
    necessarily physical encoder order (SMP swaps two positions).
+   State also includes read-only `autogen` diagnostics: activity, generation, section,
+   audible foundation voice, remaining passes, octave-register shifts, and the
+   sounding CH11 pitches at the current page onset. These support live transition
+   checks without changing the pattern or patch.
    `get_performance()` reads existing audio CPU counters, CH11 ladder/oscillator
    costs, memory use and active poly voices without pausing playback. CPU fields
    ending in `_bp` use basis points: 100 bp = 1% CPU.
