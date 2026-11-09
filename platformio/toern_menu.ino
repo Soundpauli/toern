@@ -2578,7 +2578,9 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       extern uint8_t autogenMotion();
       const uint8_t motion=autogenMotion();
       drawMenuText("AGEN",2,10,currentMenuParentTextColor());
-      drawMenuValue(motion==0?"HOLD":motion==1?"SOFT":"LIVE",2,3,motion==0?UI_DIM_RED:motion==1?UI_GREEN:UI_YELLOW);
+      static const char *const motionNames[]={"HOLD","SOFT","LONG","LIVE"};
+      static const CRGB motionColors[]={UI_DIM_RED,UI_GREEN,UI_CYAN,UI_YELLOW};
+      drawMenuValue(motionNames[min(motion,(uint8_t)3)],2,3,motionColors[min(motion,(uint8_t)3)]);
       drawMenuIndicator('L','W',3);
       drawMenuIndicator('L',autogenActive()?'G':'R',4);
       break;
@@ -5021,20 +5023,20 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 69: { // AGEN melody motion: encoder 3 = HOLD / SOFT / LIVE
+    case 69: { // AGEN melody motion: encoder 3 = HOLD / SOFT / LONG / LIVE
       extern uint8_t autogenMotion();
       extern void setAutogenMotion(uint8_t);
       static int lastMotion=-1;
       if(menuFirstEnter){
         const int value=autogenMotion();
         Encoder[2].writeMin((int32_t)0);
-        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeMax((int32_t)3);
         Encoder[2].writeCounter((int32_t)value);
         currentMode->pos[2]=(unsigned)value;
         lastMotion=value;
         menuFirstEnter=false;
       }
-      const int value=constrain((int)currentMode->pos[2],0,2);
+      const int value=constrain((int)currentMode->pos[2],0,3);
       if(value!=lastMotion){
         setAutogenMotion((uint8_t)value);
         Encoder[2].writeCounter((int32_t)value);

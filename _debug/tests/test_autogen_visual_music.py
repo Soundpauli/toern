@@ -142,7 +142,24 @@ int main(int argc,char **argv){assert(argc==2);
   assert(bars==64); // the fill and drop close the cycle; nothing cadences at bar 16
   assert(form[2]==Section::Build&&form[3]==Section::Groove); // short rise, kick and bass return
   assert(form[5]==Section::Break&&form[6]==Section::Groove); // short dip, kick and bass return
+  unsigned longBars=0;
+  for(unsigned slot=0;slot<12;++slot)longBars+=2*repeats(form[slot],slot*2,16,120,true);
+  assert(longBars==120); // LONG doubles groove, variation and drop; rolls stay short
+  assert(repeats(Section::Drop,22,16,120,true)==4&&repeats(Section::Groove,0,16,120,true)==8);
+  for(unsigned width:{16u,32u})for(unsigned bpm:{40u,60u,90u,120u,180u,300u})for(unsigned g=0;g<24;++g){
+   const unsigned n=repeats(section(g),g,width,bpm,true);
+   assert(n>=1&&n<=8&&(n==1||2*n*width*15000u<=bpm*48000u));
+  }
  }
+ for(int tonic=0;tonic<12;++tonic)for(bool minor:{false,true})for(unsigned phrase=0;phrase<24;++phrase)
+  for(unsigned step=0;step<16;++step)for(unsigned ch:{6u,7u,8u,11u,13u,14u}){
+   const int reference=ch==6||ch==14?36:60;
+   assert(melodyPitch(reference,tonic,minor,phrase,ch,step,113,MotionLong)==fitPitch(reference,tonic,minor,phrase,ch,step));
+   for(unsigned lane=0;lane<3;++lane){
+    const int voiced=voicingPitch(reference,tonic,minor,phrase,lane,113,true);
+    assert(voiced%12==chordPc(tonic,minor,phrase,lane)&&abs(voiced-reference)<=6);
+   }
+  }
  unsigned changed=0,large=0,total=0;
  for(int tonic=0;tonic<12;++tonic)for(bool minor:{false,true})for(unsigned phrase=0;phrase<32;phrase++)
   for(unsigned step=0;step<32;step++)for(unsigned ch:{6u,7u,8u,11u,13u,14u}){

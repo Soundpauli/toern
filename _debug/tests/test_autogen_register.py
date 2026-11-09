@@ -47,6 +47,12 @@ int main(){
   int soft=toern_autogen_register::monoPitch(60,0,false,2,ch,step,113,1);
   assert(held==60&&std::abs(soft-60)<=2);
  }
+ for(int key=0;key<12;key++)for(int phrase=0;phrase<24;phrase++)for(int ch:{13,14})for(int step=0;step<16;step++){
+  // LONG keeps the drawn note, fitted to the chord, on every page of a phrase.
+  const int fitted=toern_autogen_register::nearSource(toern_autogen_music::fitPitch(60,key,false,phrase,ch,step),60);
+  assert(toern_autogen_register::monoPitch(60,key,false,phrase,ch,step,113,toern_autogen_music::MotionLong)==fitted);
+  assert(toern_autogen_register::monoPitch(60,key,false,phrase,ch,step,7,toern_autogen_music::MotionLong)==fitted);
+ }
 }
 '''.replace('FUNCTION',s[a:b])
 with tempfile.TemporaryDirectory(prefix='agen-register-') as t:

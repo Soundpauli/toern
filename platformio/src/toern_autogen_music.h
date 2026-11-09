@@ -11,6 +11,9 @@
 
 namespace toern_autogen_music {
 enum class Section {Groove,Variation,Break,Build,Fill,Drop};
+// AGEN menu order. LONG keeps the drawn motif (fitted to the chord only) and
+// doubles the groove, variation and drop slots so the theme can settle in.
+enum Motion : uint8_t {MotionHold=0,MotionSoft=1,MotionLong=2,MotionLive=3};
 // One 64-bar cycle. A short rise (Build) and a short dip (Break) each resolve by
 // the kick and bass coming back in the following groove. The fill and drop
 // happen once, at the end of the cycle, rather than every 16 bars.
@@ -28,10 +31,11 @@ AGEN_MUSIC_CODE static unsigned phraseBars(unsigned generation){
 // `generation` selects the slot length. A roll is never repeated: Build and Fill
 // stay one pass of the call and one of the answer. Lengths are musical bars for
 // the whole pair; slow tempos halve them so a slot cannot run on past half a minute.
-AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned generation,unsigned width=16,unsigned bpm=120){
+AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned generation,unsigned width=16,unsigned bpm=120,bool longForm=false){
   if(s==Section::Build||s==Section::Fill)return 1;
   unsigned bars=phraseBars(generation);
-  const unsigned limit=s==Section::Build?32000u:24000u;
+  if(longForm&&(s==Section::Groove||s==Section::Variation||s==Section::Drop))bars*=2;
+  const unsigned limit=longForm?48000u:24000u;
   if(bpm<40)bpm=40;
   while(bars>1&&bars*240000u>bpm*limit)bars/=2;
   const unsigned passes=(bars*16u)/(2u*((width==32)?32u:16u));
@@ -70,23 +74,23 @@ AGEN_MUSIC_CODE static int fitPitch(int reference,int tonic,bool minor,unsigned 
 // Move actual in-key notes, rather than only quantizing unchanged notes. Both
 // pages share a contour seed; the answer reverses its direction. Bass downbeats
 // and chord-tone landings stay structural. Everything derives from the anchor.
-// motion: 0 hold the drawn pitch, 1 soft steps of a second, 2 the full contour.
+// HOLD and LONG keep the drawn pitch, SOFT moves by a second, LIVE uses the full contour.
 AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,bool minor,unsigned phrase,
-                                      unsigned channel,unsigned step,uint32_t seed,unsigned motion=2){
+                                      unsigned channel,unsigned step,uint32_t seed,unsigned motion=MotionLive){
   const Section s=section(phrase);
   const bool bass=channel==6||channel==14;
   const int baseline=fitPitch(reference,tonic,minor,phrase,channel,step);
-  if(!motion||(bass&&step%4==0))return baseline;
+  if(motion==MotionHold||motion==MotionLong||(bass&&step%4==0))return baseline;
   uint32_t h=seed^(phrase/2*374761393u)^(channel*668265263u)^(step*2246822519u);
   h=(h^(h>>13))*1274126177u;h^=h>>16;
   unsigned chance=bass?50:s==Section::Variation||s==Section::Fill?90:
       s==Section::Build?80:s==Section::Break?65:s==Section::Drop?45:40;
-  if(motion<2&&chance>35)chance=35;
+  if(motion==MotionSoft&&chance>35)chance=35;
   if(h%100>=chance)return baseline;
   static const int8_t contour[] AGEN_MUSIC_DATA={2,4,3,7,5,-2,4,-5};
   int delta=contour[((step/2)+channel+(phrase/2))%8];
   if(phrase&1)delta=-delta;
-  if(bass||motion<2)delta=delta>0?2:-2;
+  if(bass||motion==MotionSoft)delta=delta>0?2:-2;
   const int target=reference+delta;
   int best=baseline,distance=999;
   for(int n=reference-12;n<=reference+12;++n){
@@ -99,7 +103,9 @@ AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,bool minor,unsign
   }
   return best;
 }
-AGEN_MUSIC_CODE static int voicingPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned lane,uint32_t seed){
+AGEN_MUSIC_CODE static int voicingPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned lane,uint32_t seed,bool stable=false){
+  // A stable voicing takes each chord tone nearest the drawn register, so the top voice barely moves.
+  if(stable)return nearestPc(reference,chordPc(tonic,minor,phrase,lane%3));
   const unsigned inversion=(phrase+seed)%3;
   const int root=nearestPc(reference,chordPc(tonic,minor,phrase,0));
   int notes[3];
