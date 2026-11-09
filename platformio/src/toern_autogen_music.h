@@ -11,20 +11,27 @@
 
 namespace toern_autogen_music {
 enum class Section {Groove,Variation,Break,Build,Fill,Drop};
+// One 64-bar cycle. A short rise (Build) and a short dip (Break) each resolve by
+// the kick and bass coming back in the following groove. The fill and drop
+// happen once, at the end of the cycle, rather than every 16 bars.
 AGEN_MUSIC_CODE static Section section(unsigned generation){
-  static const Section form[] AGEN_MUSIC_DATA={Section::Groove,Section::Variation,Section::Groove,Section::Break,
-      Section::Build,Section::Drop,Section::Variation,Section::Groove};
-  return form[(generation/2)%8];
+  static const Section form[] AGEN_MUSIC_DATA={
+      Section::Groove,Section::Variation,Section::Build,Section::Groove,
+      Section::Variation,Section::Break,Section::Groove,Section::Groove,
+      Section::Variation,Section::Build,Section::Fill,Section::Drop};
+  return form[(generation/2)%12];
 }
-// Sections span two related pages: a call and an answer. Lengths are musical
-// bars for the complete pair; keep the countdown bounded without rushing builds.
-AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned choice,unsigned width=16,unsigned bpm=120){
-  if(s==Section::Build||s==Section::Fill)return 1; // one call/answer, never repeat a roll
-  static const uint8_t grooveBars[] AGEN_MUSIC_DATA={4,4,4,8,4,4};
-  unsigned bars=s==Section::Build?8:s==Section::Break||s==Section::Fill?4:
-      s==Section::Variation?(choice%2?8:4):grooveBars[choice%6];
-  if(s==Section::Drop)bars=4;
-  const unsigned limit=s==Section::Build?32000:s==Section::Break?24000:16000;
+AGEN_MUSIC_CODE static unsigned phraseBars(unsigned generation){
+  static const uint8_t bars[] AGEN_MUSIC_DATA={8,8,2,8,8,2,8,8,4,2,2,4};
+  return bars[(generation/2)%12];
+}
+// `generation` selects the slot length. A roll is never repeated: Build and Fill
+// stay one pass of the call and one of the answer. Lengths are musical bars for
+// the whole pair; slow tempos halve them so a slot cannot run on past half a minute.
+AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned generation,unsigned width=16,unsigned bpm=120){
+  if(s==Section::Build||s==Section::Fill)return 1;
+  unsigned bars=phraseBars(generation);
+  const unsigned limit=s==Section::Build?32000u:24000u;
   if(bpm<40)bpm=40;
   while(bars>1&&bars*240000u>bpm*limit)bars/=2;
   const unsigned passes=(bars*16u)/(2u*((width==32)?32u:16u));
@@ -63,21 +70,23 @@ AGEN_MUSIC_CODE static int fitPitch(int reference,int tonic,bool minor,unsigned 
 // Move actual in-key notes, rather than only quantizing unchanged notes. Both
 // pages share a contour seed; the answer reverses its direction. Bass downbeats
 // and chord-tone landings stay structural. Everything derives from the anchor.
+// motion: 0 hold the drawn pitch, 1 soft steps of a second, 2 the full contour.
 AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,bool minor,unsigned phrase,
-                                      unsigned channel,unsigned step,uint32_t seed){
+                                      unsigned channel,unsigned step,uint32_t seed,unsigned motion=2){
   const Section s=section(phrase);
   const bool bass=channel==6||channel==14;
   const int baseline=fitPitch(reference,tonic,minor,phrase,channel,step);
-  if(bass&&step%4==0)return baseline;
+  if(!motion||(bass&&step%4==0))return baseline;
   uint32_t h=seed^(phrase/2*374761393u)^(channel*668265263u)^(step*2246822519u);
   h=(h^(h>>13))*1274126177u;h^=h>>16;
-  const unsigned chance=bass?50:s==Section::Variation||s==Section::Fill?90:
+  unsigned chance=bass?50:s==Section::Variation||s==Section::Fill?90:
       s==Section::Build?80:s==Section::Break?65:s==Section::Drop?45:40;
+  if(motion<2&&chance>35)chance=35;
   if(h%100>=chance)return baseline;
   static const int8_t contour[] AGEN_MUSIC_DATA={2,4,3,7,5,-2,4,-5};
   int delta=contour[((step/2)+channel+(phrase/2))%8];
   if(phrase&1)delta=-delta;
-  if(bass)delta=delta>0?2:-2;
+  if(bass||motion<2)delta=delta>0?2:-2;
   const int target=reference+delta;
   int best=baseline,distance=999;
   for(int n=reference-12;n<=reference+12;++n){

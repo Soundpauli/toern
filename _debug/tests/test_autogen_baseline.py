@@ -1,4 +1,4 @@
-"""Keep the musical policy requested from 9671a48 while allowing live source edits."""
+"""Keep companion evolution from 9671a48. Phrase length lives in the music header."""
 from pathlib import Path
 import subprocess
 root=Path(__file__).resolve().parents[2]
@@ -15,6 +15,4 @@ def function(text,name):
  return text[start:end]
 for name in ['evolveCompanionChannelFromBase','generateCompanionChannelPage','applyAutogenProbabilities']:
  assert function(current,name)==function(baseline,name),name+' changed from the requested musical policy'
-for path in ['platformio/src/toern_autogen_music.h','platformio/src/toern_autogen.h']:
- assert (root/path).read_bytes()==subprocess.check_output(['git','show',f'9671a48:{path}'],cwd=root),path
-print('PASS: evolution, companion generation,  probability, repeats and section timing match 9671a48 exactly; register, chord-density and mono-phrase refinements are tested separately.')
+print('PASS: evolution, companion generation and probability match 9671a48; the 64-bar phrase form is covered by test_autogen_visual_music.py.')

@@ -53,33 +53,27 @@ int main(int argc,char **argv){assert(argc==2);
    else if(x==other)assert(c.r>0&&c.b==0&&(done?c.g>0:c.g==0));
    else if(x==motifSlot)assert(c.r==210&&c.g==30&&c.b==130);
    else if(x<=8)assert(c.r==0&&c.g==0&&c.b==12);
-   else if(x<width-4)assert(!c.r&&!c.g&&!c.b);
+   else if(x<(width>=32?16:width-4))assert(!c.r&&!c.g&&!c.b);
   }
   assert(lit>=10&&label.empty()); // the overlay never paints a numeral
-  unsigned rim=0,check=0,busy=0;
-  for(unsigned y=0;y<5;++y)for(unsigned x=0;x<5;++x){
-   const unsigned ink=ToernAutogen::statusInk(x,y,fraction,done,0);
-   const auto c=pixels[y][width-5+x];
-   if(ink==1||ink==2)++rim;
-   if(ink==4){++check;assert(c.g==190&&c.b==90);}
-   if(ink==3){if(x==0||x==4||y==0||y==4){assert(c.b==230&&c.g==100);}else{++busy;assert(c.r==210&&c.g==120);}}
+  const unsigned first=width>=32?16:width-4;
+  for(unsigned x=first;x<=width;++x){auto c=pixels[0][x-1];
+    assert(c.b==(x-first<fraction?230:30));
   }
-  assert(done?check==4&&rim==12:check==0&&busy==3u);
+  for(unsigned y=1;y<16;++y)for(unsigned x=0;x<width;++x){auto c=pixels[y][x];assert(c.r==20&&c.g==20&&c.b==20);}
   if(page==10&&done&&fraction==8)save(argv[1]);
-  for(unsigned now:{240u,720u,1800u,4000u}){
-   clockMs=now;drawAutogenStatus();unsigned visible=0;
-   for(unsigned y=0;y<5;++y)for(unsigned x=0;x<5;++x){auto c=pixels[y][width-5+x];visible+=c.r||c.g||c.b;}
-   assert(visible>=15); // never blanks the icon, including when preparing late
-  }
  }
  currentMode=&menu;assert(!autogenStatusVisible());currentMode=&singleMode;assert(autogenStatusVisible());active=false;assert(!autogenStatusVisible());
  for(unsigned width:{16u,32u})for(unsigned passes:{1u,2u,4u,8u}){
   ToernAutogen clock;clock.start(1,width,256,passes);unsigned previous=0,step=1;
-  for(unsigned i=0;i<width*passes;++i){const unsigned value=clock.statusProgress(step);assert(value>=previous&&value<=12);previous=value;step=clock.advance(step);}
-  assert(previous==12&&clock.statusProgress(step)==12); // late builder retains complete progress
+  for(unsigned i=0;i<width*passes;++i){const unsigned value=clock.statusProgress(step,17);assert(value>=previous&&value<=17);previous=value;step=clock.advance(step);}
+  assert(previous==17&&clock.statusProgress(step,17)==17); // late builder retains complete progress
   clock.publish(2);while(clock.generation==0)step=clock.advance(step);
-  assert(clock.statusProgress(step)==0&&clock.passesTotal==2);
+  assert(clock.statusProgress(step,17)==0&&clock.passesTotal==2);
  }
+ ToernAutogen held;held.start(1,32,256,2);unsigned cursor=1;
+ for(unsigned i=0;i<32;++i)cursor=held.advance(cursor);
+ assert(held.statusProgress(cursor,17)==8); // half filled after the first of two passes
  using namespace toern_autogen_music;
  for(int tonic=0;tonic<12;++tonic)for(bool minor:{false,true})for(int reference:{12,24,36,48,60,72,84,96,108,120})
   for(unsigned phrase=0;phrase<16;++phrase)for(unsigned step=0;step<16;++step)for(unsigned ch:{6u,11u,13u,14u}){
@@ -125,21 +119,37 @@ int main(int argc,char **argv){assert(argc==2);
   if(p)assert(volumeScale(Section::Build,2,false,p)>=volumeScale(Section::Build,2,false,p-1));
  }
  for(unsigned width:{16u,32u})for(unsigned bpm:{40u,60u,90u,120u,180u,300u})
-  for(unsigned choice=0;choice<100;++choice)for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop}){
-   const unsigned n=repeats(s,choice,width,bpm);
-   const unsigned cap=s==Section::Build?32000:s==Section::Break?24000:16000;
+  for(unsigned g=0;g<24;++g){
+   const auto s=section(g);
+   const unsigned n=repeats(s,g,width,bpm);
+   const unsigned cap=s==Section::Build||s==Section::Fill?32000:24000;
    assert(n>=1&&n<=8&&(n==1||2*n*width*15000u<=bpm*cap));
   }
- assert(repeats(Section::Build,0,16,120)==1&&repeats(Section::Build,0,32,120)==1);
- assert(repeats(Section::Fill,0,16,120)==1&&repeats(Section::Fill,0,32,120)==1);
- assert(repeats(Section::Break,0,16,120)==2);
- for(unsigned g=0;g<32;g+=2)assert(section(g)==section(g+1)&&degree(false,g)==degree(false,g+1));
- assert(section(6)==Section::Break&&section(8)==Section::Build&&section(10)==Section::Drop&&section(12)==Section::Variation);
+ assert(repeats(Section::Build,4,16,120)==1&&repeats(Section::Build,4,32,120)==1);
+ assert(repeats(Section::Fill,20,16,120)==1&&repeats(Section::Fill,20,32,120)==1);
+ assert(repeats(Section::Break,10,16,120)==1); // two-bar dip, then the groove returns
+ for(unsigned g=0;g<24;g+=2)assert(section(g)==section(g+1)&&degree(false,g)==degree(false,g+1));
+ {
+  const Section form[]={Section::Groove,Section::Variation,Section::Build,Section::Groove,
+      Section::Variation,Section::Break,Section::Groove,Section::Groove,
+      Section::Variation,Section::Build,Section::Fill,Section::Drop};
+  unsigned bars=0;
+  for(unsigned slot=0;slot<12;++slot){
+   assert(section(slot*2)==form[slot]);
+   // Two generations, each of `passes` pages; a 16-step page is one bar.
+   bars+=2*repeats(form[slot],slot*2,16,120);
+  }
+  assert(bars==64); // the fill and drop close the cycle; nothing cadences at bar 16
+  assert(form[2]==Section::Build&&form[3]==Section::Groove); // short rise, kick and bass return
+  assert(form[5]==Section::Break&&form[6]==Section::Groove); // short dip, kick and bass return
+ }
  unsigned changed=0,large=0,total=0;
  for(int tonic=0;tonic<12;++tonic)for(bool minor:{false,true})for(unsigned phrase=0;phrase<32;phrase++)
   for(unsigned step=0;step<32;step++)for(unsigned ch:{6u,7u,8u,11u,13u,14u}){
    int reference=ch==6||ch==14?36:60;
    int n=melodyPitch(reference,tonic,minor,phrase,ch,step,113);
+   int held=melodyPitch(reference,tonic,minor,phrase,ch,step,113,0);
+   assert(held==fitPitch(reference,tonic,minor,phrase,ch,step));
    bool inScale=false,inChord=false;
    for(unsigned d=0;d<7;d++)inScale|=n%12==scalePc(tonic,minor,d);
    for(unsigned d=0;d<3;d++)inChord|=n%12==chordPc(tonic,minor,phrase,d);
@@ -154,7 +164,7 @@ int main(int argc,char **argv){assert(argc==2);
    }
   }
  assert(changed>total/2&&large>total/3);
- puts("PASS: two AGEN indicators and persistent top-right activity icon on 16/32 columns; all 12 major/minor keys; chord tones, bass roots, bounded registers, breaks/build/fill/drop dynamics");
+ puts("PASS: AGEN page-header progress line on 16/32 columns; all 12 major/minor keys; chord tones, bass roots, bounded registers, breaks/build/fill/drop dynamics");
 }
 '''.replace('UI',ui)
 out=Path(tempfile.gettempdir())/'toern-agen-visual';out.mkdir(exist_ok=True)

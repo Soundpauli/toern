@@ -42,6 +42,11 @@ int main(){
    assert(inScale);
   }
  assert(toern_autogen_register::phrasePages(16)==4&&toern_autogen_register::phrasePages(32)==2);
+ for(int ch:{13,14})for(int step=0;step<16;step++){
+  int held=toern_autogen_register::monoPitch(60,0,false,2,ch,step,113,0);
+  int soft=toern_autogen_register::monoPitch(60,0,false,2,ch,step,113,1);
+  assert(held==60&&std::abs(soft-60)<=2);
+ }
 }
 '''.replace('FUNCTION',s[a:b])
 with tempfile.TemporaryDirectory(prefix='agen-register-') as t:

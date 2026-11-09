@@ -239,15 +239,22 @@ int main(){
    autogenPrepareStep();autogenAdvanceStep();
   }
   stopAutogen();for(unsigned ch=0;ch<16;++ch)testMutes[ch]=ch==2;
-  // Keep a real bass under the build; the next generation is the drop, with no Fill wait.
+  // A short rise keeps the bass, then the groove (kick and bass) returns.
+  // The fill and drop come once per 64-bar cycle, not at the end of every 16.
   for(auto &col:original)for(auto &n:col)n=Note{};
   for(unsigned col=1;col<=width;col+=4)original[col][7]={6,90,100,1,36};
   original[1][4]={3,90,100,1,255};GLOB.edit=GLOB.page=1;assert(toggleAutogen());
-  unsigned buildTicks=0;bool sawDrop=false;
-  for(unsigned tick=0;tick<width*100;++tick){serviceAutogen();
+  unsigned buildTicks=0;bool sawReturn=false,sawDrop=false;
+  auto previous=toern_autogen_music::section(0);
+  for(unsigned tick=0;tick<width*80;++tick){serviceAutogen();
    const auto form=toern_autogen_music::section(agen.generation);
    if(form==toern_autogen_music::Section::Build){++buildTicks;assert(agen.repeatsLeft==1);assert(agenWork->volumeNow[6]>=agenWork->volumeBase[6]*12/16);}
-   if(buildTicks&&form==toern_autogen_music::Section::Drop){assert(buildTicks==2*width);sawDrop=true;break;}
+   if(form!=previous){
+    if(previous==toern_autogen_music::Section::Build&&form==toern_autogen_music::Section::Groove){assert(buildTicks==2*width);sawReturn=true;}
+    if(previous==toern_autogen_music::Section::Build)buildTicks=0;
+    previous=form;
+   }
+   if(form==toern_autogen_music::Section::Drop){sawDrop=true;break;}
    if(agen.ready&&agenWork->section==toern_autogen_music::Section::Build){bool bassHit=false;
     const unsigned dst=(agen.target()-1)*width+1;
     for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)bassHit|=agenWork->performance[dst+col][row].channel==6;
@@ -255,7 +262,7 @@ int main(){
    }
    autogenPrepareStep();autogenAdvanceStep();
   }
-  assert(sawDrop);stopAutogen();
+  assert(sawReturn&&sawDrop);stopAutogen();
   // Pink motif edits must replace a prebuilt next page without touching playback.
   for(auto &col:original)for(auto &n:col)n=Note{};
   for(unsigned ch=0;ch<16;++ch)testMutes[ch]=false;
@@ -270,8 +277,8 @@ int main(){
   serviceAutogen();assert(!agen.ready&&agenWork->motifRevision==1);
   assert(memcmp(live,agenWork->performance+agen.firstStep(),width*sizeof(note[0]))==0);
   for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);
-  std::set<uint32_t> developed;unsigned editedRolls[2]={},editedBuilds=0,editedDropRoll=0;bool editedDrop=false;
-  for(unsigned response=0;response<10;++response){
+  std::set<uint32_t> developed;unsigned editedRolls[4]={},editedBuilds=0,editedDropRoll=0;bool editedDrop=false;
+  for(unsigned response=0;response<24;++response){
     const unsigned target=(agen.target()-1)*width+1;
     const Note &input=agenWork->performance[2*width+3][14];
     assert(sourceCalls[13]==0&&input.channel==13&&input.midiPitch==67&&input.velocity==79&&input.probability==83&&input.condition==3);
@@ -281,7 +288,7 @@ int main(){
       for(unsigned v:{(unsigned)n.channel,(unsigned)n.velocity,(unsigned)n.midiPitch})hash=(hash^v)*16777619u;
     developed.insert(hash);
     unsigned snare=0;for(unsigned col=0;col<width;++col){bool hit=false;for(const auto &n:agenWork->performance[target+col])hit|=n.channel==2;snare+=hit;}
-    if(agenWork->section==toern_autogen_music::Section::Build){assert(editedBuilds<2);editedRolls[editedBuilds++]=snare;}
+    if(agenWork->section==toern_autogen_music::Section::Build){assert(editedBuilds<4);editedRolls[editedBuilds++]=snare;}
     if(agenWork->section==toern_autogen_music::Section::Drop){editedDrop=true;editedDropRoll=snare;}
 
     assert(agenWork->pageRevision[agen.playing^1u]==1);
@@ -289,7 +296,7 @@ int main(){
     for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);
     assert(GLOB.edit==1&&note[3][14].midiPitch==67);
   }
-  assert(editedBuilds==2&&editedRolls[1]>editedRolls[0]&&editedRolls[0]>0&&editedDrop&&editedDropRoll<editedRolls[1]);
+  assert(editedBuilds==4&&editedRolls[1]>editedRolls[0]&&editedRolls[0]>0&&editedDrop&&editedDropRoll<editedRolls[3]);
   assert(developed.size()>=3); // edited input must still pass through development
   note[width+5][14]={13,88,100,1,72};
   GLOB.edit=2;GLOB.x=width+5;autogenFocusMotif();

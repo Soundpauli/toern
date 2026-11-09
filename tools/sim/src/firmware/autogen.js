@@ -1,15 +1,16 @@
 import { neutralGridMidi } from "./pitch.js";
 // Browser counterpart of the firmware's temporary, section-driven AGEN workspace.
 // The saved bank stays immutable; an editable motif steers two separate performance pages.
-export const SECTIONS = ['Groove', 'Variation', 'Groove', 'Break', 'Build', 'Drop', 'Variation', 'Groove'].flatMap(section=>[section,section]);
+// 64-bar cycle: a short rise and a short dip each return to the groove (kick and
+// bass come back). The fill and drop close the cycle once, not every 16 bars.
+const FORM = [['Groove',8],['Variation',8],['Build',2],['Groove',8],['Variation',8],['Break',2],
+  ['Groove',8],['Groove',8],['Variation',4],['Build',2],['Fill',2],['Drop',4]];
+export const SECTIONS = FORM.flatMap(([section])=>[section,section]);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export function phrasePasses(section, generation, columns, bpm) {
   if(section==='Build'||section==='Fill')return 1;
-  const choice = Math.floor(generation/2) % 6;
-  let bars = section === 'Build' ? 8 : section === 'Break' || section === 'Fill' ? 4
-    : section === 'Variation' ? (choice % 2 ? 8 : 4) : [4,4,4,8,4,4][choice];
-  if(section === 'Drop') bars=4;
-  const limit=section==='Build'?32000:section==='Break'?24000:16000;
+  let bars = FORM[Math.floor(generation/2)%FORM.length][1];
+  const limit=section==='Build'?32000:24000;
   while(bars>1 && bars*240000>Math.max(40,bpm)*limit)bars/=2;
   return Math.max(1, Math.floor(bars*16/(2*columns)));
 }
@@ -19,16 +20,18 @@ function chordPitchClasses(root, minor, generation) {
   const degree=(minor?[0,5,3,6]:[0,5,3,4])[slots[Math.floor(generation/2)%8]];
   return [0,2,4].map(t=>(root+scale[(degree+t)%7])%12);
 }
-export function melodyPitch(reference, root, minor, generation, channel, step, seed=113) {
+export function melodyPitch(reference, root, minor, generation, channel, step, seed=113, motion=2) {
   const section=SECTIONS[generation%SECTIONS.length], bass=channel===6||channel===14;
   const chord=chordPitchClasses(root,minor,generation), scale=(minor?minorScale:major).map(pc=>(root+pc)%12);
   const allowed=bass&&step%4===0?[chord[0]]:step%4===0?chord:scale;
   let h=(seed ^ Math.imul(Math.floor(generation/2),374761393) ^ Math.imul(channel,668265263) ^ Math.imul(step,2246822519))>>>0;
   h=Math.imul(h^(h>>>13),1274126177)>>>0;h=(h^(h>>>16))>>>0;
-  const chance=bass?50:section==='Variation'||section==='Fill'?90:section==='Build'?80:section==='Break'?65:section==='Drop'?45:40;
+  let chance=bass?50:section==='Variation'||section==='Fill'?90:section==='Build'?80:section==='Break'?65:section==='Drop'?45:40;
+  if(motion<2&&chance>35)chance=35;
   let delta=[2,4,3,7,5,-2,4,-5][(Math.floor(step/2)+channel+Math.floor(generation/2))%8];
   if(generation%2)delta=-delta;
-  if(bass)delta=delta>0?2:-2;
+  if(bass||motion<2)delta=delta>0?2:-2;
+  if(!motion)delta=0;
   if(h%100>=chance || (bass&&step%4===0))delta=0;
   let best=reference, distance=Infinity;
   for(let pitch=Math.max(0,reference-12);pitch<=Math.min(127,reference+12);pitch++) {
@@ -94,14 +97,17 @@ export function nearSource(pitch,reference){
  while(pitch>reference+6)pitch-=12;while(pitch<reference-6)pitch+=12;
  return pitch<0?pitch+12:pitch>127?pitch-12:pitch;
 }
-export function monoPitch(reference,root,minor,generation,ch,step,seed=113){
+export function monoPitch(reference,root,minor,generation,ch,step,seed=113,motion=2){
+ if(!motion)return reference;
  const chord=chordPitchClasses(root,minor,generation),scale=(minor?minorScale:major).map(pc=>(root+pc)%12);
  let target=reference;const h=(seed+step*977+ch*37+generation*101)>>>0;
- if(SECTIONS[generation%SECTIONS.length]==='Variation'&&step%4&&h%4===0)target+=(h&4)?2:-2;
+ if(motion>=2&&SECTIONS[generation%SECTIONS.length]==='Variation'&&step%4&&h%4===0)target+=(h&4)?2:-2;
  const pcs=ch===14&&step%4===0?[chord[0]]:step%4===0?chord:scale;
  let best=reference,gap=Infinity;
  for(let n=Math.max(0,reference-12);n<=Math.min(127,reference+12);n++)if(pcs.includes(n%12)&&Math.abs(n-target)<gap){best=n;gap=Math.abs(n-target);}
- return nearSource(best,reference);
+ best=nearSource(best,reference);
+ if(motion<2&&Math.abs(best-reference)>2)return reference;
+ return best;
 }
 export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, params=()=>({}), isMuted=()=>false, volume=()=>16 }) {
   let source = null, saved = null, generation = 0, pass = 0, page = 1, stepInPage = 0;
@@ -146,7 +152,7 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
   }
   const state = () => ({ active: !!source, performanceView, section, generation, page, remaining: repeats-pass, ready: true,
     motifPage, motifSlot:motifPage<=8?motifPage:9, playingSlot:10+performancePages.indexOf(page), otherSlot:10+(performancePages.indexOf(page)^1), revision,
-    progress: Math.min(12,Math.floor((pass*columns()+stepInPage)*12/Math.max(1,repeats*columns()-1))) });
+    progress: Math.min(columns()>=32?17:5,Math.floor((pass*columns()+stepInPage)*(columns()>=32?17:5)/Math.max(1,repeats*columns()-1))) });
   function build() {
     section = SECTIONS[generation % SECTIONS.length];
     foundation=[6,14,11,13,7,8,1].find(ch=>!isMuted(ch)&&volume(ch)>0&&source.some(col=>col.some(n=>n.channel===ch)))||0;
@@ -196,7 +202,8 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
         if(row>0)Object.assign(performance[offset+x][row],emptyNote(),{channel:11,midiPitch:encodePitch(pitches[i],shifts[11]),velocity:chord[0]?.velocity||88});
       }
     }
-    // One snare rise with an audible foundation, followed immediately by the drop.
+    // Snare rise with an audible foundation. A short rise returns to the groove;
+    // only the rise at the end of the 64-bar cycle is followed by the fill and drop.
     if (section === 'Build'&&!(removed&(1<<2))&&!isMuted(2)&&volume(2)>0) for (let x=1;x<=width;x++) {
       if(generation%2===1&&x===width)continue;
       const position=(generation%2)*width+x-1,total=2*width;
@@ -250,7 +257,7 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
       const bass=ch===6||ch===14||(ch===11&&lowCh11);
       const progress=((generation%2)*repeats*columns()+pass*columns()+stepInPage)/Math.max(1,2*repeats*columns()-1);
       if(isMuted(ch))return 0;
-      let level=volumeScale(section,ch,bass,progress);
+      let level=performanceView?volumeScale(section,ch,bass,progress):16;
       if(ch===foundation&&['Break','Build','Fill'].includes(section))level=Math.max(12,level);
       return source ? level/16 : 1;
     } };

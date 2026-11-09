@@ -2574,11 +2574,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuIndicator('L', imageMode ? 'Y' : (recChannelClear == 0 ? 'R' : (recChannelClear == 1 ? 'G' : (recChannelClear == 2 ? 'Y' : (recChannelClear == 3 ? 'N' : 'M')))), 3);
       break;
       
-    case 69:
+    case 69: {
+      extern uint8_t autogenMotion();
+      const uint8_t motion=autogenMotion();
       drawMenuText("AGEN",2,10,currentMenuParentTextColor());
-      drawMenuValue(autogenActive()?"ON":"OFF",2,3,autogenActive()?UI_GREEN:UI_DIM_RED);
-      drawMenuIndicator('L','G',4);
+      drawMenuValue(motion==0?"HOLD":motion==1?"SOFT":"LIVE",2,3,motion==0?UI_DIM_RED:motion==1?UI_GREEN:UI_YELLOW);
+      drawMenuIndicator('L','W',3);
+      drawMenuIndicator('L',autogenActive()?'G':'R',4);
       break;
+    }
     case 15: // AUTO - One-shot song generation
       drawMenuText("AUTO", 2, 10, currentMenuParentTextColor());
       // AUTO generate: encoder(0) press triggers generation -> green indicator on encoder(0)
@@ -3277,6 +3281,10 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[enc].writeCounter((int32_t)1); currentMode->pos[enc] = 1;
       }
       swapHeld[0] = swapHeld[1] = false;
+    }
+    if (lastSetting == 69) {
+      Encoder[2].writeMin((int32_t)0); Encoder[2].writeMax((int32_t)0);
+      Encoder[2].writeCounter((int32_t)0); currentMode->pos[2] = 0;
     }
     lastSetting = setting;
   }
@@ -5008,6 +5016,31 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
           v,
           g_gainEnc3IsAll ? 0x08 : 0x04);
         applyMixBusGains();
+        redrawMain(setting);
+      }
+      break;
+    }
+
+    case 69: { // AGEN melody motion: encoder 3 = HOLD / SOFT / LIVE
+      extern uint8_t autogenMotion();
+      extern void setAutogenMotion(uint8_t);
+      static int lastMotion=-1;
+      if(menuFirstEnter){
+        const int value=autogenMotion();
+        Encoder[2].writeMin((int32_t)0);
+        Encoder[2].writeMax((int32_t)2);
+        Encoder[2].writeCounter((int32_t)value);
+        currentMode->pos[2]=(unsigned)value;
+        lastMotion=value;
+        menuFirstEnter=false;
+      }
+      const int value=constrain((int)currentMode->pos[2],0,2);
+      if(value!=lastMotion){
+        setAutogenMotion((uint8_t)value);
+        Encoder[2].writeCounter((int32_t)value);
+        currentMode->pos[2]=(unsigned)value;
+        lastMotion=value;
+        menuRequestFullRedraw();
         redrawMain(setting);
       }
       break;

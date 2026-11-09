@@ -17,7 +17,7 @@ for (const columns of [16,32]) {
   controller.start(glob);
   assert.deepEqual(controller.original(),original);
   const sections=[];
-  for(let generation=0;generation<32;generation++) {
+  for(let generation=0;generation<SECTIONS.length*2;generation++) {
     const state=controller.state();sections.push(state.section);
     assert.equal(state.generation,generation);
     const offset=(state.page-1)*columns;
@@ -26,6 +26,9 @@ for (const columns of [16,32]) {
       assert(controller.performance[offset+columns].every(n=>!n.channel||n.channel>5));
       for(const x of [columns-1,columns]) assert(controller.performance[offset+x].every(n=>n.channel!==11));
     }
+    controller.toggleView();
+    for(const ch of [1,2,3,6,11,13,14])assert.equal(controller.volume(ch),1,'editing suspends arrangement volume shaping');
+    controller.toggleView();
     const passes=state.remaining;
     for(let i=0;i<passes*columns;i++) {
       const next=controller.advance();
@@ -42,7 +45,7 @@ for (const columns of [16,32]) {
     const section=SECTIONS[g%SECTIONS.length],passes=phrasePasses(section,g,columns,bpm);
     assert(Number.isInteger(passes)&&passes>=1&&passes<=8);
     // A single 32-step pass at 40 BPM itself takes 12 seconds.
-    const cap=section==='Build'?32000:section==='Break'?24000:16000;
+    const cap=section==='Build'||section==='Fill'?32000:24000;
     assert(passes===1||2*passes*columns*15000/bpm<=cap);
   }
   for(const ready of [false,true])for(let progress=0;progress<=12;progress++)for(const now of [0,240,720,1800]) {
@@ -50,7 +53,8 @@ for (const columns of [16,32]) {
     const matrix={light:(x,y,c)=>{assert(x>=1&&x<=columns&&y>=1&&y<=16);pixels.set(`${x},${y}`,c);},drawText:()=>text++};
     drawAutogenStatus(matrix,{agen:{page:1,progress,ready}},now);
     assert.equal(text,0,'AGEN uses an icon, never a numeral');
-    for(let x=0;x<5;x++)for(let y=0;y<5;y++)assert.deepEqual(pixels.get(`${columns-4+x},${16-y}`),AGEN_STATUS_COLORS[statusInk(x,y,progress,ready,now)===3&&(x===0||x===4||y===0||y===4)?2:statusInk(x,y,progress,ready,now)]);
+    for(let x=columns>=32?16:columns-4;x<=columns;x++)assert.deepEqual(pixels.get(`${x},16`),AGEN_STATUS_COLORS[x-(columns>=32?16:columns-4)<progress?2:1]);
+    assert([...pixels.keys()].every(key=>key.endsWith(',16')),'progress never covers notes');
     assert.deepEqual(pixels.get('11,16'),ready?[220,180,0]:[200,0,0]);
   }
 }
@@ -125,16 +129,16 @@ for(const width of [16,32]) {
  assert(controller.poll());assert.equal(controller.state().revision,1);
  assert.deepEqual(controller.performance.slice(1,width+1),playing,'an edit never rewrites the playing page');
  function boundary(){const generation=controller.state().generation;while(controller.state().generation===generation)controller.advance();}
- const variations=new Set(),editedRolls=[];let editedDrop=false;
- for(let response=0;response<12;response++){
+ const variations=new Set(),editedRolls=[];let editedDrop=false,editedDropRoll=0;
+ for(let response=0;response<24;response++){
   boundary();const offset=(controller.state().page-1)*width;
   variations.add(JSON.stringify(controller.performance.slice(offset+1,offset+width+1)));
   if(controller.state().section==='Build')editedRolls.push(controller.performance.slice(offset+1,offset+width+1).filter(col=>col.some(n=>n.channel===2)).length);
-  if(controller.state().section==='Drop')editedDrop=true;
+  if(controller.state().section==='Drop'){editedDrop=true;editedDropRoll=controller.performance.slice(offset+1,offset+width+1).filter(col=>col.some(n=>n.channel===2)).length;}
   assert.equal(note[3][14].midiPitch,67,'edited source remains authoritative while output develops');
   assert.equal(note[1][14].channel,0,'deleted source onset stays deleted');
  }
- assert.equal(editedRolls.length,2);assert(editedRolls[1]>editedRolls[0]&&editedRolls[0]>0&&editedDrop,'buildup accelerates then drops after editing');
+ assert.equal(editedRolls.length,4);assert(editedRolls[1]>editedRolls[0]&&editedRolls[0]>0&&editedDrop&&editedDropRoll<editedRolls[3],'short rise returns to the groove; the fill and drop close the 64-bar cycle');
  assert(variations.size>=3,'edited sources develop while mono phrases repeat more calmly');
  controller.toggleView();
  Object.assign(note[width+5][14],emptyNote(),{channel:13,midiPitch:72});
