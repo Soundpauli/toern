@@ -8,7 +8,7 @@ toern/
 ├── hardware/
 │   ├── PCB/
 │   └── housing/             Fusion projects, DXFs, previews and export scripts
-├── website/             *** public website only
+├── website/             *** public website and built cmgmt app
 ├── docs/
 │   ├── devdocs/
 │   ├── handbook/
@@ -31,7 +31,7 @@ toern/
 └── _private/
     ├── cost_planner/     *** cost-planner/management application (one app)
     ├── invoice/          *** existing separate invoice application
-    ├── cmgmt/            *** existing built customer-management assets
+    ├── cmgmt/            *** legacy customer-management build (not deployed)
     ├── internal-docs/    *** existing private notes and BOM workbook
     └── helpers/
         ├── annotate/        existing tracked annotation tool
@@ -55,3 +55,9 @@ Local deployments must use the new base directories: `tools/firmware`, `tools/sd
 The modular Fusion script is registered at `hardware/housing/exports/ModularPanel`; a rebuild and archive export were verified from that location. Other export scripts can be added from their corresponding folders under `hardware/housing/exports`.
 
 Validation after the move: firmware (`teensy41`), firmware-loader, simulator and developer-doc production builds pass. All seven JavaScript host test scripts pass. Fifty-eight of 63 Python scripts pass when optional MCP/audio requirements are installed. Five existing harness failures were reproduced with the original paths: `test_configured_release.py`, `test_encoder_step_readback.py`, `test_pcm_activity.py` (mock PlatformIO environment lacks `PioPlatform`), `test_pause_effects.py` (outdated touch-fill/autogen stubs), and `test_pattern_boot_recovery.py` (missing storage-progress stubs).
+
+The cmgmt application source stays in `_private/invoice/`. Run
+`npm run build --prefix _private/invoice` to build its public assets into
+`website/cmgmt/`, which must be included when deploying the `website/` folder.
+Its public URL is `https://toern.live/cmgmt/`; `_private/cmgmt/` is an older
+build location and is not part of the deployment.
