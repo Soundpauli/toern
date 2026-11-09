@@ -48,7 +48,10 @@ bool childLockEnabled=false,imageMode=false,touchyEnabled=false,fastRecordActive
 bool generationUndoValid=true,storageReady=true;int failures=0,generations=0,guardDepth=0;
 namespace toern_audio {struct StateGuard {StateGuard(){++guardDepth;}~StateGuard(){--guardDepth;}};}
 unsigned clockMs=100;unsigned millis(){return clockMs;}
-struct {unsigned channelVol[16]={},mute[16]={};} SMP;
+constexpr int HCUT=0,LOWCUT=1,REVERB=2,CENT=0,maxfilterResolution=32;
+float mapf(float x,float a,float b,float c,float d){return c+(x-a)*(d-c)/(b-a);}
+constexpr float CH11_SYNTHMIX_GAIN=.30f;
+struct {unsigned channelVol[16]={},mute[16]={};float bpm=120;float filter_settings[16][3]={},attack[16]={},synth_settings[16][1]={};} SMP;
 uint8_t lastChannelVolBeforeMute[16]={};bool sampleVolOnReader[9]={},neoSliderInMuteDz[8]={};
 float sampleTriggerAmp[9]={1,1,1,1,1,1,1,1,1},ampLevel[16]={},readerLevel[9]={};
 struct Amp {} testAmps[15];Amp *amps[15]={};
@@ -70,7 +73,8 @@ void menuRequestFullRedraw(){}void noteUserActivity(){}
 void play(bool){isNowPlaying=true;}
 void updateLastPage(){assert(note==original);}
 int companionEffectivePages(){return MAX_STEPS/maxX;}
-bool getMuteStateForUI(int ch){return ch==2;}
+bool testMutes[16]={false,false,true};
+bool getMuteStateForUI(int ch){return testMutes[ch];}
 bool autogenStorageReady(){return storageReady;}
 bool isChildVoiceDisabled(int){return false;}
 bool companionChannelSupported(unsigned ch){return ch>=1&&ch<=14&&ch!=9&&ch!=10&&ch!=12;}
@@ -101,6 +105,9 @@ int main(){
  for(unsigned width:{16u,32u}){
   maxX=width;
   for(unsigned ch=0;ch<16;++ch){SMP.channelVol[ch]=12;SMP.mute[ch]=ch==2;lastChannelVolBeforeMute[ch]=12;if(ch<15)amps[ch]=&testAmps[ch];if(ch<=8)voices[ch]=&testVoices[ch];}
+  for(unsigned ch=1;ch<15;++ch){SMP.filter_settings[ch][HCUT]=24;SMP.filter_settings[ch][LOWCUT]=0;SMP.filter_settings[ch][REVERB]=8;SMP.attack[ch]=2;}
+  SMP.filter_settings[11][REVERB]=0;
+  const auto patch=SMP;
   allocationAllowed=false;assert(!toggleAutogen()&&allocations==0&&note==original);allocationAllowed=true;
   for(unsigned ch:{1u,2u,3u,4u,5u,6u,11u,13u,14u})for(unsigned col=0;col<width;++col)for(unsigned seed=0;seed<12;++seed){
    const auto chance=ToernAutogen::noteChance(ch,col,seed);assert(chance>=60&&chance<=100);
@@ -127,14 +134,19 @@ int main(){
   autogenSetMute(2,false);assert(!autogenMuted(2));
   // Starve generation for more than a phrase: never switch to unfinished data.
   for(unsigned i=0;i<width*10;++i){autogenPrepareStep();autogenAdvanceStep();assert(agen.source()==base);}
-  std::set<unsigned> repeats;
+  std::set<unsigned> repeats,playedPages;
   for(unsigned i=0;i<width*160;++i){
+   playedPages.insert(agen.source());
    const unsigned start=(agen.source()-1)*width+1;
    Note playing[33][17];memcpy(playing,note+start,width*sizeof(note[0]));
    clockMs+=50;
    const auto count=generations;serviceAutogen();assert(generations-count<=1);
+   if(toern_autogen_music::section(agen.generation)==toern_autogen_music::Section::Drop)
+    for(uint8_t ch:agenOrder)assert(agenWork->volumeNow[ch]==agenWork->volumeBase[ch]);
    assert(memcmp(playing,note+start,width*sizeof(note[0]))==0);
    assert(memcmp(saved,original,sizeof(saved))==0);
+   assert(memcmp(patch.filter_settings,SMP.filter_settings,sizeof(patch.filter_settings))==0);
+   assert(memcmp(patch.attack,SMP.attack,sizeof(patch.attack))==0);
    assert(agenWork->harmony.rootPc==tonic&&agenWork->harmony.isMinor==minor);
    assert(memcmp(anchor,note+(agenWork->anchor-1)*width+1,width*sizeof(note[0]))==0);
    if(agen.ready){
@@ -151,8 +163,9 @@ int main(){
    const unsigned generation=agen.generation;autogenPrepareStep();autogenAdvanceStep();
    if(agen.generation!=generation)repeats.insert((unsigned)agen.repeatsLeft);
   }
-  assert(agen.generation>10&&repeats==std::set<unsigned>({1,4,8}));
-  assert(requestedFills>0);
+  assert(agen.generation>16&&repeats==(width==16?std::set<unsigned>({1,2,4}):std::set<unsigned>({1,2})));
+  assert(playedPages==std::set<unsigned>({base,1}));
+  assert(requestedFills==0); // generated fill must not stack a live-fill overlay
   for(uint8_t ch:agenOrder)assert(autogenControlVolume(ch)<=agenWork->volumeBase[ch]&&SMP.channelVol[ch]<=12);
   applyChannelControlVolume(1,5,autogenControlVolume(1));
   autogenManualVolume(1,5);assert(SMP.channelVol[1]==5);const auto manual=autogenControlVolume(1);clockMs+=100;serviceAutogen();assert(autogenControlVolume(1)==manual);
@@ -173,14 +186,63 @@ int main(){
   const unsigned chordStep=(agen.target()-1)*width+1;bool third=false,fifth=false;
   for(unsigned row=1;row<=maxY;++row){third|=note[chordStep][row].channel==13;fifth|=note[chordStep][row].channel==14;}
   assert(third&&fifth);stopAutogen();assert(original[1][11].midiPitch==36);
+  // Low-register source chords stay polyphonic; compensate the patch once.
+  for(auto &col:original)for(auto &n:col)n=Note{};
+  original[1][11]={11,90,100,1,36};original[1][12]={11,90,100,1,40};original[1][13]={11,90,100,1,43};
+  original[1][14]={13,90,100,1,60};original[1][15]={14,90,100,1,36};
+  octave[0]=2;SMP.synth_settings[13][CENT]=0;SMP.synth_settings[14][CENT]=8;
+  GLOB.edit=GLOB.page=1;assert(toggleAutogen());
+  assert(!agenWork->ch11Bass&&agenWork->registerShift[11]==-24&&agenWork->registerShift[13]==-24&&agenWork->registerShift[14]==-12);
+  for(unsigned i=0;i<15;++i)serviceAutogen();assert(agen.ready);
+  std::set<int> chord;
+  const unsigned onset=(agen.target()-1)*width+1;
+  for(unsigned row=1;row<=16;++row){const auto &n=note[onset][row];
+   if(n.channel==11){const int sounding=n.midiPitch+agenWork->registerShift[11];assert(sounding>=48&&sounding<=84);chord.insert(sounding);}
+   if(n.channel==13)assert(n.midiPitch+agenWork->registerShift[13]>=55);
+   if(n.channel==14)assert(n.midiPitch+agenWork->registerShift[14]>=36);
+  }
+  assert(chord.size()==3&&*chord.rbegin()-*chord.begin()<=12);
+  assert(autogenReferenceMidi(Note{},13,14)==60); // grid home C4, not C3
+  stopAutogen();octave[0]=4;
+  // A manually muted arrangement must never manufacture a hat/snare-only build.
+  for(auto &col:original)for(auto &n:col)n=Note{};
+  for(unsigned ch=1;ch<15;++ch)testMutes[ch]=ch!=3;
+  original[1][4]={3,90,100,1,255};GLOB.edit=GLOB.page=1;
+  assert(toggleAutogen());
+  for(unsigned tick=0;tick<width*100;++tick){serviceAutogen();
+   assert(agenWork->foundationVoice==0);
+   if(agen.ready){assert(agenWork->section!=toern_autogen_music::Section::Build&&agenWork->section!=toern_autogen_music::Section::Fill);
+    const unsigned dst=(agen.target()-1)*width+1;
+    for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(!note[dst+col][row].channel||note[dst+col][row].channel==3);
+   }
+   autogenPrepareStep();autogenAdvanceStep();
+  }
+  stopAutogen();for(unsigned ch=0;ch<16;++ch)testMutes[ch]=ch==2;
+  // Keep a real bass under the build; the next generation is the drop, with no Fill wait.
+  for(auto &col:original)for(auto &n:col)n=Note{};
+  for(unsigned col=1;col<=width;col+=4)original[col][7]={6,90,100,1,36};
+  original[1][4]={3,90,100,1,255};GLOB.edit=GLOB.page=1;assert(toggleAutogen());
+  unsigned buildTicks=0;bool sawDrop=false;
+  for(unsigned tick=0;tick<width*100;++tick){serviceAutogen();
+   const auto form=toern_autogen_music::section(agen.generation);
+   if(form==toern_autogen_music::Section::Build){++buildTicks;assert(agen.repeatsLeft==1);assert(agenWork->volumeNow[6]>=agenWork->volumeBase[6]*12/16);}
+   if(buildTicks&&form==toern_autogen_music::Section::Drop){assert(buildTicks==2*width);sawDrop=true;break;}
+   if(agen.ready&&agenWork->section==toern_autogen_music::Section::Build){bool bassHit=false;
+    const unsigned dst=(agen.target()-1)*width+1;
+    for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)bassHit|=note[dst+col][row].channel==6;
+    assert(bassHit);
+   }
+   autogenPrepareStep();autogenAdvanceStep();
+  }
+  assert(sawDrop);stopAutogen();
   // Empty input starts a small, coherent set rather than all voices at once.
   for(auto &col:original)for(auto &n:col)n=Note{};
   GLOB.edit=GLOB.page=1;assert(toggleAutogen());
   for(unsigned i=0;i<15;++i)serviceAutogen();
   assert(agen.ready);unsigned channels=0;for(unsigned ch=1;ch<15;++ch)if(agenWork->channels&(1u<<ch))channels++;
-  assert(channels==5);stopAutogen();for(auto &col:original)for(auto &n:col)assert(n.channel==0);
+  assert(channels==5); // selected set includes CH2, but its muted notes are never builtstopAutogen();for(auto &col:original)for(auto &n:col)assert(n.channel==0);
  }
- puts("PASS: AGEN 16/32-step boundaries, random 1/4/8 repeats, late-builder safety, one-voice jobs, untouched live/source grids, exact restoration, empty starters and incompatible-mode guards");
+ puts("PASS: AGEN 16/32-step boundaries, tempo/page-aware repeats, late-builder safety, one-voice jobs, untouched live/source grids, exact restoration, empty starters and incompatible-mode guards");
 }
 '''.replace('IMPLEMENTATION',implementation).replace('PLACEMENT',placement).replace('VOLUME_CONTROL',volume_control)
 with tempfile.TemporaryDirectory(prefix='toern-autogen-') as tmp:
@@ -189,7 +251,7 @@ with tempfile.TemporaryDirectory(prefix='toern-autogen-') as tmp:
  subprocess.run(['c++','-std=c++17','-fsanitize=address,undefined',*flags,'-I',str(root),str(cpp),'-o',str(exe)],check=True)
  subprocess.run([str(exe)],check=True)
 main=(root/'toern.ino').read_text();slots=(root/'toern_pattern_slots.ino').read_text();ops=(root/'toern_fileoperations.ino').read_text()
-assert 'if(mainSetting==15){toggleAutogen();' in main
+assert 'if(mainSetting==69){toggleAutogen();' in main
 assert 'void pause(bool skipSave) {\n  stopAutogen();' in main
 assert 'if(autogenActive())return;' in slots
 assert 'FLASHMEM void savePattern(bool autosave) {\n  stopAutogen();' in ops

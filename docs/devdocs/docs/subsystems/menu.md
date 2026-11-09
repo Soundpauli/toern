@@ -27,7 +27,7 @@ MODE, ETC and ETC → ADV share `inEtcSubmenu` and `currentEtcPage`; `currentSys
 ## Menu hierarchy
 
 - **SETT:** VIEW, CTRL, DRAW, MUTE, SWAP, SUBP. SUBP is persistent, defaults OFF and is selected with encoder 3. See [A–E subpatterns](./sd-storage#ae-file-subpatterns).
-- **MODE:** FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AGEN. MODE occupies the former SONG root slot and retains its icon and colour. Press encoder 4 on SONG to open the existing arranger.
+- **MODE:** FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO, AGEN. MODE occupies the former SONG root slot and retains its icon and colour. Press encoder 4 on SONG to open the existing arranger.
 - **ETC:** INFO, SD, BATT, ADV, RSET. RSET → RVRB sets reverb and bitcrusher controls to zero/bypass on all voices, preserving the other sound settings and notes. Turn encoder 3 to select RVRB, then press encoder 2 to apply.
 - **ETC → ADV:** CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE. Press encoder 4 on ADV to enter.
 - **VOL → PREV:** encoder 2 selects ON / PRSS / SYNC; encoder 3 retains preview volume (0–50). The former SETT → PREV leaf is removed.
@@ -56,9 +56,17 @@ TOUCHY pad input latches after a hit and rearms only after 60 ms continuously at
 
 ### AGEN: autonomous temporary evolution
 
+The browser simulator exposes **AGEN** in its shortcut menu and at **MODE → AGEN**.
+Click encoder 4 (Enter with device focus) to toggle it. It mirrors section order,
+BPM-limited page repeats, two working pages in call/answer pairs, a clock-shaped activity/progress icon, a single buildup pair followed directly by the drop, and section-driven volume automation. It uses the browser
+synth and reverb, so its sound and generation are approximations of the firmware.
+Stopping, loading, or importing restores the source notes; autosave serializes
+those source notes while AGEN is active. The animation demo is available from INFO with touch 3.
+
 On device, **MODE → AGEN → encoder 4 click** toggles self-playing evolution.
-Encoder 1 retains one-shot AUTO generation with the existing base-range and
-additional-page controls. Encoder 4 is green and the page shows ON while the
+**MODE → AUTO** remains the separate one-shot generator with its existing
+base-range and additional-page controls; encoder 1 generates. AGEN has only its
+on/off toggle. Encoder 4 is green and the page shows ON while the
 autonomous performance is active. No MCP connection is involved.
 
 AGEN starts from the currently selected page. A workspace is allocated with
@@ -72,36 +80,52 @@ loaded from SD on entry, but no such library or live SD traffic is required.
 Two pages alternate while the original bank stays untouched. A third, invisible
 workspace page holds an immutable copy of the starting motif. At the last
 physical page the second performance page wraps to page 1. The key, mode and
-starting registers are captured once: every variation refers to that foundation,
+source registers are captured once: every variation refers to that foundation,
 rather than re-inferring a key from the preceding mutation. Strong melodic beats
 fit diatonic chord tones; passing notes stay in the scale. Bass beats land on the
 chord root. Harmony holds through transitions and resolves to the tonic on the
-drop. Suitable CH11 registers receive three-note diatonic voicings; existing
-low CH11 bass stays bass; when both mono voices are free and the voice budget
+drop. CH11 chord onsets receive three distinct, ordered diatonic notes and changing inversions; low polyphonic source chords remain chords. A low monophonic CH11 source stays bass; when both mono voices are free and the voice budget
 allows it, CH13/14 supply the matching chord third/fifth. Tonal sample rows are moved only to a free correctly
 tuned row, avoiding off-key collision fallbacks.
 
-Groove/variation sections lead into a stripped break, an accelerating build,
-a short fill and a drop that restores the kick/bass groove. Ghost notes, hats,
-pickups and rolls develop the drums. Phrases repeat randomly 1/4/8 times,
-favoring longer groove sections; fills last one pass, drops hold 4/8 passes.
+Groove/variation sections lead into a supported break, one accelerating buildup,
+and a drop on the next downbeat. There is no extra four-bar Fill section between
+the buildup and drop. Each buildup page plays once: the complete call/answer pair
+is two bars on a 16-step panel or four bars on a 32-step panel (4 or 8 seconds at
+120 BPM). CH2 owns the rising roll; CH3 stays steady rather than starting an
+independent first buildup. The final percussion step leaves a short breath.
+Grooves and variations hold four or eight bars. Breaks retain their four-bar
+policy, with slow-tempo caps and a minimum of one pass per page.
+
+The chord progression reaches its fourth degree choice before returning to
+the tonic at the drop. Call/answer inversions change without replacing correct
+chord tones by independent random melodic notes. Every source chord onset is
+revoiced as a chord, including onsets outside the fixed eight-step points.
+Generated CH11/13 melodies/chords use an audible upper register; CH11/14 bass
+parts retain a bass register. Grid-to-MIDI conversion includes the mono note
+array's octave offset. Generated synth notes compensate the patch's whole-octave
+register once, keeping CENT, OCTV, instrument and envelope controls unchanged.
+Fine tuning remains manual. The original note bank stays intact.
 Nonstructural notes use role-dependent probabilities (roughly 60–95%); structural
 anchors stay reliable unless the source explicitly specified a lower probability.
 One voice is prepared per main-loop pass. The sequencer only publishes complete
 pages at boundaries; late jobs repeat the playing page.
 
-On DRAW/SINGLE, y=16 shows only the two performance-page indicators: white for
+On DRAW/SINGLE, y=16 shows the two performance-page indicators: white for
 playing, red for the unfinished next page, yellow for a complete waiting page.
-A right-aligned number at rows 11–15 counts the remaining passes, including the
-current one. While waiting for a late builder it stays at 1. It uses the same
-font/placement as the normal page-number helper on 16×16 and 32×16 panels.
+A 5×5 clock icon at the top right (x=maxX−4…maxX, y=12…16) replaces the
+numeric countdown. Its twelve-segment cyan arc measures elapsed steps across
+all scheduled passes of the current page. The rim stays visible: no digit or
+full-icon blink. An amber three-pixel spinner moves every 240 ms while preparing;
+a steady green check indicates a ready page. A late builder holds the full ring
+in amber until a complete page can switch at a boundary. Timing is derived from
+sequencer steps and `passesTotal`, so tempo changes and repeated pages remain
+honest; this is musical progress, not an estimated generation duration.
 An empty source gets a restrained starter. Companion additions are bounded to
 seven active voices unless the original already contains more.
 
 AGEN also performs per-voice volume moves through `applyChannelControlVolume`,
-the same DSP path used by physical encoder 2 in CTRL=VOL. It fades kick/bass out
-for breaks, lifts levels through builds, varies supporting voices, and restores
-the starting kick/bass level for drops. Moves stay at or below each voice's user
+the same DSP path used by physical encoder 2 in CTRL=VOL. A source bass, harmonic voice or kick is retained as an audible foundation through breaks and builds at no less than three quarters of its starting level. If no such unmuted, nonzero-level source exists, those transitions fall back to Groove. Muted voices are not introduced to manufacture a foundation. Supporting levels rise through the buildup, and all voice levels return together on the drop. Moves stay at or below each voice's user
 ceiling and advance in small steps; muted starting voices remain muted. A manual
 encoder-2 turn updates that voice's ceiling and holds automation for two seconds.
 External moves synchronize the selected volume counter without being mistaken
@@ -111,14 +135,15 @@ Starting channel volumes, last-nonzero values, mute bytes and sample-reader gain
 ownership are restored on exit before autosave. Automation state lives inside
 the on-demand workspace.
 
-At an eligible fill-section boundary, AGEN can queue one audible percussion
-voice (snare, tom, clap or hat) through the existing touch/F/F fill engine. Its
-one-page request ends with the engine's velocity-127 drop on the following
-page downbeat. Late requests are skipped. Manual fills keep their two-page
-length; AGEN exit cancels only fills it owns. Duration/ownership fields occupy
-existing `TouchFillState` padding, preserving the 12-byte per-voice state.
-`_debug/tests/test_touch_fill.py` checks both durations, ownership and exact downbeats;
-AGEN state/music tests check ceilings, manual hold, restoration and volume curves.
+AGEN does not automatically stack the touch/F/F fill engine over the generated
+buildup, or schedule a second fill afterward. Manual touch fills keep their
+existing two-page timing. The AGEN tests cover one-pass buildup pages, a direct
+next-downbeat drop, three distinct chord tones, octave compensation, sparse and
+muted sources, gain ceilings, manual holds, and exact source restoration.
+
+AGEN automates volume only. Filter, attack and reverb settings stay under manual
+control throughout the performance. Volume automation runs in the main loop at
+the existing 30 ms interval, with no SD/EEPROM I/O.
 
 Toggle OFF or pause to restore the original pattern and selected page. Opening
 PATT, NEW, SONG or TOUCHY, changing display width, starting recording, or selecting

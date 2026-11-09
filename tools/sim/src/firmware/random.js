@@ -773,7 +773,7 @@ export function drawRandoms({ note, filt, channel, page, loopLength, bpm }) {
   return true;
 }
 
-export function drawRandomsMultiPage({ note, filt, page, loopLength, bpm }) {
+export function drawRandomsMultiPage({ note, filt, page, loopLength, bpm, isMuted = () => false }) {
   page = clamp(page | 0, 1, effectivePages());
   const actPages = activePages(note, loopLength, page);
   const seed = rnd(1, 256);
@@ -798,12 +798,13 @@ export function drawRandomsMultiPage({ note, filt, page, loopLength, bpm }) {
   else { pick[7] = true; pick[8] = true; }
   if (!pick[8] && rnd(100) < 30) pick[8] = true;
 
+  // Match the device: occupied voices are context, never regeneration targets.
+  // In particular, muting must not erase or rewrite an existing part.
+  const populated = new Set();
   const base = (page - 1) * COLS;
-  for (let x = 1; x <= COLS; x++) {
-    for (let y = 1; y <= ROWS; y++) {
-      note[base + x][y].channel = 0;
-      note[base + x][y].midiPitch = 255;
-    }
+  for (let x = 1; x <= COLS; x++) for (let y = 1; y <= ROWS; y++) {
+    const ch = note[base + x][y].channel;
+    if (ch) populated.add(ch);
   }
 
   const baseCtx = analyze(note, filt, 1, actPages, page, 0);
@@ -812,7 +813,7 @@ export function drawRandomsMultiPage({ note, filt, page, loopLength, bpm }) {
 
   const order = [1, 2, 4, 3, 5, 6, 11, 13, 14, 7, 8];
   for (const ch of order) {
-    if (!pick[ch]) continue;
+    if (!pick[ch] || populated.has(ch) || isMuted(ch)) continue;
     const ctx = analyze(note, filt, 1, Math.max(actPages, page), page, ch);
     generatePage(note, filt, page, ch, ctx, pageHarm, pageGroove, seed, bpm);
   }

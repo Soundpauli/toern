@@ -31,8 +31,8 @@ template<class Canvas> void progress(Canvas &c,unsigned width,bool kit,bool savi
   }
   if(filled)c.pixel(filled+1,2,{190,205,220});
 }
-template<class Canvas> void result(Canvas &c,unsigned width,bool success,bool white,uint32_t elapsed) {
-  c.clear();
+template<class Canvas> void result(Canvas &c,unsigned width,bool success,bool white,uint32_t elapsed,bool overlay=false) {
+  if(!overlay)c.clear();
   elapsed=std::min<uint32_t>(elapsed,resultDuration);
   unsigned brightness=elapsed<100?50+elapsed*130/100:elapsed>540?(resultDuration-elapsed)*180/180:180;
   const Color color=white&&success?Color{uint8_t(brightness),uint8_t(brightness),uint8_t(brightness)}:

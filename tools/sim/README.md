@@ -100,7 +100,7 @@ All **five touch pads** are available on the panel in desktop/mobile layouts and
 
 Open **Faders · voices 1–8** for controls that remain active in menus and solo; their positions override restored mute snapshots. Sample filters include TIME (11/OFF), DLAY and bipolar V gain (−16 silence / 0 unity / +16 double). Pause releases voices and preserves effect tails. Synths expose all 13 INST choices and per-voice PSET slots (1–99). MIDI menus use SYC>/SYC<, PQ-I/PQ-O and a red `--` for inactive SYNC offsets. Browser audio, clock input and hardware indicators approximate the Teensy; no physical GPIO or equivalent outgoing MIDI-clock stream is generated.
 
-Version-2 browser pattern snapshots retain notes, filters, channel volumes and BPM and still read old note-array snapshots. Presets and sample buffers remain separate. Hardware pattern transfer covers notes and tempo only.
+Version-3 browser pattern snapshots retain notes, filters, channel volumes and BPM and still read version-2 and old note-array snapshots. Waveforms now retain the device’s native 0–16 slider values; older pattern and preset waveforms migrate when loaded. Presets and sample buffers remain separate. Hardware pattern transfer covers notes and tempo only.
 
 ```bash
 # From the repository root:
@@ -110,3 +110,61 @@ node _debug/tests/test_menu_navigation.mjs
 ```
 
 See [`docs/devdocs/docs/tools/simulator.md`](../../docs/devdocs/docs/tools/simulator.md) for the feature/approximation contract, input mapping and source ownership.
+
+
+## Device MCP parity audit (2026-11-09)
+
+The attached v3.03b device is the UI reference, including its MODE order ending
+in **AUTO, AGEN** after the firmware update. AUTO is the one-shot source-range/additional-page action; AGEN toggles automatic arrangements. DEMO remains available from INFO with touch 3 and consumes touch 1 to exit.
+
+Run the captured-device regression from the repository root:
+
+```sh
+node _debug/analysis/compare_sim_device.mjs
+node _debug/tests/test_menu_navigation.mjs
+node _debug/tests/test_sim_audio.mjs
+node _debug/tests/test_sim_synth_arp.mjs
+```
+
+The compressed MCP fixture covers 63 menu pages, 47 filter pages, 85 temporarily
+changed/restored filter controls, nine browser/editor screens, and the held
+velocity editor: **205 exact RGB comparisons**, after accounting for software
+LED brightness and matching the captured settings/catalog. Filter controls run
+through the real simulator encoder handler. All voices' filter names, order,
+native maxima and defaults are checked. DEMO launch/exit and TOUCHY were also
+walked on the device; their asynchronous animation phases are not pixel assertions.
+
+To capture a fresh baseline (Python environment with `tools/toern-mcp/requirements.txt`):
+
+```sh
+python _debug/analysis/capture_device_pages.py --port /dev/cu.usbmodemXXXX --focus --report /tmp/toern-device-pages.json
+```
+
+Start in paused DRAW. This navigates menus/browsers and all filter pages;
+`--focus` temporarily turns and restores the 85 non-INST controls. It does not
+execute file operations, recording, generation or global resets. The full saved
+fixture additionally contains the separately captured browsers and held editors.
+
+GAIN models 1–4, 5–8, SYN and ALL, including the reversed first knob and SYN/ALL
+click target. HFC uses a browser treble shelf. LOUT retains its native 1–19
+control, but browsers have one output device rather than independent codec line
+and headphone outputs. RAM audio-block/CPU metrics show `--`; reverb usage is
+computed from the modeled voices. Battery is simulated as USB-powered. Audio,
+GPIO, MIDI clock transmission and hardware sensors remain browser approximations.
+
+
+### AGEN musical refinement
+
+AGEN now uses one buildup call/answer pair, then drops immediately: two bars on
+16 steps, four bars on 32 steps. CH2 supplies the rising roll and CH3 stays steady.
+An audible bass/harmonic/kick foundation is retained; hats-only or muted-body
+sources skip unsupported buildups and breaks. Three-tone CH11 chords change
+voicing while retaining valid diatonic tones, including off-grid source onsets.
+Generation compensates synth octave registers without editing patch controls.
+Run `python3 _debug/tests/test_autogen.py`,
+`python3 _debug/tests/test_autogen_visual_music.py`, and
+`node _debug/tests/test_sim_autogen.mjs` for those regressions.
+
+AGEN displays a persistent 5×5 clock at the top right: cyan playback-progress
+arc, amber preparation spinner, and a steady green ready check. The former
+blinking pass count is removed. Device and simulator share the pixel policy.

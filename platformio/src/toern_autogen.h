@@ -7,12 +7,34 @@ struct ToernAutogen {
   volatile bool active=false,ready=false,needsBuild=false;
   volatile unsigned playing=0,generation=0,repeatsLeft=4;
   unsigned pages[2]={1,2},width=16,nextRepeats=4;
-  static unsigned phraseRepeats(unsigned choice){
-    choice%=6;return choice<4?(choice%2?8:4):1;
+  volatile unsigned passesTotal=4;
+  // Musical progress to the next page boundary, including every scheduled pass.
+  // A late builder holds the full ring while the current page safely repeats.
+  unsigned statusProgress(unsigned step)const{
+    if(!repeatsLeft)return 12;
+    const unsigned total=passesTotal?passesTotal:1;
+    const unsigned left=repeatsLeft>total?total:(unsigned)repeatsLeft;
+    const unsigned elapsed=(total-left)*width+(step?(step-1)%width:0);
+    const unsigned span=total*width>1?total*width-1:1;
+    const unsigned progress=elapsed*12/span;
+    return progress>12?12:progress;
+  }
+  // 5x5 clock: persistent rim + playback arc; amber preparation spinner or green check.
+  // Ink: 0 black, 1 dim rim, 2 elapsed cyan, 3 busy/late amber, 4 ready green.
+  static unsigned statusInk(unsigned x,unsigned y,unsigned progress,bool ready,uint32_t now){
+    static const uint8_t ring[12][2]={{2,0},{3,0},{4,1},{4,2},{4,3},{3,4},
+      {2,4},{1,4},{0,3},{0,2},{0,1},{1,0}};
+    for(unsigned i=0;i<12;++i)if(x==ring[i][0]&&y==ring[i][1])
+      return i<progress?(!ready&&progress>=12?3:2):1;
+    if(ready)return ((x==1&&y==2)||(x==2&&y==3)||(x==3&&(y==1||y==2)))?4:0;
+    static const uint8_t spinner[8][2]={{2,1},{3,1},{3,2},{3,3},{2,3},{1,3},{1,2},{1,1}};
+    const unsigned frame=(now/240)%8;
+    for(unsigned i=0;i<8;++i)if(x==spinner[i][0]&&y==spinner[i][1])return (frame+8-i)%8<3?3:0;
+    return 0;
   }
   void start(unsigned page,unsigned columns,unsigned totalSteps,unsigned repeats){
-    width=columns;pages[0]=page;pages[1]=page<totalSteps/columns?page+1:1;
-    playing=0;generation=0;repeatsLeft=repeats;ready=false;needsBuild=true;active=true;
+    width=columns;for(unsigned i=0;i<2;++i)pages[i]=(page-1+i)%(totalSteps/columns)+1;
+    playing=0;generation=0;repeatsLeft=repeats;passesTotal=repeats;ready=false;needsBuild=true;active=true;
   }
   // Keep structural hits reliable; stochastic detail supplies motion on repeats.
   static uint8_t noteChance(unsigned channel,unsigned step,uint32_t seed){
@@ -31,7 +53,7 @@ struct ToernAutogen {
     if(step<firstStep()||step>=firstStep()+width-1){
       if(repeatsLeft) --repeatsLeft;
       if(!repeatsLeft&&ready){
-        playing^=1u;++generation;repeatsLeft=nextRepeats;
+        playing=playing^1u;++generation;repeatsLeft=nextRepeats;passesTotal=nextRepeats;
         ready=false;needsBuild=true;
       }
       return firstStep();

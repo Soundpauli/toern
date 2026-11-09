@@ -30,7 +30,7 @@ Sample filter pages contain HCUT/LCUT/RVRB/BITC, RES/DTNE/OCTV/TIME, ADSR, and D
 
 All 13 ch11 instrument selections are present: BASS, KEYS, CHPT, PAD, WOW, ORG, FLT, LEAD, ARP, BRSS, 303, DXEP, DXBS. The ch11 default is DXBS. `instruments.js` mirrors the firmware's filter/register/ADSR tables; browser oscillator timbres do not reproduce the hardware's three-oscillator/FM-style recipes exactly.
 
-SMP becomes **PSET** on voices 11/13/14. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Slots are independent per voice, stored under `toern-web-presets-<voice>` in browser storage. They do not write `.pset` files on the instrument.
+SMP becomes **PSET** on voices 11/13/14. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Loading or saving returns to DRAW/SINGLE. Slots are independent per voice, stored under `toern-web-presets-<voice>` in browser storage. They do not write `.pset` files on the instrument.
 
 The left sidebar holds the current mode/status and help, panel layout, assistive controls and Mobile / iPad link. The right sidebar starts with New empty pattern and Load demo pattern. Desktop sidebars grow with their content, allowing the whole page to scroll to all controls. The introduction appears at startup unless “Don’t show again” is selected.
 
@@ -66,7 +66,7 @@ ARP is centered at 16 (OFF). Positive values use sixteenths, negative values eig
 
 Transpose out-of-range notes defaults off, including after Reset to MIDI. Original MIDI pitches remain stored while notes are drawn inside the grid. GM drum-channel notes split into five groups using the firmware's `companionRoleForChannel` assignments: 1 BD, 2 snare, 3 hat/cymbals, 4 clap, 5 tom/other percussion. Drum hits use their voice's base pitch rather than treating the GM drum key as a melody pitch.
 
-Programs and track names guide melodic parts to CH11 instruments/lead, CH13 keys, CH14 bass, and CH8 vocals/pad. These dedicated voices are filled first; extra compatible parts use sample fallbacks CH6 bass / CH7 keys, with CH11 available for extra keys/pads if no lead claims it. Fallback priority follows descending note count. A single keys-only MIDI part goes to CH11 before CH13. Other parts stay visibly unassigned for manual selection. Channels 9, 10 and 12 are not playable SIM voices. This is a role approximation, not a General MIDI soundfont. MIDI import keeps the current kit and synth parameters; it does not apply SIM-only preset changes or force neutral tuning. The Reset sound controls button resets SIM voice controls using the CH11 preset tables and mono neutral CENT defaults without replacing kit samples. USB current-pattern transfer sends notes and tempo, so the real device needs a matching kit/settings.
+Programs and track names guide melodic parts to CH11 instruments/lead, CH13 keys, CH14 bass, and CH8 vocals/pad. These dedicated voices are filled first; extra compatible parts use sample fallbacks CH6 bass / CH7 keys, with CH11 available for extra keys/pads if no lead claims it. Fallback priority follows descending note count. A single keys-only MIDI part goes to CH11 before CH13. Other parts stay visibly unassigned for manual selection. Channels 9, 10 and 12 are not playable SIM voices. This is a role approximation, not a General MIDI soundfont. MIDI import keeps the current kit and synth parameters; it does not apply SIM-only preset changes or force neutral tuning. The Reset sound controls button resets SIM voice controls using the CH11 preset tables and the device’s mono CENT defaults (CH13=0, CH14=8) without replacing kit samples. USB current-pattern transfer sends notes and tempo, so the real device needs a matching kit/settings.
 
 Overlap filtering always keeps one pitch per assigned voice/step for sample voices 1–8 and mono voice CH14. The checkbox controls only CH11 and defaults OFF on initial load and reset; CH13 note data stays intact regardless of its value. Reassigning a track reapplies this policy using its destination voice. Cross-track collisions are resolved after voice assignment; with transpose off, melody notes can move to another free display row while retaining their absolute pitch.
 
@@ -98,7 +98,7 @@ and `python3 _debug/tests/test_file_subpatterns.py`.
 
 ## Storage and transfer
 
-Browser pattern snapshot version 2 stores notes (including preserved MIDI pitch), filters, channel volumes and BPM. Legacy note-array snapshots still load. Sample buffers/recordings, browser PSET slots and fader positions are separate; snapshots are not binary Teensy `Device` structures. Web Serial pattern transfer still covers grid notes and tempo, not complete sound kits, effects or synth presets. The red SEND TO DEVICE and green GET FROM DEVICE buttons beside the simulator transfer the current pattern in RAM. Transfer patterns contains only the Pattern file browser; its upload control replaces a matching filename on the real device in the selected folder.
+Browser pattern snapshot version 3 stores notes (including preserved MIDI pitch), filters, channel volumes and BPM. Version-2 and legacy note-array snapshots still load; old waveform enums migrate to native device 0–16 values. Sample buffers/recordings, browser PSET slots and fader positions are separate; snapshots are not binary Teensy `Device` structures. Web Serial pattern transfer still covers grid notes and tempo, not complete sound kits, effects or synth presets. The red SEND TO DEVICE and green GET FROM DEVICE buttons beside the simulator transfer the current pattern in RAM. Transfer patterns contains only the Pattern file browser; its upload control replaces a matching filename on the real device in the selected folder.
 
 ## Development and verification
 
@@ -114,3 +114,16 @@ node _debug/tests/test_menu_navigation.mjs
 ```
 
 `tools/sim/src/firmware/device.js` owns state/input, `screens.js` renders the matrix, `performance.js` owns fill/SYNC rules, `instruments.js` mirrors ch11 control defaults, `pitch.js` mirrors grid-fold roots, and `tools/sim/src/audio/engine.js` owns browser DSP. `main.js` binds the five pads, pointer/keyboard controls and simulated faders. Prefer deterministic transport tests to wall-clock sleeps; always check both matrix widths and mobile layout. Deploy `dist/` only after validation and an explicit deployment request.
+
+
+## MCP device comparison
+
+The 2026-11-09 audit follows the attached v3.03b device, including MODE ending
+in AUTO then AGEN after the firmware update. The checked-in compressed MCP capture and
+`node _debug/analysis/compare_sim_device.mjs` verify 205 matched-setting LED
+frames, including every menu/filter page and 85 real encoder changes. The
+fixture supplies the recorded catalog, sensor values and user settings; the
+comparison does not equate different SD cards or measure browser audio against
+hardware. See `tools/sim/README.md` for scope, regeneration and hardware-only
+boundaries. Local firmware source can have newer menu changes than the running
+device; the captured device wins for this simulator revision.

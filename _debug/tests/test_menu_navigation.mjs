@@ -26,7 +26,9 @@ globalThis.setInterval = () => 0;
 const stored = /* @__PURE__ */ new Map();
 globalThis.localStorage = { getItem: (k) => stored.get(k) ?? null, setItem: (k, v) => stored.set(k, v) };
 globalThis.navigator = {};
-globalThis.window = { addEventListener() {
+const pagehideHandlers = [];
+globalThis.window = { addEventListener(name, fn) {
+  if (name === "pagehide") pagehideHandlers.push(fn);
 } };
 globalThis.document = { activeElement: null, addEventListener() {
 } };
@@ -192,7 +194,7 @@ expectToggle("ON", [0, 120, 0]);
 textDraws.length = 0;
 litPixels = 0;
 drawSubmenu(matrix, { mode: "mode", subIndex: 7 }, now);
-assert.equal(litPixels, 10); // Ten MODE submenu navigation dots.
+assert.equal(litPixels, 11); // Eleven MODE submenu navigation dots.
 assert.deepEqual(textDraws.map(args => args.slice(0, 3)), [["SONG", 2, 10]]);
 textDraws.length = 0;
 litPixels = 0;
@@ -222,6 +224,8 @@ for(let enc=0;enc<4;enc++) {
   d.touch(5,false); d.knobUp(enc,false);
   assert.equal(d.mode(),before); // FN-long cannot fall through to normal long/short.
 }
+// Leave CHLD before inspecting the editors (the device locks them while CHLD is ON).
+open(8);page(4);d.rotate(2,-1);
 // TOUCHY shares the sample engine and preserves the pattern.
 d.start();
 d.jump("draw"); d.selectVoice(1);
@@ -397,29 +401,17 @@ assert(audioCalls.some(c=>c[0]==="apply"&&c[1]===3&&c[2].voiceGain===17));
 perf.selectVoice(11);perf.jump("menu");perf.rotate(3,1);perf.rotate(3,1);perf.press(3);
 assert.equal(perf.mode(),"pset");perf.press(1);
 assert(JSON.parse(stored.get("toern-web-presets-11"))[1]);
-perf.press(3);perf.jump("filter");perf.rotate(0,-1);perf.jump("menu");perf.rotate(3,1);perf.rotate(3,1);perf.press(3);perf.press(0);
-assert.equal(perf.mode(),"pset");
+assert.equal(perf.mode(),"draw");
+perf.jump("filter");perf.rotate(0,-1);perf.jump("menu");perf.rotate(3,1);perf.rotate(3,1);perf.press(3);perf.press(0);
+assert.equal(perf.mode(),"draw");
 console.log("PASS: five-pad audition/fill, queued voices and final drop through transport, menu faders, solo priority, V gain, synth presets and pause release.");
 console.log("PASS: SETT, MODE \u2192 SONG, ETC \u2192 ADV, moved controls, IMG lock, merged PREV, TOUCHY pads/pitch/velocity/effects/Fastrec/browser/filter/exit, and legacy settings reload.");
 await rm(testDir, { recursive: true, force: true });
-// DEMO: exact ten-second intro, three complete traversals, then repeat without a logo.
-const { demoPhase, drawDemo, drawBpm, DEMO_TEXT, DEMO_TEXT_WIDTH } = await import('../../tools/sim/src/firmware/screens.js');
+// Fractional BPM keeps its decimal aligned on both matrix widths.
+const { drawBpm } = await import('../../tools/sim/src/firmware/screens.js');
 const { textPixelWidth } = await import('../../tools/sim/src/firmware/font.js');
 for (const cols of [16,32]) {
   setLayout(cols);
-  const scroll=(cols+DEMO_TEXT_WIDTH+1)*65;
-  assert.equal(demoPhase(9999,cols).name,'nyan');
-  for (const [i,name] of ['red','white','rainbow'].entries()) {
-    const start=10000+i*scroll;
-    assert.equal(demoPhase(start,cols).name,name);
-    assert.equal(demoPhase(start,cols).x,cols+1);
-    assert(demoPhase(start+scroll-1,cols).x <= -DEMO_TEXT_WIDTH+1);
-  }
-  assert.equal(demoPhase(10000+3*scroll,cols).name,'nyan');
-  const cycle=10000+3*scroll;
-  assert.equal(demoPhase(cycle-1,cols).name,'rainbow');
-  assert.deepEqual(demoPhase(cycle,cols),{name:'nyan',elapsed:0});
-  assert.deepEqual(demoPhase(cycle*123+1234,cols),demoPhase(1234,cols));
   const ink=[],letters=[];
   const m={light:(...a)=>ink.push(a),drawText:(...a)=>letters.push(a),drawIndicator(){}};
   for(const bpm of [40,99.9,120.3,239.9,300]) {
@@ -429,48 +421,38 @@ for (const cols of [16,32]) {
     assert(letters.every(a=>a[2]===4));
     assert.deepEqual(letters.at(-1)[3],[148,0,211]);
     assert(ink.some(c=>c[1]===4&&c[2][0]===255&&c[2][1]===255&&c[2][2]===255),'white BPM decimal point');
+    const dot=ink.find(c=>c[1]===4&&c[2][0]===255&&c[2][1]===255&&c[2][2]===255);
+    assert.equal(letters.at(-1)[1],dot[0]+(cols>16?2:1),'decimal digit spacing');
     for(const [text,x] of letters)assert(x>=1&&x+textPixelWidth(text)-2<=cols);
   }
-  letters.length=0;ink.length=0;
-  drawDemo(m,10000+15*65);
-  const textInk=ink.filter(a=>a[2][0]===255&&a[2][1]===0&&a[2][2]===0);
-  assert(textInk.length>0 && textInk.every(a=>a[1]>=4&&a[1]<=13));
-  assert(ink.some(a=>a[2][2]>a[2][0]),"blue sine behind the text");
-  for(let i=0;i<textInk.length;i+=4) {
-    const block=textInk.slice(i,i+4);
-    assert.equal(new Set(block.map(a=>a[0])).size,2);
-    assert.equal(new Set(block.map(a=>a[1])).size,2);
-  }
-  ink.length=0;
-  drawDemo(m,10000+cols*65);
-  const mRows=["#...#","##.##","#.#.#","#...#","#...#"];
-  for(let row=0;row<5;row++)for(let col=0;col<5;col++)for(let dx=0;dx<2;dx++)for(let dy=0;dy<2;dy++) {
-    const x=1+col*2+dx,y=4+(4-row)*2+dy;
-    const red=ink.some(a=>a[0]===x&&a[1]===y&&a[2][0]===255&&a[2][1]===0);
-    assert.equal(red,mRows[row][col]==='#',`wide M at ${col},${row}`);
-  }
-  letters.length=0;
-  drawDemo(m,10000+3*scroll+2000);
-  assert(!letters.some(a=>a[0]==='&'));
 }
 setLayout(32);
-open(8); page(9); d.rotate(3,1); assert.equal(d.subIndex(),9);
-d.press(3); assert.notEqual(d.mode(),'demo');
-open(9); page(1); d.touch(3,true); d.touch(3,false); assert.equal(d.mode(),'etc');
-page(0); d.press(3); assert.notEqual(d.mode(),'demo');
-open(9); page(0); d.touch(3,true); d.touch(3,false); assert.equal(d.mode(),'demo');
-const total=10000+3*(32+DEMO_TEXT_WIDTH+1)*65;
-d.start();now+=total*3;frame(now);assert.equal(d.mode(),'demo');
-d.press(3);assert.equal(d.mode(),'demo');
-d.touch(2,true);d.touch(2,false);assert.equal(d.mode(),'demo');
-d.touch(1,true);assert.equal(d.mode(),'etc');assert.equal(d.subIndex(),0);
-d.touch(1,false);assert.equal(d.mode(),'etc');
-d.touch(3,true);d.touch(3,false);assert.equal(d.mode(),'demo');
-d.keydown({key:'a',code:'KeyA',preventDefault(){},stopPropagation(){}});
-assert.equal(d.mode(),'etc');
-d.keyup({key:'a',code:'KeyA'});assert.equal(d.mode(),'etc');
+// Current device MODE ends in AUTO then AGEN; the menu button runs the generation engine.
+stored.clear();
+const agenDevice=createDevice(matrix,{},[]);
+agenDevice.start();frame(1);now+=6000;frame(now);
+agenDevice.jump('agen');
+agenDevice.jump('menu');for(let i=0;i<9;i++)agenDevice.rotate(3,1);agenDevice.press(3); agenDevice.touch(3,true); agenDevice.touch(3,false); assert.equal(agenDevice.mode(),'etc');agenDevice.touch(1,true);agenDevice.touch(1,false);
+agenDevice.jump('agen'); agenDevice.rotate(3,1); assert.equal(agenDevice.subIndex(),10);
+assert.equal(agenDevice.soon(),false);
+const beforeAgen=agenDevice.exportPatternCells();
+agenDevice.press(3); assert.equal(agenDevice.autogen().active,true); assert.equal(agenDevice.playing(),true);
+assert.equal(agenDevice.menuSummary().detail,'AGEN: ON');
+assert.deepEqual(agenDevice.exportPatternCells(),beforeAgen,'transfers export the source bank during AGEN');
+pagehideHandlers.at(-1)();
+const activeAutosave=JSON.parse(stored.get('toern-web-patterns'))[0];
+assert.deepEqual(activeAutosave.notes,beforeAgen.map(n=>n.channel?[n.channel,n.velocity,n.probability,n.condition,n.midiPitch]:0),'pagehide saves originals, never temporary pages');
+const initialGeneration=agenDevice.autogen().generation;
+for(let i=0;i<1200;i++){globalThis.audioTime=(globalThis.audioTime||0)+.125;now+=125;frame(now);}
+assert(agenDevice.autogen().generation>initialGeneration,'AGEN advances at page boundaries');
+agenDevice.pause(); assert.equal(agenDevice.autogen().active,false);
+assert.deepEqual(agenDevice.exportPatternCells(),beforeAgen,'stopping restores every original cell');
+agenDevice.press(3); assert.equal(agenDevice.autogen().active,true);
+agenDevice.press(3); assert.equal(agenDevice.autogen().active,false);
+assert.deepEqual(agenDevice.exportPatternCells(),beforeAgen);
+agenDevice.pause();
 d.jump('bpm');const oldBpm=d.bpm();d.rotate(0,1);assert.equal(d.bpm(),Math.round((oldBpm+.1)*10)/10);
-console.log('PASS: DEMO order/timing/full off-grid scrolls/exit and one-row fractional BPM on both matrix widths.');
+console.log('PASS: AGEN navigation, playback, section advancement, restoration and fractional BPM.');
 
 // Touch shortcuts must leave the encoder keys available.
 function tapKey(key, code) {
@@ -822,3 +804,97 @@ for(const length of [11,12]) {
   assert.equal(dev.menuSummary().detail,'CTRL: VOL');
 }
 console.log('PASS: SUBP OFF/ON, turn/click, red/green rendering on both layouts, persistence and 11/12-slot migration.');
+
+// Actual page-row FN + encoder 2 hold must pass live mutes into the generator.
+stored.clear();
+const muteGenDevice=createDevice(matrix,{},[]);
+muteGenDevice.start();frame(1);now+=6000;frame(now);
+muteGenDevice.importMidi([{step:1,row:7,channel:6,velocity:73,probability:45,midiPitch:41}],120);
+for(const ch of [1,2,3,4,5,6,7,8,11,13,14]) if(!muteGenDevice.muted(ch))muteGenDevice.toggleMute(ch);
+muteGenDevice.jump('draw');muteGenDevice.moveCursor(1,16);
+const beforeMutedGeneration=muteGenDevice.exportPatternCells();
+function fnGenerateMutedPage(){
+  muteGenDevice.touch(5,true);muteGenDevice.knobDown(1);now+=600;frame(now);
+  muteGenDevice.knobUp(1);muteGenDevice.touch(5,false);
+}
+fnGenerateMutedPage();
+assert.deepEqual(muteGenDevice.exportPatternCells(),beforeMutedGeneration,'all-muted FN generation preserves the full pattern');
+muteGenDevice.toggleMute(5);
+const savedRandom=Math.random;Math.random=()=>0;
+try {fnGenerateMutedPage();}finally{Math.random=savedRandom;}
+const afterMutedGeneration=muteGenDevice.exportPatternCells();
+let newHits=0;
+for(let i=0;i<afterMutedGeneration.length;i++) {
+  const old=beforeMutedGeneration[i],cell=afterMutedGeneration[i];
+  if(old.channel)assert.deepEqual(cell,old,'existing muted part is untouched');
+  else if(cell.channel){assert.equal(cell.channel,5);newHits++;}
+}
+assert(newHits>0,'the unmuted voice still receives generated notes through real FN controls');
+console.log('PASS: page-row FN + encoder 2 generation honors live mutes and preserves existing muted notes.');
+
+// AUTO remains a persistent one-shot action; AGEN is a separate session toggle.
+stored.clear();
+const autoDevice=createDevice(matrix,{},[]);
+autoDevice.start();frame(1);now+=6000;frame(now);
+autoDevice.importMidi([{step:1,row:14,channel:13,velocity:93,probability:100,midiPitch:60}],120);
+autoDevice.jump('auto');
+assert.equal(autoDevice.subIndex(),9);assert(autoDevice.menuSummary().detail.startsWith('AUTO:'));
+assert.equal(autoDevice.autogen().active,false);assert.equal(autoDevice.soon(),false);
+autoDevice.rotate(0,1); // two additional pages
+const beforeAuto=autoDevice.exportPatternCells();
+autoDevice.press(0);
+const afterAuto=autoDevice.exportPatternCells();
+assert.equal(autoDevice.autogen().active,false);assert.equal(autoDevice.mode(),'draw');
+assert(afterAuto.some((n,i)=>n.channel&&!beforeAuto[i].channel),'AUTO writes additional pages once');
+assert.deepEqual(afterAuto.slice(0,32*16),beforeAuto.slice(0,32*16),'AUTO preserves its base page');
+autoDevice.jump('auto');assert.equal(autoDevice.subIndex(),9);
+autoDevice.toggleAutogen();assert(autoDevice.autogen().active);autoDevice.pause();
+assert.deepEqual(autoDevice.exportPatternCells(),afterAuto,'AGEN restores the one-shot AUTO result');
+console.log('PASS: AUTO one-shot, AGEN session generation, preserved base and persistent result.');
+
+// MCP device parity: four mix groups, native limits, diagnostics and held editors.
+stored.clear();
+const parityDevice=createDevice(matrix,{},[]);
+parityDevice.start();frame(1);now+=6000;frame(now);
+parityDevice.jump('menu');parityDevice.rotate(3,4);parityDevice.press(3);parityDevice.rotate(3,1);
+parityDevice.rotate(0,1);assert.equal(parityDevice.menuSummary().detail,'GAIN: 0.9x');
+parityDevice.rotate(1,1);assert.equal(parityDevice.menuSummary().detail,'GAIN: 1.1x');
+parityDevice.rotate(2,1);assert.equal(parityDevice.menuSummary().detail,'GAIN: 1.1x');
+let mixCalls=audioCalls.filter(c=>c[0]==='apply').slice(-11);
+assert(Math.abs(mixCalls.find(c=>c[1]===1)[4]-.99)<1e-9);
+assert(Math.abs(mixCalls.find(c=>c[1]===5)[4]-1.21)<1e-9);
+parityDevice.press(2);parityDevice.rotate(2,-1);assert.equal(parityDevice.menuSummary().detail,'GAIN: 0.9x');
+parityDevice.rotate(3,1);parityDevice.rotate(2,100);assert.equal(parityDevice.menuSummary().detail,'LOUT: 19');
+parityDevice.rotate(2,-100);assert.equal(parityDevice.menuSummary().detail,'LOUT: 1');
+parityDevice.jump('menu');parityDevice.rotate(3,9);parityDevice.press(3);parityDevice.rotate(3,3);parityDevice.press(3);parityDevice.rotate(3,9);
+parityDevice.rotate(2,26);assert.equal(parityDevice.menuSummary().detail,'HFC: 256');
+assert.equal(audioCalls.filter(c=>c[0]==='setBus').at(-1)[1].hfCut,256);
+parityDevice.rotate(2,1);assert.equal(parityDevice.menuSummary().detail,'HFC: 256');
+parityDevice.rotate(2,-1);assert.equal(parityDevice.menuSummary().detail,'HFC: 250');
+parityDevice.importMidi([{step:1,row:2,channel:1,velocity:127,probability:100}],120);
+parityDevice.moveCursor(1,2);parityDevice.knobDown(3);now+=201;frame(now);assert.equal(parityDevice.mode(),'velocity');
+parityDevice.knobUp(3,false);assert.equal(parityDevice.mode(),'draw');
+parityDevice.jump('filter');parityDevice.press(0);parityDevice.press(0);
+const notesBeforeDemo=parityDevice.exportPatternCells();
+parityDevice.jump('demo');parityDevice.press(3);frame(now+=20);
+parityDevice.rotate(3,1);parityDevice.touch(1,true);parityDevice.touch(1,false);
+assert.equal(parityDevice.mode(),'etc');assert.equal(parityDevice.subIndex(),0);
+assert.deepEqual(parityDevice.exportPatternCells(),notesBeforeDemo);
+console.log('PASS: device mix groups, inverted first gain knob, SYN/ALL, LOUT/HFC limits, held velocity and DEMO exit.');
+
+// Old browser enums keep their audible waveform after native 0–16 migration.
+stored.clear();
+stored.set('toern-web-patterns',JSON.stringify({1:{version:2,bpm:120,notes:notesBeforeDemo.map(n=>n.channel?[n.channel,n.velocity,n.probability,n.condition,n.midiPitch]:0),filt:{13:{wave:2}}}}));
+const migratedDevice=createDevice(matrix,{},[]);
+migratedDevice.start();frame(1);now+=6000;frame(now);
+migratedDevice.jump('menu');migratedDevice.press(3);migratedDevice.press(0);migratedDevice.selectVoice(13);
+audioCalls.length=0;migratedDevice.touch(4,true);migratedDevice.touch(4,false);
+assert.equal(audioCalls.find(c=>c[0]==='trigger')[4].wave,2,'version-2 SAW remains SAW');
+migratedDevice.jump('wav');migratedDevice.press(1);
+let migratedPreset=JSON.parse(stored.get('toern-web-presets-13'))[1];
+assert.equal(migratedPreset.version,3);assert.equal(migratedPreset.wave,11);
+assert.equal(migratedDevice.mode(),'draw','saving a preset returns to the grid');
+stored.set('toern-web-presets-13',JSON.stringify({1:{wave:3}}));
+migratedDevice.jump('wav');migratedDevice.press(0);audioCalls.length=0;migratedDevice.touch(4,true);migratedDevice.touch(4,false);
+assert.equal(audioCalls.find(c=>c[0]==='trigger')[4].wave,3,'legacy preset TRI remains TRI');
+console.log('PASS: version-2 patterns and legacy presets migrate waveform enums while preserving audible choice.');

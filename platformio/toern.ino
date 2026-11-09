@@ -400,7 +400,7 @@ unsigned autogenPage();
 unsigned autogenOtherPage();
 bool autogenNextReady();
 unsigned autogenRepeatsLeft();
-void autogenUiSnapshot(unsigned &playing,unsigned &other,bool &ready,unsigned &remaining);
+void autogenUiSnapshot(unsigned &playing,unsigned &other,bool &ready,unsigned &progress);
 bool autogenStatusVisible();
 void drawAutogenStatus();
 bool autogenMuted(int channel);
@@ -3175,7 +3175,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
         (inMidiSubmenu && (mainSetting == 7 || mainSetting == 8 || mainSetting == 13 || mainSetting == 44 || mainSetting == 45 || mainSetting == 50 || mainSetting == 51 || mainSetting == 58 || mainSetting == 59 || mainSetting == 60)) ||
         (inVolSubmenu && (mainSetting == 43 || mainSetting == 46 || mainSetting == 53)) ||
         (inEtcSubmenu && (mainSetting == 9 || mainSetting == 10 || mainSetting == 18 || mainSetting == 23 || mainSetting == 24 || mainSetting == 32 || mainSetting == 54 || mainSetting == 63 || mainSetting == 56 || mainSetting == 57 || mainSetting == 40 || mainSetting == 41 || mainSetting == 48 || mainSetting == 55)));
-    if(mainSetting==15){toggleAutogen();menuRequestFullRedraw();return;}
+    if(mainSetting==69){toggleAutogen();menuRequestFullRedraw();return;}
     if (!encoder2ValuePage) {
       switchMenu(mainSetting);
     }

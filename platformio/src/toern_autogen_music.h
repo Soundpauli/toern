@@ -13,21 +13,29 @@ namespace toern_autogen_music {
 enum class Section {Groove,Variation,Break,Build,Fill,Drop};
 AGEN_MUSIC_CODE static Section section(unsigned generation){
   static const Section form[] AGEN_MUSIC_DATA={Section::Groove,Section::Variation,Section::Groove,Section::Break,
-      Section::Build,Section::Fill,Section::Drop,Section::Variation};
-  return form[generation%8];
+      Section::Build,Section::Drop,Section::Variation,Section::Groove};
+  return form[(generation/2)%8];
 }
-AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned choice){
-  if(s==Section::Fill)return 1;
-  if(s==Section::Break||s==Section::Build)return choice%3?1:4;
-  if(s==Section::Drop)return choice%2?8:4;
-  static const uint8_t lengths[] AGEN_MUSIC_DATA={4,8,4,8,1,1};return lengths[choice%6];
+// Sections span two related pages: a call and an answer. Lengths are musical
+// bars for the complete pair; keep the countdown bounded without rushing builds.
+AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned choice,unsigned width=16,unsigned bpm=120){
+  if(s==Section::Build||s==Section::Fill)return 1; // one call/answer, never repeat a roll
+  static const uint8_t grooveBars[] AGEN_MUSIC_DATA={4,4,4,8,4,4};
+  unsigned bars=s==Section::Build?8:s==Section::Break||s==Section::Fill?4:
+      s==Section::Variation?(choice%2?8:4):grooveBars[choice%6];
+  if(s==Section::Drop)bars=4;
+  const unsigned limit=s==Section::Build?32000:s==Section::Break?24000:16000;
+  if(bpm<40)bpm=40;
+  while(bars>1&&bars*240000u>bpm*limit)bars/=2;
+  const unsigned passes=(bars*16u)/(2u*((width==32)?32u:16u));
+  return passes?passes:1;
 }
 AGEN_MUSIC_CODE static unsigned degree(bool minor,unsigned phrase){
   static const uint8_t major[] AGEN_MUSIC_DATA={0,5,3,4};
   static const uint8_t naturalMinor[] AGEN_MUSIC_DATA={0,5,3,6};
   // Hold harmony through break/build/fill, then resolve the drop to the tonic.
-  static const uint8_t harmonicSlots[] AGEN_MUSIC_DATA={0,1,2,2,3,3,0,1};
-  return (minor?naturalMinor:major)[harmonicSlots[phrase%8]];
+  static const uint8_t harmonicSlots[] AGEN_MUSIC_DATA={0,1,2,3,3,0,1,2};
+  return (minor?naturalMinor:major)[harmonicSlots[(phrase/2)%8]];
 }
 AGEN_MUSIC_CODE static int scalePc(int tonic,bool minor,unsigned d){
   static const uint8_t major[] AGEN_MUSIC_DATA={0,2,4,5,7,9,11};
@@ -52,9 +60,68 @@ AGEN_MUSIC_CODE static int fitPitch(int reference,int tonic,bool minor,unsigned 
   }
   return best;
 }
-AGEN_MUSIC_CODE static bool bassAllowed(Section s,unsigned step,unsigned width){
+// Move actual in-key notes, rather than only quantizing unchanged notes. Both
+// pages share a contour seed; the answer reverses its direction. Bass downbeats
+// and chord-tone landings stay structural. Everything derives from the anchor.
+AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,bool minor,unsigned phrase,
+                                      unsigned channel,unsigned step,uint32_t seed){
+  const Section s=section(phrase);
+  const bool bass=channel==6||channel==14;
+  const int baseline=fitPitch(reference,tonic,minor,phrase,channel,step);
+  if(bass&&step%4==0)return baseline;
+  uint32_t h=seed^(phrase/2*374761393u)^(channel*668265263u)^(step*2246822519u);
+  h=(h^(h>>13))*1274126177u;h^=h>>16;
+  const unsigned chance=bass?50:s==Section::Variation||s==Section::Fill?90:
+      s==Section::Build?80:s==Section::Break?65:s==Section::Drop?45:40;
+  if(h%100>=chance)return baseline;
+  static const int8_t contour[] AGEN_MUSIC_DATA={2,4,3,7,5,-2,4,-5};
+  int delta=contour[((step/2)+channel+(phrase/2))%8];
+  if(phrase&1)delta=-delta;
+  if(bass)delta=delta>0?2:-2;
+  const int target=reference+delta;
+  int best=baseline,distance=999;
+  for(int n=reference-12;n<=reference+12;++n){
+    if(n<0||n>127)continue;
+    bool allowed=false;
+    for(unsigned d=0;d<(step%4==0?3u:7u);++d)
+      allowed|=n%12==(step%4==0?chordPc(tonic,minor,phrase,d):scalePc(tonic,minor,d));
+    int gap=n-target;if(gap<0)gap=-gap;
+    if(allowed&&gap<distance){best=n;distance=gap;}
+  }
+  return best;
+}
+AGEN_MUSIC_CODE static int voicingPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned lane,uint32_t seed){
+  const unsigned inversion=(phrase+seed)%3;
+  const int root=nearestPc(reference,chordPc(tonic,minor,phrase,0));
+  int notes[3];
+  for(unsigned i=0;i<3;++i){
+    const unsigned tone=(i+inversion)%3;
+    notes[i]=root+(chordPc(tonic,minor,phrase,tone)-chordPc(tonic,minor,phrase,0)+12)%12+(tone<inversion?12:0);
+  }
+  int center=(notes[0]+notes[1]+notes[2])/3,shift=0;
+  while(center+shift>reference+6)shift-=12;
+  while(center+shift<reference-6)shift+=12;
+  while(notes[0]+shift<24)shift+=12;
+  while(notes[2]+shift>108)shift-=12;
+  int pitch=notes[lane%3]+shift;
+  return pitch;
+}
+// AGEN notes use a musical register, then undo only the patch's octave offset.
+// Fine tuning and the user's patch stay intact; never apply the register twice.
+AGEN_MUSIC_CODE static int encodePitch(int pitch,int octaveShift){
+  pitch-=octaveShift;
+  while(pitch<0)pitch+=12;
+  while(pitch>127)pitch-=12;
+  return pitch;
+}
+AGEN_MUSIC_CODE static Section supportedSection(Section requested,unsigned foundation){
+  if(!foundation&&(requested==Section::Build||requested==Section::Break||requested==Section::Fill))return Section::Groove;
+  return requested;
+}
+AGEN_MUSIC_CODE static bool bassAllowed(Section s,unsigned step,unsigned width,bool finale=true){
   if(s==Section::Break)return false;
-  if(s==Section::Build)return step==0||step==width/2;
+  if(s==Section::Build)return false;
+  if(s==Section::Fill)return !finale||step<width-2;
   return true;
 }
 // 0..16 relative to the user's starting level; never boost beyond that ceiling.
@@ -62,14 +129,13 @@ AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsi
   if(progress>255)progress=255;
   if(s==Section::Break){if(ch==1||bass)return 0;return ch<=5?7:12;}
   if(s==Section::Build){
-    if(ch==1||bass)return progress*12/255;
+    if(ch==1||bass)return 0;
     if(ch==2)return 5+progress*11/255;
     if(ch<=5)return 6+progress*9/255;
     return 10+progress*6/255;
   }
   if(s==Section::Fill){
-    if(ch==1)return progress>=192?0:10;
-    if(bass)return 8;
+    if(ch==1||bass)return 0;
     return ch==2||ch==5?12+progress*4/255:12;
   }
   if(s==Section::Drop)return 16;
@@ -80,7 +146,7 @@ AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsi
 }
 
 // Return -1 to keep the existing hit, 0 to clear, or a velocity for a new/accented hit.
-AGEN_MUSIC_CODE static int drum(Section s,unsigned channel,unsigned step,unsigned width,uint32_t seed){
+AGEN_MUSIC_CODE static int drum(Section s,unsigned channel,unsigned step,unsigned width,uint32_t seed,bool finale=true){
   const unsigned phase=step%16;const bool tail=step>=width*3/4;
   const uint32_t h=(seed*1664525u+step*1013904223u+channel*977u)>>8;
   if(s==Section::Break){
@@ -89,12 +155,14 @@ AGEN_MUSIC_CODE static int drum(Section s,unsigned channel,unsigned step,unsigne
     if(channel==3)return phase%8==2?56:0;
   }
   if(s==Section::Build){
-    if(channel==1)return step>=width/2&&phase%8==0?94:0;
-    if(channel==2){unsigned spacing=tail?1:step>=width/2?2:4;return step%spacing==0?58+step*56/width:0;}
-    if(channel==3)return step>=width/2&&step%2==1?68:-1;
+    if(finale&&step==width-1)return 0; // one breath immediately before the drop
+    if(channel==1)return 0;
+    if(channel==2){const unsigned position=(finale?width:0)+step,total=width*2;unsigned spacing=position>=total*3/4?1:position>=total/2?2:4;return step%spacing==0?58+position*56/total:0;}
+    if(channel==3)return phase%4==2?64:0; // steady support, not a separate first roll
     if(channel==4||channel==5)return tail&&phase%2==0?78:0;
   }
   if(s==Section::Fill){
+    if(finale&&step==width-1)return 0; // one clean breath at the end of the pair
     if(channel==1&&tail)return 0;
     if(channel==2&&tail)return 76+(step%4)*10;
     if(channel==5&&tail&&phase%2==1)return 86;

@@ -69,6 +69,17 @@ int main(int argc,char**argv){assert(argc==2);
   assert(lit==8);
   for(const auto &point:check){const auto at=((16-(8+point[1]))*width+width/2+point[0]-1)*3;assert(c.rgb[at+1]>0);}
   c.save(argv[1],"check-green");
+  // Autosave draws only its check pixels over an existing non-black screen.
+  for(size_t i=0;i<c.rgb.size();i+=3){c.rgb[i]=17;c.rgb[i+1]=23;c.rgb[i+2]=31;}
+  const auto background=c.rgb;
+  toern_storage_visual::result(c,width,true,true,450,true);
+  unsigned changed=0;
+  for(size_t i=0;i<c.rgb.size();i+=3) {
+    if(c.rgb[i]!=background[i]||c.rgb[i+1]!=background[i+1]||c.rgb[i+2]!=background[i+2]) {
+      ++changed;assert(c.rgb[i]>0&&c.rgb[i]==c.rgb[i+1]&&c.rgb[i+1]==c.rgb[i+2]);
+    }
+  }
+  assert(changed==8);c.save(argv[1],"check-white-overlay");
   toern_storage_visual::result(c,width,true,true,450);c.save(argv[1],"check-white");
   toern_storage_visual::result(c,width,false,false,400);c.save(argv[1],"error");
  }

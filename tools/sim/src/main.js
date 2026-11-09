@@ -211,6 +211,7 @@ app.innerHTML = `
     <button type="button" data-jump="filter">Sound controls</button>
     <button type="button" data-jump="wav">Sample browser</button>
     <button type="button" data-jump="bpm">BPM</button>
+    <button type="button" data-jump="agen">AGEN</button>
     <button type="button" data-jump="settings-menu">Menu</button>
     <hr>
     <button type="button" id="import-midi">Import / find MIDI</button>
@@ -1965,16 +1966,15 @@ const HELP = {
   new: "NEW writes a pattern. Encoder 1 loads it. Encoder 2 sets how many pages (not on BLNK). Encoder 3 picks BLNK, TECH, HIPH, DNB, HOUS, or AMBT. Encoder 4 goes back to FILE.",
   kit: "Load a sound pack onto the eight voices. Encoder 4 picks the pack, encoder 2 loads it.",
   song: "Song arranges patterns in order. Encoder 4 moves through the song, encoder 2 picks the pattern. Encoder 3 starts the song.",
-  look: "SETT: VIEW, CTRL, DRAW, MUTE. Encoder 4 selects a page; encoder 3 changes its value. On MUTE, encoder 2 selects a voice. Esc leaves.",
-  vol: "Output levels. Encoder 4 selects a page; encoder 3 changes its value. On PREV, encoder 2 selects ON / PRSS / SYNC and encoder 3 changes preview volume.",
+  look: "SETT: VIEW, CTRL, DRAW, MUTE, SWAP, SUBP. Encoder 4 selects a page; encoder 3 changes its value. On MUTE, encoder 2 selects a voice. SWAP uses encoders 2 and 3 to select voices; hold either while turning to change its octave shift, then press encoder 4 to exchange notes. Esc leaves.",
+  vol: "Output levels. Encoder 4 selects a page; encoder 3 changes its value. On GAIN, encoder 1 changes voices 1–4, encoder 2 changes voices 5–8, and encoder 3 changes ALL or SYN (click to switch). On PREV, encoder 2 selects ON / PRSS / SYNC and encoder 3 changes preview volume.",
   recs: "REC: INPT, MIC, HPF, L-IN, TRIG, CLR. Encoder 4 picks a row, encoder 3 changes it.",
   midi: "MIDI: CH, TRAN, SEND, RCVE, FOLD, SYNC, PQ-I, PQ-O, TRIG, OVWR. SYNC uses SYC> / SYC<; red -- means the selected value has no effect in this mode. Encoder 4 selects pages.",
-  pset: "PSET stores this synth voice’s filters. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Slots are separate for voices 11, 13 and 14.",
+  pset: "PSET stores this synth voice’s filters. Encoder 4 selects 1–99, encoder 1 loads, encoder 2 saves, encoder 4 short exits. Loading or saving also returns to the grid. Slots are separate for voices 11, 13 and 14.",
   touchy: "TOUCHY: pads 1–5 play voices 1–5 (keyboard 1–5). Knobs 1–4 control the last played voice: pitch, velocity, reverb (voices 1, 2 and 5), highpass. Channel volume stays full. Click to choose voices 1–4 samples. Hold knob 1 to fast-record into the last played voice; release to stop. Hold knob 3 for the last played voice’s filter, or knob 4 to switch TOUCHY OFF and open the main menu.",
-  demo: "NyanCat for 10 seconds, MATZE SAMPLER in red, bright white and rainbow with sine curves. Repeats until Touch 1 / E or button A (A key) is pressed.",
-  mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO, DEMO. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger or DEMO to run the animation. Esc leaves.",
-  etc: "ETC: INFO, SCON, BATT, ADV, RSET, SWAP. SCON shows WAIT in yellow until a computer is talking, then OK in green. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. On SWAP, encoders 2 and 3 choose channels; hold either while turning to set its octave shift (−8…+8). Press encoder 4 / Enter to exchange their notes across the whole pattern. SWAP uses the copy/paste buffer. Esc leaves.",
-  adv: "ADV: CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE. Encoder 4 selects a page; encoder 3 changes its value. LEDS 1 / 1B select 16×16, 2 / 2B select 32×16. Esc leaves.",
+  mode: "MODE: FLOW, PMOD, LOOP, VMOD, CHLD, IMG, PONG, SONG, TCHY, AUTO, AGEN. Encoder 4 selects a page; encoder 3 changes its value. Press Enter on SONG to open the arranger or AGEN to toggle automatic arrangements. AUTO uses encoder 1 for the number of additional pages, encoders 2 and 3 for the source range; press encoder 1 to generate. AGEN keeps an audible foundation, uses one buildup pair, and drops on the next downbeat. DEMO is available from INFO with touch 3. Esc leaves.",
+  etc: "ETC: INFO, SD, BATT, ADV, RSET. SCON shows WAIT in yellow until a computer is talking, then OK in green. Encoder 4 selects a page. Press Enter on ADV to open display and diagnostic settings. On RSET, encoder 3 selects the reset and encoder 2 applies it. Esc leaves.",
+  adv: "ADV: CRSR, LEDS, RAM, LGHT, COLR, EYES, FIRE, 2-CH, USBP, HFC. Encoder 4 selects a page; encoder 3 changes its value. LEDS 1 / 1B select 16×16, 2 / 2B select 32×16. Esc leaves.",
   shift: "Shift moves the current voice. Encoder 4 moves it in time, encoder 1 moves it in pitch, encoder 2 moves only this page. Esc leaves.",
   boot: "The device is starting.",
 };
@@ -2002,7 +2002,7 @@ function markVoice() {
   document.querySelector(".voices").classList.toggle("on", mode === "draw" || mode === "single" || mode === "filter");
   refreshAssistive(false);
   document.querySelectorAll(".jump button[data-jump]").forEach((btn) => {
-    const on = btn.dataset.jump === mode || (btn.dataset.jump === "settings-menu" && mode === "menu");
+    const on = (btn.dataset.jump === "agen" && mode === "mode" && device.subIndex() === 10) || btn.dataset.jump === mode || (btn.dataset.jump === "settings-menu" && mode === "menu");
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });

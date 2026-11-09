@@ -769,13 +769,13 @@ bool storageTransferIs(bool kit,bool saving){return storageVisualActive&&storage
 bool storageResultVisible(){return storageVisualResult&&millis()-storageVisualResultAt<toern_storage_visual::resultDuration+(storageVisualHadProgress?100u:0u);}
 bool storageProgressVisible(){return storageVisualActive&&(!storageVisualKit||!storageVisualSaving||currentMode==&set_SamplePack);}
 bool storageTransferVisible(){return storageProgressVisible()||storageResultVisible();}
-void drawStorageResultFrame(bool success,bool white,uint32_t elapsed){StorageVisualCanvas canvas;toern_storage_visual::result(canvas,maxX,success,white,elapsed);}
+void drawStorageResultFrame(bool success,bool white,uint32_t elapsed){StorageVisualCanvas canvas;toern_storage_visual::result(canvas,maxX,success,white,elapsed,white);}
 void drawStorageTransferOverlay(){
   StorageVisualCanvas canvas;
   if(storageResultVisible()) {
     uint32_t elapsed=millis()-storageVisualResultAt;
     if(storageVisualHadProgress&&elapsed<100)toern_storage_visual::progress(canvas,maxX,storageVisualKit,storageVisualSaving,100,millis());
-    else toern_storage_visual::result(canvas,maxX,storageVisualSuccess,storageVisualWhite,elapsed-(storageVisualHadProgress?100u:0u));
+    else toern_storage_visual::result(canvas,maxX,storageVisualSuccess,storageVisualWhite,elapsed-(storageVisualHadProgress?100u:0u),storageVisualWhite);
   } else if(storageVisualActive)toern_storage_visual::progress(canvas,maxX,storageVisualKit,storageVisualSaving,storageVisualPercent,millis());
 }
 void storageTransferBegin(bool kit,bool saving){
@@ -1516,16 +1516,24 @@ FLASHMEM static void drawAutogenPageState(unsigned playing,unsigned other,bool r
   light(other,maxY,ready?CRGB(220,180,0):CRGB(200,0,0));
 }
 FLASHMEM void drawAutogenPages(){
-  unsigned playing,other,remaining;bool ready;
-  autogenUiSnapshot(playing,other,ready,remaining);
+  unsigned playing,other,progress;bool ready;
+  autogenUiSnapshot(playing,other,ready,progress);
   drawAutogenPageState(playing,other,ready);
+}
+FLASHMEM static void drawAutogenActivity(unsigned progress,bool ready,uint32_t now){
+  const CRGB ink[]={CRGB::Black,CRGB(4,24,30),CRGB(40,160,190),CRGB(210,120,20),CRGB(30,190,90)};
+  for(unsigned x=0;x<5;++x)for(unsigned y=0;y<5;++y)
+    light(maxX-4+x,16-y,ink[ToernAutogen::statusInk(x,y,progress,ready,now)]);
 }
 FLASHMEM void drawAutogenStatus(){
   if(!autogenStatusVisible())return;
-  unsigned playing,other,remaining;bool ready;
-  autogenUiSnapshot(playing,other,ready,remaining);
+  unsigned playing,other,progress;bool ready;
+  autogenUiSnapshot(playing,other,ready,progress);
   drawAutogenPageState(playing,other,ready);
-  drawPageNrOverlay(remaining);
+  drawAutogenActivity(progress,ready,millis());
+  // Keep actual page dots readable if a 16-column panel shares the icon's top row.
+  light(playing,maxY,CRGB(220,220,220));
+  light(other,maxY,ready?CRGB(220,180,0):CRGB(200,0,0));
 }
 
 void drawPages() {
@@ -2609,7 +2617,7 @@ FLASHMEM void drawBPMWithReservedSpace(float bpm, CRGB color, int topY) {
   const int startX = max(1, ((int)maxX - (width + 4)) / 2 + 1);
   drawText(whole, startX, topY, color);
   light(startX + width, topY, CRGB(255, 255, 255));
-  drawChar('0' + value % 10u, startX + width + 1, topY, getIndicatorColor('V'));
+  drawChar('0' + value % 10u, startX + width + 1 + (ledModules > 1 ? 1 : 0), topY, getIndicatorColor('V'));
 }
 
 FLASHMEM void drawBPMScreen() {

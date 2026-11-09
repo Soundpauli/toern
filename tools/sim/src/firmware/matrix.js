@@ -28,6 +28,26 @@ export function blend(a, b, amount) {
   return a.map((c, i) => Math.round(c + ((b[i] - c) * amount) / 255));
 }
 
+// FastLED's integer rainbow conversion is different from CSS HSV.
+export function rainbow(hue, value = 255) {
+  const offset = (hue & 31) << 3;
+  const third = (offset * 86) >> 8;
+  const twoThirds = (offset * 171) >> 8;
+  const rgb = [
+    [255 - third, third, 0], [171, 85 + third, 0],
+    [171 - twoThirds, 170 + third, 0], [0, 255 - third, third],
+    [0, 171 - twoThirds, 85 + twoThirds], [third, 0, 255 - third],
+    [85 + third, 0, 171 - third], [170 + third, 0, 85 - third],
+  ][(hue & 255) >> 5];
+  if (value === 255) return rgb;
+  const level = ((value * value) >> 8) + (value ? 1 : 0);
+  return rgb.map(c => (c * (level + 1)) >> 8);
+}
+
+export function blend8(a, b, amount) {
+  return a.map((c, i) => ((c << 8) + b[i] + (b[i] - c) * amount) >> 8);
+}
+
 const INDICATOR = {
   G: [0, 255, 0], R: [255, 0, 0], X: [0, 0, 255], W: [255, 255, 255],
   O: [255, 165, 0], H: [0, 191, 255], B: [0, 150, 255], V: [148, 0, 211],

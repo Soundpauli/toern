@@ -1,8 +1,9 @@
+import { statusInk, AGEN_STATUS_COLORS } from "./autogen.js";
 import { canReplaceShadowed } from "./paint.js";
 import { INSTRUMENT_NAMES } from "./instruments.js";
 import { syncHasEffect } from "./performance.js";
 import { COL, COL_BASE, COLS, ROWS, PAGES, SCHEMES, filterPagesFor } from "./const.js";
-import { blend, hsv, nscale, indicatorColor } from "./matrix.js";
+import { blend, blend8, rainbow, hsv, nscale, indicatorColor } from "./matrix.js";
 import { ALPHABET, glyphWidth, textPixelWidth } from "./font.js";
 import { showIcon } from "./icons.js";
 import { GENRES } from "./genres.js";
@@ -19,7 +20,7 @@ const UI_DIM_RED = [20, 0, 0];
 const UI_DIM_GREEN = [0, 20, 0];
 const FILTER_WIDE = [[5, 6], [12, 13], [20, 21], [27, 28]];
 const FILTER_NARROW = [[2, 3], [6, 7], [10, 11], [14, 15]];
-function filterCols() { return COLS <= 16 ? FILTER_NARROW : FILTER_WIDE; }
+function filterCols(s) { return COLS > 16 && s.ledMode === 3 ? FILTER_WIDE : FILTER_NARROW; }
 const FILTER_NAMES = ["HCUT", "LCUT", "RVRB", "BITC"];
 const FILTER_COLORS = [[255, 0, 0], [255, 64, 0], [255, 128, 0], [255, 191, 0]];
 const LOGO = [
@@ -46,8 +47,8 @@ export const SUBS = {
   recs: ["INPT", "MIC", "HPF", "L-IN", "TRIG", "CLR"],
   midi: ["CH", "TRAN", "SEND", "RCVE", "FOLD", "SYNC", "PQ-I", "PQ-O", "TRIG", "OVWR"],
   vol: ["MAIN", "GAIN", "LOUT", "PREV", "SPKR"],
-  mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO"],
-  etc: ["INFO", "SCON", "BATT", "ADV", "RSET"],
+  mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO", "AGEN"],
+  etc: ["INFO", "SD", "BATT", "ADV", "RSET"],
   adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE", "2-CH", "USBP", "HFC"],
   pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
 };
@@ -56,7 +57,7 @@ const SUB_SLOTS = {
   midi: [["midi", 0], ["midi", 1], ["midi", 2], ["midi", 3], ["midi", 4], ["midi", 5], ["midi", 8], ["midi", 6], ["midi", 7], ["midi", 9]],
   look: [["look", 2], ["look", 6], ["look", 10], ["look", 11], null, ["look", 12]],
   vol: [["vol", 0], ["vol", 1], ["vol", 2], ["vol", 3], ["vol", 5]],
-  mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["touchy", 0], ["etc", 3]],
+  mode: [["look", 0], ["look", 3], ["look", 4], ["look", 5], ["etc", 8], ["etc", 10], ["look", 8], ["song", 0], ["touchy", 0], ["auto", 0], ["agen", 0]],
   etc: [["etc", 0], ["etc", 2], ["etc", 6], ["adv", 0], ["etc", 11]],
   adv: [["look", 9], ["look", 7], ["etc", 1], ["etc", 4], ["etc", 5], ["etc", 7], ["etc", 9], ["vol", 4], ["vol", 7], ["vol", 6]],
 };
@@ -500,7 +501,7 @@ export function drawVelocity(matrix, s) {
   const velX1 = sx(2);
   const velX2 = sx(3);
   for (let x = velX1; x <= velX2; x++) {
-    for (let y = 1; y < v + 1; y++) matrix.light(x, y, [Math.min(255, y * y), Math.max(0, 20 - y), 0]);
+    for (let y = 1; y < v + 1; y++) matrix.light(x, y, [(y*y)&255, Math.max(0, 20 - y), 0]);
   }
   const pL = sx(5); const pR = sx(8); const iL = sx(6); const iR = sx(7);
   const frame = [30, 30, 30];
@@ -530,15 +531,16 @@ export function drawVelocity(matrix, s) {
   matrix.light(ix1, 7, frame);
   matrix.drawText(den, ix1 + 1, 2, tc);
   for (let x = COLS <= 16 ? 14 : 27; x <= (COLS <= 16 ? 15 : 28); x++) {
-    for (let y = 1; y < vol + 1; y++) matrix.light(x, y, [0, Math.max(0, 20 - y), Math.min(255, y * y)]);
+    for (let y = 1; y < vol + 1; y++) matrix.light(x, y, [0, Math.max(0, 20 - y), (y*y)&255]);
   }
 }
 
 const FILTER_PAGES_COLORS = [
-  [[255, 0, 0], [255, 64, 0], [255, 128, 0], [255, 191, 0]],
-  [[0, 80, 255], [0, 140, 255], [0, 200, 220], [0, 220, 180]],
-  [[80, 255, 0], [140, 255, 0], [180, 220, 0], [80, 180, 40]],
-  [[255, 0, 180], [255, 80, 160], [180, 80, 255], [80, 180, 255]],
+  [0, 10, 20, 30].map(h => rainbow(h)),
+  [160, 170, 185, 200].map(h => rainbow(h)),
+  [90, 100, 115, 130].map(h => rainbow(h)),
+  [220, 235, 250, 255].map((h, i) => rainbow(h, i === 3 ? 150 : 255)),
+  [42, 22, 96, 224].map(h => rainbow(h)),
 ];
 const WAVE_NAMES = ["SIN", "SQR", "SAW", "TRI"];
 const INST_NAMES = INSTRUMENT_NAMES;
@@ -548,8 +550,9 @@ export function drawFilter(matrix, s, now) {
   const pages = filterPagesFor(s.GLOB.currentChannel);
   const page = pages[s.filterPage || 0] || pages[0];
   const pageColors = FILTER_PAGES_COLORS[s.filterPage || 0] || FILTER_PAGES_COLORS[0];
-  pageColors.forEach((c, i) => matrix.setRing(i + 1, c));
-  for (let p = 0; p < pages.length; p++) matrix.light(COLS - pages.length + 1 + p, ROWS, p === (s.filterPage || 0) ? [255, 255, 255] : [30, 30, 30]);
+  const fast = i => i === f.fast && (f.fastPage || 0) === (s.filterPage || 0);
+  const disabled = i => page[i]?.key === "r" && [3, 4].includes(s.GLOB.currentChannel);
+  pageColors.forEach((c, i) => matrix.setRing(i + 1, disabled(i) ? fast(i) ? [16,16,0] : [8,8,8] : fast(i) ? [255,255,0] : c, true));
   const focus = s.filterTouch;
   const active = now - s.filterTouchAt < 1000 && focus >= 0 && focus < 4 && page[focus];
   for (let i = 0; i < 4; i++) {
@@ -558,46 +561,49 @@ export function drawFilter(matrix, s, now) {
     if (active && i !== focus) continue;
     const val = f[spec.key] ?? 0;
     const max = spec.max ?? 32;
-    const display = Math.max(1, Math.min(10, Math.round((val / max) * 9) + 1));
-    const color = blend([0, 0, 0], pageColors[i], Math.round((val / max) * 255));
-    const [x0, x1] = filterCols()[i];
+    const display = Math.max(1, Math.min(10, Math.floor((val / max) * 9 + 1)));
+    const sliderColor = disabled(i) ? [4,4,4] : pageColors[i];
+    const color = blend8([0, 0, 0], sliderColor, Math.floor((val / max) * 255));
+    const [x0, x1] = filterCols(s)[i];
     const isBipolarMid =
       (spec.key === "oct" && val === Math.floor(max / 2)) ||
-      ((spec.key === "detune" || spec.key === "cent" || spec.key === "semi" || spec.key === "arp" || spec.key === "voiceGain") && val === 16);
+      ((spec.key === "detune" || spec.key === "cent" || spec.key === "semi" || spec.key === "arp" || spec.key === "voiceGain") && val === 16) || (spec.key === "stretch" && val === 11);
     for (let y = 1; y <= 10; y++) {
       let c = [0, 0, 0];
-      if (y === display) c = i === f.fast ? [255, 255, 0] : [255, 255, 255];
-      else if (isBipolarMid && y === 1) c = [0, 255, 0];
+      if (y === display) c = fast(i) ? [255, 255, 0] : [255, 255, 255];
+      else if (isBipolarMid && y === 1) c = [0, 128, 0];
       else if (y < display) c = color;
       matrix.light(x0, y, c);
       matrix.light(x1, y, c);
     }
-    if (!active) matrix.drawText(spec.name[0], x0, 12, pageColors[i]);
+    if (!active) matrix.drawText(spec.name[0], x0, 12, sliderColor);
   }
   if (active) {
     const spec = page[focus];
     const val = f[spec.key] ?? 0;
-    const [x0, x1] = filterCols()[focus];
+    const [x0, x1] = filterCols(s)[focus];
     const width = textPixelWidth(spec.name);
     let tx = Math.floor((COLS - width + 1) / 2);
     if (tx < 1) tx = 1;
-    matrix.drawText(spec.name, tx, 12, pageColors[focus]);
+    matrix.drawText(spec.name, tx, 12, disabled(focus) ? [4,4,4] : pageColors[focus]);
     const bipolarKeys = new Set(["detune", "oct", "cent", "semi", "arp", "voiceGain"]);
     let label;
     if (spec.key === "voiceGain") label = (val > 16 ? "+" : "") + String(val - 16);
-    else if (spec.key === "stretch") label = val === 11 ? "OFF" : String(val - 11);
-    else if (spec.key === "wave") label = WAVE_NAMES[val] || String(val);
+    else if (spec.key === "stretch") label = val === 11 ? "OFF" : val < 11 ? `-${10-val}%` : `+${val-12}%`;
+    else if (spec.key === "wave") label = WAVE_NAMES[Math.min(3, Math.floor(val * 3 / 16))];
     else if (spec.key === "inst") label = INST_NAMES[val] || String(val);
     else if (spec.key === "detune" && (spec.max ?? 32) === 32) {
       label = String(Math.round((val / 32) * 200 - 100)); // cents
     } else if (spec.key === "oct" && (spec.max ?? 48) === 48) {
       label = String(val - 24); // whole semis ±2 oct
-    } else if (bipolarKeys.has(spec.key) && (spec.max ?? 32) === 32) label = String(val - 16);
+    } else if (spec.key === "arp") label = val === 16 ? "OFF" : `${val > 16 ? "+" : ""}${val-16}`;
+    else if (bipolarKeys.has(spec.key) && (spec.max ?? 32) === 32) label = String(val - 16);
     else label = String(val);
-    const t = Math.round((val / (spec.max ?? 32)) * 255);
+    const t = Math.floor((val / (spec.max ?? 32)) * 255);
     let valueColor = (spec.key === "res" || spec.key === "b" || spec.key === "voiceGain")
-      ? blend([0, 255, 0], [255, 0, 0], t)
-      : blend([255, 0, 0], [0, 255, 0], t);
+      ? blend8([0, 128, 0], [255, 0, 0], t)
+      : blend8([255, 0, 0], [0, 128, 0], t);
+    if (spec.key === "stretch") valueColor = val === 11 ? [100,100,100] : [0,128,0];
     if (spec.key === "oct" && (spec.max ?? 48) === 48) {
       const semis = val - 24;
       if (semis === 0 || semis === 12 || semis === -12 || semis === 24 || semis === -24)
@@ -605,7 +611,15 @@ export function drawFilter(matrix, s, now) {
     } else if (bipolarKeys.has(spec.key) && val === 16) {
       valueColor = [255, 255, 255];
     }
-    matrix.drawText(label, focus < 2 ? x1 + 4 : Math.max(1, x0 - 10), 5, valueColor);
+    const wide = COLS > 16 && s.ledMode === 3;
+    let valueX = wide ? Math.max(1, Math.min(COLS-6, focus < 2 ? x1+4 : x0-10)) : s.GLOB.currentChannel === 11 && focus === 0 && spec.key === "wave" ? 6 : focus < 2 ? 10 : 2;
+    for(let x=valueX;x<=valueX+6;x++)for(let y=4;y<11;y++)matrix.light(x,y,[0,0,0]);
+    if (bipolarKeys.has(spec.key) || spec.key === "stretch") {
+      const width=textPixelWidth(label)-1;
+      valueX = Math.max(1, Math.min(valueX, COLS-width+1));
+      for(let x=valueX;x<valueX+width;x++)for(let y=4;y<11;y++)matrix.light(x,y,[0,0,0]);
+    }
+    matrix.drawText(label, valueX, 5, valueColor);
   }
 }
 
@@ -621,6 +635,7 @@ export function drawFilterCheck(matrix, value, color) {
 }
 
 export function drawMenu(matrix, s) {
+  matrix = menuMatrix(matrix);
   const page = MENU_PAGES[s.menuIndex];
   const tc = menuText(page.col);
   matrix.drawIndicator("L", "G", 4);
@@ -636,10 +651,10 @@ export function isSoon(mode, index) {
 }
 
 const SOON = {
-  look: new Set([7]),
+  look: new Set(),
   midi: new Set(),
-  vol: new Set([2]),
-  etc: new Set([1, 3, 4, 6]), // RAM AUTO LGHT BATT stay stubbed; 2 is SCON
+  vol: new Set(),
+  etc: new Set(),
 };
 
 function drawLength(matrix, s, y, withNumber) {
@@ -686,6 +701,7 @@ function menuMatrix(matrix) {
 }
 
 export function drawSubmenu(matrix, s, now = performance.now()) {
+  const rawMatrix=matrix;
   matrix = menuMatrix(matrix);
   const pages = SUBS[s.mode];
   const name = pages[s.subIndex];
@@ -708,9 +724,26 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawText(s.swapHeld?.[1] ? `${s.swapOctaves[1]>=0?"+":""}${s.swapOctaves[1]}` : String(s.swapTo), COLS >= 24 ? 24 : 10, 3, COL[s.swapTo]);
     if (COLS >= 24) matrix.drawText("<>",12,3,UI_WHITE);
     else { matrix.light(8,4,UI_WHITE); matrix.light(9,4,UI_WHITE); }
-    matrix.drawLargeCustom(COL[s.swapFrom],2);
+    // SWAP uses the voice's full brightness, including its encoder-2 indicator.
+    const [a,b,c,d] = (COLS <= 16 ? [5,6,7,8] : [11,12,13,14]);
+    for (const x of [a,b,c,d]) matrix.light(x,1,COL[s.swapFrom]);
+    matrix.setRing?.(2,COL[s.swapFrom]);
     matrix.drawLargeCustom(COL[s.swapTo],3);
     matrix.drawIndicator("L",s.swapFrom===s.swapTo?"R":"G",4);
+    return;
+  }
+  if (s.mode === "mode" && s.subIndex === 9) {
+    matrix.drawText("AUTO",2,10,parent);
+    for(let x=1;x<=16;x++)matrix.light(x,8,x>=s.autoStart&&x<=s.autoEnd?[255,165,0]:x>s.autoEnd&&x<=s.autoEnd+s.autoPages?[0,255,0]:[0,0,0]);
+    matrix.drawIndicator('L','G',1);
+    matrix.drawIndicator('L','Y',2);
+    matrix.drawIndicator('L','W',3);
+    return;
+  }
+  if (s.mode === "mode" && s.subIndex === 10) {
+    matrix.drawText("AGEN",2,10,parent);
+    matrix.drawText(s.agen?.active?"ON":"OFF",2,3,s.agen?.active?UI_GREEN:UI_RED);
+    matrix.drawIndicator("L","G",4);
     return;
   }
   const { mode: pageMode, index: pageIndex } = resolveSubPage(s.mode, s.subIndex);
@@ -720,8 +753,29 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     return;
   }
   if (pageMode === "etc" && pageIndex === 0) {
-    drawInfo(matrix, s, now, parent);
+    drawInfo(rawMatrix, s, now, parent);
     return;
+  }
+  if (pageMode === "vol" && pageIndex === 1) {
+    const focus=s.gainFocus??3, values=[s.gain14??1,s.gain58??1,s.gainSynth??1,s.gain];
+    const colors=[[0,120,120],UI_ORANGE,[120,0,120],UI_GREEN];
+    matrix.drawText(["1-4","5-8","SYN","ALL"][focus],2,10,parent);
+    matrix.drawText(`${values[focus].toFixed(1)}x`,2,3,colors[focus]);
+    for(let i=0;i<4;i++)for(let k=0;k<4;k++)matrix.light(1+i*4+k,8,k<Math.round(values[i]*2)?colors[i].map(c=>i===focus?c:(c*91)>>8):[0,0,0]);
+    matrix.drawIndicator("L","N",1);matrix.drawIndicator("L","O",2);matrix.drawIndicator("L",s.gainEditAll===false?"M":"G",3);
+    return;
+  }
+  if (pageMode === "etc" && pageIndex === 1) {
+    const metric=s.ramMetric||0;
+    const rev=Math.floor([1,2,5,6,7,8,11].reduce((n,ch)=>n+(s.filt[ch].r||0),0)*100/(7*32));
+    matrix.drawText("RAM",2,10,parent);
+    matrix.drawText(s.ramLabel || ["A--",`R${rev}`,"F--","C--"][metric],2,3,metric===1&&rev>70?UI_YELLOW:UI_GREEN);
+    matrix.drawIndicator("L","G",3);
+    return;
+  }
+  if (pageMode === "etc" && pageIndex === 6) {
+    const pct=s.batteryPercent??100;
+    matrix.drawText("BATT",2,10,parent);matrix.drawText(`${pct}%`,2,3,pct>20?UI_GREEN:pct>10?UI_ORANGE:UI_RED);return;
   }
   s.infoAt = 0;
   if ((visibleMode === "etc" && visibleIndex === 3) || (visibleMode === "mode" && visibleIndex === 7)) {
@@ -741,7 +795,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.setRing?.(3,orange);
     return;
   }
-  matrix.drawText(name, 2, 10, parent);
+  if(!(pageMode === "midi" && pageIndex === 5))matrix.drawText(visibleMode === "mode" && visibleIndex === 1 ? "PMODE" : name, 2, 10, parent);
   if (pageMode === "look" && pageIndex === 11) {
     for (let uch = 1; uch <= 16; uch++) {
       const bit = uch === 16 ? 0 : uch;
@@ -792,8 +846,8 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawText(edit === 0 ? "SYC>" : "SYC<", 2, 10, parent);
     const active = syncHasEffect(s, edit, ms);
     matrix.drawText(active ? String(ms) : "--", 2, 3, !active || edit === 1 ? UI_RED : UI_GREEN);
-    matrix.drawIndicator("L", "Y", 2);
-    matrix.drawIndicator("L", "W", 3);
+    matrix.drawIndicator("L", "Y", 1);
+    matrix.drawIndicator("L", "W", 2);
     return;
   }
   if (pageMode === "midi" && pageIndex === 6) {
@@ -801,7 +855,8 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     const focus = s.ppqnFocus | 0;
     const width = s.ppqnWidthMs || 1;
     const stop = s.ppqnStopWithPlay ? "STOP" : "CONT";
-    const rate = PPQN_RATE_LABELS[s.ppqnRateSel | 0] || "OFF";
+    const rawRate = PPQN_RATE_LABELS[s.ppqnRateSel | 0] || "OFF";
+    const rate=rawRate==="OFF"?rawRate:`${s.ppqnPolarityPos===false?"-":"+"}${rawRate}`;
     let shown = rate;
     let code = rate === "OFF" ? "R" : "G";
     if (focus === 1) { shown = stop; code = s.ppqnStopWithPlay ? "R" : "G"; }
@@ -809,7 +864,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.drawText(shown, 2, 3, code === "R" ? UI_RED : code === "G" ? UI_GREEN : UI_WHITE);
     matrix.drawIndicator("L", "W", 1);
     matrix.drawIndicator("L", s.ppqnStopWithPlay ? "R" : "G", 2);
-    matrix.drawIndicator("L", code, 3);
+    matrix.drawIndicator("L", s.ppqnPolarityPos===false?"R":"G", 3);
     return;
   }
   if (pageMode === "midi" && pageIndex === 8) {
@@ -819,15 +874,19 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     const ppqn = CIN_PPQN_TABLE[s.cinPpqnIndex | 0] || 4;
     const shown = focus === 1 ? String(hold) : s.cinEnabled === false ? "OFF" : (s.cinPolarityPos === false ? "-" : "+") + ppqn;
     matrix.drawText(shown, 2, 3, focus === 1 ? UI_WHITE : s.cinEnabled === false || s.cinPolarityPos === false ? UI_RED : UI_GREEN);
-    matrix.drawIndicator("L", focus === 1 ? "W" : "G", 1);
-    matrix.drawIndicator("L", focus === 1 ? "G" : "W", 3);
+    matrix.drawIndicator("L", "W", 1);
+    matrix.drawIndicator("L", s.cinPolarityPos===false?"R":"G", 3);
     return;
   }
   const value = pageMode === "touchy"
     ? { text: s.touchyEnabled ? "ON" : "OFF", color: s.touchyEnabled ? UI_GREEN : UI_RED, code: s.touchyEnabled ? "G" : "R" }
     : s.legacySubValue(pageMode, pageIndex);
   matrix.drawText(value.text, 2, 3, value.color);
-  matrix.drawLargeCustom(value.color, 3);
+  if(visibleMode==='mode'&&visibleIndex===6)return;
+  if (pageMode === "etc" && pageIndex === ETC_RSET_INDEX) matrix.drawIndicator("L","G",2);
+  // TRIG's voice-coloured readout retains the device's green action indicator.
+  if(pageMode==="midi"&&pageIndex===7)matrix.drawIndicator("L",s.sideVoice?"G":"R",3);
+  else matrix.drawLargeCustom(value.color, 3);
 }
 
 function clampUi(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -842,6 +901,7 @@ export function drawLoadSave(matrix, s) {
   const isNew = s.slot < 0;
   const exists = isNew ? true : s.slotExists("toern-web-patterns", s.slot);
   showIcon(matrix, "folder", 2, 7, isNew ? UI_BLUE : (exists ? UI_GREEN : UI_DIM_RED));
+  if(s.slot===s.loadedPatternFile)matrix.drawText(">",1,11,UI_BLUE);
   if (isNew) matrix.drawText("+", 4, 6, UI_WHITE);
   matrix.drawIndicator("L", "X", 4);
   matrix.setRing(3, [0, 0, 0]);
@@ -866,6 +926,8 @@ export function drawLoadSave(matrix, s) {
     matrix.drawIndicator("M", "G", 1);
     matrix.drawIndicator("M", s.fnHeld?"R":"D", 2);
     matrix.drawNumber(s.slot, UI_BRIGHT_GREEN, 11);
+    const count=s.patternSlotCount?.(s.slot)??1;
+    for(let i=0;i<count;i++)matrix.light((COLS>=32?10:5)+2*i,7,UI_GREEN);
   } else {
     matrix.drawIndicator("M", "E", 1);
     matrix.drawIndicator("M", "R", 2);
@@ -877,6 +939,7 @@ export function drawLoadSave(matrix, s) {
 export function drawPack(matrix, s) {
   const exists = s.slotExists("toern-web-packs", s.packSlot);
   showIcon(matrix, "pack", 2, 7, exists ? UI_GREEN : UI_DIM_RED);
+  if(s.packSlot===s.loadedPackSlot)matrix.drawText(">",1,11,UI_RED);
   matrix.drawIndicator("M", exists ? "G" : "E", 1);
   matrix.drawIndicator("M", exists ? "D" : "R", 2);
   matrix.drawIndicator("L", "X", 4);
@@ -1004,10 +1067,10 @@ export function drawWave(matrix, s, now) {
 export function drawSong(matrix, s) {
   matrix.drawIndicator("L", "M", 2);
   matrix.drawIndicator("L", "N", 4);
-  matrix.drawText(String(s.songPattern).padStart(2, "0"), 1, 11, hsv(s.songPattern * 16, 255, 255));
+  matrix.drawText(String(s.songPattern).padStart(2, "0"), 1, 11, rainbow(s.songPattern * 16));
   matrix.drawText(String(s.songPos).padStart(2, "0"), 10, 11, [0, 255, 255]);
   const stored = s.song[s.songPos - 1];
-  if (stored > 0) matrix.drawText(">" + String(stored).padStart(2, "0"), 1, 5, hsv(stored * 16, 255, 255));
+  if (stored > 0) matrix.drawText(">" + String(stored).padStart(2, "0"), 1, 5, rainbow(stored * 16));
   for (let i = 0; i < COLS && i < 64; i++) {
     const pos = i;
     const pattern = s.song[pos];
@@ -1057,6 +1120,22 @@ export function drawBoot(matrix, now, bootAt, wavesOnly = false) {
   return !wavesOnly && t >= 5000;
 }
 
+export function drawDemo(matrix,s,now) {
+  const text="MATZE SAMPLER", width=[...text].reduce((n,c)=>n+((c==='M'?5:glyphWidth(c))+1)*2,0);
+  const scroll=(COLS+width+1)*65;
+  let t=(now-s.demoStarted)%(10000+scroll*3);
+  if(t<10000){drawTouchyCat(matrix.light,COLS,t,[170,62,105]);return;}
+  t-=10000;const pass=Math.floor(t/scroll),x0=COLS+1-Math.floor((t%scroll)/65);
+  drawBoot(matrix,now,s.demoStarted,true);
+  let x=x0;
+  for(const c of text){
+    const glyph=ALPHABET[c.charCodeAt(0)-32], columns=c==='M'?[31,2,4,2,31]:glyph.slice(1,1+glyph[0]);
+    const color=pass===0?[255,0,0]:pass===1?[255,255,255]:rainbow((x*12+Math.floor((now-s.demoStarted)/25))&255);
+    for(let col=0;col<columns.length;col++)for(let row=0;row<5;row++)if(columns[col]&(1<<row))for(let dx=0;dx<2;dx++)for(let dy=0;dy<2;dy++)matrix.light(x+col*2+dx,4+(4-row)*2+dy,color);
+    x+=(columns.length+1)*2;
+  }
+}
+
 const VERSION = "v3.03b";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
@@ -1096,7 +1175,7 @@ export function drawBpm(matrix, s) {
   matrix.drawText(whole, start, 4, digitColor);
   const dot = start + textPixelWidth(whole);
   matrix.light(dot, 4, [255, 255, 255]);
-  matrix.drawText(String(value % 10), dot + 1, 4, [148, 0, 211]);
+  matrix.drawText(String(value % 10), dot + 1 + (COLS > 16 ? 1 : 0), 4, [148, 0, 211]);
   const x = COLS - 1;
   const now = performance.now();
   const pulseFresh = analogExt && s.analogPulseAt && (now - s.analogPulseAt) < 80;
@@ -1226,24 +1305,25 @@ export function drawEyesScreensaver(matrix, s, now) {
 export function drawRecord(matrix, s, now) {
   matrix.setRing(1, [255, 255, 0]);
   matrix.drawIndicator("L", "Y", 1);
-  if (s.recOn) matrix.setRing(2, [0, 0, 0]);
-  else {
-    matrix.setRing(2, [255, 0, 0]);
-    matrix.drawIndicator("L", "R", 2);
-  }
+  matrix.setRing(2, [0, 0, 0]);
   matrix.setRing(3, [0, 255, 0]);
   matrix.drawIndicator("L", "G", 3);
   matrix.setRing(4, [0, 0, 255]);
   matrix.drawIndicator("L", "X", 4);
+  for(let y=1;y<=2;y++){matrix.light(Math.min(COLS,9),y,[180,140,0]);matrix.light(COLS>=24?24:12,y,[255,0,0]);}
   const level = Math.max(0, Math.min(16, Math.round((s.recLevel || 0) * 16)));
-  for (let y = 1; y <= level; y++) matrix.light(2, y, [255, 0, 0]);
+  for (let y = 1; y <= level; y++) matrix.light(2, y, y>=14?[255,0,30]:y>=10?[255,140,0]:[0,220,90]);
+  const peak=Math.min(16,Math.round((s.recPeak||0)*16));
+  if(peak>0)matrix.light(2,peak,peak>=14?[255,60,60]:[200,220,255]);
   if (s.recOn) {
     const sec = Math.max(0, (now - s.recAt) / 1000);
-    matrix.drawText(sec.toFixed(1).padStart(4, " "), 3, 5, [255, 140, 0]);
+    if(COLS>=28)matrix.drawText("REC",5,9,[255,0,0]);
+    matrix.drawText(sec.toFixed(1),COLS>=28?18:4,9,UI_ORANGE);
   } else if (s.recPlay) {
     const sec = Math.max(0, (now - s.recPlayAt) / 1000);
-    matrix.drawText(sec.toFixed(1).padStart(4, " "), 3, 5, [0, 255, 0]);
-  } else matrix.drawText("RDY", 5, 5, [255, 100, 0]);
+    if(COLS>=28)matrix.drawText("PLAY",5,9,[0,255,80]);
+    matrix.drawText(sec.toFixed(1),COLS>=28?21:4,9,UI_ORANGE);
+  } else matrix.drawText("RDY", 5, 9, UI_ORANGE);
 }
 
 function drawOk(matrix, t) {
@@ -1318,47 +1398,6 @@ export function drawTouchy(matrix, s, now) {
   for(let i=0;i<4;i++)matrix.setRing?.(i+1,TOUCHY_COLORS[i].map(v=>Math.floor(v/2)),true);
 }
 
-export const DEMO_TEXT = "MATZE SAMPLER";
-export const DEMO_TEXT_SCALE = 2;
-export const DEMO_M_GLYPH = [5, 0x1f, 0x02, 0x04, 0x02, 0x1f];
-export function demoGlyph(ch) { return ch === "M" ? DEMO_M_GLYPH : ALPHABET[ch.charCodeAt(0) - 32]; }
-export const DEMO_TEXT_WIDTH = [...DEMO_TEXT].reduce((width,ch)=>width+(demoGlyph(ch)[0]+1)*DEMO_TEXT_SCALE,0);
-export function demoPhase(elapsed, columns = COLS) {
-  const scrollMs = (columns + DEMO_TEXT_WIDTH + 1) * 65;
-  const cycleMs = 10000 + 3 * scrollMs;
-  let t = Math.max(0, elapsed) % cycleMs;
-  if (t < 10000) return { name: "nyan", elapsed: t };
-  t -= 10000;
-  for (const name of ["red", "white", "rainbow"]) {
-    if (t < scrollMs) return { name, elapsed: t, x: columns + 1 - Math.floor(t / 65) };
-    t -= scrollMs;
-  }
-  return { name: "nyan", elapsed: 0 };
-}
-export function drawDemo(matrix, elapsed) {
-  const phase = demoPhase(elapsed);
-  if (phase.name === "nyan") {
-    drawTouchyCat((x,y,color)=>matrix.light(x,y,color), COLS, phase.elapsed);
-  } else if (["red", "white", "rainbow"].includes(phase.name)) {
-    drawBoot(matrix, elapsed, 0, true);
-    // Double each font pixel in both dimensions; scroll entirely off-grid.
-    let x = phase.x;
-    for (const ch of DEMO_TEXT) {
-      const color = phase.name === "red" ? [255,0,0] : phase.name === "white" ? [255,255,255] : hsv((x*12 + elapsed/25)%256,255,255);
-      const glyph = demoGlyph(ch);
-      for (let col = 0; col < glyph[0]; col++) for (let row = 0; row < 5; row++) {
-        const bits = glyph[col + 1];
-        if (!(bits & (1 << row))) continue;
-        for (let dx = 0; dx < DEMO_TEXT_SCALE; dx++) for (let dy = 0; dy < DEMO_TEXT_SCALE; dy++)
-          matrix.light(x + col * DEMO_TEXT_SCALE + dx, 4 + (4 - row) * DEMO_TEXT_SCALE + dy, color);
-      }
-      x += (glyph[0] + 1) * DEMO_TEXT_SCALE;
-    }
-
-
-  }
-}
-
 export function drawBrowserConfirmation(matrix,s) {
   const deleting=s.confirmation.deleting,yes=s.confirmChoice===1;
   if(COLS<32&&!deleting){
@@ -1381,6 +1420,7 @@ function drawCanceled(matrix,elapsed) {
 
 export function renderFrame(matrix, s, now) {
   matrix.clear();
+  if(s.demoActive){drawDemo(matrix,s,now);matrix.present();return;}
   matrix.setBrightness(s.ledBrightness);
   matrix.setCursor(0, 0);
   if (s.mode !== "etc") s.infoAt = 0;
@@ -1398,9 +1438,7 @@ export function renderFrame(matrix, s, now) {
     matrix.present();
     return;
   }
-  if (s.mode === "demo") {
-    drawDemo(matrix, now - s.demoAt);
-  } else if (s.mode === "boot") {
+  if (s.mode === "boot") {
     if (drawBoot(matrix, now, s.bootAt)) s.mode = "draw";
   } else if (s.mode === "draw" || s.mode === "single" || s.mode === "shift") {
     const voice = (pal(s).col[s.GLOB.currentChannel] || [255, 0, 0]).slice();
@@ -1452,6 +1490,7 @@ export function renderFrame(matrix, s, now) {
       matrix.drawText(text, x, y, [255, 255, 0]);
     }
     if (s.solo && now - s.soloArrowAt < 250 && s.soloArrow) matrix.drawText(s.soloArrow, 7, 8, [255, 255, 255]);
+    if (s.agen?.active) drawAutogenStatus(matrix, s, now);
     if (s.mode === "shift") matrix.drawText("SHFT", 2, 11, [120, 120, 0]);
     if (s.sensCountActive) {
       const n = s.sensCountSec || 3;
@@ -1469,9 +1508,10 @@ export function renderFrame(matrix, s, now) {
   else if (s.mode === "touchy") drawTouchy(matrix, s, now);
   else if (SUBS[s.mode]) drawSubmenu(matrix, s, now);
   else if (s.mode === "pset") {
-    matrix.drawText("PSET", 2, 10, UI_WHITE);
-    matrix.drawText(String(s.presetSlot), 2, 3, s.presetExists() ? UI_GREEN : UI_BLUE);
-    matrix.drawIndicator("L", "G", 1); matrix.drawIndicator("L", "R", 2); matrix.drawIndicator("L", "X", 4);
+    const exists=s.presetExists();
+    showIcon(matrix,"folder",2,7,exists?UI_GREEN:UI_DIM_RED);
+    matrix.drawNumber(s.presetSlot,exists?UI_BRIGHT_GREEN:UI_BLUE,11);
+    matrix.drawIndicator("M",exists?"G":"E",1);matrix.drawIndicator("M",exists?"D":"R",2);matrix.drawIndicator("L","X",4);
   }
   else if (s.mode === "dat") drawLoadSave(matrix, s);
   else if (s.mode === "new") drawNew(matrix, s);
@@ -1508,4 +1548,13 @@ export function renderFrame(matrix, s, now) {
     for (const [x,y] of points) matrix.light(cx+x,cy+y,[0,0,255]);
   }
   matrix.present();
+}
+
+export function drawAutogenStatus(matrix, s, now) {
+  const { page, ready=true, progress=0 } = s.agen;
+  for(let x=1;x<=COLS;x++) matrix.light(x,16,[0,0,0]);
+  for(let i=1;i<=2;i++)matrix.light(i,16,i===page?[220,220,220]:ready?[220,180,0]:[200,0,0]);
+  for(let x=0;x<5;x++)for(let y=0;y<5;y++)
+    matrix.light(COLS-4+x,16-y,AGEN_STATUS_COLORS[statusInk(x,y,progress,ready,now)]);
+  for(let i=1;i<=2;i++)matrix.light(i,16,i===page?[220,220,220]:ready?[220,180,0]:[200,0,0]);
 }

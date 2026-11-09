@@ -71,6 +71,7 @@ function bitCurve(bits) {
 export function createEngine() {
   let ctx = null;
   let master = null;
+  let treble = null;
   const chains = {};
   const buffers = {};
   const custom = {};
@@ -80,10 +81,12 @@ export function createEngine() {
     ctx = new AudioContext({ latencyHint: "interactive" });
     master = ctx.createGain();
     master.gain.value = 0.6;
-    master.connect(ctx.destination);
+    treble=ctx.createBiquadFilter();treble.type="highshelf";
+    treble.frequency.value=6000;treble.gain.value=0;
+    treble.connect(ctx.destination);master.connect(treble);
     const previewBus = ctx.createGain();
     previewBus.gain.value = 0.5;
-    previewBus.connect(ctx.destination);
+    previewBus.connect(treble);
     ctx.__preview = previewBus;
     const verb = makeVerb(ctx);
     verb.wet.connect(master);
@@ -142,10 +145,11 @@ export function createEngine() {
   }
 
   let tempo = 120;
-  function setBus({ main = 80, preview = 8, stereo = 0, bpm = tempo } = {}) {
+  function setBus({ main = 80, preview = 8, stereo = 0, bpm = tempo, hfCut = 0 } = {}) {
     tempo = bpm;
     if (!ctx) return;
     master.gain.setTargetAtTime((main / 100) * 0.75, ctx.currentTime, 0.02);
+    treble.gain.setTargetAtTime(-12*Math.max(0,Math.min(256,hfCut))/256,ctx.currentTime,0.02);
     ctx.__preview.gain.setTargetAtTime(preview / 16, ctx.currentTime, 0.02);
     for (const ch of [1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 14]) chains[ch].pan.pan.setTargetAtTime(mix(ch, stereo), ctx.currentTime, 0.02);
   }

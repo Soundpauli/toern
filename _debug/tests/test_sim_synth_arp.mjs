@@ -27,7 +27,8 @@ for (const ch of [13,14]) {
   const f=emptyFilt(ch);
   engine.trigger(ch,100,0,{...f,midiPitch:69,detune:0,octaveRaw:f.oct,env:f},ch+1);
   const pair=oscillators.slice(-2).map(osc=>osc.frequency.value);
-  assert.deepEqual(pair,[440,440], 'SIM defaults keep both mono voices at neutral CENT and OCTV');
+  const defaultPitch=ch===13?110:220;
+  assert.deepEqual(pair,[defaultPitch,defaultPitch], 'MCP device defaults use CENT 0 on CH13 and CENT 8 on CH14');
   engine.trigger(ch,100,0,{...f,midiPitch:69,cent:16,semi:0,detune:1,octaveRaw:32,env:f},ch+1);
   const tuned=oscillators.slice(-2).map(osc=>osc.frequency.value);
   assert.equal(tuned[0],440,'mono SEMI, DTNE and OCTV do not shift oscillator 1');

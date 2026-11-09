@@ -1,4 +1,5 @@
 #if TOERN_REMOTE_CONTROL
+void remotePrintAutogenState();
 // Semantic readback uses the same menu/slider definitions as the panel.
 // It is read-only: no encoder polling, screen changes, or parameter writes.
 FLASHMEM void remotePrintUiState() {
@@ -12,6 +13,7 @@ FLASHMEM void remotePrintUiState() {
     Serial.printf("\"cell\":{\"step\":%u,\"row\":%u,\"voice\":%u,\"velocity\":%u,\"probability\":%u,\"condition\":%u}",
         step, GLOB.y, cell.channel, cell.velocity, cell.probability, cell.condition);
   } else Serial.print("\"cell\":null");
+  Serial.print(",\"autogen\":");remotePrintAutogenState();
 }
 
 FLASHMEM void remoteReplyFilters(unsigned long id, int ch) {
