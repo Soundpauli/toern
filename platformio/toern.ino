@@ -69,6 +69,7 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include "src/toern_sd_protocol.h"
 #include <Audio.h>
 #include "src/toern_audio_runtime.h"
+#include "src/toern_stall_probe.h"
 #include "src/toern_envelope_curve.h"
 #include "src/toern_pcm_interpolation.h"
 #include "src/toern_midi_pitch.h"
@@ -4972,6 +4973,7 @@ FLASHMEM void setup() {
   Serial8.addMemoryForWrite(midiTxExtra, sizeof(midiTxExtra));
   Serial8.addMemoryForRead(midiRxExtra, sizeof(midiRxExtra));
   Serial8.begin(31250);
+  toern_stall_probe::install();
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.turnThruOff();
   MIDI.setHandleNoteOn(handleNoteOn);    // optional MIDI library hook
@@ -7398,6 +7400,7 @@ struct LoopTimingScope {
 static volatile uint32_t detailMax[8]={};
 struct StallDetail {unsigned slot;uint32_t started;StallDetail(unsigned n):slot(n),started(micros()){}~StallDetail(){uint32_t dt=micros()-started;if(dt>detailMax[slot])detailMax[slot]=dt;}};
 void loop() {
+  ++toern_stall_probe::heartbeat;
   toernI2cRuntimeBegin();
 #if TOERN_REMOTE_CONTROL
   LoopTimingScope timingScope;

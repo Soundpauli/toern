@@ -1,5 +1,40 @@
 # Playback stall diagnostic checkpoint — 2026-11-09
 
+## Root cause (found 2026-11-09, branch `live-agen`)
+
+The ~1.3 s freezes are **not firmware code paths**: the whole CPU, every
+interrupt included, is parked for exactly 2^30 CPU cycles (1,315,860 µs at
+816 MHz; stalls of 2^31 / 2^32 cycles were also logged).
+
+A SysTick-hooked probe (`src/toern_stall_probe.h`, fires at priority 32 while
+PIT/audio are blocked) caught the stuck instruction: a `SCB_CACHE_DCIMVAC`
+store inside `AudioInputI2S::isr()` — a plain cache-invalidate that waits
+behind a blocked AXI path. The cause matches the PJRC analysis in
+<https://forum.pjrc.com/index.php?threads/78171/>: the stock Teensy 4.1 core
+(1.162 / "1.62") maps FlexSPI2 as one 32 MB cacheable MPU region, but the board
+has 2 × 8 MB PSRAM. Any address in 0x71000000–0x71FFFFFF that happens to sit in
+a register can be speculatively prefetched by the Cortex-M7; FlexSPI2 then
+waits for its AHB bus timeout, 4 × 2^28 cycles per 256-bit line fill. With a
+16.6 MB EXTMEM footprint on this firmware there are plenty of 0x70xxxxxx/
+0x71xxxxxx-looking values in registers, which is why dense CH11/CH13 patterns,
+MIDI input and AGEN all "correlated" without any of them being the cause.
+
+Fix: `src/toern_psram_mpu.cpp` implements `startup_middle_hook()`, shrinks the
+0x70000000 MPU region to the detected `external_psram_size` (8 or 16 MB) and
+zeroes `FLEXSPI2_FLSHB1CR0/B2CR0`. Speculative accesses to the unbacked half are
+now rejected by the MPU instead of reaching FlexSPI2. `REMOTE PERF` reports
+`psram_mb` and `flexspi2_mpu_mb` (16/16 on the dev unit, previously 16/32).
+
+Validation: the saved stalling motif reproduced on the probe build after
+~90 s (`playback_late` 1, 1,318,004 µs stall, probe PC in `AudioInputI2S::isr`).
+With the MPU fix the same motif ran 15 min / 5,994 steps: `playback_late` 0,
+`loop_stalls` 0, `stall_probe_count` 0, `playback_gap_us` ≈ step interval
+throughout. The SysTick probe stays in the build as a cheap watchdog
+(`stall_probe*` fields in `PERF`); remove it together with the other
+diagnostics before a production merge.
+
+---
+
 Branch: `codex/fix-playback-stalls`, based on `3d6b5f0`.
 
 This preserves the diagnostic firmware that the user reported as running well.
