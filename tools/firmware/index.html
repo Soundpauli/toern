@@ -334,13 +334,13 @@
             <li>Connect TŒRN by USB and leave it running.</li>
             <li>Under Firmware, pick the build.</li>
             <li>Press <strong>Upload Firmware</strong> and choose the Teensy serial port in the browser dialog.</li>
-            <li>Wait until the small LED blinks red.</li>
-            <li>If <strong>Choose blinking Teensy</strong> appears, press it, pick the blinking board, then press <strong>Upload Firmware</strong> again.</li>
+            <li>Wait for the small red LED to light. A steady light is normal in programming mode.</li>
+            <li>If prompted, press <strong>Choose Teensy bootloader</strong>, pick the Teensy bootloader, then press <strong>Upload Firmware</strong> again.</li>
             <li>The bar fills. When the status says the flash is complete, TŒRN restarts on the new firmware by itself.</li>
           </ol>
-          <p>If the LED never blinks, something else still holds the serial port. Close it and press <strong>Upload Firmware</strong> again.</p>
-          <h3>No sketch running</h3>
-          <p>Press the programming button so the LED blinks red. Then <strong>Choose blinking Teensy</strong>, then <strong>Upload Firmware</strong>.</p>
+          <p>If the board stays on its serial port instead of entering programming mode, another program may still hold that port. Close it and press <strong>Upload Firmware</strong> again.</p>
+          <h3>Factory firmware / programming button</h3>
+          <p>Press the Teensy programming button so the red LED lights. Then <strong>Choose Teensy bootloader</strong>, then upload the selected firmware. This path needs no running serial port.</p>
           <img src="public/reset.jpeg" alt="Teensy programming button, marked in red" class="teensy-reset-img">
         </div>
         </details>
@@ -362,7 +362,12 @@
               <input type="radio" name="firmware" value="beta-modulr" id="firmwareBetaModulr">
               BETA-MODULR
             </label>
+            <label class="teensy-firmware-option">
+              <input type="radio" name="firmware" value="ramtest" id="firmwareRamTest">
+              RAM test · 16 MB
+            </label>
           </div>
+          <p id="ramTestWarning" hidden>Diagnostic firmware: temporarily replaces the instrument program. Test the RAM below, then upload your usual firmware again. EEPROM settings and SD files are preserved.</p>
           <div class="teensy-beta-warning" id="betaWarning">
             Careful: this is a beta and might introduce troubles, including losing data or settings of your unit. Use at your own risk.
           </div>
@@ -371,11 +376,11 @@
         <!-- Device Selection & Flashing -->
         <div class="teensy-section">
           <h2>2. Device & Flash</h2>
-          <p>Press Upload Firmware. The full sequence, and what each button does, is under Before you flash.</p>
+          <p>Running TŒRN can reboot automatically when you upload. For factory firmware or a board already in programming mode: press the Teensy programming button, choose the Teensy bootloader, then upload.</p>
           <p id="firmwareLoaded" class="teensy-loaded"></p>
           <div class="teensy-buttons">
             <button type="button" class="teensy-btn" id="uploadFirmwareBtn">Upload Firmware</button>
-            <button type="button" class="teensy-btn" id="selectDeviceBtn" hidden>Choose blinking Teensy</button>
+            <button type="button" class="teensy-btn" id="selectDeviceBtn">Choose Teensy bootloader</button>
           </div>
           <progress id="flashProgress" value="0" max="1"></progress>
         </div>
@@ -384,6 +389,14 @@
         <div class="teensy-section teensy-status-section">
           <div id="status"></div>
         </div>
+
+        <section class="teensy-section setup-wizard" id="setupWizard" aria-labelledby="setupHeading">
+          <h2 id="setupHeading">3. Make it yours</h2>
+        </section>
+
+        <section class="teensy-section setup-wizard" id="ramTest" aria-labelledby="ramTestHeading">
+          <h2 id="ramTestHeading">4. Test all 16 MB of RAM</h2>
+        </section>
 
         <!-- Serial Port (collapsible, default hidden) -->
         <details class="teensy-serial-toggle">

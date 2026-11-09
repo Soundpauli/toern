@@ -58,8 +58,8 @@ async function sendReportWithRetries(device, data, maxRetries = 5) {
  */
 function getAddressOffset(productId) {
     switch (productId) {
-        case 0x0478: // Teensy 4.0
-        case 0x0479: // Teensy 4.1
+        case 0x0478: // Shared HalfKay PID, including Teensy 4.0 and 4.1
+        case 0x0479: // Retained legacy T4.x compatibility entry
             return 0x60000000;
         default:
             return 0x00000000;
@@ -579,8 +579,8 @@ export class SerialPortManager {
  * Device filters to include multiple Teensy boards (3.x and 4.x).
  */
 export const TEENSY_DEVICE_FILTERS = [
-    { vendorId: 0x16c0, productId: 0x0478 }, // Teensy 4.0
-    { vendorId: 0x16c0, productId: 0x0479 }, // Teensy 4.1
+    { vendorId: 0x16c0, productId: 0x0478 }, // Shared HalfKay bootloader (also Teensy 4.1)
+    { vendorId: 0x16c0, productId: 0x0479 }, // Retained legacy compatibility
     { vendorId: 0x16c0, productId: 0x0477 }, // Teensy 3.6
     { vendorId: 0x16c0, productId: 0x0474 }, // Teensy 3.5
     { vendorId: 0x16c0, productId: 0x0484 }, // Teensy 3.1 / 3.2
