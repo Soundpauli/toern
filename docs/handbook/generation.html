@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TŒRN — AUTO &amp; AGEN</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preload" href="fonts/bebas-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-400-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="handbook-fonts.css?v=20261011d" />
+  <link rel="stylesheet" href="handbook.css?v=20261016s" />
+</head>
+<body class="hb-body">
+<a class="hb-skip" href="#hb-content">Skip to content</a>
+<div class="hb-app">
+  <button type="button" class="hb-nav-toggle" id="hb-nav-toggle" aria-expanded="false" aria-controls="hb-sidebar" aria-label="Open handbook menu"><span class="hb-nav-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <div class="hb-nav-backdrop" id="hb-nav-backdrop" aria-hidden="true"></div>
+  <aside id="hb-sidebar" class="hb-sidebar" aria-label="Handbook chapters"></aside>
+  <script src="handbook-layout.js?v=20261016s"></script>
+  <script src="handbook-language.js?v=20261109agen"></script>
+  <script src="handbook-icons.js"></script>
+  <script src="handbook-nav.js?v=20261109agen"></script>
+
+  <div class="hb-main">
+    <div id="hb-content" class="hb-main__scroll" tabindex="-1">
+      <div class="wrap">
+<section class="handbook-page" id="page-generation">
+  <h2 class="handbook-page__title" data-hb-copy="generation.001">AUTO &amp; AGEN</h2>
+  <p class="handbook-page__summary" data-hb-copy="generation.002">Turn a motif into written variations or an evolving live arrangement. This chapter explains the controls, chord rules, registers, rhythm, probabilities and timing behind generation.</p>
+  <nav aria-label="In this chapter"><p data-hb-copy="generation.003"><a href="#choose">Choose a tool</a> · <a href="#auto">AUTO</a> · <a href="#agen">AGEN</a> · <a href="#arrangement">Sections &amp; timing</a> · <a href="#harmony">Harmony</a> · <a href="#chords">Chords</a> · <a href="#pitch">Pitch</a> · <a href="#rhythm">Rhythm &amp; chance</a> · <a href="#volume">Volume</a> · <a href="#memory">What is preserved</a></p></nav>
+
+  <section class="hb-sub" id="choose">
+    <h2 data-hb-copy="generation.004">Choose the right kind of generation</h2>
+    <p data-hb-copy="generation.005">TŒRN runs a local musical rule system: it measures your notes, chooses related rhythmic and harmonic candidates, then varies them with seeded pseudo-random numbers. The source pattern, voice roles and current section guide the result. It needs no network connection, account or downloaded model.</p>
+    <table class="opt-table"><thead><tr><th>Tool</th><th>Use it for</th><th>What happens to the notes</th></tr></thead><tbody>
+      <tr><td><a href="#auto"><strong>MODE → AUTO</strong></a></td><td>Write a continuation after a selected range of pages.</td><td>Generated pages become ordinary editable notes in the current pattern.</td></tr>
+      <tr><td><a href="#agen"><strong>MODE → AGEN</strong></a></td><td>Play an arrangement that keeps developing.</td><td>Two temporary performance pages alternate; stopping restores the original note bank.</td></tr>
+      <tr><td><strong>FN + encoder 2 long</strong></td><td>Rewrite the selected voice in SINGLE, or add companion parts in DRAW.</td><td>Edits the current page. Keep FN held and short-press encoder 2 for its one-level generation undo.</td></tr>
+      <tr><td><strong>Touch 4 + 5</strong></td><td>Request a live fill for the selected voice.</td><td>A scheduled two-page performance fill leaves the grid unchanged and ends with a velocity-127 hit.</td></tr>
+      <tr><td><strong>PATT → NEW</strong></td><td>Start from BLNK or a genre pattern.</td><td>Creates a fresh pattern. See <a href="files.html#file">Files</a>.</td></tr>
+    </tbody></table>
+    <p data-hb-copy="generation.006">“Written” means the notes stay in the working pattern after the action. Use <strong>PATT save</strong> to keep a named copy on the SD card. AGEN's temporary performance is not a replacement for saving a pattern.</p>
+  </section>
+
+  <section class="hb-sub" id="auto">
+    <h2 data-hb-copy="generation.007">AUTO — write a continuation</h2>
+    <ol>
+      <li data-hb-copy="generation.008">Make a motif on one or more pages. Save anything important before generating over later pages.</li>
+      <li data-hb-copy="generation.009">Open <strong>MODE → AUTO</strong> with encoder 4.</li>
+      <li data-hb-copy="generation.010">Turn encoders <strong>2 and 3</strong> to choose the first and last source page. The orange range shows the source.</li>
+      <li data-hb-copy="generation.011">Turn encoder <strong>1</strong> to choose the number of additional pages. The green range follows the source range.</li>
+      <li data-hb-copy="generation.012">Short-press encoder <strong>1</strong> to generate. You return to DRAW; the written notes can be edited and saved.</li>
+    </ol>
+    <article class="hb-device"><div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="et_auto" width="640" height="320" role="img" aria-label="AUTO with an orange source range and green destination pages"></canvas></div>
+      <div class="hb-enc-grid">
+        <div class="hb-enc-card hb-enc--1"><h5><span class="kn">1</span> Additional pages</h5><table class="enc-act"><tbody><tr><th>Turn</th><td>Choose how many following pages to write.</td></tr><tr><th>Short</th><td>Run AUTO.</td></tr></tbody></table></div>
+        <div class="hb-enc-card hb-enc--2"><h5><span class="kn">2</span> Source start</h5><table class="enc-act"><tbody><tr><th>Turn</th><td>Choose the first source page.</td></tr></tbody></table></div>
+        <div class="hb-enc-card hb-enc--3"><h5><span class="kn">3</span> Source end</h5><table class="enc-act"><tbody><tr><th>Turn</th><td>Choose the last source page.</td></tr></tbody></table></div>
+        <div class="hb-enc-card hb-enc--4"><h5><span class="kn">4</span> Menu selection</h5><table class="enc-act"><tbody><tr><th>Turn</th><td>Select another MODE page.</td></tr></tbody></table></div>
+      </div>
+    </article>
+    <div class="hb-warn" data-hb-copy="generation.013"><strong>AUTO replaces destination pages.</strong> The nonempty source range stays intact, but existing notes in the following destination range are cleared first. There is no AUTO-specific undo snapshot. Save a copy first. If the selected source is entirely empty, AUTO first creates a starter on its first source page.</div>
+    <h3 data-hb-copy="generation.014">Which source page feeds each new page?</h3>
+    <p data-hb-copy="generation.015">Let <code>a</code> be the source start, <code>b</code> its end, <code>N</code> the requested additional pages, and <code>P = 256 / page width</code> the available pages. AUTO writes from <code>b + 1</code> through <code>min(P, b + N)</code>. At zero-based destination offset <code>j</code>, it uses source page <code>a + (j mod (b − a + 1))</code>.</p>
+    <p data-hb-copy="generation.016">For example, source pages 1–2 plus four additional pages write pages 3–6, using source pages 1, 2, 1, 2. The engine changes the interpretation rather than simply duplicating each source. It cycles through subtle groove variation, response, lift/development and turnaround; a multi-page continuation ends with a turnaround. At the end of the 256-step pattern the requested output is shortened. If no page remains after the source range, nothing is written.</p>
+    <p data-hb-copy="generation.017">AUTO analyses the selected range, follows its voices and harmonic context, and evolves each destination from a source page. When a voice appears elsewhere in the source range, it can be brought into a response or development page. With PMOD active, the source page's mute map is copied to its continuation. AUTO's harmonic choices and page-writing arc are separate from AGEN's live section cycle.</p>
+  </section>
+
+  <section class="hb-sub" id="agen">
+    <h2 data-hb-copy="generation.018">AGEN — develop a live arrangement</h2>
+    <ol>
+      <li data-hb-copy="generation.019">Select the edit page containing your motif. Choose a kit and set comfortable voice levels.</li>
+      <li data-hb-copy="generation.020">Open <strong>MODE → AGEN</strong> and short-press <strong>encoder 4</strong>. The value changes to ON. Playback starts if it was paused.</li>
+      <li data-hb-copy="generation.021">Return to the grid with touch 2. Listen across several sections; a new page is an answer to the motif, not a new random song.</li>
+      <li data-hb-copy="generation.022">Use mutes, faders and CTRL volume during the performance. Filters, instruments and envelopes remain available for manual sound changes.</li>
+      <li data-hb-copy="generation.023">Short-press encoder 4 on AGEN again, or pause, to end the temporary arrangement and restore the source notes.</li>
+    </ol>
+    <div class="hb-led-wrap hb-display-image"><canvas class="led-matrix" data-scene="md_agen" width="640" height="320" role="img" aria-label="MODE AGEN showing ON and a green fourth-encoder action"></canvas></div>
+    <p data-hb-copy="generation.024">The original note bank stays aside while two working pages alternate. An invisible workspace copy of the starting motif supplies each variation, so pitch shifts and deletions do not accumulate from one mutation into the next. Key and source register analysis are anchored to that starting material. On an empty page the firmware can create a restrained starter ensemble.</p>
+    <h3 data-hb-copy="generation.025">Read the performance indicators</h3>
+    <table class="opt-table"><thead><tr><th>Grid indicator</th><th>Meaning</th></tr></thead><tbody>
+      <tr><td>White page dot</td><td>The performance page currently playing.</td></tr><tr><td>Red page dot</td><td>The next page is still being prepared.</td></tr><tr><td>Yellow page dot</td><td>The next page is complete and waiting for its boundary.</td></tr><tr><td>Right-hand number</td><td>Passes remaining on the current page, including the pass now playing.</td></tr>
+    </tbody></table>
+    <p data-hb-copy="generation.026">The countdown blinks cyan above 3, yellow at 3, orange at 2 and red at 1. Its blink period is 1,200 / 650 / 400 / 200 ms respectively, with the digit lit for two thirds of each period. AGEN switches only to a completely prepared page at a page boundary. If preparation runs late, it repeats the complete current page and keeps the countdown at 1 instead of playing a partly built page.</p>
+  </section>
+
+  <section class="hb-sub" id="arrangement">
+    <h2 data-hb-copy="generation.027">The section cycle and the drop</h2>
+    <p data-hb-copy="generation.028"><strong>Groove → Variation → Groove → Break → Build → Drop → Variation → Groove</strong>, then repeat. Each section uses a related call/answer pair. Groove and Variation change density, phrasing and melody; Break removes supporting parts; Build raises tension; Drop restores the full user-level groove.</p>
+    <p data-hb-copy="generation.029"><strong>Build has one pass per page and leads directly to Drop.</strong> It does not repeat the roll a second time or insert a separate four-bar Fill section. CH2 provides the accelerating roll; CH3 keeps a steady supporting pattern. The final percussion sixteenth leaves a short breath before the next downbeat. Manual touch fills are an independent feature and retain their own two-page timing.</p>
+    <h3 data-hb-copy="generation.030">The time calculation</h3>
+    <p data-hb-copy="generation.031">The grid uses sixteenths: <code>step seconds = 60 / (4 × BPM)</code>. A page with <code>W</code> steps lasts <code>15W / BPM</code> seconds, or <code>W / 16</code> bars in 4/4. A complete buildup pair lasts <code>30W / BPM</code> seconds.</p>
+    <table class="opt-table"><thead><tr><th>Panel/page width</th><th>One page</th><th>Whole buildup</th><th>At 100 / 110 / 120 BPM</th></tr></thead><tbody>
+      <tr><td>16 steps</td><td>1 bar</td><td>2 bars</td><td>4.80 / 4.36 / 4.00 seconds</td></tr><tr><td>32 steps</td><td>2 bars</td><td>4 bars</td><td>9.60 / 8.73 / 8.00 seconds</td></tr>
+    </tbody></table>
+    <p data-hb-copy="generation.032">For the other sections, the engine first chooses a bar budget: Groove and Variation normally use four or eight bars; Break and Drop use four. Page passes are <code>max(1, floor(bars × 16 / (2W)))</code>. Long choices halve at slow tempos to aim for a 16-second cap, or 24 seconds for Break. The minimum is still one pass per page, so an especially slow two-page pair can exceed the cap. Build bypasses that budget calculation and always uses one pass on each page.</p>
+  </section>
+
+  <section class="hb-sub" id="harmony">
+    <h2 data-hb-copy="generation.033">How the engine finds a key</h2>
+    <p data-hb-copy="generation.034">A pitch class is a note name without its octave: <code>pc = MIDI note mod 12</code>, with C = 0, C♯ = 1, …, B = 11. The analyser collects weighted pitch-class evidence from bass, keys and pad roles. Bass notes receive extra weight, stronger notes matter more, and local/downbeat evidence helps establish an anchor. This gives a useful tonal estimate, not a promise to identify every ambiguous progression correctly.</p>
+    <p data-hb-copy="generation.035">It tests all twelve roots in major and natural minor. Their semitone intervals are <code>[0, 2, 4, 5, 7, 9, 11]</code> and <code>[0, 2, 3, 5, 7, 8, 10]</code>. For each candidate, the seven scale degrees receive weights <code>[6, 2, 4, 3, 5, 3, 2]</code>; notes outside the scale receive −4. The score is the sum of pitch evidence times those weights, plus bonuses of four times the first rhythmic group's root-bass evidence and twice its root-pitch evidence. The highest score wins.</p>
+    <p data-hb-copy="generation.036">AUTO can also score candidate triads against the source's local harmonic groups: root evidence × 5, third × 3, fifth × 3, seventh × 1 and root-bass evidence × 6, with a small preference for the proposed progression. This lets source notes outweigh a stock progression. AGEN fixes the inferred root and mode for its performance and uses its own section progression. With no tonal evidence, AGEN uses C natural minor as its harmonic starting point; percussion does not supply a reliable sung key.</p>
+    <table class="opt-table"><thead><tr><th>AGEN section</th><th>Major degree / C-major example</th><th>Natural-minor degree / C-minor example</th></tr></thead><tbody>
+      <tr><td>Groove</td><td>I / C</td><td>i / Cm</td></tr><tr><td>Variation</td><td>vi / Am</td><td>VI / A♭</td></tr><tr><td>Groove</td><td>IV / F</td><td>iv / Fm</td></tr><tr><td>Break → Build</td><td>V / G</td><td>VII / B♭</td></tr><tr><td>Drop</td><td>I / C</td><td>i / Cm</td></tr><tr><td>Variation → Groove</td><td>vi → IV / Am → F</td><td>VI → iv / A♭ → Fm</td></tr>
+    </tbody></table>
+    <p data-hb-copy="generation.037">The section cycle deliberately holds its transition harmony through Break and Build, then resolves to the tonic at Drop. Elsewhere, a change of chord, inversion, rhythm or contour can make the same starting motif feel different without abandoning its key.</p>
+  </section>
+
+  <section class="hb-sub" id="chords">
+    <h2 data-hb-copy="generation.038">CH11 chords: three voices that belong together</h2>
+    <p data-hb-copy="generation.039">A diatonic triad takes scale degrees <code>d, d + 2, d + 4</code>, wrapping through the seven-note scale. In C major, starting at degree 0 gives C–E–G; starting at degree 3 gives F–A–C. These are scale-degree steps, not a fixed chromatic transpose of the original chord.</p>
+    <p data-hb-copy="generation.040">CH11 has up to three simultaneous notes. AGEN revoices existing multi-note onsets as a chord, including onsets between the fixed eight-step chord points. It also introduces chord attacks at regular eight-step points, with extra response attacks in Variation. A low multi-note CH11 source is still treated as harmony; a low monophonic CH11 source remains a bass line. Where the voice budget permits and both monos are available, CH13/14 can provide a third and fifth above a CH11 bass.</p>
+    <p data-hb-copy="generation.041">The inversion index is <code>(generation + seed) mod 3</code>. Root position, first inversion and second inversion reorder the same three pitch classes, raising wrapped tones by an octave. The whole voicing then shifts by octaves to put its average near the chosen register. The resulting pitches are ordered, distinct, no more than an octave apart and bounded within MIDI 24–108. Thus C–E–G can become E–G–C or G–C–E without turning into three unrelated random notes.</p>
+    <p data-hb-copy="generation.042">Changing inversion does not guarantee the smallest possible movement for every individual voice. It keeps a controlled, compact register and related answers. Sample voices 1–8 and mono synths 13/14 each remain monophonic; a grid collision is placed in a free row when one is available rather than overwriting another part.</p>
+  </section>
+
+  <section class="hb-sub" id="pitch">
+    <h2 data-hb-copy="generation.043">Why generated notes do not need a huge CENT adjustment</h2>
+    <p data-hb-copy="generation.044">AGEN chooses a musical register before applying the instrument's patch. CH11/13 melodic and harmonic references are kept around MIDI 55–79; bass references use MIDI 36–55. Individual melodic moves can travel up to an octave from their reference. Chord voicings have their separate 24–108 bounds. These reference ranges are not hard limits on every note played.</p>
+    <p data-hb-copy="generation.045">AGEN then compensates the patch's whole-octave register exactly once: <code>stored generated pitch = desired pitch − patch octave shift</code>. For CH11, the register shift is <code>12 × (register − 4)</code>. For CH13/14, the raw CENT slider maps to <code>1.5 × value − 24</code> semitones; the nearest whole-octave part is compensated. Raw slider values are internal units, not necessarily the signed label on the display. The mono grid-to-MIDI reference also includes the note table's MIDI-12 octave offset.</p>
+    <p data-hb-copy="generation.046">For example, a patch shifted down 24 semitones needs stored MIDI 84 to make a desired MIDI 60 sound at that register: <code>84 − 24 = 60</code>. Fine tuning, oscillator-2 octave/detune and instrument character remain under your control. AGEN does not turn CENT, OCTV, INST or ADSR for you. Very low source chords can therefore become useful generated chords without editing the saved patch.</p>
+  </section>
+
+  <section class="hb-sub" id="rhythm">
+    <h2 data-hb-copy="generation.047">Rhythm, melody and probability</h2>
+    <p data-hb-copy="generation.048">The companion engine follows voice roles: kick, snare, hat, clap and tom provide different rhythmic jobs; sample bass, keys/pad and synth parts use different note choices. It preserves structural anchors and develops offbeats, responses and turnarounds. Sparse Euclidean rhythm candidates distribute a chosen number of pulses through sixteen positions; rotations and related second halves produce alternatives. For phase <code>t</code>, rotation <code>r</code> and pulse count <code>k</code>, let <code>u = (t − r) mod 16</code> with a nonnegative remainder. The candidate has a hit when <code>k &gt; 0</code> and <code>(u × k) mod 16 &lt; k</code>. For example, four pulses at rotation zero give steps 1, 5, 9 and 13. The seeds decide among those candidates, so repeating an action can give a fresh interpretation.</p>
+    <p data-hb-copy="generation.049">AGEN's melody contour uses semitone suggestions <code>[2, 4, 3, 7, 5, −2, 4, −5]</code>, reversed for the answer page and reduced for bass. A proposed move is fitted back to the chord on strong beats or the scale on passing steps. Bass quarter-note landings use the chord root. The chance of proposing a contour move depends on the role and section: bass 50%; other melodies 40% in Groove, 90% in Variation, 80% in Build, 65% in Break and 45% in Drop. These are proposal chances, not percentages of notes guaranteed to sound different.</p>
+    <p data-hb-copy="generation.050">In the buildup, progress runs across both pages. CH2 spacing tightens from every four steps to every two, then every step in the last quarter of the pair. Its nominal velocity rises from about 58 toward 114. CH3 supplies a steady offbeat. The last percussion step is cleared. Drop restores the quarter-note kick/backbeat structure and the user-level mix; it does not make every note a velocity-127 hit.</p>
+    <p data-hb-copy="generation.051">Playback probability is a separate decision. Structural kick, backbeat and tonal anchors are offered 100%; remaining hats/toms use generated ceilings of 60–95%, snare/clap 70–95%, and other voices 80–95%. The final probability is <code>min(source probability, generated ceiling)</code>. A source note deliberately set to a lower probability keeps that limit. A pseudo-random hash of seed, channel and step supplies repeatable choices within a variation.</p>
+    <p data-hb-copy="generation.052">Manual <strong>touch 4 + 5</strong> fills start on the next page, run for two pages and produce a velocity-127 final hit on the following downbeat. Several voices can be queued independently. AGEN does not automatically stack this second fill engine over its generated buildup. See <a href="advanced-sequencing.html#performance-fill">Performance fills</a> for the gesture and re-arming rules.</p>
+  </section>
+
+  <section class="hb-sub" id="volume">
+    <h2 data-hb-copy="generation.053">Volume, backing parts and your manual controls</h2>
+    <p data-hb-copy="generation.054">Before building a transition, AGEN looks for a source backing part that is present, unmuted and has a nonzero starting voice level. It prefers sample bass, CH14, CH11, CH13, sample keys/pad, then kick. If no such foundation exists, Break/Build/Fill requests fall back to Groove. A hats-only source therefore does not manufacture a percussion buildup while all backing voices are muted.</p>
+    <p data-hb-copy="generation.055">The chosen backing part is retained through transitions at a scale of at least <code>12 / 16</code> of its starting level, subject to integer rounding and manual controls. Other parts thin or rise according to their roles. For base voice level <code>V</code> and section scale <code>s</code>, the target is <code>floor(V × s / 16)</code>. A base level of 12 with scale 12 becomes 9. For the CH2 buildup, <code>s = 5 + floor(11 × progress / 255)</code>, so a base level of 12 rises from 3 to 12.</p>
+    <p data-hb-copy="generation.056">Automation updates at roughly 30 ms intervals and moves one voice-level unit toward its target per update. Drop restores the target immediately on entering the section. Moves stay at or below your chosen ceiling. Turning the physical CTRL=VOL encoder sets a new ceiling for that voice and gives the manual value priority for two seconds. Fader gain and its mute zone still apply; a full-velocity note cannot override a silent fader.</p>
+    <p data-hb-copy="generation.057">AGEN's automatic sound-control changes are volume changes. Filter cutoff, resonance, reverb, attack and other patch settings remain manual. You can shape the sound without the generator repeatedly undoing your choices.</p>
+  </section>
+
+  <section class="hb-sub" id="memory">
+    <h2 data-hb-copy="generation.058">Original notes, saving and stopping</h2>
+    <p data-hb-copy="generation.059">AUTO writes ordinary pages in the current pattern. AGEN allocates a temporary workspace only while active: the original bank stays available, two pages perform, and an additional hidden anchor supplies fresh variations. It prepares at most one voice per main-loop pass. The sequencer publishes a page only when every voice has finished; generation and SD file work do not run in the timing interrupt.</p>
+    <p data-hb-copy="generation.060">Turning AGEN off or pausing restores the original note bank, selected page, starting mute state and automated voice levels. Manual filter/instrument changes remain live. Opening PATT, NEW, SONG or TOUCHY, changing display width, starting recording or switching a file subpattern ends AGEN. Pattern save/load restores the original bank first. Temporary variations are not autosaved, and AGEN is not remembered as enabled across a reboot.</p>
+    <p data-hb-copy="generation.061">If CHLD, IMG, TOUCHY, recording or a pending pattern-bank operation makes the temporary workspace unavailable, AGEN refuses to start. Allocation failure also leaves the existing note bank and transport intact. To keep generated pages as a composition, use AUTO and save the resulting pattern; to keep the sound of an AGEN performance, capture USB audio on a computer or use an external recorder. Starting the on-device recorder ends AGEN.</p>
+  </section>
+
+  <section class="hb-sub" id="workflow">
+    <h2 data-hb-copy="generation.062">A practical first session</h2>
+    <ol>
+      <li data-hb-copy="generation.063">Make a one-page groove with kick, a bass or harmonic voice, and a few hats. Put a simple CH11 chord on beat 1 if you want to hear voicing changes.</li>
+      <li data-hb-copy="generation.064">Set voice levels and save the motif. Try AGEN for a full section cycle before judging its variation.</li>
+      <li data-hb-copy="generation.065">Listen for the call/answer changes, retained backing part, accelerating CH2 roll and direct next-downbeat drop.</li>
+      <li data-hb-copy="generation.066">Turn AGEN off. Your motif returns. Use AUTO to write a few variations after it, then edit the result and save a second pattern.</li>
+    </ol>
+    <h3 data-hb-copy="generation.067">When something sounds unexpected</h3>
+    <p data-hb-copy="generation.068"><strong>Too little variation:</strong> use more than one melodic onset or a real multi-note CH11 chord, and listen through Variation as well as Groove. Sparse or low monophonic CH11 input can be treated as bass; it will not suddenly become a three-note pad. <strong>Very low or quiet:</strong> check patch tuning, voice ceiling, fader position, note probability and sample tuning. AGEN register compensation is for its generated synth notes, not a global retuning of your existing pattern. <strong>A late change:</strong> inspect the red/yellow next-page dot; an unfinished page repeats safely. <strong>Nothing to keep:</strong> AGEN restores its source by design; AUTO writes editable pages.</p>
+    <p data-hb-copy="generation.069">Related chapters: <a href="advanced-sequencing.html#auto-extend">Companion gestures</a>, <a href="note-detail.html">Note detail and probability</a>, <a href="sound.html">Sound design</a>, <a href="song.html">SONG and page playback</a>, and the <a href="menus.html#mode">menu map</a>.</p>
+  </section>
+</section>
+
+        <nav class="hb-pager" aria-label="Chapter navigation">
+          <a class="hb-pager__link" href="advanced-sequencing.html"><span class="hb-pager__dir">Previous</span><span class="hb-pager__name">Advanced Sequencing</span></a>
+          <a class="hb-pager__link hb-pager__link--next" href="samples.html"><span class="hb-pager__dir">Next</span><span class="hb-pager__name">Samples</span></a>
+        </nav>
+      </div>
+      <script src="handbook-led.js?v=20261109agen" defer></script>
+    </div>
+  </div>
+</div>
+</body>
+</html>

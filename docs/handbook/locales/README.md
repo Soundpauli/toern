@@ -1,6 +1,6 @@
 # Handbook languages
 
-`fun` is the default edition of chapters 00–22, stored in `fun.json`. English
+`fun` is the default edition of chapters 00–23, stored in `fun.json`. English
 remains selectable and lives directly in the chapter HTML as the fallback when
 JavaScript is unavailable or a language cannot load. An explicit URL or remembered
 language choice takes precedence over the default.

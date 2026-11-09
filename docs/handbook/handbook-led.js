@@ -1104,13 +1104,27 @@ function drawTouchyCat(light, columns, now, tint = TOUCHY_PALETTE.E) {
       drawText(m, "WAIT", 2, 3, 255, 220, 0);
     },
     et_auto(m) {
-      etcSubFrame(m, 3, "AGEN", "G", "Y", "W");
-      for (let x = 1; x <= m.w; x++) {
-        if (x >= Math.round(m.w * 3 / 16) && x <= m.w / 2) m.set(x, 8, 255, 165, 0);
-        else if (x > m.w / 2 && x <= m.w * .75) m.set(x, 8, 0, 255, 0);
-        else m.set(x, 8, 0, 0, 0);
+      m.clear();
+      m.menuColors = true;
+      largeInd4Parent(m, 13);
+      drawSubmenuDots16(m, 9, 11, 13);
+      const tc = menuTextFromCol(13);
+      drawText(m, "AUTO", 2, 10, tc[0], tc[1], tc[2]);
+      m.indL(1, "G"); m.indL(2, "Y"); m.indL(3, "W");
+      for (let x = 1; x <= 6; x++) {
+        if (x <= 2) m.set(x, 8, 255, 165, 0);
+        else m.set(x, 8, 0, 255, 0);
       }
-
+    },
+    md_agen(m) {
+      m.clear();
+      m.menuColors = true;
+      largeInd4Parent(m, 13);
+      drawSubmenuDots16(m, 10, 11, 13);
+      const tc = menuTextFromCol(13);
+      drawText(m, "AGEN", 2, 10, tc[0], tc[1], tc[2]);
+      drawText(m, "ON", 2, 3, 0, 120, 0);
+      m.indL(4, "G");
     },
     et_lght(m) {
       etcSubFrame(m, 4, "LGHT", "", "", "G");

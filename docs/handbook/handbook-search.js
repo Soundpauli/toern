@@ -1,6 +1,6 @@
 (function () {
   var INDEX_KEY = "hb-search-index-v2-" + (window.HBLanguage ? window.HBLanguage.id : "en");
-  var INDEX_VER = "20261105a";
+  var INDEX_VER = "20261109agen";
 
   function pages() {
     return (window.HBHandbook && window.HBHandbook.pages) || [];
