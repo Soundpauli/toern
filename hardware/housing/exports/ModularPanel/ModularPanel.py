@@ -38,7 +38,7 @@ def run(context):
   for x,y,diam,tag in data['cut_circles']:circle(sk,x,y,diam).attributes.add('TOERN','function',tag)
   for sl in data['slots']:slot(sk,*sl)
   for a,b in data['engrave_lines']:line(sk,a,b,True)
-  for poly in data['logo_polylines']:
+  for poly in data['logo_polylines']+data.get('icon_polylines',[]):
    for a,b in zip(poly,poly[1:]):line(sk,a,b,True)
    if poly[0]!=poly[-1]:line(sk,poly[-1],poly[0],True)
   sk.isComputeDeferred=False
@@ -67,7 +67,7 @@ def run(context):
    for x,y,w,h,tag in data[key]:rect(ref,x,y,w,h,True)
   for key in ['clearance_circles','clamp_head_circles','pcb_mount_clearance_circles']:
    for x,y,di,tag in data[key]:circle(ref,x,y,di,True)
-  for sl in data['rack_head_slots']:slot(ref,*sl,construction=True)
+  for sl in data['rack_head_slots']+data.get('base_clamp_head_slots',[]):slot(ref,*sl,construction=True)
   for sl in data['cutout_clearance_slots']:slot(ref,*sl,construction=True)
   rect(front,*data['cover'])
   for x,y,di,tag in data['clamp_holes']:circle(front,x,y,di)
@@ -146,10 +146,10 @@ def run(context):
   ps.isVisible=False
   led=part('LED_PANEL_REFERENCE_160x80_THICKNESS_ASSUMED_8mm',0,data['led'],[],8,.12)
   cap=part('FRONT_CLAMP_172x86_REFERENCE_2mm',8,data['cover'],data['clamp_holes'],2,.18)
-  heads=part('M2_HEAD_ENVELOPES_DIAMETER_6mm',10,[0,0,.01,.01],[],.01,.1) if False else None
+  heads=part('M25_HEAD_ENVELOPES_DIAMETER_6mm',10,[0,0,.01,.01],[],.01,.1) if False else None
   # Four head-envelope cylinders show the selected generous M2 head allowance.
   tr=adsk.core.Matrix3D.create();tr.translation=adsk.core.Vector3D.create(0,0,1.0)
-  headocc=stack.component.occurrences.addNewComponent(tr);headocc.component.name='M2_HEAD_ENVELOPES_6mm_REFERENCE'
+  headocc=stack.component.occurrences.addNewComponent(tr);headocc.component.name='M25_HEAD_ENVELOPES_6mm_REFERENCE'
   hs=headocc.component.sketches.add(headocc.component.xYConstructionPlane)
   for x,y,di,t in data['clamp_head_circles']:circle(hs,x,y,di)
   for p in hs.profiles:
@@ -180,11 +180,11 @@ def run(context):
   app.activeViewport.saveAsImageFile(os.path.join(HOUSING,'modular_pcb_rear.png'),1800,1300)
   camera()
   box=pcbocc.boundingBox
-  result={'document':app.activeDocument.name,'sketch':sk.name,'curves':sk.sketchCurves.count,'circles':sk.sketchCurves.sketchCircles.count,'texts':sk.sketchTexts.count,'slots':len(data['slots']),'rack_slots':4,'long_slot_mm':data['slots'][-1][2:],'slot_center_mm':data['slots'][-1][:2],'PCB_mount_holes':mount_checks,'PCB_standoff_length_mm_reference':stand_height,'clearance_curves':ref.sketchCurves.count,'pcb_source':STEP,'pcb_body_dimensions_mm':[v*10 for v in dims(board)],'assembly_bounds_mm':{'min_mm':[box.minPoint.x*10,box.minPoint.y*10,box.minPoint.z*10],'max_mm':[box.maxPoint.x*10,box.maxPoint.y*10,box.maxPoint.z*10]},'assembly_fits_panel_xy':box.minPoint.x>=0 and box.maxPoint.x<=18.25 and box.minPoint.y>=0 and box.maxPoint.y<=12.85,'pcb_local_board_bbox_mm':[[bb.minPoint.x*10,bb.minPoint.y*10,bb.minPoint.z*10],[bb.maxPoint.x*10,bb.maxPoint.y*10,bb.maxPoint.z*10]],'pcb_transform_mm':[dx*10,dy*10,dz*10],'depth_reference_only':True,'PCB_orientation':data['PCB_orientation'],'PCB_component_side_normal_world':[pcbocc.transform2.getCell(0,2),pcbocc.transform2.getCell(1,2),pcbocc.transform2.getCell(2,2)],'fonts':list(set(t.fontName for t in sk.sketchTexts)),'label_contents':[t.text for t in sk.sketchTexts],'text_center_checks':text_checks,'font_sizes_mm':data['font_sizes_mm'],'font_weight':'Bold','text_styles':[int(t.textStyle) for t in sk.sketchTexts],'alignment':data['alignment'],'cover_mm':[172,86],'clamp_holes_mm':data['clamp_holes'],'clamp_head_allowance_mm':6,'stack_mm':data['stack_mm'],'logo_source':data['logo_source']}
+  result={'document':app.activeDocument.name,'sketch':sk.name,'curves':sk.sketchCurves.count,'circles':sk.sketchCurves.sketchCircles.count,'texts':sk.sketchTexts.count,'slots':len(data['slots']),'rack_slots':4,'long_slot_mm':data['slots'][-1][2:],'slot_center_mm':data['slots'][-1][:2],'PCB_mount_holes':mount_checks,'PCB_standoff_length_mm_reference':stand_height,'clearance_curves':ref.sketchCurves.count,'pcb_source':STEP,'pcb_body_dimensions_mm':[v*10 for v in dims(board)],'assembly_bounds_mm':{'min_mm':[box.minPoint.x*10,box.minPoint.y*10,box.minPoint.z*10],'max_mm':[box.maxPoint.x*10,box.maxPoint.y*10,box.maxPoint.z*10]},'assembly_fits_panel_xy':box.minPoint.x>=0 and box.maxPoint.x<=18.25 and box.minPoint.y>=0 and box.maxPoint.y<=12.85,'pcb_local_board_bbox_mm':[[bb.minPoint.x*10,bb.minPoint.y*10,bb.minPoint.z*10],[bb.maxPoint.x*10,bb.maxPoint.y*10,bb.maxPoint.z*10]],'pcb_transform_mm':[dx*10,dy*10,dz*10],'depth_reference_only':True,'PCB_orientation':data['PCB_orientation'],'PCB_component_side_normal_world':[pcbocc.transform2.getCell(0,2),pcbocc.transform2.getCell(1,2),pcbocc.transform2.getCell(2,2)],'fonts':list(set(t.fontName for t in sk.sketchTexts)),'label_contents':[t.text for t in sk.sketchTexts],'direction_icons':data.get('direction_icons',[]),'midi_type':data.get('midi_type'),'text_center_checks':text_checks,'font_sizes_mm':data['font_sizes_mm'],'font_weight':'Bold','text_styles':[int(t.textStyle) for t in sk.sketchTexts],'alignment':data['alignment'],'cover_mm':[172,86],'clamp_holes_mm':data['clamp_holes'],'clamp_head_allowance_mm':6,'stack_mm':data['stack_mm'],'logo_source':data['logo_source']}
   with open(os.path.join(ROOT,'result.json'),'w') as f:json.dump(result,f,indent=2)
   manager=d.exportManager
   if not manager.execute(manager.createFusionArchiveExportOptions(os.path.join(HOUSING,'toern_final_v3_modular.f3d'))):raise RuntimeError('Archive export failed')
-  ui.messageBox('modular updated: logo left, DIN right, DIN text removed. MIDI/CLOCK/SIDE and audio ports shifted left to fit with clearance guides. PHONES label and rotated logo retained. 70 x 13 mm slot placement remains pending; current slot retained. Archive and previews exported.')
+  ui.messageBox('modular updated: MIDI A (verified TRS Type A), CLCK, SC. Shared IN/OUT words replaced with engraved horizontal arrow/bar icons. Archive and previews exported.')
  except:
   for s in made:
    try:s.isComputeDeferred=False

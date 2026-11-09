@@ -1,0 +1,7 @@
+"Designator","Manufacturer","Manufacturer part number","LCSC","Quantity per PCB","Sourcing action","Assembly","Notes","PCB source"
+"U3","NXP","SGTL5000XNBA3","C5196742","1","Pre-order or arrange external sourcing before PCB assembly","JLCPCB","QFN-32-1EP 5x5 mm; use the exact rev H codec package","../toern_revH/toern_revH.kicad_pcb"
+"J17,J3","CUI","SJ1-3533","C4991776","2","Pre-order or arrange external sourcing before PCB assembly","JLCPCB","J3/J17 MIDI jacks; CUI SJ1-3533 footprint","../toern_revH/toern_revH.kicad_pcb"
+"S1","E-Switch","EG2219","C3664594","1","Pre-order or arrange external sourcing before PCB assembly","JLCPCB","E-Switch EG2219; distributor reference Mouser 612-EG2219","../toern_revH/toern_revH.kicad_pcb"
+"C6","Panasonic","EEE-FK1C102SV","C5686929","1","Pre-order or arrange external sourcing before PCB assembly","JLCPCB","C6 1000 uF; CP_Elec_8x10.5 footprint","../toern_revH/toern_revH.kicad_pcb"
+"J8","Hirose","DM3BT-DSF-PEJS","C597972","1","Pre-order or arrange external sourcing before PCB assembly","JLCPCB","Hirose microSD socket; distributor reference Mouser 798-DM3BT-DSF-PEJS","../toern_revH/toern_revH.kicad_pcb"
+"U4","Toshiba","TLP2361(TPL,E(T","C107626","1","Pre-order or arrange external sourcing before PCB assembly","JLCPCB","KiCad value TLP2361V4_E; verify exact SO6 package; RS Components sourcing option","../toern_revH/toern_revH.kicad_pcb"

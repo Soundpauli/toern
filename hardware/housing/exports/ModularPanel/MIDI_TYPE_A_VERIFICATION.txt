@@ -1,0 +1,8 @@
+TRS MIDI Type A verification - rev H
+SJ1-3533 terminal 1=sleeve, 2=tip, 3=ring.
+J17 OUT: pad2/tip through R7 (33R) to U5 data buffer; pad3/ring through R8 (33R) to +3.3 V.
+J3 IN: pad2/tip to optocoupler U4 cathode; pad3/ring through R6 (220R) to optocoupler anode.
+This matches Type A: tip = DIN5/current sink, ring = DIN4/current source.
+PCB source: hardware/PCB/toern_revH/toern_revH.kicad_pcb
+Jack manufacturer: https://www.sameskydevices.com/product/resource/masterpdf/sj1-353x.pdf
+MIDI Association: https://midi.org/updated-how-to-make-your-own-3-5mm-mini-stereo-trs-to-midi-5-pin-din-cables

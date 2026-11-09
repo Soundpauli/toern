@@ -1,0 +1,74 @@
+TOERN REV H — JLCPCB manufacturing package
+
+Upload these three files from production_files/:
+  GERBER-toern_revH.zip  — PCB fabrication, 4 copper layers, mask, silk,
+                          paste, edge cuts and separate PTH/NPTH drills
+  BOM-toern_revH.csv     — JLCPCB assembly parts
+  CPL-toern_revH.csv     — matching placement data, millimetres, degrees
+
+Order a 4-layer, 1.6 mm FR-4 board, top-side assembly. Copper order is
+F.Cu / In1.Cu / In2.Cu / B.Cu. The outline is approximately 160 x 71 mm.
+Select surface finish, colours and quantity in the quote as desired.
+
+Assembly scope follows hardware/PCB/BOM/README.md: include through-hole
+jacks, JST headers, encoder sockets, switch, microphone and CN1/CN2 pogo
+pins. Arrange the necessary through-hole assembly service in the quote.
+J28-J31 are hand-soldered 3M Teensy sockets and are excluded from both
+upload CSVs. U6 (Teensy), mounting holes, logos and JP1 are also excluded.
+
+D2 is BAT54S, C171786, SOT-23:
+  pin 1 = GND (anode), pin 2 = +3.3 V (cathode), pin 3 = clock clamp node.
+The exported copper, not just the BOM label, is checked for this correction.
+
+References with descriptive labels in KiCad are renamed in the manufacturing
+snapshot only, to keep BOM/CPL designators simple and identical to Gerber
+attributes and the assembly drawing. See review/reference-map.csv:
+  source J11-5V -> J11; source J11-3.3V -> J32
+  source J12 - BUTTON_A-C -> J12
+  source J13 - TOUCHYTOUCH -> J13
+  source J14 + BUTTON_C -> J14
+All six 5-pin JST headers are included (J11-J15 and J32).
+
+Parts data:
+  R24 is 590R, C166635 (RALEC RTT02591JTH), 0402, +/-5%, as selected by
+  the user. PCB, schematic, BOM and placement data use this same selection.
+  This programs approximately 1.5 A nominal fast-charge current; actual
+  current is limited by the input supply, system load and thermal regulation.
+  C34 uses the source PCB selection C15195, 10nF, 0402. The previous
+  export's C57112 is a 0603 part and does not match the PCB footprint.
+  C171786 is listed as BAT54S, SOT-23 by JLCPCB.
+  Catalog identities checked 2026-11-09 using JLCPCB's component-detail API:
+  https://jlcpcb.com/api/overseas-pcb-order/v1/smtComponentShopCart/getComponentDetail?componentCode=C166635
+  (replace componentCode for the other part numbers).
+
+Placement coordinates use the centre of the pad bounding box, relative
+to the board's drill/place origin, Y positive upwards. The installed JLCPCB
+plugin's rotation corrections are preserved: 180 degrees for Conn_01x02,
+Conn_01x03 and Microphone_Condenser; 270 degrees for PAM8403D.
+Verify pin-1/polarity against review/assembly-top.svg in JLCPCB's placement
+preview, particularly D2, IC1, U3, U4, U8, C6 and the connectors. These
+local exports have not been uploaded to JLCPCB or approved by its engineers.
+JLCPCB CPL reference: https://jlcpcb.com/help/article/pick-place-file-for-pcb-assembly
+
+Review files:
+  DRC.json — checks on a refilled copy before manufacturing reference aliases
+  manifest.json — source hashes, validation counts and export conventions
+  manufacturing.kicad_pcb — exact refilled, reference-aliased export snapshot
+  schematic.net — fresh schematic netlist, with original source references
+  assembly-top.svg — component outlines and pad numbers from export snapshot
+  reference-map.csv / not-assembled.csv — reference changes and exclusions
+  preorder-parts.csv — parts requiring advance sourcing per project build notes
+  hand-solder-parts.csv / additional-purchased-parts.csv — separate purchases
+  SHA256SUMS.txt at package root — hashes for all included files
+
+The DRC report has no copper/clearance errors or unconnected items at
+generation. Existing library/silkscreen warnings and schematic parity
+issues (Teensy pads and connector reference names) remain documented in
+DRC.json. This is an export validation, not a complete electrical redesign
+review. Resolve component stock, sourcing and placement in the JLCPCB quote.
+
+Use only the files packaged together here. Old Gerber/ and other archived
+exports elsewhere in the repository are historical, not this release.
+
+Regenerate from the repository with KiCad's Python:
+  /Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3 tools/pcb/export_jlcpcb.py

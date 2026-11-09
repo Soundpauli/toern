@@ -46,5 +46,38 @@
   "clearance_guides_checked": true,
   "rack_head_flange_clearance_checked": true,
   "font": "Space Grotesk Bold",
-  "depths_verified": false
+  "depths_verified": false,
+  "source_document": "toern_final_v3_v118 v1",
+  "existing_engraving_preserved": true,
+  "label_contents": [
+    "PHONES",
+    "LINE-OUT",
+    "LINE-IN",
+    "MIDI A",
+    "CLCK",
+    "SC"
+  ],
+  "IN_OUT_text_removed": true,
+  "direction_icons": [
+    "right arrow toward bar (IN)",
+    "left arrow away from bar (OUT)"
+  ],
+  "direction_icon_stroke_mm": 0.45,
+  "direction_icon_clearance_verified": true,
+  "midi_type": "A",
+  "front_screw": "M2.5",
+  "front_hole_diameter_mm": 2.8,
+  "base_slots_mm": [
+    5,
+    2.8
+  ],
+  "audio_holes_diameter_mm": 11.5,
+  "pcb_screw": "M2",
+  "pcb_holes_diameter_mm": 2.2,
+  "pcb_mounts_preserved": true,
+  "combined_closed_cut_regions": 32,
+  "combined_panel_gap_mm": 4,
+  "base_slot_horizontal": true,
+  "front_hole_edge_material_mm": 2.1,
+  "base_slot_min_panel_edge_material_mm": 6.25
 }

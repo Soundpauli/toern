@@ -1,0 +1,1007 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-09T13:18:29+0100",
+    "kicad_version": "9.0.5",
+    "schematic_parity": [
+        {
+            "description": "Missing footprint J11 (Conn_01x05)",
+            "items": [],
+            "severity": "warning",
+            "type": "missing_footprint"
+        },
+        {
+            "description": "Missing footprint J11.5 (Conn_01x05)",
+            "items": [],
+            "severity": "warning",
+            "type": "missing_footprint"
+        },
+        {
+            "description": "Missing footprint J12 (Conn_01x05)",
+            "items": [],
+            "severity": "warning",
+            "type": "missing_footprint"
+        },
+        {
+            "description": "Missing footprint J13 (Conn_01x05)",
+            "items": [],
+            "severity": "warning",
+            "type": "missing_footprint"
+        },
+        {
+            "description": "Missing footprint J14 (Conn_01x05)",
+            "items": [],
+            "severity": "warning",
+            "type": "missing_footprint"
+        },
+        {
+            "description": "Footprint attributes don't match symbol: 'Do not populate' settings differ.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "footprint_symbol_mismatch"
+        },
+        {
+            "description": "No pad found for pin 67 (D+) in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 66 (D-) in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 51 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 55 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 57 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 56 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 52 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 58 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 59 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 64 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 61 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 54 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 53 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 60 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 65 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 63 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 62 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 50 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "No pad found for pin 49 in schematic.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "net_conflict"
+        },
+        {
+            "description": "Extra footprint",
+            "items": [
+                {
+                    "description": "Footprint J11-5V",
+                    "pos": {
+                        "x": 63.0,
+                        "y": 81.6
+                    },
+                    "uuid": "17c5dadf-c4dd-4732-85ae-76b074284410"
+                }
+            ],
+            "severity": "warning",
+            "type": "extra_footprint"
+        },
+        {
+            "description": "Extra footprint",
+            "items": [
+                {
+                    "description": "Footprint J11-3.3V",
+                    "pos": {
+                        "x": 63.0,
+                        "y": 90.0
+                    },
+                    "uuid": "1d741b5d-fc9c-47f2-93ea-dccd1005b179"
+                }
+            ],
+            "severity": "warning",
+            "type": "extra_footprint"
+        },
+        {
+            "description": "Extra footprint",
+            "items": [
+                {
+                    "description": "Footprint J12 - BUTTON_A-C",
+                    "pos": {
+                        "x": 61.0,
+                        "y": 38.0
+                    },
+                    "uuid": "27ff1fb4-7674-4ae8-a229-92916f535abc"
+                }
+            ],
+            "severity": "warning",
+            "type": "extra_footprint"
+        },
+        {
+            "description": "Extra footprint",
+            "items": [
+                {
+                    "description": "Footprint J13 - TOUCHYTOUCH",
+                    "pos": {
+                        "x": 74.5,
+                        "y": 38.0
+                    },
+                    "uuid": "c19b709c-983f-46d9-b85f-a18698134966"
+                }
+            ],
+            "severity": "warning",
+            "type": "extra_footprint"
+        },
+        {
+            "description": "Extra footprint",
+            "items": [
+                {
+                    "description": "Footprint J14 + BUTTON_C",
+                    "pos": {
+                        "x": 61.0,
+                        "y": 30.0
+                    },
+                    "uuid": "df36efb8-5046-471f-b17f-6b3d5396b9fa"
+                }
+            ],
+            "severity": "warning",
+            "type": "extra_footprint"
+        }
+    ],
+    "source": "toern_revH.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "Footprint 'MIC-TH_BD6.0-P1.90-D0.4-L-FD' does not match copy in library 'C529951'.",
+            "items": [
+                {
+                    "description": "Footprint MK1",
+                    "pos": {
+                        "x": 112.0,
+                        "y": 66.5
+                    },
+                    "uuid": "05c094cf-6fdf-49f6-a8c8-d8db49fa3b27"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'USB_C_Receptacle_HRO_TYPE-C-31-M-12' does not match copy in library 'Connector_USB'.",
+            "items": [
+                {
+                    "description": "Footprint J4",
+                    "pos": {
+                        "x": 33.95,
+                        "y": 52.86
+                    },
+                    "uuid": "1e02bfad-4f61-4a87-b474-90620a845cbc"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'BQ24075TRGTR'.",
+            "items": [
+                {
+                    "description": "Footprint IC1",
+                    "pos": {
+                        "x": 180.925,
+                        "y": 30.225
+                    },
+                    "uuid": "2092bef5-cf43-4109-8f86-045f8a6894b8"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Footprint '3M_929870-01-12-RA_Assembly' does not match copy in library '3M_929870-01-12-RA'.",
+            "items": [
+                {
+                    "description": "Footprint J30",
+                    "pos": {
+                        "x": 160.01,
+                        "y": 26.91
+                    },
+                    "uuid": "2c15b2da-4192-43d9-a598-41d9357fe94a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'SOT-23-6' does not match copy in library 'Package_TO_SOT_SMD'.",
+            "items": [
+                {
+                    "description": "Footprint U5",
+                    "pos": {
+                        "x": 138.77,
+                        "y": 48.69
+                    },
+                    "uuid": "34db220f-697f-40d0-aae2-bfd55d28d8d0"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint '3M_929870-01-12-RA_Assembly' does not match copy in library '3M_929870-01-12-RA'.",
+            "items": [
+                {
+                    "description": "Footprint J28",
+                    "pos": {
+                        "x": 129.53,
+                        "y": 42.15
+                    },
+                    "uuid": "37187cde-e540-48d0-a6a6-e093ce52b601"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'SOT-23-5' does not match copy in library 'Package_TO_SOT_SMD'.",
+            "items": [
+                {
+                    "description": "Footprint U1",
+                    "pos": {
+                        "x": 98.75842,
+                        "y": 50.53552
+                    },
+                    "uuid": "40b5a1ac-7f07-4671-95a1-7389efc13cef"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'myLibKicad'.",
+            "items": [
+                {
+                    "description": "Footprint U4",
+                    "pos": {
+                        "x": 153.7183,
+                        "y": 48.59
+                    },
+                    "uuid": "51384337-fcf7-48a8-a5ec-311b10703ae8"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Footprint 'SOT-23-5' does not match copy in library 'Package_TO_SOT_SMD'.",
+            "items": [
+                {
+                    "description": "Footprint U7",
+                    "pos": {
+                        "x": 97.93,
+                        "y": 36.4225
+                    },
+                    "uuid": "704a59aa-503d-4225-994d-02f9a7c3eb2f"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'YZP0354-20100-01' does not match copy in library 'YZP0354-20100-01'.",
+            "items": [
+                {
+                    "description": "Footprint CN1",
+                    "pos": {
+                        "x": 116.07,
+                        "y": 33.26
+                    },
+                    "uuid": "73960464-2d82-41fe-a51a-1d7a7d559e38"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'YZP0354-20100-01' does not match copy in library 'YZP0354-20100-01'.",
+            "items": [
+                {
+                    "description": "Footprint CN2",
+                    "pos": {
+                        "x": 116.07,
+                        "y": 35.8
+                    },
+                    "uuid": "775c9549-f5c4-42cc-bc07-7760514d42ab"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint '3M_929870-01-12-RA_Assembly' does not match copy in library '3M_929870-01-12-RA'.",
+            "items": [
+                {
+                    "description": "Footprint J29",
+                    "pos": {
+                        "x": 160.01,
+                        "y": 42.15
+                    },
+                    "uuid": "8c7a07b1-cffc-48d8-b47c-a70471f5f642"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "The footprint library 'TPS22918DBVR' was not found at '/var/folders/3h/f1rm8vzs1lv5ljhwy05p7nfhf1r72j/T/toern-jlcpcb-6kmh7gcv/source/TPS22918DBVR'.",
+            "items": [
+                {
+                    "description": "Footprint U8",
+                    "pos": {
+                        "x": 94.545,
+                        "y": 28.2
+                    },
+                    "uuid": "933ea744-4833-4767-991e-d18cd7aba36b"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Footprint 'SOT-23-5' does not match copy in library 'Package_TO_SOT_SMD'.",
+            "items": [
+                {
+                    "description": "Footprint U2",
+                    "pos": {
+                        "x": 98.77,
+                        "y": 46.95
+                    },
+                    "uuid": "ae1f2a27-35c3-4765-bf06-15be13f783bb"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint '3M_929870-01-12-RA_Assembly' does not match copy in library '3M_929870-01-12-RA'.",
+            "items": [
+                {
+                    "description": "Footprint J31",
+                    "pos": {
+                        "x": 129.53,
+                        "y": 26.91
+                    },
+                    "uuid": "ba0a266a-70bd-4d2f-8a0e-f50a903806ac"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'EG2219'.",
+            "items": [
+                {
+                    "description": "Footprint S1",
+                    "pos": {
+                        "x": 184.75,
+                        "y": 47.0
+                    },
+                    "uuid": "c4d24186-87c3-41ac-ab67-56546074e0f9"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Footprint 'QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm' does not match copy in library 'Package_DFN_QFN'.",
+            "items": [
+                {
+                    "description": "Footprint U3",
+                    "pos": {
+                        "x": 108.16,
+                        "y": 44.95
+                    },
+                    "uuid": "c910aceb-915c-4fa0-94a1-23dd491ddbbd"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'myLibKicad'.",
+            "items": [
+                {
+                    "description": "Footprint U6",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 34.53
+                    },
+                    "uuid": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Circle of J30 on F.Silkscreen",
+                    "pos": {
+                        "x": 146.04,
+                        "y": 26.91
+                    },
+                    "uuid": "89bca983-ff14-4a68-9715-9580cf04b01b"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Circle of J28 on F.Silkscreen",
+                    "pos": {
+                        "x": 115.56,
+                        "y": 42.15
+                    },
+                    "uuid": "9a9c9916-531a-495b-aa53-7e67b57bbd93"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Circle of CN1 on F.Silkscreen",
+                    "pos": {
+                        "x": 116.07,
+                        "y": 33.26
+                    },
+                    "uuid": "2b43a758-3086-4839-9f19-407e38f0b90c"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Circle of CN2 on F.Silkscreen",
+                    "pos": {
+                        "x": 116.07,
+                        "y": 35.8
+                    },
+                    "uuid": "43e52a70-d915-46de-ae08-27b73d131863"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Circle of J29 on F.Silkscreen",
+                    "pos": {
+                        "x": 146.04,
+                        "y": 42.15
+                    },
+                    "uuid": "3720af16-60db-4525-bad0-2bd1267b9145"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Circle of J31 on F.Silkscreen",
+                    "pos": {
+                        "x": 115.56,
+                        "y": 26.91
+                    },
+                    "uuid": "9a18ea12-8025-44a4-9e72-e3cf1b17f558"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Rectangle of J29 on F.Silkscreen",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 40.88
+                    },
+                    "uuid": "65fde8ab-68a4-4d40-acb9-0083037a346b"
+                },
+                {
+                    "description": "Rectangle of J28 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 40.88
+                    },
+                    "uuid": "e8986531-2443-49af-883a-d91f1d67f908"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 175.25,
+                        "y": 43.42
+                    },
+                    "uuid": "2755bc9d-1690-4e3f-bb8e-164787808767"
+                },
+                {
+                    "description": "Rectangle of J28 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 40.88
+                    },
+                    "uuid": "e8986531-2443-49af-883a-d91f1d67f908"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 175.25,
+                        "y": 43.42
+                    },
+                    "uuid": "2755bc9d-1690-4e3f-bb8e-164787808767"
+                },
+                {
+                    "description": "Rectangle of J29 on F.Silkscreen",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 40.88
+                    },
+                    "uuid": "65fde8ab-68a4-4d40-acb9-0083037a346b"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 43.42
+                    },
+                    "uuid": "143bbee6-4b81-4778-b7ea-49c3ba341d2e"
+                },
+                {
+                    "description": "Rectangle of J28 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 40.88
+                    },
+                    "uuid": "e8986531-2443-49af-883a-d91f1d67f908"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 43.42
+                    },
+                    "uuid": "143bbee6-4b81-4778-b7ea-49c3ba341d2e"
+                },
+                {
+                    "description": "Rectangle of J31 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 25.64
+                    },
+                    "uuid": "783aa5c4-6bac-4840-a768-0262a4a50839"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Rectangle of J31 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 25.64
+                    },
+                    "uuid": "783aa5c4-6bac-4840-a768-0262a4a50839"
+                },
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 25.64
+                    },
+                    "uuid": "e59a0f55-e84f-4214-842b-40b46be97a6c"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Rectangle of J31 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 25.64
+                    },
+                    "uuid": "783aa5c4-6bac-4840-a768-0262a4a50839"
+                },
+                {
+                    "description": "Rectangle of J30 on F.Silkscreen",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 25.64
+                    },
+                    "uuid": "d0e29ec9-d2cd-4ef0-af54-eb5ef457f528"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Rectangle of J30 on F.Silkscreen",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 25.64
+                    },
+                    "uuid": "d0e29ec9-d2cd-4ef0-af54-eb5ef457f528"
+                },
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 114.29,
+                        "y": 25.64
+                    },
+                    "uuid": "e59a0f55-e84f-4214-842b-40b46be97a6c"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 175.25,
+                        "y": 25.64
+                    },
+                    "uuid": "5a73d0d2-e030-48ba-9923-7031e0096876"
+                },
+                {
+                    "description": "Rectangle of J29 on F.Silkscreen",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 40.88
+                    },
+                    "uuid": "65fde8ab-68a4-4d40-acb9-0083037a346b"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen overlap",
+            "items": [
+                {
+                    "description": "Segment of U6 on F.Silkscreen",
+                    "pos": {
+                        "x": 175.25,
+                        "y": 25.64
+                    },
+                    "uuid": "5a73d0d2-e030-48ba-9923-7031e0096876"
+                },
+                {
+                    "description": "Rectangle of J30 on F.Silkscreen",
+                    "pos": {
+                        "x": 144.77,
+                        "y": 25.64
+                    },
+                    "uuid": "d0e29ec9-d2cd-4ef0-af54-eb5ef457f528"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        }
+    ]
+}

@@ -24,15 +24,29 @@ for x,tags in zip(cols,[['MIDI IN','MIDI OUT'],['CLOCK IN','CLOCK OUT'],['SIDECH
  for y,tag in zip([28,13],tags):
   S['cut_circles'].append([x,y,7.8,tag]);S['clearance_circles'].append([x,y,10.8,'HOLE + 1.5 mm'])
 for x,tag in [(83,'HEADPHONE OUT'),(101,'LINE OUT'),(119,'LINE IN')]:
- S['cut_circles'].append([x,18,11,tag]);S['clearance_circles'].append([x,18,14,'HOLE + 1.5 mm'])
+ S['cut_circles'].append([x,18,11.5,tag]);S['clearance_circles'].append([x,18,14.5,'HOLE + 1.5 mm'])
 S['cut_circles'].extend([[161.75,20.5,20,'DIN'],[149.75,11,3,'DIN SCREW'],[173.75,30,3,'DIN SCREW']])
 S['reference_rects'].append([146.25,7.5,31,26,'DIN FLANGE 31 x 26'])
 S['reference_rects'].append([*S['pcb'],'PCB 160 x 70.96'])
 S['clearance_rects'].extend([[144.75,6,34,29,'DIN FLANGE + 1.5 mm'],[9.75,37.5,163,83,'LED + 1.5 mm']])
-for text,x in [('MIDI',36),('CLOCK',49),('SIDE',62)]:label(text,x,20.5,align='middle_center')
+for text,x in [('MIDI A',36),('CLCK',49),('SC',62)]:label(text,x,20.5,align='middle_center')
 for text,x in [('PHONES',83),('LINE-OUT',101),('LINE-IN',119)]:label(text,x,28.5,align='middle_center')
-label('IN',25.5,28,3,align='middle_center')
-label('OUT',25.5,13,3,align='middle_center')
+# Horizontal arrow-to-bar / arrow-away-from-bar icons, with round 0.45 mm strokes.
+# These are engraving outlines, not text characters or cut contours.
+from shapely.geometry import LineString
+from shapely.ops import unary_union
+S['direction_icons']=[];S['icon_polylines']=[]
+for kind,y in [('IN',28),('OUT',13)]:
+ x=25.5
+ tip=x+1.0 if kind=='IN' else x-2.25
+ back=tip-1.2 if kind=='IN' else tip+1.2
+ strokes=[[(x-2.25,y),(x+1.0,y)],[(back,y+1.2),(tip,y),(back,y-1.2)],[(x+2.25,y-1.6),(x+2.25,y+1.6)]]
+ shape=unary_union([LineString(s).buffer(.225,quad_segs=6) for s in strokes])
+ polys=list(shape.geoms) if shape.geom_type=='MultiPolygon' else [shape]
+ contours=[list(map(list,p.exterior.coords)) for p in polys]
+ S['icon_polylines'].extend(contours)
+ S['direction_icons'].append({'kind':kind,'center_mm':[x,y],'orientation':'right toward bar' if kind=='IN' else 'left away from bar','stroke_mm':.45,'polylines':contours})
+S['midi_type']={'type':'A','label':'MIDI A','jack':'SJ1-3533','tip_pad':2,'ring_pad':3,'tip':'DIN 5 / current sink','ring':'DIN 4 / current source','source':'rev H PCB: J17 pad2 via R7 to U5 data, pad3 via R8 to +3.3 V; J3 pad2 opto cathode, pad3 via R6 opto anode.'}
 S['slots'].append([136.5,18,11,12])
 S['cutout_clearance_slots']=[[136.5,18,14,15]]
 # Authoritative KiCad MountingHole footprints, mapped to the native-scale STEP placement.
@@ -47,10 +61,12 @@ S['cut_circles'].extend(S['pcb_mount_holes'])
 S['PCB_orientation']={'rotation_axis':'X','rotation_degrees':180,'flat_underside_faces_panel':True,'components_face_case':True,'standoff_reference_length_mm':19.205}
 S['pcb_mount_clearance_circles']=[[x,y,5,'M2 STANDOFF RESERVE'] for x,y,di,tag in S['pcb_mount_holes']]
 S['cover']=[5.25,36,172,86]
-S['clamp_holes']=[[x,y,2.2,'M2 CLAMP'] for x in [8.75,173.75] for y in [39.5,118.5]]
-S['cut_circles'].extend(S['clamp_holes'])
+S['clamp_holes']=[[x,y,2.8,'M2.5 CLAMP'] for x in [8.75,173.75] for y in [39.5,118.5]]
+S['base_clamp_slots']=[[x,y,5,2.8] for x,y,_,_ in S['clamp_holes']]
+S['slots'][-1:-1]=S['base_clamp_slots']
+S['base_clamp_head_slots']=[[x,y,8.2,6] for x,y,_,_ in S['clamp_holes']]
 S['reference_rects'].append([*S['cover'],'FRONT COVER 172 x 86'])
-S['clamp_head_circles']=[[x,y,6,'M2 HEAD ENVELOPE'] for x,y,_,_ in S['clamp_holes']]
+S['clamp_head_circles']=[[x,y,6,'M2.5 HEAD ENVELOPE'] for x,y,_,_ in S['clamp_holes']]
 S['stack_mm']={'base_z':[-2,0],'LED_reference_z':[0,8],'front_cover_z':[8,10],'thicknesses_are_visualisation_only':True}
 S['font']='Space Grotesk'
 S['font_sizes_mm']=[2.4,3.0]
@@ -79,7 +95,7 @@ for path in logo_paths:
   S['logo_polylines'].append(pts)
 S['logo_source']='/Users/jank/git/toern/website/assets/img/logo.svg'
 S['requested_slot_pending']={'width_mm':13,'height_mm':70,'status':'Placement unresolved: a 70 mm slot intersects the LED stack at 36 HP; current 11 x 12 mm slot retained.'}
-S['notes']=['Logo moved left, DIN right with no DIN text. Port groups shifted left to fit. The 70 x 13 mm slot placement remains unresolved; current slot retained.','MIDI, CLOCK and SIDE pairs use 13 mm column spacing. Audio PHONES, LINE-OUT and LINE-IN share one row at y=18 mm with centered labels above. The last cutout is a vertical 11 x 12 mm slot before the 270-degree rotated logo matching the DIN flange height (26 mm).','PCB flat underside faces panel; components face into case. Five M2 holes match current KiCad board. Use flush screw heads under the LED or an LED spacer gap.','DIN bore remains requested 20 mm. Clearance guides reserve 1.5 mm around cutouts and DIN flange; connector bodies and rear depths remain unverified.','Stack thicknesses and PCB standoff lengths are visualization references.']
+S['notes']=['Functional labels MIDI A (TRS Type A), CLCK and SC. Shared IN/OUT words replaced by horizontal engraved arrow-to-bar / arrow-away-from-bar icons.','Logo moved left, DIN right with no DIN text. Port groups shifted left to fit. The 70 x 13 mm slot placement remains unresolved; current slot retained.','MIDI, CLOCK and SIDE pairs use 13 mm column spacing. Audio PHONES, LINE-OUT and LINE-IN share one row at y=18 mm with centered labels above. The last cutout is a vertical 11 x 12 mm slot before the 270-degree rotated logo matching the DIN flange height (26 mm).','PCB flat underside faces panel; components face into case. Five M2 holes match current KiCad board. Use flush screw heads under the LED or an LED spacer gap.','DIN bore remains requested 20 mm. Clearance guides reserve 1.5 mm around cutouts and DIN flange; connector bodies and rear depths remain unverified.','Stack thicknesses and PCB standoff lengths are visualization references.']
 (R/'panel_spec.json').write_text(json.dumps(S,indent=2,ensure_ascii=False))
 def capsule(ms,x,y,w,h,layer):
  r=min(w,h)/2;dx=abs(w-h)/2;vertical=h>w;a={'layer':layer}
@@ -103,7 +119,7 @@ for a,b in S['engrave_lines']:m.add_line(a,b,dxfattribs={'layer':'GRAVUR'})
 for t in S['labels']:
  align={'middle_left':TextEntityAlignment.MIDDLE_LEFT,'middle_center':TextEntityAlignment.MIDDLE_CENTER,'left':TextEntityAlignment.BOTTOM_LEFT,'center':TextEntityAlignment.BOTTOM_CENTER}[t['align']]
  m.add_text(t['text'],dxfattribs={'height':t['height'],'style':'LABELS','rotation':t['rotation'],'layer':'GRAVUR'}).set_placement((t['x'],t['y']),align=align)
-for poly in S['logo_polylines']:m.add_lwpolyline(poly[:-1] if poly[0]==poly[-1] else poly,close=True,dxfattribs={'layer':'GRAVUR'})
+for poly in S['logo_polylines']+S['icon_polylines']:m.add_lwpolyline(poly[:-1] if poly[0]==poly[-1] else poly,close=True,dxfattribs={'layer':'GRAVUR'})
 d.set_modelspace_vport(height=140,center=(91.25,64.25));d.saveas(OUT/'modular.dxf')
 front=ezdxf.new('R2010');front.units=4;front.layers.new('SCHNITT',dxfattribs={'color':7});fm=front.modelspace()
 fp=[];rect(0,0,172,86,fp)
@@ -117,7 +133,7 @@ for key,l in [('clearance_rects','FREIHALTEN'),('reference_rects','BAUTEIL_REFER
   lines=[];rect(x,y,w,h,lines)
   for a,b in lines:m.add_line(a,b,dxfattribs={'layer':l})
 for x,y,di,t in S['clearance_circles']+S['pcb_mount_clearance_circles']:m.add_circle((x,y),di/2,dxfattribs={'layer':'FREIHALTEN'})
-for slot in S['rack_head_slots']:capsule(m,*slot,'SCHRAUBENKOPF')
+for slot in S['rack_head_slots']+S['base_clamp_head_slots']:capsule(m,*slot,'SCHRAUBENKOPF')
 for slot in S['cutout_clearance_slots']:capsule(m,*slot,'FREIHALTEN')
 for x,y,di,t in S['clamp_head_circles']:m.add_circle((x,y),di/2,dxfattribs={'layer':'SCHRAUBENKOPF'})
 d.saveas(OUT/'modular_clearances.dxf')
@@ -126,7 +142,7 @@ for key,col in [('clearance_rects','#dd8c23'),('reference_rects','#4b9898')]:
  for x,y,w,h,t in S[key]:ax.add_patch(Rectangle((x,y),w,h,fill=False,edgecolor=col,lw=.8,ls='--'))
 for x,y,di,t in S['clearance_circles']+S['pcb_mount_clearance_circles']:ax.add_patch(Circle((x,y),di/2,fill=False,ec='#dd8c23',lw=.65,ls='--'))
 for x,y,di,t in S['clamp_head_circles']:ax.add_patch(Circle((x,y),di/2,fill=False,ec='#bb7979',lw=.7,ls='--'))
-for x,y,w,h in S['rack_head_slots']:
+for x,y,w,h in S['rack_head_slots']+S['base_clamp_head_slots']:
  from shapely.geometry import LineString
  p=capsule_shape(x,y,w,h)
  ax.plot(*p.exterior.xy,color='#bb7979',lw=.6,ls='--')
@@ -140,7 +156,7 @@ for x,y,w,h in S['slots']:
  p=capsule_shape(x,y,w,h)
  ax.plot(*p.exterior.xy,color='#243c54',lw=1)
 for t in S['labels']:ax.text(t['x'],t['y'],t['text'],color='#00894c',fontsize=t['height']*3.1,ha='left' if t['align'] in ['middle_left','left'] else 'center',va='center' if t['align'].startswith('middle') else 'bottom',rotation=t['rotation'],fontweight='bold')
-for poly in S['logo_polylines']:ax.plot(*zip(*poly),color='#00894c',lw=.6)
+for poly in S['logo_polylines']+S['icon_polylines']:ax.plot(*zip(*poly),color='#00894c',lw=.6)
 ax.text(91.25,85,'LED · 160 × 80 mm\nengraved outline',ha='center',color='#6f967e',fontsize=12)
 ax.text(91.25,65,'rev H PCB · 160 × 70.96 mm\nflat underside toward panel',ha='center',color='#4b9898',fontsize=10)
 ax.text(161.75,1,'31 × 26 mm DIN flange',ha='center',color='#4b9898',fontsize=6)

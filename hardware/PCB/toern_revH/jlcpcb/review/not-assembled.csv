@@ -1,0 +1,13 @@
+Reference,Value,Footprint,Reason
+J28,929870-01-12-RA,3M_929870-01-12-RA_Assembly,Hand solder
+J29,929870-01-12-RA,3M_929870-01-12-RA_Assembly,Hand solder
+J30,929870-01-12-RA,3M_929870-01-12-RA_Assembly,Hand solder
+J31,929870-01-12-RA,3M_929870-01-12-RA_Assembly,Hand solder
+JP1,SolderJumper_3_Open,SolderJumper-3_P1.3mm_Open_RoundedPad1.0x1.5mm,DNP / excluded from BOM
+LOGOOPENHARDWARE,OSHW-Logo2_7.3x6mm_SilkScreen,OSHW-Logo2_7.3x6mm_SilkScreen,DNP / excluded from BOM
+MountingHole1,MountingHole_2.2mm_M2,MountingHole_2.2mm_M2,DNP / excluded from BOM
+MountingHole2,MountingHole_2.2mm_M2,MountingHole_2.2mm_M2,DNP / excluded from BOM
+MountingHole3,MountingHole_2.2mm_M2,MountingHole_2.2mm_M2,DNP / excluded from BOM
+MountingHole4,MountingHole_2.2mm_M2,MountingHole_2.2mm_M2,DNP / excluded from BOM
+MountingHole5,MountingHole_2.2mm_M2,MountingHole_2.2mm_M2,DNP / excluded from BOM
+U6,Teensy4.1,Teensy41,DNP / excluded from BOM

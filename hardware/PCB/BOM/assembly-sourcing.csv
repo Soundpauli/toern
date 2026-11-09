@@ -14,7 +14,7 @@
 "U3","SGTL5000XNBA3","QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm","C5196742","1","Pre-order or arrange external sourcing for JLCPCB assembly before placing the PCB order","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"
 "CN1,CN2","YZP0354-20100-01","YZP0354-20100-01","C5157282","2","JLCPCB assembles this PCB component","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"
 "C27,C28","0.47uF","C_0603_1608Metric","C1623","2","JLCPCB assembles this PCB component","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"
-"R24","1.13k","R_0402_1005Metric","C67014","1","JLCPCB assembles this PCB component","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"
+"R24","590R","R_0402_1005Metric","C166635","1","JLCPCB assembles this PCB component","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"
 "R23","1.1k","R_0402_1005Metric","C25860","1","JLCPCB assembles this PCB component","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"
 "R19","1.5M","R_0402_1005Metric","C11812","1","JLCPCB assembles this PCB component","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"
 "R25,R26","1.5k","R_0402_1005Metric","C25867","2","JLCPCB assembles this PCB component","Check current assembly quote and component availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv"

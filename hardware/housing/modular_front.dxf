@@ -489,7 +489,7 @@ $SKPOLY
   9
 $TDCREATE
  40
-2461348.77375
+2461350.4414467593
   9
 $TDUCREATE
  40
@@ -497,7 +497,7 @@ $TDUCREATE
   9
 $TDUPDATE
  40
-2461348.77375
+2461350.4414467593
   9
 $TDUUPDATE
  40
@@ -549,7 +549,7 @@ $SPLINESEGS
   9
 $HANDSEED
   5
-3C
+3E
   9
 $SURFTAB1
  70
@@ -929,11 +929,11 @@ $PSTYLEMODE
   9
 $FINGERPRINTGUID
   2
-{2336A8DF-A98E-479B-97C9-3999E13BA93F}
+{B3BFBD44-15F8-4D28-AC74-68FDA5752B51}
   9
 $VERSIONGUID
   2
-{BBF02A6D-8DD7-4E5D-9941-334805BDF3A1}
+{4095F070-1A23-4A42-B6C3-1E00E4548A5A}
   9
 $EXTNAMES
 290
@@ -1373,7 +1373,7 @@ AcDbSymbolTable
   0
 VPORT
   5
-38
+3A
 330
 8
 100
@@ -1393,9 +1393,9 @@ AcDbViewportTableRecord
  21
 1.0
  12
-86.0
+91.25
  22
-43.0
+64.25
  13
 0.0
  23
@@ -1421,7 +1421,7 @@ AcDbViewportTableRecord
  37
 0.0
  40
-100.0
+140.0
  41
 1.34
  42
@@ -1569,7 +1569,7 @@ LAYER
 100
 AcDbSymbolTable
  70
-3
+4
   0
 LAYER
   5
@@ -1645,6 +1645,30 @@ Continuous
 347
 21
   0
+LAYER
+  5
+30
+330
+1
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+GRAVUR
+ 70
+0
+ 62
+3
+  6
+Continuous
+370
+-3
+390
+13
+347
+21
+  0
 ENDTAB
   0
 TABLE
@@ -1657,7 +1681,7 @@ STYLE
 100
 AcDbSymbolTable
  70
-1
+2
   0
 STYLE
   5
@@ -1684,6 +1708,34 @@ Standard
 2.5
   3
 txt
+  4
+
+  0
+STYLE
+  5
+31
+330
+5
+100
+AcDbSymbolTableRecord
+100
+AcDbTextStyleTableRecord
+  2
+LABELS
+ 70
+0
+ 40
+0.0
+ 41
+1.0
+ 50
+0.0
+ 71
+0
+ 42
+2.5
+  3
+SpaceGrotesk-Bold.ttf
   4
 
   0
@@ -1745,7 +1797,7 @@ ACAD
   0
 APPID
   5
-39
+3B
 330
 3
 100
@@ -1759,7 +1811,7 @@ HATCHBACKGROUNDCOLOR
   0
 APPID
   5
-3A
+3C
 330
 3
 100
@@ -2069,54 +2121,6 @@ ENTITIES
   0
 LINE
   5
-30
-330
-17
-100
-AcDbEntity
-  8
-SCHNITT
-100
-AcDbLine
- 10
-0.0
- 20
-0.0
- 30
-0.0
- 11
-172.0
- 21
-0.0
- 31
-0.0
-  0
-LINE
-  5
-31
-330
-17
-100
-AcDbEntity
-  8
-SCHNITT
-100
-AcDbLine
- 10
-172.0
- 20
-0.0
- 30
-0.0
- 11
-172.0
- 21
-86.0
- 31
-0.0
-  0
-LINE
-  5
 32
 330
 17
@@ -2127,15 +2131,15 @@ SCHNITT
 100
 AcDbLine
  10
-172.0
+0.0
  20
-86.0
+0.0
  30
 0.0
  11
-0.0
+172.0
  21
-86.0
+0.0
  31
 0.0
   0
@@ -2151,6 +2155,54 @@ SCHNITT
 100
 AcDbLine
  10
+172.0
+ 20
+0.0
+ 30
+0.0
+ 11
+172.0
+ 21
+86.0
+ 31
+0.0
+  0
+LINE
+  5
+34
+330
+17
+100
+AcDbEntity
+  8
+SCHNITT
+100
+AcDbLine
+ 10
+172.0
+ 20
+86.0
+ 30
+0.0
+ 11
+-1.4210854715202004e-14
+ 21
+86.0
+ 31
+0.0
+  0
+LINE
+  5
+35
+330
+17
+100
+AcDbEntity
+  8
+SCHNITT
+100
+AcDbLine
+ 10
 0.0
  20
 86.0
@@ -2165,46 +2217,6 @@ AcDbLine
   0
 CIRCLE
   5
-34
-330
-17
-100
-AcDbEntity
-  8
-SCHNITT
-100
-AcDbCircle
- 10
-3.5
- 20
-3.5
- 30
-0.0
- 40
-1.1
-  0
-CIRCLE
-  5
-35
-330
-17
-100
-AcDbEntity
-  8
-SCHNITT
-100
-AcDbCircle
- 10
-3.5
- 20
-82.5
- 30
-0.0
- 40
-1.1
-  0
-CIRCLE
-  5
 36
 330
 17
@@ -2215,13 +2227,13 @@ SCHNITT
 100
 AcDbCircle
  10
-168.5
+3.5
  20
 3.5
  30
 0.0
  40
-1.1
+1.399999999999999
   0
 CIRCLE
   5
@@ -2235,13 +2247,53 @@ SCHNITT
 100
 AcDbCircle
  10
+3.5
+ 20
+82.5
+ 30
+0.0
+ 40
+1.399999999999999
+  0
+CIRCLE
+  5
+38
+330
+17
+100
+AcDbEntity
+  8
+SCHNITT
+100
+AcDbCircle
+ 10
+168.5
+ 20
+3.5
+ 30
+0.0
+ 40
+1.4000000000000057
+  0
+CIRCLE
+  5
+39
+330
+17
+100
+AcDbEntity
+  8
+SCHNITT
+100
+AcDbCircle
+ 10
 168.5
  20
 82.5
  30
 0.0
  40
-1.1
+1.4000000000000057
   0
 ENDSEC
   0
@@ -3233,7 +3285,7 @@ CREATED_BY_EZDXF
   3
 WRITTEN_BY_EZDXF
 350
-3B
+3D
   0
 DICTIONARYVAR
   5
@@ -3245,11 +3297,11 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-11-03T17:34:12.358633+00:00
+1.4.3 @ 2026-11-05T09:35:41.473713+00:00
   0
 DICTIONARYVAR
   5
-3B
+3D
 330
 2D
 100
@@ -3257,7 +3309,7 @@ DictionaryVariables
 280
 0
   1
-1.4.3 @ 2026-11-03T17:34:12.359404+00:00
+1.4.3 @ 2026-11-05T09:35:41.474324+00:00
   0
 ENDSEC
   0
