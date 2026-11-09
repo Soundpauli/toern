@@ -191,12 +191,6 @@ FLASHMEM void remoteHandleCommand(char *args) {
     Serial.println("\"ok\":true}");
     return;
   }
-  if (count == 4 && !strcmp(op, "DNOTE") && values[1]>=0 && values[1]<=127 && values[2]>=0 && values[2]<=127) {
-    remoteInput.renew(millis());
-    if(values[2])handleNoteOn(11,(uint8_t)values[1],(uint8_t)values[2]);
-    else handleNoteOff(11,(uint8_t)values[1],0);
-    remoteReplyState(id);return;
-  }
   if (count == 2 && !strcmp(op, "PERF")) {
     remoteInput.renew(millis());
     remoteReplyPerformance(id);

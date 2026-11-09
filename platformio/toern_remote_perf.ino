@@ -12,23 +12,8 @@ FLASHMEM static unsigned remoteCpuBasisPoints(float percent) {
 
 FLASHMEM void remoteReplyPerformance(unsigned long id) {
   remoteReplyStart(id);
-  extern volatile uint32_t toern_audio_peak_cycles,toern_audio_peak_node_cycles,toern_audio_peak_node,toern_audio_peak_vtable;
-  Serial.printf("\"audio_raw_cycles\":[%lu,%lu,%lu,%lu],",(unsigned long)toern_audio_peak_cycles,(unsigned long)toern_audio_peak_node_cycles,(unsigned long)toern_audio_peak_node,(unsigned long)toern_audio_peak_vtable);
-  Serial.print("\"detail_us\":[");for(unsigned i=0;i<8;++i)Serial.printf("%s%lu",i?",":"",(unsigned long)detailMax[i]);Serial.print("],");
   {
-    using namespace toern_stall_probe;
-    const uint32_t n = recordCount;
-    Serial.printf("\"stall_probe_count\":%lu,\"stall_probe\":[", (unsigned long)n);
-    const unsigned shown = n < kRecords ? n : kRecords;
-    for (unsigned i = 0; i < shown; ++i) {
-      const volatile Record &r = records[i];
-      Serial.printf("%s{\"ms\":%lu,\"stuck_ms\":%lu,\"pc\":\"0x%08lx\",\"lr\":\"0x%08lx\",\"xpsr\":\"0x%08lx\",\"r0\":\"0x%08lx\",\"r1\":\"0x%08lx\"}",
-          i ? "," : "", (unsigned long)r.ms, (unsigned long)r.stuckMs, (unsigned long)r.pc, (unsigned long)r.lr,
-          (unsigned long)r.xpsr, (unsigned long)r.r0, (unsigned long)r.r1);
-    }
-    Serial.print("],");
-  }
-  {
+    // PSRAM size vs. FlexSPI2 MPU region: must match (see src/toern_psram_mpu.cpp).
     uint32_t sizeField = 0;
     for (int r = 0; r < 16; ++r) {
       SCB_MPU_RNR = (uint32_t)r; asm volatile("dsb" ::: "memory");
@@ -37,7 +22,6 @@ FLASHMEM void remoteReplyPerformance(unsigned long id) {
     Serial.printf("\"psram_mb\":%u,\"flexspi2_mpu_mb\":%lu,", (unsigned)external_psram_size,
         sizeField ? (unsigned long)(1ull << (sizeField + 1)) >> 20 : 0ul);
   }
-  Serial.printf("\"playback_calls\":%lu,\"playback_max_us\":%lu,\"playback_gap_us\":%lu,\"playback_late\":%lu,\"guard_max_us\":%lu,",(unsigned long)playbackCalls,(unsigned long)playbackMaxUs,(unsigned long)playbackGapUs,(unsigned long)playbackLate,(unsigned long)toern_audio::guardMaxUs);
   if (&toern_usb_tx_discarded_frames && &toern_usb_tx_overruns &&
       &toern_usb_tx_silent_frames && &toern_usb_tx_underruns) {
     Serial.printf("\"usb_tx\":{\"discarded_frames\":%lu,\"overruns\":%lu,\"silent_frames\":%lu,\"underruns\":%lu},",

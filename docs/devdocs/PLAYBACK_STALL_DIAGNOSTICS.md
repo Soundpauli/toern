@@ -29,9 +29,13 @@ Validation: the saved stalling motif reproduced on the probe build after
 ~90 s (`playback_late` 1, 1,318,004 µs stall, probe PC in `AudioInputI2S::isr`).
 With the MPU fix the same motif ran 15 min / 5,994 steps: `playback_late` 0,
 `loop_stalls` 0, `stall_probe_count` 0, `playback_gap_us` ≈ step interval
-throughout. The SysTick probe stays in the build as a cheap watchdog
-(`stall_probe*` fields in `PERF`); remove it together with the other
-diagnostics before a production merge.
+throughout.
+
+All temporary instrumentation described below (StallDetail, PlaybackTimingScope,
+`guardMaxUs`, `audio_raw_cycles` + the framework `AudioStream.cpp` patch, the
+`DNOTE` command and the SysTick stall probe) was removed again after the fix
+was validated; only `psram_mb` / `flexspi2_mpu_mb` remain in `PERF`. The
+notes below are kept for reference should the problem ever need re-probing.
 
 ---
 

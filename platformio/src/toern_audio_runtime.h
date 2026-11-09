@@ -11,19 +11,16 @@ static_assert(kTimerPriority > kAudioPriority, "PIT must not preempt audio updat
 // Protect short sampler state transactions from both audio update and PIT
 // callbacks, without blocking I2S DMA, UART or USB. Restore the prior IRQ state
 // so nested guards and callers which already disabled an IRQ stay correct.
-inline volatile uint32_t guardMaxUs = 0;
 class StateGuard {
 public:
     StateGuard() : audioEnabled_(NVIC_IS_ENABLED(IRQ_SOFTWARE) != 0),
-                   pitEnabled_(NVIC_IS_ENABLED(IRQ_PIT) != 0), started_(micros()) {
+                   pitEnabled_(NVIC_IS_ENABLED(IRQ_PIT) != 0) {
         NVIC_DISABLE_IRQ(IRQ_PIT);
         NVIC_DISABLE_IRQ(IRQ_SOFTWARE);
         __DSB();
         __ISB();
     }
     ~StateGuard() {
-        const uint32_t elapsed = micros() - started_;
-        if (elapsed > guardMaxUs) guardMaxUs = elapsed;
         __DSB();
         if (audioEnabled_) NVIC_ENABLE_IRQ(IRQ_SOFTWARE);
         if (pitEnabled_) NVIC_ENABLE_IRQ(IRQ_PIT);
@@ -31,7 +28,6 @@ public:
     StateGuard(const StateGuard&) = delete;
     StateGuard& operator=(const StateGuard&) = delete;
 private:
-    uint32_t started_;
     bool audioEnabled_;
     bool pitEnabled_;
 };

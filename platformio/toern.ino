@@ -69,7 +69,6 @@ volatile uint16_t isrDbgLoopCountValue = 0;
 #include "src/toern_sd_protocol.h"
 #include <Audio.h>
 #include "src/toern_audio_runtime.h"
-#include "src/toern_stall_probe.h"
 #include "src/toern_envelope_curve.h"
 #include "src/toern_pcm_interpolation.h"
 #include "src/toern_midi_pitch.h"
@@ -4973,7 +4972,6 @@ FLASHMEM void setup() {
   Serial8.addMemoryForWrite(midiTxExtra, sizeof(midiTxExtra));
   Serial8.addMemoryForRead(midiRxExtra, sizeof(midiRxExtra));
   Serial8.begin(31250);
-  toern_stall_probe::install();
   MIDI.begin(MIDI_CHANNEL_OMNI);
   MIDI.turnThruOff();
   MIDI.setHandleNoteOn(handleNoteOn);    // optional MIDI library hook
@@ -7397,10 +7395,7 @@ struct LoopTimingScope {
 };
 #endif
 
-static volatile uint32_t detailMax[8]={};
-struct StallDetail {unsigned slot;uint32_t started;StallDetail(unsigned n):slot(n),started(micros()){}~StallDetail(){uint32_t dt=micros()-started;if(dt>detailMax[slot])detailMax[slot]=dt;}};
 void loop() {
-  ++toern_stall_probe::heartbeat;
   toernI2cRuntimeBegin();
 #if TOERN_REMOTE_CONTROL
   LoopTimingScope timingScope;
@@ -7826,13 +7821,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
 #if TOERN_REMOTE_CONTROL
   loopTiming.mark(ToernLoopTiming::Other,micros());
 #endif
-  {StallDetail t(0);checkPendingSampleNotes();}
-  {StallDetail t(1);serviceSetWavSyncPreview();}
-  {StallDetail t(2);serviceSdPreviewRequests();}
+  checkPendingSampleNotes();
+  serviceSetWavSyncPreview();
+  serviceSdPreviewRequests();
 
   // Periodic system stats to Serial removed (requested): keep runtime silent by default.
 
-  {StallDetail t(7);yield();}  // Yield periodically to prevent unresponsiveness, especially during file operations
+  yield();  // Yield periodically to prevent unresponsiveness, especially during file operations
 
   // === INPUT MONITORING WHEN IN DRAW MODE ===
   // Enable if monitoring toggle is ON (y==1 only) or ALL (always on), and not in record mode
@@ -7867,7 +7862,7 @@ if (SMP.filter_settings[8][ACTIVE]>0){
   // Advance ALL active filter-mixer crossfades (not only the selected channel).
   // Updating only currentChannel froze mid-PASS transitions on neighbors → silent
   // until a filter/EFX reset snapped gains (matches "fixed once after filter reset").
-  {StallDetail t(3);updateAllMixerGains();}
+  updateAllMixerGains();
 
   // Recovery mechanism: Detect and reset stuck pressed[] states
   // If pressed[] is true but no button event is active, it might be stuck
@@ -8105,13 +8100,13 @@ if (SMP.filter_settings[8][ACTIVE]>0){
     }
   }
 
-  {StallDetail t(4);autoOffActiveNotes();}
+  autoOffActiveNotes();
 
   filterfreshsetted = false;
 
-  {StallDetail t(5);FastLEDshow();}
+  FastLEDshow();
 
-  {StallDetail t(6);yield();}
+  yield();
 }
 
 FLASHMEM void triggerExternalOneBlink() {
@@ -9401,24 +9396,7 @@ static void servicePendingTouchFill(unsigned int step) {
 }
 
 
-static volatile uint32_t playbackCalls=0, playbackMaxUs=0, playbackGapUs=0, playbackLate=0;
-static uint32_t playbackLastUs=0;
-struct PlaybackTimingScope {
-  uint32_t started;
-  PlaybackTimingScope():started(micros()) {
-    if (!isNowPlaying) {playbackLastUs=0;return;}
-    ++playbackCalls;
-    if(playbackLastUs) {
-      const uint32_t gap=started-playbackLastUs;
-      if(gap>playbackGapUs)playbackGapUs=gap;
-      if(gap>(uint32_t)playNoteInterval+20000)++playbackLate;
-    }
-    playbackLastUs=started;
-  }
-  ~PlaybackTimingScope(){const uint32_t duration=micros()-started;if(duration>playbackMaxUs)playbackMaxUs=duration;}
-};
 void playNote() {
-  PlaybackTimingScope timing;
   ToernNoteScope<decltype(note)> playbackScope(note,autogenPlaybackGrid());
 
   // Remember which beat is actually being played for UI highlighting
