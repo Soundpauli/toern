@@ -121,7 +121,7 @@ export function createDevice(matrix, statusEl, rings) {
   subPick.recs[5] = 1;
   subPick.look[0] = 1;
   subPick.look[6] = 1;
-  subPick.look[7] = 2;
+  subPick.look[7] = 3; // 2B: 32×16 with rotated panel (matches firmware DEFAULT_LED_MODE=4)
   subPick.etc[ETC_EYES_INDEX] = 1;
   subPick.midi[3] = 1; // RCVE NOTE
   subPick.midi[4] = 1; // CLMP ON
@@ -1161,7 +1161,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (Number.isFinite(data.imgBrushChannel)) s.imgBrushChannel = clamp(data.imgBrushChannel, 1, 8);
     if (Number.isFinite(data.muteMask)) s.muteMask = data.muteMask & 0xffff;
     if (Number.isFinite(data.ledBrightness)) s.ledBrightness = clamp(data.ledBrightness, 3, 255);
-    if (!data.deviceChosen) subPick.look[7] = 2;
+    if (!data.deviceChosen) subPick.look[7] = 3;
     s.packSlot = Number.isFinite(data.packSlot) && data.packSlot >= 1 && data.packSlot <= 99 ? data.packSlot : 1;
     // Sync SIDE pick from saved voice
     {
@@ -1283,7 +1283,14 @@ export function createDevice(matrix, statusEl, rings) {
   function subValue(mode, index) {
     if (mode === "look" && SUBS.look[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
     if (mode === "mode" && index === 9) return {text:`${s.autoStart}-${s.autoEnd} +${s.autoPages}`};
-    if (mode === "mode" && index === 10) return { text: s.agen.active?"ON":"OFF" };
+    if (mode === "mode" && index === 10) {
+      const motion = ["HOLD", "SOFT", "LONG", "LIVE"][s.agen.motion ?? 1];
+      const scale = ["AUTO", "MAJ", "MIN", "HRM", "DOR", "PEN", "BLU"][s.agen.scale ?? 0];
+      const density = ["LOW", "MED", "HIGH", "MAX"][s.agen.density ?? 1];
+      const focus = s.agenMenuFocus ?? 2;
+      const shown = focus === 0 ? scale : focus === 1 ? density : motion;
+      return { text: `${shown}${s.agen.active ? " · ON" : ""}` };
+    }
     if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
     return legacySubValue(slot.mode, slot.index);
@@ -1699,7 +1706,12 @@ export function createDevice(matrix, statusEl, rings) {
       if(enc===2){s.autoEnd=clamp(s.autoEnd+dir,s.autoStart,PAGES-1);s.autoPages=clamp(s.autoPages,1,PAGES-s.autoEnd);}
       return;
     }
-    if (s.mode === "mode" && s.subIndex === 10 && enc === 2) return;
+    if (s.mode === "mode" && s.subIndex === 10 && enc <= 2) {
+      if (enc === 0) { s.agen = agen.setScale((s.agen.scale ?? 0) + dir); s.agenMenuFocus = 0; }
+      else if (enc === 1) { s.agen = agen.setDensity((s.agen.density ?? 1) + dir); s.agenMenuFocus = 1; }
+      else { s.agen = agen.setMotion((s.agen.motion ?? 1) + dir); s.agenMenuFocus = 2; }
+      return;
+    }
     if (s.mode === "mode" && s.subIndex === 8 && enc === 2) {
       if (dir > 0 && s.playing) togglePlay();
       const enabled = dir > 0;
@@ -2057,7 +2069,8 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (s.mode === "mode" && s.subIndex === 9) { if(enc===0)generateAuto(); return; }
     if (s.mode === "mode" && s.subIndex === 10) {
-      if (enc === 3) toggleAutogen();
+      // Firmware: pressing the AGEN setting toggles generation; encoder 3 sets motion.
+      toggleAutogen();
       return;
     }
     const slot = resolveSubPage(s.mode, s.subIndex);

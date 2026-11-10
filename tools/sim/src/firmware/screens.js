@@ -18,9 +18,12 @@ const UI_BRIGHT_WHITE = [150, 150, 150];
 const UI_BRIGHT_GREEN = [0, 150, 0];
 const UI_DIM_RED = [20, 0, 0];
 const UI_DIM_GREEN = [0, 20, 0];
+const UI_CYAN = [0, 120, 120];
 const FILTER_WIDE = [[5, 6], [12, 13], [20, 21], [27, 28]];
 const FILTER_NARROW = [[2, 3], [6, 7], [10, 11], [14, 15]];
-function filterCols(s) { return COLS > 16 && s.ledMode === 3 ? FILTER_WIDE : FILTER_NARROW; }
+// Firmware 2B spreads across 32px; on any 32-wide matrix the sim does the same so
+// the filter is never stuck in the left 16 columns of a dual panel.
+function filterCols(s) { return COLS > 16 ? FILTER_WIDE : FILTER_NARROW; }
 const FILTER_NAMES = ["HCUT", "LCUT", "RVRB", "BITC"];
 const FILTER_COLORS = [[255, 0, 0], [255, 64, 0], [255, 128, 0], [255, 191, 0]];
 const LOGO = [
@@ -620,7 +623,7 @@ export function drawFilter(matrix, s, now) {
     } else if (bipolarKeys.has(spec.key) && val === 16) {
       valueColor = [255, 255, 255];
     }
-    const wide = COLS > 16 && s.ledMode === 3;
+    const wide = COLS > 16;
     let valueX = wide ? Math.max(1, Math.min(COLS-6, focus < 2 ? x1+4 : x0-10)) : s.GLOB.currentChannel === 11 && focus === 0 && spec.key === "wave" ? 6 : focus < 2 ? 10 : 2;
     for(let x=valueX;x<=valueX+6;x++)for(let y=4;y<11;y++)matrix.light(x,y,[0,0,0]);
     if (bipolarKeys.has(spec.key) || spec.key === "stretch") {
@@ -750,9 +753,23 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     return;
   }
   if (s.mode === "mode" && s.subIndex === 10) {
+    // Firmware AGEN: encoder 3 = HOLD/SOFT/LONG/LIVE; indicator 4 = active G/R.
+    const motion = Math.max(0, Math.min(3, s.agen?.motion ?? 1));
+    const scale = Math.max(0, Math.min(6, s.agen?.scale ?? 0));
+    const density = Math.max(0, Math.min(3, s.agen?.density ?? 1));
+    const focus = s.agenMenuFocus ?? 2;
+    const motionNames = ["HOLD", "SOFT", "LONG", "LIVE"];
+    const scaleNames = ["AUTO", "MAJ", "MIN", "HRM", "DOR", "PEN", "BLU"];
+    const densityNames = ["LOW", "MED", "HIGH", "MAX"];
+    const motionColors = [UI_DIM_RED, UI_GREEN, UI_CYAN, UI_YELLOW];
+    const label = focus === 0 ? scaleNames[scale] : focus === 1 ? densityNames[density] : motionNames[motion];
+    const color = focus === 0 ? UI_WHITE : focus === 1 ? UI_ORANGE : motionColors[motion];
     matrix.drawText("AGEN",2,10,parent);
-    matrix.drawText(s.agen?.active?"ON":"OFF",2,3,s.agen?.active?UI_GREEN:UI_RED);
-    matrix.drawIndicator("L","G",4);
+    matrix.drawText(label,2,3,color);
+    matrix.drawIndicator("L","W",1);
+    matrix.drawIndicator("L","Y",2);
+    matrix.drawIndicator("L","W",3);
+    matrix.drawIndicator("L",s.agen?.active?"G":"R",4);
     return;
   }
   const { mode: pageMode, index: pageIndex } = resolveSubPage(s.mode, s.subIndex);

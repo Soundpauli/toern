@@ -181,6 +181,23 @@ int main(int argc,char **argv){assert(argc==2);
    }
   }
  assert(changed>total/2&&large>total/3);
+ for(Scale sc:{ScaleMajor,ScaleMinor,ScaleHarmonic,ScaleDorian,ScalePenta,ScaleBlues})
+  for(int tonic=0;tonic<12;++tonic)for(unsigned phrase=0;phrase<16;++phrase)for(unsigned step=0;step<16;++step){
+   int n=fitPitch(60,tonic,sc,phrase,13,step);bool inScale=false;
+   for(unsigned d=0;d<scaleCount(sc);++d)inScale|=n%12==scalePc(tonic,sc,d);
+   assert(inScale);
+   int seventh=chordPc(tonic,sc,phrase,3);
+   bool seventhIn=false;for(unsigned d=0;d<scaleCount(sc);++d)seventhIn|=seventh%12==scalePc(tonic,sc,d);
+   assert(seventhIn);
+   int voiced=voicingPitch(60,tonic,sc,phrase,3,113,true,4);
+   assert(voiced%12==seventh);
+  }
+ unsigned dense=0,sparse=0;
+ for(unsigned step=0;step<64;++step){
+  if(bassHit(step,0,9)){++sparse;assert(step%4==0);}
+  if(bassHit(step,3,9))++dense;
+ }
+ assert(sparse==16&&dense>sparse);
  puts("PASS: AGEN page-header progress line on 16/32 columns; all 12 major/minor keys; chord tones, bass roots, bounded registers, breaks/build/fill/drop dynamics");
 }
 '''.replace('UI',ui)

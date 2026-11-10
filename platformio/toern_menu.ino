@@ -2576,11 +2576,24 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       
     case 69: {
       extern uint8_t autogenMotion();
+      extern uint8_t autogenScaleChoice();
+      extern uint8_t autogenDensity();
       const uint8_t motion=autogenMotion();
+      const uint8_t scale=autogenScaleChoice();
+      const uint8_t density=autogenDensity();
       drawMenuText("AGEN",2,10,currentMenuParentTextColor());
       static const char *const motionNames[]={"HOLD","SOFT","LONG","LIVE"};
+      static const char *const scaleNames[]={"AUTO","MAJ","MIN","HRM","DOR","PEN","BLU"};
+      static const char *const densityNames[]={"LOW","MED","HIGH","MAX"};
       static const CRGB motionColors[]={UI_DIM_RED,UI_GREEN,UI_CYAN,UI_YELLOW};
-      drawMenuValue(motionNames[min(motion,(uint8_t)3)],2,3,motionColors[min(motion,(uint8_t)3)]);
+      extern int autogenMenuFocus;
+      const int agenShow=autogenMenuFocus;
+      const char *label=agenShow==0?scaleNames[min(scale,(uint8_t)6)]:
+          agenShow==1?densityNames[min(density,(uint8_t)3)]:motionNames[min(motion,(uint8_t)3)];
+      const CRGB color=agenShow==0?UI_WHITE:agenShow==1?UI_ORANGE:motionColors[min(motion,(uint8_t)3)];
+      drawMenuValue(label,2,3,color);
+      drawMenuIndicator('L','W',1);
+      drawMenuIndicator('L','Y',2);
       drawMenuIndicator('L','W',3);
       drawMenuIndicator('L',autogenActive()?'G':'R',4);
       break;
@@ -3285,8 +3298,10 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       swapHeld[0] = swapHeld[1] = false;
     }
     if (lastSetting == 69) {
-      Encoder[2].writeMin((int32_t)0); Encoder[2].writeMax((int32_t)0);
-      Encoder[2].writeCounter((int32_t)0); currentMode->pos[2] = 0;
+      for(int enc=0;enc<=2;++enc){
+        Encoder[enc].writeMin((int32_t)0); Encoder[enc].writeMax((int32_t)0);
+        Encoder[enc].writeCounter((int32_t)0); currentMode->pos[enc] = 0;
+      }
     }
     lastSetting = setting;
   }
@@ -5023,25 +5038,36 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 69: { // AGEN melody motion: encoder 3 = HOLD / SOFT / LONG / LIVE
+    case 69: { // AGEN: enc1 scale, enc2 density, enc3 motion
       extern uint8_t autogenMotion();
+      extern uint8_t autogenScaleChoice();
+      extern uint8_t autogenDensity();
       extern void setAutogenMotion(uint8_t);
-      static int lastMotion=-1;
+      extern void setAutogenScaleChoice(uint8_t);
+      extern void setAutogenDensity(uint8_t);
+      extern int autogenMenuFocus;
+      static int lastScale=-1,lastDensity=-1,lastMotion=-1;
       if(menuFirstEnter){
-        const int value=autogenMotion();
-        Encoder[2].writeMin((int32_t)0);
-        Encoder[2].writeMax((int32_t)3);
-        Encoder[2].writeCounter((int32_t)value);
-        currentMode->pos[2]=(unsigned)value;
-        lastMotion=value;
+        Encoder[0].writeMin((int32_t)0);Encoder[0].writeMax((int32_t)6);
+        Encoder[0].writeCounter((int32_t)autogenScaleChoice());currentMode->pos[0]=autogenScaleChoice();
+        Encoder[1].writeMin((int32_t)0);Encoder[1].writeMax((int32_t)3);
+        Encoder[1].writeCounter((int32_t)autogenDensity());currentMode->pos[1]=autogenDensity();
+        Encoder[2].writeMin((int32_t)0);Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeCounter((int32_t)autogenMotion());currentMode->pos[2]=autogenMotion();
+        lastScale=autogenScaleChoice();lastDensity=autogenDensity();lastMotion=autogenMotion();
         menuFirstEnter=false;
       }
-      const int value=constrain((int)currentMode->pos[2],0,3);
-      if(value!=lastMotion){
-        setAutogenMotion((uint8_t)value);
-        Encoder[2].writeCounter((int32_t)value);
-        currentMode->pos[2]=(unsigned)value;
-        lastMotion=value;
+      const int scale=constrain((int)currentMode->pos[0],0,6);
+      const int density=constrain((int)currentMode->pos[1],0,3);
+      const int motion=constrain((int)currentMode->pos[2],0,3);
+      bool changed=false;
+      if(scale!=lastScale){setAutogenScaleChoice((uint8_t)scale);lastScale=scale;autogenMenuFocus=0;changed=true;}
+      if(density!=lastDensity){setAutogenDensity((uint8_t)density);lastDensity=density;autogenMenuFocus=1;changed=true;}
+      if(motion!=lastMotion){setAutogenMotion((uint8_t)motion);lastMotion=motion;autogenMenuFocus=2;changed=true;}
+      if(changed){
+        Encoder[0].writeCounter((int32_t)scale);currentMode->pos[0]=(unsigned)scale;
+        Encoder[1].writeCounter((int32_t)density);currentMode->pos[1]=(unsigned)density;
+        Encoder[2].writeCounter((int32_t)motion);currentMode->pos[2]=(unsigned)motion;
         menuRequestFullRedraw();
         redrawMain(setting);
       }

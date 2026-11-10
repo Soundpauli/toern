@@ -17,45 +17,98 @@ export function phrasePasses(section, generation, columns, bpm, longForm=false) 
   while(bars>1 && bars*240000>Math.max(40,bpm)*limit)bars/=2;
   return Math.max(1, Math.floor(bars*16/(2*columns)));
 }
-const major=[0,2,4,5,7,9,11], minorScale=[0,2,3,5,7,8,10];
-function chordPitchClasses(root, minor, generation) {
-  const scale=minor?minorScale:major, slots=[0,1,2,3,3,0,1,2];
-  const degree=(minor?[0,5,3,6]:[0,5,3,4])[slots[Math.floor(generation/2)%8]];
-  return [0,2,4].map(t=>(root+scale[(degree+t)%7])%12);
+export const SCALE = {MAJOR:0,MINOR:1,HARMONIC:2,DORIAN:3,PENTA:4,BLUES:5};
+const SCALE_PCS = [
+  [0,2,4,5,7,9,11],[0,2,3,5,7,8,10],[0,2,3,5,7,8,11],[0,2,3,5,7,9,10],[0,3,5,7,10],[0,3,5,6,7,10],
+];
+const major=SCALE_PCS[0], minorScale=SCALE_PCS[1];
+export function scaleCount(sc){return SCALE_PCS[sc%6].length;}
+export function scalePc(root, sc, degree) {
+  const pcs = SCALE_PCS[typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc%6];
+  return (root + pcs[degree % pcs.length]) % 12;
 }
-export function melodyPitch(reference, root, minor, generation, channel, step, seed=113, motion=MOTION.LIVE) {
+function degreeIndex(sc, generation) {
+  const slots=[0,1,2,3,3,0,1,2], slot=slots[Math.floor(generation/2)%8];
+  if(sc===SCALE.PENTA||sc===SCALE.BLUES)return [0,3,2,4][slot];
+  return ((sc===SCALE.MINOR||sc===SCALE.HARMONIC)?[0,5,3,6]:[0,5,3,4])[slot];
+}
+function chordPitchClasses(root, sc, generation) {
+  const s = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
+  const d = degreeIndex(s, generation);
+  return [0,1,2,3].map(t=>scalePc(root,s,d+t*2));
+}
+const nearestPc=(reference,pc)=>{let best=reference,d=Infinity;for(let n=0;n<=127;n++)if(n%12===pc&&Math.abs(n-reference)<d){best=n;d=Math.abs(n-reference);}return best;};
+// Firmware fitPitch: snap the drawn note to the chord on the beat, otherwise the scale.
+export function fitPitch(reference, root, sc, generation, channel, step) {
+  const chord = chordPitchClasses(root, sc, generation);
+  if ((channel === 6 || channel === 14) && step % 4 === 0) return nearestPc(reference, chord[0]);
+  const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
+  const choices = step % 4 === 0 ? chord.slice(0,3) : [...Array(scaleCount(scaleId))].map((_,d)=>scalePc(root,scaleId,d));
+  let best = reference, distance = Infinity;
+  for (const pc of choices) {
+    const n = nearestPc(reference, pc), gap = Math.abs(n - reference);
+    if (gap < distance) { best = n; distance = gap; }
+  }
+  return best;
+}
+export function bassHit(step, density, seed) {
+  if(step%4===0)return true;
+  if(!density)return false;
+  const h=((seed*1664525)+step*1013904223)>>>8;
+  let chance=density===1?22:density===2?48:72;
+  if(step%2)chance=Math.floor(chance*2/3);
+  return h%100<chance;
+}
+export function bassPitch(reference, root, sc, generation, step, seed) {
+  const rootPc = chordPitchClasses(root, sc, generation)[0];
+  const locked = nearestPc(reference, rootPc);
+  if(step%4===0)return locked;
+  const h=(seed+step*977)>>>8;
+  if(h%4===0)return nearestPc(reference+12, rootPc);
+  return locked;
+}
+export function melodyPitch(reference, root, sc, generation, channel, step, seed=113, motion=MOTION.LIVE, density=2) {
   const section=SECTIONS[generation%SECTIONS.length], bass=channel===6||channel===14;
-  const chord=chordPitchClasses(root,minor,generation), scale=(minor?minorScale:major).map(pc=>(root+pc)%12);
-  const allowed=bass&&step%4===0?[chord[0]]:step%4===0?chord:scale;
+  const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
+  const chord=chordPitchClasses(root,scaleId,generation).slice(0,3);
+  const scale=[...Array(scaleCount(scaleId))].map((_,d)=>scalePc(root,scaleId,d));
+  const baseline=fitPitch(reference,root,scaleId,generation,channel,step);
+  if(motion===MOTION.HOLD||motion===MOTION.LONG||(bass&&step%4===0))return baseline;
+  const allowed=step%4===0?chord:scale;
   let h=(seed ^ Math.imul(Math.floor(generation/2),374761393) ^ Math.imul(channel,668265263) ^ Math.imul(step,2246822519))>>>0;
   h=Math.imul(h^(h>>>13),1274126177)>>>0;h=(h^(h>>>16))>>>0;
-  let chance=bass?50:section==='Variation'||section==='Fill'?90:section==='Build'?80:section==='Break'?65:section==='Drop'?45:40;
+  let chance=section==='Variation'||section==='Fill'?90:section==='Build'?80:section==='Break'?65:section==='Drop'?45:40;
   if(motion===MOTION.SOFT&&chance>35)chance=35;
+  if(density===0&&chance>18)chance=18;
+  else if(density===1&&chance>32)chance=32;
+  if(h%100>=chance)return baseline;
   let delta=[2,4,3,7,5,-2,4,-5][(Math.floor(step/2)+channel+Math.floor(generation/2))%8];
   if(generation%2)delta=-delta;
-  if(bass||motion===MOTION.SOFT)delta=delta>0?2:-2;
-  if(motion===MOTION.HOLD||motion===MOTION.LONG)delta=0;
-  if(h%100>=chance || (bass&&step%4===0))delta=0;
-  let best=reference, distance=Infinity;
+  if(motion===MOTION.SOFT)delta=delta>0?2:-2;
+  const target=reference+delta;
+  let best=baseline, distance=Infinity;
   for(let pitch=Math.max(0,reference-12);pitch<=Math.min(127,reference+12);pitch++) {
-    const gap=Math.abs(pitch-reference-delta);
-    if(allowed.includes(pitch%12)&&gap<distance){best=pitch;distance=gap;}
+    if(!allowed.includes(pitch%12))continue;
+    const gap=Math.abs(pitch-target);
+    if(gap<distance){best=pitch;distance=gap;}
   }
   return best;
 }
 
-const nearestPc=(reference,pc)=>{let best=reference,d=Infinity;for(let n=0;n<=127;n++)if(n%12===pc&&Math.abs(n-reference)<d){best=n;d=Math.abs(n-reference);}return best;};
-export function voicingPitches(reference,root,minor,generation,seed=113,stable=false) {
-  const chord=chordPitchClasses(root,minor,generation), inversion=(generation+seed)%3;
+export function voicingPitches(reference,root,sc,generation,seed=113,stable=false,tones=3) {
+  const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
+  tones=Math.max(3,Math.min(4,tones));
+  const chord=chordPitchClasses(root,scaleId,generation).slice(0,tones);
   if(stable)return chord.map(pc=>nearestPc(reference,pc));
+  const inversion=(generation+seed)%tones;
   let base=reference,distance=Infinity;
   for(let n=0;n<=127;n++)if(n%12===chord[0]&&Math.abs(n-reference)<distance){base=n;distance=Math.abs(n-reference);}
-  const notes=[0,1,2].map(i=>{const tone=(i+inversion)%3;return base+(chord[tone]-chord[0]+12)%12+(tone<inversion?12:0);});
-  let center=Math.trunc(notes.reduce((a,b)=>a+b,0)/3),shift=0;
+  const notes=[...Array(tones)].map((_,i)=>{const tone=(i+inversion)%tones;return base+(chord[tone]-chord[0]+12)%12+(tone<inversion?12:0);});
+  let center=Math.trunc(notes.reduce((a,b)=>a+b,0)/tones),shift=0;
   while(center+shift>reference+6)shift-=12;
   while(center+shift<reference-6)shift+=12;
   while(notes[0]+shift<24)shift+=12;
-  while(notes[2]+shift>108)shift-=12;
+  while(notes[tones-1]+shift>108)shift-=12;
   return notes.map(n=>n+shift);
 }
 export function encodePitch(pitch,octaveShift) {
@@ -102,16 +155,18 @@ export function nearSource(pitch,reference){
  while(pitch>reference+6)pitch-=12;while(pitch<reference-6)pitch+=12;
  return pitch<0?pitch+12:pitch>127?pitch-12:pitch;
 }
-export function monoPitch(reference,root,minor,generation,ch,step,seed=113,motion=MOTION.LIVE){
+export function monoPitch(reference,root,sc,generation,ch,step,seed=113,motion=MOTION.LIVE,density=2){
+ const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
  if(motion===MOTION.HOLD)return reference;
- const chord=chordPitchClasses(root,minor,generation),scale=(minor?minorScale:major).map(pc=>(root+pc)%12);
+ if(!density&&step%2)return reference;
+ const chord=chordPitchClasses(root,scaleId,generation),scale=[...Array(scaleCount(scaleId))].map((_,d)=>scalePc(root,scaleId,d));
  let target=reference;const h=(seed+step*977+ch*37+generation*101)>>>0;
- if(motion===MOTION.LIVE&&SECTIONS[generation%SECTIONS.length]==='Variation'&&step%4&&h%4===0)target+=(h&4)?2:-2;
- const pcs=ch===14&&step%4===0?[chord[0]]:step%4===0?chord:scale;
+ if(motion===MOTION.LIVE&&density>=2&&SECTIONS[generation%SECTIONS.length]==='Variation'&&step%4&&h%4===0)target+=(h&4)?2:-2;
+ const pcs=ch===14&&step%4===0?[chord[0]]:step%4===0?chord.slice(0,3):scale;
  let best=reference,gap=Infinity;
  for(let n=Math.max(0,reference-12);n<=Math.min(127,reference+12);n++)if(pcs.includes(n%12)&&Math.abs(n-target)<gap){best=n;gap=Math.abs(n-target);}
  best=nearSource(best,reference);
- if(motion===MOTION.SOFT&&Math.abs(best-reference)>2)return reference;
+ if((motion===MOTION.SOFT||density<2)&&Math.abs(best-reference)>2)return reference;
  return best;
 }
 export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, params=()=>({}), isMuted=()=>false, volume=()=>16 }) {
@@ -119,6 +174,8 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
   let section = 'Groove', repeats = 1, lowCh11 = false;
   let foundation=0,registers=Array(16).fill(60),shifts=Array(16).fill(0);
   let key = 0, scale = [0,2,4,5,7,9,11];
+  // Firmware default is SOFT / AUTO scale / MED density.
+  let motion = MOTION.SOFT, seed = 113, scaleChoice = 0, density = 1;
   let motifPage=1, performancePages=[2,3], fingerprint=[], revision=0, removed=0, muteSignature='';
   let performanceView=true,previousSection=null,builtRevision=-1;
   const removedByPage=new Map();
@@ -155,14 +212,17 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
     if(changed.length||controlsChanged){revision++;return true;}
     return false;
   }
+  const resolvedScale = () => scaleChoice ? Math.min(SCALE.BLUES, scaleChoice-1) : (scale[2]===3?SCALE.MINOR:SCALE.MAJOR);
   const state = () => ({ active: !!source, performanceView, section, generation, page, remaining: repeats-pass, ready: true,
-    motifPage, motifSlot:motifPage<=8?motifPage:9, playingSlot:10+performancePages.indexOf(page), otherSlot:10+(performancePages.indexOf(page)^1), revision,
+    motion, scale: scaleChoice, density, motifPage, motifSlot:motifPage<=8?motifPage:9, playingSlot:10+performancePages.indexOf(page), otherSlot:10+(performancePages.indexOf(page)^1), revision,
     progress: Math.min(columns()>=32?17:5,Math.floor((pass*columns()+stepInPage)*(columns()>=32?17:5)/Math.max(1,repeats*columns()-1))) });
   function build() {
     section = SECTIONS[generation % SECTIONS.length];
     foundation=[6,14,11,13,7,8,1].find(ch=>!isMuted(ch)&&volume(ch)>0&&source.some(col=>col.some(n=>n.channel===ch)))||0;
     if(!foundation&&['Break','Build','Fill'].includes(section))section='Groove';
-    repeats = phrasePasses(section, generation, columns(), bpm());
+    const longForm = motion === MOTION.LONG;
+    const phrase = generation + 1; // firmware arrangeAutogenChannel(..., agen.generation+1)
+    repeats = phrasePasses(section, generation, columns(), bpm(), longForm);
     const width = columns(), offset = (page-1)*width;
     const previous=performance.slice((page===1?1:0)*width+1,(page===1?2:1)*width+1).map(col=>col.map(n=>({...n})));
     const held=new Set();
@@ -186,9 +246,13 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
       }
       if(section==='Build'&&generation%2===1&&x===width&&ch!==foundation){Object.assign(n,emptyNote());continue;}
       if(section==='Build'&&ch===3&&(x-1)%4!==2){Object.assign(n,emptyNote());continue;}
+      if (bass && !bassHit(x-1, density, seed+ch)) { Object.assign(n, emptyNote()); continue; }
       if (!perc) {
         const target=reference;
-        n.midiPitch=(ch===13||ch===14)?monoPitch(target,key,scale[2]===3,generation,ch,x-1):nearSource(melodyPitch(target,key,scale[2]===3,generation,bass?14:ch,x-1),target);
+        const sc=resolvedScale();
+        if(bass)n.midiPitch=bassPitch(target,key,sc,phrase,x-1,seed);
+        else if(ch===13||ch===14)n.midiPitch=monoPitch(target,key,sc,phrase,ch,x-1,seed,motion,density);
+        else n.midiPitch=nearSource(melodyPitch(target,key,sc,phrase,ch,x-1,seed,motion,density),target);
       }
       n.condition=0;
       n.probability = ch === 1 || bass || x % 4 === 1 ? 100 : Math.max(75,n.probability || 100);
@@ -201,8 +265,9 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
       const chord=original.filter(n=>n.channel===11);
       if(chord.length<2)continue;
       for(const n of performance[offset+x])if(n.channel===11)Object.assign(n,emptyNote());
-      const pitches=voicingPitches(registers[11],key,scale[2]===3,generation);
-      for(let i=0;i<Math.min(chord.length,3);i++){
+      const tones=Math.min(Math.max(chord.length,3),density>=2?4:3);
+      const pitches=voicingPitches(registers[11],key,resolvedScale(),phrase,seed,longForm,tones);
+      for(let i=0;i<Math.min(chord.length,tones);i++){
         let row=clamp(12+i,1,rows);if(performance[offset+x][row].channel)row=performance[offset+x].findIndex((n,y)=>y>0&&!n.channel);
         if(row>0)Object.assign(performance[offset+x][row],emptyNote(),{channel:11,midiPitch:encodePitch(pitches[i],shifts[11]),velocity:chord[0]?.velocity||88});
       }
@@ -232,10 +297,32 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
     source=motif();fingerprint=fingerprints();revision=0;removed=0;removedByPage.clear();muteSignature=manualSignature();
     sourceRegisters();
     shifts.fill(0);previousSection=null;builtRevision=-1;
+    seed = 1 + Math.floor(Math.random() * 255);
     const harmony=inferHarmony(source);
     key=harmony.root;scale=harmony.minor?minorScale:major;
     generation=0;pass=0;page=performancePages[0];stepInPage=0;
     build(); return state();
+  }
+  function setMotion(level) {
+    const next = Math.max(MOTION.HOLD, Math.min(MOTION.LIVE, level | 0));
+    if (next === motion) return state();
+    motion = next;
+    if (source) { revision++; build(); }
+    return state();
+  }
+  function setScale(level) {
+    const next = Math.max(0, Math.min(6, level | 0));
+    if (next === scaleChoice) return state();
+    scaleChoice = next;
+    if (source) { revision++; build(); }
+    return state();
+  }
+  function setDensity(level) {
+    const next = Math.max(0, Math.min(3, level | 0));
+    if (next === density) return state();
+    density = next;
+    if (source) { revision++; build(); }
+    return state();
   }
   function advance() {
     if (!source) return null;
@@ -251,7 +338,7 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
     for(let x=1;x<saved.notes.length;x++)for(let y=1;y<=rows;y++)Object.assign(note[x][y],saved.notes[x][y]);
     Object.assign(glob,saved.glob);source=null;saved=null;
   }
-  return { start, stop, advance, state, poll, performance,
+  return { start, stop, advance, state, poll, performance, setMotion, setScale, setDensity,
     toggleView(){if(source)performanceView=!performanceView;return state();},
     selectMotif(page) {
       if(!source||performanceView||page===motifPage)return;

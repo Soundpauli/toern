@@ -74,6 +74,23 @@ for(let step=0;step<32;step++)for(let generation=2;generation<=3;generation++) {
 assert(moved>32&&bigMoves>16,'variations audibly develop the melody');
 assert.equal(phrasePasses('Build',8,32,120)*2*32/16,4);
 assert.equal(phrasePasses('Fill',10,32,120)*2*32/16,4);
+{
+  const {fitPitch,MOTION}=await import('../../tools/sim/src/firmware/autogen.js');
+  for(let step=0;step<16;step++){
+    const fitted=fitPitch(60,0,false,2,13,step);
+    assert.equal(melodyPitch(60,0,false,2,13,step,113,MOTION.HOLD),fitted);
+    assert.equal(melodyPitch(60,0,false,2,13,step,113,MOTION.LONG),fitted);
+  }
+  assert.equal(phrasePasses('Groove',0,16,120,true),8);
+  assert.equal(phrasePasses('Drop',22,16,120,true),4);
+}
+{
+  const {SCALE,scaleCount,scalePc,bassHit,fitPitch}=await import('../../tools/sim/src/firmware/autogen.js');
+  assert.equal(scaleCount(SCALE.PENTA),5);
+  for(let step=0;step<16;step++)assert([0,3,5,7,10].includes(fitPitch(60,0,SCALE.PENTA,0,13,step)%12));
+  let sparse=0;for(let step=0;step<64;step++)if(bassHit(step,0,9)){sparse++;assert.equal(step%4,0);}
+  assert.equal(sparse,16);
+}
 
 for(const section of new Set(SECTIONS))for(const ch of [1,2,3,5,6,7,8,11,13,14])for(const p of [0,.25,.5,.75,1]) {
   const bass=ch===6||ch===14;

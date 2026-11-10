@@ -11,16 +11,21 @@ static inline int nearSource(int pitch,int reference){
 static inline unsigned phrasePages(unsigned width){return (64+width-1)/width;}
 // motion matches the AGEN menu: HOLD keeps the drawn pitch, SOFT allows a second,
 // LONG only fits the drawn pitch to the chord, LIVE adds the occasional variation step.
-static inline int monoPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned channel,unsigned step,uint32_t seed,
-                            unsigned motion=toern_autogen_music::MotionLive){
+static inline int monoPitch(int reference,int tonic,toern_autogen_music::Scale sc,unsigned phrase,unsigned channel,unsigned step,uint32_t seed,
+                            unsigned motion=toern_autogen_music::MotionLive,unsigned density=2){
   using namespace toern_autogen_music;
   if(motion==MotionHold)return reference;
+  if(!density&&step%2)return reference;
   int target=reference;
   const uint32_t h=seed+step*977u+channel*37u+phrase*101u;
-  if(motion==MotionLive&&section(phrase)==Section::Variation&&step%4&&h%4==0)
+  if(motion==MotionLive&&density>=2&&section(phrase)==Section::Variation&&step%4&&h%4==0)
     target+=(h&4)?2:-2;
-  const int fitted=nearSource(fitPitch(target,tonic,minor,phrase,channel,step),reference);
-  if(motion==MotionSoft){const int delta=fitted-reference;if(delta>2||delta<-2)return reference;}
+  const int fitted=nearSource(fitPitch(target,tonic,sc,phrase,channel,step),reference);
+  if(motion==MotionSoft||density<2){const int delta=fitted-reference;if(delta>2||delta<-2)return reference;}
   return fitted;
+}
+static inline int monoPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned channel,unsigned step,uint32_t seed,
+                            unsigned motion=toern_autogen_music::MotionLive,unsigned density=2){
+  return monoPitch(reference,tonic,toern_autogen_music::defaultScale(minor),phrase,channel,step,seed,motion,density);
 }
 }

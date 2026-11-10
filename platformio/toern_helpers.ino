@@ -5267,12 +5267,35 @@ FLASHMEM static void applyAutogenProbabilities(Note (*grid)[maxY+1],unsigned pag
   }
 }
 static uint8_t autogenMotionLevel=toern_autogen_music::MotionSoft;
+static uint8_t autogenScaleLevel=0;   // 0 AUTO, 1..6 explicit Scale+1
+static uint8_t autogenDensityLevel=1; // 0 LOW .. 3 MAX
+int autogenMenuFocus=2; // which AGEN encoder last moved (0 scale, 1 density, 2 motion)
 uint8_t autogenMotion(){return autogenMotionLevel;}
+uint8_t autogenScaleChoice(){return autogenScaleLevel;}
+uint8_t autogenDensity(){return autogenDensityLevel;}
 static bool autogenLongForm(){return autogenMotionLevel==toern_autogen_music::MotionLong;}
+static bool autogenSevenths(){return autogenDensityLevel>=2;}
+static toern_autogen_music::Scale autogenResolvedScale(){
+  using namespace toern_autogen_music;
+  if(autogenScaleLevel)return (Scale)min((unsigned)(autogenScaleLevel-1),(unsigned)ScaleBlues);
+  return agenWork?defaultScale(agenWork->harmony.isMinor):ScaleMinor;
+}
 void setAutogenMotion(uint8_t level){
   level=min(level,(uint8_t)toern_autogen_music::MotionLive);
   if(level==autogenMotionLevel)return;
   autogenMotionLevel=level;
+  if(agen.active)invalidateAutogenPage();
+}
+void setAutogenScaleChoice(uint8_t level){
+  level=min(level,(uint8_t)6);
+  if(level==autogenScaleLevel)return;
+  autogenScaleLevel=level;
+  if(agen.active)invalidateAutogenPage();
+}
+void setAutogenDensity(uint8_t level){
+  level=min(level,(uint8_t)3);
+  if(level==autogenDensityLevel)return;
+  autogenDensityLevel=level;
   if(agen.active)invalidateAutogenPage();
 }
 bool autogenMuted(int channel){return channel>=0&&channel<16?agenWork->mutes[channel]:false;}
@@ -5371,7 +5394,7 @@ FLASHMEM static void refreshAutogenMotif(unsigned changed,bool adopting){
     }
     if(count)agenWork->removedVoices&=~(1u<<ch);else if(!adopting)agenWork->removedVoices|=1u<<ch;
     const int reference=count?sum/count:ch==6||ch==14?36:60;
-    if(ch==11){agenWork->ch11Bass=count&&reference<48&&maxPoly<=1;agenWork->ch11MaxPolyphony=max(1u,min(maxPoly,3u));}
+    if(ch==11){agenWork->ch11Bass=count&&reference<48&&maxPoly<=1;agenWork->ch11MaxPolyphony=max(1u,min(maxPoly,autogenSevenths()?4u:3u));}
     const bool bass=ch==6||ch==14||(ch==11&&agenWork->ch11Bass);
     agenWork->registers[ch]=reference;
   }
@@ -5433,21 +5456,26 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
           events[i].probability,events[i].condition,events[i].midiPitch);
       continue;
     }
+    const Scale sc=autogenResolvedScale();
+    const unsigned density=autogenDensityLevel;
     if(agenWork->chordPair&&(ch==13||ch==14)){
-      if(col%8==0||(!autogenLongForm()&&(agenWork->section==Section::Variation||agenWork->section==Section::Build||agenWork->section==Section::Fill)&&col%8==6)){
+      const bool passing=density>=2&&!autogenLongForm()&&(agenWork->section==Section::Variation||agenWork->section==Section::Build||agenWork->section==Section::Fill)&&col%8==6;
+      if(col%8==0||passing){
         const int pairReference=min(60,agenWork->registers[11]+12);
-        int pitch=col%8==6?toern_autogen_register::monoPitch(pairReference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,13,col,agenWork->seed+ch*17,autogenMotionLevel):
-            nearestPc(pairReference,chordPc(agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,ch==13?1:2));
+        int pitch=passing?toern_autogen_register::monoPitch(pairReference,agenWork->harmony.rootPc,sc,phrase,13,col,agenWork->seed+ch*17,autogenMotionLevel,density):
+            nearestPc(pairReference,chordPc(agenWork->harmony.rootPc,sc,phrase,ch==13?1:2));
         companionPlaceCellLimited(start+col,ch,ch,86,100,1,encodePitch(pitch,agenWork->registerShift[ch]));
       }
       continue;
     }
     const bool bass=ch==6||ch==14||(ch==11&&agenWork->ch11Bass);
     if(bass&&ch!=agenWork->foundationVoice&&!bassAllowed(agenWork->section,col,maxX,phrase%2==1))continue;
-    // Three diatonic voices in the starting register, rather than parallel chromatic shifts.
+    if(bass&&!bassHit(col,density,agenWork->seed+ch))continue;
+    // Chord stack stays a voicing, not a melody contour. MAX density may add a seventh.
     if(ch==11&&!bass&&count>1){
-      for(unsigned tone=0;tone<min(count,3u);++tone){
-        int pitch=voicingPitch(autogenSourceRegister(ch,col,agenWork->registers[ch]),agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,tone,agenWork->seed,autogenLongForm());
+      const unsigned tones=min(count,autogenSevenths()?4u:3u);
+      for(unsigned tone=0;tone<tones;++tone){
+        int pitch=voicingPitch(autogenSourceRegister(ch,col,agenWork->registers[ch]),agenWork->harmony.rootPc,sc,phrase,tone,agenWork->seed,autogenLongForm(),tones);
         companionPlaceCellLimited(start+col,constrain((int)agenWork->foundation.channelHomeRow[ch]+(int)tone,1,16),ch,
             count?events[0].velocity:88,count?events[0].probability:100,1,encodePitch(pitch,agenWork->registerShift[ch]));
       }
@@ -5455,8 +5483,10 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
     }
     for(unsigned i=0;i<count;++i){
       const int reference=autogenReferenceMidi(events[i],ch,rows[i]);
-      const int pitch=(ch==13||ch==14)?toern_autogen_register::monoPitch(reference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,ch,col,agenWork->seed,autogenMotionLevel):
-          toern_autogen_register::nearSource(melodyPitch(reference,agenWork->harmony.rootPc,agenWork->harmony.isMinor,phrase,bass?14:ch,col,agenWork->seed,autogenMotionLevel),autogenSourceRegister(ch,col,agenWork->registers[ch]));
+      int pitch;
+      if(bass)pitch=bassPitch(reference,agenWork->harmony.rootPc,sc,phrase,col,agenWork->seed);
+      else if(ch==13||ch==14)pitch=toern_autogen_register::monoPitch(reference,agenWork->harmony.rootPc,sc,phrase,ch,col,agenWork->seed,autogenMotionLevel,density);
+      else pitch=toern_autogen_register::nearSource(melodyPitch(reference,agenWork->harmony.rootPc,sc,phrase,ch,col,agenWork->seed,autogenMotionLevel,density),autogenSourceRegister(ch,col,agenWork->registers[ch]));
       if(ch>=11)companionPlaceCellLimited(start+col,rows[i],ch,events[i].velocity,
           events[i].probability,events[i].condition,encodePitch(pitch,agenWork->registerShift[ch]));
       else {
@@ -5525,7 +5555,7 @@ FLASHMEM bool toggleAutogen(){
       if(note[col][row].channel==ch){sum+=autogenReferenceMidi(note[col][row],ch,row);++count;}
     for(unsigned col=(base-1)*maxX+1;col<=base*maxX;++col){unsigned n=0;for(unsigned row=1;row<=maxY;++row)n+=note[col][row].channel==ch;maxPoly=max(maxPoly,n);}
     const int reference=count?sum/count:ch==6||ch==14?36:60;
-    if(ch==11){agenWork->ch11Bass=reference<48&&maxPoly<=1;agenWork->ch11MaxPolyphony=max(1u,min(maxPoly,3u));}
+    if(ch==11){agenWork->ch11Bass=reference<48&&maxPoly<=1;agenWork->ch11MaxPolyphony=max(1u,min(maxPoly,autogenSevenths()?4u:3u));}
     const bool bass=ch==6||ch==14||(ch==11&&agenWork->ch11Bass);
     agenWork->registers[ch]=reference;
   }

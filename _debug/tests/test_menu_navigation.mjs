@@ -437,7 +437,7 @@ agenDevice.jump('agen'); agenDevice.rotate(3,1); assert.equal(agenDevice.subInde
 assert.equal(agenDevice.soon(),false);
 const beforeAgen=agenDevice.exportPatternCells();
 agenDevice.press(3); assert.equal(agenDevice.autogen().active,true); assert.equal(agenDevice.playing(),true);
-assert.equal(agenDevice.menuSummary().detail,'AGEN: ON');
+assert.equal(agenDevice.menuSummary().detail,'AGEN: SOFT · ON');
 assert.deepEqual(agenDevice.exportPatternCells(),beforeAgen,'transfers export the source bank during AGEN');
 pagehideHandlers.at(-1)();
 const activeAutosave=JSON.parse(stored.get('toern-web-patterns'))[0];

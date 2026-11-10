@@ -14,6 +14,29 @@ enum class Section {Groove,Variation,Break,Build,Fill,Drop};
 // AGEN menu order. LONG keeps the drawn motif (fitted to the chord only) and
 // doubles the groove, variation and drop slots so the theme can settle in.
 enum Motion : uint8_t {MotionHold=0,MotionSoft=1,MotionLong=2,MotionLive=3};
+// Menu 0 is AUTO (motif major/minor). Explicit picks follow.
+enum Scale : uint8_t {ScaleMajor=0,ScaleMinor,ScaleHarmonic,ScaleDorian,ScalePenta,ScaleBlues,ScaleCount};
+AGEN_MUSIC_CODE static Scale defaultScale(bool minor){return minor?ScaleMinor:ScaleMajor;}
+AGEN_MUSIC_CODE static unsigned scaleCount(Scale sc){
+  static const uint8_t n[] AGEN_MUSIC_DATA={7,7,7,7,5,6};
+  return n[(unsigned)sc%6];
+}
+AGEN_MUSIC_CODE static int scalePc(int tonic,Scale sc,unsigned d){
+  static const uint8_t major[] AGEN_MUSIC_DATA={0,2,4,5,7,9,11};
+  static const uint8_t naturalMinor[] AGEN_MUSIC_DATA={0,2,3,5,7,8,10};
+  static const uint8_t harmonic[] AGEN_MUSIC_DATA={0,2,3,5,7,8,11};
+  static const uint8_t dorian[] AGEN_MUSIC_DATA={0,2,3,5,7,9,10};
+  static const uint8_t penta[] AGEN_MUSIC_DATA={0,3,5,7,10};
+  static const uint8_t blues[] AGEN_MUSIC_DATA={0,3,5,6,7,10};
+  const uint8_t *table=major;
+  if(sc==ScaleMinor)table=naturalMinor;
+  else if(sc==ScaleHarmonic)table=harmonic;
+  else if(sc==ScaleDorian)table=dorian;
+  else if(sc==ScalePenta)table=penta;
+  else if(sc==ScaleBlues)table=blues;
+  const unsigned n=scaleCount(sc);
+  return (tonic+table[d%n])%12;
+}
 // One 64-bar cycle. A short rise (Build) and a short dip (Break) each resolve by
 // the kick and bass coming back in the following groove. The fill and drop
 // happen once, at the end of the cycle, rather than every 16 bars.
@@ -41,85 +64,113 @@ AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned generation,unsigned w
   const unsigned passes=(bars*16u)/(2u*((width==32)?32u:16u));
   return passes?passes:1;
 }
-AGEN_MUSIC_CODE static unsigned degree(bool minor,unsigned phrase){
+AGEN_MUSIC_CODE static unsigned degree(Scale sc,unsigned phrase){
   static const uint8_t major[] AGEN_MUSIC_DATA={0,5,3,4};
   static const uint8_t naturalMinor[] AGEN_MUSIC_DATA={0,5,3,6};
+  static const uint8_t compact[] AGEN_MUSIC_DATA={0,3,2,4};
   // Hold harmony through break/build/fill, then resolve the drop to the tonic.
   static const uint8_t harmonicSlots[] AGEN_MUSIC_DATA={0,1,2,3,3,0,1,2};
-  return (minor?naturalMinor:major)[harmonicSlots[(phrase/2)%8]];
+  const unsigned slot=harmonicSlots[(phrase/2)%8];
+  if(sc==ScalePenta||sc==ScaleBlues)return compact[slot];
+  return ((sc==ScaleMinor||sc==ScaleHarmonic)?naturalMinor:major)[slot];
 }
-AGEN_MUSIC_CODE static int scalePc(int tonic,bool minor,unsigned d){
-  static const uint8_t major[] AGEN_MUSIC_DATA={0,2,4,5,7,9,11};
-  static const uint8_t naturalMinor[] AGEN_MUSIC_DATA={0,2,3,5,7,8,10};
-  return (tonic+(minor?naturalMinor:major)[d%7])%12;
-}
-AGEN_MUSIC_CODE static int chordPc(int tonic,bool minor,unsigned phrase,unsigned tone){return scalePc(tonic,minor,degree(minor,phrase)+tone*2);}
+AGEN_MUSIC_CODE static unsigned degree(bool minor,unsigned phrase){return degree(defaultScale(minor),phrase);}
+AGEN_MUSIC_CODE static int scalePc(int tonic,bool minor,unsigned d){return scalePc(tonic,defaultScale(minor),d);}
+AGEN_MUSIC_CODE static int chordPc(int tonic,Scale sc,unsigned phrase,unsigned tone){return scalePc(tonic,sc,degree(sc,phrase)+tone*2);}
+AGEN_MUSIC_CODE static int chordPc(int tonic,bool minor,unsigned phrase,unsigned tone){return chordPc(tonic,defaultScale(minor),phrase,tone);}
 AGEN_MUSIC_CODE static int nearestPc(int reference,int pc){
   int best=reference,distance=999;
   for(int n=0;n<=127;++n){int delta=n-reference;if(delta<0)delta=-delta;
     if(n%12==pc&&delta<distance){best=n;distance=delta;}}
   return best;
 }
-AGEN_MUSIC_CODE static int fitPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned channel,unsigned step){
-  if((channel==6||channel==14)&&step%4==0)return nearestPc(reference,chordPc(tonic,minor,phrase,0));
+AGEN_MUSIC_CODE static int fitPitch(int reference,int tonic,Scale sc,unsigned phrase,unsigned channel,unsigned step){
+  const unsigned tones=step%4==0?3:scaleCount(sc);
+  if((channel==6||channel==14)&&step%4==0)return nearestPc(reference,chordPc(tonic,sc,phrase,0));
   int best=reference,distance=999;
-  const unsigned choices=step%4==0?3:7;
-  for(unsigned i=0;i<choices;++i){
-    int pc=choices==3?chordPc(tonic,minor,phrase,i):scalePc(tonic,minor,i);
+  for(unsigned i=0;i<tones;++i){
+    int pc=step%4==0?chordPc(tonic,sc,phrase,i):scalePc(tonic,sc,i);
     int n=nearestPc(reference,pc),delta=n-reference;if(delta<0)delta=-delta;
     if(delta<distance){distance=delta;best=n;}
   }
   return best;
 }
-// Move actual in-key notes, rather than only quantizing unchanged notes. Both
-// pages share a contour seed; the answer reverses its direction. Bass downbeats
-// and chord-tone landings stay structural. Everything derives from the anchor.
-// HOLD and LONG keep the drawn pitch, SOFT moves by a second, LIVE uses the full contour.
-AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,bool minor,unsigned phrase,
-                                      unsigned channel,unsigned step,uint32_t seed,unsigned motion=MotionLive){
+AGEN_MUSIC_CODE static int fitPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned channel,unsigned step){
+  return fitPitch(reference,tonic,defaultScale(minor),phrase,channel,step);
+}
+// Bass stays a root groove: downbeats lock to the chord, offbeats only octave-jump.
+AGEN_MUSIC_CODE static bool bassHit(unsigned step,unsigned density,uint32_t seed){
+  if(step%4==0)return true;
+  if(!density)return false;
+  const uint32_t h=(seed*1664525u+step*1013904223u)>>8;
+  unsigned chance=density==1?22:density==2?48:72;
+  if(step%2)chance=chance*2/3;
+  return h%100<chance;
+}
+AGEN_MUSIC_CODE static int bassPitch(int reference,int tonic,Scale sc,unsigned phrase,unsigned step,uint32_t seed){
+  const int root=nearestPc(reference,chordPc(tonic,sc,phrase,0));
+  if(step%4==0)return root;
+  const uint32_t h=(seed+step*977u)>>8;
+  if(h%4==0)return nearestPc(reference+12,chordPc(tonic,sc,phrase,0));
+  return root;
+}
+// Lead only: HOLD/LONG keep the fitted motif, SOFT moves by a second, LIVE uses the contour.
+// density 0..3 further caps how often the contour fires (0 sparse, 3 full).
+AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,Scale sc,unsigned phrase,
+                                      unsigned channel,unsigned step,uint32_t seed,unsigned motion=MotionLive,unsigned density=2){
   const Section s=section(phrase);
-  const bool bass=channel==6||channel==14;
-  const int baseline=fitPitch(reference,tonic,minor,phrase,channel,step);
-  if(motion==MotionHold||motion==MotionLong||(bass&&step%4==0))return baseline;
+  const int baseline=fitPitch(reference,tonic,sc,phrase,channel,step);
+  if(motion==MotionHold||motion==MotionLong||((channel==6||channel==14)&&step%4==0))return baseline;
   uint32_t h=seed^(phrase/2*374761393u)^(channel*668265263u)^(step*2246822519u);
   h=(h^(h>>13))*1274126177u;h^=h>>16;
-  unsigned chance=bass?50:s==Section::Variation||s==Section::Fill?90:
+  unsigned chance=s==Section::Variation||s==Section::Fill?90:
       s==Section::Build?80:s==Section::Break?65:s==Section::Drop?45:40;
   if(motion==MotionSoft&&chance>35)chance=35;
+  if(density==0&&chance>18)chance=18;
+  else if(density==1&&chance>32)chance=32;
   if(h%100>=chance)return baseline;
   static const int8_t contour[] AGEN_MUSIC_DATA={2,4,3,7,5,-2,4,-5};
   int delta=contour[((step/2)+channel+(phrase/2))%8];
   if(phrase&1)delta=-delta;
-  if(bass||motion==MotionSoft)delta=delta>0?2:-2;
+  if(motion==MotionSoft)delta=delta>0?2:-2;
   const int target=reference+delta;
   int best=baseline,distance=999;
+  const unsigned allowedTones=step%4==0?3u:scaleCount(sc);
   for(int n=reference-12;n<=reference+12;++n){
     if(n<0||n>127)continue;
     bool allowed=false;
-    for(unsigned d=0;d<(step%4==0?3u:7u);++d)
-      allowed|=n%12==(step%4==0?chordPc(tonic,minor,phrase,d):scalePc(tonic,minor,d));
+    for(unsigned d=0;d<allowedTones;++d)
+      allowed|=n%12==(step%4==0?chordPc(tonic,sc,phrase,d):scalePc(tonic,sc,d));
     int gap=n-target;if(gap<0)gap=-gap;
     if(allowed&&gap<distance){best=n;distance=gap;}
   }
   return best;
 }
-AGEN_MUSIC_CODE static int voicingPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned lane,uint32_t seed,bool stable=false){
-  // A stable voicing takes each chord tone nearest the drawn register, so the top voice barely moves.
-  if(stable)return nearestPc(reference,chordPc(tonic,minor,phrase,lane%3));
-  const unsigned inversion=(phrase+seed)%3;
-  const int root=nearestPc(reference,chordPc(tonic,minor,phrase,0));
-  int notes[3];
-  for(unsigned i=0;i<3;++i){
-    const unsigned tone=(i+inversion)%3;
-    notes[i]=root+(chordPc(tonic,minor,phrase,tone)-chordPc(tonic,minor,phrase,0)+12)%12+(tone<inversion?12:0);
+AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,bool minor,unsigned phrase,
+                                      unsigned channel,unsigned step,uint32_t seed,unsigned motion=MotionLive,unsigned density=2){
+  return melodyPitch(reference,tonic,defaultScale(minor),phrase,channel,step,seed,motion,density);
+}
+// tones 3 = triad, 4 = seventh. A stable voicing takes each chord tone nearest the drawn register.
+AGEN_MUSIC_CODE static int voicingPitch(int reference,int tonic,Scale sc,unsigned phrase,unsigned lane,uint32_t seed,bool stable=false,unsigned tones=3){
+  if(tones<3)tones=3;if(tones>4)tones=4;
+  if(stable)return nearestPc(reference,chordPc(tonic,sc,phrase,lane%tones));
+  const unsigned inversion=(phrase+seed)%tones;
+  const int root=nearestPc(reference,chordPc(tonic,sc,phrase,0));
+  int notes[4];
+  for(unsigned i=0;i<tones;++i){
+    const unsigned tone=(i+inversion)%tones;
+    notes[i]=root+(chordPc(tonic,sc,phrase,tone)-chordPc(tonic,sc,phrase,0)+12)%12+(tone<inversion?12:0);
   }
-  int center=(notes[0]+notes[1]+notes[2])/3,shift=0;
+  int center=0;for(unsigned i=0;i<tones;++i)center+=notes[i];center/=(int)tones;
+  int shift=0;
   while(center+shift>reference+6)shift-=12;
   while(center+shift<reference-6)shift+=12;
   while(notes[0]+shift<24)shift+=12;
-  while(notes[2]+shift>108)shift-=12;
-  int pitch=notes[lane%3]+shift;
-  return pitch;
+  while(notes[tones-1]+shift>108)shift-=12;
+  return notes[lane%tones]+shift;
+}
+AGEN_MUSIC_CODE static int voicingPitch(int reference,int tonic,bool minor,unsigned phrase,unsigned lane,uint32_t seed,bool stable=false,unsigned tones=3){
+  return voicingPitch(reference,tonic,defaultScale(minor),phrase,lane,seed,stable,tones);
 }
 // AGEN notes use a musical register, then undo only the patch's octave offset.
 // Fine tuning and the user's patch stay intact; never apply the register twice.
