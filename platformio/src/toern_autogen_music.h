@@ -184,10 +184,10 @@ AGEN_MUSIC_CODE static int bassPitch(int reference,int tonic,Scale sc,unsigned p
   if(h%4==0)return nearestPc(reference+12,chordPc(tonic,sc,phrase,0,lock));
   return root;
 }
-// Voice 6 is a bass sample tuned at C2, with lifts into C3. Fold a concert pitch
-// into that octave: `upper` selects C3, otherwise C2.
+// Voice 6 is a bass sample tuned at C2. Sample midiPitch 60 plays the sample's
+// own pitch, so 60..71 is the C2 octave and `upper` lifts into C3 (72..83).
 AGEN_MUSIC_CODE static int bassSamplePitch(int pitch,bool upper){
-  const int low=upper?48:36;
+  const int low=upper?72:60;
   while(pitch<low)pitch+=12;
   while(pitch>=low+12)pitch-=12;
   return pitch;
@@ -273,9 +273,11 @@ AGEN_MUSIC_CODE static Section supportedSection(Section requested,unsigned found
 // guest here: vocals have their own climax schedule.
 AGEN_MUSIC_CODE static bool guestWanted(unsigned channel,unsigned generation,Section s,bool deep=false){
   const unsigned slot=(generation/2)%12;const bool established=generation>=24;
-  // Deep house leaves the tom, the second kick, the clap and the keys line out.
+  // Deep house leaves the second kick, the clap and the keys line out. Voice 5 is
+  // the sample melody: it enters with the groove and carries the break.
   // The backbeat arrives with the drop, not as a fill.
-  if(deep&&(channel==4||channel==5||channel==7||channel==13))return false;
+  if(deep&&(channel==4||channel==7||channel==13))return false;
+  if(deep&&channel==5)return established||slot>=3||s==Section::Break||s==Section::Drop;
   if(deep&&channel==2)return s==Section::Drop;
   if(channel==3||channel==11)return true;
   const bool guest=channel==1||channel==2||channel==4||channel==5||channel==6||channel==7||channel==13||channel==14;
@@ -316,7 +318,9 @@ AGEN_MUSIC_CODE static bool bassAllowed(Section s,unsigned step,unsigned width,b
   return true;
 }
 // 0..16 relative to the user's starting level; never boost beyond that ceiling.
-AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsigned progress){
+// `melody` marks a sample voice that carries a line (DEEP voice 5): it rides like the lead.
+AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsigned progress,bool melody=false){
+  if(melody)ch=13;
   if(progress>255)progress=255;
   if(s==Section::Solo)return 16; // resting tonal voices ring out; nothing is cut
   if(s==Section::Break){if(ch==1||ch==7||bass)return 0;return ch<=5?7:16;}

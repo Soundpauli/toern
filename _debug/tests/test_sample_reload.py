@@ -50,7 +50,7 @@ struct Fade {
  unsigned start=0;int outs=0;
  void fadeOut(unsigned ms){assert(ms==3);start=now;++outs;}
 } sdPreviewFade;
-struct AudioPlaySdWav {
+struct AudioPlaySdWavPreview {
  bool playing=true;int stops=0;
  bool isPlaying(){return playing;}
  void stop(){assert(!irq||now-sdPreviewFade.start>=8000);playing=false;++stops;}
@@ -119,7 +119,11 @@ for body in (preview,load):
     assert body.index('beginChannelSampleReload(0)') < body.index('previewFile.read(&sampled[0]')
     assert body.index('endChannelSampleReload(0)') > body.index('previewFile.read(&sampled[0]')
 assert 'min(LPREVIEW_CHUNK, (size_t)(maxToRead - plen))' in load
-assert 'sdPreviewFade.fadeIn(0);' in function(sample,'static void startSdPreviewNow(')
+assert 'sdPreviewFade.fadeIn(2);' in function(sample,'static void startSdPreviewNow(')
+assert 'stopSdPreviewForSdAccess();' in function((root/'toern_helpers.ino').read_text(),'FLASHMEM void sampleBrowserRefreshList(')
+player=(root/'src'/'play_sd_wav_preview.cpp').read_text()
+open_body=player[player.index('bool AudioPlaySdWavPreview::play(File file)'):]
+assert 'SD.open' not in open_body[:open_body.index('return true;')]  # the open never runs with audio updates off
 assert 'patchCord216(playSdWav1, 0, sdPreviewFade, 0)' in (root/'audioinit.h').read_text()
 with tempfile.TemporaryDirectory() as directory:
     cpp=Path(directory)/'reload.cpp';binary=Path(directory)/'reload'

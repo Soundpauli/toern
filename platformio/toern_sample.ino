@@ -193,7 +193,7 @@ static bool commitCurrentBrowsePathToChannel(int ch) {
 volatile bool channelSampleReloadBusy[maxFiles] = { false };
 
 void stopSdPreviewIfPlaying() {
-  extern AudioPlaySdWav playSdWav1;
+  extern AudioPlaySdWavPreview playSdWav1;
   extern AudioEffectEnvelope envelope0;
   if (playSdWav1.isPlaying()) {
     // SD preview bypasses envelope0. Fade its own route before closing the
@@ -228,6 +228,12 @@ static void stopSdPreviewAndWait() {
   previewIsPlaying = false;
 }
 
+// Any main-loop SD walk (directory listing) must not run under the preview's ISR reads.
+void stopSdPreviewForSdAccess() {
+  g_queuedSdPreview = false;
+  stopSdPreviewAndWait();
+}
+
 static void startSdPreviewNow(const char *path) {
   if (!path || !path[0]) return;
   g_queuedSdPreview = false;
@@ -235,7 +241,7 @@ static void startSdPreviewNow(const char *path) {
   updatePreviewVolume();
   previewIsPlaying = true;
   sampleIsLoaded = true;
-  sdPreviewFade.fadeIn(0);
+  sdPreviewFade.fadeIn(2); // a file that opens off zero would click
   playSdWav1.play(path);
 }
 

@@ -172,6 +172,7 @@ int main(int argc,char **argv){assert(argc==2);
   assert(volumeScale(Section::Break,1,false,p)==0&&volumeScale(Section::Break,14,true,p)==0);
   assert(volumeScale(Section::Drop,1,false,p)==16&&volumeScale(Section::Drop,14,true,p)==16);
   for(unsigned ch:{11u,13u,8u})assert(volumeScale(Section::Break,ch,false,p)==16); // the melody solo is not ducked
+  assert(volumeScale(Section::Break,5,false,p,true)==16&&volumeScale(Section::Break,5,false,p)==7); // a deep voice 5 melody carries the break
   assert(volumeScale(Section::Break,7,false,p)==0&&volumeScale(Section::Build,7,false,p)==0&&volumeScale(Section::Fill,7,false,p)==0); // voice 7 is a kick
   for(unsigned ch:{1u,2u,3u,5u,6u,11u,13u,14u})assert(volumeScale(Section::Solo,ch,ch==6||ch==14,p)==16);
   for(unsigned ch:{1u,2u,3u,5u,6u,7u,8u,11u,13u,14u})for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop,Section::Solo})
@@ -317,10 +318,11 @@ int main(int argc,char **argv){assert(argc==2);
   for(unsigned ch:{1u,2u,4u,5u,6u,7u,13u,14u})if(s==Section::Drop)assert(guestWanted(ch,g,s));
   if(g<24&&slot<2)for(unsigned ch:{1u,2u,4u,5u,6u,7u,13u,14u})assert(!guestWanted(ch,g,s)); // the motif opens alone
   if(slot>=3||g>=24)assert(guestWanted(1,g,s)&&guestWanted(7,g,s)&&guestWanted(2,g,s)&&guestWanted(6,g,s)&&guestWanted(14,g,s));
-  assert(bassSamplePitch(31,false)==43&&bassSamplePitch(36,false)==36&&bassSamplePitch(55,true)==55&&bassSamplePitch(60,true)==48);
+  assert(bassSamplePitch(31,false)==67&&bassSamplePitch(36,false)==60&&bassSamplePitch(55,true)==79&&bassSamplePitch(60,true)==72);
   if(s==Section::Solo||s==Section::Fill)assert(guestWanted(5,g,s));
   if(s==Section::Build)assert(guestWanted(2,g,s));
-  assert(!guestWanted(4,g,s,true)&&!guestWanted(5,g,s,true)&&!guestWanted(7,g,s,true)&&!guestWanted(13,g,s,true));
+  assert(!guestWanted(4,g,s,true)&&!guestWanted(7,g,s,true)&&!guestWanted(13,g,s,true));
+  assert(guestWanted(5,g,s,true)==(g>=24||slot>=3||s==Section::Break||s==Section::Drop)); // the deep sample melody
   assert(guestWanted(2,g,s,true)==(s==Section::Drop));
   for(unsigned step=0;step<16;++step){
    assert(drum(Section::Groove,3,step,16,9,true,false,true)==(step%4==2?54:0));

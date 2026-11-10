@@ -1,4 +1,5 @@
 #include "src/mixer_limited.h"
+#include "src/play_sd_wav_preview.h"
 // Audio Processing Nodes
 // Audio graph routing, small mixers and CH11 DSP state are hot every block.
 // Keep their state in DTCM; only large sample and delay storage stays in PSRAM.
@@ -153,7 +154,7 @@ AudioMixer4                     freeverbmixer8; //xy=2970,1108
 AudioMixer4Limited                     mixer1;         //xy=3200,763
 AudioMixer4Limited                     mixer2;         //xy=3200,948
 AudioEffectEnvelope             envelope0;      //xy=3524,426
-AudioPlaySdWav                  playSdWav1;     //xy=3524,474
+AudioPlaySdWavPreview           playSdWav1;     //xy=3524,474
 AudioMixer4Limited                     mixer_end;      //xy=3518,1059
 AudioInputI2S                   audioInput;     //xy=3556,1189
 AudioAmplifier                  audioInputAmp;  //xy=3650,1189

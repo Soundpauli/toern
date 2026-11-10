@@ -18,11 +18,11 @@ void pinMode(int pin,int mode){assert(pin==13&&mode==OUTPUT);events.push_back(99
 void digitalWrite(int pin,int value){assert(pin==13);events.push_back(value);}
 void delay(int ms){events.push_back(ms);}
 void boot(){STARTUP}
-int main(){boot();std::vector<int> expected={99};for(int i=0;i<4;++i){expected.push_back(1);expected.push_back(500);expected.push_back(0);expected.push_back(500);}expected.push_back(1000);assert(events==expected);}
+int main(){boot();std::vector<int> expected={99};for(int i=0;i<3;++i){expected.push_back(1);expected.push_back(125);expected.push_back(0);expected.push_back(125);}expected.push_back(250);assert(events==expected);}
 '''.replace('STARTUP',startup)
 with tempfile.TemporaryDirectory() as tmp:
  p=Path(tmp);(p/'test.cpp').write_text(code)
  flags=['-isystem','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform=='darwin' else []
  subprocess.run(['c++','-std=c++17',*flags,str(p/'test.cpp'),'-o',str(p/'test')],check=True)
  subprocess.run([str(p/'test')],check=True)
-print('PASS: four 500 ms on/off blinks and a 1 s pause precede Serial.begin and the remaining setup.')
+print('PASS: three 125 ms on/off blinks and a 250 ms pause precede Serial.begin and the remaining setup.')

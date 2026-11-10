@@ -431,7 +431,7 @@ int main(){
      for(unsigned row=1;row<=16;++row){
       const Note &n=agenWork->performance[target+col][row];
       if(n.channel==1)has1=true;
-      if(n.channel==6){++bassNotes;assert(n.midiPitch>=36&&n.midiPitch<60);assert(n.midiPitch%12==(chords[chordAt(col)][0]%12));}
+      if(n.channel==6){++bassNotes;assert(n.midiPitch>=60&&n.midiPitch<84);assert(n.midiPitch%12==(chords[chordAt(col)][0]%12));}
       if(n.channel==7){has7=true;++kick2;assert(n.midiPitch==60);}
       if(n.channel==11){has11=true;chordVel=n.velocity;}
      }

@@ -2908,7 +2908,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       stopRecordingRAM((int)SMP.wav[GLOB.currentChannel].oldID, (int)SMP.wav[GLOB.currentChannel].fileID);
       extern bool disableThresholdFlag;
       disableThresholdFlag = true;
-      extern AudioPlaySdWav playSdWav1;
+      extern AudioPlaySdWavPreview playSdWav1;
       if (playSdWav1.isPlaying()) playSdWav1.stop();
       extern bool sampleIsLoaded, firstcheck;
       extern CachedSample previewCache;
@@ -3302,7 +3302,7 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
       disableThresholdFlag = true;
     }
     // Stop any playback
-    extern AudioPlaySdWav playSdWav1;
+    extern AudioPlaySdWavPreview playSdWav1;
     if (playSdWav1.isPlaying()) {
       playSdWav1.stop();
     }
@@ -6856,7 +6856,7 @@ void showDoRecord() {
   // Externs
   extern bool disableThresholdFlag;
   extern AudioAnalyzePeak peakRec;
-  extern AudioPlaySdWav playSdWav1;
+  extern AudioPlaySdWavPreview playSdWav1;
   extern bool previewIsPlaying;
   extern int peakRecIndex;
   extern const int maxRecPeaks;
@@ -10518,8 +10518,8 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
 
 FLASHMEM void updatePreviewVolume() {
   unsigned int level = constrain(previewVol, 0u, 50u);
-  // Map previewVol (0-50) to gain (0.0-0.5): vol = previewVol * 0.01f
-  float gain = (float)level * 0.01f;  // Map 0→0.0, 50→0.5
+  // 50 plays the file at the level a voice plays it (unity); 0.5 left PREV 6 dB under the kit.
+  float gain = (float)level * 0.02f;
 
   // Apply PREV volume to both preview paths:
   // - sound0 (voice0) → envelope0 → mixer0 channel 0 (RAM playback when seek is set)
