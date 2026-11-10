@@ -61,20 +61,16 @@ void AudioPlaySdWavPreview::begin(void)
 }
 
 
-// TŒRN: the stock player opens the file with the audio update interrupt off. A
-// path lookup in a large folder outlasts an audio block, so every audition
-// dropped out the whole mix. Once stopped, this player's update() never touches
-// SD, so the open runs with audio running; only the hand-over is guarded.
+// The card lookup and the file close run with the mix still playing. Holding the
+// audio interrupt off across either one drops a block of Main as well as the
+// preview, which is the click heard on the left when 2-CH is M+P. The player is
+// stopped first, so its interrupt does not touch the card during the lookup.
+// Only the hand-over, a pointer swap, is guarded.
 bool AudioPlaySdWavPreview::play(const char *filename)
 {
 	stop();
-	return play(SD.open(filename));
-}
-
-bool AudioPlaySdWavPreview::play(File file)
-{
-	stop();
-	if (!file) return false;
+	File opened = SD.open(filename);
+	if (!opened) return false;
 	bool irq = false;
 	if (NVIC_IS_ENABLED(IRQ_SOFTWARE)) {
 		NVIC_DISABLE_IRQ(IRQ_SOFTWARE);
@@ -85,7 +81,7 @@ bool AudioPlaySdWavPreview::play(File file)
 #else
 	AudioStartUsingSPI();
 #endif
-	wavfile = file;
+	wavfile = static_cast<File&&>(opened);
 	buffer_length = 0;
 	buffer_offset = 0;
 	state_play = STATE_STOP;
@@ -103,7 +99,8 @@ void AudioPlaySdWavPreview::stop(void)
 		NVIC_DISABLE_IRQ(IRQ_SOFTWARE);
 		irq = true;
 	}
-	if (state != STATE_STOP) {
+	const bool active = state != STATE_STOP;
+	if (active) {
 		audio_block_t *b1 = block_left;
 		block_left = NULL;
 		audio_block_t *b2 = block_right;
@@ -111,14 +108,15 @@ void AudioPlaySdWavPreview::stop(void)
 		state = STATE_STOP;
 		if (b1) release(b1);
 		if (b2) release(b2);
-		wavfile.close();
-#if defined(HAS_KINETIS_SDHC)
-		if (!(SIM_SCGC3 & SIM_SCGC3_SDHC)) AudioStopUsingSPI();
-#else
-		AudioStopUsingSPI();
-#endif
 	}
 	if (irq) NVIC_ENABLE_IRQ(IRQ_SOFTWARE);
+	if (!active) return;
+	wavfile.close();
+#if defined(HAS_KINETIS_SDHC)
+	if (!(SIM_SCGC3 & SIM_SCGC3_SDHC)) AudioStopUsingSPI();
+#else
+	AudioStopUsingSPI();
+#endif
 }
 
 void AudioPlaySdWavPreview::togglePlayPause(void) {
@@ -593,7 +591,9 @@ bool AudioPlaySdWavPreview::parse_format(void)
 bool AudioPlaySdWavPreview::isPlaying(void)
 {
 	uint8_t s = *(volatile uint8_t *)&state;
-	return (s < 8);
+	// Header parsing is part of playback. Callers that treat "not playing" as
+	// "the card is free" would otherwise open the same file mid-parse.
+	return s < STATE_PAUSED;
 }
 
 

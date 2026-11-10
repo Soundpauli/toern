@@ -37,7 +37,6 @@ public:
 	AudioPlaySdWavPreview(void) : AudioStream(0, NULL), block_left(NULL), block_right(NULL) { begin(); }
 	void begin(void);
 	bool play(const char *filename);
-	bool play(File file);
 	void togglePlayPause(void);
 	void stop(void);
 	bool isPlaying(void);

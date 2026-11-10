@@ -26,6 +26,7 @@ class ResamplingReader {
 public:
     ResamplingReader() :
         _playing(false),
+        _declickRestart(false),
         _file_size(0), // Will be set by play()
         _header_offset(0), // Will be set by play()
         _playbackRate(1.0),
@@ -95,6 +96,7 @@ public:
         // Original code: _file_size = length * 2;  _loop_finish = length;
         // This implies length was total int16_t samples, and _loop_finish also in total int16_t samples.
 
+        const bool restarting = _playing;
         _sourceBuffer = array;
         stop();
 
@@ -105,8 +107,16 @@ public:
         setNumChannels(numChannels);
 
         reset();
+        _declickRestart = restarting;
         _playing = true;
         return true;
+    }
+
+    // True once, after playRaw/play restarts a voice that was still sounding.
+    bool consumeDeclickRestart() {
+        const bool restart = _declickRestart;
+        _declickRestart = false;
+        return restart;
     }
 
     // This overload seems to have a type mismatch in its call to the above playRaw
@@ -296,8 +306,10 @@ public:
         }
         // If _playing is already true, maybe do nothing or restart?
         // Original just called stop then reset.
+        const bool restarting = _playing;
         stop(); // Set _playing = false
         reset(); // Recalculate positions, re-init interpolation points
+        _declickRestart = restarting;
         _playing = true;
         return true;
     }
@@ -775,6 +787,7 @@ protected:
         return n;
     }
     volatile bool _playing;
+    bool _declickRestart;
 
     int32_t _file_size;
     int32_t _header_offset; 

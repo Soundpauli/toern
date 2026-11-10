@@ -99,6 +99,26 @@ for library_dir in libdeps_dir.glob("TeensyAudioSampler*"):
     # Respect release configured by TŒRN; do not replace it with a fixed 2 ms.
     text = text.replace("audio_voice->_audioenvelop->release(2);", "")
     text = text.replace("audio_voice->_audioenvelop2->release(2);", "")
+    if "held sample keeps its open envelope" not in text:
+        text = text.replace(
+            """                    if (audio_voice->_audioenvelop != nullptr) {
+                       audio_voice->_audioenvelop->noteOn();
+                    }
+                    if (audio_voice->_audioenvelop2 != nullptr) {
+                        audio_voice->_audioenvelop2->noteOn();
+                    }""",
+            """                    // A held sample keeps its open envelope. Restarting it cuts the
+                    // sounding waveform; the reader crossfades that join instead.
+                    const bool held = audio_voice->_audioenvelop && audio_voice->_audioenvelop->isSustain()
+                        && audio_voice->_audioplayarray && audio_voice->_audioplayarray->isPlaying()
+                        && audio_voice->_audioplayarray->hasRecentOutput();
+                    if (audio_voice->_audioenvelop != nullptr && !held) {
+                       audio_voice->_audioenvelop->noteOn();
+                    }
+                    if (audio_voice->_audioenvelop2 != nullptr && !held) {
+                        audio_voice->_audioenvelop2->noteOn();
+                    }""",
+        )
     sampler.write_text(text)
 
     polyphonic_sampler = library_dir / "src" / "polyphonicsampler.h"
@@ -282,6 +302,62 @@ for source_dir in playback_src_dirs:
         text = replace_once(text, '        volatile int32_t ampTarget;',
             '        volatile int32_t ampTarget;\n        ToernPcmActivity pcmActivity;',
             'PCM activity member')
+    if "declickLeft" not in text:
+        text = replace_once(
+            text,
+            """            if (!reader->isPlaying()) {
+                pcmActivity.clear();
+                ampMult = ampTarget;
+                return;
+            }""",
+            """            if (!reader->isPlaying()) {
+                pcmActivity.clear();
+                ampMult = ampTarget;
+                declickLeft = 0;
+                lastOutValid = false;
+                return;
+            }""",
+            "declick idle",
+        )
+        text = replace_once(
+            text,
+            """                ampMult = cur;
+                pcmActivity.observe(data, _numChannels, n);""",
+            """                ampMult = cur;
+                // A restarted voice joins from the sample just heard, so the
+                // playhead jump is a 1.5 ms ramp instead of a click.
+                if (reader->consumeDeclickRestart() && lastOutValid) {
+                    declickLeft = 64;
+                    declickFrom[0] = lastOut[0];
+                    declickFrom[1] = lastOut[1];
+                }
+                for (unsigned int s = 0; s < n && declickLeft; ++s) {
+                    const int32_t done = 64 - (int32_t)declickLeft;
+                    for (int channel = 0; channel < _numChannels && channel < 2; ++channel) {
+                        const int32_t sample = data[channel][s];
+                        data[channel][s] = (int16_t)(declickFrom[channel]
+                            + ((sample - declickFrom[channel]) * done) / 64);
+                    }
+                    --declickLeft;
+                }
+                if (n > 0) {
+                    lastOut[0] = data[0][n - 1];
+                    lastOut[1] = _numChannels > 1 ? data[1][n - 1] : lastOut[0];
+                    lastOutValid = true;
+                }
+                pcmActivity.observe(data, _numChannels, n);""",
+            "declick ramp",
+        )
+        text = replace_once(
+            text,
+            "        ToernPcmActivity pcmActivity;",
+            """        ToernPcmActivity pcmActivity;
+        uint16_t declickLeft = 0;
+        int16_t declickFrom[2] = {0, 0};
+        int16_t lastOut[2] = {0, 0};
+        bool lastOutValid = false;""",
+            "declick members",
+        )
     playresmp.write_text(text)
 
 # Stock AudioEffectDelayExternal talks SPI RAM (23LC1024). TŒRN uses a PSRAM

@@ -122,8 +122,9 @@ assert 'min(LPREVIEW_CHUNK, (size_t)(maxToRead - plen))' in load
 assert 'sdPreviewFade.fadeIn(2);' in function(sample,'static void startSdPreviewNow(')
 assert 'stopSdPreviewForSdAccess();' in function((root/'toern_helpers.ino').read_text(),'FLASHMEM void sampleBrowserRefreshList(')
 player=(root/'src'/'play_sd_wav_preview.cpp').read_text()
-open_body=player[player.index('bool AudioPlaySdWavPreview::play(File file)'):]
-assert 'SD.open' not in open_body[:open_body.index('return true;')]  # the open never runs with audio updates off
+open_body=player[player.index('bool AudioPlaySdWavPreview::play(const char *filename)'):player.index('void AudioPlaySdWavPreview::stop(void)')]
+assert open_body.index('SD.open(filename)') < open_body.index('NVIC_DISABLE_IRQ')
+assert 'wavfile = static_cast<File&&>(opened);' in open_body
 assert 'patchCord216(playSdWav1, 0, sdPreviewFade, 0)' in (root/'audioinit.h').read_text()
 with tempfile.TemporaryDirectory() as directory:
     cpp=Path(directory)/'reload.cpp';binary=Path(directory)/'reload'

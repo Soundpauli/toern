@@ -1220,7 +1220,7 @@ void showWave() {
     }
   }
   
-  if (selectedIsFile && !playSdWav1.isPlaying() && !g_queuedSdPreview) {
+  if (selectedIsFile && !playSdWav1.isPlaying() && !previewIsPlaying && !g_queuedSdPreview) {
     servicePeakScan(4096);
     yield();
   }
