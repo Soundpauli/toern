@@ -37,7 +37,7 @@ void extmem_free(void *p){--allocations;free(p);}
 constexpr unsigned maxlen=257,maxY=16,MAX_STEPS=256;
 unsigned maxX=16,beat=1,beatForUI=1,loopCount=1,lastPage=1,editpage=1;
 int octave[2]={4,4},transpose=0,SampleRate[16]={};float detune[16]={},channelOctave[16]={};
-constexpr uint8_t NOTE_MIDI_PITCH_NONE=255;
+constexpr uint8_t NOTE_MIDI_PITCH_NONE=255,NOTE_CONDITION_GLIDE=22;
 int ctrlMode=0;bool hasNotes[17]={};
 struct Note {uint8_t channel=0,velocity=127,probability=100,condition=1,midiPitch=255;};
 Note original[maxlen+1][maxY+1];Note (*note)[maxY+1]=original;
@@ -356,6 +356,73 @@ int main(){
     assert(found);
   }
   stopAutogen();
+  // Three held CH11 chords across the page, a held lead and a syncopated beat,
+  // followed through a whole cycle: the chords reach the end of the page, stay
+  // held, keep the drawn progression; solos are complete; the drop keeps the groove.
+  // Vocals on voice 8, drawn or not, sing at the climaxes only and exactly as drawn.
+  for(unsigned ch=0;ch<16;++ch)testMutes[ch]=false;
+  for(bool drawnVocal:{false,true}){
+   for(auto &col:original)for(auto &n:col)n=Note{};
+   const Note vocalA={8,93,77,2,255},vocalB={8,64,100,1,255};
+   if(drawnVocal){original[1][9]=vocalA;original[1+width/2][7]=vocalB;}
+   const uint8_t chords[3][3]={{48,51,55},{44,48,51},{46,50,53}}; // Cm, Ab, Bb
+   auto chordAt=[&](unsigned col){return min(2u,col*3/width);};
+   auto headAt=[&](unsigned col){return !col||chordAt(col-1)!=chordAt(col);};
+   for(unsigned col=0;col<width;++col)for(unsigned t=0;t<3;++t)
+    original[1+col][11+t]={11,100,100,(uint8_t)(headAt(col)?1:NOTE_CONDITION_GLIDE),chords[chordAt(col)][t]};
+   for(unsigned col=2;col<10;++col)original[1+col][15]={13,100,100,(uint8_t)(col==2?1:NOTE_CONDITION_GLIDE),62};
+   uint32_t drawnKicks=0;
+   for(unsigned col:{0u,3u,6u,10u}){original[1+col][2]={1,110,100,1,255};drawnKicks|=1u<<col;}
+   original[5][3]={2,100,100,1,255};original[13][3]={2,100,100,1,255};
+   GLOB.edit=GLOB.page=1;GLOB.x=1;for(auto &calls:sourceCalls)calls=0;
+   assert(toggleAutogen());
+   bool sawBreak=false,sawSolo=false,sawDrop=false;unsigned sung=0;
+   for(unsigned response=0;response<26;++response){
+    for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);
+    const unsigned target=(agen.target()-1)*width+1;const auto built=agenWork->section;
+    const bool sings=toern_autogen_music::vocalWanted(agen.generation+1,built);
+    uint32_t kicks=0;unsigned drumCells=0,tonalCells=0,vocalCells=0;std::set<int> previous;int lead=-1;
+    for(unsigned col=0;col<width;++col){
+     std::set<int> pitches;unsigned drawnPcs=0,pcs=0;
+     for(unsigned t=0;t<3;++t)drawnPcs|=1u<<(chords[chordAt(col)][t]%12);
+     for(unsigned row=1;row<=16;++row){
+      const Note &n=agenWork->performance[target+col][row];
+      if(n.channel==8){
+       ++vocalCells;
+       const Note expected=!drawnVocal?Note{8,100,100,20,255}:col?vocalB:vocalA; // 20 = first pass only
+       assert((col==0&&row==9)||(drawnVocal&&col==width/2&&row==7));
+       assert(n.velocity==expected.velocity&&n.probability==expected.probability&&n.condition==expected.condition&&n.midiPitch==expected.midiPitch);
+      }
+      if(n.channel>=1&&n.channel<=5)++drumCells;
+      if(n.channel==11||n.channel==13||n.channel==14)++tonalCells;
+      if(n.channel==1)kicks|=1u<<col;
+      if(n.channel==11){
+       pitches.insert(n.midiPitch);pcs|=1u<<(n.midiPitch%12);
+       assert(n.probability==100&&n.condition==(headAt(col)?1:NOTE_CONDITION_GLIDE)); // never thinned, never re-attacked
+      }
+      if(n.channel==13&&built!=toern_autogen_music::Section::Solo){
+       assert(col>=2&&col<10&&n.probability==100&&n.condition==(col==2?1:NOTE_CONDITION_GLIDE));
+       if(col==2)lead=n.midiPitch;else assert(n.midiPitch==lead); // a held note keeps one pitch
+      }
+     }
+     if(built==toern_autogen_music::Section::Solo)continue;
+     assert(pitches.size()==3&&pcs==drawnPcs);          // drawn chord on every step, both halves
+     if(!headAt(col))assert(pitches==previous);          // identical tones: the chord sustains
+     previous=pitches;
+    }
+    if(built!=toern_autogen_music::Section::Solo)assert(lead>=0);
+    assert(vocalCells==(sings?drawnVocal?2u:1u:0u));sung+=sings;
+    if(built==toern_autogen_music::Section::Solo){sawSolo=true;assert(!tonalCells&&drumCells);}
+    if(built==toern_autogen_music::Section::Break){sawBreak=true;assert(!drumCells&&tonalCells);}
+    if(built==toern_autogen_music::Section::Drop){sawDrop=true;assert(kicks==drawnKicks);} // no stock four-on-the-floor
+    if(built==toern_autogen_music::Section::Groove)assert(kicks==drawnKicks);
+    agen.repeatsLeft=1;beat=agen.firstStep()+width-1;autogenAdvanceStep();
+   }
+   assert(sawBreak&&sawSolo&&sawDrop&&sourceCalls[11]==0&&sourceCalls[1]>0);
+   assert(sung==3&&sourceCalls[8]==0); // half the melodic solo and both drop pages, never evolved
+   stopAutogen();
+  }
+  for(unsigned ch=0;ch<16;++ch)testMutes[ch]=ch==2;
   // Empty input starts a small, coherent set rather than all voices at once.
   for(auto &col:original)for(auto &n:col)n=Note{};
   GLOB.edit=GLOB.page=1;assert(toggleAutogen());
@@ -367,7 +434,7 @@ int main(){
   for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(!agenWork->performance[silent+col][row].channel);
   stopAutogen();for(auto &col:original)for(auto &n:col)assert(n.channel==0);
  }
- puts("PASS: AGEN 16/32-step boundaries, tempo/page-aware repeats, late-builder safety, one-voice jobs, untouched live/source grids, editable motif, pending-page invalidation, developed edited sources, mute/unmute, removed voices, exact restoration, empty starters and incompatible-mode guards");
+ puts("PASS: AGEN 16/32-step boundaries, tempo/page-aware repeats, late-builder safety, one-voice jobs, untouched live/source grids, editable motif, pending-page invalidation, developed edited sources, mute/unmute, removed voices, held CH11 progressions, held leads, full solos, kept drop groove, climax-only vocals on voice 8, exact restoration, empty starters and incompatible-mode guards");
 }
 '''.replace('IMPLEMENTATION',implementation).replace('PLACEMENT',placement).replace('VOLUME_CONTROL',volume_control)
 with tempfile.TemporaryDirectory(prefix='toern-autogen-') as tmp:

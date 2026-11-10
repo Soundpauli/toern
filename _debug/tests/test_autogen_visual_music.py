@@ -96,9 +96,25 @@ int main(int argc,char **argv){assert(argc==2);
    if(step>=width-2)assert(!bassAllowed(Section::Fill,step,width));
    if(step==width-1)for(unsigned ch=1;ch<=5;++ch)assert(drum(Section::Fill,ch,step,width,9)==0);
    if(drum(Section::Build,2,step,width,9)>0){if(step<width/4)++early;if(step>=width*3/4)++late;}
-   if(drum(Section::Drop,1,step,width,9)>0){++drop;assert(step%4==0);}
+   for(unsigned ch=1;ch<=5;++ch)for(bool hit:{false,true})for(unsigned seed:{1u,9u,77u,200u}){
+    // The page's own groove is the drop: nothing is replaced and nothing invented.
+    assert(drum(Section::Drop,ch,step,width,seed,true,hit)==-1&&drum(Section::Groove,ch,step,width,seed,true,hit)==-1);
+    assert(drum(Section::Break,ch,step,width,seed,true,hit)==0); // melodic solo: every drum rests
+    // Variations and the drum solo decorate around drawn hits and never overwrite one.
+    if(hit)assert(drum(Section::Variation,ch,step,width,seed,true,true)==-1&&drum(Section::Solo,ch,step,width,seed,true,true)==-1);
+    assert(!bassAllowed(Section::Solo,step,width));
+   }
+   if(drum(Section::Solo,1,step,width,9)>0){++drop;assert(step%4!=0);} // pushed kicks sit off the beat
   }
-  assert(late>early&&drop==width/4);
+  assert(late>early&&drop==2*width/16);
+  for(unsigned seed=0;seed<64;++seed){
+   unsigned snare=0,tom=0;
+   for(unsigned step=width*3/4;step<width-1;++step){
+    const int s2=drum(Section::Fill,2,step,width,seed),t5=drum(Section::Fill,5,step,width,seed);
+    snare+=s2>0;tom+=t5>0;assert(s2<=127&&t5<=127);
+   }
+   assert(snare>=1&&snare+tom>=width/4-1); // every turnaround style fills the last quarter
+  }
  }
  for(int tonic=0;tonic<12;++tonic)for(bool minor:{false,true})for(unsigned phrase=0;phrase<16;++phrase){
   const int a=voicingPitch(60,tonic,minor,phrase,0,113),b=voicingPitch(60,tonic,minor,phrase,1,113),c=voicingPitch(60,tonic,minor,phrase,2,113);
@@ -110,11 +126,17 @@ int main(int argc,char **argv){assert(argc==2);
   assert(supportedSection(requested,0)==Section::Groove);
   assert(supportedSection(requested,6)==requested);
  }
+ // A melodic break needs a melodic voice; a drum solo needs drums.
+ assert(supportedSection(Section::Break,1)==Section::Groove&&supportedSection(Section::Break,11)==Section::Break);
+ assert(supportedSection(Section::Solo,0,true)==Section::Solo&&supportedSection(Section::Solo,6,false)==Section::Variation);
+ assert(lastPassCondition(1)==1&&lastPassCondition(2)==2&&lastPassCondition(4)==4&&lastPassCondition(8)==8&&lastPassCondition(3)==1);
  assert(encodePitch(60,-24)==84&&encodePitch(36,-12)==48);
  for(unsigned p=0;p<256;++p){
   assert(volumeScale(Section::Break,1,false,p)==0&&volumeScale(Section::Break,14,true,p)==0);
   assert(volumeScale(Section::Drop,1,false,p)==16&&volumeScale(Section::Drop,14,true,p)==16);
-  for(unsigned ch:{1u,2u,3u,5u,6u,7u,8u,11u,13u,14u})for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop})
+  for(unsigned ch:{11u,13u,7u,8u})assert(volumeScale(Section::Break,ch,false,p)==16); // the melody solo is not ducked
+  for(unsigned ch:{1u,2u,3u,5u,6u,11u,13u,14u})assert(volumeScale(Section::Solo,ch,ch==6||ch==14,p)==16);
+  for(unsigned ch:{1u,2u,3u,5u,6u,7u,8u,11u,13u,14u})for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop,Section::Solo})
    assert(volumeScale(s,ch,ch==6||ch==14,p)<=16);
   if(p)assert(volumeScale(Section::Build,2,false,p)>=volumeScale(Section::Build,2,false,p-1));
  }
@@ -127,12 +149,19 @@ int main(int argc,char **argv){assert(argc==2);
   }
  assert(repeats(Section::Build,4,16,120)==1&&repeats(Section::Build,4,32,120)==1);
  assert(repeats(Section::Fill,20,16,120)==1&&repeats(Section::Fill,20,32,120)==1);
- assert(repeats(Section::Break,10,16,120)==1); // two-bar dip, then the groove returns
+ assert(repeats(Section::Break,10,16,120)==4&&repeats(Section::Break,10,32,120)==2); // eight-bar melodic solo
+ assert(repeats(Section::Groove,12,16,120)==2); // the groove returns for four bars, then moves on
+ assert(repeats(Section::Variation,14,16,120)==4);
+ assert(repeats(Section::Solo,16,16,120)==1);  // two-bar drum solo before the final rise
+ // Vocals on voice 8: the drop and the answer half of the melodic solo, nowhere else.
+ for(unsigned g=0;g<48;++g)for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop,Section::Solo})
+  assert(vocalWanted(g,s)==(s==Section::Drop||(s==Section::Break&&g%2==1)));
+ {unsigned sung=0;for(unsigned g=0;g<24;++g)sung+=vocalWanted(g,section(g));assert(sung==3);}
  for(unsigned g=0;g<24;g+=2)assert(section(g)==section(g+1)&&degree(false,g)==degree(false,g+1));
  {
   const Section form[]={Section::Groove,Section::Variation,Section::Build,Section::Groove,
-      Section::Variation,Section::Break,Section::Groove,Section::Groove,
-      Section::Variation,Section::Build,Section::Fill,Section::Drop};
+      Section::Variation,Section::Break,Section::Groove,Section::Variation,
+      Section::Solo,Section::Build,Section::Fill,Section::Drop};
   unsigned bars=0;
   for(unsigned slot=0;slot<12;++slot){
    assert(section(slot*2)==form[slot]);
@@ -141,10 +170,12 @@ int main(int argc,char **argv){assert(argc==2);
   }
   assert(bars==64); // the fill and drop close the cycle; nothing cadences at bar 16
   assert(form[2]==Section::Build&&form[3]==Section::Groove); // short rise, kick and bass return
-  assert(form[5]==Section::Break&&form[6]==Section::Groove); // short dip, kick and bass return
+  assert(form[5]==Section::Break&&form[6]==Section::Groove); // melodic solo, kick and bass return
+  assert(form[8]==Section::Solo&&form[9]==Section::Build);   // drum solo leads into the final rise
   unsigned longBars=0;
   for(unsigned slot=0;slot<12;++slot)longBars+=2*repeats(form[slot],slot*2,16,120,true);
-  assert(longBars==120); // LONG doubles groove, variation and drop; rolls stay short
+  assert(longBars==112); // LONG doubles groove, variation and drop; solos and rolls keep their length
+  for(unsigned slot=0;slot+1<12;++slot)assert(form[slot]!=form[slot+1]); // no section is played twice in a row
   assert(repeats(Section::Drop,22,16,120,true)==4&&repeats(Section::Groove,0,16,120,true)==8);
   for(unsigned width:{16u,32u})for(unsigned bpm:{40u,60u,90u,120u,180u,300u})for(unsigned g=0;g<24;++g){
    const unsigned n=repeats(section(g),g,width,bpm,true);
@@ -198,7 +229,56 @@ int main(int argc,char **argv){assert(argc==2);
   if(bassHit(step,3,9))++dense;
  }
  assert(sparse==16&&dense>sparse);
- puts("PASS: AGEN page-header progress line on 16/32 columns; all 12 major/minor keys; chord tones, bass roots, bounded registers, breaks/build/fill/drop dynamics");
+ // A drawn progression is read as scale degrees, inversions included, and pins every voice to it.
+ for(int tonic=0;tonic<12;++tonic)for(Scale sc:{ScaleMajor,ScaleMinor,ScaleHarmonic,ScaleDorian})for(unsigned d=0;d<7;++d){
+  unsigned pcs=0;for(unsigned t=0;t<3;++t)pcs|=1u<<scalePc(tonic,sc,d+t*2);
+  for(unsigned t=0;t<3;++t)assert(drawnDegree(tonic,sc,pcs,scalePc(tonic,sc,d+t*2))==(int)d);
+  const unsigned dyad=(1u<<scalePc(tonic,sc,d))|(1u<<scalePc(tonic,sc,d+4));
+  assert(drawnDegree(tonic,sc,dyad,scalePc(tonic,sc,d))==(int)d);
+  for(unsigned phrase=0;phrase<24;++phrase){
+   for(unsigned t=0;t<4;++t)assert(chordPc(tonic,sc,phrase,t,(int)d)==scalePc(tonic,sc,d+t*2));
+   assert(chordPc(tonic,sc,phrase,0,-1)==chordPc(tonic,sc,phrase,0));
+   for(unsigned step=0;step<16;step+=4){
+    assert(bassPitch(36,tonic,sc,phrase,step,113,(int)d)%12==scalePc(tonic,sc,d));
+    for(unsigned ch:{11u,13u}){
+     bool chord=false;const int fitted=fitPitch(60,tonic,sc,phrase,ch,step,(int)d),moved=melodyPitch(60,tonic,sc,phrase,ch,step,113,MotionLive,3,(int)d);
+     for(unsigned t=0;t<3;++t)chord|=fitted%12==scalePc(tonic,sc,d+t*2);
+     assert(chord);chord=false;
+     for(unsigned t=0;t<3;++t)chord|=moved%12==scalePc(tonic,sc,d+t*2);
+     assert(chord);
+    }
+   }
+   for(bool stable:{false,true})for(unsigned lane=0;lane<3;++lane){
+    const int voiced=voicingPitch(60,tonic,sc,phrase,lane,113,stable,3,(int)d);bool chord=false;
+    for(unsigned t=0;t<3;++t)chord|=voiced%12==scalePc(tonic,sc,d+t*2);
+    assert(chord&&voiced>=24&&voiced<=108);
+   }
+   // Shell seventh for three voices: root, third and seventh near the drawn register.
+   assert(voicingPitch(60,tonic,sc,phrase,3,113,true,4,(int)d)%12==scalePc(tonic,sc,d+6));
+  }
+ }
+ // Velocity: flat voices get a metric groove, shaped voices keep theirs, the drop leans on the beat.
+ for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop,Section::Solo})
+  for(unsigned ch:{1u,2u,3u,4u,5u,6u,7u,8u,11u,13u,14u})for(unsigned step=0;step<32;++step)for(unsigned v:{1u,40u,90u,127u}){
+   const unsigned shaped=accent(s,ch,step,v,false),flat=accent(s,ch,step,v,true);
+   assert(shaped>=1&&shaped<=127&&flat>=1&&flat<=127&&flat<=shaped);
+   if(s!=Section::Drop)assert(shaped==v);else assert(shaped>=v&&(step%4==0||shaped==v));
+   if(step%4==0)assert(flat==shaped);
+   if(ch==3&&step%4==2)assert(flat==shaped);
+   if(step%2&&v>=40)assert(flat<shaped&&flat*100>=v*75);
+  }
+ // Guests enter in stages; hat and chords from the start, everything on the drop.
+ for(unsigned g=0;g<48;++g){
+  const Section s=section(g);const unsigned slot=(g/2)%12;
+  assert(guestWanted(3,g,s)&&guestWanted(11,g,s));
+  for(unsigned ch:{6u,7u,8u,9u,10u,12u})assert(!guestWanted(ch,g,s)); // samples of unknown tuning stay out
+  for(unsigned ch:{1u,2u,4u,5u,13u,14u})if(s==Section::Drop)assert(guestWanted(ch,g,s));
+  if(g<24&&slot<2)for(unsigned ch:{1u,2u,4u,5u,13u,14u})assert(!guestWanted(ch,g,s)); // the motif opens alone
+  if(slot>=3||g>=24)assert(guestWanted(1,g,s)&&guestWanted(2,g,s)&&guestWanted(14,g,s));
+  if(s==Section::Solo||s==Section::Fill)assert(guestWanted(5,g,s));
+  if(s==Section::Build)assert(guestWanted(2,g,s));
+ }
+ puts("PASS: AGEN page-header progress line on 16/32 columns; all 12 major/minor keys; chord tones, bass roots, bounded registers, drawn progressions, full melodic/drum solos, kept grooves, velocity accents, staged guests and build/fill/drop dynamics");
 }
 '''.replace('UI',ui)
 out=Path(tempfile.gettempdir())/'toern-agen-visual';out.mkdir(exist_ok=True)

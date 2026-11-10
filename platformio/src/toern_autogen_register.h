@@ -12,7 +12,7 @@ static inline unsigned phrasePages(unsigned width){return (64+width-1)/width;}
 // motion matches the AGEN menu: HOLD keeps the drawn pitch, SOFT allows a second,
 // LONG only fits the drawn pitch to the chord, LIVE adds the occasional variation step.
 static inline int monoPitch(int reference,int tonic,toern_autogen_music::Scale sc,unsigned phrase,unsigned channel,unsigned step,uint32_t seed,
-                            unsigned motion=toern_autogen_music::MotionLive,unsigned density=2){
+                            unsigned motion=toern_autogen_music::MotionLive,unsigned density=2,int lock=-1){
   using namespace toern_autogen_music;
   if(motion==MotionHold)return reference;
   if(!density&&step%2)return reference;
@@ -20,7 +20,7 @@ static inline int monoPitch(int reference,int tonic,toern_autogen_music::Scale s
   const uint32_t h=seed+step*977u+channel*37u+phrase*101u;
   if(motion==MotionLive&&density>=2&&section(phrase)==Section::Variation&&step%4&&h%4==0)
     target+=(h&4)?2:-2;
-  const int fitted=nearSource(fitPitch(target,tonic,sc,phrase,channel,step),reference);
+  const int fitted=nearSource(fitPitch(target,tonic,sc,phrase,channel,step,lock),reference);
   if(motion==MotionSoft||density<2){const int delta=fitted-reference;if(delta>2||delta<-2)return reference;}
   return fitted;
 }

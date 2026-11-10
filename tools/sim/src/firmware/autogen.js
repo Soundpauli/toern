@@ -1,10 +1,11 @@
 import { neutralGridMidi } from "./pitch.js";
 // Browser counterpart of the firmware's temporary, section-driven AGEN workspace.
 // The saved bank stays immutable; an editable motif steers two separate performance pages.
-// 64-bar cycle: a short rise and a short dip each return to the groove (kick and
-// bass come back). The fill and drop close the cycle once, not every 16 bars.
-const FORM = [['Groove',8],['Variation',8],['Build',2],['Groove',8],['Variation',8],['Break',2],
-  ['Groove',8],['Groove',8],['Variation',4],['Build',2],['Fill',2],['Drop',4]];
+// 64-bar cycle: a short rise returns to the groove (kick and bass come back).
+// The Break is a melodic solo (every drum rests), the Solo a drum solo (every
+// tonal voice rests). The fill and drop close the cycle once, not every 16 bars.
+const FORM = [['Groove',8],['Variation',8],['Build',2],['Groove',8],['Variation',8],['Break',4],
+  ['Groove',8],['Groove',8],['Solo',2],['Build',2],['Fill',2],['Drop',4]];
 export const SECTIONS = FORM.flatMap(([section])=>[section,section]);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 // AGEN menu order; LONG keeps the drawn motif and doubles groove, variation and drop.
@@ -32,15 +33,41 @@ function degreeIndex(sc, generation) {
   if(sc===SCALE.PENTA||sc===SCALE.BLUES)return [0,3,2,4][slot];
   return ((sc===SCALE.MINOR||sc===SCALE.HARMONIC)?[0,5,3,6]:[0,5,3,4])[slot];
 }
-function chordPitchClasses(root, sc, generation) {
+// lock >= 0 pins the chord to a scale degree read from the drawn progression.
+function chordPitchClasses(root, sc, generation, lock=-1) {
   const s = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
-  const d = degreeIndex(s, generation);
+  const d = lock>=0 ? lock : degreeIndex(s, generation);
   return [0,1,2,3].map(t=>scalePc(root,s,d+t*2));
+}
+// Firmware drawnDegree: the scale degree whose stacked chord best explains the
+// drawn pitch classes; the lowest note breaks ties as the root.
+export function drawnDegree(root, sc, pcs, lowestPc) {
+  let best=0,bestScore=-Infinity;
+  for(let d=0;d<scaleCount(sc);d++){
+    const tones=[];let score=0;
+    [5,3,3,1].forEach((weight,t)=>{const pc=scalePc(root,sc,d+t*2);if(tones.includes(pc))return;tones.push(pc);if(pcs.includes(pc))score+=weight;});
+    score-=3*new Set(pcs.filter(pc=>!tones.includes(pc))).size;
+    if(scalePc(root,sc,d)===lowestPc)score+=2;
+    if(score>bestScore){bestScore=score;best=d;}
+  }
+  return best;
+}
+// Firmware accent: voices drawn at one level get a metric groove; the drop leans on the beat.
+export function accent(section, ch, step, velocity, flat) {
+  const beat=step%4;let level=velocity;
+  if(flat){
+    let percent=(ch<=5?[100,78,90,78]:[100,88,94,88])[beat];
+    if(ch===1&&beat)percent=92;
+    if(ch===3&&beat===2)percent=100;
+    level=Math.floor(velocity*percent/100);
+  }
+  if(section==='Drop'&&beat===0)level+=Math.floor(level/10);
+  return clamp(level,1,127);
 }
 const nearestPc=(reference,pc)=>{let best=reference,d=Infinity;for(let n=0;n<=127;n++)if(n%12===pc&&Math.abs(n-reference)<d){best=n;d=Math.abs(n-reference);}return best;};
 // Firmware fitPitch: snap the drawn note to the chord on the beat, otherwise the scale.
-export function fitPitch(reference, root, sc, generation, channel, step) {
-  const chord = chordPitchClasses(root, sc, generation);
+export function fitPitch(reference, root, sc, generation, channel, step, lock=-1) {
+  const chord = chordPitchClasses(root, sc, generation, lock);
   if ((channel === 6 || channel === 14) && step % 4 === 0) return nearestPc(reference, chord[0]);
   const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
   const choices = step % 4 === 0 ? chord.slice(0,3) : [...Array(scaleCount(scaleId))].map((_,d)=>scalePc(root,scaleId,d));
@@ -59,20 +86,20 @@ export function bassHit(step, density, seed) {
   if(step%2)chance=Math.floor(chance*2/3);
   return h%100<chance;
 }
-export function bassPitch(reference, root, sc, generation, step, seed) {
-  const rootPc = chordPitchClasses(root, sc, generation)[0];
+export function bassPitch(reference, root, sc, generation, step, seed, lock=-1) {
+  const rootPc = chordPitchClasses(root, sc, generation, lock)[0];
   const locked = nearestPc(reference, rootPc);
   if(step%4===0)return locked;
   const h=(seed+step*977)>>>8;
   if(h%4===0)return nearestPc(reference+12, rootPc);
   return locked;
 }
-export function melodyPitch(reference, root, sc, generation, channel, step, seed=113, motion=MOTION.LIVE, density=2) {
+export function melodyPitch(reference, root, sc, generation, channel, step, seed=113, motion=MOTION.LIVE, density=2, lock=-1) {
   const section=SECTIONS[generation%SECTIONS.length], bass=channel===6||channel===14;
   const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
-  const chord=chordPitchClasses(root,scaleId,generation).slice(0,3);
+  const chord=chordPitchClasses(root,scaleId,generation,lock).slice(0,3);
   const scale=[...Array(scaleCount(scaleId))].map((_,d)=>scalePc(root,scaleId,d));
-  const baseline=fitPitch(reference,root,scaleId,generation,channel,step);
+  const baseline=fitPitch(reference,root,scaleId,generation,channel,step,lock);
   if(motion===MOTION.HOLD||motion===MOTION.LONG||(bass&&step%4===0))return baseline;
   const allowed=step%4===0?chord:scale;
   let h=(seed ^ Math.imul(Math.floor(generation/2),374761393) ^ Math.imul(channel,668265263) ^ Math.imul(step,2246822519))>>>0;
@@ -95,10 +122,10 @@ export function melodyPitch(reference, root, sc, generation, channel, step, seed
   return best;
 }
 
-export function voicingPitches(reference,root,sc,generation,seed=113,stable=false,tones=3) {
+export function voicingPitches(reference,root,sc,generation,seed=113,stable=false,tones=3,lock=-1) {
   const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
   tones=Math.max(3,Math.min(4,tones));
-  const chord=chordPitchClasses(root,scaleId,generation).slice(0,tones);
+  const chord=chordPitchClasses(root,scaleId,generation,lock).slice(0,tones);
   if(stable)return chord.map(pc=>nearestPc(reference,pc));
   const inversion=(generation+seed)%tones;
   let base=reference,distance=Infinity;
@@ -129,7 +156,8 @@ export function statusInk(x,y,progress,ready,now) {
 // Match the firmware's volume-only performance automation.
 export function volumeScale(section, ch, bass, progress) {
   const p=clamp(progress,0,1);
-  if(section==='Break')return ch===1||bass?0:ch<=5?7:12;
+  if(section==='Solo')return 16;
+  if(section==='Break')return ch===1||bass?0:ch<=5?7:16;
   if(section==='Build')return ch===1||bass?0:ch===2?5+p*11:ch<=5?6+p*9:10+p*6;
   if(section==='Fill')return ch===1||bass?0:ch===2||ch===5?12+p*4:12;
   if(section==='Drop')return 16;
@@ -155,11 +183,11 @@ export function nearSource(pitch,reference){
  while(pitch>reference+6)pitch-=12;while(pitch<reference-6)pitch+=12;
  return pitch<0?pitch+12:pitch>127?pitch-12:pitch;
 }
-export function monoPitch(reference,root,sc,generation,ch,step,seed=113,motion=MOTION.LIVE,density=2){
+export function monoPitch(reference,root,sc,generation,ch,step,seed=113,motion=MOTION.LIVE,density=2,lock=-1){
  const scaleId = typeof sc === "boolean" ? (sc ? SCALE.MINOR : SCALE.MAJOR) : sc;
  if(motion===MOTION.HOLD)return reference;
  if(!density&&step%2)return reference;
- const chord=chordPitchClasses(root,scaleId,generation),scale=[...Array(scaleCount(scaleId))].map((_,d)=>scalePc(root,scaleId,d));
+ const chord=chordPitchClasses(root,scaleId,generation,lock),scale=[...Array(scaleCount(scaleId))].map((_,d)=>scalePc(root,scaleId,d));
  let target=reference;const h=(seed+step*977+ch*37+generation*101)>>>0;
  if(motion===MOTION.LIVE&&density>=2&&SECTIONS[generation%SECTIONS.length]==='Variation'&&step%4&&h%4===0)target+=(h&4)?2:-2;
  const pcs=ch===14&&step%4===0?[chord[0]]:step%4===0?chord.slice(0,3):scale;
@@ -220,7 +248,33 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
     section = SECTIONS[generation % SECTIONS.length];
     foundation=[6,14,11,13,7,8,1].find(ch=>!isMuted(ch)&&volume(ch)>0&&source.some(col=>col.some(n=>n.channel===ch)))||0;
     if(!foundation&&['Break','Build','Fill'].includes(section))section='Groove';
+    // A melodic break needs a melodic voice; a drum solo needs drums.
+    if(section==='Break'&&foundation<=5)section='Groove';
+    if(section==='Solo'&&![1,2,3,4,5].some(ch=>!isMuted(ch)&&volume(ch)>0&&source.some(col=>col.some(n=>n.channel===ch))))section='Variation';
     const longForm = motion === MOTION.LONG;
+    const sc = resolvedScale();
+    const pitchOf=(n,row)=>n.midiPitch<=127?n.midiPitch:neutralGridMidi(n.channel,row);
+    // Drawn CH11 progression: each chord holds until the next; the page loops.
+    const stepDegree=Array(columns()).fill(-1);
+    {
+      let current=-1,first=-1,moves=false;
+      source.forEach((col,x)=>{
+        const chord=col.flatMap((n,row)=>n.channel===11?[pitchOf(n,row)]:[]);
+        if(chord.length>=2){
+          current=drawnDegree(key,sc,chord.map(p=>p%12),Math.min(...chord)%12);
+          if(first<0)first=current;else if(current!==first)moves=true;
+        }
+        stepDegree[x]=current;
+      });
+      for(let x=0;x<stepDegree.length;x++)stepDegree[x]=!moves?-1:stepDegree[x]<0?current:stepDegree[x];
+    }
+    // Voices drawn at one velocity (three or more hits) were not shaped by hand.
+    const flat=new Set();
+    for(let ch=1;ch<15;ch++){
+      const levels=source.flatMap(col=>col.filter(n=>n.channel===ch).map(n=>n.velocity));
+      if(levels.length>=3&&levels.every(v=>v===levels[0]))flat.add(ch);
+    }
+    const heldPitch=Array(16).fill(-1),heldSource=Array(16).fill(-1);
     const phrase = generation + 1; // firmware arrangeAutogenChannel(..., agen.generation+1)
     repeats = phrasePasses(section, generation, columns(), bpm(), longForm);
     const width = columns(), offset = (page-1)*width;
@@ -234,29 +288,35 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
       const n = performance[offset+x][y];
       Object.assign(n, emptyNote(), src || {});
       if (!n.channel) continue;
-      const ch = n.channel, perc = ch <= 5;
+      const ch = n.channel, perc = ch <= 5, lock = stepDegree[x-1], tie = src.condition === 22;
+      // Full solos: the drum solo rests every tonal voice, the melodic break every drum.
+      if((section==='Solo'&&!perc)||(section==='Break'&&perc)){Object.assign(n,emptyNote());continue;}
       if(held.has(ch)){Object.assign(n,emptyNote());continue;}
       if(isMuted(ch)||volume(ch)<=0){Object.assign(n,emptyNote());continue;}
       const reference = n.midiPitch<=127?n.midiPitch:neutralGridMidi(ch,y);
       const bass = ch===6||ch===14||(ch===11&&lowCh11);
       if (isMuted(ch) || (section === 'Build' && (ch === 1 || bass)&&ch!==foundation) ||
-          (section === 'Break' && ch!==foundation && (ch === 1 || bass || (perc && x % 4 !== 1))) ||
+          (section === 'Break' && ch!==foundation && bass) ||
           (section === 'Fill' && generation%2===1 && ((perc && x === width) || (bass && x >= width-1)))) {
         Object.assign(n, emptyNote()); continue;
       }
       if(section==='Build'&&generation%2===1&&x===width&&ch!==foundation){Object.assign(n,emptyNote());continue;}
       if(section==='Build'&&ch===3&&(x-1)%4!==2){Object.assign(n,emptyNote());continue;}
-      if (bass && !bassHit(x-1, density, seed+ch)) { Object.assign(n, emptyNote()); continue; }
+      // A held note is a head plus G/L cells; they keep the head's pitch and fate.
+      const tied = !perc && tie && heldSource[ch] === reference;
+      if (!tied && bass && !bassHit(x-1, density, seed+ch)) { heldSource[ch]=reference;heldPitch[ch]=-1;Object.assign(n, emptyNote()); continue; }
+      if (tied && heldPitch[ch] < 0) { Object.assign(n, emptyNote()); continue; }
       if (!perc) {
         const target=reference;
-        const sc=resolvedScale();
-        if(bass)n.midiPitch=bassPitch(target,key,sc,phrase,x-1,seed);
-        else if(ch===13||ch===14)n.midiPitch=monoPitch(target,key,sc,phrase,ch,x-1,seed,motion,density);
-        else n.midiPitch=nearSource(melodyPitch(target,key,sc,phrase,ch,x-1,seed,motion,density),target);
+        if(tied)n.midiPitch=heldPitch[ch];
+        else if(bass)n.midiPitch=bassPitch(target,key,sc,phrase,x-1,seed,lock);
+        else if(ch===13||ch===14)n.midiPitch=monoPitch(target,key,sc,phrase,ch,x-1,seed,motion,density,lock);
+        else n.midiPitch=nearSource(melodyPitch(target,key,sc,phrase,ch,x-1,seed,motion,density,lock),target);
+        heldSource[ch]=reference;heldPitch[ch]=n.midiPitch;
       }
-      n.condition=0;
-      n.probability = ch === 1 || bass || x % 4 === 1 ? 100 : Math.max(75,n.probability || 100);
-      if (section === 'Break') n.velocity = Math.max(1, Math.round(n.velocity*.7));
+      n.condition=tie&&!perc?22:0;
+      n.probability = tied || ch === 1 || bass || x % 4 === 1 ? 100 : Math.max(75,n.probability || 100);
+      if (!tied) n.velocity = accent(section, ch, x-1, n.velocity, flat.has(ch));
       if (section === 'Fill' && perc) n.velocity = Math.min(127,n.velocity+12);
     }
     // Preserve three distinct chord tones at every source chord onset.
@@ -265,11 +325,17 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
       const chord=original.filter(n=>n.channel===11);
       if(chord.length<2)continue;
       for(const n of performance[offset+x])if(n.channel===11)Object.assign(n,emptyNote());
-      const tones=Math.min(Math.max(chord.length,3),density>=2?4:3);
-      const pitches=voicingPitches(registers[11],key,resolvedScale(),phrase,seed,longForm,tones);
-      for(let i=0;i<Math.min(chord.length,tones);i++){
+      // CH11 has three voices. A held chord keeps its G/L cells so it sustains; a
+      // drawn progression keeps its chord and, while the groove settles, its close voicing.
+      const lock=stepDegree[x-1],heldChord=chord.every(n=>n.condition===22),voices=Math.min(chord.length,3);
+      const colour=density>=2&&voices===3&&(section==='Variation'||section==='Drop');
+      const stable=longForm||colour||(lock>=0&&(section==='Groove'||section==='Break'));
+      const reference=Math.floor(original.flatMap((n,row)=>n.channel===11?[pitchOf(n,row)]:[]).reduce((a,b)=>a+b,0)/chord.length);
+      const pitches=voicingPitches(lock>=0?reference:registers[11],key,sc,phrase,seed,stable,colour?4:3,lock);
+      const velocity=heldChord?chord[0].velocity:accent(section,11,x-1,chord[0]?.velocity||88,flat.has(11));
+      for(let i=0;i<voices;i++){
         let row=clamp(12+i,1,rows);if(performance[offset+x][row].channel)row=performance[offset+x].findIndex((n,y)=>y>0&&!n.channel);
-        if(row>0)Object.assign(performance[offset+x][row],emptyNote(),{channel:11,midiPitch:encodePitch(pitches[i],shifts[11]),velocity:chord[0]?.velocity||88});
+        if(row>0)Object.assign(performance[offset+x][row],emptyNote(),{channel:11,midiPitch:encodePitch(pitches[colour&&i===2?3:i],shifts[11]),velocity,condition:heldChord?22:0});
       }
     }
     // Snare rise with an audible foundation. A short rise returns to the groove;
