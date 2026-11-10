@@ -143,6 +143,14 @@ AGEN_MUSIC_CODE static int bassPitch(int reference,int tonic,Scale sc,unsigned p
   if(h%4==0)return nearestPc(reference+12,chordPc(tonic,sc,phrase,0,lock));
   return root;
 }
+// Voice 6 is a bass sample tuned at C2, with lifts into C3. Fold a concert pitch
+// into that octave: `upper` selects C3, otherwise C2.
+AGEN_MUSIC_CODE static int bassSamplePitch(int pitch,bool upper){
+  const int low=upper?48:36;
+  while(pitch<low)pitch+=12;
+  while(pitch>=low+12)pitch-=12;
+  return pitch;
+}
 // Lead only: HOLD/LONG keep the fitted motif, SOFT moves by a second, LIVE uses the contour.
 // density 0..3 further caps how often the contour fires (0 sparse, 3 full).
 AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,Scale sc,unsigned phrase,
@@ -218,16 +226,18 @@ AGEN_MUSIC_CODE static Section supportedSection(Section requested,unsigned found
   return requested;
 }
 // Voices AGEN may add when the motif leaves them empty. They enter in stages so
-// the arrangement grows: hat and chords first, the beat and a synth bass after
-// the first rise, colour later, everything on the drop. From the second cycle
-// on the beat is already established.
+// the arrangement grows: hat and chords first, the beat (both kicks and the
+// sample bass) after the first rise, colour later, everything on the drop.
+// From the second cycle on the beat is already established. Voice 8 is not a
+// guest here: vocals have their own climax schedule.
 AGEN_MUSIC_CODE static bool guestWanted(unsigned channel,unsigned generation,Section s){
   const unsigned slot=(generation/2)%12;const bool established=generation>=24;
   if(channel==3||channel==11)return true;
-  const bool guest=channel==1||channel==2||channel==4||channel==5||channel==13||channel==14;
+  const bool guest=channel==1||channel==2||channel==4||channel==5||channel==6||channel==7||channel==13||channel==14;
   if(s==Section::Drop)return guest;
   if(channel==2)return established||slot>=3||s==Section::Build||s==Section::Fill;
-  if(channel==1||channel==14)return established||slot>=3;
+  // Voice 7 is the second kick and enters with voice 1. Voice 6 is the sample bass.
+  if(channel==1||channel==7||channel==6||channel==14)return established||slot>=3;
   if(channel==4||channel==13)return slot>=6;
   if(channel==5)return s==Section::Solo||s==Section::Fill;
   return false;
@@ -246,7 +256,7 @@ AGEN_MUSIC_CODE static unsigned accent(Section s,unsigned channel,unsigned step,
   unsigned level=velocity;
   if(flat){
     unsigned percent=(channel<=5?drums:tonal)[beat];
-    if(channel==1&&beat)percent=92;       // the kick stays solid
+    if((channel==1||channel==7)&&beat)percent=92; // both kicks stay solid
     if(channel==3&&beat==2)percent=100;   // hats may lean on the offbeat
     level=velocity*percent/100;
   }
@@ -263,21 +273,21 @@ AGEN_MUSIC_CODE static bool bassAllowed(Section s,unsigned step,unsigned width,b
 AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsigned progress){
   if(progress>255)progress=255;
   if(s==Section::Solo)return 16; // resting tonal voices ring out; nothing is cut
-  if(s==Section::Break){if(ch==1||bass)return 0;return ch<=5?7:16;}
+  if(s==Section::Break){if(ch==1||ch==7||bass)return 0;return ch<=5?7:16;}
   if(s==Section::Build){
-    if(ch==1||bass)return 0;
+    if(ch==1||ch==7||bass)return 0;
     if(ch==2)return 5+progress*11/255;
     if(ch<=5)return 6+progress*9/255;
     return 10+progress*6/255;
   }
   if(s==Section::Fill){
-    if(ch==1||bass)return 0;
+    if(ch==1||ch==7||bass)return 0;
     return ch==2||ch==5?12+progress*4/255:12;
   }
   if(s==Section::Drop)return 16;
   const unsigned triangle=progress<128?progress*2:(255-progress)*2;
   if(ch==3||ch==5)return 11+triangle*5/255;
-  if(ch==7||ch==8||(!bass&&(ch==11||ch==13||ch==14)))return 12+triangle*4/255;
+  if(ch==8||(!bass&&(ch==11||ch==13||ch==14)))return 12+triangle*4/255;
   return 16;
 }
 
@@ -286,6 +296,7 @@ AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsi
 // the page is the one to play: sections thin or decorate it and never swap in a
 // stock four-on-the-floor or backbeat.
 AGEN_MUSIC_CODE static int drum(Section s,unsigned channel,unsigned step,unsigned width,uint32_t seed,bool finale=true,bool hit=false){
+  if(channel==7)channel=1; // voice 7 is a second kick: same part as voice 1
   const unsigned phase=step%16;const bool tail=step>=width*3/4;
   const uint32_t h=(seed*1664525u+step*1013904223u+channel*977u)>>8;
   if(s==Section::Break)return 0; // melodic solo: every drum rests

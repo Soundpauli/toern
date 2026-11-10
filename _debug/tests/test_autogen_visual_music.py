@@ -105,6 +105,8 @@ int main(int argc,char **argv){assert(argc==2);
     assert(!bassAllowed(Section::Solo,step,width));
    }
    if(drum(Section::Solo,1,step,width,9)>0){++drop;assert(step%4!=0);} // pushed kicks sit off the beat
+   assert(drum(Section::Solo,7,step,width,9)==drum(Section::Solo,1,step,width,9));
+   assert(drum(Section::Break,7,step,width,9)==0&&drum(Section::Build,7,step,width,9)==0);
   }
   assert(late>early&&drop==2*width/16);
   for(unsigned seed=0;seed<64;++seed){
@@ -134,7 +136,8 @@ int main(int argc,char **argv){assert(argc==2);
  for(unsigned p=0;p<256;++p){
   assert(volumeScale(Section::Break,1,false,p)==0&&volumeScale(Section::Break,14,true,p)==0);
   assert(volumeScale(Section::Drop,1,false,p)==16&&volumeScale(Section::Drop,14,true,p)==16);
-  for(unsigned ch:{11u,13u,7u,8u})assert(volumeScale(Section::Break,ch,false,p)==16); // the melody solo is not ducked
+  for(unsigned ch:{11u,13u,8u})assert(volumeScale(Section::Break,ch,false,p)==16); // the melody solo is not ducked
+  assert(volumeScale(Section::Break,7,false,p)==0&&volumeScale(Section::Build,7,false,p)==0&&volumeScale(Section::Fill,7,false,p)==0); // voice 7 is a kick
   for(unsigned ch:{1u,2u,3u,5u,6u,11u,13u,14u})assert(volumeScale(Section::Solo,ch,ch==6||ch==14,p)==16);
   for(unsigned ch:{1u,2u,3u,5u,6u,7u,8u,11u,13u,14u})for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop,Section::Solo})
    assert(volumeScale(s,ch,ch==6||ch==14,p)<=16);
@@ -271,10 +274,11 @@ int main(int argc,char **argv){assert(argc==2);
  for(unsigned g=0;g<48;++g){
   const Section s=section(g);const unsigned slot=(g/2)%12;
   assert(guestWanted(3,g,s)&&guestWanted(11,g,s));
-  for(unsigned ch:{6u,7u,8u,9u,10u,12u})assert(!guestWanted(ch,g,s)); // samples of unknown tuning stay out
-  for(unsigned ch:{1u,2u,4u,5u,13u,14u})if(s==Section::Drop)assert(guestWanted(ch,g,s));
-  if(g<24&&slot<2)for(unsigned ch:{1u,2u,4u,5u,13u,14u})assert(!guestWanted(ch,g,s)); // the motif opens alone
-  if(slot>=3||g>=24)assert(guestWanted(1,g,s)&&guestWanted(2,g,s)&&guestWanted(14,g,s));
+  for(unsigned ch:{8u,9u,10u,12u})assert(!guestWanted(ch,g,s)); // vocals and non-voices stay out of the guest list
+  for(unsigned ch:{1u,2u,4u,5u,6u,7u,13u,14u})if(s==Section::Drop)assert(guestWanted(ch,g,s));
+  if(g<24&&slot<2)for(unsigned ch:{1u,2u,4u,5u,6u,7u,13u,14u})assert(!guestWanted(ch,g,s)); // the motif opens alone
+  if(slot>=3||g>=24)assert(guestWanted(1,g,s)&&guestWanted(7,g,s)&&guestWanted(2,g,s)&&guestWanted(6,g,s)&&guestWanted(14,g,s));
+  assert(bassSamplePitch(31,false)==43&&bassSamplePitch(36,false)==36&&bassSamplePitch(55,true)==55&&bassSamplePitch(60,true)==48);
   if(s==Section::Solo||s==Section::Fill)assert(guestWanted(5,g,s));
   if(s==Section::Build)assert(guestWanted(2,g,s));
  }

@@ -39,7 +39,7 @@ struct ToernAutogen {
   // Keep structural hits reliable; stochastic detail supplies motion on repeats.
   static uint8_t noteChance(unsigned channel,unsigned step,uint32_t seed){
     const unsigned phase=step%16;
-    if((channel==1&&phase%4==0)||((channel==2||channel==4)&&phase%8==4)
+    if(((channel==1||channel==7)&&phase%4==0)||((channel==2||channel==4)&&phase%8==4)
         ||((channel==6||channel==11||channel==13||channel==14)&&phase%8==0))return 100;
     uint32_t h=seed^(step*374761393u)^(channel*668265263u);
     h=(h^(h>>13))*1274126177u;h^=h>>16;

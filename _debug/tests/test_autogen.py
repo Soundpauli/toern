@@ -391,7 +391,11 @@ int main(){
        ++vocalCells;
        const Note expected=!drawnVocal?Note{8,100,100,20,255}:col?vocalB:vocalA; // 20 = first pass only
        assert((col==0&&row==9)||(drawnVocal&&col==width/2&&row==7));
-       assert(n.velocity==expected.velocity&&n.probability==expected.probability&&n.condition==expected.condition&&n.midiPitch==expected.midiPitch);
+       const bool ducked=toern_autogen_music::guestWanted(7,agen.generation+1,built)
+         &&built!=toern_autogen_music::Section::Break&&built!=toern_autogen_music::Section::Build
+         &&(col==0||col==3||col==6||col==10);
+       const unsigned vel=ducked?expected.velocity*78/100:expected.velocity;
+       assert(n.velocity==vel&&n.probability==expected.probability&&n.condition==expected.condition&&n.midiPitch==expected.midiPitch);
       }
       if(n.channel>=1&&n.channel<=5)++drumCells;
       if(n.channel==11||n.channel==13||n.channel==14)++tonalCells;
@@ -416,6 +420,27 @@ int main(){
     if(built==toern_autogen_music::Section::Break){sawBreak=true;assert(!drumCells&&tonalCells);}
     if(built==toern_autogen_music::Section::Drop){sawDrop=true;assert(kicks==drawnKicks);} // no stock four-on-the-floor
     if(built==toern_autogen_music::Section::Groove)assert(kicks==drawnKicks);
+    const unsigned builtGen=agen.generation+1;
+    const bool wantBass=toern_autogen_music::guestWanted(6,builtGen,built);
+    const bool wantKick=toern_autogen_music::guestWanted(7,builtGen,built);
+    const bool bassRests=built==toern_autogen_music::Section::Break||built==toern_autogen_music::Section::Solo||built==toern_autogen_music::Section::Build;
+    const bool drumsRest=built==toern_autogen_music::Section::Break||built==toern_autogen_music::Section::Build;
+    unsigned bassNotes=0,kick2=0;
+    for(unsigned col=0;col<width;++col){
+     bool has1=false,has7=false,has11=false;unsigned chordVel=0;
+     for(unsigned row=1;row<=16;++row){
+      const Note &n=agenWork->performance[target+col][row];
+      if(n.channel==1)has1=true;
+      if(n.channel==6){++bassNotes;assert(n.midiPitch>=36&&n.midiPitch<60);assert(n.midiPitch%12==(chords[chordAt(col)][0]%12));}
+      if(n.channel==7){has7=true;++kick2;assert(n.midiPitch==60);}
+      if(n.channel==11){has11=true;chordVel=n.velocity;}
+     }
+     if(wantKick&&!drumsRest)assert(has7==has1);
+     if(has7&&has11)assert(chordVel<=70); // the second kick ducks the chord
+    }
+    if(wantBass&&!bassRests)assert(bassNotes>=width/4);
+    if(!wantBass)assert(bassNotes==0);
+    if(!wantKick||drumsRest)assert(kick2==0);
     agen.repeatsLeft=1;beat=agen.firstStep()+width-1;autogenAdvanceStep();
    }
    assert(sawBreak&&sawSolo&&sawDrop&&sourceCalls[11]==0&&sourceCalls[1]>0);
