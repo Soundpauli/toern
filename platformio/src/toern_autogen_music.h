@@ -13,7 +13,9 @@ namespace toern_autogen_music {
 enum class Section {Groove,Variation,Break,Build,Fill,Drop,Solo};
 // AGEN menu order. LONG keeps the drawn motif (fitted to the chord only) and
 // doubles the groove, variation and drop slots so the theme can settle in.
-enum Motion : uint8_t {MotionHold=0,MotionSoft=1,MotionLong=2,MotionLive=3};
+// DEEP is minimal deep house: the same long grooves, with a pulse bass,
+// offbeat hats and a few minor-seven stabs instead of a busy arrangement.
+enum Motion : uint8_t {MotionHold=0,MotionSoft=1,MotionLong=2,MotionLive=3,MotionDeep=4};
 // Menu 0 is AUTO (motif major/minor). Explicit picks follow.
 enum Scale : uint8_t {ScaleMajor=0,ScaleMinor,ScaleHarmonic,ScaleDorian,ScalePenta,ScaleBlues,ScaleCount};
 AGEN_MUSIC_CODE static Scale defaultScale(bool minor){return minor?ScaleMinor:ScaleMajor;}
@@ -70,6 +72,44 @@ AGEN_MUSIC_CODE static unsigned repeats(Section s,unsigned generation,unsigned w
   while(bars>1&&bars*240000u>bpm*limit)bars/=2;
   const unsigned passes=(bars*16u)/(2u*((width==32)?32u:16u));
   return passes?passes:1;
+}
+// Eight-pixel cue for the top row. Red fills toward the next Break. Once that
+// break has started, orange fills toward the Fill, then red resumes toward the
+// break of the next cycle. `step` is the step inside `generation`; `generationSteps`
+// is that generation's real length in steps (already scheduled passes).
+struct FormCue { unsigned pixels; bool fill; };
+AGEN_MUSIC_CODE static unsigned scheduledSteps(unsigned generation,unsigned width,unsigned bpm,bool longForm){
+  const unsigned columns=width==32?32u:16u;
+  return repeats(section(generation),generation,columns,bpm,longForm)*columns;
+}
+AGEN_MUSIC_CODE static FormCue formCue(unsigned generation,unsigned step,unsigned generationSteps,unsigned width,unsigned bpm,bool longForm){
+  const unsigned cycle=generation/24u*24u;
+  const unsigned index=generation-cycle;
+  unsigned origin[25]={};unsigned at=0;
+  for(unsigned i=0;i<24;++i){
+    origin[i]=at;
+    unsigned len=i==index?(generationSteps?generationSteps:1u):scheduledSteps(cycle+i,width,bpm,longForm);
+    if(!len)len=1;
+    at+=len;
+  }
+  origin[24]=at;
+  const unsigned cycleLen=at?at:1;
+  unsigned pos=origin[index]+(generationSteps&&step<generationSteps?step:generationSteps?generationSteps-1:0);
+  if(pos>=cycleLen)pos=cycleLen-1;
+  unsigned breakAt=0,fillAt=0;bool sawBreak=false,sawFill=false;
+  for(unsigned i=0;i<24;++i){
+    const Section part=section(cycle+i);
+    if(part==Section::Break&&!sawBreak){breakAt=origin[i];sawBreak=true;}
+    if(part==Section::Fill&&!sawFill){fillAt=origin[i];sawFill=true;}
+  }
+  unsigned start=0,end=breakAt?breakAt:cycleLen;bool fill=false;
+  if(pos>=fillAt){start=fillAt;end=cycleLen+breakAt;}
+  else if(pos>=breakAt){start=breakAt;end=fillAt;fill=true;}
+  const unsigned span=end>start?end-start:1;
+  const unsigned elapsed=pos>=start?pos-start:0;
+  unsigned pixels=elapsed*8u/(span>1?span-1:1);
+  if(pixels>8)pixels=8;
+  return {pixels,fill};
 }
 AGEN_MUSIC_CODE static unsigned degree(Scale sc,unsigned phrase){
   static const uint8_t major[] AGEN_MUSIC_DATA={0,5,3,4};
@@ -128,7 +168,8 @@ AGEN_MUSIC_CODE static int fitPitch(int reference,int tonic,bool minor,unsigned 
   return fitPitch(reference,tonic,defaultScale(minor),phrase,channel,step);
 }
 // Bass stays a root groove: downbeats lock to the chord, offbeats only octave-jump.
-AGEN_MUSIC_CODE static bool bassHit(unsigned step,unsigned density,uint32_t seed){
+AGEN_MUSIC_CODE static bool bassHit(unsigned step,unsigned density,uint32_t seed,bool deep=false){
+  if(deep)return step%4==0; // one note per beat: the kick and the bass share the pulse
   if(step%4==0)return true;
   if(!density)return false;
   const uint32_t h=(seed*1664525u+step*1013904223u)>>8;
@@ -136,9 +177,9 @@ AGEN_MUSIC_CODE static bool bassHit(unsigned step,unsigned density,uint32_t seed
   if(step%2)chance=chance*2/3;
   return h%100<chance;
 }
-AGEN_MUSIC_CODE static int bassPitch(int reference,int tonic,Scale sc,unsigned phrase,unsigned step,uint32_t seed,int lock=-1){
+AGEN_MUSIC_CODE static int bassPitch(int reference,int tonic,Scale sc,unsigned phrase,unsigned step,uint32_t seed,int lock=-1,bool deep=false){
   const int root=nearestPc(reference,chordPc(tonic,sc,phrase,0,lock));
-  if(step%4==0)return root;
+  if(deep||step%4==0)return root; // deep house stays on the low root; no octave jumps
   const uint32_t h=(seed+step*977u)>>8;
   if(h%4==0)return nearestPc(reference+12,chordPc(tonic,sc,phrase,0,lock));
   return root;
@@ -157,7 +198,7 @@ AGEN_MUSIC_CODE static int melodyPitch(int reference,int tonic,Scale sc,unsigned
                                       unsigned channel,unsigned step,uint32_t seed,unsigned motion=MotionLive,unsigned density=2,int lock=-1){
   const Section s=section(phrase);
   const int baseline=fitPitch(reference,tonic,sc,phrase,channel,step,lock);
-  if(motion==MotionHold||motion==MotionLong||((channel==6||channel==14)&&step%4==0))return baseline;
+  if(motion==MotionHold||motion==MotionLong||motion==MotionDeep||((channel==6||channel==14)&&step%4==0))return baseline;
   uint32_t h=seed^(phrase/2*374761393u)^(channel*668265263u)^(step*2246822519u);
   h=(h^(h>>13))*1274126177u;h^=h>>16;
   unsigned chance=s==Section::Variation||s==Section::Fill?90:
@@ -230,8 +271,12 @@ AGEN_MUSIC_CODE static Section supportedSection(Section requested,unsigned found
 // sample bass) after the first rise, colour later, everything on the drop.
 // From the second cycle on the beat is already established. Voice 8 is not a
 // guest here: vocals have their own climax schedule.
-AGEN_MUSIC_CODE static bool guestWanted(unsigned channel,unsigned generation,Section s){
+AGEN_MUSIC_CODE static bool guestWanted(unsigned channel,unsigned generation,Section s,bool deep=false){
   const unsigned slot=(generation/2)%12;const bool established=generation>=24;
+  // Deep house leaves the tom, the second kick, the clap and the keys line out.
+  // The backbeat arrives with the drop, not as a fill.
+  if(deep&&(channel==4||channel==5||channel==7||channel==13))return false;
+  if(deep&&channel==2)return s==Section::Drop;
   if(channel==3||channel==11)return true;
   const bool guest=channel==1||channel==2||channel==4||channel==5||channel==6||channel==7||channel==13||channel==14;
   if(s==Section::Drop)return guest;
@@ -244,7 +289,8 @@ AGEN_MUSIC_CODE static bool guestWanted(unsigned channel,unsigned generation,Sec
 }
 // Voice 8 carries vocals. They are a feature, not a bed: they sing over the drop
 // and answer the second half of the melodic solo, and rest everywhere else.
-AGEN_MUSIC_CODE static bool vocalWanted(unsigned generation,Section s){
+AGEN_MUSIC_CODE static bool vocalWanted(unsigned generation,Section s,bool deep=false){
+  if(deep)return s==Section::Drop&&generation%2==0; // one phrase on the drop, then it goes
   return s==Section::Drop||(s==Section::Break&&generation%2==1);
 }
 // Velocity for a kept hit. A voice drawn at one level gets a metric groove; a
@@ -295,8 +341,19 @@ AGEN_MUSIC_CODE static unsigned volumeScale(Section s,unsigned ch,bool bass,unsi
 // `hit` says a drawn or generated hit already sits on this step. The groove on
 // the page is the one to play: sections thin or decorate it and never swap in a
 // stock four-on-the-floor or backbeat.
-AGEN_MUSIC_CODE static int drum(Section s,unsigned channel,unsigned step,unsigned width,uint32_t seed,bool finale=true,bool hit=false){
+AGEN_MUSIC_CODE static int drum(Section s,unsigned channel,unsigned step,unsigned width,uint32_t seed,bool finale=true,bool hit=false,bool deep=false){
   if(channel==7)channel=1; // voice 7 is a second kick: same part as voice 1
+  if(deep){
+    // Kick and drawn hats stay. Everything else is an offbeat hat, plus a soft
+    // backbeat only when the drop arrives. No rolls, ghosts or pushed kicks.
+    if(s==Section::Break)return 0;
+    if(finale&&(s==Section::Build||s==Section::Fill)&&step==width-1)return 0;
+    if((s==Section::Build||s==Section::Fill)&&channel==1)return 0;
+    if(hit)return -1;
+    if(channel==3&&step%4==2)return 54;
+    if(channel==2&&s==Section::Drop&&step%8==4)return 72;
+    return 0;
+  }
   const unsigned phase=step%16;const bool tail=step>=width*3/4;
   const uint32_t h=(seed*1664525u+step*1013904223u+channel*977u)>>8;
   if(s==Section::Break)return 0; // melodic solo: every drum rests

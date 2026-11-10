@@ -8,7 +8,7 @@ description: Five-pad controls, fills, faders, effects, presets and browser boun
 
 **Hosted build:** [sim.tyng.app](https://sim.tyng.app/). **Source:** [`tools/sim/`](https://github.com/Soundpauli/toern/tree/main/tools/sim).
 
-This is a JavaScript model of the instrument, with Web Audio synthesis and scheduling. It does not execute the Teensy firmware. Both **16×16** and **32×16** panel layouts use the current control vocabulary; the selector changes matrix geometry, not firmware version. The INFO version follows `VERSION` in `platformio/toern.ino` (currently v3.03b). Local changes reach the hosted site only after a separate deployment.
+This is a JavaScript model of the instrument, with Web Audio synthesis and scheduling. It does not execute the Teensy firmware. Both **16×16** and **32×16** panel layouts use the current control vocabulary; the selector changes matrix geometry, not firmware version. The INFO version follows `VERSION` in `platformio/toern.ino` (currently v3.03c). Local changes reach the hosted site only after a separate deployment.
 
 ## Five touch pads
 

@@ -21,6 +21,7 @@ static inline int monoPitch(int reference,int tonic,toern_autogen_music::Scale s
   if(motion==MotionLive&&density>=2&&section(phrase)==Section::Variation&&step%4&&h%4==0)
     target+=(h&4)?2:-2;
   const int fitted=nearSource(fitPitch(target,tonic,sc,phrase,channel,step,lock),reference);
+  if(motion==MotionDeep)return fitted; // the hook stays on the chord; the space is the part
   if(motion==MotionSoft||density<2){const int delta=fitted-reference;if(delta>2||delta<-2)return reference;}
   return fitted;
 }

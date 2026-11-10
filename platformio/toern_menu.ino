@@ -2582,15 +2582,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       const uint8_t scale=autogenScaleChoice();
       const uint8_t density=autogenDensity();
       drawMenuText("AGEN",2,10,currentMenuParentTextColor());
-      static const char *const motionNames[]={"HOLD","SOFT","LONG","LIVE"};
+      static const char *const motionNames[]={"HOLD","SOFT","LONG","LIVE","DEEP"};
       static const char *const scaleNames[]={"AUTO","MAJ","MIN","HRM","DOR","PEN","BLU"};
       static const char *const densityNames[]={"LOW","MED","HIGH","MAX"};
-      static const CRGB motionColors[]={UI_DIM_RED,UI_GREEN,UI_CYAN,UI_YELLOW};
+      static const CRGB motionColors[]={UI_DIM_RED,UI_GREEN,UI_CYAN,UI_YELLOW,UI_BLUE};
       extern int autogenMenuFocus;
       const int agenShow=autogenMenuFocus;
       const char *label=agenShow==0?scaleNames[min(scale,(uint8_t)6)]:
-          agenShow==1?densityNames[min(density,(uint8_t)3)]:motionNames[min(motion,(uint8_t)3)];
-      const CRGB color=agenShow==0?UI_WHITE:agenShow==1?UI_ORANGE:motionColors[min(motion,(uint8_t)3)];
+          agenShow==1?densityNames[min(density,(uint8_t)3)]:motionNames[min(motion,(uint8_t)4)];
+      const CRGB color=agenShow==0?UI_WHITE:agenShow==1?UI_ORANGE:motionColors[min(motion,(uint8_t)4)];
       drawMenuValue(label,2,3,color);
       drawMenuIndicator('L','W',1);
       drawMenuIndicator('L','Y',2);
@@ -5052,14 +5052,14 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[0].writeCounter((int32_t)autogenScaleChoice());currentMode->pos[0]=autogenScaleChoice();
         Encoder[1].writeMin((int32_t)0);Encoder[1].writeMax((int32_t)3);
         Encoder[1].writeCounter((int32_t)autogenDensity());currentMode->pos[1]=autogenDensity();
-        Encoder[2].writeMin((int32_t)0);Encoder[2].writeMax((int32_t)3);
+        Encoder[2].writeMin((int32_t)0);Encoder[2].writeMax((int32_t)4);
         Encoder[2].writeCounter((int32_t)autogenMotion());currentMode->pos[2]=autogenMotion();
         lastScale=autogenScaleChoice();lastDensity=autogenDensity();lastMotion=autogenMotion();
         menuFirstEnter=false;
       }
       const int scale=constrain((int)currentMode->pos[0],0,6);
       const int density=constrain((int)currentMode->pos[1],0,3);
-      const int motion=constrain((int)currentMode->pos[2],0,3);
+      const int motion=constrain((int)currentMode->pos[2],0,4);
       bool changed=false;
       if(scale!=lastScale){setAutogenScaleChoice((uint8_t)scale);lastScale=scale;autogenMenuFocus=0;changed=true;}
       if(density!=lastDensity){setAutogenDensity((uint8_t)density);lastDensity=density;autogenMenuFocus=1;changed=true;}

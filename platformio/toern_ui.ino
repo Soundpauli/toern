@@ -1523,10 +1523,20 @@ FLASHMEM void drawAutogenPages(){
   drawAutogenPageState(playing,other,ready);
 }
 FLASHMEM static void drawAutogenActivity(unsigned progress,bool ready,uint32_t now){
+  (void)ready;(void)now;
   const bool performance=autogenViewingPerformance();
   const CRGB dim=performance?CRGB(4,12,30):CRGB(30,4,18);
   const CRGB filled=performance?CRGB(40,100,230):CRGB(230,30,150);
-  const unsigned first=maxX>=32?16:maxX-4;
+  if(maxX>=32){
+    unsigned cue=0;bool towardFill=false;
+    autogenFormCue(cue,towardFill);
+    const CRGB cueDim=towardFill?CRGB(48,18,0):CRGB(40,0,0);
+    const CRGB cueLit=towardFill?CRGB(255,120,0):CRGB(255,0,0);
+    for(unsigned x=16;x<=23;++x)light(x,16,x-16<cue?cueLit:cueDim);
+    for(unsigned x=24;x<=maxX;++x)light(x,16,x-24<progress?filled:dim);
+    return;
+  }
+  const unsigned first=maxX>4?maxX-4:1;
   for(unsigned x=first;x<=maxX;++x)
     light(x,16,x-first<progress?filled:dim);
 }

@@ -754,14 +754,14 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
   }
   if (s.mode === "mode" && s.subIndex === 10) {
     // Firmware AGEN: encoder 3 = HOLD/SOFT/LONG/LIVE; indicator 4 = active G/R.
-    const motion = Math.max(0, Math.min(3, s.agen?.motion ?? 1));
+    const motion = Math.max(0, Math.min(4, s.agen?.motion ?? 1));
     const scale = Math.max(0, Math.min(6, s.agen?.scale ?? 0));
     const density = Math.max(0, Math.min(3, s.agen?.density ?? 1));
     const focus = s.agenMenuFocus ?? 2;
-    const motionNames = ["HOLD", "SOFT", "LONG", "LIVE"];
+    const motionNames = ["HOLD", "SOFT", "LONG", "LIVE", "DEEP"];
     const scaleNames = ["AUTO", "MAJ", "MIN", "HRM", "DOR", "PEN", "BLU"];
     const densityNames = ["LOW", "MED", "HIGH", "MAX"];
-    const motionColors = [UI_DIM_RED, UI_GREEN, UI_CYAN, UI_YELLOW];
+    const motionColors = [UI_DIM_RED, UI_GREEN, UI_CYAN, UI_YELLOW, UI_BLUE];
     const label = focus === 0 ? scaleNames[scale] : focus === 1 ? densityNames[density] : motionNames[motion];
     const color = focus === 0 ? UI_WHITE : focus === 1 ? UI_ORANGE : motionColors[motion];
     matrix.drawText("AGEN",2,10,parent);
@@ -1162,7 +1162,7 @@ export function drawDemo(matrix,s,now) {
   }
 }
 
-const VERSION = "v3.03b";
+const VERSION = "v3.03c";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
 function drawInfo(matrix, s, now, color) {

@@ -51,6 +51,7 @@ int main(){
   // LONG keeps the drawn note, fitted to the chord, on every page of a phrase.
   const int fitted=toern_autogen_register::nearSource(toern_autogen_music::fitPitch(60,key,false,phrase,ch,step),60);
   assert(toern_autogen_register::monoPitch(60,key,false,phrase,ch,step,113,toern_autogen_music::MotionLong)==fitted);
+  assert(toern_autogen_register::monoPitch(60,key,false,phrase,ch,step,113,toern_autogen_music::MotionDeep)==fitted);
   assert(toern_autogen_register::monoPitch(60,key,false,phrase,ch,step,7,toern_autogen_music::MotionLong)==fitted);
  }
 }

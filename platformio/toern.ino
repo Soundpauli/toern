@@ -10,7 +10,7 @@
 #include "src/toern_pattern_slots.h"
 #include "src/toern_kit_browser.h"
 
-#define VERSION "v3.03b"
+#define VERSION "v3.03c"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -411,6 +411,7 @@ unsigned autogenOtherPage();
 bool autogenNextReady();
 unsigned autogenRepeatsLeft();
 void autogenUiSnapshot(unsigned &playing,unsigned &other,bool &ready,unsigned &progress);
+void autogenFormCue(unsigned &pixels,bool &towardFill);
 bool autogenStatusVisible();
 void drawAutogenStatus();
 bool autogenMuted(int channel);
@@ -4646,15 +4647,15 @@ FLASHMEM void loadLedModeEarlyFromEEPROM() {
 }
 
 FLASHMEM void setup() {
-  // First application startup signal: four 0.5 s on/off blinks, then 1 s quiet.
+  // First application startup signal: three short blinks on the Teensy LED.
   pinMode(LED_BUILTIN, OUTPUT);
-  for (uint8_t blink = 0; blink < 4; ++blink) {
+  for (uint8_t blink = 0; blink < 3; ++blink) {
     digitalWrite(LED_BUILTIN, HIGH);
-    delay(500);
+    delay(125);
     digitalWrite(LED_BUILTIN, LOW);
-    delay(500);
+    delay(125);
   }
-  delay(1000);
+  delay(250);
 
   Serial.begin(115200);
   if (exttouch) {

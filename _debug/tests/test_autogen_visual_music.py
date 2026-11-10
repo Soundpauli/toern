@@ -32,6 +32,8 @@ bool autogenViewingPerformance(){return true;}
 bool autogenActive(){return active;}unsigned autogenPage(){return source;}unsigned autogenOtherPage(){return other;}
 bool autogenNextReady(){return ready;}unsigned autogenRepeatsLeft(){return remaining;}
 void autogenUiSnapshot(unsigned &p,unsigned &o,bool &r,unsigned &n){p=source;o=other;r=ready;n=progress;}
+unsigned formCuePixels=3;bool formCueFill=false;
+void autogenFormCue(unsigned &pixels,bool &towardFill){pixels=formCuePixels;towardFill=formCueFill;}
 void light(unsigned x,unsigned y,CRGB c){assert(x>=1&&x<=maxX&&y>=1&&y<=16);pixels[16-y][x-1]=c;}
 void drawText(const char*s,int x,int y,CRGB c){
  label=s;labelX=x;labelY=y;labelColor=c;
@@ -46,6 +48,7 @@ void save(const char *directory){
 int main(int argc,char **argv){assert(argc==2);
  for(unsigned width:{16u,32u})for(unsigned page:{10u,11u})for(bool done:{false,true})for(unsigned fraction=0;fraction<=12;++fraction){
   maxX=width;source=page;other=page==10?11:10;motifSlot=width==16?9:1;ready=done;progress=fraction;
+  formCuePixels=fraction%9;formCueFill=fraction>6;
   for(auto &row:pixels)for(auto &c:row)c=CRGB(20,20,20);
   label.clear();clockMs=0;drawAutogenStatus();unsigned lit=0;
   for(unsigned x=1;x<=width;++x){auto c=pixels[0][x-1];if(c.r||c.g||c.b)++lit;
@@ -56,9 +59,16 @@ int main(int argc,char **argv){assert(argc==2);
    else if(x<(width>=32?16:width-4))assert(!c.r&&!c.g&&!c.b);
   }
   assert(lit>=10&&label.empty()); // the overlay never paints a numeral
-  const unsigned first=width>=32?16:width-4;
-  for(unsigned x=first;x<=width;++x){auto c=pixels[0][x-1];
-    assert(c.b==(x-first<fraction?230:30));
+  if(width>=32){
+   for(unsigned x=16;x<=23;++x){auto c=pixels[0][x-1];
+    const bool lit=x-16<formCuePixels;
+    if(formCueFill)assert(c.r==(lit?255:48)&&c.g==(lit?120:18)&&c.b==0);
+    else assert(c.r==(lit?255:40)&&c.g==0&&c.b==0);
+   }
+   for(unsigned x=24;x<=width;++x){auto c=pixels[0][x-1];assert(c.b==(x-24<fraction?230:30));}
+  }else{
+   const unsigned first=width-4;
+   for(unsigned x=first;x<=width;++x){auto c=pixels[0][x-1];assert(c.b==(x-first<fraction?230:30));}
   }
   for(unsigned y=1;y<16;++y)for(unsigned x=0;x<width;++x){auto c=pixels[y][x];assert(c.r==20&&c.g==20&&c.b==20);}
   if(page==10&&done&&fraction==8)save(argv[1]);
@@ -75,6 +85,31 @@ int main(int argc,char **argv){assert(argc==2);
  for(unsigned i=0;i<32;++i)cursor=held.advance(cursor);
  assert(held.statusProgress(cursor,17)==8); // half filled after the first of two passes
  using namespace toern_autogen_music;
+ for(unsigned width:{16u,32u})for(bool longForm:{false,true}){
+  unsigned pos=0,breakAt=0,fillAt=0,cycle=0;bool seenBreak=false,seenFill=false;
+  for(unsigned g=0;g<24;++g){
+   const unsigned len=scheduledSteps(g,width,120,longForm);
+   if(section(g)==Section::Break&&!seenBreak){breakAt=pos;seenBreak=true;}
+   if(section(g)==Section::Fill&&!seenFill){fillAt=pos;seenFill=true;}
+   cycle+=len;pos+=len;
+  }
+  assert(seenBreak&&seenFill&&breakAt>0&&fillAt>breakAt&&cycle>fillAt);
+  unsigned walk=0;
+  for(unsigned g=0;g<24;++g){
+   const unsigned len=scheduledSteps(g,width,120,longForm);
+   for(unsigned step=0;step<len;++step,++walk){
+    const FormCue cue=formCue(g,step,len,width,120,longForm);
+    assert(cue.pixels<=8);
+    const bool orange=walk>=breakAt&&walk<fillAt;
+    assert(cue.fill==orange);
+    const unsigned start=orange?breakAt:walk>=fillAt?fillAt:0;
+    const unsigned end=orange?fillAt:walk>=fillAt?cycle+breakAt:breakAt;
+    const unsigned span=end-start;
+    const unsigned expect=(walk-start)*8u/(span>1?span-1:1);
+    assert(cue.pixels==(expect>8?8:expect));
+   }
+  }
+ }
  for(int tonic=0;tonic<12;++tonic)for(bool minor:{false,true})for(int reference:{12,24,36,48,60,72,84,96,108,120})
   for(unsigned phrase=0;phrase<16;++phrase)for(unsigned step=0;step<16;++step)for(unsigned ch:{6u,11u,13u,14u}){
    int pitch=fitPitch(reference,tonic,minor,phrase,ch,step);bool inScale=false,inChord=false;
@@ -160,6 +195,7 @@ int main(int argc,char **argv){assert(argc==2);
  for(unsigned g=0;g<48;++g)for(auto s:{Section::Groove,Section::Variation,Section::Break,Section::Build,Section::Fill,Section::Drop,Section::Solo})
   assert(vocalWanted(g,s)==(s==Section::Drop||(s==Section::Break&&g%2==1)));
  {unsigned sung=0;for(unsigned g=0;g<24;++g)sung+=vocalWanted(g,section(g));assert(sung==3);}
+ {unsigned deepSung=0;for(unsigned g=0;g<48;++g)deepSung+=vocalWanted(g,section(g),true);assert(deepSung==2);}
  for(unsigned g=0;g<24;g+=2)assert(section(g)==section(g+1)&&degree(false,g)==degree(false,g+1));
  {
   const Section form[]={Section::Groove,Section::Variation,Section::Build,Section::Groove,
@@ -189,6 +225,7 @@ int main(int argc,char **argv){assert(argc==2);
   for(unsigned step=0;step<16;++step)for(unsigned ch:{6u,7u,8u,11u,13u,14u}){
    const int reference=ch==6||ch==14?36:60;
    assert(melodyPitch(reference,tonic,minor,phrase,ch,step,113,MotionLong)==fitPitch(reference,tonic,minor,phrase,ch,step));
+   assert(melodyPitch(reference,tonic,minor,phrase,ch,step,113,MotionDeep)==fitPitch(reference,tonic,minor,phrase,ch,step));
    for(unsigned lane=0;lane<3;++lane){
     const int voiced=voicingPitch(reference,tonic,minor,phrase,lane,113,true);
     assert(voiced%12==chordPc(tonic,minor,phrase,lane)&&abs(voiced-reference)<=6);
@@ -232,6 +269,8 @@ int main(int argc,char **argv){assert(argc==2);
   if(bassHit(step,3,9))++dense;
  }
  assert(sparse==16&&dense>sparse);
+ unsigned deepBass=0;for(unsigned step=0;step<64;++step){if(bassHit(step,3,9,true)){++deepBass;assert(step%4==0);}const int low=bassPitch(36,0,ScaleMajor,0,step,9,-1,true);assert(low%12==0&&low<48);}
+ assert(deepBass==16);
  // A drawn progression is read as scale degrees, inversions included, and pins every voice to it.
  for(int tonic=0;tonic<12;++tonic)for(Scale sc:{ScaleMajor,ScaleMinor,ScaleHarmonic,ScaleDorian})for(unsigned d=0;d<7;++d){
   unsigned pcs=0;for(unsigned t=0;t<3;++t)pcs|=1u<<scalePc(tonic,sc,d+t*2);
@@ -281,6 +320,15 @@ int main(int argc,char **argv){assert(argc==2);
   assert(bassSamplePitch(31,false)==43&&bassSamplePitch(36,false)==36&&bassSamplePitch(55,true)==55&&bassSamplePitch(60,true)==48);
   if(s==Section::Solo||s==Section::Fill)assert(guestWanted(5,g,s));
   if(s==Section::Build)assert(guestWanted(2,g,s));
+  assert(!guestWanted(4,g,s,true)&&!guestWanted(5,g,s,true)&&!guestWanted(7,g,s,true)&&!guestWanted(13,g,s,true));
+  assert(guestWanted(2,g,s,true)==(s==Section::Drop));
+  for(unsigned step=0;step<16;++step){
+   assert(drum(Section::Groove,3,step,16,9,true,false,true)==(step%4==2?54:0));
+   assert(drum(Section::Groove,2,step,16,9,true,false,true)==0);
+   assert(drum(Section::Break,1,step,16,9,true,true,true)==0);
+   if(step%4==0)assert(drum(Section::Groove,1,step,16,9,true,true,true)==-1);
+  }
+  assert(drum(Section::Drop,2,4,16,9,true,false,true)==72);
  }
  puts("PASS: AGEN page-header progress line on 16/32 columns; all 12 major/minor keys; chord tones, bass roots, bounded registers, drawn progressions, full melodic/drum solos, kept grooves, velocity accents, staged guests and build/fill/drop dynamics");
 }
