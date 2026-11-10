@@ -17,6 +17,7 @@ void generateTechnoPattern(unsigned int start, unsigned int end, unsigned int pa
 void generateHipHopPattern(unsigned int start, unsigned int end, unsigned int page);
 void generateDnBPattern(unsigned int start, unsigned int end, unsigned int page);
 void generateHousePattern(unsigned int start, unsigned int end, unsigned int page);
+void generateDeepPattern(unsigned int start, unsigned int end, unsigned int page);
 void generateAmbientPattern(unsigned int start, unsigned int end, unsigned int page);
 
 // ---- NEW/genre generation helpers (no RAM1 globals; no large locals) ----
@@ -3410,8 +3411,12 @@ FLASHMEM void generateGenreTrack() {
       case 4: // HOUS - House patterns
         generateHousePattern(start, end, page);
         break;
+
+      case 5: // DEEP - minimal deep house, the groove DEEP AGEN keeps
+        generateDeepPattern(start, end, page);
+        break;
         
-      case 5: // AMBT - Ambient patterns
+      case 6: // AMBT - Ambient patterns
         generateAmbientPattern(start, end, page);
         break;
     }
@@ -3462,7 +3467,10 @@ FLASHMEM void setGenreBPM() {
     case 4: // HOUS - House
       targetBPM = 124 + random(-4, 5); // 120-128 BPM
       break;
-    case 5: // AMBT - Ambient
+    case 5: // DEEP - minimal deep house
+      targetBPM = 122 + random(-2, 3); // 120-124 BPM
+      break;
+    case 6: // AMBT - Ambient
       targetBPM = 70 + random(-5, 6); // 65-75 BPM
       break;
   }
@@ -3980,6 +3988,38 @@ FLASHMEM void generateHousePattern(unsigned int start, unsigned int end, unsigne
       if (row > 16) row -= 7;
       int vel = 92 + random(-4, 5);
       placeGenNote(c, row, 8, vel, 50, 2);
+    }
+  }
+}
+
+// Minimal deep house. The same 16-step bar on every page: four-on-the-floor,
+// offbeat hats, a soft backbeat, a root bass and a minor-seven stab on beat 2
+// and beat 4. Harmony walks i–VI–iv–VII. This is the grid DEEP AGEN keeps.
+FLASHMEM void generateDeepPattern(unsigned int start, unsigned int end, unsigned int page) {
+  struct Chord { uint8_t bassRow; uint8_t rows[3]; uint8_t midi[3]; };
+  static const Chord loop[] = {
+    {7,  {10, 12, 14}, {58, 60, 63}}, // i  C:  Bb3 C4 Eb4
+    {15, {10, 12, 14}, {56, 60, 63}}, // VI Ab: Ab3 C4 Eb4
+    {12, {9,  11, 13}, {53, 56, 60}}, // iv F:  F3 Ab3 C4
+    {5,  {10, 11, 14}, {58, 62, 65}}  // VII Bb: Bb3 D4 F4
+  };
+  const Chord &chord = loop[(page - 1) & 3];
+  for (unsigned int c = start; c < end; c++) {
+    const int beat = (int)((c - start) % 16u) + 1;
+    if (beat == 1 || beat == 5 || beat == 9 || beat == 13)
+      placeGenNote(c, 3, 1, beat == 1 ? 116 : 110, 100, 1);
+    if (beat == 3 || beat == 7 || beat == 11 || beat == 15)
+      placeGenNote(c, 8, 3, 62, 100, 1);
+    if (beat == 5 || beat == 13)
+      placeGenNote(c, 6, 2, 76, 100, 1);
+    if (beat == 1 || beat == 5 || beat == 9 || beat == 13)
+      placeGenNote(c, chord.bassRow, 6, 104, 100, 1);
+    if (beat == 5 || beat == 6 || beat == 13 || beat == 14) {
+      const uint8_t condition = (beat == 6 || beat == 14) ? 22 : 1;
+      for (int tone = 0; tone < 3; ++tone) {
+        placeGenNote(c, chord.rows[tone], 11, 70, 100, condition);
+        note[c][chord.rows[tone]].midiPitch = chord.midi[tone];
+      }
     }
   }
 }

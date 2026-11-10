@@ -4,6 +4,7 @@ export const GENRES = [
   { name: "HIPH", color: [255, 0, 255], bpm: 85 },
   { name: "DNB", color: [0, 255, 0], bpm: 174 },
   { name: "HOUS", color: [0, 100, 255], bpm: 124 },
+  { name: "DEEP", color: [40, 20, 140], bpm: 122 },
   { name: "AMBT", color: [255, 255, 0], bpm: 70 },
 ];
 
@@ -119,6 +120,26 @@ function house(note, step, beat, page) {
   if (roll(100) < 14) put(note, step, degree(MAJOR, page, beat + 2), 8, 64, 50, 2);
 }
 
+function deepBar(note, step, beat, page) {
+  const chord = [
+    { bass: 7, rows: [10, 12, 14], midi: [58, 60, 63] },
+    { bass: 15, rows: [10, 12, 14], midi: [56, 60, 63] },
+    { bass: 12, rows: [9, 11, 13], midi: [53, 56, 60] },
+    { bass: 5, rows: [10, 11, 14], midi: [58, 62, 65] },
+  ][page % 4];
+  if (has([1, 5, 9, 13], beat)) put(note, step, 3, 1, beat === 1 ? 116 : 110);
+  if (has([3, 7, 11, 15], beat)) put(note, step, 8, 3, 62);
+  if (has([5, 13], beat)) put(note, step, 6, 2, 76);
+  if (has([1, 5, 9, 13], beat)) put(note, step, chord.bass, 6, 104);
+  if (has([5, 6, 13, 14], beat)) {
+    const condition = beat === 6 || beat === 14 ? 22 : 1;
+    chord.rows.forEach((row, tone) => {
+      put(note, step, row, 11, 70, 100, condition);
+      if (note[step]?.[row]) note[step][row].midiPitch = chord.midi[tone];
+    });
+  }
+}
+
 function ambient(note, step, beat, page) {
   const chance = page % 3 === 0 ? 15 : page % 3 === 1 ? 25 : 35;
   if (roll(100) < chance) {
@@ -131,7 +152,7 @@ function ambient(note, step, beat, page) {
   if (roll(100) < 5) put(note, step, 5, 2, 44, 35, 8);
 }
 
-const WRITE = [null, techno, hiphop, dnb, house, ambient];
+const WRITE = [null, techno, hiphop, dnb, house, deepBar, ambient];
 
 export function generateGenre(note, type, pages, cols, steps) {
   clearNotes(note, steps);

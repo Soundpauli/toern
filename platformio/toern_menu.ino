@@ -463,7 +463,7 @@ int aiBaseStartPage = 1; // Start of base page range for AI analysis
 int aiBaseEndPage = 1;   // End of base page range for AI analysis
 
 // Genre generation variables
-int genreType = 0; // 0=BLNK, 1=TECH, 2=HIPH, 3=DNB, 4=HOUS, 5=AMBT
+int genreType = 0; // 0=BLNK, 1=TECH, 2=HIPH, 3=DNB, 4=HOUS, 5=DEEP, 6=AMBT
 int genreLength = 8; // Default length for genre generation
 
 // NEW mode state management
@@ -3229,13 +3229,14 @@ FLASHMEM void drawAdditionalFeatures(int setting) {
 
 FLASHMEM void drawGenreSelection() {
   // Draw genre options on y=8
-  const char* genres[] = {"BLNK", "TECH", "HIPH", "DNB", "HOUS", "AMBT"};
+  const char* genres[] = {"BLNK", "TECH", "HIPH", "DNB", "HOUS", "DEEP", "AMBT"};
   CRGB genreColors[] = {
     CRGB(100, 100, 100), // BLNK - gray
     CRGB(255, 100, 0),   // TECH - orange
     CRGB(255, 0, 255),   // HIPH - magenta
     CRGB(0, 255, 0),     // DNB - green
     CRGB(0, 100, 255),   // HOUS - blue
+    CRGB(40, 20, 140),   // DEEP - indigo
     CRGB(255, 255, 0)    // AMBT - yellow
   };
   
@@ -5857,7 +5858,7 @@ FLASHMEM void showNewFileMode() {
   if (newScreenFirstEnter) {
     // Template selection on 3rd encoder (encoder 2)
     Encoder[2].writeCounter((int32_t)genreType);
-    Encoder[2].writeMax((int32_t)5);
+    Encoder[2].writeMax((int32_t)6);
     Encoder[2].writeMin((int32_t)0);
     currentMode->pos[2] = genreType;
 
@@ -5893,7 +5894,7 @@ FLASHMEM void showNewFileMode() {
   int currentGenreType = currentMode->pos[2];
   if (currentGenreType != lastGenreType) {
     genreType = currentGenreType;
-    if (genreType > 5) genreType = 5;
+    if (genreType > 6) genreType = 6;
     if (genreType < 0) genreType = 0;
     
     // Update encoder to match clamped value

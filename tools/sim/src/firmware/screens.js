@@ -53,7 +53,7 @@ export const SUBS = {
   mode: ["FLOW", "PMOD", "LOOP", "VMOD", "CHLD", "IMG", "PONG", "SONG", "TCHY", "AUTO", "AGEN"],
   etc: ["INFO", "SD", "BATT", "ADV", "RSET"],
   adv: ["CRSR", "LEDS", "RAM", "LGHT", "COLR", "EYES", "FIRE", "2-CH", "USBP", "HFC"],
-  pat: ["TECH", "HIPH", "DNB", "HOUS", "AMBT"],
+  pat: ["TECH", "HIPH", "DNB", "HOUS", "DEEP", "AMBT"],
 };
 const SUB_SLOTS = {
   recs: [["recs", 0], ["recs", 1], ["recs", 5], ["recs", 2], ["recs", 3], ["recs", 4]],
