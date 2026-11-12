@@ -98,10 +98,11 @@ actual firmware endpoint with mock EEPROM/audio. Build the hardware variants wit
 
 ## Full 16 MB PSRAM diagnostic
 
-Select **RAM test · 16 MB** in Firmware and upload it using the existing USB
-flasher. After restart, open **Test all 16 MB of RAM**, connect the running Teensy,
-and start the test. Its progress and PASS/FAIL result appear on the page. Restore
-the usual instrument build afterward using the restore button and flasher.
+Open the **RAM test · 16 MB** subpage from the main firmware tool and upload the
+diagnostic with the USB flasher. After restart, open **Test all 16 MB of RAM**,
+connect the running Teensy, and start the test. Its progress and PASS/FAIL result
+appear on the page. Restore the usual instrument build afterward with the restore
+button (returns to the main firmware page) and flasher.
 EEPROM and SD files are not accessed by the diagnostic; external RAM contents
 are overwritten. A Teensy 4.1 is required.
 

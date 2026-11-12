@@ -1,4 +1,3 @@
-import { mountRamTest } from './ram-test.js';
 import { mountSetupWizard } from './setup-wizard.js';
 import {
   FirmwareFile,
@@ -10,14 +9,12 @@ import {
 const FIRMWARE_URLS = {
   stable: new URL('./public/toern_firmware_3.0.ino.hex', import.meta.url).href,
   beta: new URL('./public/toern_firmware_beta.ino.hex', import.meta.url).href,
-  'beta-modulr': new URL('./public/toern_firmware_beta_modulr.ino.hex', import.meta.url).href,
-  ramtest: new URL('./public/toern_ram_test.ino.hex', import.meta.url).href
+  'beta-modulr': new URL('./public/toern_firmware_beta_modulr.ino.hex', import.meta.url).href
 };
 const FIRMWARE_NAMES = {
   stable: 'toern_firmware_3.0.ino.hex',
   beta: 'toern_firmware_beta.ino.hex',
-  'beta-modulr': 'toern_firmware_beta_modulr.ino.hex',
-  ramtest: 'toern_ram_test.ino.hex'
+  'beta-modulr': 'toern_firmware_beta_modulr.ino.hex'
 };
 const BETA_VERSION_URL = new URL('./public/beta-version.json', import.meta.url).href;
 
@@ -27,8 +24,6 @@ let firmwareName = null;
 let firmwareLoadRequest = 0;
 /** From #define VERSION in toern.ino (synced at loader build). */
 let betaVersion = '';
-let lastInstrumentFirmware = 'stable';
-let ramTest;
 
 function setLabelText(labelId, inputId, text) {
   const label = document.getElementById(labelId);
@@ -62,36 +57,16 @@ const flasher = new TeensyFlasher();
 const serialManager = new SerialPortManager();
 const setupWizard = mountSetupWizard(document.getElementById('setupWizard'), {
   beforeConnect: async () => {
-    if (ramTest?.busy) throw new Error('Stop the RAM test before connecting guided setup.');
-    await ramTest?.disconnect();
     if (serialManager.serialPort) await serialManager.closeSerialPort();
   },
   installFirmware: () => {
     const selected = document.querySelector('input[name="firmware"]:checked')?.value;
-    if (selected === 'stable' || selected === 'ramtest') {
+    if (selected === 'stable') {
       document.getElementById('firmwareBeta').checked = true;
       document.getElementById('firmwareBeta').dispatchEvent(new Event('change'));
     }
     document.getElementById('uploadFirmwareBtn').scrollIntoView({ behavior: 'smooth', block: 'center' });
     setStatus('Install the latest Beta (or BETA-MODULR for an external panel), then reconnect in guided setup. Your answers are kept.');
-  },
-});
-
-function chooseFirmware(value) {
-  document.querySelector(`input[name="firmware"][value="${value}"]`).checked = true;
-  document.querySelector(`input[name="firmware"][value="${value}"]`).dispatchEvent(new Event('change'));
-  document.getElementById('uploadFirmwareBtn').scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-ramTest = mountRamTest(document.getElementById('ramTest'), {
-  beforeConnect: async () => {
-    if (setupWizard.busy || document.getElementById('uploadFirmwareBtn').disabled) throw new Error('Wait for the current device operation to finish.');
-    await setupWizard.disconnect();
-    if (serialManager.serialPort) await serialManager.closeSerialPort();
-  },
-  selectTest: () => chooseFirmware('ramtest'),
-  restoreFirmware: () => {
-    chooseFirmware(lastInstrumentFirmware);
-    setStatus('Choose your usual instrument build, then Upload Firmware to restore TŒRN.');
   },
 });
 
@@ -149,11 +124,7 @@ async function loadFirmware() {
 
 document.querySelectorAll('input[name="firmware"]').forEach(input => {
   input.addEventListener('change', () => {
-    const ram = input.value === 'ramtest';
-    if (!ram) lastInstrumentFirmware = input.value;
     document.getElementById('betaWarning').classList.toggle('is-visible', input.value.startsWith('beta'));
-    document.getElementById('ramTestWarning').hidden = !ram;
-    document.getElementById('uploadFirmwareBtn').textContent = ram ? 'Upload RAM test' : 'Upload Firmware';
     loadFirmware();
   });
 });
@@ -257,7 +228,7 @@ async function ensureBootloader() {
 
 selectBtn.addEventListener('click', async () => {
   if (!navigator.hid) { setStatus('Use Chrome or Edge on a desktop computer.'); return; }
-  if (setupWizard.busy || ramTest.busy || uploadBtn.disabled) { setStatus('Finish or stop the current device operation first.'); return; }
+  if (setupWizard.busy || uploadBtn.disabled) { setStatus('Finish or stop the current device operation first.'); return; }
   try {
     const devices = await navigator.hid.requestDevice({ filters: TEENSY_DEVICE_FILTERS });
     if (devices && devices.length > 0) {
@@ -275,7 +246,7 @@ selectBtn.addEventListener('click', async () => {
 });
 
 document.getElementById('uploadFirmwareBtn').addEventListener('click', async () => {
-  if (setupWizard.busy || ramTest.busy) { setStatus('Finish or stop the current device test/setup before flashing.'); return; }
+  if (setupWizard.busy) { setStatus('Finish or stop the current device setup before flashing.'); return; }
   if (!firmwareData) {
     setStatus('Firmware is still loading.');
     return;
@@ -285,13 +256,10 @@ document.getElementById('uploadFirmwareBtn').addEventListener('click', async () 
     return;
   }
 
-  const isRamTest = document.getElementById('firmwareRamTest').checked;
   uploadBtn.disabled = true;
   document.querySelectorAll('input[name="firmware"]').forEach(input => { input.disabled = true; });
   setupWizard.setFlashing(true);
-  ramTest.setFlashing(true);
   try {
-    await ramTest.disconnect();
     await setupWizard.disconnect();
     const device = selectedDevice || await ensureBootloader();
     if (!device) {
@@ -300,23 +268,18 @@ document.getElementById('uploadFirmwareBtn').addEventListener('click', async () 
     }
     selectedDevice = null;
 
-    // HalfKay PID 0478 is shared across Teensy models, including Teensy 4.1.
-    // The selected RAM-test image targets TŒRN/4.1; PID is not a model ID.
-    if (isRamTest && ![0x0478, 0x0479].includes(device.productId)) throw new Error('Choose the Teensy HalfKay bootloader (16C0:0478) after pressing its programming button.');
     const fw = new FirmwareFile(firmwareData, firmwareName, device.productId);
     const blocks = await fw.buildBlocks();
 
     document.getElementById('flashProgress').value = 0;
-    setStatus(isRamTest ? 'Flashing RAM-test firmware...' : 'Flashing firmware...');
+    setStatus('Flashing firmware...');
 
     await flasher.flashFirmware(blocks, device, (progress) => {
       document.getElementById('flashProgress').value = progress;
     });
 
-    setStatus(isRamTest ? 'RAM-test firmware uploaded. Wait for the restart, then use Connect RAM tester below.' : 'Flash complete! You can now configure your device in guided setup below.');
-    ramTest.afterFlash(isRamTest);
-    if (!isRamTest) setupWizard.afterFlash();
-    if (isRamTest) document.getElementById('ramTest').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setStatus('Flash complete! You can now configure your device in guided setup below.');
+    setupWizard.afterFlash();
   } catch (err) {
     selectedDevice = null;
     const blocked = err && (err.name === 'SecurityError' || err.name === 'NotAllowedError' || err.name === 'NotFoundError');
@@ -328,15 +291,13 @@ document.getElementById('uploadFirmwareBtn').addEventListener('click', async () 
     uploadBtn.disabled = false;
     document.querySelectorAll('input[name="firmware"]').forEach(input => { input.disabled = false; });
     setupWizard.setFlashing(false);
-    ramTest.setFlashing(false);
   }
 });
 
 document.getElementById('openSerialBtn').addEventListener('click', async () => {
-  if (setupWizard.busy || ramTest.busy || uploadBtn.disabled) { setStatus('Wait for the current device operation to finish.'); return; }
+  if (setupWizard.busy || uploadBtn.disabled) { setStatus('Wait for the current device operation to finish.'); return; }
   try {
     await setupWizard.disconnect();
-    await ramTest.disconnect();
     await serialManager.openSerialPort({ baudRate: 115200 });
     setStatus('Serial opened.');
   } catch (err) {

@@ -4,7 +4,7 @@ export const RAM_BYTES = 16 * 1024 * 1024;
 export const RAM_STAGES = 26;
 const states = new Set(['idle', 'running', 'pass', 'fail', 'missing', 'aborted']);
 export function validateRamStatus(s) {
-  if (!s?.ok || s.protocol !== 1 || s.device !== 'toern-psram-test' || !states.has(s.state)) throw new Error('This is not the RAM-test firmware. Select RAM test above and upload it first.');
+  if (!s?.ok || s.protocol !== 1 || s.device !== 'toern-psram-test' || !states.has(s.state)) throw new Error('This is not the RAM-test firmware. Upload the RAM-test firmware on this page first.');
   const uint = (v, max = 0xFFFFFFFF) => Number.isInteger(v) && v >= 0 && v <= max;
   if (s.targetBytes !== RAM_BYTES || s.stages !== RAM_STAGES || !uint(s.run) || !uint(s.stage, RAM_STAGES) || !uint(s.progress, 100) || !uint(s.detectedBytes) || !uint(s.testedBytes, RAM_BYTES) || !uint(s.elapsedMs) || !uint(s.offset, RAM_BYTES - 1) || !uint(s.expected) || !uint(s.actual)) throw new Error('The RAM test returned an incomplete result. Full 16 MB has not been verified.');
   if (s.state === 'pass' && (s.run < 1 || s.detectedBytes !== RAM_BYTES || s.testedBytes !== RAM_BYTES || s.stage !== RAM_STAGES || s.progress !== 100)) throw new Error('Incomplete RAM test: a full 16 MB pass could not be verified.');
@@ -95,7 +95,7 @@ export function mountRamTest(root, { beforeConnect, selectTest, restoreFirmware 
     content.replaceChildren(); root.setAttribute('aria-busy',String(operation||running||flashing));
     content.append(el('p','Check every address in the full 16 MB of external PSRAM, including both halves of memory.'));
     content.append(el('p','This temporarily replaces the instrument firmware. EEPROM settings and SD files are not changed. After testing, upload your usual instrument firmware again.','setup-note'));
-    const instructions=el('ol');for(const text of ['Select RAM test. For factory firmware, press the Teensy programming button and choose the Teensy bootloader above; then upload.','After the device restarts, connect here and start the full test. Keep USB connected.','Read the result, then restore your usual firmware.'])instructions.append(el('li',text));content.append(instructions);
+    const instructions=el('ol');for(const text of ['Upload the RAM-test firmware above. For factory firmware, press the Teensy programming button and choose the Teensy bootloader; then upload.','After the device restarts, connect here and start the full test. Keep USB connected.','Read the result, then restore your usual firmware on the main firmware page.'])instructions.append(el('li',text));content.append(instructions);
     const result = el('p',running && !status ? 'Starting the full 16 MB test…' : ramResultText(status),'ram-result');result.setAttribute('role','status');result.setAttribute('aria-live','polite');
     resultNode = result;
     result.classList.toggle('ram-pass',status?.state==='pass');result.classList.toggle('ram-fail',['fail','missing','aborted','interrupted'].includes(status?.state) || (status?.state==='idle' && status.detectedBytes!==RAM_BYTES));content.append(result);
@@ -104,7 +104,7 @@ export function mountRamTest(root, { beforeConnect, selectTest, restoreFirmware 
     if(flashing)content.append(el('p','Firmware upload is running. Connect here after TŒRN restarts.','setup-note'));
     messageNode=el('p','','setup-status');messageNode.setAttribute('role','alert');content.append(messageNode);
     const buttons=el('div','','setup-actions');
-    buttons.append(button('Select RAM test',selectTest,operation||running||flashing,true));
+    buttons.append(button('Show upload',selectTest,operation||running||flashing,true));
     if(!connected)buttons.append(button('Connect RAM tester',connect,operation||flashing));
     else buttons.append(running?button('Stop test',stop,operation||flashing,true):button(status?.state==='pass'?'Test again':'Start full 16 MB test',start,operation||flashing));
     content.append(buttons);

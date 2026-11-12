@@ -5,8 +5,8 @@ import vm from 'node:vm';
 
 async function factoryFlash(hasSerialApi, productId = 0x0478) {
   const elements = new Map(), calls = {serial:0,hid:0,flashed:0,ramReady:0};
-  const radios = ['stable','beta','beta-modulr','ramtest'].map(value=>({value,checked:value==='ramtest',disabled:false}));
-  const ids = {firmwareStable:0,firmwareBeta:1,firmwareBetaModulr:2,firmwareRamTest:3};
+  const radios = ['ramtest'].map(value=>({value,checked:true,disabled:false}));
+  const ids = {firmwareRamTest:0};
   function element(id) {
     if (!elements.has(id)) elements.set(id,{
       ...(id in ids ? radios[ids[id]] : {}),id,hidden:false,disabled:false,textContent:id==='uploadFirmwareBtn'?'Upload RAM test':'',style:{},listeners:{},
@@ -20,16 +20,16 @@ async function factoryFlash(hasSerialApi, productId = 0x0478) {
   const device={vendorId:0x16c0,productId,productName:''}; // Match the user's unnamed 16C0:0478 HalfKay device.
   const navigator={hid:{async requestDevice({filters}){assert(filters.some(f=>f.vendorId===device.vendorId&&f.productId===device.productId));++calls.hid;return[device];},async getDevices(){return[];}}};
   if(hasSerialApi)navigator.serial={async requestPort(){++calls.serial;throw new Error('Factory firmware has no serial port');}};
-  const source=readFileSync(new URL('../main.js',import.meta.url),'utf8')
+  const source=readFileSync(new URL('../ram-test-page.js',import.meta.url),'utf8')
     .replace(/^import[\s\S]*?from\s+['"][^'"]+['"];\s*/gm,'')
-    .replaceAll('import.meta.url',JSON.stringify(new URL('../main.js',import.meta.url).href));
+    .replaceAll('import.meta.url',JSON.stringify(new URL('../ram-test-page.js',import.meta.url).href));
   const context={document,navigator,URL,Uint8Array,Event,TextEncoder,TextDecoder,setTimeout,clearTimeout,performance,console:{log(){},warn(){},error(){}},TEENSY_DEVICE_FILTERS:[{vendorId:0x16c0,productId:0x0478},{vendorId:0x16c0,productId:0x0479}],
     async fetch(){return{ok:true,async json(){return{version:'test'};},async arrayBuffer(){return new Uint8Array([1,2,3]).buffer;}};},
     FirmwareFile:class {constructor(data,name,pid){assert.equal(name,'toern_ram_test.ino.hex');assert.equal(pid,productId);}async buildBlocks(){return{mainBlocks:[],loaderBlocks:[]};}},
     TeensyFlasher:class {async flashFirmware(blocks,selected,progress){assert.equal(selected,device);++calls.flashed;progress(1);}},
     SerialPortManager:class {constructor(){this.serialPort=null;}},
-    mountSetupWizard(){return{busy:false,async disconnect(){},setFlashing(){},afterFlash(){}};},
     mountRamTest(){return{busy:false,async disconnect(){},setFlashing(){},afterFlash(ram){if(ram)++calls.ramReady;}};},
+    window:{location:{href:''}},
   };
   vm.runInNewContext(source,context);
   await new Promise(resolve=>setImmediate(resolve));
@@ -43,6 +43,12 @@ test('programming-button factory flow flashes over HID without requesting a seri
 test('a selected bootloader can flash even when Web Serial is unavailable',()=>factoryFlash(false));
 test('legacy 0479 compatibility remains supported',()=>factoryFlash(true,0x0479));
 test('the direct bootloader chooser is visible without first attempting serial reboot',()=>{
-  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const html=readFileSync(new URL('../ram-test.html',import.meta.url),'utf8');
   const tag=html.match(/<button[^>]+id="selectDeviceBtn"[^>]*>/)[0];assert.doesNotMatch(tag,/\bhidden\b/);
+});
+test('main firmware page links to the RAM test subpage and omits the section',()=>{
+  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.match(html,/href="ram-test\.html"/);
+  assert.doesNotMatch(html,/id="ramTest"/);
+  assert.doesNotMatch(html,/value="ramtest"/);
 });

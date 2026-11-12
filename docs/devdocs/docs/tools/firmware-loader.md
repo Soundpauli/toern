@@ -9,7 +9,7 @@ description: Browser Teensy flasher (WebHID) at firmware.tyng.app. GPL-3.0.
 **Live:** [https://firmware.tyng.app/](https://firmware.tyng.app/)
 **Source:** [`tools/firmware/`](https://github.com/Soundpauli/toern/tree/main/tools/firmware)
 
-Based on **Teensy Loader Javascript** (WebHID flash + optional serial). The current UI flashes its bundled stable **v3.0**, **Beta** or **BETA-MODULR** HEX preset onto a Teensy 4.1 from Chrome/Edge desktop. It does not expose a custom HEX/BIN file picker. The library supports firmware-file parsing, but the UI deliberately uses these bundled presets.
+Based on **Teensy Loader Javascript** (WebHID flash + optional serial). The current UI flashes its bundled stable **v3.0**, **Beta** or **BETA-MODULR** HEX preset onto a Teensy 4.1 from Chrome/Edge desktop. The **RAM test · 16 MB** diagnostic lives on a subpage (`ram-test.html`). It does not expose a custom HEX/BIN file picker. The library supports firmware-file parsing, but the UI deliberately uses these bundled presets.
 
 ## Typical flow
 
