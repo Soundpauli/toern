@@ -3,7 +3,7 @@
 #define LOOK_PAGES_COUNT 6
 #define RECS_PAGES_COUNT 6
 #define MIDI_PAGES_COUNT 10
-#define VOL_PAGES_COUNT 5
+#define VOL_PAGES_COUNT 6
 #define ETC_PAGES_COUNT 5
 #define MODE_PAGES_COUNT 11
 #define ADV_PAGES_COUNT 10
@@ -159,6 +159,7 @@ MenuPage volPages[VOL_PAGES_COUNT] = {
   {"MAIN", 27, false, nullptr},         // Headphone output volume
   {"GAIN", 53, false, nullptr},         // Mix bus / synth / master trim (0.0x–2.0x, 1.0x = unity)
   {"LOUT", 28, false, nullptr},         // Line output volume
+  {"DRV", 66, false, nullptr},          // Output drive, 0–6 dB, default 0
   {"PREV", 29, false, nullptr},         // Preview volume
   {"SPKR", 43, false, nullptr}           // Speaker toggle (ON/OFF)
 };
@@ -854,7 +855,7 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 5,  2);   // fastRecMode default (SENS)
       EEPROM.write(EEPROM_DATA_START + 58, 0xA5); // TRIG default already SENS
       EEPROM.write(EEPROM_DATA_START + 6,  0);   // recChannelClear default (OFF)
-      EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol default (0-50 range, middle = 20)
+      EEPROM.write(EEPROM_DATA_START + 7,  70);   // previewVol default (0-100)
       EEPROM.write(EEPROM_DATA_START + 8, 1);   // flowMode default (ON)
       EEPROM.write(EEPROM_DATA_START + 9, 10);   // micGain default (10)
       // slot 10: PPQN packed (bit0=on, bit1=polarity-, bits2-4=ppqn idx, bit5=STOP); default OFF / + / 24 / CONT
@@ -864,9 +865,10 @@ FLASHMEM void loadMenuFromEEPROM() {
       EEPROM.write(EEPROM_DATA_START + 12, 0);   // loopLength default (0 = OFF)
       EEPROM.write(EEPROM_DATA_START + 13, DEFAULT_LED_MODE); // 2B: 32x16 with rotated panel compensation
       EEPROM.write(EEPROM_DATA_START + 14, 1);   // ctrlMode default (1 = VOL)
-      EEPROM.write(EEPROM_DATA_START + 15, 30);  // lineOutLevelSetting default (30)
+      EEPROM.write(EEPROM_DATA_START + 15, 13);  // lineOutLevelSetting default (13 = loudest clean)
+      EEPROM.write(EEPROM_AUDIO_TWEAK_ADDR, 0);  // preview/line-out scale already current
       EEPROM.write(EEPROM_DATA_START + 16, 8);   // lineInLevel default (8)
-      EEPROM.write(EEPROM_DATA_START + 17, 80);  // GLOB.vol default (80, maps to 0.8 volume, 0-100 range)
+      EEPROM.write(EEPROM_DATA_START + 17, 70);  // GLOB.vol default (0-100)
       EEPROM.write(EEPROM_DATA_START + 18, 0);   // subpatternsEnabled default (0 = OFF)
       EEPROM.write(EEPROM_DATA_START + 19, 0);   // showChannelNr default (0 = false, NORM mode)
       EEPROM.write(EEPROM_DATA_START + 20, 0);   // previewTriggerMode default (ON)
@@ -974,9 +976,9 @@ FLASHMEM void loadMenuFromEEPROM() {
     saveSingleModeToEEPROM(6, recChannelClear);
   }
   
-  previewVol   = (int8_t) EEPROM.read(EEPROM_DATA_START + 7);
-  if (previewVol > 50) {  // 0 is a valid silent preview volume.
-    previewVol = 20;  // Default to mid
+  previewVol   = (uint8_t) EEPROM.read(EEPROM_DATA_START + 7);
+  if (previewVol > PREVIEW_VOL_MAX) {  // 0 is a valid silent preview volume.
+    previewVol = 70;
     saveSingleModeToEEPROM(7, previewVol);
   }
   
@@ -1361,8 +1363,8 @@ FLASHMEM void loadMenuFromEEPROM() {
     drawRFullMuteCustomUnmuteMask = fm;
   }
 
-  if (previewVol < 0 || previewVol > 50) {
-    previewVol = 20;
+  if (previewVol > PREVIEW_VOL_MAX) {
+    previewVol = 70;
     saveSingleModeToEEPROM(7, previewVol);
   }
   
@@ -1486,18 +1488,9 @@ FLASHMEM void applyAudioSettingsFromGlobals() {
   extern unsigned int micGain;
   extern unsigned int lineInLevel;
   
-  // Apply main volume (headphone output)
-  // Handle both legacy (0-10) and new (0-100) ranges
-  float vol;
-  if (GLOB.vol <= 10) {
-    // Legacy value (0-10): convert to 0.0-1.0
-    vol = GLOB.vol / 10.0f;
-  } else {
-    // New value (0-100): convert to 0.0-1.0
-    vol = GLOB.vol / 100.0f;
-  }
-  vol = constrain(vol, 0.0f, 1.0f);
-  sgtl5000_1.volume(vol);
+  // Headphone amp stays full. MAIN is applied to the playing mix only.
+  sgtl5000_1.volume(1.0f);
+  updatePreviewVolume();
   
   // Apply line output level
   sgtl5000_1.lineOutLevel(lineOutLevelSetting);
@@ -2012,6 +2005,7 @@ FLASHMEM void showMidiMenu() {
 static bool previewModeLabelVisible = false;
 static unsigned long previewModeLabelChangedAt = 0;
 static constexpr unsigned long PREVIEW_MODE_LABEL_MS = 2500;
+static uint8_t g_mainVolFocus = 2; // 1 = encoder 2 PREV, 2 = encoder 3 MAIN
 
 FLASHMEM void showVolMenu() {
   static uint32_t lastPosHash = 0;
@@ -2059,10 +2053,13 @@ FLASHMEM void showVolMenu() {
   CRGB indicatorColor = currentMenuParentTextColor();
   const bool volGainPage = (mainSetting == 53);
   const bool volValuePage = (mainSetting == 43);
+  const bool volMainPage = (mainSetting == 27);
   Encoder[0].writeRGBCode(volGainPage ? 0x00C8C8 : 0x000000); // 1-4 cyan
-  Encoder[1].writeRGBCode(volGainPage ? 0xC86400 : 0x000000); // 5-8 orange
+  Encoder[1].writeRGBCode(volGainPage ? 0xC86400 : (volMainPage ? 0x00FF00 : 0x000000));
   if (volGainPage) {
     Encoder[2].writeRGBCode(g_gainEnc3IsAll ? 0x00FF00 : 0xC828C8); // ALL green / SYN magenta
+  } else if (volMainPage) {
+    Encoder[2].writeRGBCode(0xFF8000);
   } else {
     Encoder[2].writeRGBCode(volValuePage ? (indicatorColor.r << 16 | indicatorColor.g << 8 | indicatorColor.b) : 0x000000);
   }
@@ -2961,20 +2958,15 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       }
       break;
 
-    case 27: { // MAIN - Headphone output volume - encoder 3
-      drawMenuText("MAIN", 2, 10, currentMenuParentTextColor());
-      extern struct GlobalVars GLOB;
-      
-      // Display GLOB.vol directly as 0-100
-      int volDisplay = GLOB.vol;
-      // Handle legacy values (0-10) for backward compatibility
-      if (volDisplay <= 10) {
-        volDisplay = volDisplay * 10;
-      }
+    case 27: { // MAIN - headphone volume on encoder 3, PREV level on encoder 2
+      extern unsigned int previewVol;
+      const bool prev = g_mainVolFocus == 1;
+      drawMenuText(prev ? "PREV" : "MAIN", 2, 10, currentMenuParentTextColor());
       char volText[8];
-      snprintf(volText, sizeof(volText), "%d", volDisplay);
-      drawMenuText(volText, 2, 3, UI_ORANGE); // Match encoder 3 and its indicator.
-      
+      snprintf(volText, sizeof(volText), "%u",
+               prev ? previewVol : (unsigned)constrain((int)GLOB.vol, 0, 100));
+      drawMenuText(volText, 2, 3, prev ? UI_GREEN : UI_ORANGE);
+      drawMenuIndicator('L', 'G', 2);
       drawMenuIndicator('L', 'O', 3);
       break;
     }
@@ -2994,8 +2986,18 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuIndicator('L', 'M', 3);
       break;
     }
+
+    case 66: { // DRV - extra output drive, 0–6 dB
+      drawMenuText("DRV", 2, 10, currentMenuParentTextColor());
+      extern uint8_t outputDriveDb;
+      char driveText[8];
+      snprintf(driveText, sizeof(driveText), "+%u", (unsigned)outputDriveDb);
+      drawMenuText(driveText, 2, 3, UI_ORANGE);
+      drawMenuIndicator('L', 'O', 3);
+      break;
+    }
     
-    case 29: { // PREV: encoder 2 selects policy, encoder 3 sets volume.
+    case 29: { // PREV: encoder 2 selects the audition policy. Level is on MAIN.
       const char* trigger = previewTriggerMode == PREVIEW_MODE_PRESS ? "PRSS" :
           (previewTriggerMode == PREVIEW_MODE_SYNC ? "SYNC" : "ON");
       const char code = previewTriggerMode == PREVIEW_MODE_PRESS ? 'R' :
@@ -3003,14 +3005,9 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       const CRGB valueColor = previewTriggerMode == PREVIEW_MODE_PRESS ? UI_RED :
           (previewTriggerMode == PREVIEW_MODE_SYNC ? UI_YELLOW : UI_GREEN);
       drawMenuText("PREV", 2, 10, currentMenuParentTextColor());
-      char volText[8];
-      snprintf(volText, sizeof(volText), "%u", previewVol);
-      drawMenuText(previewModeLabelVisible ? trigger : volText, 2, 3,
-               previewModeLabelVisible ? valueColor : UI_ORANGE);
+      drawMenuText(trigger, 2, 3, valueColor);
       drawMenuIndicator('L', code, 2);
-      drawMenuIndicator('L', 'O', 3);
       Encoder[1].writeRGBCode(CRGBToUint32(valueColor));
-      Encoder[2].writeRGBCode(CRGBToUint32(UI_ORANGE));
       break;
     }
 
@@ -3256,6 +3253,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   static bool pongMenuFirstEnter = true;
   static bool mainMenuFirstEnter = true;
   static bool lineMenuFirstEnter = true;
+  static bool driveMenuFirstEnter = true;
   static bool prevMenuFirstEnter = true;
   static bool micMenuFirstEnter = true;
   static bool lvlMenuFirstEnter = true;
@@ -3272,6 +3270,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     pongMenuFirstEnter = true;
     mainMenuFirstEnter = true;
     lineMenuFirstEnter = true;
+    driveMenuFirstEnter = true;
     prevMenuFirstEnter = true;
     micMenuFirstEnter = true;
     lvlMenuFirstEnter = true;
@@ -3279,6 +3278,12 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
     lastStereoCh = -1;
     infoPageFirstEnter = true;
     lastPongSpeed = -1;
+    if (lastSetting == 27) {
+      Encoder[1].writeMin((int32_t)0);
+      Encoder[1].writeMax((int32_t)0);
+      Encoder[1].writeCounter((int32_t)0);
+      currentMode->pos[1] = 0;
+    }
     if (lastSetting == 50 || lastSetting == 53 || lastSetting == 55) {
       extern uint8_t fireFocus;
       if (lastSetting == 55) fireFocus = 0;
@@ -4698,56 +4703,46 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
     
-    case 27: { // MAIN - Headphone output volume
+    case 27: { // MAIN on encoder 3, PREV level on encoder 2
       static int lastHpVol = -1;
-      
-      extern Mode *currentMode;
-      extern struct GlobalVars GLOB;
-      
+      static int lastPrevOnMain = -1;
+      extern unsigned int previewVol;
+
       if (mainMenuFirstEnter) {
-        // Load GLOB.vol from EEPROM (0-10 legacy or 0-100 new)
-        // Convert legacy 0-10 to 0-100 for backward compatibility
-        int encoderVal;
-        if (GLOB.vol <= 10) {
-          // Legacy value (0-10): convert to 0-100
-          encoderVal = GLOB.vol * 10;
-        } else {
-          // New value (0-100): use directly
-          encoderVal = GLOB.vol;
-        }
-        encoderVal = constrain(encoderVal, 0, 100);
-        
-        Encoder[2].writeCounter((int32_t)encoderVal);
+        int mainVal = constrain((int)GLOB.vol, 0, 100);
+        int prevVal = constrain((int)previewVol, 0, PREVIEW_VOL_MAX);
+        Encoder[1].writeMin((int32_t)0);
+        Encoder[1].writeMax((int32_t)PREVIEW_VOL_MAX);
+        Encoder[1].writeCounter((int32_t)prevVal);
+        currentMode->pos[1] = prevVal;
+        lastPrevOnMain = prevVal;
+        Encoder[2].writeCounter((int32_t)mainVal);
         Encoder[2].writeMax((int32_t)100);
         Encoder[2].writeMin((int32_t)0);
-        currentMode->pos[2] = encoderVal;
-        lastHpVol = encoderVal;
+        currentMode->pos[2] = mainVal;
+        lastHpVol = mainVal;
         mainMenuFirstEnter = false;
-        
-        // Apply to hardware: map 0-100 to 0.0-1.0
-        float vol = encoderVal / 100.0f;
-        sgtl5000_1.volume(vol);
-        
-        // Update GLOB.vol to new range (0-100)
-        GLOB.vol = encoderVal;
+        GLOB.vol = mainVal;
+        sgtl5000_1.volume(1.0f);
+        updatePreviewVolume();
       }
-      
+
+      if ((int)currentMode->pos[1] != lastPrevOnMain) {
+        int encoderPos = constrain((int)currentMode->pos[1], 0, PREVIEW_VOL_MAX);
+        previewVol = (unsigned)encoderPos;
+        updatePreviewVolume();
+        saveSingleModeToEEPROM(7, previewVol);
+        g_mainVolFocus = 1;
+        redrawMain(setting);
+        lastPrevOnMain = encoderPos;
+      }
       if (currentMode->pos[2] != lastHpVol) {
         int encoderPos = constrain(currentMode->pos[2], 0, 100);
-        // Map encoder position (0-100) directly to volume (0.00-1.00)
-        // Position 0 = 0.00, Position 100 = 1.00
-        float vol = encoderPos / 100.0f;
-        
-        // Store in GLOB.vol as 0-100
         GLOB.vol = encoderPos;
-        
-        // Apply to hardware
-        sgtl5000_1.volume(vol);
-        
-        // Save to EEPROM (slot 17 - separate from transportMode which uses slot 2)
-        // Store as 0-100 (int8_t can hold -128 to 127, so 0-100 is fine)
+        sgtl5000_1.volume(1.0f);
+        updatePreviewVolume();
         saveSingleModeToEEPROM(17, (int8_t)GLOB.vol);
-        
+        g_mainVolFocus = 2;
         redrawMain(setting);
         lastHpVol = encoderPos;
       }
@@ -4787,12 +4782,32 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       }
       break;
     }
+
+    case 66: { // DRV - 0–6 dB output drive, 0 = untouched
+      static int lastDrive = -1;
+      extern uint8_t outputDriveDb;
+      if (driveMenuFirstEnter) {
+        int encoderVal = constrain((int)outputDriveDb, 0, OUTPUT_DRIVE_DB_MAX);
+        Encoder[2].writeCounter((int32_t)encoderVal);
+        Encoder[2].writeMax((int32_t)OUTPUT_DRIVE_DB_MAX);
+        Encoder[2].writeMin((int32_t)0);
+        currentMode->pos[2] = encoderVal;
+        lastDrive = encoderVal;
+        driveMenuFirstEnter = false;
+      }
+      if (currentMode->pos[2] != lastDrive) {
+        int encoderPos = constrain(currentMode->pos[2], 0, OUTPUT_DRIVE_DB_MAX);
+        outputDriveDb = (uint8_t)encoderPos;
+        EEPROM.write(EEPROM_OUTPUT_DRIVE_ADDR, outputDriveDb);
+        applyStereoChannelRouting();
+        redrawMain(setting);
+        lastDrive = encoderPos;
+      }
+      break;
+    }
     
-    case 29: { // PREV - Preview volume
-      static int lastPvVol = -1;
+    case 29: { // PREV - audition policy on encoder 2. Level is on MAIN.
       static int lastPreviewTrigger = -1;
-      
-      extern unsigned int previewVol;
       
       if (prevMenuFirstEnter) {
         previewModeLabelVisible = false;
@@ -4802,18 +4817,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[1].writeCounter((int32_t)trigger);
         currentMode->pos[1] = trigger;
         lastPreviewTrigger = trigger;
-        // Load previewVol from EEPROM (0-50), direct mapping to encoder range (0-50)
-        int encoderVal = constrain((int)previewVol, 0, 50);
-        
-        Encoder[2].writeCounter((int32_t)encoderVal);
-        Encoder[2].writeMax((int32_t)50);
-        Encoder[2].writeMin((int32_t)0);
-        currentMode->pos[2] = encoderVal;
-        lastPvVol = encoderVal;
         prevMenuFirstEnter = false;
-        
-        // Apply to hardware
-        updatePreviewVolume();
       }
       
       if ((int)currentMode->pos[1] != lastPreviewTrigger) {
@@ -4821,23 +4825,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lastPreviewTrigger = previewTriggerMode;
         currentMode->pos[1] = previewTriggerMode;
         saveSingleModeToEEPROM(20, (int8_t)previewTriggerMode);
-        previewModeLabelVisible = true;
-        previewModeLabelChangedAt = millis();
         redrawMain(setting);
-      }
-      if (currentMode->pos[2] != lastPvVol) {
-        int encoderPos = constrain(currentMode->pos[2], 0, 50);
-        previewModeLabelVisible = false;
-        previewVol = encoderPos;  // Store 0-50 (0.00-0.50)
-        
-        // Apply to hardware
-        updatePreviewVolume();
-        
-        // Save to EEPROM
-        saveSingleModeToEEPROM(7, previewVol);
-        
-        redrawMain(setting);
-        lastPvVol = encoderPos;
       }
       break;
     }

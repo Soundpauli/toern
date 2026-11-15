@@ -472,6 +472,7 @@ static void analogDirectPulse() {
     playTimer.end();
     fillTimer.end();
     isNowPlaying = true;
+    applyStereoChannelRouting();
     pulseClockOnTransportStart();
   }
   if (!isNowPlaying) return;
@@ -792,6 +793,7 @@ static void serviceMidiTransportStart() {
       pendingPage = 0;
     }
     isNowPlaying = true;
+    applyStereoChannelRouting();
     playStartTime = millis();
     pulseClockOnTransportStart();
     if (SMP.bpm > 0) {
@@ -1412,6 +1414,7 @@ void handleStart() {
   pendingStartOnBar = false;
   if (clockMode != 1) {
     isNowPlaying = false;
+    applyStereoChannelRouting();
     transportStartDelayUntil = 0;
     midiStartOnClock = true;
     return;

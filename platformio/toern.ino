@@ -253,6 +253,11 @@ extern void handleStart();
 // VOL→GAIN: stored 0..20 tenths (UI 0.0–2.0), 10 = current staging (1.0×). Bus × master, so 2.0×2.0 = 4×.
 #define MIX_GAIN_UNITY 10
 #define MIX_GAIN_MAX 20
+// VOL → DRV: 0–6 dB into the output limiter. 0 leaves the mix untouched.
+#define OUTPUT_DRIVE_DB_MAX 6
+#define PREVIEW_VOL_MAX 100
+#define EEPROM_AUDIO_TWEAK_ADDR (EEPROM_DATA_START + 60)
+#define EEPROM_OUTPUT_DRIVE_ADDR (EEPROM_DATA_START + 61)
 #define EEPROM_MIX_GAIN_14 38
 #define EEPROM_MIX_GAIN_58 39
 #define EEPROM_MIX_GAIN_SYN 40
@@ -317,6 +322,8 @@ int inputMonitoringState = 0;
 void triggerExternalOneBlink();
 void updateExternalOneBlink();
 void updatePreviewVolume();
+float headphoneVolumeLinear();
+float outputDriveGain();
 
 #define CLOCK_BUFFER_SIZE 24
 //elapsedMillis recFlushTimer;
@@ -584,7 +591,8 @@ unsigned int lastFlowPage = 0;   // Track the last page set by FLOW mode
 unsigned int SMP_FAST_REC = false;
 unsigned int SMP_REC_CHANNEL_CLEAR = true;
 bool SMP_LOAD_SETTINGS = true;  // Pattern browser defaults to saved sound settings.
-uint8_t lineOutLevelSetting = 30;
+uint8_t lineOutLevelSetting = 13;  // codec max clean line level (3.16 Vpp)
+uint8_t outputDriveDb = 0;             // VOL → DRV, 0–6 dB, default untouched
 
 bool pendingStartOnBar = false;  // "I hit Play, now wait for bar-1"
 
@@ -770,7 +778,7 @@ const unsigned int totalPulsesToWait = pulsesPerBar * 2;
 //  -1  = LINEIN (MIC/capture path disabled)
 int recMode = -1;
 unsigned int fastRecMode = 0;
-unsigned int previewVol = 20;  // Default 20 (0-50 range, 0.00-0.50)
+unsigned int previewVol = 70;  // 0-100; default 70, independent of MAIN
 uint8_t mixGain14 = MIX_GAIN_UNITY;     // VOL→GAIN: mixer1 (voices 1–4)
 uint8_t mixGain58 = MIX_GAIN_UNITY;     // mixer2 (voices 5–8)
 uint8_t mixGainSynth = MIX_GAIN_UNITY;  // mixer_end synth bus (ch11/13/14)
@@ -1828,16 +1836,20 @@ FLASHMEM void applyStereoChannelRouting() {
   // inputs 2/3 unused
   // USB copies that map. In SMP, voice 0 reaches USB only when VOL>USBP is ON.
 
+  // Headphone amp stays at full. MAIN is a digital gain with the old
+  // codec taper, scaled so 100 matches the previous linear 40. The same
+  // gain is used while paused; preview does not replace it.
+  const float drive = outputDriveGain() * headphoneVolumeLinear();
   float mainL = 0, prevL = 0, busL = 0;
   float mainR = 0, prevR = 0, busR = 0;
   if (stereoChannel == 0) {
-    mainL = mainR = 1.0f;
+    mainL = mainR = drive;
     prevL = prevR = 1.0f;
   } else if (stereoChannel == 1) {
-    mainL = 1.0f;
+    mainL = drive;
     prevR = 1.0f;
   } else {
-    busL = busR = 1.0f;
+    busL = busR = drive;
   }
 
   mixer_stereoL.gain(0, mainL);
@@ -3835,9 +3847,10 @@ FLASHMEM void initSoundChip() {
   // GLOB, micGain, lineInLevel, and lineOutLevelSetting are already in scope as globals
 
   // Apply initial volume (will be fully applied later via applyAudioSettingsFromGlobals)
-  float vol = GLOB.vol <= 10 ? GLOB.vol / 10.0f : GLOB.vol / 100.0f;
-  vol = constrain(vol, 0.0f, 1.0f);
-  sgtl5000_1.volume(vol);
+  // Analog headphone volume is 0.5 dB steps down to -51 dB. Leave it
+  // full and apply MAIN in the mixer, or preview cannot stay loud.
+  sgtl5000_1.volume(1.0f);
+  updatePreviewVolume();
 
   // Initialize audio input amplifier - turned off at startup
   //audioInputAmp.gain(0.0);
@@ -4816,7 +4829,7 @@ FLASHMEM void setup() {
   // Support both legacy (0-10) and new (0-100) ranges
   GLOB.vol = (int8_t)EEPROM.read(EEPROM_DATA_START + 17);
   if (GLOB.vol <= 0 || GLOB.vol > 100) {
-    GLOB.vol = 80;  // Default MAIN volume if invalid or zero
+    GLOB.vol = 70;  // Default MAIN volume if invalid or zero
   } else if (GLOB.vol > 10 && GLOB.vol <= 100) {
     // New range value (11-100): use as-is
   } else {
@@ -4829,11 +4842,9 @@ FLASHMEM void setup() {
     micGain = 10;  // Default to 10 if invalid or zero
   }
 
-  // Load previewVol from EEPROM
-  previewVol = (unsigned int)EEPROM.read(EEPROM_DATA_START + 7);
-  if (previewVol < 1 || previewVol > 50) {
-    previewVol = 20;  // Default to mid if invalid or zero
-  }
+  // Load previewVol from EEPROM (0-100; 100 = full, independent of MAIN)
+  const uint8_t rawPreviewVol = EEPROM.read(EEPROM_DATA_START + 7);
+  previewVol = rawPreviewVol > PREVIEW_VOL_MAX ? 70u : rawPreviewVol;
 
   // Load previewTriggerMode (0=ON, 1=PRSS, 2=SYNC) from EEPROM slot 20
   previewTriggerMode = (int)EEPROM.read(EEPROM_DATA_START + 20);
@@ -4848,9 +4859,22 @@ FLASHMEM void setup() {
   }
 
   // Load lineOutLevelSetting from EEPROM
-  lineOutLevelSetting = (uint8_t)EEPROM.read(EEPROM_DATA_START + 15);
-  if (lineOutLevelSetting < LINEOUT_MIN || lineOutLevelSetting > LINEOUT_MAX) {
-    lineOutLevelSetting = 30;  // Default to 30 if invalid
+  const uint8_t rawLineOut = EEPROM.read(EEPROM_DATA_START + 15);
+  lineOutLevelSetting = (rawLineOut < LINEOUT_MIN || rawLineOut > LINEOUT_MAX) ? (uint8_t)LINEOUT_MIN : rawLineOut;
+  // One-time: old PREV 50 was unity (now 100). Old factory line-out 30 is ~1.22 Vpp;
+  // step 13 is the clean maximum, 3.16 Vpp. Marker is outside the settings block.
+  // Erased EEPROM is 0xFF. A later choice of 30 is kept.
+  if (EEPROM.read(EEPROM_AUDIO_TWEAK_ADDR) == 0xFF) {
+    if (rawPreviewVol <= 50) previewVol = (unsigned)rawPreviewVol * 2u;
+    if (rawLineOut == 30) lineOutLevelSetting = LINEOUT_MIN;
+    EEPROM.write(EEPROM_DATA_START + 7, (uint8_t)previewVol);
+    EEPROM.write(EEPROM_DATA_START + 15, lineOutLevelSetting);
+    EEPROM.write(EEPROM_AUDIO_TWEAK_ADDR, 0);
+  }
+
+  {
+    const uint8_t rawDrive = EEPROM.read(EEPROM_OUTPUT_DRIVE_ADDR);
+    outputDriveDb = rawDrive <= OUTPUT_DRIVE_DB_MAX ? rawDrive : 0;
   }
 
   // Load REC input mode early (before initSoundChip).
@@ -5047,7 +5071,7 @@ FLASHMEM void setup() {
 FLASHMEM void initGlobalVars() {
   GLOB.singleMode = false;
   GLOB.currentChannel = 1;
-  GLOB.vol = 80;
+  GLOB.vol = 70;
   GLOB.velocity = 10;
   GLOB.copyChannel = 0;
   GLOB.page = 1;
@@ -8608,6 +8632,7 @@ void play(bool fromStart) {
       resetMidiClockForTransportStart();
       if (effectiveTransportSendDelayMs() == 0) {
         isNowPlaying = true;
+        applyStereoChannelRouting();
         playStartTime = millis();
         extern void pulseClockOnTransportStart();
         pulseClockOnTransportStart();
@@ -8635,11 +8660,13 @@ void play(bool fromStart) {
       } else {
         armMasterTransportStartDelay();
         isNowPlaying = false;
+        applyStereoChannelRouting();
       }
     } else {
       // slave-mode: arm for the next bar-1 instead of starting now
       pendingStartOnBar = true;
       isNowPlaying = false;  // It's not playing YET. MIDI clock will start it.
+      applyStereoChannelRouting();
       extern bool getAnalogExtClock();
       extern void analogClockCatchIfHigh();
       if (getAnalogExtClock()) analogClockCatchIfHigh();
@@ -8667,6 +8694,7 @@ void pause(bool skipSave) {
 
   ctrlVolumeOverlayActive = false;
   isNowPlaying = false;
+  applyStereoChannelRouting();
   pendingStartOnBar = false;
   lastFlowPage = 0;
   fillTimer.end();
@@ -9757,6 +9785,7 @@ void playNote() {
     if (fastRecordActive) stopFastRecord();
     enforceChildModeRestrictions();
     isNowPlaying = true;      // Should already be true if MIDI clock started it
+    applyStereoChannelRouting();
     waitForFourBars = false;  // Reset for the next start message
   }
 
@@ -10516,18 +10545,47 @@ void clearNoteChannel(unsigned int c, unsigned int yStart, unsigned int yEnd, un
   }
 }
 
-FLASHMEM void updatePreviewVolume() {
-  unsigned int level = constrain(previewVol, 0u, 50u);
-  // 50 plays the file at the level a voice plays it (unity); 0.5 left PREV 6 dB under the kit.
-  float gain = (float)level * 0.02f;
+float headphoneVolumeLinear() {
+  // f99a51c applied MAIN with sgtl5000.volume(), 0.5 dB steps, +12 dB at 100.
+  // That taper is kept, then multiplied by 0.40 so 100 is as loud as the
+  // later linear setting 40 into the same full headphone amp. 0 is silence.
+  int v = (int)GLOB.vol;
+  if (v <= 0) return 0.0f;
+  if (v > 100) v = 100;
+  const float unit = (float)v * 0.01f;
+  const unsigned n = (unsigned)(unit * 129.0f + 0.499f);
+  const unsigned reg = (n > 0x80u) ? 0u : (0x80u - n);
+  return 0.40f * powf(10.0f, -((float)reg) / 40.0f);
+}
 
-  // Apply PREV volume to both preview paths:
-  // - sound0 (voice0) → envelope0 → mixer0 channel 0 (RAM playback when seek is set)
-  // - playSdWav1 → ampPreview → mixer0 channel 1 (SD file streaming when seek=0)
-  // Compensate for envelope path gain reduction by increasing RAM path gain slightly
-  mixer0.gain(0, gain * 1.25f);  // RAM playback path - increased to match SD path loudness
-  mixer0.gain(1, gain);          // SD file playback path
-  ampPreview.gain(1.0f);         // Set ampPreview to unity gain (volume controlled by mixer0)
+float previewVolumeGain() {
+  unsigned level = previewVol;
+  if (level > PREVIEW_VOL_MAX) level = PREVIEW_VOL_MAX;
+  if (level == 0) return 0.0f;
+  const float unit = (float)level * 0.01f;
+  const unsigned n = (unsigned)(unit * 129.0f + 0.499f);
+  const unsigned reg = (n > 0x80u) ? 0u : (0x80u - n);
+  return 0.40f * powf(10.0f, -((float)reg) / 40.0f);
+}
+
+float outputDriveGain() {
+  // 0 dB is unity. Each step is +1 dB, up to +6 dB.
+  static const float gain[OUTPUT_DRIVE_DB_MAX + 1] = {
+    1.000000f, 1.122018f, 1.258925f, 1.412538f, 1.584893f, 1.778279f, 1.995262f
+  };
+  uint8_t db = outputDriveDb;
+  if (db > OUTPUT_DRIVE_DB_MAX) db = 0;
+  return gain[db];
+}
+
+FLASHMEM void updatePreviewVolume() {
+  // Same codec taper as MAIN, still independent of the MAIN setting.
+  // RAM path stays 25% hotter to match the SD player.
+  const float gain = previewVolumeGain();
+  mixer0.gain(0, gain * 1.25f);
+  mixer0.gain(1, gain);
+  ampPreview.gain(1.0f);
+  applyStereoChannelRouting();
 }
 
 void updateBrightness() {

@@ -3626,6 +3626,7 @@ FLASHMEM void startNew() {
   // 0. STOP PLAYBACK FIRST (if playing)
   if (isNowPlaying) {
     isNowPlaying = false;
+    applyStereoChannelRouting();
   }
   
   // Visual feedback - clear display and show message
@@ -3639,7 +3640,7 @@ FLASHMEM void startNew() {
   
   // 2. RESET GLOBAL VARIABLES FIRST (before using GLOB.currentChannel)
   SMP.bpm = 100.0;
-  GLOB.vol = 80;  // 0-100 range, default MAIN volume
+  GLOB.vol = 70;  // 0-100 range, default MAIN volume
   GLOB.velocity = 10;
   GLOB.currentChannel = 1;  // Set this FIRST before using it
   GLOB.page = 1;
@@ -3661,7 +3662,7 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 5,  2);    // fastRecMode (SENS)
   EEPROM.write(EEPROM_DATA_START + 58, 0xA5); // TRIG default already SENS
   EEPROM.write(EEPROM_DATA_START + 6,  0);    // recChannelClear (OFF)
-  EEPROM.write(EEPROM_DATA_START + 7,  20);   // previewVol
+  EEPROM.write(EEPROM_DATA_START + 7,  70);   // previewVol (0-100)
   EEPROM.write(EEPROM_DATA_START + 8,  1);    // flowMode (ON)
   EEPROM.write(EEPROM_DATA_START + 9,  10);   // micGain
   EEPROM.write(EEPROM_DATA_START + 10, (6 << 2)); // PPQN pulse: OFF, +, 24, CONT
@@ -3670,9 +3671,10 @@ FLASHMEM void startNew() {
   EEPROM.write(EEPROM_DATA_START + 12, 0);    // loopLength (OFF)
   EEPROM.write(EEPROM_DATA_START + 13, preserveLedMode);  // ledMode: keep SETT>LEDS
   EEPROM.write(EEPROM_DATA_START + 14, 1);    // ctrlMode (VOL)
-  EEPROM.write(EEPROM_DATA_START + 15, 30);   // lineOutLevelSetting
+  EEPROM.write(EEPROM_DATA_START + 15, 13);   // lineOutLevelSetting (loudest clean)
+  EEPROM.write(EEPROM_AUDIO_TWEAK_ADDR, 0);   // preview/line-out scale already current
   EEPROM.write(EEPROM_DATA_START + 16, 8);    // lineInLevel
-  EEPROM.write(EEPROM_DATA_START + 17, 80);   // GLOB.vol
+  EEPROM.write(EEPROM_DATA_START + 17, 70);   // GLOB.vol
   EEPROM.write(EEPROM_DATA_START + 18, 0);    // cursorType
   EEPROM.write(EEPROM_DATA_START + 19, 0);    // showChannelNr
   EEPROM.write(EEPROM_DATA_START + 20, 0);    // previewTriggerMode
