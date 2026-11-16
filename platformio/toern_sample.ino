@@ -1312,8 +1312,10 @@ void showWave() {
       overlayInit = false;
     }
 
+    bool resetSelectionScroll = false;
     if (!overlayInit) {
       overlayInit = true;
+      resetSelectionScroll = true;
       lastOverlayPos3 = currentBrowsePos;
       strncpy(lastBrowseSnap, g_browseDir[ch], sizeof(lastBrowseSnap) - 1);
       lastBrowseSnap[sizeof(lastBrowseSnap) - 1] = 0;
@@ -1322,9 +1324,7 @@ void showWave() {
     bool browseDirChanged = (strcmp(lastBrowseSnap, g_browseDir[ch]) != 0);
     bool pos3Changed = (currentBrowsePos != lastOverlayPos3);
     if (browseDirChanged || pos3Changed) {
-      scrollSelectionOffset = 0;
-      selectionDir = 1;
-      nextSelectionStepMs = millis() + 300;
+      resetSelectionScroll = true;
       lastOverlayPos3 = currentBrowsePos;
       strncpy(lastBrowseSnap, g_browseDir[ch], sizeof(lastBrowseSnap) - 1);
       lastBrowseSnap[sizeof(lastBrowseSnap) - 1] = 0;
@@ -1363,6 +1363,22 @@ void showWave() {
         snprintf(browseRel, sizeof(browseRel), "%s", g_wavPickName[ei]);
       }
       selectionIsLoaded = (strcasecmp(browseRel, voiceLoadedPathRel[ch]) == 0);
+    }
+    // Long names start fully scrolled to the end so trailing digits are visible first.
+    if (resetSelectionScroll) {
+      const int viewStart = 1;
+      const int viewEnd = selectionIsLoaded ? max(1, (int)maxX - 4) : (int)maxX;
+      const int viewWidth = viewEnd - viewStart + 1;
+      const int width = textPixelWidth(selectionLabel);
+      if (width <= viewWidth) {
+        scrollSelectionOffset = 0;
+        selectionDir = 1;
+        nextSelectionStepMs = millis() + 300;
+      } else {
+        scrollSelectionOffset = max(0, viewStart + width - (viewEnd + 1));
+        selectionDir = -1;
+        nextSelectionStepMs = millis() + 500;
+      }
     }
     renderLine(selectionLabel, 12, selectionColor, scrollSelectionOffset, selectionDir, nextSelectionStepMs, selectionIsLoaded);
     if (selectionIsLoaded) {

@@ -4269,6 +4269,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         currentMode->pos[2] = loopLength;
         lastLoopLength = loopLength;
         saveSingleModeToEEPROM(12, loopLength);
+        updateLastPage();
         redrawMain(setting);
       }
       break;
@@ -5484,6 +5485,7 @@ FLASHMEM void switchMenu(int menuPosition){
         loopLength = loopLength + 1;
         if (loopLength > 8) loopLength = 0;
         saveSingleModeToEEPROM(12, loopLength);
+        updateLastPage();
         drawMainSettingStatus(menuPosition);
         break;
 

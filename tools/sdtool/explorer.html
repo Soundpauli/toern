@@ -364,6 +364,7 @@
             </div>
             <div class="toolbar-right">
               <button type="button" class="sd-btn" id="btnNew">New folder</button>
+              <button type="button" class="sd-btn" id="btnCleanUp" title="Rename nested folders that repeat their parent name">Clean up</button>
               <label class="file-btn primary" id="uploadLabel" for="fileInput">Upload file(s)</label>
               <input type="file" id="fileInput" multiple/>
               <label class="file-btn" id="folderLabel" for="folderInput" title="Upload folder(s) — keeps nested paths">Upload folder(s)</label>
@@ -385,7 +386,7 @@
 
         <div class="banner" id="banner"></div>
         <pre class="dbg-panel" id="dbgLog" aria-label="Debug log"></pre>
-        <p class="hint">↑↓ select · ← parent · → open folder · Enter play/open · Space play · F2 rename · drop files/folders/.zip to upload</p>
+        <p class="hint">↑↓ select · ← parent · → open folder · Enter play/open · Space play · F2 rename · Clean up · drop files/folders/.zip to upload</p>
       </div>
     </div>
   </main>
@@ -529,6 +530,97 @@ function joinSdPath(parent, name) {
   name = String(name || "").replace(/^\/+|\/+$/g, "").replace(/\\/g, "/");
   if (parent === "" || parent === "/") return "/" + name;
   return parent.replace(/\/+$/, "") + "/" + name;
+}
+
+function baseName(path) {
+  path = String(path || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!path || path === "/") return "";
+  const idx = path.lastIndexOf("/");
+  return idx < 0 ? path : path.slice(idx + 1);
+}
+
+/** Strip a repeated parent folder name from a child folder name ("Kick - Soft" → "Soft"). */
+function cleanedChildDirName(parentName, childName) {
+  parentName = String(parentName || "");
+  childName = String(childName || "");
+  if (!parentName || !childName) return null;
+  const lowerParent = parentName.toLowerCase();
+  const lowerChild = childName.toLowerCase();
+  const idx = lowerChild.indexOf(lowerParent);
+  if (idx < 0) return null;
+  let rest = childName.slice(0, idx) + childName.slice(idx + parentName.length);
+  // After removing the parent, a leftover "-" / " -" / "- " / " - " becomes the separator to drop.
+  rest = rest.replace(/^\s*-\s*/, "").replace(/\s*-\s*$/, "").trim();
+  rest = rest.replace(/\s+/g, " ").trim();
+  if (!rest || rest === childName) return null;
+  if (rest === "." || rest === ".." || /[\\/]/.test(rest)) return null;
+  return rest;
+}
+
+async function collectDirectoriesDeepestFirst(client, rootPath) {
+  const out = [];
+  async function walk(path) {
+    const entries = await client.listDir(path);
+    for (const entry of entries) {
+      if (entry.type !== "dir") continue;
+      const full = joinSdPath(path, entry.name);
+      await walk(full);
+      out.push({
+        path: full,
+        name: entry.name,
+        parentPath: path,
+        parentName: baseName(path),
+      });
+    }
+  }
+  await walk(rootPath);
+  return out;
+}
+
+async function cleanUpDirectoryNames(client, rootPath, onProgress) {
+  const dirs = await collectDirectoriesDeepestFirst(client, rootPath);
+  let renamed = 0;
+  let skipped = 0;
+  let failed = 0;
+  const siblingCache = new Map();
+  const listNames = async (parentPath) => {
+    if (siblingCache.has(parentPath)) return siblingCache.get(parentPath);
+    const entries = await client.listDir(parentPath);
+    const names = new Set(entries.map((e) => e.name.toLowerCase()));
+    siblingCache.set(parentPath, names);
+    return names;
+  };
+  for (let i = 0; i < dirs.length; i++) {
+    const dir = dirs[i];
+    if (onProgress) onProgress(dir.path, dirs.length ? (i + 1) / dirs.length : 1);
+    if (!dir.parentName) {
+      skipped++;
+      continue;
+    }
+    const next = cleanedChildDirName(dir.parentName, dir.name);
+    if (!next) {
+      skipped++;
+      continue;
+    }
+    const dest = joinSdPath(dir.parentPath, next);
+    try {
+      const names = await listNames(dir.parentPath);
+      if (names.has(next.toLowerCase())) {
+        skipped++;
+        dbg(`clean up skip (exists): ${dir.path} → ${next}`);
+        continue;
+      }
+      await client.rename(dir.path, dest);
+      names.delete(dir.name.toLowerCase());
+      names.add(next.toLowerCase());
+      renamed++;
+      dbg(`clean up: ${dir.path} → ${dest}`, "ok");
+    } catch (err) {
+      failed++;
+      dbg(`clean up fail ${dir.path}: ${err && err.message || err}`, "err");
+    }
+  }
+  return { renamed, skipped, failed, total: dirs.length };
 }
 
 // --- Web Serial SD client ----------------------------------------------------
@@ -2416,6 +2508,35 @@ $("btnNew").onclick = () => {
   $("mkdirName").value = "";
   $("mkdirDlg").showModal();
   $("mkdirName").focus();
+};
+
+$("btnCleanUp").onclick = async () => {
+  if (!state.connected || state.busy) return;
+  const root = state.path;
+  const ok = window.confirm(
+    "Clean up folder names under " + root + "?\n\n" +
+    "Nested folders that repeat their parent name are renamed, e.g. \"Kick - Soft\" → \"Soft\". " +
+    "Already-uploaded files are left alone; only directory names change."
+  );
+  if (!ok) return;
+  setBusy(true);
+  dbg("UI: clean up " + root);
+  try {
+    const client = requireSd();
+    const result = await cleanUpDirectoryNames(client, root, (path, ratio) => {
+      showProgress("Cleaning up", ratio, path);
+    });
+    playCache.clear();
+    await refresh();
+    const summary = `Clean up: ${result.renamed} renamed, ${result.skipped} unchanged, ${result.failed} failed`;
+    showBanner(summary, result.failed === 0);
+    dbg(summary, result.failed ? "err" : "ok");
+  } catch (err) {
+    dbg("UI: clean up failed — " + (err && err.message || err), "err");
+    showBanner(String(err && err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
 };
 $("mkdirCancel").onclick = () => $("mkdirDlg").close();
 $("mkdirOk").onclick = async () => {

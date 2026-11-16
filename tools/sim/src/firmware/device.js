@@ -385,6 +385,7 @@ export function createDevice(matrix, statusEl, rings) {
       s.GLOB.x = (s.GLOB.edit - 1) * COLS + localX(s.GLOB.x);
     }
     if (s.mode === "draw") applyVoiceEdit(ch);
+    if (s.mode === "single" || s.GLOB.singleMode) refreshVoiceLens();
     if (s.mode === "wav" && ch <= 8) refreshBrowse();
   }
   function drawRandomPage() {
@@ -583,7 +584,7 @@ export function createDevice(matrix, statusEl, rings) {
   function pageCount() {
     // Firmware: LOOP > 0 forces length; otherwise lastPage = highest page with notes.
     // PMOD OFF still wraps at lastPage (not all PAGES). PMOD ON loops one page in tick().
-    // VMOD ignores LOOP; the cycle is the longest voice.
+    // VMOD usually ignores LOOP (longest voice), except SINGLE + LOOP for the focused voice.
     if (!s.voiceMode && s.loopLength > 0) return Math.min(s.loopLength, PAGES);
     let last = 1;
     for (let p = 1; p <= PAGES; p++) if (hasPageNotes(p)) last = p;
@@ -695,6 +696,15 @@ export function createDevice(matrix, statusEl, rings) {
     }
     let longest = 1;
     for (let c = 1; c < 16; c++) if (len[c] > longest) longest = len[c];
+    // SINGLE + VMOD + LOOP: focused voice cycles at LOOP length for live record/input.
+    if (s.voiceMode && s.loopLength > 0 && (s.GLOB.singleMode || s.mode === "single")) {
+      const ch = s.GLOB.currentChannel;
+      if (ch >= 1 && ch <= 15) {
+        const forced = Math.max(1, Math.min(s.loopLength, Math.min(8, PAGES)));
+        len[ch] = forced;
+        if (forced > longest) longest = forced;
+      }
+    }
     s.voiceLen = len;
     s.voiceMask = mask;
     s.voicePages = longest;
@@ -1341,6 +1351,7 @@ export function createDevice(matrix, statusEl, rings) {
       } else {
         s.voiceMode = subPick.look[5] === 1;
       }
+      if (index === 4 || index === 5) refreshVoiceLens();
       s.ctrlVol = subPick.look[6] === 1;
       s.cursorType = subPick.look[9];
       s.drawR = subPick.look[10] === 1;
@@ -2374,6 +2385,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.mode === "single") {
       s.GLOB.singleMode = false;
       s.mode = s.touchyEnabled ? "touchy" : "draw";
+      refreshVoiceLens();
       return;
     }
     if (s.GLOB.y >= 16) return;
@@ -2382,6 +2394,7 @@ export function createDevice(matrix, statusEl, rings) {
       s.GLOB.currentChannel = ch;
       s.GLOB.singleMode = true;
       s.mode = "single";
+      refreshVoiceLens();
     }
   }
   function faderMute(ch, fallback) {
@@ -3262,6 +3275,7 @@ export function createDevice(matrix, statusEl, rings) {
         if (!((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14)) return;
         s.GLOB.singleMode = true;
         s.mode = "single";
+        refreshVoiceLens();
         return;
       }
       if (name === "filter") { enterFilter(); return; }

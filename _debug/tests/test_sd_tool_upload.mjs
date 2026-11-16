@@ -21,7 +21,7 @@ const run = new Function('env', 'File', `
  const {state,requireSd,setBusy,showProgress,showBanner,refresh,playCache,
         prepareUploadFile,fmtXferBytes,joinPath,dbg,IO_TIMEOUT_MS,KEEPALIVE_MS=4000} = env;
  ${code}
- return {fileListToUploadItems,collectDroppedUploadItems,uploadFiles,validateUploadPath,ToernSdSerial,crc32Hex,unzipToUploadItems};
+ return {fileListToUploadItems,collectDroppedUploadItems,uploadFiles,validateUploadPath,ToernSdSerial,crc32Hex,unzipToUploadItems,cleanedChildDirName,cleanUpDirectoryNames,baseName};
 `);
 const calls = [], banners = [];
 const state = { connected: true, busy: false, path: '/target' };
@@ -295,4 +295,47 @@ try{
  idle._opBusy=1;tick();await Promise.resolve();assert.equal(pings,1);
  idle._stopKeepalive();state.busy=false;
 }finally{globalThis.setInterval=savedInterval;globalThis.clearInterval=savedClear;}
-console.log('PASS: picker/File arrays, nested and empty folder drops, >100 entries, modern handles, read failures, UTF-8 paths, firmware capability, 5.35 MB fixture, CRC/ACK framing and stalled-upload isolation.');
+// Folder clean-up strips a repeated parent name and leftover dash separators.
+assert.equal(tool.cleanedChildDirName('parentname', 'parentname - bd'), 'bd');
+assert.equal(tool.cleanedChildDirName('parentname', 'parentname- bd'), 'bd');
+assert.equal(tool.cleanedChildDirName('parentname', 'parentname -bd'), 'bd');
+assert.equal(tool.cleanedChildDirName('parentname', 'parentname-bd'), 'bd');
+assert.equal(tool.cleanedChildDirName('Kick', 'Kick - Soft'), 'Soft');
+assert.equal(tool.cleanedChildDirName('Dirt-Samples', 'Dirt-Samples - dork2'), 'dork2');
+assert.equal(tool.cleanedChildDirName('Kick', 'Soft'), null);
+assert.equal(tool.cleanedChildDirName('Foo', 'Foo'), null);
+assert.equal(tool.baseName('/samples/Dirt-Samples'), 'Dirt-Samples');
+const tree = {
+  '/pack': [{ type: 'dir', name: 'Kick' }],
+  '/pack/Kick': [
+    { type: 'dir', name: 'Kick - Soft' },
+    { type: 'dir', name: 'other' },
+    { type: 'file', name: 'a.wav', size: 1 },
+  ],
+  '/pack/Kick/Kick - Soft': [{ type: 'dir', name: 'Kick - Soft - 01' }],
+  '/pack/Kick/Kick - Soft/Kick - Soft - 01': [],
+  '/pack/Kick/other': [],
+};
+const renames = [];
+const cleanClient = {
+  async listDir(path) { return tree[path] || []; },
+  async rename(src, dst) {
+    renames.push([src, dst]);
+    const parent = src.slice(0, src.lastIndexOf('/')) || '/';
+    const oldName = src.slice(src.lastIndexOf('/') + 1);
+    const newName = dst.slice(dst.lastIndexOf('/') + 1);
+    const entries = tree[parent] || [];
+    const hit = entries.find((e) => e.name === oldName);
+    if (hit) hit.name = newName;
+    if (tree[src]) { tree[dst] = tree[src]; delete tree[src]; }
+  },
+};
+const cleaned = await tool.cleanUpDirectoryNames(cleanClient, '/pack');
+assert.deepEqual(renames, [
+  ['/pack/Kick/Kick - Soft/Kick - Soft - 01', '/pack/Kick/Kick - Soft/01'],
+  ['/pack/Kick/Kick - Soft', '/pack/Kick/Soft'],
+]);
+assert.equal(cleaned.renamed, 2);
+assert.equal(cleaned.failed, 0);
+
+console.log('PASS: picker/File arrays, nested and empty folder drops, >100 entries, modern handles, read failures, UTF-8 paths, firmware capability, 5.35 MB fixture, CRC/ACK framing, stalled-upload isolation and folder clean-up.');

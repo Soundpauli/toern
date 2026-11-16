@@ -10,7 +10,7 @@
 #include "src/toern_pattern_slots.h"
 #include "src/toern_kit_browser.h"
 
-#define VERSION "v3.03c"
+#define VERSION "v3.03d"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
@@ -11487,6 +11487,20 @@ void updateVoiceLengths() {
       if (c >= 1 && len[c] > longest) longest = len[c];
     }
   }
+  // SINGLE + VMOD + LOOP: the focused voice cycles at LOOP length so live
+  // record / input / play have a fixed page span before notes fill those pages.
+  extern int loopLength;
+  if (voiceMode && loopLength > 0 && (GLOB.singleMode || currentMode == &singleMode)) {
+    int ch = (int)GLOB.currentChannel;
+    if (ch >= 1 && ch <= 15) {
+      int maxP = pages;
+      if (maxP > 8) maxP = 8;
+      if (maxP < 1) maxP = 1;
+      uint8_t forced = (uint8_t)constrain(loopLength, 1, maxP);
+      voicePageLen[ch] = forced;
+      if (forced > longest) longest = forced;
+    }
+  }
   voiceModePages = longest;
 }
 
@@ -11668,8 +11682,16 @@ void extendLastPageForLiveNote(uint8_t channel, uint8_t row, uint16_t targetBeat
       if ((uint8_t)notePage > voicePageLen[channel]) {
         voicePageLen[channel] = (uint8_t)notePage;
       }
-      if ((uint8_t)notePage > voiceModePages) {
-        voiceModePages = (uint8_t)notePage;
+      // Keep the SINGLE voice on LOOP length while live notes arrive.
+      if (loopLength > 0 && (GLOB.singleMode || currentMode == &singleMode) &&
+          channel == (uint8_t)GLOB.currentChannel) {
+        int maxP = effectiveMaxPages;
+        if (maxP > 8) maxP = 8;
+        if (maxP < 1) maxP = 1;
+        voicePageLen[channel] = (uint8_t)constrain(loopLength, 1, maxP);
+      }
+      if (voicePageLen[channel] > voiceModePages) {
+        voiceModePages = voicePageLen[channel];
       }
     }
     return;
