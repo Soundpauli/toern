@@ -4522,19 +4522,14 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
   AudioEffectEnvelope *env = samplePolyEnvelopes[ch][slot];
   if (!voice || !env) return;
 
-  // Soft-release only the stolen/restarted layer; leave other layers ringing.
-  // Still-playing retriggers must keep the open envelope and join via the
-  // reader declick ramp. releaseNoteOn(5)+noteOn fades to zero for ~5 ms and
-  // clicks on every overlap (MONO and MULT), including during the long default
-  // decay before sustain.
-  const bool active = samplePolySlotActive(ch, slot);
-  env->releaseNoteOn(0.0f);
-
+  // MIDI and grid share this path. Every hit restarts ADSR from the current
+  // gain (attack toward full, then decay to SUST) so a low sustain cannot
+  // stick after the first note. Stock noteOn() would drop through zero and click.
   const float fine = detune[ch];
   const float rate = powf(2.0f, ((float)pitch + fine - (float)SAMPLE_POLY_ROOT) / 12.0f);
   voice->setPlaybackRate(rate);
 
-  if (!(active && env->isActive())) env->noteOn();
+  env->retrigger();
   voice->playRaw(samplePolyData[ch], samplePolyFrames[ch], samplePolyChannels[ch]);
 
   const float outAmp = amp * sampleChannelVolScale(ch);

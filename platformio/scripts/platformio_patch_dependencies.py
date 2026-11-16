@@ -100,6 +100,25 @@ for _label, _old, _new in _envelope_patches:
         raise RuntimeError(f"Cannot apply PlatformIO dependency patch: {_label}")
     _envelope_text = _envelope_text.replace(_old, _new, 1)
     _envelope_changed = True
+_retrigger = """\t// Restart ADSR from the current gain. Stock noteOn() zeros the multiplier,
+\t// which clicks a still-sounding sample and leaves a low sustain stuck.
+\tvoid retrigger() {
+\t\t__disable_irq();
+\t\tif (state == 0 /* STATE_IDLE */) mult_hires = 0;
+\t\tstate = 2; /* STATE_ATTACK */
+\t\tcount = attack_count ? attack_count : 1;
+\t\tint32_t remaining = 0x40000000 - mult_hires;
+\t\tif (remaining < 0) remaining = 0;
+\t\tinc_hires = remaining / (int32_t)count;
+\t\t__enable_irq();
+\t}
+"""
+if "void retrigger()" not in _envelope_text:
+    _marker = "\tbool isActive();\n"
+    if _marker not in _envelope_text:
+        raise RuntimeError("Cannot apply PlatformIO dependency patch: envelope retrigger")
+    _envelope_text = _envelope_text.replace(_marker, _retrigger + _marker, 1)
+    _envelope_changed = True
 if _envelope_changed:
     _envelope_h.write_text(_envelope_text)
 

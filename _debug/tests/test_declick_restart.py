@@ -13,10 +13,10 @@ assert 'stop();\n            return reader->playRaw(data, numSamples, numChannel
 assert '_declickRestart = restarting;' in reader
 assert 'consumeDeclickRestart()' in reader
 
-# Trigger path: still-playing layers keep the envelope open (reader declick only).
+# MIDI and grid share triggerSamplerVoice and restart ADSR on every hit.
 main = (root / 'toern.ino').read_text()
-assert 'if (!(active && env->isActive())) env->noteOn();' in main
-assert 'env->releaseNoteOn(0.0f);' in main
+assert 'env->retrigger();' in main
+assert 'if (!(active && env->isActive())) env->noteOn();' not in main
 assert 'Keep _playing true into the reader so restart declick can arm' in play
 
 code = r'''
@@ -70,4 +70,4 @@ with tempfile.TemporaryDirectory(prefix='toern-declick-') as tmp:
     flags = ['-isystem', '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1'] if sys.platform == 'darwin' else []
     subprocess.run(['c++', '-std=c++17', *flags, str(path / 'test.cpp'), '-o', str(path / 'test')], check=True)
     subprocess.run([str(path / 'test')], check=True)
-print('PASS: still-playing playRaw arms declick; cold start does not; trigger keeps sustain-held envelopes open')
+print('PASS: still-playing playRaw arms declick; every sample hit restarts ADSR from the current gain')
