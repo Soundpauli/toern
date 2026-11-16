@@ -999,30 +999,21 @@ function spectral(y) {
 }
 
 function drawMarquee(matrix, text, color, now, reserveLoadedMark = false) {
+  if (!matrix.__marquee || matrix.__marquee.text !== text || matrix.__marquee.reserve !== reserveLoadedMark || matrix.__marquee.cols !== COLS) {
+    matrix.__marquee = { text, offset: 0, dir: 1, next: now + 300, reserve: reserveLoadedMark, cols: COLS };
+  }
+  const mark = matrix.__marquee;
   const width = Math.max(0, textPixelWidth(text) - 1);
   const initial = 1;
   const viewEnd = reserveLoadedMark ? Math.max(1, COLS - 4) : COLS;
-  const offsetMax = Math.max(0, initial + width - (viewEnd + 1));
-  const fits = width <= viewEnd;
-  if (!matrix.__marquee || matrix.__marquee.text !== text || matrix.__marquee.reserve !== reserveLoadedMark || matrix.__marquee.cols !== COLS) {
-    // Long names start at the end so trailing digits are visible first.
-    matrix.__marquee = {
-      text,
-      offset: fits ? 0 : offsetMax,
-      dir: fits ? 1 : -1,
-      next: now + (fits ? 300 : 500),
-      reserve: reserveLoadedMark,
-      cols: COLS,
-    };
-  }
-  const mark = matrix.__marquee;
-  if (fits) {
+  if (width <= viewEnd) {
     mark.offset = 0;
     mark.dir = 1;
     mark.next = now + 300;
     matrix.drawText(text, initial, 12, color);
     return;
   }
+  const offsetMax = Math.max(0, initial + width - (viewEnd + 1));
   if (now >= mark.next) {
     if (mark.dir > 0) {
       mark.offset += 1;

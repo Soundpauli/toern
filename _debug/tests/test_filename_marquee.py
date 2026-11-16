@@ -69,17 +69,13 @@ for(const columns of [16,32]) for(const loaded of [false,true]){
  const draw=new Function('textPixelWidth','COLS',SOURCE+';return drawMarquee;')(textPixelWidth,columns);
  const available=columns-(loaded?4:0);
  for(const name of ['i','iiiii','MMMM','iiiiiiii','MMMMMMMM','MMMMMMMMM','MMij','MMMij','MMMMMMij','MMMMMMMij']){
-  let x=0,moved=false,first=null;
+  let x=0,moved=false;
   const matrix={drawText(_text,start){x=start;}};
   for(let now=0;now<=6000;now+=50){
    draw(matrix,name,[],now,loaded);moved ||= x!==1;
-   if(first===null)first=x;
    if(textPixelWidth(name)-1<=available)assert.equal(x,1);
   }
-  const overflow=textPixelWidth(name)-1>available;
-  assert.equal(moved,overflow);
-  // Overflowing labels start fully scrolled to the end.
-  if(overflow)assert.ok(first<1);
+  assert.equal(moved,textPixelWidth(name)-1>available);
  }
 }
 '''.replace('SOURCE',json.dumps(marquee))
