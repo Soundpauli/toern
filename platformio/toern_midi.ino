@@ -1327,7 +1327,10 @@ void handleNoteOff(uint8_t midiChannel, uint8_t pitch, uint8_t velocity) {
         persistentNoteOn[channel] = false;
         // Grid hits are one-shots (sustain until the sample ends). Don't start
         // release on key-up; default RELEASE is 0 and would chop the file.
-        if (envelopes[channel] && !noteOnTriggered[channel]) envelopes[channel]->noteOff();
+        if (!noteOnTriggered[channel]) {
+          extern void samplePolyNoteOffAll(int ch);
+          samplePolyNoteOffAll(channel);
+        }
       }
       continue;
     }

@@ -12,7 +12,7 @@ The sequencer speaks in **channel numbers** that map to audio engines. Grid note
 
 | Channel | Kind | Audio entry points |
 |---------|------|--------------------|
-| **1–8** | Sample voices | `sound1`…`sound8` (`AudioPlayArrayResmp`) + per-voice envelope → bitcrush → filter path; reverb on 1, 2, 4, 6–8 |
+| **1–8** | Sample voices (TRIG MULT = 3-note poly, MONO = one playhead) | `soundN`/`soundNb`/`soundNc` + matching envelopes → `sampleSumN` → shared bitcrush/filter path; reverb on 1, 2, 4, 6–8. Same EXTMEM PCM for all layers. |
 | **11** | Poly synth (3 voices) | Oscillator banks `Swaveform*` / mixers / ladder filters in `audioinit.h`; voice logic in `toern_synths.ino` |
 | **13–14** | Mono synths | `waveform13_*` / `waveform14_*` chains with LFO/arp support |
 

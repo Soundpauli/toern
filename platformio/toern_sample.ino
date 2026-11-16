@@ -290,13 +290,15 @@ bool isChannelSampleReloadBusy(unsigned int ch) {
 void beginChannelSampleReload(unsigned int ch) {
   if (ch >= maxFiles) return;
   extern void cancelKitSaveForSampleChange(unsigned ch);
+  extern void samplePolyStopAll(int ch);
+  extern bool samplePolyAnyPlaying(int ch);
   cancelKitSaveForSampleChange(ch);
   bool fade = false;
   {
     toern_audio::StateGuard guard;
     channelSampleReloadBusy[ch] = true;
-    if (voices[ch] && voices[ch]->isPlaying()) {
-      voices[ch]->setAmplitude(0.0f);
+    if (samplePolyAnyPlaying((int)ch)) {
+      applyPlayAmplitude((int)ch, 0.0f);
       fade = true;
     }
   }
@@ -312,16 +314,7 @@ void beginChannelSampleReload(unsigned int ch) {
   // noteOff alone leaves a releasing player reading the buffer being rewritten.
   {
     toern_audio::StateGuard guard;
-    if (voices[ch]) voices[ch]->stop();
-  }
-  // Clear allocator state for the entire MIDI range, yielding IRQ ownership
-  // between events instead of masking audio around the complete sweep.
-  for (int note = 0; note < 128; note++) {
-    samplerNoteEvent(ch, note, 0, false, false);
-  }
-  {
-    toern_audio::StateGuard guard;
-    if (ch < 15 && envelopes[ch] != nullptr) envelopes[ch]->noteOff();
+    samplePolyStopAll((int)ch);
   }
   samplerRemoveSamples(ch);
 }
@@ -329,9 +322,9 @@ void beginChannelSampleReload(unsigned int ch) {
 void endChannelSampleReload(unsigned int ch) {
   if (ch >= maxFiles) return;
   toern_audio::StateGuard guard;
-  // The reader is stopped; restore its level for the next note (including RAM
+  // Readers are stopped; restore level for the next note (including RAM
   // preview, whose trigger does not go through triggerSamplerVoice).
-  if (voices[ch]) voices[ch]->setAmplitude(playAmpForVoice(ch));
+  applyPlayAmplitude((int)ch, playAmpForVoice((int)ch));
   channelSampleReloadBusy[ch] = false;
 }
 

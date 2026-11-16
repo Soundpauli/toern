@@ -31,7 +31,7 @@ Call these around blocking file work when audio should keep playing.
 
 ## Players
 
-`AudioPlayArrayResmp` instances (`sound0`…`sound8` in `audioinit.h`) play from memory with rate control via the custom resampler. Channel 0 is used for preview / utility paths; performance voices are 1–8.
+`AudioPlayArrayResmp` instances (`sound0`…`sound8` in `audioinit.h`) play from memory with rate control via the custom resampler. Channel 0 is used for preview / utility paths; performance voices are 1–8. Voices **1–8** each have three playheads (`soundN`/`Nb`/`Nc`) and envelopes summed in `sampleSumN` before the shared FX chain, so overlapping retriggers of the same sample can ring together without duplicating EXTMEM PCM.
 
 ## Default playback fidelity
 
@@ -39,7 +39,7 @@ At neutral settings, a sample plays as a one-shot through its actual end. The de
 
 The loaders use exact PCM frame windows: a **0–100%** selection includes every frame, including quiet tails and frame counts not divisible by three. There is no hidden 1% end trim or automatic fade over the end of the source. Any zero padding is appended **after** the original PCM so effects can settle; it does not replace the tail.
 
-`samplerNoteEvent()` avoids applying the envelope's forced retrigger release to a finished reader or a reader walking digital silence. `ToernPcmActivity` observes rendered PCM and requires two entirely zero blocks; even ±1 LSB counts as signal. This only controls the next note's restart policy. It never stops, trims or fades the current file. A still-sounding sample retains the existing retrigger de-click fade.
+Filter page 3 **TRIG** selects **MONO** (single playhead) or **MULT** (round-robin across three playheads). MULT is the default. Overlapping retriggers allocate an idle playhead (or steal the oldest). A still-playing layer keeps its open envelope and joins through the reader's 64-sample declick ramp; a fresh idle layer gets `noteOn`. `AudioPlayResmp::playRaw` must not `stop()` before the reader, or `_declickRestart` never arms and every overlap clicks. Live ADSR edits update all three envelopes for the channel; attack/decay/sustain/release also reshape the current stage while a layer is mid-envelope. `ToernPcmActivity` observes rendered PCM and requires two entirely zero blocks; even ±1 LSB counts as signal. This only controls that layer's restart policy. It never stops, trims or fades other layers.
 
 The stock Teensy envelope still implements `attack(0)` as eight samples (about 0.181 ms), and the output limiter retains its headroom protection. USB output therefore is not promised to be bit-identical to every source WAV. Loaded PCM can be checked exactly; playback checks compare against both the original WAV and the known native onset.
 

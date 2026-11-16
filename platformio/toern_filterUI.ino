@@ -82,6 +82,7 @@ uint8_t readSetting(SettingArray arr, int8_t idx, uint8_t chan) {
         idx == SUSTAIN ? toern_audio::sustainSliderMin(chan) : 0, MAX_FILTER_RESOLUTION); break;
     case ARR_STRETCH: raw = chan >= 1 && chan <= 8 ? sampleTimeStretch[chan] : 0; break;
     case ARR_GAIN: raw = sampleVoiceGainSlider(chan); break;
+    case ARR_TRIG: raw = sampleTrigModeSlider(chan); break;
     default: return 0;
   }
   return raw;
@@ -410,6 +411,7 @@ void toggleDefaultFilterFromSlider(uint8_t page, uint8_t encoder) {
     // Set as new default fast filter
     switch (def.arr) {
       case ARR_GAIN:
+      case ARR_TRIG:
       case ARR_FILTER:
         defaultFastFilter[chan].arr = def.arr;
         defaultFastFilter[chan].idx = def.idx;
@@ -485,6 +487,9 @@ void processAdjustments_new(uint8_t page) {
         break;
       case ARR_GAIN:
         setSampleVoiceGain(chan, currentMode->pos[i]);
+        break;
+      case ARR_TRIG:
+        setSampleTrigMode(chan, currentMode->pos[i]);
         break;
 
       default:

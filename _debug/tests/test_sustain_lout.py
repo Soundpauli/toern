@@ -39,7 +39,11 @@ struct {float param_settings[15][8]{};} SMP;
 float maxParamVal[12]{},sustainAmp[2][3]{};
 uint16_t attackAmp[2][3]{},decayAmp[2][3]{},releaseAmp[2][3]{},releaseFilter[2][3]{};
 struct Env {float level,attackMs;void attack(float v){attackMs=v;}void decay(float){}void release(float){}void sustain(float v){level=v;}} env[15];
+using AudioEffectEnvelope = Env;
 Env *envelopes[15]{};
+constexpr int SAMPLE_POLY=3;
+Env *samplePolyEnvelopes[9][SAMPLE_POLY]{};
+namespace toern_audio { struct StateGuard { StateGuard(){} ~StateGuard(){} }; }
 void updateVals(int){}bool channelHasVoiceDelay(int){return false;}void applyVoiceDelay(int){}
 float mapf(float x,float a,float b,float c,float d){return c+(x-a)*(d-c)/(b-a);}
 Env *Senvelope1[3]={&env[11],&env[11],&env[11]},*Senvelope2[3]={&env[11],&env[11],&env[11]};
@@ -64,6 +68,7 @@ void saveSingleModeToEEPROM(int slot,int8_t v){assert(slot==15);savedCodec=v;}
 void redrawMain(int){}
 void lineMenu(){int setting=28;switch(setting){LINE_CASE}}
 int main(){
+ for(int ch:{1,8}) for(int s=0;s<SAMPLE_POLY;++s) samplePolyEnvelopes[ch][s]=&env[ch];
  maxParamVal[ATTACK]=2000;
  for(int ch:{1,8,11,13,14})for(int raw=0;raw<=32;++raw){
   envelopes[ch]=&env[ch];SMP.param_settings[ch][ATTACK]=raw;setParams(ATTACK,ch);

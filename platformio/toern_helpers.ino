@@ -1150,20 +1150,9 @@ void startFastRecord() {
   fastRecordChannel = (uint8_t)constrain(ch, 0, 255);
   
   // Immediately stop any playing sound on the recording channel
-  extern AudioPlayArrayResmp *voices[];
-  if (ch >= 0 && ch <= 8 && voices[ch] != nullptr) {
-    voices[ch]->stop();  // stop reader before we overwrite sampled[ch]
-  }
-  extern AudioEffectEnvelope *envelopes[];
-  if (ch >= 0 && ch < 15 && envelopes[ch] != nullptr) {
-    envelopes[ch]->noteOff();
-  }
-  
-  // Also stop all notes on the sampler for channels 0-8 (sample channels)
+  extern void samplePolyStopAll(int ch);
   if (ch >= 0 && ch <= 8) {
-    for (int note = 36; note <= 96; note++) {
-      samplerNoteEvent(ch, note, 0, false, false);
-    }
+    samplePolyStopAll(ch);  // stop all poly readers before we overwrite sampled[ch]
   }
   
   fastRecWriteIndex[ch] = 0;
@@ -3748,6 +3737,7 @@ FLASHMEM void startNew() {
     if (ch >= 1 && ch <= 8) {
       setSampleTimeStretch(ch, 11);
       setSampleVoiceGain(ch, 16);
+      setSampleTrigMode(ch, 1);  // MULT
     }
     
     // Reset synth data (only for channels 11, 13-14)

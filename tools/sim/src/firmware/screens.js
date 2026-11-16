@@ -602,6 +602,7 @@ export function drawFilter(matrix, s, now) {
     let label;
     if (spec.key === "voiceGain") label = (val > 16 ? "+" : "") + String(val - 16);
     else if (spec.key === "stretch") label = val === 11 ? "OFF" : val < 11 ? `-${10-val}%` : `+${val-12}%`;
+    else if (spec.key === "trig") label = val ? "MULT" : "MONO";
     else if (spec.key === "wave") label = WAVE_NAMES[Math.min(3, Math.floor(val * 3 / 16))];
     else if (spec.key === "inst") label = INST_NAMES[val] || String(val);
     else if (spec.key === "detune" && (spec.max ?? 32) === 32) {

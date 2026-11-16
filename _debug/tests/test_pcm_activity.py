@@ -40,9 +40,17 @@ with tempfile.TemporaryDirectory() as tmp:
     playback=work/'test/TeensyVariablePlayback/src/playresmp.h'
     playback.parent.mkdir(parents=True)
     playback.write_text((root/'.pio/libdeps/teensy41/TeensyVariablePlayback/src/playresmp.h').read_text())
+    framework = Path.home() / '.platformio/packages/framework-arduinoteensy'
+    class Platform:
+        def get_package_dir(self, name):
+            if name == 'framework-arduinoteensy':
+                return str(framework)
+            return str(work / name)
     class Env:
         def subst(self,key):
             return {'$PROJECT_DIR':str(root),'$PROJECT_LIBDEPS_DIR':str(work),'$PIOENV':'test'}[key]
+        def PioPlatform(self):
+            return Platform()
         def AddBuildMiddleware(self,callback):
             pass
     namespace={'Import':lambda name:None,'env':Env()}

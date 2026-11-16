@@ -1955,7 +1955,7 @@ const HELP = {
   draw: "Draw is the grid. Move with the encoders, Enter paints a note, Space plays. Hold T3 to record into the current voice when REC→TRIG is INST. SENS waits 3 seconds first. D clears this page. T1 enters single mode on the current row. T2 opens the main menu.",
   empty: "New empty pattern clears all notes and effects (ETC → RSET → FULL), then returns to Draw.",
   single: "Single mode is one voice, and each row is a pitch. Enter paints that voice. On the bottom row, hold Tab to generate a pattern. D clears only this voice. T1 returns to draw.",
-  filter: "Samples have TIME and DLAY/VOL; VOL is -16 silence, 0 unity, +16 double gain. Filter shapes the current voice. The four encoders are the controls on this page. T2 moves to the next filter page. T1 leaves. T3 resets this page.",
+  filter: "Samples have TIME and DLAY/VOL/TRIG; VOL is -16 silence, 0 unity, +16 double gain; TRIG is MONO or MULT. Filter shapes the current voice. The four encoders are the controls on this page. T2 moves to the next filter page. T1 leaves. T3 resets this page.",
   menu: "Main menu. Encoder 4 moves through the pages, Enter opens the one you are on. T2 or Esc leaves.",
   wav: "Load a sample onto this voice. Encoder 4 moves through folders and files, Enter opens a folder or loads the file. Q/W and R/T trim the sample, Tab previews it. T3 records from the mic.",
   rec: "Mic record. Encoder 2 starts the take, encoder 3 stops it or plays it back, encoder 4 leaves. The recording replaces this voice.",

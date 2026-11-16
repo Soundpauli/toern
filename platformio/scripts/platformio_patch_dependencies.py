@@ -8,11 +8,100 @@ project_dir = Path(env.subst("$PROJECT_DIR"))
 # Framework changes must survive clean installs and apply to both MCP builds.
 import runpy
 _usb_patch = runpy.run_path(str(project_dir / "scripts" / "patch_usb_audio.py"))["patch_usb_audio"]
-_usb_path = Path(env.PioPlatform().get_package_dir("framework-arduinoteensy")) / "cores/teensy4/usb_audio.cpp"
+_framework = Path(env.PioPlatform().get_package_dir("framework-arduinoteensy"))
+_usb_path = _framework / "cores/teensy4/usb_audio.cpp"
 _usb_source = _usb_path.read_text()
 _usb_patched = _usb_patch(_usb_source)
 if _usb_patched != _usb_source:
     _usb_path.write_text(_usb_patched)
+
+# Live ADSR edits must move the current stage, not only the next noteOn target.
+_envelope_h = _framework / "libraries/Audio/effect_envelope.h"
+_envelope_text = _envelope_h.read_text()
+_envelope_patches = [
+    (
+        "live attack update",
+        """\tvoid attack(float milliseconds) {
+\t\tattack_count = milliseconds2count(milliseconds);
+\t\tif (attack_count == 0) attack_count = 1;
+\t}""",
+        """\tvoid attack(float milliseconds) {
+\t\tattack_count = milliseconds2count(milliseconds);
+\t\tif (attack_count == 0) attack_count = 1;
+\t\t__disable_irq();
+\t\tif (state == 2 /* STATE_ATTACK */) {
+\t\t\tint32_t remaining = 0x40000000 - mult_hires;
+\t\t\tif (remaining < 0) remaining = 0;
+\t\t\tcount = attack_count;
+\t\t\tinc_hires = remaining / (int32_t)count;
+\t\t}
+\t\t__enable_irq();
+\t}""",
+    ),
+    (
+        "live decay update",
+        """\tvoid decay(float milliseconds) {
+\t\tdecay_count = milliseconds2count(milliseconds);
+\t\tif (decay_count == 0) decay_count = 1;
+\t}""",
+        """\tvoid decay(float milliseconds) {
+\t\tdecay_count = milliseconds2count(milliseconds);
+\t\tif (decay_count == 0) decay_count = 1;
+\t\t__disable_irq();
+\t\tif (state == 4 /* STATE_DECAY */) {
+\t\t\tcount = decay_count;
+\t\t\tinc_hires = (sustain_mult - mult_hires) / (int32_t)count;
+\t\t}
+\t\t__enable_irq();
+\t}""",
+    ),
+    (
+        "live sustain update",
+        """\tvoid sustain(float level) {
+\t\tif (level < 0.0f) level = 0;
+\t\telse if (level > 1.0f) level = 1.0f;
+\t\tsustain_mult = level * 1073741824.0f;
+\t}""",
+        """\tvoid sustain(float level) {
+\t\tif (level < 0.0f) level = 0;
+\t\telse if (level > 1.0f) level = 1.0f;
+\t\tsustain_mult = level * 1073741824.0f;
+\t\t__disable_irq();
+\t\tif (state == 5 /* STATE_SUSTAIN */) {
+\t\t\tmult_hires = sustain_mult;
+\t\t\tinc_hires = 0;
+\t\t}
+\t\t__enable_irq();
+\t}""",
+    ),
+    (
+        "live release update",
+        """\tvoid release(float milliseconds) {
+\t\trelease_count = milliseconds2count(milliseconds);
+\t\tif (release_count == 0) release_count = 1;
+\t}""",
+        """\tvoid release(float milliseconds) {
+\t\trelease_count = milliseconds2count(milliseconds);
+\t\tif (release_count == 0) release_count = 1;
+\t\t__disable_irq();
+\t\tif (state == 6 /* STATE_RELEASE */) {
+\t\t\tcount = release_count;
+\t\t\tinc_hires = (-mult_hires) / (int32_t)count;
+\t\t}
+\t\t__enable_irq();
+\t}""",
+    ),
+]
+_envelope_changed = False
+for _label, _old, _new in _envelope_patches:
+    if _new in _envelope_text:
+        continue
+    if _old not in _envelope_text:
+        raise RuntimeError(f"Cannot apply PlatformIO dependency patch: {_label}")
+    _envelope_text = _envelope_text.replace(_old, _new, 1)
+    _envelope_changed = True
+if _envelope_changed:
+    _envelope_h.write_text(_envelope_text)
 
 libdeps_dir = Path(env.subst("$PROJECT_LIBDEPS_DIR")) / env.subst("$PIOENV")
 
@@ -154,6 +243,23 @@ for source_dir in playback_src_dirs:
 
     playresmp = source_dir / "playresmp.h"
     text = playresmp.read_text()
+    # Retrigger must keep _playing true into ResamplingReader::playRaw so
+    # _declickRestart arms. Pre-stopping made every still-playing hit click.
+    if "Keep _playing true into the reader so restart declick can arm" not in text:
+        text = replace_once(
+            text,
+            """        bool playRaw(int16_t *data, uint32_t numSamples, uint16_t numChannels)
+        {
+            stop();
+            return reader->playRaw(data, numSamples, numChannels);
+        }""",
+            """        bool playRaw(int16_t *data, uint32_t numSamples, uint16_t numChannels)
+        {
+            // Keep _playing true into the reader so restart declick can arm.
+            return reader->playRaw(data, numSamples, numChannels);
+        }""",
+            "playRaw declick restart",
+        )
     if "void setAmplitude(float n)" not in text:
         text = replace_once(
             text,

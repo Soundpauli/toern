@@ -8,7 +8,7 @@ method=source[start:end]
 parameters=(root/'toern_parameters.ino').read_text()
 start=parameters.index('float getAttackDuration(int channel) {');end=parameters.index('\n}',start)+2
 attack=parameters[start:end]
-assert 'if (ch >= 1 && envelopes[ch]) setParams(ATTACK, ch);' in source
+assert 'if (ch >= 1) applySampleEnvelopeParams(ch);' in source
 code=r'''
 #include <cassert>
 #include <cmath>

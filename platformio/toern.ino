@@ -154,7 +154,8 @@ enum SettingArray : uint8_t { ARR_FILTER,
                               ARR_PARAM,
                               ARR_NONE,
                               ARR_STRETCH,
-                              ARR_GAIN };
+                              ARR_GAIN,
+                              ARR_TRIG };
 
 // Define named struct for sliderDef
 struct SliderDefEntry {
@@ -247,6 +248,10 @@ extern void handleStart();
 // synthmixer11 0.20 made single notes much quieter than ch13/14; GAIN SYN then clipped the bus.
 #define CH11_POLY_SUM_GAIN 0.55f
 #define CH11_SYNTHMIX_GAIN 0.72f
+// Sample voices 1–8: three overlapping playheads into sampleSumN before shared FX.
+#define SAMPLE_POLY 3
+#define SAMPLE_POLY_SUM_GAIN 0.55f
+#define SAMPLE_POLY_ROOT 36
 #define LFO_CUTOFF_OCTAVES 6.0f
 #define LFO_RES_SWEEP 4.2f
 #define ARP_CENTER 16
@@ -445,6 +450,8 @@ void resetAllChannelVolumesToDefault();
 void extendLastPageForLiveNote(uint8_t channel, uint8_t row, uint16_t targetBeat);
 void updateLastPage();
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSidechain = false);
+void setParams(ParameterType paramType, int index);
+void samplePolyStopAll(int ch);
 uint8_t scaledNoteVelocity(int ch, int vel);
 void updateAllMixerGains();
 void forceAllMixerGainsToTarget();
@@ -495,6 +502,7 @@ const char *const instTypeNames[] PROGMEM = { "BASS", "KEYS", "CHPT", "PAD", "WO
 // Add at file scope, after instTypeNames[]
 const char *const sndTypeNames[] PROGMEM = { "SAMP" };
 const char *const waveformNames[] PROGMEM = { "SIN", "SQR", "SAW", "TRI" };
+const char *const trigModeNames[] PROGMEM = { "MONO", "MULT" };
 
 struct SliderMeta {
   uint8_t maxValue;        // physical encoder range, e.g. 16
@@ -1484,6 +1492,29 @@ void setSampleVoiceGain(int ch, int slider) {
   applySampleVoiceGain(ch);
 }
 
+// TRIG: 0=MONO (single playhead), 1=MULT (round-robin 3). Tagged spare param slot.
+static constexpr int SAMPLE_TRIG_SLOT = 13;
+static constexpr float SAMPLE_TRIG_TAG = 2097152.0f;
+static_assert(SAMPLE_TRIG_SLOT < maxFilters, "TRIG must retain the Device layout");
+static_assert(SAMPLE_TRIG_SLOT != SAMPLE_VOICE_GAIN_SLOT, "TRIG and VOL need distinct slots");
+
+int sampleTrigModeSlider(int ch) {
+  if (ch < 1 || ch > 8) return 1;
+  const float stored = SMP.param_settings[ch][SAMPLE_TRIG_SLOT];
+  if (!isfinite(stored) || stored < SAMPLE_TRIG_TAG
+      || stored > SAMPLE_TRIG_TAG + 1.0f || floorf(stored) != stored) return 1;  // default MULT
+  return (int)(stored - SAMPLE_TRIG_TAG);
+}
+
+void samplePolyApplyTrigMode(int ch);
+
+void setSampleTrigMode(int ch, int slider) {
+  if (ch < 1 || ch > 8) return;
+  const int mode = constrain(slider, 0, 1);
+  SMP.param_settings[ch][SAMPLE_TRIG_SLOT] = SAMPLE_TRIG_TAG + mode;
+  samplePolyApplyTrigMode(ch);
+}
+
 // Per-page mute system for PMOD (pattern mode)
 DMAMEM static bool pageMutes[maxPages][maxY];  // [page][channel] - stores mute state per page
 DMAMEM static bool globalMutes[maxY];          // stores global mute state when PMOD is off
@@ -1806,11 +1837,46 @@ DMAMEM FilterTarget defaultFastFilter[NUM_CHANNELS];  // one per channel
 // Small note/voice controllers are hot on triggers; sample PCM stays in PSRAM.
 arraysampler _samplers[9];
 AudioPlayArrayResmp *voices[9] = { &sound0, &sound1, &sound2, &sound3, &sound4, &sound5, &sound6, &sound7, &sound8 };
+// voices[ch] / envelopes[ch] remain slot 0; b/c layers for overlapping retriggers.
+AudioPlayArrayResmp *samplePolyVoices[9][SAMPLE_POLY] = {
+  { &sound0, nullptr, nullptr },
+  { &sound1, &sound1b, &sound1c },
+  { &sound2, &sound2b, &sound2c },
+  { &sound3, &sound3b, &sound3c },
+  { &sound4, &sound4b, &sound4c },
+  { &sound5, &sound5b, &sound5c },
+  { &sound6, &sound6b, &sound6c },
+  { &sound7, &sound7b, &sound7c },
+  { &sound8, &sound8b, &sound8c },
+};
+AudioEffectEnvelope *samplePolyEnvelopes[9][SAMPLE_POLY] = {
+  { &envelope0, nullptr, nullptr },
+  { &envelope1, &envelope1b, &envelope1c },
+  { &envelope2, &envelope2b, &envelope2c },
+  { &envelope3, &envelope3b, &envelope3c },
+  { &envelope4, &envelope4b, &envelope4c },
+  { &envelope5, &envelope5b, &envelope5c },
+  { &envelope6, &envelope6b, &envelope6c },
+  { &envelope7, &envelope7b, &envelope7c },
+  { &envelope8, &envelope8b, &envelope8c },
+};
+static AudioMixer4 *samplePolySums[9] = {
+  nullptr, &sampleSum1, &sampleSum2, &sampleSum3, &sampleSum4,
+  &sampleSum5, &sampleSum6, &sampleSum7, &sampleSum8
+};
+static uint32_t samplePolyNoteOnMs[9][SAMPLE_POLY] = {};
+static int16_t *samplePolyData[9] = {};
+static uint32_t samplePolyFrames[9] = {};
+static uint16_t samplePolyChannels[9] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 static uint8_t sampleTimeStretch[9] = {11,11,11,11,11,11,11,11,11};
 void setSampleTimeStretch(uint8_t channel, int value) {
   if (channel < 1 || channel > 8) return;
   sampleTimeStretch[channel] = constrain(value, 0, 22);
-  voices[channel]->setTimeStretchAmount(sampleTimeStretch[channel]);
+  for (int s = 0; s < SAMPLE_POLY; ++s) {
+    if (samplePolyVoices[channel][s]) {
+      samplePolyVoices[channel][s]->setTimeStretchAmount(sampleTimeStretch[channel]);
+    }
+  }
 }
 
 AudioEffectEnvelope *envelopes[15] = { &envelope0, &envelope1, &envelope2, &envelope3, &envelope4, &envelope5, &envelope6, &envelope7, &envelope8, nullptr, nullptr, &envelope11, nullptr, &envelope13, &envelope14 };
@@ -3884,16 +3950,22 @@ FLASHMEM void initSamples() {
   }
   //preview
   _samplers[0].addVoice(sound0, mixer0, 1, envelope0);
-  //voice 1-
-  _samplers[1].addVoice(sound1, envelope1);
-  _samplers[2].addVoice(sound2, envelope2);
-  _samplers[3].addVoice(sound3, envelope3);
-  _samplers[4].addVoice(sound4, envelope4);
-
-  _samplers[5].addVoice(sound5, envelope5);
-  _samplers[6].addVoice(sound6, envelope6);
-  _samplers[7].addVoice(sound7, envelope7);
-  _samplers[8].addVoice(sound8, envelope8);
+  // Voices 1–8: three playheads each (custom allocator; same-pitch overlapping).
+  for (int ch = 1; ch <= 8; ++ch) {
+    for (int s = 0; s < SAMPLE_POLY; ++s) {
+      if (samplePolyVoices[ch][s] && samplePolyEnvelopes[ch][s]) {
+        // Stock ctor leaves hold at 2.5 ms; sample ADSR has no HOLD slider.
+        samplePolyEnvelopes[ch][s]->hold(0.0f);
+        _samplers[ch].addVoice(*samplePolyVoices[ch][s], *samplePolyEnvelopes[ch][s]);
+      }
+    }
+    if (samplePolySums[ch]) {
+      samplePolySums[ch]->gain(0, SAMPLE_POLY_SUM_GAIN);
+      samplePolySums[ch]->gain(1, SAMPLE_POLY_SUM_GAIN);
+      samplePolySums[ch]->gain(2, SAMPLE_POLY_SUM_GAIN);
+      samplePolySums[ch]->gain(3, 0.0f);
+    }
+  }
 
   synthmixer11.gain(0, CH11_SYNTHMIX_GAIN);
   synthmixer11.gain(1, 0.0f);
@@ -4010,10 +4082,12 @@ FLASHMEM void initSamples() {
   }
 
   for (unsigned int i = 0; i < 9; i++) {
-    if (voices[i]) {  // Check if voice exists
-      voices[i]->enableInterpolation(true);
-      if (i == 0) ToernWsola::init();
+    for (int s = 0; s < SAMPLE_POLY; ++s) {
+      if (samplePolyVoices[i][s]) {
+        samplePolyVoices[i][s]->enableInterpolation(true);
+      }
     }
+    if (i == 0) ToernWsola::init();
   }
 
   initSliderDefTemplates();
@@ -4267,11 +4341,84 @@ uint8_t scaledNoteVelocity(int ch, int vel) {
   return (uint8_t)out;
 }
 
+static bool samplePolySlotActive(int ch, int slot) {
+  if (ch < 0 || ch > 8 || slot < 0 || slot >= SAMPLE_POLY) return false;
+  AudioPlayArrayResmp *v = samplePolyVoices[ch][slot];
+  return v && v->isPlaying() && v->hasRecentOutput();
+}
+
+void samplePolyApplyTrigMode(int ch) {
+  if (ch < 1 || ch > 8) return;
+  if (sampleTrigModeSlider(ch) != 0) return;  // MULT keeps overlaps
+  for (int s = 1; s < SAMPLE_POLY; ++s) {
+    if (samplePolyVoices[ch][s]) samplePolyVoices[ch][s]->stop();
+    if (samplePolyEnvelopes[ch][s]) samplePolyEnvelopes[ch][s]->noteOff();
+    samplePolyNoteOnMs[ch][s] = 0;
+  }
+}
+
+static int allocSamplePolySlot(int ch) {
+  if (sampleTrigModeSlider(ch) == 0) {
+    samplePolyApplyTrigMode(ch);  // MONO: only slot 0
+    return 0;
+  }
+  for (int s = 0; s < SAMPLE_POLY; ++s) {
+    if (!samplePolySlotActive(ch, s)) return s;
+  }
+  int oldest = 0;
+  for (int s = 1; s < SAMPLE_POLY; ++s) {
+    if (samplePolyNoteOnMs[ch][s] < samplePolyNoteOnMs[ch][oldest]) oldest = s;
+  }
+  return oldest;
+}
+
+void samplePolyStopAll(int ch) {
+  if (ch < 0 || ch > 8) return;
+  for (int s = 0; s < SAMPLE_POLY; ++s) {
+    if (samplePolyVoices[ch][s]) samplePolyVoices[ch][s]->stop();
+    if (samplePolyEnvelopes[ch][s]) samplePolyEnvelopes[ch][s]->noteOff();
+    samplePolyNoteOnMs[ch][s] = 0;
+  }
+}
+
+void samplePolyNoteOffAll(int ch) {
+  if (ch < 0 || ch > 8) return;
+  for (int s = 0; s < SAMPLE_POLY; ++s) {
+    if (samplePolyEnvelopes[ch][s]) samplePolyEnvelopes[ch][s]->noteOff();
+  }
+}
+
+bool samplePolyAnyEnvelopeActive(int ch) {
+  if (ch < 0 || ch > 8) return false;
+  for (int s = 0; s < SAMPLE_POLY; ++s) {
+    if (samplePolyEnvelopes[ch][s] && samplePolyEnvelopes[ch][s]->isActive()) return true;
+  }
+  return false;
+}
+
+bool samplePolyAnyPlaying(int ch) {
+  if (ch < 0 || ch > 8) return false;
+  for (int s = 0; s < SAMPLE_POLY; ++s) {
+    if (samplePolyVoices[ch][s] && samplePolyVoices[ch][s]->isPlaying()) return true;
+  }
+  return false;
+}
+
 static void applyPlayAmplitude(int ch, float amp) {
-  if (ch < 0 || ch > 8 || voices[ch] == nullptr) return;
+  if (ch < 0 || ch > 8) return;
   if (amp < 0.0f) amp = 0.0f;
   if (amp > 1.0f) amp = 1.0f;
-  voices[ch]->setAmplitude(amp);
+  for (int s = 0; s < SAMPLE_POLY; ++s) {
+    if (samplePolyVoices[ch][s]) samplePolyVoices[ch][s]->setAmplitude(amp);
+  }
+}
+
+static void applySampleEnvelopeParams(int ch) {
+  if (ch < 1 || ch > 8) return;
+  setParams(ATTACK, ch);
+  setParams(DECAY, ch);
+  setParams(SUSTAIN, ch);
+  setParams(RELEASE, ch);
 }
 
 static float playAmpForVoice(int ch) {
@@ -4304,29 +4451,42 @@ void samplerNoteEvent(int ch, uint8_t pitch, uint8_t velocity, bool on, bool ret
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
   if (on && velocity && isChannelSampleReloadBusy((unsigned int)ch)) return;
-  if (on && velocity && ch >= 1 && envelopes[ch] && voices[ch]) {
-    // At EOF the reader stops sending blocks, so its envelope can remain in
-    // SUSTAIN. A forced release here would fade the NEW sample's first 5ms,
-    // then abruptly restart its attack. Idle readers need a fresh attack;
-    // Readers walking a silent WAV tail also need a fresh attack. Nonzero
-    // output in the last two blocks retains the normal retrigger de-click.
-    const bool active = voices[ch]->isPlaying() && voices[ch]->hasRecentOutput();
-    envelopes[ch]->releaseNoteOn(active ? 5.0f : 0.0f);
+  // Preview (ch0) stays mono via TeensyAudioSampler. Performance voices 1–8 use
+  // the custom 3-slot path in triggerSamplerVoice / samplePolyStopAll.
+  if (ch == 0) {
+    if (on && velocity && envelopes[0] && voices[0]) {
+      const bool active = voices[0]->isPlaying() && voices[0]->hasRecentOutput();
+      envelopes[0]->releaseNoteOn(active ? 5.0f : 0.0f);
+    }
+    _samplers[ch].noteEvent(pitch, velocity, on, retrigger);
+    return;
   }
-  _samplers[ch].noteEvent(pitch, velocity, on, retrigger);
+  if (!on || velocity == 0) {
+    samplePolyNoteOffAll(ch);
+    return;
+  }
+  (void)pitch;
+  (void)retrigger;
 }
 
 void samplerRemoveSamples(int ch) {
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
   _samplers[ch].removeAllSamples();
+  samplePolyData[ch] = nullptr;
+  samplePolyFrames[ch] = 0;
+  samplePolyChannels[ch] = 1;
 }
 
 void samplerAddSample(int ch, uint8_t root, int16_t *data, uint32_t frames, uint16_t channels) {
   if (ch < 0 || ch > 8) return;
   toern_audio::StateGuard guard;
   _samplers[ch].addSample(root, data, frames, channels);
-  if (ch >= 1 && envelopes[ch]) setParams(ATTACK, ch);
+  samplePolyData[ch] = data;
+  samplePolyFrames[ch] = frames;
+  samplePolyChannels[ch] = channels ? channels : 1;
+  if (ch >= 1) applySampleEnvelopeParams(ch);
+  else if (envelopes[ch]) setParams(ATTACK, ch);
 }
 
 void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSidechain) {
@@ -4346,28 +4506,45 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
   if (isNeoSliderControlledChannel(ch)) {
     neoSliderLastVelNorm[ch - 1] = noteN;
   }
-  uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
-  const uint8_t midiPitch = (uint8_t)constrain(pitch, 0, 127);
-  samplerNoteEvent(ch, midiPitch, sv, true, retrigger);
-  if (ch >= 1 && ch <= 8) {
-    // One-shot: keep the envelope in sustain so the file can finish.
-    // MIDI Note Off must not start release (default R is 0 and would chop).
-    noteOnTriggered[ch] = true;
+
+  if (ch == 0) {
+    uint8_t sv = (uint8_t)constrain((int)(amp * 127.0f + 0.5f), 1, 127);
+    const uint8_t midiPitch = (uint8_t)constrain(pitch, 0, 127);
+    samplerNoteEvent(ch, midiPitch, sv, true, retrigger);
+    if (voices[0]) voices[0]->snapAmplitude(amp);
+    return;
   }
-  if (ch >= 1 && ch <= 8) sampleTriggerAmp[ch] = amp;
-  if (voices[ch] != nullptr) {
-    voices[ch]->snapAmplitude(ch >= 1 && ch <= 8 ? amp * sampleChannelVolScale(ch) : amp);
-  }
-  // DTNE fine tune (±1 semitone) for sample voices — rate multiply after integer note.
-  if (ch >= 1 && ch <= 8 && voices[ch] != nullptr) {
-    const float fine = detune[ch];
-    if (fine != 0.0f || pitch != (int)midiPitch) {
-      // The sampler event key is a MIDI byte, but low incoming pitches may
-      // need a rate below key 0 after conversion to the sample's local root.
-      // Samples are registered at root 36 (see samplerAddSample).
-      voices[ch]->setPlaybackRate(powf(2.0f, ((float)pitch + fine - 36.0f) / 12.0f));
-    }
-  }
+
+  if (!samplePolyData[ch] || samplePolyFrames[ch] == 0) return;
+
+  const int slot = allocSamplePolySlot(ch);
+  AudioPlayArrayResmp *voice = samplePolyVoices[ch][slot];
+  AudioEffectEnvelope *env = samplePolyEnvelopes[ch][slot];
+  if (!voice || !env) return;
+
+  // Soft-release only the stolen/restarted layer; leave other layers ringing.
+  // Still-playing retriggers must keep the open envelope and join via the
+  // reader declick ramp. releaseNoteOn(5)+noteOn fades to zero for ~5 ms and
+  // clicks on every overlap (MONO and MULT), including during the long default
+  // decay before sustain.
+  const bool active = samplePolySlotActive(ch, slot);
+  env->releaseNoteOn(0.0f);
+
+  const float fine = detune[ch];
+  const float rate = powf(2.0f, ((float)pitch + fine - (float)SAMPLE_POLY_ROOT) / 12.0f);
+  voice->setPlaybackRate(rate);
+
+  if (!(active && env->isActive())) env->noteOn();
+  voice->playRaw(samplePolyData[ch], samplePolyFrames[ch], samplePolyChannels[ch]);
+
+  const float outAmp = amp * sampleChannelVolScale(ch);
+  voice->snapAmplitude(outAmp);
+  samplePolyNoteOnMs[ch][slot] = millis();
+  sampleTriggerAmp[ch] = amp;
+  // One-shot: keep envelopes in sustain so the file can finish.
+  // MIDI Note Off must not start release (default R is 0 and would chop).
+  noteOnTriggered[ch] = true;
+  (void)retrigger;
 }
 
 // Restore amp gains from channelVol for sample/synth voices that have amps[].
@@ -8702,7 +8879,8 @@ void pause(bool skipSave) {
 
   // Stop audio voices immediately (time-critical, no I2C)
   for (int ch = 0; ch < 15; ++ch) {
-    if (envelopes[ch]) envelopes[ch]->noteOff();
+    if (ch >= 1 && ch <= 8) samplePolyNoteOffAll(ch);
+    else if (envelopes[ch]) envelopes[ch]->noteOff();
   }
   releaseAllPolySynthVoices();
   stopSynthChannel(13);
@@ -8751,7 +8929,12 @@ void servicePauseAudioCleanup() {
     return;
   }
   for (int ch = 0; ch < 15; ++ch) {
-    if (envelopes[ch] && envelopes[ch]->isActive()) {
+    if (ch >= 1 && ch <= 8) {
+      if (samplePolyAnyEnvelopeActive(ch)) {
+        pauseEffectsQuietMs = 0;
+        return;
+      }
+    } else if (envelopes[ch] && envelopes[ch]->isActive()) {
       pauseEffectsQuietMs = 0;
       return;
     }
@@ -8766,7 +8949,7 @@ void servicePauseAudioCleanup() {
   // Let the closed envelopes propagate before reclaiming sample readers.
   if (pauseEffectsQuietMs < 20) return;
   for (int ch = 0; ch <= 8; ++ch) {
-    if (voices[ch]) voices[ch]->stop();
+    samplePolyStopAll(ch);
   }
   pendingPauseAudioCleanup = false;
 }
@@ -8776,7 +8959,11 @@ bool sdIoAudioSettled() {
   if (isNowPlaying) return false;
 
   for (int ch = 0; ch < 15; ch++) {
-    if (envelopes[ch] && envelopes[ch]->isActive()) return false;
+    if (ch >= 1 && ch <= 8) {
+      if (samplePolyAnyEnvelopeActive(ch)) return false;
+    } else if (envelopes[ch] && envelopes[ch]->isActive()) {
+      return false;
+    }
   }
   for (int v = 0; v < 3; v++) {
     if (Senvelope1[v] && Senvelope1[v]->isActive()) return false;
@@ -8788,9 +8975,9 @@ bool sdIoAudioSettled() {
   // After pause only: envelope is closed, so stop sample readers before the SD burst.
   if (pendingPauseAutoSave) {
     for (int ch = 0; ch <= 8; ch++) {
-      if (voices[ch] && voices[ch]->isPlaying()) {
+      if (samplePolyAnyPlaying(ch)) {
         toern_audio::StateGuard guard;
-        voices[ch]->stop();
+        samplePolyStopAll(ch);
       }
     }
   }
@@ -10711,6 +10898,9 @@ static void refreshSamplerChannel(uint8_t channel) {
   toern_audio::StateGuard guard;
   _samplers[channel].removeAllSamples();
   _samplers[channel].addSample(36, buffer, sampleCount, rateFactor);
+  samplePolyData[channel] = buffer;
+  samplePolyFrames[channel] = sampleCount;
+  samplePolyChannels[channel] = rateFactor ? rateFactor : 1;
 }
 
 static void applyChannelDirection(uint8_t channel, int8_t targetDir) {
@@ -11619,6 +11809,7 @@ int getDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx) {
     case ARR_PARAM: return SMP.param_settings[channel][idx];
     case ARR_STRETCH: return channel >= 1 && channel <= 8 ? sampleTimeStretch[channel] : 0;
     case ARR_GAIN: return sampleVoiceGainSlider(channel);
+    case ARR_TRIG: return sampleTrigModeSlider(channel);
     default: return 0;
   }
 }
@@ -11629,6 +11820,7 @@ void setDefaultFastFilterValue(int channel, SettingArray arr, int8_t idx, int va
     case ARR_PARAM: SMP.param_settings[channel][idx] = value; break;
     case ARR_STRETCH: setSampleTimeStretch(channel, value); break;
     case ARR_GAIN: setSampleVoiceGain(channel, value); break;
+    case ARR_TRIG: setSampleTrigMode(channel, value); break;
     default: break;
   }
 }
@@ -11667,7 +11859,7 @@ void setSliderDefForChannel(int channel) {
     memcpy(sliderDef[channel], sampleVoiceTemplate, sizeof(sampleVoiceTemplate));
     sliderDef[channel][3][0] = { ARR_PARAM, DELAY, "DLAY", 32, DISPLAY_NUMERIC, nullptr, 32 };
     sliderDef[channel][3][1] = { ARR_GAIN, 0, "VOL", 32, DISPLAY_NUMERIC, nullptr, 32 };
-    sliderDef[channel][3][2] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
+    sliderDef[channel][3][2] = { ARR_TRIG, 0, "TRIG", 1, DISPLAY_ENUM, (const char **)trigModeNames, 2 };
     sliderDef[channel][3][3] = { ARR_NONE, -1, "", 0, DISPLAY_NUMERIC, nullptr, 0 };
     return;
   }
@@ -11791,12 +11983,7 @@ static void stopMutedVoiceAudio(int ch) {
   // Release currently sounding notes so mute does not leave hot voices
   // holding audio blocks / freeverb tails under memory pressure.
   if (ch >= 1 && ch <= 8) {
-    for (int note = 36; note <= 96; note++) {
-      samplerNoteEvent(ch, note, 0, false, false);
-    }
-    if (ch < 15 && envelopes[ch] != nullptr) {
-      envelopes[ch]->noteOff();
-    }
+    samplePolyStopAll(ch);
   } else if (ch == 11) {
     for (int noteValue = 0; noteValue <= 107; noteValue++) {
       stopSound(noteValue, 0);

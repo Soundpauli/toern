@@ -17,6 +17,22 @@ float getAttackDuration(int channel) {
 
 // Refactored: setParams combines processParameterAdjustment and updateParameterValue
 void setParams(ParameterType paramType, int index) {
+  // Touch every sample poly layer under StateGuard so a mid-phrase ADSR tweak
+  // cannot leave b/c slots on constructor defaults while slot 0 already moved.
+  auto applySamplePoly = [index](ParameterType pt, float mappedValue) {
+    toern_audio::StateGuard guard;
+    for (int s = 0; s < SAMPLE_POLY; ++s) {
+      AudioEffectEnvelope *env = samplePolyEnvelopes[index][s];
+      if (!env) continue;
+      switch (pt) {
+        case ATTACK:  env->attack(mappedValue);  break;
+        case DECAY:   env->decay(mappedValue);   break;
+        case SUSTAIN: env->sustain(mappedValue); break;
+        case RELEASE: env->release(mappedValue); break;
+        default: break;
+      }
+    }
+  };
 
   float mappedValue;
   switch (paramType) {
@@ -31,7 +47,9 @@ void setParams(ParameterType paramType, int index) {
       if (index == 11) {
         for (int v = 0; v < 3; v++) attackAmp[0][v] = (uint16_t)mappedValue;
         updateVals(0);
-      } else {
+      } else if (index >= 1 && index <= 8) {
+        applySamplePoly(ATTACK, mappedValue);
+      } else if (envelopes[index]) {
         envelopes[index]->attack(mappedValue);
       }
       break;
@@ -40,7 +58,9 @@ void setParams(ParameterType paramType, int index) {
       if (index == 11) {
         for (int v = 0; v < 3; v++) decayAmp[0][v] = (uint16_t)mappedValue;
         updateVals(0);
-      } else {
+      } else if (index >= 1 && index <= 8) {
+        applySamplePoly(DECAY, mappedValue);
+      } else if (envelopes[index]) {
         envelopes[index]->decay(mappedValue);
       }
       break;
@@ -57,7 +77,9 @@ void setParams(ParameterType paramType, int index) {
       if (index == 11) {
         for (int v = 0; v < 3; v++) sustainAmp[0][v] = mappedValue;
         updateVals(0);
-      } else {
+      } else if (index >= 1 && index <= 8) {
+        applySamplePoly(SUSTAIN, mappedValue);
+      } else if (envelopes[index]) {
         envelopes[index]->sustain(mappedValue);
       }
       break;
@@ -71,7 +93,9 @@ void setParams(ParameterType paramType, int index) {
           releaseFilter[0][v] = fltRelMs;
         }
         updateVals(0);
-      } else {
+      } else if (index >= 1 && index <= 8) {
+        applySamplePoly(RELEASE, mappedValue);
+      } else if (envelopes[index]) {
         envelopes[index]->release(mappedValue);
       }
       break;
@@ -173,6 +197,7 @@ static int defaultSettingValue(int ch, SettingArray arr, int8_t idx) {
         default: return 0;
       }
     case ARR_GAIN: return 16;
+    case ARR_TRIG: return 1;  // MULT
     case ARR_PARAM:
       // Default ADSR: ch11 uses active instrument preset; ch14 303 uses D=20, S=20, R=16; others A=32, D=32, S=32
       switch (idx) {
@@ -281,6 +306,9 @@ static void setFilterPageDefaultValues(int ch, uint8_t page) {
       case ARR_GAIN:
         setSampleVoiceGain(ch, val);
         break;
+      case ARR_TRIG:
+        setSampleTrigMode(ch, val);
+        break;
       default:
         break;
     }
@@ -330,6 +358,7 @@ void setAllFilterPagesDefaultValues(int ch) {
   setParams(DELAY, ch);
   if (ch >= 1 && ch <= 8) {
     setSampleTimeStretch(ch, 11);
+    setSampleTrigMode(ch, 1);  // MULT
   }
   if (ch == 11) {
     SMP.synth_settings[11][INSTRUMENT] = DEFAULT_CH11_INSTRUMENT;
