@@ -424,6 +424,16 @@
   <p class="need-sd-hint">Reflash, or on that older build open Menu → ETC → SD (SCON, WAIT → OK).</p>
 </dialog>
 
+<dialog id="uploadErrDlg" aria-labelledby="uploadErrTitle">
+  <h2 id="uploadErrTitle">Upload failed</h2>
+  <p id="uploadErrMsg" class="hint" style="max-width:36rem;word-break:break-word;white-space:pre-wrap"></p>
+  <div class="dlg-actions">
+    <button type="button" class="sd-btn" id="uploadErrStop">Stop</button>
+    <button type="button" class="sd-btn" id="uploadErrRetry">Retry</button>
+    <button type="button" class="sd-btn primary" id="uploadErrContinue">Continue</button>
+  </div>
+</dialog>
+
 <audio id="audio" preload="none"></audio>
 
 <script>
@@ -1253,11 +1263,12 @@ class ToernSdSerial {
           throw new Error(terminalReply ? ready : "expected READY, got: " + ready);
         }
         // A matching ACK commits each block before the host sends the next one.
+        // Copy each block: some Web Serial stacks mishandle views into a large buffer.
         const block = 8192;
         for (let i = 0; i < bytes.length; i += block) {
           const end = Math.min(i + block, bytes.length);
           phase = `sending block ${i}–${end}`;
-          await this._write(bytes.subarray(i, end));
+          await this._write(bytes.slice(i, end));
           phase = `waiting for ACK for ${end} bytes`;
           const ack = await this._readLine(IO_TIMEOUT_MS);
           if (ack !== "ACK") {
@@ -1840,6 +1851,61 @@ async function expandUploadItems(items, onProgress) {
   return out;
 }
 
+function isRetriableUploadError(err) {
+  return /ERR CRC|ERR IO/i.test(String(err && err.message || err));
+}
+
+function askUploadError(message) {
+  const dlg = typeof document !== "undefined" ? document.getElementById("uploadErrDlg") : null;
+  const msg = dlg ? document.getElementById("uploadErrMsg") : null;
+  const retryBtn = dlg ? document.getElementById("uploadErrRetry") : null;
+  const continueBtn = dlg ? document.getElementById("uploadErrContinue") : null;
+  const stopBtn = dlg ? document.getElementById("uploadErrStop") : null;
+  if (!dlg || !msg || !retryBtn || !continueBtn || !stopBtn || typeof dlg.showModal !== "function") {
+    // Headless / test fallback: confirm = continue remaining files.
+    const cont = typeof window !== "undefined" && window.confirm
+      ? window.confirm(message + "\n\nOK = continue with remaining files, Cancel = stop")
+      : false;
+    return Promise.resolve(cont ? "continue" : "stop");
+  }
+  msg.textContent = message;
+  dlg.showModal();
+  return new Promise((resolve) => {
+    const finish = (choice) => {
+      retryBtn.onclick = null;
+      continueBtn.onclick = null;
+      stopBtn.onclick = null;
+      dlg.oncancel = null;
+      if (dlg.open) dlg.close();
+      resolve(choice);
+    };
+    retryBtn.onclick = () => finish("retry");
+    continueBtn.onclick = () => finish("continue");
+    stopBtn.onclick = () => finish("stop");
+    dlg.oncancel = (ev) => {
+      ev.preventDefault();
+      finish("stop");
+    };
+  });
+}
+
+async function putBytesWithRetries(client, remote, bytes, onProgress) {
+  const maxAttempts = 3;
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await client.putBytes(remote, bytes, onProgress);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (client.connected === false || !isRetriableUploadError(err) || attempt === maxAttempts) throw err;
+      dbg(`PUT retry ${attempt}/${maxAttempts - 1} for ${remote}: ${err && err.message || err}`, "err");
+      await new Promise((r) => setTimeout(r, 50 * attempt));
+    }
+  }
+  throw lastErr;
+}
+
 async function uploadFiles(fileListOrItems) {
   if (!state.connected || state.busy) return;
   const destination = state.path;
@@ -1861,9 +1927,10 @@ async function uploadFiles(fileListOrItems) {
     if (items.some((item) => / /.test(joinPath(destination, item.relativePath))) && client._putSpaces !== true) {
       throw new Error("Uploading folders or files with spaces requires updated TŒRN firmware. Reflash the latest firmware, then reconnect.");
     }
-    let n = 0, createdDirs = 0;
+    let n = 0, createdDirs = 0, failed = 0, stopped = false;
     const fileCount = items.filter((item) => item.type !== "directory").length;
     for (const item of items) {
+      if (client.connected === false) throw new Error("Disconnected during upload");
       const remote = joinPath(destination, item.relativePath);
       if (item.type === "directory") {
         showProgress("Creating " + item.relativePath, null);
@@ -1880,7 +1947,7 @@ async function uploadFiles(fileListOrItems) {
       const { file, relativePath } = item;
       dbg(`Preparing upload: ${relativePath} (${file.size} source bytes)`);
       const prepared = await prepareUploadFile(file, (label, ratio) => {
-        showProgress(label, ratio, fileCount > 1 ? `File ${n + 1}/${fileCount}` : "");
+        showProgress(label, ratio, fileCount > 1 ? `File ${n + failed + 1}/${fileCount}` : "");
       });
       if (!prepared) continue;
       const dir = relativePath.includes("/")
@@ -1889,16 +1956,49 @@ async function uploadFiles(fileListOrItems) {
       const remoteFile = joinPath(destination, remoteRel);
       validateUploadPath(remoteFile);
       const bytes = new Uint8Array(await prepared.arrayBuffer());
-      await client.putBytes(remoteFile, bytes, (sent, total) => {
-        showProgress("Uploading " + remoteRel, total ? sent / total : null,
-          fmtXferBytes(sent) + " / " + fmtXferBytes(total) +
-          (fileCount > 1 ? ` · ${n + 1}/${fileCount}` : ""));
-      });
-      n++;
+      let done = false;
+      while (!done) {
+        try {
+          await putBytesWithRetries(client, remoteFile, bytes, (sent, total) => {
+            showProgress("Uploading " + remoteRel, total ? sent / total : null,
+              fmtXferBytes(sent) + " / " + fmtXferBytes(total) +
+              (fileCount > 1 ? ` · ${n + failed + 1}/${fileCount}` : ""));
+          });
+          n++;
+          done = true;
+        } catch (err) {
+          const message = String(err && err.message || err);
+          dbg(`upload item failed: ${message}`, "err");
+          if (client.connected === false) throw err;
+          const choice = await askUploadError(message);
+          if (choice === "retry") {
+            dbg(`UI: retry ${remoteRel}`);
+            continue;
+          }
+          if (choice === "continue") {
+            failed++;
+            dbg(`UI: continue after failure — skipping ${remoteRel}`);
+            done = true;
+            break;
+          }
+          stopped = true;
+          failed++;
+          dbg("UI: stop upload batch after failure");
+          done = true;
+          break;
+        }
+      }
+      if (stopped) break;
     }
-    showBanner(`Uploaded ${n} file(s), created ${createdDirs} folder(s)`, true);
     playCache.clear();
     await refresh();
+    if (stopped) {
+      showBanner(`Stopped: ${n} uploaded, ${failed} failed, ${createdDirs} folder(s)`, false);
+    } else if (failed) {
+      showBanner(`Uploaded ${n} file(s), ${failed} skipped after errors, ${createdDirs} folder(s)`, false);
+    } else {
+      showBanner(`Uploaded ${n} file(s), created ${createdDirs} folder(s)`, true);
+    }
   } catch (err) {
     showBanner(String(err && err.message || err), false);
   } finally {
@@ -2401,7 +2501,7 @@ panelEl.addEventListener("drop", async (ev) => {
 document.addEventListener("keydown", (ev) => {
   if (!state.connected || state.busy) return;
   if (document.activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-  if ($("mkdirDlg").open || $("renameDlg").open || $("needSdDlg").open) return;
+  if ($("mkdirDlg").open || $("renameDlg").open || $("needSdDlg").open || ($("uploadErrDlg") && $("uploadErrDlg").open)) return;
 
   const entries = sortedEntries();
   if (!entries.length && ev.key !== "ArrowLeft") return;

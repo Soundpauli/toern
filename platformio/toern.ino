@@ -1865,6 +1865,9 @@ static AudioMixer4 *samplePolySums[9] = {
   &sampleSum5, &sampleSum6, &sampleSum7, &sampleSum8
 };
 static uint32_t samplePolyNoteOnMs[9][SAMPLE_POLY] = {};
+// Set when a slot is taken, before the audio ISR has rendered it. Same-step
+// grid chords would otherwise all reuse slot 0.
+static uint32_t samplePolyClaimMs[9][SAMPLE_POLY] = {};
 static int16_t *samplePolyData[9] = {};
 static uint32_t samplePolyFrames[9] = {};
 static uint16_t samplePolyChannels[9] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
@@ -4354,7 +4357,14 @@ void samplePolyApplyTrigMode(int ch) {
     if (samplePolyVoices[ch][s]) samplePolyVoices[ch][s]->stop();
     if (samplePolyEnvelopes[ch][s]) samplePolyEnvelopes[ch][s]->noteOff();
     samplePolyNoteOnMs[ch][s] = 0;
+    samplePolyClaimMs[ch][s] = 0;
   }
+}
+
+static bool samplePolySlotBusy(int ch, int slot) {
+  if (samplePolySlotActive(ch, slot)) return true;
+  const uint32_t claimed = samplePolyClaimMs[ch][slot];
+  return claimed != 0 && (uint32_t)(millis() - claimed) < 20;
 }
 
 static int allocSamplePolySlot(int ch) {
@@ -4363,7 +4373,7 @@ static int allocSamplePolySlot(int ch) {
     return 0;
   }
   for (int s = 0; s < SAMPLE_POLY; ++s) {
-    if (!samplePolySlotActive(ch, s)) return s;
+    if (!samplePolySlotBusy(ch, s)) return s;
   }
   int oldest = 0;
   for (int s = 1; s < SAMPLE_POLY; ++s) {
@@ -4378,6 +4388,7 @@ void samplePolyStopAll(int ch) {
     if (samplePolyVoices[ch][s]) samplePolyVoices[ch][s]->stop();
     if (samplePolyEnvelopes[ch][s]) samplePolyEnvelopes[ch][s]->noteOff();
     samplePolyNoteOnMs[ch][s] = 0;
+    samplePolyClaimMs[ch][s] = 0;
   }
 }
 
@@ -4522,9 +4533,8 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
   AudioEffectEnvelope *env = samplePolyEnvelopes[ch][slot];
   if (!voice || !env) return;
 
-  // MIDI and grid share this path. Every hit restarts ADSR from the current
-  // gain (attack toward full, then decay to SUST) so a low sustain cannot
-  // stick after the first note. Stock noteOn() would drop through zero and click.
+  // MIDI and grid share this path. Every hit restarts that layer's attack
+  // from silence (a loud MULT slot fades ~1.5 ms first) so ATTACK is not skipped.
   const float fine = detune[ch];
   const float rate = powf(2.0f, ((float)pitch + fine - (float)SAMPLE_POLY_ROOT) / 12.0f);
   voice->setPlaybackRate(rate);
@@ -4534,7 +4544,9 @@ void triggerSamplerVoice(int ch, int pitch, int vel, bool retrigger, bool sendSi
 
   const float outAmp = amp * sampleChannelVolScale(ch);
   voice->snapAmplitude(outAmp);
-  samplePolyNoteOnMs[ch][slot] = millis();
+  const uint32_t nowMs = millis();
+  samplePolyNoteOnMs[ch][slot] = nowMs ? nowMs : 1;
+  samplePolyClaimMs[ch][slot] = samplePolyNoteOnMs[ch][slot];
   sampleTriggerAmp[ch] = amp;
   // One-shot: keep envelopes in sustain so the file can finish.
   // MIDI Note Off must not start release (default R is 0 and would chop).

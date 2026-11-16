@@ -125,7 +125,7 @@ void applyVoiceCuts(int index) {
 
 // ch13/14 CUT·RES·FLT (same letters as ch11). CUT/RES follow the SVF; FLT is
 // octaveControl amount. OCTV stays oscillator pitch only.
-static float voiceDelayMsForSlider(int slider) {
+float voiceDelayMsForSlider(int slider) {
   float bpm = (SMP.bpm > 0.0f) ? SMP.bpm : 100.0f;
   float beatMs = 60000.0f / bpm;
   float quantumMs = beatMs / 32.0f;  // fader 32 = 1 beat; 16 = 1/2; 8 = 1/4 …

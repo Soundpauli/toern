@@ -15,110 +15,109 @@ _usb_patched = _usb_patch(_usb_source)
 if _usb_patched != _usb_source:
     _usb_path.write_text(_usb_patched)
 
-# Live ADSR edits must move the current stage, not only the next noteOn target.
+# Live ADSR: scale the time still left in the current stage. Resetting count to
+# the full new duration snaps a sounding attack to full. retrigger() always
+# begins the next hit from silence so a loud MULT layer cannot skip ATTACK.
 _envelope_h = _framework / "libraries/Audio/effect_envelope.h"
 _envelope_text = _envelope_h.read_text()
-_envelope_patches = [
-    (
-        "live attack update",
-        """\tvoid attack(float milliseconds) {
-\t\tattack_count = milliseconds2count(milliseconds);
-\t\tif (attack_count == 0) attack_count = 1;
-\t}""",
-        """\tvoid attack(float milliseconds) {
-\t\tattack_count = milliseconds2count(milliseconds);
-\t\tif (attack_count == 0) attack_count = 1;
+_envelope_wanted = {
+    "void attack(float milliseconds)": """\tvoid attack(float milliseconds) {
+\t\tuint16_t next = milliseconds2count(milliseconds);
+\t\tif (next == 0) next = 1;
+\t\tuint32_t primask; __asm__ volatile("mrs %0, primask" : "=r"(primask) :: "memory");
 \t\t__disable_irq();
-\t\tif (state == 2 /* STATE_ATTACK */) {
+\t\t// Keep the fraction of the attack still to go. Replacing count with the
+\t\t// full new duration snaps a sounding note to full (attack 32).
+\t\tif (state == 2 /* STATE_ATTACK */ && attack_count > 0 && count > 0) {
+\t\t\tuint32_t scaled = ((uint32_t)count * next + attack_count / 2) / attack_count;
+\t\t\tif (scaled < 1) scaled = 1;
+\t\t\tif (scaled > 65535) scaled = 65535;
+\t\t\tcount = (uint16_t)scaled;
 \t\t\tint32_t remaining = 0x40000000 - mult_hires;
 \t\t\tif (remaining < 0) remaining = 0;
-\t\t\tcount = attack_count;
 \t\t\tinc_hires = remaining / (int32_t)count;
 \t\t}
-\t\t__enable_irq();
+\t\tattack_count = next;
+\t\tif (!primask) __enable_irq();
 \t}""",
-    ),
-    (
-        "live decay update",
-        """\tvoid decay(float milliseconds) {
-\t\tdecay_count = milliseconds2count(milliseconds);
-\t\tif (decay_count == 0) decay_count = 1;
-\t}""",
-        """\tvoid decay(float milliseconds) {
-\t\tdecay_count = milliseconds2count(milliseconds);
-\t\tif (decay_count == 0) decay_count = 1;
+    "void decay(float milliseconds)": """\tvoid decay(float milliseconds) {
+\t\tuint16_t next = milliseconds2count(milliseconds);
+\t\tif (next == 0) next = 1;
+\t\tuint32_t primask; __asm__ volatile("mrs %0, primask" : "=r"(primask) :: "memory");
 \t\t__disable_irq();
-\t\tif (state == 4 /* STATE_DECAY */) {
-\t\t\tcount = decay_count;
+\t\tif (state == 4 /* STATE_DECAY */ && decay_count > 0 && count > 0) {
+\t\t\tuint32_t scaled = ((uint32_t)count * next + decay_count / 2) / decay_count;
+\t\t\tif (scaled < 1) scaled = 1;
+\t\t\tif (scaled > 65535) scaled = 65535;
+\t\t\tcount = (uint16_t)scaled;
 \t\t\tinc_hires = (sustain_mult - mult_hires) / (int32_t)count;
 \t\t}
-\t\t__enable_irq();
+\t\tdecay_count = next;
+\t\tif (!primask) __enable_irq();
 \t}""",
-    ),
-    (
-        "live sustain update",
-        """\tvoid sustain(float level) {
+    "void sustain(float level)": """\tvoid sustain(float level) {
 \t\tif (level < 0.0f) level = 0;
 \t\telse if (level > 1.0f) level = 1.0f;
 \t\tsustain_mult = level * 1073741824.0f;
-\t}""",
-        """\tvoid sustain(float level) {
-\t\tif (level < 0.0f) level = 0;
-\t\telse if (level > 1.0f) level = 1.0f;
-\t\tsustain_mult = level * 1073741824.0f;
+\t\tuint32_t primask; __asm__ volatile("mrs %0, primask" : "=r"(primask) :: "memory");
 \t\t__disable_irq();
 \t\tif (state == 5 /* STATE_SUSTAIN */) {
 \t\t\tmult_hires = sustain_mult;
 \t\t\tinc_hires = 0;
 \t\t}
-\t\t__enable_irq();
+\t\tif (!primask) __enable_irq();
 \t}""",
-    ),
-    (
-        "live release update",
-        """\tvoid release(float milliseconds) {
-\t\trelease_count = milliseconds2count(milliseconds);
-\t\tif (release_count == 0) release_count = 1;
-\t}""",
-        """\tvoid release(float milliseconds) {
-\t\trelease_count = milliseconds2count(milliseconds);
-\t\tif (release_count == 0) release_count = 1;
+    "void release(float milliseconds)": """\tvoid release(float milliseconds) {
+\t\tuint16_t next = milliseconds2count(milliseconds);
+\t\tif (next == 0) next = 1;
+\t\tuint32_t primask; __asm__ volatile("mrs %0, primask" : "=r"(primask) :: "memory");
 \t\t__disable_irq();
-\t\tif (state == 6 /* STATE_RELEASE */) {
-\t\t\tcount = release_count;
+\t\tif (state == 6 /* STATE_RELEASE */ && release_count > 0 && count > 0) {
+\t\t\tuint32_t scaled = ((uint32_t)count * next + release_count / 2) / release_count;
+\t\t\tif (scaled < 1) scaled = 1;
+\t\t\tif (scaled > 65535) scaled = 65535;
+\t\t\tcount = (uint16_t)scaled;
 \t\t\tinc_hires = (-mult_hires) / (int32_t)count;
 \t\t}
-\t\t__enable_irq();
+\t\trelease_count = next;
+\t\tif (!primask) __enable_irq();
 \t}""",
-    ),
-]
-_envelope_changed = False
-for _label, _old, _new in _envelope_patches:
-    if _new in _envelope_text:
-        continue
-    if _old not in _envelope_text:
-        raise RuntimeError(f"Cannot apply PlatformIO dependency patch: {_label}")
-    _envelope_text = _envelope_text.replace(_old, _new, 1)
-    _envelope_changed = True
-_retrigger = """\t// Restart ADSR from the current gain. Stock noteOn() zeros the multiplier,
-\t// which clicks a still-sounding sample and leaves a low sustain stuck.
-\tvoid retrigger() {
+    "void retrigger()": """\tvoid retrigger() {
+\t\tuint32_t primask; __asm__ volatile("mrs %0, primask" : "=r"(primask) :: "memory");
 \t\t__disable_irq();
-\t\tif (state == 0 /* STATE_IDLE */) mult_hires = 0;
-\t\tstate = 2; /* STATE_ATTACK */
-\t\tcount = attack_count ? attack_count : 1;
-\t\tint32_t remaining = 0x40000000 - mult_hires;
-\t\tif (remaining < 0) remaining = 0;
-\t\tinc_hires = remaining / (int32_t)count;
-\t\t__enable_irq();
-\t}
-"""
-if "void retrigger()" not in _envelope_text:
-    _marker = "\tbool isActive();\n"
-    if _marker not in _envelope_text:
-        raise RuntimeError("Cannot apply PlatformIO dependency patch: envelope retrigger")
-    _envelope_text = _envelope_text.replace(_marker, _retrigger + _marker, 1)
-    _envelope_changed = True
+\t\tconst int32_t audible = 0x40000000 / 64;
+\t\tif (state == 0 /* STATE_IDLE */ || mult_hires < audible) {
+\t\t\tmult_hires = 0;
+\t\t\tstate = 2; /* STATE_ATTACK */
+\t\t\tcount = attack_count ? attack_count : 1;
+\t\t\tinc_hires = 0x40000000 / (int32_t)count;
+\t\t} else {
+\t\t\tstate = 7; /* STATE_FORCED: ~1.5 ms fade, then the configured attack */
+\t\t\tcount = 8;
+\t\t\tinc_hires = (-mult_hires) / (int32_t)count;
+\t\t}
+\t\tif (!primask) __enable_irq();
+\t}""",
+}
+def _replace_method(text, signature, body):
+    start = text.find("\t" + signature)
+    if start < 0:
+        if signature == "void retrigger()":
+            marker = "\tbool isActive();\n"
+            if marker not in text:
+                raise RuntimeError("Cannot apply PlatformIO dependency patch: envelope retrigger")
+            return text.replace(marker, body + "\n\tbool isActive();\n", 1), True
+        raise RuntimeError(f"Cannot apply PlatformIO dependency patch: {signature}")
+    end = text.find("\n\tvoid ", start + 1)
+    if end < 0:
+        end = text.find("\n\tbool isActive();", start)
+    if end < 0 or text[start:end] == body:
+        return text, False
+    return text[:start] + body + text[end:], True
+_envelope_changed = False
+for _signature, _body in _envelope_wanted.items():
+    _envelope_text, _did = _replace_method(_envelope_text, _signature, _body)
+    _envelope_changed = _envelope_changed or _did
 if _envelope_changed:
     _envelope_h.write_text(_envelope_text)
 

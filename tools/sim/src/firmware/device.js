@@ -785,9 +785,8 @@ export function createDevice(matrix, statusEl, rings) {
     fired.push({ step, when });
     if (fired.length > 8) fired.shift();
     if (s.voiceMode) refreshVoiceLens();
-    // Sample voices 1–8 are monophonic (one sampler per channel, like firmware
-    // retrigger). If several notes share a step+voice, keep the highest row only.
     const fillHits = s.agen.active ? [] : fills.step(step, COLS);
+    // MONO keeps one tone per step. MULT sounds up to three grid tones at once.
     const samplePick = new Map();
     const otherHits = [];
     for (let y = 1; y <= ROWS; y++) {
@@ -806,13 +805,21 @@ export function createDevice(matrix, statusEl, rings) {
         continue;
       }
       if (n.channel >= 1 && n.channel <= 8) {
-        const prev = samplePick.get(n.channel);
-        if (!prev || y > prev.y) samplePick.set(n.channel, { n, y });
+        const list = samplePick.get(n.channel) || [];
+        list.push({ n, y });
+        samplePick.set(n.channel, list);
       } else {
         otherHits.push({ n, y });
       }
     }
-    const hits = [...samplePick.values(), ...otherHits];
+    const hits = [];
+    for (const [ch, list] of samplePick) {
+      const multi = (filt[ch]?.trig ?? 1) !== 0;
+      const ranked = list.slice().sort((a, b) => b.y - a.y);
+      const chosen = multi ? ranked.slice(0, 3) : ranked.slice(0, 1);
+      hits.push(...chosen);
+    }
+    hits.push(...otherHits);
     for (const { n, y } of hits) {
       const wav = { ...wavOpts(n.channel), midiPitch: n.midiPitch };
       if (s.prevMode === 2 && n.channel === s.GLOB.currentChannel && s.mode === "wav") wav.index = s.browse;

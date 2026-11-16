@@ -26,6 +26,7 @@ const run = new Function('env', 'File', `
 const calls = [], banners = [];
 const state = { connected: true, busy: false, path: '/target' };
 const client = {
+  connected: true,
   _putSpaces: true,
   async mkdir(path) { calls.push(['mkdir', path]); },
   async listDir(path) { calls.push(['list', path]); return []; },
@@ -238,6 +239,45 @@ const badCrc=new tool.ToernSdSerial();let reply=0;
 badCrc._write=async()=>{};badCrc._readLine=async()=>['READY','ACK','ERR CRC got=00000000 want=00000001'][reply++];
 await assert.rejects(badCrc.putBytes('/crc.bin',new Uint8Array(1)),/ERR CRC/);
 assert.equal(badCrc._closed,false);
+// Batch uploads auto-retry CRC, then Continue keeps going without redoing finished files.
+globalThis.window = globalThis;
+let confirmContinue = true;
+globalThis.confirm = () => confirmContinue;
+calls.length = 0; banners.length = 0;
+let crcFails = 0;
+client.putBytes = async (path, bytes) => {
+  if (path.endsWith('/flaky.bin') && crcFails < 2) {
+    crcFails++;
+    throw new Error('Upload failed: ' + path + ' — waiting for final OK; ' + bytes.length + '/' + bytes.length +
+      ' bytes acknowledged — ERR CRC got=6A227552 want=98047C0C');
+  }
+  if (path.endsWith('/hardfail.bin')) {
+    throw new Error('Upload failed: ' + path + ' — waiting for final OK; 1/1 bytes acknowledged — ERR CRC got=1 want=2');
+  }
+  calls.push(['put', path, [...bytes]]);
+};
+await tool.uploadFiles([
+  file('ok.bin', 'ok'),
+  file('flaky.bin', 'flaky'),
+  file('hardfail.bin', 'nope'),
+  file('after.bin', 'after'),
+]);
+assert.equal(crcFails, 2);
+assert.deepEqual(calls.map((c) => c[1]), [
+  '/target/ok.bin', '/target/flaky.bin', '/target/after.bin',
+]);
+assert.match(banners.at(-1)[0], /1 skipped after errors/);
+assert.equal(banners.at(-1)[1], false);
+// Stop leaves later files untouched.
+calls.length = 0; banners.length = 0; confirmContinue = false;
+client.putBytes = async (path, bytes) => {
+  if (path.endsWith('/a.bin')) throw new Error('Upload failed: ' + path + ' — ERR CRC got=1 want=2');
+  calls.push(['put', path, [...bytes]]);
+};
+await tool.uploadFiles([file('a.bin', 'a'), file('b.bin', 'b')]);
+assert.deepEqual(calls.map((c) => c[1]), []);
+assert.match(banners.at(-1)[0], /^Stopped:/);
+client.putBytes = async (path, bytes) => { calls.push(['put', path, [...bytes]]); };
 // Browser writes themselves also have a deadline (not just ACK reads).
 const fastTool=run({...env,IO_TIMEOUT_MS:5},File);
 const blockedWrite=new fastTool.ToernSdSerial();

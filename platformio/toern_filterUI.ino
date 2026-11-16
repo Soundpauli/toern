@@ -151,11 +151,28 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
     }
   }
 
-  char buf[6];
+  char buf[8];
   uint8_t shownVal = scaleToDisplay(meta, val);
   const bool bipolar = isBipolarCenteredParam(meta);
+  bool timeLabel = false;
 
-  if (meta.arr == ARR_STRETCH) {
+  if (meta.arr == ARR_PARAM && (meta.idx == ATTACK || meta.idx == DECAY || meta.idx == SUSTAIN
+      || meta.idx == RELEASE || meta.idx == DELAY)) {
+    timeLabel = true;
+    int ms = 0;
+    if (meta.idx == SUSTAIN) {
+      snprintf(buf, sizeof(buf), "%d%%", (int)lroundf(mapf((float)val, 0.0f, 32.0f, 0.0f, 100.0f)));
+      timeLabel = true;
+    } else {
+      if (meta.idx == ATTACK) ms = (int)lroundf(getAttackDuration(GLOB.currentChannel));
+      else if (meta.idx == DECAY) ms = (int)lroundf(mapf((float)val, 0.0f, 32.0f, 0.0f, maxParamVal[DECAY]));
+      else if (meta.idx == RELEASE) ms = (int)lroundf(mapf((float)val, 0.0f, 32.0f, 0.0f, maxParamVal[RELEASE]));
+      else if (meta.idx == DELAY) ms = val <= 0 ? 0 : (int)lroundf(voiceDelayMsForSlider(val));
+      if (ms >= 10000) snprintf(buf, sizeof(buf), "%ds", ms / 1000);
+      else if (ms >= 1000) snprintf(buf, sizeof(buf), "%d.%ds", ms / 1000, (ms % 1000) / 100);
+      else snprintf(buf, sizeof(buf), "%dms", ms);
+    }
+  } else if (meta.arr == ARR_STRETCH) {
     if (val == 11) snprintf(buf, sizeof(buf), "OFF");
     else if (val < 11) snprintf(buf, sizeof(buf), "-%u%%", 10 - val);
     else snprintf(buf, sizeof(buf), "+%u%%", val - 12);
@@ -196,7 +213,7 @@ void drawCornerValueCustom(uint8_t encoderIndex, uint8_t val, const SliderDefEnt
   CRGB textColor = dangerHighFlip ? blend(CRGB::Green, CRGB::Red, blendVal)
                                   : blend(CRGB::Red, CRGB::Green, blendVal);
 
-  if (meta.arr == ARR_STRETCH || bipolar) {
+  if (meta.arr == ARR_STRETCH || bipolar || timeLabel) {
     // Signed labels (e.g. -16, -10%) need a wider clear than the default 6px box.
     int width = -1;
     for (const char *p = buf; *p; ++p) width += alphabet[*p - 32][0] + 1;

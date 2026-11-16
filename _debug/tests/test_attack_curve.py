@@ -6,7 +6,7 @@ source=(root/'toern.ino').read_text()
 start=source.index('float getNoteDuration(int channel) {');end=source.index('\n}',start)+2
 method=source[start:end]
 parameters=(root/'toern_parameters.ino').read_text()
-start=parameters.index('float getAttackDuration(int channel) {');end=parameters.index('\n}',start)+2
+start=parameters.index('float attackMsFromSlider(');end=parameters.index('\n}', parameters.index('float getAttackDuration('))+2
 attack=parameters[start:end]
 assert 'if (ch >= 1) applySampleEnvelopeParams(ch);' in source
 code=r'''
@@ -29,7 +29,8 @@ int main(){
    loadedSampleLen[ch]=frames;
    for(int raw=0;raw<=32;++raw){
     SMP.param_settings[ch][ATTACK]=raw;
-    const float expected=(1.0f-raw/32.0f)*frames*1000.0f/AUDIO_SAMPLE_RATE_EXACT;
+    const float n=(32.0f-raw)/32.0f;
+    const float expected=n<=0?0.0f:(n>=1?frames*1000.0f/AUDIO_SAMPLE_RATE_EXACT:frames*1000.0f/AUDIO_SAMPLE_RATE_EXACT*(powf(32.0f,n)-1.0f)/31.0f);
     assert(std::abs(getAttackDuration(ch)-expected)<0.001f);
     assert(std::abs(getNoteDuration(ch)-(expected+5))<0.001f);
    }
@@ -37,8 +38,8 @@ int main(){
  }
  // The same setting must follow a replacement sample without a knob change.
  SMP.param_settings[1][ATTACK]=16;
- loadedSampleLen[1]=4410;assert(std::abs(getAttackDuration(1)-50)<0.001f);
- loadedSampleLen[1]=44100;assert(std::abs(getAttackDuration(1)-500)<0.001f);
+ loadedSampleLen[1]=4410;assert(std::abs(getAttackDuration(1)-100.0f*(powf(32.0f,0.5f)-1.0f)/31.0f)<0.001f);
+ loadedSampleLen[1]=44100;assert(std::abs(getAttackDuration(1)-1000.0f*(powf(32.0f,0.5f)-1.0f)/31.0f)<0.001f);
  assert(mapf(32,0,32,2000,0)==0&&mapf(0,0,32,2000,0)==2000);
  assert(mapf(16,0,32,2000,0)==1000);
  float previous=2001;
@@ -54,10 +55,14 @@ engine=(root/'../tools/sim/src/audio/engine.js').read_text()
 att=next(line for line in engine.splitlines() if 'const att = (env,' in line)
 for duration in (0.05, 0.5, 1, 4, 2):
  values=json.loads(subprocess.check_output(['node','--input-type=module','-e',att+f';console.log(JSON.stringify(Array.from({{length:33}},(_,attValue)=>att({{att:attValue}}, {duration}))))'],text=True))
+ curved=json.loads(subprocess.check_output(['node','--input-type=module','-e',att+f';console.log(JSON.stringify(Array.from({{length:33}},(_,attValue)=>att({{att:attValue}}, {duration}, true))))'],text=True))
  for raw,seconds in enumerate(values):
   expected=max(0.001, ((32-raw)/32)*duration)
   assert abs(seconds-expected)<1e-10
-assert 'const a = att(env, span);' in engine
+  n=(32-raw)/32
+  curvedExpected=0.001 if n<=0 else duration*(32**n-1)/31
+  assert abs(curved[raw]-max(0.001, curvedExpected))<1e-10
+assert 'const a = att(env, span, true);' in engine
 assert 'const a = att(env);' in engine  # Synths retain the default two-second range.
 with tempfile.TemporaryDirectory() as directory:
     path=Path(directory);(path/'attack.cpp').write_text(code)

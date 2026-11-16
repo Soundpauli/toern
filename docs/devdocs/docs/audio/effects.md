@@ -112,10 +112,11 @@ Only samples 1–8 expose **V** / VOLUME (`ARR_GAIN`) beside DLAY, encoder 2. Th
 
 ```text
 maximumMs = loadedSampleLen[channel] * 1000 / AUDIO_SAMPLE_RATE_EXACT
-attackMs = (32 - ATTC) / 32 * maximumMs
+n = (32 - ATTC) / 32
+attackMs = maximumMs * (32^n - 1) / 31
 ```
 
-ATTC 32 requests 0 ms, 16 requests half the loaded PCM duration and 0 requests its full duration. This uses the loaded buffer (including its zero-tail pad) at root playback rate; pitch and TIME do not rescale the envelope per note. `samplerAddSample()` reapplies ATTACK after registering a replacement, covering file loads, trims and recordings. An empty sample has a zero-duration maximum. The stock envelope still implements `attack(0)` with its native minimum ramp.
+ATTC 32 is 0 ms. The curve is exponential, so the top half of the knob is no longer a hard hit and the bottom half still lengthens toward the full buffer. A linear map put half the file at 16, which on a long sample was already longer than a note. `samplerAddSample()` reapplies ATTACK after registering a replacement, covering file loads, trims and recordings. An empty sample has a zero-duration maximum. The stock envelope still implements `attack(0)` with its native minimum ramp.
 
 Synth voices retain the linear 0–2000 ms range. Decay and release remain 0–1000 ms. Sample sustain allows 0–32; synth sustain floors at 1. `_debug/tests/test_attack_curve.py` covers all 33 settings, multiple sample lengths, replacement, note gates and simulator timing. The browser uses the selected buffer span for sample attack, retains its 1 ms scheduling floor and the fixed synth range.
 

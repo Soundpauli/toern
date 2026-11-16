@@ -6,12 +6,27 @@ extern uint16_t releaseAmp[2][3];
 extern uint16_t releaseFilter[2][3];
 extern void     updateVals(int ch);
 
+float attackMsFromSlider(float maximumMs, float slider) {
+  if (maximumMs < 0.0f) maximumMs = 0.0f;
+  const float n = (maxfilterResolution - slider) / maxfilterResolution;
+  if (n <= 0.0f) return 0.0f;
+  if (n >= 1.0f) return maximumMs;
+  // Exponential: equal knob steps stay useful. Linear mapping spent 32–16 on
+  // 0..half the file (still a hard hit) and 16–0 on the rest (already longer
+  // than a note, so it barely changed).
+  const float k = 32.0f;
+  return maximumMs * (powf(k, n) - 1.0f) / (k - 1.0f);
+}
+
 float getAttackDuration(int channel) {
   // Sample voices span the loaded PCM duration at its root playback rate.
   // Synth voices retain their fixed maximum because they have no sample.
   const float maximumMs = (channel >= 1 && channel <= 8)
       ? (float)loadedSampleLen[channel] * 1000.0f / AUDIO_SAMPLE_RATE_EXACT
       : maxParamVal[ATTACK];
+  if (channel >= 1 && channel <= 8) {
+    return attackMsFromSlider(maximumMs, SMP.param_settings[channel][ATTACK]);
+  }
   return mapf(SMP.param_settings[channel][ATTACK], 0, maxfilterResolution, maximumMs, 0);
 }
 
