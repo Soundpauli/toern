@@ -354,6 +354,7 @@ extern int currentMenuPage;
 bool getMuteState(int channel);
 bool getMuteStateForUI(int channel);  // Get mute state for UI display (uses edit page)
 void setMuteState(int channel, bool muted);
+#include "src/toern_launchpad.h"
 bool isChildVoiceDisabled(int channel);
 bool isChildVoiceMuted(int channel);
 void enforceChildModeRestrictions();
@@ -5249,6 +5250,8 @@ FLASHMEM void setup() {
 
   lastUserActivityMs = millis();
 
+  launchpadHostBegin();
+
   // END SETUP
 }
 
@@ -7641,6 +7644,7 @@ void loop() {
 #endif
   updateExternalOneBlink();
   checkMidi();  // Process MIDI early in loop for lower latency
+  launchpadHostService();  // USB-host Launchpad mixer (isolated from TRS MIDI)
   serviceIdlePolySynthVoices();
   serviceSynthLfo();
   serviceAutogen();
@@ -12024,6 +12028,32 @@ static void stopMutedVoiceAudio(int ch) {
     pressedKeyCount[ch] = 0;
   }
 }
+
+bool launchpadGetChildLock() { return childLockEnabled; }
+uint32_t launchpadGetVoiceColor(unsigned ch) {
+  if (ch < 1 || ch > 8) return 0;
+  const CRGB &c = col[ch];
+  return ((uint32_t)c.r << 16) | ((uint32_t)c.g << 8) | c.b;
+}
+unsigned launchpadGetCurrentChannel() { return GLOB.currentChannel; }
+void launchpadSelectVoice(unsigned ch) {
+  if (ch < 1 || ch > 8) return;
+  GLOB.currentChannel = ch;
+  GLOB.y = ch + 1;
+}
+unsigned launchpadGetChannelVolume(unsigned ch) {
+  if (ch >= maxY) return 0;
+  return (unsigned)constrain((int)SMP.channelVol[ch], 0, 16);
+}
+void launchpadSetChannelVolume(unsigned ch, int vol) {
+  if (ch < 1 || ch > 8) return;
+  vol = constrain(vol, 0, 16);
+  SMP.channelVol[ch] = (unsigned int)vol;
+  if (ch < maxY) lastChannelVolBeforeMute[ch] = (uint8_t)vol;
+  applyVoiceAmpGainFromVol((int)ch, vol);
+}
+bool launchpadGetMuted(unsigned ch) { return getMuteStateForUI((int)ch); }
+void launchpadSetMuted(unsigned ch, bool muted) { setMuteState((int)ch, muted); }
 
 // Set mute state for a channel, considering PMOD setting
 FLASHMEM void setMuteState(int channel, bool muted) {

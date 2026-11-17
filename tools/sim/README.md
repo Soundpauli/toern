@@ -108,8 +108,10 @@ when the browser asks. The sim switches it toward programmer layout and uses the
 | 8 | Select `currentVoice` |
 
 Pads are claimed so they do not paint MIDI notes into the grid. Connection
-status appears under the left sidebar status line. This is sim-only for now;
-USB-host on the Teensy is a later step.
+status appears under the left sidebar status line. On the hardware, the same
+map runs over Teensy USB-host (`TOERN_LAUNCHPAD_HOST`, see
+`platformio/toern_launchpad.ino`) when a Launchpad is plugged into the soldered
+host port.
 
 ```bash
 node _debug/tests/test_sim_launchpad.mjs

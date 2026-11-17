@@ -8,7 +8,7 @@
  *   row 7       → solo that voice (toggle; another column retargets)
  *   row 8       → select currentVoice
  *
- * Phase 1: browser sim only. Device USB-host path is later.
+ * Hardware: same map via Teensy USB-host in platformio/toern_launchpad.ino.
  */
 
 const VOL_LEVELS = [0, 4, 8, 12, 16];
