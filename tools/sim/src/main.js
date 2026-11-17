@@ -2,6 +2,7 @@ import { TOUCHY_COLORS } from "./firmware/screens.js";
 import { COL } from "./firmware/const.js";
 import { createMatrix } from "./firmware/matrix.js";
 import { createDevice } from "./firmware/device.js";
+import { createLaunchpadController } from "./launchpad.js";
 import { createBitMidiBrowser } from "./bitMidiBrowser.js";
 import { parseMidiFile, mapNotesToGrid, filterOverlappingNotes, buildMidiSubpatterns, suggestMidiSlots, MIDI_VOICE_LABELS, selectMidiPageWindow, MIDI_SUBPATTERN_STEPS, MIDI_SUBPATTERN_COUNT } from "./firmware/midiImport.js";
 import { transferMidiSubpatterns } from "./firmware/midiSongTransfer.js";
@@ -89,11 +90,13 @@ app.innerHTML = `
     </div>
     <p class="status" id="status" role="status"></p>
     <p class="jump-help" id="jump-help"></p>
+    <p class="status launchpad-status" id="launchpad-status" role="status">Launchpad: looking…</p>
     <hr>
     <h1 class="jump-title">Browser shortcuts</h1>
     <p>Press Space to play / pause. Click the grid first to activate browser audio. Turn the onscreen knobs with your mouse or use the keys below.</p>
     <ul class="key-legend-list">
       <li><kbd>1</kbd>–<kbd>8</kbd> voice</li>
+      <li>Launchpad: cols = voices 1–8; row 1 mute, 2–6 volume, 7 solo, 8 select</li>
       <li><kbd>E</kbd> <kbd>P</kbd> <kbd>.</kbd> <kbd>X</kbd> <kbd>M</kbd> touch pads 1–5</li>
       <li><kbd>X</kbd> + <kbd>M</kbd> fill (while playing)</li>
       <li><kbd>S</kbd> single mode</li>
@@ -380,6 +383,13 @@ const device = createDevice(
   document.querySelector("#status"),
   [...document.querySelectorAll(".ring")]
 );
+const launchpadStatus = document.querySelector("#launchpad-status");
+const launchpad = createLaunchpadController(device, {
+  onStatus(text) {
+    if (launchpadStatus) launchpadStatus.textContent = text;
+  },
+});
+launchpad.start();
 window.addEventListener("keydown", (e) => device.keydown(e), true);
 window.addEventListener("keyup", (e) => device.keyup(e), true);
 

@@ -178,10 +178,15 @@ export function createDevice(matrix, statusEl, rings) {
   const agen = createAutogen({ note, columns:()=>COLS, steps:()=>STEPS, rows:ROWS, emptyNote, bpm:()=>s.bpm, params:ch=>filt[ch], isMuted:ch=>mute[ch], volume:ch=>chVol[ch] });
   s.agen = agen.state();
   let agenVolumeAt = 0;
+  let agenSavedMutes = null;
   function stopAutogen() {
     if (!s.agen.active) return;
     agen.stop(s.GLOB);
     s.agen = agen.state();
+    if (agenSavedMutes) {
+      agenSavedMutes.forEach((v, i) => { s.mute[i] = v; });
+      agenSavedMutes = null;
+    }
     s.beat = (s.GLOB.page-1)*COLS+1;
     applyMix();
   }
@@ -201,6 +206,21 @@ export function createDevice(matrix, statusEl, rings) {
     if (s.voiceMode || s.pmode !== 0 || s.imageMode || s.touchyEnabled || s.fastRecActive) return;
     patternDirty = true;
     if (!s.playing) togglePlay(true);
+    // Motif occupancy: mute empty voices so AGEN does not treat them as live.
+    agenSavedMutes = s.mute.slice();
+    const motifStart = (s.GLOB.edit - 1) * COLS + 1;
+    const occupied = new Set();
+    for (let x = motifStart; x < motifStart + COLS; x++) {
+      for (let y = 1; y <= ROWS; y++) {
+        const ch = note[x][y].channel;
+        if (ch) occupied.add(ch);
+      }
+    }
+    if (occupied.size) {
+      for (let ch = 1; ch <= 14; ch++) {
+        if (!occupied.has(ch)) s.mute[ch] = true;
+      }
+    }
     s.agen = agen.start(s.GLOB);s.agenPerformance=agen.performance;
     s.GLOB.page = s.agen.page;
     s.beat = (s.agen.page-1)*COLS+1;
@@ -223,6 +243,7 @@ export function createDevice(matrix, statusEl, rings) {
   let clip = null;
   let clipCh = 0;
   let midiAccess = null;
+  let midiControlHandler = null;
   const hold = {};
   const touch = { l: false, m: false, t4: false, first: 0, chord: false, fnCopy: false };
 
@@ -2534,6 +2555,7 @@ export function createDevice(matrix, statusEl, rings) {
   });
   const sampleMidiInputs = new Map();
   function onMidiMessage(ev) {
+    if (midiControlHandler?.(ev)) return;
     const [status, data1, data2] = ev.data || [];
     if (status == null) return;
     const type = status & 0xf0;
@@ -2599,7 +2621,8 @@ export function createDevice(matrix, statusEl, rings) {
   function effectiveRcveDelayMs() { return syncDelays(s.syncSendMs, s.syncRcveMs).receive; }
   function bindWebMidi() {
     if (!navigator.requestMIDIAccess || midiAccess) return;
-    navigator.requestMIDIAccess({ sysex: false }).then((access) => {
+    // Sysex so Launchpad (and similar) can enter programmer mode via control handler.
+    navigator.requestMIDIAccess({ sysex: true }).then((access) => {
       midiAccess = access;
       const hook = () => {
         for (const input of access.inputs.values()) {
@@ -2608,7 +2631,19 @@ export function createDevice(matrix, statusEl, rings) {
       };
       hook();
       access.onstatechange = hook;
-    }).catch(() => { /* permission / unsupported */ });
+    }).catch(() => {
+      // Retry without sysex if the browser/OS denies it.
+      navigator.requestMIDIAccess({ sysex: false }).then((access) => {
+        midiAccess = access;
+        const hook = () => {
+          for (const input of access.inputs.values()) {
+            input.onmidimessage = onMidiMessage;
+          }
+        };
+        hook();
+        access.onstatechange = hook;
+      }).catch(() => { /* permission / unsupported */ });
+    });
   }
 
   function isTab(e) { return e.code === "Tab" || e.key === "Tab"; }
@@ -3060,6 +3095,18 @@ export function createDevice(matrix, statusEl, rings) {
       liveMix();
       announceState();
     },
+    setChannelVolume(ch, vol) {
+      if (!((ch >= 1 && ch <= 8) || ch === 11 || ch === 13 || ch === 14)) return;
+      chVol[ch] = clamp(Math.round(vol), 0, 16);
+      s.volBar = chVol[ch];
+      s.volBarAt = performance.now();
+      applyFilt(ch);
+      announceState();
+    },
+    channelVolume(ch) { return chVol[ch] ?? 16; },
+    soloActive() { return !!s.solo; },
+    setMidiControlHandler(fn) { midiControlHandler = typeof fn === "function" ? fn : null; },
+    midiAccess() { return midiAccess; },
     soloHold(ch) {
       selectVoice(ch);
       if (!s.solo) enterSolo();

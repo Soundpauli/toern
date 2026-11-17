@@ -94,6 +94,27 @@ Apache **DocumentRoot** (same pattern as sdtool):
 
 Then `certbot --apache -d sim.tyng.app` for HTTPS.
 
+## Launchpad mixer (Web MIDI)
+
+Plug in a Novation Launchpad (Mini MK3 / X / Pro MK3 preferred) and allow MIDI
+when the browser asks. The sim switches it toward programmer layout and uses the
+8×8 grid as a mixer for voices **1–8**:
+
+| Rows (1 = bottom) | Action |
+| --- | --- |
+| 1 | Mute / unmute (below the volume meter) |
+| 2–6 | Channel volume steps `0 / 4 / 8 / 12 / 16` (lit as a meter) |
+| 7 | Solo that voice (press again to leave solo) |
+| 8 | Select `currentVoice` |
+
+Pads are claimed so they do not paint MIDI notes into the grid. Connection
+status appears under the left sidebar status line. This is sim-only for now;
+USB-host on the Teensy is a later step.
+
+```bash
+node _debug/tests/test_sim_launchpad.mjs
+```
+
 ## Current controls and features
 
 All **five touch pads** are available on the panel in desktop/mobile layouts and through **Q P M R U** (touch 1–5). T4 auditions the current voice; T5 holds FN (turn encoder 1 for sample direction). In TOUCHY they play voices 1–5. During playback, T4+T5 queues a fill for the next page; requests for several voices accumulate independently, run for two pages, and finish with a velocity-127 drop. The FILL confirmation uses the requesting voice's color for one second.
