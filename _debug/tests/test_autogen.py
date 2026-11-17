@@ -132,6 +132,9 @@ int main(){
   GLOB.edit=GLOB.page=base;GLOB.x=beat=(base-1)*width+5;
   assert(toggleAutogen()&&allocations==1&&autogenActive()&&note!=original&&beat==5);
   assert(agen.source()==1&&agen.target()==2&&autogenMotifPage()==base&&autogenMuted(2));
+  // Motif has voices 1 and 11; empty voices are muted at start (user mute on 2 kept).
+  assert(!autogenMuted(1)&&!autogenMuted(11));
+  assert(autogenMuted(3)&&autogenMuted(7)&&autogenMuted(8)&&autogenMuted(13)&&autogenMuted(14));
   {
    auto editable=note;
    ToernNoteScope<decltype(note)> builder(note,agenWork->performance);
@@ -200,9 +203,12 @@ int main(){
   fastRecordActive=true;assert(!toggleAutogen());fastRecordActive=false;
   storageReady=false;assert(!toggleAutogen());storageReady=true;
   // A low CH11 bass keeps its register; spare monos supply the chord third/fifth.
+  // Empty voices start muted; unmute 13/14 so the chord-pair guest path can run.
   for(auto &col:original)for(auto &n:col)n=Note{};
   original[1][11]={11,90,100,1,36};GLOB.edit=GLOB.page=1;
-  assert(toggleAutogen());for(unsigned i=0;i<15;++i)serviceAutogen();
+  assert(toggleAutogen());assert(autogenMuted(13)&&autogenMuted(14));
+  autogenSetMute(13,false);autogenSetMute(14,false);
+  for(unsigned i=0;i<15;++i)serviceAutogen();
   assert(agenWork->chordPair&&agen.ready);
   const unsigned chordStep=(agen.target()-1)*width+1;bool third=false,fifth=false;
   for(unsigned row=1;row<=maxY;++row){third|=agenWork->performance[chordStep][row].channel==13;fifth|=agenWork->performance[chordStep][row].channel==14;}
@@ -267,6 +273,7 @@ int main(){
   for(auto &col:original)for(auto &n:col)n=Note{};
   for(unsigned ch=0;ch<16;++ch)testMutes[ch]=false;
   original[1][2]={1,90,100,1,255};original[1][14]={13,90,100,1,60};original[1][4]={3,90,100,1,255};
+  original[5][3]={2,90,100,1,255}; // snare on motif so Build rolls stay unmuted
   GLOB.edit=GLOB.page=1;GLOB.x=1;assert(toggleAutogen());
   assert(autogenViewingPerformance());autogenToggleView();assert(!autogenViewingPerformance());
   assert(autogenMotifPage()==1&&agen.source()==1&&agen.target()==2);
@@ -303,7 +310,8 @@ int main(){
   for(unsigned i=0;i<20;++i)serviceAutogen();
   assert(autogenMotifPage()==2&&GLOB.edit==2&&GLOB.x==width+5);
   assert(agenWork->performance[2*width+5][14].midiPitch==72);
-  assert(!(agenWork->removedVoices&(1u<<11))&&(agenWork->channels&(1u<<11))); // absent companions remain eligible after navigation
+  // Empty motif voices were muted at start, so absent companions stay out.
+  assert(autogenMuted(11)&&!(agenWork->channels&(1u<<11)));
   GLOB.edit=1;GLOB.x=3;autogenFocusMotif();
   for(unsigned i=0;i<20;++i)serviceAutogen();
   assert(note[3][14].midiPitch==67);
@@ -376,6 +384,8 @@ int main(){
    original[5][3]={2,100,100,1,255};original[13][3]={2,100,100,1,255};
    GLOB.edit=GLOB.page=1;GLOB.x=1;for(auto &calls:sourceCalls)calls=0;
    assert(toggleAutogen());
+   // Empty voices start muted; reopen the usual guest/vocal slots for this cycle test.
+   for(unsigned ch:{6u,7u,8u})autogenSetMute(ch,false);
    bool sawBreak=false,sawSolo=false,sawDrop=false;unsigned sung=0;
    for(unsigned response=0;response<26;++response){
     for(unsigned i=0;i<20;++i)serviceAutogen();assert(agen.ready);

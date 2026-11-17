@@ -5165,6 +5165,29 @@ FLASHMEM bool toggleAutogen(){
     agenWork->volumeBase[ch]=agenWork->volumeNow[ch]=agenWork->mutes[ch]?0:agenWork->savedVolume[ch];
     if(ch<=8)agenWork->savedReader[ch]=sampleVolOnReader[ch];
   }
+  // Motif occupancy: if any voice has notes, mute the empty ones so AGEN does not
+  // treat them as live / invite them as guests. Fully empty motifs keep the starter path.
+  {
+    bool occupied[16] = {};
+    unsigned occupiedCount = 0;
+    for (unsigned col = (base - 1) * maxX + 1; col <= base * maxX; ++col) {
+      for (unsigned row = 1; row <= maxY; ++row) {
+        const uint8_t ch = note[col][row].channel;
+        if (ch < 1 || ch >= 16 || occupied[ch]) continue;
+        occupied[ch] = true;
+        ++occupiedCount;
+      }
+    }
+    if (occupiedCount) {
+      for (int ch = 1; ch < 15; ++ch) {
+        if (occupied[ch]) continue;
+        agenWork->mutes[ch] = true;
+        agenWork->userMuted[ch] = true;
+        agenWork->volumeBase[ch] = agenWork->volumeNow[ch] = 0;
+        stopMutedVoiceAudio(ch);
+      }
+    }
+  }
   agenWork->original=note;
   memcpy(agenWork->notes,note,sizeof(agenWork->notes)); // interrupts stay enabled
   agenWork->foundation=analyzeCompanionContext(base,base,base,0);

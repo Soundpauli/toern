@@ -122,8 +122,10 @@ a steady green check indicates a ready page. A late builder holds the full ring
 in its blue/pink view color with the amber spinner until a complete page can switch at a boundary. Timing is derived from
 sequencer steps and `passesTotal`, so tempo changes and repeated pages remain
 honest; this is musical progress, not an estimated generation duration.
-An empty source gets a restrained starter. Companion additions are bounded to
-seven active voices unless the original already contains more.
+An empty source gets a restrained starter. When the motif already has notes,
+voices with no notes on that page are muted at start so AGEN does not treat them
+as live or invite them as guests; those mutes restore on exit. Companion additions
+are bounded to seven active voices unless the original already contains more.
 
 AGEN also performs per-voice volume moves through `applyChannelControlVolume`,
 the same DSP path used by physical encoder 2 in CTRL=VOL. A source bass, harmonic voice or kick is retained as an audible foundation through breaks and builds at no less than three quarters of its starting level. If no such unmuted, nonzero-level source exists, those transitions fall back to Groove. Muted voices are not introduced to manufacture a foundation. Supporting levels rise through the buildup, and all voice levels return together on the drop. Moves stay at or below each voice's user
