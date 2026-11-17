@@ -179,6 +179,7 @@ static void lpToggleMute(uint8_t ch) {
 static void lpSetVolume(uint8_t ch, int vol) {
   if (ch < 1 || ch > 8) return;
   launchpadSetChannelVolume(ch, vol);
+  if (launchpadGetMuted(ch)) launchpadSetMuted(ch, false);
   lpPaintDirty = true;
 }
 
