@@ -1,0 +1,62 @@
+{
+  "baseline_commit": "b1f796f",
+  "date": "2026-09-11",
+  "order_date": "2026-09-12",
+  "order_upload_verified": false,
+  "verified_sources": [
+    "PCB source",
+    "production CPL",
+    "CN1/CN2 copper Gerber flashes",
+    "PTH drill in production GERBER zip"
+  ],
+  "September_positions": {
+    "CN1": [
+      116.27,
+      33.03
+    ],
+    "CN2": [
+      116.27,
+      36.03
+    ]
+  },
+  "current_positions": {
+    "CN1": [
+      116.07,
+      33.26
+    ],
+    "CN2": [
+      116.07,
+      35.8
+    ],
+    "CN3": [
+      121.91,
+      39.1
+    ],
+    "CN4": [
+      124.45,
+      39.1
+    ],
+    "CN5": [
+      126.99,
+      39.1
+    ],
+    "CN6": [
+      129.53,
+      39.1
+    ],
+    "CN7": [
+      132.07,
+      39.1
+    ]
+  },
+  "September_spacing_mm": 3.0,
+  "current_spacing_mm": 2.54,
+  "CN1_shift_mm": [
+    -0.2,
+    0.23
+  ],
+  "CN2_shift_mm": [
+    -0.2,
+    -0.23
+  ]
+}

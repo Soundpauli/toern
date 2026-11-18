@@ -1,0 +1,32 @@
+{
+  "generated_utc": "2026-11-09T12:18:32.986938+00:00",
+  "source_sha256": {
+    "toern_revH.kicad_pcb": "de8e47dd148faed4c8ee0ea724d7a4f02bfddfd66de0bebe4c39b28001136c16",
+    "toern_revH.kicad_sch": "0fee8d84a96f9b34422a761b3fb4e9aa21a250d7c5d3abc300e90d8b16164c7f",
+    "toern_revH.kicad_pro": "afd836ff77237ec008ad5277d59069f8a6ef20e48b394fcf1be62c177edf42f4"
+  },
+  "manufacturing_board_sha256": "b7daf668fb1e2f40bc0cc8fd68cfae9259fec64fa94a5ecebc0b330a0e00a004",
+  "copper_layers": 4,
+  "thickness_mm": 1.6,
+  "assembly_components": 118,
+  "bom_rows": 53,
+  "drc_errors": 0,
+  "drc_warnings": 34,
+  "unconnected_items": 0,
+  "schematic_parity_issues": 30,
+  "d2_verified_in_board_and_gerber": true,
+  "reference_aliases": {
+    "J11-5V": "J11",
+    "J11-3.3V": "J32",
+    "J12 - BUTTON_A-C": "J12",
+    "J13 - TOUCHYTOUCH": "J13",
+    "J14 + BUTTON_C": "J14"
+  },
+  "lcsc_overrides": {},
+  "rotation_corrections_by_value": {
+    "Conn_01x03": 180,
+    "Conn_01x02": 180,
+    "Microphone_Condenser": 180,
+    "PAM8403D": 270
+  }
+}

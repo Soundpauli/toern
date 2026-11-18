@@ -1,0 +1,96 @@
+(kicad_symbol_lib
+  (version 20231120)
+  (generator "kicad_symbol_editor")
+  (generator_version "9.0")
+  (symbol "YZP0354-20100-01"
+    (pin_names
+      (offset 1.016)
+      (hide yes)
+    )
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (property "Reference" "CN"
+      (at 0 3.81 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+    )
+    (property "Value" "YZP0354-20100-01"
+      (at 0 -3.81 0)
+      (effects
+        (font (size 1.27 1.27))
+      )
+    )
+    (property "Footprint" "YZP0354-20100-01:YZP0354-20100-01"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+        (hide yes)
+      )
+    )
+    (property "Datasheet" "https://easyeda.com/editor#id=!717ea0c0017f4715b4b308a4536ca606"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+        (hide yes)
+      )
+    )
+    (property "Description" "Through-hole spring-loaded pogo pin, 6.3 mm operational height"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+        (hide yes)
+      )
+    )
+    (property "Manufacturer" "Xinyangze"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+        (hide yes)
+      )
+    )
+    (property "MPN" "YZP0354-20100-01"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+        (hide yes)
+      )
+    )
+    (property "LCSC" "C5157282"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+        (hide yes)
+      )
+    )
+    (property "lcsc#" "C5157282"
+      (at 0 0 0)
+      (effects
+        (font (size 1.27 1.27))
+        (hide yes)
+      )
+    )
+    (symbol "YZP0354-20100-01_0_1"
+      (circle
+        (center 0 0)
+        (radius 1.27)
+        (stroke (width 0.254) (type default))
+        (fill (type none))
+      )
+    )
+    (symbol "YZP0354-20100-01_1_1"
+      (pin passive line
+        (at -5.08 0 0)
+        (length 3.81)
+        (name "CONTACT"
+          (effects (font (size 1.27 1.27)))
+        )
+        (number "1"
+          (effects (font (size 1.27 1.27)))
+        )
+      )
+    )
+    (embedded_fonts no)
+  )
+)

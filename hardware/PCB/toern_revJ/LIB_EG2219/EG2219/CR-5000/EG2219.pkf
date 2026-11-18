@@ -1,0 +1,10 @@
+(unit MM)
+
+(package "EG2219"
+    (type UNDEF)
+    (uver 2)
+    (mountForm default
+        (footprintRef "EG2219")
+        (spec "default")
+    )
+)

@@ -1,0 +1,8 @@
+# Local KiCad state and recovery files
+*.kicad_prl
+*-backups/
+~*.lck
+_autosave-*
+/#auto_saved_files#
+fp-info-cache
+jlcpcb/project.db

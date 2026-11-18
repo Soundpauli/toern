@@ -1,0 +1,2 @@
+"Designator","Part or value","Footprint","LCSC","Quantity per PCB","Sourcing action","Stock status","Source"
+"J28,J29,J30,J31","929870-01-12-RA","3M_929870-01-12-RA_Assembly","C20926467","4","Buy 4 x 3M 929870-01-12-RA 1x12 female sockets from DigiKey; solder at J28-J31","Check supplier availability","../toern_revH/jlcpcb/production_files/BOM-toern_revH.csv; https://www.digikey.de/de/products/detail/3m/929870-01-12-RA/1239316"
