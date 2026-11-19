@@ -1,0 +1,68 @@
+(footprint "3M_929870-01-12-RA_Assembly"
+  (version 20240108)
+  (generator "pcbnew")
+  (generator_version "9.0")
+  (layer "F.Cu")
+  (descr "Assembly-only overlay for 3M 929870-01-12-RA low-profile 1x12 socket; electrical pads and drills are supplied by the underlying Teensy 4.1 footprint")
+  (tags "3M 929870 1x12 2.54mm low profile C20926467 assembly overlay")
+  (property "Reference" "J"
+    (at 0 -2.4 0)
+    (layer "F.SilkS")
+    (effects
+      (font (size 1 1) (thickness 0.15))
+    )
+  )
+  (property "Value" "929870-01-12-RA"
+    (at 0 2.4 0)
+    (layer "F.Fab")
+    (effects
+      (font (size 1 1) (thickness 0.15))
+    )
+  )
+  (property "Datasheet" "https://multimedia.3m.com/mws/media/223110O/3mtm-boardmount-socket-929-series-ts0211.pdf")
+  (property "Description" "3M 929 Series low-profile 1x12 female socket, 2.54 mm pitch, 3.81 mm insulator height, 3.18 mm solder tails")
+  (property "Manufacturer" "3M")
+  (property "MPN" "929870-01-12-RA")
+  (property "lcsc#" "C20926467")
+  (fp_rect
+    (start -15.24 -1.27)
+    (end 15.24 1.27)
+    (stroke (width 0.15) (type default))
+    (fill none)
+    (layer "F.SilkS")
+  )
+  (fp_rect
+    (start -15.24 -1.27)
+    (end 15.24 1.27)
+    (stroke (width 0.1) (type default))
+    (fill none)
+    (layer "F.Fab")
+  )
+  (fp_rect
+    (start -15.49 -1.52)
+    (end 15.49 1.52)
+    (stroke (width 0.05) (type default))
+    (fill none)
+    (layer "F.CrtYd")
+  )
+  (fp_circle
+    (center -13.97 0)
+    (end -13.37 0)
+    (stroke (width 0.15) (type default))
+    (fill none)
+    (layer "F.SilkS")
+  )
+  (fp_text user "${REFERENCE}"
+    (at 0 0 0)
+    (layer "F.Fab")
+    (effects
+      (font (size 0.8 0.8) (thickness 0.12))
+    )
+  )
+  (embedded_fonts no)
+  (model "${KIPRJMOD}/3M_929870-01-12-RA.pretty/3M_929870-01-12-RA.wrl"
+    (offset (xyz 0 0 0))
+    (scale (xyz 1 1 1))
+    (rotate (xyz 0 0 0))
+  )
+)

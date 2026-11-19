@@ -1,0 +1,2583 @@
+{
+  "violations": [
+    {
+      "error_type": "DRCET_HOLE_CLEARANCE",
+      "position": {
+        "x_nm": "104967345",
+        "y_nm": "52381945"
+      },
+      "items": [
+        {
+          "value": "ad275484-4a49-4d4b-a72c-ffe163fe2ea8"
+        },
+        {
+          "value": "8d552efc-447b-476a-b33f-5563c6d3b14d"
+        }
+      ],
+      "violating_rule": "board setup constraints hole",
+      "description": "Hole clearance violation (board setup constraints hole clearance 0.2500 mm; actual 0.2467 mm)",
+      "severity": "RS_ERROR"
+    },
+    {
+      "error_type": "DRCET_HOLE_CLEARANCE",
+      "position": {
+        "x_nm": "105878869",
+        "y_nm": "50891132"
+      },
+      "items": [
+        {
+          "value": "164234e2-8bbb-4ed5-8881-c2f06df58a80"
+        },
+        {
+          "value": "d415acbb-dc05-44be-be89-257a75942afc"
+        }
+      ],
+      "violating_rule": "board setup constraints hole",
+      "description": "Hole clearance violation (board setup constraints hole clearance 0.2500 mm; actual 0.2357 mm)",
+      "severity": "RS_ERROR"
+    },
+    {
+      "error_type": "DRCET_OVERLAPPING_FOOTPRINTS",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "25395000"
+      },
+      "items": [
+        {
+          "value": "2c15b2da-4192-43d9-a598-41d9357fe94a"
+        },
+        {
+          "value": "ba0a266a-70bd-4d2f-8a0e-f50a903806ac"
+        }
+      ],
+      "violating_rule": "board setup constraints courtyard",
+      "description": "Courtyards overlap",
+      "severity": "RS_ERROR"
+    },
+    {
+      "error_type": "DRCET_OVERLAPPING_FOOTPRINTS",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "40635000"
+      },
+      "items": [
+        {
+          "value": "37187cde-e540-48d0-a6a6-e093ce52b601"
+        },
+        {
+          "value": "8c7a07b1-cffc-48d8-b47c-a70471f5f642"
+        }
+      ],
+      "violating_rule": "board setup constraints courtyard",
+      "description": "Courtyards overlap",
+      "severity": "RS_ERROR"
+    },
+    {
+      "error_type": "DRCET_DANGLING_TRACK",
+      "position": {
+        "x_nm": "182425000",
+        "y_nm": "31725000"
+      },
+      "items": [
+        {
+          "value": "0c616ef8-6b93-44a8-92d3-833a2f4844be"
+        }
+      ],
+      "description": "Track has unconnected end",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_DANGLING_TRACK",
+      "position": {
+        "x_nm": "105957817",
+        "y_nm": "51680000"
+      },
+      "items": [
+        {
+          "value": "df3d451a-2fe0-40ab-b0a0-660ed8fcbab6"
+        }
+      ],
+      "description": "Track has unconnected end",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_DANGLING_TRACK",
+      "position": {
+        "x_nm": "105500000",
+        "y_nm": "53000000"
+      },
+      "items": [
+        {
+          "value": "738e554e-c18d-49d3-aa53-1302cdd555c4"
+        }
+      ],
+      "description": "Track has unconnected end",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "150000000",
+        "y_nm": "30510000"
+      },
+      "items": [
+        {
+          "value": "05b7a891-9d08-4f61-a751-497cb8af86b5"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "111000000",
+        "y_nm": "67450000"
+      },
+      "items": [
+        {
+          "value": "05c094cf-6fdf-49f6-a8c8-d8db49fa3b27"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'C529951'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "152800000",
+        "y_nm": "36150000"
+      },
+      "items": [
+        {
+          "value": "07aca5b5-8536-4347-b46f-427917f41e4d"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "44975000",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "08d97e3a-474d-4850-8629-41c37e878bcf"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "186250000",
+        "y_nm": "68700000"
+      },
+      "items": [
+        {
+          "value": "0b3ca909-6849-4d0e-b238-6d2ac4f7c0a9"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "102980000",
+        "y_nm": "48500000"
+      },
+      "items": [
+        {
+          "value": "0e104101-798f-41eb-8b3d-70f58c8f91a4"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "188775000",
+        "y_nm": "31600000"
+      },
+      "items": [
+        {
+          "value": "0f3f1f73-1995-429d-855f-986f31dbd7d7"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "95565000",
+        "y_nm": "37072500"
+      },
+      "items": [
+        {
+          "value": "11492a7d-d3b0-4b87-aade-e0e965dd07a3"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "101990000",
+        "y_nm": "43540000"
+      },
+      "items": [
+        {
+          "value": "13ceddb5-e80b-4d5a-ae58-b50a43c29960"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "185550000",
+        "y_nm": "58865836"
+      },
+      "items": [
+        {
+          "value": "13f1d5a9-468a-416c-95f9-3053aa87a9d0"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "67000000",
+        "y_nm": "82150000"
+      },
+      "items": [
+        {
+          "value": "17c5dadf-c4dd-4732-85ae-76b074284410"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "58500000",
+        "y_nm": "43500000"
+      },
+      "items": [
+        {
+          "value": "197a26cd-c145-4007-8b95-f5b5cb454eb2"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "178000000",
+        "y_nm": "68825000"
+      },
+      "items": [
+        {
+          "value": "1cf2c1ee-b7b7-4e94-8eb6-59a11304b7ef"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "67000000",
+        "y_nm": "90550000"
+      },
+      "items": [
+        {
+          "value": "1d741b5d-fc9c-47f2-93ea-dccd1005b179"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "116055000",
+        "y_nm": "47850000"
+      },
+      "items": [
+        {
+          "value": "1de5b0ff-4c55-499f-9b00-d4896befa0d8"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "34510000",
+        "y_nm": "52860000"
+      },
+      "items": [
+        {
+          "value": "1e02bfad-4f61-4a87-b474-90620a845cbc"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_USB'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "180925000",
+        "y_nm": "30225000"
+      },
+      "items": [
+        {
+          "value": "2092bef5-cf43-4109-8f86-045f8a6894b8"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'BQ24075TRGTR'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "103920000",
+        "y_nm": "39510000"
+      },
+      "items": [
+        {
+          "value": "22a33f28-a084-4239-b35e-3c5607b524f3"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "65000000",
+        "y_nm": "38550000"
+      },
+      "items": [
+        {
+          "value": "27ff1fb4-7674-4ae8-a229-92916f535abc"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "101990000",
+        "y_nm": "44680000"
+      },
+      "items": [
+        {
+          "value": "29f28c4f-1962-4ffd-af7e-115d8cdce71b"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "160010000",
+        "y_nm": "26910000"
+      },
+      "items": [
+        {
+          "value": "2c15b2da-4192-43d9-a598-41d9357fe94a"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library '3M_929870-01-12-RA'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "185850000",
+        "y_nm": "89357500"
+      },
+      "items": [
+        {
+          "value": "2d31b70a-f701-4cd8-8718-0f0cfbdf874d"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'SJ1-3533'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "121700000",
+        "y_nm": "77020000"
+      },
+      "items": [
+        {
+          "value": "2e350092-0669-49a7-b8ea-3bc5c65a3ce6"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "101617500",
+        "y_nm": "50390000"
+      },
+      "items": [
+        {
+          "value": "3131fbf9-e517-4213-ba34-47c9cfe3433f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "44150000",
+        "y_nm": "48200000"
+      },
+      "items": [
+        {
+          "value": "315ca44f-a5fe-4ed4-9b11-d9367355a8bc"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'MountingHole'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "138770000",
+        "y_nm": "48602500"
+      },
+      "items": [
+        {
+          "value": "34db220f-697f-40d0-aae2-bfd55d28d8d0"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "129530000",
+        "y_nm": "42150000"
+      },
+      "items": [
+        {
+          "value": "37187cde-e540-48d0-a6a6-e093ce52b601"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library '3M_929870-01-12-RA'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "110500000",
+        "y_nm": "40000000"
+      },
+      "items": [
+        {
+          "value": "3b955b87-6b90-4931-901c-968f4a5be23e"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "176642500",
+        "y_nm": "37800000"
+      },
+      "items": [
+        {
+          "value": "3c0030e3-69c4-489f-a5f0-ec9d4a013977"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Jumper'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "98758420",
+        "y_nm": "50448020"
+      },
+      "items": [
+        {
+          "value": "40b5a1ac-7f07-4671-95a1-7389efc13cef"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "116070000",
+        "y_nm": "46310000"
+      },
+      "items": [
+        {
+          "value": "40fdadf9-c130-42e3-84d5-efe7c3ebfb1f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "122000000",
+        "y_nm": "75500000"
+      },
+      "items": [
+        {
+          "value": "4850a175-56d3-4414-b83d-947bff2f43e2"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "81275000",
+        "y_nm": "26800000"
+      },
+      "items": [
+        {
+          "value": "49028964-b5ce-4e32-8551-18e40a40d1bf"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "126990000",
+        "y_nm": "39100000"
+      },
+      "items": [
+        {
+          "value": "4948bbc7-fd39-4687-8a32-9a79647d2b1e"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'YZP0354-20100-01'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "177726122",
+        "y_nm": "27053750"
+      },
+      "items": [
+        {
+          "value": "4a393093-0e8a-489f-b2ea-679cd8cd24c9"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'LED_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "106140000",
+        "y_nm": "39510000"
+      },
+      "items": [
+        {
+          "value": "4af4c6e3-e051-45a3-ac7e-ed56e133a3e5"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "34510000",
+        "y_nm": "66470000"
+      },
+      "items": [
+        {
+          "value": "5069fe8c-0200-4a9c-8824-d8bc75ed33c0"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_USB'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "151600000",
+        "y_nm": "30075000"
+      },
+      "items": [
+        {
+          "value": "50733e56-39c3-42a7-b96d-03ac9a4dd9fc"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "153718300",
+        "y_nm": "48590000"
+      },
+      "items": [
+        {
+          "value": "51384337-fcf7-48a8-a5ec-311b10703ae8"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'myLibKicad'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "107230000",
+        "y_nm": "39510000"
+      },
+      "items": [
+        {
+          "value": "5413fc68-3364-40c3-9836-9f7b111c5650"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "80400000",
+        "y_nm": "30550000"
+      },
+      "items": [
+        {
+          "value": "56a59526-b7eb-4f33-bce4-9d4a990bb3d7"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "111900000",
+        "y_nm": "47800000"
+      },
+      "items": [
+        {
+          "value": "56b60adb-9663-4e20-8e85-2fe6a13909ea"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "61450000",
+        "y_nm": "71800000"
+      },
+      "items": [
+        {
+          "value": "57894d31-46cb-4461-836c-72c9ef8d3589"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "118975726",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "5b9eae1f-8290-43e6-9029-56998cc92821"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "142005000",
+        "y_nm": "85435000"
+      },
+      "items": [
+        {
+          "value": "60ff9883-ba56-4b66-a3bd-323812aa424b"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_Audio'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "156690000",
+        "y_nm": "45760000"
+      },
+      "items": [
+        {
+          "value": "6363bab2-c48a-4bc3-ab8a-ce8ae7e061f7"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "184500000",
+        "y_nm": "33450000"
+      },
+      "items": [
+        {
+          "value": "64cb105b-c6ef-467f-b073-2ac2a91c91b4"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "163337500",
+        "y_nm": "30300000"
+      },
+      "items": [
+        {
+          "value": "666c6bb6-3305-4793-8059-8a56f97b1284"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "185950000",
+        "y_nm": "31860000"
+      },
+      "items": [
+        {
+          "value": "66ed66f0-f5b2-40d1-b10c-5b86059c5627"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "40500000",
+        "y_nm": "60500000"
+      },
+      "items": [
+        {
+          "value": "6724bb76-d1de-448f-9790-86c40129e63e"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "102649418",
+        "y_nm": "69677936"
+      },
+      "items": [
+        {
+          "value": "68ca48e7-a71f-4d88-8e98-70f5760d7bda"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Symbol'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "163300000",
+        "y_nm": "38760000"
+      },
+      "items": [
+        {
+          "value": "6ac02f29-346d-4b4c-92d0-5e28ff3605d8"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "58000000",
+        "y_nm": "74000000"
+      },
+      "items": [
+        {
+          "value": "6b67bdef-a422-44f6-8820-ac61e6d7e00f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "132070000",
+        "y_nm": "39100000"
+      },
+      "items": [
+        {
+          "value": "6df6d060-67b6-45de-a4b7-9f8b95fbd732"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'YZP0354-20100-01'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "65975000",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "6e253147-fdf9-4391-b587-08f98f807126"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "98017500",
+        "y_nm": "36422500"
+      },
+      "items": [
+        {
+          "value": "704a59aa-503d-4225-994d-02f9a7c3eb2f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "180700000",
+        "y_nm": "69650000"
+      },
+      "items": [
+        {
+          "value": "706bbe04-5ea6-4569-a141-d530243b1ba7"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "116070000",
+        "y_nm": "33260000"
+      },
+      "items": [
+        {
+          "value": "73960464-2d82-41fe-a51a-1d7a7d559e38"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'YZP0354-20100-01'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "40500000",
+        "y_nm": "62000000"
+      },
+      "items": [
+        {
+          "value": "75608c6e-8c04-4bf1-956b-cd8e589c2886"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "34140000",
+        "y_nm": "60500000"
+      },
+      "items": [
+        {
+          "value": "75ee2320-5a6b-4d62-9e3e-6173950bf6e2"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "102973419",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "7696bb42-f7a0-45a2-ba22-69b387221ba0"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "90000000",
+        "y_nm": "35000000"
+      },
+      "items": [
+        {
+          "value": "769e8cc6-5b64-467c-aad8-6aa4c8e9a905"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "116065000",
+        "y_nm": "44790000"
+      },
+      "items": [
+        {
+          "value": "7732d704-cf4d-4e21-842b-46c21763e8aa"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "116070000",
+        "y_nm": "35800000"
+      },
+      "items": [
+        {
+          "value": "775c9549-f5c4-42cc-bc07-7760514d42ab"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'YZP0354-20100-01'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "61500000",
+        "y_nm": "70000000"
+      },
+      "items": [
+        {
+          "value": "79ffb579-38f1-4746-b89c-9934c46ead4e"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "42246020",
+        "y_nm": "35192339"
+      },
+      "items": [
+        {
+          "value": "7c6a29ab-9b2c-47ec-8fdd-d5b701b9753c"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_Audio'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "95450000",
+        "y_nm": "46825000"
+      },
+      "items": [
+        {
+          "value": "7cbd9f58-15ff-477d-99d1-d1376ff7429f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "34150000",
+        "y_nm": "59250000"
+      },
+      "items": [
+        {
+          "value": "7dadb81f-68d4-4115-8b44-3dd62ee90b2d"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "61500000",
+        "y_nm": "68000000"
+      },
+      "items": [
+        {
+          "value": "7e42d3bf-7ce9-4acc-a041-d2ec3e0b2743"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "159087500",
+        "y_nm": "30562500"
+      },
+      "items": [
+        {
+          "value": "8366406c-031f-41d7-91e5-369396f6b3c4"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "129530000",
+        "y_nm": "39100000"
+      },
+      "items": [
+        {
+          "value": "8483ee3e-c2ac-4045-a3c4-a081c3ed727f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'YZP0354-20100-01'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "45850000",
+        "y_nm": "69150000"
+      },
+      "items": [
+        {
+          "value": "86d9de48-8e34-49c4-a301-e81d2fb98b6a"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "118800000",
+        "y_nm": "69600000"
+      },
+      "items": [
+        {
+          "value": "8a689619-799a-4bc6-9e38-b6c8a096184f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'MountingHole'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "160010000",
+        "y_nm": "42150000"
+      },
+      "items": [
+        {
+          "value": "8c7a07b1-cffc-48d8-b47c-a70471f5f642"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library '3M_929870-01-12-RA'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "58500000",
+        "y_nm": "45500000"
+      },
+      "items": [
+        {
+          "value": "8da265aa-a2ad-4228-9336-405306c19895"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "148650000",
+        "y_nm": "54250000"
+      },
+      "items": [
+        {
+          "value": "8effb611-d2f3-403a-afec-e75d9002ab85"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "118730000",
+        "y_nm": "77500000"
+      },
+      "items": [
+        {
+          "value": "92dc15c2-17e2-408b-8074-bb076dd264b1"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "155250000",
+        "y_nm": "32700000"
+      },
+      "items": [
+        {
+          "value": "932bc0f6-96e8-4dcf-9f2c-c932b1305ebd"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "94827500",
+        "y_nm": "28200000"
+      },
+      "items": [
+        {
+          "value": "933ea744-4833-4767-991e-d18cd7aba36b"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'TPS22918DBVR'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "180083674",
+        "y_nm": "27050415"
+      },
+      "items": [
+        {
+          "value": "935eee2e-df2b-408a-b248-3c624686e23e"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'LED_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "148650000",
+        "y_nm": "61250000"
+      },
+      "items": [
+        {
+          "value": "936a255f-9755-4cb3-b2e7-4db97c450e37"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "176544200",
+        "y_nm": "26921978"
+      },
+      "items": [
+        {
+          "value": "94025d14-811c-490c-bb37-66ac75cb010a"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "141567500",
+        "y_nm": "49170000"
+      },
+      "items": [
+        {
+          "value": "94f4f04e-c49d-45bc-943e-b4915682fc61"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "54467500",
+        "y_nm": "68475000"
+      },
+      "items": [
+        {
+          "value": "964c13d9-2469-4e12-a301-1005fe968a7d"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_SO'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "166500000",
+        "y_nm": "29350000"
+      },
+      "items": [
+        {
+          "value": "a29b0f95-b5cd-45bd-8a2b-4ae00b2bce79"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "187000000",
+        "y_nm": "27950000"
+      },
+      "items": [
+        {
+          "value": "a5bf9fc9-7d13-4881-bb23-1e7fc370c9e5"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "102870000",
+        "y_nm": "39510000"
+      },
+      "items": [
+        {
+          "value": "ab659aaf-33c1-4aaa-9873-c7dfd779d983"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "98770000",
+        "y_nm": "46862500"
+      },
+      "items": [
+        {
+          "value": "ae1f2a27-35c3-4765-bf06-15be13f783bb"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "159430000",
+        "y_nm": "34250000"
+      },
+      "items": [
+        {
+          "value": "ae804e05-c7a1-455c-8be2-7e556dd27318"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "105050000",
+        "y_nm": "39510000"
+      },
+      "items": [
+        {
+          "value": "b0d0cd95-1091-4c78-9ff0-64e3b44381c0"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "166600000",
+        "y_nm": "31250000"
+      },
+      "items": [
+        {
+          "value": "b1fbf86f-691a-45b4-a659-2a66477cc0ad"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "165962500",
+        "y_nm": "38762500"
+      },
+      "items": [
+        {
+          "value": "b2ac467c-fb0c-44ae-8379-d2b36a4afc75"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "129530000",
+        "y_nm": "26910000"
+      },
+      "items": [
+        {
+          "value": "ba0a266a-70bd-4d2f-8a0e-f50a903806ac"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library '3M_929870-01-12-RA'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "148276528",
+        "y_nm": "48424664"
+      },
+      "items": [
+        {
+          "value": "baa131d9-8a9e-470b-b8a9-5ae10c834973"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Diode_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "98150000",
+        "y_nm": "27000000"
+      },
+      "items": [
+        {
+          "value": "bdfec83b-538d-45ab-9319-523bbf04341e"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "121910000",
+        "y_nm": "39100000"
+      },
+      "items": [
+        {
+          "value": "c02dd31a-070b-476b-9697-1d8d55ff8f70"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'YZP0354-20100-01'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "71450000",
+        "y_nm": "74700000"
+      },
+      "items": [
+        {
+          "value": "c054f226-abd5-40d0-a437-a4628a82fedf"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'MountingHole'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "78500000",
+        "y_nm": "38550000"
+      },
+      "items": [
+        {
+          "value": "c19b709c-983f-46d9-b85f-a18698134966"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "81973914",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "c1b632c8-2ddc-4b6b-85dc-9f9bf027d2fd"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "65000000",
+        "y_nm": "70000000"
+      },
+      "items": [
+        {
+          "value": "c2f124ea-7b0c-488d-99ed-a7856961a15c"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "187637500",
+        "y_nm": "43000000"
+      },
+      "items": [
+        {
+          "value": "c4d24186-87c3-41ac-ab67-56546074e0f9"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'EG2219'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "178000000",
+        "y_nm": "32010000"
+      },
+      "items": [
+        {
+          "value": "c6fe6cec-a967-46fb-a436-0ea9478af3a5"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "58000000",
+        "y_nm": "76000000"
+      },
+      "items": [
+        {
+          "value": "c78d81f2-52c2-43fa-968a-ffd49dccf93f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "98105000",
+        "y_nm": "33022500"
+      },
+      "items": [
+        {
+          "value": "c7a2a9b2-d2ae-4ea7-bffc-5346e96705f8"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "95443778",
+        "y_nm": "50283225"
+      },
+      "items": [
+        {
+          "value": "c87b4a0b-74c1-4a36-8e26-1e2e11f1ea8f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "185850000",
+        "y_nm": "76307500"
+      },
+      "items": [
+        {
+          "value": "c88d2f28-72ee-4806-bcc5-b997a1b1f72c"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'SJ1-3533'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "108160000",
+        "y_nm": "44950000"
+      },
+      "items": [
+        {
+          "value": "c910aceb-915c-4fa0-94a1-23dd491ddbbd"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_DFN_QFN'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "120870000",
+        "y_nm": "89390000"
+      },
+      "items": [
+        {
+          "value": "c9183c0c-271f-4a07-ae43-e9d2a2f2e1cb"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_Card'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "110500000",
+        "y_nm": "41000000"
+      },
+      "items": [
+        {
+          "value": "c945d27e-339f-41ed-b05e-97c526953082"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "139975000",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "ca0394e8-cdff-441d-b46c-99221d2840f3"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "167550000",
+        "y_nm": "51800000"
+      },
+      "items": [
+        {
+          "value": "ca510638-f2da-4151-a60f-28d5a527e97d"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'MountingHole'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "156137500",
+        "y_nm": "35112500"
+      },
+      "items": [
+        {
+          "value": "cc48b933-0369-499c-aa34-99cafa931a96"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "61500000",
+        "y_nm": "66000000"
+      },
+      "items": [
+        {
+          "value": "cf2f6845-e9ab-40de-8caf-2b769b45c3d6"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "108880000",
+        "y_nm": "50520000"
+      },
+      "items": [
+        {
+          "value": "d1e011f3-539a-4f76-83f9-53fe1d46daf6"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "164760000",
+        "y_nm": "85435000"
+      },
+      "items": [
+        {
+          "value": "d1ed164f-d0ce-4739-8748-da793acd5544"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_Audio'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "65000000",
+        "y_nm": "68000000"
+      },
+      "items": [
+        {
+          "value": "d536b62a-efea-4df7-b98d-2c1130fed8cf"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "176500000",
+        "y_nm": "32000000"
+      },
+      "items": [
+        {
+          "value": "d680c46c-f0bf-480e-aa22-fa6446cfe995"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "176977175",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "d6b5f394-2dc5-4b10-8e82-1c6d7e5ff840"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "169100000",
+        "y_nm": "37100000"
+      },
+      "items": [
+        {
+          "value": "d7a13a69-8f31-48ae-a8d8-8623e8b8279a"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "87800000",
+        "y_nm": "44650000"
+      },
+      "items": [
+        {
+          "value": "d8681a0e-2694-466f-9da6-6b554c401f74"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'MountingHole'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "178990000",
+        "y_nm": "26921978"
+      },
+      "items": [
+        {
+          "value": "da82aadd-851e-499a-9eef-713cb8487070"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "103500000",
+        "y_nm": "46980000"
+      },
+      "items": [
+        {
+          "value": "dc766171-9f03-44ae-99f0-41650f97914f"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "168900000",
+        "y_nm": "39410000"
+      },
+      "items": [
+        {
+          "value": "dcdaaa08-13c4-495b-9634-e3902193ca73"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "91270000",
+        "y_nm": "27100000"
+      },
+      "items": [
+        {
+          "value": "ddd7ca64-616b-4344-99e1-2cc78571a11c"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "65000000",
+        "y_nm": "30550000"
+      },
+      "items": [
+        {
+          "value": "df36efb8-5046-471f-b17f-6b3d5396b9fa"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_JST'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "181177879",
+        "y_nm": "33301621"
+      },
+      "items": [
+        {
+          "value": "e050ca03-d1df-4770-9ed3-1bcb027d6261"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "98415000",
+        "y_nm": "39232500"
+      },
+      "items": [
+        {
+          "value": "e9c5a3f3-b32e-4ac2-ab03-76076ed94d68"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "148500000",
+        "y_nm": "30510000"
+      },
+      "items": [
+        {
+          "value": "e9fda9b5-d0e4-4d85-bb4e-25b19a288108"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "107520000",
+        "y_nm": "53000000"
+      },
+      "items": [
+        {
+          "value": "ee5659b7-fabc-4fa4-b45b-8b7de2b2e2c6"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "138900000",
+        "y_nm": "29400000"
+      },
+      "items": [
+        {
+          "value": "ef4e70e9-ce55-45bc-a157-bea377499325"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "155900000",
+        "y_nm": "29700000"
+      },
+      "items": [
+        {
+          "value": "ef8415a3-e164-4a0a-bba6-13e78b67ab7e"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "124450000",
+        "y_nm": "39100000"
+      },
+      "items": [
+        {
+          "value": "efd95b88-3ea5-4dae-98f5-2be94050d700"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'YZP0354-20100-01'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "144135000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'myLibKicad'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "146340000",
+        "y_nm": "48460000"
+      },
+      "items": [
+        {
+          "value": "f3448773-2250-438b-a013-90cb9d918d67"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "108920000",
+        "y_nm": "51680000"
+      },
+      "items": [
+        {
+          "value": "f726dec9-d9a9-48ec-85e6-dcc2f7d56785"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "184300000",
+        "y_nm": "31860000"
+      },
+      "items": [
+        {
+          "value": "f7a46014-7a51-4503-887e-e39b9db5b840"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "42265000",
+        "y_nm": "83115000"
+      },
+      "items": [
+        {
+          "value": "f8926f74-045c-4ee2-813a-9979dfa4c436"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_Audio'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_LIB_FOOTPRINT_ISSUES",
+      "position": {
+        "x_nm": "155976958",
+        "y_nm": "58490000"
+      },
+      "items": [
+        {
+          "value": "fe573b75-b91d-4530-9050-104a765862ea"
+        }
+      ],
+      "description": "The current configuration does not include the footprint library 'Connector_PinSocket_2.54mm'",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SCHEMATIC_PARITY",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "myLibKicad:Teensy41 doesn't match footprint given by symbol (toern:Teensy41_Carrier)",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 55 (5V-HOST) in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 67 (D+) in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 57 (D+HOST) in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 66 (D-) in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 56 (D-HOST) in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 58 (GND) in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 59 (GND) in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 51 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 52 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 64 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 61 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 54 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 53 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 60 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 65 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 63 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 62 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 50 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_NET_CONFLICT",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "34530000"
+      },
+      "items": [
+        {
+          "value": "f01e8464-da75-4a8c-bbed-0993a1aa3ee4"
+        }
+      ],
+      "description": "No pad found for pin 49 in schematic",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_STARVED_THERMAL",
+      "position": {
+        "x_nm": "37995000",
+        "y_nm": "49610000"
+      },
+      "items": [
+        {
+          "value": "582d36d0-4bab-4f2a-aada-2e6990c47e25"
+        },
+        {
+          "value": "5790e209-5b41-4ced-9852-e6eaa8e3a040"
+        }
+      ],
+      "layer": "BL_F_Cu",
+      "description": "Thermal relief connection to zone incomplete (layer F.Cu; zone min spoke count 2; actual 1)",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_STARVED_THERMAL",
+      "position": {
+        "x_nm": "37995000",
+        "y_nm": "56110000"
+      },
+      "items": [
+        {
+          "value": "582d36d0-4bab-4f2a-aada-2e6990c47e25"
+        },
+        {
+          "value": "61886afb-c128-41f8-89b9-ac823ab69d95"
+        }
+      ],
+      "layer": "BL_F_Cu",
+      "description": "Thermal relief connection to zone incomplete (layer F.Cu; zone min spoke count 2; actual 1)",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_STARVED_THERMAL",
+      "position": {
+        "x_nm": "37995000",
+        "y_nm": "56110000"
+      },
+      "items": [
+        {
+          "value": "582d36d0-4bab-4f2a-aada-2e6990c47e25"
+        },
+        {
+          "value": "ec0b9c57-42fd-48ce-a834-62b4055c2aa4"
+        }
+      ],
+      "layer": "BL_F_Cu",
+      "description": "Thermal relief connection to zone incomplete (layer F.Cu; zone min spoke count 2; actual 1)",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_STARVED_THERMAL",
+      "position": {
+        "x_nm": "37995000",
+        "y_nm": "49610000"
+      },
+      "items": [
+        {
+          "value": "582d36d0-4bab-4f2a-aada-2e6990c47e25"
+        },
+        {
+          "value": "b1634a8b-90f6-48d7-a666-73b8c6100ac3"
+        }
+      ],
+      "layer": "BL_F_Cu",
+      "description": "Thermal relief connection to zone incomplete (layer F.Cu; zone min spoke count 2; actual 1)",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "43420000"
+      },
+      "items": [
+        {
+          "value": "2755bc9d-1690-4e3f-bb8e-164787808767"
+        },
+        {
+          "value": "e8986531-2443-49af-883a-d91f1d67f908"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "43420000"
+      },
+      "items": [
+        {
+          "value": "2755bc9d-1690-4e3f-bb8e-164787808767"
+        },
+        {
+          "value": "65fde8ab-68a4-4d40-acb9-0083037a346b"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "42150000"
+      },
+      "items": [
+        {
+          "value": "65fde8ab-68a4-4d40-acb9-0083037a346b"
+        },
+        {
+          "value": "e8986531-2443-49af-883a-d91f1d67f908"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "114290000",
+        "y_nm": "43420000"
+      },
+      "items": [
+        {
+          "value": "143bbee6-4b81-4778-b7ea-49c3ba341d2e"
+        },
+        {
+          "value": "e8986531-2443-49af-883a-d91f1d67f908"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "114290000",
+        "y_nm": "26910000"
+      },
+      "items": [
+        {
+          "value": "143bbee6-4b81-4778-b7ea-49c3ba341d2e"
+        },
+        {
+          "value": "783aa5c4-6bac-4840-a768-0262a4a50839"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "114290000",
+        "y_nm": "25640000"
+      },
+      "items": [
+        {
+          "value": "783aa5c4-6bac-4840-a768-0262a4a50839"
+        },
+        {
+          "value": "e59a0f55-e84f-4214-842b-40b46be97a6c"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "28180000"
+      },
+      "items": [
+        {
+          "value": "783aa5c4-6bac-4840-a768-0262a4a50839"
+        },
+        {
+          "value": "d0e29ec9-d2cd-4ef0-af54-eb5ef457f528"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "144770000",
+        "y_nm": "25640000"
+      },
+      "items": [
+        {
+          "value": "d0e29ec9-d2cd-4ef0-af54-eb5ef457f528"
+        },
+        {
+          "value": "e59a0f55-e84f-4214-842b-40b46be97a6c"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "175250000",
+        "y_nm": "28180000"
+      },
+      "items": [
+        {
+          "value": "5a73d0d2-e030-48ba-9923-7031e0096876"
+        },
+        {
+          "value": "d0e29ec9-d2cd-4ef0-af54-eb5ef457f528"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    },
+    {
+      "error_type": "DRCET_SILK_CLEARANCE",
+      "position": {
+        "x_nm": "175250000",
+        "y_nm": "43420000"
+      },
+      "items": [
+        {
+          "value": "5a73d0d2-e030-48ba-9923-7031e0096876"
+        },
+        {
+          "value": "65fde8ab-68a4-4d40-acb9-0083037a346b"
+        }
+      ],
+      "violating_rule": "board setup constraints silk",
+      "description": "Silkscreen clearance",
+      "severity": "RS_WARNING"
+    }
+  ],
+  "ignored_count": 7
+}

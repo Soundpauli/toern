@@ -1,0 +1,25 @@
+review/reroute/baseline/toern_revJ.kicad_pcb
+D+ J4.A6 to CN2.1: 100.901 mm planar, 1 via transitions, 102.501 mm with nominal via barrel, {('F.Cu', 0.2): 4.406, ('B.Cu', 0.15): 96.495}
+D- J4.A7 to CN1.1: 96.171 mm planar, 2 via transitions, 99.371 mm with nominal via barrel, {('F.Cu', 0.2): 5.161, ('B.Cu', 0.15): 91.011}
+D+ J4.B6 to CN2.1: 98.009 mm planar, 1 via transitions, 99.609 mm with nominal via barrel, {('F.Cu', 0.2): 1.514, ('B.Cu', 0.15): 96.495}
+D- J4.B7 to CN1.1: 97.213 mm planar, 2 via transitions, 100.413 mm with nominal via barrel, {('F.Cu', 0.2): 6.202, ('B.Cu', 0.15): 91.011}
+D+HOST J33.A6 to CN5.1: 120.194 mm planar, 1 via transitions, 121.794 mm with nominal via barrel, {('F.Cu', 0.15): 63.446, ('B.Cu', 0.15): 56.747}
+D-HOST J33.A7 to CN4.1: 121.126 mm planar, 3 via transitions, 125.926 mm with nominal via barrel, {('F.Cu', 0.15): 65.465, ('B.Cu', 0.15): 55.661}
+D+HOST J33.B6 to CN5.1: 121.290 mm planar, 3 via transitions, 126.090 mm with nominal via barrel, {('F.Cu', 0.15): 63.943, ('B.Cu', 0.15): 57.347}
+D-HOST J33.B7 to CN4.1: 120.126 mm planar, 1 via transitions, 121.726 mm with nominal via barrel, {('F.Cu', 0.15): 65.465, ('B.Cu', 0.15): 54.661}
++1V8 U3.30 to C2.1: 2.541 mm planar, 0 via transitions, 2.541 mm with nominal via barrel, {('F.Cu', 0.2): 2.541}
++3.3VA U3.5 to C10.1: centerline endpoint graph incomplete (pad copper can bridge tracks or join off center)
++3.3V U3.20 to C11.1: 6.213 mm planar, 0 via transitions, 6.213 mm with nominal via barrel, {('F.Cu', 0.2): 3.268, ('F.Cu', 0.5): 2.945}
+Net-(U3-VAG) U3.10 to C13.1: 1.918 mm planar, 0 via transitions, 1.918 mm with nominal via barrel, {('F.Cu', 0.2): 1.918}
+Net-(U13-VREF) U13.8 to C29.2: centerline endpoint graph incomplete (pad copper can bridge tracks or join off center)
++5V U13.4 to C30.2: 9.146 mm planar, 0 via transitions, 9.146 mm with nominal via barrel, {('F.Cu', 1.0): 9.146}
++5V U13.13 to C31.1: 15.096 mm planar, 0 via transitions, 15.096 mm with nominal via barrel, {('F.Cu', 1.0): 15.096}
+VBUS IC1.13 to C32.1: 1.671 mm planar, 0 via transitions, 1.671 mm with nominal via barrel, {('F.Cu', 0.5): 1.671}
+VYS IC1.10 to C33.1: centerline endpoint graph incomplete (pad copper can bridge tracks or join off center)
+VBAT IC1.2 to C35.1: 6.179 mm planar, 0 via transitions, 6.179 mm with nominal via barrel, {('F.Cu', 0.5): 6.179}
++5V U8.1 to C24.1: 8.466 mm planar, 0 via transitions, 8.466 mm with nominal via barrel, {('F.Cu', 1.0): 8.466}
+Net-(U8-CT) U8.4 to C34.1: 1.602 mm planar, 0 via transitions, 1.602 mm with nominal via barrel, {('F.Cu', 0.3): 1.602}
+5V-HOST CN3.1 to J33.A4: 120.318 mm planar, 5 via transitions, 128.318 mm with nominal via barrel, {('B.Cu', 0.6): 87.191, ('F.Cu', 0.6): 32.122, ('F.Cu', 0.4): 1.005}
+5V-HOST CN3.1 to J33.A9: 125.804 mm planar, 7 via transitions, 137.004 mm with nominal via barrel, {('B.Cu', 0.6): 87.191, ('F.Cu', 0.6): 32.122, ('B.Cu', 0.4): 5.487, ('F.Cu', 0.4): 1.005}
+Schematic assigned pin checks: 459
+Assigned pin mismatches: 0

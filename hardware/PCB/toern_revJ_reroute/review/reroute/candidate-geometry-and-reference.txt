@@ -1,0 +1,33 @@
+Footprints (baseline, candidate): 138 138
+Footprint ref/value/library/origin/rotation/side differences: []
+Pad-count baseline/candidate: 523 523
+Footprints with differing pad name, primary shape, size, drill, location, layer or net records: []
+Outline shape count and match: 1 1 True
+Baseline via geometries Counter({('0.5', '0.3', 'F.Cu" "B.Cu', 'through'): 236, ('0.6', '0.3', 'F.Cu" "B.Cu', 'through'): 45, ('0.8', '0.4', 'F.Cu" "B.Cu', 'through'): 2})
+Candidate via geometries Counter({('0.5', '0.3', 'F.Cu" "B.Cu', 'through'): 238, ('0.6', '0.3', 'F.Cu" "B.Cu', 'through'): 45, ('0.8', '0.4', 'F.Cu" "B.Cu', 'through'): 2})
++1V8 items removed: 5 items added: 4
+5V-HOST items removed: 1 items added: 3
+D+ items removed: 3 items added: 3
+D+HOST items removed: 1 items added: 4
+D- items removed: 1 items added: 1
+D-HOST items removed: 1 items added: 1
+LINEIN_L items removed: 3 items added: 2
+LINEIN_R items removed: 3 items added: 2
+MIC items removed: 3 items added: 2
+Net-(IC1-ILIM) items removed: 2 items added: 2
+Net-(IC1-ISET) items removed: 3 items added: 3
+Net-(IC1-TS) items removed: 6 items added: 5
+Net-(U13-VREF) items removed: 8 items added: 8
+Net-(U2-BP) items removed: 3 items added: 2
+Net-(U3-I2S_DIN) items removed: 3 items added: 4
+Net-(U3-I2S_DOUT) items removed: 3 items added: 2
+Net-(U3-I2S_LRCLK) items removed: 3 items added: 2
+Net-(U3-I2S_SCLK) items removed: 3 items added: 2
+Net-(U3-SYS_MCLK) items removed: 3 items added: 2
+Net-(U3-VAG) items removed: 3 items added: 5
+Net-(U7-BP) items removed: 1 items added: 2
+Net-(U8-CT) items removed: 3 items added: 2
+D+ In2.Cu centerline samples with ground beneath: 498 of 498 missing x positions: []
+D- In2.Cu centerline samples with ground beneath: 498 of 498 missing x positions: []
+D+HOST In1.Cu centerline samples with ground beneath: 248 of 254 missing x positions: [44.902, 45.002, 45.102, 65.902, 66.002, 66.102]
+D-HOST In1.Cu centerline samples with ground beneath: 244 of 254 missing x positions: [44.802, 44.902, 45.002, 45.102, 45.202, 65.802, 65.902, 66.002, 66.102, 66.202]

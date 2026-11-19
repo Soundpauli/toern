@@ -1,0 +1,547 @@
+[
+  {
+    "net": "GND",
+    "pads": 118,
+    "missing": []
+  },
+  {
+    "net": "40_A16",
+    "pads": 4,
+    "missing": []
+  },
+  {
+    "net": "MICBIAS",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(J25-Pin_1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(R28-Pad2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "+5V",
+    "pads": 33,
+    "missing": []
+  },
+  {
+    "net": "18_A4_SDA",
+    "pads": 11,
+    "missing": []
+  },
+  {
+    "net": "19_A5_SCL",
+    "pads": 11,
+    "missing": []
+  },
+  {
+    "net": "27_A13_SCK1",
+    "pads": 9,
+    "missing": []
+  },
+  {
+    "net": "Net-(J27-Pin_1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U2-BP)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "VBAT",
+    "pads": 5,
+    "missing": []
+  },
+  {
+    "net": "Net-(U7-BP)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "+3.3V",
+    "pads": 23,
+    "missing": []
+  },
+  {
+    "net": "33_MCLK2",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "32_OUT1B",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "41_A17",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "24_A10_TX6_SCL2",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "25_A11_RX6_SDA2",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "31_CTX3",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-LINEOUT_R)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(C16-Pad2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(R7-Pad1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(J17-Pad2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(C18-Pad1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "LINEIN_R",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "VBUS",
+    "pads": 9,
+    "missing": []
+  },
+  {
+    "net": "Net-(J4-CC1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "D+",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "D-",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(J4-CC2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(IC1-TS)",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(D4-K)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(D5-K)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "VYS",
+    "pads": 6,
+    "missing": []
+  },
+  {
+    "net": "Net-(IC1-ILIM)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(IC1-ISET)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "8_TX2_IN1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-I2S_DOUT)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "22_A8_CTX1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "5_IN2",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "15_A1_RX3_SPDIF_IN",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(D1-A)",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(J3-Pad3)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "+3.3VA",
+    "pads": 5,
+    "missing": []
+  },
+  {
+    "net": "35_TX8",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U5-Pad3)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(JP1-C)",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(U1-BP)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(C19-Pad1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "LINEIN_L",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(J9-Pin_3)",
+    "pads": 4,
+    "missing": []
+  },
+  {
+    "net": "D+HOST",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(D5-A)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "20_A6_TX5_LRCLK1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-I2S_LRCLK)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "5V-HOST",
+    "pads": 7,
+    "missing": []
+  },
+  {
+    "net": "Net-(J33-CC1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "D-HOST",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(J33-CC2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(D1-K)",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "34_RX8",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "23_A9_CRX1_MCLK1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-SYS_MCLK)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(J9-Pin_1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-VAG)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(C20-Pad1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(D2-common)",
+    "pads": 4,
+    "missing": []
+  },
+  {
+    "net": "28_RX7",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(C27-Pad2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U13-INL)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(J17-Pad3)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "MIC",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(C17-Pad2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "38_CS1_IN1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(J10-Pin_1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(J10-Pin_2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-LINEOUT_L)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(J26-Pin_1)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "10_CS_MQSR",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "37_CS",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "36_CS",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(U8-CT)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(D4-A)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U13-VREF)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U13-INR)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "30_CRX3",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "7_RX2_OUT1A",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-I2S_DIN)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "+1V8",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "21_A7_RX5_BCLK1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-I2S_SCLK)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(R32-Pad2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "2_OUT2",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "4_BCLK2",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "3_LRCLK2",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "6_OUT1D",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "39_MISO1_OUT1A",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-HP_R)",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(C28-Pad2)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-HP_L)",
+    "pads": 3,
+    "missing": []
+  },
+  {
+    "net": "Net-(U3-HP_VGND)",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "11_MOSI_CTX1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "13_SCK_LED",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "12_MISO_MQSL",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "14_A0_TX3_SPDIF_OUT",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "9_OUT1C",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "16_A2_RX4_SCL1",
+    "pads": 2,
+    "missing": []
+  },
+  {
+    "net": "17_A3_TX4_SDA1",
+    "pads": 2,
+    "missing": []
+  }
+]
