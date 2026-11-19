@@ -1,0 +1,10 @@
+Checked 122 labelled terminals across 33 nets from four exported copper layers and plated drill file.
+Plated hole/slot count: 108. Non-plated drill count: 5.
+Compared 46 original component, connector, edge and mounting drills/slots to the reconstruction.
+J1.1 exposed without paste; nearest non-contact copper distinct from J1 nets 2.079 mm
+J1.2 exposed without paste; nearest non-contact copper distinct from J1 nets 1.038 mm
+J1.3 exposed without paste; nearest non-contact copper distinct from J1 nets 1.787 mm
+J1.4 exposed without paste; nearest non-contact copper distinct from J1 nets 0.517 mm
+J1.5 exposed without paste; nearest non-contact copper distinct from J1 nets 1.854 mm
+J1.6 exposed without paste; nearest non-contact copper distinct from J1 nets 0.642 mm
+ERRORS: 0

@@ -1,4 +1,5 @@
-TŒRN hardware in this tree (schematics, PCB, Gerbers, BOMs, related mechanical files) is
+Except for separately licensed material described below, TŒRN hardware in this
+tree (schematics, PCB, Gerbers, BOMs, related mechanical files) is
 Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
 
 Commercial sale of TŒRN PCBs, kits, or assembled hardware — including boards sold
@@ -7,3 +8,8 @@ without a Teensy — is reserved exclusively to Jan-Peter Kuntoff (toern.live).
 The Teensy 4.1 module is a PJRC product and is not licensed by these files.
 
 Full terms: repository root LICENSE.
+
+Exception: `i2cencoder_v2_1/` is the DuPPa-derived I2C Encoder V2.1 project.
+Its hardware design and modifications are GPLv3; documentation is CC BY-SA 4.0.
+The CC BY-NC license and exclusive-commercial-sale restriction above do not
+apply to that folder. See `i2cencoder_v2_1/NOTICE.md` and its full `LICENSE`.

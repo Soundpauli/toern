@@ -1,0 +1,10 @@
+# Local KiCad state and recovery files
+*.lck
+*.kicad_prl
+*-backups/
+fp-info-cache
+*.bak
+
+# Keep firmware upstream; only the link document is public
+/extra/upstream/Firmware/*
+!/extra/upstream/Firmware/README.md

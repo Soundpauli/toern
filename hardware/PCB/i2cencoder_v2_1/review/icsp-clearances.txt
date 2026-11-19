@@ -1,0 +1,12 @@
+Component-side local clearance audit. The six contacts use the manufacturer pattern.
+Distance from each contact to routed foreign B.Cu tracks, vias or component pads, excluding the other five standard J1 contacts.
+J1.1: 0.7513 mm to GND track [8.085, -8.73] [9.25, -8.73]
+J1.2: 0.5197 mm to ADD0 track [5.8, -8.0] [5.8, -6.65]
+J1.3: 0.7747 mm to ADD0 track [6.815, -8.73] [6.53, -8.73]
+J1.4: 0.5174 mm to ADD6 via (5.599937999999997, -8.700008)
+J1.5: 0.7513 mm to GND track [8.085, -8.73] [9.25, -8.73]
+J1.6: 0.5487 mm to GND SJ7.1
+Distance from each guide hole edge to nearest routed/land copper on the external layers.
+H1: F.Cu 0.2531 mm; B.Cu 0.3002 mm
+H2: F.Cu 0.2658 mm; B.Cu 0.2658 mm
+H3: F.Cu 0.6980 mm; B.Cu 0.4369 mm

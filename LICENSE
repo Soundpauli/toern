@@ -1,9 +1,14 @@
-MIT License (for the software in this repository, except the firmware loader)
+MIT License (for the software in this repository, except separately licensed material)
 
 The folder `tools/firmware/` contains Teensy Loader Javascript
 (https://github.com/coelacant1/Teensy-Loader-Javascript) and is licensed under
 GPL-3.0 only. See `tools/firmware/LICENSE`.
-GPL-3.0 does not apply to the rest of this repository.
+Other separately licensed material retains its own terms. In particular,
+`hardware/PCB/i2cencoder_v2_1/` contains the DuPPa-derived encoder design:
+hardware and its modifications are GPLv3; documentation is CC BY-SA 4.0.
+See that folder's NOTICE.md and LICENSE. Neither the MIT license below nor
+the CC BY-NC license and commercial-sale restrictions below apply to that
+folder. The GPL does not apply to independent works merely stored alongside it.
 
 Copyright (c) 2025 Jan-Peter Kuntoff
 
@@ -28,7 +33,8 @@ SOFTWARE.
 ---
 
 Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)  
-(for all hardware files: schematics, PCB layouts, Gerbers, BOMs, housings, etc. of the TŒRN project)
+(for TŒRN hardware files: schematics, PCB layouts, Gerbers, BOMs, housings, etc.,
+except separately licensed material such as hardware/PCB/i2cencoder_v2_1/)
 
 You are free to:
 - Share — copy and redistribute the material in any medium or format
