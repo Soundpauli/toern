@@ -1,4 +1,4 @@
-import { createAutogen, melodyPitch, inferHarmony } from "./autogen.js";
+import { createAutogen, melodyPitch, inferHarmony, AGEN_CHANNELS, AGEN_KINDS } from "./autogen.js";
 import { canReplaceShadowed, shadowSlots } from "./paint.js";
 import { createSynthArp } from "./synthArp.js";
 import { instrumentDefaults } from "./instruments.js";
@@ -1326,12 +1326,16 @@ export function createDevice(matrix, statusEl, rings) {
     if (mode === "look" && SUBS.look[index] === "SWAP") return {text:`${s.swapFrom}<>${s.swapTo}`,color:[120,120,120],code:"W"};
     if (mode === "mode" && index === 9) return {text:`${s.autoStart}-${s.autoEnd} +${s.autoPages}`};
     if (mode === "mode" && index === 10) {
-      const motion = ["HOLD", "SOFT", "LONG", "LIVE"][s.agen.motion ?? 1];
+      if(s.agenAssignmentView){
+        const ch=AGEN_CHANNELS[s.agenAssignmentIndex??1];
+        return {text:`${ch?`CH${ch}`:"ALL"}: ${agen.kindLabel(ch)}`};
+      }
+      const motion = ["HOLD", "SOFT", "LONG", "LIVE", "DEEP"][s.agen.motion ?? 1];
       const scale = ["AUTO", "MAJ", "MIN", "HRM", "DOR", "PEN", "BLU"][s.agen.scale ?? 0];
       const density = ["LOW", "MED", "HIGH", "MAX"][s.agen.density ?? 1];
       const focus = s.agenMenuFocus ?? 2;
       const shown = focus === 0 ? scale : focus === 1 ? density : motion;
-      return { text: `${shown}${s.agen.active ? " · ON" : ""}` };
+      return { text: `${["SCAL","DENS","MOVE"][focus]} ${shown}${s.agen.active ? " · ON" : ""}` };
     }
     if (mode === "mode" && index === 8) return { text: s.touchyEnabled ? "ON" : "OFF" };
     const slot = resolveSubPage(mode, index);
@@ -1750,6 +1754,11 @@ export function createDevice(matrix, statusEl, rings) {
       return;
     }
     if (s.mode === "mode" && s.subIndex === 10 && enc <= 2) {
+      if(s.agenAssignmentView){
+        if(enc===0)s.agenAssignmentIndex=clamp((s.agenAssignmentIndex??1)+dir,0,AGEN_CHANNELS.length-1);
+        if(enc===1){const ch=AGEN_CHANNELS[s.agenAssignmentIndex??1];s.agen=agen.setKind(ch,agen.kind(ch)+dir);}
+        return;
+      }
       if (enc === 0) { s.agen = agen.setScale((s.agen.scale ?? 0) + dir); s.agenMenuFocus = 0; }
       else if (enc === 1) { s.agen = agen.setDensity((s.agen.density ?? 1) + dir); s.agenMenuFocus = 1; }
       else { s.agen = agen.setMotion((s.agen.motion ?? 1) + dir); s.agenMenuFocus = 2; }
@@ -2112,8 +2121,9 @@ export function createDevice(matrix, statusEl, rings) {
     }
     if (s.mode === "mode" && s.subIndex === 9) { if(enc===0)generateAuto(); return; }
     if (s.mode === "mode" && s.subIndex === 10) {
-      // Firmware: pressing the AGEN setting toggles generation; encoder 3 sets motion.
-      toggleAutogen();
+      if(enc===2)s.agenAssignmentView=!s.agenAssignmentView;
+      else if(enc===3)toggleAutogen();
+      else if(enc===0)backToGrid();
       return;
     }
     const slot = resolveSubPage(s.mode, s.subIndex);

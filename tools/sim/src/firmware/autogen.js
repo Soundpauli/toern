@@ -1,3 +1,6 @@
+export const AGEN_CHANNELS=[0,1,2,3,4,5,6,7,8,11,13,14];
+export const AGEN_KINDS=["OFF","KICK","SNAR","HAT","CLAP","TOM","BASS","KEYS","VOIC","LEAD"];
+const AGEN_ROLE_CHANNELS=[0,1,2,3,4,5,6,11,8,13];
 import { neutralGridMidi } from "./pitch.js";
 // Browser counterpart of the firmware's temporary, section-driven AGEN workspace.
 // The saved bank stays immutable; an editable motif steers two separate performance pages.
@@ -198,6 +201,25 @@ export function monoPitch(reference,root,sc,generation,ch,step,seed=113,motion=M
  return best;
 }
 export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, params=()=>({}), isMuted=()=>false, volume=()=>16 }) {
+  const assignments=Array(16).fill(null);
+  const role=ch=>!ch?0:assignments[ch]===null?ch:AGEN_ROLE_CHANNELS[assignments[ch]];
+  function kind(ch){
+    if(assignments[ch]!==null)return assignments[ch];
+    let value=ch===7?1:ch===14?6:ch===11&&lowCh11?6:ch;
+    return Math.max(0,AGEN_ROLE_CHANNELS.indexOf(value));
+  }
+  function kindLabel(ch){
+    if(ch)return AGEN_KINDS[kind(ch)];
+    const kinds=AGEN_CHANNELS.filter(Boolean).map(kind);
+    return kinds.every(value=>value===kinds[0])?AGEN_KINDS[kinds[0]]:"MIX";
+  }
+  function setKind(ch,value){
+    value=Math.max(0,Math.min(AGEN_KINDS.length-1,value|0));
+    if(ch===0)for(const channel of AGEN_CHANNELS)assignments[channel]=value;
+    else if(AGEN_CHANNELS.includes(ch))assignments[ch]=value;
+    if(source){revision++;build();}
+    return state();
+  }
   let source = null, saved = null, generation = 0, pass = 0, page = 1, stepInPage = 0;
   let section = 'Groove', repeats = 1, lowCh11 = false;
   let foundation=0,registers=Array(16).fill(60),shifts=Array(16).fill(0);
@@ -242,7 +264,7 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
   }
   const resolvedScale = () => scaleChoice ? Math.min(SCALE.BLUES, scaleChoice-1) : (scale[2]===3?SCALE.MINOR:SCALE.MAJOR);
   const state = () => ({ active: !!source, performanceView, section, generation, page, remaining: repeats-pass, ready: true,
-    motion, scale: scaleChoice, density, motifPage, motifSlot:motifPage<=8?motifPage:9, playingSlot:10+performancePages.indexOf(page), otherSlot:10+(performancePages.indexOf(page)^1), revision,
+    motion, scale: scaleChoice, density, kinds:Array.from({length:16},(_,ch)=>kind(ch)), kindLabels:Array.from({length:16},(_,ch)=>kindLabel(ch)), motifPage, motifSlot:motifPage<=8?motifPage:9, playingSlot:10+performancePages.indexOf(page), otherSlot:10+(performancePages.indexOf(page)^1), revision,
     progress: Math.min(columns()>=32?17:5,Math.floor((pass*columns()+stepInPage)*(columns()>=32?17:5)/Math.max(1,repeats*columns()-1))) });
   function build() {
     section = SECTIONS[generation % SECTIONS.length];
@@ -288,20 +310,21 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
       const n = performance[offset+x][y];
       Object.assign(n, emptyNote(), src || {});
       if (!n.channel) continue;
-      const ch = n.channel, perc = ch <= 5, lock = stepDegree[x-1], tie = src.condition === 22;
+      if(!role(n.channel)){Object.assign(n,emptyNote());continue;}
+      const ch = n.channel, assigned=role(ch), perc = assigned>=1&&assigned<=5||assigned===7, lock = stepDegree[x-1], tie = src.condition === 22;
       // Full solos: the drum solo rests every tonal voice, the melodic break every drum.
       if((section==='Solo'&&!perc)||(section==='Break'&&perc)){Object.assign(n,emptyNote());continue;}
       if(held.has(ch)){Object.assign(n,emptyNote());continue;}
       if(isMuted(ch)||volume(ch)<=0){Object.assign(n,emptyNote());continue;}
       const reference = n.midiPitch<=127?n.midiPitch:neutralGridMidi(ch,y);
-      const bass = ch===6||ch===14||(ch===11&&lowCh11);
-      if (isMuted(ch) || (section === 'Build' && (ch === 1 || bass)&&ch!==foundation) ||
+      const bass = assigned===6||assigned===14||(assigned===11&&assignments[ch]===null&&lowCh11);
+      if (isMuted(ch) || (section === 'Build' && (assigned === 1 || bass)&&ch!==foundation) ||
           (section === 'Break' && ch!==foundation && bass) ||
           (section === 'Fill' && generation%2===1 && ((perc && x === width) || (bass && x >= width-1)))) {
         Object.assign(n, emptyNote()); continue;
       }
       if(section==='Build'&&generation%2===1&&x===width&&ch!==foundation){Object.assign(n,emptyNote());continue;}
-      if(section==='Build'&&ch===3&&(x-1)%4!==2){Object.assign(n,emptyNote());continue;}
+      if(section==='Build'&&assigned===3&&(x-1)%4!==2){Object.assign(n,emptyNote());continue;}
       // A held note is a head plus G/L cells; they keep the head's pitch and fate.
       const tied = !perc && tie && heldSource[ch] === reference;
       if (!tied && bass && !bassHit(x-1, density, seed+ch)) { heldSource[ch]=reference;heldPitch[ch]=-1;Object.assign(n, emptyNote()); continue; }
@@ -310,17 +333,18 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
         const target=reference;
         if(tied)n.midiPitch=heldPitch[ch];
         else if(bass)n.midiPitch=bassPitch(target,key,sc,phrase,x-1,seed,lock);
-        else if(ch===13||ch===14)n.midiPitch=monoPitch(target,key,sc,phrase,ch,x-1,seed,motion,density,lock);
+        else if(assigned===13||assigned===14)n.midiPitch=monoPitch(target,key,sc,phrase,ch,x-1,seed,motion,density,lock);
         else n.midiPitch=nearSource(melodyPitch(target,key,sc,phrase,ch,x-1,seed,motion,density,lock),target);
         heldSource[ch]=reference;heldPitch[ch]=n.midiPitch;
       }
+      if(assigned===8){Object.assign(n,src);continue;}
       n.condition=tie&&!perc?22:0;
-      n.probability = tied || ch === 1 || bass || x % 4 === 1 ? 100 : Math.max(75,n.probability || 100);
-      if (!tied) n.velocity = accent(section, ch, x-1, n.velocity, flat.has(ch));
+      n.probability = tied || assigned === 1 || bass || x % 4 === 1 ? 100 : Math.max(75,n.probability || 100);
+      if (!tied) n.velocity = accent(section, assigned, x-1, n.velocity, flat.has(ch));
       if (section === 'Fill' && perc) n.velocity = Math.min(127,n.velocity+12);
     }
     // Preserve three distinct chord tones at every source chord onset.
-    if(!lowCh11&&!isMuted(11)&&volume(11)>0&&source.some(col=>col.some(n=>n.channel===11)))for(let x=1;x<=width;x++){
+    if(role(11)===11&&!lowCh11&&!isMuted(11)&&volume(11)>0&&source.some(col=>col.some(n=>n.channel===11)))for(let x=1;x<=width;x++){
       const original=source[(Math.floor(generation/2)*width+x-1)%source.length];
       const chord=original.filter(n=>n.channel===11);
       if(chord.length<2)continue;
@@ -340,12 +364,12 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
     }
     // Snare rise with an audible foundation. A short rise returns to the groove;
     // only the rise at the end of the 64-bar cycle is followed by the fill and drop.
-    if (section === 'Build'&&!(removed&(1<<2))&&!isMuted(2)&&volume(2)>0) for (let x=1;x<=width;x++) {
+    for(const snare of AGEN_CHANNELS.filter(ch=>ch&&role(ch)===2))if (section === 'Build'&&!(removed&(1<<snare))&&!isMuted(snare)&&volume(snare)>0) for (let x=1;x<=width;x++) {
       if(generation%2===1&&x===width)continue;
       const position=(generation%2)*width+x-1,total=2*width;
       if (x % (position>total*3/4?1:position>total/2?2:4) !== 0) continue;
-      let row=!performance[offset+x][3].channel||performance[offset+x][3].channel===2?3:performance[offset+x].findIndex((n,y)=>y>0&&!n.channel);
-      if(row>0)Object.assign(performance[offset+x][row],emptyNote(),{channel:2,velocity:58+Math.floor(position*56/total),probability:100});
+      let row=!performance[offset+x][3].channel||performance[offset+x][3].channel===snare?3:performance[offset+x].findIndex((n,y)=>y>0&&!n.channel);
+      if(row>0)Object.assign(performance[offset+x][row],emptyNote(),{channel:snare,velocity:58+Math.floor(position*56/total),probability:100});
     }
 
     for(const ch of held)for(let x=0;x<width;x++)for(let y=1;y<=rows;y++){
@@ -404,7 +428,7 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
     for(let x=1;x<saved.notes.length;x++)for(let y=1;y<=rows;y++)Object.assign(note[x][y],saved.notes[x][y]);
     Object.assign(glob,saved.glob);source=null;saved=null;
   }
-  return { start, stop, advance, state, poll, performance, setMotion, setScale, setDensity,
+  return { start, stop, advance, state, poll, performance, setMotion, setScale, setDensity, setKind, kind, kindLabel,
     toggleView(){if(source)performanceView=!performanceView;return state();},
     selectMotif(page) {
       if(!source||performanceView||page===motifPage)return;
@@ -412,10 +436,12 @@ export function createAutogen({ note, columns, steps, rows, emptyNote, bpm, para
       source=motif();fingerprint=fingerprints();sourceRegisters();revision++;
     }, original:()=>saved?.notes,
     volume(ch) {
-      const bass=ch===6||ch===14||(ch===11&&lowCh11);
+      const assigned=role(ch);
+      if(!assigned)return 0;
+      const bass=assigned===6||assigned===14||(assigned===11&&assignments[ch]===null&&lowCh11);
       const progress=((generation%2)*repeats*columns()+pass*columns()+stepInPage)/Math.max(1,2*repeats*columns()-1);
       if(isMuted(ch))return 0;
-      let level=performanceView?volumeScale(section,ch,bass,progress):16;
+      let level=performanceView?volumeScale(section,assigned,bass,progress):16;
       if(ch===foundation&&['Break','Build','Fill'].includes(section))level=Math.max(12,level);
       return source ? level/16 : 1;
     } };

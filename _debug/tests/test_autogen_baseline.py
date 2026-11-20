@@ -13,6 +13,9 @@ def function(text,name):
  while depth:
   depth+=(text[end]=='{')-(text[end]=='}');end+=1
  return text[start:end]
-for name in ['evolveCompanionChannelFromBase','generateCompanionChannelPage','applyAutogenProbabilities']:
+for name in ['evolveCompanionChannelFromBase','generateCompanionChannelPage']:
  assert function(current,name)==function(baseline,name),name+' changed from the requested musical policy'
-print('PASS: evolution, companion generation and probability match 9671a48; the 64-bar phrase form is covered by test_autogen_visual_music.py.')
+# Assignments now route probabilities by musical role; the probability policy stays intact.
+probabilities=function(current,'applyAutogenProbabilities').replace('noteChance(autogenRoleChannel(channel),','noteChance(channel,')
+assert probabilities==function(baseline,'applyAutogenProbabilities')
+print('PASS: evolution, companion generation and default-role probability match 9671a48; the 64-bar phrase form is covered by test_autogen_visual_music.py.')

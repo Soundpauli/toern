@@ -65,9 +65,17 @@ those source notes while AGEN is active. The animation demo is available from IN
 
 On device, **MODE → AGEN → encoder 4 click** toggles self-playing evolution.
 **MODE → AUTO** remains the separate one-shot generator with its existing
-base-range and additional-page controls; encoder 1 generates. AGEN has only its
-on/off toggle. Encoder 4 is green and the page shows ON while the
-autonomous performance is active. No MCP connection is involved.
+base-range and additional-page controls; encoder 1 generates. In AGEN, turning
+encoders 1–3 edits scale, density and motion; the lower label follows the knob
+(`SCAL`, `DENS`, `MOVE`) and the upper row shows its value, as in VOL → MAIN/PREV.
+Click encoder 3 to toggle channel assignments. Encoder 1 selects ALL (0),
+channels 1–8, or synth channels 11, 13 and 14. Encoder 2 selects the displayed
+kind: OFF, KICK, SNAR, HAT, CLAP, TOM, BASS, KEYS, VOIC or LEAD. ALL applies the
+chosen kind to every playable channel. Assignments affect generation and volume
+motion, and remain in RAM across AGEN stops; reboot restores automatic defaults.
+Encoder 3 click returns to scale/density/motion; encoder 4 still toggles the
+performance in either view. Its indicator is green while active. No MCP
+connection is involved.
 
 AGEN starts from the currently selected page. A workspace is allocated with
 `extmem_malloc` on entry and freed on exit, preferring PSRAM and falling back to

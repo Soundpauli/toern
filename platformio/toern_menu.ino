@@ -1,3 +1,9 @@
+#include "src/toern_autogen_roles.h"
+extern bool autogenAssignmentView;
+extern unsigned autogenAssignmentIndex;
+extern unsigned autogenAssignmentKind(unsigned);
+extern void setAutogenAssignment(unsigned,unsigned);
+extern const char *autogenAssignmentLabel(unsigned);
 // Menu page system - completely independent from maxPages
 #define MENU_PAGES_COUNT 10
 #define LOOK_PAGES_COUNT 6
@@ -2578,13 +2584,24 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       const uint8_t motion=autogenMotion();
       const uint8_t scale=autogenScaleChoice();
       const uint8_t density=autogenDensity();
-      drawMenuText("AGEN",2,10,currentMenuParentTextColor());
+      if(autogenAssignmentView){
+        const unsigned ch=toern_autogen_roles::channels[autogenAssignmentIndex];
+        char title[8];snprintf(title,sizeof(title),ch?"CH%u":"ALL",ch);
+        drawMenuText(title,2,10,currentMenuParentTextColor());
+        drawMenuValue(autogenAssignmentLabel(ch),2,3,ch?col[ch]:UI_WHITE);
+        drawMenuIndicator('L','W',1);
+        drawMenuIndicator('L','Y',2);
+        drawMenuIndicator('L','G',3);
+        drawMenuIndicator('L',autogenActive()?'G':'R',4);
+        break;
+      }
       static const char *const motionNames[]={"HOLD","SOFT","LONG","LIVE","DEEP"};
       static const char *const scaleNames[]={"AUTO","MAJ","MIN","HRM","DOR","PEN","BLU"};
       static const char *const densityNames[]={"LOW","MED","HIGH","MAX"};
       static const CRGB motionColors[]={UI_DIM_RED,UI_GREEN,UI_CYAN,UI_YELLOW,UI_BLUE};
       extern int autogenMenuFocus;
       const int agenShow=autogenMenuFocus;
+      drawMenuText(agenShow==0?"SCAL":agenShow==1?"DENS":"MOVE",2,10,currentMenuParentTextColor());
       const char *label=agenShow==0?scaleNames[min(scale,(uint8_t)6)]:
           agenShow==1?densityNames[min(density,(uint8_t)3)]:motionNames[min(motion,(uint8_t)4)];
       const CRGB color=agenShow==0?UI_WHITE:agenShow==1?UI_ORANGE:motionColors[min(motion,(uint8_t)4)];
@@ -5028,7 +5045,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       break;
     }
 
-    case 69: { // AGEN: enc1 scale, enc2 density, enc3 motion
+    case 69: { // AGEN settings / channel assignments (encoder 3 click)
       extern uint8_t autogenMotion();
       extern uint8_t autogenScaleChoice();
       extern uint8_t autogenDensity();
@@ -5036,6 +5053,33 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       extern void setAutogenScaleChoice(uint8_t);
       extern void setAutogenDensity(uint8_t);
       extern int autogenMenuFocus;
+      static bool lastAssignmentView=false;
+      if(lastAssignmentView!=autogenAssignmentView){menuFirstEnter=true;lastAssignmentView=autogenAssignmentView;}
+      static int lastChannel=-1,lastKind=-1;
+      if(autogenAssignmentView){
+        if(menuFirstEnter){
+          Encoder[0].writeMin((int32_t)0);Encoder[0].writeMax((int32_t)(toern_autogen_roles::channelCount-1));
+          Encoder[0].writeCounter((int32_t)autogenAssignmentIndex);currentMode->pos[0]=autogenAssignmentIndex;
+          Encoder[1].writeMin((int32_t)0);Encoder[1].writeMax((int32_t)(toern_autogen_roles::kindCount-1));
+          const unsigned kind=autogenAssignmentKind(toern_autogen_roles::channels[autogenAssignmentIndex]);
+          Encoder[1].writeCounter((int32_t)kind);currentMode->pos[1]=kind;
+          Encoder[2].writeMin((int32_t)0);Encoder[2].writeMax((int32_t)0);Encoder[2].writeCounter((int32_t)0);currentMode->pos[2]=0;
+          lastChannel=autogenAssignmentIndex;lastKind=kind;menuFirstEnter=false;
+        }
+        const int selected=constrain((int)currentMode->pos[0],0,(int)toern_autogen_roles::channelCount-1);
+        if(selected!=lastChannel){
+          autogenAssignmentIndex=selected;lastChannel=selected;
+          lastKind=autogenAssignmentKind(toern_autogen_roles::channels[selected]);
+          Encoder[1].writeCounter((int32_t)lastKind);currentMode->pos[1]=lastKind;
+          menuRequestFullRedraw();redrawMain(setting);
+        }
+        const int kind=constrain((int)currentMode->pos[1],0,(int)toern_autogen_roles::kindCount-1);
+        if(kind!=lastKind){
+          setAutogenAssignment(toern_autogen_roles::channels[selected],kind);lastKind=kind;
+          menuRequestFullRedraw();redrawMain(setting);
+        }
+        break;
+      }
       static int lastScale=-1,lastDensity=-1,lastMotion=-1;
       if(menuFirstEnter){
         Encoder[0].writeMin((int32_t)0);Encoder[0].writeMax((int32_t)6);
@@ -5072,6 +5116,11 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
        break;
   }
   return didRedraw;
+}
+
+void toggleAutogenAssignmentView(){
+  autogenAssignmentView=!autogenAssignmentView;
+  menuRequestFullRedraw();
 }
 
 FLASHMEM void switchMenu(int menuPosition){

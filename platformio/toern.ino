@@ -3595,6 +3595,10 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     extern void togglePulseClockPolarityFromMenu();
     extern void toggleMixGainEnc3Target();
     int mainSetting = getCurrentMenuMainSetting();
+    if(mainSetting==69){
+      extern void toggleAutogenAssignmentView();
+      toggleAutogenAssignmentView();return;
+    }
     if (inMidiSubmenu && mainSetting == 50) {
       togglePulseClockPolarityFromMenu();
       return;
@@ -4852,16 +4856,6 @@ FLASHMEM void loadLedModeEarlyFromEEPROM() {
 }
 
 FLASHMEM void setup() {
-  // First application startup signal: three short blinks on the Teensy LED.
-  pinMode(LED_BUILTIN, OUTPUT);
-  for (uint8_t blink = 0; blink < 3; ++blink) {
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(125);
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(125);
-  }
-  delay(250);
-
   Serial.begin(115200);
   if (exttouch) {
     pinMode(BUTTON_A, INPUT_PULLUP);
@@ -4870,11 +4864,9 @@ FLASHMEM void setup() {
     pinMode(BUTTON_D, INPUT_PULLUP);
   }
 
-  //delay the LED-Matrix-Power on
+  // Enable LED matrix power immediately.
   pinMode(36, OUTPUT);
-  digitalWrite(36, LOW);   // keep LEDs off during early boot
-  delay(500);                   // Teensy is booted, supply stable
-  digitalWrite(36, HIGH);  // LEDs now always on
+  digitalWrite(36, HIGH);
   //Wire.begin();
   NVIC_SET_PRIORITY(IRQ_SOFTWARE, toern_audio::kAudioPriority);
   // Teensy 4.1 Serial8 is LPUART5 (not LPUART8). UART must preempt PIT.

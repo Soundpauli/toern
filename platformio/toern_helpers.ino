@@ -1710,7 +1710,15 @@ static inline int randStep16(unsigned int x_rel) {
   return (int)(((x_rel - 1u) % 16u) + 1u);
 }
 
+unsigned autogenRoleChannel(unsigned channel);
+bool autogenAssignmentAutomatic(unsigned channel);
+bool autogenAssignmentContext();
 FLASHMEM static CompanionRole companionRoleForChannel(uint8_t channel) {
+  if(autogenAssignmentContext()){
+    const unsigned role=autogenRoleChannel(channel);
+    if(role==11&&!autogenAssignmentAutomatic(channel))return CompanionRole::Keys;
+    channel=role;
+  }
   switch (channel) {
     case 1: return CompanionRole::Kick;
     case 2: return CompanionRole::Snare;
@@ -4560,6 +4568,9 @@ FLASHMEM void generateSong() {
 }
 
 // AGEN: RAM-only alternating performance pages. The original bank stays intact.
+#include "src/toern_autogen_roles.h"
+static toern_autogen_roles::Assignments autogenAssignments;
+unsigned autogenRoleChannel(unsigned channel);
 #include "src/toern_note_scope.h"
 #include "src/toern_autogen.h"
 #include "src/toern_autogen_music.h"
@@ -4600,6 +4611,7 @@ struct AutogenWorkspace {
 static_assert(sizeof(AutogenWorkspace)<=32*1024,"AGEN workspace must stay bounded and allocated only on entry");
 static ToernAutogen agen;
 static AutogenWorkspace *agenWork=nullptr;
+bool autogenAssignmentContext(){return agenWork!=nullptr;}
 static bool agenRestoreUI=false;
 static const uint8_t agenOrder[] PROGMEM={1,2,4,3,5,6,11,13,14,7,8};
 
@@ -4699,14 +4711,14 @@ FLASHMEM static void applyAutogenProbabilities(Note (*grid)[maxY+1],unsigned pag
   const unsigned start=(page-1)*maxX+1;
   for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row){
     Note &cell=grid[start+col][row];
-    if(cell.channel==channel)cell.probability=min(cell.probability,ToernAutogen::noteChance(channel,col,seed));
+    if(cell.channel==channel)cell.probability=min(cell.probability,ToernAutogen::noteChance(autogenRoleChannel(channel),col,seed));
   }
 }
 // Thin a voice, but never break a sustain or pull single tones out of a chord:
 // G/L cells, the heads they hang on and stacked CH11 tones keep their own chance.
 FLASHMEM static void thinAutogenVoice(Note (*grid)[maxY+1],unsigned page,unsigned channel,uint32_t seed){
-  if(channel==8)return; // a vocal sounds as drawn or not at all
-  if(channel!=11&&channel!=13&&channel!=14){applyAutogenProbabilities(grid,page,channel,seed);return;}
+  if(autogenRoleChannel(channel)==8)return; // a vocal sounds as drawn or not at all
+  if(channel<=8&&autogenRoleChannel(channel)!=11&&autogenRoleChannel(channel)!=13&&autogenRoleChannel(channel)!=14){applyAutogenProbabilities(grid,page,channel,seed);return;}
   const unsigned start=(page-1)*maxX+1;
   uint8_t drawn[32][maxY+1];
   for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row)drawn[col][row]=grid[start+col][row].probability;
@@ -4726,6 +4738,29 @@ FLASHMEM static void thinAutogenVoice(Note (*grid)[maxY+1],unsigned page,unsigne
 static uint8_t autogenMotionLevel=toern_autogen_music::MotionSoft;
 static uint8_t autogenScaleLevel=0;   // 0 AUTO, 1..6 explicit Scale+1
 static uint8_t autogenDensityLevel=1; // 0 LOW .. 3 MAX
+bool autogenAssignmentView=false;
+unsigned autogenAssignmentIndex=1;
+bool autogenAssignmentAutomatic(unsigned ch){return autogenAssignments.automatic(ch);}
+unsigned autogenRoleChannel(unsigned ch){return autogenAssignments.role(ch);}
+unsigned autogenAssignmentKind(unsigned ch){
+  unsigned role=autogenRoleChannel(ch);
+  if(autogenAssignments.automatic(ch)){
+    if(ch==5&&autogenDeep())role=13;
+    if(ch==11&&agenWork&&agenWork->ch11Bass)role=6;
+  }
+  return autogenAssignments.kind(ch,role);
+}
+const char *autogenAssignmentLabel(unsigned ch){
+  if(ch)return toern_autogen_roles::names[autogenAssignmentKind(ch)];
+  const unsigned first=autogenAssignmentKind(1);
+  for(unsigned i=2;i<toern_autogen_roles::channelCount;++i)
+    if(autogenAssignmentKind(toern_autogen_roles::channels[i])!=first)return "MIX";
+  return toern_autogen_roles::names[first];
+}
+void setAutogenAssignment(unsigned ch,unsigned kind){
+  autogenAssignments.set(ch,kind);
+  if(agen.active)invalidateAutogenPage();
+}
 int autogenMenuFocus=2; // which AGEN encoder last moved (0 scale, 1 density, 2 motion)
 uint8_t autogenMotion(){return autogenMotionLevel;}
 uint8_t autogenScaleChoice(){return autogenScaleLevel;}
@@ -4808,10 +4843,11 @@ FLASHMEM static void serviceAutogenPerformance(){
   const unsigned position=(total-left)*maxX+(beat>0?(beat-1)%maxX:0);
   const unsigned progress=min(255u,((generation%2)*total*maxX+position)*255/max(1u,2*total*maxX-1));
   for(uint8_t ch:agenOrder){
-    const bool bass=ch==6||(ch==14&&!agenWork->chordPair)||(ch==11&&agenWork->ch11Bass);
+    const unsigned role=autogenRoleChannel(ch);
+    const bool bass=role==6||(role==14&&!agenWork->chordPair)||(role==11&&autogenAssignments.automatic(ch)&&agenWork->ch11Bass);
     if(agenWork->manualUntil[ch]&&int32_t(now-agenWork->manualUntil[ch])<0)continue;
-    unsigned scale=agenWork->performanceView?volumeScale(form,ch,bass,progress,ch==5&&autogenDeep()):16;
-    if(ch==agenWork->foundationVoice&&(form==Section::Build||form==Section::Break||form==Section::Fill))scale=max(12u,scale);
+    unsigned scale=!role?0:agenWork->performanceView?volumeScale(form,role,bass,progress,role==5&&autogenAssignments.automatic(ch)&&autogenDeep()):16;
+    if(role&&ch==agenWork->foundationVoice&&(form==Section::Build||form==Section::Break||form==Section::Fill))scale=max(12u,scale);
     if(agenWork->userMuted[ch])scale=0;
     const unsigned target=agenWork->volumeBase[ch]*scale/16;
     const unsigned previous=agenWork->volumeNow[ch];
@@ -4891,20 +4927,20 @@ FLASHMEM static void copyAutogenVoice(unsigned source,unsigned target,unsigned c
 // Vocals on voice 8 are never refitted or thinned: drawn hits keep their pitch,
 // level and condition. Without drawn hits one unpitched hit opens the page on
 // its first pass only (condition 16/1), so a long phrase is not chopped up.
-FLASHMEM static void placeAutogenVocal(unsigned source,unsigned target,bool drawn){
+FLASHMEM static void placeAutogenVocal(unsigned source,unsigned target,bool drawn,unsigned ch=8){
   const unsigned src=(source-1)*maxX+1,dst=(target-1)*maxX+1;
-  if(!drawn){companionPlaceCellLimited(dst,8+1,8,100,100,20,NOTE_MIDI_PITCH_NONE);return;}
+  if(!drawn){companionPlaceCellLimited(dst,ch+1,ch,100,100,20,NOTE_MIDI_PITCH_NONE);return;}
   for(unsigned col=0;col<maxX;++col)for(unsigned row=1;row<=maxY;++row){
-    const Note &cell=note[src+col][row];if(cell.channel!=8)continue;
+    const Note &cell=note[src+col][row];if(cell.channel!=ch)continue;
     // Sample pitch follows the row: if the row is taken, pin the pitch before moving.
     const bool taken=note[dst+col][row].channel!=0;
-    companionPlaceCellLimited(dst+col,row,8,cell.velocity,cell.probability,cell.condition,
-        taken&&cell.midiPitch>127?autogenReferenceMidi(cell,8,row):cell.midiPitch);
+    companionPlaceCellLimited(dst+col,row,ch,cell.velocity,cell.probability,cell.condition,
+        taken&&cell.midiPitch>127?autogenReferenceMidi(cell,ch,row):cell.midiPitch);
   }
 }
 // Voice 6 is the sample bass: roots on C2, with some lifts to C3. Drawn bass is
 // fitted instead; this line is only for an empty voice.
-FLASHMEM static void placeAutogenSampleBass(unsigned page,unsigned phrase){
+FLASHMEM static void placeAutogenSampleBass(unsigned page,unsigned phrase,unsigned ch=6){
   using namespace toern_autogen_music;
   const unsigned start=(page-1)*maxX+1;
   const Scale sc=autogenResolvedScale();
@@ -4915,7 +4951,7 @@ FLASHMEM static void placeAutogenSampleBass(unsigned page,unsigned phrase){
     const int lock=col<32?agenWork->stepDegree[col]:-1;
     int pitch=bassPitch(60,root,sc,phrase,col,agenWork->seed,lock,autogenDeep());
     pitch=bassSamplePitch(pitch,!autogenDeep()&&pitch>=66);
-    companionPlaceCellLimited(start+col,4,6,100,100,1,(uint8_t)pitch);
+    companionPlaceCellLimited(start+col,4,ch,100,100,1,(uint8_t)pitch);
   }
 }
 // Minimal deep house: one minor-seven stab on beat 2 of each bar, held a step
@@ -4940,7 +4976,7 @@ FLASHMEM static void placeAutogenDeepChords(unsigned page,unsigned phrase){
 // DEEP voice 5, after pattern 52: the root an octave under the sample on each bar
 // head and, every second bar, a fifth or seventh answering on beat 3. The break
 // answers every bar. Sample midiPitch 60 is the sample's own pitch.
-FLASHMEM static void placeAutogenDeepMelody(unsigned page,unsigned phrase){
+FLASHMEM static void placeAutogenDeepMelody(unsigned page,unsigned phrase,unsigned ch=5){
   using namespace toern_autogen_music;
   const unsigned start=(page-1)*maxX+1;
   const Scale sc=autogenResolvedScale();
@@ -4953,7 +4989,7 @@ FLASHMEM static void placeAutogenDeepMelody(unsigned page,unsigned phrase){
     const int lock=col<32?agenWork->stepDegree[col]:-1;
     const unsigned lane=head?0:(phrase/2)%2?3:2;
     const int pitch=nearestPc(48,chordPc(root,sc,phrase,lane,lock));
-    companionPlaceCellLimited(start+col,9,5,head?75:89,100,1,(uint8_t)pitch);
+    companionPlaceCellLimited(start+col,9,ch,head?75:89,100,1,(uint8_t)pitch);
   }
 }
 // Voice 7 doubles the kick already arranged on this page, at the sample's own pitch.
@@ -4973,15 +5009,16 @@ FLASHMEM static void duckAutogenBeat(unsigned page){
   for(unsigned col=0;col<maxX;++col){
     bool side=false,kick=false;
     for(unsigned row=1;row<=maxY;++row){
-      if(note[start+col][row].channel==7)side=true;
-      if(note[start+col][row].channel==1)kick=true;
+      if(autogenRoleChannel(note[start+col][row].channel)==7)side=true;
+      if(autogenRoleChannel(note[start+col][row].channel)==1)kick=true;
     }
     // Deep house has one kick: it eases the bass and the chord, and leaves the hat.
     if(!side&&!(autogenDeep()&&kick))continue;
     for(unsigned row=1;row<=maxY;++row){
       Note &cell=note[start+col][row];
-      if(!cell.channel||cell.channel==1||cell.channel==7)continue;
-      const bool low=cell.channel==6||cell.channel>=11;
+      const unsigned role=autogenRoleChannel(cell.channel);
+      if(!role||role==1||role==7)continue;
+      const bool low=role==6||role>=11;
       const unsigned factor=!side? (low?72u:92u) : (low?58u:78u);
       unsigned level=cell.velocity*factor/100u;
       cell.velocity=level<1?1:level>127?127:level;
@@ -5022,8 +5059,9 @@ FLASHMEM static void readAutogenProgression(){
 FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned phrase){
   using namespace toern_autogen_music;
   const unsigned start=(page-1)*maxX+1;
+  const unsigned role=autogenRoleChannel(ch);
   // Voice 7 is a second kick. In DEEP, voice 5 carries the sample melody, not a tom.
-  const bool tonal=ch==6||ch==8||ch==11||ch==13||ch==14||(ch==5&&autogenDeep());
+  const bool tonal=role==6||role==8||role==11||role==13||role==14||(role==5&&autogenAssignments.automatic(ch)&&autogenDeep());
   const bool flat=agenWork->flatVoices&(1u<<ch),drawn=agenWork->drawnVoices&(1u<<ch);
   const Section section=agenWork->section;
   // A held note is a head plus G/L cells. They share the head's pitch and fate.
@@ -5038,8 +5076,8 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
       const bool support=ch==agenWork->foundationVoice&&(section==Section::Build||section==Section::Break||section==Section::Fill);
       // A deep guest kit is not the generated pattern: hats sit on the offbeat
       // and the backbeat waits for the drop. Drawn drums keep their grid.
-      const bool keep=count>0&&(!autogenDeep()||drawn||(ch!=2&&ch!=3&&ch!=4&&ch!=5));
-      const int action=support?-1:drum(section,ch,col,maxX,agenWork->seed,phrase%2==1,keep,autogenDeep());
+      const bool keep=count>0&&(!autogenDeep()||drawn||(role!=2&&role!=3&&role!=4&&role!=5));
+      const int action=support?-1:drum(section,role,col,maxX,agenWork->seed,phrase%2==1,keep,autogenDeep());
       if(action==0)continue;
       if(action>0){
         const int row=count?rows[0]:agenWork->foundation.channelHomeRow[ch];
@@ -5047,7 +5085,7 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
         // An added turnaround closes the phrase: it sounds on the last pass only.
         const bool turnaround=!count&&col>=maxX*3/4&&(section==Section::Variation||section==Section::Solo);
         companionPlaceCellLimited(start+col,row,ch,action,probability,turnaround?lastPassCondition(agenWork->passes):1,NOTE_MIDI_PITCH_NONE);
-      }else for(unsigned i=0;i<count;++i)companionPlaceCellLimited(start+col,rows[i],ch,accent(section,ch,col,events[i].velocity,flat),
+      }else for(unsigned i=0;i<count;++i)companionPlaceCellLimited(start+col,rows[i],ch,accent(section,role,col,events[i].velocity,flat),
           events[i].probability,events[i].condition,events[i].midiPitch);
       continue;
     }
@@ -5056,7 +5094,7 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
     const Scale sc=autogenResolvedScale();
     const unsigned density=autogenDensityLevel;
     const int lock=col<32?agenWork->stepDegree[col]:-1;
-    if(agenWork->chordPair&&(ch==13||ch==14)){
+    if(agenWork->chordPair&&autogenAssignments.automatic(ch)&&(ch==13||ch==14)){
       const bool passing=density>=2&&!autogenSettled()&&(agenWork->section==Section::Variation||agenWork->section==Section::Build||agenWork->section==Section::Fill)&&col%8==6;
       if(col%8==0||passing){
         const int pairReference=min(60,agenWork->registers[11]+12);
@@ -5066,11 +5104,11 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
       }
       continue;
     }
-    const bool bass=ch==6||ch==14||(ch==11&&agenWork->ch11Bass);
+    const bool bass=role==6||role==14||(role==11&&autogenAssignments.automatic(ch)&&agenWork->ch11Bass);
     const int root=agenWork->harmony.rootPc;
     // Chord stack stays a voicing, not a melody contour. A held chord keeps its
     // G/L cells: it sustains instead of re-attacking on every step.
-    if(ch==11&&!bass&&count>1){
+    if(role==11&&ch==11&&!bass&&count>1){
       bool held=true;
       for(unsigned i=0;i<count;++i)held&=events[i].condition==NOTE_CONDITION_GLIDE;
       const unsigned voices=min(count,3u);
@@ -5080,7 +5118,7 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
       // A drawn progression keeps its own close voicing while the groove settles.
       const bool stable=autogenSettled()||colour||(lock>=0&&(section==Section::Groove||section==Section::Break));
       const int reference=autogenSourceRegister(ch,col,agenWork->registers[ch]);
-      const unsigned velocity=held?events[0].velocity:accent(section,ch,col,events[0].velocity,flat);
+      const unsigned velocity=held?events[0].velocity:accent(section,role,col,events[0].velocity,flat);
       for(unsigned tone=0;tone<voices;++tone){
         const int pitch=voicingPitch(reference,root,sc,phrase,colour&&tone==2?3:tone,agenWork->seed,stable,colour?4:3,lock);
         // The rows the chord was copied to were just vacated, so no tone can be crowded out.
@@ -5104,13 +5142,15 @@ FLASHMEM static void arrangeAutogenChannel(unsigned page,unsigned ch,unsigned ph
         heldSource=count==1?source:-1;heldPitch=-1;
         // A drawn DEEP bass keeps its own pump; the quarter-note line is for guests.
         if(bass&&!(drawn&&autogenDeep())&&!bassHit(col,density,agenWork->seed+ch,autogenDeep()))continue;
-        if(bass)pitch=bassPitch(reference,root,sc,phrase,col,agenWork->seed,lock,autogenDeep());
-        if(ch==6&&!drawn)pitch=bassSamplePitch(pitch,!autogenDeep()&&pitch>=reference+6);
-        else if(ch==13||ch==14)pitch=toern_autogen_register::monoPitch(reference,root,sc,phrase,ch,col,agenWork->seed,autogenMotionLevel,density,lock);
+        if(bass){
+          pitch=bassPitch(reference,root,sc,phrase,col,agenWork->seed,lock,autogenDeep());
+          if(ch<=8&&!drawn)pitch=bassSamplePitch(pitch,!autogenDeep()&&pitch>=reference+6);
+        }
+        else if(role==13||role==14)pitch=toern_autogen_register::monoPitch(reference,root,sc,phrase,ch,col,agenWork->seed,autogenMotionLevel,density,lock);
         else pitch=toern_autogen_register::nearSource(melodyPitch(reference,root,sc,phrase,ch,col,agenWork->seed,autogenMotionLevel,density,lock),autogenSourceRegister(ch,col,agenWork->registers[ch]));
         heldPitch=pitch;
       }
-      const unsigned velocity=tied?events[i].velocity:accent(section,ch,col,events[i].velocity,flat);
+      const unsigned velocity=tied?events[i].velocity:accent(section,role,col,events[i].velocity,flat);
       if(ch>=11)companionPlaceCellLimited(start+col,rows[i],ch,velocity,
           tied?100:events[i].probability,events[i].condition,encodePitch(pitch,agenWork->registerShift[ch]));
       else {
@@ -5249,7 +5289,7 @@ FLASHMEM void serviceAutogen(){
     memset(softest,255,sizeof(softest));
     for(unsigned x=start;x<start+maxX;++x)for(unsigned y=1;y<=maxY;++y){
       const unsigned ch=note[x][y].channel;
-      if(!ch||ch>=16||!companionChannelSupported(ch))continue;
+      if(!ch||ch>=16||!autogenRoleChannel(ch)||!companionChannelSupported(ch))continue;
       agenWork->channels|=1u<<ch;
       softest[ch]=min(softest[ch],note[x][y].velocity);loudest[ch]=max(loudest[ch],note[x][y].velocity);
       if(hits[ch]<255)++hits[ch];
@@ -5259,8 +5299,8 @@ FLASHMEM void serviceAutogen(){
     agenWork->drawnVoices=agenWork->channels;
     agenWork->foundationVoice=0;
     // The vocals rest most of the time, so they cannot carry a build or a solo.
-    for(unsigned candidate:{6u,14u,11u,13u,1u})if((agenWork->channels&(1u<<candidate))&&!agenWork->userMuted[candidate]&&agenWork->volumeBase[candidate]>0){agenWork->foundationVoice=candidate;break;}
-    agenWork->section=toern_autogen_music::supportedSection(agenWork->section,agenWork->foundationVoice);
+    for(unsigned candidate:{6u,14u,11u,13u,1u,2u,3u,4u,5u,7u,8u})if((autogenRoleChannel(candidate)==1||autogenRoleChannel(candidate)==6||autogenRoleChannel(candidate)>=11)&&(agenWork->channels&(1u<<candidate))&&!agenWork->userMuted[candidate]&&agenWork->volumeBase[candidate]>0){agenWork->foundationVoice=candidate;break;}
+    agenWork->section=toern_autogen_music::supportedSection(agenWork->section,autogenRoleChannel(agenWork->foundationVoice));
     // Empty pages get a restrained starter using the existing companion engine.
     if(!agenWork->channels&&!agenWork->motifEdited)agenWork->channels=(1u<<1)|(1u<<2)|(1u<<3)|(1u<<11)|(1u<<13);
     agenWork->channels&=~agenWork->removedVoices;
@@ -5268,11 +5308,14 @@ FLASHMEM void serviceAutogen(){
     // Vocals on voice 8 sing at the climaxes only, drawn or not. Muting the voice
     // or deleting its notes keeps it out, like any other guest.
     // A motif of vocals alone keeps playing them: there is nothing else to hear.
-    if(!toern_autogen_music::vocalWanted(next,agenWork->section,autogenDeep())){if(agenWork->channels&~(1u<<8))agenWork->channels&=~(1u<<8);}
-    else if(agenWork->channels&&!(agenWork->removedVoices&(1u<<8))&&!agenWork->userMuted[8]&&agenWork->volumeBase[8]>0&&!isChildVoiceDisabled(8))agenWork->channels|=1u<<8;
+    for(unsigned ch:agenOrder)if(autogenRoleChannel(ch)==8){
+      if(!toern_autogen_music::vocalWanted(next,agenWork->section,autogenDeep())){
+        if(agenWork->channels&~(1u<<ch))agenWork->channels&=~(1u<<ch);
+      }else if(agenWork->channels&&!(agenWork->removedVoices&(1u<<ch))&&!agenWork->userMuted[ch]&&agenWork->volumeBase[ch]>0&&!isChildVoiceDisabled(ch))agenWork->channels|=1u<<ch;
+    }
     // Introduce at most one companion during development; keep the voice count bounded.
     unsigned count=0;for(unsigned ch=1;ch<15;++ch)if(agenWork->channels&(1u<<ch))++count;
-    agenWork->chordPair=agenWork->ch11Bass&&(agenWork->channels&(1u<<11))
+    agenWork->chordPair=autogenAssignments.automatic(11)&&autogenAssignments.automatic(13)&&autogenAssignments.automatic(14)&&agenWork->ch11Bass&&(agenWork->channels&(1u<<11))
         &&!(agenWork->channels&((1u<<13)|(1u<<14)))&&!(agenWork->removedVoices&((1u<<13)|(1u<<14)))&&count<=5&&!agenWork->userMuted[13]&&!agenWork->userMuted[14]&&agenWork->volumeBase[13]>0&&agenWork->volumeBase[14]>0;
     if(agenWork->chordPair){agenWork->channels|=(1u<<13)|(1u<<14);count+=2;}
     // Guest voices fill what the motif leaves empty, entering in stages. A muted,
@@ -5280,19 +5323,25 @@ FLASHMEM void serviceAutogen(){
     // is the sample bass (C2, lifts to C3) and voice 7 a second kick. The synth
     // bass on CH14 joins only when voice 6 is not already the bass.
     const unsigned limit=next<24&&(next/2)%12<3?7u:9u;
-    const bool hasBass=(agenWork->channels&((1u<<6)|(1u<<14)))||(agenWork->ch11Bass&&(agenWork->channels&(1u<<11)));
+    bool hasBass=false;
+    for(unsigned ch:agenOrder)if(agenWork->channels&(1u<<ch)){
+      const unsigned role=autogenRoleChannel(ch);
+      hasBass|=role==6||role==14||(ch==11&&autogenAssignments.automatic(ch)&&agenWork->ch11Bass);
+    }
     for(unsigned candidate:{3u,11u,1u,7u,2u,6u,14u,4u,13u,5u}){
       if(!agenWork->channels||count>=limit)break;
-      if(!toern_autogen_music::guestWanted(candidate,next,agenWork->section,autogenDeep()))continue;
-      if(candidate==6&&hasBass)continue;
+      if(!autogenRoleChannel(candidate)||!toern_autogen_music::guestWanted(autogenRoleChannel(candidate),next,agenWork->section,autogenDeep()))continue;
+      if((autogenRoleChannel(candidate)==6||autogenRoleChannel(candidate)==14)&&hasBass)continue;
       if(candidate==14&&(hasBass||(agenWork->channels&(1u<<6))))continue;
       if(!(agenWork->removedVoices&(1u<<candidate))&&!(agenWork->channels&(1u<<candidate))&&!agenWork->userMuted[candidate]&&agenWork->volumeBase[candidate]>0&&!isChildVoiceDisabled(candidate)){agenWork->channels|=1u<<candidate;++count;}
     }
     if(agenWork->section==toern_autogen_music::Section::Solo){
       bool drums=false;
-      for(unsigned ch=1;ch<=(autogenDeep()?4u:5u);++ch)drums|=(agenWork->channels&(1u<<ch))&&!agenWork->userMuted[ch]&&agenWork->volumeBase[ch]>0;
-      drums|=(agenWork->channels&(1u<<7))&&!agenWork->userMuted[7]&&agenWork->volumeBase[7]>0;
-      agenWork->section=toern_autogen_music::supportedSection(agenWork->section,agenWork->foundationVoice,drums);
+      for(unsigned ch:agenOrder){
+        const unsigned role=autogenRoleChannel(ch);
+        if((role>=1&&role<=(autogenDeep()?4u:5u))||role==7)drums|=(agenWork->channels&(1u<<ch))&&!agenWork->userMuted[ch]&&agenWork->volumeBase[ch]>0;
+      }
+      agenWork->section=toern_autogen_music::supportedSection(agenWork->section,autogenRoleChannel(agenWork->foundationVoice),drums);
     }
     agenWork->passes=toern_autogen_music::repeats(agenWork->section,next,maxX,(unsigned)SMP.bpm,autogenSettled());
     readAutogenProgression();
@@ -5304,12 +5353,14 @@ FLASHMEM void serviceAutogen(){
   if(agenWork->voice<sizeof(agenOrder)){
     const uint8_t ch=agenOrder[agenWork->voice++];
     if(!(agenWork->channels&(1u<<ch))||agenWork->userMuted[ch]||isChildVoiceDisabled(ch))return;
-    if(ch==8){placeAutogenVocal(agenWork->source,agenWork->target,agenWork->drawnVoices&(1u<<8));return;}
-    if(ch==11&&autogenDeep()&&!(agenWork->drawnVoices&(1u<<11))){placeAutogenDeepChords(agenWork->target,agen.generation+1);return;}
-    if(ch==5&&autogenDeep()&&!(agenWork->drawnVoices&(1u<<5))){placeAutogenDeepMelody(agenWork->target,agen.generation+1);return;}
-    if(ch==6&&!(agenWork->drawnVoices&(1u<<6))){placeAutogenSampleBass(agenWork->target,agen.generation+1);thinAutogenVoice(note,agenWork->target,ch,agenWork->seed);return;}
-    if(ch==7&&!(agenWork->drawnVoices&(1u<<7))){mirrorAutogenKick(agenWork->target);thinAutogenVoice(note,agenWork->target,ch,agenWork->seed);return;}
-    const bool mono=ch==13||ch==14;
+    const unsigned role=autogenRoleChannel(ch);
+    if(!role)return;
+    if(role==8){placeAutogenVocal(agenWork->source,agenWork->target,agenWork->drawnVoices&(1u<<ch),ch);return;}
+    if(ch==11&&role==11&&autogenDeep()&&!(agenWork->drawnVoices&(1u<<11))){placeAutogenDeepChords(agenWork->target,agen.generation+1);return;}
+    if(((role==5&&autogenAssignments.automatic(ch)&&autogenDeep())||role==13)&&ch<=8&&!(agenWork->drawnVoices&(1u<<ch))){placeAutogenDeepMelody(agenWork->target,agen.generation+1,ch);return;}
+    if(role==6&&ch<=8&&!(agenWork->drawnVoices&(1u<<ch))){placeAutogenSampleBass(agenWork->target,agen.generation+1,ch);thinAutogenVoice(note,agenWork->target,ch,agenWork->seed);return;}
+    if(role==7&&!(agenWork->drawnVoices&(1u<<7))){mirrorAutogenKick(agenWork->target);thinAutogenVoice(note,agenWork->target,ch,agenWork->seed);return;}
+    const bool mono=ch>=11&&(role==13||role==14||role==6);
     const unsigned next=agen.generation+1;
     if(mono&&autogenVoicePresent(agen.source(),ch)&&next%toern_autogen_register::phrasePages(maxX)!=0&&
         agenWork->pageRevision[agen.playing]==agenWork->motifRevision&&

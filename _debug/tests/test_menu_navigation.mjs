@@ -437,7 +437,7 @@ agenDevice.jump('agen'); agenDevice.rotate(3,1); assert.equal(agenDevice.subInde
 assert.equal(agenDevice.soon(),false);
 const beforeAgen=agenDevice.exportPatternCells();
 agenDevice.press(3); assert.equal(agenDevice.autogen().active,true); assert.equal(agenDevice.playing(),true);
-assert.equal(agenDevice.menuSummary().detail,'AGEN: SOFT · ON');
+assert.equal(agenDevice.menuSummary().detail,'AGEN: MOVE SOFT · ON');
 assert.deepEqual(agenDevice.exportPatternCells(),beforeAgen,'transfers export the source bank during AGEN');
 pagehideHandlers.at(-1)();
 const activeAutosave=JSON.parse(stored.get('toern-web-patterns'))[0];
@@ -468,6 +468,26 @@ agenDevice.press(3); assert.equal(agenDevice.autogen().active,false);
 assert.deepEqual(agenDevice.exportPatternCells(),beforeAgen);
 agenDevice.pause();
 d.jump('bpm');const oldBpm=d.bpm();d.rotate(0,1);assert.equal(d.bpm(),Math.round((oldBpm+.1)*10)/10);
+// AGEN knobs identify the parameter; assignment view edits the generator roles.
+agenDevice.jump('agen');
+agenDevice.rotate(0,1);assert.match(agenDevice.menuSummary().detail,/SCAL/);
+agenDevice.rotate(1,1);assert.match(agenDevice.menuSummary().detail,/DENS/);
+agenDevice.rotate(2,1);assert.match(agenDevice.menuSummary().detail,/MOVE/);
+const agenSettings={...agenDevice.autogen()};
+agenDevice.press(2);assert.equal(agenDevice.autogen().active,false);
+assert.match(agenDevice.menuSummary().detail,/CH1: KICK/);
+agenDevice.rotate(1,1);assert.equal(agenDevice.autogen().kinds[1],2);
+assert.match(agenDevice.menuSummary().detail,/CH1: SNAR/);
+agenDevice.rotate(0,8);assert.match(agenDevice.menuSummary().detail,/CH11: KEYS/);
+agenDevice.rotate(1,1);assert.equal(agenDevice.autogen().kinds[11],8);
+agenDevice.rotate(0,2);assert.match(agenDevice.menuSummary().detail,/CH14: BASS/);
+agenDevice.rotate(0,-11);assert.match(agenDevice.menuSummary().detail,/ALL/);
+agenDevice.rotate(1,1);
+for(const ch of [1,2,3,4,5,6,7,8,11,13,14])assert.equal(agenDevice.autogen().kinds[ch],1);
+agenDevice.press(3);assert.equal(agenDevice.autogen().active,true,'fourth encoder still starts AGEN in assignment view');
+agenDevice.press(2);assert.equal(agenDevice.autogen().active,true,'view toggle keeps the performance running');
+for(const key of ['scale','density','motion'])assert.equal(agenDevice.autogen()[key],agenSettings[key]);
+agenDevice.press(3);assert.equal(agenDevice.autogen().active,false);
 console.log('PASS: AGEN navigation, playback, section advancement, restoration and fractional BPM.');
 
 // Touch shortcuts must leave the encoder keys available.

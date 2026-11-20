@@ -1,4 +1,4 @@
-import { statusInk, AGEN_STATUS_COLORS, AGEN_MOTIF_COLORS } from "./autogen.js";
+import { statusInk, AGEN_STATUS_COLORS, AGEN_MOTIF_COLORS, AGEN_CHANNELS, AGEN_KINDS } from "./autogen.js";
 import { canReplaceShadowed, shadowSlots } from "./paint.js";
 import { INSTRUMENT_NAMES } from "./instruments.js";
 import { syncHasEffect } from "./performance.js";
@@ -755,7 +755,15 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     return;
   }
   if (s.mode === "mode" && s.subIndex === 10) {
-    // Firmware AGEN: encoder 3 = HOLD/SOFT/LONG/LIVE; indicator 4 = active G/R.
+    if(s.agenAssignmentView){
+      const ch=AGEN_CHANNELS[s.agenAssignmentIndex??1];
+      const kind=s.agen?.kinds?.[ch]??({1:1,2:2,3:3,4:4,5:5,6:6,7:1,8:8,11:7,13:9,14:6}[ch]??0);
+      matrix.drawText(ch?`CH${ch}`:"ALL",2,10,parent);
+      matrix.drawText(s.agen?.kindLabels?.[ch]??(ch?AGEN_KINDS[kind]:"MIX"),2,3,ch?COL[ch]:UI_WHITE);
+      matrix.drawIndicator("L","W",1);matrix.drawIndicator("L","Y",2);
+      matrix.drawIndicator("L","G",3);matrix.drawIndicator("L",s.agen?.active?"G":"R",4);
+      return;
+    }
     const motion = Math.max(0, Math.min(4, s.agen?.motion ?? 1));
     const scale = Math.max(0, Math.min(6, s.agen?.scale ?? 0));
     const density = Math.max(0, Math.min(3, s.agen?.density ?? 1));
@@ -766,7 +774,7 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     const motionColors = [UI_DIM_RED, UI_GREEN, UI_CYAN, UI_YELLOW, UI_BLUE];
     const label = focus === 0 ? scaleNames[scale] : focus === 1 ? densityNames[density] : motionNames[motion];
     const color = focus === 0 ? UI_WHITE : focus === 1 ? UI_ORANGE : motionColors[motion];
-    matrix.drawText("AGEN",2,10,parent);
+    matrix.drawText(["SCAL","DENS","MOVE"][focus],2,10,parent);
     matrix.drawText(label,2,3,color);
     matrix.drawIndicator("L","W",1);
     matrix.drawIndicator("L","Y",2);

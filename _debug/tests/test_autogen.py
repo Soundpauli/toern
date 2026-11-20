@@ -469,6 +469,32 @@ int main(){
   for(unsigned col=0;col<width;++col)for(unsigned row=1;row<=16;++row)assert(!agenWork->performance[silent+col][row].channel);
   stopAutogen();for(auto &col:original)for(auto &n:col)assert(n.channel==0);
  }
+ // Every kind routes to the selected physical sample/synth, with OFF silent.
+ maxX=16;GLOB.edit=GLOB.page=1;
+ for(unsigned ch:toern_autogen_roles::channels)if(ch)for(unsigned kind=0;kind<toern_autogen_roles::kindCount;++kind){
+  autogenAssignments=toern_autogen_roles::Assignments{};
+  setAutogenAssignment(ch,kind);
+  assert(autogenAssignmentKind(ch)==kind);
+  for(auto &col:original)for(auto &n:col)n=Note{};
+  for(unsigned i=0;i<16;++i){testMutes[i]=false;SMP.channelVol[i]=12;SMP.mute[i]=false;}
+  original[1][ch]={uint8_t(ch),91,100,1,60};
+  assert(toggleAutogen());
+  for(unsigned i=0;i<30&&!agen.ready;++i)serviceAutogen();
+  assert(agen.ready);
+  const unsigned start=(agen.target()-1)*maxX+1;
+  unsigned count=0;
+  for(unsigned x=start;x<start+maxX;++x)for(unsigned y=1;y<=16;++y){
+   const auto &n=agenWork->performance[x][y];
+   if(n.channel){assert(n.channel==ch);++count;}
+  }
+  if(kind==0)assert(count==0);
+  if(kind==8){assert(count==1);assert(agenWork->performance[start][ch].velocity==91);}
+  stopAutogen();assert(original[1][ch].channel==ch&&original[1][ch].velocity==91);
+ }
+ setAutogenAssignment(0,2);
+ for(unsigned ch:toern_autogen_roles::channels)if(ch)assert(autogenAssignmentKind(ch)==2);
+ autogenAssignments=toern_autogen_roles::Assignments{};
+ puts("PASS: every AGEN kind routes to each physical sample/synth channel; OFF silences output; VOIC preserves drawn hits; ALL assigns every channel; stopping preserves the motif");
  puts("PASS: AGEN 16/32-step boundaries, tempo/page-aware repeats, late-builder safety, one-voice jobs, untouched live/source grids, editable motif, pending-page invalidation, developed edited sources, mute/unmute, removed voices, held CH11 progressions, held leads, full solos, kept drop groove, climax-only vocals on voice 8, exact restoration, empty starters and incompatible-mode guards");
 }
 '''.replace('IMPLEMENTATION',implementation).replace('PLACEMENT',placement).replace('VOLUME_CONTROL',volume_control)
