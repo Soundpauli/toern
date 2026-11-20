@@ -260,17 +260,31 @@
       color: var(--text-muted);
       opacity: 1;
     }
-    .explorer.dragover {
+    .explorer.dragover, .explorer.move-dragover {
       outline: 2px dashed var(--accent);
       outline-offset: -6px;
     }
+    .explorer.move-dragover { outline-color: #7dffa3; }
     .drop-hint {
       display: none; position: absolute; inset: 0; z-index: 4;
       align-items: center; justify-content: center;
       font-family: var(--font-tech); font-size: 0.9rem; color: var(--accent);
       background: rgba(26, 37, 55, 0.88); pointer-events: none; border-radius: 12px;
     }
-    .explorer.dragover .drop-hint { display: flex; }
+    .explorer.dragover .drop-hint, .explorer.move-dragover .drop-hint { display: flex; }
+    .row.cut { opacity: 0.45; }
+    .row.drop-target, .crumbs button.drop-target, #btnUp.drop-target {
+      outline: 1px solid #7dffa3; outline-offset: -1px;
+      background: rgba(125, 255, 163, 0.08);
+    }
+    .clipboard-bar {
+      display: none; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+      margin: 0.35rem 0 0.15rem; padding: 0.35rem 0.55rem;
+      border: 1px solid var(--grid-line); border-radius: 8px;
+      font-family: var(--font-tech); font-size: 0.75rem; color: var(--text-muted);
+    }
+    .clipboard-bar.show { display: flex; }
+    .clipboard-bar strong { color: var(--accent); font-weight: 500; }
     .hint {
       margin-top: 0.85rem; font-size: 0.75rem; color: var(--text-muted);
       font-family: var(--font-tech); letter-spacing: 0.02em;
@@ -356,13 +370,15 @@
             <h2>2. Files</h2>
           </div>
           <div class="busy-overlay" id="panelOverlay" aria-hidden="true"><div class="spinner" role="status" aria-label="Loading"></div></div>
-          <div class="drop-hint">Drop files, folders, or .zip</div>
+          <div class="drop-hint" id="dropHint">Drop files, folders, or .zip</div>
           <div class="toolbar">
             <div class="toolbar-left">
               <button type="button" class="sd-btn" id="btnUp" title="Parent folder">↑ Up</button>
               <label class="autoplay"><input type="checkbox" id="autoplay"/> Autoplay</label>
             </div>
             <div class="toolbar-right">
+              <button type="button" class="sd-btn" id="btnCut" title="Cut selected (⌘X)">Cut</button>
+              <button type="button" class="sd-btn" id="btnPaste" title="Paste here (⌘V)" disabled>Paste</button>
               <button type="button" class="sd-btn" id="btnNew">New folder</button>
               <button type="button" class="sd-btn" id="btnCleanUp" title="Rename nested folders that repeat their parent name">Clean up</button>
               <label class="file-btn primary" id="uploadLabel" for="fileInput">Upload file(s)</label>
@@ -372,6 +388,7 @@
               <button type="button" class="sd-btn icon" id="btnRefresh" title="Refresh" aria-label="Refresh">↻</button>
             </div>
           </div>
+          <div class="clipboard-bar" id="clipboardBar" hidden></div>
           <nav class="crumbs" id="crumbs" aria-label="Path"></nav>
           <div class="cols" id="cols">
             <span></span>
@@ -386,7 +403,7 @@
 
         <div class="banner" id="banner"></div>
         <pre class="dbg-panel" id="dbgLog" aria-label="Debug log"></pre>
-        <p class="hint">↑↓ select · ← parent · → open folder · Enter play/open · Space play · F2 rename · Clean up · drop files/folders/.zip to upload</p>
+        <p class="hint">↑↓ select · ← parent · → open folder · Enter play/open · Space play · F2 rename · ⌘X cut · ⌘V paste · drag onto [../] / Up / crumbs to move · drop files/folders/.zip to upload</p>
       </div>
     </div>
   </main>
@@ -456,6 +473,8 @@ const state = {
   sortKey: "name",
   sortAsc: true,
   renameFrom: null,
+  clipboard: null, // { path, name, type: "file"|"dir" } when cut
+  draggingPath: null,
 };
 
 /** @type {Map<string, Uint8Array>} */
@@ -1491,6 +1510,41 @@ class ToernSdSerial {
     }
     await this.rm(path);
   }
+
+  // FAT rename often fails for non-empty folders — fall back to child moves.
+  async moveRecursive(src, dest) {
+    src = String(src || "").replace(/\\/g, "/").replace(/\/+$/, "") || "/";
+    dest = String(dest || "").replace(/\\/g, "/").replace(/\/+$/, "") || "/";
+    if (!src || src === "/" || !dest || dest === "/") throw new Error("ERR BAD_PATH");
+    try {
+      await this.rename(src, dest);
+      return;
+    } catch (err) {
+      let isDir = false;
+      try {
+        const entries = await this.listDir(parentSdPath(src), false);
+        const match = entries.find((e) => e.name === baseName(src));
+        isDir = !!(match && match.type === "dir");
+      } catch (_) {}
+      if (!isDir) throw err;
+    }
+    let children;
+    try {
+      children = await this.listDir(src, false);
+    } catch (_) {
+      await this.rename(src, dest);
+      return;
+    }
+    try {
+      await this.mkdir(dest);
+    } catch (err) {
+      if (!/EXISTS/i.test(String(err && err.message || err))) throw err;
+    }
+    for (const child of children) {
+      await this.moveRecursive(joinSdPath(src, child.name), joinSdPath(dest, child.name));
+    }
+    await this.rm(src);
+  }
 }
 
 // --- UI helpers --------------------------------------------------------------
@@ -1590,7 +1644,15 @@ function sortedEntries() {
   };
   dirs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   files.sort(cmp);
-  return dirs.concat(files);
+  const items = dirs.concat(files);
+  if (state.path !== "/") items.unshift({ name: "..", type: "up" });
+  return items;
+}
+
+function entryFullPath(e) {
+  if (!e) return state.path;
+  if (e.type === "up") return parentDir(state.path);
+  return joinPath(state.path, e.name);
 }
 
 function portLabelFrom(port) {
@@ -2218,8 +2280,36 @@ function renderCrumbs() {
   crumbsEl.innerHTML = html;
   crumbsEl.querySelectorAll("button").forEach((btn) => {
     btn.onclick = () => navigate(btn.dataset.path);
+    btn.addEventListener("dragover", (ev) => {
+      if (!isInternalSdDrag(ev.dataTransfer)) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      btn.classList.add("drop-target");
+    });
+    btn.addEventListener("dragleave", () => btn.classList.remove("drop-target"));
+    btn.addEventListener("drop", async (ev) => {
+      btn.classList.remove("drop-target");
+      const src = (ev.dataTransfer && ev.dataTransfer.getData("application/x-toern-sd-path")) || state.draggingPath;
+      state.draggingPath = null;
+      panelEl.classList.remove("move-dragover", "dragover");
+      if (!src) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      setBusy(true);
+      try {
+        if (await moveEntry(src, btn.dataset.path)) {
+          showBanner("Moved " + baseName(src), true);
+          await refresh();
+        }
+      } catch (err) {
+        showBanner(String(err.message || err), false);
+      } finally {
+        setBusy(false);
+      }
+    });
   });
   $("btnUp").disabled = state.path === "/";
+  updateClipboardBar();
 }
 
 function renderSortHeaders() {
@@ -2233,6 +2323,46 @@ function renderSortHeaders() {
   });
 }
 
+function bindMoveDropTarget(el, destDirOrFn) {
+  const destOf = () => (typeof destDirOrFn === "function" ? destDirOrFn() : destDirOrFn);
+  el.addEventListener("dragover", (ev) => {
+    if (!isInternalSdDrag(ev.dataTransfer)) return;
+    if (el.id === "btnUp" && state.path === "/") return;
+    const destDir = destOf();
+    const src = state.draggingPath || "";
+    if (!destDir || samePath(src, destDir) || isUnderPath(destDir, src)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.dataTransfer.dropEffect = "move";
+    el.classList.add("drop-target");
+  });
+  el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
+  el.addEventListener("drop", async (ev) => {
+    el.classList.remove("drop-target");
+    const src = (ev.dataTransfer && ev.dataTransfer.getData("application/x-toern-sd-path")) || state.draggingPath;
+    state.draggingPath = null;
+    panelEl.classList.remove("move-dragover", "dragover");
+    setDropHint(false);
+    if (!src) return;
+    if (el.id === "btnUp" && state.path === "/") return;
+    const destDir = destOf();
+    if (!destDir) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    setBusy(true);
+    try {
+      if (await moveEntry(src, destDir)) {
+        showBanner("Moved " + baseName(src), true);
+        await refresh();
+      }
+    } catch (err) {
+      showBanner(String(err.message || err), false);
+    } finally {
+      setBusy(false);
+    }
+  });
+}
+
 function renderList() {
   const entries = sortedEntries();
   if (!entries.length) {
@@ -2243,22 +2373,26 @@ function renderList() {
   if (state.selected >= entries.length) state.selected = entries.length - 1;
 
   listEl.innerHTML = entries.map((e, idx) => {
-    const full = joinPath(state.path, e.name);
-    const label = e.type === "dir" ? e.name + "/" : e.name;
+    const full = entryFullPath(e);
+    const label = e.type === "up" ? "[../]" : e.type === "dir" ? e.name + "/" : e.name;
     const sel = idx === state.selected ? " selected" : "";
+    const cut = e.type !== "up" && state.clipboard && samePath(state.clipboard.path, full) ? " cut" : "";
     const canPlay = e.type === "file" && isWav(e.name);
     const playCell = canPlay
       ? `<button type="button" class="sd-btn" data-play="${full}" data-name="${e.name}" title="Play">▶</button>`
       : `<span></span>`;
-    return `<li class="row${sel}" data-idx="${idx}">
-      ${playCell}
-      <button type="button" class="name ${e.type}" data-idx="${idx}">${label}</button>
-      <span class="meta">${e.type === "dir" ? "folder" : fmtSize(e.size)}</span>
-      <div class="ops">
+    const ops = e.type === "up" ? "" : `<div class="ops">
         ${e.type === "file" ? `<button type="button" class="sd-btn" data-dl="${full}" data-name="${e.name}">↓</button>` : ""}
         <button type="button" class="sd-btn" data-ren="${full}" data-name="${e.name}">✎</button>
         <button type="button" class="sd-btn danger" data-rm="${full}" data-label="${label}">✕</button>
-      </div>
+      </div>`;
+    const drag = e.type === "up" ? "false" : "true";
+    const meta = e.type === "up" ? "parent" : e.type === "dir" ? "folder" : fmtSize(e.size);
+    return `<li class="row${sel}${cut}" data-idx="${idx}" data-path="${full}" data-type="${e.type}" draggable="${drag}">
+      ${playCell}
+      <button type="button" class="name ${e.type === "file" ? "file" : "dir"}" data-idx="${idx}">${label}</button>
+      <span class="meta">${meta}</span>
+      ${ops || "<div class=\"ops\"></div>"}
     </li>`;
   }).join("");
 
@@ -2303,6 +2437,31 @@ function renderList() {
       removePath(el.dataset.rm, el.dataset.label);
     };
   });
+  listEl.querySelectorAll(".row").forEach((row) => {
+    if (row.dataset.type !== "up") {
+      row.addEventListener("dragstart", (ev) => {
+        if (ev.target.closest("button")) { ev.preventDefault(); return; }
+        const src = row.dataset.path;
+        state.draggingPath = src;
+        state.selected = Number(row.dataset.idx);
+        ev.dataTransfer.setData("application/x-toern-sd-path", src);
+        ev.dataTransfer.setData("text/plain", src);
+        ev.dataTransfer.effectAllowed = "move";
+        row.classList.add("cut");
+        setDropHint(true);
+      });
+      row.addEventListener("dragend", () => {
+        state.draggingPath = null;
+        setDropHint(false);
+        panelEl.classList.remove("move-dragover", "dragover");
+        renderList();
+      });
+    }
+    if (row.dataset.type === "dir" || row.dataset.type === "up") {
+      bindMoveDropTarget(row, row.dataset.path);
+    }
+  });
+  updateClipboardBar();
 }
 
 function ensureSelectedVisible() {
@@ -2374,8 +2533,8 @@ function activateSelected() {
   const entries = sortedEntries();
   const e = entries[state.selected];
   if (!e) return;
-  const full = joinPath(state.path, e.name);
-  if (e.type === "dir") navigate(full);
+  const full = entryFullPath(e);
+  if (e.type === "up" || e.type === "dir") navigate(full);
   else if (isWav(e.name)) playPath(full, e.name);
   else download(full, e.name);
 }
@@ -2414,6 +2573,135 @@ async function navigate(path) {
   state.path = path || "/";
   stopPlayback();
   await refresh();
+}
+
+
+function parentDir(path) {
+  path = String(path || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!path || path === "/") return "/";
+  const idx = path.lastIndexOf("/");
+  if (idx <= 0) return "/";
+  return path.slice(0, idx) || "/";
+}
+
+function samePath(a, b) {
+  const norm = (x) => String(x || "").replace(/\\/g, "/").replace(/\/+$/, "") || "/";
+  return norm(a) === norm(b);
+}
+
+function isUnderPath(child, parent) {
+  const c = String(child || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  const p = String(parent || "").replace(/\\/g, "/").replace(/\/+$/, "") || "";
+  if (!p || p === "/") return false;
+  return c === p || c.startsWith(p + "/");
+}
+
+function updateClipboardBar() {
+  const bar = $("clipboardBar");
+  const pasteBtn = $("btnPaste");
+  if (!bar || !pasteBtn) return;
+  if (!state.clipboard) {
+    bar.hidden = true;
+    bar.classList.remove("show");
+    bar.innerHTML = "";
+    pasteBtn.disabled = true;
+    return;
+  }
+  const label = state.clipboard.type === "dir" ? state.clipboard.name + "/" : state.clipboard.name;
+  bar.hidden = false;
+  bar.classList.add("show");
+  bar.innerHTML = `<span>Cut:</span> <strong>${label}</strong> <button type="button" class="sd-btn" id="btnClearClip">Clear</button>`;
+  pasteBtn.disabled = !state.connected || state.busy;
+  const clear = $("btnClearClip");
+  if (clear) clear.onclick = () => { state.clipboard = null; updateClipboardBar(); renderList(); };
+}
+
+function cutSelected() {
+  const entries = sortedEntries();
+  const e = entries[state.selected];
+  if (!e || e.type === "up") return;
+  state.clipboard = {
+    path: entryFullPath(e),
+    name: e.name,
+    type: e.type,
+  };
+  updateClipboardBar();
+  renderList();
+  showBanner("Cut " + (e.type === "dir" ? e.name + "/" : e.name), true);
+}
+
+async function moveEntry(srcPath, destDir, srcType) {
+  const name = baseName(srcPath);
+  if (!name) throw new Error("Invalid source");
+  destDir = destDir || "/";
+  if (samePath(parentDir(srcPath), destDir)) {
+    showBanner("Already there", true);
+    return false;
+  }
+  if (isUnderPath(destDir, srcPath)) {
+    throw new Error("Cannot move a folder into itself");
+  }
+  const destPath = joinPath(destDir, name);
+  if (samePath(srcPath, destPath)) return false;
+  // Collision: refuse rather than overwrite
+  const listing = await requireSd().listDir(destDir);
+  if (listing.some((e) => e.name === name)) {
+    throw new Error("Already exists: " + destPath);
+  }
+  dbg("UI: move " + srcPath + " → " + destPath);
+  const client = requireSd();
+  let isDir = srcType === "dir";
+  if (srcType == null) {
+    try {
+      const parentListing = await client.listDir(parentDir(srcPath), false);
+      const match = parentListing.find((e) => e.name === name);
+      isDir = !!(match && match.type === "dir");
+    } catch (_) {
+      isDir = false;
+    }
+  }
+  if (isDir) await client.moveRecursive(srcPath, destPath);
+  else await client.rename(srcPath, destPath);
+  if (state.clipboard && samePath(state.clipboard.path, srcPath)) {
+    state.clipboard = null;
+    updateClipboardBar();
+  }
+  playCache.clear();
+  return true;
+}
+
+async function pasteClipboard() {
+  if (!state.clipboard) return;
+  const src = state.clipboard.path;
+  const label = state.clipboard.type === "dir" ? state.clipboard.name + "/" : state.clipboard.name;
+  const srcType = state.clipboard.type;
+  setBusy(true);
+  try {
+    const ok = await moveEntry(src, state.path, srcType);
+    if (ok) {
+      state.clipboard = null;
+      updateClipboardBar();
+      showBanner("Moved " + label, true);
+      await refresh();
+    }
+  } catch (err) {
+    dbg("UI: paste failed — " + (err && err.message || err), "err");
+    showBanner(String(err.message || err), false);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function setDropHint(move) {
+  const el = $("dropHint");
+  if (!el) return;
+  el.textContent = move ? "Drop to move here" : "Drop files, folders, or .zip";
+}
+
+function isInternalSdDrag(dt) {
+  if (!dt) return false;
+  if (dt.types && [...dt.types].includes("application/x-toern-sd-path")) return true;
+  return !!(state.draggingPath);
 }
 
 async function removePath(path, label) {
@@ -2469,7 +2757,10 @@ function openRename(fullPath, name) {
 }
 
 $("btnRefresh").onclick = () => refresh();
-$("btnUp").onclick = () => navigate(state.path === "/" ? "/" : state.path.replace(/\/[^/]+\/?$/, "") || "/");
+$("btnCut").onclick = () => cutSelected();
+$("btnPaste").onclick = () => pasteClipboard();
+$("btnUp").onclick = () => navigate(state.path === "/" ? "/" : parentDir(state.path));
+bindMoveDropTarget($("btnUp"), () => parentDir(state.path));
 
 $("cols").querySelectorAll("button[data-sort]").forEach((btn) => {
   btn.onclick = () => {
@@ -2602,20 +2893,45 @@ $("folderInput").onchange = async (ev) => {
 panelEl.addEventListener("dragenter", (ev) => {
   if (!state.connected) return;
   ev.preventDefault();
-  panelEl.classList.add("dragover");
+  const move = isInternalSdDrag(ev.dataTransfer);
+  setDropHint(move);
+  panelEl.classList.add(move ? "move-dragover" : "dragover");
 });
 panelEl.addEventListener("dragover", (ev) => {
   if (!state.connected) return;
   ev.preventDefault();
-  ev.dataTransfer.dropEffect = "copy";
-  panelEl.classList.add("dragover");
+  const move = isInternalSdDrag(ev.dataTransfer);
+  ev.dataTransfer.dropEffect = move ? "move" : "copy";
+  setDropHint(move);
+  panelEl.classList.add(move ? "move-dragover" : "dragover");
+  panelEl.classList.remove(move ? "dragover" : "move-dragover");
 });
 panelEl.addEventListener("dragleave", (ev) => {
-  if (!panelEl.contains(ev.relatedTarget)) panelEl.classList.remove("dragover");
+  if (!panelEl.contains(ev.relatedTarget)) {
+    panelEl.classList.remove("dragover", "move-dragover");
+    setDropHint(false);
+  }
 });
 panelEl.addEventListener("drop", async (ev) => {
   ev.preventDefault();
-  panelEl.classList.remove("dragover");
+  panelEl.classList.remove("dragover", "move-dragover");
+  setDropHint(false);
+  const src = (ev.dataTransfer && ev.dataTransfer.getData("application/x-toern-sd-path")) || state.draggingPath;
+  state.draggingPath = null;
+  if (src) {
+    setBusy(true);
+    try {
+      if (await moveEntry(src, state.path)) {
+        showBanner("Moved " + baseName(src), true);
+        await refresh();
+      }
+    } catch (err) {
+      showBanner(String(err.message || err), false);
+    } finally {
+      setBusy(false);
+    }
+    return;
+  }
   await uploadFiles(ev.dataTransfer);
 });
 
@@ -2645,7 +2961,7 @@ document.addEventListener("keydown", (ev) => {
   } else if (ev.key === "ArrowRight") {
     ev.preventDefault();
     const e = entries[state.selected];
-    if (e && e.type === "dir") activateSelected();
+    if (e && (e.type === "dir" || e.type === "up")) activateSelected();
   } else if (ev.key === "Enter") {
     ev.preventDefault();
     activateSelected();
@@ -2653,17 +2969,25 @@ document.addEventListener("keydown", (ev) => {
     ev.preventDefault();
     const e = entries[state.selected];
     if (e && e.type === "file" && isWav(e.name)) {
-      playPath(joinPath(state.path, e.name), e.name);
+      playPath(entryFullPath(e), e.name);
     }
   } else if (ev.key === "F2") {
     ev.preventDefault();
     const e = entries[state.selected];
-    if (e) openRename(joinPath(state.path, e.name), e.name);
+    if (e && e.type !== "up") openRename(entryFullPath(e), e.name);
+  } else if ((ev.key === "x" || ev.key === "X") && (ev.metaKey || ev.ctrlKey)) {
+    ev.preventDefault();
+    cutSelected();
+  } else if ((ev.key === "v" || ev.key === "V") && (ev.metaKey || ev.ctrlKey)) {
+    ev.preventDefault();
+    pasteClipboard();
   } else if (ev.key === "Delete" || ev.key === "Backspace") {
     if (ev.key === "Backspace" && !ev.metaKey && !ev.ctrlKey) return;
     ev.preventDefault();
     const e = entries[state.selected];
-    if (e) removePath(joinPath(state.path, e.name), e.type === "dir" ? e.name + "/" : e.name);
+    if (e && e.type !== "up") {
+      removePath(entryFullPath(e), e.type === "dir" ? e.name + "/" : e.name);
+    }
   }
 });
 

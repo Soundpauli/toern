@@ -47,4 +47,26 @@ inline bool parsePutArgs(char *args, char *&path, uint32_t &size, uint32_t &crc)
   path = args;
   return true;
 }
+
+// MV <from> <to>. Both paths are absolute (start with '/'); names may contain
+// spaces. Split on the last " /" so the destination is the final absolute path.
+inline bool parseMvArgs(char *args, char *&from, char *&to) {
+  if (!args) return false;
+  while (isSpace(*args)) ++args;
+  if (*args != '/') return false;
+  char *split = nullptr;
+  for (char *p = args + 1; *p; ++p) {
+    if (isSpace(*p) && p[1] == '/') split = p;
+  }
+  if (!split) return false;
+  *split = '\0';
+  from = args;
+  to = split + 1;
+  while (isSpace(*to)) ++to;
+  char *end = from + std::strlen(from);
+  while (end > from && isSpace(end[-1])) *--end = '\0';
+  end = to + std::strlen(to);
+  while (end > to && isSpace(end[-1])) *--end = '\0';
+  return *from == '/' && *to == '/' && std::strcmp(from, "/") != 0 && std::strcmp(to, "/") != 0;
+}
 }  // namespace toern_sd

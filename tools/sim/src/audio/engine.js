@@ -179,8 +179,8 @@ export function createEngine() {
     if (slider <= 0) c.shaper.curve = null;
     else {
       const mv = Math.max(1, Math.min(16, Math.round(mapf(slider, 1, 32, 1, 16))));
-      const crushAmt = mapf(mv, 1, 16, 0, 0.8);
-      const bits = Math.max(4, Math.min(16, Math.round(mapf(crushAmt, 0, 1, 16, 1))));
+      const crushAmt = mapf(mv, 1, 16, 0, 1);
+      const bits = Math.max(1, Math.min(16, Math.round(mapf(crushAmt, 0, 1, 16, 1))));
       c.shaper.curve = bitCurve(bits);
       amp = mapf(mv, 1, 16, Math.max(channelvolume, 0.1), 0.6);
     }

@@ -84,7 +84,7 @@ void run(){for(unsigned n=0;n<10000&&kitSavePending();++n)poll();assert(!kitSave
 void start(int target){currentMode=&set_SamplePack;set_SamplePack.pos[3]=target;beginKitSave(target);assert(kitSavePending());}
 std::map<std::string,std::vector<uint8_t>> primary(unsigned kit){
  std::map<std::string,std::vector<uint8_t>> out;
- for(unsigned voice=1;voice<=8;++voice){const auto p=std::to_string(kit)+"/"+std::to_string(voice)+".wav";out[p]=SD.files.at(p)->bytes;}
+ for(unsigned voice=1;voice<=8;++voice){const auto p=std::string("kits/")+std::to_string(kit)+"/"+std::to_string(voice)+".wav";out[p]=SD.files.at(p)->bytes;}
  return out;
 }
 int main(){
@@ -98,7 +98,7 @@ int main(){
  assert(g_pendingKitEeprom&&g_pendingSp0Eeprom&&backupMarks==1);
  assert(mainLoopPasses>50&&maxTransfer==2048&&currentMode==&set_SamplePack);
  for(int ch=1;ch<=8;ch++){
-  const auto &bytes=SD.files.at("4/"+std::to_string(ch)+".wav")->bytes;
+  const auto &bytes=SD.files.at(std::string("kits/4/")+std::to_string(ch)+".wav")->bytes;
   const size_t count=loadedSampleLen[ch]*2;
   if(!count){assert(bytes.empty());continue;}
   assert(bytes.size()==count+44&&!memcmp(bytes.data()+44,sampled[ch],count));
@@ -110,27 +110,27 @@ int main(){
  for(unsigned n=0;kitSavePending()&&n<30;++n)poll();
  assert(confirmedTarget==4&&!kitSavePending());
  // Same-target KIT 0 uses PCM rather than deleting its own source file.
- SD.dirs.insert("0");SD.files["0/1.wav"]=std::make_shared<Node>();SD.files["0/1.wav"]->bytes.assign(16,42);
- SMP.sp0Active[1]=true;start(0);run();assert(kitSaveFeedback()==2&&SD.files.at("0/1.wav")->bytes.size()==loadedSampleLen[1]*2+44);
- SMP.sp0Active[1]=true;const auto custom=SD.files.at("0/1.wav")->bytes;
+ SD.dirs.insert("kits");SD.dirs.insert("kits/0");SD.files["kits/0/1.wav"]=std::make_shared<Node>();SD.files["kits/0/1.wav"]->bytes.assign(16,42);
+ SMP.sp0Active[1]=true;start(0);run();assert(kitSaveFeedback()==2&&SD.files.at("kits/0/1.wav")->bytes.size()==loadedSampleLen[1]*2+44);
+ SMP.sp0Active[1]=true;const auto custom=SD.files.at("kits/0/1.wav")->bytes;
  sampled[1][0]^=1; // SP0 still holds the previous sample until its deferred copy runs.
- start(5);run();assert(kitSaveFeedback()==2&&SD.files.at("5/1.wav")->bytes[44]==sampled[1][0]);
- assert(SD.files.at("5/1.wav")->bytes!=custom);
+ start(5);run();assert(kitSaveFeedback()==2&&SD.files.at("kits/5/1.wav")->bytes[44]==sampled[1][0]);
+ assert(SD.files.at("kits/5/1.wav")->bytes!=custom);
  // Source identity is snapshotted independently from later browser/preview paths.
  strcpy(sourcePaths[1],"Drums/808/Kick Long.wav");
  start(6);strcpy(sourcePaths[1],"preview/other.wav");run();
- const auto &withSource=SD.files.at("6/1.wav")->bytes;
+ const auto &withSource=SD.files.at("kits/6/1.wav")->bytes;
  const size_t pcm=loadedSampleLen[1]*2;
  assert(withSource.size()==44+pcm+toern_kit_io::sourceChunkBytes);
  assert(!memcmp(withSource.data()+44,sampled[1],pcm));
  assert(toern_kit_io::sourceLE32(withSource.data()+4)==withSource.size()-8);
  assert(toern_kit_io::sourceLE32(withSource.data()+40)==pcm);
- char restored[128];auto sourceFile=SD.open("6/1.wav");
+ char restored[128];auto sourceFile=SD.open("kits/6/1.wav");
  assert(toern_kit_io::readSourcePath(sourceFile,restored)&&!strcmp(restored,"Drums/808/Kick Long.wav"));
- strcpy(sourcePaths[1],restored);start(7);run();sourceFile=SD.open("7/1.wav");
+ strcpy(sourcePaths[1],restored);start(7);run();sourceFile=SD.open("kits/7/1.wav");
  assert(toern_kit_io::readSourcePath(sourceFile,restored)&&!strcmp(restored,"Drums/808/Kick Long.wav"));
- auto legacy=SD.open("4/1.wav");assert(!toern_kit_io::readSourcePath(legacy,restored)&&!restored[0]);
- auto empty=SD.open("4/8.wav");assert(!toern_kit_io::readSourcePath(empty,restored)&&!restored[0]);
+ auto legacy=SD.open("kits/4/1.wav");assert(!toern_kit_io::readSourcePath(legacy,restored)&&!restored[0]);
+ auto empty=SD.open("kits/4/8.wav");assert(!toern_kit_io::readSourcePath(empty,restored)&&!restored[0]);
  auto malformed=withSource;
  malformed[44+pcm+4]=127;SD.files["bad.wav"]=std::make_shared<Node>();SD.files["bad.wav"]->bytes=malformed;
  auto bad=SD.open("bad.wav");assert(!toern_kit_io::readSourcePath(bad,restored)&&!restored[0]);
@@ -151,13 +151,13 @@ int main(){
  // Read-back CRC rejects corruption before any primary is installed.
  corruptRead=true;start(4);run();assert(kitSaveFeedback()==3&&primary(4)==original);
  // A failure after earlier slots installed rolls the entire family back.
- failRenameTo="4/5.wav";start(4);run();assert(kitSaveFeedback()==3&&primary(4)==original);
+ failRenameTo="kits/4/5.wav";start(4);run();assert(kitSaveFeedback()==3&&primary(4)==original);
  // Cancellation halfway through installation also restores the old family.
  start(4);
- for(unsigned n=0;n<10000&&!SD.files.count("4/3.wav.kit-bak");++n)poll();
- assert(SD.files.count("4/3.wav.kit-bak"));cancelKitSaveForSampleChange(1);run();assert(primary(4)==original&&samplePackID==oldKit);
+ for(unsigned n=0;n<10000&&!SD.files.count("kits/4/3.wav.kit-bak");++n)poll();
+ assert(SD.files.count("kits/4/3.wav.kit-bak"));cancelKitSaveForSampleChange(1);run();assert(primary(4)==original&&samplePackID==oldKit);
  // Recover a previous interrupted rename before replacing a missing primary.
- SD.files["4/8.wav.kit-bak"]=SD.files["4/8.wav"];SD.files.erase("4/8.wav");
+ SD.files["kits/4/8.wav.kit-bak"]=SD.files["kits/4/8.wav"];SD.files.erase("kits/4/8.wav");
  start(4);currentMode=&draw;run();assert(kitSaveFeedback()==2&&samplePackID==4&&primary(4).size()==8);
  for(const auto &file:SD.files)assert(file.first.find(".kit-tmp")==std::string::npos);
  puts("PASS: KIT saves during playback, one <=2048-byte operation per loop, monotonic progress, exact WAVs/live custom PCM, deferred EEPROM flags, read-back CRC, failure/cancel rollback and interrupted-rename recovery");

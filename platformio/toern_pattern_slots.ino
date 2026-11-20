@@ -8,8 +8,8 @@ struct SubpatternMetadata {
   bool has[maxPages+1]{};
   unsigned last=1;
 };
-static SubpatternMetadata subpatternMetadata[5],subpatternBuilding;
-static Note (*subpatternCache[5])[maxY+1] = {};
+static SubpatternMetadata subpatternMetadata[toern_pattern_slots::count],subpatternBuilding;
+static Note (*subpatternCache[toern_pattern_slots::count])[maxY+1] = {};
 static uint8_t subpatternDirtyMask=0,subpatternEmptyMask=0;
 static unsigned long subpatternErrorUntil=0,subpatternRetryAt=0,subpatternSuccessUntil=0;
 static bool subpatternSwitchArmed=false;
@@ -64,24 +64,49 @@ FLASHMEM static void serviceSubpatternIndex() {
     memset(subpatternFileMasks,0,sizeof(subpatternFileMasks));
     subpatternIndexBrowser=patternBrowserRevision;subpatternIndexStorage=patternStorageRevision;
     subpatternIndexBusy=true;subpatternIndexValid=false;++subpatternIndexPaintRevision;
-    subpatternIndexRoot=SD.open("/");
+    if(!SD.exists("patterns"))SD.mkdir("patterns");
+    subpatternIndexRoot=SD.open("patterns");
     if(!subpatternIndexRoot){subpatternIndexBusy=false;subpatternFailure();}
     return;
   }
   if(!subpatternIndexBusy)return;
   File entry=subpatternIndexRoot.openNextFile();
   if(!entry){subpatternIndexRoot.close();subpatternIndexBusy=false;subpatternIndexValid=true;++subpatternIndexPaintRevision;return;}
-  unsigned number;uint8_t slot;char canonical[32];
+  unsigned number;uint8_t slot;char canonical[40];
   snprintf(canonical,sizeof(canonical),"%s",entry.name());
+  if(canonical[0]=='/')memmove(canonical,canonical+1,strlen(canonical));
+  const bool isDir=entry.isDirectory();
+  entry.close();
+  if(isDir) {
+    // patterns/<n>/ — probe nested slot files in one bounded pass.
+    number=0;const char *p=canonical;
+    if(*p<'1'||*p>'9')return;
+    while(*p>='0'&&*p<='9'){number=number*10u+(*p++-'0');if(number>999)return;}
+    if(*p||number<1||number>999)return;
+    const uint8_t before=subpatternFileMasks[number];
+    for(slot=0;slot<toern_pattern_slots::count;++slot) {
+      char path[36],sidecar[40];
+      if(!toern_pattern_slots::path(path,sizeof(path),number,slot))continue;
+      if(SD.exists(path)){subpatternFileMasks[number]|=1u<<slot;continue;}
+      // Recovery generations still occupy the slot for overwrite/browser dots.
+      snprintf(sidecar,sizeof(sidecar),"%s.bak",path);
+      if(SD.exists(sidecar)){subpatternFileMasks[number]|=1u<<slot;continue;}
+      snprintf(sidecar,sizeof(sidecar),"%s.tmp",path);
+      if(SD.exists(sidecar))subpatternFileMasks[number]|=1u<<slot;
+    }
+    const unsigned selected=currentMode->pos[3]>1?currentMode->pos[3]-1:0;
+    if(before!=subpatternFileMasks[number]&&(number==selected||number==loadedPatternFile()))++subpatternIndexPaintRevision;
+    return;
+  }
+  // Flat leftover patterns/<n>.txt during migration.
   const size_t len=strlen(canonical);
   if(len>4&&(!strcmp(canonical+len-4,".tmp")||!strcmp(canonical+len-4,".bak")
              ||!strcmp(canonical+len-4,".TMP")||!strcmp(canonical+len-4,".BAK")))canonical[len-4]=0;
-  if(!entry.isDirectory()&&toern_pattern_slots::parse(canonical,number,slot)) {
+  if(toern_pattern_slots::parse(canonical,number,slot)) {
     const uint8_t before=subpatternFileMasks[number];subpatternFileMasks[number]|=1u<<slot;
     const unsigned selected=currentMode->pos[3]>1?currentMode->pos[3]-1:0;
     if(before!=subpatternFileMasks[number]&&(number==selected||number==loadedPatternFile()))++subpatternIndexPaintRevision;
   }
-  entry.close();
 }
 // Occupancy and file presence are separate: empty trailing files still exist
 // for loading/overwrite/deletion, but do not extend the displayed letter count.
@@ -99,7 +124,7 @@ FLASHMEM static bool subpatternRamHasNotes(const Note (*grid)[maxY+1]) {
 FLASHMEM static uint8_t subpatternContentMask(unsigned file) {
   if(file<1||file>999)return 0;
   uint8_t mask=subpatternContentRevision==patternStorageRevision?subpatternContentMasks[file]:0;
-  if(file==loadedPatternFile())for(uint8_t slot=0;slot<5;++slot)if(subpatternCache[slot]) {
+  if(file==loadedPatternFile())for(uint8_t slot=0;slot<toern_pattern_slots::count;++slot)if(subpatternCache[slot]) {
     if(subpatternRamHasNotes(subpatternCache[slot]))mask|=1u<<slot;
     else mask&=~(1u<<slot);
   }
@@ -122,7 +147,7 @@ FLASHMEM static bool serviceSubpatternContentCounts() {
   if(subpatternContentReading) {
     const auto result=subpatternContentReader.tick(SD);if(result==SubpatternIoResult::Running)return true;
     if(result!=SubpatternIoResult::Valid&&++subpatternContentCandidate<3) {
-      char base[24],path[32];toern_pattern_slots::path(base,sizeof(base),wanted,subpatternContentSlot);
+      char base[36],path[44];toern_pattern_slots::path(base,sizeof(base),wanted,subpatternContentSlot);
       snprintf(path,sizeof(path),"%s.%s",base,subpatternContentCandidate==1?"tmp":"bak");
       subpatternContentReader.begin(path,subpatternContentCandidate==1);return true;
     }
@@ -131,7 +156,7 @@ FLASHMEM static bool serviceSubpatternContentCounts() {
     else subpatternContentMasks[wanted]&=~bit;
     subpatternContentKnown[wanted]|=bit;subpatternContentReading=false;++subpatternIndexPaintRevision;return true;
   }
-  for(uint8_t slot=0;slot<5;++slot) {
+  for(uint8_t slot=0;slot<toern_pattern_slots::count;++slot) {
     const uint8_t bit=1u<<slot;if(subpatternContentKnown[wanted]&bit)continue;
     if(wanted==loadedPatternFile()&&subpatternCache[slot]) {
       if(subpatternRamHasNotes(subpatternCache[slot]))subpatternContentMasks[wanted]|=bit;
@@ -139,7 +164,10 @@ FLASHMEM static bool serviceSubpatternContentCounts() {
       subpatternContentKnown[wanted]|=bit;++subpatternIndexPaintRevision;return true;
     }
     if(!(savedSubpatternMask(wanted)&bit)){subpatternContentKnown[wanted]|=bit;continue;}
-    char path[24];toern_pattern_slots::path(path,sizeof(path),wanted,slot);
+    char path[36];
+    auto exists=[](const char *p){return SD.exists(p);};
+    if(!toern_pattern_slots::resolve(path,sizeof(path),wanted,slot,exists))
+      toern_pattern_slots::path(path,sizeof(path),wanted,slot);
     subpatternContentFile=wanted;subpatternContentSlot=slot;subpatternContentCandidate=0;
     subpatternContentReader.begin(path,false);subpatternContentReading=true;return true;
   }
@@ -189,7 +217,10 @@ FLASHMEM static void serviceSubpatternLoad() {
     for(;subpatternClearCell<end;++subpatternClearCell)
       subpatternGrid[subpatternClearCell/(maxY+1)][subpatternClearCell%(maxY+1)]={0,defaultVelocity,100,1,NOTE_MIDI_PITCH_NONE};
     if(subpatternClearCell==(maxlen+1)*(maxY+1)) {
-      char path[24];toern_pattern_slots::path(path,sizeof(path),subpatternFile,subpatternLoadingSlot);
+      char path[36];
+      auto exists=[](const char *p){return SD.exists(p);};
+      if(!toern_pattern_slots::resolve(path,sizeof(path),subpatternFile,subpatternLoadingSlot,exists))
+        toern_pattern_slots::path(path,sizeof(path),subpatternFile,subpatternLoadingSlot);
       subpatternReadJob.begin(path,false,subpatternGrid);subpatternLoadPhase=SubLoadRead;
     }
     return;
@@ -202,7 +233,7 @@ FLASHMEM static void serviceSubpatternLoad() {
     }
     subpatternSawInvalid|=result!=SubpatternIoResult::Missing;
     if(++subpatternCandidate<3) {
-      char base[24],path[32];toern_pattern_slots::path(base,sizeof(base),subpatternFile,subpatternLoadingSlot);
+      char base[36],path[44];toern_pattern_slots::path(base,sizeof(base),subpatternFile,subpatternLoadingSlot);
       snprintf(path,sizeof(path),"%s.%s",base,subpatternCandidate==1?"tmp":"bak");
       subpatternReadJob.begin(path,subpatternCandidate==1,subpatternGrid);return;
     }
@@ -229,7 +260,7 @@ FLASHMEM static void subpatternCaptureSettings(Device &settings,unsigned file) {
     for(unsigned page=0;page<maxPages;++page)settings.pageMutes[page][ch]=pageMutes[page][ch];}
 }
 FLASHMEM static void subpatternShowVisible(uint8_t slot) {
-  if(slot>=5||!subpatternCache[slot])return;
+  if(slot>=toern_pattern_slots::count||!subpatternCache[slot])return;
   unsigned page=subpatternSelectedPage?subpatternSelectedPage:std::max(GLOB.edit,1u);
   const uint16_t mask=subpatternMetadata[slot].mask;
   if(page>maxPages||!(mask&(1u<<(page-1)))) {
@@ -321,7 +352,7 @@ void subpatternNotePagesLoaded() {
   subpatternAvailable|=1u<<subpatternSlot;
 }
 
-// USB song import uses the resident A–E banks and the normal cooperative writer.
+// USB song import uses the resident A–H banks and the normal cooperative writer.
 // Called only after the complete RAM image has passed its framing/CRC checks.
 const char *subpatternTransferError() {
   if(!subpatternsEnabled)return "ERR SUBP_OFF";
@@ -330,7 +361,7 @@ const char *subpatternTransferError() {
   return nullptr;
 }
 bool beginTransferredSubpattern(uint8_t slot) {
-  if(slot>=5||subpatternTransferError()||isNowPlaying)return false;
+  if(slot>=toern_pattern_slots::count||subpatternTransferError()||isNowPlaying)return false;
   // Finish/abandon any writer before changing a bank that it might reference.
   if(!subpatternWriteJob.abandon(SD))return false;
   subpatternWritingSlot=255;subpatternOldSavePending=false;subpatternSaveNew=false;
@@ -359,7 +390,7 @@ void finishTransferredSubpattern() {
 }
 bool subpatternBrowsePageMask(uint16_t *mask) {
   const uint8_t slot=subpatternSelector?subpatternSelected:subpatternViewSlot;
-  if(!mask||!subpatternViewOn||slot>=5||!subpatternCache[slot])return false;
+  if(!mask||!subpatternViewOn||slot>=toern_pattern_slots::count||!subpatternCache[slot])return false;
   *mask=subpatternMetadata[slot].mask;return true;
 }
 bool subpatternPreviewVisible(){return subpatternViewOn&&subpatternCache[subpatternViewSlot];}
@@ -371,7 +402,12 @@ Note *subpatternViewedNote(unsigned ix,unsigned iy) {
 bool subpatternViewedShadowed(unsigned ix,unsigned iy) {
   if(!subpatternPreviewVisible())return false;
   const unsigned x=(subpatternViewPage-1)*maxX+ix;
-  return toern_grid_paint::canReplaceShadowed(subpatternCache[subpatternViewSlot],x,iy,0,MAX_STEPS,maxY);
+  const unsigned ch = subpatternCache[subpatternViewSlot][x][iy].channel;
+  unsigned slots = 1;
+  if (ch >= 1 && ch <= 8) {
+    slots = sampleTrigModeSlider((int)ch) != 0 ? (unsigned)SAMPLE_POLY : 1u;
+  }
+  return toern_grid_paint::canReplaceShadowed(subpatternCache[subpatternViewSlot],x,iy,0,MAX_STEPS,maxY,slots);
 }
 bool subpatternShowingOtherSlot(){return isNowPlaying&&subpatternPreviewVisible()&&subpatternViewSlot!=subpatternSlot;}
 
@@ -380,7 +416,7 @@ FLASHMEM static void stageSelectedSubpattern() {
   if(!subpatternsEnabled||fastRecordActive||isRecording||subpatternWriteJob.busy())return;
   if(!subpatternSelector&&!subpatternSwitchArmed)return;
   const uint8_t target=subpatternSwitchArmed?subpatternPendingSlot:subpatternSelected;
-  if(target>=5)return;
+  if(target>=toern_pattern_slots::count)return;
   if(subpatternLoadingSlot!=target&&!subpatternGridReady)subpatternStartLoad(target);
   if(subpatternLoadPhase!=SubLoadIdle){serviceSubpatternLoad();return;}
   if(!subpatternGridReady||subpatternGridSlot!=target)return;
@@ -431,13 +467,16 @@ FLASHMEM static void serviceSubpatterns() {
     return;
   }
   if(!isNowPlaying&&!fastRecordActive&&!isRecording&&subpatternDirtyMask&&(int32_t)(millis()-subpatternRetryAt)>=0) {
-    for(uint8_t slot=0;slot<5;++slot)if((subpatternDirtyMask&(1u<<slot))&&subpatternCache[slot]) {
+    for(uint8_t slot=0;slot<toern_pattern_slots::count;++slot)if((subpatternDirtyMask&(1u<<slot))&&subpatternCache[slot]) {
       // Explicit deletion must not be undone by a deferred empty-grid save.
       if(deletedSubpatternSlots&(1u<<slot)) {
         bool blank=true;for(unsigned x=1;x<maxlen&&blank;++x)for(unsigned y=1;y<=maxY;++y)if(subpatternCache[slot][x][y].channel){blank=false;break;}
         if(blank){subpatternDirtyMask&=~(1u<<slot);continue;}
       }
-      char path[24];toern_pattern_slots::path(path,sizeof(path),subpatternFile,slot);
+      if(!SD.exists("patterns"))SD.mkdir("patterns");
+      char folder[20],path[36];
+      if(toern_pattern_slots::familyDir(folder,sizeof(folder),subpatternFile)&&!SD.exists(folder))SD.mkdir(folder);
+      toern_pattern_slots::path(path,sizeof(path),subpatternFile,slot);
       Device settings;subpatternCaptureSettings(settings,subpatternFile);
       subpatternWriteJob.begin(path,subpatternCache[slot],settings,slot,0,FILE_WRITE_BEGIN);
       subpatternWritingSlot=slot;subpatternOldSavePending=true;return;
@@ -557,7 +596,7 @@ static Note (*patternFamilyBlank)[maxY+1]=nullptr;
 
 static bool patternFamilyBusy(){return patternFamilyPhase!=FamilyIdle;}
 FLASHMEM static void patternFamilyPath(char *out,size_t size,unsigned file,uint8_t slot,uint8_t part=0) {
-  char base[24];toern_pattern_slots::path(base,sizeof(base),file,slot);
+  char base[36];toern_pattern_slots::path(base,sizeof(base),file,slot);
   snprintf(out,size,part==0?"%s":part==1?"%s.tmp":"%s.bak",base);
 }
 FLASHMEM static void patternFamilyFinish(bool ok) {
@@ -590,8 +629,13 @@ FLASHMEM static void beginPatternFamilySave(unsigned target,bool overwrite) {
   patternFamilyMoved=patternFamilyInstalled=0;patternFamilySlot=0;patternFamilyPart=0;patternFamilyFailed=false;
   patternFamilySingle=target==patternFamilySource;subpatternCancelPreview();
   patternFamilySaveVisual=true;storageTransferBegin(false,true);
+  if(!SD.exists("patterns"))SD.mkdir("patterns");
+  {
+    char folder[20];
+    if(toern_pattern_slots::familyDir(folder,sizeof(folder),target)&&!SD.exists(folder))SD.mkdir(folder);
+  }
   if(patternFamilySingle) {
-    char path[24];toern_pattern_slots::path(path,sizeof(path),target,subpatternSlot);
+    char path[36];toern_pattern_slots::path(path,sizeof(path),target,subpatternSlot);
     patternFamilySlot=subpatternSlot;
     patternFamilyWriter.begin(path,note,patternFamilySettings,subpatternSlot,0,FILE_WRITE_BEGIN);
     patternFamilyPhase=FamilyStageRam;
@@ -628,7 +672,7 @@ FLASHMEM static void servicePatternFamilyJob() {
       if(currentMode!=&loadSaveTrack){patternFamilyFinish(false);return;}
       patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot,patternFamilyPart);
       if(SD.exists(path)){const unsigned target=patternFamilyTarget;patternFamilyPhase=FamilyIdle;openPatternConfirmation(target,false);return;}
-      if(++patternFamilyPart==3){patternFamilyPart=0;if(++patternFamilySlot==5){const unsigned target=patternFamilyTarget;patternFamilyPhase=FamilyIdle;beginPatternFamilySave(target,false);}}return;
+      if(++patternFamilyPart==3){patternFamilyPart=0;if(++patternFamilySlot==toern_pattern_slots::count){const unsigned target=patternFamilyTarget;patternFamilyPhase=FamilyIdle;beginPatternFamilySave(target,false);}}return;
     case FamilySource:
       if(subpatternCache[patternFamilySlot]){patternFamilySourceMask|=1u<<patternFamilySlot;patternFamilyPart=0;++patternFamilySlot;}
       else {
@@ -636,7 +680,7 @@ FLASHMEM static void servicePatternFamilyJob() {
         if(SD.exists(path)){patternFamilySourceMask|=1u<<patternFamilySlot;patternFamilyPart=0;++patternFamilySlot;}
         else if(++patternFamilyPart==3){patternFamilyPart=0;++patternFamilySlot;}
       }
-      if(patternFamilySlot==5){patternFamilySlot=0;patternFamilyPart=0;patternFamilyPhase=FamilyTargetCheck;}return;
+      if(patternFamilySlot==toern_pattern_slots::count){patternFamilySlot=0;patternFamilyPart=0;patternFamilyPhase=FamilyTargetCheck;}return;
     case FamilyTargetCheck:
       patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot,patternFamilyPart);
       if(SD.exists(path)) {
@@ -644,13 +688,13 @@ FLASHMEM static void servicePatternFamilyJob() {
         patternFamilyCandidate=0;patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot);
         patternFamilyReader.begin(path,false);patternFamilyPhase=FamilyRecoverRead;return;
       }
-      if(++patternFamilyPart==3){patternFamilyPart=0;if(++patternFamilySlot==5){patternFamilySlot=0;patternFamilyPhase=FamilyStage;}}
+      if(++patternFamilyPart==3){patternFamilyPart=0;if(++patternFamilySlot==toern_pattern_slots::count){patternFamilySlot=0;patternFamilyPhase=FamilyStage;}}
       return;
     case FamilyRecoverRead: {
       const auto r=patternFamilyReader.tick(SD);if(r==SubpatternIoResult::Running)return;
       if(r==SubpatternIoResult::Valid){
         if(patternFamilyCandidate==0){patternFamilyOldMask|=1u<<patternFamilySlot;
-          patternFamilyPart=0;if(++patternFamilySlot==5){patternFamilySlot=0;patternFamilyPhase=FamilyStage;}else patternFamilyPhase=FamilyTargetCheck;
+          patternFamilyPart=0;if(++patternFamilySlot==toern_pattern_slots::count){patternFamilySlot=0;patternFamilyPhase=FamilyStage;}else patternFamilyPhase=FamilyTargetCheck;
         }else patternFamilyPhase=FamilyRecoverExists;
         return;
       }
@@ -669,9 +713,9 @@ FLASHMEM static void servicePatternFamilyJob() {
       patternFamilyPath(other,sizeof(other),patternFamilyTarget,patternFamilySlot);
       if(!SD.rename(path,other)){patternFamilyFinish(false);return;}
       patternFamilyOldMask|=1u<<patternFamilySlot;patternFamilyPart=0;
-      if(++patternFamilySlot==5){patternFamilySlot=0;patternFamilyPhase=FamilyStage;}else patternFamilyPhase=FamilyTargetCheck;return;
+      if(++patternFamilySlot==toern_pattern_slots::count){patternFamilySlot=0;patternFamilyPhase=FamilyStage;}else patternFamilyPhase=FamilyTargetCheck;return;
     case FamilyStage:
-      if(patternFamilySlot==5){patternFamilySlot=0;patternFamilyPhase=FamilyInstall;return;}
+      if(patternFamilySlot==toern_pattern_slots::count){patternFamilySlot=0;patternFamilyPhase=FamilyInstall;return;}
       if(!(patternFamilySourceMask&(1u<<patternFamilySlot))){++patternFamilySlot;return;}
       patternFamilyStaged|=1u<<patternFamilySlot;
       if(subpatternCache[patternFamilySlot]) {
@@ -727,7 +771,7 @@ FLASHMEM static void servicePatternFamilyJob() {
       if(r!=SubpatternIoResult::Valid){patternFamilyAbort();return;}++patternFamilySlot;patternFamilyPhase=FamilyStage;return;
     }
     case FamilyInstall:
-      if(patternFamilySlot==5){patternFamilySlot=0;patternFamilyPart=0;patternFamilyPhase=FamilyCleanupCheck;return;}
+      if(patternFamilySlot==toern_pattern_slots::count){patternFamilySlot=0;patternFamilyPart=0;patternFamilyPhase=FamilyCleanupCheck;return;}
       if(patternFamilyOldMask&(1u<<patternFamilySlot)){patternFamilyPhase=FamilyBakCheck;return;}
       if(patternFamilySourceMask&(1u<<patternFamilySlot)){patternFamilyPhase=FamilyMoveNew;return;}
       ++patternFamilySlot;return;
@@ -749,7 +793,7 @@ FLASHMEM static void servicePatternFamilyJob() {
       if(!SD.rename(path,other)){patternFamilyAbort();return;}
       patternFamilyInstalled|=1u<<patternFamilySlot;++patternFamilySlot;patternFamilyPhase=FamilyInstall;return;
     case FamilyCleanupCheck:
-      if(patternFamilySlot==5){
+      if(patternFamilySlot==toern_pattern_slots::count){
         subpatternFile=SMP.file=patternFamilyTarget;subpatternDirtyMask=0;deletedSubpatternSlots=0;subpatternEmptyMask=0;subpatternAvailable=patternFamilySourceMask;
         if(currentMode!=&draw)switchMode(&draw);patternFamilyFinish(true);return;
       }
@@ -762,7 +806,7 @@ FLASHMEM static void servicePatternFamilyJob() {
       if(!SD.remove(path)){patternFamilyFinish(false);return;}
       if(++patternFamilyPart==3){patternFamilyPart=0;++patternFamilySlot;}patternFamilyPhase=FamilyCleanupCheck;return;
     case FamilyRollbackRemove:
-      if(patternFamilySlot==5){patternFamilyFinish(false);return;}
+      if(patternFamilySlot==toern_pattern_slots::count){patternFamilyFinish(false);return;}
       if(patternFamilyPart==0&&(patternFamilyInstalled&(1u<<patternFamilySlot))){patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot);SD.remove(path);patternFamilyPart=1;return;}
       if(patternFamilyPart<2&&(patternFamilyStaged&(1u<<patternFamilySlot))){patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot,1);SD.remove(path);patternFamilyPart=2;return;}
       patternFamilyPhase=FamilyRollbackRestore;return;
@@ -773,20 +817,20 @@ FLASHMEM static void servicePatternFamilyJob() {
       }
       ++patternFamilySlot;patternFamilyPart=0;patternFamilyPhase=FamilyRollbackRemove;return;
     case FamilyDeleteCheck: {
-      if(patternFamilySlot==5&&patternFamilyFailed){patternFamilyFinish(false);return;}
-      if(patternFamilySlot==6){
+      if(patternFamilySlot==toern_pattern_slots::count&&patternFamilyFailed){patternFamilyFinish(false);return;}
+      if(patternFamilySlot==toern_pattern_slots::count+1){
         if(patternFamilyFailed){patternFamilyFinish(false);return;}
         if(patternFamilyTarget!=loadedPatternFile()){patternFamilyFinish(!patternFamilyFailed);return;}
         patternFamilyBlank=subpatternFreeBank();if(!patternFamilyBlank){patternFamilyFinish(false);return;}
         patternFamilyClearCell=0;patternFamilyPhase=FamilyDeleteClear;return;
       }
-      const uint8_t slot=patternFamilySlot%5;
+      const uint8_t slot=patternFamilySlot%toern_pattern_slots::count;
       patternFamilyPath(path,sizeof(path),patternFamilyTarget,slot,patternFamilyPart%3);
       if(SD.exists(path)){patternFamilyPhase=FamilyDeleteRemove;return;}
       if(++patternFamilyPart==4){patternFamilyPart=1;++patternFamilySlot;}return;
     }
     case FamilyDeleteRemove:
-      patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot%5,patternFamilyPart%3);
+      patternFamilyPath(path,sizeof(path),patternFamilyTarget,patternFamilySlot%toern_pattern_slots::count,patternFamilyPart%3);
       if(!SD.remove(path))patternFamilyFailed=true;
       if(++patternFamilyPart==4){patternFamilyPart=1;++patternFamilySlot;}patternFamilyPhase=FamilyDeleteCheck;return;
     case FamilyDeleteClear: {
@@ -795,7 +839,7 @@ FLASHMEM static void servicePatternFamilyJob() {
         patternFamilyBlank[patternFamilyClearCell/(maxY+1)][patternFamilyClearCell%(maxY+1)]={0,defaultVelocity,100,1,NOTE_MIDI_PITCH_NONE};
       if(patternFamilyClearCell==(maxlen+1)*(maxY+1)) {
         {toern_audio::StateGuard guard;note=patternFamilyBlank;}
-        updateLastPage();subpatternNotePagesLoaded();deletedSubpatternSlots=0x1F;patternFamilyFinish(!patternFamilyFailed);
+        updateLastPage();subpatternNotePagesLoaded();deletedSubpatternSlots=(1u<<toern_pattern_slots::count)-1u;patternFamilyFinish(!patternFamilyFailed);
       }return;
     }
     default:return;

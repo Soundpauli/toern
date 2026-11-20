@@ -8,7 +8,7 @@
 //   LIST [path]
 //   RM <path>
 //   MKDIR <path>
-//   MV <from> <to>   (also REN)
+//   MV <from> <to>   (also REN; absolute paths may contain spaces)
 //   PUT <path> <size> <crc32>
 //     → READY
 //     ← <8192-byte blocks>  (host waits for ACK after each block — USB flow control)
@@ -23,7 +23,7 @@
 //   GETPAT / PUTPAT <size> <crc32>
 //     Same framing as GET / PUT, but the bytes are the current pattern in RAM
 //     (notes, BPM, MIDI pitches). Nothing is written to the SD card.
-//   PUTSUB <A-E> <size> <crc32>
+//   PUTSUB <A-H> <size> <crc32>
 //     Same image/framing as PUTPAT; select and replace a resident subpattern.
 //     Requires SETT SUBP ON. The normal stopped-state writer saves the bank.
 //
@@ -216,7 +216,7 @@ static const char *sdSerFsPath(const char *normalized) {
 }
 
 static void sdSerCmdPing() {
-  sdSerReplyf("OK TOERN SD %s PUT_SPACES PUT_TRACE", VERSION);
+  sdSerReplyf("OK TOERN SD %s PUT_SPACES MV_SPACES PUT_TRACE", VERSION);
 }
 
 static void sdSerCmdList(const char *pathArg) {
@@ -261,9 +261,9 @@ static void sdSerCmdList(const char *pathArg) {
 }
 
 static void sdSerCmdMv(char *args) {
-  char *fromTok = strtok(args, " \t");
-  char *toTok = strtok(NULL, " \t");
-  if (!fromTok || !toTok) {
+  char *fromTok = nullptr;
+  char *toTok = nullptr;
+  if (!toern_sd::parseMvArgs(args, fromTok, toTok)) {
     sdSerReply("ERR USAGE");
     return;
   }
@@ -818,7 +818,7 @@ static void sdSerCmdPutPat(char *args, int slot) {
 }
 
 static void sdSerCmdPutSub(char *args) {
-  if (!args || args[0] < 'A' || args[0] > 'E' || (args[1] != ' ' && args[1] != '\t')) {
+  if (!args || args[0] < 'A' || args[0] > 'H' || (args[1] != ' ' && args[1] != '\t')) {
     sdSerReply("ERR USAGE");
     return;
   }
@@ -901,7 +901,7 @@ void sdSerialServerSetActive(bool on) {
     sdSerDrainRx();
     sdSerExpireClient();
     sdSerActive = true;
-    sdSerReplyf("OK TOERN SD %s PUT_SPACES PUT_TRACE", VERSION);
+    sdSerReplyf("OK TOERN SD %s PUT_SPACES MV_SPACES PUT_TRACE", VERSION);
   } else {
     sdSerActive = false;
     sdSerDrainRx();
@@ -959,7 +959,7 @@ static void sdSerHandleOffPage(char *line) {
 
   if (strcasecmp(cmd, "PING") == 0) {
     sdSerNoteHostPresent();
-    sdSerReplyf("OK TOERN SD %s PUT_SPACES PUT_TRACE", VERSION);
+    sdSerReplyf("OK TOERN SD %s PUT_SPACES MV_SPACES PUT_TRACE", VERSION);
     return;
   }
 

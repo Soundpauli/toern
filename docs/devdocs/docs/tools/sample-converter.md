@@ -20,7 +20,7 @@ description: Browser tool that converts audio to 44.1 kHz mono WAV and ships def
 ## Use with the device
 
 1. Convert your samples (or grab the default SD ZIP).
-2. Extract converted samples into `samples/` or another browser folder. For a fresh card, extract the default SD ZIP directly into the card root. Numbered KIT folders use `1.wav` … `8.wav`.
+2. Extract converted samples into `samples/` or another browser folder. For a fresh card, extract the default SD ZIP directly into the card root. Kits live under `kits/<n>/` with `1.wav` … `8.wav`; patterns under `patterns/<n>/<n>.txt`.
 3. Or push files while the card stays in the unit via the [SD tool](./sd-tool).
 
 ## Code map

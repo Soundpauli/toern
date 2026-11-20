@@ -614,14 +614,21 @@ assert.deepEqual(bypassDevice.exportPatternCells(),bypassNotes);
 console.log('PASS: RSET > RVRB bypasses reverb/crush on every voice without resetting the patch or pattern.');
 
 
-// Paint only replaces a foreign note whose mono voice already has a higher hit.
+// Paint only replaces a foreign note already covered by enough higher hits (1 MONO / 3 MULT).
 stored.clear();
 const paintDevice=createDevice(matrix,{},[]);
 paintDevice.start();now+=6000;frame(now);now+=6000;frame(now);
 function paintFixture(blocked=1,upper=blocked,probability=100,condition=1) {
  const cells=Array.from({length:256*16},()=>({channel:0}));
  cells[2]={channel:blocked,velocity:23,probability:60,condition:18,midiPitch:72};
- if(upper)cells[8]={channel:upper,velocity:93,probability,condition,midiPitch:84};
+ if(upper){
+  cells[8]={channel:upper,velocity:93,probability,condition,midiPitch:84};
+  // Sample MULT keeps three audible hits; add two more covers so row 3 is shadowed.
+  if(blocked>=1&&blocked<=8&&upper===blocked&&probability>=100&&(condition===1||condition===22)){
+   cells[10]={channel:upper,velocity:94,probability,condition,midiPitch:86};
+   cells[12]={channel:upper,velocity:95,probability,condition,midiPitch:88};
+  }
+ }
  paintDevice.importPatternCells(cells,120);
 }
 for(const mode of ['draw','single'])for(const gesture of ['click','drag','encoder']){
@@ -648,7 +655,10 @@ const rightPaint=createDevice(matrix,{},[]);
 rightPaint.start();now+=6000;frame(now);now+=6000;frame(now);
 const rightCells=Array.from({length:256*16},()=>({channel:0}));
 rightCells[2]={channel:1,velocity:100,probability:100,condition:1,midiPitch:255};
-rightCells[8]={...rightCells[2]};rightPaint.importPatternCells(rightCells,120);
+rightCells[8]={...rightCells[2]};
+rightCells[10]={...rightCells[2]};
+rightCells[12]={...rightCells[2]};
+rightPaint.importPatternCells(rightCells,120);
 rightPaint.selectVoice(2);rightPaint.jump('single');rightPaint.moveCursor(1,3);rightPaint.press(3);
 assert.equal(rightPaint.exportPatternCells()[2].channel,2);
 assert.equal(rightPaint.exportPatternCells()[8].channel,1);

@@ -8,6 +8,7 @@
 #include <errno.h>
 #include "toern_touch_input.h"
 #include "src/toern_pattern_slots.h"
+#include "src/toern_kit_paths.h"
 #include "src/toern_kit_browser.h"
 
 #define VERSION "v3.03d"
@@ -1067,10 +1068,16 @@ volatile uint8_t fillActiveMidiPitch = NOTE_MIDI_PITCH_NONE;
 unsigned int lastPage = 1;
 int editpage = 1;
 // Six RAM2 banks: five resident letters and one unpublished I/O bank.
-DMAMEM Note noteBanks[6][maxlen + 1][maxY + 1];
+DMAMEM Note noteBanks[9][maxlen + 1][maxY + 1];
 Note (*note)[maxY + 1] = noteBanks[0];
+int sampleTrigModeSlider(int ch);
 static bool canPaintOverShadowed(unsigned int step, unsigned int row, unsigned int brush) {
-  return toern_grid_paint::canReplaceShadowed(note, step, row, brush, MAX_STEPS, maxY);
+  const unsigned ch = note[step][row].channel;
+  unsigned slots = 1;
+  if (ch >= 1 && ch <= 8) {
+    slots = sampleTrigModeSlider((int)ch) != 0 ? (unsigned)SAMPLE_POLY : 1u;
+  }
+  return toern_grid_paint::canReplaceShadowed(note, step, row, brush, MAX_STEPS, maxY, slots);
 }
 EXTMEM Note tmp[maxlen + 1][maxY + 1] = {};
 EXTMEM Note original[maxlen + 1][maxY + 1] = {};
@@ -1187,7 +1194,7 @@ static bool subpatternSelector = false;
 static bool subpatternQuietSave = false, subpatternSaveNew = false;
 static bool subpatternSavingPrevious = false, subpatternOldSavePending = false;
 static uint8_t subpatternPreviousSlot = 0;
-static Note (*subpatternGrid)[maxY + 1] = noteBanks[5];
+static Note (*subpatternGrid)[maxY + 1] = noteBanks[8];
 static const Note (*subpatternOutgoingGrid)[maxY + 1] = nullptr;
 static uint32_t subpatternAvailable = 0;
 static volatile bool subpatternReady = false, subpatternBoundary = false, subpatternApplied = false;
@@ -11345,7 +11352,10 @@ FLASHMEM void showSamplePack() {
   const uint32_t now=millis();
   const bool selectionChanged=browser.select(SMP.pack,now);
   const bool availabilityChanged=browser.tick(now,[](unsigned pack,unsigned voice){
-    char path[24];snprintf(path,sizeof(path),"%u/%u.wav",pack,voice);return SD.exists(path);
+    char path[32];
+    snprintf(path,sizeof(path),"kits/%u/%u.wav",pack,voice);
+    if(SD.exists(path))return true;
+    snprintf(path,sizeof(path),"%u/%u.wav",pack,voice);return SD.exists(path);
   });
   const bool wavExists=browser.available();
   // SMP.pack follows browsing; samplePackID follows the last loaded/saved kit.

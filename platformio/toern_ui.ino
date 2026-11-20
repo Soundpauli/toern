@@ -312,6 +312,23 @@ void drawPlayButton() {
   }
 }
 
+// Ensure patterns/ + kits/ exist. Full root→folder moves run later with IRQs
+// on — drawNoSD sits inside AudioNoInterrupts() and must stay tiny.
+FLASHMEM static void migrateSdLibraryFolders() {
+  if (!SD.exists("patterns")) SD.mkdir("patterns");
+  if (!SD.exists("kits")) SD.mkdir("kits");
+  if (SD.exists("autosaved.txt") && !SD.exists("patterns/autosaved.txt")) {
+    SD.rename("autosaved.txt", "patterns/autosaved.txt");
+  }
+  for (const char *suffix : {".tmp", ".bak"}) {
+    char from[24], to[36];
+    snprintf(from, sizeof(from), "autosaved.txt%s", suffix);
+    snprintf(to, sizeof(to), "patterns/autosaved.txt%s", suffix);
+    if (SD.exists(from) && !SD.exists(to)) SD.rename(from, to);
+  }
+}
+
+
 void drawNoSD() {
   playSdWav1.stop();
   if (drawNoSD_hasRun) return;  // Prevent running again
@@ -334,6 +351,8 @@ void drawNoSD() {
     extern void sampleBrowserInvalidate();
     sampleBrowserInvalidate();
   }
+
+  migrateSdLibraryFolders();
 
   drawNoSD_hasRun = true;  // Mark it as run
 }

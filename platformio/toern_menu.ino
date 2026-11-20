@@ -5302,38 +5302,46 @@ FLASHMEM void switchMenu(int menuPosition){
           sampleBrowserInvalidate();
           showSaveSuccessAnimation();
         } else if (resetMenuOption == 3) {
-          // FILE: Wipe numbered patterns and A-E slots; keep autosaved.txt.
+          // FILE: Wipe numbered patterns and A-H slots; keep patterns/autosaved.txt.
           resetFileSubpattern();
           FastLEDclear();
           drawText("WIPE", 2, 10, UI_ORANGE);
           drawText("PATT", 2, 3, UI_ORANGE);
           FastLEDshow();
           
-          char filename[24];
+          char filename[32];
           int deletedCount = 0;
           sdIoBeginAudioSafe();
           for (int i = 1; i <= 999; i++) {
-            sprintf(filename, "%d.txt", i);
-            if (SD.exists(filename)) {
-              SD.remove(filename);
-              deletedCount++;
-            }
-            sprintf(filename, "%d.txt.tmp", i); SD.remove(filename);
-            sprintf(filename, "%d.txt.bak", i); SD.remove(filename);
             for (uint8_t slot = 0; slot < toern_pattern_slots::count; ++slot) {
-              char base[24], sidecar[32];
+              char base[36], sidecar[44], flat[28], legacy[24];
               toern_pattern_slots::path(base, sizeof(base), i, slot);
-              SD.remove(base);
+              if (SD.exists(base)) { SD.remove(base); deletedCount++; }
               snprintf(sidecar, sizeof(sidecar), "%s.tmp", base); SD.remove(sidecar);
               snprintf(sidecar, sizeof(sidecar), "%s.bak", base); SD.remove(sidecar);
+              if (toern_pattern_slots::flatPath(flat, sizeof(flat), i, slot)) {
+                SD.remove(flat);
+                snprintf(sidecar, sizeof(sidecar), "%s.tmp", flat); SD.remove(sidecar);
+                snprintf(sidecar, sizeof(sidecar), "%s.bak", flat); SD.remove(sidecar);
+              }
+              if (toern_pattern_slots::legacyPath(legacy, sizeof(legacy), i, slot)) {
+                SD.remove(legacy);
+                snprintf(sidecar, sizeof(sidecar), "%s.tmp", legacy); SD.remove(sidecar);
+                snprintf(sidecar, sizeof(sidecar), "%s.bak", legacy); SD.remove(sidecar);
+              }
               sdIoYield();
             }
+            {
+              char folder[20];
+              if (toern_pattern_slots::familyDir(folder, sizeof(folder), (unsigned)i)) SD.rmdir(folder);
+            }
+            (void)filename;
           }
           sdIoEndAudioSafe();
           
           showSaveSuccessAnimation();
         } else if (resetMenuOption == 4) {
-          // PACK: Remove all samplepack directories except 1/ (used by FULL reset)
+          // PACK: Remove all kit folders except kits/1 (and legacy 1/)
           FastLEDclear();
           drawText("WIPE", 2, 10, UI_ORANGE);
           drawText("KIT", 2, 3, UI_ORANGE);
@@ -5342,18 +5350,22 @@ FLASHMEM void switchMenu(int menuPosition){
           char dirname[16];
           char filepath[32];
           for (int pack = 0; pack <= 999; pack++) {
-            if (pack == 1) continue;  // Keep samplepack 1 (used by FULL reset)
+            if (pack == 1) continue;  // Keep kit 1 (used by FULL reset)
             
+            snprintf(dirname, sizeof(dirname), "kits/%d", pack);
+            if (SD.exists(dirname)) {
+              for (int sample = 1; sample <= 8; sample++) {
+                snprintf(filepath, sizeof(filepath), "kits/%d/%d.wav", pack, sample);
+                if (SD.exists(filepath)) SD.remove(filepath);
+              }
+              SD.rmdir(dirname);
+            }
             sprintf(dirname, "%d", pack);
             if (SD.exists(dirname)) {
-              // Delete all .wav files in the directory first
               for (int sample = 1; sample <= 8; sample++) {
                 sprintf(filepath, "%d/%d.wav", pack, sample);
-                if (SD.exists(filepath)) {
-                  SD.remove(filepath);
-                }
+                if (SD.exists(filepath)) SD.remove(filepath);
               }
-              // Try to remove the directory (only works if empty)
               SD.rmdir(dirname);
             }
           }

@@ -121,6 +121,18 @@ int main(){
  assert(!sdSerNormalizePath("/ok/../escape",out,sizeof(out)));
  assert(!sdSerNormalizePath("/bad\nPING",out,sizeof(out)));
  assert(sdSerNormalizePath("/",out,sizeof(out))&&std::string(out)=="/");
+ // MV keeps spaces in folder names; strtok used to truncate at the first space.
+ char mv[]="/samples/Moog Loops _ Hits /samples/Moog";
+ char *from=nullptr,*to=nullptr;
+ assert(toern_sd::parseMvArgs(mv,from,to));
+ assert(std::string(from)=="/samples/Moog Loops _ Hits");
+ assert(std::string(to)=="/samples/Moog");
+ char plain[]="/a/b /c/d";
+ assert(toern_sd::parseMvArgs(plain,from,to)&&std::string(from)=="/a/b"&&std::string(to)=="/c/d");
+ char bad[]="/samples/Moog Loops";
+ assert(!toern_sd::parseMvArgs(bad,from,to));
+ char root[]="/samples/x /";
+ assert(!toern_sd::parseMvArgs(root,from,to));
 }
 '''.replace('FUNCTIONS','\n'.join(function(n) for n in ['sdSerReadExact','sdSerCrc32Update','sdSerNormalizePath','sdSerCmdPut']))
 harness = harness.replace('CHUNK_VALUE', re.search(r'SD_SER_CHUNK = (\d+);', source).group(1))

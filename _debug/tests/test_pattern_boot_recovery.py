@@ -42,7 +42,7 @@ Device SMP;
 struct Note {uint8_t channel,velocity,probability,condition,midiPitch;}note[maxlen+1][maxY+1];
 constexpr uint8_t NOTE_MIDI_PITCH_NONE=255;
 const uint8_t PITCH_EXTENSION_HEADER[8]={'T','P','I','T',1,16,0,0};
-const char *AUTOSAVE_PATH="autosaved.txt";
+const char *AUTOSAVE_PATH="patterns/autosaved.txt";
 std::map<std::string,std::vector<uint8_t>> files;
 std::vector<std::string> opens;
 struct File {
@@ -78,8 +78,12 @@ struct CRGB{};
 void drawText(const char*,int,int,CRGB){}
 void drawText(const char*,int,int,int){}
 void drawNoSD(){}void stopSdPreviewIfPlaying(){}void sdIoYield(){}
+void storageTransferBegin(bool,bool){}void storageTransferProgress(unsigned){}
+void storageTransferFinish(bool,bool){}void storageTransferDismiss(){}bool storageTransferIs(bool,bool){return false;}
 void sdIoBeginAudioSafe(){}void sdIoEndAudioSafe(){}
 void FastLEDclear(){}void FastLEDshow(){}
+void stopAutogen(){}
+void syncVoiceLoadedPathsFromStored(){}
 void clearPatternNotes(){++cleared;memset(note,0,sizeof(note));}
 void unmuteAllChannels(){}void applyMutesAfterPMODSwitch(){}
 void showPatternResult(bool ok){if(!ok)++failures;}

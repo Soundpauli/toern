@@ -86,8 +86,8 @@
             <h2 data-hb-copy="sample-packs.023">How kits live on the card</h2>
             <p data-hb-copy="sample-packs.024">Each kit number maps to a numbered folder on the microSD card. The starter layout from <a href="sd-card.html">SD card chapter</a> includes:</p>
             <ul>
-              <li data-hb-copy="sample-packs.025"><code>0/</code>, <code>1/</code> … <code>999/</code> — one folder per kit number. Each folder holds the WAV files for sample voices 1 through 8 plus optional extras.</li>
-              <li data-hb-copy="sample-packs.026"><code>1.txt</code>, <code>2.txt</code>, … in the card root — binary <a href="files.html#sidecar">pattern files with their settings</a>.</li>
+              <li data-hb-copy="sample-packs.025"><code>kits/0/</code>, <code>kits/1/</code> … <code>kits/999/</code> — one folder per kit number. Each folder holds <code>1.wav</code> … <code>8.wav</code> for sample voices 1–8.</li>
+              <li data-hb-copy="sample-packs.026"><code>patterns/N/N.txt</code> (and <code>N-B.txt</code> … <code>N-H.txt</code>) — binary <a href="files.html#sidecar">pattern files with their settings</a>; autosave is <code>patterns/autosaved.txt</code>.</li>
               <li><code>scheme.txt</code> — colour palette state, written by the <a href="https://toern.io/tools/colorsheme/" rel="noopener" target="_blank">colour-scheme web tool</a>.</li>
             </ul>
             <p data-hb-copy="sample-packs.028">On boot the firmware indexes the card and your kits show up in KIT. If the list looks stale after swapping the card, refreshing its contents offline, or transferring via the <a href="sd-card.html#sd-tool">SD tool</a> (card stays in the unit), run <a href="menus.html#rset">ETC → RSET → SD</a>.</p>

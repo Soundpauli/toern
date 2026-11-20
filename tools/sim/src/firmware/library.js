@@ -37,7 +37,7 @@ export function sampleWavs() {
 }
 
 export function patternUrl(slot) {
-  const name = slot === 0 ? "autosaved.txt" : `${slot}.txt`;
+  const name = slot === 0 ? "patterns/autosaved.txt" : `patterns/${slot}/${slot}.txt`;
   return files.find((file) => file.rel === name)?.url || null;
 }
 

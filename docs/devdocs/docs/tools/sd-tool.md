@@ -22,6 +22,8 @@ Features: browse, upload, download, rename, delete; multi-file / folder drops; Z
 
 See also firmware notes: [SD & storage](../subsystems/sd-storage).
 
+Canonical pattern paths are nested: `patterns/<n>/<n>.txt` (+ `N-B.txt` … `N-H.txt`); kits are `kits/<n>/<voice>.wav`. Autosave stays at `patterns/autosaved.txt`. Firmware `MV` / `LIST` / `MKDIR` / `RM` require absolute paths (`/patterns/…`); the Python CLI normalizes a leading slash.
+
 ## Python CLI / local web
 
 ```bash
@@ -46,7 +48,7 @@ Requires a USB type that includes **Serial**.
 Firmware side: `toern_sd_serial.ino`, polled from `loop()` only while the host serial port is open.
 
 The simulator also uses `GETPAT` / `PUTPAT <size> <crc32>` for current-pattern
-RAM exchange. `PUTSUB <A-E> <size> <crc32>` accepts the same 20,494-byte notes,
+RAM exchange. `PUTSUB <A-H> <size> <crc32>` accepts the same 20,494-byte notes,
 BPM and pitch image into a named resident subpattern of the loaded family.
 It requires `SETT → SUBP` and a valid family, stops playback, validates the
 complete image before changing banks, rebuilds page metadata, and marks the

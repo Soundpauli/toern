@@ -62,7 +62,7 @@
               <tbody>
                 <tr><td>Player</td><td><span class="ap-code">sound1–8</span> (<span class="ap-code">AudioPlayArrayResmp</span>)</td><td><span class="ap-code">setAmplitude(vel/127 × neo-slider)</span> 0–1. Velocity is also sent into the sampler note event.</td></tr>
                 <tr><td>Envelope</td><td><span class="ap-code">envelope1–8</span></td><td>ADSR from PARAM sliders (0–32). Mute / note-off calls <span class="ap-code">noteOff()</span>.</td></tr>
-                <tr><td>Bitcrush</td><td><span class="ap-code">bitcrusher1–8</span></td><td>Slider 0 = bypass (16-bit @ sample rate). Slider 32 = 80% of old max ≈ <strong>4-bit / ~9.6 kHz</strong> (not 1-bit / 1 kHz).</td></tr>
+                <tr><td>Bitcrush</td><td><span class="ap-code">bitcrusher1–8</span></td><td>Slider 0 = bypass (16-bit @ sample rate). Slider 32 = full crush ≈ <strong>1-bit / ~1 kHz</strong>.</td></tr>
                 <tr><td>Channel amp</td><td><span class="ap-code">amp1–8</span></td><td><span class="ap-code">map(channelVol, 0..16, 0..1)</span>. At BITC &gt; 0 the amp is ducked toward 0.6 as crush rises (<span class="ap-code">crushCompGain</span>).</td></tr>
                 <tr><td>Filter</td><td><span class="ap-code">filter1–8</span> SVF</td><td>HCUT=32 / LCUT=0: true dry bypass. HCUT 0–31: LP path, freq 281 Hz–9.7 kHz. LCUT &gt; 0: switch mixer to HP, freq 40 Hz–2.5 kHz. RES 0.7–5.0.</td></tr>
                 <tr><td>Filter mixer</td><td><span class="ap-code">filtermixerN</span></td><td>Open cuts: in3=1 (dry), other inputs=0. HCUT uses in0 (LP); LCUT uses in2 (HP). Smooth 32-step crossfade.</td></tr>

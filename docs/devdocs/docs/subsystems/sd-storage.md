@@ -32,11 +32,15 @@ Protocol details belong with those tools; the device side is `sdSerialServerPoll
 
 ## Card layout and save semantics
 
-- Root `1.txt` … `999.txt`: binary patterns (notes + sound settings + mutes + page arrangement).
-- Root `autosaved.txt`: session recovery, independent of the last numbered slot.
-- `0/`: scratch/custom samples; `1/` … `999/`: kits, each with `1.wav` … `8.wav`.
+Current on-card layout (one folder per pattern number — not a flat `patterns/` dump):
+
+- `patterns/<n>/<n>.txt`: binary patterns (notes + sound settings + mutes + page arrangement). Companions are `patterns/<n>/<n>-B.txt` … `patterns/<n>/<n>-H.txt` (A is the unnamed primary file).
+- `patterns/autosaved.txt`: session recovery, independent of the last numbered slot (stays at the `patterns/` root, not inside a number folder).
+- `kits/0/`: scratch/custom samples; `kits/1/` … `kits/999/`: kits, each with `1.wav` … `8.wav`.
 - `samples/`: browser library; it is not embedded in a pattern.
+- `presets/<ch>/<nnn>.pset`: synth filter presets (ch 11/13/14).
 - `settings.txt`: device-preference backup; the filename does not make a binary pattern editable text.
+- Migrations still present (kept until explicitly removed): read fallbacks + wipe targets for flat `patterns/<n>.txt`, root `N.txt`, and root kit folders `N/`. Boot only ensures `patterns/` + `kits/` and moves root `autosaved.txt` into `patterns/`; it does not bulk-rename every legacy pattern.
 
 Pattern saves validate `<destination>.tmp`, keep the previous generation as `<destination>.bak`, then install the new file. Recovery prefers a valid destination, otherwise a valid destination-specific temporary file or backup. The old shared `pattern.tmp` is not promoted because it has no slot identity. Loading stages the complete payload before changing notes/settings.
 
@@ -168,7 +172,7 @@ uses the same marker/size/pitch validation as ordinary patterns and tries its
 primary, temporary, and backup generations. A valid backup is never mistaken
 for a new blank slot; corrupt/unreadable data never replaces the live bank.
 
-A uses `N.txt`; B–E use `N-B.txt` through `N-E.txt`. `N-A.txt` is ignored.
+A uses `patterns/<n>/<n>.txt`; B–H use `patterns/<n>/<n>-B.txt` through `patterns/<n>/<n>-H.txt`. `…-A.txt` is ignored.
 Family Save As and deletion are cooperative jobs too. Save As uses all resident
 RAM letters (including live edits), copies uncached siblings with recovery,
 and stages/validates all incoming files before installation. A failed rename

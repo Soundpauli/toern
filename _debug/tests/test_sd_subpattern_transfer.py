@@ -29,7 +29,7 @@ code = r'''
 #define EXTMEM
 const uint8_t NOTE_MIDI_PITCH_NONE=255;
 struct Note {uint8_t channel=0,velocity=0,probability=100,condition=1,midiPitch=255;};
-Note banks[5][257][17];Note (*note)[17]=banks[0];
+Note banks[8][257][17];Note (*note)[17]=banks[0];
 struct {float bpm=100;} SMP;
 double playNoteInterval=0;
 struct Timer {void update(double){}} playTimer,fillTimer;
@@ -37,7 +37,7 @@ void syncBpmEncoderPositions(){}
 unsigned activated=0,finished=0,stopped=0;int selected=0;
 const char *failure=nullptr;
 const char *subpatternTransferError(){return failure;}
-bool beginTransferredSubpattern(uint8_t slot){assert(slot<5);activated++;selected=slot;note=banks[slot];return !failure;}
+bool beginTransferredSubpattern(uint8_t slot){assert(slot<8);activated++;selected=slot;note=banks[slot];return !failure;}
 void finishTransferredSubpattern(){finished++;}
 void showDrawAfterPatternTransfer(){}
 std::vector<std::string> replies;
@@ -77,15 +77,15 @@ std::string suffix(const std::vector<uint8_t>&data){
 }
 int main(){
  auto bytes=image();
- for(char letter='A';letter<='E';letter++){
+ for(char letter='A';letter<='H';letter++){
   send(std::string(1,letter)+" "+suffix(bytes),bytes);
   assert(replies==std::vector<std::string>({"READY","ACK","ACK","ACK","OK"}));
   assert(selected==letter-'A'&&note[1][1].channel==11&&note[1][1].midiPitch==72);
   assert(note[256][16].channel==14&&note[256][16].midiPitch==36&&SMP.bpm==123.5f);
  }
- assert(activated==5&&finished==5);
+ assert(activated==8&&finished==8);
  const auto old=note[1][1];const unsigned before=activated;
- for(auto bad:{std::string("F ")+suffix(bytes),std::string("AA ")+suffix(bytes),std::string("A nope 0"),std::string("A 20494 FFFFFFFF extra"),std::string("A -1 0")}){
+ for(auto bad:{std::string("I ")+suffix(bytes),std::string("AA ")+suffix(bytes),std::string("A nope 0"),std::string("A 20494 FFFFFFFF extra"),std::string("A -1 0")}){
   send(bad,bytes);assert(replies==std::vector<std::string>({"ERR USAGE"}));assert(activated==before);
  }
  send("A 1 0",{});assert(replies==std::vector<std::string>({"ERR SIZE"}));
@@ -98,8 +98,8 @@ int main(){
   assert(replies.back()=="ERR PATTERN"&&activated==before&&memcmp(&old,&note[1][1],sizeof(old))==0);
  }
  // Legacy PUTPAT continues to target the active bank without selecting a letter.
- send(suffix(bytes),bytes,false);assert(replies.back()=="OK"&&activated==before&&selected==4);
- puts("PASS: A–E USB RAM images, all ACK blocks, preserved pitch/BPM, legacy PUTPAT, disabled mode, malformed headers/data, short reads and CRC rejection before bank mutation");
+ send(suffix(bytes),bytes,false);assert(replies.back()=="OK"&&activated==before&&selected==7);
+ puts("PASS: A–H USB RAM images, all ACK blocks, preserved pitch/BPM, legacy PUTPAT, disabled mode, malformed headers/data, short reads and CRC rejection before bank mutation");
 }
 '''.replace('CONSTANTS', constants).replace('FUNCTIONS', '\n'.join(function(name) for name in (
     'sdSerCrc32Update', 'sdSerSkipSpaces', 'sdPatApply', 'sdSerCmdPutPat', 'sdSerCmdPutSub')))

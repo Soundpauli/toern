@@ -750,7 +750,8 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
   char OUTPUTf[64];
   
   // Check if we're loading from samplepack 0 (check if file exists first)
-  sprintf(OUTPUTf, "0/%d.wav", sampleID);
+  snprintf(OUTPUTf, sizeof(OUTPUTf), "kits/0/%d.wav", sampleID);
+  if (!SD.exists(OUTPUTf)) snprintf(OUTPUTf, sizeof(OUTPUTf), "0/%d.wav", sampleID);
   bool loadingFromSp0 = (packID == 0 && SD.exists(OUTPUTf));
   // If we are loading from a regular samplepack, this voice is no longer "SP0 custom".
   // (SP0 custom should only be true when we use 0/<voice>.wav)
@@ -767,7 +768,8 @@ FLASHMEM void loadSample(unsigned int packID, unsigned int sampleID) {
     OUTPUTf[0] = '\0';
   } else {
     // Loading from regular samplepack
-    snprintf(OUTPUTf, sizeof(OUTPUTf), "%d/%d.wav", packID, sampleID);
+    snprintf(OUTPUTf, sizeof(OUTPUTf), "kits/%d/%d.wav", packID, sampleID);
+    if (!SD.exists(OUTPUTf)) snprintf(OUTPUTf, sizeof(OUTPUTf), "%d/%d.wav", packID, sampleID);
   }
 
   if (!OUTPUTf[0] || !SD.exists(OUTPUTf)) {
@@ -1436,13 +1438,12 @@ FLASHMEM void copySampleToSamplepack0(unsigned int channel, bool showLoadProgres
   }
   stopSdPreviewAndWait();
   
-  // Ensure samplepack 0 directory exists
-  if (!SD.exists("0")) {
-    SD.mkdir("0");
-  }
+  // Ensure kits/0 directory exists
+  if (!SD.exists("kits")) SD.mkdir("kits");
+  if (!SD.exists("kits/0")) SD.mkdir("kits/0");
   
   char outputPath[50];
-  sprintf(outputPath, "0/%d.wav", channel);
+  snprintf(outputPath, sizeof(outputPath), "kits/0/%d.wav", channel);
   
   // Remove existing file if it exists
   if (SD.exists(outputPath)) {

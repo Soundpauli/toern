@@ -925,7 +925,7 @@ export class ToernSdSerial {
 
   /** Replace/select A–E in the loaded family; firmware saves through its bank writer. */
   putSubpatternRam(letter, data, onProgress) {
-    if (!/^[A-E]$/.test(letter)) return Promise.reject(new Error("Invalid subpattern letter"));
+    if (!/^[A-H]$/.test(letter)) return Promise.reject(new Error("Invalid subpattern letter"));
     return this._putPatternImage(`PUTSUB ${letter}`, data, onProgress);
   }
 

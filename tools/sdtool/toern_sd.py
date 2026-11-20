@@ -61,6 +61,14 @@ def join_sd_path(parent: str, name: str) -> str:
     return parent.rstrip("/") + "/" + name
 
 
+def abs_sd_path(path: str) -> str:
+    """Firmware MV/LIST/MKDIR/RM require a leading slash."""
+    path = (path or "/").replace("\\", "/")
+    if not path.startswith("/"):
+        path = "/" + path
+    return path if path == "/" else path.rstrip("/")
+
+
 def parent_sd_path(path: str) -> str:
     path = (path or "/").replace("\\", "/").rstrip("/")
     if not path or path == "/":
@@ -163,7 +171,7 @@ class ToernSd:
 
     def list_dir(self, path: str = "/", *, hide_dot: bool = True) -> list[dict[str, Any]]:
         with self._lock:
-            self.ser.write(f"LIST {path}\n".encode("utf-8"))
+            self.ser.write(f"LIST {abs_sd_path(path)}\n".encode("utf-8"))
             self.ser.flush()
             entries: list[dict[str, Any]] = []
             while True:
@@ -212,24 +220,25 @@ class ToernSd:
 
     def rename(self, src: str, dst: str) -> None:
         with self._lock:
-            self.ser.write(f"MV {src} {dst}\n".encode("utf-8"))
+            self.ser.write(f"MV {abs_sd_path(src)} {abs_sd_path(dst)}\n".encode("utf-8"))
             self.ser.flush()
             expect_ok(read_line(self.ser))
 
     def rm(self, path: str) -> None:
         with self._lock:
-            self.ser.write(f"RM {path}\n".encode("utf-8"))
+            self.ser.write(f"RM {abs_sd_path(path)}\n".encode("utf-8"))
             self.ser.flush()
             expect_ok(read_line(self.ser))
 
     def mkdir(self, path: str) -> None:
         with self._lock:
-            self.ser.write(f"MKDIR {path}\n".encode("utf-8"))
+            self.ser.write(f"MKDIR {abs_sd_path(path)}\n".encode("utf-8"))
             self.ser.flush()
             expect_ok(read_line(self.ser))
 
     def put_bytes(self, remote: str, data: bytes) -> None:
         with self._lock:
+            remote = abs_sd_path(remote)
             csum = crc32_hex(data)
             self.ser.write(f"PUT {remote} {len(data)} {csum}\n".encode("utf-8"))
             self.ser.flush()
@@ -251,7 +260,7 @@ class ToernSd:
 
     def get_bytes(self, remote: str) -> bytes:
         with self._lock:
-            self.ser.write(f"GET {remote}\n".encode("utf-8"))
+            self.ser.write(f"GET {abs_sd_path(remote)}\n".encode("utf-8"))
             self.ser.flush()
             header = read_line(self.ser)
             if header.startswith("ERR"):

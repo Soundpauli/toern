@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "toern_kit_source.h"
+#include "toern_kit_paths.h"
 
 // Cooperative KIT export. Each tick performs at most one filesystem operation
 // or one bounded 2 KB read/write. Audio/MIDI IRQs are never masked here.
@@ -27,7 +28,7 @@ public:
         memcpy(sourcePaths_[i],sources[i].pathRel,strlen(sources[i].pathRel)+1);
     }
     slot_=0;staged_=installed_=backed_=0;cancel_=committed_=rollbackFailed_=false;
-    result_=Result::Running;state_=DirExists;return true;
+    result_=Result::Running;state_=KitsRootExists;return true;
   }
   bool busy()const{return result_==Result::Running;}
   Result result()const{return result_;}
@@ -38,8 +39,18 @@ public:
     if(cancel_&&!committed_&&state_<CloseAbortIn) {failure_=Result::Cancelled;state_=CloseAbortIn;}
     char dest[32],tmp[40],bak[40];paths(dest,tmp,bak);
     switch(state_) {
-      case DirExists: {char dir[12];snprintf(dir,sizeof(dir),"%u",target_);state_=fs.exists(dir)?Start:DirMake;break;}
-      case DirMake: {char dir[12];snprintf(dir,sizeof(dir),"%u",target_);if(!fs.mkdir(dir))return fail();state_=Start;break;}
+      case KitsRootExists:
+        state_=fs.exists("kits")?DirExists:KitsRootMake;break;
+      case KitsRootMake:
+        if(!fs.mkdir("kits"))return fail();state_=DirExists;break;
+      case DirExists: {
+        char dir[16];toern_kit_paths::dir(dir,sizeof(dir),target_);
+        state_=fs.exists(dir)?Start:DirMake;break;
+      }
+      case DirMake: {
+        char dir[16];toern_kit_paths::dir(dir,sizeof(dir),target_);
+        if(!fs.mkdir(dir))return fail();state_=Start;break;
+      }
       case Start:
         offset_=0;total_=0;crc_=verifyCrc_=0;state_=TempExists;break;
       case TempExists: state_=fs.exists(tmp)?TempRemove:OutOpen;break;
@@ -122,7 +133,7 @@ public:
 private:
   Result fail(){failure_=Result::Failed;state_=CloseAbortIn;rollbackFailed_=false;return result_;}
   void paths(char *dest,char *tmp,char *bak)const {
-    snprintf(dest,32,"%u/%u.wav",target_,slot_+1);
+    toern_kit_paths::wav(dest,32,target_,slot_+1);
     snprintf(tmp,40,"%s.kit-tmp",dest);snprintf(bak,40,"%s.kit-bak",dest);
   }
   static uint32_t crc(uint32_t value,const uint8_t *data,size_t size) {
@@ -135,7 +146,7 @@ private:
       1,0,1,0,0x44,0xAC,0,0,0x88,0x58,1,0,2,0,16,0,'d','a','t','a',0,0,0,0};
     memcpy(out,base,44);const uint32_t riff=bytes+36+extra;memcpy(out+4,&riff,4);memcpy(out+40,&bytes,4);
   }
-  enum State {Idle,DirExists,DirMake,Start,TempExists,TempRemove,OutOpen,Truncate,
+  enum State {Idle,KitsRootExists,KitsRootMake,DirExists,DirMake,Start,TempExists,TempRemove,OutOpen,Truncate,
     Header,Write,SourceChunk,CloseIn,CloseOut,VerifyOpen,VerifyRead,VerifyClose,BackupExists,PrimaryRecoveryCheck,
     Recover,BackupRemove,PrimaryExists,BackupMove,Install,CleanupBackup,
     CloseAbortIn,CloseAbortOut,RollbackRemove,RollbackRestore,RollbackTemp} state_=Idle;

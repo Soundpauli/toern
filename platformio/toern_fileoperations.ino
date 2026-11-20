@@ -1,7 +1,8 @@
 #include "src/pattern_transaction.h"
 static bool lastPatternSaveOk = false;
 static bool patternStageOnly = false;
-static const char *AUTOSAVE_PATH = "autosaved.txt";
+static const char *AUTOSAVE_PATH = "patterns/autosaved.txt";
+#include "src/toern_kit_paths.h"
 static const uint8_t PITCH_EXTENSION_HEADER[8] = {
   'T', 'P', 'I', 'T', 1, 0x10, 0x00, 0
 }; // magic, version 1, 4096 entries (big-endian), reserved
@@ -22,8 +23,23 @@ FLASHMEM void clearPatternNotes() {
 
 FLASHMEM void deleteAutosaveFile() {
   if (SD.exists(AUTOSAVE_PATH)) SD.remove(AUTOSAVE_PATH);
+  SD.remove("patterns/autosaved.txt.tmp");
+  SD.remove("patterns/autosaved.txt.bak");
+  // Legacy root autosave from before patterns/
+  SD.remove("autosaved.txt");
   SD.remove("autosaved.txt.tmp");
   SD.remove("autosaved.txt.bak");
+}
+
+FLASHMEM static void ensurePatternsDir() {
+  if (!SD.exists("patterns")) SD.mkdir("patterns");
+}
+
+FLASHMEM static void ensurePatternFamilyDir(unsigned file) {
+  ensurePatternsDir();
+  char folder[20];
+  if (!toern_pattern_slots::familyDir(folder, sizeof(folder), file)) return;
+  if (!SD.exists(folder)) SD.mkdir(folder);
 }
 
 static bool patternWriteAll(File &f, const uint8_t *data, size_t len) {
@@ -120,9 +136,11 @@ FLASHMEM void savePattern(bool autosave) {
   
 
   char OUTPUTf[50];
+  ensurePatternsDir();
   if (autosave) {
     sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
   } else {
+    ensurePatternFamilyDir(SMP.file);
     patternDestination(OUTPUTf, sizeof(OUTPUTf), SMP.file);
   }
 
@@ -313,7 +331,9 @@ void serviceKitSave() {
   if(kitSaveChecking) {
     if(currentMode!=&set_SamplePack||currentMode->pos[3]!=kitSaveTarget||samplePackID!=kitSaveSourcePack
         ||fastRecordActive||isRecording){kitSaveChecking=false;return;}
-    char path[40];snprintf(path,sizeof(path),"%u/%u.wav%s",kitSaveTarget,kitSaveCheckVoice,kitSaveCheckPart?".kit-bak":"");
+    char path[40];
+    toern_kit_paths::wav(path,sizeof(path),kitSaveTarget,kitSaveCheckVoice);
+    if(kitSaveCheckPart)strncat(path,".kit-bak",sizeof(path)-strlen(path)-1);
     const bool occupied=SD.exists(path);
     if(occupied){kitSaveChecking=false;confirmKitSave(kitSaveTarget);}
     else if(++kitSaveCheckPart==2) {
@@ -404,11 +424,20 @@ FLASHMEM bool deleteConfirmedBrowserResource() {
       ok = regular && SD.remove(path);
     }
   } else if (patternConfirmResource == 2 && patternConfirmTarget <= 999) {
-    char folder[12]; snprintf(folder, sizeof(folder), "%u", patternConfirmTarget);
+    char folder[16]; toern_kit_paths::dir(folder, sizeof(folder), patternConfirmTarget);
     File dir = SD.open(folder);
     ok = dir && dir.isDirectory(); dir.close();
+    bool legacyKit = false;
+    if (!ok) {
+      snprintf(folder, sizeof(folder), "%u", patternConfirmTarget);
+      dir = SD.open(folder);
+      ok = dir && dir.isDirectory(); dir.close();
+      legacyKit = ok;
+    }
     if (ok) for (unsigned voice = 1; voice <= 8; ++voice) {
-      char path[24]; snprintf(path, sizeof(path), "%u/%u.wav", patternConfirmTarget, voice);
+      char path[32];
+      if (legacyKit) toern_kit_paths::legacyWav(path, sizeof(path), patternConfirmTarget, voice);
+      else toern_kit_paths::wav(path, sizeof(path), patternConfirmTarget, voice);
       const bool removed = !SD.exists(path) || SD.remove(path);
       ok = removed && ok; sdIoYield();
     }
@@ -448,11 +477,18 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
 
   FastLEDclear();
   char OUTPUTf[50];
-  // autoload, or FILE menu slot 0 → autosaved.txt
+  // autoload, or FILE menu slot 0 → patterns/autosaved.txt
   if (autoload || requestedFile == 0) {
     sprintf(OUTPUTf, "%s", AUTOSAVE_PATH);
+    if (!SD.exists(OUTPUTf) && !SD.exists("patterns/autosaved.txt.tmp")
+        && !SD.exists("patterns/autosaved.txt.bak") && SD.exists("autosaved.txt")) {
+      strcpy(OUTPUTf, "autosaved.txt");  // legacy root autosave
+    }
   } else {
-    toern_pattern_slots::path(OUTPUTf, sizeof(OUTPUTf), requestedFile, requestedSlot);
+    auto exists = [](const char *p) { return SD.exists(p); };
+    if (!toern_pattern_slots::resolve(OUTPUTf, sizeof(OUTPUTf), requestedFile, requestedSlot, exists)) {
+      toern_pattern_slots::path(OUTPUTf, sizeof(OUTPUTf), requestedFile, requestedSlot);
+    }
   }
 
   char tmpPath[64], backupPath[64];
@@ -550,7 +586,8 @@ FLASHMEM void loadPattern(bool autoload, unsigned targetFile) {
       SMP.file = subpatternFile;
       pendingNewPatternFile = 0;
       deletedSubpatternSlots = (autoload || requestedFile == 0)
-          && memcmp(identity, "TSUB", 4) == 0 && identity[4] == 1 ? identity[7] & 0x1F : 0;
+          && memcmp(identity, "TSUB", 4) == 0 && identity[4] == 1
+          ? identity[7] & (uint8_t)((1u << toern_pattern_slots::count) - 1u) : 0;
       loadedOk = true;
     }
     sdIoYield();

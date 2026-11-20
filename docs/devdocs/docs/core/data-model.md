@@ -84,11 +84,11 @@ that extension as row-derived; older firmware ignores the trailing extension.
 - Prefer updating `note`/`SMP` first, then redraw — LEDs should mirror state, not invent it.
 - Large buffers belong in `EXTMEM` / `DMAMEM`, not as function-local `static` arrays (those land in RAM1).
 
-Saves use destination-specific `N.txt.tmp` / `N.txt.bak` (or `autosaved.txt.tmp` / `.bak`). A valid destination wins; recovery otherwise validates a complete temporary file or the previous generation. Shared `pattern.tmp` is not promoted. A manual save of an empty grid deliberately deletes the selected numbered slot, including its temporary file and backup. Autosave still stores an empty session. Loading stages the full note/settings payload before replacing live state.
+Saves use destination-specific `patterns/<n>/<n>.txt.tmp` / `.bak` (or `patterns/autosaved.txt.tmp` / `.bak`). A valid destination wins; recovery otherwise validates a complete temporary file or the previous generation. Shared `pattern.tmp` is not promoted. A manual save of an empty grid deliberately deletes the selected numbered slot, including its temporary file and backup. Autosave still stores an empty session. Loading stages the full note/settings payload before replacing live state.
 
 ## Recall and boundaries
 
-PATT uses slots **1–999**; slot **0/A** loads `autosaved.txt` and is load-only. KIT uses numbered folders **1–999**, with **0** as the scratch/custom-sample kit. A pattern stores notes, sound settings, mutes and the 64-slot page arrangement, but not sample PCM. Loading it does not reload sample buffers: load its matching KIT separately.
+PATT uses slots **1–999** as `patterns/<n>/<n>.txt` (+ B–H companions); slot **0/A** loads `patterns/autosaved.txt` and is load-only. KIT uses `kits/<n>/` folders **1–999**, with **0** as the scratch/custom-sample kit. A pattern stores notes, sound settings, mutes and the 64-slot page arrangement, but not sample PCM. Loading it does not reload sample buffers: load its matching KIT separately.
 
 Encoder 3 on PATT toggles applying loaded sound settings to audio objects. The `SMP` payload is still read into memory when that option is off; it is not a notes-only import. There are no `.dat` files or sidecars.
 

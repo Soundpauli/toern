@@ -40,12 +40,14 @@ using std::min;
 #define DMAMEM
 #define FLASHMEM
 #define __DMB() ((void)0)
+#define TOERN_TEST_POLY 3
+int sampleTrigModeSlider(int){return 1;}
 constexpr unsigned MAX_STEPS=256;
 const unsigned maxlen=257,maxY=16,maxPages=16,maxFiles=9,maxFilters=15;
 unsigned maxX=16;
 const uint8_t defaultVelocity=100,NOTE_MIDI_PITCH_NONE=255;
 struct Note {uint8_t channel,velocity,probability,condition,midiPitch;};
-Note noteBanks[6][maxlen+1][maxY+1];
+Note noteBanks[9][maxlen+1][maxY+1];
 Note (*note)[maxY+1]=noteBanks[0];
 SAMPLE
 DEVICE
@@ -110,6 +112,7 @@ void updateLastPage(){
 }
 void loadSMPSettings(){soundLoads++;}
 void syncVoiceLoadedPathsFromStored(){}
+const char *getVoiceLoadedPathRel(unsigned){return "";}
 STATE
 const int O_WRITE=1,O_CREAT=2,O_TRUNC=4,FILE_READ=0,FILE_WRITE_BEGIN=2;
 extern bool enforceBudget;extern unsigned stepReads,stepWrites,stepEntries,maxRead,maxWrite;
@@ -140,11 +143,27 @@ struct FS {
  bool rename(const char*a,const char*b){if(failRenameOnceTo==b){failRenameOnceTo.clear();return false;}if(!exists(a)||exists(b))return false;files[b]=files[a];files.erase(a);return true;}
  File open(const char*p,int mode=0){
   if(!strcmp(p,"/")){rootScans++;File f;f.entries=std::make_shared<std::vector<std::string>>();for(auto &pair:files)f.entries->push_back(pair.first);return f;}
+  if(!strcmp(p,"patterns")||!strcmp(p,"patterns/")){
+   File f;f.entries=std::make_shared<std::vector<std::string>>();std::set<std::string> seen;
+   for(auto &pair:files){
+    if(pair.first.rfind("patterns/",0)!=0)continue;
+    std::string rest=pair.first.substr(9);auto slash=rest.find('/');
+    if(slash==std::string::npos)f.entries->push_back(pair.first); // flat leftover
+    else{std::string leaf=rest.substr(0,slash);if(seen.insert(leaf).second)f.entries->push_back(std::string("patterns/")+leaf);}
+   }
+   return f;
+  }
+  {unsigned n=0;const char *q=p;if(!strncmp(q,"patterns/",9)){q+=9;if(*q>='1'&&*q<='9'){while(*q>='0'&&*q<='9')n=n*10+(*q++-'0');if((!*q||!strcmp(q,"/"))&&n>=1&&n<=999){
+   File f;f.entries=std::make_shared<std::vector<std::string>>();char prefix[24];snprintf(prefix,sizeof(prefix),"patterns/%u/",n);
+   for(auto &pair:files)if(pair.first.rfind(prefix,0)==0)f.entries->push_back(pair.first);return f;}}}}
   if(dirs.count(p)){File f;f.entries=std::make_shared<std::vector<std::string>>();return f;}
   if(mode&O_CREAT){if(!exists(p)||mode&O_TRUNC)files[p]=std::make_shared<std::vector<uint8_t>>();}
   if(!exists(p))return {};return {files[p],0,failWrite||failWritePath==p};}
 } SD;
-File File::openNextFile(){if(enforceBudget)++stepEntries;if(!entries||dirpos==entries->size())return {};auto n=(*entries)[dirpos++];File f;f.data=SD.files[n];f.filename=n;return f;}
+File File::openNextFile(){if(enforceBudget)++stepEntries;if(!entries||dirpos==entries->size())return {};auto n=(*entries)[dirpos++];File f;auto slash=n.rfind('/');f.filename=slash==std::string::npos?n:n.substr(slash+1);
+ if(SD.files.count(n))f.data=SD.files[n];
+ else{f.entries=std::make_shared<std::vector<std::string>>();} // directory placeholder
+ return f;}
 HELPERS
 VALIDATOR
 SLOTS
@@ -179,9 +198,9 @@ int main(){
  clearPatternNotes();SMP.file=1;SMP.bpm=120;GLOB.x=3;
  assert(!subpatternsEnabled);fnHeld=true;subpatternTurn(1);fnHeld=false;assert(!subpatternSelector);
  subpatternsEnabled=true;subpatternFile=1;subpatternCache[0]=note;note[1][2]={3,127,100,1,60};
- updateLastPage();savePattern(false);assert(lastPatternSaveOk&&validPatternFile("1.txt",true));
- SD.files["1-B.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1.txt"]);
- (*SD.files["1-B.txt"])[4]=7;
+ updateLastPage();savePattern(false);assert(lastPatternSaveOk&&validPatternFile("patterns/1/1.txt",true));
+ SD.files["patterns/1/1-B.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1.txt"]);
+ (*SD.files["patterns/1/1-B.txt"])[4]=7;
  // Cold preview/staging never finishes a whole file in a single loop pass.
  isNowPlaying=true;auto oldGrid=note;const unsigned writesBefore=sdWrites;
  fnHeld=true;subpatternTurn(1);tick();assert(!subpatternGridReady&&note==oldGrid);
@@ -197,20 +216,20 @@ int main(){
  choose(1);assert(note[1][2].velocity==88&&sdWrites==writesBefore);
  // Stopped new-slot switching and all automatic writes remain cooperative.
  isNowPlaying=false;choose(1);assert(subpatternSlot==2&&note[1][2].channel==0);
- flush();assert(SD.exists("1-C.txt")&&validPatternFile("1-C.txt",true));
+ flush();assert(SD.exists("patterns/1/1-C.txt")&&validPatternFile("patterns/1/1-C.txt",true));
  // Missing primary must recover a valid backup, never install a new blank.
- SD.files["1-B.txt.bak"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1-B.txt"]);
- SD.files.erase("1-B.txt");reload(1);isNowPlaying=true;
+ SD.files["patterns/1/1-B.txt.bak"]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1-B.txt"]);
+ SD.files.erase("patterns/1/1-B.txt");reload(1);isNowPlaying=true;
  choose(1);assert(subpatternSlot==1&&note[1][2].channel==7&&note[1][2].velocity==88);
- assert(!(subpatternEmptyMask&2)&&!SD.exists("1-B.txt"));
- isNowPlaying=false;flush();assert(validPatternFile("1-B.txt",true));
+ assert(!(subpatternEmptyMask&2)&&!SD.exists("patterns/1/1-B.txt"));
+ isNowPlaying=false;flush();assert(validPatternFile("patterns/1/1-B.txt",true));
  // A malformed marker is rejected by both the normal and staged loaders.
- SD.files["1-D.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1-B.txt"]);
- (*SD.files["1-D.txt"])[MAX_STEPS*maxY*4]=0;
- assert(!validPatternFile("1-D.txt",false));oldGrid=note;fnHeld=true;subpatternTurn(1);subpatternTurn(1);
+ SD.files["patterns/1/1-D.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1-B.txt"]);
+ (*SD.files["patterns/1/1-D.txt"])[MAX_STEPS*maxY*4]=0;
+ assert(!validPatternFile("patterns/1/1-D.txt",false));oldGrid=note;fnHeld=true;subpatternTurn(1);subpatternTurn(1);
  for(unsigned i=0;i<10000&&!subpatternErrorUntil;++i)tick();
  fnHeld=false;assert(subpatternErrorUntil&&note==oldGrid&&subpatternSlot==1&&!subpatternReady);
- SD.files.erase("1-D.txt");subpatternErrorUntil=0;
+ SD.files.erase("patterns/1/1-D.txt");subpatternErrorUntil=0;
  // VMOD uses the actual selected bank, not live per-voice ownership mapping.
  voiceMode=true;isNowPlaying=true;fnHeld=true;subpatternTurn(1);ready();
  assert(subpatternPreviewVisible()&&subpatternViewedNote(1,2)->channel==0);
@@ -218,31 +237,31 @@ int main(){
  voiceMode=false;isNowPlaying=false;flush();
  // A failed first save must remain retryable even if temporary cleanup also failed.
  SubpatternWriter freshWriter;Device freshSettings=SMP;freshSettings.file=99;
- SD.failWritePath="99.txt.tmp";SD.failRemove="99.txt.tmp";
- freshWriter.begin("99.txt",note,freshSettings,0,0,FILE_WRITE_BEGIN);
+ SD.failWritePath="patterns/99/99.txt.tmp";SD.failRemove="patterns/99/99.txt.tmp";
+ freshWriter.begin("patterns/99/99.txt",note,freshSettings,0,0,FILE_WRITE_BEGIN);
  for(unsigned i=0;i<10000&&freshWriter.busy();++i){stepReads=stepWrites=0;enforceBudget=true;freshWriter.tick(SD);enforceBudget=false;assert(stepReads<=1&&stepWrites<=1);}
- assert(freshWriter.result()==SubpatternIoResult::Failed&&!SD.exists("99.txt")&&SD.exists("99.txt.tmp"));
- SD.failWritePath.clear();SD.failRemove.clear();freshWriter.begin("99.txt",note,freshSettings,0,0,FILE_WRITE_BEGIN);
+ assert(freshWriter.result()==SubpatternIoResult::Failed&&!SD.exists("patterns/99/99.txt")&&SD.exists("patterns/99/99.txt.tmp"));
+ SD.failWritePath.clear();SD.failRemove.clear();freshWriter.begin("patterns/99/99.txt",note,freshSettings,0,0,FILE_WRITE_BEGIN);
  for(unsigned i=0;i<10000&&freshWriter.busy();++i){stepReads=stepWrites=0;enforceBudget=true;freshWriter.tick(SD);enforceBudget=false;assert(stepReads<=1&&stepWrites<=1);}
- assert(freshWriter.result()==SubpatternIoResult::Valid&&validPatternFile("99.txt",true));
+ assert(freshWriter.result()==SubpatternIoResult::Valid&&validPatternFile("patterns/99/99.txt",true));
  // Existing temporary content is truncated rather than appended or left trailing.
- SD.files["99.txt.tmp"]=std::make_shared<std::vector<uint8_t>>(SubpatternWriter::totalBytes*2,42);
- freshWriter.begin("99.txt",note,freshSettings,0,0,FILE_WRITE_BEGIN);
+ SD.files["patterns/99/99.txt.tmp"]=std::make_shared<std::vector<uint8_t>>(SubpatternWriter::totalBytes*2,42);
+ freshWriter.begin("patterns/99/99.txt",note,freshSettings,0,0,FILE_WRITE_BEGIN);
  for(unsigned i=0;i<10000&&freshWriter.busy();++i){stepReads=stepWrites=0;enforceBudget=true;freshWriter.tick(SD);enforceBudget=false;assert(stepReads<=1&&stepWrites<=1);}
- assert(freshWriter.result()==SubpatternIoResult::Valid&&SD.files["99.txt"]->size()==SubpatternWriter::totalBytes);
+ assert(freshWriter.result()==SubpatternIoResult::Valid&&SD.files["patterns/99/99.txt"]->size()==SubpatternWriter::totalBytes);
  // Save As carries the latest resident grids and adopts identity only at commit.
  saveSelectedPatternFamily(2,false);assert(patternFamilyBusy());
  while(patternFamilyBusy()){assert(SMP.file==1);tick();}
  assert(lastPatternSaveOk&&SMP.file==2&&subpatternFile==2);
- assert(validPatternFile("2.txt",true)&&validPatternFile("2-B.txt",true)&&validPatternFile("2-C.txt",true));
- assert((*SD.files["2-B.txt"])[5]==88);
+ assert(validPatternFile("patterns/2/2.txt",true)&&validPatternFile("patterns/2/2-B.txt",true)&&validPatternFile("patterns/2/2-C.txt",true));
+ assert((*SD.files["patterns/2/2-B.txt"])[5]==88);
  // Rollback restores every target primary after a late rename failure.
- for(const char *path:{"3.txt","3-B.txt","3-C.txt"})SD.files[path]=std::make_shared<std::vector<uint8_t>>(*SD.files["1.txt"]);
- const auto oldA=*SD.files["3.txt"],oldB=*SD.files["3-B.txt"],oldC=*SD.files["3-C.txt"];
- SD.failRenameOnceTo="3-B.txt";saveSelectedPatternFamily(3,true);family();
- assert(!lastPatternSaveOk&&SMP.file==2&&*SD.files["3.txt"]==oldA&&*SD.files["3-B.txt"]==oldB&&*SD.files["3-C.txt"]==oldC);
+ for(const char *path:{"patterns/3/3.txt","patterns/3/3-B.txt","patterns/3/3-C.txt"})SD.files[path]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1.txt"]);
+ const auto oldA=*SD.files["patterns/3/3.txt"],oldB=*SD.files["patterns/3/3-B.txt"],oldC=*SD.files["patterns/3/3-C.txt"];
+ SD.failRenameOnceTo="patterns/3/3-B.txt";saveSelectedPatternFamily(3,true);family();
+ assert(!lastPatternSaveOk&&SMP.file==2&&*SD.files["patterns/3/3.txt"]==oldA&&*SD.files["patterns/3/3-B.txt"]==oldB&&*SD.files["patterns/3/3-C.txt"]==oldC);
  // Failed quiet writes retain RAM and retry without blocking input polling.
- subpatternDirtyMask=2;SD.failWritePath="2-B.txt.tmp";const unsigned pollsBefore=pollCount;
+ subpatternDirtyMask=2;SD.failWritePath="patterns/2/2-B.txt.tmp";const unsigned pollsBefore=pollCount;
  for(unsigned i=0;i<10000&&subpatternWritingSlot!=1;++i)tick();
  while(subpatternWriteJob.busy())tick();
  assert(subpatternDirtyMask&2);assert(subpatternCache[1][1][2].velocity==88&&pollCount>pollsBefore);
@@ -254,14 +273,14 @@ int main(){
  assert(!subpatternWriteJob.busy()&&(subpatternDirtyMask&2));
  choose(-2);isNowPlaying=false;flush();
  // Family deletion preserves A if companion cleanup fails and preserves other live families.
- deleteSelectedPatternFamily(3);family();assert(!SD.exists("3.txt")&&SMP.file==2);
- SD.failRemove="2-B.txt";deleteSelectedPatternFamily(2);family();
- assert(!lastPatternSaveOk&&SD.exists("2.txt")&&SMP.file==2);
+ deleteSelectedPatternFamily(3);family();assert(!SD.exists("patterns/3/3.txt")&&SMP.file==2);
+ SD.failRemove="patterns/2/2-B.txt";deleteSelectedPatternFamily(2);family();
+ assert(!lastPatternSaveOk&&SD.exists("patterns/2/2.txt")&&SMP.file==2);
  SD.failRemove.clear();deleteSelectedPatternFamily(2);family();
- assert(lastPatternSaveOk&&!SD.exists("2.txt")&&!SD.exists("2-B.txt")&&deletedSubpatternSlots==31);
+ assert(lastPatternSaveOk&&!SD.exists("patterns/2/2.txt")&&!SD.exists("patterns/2/2-B.txt")&&deletedSubpatternSlots==255);
  for(unsigned x=1;x<maxlen;++x)for(unsigned y=1;y<=maxY;++y)assert(!note[x][y].channel);
  savePattern(true);SMP.file=0xA5A5A5A5;resetFileSubpattern();loadPattern(true);
- assert(SMP.file==2&&subpatternFile==2&&deletedSubpatternSlots==31);
+ assert(SMP.file==2&&subpatternFile==2&&deletedSubpatternSlots==255);
  // NO/YES confirmation and browser selection remain independent from job execution.
  currentMode=&loadSaveTrack;loadSaveTrack.pos[3]=2;openPatternConfirmation(1,false);
  const unsigned beforeNo=sdWrites;finishPatternConfirmation(false);
@@ -272,26 +291,26 @@ int main(){
  currentMode=&set_Wav;set_Wav.pos[3]=7;capturedSample="samples/a.wav";requestBrowserDelete();
  capturedSample="samples/b.wav";patternConfirmMode.pos[3]=1;finishPatternConfirmation(true);
  assert(!SD.exists("samples/a.wav")&&SD.exists("samples/b.wav")&&set_Wav.pos[3]==7);
- SD.files["8/7.wav"]=std::make_shared<std::vector<uint8_t>>(8,3);currentMode=&set_SamplePack;set_SamplePack.pos[3]=8;
+ SD.files["kits/8/7.wav"]=std::make_shared<std::vector<uint8_t>>(8,3);currentMode=&set_SamplePack;set_SamplePack.pos[3]=8;
  requestKitSave(8);for(unsigned i=0;i<20&&kitSavePending();++i){now++;serviceKitSave();}
  assert(currentMode==&patternConfirmMode&&kitSaveCalls==0);finishPatternConfirmation(false);
  assert(currentMode==&set_SamplePack&&set_SamplePack.pos[3]==8&&kitSaveCalls==0);
  requestKitSave(8);for(unsigned i=0;i<20&&kitSavePending();++i){now++;serviceKitSave();}
  patternConfirmMode.pos[3]=1;finishPatternConfirmation(true);assert(savedKit==8&&kitSaveCalls==1);
  // Uncached siblings copy in bounded blocks as part of Save As.
- SD.files["1-E.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1.txt"]);
+ SD.files["patterns/1/1-E.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1.txt"]);
  reload(1);saveSelectedPatternFamily(4,false);family();assert(lastPatternSaveOk&&SMP.file==4);
- assert(*SD.files["4-E.txt"]==*SD.files["1-E.txt"]);
+ assert(*SD.files["patterns/4/4-E.txt"]==*SD.files["patterns/1/1-E.txt"]);
  // Save As also recovers an uncached sibling that only has a valid backup.
- SD.files["1-E.txt.bak"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1-E.txt"]);SD.files.erase("1-E.txt");
+ SD.files["patterns/1/1-E.txt.bak"]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1-E.txt"]);SD.files.erase("patterns/1/1-E.txt");
  reload(1);saveSelectedPatternFamily(5,false);family();assert(lastPatternSaveOk&&SMP.file==5);
- assert(*SD.files["5-E.txt"]==*SD.files["1-E.txt.bak"]);
+ assert(*SD.files["patterns/5/5-E.txt"]==*SD.files["patterns/1/1-E.txt.bak"]);
  // Raw sibling copying truncates stale target temporaries too.
- SD.files["7-E.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1-E.txt.bak"]);
- SD.files["7-E.txt.tmp"]=std::make_shared<std::vector<uint8_t>>(60000,42);
- reload(1);saveSelectedPatternFamily(7,true);family();assert(lastPatternSaveOk&&*SD.files["7-E.txt"]==*SD.files["1-E.txt.bak"]);
+ SD.files["patterns/7/7-E.txt"]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1-E.txt.bak"]);
+ SD.files["patterns/7/7-E.txt.tmp"]=std::make_shared<std::vector<uint8_t>>(60000,42);
+ reload(1);saveSelectedPatternFamily(7,true);family();assert(lastPatternSaveOk&&*SD.files["patterns/7/7-E.txt"]==*SD.files["patterns/1/1-E.txt.bak"]);
  // A recovery-only destination still requires overwrite confirmation, before any write.
- SD.files["6-D.txt.bak"]=std::make_shared<std::vector<uint8_t>>(*SD.files["1.txt"]);
+ SD.files["patterns/6/6-D.txt.bak"]=std::make_shared<std::vector<uint8_t>>(*SD.files["patterns/1/1.txt"]);
  currentMode=&loadSaveTrack;loadSaveTrack.pos[3]=7;const unsigned recoveryPromptWrites=sdWrites;
  requestPatternSave(6);family();assert(currentMode==&patternConfirmMode&&patternConfirmTarget==6&&sdWrites==recoveryPromptWrites);
  finishPatternConfirmation(false);assert(currentMode==&loadSaveTrack&&loadSaveTrack.pos[3]==7);
@@ -303,27 +322,27 @@ int main(){
  const unsigned scanned=SD.rootScans;for(unsigned i=0;i<20;++i){showLoadSave();tick();}assert(SD.rootScans==scanned);
  for(unsigned width:{16u,32u}){maxX=width;pixelCalls.clear();drawPatternSlotDots(0x05,UI_GREEN);assert(pixelCalls.size()==3);assert(pixelCalls[0].x==(width==32?10:5));}maxX=16;
  // Content-aware dots trim trailing empty files but retain internal empty letters.
- const auto blank=*SD.files["1-C.txt"],filled=*SD.files["1.txt"];
- for(unsigned familyNumber:{20u,21u})for(uint8_t slot=0;slot<5;++slot){
+ const auto blank=*SD.files["patterns/1/1-C.txt"],filled=*SD.files["patterns/1/1.txt"];
+ for(unsigned familyNumber:{20u,21u})for(uint8_t slot=0;slot<toern_pattern_slots::count;++slot){
   char path[24];toern_pattern_slots::path(path,sizeof(path),familyNumber,slot);
   SD.files[path]=std::make_shared<std::vector<uint8_t>>(familyNumber==20&&slot==2?filled:blank);
  }
  // An old nonempty backup must not override a valid, intentionally emptied E.
- SD.files["20-E.txt.bak"]=std::make_shared<std::vector<uint8_t>>(filled);
+ SD.files["patterns/20/20-E.txt.bak"]=std::make_shared<std::vector<uint8_t>>(filled);
  ++patternStorageRevision;currentMode=&loadSaveTrack;loadSaveTrack.pos[3]=21;
- for(unsigned i=0;i<5000&&(subpatternContentRevision!=patternStorageRevision||subpatternContentKnown[20]!=31);++i)tick();
- assert(subpatternContentKnown[20]==31&&subpatternContentMask(20)==4);
+ for(unsigned i=0;i<5000&&(subpatternContentRevision!=patternStorageRevision||subpatternContentKnown[20]!=255);++i)tick();
+ assert(subpatternContentKnown[20]==255&&subpatternContentMask(20)==4);
  pixelCalls.clear();drawPatternSlotDots(subpatternContentMask(20),UI_GREEN);assert(pixelCalls.size()==3);
- assert(SD.exists("20-D.txt")&&SD.exists("20-E.txt"));
+ assert(SD.exists("patterns/20/20-D.txt")&&SD.exists("patterns/20/20-E.txt"));
  loadSaveTrack.pos[3]=22;
- for(unsigned i=0;i<5000&&subpatternContentKnown[21]!=31;++i)tick();
- assert(subpatternContentKnown[21]==31&&subpatternContentMask(21)==0);
+ for(unsigned i=0;i<5000&&subpatternContentKnown[21]!=255;++i)tick();
+ assert(subpatternContentKnown[21]==255&&subpatternContentMask(21)==0);
  pixelCalls.clear();drawPatternSlotDots(subpatternContentMask(21),UI_GREEN);assert(pixelCalls.size()==1);
  // The latest RAM contents override saved data, including an empty active E.
  loadSaveTrack.pos[3]=SMP.file+1;
  auto emptyBank=subpatternFreeBank();assert(emptyBank);memset(emptyBank,0,sizeof(noteBanks[0]));
  subpatternCache[4]=emptyBank;note=emptyBank;subpatternSlot=4;
- for(unsigned i=0;i<5000&&subpatternContentKnown[SMP.file]!=31;++i)tick();
+ for(unsigned i=0;i<5000&&subpatternContentKnown[SMP.file]!=255;++i)tick();
  const uint8_t latestMask=subpatternContentMask(SMP.file);
  assert(!(latestMask&16)&&toern_pattern_slots::displayCount(latestMask)==2);
  // Rendering only consults RAM/cache; it never reads pattern files for counting.
@@ -354,7 +373,7 @@ int main(){
  auto bankBefore=note;subpatternsEnabled=false;
  assert(!strcmp(subpatternTransferError(),"ERR SUBP_OFF")&&!beginTransferredSubpattern(0)&&note==bankBefore);
  subpatternsEnabled=true;isNowPlaying=true;assert(!beginTransferredSubpattern(0)&&note==bankBefore);
- isNowPlaying=false;assert(!beginTransferredSubpattern(5)&&note==bankBefore);
+ isNowPlaying=false;assert(!beginTransferredSubpattern(toern_pattern_slots::count)&&note==bankBefore);
  // PATT marks only the loaded numbered family, always blue, on both layouts.
  currentMode=&loadSaveTrack;const unsigned loaded=loadedPatternFile();
  for(unsigned width:{16u,32u}) {
@@ -372,7 +391,10 @@ int main(){
  }
  puts("PASS: bounded jobs, subpattern transfers, storage/recovery, confirmation, live edits and a blue loaded-PATT marker on both layouts.");
 }
-'''.replace('SAMPLE',sample).replace('DEVICE',device).replace('STATE',state).replace('HELPERS',helpers).replace('VALIDATOR',validator).replace('SLOTS',slots).replace('LOADER',loader).replace('RENDERER',renderer).replace('FNDELETE',fn_delete).replace('CONFIRMBUTTONS',confirm_buttons)
+'''
+
+harness = harness.replace('SAMPLE', sample).replace('DEVICE', device)
+harness = harness.replace('Note (*note)[maxY+1]=noteBanks[0];', 'Note (*note)[maxY+1]=noteBanks[0];\n#define SAMPLE_POLY 3').replace('STATE', state).replace('HELPERS', helpers).replace('VALIDATOR', validator).replace('SLOTS', slots).replace('LOADER', loader).replace('RENDERER', renderer).replace('FNDELETE', fn_delete).replace('CONFIRMBUTTONS', confirm_buttons)
 with tempfile.TemporaryDirectory(prefix='toern-subpatterns-') as tmp:
  p=Path(tmp);(p/'test.cpp').write_text(harness)
  flags=['c++','-std=c++17','-O1','-Wno-deprecated-declarations','-fsanitize=address,undefined','-I',str(root/'src'),'-I',str(root)]

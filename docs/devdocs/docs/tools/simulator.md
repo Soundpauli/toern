@@ -81,7 +81,7 @@ layout changes recompute the mapping.
 For a single letter, SEND TO DEVICE retains the ordinary current-pattern RAM
 transfer. For multiple letters, it replaces **A–E in the loaded device family**,
 including clearing unused trailing letters. Enable `SETT → SUBP` first and use
-firmware with `PUTSUB` support. Images are sent B, C, D, E, then A, leaving A
+firmware with `PUTSUB` support. Images are sent B–H, then A, leaving A
 selected and playback stopped. Each bank is accepted only after full transfer,
 CRC and image validation; the normal cooperative bank writer saves it while
 stopped. An interrupted transfer can leave some letters replaced; the browser

@@ -1,5 +1,5 @@
 import { createAutogen, melodyPitch, inferHarmony } from "./autogen.js";
-import { canReplaceShadowed } from "./paint.js";
+import { canReplaceShadowed, shadowSlots } from "./paint.js";
 import { createSynthArp } from "./synthArp.js";
 import { instrumentDefaults } from "./instruments.js";
 import { createFillScheduler, baseRow, syncDelays } from "./performance.js";
@@ -437,6 +437,10 @@ export function createDevice(matrix, statusEl, rings) {
     }
     queueAutosave();
   }
+  function isShadowed(step, row, brush) {
+    const ch = note[step][row].channel;
+    return canReplaceShadowed(note, step, row, brush, 256, 16, shadowSlots(ch, filt[ch]?.trig ?? 1));
+  }
   function paintCell(x, y) {
     if(s.agen.active&&s.agen.performanceView)return;
     if (y < 1 || y > 15) return false;
@@ -462,7 +466,7 @@ export function createDevice(matrix, statusEl, rings) {
     if (!s.GLOB.singleMode && !PAINT_ROWS.has(y)) return false;
     const n = note[x][y];
     const channel = s.GLOB.singleMode ? s.GLOB.currentChannel : channelOfRow(y);
-    const replace = canReplaceShadowed(note,x,y,channel);
+    const replace = isShadowed(x, y, channel);
     if (n.channel && n.channel !== channel && !replace) return false;
     if (!n.channel || replace) Object.assign(n,emptyNote(),{channel,velocity:127,probability:100,condition:1});
     queueAutosave();
@@ -471,7 +475,7 @@ export function createDevice(matrix, statusEl, rings) {
   function paintPress(x, y) {
     if(s.agen.active&&s.agen.performanceView)return;
     if (y === 16) { toggleCopy(); return; }
-    if (s.drawR && note[x][y].channel && !canReplaceShadowed(note,x,y,s.GLOB.singleMode?s.GLOB.currentChannel:channelOfRow(y))) { eraseCell(x, y); return; }
+    if (s.drawR && note[x][y].channel && !isShadowed(x, y, s.GLOB.singleMode?s.GLOB.currentChannel:channelOfRow(y))) { eraseCell(x, y); return; }
     if (paintCell(x, y)) playCell(x, y);
   }
   /** MIDI live grid write in SINGLE; WRTE OFF skips occupied cells. */
@@ -3071,7 +3075,7 @@ export function createDevice(matrix, statusEl, rings) {
     placeLiveGridNote,
     canReplaceAt(col,row) {
       if (col<1 || col>COLS || row<1 || row>15 || (!s.GLOB.singleMode && !PAINT_ROWS.has(row))) return false;
-      return canReplaceShadowed(note,(s.GLOB.edit-1)*COLS+col,row,s.GLOB.singleMode?s.GLOB.currentChannel:channelOfRow(row));
+      return isShadowed((s.GLOB.edit-1)*COLS+col,row,s.GLOB.singleMode?s.GLOB.currentChannel:channelOfRow(row));
     },
     analogClockPulse,
     keydown, keyup,

@@ -1,5 +1,5 @@
 import { statusInk, AGEN_STATUS_COLORS, AGEN_MOTIF_COLORS } from "./autogen.js";
-import { canReplaceShadowed } from "./paint.js";
+import { canReplaceShadowed, shadowSlots } from "./paint.js";
 import { INSTRUMENT_NAMES } from "./instruments.js";
 import { syncHasEffect } from "./performance.js";
 import { COL, COL_BASE, COLS, ROWS, PAGES, SCHEMES, filterPagesFor } from "./const.js";
@@ -227,7 +227,8 @@ export function drawTriggers(matrix, s, now) {
       }
       const ch = cell.channel;
       if (!ch) continue;
-      const shadowed = canReplaceShadowed(s.note,step,iy,0);
+      const slots = shadowSlots(ch, s.filt?.[ch]?.trig ?? 1);
+      const shadowed = canReplaceShadowed(s.note,step,iy,0,256,16,slots);
       const drawNoteColor = color => matrix.light(ix,iy,shadowed ? color.map(c=>Math.floor(c/5)) : color);
 
       if (easy && !voiceGrid) {
@@ -426,7 +427,7 @@ export function drawTimer(matrix, s) {
       step = (s.GLOB.edit - 1) * COLS + x;
       ch = s.note[step][y].channel;
     }
-    if (ch > 0 && canReplaceShadowed(s.note,step,y,0)) continue;
+    if (ch > 0 && canReplaceShadowed(s.note,step,y,0,256,16,shadowSlots(ch, s.filt?.[ch]?.trig ?? 1))) continue;
     matrix.light(x, y, s.agen?.active&&s.agen.performanceView?[0,50,0]:[28,0,0]);
     if (ch > 0 && !s.mute[ch]) {
       const lit = !s.GLOB.singleMode || s.GLOB.currentChannel === ch;
