@@ -4845,6 +4845,8 @@ FLASHMEM static void serviceAutogenPerformance(){
   for(uint8_t ch:agenOrder){
     const unsigned role=autogenRoleChannel(ch);
     const bool bass=role==6||(role==14&&!agenWork->chordPair)||(role==11&&autogenAssignments.automatic(ch)&&agenWork->ch11Bass);
+    // NEXT mute is a trigger gate: keep the sounding voice's gain untouched.
+    if(muteNext&&agenWork->userMuted[ch])continue;
     if(agenWork->manualUntil[ch]&&int32_t(now-agenWork->manualUntil[ch])<0)continue;
     unsigned scale=!role?0:agenWork->performanceView?volumeScale(form,role,bass,progress,role==5&&autogenAssignments.automatic(ch)&&autogenDeep()):16;
     if(role&&ch==agenWork->foundationVoice&&(form==Section::Build||form==Section::Break||form==Section::Fill))scale=max(12u,scale);

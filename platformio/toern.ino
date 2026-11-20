@@ -352,6 +352,7 @@ const uint8_t EEPROM_MAGIC = 0x5A;  // anything nonzero
 extern int currentMenuPage;
 
 // Function declarations for per-page mute system
+bool muteNext = false; // INST cuts sounding voices; NEXT only blocks new triggers.
 bool getMuteState(int channel);
 bool getMuteStateForUI(int channel);  // Get mute state for UI display (uses edit page)
 void setMuteState(int channel, bool muted);
@@ -3142,6 +3143,15 @@ FLASHMEM void checkMode(const uint8_t currentButtonStates[NUM_ENCODERS], bool re
     switchMode(&noteShift);
     GLOB.singleMode = true;
     return;  // Prevent other button actions from being processed
+  }
+
+  if (currentMode == &menu && match_buttons(currentButtonStates, 1, 0, 0, 0)) {
+    extern int getCurrentMenuMainSetting();
+    if (getCurrentMenuMainSetting() == 47) {
+      extern void toggleSelectedMuteMaskChannel();
+      toggleSelectedMuteMaskChannel();
+      return;
+    }
   }
 
   if (currentMode == &menu && match_buttons(currentButtonStates, 1, 0, 0, 0)) {  // "1000"
@@ -7026,6 +7036,7 @@ void checkPendingSampleNotes() {
 
     if (isDue) {
       if (!isChildVoiceDisabled((int)ev.channel)
+          && !getMuteState((int)ev.channel)
           && !isChannelSampleReloadBusy((unsigned int)ev.channel)) {
         if (shouldSkipVoiceTriggerForSyncPreview((int)ev.channel)) {
           triggerSetWavSyncPreview(ev.velocity);
@@ -8598,15 +8609,7 @@ void tmpMuteAll(bool pressed) {
 }
 
 static void silenceAllVoicesForFullMute() {
-  for (int ch = 0; ch <= 8; ch++) {
-    for (int note = 36; note <= 96; note++) {
-      samplerNoteEvent(ch, note, 0, false, false);
-    }
-  }
-
-  stopSynthChannel(13);
-  stopSynthChannel(14);
-  resetMidiPressedKeyCount11to14();
+  for (int ch = 1; ch < (int)maxY; ++ch) stopMutedVoiceAudio(ch);
 }
 
 static void syncMuteArraysToSmp() {
@@ -8649,16 +8652,9 @@ FLASHMEM void fullMuteApplyView() {
   if (fullMuteView == FullMuteView::AllMuted) {
     silenceAllVoicesForFullMute();
   } else {
-    // Stop voices that this view keeps muted (e.g. UnmuteAll -> Ch12).
-    for (int ch = 0; ch < maxY; ch++) {
-      if (!globalMutes[ch]) continue;
-      if (ch >= 1 && ch <= 8) {
-        for (int note = 36; note <= 96; note++) {
-          samplerNoteEvent(ch, note, 0, false, false);
-        }
-      } else if (ch == 13 || ch == 14) {
-        stopSynthChannel(ch);
-      }
+    // Apply the same INST/NEXT policy to custom mute groups.
+    for (int ch = 1; ch < (int)maxY; ++ch) {
+      if (globalMutes[ch]) stopMutedVoiceAudio(ch);
     }
   }
 }
@@ -12015,6 +12011,7 @@ FLASHMEM bool getMuteStateForUI(int channel) {
 }
 
 static void stopMutedVoiceAudio(int ch) {
+  if (muteNext) return;
   // Release currently sounding notes so mute does not leave hot voices
   // holding audio blocks / freeverb tails under memory pressure.
   if (ch >= 1 && ch <= 8) {

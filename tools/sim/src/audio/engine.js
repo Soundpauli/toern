@@ -483,6 +483,12 @@ export function createEngine() {
     if (pitch == null) delete mono[ch];
   }
 
+  function stopChannel(ch){
+    if(!ctx)return;
+    for(const voice of new Set([...live,...releasing]))if(voice.ch===ch)stopVoice(voice,ctx.currentTime);
+    releaseChannel(ch);
+  }
+
   function releaseAll() {
     if (!ctx) return;
     const when = ctx.currentTime;
@@ -494,5 +500,5 @@ export function createEngine() {
     }
     // Delay/reverb nodes keep running until their existing tails decay.
   }
-  return { releaseAll, releaseChannel, ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
+  return { releaseAll, releaseChannel, stopChannel, ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
 }

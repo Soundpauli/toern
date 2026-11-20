@@ -831,18 +831,22 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
     matrix.setRing?.(3,orange);
     return;
   }
-  if(!(pageMode === "midi" && pageIndex === 5))matrix.drawText(visibleMode === "mode" && visibleIndex === 1 ? "PMODE" : name, 2, 10, parent);
+  if(!(pageMode === "midi" && pageIndex === 5)&&!(pageMode === "look" && pageIndex === 11))matrix.drawText(visibleMode === "mode" && visibleIndex === 1 ? "PMODE" : name, 2, 10, parent);
   if (pageMode === "look" && pageIndex === 11) {
+    const on=!!(s.muteMask&(1<<(s.muteSel===16?0:s.muteSel)));
+    matrix.drawText(s.muteTimingFocus?"MUTE":`CH${s.muteSel}`,2,10,parent);
+    matrix.drawText(s.muteTimingFocus?(s.muteNext?"NEXT":"INST"):(on?"ON":"OFF"),2,3,s.muteTimingFocus?UI_WHITE:on?UI_GREEN:UI_RED);
     for (let uch = 1; uch <= 16; uch++) {
       const bit = uch === 16 ? 0 : uch;
       let dot = (s.muteMask & (1 << bit)) ? UI_GREEN.slice() : UI_RED.slice();
       if (uch === s.muteSel) dot = [Math.min(255, dot[0] + 100), Math.min(255, dot[1] + 60), Math.min(255, dot[2] + 60)];
-      matrix.light(uch, 3, dot);
+      matrix.light(uch, 9, dot);
     }
-    matrix.drawIndicator("L", "Y", 2);
-    matrix.drawIndicator("L", "W", 3);
+    matrix.drawIndicator("L", on?"G":"R", 1);
+    matrix.drawIndicator("L", s.muteNext?"W":"O", 3);
     return;
   }
+
   if (pageMode === "etc" && pageIndex === ETC_FIRE_INDEX) {
     const value = s.legacySubValue(pageMode, pageIndex);
     const wide = COLS >= 24;

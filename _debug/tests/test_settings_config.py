@@ -69,7 +69,7 @@ void error(const char *s){assert(Serial.output.find(std::string("\"error\":\"")+
 int main(){
  memcpy(EEPROM.data+43,validBlock,60);EEPROM.data[0]=77;EEPROM.data[201]=1;
  request("GET");assert(Serial.output.find("\"protocol\":1")!=std::string::npos&&EEPROM.writes==0);
- uint8_t desired[60];memcpy(desired,validBlock,60);desired[27]=0;
+ uint8_t desired[60];memcpy(desired,validBlock,60);desired[27]=0;desired[21]=3;
  isNowPlaying=true;request(set(desired));error("BUSY");assert(EEPROM.writes==0);
  request("STOP");assert(!isNowPlaying&&EEPROM.writes==0);
  quiet=false;request(set(desired));error("BUSY");assert(EEPROM.writes==0);quiet=true;

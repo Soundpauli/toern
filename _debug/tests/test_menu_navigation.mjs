@@ -944,3 +944,25 @@ stored.set('toern-web-presets-13',JSON.stringify({1:{wave:3}}));
 migratedDevice.jump('wav');migratedDevice.press(0);audioCalls.length=0;migratedDevice.touch(4,true);migratedDevice.touch(4,false);
 assert.equal(audioCalls.find(c=>c[0]==='trigger')[4].wave,3,'legacy preset TRI remains TRI');
 console.log('PASS: version-2 patterns and legacy presets migrate waveform enums while preserving audible choice.');
+
+// MUTE mask clicks and mute timing are separate controls and survive reload.
+const muteControls=createDevice(matrix,{},[]);
+muteControls.start();frame(1);now+=6000;frame(now);
+muteControls.jump('settings-menu');muteControls.press(3);muteControls.rotate(3,3);
+assert.match(muteControls.menuSummary().detail,/MUTE: CH1 ON/);
+muteControls.rotate(0,15);assert.match(muteControls.menuSummary().detail,/CH16 OFF/);
+muteControls.press(0);assert.equal(muteControls.mode(),'look');
+assert.match(muteControls.menuSummary().detail,/CH16 ON/);
+const muteGroup=JSON.parse(stored.get('toern-web-eeprom')).muteMask;
+muteControls.rotate(2,1);assert.match(muteControls.menuSummary().detail,/MUTE: NEXT/);
+assert.equal(JSON.parse(stored.get('toern-web-eeprom')).muteMask,muteGroup);
+assert.equal(JSON.parse(stored.get('toern-web-eeprom')).muteNext,true);
+muteControls.jump('draw');muteControls.unmute(1);audioCalls.length=0;
+muteControls.toggleMute(1);
+assert(!audioCalls.some(c=>c[0]==='stopChannel'&&c[1]===1));
+assert(audioCalls.some(c=>c[0]==='apply'&&c[1]===1&&c[3]>0),'NEXT leaves the sounding channel gain intact');
+muteControls.unmute(1);muteControls.jump('settings-menu');muteControls.press(3);muteControls.rotate(3,3);muteControls.rotate(2,-1);
+assert.match(muteControls.menuSummary().detail,/MUTE: INST/);
+muteControls.jump('draw');audioCalls.length=0;muteControls.toggleMute(1);
+assert(audioCalls.some(c=>c[0]==='stopChannel'&&c[1]===1),'INST stops the sounding channel');
+console.log('PASS: MUTE encoder 0 selection/click, CH16 bit mapping, independent INST/NEXT persistence and live audio cutoff behavior.');

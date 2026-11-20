@@ -47,6 +47,8 @@ extern const int PREVIEW_MODE_SYNC;
 extern uint8_t currentColorScheme;
 extern void applyColorScheme(uint8_t scheme);
 extern uint16_t drawRFullMuteCustomUnmuteMask;
+extern bool muteNext;
+static bool muteMenuTimingFocus=false;
 
 // Match the start paths in play(), handleStart(), and analogDirectPulse().
 // Negative offsets contribute to the opposite path, so test the selected value.
@@ -1133,12 +1135,14 @@ FLASHMEM void loadMenuFromEEPROM() {
   extern bool showChannelNr;
   showChannelNr = (EEPROM.read(EEPROM_DATA_START + 19) != 0);
   
-  // Load drawMode from EEPROM (stored at EEPROM_DATA_START + 21)
-  drawMode = (int8_t)EEPROM.read(EEPROM_DATA_START + 21);
-  if (drawMode < 0 || drawMode > 1) {
-    drawMode = 0;  // Default to 0 (L+R) if invalid
-    saveSingleModeToEEPROM(21, drawMode);
+  // Byte 21: bit 0 DRAW mode; bit 1 NEXT mute. Legacy 0/1 keeps INST.
+  uint8_t drawMuteSettings = EEPROM.read(EEPROM_DATA_START + 21);
+  if (drawMuteSettings > 3) {
+    drawMuteSettings = 0;
+    saveSingleModeToEEPROM(21, 0);
   }
+  drawMode = drawMuteSettings & 1;
+  muteNext = (drawMuteSettings & 2) != 0;
 
   // Load stereoChannel from EEPROM (stored at EEPROM_DATA_START + 23)
   // 0=OFF, 1=M+P, 2=L+R
@@ -2937,24 +2941,28 @@ FLASHMEM void drawMainSettingStatus(int setting) {
       drawMenuIndicator('L', 'G', 3);
       break;
 
-    case 47: { // MUTE — columns 1..16 = user CH1..CH16 (see userChToInternalDrawR); green=in mask, red=out; enc1=CH, enc2=toggle
+    case 47: { // MUTE mask membership and global INST/NEXT policy
       const CRGB tc = currentMenuParentTextColor();
-      drawMenuText("MUTE", 2, 10, tc);
-      int selUch = constrain((int)currentMode->pos[1], 1, 16);
-      const int rowDots = 3;
-      for (int uch = 1; uch <= 16; uch++) {
-        int in = userChToInternalDrawR(uch);
-        bool inMask = (drawRFullMuteCustomUnmuteMask & (1u << in)) != 0;
-        CRGB dot = inMask ? UI_GREEN : UI_RED;
+      const int selUch = constrain((int)currentMode->pos[0], 1, 16);
+      const int internal = userChToInternalDrawR(selUch);
+      const bool on = (drawRFullMuteCustomUnmuteMask & (1u << internal)) != 0;
+      char label[8];snprintf(label,sizeof(label),"CH%d",selUch);
+      drawMenuText(muteMenuTimingFocus ? "MUTE" : label, 2, 10, tc);
+      drawMenuValue(muteMenuTimingFocus ? (muteNext ? "NEXT" : "INST") : (on ? "ON" : "OFF"),
+                    2, 3, muteMenuTimingFocus ? UI_WHITE : (on ? UI_GREEN : UI_RED));
+      // Keep the group overview between the value and title rows.
+      for (int uch = 1; uch <= 16; ++uch) {
+        const bool included = (drawRFullMuteCustomUnmuteMask & (1u << userChToInternalDrawR(uch))) != 0;
+        CRGB dot = included ? UI_GREEN : UI_RED;
         if (uch == selUch) {
           dot.r = (uint8_t)min(255, (int)dot.r + 100);
           dot.g = (uint8_t)min(255, (int)dot.g + 60);
           dot.b = (uint8_t)min(255, (int)dot.b + 60);
         }
-        light(uch, rowDots, dot);
+        light(uch, 9, dot);
       }
-      drawMenuIndicator('L', 'Y', 2);
-      drawMenuIndicator('L', 'W', 3);
+      drawMenuIndicator('L', on ? 'G' : 'R', 1);
+      drawMenuIndicator('L', muteNext ? 'W' : 'O', 3);
       break;
     }
 
@@ -3301,7 +3309,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
       Encoder[1].writeCounter((int32_t)0);
       currentMode->pos[1] = 0;
     }
-    if (lastSetting == 50 || lastSetting == 53 || lastSetting == 55) {
+    if (lastSetting == 47 || lastSetting == 50 || lastSetting == 53 || lastSetting == 55) {
       extern uint8_t fireFocus;
       if (lastSetting == 55) fireFocus = 0;
       Encoder[0].writeMin((int32_t)1);
@@ -4480,62 +4488,41 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         Encoder[2].writeCounter((int32_t)drawMode);
         currentMode->pos[2] = drawMode;
         lastDrawMode = drawMode;
-        saveSingleModeToEEPROM(21, (int8_t)drawMode);
+        saveSingleModeToEEPROM(21, (int8_t)(drawMode | (muteNext ? 2 : 0)));
         redrawMain(setting);
       }
       break;
     }
 
-    case 47: { // MUTE — enc1 = user CH1..CH16; enc2 toggles internal bit for that CH
+    case 47: { // Encoder 0 selects/clicks membership; encoder 2 selects timing.
       static int lastMuteSelUch = -1;
-      static int lastMuteOn = -1;
+      static int lastMuteTiming = -1;
       if (menuFirstEnter) {
         int selUch = 1;
-        for (int in = 0; in < 16; in++) {
-          if (drawRFullMuteCustomUnmuteMask & (1u << in)) {
-            selUch = internalToUserChDrawR(in);
-            break;
-          }
+        for (int in = 0; in < 16; ++in) if (drawRFullMuteCustomUnmuteMask & (1u << in)) {
+          selUch = internalToUserChDrawR(in);break;
         }
-        Encoder[1].writeCounter((int32_t)selUch);
-        Encoder[1].writeMax((int32_t)16);
-        Encoder[1].writeMin((int32_t)1);
-        currentMode->pos[1] = selUch;
-        int in = userChToInternalDrawR(selUch);
-        int on = (drawRFullMuteCustomUnmuteMask & (1u << in)) ? 1 : 0;
-        Encoder[2].writeCounter((int32_t)on);
-        Encoder[2].writeMax((int32_t)1);
-        Encoder[2].writeMin((int32_t)0);
-        currentMode->pos[2] = on;
-        lastMuteSelUch = selUch;
-        lastMuteOn = on;
-        menuFirstEnter = false;
+        Encoder[0].writeMin((int32_t)1);Encoder[0].writeMax((int32_t)16);
+        Encoder[0].writeCounter((int32_t)selUch);currentMode->pos[0]=selUch;
+        Encoder[1].writeMin((int32_t)0);Encoder[1].writeMax((int32_t)0);
+        Encoder[1].writeCounter((int32_t)0);currentMode->pos[1]=0;
+        Encoder[2].writeMin((int32_t)0);Encoder[2].writeMax((int32_t)1);
+        Encoder[2].writeCounter((int32_t)muteNext);currentMode->pos[2]=muteNext;
+        lastMuteSelUch=selUch;lastMuteTiming=muteNext;
+        muteMenuTimingFocus=false;menuFirstEnter=false;
       }
-      int selUch = constrain((int)currentMode->pos[1], 1, 16);
-      if (selUch != lastMuteSelUch) {
-        lastMuteSelUch = selUch;
-        currentMode->pos[1] = selUch;
-        Encoder[1].writeCounter((int32_t)selUch);
-        int in = userChToInternalDrawR(selUch);
-        int on = (drawRFullMuteCustomUnmuteMask & (1u << in)) ? 1 : 0;
-        Encoder[2].writeCounter((int32_t)on);
-        currentMode->pos[2] = on;
-        lastMuteOn = on;
-        redrawMain(setting);
+      const int selUch=constrain((int)currentMode->pos[0],1,16);
+      if(selUch!=lastMuteSelUch){
+        lastMuteSelUch=selUch;currentMode->pos[0]=selUch;
+        Encoder[0].writeCounter((int32_t)selUch);
+        muteMenuTimingFocus=false;redrawMain(setting);
       }
-      int inSel = userChToInternalDrawR(selUch);
-      int on = constrain((int)currentMode->pos[2], 0, 1);
-      if (on != lastMuteOn) {
-        lastMuteOn = on;
-        currentMode->pos[2] = on;
-        Encoder[2].writeCounter((int32_t)on);
-        if (on) {
-          drawRFullMuteCustomUnmuteMask |= (uint16_t)(1u << inSel);
-        } else {
-          drawRFullMuteCustomUnmuteMask &= (uint16_t)~(1u << inSel);
-        }
-        saveSettingsU16ToEEPROM(34, drawRFullMuteCustomUnmuteMask);
-        redrawMain(setting);
+      const int timing=constrain((int)currentMode->pos[2],0,1);
+      if(timing!=lastMuteTiming){
+        lastMuteTiming=timing;muteNext=timing!=0;
+        currentMode->pos[2]=timing;Encoder[2].writeCounter((int32_t)timing);
+        saveSingleModeToEEPROM(21,(int8_t)(drawMode | (muteNext ? 2 : 0)));
+        muteMenuTimingFocus=true;redrawMain(setting);
       }
       break;
     }
@@ -5118,6 +5105,14 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
   return didRedraw;
 }
 
+void toggleSelectedMuteMaskChannel(){
+  const int selected=constrain((int)currentMode->pos[0],1,16);
+  drawRFullMuteCustomUnmuteMask ^= (uint16_t)(1u << userChToInternalDrawR(selected));
+  saveSettingsU16ToEEPROM(34,drawRFullMuteCustomUnmuteMask);
+  muteMenuTimingFocus=false;
+  menuRequestFullRedraw();
+}
+
 void toggleAutogenAssignmentView(){
   autogenAssignmentView=!autogenAssignmentView;
   menuRequestFullRedraw();
@@ -5474,7 +5469,7 @@ FLASHMEM void switchMenu(int menuPosition){
         case 38:
         // DRAW mode toggle: switch between L+R (0) and R (1)
         drawMode = (drawMode == 0) ? 1 : 0;
-        saveSingleModeToEEPROM(21, (int8_t)drawMode);
+        saveSingleModeToEEPROM(21, (int8_t)(drawMode | (muteNext ? 2 : 0)));
         drawMainSettingStatus(menuPosition);
         break;
         

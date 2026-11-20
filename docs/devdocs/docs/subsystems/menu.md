@@ -238,3 +238,16 @@ CH13/14 develop more gently and repeat their phrase over 64 steps, with early
 refresh for a source edit or section transition. Drum/form timing stays active.
 Plain FN view taps perform no encoder-counter writes or subpattern-release
 rewinds; they update only view state and redraw flags.
+
+### SETT → MUTE
+
+Encoder 1 (index 0) selects CH1–CH16 in the custom mute-group mask. Click the
+same encoder to toggle the displayed ON/OFF membership. The dots on row 9 show
+the complete group. Encoder 3 (index 2) selects the global mute behavior:
+**INST** cuts the currently sounding voice; **NEXT** blocks new notes while
+letting current samples and envelopes finish. Individual, solo and full-mute
+operations use the same behavior, including manual AGEN mutes. Normal note-off
+and release processing continues in NEXT. Stop/pause still stops playback.
+
+The behavior defaults to INST and is saved with DRAW in EEPROM byte 21
+(bit 0 = DRAW, bit 1 = NEXT), preserving the existing 60-byte settings format.

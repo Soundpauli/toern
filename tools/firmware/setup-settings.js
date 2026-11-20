@@ -42,6 +42,7 @@ export function makeSettings(answers, current) {
     0xA5, 1, 0, 2, 0, 0xA5, 1, 0, 0xA5, 0,
   ]);
   b[13] = current[13];
+  b[21] = current[21] <= 3 ? current[21] & 2 : 0; // Preserve INST/NEXT mute preference.
   b[27] = answers.speaker === 'yes' ? 1 : 0;
   const full = answers.controls === 'full';
   b[11] = full ? 2 : 1;

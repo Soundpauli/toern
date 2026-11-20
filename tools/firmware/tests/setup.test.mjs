@@ -147,3 +147,11 @@ test('disconnect rejects pending work and permits reconnect', async () => {
   await new Promise(resolve=>setTimeout(resolve,10));
   assert.equal(device.port,null); await device.connect(); assert(fake.open); await device.close();
 });
+
+test('guided setup preserves NEXT mute without retaining the DRAW mode', () => {
+  for(const packed of [0,1,2,3]){
+    const current=new Uint8Array(60);current[13]=4;current[21]=packed;
+    const settings=makeSettings(DEFAULT_ANSWERS,current);
+    assert.equal(settings[21],packed&2);
+  }
+});

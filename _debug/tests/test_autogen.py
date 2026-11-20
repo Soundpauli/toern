@@ -57,6 +57,7 @@ uint8_t lastChannelVolBeforeMute[16]={};bool sampleVolOnReader[9]={},neoSliderIn
 float sampleTriggerAmp[9]={1,1,1,1,1,1,1,1,1},ampLevel[16]={},readerLevel[9]={};
 struct Amp {} testAmps[15];Amp *amps[15]={};
 struct Voice {} testVoices[9];Voice *voices[9]={};
+bool muteNext=false;
 bool autogenActive();bool autogenMuted(int);void autogenSetMute(int,bool);
 bool getMuteState(int ch){return autogenActive()?autogenMuted(ch):ch==2;}
 void setMuteState(int ch,bool muted){autogenSetMute(ch,muted);}
@@ -494,6 +495,15 @@ int main(){
  setAutogenAssignment(0,2);
  for(unsigned ch:toern_autogen_roles::channels)if(ch)assert(autogenAssignmentKind(ch)==2);
  autogenAssignments=toern_autogen_roles::Assignments{};
+ // NEXT manual mute blocks triggers without automating the sounding gain to zero.
+ for(auto &col:original)for(auto &n:col)n=Note{};
+ original[1][2]={1,91,100,1,60};
+ for(unsigned ch=0;ch<16;++ch){testMutes[ch]=false;SMP.channelVol[ch]=12;SMP.mute[ch]=false;}
+ GLOB.edit=GLOB.page=1;muteNext=true;assert(toggleAutogen());
+ const unsigned heldVolume=agenWork->volumeNow[1];
+ autogenSetMute(1,true);clockMs+=100;serviceAutogenPerformance();
+ assert(getMuteState(1)&&agenWork->volumeNow[1]==heldVolume&&SMP.channelVol[1]==12);
+ stopAutogen();muteNext=false;
  puts("PASS: every AGEN kind routes to each physical sample/synth channel; OFF silences output; VOIC preserves drawn hits; ALL assigns every channel; stopping preserves the motif");
  puts("PASS: AGEN 16/32-step boundaries, tempo/page-aware repeats, late-builder safety, one-voice jobs, untouched live/source grids, editable motif, pending-page invalidation, developed edited sources, mute/unmute, removed voices, held CH11 progressions, held leads, full solos, kept drop groove, climax-only vocals on voice 8, exact restoration, empty starters and incompatible-mode guards");
 }
