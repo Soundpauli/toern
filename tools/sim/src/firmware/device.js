@@ -984,7 +984,8 @@ export function createDevice(matrix, statusEl, rings) {
     s.playing = !s.playing;
     fills.reset(); fired.length = 0; pendingAudition = null;
     midiArp.reset();
-    engine.releaseAll();
+    if(s.playing||!s.muteNext)engine.releaseAll();
+    else engine.finishHeldVoices();
     noteActivity();
     if (!s.playing) {
       stopAutogen();
@@ -1360,7 +1361,7 @@ export function createDevice(matrix, statusEl, rings) {
   function legacySubValue(mode, index) {
     if(mode==="look"&&index===11){
       const on=!!(s.muteMask&(1<<(s.muteSel===16?0:s.muteSel)));
-      return {text:s.muteTimingFocus?(s.muteNext?"NEXT":"INST"):`CH${s.muteSel} ${on?"ON":"OFF"}`};
+      return {text:s.muteTimingFocus?(s.muteNext?"NEXT":"INST"):`CH${s.muteSel} ${on?"ON":"MUTE"}`};
     }
     if (mode === "vol" && index === 0) return { text: String(s.mainVol), color: [120, 60, 0], code: "O" };
     if (mode === "vol" && index === 1) return { text: `${[s.gain14,s.gain58,s.gainSynth,s.gain][s.gainFocus].toFixed(1)}x`, color: [0, 120, 0], code: "G" };
@@ -1695,7 +1696,7 @@ export function createDevice(matrix, statusEl, rings) {
     if(pageMode==='etc'&&pageIndex===1&&enc===2){s.ramMetric=clamp(s.ramMetric+dir,0,3);return;}
     if(pageMode==='etc'&&pageIndex===6&&enc===2)return;
     if (pageMode === "look" && pageIndex === 11 && enc === 0) {
-      s.muteSel = clamp(s.muteSel + dir, 1, 16);s.muteTimingFocus=false;
+      s.muteSel = clamp(s.muteSel - dir, 1, 16);s.muteTimingFocus=false;
       return;
     }
     if (pageMode === "bpm" && enc === 1) {
@@ -3075,7 +3076,8 @@ export function createDevice(matrix, statusEl, rings) {
   function toggleSong() {
     stopAutogen();
     if (s.playing) {
-      s.playing = false; fills.reset(); midiArp.reset(); engine.releaseAll();
+      s.playing = false; fills.reset(); midiArp.reset();
+      if(s.muteNext)engine.finishHeldVoices();else engine.releaseAll();
       queueAutosave();
       subPick.look[3] = 0;
       applySub("look", 3);

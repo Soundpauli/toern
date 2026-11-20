@@ -411,7 +411,7 @@ export function createEngine() {
       for (const previous of mono[ch].oscs) previous.stop(when + 0.04);
     }
     if (ch !== 11) mono[ch] = { oscs, g };
-    const voice = { ch, pitch: wav.inputPitch, oscs, g };
+    const voice = { ch, pitch: wav.inputPitch, oscs, g, held:!!wav.held, release:rel };
     synthLive.add(voice);
     osc.onended = () => { synthLive.delete(voice); for (const node of oscs) node.disconnect(); g.disconnect(); };
     for (const node of oscs) {
@@ -489,6 +489,18 @@ export function createEngine() {
     releaseChannel(ch);
   }
 
+  function finishHeldVoices(){
+    if(!ctx)return;
+    // One-shot envelopes already have their complete release scheduled.
+    for(const voice of live)if(voice.held)releaseChannel(voice.ch);
+    const when=ctx.currentTime;
+    for(const voice of synthLive)if(voice.held){
+      voice.g.gain.cancelScheduledValues(when);
+      voice.g.gain.setTargetAtTime(0.0001,when,voice.release/5);
+      try {for(const node of voice.oscs)node.stop(when+voice.release+0.02);}catch { /* ended */ }
+    }
+  }
+
   function releaseAll() {
     if (!ctx) return;
     const when = ctx.currentTime;
@@ -500,5 +512,5 @@ export function createEngine() {
     }
     // Delay/reverb nodes keep running until their existing tails decay.
   }
-  return { releaseAll, releaseChannel, stopChannel, ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
+  return { releaseAll, finishHeldVoices, releaseChannel, stopChannel, ensure, apply, setBus, loadUrl, loadBuffer, decodeUrl, trigger, preview, click, now: () => (ctx ? ctx.currentTime : 0) };
 }

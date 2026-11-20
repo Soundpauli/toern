@@ -2943,18 +2943,20 @@ FLASHMEM void drawMainSettingStatus(int setting) {
 
     case 47: { // MUTE mask membership and global INST/NEXT policy
       const CRGB tc = currentMenuParentTextColor();
-      const int selUch = constrain((int)currentMode->pos[0], 1, 16);
+      const int selUch = 17 - constrain((int)currentMode->pos[0], 1, 16);
       const int internal = userChToInternalDrawR(selUch);
       const bool on = (drawRFullMuteCustomUnmuteMask & (1u << internal)) != 0;
       char label[8];snprintf(label,sizeof(label),"CH%d",selUch);
       drawMenuText(muteMenuTimingFocus ? "MUTE" : label, 2, 10, tc);
-      drawMenuValue(muteMenuTimingFocus ? (muteNext ? "NEXT" : "INST") : (on ? "ON" : "OFF"),
+      drawMenuValue(muteMenuTimingFocus ? (muteNext ? "NEXT" : "INST") : (on ? "ON" : "MUTE"),
                     2, 3, muteMenuTimingFocus ? UI_WHITE : (on ? UI_GREEN : UI_RED));
       // Keep the group overview between the value and title rows.
       for (int uch = 1; uch <= 16; ++uch) {
         const bool included = (drawRFullMuteCustomUnmuteMask & (1u << userChToInternalDrawR(uch))) != 0;
         CRGB dot = included ? UI_GREEN : UI_RED;
-        if (uch == selUch) {
+        if (muteMenuTimingFocus) {
+          dot.r = dot.g = dot.b = 0;
+        } else if (uch == selUch) {
           dot.r = (uint8_t)min(255, (int)dot.r + 100);
           dot.g = (uint8_t)min(255, (int)dot.g + 60);
           dot.b = (uint8_t)min(255, (int)dot.b + 60);
@@ -4503,7 +4505,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
           selUch = internalToUserChDrawR(in);break;
         }
         Encoder[0].writeMin((int32_t)1);Encoder[0].writeMax((int32_t)16);
-        Encoder[0].writeCounter((int32_t)selUch);currentMode->pos[0]=selUch;
+        Encoder[0].writeCounter((int32_t)(17-selUch));currentMode->pos[0]=17-selUch;
         Encoder[1].writeMin((int32_t)0);Encoder[1].writeMax((int32_t)0);
         Encoder[1].writeCounter((int32_t)0);currentMode->pos[1]=0;
         Encoder[2].writeMin((int32_t)0);Encoder[2].writeMax((int32_t)1);
@@ -4511,10 +4513,10 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
         lastMuteSelUch=selUch;lastMuteTiming=muteNext;
         muteMenuTimingFocus=false;menuFirstEnter=false;
       }
-      const int selUch=constrain((int)currentMode->pos[0],1,16);
+      const int selUch=17-constrain((int)currentMode->pos[0],1,16);
       if(selUch!=lastMuteSelUch){
-        lastMuteSelUch=selUch;currentMode->pos[0]=selUch;
-        Encoder[0].writeCounter((int32_t)selUch);
+        lastMuteSelUch=selUch;currentMode->pos[0]=17-selUch;
+        Encoder[0].writeCounter((int32_t)(17-selUch));
         muteMenuTimingFocus=false;redrawMain(setting);
       }
       const int timing=constrain((int)currentMode->pos[2],0,1);
@@ -5106,7 +5108,7 @@ FLASHMEM bool handleAdditionalFeatureControls(int setting) {
 }
 
 void toggleSelectedMuteMaskChannel(){
-  const int selected=constrain((int)currentMode->pos[0],1,16);
+  const int selected=17-constrain((int)currentMode->pos[0],1,16);
   drawRFullMuteCustomUnmuteMask ^= (uint16_t)(1u << userChToInternalDrawR(selected));
   saveSettingsU16ToEEPROM(34,drawRFullMuteCustomUnmuteMask);
   muteMenuTimingFocus=false;

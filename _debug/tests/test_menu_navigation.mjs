@@ -950,7 +950,7 @@ const muteControls=createDevice(matrix,{},[]);
 muteControls.start();frame(1);now+=6000;frame(now);
 muteControls.jump('settings-menu');muteControls.press(3);muteControls.rotate(3,3);
 assert.match(muteControls.menuSummary().detail,/MUTE: CH1 ON/);
-muteControls.rotate(0,15);assert.match(muteControls.menuSummary().detail,/CH16 OFF/);
+muteControls.rotate(0,-15);assert.match(muteControls.menuSummary().detail,/CH16 MUTE/);
 muteControls.press(0);assert.equal(muteControls.mode(),'look');
 assert.match(muteControls.menuSummary().detail,/CH16 ON/);
 const muteGroup=JSON.parse(stored.get('toern-web-eeprom')).muteMask;
@@ -966,3 +966,16 @@ assert.match(muteControls.menuSummary().detail,/MUTE: INST/);
 muteControls.jump('draw');audioCalls.length=0;muteControls.toggleMute(1);
 assert(audioCalls.some(c=>c[0]==='stopChannel'&&c[1]===1),'INST stops the sounding channel');
 console.log('PASS: MUTE encoder 0 selection/click, CH16 bit mapping, independent INST/NEXT persistence and live audio cutoff behavior.');
+
+// Transport pause applies the selected mute policy, including the song path.
+muteControls.unmute(1);
+muteControls.jump('settings-menu');muteControls.press(3);muteControls.rotate(3,3);muteControls.rotate(2,1);
+muteControls.jump('draw');muteControls.togglePlay();assert(muteControls.playing());
+audioCalls.length=0;muteControls.pause();assert(!muteControls.playing());
+assert(!audioCalls.some(c=>c[0]==='releaseAll'),'NEXT pause preserves existing one-shot audio');
+assert(audioCalls.some(c=>c[0]==='finishHeldVoices'),'NEXT lets held voices use their configured release');
+muteControls.jump('settings-menu');muteControls.press(3);muteControls.rotate(3,3);muteControls.rotate(2,-1);
+muteControls.jump('draw');muteControls.togglePlay();assert(muteControls.playing());
+audioCalls.length=0;muteControls.pause();assert(!muteControls.playing());
+assert(audioCalls.some(c=>c[0]==='releaseAll'),'INST pause begins immediate release');
+console.log('PASS: NEXT pause preserves one-shots and finishes held voices; INST pause releases immediately.');

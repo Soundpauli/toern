@@ -242,12 +242,15 @@ rewinds; they update only view state and redraw flags.
 ### SETT → MUTE
 
 Encoder 1 (index 0) selects CH1–CH16 in the custom mute-group mask. Click the
-same encoder to toggle the displayed ON/OFF membership. The dots on row 9 show
-the complete group. Encoder 3 (index 2) selects the global mute behavior:
+same encoder to toggle the displayed green ON/red MUTE membership. Channel
+selection runs in the reverse encoder direction. The dots on row 9 show the
+complete group while selecting channels and are hidden on the INST/NEXT view. Encoder 3 (index 2) selects the global mute behavior:
 **INST** cuts the currently sounding voice; **NEXT** blocks new notes while
 letting current samples and envelopes finish. Individual, solo and full-mute
 operations use the same behavior, including manual AGEN mutes. Normal note-off
-and release processing continues in NEXT. Stop/pause still stops playback.
+and release processing continues in NEXT. Pause also uses this setting: INST
+begins release immediately; NEXT stops new notes and lets existing samples and
+synth gates finish naturally. Delay and reverb tails remain intact in both modes.
 
 The behavior defaults to INST and is saved with DRAW in EEPROM byte 21
 (bit 0 = DRAW, bit 1 = NEXT), preserving the existing 60-byte settings format.

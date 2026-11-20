@@ -127,12 +127,13 @@ Envelope *envelopes[15]={};
 Envelope *Senvelope1[3]={&poly[0][0],&poly[0][1],&poly[0][2]};
 Envelope *Senvelope2[3]={&poly[1][0],&poly[1][1],&poly[1][2]};
 Envelope *SenvelopeFilter1[3]={&poly[2][0],&poly[2][1],&poly[2][2]};
-struct Voice {int stops=0;void stop(){stops++;}} readers[9];
+struct Voice {int stops=0;bool playing=true;void stop(){stops++;playing=false;}} readers[9];
 Voice *voices[9]={};
 struct Effect {int clears=0;void clear(){clears++;}} verbs[15];
 Effect *freeverbs[15]={};
 const int VOICE_DELAY_COUNT=11;
 Effect voiceDelay[11],voiceDelayFb[11],voiceDelayMix[11];
+bool muteNext=false,pauseKeepsTails=false;uint16_t pauseTailSampleReleaseMask=0;
 bool pendingPauseAudioCleanup=false,isNowPlaying=true,isRecording=false,fastRecordActive=false;
 elapsedMillis pauseEffectsQuietMs,pauseSdWaitMs;
 const int POLY_VOICES=3,INSTRUMENT_CHANNELS=2,NOTE_EMPTY=-32768;
@@ -141,9 +142,18 @@ void releasePolyVoice(int i){Senvelope1[i]->noteOff();Senvelope2[i]->noteOff();S
 bool MIDI_CLOCK_SEND=false,MIDI_TRANSPORT_SEND=false;
 namespace midi{const int Stop=0;}
 struct {void sendRealTime(int){}} MIDI;
+void stopAutogen(){}void applyStereoChannelRouting(){}
+void samplePolyNoteOffAll(int ch){env[ch].noteOff();}
+bool samplePolyAnyEnvelopeActive(int ch){return env[ch].active;}
+bool samplePolyAnyPlaying(int ch){return readers[ch].playing;}
+void samplePolyStopAll(int ch){readers[ch].stop();}
+uint32_t sequencedSoundCurrentTick=4,sequencedSoundLastTick=4;
+bool sequencedSoundLegato=true,sequencedSoundTouched[3]={true,true,true};
+uint32_t sequencedMonoSynthLastTick[15]={},sequencedMonoSynthLastPitch[15]={};
+bool sequencedMonoSynthActive[15]={};
 void cancelMidiTransportStart(){}
 void MidiReleaseSequencerNotes(){} void clearLiveRecordSkip(){} void deleteActiveCopy(){}
-void stopSynthChannel(int){} void resetMidiPressedKeyCount11to14(){} void resetSequencedSynthLegato(){}
+void stopSynthChannel(int){} void resetMidiPressedKeyCount11to14(){}
 struct {void end(){}} fillTimer;
 struct {int page=2;} GLOB;
 bool ctrlVolumeOverlayActive=true,pendingStartOnBar=true,fillHasTriggered=true,fillRunning=true;
@@ -155,11 +165,11 @@ bool pendingPauseUIUpdate=false,pendingPauseSkipSave=false;
 int pauseSdSettleGen=0;
 uint16_t touchFillPendingMask=0;
 uint32_t fillStepsRemaining=0;
-struct TouchFillState {bool running=false;uint32_t startSubTick=0,stepsRemaining=0;};
+struct TouchFillState {bool running=false,autoOwned=false;uint8_t pages=2,pendingPages=2;uint32_t startSubTick=0,stepsRemaining=0;};
 struct FillDropState {bool pending=false;uint8_t row=0,midiPitch=255;};
 FillDropState fillDrops[15];
 TouchFillState touchFills[15];
-''' + function('toern.ino','static void resetTouchFills() {')+'\n'+function('toern_synths.ino','void releaseAllPolySynthVoices() {') + '\n' + function('toern.ino','void pause(bool skipSave) {') + '\n' + function('toern.ino','void servicePauseAudioCleanup() {') + r'''
+''' + function('toern_synths.ino','void resetSequencedSynthLegatoState(bool releaseVoices) {')+'\n'+function('toern_synths.ino','void resetSequencedSynthLegato() {')+'\n'+function('toern.ino','static void resetTouchFills() {')+'\n'+function('toern_synths.ino','void releaseAllPolySynthVoices() {') + '\n' + function('toern.ino','void pause(bool skipSave) {') + '\n' + function('toern.ino','void servicePauseAudioCleanup() {') + r'''
 int main(){
  for(int i=0;i<15;i++){envelopes[i]=&env[i];freeverbs[i]=&verbs[i];env[i].active=true;}
  for(int i=0;i<9;i++)voices[i]=&readers[i];
@@ -178,6 +188,29 @@ int main(){
  for(int i=0;i<11;i++)assert(voiceDelay[i].clears==0&&voiceDelayFb[i].clears==0&&voiceDelayMix[i].clears==0);
  assert(verbs[11].clears==0);for(auto &r:readers)assert(r.stops==1);
  servicePauseAudioCleanup();assert(verbs[11].clears==0);
+ // NEXT pause leaves one-shot sample and synth envelopes untouched, but releases
+ // sequencer ownership so the normal synth auto-off timers can finish them.
+ muteNext=true;isNowPlaying=true;
+ for(auto &e:env){e.active=true;e.offs=0;}
+ for(auto &group:poly)for(auto &e:group){e.active=true;e.offs=0;}
+ for(auto &reader:readers)reader.playing=true;
+ noteArray[0][0]=60;sequencedSoundLastTick=5;sequencedMonoSynthActive[13]=true;
+ pause(false);assert(!isNowPlaying&&pauseKeepsTails&&pendingPauseAudioCleanup);
+ for(auto &e:env)assert(e.offs==0);
+ for(auto &group:poly)for(auto &e:group)assert(e.offs==0);
+ assert(noteArray[0][0]==60&&sequencedSoundLastTick==0&&!sequencedMonoSynthActive[13]);
+ now+=100;servicePauseAudioCleanup();assert(env[0].offs==0&&pendingPauseAudioCleanup);
+ // An envelope may close before a long sample finishes: the reader still owns
+ // its sound in NEXT, so it must not be reclaimed by pause cleanup.
+ for(auto &e:env)e.active=false;
+ for(auto &group:poly)for(auto &e:group)e.active=false;
+ now+=100;servicePauseAudioCleanup();assert(pendingPauseAudioCleanup);
+ for(auto &reader:readers)assert(reader.stops==1);
+ for(auto &reader:readers)reader.playing=false;
+ now+=100;servicePauseAudioCleanup();
+ now+=20;servicePauseAudioCleanup();assert(!pendingPauseAudioCleanup);
+ for(int i=0;i<=8;++i){assert(env[i].offs==1);assert(readers[i].stops==2);}
+ assert(verbs[11].clears==0);
  // Restart/capture cancels cleanup instead of silencing new audio.
  for(int which=0;which<3;which++){
   pendingPauseAudioCleanup=true;
@@ -204,4 +237,4 @@ with tempfile.TemporaryDirectory(prefix='toern-pause-effects-') as tmp:
         cpp=tmp/f'{name}.cpp';exe=tmp/name;cpp.write_text(code)
         subprocess.run(flags+[str(cpp),*map(str,sources),'-o',str(exe)],check=True)
         subprocess.run([str(exe)],check=True)
-print('PASS: pause releases voices without clearing effects; long delay/reverb tails decay naturally to silence and retain their settings.')
+print('PASS: INST pause releases immediately; NEXT preserves samples and timed synth gates without hung legato; long delay/reverb tails decay naturally to silence and retain their settings.')

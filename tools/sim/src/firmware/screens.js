@@ -835,8 +835,8 @@ export function drawSubmenu(matrix, s, now = performance.now()) {
   if (pageMode === "look" && pageIndex === 11) {
     const on=!!(s.muteMask&(1<<(s.muteSel===16?0:s.muteSel)));
     matrix.drawText(s.muteTimingFocus?"MUTE":`CH${s.muteSel}`,2,10,parent);
-    matrix.drawText(s.muteTimingFocus?(s.muteNext?"NEXT":"INST"):(on?"ON":"OFF"),2,3,s.muteTimingFocus?UI_WHITE:on?UI_GREEN:UI_RED);
-    for (let uch = 1; uch <= 16; uch++) {
+    matrix.drawText(s.muteTimingFocus?(s.muteNext?"NEXT":"INST"):(on?"ON":"MUTE"),2,3,s.muteTimingFocus?UI_WHITE:on?UI_GREEN:UI_RED);
+    if(!s.muteTimingFocus)for (let uch = 1; uch <= 16; uch++) {
       const bit = uch === 16 ? 0 : uch;
       let dot = (s.muteMask & (1 << bit)) ? UI_GREEN.slice() : UI_RED.slice();
       if (uch === s.muteSel) dot = [Math.min(255, dot[0] + 100), Math.min(255, dot[1] + 60), Math.min(255, dot[2] + 60)];

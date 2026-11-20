@@ -1072,13 +1072,13 @@ void finishSequencedSoundTick(uint32_t tick, bool hadNotes) {
   }
 }
 
-void resetSequencedSynthLegato() {
+void resetSequencedSynthLegatoState(bool releaseVoices) {
   sequencedSoundCurrentTick = 0;
   sequencedSoundLastTick = 0;
   sequencedSoundLegato = false;
   for (int voice = 0; voice < POLY_VOICES; voice++) {
     sequencedSoundTouched[voice] = false;
-    if (noteArray[0][voice] != NOTE_EMPTY) {
+    if (releaseVoices && noteArray[0][voice] != NOTE_EMPTY) {
       Senvelope1[voice]->noteOff();
       Senvelope2[voice]->noteOff();
       SenvelopeFilter1[voice]->noteOff();
@@ -1094,6 +1094,10 @@ void resetSequencedSynthLegato() {
 }
 
 
+
+void resetSequencedSynthLegato() {
+  resetSequencedSynthLegatoState(true);
+}
 
 // The output envelopes sit after the six ladder filters. Once BOTH sides of a
 // voice finish, stop its three oscillators so they no longer feed those filters.

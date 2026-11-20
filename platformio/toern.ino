@@ -45,6 +45,8 @@ static uint8_t pauseSdSettleGen = 0;
 
 bool sdIoAudioSettled();
 static volatile bool pendingPauseAudioCleanup = false;
+static bool pauseKeepsTails = false;
+static uint16_t pauseTailSampleReleaseMask = 0;
 static elapsedMillis pauseEffectsQuietMs;
 void servicePauseAudioCleanup();
 void releaseAllPolySynthVoices();
@@ -392,6 +394,7 @@ void playSequencedSound(int note, int ch, int velocity, uint32_t tick,
                         bool allowLegato);
 void finishSequencedSoundTick(uint32_t tick, bool hadNotes);
 void resetSequencedSynthLegato();
+void resetSequencedSynthLegatoState(bool releaseVoices);
 void playSequencedSynth(int ch, int b, int vel, uint32_t tick,
                         bool allowLegato, int midiPitchOverride);
 void playSynthMidi(int ch, uint8_t midiPitch, int vel, bool persistant);
@@ -8883,17 +8886,26 @@ void pause(bool skipSave) {
   fillTimer.end();
   deleteActiveCopy();
 
-  // Stop audio voices immediately (time-critical, no I2C)
-  for (int ch = 0; ch < 15; ++ch) {
-    if (ch >= 1 && ch <= 8) samplePolyNoteOffAll(ch);
-    else if (envelopes[ch]) envelopes[ch]->noteOff();
+  pauseKeepsTails = muteNext;
+  pauseTailSampleReleaseMask = 0;
+  if (!pauseKeepsTails) {
+    // INST: begin release immediately, without touching downstream effect tails.
+    for (int ch = 0; ch < 15; ++ch) {
+      if (ch >= 1 && ch <= 8) samplePolyNoteOffAll(ch);
+      else if (envelopes[ch]) envelopes[ch]->noteOff();
+    }
+    releaseAllPolySynthVoices();
+    stopSynthChannel(13);
+    stopSynthChannel(14);
+    resetSequencedSynthLegato();
+  } else {
+    // NEXT: detach the sequencer without shortening sample playback or synth gates.
+    // Clearing legato ownership lets the usual timed auto-off release held synths.
+    resetSequencedSynthLegatoState(false);
+    persistentNoteOn[13] = persistentNoteOn[14] = false;
   }
-  releaseAllPolySynthVoices();
-  stopSynthChannel(13);
-  stopSynthChannel(14);
   resetMidiPressedKeyCount11to14();
   sequencerSynthTick = 0;
-  resetSequencedSynthLegato();
   noteOnTriggered[11] = persistentNoteOn[11] = false;
   pauseEffectsQuietMs = 0;
   pendingPauseAudioCleanup = true;
@@ -8935,7 +8947,18 @@ void servicePauseAudioCleanup() {
     return;
   }
   for (int ch = 0; ch < 15; ++ch) {
-    if (ch >= 1 && ch <= 8) {
+    if (ch <= 8) {
+      if (pauseKeepsTails && samplePolyAnyPlaying(ch)) {
+        pauseEffectsQuietMs = 0;
+        return;
+      }
+      // One-shot sample envelopes sustain while their readers play. In NEXT,
+      // release each silent envelope only once its complete sample has ended.
+      if (pauseKeepsTails && !(pauseTailSampleReleaseMask & (1u << ch))
+          && !samplePolyAnyPlaying(ch)) {
+        samplePolyNoteOffAll(ch);
+        pauseTailSampleReleaseMask |= 1u << ch;
+      }
       if (samplePolyAnyEnvelopeActive(ch)) {
         pauseEffectsQuietMs = 0;
         return;

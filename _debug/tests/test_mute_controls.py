@@ -39,12 +39,13 @@ void saveSettingsU16ToEEPROM(int index,uint16_t value){assert(index==34&&value==
 void menuRequestFullRedraw(){}void redrawMain(int){}
 struct Knob {int low=0,high=0,value=0;void writeMin(int n){low=n;}void writeMax(int n){high=n;}void writeCounter(int n){value=n;}} Encoder[4];
 struct CRGB {int r=0,g=0,b=0;};
-const CRGB UI_WHITE{},UI_GREEN{},UI_RED{};
+const CRGB UI_WHITE{255,255,255},UI_GREEN{0,255,0},UI_RED{255,0,0};
+int dots=0;CRGB valueColor;
 CRGB currentMenuParentTextColor(){return {};}
 std::string title,value;
 void drawMenuText(const char *s,int,int,CRGB){title=s;}
-void drawMenuValue(const char *s,int,int,CRGB){value=s;}
-void drawMenuIndicator(char,char,int){}void light(int,int,CRGB){}
+void drawMenuValue(const char *s,int,int,CRGB c){value=s;valueColor=c;}
+void drawMenuIndicator(char,char,int){}void light(int,int y,CRGB c){if(y==9&&(c.r||c.g||c.b))++dots;}
 bool sounding[16]={};unsigned cuts[16]={},triggers=0;int pressedKeyCount[16]={};
 void samplePolyStopAll(int ch){sounding[ch]=false;++cuts[ch];}
 void stopSound(int,int){sounding[11]=false;++cuts[11];}
@@ -71,11 +72,13 @@ int main(){
  EEPROM.data[64]=255;load();assert(drawMode==0&&!muteNext&&EEPROM.data[64]==0);
  control();render();assert(title=="CH1"&&value=="ON");
  assert(Encoder[0].low==1&&Encoder[0].high==16&&Encoder[1].high==0&&Encoder[2].high==1);
- currentMode->pos[0]=16;control();toggleSelectedMuteMaskChannel();render();
+ assert(currentMode->pos[0]==16);
+ currentMode->pos[0]=15;control();render();assert(title=="CH2");
+ currentMode->pos[0]=1;control();toggleSelectedMuteMaskChannel();render();
  assert(title=="CH16"&&value=="ON"&&(drawRFullMuteCustomUnmuteMask&1));
- const unsigned mask=drawRFullMuteCustomUnmuteMask;drawMode=1;currentMode->pos[2]=1;control();render();
+ const unsigned mask=drawRFullMuteCustomUnmuteMask;drawMode=1;currentMode->pos[2]=1;control();dots=0;render();assert(dots==0);
  assert(title=="MUTE"&&value=="NEXT"&&drawRFullMuteCustomUnmuteMask==mask&&EEPROM.data[64]==3);
- toggleSelectedMuteMaskChannel();render();assert(title=="CH16"&&value=="OFF"&&muteNext);
+ toggleSelectedMuteMaskChannel();render();assert(title=="CH16"&&value=="MUTE"&&muteNext&&valueColor.r==255&&valueColor.g==0);
  for(bool next:{false,true})for(int ch:{1,8,11,13,14}){
   muteNext=next;SMP_PATTERN_MODE=false;globalMutes[ch]=false;sounding[ch]=true;cuts[ch]=0;
   note[1][1].channel=ch;setMuteState(ch,true);
