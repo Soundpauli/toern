@@ -1,10 +1,14 @@
 # TŒRN revJ board explorer
 
-Standalone Three.js explorer with the complete component catalog, 3D board, pin connections and inspector. `website/board-explorer/` contains the embedded version used immediately after **Open & Hackable.** on the homepage. The embedded version shows only the model and right sidebar, with a component selector for keyboard access.
+Standalone Three.js explorer with the complete component catalog, 3D board, pin connections and inspector. `website/board-explorer/` contains the embedded version used immediately after **Open & Hackable.** on the homepage. The embedded model spans the website width. Its inspector is closed by default and opens as a section-height overlay using the chevron on the right; its component selector provides keyboard access. Color/module controls and the bottom selection/status strip are omitted from the website embed.
 
 ## Run and check
 
 No dependency installation or build is needed: Three.js 0.180.0 and the required addons are vendored locally.
+
+The core runtime files are directly under `vendor/three/`. Do not move them
+back under a `build/` directory: that runtime location was missing from the
+live deployment and caused the viewer's 404 / blank canvas.
 
 ```sh
 npm start --prefix tools/board-explorer
@@ -24,7 +28,7 @@ python3 tools/board-explorer/scripts/sync-website.py --check
 
 The sync copies application files, models, data, licenses and the minimal Three.js runtime. It generates the embed HTML from the standalone entry point. Embedding styles and the homepage section behavior are maintained in `embed/`. The homepage integration is in `website/index.html`.
 
-The embedded canvas uses Ctrl/Command + wheel for zoom so normal wheel input can scroll the website. On small screens the inspector stacks below the board. Rendering pauses while the canvas is outside the visible area.
+The embedded canvas uses Ctrl/Command + wheel for zoom so normal wheel input can scroll the website. The inspector overlays the model on both desktop and mobile; opening it does not resize the canvas. Escape closes it. Rendering pauses while the canvas is outside the visible area.
 
 ## Refresh the carrier snapshot
 

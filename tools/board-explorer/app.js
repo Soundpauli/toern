@@ -209,8 +209,21 @@ function fit(view='iso',focus=false){
  if(!box)return;
  const target=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
  const dim=Math.max(size.x, size.z, size.y, focus?14:80);
- const distance=(dim/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))) / Math.min(camera.aspect,1) * (focus?1.55:1.15);
+ let distance=(dim/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)))) / Math.min(camera.aspect,1) * (focus?1.55:1.15);
  const direction=view==='top'?new THREE.Vector3(0,1,.0001):view==='bottom'?new THREE.Vector3(0,-1,.0001):new THREE.Vector3(.12,1,.83).normalize();
+ if(embedded){
+  // Fit the projected bounds to both axes, using the full website canvas
+  // rather than reserving the standalone explorer's sidebar-sized space.
+  const right=new THREE.Vector3().crossVectors(camera.up,direction).normalize();
+  const up=new THREE.Vector3().crossVectors(direction,right).normalize();
+  const tangent=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  distance=6;
+  for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
+   const offset=new THREE.Vector3(x,y,z).sub(target),depth=offset.dot(direction);
+   distance=Math.max(distance,depth+Math.abs(offset.dot(right))/(tangent*camera.aspect),depth+Math.abs(offset.dot(up))/tangent);
+  }
+  distance*=focus?1.4:1.12;
+ }
   animation={start:performance.now(),fromPosition:camera.position.clone(),fromTarget:controls.target.clone(),toPosition:target.clone().addScaledVector(direction,distance),toTarget:target};
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)animation.start-=500;
  for(const b of $('views').querySelectorAll('button'))b.setAttribute('aria-pressed',b.dataset.view===view);

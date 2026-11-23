@@ -1,15 +1,18 @@
-/* Embedded in toern.live: only the model and component inspector. */
+/* Website-only layout. The standalone explorer keeps its full controls. */
 html,body.embedded{margin:0;width:100%;height:100%;overflow:hidden;background:#ebebeb}
-body.embedded .catalog[hidden]{display:none!important}
-body.embedded main{display:grid;grid-template-columns:minmax(0,1fr) 330px;height:100dvh;min-height:0}
-body.embedded .workspace{grid-column:1;grid-row:1;height:100%;min-height:0}
-body.embedded .inspector{grid-column:2;grid-row:1;height:100%;max-height:none;overflow:auto;border-top:0;border-left:1px solid var(--line);padding:25px 23px}
+body.embedded .catalog[hidden],body.embedded .scene-bottom[hidden],body.embedded .selection-strip[hidden]{display:none!important}
+body.embedded main{display:block;position:relative;width:100%;height:100dvh;min-height:0;overflow:hidden}
+body.embedded .workspace{width:100%;height:100%;min-height:0}
+body.embedded .viewbar{padding:18px 24px}
+body.embedded .inspector{position:absolute;inset:0 0 0 auto;z-index:5;width:min(380px,calc(100% - 44px));height:100%;max-height:none;overflow:auto;padding:26px 24px;border-top:0;border-left:1px solid var(--line);background:#f4f4f2f5;box-shadow:-12px 0 30px #00000012;transform:translateX(100%);visibility:hidden;pointer-events:none;transition:transform .2s ease,visibility .2s}
+body.embedded.inspector-open .inspector{transform:translateX(0);visibility:visible;pointer-events:auto}
 body.embedded .inspector .pins{display:flex}
-body.embedded .viewbar{padding:18px 20px}
-body.embedded .scene-bottom{padding:12px 20px 17px}
-body.embedded .navigation-hint{display:block;flex-basis:100%;font-size:11px}
-body.embedded .model-note{display:none}
+body.embedded .sidebar-toggle{position:absolute;z-index:6;right:0;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:44px;height:56px;padding:0;background:#f4f4f2;color:#1a1a1c;border:1px solid var(--line);border-right:0;border-radius:6px 0 0 6px;box-shadow:-3px 2px 10px #0000000c;transition:right .2s ease}
+body.embedded .sidebar-toggle:hover{color:#ff3b30;background:#fff}
+body.embedded .sidebar-toggle svg{display:block;width:20px;height:20px;transition:transform .2s ease}
+body.embedded.inspector-open .sidebar-toggle{right:min(380px,calc(100% - 44px))}
+body.embedded.inspector-open .sidebar-toggle svg{transform:rotate(180deg)}
 body.embedded .component-picker-label{display:flex;flex-direction:column;gap:7px;margin:17px 0 20px;color:var(--muted);font:12px var(--mono)}
 body.embedded #component-picker{width:100%;min-width:0;padding:10px 8px;border:1px solid rgba(0,0,0,.18);border-radius:4px;background:#fff;color:var(--text);font:13px 'Space Grotesk',sans-serif}
-@media(max-width:800px) and (min-width:701px){body.embedded main{grid-template-columns:minmax(0,1fr) 285px}body.embedded .inspector{padding:22px 16px}body.embedded .viewbar{padding:14px 10px}body.embedded .segmented button{padding:8px}body.embedded .scene-bottom{padding:10px}}
-@media(max-width:700px){body.embedded main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:460px minmax(0,1fr);height:100dvh}body.embedded .workspace{grid-column:1;grid-row:1;height:460px}body.embedded .inspector{grid-column:1;grid-row:2;border-left:0;border-top:1px solid var(--line);height:100%;padding:22px 20px}body.embedded .viewbar{padding:14px 12px}body.embedded .scene-bottom{padding:10px 12px}body.embedded .toggles{gap:10px}body.embedded .toggles label{font-size:12px}}
+@media(max-width:600px){body.embedded .viewbar{padding:14px 12px}body.embedded .inspector{padding:24px 18px}}
+@media(prefers-reduced-motion:reduce){body.embedded .inspector,body.embedded .sidebar-toggle,body.embedded .sidebar-toggle svg{transition:none}}

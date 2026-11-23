@@ -6,7 +6,7 @@
  <link rel="stylesheet" href="style.css">
  <link rel="stylesheet" href="brand.css">
  <link rel="stylesheet" href="embed.css">
- <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
+ <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
 </head>
 <body class="embedded">
  <main>
@@ -21,11 +21,13 @@
   <section class="workspace" aria-label="Interactive 3D board">
    <div class="viewbar"><div class="segmented" id="views"><button data-view="iso" aria-pressed="true">Perspective</button><button data-view="top" aria-pressed="false">Top</button><button data-view="bottom" aria-pressed="false">Bottom</button></div><button id="fit" class="quiet">Fit board</button></div>
    <div id="viewport"><canvas id="scene" aria-label="3D model of the TŒRN revJ circuit board. Drag to orbit, Ctrl/⌘ + scroll to zoom; use the component selector for keyboard selection."></canvas><div id="labels"></div><div id="loading" role="status"><span class="loader-mark">TŒRN</span><span id="loading-text">Loading board geometry…</span></div><div id="hover" hidden></div></div>
-   <div class="scene-bottom"><div class="toggles"><label>PCB color <select id="pcb-color"><option value="green">Green</option><option value="black" selected>Black</option></select></label><label><input id="module-toggle" type="checkbox">Teensy module</label><label><input id="encoders-toggle" type="checkbox" checked>Encoder boards</label></div><span class="navigation-hint">Drag to orbit · Ctrl/⌘ + scroll to zoom · right-drag to pan</span></div>
-   <div class="selection-strip"><span class="selection-indicator"></span><span id="selection-status">J33 / USB host</span><button id="focus" class="quiet">Focus selected</button><span class="model-note">Actual KiCad geometry</span></div>
+   <div class="scene-bottom" hidden><div class="toggles"><label>PCB color <select id="pcb-color"><option value="green">Green</option><option value="black" selected>Black</option></select></label><label><input id="module-toggle" type="checkbox">Teensy module</label><label><input id="encoders-toggle" type="checkbox" checked>Encoder boards</label></div><span class="navigation-hint">Drag to orbit · Ctrl/⌘ + scroll to zoom · right-drag to pan</span></div>
+   <div class="selection-strip" hidden><span class="selection-indicator"></span><span id="selection-status">J33 / USB host</span><button id="focus" class="quiet">Focus selected</button><span class="model-note">Actual KiCad geometry</span></div>
   </section>
-  <aside class="inspector" id="inspector" aria-label="Selected component details"></aside>
+  <button id="inspector-toggle" class="sidebar-toggle" type="button" aria-label="Open component details" aria-expanded="false" aria-controls="inspector"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+  <aside class="inspector" id="inspector" inert aria-hidden="true" aria-label="Selected component details"></aside>
  </main>
  <script type="module" src="app.js"></script>
+ <script src="embed.js" defer></script>
 </body>
 </html>
