@@ -1,6 +1,6 @@
 # RevJ 3D models
 
-See [NOTICE.md](NOTICE.md) for license scope, attribution and the redistribution review. **The manufacturer/catalog models are not cleared for public redistribution.** Product drawing links below identify the corresponding parts; they do not establish the origin or license of each STEP file.
+See [NOTICE.md](NOTICE.md) for license scope, attribution and the redistribution review. The five unresolved manufacturer/catalog STEP files and their PCB model links have been removed. The corresponding rows below record their former placement for reference; those models are not bundled. Product drawing links identify the parts, not a redistribution license. Existing website and board explorer assets are preserved separately.
 
 These files are linked from the revJ PCB using project-relative paths. Existing project-local models for the 3.5 mm jacks, switches, charger, Teensy sockets and pogo contacts retain their original links.
 
@@ -15,4 +15,4 @@ These files are linked from the revJ PCB using project-relative paths. Existing 
 | U8 | Existing project-local TPS22918DBVR STEP, rotated upright and aligned to pin 1. |
 | Standard parts | Stock KiCad models, using STEP where the same library model is available in that format. [KiCad 3D models project](https://gitlab.com/kicad/libraries/kicad-packages3D) |
 
-The PCB keeps its KiCad 9 file format. A comparison of the saved board against the baseline matched every non-model line. The model path check and KiCad renders used only project-local assets. Eleven existing socket and pogo models use VRML and appear in KiCad’s 3D view. KiCad’s STEP exporter omits them.
+The PCB keeps its KiCad 9 file format. Removing the five unresolved source models changes only 3D model links; electrical geometry is unchanged. Existing review renders predate that removal. Eleven existing socket and pogo models use VRML and appear in KiCad’s 3D view. KiCad’s STEP exporter omits them.

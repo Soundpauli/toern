@@ -32,7 +32,15 @@ MIT license, copyright (c) 2015 Ricardo Band, is retained verbatim in
 author attribution. This does not license the physical PJRC product or its
 trademarks.
 
-## Manufacturer/catalog models: publication not cleared
+## Removed manufacturer/catalog source models: publication not cleared
+
+The five STEP files listed below and their PCB model links have been removed
+from the working tree. The table retains the permission findings for the former
+files. Website and board explorer assets, and existing review renders, were
+preserved at the user's request; this removal does not establish permission for
+any derived geometry or images in those assets. The original STEP files also
+remain in local Git history, including `d0c99ca`; deleting them in a later commit
+does not remove them from a push containing that history.
 
 The product links in README.md are not proof of the exact STEP download source.
 The STEP headers do not supply a redistribution license. In particular, several

@@ -6058,17 +6058,6 @@
 			(uuid "30b3f226-dc0a-4e7d-97ba-831c87d4db23")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/HRO_TYPE-C-31-M-12.step"
-			(offset
-				(xyz 0 0.324 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 180)
-			)
-		)
 	)
 	(footprint "BQ24075TRGTR:QFN50P300X300X100-17N-D"
 		(layer "F.Cu")
@@ -12578,17 +12567,6 @@
 			(uuid "0815df67-d164-4192-b409-15a87d1d700b")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/HRO_TYPE-C-31-M-12.step"
-			(offset
-				(xyz 0 0.324 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 180)
-			)
-		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -13468,17 +13446,6 @@
 			(uuid "dab4b457-8c8c-439c-a754-e912d7d86151")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/TLP2361.step"
-			(offset
-				(xyz 0 0 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 180)
-			)
-		)
 	)
 	(footprint "Resistor_SMD:R_0402_1005Metric"
 		(layer "F.Cu")
@@ -15704,17 +15671,6 @@
 			(uuid "4f31e5ad-18e8-435d-a5f1-89ed8eac0d00")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/NMJ6HCD2.step"
-			(offset
-				(xyz 16.7 -8.115 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz -90 0 -90)
-			)
-		)
 	)
 	(footprint "Capacitor_SMD:C_0402_1005Metric"
 		(layer "F.Cu")
@@ -21853,17 +21809,6 @@
 			(uuid "f892a3cd-3f90-4b8f-b700-3309c02d13bb")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/NMJ6HCD2.step"
-			(offset
-				(xyz 16.7 -8.115 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz -90 0 -90)
-			)
-		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -35151,17 +35096,6 @@
 			(uuid "1b2aa8e7-26da-4991-b3d9-781969497bb9")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/SGTL5000_HVQFN32.step"
-			(offset
-				(xyz 0 0 0)
-			)
-			(scale
-				(xyz 1 1 0.85)
-			)
-			(rotate
-				(xyz 0 0 0)
-			)
-		)
 	)
 	(footprint "Connector_Card:microSD_HC_Hirose_DM3BT-DSF-PEJS"
 		(locked yes)
@@ -35809,17 +35743,6 @@
 			)
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/Hirose_DM3BT-DSF-PEJS.step"
-			(offset
-				(xyz 0 -0.22 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 0)
-			)
-		)
 	)
 	(footprint "Capacitor_SMD:C_0402_1005Metric"
 		(layer "F.Cu")
@@ -38044,17 +37967,6 @@
 			(uuid "85d98b05-a677-42c8-be87-ac99b4b06eb8")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/NMJ6HCD2.step"
-			(offset
-				(xyz 16.7 -8.115 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz -90 0 -90)
-			)
-		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -44547,17 +44459,6 @@
 			(uuid "36d423cd-5a78-4db6-8b50-f28a7e006b2b")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/models3d/NMJ6HCD2.step"
-			(offset
-				(xyz 16.7 -8.115 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz -90 0 -90)
-			)
-		)
 	)
 	(footprint "Connector_PinSocket_2.54mm:PinSocket_1x05_P2.54mm_Vertical"
 		(locked yes)
