@@ -1176,7 +1176,7 @@ export function drawDemo(matrix,s,now) {
   }
 }
 
-const VERSION = "v3.03d";
+const VERSION = "v3.03e";
 const INFO_MSG = "   Thank you for using TOERN. Shout out to Matzesampler, Sabrina, Hairy and all others for supporting me. Jan";
 
 function drawInfo(matrix, s, now, color) {

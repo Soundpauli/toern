@@ -11,7 +11,7 @@
 #include "src/toern_kit_paths.h"
 #include "src/toern_kit_browser.h"
 
-#define VERSION "v3.03d"
+#define VERSION "v3.03e"
 extern "C" char *sbrk(int incr);
 #define FASTLED_ALLOW_INTERRUPTS 0
 // Sketch-local SERIAL8_*_BUFFER_SIZE defines do not resize HardwareSerial8.cpp.
