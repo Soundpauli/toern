@@ -29,6 +29,10 @@ tools/firmware/public/*.hex linguist-generated
 tools/audioconvert/ffmpeg-core.* linguist-vendored
 tools/audioconvert/jszip.mjs linguist-vendored
 tools/audioconvert/SD-CARD-CONTENT/** linguist-vendored
+tools/board-explorer/vendor/** linguist-vendored -whitespace
+website/board-explorer/vendor/** linguist-vendored -whitespace
+tools/board-explorer/assets/*.glb linguist-generated
+website/board-explorer/assets/*.glb linguist-generated
 
 # Lockfiles / package metadata
 package-lock.json linguist-generated

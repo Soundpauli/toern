@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>TŒRN revJ · Board explorer</title>
+ <link rel="stylesheet" href="style.css">
+ <link rel="stylesheet" href="brand.css">
+ <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
+</head>
+<body>
+ <header><a class="brand" href="./">TŒRN<span>revJ</span></a><span class="headline">Inside the instrument</span><span class="header-note">Interactive board explorer <span class="divider">/</span> Three.js</span></header>
+ <main>
+  <aside class="catalog">
+   <div class="catalog-head"><div class="eyebrow">// THE HARDWARE</div><h1>Every connection.<br>In context.</h1><p>Explore the real board. Select a part to see what it does and where its pins go.</p></div>
+   <label class="search"><span>Find a part or signal</span><input id="search" placeholder="JST, USB, GPIO, J16…" type="search" autocomplete="off"></label>
+   <div class="filters" id="filters" aria-label="Component categories"></div>
+   <div class="list-heading"><span id="list-title">I/O & connectors</span><span id="count"></span></div>
+   <div id="part-list" class="part-list" aria-label="Board components"></div>
+   <div class="catalog-footer">Current revJ PCB <span>1.6 mm · four copper layers</span></div>
+  </aside>
+  <section class="workspace" aria-label="Interactive 3D board">
+   <div class="viewbar"><div class="segmented" id="views"><button data-view="iso" aria-pressed="true">Perspective</button><button data-view="top" aria-pressed="false">Top</button><button data-view="bottom" aria-pressed="false">Bottom</button></div><button id="fit" class="quiet">Fit board</button></div>
+   <div id="viewport"><canvas id="scene" aria-label="3D model of the TŒRN revJ circuit board. Drag to orbit, scroll to zoom; use the component list for keyboard selection."></canvas><div id="labels"></div><div id="loading" role="status"><span class="loader-mark">TŒRN</span><span id="loading-text">Loading board geometry…</span></div><div id="hover" hidden></div></div>
+   <div class="scene-bottom"><div class="toggles"><label>PCB color <select id="pcb-color"><option value="green">Green</option><option value="black" selected>Black</option></select></label><label><input id="module-toggle" type="checkbox">Teensy module</label><label><input id="encoders-toggle" type="checkbox" checked>Encoder boards</label></div><span class="navigation-hint">Drag to orbit · scroll to zoom · right-drag to pan</span></div>
+   <div class="selection-strip"><span class="selection-indicator"></span><span id="selection-status">J33 / USB host</span><button id="focus" class="quiet">Focus selected</button><span class="model-note">Actual KiCad geometry</span></div>
+  </section>
+  <aside class="inspector" id="inspector" aria-label="Selected component details"></aside>
+ </main>
+ <script type="module" src="app.js"></script>
+</body>
+</html>

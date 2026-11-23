@@ -1,5 +1,7 @@
 # Local/deployed site and business data
-/website/
+/website/*
+!/website/index.html
+!/website/board-explorer/
 /_private/*
 !/_private/helpers/
 /_private/helpers/*

@@ -1,0 +1,29 @@
+# DuPPa I2C Encoder V2.1 attribution and licensing
+
+Original design: **DuPPa / Simone Caron**.
+
+- [Upstream repository](https://github.com/DuPPadotnet/I2CEncoderV2.1)
+- Upstream revision: [`d47fd5afe6d1130eee8f7d02c4856071b2adc8be`](https://github.com/DuPPadotnet/I2CEncoderV2.1/tree/d47fd5afe6d1130eee8f7d02c4856071b2adc8be)
+- [Upstream licensing declaration](https://github.com/DuPPadotnet/I2CEncoderV2.1/tree/d47fd5afe6d1130eee8f7d02c4856071b2adc8be#licensing)
+- [Original CircuitMaker project](https://workspace.circuitmaker.com/Projects/Details/Simone--Caron/I2C-Encoder-V2)
+
+## Hardware: GPLv3
+
+DuPPa licenses its hardware design under the GNU General Public License version 3. The hardware design files in this folder, including the reconstructed KiCad schematic, PCB, project libraries and modified ICSP layout, are distributed under GPLv3. The full license is in [LICENSE](LICENSE); the upstream copy is retained in [extra/upstream/LICENSE](extra/upstream/LICENSE). Preserve existing copyright, license and warranty notices.
+
+TŒRN modifications by Jan-Peter Kuntoff, recorded **2026-11-19**: reconstructed the published DuPPa hardware in KiCad, rebuilt local symbols/footprints and copper pours, and added the component-side TC2030-PKT-NL ICSP connector and associated routing. The module outline, mounting/header/encoder geometry and upstream circuit were preserved as described in [review/layout.md](review/layout.md). These hardware modifications are also licensed under GPLv3.
+
+This entire folder is expressly excluded from the parent repository's MIT and CC BY-NC defaults and its exclusive-commercial-sale statement. Those statements add no restrictions to the rights granted here. GPLv3 permits commercial redistribution subject to its terms.
+
+## Documentation: CC BY-SA 4.0
+
+DuPPa licenses its documentation under Creative Commons Attribution-ShareAlike 4.0 International. Preserve attribution to DuPPa / Simone Caron and identify adaptations. TŒRN's accompanying README, layout report and explanatory documentation in this folder are also made available under CC BY-SA 4.0. Design drawings and renders of the hardware do not change the GPLv3 status of the underlying design.
+
+[CC BY-SA 4.0 terms](https://creativecommons.org/licenses/by-sa/4.0/) · [Full legal code](https://creativecommons.org/licenses/by-sa/4.0/legalcode)
+
+## Firmware and other third-party material
+
+Firmware source and HEX images are provided through [upstream links](extra/upstream/Firmware/README.md), not bundled here. DuPPa's GPLv3 firmware declaration coexists with Microchip-product-only notices in individual source files; those notices have not been removed or relicensed. Other third-party material retains any applicable original notices. Links do not imply endorsement by DuPPa, Microchip, PJRC or Tag-Connect.
+
+
+Browser viewer notes (2026-11-23): Geometry converted from the pinned upstream EncoderI2Cv21.step and RGB encoder.step. Four assemblies positioned from the revJ header pairs J2/J18, J19/J20, J21/J22 and J23/J24. The 2.54 mm male-header spacer height is an assembly assumption. Header bodies and pins are schematic geometry. Shaft RGB colors illustrate illumination and are not live firmware readings. The upstream module STEP does not include the local TC2030 ICSP modification.

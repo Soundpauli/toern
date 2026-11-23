@@ -1,0 +1,15 @@
+/* Embedded in toern.live: only the model and component inspector. */
+html,body.embedded{margin:0;width:100%;height:100%;overflow:hidden;background:#ebebeb}
+body.embedded .catalog[hidden]{display:none!important}
+body.embedded main{display:grid;grid-template-columns:minmax(0,1fr) 330px;height:100dvh;min-height:0}
+body.embedded .workspace{grid-column:1;grid-row:1;height:100%;min-height:0}
+body.embedded .inspector{grid-column:2;grid-row:1;height:100%;max-height:none;overflow:auto;border-top:0;border-left:1px solid var(--line);padding:25px 23px}
+body.embedded .inspector .pins{display:flex}
+body.embedded .viewbar{padding:18px 20px}
+body.embedded .scene-bottom{padding:12px 20px 17px}
+body.embedded .navigation-hint{display:block;flex-basis:100%;font-size:11px}
+body.embedded .model-note{display:none}
+body.embedded .component-picker-label{display:flex;flex-direction:column;gap:7px;margin:17px 0 20px;color:var(--muted);font:12px var(--mono)}
+body.embedded #component-picker{width:100%;min-width:0;padding:10px 8px;border:1px solid rgba(0,0,0,.18);border-radius:4px;background:#fff;color:var(--text);font:13px 'Space Grotesk',sans-serif}
+@media(max-width:800px) and (min-width:701px){body.embedded main{grid-template-columns:minmax(0,1fr) 285px}body.embedded .inspector{padding:22px 16px}body.embedded .viewbar{padding:14px 10px}body.embedded .segmented button{padding:8px}body.embedded .scene-bottom{padding:10px}}
+@media(max-width:700px){body.embedded main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:460px minmax(0,1fr);height:100dvh}body.embedded .workspace{grid-column:1;grid-row:1;height:460px}body.embedded .inspector{grid-column:1;grid-row:2;border-left:0;border-top:1px solid var(--line);height:100%;padding:22px 20px}body.embedded .viewbar{padding:14px 12px}body.embedded .scene-bottom{padding:10px 12px}body.embedded .toggles{gap:10px}body.embedded .toggles label{font-size:12px}}

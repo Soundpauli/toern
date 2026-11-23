@@ -1,0 +1,10 @@
+{
+  "name": "toern-board-explorer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 3813 --bind 127.0.0.1",
+    "check": "node --check app.js && node --check encoder-assemblies.js",
+    "sync:website": "python3 scripts/sync-website.py"
+  }
+}

@@ -8,7 +8,7 @@ toern/
 ├── hardware/
 │   ├── PCB/
 │   └── housing/             Fusion projects, DXFs, previews and export scripts
-├── website/             *** public website and built cmgmt app
+├── website/                tracked homepage and board-explorer; other assets/builds ***
 ├── docs/
 │   ├── devdocs/
 │   ├── handbook/
@@ -21,6 +21,7 @@ toern/
 │   ├── sim/                 formerly web-standalone
 │   ├── audioconvert/        formerly audio-converter-standalone
 │   ├── case/                formerly case-generator; case.toern.live planned only
+│   ├── board-explorer/      standalone revJ 3D explorer; shared source for website embed
 │   ├── colorsheme/          existing color editor; no new subdomain configured
 │   ├── toern-mcp/           standalone local remote bridge
 │   └── _shared/             CSS sources and synchronization helper
@@ -43,6 +44,12 @@ toern/
 ```
 
 The cost-planner was not duplicated into a new “mgmt” directory. The invoice source and cmgmt build already existed separately and were preserved as found. Website runtime Netlify functions and their audio-conversion helper remain with the website.
+
+The revJ board explorer is maintained in `tools/board-explorer/`. Its models,
+application and embed styles are synchronized to `website/board-explorer/` with
+`python3 tools/board-explorer/scripts/sync-website.py`. Only the homepage and
+this viewer subtree are tracked under `website/`; other website files retain
+their local/deploy-only status.
 
 Run `pio run -d platformio` from the repository root, or run `platformio/flash.toern` to build and upload. The optional no-MCP build is `pio run -d platformio -e teensy41-no-mcp`.
 

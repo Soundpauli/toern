@@ -1,0 +1,2943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TŒRN | Open-Source Sequencer & Sampler</title>
+    <meta name="description" content="TŒRN is a standalone open-source sequencer and sampler.">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400&family=JetBrains+Mono:wght@300;400&family=Space+Grotesk:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <!-- One initial loading screen; content never waits for scroll to appear. -->
+    <style>
+        .page-preloader { display: none; }
+        html.assets-loading { overflow: hidden; }
+        html.assets-loading .page-preloader { position: fixed; inset: 0; z-index: 20000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; background: #ebebeb; color: #1a1a1c; font-family: monospace; }
+        .page-preloader-logo { display: block; width: 150px; height: auto; }
+        .page-preloader-spinner { width: 32px; height: 32px; animation: preloader-spin 1s linear infinite; }
+        @keyframes preloader-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .page-preloader-spinner { animation: none; } }
+    </style>
+    <script>
+        document.documentElement.classList.add('assets-loading');
+        window.toernLoadingTimeout = setTimeout(function() {
+            document.documentElement.classList.remove('assets-loading');
+        }, 8000);
+    </script>
+    <script src="preloader.js" defer></script>
+
+    <!-- GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <link rel="stylesheet" href="styles.css?v=20261105-build-collapsed">
+    <link rel="stylesheet" href="board-explorer/section.css?v=20261123">
+
+<style>
+        /* PayPal result states + celebration overlay */
+        .paypal-status {
+            display: none;
+            margin-top: 0.9rem;
+            padding: 1rem 1.1rem;
+            border-radius: var(--r-m, 10px);
+            text-align: left;
+            border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.14));
+            background: var(--bg-2, rgba(255, 255, 255, 0.04));
+        }
+        .paypal-status.is-visible {
+            display: block;
+        }
+        .paypal-status h4 {
+            margin: 0 0 0.45rem 0;
+            font-size: 1.1rem;
+            letter-spacing: 0.02em;
+        }
+        .paypal-status p {
+            margin: 0;
+            font-size: 0.95rem;
+            opacity: 0.95;
+            line-height: 1.45;
+        }
+        .paypal-status.success {
+            border-color: rgba(70, 255, 120, 0.55);
+            background: linear-gradient(165deg, rgba(0, 72, 28, 0.92), rgba(0, 110, 42, 0.88));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        .paypal-status.success h4,
+        .paypal-status.success p {
+            color: #ffffff;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+        }
+        .paypal-status.error {
+            border-color: rgba(255, 70, 70, 0.7);
+            background: linear-gradient(165deg, rgba(150, 12, 8, 0.95), rgba(210, 40, 32, 0.88));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 34px rgba(255, 40, 40, 0.18);
+        }
+        .paypal-status-actions {
+            display: flex;
+            gap: 0.6rem;
+            margin-top: 0.85rem;
+            flex-wrap: wrap;
+        }
+        .paypal-contact-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            text-decoration: none;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            color: #fff;
+            background: rgba(22, 22, 24, 0.35);
+            font-size: 0.85rem;
+            letter-spacing: 0.03em;
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+        .paypal-contact-btn:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        #order-celebration {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            pointer-events: none;
+            display: none;
+            background: radial-gradient(circle at 20% 20%, rgba(255, 0, 170, 0.14), transparent 42%),
+                        radial-gradient(circle at 80% 30%, rgba(30, 145, 255, 0.14), transparent 45%),
+                        radial-gradient(circle at 50% 80%, rgba(255, 227, 80, 0.12), transparent 42%),
+                        rgba(22, 22, 24, 0.55);
+        }
+        #order-celebration.is-visible {
+            display: block;
+        }
+        #order-celebration-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .order-celebration-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 1rem;
+            color: #fff;
+            text-shadow: 0 6px 26px rgba(0, 0, 0, 0.45);
+            opacity: 0;
+            transform: scale(0.9);
+            transition: opacity 0.45s ease, transform 0.45s ease;
+        }
+        #order-celebration.is-visible .order-celebration-text {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .order-celebration-text h3 {
+            margin: 0;
+            font-size: clamp(2rem, 6vw, 4.2rem);
+            letter-spacing: 0.04em;
+            line-height: 1.05;
+            color: transparent;
+            background: linear-gradient(90deg, #ff2ea1, #ff7b54, #ffe45c, #53ff86, #38b6ff, #b07cff, #ff2ea1);
+            background-size: 300% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            text-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+            animation: thankyou-rainbow 2s linear infinite, thankyou-blink 0.9s steps(2, end) infinite;
+        }
+        @keyframes thankyou-rainbow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 300% 50%; }
+        }
+        @keyframes thankyou-blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0.4; }
+        }
+        .order-celebration-text p {
+            margin: 0.55rem 0 0;
+            font-size: clamp(0.95rem, 2.2vw, 1.25rem);
+            opacity: 0.95;
+        }
+        .buy-section.buy-sold-out {
+            display: none;
+        }
+        #preorder {
+            display: none;
+        }
+        #preorder.waitlist-promoted {
+            display: block;
+            scroll-margin-top: 120px;
+        }
+    </style>
+</head>
+<body id="top">
+    <div class="page-preloader" role="status" aria-label="Loading page"><img class="page-preloader-logo" src="assets/img/logo.svg" alt="TŒRN" width="1316" height="557" loading="eager"><svg class="page-preloader-spinner" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="12" stroke="currentColor" stroke-opacity=".15" stroke-width="3"/><path d="M16 4a12 12 0 0 1 12 12" stroke="#ff4500" stroke-width="3" stroke-linecap="round"/></svg></div>
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+
+    <nav>
+        <a href="#top" class="nav-logo">TŒRN</a>
+        <div class="nav-links">
+            <a href="#about">ABOUT</a>
+            <a href="#features">FEATURES</a>
+            <a href="#platform">PLATFORM</a>
+            <a href="#specs">SPECS</a>
+            <a href="#contribute">CONTRIBUTE</a>
+            <a href="#media">SEE IT IN ACTION</a>
+            <a href="#buy">BUY</a>
+        </div>
+        <button type="button" class="nav-burger" id="nav-burger" aria-label="Open menu" aria-expanded="false">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+    </nav>
+    <div class="nav-mobile-backdrop" id="nav-mobile-backdrop" aria-hidden="true"></div>
+    <div class="nav-mobile-panel" id="nav-mobile-panel" aria-hidden="true">
+        <button type="button" class="nav-mobile-close" id="nav-mobile-close" aria-label="Close menu">
+            <span></span>
+            <span></span>
+        </button>
+        <a href="#about">ABOUT</a>
+        <a href="#features">FEATURES</a>
+        <a href="#platform">PLATFORM</a>
+        <a href="#specs">SPECS</a>
+        <a href="#contribute">CONTRIBUTE</a>
+        <a href="#media">SEE IT IN ACTION</a>
+        <a href="#buy">BUY</a>
+    </div>
+
+    <main>
+
+        <!-- Hero -->
+        <header id="hero" class="hero">
+            <div class="hero-bg">
+                <img src="assets/img/hero-toern-hand.jpg?v=3" alt="Hand holding TŒRN with the LED grid lit" class="hero-bg-img hero-bg-img-desktop" width="1672" height="941">
+                <img src="assets/img/hero-toern-hand.jpg?v=3" alt="Hand holding TŒRN with the LED grid lit" class="hero-bg-img hero-bg-img-mobile" width="1672" height="941">
+            </div>
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+                <h1 class="hero-title">TŒRN</h1>
+                <p class="hero-credit">by warft_labs</p>
+                <div class="hero-sub">
+                    <div class="hero-sub-line">
+                        <span>STANDALONE</span>
+                        <span>PORTABLE</span>
+                        <span>GROOVEBOX</span>
+                    </div>
+                    <div class="hero-sub-line">
+                        <span>SEQUENCER</span>
+                        <span>SAMPLER</span>
+                        <span>SYNTH</span>
+                    </div>
+                    <div class="hero-sub-line">
+                        <span>OPEN SOURCE</span>
+                        <span>CREATIVE PLATFORM</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Marquee -->
+        <div class="marquee-container">
+            <div class="marquee">
+                <div class="track">
+                    <div>STANDALONE /// POWERFUL /// FUN /// PLAYABLE /// PORTABLE /// ARDUINO BASED /// 32X16 RGB GRID /// TEENSY 4.1 /// GROOVEBOX /// BATTERY READY /// EXPRESSIVE ///</div>
+                    <div>LOVABLE /// SMALL /// COLORFUL /// BEGINNER-FRIENDLY /// CUTE /// EXTENDABLE /// MIDI COMPATIBLE /// LOOPER /// SURPRISING /// LIGHTWEIGHT /// INEXPENSIVE ///</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- About (Restored) -->
+        <section id="about" class="container split-section">
+            <div class="split-text">
+                <span class="mono topline">// ABOUT</span>
+                <h2>ABOUT</h2>
+                <p>
+                    Hi, I'm Jan aka warft_labs - a musician and maker based in Hamburg. TŒRN started as a personal itch: I wanted a sequencer and sampler that feels like an instrument first, and a computer last - less buttons, less screen, less cables and less studio-feeling. Over the last years I’ve been prototyping, breaking, rebuilding, and testing it until it became something I genuinely love to play.
+                </p>
+                <p>
+                    TŒRN is small-batch and still evolving. If you jump in now, you're joining early: you’ll find a few rough edges, but also a project with heart, openness, and lots of room to grow. If you like building, tweaking, or adding features, I’d love your help - feel free to <a href="#contribute">contribute</a>.
+                </p>
+                <p>
+                    TŒRN is a standalone, open-source live performance sequencer - ready to operate on battery. Built to be played in motion - not prepared in advance.
+                </p>
+                <p>
+                    It’s also a creative platform for your own ideas. The PCB brings sound, MIDI, light, touch, storage, and control together on one board, giving you a head start on fast prototypes. Build an interactive art installation, a theater cue player, a backing-track player, a fruit-touch instrument, or your own MIDI and lighting controller.
+                </p>
+                <p>
+                    Tinker, build, and make it yours. Add sensors, switches, and faders; connect compatible I²C devices or another Arduino or microcontroller. Write your own behavior, build your own enclosure, and turn everyday objects into interfaces. The <a href="https://docs.toern.live/hardware/connectors/" target="_blank" rel="noopener noreferrer">connector docs</a> and <a href="https://github.com/soundpauli/toern" target="_blank" rel="noopener noreferrer">source files</a> are there to help you get started.
+                </p>
+                <p>
+                    No laptop. No DAW. No preparation freeze. Build patterns. Break them. Save them. Keep playing. Everything happens while the clock is running. Patterns and sounds evolve inside the performance, not before it.
+                </p>
+                <p>Start with the <a href="https://handbook.toern.live/first-beat.html" target="_blank" rel="noopener noreferrer">first beat guide</a>, or explore the simulator. Its controls illustrate the workflow; browser sound and timing are approximate.</p>
+                <p class="about-sim-cta">
+                    <a class="about-sim-btn" href="https://sim.toern.live/" target="_blank" rel="noopener noreferrer">Try the browser simulator</a>
+                </p>
+
+            </div>
+            <div class="split-image">
+                <img src="assets/img/toern-live.png" alt="TŒRN live setup" loading="eager">
+            </div>
+        </section>
+
+        <!-- Features Bento Grid -->
+        <section id="features" class="bento-section container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <div><span class="mono topline">// System Capabilities</span>
+                    <h2 class="section-title">Key Features</h2></div>
+                <button id="copy-features-btn" class="copy-to-ai-btn" title="Copy features to clipboard">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2ZM20 16H6L4 18V4H20V16Z" fill="currentColor"/>
+                        <path d="M7 9H17V11H7V9ZM7 12H15V14H7V12ZM7 6H17V8H7V6Z" fill="currentColor"/>
+                    </svg>
+                    <span class="copy-label-desktop">Copy features to clipboard</span>
+                    <span class="copy-label-mobile">Copy</span>
+                </button>
+            </div>
+            <div class="bento-slider-wrap">
+                <div class="gallery-nav gallery-prev" aria-hidden="true">
+                    <button type="button" id="features-prev" aria-label="Previous feature">&lt;</button>
+                </div>
+                <div class="bento-grid" id="features-track">
+
+                <div class="bento-card card-lg tile-01" id="feature-platform">
+                    <span class="mono">FORWARD ENGINEERED</span>
+                    <div>
+                        <h3>A groovebox might be the heart of your next project</h3>
+                        <p>AI slop is terrible. “Vibe-coding” and hacking firmware are a sport of their own these days. But AI can also help you build new features and make something great — even if you are new to Arduino.</p>
+                        <p>TŒRN does not ask you to hack the firmware. It invites you to play with it: change what you need, add what is missing. Docs and skills are already there for you or an AI to use, so you do not need deep internals knowledge. If you already write firmware, the Arduino source is documented and ready to extend.</p>
+                        <p>Later, TŒRN should have its own workflow for this: tell it what you want, and let the AI write and flash the firmware to your device.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card card-lg tile-10" id="feature-grid">
+                    <span class="mono">GRID</span>
+                    <div>
+                        <h3>The grid is the instrument</h3>
+                        <p>Draw your music with four knobs. The LED grid isn't just for sequencing — it's a retro-futuristic canvas for modulation and performance. Each LED can display pattern data, modulation values, effects states, and more, creating a visual representation of your music in real time. Time moves from left to right, voices stack vertically, and the pattern stays visible as you turn the knobs.</p>
+                        <p>Draw steps directly onto the grid, switch pages, edit parameters and perform without moving between a screen and a separate controller. Custom color schemes let you make the interface your own.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-02">
+                    <span class="mono">PLAY</span>
+                    <div>
+                        <h3>Build while it plays</h3>
+                        <p>TŒRN is designed around the running clock. Mute, solo and transpose voices without stopping. Change samples, load or save a pattern, or switch an entire sample pack while the sequence keeps moving.</p>
+                        <p>Probability and conditional triggers add controlled variation. A 64-slot page chain turns individual pages into complete arrangements.</p>
+                        <p>Voice mode gives each voice its own pattern length. A voice loops the pages that contain its notes, including pitches on other rows, while every other voice keeps its own cycle.</p>
+                        <p>There is no separate preparation mode. Building, editing and performing are the same workflow.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-03">
+                    <span class="mono">SAMPLE</span>
+                    <div>
+                        <h3>Sample anything</h3>
+                        <p>Load WAV files from MicroSD or record directly into one of the eight sample voices. Browse samples by folder and hear them before loading.</p>
+                        <p>Every sample voice holds up to 12 seconds of 44.1 kHz, 16-bit mono audio. Trim the start and end points, reverse the sample, set its level, shape its envelope, filter it or reduce its bit depth and sample rate.</p>
+                        <p><strong>TIME</strong> stretches or shortens a sample without the usual pitch shift from speeding it up — useful for fitting hits and loops to the groove.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-04">
+                    <span class="mono">RECORD</span>
+                    <div>
+                        <h3>Record without stopping</h3>
+                        <p>Capture a microphone, instrument or line-level source while the clock is running, then sequence the recording immediately.</p>
+                        <p>Use hold-to-record for hands-on sampling or one-shot mode for a defined take. Input monitoring lets you hear the source throughout the recording process, with separate control over input and output levels.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-05">
+                    <span class="mono">SYNTHS</span>
+                    <div>
+                        <h3>One poly synth. Two mono synths.</h3>
+                        <p>Eight sample voices, one three-voice poly synth and two mono synths. The remaining grid rows are unassigned or reserved for navigation rather than additional sound voices.</p>
+                        <p>The polyphonic synth provides three voices with three oscillators per voice. It includes an ADSR envelope, filter envelope, waveform selection, tuning in cents and semitones, pan and a shared reverb send.</p>
+                        <p>Two monophonic synths provide two oscillators each, plus their own LFO and arpeggiator. Great for bass lines, leads, drones and repeating melodic structures.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-06">
+                    <span class="mono">EFFECTS</span>
+                    <div>
+                        <h3>Shape every voice</h3>
+                        <p>Sound parameters remain accessible while the sequence runs. Adjust envelopes, filters, independent time-stretch and bit reduction as part of the performance instead of treating them as a separate production stage.</p>
+                        <p>Each voice has its own ADSR envelope. Filters provide low-pass, high-pass and band-pass modes with resonance. The bitcrusher controls bit depth and sample-rate reduction. <strong>TIME</strong> stretches around the current pitch.</p>
+                        <p>Reverb is shared through individual sends, allowing selected voices to sit in the same space without processing the entire mix equally.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-07">
+                    <span class="mono">CLOCK</span>
+                    <div>
+                        <h3>Clock your setup</h3>
+                        <p>TŒRN can lead a setup or follow one.</p>
+                        <p>MIDI input and output carry clock, notes or both over 3.5 mm TRS Type A connections. Use the internal BPM clock, sync TŒRN to an external MIDI clock or send its timing to other instruments.</p>
+                        <p>A dedicated analog PPQN pulse output follows the same clock (1–32 PPQN). JST headers also bring out analog clock in (3–5&nbsp;V), buffered 5&nbsp;V clock out, and a 5&nbsp;V sidechain / gate out — digital pulses only, no CV. USB-C carries power, serial data and USB audio output. Use the TRS ports for MIDI notes, clock and transport.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-08">
+                    <span class="mono">AUDIO</span>
+                    <div>
+                        <h3>Audio in and out</h3>
+                        <p>TŒRN’s audio system is built around the SGTL5000 codec, providing onboard sampling, monitoring and playback.</p>
+                        <p>Connect headphones, a mixer, an external microphone or a line-level source using full-size 6.35 mm connections. A built-in microphone is available whenever you want to capture something without setting up additional equipment.</p>
+                    </div>
+                </div>
+
+                <div class="bento-card tile-09">
+                    <span class="mono">OPEN</span>
+                    <div>
+                        <h3>Open by design</h3>
+                        <p>TŒRN is an instrument you can play immediately and a platform you can continue to change.</p>
+                        <p>It runs on a Teensy 4.1 with Arduino-based firmware. The firmware is released under the MIT License. Hardware design files are published under CC BY-NC.</p>
+                        <p>Expansion headers expose 3.3&nbsp;V, 5&nbsp;V, ground, WS2812 and spare I/O, plus dedicated clock-in, 5&nbsp;V clock-out and sidechain/gate JSTs. Add lights, switches, triggers, clocks, gates or something that does not exist yet.</p>
+                    </div>
+                </div>
+
+                </div>
+                <div class="gallery-nav gallery-next" aria-hidden="true">
+                    <button type="button" id="features-next" aria-label="Next feature">&gt;</button>
+                </div>
+            </div>
+            <div class="slider-indicators" id="features-indicators" aria-label="Feature slider indicators"></div>
+        </section>
+
+        <!-- Creative platform: three full-screen chapters -->
+        <section id="platform" class="platform-chapter platform-board" aria-labelledby="platform-title">
+            <div class="platform-inner">
+                <div class="platform-copy">
+                    <span class="mono platform-eyebrow">01 / ONE BOARD. YOUR IDEAS.</span>
+                    <h2 id="platform-title">A groovebox.<br>A starting point<br>for <em>something else.</em></h2>
+                    <p>TŒRN is a groovebox, but it can be so much more than an instrument. Its Teensy 4.1 runs at 816&nbsp;MHz in the current firmware build, with JST expansion headers exposing 17 GPIO pins and easy access to onboard 3.3&nbsp;V and 5&nbsp;V power.</p>
+                    <p>Make it the heart of an interactive installation, a companion in your live setup, or an instrument nobody has imagined yet. Your project. Your code. Your way.</p>
+                    <a class="platform-link" href="#platform-projects" data-platform-scroll>What will you make? <span aria-hidden="true">↘</span></a>
+                </div>
+                <figure class="platform-board-visual">
+                    <img src="assets/img/pcb.png" alt="The TŒRN PCB with audio connections, expansion headers, and microcontroller sockets" loading="eager" width="640" height="480">
+                    <figcaption><span>THE FOUNDATION</span><span>YOU DECIDE WHAT HAPPENS NEXT</span></figcaption>
+                    <div class="platform-connections" aria-label="Building blocks"><span>AUDIO</span><span>MIDI</span><span>TOUCH</span><span>LIGHT</span><span>I²C</span><span>ANALOG + DIGITAL I/Os</span><span>SD CARD</span><span>USB-C</span><span>JST</span><span>WS2812</span><span>BATTERY CHARGER</span><span>INTERNAL MIC</span><span title="PAM8403D class-D speaker amplifier; up to 3 W per channel into 4 Ω at 5 V, at 10% THD">AMPLIFIER · PAM8403 · UP TO 3 W</span></div>
+                    <div class="platform-board-aside">
+                        <p>Sound, MIDI, light, touch, storage, and control on one board. Start with the instrument, or use the PCB as the foundation for your own project.</p>
+                        <p class="platform-statement">The PCB already has the building blocks you might need.<br>Less time assembling the basics.<br>More time making your idea work.</p>
+                    </div>
+                </figure>
+            </div>
+        </section>
+
+        <section id="platform-projects" class="platform-chapter platform-projects" aria-labelledby="platform-projects-title">
+            <div class="platform-inner">
+                <div class="platform-copy">
+                    <span class="mono platform-eyebrow">02 / PROJECTS TO BUILD</span>
+                    <h2 id="platform-projects-title">On stage.<br>In a gallery.<br><em>On your kitchen table.</em></h2>
+                    <p>One platform, many possible projects. Bring your own idea, add the interfaces it needs, and make the firmware your own.</p>
+                    <p>Built with open-source, Arduino-compatible libraries and familiar tools. No reverse engineering or firmware hacking needed—start with the source, use the libraries you already know, and build from there.</p>
+                    <p class="platform-project-guide" id="platform-project-guide">A cue for the next scene. A sculpture that reacts to visitors. An instrument made from fruit. Choose a starting point below to explore what you could build.</p>
+                    <div class="platform-project-buttons" role="group" aria-label="Explore project ideas" aria-describedby="platform-project-guide">
+                        <button type="button" data-project="stage" aria-pressed="true" aria-controls="platform-project-detail">Stage</button>
+                        <button type="button" data-project="installation" aria-pressed="false" aria-controls="platform-project-detail">Installation</button>
+                        <button type="button" data-project="play" aria-pressed="false" aria-controls="platform-project-detail">Play</button>
+                        <button type="button" data-project="control" aria-pressed="false" aria-controls="platform-project-detail">Control</button>
+                    </div>
+                </div>
+                <div class="platform-project-detail" id="platform-project-detail" data-scene="stage" aria-live="polite" aria-atomic="true">
+                    <div class="platform-pixel-grid" aria-hidden="true"></div>
+                    <div class="platform-project-text">
+                        <span class="mono" id="platform-project-cue">CUE → SOUND</span>
+                        <h3 id="platform-project-name">Your next performance.</h3>
+                        <p id="platform-project-description">Build a band backing-track player, a theater cue system, or a portable sound-effects box. Record MIDI ideas and keep instruments moving together with MIDI clock.</p>
+                        <span class="platform-project-number" aria-hidden="true">01—04</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="platform-make" class="platform-chapter platform-make" aria-labelledby="platform-make-title">
+            <div class="platform-inner">
+                <div class="platform-copy">
+                    <span class="mono platform-eyebrow">03 / MAKE IT YOURS</span>
+                    <h2 id="platform-make-title">Add a sensor.<br>Move a fader.<br><em>IF YOU CAN THINK IT, YOU CAN ADD IT.</em></h2>
+                    <p>Connect sensors, switches, faders, and compatible I²C devices. Add another Arduino or microcontroller. Write your own behavior, build a different enclosure, or turn an everyday object into an interface.</p>
+                    <p class="platform-statement">Tinker-friendly. DIY-friendly.<br>A head start for your next prototype.</p>
+                    <div class="platform-actions">
+                        <a class="platform-button" href="#tech-specs" data-platform-scroll>Explore the board <span aria-hidden="true">↓</span></a>
+                        <a class="platform-link" href="https://github.com/soundpauli/toern" target="_blank" rel="noopener noreferrer">Get the source <span aria-hidden="true">↗</span></a>
+                    </div>
+                </div>
+                <aside class="platform-build-visual" aria-labelledby="platform-build-title">
+                    <span class="mono">A FEW PLACES TO START</span>
+                    <h3 id="platform-build-title">One small addition.<br>A whole new possibility.</h3>
+                    <div class="platform-build-recipes">
+                        <article class="platform-build-recipe">
+                            <span class="mono">01 / SENSE</span>
+                            <h4>A visitor becomes the volume knob.</h4>
+                            <p>Add a distance sensor. Map movement to a sample’s volume or pitch, and give a sound installation a sense of presence.</p>
+                            <span class="platform-build-pair">Distance sensor <span aria-hidden="true">→</span> Responsive sound</span>
+                        </article>
+                        <article class="platform-build-recipe">
+                            <span class="mono">02 / SHAPE</span>
+                            <h4>Build the controls you wish you had.</h4>
+                            <p>Add faders and switches. Make a MIDI controller with a layout that fits your set, your hands, and your way of playing.</p>
+                            <span class="platform-build-pair">Faders + switches <span aria-hidden="true">→</span> MIDI control</span>
+                        </article>
+                        <article class="platform-build-recipe">
+                            <span class="mono">03 / PLAY</span>
+                            <h4>Turn the everyday into an instrument.</h4>
+                            <p>Add a suitable touch interface. Give fruit, foil, or found objects their own notes, then record what happens.</p>
+                            <span class="platform-build-pair">Touch interface <span aria-hidden="true">→</span> Your own keyboard</span>
+                        </article>
+                    </div>
+                    <p class="platform-build-note">Choose your interface. Adapt the firmware. Try it, change it, make it yours.</p>
+                </aside>
+            </div>
+        </section>
+
+        <section id="tech-specs" class="tech-specs container">
+            <span class="mono topline">// Technical</span>
+            <h2 class="section-title">Specifications</h2>
+            <div class="tech-specs-grid">
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="Sequencer – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">SEQUENCER</span>
+                        <span class="spec-val">16 lanes · 256 steps</span>
+                        <span class="spec-extra">LIVE SAVE</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>Sequencer lanes</span> <span>16</span></li>
+                        <li><span>Maximum pattern length</span> <span>256 steps</span></li>
+                        <li><span>16×16 layout</span> <span>16 steps × 16 pages</span></li>
+                        <li><span>32×16 layout</span> <span>32 steps × 8 pages</span></li>
+                        <li><span>Pattern slots</span> <span>999 + session recovery</span></li>
+                        <li><span>Sample kits</span> <span>999 numbered folders + scratch kit 0</span></li>
+                        <li><span>Song mode</span> <span>64-slot page chain</span></li>
+                        <li><span>Voice mode</span> <span>Per-voice pattern length</span></li>
+                        <li><span>FIRE</span> <span>Playhead sparks (ETC menu)</span></li>
+                        <li><span>Trigger probability</span> <span>0%, 25%, 50%, 75% or 100%</span></li>
+                        <li><span>Trigger conditions</span> <span>Supported</span></li>
+                        <li><span>Performance controls</span> <span>Mute, solo and transpose</span></li>
+                        <li><span>Live saving</span> <span>Patterns and sample packs without stopping playback</span></li>
+                        <li><span>Sample browser</span> <span>MicroSD folders with live preview</span></li>
+                    </ul>
+                </article>
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="Sample engine – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">SAMPLE ENGINE</span>
+                        <span class="spec-val">8 voices · WAV</span>
+                        <span class="spec-extra">UP TO 12 S</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>Sample voices</span> <span>8</span></li>
+                        <li><span>File format</span> <span>WAV</span></li>
+                        <li><span>Sample rate</span> <span>44.1 kHz</span></li>
+                        <li><span>Bit depth</span> <span>16-bit</span></li>
+                        <li><span>Channels</span> <span>Mono</span></li>
+                        <li><span>Maximum sample length</span> <span>12 seconds per voice</span></li>
+                        <li><span>Editing</span> <span>Trim, reverse and TIME stretch</span></li>
+                        <li><span>Level control</span> <span>Per sample voice</span></li>
+                        <li><span>Per-voice processing</span> <span>ADSR, multimode filter, bitcrusher and WSOLA time-stretch</span></li>
+                        <li><span>TIME (stretch)</span> <span>Independent of pitch; 11 = off, ± about 10%</span></li>
+                    </ul>
+                </article>
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="Synthesis – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">SYNTHESIS</span>
+                        <span class="spec-val">1 poly · 2 mono</span>
+                        <span class="spec-extra">3 + 2 OSC</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>Polyphonic engines</span> <span>1</span></li>
+                        <li><span>Polyphony</span> <span>3 voices</span></li>
+                        <li><span>Oscillators per polyphonic voice</span> <span>3</span></li>
+                        <li><span>Monophonic engines</span> <span>2</span></li>
+                        <li><span>Oscillators per monophonic engine</span> <span>2</span></li>
+                        <li><span>Waveforms</span> <span>Sine, saw, square and triangle</span></li>
+                        <li><span>Polyphonic controls</span> <span>ADSR, filter envelope, waveform and pan</span></li>
+                        <li><span>Polyphonic tuning</span> <span>Cents and semitones</span></li>
+                        <li><span>Polyphonic presets</span> <span>Bass, Keys, Chiptune, Pad, Wow, Organ, Flute, Lead, Arp and Brass</span></li>
+                        <li><span>Mono LFO controls</span> <span>Rate, depth and filter modulation</span></li>
+                        <li><span>Mono arpeggiator controls</span> <span>Step and span per synth</span></li>
+                        <li><span>Mono reverb send</span> <span>None</span></li>
+                    </ul>
+                </article>
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="Effects – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">EFFECTS</span>
+                        <span class="spec-val">ADSR · filter · crush · reverb</span>
+                        <span class="spec-extra">LIVE EDIT</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>Envelope</span> <span>ADSR per voice</span></li>
+                        <li><span>Filter</span> <span>Low-pass, high-pass and band-pass with resonance</span></li>
+                        <li><span>Bitcrusher</span> <span>Adjustable bit depth and sample rate</span></li>
+                        <li><span>Reverb controls</span> <span>Room, damping and send</span></li>
+                        <li><span>Reverb sources</span> <span>Sample voices 1, 2, 4 and 6 to 8, plus the polyphonic synth</span></li>
+                        <li><span>Real-time editing</span> <span>Available while the sequence is running</span></li>
+                    </ul>
+                </article>
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="Recording – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">RECORDING</span>
+                        <span class="spec-val">8 voices · hold or one-shot</span>
+                        <span class="spec-extra">WHILE PLAYING</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>Recording destinations</span> <span>8 sample voices</span></li>
+                        <li><span>Maximum recording length</span> <span>12 seconds per voice</span></li>
+                        <li><span>Sources</span> <span>Built-in microphone, external microphone and line input</span></li>
+                        <li><span>Recording modes</span> <span>Hold-to-record and one-shot</span></li>
+                        <li><span>Monitoring</span> <span>Live input monitoring</span></li>
+                        <li><span>Level controls</span> <span>Input and output</span></li>
+                        <li><span>Recording during playback</span> <span>Supported</span></li>
+                        <li><span>Post-recording workflow</span> <span>Recordings can be sequenced immediately</span></li>
+                    </ul>
+                </article>
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="MIDI and sync – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">MIDI AND SYNC</span>
+                        <span class="spec-val">TRS Type A · PPQN · Gate</span>
+                        <span class="spec-extra">IN / OUT</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>MIDI connectors</span> <span>3.5 mm TRS Type A input and output</span></li>
+                        <li><span>MIDI transmission</span> <span>Notes, clock or both</span></li>
+                        <li><span>Clock sources</span> <span>Internal BPM or external MIDI</span></li>
+                        <li><span>Analog PPQN output</span> <span>5 V pulse (J25), 1–32 PPQN</span></li>
+                        <li><span>Analog clock in</span> <span>3–5 V pulse (J26, rev H+)</span></li>
+                        <li><span>Sidechain / gate out</span> <span>5 V logic (J27, rev H+)</span></li>
+                        <li><span>CV</span> <span>Not provided (digital pulse / gate only)</span></li>
+                        <li><span>Clock routing</span> <span>PPQN output follows the active internal or external clock</span></li>
+                        <li><span>USB-C</span> <span>Power, USB audio output and serial data</span></li>
+                    </ul>
+                </article>
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="Audio – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">AUDIO</span>
+                        <span class="spec-val">SGTL5000 · 6.35 mm</span>
+                        <span class="spec-extra">IN / OUT</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>Codec</span> <span>SGTL5000</span></li>
+                        <li><span>Audio output</span> <span>6.35 mm line out</span></li>
+                        <li><span>Headphone output</span> <span>6.35 mm</span></li>
+                        <li><span>Microphone input</span> <span>6.35 mm</span></li>
+                        <li><span>Line input</span> <span>6.35 mm</span></li>
+                        <li><span>Built-in microphone</span> <span>Yes</span></li>
+                    </ul>
+                </article>
+                <article class="tech-spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="Platform and expansion – expand specifications">
+                    <div class="spec-row-head">
+                        <span class="spec-label">PLATFORM</span>
+                        <span class="spec-val">Teensy 4.1 · Arduino</span>
+                        <span class="spec-extra">MIT / CC BY-NC</span>
+                    </div>
+                    <ul class="tech-list">
+                        <li><span>Controller</span> <span>Teensy 4.1</span></li>
+                        <li><span>Firmware environment</span> <span>Arduino</span></li>
+                        <li><span>Firmware license</span> <span>MIT</span></li>
+                        <li><span>Hardware design license</span> <span>CC BY-NC</span></li>
+                        <li><span>External RAM</span> <span>16 MB</span></li>
+                        <li><span>Storage</span> <span>MicroSD, up to 64 GB</span></li>
+                        <li><span>Expansion connections</span> <span>JST</span></li>
+                        <li><span>Available rails</span> <span>3.3 V, 5 V and ground</span></li>
+                        <li><span>Color schemes</span> <span>User-editable</span></li>
+                        <li><span>Clock / gate headers (rev H+)</span> <span>CLK-IN, CLK-OUT 5V, SIDEC-5V</span></li>
+                        <li><span>Expansion uses</span> <span>WS2812 lighting, additional inputs, switches, triggers, clocks and gates</span></li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <!-- Beauty shot 1 (after Features) -->
+        <div class="beauty-shot">
+            <img src="assets/img/DSCF2430.jpg" alt="TŒRN" loading="eager">
+            <div class="beauty-shot-caption">
+                <h2 class="beauty-headline">No laptop. No freeze.</h2>
+                <p class="beauty-desc">Standalone. Battery ready. Built to move. Extendable and accessible. Add what you need - use it your way.</p>
+            </div>
+        </div>
+
+        <!-- Specs -->
+        <section id="specs" class="specs-section container">
+            <span class="mono topline">// SPECIFICATIONS</span>
+            <h2 class="section-title" style="margin-bottom: 1.5rem;">HARDWARE</h2>
+
+            <div class="spec-table">
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="PCB – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">PCB</span>
+                        <span class="spec-val">Custom PCB</span>
+                        <span class="spec-extra">FULLY ASSEMBLED</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/pcb.png" alt="Custom PCB" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">BRAIN + HEART</span>
+                                <p class="spec-component-desc">Fully assembled custom made PCB including SGTL5000 Audio IC, BQ24075 charging unit, PAM8403 amplifier and additional integrated support circuitry for TŒRN operation. This is the heart of TŒRN.</p>
+                                <a class="spec-component-link" href="https://github.com/Soundpauli/toern" target="_blank" rel="noopener noreferrer">If you want to make your own: all files on GitHub →</a>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="MICROCONTROLLER – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">MICROCONTROLLER</span>
+                        <span class="spec-val">Teensy 4.1</span>
+                        <span class="spec-extra">816 MHZ FIRMWARE</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/teensy.jpg" alt="Teensy 4.1 microcontroller" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">816 MHZ FIRMWARE</span>
+                                <p class="spec-component-desc">The current firmware runs the Teensy 4.1 ARM Cortex-M7 at 816 MHz. It handles the audio engine, sequencing, MIDI and controls, with floating-point and DSP support.</p>
+                                <a class="spec-component-link" href="https://www.pjrc.com/store/teensy41.html" target="_blank" rel="noopener noreferrer">PJRC Teensy 4.1 →</a>
+                                <span class="spec-component-price">ca. €45</span>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="MEMORY – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">MEMORY</span>
+                        <span class="spec-val">16MB PSRAM</span>
+                        <span class="spec-extra">BUFFER</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/psram.jpg" alt="PSRAM module" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">BUFFER</span>
+                                <p class="spec-component-desc">Two 8 MB PSRAM chips provide 16 MB of external working memory for sample buffers, effects and live processing. Samples and saved patterns are stored on the microSD card.</p>
+                                <a class="spec-component-link" href="https://www.pjrc.com/store/psram.html" target="_blank" rel="noopener noreferrer">PSRAM module details →</a>
+                                <span class="spec-component-price">ca. €5 (with Teensy)</span>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="DISPLAY – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">DISPLAY</span>
+                        <span class="spec-val">32×16 standard · 16×16 optional</span>
+                        <span class="spec-extra">512 RGB LEDS</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/ledmatrix.jpg" alt="RGB LED matrix" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">512 RGB LEDS</span>
+                                <p class="spec-component-desc">The standard build uses one 32×16 addressable RGB LED panel (512 LEDs). A smaller 16×16 build remains optional. <a href="https://de.aliexpress.com/item/1005010071864259.html">Standard panel source →</a></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="AUDIO – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">AUDIO</span>
+                        <span class="spec-val">Line In/Out</span>
+                        <span class="spec-extra">6.35mm TRS</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/image-coming-soon.jpg" alt="6.35mm audio jack" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">6.35mm TRS</span>
+                                <p class="spec-component-desc">Record and monitor line-level audio. 6.35mm (¼") stereo TRS jacks carry separate left and right channels. The current sampler records the left line-input channel as a mono WAV. Line out follows the selected 2-channel output routing.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="MIDI – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">MIDI</span>
+                        <span class="spec-val">TRS MIDI In/Out</span>
+                        <span class="spec-extra">TYPE A - CLOCK / NOTES / BOTH</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/image-coming-soon.jpg" alt="TRS MIDI connectors" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">TYPE A - CLOCK / NOTES / BOTH</span>
+                                <p class="spec-component-desc">Sync and control synths, drum machines, and DAWs. Separate TRS MIDI Type A input and output ports support clock, notes, or both so you can drive external gear or be driven by a sequencer.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="HOUSING – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">HOUSING</span>
+                        <span class="spec-val">Acrylic</span>
+                        <span class="spec-extra">LASER CUT SMOKE BLACK</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/housing.jpg" alt="Acrylic housing" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">LASER CUT SMOKE BLACK</span>
+                                <p class="spec-component-desc">Rigid enclosure and front panel in laser-cut smoke black acrylic. Easy to customize or re-cut from open-source files so you can tweak layout, add holes, or match your setup.</p>
+                                <a class="spec-component-link" href="https://github.com/soundpauli/toern/tree/main/hardware/housing" target="_blank" rel="noopener noreferrer">Housing DXFs and assembly files →</a>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="ENCODERS – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">ENCODERS</span>
+                        <span class="spec-val">4× RGB rotary-push encoders</span>
+                        <span class="spec-extra">DUPPA I²C V2.1</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/encoder.webp" alt="RGB push encoder" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">I2C</span>
+                                <p class="spec-component-desc">Parameter control, navigation, and visual feedback. Four DuPPa I2C Encoder V2.1 modules with illuminated RGB rotary-push encoders provide turning, push-to-select and visual feedback.</p>
+                                <a class="spec-component-link" href="https://www.duppa.net/product-category/i2c-devices/" target="_blank" rel="noopener noreferrer">I2C rotary encoder devices →</a>
+                                <span class="spec-component-price">ca. 4x12€</span>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="STORAGE – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">STORAGE</span>
+                        <span class="spec-val">Micro SD Card</span>
+                        <span class="spec-extra">32 GB / 64 GB</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/sdcard.jpg" alt="Micro SD slot" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">32 GB / 64 GB</span>
+                                <p class="spec-component-desc">Sample storage and project data. The onboard microSD slot stores WAV samples, kits and patterns on a removable card. A microSD card is included with the unit. Use 32 GB FAT32 or 64 GB exFAT.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="MICROPHONE – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">MICROPHONE</span>
+                        <span class="spec-val">Built-in + 6.35mm Jack</span>
+                        <span class="spec-extra">DUAL INPUT</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/mic.jpg" alt="Microphone input" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">DUAL INPUT</span>
+                                <p class="spec-component-desc">Quick sampling from onboard mic or external mic/instrument via 6.35mm jack. Dual input lets you grab sounds on the fly without plugging in, or use a proper mic or line when you need it.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="HEADPHONES – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">HEADPHONES</span>
+                        <span class="spec-val">6.35mm Output</span>
+                        <span class="spec-extra">6.35mm JACK</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/image-coming-soon.jpg" alt="Headphone output" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">6.35mm JACK</span>
+                                <p class="spec-component-desc">Headphone monitoring on a 6.35 mm jack. The main mix is mono, so both ears hear the same signal. 2-channel mode can send voices 1–4 to the left and 5–8 to the right.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="USB – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">USB</span>
+                        <span class="spec-val">USB-C</span>
+                        <span class="spec-extra">POWER & DATA</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/image-coming-soon.jpg" alt="USB-C port" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">POWER & DATA</span>
+                                <p class="spec-component-desc">Charging, firmware updates, USB audio output and serial access for the SD tool. Connect USB-C with a data cable and select TŒRN’s USB audio input in your DAW to record two channels. USB audio follows the same ETC → ADV → 2-CH routing as the headphone and line outputs. Use the separate TRS ports for musical MIDI. USB MIDI and USB host operation are not implemented on this connector in the current firmware.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="SPEAKER – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">SPEAKER</span>
+                        <span class="spec-val">PAM8403 amplifier</span>
+                        <span class="spec-extra">OPTIONAL 4 / 8 Ω SPEAKER</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-component-info">
+                                <p class="spec-component-desc">The carrier includes a PAM8403 speaker amplifier. For a DIY build, solder a suitable 4 or 8 Ω speaker to a JST-PH 2.00 mm 2-pin mating lead and connect it to J10. Both leads are amplifier outputs; neither connects to ground. Switch the speaker on or off in VOL → SPKR.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="POWER – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">POWER</span>
+                        <span class="spec-val">USB-C / single-cell LiPo</span>
+                        <span class="spec-extra">BATTERY NOT INCLUDED</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-component-info">
+                                <p class="spec-component-desc">Power TŒRN over USB-C or add a compatible single-cell LiPo for portable use. The carrier includes a BQ24075 charging circuit and power switch. Purchase the battery separately and check its connector polarity and enclosure fit before connecting it.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="TOUCH CONTROLS – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">TOUCH CONTROLS</span>
+                        <span class="spec-val">Five touch buttons</span>
+                        <span class="spec-extra">CAPACITIVE</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/image-coming-soon.jpg" alt="Capacitive touch buttons" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">CAPACITIVE</span>
+                                <p class="spec-component-desc">Five capacitive touch buttons provide single, menu, record, current-voice audition and FN shortcuts. Touch 4 + touch 5 requests a live fill during playback. Their actions also adapt to the active screen.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="spec-row" role="button" tabindex="0" aria-expanded="false" aria-label="CONNECTORS – expand for component details">
+                    <div class="spec-row-head">
+                        <span class="spec-label">CONNECTORS</span>
+                        <span class="spec-val">JST Connectors</span>
+                        <span class="spec-extra">NO SOLDERING</span>
+                    </div>
+                    <div class="spec-row-detail">
+                        <div class="spec-row-detail-inner">
+                            <div class="spec-row-images">
+                                <img src="assets/img/jst.jpg" alt="JST connectors" loading="eager">
+                            </div>
+                            <div class="spec-component-info">
+                                <span class="spec-extra-inline">NO SOLDERING</span>
+                                <p class="spec-component-desc">Expandability for LEDs, triggers, clocks, gates, or custom hardware. JST connectors bring out 5&nbsp;V, 3.3&nbsp;V, GND, and free I/O — and on rev&nbsp;H+, dedicated CLK-IN (3–5&nbsp;V), CLK-OUT (5&nbsp;V) and SIDEC-5V headers — so you can add modules without soldering.</p>
+                                <span class="spec-component-price"><span class="highlight">INCLUDED</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Personal rev H hardware builds -->
+        <section id="build" class="container build-section" aria-labelledby="build-title">
+            <details class="build-guide">
+                <summary class="build-guide-toggle"><h2 id="build-title">Build it yourself</h2></summary>
+                <div class="build-guide-content">
+            <p class="build-intro">Build a personal rev H unit from the open hardware files. Fit a Teensy, four DuPPa encoders, the matrix and a case. <a id="build-finished-link" href="#buy"><strong>A finished TŒRN ordered from the shop arrives ready to play.</strong></a></p>
+            <div class="build-steps">
+                <div class="build-step-with-offer">
+                <details>
+                    <summary><span>01</span> Fabricate the PCB yourself</summary>
+                    <div class="build-detail">
+                        <p>Only if you did not buy the pre-assembled circuit board (PCB only) beside this step. That board is populated and nothing else: you still add the Teensy, encoders and the rest.</p>
+                        <p>Order the <strong>4-layer, 1.6 mm rev H PCB</strong> with the matching Gerbers, production BOM and CPL from <a href="https://github.com/soundpauli/toern/tree/main/hardware/PCB/toern_revH/jlcpcb/production_files">the production package</a>. Check every component match in the assembly quote before paying.</p>
+                        <p>Pre-order or arrange sourcing for <strong>SGTL5000XNBA3 (C5196742), SJ1-3533 (C4991776), EG2219 (C3664594), EEE-FK1C102SV (C5686929), DM3BT-DSF-PEJS (C597972) and TLP2361 (C107626)</strong> before PCB assembly. The <a href="https://github.com/soundpauli/toern/blob/main/hardware/PCB/BOM/preorder-parts.csv">pre-order BOM</a> gives quantities and sourcing routes. Use <a href="https://jlcpcb.com/help/article/what-is-jlcpcb-parts-pre-order-service">JLCPCB Parts Pre-order</a> or an approved sourcing route, and verify the component matches in your quote.</p>
+                        <p>JLCPCB assembles the carrier components, including the pogo pins, audio/MIDI jacks, encoder sockets, JST-PH headers, switch and microphone. <strong>CN1/CN2 pogo pins are included in the production BOM: C5157282, quantity 2.</strong> The <a href="https://github.com/soundpauli/toern/tree/main/hardware/PCB/BOM">BOM directory</a> separates the assembled carrier parts from the sockets, modules and cables you fit yourself.</p>
+                    </div>
+                </details>
+                <details id="pcb-offer" class="pcb-offer">
+                    <summary>Don’t want to fabricate the PCB yourself? Buy a pre-assembled circuit board (PCB only) here</summary>
+                    <div class="buy-box build-pcb-buy">
+                        <div class="buy-price" id="pcb-price">99€</div>
+                        <div class="buy-price-note">Pre-assembled circuit board (PCB only). No Teensy, encoders, panel or case. Price includes EU VAT · plus shipping.</div>
+                        <div class="buy-shipping" id="pcb-shipping">
+                            <p class="buy-shipping-label">Shipping</p>
+                            <div class="buy-shipping-options" id="pcb-shipping-options"></div>
+                            <p class="buy-shipping-total" id="pcb-shipping-total"></p>
+                        </div>
+                        <div id="paypal-pcb-container"></div>
+                        <div id="paypal-pcb-success" class="paypal-status success" role="status" aria-live="polite">
+                            <h4>Thank you for your PCB order.</h4>
+                            <p>Your payment was successful. This order is the pre-assembled circuit board (PCB only).</p>
+                        </div>
+                        <div id="paypal-pcb-error" class="paypal-status error" role="alert" aria-live="assertive">
+                            <h4>Sorry, something went wrong.</h4>
+                            <p>Please try checkout again, or get in touch and we will help you directly.</p>
+                        </div>
+                        <p class="buy-payment-note">Secure checkout via PayPal (PayPal account or credit / debit card). <a href="/widerruf.html">Widerrufsbelehrung</a> · <a href="/widerruf.html#funktion">Vertrag widerrufen</a></p>
+                    </div>
+                </details>
+                </div>
+                <details>
+                    <summary><span>02</span> Add the Teensy</summary>
+                    <div class="build-detail">
+                        <ol>
+                            <li>Solder <strong>two compatible 8 MB PSRAM chips</strong> to the Teensy 4.1 underside for 16 MB total. Align pin 1 using <a href="https://www.pjrc.com/store/psram.html">PJRC’s placement photos</a>, inspect for bridges and run the linked memory test. Confirm 16 MB is detected and passes before fitting the module.</li>
+                            <li>Solder <strong>two 1×24 male headers, 2.54 mm pitch</strong>, along the Teensy edges. Keep them straight. Fit <strong>four 1×12 female carrier sockets, 3M 929870-01-12-RA</strong> (<a href="https://www.digikey.de/de/products/detail/3m/929870-01-12-RA/1239316">DigiKey</a>), at J28–J31. CN1/CN2 are already fitted by JLCPCB; check they contact the Teensy USB-device D−/D+ pads and allow clearance for the PSRAM.</li>
+                            <li>Inspect the JLCPCB-assembled carrier, including the jacks, JST-PH headers, encoder sockets, power switch, microphone and pogo pins. Match the assembled parts to the schematic before powering up.</li>
+                            <li>Bridge <strong>JP1 center to VYS</strong> for normal USB/battery operation. Center to VBUS is the USB-only option. <strong>Bridge one gap only.</strong> Bridging both joins raw USB power to the charger output. Check <a href="https://www.pjrc.com/teensy/schematic.html">VIN/VUSB isolation</a> if also plugging into the Teensy’s own USB socket while the carrier supplies VIN.</li>
+                        </ol>
+                    </div>
+                </details>
+                <details>
+                    <summary><span>03</span> Add the DuPPa encoders</summary>
+                    <div class="build-detail">
+                        <p>Solder each DuPPa V2.1 RGB encoder and its two 1×5 headers. Set the four module addresses from left to right to <strong>0x01, 0x41, 0x20, 0x61</strong>: close A0; A6+A0; A5; A6+A5+A0 respectively. Leave other address jumpers open. Carrier encoder header pins are <strong>1 GND, 2 +5 V, 3 SDA, 4 SCL, 5 INT</strong>; match module labels before seating.</p>
+                    </div>
+                </details>
+                <details>
+                    <summary><span>04</span> Wire the matrix, clocks and speaker</summary>
+                    <div class="build-detail">
+                        <p>Use the <a href="https://www.amazon.de/dp/B0BVQR1PJR">standard touchpads</a> with <a href="https://www.amazon.de/dp/B0C744NTGN">inlay pieces</a> fitted into the touchpad assembly. The build needs <strong>one 5-pin touch cable, four 2-pin speaker/clock-jack cables, and one 3-pin LED-panel cable</strong>, JST-PH 2.00 mm. Pin numbers are PCB pins, not wire colours.</p>
+                        <div class="build-table-wrap" tabindex="0" role="region" aria-label="Cable wiring">
+                            <table class="build-table">
+                                <thead><tr><th>Connection</th><th>Wire it this way</th></tr></thead>
+                                <tbody>
+                                    <tr><td>Matrix · J9</td><td>1 → DIN, 2 → GND, 3 → +5 V. One 32×16 panel; firmware LED mode 2 addresses its 512 LEDs.</td></tr>
+                                    <tr><td>Clock out · J25</td><td>1 → TS jack tip, 2 → sleeve/GND. Buffered 5 V output (Teensy 37).</td></tr>
+                                    <tr><td>Clock in · J26</td><td>1 → TS tip, 2 → sleeve/GND. Buffered 3–5 V input (Teensy 38).</td></tr>
+                                    <tr><td>Sidechain out · J27</td><td>1 → TS tip, 2 → sleeve/GND. Buffered 5 V voice trigger (Teensy 28).</td></tr>
+                                    <tr><td>Speaker · J10</td><td>1 → ROUT−, 2 → ROUT+. Neither wire goes to GND.</td></tr>
+                                    <tr><td>Touch · J13</td><td>Pin 1 touch 1 (GPIO 2), pin 3 menu (GPIO 3), pin 2 touch3 (GPIO 4), pin 4 audition (GPIO 6), pin 5 FN (GPIO 39).</td></tr>
+                                    <tr><td>Battery · J16</td><td>1 → GND, 2 → VBAT. Check the LiPo plug polarity first.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </details>
+                <details>
+                    <summary><span>05</span> Cut the case</summary>
+                    <div class="build-detail">
+                        <ol>
+                            <li>Choose <strong>32_16.dxf plus COMMON.dxf</strong> for the standard desktop housing; 16_16.dxf is the smaller optional build. For the modular panel choose <strong>modular_2parts.dxf</strong> or its two separate base/front files. Import in millimetres at 1:1; do not cut both the combined file and its separate copies. The modular base is 182.5 × 128.5 mm and the front is 172 × 86 mm.</li>
+                            <li>Separate <strong>SCHNITT (cut)</strong> from <strong>GRAVUR (engrave)</strong>. Exclude reference clearance guides. Convert text to outlines if your laser software cannot use Space Grotesk Bold.</li>
+                            <li>Start with a <strong>0.125 mm offset into the waste</strong>: outside the outer perimeter and inside holes/cutouts. Software asking for full kerf width needs <strong>0.250 mm</strong> for that offset. Check the preview and apply compensation only once.</li>
+                            <li>Cut a fit coupon in the actual laser-safe acrylic first. Adjust kerf to the machine/material and confirm sheet thickness against your stack. The modular illustration uses a 2 mm base, 8 mm LED and 2 mm front; verify the real clearances before ordering sheets.</li>
+                            <li>Engrave first, cut holes next, outer profiles last. Dry-fit everything and check the panel, PCB and LED clearances before final assembly. Mount the PCB flat underside toward the panel.</li>
+                        </ol>
+                        <p>Follow the <a href="https://github.com/soundpauli/toern/blob/main/hardware/housing/exports/ModularPanel/LASER_README.txt">modular laser notes</a> for the mounting orientation. The older browser case generator uses an older board template; verify rev H holes before cutting from it.</p>
+                    </div>
+                </details>
+                <details>
+                    <summary><span>06</span> Power on</summary>
+                    <div class="build-detail">
+                        <p>Leave the battery, Teensy and matrix disconnected for the first carrier check. With JP1 bridged and the switch on, check the 5 V, 3.3 V and 1.8 V rails. Power off, fit the tested Teensy, then reconnect and check again.</p>
+                        <p>Build with <code>pio run -d platformio</code> from the repository root, or use the <a href="https://github.com/soundpauli/toern/blob/main/docs/info.md">flashing instructions</a>. The firmware uses USB Serial + MIDI + Audio. Add the microSD and matrix with power off, test the four encoders and headphone audio, then enable the optional speaker in VOL → SPKR. Connect the battery after the USB-powered checks pass.</p>
+                        <p>Try the <a href="https://handbook.toern.live/">handbook’s first beat</a>. For the display Demo, open ETC → INFO and press touch3 / BUTTON_C; press and release Touch 1 / BUTTON_A to return.</p>
+                    </div>
+                </details>
+            </div>
+            <details class="build-more">
+                <summary>Parts list, BOMs and drawings</summary>
+            <p class="build-resources">
+                <a href="https://github.com/soundpauli/toern/blob/main/docs/BUILD.md">Full assembly guide</a>
+                <a href="https://github.com/soundpauli/toern/tree/main/hardware/PCB/BOM">Purchasing BOMs</a>
+                <a href="https://github.com/soundpauli/toern/tree/main/hardware/housing">Housing DXFs</a>
+            </p>
+            <div class="build-table-wrap" tabindex="0" role="region" aria-label="Additional purchased parts">
+                <table class="build-table">
+                    <thead><tr><th>Qty</th><th>Part</th><th>What to check</th></tr></thead>
+                    <tbody>
+                        <tr><td>1</td><td>Assembled rev H PCB</td><td>Secure SGTL5000XNBA3 and all unavailable assembly parts before ordering.</td></tr>
+                        <tr><td>1 + 2</td><td>Teensy 4.1 + 8 MB PSRAM chips</td><td>16 MB total; two 1×24 male headers if the Teensy has no pins.</td></tr>
+                        <tr><td>4 sets</td><td>DuPPa I2C Encoder V2.1, RGB encoder, knob</td><td>Two 1×5 male headers each; check which accessories the bundle includes.</td></tr>
+                        <tr><td>1</td><td><a href="https://de.aliexpress.com/item/1005010071864259.html">32×16 RGB LED panel</a></td><td>Standard 512-LED display; J9 3-pin mating cable. 16×16 is optional.</td></tr>
+                        <tr><td>5 + 1 set</td><td><a href="https://www.amazon.de/dp/B0BVQR1PJR">Touchpads</a> + <a href="https://www.amazon.de/dp/B0C744NTGN">inlay</a></td><td>Fit the inlay into the touchpad assembly. Four grounded buttons are the external-panel alternative.</td></tr>
+                        <tr><td>4</td><td>1×12 Teensy carrier sockets</td><td><a href="https://www.digikey.de/de/products/detail/3m/929870-01-12-RA/1239316">3M 929870-01-12-RA, DigiKey</a>; solder at J28–J31.</td></tr>
+                        <tr><td>3</td><td>Clock/sidechain TS panel jacks (<a href="https://www.amazon.de/dp/B09TK2HNKD">Amazon source</a>)</td><td>Match panel holes; solder each jack to a 2-pin cable from the four-lead total below.</td></tr>
+                        <tr><td>1</td><td>Speaker (optional)</td><td>Solder speaker leads to a JST-PH 2.00 mm 2-pin mating cable for J10. Neither terminal is GND.</td></tr>
+                        <tr><td>1</td><td><a href="https://www.amazon.de/dp/B0CBWZVNXS">JST-PH 5-pin cable</a></td><td>2.00 mm pitch; five touchpads on J13.</td></tr>
+                        <tr><td>4</td><td><a href="https://www.amazon.de/dp/B0CBX13ZS2">JST-PH 2-pin cables</a></td><td>2.00 mm pitch; one for the speaker and three for clock/sidechain jacks.</td></tr>
+                        <tr><td>1</td><td><a href="https://www.amazon.de/dp/B0CBWZ5KGJ">JST-PH 3-pin cable</a></td><td>2.00 mm pitch; LED panel on J9.</td></tr>
+                        <tr><td>1</td><td>Single-cell LiPo (optional)</td><td>JST-PH plug; verify polarity and case fit.</td></tr>
+                        <tr><td>1 each</td><td>microSD + USB-C data cable</td><td>32 GB FAT32 or 64 GB exFAT; load the sample folders onto the card.</td></tr>
+                        <tr><td>1 set</td><td>Laser-safe acrylic</td><td>Match the housing and measured stack.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            </details>
+            <p class="build-license">Hardware files are CC BY-NC 4.0 for personal/non-commercial builds. Commercial hardware sales require written permission; see the <a href="https://github.com/soundpauli/toern/blob/main/Readme.md#license">license</a>.</p>
+                </div>
+            </details>
+        </section>
+
+        <!-- Beauty shot 3 (after Specs) -->
+        <div class="beauty-shot">
+            <img src="assets/img/open-hackable.jpg" alt="Open TŒRN with the LED matrix and circuit board" loading="eager">
+            <div class="beauty-shot-caption">
+                <h2 class="beauty-headline">Open & Hackable.</h2>
+                <p class="beauty-desc">Firmware is MIT. Hardware design files are CC BY-NC. The handbook is how you play it.</p>
+            </div>
+        </div>
+
+        <!-- Interactive revJ board, directly after Open & Hackable -->
+        <section id="board-explorer" class="board-explorer-section" aria-label="Explore the TŒRN circuit board in 3D">
+            <div class="board-explorer-container">
+                <iframe src="board-explorer/index.html#J13" title="Interactive TŒRN revJ board and component inspector" loading="lazy" allow="fullscreen"></iframe>
+            </div>
+        </section>
+
+        <!-- Contribute section -->
+        <section id="contribute" class="contribute-section">
+            <div class="container contribute-section-inner">
+                <span class="mono topline">// OPEN SOURCE</span>
+                <h2><span class="">Contribute</span></h2>
+                <p>TŒRN is open source. Use the firmware, and hardware files; build - and share what you make. PCB, source code, and docs are on GitHub.</p>
+                <div class="contribute-grid">
+                    <div class="contribute-block">
+                        <h4>Repository</h4>
+                        <div class="contribute-promo-btns">
+                            <a class="contribute-github-btn" href="https://github.com/soundpauli/toern" target="_blank" rel="noopener noreferrer">GitHub - PCB, firmware, docs</a>
+                            <a class="contribute-handbook-btn" href="https://handbook.toern.live/" target="_blank" rel="noopener noreferrer">
+                                <img src="assets/img/handbook-icon.svg" alt="" class="handbook-icon" width="28" height="28">
+                                TŒRN Handbook
+                            </a>
+                            <a class="contribute-handbook-btn" href="https://docs.toern.live/" target="_blank" rel="noopener noreferrer">
+                                Code &amp; hardware docs
+                            </a>
+                        </div>
+                    </div>
+                    <div class="contribute-block">
+                        <h4>Web tools</h4>
+                        <ul class="contribute-links">
+                            <li><a href="https://firmware.toern.live/" target="_blank" rel="noopener noreferrer">TŒRN Firmware tool --></a></li>
+                            <li><a href="https://audioconvert.toern.live/" target="_blank" rel="noopener noreferrer">TŒRN Sample converter --></a></li>
+                            <li><a href="https://sdtool.toern.live/" target="_blank" rel="noopener noreferrer">TŒRN SD tool --></a></li>
+                            <li><a href="https://sim.toern.live/" target="_blank" rel="noopener noreferrer">TŒRN Simulator --></a></li>
+                            <li><a href="https://toern.live/tools/case/" target="_blank" rel="noopener noreferrer">TŒRN Case generator (demo) --></a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+
+        <!-- Media / Instagram - See It In Action: square cards, no iframes. -->
+        <section id="media" class="container media-section">
+            <div class="media-header">
+                <h2 style="font-size: 3.6rem;">See It In Action</h2>
+                <a href="https://www.instagram.com/toern_ctrl/" class="ig-cta-btn" target="_blank" rel="noopener noreferrer">
+                    <svg class="ig-cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+                    </svg>
+                    <span>View on Instagram</span>
+                </a>
+            </div>
+            <!-- Feed items. Update the JSON below or set data-feed-url to an API that returns [{ imageUrl, postUrl, alt }]. -->
+            <div class="media-grid" id="instagram-feed" aria-label="Latest Instagram posts"></div>
+            <div class="gallery-wrap">
+                <div class="gallery-nav gallery-prev" aria-hidden="true">
+                    <button type="button" id="gallery-prev" aria-label="Previous image">&lt;</button>
+                </div>
+                <div class="gallery-track">
+                    <div class="gallery-item"><img src="assets/img/teaser_outside.jpeg" alt="TŒRN" loading="eager"></div>
+                    <div class="gallery-item"><img src="assets/img/gallery-current-01.jpg" alt="TŒRN, side view with the LED matrix" loading="eager"></div>
+                    <div class="gallery-item"><img src="assets/img/gallery-current-02.jpg" alt="TŒRN panel with encoders and jacks" loading="eager"></div>
+                    <div class="gallery-item"><img src="assets/img/gallery-current-03.jpg" alt="TŒRN with the matrix lit" loading="eager"></div>
+
+                    <div class="gallery-item portrait gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/DSCF2588.JPG" alt="Earlier TŒRN" loading="eager"></div>
+                    <div class="gallery-item portrait gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/0_DSCF2538.jpg" alt="Earlier TŒRN" loading="eager"></div>
+                    <div class="gallery-item portrait gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/DSCF2598.jpg" alt="Earlier TŒRN" loading="eager"></div>
+                    <div class="gallery-item gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/1_asdf_toern_01.jpg" alt="Earlier TŒRN" loading="eager"></div>
+                    <div class="gallery-item gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/4_DSCF2560.jpg" alt="Earlier TŒRN" loading="eager"></div>
+                    <div class="gallery-item gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/2_DSCF2380.jpg" alt="Earlier TŒRN" loading="eager"></div>
+                    <div class="gallery-item gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/3_DSCF2553.jpg" alt="Earlier TŒRN" loading="eager"></div>
+                    <div class="gallery-item portrait gallery-old"><span class="gallery-storer">OLD VERSION</span><img src="assets/img/5_DSCF2399.jpg" alt="Earlier TŒRN" loading="eager"></div>
+                </div>
+                <div class="gallery-nav gallery-next" aria-hidden="true">
+                    <button type="button" id="gallery-next" aria-label="Next image">&gt;</button>
+                </div>
+            </div>
+            <div class="slider-indicators" id="gallery-indicators" aria-label="Gallery slider indicators"></div>
+        </section>
+        <script id="instagram-feed-config" type="application/json">
+        [
+            { "imageUrl": "assets/img/reel_DfSJXGSoEb1.jpg", "postUrl": "https://www.instagram.com/p/DfSJXGSoEb1/", "alt": "Late nights with TŒRN", "caption": "“Just one more pattern” was 2 hours ago.\n\nLate nights with TŒRN. No laptop, no plan. Just seeing where the next loop takes me.\n\n#latenightjams #toern #groovebox #dawless #livejam", "postedAt": "2026-11-03", "isVideo": true },
+            { "imageUrl": "assets/img/reel_Dez3n2gIISc.jpg", "postUrl": "https://www.instagram.com/p/Dez3n2gIISc/", "alt": "TŒRN", "caption": "TŒRN", "postedAt": "2026-10-22", "isVideo": true },
+            { "imageUrl": "assets/img/reel_DdKQTtnIwih.jpg", "postUrl": "https://www.instagram.com/p/DdKQTtnIwih/", "alt": "New TŒRN hardware and firmware", "caption": "#diysequencer #diysynth #opensourcehardware #diysampler #sequencer — new hardware & firmware incoming. Including native support for 5-12V gate triggers and PPQN pulse clocks.", "postedAt": "2026-09-11", "isVideo": true },
+            { "imageUrl": "assets/img/reel_DSzzN5fCOqR.jpg", "postUrl": "https://www.instagram.com/reel/DSzzN5fCOqR/", "alt": "TŒRN DAWless session", "caption": "DAWless session with new samples! #diysequencer #diysampler #sampler #dawless #opensourcehardware", "postedAt": "2025-12-28", "isVideo": true },
+            { "imageUrl": "assets/img/reel_DQFT8f2CFwx.jpg", "postUrl": "https://www.instagram.com/reel/DQFT8f2CFwx/", "alt": "TŒRN firmware v1.2", "caption": "The firmware is now v1.2 and running smoothly - only a few hardware adjustments are needed before I really can think on getting this thing out in the wild! 🌈\n\n#diysynth #opensource #diysynthesizer #diysequencer #sequencer #teensy #arduino #sampler #diysampler #liveloopingartist #livelooper #dawless", "postedAt": "2025-10-21", "isVideo": true },
+            { "imageUrl": "assets/img/reel_DPU0oTZjLOv.jpg", "postUrl": "https://www.instagram.com/reel/DPU0oTZjLOv/", "alt": "TŒRN live jam 124 BPM", "caption": "The trial by fire for TŒRN:\n\nLive jam at 124 BPM - live looping, 8 voice sampling, sequencing. Dawless fun: Driving the main clock while running 11 effects, envelopes and filters: Frequency pass, bitcrushers, reverb, adsr, [...], live transposing, velocity and trig controls. Muting and live pattern play. All live. All open source. All portable. TŒRN.", "postedAt": "2025-10-02", "isVideo": true }
+        ]
+        </script>
+        <script>
+        (function() {
+            var container = document.getElementById('instagram-feed');
+            var configEl = document.getElementById('instagram-feed-config');
+            if (!container || !configEl) return;
+            var feedUrl = document.getElementById('media').getAttribute('data-feed-url');
+            function escapeHtml(s) {
+                if (!s) return '';
+                var d = document.createElement('div');
+                d.textContent = s;
+                return d.innerHTML;
+            }
+            function dateAgo(iso) {
+                if (!iso) return '';
+                var d = new Date(iso);
+                var now = new Date();
+                var diff = (now - d) / 864e5;
+                if (diff < 1) return 'Today';
+                if (diff < 2) return '1 day ago';
+                if (diff < 7) return Math.floor(diff) + ' days ago';
+                if (diff < 14) return '1 week ago';
+                if (diff < 60) return Math.floor(diff / 7) + ' weeks ago';
+                if (diff < 365) return Math.floor(diff / 30) + ' months ago';
+                return Math.floor(diff / 365) + ' year' + (diff >= 730 ? 's' : '') + ' ago';
+            }
+            var playSvg = '<span class="media-item-play" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>';
+            function render(items) {
+                if (!Array.isArray(items) || items.length === 0) return;
+                container.innerHTML = items.slice(0, 6).map(function(post) {
+                    var img = '<img src="' + escapeHtml(post.imageUrl || '') + '" alt="' + escapeHtml(post.alt || 'Instagram') + '" loading="eager" decoding="async" />';
+                    var dateStr = dateAgo(post.postedAt);
+                    var dateHtml = dateStr ? ('<p class="media-item-date">' + escapeHtml(dateStr) + '</p>') : '';
+                    var caption = (post.caption && post.caption.trim()) ? ('<p class="media-item-caption">' + escapeHtml(post.caption).replace(/\n/g, '<br>') + '</p>') : '';
+                    var overlay = '<div class="media-item-overlay">' + dateHtml + caption + '</div>';
+                    var inner = img + (post.isVideo ? playSvg : '') + overlay;
+                    var link = '<a class="media-item" href="' + escapeHtml(post.postUrl || '#') + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>';
+                    return '<div class="media-cell">' + link + '</div>';
+                }).join('');
+            }
+            if (feedUrl) {
+                window.toernFeedReady = fetch(feedUrl).then(function(r) { return r.json(); }).then(render).catch(function() {
+                    try { render(JSON.parse(configEl.textContent)); } catch (e) {}
+                });
+            } else {
+                try { render(JSON.parse(configEl.textContent)); } catch (e) {}
+            }
+        })();
+        </script>
+
+        <!-- Waitlist section -->
+        <footer id="preorder" class="cta-section">
+            <div class="cta-section-inner">
+                <div style="max-width: 600px; margin: 0 auto;">
+                    <div class="cta-headline-wrap">
+                        <h2>Join the <span class="highlight">waitlist</span></h2>
+                    </div>
+                    <p>Woah, sorry, we are sold out currently! You can join the waitlist to be notified about upcoming batches.</p>
+
+                    <form class="email-form" id="waitlist-form" name="waitlist" method="POST" data-netlify="true" netlify-honeypot="bot-field">
+                        <input type="hidden" name="form-name" value="waitlist">
+                        <p class="hidden" style="display:none"><label>Don't fill this out: <input name="bot-field"></label></p>
+                        <input type="email" name="email" placeholder="EMAIL ADDRESS" class="email-input" id="waitlist-email" required>
+                        <button type="submit" id="waitlist-submit">JOIN WAITLIST</button>
+                    </form>
+                    <div class="cta-message cta-message-success" id="waitlist-success">
+                        <h3>Thank you!</h3>
+                        <p>You've been added to the waitlist. We will notify you when the next batch is ready.</p>
+                    </div>
+                    <div class="cta-message cta-message-error" id="waitlist-error">
+                        <p>Something went wrong. Please try again later.</p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Buy section: PayPal SDK with client ID, vertical layout -->
+        <section id="buy" class="buy-section">
+            <div class="container buy-section-inner">
+            <span class="mono topline">// MAKE IT YOURS</span>
+            <h2><span class="highlight">Buy</span> TŒRN</h2>
+            <div class="buy-inner">
+                <div class="buy-grid">
+                    <div>
+                        <ul class="buy-overview">
+                            <li>One TŒRN unit - sequencer, sampler and synth groovebox</li>
+                            <li>17 × 17 × 5 cm, about 480 g</li>
+                            <li>DIY kit, partially assembled</li>
+                            <li>32×16 layout. If you need a 16×16, contact me via the <a href="#impressum">imprint</a>.</li>
+                            <li>Standalone - no laptop or DAW needed to play</li>
+                            <li class="buy-overview-item-with-info">
+                                <span>Powered via USB-C, also battery-ready — has to be ordered from 3rd party</span>
+                                <button type="button" class="buy-disclosure-toggle buy-info-toggle" id="buy-battery-toggle" aria-expanded="false" aria-controls="buy-battery-content">Battery &amp; power supply info</button>
+                                <div class="buy-disclosure-content buy-info-content" id="buy-battery-content">
+                                    <p><strong>Battery:</strong> 503759 3.7V 1500 mAh, PCM, JST PH2.0-2P Plug — <a href="https://www.amazon.de/dp/B0DLGT7DD1?ref_=ppx_hzsearch_conn_dt_b_fed_asin_title_4&amp;th=1" target="_blank" rel="noopener noreferrer">example (Amazon)</a>. Max thickness 5 mm, up to 3000 mAh should work. Cut the foam so the cell fits. Plug pin 2 is positive (VBAT).</p>
+                                    <p><strong>Power Supply:</strong> any suitable USB-C power supply with more than 2A should be fine, e.g. IKEA SJÖSS — <a href="https://www.ikea.com/de/de/p/sjoess-ladegeraet-mit-1-usb-ausgang-20-w-60609740/" target="_blank" rel="noopener noreferrer">IKEA SJÖSS</a></p>
+                                </div>
+                            </li>
+                            <li>When it arrives, open the <a href="https://handbook.toern.live/first-beat.html" target="_blank" rel="noopener noreferrer">handbook</a> and play the first beat</li>
+                            <li>MicroSD card for samples is included</li>
+                            <li>Unit and packaging. Shipping for Germany and EU is added at checkout.</li>
+                        </ul>
+                        <p class="buy-note">TŒRN is a small-batch instrument from an independent maker, not a mass-produced product. It is tested, and it can still have rough edges. Firmware is MIT. Hardware design files are CC BY-NC.</p>
+                    </div>
+                    <div class="buy-box">
+                        <div class="buy-price" id="buy-price">449€</div>
+                        <div class="buy-price-note" id="buy-price-note">Price includes EU VAT · plus shipping</div>
+                        <div class="buy-shipping" id="buy-shipping" hidden>
+                            <p class="buy-shipping-label">Shipping</p>
+                            <div class="buy-shipping-options" id="buy-shipping-options"></div>
+                            <p class="buy-shipping-total" id="buy-shipping-total"></p>
+                        </div>
+                        <p class="buy-price-note" style="margin-bottom: 1.5rem;">Built first, then shipped. About 5–10 weeks after your order.</p>
+                        <div class="buy-buttons">
+                            <div id="paypal-button-container"></div>
+                            <div id="paypal-status-success" class="paypal-status success" role="status" aria-live="polite">
+                                <h4>Thank you for your order!</h4>
+                                <p>Your payment was successful. We have received your order. It is built first, then shipped, about 5–10 weeks after payment. A microSD card is included. While you wait, order a battery from the list on this page. When it arrives, start at the <a href="https://handbook.toern.live/first-beat.html" target="_blank" rel="noopener noreferrer">first beat</a>.</p>
+                            </div>
+                            <div id="paypal-status-error" class="paypal-status error" role="alert" aria-live="assertive">
+                                <h4>Sorry, something went wrong.</h4>
+                                <p>Please try checkout again, or get in touch and we will help you directly.</p>
+                                <div class="paypal-status-actions">
+                                    <a class="paypal-contact-btn" href="mailto:info@toern.live?subject=T%C5%92RN%20order%20support">Email support</a>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="buy-payment-note">Secure checkout via PayPal (PayPal account or credit / debit card). <a href="/widerruf.html">Widerrufsbelehrung</a> · <a href="/widerruf.html#funktion">Vertrag widerrufen</a></p>
+                    </div>
+                </div>
+                <div class="disclaimers-section">
+                    <div class="disclaimer-item">
+                        <h4>Shipping</h4>
+                        <p>Shipped via DHL. Germany and EU shipping are added at checkout, on top of the unit price. The unit price does not include shipping.</p>
+                    </div>
+
+                    <div class="disclaimer-item">
+                        <h4>Customs, Tax</h4>
+                        <p>EU: Total includes VAT (19%).</p>
+                        <p>Other: Customs and/or import tax may apply upon import.</p>
+                    </div>
+
+                    <div class="disclaimer-item">
+                        <button type="button" class="buy-disclosure-toggle" id="buy-revocation-toggle" aria-expanded="false" aria-controls="buy-revocation-content">Right of Revocation</button>
+                        <div class="buy-disclosure-content" id="buy-revocation-content">
+                            <p>You may declare the revocation of your contractual statement in text form (e.g. letter, email) or by returning the merchandise within a period of two weeks. The revocation does not have to contain any reason. We will forward this revocation instruction to you again in text form. The revocation period commences the day following the receipt of merchandise and this revocation instruction in text form. The time-limit shall be deemed to be observed by the timely dispatch of the declaration of revocation or the return shipment.</p>
+                            <p>The revocation is to be addressed to:</p>
+                            <p>E-Mail: info@toern.live</p>
+                            <p>Postal:</p>
+                            <p>warft_labs<br>Schanzenstraße 35<br>20357 Hamburg<br>GERMANY</p>
+                        </div>
+                    </div>
+
+                    <div class="disclaimer-item">
+                        <button type="button" class="buy-disclosure-toggle" id="buy-privacy-toggle" aria-expanded="false" aria-controls="buy-privacy-content">Privacy</button>
+                        <div class="buy-disclosure-content" id="buy-privacy-content">
+                            <p>Personal data you provide for ordering are used for order processing and communication directly related to the order (such as invoice, shipment notification) only. This information is not shared with third parties and will be stored as long as required by law. When ordering through PayPal, your personal data are collected by PayPal and PayPal's privacy policy will apply, too.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </section>
+
+        <!-- FAQ -->
+        <section id="faq" class="faq-section">
+            <div class="container faq-inner">
+                <span class="mono topline">// FAQ</span>
+                <h2 style="font-size: 3.6rem; margin-bottom: 2rem;">Order &amp; Shipping</h2>
+
+                <div class="faq-list">
+                    <details class="faq-item">
+                        <summary>When will my TŒRN ship?</summary>
+                        <div class="faq-answer">
+                            <p>Your TŒRN is built first, then shipped. That takes about 5–10 weeks after your order.</p>
+                            <p>You’ll get production updates by email.</p>
+                        </div>
+                    </details>
+
+                    <details class="faq-item">
+                        <summary>Can I cancel my order?</summary>
+                        <div class="faq-answer">
+                            <p>You may cancel your order for a full refund at any time before production begins.</p>
+                            <p>Once production has started, cancellation may no longer be possible.</p>
+                            <p>After delivery, the statutory 14-day right of withdrawal applies in accordance with EU consumer law.</p>
+                            <p>To request a cancellation or withdrawal, please contact us at <a href="mailto:info@toern.live">info@toern.live</a>.</p>
+                        </div>
+                    </details>
+
+                    <details class="faq-item">
+                        <summary>Is there a warranty?</summary>
+                        <div class="faq-answer">
+                            <p>Yes. All units are covered by a 2-year warranty in accordance with applicable EU law.</p>
+                            <p>This warranty applies in addition to statutory consumer rights, including rights related to defects and non-conformity.</p>
+                        </div>
+                    </details>
+
+                    <details class="faq-item">
+                        <summary>Where do you ship to?</summary>
+                        <div class="faq-answer">
+                            <p>Orders on this site ship only within the EU.</p>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </section>
+
+        <!-- Thank you -->
+        <section id="thanks" class="thanks-section">
+            <div class="container thanks-inner">
+                <span class="mono topline">// THANK YOU</span>
+                <h2 style="font-size: 3.6rem; margin-bottom: 2rem;">Standing on good work</h2>
+
+                <div class="thanks-body">
+                    <p>TŒRN is a small instrument built on a lot of generous work by other people. None of this would exist without them, so here is where the credit belongs.</p>
+
+                    <p>First and foremost: thank you to <a href="https://www.pjrc.com/" target="_blank" rel="noopener noreferrer">Paul Stoffregen and the PJRC crew</a>. The <a href="https://www.pjrc.com/store/teensy41.html" target="_blank" rel="noopener noreferrer">Teensy 4.1</a> is the brain of every unit, and the <a href="https://www.pjrc.com/teensy/td_libs_Audio.html" target="_blank" rel="noopener noreferrer">Teensy Audio Library</a> — Freeverb and all — is the reason it sounds like something you want to keep playing. The <a href="https://github.com/PaulStoffregen/cores" target="_blank" rel="noopener noreferrer">Teensy cores</a>, <a href="https://github.com/PaulStoffregen/WS2812Serial" target="_blank" rel="noopener noreferrer">WS2812Serial</a> for the LED matrix, and <a href="https://github.com/PaulStoffregen/LittleFS" target="_blank" rel="noopener noreferrer">LittleFS</a> and <a href="https://github.com/PaulStoffregen/SerialFlash" target="_blank" rel="noopener noreferrer">SerialFlash</a> for storage come from the same place. An enormous amount of TŒRN is really their work, carefully wrapped in a box with knobs.</p>
+
+                    <p>An especially loud shoutout goes to <a href="https://github.com/newdigate" target="_blank" rel="noopener noreferrer">Nic Newdigate</a>, whose <a href="https://github.com/newdigate/teensy-polyphony" target="_blank" rel="noopener noreferrer">teensy-polyphony</a> and <a href="https://github.com/newdigate/teensy-variable-playback" target="_blank" rel="noopener noreferrer">teensy-variable-playback</a> are the polyphonic heart of this instrument. And a warm thank you to <a href="https://signaturesounds.org/" target="_blank" rel="noopener noreferrer">signaturesounds.org</a> for providing such awesome sounds and samples — a sampler is only as good as what you feed it.</p>
+
+                    <p>Plenty of other projects are doing quiet, essential work in the background: the <a href="https://github.com/FortySevenEffects/arduino_midi_library" target="_blank" rel="noopener noreferrer">Arduino MIDI Library</a> by FortySevenEffects keeps TŒRN in time with the rest of your studio, <a href="https://fastled.io/" target="_blank" rel="noopener noreferrer">FastLED</a> paints every pixel you see, <a href="https://www.adafruit.com/" target="_blank" rel="noopener noreferrer">Adafruit</a>’s <a href="https://github.com/adafruit/Adafruit_BusIO" target="_blank" rel="noopener noreferrer">BusIO</a> and <a href="https://github.com/adafruit/Adafruit_Seesaw" target="_blank" rel="noopener noreferrer">seesaw</a> libraries talk to the hardware, <a href="https://www.duppa.net/" target="_blank" rel="noopener noreferrer">DuPPa</a>’s <a href="https://github.com/Fattoresaimon/ArduinoDuPPaLib" target="_blank" rel="noopener noreferrer">ArduinoDuPPaLib</a> drives the encoders, <a href="https://github.com/AdrianFreed/FastTouch" target="_blank" rel="noopener noreferrer">Adrian Freed</a>’s FastTouch reads your fingertips, <a href="https://github.com/natnqweb/Mapf" target="_blank" rel="noopener noreferrer">natnqweb</a>’s Mapf does the maths nobody wants to write twice, <a href="https://github.com/greiman/SdFat" target="_blank" rel="noopener noreferrer">Bill Greiman</a>’s SdFat sits behind every sample you load and save, and <a href="https://www.pjrc.com/teensy/loader.html" target="_blank" rel="noopener noreferrer">Teensy Loader</a> puts new firmware on your unit from the browser.</p>
+
+                    <p>And thank you to the wider open-source audio community, for sharing the kind of knowledge that lets one person build a synth in the first place. Full credits and licenses live in the <a href="https://github.com/soundpauli/toern" target="_blank" rel="noopener noreferrer">git repository</a>.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="sponsor-section" aria-label="HAIC Award and MiniBooth">
+            <div class="container">
+                <div class="sponsor-wall">
+                    <article class="sponsor">
+                        <a href="https://haic-award.de/" target="_blank" rel="noopener noreferrer">
+                            <img src="assets/img/haic-award-2026-realities-gold.png" alt="HAIC Award 2026 Gold, category Realities" width="1800" height="1800">
+                        </a>
+                        <p>toern won Gold in the category Realities at the <a href="https://haic-award.de/" target="_blank" rel="noopener noreferrer">HAIC Award</a>.</p>
+                    </article>
+                    <article class="sponsor">
+                        <a href="https://fez-berlin.de/veranstaltungen2026/minibooth" target="_blank" rel="noopener noreferrer">
+                            <img src="assets/img/minibooth.jpeg" alt="MiniBooth Berlin 2026" width="560" height="315">
+                        </a>
+                        <p><a href="https://fez-berlin.de/veranstaltungen2026/minibooth" target="_blank" rel="noopener noreferrer">MiniBooth Berlin 2026</a> is where toern was first presented to the public.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- Impressum Footer -->
+        <footer id="impressum" class="impressum-footer container">
+            <div class="impressum-grid">
+                <h3>Impressum</h3>
+
+                <div class="impressum-column">
+                    <address>
+                        warft_labs<br>
+                        Schanzenstraße 35<br>
+                        20357 Hamburg<br>
+                        GERMANY
+                    </address>
+                </div>
+
+                <div class="impressum-column">
+                    <p>
+                        <strong>Contact:</strong><br>
+                        <a href="/widerruf.html">Vertrag widerrufen</a><br>
+                        Email: <a href="mailto:info@toern.live">info@toern.live</a>
+                    </p>
+                    <p>
+                        <strong>Responsible for content:</strong><br>
+                        Jan-Peter Kuntoff
+                    </p>
+                </div>
+
+                <div class="impressum-column">
+                    <div class="impressum-social-links">
+                        <a href="https://www.instagram.com/toern_ctrl/" class="impressum-social-link" target="_blank" rel="noopener noreferrer">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+                                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+                            </svg>
+                            <span>Instagram</span>
+                        </a>
+                        <a href="https://github.com/soundpauli/toern" class="impressum-social-link" target="_blank" rel="noopener noreferrer">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                            </svg>
+                            <span>GitHub</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="impressum-datenschutz">
+                    <div class="impressum-datenschutz-toggle" id="datenschutz-toggle">Datenschutz / Privacy</div>
+                    <div class="impressum-datenschutz-content" id="datenschutz-content">
+                        <h5>Shop</h5>
+                        <p>Personal data you provide for ordering are used for order processing and communication directly related to the order (such as invoice, shipment notification, order confirmation) only. This information is not shared with third parties and will be stored as long as required by law. When ordering through PayPal, your personal data are collected by PayPal and PayPal's privacy policy will apply, too.</p>
+                        <p>If you use the withdrawal function (<a href="/widerruf.html#funktion">Vertrag widerrufen</a>), we store your name, email address, the order reference and the text of the withdrawal so we can confirm receipt and process the withdrawal. That record is kept for the statutory retention period, then deleted. You do not need an account, and you do not have to give a reason.</p>
+
+                        <h5>Website</h5>
+                        <p>Otherwise, the Catoern.live website does not process, collect, transmit or share personal information. There are no third party services embedded and there is no user tracking. It doesn't even use cookies.</p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+        <div class="bottom-cta-bar">
+            <div class="container">
+            <div class="bottom-cta-stack">
+            <a href="#faq" class="cta-preorder-link">
+                order your unit
+                <span class="cta-arrow" aria-hidden="true">→</span>
+            </a>
+            <a href="https://www.instagram.com/toern_ctrl" target="_blank" rel="noopener noreferrer">
+                <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+                </svg>
+                Follow me on Instagram
+                <span class="cta-arrow" aria-hidden="true">→</span>
+            </a>
+            </div>
+            </div>
+        </div>
+
+    </main>
+    <div id="order-celebration" aria-hidden="true">
+        <canvas id="order-celebration-canvas"></canvas>
+        <div class="order-celebration-text">
+            <div>
+                <h3>THANK YOU</h3>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. NATIVE SCROLL (realtime, no animation) ---
+
+        // --- 2. ACTIVE NAV ---
+        const sections = document.querySelectorAll("section[id], header[id], footer[id]");
+        const navLinks = document.querySelectorAll(".nav-links a");
+        const navLogo = document.querySelector(".nav-logo");
+        let lastScrollY = 0;
+        const heroHideThreshold = typeof window !== 'undefined' ? window.innerHeight : 600;
+
+        function updateActiveNav() {
+            const scrollPos = window.scrollY || window.pageYOffset;
+            let current = "";
+
+            sections.forEach((section) => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.offsetHeight;
+                const sectionId = section.getAttribute("id");
+                if (scrollPos >= sectionTop - 300 && scrollPos < sectionTop + sectionHeight - 300) {
+                    current = sectionId;
+                }
+            });
+
+            // Handle top/hero section
+            if (scrollPos < 300) {
+                current = "top";
+            }
+
+            // Update nav links
+            navLinks.forEach((link) => {
+                link.classList.remove("active");
+                const href = link.getAttribute("href").replace('#', '');
+                if (href === current) {
+                    link.classList.add("active");
+                }
+            });
+            // Sync active state to mobile panel links
+            document.querySelectorAll(".nav-mobile-panel a").forEach((link) => {
+                link.classList.remove("active");
+                const href = link.getAttribute("href").replace('#', '');
+                if (href === current) {
+                    link.classList.add("active");
+                }
+            });
+
+            // Update logo active state
+            if (navLogo) {
+                const logoBounds = navLogo.getBoundingClientRect();
+                const logoCenter = logoBounds.top + logoBounds.height / 2;
+                const onDarkPlatform = window.innerWidth > 1024 && ['platform', 'platform-make'].some(id => {
+                    const chapter = document.getElementById(id);
+                    if (!chapter) return false;
+                    const bounds = chapter.getBoundingClientRect();
+                    return bounds.top <= logoCenter && bounds.bottom > logoCenter;
+                });
+                navLogo.classList.toggle('nav-logo-on-platform', onDarkPlatform);
+                if (current === "top" || current === "hero") {
+                    navLogo.classList.add("active");
+                } else {
+                    navLogo.classList.remove("active");
+                }
+            }
+            // Hide nav on scroll down after hero; show on scroll up or when in hero
+            const navEl = document.querySelector("nav");
+            if (navEl) {
+                if (scrollPos > 80) navEl.classList.add("nav-scrolled");
+                else navEl.classList.remove("nav-scrolled");
+                if (scrollPos > heroHideThreshold) {
+                    if (scrollPos > lastScrollY) navEl.classList.add("nav-links-hidden");
+                    else navEl.classList.remove("nav-links-hidden");
+                } else {
+                    navEl.classList.remove("nav-links-hidden");
+                }
+                lastScrollY = scrollPos;
+                // White on dark, black on white: add nav-on-light when nav is over buy or waitlist (only if section is visible)
+                const buySection = document.querySelector(".buy-section");
+                const ctaSection = document.querySelector(".cta-section");
+                const navHeight = 100;
+                let onLight = false;
+                function isVisible(el) {
+                    if (!el) return false;
+                    var r = el.getBoundingClientRect();
+                    var style = window.getComputedStyle(el);
+                    return (r.height > 0 && r.bottom > r.top) && style.display !== "none" && style.visibility !== "hidden";
+                }
+                if (buySection && isVisible(buySection)) {
+                    var r = buySection.getBoundingClientRect();
+                    if (r.top <= navHeight && r.bottom >= 0) onLight = true;
+                }
+                if (!onLight && ctaSection && isVisible(ctaSection)) {
+                    var r = ctaSection.getBoundingClientRect();
+                    if (r.top <= navHeight && r.bottom >= 0) onLight = true;
+                }
+                if (onLight) navEl.classList.add("nav-on-light");
+                else navEl.classList.remove("nav-on-light");
+            }
+        }
+
+        // Update on scroll
+        window.addEventListener("scroll", updateActiveNav, { passive: true });
+        window.addEventListener("resize", updateActiveNav, { passive: true });
+        updateActiveNav(); // Initial call
+
+        // Smooth scroll to section when clicking nav links
+        document.querySelector('.nav-links')?.addEventListener('click', function(e) {
+            const a = e.target.closest('a[href^="#"]');
+            if (!a) return;
+            const id = a.getAttribute('href').slice(1);
+            if (!id) return;
+            const el = document.getElementById(id);
+            if (el) {
+                e.preventDefault();
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+
+        // Mobile burger menu: open/close panel, close on backdrop or link click
+        (function() {
+            const burger = document.getElementById("nav-burger");
+            const backdrop = document.getElementById("nav-mobile-backdrop");
+            const panel = document.getElementById("nav-mobile-panel");
+            const closeButton = document.getElementById("nav-mobile-close");
+            if (!burger || !backdrop || !panel) return;
+            function openMenu() {
+                document.body.classList.add("nav-mobile-open");
+                burger.setAttribute("aria-expanded", "true");
+                burger.setAttribute("aria-label", "Close menu");
+                panel.setAttribute("aria-hidden", "false");
+                backdrop.setAttribute("aria-hidden", "false");
+            }
+            function closeMenu() {
+                document.body.classList.remove("nav-mobile-open");
+                burger.setAttribute("aria-expanded", "false");
+                burger.setAttribute("aria-label", "Open menu");
+                panel.setAttribute("aria-hidden", "true");
+                backdrop.setAttribute("aria-hidden", "true");
+            }
+            burger.addEventListener("click", function() {
+                if (document.body.classList.contains("nav-mobile-open")) closeMenu();
+                else openMenu();
+            });
+            if (closeButton) {
+                closeButton.addEventListener("click", closeMenu);
+            }
+            backdrop.addEventListener("click", closeMenu);
+            panel.querySelectorAll("a").forEach(function(a) {
+                a.addEventListener("click", function(e) {
+                    const href = a.getAttribute("href");
+                    if (href && href.indexOf("#") === 0) {
+                        e.preventDefault();
+                        closeMenu();
+                        const id = href.slice(1);
+                        if (id) {
+                            const el = document.getElementById(id);
+                            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }
+                    }
+                });
+            });
+        })();
+
+        // --- 3. CURSOR ---
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+        const gridSize = 120;
+        const isCoarse = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 1024;
+
+        if (!isCoarse && cursorDot && cursorOutline) {
+            const cursorZonesSelector = "#hero, #about";
+            const hoverTargetSelector = "a, button, .bento-card";
+            let cursorEnabled = false;
+            let lastHoverTarget = null;
+
+            function snapToGrid(value) {
+                return Math.round(value / gridSize) * gridSize;
+            }
+            function isInCursorZone(target, clientX, clientY) {
+                if (target && target.closest && target.closest(cursorZonesSelector)) return true;
+                var zones = document.querySelectorAll(cursorZonesSelector);
+                for (var i = 0; i < zones.length; i++) {
+                    var el = zones[i];
+                    var r = el.getBoundingClientRect();
+                    var s = window.getComputedStyle(el);
+                    var mt = parseFloat(s.marginTop) || 0, mr = parseFloat(s.marginRight) || 0;
+                    var mb = parseFloat(s.marginBottom) || 0, ml = parseFloat(s.marginLeft) || 0;
+                    var top = r.top - mt, left = r.left - ml, right = r.right + mr, bottom = r.bottom + mb;
+                    if (clientX >= left && clientX <= right && clientY >= top && clientY <= bottom) return true;
+                }
+                return false;
+            }
+            function resetCursorOutline() {
+                cursorOutline.style.width = '32px';
+                cursorOutline.style.height = '32px';
+                cursorOutline.classList.remove('hover');
+                cursorOutline.style.background = '';
+                lastHoverTarget = null;
+            }
+            function setCursorEnabled(enabled) {
+                if (cursorEnabled === enabled) return;
+                cursorEnabled = enabled;
+                if (enabled) {
+                    document.body.classList.add('cursor-fx-active');
+                    if (cursorDot) cursorDot.style.display = 'none';
+                    cursorOutline.style.display = '';
+                } else {
+                    document.body.classList.remove('cursor-fx-active');
+                    if (cursorDot) cursorDot.style.display = 'none';
+                    cursorOutline.style.display = 'none';
+                    resetCursorOutline();
+                }
+            }
+
+            window.addEventListener("mousemove", function(e) {
+                const zoneActive = isInCursorZone(e.target, e.clientX, e.clientY);
+                setCursorEnabled(zoneActive);
+                if (!zoneActive) return;
+
+                // Snap cursor-outline to grid (dot hidden; outline is the only cursor)
+                const gridX = snapToGrid(e.clientX);
+                const gridY = snapToGrid(e.clientY);
+                cursorOutline.animate({ left: `${gridX}px`, top: `${gridY}px` }, { duration: 500, fill: "forwards" });
+
+                const hoverTarget = e.target.closest(hoverTargetSelector);
+                if (hoverTarget && isInCursorZone(hoverTarget, e.clientX, e.clientY)) {
+                    if (hoverTarget !== lastHoverTarget) {
+                        cursorOutline.style.width = '64px';
+                        cursorOutline.style.height = '64px';
+                        cursorOutline.classList.add('hover');
+                        const randomColor = hoverColors[Math.floor(Math.random() * hoverColors.length)];
+                        const rgba = `rgba(${randomColor.rgb[0]}, ${randomColor.rgb[1]}, ${randomColor.rgb[2]}, 0.3)`;
+                        cursorOutline.style.background = `radial-gradient(circle, #ffffff 0%, ${randomColor.hex} 40%, ${rgba} 100%)`;
+                        lastHoverTarget = hoverTarget;
+                    }
+                } else if (lastHoverTarget) {
+                    resetCursorOutline();
+                }
+            });
+            // Colors from col[1] to col[8] in colors.h
+            const hoverColors = [
+                { rgb: [255, 0, 0], hex: '#ff0000' },      // col[1] - Red
+                { rgb: [255, 69, 0], hex: '#ff4500' },     // col[2] - Burnt Orange
+                { rgb: [255, 255, 0], hex: '#ffff00' },    // col[3] - Gold
+                { rgb: [0, 200, 0], hex: '#00c800' },      // col[4] - Green
+                { rgb: [0, 255, 255], hex: '#00ffff' },    // col[5] - Cyan
+                { rgb: [0, 0, 255], hex: '#0000ff' },      // col[6] - Blue
+                { rgb: [255, 0, 255], hex: '#ff00ff' },     // col[7] - Magenta
+                { rgb: [220, 100, 100], hex: '#dc6464' }   // col[8] - Pink
+            ];
+            document.addEventListener('mouseleave', function() {
+                setCursorEnabled(false);
+            });
+            setCursorEnabled(false);
+        } else {
+            if (cursorDot) cursorDot.style.display = 'none';
+            if (cursorOutline) cursorOutline.style.display = 'none';
+        }
+
+        // --- 4. ANIMATIONS ---
+        gsap.registerPlugin(ScrollTrigger);
+
+        // Parallax
+        ScrollTrigger.matchMedia({
+            "(max-width: 1024px)": function() {
+                gsap.to(".hero-bg-img", {
+                    yPercent: 16,
+                    ease: "none",
+                    force3D: true,
+                    scrollTrigger: {
+                        trigger: ".hero",
+                        start: "top top",
+                        end: "bottom top",
+                        scrub: 0.75,
+                        invalidateOnRefresh: true
+                    }
+                });
+            },
+            "(min-width: 1025px)": function() {
+                gsap.to(".hero-bg-img", {
+                    yPercent: 30,
+                    ease: "none",
+                    scrollTrigger: {
+                        trigger: ".hero",
+                        start: "top top",
+                        end: "bottom top",
+                        scrub: true
+                    }
+                });
+            }
+        });
+
+        // Copy features to clipboard
+        (function() {
+            const copyBtn = document.getElementById('copy-features-btn');
+            if (!copyBtn) return;
+
+            copyBtn.addEventListener('click', async function() {
+                try {
+                    const cards = document.querySelectorAll('.bento-card');
+                    let markdown = '# TŒRN Key Features\n\n';
+
+                    cards.forEach((card) => {
+                        const category = card.querySelector('.mono')?.textContent?.trim() || '';
+                        const body = card.querySelector(':scope > div');
+                        markdown += `## ${category}\n\n`;
+                        if (!body) return;
+                        Array.from(body.children).forEach((el) => {
+                            if (el.matches('h3')) markdown += `**${el.textContent.trim()}**\n\n`;
+                            else if (el.matches('h4')) markdown += `### ${el.textContent.trim()}\n\n`;
+                            else if (el.matches('p')) markdown += `${el.textContent.trim()}\n\n`;
+                            else if (el.matches('ul')) {
+                                el.querySelectorAll('li').forEach((li) => {
+                                    const spans = li.querySelectorAll('span');
+                                    if (spans.length >= 2) {
+                                        markdown += `- ${spans[0].textContent.trim()}: ${spans[1].textContent.trim()}\n`;
+                                    }
+                                });
+                                markdown += '\n';
+                            }
+                        });
+                        markdown += '---\n\n';
+                    });
+
+                    const specs = document.getElementById('tech-specs');
+                    if (specs) {
+                        const specsTitle = specs.querySelector('h2')?.textContent?.trim() || 'Specifications';
+                        markdown += `# ${specsTitle}\n\n`;
+                        specs.querySelectorAll('article').forEach((article) => {
+                            const heading = article.querySelector('.spec-label')?.textContent?.trim()
+                                || article.querySelector('h3')?.textContent?.trim() || '';
+                            if (heading) markdown += `## ${heading}\n\n`;
+                            article.querySelectorAll('.tech-list li').forEach((li) => {
+                                const spans = li.querySelectorAll('span');
+                                if (spans.length >= 2) {
+                                    markdown += `- ${spans[0].textContent.trim()}: ${spans[1].textContent.trim()}\n`;
+                                }
+                            });
+                            markdown += '\n';
+                        });
+                    }
+
+                    await navigator.clipboard.writeText(markdown);
+
+                    // Visual feedback
+                    const originalText = copyBtn.querySelector('span')?.textContent || '';
+                    copyBtn.querySelector('span').textContent = 'Copied!';
+                    copyBtn.style.background = '#4caf50';
+                    copyBtn.style.color = 'white';
+
+                    setTimeout(() => {
+                        copyBtn.querySelector('span').textContent = originalText;
+                        copyBtn.style.background = 'white';
+                        copyBtn.style.color = '#000';
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                    alert('Failed to copy to clipboard. Please try again.');
+                }
+            });
+        })();
+
+        // Key Features slider: one-row tiles with gallery-style prev/next controls
+        (function() {
+            const featuresWrap = document.querySelector('.bento-slider-wrap');
+            const featuresTrack = document.getElementById('features-track');
+            const prevBtn = document.getElementById('features-prev');
+            const nextBtn = document.getElementById('features-next');
+            const indicatorsEl = document.getElementById('features-indicators');
+            const sliderDesktopMinWidth = 768;
+            if (!featuresWrap || !featuresTrack || !prevBtn || !nextBtn) return;
+
+            const items = featuresTrack.querySelectorAll('.bento-card');
+            if (!items.length) return;
+
+            let currentSlide = 0;
+
+            function buildIndicators() {
+                if (!indicatorsEl) return;
+                indicatorsEl.innerHTML = '';
+                items.forEach(function(_, index) {
+                    const dot = document.createElement('button');
+                    dot.type = 'button';
+                    dot.className = 'slider-indicator-dot';
+                    dot.setAttribute('aria-label', 'Go to feature ' + (index + 1));
+                    dot.addEventListener('click', function() {
+                        currentSlide = index;
+                        if (window.innerWidth >= sliderDesktopMinWidth) {
+                            updateFeaturesPosition();
+                        } else {
+                            scrollToFeature(index);
+                        }
+                    });
+                    indicatorsEl.appendChild(dot);
+                });
+            }
+
+            function updateIndicators() {
+                if (!indicatorsEl) return;
+                const dots = indicatorsEl.querySelectorAll('.slider-indicator-dot');
+                dots.forEach(function(dot, index) {
+                    dot.classList.toggle('is-active', index === currentSlide);
+                });
+            }
+
+            function setActiveFeature(index) {
+                items.forEach(function(card, i) {
+                    card.classList.toggle('is-active', i === index);
+                });
+                updateIndicators();
+            }
+
+            function getClosestSlideToCenter() {
+                const wrapRect = featuresWrap.getBoundingClientRect();
+                const wrapCenter = wrapRect.left + wrapRect.width / 2;
+                let closest = 0;
+                let minDist = Infinity;
+                items.forEach(function(card, index) {
+                    const r = card.getBoundingClientRect();
+                    const cardCenter = r.left + r.width / 2;
+                    const dist = Math.abs(cardCenter - wrapCenter);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closest = index;
+                    }
+                });
+                return closest;
+            }
+
+            function getGapPx() {
+                const style = window.getComputedStyle(featuresTrack);
+                const gap = parseFloat(style.columnGap || style.gap || '0');
+                return Number.isFinite(gap) ? gap : 0;
+            }
+
+            function updateButtons() {
+                prevBtn.disabled = currentSlide <= 0;
+                nextBtn.disabled = currentSlide >= items.length - 1;
+            }
+
+            function scrollToFeature(index) {
+                const item = items[index];
+                if (!item) return;
+                const targetLeft = item.offsetLeft - (featuresWrap.clientWidth - item.offsetWidth) / 2;
+                featuresWrap.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+            }
+
+            const sliderTween = { duration: 0.72, ease: 'power3.out', overwrite: 'auto', force3D: true };
+
+            function updateFeaturesPosition() {
+                if (window.innerWidth < sliderDesktopMinWidth) {
+                    gsap.set(featuresTrack, { x: 0 });
+                    prevBtn.disabled = false;
+                    nextBtn.disabled = false;
+                    currentSlide = getClosestSlideToCenter();
+                    setActiveFeature(currentSlide);
+                    return;
+                }
+                const item = items[currentSlide];
+                if (!item) return;
+                const itemLeft = item.offsetLeft;
+                const itemWidth = item.offsetWidth;
+                const wrapWidth = featuresWrap.offsetWidth;
+                const trackLeft = featuresTrack.offsetLeft;
+                const x = wrapWidth / 2 - trackLeft - itemLeft - itemWidth / 2;
+                gsap.to(featuresTrack, Object.assign({ x: x }, sliderTween));
+                updateButtons();
+                setActiveFeature(currentSlide);
+            }
+
+            prevBtn.addEventListener('click', function() {
+                if (window.innerWidth >= sliderDesktopMinWidth) {
+                    if (currentSlide > 0) {
+                        currentSlide -= 1;
+                        updateFeaturesPosition();
+                    }
+                } else {
+                    const step = (featuresTrack.querySelector('.bento-card')?.offsetWidth || 0) + getGapPx();
+                    featuresWrap.scrollBy({ left: -step, behavior: 'smooth' });
+                }
+            });
+
+            nextBtn.addEventListener('click', function() {
+                if (window.innerWidth >= sliderDesktopMinWidth) {
+                    if (currentSlide < items.length - 1) {
+                        currentSlide += 1;
+                        updateFeaturesPosition();
+                    }
+                } else {
+                    const step = (featuresTrack.querySelector('.bento-card')?.offsetWidth || 0) + getGapPx();
+                    featuresWrap.scrollBy({ left: step, behavior: 'smooth' });
+                }
+            });
+
+            window.addEventListener('resize', updateFeaturesPosition);
+            featuresWrap.addEventListener('scroll', function() {
+                if (window.innerWidth >= sliderDesktopMinWidth) return;
+                currentSlide = getClosestSlideToCenter();
+                setActiveFeature(currentSlide);
+            }, { passive: true });
+            ScrollTrigger.matchMedia({
+                '(min-width: 768px)': function() {
+                    gsap.set(featuresTrack, { x: 0 });
+                    updateFeaturesPosition();
+                },
+                '(max-width: 767px)': function() {
+                    gsap.set(featuresTrack, { x: 0 });
+                    currentSlide = getClosestSlideToCenter();
+                    setActiveFeature(currentSlide);
+                }
+            });
+
+            buildIndicators();
+            updateFeaturesPosition();
+        })();
+
+        // Technical specifications: collapsed groups on small screens
+        (function () {
+            var mq = window.matchMedia("(max-width: 768px)");
+            var articles = document.querySelectorAll("#tech-specs article");
+            function sync() {
+                var mobile = mq.matches;
+                articles.forEach(function (article) {
+                    if (mobile) {
+                        article.setAttribute("role", "button");
+                        article.tabIndex = 0;
+                        article.setAttribute("aria-expanded", article.classList.contains("is-open") ? "true" : "false");
+                    } else {
+                        article.removeAttribute("role");
+                        article.removeAttribute("tabindex");
+                        article.removeAttribute("aria-expanded");
+                        article.classList.remove("is-open");
+                    }
+                });
+            }
+            articles.forEach(function (article) {
+                function toggle() {
+                    if (!mq.matches) return;
+                    var open = article.classList.toggle("is-open");
+                    article.setAttribute("aria-expanded", open ? "true" : "false");
+                }
+                article.addEventListener("click", toggle);
+                article.addEventListener("keydown", function (e) {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle();
+                    }
+                });
+            });
+            sync();
+            if (mq.addEventListener) mq.addEventListener("change", sync);
+            else if (mq.addListener) mq.addListener(sync);
+        })();
+
+        // Spec rows: toggle component images on click (collapsed by default)
+        document.querySelectorAll(".spec-row").forEach(function (row) {
+            function toggle() {
+                var open = row.classList.toggle("is-expanded");
+                row.setAttribute("aria-expanded", open);
+            }
+            row.addEventListener("click", function (e) {
+                if (e.target.closest("a")) return;
+                e.preventDefault();
+                toggle();
+            });
+            row.addEventListener("keydown", function (e) {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggle();
+                }
+            });
+        });
+
+        // Gallery: no scroll-through; user must swipe or use nav icons only
+        const galleryWrap = document.querySelector(".gallery-wrap");
+        const race = document.querySelector(".gallery-track");
+        const galleryPrevBtn = document.getElementById("gallery-prev");
+        const galleryNextBtn = document.getElementById("gallery-next");
+        const galleryIndicatorsEl = document.getElementById("gallery-indicators");
+
+        if (race && galleryWrap) {
+            const items = race.querySelectorAll(".gallery-item");
+            const numSlides = items.length;
+            let currentSlide = 0;
+            const sliderDesktopMinWidth = 768;
+
+            function buildGalleryIndicators() {
+                if (!galleryIndicatorsEl) return;
+                galleryIndicatorsEl.innerHTML = '';
+                for (let i = 0; i < numSlides; i += 1) {
+                    const dot = document.createElement('button');
+                    dot.type = 'button';
+                    dot.className = 'slider-indicator-dot';
+                    dot.setAttribute('aria-label', 'Go to gallery image ' + (i + 1));
+                    dot.addEventListener('click', function() {
+                        currentSlide = i;
+                        if (window.innerWidth >= sliderDesktopMinWidth) {
+                            updateGalleryPosition();
+                        } else {
+                            const item = items[i];
+                            if (!item) return;
+                            const targetLeft = item.offsetLeft - (race.clientWidth - item.offsetWidth) / 2;
+                            race.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+                        }
+                    });
+                    galleryIndicatorsEl.appendChild(dot);
+                }
+            }
+
+            function updateGalleryIndicators() {
+                if (!galleryIndicatorsEl) return;
+                const dots = galleryIndicatorsEl.querySelectorAll('.slider-indicator-dot');
+                dots.forEach(function(dot, index) {
+                    dot.classList.toggle('is-active', index === currentSlide);
+                });
+            }
+
+            function getClosestGallerySlideToCenter() {
+                const wrapRect = galleryWrap.getBoundingClientRect();
+                const wrapCenter = wrapRect.left + wrapRect.width / 2;
+                let closest = 0;
+                let minDist = Infinity;
+                items.forEach(function(item, index) {
+                    const r = item.getBoundingClientRect();
+                    const center = r.left + r.width / 2;
+                    const dist = Math.abs(center - wrapCenter);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closest = index;
+                    }
+                });
+                return closest;
+            }
+
+            function updateGalleryRowHeight() {
+                var wrapWidth = galleryWrap.offsetWidth;
+                var maxH = Math.floor(window.innerHeight * 0.8);
+                var rowHeight = maxH;
+                if (wrapWidth) {
+                    var allItems = race.querySelectorAll(".gallery-item");
+                    var minHeight = Infinity;
+                    for (var i = 0; i < allItems.length; i++) {
+                        var img = allItems[i].querySelector("img");
+                        if (!img || !img.naturalWidth || !img.naturalHeight) continue;
+                        var h = wrapWidth * img.naturalHeight / img.naturalWidth;
+                        if (h < minHeight) minHeight = h;
+                    }
+                    if (minHeight !== Infinity) rowHeight = Math.min(minHeight, maxH);
+                }
+                galleryWrap.style.setProperty("--gallery-row-height", rowHeight + "px");
+                items.forEach(function(el) {
+                    el.style.height = rowHeight + "px";
+                    var img = el.querySelector("img");
+                    if (img && img.naturalWidth && img.naturalHeight) {
+                        el.style.width = Math.floor(rowHeight * img.naturalWidth / img.naturalHeight) + "px";
+                    } else if (el.classList.contains("portrait")) {
+                        el.style.width = Math.floor(rowHeight * 9 / 16) + "px";
+                    } else {
+                        el.style.width = "";
+                    }
+                });
+            }
+            function onGalleryImageLoad() {
+                updateGalleryRowHeight();
+                if (typeof updateGalleryPosition === "function") updateGalleryPosition();
+            }
+            race.querySelectorAll(".gallery-item img").forEach(function(img) {
+                if (img.complete) onGalleryImageLoad();
+                else img.addEventListener("load", onGalleryImageLoad);
+            });
+            window.addEventListener("resize", function() {
+                updateGalleryRowHeight();
+                if (typeof updateGalleryPosition === "function") updateGalleryPosition();
+            });
+            updateGalleryRowHeight();
+
+            function updateGalleryPosition() {
+                if (numSlides === 0) return;
+                const item = items[currentSlide];
+                if (!item) return;
+                if (window.innerWidth < sliderDesktopMinWidth) return;
+                const itemLeft = item.offsetLeft;
+                const itemWidth = item.offsetWidth;
+                const wrapWidth = galleryWrap.offsetWidth;
+                const trackLeft = race.offsetLeft;
+                const x = wrapWidth / 2 - trackLeft - itemLeft - itemWidth / 2;
+                gsap.to(race, { x: x, duration: 0.72, ease: "power3.out", overwrite: "auto", force3D: true });
+                if (galleryPrevBtn) galleryPrevBtn.disabled = currentSlide === 0;
+                if (galleryNextBtn) galleryNextBtn.disabled = currentSlide === numSlides - 1;
+                updateGalleryIndicators();
+            }
+
+            // Single set of handlers (no double trigger from matchMedia re-running)
+            if (galleryPrevBtn) {
+                galleryPrevBtn.addEventListener('click', function() {
+                    if (window.innerWidth >= sliderDesktopMinWidth) {
+                        if (currentSlide > 0) { currentSlide--; updateGalleryPosition(); }
+                    } else {
+                        race.scrollBy({ left: -((race.querySelector('.gallery-item')?.offsetWidth || 0) + 16), behavior: 'smooth' });
+                    }
+                });
+            }
+            if (galleryNextBtn) {
+                galleryNextBtn.addEventListener('click', function() {
+                    if (window.innerWidth >= sliderDesktopMinWidth) {
+                        if (currentSlide < numSlides - 1) { currentSlide++; updateGalleryPosition(); }
+                    } else {
+                        race.scrollBy({ left: (race.querySelector('.gallery-item')?.offsetWidth || 0) + 16, behavior: 'smooth' });
+                    }
+                });
+            }
+
+            race.addEventListener('scroll', function() {
+                if (window.innerWidth >= sliderDesktopMinWidth) return;
+                currentSlide = getClosestGallerySlideToCenter();
+                updateGalleryIndicators();
+            }, { passive: true });
+
+            ScrollTrigger.matchMedia({
+                "(min-width: 768px)": () => {
+                    gsap.set(race, { x: 0 });
+                    ScrollTrigger.getAll().forEach(st => { if (st.trigger === galleryWrap) st.kill(); });
+                    currentSlide = 0;
+                    updateGalleryPosition();
+                },
+                "(max-width: 767px)": () => {
+                    gsap.set(race, { x: 0 });
+                    currentSlide = getClosestGallerySlideToCenter();
+                    updateGalleryIndicators();
+                }
+            });
+
+            buildGalleryIndicators();
+            updateGalleryIndicators();
+
+            // Arrow key navigation when gallery is in view
+            document.addEventListener('keydown', function galleryArrowKeys(e) {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                var tag = document.activeElement && document.activeElement.tagName;
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+                var rect = galleryWrap.getBoundingClientRect();
+                if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+                e.preventDefault();
+                if (window.innerWidth >= sliderDesktopMinWidth) {
+                    if (e.key === 'ArrowLeft' && currentSlide > 0) { currentSlide--; updateGalleryPosition(); }
+                    if (e.key === 'ArrowRight' && currentSlide < numSlides - 1) { currentSlide++; updateGalleryPosition(); }
+                } else {
+                    var step = (race.querySelector('.gallery-item')?.offsetWidth || 0) + 16;
+                    if (e.key === 'ArrowLeft') race.scrollBy({ left: -step, behavior: 'smooth' });
+                    if (e.key === 'ArrowRight') race.scrollBy({ left: step, behavior: 'smooth' });
+                }
+            });
+        }
+
+        // Desktop: button is a link to Instagram. Mobile: Load more is hidden (only 2 iframes).
+        // No JS needed for "load more" - desktop shows 3 iframes and link opens Instagram.
+
+    </script>
+    <!-- PayPal JS SDK: https://developer.paypal.com/sdk/js/reference/ | components=buttons, layout=vertical -->
+    <script>
+        (function() {
+            var paypalUrl = "https://www.paypal.com/sdk/js?client-id=ASe9cYcy5IvmW1KwF2A_QoGfOjxQINROVhS142zormTKMJQABnxxXXjB5DucPDpqRRCdeyTatNJ0Eixy&currency=EUR&components=buttons&intent=capture";
+            // Default closed until Supabase confirms stock (fail closed → waitlist, not buy)
+            var serverSoldOut = true;
+            var shopPricing = {
+                productPrice: 449,
+                pcbPrice: 99,
+                shipping: [
+                    { id: "de", name: "Deutschland", price: 6.9 },
+                    { id: "eu", name: "EU", price: 20.95 }
+                ]
+            };
+            var EU_COUNTRIES = { AT:1, BE:1, BG:1, HR:1, CY:1, CZ:1, DK:1, EE:1, FI:1, FR:1, DE:1, GR:1, HU:1, IE:1, IT:1, LV:1, LT:1, LU:1, MT:1, NL:1, PL:1, PT:1, RO:1, SK:1, SI:1, ES:1, SE:1 };
+            var selectedShippingId = "de";
+            var SUPABASE_URL = "https://bhzgcsrfshkofsammjdt.supabase.co";
+            var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJoemdjc3Jmc2hrb2ZzYW1tamR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDgzNDMsImV4cCI6MjA4OTQ4NDM0M30.TTTba_wpA9MmY1NfRTdsORW5qgfbC-T8VegzOdfZ1xc";  // Set: Supabase Dashboard → Settings → API → anon public
+            function pointFinishedLink() {
+                var link = document.getElementById("build-finished-link");
+                if (link) link.setAttribute("href", serverSoldOut ? "#preorder" : "#buy");
+            }
+            function activateSoldOutMode(options) {
+                var shouldScroll = !options || options.scroll !== false;
+                var buySection = document.getElementById("buy");
+                var waitlistSection = document.getElementById("preorder");
+                if (buySection) buySection.classList.add("buy-sold-out");
+                if (waitlistSection) waitlistSection.classList.add("waitlist-promoted");
+                document.querySelectorAll('.nav-links a[href="#buy"], .nav-mobile-panel a[href="#buy"]').forEach(function(link) {
+                    link.setAttribute("href", "#preorder");
+                    link.textContent = "WAITLIST";
+                });
+                if (shouldScroll && waitlistSection) {
+                    setTimeout(function() {
+                        waitlistSection.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 80);
+                }
+            }
+
+            // Fetch sold-out state: sold_out = manual override OR (order_count >= max_orders)
+            function fetchShopConfig() {
+                if (!SUPABASE_ANON_KEY) {
+                    serverSoldOut = true;
+                    return Promise.resolve();
+                }
+                return fetch(SUPABASE_URL + "/rest/v1/rpc/get_shop_status", {
+                    method: "POST",
+                    headers: {
+                        "apikey": SUPABASE_ANON_KEY,
+                        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+                        "Content-Type": "application/json"
+                    },
+                    body: "{}"
+                })
+                    .then(function(r) {
+                        if (!r.ok) throw new Error("shop status " + r.status);
+                        return r.json();
+                    })
+                    .then(function(data) {
+                        if (data && typeof data.sold_out === "boolean") {
+                            serverSoldOut = data.sold_out;
+                        } else {
+                            serverSoldOut = true;
+                        }
+                        pointFinishedLink();
+                    })
+                    .catch(function() {
+                        serverSoldOut = true;
+                        pointFinishedLink();
+                    });
+            }
+
+            function deZone() {
+                return shopPricing.shipping.find(function(row) { return row.id === "de"; }) || shopPricing.shipping[0];
+            }
+            function euZone() {
+                var de = deZone();
+                return shopPricing.shipping.find(function(row) { return row.id === "eu"; })
+                    || shopPricing.shipping.find(function(row) { return row.id !== de.id; })
+                    || de;
+            }
+            function zoneForCountry(code) {
+                return String(code || "").toUpperCase() === "DE" ? deZone() : euZone();
+            }
+            function selectedShipping() {
+                return shopPricing.shipping.find(function(row) { return row.id === selectedShippingId; }) || deZone();
+            }
+            function money(n) {
+                return (Math.round((Number(n) + Number.EPSILON) * 100) / 100).toFixed(2);
+            }
+            function shopTotal() {
+                var zone = selectedShipping() || { price: 0 };
+                return (Number(shopPricing.productPrice) || 449) + (Number(zone.price) || 0);
+            }
+            function formatEuro(n) {
+                return money(n).replace(".", ",") + "€";
+            }
+            function pcbPrice() { return Number(shopPricing.pcbPrice) || 99; }
+            var selectedPcbShippingId = "de";
+            function paypalAmount(zone, productPrice) {
+                var product = productPrice == null ? (Number(shopPricing.productPrice) || 449) : Number(productPrice);
+                var ship = Number(zone && zone.price) || 0;
+                return {
+                    currency_code: "EUR",
+                    value: money(product + ship),
+                    breakdown: {
+                        item_total: { currency_code: "EUR", value: money(product) },
+                        shipping: { currency_code: "EUR", value: money(ship) }
+                    }
+                };
+            }
+            function paypalUnit(zone) {
+                var product = Number(shopPricing.productPrice) || 449;
+                var name = (zone && zone.name) || "EU";
+                return {
+                    reference_id: "default",
+                    description: "TŒRN groovebox with microSD card included. " + money(product) + "€ plus " + name + " shipping " + money(zone && zone.price) + "€. Built first, then shipped (about 5–10 weeks).",
+                    amount: paypalAmount(zone),
+                    custom_id: "unit",
+                    items: [{
+                        name: "TŒRN groovebox, microSD card included",
+                        quantity: "1",
+                        category: "PHYSICAL_GOODS",
+                        unit_amount: { currency_code: "EUR", value: money(product) }
+                    }]
+                };
+            }
+            function selectedPcbShipping() {
+                return shopPricing.shipping.find(function(row) { return row.id === selectedPcbShippingId; }) || deZone();
+            }
+            function pcbTotal() {
+                var zone = selectedPcbShipping() || { price: 0 };
+                return pcbPrice() + (Number(zone.price) || 0);
+            }
+            function paypalPcbUnit(zone) {
+                var name = (zone && zone.name) || "EU";
+                return {
+                    reference_id: "default",
+                    custom_id: "pcb",
+                    description: "TŒRN pre-assembled circuit board (PCB only). No Teensy, encoders, panel or case. " + money(pcbPrice()) + "€ plus " + name + " shipping " + money(zone && zone.price) + "€.",
+                    amount: paypalAmount(zone, pcbPrice()),
+                    items: [{
+                        name: "TŒRN pre-assembled circuit board (PCB only)",
+                        quantity: "1",
+                        category: "PHYSICAL_GOODS",
+                        unit_amount: { currency_code: "EUR", value: money(pcbPrice()) }
+                    }]
+                };
+            }
+            function renderPcbShipping() {
+                var priceEl = document.getElementById("pcb-price");
+                var options = document.getElementById("pcb-shipping-options");
+                var totalEl = document.getElementById("pcb-shipping-total");
+                if (priceEl) priceEl.textContent = Math.round(pcbPrice()) + "€";
+                if (!options || !shopPricing.shipping.length) return;
+                options.innerHTML = shopPricing.shipping.map(function(zone) {
+                    var checked = zone.id === selectedPcbShippingId ? " checked" : "";
+                    return '<label><span><input type="radio" name="pcb-shipping" value="' + zone.id + '"' + checked + '> ' +
+                        zone.name + '</span><span>' + formatEuro(Number(zone.price) || 0) + '</span></label>';
+                }).join("");
+                options.querySelectorAll("input").forEach(function(input) {
+                    input.addEventListener("change", function() {
+                        selectedPcbShippingId = input.value;
+                        renderPcbShipping();
+                    });
+                });
+                if (totalEl) totalEl.textContent = "Total " + formatEuro(pcbTotal());
+            }
+            function renderShopPricing() {
+                var priceEl = document.getElementById("buy-price");
+                var noteEl = document.getElementById("buy-price-note");
+                var box = document.getElementById("buy-shipping");
+                var options = document.getElementById("buy-shipping-options");
+                var totalEl = document.getElementById("buy-shipping-total");
+                if (priceEl) priceEl.textContent = Math.round(shopPricing.productPrice) + "€";
+                if (noteEl) noteEl.textContent = "Price includes EU VAT · plus shipping";
+                if (!box || !options || !shopPricing.shipping.length) return;
+                box.hidden = false;
+                options.innerHTML = shopPricing.shipping.map(function(zone) {
+                    var checked = zone.id === selectedShippingId ? " checked" : "";
+                    return '<label><span><input type="radio" name="buy-shipping" value="' + zone.id + '"' + checked + '> ' +
+                        zone.name + '</span><span>' + formatEuro(Number(zone.price) || 0) + '</span></label>';
+                }).join("");
+                options.querySelectorAll("input").forEach(function(input) {
+                    input.addEventListener("change", function() {
+                        selectedShippingId = input.value;
+                        renderShopPricing();
+                    });
+                });
+                if (totalEl) totalEl.textContent = "Total " + formatEuro(shopTotal());
+            }
+            function fetchShopPricing() {
+                if (!SUPABASE_ANON_KEY) return Promise.resolve();
+                return fetch(SUPABASE_URL + "/rest/v1/app_settings?key=eq.shop_pricing&select=value", {
+                    headers: {
+                        "apikey": SUPABASE_ANON_KEY,
+                        "Authorization": "Bearer " + SUPABASE_ANON_KEY
+                    }
+                })
+                    .then(function(r) {
+                        if (!r.ok) throw new Error("shop pricing " + r.status);
+                        return r.json();
+                    })
+                    .then(function(rows) {
+                        if (!rows || !rows[0] || !rows[0].value) return;
+                        var parsed = JSON.parse(rows[0].value);
+                        if (parsed && Number(parsed.productPrice) > 0) shopPricing.productPrice = Number(parsed.productPrice);
+                        if (parsed && Number(parsed.pcbPrice) > 0) shopPricing.pcbPrice = Number(parsed.pcbPrice);
+                        if (parsed && Array.isArray(parsed.shipping) && parsed.shipping.length) {
+                            shopPricing.shipping = parsed.shipping.map(function(row) {
+                                return {
+                                    id: String(row.id || ""),
+                                    name: String(row.name || "Shipping"),
+                                    price: Math.max(0, Number(row.price) || 0)
+                                };
+                            });
+                            if (!shopPricing.shipping.some(function(row) { return row.id === selectedShippingId; })) {
+                                selectedShippingId = shopPricing.shipping[0].id;
+                            }
+                        }
+                    })
+                    .catch(function() { /* keep defaults */ })
+                    .then(function() {
+                        if (!shopPricing.shipping.some(function(row) { return row.id === selectedPcbShippingId; })) {
+                            selectedPcbShippingId = (deZone() && deZone().id) || selectedPcbShippingId;
+                        }
+                        renderShopPricing();
+                        renderPcbShipping();
+                    });
+            }
+
+            function pcbDetailsOpen() {
+                var details = document.getElementById("pcb-offer");
+                return details && details.open;
+            }
+            function renderPayPalButtons() {
+                if (serverSoldOut) activateSoldOutMode({ scroll: false });
+                if (pcbDetailsOpen()) mountPaypalCheckout({
+                    containerId: "paypal-pcb-container",
+                    successId: "paypal-pcb-success",
+                    errorId: "paypal-pcb-error",
+                    unit: function() { return paypalPcbUnit(selectedPcbShipping()); },
+                    onZone: function(zone) {
+                        selectedPcbShippingId = zone.id;
+                        renderPcbShipping();
+                        return paypalAmount(zone, pcbPrice());
+                    }
+                });
+                if (serverSoldOut) return;
+                mountPaypalCheckout({
+                    containerId: "paypal-button-container",
+                    successId: "paypal-status-success",
+                    errorId: "paypal-status-error",
+                    celebrate: true,
+                    unit: function() { return paypalUnit(selectedShipping()); },
+                    onZone: function(zone) {
+                        selectedShippingId = zone.id;
+                        renderShopPricing();
+                        return paypalAmount(zone);
+                    }
+                });
+            }
+            var pcbOffer = document.getElementById("pcb-offer");
+            if (pcbOffer) {
+                pcbOffer.addEventListener("toggle", function() {
+                    if (pcbOffer.open) renderPayPalButtons();
+                });
+            }
+            function mountPaypalCheckout(opts) {
+                var container = document.getElementById(opts.containerId);
+                if (container && container.dataset.paypalMounted === "1") return;
+                var successTile = document.getElementById(opts.successId);
+                var errorTile = document.getElementById(opts.errorId);
+                if (!container || typeof paypal === "undefined") return;
+                container.dataset.paypalMounted = "1";
+                function showStatus(type) {
+                    if (successTile) successTile.classList.remove("is-visible");
+                    if (errorTile) errorTile.classList.remove("is-visible");
+                    if (type === "success" && successTile) successTile.classList.add("is-visible");
+                    if (type === "error" && errorTile) errorTile.classList.add("is-visible");
+                }
+                function hidePayPalButtons() {
+                    container.style.display = "none";
+                }
+                function showPayPalButtons() {
+                    container.style.display = "";
+                }
+                var celebrationOverlay = document.getElementById("order-celebration");
+                var celebrationCanvas = document.getElementById("order-celebration-canvas");
+                var celebrationDone = false;
+                var celebratePendingReturn = false;
+                function runConfettiCelebration() {
+                    if (celebrationDone || !celebrationOverlay || !celebrationCanvas) return;
+                    celebrationDone = true;
+                    celebrationOverlay.classList.add("is-visible");
+                    celebrationOverlay.setAttribute("aria-hidden", "false");
+
+                    var ctx = celebrationCanvas.getContext("2d");
+                    if (!ctx) return;
+                    var dpr = window.devicePixelRatio || 1;
+                    var width = window.innerWidth;
+                    var height = window.innerHeight;
+                    celebrationCanvas.width = Math.floor(width * dpr);
+                    celebrationCanvas.height = Math.floor(height * dpr);
+                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+                    var colors = ["#ff2ea1", "#38b6ff", "#ffe45c", "#8dff70", "#ff7b54", "#b07cff", "#ffffff"];
+                    var particles = [];
+                    var count = Math.min(420, Math.max(220, Math.floor((width * height) / 5200)));
+                    for (var i = 0; i < count; i += 1) {
+                        particles.push({
+                            x: Math.random() * width,
+                            y: (Math.random() * -height) - 20,
+                            w: 4 + Math.random() * 10,
+                            h: 7 + Math.random() * 13,
+                            vy: 2 + Math.random() * 5.8,
+                            vx: -1.8 + Math.random() * 3.6,
+                            rot: Math.random() * Math.PI,
+                            vr: -0.17 + Math.random() * 0.34,
+                            color: colors[Math.floor(Math.random() * colors.length)],
+                            alpha: 0.55 + Math.random() * 0.45
+                        });
+                    }
+
+                    var start = performance.now();
+                    var duration = 3600;
+                    function frame(now) {
+                        var elapsed = now - start;
+                        var progress = Math.min(1, elapsed / duration);
+                        ctx.clearRect(0, 0, width, height);
+                        for (var j = 0; j < particles.length; j += 1) {
+                            var p = particles[j];
+                            p.x += p.vx;
+                            p.y += p.vy;
+                            p.rot += p.vr;
+                            if (p.y > height + 24) {
+                                p.y = -20 - Math.random() * 80;
+                                p.x = Math.random() * width;
+                            }
+                            if (p.x < -30) p.x = width + 30;
+                            if (p.x > width + 30) p.x = -30;
+                            ctx.save();
+                            ctx.globalAlpha = p.alpha * (1 - (progress * 0.45));
+                            ctx.translate(p.x, p.y);
+                            ctx.rotate(p.rot);
+                            ctx.fillStyle = p.color;
+                            ctx.fillRect(-p.w * 0.5, -p.h * 0.5, p.w, p.h);
+                            ctx.restore();
+                        }
+                        if (progress < 1) {
+                            requestAnimationFrame(frame);
+                        } else {
+                            setTimeout(function() {
+                                celebrationOverlay.classList.remove("is-visible");
+                                celebrationOverlay.setAttribute("aria-hidden", "true");
+                            }, 300);
+                        }
+                    }
+                    requestAnimationFrame(frame);
+                }
+                function queueCelebrationOnReturn() {
+                    celebratePendingReturn = true;
+                    function maybeRun() {
+                        if (!celebratePendingReturn) return;
+                        if (document.visibilityState === "visible") {
+                            celebratePendingReturn = false;
+                            runConfettiCelebration();
+                            window.removeEventListener("focus", maybeRun);
+                            window.removeEventListener("pageshow", maybeRun);
+                            document.removeEventListener("visibilitychange", maybeRun);
+                        }
+                    }
+                    window.addEventListener("focus", maybeRun);
+                    window.addEventListener("pageshow", maybeRun);
+                    document.addEventListener("visibilitychange", maybeRun);
+                    maybeRun();
+                }
+                paypal.Buttons({
+                    style: { layout: "vertical", color: "gold", shape: "rect", label: "paypal", tagline: false },
+                    createOrder: function(data, actions) {
+                        return actions.order.create({
+                            intent: "CAPTURE",
+                            purchase_units: [opts.unit()],
+                            application_context: {
+                                brand_name: "TŒRN",
+                                shipping_preference: "GET_FROM_FILE",
+                                user_action: "PAY_NOW"
+                            }
+                        });
+                    },
+                    onShippingAddressChange: function(data, actions) {
+                        var code = data && data.shippingAddress && data.shippingAddress.countryCode;
+                        if (!EU_COUNTRIES[String(code || "").toUpperCase()]) return actions.reject();
+                        var zone = zoneForCountry(code);
+                        return actions.order.patch([{
+                            op: "replace",
+                            path: "/purchase_units/@reference_id=='default'/amount",
+                            value: opts.onZone(zone)
+                        }]);
+                    },
+                    onApprove: function(data, actions) {
+                        return actions.order.capture().then(function(orderData) {
+                            console.log("Capture result", orderData);
+
+                            // Check if payment was successful
+                            var orderStatus = orderData.status;
+                            var captureStatus = orderData.purchase_units &&
+                                                orderData.purchase_units[0] &&
+                                                orderData.purchase_units[0].payments &&
+                                                orderData.purchase_units[0].payments.captures &&
+                                                orderData.purchase_units[0].payments.captures[0] &&
+                                                orderData.purchase_units[0].payments.captures[0].status;
+
+                            if (orderStatus === "COMPLETED" && captureStatus === "COMPLETED") {
+                                var transactionId = orderData.purchase_units[0].payments.captures[0].id;
+                                console.log("Payment successful! Transaction ID:", transactionId);
+                                hidePayPalButtons();
+                                showStatus("success");
+                                if (opts.celebrate) queueCelebrationOnReturn();
+                                // Save full order data to Supabase (customers, addresses, dates, etc.)
+                                if (SUPABASE_ANON_KEY) {
+                                    fetch(SUPABASE_URL + "/rest/v1/paypal_orders", {
+                                        method: "POST",
+                                        headers: {
+                                            "apikey": SUPABASE_ANON_KEY,
+                                            "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+                                            "Content-Type": "application/json",
+                                            "Prefer": "return=minimal"
+                                        },
+                                        body: JSON.stringify({
+                                            paypal_capture_id: transactionId,
+                                            order_data: orderData
+                                        })
+                                    }).catch(function(e) { console.warn("Failed to save order to DB:", e); });
+                                }
+                            } else {
+                                console.warn("Payment status unclear:", orderStatus, captureStatus);
+                                showPayPalButtons();
+                                showStatus("error");
+                            }
+                        });
+                    },
+                    onCancel: function(data) {
+                        console.warn("PayPal checkout cancelled", data);
+                        showPayPalButtons();
+                        showStatus("error");
+                    },
+                    onError: function(err) {
+                        console.error("PayPal error", err);
+                        showPayPalButtons();
+                        showStatus("error");
+                    }
+                }).render("#" + opts.containerId);
+            }
+            // First fetch server config, then load PayPal. The unit follows the batch limit.
+            // The bare PCB stays on sale either way.
+            renderShopPricing();
+            renderPcbShipping();
+            Promise.all([fetchShopConfig(), fetchShopPricing()]).then(function() {
+                if (serverSoldOut) activateSoldOutMode({ scroll: false });
+                if (typeof paypal !== "undefined") {
+                    renderPayPalButtons();
+                    return;
+                }
+                var s = document.createElement("script");
+                s.src = paypalUrl;
+                s.async = true;
+                s.onload = renderPayPalButtons;
+                s.onerror = function() { console.error("PayPal SDK failed to load"); };
+                document.head.appendChild(s);
+            });
+        })();
+
+        // Datenschutz toggle
+        (function() {
+            const toggle = document.getElementById("datenschutz-toggle");
+            const content = document.getElementById("datenschutz-content");
+            if (toggle && content) {
+                toggle.addEventListener("click", function() {
+                    toggle.classList.toggle("active");
+                    content.classList.toggle("active");
+                });
+            }
+        })();
+
+        // Buy section disclosure toggles
+        (function() {
+            document.querySelectorAll(".buy-disclosure-toggle").forEach(function(toggle) {
+                var contentId = toggle.getAttribute("aria-controls");
+                if (!contentId) return;
+                var content = document.getElementById(contentId);
+                if (!content) return;
+
+                toggle.addEventListener("click", function() {
+                    var isExpanded = toggle.getAttribute("aria-expanded") === "true";
+                    toggle.setAttribute("aria-expanded", isExpanded ? "false" : "true");
+                    toggle.classList.toggle("active", !isExpanded);
+                    content.classList.toggle("active", !isExpanded);
+                });
+            });
+        })();
+
+        // Waitlist form submission
+        (function() {
+            const form = document.getElementById("waitlist-form");
+            const emailInput = document.getElementById("waitlist-email");
+            const submitBtn = document.getElementById("waitlist-submit");
+            const successMsg = document.getElementById("waitlist-success");
+            const errorMsg = document.getElementById("waitlist-error");
+
+            if (!form || !emailInput || !submitBtn) return;
+
+            function setIdleLabel() {
+                submitBtn.textContent = window.matchMedia('(max-width: 768px)').matches ? 'OK' : 'JOIN WAITLIST';
+            }
+
+            setIdleLabel();
+            window.addEventListener('resize', setIdleLabel);
+
+            function hideMessages() {
+                if (successMsg) successMsg.classList.remove("visible");
+                if (errorMsg) errorMsg.classList.remove("visible");
+                if (form) form.classList.remove("error");
+            }
+
+            function showSuccess() {
+                hideMessages();
+                if (successMsg) {
+                    successMsg.classList.add("visible");
+
+                    // Scroll to keep message visible
+                    setTimeout(() => {
+                        const formRect = form.getBoundingClientRect();
+                        const scrollOffset = window.scrollY + formRect.top - 100;
+                        window.scrollTo({ top: scrollOffset, behavior: 'auto' });
+                    }, 100);
+                }
+            }
+
+            function showError(message) {
+                hideMessages();
+                if (errorMsg) {
+                    if (message) errorMsg.querySelector('p').textContent = message;
+                    errorMsg.classList.add("visible");
+                    form.classList.add("error");
+
+                    // Remove error class after animation
+                    setTimeout(() => {
+                        form.classList.remove("error");
+                    }, 500);
+                }
+            }
+
+            form.addEventListener("submit", async function(e) {
+                e.preventDefault();
+
+                const email = emailInput.value.trim();
+
+                if (!email) {
+                    showError("Please enter a valid email address.");
+                    return;
+                }
+
+                // Disable form
+                submitBtn.disabled = true;
+                submitBtn.textContent = "JOINING...";
+                hideMessages();
+
+                try {
+                    // Submit to Netlify Forms
+                    const formData = new URLSearchParams();
+                    formData.append("form-name", "waitlist");
+                    formData.append("email", email);
+
+                    const response = await fetch("/", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: formData.toString()
+                    });
+
+                    if (!response.ok) throw new Error("Submission failed");
+
+                    showSuccess();
+                    form.style.display = 'none';
+                    emailInput.value = '';
+                } catch (err) {
+                    showError("Something went wrong. Please try again later.");
+                    submitBtn.disabled = false;
+                    setIdleLabel();
+                }
+            });
+        })();
+    </script>
+    <script>
+
+
+        // Bottom preorder CTA: link to pre-order (buy) when visible, else waitlist
+        (function() {
+            var preorderCta = document.querySelector('.cta-preorder-link');
+            var buySection = document.getElementById('buy');
+            var waitlistSection = document.getElementById('preorder');
+            if (!preorderCta) return;
+
+            function isSectionVisible(el) {
+                if (!el) return false;
+                var style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) return false;
+                var rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            }
+
+            function updatePreorderCtaTarget() {
+                var buyVisible = isSectionVisible(buySection);
+                var waitlistVisible = isSectionVisible(waitlistSection);
+
+                if (buyVisible) {
+                    preorderCta.setAttribute('href', '#buy');
+                    return;
+                }
+                if (waitlistVisible) {
+                    preorderCta.setAttribute('href', '#preorder');
+                    return;
+                }
+                preorderCta.setAttribute('href', '#buy');
+            }
+
+            updatePreorderCtaTarget();
+            window.addEventListener('resize', updatePreorderCtaTarget);
+
+            if (typeof MutationObserver !== 'undefined') {
+                var observer = new MutationObserver(updatePreorderCtaTarget);
+                if (buySection) observer.observe(buySection, { attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+                if (waitlistSection) observer.observe(waitlistSection, { attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+            }
+        })();
+    </script>
+    <script src="platform.js" defer></script>
+    <script src="board-explorer/section.js" defer></script>
+</body>
+</html>
