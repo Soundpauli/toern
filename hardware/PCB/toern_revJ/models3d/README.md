@@ -1,5 +1,7 @@
 # RevJ 3D models
 
+See [NOTICE.md](NOTICE.md) for license scope, attribution and the redistribution review. **The manufacturer/catalog models are not cleared for public redistribution.** Product drawing links below identify the corresponding parts; they do not establish the origin or license of each STEP file.
+
 These files are linked from the revJ PCB using project-relative paths. Existing project-local models for the 3.5 mm jacks, switches, charger, Teensy sockets and pogo contacts retain their original links.
 
 | References | Source and model placement |

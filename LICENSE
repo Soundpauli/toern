@@ -4,6 +4,9 @@ The folder `tools/firmware/` contains Teensy Loader Javascript
 (https://github.com/coelacant1/Teensy-Loader-Javascript) and is licensed under
 GPL-3.0 only. See `tools/firmware/LICENSE`.
 Other separately licensed material retains its own terms. In particular,
+third-party 3D assets in `hardware/PCB/toern_revJ/models3d/` retain their
+owners' terms; see that folder's NOTICE.md. The licenses below grant no
+rights to manufacturer/catalog models whose redistribution is unresolved.
 `hardware/PCB/i2cencoder_v2_1/` contains the DuPPa-derived encoder design:
 hardware and its modifications are GPLv3; documentation is CC BY-SA 4.0.
 See that folder's NOTICE.md and LICENSE. Neither the MIT license below nor
