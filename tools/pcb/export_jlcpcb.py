@@ -28,8 +28,8 @@ CLI = os.environ.get('KICAD_CLI', '/Applications/KiCad/KiCad.app/Contents/MacOS/
 HAND_SOLDER = {'J28', 'J29', 'J30', 'J31'}
 # JLCPCB-friendly references, applied only to the manufacturing snapshot.
 ALIASES = {'J11-5V': 'J11', 'J11-3.3V': 'J32',
-           'J12 - BUTTON_A-C': 'J12', 'J13 - TOUCHYTOUCH': 'J13',
-           'J14 + BUTTON_C': 'J14'}
+           'J12 - GPIO/GND': 'J12', 'J13 - TOUCH/A-C': 'J13',
+           'J14 + BUTTON_D': 'J14'}
 # Use the part selections in the board, including R24 = 590R / C166635.
 LCSC_OVERRIDES = {}
 # Preserve the installed JLCPCB plugin's explicit rotation corrections.

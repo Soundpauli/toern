@@ -206,9 +206,10 @@ extern void handleStart();
 
 #define SWITCH_1 2 // ALT: 16   // Capacitive input 1 >> SINGLE
 #define SWITCH_2 3 // ALT: 3    // Capacitive input 2 >> MENU
-#define BUTTON_A 5  // External SINGLE button (J12 pin 2), active LOW
-#define BUTTON_B 22 // External MENU button (J12 pin 1), active LOW
-#define BUTTON_C 15 // External REC / touch3 (J12 pin 3), active LOW
+// Exttouch A/B/C on J13 (not capacitive T1/T2/T3 silk order).
+#define BUTTON_A 4  // External SINGLE (J13 pin 2), active LOW
+#define BUTTON_B 2  // External MENU (J13 pin 1), active LOW
+#define BUTTON_C 3  // External REC (J13 pin 3), active LOW
 #define BUTTON_D 14 // External FN / touch5 (J14 pin 1), active LOW
 #define SWITCH_3 4 // ALT: 41  //Pin for TPP223 2 >> REC /
 #define SWITCH_4 6   // Capacitive touch4 >> current-voice audition (+ base-pitch note in SINGLE while playing)
@@ -4900,10 +4901,15 @@ FLASHMEM void setup() {
 
   // Load LED mode (count + rotation) before any startup visuals.
   loadLedModeEarlyFromEEPROM();
-  
-  pinMode(SWITCH_1, INPUT_PULLDOWN);
-  pinMode(SWITCH_2, INPUT_PULLDOWN);
-  pinMode(SWITCH_3, INPUT_PULLDOWN);
+
+  // Capacitive pads need pulldown. External A/B/C reuse SWITCH_1/2/3 on J13 and
+  // already have INPUT_PULLUP above — do not overwrite them or boot-hold / press
+  // checks read stuck LOW.
+  if (!exttouch) {
+    pinMode(SWITCH_1, INPUT_PULLDOWN);
+    pinMode(SWITCH_2, INPUT_PULLDOWN);
+    pinMode(SWITCH_3, INPUT_PULLDOWN);
+  }
   pinMode(SWITCH_5, INPUT_PULLDOWN);
   pinMode(SWITCH_4, INPUT_PULLDOWN);
 
@@ -5004,9 +5010,16 @@ FLASHMEM void setup() {
   pinMode(INT_PIN, INPUT_PULLUP);     // Interrups for encoder
   pinMode(BATT_ADC_PIN, INPUT);       // Battery sense (no pull) - voltage divider on schematic
   analogReadResolution(12);           // 0-4095 so BATT raw reflects actual voltage (was 10-bit 1023 max)
-  pinMode(SWITCH_1, INPUT_PULLDOWN);  // Capacitive input
-  pinMode(SWITCH_2, INPUT_PULLDOWN);  // Capacitive input
-  pinMode(SWITCH_3, INPUT_PULLDOWN);  // Rec touch (same pin as Teensy D4)
+  if (!exttouch) {
+    pinMode(SWITCH_1, INPUT_PULLDOWN);  // Capacitive input
+    pinMode(SWITCH_2, INPUT_PULLDOWN);  // Capacitive input
+    pinMode(SWITCH_3, INPUT_PULLDOWN);  // Rec touch (same pin as Teensy D4)
+  } else {
+    // Keep J13 A/B/C pullups after the earlier capacitive-style init path.
+    pinMode(BUTTON_A, INPUT_PULLUP);
+    pinMode(BUTTON_B, INPUT_PULLUP);
+    pinMode(BUTTON_C, INPUT_PULLUP);
+  }
   pinMode(SWITCH_5, INPUT_PULLDOWN);
   pinMode(SWITCH_4, INPUT_PULLDOWN);  // Capacitive touch4 (voice audition)
 

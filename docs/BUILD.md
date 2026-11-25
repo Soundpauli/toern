@@ -134,7 +134,7 @@ three JST-PH 2-pin mating cables. Verify tip/sleeve terminals and panel fit.
 | Sidechain out J27 | Pin 1 → TS tip, pin 2 GND → sleeve. Buffered 5 V trigger output, Teensy 28; this is a trigger, not an audio input |
 | Speaker J10 | Pin 1 = ROUT−, pin 2 = ROUT+. Solder the speaker leads to a **JST-PH 2.00 mm 2-pin mating cable**, then plug into J10; **neither terminal goes to GND**. Enable VOL → SPKR after testing headphones |
 | Capacitive touch J13 | Touch 1 = pin 1 (Teensy 2), touch 2 = pin 3 (Teensy 3), touch3 = pin 2 (Teensy 4). Pin 4 = touch4 (6), pin 5 = touch5 (39). No power or GND on this header |
-| External buttons | With `exttouch = true`: A = J12.2 (Teensy 5), B = J12.1 (22), C = J12.3 (15), D = J14.1 (14). Each button closes to GND; J12.5 is GND. These are active LOW, not capacitive pads |
+| External buttons | With `exttouch = true`: A = J13.2 (Teensy 4), B = J13.1 (2), C = J13.3 (3), D = J14.1 (14). Each button closes to GND; take GND from J12.5 or J14.5 (J13 has no GND). These are active LOW, not capacitive pads |
 | Battery J16 | Pin 1 GND, pin 2 VBAT. Check pack polarity before connecting |
 
 Fit the four **DuPPa I2C Encoder V2.1** modules, RGB encoders and their two 1×5
